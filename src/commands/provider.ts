@@ -584,7 +584,7 @@ export function buildProviderOAuthResult(
   const apiKeyEnv = normalizeOptionalApiKeyEnv(options.apiKeyEnv ?? defaultApiKeyEnvForProvider(target));
   const commonNotes = [
     "OMK does not read OAuth token files, print token values, or write provider secrets into project files.",
-    "Kimi remains the final authority/fallback for provider-routed work.",
+    "Kimi remains available as an explicit API provider; OMK keeps provider-neutral authority by default.",
   ];
 
   if (target === "kimi") {
@@ -592,9 +592,9 @@ export function buildProviderOAuthResult(
       ok: true,
       command: "provider oauth",
       provider: target,
-      authMethod: "official-cli-oauth",
-      oauthAvailable: true,
-      exchangeRequiresBrowser: true,
+      authMethod: "api-key-env",
+      oauthAvailable: false,
+      exchangeRequiresBrowser: false,
       exchangePerformed: false,
       authBypass: false,
       authJsonRead: false,
@@ -605,8 +605,9 @@ export function buildProviderOAuthResult(
       tokensRead: false,
       checkedAt: new Date().toISOString(),
       nextActions: [
-        "Run `kimi login` in a local terminal to complete the official browser login flow.",
-        "Run `omk doctor --soft` after login to verify Kimi CLI availability without printing credentials.",
+        "Set KIMI_API_KEY in your shell or provider environment.",
+        "Optional: set KIMI_MODEL or configure [providers.kimi] in ~/.omk/config.toml.",
+        "Run `omk provider doctor kimi --soft` to verify OMK sees the Kimi API credentials.",
       ],
       notes: commonNotes,
     };
@@ -738,7 +739,7 @@ function normalizeAuthMethodOption(value: string | undefined): ProviderAuthMetho
 }
 
 function providerKindForAuth(provider: ProviderId, authMethod: ProviderAuthMethod): ProviderConfigSetInput["kind"] {
-  if (provider === "kimi") return "kimi-native";
+  if (provider === "kimi") return "openai-compatible";
   if (provider === "codex") return "codex-cli";
   if (authMethod === "external-cli") return "external-cli";
   return "openai-compatible";

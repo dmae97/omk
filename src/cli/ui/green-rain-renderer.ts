@@ -1,13 +1,15 @@
+import gradientString from "gradient-string";
 import type { CliUiEvent } from "./event.js";
 import type { CliRenderer } from "./renderer.js";
 import { System24Renderer, type System24RendererStreams } from "./system24-renderer.js";
 import { GREEN_RAIN_THEME, resolveTuiMotion, shouldUseAnsiColor, type OmkTuiMotion } from "../../brand/theme.js";
 import { renderMatrixRain } from "../../brand/matrix-rain.js";
-
+import { renderOmkSparkleText } from "../../ui/omk-sigil.js";
 interface WritableStreamLike {
   write(chunk: string): unknown;
   isTTY?: boolean;
   columns?: number;
+  rows?: number;
 }
 
 const ESC = "\x1b[";
@@ -34,6 +36,10 @@ function center(text: string, width: number): string {
   return `${" ".repeat(pad)}${text}`;
 }
 
+function gradientLine(text: string, colors: string[], noColor: boolean): string {
+  return noColor ? text : gradientString(colors).multiline(text);
+}
+
 export class GreenRainRenderer implements CliRenderer {
   private readonly base: System24Renderer;
   private readonly err: WritableStreamLike;
@@ -48,6 +54,7 @@ export class GreenRainRenderer implements CliRenderer {
     this.base = new System24Renderer(streams, GREEN_RAIN_THEME, {
       sessionHeader: "compact",
       noColor: this.noColor,
+      terminalControls: true,
     });
   }
 
@@ -58,6 +65,7 @@ export class GreenRainRenderer implements CliRenderer {
 
   emit(event: CliUiEvent): void {
     if (event.type === "session:start") {
+      this.base.setStickyHeaderPrefixRows(this.greenRainHeaderRows());
       this.renderGreenRainHeader(event);
     }
     this.base.emit(event);
@@ -71,11 +79,17 @@ export class GreenRainRenderer implements CliRenderer {
     this.base.stop();
   }
 
+  private greenRainHeaderRows(): number {
+    const shouldRenderRain = this.motion !== "off"
+      && this.started
+      && this.err.isTTY !== false
+      && GREEN_RAIN_THEME.motion.rain;
+    return (shouldRenderRain ? 2 : 0) + 4;
+  }
+
   private renderGreenRainHeader(event: Extract<CliUiEvent, { type: "session:start" }>): void {
     const width = Math.min(76, Math.max(40, this.err.columns ?? process.stderr.columns ?? 80) - 2);
-    const color = GREEN_RAIN_THEME.colors.primary;
     const dim = GREEN_RAIN_THEME.colors.muted;
-    const hot = GREEN_RAIN_THEME.colors.borderHot;
     const run = event.runId ? `run#${event.runId.slice(0, 7)}` : "run#pending";
     const root = event.root ? truncate(event.root, Math.max(12, width - 16)) : "root:unknown";
     const shouldRenderRain = this.motion !== "off"
@@ -85,14 +99,20 @@ export class GreenRainRenderer implements CliRenderer {
     const rain = shouldRenderRain
       ? renderMatrixRain(event.runId ?? "omk", width, 2)
       : "";
+    const titleLine = center("◢█ OMK GREEN RAIN █◣", width);
+    const mottoLine = center(truncate(GREEN_RAIN_THEME.motto, width), width);
     const routeLine = truncate(`${GREEN_RAIN_THEME.symbols.signal} ${run} · ${event.provider} · ${event.model ?? "auto"}`, width);
     const rootLine = truncate(`${GREEN_RAIN_THEME.symbols.pending} root ${root}`, width);
 
     if (rain) {
       for (const rainLine of rain.split("\n")) line(this.err, `${dim}${rainLine}${RST}`, this.noColor);
     }
-    line(this.err, `${hot}${center(GREEN_RAIN_THEME.label.toUpperCase(), width)}${RST}`, this.noColor);
-    line(this.err, `${color}${center(GREEN_RAIN_THEME.motto, width)}${RST}`, this.noColor);
+    line(this.err, renderOmkSparkleText(titleLine, {
+      frame: Math.floor(Date.now() / 80),
+      noColor: this.noColor,
+      colors: ["#00FFC2", "#f4ffff", "#ffd166", "#00D6FF", "#9D4EDD"],
+    }), this.noColor);
+    line(this.err, gradientLine(mottoLine, ["#00FFC2", "#00D6FF"], this.noColor), this.noColor);
     line(this.err, `${dim}${routeLine}${RST}`, this.noColor);
     line(this.err, `${dim}${rootLine}${RST}`, this.noColor);
   }

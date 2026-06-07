@@ -23,7 +23,7 @@ import { scoreGoal } from "../goal/scoring.js";
 import { suggestNextAction, evaluateMissingCriteria } from "../goal/eval-criteria.js";
 import type { MemoryOntology, MemoryMindmap } from "../memory/local-graph-memory-store.js";
 import { createStatePersister, redactSecrets } from "../orchestration/state-persister.js";
-import { loadTodos, readTodos, deriveTodosFromState, writeTodos, type TodoItem } from "../util/todo-sync.js";
+import { loadTodos, readTodos, deriveTodosFromState, writeTodos, normalizeTodoItems, normalizeTodoWriteInput, applyTodoWriteOperations, type TodoItem, type TodoWriteOperation } from "../util/todo-sync.js";
 import { listActiveSessions, readSessionMeta, type SessionMeta } from "../util/session.js";
 import { readEvents, tailEvents } from "../util/events-logger.js";
 let clientDisconnected = false;
@@ -1043,9 +1043,40 @@ async function resolveLatestRunIdForMcp(): Promise<string | null> {
   return best?.name ?? null;
 }
 
-async function handleWriteTodos(args: { runId: string; todos: TodoItem[] }): Promise<{ written: number }> {
-  await writeTodos(args.runId, args.todos);
-  return { written: args.todos.length };
+async function resolveTodoWriteRunId(runId?: string): Promise<string> {
+  const candidate = runId ?? process.env.OMK_SESSION_ID ?? await resolveLatestRunIdForMcp();
+  if (!candidate) {
+    throw new Error("TodoWrite requires runId when no active OMK session can be inferred");
+  }
+  return sanitizeRunId(candidate);
+}
+
+async function handleWriteTodos(args: { runId: string; todos: TodoItem[] }): Promise<{ runId: string; written: number }> {
+  const runId = sanitizeRunId(args.runId);
+  const todos = normalizeTodoItems(args.todos);
+  await writeTodos(runId, todos);
+  return { runId, written: todos.length };
+}
+
+async function handleTodoWrite(args: unknown): Promise<{ runId: string; written: number; source: "TodoWrite" }> {
+  const input = args && typeof args === "object" ? args as { runId?: string } : {};
+  const runId = await resolveTodoWriteRunId(input.runId);
+  const todos = normalizeTodoWriteInput(args);
+  await writeTodos(runId, todos);
+  return { runId, written: todos.length, source: "TodoWrite" };
+}
+
+async function handleOmkTodoWrite(args: { runId?: string; ops: TodoWriteOperation[] }): Promise<{ runId: string; applied: number; written: number; todos: TodoItem[] }> {
+  const runId = await resolveTodoWriteRunId(args.runId);
+  const existing = await readTodos(runId).then((todos) => todos ?? []);
+  const result = applyTodoWriteOperations(existing, args.ops);
+  await writeTodos(runId, result.todos);
+  return {
+    runId,
+    applied: result.applied,
+    written: result.todos.length,
+    todos: redactSecrets(result.todos) as TodoItem[],
+  };
 }
 
 // ─── Resource registry ──────────────────────────────────────────────────
@@ -1413,6 +1444,106 @@ const TOOLS: Tool[] = [
       required: ["runId", "todos"],
     },
   },
+  {
+    name: "omk_todo_write",
+    description: "Apply phased todo_write operations to the run TODO list. Supports init/start/done/drop/rm/append/note.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        runId: { type: "string", description: "Optional run identifier; current/latest run is used when omitted" },
+        ops: {
+          type: "array",
+          description: "Todo operations in order",
+          items: {
+            type: "object",
+            properties: {
+              op: { type: "string", enum: ["init", "start", "done", "drop", "rm", "append", "note"] },
+              list: {
+                type: "array",
+                description: "For init: phased task list",
+                items: {
+                  type: "object",
+                  properties: {
+                    phase: { type: "string" },
+                    items: { type: "array", items: { type: "string" } },
+                  },
+                  required: ["phase", "items"],
+                },
+              },
+              task: { type: "string", description: "Task title for task-scoped operations" },
+              phase: { type: "string", description: "Phase name for phase-scoped operations or append" },
+              items: { type: "array", items: { type: "string" }, description: "Tasks to append" },
+              text: { type: "string", description: "Note text for note operation" },
+            },
+            required: ["op"],
+          },
+        },
+      },
+      required: ["ops"],
+    },
+  },
+  {
+    name: "TodoWrite",
+    description: "Claude-compatible TodoWrite tool. Replaces the run TODO list from todos: [{ content, status, activeForm? }]. Status values are pending, in_progress, or completed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        runId: { type: "string", description: "Optional run identifier; current/latest run is used when omitted" },
+        todos: {
+          type: "array",
+          description: "Claude TodoWrite items",
+          items: {
+            type: "object",
+            properties: {
+              content: { type: "string", description: "Stable todo text" },
+              status: { type: "string", enum: ["pending", "in_progress", "completed"] },
+              activeForm: { type: "string", description: "Present-continuous text shown while in_progress" },
+            },
+            required: ["content", "status"],
+          },
+        },
+      },
+      required: ["todos"],
+    },
+  },
+  {
+    name: "todo_write",
+    description: "Alias for omk_todo_write. Applies phased todo_write operations: init/start/done/drop/rm/append/note.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        runId: { type: "string", description: "Optional run identifier; current/latest run is used when omitted" },
+        ops: {
+          type: "array",
+          description: "Todo operations in order",
+          items: {
+            type: "object",
+            properties: {
+              op: { type: "string", enum: ["init", "start", "done", "drop", "rm", "append", "note"] },
+              list: {
+                type: "array",
+                description: "For init: phased task list",
+                items: {
+                  type: "object",
+                  properties: {
+                    phase: { type: "string" },
+                    items: { type: "array", items: { type: "string" } },
+                  },
+                  required: ["phase", "items"],
+                },
+              },
+              task: { type: "string", description: "Task title for task-scoped operations" },
+              phase: { type: "string", description: "Phase name for phase-scoped operations or append" },
+              items: { type: "array", items: { type: "string" }, description: "Tasks to append" },
+              text: { type: "string", description: "Note text for note operation" },
+            },
+            required: ["op"],
+          },
+        },
+      },
+      required: ["ops"],
+    },
+  },
 ];
 
 async function handleToolCall(name: string, args: unknown): Promise<unknown> {
@@ -1478,6 +1609,11 @@ async function handleToolCall(name: string, args: unknown): Promise<unknown> {
       return handleReadTodos(args as { runId: string });
     case "omk_write_todos":
       return handleWriteTodos(args as { runId: string; todos: TodoItem[] });
+    case "TodoWrite":
+      return handleTodoWrite(args);
+    case "omk_todo_write":
+    case "todo_write":
+      return handleOmkTodoWrite(args as { runId?: string; ops: TodoWriteOperation[] });
     // Legacy aliases (still callable for backward compatibility)
     case "omk_read_memory":
       return handleMemoryRead(args as { path: string });

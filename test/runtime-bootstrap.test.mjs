@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile, chmod } from "node:fs/promises";
+import { mkdtemp, writeFile, chmod, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
@@ -67,4 +67,43 @@ test("resolveRuntimeBootstrap auto mode prefers configured API providers before 
   assert.equal(bootstrap.providerPolicy, "auto");
   assert.equal(bootstrap.selectedProvider, "deepseek");
   assert.equal(bootstrap.selectedRuntimeId, "deepseek-api");
+});
+
+test("resolveRuntimeBootstrap treats explicit Kimi as direct API, not CLI", async () => {
+  const kimiBin = await fakeExecutable("kimi");
+  const bootstrap = await resolveRuntimeBootstrap({
+    provider: "kimi",
+    env: {
+      KIMI_BIN: kimiBin,
+      KIMI_API_KEY: "test-key",
+    },
+  });
+
+  assert.equal(bootstrap.ok, true);
+  assert.equal(bootstrap.selectedProvider, "kimi");
+  assert.equal(bootstrap.selectedRuntimeId, "KIMI_API_KEY");
+  assert.equal(bootstrap.sessionMode, "api-turn");
+});
+
+test("resolveRuntimeBootstrap auto mode ignores Kimi CLI without API credentials", async () => {
+  const kimiBin = await fakeExecutable("kimi");
+  const home = await mkdtemp(join(tmpdir(), "omk-runtime-bootstrap-home-"));
+  try {
+    const bootstrap = await resolveRuntimeBootstrap({
+      provider: "auto",
+      env: {
+        HOME: home,
+        PATH: "",
+        KIMI_BIN: kimiBin,
+        CODEX_BIN: join(home, "missing-codex"),
+        COMMANDCODE_BIN: join(home, "missing-commandcode"),
+        OPENCODE_BIN: join(home, "missing-opencode"),
+      },
+    });
+
+    assert.equal(bootstrap.ok, false);
+    assert.equal(bootstrap.selectedRuntimeId, "auto");
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });

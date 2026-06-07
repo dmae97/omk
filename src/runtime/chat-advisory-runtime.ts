@@ -28,20 +28,20 @@ export function createChatAdvisoryRuntime(): AgentRuntime {
         "",
         "  2. Install a CLI runtime:",
         hasNpm ? "     • npm install -g @openai/codex" : undefined,
-        hasNpm ? "     • npm install -g @anthropic-ai/kimi-code  && kimi login" : undefined,
         hasCargo ? "     • cargo install opencode" : undefined,
         "",
         "  3. Or set API keys:",
         "     • export DEEPSEEK_API_KEY=\"sk-...\"",
         "     • export OPENAI_API_KEY=\"sk-...\"",
+        "     • export KIMI_API_KEY=\"sk-...\"",
         "",
         "  4. Then try again: omk chat",
         "",
         available.length > 0
           ? `Detected: ${available.join(", ")}`
-          : "No runtimes detected. Install one from step 2.",
+          : "No runtimes detected. Install one or configure an API key.",
         "",
-        "Quick start: npm install -g @openai/codex && codex login && omk chat",
+        "Quick start: export OPENAI_API_KEY=\"sk-...\" && omk chat",
         sep,
       ].filter((line): line is string => line !== undefined).join("\n");
 

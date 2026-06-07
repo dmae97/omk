@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -30,6 +30,9 @@ import {
   resolveAuthorityProvider,
   resolveFallbackRuntime,
   resolveRuntimeFallbackChain,
+  compactContext,
+  estimateInputTokens,
+  preflightProviderInput,
 } from "../dist/providers/index.js";
 import { buildTaskRunContext } from "../dist/runtime/worker-manifest.js";
 
@@ -162,6 +165,12 @@ test("provider model parser normalizes Qwen 3.7 MAX, OpenRouter models, and know
     provider: "openrouter",
     model: "anthropic/claude-sonnet-4.5",
   });
+  assert.deepEqual(parseProviderModelArg("deepseek/pro:max"), {
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    thinkingLevel: "max",
+  });
+  assert.equal(normalizeProviderPolicy("mimo"), "mimo");
   assert.equal(normalizeProviderPolicy("deepseek"), "deepseek");
   assert.equal(normalizeProviderPolicy("codex"), "codex");
   assert.equal(normalizeProviderPolicy("opencode"), "opencode");
@@ -209,13 +218,16 @@ test("provider registry stores generic provider metadata without secret values",
     assert.equal(qwenEntry.defaultModel, "qwen3-max");
     assert.equal(JSON.stringify(qwenEntry).includes("secret-value"), false);
 
+    const mimoEntry = registry.find((entry) => entry.id === "mimo");
+    assert.equal(mimoEntry.defaultModel, "mimo-v2.5-pro");
+    assert.equal(mimoEntry.apiKeyEnv, "MIMO_API_KEY");
+
     const openrouterEntry = registry.find((entry) => entry.id === "openrouter");
     assert.equal(openrouterEntry.baseUrl, "https://openrouter.ai/api/v1");
     assert.equal(openrouterEntry.apiKeyEnv, "OPENROUTER_API_KEY");
     assert.equal(openrouterEntry.defaultModel, "openrouter/auto");
-    assert.equal(openrouterEntry.headers["X-OpenRouter-Title"], "open_multi-agent_kit");
-    assert.equal(openrouterEntry.headers["HTTP-Referer"], "https://github.com/dmae97/open_multi-agent_kit");
-    assert.doesNotMatch(JSON.stringify(openrouterEntry.headers), /oh-my-kimi/i);
+    assert.equal(openrouterEntry.headers["X-OpenRouter-Title"], "open-multi-agent-kit");
+    assert.equal(openrouterEntry.headers["HTTP-Referer"], "https://github.com/dmae97/open-multi-agent-kit");
 
     const missing = await providerDoctorStatus("qwen", { homeDir, env: { QWEN_TEST_KEY: "" } });
     assert.equal(missing.available, false);
@@ -224,6 +236,12 @@ test("provider registry stores generic provider metadata without secret values",
     const present = await providerDoctorStatus("qwen", { homeDir, env: { QWEN_TEST_KEY: "secret-value" } });
     assert.equal(present.available, true);
     assert.equal(JSON.stringify(present).includes("secret-value"), false);
+    const mimoStatus = await providerDoctorStatus("mimo", { homeDir, env: { MIMO_API_KEY: "unit-key" } });
+    assert.equal(mimoStatus.authority, "authority");
+    assert.equal(mimoStatus.fallbackProvider, "mimo");
+    assert.equal(mimoStatus.available, true);
+    const kimiStatus = await providerDoctorStatus("kimi", { homeDir, env: { KIMI_API_KEY: "unit-key" } });
+    assert.equal(kimiStatus.authority, "advisory");
     const openrouterMissing = await providerDoctorStatus("openrouter", { homeDir, env: { OPENROUTER_API_KEY: "" } });
     assert.equal(openrouterMissing.available, false);
     assert.equal(openrouterMissing.apiKeyEnv, "OPENROUTER_API_KEY");
@@ -902,7 +920,7 @@ test("provider task runner does not grant DeepSeek write fallback on Kimi quota 
   assert.equal(calls.some((call) => call.env.OMK_PROVIDER_FALLBACK_FROM === "kimi"), false);
 });
 
-test("provider-backed runner keeps provider metadata when Kimi runtime is unavailable", async () => {
+test("provider-backed runner keeps provider metadata when explicit Kimi CLI runtime is unavailable", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-provider-backed-"));
   const previousPath = process.env.PATH;
   const previousPathUpper = process.env.Path;
@@ -928,7 +946,7 @@ test("provider-backed runner keeps provider metadata when Kimi runtime is unavai
     assert.equal(result.metadata.requestedProvider, "kimi");
     assert.ok(result.metadata._budgetReport);
     assert.equal(result.metadata.runtime, undefined);
-    assert.match(result.stderr, /Kimi runner not configured|Kimi CLI not found/i);
+    assert.match(result.stderr, /Legacy provider runner is disabled|Kimi runner not configured|Kimi CLI not found/i);
   } finally {
     if (previousPath === undefined) delete process.env.PATH;
     else process.env.PATH = previousPath;
@@ -2010,7 +2028,7 @@ test("provider task runner does not use Kimi CLI runner as implicit default auth
   assert.deepEqual(calls.map((call) => call.provider), []);
   assert.equal(result.metadata.provider, "mimo");
   assert.equal(result.metadata.requestedProvider, "mimo");
-  assert.match(result.stderr, /Kimi CLI fallback is disabled by provider-neutral policy/);
+  assert.match(result.stderr, /legacy CLI fallback is disabled by provider-neutral policy/);
 });
 
 test("provider router does not select unavailable DeepSeek direct or advisory routes", () => {

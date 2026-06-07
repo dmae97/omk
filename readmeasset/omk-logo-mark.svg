@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<rect width="512" height="512" rx="96" fill="#070B14"/>
+<path d="M256 48 424 144v224L256 464 88 368V144Z" fill="#101826" stroke="#00D6FF" stroke-width="16"/>
+<path d="M88 144 256 240 424 144" fill="none" stroke="#9D4EDD" stroke-width="10" opacity=".8"/>
+<text x="256" y="288" text-anchor="middle" fill="#E8F8FF" font-family="monospace" font-size="104" font-weight="900">OMK</text>
+<text x="256" y="340" text-anchor="middle" fill="#00FFC2" font-family="monospace" font-size="28">//CONTROL</text>
+</svg>

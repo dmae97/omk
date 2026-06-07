@@ -394,6 +394,7 @@ export async function orchestratePrompt(
     execution: executionDecision.policy,
     executionStrategy: executionDecision.strategy,
     executionDecision,
+    orchestrationPrompt: executionPromptForRun,
     signal: options.signal,
   };
 

@@ -218,7 +218,7 @@ export class InteractiveOrchestrator extends EventEmitter {
 
       this.setPhase("completed");
       this.state.completedAt = new Date().toISOString();
-      this.emit("log", "Orchestration completed successfully", "info");
+      this.emit("log", "Execution finished; completion still requires diff + test + log artifacts plus a passing verify result.", "info");
     } catch (error) {
       this.state.phase = "failed";
       this.state.error = error instanceof Error ? error.message : String(error);

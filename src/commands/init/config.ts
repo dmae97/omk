@@ -1,22 +1,22 @@
-import { OMK_PARALLEL_ORCHESTRATOR_PRESET, OMK_RUNTIME_PRESETS } from "../../runtime/core-verified-preset.js";
+import { OMK_CORE_VERIFIED_PRESET, OMK_RUNTIME_PRESETS } from "../../runtime/core-verified-preset.js";
 import type { RuntimeScope } from "./types.js";
 
 export function createThemeJson(): string {
   return JSON.stringify({
     banner: {
-      title: "open_multi-agent_kit",
-      subtitle: "OMK — multi-provider agent orchestration CLI.",
+      title: "OMK://CONTROL",
+      subtitle: "Route agents. Verify evidence. Control the loop.",
       style: "default",
       enabled: true,
     },
     colors: {
-      primary: "#7B5BF5",
-      accent: "#EC4899",
-      success: "#14B8A6",
-      warning: "#FB923C",
-      danger: "#F87171",
-      info: "#60A5FA",
-      muted: "#94A3B8",
+      primary: "#00D6FF",
+      accent: "#FF47B2",
+      success: "#00FFC2",
+      warning: "#FFB000",
+      danger: "#FF5874",
+      info: "#9D4EDD",
+      muted: "#758FA8",
     },
     metaBox: true,
   }, null, 2) + "\n";
@@ -24,14 +24,14 @@ export function createThemeJson(): string {
 
 export function createRuntimePresetsJson(): string {
   return JSON.stringify({
-    defaultPresetId: OMK_PARALLEL_ORCHESTRATOR_PRESET.id,
+    defaultPresetId: OMK_CORE_VERIFIED_PRESET.id,
     presets: OMK_RUNTIME_PRESETS,
   }, null, 2) + "\n";
 }
 
 export function getConfigToml(options: { mcpScope: RuntimeScope; skillsScope: RuntimeScope; hooksScope: RuntimeScope }): string {
   const { mcpScope, skillsScope, hooksScope } = options;
-  return `# open_multi-agent_kit project settings
+  return `# open-multi-agent-kit project settings
 [project]
 name = "my-project"
 description = ""
@@ -39,9 +39,9 @@ description = ""
 [orchestration]
 default_workers = 4
 max_retries = 3
-approval_policy = "auto"         # safe default: safe tools auto, destructive ask
+approval_policy = "yolo"         # low-friction SWE/benchmark mode: auto-allow tool use
 execution_prompt = "ask"         # ask | auto | parallel | sequential
-yolo_mode = false                # safe guards still block secrets/destructive shell hooks
+yolo_mode = true                 # minimal hard stops only; avoid benchmark-stalling prompts
 
 [runtime]
 # auto chooses lite on <=18GB RAM hosts to make 16GB laptops usable.
@@ -94,7 +94,8 @@ language = "en"
 
 [router]
 default_model = "kimi-k2.6"
-research_thinking = "disabled"
-coding_thinking = "enabled"
+# off | medium | high | xhigh | max
+research_thinking = "off"
+coding_thinking = "high"
 `;
 }

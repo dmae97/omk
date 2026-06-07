@@ -8,7 +8,8 @@
  * - ProviderEventNormalizer for bilingual output
  */
 
-import { createCommandBus } from "../../runtime/command-bus.js";
+import { createCommandBus, type CommandBusResult } from "../../runtime/command-bus.js";
+import { registerSlashCommands } from "../../runtime/slash-commands.js";
 import {
   classifyIntent,
   selectCapabilities,
@@ -17,6 +18,17 @@ import {
 } from "../../runtime/debloat-nlp.js";
 import { createOutputRouter } from "../../runtime/output-router.js";
 import type { OmkEvent, OutputProfile } from "../../runtime/contracts/command-envelope.js";
+import { normalizeProviderId, readProviderRegistry } from "../../providers/model-registry.js";
+import { renderProviderModelTable } from "../../providers/model-table.js";
+import {
+  ALL_PROVIDER_TAB,
+  buildProviderTabs,
+  createModelPickerState,
+  debugModelTabs,
+  handleModelPickerKey,
+  initializeModelPickerState,
+  providerTabIdForProvider,
+} from "../../providers/model-tabs.js";
 
 export interface ChatReplOptions {
   provider?: string;
@@ -25,17 +37,171 @@ export interface ChatReplOptions {
   json?: boolean;
 }
 
+export interface ChatReplState {
+  provider?: string;
+  model?: string;
+  thinking?: string;
+  modelVariant?: string;
+  activeProviderTab?: string;
+}
+
+export function createChatReplState(options: ChatReplOptions = {}): ChatReplState {
+  return {
+    provider: options.provider,
+    model: options.model,
+  };
+}
+
+export function createChatReplCommandBus(
+  options: ChatReplOptions = {},
+  state: ChatReplState = createChatReplState(options),
+) {
+  const bus = createCommandBus();
+  registerSlashCommands(bus, state);
+  return bus;
+}
+
+export function applyChatReplSlashResultToState(state: ChatReplState, result: CommandBusResult): void {
+  if (!result.handled || !result.output) return;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(result.output);
+  } catch {
+    return;
+  }
+  if (!payload || typeof payload !== "object") return;
+  const data = payload as { provider?: unknown; model?: unknown; thinking?: unknown; modelVariant?: unknown };
+  const routeChanged = typeof data.provider === "string" || typeof data.model === "string";
+  if (typeof data.provider === "string") state.provider = data.provider;
+  if (typeof data.model === "string") state.model = data.model;
+  if (typeof data.thinking === "string") state.thinking = data.thinking;
+  if (typeof data.modelVariant === "string") {
+    state.modelVariant = data.modelVariant;
+  } else if (routeChanged) {
+    delete state.modelVariant;
+  }
+}
+function explicitProviderTabFromModelLine(line: string, providerIds: readonly string[]): string | undefined {
+  const trimmed = line.trim();
+  if (!/^\/(?:model|m)(?:\s|$)/.test(trimmed)) {
+    return undefined;
+  }
+
+  const tokens = trimmed.split(/\s+/);
+  const rawArg = tokens[1];
+  if (!rawArg) {
+    return undefined;
+  }
+
+  const slashIndex = rawArg.indexOf("/");
+  const providerPart = (slashIndex > 0 ? rawArg.slice(0, slashIndex) : rawArg)
+    .split(":")[0]
+    ?.trim()
+    .toLowerCase();
+  if (!providerPart) {
+    return undefined;
+  }
+
+  const tabs = buildProviderTabs(providerIds);
+  if (tabs.includes(providerPart)) {
+    return providerPart;
+  }
+
+  const normalized = normalizeProviderId(providerPart);
+  const normalizedTab = normalized === "auto" ? null : providerTabIdForProvider(normalized);
+  if (normalizedTab && tabs.includes(normalizedTab)) {
+    return normalizedTab;
+  }
+
+  return undefined;
+}
+
+function countVisibleProviderRows(
+  providerIds: readonly string[],
+  activeProviderTab: string,
+): number {
+  return providerIds.filter((providerId) =>
+    activeProviderTab === ALL_PROVIDER_TAB || providerTabIdForProvider(providerId) === activeProviderTab
+  ).length;
+}
+function isModelShowInput(input: string): boolean {
+  return input === "/model" || input === "/m";
+}
+
+export function prepareChatReplModelPickerForShow(args: {
+  input: string;
+  state: ChatReplState;
+  modelPickerState: ReturnType<typeof createModelPickerState>;
+  providerIds: readonly string[];
+}): boolean {
+  if (!isModelShowInput(args.input)) {
+    return false;
+  }
+
+  initializeModelPickerState({
+    state: args.modelPickerState,
+    providerIds: args.providerIds,
+  });
+  args.modelPickerState.query = "";
+  args.state.activeProviderTab = args.modelPickerState.activeProviderTab;
+  return true;
+}
+
+
 /**
  * Start an interactive chat REPL that routes all input through the full pipeline.
  */
 export async function startChatRepl(options: ChatReplOptions): Promise<void> {
   const readline = await import("readline");
-  const bus = createCommandBus();
+  const replState = createChatReplState(options);
+  const bus = createChatReplCommandBus(options, replState);
+  const modelProviderRegistry = await readProviderRegistry().catch(() => []);
+  const modelProviderIds = modelProviderRegistry.map((entry) => entry.id);
+  const modelPickerState = createModelPickerState(ALL_PROVIDER_TAB);
 
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     prompt: options.json ? "omk> " : "\x1b[36momk>\x1b[0m ",
+    completer: (line: string) => {
+      const trimmed = line.trim();
+      if (/^\/(?:model|m)(?:\s|$)/.test(trimmed) || (trimmed.length === 0 && replState.activeProviderTab)) {
+        const previousActiveProviderTab = modelPickerState.activeProviderTab;
+        const explicitProviderTab = explicitProviderTabFromModelLine(line, modelProviderIds);
+        const isFreshQuery = modelPickerState.query !== line;
+
+        if (isFreshQuery) {
+          initializeModelPickerState({
+            state: modelPickerState,
+            providerIds: modelProviderIds,
+            explicitProviderTab,
+          });
+        } else {
+          handleModelPickerKey({ key: "\t", state: modelPickerState, providerIds: modelProviderIds });
+        }
+
+        modelPickerState.query = line;
+        replState.activeProviderTab = modelPickerState.activeProviderTab;
+        const tabs = buildProviderTabs(modelProviderIds);
+        debugModelTabs({
+          providerIds: modelProviderIds,
+          tabs,
+          activeProviderTab: isFreshQuery ? modelPickerState.activeProviderTab : previousActiveProviderTab,
+          key: isFreshQuery ? (explicitProviderTab ? "/model explicit" : "/model") : "\t",
+          nextProviderTab: isFreshQuery ? undefined : modelPickerState.activeProviderTab,
+          runtimeProvider: replState.provider,
+          runtimeModel: replState.model,
+          visibleRowCount: countVisibleProviderRows(modelProviderIds, modelPickerState.activeProviderTab),
+        });
+        console.log(renderProviderModelTable(modelProviderRegistry, {
+          currentProvider: replState.provider,
+          currentModel: replState.model,
+          currentThinking: replState.thinking,
+          activeProviderTab: replState.activeProviderTab,
+        }));
+      }
+      return [[], line];
+    },
   });
 
   const outputMode = options.json ? "json" as const : "theme" as const;
@@ -90,6 +256,13 @@ export async function startChatRepl(options: ChatReplOptions): Promise<void> {
       return;
     }
 
+    const preparedModelPicker = prepareChatReplModelPickerForShow({
+      input,
+      state: replState,
+      modelPickerState,
+      providerIds: modelProviderIds,
+    });
+
     // Route through CommandBus first (handles slash commands)
     const busResult = await bus.dispatch({
       kind: "chat",
@@ -98,6 +271,12 @@ export async function startChatRepl(options: ChatReplOptions): Promise<void> {
     });
 
     if (busResult.handled) {
+      applyChatReplSlashResultToState(replState, busResult);
+      if (preparedModelPicker) {
+        replState.activeProviderTab = modelPickerState.activeProviderTab;
+      } else if (input.startsWith("/") || input.startsWith(":")) {
+        delete replState.activeProviderTab;
+      }
       for (const ev of busResult.events) {
         router.route(ev);
       }
@@ -117,8 +296,8 @@ export async function startChatRepl(options: ChatReplOptions): Promise<void> {
 
     const result = compileBloatToNlp({
       rawText: input,
-      provider: options.provider || undefined,
-      model: options.model || undefined,
+      provider: replState.provider || undefined,
+      model: replState.modelVariant ?? replState.model ?? undefined,
     });
     const sidecar = result.runtimeSidecar;
 

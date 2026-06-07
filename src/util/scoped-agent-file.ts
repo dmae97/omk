@@ -15,6 +15,7 @@ export interface AgentCapabilityScopes {
   skillNames?: string[];
   hookNames?: string[];
   toolNames?: string[];
+  reasoningVariant?: string;
 }
 
 export interface ScopedSubagentRef {
@@ -111,6 +112,7 @@ export function renderScopedAgentYaml(options: {
     `    OMK_TOOL_HINTS: ${JSON.stringify(renderCapabilityHint(options.resources.toolNames ?? [], "project"))}`,
     `    OMK_HOOK_HINTS: ${JSON.stringify(renderCapabilityHint(options.resources.hookNames ?? [], options.resources.hooksScope))}`,
     `    OMK_CONTEXT_BUDGET: "small"`,
+    `    OMK_REASONING_VARIANT: ${JSON.stringify(options.resources.reasoningVariant ?? "balanced-medium")}`,
     `    OMK_ROUTE_READ_ONLY: "false"`
   );
   if (options.excludeTools?.length) {

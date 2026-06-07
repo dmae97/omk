@@ -18,7 +18,7 @@ import type {
 } from "./types.js";
 import { DEFAULT_AUTHORITY_PROVIDER } from "./types.js";
 
-export const KNOWN_PROVIDER_IDS = ["kimi", "deepseek", "qwen", "codex", "openrouter"] as const satisfies readonly KnownProviderId[];
+export const KNOWN_PROVIDER_IDS = ["mimo", "kimi", "deepseek", "qwen", "codex", "openrouter"] as const satisfies readonly KnownProviderId[];
 export const QWEN_DASHSCOPE_COMPAT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 export const OPENROUTER_COMPAT_BASE_URL = "https://openrouter.ai/api/v1";
 
@@ -37,6 +37,8 @@ export interface ProviderRegistryEntry {
   planKind?: ProviderPlanKind;
   routing?: "runtime" | "advisory" | "external-cli";
   headers?: Record<string, string>;
+  contextWindow?: number;
+  reservedOutputTokens?: number;
   configured: boolean;
   disabledReason?: string;
   updatedAt?: string;
@@ -73,14 +75,34 @@ export interface ProviderConfigSetInput {
 }
 
 const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEntry, "id" | "configured" | "updatedAt">> = {
+  mimo: {
+    enabled: true,
+    kind: "openai-compatible",
+    baseUrl: "https://api.xiaomimimo.com/v1",
+    apiKeyEnv: "MIMO_API_KEY",
+    defaultModel: "mimo-v2.5-pro",
+    aliases: { default: "mimo-v2.5-pro", mimo: "mimo-v2.5-pro", "mimo-v2.5-pro": "mimo-v2.5-pro" },
+    capabilities: ["read", "plan", "code", "review", "qa", "research", "advisory"],
+    contextWindow: 128_000,
+    reservedOutputTokens: 4096,
+    wireApi: "openai-chat-completions",
+    auth: { method: "api-key-env" },
+    profileType: "runtime",
+    planKind: "runtime",
+    routing: "runtime",
+  },
   kimi: {
     enabled: true,
-    kind: "kimi-native",
+    kind: "openai-compatible",
+    baseUrl: "https://api.moonshot.cn/v1",
+    apiKeyEnv: "KIMI_API_KEY",
     defaultModel: "kimi-k2.6",
-    aliases: { default: "kimi-k2.6", kimi: "kimi-k2.6" },
-    capabilities: ["authority", "write", "shell", "mcp", "merge", "review"],
-    wireApi: "kimi-native",
-    auth: { method: "none" },
+    aliases: { default: "kimi-k2.6", kimi: "kimi-k2.6", moonshot: "kimi-k2.6" },
+    capabilities: ["read", "review", "qa", "research", "advisory"],
+    contextWindow: 128_000,
+    reservedOutputTokens: 4096,
+    wireApi: "openai-chat-completions",
+    auth: { method: "api-key-env" },
     profileType: "runtime",
     planKind: "runtime",
     routing: "runtime",
@@ -99,6 +121,8 @@ const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEnt
       "deepseek-v4-pro": "deepseek-v4-pro",
     },
     capabilities: ["read", "review", "qa", "research", "advisory"],
+    contextWindow: 128_000,
+    reservedOutputTokens: 4096,
     wireApi: "openai-chat-completions",
     auth: { method: "api-key-env" },
     profileType: "runtime",
@@ -111,6 +135,8 @@ const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEnt
     defaultModel: "codex-cli",
     aliases: { default: "codex-cli", codex: "codex-cli", "codex-cli": "codex-cli" },
     capabilities: ["read", "plan", "review", "advisory"],
+    contextWindow: 128_000,
+    reservedOutputTokens: 4096,
     wireApi: "external-cli",
     auth: { method: "external-cli" },
     profileType: "compatibility",
@@ -133,6 +159,8 @@ const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEnt
       "Qwen 3.7 MAX": "qwen3-max",
     },
     capabilities: ["read", "research", "review", "qa", "advisory"],
+    contextWindow: 128_000,
+    reservedOutputTokens: 4096,
     wireApi: "openai-chat-completions",
     auth: { method: "api-key-env" },
     profileType: "runtime",
@@ -152,14 +180,16 @@ const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEnt
       "openrouter/auto": "openrouter/auto",
     },
     capabilities: ["read", "research", "review", "qa", "advisory"],
+    contextWindow: 128_000,
+    reservedOutputTokens: 4096,
     wireApi: "openai-chat-completions",
     auth: { method: "api-key-env" },
     profileType: "runtime",
     planKind: "openrouter-credits",
     routing: "advisory",
     headers: {
-      "HTTP-Referer": "https://github.com/dmae97/open_multi-agent_kit",
-      "X-OpenRouter-Title": "open_multi-agent_kit",
+      "HTTP-Referer": "https://github.com/dmae97/open-multi-agent-kit",
+      "X-OpenRouter-Title": "open-multi-agent-kit",
     },
   },
 };
@@ -174,6 +204,7 @@ export function normalizeProviderId(value: string | undefined): ProviderId | "au
   if (!trimmed) return "auto";
   const lower = trimmed.toLowerCase();
   if (lower === "auto") return "auto";
+  if (lower === "mimo" || lower === "xiaomi" || lower === "xiaomi-mimo") return "mimo";
   if (lower === "kimi" || lower === "moonshot") return "kimi";
   if (lower === "deepseek" || lower === "deepseek-v4" || lower === "ds") return "deepseek";
   if (lower === "codex" || lower === "openai-codex") return "codex";
@@ -182,22 +213,55 @@ export function normalizeProviderId(value: string | undefined): ProviderId | "au
   return lower;
 }
 
-export function parseProviderModelArg(value: string | undefined): { provider?: ProviderId; model?: string } {
+export interface ProviderModelArg {
+  provider?: ProviderId;
+  model?: string;
+  thinkingLevel?: string;
+}
+
+export function parseProviderModelArg(value: string | undefined): ProviderModelArg {
   const trimmed = value?.trim();
   if (!trimmed) return {};
-  const slash = trimmed.indexOf("/");
-  if (slash > 0) {
-    const provider = normalizeProviderId(trimmed.slice(0, slash));
-    return {
-      provider: provider === "auto" ? undefined : provider,
-      model: normalizeModelAlias(trimmed.slice(slash + 1)),
-    };
+  // Extract thinking level suffix: model:level or provider/model:level
+  const colon = trimmed.lastIndexOf(":");
+  let modelPart = trimmed;
+  let thinkingLevel: string | undefined;
+  if (colon > 0) {
+    const suffix = trimmed.slice(colon + 1).trim().toLowerCase();
+    // Only treat as thinking level if it looks like one
+    if (isThinkingLevelSuffix(suffix)) {
+      modelPart = trimmed.slice(0, colon).trim();
+      thinkingLevel = suffix;
+    }
   }
-  const model = normalizeModelAlias(trimmed);
-  if (model === "codex-cli") return { provider: "codex", model };
-  if (model.startsWith("deepseek-v4-")) return { provider: "deepseek", model };
-  if (model.startsWith("claude-") || model.startsWith("gpt-")) return { provider: "openrouter", model };
-  return { model };
+
+  const withThinking = (arg: ProviderModelArg): ProviderModelArg => {
+    if (thinkingLevel) arg.thinkingLevel = thinkingLevel;
+    return arg;
+  };
+
+  const slash = modelPart.indexOf("/");
+  if (slash > 0) {
+    const provider = normalizeProviderId(modelPart.slice(0, slash));
+    const arg: ProviderModelArg = { model: normalizeModelAlias(modelPart.slice(slash + 1)) };
+    if (provider !== "auto") arg.provider = provider;
+    return withThinking(arg);
+  }
+  const model = normalizeModelAlias(modelPart);
+  if (model === "codex-cli") return withThinking({ provider: "codex", model });
+  if (model.startsWith("deepseek-v4-")) return withThinking({ provider: "deepseek", model });
+  if (model.startsWith("claude-") || model.startsWith("gpt-")) return withThinking({ provider: "openrouter", model });
+  return withThinking({ model });
+}
+
+function isThinkingLevelSuffix(suffix: string): boolean {
+  const thinkingAliases = [
+    "off", "minimal", "min", "low", "lo",
+    "medium", "med", "normal", "mid",
+    "high", "hi", "xhigh", "x-high", "x_high", "extra", "xhi",
+    "max", "maximum", "full",
+  ];
+  return thinkingAliases.includes(suffix);
 }
 
 export function normalizeModelAlias(value: string): string {
@@ -254,6 +318,8 @@ export async function setProviderConfig(
     planKind: current.planKind,
     routing: current.routing,
     headers: current.headers,
+    contextWindow: current.contextWindow,
+    reservedOutputTokens: current.reservedOutputTokens,
     disabledAt: input.enabled === false ? new Date().toISOString() : undefined,
     disabledReason: input.enabled === false ? "Disabled by user" : undefined,
     disabledBy: input.enabled === false ? "user" : undefined,
@@ -301,6 +367,8 @@ export async function setProviderEnabled(
     planKind: current.planKind,
     routing: current.routing,
     headers: current.headers,
+    contextWindow: current.contextWindow,
+    reservedOutputTokens: current.reservedOutputTokens,
     enabled,
     disabledAt: enabled ? undefined : new Date().toISOString(),
     disabledReason: enabled ? undefined : reason,
@@ -374,7 +442,7 @@ export async function providerDoctorStatus(
     profileType: entry.profileType,
     planKind: entry.planKind,
     headers: entry.headers,
-    authority: entry.id === "kimi" ? "authority" : "advisory",
+    authority: entry.id === DEFAULT_AUTHORITY_PROVIDER ? "authority" : "advisory",
     fallbackProvider: DEFAULT_AUTHORITY_PROVIDER,
     reason: available
       ? "Provider configured"
@@ -403,6 +471,8 @@ function mergeProviderConfig(id: string, stored: GenericProviderConfig | undefin
     planKind: normalizePlanKind(stored?.planKind) ?? known?.planKind ?? "runtime",
     routing: normalizeRouting(stored?.routing) ?? known?.routing ?? "advisory",
     headers: { ...(known?.headers ?? {}), ...(stored?.headers ?? {}) },
+    contextWindow: stored?.contextWindow ?? known?.contextWindow,
+    reservedOutputTokens: stored?.reservedOutputTokens ?? known?.reservedOutputTokens,
     configured: Boolean(stored),
     disabledReason: stored?.disabledReason,
     updatedAt: stored?.updatedAt,

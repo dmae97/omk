@@ -29,6 +29,8 @@ test("MCP permission profile defaults to read-only write tool denial", () => {
   assert.equal(canCallMcpTool("omk_memory_read", {}), true);
   assert.equal(canCallMcpTool("omk_memory_write", {}), false);
   assert.equal(canCallMcpTool("omk_write_todos", {}), false);
+  assert.equal(canCallMcpTool("TodoWrite", {}), false);
+  assert.equal(canCallMcpTool("omk_todo_write", {}), false);
   assert.equal(canCallMcpTool("omk_goal_verify", {}), false);
   assert.equal(canCallMcpTool("omk_evidence_check", {}), false);
   assert.equal(canCallMcpTool("omk_quality_gate", {}), false);
@@ -41,6 +43,9 @@ test("MCP permission profiles allow only intended write surfaces", () => {
   assert.equal(canCallMcpTool("omk_memory_write", { OMK_MCP_PERMISSION_PROFILE: "docs" }), true);
   assert.equal(canCallMcpTool("omk_write_todos", { OMK_MCP_PERMISSION_PROFILE: "docs" }), false);
   assert.equal(canCallMcpTool("omk_write_todos", { OMK_MCP_PERMISSION_PROFILE: "repo" }), true);
+  assert.equal(canCallMcpTool("TodoWrite", { OMK_MCP_PERMISSION_PROFILE: "repo" }), true);
+  assert.equal(canCallMcpTool("omk_todo_write", { OMK_MCP_PERMISSION_PROFILE: "repo" }), true);
+  assert.equal(canCallMcpTool("todo_write", { OMK_MCP_PERMISSION_PROFILE: "repo" }), true);
   assert.equal(canCallMcpTool("omk_goal_verify", { OMK_MCP_PERMISSION_PROFILE: "repo" }), true);
   assert.equal(canCallMcpTool("omk_evidence_check", { OMK_MCP_PERMISSION_PROFILE: "repo" }), true);
   assert.equal(canCallMcpTool("omk_quality_gate", { OMK_MCP_PERMISSION_PROFILE: "repo" }), true);
@@ -60,6 +65,8 @@ test("MCP tool filtering hides write-capable tools in default profile", () => {
     { name: "omk_memory_write" },
     { name: "omk_quality_gate" },
     { name: "omk_write_todos" },
+    { name: "TodoWrite" },
+    { name: "omk_todo_write" },
   ];
   assert.deepEqual(filterAllowedMcpTools(tools, {}).map((tool) => tool.name), ["omk_memory_read"]);
   assert.deepEqual(filterAllowedMcpTools(tools, { OMK_MCP_PERMISSION_PROFILE: "repo" }).map((tool) => tool.name), [
@@ -67,5 +74,7 @@ test("MCP tool filtering hides write-capable tools in default profile", () => {
     "omk_memory_write",
     "omk_quality_gate",
     "omk_write_todos",
+    "TodoWrite",
+    "omk_todo_write",
   ]);
 });

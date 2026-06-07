@@ -36,6 +36,19 @@ import type { CliRenderer } from "../../cli/ui/renderer.js";
 import type { TaskRunContext } from "../../contracts/worker-context.js";
 import { executeHarnessRun } from "../../harness/execute-harness-run.js";
 import type { ProviderPolicy } from "../../providers/types.js";
+import { normalizeProviderId, readProviderRegistry, type ProviderRegistryEntry } from "../../providers/model-registry.js";
+import { renderProviderModelTable } from "../../providers/model-table.js";
+import {
+  ALL_PROVIDER_TAB,
+  buildProviderTabs,
+  createModelPickerState,
+  debugModelTabs,
+  handleModelPickerKey,
+  initializeModelPickerState,
+  normalizeProviderTab,
+  providerTabIdForProvider,
+} from "../../providers/model-tabs.js";
+import { formatThinkingModelVariant, nextThinkingLevel, thinkingLevelsFor } from "../../providers/thinking-levels.js";
 import { buildChatTurnDag } from "./chat-turn-dag.js";
 import { createSlashCommandContext } from "./slash/context.js";
 import { buildNativeChatSlashCommands } from "./slash/commands/index.js";
@@ -78,10 +91,13 @@ export interface NativeRootSessionState {
   bootstrap: RuntimeBootstrap;
   provider: string;
   model?: string;
+  thinking?: string;
   approvalPolicy?: string;
   theme?: OmkBrandThemeName;
   view?: TuiView;
   animation?: OmkTuiMotion;
+  modelPickerOpen?: boolean;
+  activeProviderTab?: string;
   updatedAt?: string;
 }
 
@@ -96,6 +112,69 @@ async function runSlashHandler(
   if (ctx.renderer) emitSlashResult(normalized, ctx.renderer);
   else printSlashResult(normalized);
   return normalized;
+}
+
+function isModelSlashCommand(parsed: ParsedSlashInput): boolean {
+  return parsed.command === "/model" || parsed.command === "/m";
+}
+
+function isModelShowSlash(parsed: ParsedSlashInput): boolean {
+  return isModelSlashCommand(parsed)
+    && parsed.args.positional.length === 0
+    && parsed.args.flags.json !== true;
+}
+
+function explicitProviderTabFromModelLine(
+  line: string,
+  providerIds: readonly string[],
+): string | undefined {
+  const trimmed = line.trim();
+  if (!/^\/(?:model|m)(?:\s|$)/.test(trimmed)) {
+    return undefined;
+  }
+
+  const tokens = trimmed.split(/\s+/);
+  const rawArg = tokens[1];
+  if (!rawArg) {
+    return undefined;
+  }
+
+  const slashIndex = rawArg.indexOf("/");
+  const providerPart = (slashIndex > 0 ? rawArg.slice(0, slashIndex) : rawArg)
+    .split(":")[0]
+    ?.trim()
+    .toLowerCase();
+  if (!providerPart) {
+    return undefined;
+  }
+
+  const tabs = buildProviderTabs(providerIds);
+  if (tabs.includes(providerPart)) {
+    return providerPart;
+  }
+
+  const normalized = normalizeProviderId(providerPart);
+  const normalizedTab = normalized === "auto" ? null : providerTabIdForProvider(normalized);
+  if (normalizedTab && tabs.includes(normalizedTab)) {
+    return normalizedTab;
+  }
+
+  return undefined;
+}
+
+function isModelPickerLine(line: string, state: NativeRootSessionState): boolean {
+  const trimmed = line.trim();
+  return /^\/(?:model|m)(?:\s|$)/.test(trimmed)
+    || (state.modelPickerOpen === true && trimmed.length === 0);
+}
+
+function countModelPickerRows(
+  registry: readonly ProviderRegistryEntry[],
+  activeProviderTab: string,
+): number {
+  return registry
+    .filter((entry) => activeProviderTab === ALL_PROVIDER_TAB || providerTabIdForProvider(entry.id) === activeProviderTab)
+    .reduce((count, entry) => count + 1 + Object.keys(entry.aliases).length, 0);
 }
 
 function isDisabledEnvValue(value: string | undefined): boolean {
@@ -114,6 +193,44 @@ export function shouldRunNativeParallelTurn(
   return executionPrompt?.trim().toLowerCase() === "parallel";
 }
 
+export function buildNativeParallelTurnArgs(input: NativeRootLoopInput, prompt: string): string[] {
+  const args = ["dist/cli.js", "parallel", prompt, "--execution", "parallel", "--chat"];
+  if (input.workers && input.workers > 0) {
+    args.push("--workers", String(input.workers));
+  }
+
+  const provider = input.bootstrap.providerPolicy || input.bootstrap.provider;
+  if (provider) {
+    args.push("--provider", provider);
+  }
+
+  const model = input.env.OMK_MODEL_VARIANT
+    ?? input.bootstrap.selectedModel
+    ?? input.env.OMK_PROVIDER_MODEL
+    ?? input.env.OMK_MODEL;
+  if (model) {
+    args.push("--model", model);
+  }
+
+  const mcpScope = input.env.OMK_MCP_SCOPE;
+  if (mcpScope === "all" || mcpScope === "project" || mcpScope === "none") {
+    args.push("--mcp-scope", mcpScope);
+  }
+
+  return args;
+}
+
+function buildNativeParallelTurnEnv(input: NativeRootLoopInput): Record<string, string> {
+  return {
+    ...input.env,
+    OMK_PARALLEL_PARENT_RUN_ID: input.runId,
+    OMK_PARALLEL_PARENT_MCP: (input.mcpAllowlist ?? []).join(","),
+    OMK_PARALLEL_PARENT_SKILLS: (input.skillNames ?? []).join(","),
+    OMK_PARALLEL_PARENT_HOOKS: (input.hookNames ?? []).join(","),
+  };
+}
+
+
 async function runNativeParallelTurn(
   input: NativeRootLoopInput,
   prompt: string,
@@ -128,10 +245,10 @@ async function runNativeParallelTurn(
   }
   const result = await runShell(
     process.execPath,
-    ["dist/cli.js", "parallel", normalizedPrompt],
+    buildNativeParallelTurnArgs(input, normalizedPrompt),
     {
       cwd: input.root,
-      env: input.env,
+      env: buildNativeParallelTurnEnv(input),
       stdio: "inherit",
       timeout: 300000,
     },
@@ -531,6 +648,27 @@ export function buildNativeRootLoopTurnNode(input: {
   };
 }
 
+function runtimeSidecarIntent(node: DagNode): string | undefined {
+  const sidecar = node.routing?.runtimeSidecar;
+  if (!sidecar || typeof sidecar !== "object") return undefined;
+  const intent = (sidecar as { intent?: unknown }).intent;
+  return typeof intent === "string" && intent.trim().length > 0 ? intent : undefined;
+}
+
+function describeNativeTurnActivity(node: DagNode): string {
+  const intent = runtimeSidecarIntent(node);
+  const risk = node.routing?.risk;
+  const provider = node.routing?.provider ?? "auto";
+  const mcpCount = node.routing?.mcpServers?.length ?? 0;
+  const skillCount = node.routing?.skills?.length ?? 0;
+  const intentPart = intent ? intent.replace(/_/g, " ") : "agent turn";
+  const guardPart = risk && risk !== "read" ? `${risk} gate` : "evidence gate";
+  const scopePart = mcpCount > 0 || skillCount > 0
+    ? `${mcpCount} MCP/${skillCount} skills`
+    : "local ctx";
+  return `${intentPart} · ${guardPart} · ${scopePart} · ${provider}`;
+}
+
 async function executeNativeRootTurn(input: {
   taskRunner: TaskRunner;
   node: DagNode;
@@ -545,6 +683,7 @@ async function executeNativeRootTurn(input: {
 }): Promise<TaskResult> {
   const startedAt = Date.now();
   const routing = input.node.routing;
+  const activity = describeNativeTurnActivity(input.node);
   emitNativeTurnRoute(input);
 
   let heartbeatPrinted = false;
@@ -559,11 +698,12 @@ async function executeNativeRootTurn(input: {
             elapsedMs: sec * 1000,
             provider: routing?.provider ?? "auto",
             model: routing?.providerModel ?? input.env.OMK_PROVIDER_MODEL,
+            activity,
           });
         } else {
           process.stderr.write(
             style.phosphorDim(
-              `\r  running ${sec}s · provider=${routing?.provider ?? "auto"} · model=${routing?.providerModel ?? input.env.OMK_PROVIDER_MODEL ?? "auto"}   `,
+              `\r  ${activity} · ${sec}s · model=${routing?.providerModel ?? input.env.OMK_PROVIDER_MODEL ?? "auto"}   `,
             ),
           );
         }
@@ -782,11 +922,94 @@ export async function runNativeOmkRootLoop(
 
   // opencode-style: banner handled by PlainModernRenderer session:start event
 
+  const modelProviderRegistry = await readProviderRegistry({ env: input.env }).catch((): ProviderRegistryEntry[] => []);
+  const modelProviderIds = modelProviderRegistry.map((entry) => entry.id);
+  const modelPickerState = createModelPickerState(ALL_PROVIDER_TAB);
+  const renderModelPicker = (key?: string, previousActiveProviderTab?: string): void => {
+    const tabs = buildProviderTabs(modelProviderIds);
+    const activeProviderTab = normalizeProviderTab(
+      modelPickerState.activeProviderTab,
+      tabs,
+    );
+    debugModelTabs({
+      providerIds: modelProviderIds,
+      tabs,
+      activeProviderTab: previousActiveProviderTab ?? activeProviderTab,
+      key,
+      nextProviderTab: previousActiveProviderTab ? activeProviderTab : undefined,
+      runtimeProvider: state.provider,
+      runtimeModel: state.model,
+      visibleRowCount: countModelPickerRows(modelProviderRegistry, activeProviderTab),
+    });
+    const text = renderProviderModelTable(modelProviderRegistry, {
+      currentProvider: state.provider,
+      currentModel: state.model,
+      currentThinking: state.thinking,
+      activeProviderTab,
+    });
+    if (renderer) renderer.emit({ type: "control:output", text });
+    else process.stdout.write(`${text}\n`);
+  };
+
   const { createInterface } = await import("readline");
   const rl = createInterface({
     input: process.stdin,
     output: renderer ? process.stderr : process.stdout,
+    completer: (line: string) => {
+      if (isModelPickerLine(line, state)) {
+        const previousActiveProviderTab = modelPickerState.activeProviderTab;
+        const explicitProviderTab = explicitProviderTabFromModelLine(line, modelProviderIds);
+        const isFreshQuery = modelPickerState.query !== line;
+        if (isFreshQuery) {
+          initializeModelPickerState({
+            state: modelPickerState,
+            providerIds: modelProviderIds,
+            explicitProviderTab,
+          });
+          state.modelPickerOpen = true;
+          state.activeProviderTab = modelPickerState.activeProviderTab;
+          modelPickerState.query = line;
+          renderModelPicker(explicitProviderTab ? "/model explicit" : "/model");
+        } else if (handleModelPickerKey({
+          key: "\t",
+          state: modelPickerState,
+          providerIds: modelProviderIds,
+        })) {
+          state.modelPickerOpen = true;
+          state.activeProviderTab = modelPickerState.activeProviderTab;
+          modelPickerState.query = line;
+          renderModelPicker("\t", previousActiveProviderTab);
+        }
+        return [[], line];
+      }
+
+      if (line.trim().length === 0 || line.trimStart().startsWith("/think")) {
+        const next = nextThinkingLevel(state.thinking ?? input.env.OMK_THINKING, state.provider, state.model);
+        state.thinking = next;
+        state.updatedAt = new Date().toISOString();
+        input.env.OMK_THINKING = next;
+        input.env.OMK_MODEL_VARIANT = formatThinkingModelVariant(state.model, next);
+        const levels = thinkingLevelsFor(state.provider, state.model).join(" → ");
+        const message = `\n  Thinking: ${next} (${levels}) · ${input.env.OMK_MODEL_VARIANT}\n`;
+        if (renderer) renderer.emit({ type: "control:output", text: style.phosphorDim(message) });
+        else process.stdout.write(style.phosphorDim(message));
+      }
+      return [[], line];
+    },
   });
+  const modelPickerRawKeyHandler = (chunk: Buffer | string): void => {
+    const key = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : chunk;
+    if (key !== "\x1b[Z" || state.modelPickerOpen !== true) {
+      return;
+    }
+    const previousActiveProviderTab = modelPickerState.activeProviderTab;
+    if (handleModelPickerKey({ key, state: modelPickerState, providerIds: modelProviderIds })) {
+      state.activeProviderTab = modelPickerState.activeProviderTab;
+      renderModelPicker(key, previousActiveProviderTab);
+    }
+  };
+  process.stdin.on("data", modelPickerRawKeyHandler);
+
   const terminalOwner = new TerminalOwner(process.stdin);
   const releaseReadlineOwner = terminalOwner.claimReadline();
 
@@ -809,6 +1032,7 @@ export async function runNativeOmkRootLoop(
     }
   });
   rl.once("close", () => {
+    process.stdin.off("data", modelPickerRawKeyHandler);
     readlineClosed = true;
     if (queuedLines.length === 0) resolveNextLine(undefined);
   });
@@ -871,6 +1095,30 @@ export async function runNativeOmkRootLoop(
       const handler = slashRegistry.resolve(parsedSlash);
 
       if (handler) {
+        const modelShow = isModelShowSlash(parsedSlash);
+        if (modelShow) {
+          initializeModelPickerState({
+            state: modelPickerState,
+            providerIds: modelProviderIds,
+          });
+          modelPickerState.query = "";
+          state.modelPickerOpen = true;
+          state.activeProviderTab = modelPickerState.activeProviderTab;
+          const tabs = buildProviderTabs(modelProviderIds);
+          debugModelTabs({
+            providerIds: modelProviderIds,
+            tabs,
+            activeProviderTab: ALL_PROVIDER_TAB,
+            key: "/model",
+            runtimeProvider: state.provider,
+            runtimeModel: state.model,
+            visibleRowCount: countModelPickerRows(modelProviderRegistry, ALL_PROVIDER_TAB),
+          });
+        } else if (isModelSlashCommand(parsedSlash)) {
+          state.modelPickerOpen = false;
+          state.activeProviderTab = ALL_PROVIDER_TAB;
+        }
+
         try {
           await terminalOwner.withChildProcess(rl, async () => {
             const result = await runSlashHandler(
@@ -880,6 +1128,9 @@ export async function runNativeOmkRootLoop(
             );
             if (result.exit) running = false;
           });
+          if (!modelShow && !isModelSlashCommand(parsedSlash)) {
+            state.modelPickerOpen = false;
+          }
         } catch (err: unknown) {
           const m = err instanceof Error ? err.message : String(err);
           if (renderer) {
@@ -901,6 +1152,8 @@ export async function runNativeOmkRootLoop(
       }
       continue;
     }
+
+    state.modelPickerOpen = false;
 
     if (shouldRunNativeParallelTurn(state.approvalPolicy)) {
       const turnStartedAt = Date.now();

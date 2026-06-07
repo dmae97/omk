@@ -25,7 +25,7 @@ import {
   panel,
   gauge,
   stat,
-  sparkleHeader,
+  omkHudHeader,
   gradient,
   getSystemUsage,
   separator,
@@ -929,7 +929,7 @@ async function renderCompactDashboard(options: HudRenderOptions): Promise<string
   const goalTitle = vm.goalTitle ?? null;
   const output: string[] = [];
 
-  output.push(sparkleHeader("OMK HUD"));
+  output.push(omkHudHeader(options.runId));
 
   const summary = buildSummaryBar(vm, stateError, goalTitle, effectiveWidth);
   output.push(summary);
@@ -963,7 +963,7 @@ async function renderMediumDashboard(options: HudRenderOptions): Promise<string>
   const mainPanels: string[] = [];
   const output: string[] = [];
 
-  output.push(sparkleHeader("OMK HUD"));
+  output.push(omkHudHeader(options.runId));
 
   const runsDir = getRunsDir();
   let vm: RunViewModel = buildRunViewModel(null);
@@ -1024,7 +1024,7 @@ async function renderFullDashboard(options: HudRenderOptions): Promise<string> {
   const mainPanels: string[] = [];
   const output: string[] = [];
 
-  output.push(sparkleHeader("OMK HUD"));
+  output.push(omkHudHeader(options.runId));
 
   const runsDir = getRunsDir();
   let vm: RunViewModel = buildRunViewModel(null);
@@ -1085,7 +1085,7 @@ async function renderSectionDashboard(options: HudRenderOptions): Promise<string
   const gitChanges = gitChangesResult ?? [];
   const output: string[] = [];
 
-  output.push(sparkleHeader("OMK HUD"));
+  output.push(omkHudHeader(options.runId));
 
   const runsDir = getRunsDir();
   let vm: RunViewModel = buildRunViewModel(null);

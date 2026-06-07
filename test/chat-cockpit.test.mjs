@@ -258,12 +258,12 @@ describe("tmux lifecycle commands", () => {
       nodeCmd: "'/usr/local/bin/node'",
       cliCmd: "'/usr/local/bin/omk'",
       runId: "run-123",
-      brand: "kimicat",
+      brand: "omk",
       session: "omk-chat-run-123",
     });
     assert.ok(cmd.includes("chat --layout plain"), "should use chat --layout plain");
     assert.ok(cmd.includes("run-123"), "should contain runId");
-    assert.ok(cmd.includes("kimicat"), "should contain brand");
+    assert.ok(cmd.includes("omk"), "should contain brand");
     // Session cleanup is now handled by tmux set-hook pane-died, not inside the command
     assert.ok(!cmd.includes("/bin/sh -c"), "should not wrap in shell — runs directly via tmux new-session");
   });
@@ -273,7 +273,7 @@ describe("tmux lifecycle commands", () => {
       nodeCmd: "'/usr/local/bin/node'",
       cliCmd: "'/usr/local/bin/omk'",
       runId: "run-456",
-      brand: "kimicat",
+      brand: "omk",
       session: "omk-chat-run-456",
     });
     assert.ok(!cmd.includes("exec "), "must not contain 'exec ' to prevent orphaned panes");
@@ -313,14 +313,14 @@ describe("tmux lifecycle commands", () => {
       nodeCmd: "'/usr/local/bin/node'",
       cliCmd: "'/usr/local/bin/omk'",
       runId,
-      brand: "kimicat",
+      brand: "omk",
       session: "omk-chat-it-s-a-test",
     });
     assert.doesNotThrow(() => buildLeftPaneCommand({
       nodeCmd: "node",
       cliCmd: "omk",
       runId,
-      brand: "kimicat",
+      brand: "omk",
       session: "omk-chat-it-s-a-test",
     }));
     // The runId should survive quoting without being truncated
@@ -332,20 +332,20 @@ describe("tmux lifecycle commands", () => {
       nodeCmd: "node",
       cliCmd: "omk",
       runId: "run-789",
-      brand: "kimicat",
+      brand: "omk",
       session: "omk-chat-session-a",
     });
     const cmd2 = buildLeftPaneCommand({
       nodeCmd: "node",
       cliCmd: "omk",
       runId: "run-789",
-      brand: "kimicat",
+      brand: "omk",
       session: "omk-chat-session-b",
     });
     assert.strictEqual(cmd1, cmd2, "session should not affect command output — cleanup is handled by tmux set-hook");
   });
 
-  it("buildRightPaneCommand defaults to auto-height cockpit output", () => {
+  it("buildRightPaneCommand lets the cockpit child auto-fit its pane height", () => {
     const cmd = buildRightPaneCommand({
       nodeCmd: "node",
       cliCmd: "omk",
@@ -353,7 +353,7 @@ describe("tmux lifecycle commands", () => {
       refreshMs: 2000,
     });
     assert.ok(cmd.includes("cockpit --run-id 'run-auto' --watch --refresh 2000"));
-    assert.ok(!cmd.includes("--height"), "height should be omitted so cockpit can auto-expand vertically");
+    assert.ok(!cmd.includes("--height"), "height should be omitted so the cockpit child can pin to its own tmux pane rows");
   });
 
   it("buildRightPaneCommand preserves explicit fixed height when requested", () => {
@@ -384,15 +384,43 @@ describe("tmux lifecycle commands", () => {
     assert.ok(cmd.includes("--height 32"), "should include --height with the exact value");
   });
 
-  it("source uses -p 50 for bottom split fallback to avoid stealing cockpit space", async () => {
+  it("source keeps the optional bottom history pane small and fixed", async () => {
     const src = await readFile(new URL("../dist/util/chat-cockpit.js", import.meta.url), "utf8");
-    assert.ok(src.includes('-p", "50"'), "should use -p 50 for proportional bottom split");
+    assert.ok(src.includes('"-l", String(minHistoryPaneHeight)'), "should allocate a fixed small bottom history pane");
+    assert.ok(src.includes('-p", "25"'), "should fall back to a small proportional history pane");
   });
 
-  it("dist source passes cockpitPaneHeight to buildRightPaneCommand and splits bottom without -l historyTopHeight", async () => {
+  it("dist source applies session-scoped Night City tmux branding and pins the right dashboard", async () => {
     const src = await readFile(new URL("../dist/util/chat-cockpit.js", import.meta.url), "utf8");
-    assert.ok(src.includes("cockpitPaneHeight"), "should calculate cockpitPaneHeight");
-    assert.ok(src.includes("height: cockpitPaneHeight"), "should pass cockpitPaneHeight to buildRightPaneCommand");
-    assert.ok(!src.includes("-l String(historyTopHeight)"), "should not use -l with historyTopHeight for bottom split");
+    assert.ok(src.includes("OMK//CONTROL"), "tmux status should carry OMK control branding");
+    assert.ok(src.includes("Night City"), "tmux status should carry Night City branding");
+    assert.ok(src.includes("status-style"), "tmux session should style the status bar");
+    assert.ok(src.includes("pane-active-border-style"), "tmux window should style the active pane border");
+    assert.ok(src.includes("window-status-current-style"), "tmux session should style the active window");
+    assert.ok(src.includes("main-pane-width"), "tmux layout should pin the main chat pane width");
+    assert.ok(src.includes("main-vertical"), "tmux layout should keep the dashboard stack on the right");
+    assert.ok(src.includes('"-t", session'), "tmux theme options should be scoped to the OMK chat session");
+  });
+
+  it("dist chat command re-enables tmux cockpit before inline HUD rendering", async () => {
+    const src = await readFile(new URL("../dist/commands/chat/core.js", import.meta.url), "utf8");
+    assert.ok(src.includes("launchChatCockpit"), "chat command should launch the tmux cockpit layout");
+    assert.ok(src.includes("detectTmux"), "chat command should auto-detect tmux for layout auto");
+    assert.doesNotMatch(src, /ui: "plain-modern"/, "tmux cockpit should preserve the resolved themed UI renderer");
+    assert.ok(src.includes("ui,"), "chat command should forward the resolved UI renderer to the tmux child");
+    assert.ok(src.includes("cockpitHistory"), "chat command should forward cockpit pane options");
+  });
+
+  it("dist cockpit command documents pane-fitted watch height", async () => {
+    const src = await readFile(new URL("../dist/cli/register-basic-commands.js", import.meta.url), "utf8");
+    assert.ok(src.includes("watch default: auto-fit pane"), "height option should document pane-fitted watch mode");
+    assert.ok(!src.includes('"Cockpit fixed height in rows", "18"'), "cockpit should not force a fixed 18-row option default");
+  });
+
+  it("dist source lets the cockpit child auto-fit its actual tmux pane height", async () => {
+    const src = await readFile(new URL("../dist/util/chat-cockpit.js", import.meta.url), "utf8");
+    assert.ok(src.includes("requestedCockpitHeight"), "should preserve explicit --cockpit-height values");
+    assert.ok(src.includes("height: requestedCockpitHeight"), "should only pass an explicitly requested cockpit height");
+    assert.ok(!src.includes("cockpitPaneHeight"), "should not pass a parent-derived default height to the child pane");
   });
 });

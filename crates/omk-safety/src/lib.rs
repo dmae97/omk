@@ -5,6 +5,178 @@ pub const RUN_ARTIFACT_PATH_MAX_LENGTH: usize = 256;
 pub const RESERVED_RUN_IDS: [&str; 1] = ["latest"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThemeColor {
+    pub token: &'static str,
+    pub hex: &'static str,
+    pub rgb: (u8, u8, u8),
+    pub role: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThemeGlyph {
+    pub token: &'static str,
+    pub glyph: &'static str,
+    pub role: &'static str,
+}
+
+pub const NIGHT_CITY_RUST_COLORS: [ThemeColor; 6] = [
+    ThemeColor {
+        token: "rust-orange",
+        hex: "#F97316",
+        rgb: (249, 115, 22),
+        role: "native toolchain accent",
+    },
+    ThemeColor {
+        token: "rust-oxide",
+        hex: "#7C2D12",
+        rgb: (124, 45, 18),
+        role: "native warning shadow",
+    },
+    ThemeColor {
+        token: "cargo-green",
+        hex: "#00FFC2",
+        rgb: (0, 255, 194),
+        role: "verified native check",
+    },
+    ThemeColor {
+        token: "safety-cyan",
+        hex: "#00D6FF",
+        rgb: (0, 214, 255),
+        role: "native route signal",
+    },
+    ThemeColor {
+        token: "evidence-magenta",
+        hex: "#FF47B2",
+        rgb: (255, 71, 178),
+        role: "evidence gate accent",
+    },
+    ThemeColor {
+        token: "control-purple",
+        hex: "#9D4EDD",
+        rgb: (157, 78, 221),
+        role: "orchestration control accent",
+    },
+];
+
+pub const NIGHT_CITY_RUST_GLYPHS: [ThemeGlyph; 5] = [
+    ThemeGlyph {
+        token: "native",
+        glyph: "🦀",
+        role: "Rust safety surface",
+    },
+    ThemeGlyph {
+        token: "route",
+        glyph: "◇",
+        role: "provider route signal",
+    },
+    ThemeGlyph {
+        token: "verify",
+        glyph: "✓",
+        role: "evidence gate pass",
+    },
+    ThemeGlyph {
+        token: "evidence",
+        glyph: "▣",
+        role: "artifact-backed proof",
+    },
+    ThemeGlyph {
+        token: "guard",
+        glyph: "⟁",
+        role: "safety guard warning",
+    },
+];
+
+pub const OMK_NATIVE_ASCII_ART: &str = "  ╔═ OMK//CONTROL ═════════╗\n  ║ SIGNAL GRID :: online  ║\n  ║ ROUTE/VERIFY :: armed  ║\n  ║ RUST NATIVE :: synced  ║\n  ╚═ evidence loop held ═══╝";
+
+fn json_escape(value: &str) -> String {
+    value
+        .chars()
+        .flat_map(|c| match c {
+            '\\' => "\\\\".chars().collect::<Vec<_>>(),
+            '"' => "\\\"".chars().collect::<Vec<_>>(),
+            '\n' => "\\n".chars().collect::<Vec<_>>(),
+            '\r' => "\\r".chars().collect::<Vec<_>>(),
+            '\t' => "\\t".chars().collect::<Vec<_>>(),
+            _ => vec![c],
+        })
+        .collect()
+}
+
+fn colors_json() -> String {
+    NIGHT_CITY_RUST_COLORS
+        .iter()
+        .map(|color| {
+            format!(
+                "{{\"token\":\"{}\",\"hex\":\"{}\",\"rgb\":[{},{},{}],\"role\":\"{}\"}}",
+                json_escape(color.token),
+                json_escape(color.hex),
+                color.rgb.0,
+                color.rgb.1,
+                color.rgb.2,
+                json_escape(color.role)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn glyphs_json() -> String {
+    NIGHT_CITY_RUST_GLYPHS
+        .iter()
+        .map(|glyph| {
+            format!(
+                "{{\"token\":\"{}\",\"glyph\":\"{}\",\"role\":\"{}\"}}",
+                json_escape(glyph.token),
+                json_escape(glyph.glyph),
+                json_escape(glyph.role)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+pub fn omk_theme_token_names() -> Vec<&'static str> {
+    NIGHT_CITY_RUST_COLORS.iter().map(|color| color.token).collect()
+}
+
+pub fn omk_theme_ascii() -> &'static str {
+    OMK_NATIVE_ASCII_ART
+}
+
+pub fn omk_theme_glyphs_json() -> String {
+    format!("{{\"ok\":true,\"theme\":\"OMK//CONTROL\",\"glyphs\":[{}]}}", glyphs_json())
+}
+
+pub fn omk_theme_list_json() -> String {
+    let tokens = omk_theme_token_names()
+        .iter()
+        .map(|token| format!("\"{}\"", json_escape(token)))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"ok\":true,\"theme\":\"OMK//CONTROL\",\"surface\":\"rust-native-safety\",\"tokens\":[{}],\"glyphs\":[{}]}}",
+        tokens,
+        glyphs_json()
+    )
+}
+
+pub fn omk_theme_ascii_json() -> String {
+    format!(
+        "{{\"ok\":true,\"theme\":\"OMK//CONTROL\",\"surface\":\"rust-native-safety\",\"ascii\":\"{}\"}}",
+        json_escape(omk_theme_ascii())
+    )
+}
+
+pub fn omk_theme_snapshot_json() -> String {
+    format!(
+        "{{\"ok\":true,\"theme\":\"OMK//CONTROL\",\"surface\":\"rust-native-safety\",\"glyph\":\"🦀\",\"motto\":\"Route agents. Verify evidence. Control the loop.\",\"colors\":[{}],\"glyphs\":[{}],\"ascii\":\"{}\"}}",
+        colors_json(),
+        glyphs_json(),
+        json_escape(omk_theme_ascii())
+    )
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SafetyErrorKind {
     EmptyRunId,
     RunIdTooLong,
@@ -208,7 +380,12 @@ pub fn run_self_test() -> Result<usize, SafetyError> {
         "run-123",
         "../state.json",
     ))?;
-    Ok(6)
+    assert_eq!(NIGHT_CITY_RUST_COLORS[0].hex, "#F97316");
+    assert!(omk_theme_snapshot_json().contains("OMK//CONTROL"));
+    assert!(omk_theme_list_json().contains("rust-orange"));
+    assert!(omk_theme_ascii().contains("RUST NATIVE"));
+    assert!(omk_theme_glyphs_json().contains("evidence"));
+    Ok(11)
 }
 
 fn assert_rejected<T>(result: Result<T, SafetyError>) -> Result<(), SafetyError> {
@@ -387,6 +564,27 @@ mod tests {
 
     #[test]
     fn self_test_exercises_positive_and_negative_contracts() {
-        assert_eq!(run_self_test(), Ok(6));
+        assert_eq!(run_self_test(), Ok(11));
+    }
+
+    #[test]
+    fn exposes_night_city_rust_theme_snapshot() {
+        let snapshot = omk_theme_snapshot_json();
+        assert!(snapshot.contains("\"theme\":\"OMK//CONTROL\""));
+        assert!(snapshot.contains("\"surface\":\"rust-native-safety\""));
+        assert!(snapshot.contains("\"token\":\"rust-orange\""));
+        assert!(snapshot.contains("\"hex\":\"#F97316\""));
+        assert!(snapshot.contains("\"token\":\"cargo-green\""));
+        assert!(snapshot.contains("\"token\":\"evidence-magenta\""));
+        assert!(snapshot.contains("\"ascii\":\""));
+    }
+
+    #[test]
+    fn exposes_native_theme_list_ascii_and_glyph_contracts() {
+        assert!(omk_theme_token_names().contains(&"rust-orange"));
+        assert!(omk_theme_ascii().contains("OMK//CONTROL"));
+        assert!(omk_theme_ascii_json().contains("RUST NATIVE"));
+        assert!(omk_theme_glyphs_json().contains("\"glyph\":\"✓\""));
+        assert!(omk_theme_list_json().contains("\"tokens\""));
     }
 }

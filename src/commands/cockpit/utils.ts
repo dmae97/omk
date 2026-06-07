@@ -56,11 +56,16 @@ export interface CockpitRenderOptions {
   quick?: boolean;
   showHistory?: boolean;
   height?: number;
+  animFrame?: number;
+  /** Current prompt/composer buffer; rendered as sticky chrome, never as transcript content. */
+  composerText?: string;
   resourceProvider?: () => Promise<CockpitResourceSnapshot | null>;
   deepSeekProvider?: () => Promise<CockpitDeepSeekSnapshot | null>;
   section?: "agents" | "todos" | "mcp" | "all";
   events?: "on" | "off";
   view?: "panel" | "rail" | "compact" | "json";
+  /** CockpitRenderer for scroll state and left-pane viewport management */
+  renderer?: import("./update-loop.js").CockpitRenderer;
 }
 
 // ── Cache types ──
@@ -524,4 +529,101 @@ function formatBalanceValue(value: string): string {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return truncateText(value, 10);
   return parsed.toFixed(parsed >= 100 ? 0 : 2);
+}
+
+// ── Cockpit Layout: split left pane (transcript/working/composer) from right rail ──
+
+import type { Rect } from "./scroll.js";
+
+export type CockpitLayout = {
+  leftPane: Rect;
+  transcript: Rect;
+  working: Rect;
+  composer: Rect;
+  rightRail: Rect | null;
+  footer: Rect;
+};
+
+export function computeCockpitLayout(args: {
+  cols: number;
+  rows: number;
+  rightRailPinned: boolean;
+  composerHeight: number;
+  workingHeight: number;
+  composerLiftRows: number;
+}): CockpitLayout {
+  const cols = Math.max(80, args.cols);
+  const rows = Math.max(24, args.rows);
+
+  const gap = 1;
+  const footerH = 1;
+  const composerH = Math.max(2, args.composerHeight);
+  const workingH = Math.max(0, args.workingHeight);
+
+  const rightRailW =
+    args.rightRailPinned && cols >= 110
+      ? Math.min(44, Math.max(34, Math.floor(cols * 0.25)))
+      : 0;
+
+  const leftW = rightRailW > 0 ? cols - rightRailW - gap : cols;
+  const leftPane: Rect = {
+    x: 1,
+    y: 1,
+    w: leftW - 1,
+    h: rows - footerH,
+  };
+
+  const composerY = Math.max(
+    6,
+    rows - footerH - composerH - Math.max(0, args.composerLiftRows),
+  );
+
+  const workingY = Math.max(3, composerY - workingH - 1);
+
+  const transcript: Rect = {
+    x: leftPane.x,
+    y: leftPane.y,
+    w: leftPane.w,
+    h: Math.max(1, workingY - leftPane.y - 1),
+  };
+
+  const working: Rect = {
+    x: leftPane.x,
+    y: workingY,
+    w: leftPane.w,
+    h: workingH,
+  };
+
+  const composer: Rect = {
+    x: leftPane.x,
+    y: composerY,
+    w: leftPane.w,
+    h: composerH,
+  };
+
+  const rightRail: Rect | null =
+    rightRailW > 0
+      ? {
+          x: cols - rightRailW + 1,
+          y: 1,
+          w: rightRailW,
+          h: rows - footerH,
+        }
+      : null;
+
+  const footer: Rect = {
+    x: 1,
+    y: rows,
+    w: cols,
+    h: footerH,
+  };
+
+  return {
+    leftPane,
+    transcript,
+    working,
+    composer,
+    rightRail,
+    footer,
+  };
 }

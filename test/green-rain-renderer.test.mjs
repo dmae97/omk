@@ -37,6 +37,7 @@ test("GreenRainRenderer renders an OMK-native control-plane header", () => {
   assert.equal(stdout.join(""), "");
   const output = stderr.join("");
   assert.match(output, /OMK GREEN RAIN/);
+  assert.match(output, /◢█ OMK GREEN RAIN █◣/);
   assert.match(output, /Follow the signal\. Verify the evidence\./);
   assert.match(output, /run#green-r/);
   assert.match(output, /verify the evidence/);
@@ -87,8 +88,9 @@ test("GreenRainRenderer honors NO_COLOR and clamps visible width", () => {
     });
 
     const output = stderr.join("");
-    assert.doesNotMatch(output, /\x1b\[/);
-    for (const line of output.split("\n").filter(Boolean)) {
+    assert.doesNotMatch(output, /\x1b\[[0-9;]*m/);
+    const visibleOutput = output.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
+    for (const line of visibleOutput.split("\n").filter(Boolean)) {
       assert.ok(line.length <= 48, `line exceeded width: ${line}`);
     }
   } finally {

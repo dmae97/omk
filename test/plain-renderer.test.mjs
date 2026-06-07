@@ -53,7 +53,7 @@ test("PlainModernRenderer routes status to stderr and assistant output to stdout
   renderer.emit({ type: "session:start", runId: "r1", provider: "codex", model: "codex-cli", layout: "plain" });
   renderer.emit({ type: "input:submitted", text: "hello" });
   renderer.emit({ type: "turn:route", provider: "codex", model: "codex-cli", risk: "read", sandbox: "read-only" });
-  renderer.emit({ type: "turn:heartbeat", elapsedMs: 3000, provider: "codex", model: "codex-cli" });
+  renderer.emit({ type: "turn:heartbeat", elapsedMs: 3000, provider: "codex", model: "codex-cli", activity: "code edit · scoping 1 MCP/1 skills · write gate · codex" });
   renderer.emit({ type: "assistant:final", text: "answer" });
   renderer.emit({ type: "turn:finish", durationMs: 3400, exitCode: 0 });
 
@@ -62,7 +62,8 @@ test("PlainModernRenderer routes status to stderr and assistant output to stdout
   match(statusOutput, /OMK Agent Console/);
   match(statusOutput, /› hello/);
   match(statusOutput, /◇ Route/);
-  match(statusOutput, /◌ Running 3s/);
+  match(statusOutput, /◌ code edit · scoping 1 MCP\/1 skills · write gate · codex · 3s/);
+  doesNotMatch(statusOutput, /Working\.\.\.|Running 3s/);
   match(statusOutput, /● Finished 3\.4s · exit 0/);
   strictEqual(assistantOutput, "\n● Assistant\nanswer\n");
   ok(!assistantOutput.includes("Route"));
@@ -84,4 +85,23 @@ test("PlainModernRenderer sanitizes control and error output", () => {
   doesNotMatch(output, /The model may report evidence/);
   doesNotMatch(output, /Loop Guard/);
   doesNotMatch(output, /raw payload/);
+});
+
+test("PlainModernRenderer pins its compact header in an alternate screen scroll region on TTY", () => {
+  const stdout = [];
+  const stderr = [];
+  const renderer = new PlainModernRenderer({
+    stdout: { write: (chunk) => stdout.push(String(chunk)) },
+    stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY: true, rows: 30 },
+  });
+
+  renderer.start();
+  renderer.emit({ type: "session:start", runId: "plain-sticky", provider: "codex", model: "codex-cli", layout: "plain" });
+  renderer.stop();
+
+  strictEqual(stdout.join(""), "");
+  const output = stderr.join("");
+  match(output, /\x1b\[\?1049h/);
+  match(output, /\x1b\[5;30r/);
+  match(output, /\x1b\[\?1049l/);
 });

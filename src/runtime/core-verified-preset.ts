@@ -56,24 +56,19 @@ export const OMK_CORE_VERIFIED_PRESET: OmkCoreVerifiedPreset = {
   skills: [
     "omk-repo-explorer",
     "omk-context-broker",
-    "omk-industrial-control-loop",
     "omk-plan-first",
     "omk-quality-gate",
-    "omk-code-review",
-    "omk-test-debug-loop",
-    "omk-python-typing",
+    "omk-secret-guard",
   ],
   hooks: [
     "pre-shell-guard.sh",
     "protect-secrets.sh",
     "stop-verify.sh",
-    "subagent-stop-audit.sh",
-    "post-format.sh",
   ],
   mcpServers: [
     "omk-project",
   ],
-  purpose: "Baseline safety, context, review, and verification loop for everyday OMK work with project-local MCP plus full skills and hooks capability flags.",
+  purpose: "Baseline conservative orchestration loop with project-local MCP, minimal hooks, and only the core skills needed for bounded planning, repo context, verification, and secret protection.",
 };
 
 export const OMK_TS_PRODUCT_PRESET: OmkTsProductPreset = {

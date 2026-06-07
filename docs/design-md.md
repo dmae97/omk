@@ -1,6 +1,6 @@
 # DESIGN.md Integration
 
-oh-my-kimi supports Google DESIGN.md for visual identity.
+open-multi-agent-kit supports Google DESIGN.md for visual identity.
 
 ## Commands
 

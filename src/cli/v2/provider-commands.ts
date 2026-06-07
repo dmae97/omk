@@ -209,6 +209,36 @@ export class ModelUseCommand extends Command {
   }
 }
 
+export class ThinkCommand extends Command {
+  static override paths = [["think"], ["thinking"]];
+  static override usage = Command.Usage({
+    description: "Preview model thinking level or custom variant without changing settings",
+    examples: [
+      ["Preview high thinking", "omk think high --model codex"],
+      ["Export a custom variant", "omk think variant code-high --export"],
+    ],
+  });
+
+  level = Option.String("");
+  variant = Option.String("");
+  provider = Option.String("--provider", "");
+  model = Option.String("--model", "");
+  exportEnv = Option.Boolean("--export", false);
+  json = Option.Boolean("--json", false);
+
+  async execute(): Promise<number> {
+    const { thinkCommand } = await import("../../commands/model.js");
+    await thinkCommand(this.level || undefined, this.variant || undefined, {
+      provider: this.provider || undefined,
+      model: this.model || undefined,
+      exportEnv: this.exportEnv,
+      json: this.json,
+    });
+    return typeof process.exitCode === "number" ? process.exitCode : process.exitCode ? 1 : 0;
+  }
+}
+
+
 export class ModelAliasAddCommand extends Command {
   static override paths = [["model", "alias", "add"]];
   static override usage = Command.Usage({
@@ -258,6 +288,7 @@ export function registerProviderCommandsV2(cli: ClipanionRegistrar): void {
   cli.register(ModelAliasesCommand);
   cli.register(ModelResolveCommand);
   cli.register(ModelUseCommand);
+  cli.register(ThinkCommand);
   cli.register(ModelAliasAddCommand);
   cli.register(ModelAliasRemoveCommand);
 }

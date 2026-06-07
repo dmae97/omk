@@ -190,7 +190,7 @@ export class KimiWireClient {
       "initialize",
       {
         protocol_version: "2025-03-11",
-        client: { name: "oh-my-kimi", version: getOmkVersionSync() },
+        client: { name: "open-multi-agent-kit", version: getOmkVersionSync() },
         capabilities: { supports_question: true, supports_plan_mode: true },
         external_tools: [
         {

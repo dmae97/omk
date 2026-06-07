@@ -171,7 +171,7 @@ export async function executeParallelRun(input: {
   process.once("SIGTERM", handleSignal);
 
   console.log(omkCliHero(formatOmkVersionFooter()));
-  console.log(style.purpleBold("🐾 omk parallel — DAG executor with live UI"));
+  console.log(style.phosphorBold("◈ omk parallel — DAG executor with live UI"));
   console.log(style.gray(t("parallel.agentsActivated")));
 
   // Determine TTY and mode defaults

@@ -6,7 +6,7 @@ export function registerWorkflowCommands(program: Command): void {
   program
     .command("plan <goal>")
     .description(t("cmd.planDesc"))
-    .option("--thinking <mode>", "thinking mode", "enabled")
+    .option("--thinking <mode>", "thinking mode (off|medium|high|xhigh|max)", "high")
     .option("--spec-kit", t("cmd.featureSpecKitOption"))
     .option("--no-spec-kit", t("cmd.featureNoSpecKitOption"))
     .action(async (goal, options) => {
@@ -124,11 +124,15 @@ export function registerWorkflowCommands(program: Command): void {
 
   program
     .command("orchestrate <goal>")
-    .description("Parallel agent orchestration with skill/MCP/hook assignment")
+    .description("Parallel agent orchestration with skill/MCP/hook assignment. Use --mode for enhanced think/mcp/skills/variant subagents.")
     .option("--workers <n>", "worker count (auto = resource profile based)", "auto")
     .option("--timeout <ms>", "orchestration timeout in milliseconds", "600000")
     .option("--dry-run", "Create the orchestration plan without executing workers")
     .option("--output <path>", "Write orchestration result JSON")
+    .option("--mode <modes>", "Enhanced mode: default (think+mcp+skills), full (all), or comma-separated: think,mcp,skills,variant")
+    .option("--variant-count <n>", "Number of variants when variant mode is active (1-5, default: 3)", "3")
+    .option("--variant-strategy <strategy>", "Variant selection strategy: majority-vote, best-score, first-pass, ensemble (default: best-score)")
+    .option("--thinking-level <level>", "Thinking trace verbosity: brief, normal, verbose (default: normal)")
     .action(async (goal, options) => {
       const globalOpts = program.opts();
       const { orchestrateCommand } = await import("../commands/orchestrate.js");

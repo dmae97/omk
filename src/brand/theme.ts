@@ -8,8 +8,10 @@ export type OmkBrandThemeName =
   | "system24"
   | "green-rain"
   | "neon-grid"
+  | "rust-forge"
   | "plain"
-  | "high-contrast";
+  | "high-contrast"
+  | "matrix";
 export type OmkTuiMotion = "off" | "low" | "auto" | "full";
 
 export interface OmkBrandTheme {
@@ -45,8 +47,8 @@ export interface OmkBrandTheme {
 export const SYSTEM24_THEME: OmkBrandTheme = {
   name: "system24",
   label: "OMK System24",
-  tagline: "Provider-neutral agent console.",
-  motto: "Route the work. Verify the evidence.",
+  tagline: "OMK operator console for routed agent work.",
+  motto: "Route the work. Verify the evidence. Control the loop.",
   symbols: {
     prompt: "›",
     active: "▶",
@@ -75,8 +77,8 @@ export const SYSTEM24_THEME: OmkBrandTheme = {
 export const GREEN_RAIN_THEME: OmkBrandTheme = {
   name: "green-rain",
   label: "OMK Green Rain",
-  tagline: "Provider-neutral agent control plane.",
-  motto: "Follow the signal. Verify the evidence.",
+  tagline: "Provider-neutral Green Rain signal console.",
+  motto: "Follow the signal. Verify the evidence. Control the loop.",
   symbols: {
     prompt: "›",
     active: "▶",
@@ -86,15 +88,15 @@ export const GREEN_RAIN_THEME: OmkBrandTheme = {
     signal: "◆",
   },
   colors: {
-    border: rgb(0, 95, 45),
-    borderHot: rgb(80, 255, 130),
-    text: rgb(210, 255, 220),
-    muted: rgb(90, 140, 105),
-    primary: rgb(90, 255, 120),
-    success: rgb(120, 255, 150),
-    warning: rgb(230, 210, 110),
-    danger: rgb(255, 110, 110),
-    info: rgb(110, 220, 180),
+    border: rgb(8, 39, 31),
+    borderHot: rgb(0, 255, 194),
+    text: rgb(232, 248, 255),
+    muted: rgb(117, 143, 168),
+    primary: rgb(0, 255, 194),
+    success: rgb(0, 255, 194),
+    warning: rgb(255, 176, 0),
+    danger: rgb(255, 88, 116),
+    info: rgb(0, 214, 255),
   },
   motion: {
     rain: true,
@@ -104,8 +106,8 @@ export const GREEN_RAIN_THEME: OmkBrandTheme = {
 
 export const NEON_GRID_THEME: OmkBrandTheme = {
   name: "neon-grid",
-  label: "OMK//CONTROL",
-  tagline: "Neon control plane for coding agents.",
+  label: "PI+OMK//CONTROL",
+  tagline: "PI+OMK control plane for coding agents.",
   motto: "Route agents. Verify evidence. Control the loop.",
   symbols: {
     prompt: "›",
@@ -116,15 +118,15 @@ export const NEON_GRID_THEME: OmkBrandTheme = {
     signal: "◇",
   },
   colors: {
-    border: rgb(38, 49, 77),
-    borderHot: rgb(0, 229, 255),
-    text: rgb(234, 242, 255),
-    muted: rgb(123, 132, 153),
-    primary: rgb(0, 229, 255),
-    success: rgb(0, 255, 136),
-    warning: rgb(252, 238, 9),
-    danger: rgb(255, 59, 92),
-    info: rgb(139, 92, 246),
+    border: rgb(34, 50, 74),
+    borderHot: rgb(0, 214, 255),
+    text: rgb(232, 248, 255),
+    muted: rgb(117, 143, 168),
+    primary: rgb(0, 214, 255),
+    success: rgb(0, 255, 194),
+    warning: rgb(255, 176, 0),
+    danger: rgb(255, 88, 116),
+    info: rgb(0, 214, 255),
   },
   motion: {
     rain: false,
@@ -132,11 +134,71 @@ export const NEON_GRID_THEME: OmkBrandTheme = {
   },
 };
 
+export const RUST_FORGE_THEME: OmkBrandTheme = {
+  name: "rust-forge",
+  label: "OMK Rust Forge",
+  tagline: "Rust-native safety console for OMK orchestration.",
+  motto: "Forge native checks. Verify the evidence. Control the loop.",
+  symbols: {
+    prompt: "›",
+    active: "◉",
+    done: "✓",
+    failed: "✕",
+    pending: "□",
+    signal: "▣",
+  },
+  colors: {
+    border: rgb(124, 45, 18),
+    borderHot: rgb(249, 115, 22),
+    text: rgb(232, 248, 255),
+    muted: rgb(117, 143, 168),
+    primary: rgb(249, 115, 22),
+    success: rgb(0, 255, 194),
+    warning: rgb(255, 176, 0),
+    danger: rgb(255, 88, 116),
+    info: rgb(0, 214, 255),
+  },
+  motion: {
+    rain: false,
+    spinner: "braille",
+  },
+};
+
+export const MATRIX_THEME: OmkBrandTheme = {
+  name: "matrix",
+  label: "OMK Matrix",
+  tagline: "Matrix rain code console for OMK orchestration.",
+  motto: "Follow the white rabbit. Verify the evidence. Control the loop.",
+  symbols: {
+    prompt: "›",
+    active: "⏵",
+    done: "✓",
+    failed: "✕",
+    pending: "○",
+    signal: "⏣",
+  },
+  colors: {
+    border: rgb(0, 20, 0),
+    borderHot: rgb(0, 255, 65),
+    text: rgb(200, 255, 200),
+    muted: rgb(0, 95, 25),
+    primary: rgb(0, 255, 65),
+    success: rgb(0, 255, 65),
+    warning: rgb(255, 176, 0),
+    danger: rgb(255, 50, 50),
+    info: rgb(0, 200, 50),
+  },
+  motion: {
+    rain: true,
+    spinner: "scanline",
+  },
+};
+
 export const PLAIN_THEME: OmkBrandTheme = {
   name: "plain",
   label: "OMK Plain",
-  tagline: "Provider-neutral agent console.",
-  motto: "Route the work. Verify the evidence.",
+  tagline: "OMK operator console.",
+  motto: "Route the work. Verify the evidence. Control the loop.",
   symbols: {
     prompt: ">",
     active: ">",
@@ -165,8 +227,8 @@ export const PLAIN_THEME: OmkBrandTheme = {
 export const HIGH_CONTRAST_THEME: OmkBrandTheme = {
   name: "high-contrast",
   label: "OMK High Contrast",
-  tagline: "High-contrast agent console.",
-  motto: "Route the work. Verify the evidence.",
+  tagline: "High-contrast OMK operator console.",
+  motto: "Route the work. Verify the evidence. Control the loop.",
   symbols: {
     prompt: "›",
     active: "▶",
@@ -197,17 +259,39 @@ export function resolveOmkBrandTheme(name: string | undefined): OmkBrandTheme {
   if (
     normalized === "green-rain" ||
     normalized === "green" ||
-    normalized === "rain"
+    normalized === "phosphor"
   )
     return GREEN_RAIN_THEME;
+  if (
+    normalized === "matrix" ||
+    normalized === "matrix-rain" ||
+    normalized === "neo" ||
+    normalized === "zion" ||
+    normalized === "rain"
+  )
+    return MATRIX_THEME;
   if (
     normalized === "neon-grid" ||
     normalized === "neon" ||
     normalized === "grid" ||
     normalized === "control" ||
-    normalized === "omk-control"
+    normalized === "omk-control" ||
+    normalized === "night-city" ||
+    normalized === "night-city-ops" ||
+    normalized === "metrics" ||
+    normalized === "metrics-control" ||
+    normalized === "cyberpunk"
   )
     return NEON_GRID_THEME;
+  if (
+    normalized === "rust-forge" ||
+    normalized === "rust" ||
+    normalized === "cargo" ||
+    normalized === "oxide" ||
+    normalized === "forge" ||
+    normalized === "rust-native"
+  )
+    return RUST_FORGE_THEME;
   if (normalized === "plain") return PLAIN_THEME;
   if (normalized === "high-contrast" || normalized === "contrast")
     return HIGH_CONTRAST_THEME;

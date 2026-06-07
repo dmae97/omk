@@ -28,7 +28,7 @@ for (const file of strictDefaultSurfaceFiles) {
   }
 }
 
-const legacyIsolationChecks = [
+const noLegacyRuntimeChecks = [
   {
     file: "src/runtime/runtime-backed-task-runner.ts",
     checks: [
@@ -37,12 +37,14 @@ const legacyIsolationChecks = [
         pattern: /readProviderConfig\("\.omk"\)/,
       },
       {
-        name: "legacy home config is gated",
-        pattern: /options\.legacyKimiEnabled\s*\?\s*\[readProviderConfig\("\.kimi"\)\]\s*:\s*\[\]/,
+        name: "legacy home provider config removed",
+        pattern: /readProviderConfig\("\.kimi"\)/,
+        forbidden: true,
       },
       {
-        name: "legacy runtime registration is explicit",
-        pattern: /legacyKimiEnabled\s*&&\s*await checkCommand/,
+        name: "legacy Kimi print runtime removed",
+        pattern: /createKimiPrintRuntime/,
+        forbidden: true,
       },
     ],
   },
@@ -50,26 +52,30 @@ const legacyIsolationChecks = [
     file: "src/providers/provider-runtime.ts",
     checks: [
       {
-        name: "legacy request is explicit",
-        pattern: /const legacyKimiRequested = shouldEnableLegacyKimi\(providerPolicy, options\.fallbackChain\)/,
+        name: "legacy request flag removed",
+        pattern: /legacyKimiRequested|shouldEnableLegacyKimi/,
+        forbidden: true,
       },
       {
-        name: "legacy provider registration is gated",
-        pattern: /if \(legacyKimiRequested\) \{[\s\S]*createKimiProvider/,
+        name: "legacy Kimi provider registration removed",
+        pattern: /createKimiProvider|createKimiTaskRunner/,
+        forbidden: true,
       },
       {
-        name: "legacy CLI runtime registration is gated",
-        pattern: /if \(legacyKimiRequested\) \{[\s\S]*await checkCommand/,
+        name: "legacy CLI runtime registration removed",
+        pattern: /createKimiPrintRuntime|createKimiWireRuntime|resolveKimiBin/,
+        forbidden: true,
       },
     ],
   },
 ];
 
-for (const { file, checks } of legacyIsolationChecks) {
+for (const { file, checks } of noLegacyRuntimeChecks) {
   const text = readFileSync(file, "utf8");
-  for (const { name, pattern } of checks) {
-    if (!pattern.test(text)) {
-      violations.push(`${file}: missing legacy-isolation guard: ${name}`);
+  for (const { name, pattern, forbidden } of checks) {
+    const matched = pattern.test(text);
+    if (forbidden ? matched : !matched) {
+      violations.push(`${file}: ${forbidden ? "unexpected legacy surface" : "missing expected guard"}: ${name}`);
     }
   }
 }
@@ -81,5 +87,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Default control-plane surface is provider-neutral (${strictDefaultSurfaceFiles.length} files checked; ${legacyIsolationChecks.length} legacy guards checked).`
+  `Default control-plane surface is provider-neutral (${strictDefaultSurfaceFiles.length} files checked; ${noLegacyRuntimeChecks.length} no-legacy guards checked).`
 );

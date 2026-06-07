@@ -21,7 +21,7 @@ export class PlanCommand extends Command {
   });
 
   goal = Option.String({ required: true });
-  thinking = Option.String("--thinking", "enabled");
+  thinking = Option.String("--thinking", "high");
   specKit = Option.Boolean("--spec-kit", false);
 
   async execute(): Promise<number> {

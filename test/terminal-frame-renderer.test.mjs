@@ -34,6 +34,14 @@ test("full mode clears frame before writing full content", () => {
   assert.deepEqual(writes, ["<clear>", "one\ntwo\n"]);
 });
 
+test("full mode does not append a trailing newline for fixed-height frames", () => {
+  const { renderer, writes } = createCapturedRenderer({ mode: "full", height: 2 });
+
+  renderer.render("one\ntwo");
+
+  assert.deepEqual(writes, ["<clear>", "one\ntwo"]);
+});
+
 test("append mode writes complete frames without clearing", () => {
   const { renderer, writes } = createCapturedRenderer({ mode: "append" });
 

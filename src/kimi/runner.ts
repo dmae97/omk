@@ -2,7 +2,7 @@ import type { IPty } from "node-pty";
 import { BannerReplacer } from "./banner.js";
 import { KimiBugFilter } from "./bug-filter.js";
 import { KimiContinuePromptGuard } from "../adapters/kimi/continue-prompt-guard.js";
-import { kimicatBanner, style, loadThemeConfig } from "../util/theme.js";
+import { omkBanner, style, loadThemeConfig } from "../util/theme.js";
 import { ensureDir, injectKimiGlobals, getProjectRoot, getUserHome, pathExists } from "../util/fs.js";
 import { pasteScreenshot } from "../util/screenshot-store.js";
 import { isAbsolute, join, relative, resolve } from "path";
@@ -19,6 +19,10 @@ import { checkCommand, resolveKimiBin } from "../util/shell.js";
 import { defaultScopedRoleAgentFile, writeScopedAgentFile } from "../util/scoped-agent-file.js";
 import { terminateProcessTree, type ProcessTreeTarget } from "../util/process-tree.js";
 import { isDeniedChildEnvName } from "../runtime/child-env.js";
+import {
+  contextPreflightErrorMessage,
+  preflightProviderInput,
+} from "../providers/context-preflight.js";
 
 const REQUIRED_KIMI_ENV_KEYS = new Set([
   "PATH",
@@ -415,7 +419,7 @@ export async function runKimiInteractive(
   };
   const replacer = new BannerReplacer((meta) => {
     if (noBanner) return;
-    writeStdout(kimicatBanner(meta, formatOmkVersionFooter(), theme ?? undefined) + "\n");
+    writeStdout(omkBanner(meta, formatOmkVersionFooter(), theme ?? undefined) + "\n");
     options?.onMeta?.(meta);
   }, true, (rawMeta) => {
     const kimiSession = rawMeta.session?.trim();
@@ -536,7 +540,7 @@ export async function runKimiInteractive(
   // Print OMK banner BEFORE spawning Kimi
   const meta = launchMeta;
   if (!noBanner) {
-    writeStdout(kimicatBanner(meta, formatOmkVersionFooter(), theme ?? undefined) + "\n");
+    writeStdout(omkBanner(meta, formatOmkVersionFooter(), theme ?? undefined) + "\n");
   }
   options?.onMeta?.(meta);
 
@@ -550,8 +554,8 @@ export async function runKimiInteractive(
       "[omk] Failed to load node-pty native module. " +
         `(${message})\n` +
         "This usually happens when installed with --ignore-scripts.\n" +
-        "Fix: npm rebuild -g @oh-my-kimi/cli\n" +
-        "Or reinstall: npm uninstall -g @oh-my-kimi/cli && npm install -g @oh-my-kimi/cli"
+        "Fix: npm rebuild -g open-multi-agent-kit\n" +
+        "Or reinstall: npm uninstall -g open-multi-agent-kit && npm install -g open-multi-agent-kit"
     );
   }
 
@@ -797,6 +801,9 @@ export interface KimiTaskRunnerOptions {
   onThinking?: (thinking: string) => void;
   /** If true, automatically pick .omk/agents/{role}.yaml per node role */
   roleAgentFiles?: boolean;
+  contextWindow?: number;
+  reservedOutputTokens?: number;
+  safetyMarginTokens?: number;
 }
 
 function createLiveThinkingHandler(onThinking: ((thinking: string) => void) | undefined) {
@@ -958,7 +965,7 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
         });
         args.push("--agent-file", scopedAgentFile);
       }
-      const promptInput = `${buildNodeMessage(node, mergedEnv, promptPrefix)}\n`;
+      const rawPromptInput = `${buildNodeMessage(node, mergedEnv, promptPrefix)}\n`;
       args.push("--print", "--input-format", "text");
 
       if (worktree) {
@@ -986,7 +993,32 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
         };
       }
       let result: Awaited<ReturnType<typeof runShellStreaming>>;
+      let promptInput = rawPromptInput;
+      let contextPreflightMetadata: Record<string, unknown> | undefined;
       try {
+        const preflight = await preflightProviderInput(rawPromptInput, {
+          provider: "kimi",
+          model: mergedEnv.OMK_KIMI_MODEL ?? mergedEnv.OMK_MODEL,
+          contextWindow: options.contextWindow,
+          reservedOutputTokens: options.reservedOutputTokens,
+          safetyMarginTokens: options.safetyMarginTokens,
+          runId,
+          nodeId: node.id,
+          projectRoot: getProjectRoot(),
+        });
+        if (!preflight.ok) {
+          return {
+            success: false,
+            exitCode: 1,
+            stdout: "",
+            stderr: contextPreflightErrorMessage(preflight.report),
+            metadata: { contextPreflight: preflight.report },
+          };
+        }
+        promptInput = `${preflight.input.trimEnd()}\n`;
+        contextPreflightMetadata = preflight.report.compacted
+          ? { contextPreflight: preflight.report }
+          : undefined;
         const continuePromptGuard = new KimiContinuePromptGuard({
           maxAutoEnters: Number(process.env.OMK_KIMI_MAX_AUTO_ENTER ?? 5),
         });
@@ -1083,6 +1115,7 @@ export function createKimiTaskRunner(options: KimiTaskRunnerOptions = {}): TaskR
         exitCode: result.exitCode,
         stdout: prefixStdout,
         stderr: stderrWithOptionalWarning,
+        metadata: contextPreflightMetadata,
       };
     },
   };

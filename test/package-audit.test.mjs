@@ -278,6 +278,15 @@ describe("validateRequiredEntries", () => {
     }
   });
 
+  it("locks canonical README branding assets into required package entries", () => {
+    for (const asset of [
+      "readmeasset/omk-control.webp",
+      "readmeasset/ASSET_PROVENANCE.md",
+    ]) {
+      assert.ok(REQUIRED_ENTRIES.includes(asset), `missing required README branding asset: ${asset}`);
+    }
+  });
+
   it("locks OMK web bridge Chrome extension templates into required package entries", () => {
     for (const template of [
       "templates/web-bridge/chrome-extension/manifest.json",
@@ -396,6 +405,12 @@ describe("validateForbiddenEntries", () => {
     const files = [makeFile("test/smoke.test.mjs")];
     const result = validateForbiddenEntries(files, FORBIDDEN_PATTERNS);
     assert.ok(result.errors.some((e) => e.includes("test/smoke.test.mjs")));
+  });
+
+  it("fails on legacy local .pi directory contents", () => {
+    const files = [makeFile(".pi/settings.json")];
+    const result = validateForbiddenEntries(files, FORBIDDEN_PATTERNS);
+    assert.ok(result.errors.some((e) => e.includes(".pi/settings.json")));
   });
 
   it("fails on source-only public assets", () => {
@@ -544,14 +559,14 @@ describe("validateSizeBudgets", () => {
     const files = [
       makeFile("dist/cli.js", 3 * 1024 * 1024),
       makeFile("dist/commands/run.js", 2 * 1024 * 1024),
-      makeFile("readmeasset/kimicat.png", 4 * 1024 * 1024),
+      makeFile("readmeasset/omk-social-preview.png", 4 * 1024 * 1024),
       makeFile("README.md", 1024),
     ];
     const pkg = { size: 1024, unpackedSize: 1024, entryCount: files.length };
     const result = validateSizeBudgets(files, pkg);
     assert.equal(result.sizeDrivers.groups[0].path, "dist/");
     assert.equal(result.sizeDrivers.groups[0].size, 5 * 1024 * 1024);
-    assert.equal(result.sizeDrivers.largestFiles[0].path, "readmeasset/kimicat.png");
+    assert.equal(result.sizeDrivers.largestFiles[0].path, "readmeasset/omk-social-preview.png");
   });
 });
 
@@ -604,7 +619,7 @@ describe("validateDistDrift", () => {
 
 describe("validateMarkdownLinks", () => {
   it("passes when all local links resolve to packed files", () => {
-    const pathSet = new Set(["readmeasset/kimicat.png"]);
+    const pathSet = new Set(["readmeasset/omk-social-preview.png"]);
     const result = validateMarkdownLinks(
       ["README.md"],
       pathSet

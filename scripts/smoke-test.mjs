@@ -6,7 +6,7 @@
  *
  * Hardening guarantees:
  *   - Resolves tarball globs to a single file before install.
- *   - Requires both omk and open-multi-agent-kit installed bin shims (no cli.js fallback).
+ *   - Requires the omk installed bin shim (no cli.js fallback).
  *   - Runs local install smoke + global-prefix install smoke.
  *   - Runs provider-neutral Kimi API onboarding smoke with isolated HOME (no host Kimi CLI dependency).
  *   - Runs star fallback smoke with a fake gh shim.
@@ -144,21 +144,20 @@ try {
 }
 
 const localOmk = localBinPath(installDir, "omk");
-const localOpenMultiAgentKit = localBinPath(installDir, "open-multi-agent-kit");
+const localLegacyCli = localBinPath(installDir, "omk-cli");
 
 if (!existsSync(localOmk)) {
   logFail("Local omk bin shim missing");
   cleanup();
   process.exit(1);
 }
-if (!existsSync(localOpenMultiAgentKit)) {
-  logFail("Local open-multi-agent-kit bin shim missing");
+if (existsSync(localLegacyCli)) {
+  logFail("Local unexpected package-name bin shim omk-cli should not be installed");
   cleanup();
   process.exit(1);
 }
 
 const localOmkCmd = (args) => binCmd(localOmk) + ` ${args}`;
-const localOpenCmd = (args) => binCmd(localOpenMultiAgentKit) + ` ${args}`;
 
 // Local help smoke
 try {
@@ -166,13 +165,6 @@ try {
   logPass("Local omk --help");
 } catch (err) {
   logFail("Local omk --help", err);
-}
-
-try {
-  run(localOpenCmd("--help"), installDir);
-  logPass("Local open-multi-agent-kit --help");
-} catch (err) {
-  logFail("Local open-multi-agent-kit --help", err);
 }
 
 // Local doctor soft smoke
@@ -240,19 +232,6 @@ try {
   logFail("Local omk doctor --json --soft", err);
 }
 
-try {
-  const raw = run(localOpenCmd("doctor --json --soft"), installDir, NATIVE_SMOKE_ENV);
-  const parsed = JSON.parse(raw);
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error("doctor output is not a JSON object");
-  }
-  assertNoUnexpectedIssues(parsed, "local open-multi-agent-kit");
-  assertNativeSafety(parsed, "local open-multi-agent-kit");
-  logPass("Local open-multi-agent-kit doctor --json --soft");
-} catch (err) {
-  logFail("Local open-multi-agent-kit doctor --json --soft", err);
-}
-
 // ---------------------------------------------------------------------------
 // Global-prefix install smoke
 // ---------------------------------------------------------------------------
@@ -269,34 +248,26 @@ try {
 }
 
 const globalOmk = globalBinPath(prefixDir, "omk");
-const globalOpenMultiAgentKit = globalBinPath(prefixDir, "open-multi-agent-kit");
+const globalLegacyCli = globalBinPath(prefixDir, "omk-cli");
 
 if (!existsSync(globalOmk)) {
   logFail("Global-prefix omk bin shim missing");
   cleanup();
   process.exit(1);
 }
-if (!existsSync(globalOpenMultiAgentKit)) {
-  logFail("Global-prefix open-multi-agent-kit bin shim missing");
+if (existsSync(globalLegacyCli)) {
+  logFail("Global-prefix unexpected package-name bin shim omk-cli should not be installed");
   cleanup();
   process.exit(1);
 }
 
 const globalOmkCmd = (args) => binCmd(globalOmk) + ` ${args}`;
-const globalOpenCmd = (args) => binCmd(globalOpenMultiAgentKit) + ` ${args}`;
 
 try {
   run(globalOmkCmd("--help"), process.cwd());
   logPass("Global-prefix omk --help");
 } catch (err) {
   logFail("Global-prefix omk --help", err);
-}
-
-try {
-  run(globalOpenCmd("--help"), process.cwd());
-  logPass("Global-prefix open-multi-agent-kit --help");
-} catch (err) {
-  logFail("Global-prefix open-multi-agent-kit --help", err);
 }
 
 // ---------------------------------------------------------------------------
@@ -319,7 +290,7 @@ function isDirectKimiApiStatus(kimi) {
     .filter((value) => typeof value === "string")
     .join("\n")
     .toLowerCase();
-  return actionText.includes("kimi-api") && actionText.includes("no cli");
+  return (actionText.includes("kimi-api") && actionText.includes("no cli")) || actionText.includes("set kimi_api_key");
 }
 
 // Update check --json smoke with provider-neutral Kimi API status

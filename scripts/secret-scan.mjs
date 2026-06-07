@@ -56,6 +56,9 @@ const PROTECTED_FILE_PATTERNS = [
   /^id_ed25519$/,
   /^credentials\.json$/,
   /^service-account.*\.json$/i,
+  /^auth\.json$/i,
+  /^oauth\.json$/i,
+  /^tokens?\.json$/i,
 ];
 
 const LITERAL_PATTERNS = [
@@ -66,7 +69,7 @@ const LITERAL_PATTERNS = [
   ["openai_key", /\bsk-(?:proj|svcacct)-[A-Za-z0-9_-]{16,}\b|\bsk-[A-Za-z0-9_-]{20,}\b/],
   ["oauth_session_token", /\b(?:oauth|session|refresh|access)[_-]?token\b["']?\s*[:=]\s*["']?[A-Za-z0-9._~+/=-]{20,}/i],
   ["stripe_key", /\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9]{16,}\b/],
-  ["maintainer_private_path", /\.config\/opencode\/secrets\.env|\/home\/dmae|\/mnt\/m\/(?:oh-my-kimi|open_multi-agent_kit)/],
+  ["maintainer_private_path", /\.config\/opencode\/secrets\.env|\/home\/dmae|\/mnt\/m\/(?:open_multi-agent_kit|omk)/],
 ];
 
 const GENERIC_ASSIGNMENT = /\b(api[_-]?key|secret|token|password|private[_-]?key)\b["']?\s*[:=]\s*["']?([^"'\s;,}]{20,})/i;

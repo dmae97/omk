@@ -5,7 +5,7 @@ import { getOmkVersionSync } from "../../util/version.js";
 import { style, header, status } from "../../util/theme.js";
 import { defaultLspConfigJson } from "../../lsp/default-config.js";
 import { t } from "../../util/i18n.js";
-import { OMK_PARALLEL_ORCHESTRATOR_PRESET } from "../../runtime/core-verified-preset.js";
+import { OMK_CORE_VERIFIED_PRESET } from "../../runtime/core-verified-preset.js";
 import { packageRoot } from "./constants.js";
 import {
   OKABE_AGENT_YAML,
@@ -35,7 +35,7 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
   const root = getProjectRoot();
   const initHomeDir = normalizeUserHomePath(options.homeDir) ?? getUserHome(options.env ?? process.env);
   const mcpJson = createMcpJson(root);
-  console.log(header(`open_multi-agent_kit init (profile: ${options.profile})`));
+  console.log(header(`open-multi-agent-kit init (profile: ${options.profile})`));
   const localUserRuntime = await resolveLocalUserRuntime(options, initHomeDir);
 
   // 1. Create directories (parallel)
@@ -221,7 +221,7 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
   await writeFile(join(root, ".omk/kimi.config.toml"), kimiConfigContent);
   await ensureProjectMcpConfig(join(root, ".omk/mcp.json"), mcpJson, { removeRuntimeManagedOmkProject: true });
   await writeFile(join(root, ".omk/theme.json"), createThemeJson());
-  await writeFile(join(root, ".omk/runtime-preset.json"), JSON.stringify(OMK_PARALLEL_ORCHESTRATOR_PRESET, null, 2) + "\n");
+  await writeFile(join(root, ".omk/runtime-preset.json"), JSON.stringify(OMK_CORE_VERIFIED_PRESET, null, 2) + "\n");
   await writeFile(join(root, ".omk/runtime-presets.json"), createRuntimePresetsJson());
 
   // Project-local server config must not import global definitions by default.
@@ -279,7 +279,7 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
     }
   }
 
-  console.log(status.success("open_multi-agent_kit initialized."));
+  console.log(status.success("OMK initialized."));
   console.log();
   console.log("Created:");
   console.log("- AGENTS.md");
@@ -336,9 +336,9 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
     console.log("");
     console.log(style.orange("⚠️  omk is not in PATH."));
     console.log(style.gray("   Run one of the following:"));
-    console.log(style.gray("   1) npm install -g open-multi-agent-kit"));
+    console.log(style.gray("   1) npm install -g @omk/cli"));
     console.log(style.gray("   2) npm link (for development)"));
-    console.log(style.gray("   3) alias omk='npx open-multi-agent-kit'"));
+    console.log(style.gray("   3) alias omk='npx -p @omk/cli omk'"));
   } else {
     await maybeInstallShellCompletion(root);
   }

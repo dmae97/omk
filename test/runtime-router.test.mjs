@@ -149,15 +149,15 @@ test("runtime router uses provider ID as a deterministic final tie-break after s
 });
 
 
-test("legacy Kimi API runtime advertises explicit legacy metadata", () => {
+test("Kimi API runtime is direct HTTP and not a legacy CLI runtime", () => {
   const runtime = createKimiApiRuntime({ apiKey: "test-key" });
 
   assert.equal(runtime.providerId, "kimi");
-  assert.equal(runtime.legacy, true);
+  assert.equal(runtime.legacy, false);
   assert.equal(runtime.runtimeMode, "api");
 });
 
-test("runtime router blocks legacy provider CLI in neutral mode and allows legacy Kimi only when explicit", async () => {
+test("runtime router blocks legacy provider CLI in neutral mode and provider-only Kimi requests", async () => {
   const calls = [];
   const neutralRouter = createRuntimeRouter({
     runtimes: [
@@ -176,18 +176,18 @@ test("runtime router blocks legacy provider CLI in neutral mode and allows legac
       fakeRuntime("kimi-cli", calls),
     ],
   });
-  const explicitProvider = await explicitProviderRouter.execute(fakeTask({
-    prompt: "run through explicit Kimi compatibility provider",
-    providerPolicy: {
-      strategy: "priority-first",
-      preferredProviders: ["kimi"],
-      fallbackChain: [],
-    },
-  }));
-
-  assert.equal(explicitProvider.exitCode, 0);
-  assert.equal(explicitProvider.metadata.selectedRuntime, "kimi-cli");
-  assert.deepEqual(calls, ["kimi-cli"]);
+  await assert.rejects(
+    () => explicitProviderRouter.execute(fakeTask({
+      prompt: "provider=kimi must not unlock legacy CLI runtime",
+      providerPolicy: {
+        strategy: "priority-first",
+        preferredProviders: ["kimi"],
+        fallbackChain: [],
+      },
+    })),
+    /No runtime supports task for node coder-node.*Detected runtimes: legacy-external-runtime/
+  );
+  assert.deepEqual(calls, []);
 
   calls.length = 0;
   const explicitRuntimeRouter = createRuntimeRouter({
@@ -577,7 +577,7 @@ test("runtime-backed runner ignores legacy home provider config unless legacy mo
     let runner = await createRuntimeBackedTaskRunner({ cwd: process.cwd(), env: { PATH: process.env.PATH ?? "" }, runId: "legacy-home-disabled" });
     let runtimeIds = runner._registry.list().map((runtime) => runtime.id);
     assert.equal(runtimeIds.includes("mimo-api"), false, "neutral mode must not read provider keys from legacy .kimi config");
-    assert.equal(runtimeIds.includes("kimi-api"), false, "neutral mode must not register legacy Kimi API from legacy config");
+    assert.equal(runtimeIds.includes("kimi-api"), false, "neutral mode must not register Kimi API from legacy .kimi config");
 
     await mkdir(join(home, ".omk"), { recursive: true });
     await writeFile(join(home, ".omk", "config.toml"), [
@@ -589,7 +589,18 @@ test("runtime-backed runner ignores legacy home provider config unless legacy mo
     runner = await createRuntimeBackedTaskRunner({ cwd: process.cwd(), env: { PATH: process.env.PATH ?? "" }, runId: "omk-home-enabled" });
     runtimeIds = runner._registry.list().map((runtime) => runtime.id);
     assert.equal(runtimeIds.includes("mimo-api"), true, "neutral mode should read provider keys from OMK config");
-    assert.equal(runtimeIds.includes("kimi-api"), false, "OMK config should not implicitly enable legacy Kimi");
+    assert.equal(runtimeIds.includes("kimi-api"), false, "OMK config without Kimi credentials should not enable Kimi API");
+    await writeFile(join(home, ".omk", "config.toml"), [
+      "[providers.mimo]",
+      "api_key = \"omk-mimo-key\"",
+      "[providers.kimi]",
+      "api_key = \"omk-kimi-key\"",
+      "",
+    ].join("\n"), "utf8");
+
+    runner = await createRuntimeBackedTaskRunner({ cwd: process.cwd(), env: { PATH: process.env.PATH ?? "" }, runId: "omk-kimi-api-enabled" });
+    runtimeIds = runner._registry.list().map((runtime) => runtime.id);
+    assert.equal(runtimeIds.includes("kimi-api"), true, "neutral mode should read Kimi API credentials from OMK config");
 
     runner = await createRuntimeBackedTaskRunner({
       cwd: process.cwd(),
@@ -597,7 +608,7 @@ test("runtime-backed runner ignores legacy home provider config unless legacy mo
       runId: "legacy-home-explicit",
     });
     runtimeIds = runner._registry.list().map((runtime) => runtime.id);
-    assert.equal(runtimeIds.includes("kimi-api"), true, "legacy Kimi API is allowed only when legacy mode is explicit");
+    assert.equal(runtimeIds.includes("kimi-api"), true, "Kimi API is allowed from legacy .kimi config only when legacy mode is explicit");
   } finally {
     for (const [key, value] of Object.entries(previousEnv)) {
       if (value === undefined) delete process.env[key];
@@ -828,7 +839,7 @@ function runtimeDecisionClass(runtimeId) {
 }
 
 function legacyCompatibilityRuntimeIds() {
-  return ["kimi-api", "kimi-cli", "kimi-print", "kimi-wire"];
+  return ["kimi-cli", "kimi-print", "kimi-wire"];
 }
 
 function fakeTask(overrides = {}) {

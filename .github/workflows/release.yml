@@ -4,9 +4,14 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   quality:
@@ -94,11 +99,16 @@ jobs:
           TMP: /tmp
           TEMP: /tmp
           npm_config_cache: /tmp/omk-npm-cache
+      - name: Resolve tarball filename
+        id: tarball
+        run: |
+          TARBALL=$(ls *.tgz | head -n 1)
+          echo "path=${TARBALL}" >> "$GITHUB_OUTPUT"
       - name: Upload tarball
         uses: actions/upload-artifact@v4
         with:
           name: tarball
-          path: open-multi-agent-kit-*.tgz
+          path: ${{ steps.tarball.outputs.path }}
 
   audit:
     runs-on: ubuntu-latest
@@ -117,7 +127,7 @@ jobs:
         with:
           name: tarball
       - name: Audit tarball
-        run: node scripts/package-audit.mjs --tarball open-multi-agent-kit-*.tgz
+        run: node scripts/package-audit.mjs --tarball *.tgz
 
   smoke:
     name: Install Smoke (${{ matrix.os }} / Node ${{ matrix.node-version }})
@@ -139,7 +149,7 @@ jobs:
         with:
           name: tarball
       - name: Run smoke tests
-        run: node scripts/smoke-test.mjs --tarball open-multi-agent-kit-*.tgz
+        run: node scripts/smoke-test.mjs --tarball *.tgz
 
   publish:
     runs-on: ubuntu-latest
@@ -154,15 +164,49 @@ jobs:
           node-version: 22
           cache: npm
           registry-url: 'https://registry.npmjs.org'
+      - name: Resolve package metadata
+        id: meta
+        run: |
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${PKG_VERSION}" ]; then
+            echo "Git tag ${GITHUB_REF_NAME} does not match package version v${PKG_VERSION}" >&2
+            exit 1
+          fi
+          if echo "${PKG_VERSION}" | grep -q -- '-'; then
+            PRERELEASE=true
+            NPM_TAG=$(node -e "const v=require('./package.json').version; const m=v.match(/-([0-9A-Za-z]+)(?:[.-].*)?$/); console.log(m ? m[1] : 'alpha')")
+          else
+            PRERELEASE=false
+            NPM_TAG=latest
+          fi
+          {
+            echo "pkg_name=${PKG_NAME}"
+            echo "pkg_version=${PKG_VERSION}"
+            echo "prerelease=${PRERELEASE}"
+            echo "npm_tag=${NPM_TAG}"
+          } >> "$GITHUB_OUTPUT"
       - name: Download tarball
         uses: actions/download-artifact@v4
         with:
           name: tarball
       - name: Publish to npm
-        run: npm publish open-multi-agent-kit-*.tgz --provenance --access public
+        run: |
+          TARBALL=$(ls *.tgz | head -n 1)
+          if npm view "${{ steps.meta.outputs.pkg_name }}@${{ steps.meta.outputs.pkg_version }}" version >/dev/null 2>&1; then
+            echo "Version ${{ steps.meta.outputs.pkg_version }} already exists on npm; skipping publish."
+            exit 0
+          fi
+          if [ "${{ steps.meta.outputs.npm_tag }}" = "latest" ]; then
+            npm publish "${TARBALL}" --provenance --access public
+          else
+            npm publish "${TARBALL}" --tag "${{ steps.meta.outputs.npm_tag }}" --provenance --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          files: "*.tgz"

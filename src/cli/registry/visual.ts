@@ -55,7 +55,7 @@ export function registerVisualCommands(program: Command): void {
     .option("-w, --watch", t("cmd.cockpitWatchOption"))
     .option("--refresh <ms>", t("cmd.cockpitRefreshOption"), "1500")
     .option("--redraw <diff|full|append>", "Redraw mode", "diff")
-    .option("--height <rows>", "Cockpit fixed height in rows", "18")
+    .option("--height <rows>", "Cockpit height in rows (watch default: auto-fit pane; one-shot default: auto)")
     .option("--section <agents|todos|mcp|all>", "Cockpit section to render", "all")
     .option("--events <on|off>", "Use events.jsonl telemetry when available", "on")
     .option("--view <panel|rail|compact|json>", "Cockpit view mode", "panel")
@@ -82,7 +82,7 @@ export function registerVisualCommands(program: Command): void {
     .option("--run-id <id>", "Run ID to focus on")
     .option("-w, --watch", "Watch mode")
     .option("--refresh <ms>", "Refresh interval in ms", "1500")
-    .option("--height <rows>", "Fixed height in rows")
+    .option("--height <rows>", "Fixed height in rows (default: auto)")
     .action(async (options) => {
       const globalOpts = program.opts();
       const { railCommand } = await import("../../commands/rail.js");

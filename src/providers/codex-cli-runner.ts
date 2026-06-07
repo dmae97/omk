@@ -7,12 +7,19 @@ import { renderPromptDigest } from "../goal/prompt-digest.js";
 import { runShell } from "../util/shell.js";
 import { buildChildEnv } from "../runtime/child-env.js";
 import { inferNodeRisk } from "./router.js";
+import {
+  contextPreflightErrorMessage,
+  preflightProviderInput,
+} from "./context-preflight.js";
 
 export interface CodexCliRunnerOptions {
   cwd: string;
   bin?: string;
   model?: string;
   timeoutMs?: number;
+  contextWindow?: number;
+  reservedOutputTokens?: number;
+  safetyMarginTokens?: number;
 }
 
 export function createCodexCliAdvisoryTaskRunner(options: CodexCliRunnerOptions): TaskRunner {
@@ -44,7 +51,28 @@ export function createCodexCliAdvisoryTaskRunner(options: CodexCliRunnerOptions)
       const tmp = await mkdtemp(join(tmpdir(), "omk-codex-provider-"));
       const outputPath = join(tmp, "last-message.txt");
       try {
-        const prompt = buildCodexPrompt(node, env);
+        const rawPrompt = buildCodexPrompt(node, env);
+        const model = env.OMK_PROVIDER_MODEL || options.model;
+        const preflight = await preflightProviderInput(rawPrompt, {
+          provider: "codex",
+          model,
+          contextWindow: options.contextWindow,
+          reservedOutputTokens: options.reservedOutputTokens,
+          safetyMarginTokens: options.safetyMarginTokens,
+          runId: env.OMK_RUN_ID,
+          nodeId: node.id,
+          projectRoot: env.OMK_PROJECT_ROOT,
+        });
+        if (!preflight.ok) {
+          return {
+            success: false,
+            exitCode: 1,
+            stdout: "",
+            stderr: contextPreflightErrorMessage(preflight.report),
+            metadata: { contextPreflight: preflight.report },
+          };
+        }
+        const prompt = preflight.input;
         const sandboxMode = risk === "read" || advisoryMode ? "read-only" : "workspace-write";
         const approvalPolicy = sandboxMode === "workspace-write" ? "on-request" : "never";
         const childEnv = buildChildEnv({
@@ -63,7 +91,6 @@ export function createCodexCliAdvisoryTaskRunner(options: CodexCliRunnerOptions)
           "--color", "never",
           "--output-last-message", outputPath,
         ];
-        const model = env.OMK_PROVIDER_MODEL || options.model;
         if (model && model !== "codex-cli") args.push("--model", model);
         args.push("-");
         const result = await runShell(options.bin ?? "codex", args, {
@@ -80,6 +107,7 @@ export function createCodexCliAdvisoryTaskRunner(options: CodexCliRunnerOptions)
           exitCode: result.exitCode,
           stdout: lastMessage.trim() ? lastMessage : result.stdout,
           stderr: result.stderr,
+          metadata: preflight.report.compacted ? { contextPreflight: preflight.report } : undefined,
         };
       } finally {
         await rm(tmp, { recursive: true, force: true }).catch(() => undefined);

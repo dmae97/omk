@@ -265,25 +265,28 @@ const OPEN_DESIGN_OMK_SETTINGS_FIELD = `  {
   },
 `;
 
-const OPEN_DESIGN_OMK_VISUAL = `  // OMK — Kimicat purple/mint bridge.
+const OPEN_DESIGN_OMK_VISUAL_MARKER = "OMK — Control-plane neon-grid bridge.";
+const OPEN_DESIGN_OMK_VISUAL_BLOCK_RE = /[ ]{2}\/\/ OMK — (?:Control-plane neon-grid bridge\.|Kimicat purple\/mint bridge\.)\n[ ]{2}omk: \{\n[ ]{4}bg: '[^']+',\n[ ]{4}fg: '[^']+',\n[ ]{4}glyph: \(s\) => star4\(s, '[^']+'\),\n[ ]{2}\},\n/;
+
+const OPEN_DESIGN_OMK_VISUAL = `  // ${OPEN_DESIGN_OMK_VISUAL_MARKER}
   omk: {
-    bg: 'linear-gradient(135deg, #241C32 0%, #7B5BF5 58%, #14B8A6 100%)',
-    fg: '#F3E8FF',
-    glyph: (s) => star4(s, '#F3E8FF'),
+    bg: 'linear-gradient(135deg, #070B14 0%, #00D6FF 45%, #FF47B2 100%)',
+    fg: '#E8F8FF',
+    glyph: (s) => star4(s, '#E8F8FF'),
   },
 `;
 
 const OPEN_DESIGN_OMK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OMK">
   <defs>
     <linearGradient id="omk" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#241C32"/>
-      <stop offset=".58" stop-color="#7B5BF5"/>
-      <stop offset="1" stop-color="#14B8A6"/>
+      <stop stop-color="#070B14"/>
+      <stop offset=".45" stop-color="#00D6FF"/>
+      <stop offset="1" stop-color="#FF47B2"/>
     </linearGradient>
   </defs>
   <rect width="64" height="64" rx="18" fill="url(#omk)"/>
-  <path d="M20 35c0-8 5-14 12-14s12 6 12 14v7h-6v-7c0-5-2-8-6-8s-6 3-6 8v7h-6v-7Z" fill="#F3E8FF"/>
-  <path d="M17 20l4 3 4-3-3 5 3 5-4-3-4 3 3-5-3-5Zm25 0 4 3 4-3-3 5 3 5-4-3-4 3 3-5-3-5Z" fill="#FDE68A"/>
+  <path d="M20 35c0-8 5-14 12-14s12 6 12 14v7h-6v-7c0-5-2-8-6-8s-6 3-6 8v7h-6v-7Z" fill="#E8F8FF"/>
+  <path d="M17 20l4 3 4-3-3 5 3 5-4-3-4 3 3-5-3-5Zm25 0 4 3 4-3-3 5 3 5-4-3-4 3 3-5-3-5Z" fill="#FFB000"/>
 </svg>
 `;
 
@@ -368,7 +371,10 @@ function patchOpenDesignAgentLabelsSource(source: string): string {
 }
 
 function patchOpenDesignAgentIconSource(source: string): string {
-  if (source.includes("OMK — Kimicat")) return source;
+  if (source.includes(OPEN_DESIGN_OMK_VISUAL)) return source;
+  if (OPEN_DESIGN_OMK_VISUAL_BLOCK_RE.test(source)) {
+    return source.replace(OPEN_DESIGN_OMK_VISUAL_BLOCK_RE, OPEN_DESIGN_OMK_VISUAL);
+  }
   if (source.includes("const ICON_EXT: Record<string, 'svg' | 'png'>")) {
     if (source.includes("omk: 'svg'")) return source;
     const marker = "  kimi: 'svg',";

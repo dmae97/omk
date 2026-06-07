@@ -1,17 +1,17 @@
 # Getting Started
 
-Source release target: `@oh-my-kimi/cli@1.1.18`. Latest published npm release remains `1.1.17` until release gates pass.
+Source release target: `@omk/cli@0.78.0-alpha.1`.
 
 ## Prerequisites
 
 - Node.js 20+
 - Git
-- At least one supported provider (Kimi, Codex CLI, Gemini CLI, Claude Code, OpenRouter, etc.)
+- At least one supported provider or local runtime adapter (Codex CLI, Gemini CLI, Claude Code, OpenRouter, DeepSeek, Kimi, etc.)
 
 ## Install
 
 ```bash
-npm install -g @oh-my-kimi/cli
+npm install -g @omk/cli
 ```
 
 ## Initialize a project
@@ -22,7 +22,7 @@ omk init
 
 This creates:
 - `AGENTS.md`, `GEMINI.md`, `CLAUDE.md`, `DESIGN.md`
-- `.kimi/skills/` (runtime skills, with Kimi as the first and most mature adapter)
+- `.kimi/skills/` (runtime adapter skills used by the OMK control loop)
 - `.agents/skills/` (portable skills)
 - packaged workflow skills such as `agentmemory`, `react-doctor`, and `multica`
 - `.omk/` (config, hooks, memory, agents)

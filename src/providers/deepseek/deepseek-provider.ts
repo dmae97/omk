@@ -3,10 +3,17 @@ import type { DagNode } from "../../orchestration/dag.js";
 import { renderPromptDigest } from "../../goal/prompt-digest.js";
 import { inferNodeRisk } from "../router.js";
 import { DeepSeekClient, type DeepSeekClientOptions } from "./deepseek-client.js";
+import {
+  contextPreflightErrorMessage,
+  preflightProviderMessages,
+} from "../context-preflight.js";
 
 export interface DeepSeekReadOnlyRunnerOptions extends DeepSeekClientOptions {
   promptPrefix?: string;
   allowAdvisoryFileNodes?: boolean;
+  contextWindow?: number;
+  reservedOutputTokens?: number;
+  safetyMarginTokens?: number;
 }
 
 export function createDeepSeekReadOnlyTaskRunner(
@@ -47,23 +54,46 @@ export function createDeepSeekReadOnlyTaskRunner(
         reasoningEffort,
       });
       try {
+        const messages = [
+          {
+            role: "system" as const,
+            content: [
+              "You are a DeepSeek read-only worker inside OMK.",
+              "The configured authority provider is the main orchestrator and final reviewer.",
+              "Do not claim file writes, shell execution, secret access, MCP access, or merge authority.",
+              "Do not echo the original user input or objective; synthesize from digests, node state, and evidence.",
+              advisoryFileMode
+                ? "For this file-affecting node, provide advisory patch strategy only; the configured authority provider will perform actual file edits."
+                : "",
+              "Return concise findings, evidence, risks, and recommended authority-provider follow-up.",
+            ].filter(Boolean).join(" ") || "You are a DeepSeek read-only worker. Provide analysis for the given node.",
+          },
+          { role: "user" as const, content: buildDeepSeekNodePrompt(node, env, options.promptPrefix) },
+        ];
+        const preflight = await preflightProviderMessages(messages, {
+          provider: "deepseek",
+          model,
+          contextWindow: options.contextWindow,
+          reservedOutputTokens: options.reservedOutputTokens ?? 4096,
+          safetyMarginTokens: options.safetyMarginTokens,
+          runId: env.OMK_RUN_ID,
+          nodeId: node.id,
+          projectRoot: env.OMK_PROJECT_ROOT,
+        });
+        if (!preflight.ok) {
+          return {
+            success: false,
+            exitCode: 1,
+            stdout: "",
+            stderr: contextPreflightErrorMessage(preflight.report),
+            metadata: { contextPreflight: preflight.report },
+          };
+        }
         const content = await client.complete({
-          messages: [
-            {
-              role: "system",
-              content: [
-                "You are a DeepSeek read-only worker inside OMK.",
-                "The configured authority provider is the main orchestrator and final reviewer.",
-                "Do not claim file writes, shell execution, secret access, MCP access, or merge authority.",
-                "Do not echo the original user input or objective; synthesize from digests, node state, and evidence.",
-                advisoryFileMode
-                  ? "For this file-affecting node, provide advisory patch strategy only; the configured authority provider will perform actual file edits."
-                  : "",
-                "Return concise findings, evidence, risks, and recommended authority-provider follow-up.",
-              ].filter(Boolean).join(" ") || "You are a DeepSeek read-only worker. Provide analysis for the given node.",
-            },
-            { role: "user", content: buildDeepSeekNodePrompt(node, env, options.promptPrefix) },
-          ],
+          messages: preflight.messages.map((message) => ({
+            role: message.role === "assistant" ? "assistant" : message.role === "system" ? "system" : "user",
+            content: message.content,
+          })),
           maxTokens: 4096,
           thinking: options.thinking,
           reasoningEffort: options.reasoningEffort,
@@ -74,6 +104,7 @@ export function createDeepSeekReadOnlyTaskRunner(
           exitCode: 0,
           stdout: `[${node.id}:${node.role}:deepseek] ${content}\n`,
           stderr: "",
+          metadata: preflight.report.compacted ? { contextPreflight: preflight.report } : undefined,
         };
       } catch (err) {
         return {

@@ -3,22 +3,30 @@
  */
 
 export const P = {
-  purple: { r: 123, g: 91, b: 245 },        // #7B5BF5  Primary brand
-  lightPurple: { r: 167, g: 139, b: 250 },  // #A78BFA  Soft highlights
-  darkPurple: { r: 91, g: 33, b: 182 },     // #5B21B6  Deep shadows
-  pink: { r: 236, g: 72, b: 153 },          // #EC4899  Accent
-  hotPink: { r: 236, g: 72, b: 153 },       // #EC4899  Accent (alias)
-  mint: { r: 20, g: 184, b: 166 },          // #14B8A6  Success
-  darkMint: { r: 13, g: 148, b: 136 },      // #0D9488  Mint shadow
-  orange: { r: 251, g: 146, b: 60 },        // #FB923C  Warning
-  red: { r: 248, g: 113, b: 113 },          // #F87171  Error
-  blue: { r: 96, g: 165, b: 250 },          // #60A5FA  Info
-  cream: { r: 243, g: 232, b: 255 },        // #F3E8FF  Bright text
-  dark: { r: 36, g: 28, b: 50 },            // #241C32  Background
-  gray: { r: 148, g: 163, b: 184 },         // #94A3B8  Muted
-  skin: { r: 249, g: 211, b: 197 },         // #F9D3C5  Warm skin tone
-  matrixGreen: { r: 0, g: 255, b: 65 },     // #00FF41  Matrix phosphor green
-  matrixDark: { r: 0, g: 68, b: 0 },        // #004400  Matrix dark green
+  purple: { r: 157, g: 78, b: 221 },        // #9D4EDD  orchestration/control accent
+  lightPurple: { r: 214, g: 108, b: 255 },  // #D66CFF  neon highlight
+  darkPurple: { r: 64, g: 18, b: 133 },     // #401285  deep control shadow
+  pink: { r: 255, g: 71, b: 178 },          // #FF47B2  control/focus accent
+  hotPink: { r: 255, g: 71, b: 178 },       // #FF47B2  hot accent (alias)
+  mint: { r: 0, g: 255, b: 194 },           // #00FFC2  telemetry/success
+  darkMint: { r: 0, g: 196, b: 153 },       // #00C499  telemetry shadow
+  orange: { r: 255, g: 176, b: 0 },         // #FFB000  warning/pending
+  red: { r: 255, g: 88, b: 116 },           // #FF5874  fault/danger
+  blue: { r: 0, g: 214, b: 255 },           // #00D6FF  route/signal/info
+  cream: { r: 232, g: 248, b: 255 },        // #E8F8FF  bright console text
+  dark: { r: 7, g: 11, b: 20 },             // #070B14  cockpit background
+  gray: { r: 117, g: 143, b: 168 },         // #758FA8  muted telemetry
+  skin: { r: 255, g: 214, b: 102 },         // #FFD666  metric gold
+  rustOrange: { r: 249, g: 115, b: 22 },    // #F97316  Rust/native toolchain accent
+  rustOxide: { r: 124, g: 45, b: 18 },      // #7C2D12  Rust/native warning shadow
+  cargoGreen: { r: 0, g: 255, b: 194 },     // #00FFC2  verified native check
+  matrixGreen: { r: 0, g: 255, b: 194 },    // #00FFC2  OMK signal phosphor
+  matrixDark: { r: 8, g: 39, b: 31 },       // #08271F  success/signal background
+  matrixRainGreen: { r: 0, g: 255, b: 65 },  // #00FF41  iconic Matrix rain code green
+  matrixDeepBg: { r: 0, g: 8, b: 0 },       // #000800  matrix rain deep background
+  matrixRainDim: { r: 0, g: 95, b: 25 },    // #005F19  matrix rain dark green
+  matrixWarningAmber: { r: 255, g: 176, b: 0 }, // #FFB000  matrix warning amber
+  matrixErrorRed: { r: 255, g: 50, b: 50 }, // #FF3232  matrix error red
 
   // ── Metrics theme (professional dashboard) ──
   metricsCyan: { r: 6, g: 182, b: 212 },    // #06B6D4  Metrics primary

@@ -287,7 +287,7 @@ function enforceLinkage(errors, bundlePath, bundle, verify, manifest, evidenceRe
 
   if (bundle.proofId === "009-no-kimi-smoke") {
     const text = `${bundle.providerPolicy}\n${verify?.data ? JSON.stringify(verify.data) : ""}`;
-    if (!/no-kimi|kimiUnavailable|KIMI_BIN=\/nonexistent\/kimi/i.test(text)) errors.push(`${bundlePath}: no-Kimi proof must explicitly record Kimi-unavailable/nonfatal policy`);
+    if (!/no-kimi|kimiUnavailable|KIMI_API_KEY is not set|not configured/i.test(text)) errors.push(`${bundlePath}: no-Kimi proof must explicitly record the direct-API Kimi-unavailable/nonfatal policy`);
   }
 }
 

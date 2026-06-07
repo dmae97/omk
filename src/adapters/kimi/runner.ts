@@ -579,8 +579,8 @@ export async function runKimiInteractive(
       "[omk] Failed to load node-pty native module. " +
         `(${message})\n` +
         "This usually happens when installed with --ignore-scripts.\n" +
-        "Fix: npm rebuild -g open-multi-agent-kit\n" +
-        "Or reinstall: npm uninstall -g open-multi-agent-kit && npm install -g open-multi-agent-kit"
+        "Fix: npm rebuild -g @omk/cli\n" +
+        "Or reinstall: npm uninstall -g @omk/cli && npm install -g @omk/cli"
     );
   }
 

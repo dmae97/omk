@@ -6,8 +6,8 @@ Thanks for your interest in contributing! OMK is a provider-neutral multi-agent 
 
 ```bash
 # Clone and install
-git clone https://github.com/dmae97/open_multi-agent_kit.git
-cd open_multi-agent_kit
+git clone https://github.com/dmae97/open-multi-agent-kit.git
+cd open-multi-agent-kit
 npm ci
 
 # Run the main quality gate (must pass before PR)
@@ -147,7 +147,7 @@ When modifying commands that support `--json`:
 
 ## Questions?
 
-- Open a [Discussion](https://github.com/dmae97/open_multi-agent_kit/discussions)
+- Open a [Discussion](https://github.com/dmae97/open-multi-agent-kit/discussions)
 - Check [`README.md`](./README.md) and [`DESIGN.md`](./DESIGN.md) for architecture context
 
 Thank you for helping make OMK better!

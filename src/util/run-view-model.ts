@@ -309,11 +309,12 @@ export function buildRunViewModel(
   const nodeTelemetry = buildNodeTelemetryIndex(options.telemetry ?? []);
   const assignments = new Map<string, RunCapabilityAssignment>();
   const capabilityAssignments = state.capabilityAssignments;
-  const assignmentList = Array.isArray(capabilityAssignments)
-    ? capabilityAssignments
-    : Object.values(capabilityAssignments ?? {});
-  for (const assignment of assignmentList) {
-    if (assignment.nodeId) assignments.set(assignment.nodeId, assignment);
+  const assignmentEntries = Array.isArray(capabilityAssignments)
+    ? capabilityAssignments.map((assignment): [string | undefined, RunCapabilityAssignment] => [assignment.nodeId, assignment])
+    : Object.entries(capabilityAssignments ?? {});
+  for (const [key, assignment] of assignmentEntries) {
+    const nodeKey = assignment.nodeId ?? key;
+    if (nodeKey) assignments.set(nodeKey, assignment);
     if (assignment.agent) assignments.set(assignment.agent, assignment);
     if (assignment.role) assignments.set(assignment.role, assignment);
   }

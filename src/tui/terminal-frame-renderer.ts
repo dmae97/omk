@@ -36,7 +36,8 @@ export class TerminalFrameRenderer {
 
     if (this.mode === "full") {
       this.clear();
-      this.write(`${frame}\n`);
+      const fillsFixedFrame = this.height != null && newLines.length >= Math.max(1, Math.floor(this.height));
+      this.write(fillsFixedFrame ? frame : `${frame}\n`);
       this.prevLines = [...newLines];
       return;
     }

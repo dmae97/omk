@@ -19,6 +19,8 @@ const {
   updateTodoStatus,
   deriveTodosFromState,
   parseSetTodoListFromOutput,
+  normalizeTodoWriteInput,
+  applyTodoWriteOperations,
   loadTodos,
 } = await import("../dist/util/todo-sync.js");
 
@@ -234,6 +236,62 @@ describe("session and todo-sync utilities", () => {
     assert.strictEqual(result[1].status, "blocked");
 
     assert.strictEqual(parseSetTodoListFromOutput("no todos here"), null);
+
+    const todoWrite = `name='TodoWrite', arguments='{"todos":[{"content":"Implement schema","status":"in_progress","activeForm":"Implementing schema"},{"content":"Ship","status":"completed"}]}'`;
+    result = parseSetTodoListFromOutput(todoWrite);
+    assert.ok(result);
+    assert.strictEqual(result.length, 2);
+    assert.strictEqual(result[0].title, "Implement schema");
+    assert.strictEqual(result[0].status, "in_progress");
+    assert.strictEqual(result[0].activeForm, "Implementing schema");
+    assert.strictEqual(result[1].status, "done");
+  });
+
+  it("normalizeTodoWriteInput maps Claude TodoWrite items into internal TODO items", () => {
+    const result = normalizeTodoWriteInput({
+      todos: [
+        { content: "Implement schema", status: "pending" },
+        { content: "Run tests", status: "in_progress", activeForm: "Running tests" },
+        { content: "Report", status: "completed" },
+      ],
+    });
+
+    assert.deepStrictEqual(result.map((todo) => todo.title), ["Implement schema", "Run tests", "Report"]);
+    assert.deepStrictEqual(result.map((todo) => todo.status), ["pending", "in_progress", "done"]);
+    assert.strictEqual(result[1].activeForm, "Running tests");
+  });
+
+  it("applyTodoWriteOperations supports phased init, completion, append, note, and removal", () => {
+    const now = () => "2026-06-06T00:00:00.000Z";
+    let result = applyTodoWriteOperations([], [
+      {
+        op: "init",
+        list: [
+          { phase: "Discovery", items: ["Map surfaces", "Read docs"] },
+          { phase: "Implementation", items: ["Patch code"] },
+        ],
+      },
+    ], now);
+
+    assert.deepStrictEqual(result.todos.map((todo) => [todo.phase, todo.title, todo.status]), [
+      ["Discovery", "Map surfaces", "in_progress"],
+      ["Discovery", "Read docs", "pending"],
+      ["Implementation", "Patch code", "pending"],
+    ]);
+
+    result = applyTodoWriteOperations(result.todos, [
+      { op: "done", task: "Map surfaces" },
+      { op: "append", phase: "Implementation", items: ["Run tests"] },
+      { op: "note", task: "Read docs", text: "Use Claude Agent SDK TodoWrite schema" },
+      { op: "rm", task: "Patch code" },
+    ], now);
+
+    assert.deepStrictEqual(result.todos.map((todo) => [todo.phase, todo.title, todo.status]), [
+      ["Discovery", "Map surfaces", "done"],
+      ["Discovery", "Read docs", "in_progress"],
+      ["Implementation", "Run tests", "pending"],
+    ]);
+    assert.deepStrictEqual(result.todos[1].notes, ["Use Claude Agent SDK TodoWrite schema"]);
   });
 
   it("loadTodos falls back to deriveTodosFromState when todos.json is missing", async () => {

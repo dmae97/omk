@@ -6,13 +6,14 @@ import { style, header, status, label } from "../util/theme.js";
 import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { parseRuntimeScopeOption } from "../util/runtime-scope.js";
 import { t } from "../util/i18n.js";
-import { createRoutedRunState, refreshRunStateEstimate } from "../orchestration/run-state.js";
-import { buildCapabilityAgentNodes, isCapabilityAgentNode } from "../orchestration/capability-agents.js";
 import type { RunState } from "../contracts/orchestration.js";
 import { orchestratePrompt } from "../orchestration/orchestrate-prompt.js";
 import type { ProviderPolicy } from "../providers/types.js";
 import { normalizeProviderPolicy, parseProviderModelArg } from "../providers/model-registry.js";
 
+import { createInteractiveRunState } from "./parallel/orchestrator.js";
+import { refreshRunStateEstimate } from "../orchestration/run-state.js";
+import { ensureCompletionArtifactContract } from "../orchestration/completion-artifacts.js";
 interface RunCommandOptions {
   workers?: string;
   runId?: string;
@@ -78,6 +79,7 @@ export async function runCommand(
       console.error(status.error(t("run.runNotFound", runId)));
       process.exit(1);
     }
+    await ensureCompletionArtifactContract(root, runId);
 
     const [existingGoal, existingPlan] = await Promise.all([
       readFile(join(runDir, "goal.md"), "utf-8").catch(() => null),
@@ -105,7 +107,7 @@ export async function runCommand(
       await writeFile(join(runDir, "goal.md"), `# Goal\n\n${resolvedGoal}\n`);
     }
     if (flow) {
-      await writeFile(join(runDir, "plan.md"), `# Plan\n\nFlow: ${resolvedFlow}\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nProvider policy: ${providerPolicy}\n`);
+      await writeFile(join(runDir, "plan.md"), `# Plan\n\nFlow: ${resolvedFlow}\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nSkills scope: ${resources.skillsScope}\nHooks scope: ${resources.hooksScope}\nCapability assignment: goal-scoped MCP/skills/hooks per worker lane\nProvider policy: ${providerPolicy}\n`);
     }
   } else {
     if (!resolvedFlow || !resolvedGoal) {
@@ -149,17 +151,22 @@ export async function runCommand(
     }
 
     await mkdir(runDir, { recursive: true });
+    await ensureCompletionArtifactContract(root, runId);
     startedAt = new Date().toISOString();
     await writeFile(join(runDir, "goal.md"), `# Goal\n\n${resolvedGoal}\n`);
-    await writeFile(join(runDir, "plan.md"), `# Plan\n\nFlow: ${resolvedFlow}\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nProvider policy: ${providerPolicy}\n`);
+    await writeFile(join(runDir, "plan.md"), `# Plan\n\nFlow: ${resolvedFlow}\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nSkills scope: ${resources.skillsScope}\nHooks scope: ${resources.hooksScope}\nCapability assignment: goal-scoped MCP/skills/hooks per worker lane\nProvider policy: ${providerPolicy}\n`);
     const runState = createInteractiveRunState({
       runId,
       flow: resolvedFlow,
       goal: resolvedGoal,
       workerCount,
       startedAt,
+      approvalPolicy: options.execution ?? "ask",
       goalId: options.goalId,
       goalSnapshot,
+      profile: resources.profile,
+      providerPolicy,
+      executionStrategy: workerCount > 1 ? "parallel" : "sequential",
     });
     currentState = runState;
     await writeFile(join(runDir, "state.json"), JSON.stringify(runState, null, 2));
@@ -347,86 +354,3 @@ function renderRunDryRunReport(report: Record<string, unknown>): void {
   console.log(status.ok("Provider/runtime execution skipped; artifacts are inspectable."));
 }
 
-function createInteractiveRunState(input: {
-  runId: string;
-  flow: string;
-  goal: string;
-  workerCount: number;
-  startedAt: string;
-  goalId?: string;
-  goalSnapshot?: RunState["goalSnapshot"];
-}): RunState {
-  const capabilityAgentNodes = input.workerCount > 1
-    ? buildCapabilityAgentNodes({
-      goal: input.goal,
-      dependsOn: ["root-coordinator"],
-      maxAgents: 3,
-      seedId: "run-capability-routing-seed",
-      seedName: `Route active MCP, skills, and hooks for: ${input.goal}`,
-    })
-    : [];
-  const capabilityInputs = capabilityAgentNodes.map((node) => ({
-    name: node.outputs?.[0]?.name ?? node.name,
-    ref: "state.json",
-    from: node.id,
-    required: !isCapabilityAgentNode(node),
-  }));
-  const state = createRoutedRunState({
-    runId: input.runId,
-    startedAt: input.startedAt,
-    workerCount: input.workerCount,
-    goalId: input.goalId,
-    goalSnapshot: input.goalSnapshot,
-    nodes: [
-      {
-        id: "bootstrap",
-        name: `Prepare ${input.flow} run`,
-        role: "omk",
-        dependsOn: [],
-        maxRetries: 1,
-        startedAt: input.startedAt,
-        completedAt: input.startedAt,
-      },
-      {
-        id: "root-coordinator",
-        name: `Coordinate: ${input.goal}`,
-        role: "orchestrator",
-        dependsOn: ["bootstrap"],
-        maxRetries: 1,
-        startedAt: input.startedAt,
-        outputs: [{ name: "worker plan", gate: "summary" }],
-      },
-      {
-        id: "worker-fanout",
-        name: `${input.workerCount} worker budget`,
-        role: "router",
-        dependsOn: ["root-coordinator"],
-        maxRetries: 1,
-        inputs: [{ name: "worker plan", ref: "plan.md", from: "root-coordinator" }],
-        outputs: [{ name: "worker outputs", gate: "summary" }],
-      },
-      ...capabilityAgentNodes,
-      {
-        id: "review-merge",
-        name: "Review, verify, and merge outputs",
-        role: "reviewer",
-        dependsOn: ["worker-fanout", ...capabilityAgentNodes.map((node) => node.id)],
-        maxRetries: 1,
-        inputs: [{ name: "worker outputs", ref: "state.json", from: "worker-fanout" }, ...capabilityInputs],
-        outputs: [{ name: "verified result", gate: "review-pass" }],
-      },
-    ],
-  });
-  const bootstrap = state.nodes.find((node) => node.id === "bootstrap");
-  if (bootstrap) {
-    bootstrap.status = "done";
-    bootstrap.startedAt = input.startedAt;
-    bootstrap.completedAt = input.startedAt;
-  }
-  const coordinator = state.nodes.find((node) => node.id === "root-coordinator");
-  if (coordinator) {
-    coordinator.status = "running";
-    coordinator.startedAt = input.startedAt;
-  }
-  return refreshRunStateEstimate(state, input.workerCount);
-}

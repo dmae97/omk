@@ -19,6 +19,8 @@ lerna-debug.log*
 
 # OMK runtime / local data (NEVER commit)
 .omk/
+# Legacy local Pi harness data is imported into .omk only; never commit it.
+.pi/
 !templates/.omk/
 !templates/.omk/**
 
@@ -114,6 +116,7 @@ coverage/
 .gsd/
 agent-skills/
 continuous-claude-v3/
+headroom/
 lobehub/
 logs/
 *.bak

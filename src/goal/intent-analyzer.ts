@@ -210,7 +210,7 @@ function extractFiles(rawPrompt: string): string[] {
 }
 
 function looksLikeCommand(value: string): boolean {
-  return /^(?:omk|open-multi-agent-kit|npm|pnpm|yarn|node|npx|tsx|tsc|git)\b/u.test(value.trim());
+  return /^(?:omk|npm|pnpm|yarn|node|npx|tsx|tsc|git)\b/u.test(value.trim());
 }
 
 function maskSensitiveText(value: string): string {
@@ -239,7 +239,7 @@ function extractCommands(rawPrompt: string): string[] {
 function firstCommandToken(rawPrompt: string): { command?: string; explicitOmk: boolean } {
   const tokens = rawPrompt.trim().toLowerCase().split(/\s+/u);
   if (tokens.length === 0) return { explicitOmk: false };
-  if (tokens[0] === "omk" || tokens[0] === "open-multi-agent-kit") {
+  if (tokens[0] === "omk") {
     return { command: tokens[1], explicitOmk: true };
   }
   return { command: tokens[0], explicitOmk: false };

@@ -284,14 +284,11 @@ test("shouldUseDirectKimiFallback: kimi → false without legacy mode", () => {
   deepStrictEqual(shouldUseDirectKimiFallback("kimi", {}), false);
 });
 
-test("shouldUseDirectKimiFallback: auto/kimi + legacy → true", () => {
-  deepStrictEqual(shouldUseDirectKimiFallback("auto", { OMK_LEGACY_CHAT: "1" }), true);
-  deepStrictEqual(shouldUseDirectKimiFallback("kimi", { OMK_LEGACY_CHAT: "1" }), true);
-});
-
-test("shouldUseDirectKimiFallback: explicit non-Kimi provider ignores legacy Kimi fallback", () => {
+test("shouldUseDirectKimiFallback is permanently disabled", () => {
+  deepStrictEqual(shouldUseDirectKimiFallback("auto", { OMK_LEGACY_CHAT: "1" }), false);
+  deepStrictEqual(shouldUseDirectKimiFallback("kimi", { OMK_LEGACY_CHAT: "1" }), false);
   deepStrictEqual(shouldUseDirectKimiFallback("codex", { OMK_LEGACY_CHAT: "1" }), false);
-  deepStrictEqual(shouldUseDirectKimiFallback("deepseek", { OMK_LEGACY_CHAT: "1" }), false);
+  deepStrictEqual(shouldUseDirectKimiFallback("deepseek", {}), false);
 });
 
 test("DNC compiles status request to minimal prompt and sidecar", () => {

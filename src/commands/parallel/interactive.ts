@@ -161,7 +161,7 @@ export async function interactiveParallelCommand(
   console.log("─".repeat(60));
 
   if (result.phase === "completed") {
-    console.log(status.ok("Orchestration completed successfully!"));
+    console.log(status.warn("Orchestration execution finished — completion is not done until diff + test + log artifacts exist and `omk verify --run <id> --json` passes."));
   } else {
     console.log(status.error(`Orchestration ${result.phase}`));
     if (result.error) {

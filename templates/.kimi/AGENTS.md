@@ -1,10 +1,12 @@
 # .kimi/AGENTS.md
 
-## Kimi-Specific Rules
+## Kimi Provider Adapter Rules
 
-This project is running through oh-my-kimi.
+This project is running through OMK; the Kimi surface is only a provider adapter lane.
 
-Use Kimi native tools aggressively:
+OMK is the root orchestrator identity. Models execute; OMK routes, verifies, measures, and controls.
+
+When the Kimi provider adapter is selected, use Kimi native tools aggressively without replacing OMK orchestration authority:
 
 - Use `SetTodoList` for multi-step work.
 - Use `Agent` for non-trivial work.

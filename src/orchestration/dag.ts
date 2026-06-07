@@ -107,6 +107,8 @@ export interface DagNodeAttempt {
   providerModel?: string;
   providerModelTier?: DeepSeekModelTier;
   providerParticipation?: DeepSeekParticipation;
+  /** Error message when the attempt failed. Captured from runner stderr or exception. */
+  error?: string;
 }
 
 export interface DagNode {

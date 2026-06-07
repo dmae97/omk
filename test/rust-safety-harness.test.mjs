@@ -73,7 +73,7 @@ test("Rust safety harness validates run artifact pairs", { skip: !cargoAvailable
 test("Rust safety harness self-test and resolver expose native safety contract", { skip: !cargoAvailable() }, () => {
   const selfTest = runSafety(["self-test"]);
   assert.equal(selfTest.status, 0, selfTest.stderr || selfTest.stdout);
-  assert.deepEqual(JSON.parse(selfTest.stdout), { ok: true, checks: 6 });
+  assert.deepEqual(JSON.parse(selfTest.stdout), { ok: true, checks: 11 });
 
   const resolved = runSafety(["resolve-run-artifact", ".omk/runs", "run-123", "logs/node-1.log"]);
   assert.equal(resolved.status, 0, resolved.stderr || resolved.stdout);
@@ -86,4 +86,36 @@ test("Rust safety harness self-test and resolver expose native safety contract",
   const traversal = runSafety(["resolve-run-artifact", ".omk/runs", "run-123", "../state.json"]);
   assert.equal(traversal.status, 1);
   assert.equal(JSON.parse(traversal.stdout).ok, false);
+});
+
+test("Rust safety harness exposes Night City native theme tokens", { skip: !cargoAvailable() }, () => {
+  const snapshot = runSafety(["theme-snapshot"]);
+  assert.equal(snapshot.status, 0, snapshot.stderr || snapshot.stdout);
+  const parsed = JSON.parse(snapshot.stdout);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.theme, "OMK//CONTROL");
+  assert.equal(parsed.surface, "rust-native-safety");
+  assert.equal(parsed.glyph, "🦀");
+  assert.ok(parsed.colors.some((color) => color.token === "rust-orange" && color.hex === "#F97316"));
+  assert.ok(parsed.colors.some((color) => color.token === "cargo-green" && color.hex === "#00FFC2"));
+  assert.ok(parsed.colors.some((color) => color.token === "evidence-magenta" && color.hex === "#FF47B2"));
+  assert.ok(parsed.glyphs.some((glyph) => glyph.token === "evidence" && glyph.glyph === "▣"));
+  assert.match(parsed.ascii, /RUST NATIVE/);
+});
+
+test("Rust safety harness exposes theme list, glyph, and ASCII commands", { skip: !cargoAvailable() }, () => {
+  const list = runSafety(["theme-list"]);
+  assert.equal(list.status, 0, list.stderr || list.stdout);
+  const parsedList = JSON.parse(list.stdout);
+  assert.equal(parsedList.ok, true);
+  assert.ok(parsedList.tokens.includes("rust-orange"));
+  assert.ok(parsedList.tokens.includes("control-purple"));
+
+  const ascii = runSafety(["theme-ascii"]);
+  assert.equal(ascii.status, 0, ascii.stderr || ascii.stdout);
+  assert.match(JSON.parse(ascii.stdout).ascii, /OMK\/\/CONTROL/);
+
+  const glyphs = runSafety(["theme-glyphs"]);
+  assert.equal(glyphs.status, 0, glyphs.stderr || glyphs.stdout);
+  assert.ok(JSON.parse(glyphs.stdout).glyphs.some((glyph) => glyph.token === "verify" && glyph.glyph === "✓"));
 });

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository is configured for open_multi-agent_kit (OMK).
+This repository is configured for open-multi-agent-kit (OMK).
 
 The agent must avoid making the user repeat common instructions. Apply this file silently and execute the workflow directly.
 
@@ -304,7 +304,7 @@ test/v2-regression.test.mjs                 # 10 regression tests
 
 ## Okabe / D-Mail Policy
 
-This project is a provider-neutral agent runtime for coding workflows, originally built with deep Kimi integration. Generated agents should inherit the Okabe-compatible base agent so the `SendDMail` tool is available. Use Okabe smart context management plus D-Mail checkpoints before risky refactors, context compaction, multi-agent handoffs, or rollback-prone work. D-Mail notes should be concise recovery records: current goal, changed files, verification state, blockers, and intended next action.
+This project is a provider-neutral agent runtime for coding workflows. Generated agents should inherit the Okabe-compatible base agent so the `SendDMail` tool is available. Use Okabe smart context management plus D-Mail checkpoints before risky refactors, context compaction, multi-agent handoffs, or rollback-prone work. D-Mail notes should be concise recovery records: current goal, changed files, verification state, blockers, and intended next action.
 
 ## Context Policy
 

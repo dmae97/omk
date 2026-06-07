@@ -2,7 +2,7 @@
 
 > 목적: 현재 OMK interactive chat/runtime에서 발생하는 **prompt envelope 비대화**, **MCP 전체 강제 활성화**, **theme 미적용**, **NLP 비활성화**, **slash command 비대화형 유지**, **optional MCP 실패 fatal 처리** 문제를 해결하기 위한 CLI/runtime 아키텍처 문서.
 
-- 대상 저장소: `dmae97/oh-my-kimi`
+- 대상 저장소: `dmae97/open-multi-agent-kit`
 - 기준 관찰 로그: `붙여넣은 마크다운(1)(3).md`
 - 기준 공개 커밋 맥락: `main` 최신 공개 커밋이 `fix(runtime): reuse fallback provider default in env` 계열로 확인된 상태
 - 핵심 방향: **CLI 프레임워크 교체보다 먼저 `CapabilityPlan + RuntimeSidecar + OutputRouter + ProviderEventNormalizer`를 도입한다.**

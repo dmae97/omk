@@ -1,7 +1,7 @@
 # Critical Issues & Improvement Plan — 2026-05-01
 
 **Date:** 2026-05-01 (KST)
-**Project:** oh-my-kimi
+**Project:** open-multi-agent-kit
 **Scope:** current repository state, CLI runtime, orchestration, MCP, safety hooks, docs, and release readiness
 **Audience:** maintainer / future implementation agents
 
@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-oh-my-kimi already has a promising shell: CLI entry points, Kimi wrapping, scaffold generation, design integration, MCP server, DAG primitives, tmux layout, HUD, and a polished README. The main gap is that several advertised “team runtime / quality gate / live HUD” capabilities are still scaffold-level or partially connected.
+open-multi-agent-kit already has a promising shell: CLI entry points, Kimi wrapping, scaffold generation, design integration, MCP server, DAG primitives, tmux layout, HUD, and a polished README. The main gap is that several advertised “team runtime / quality gate / live HUD” capabilities are still scaffold-level or partially connected.
 
 The most urgent work before treating this as a serious public tool is:
 
@@ -33,7 +33,7 @@ Completed in the current working tree:
 - Open-source scaffold defaults now use `approval_policy = "yolo"` plus `yolo_mode = true`.
 - Built-in TypeScript LSP support added: `omk lsp typescript`, `.omk/lsp.json`, bundled `typescript-language-server`, and LSP regression tests.
 - Current TypeScript build blockers in the graph memory files are resolved; `npm run check`, `npm run build`, and `npm pack --dry-run --json` pass.
-- Mascot theme follow-up completed: `omk --help` and Kimi banner fallback now use the Kimicat purple/hoodie/mint token set plus compact ASCII instead of the previous oversized ANSI image fallback.
+- Control-plane theme follow-up completed: `omk --help` and Kimi banner fallback now use the OMK Control neon-grid token set plus compact ASCII instead of the previous oversized ANSI image fallback.
 - AGENTS/DAG runtime ETA support added: executor records per-node timing/attempts, persists `RunState.estimate`, passes ETA env to task runners, and HUD displays progress/ETA when `state.json` exists.
 - Theme safety guardrails added: terminal display strings are sanitized, `NO_COLOR`/`TERM=dumb` are respected, and configured logo images are project-relative by default with type/size/magic-byte validation.
 
@@ -55,7 +55,7 @@ Commands run during this review:
 | `npm run secret:scan` | Pass | No high-confidence secrets or maintainer-private paths found. |
 | `npm run lint` | Pass | Currently secret-scan-backed; style lint remains TODO. |
 | `npm run check` | Pass | `tsc --noEmit` completed. |
-| `npm test` | Pass | Node test runner: 23 regression tests covering quality gates, config-write permissions, LSP config, local graph memory, logo image safety, ETA, and Kimicat theme output. |
+| `npm test` | Pass | Node test runner: 23 regression tests covering quality gates, config-write permissions, LSP config, local graph memory, logo image safety, ETA, and OMK Control theme output. |
 | `npm run build` | Pass | `tsc` completed. |
 | `node dist/cli.js lsp --print-config` | Pass | Default `.omk/lsp.json` payload renders. |
 | `node dist/cli.js lsp --check` | Pass | Resolves bundled `typescript-language-server` binary. |
@@ -277,7 +277,7 @@ Use a single policy source that can generate both TS checks and shell hook behav
 
 - README features section sells mature capabilities (`README.md:53-62`).
 - README command table later marks several commands partial/stub (`README.md:116-125`).
-- `docs/getting-started.md` still says `npm install -g oh-my-kimi`, while package name is `oh-my-kimi`.
+- `docs/getting-started.md` still says `npm install -g open-multi-agent-kit`, while package name is `open-multi-agent-kit`.
 
 **Improvement**
 
@@ -319,7 +319,7 @@ Add npm provenance if compatible with the release environment.
 4. Add a compatibility matrix for Node 20/22/24 and Kimi CLI versions.
 5. Replace ad-hoc docs with a maintained roadmap: `Now / Next / Later`.
 6. Cache `getProjectRoot()` or pass root through command context to avoid repeated sync shell calls.
-7. Normalize naming: docs still mix `oh-my-kimi`, `oh-my-kimi`, and `omk`.
+7. Normalize naming: docs still mix `open-multi-agent-kit`, legacy repo names, and `omk`.
 
 ---
 

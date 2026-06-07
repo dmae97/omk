@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420">
+<rect width="1200" height="420" fill="#070B14"/>
+<defs><filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#00D6FF"/></marker></defs>
+<text x="48" y="70" fill="#E8F8FF" font-family="monospace" font-size="42" font-weight="800">OMK Core Loop</text>
+<text x="50" y="112" fill="#9DB3C7" font-family="monospace" font-size="20">Goal to verified merge</text>
+<rect x="48" y="178" width="155" height="120" rx="18" fill="#101826" stroke="#00D6FF" stroke-width="3" filter="url(#glow)"/>
+<text x="72" y="232" fill="#00D6FF" font-family="monospace" font-size="24" font-weight="700">Goal</text>
+<path d="M 211 238 L 229 238" stroke="#00D6FF" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="237" y="178" width="155" height="120" rx="18" fill="#101826" stroke="#9D4EDD" stroke-width="3" filter="url(#glow)"/>
+<text x="261" y="232" fill="#9D4EDD" font-family="monospace" font-size="24" font-weight="700">DAG</text>
+<path d="M 400 238 L 418 238" stroke="#00D6FF" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="426" y="178" width="155" height="120" rx="18" fill="#101826" stroke="#00FFC2" stroke-width="3" filter="url(#glow)"/>
+<text x="450" y="232" fill="#00FFC2" font-family="monospace" font-size="24" font-weight="700">Lanes</text>
+<path d="M 589 238 L 607 238" stroke="#00D6FF" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="615" y="178" width="155" height="120" rx="18" fill="#101826" stroke="#FF47B2" stroke-width="3" filter="url(#glow)"/>
+<text x="639" y="232" fill="#FF47B2" font-family="monospace" font-size="24" font-weight="700">Evidence</text>
+<path d="M 778 238 L 796 238" stroke="#00D6FF" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="804" y="178" width="155" height="120" rx="18" fill="#101826" stroke="#00D6FF" stroke-width="3" filter="url(#glow)"/>
+<text x="828" y="232" fill="#00D6FF" font-family="monospace" font-size="24" font-weight="700">Verify</text>
+<path d="M 967 238 L 985 238" stroke="#00D6FF" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="993" y="178" width="155" height="120" rx="18" fill="#101826" stroke="#9D4EDD" stroke-width="3" filter="url(#glow)"/>
+<text x="1017" y="232" fill="#9D4EDD" font-family="monospace" font-size="24" font-weight="700">Merge</text>
+<text x="48" y="372" fill="#00FFC2" font-family="monospace" font-size="22">Models execute. OMK routes, verifies, measures, and controls.</text>
+</svg>

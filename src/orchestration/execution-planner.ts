@@ -305,11 +305,14 @@ export function isBatchReady(batch: DagNode[], completed: Set<string>): boolean 
  */
 export function getNextExecutableBatch(
   plan: ExecutionPlan,
-  completed: Set<string>
+  completed: Set<string>,
+  terminal: Set<string> = completed
 ): DagNode[] | null {
   for (const batch of plan.batches) {
-    if (isBatchReady(batch, completed)) {
-      return batch;
+    const pending = batch.filter((node) => !terminal.has(node.id));
+    if (pending.length === 0) continue;
+    if (isBatchReady(pending, completed)) {
+      return pending;
     }
   }
   return null;

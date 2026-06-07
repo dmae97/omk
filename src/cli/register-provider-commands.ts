@@ -229,6 +229,19 @@ export function registerProviderCommands(program: Command): void {
     });
 
   program
+    .command("think [level] [variant]")
+    .alias("thinking")
+    .description("Preview model thinking level or custom variant without changing settings")
+    .option("--provider <provider>", "Provider context for supported thinking levels")
+    .option("--model <model>", "Model or alias context for the variant")
+    .option("--export", "Print shell exports instead of a status table")
+    .option("--json", "Output JSON")
+    .action(async (level, variant, options) => {
+      const { thinkCommand } = await import("../commands/model.js");
+      await thinkCommand(level, variant, { ...commandOptions(options), exportEnv: Boolean(options.export) });
+    });
+
+  program
     .command("deepseekset")
     .description("Alias: save DeepSeek API key via masked prompt, stdin, or --from-env")
     .option("--from-env <name>", "Read API key from an environment variable")

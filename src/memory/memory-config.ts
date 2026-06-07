@@ -58,7 +58,7 @@ type Env = NodeJS.ProcessEnv;
 
 const FALLBACK_SESSION_ID = `process-${process.pid}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
 
-export const GLOBAL_MEMORY_CONFIG_TOML = `# oh-my-kimi global memory policy
+export const GLOBAL_MEMORY_CONFIG_TOML = `# open-multi-agent-kit global memory policy
 # Default is project-local graph memory: open-source friendly, no daemon, no secrets.
 # Use backend = "kuzu" when you want the embedded Kuzu graph backend.
 [memory]

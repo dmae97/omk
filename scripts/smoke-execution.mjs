@@ -34,8 +34,6 @@ const env = {
   HOME: home,
   OMK_PROJECT_ROOT: root,
   OMK_MCP_PREFLIGHT: "off",
-  OMK_LEGACY_CHAT: "0",
-  KIMI_BIN: "/nonexistent/kimi",
   CODEX_BIN: "/nonexistent/codex",
   OPENCODE_BIN: "/nonexistent/opencode",
   COMMANDCODE_BIN: "/nonexistent/commandcode",

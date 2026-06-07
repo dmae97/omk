@@ -8,6 +8,7 @@ import { actionAtomRouting, makeActionAtom, renderActionDigest } from "../goal/i
 import type { InputEnvelope } from "../input/input-envelope.js";
 import type { ProviderPolicy } from "../providers/types.js";
 import type { DagNodeDefinition, DagOutputGate } from "./dag.js";
+import type { EnhancedMode } from "./enhanced-modes.js";
 
 export interface RoleSpecificDagPresetInput {
   input: InputEnvelope;
@@ -16,6 +17,8 @@ export interface RoleSpecificDagPresetInput {
   workerCount: number;
   executionStrategy: ExecutionStrategy;
   providerPolicy: ProviderPolicy;
+  /** Enhanced modes: think, mcp, skills, variant */
+  enhancedModes?: readonly EnhancedMode[];
 }
 
 export function shouldCompileRoleSpecificDag(input: {
@@ -167,9 +170,12 @@ function buildPlannerNode(input: RoleSpecificDagPresetInput): DagNodeDefinition 
 }
 
 function buildCapabilityRouterNode(input: RoleSpecificDagPresetInput): DagNodeDefinition {
+  const hasEnhanced = input.enhancedModes && input.enhancedModes.length > 0;
+  const enhancedTag = hasEnhanced ? ` (enhanced: ${input.enhancedModes!.join(",")})` : "";
+
   return {
     id: "capability-router",
-    name: "Bind MCP skills hooks and tools to worker lanes",
+    name: `Bind MCP skills hooks and tools to worker lanes${enhancedTag}`,
     role: "router",
     dependsOn: ["planner"],
     maxRetries: 1,
@@ -178,8 +184,11 @@ function buildCapabilityRouterNode(input: RoleSpecificDagPresetInput): DagNodeDe
     routing: {
       ...baseRouting(input, true),
       assignedProviderCapabilities: ["read", "route", "mcp"],
-      requiresMcp: input.intentFrame.capabilityHints.needsMcp,
-      requiresToolCalling: input.intentFrame.capabilityHints.tools.length > 0,
+      requiresMcp: hasEnhanced
+        ? input.enhancedModes!.includes("mcp") || input.intentFrame.capabilityHints.needsMcp
+        : input.intentFrame.capabilityHints.needsMcp,
+      requiresToolCalling:
+        hasEnhanced || input.intentFrame.capabilityHints.tools.length > 0,
       skills: input.intentFrame.capabilityHints.skills,
       mcpServers: input.intentFrame.capabilityHints.mcpServers,
       tools: input.intentFrame.capabilityHints.tools,
@@ -191,9 +200,13 @@ function buildCapabilityRouterNode(input: RoleSpecificDagPresetInput): DagNodeDe
         verb: "route",
         object: "tool plane capabilities",
         evidenceTarget: "capability-routing.json",
-        doneCondition: "Workers receive bounded MCP, skill, hook, and tool routing hints",
+        doneCondition: hasEnhanced
+          ? `Workers receive bounded MCP, skill, hook, and tool routing + enhanced mode hints (${input.enhancedModes!.join(",")})`
+          : "Workers receive bounded MCP, skill, hook, and tool routing hints",
       })),
-      rationale: "Make tool-plane authority explicit before fanout",
+      rationale: hasEnhanced
+        ? `Make tool-plane authority and enhanced subagent modes (${input.enhancedModes!.join(",")}) explicit before fanout`
+        : "Make tool-plane authority explicit before fanout",
     },
   };
 }
@@ -206,12 +219,36 @@ function buildWorkerNode(
   evidenceRequired: boolean,
 ): DagNodeDefinition {
   const readOnly = input.intent.isReadOnly || isReadOnlyRole(role);
+  const hasEnhanced = input.enhancedModes && input.enhancedModes.length > 0;
+  const hasThink = hasEnhanced && input.enhancedModes!.includes("think");
+  const hasMcp = hasEnhanced && input.enhancedModes!.includes("mcp");
+  const hasSkills = hasEnhanced && input.enhancedModes!.includes("skills");
+
+  // Enhanced mode capability injection
+  const enhancedCapabilities: string[] = [];
+  if (hasThink) enhancedCapabilities.push("reasoning");
+  if (hasMcp) enhancedCapabilities.push("mcp");
+  if (hasSkills) enhancedCapabilities.push("skills");
+
+  const baseCaps = readOnly
+    ? ["read", "review", "advisory"]
+    : ["write", "patch", "shell"];
+
+  // MCP-enhanced workers get additional tool authority
+  const providerCaps = hasMcp
+    ? [...baseCaps, "mcp", ...enhancedCapabilities]
+    : hasEnhanced
+      ? [...baseCaps, ...enhancedCapabilities]
+      : baseCaps;
+
   return {
     id: `worker-${index}`,
-    name: `${role} lane ${index}: ${workerTaskName(input.intent.taskType, index)}`,
+    name: hasThink
+      ? `${role} lane ${index} (think): ${workerTaskName(input.intent.taskType, index)}`
+      : `${role} lane ${index}: ${workerTaskName(input.intent.taskType, index)}`,
     role,
     dependsOn: ["planner", "capability-router"],
-    maxRetries: 1,
+    maxRetries: hasEnhanced ? 2 : 1,
     inputs: [
       { name: "worker plan", ref: "plan.md", from: "planner" },
       { name: "capability routing", ref: "capability-routing.json", from: "capability-router" },
@@ -220,12 +257,15 @@ function buildWorkerNode(
     failurePolicy: { retryable: true, blockDependents: true },
     routing: {
       ...baseRouting(input, readOnly),
-      assignedProviderCapabilities: readOnly
-        ? ["read", "review", "advisory"]
-        : ["write", "patch", "shell"],
-      evidenceRequired,
+      assignedProviderCapabilities: providerCaps,
+      evidenceRequired: evidenceRequired || hasThink || hasSkills,
+      requiresMcp: hasMcp || undefined,
+      requiresToolCalling: hasMcp || hasSkills || undefined,
+      contextBudget: hasEnhanced ? "normal" : "small",
       actionAtom: actionAtomRouting(atom),
-      rationale: `Worker lane ${index} owns action atom ${atom.id}`,
+      rationale: hasEnhanced
+        ? `Worker lane ${index} (${input.enhancedModes!.join(",")}) owns action atom ${atom.id}`
+        : `Worker lane ${index} owns action atom ${atom.id}`,
     },
   };
 }

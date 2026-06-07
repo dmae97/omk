@@ -132,7 +132,7 @@ function stripAnsiLen(s: string): number {
 const THINK_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 let thinkFrameIdx = 0;
 
-function renderThinkingLine(summary: string | undefined, elapsedMs: number): string {
+function renderThinkingLine(summary: string | undefined, elapsedMs: number, activity?: string): string {
   const spinner = THINK_FRAMES[thinkFrameIdx++ % THINK_FRAMES.length];
   const seconds = Math.floor(elapsedMs / 1000);
   const time = style.phosphorDim(`${seconds}s`);
@@ -140,7 +140,9 @@ function renderThinkingLine(summary: string | undefined, elapsedMs: number): str
     const truncated = summary.length > 60 ? summary.slice(0, 57) + "..." : summary;
     return `  ${style.purple(spinner)} ${style.gray(truncated)} ${time}`;
   }
-  return `  ${style.purple(spinner)} ${style.phosphorDim("thinking...")} ${time}`;
+  const active = activity ?? "routing turn · evidence gate armed";
+  const truncated = active.length > 60 ? active.slice(0, 57) + "..." : active;
+  return `  ${style.purple(spinner)} ${style.phosphorDim(truncated)} ${time}`;
 }
 
 // ── RichRenderer ───────────────────────────────────────────────────────────
@@ -218,7 +220,7 @@ export class RichRenderer implements CliRenderer {
         break;
 
       case "turn:heartbeat": {
-        const line = renderThinkingLine(this.thinkingSummary, event.elapsedMs);
+        const line = renderThinkingLine(this.thinkingSummary, event.elapsedMs, event.activity);
         if (this.stderr.isTTY) {
           this.stderr.write("\r" + line.padEnd(80) + "\r");
           this.heartbeatOpen = true;
@@ -257,7 +259,7 @@ export class RichRenderer implements CliRenderer {
           this.heartbeatOpen = false;
         }
         const secs = (event.durationMs / 1000).toFixed(1);
-        this.stderr.write(style.gray("  ─ ") + style.phosphorDim(`${secs}s`) + style.gray(" ─") + "\n\n");
+        this.stderr.write(style.gray("  ─ turn settled · ") + style.phosphorDim(`${secs}s`) + style.gray(" ─") + "\n\n");
         break;
       }
 

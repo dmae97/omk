@@ -1755,15 +1755,127 @@ test("omk-project MCP exposes secret-free run telemetry tools", async () => {
   }
 });
 
+test("omk-project MCP TodoWrite stores Claude-compatible todo items", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-todowrite-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    const runId = "todowrite-run";
+    const input = [
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "omk-mcp-test", version: "0.0.0" },
+        },
+      },
+      { jsonrpc: "2.0", id: 2, method: "tools/list" },
+      {
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: {
+          name: "TodoWrite",
+          arguments: {
+            runId,
+            todos: [
+              { content: "Implement schema", status: "in_progress", activeForm: "Implementing schema" },
+              { content: "Ship result", status: "completed" },
+            ],
+          },
+        },
+      },
+      {
+        jsonrpc: "2.0",
+        id: 4,
+        method: "tools/call",
+        params: { name: "omk_read_todos", arguments: { runId } },
+      },
+      {
+        jsonrpc: "2.0",
+        id: 5,
+        method: "tools/call",
+        params: {
+          name: "todo_write",
+          arguments: {
+            runId,
+            ops: [
+              { op: "init", list: [{ phase: "Implementation", items: ["Patch code", "Run tests"] }] },
+              { op: "done", task: "Patch code" },
+            ],
+          },
+        },
+      },
+      {
+        jsonrpc: "2.0",
+        id: 6,
+        method: "tools/call",
+        params: { name: "omk_read_todos", arguments: { runId } },
+      },
+    ].map((message) => JSON.stringify(message)).join("\n") + "\n";
+
+    const result = spawnSync(process.execPath, [OMK_PROJECT_SERVER], {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        HOME: homeRoot,
+        OMK_PROJECT_ROOT: projectRoot,
+        OMK_MCP_PERMISSION_PROFILE: "repo",
+      },
+      input,
+      encoding: "utf-8",
+      timeout: 10000,
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const responses = result.stdout.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    const listResponse = responses.find((response) => response.id === 2);
+    const writeResponse = responses.find((response) => response.id === 3);
+    const readResponse = responses.find((response) => response.id === 4);
+    const opWriteResponse = responses.find((response) => response.id === 5);
+    const opReadResponse = responses.find((response) => response.id === 6);
+    const toolNames = listResponse.result.tools.map((tool) => tool.name);
+
+    assert.equal(toolNames.includes("TodoWrite"), true);
+    assert.equal(toolNames.includes("omk_todo_write"), true);
+    assert.equal(toolNames.includes("todo_write"), true);
+    assert.equal(writeResponse.result.isError, undefined);
+    assert.match(writeResponse.result.content[0].text, /"source": "TodoWrite"/);
+    assert.match(writeResponse.result.content[0].text, /"written": 2/);
+
+    const readPayload = JSON.parse(readResponse.result.content[0].text);
+    assert.equal(readPayload.todos[0].title, "Implement schema");
+    assert.equal(readPayload.todos[0].status, "in_progress");
+    assert.equal(readPayload.todos[0].activeForm, "Implementing schema");
+    assert.equal(readPayload.todos[1].title, "Ship result");
+    assert.equal(readPayload.todos[1].status, "done");
+    assert.equal(opWriteResponse.result.isError, undefined);
+    assert.match(opWriteResponse.result.content[0].text, /"applied": 2/);
+    const opReadPayload = JSON.parse(opReadResponse.result.content[0].text);
+    assert.deepEqual(opReadPayload.todos.map((todo) => [todo.phase, todo.title, todo.status]), [
+      ["Implementation", "Patch code", "done"],
+      ["Implementation", "Run tests", "in_progress"],
+    ]);
+  } finally {
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+  }
+});
+
 test("filesystem-readonly MCP exposes read tools and denies write tool calls", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-readonly-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
 
   try {
     await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await mkdir(join(projectRoot, ".pi", "agent"), { recursive: true });
     await mkdir(join(projectRoot, ".omk", "cache"), { recursive: true });
     await writeFile(join(projectRoot, "README.md"), "readonly ok", "utf-8");
     await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({ token: "SECRET" }), "utf-8");
+    await writeFile(join(projectRoot, ".pi", "agent", "auth.json"), JSON.stringify({ token: "SECRET" }), "utf-8");
     await writeFile(join(projectRoot, ".omk", "cache", "mcp-runtime.json"), JSON.stringify({ token: "SECRET" }), "utf-8");
     const input = [
       {
@@ -1819,6 +1931,12 @@ test("filesystem-readonly MCP exposes read tools and denies write tool calls", a
         method: "tools/call",
         params: { name: "search_files", arguments: { pattern: "mcp" } },
       },
+      {
+        jsonrpc: "2.0",
+        id: 10,
+        method: "tools/call",
+        params: { name: "read_file", arguments: { path: ".pi/agent/auth.json" } },
+      },
     ].map((message) => JSON.stringify(message)).join("\n") + "\n";
 
     const result = spawnSync(process.execPath, [OMK_CLI, "mcp", "serve", "filesystem-readonly"], {
@@ -1847,6 +1965,7 @@ test("filesystem-readonly MCP exposes read tools and denies write tool calls", a
     const rootListResponse = responses.find((response) => response.id === 7);
     const omkListResponse = responses.find((response) => response.id === 8);
     const searchResponse = responses.find((response) => response.id === 9);
+    const legacySecretReadResponse = responses.find((response) => response.id === 10);
     const toolNames = listResponse.result.tools.map((tool) => tool.name);
 
     assert.deepEqual(toolNames.sort(), [
@@ -1865,9 +1984,12 @@ test("filesystem-readonly MCP exposes read tools and denies write tool calls", a
     assert.doesNotMatch(secretReadResponse.result.content[0].text, /SECRET/);
     assert.equal(secretInfoResponse.result.isError, true);
     assert.match(secretInfoResponse.result.content[0].text, /secret-bearing file pattern/);
-    assert.doesNotMatch(rootListResponse.result.content[0].text, /\.kimi/);
+    assert.equal(legacySecretReadResponse.result.isError, true);
+    assert.match(legacySecretReadResponse.result.content[0].text, /secret-bearing file pattern/);
+    assert.doesNotMatch(legacySecretReadResponse.result.content[0].text, /SECRET/);
+    assert.doesNotMatch(rootListResponse.result.content[0].text, /\.kimi|\.pi/);
     assert.doesNotMatch(omkListResponse.result.content[0].text, /cache/);
-    assert.doesNotMatch(searchResponse.result.content[0].text, /\.kimi|\.omk\/cache/);
+    assert.doesNotMatch(searchResponse.result.content[0].text, /\.kimi|\.pi|\.omk\/cache/);
   } finally {
     await removeTree(projectRoot);
     await removeTree(homeRoot);

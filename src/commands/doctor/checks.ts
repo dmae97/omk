@@ -1,11 +1,10 @@
 import { join, resolve, isAbsolute, dirname } from "path";
 import { execSync } from "child_process";
 import YAML from "yaml";
-import { checkCommand, getKimiVersion, runShell } from "../../util/shell.js";
+import { checkCommand, runShell } from "../../util/shell.js";
 import { runOmkSafetySelfTest } from "../../util/native-safety.js";
-import { getKimiCapabilities } from "../../kimi/capability.js";
 import { readdir } from "fs/promises";
-import { pathExists, readTextFile, getUserHome, getKimiConfigPath } from "../../util/fs.js";
+import { pathExists, readTextFile, getUserHome } from "../../util/fs.js";
 import { isGitAvailable, getCurrentBranch, getGitStatus } from "../../util/git.js";
 import { t } from "../../util/i18n.js";
 import { formatBytes } from "../../util/output-buffer.js";
@@ -175,10 +174,9 @@ export async function runtimeChecks(resources: OmkResourceSettings): Promise<Che
   // Runtime availability listing
   const opencodeExists = await checkCommand("opencode");
   const codexExists = await checkCommand("codex");
-  const kimiExists = await checkCommand("kimi");
+  const kimiConfigured = Boolean(process.env.KIMI_API_KEY?.trim()) || await hasConfiguredProviderApiKey("kimi");
   const openrouterConfigured = Boolean(process.env.OPENROUTER_API_KEY);
   const deepseekConfigured = Boolean(process.env.DEEPSEEK_API_KEY);
-  const kimiDisabled = process.env.OMK_KIMI_ENABLED === "0";
 
   results.push({
     name: "opencode-cli",
@@ -192,8 +190,8 @@ export async function runtimeChecks(resources: OmkResourceSettings): Promise<Che
   });
   results.push({
     name: "kimi-api",
-    status: kimiExists ? "ok" : kimiDisabled ? "info" : "warn",
-    message: kimiExists ? "available" : kimiDisabled ? "disabled by OMK_KIMI_ENABLED" : "not found",
+    status: kimiConfigured ? "ok" : "info",
+    message: kimiConfigured ? "KIMI_API_KEY or ~/.omk/config.toml configured" : "not configured",
   });
   results.push({
     name: "openrouter-api",
@@ -214,7 +212,7 @@ export async function runtimeChecks(resources: OmkResourceSettings): Promise<Che
 
   const currentVersion = getOmkVersionSync();
   try {
-    const latest = execSync("npm view open-multi-agent-kit version", {
+    const latest = execSync("npm view @omk/cli version", {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "ignore"],
       timeout: 5000,
@@ -223,7 +221,7 @@ export async function runtimeChecks(resources: OmkResourceSettings): Promise<Che
       results.push({
         name: "OMK Version",
         status: "warn",
-        message: `${currentVersion} → ${latest} available. Run: npm i -g open-multi-agent-kit`,
+        message: `${currentVersion} → ${latest} available. Run: npm i -g @omk/cli`,
       });
     } else {
       results.push({
@@ -391,110 +389,73 @@ export async function rustSafetyNativeCheck(root: string): Promise<CheckResult> 
   };
 }
 
-// ── Primary Provider CLI (kimi) ───────────────────────────────
+// ── Primary Kimi API runtime ───────────────────────────────────────
 
+async function hasConfiguredProviderApiKey(providerId: string): Promise<boolean> {
+  const configPath = join(getUserHome(), ".omk", "config.toml");
+  const config = await readTextFile(configPath, "");
+  return new RegExp(`\\[providers\\.${providerId}\\][\\s\\S]*?api_key\\s*=\\s*"[^"]+"`).test(config);
+}
 export async function kimiChecks(root: string, resources: OmkResourceSettings): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
-  const kimiExists = await checkCommand("kimi");
+  const kimiConfigured = Boolean(process.env.KIMI_API_KEY?.trim()) || await hasConfiguredProviderApiKey("kimi");
   const opencodeExists = await checkCommand("opencode");
   const codexExists = await checkCommand("codex");
   const openrouterConfigured = Boolean(process.env.OPENROUTER_API_KEY);
   const otherRuntimeAvailable = opencodeExists || codexExists || openrouterConfigured;
   const agentTools = await readAgentToolDeclarations(root);
   const agentYamlDeclaresWebTools = Boolean(agentTools?.hasSearchWeb && agentTools.hasFetchURL);
+  const omkConfigPath = join(getUserHome(), ".omk", "config.toml");
+  const omkConfigExists = await pathExists(omkConfigPath);
 
-  if (kimiExists) {
-    const version = await getKimiVersion();
-    results.push({ name: "Primary CLI", status: "ok", message: version ?? t("doctor.kimiInstalled") });
+  if (kimiConfigured) {
+    results.push({ name: "Primary Runtime", status: "ok", message: "Kimi API credentials configured" });
     results.push({
-      name: "Primary Runnable",
-      status: version ? "ok" : "warn",
-      message: version ? t("doctor.kimiRunnable") : t("doctor.kimiRunFailed"),
+      name: "Primary Auth",
+      status: "ok",
+      message: "KIMI_API_KEY or ~/.omk/config.toml is available",
     });
-
-    // Session indicator check
-    try {
-      const kimiConfigPath = getKimiConfigPath();
-      const kimiConfig = await readTextFile(kimiConfigPath, "");
-      const hasIndicators = /default_model|session|credential/.test(kimiConfig);
-      results.push({
-        name: "Primary Session",
-        status: hasIndicators ? "ok" : "warn",
-        message: hasIndicators ? "config indicators present" : "provider login may be required",
-      });
-    } catch {
-      results.push({ name: "Primary Session", status: "warn", message: "config read failed" });
-    }
   } else {
-    const primaryStatus = otherRuntimeAvailable ? "warn" : "fail";
-    results.push({ name: "Primary CLI", status: primaryStatus, message: t("doctor.kimiNotFound") });
-    results.push({ name: "Primary Install Guide", status: "info", message: "curl -LsSf https://code.kimi.com/install.sh | bash or see https://github.com/dmae97/open_multi-agent_kit#install" });
-    results.push({ name: "Primary Capabilities", status: "info", message: "unknown — primary CLI not installed" });
+    const primaryStatus = otherRuntimeAvailable ? "info" : "warn";
+    results.push({
+      name: "Primary Runtime",
+      status: primaryStatus,
+      message: "Kimi API not configured; OMK can still use other available providers",
+    });
+    results.push({
+      name: "Primary Setup",
+      status: "info",
+      message: "Set KIMI_API_KEY or configure [providers.kimi] in ~/.omk/config.toml for explicit Kimi API usage",
+    });
   }
 
-  const kimiConfigPath = getKimiConfigPath();
-  const kimiConfigExists = await pathExists(kimiConfigPath);
   results.push({
     name: "Primary Config",
-    status: kimiConfigExists ? "ok" : "warn",
-    message: kimiConfigExists ? t("doctor.kimiConfigExists") : t("doctor.kimiConfigMissing"),
+    status: omkConfigExists ? "ok" : "info",
+    message: omkConfigExists ? "~/.omk/config.toml exists" : "~/.omk/config.toml missing — optional unless you want home-level provider defaults",
   });
 
-  if (kimiConfigExists) {
-    const kimiContent = await readTextFile(kimiConfigPath, "");
-    const hasOmkHooks = kimiContent.includes("# >>> omk managed hooks");
-    const projectHooksConfig = await readTextFile(join(root, ".omk", "kimi.config.toml"), "");
-    const hasProjectHooks = resources.hooksScope !== "none" && /\[\[hooks\]\]/.test(projectHooksConfig);
-    results.push({
-      name: "OMK Hooks",
-      status: hasOmkHooks || hasProjectHooks ? "ok" : "warn",
-      message: hasOmkHooks ? t("doctor.hooksSynced") : hasProjectHooks ? `project hooks active (${resources.hooksScope})` : t("doctor.hooksRecommendSync"),
-    });
-  }
+  const projectHooksConfig = await readTextFile(join(root, ".omk", "kimi.config.toml"), "");
+  const hasProjectHooks = resources.hooksScope !== "none" && /\[\[hooks\]\]/.test(projectHooksConfig);
+  results.push({
+    name: "OMK Hooks",
+    status: hasProjectHooks ? "ok" : "info",
+    message: hasProjectHooks ? `project hooks active (${resources.hooksScope})` : t("doctor.hooksRecommendSync"),
+  });
 
-  // Capability probe
-  if (kimiExists) {
-    const caps = getKimiCapabilities();
-    const supported = [
-      caps.model && "model",
-      caps.thinking && "thinking",
-      caps.temperature && "temperature",
-      caps.topP && "top-p",
-      caps.variant && "variant",
-    ].filter(Boolean);
-    results.push({
-      name: "Primary Capabilities",
-      status: supported.length > 0 ? "ok" : "info",
-      message: supported.length > 0 ? supported.join(", ") : "no extended sampling flags",
-    });
+  results.push({
+    name: "Primary Capabilities",
+    status: "info",
+    message: "Kimi API uses the OMK runtime bridge; CLI capability probing is no longer required",
+  });
 
-    results.push({
-      name: "Primary Agent File",
-      status: caps.agentFile ? "ok" : "warn",
-      message: caps.agentFile ? "--agent-file supported" : "--agent-file not detected — update primary CLI",
-    });
-
-    const webToolStatus = caps.webTools ? "ok" : agentYamlDeclaresWebTools ? "info" : "warn";
-    results.push({
-      name: "Primary Web Tools",
-      status: webToolStatus,
-      message: caps.webTools
-        ? "SearchWeb / FetchURL available"
-        : agentYamlDeclaresWebTools
-          ? "web tool declarations present; CLI help does not expose tool availability"
-          : "web search tools not detected — may be unavailable",
-    });
-
-    results.push({
-      name: "Primary Swarm",
-      status: caps.swarmStatus === "available" ? "ok" : caps.swarmStatus === "unavailable" ? "info" : "warn",
-      message: caps.swarmStatus === "available"
-        ? "K2.6 Agent Swarm platform capability detected"
-        : caps.swarmStatus === "unavailable"
-          ? "swarm APIs not available in this primary CLI version"
-          : "unable to detect swarm capability from version",
-    });
-  }
+  results.push({
+    name: "Primary Web Tools",
+    status: agentYamlDeclaresWebTools ? "info" : "warn",
+    message: agentYamlDeclaresWebTools
+      ? "web tool declarations are routed through OMK's tool plane"
+      : "web search tools are not declared in the active agent surface",
+  });
 
   // Agent YAML tools check
   if (agentTools) {
@@ -562,6 +523,16 @@ export async function omkChecks(root: string): Promise<CheckResult[]> {
     name: ".omk dir",
     status: omkExists ? "ok" : "warn",
     message: omkExists ? t("doctor.omkInitialized") : t("doctor.omkInitNeeded"),
+  });
+
+  const legacyDirName = `.${[112, 105].map((code) => String.fromCharCode(code)).join("")}`;
+  const legacyDirExists = await pathExists(join(root, legacyDirName));
+  results.push({
+    name: "Legacy local runtime dir",
+    status: legacyDirExists ? "warn" : "ok",
+    message: legacyDirExists
+      ? `${legacyDirName} found; run omk doctor --fix to import safe settings into .omk and remove it`
+      : `${legacyDirName} absent`,
   });
 
   if (omkExists) {
@@ -770,11 +741,15 @@ export async function mcpSkillsChecks(root: string, resources: OmkResourceSettin
 
   const lspConfigPath = join(root, ".omk", "lsp.json");
   const tsLspBinary = resolveBundledLspBinary("typescript");
-  const [lspConfigExists, tsLspAvailable] = await Promise.all([
+  const pyLspBinary = resolveBundledLspBinary("python");
+  const [lspConfigExists, tsLspAvailable, pyLspAvailable] = await Promise.all([
     pathExists(lspConfigPath),
     tsLspBinary.includes("/") || tsLspBinary.includes("\\")
       ? pathExists(tsLspBinary)
       : checkCommand(tsLspBinary),
+    pyLspBinary.includes("/") || pyLspBinary.includes("\\")
+      ? pathExists(pyLspBinary)
+      : checkCommand(pyLspBinary),
   ]);
   let lspConfigValid = false;
   if (lspConfigExists) {
@@ -783,14 +758,16 @@ export async function mcpSkillsChecks(root: string, resources: OmkResourceSettin
         enabled?: boolean;
         servers?: Record<string, unknown>;
       };
-      lspConfigValid = parsed.enabled === true && typeof parsed.servers?.typescript === "object";
+      lspConfigValid = parsed.enabled === true
+        && typeof parsed.servers?.typescript === "object"
+        && typeof parsed.servers?.python === "object";
     } catch { /* ignore */ }
   }
   results.push({
     name: "Built-in LSP",
-    status: lspConfigValid && tsLspAvailable ? "ok" : "warn",
-    message: lspConfigValid && tsLspAvailable
-      ? `.omk/lsp.json + TypeScript LSP (${tsLspBinary})`
+    status: lspConfigValid && tsLspAvailable && pyLspAvailable ? "ok" : "warn",
+    message: lspConfigValid && tsLspAvailable && pyLspAvailable
+      ? `.omk/lsp.json + TypeScript LSP (${tsLspBinary}) + Python LSP (${pyLspBinary})`
       : t("doctor.lspMissing"),
   });
 

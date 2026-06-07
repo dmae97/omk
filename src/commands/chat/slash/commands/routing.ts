@@ -3,13 +3,16 @@ import {
   KNOWN_PROVIDER_IDS,
   listUserModelAliases,
   normalizeProviderId,
+  parseProviderModelArg,
   readProviderRegistry,
   resolveUserModelAlias,
 } from "../../../../providers/model-registry.js";
+import { groupProviderModelsByProvider, renderProviderModelTable } from "../../../../providers/model-table.js";
+import { formatThinkingModelVariant, nextThinkingLevel, normalizeThinkingLevel, normalizeThinkingVariant, thinkingLevelsFor } from "../../../../providers/thinking-levels.js";
 import { resolveRuntimeBootstrap } from "../../../../runtime/runtime-bootstrap.js";
 import { style } from "../../../../util/theme.js";
-import { okSlashResult } from "../result.js";
-import type { SlashCommandContext, SlashCommandSpec } from "../types.js";
+import { errorSlashResult, okSlashResult } from "../result.js";
+import type { SlashCommandContext, SlashCommandResult, SlashCommandSpec } from "../types.js";
 
 export function buildRoutingSlashCommands(): SlashCommandSpec[] {
   return [
@@ -41,17 +44,7 @@ export function buildRoutingSlashCommands(): SlashCommandSpec[] {
       examples: ["/providers"],
       handler: async (ctx) => {
         const providers = await readProviderRegistry({ env: ctx.env });
-        const lines = [style.phosphorBold("\n  Providers:")];
-        for (const provider of providers) {
-          const current = provider.id === ctx.state.provider ? "*" : " ";
-          lines.push(
-            style.phosphorDim(
-              `  ${current} ${provider.id.padEnd(12)} ${provider.enabled ? "enabled" : "disabled"} ${provider.defaultModel}`,
-            ),
-          );
-        }
-        lines.push("");
-        return okSlashResult({ text: lines.join("\n") });
+        return okSlashResult({ text: renderProviderModelTable(providers, { currentProvider: ctx.state.provider, currentModel: ctx.state.model, currentThinking: ctx.state.thinking, compactAliases: true, activeProviderTab: ctx.state.activeProviderTab }) });
       },
     },
     {
@@ -101,38 +94,182 @@ export function buildRoutingSlashCommands(): SlashCommandSpec[] {
       name: "/model",
       aliases: ["/m"],
       group: "routing",
-      summary: "Set model for this session",
-      usage: "/model <provider/model|model>",
-      examples: ["/model codex/codex-cli"],
+      summary: "Show or set model [+thinking variant] for this session",
+      usage: "/model [provider/model|model[:level]]",
+      examples: ["/model", "/model codex/codex-cli", "/model deepseek/pro:max", "/model kimi/k2.6:high", "/model deepseek-v4-pro:max", "/think variant code-high"],
       handler: async (ctx, args) => {
-        const model = args.positional.join(" ").trim();
-        if (!model) {
+        const raw = args.positional.join(" ").trim();
+        if (!raw) {
+          const providers = await readProviderRegistry({ env: ctx.env });
+          const providerGroups = groupProviderModelsByProvider(providers);
+          if (args.flags.json) {
+            return okSlashResult({
+              json: {
+                schema: "omk.slash.model-groups.v1",
+                currentProvider: ctx.state.provider,
+                currentModel: ctx.state.model,
+                currentThinking: ctx.state.thinking,
+                providerGroups,
+              },
+            });
+          }
           return okSlashResult({
-            text: `${style.phosphorDim(`\n  Current model: ${ctx.state.model ?? "auto"}`)}\n${style.phosphorDim("  Usage: /model codex/codex-cli\n")}`,
+            text: renderProviderModelTable(providers, {
+              currentProvider: ctx.state.provider,
+              currentModel: ctx.state.model,
+              currentThinking: ctx.state.thinking,
+              activeProviderTab: ctx.state.activeProviderTab,
+            }),
           });
         }
-        return applyModelOverride(ctx, model);
+        // Parse model + optional :thinkingLevel
+        const parsed = parseProviderModelArg(raw);
+        const ref = modelRefFromParsed(parsed, raw);
+        const thinking = parsed.thinkingLevel
+          ? await validateThinkingOverride(ctx, ref, parsed.thinkingLevel)
+          : undefined;
+        if (thinking && !thinking.ok) return thinking.result;
+        const result = await applyModelOverride(ctx, ref);
+        return thinking?.ok
+          ? applyThinkingOverride(ctx, result, thinking.level, thinking.levels)
+          : result;
+      },
+    },
+    {
+      name: "/think",
+      aliases: ["/thinking", ":think"],
+      group: "routing",
+      summary: "Show, cycle, or set model thinking variant",
+      usage: "/think [next|medium|high|xhigh|max|variant <name>]",
+      examples: ["/think", "/think next", "/think high", "/think variant code-high", "/think varint review-xhigh"],
+      handler: async (ctx, args) => {
+        const requested = args.positional[0]?.trim().toLowerCase();
+        const levels = thinkingLevelsFor(ctx.state.provider, ctx.state.model);
+        const wantsCustomVariant = requested === "variant" || requested === "varint" || requested === "v";
+        const customVariant = wantsCustomVariant ? normalizeThinkingVariant(args.positional[1]) : undefined;
+        if (wantsCustomVariant) {
+          if (!customVariant) {
+            return okSlashResult({
+              text: style.phosphorDim(`\n  Usage: /think variant <name>\n  Example: /think variant code-high\n  Alias: /think varint <name>\n  Allowed: letters, numbers, dot, underscore, colon, hyphen.\n`),
+            });
+          }
+          ctx.env.OMK_THINKING = customVariant;
+          ctx.env.OMK_MODEL_VARIANT = formatThinkingModelVariant(ctx.state.model, customVariant);
+          return okSlashResult({
+            statePatch: { thinking: customVariant, updatedAt: new Date().toISOString() },
+            text: [
+              style.phosphor(`\n  Thinking variant: ${customVariant}`),
+              style.phosphorDim("  Mode: custom variant"),
+              style.phosphorDim(`  Active: ${ctx.env.OMK_MODEL_VARIANT}`),
+              style.phosphorDim(`  Level cycle still available: ${levels.join(" → ")}\n`),
+            ].join("\n"),
+          });
+        }
+        const level = !requested || requested === "next" || requested === "tab"
+          ? nextThinkingLevel(ctx.state.thinking ?? ctx.env.OMK_THINKING, ctx.state.provider, ctx.state.model)
+          : normalizeThinkingLevel(requested);
+        if (!level || !levels.includes(level)) {
+          return okSlashResult({
+            text: style.phosphorDim(`\n  Supported thinking levels for ${ctx.state.provider}/${ctx.state.model ?? "auto"}: ${levels.join(" → ")}\n  Usage: /think next | ${levels.join(" | ")} | variant <name>\n  Shortcut: /model ${ctx.state.provider ?? "kimi"}/${ctx.state.model ?? "auto"}:${levels[0]}\n`),
+          });
+        }
+        ctx.env.OMK_THINKING = level;
+        ctx.env.OMK_MODEL_VARIANT = formatThinkingModelVariant(ctx.state.model, level);
+        return okSlashResult({
+          statePatch: { thinking: level, updatedAt: new Date().toISOString() },
+          text: [
+            style.phosphor(`\n  Thinking variant: ${level}`),
+            style.phosphorDim(`  Cycle: ${levels.join(" → ")}`),
+            style.phosphorDim(`  Active: ${ctx.env.OMK_MODEL_VARIANT}`),
+            style.phosphorDim(`  Shortcut: /model ${ctx.state.provider ?? "kimi"}/${ctx.state.model ?? "auto"}:${level}`),
+            style.phosphorDim("  Custom variant: /think variant code-high  (alias: /think varint code-high)\n"),
+          ].join("\n"),
+        });
       },
     },
     {
       name: "/use",
       aliases: [":use"],
       group: "routing",
-      summary: "Switch provider/model by alias",
-      usage: "/use <ref>",
-      examples: ["/use codex/codex-cli", "/use fast"],
+      summary: "Switch provider/model [+thinking] by alias",
+      usage: "/use <ref>[:level]",
+      examples: ["/use codex/codex-cli", "/use fast", "/use deepseek/pro:max"],
       handler: async (ctx, args) => {
-        const ref = args.positional.join(" ").trim();
-        if (!ref)
+        const raw = args.positional.join(" ").trim();
+        if (!raw)
           return okSlashResult({
             text: style.phosphorDim(
-              "\n  Usage: /use codex/codex-cli or /use fast\n",
+              "\n  Usage: /use codex/codex-cli or /use fast or /use deepseek/pro:max\n",
             ),
           });
-        return applyModelOverride(ctx, ref);
+        const parsed = parseProviderModelArg(raw);
+        const ref = modelRefFromParsed(parsed, raw);
+        const thinking = parsed.thinkingLevel
+          ? await validateThinkingOverride(ctx, ref, parsed.thinkingLevel)
+          : undefined;
+        if (thinking && !thinking.ok) return thinking.result;
+        const result = await applyModelOverride(ctx, ref);
+        return thinking?.ok
+          ? applyThinkingOverride(ctx, result, thinking.level, thinking.levels)
+          : result;
       },
     },
   ];
+}
+
+function modelRefFromParsed(parsed: ReturnType<typeof parseProviderModelArg>, raw: string): string {
+  return `${parsed.provider ? `${parsed.provider}/` : ""}${parsed.model ?? raw}`;
+}
+
+type ThinkingValidation =
+  | { ok: true; level: NonNullable<ReturnType<typeof normalizeThinkingLevel>>; levels: readonly string[] }
+  | { ok: false; result: SlashCommandResult };
+
+async function validateThinkingOverride(
+  ctx: SlashCommandContext,
+  ref: string,
+  requestedThinking: string,
+): Promise<ThinkingValidation> {
+  const level = normalizeThinkingLevel(requestedThinking);
+  const resolved = await resolveUserModelAlias(ref, { env: ctx.env });
+  const nextProvider = resolved.provider ?? ctx.state.provider;
+  const nextModel = resolved.model ?? ctx.state.model;
+  const levels = thinkingLevelsFor(nextProvider, nextModel);
+  if (!level || !levels.includes(level)) {
+    return {
+      ok: false,
+      result: errorSlashResult([
+        style.metricsRed(`\n  Unsupported thinking level: ${requestedThinking}`),
+        style.phosphorDim(`  Target: ${nextProvider ?? "auto"}/${nextModel ?? "auto"}`),
+        style.phosphorDim(`  Supported: ${levels.join(" → ")}`),
+        style.phosphorDim(`  Usage: /model ${ref}:${levels.join("|")}\n`),
+      ].join("\n")),
+    };
+  }
+  return { ok: true, level, levels };
+}
+
+function applyThinkingOverride(
+  ctx: SlashCommandContext,
+  result: SlashCommandResult,
+  level: NonNullable<ReturnType<typeof normalizeThinkingLevel>>,
+  levels: readonly string[],
+): SlashCommandResult {
+  const nextModel = result.statePatch?.model ?? ctx.state.model;
+  if (!nextModel) return result;
+  ctx.env.OMK_THINKING = level;
+  ctx.env.OMK_MODEL_VARIANT = formatThinkingModelVariant(nextModel, level);
+  const statePatch = result.statePatch ?? {};
+  result.statePatch = {
+    ...statePatch,
+    thinking: level,
+    updatedAt: new Date().toISOString(),
+  };
+  result.text = [
+    result.text?.trimEnd(),
+    style.phosphorDim(`  Thinking: ${level}  (cycle: ${levels.join(" → ")})`),
+  ].filter(Boolean).join("\n");
+  return result;
 }
 
 async function applyProviderOverride(

@@ -18,14 +18,13 @@ import { applyTaskRunContextToAgentTask, envFromWorkerManifest } from "./worker-
 import { createRuntimeRegistry, type RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRouter } from "./runtime-router.js";
 import { createContextBroker } from "./context-broker.js";
-import { createKimiPrintRuntime } from "./kimi-print-runtime.js";
 import { DeepSeekRuntime } from "./deepseek-runtime.js";
 import { CodexRuntime } from "./codex-runtime.js";
 import { createOpencodeCliAdapter } from "../adapters/opencode/opencode-cli-adapter.js";
 import { createCommandcodeCliAdapter } from "../adapters/commandcode/commandcode-cli-adapter.js";
 import { createChatAdvisoryRuntime } from "./chat-advisory-runtime.js";
 import { LocalLlmRuntime } from "./local-llm-runtime.js";
-import { checkCommand, resolveKimiBin } from "../util/shell.js";
+import { checkCommand } from "../util/shell.js";
 import { createMimoApiRuntime } from "./mimo-api-runtime.js";
 import { createKimiApiRuntime } from "./kimi-api-runtime.js";
 import { getUserHome } from "../util/fs.js";
@@ -45,12 +44,10 @@ async function createDefaultRuntimeRegistry(
   options: RuntimeBackedTaskRunnerOptions
 ): Promise<RuntimeRegistry> {
   const registry = createRuntimeRegistry();
-  const legacyKimiEnabled = isLegacyKimiEnabled(options.env);
-
   // ── MiMo API runtime (Xiaomi MiMo — OpenAI-compatible, highest priority) ──
   let mimoApiKey = options.env?.MIMO_API_KEY ?? process.env.MIMO_API_KEY;
   if (!mimoApiKey) {
-    mimoApiKey = readConfiguredProviderApiKey("mimo", { legacyKimiEnabled });
+    mimoApiKey = readConfiguredProviderApiKey("mimo");
   }
   if (mimoApiKey) {
     registry.register(createMimoApiRuntime({ apiKey: mimoApiKey }));
@@ -58,10 +55,10 @@ async function createDefaultRuntimeRegistry(
 
   // ── Kimi API runtime (Moonshot HTTP direct — no binary needed) ──
   let kimiApiKey = options.env?.KIMI_API_KEY ?? process.env.KIMI_API_KEY;
-  if (legacyKimiEnabled && !kimiApiKey) {
-    kimiApiKey = readConfiguredProviderApiKey("kimi", { legacyKimiEnabled });
+  if (!kimiApiKey) {
+    kimiApiKey = readConfiguredProviderApiKey("kimi");
   }
-  if (legacyKimiEnabled && kimiApiKey) {
+  if (kimiApiKey) {
     registry.register(createKimiApiRuntime({ apiKey: kimiApiKey }));
   }
 
@@ -71,11 +68,6 @@ async function createDefaultRuntimeRegistry(
     registry.register(new CodexRuntime({ bin: codexBin, cwd: options.cwd }));
   }
 
-  // ── kimi-print adapter (legacy binary — only if kimi CLI installed) ──
-  const kimiBin = resolveKimiBin({ ...process.env, ...(options.env ?? {}) });
-  if (legacyKimiEnabled && await checkCommand(kimiBin).catch(() => false)) {
-    registry.register(createKimiPrintRuntime({ cwd: options.cwd, env: options.env }));
-  }
 
   // ── local-llm (OpenAI-compatible local endpoint) ──
   const localBaseUrl = options.env?.LOCAL_LLM_BASE_URL ?? process.env.LOCAL_LLM_BASE_URL;
@@ -121,28 +113,14 @@ async function createDefaultRuntimeRegistry(
   return registry;
 }
 
-function isLegacyKimiEnabled(env: Record<string, string> | undefined): boolean {
-  const merged = { ...process.env, ...(env ?? {}) };
-  return /^(1|true|yes)$/i.test(merged.OMK_LEGACY_KIMI_ENABLED ?? "");
-}
+function readConfiguredProviderApiKey(providerId: string): string | undefined {
+  const configContent = readProviderConfig(".omk");
+  if (!configContent) return undefined;
 
-function readConfiguredProviderApiKey(
-  providerId: string,
-  options: { legacyKimiEnabled: boolean }
-): string | undefined {
-  const configContents = [
-    readProviderConfig(".omk"),
-    ...(options.legacyKimiEnabled ? [readProviderConfig(".kimi")] : []),
-  ].filter((content): content is string => content !== undefined);
-
-  for (const configContent of configContents) {
-    const match = configContent.match(
-      new RegExp(`\\[providers\\.${escapeRegExp(providerId)}\\][\\s\\S]*?api_key\\s*=\\s*"([^"]+)"`)
-    );
-    if (match?.[1]) return match[1];
-  }
-
-  return undefined;
+  const match = configContent.match(
+    new RegExp(`\\[providers\\.${escapeRegExp(providerId)}\\][\\s\\S]*?api_key\\s*=\\s*"([^"]+)"`)
+  );
+  return match?.[1];
 }
 
 function readProviderConfig(configDir: ".omk" | ".kimi"): string | undefined {

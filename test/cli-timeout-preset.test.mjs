@@ -93,7 +93,7 @@ test("chat, run, and parallel commands expose execution selection policy", () =>
 test("chat command exposes opt-in single-pane UI renderer", () => {
   const result = runHelp("chat");
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /--ui <legacy\|plain-modern\|rich\|system24\|green-rain\|neon-grid>/);
+  assert.match(result.stdout, /--ui <legacy\|plain-modern\|rich\|system24\|green-rain\|neon-grid\|rust-forge>/);
 });
 
 test("agent mode preset launches interactive orchestrator chat surface", async () => {
@@ -1002,10 +1002,10 @@ test("slash command templates are packaged", () => {
 test("chat command leaves mode unset for persisted mode and advertises OMK brand", () => {
   const result = runHelp("chat");
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /--brand <omk\|minimal\|plain\|green-rain\|neon-grid>/);
+  assert.match(result.stdout, /--brand <omk\|minimal\|plain\|green-rain\|neon-grid\|rust-forge>/);
   assert.match(result.stdout, /--mode <agent\|plan\|chat\|debugging\|review>/);
   assert.doesNotMatch(result.stdout, /default: agent/);
-  assert.doesNotMatch(result.stdout, /kimicat|kimichan/);
+  assert.doesNotMatch(result.stdout, /kimi(?:cat|chan)/);
 });
 
 test("parallel keeps the historical ten-minute node timeout when no preset is requested", () => {

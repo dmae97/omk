@@ -1,5 +1,5 @@
 import { join, dirname, resolve } from "path";
-import { chmod, copyFile, mkdir, readdir, stat as fsStat, writeFile } from "fs/promises";
+import { chmod, copyFile, mkdir, readdir, rm, stat as fsStat, writeFile } from "fs/promises";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { runShell } from "../../util/shell.js";
@@ -13,7 +13,7 @@ import {
   type ProjectRootResolution,
 } from "../../util/fs.js";
 import { MemoryStore } from "../../memory/memory-store.js";
-import { OMK_PARALLEL_ORCHESTRATOR_PRESET, OMK_RUNTIME_PRESETS } from "../../runtime/core-verified-preset.js";
+import { OMK_CORE_VERIFIED_PRESET, OMK_RUNTIME_PRESETS } from "../../runtime/core-verified-preset.js";
 import { repairMcpDoctorIssues } from "../mcp.js";
 import {
   createDoctorFixPlan,
@@ -50,6 +50,7 @@ export async function applyDoctorFixes(root: string, options: DoctorOptions, roo
   const allowGlobalFixes = shouldRunDoctorGlobalFixes(options);
 
   await applyDefaultProjectRootFix(options, rootResolution, ctx);
+  await repairLegacyIdentityProjectConfig(root, ctx);
   await repairRuntimePresetFiles(root, ctx);
   await repairProjectConfigToml(root, ctx);
   await repairLspConfig(root, ctx);
@@ -306,10 +307,139 @@ function createSkippedGlobalSyncReport(): KimiGlobalSyncReport {
   };
 }
 
+function legacyIdentityDirName(): string {
+  return `.${[112, 105].map((code) => String.fromCharCode(code)).join("")}`;
+}
+
+function normalizeLegacyIdentityRelPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
+function isAllowedLegacyIdentityProjectPath(path: string): boolean {
+  const normalized = normalizeLegacyIdentityRelPath(path);
+  return normalized === "settings.json" || normalized === "theme.json" || /^themes\/[^/]+\.json$/i.test(normalized);
+}
+
+function isSecretBearingLegacyIdentityPath(path: string): boolean {
+  const normalized = normalizeLegacyIdentityRelPath(path).toLowerCase();
+  return /(?:^|\/)(?:auth|oauth|tokens?|session|credentials|service-account.*)\.json$/.test(normalized)
+    || /(?:^|\/)(?:\.env(?:\..*)?|\.npmrc|\.netrc|id_rsa|id_ed25519)$/.test(normalized)
+    || /\.(?:pem|key|p8|p12|pfx)$/i.test(normalized);
+}
+
+function containsSecretLikeMaterial(content: string): boolean {
+  return /\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|session[_-]?token|authorization|bearer|secret|password)\b['"]?\s*[:=]\s*['"]?[A-Za-z0-9._~+/=@:-]{12,}/i.test(content)
+    || /\bBearer\s+[A-Za-z0-9._~+/-]{16,}/i.test(content);
+}
+
+async function collectLegacyIdentityProjectFiles(dir: string, prefix = ""): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const files: string[] = [];
+  for (const entry of entries) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await collectLegacyIdentityProjectFiles(fullPath, rel));
+    } else if (entry.isFile()) {
+      files.push(normalizeLegacyIdentityRelPath(rel));
+    }
+  }
+  return files;
+}
+
+async function repairLegacyIdentityProjectConfig(root: string, ctx: DoctorFixContext): Promise<void> {
+  const legacyDir = join(root, legacyIdentityDirName());
+  if (!(await pathExists(legacyDir))) return;
+  const legacyInfo = await fsStat(legacyDir).catch(() => null);
+  if (!legacyInfo?.isDirectory()) {
+    recordDoctorFix(ctx, {
+      id: "legacy-identity-storage-not-directory",
+      category: "legacy-identity",
+      severity: "warn",
+      status: "skipped",
+      before: legacyIdentityDirName(),
+      after: ".omk",
+      reason: "legacy local runtime path exists but is not a directory; manual cleanup required",
+      verifyCheck: "OMK Scaffold",
+    });
+    return;
+  }
+
+  const files = await collectLegacyIdentityProjectFiles(legacyDir);
+  const imported: string[] = [];
+  const duplicates: string[] = [];
+  const conflictBackups: string[] = [];
+  const skipped: string[] = [];
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+  for (const relPath of files) {
+    const sourcePath = join(legacyDir, relPath);
+    if (isSecretBearingLegacyIdentityPath(relPath) || !isAllowedLegacyIdentityProjectPath(relPath)) {
+      skipped.push(relPath);
+      continue;
+    }
+    const sourceText = await readTextFile(sourcePath, "");
+    if (containsSecretLikeMaterial(sourceText)) {
+      skipped.push(relPath);
+      continue;
+    }
+
+    const destPath = join(root, ".omk", relPath);
+    const destExists = await pathExists(destPath);
+    const destText = destExists ? await readTextFile(destPath, "") : "";
+    if (destExists && destText === sourceText) {
+      duplicates.push(relPath);
+      continue;
+    }
+
+    if (ctx.dryRun) {
+      imported.push(relPath);
+      continue;
+    }
+
+    await mkdir(dirname(destPath), { recursive: true });
+    if (destExists) {
+      const backupPath = `${destPath}.legacy-${timestamp}`;
+      await copyFile(sourcePath, backupPath);
+      conflictBackups.push(backupPath);
+      if (!ctx.plan.backups.includes(backupPath)) ctx.plan.backups.push(backupPath);
+    } else {
+      await copyFile(sourcePath, destPath);
+      imported.push(relPath);
+    }
+  }
+
+  if (skipped.length > 0) {
+    recordDoctorFix(ctx, {
+      id: "legacy-identity-storage-skipped",
+      category: "legacy-identity",
+      severity: "warn",
+      status: "blocked",
+      before: { files },
+      after: { imported, duplicates, conflictBackups },
+      reason: `legacy local runtime import skipped secret-bearing or unsupported files: ${skipped.join(", ")}`,
+      verifyCheck: "OMK Scaffold",
+    });
+    return;
+  }
+
+  if (!ctx.dryRun) {
+    await rm(legacyDir, { recursive: true, force: true });
+  }
+  recordDoctorFix(ctx, {
+    id: "legacy-identity-storage-import",
+    category: "legacy-identity",
+    before: { legacyDir: legacyIdentityDirName(), files },
+    after: { canonicalDir: ".omk", imported, duplicates, conflictBackups, removedLegacyDir: !ctx.dryRun },
+    reason: `${ctx.dryRun ? "would import" : "imported"} legacy local runtime settings into .omk and ${ctx.dryRun ? "would remove" : "removed"} the legacy project directory`,
+    verifyCheck: "OMK Scaffold",
+  });
+}
+
 async function repairRuntimePresetFiles(root: string, ctx: DoctorFixContext): Promise<void> {
   const runtimePresetPath = join(root, ".omk", "runtime-preset.json");
   const runtimePresetsPath = join(root, ".omk", "runtime-presets.json");
-  const desiredPreset = OMK_PARALLEL_ORCHESTRATOR_PRESET;
+  const desiredPreset = OMK_CORE_VERIFIED_PRESET;
   const currentPreset = await readJsonValue(runtimePresetPath);
   const presetNeedsRepair = !isRecord(currentPreset.value) || currentPreset.value.id !== desiredPreset.id;
   if (presetNeedsRepair) {
@@ -329,7 +459,7 @@ async function repairRuntimePresetFiles(root: string, ctx: DoctorFixContext): Pr
 
   const currentPresets = await readJsonValue(runtimePresetsPath);
   let nextPresets: Record<string, unknown> = {
-    defaultPresetId: OMK_PARALLEL_ORCHESTRATOR_PRESET.id,
+    defaultPresetId: OMK_CORE_VERIFIED_PRESET.id,
     presets: OMK_RUNTIME_PRESETS,
   };
   if (isRecord(currentPresets.value)) {
@@ -339,7 +469,7 @@ async function repairRuntimePresetFiles(root: string, ctx: DoctorFixContext): Pr
       : [];
     nextPresets = {
       ...currentPresets.value,
-      defaultPresetId: OMK_PARALLEL_ORCHESTRATOR_PRESET.id,
+      defaultPresetId: OMK_CORE_VERIFIED_PRESET.id,
       presets: [...OMK_RUNTIME_PRESETS, ...extras],
     };
   }
@@ -352,14 +482,14 @@ async function repairRuntimePresetFiles(root: string, ctx: DoctorFixContext): Pr
       id: "runtime-presets-default",
       category: "runtime",
       before: currentPresets.exists ? currentPresets.value ?? "invalid JSON" : "missing",
-      after: { defaultPresetId: OMK_PARALLEL_ORCHESTRATOR_PRESET.id },
-      reason: `${ctx.dryRun ? "would repair" : "repaired"} .omk/runtime-presets.json defaultPresetId to ${OMK_PARALLEL_ORCHESTRATOR_PRESET.id}`,
+      after: { defaultPresetId: OMK_CORE_VERIFIED_PRESET.id },
+      reason: `${ctx.dryRun ? "would repair" : "repaired"} .omk/runtime-presets.json defaultPresetId to ${OMK_CORE_VERIFIED_PRESET.id}`,
       verifyCheck: "OMK Runtime",
     });
   }
 }
 
-const DEFAULT_SAFE_CONFIG_TOML = `# open_multi-agent_kit project settings
+const DEFAULT_SAFE_CONFIG_TOML = `# open-multi-agent-kit project settings
 [orchestration]
 execution_prompt = "ask"
 
@@ -489,7 +619,10 @@ async function repairLspConfig(root: string, ctx: DoctorFixContext): Promise<voi
   const lspConfigPath = join(root, ".omk", "lsp.json");
   const current = await readJsonValue(lspConfigPath);
   const parsed = isRecord(current.value) ? current.value : null;
-  const valid = parsed?.enabled === true && isRecord(parsed.servers) && isRecord(parsed.servers.typescript);
+  const valid = parsed?.enabled === true
+    && isRecord(parsed.servers)
+    && isRecord(parsed.servers.typescript)
+    && isRecord(parsed.servers.python);
   if (valid) return;
   if (!ctx.dryRun) {
     await mkdir(dirname(lspConfigPath), { recursive: true });
@@ -499,8 +632,8 @@ async function repairLspConfig(root: string, ctx: DoctorFixContext): Promise<voi
     id: "lsp-config",
     category: "scaffold",
     before: current.exists ? current.value ?? "invalid JSON" : "missing",
-    after: "default TypeScript LSP config",
-    reason: `${ctx.dryRun ? "would restore" : "restored"} .omk/lsp.json default TypeScript LSP config`,
+    after: "default TypeScript/Python LSP config",
+    reason: `${ctx.dryRun ? "would restore" : "restored"} .omk/lsp.json default TypeScript/Python LSP config`,
     verifyCheck: "Built-in LSP",
   });
 }

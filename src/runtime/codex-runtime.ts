@@ -17,6 +17,10 @@ import { capsuleToTask } from "./context-broker-converter.js";
 import { runShell, runShellStreaming, checkCommand } from "../util/shell.js";
 import { sanitizeUserVisibleOutput } from "../util/user-visible-output.js";
 import { buildChildEnv } from "./child-env.js";
+import {
+  contextPreflightErrorMessage,
+  preflightProviderInput,
+} from "../providers/context-preflight.js";
 import { createRuntimeSandboxProfile } from "./sandbox-profile.js";
 
 export interface CodexRuntimeOptions {
@@ -24,6 +28,9 @@ export interface CodexRuntimeOptions {
   cwd?: string;
   model?: string;
   timeoutMs?: number;
+  contextWindow?: number;
+  reservedOutputTokens?: number;
+  safetyMarginTokens?: number;
 }
 
 export class CodexRuntime implements AgentRuntime {
@@ -48,12 +55,18 @@ export class CodexRuntime implements AgentRuntime {
   private readonly bin: string;
   private readonly model: string | undefined;
   private readonly timeoutMs: number;
+  private readonly contextWindow: number | undefined;
+  private readonly reservedOutputTokens: number | undefined;
+  private readonly safetyMarginTokens: number | undefined;
 
   constructor(options: CodexRuntimeOptions = {}) {
     this.cwd = options.cwd ?? process.cwd();
     this.bin = options.bin ?? process.env.CODEX_BIN ?? "codex";
     this.model = options.model;
     this.timeoutMs = options.timeoutMs ?? 120_000;
+    this.contextWindow = options.contextWindow;
+    this.reservedOutputTokens = options.reservedOutputTokens;
+    this.safetyMarginTokens = options.safetyMarginTokens;
   }
 
   supports(capsule: ContextCapsule): boolean {
@@ -115,6 +128,28 @@ export class CodexRuntime implements AgentRuntime {
   async execute(task: AgentTask): Promise<AgentResult> {
     const prompt = this.buildPrompt(task);
     const model = task.context.providerModel ?? task.context.env?.OMK_PROVIDER_MODEL ?? this.model ?? process.env.OMK_PROVIDER_MODEL;
+    const preflight = await preflightProviderInput(prompt, {
+      provider: "codex",
+      model,
+      contextWindow: this.contextWindow,
+      reservedOutputTokens: this.reservedOutputTokens,
+      safetyMarginTokens: this.safetyMarginTokens,
+      runId: task.context.runId,
+      nodeId: task.context.nodeId,
+      projectRoot: task.context.env?.OMK_PROJECT_ROOT ?? task.context.cwd ?? this.cwd,
+    });
+    if (!preflight.ok) {
+      return {
+        output: "",
+        exitCode: 1,
+        metadata: {
+          runtime: this.id,
+          error: contextPreflightErrorMessage(preflight.report),
+          contextPreflight: preflight.report,
+        },
+      };
+    }
+    const providerPrompt = preflight.input;
     const env: Record<string, string> = buildChildEnv({
       overrideEnv: {
         ...(task.context.env ?? {}),
@@ -177,7 +212,7 @@ export class CodexRuntime implements AgentRuntime {
       const shellFn = useStreaming ? runShellStreaming : runShell;
       const shellOptions: Parameters<typeof runShellStreaming>[2] = {
         cwd: this.cwd,
-        input: prompt,
+        input: providerPrompt,
         timeout: this.timeoutMs,
         signal: task.context.abortSignal,
         inheritEnv: false,
@@ -209,6 +244,7 @@ export class CodexRuntime implements AgentRuntime {
           approvalPolicy,
           stderr: shellResult.stderr,
           failed: shellResult.failed,
+          ...(preflight.report.compacted ? { contextPreflight: preflight.report } : {}),
         },
       };
     } catch (err) {

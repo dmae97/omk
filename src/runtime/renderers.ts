@@ -102,7 +102,7 @@ export function createThemeRenderer(
       // opencode-style: spinner + compact message
       const spin = themed(palette, "warning", spinnerNext());
       const bar = percent !== undefined ? ` ${progressBar(percent)}` : "";
-      emit(`  ${spin} ${message}${bar}`);
+      emit(`  ${spin} ${themed(palette, "info", "signal active")} ${dim(palette, "//")} ${message}${bar}`);
     },
 
     renderMcpStatus(server: string, status: string): void {
@@ -153,7 +153,7 @@ export function createThemeRenderer(
       const dur = durationMs >= 1000
         ? `${(durationMs / 1000).toFixed(1)}s`
         : `${durationMs}ms`;
-      emit(`  ${icon} ${ts} ${dim(palette, "done in")} ${themed(palette, "info", dur)}`);
+      emit(`  ${icon} ${ts} ${dim(palette, "turn settled in")} ${themed(palette, "info", dur)}`);
     },
 
     renderStatusBar(provider: string, model: string, intent: string): void {

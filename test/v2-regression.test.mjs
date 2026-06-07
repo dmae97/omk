@@ -204,6 +204,68 @@ test("20.7 slash command /help returns CommandResult through CommandBus", async 
   assert.equal(lastEvent.data.kind, "result", "event should be result kind");
 });
 
+test("20.7 v2 interactive REPL bus registers /think and applies session state", async () => {
+  const replMod = await import("../dist/cli/v2/chat-repl.js");
+  const state = replMod.createChatReplState({ provider: "codex", model: "codex-cli" });
+  const bus = replMod.createChatReplCommandBus({}, state);
+
+  const result = await bus.dispatch({ kind: "chat", source: "cli", rawText: "/think xhigh" });
+  replMod.applyChatReplSlashResultToState(state, result);
+
+  assert.equal(result.handled, true, "/think should be handled in v2 chat REPL");
+  const payload = JSON.parse(result.output);
+  assert.equal(payload.thinking, "xhigh");
+  assert.ok(payload.modelVariant, "should include model variant for thinking change");
+  assert.equal(state.thinking, "xhigh");
+  assert.equal(state.modelVariant, payload.modelVariant);
+
+  const modelResult = await bus.dispatch({ kind: "chat", source: "cli", rawText: "/model kimi/kimi-code" });
+  replMod.applyChatReplSlashResultToState(state, modelResult);
+  assert.equal(state.provider, "kimi");
+  assert.equal(state.model, "kimi-code");
+  assert.equal(state.modelVariant, undefined, "route changes should clear stale thinking model variants");
+});
+test("20.7 chat REPL prepares /model show with activeProviderTab all before dispatch", async () => {
+  const replMod = await import("../dist/cli/v2/chat-repl.js");
+  const tabsMod = await import("../dist/providers/model-tabs.js");
+  const state = replMod.createChatReplState({ provider: "openai-codex", model: "gpt-5.5" });
+  state.activeProviderTab = "openai-codex";
+  const modelPickerState = tabsMod.createModelPickerState("openai-codex");
+
+  const prepared = replMod.prepareChatReplModelPickerForShow({
+    input: "/model",
+    state,
+    modelPickerState,
+    providerIds: ["anthropic", "deepseek", "google", "mimo", "minimax", "openai-codex", "openrouter", "zai"],
+  });
+
+  assert.equal(prepared, true);
+  assert.equal(state.activeProviderTab, "all");
+  assert.equal(modelPickerState.activeProviderTab, "all");
+});
+
+test("20.7 chat REPL /model show renders all tab even when current runtime provider is openai-codex", async () => {
+  const replMod = await import("../dist/cli/v2/chat-repl.js");
+  const tabsMod = await import("../dist/providers/model-tabs.js");
+  const state = replMod.createChatReplState({ provider: "openai-codex", model: "gpt-5.5" });
+  state.activeProviderTab = "openai-codex";
+  const bus = replMod.createChatReplCommandBus({}, state);
+  const modelPickerState = tabsMod.createModelPickerState("openai-codex");
+
+  replMod.prepareChatReplModelPickerForShow({
+    input: "/model",
+    state,
+    modelPickerState,
+    providerIds: ["anthropic", "deepseek", "google", "mimo", "minimax", "openai-codex", "openrouter", "zai"],
+  });
+
+  const result = await bus.dispatch({ kind: "chat", source: "cli", rawText: "/model" });
+
+  assert.equal(result.handled, true);
+  assert.match(result.events.at(-1).data.content, /\[● all\]/);
+  assert.doesNotMatch(result.events.at(-1).data.content, /\[● openai-codex\]/);
+});
+
 test("20.7 slash command /model returns provider info", async () => {
   const busMod = await import("../dist/runtime/command-bus.js");
   const slashMod = await import("../dist/runtime/slash-commands.js");
@@ -216,4 +278,46 @@ test("20.7 slash command /model returns provider info", async () => {
   const payload = JSON.parse(result.output);
   assert.equal(payload.currentProvider, "kimi", "should show provider");
   assert.equal(payload.currentModel, "kimi-code", "should show model");
+  assert.ok(payload.providerGroups.some((group) => group.provider === "mimo"), "mimo should appear as default provider tab");
+  const deepseekGroup = payload.providerGroups.find((group) => group.provider === "deepseek");
+  const deepseekPro = deepseekGroup.models.find((entry) => entry.model === "deepseek-v4-pro");
+  assert.ok(deepseekPro.thinkingLevels.includes("max"), "deepseek-v4-pro should list max thinking");
+  assert.match(result.events.at(-1).data.content, /provider tabs/);
+  assert.match(result.events.at(-1).data.content, /deepseek-v4-pro:max/);
+});
+
+test("20.7 slash command /model keeps provider-only selection working", async () => {
+  const replMod = await import("../dist/cli/v2/chat-repl.js");
+  const state = replMod.createChatReplState({ provider: "codex", model: "codex-cli" });
+  const bus = replMod.createChatReplCommandBus({}, state);
+
+  const result = await bus.dispatch({ kind: "chat", source: "cli", rawText: "/model kimi" });
+  replMod.applyChatReplSlashResultToState(state, result);
+
+  assert.equal(result.handled, true, "/model provider-only should be handled");
+  const payload = JSON.parse(result.output);
+  assert.equal(payload.provider, "kimi");
+  assert.equal(payload.model, "kimi-k2.6");
+  assert.equal(state.provider, "kimi");
+  assert.equal(state.model, "kimi-k2.6");
+});
+
+test("20.7 slash command /model parses deepseek pro max thinking", async () => {
+  const replMod = await import("../dist/cli/v2/chat-repl.js");
+  const state = replMod.createChatReplState({ provider: "kimi", model: "kimi-code" });
+  const bus = replMod.createChatReplCommandBus({}, state);
+
+  const result = await bus.dispatch({ kind: "chat", source: "cli", rawText: "/model deepseek/pro:max" });
+  replMod.applyChatReplSlashResultToState(state, result);
+
+  assert.equal(result.handled, true, "/model should be handled");
+  const payload = JSON.parse(result.output);
+  assert.equal(payload.provider, "deepseek");
+  assert.equal(payload.model, "deepseek-v4-pro");
+  assert.equal(payload.thinking, "max");
+  assert.equal(payload.modelVariant, "deepseek-v4-pro:max");
+  assert.equal(state.provider, "deepseek");
+  assert.equal(state.model, "deepseek-v4-pro");
+  assert.equal(state.thinking, "max");
+  assert.equal(state.modelVariant, "deepseek-v4-pro:max");
 });

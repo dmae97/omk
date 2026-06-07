@@ -1,7 +1,7 @@
 # Adjustable Timeouts and Cron Jobs
 
 **Date**: 2026-05-05
-**Issue**: [#6](https://github.com/dmae97/oh-my-kimi/issues/6) — Adjustable timeouts and execution limits
+**Issue**: [#6](https://github.com/dmae97/open-multi-agent-kit/issues/6) — Adjustable timeouts and execution limits
 **Status**: Implemented in v1.1.1
 **Spec**: `specs/001-adjustable-timeouts-cron/`
 

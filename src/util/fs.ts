@@ -21,7 +21,6 @@ import { execa } from "execa";
 import { GLOBAL_MEMORY_CONFIG_TOML, getGlobalMemoryConfigPath } from "../memory/memory-config.js";
 import { SyncManifestEntry, sha256, simpleDiff } from "./sync-manifest.js";
 import { getOmkResourceSettings, type OmkRuntimeScope } from "./resource-profile.js";
-import { getKimiCapabilities } from "../kimi/capability.js";
 import { resolveRuntimeProfile, buildProfileArgs } from "./runtime-profile.js";
 import {
   getProjectRoot as resolveProjectRootSync,
@@ -766,30 +765,18 @@ export async function syncAllKimiGlobals(
   };
 }
 
-/** Canonical OMK-first MCP config collection with Kimi files kept as compatibility input. */
+/** Canonical OMK MCP config collection; Kimi project/global files are not part of the root OMK runtime path. */
 export async function collectMcpConfigs(scope: OmkRuntimeScope = "project"): Promise<string[]> {
   const configs: string[] = [];
   if (scope === "none") return configs;
 
   const root = await getProjectRootAsync();
   const omkMcp = join(root, ".omk", "mcp.json");
-  const kimiMcp = join(root, ".kimi", "mcp.json");
-  const globalMcp = join(getUserHome(), ".kimi", "mcp.json");
   const globalOmkMcp = join(getUserHome(), ".omk", "mcp.json");
 
-  if (scope === "all") {
-    if (await pathExists(globalMcp)) configs.push(globalMcp);
-    if (await pathExists(globalOmkMcp)) configs.push(globalOmkMcp);
-  }
+  if (scope === "all" && await pathExists(globalOmkMcp)) configs.push(globalOmkMcp);
 
-  const [kimiMcpExists, omkMcpExists] = await Promise.all([
-    pathExists(kimiMcp),
-    pathExists(omkMcp),
-  ]);
-  // .kimi/mcp.json remains the Kimi-native project source of truth.
-  // .omk/mcp.json is a compatibility fallback/mirror for older projects.
-  if (kimiMcpExists) configs.push(kimiMcp);
-  else if (omkMcpExists) configs.push(omkMcp);
+  if (await pathExists(omkMcp)) configs.push(omkMcp);
 
   return [...new Set(configs)];
 }
@@ -1926,6 +1913,7 @@ export async function injectKimiGlobals(
   let injectedModel: string | undefined;
   if (options.role) {
     const profile = await resolveRuntimeProfile(options.role);
+    const { getKimiCapabilities } = await import("../kimi/capability.js");
     const caps = getKimiCapabilities();
     const profileArgs = buildProfileArgs(profile, caps);
     args.push(...profileArgs);

@@ -9,6 +9,7 @@ import {
   buildChatAgentHarnessManifest,
   buildChatAgentModeContract,
   buildParallelAlgorithmInjection,
+  parseChatAgentModelVariantProfiles,
   prepareChatAgentModeAgent,
 } from "../dist/util/chat-agent-mode.js";
 
@@ -46,8 +47,11 @@ test("chat agent mode contract captures mode and active runtime resources", () =
   assert.match(contract, /Injected parallel DAG algorithm/);
   assert.match(contract, /Raw Input -> IntentFrame -> ActionAtoms -> Evidence DAG -> Novelty Guard -> Replan\/Continue/);
   assert.match(contract, /raw input in audit\/digest artifacts only/);
-  assert.match(contract, /bootstrap\(done\) -> root-coordinator -> model\/capability\/worker lanes -> review-merge -> quality\/security\/design gates/);
-  assert.match(contract, /DeepSeek direct lanes are read-only/);
+  assert.match(contract, /bootstrap\(done\) -> root-coordinator -> variant\/capability\/worker lanes -> review-merge -> quality\/security\/design gates/);
+  assert.match(contract, /Subagent model invariant/);
+  assert.match(contract, /same default provider\/model/);
+  assert.match(contract, /assignedVariant/);
+  assert.doesNotMatch(contract, /DeepSeek direct lanes are read-only/);
   assert.doesNotMatch(contract, /Kimi keeps root\/integrator authority|Kimi\/OMK chat owns edits|integrator is Kimi-only/);
   assert.match(contract, /default command-pass gate is `npm run check`/);
   assert.match(contract, /authority=mimo; ensemble=enabled; workerCap=3/);
@@ -74,8 +78,11 @@ test("parallel algorithm injection mirrors the parallel DAG routing contract", (
   assert.match(injection.text, /Strict action DAG/);
   assert.match(injection.text, /Intent schema to infer before delegation: taskType, complexity, estimatedWorkers/);
   assert.match(injection.text, /Capability-agent routing: when active inventory exists/);
-  assert.match(injection.text, /spawn read-only Flash quick-decomposition and Pro critique lanes/);
-  assert.match(injection.text, /review-merge depends on every model, capability, and worker lane/);
+  assert.match(injection.text, /Subagent model invariant/);
+  assert.match(injection.text, /same default provider\/model/);
+  assert.match(injection.text, /Variant routing: explorer\/researcher use fast-low/);
+  assert.doesNotMatch(injection.text, /spawn read-only Flash quick-decomposition and Pro critique lanes/);
+  assert.match(injection.text, /review-merge depends on every variant, capability, and worker lane/);
   assert.match(injection.text, /read `chat-agent-harness\.json` for the full MCP\/skills\/hooks inventory/);
 });
 
@@ -124,22 +131,26 @@ test("chat agent harness manifest captures full inventory and safe worker limits
   assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "capability-mcp-agent")?.assignedCapabilities.mcp, ["omk-project"]);
   assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "capability-hook-agent")?.assignedCapabilities.hooks, ["pre-shell-guard.sh"]);
   assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "worker-1")?.assignedProviderCapabilities, ["write", "shell", "mcp", "merge"]);
-  assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "capability-skill-agent")?.candidateProviders, ["deepseek", "qwen", "openrouter", "mimo"]);
+  assert.deepEqual(manifest.virtualDag.nodes.find((node) => node.id === "capability-skill-agent")?.candidateProviders, ["mimo"]);
+  assert.equal(manifest.virtualDag.nodes.find((node) => node.id === "worker-1")?.assignedVariant, "code-medium");
   const explorerLane = manifest.laneCapabilityAssignments.find((lane) => lane.laneId === "explorer");
-  assert.equal(explorerLane?.assignedProvider, "deepseek");
-  assert.deepEqual(explorerLane?.candidateProviders, ["deepseek", "qwen", "openrouter", "mimo"]);
-  assert.equal(explorerLane?.assignedModel, "deepseek-v4-flash");
+  assert.equal(explorerLane?.assignedProvider, "mimo");
+  assert.deepEqual(explorerLane?.candidateProviders, ["mimo"]);
+  assert.equal(explorerLane?.assignedModel, "mimo-v2.5-pro");
+  assert.equal(explorerLane?.assignedVariant, "fast-low");
   assert.deepEqual(explorerLane?.assignedCapabilities, ["read", "research", "web"]);
   const coderLane = manifest.laneCapabilityAssignments.find((lane) => lane.laneId === "coder");
   assert.equal(coderLane?.assignedProvider, "mimo");
   assert.equal(coderLane?.assignedModel, "mimo-v2.5-pro");
+  assert.equal(coderLane?.assignedVariant, "code-medium");
   assert.deepEqual(coderLane?.assignedCapabilities, ["write", "shell", "mcp", "merge"]);
   assert.equal(manifest.memoryRecall.requiredBeforePlanning, true);
   assert.ok(manifest.authority.some((line) => /configured OMK authority provider owns edits/.test(line)));
+  assert.ok(manifest.authority.some((line) => /Subagent lanes inherit the default provider\/model/.test(line)));
   assert.equal(manifest.authority.some((line) => /Kimi\/OMK chat owns edits/.test(line)), false);
 });
 
-test("chat agent harness records explicit provider and model assignments per lane", () => {
+test("chat agent harness records default provider/model with per-lane variants", () => {
   const manifest = buildChatAgentHarnessManifest({
     mode: "agent",
     runId: "chat-agent-provider-lanes",
@@ -163,20 +174,70 @@ test("chat agent harness records explicit provider and model assignments per lan
   assert.equal(manifest.resources.providerModel, "qwen3-max");
   const byLane = new Map(manifest.laneCapabilityAssignments.map((lane) => [lane.laneId, lane]));
   assert.equal(byLane.get("explorer")?.assignedProvider, "qwen");
-  assert.deepEqual(byLane.get("explorer")?.candidateProviders, ["qwen", "mimo"]);
+  assert.deepEqual(byLane.get("explorer")?.candidateProviders, ["qwen"]);
   assert.equal(byLane.get("explorer")?.assignedModel, "qwen3-max");
-  assert.deepEqual(byLane.get("explorer")?.assignedCapabilities, ["read", "research", "review", "qa", "advisory"]);
-  assert.equal(byLane.get("coder")?.assignedProvider, "mimo");
+  assert.equal(byLane.get("explorer")?.assignedVariant, "fast-low");
+  assert.deepEqual(byLane.get("explorer")?.assignedCapabilities, ["read", "research", "web"]);
+  assert.equal(byLane.get("coder")?.assignedProvider, "qwen");
+  assert.equal(byLane.get("coder")?.assignedVariant, "code-medium");
+  assert.deepEqual(byLane.get("coder")?.candidateProviders, ["qwen"]);
   assert.deepEqual(byLane.get("coder")?.assignedCapabilities, ["write", "shell", "mcp", "merge"]);
   assert.equal(byLane.get("security")?.assignedProvider, "qwen");
-  assert.deepEqual(byLane.get("security")?.candidateProviders, ["qwen", "mimo"]);
+  assert.equal(byLane.get("security")?.assignedVariant, "security-xhigh");
+  assert.deepEqual(byLane.get("security")?.candidateProviders, ["qwen"]);
   assert.deepEqual(byLane.get("security")?.assignedCapabilities, ["read", "review", "security"]);
 
   const worker = manifest.virtualDag.nodes.find((node) => node.id === "worker-1");
-  assert.equal(worker?.assignedProvider, "mimo");
-  assert.deepEqual(worker?.candidateProviders, ["mimo"]);
-  assert.equal(worker?.assignedProviderAuthority, "authority");
+  assert.equal(worker?.assignedProvider, "qwen");
+  assert.deepEqual(worker?.candidateProviders, ["qwen"]);
+  assert.equal(worker?.assignedProviderAuthority, "advisory");
+  assert.equal(worker?.assignedVariant, "code-medium");
   assert.deepEqual(worker?.assignedProviderCapabilities, ["write", "shell", "mcp", "merge"]);
+});
+
+test("chat agent harness supports model-specific variant overrides", () => {
+  const modelVariantProfiles = parseChatAgentModelVariantProfiles(JSON.stringify({
+    "qwen3-max": {
+      explorer: "fast-custom",
+      coder: "code-custom",
+      security: "security-custom",
+    },
+    "mimo:qwen3-max": {
+      reviewer: "review-provider-model",
+    },
+    "bad model key with spaces": {
+      coder: "ignored",
+    },
+  }));
+
+  const manifest = buildChatAgentHarnessManifest({
+    mode: "agent",
+    runId: "chat-agent-model-variants",
+    resources: {
+      workers: "2",
+      resourceProfile: "standard",
+      approvalPolicy: "interactive",
+      providerPolicy: "qwen",
+      providerModel: "qwen3-max",
+      modelVariantProfiles,
+      ensembleDefaultEnabled: true,
+      mcpScope: "project",
+      skillsScope: "project",
+      hooksScope: "project",
+      mcpNames: ["omk-project"],
+      skillNames: ["omk-repo-explorer"],
+      hookNames: ["protect-secrets.sh"],
+    },
+  });
+
+  assert.equal(manifest.resources.variantProfile.model, "qwen3-max");
+  assert.equal(manifest.resources.variantProfile.source, "configured:qwen3-max");
+  const byLane = new Map(manifest.laneCapabilityAssignments.map((lane) => [lane.laneId, lane]));
+  assert.equal(byLane.get("explorer")?.assignedVariant, "fast-custom");
+  assert.equal(byLane.get("coder")?.assignedVariant, "code-custom");
+  assert.equal(byLane.get("reviewer")?.assignedVariant, "review-high");
+  assert.equal(byLane.get("security")?.assignedVariant, "security-custom");
+  assert.equal(manifest.virtualDag.nodes.find((node) => node.id === "worker-1")?.assignedVariant, "code-custom");
 });
 
 test("chat agent harness routes write lanes to configured authority provider", () => {
@@ -527,6 +588,9 @@ test("prepareChatAgentModeAgent writes run-scoped wrapper agent and prompt", asy
     assert.match(yaml, /OMK_CONTEXT_BUDGET: "normal"/);
     assert.match(yaml, /OMK_PROVIDER_AUTHORITY: "mimo"/);
 
+    const explorerYaml = await readFile(join(root, ".omk", "runs", "chat-agent-run", "roles", "explorer.yaml"), "utf-8");
+    assert.match(explorerYaml, /OMK_REASONING_VARIANT: "fast-low"/);
+
     const prompt = await readFile(prepared.promptPath, "utf-8");
     assert.match(prompt, /# Base Root Prompt/);
     assert.match(prompt, /# OMK Interactive Orchestrator Runtime Contract/);
@@ -580,10 +644,10 @@ test("prepareChatAgentModeAgent fallback root prompt is provider-neutral OMK", a
     });
 
     const prompt = await readFile(prepared.promptPath, "utf-8");
-    assert.match(prompt, /# open_multi-agent_kit Root Agent/);
-    assert.match(prompt, /provider-neutral orchestration layer/);
+    assert.match(prompt, /# open-multi-agent-kit Root Agent/);
+    assert.match(prompt, /OMK root orchestrator/);
+    assert.match(prompt, /Models execute\. OMK routes, verifies, measures, and controls\./);
     assert.match(prompt, /Authority provider: codex/);
-    assert.doesNotMatch(prompt, /# oh-my-kimi Root Agent|oh-my-kimi root coordinator|Kimi-native/);
     const yaml = await readFile(prepared.agentFile, "utf-8");
     assert.match(yaml, /OMK_PROVIDER_AUTHORITY: "codex"/);
   } finally {

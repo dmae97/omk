@@ -92,7 +92,6 @@ function defaultCockpitSideWidth(): number {
   return 40;
 }
 
-const DEFAULT_CHAT_COCKPIT_HEIGHT = 32;
 const MIN_CHAT_COCKPIT_HEIGHT = 14;
 const MAX_CHAT_COCKPIT_HEIGHT = 96;
 
@@ -119,6 +118,84 @@ export function buildRightPaneCommand(options: {
     cmd += ` --height ${options.height}`;
   }
   return cmd;
+}
+
+const TMUX_NIGHT_CITY_STATUS_LEFT = "#[fg=#00FFC2,bold] OMK//CONTROL #[fg=#758FA8]Night City";
+const TMUX_NIGHT_CITY_STATUS_RIGHT = "#[fg=#00D6FF]#S #[fg=#758FA8]%H:%M";
+
+const TMUX_NIGHT_CITY_SESSION_OPTIONS: Array<readonly [string, string]> = [
+  ["status", "on"],
+  ["status-style", "bg=#070B14,fg=#E8F8FF"],
+  ["message-style", "bg=#9D4EDD,fg=#E8F8FF,bold"],
+  ["window-status-style", "fg=#758FA8,bg=#070B14"],
+  ["window-status-current-style", "fg=#070B14,bg=#00FFC2,bold"],
+  ["status-left", TMUX_NIGHT_CITY_STATUS_LEFT],
+  ["status-right", TMUX_NIGHT_CITY_STATUS_RIGHT],
+];
+
+const TMUX_NIGHT_CITY_WINDOW_OPTIONS: Array<readonly [string, string]> = [
+  ["pane-border-style", "fg=#22324A"],
+  ["pane-active-border-style", "fg=#FF47B2"],
+];
+
+async function applyTmuxNightCityTheme(session: string, cwd: string): Promise<void> {
+  for (const [option, value] of TMUX_NIGHT_CITY_SESSION_OPTIONS) {
+    const result = await runShell("tmux", ["set-option", "-t", session, option, value], { cwd, timeout: 5000 });
+    if (result.failed) {
+      console.warn(`Failed to set tmux ${option}: ${result.stderr || result.stdout}`);
+    }
+  }
+
+  for (const [option, value] of TMUX_NIGHT_CITY_WINDOW_OPTIONS) {
+    const result = await runShell("tmux", ["set-window-option", "-t", `${session}:chat`, option, value], { cwd, timeout: 5000 });
+    if (result.failed) {
+      console.warn(`Failed to set tmux ${option}: ${result.stderr || result.stdout}`);
+    }
+  }
+}
+
+function computeMainPaneWidth(terminalWidth: number, sideWidthPercent: number): number | undefined {
+  if (!Number.isFinite(terminalWidth) || terminalWidth <= 0) return undefined;
+  const rightColumns = Math.max(24, Math.round((terminalWidth * sideWidthPercent) / 100));
+  return Math.max(20, terminalWidth - rightColumns);
+}
+
+async function pinTmuxRightDashboard(options: {
+  session: string;
+  cwd: string;
+  leftPaneId: string;
+  terminalWidth: number;
+  sideWidthPercent: number;
+}): Promise<void> {
+  const mainPaneWidth = computeMainPaneWidth(options.terminalWidth, options.sideWidthPercent);
+  if (mainPaneWidth !== undefined) {
+    const widthResult = await runShell(
+      "tmux",
+      ["set-window-option", "-t", `${options.session}:chat`, "main-pane-width", String(mainPaneWidth)],
+      { cwd: options.cwd, timeout: 5000 }
+    );
+    if (widthResult.failed) {
+      console.warn(`Failed to pin tmux main pane width: ${widthResult.stderr || widthResult.stdout}`);
+    }
+  }
+
+  const layoutResult = await runShell(
+    "tmux",
+    ["select-layout", "-t", `${options.session}:chat`, "main-vertical"],
+    { cwd: options.cwd, timeout: 5000 }
+  );
+  if (layoutResult.failed) {
+    console.warn(`Failed to pin tmux right dashboard layout: ${layoutResult.stderr || layoutResult.stdout}`);
+  }
+
+  const selectLeftResult = await runShell(
+    "tmux",
+    ["select-pane", "-t", options.leftPaneId],
+    { cwd: options.cwd, timeout: 5000 }
+  );
+  if (selectLeftResult.failed) {
+    console.warn(`Failed to reselect tmux chat pane after layout pin: ${selectLeftResult.stderr || selectLeftResult.stdout}`);
+  }
 }
 
 export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}): Promise<void> {
@@ -163,11 +240,16 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
   const terminalWidth = process.stdout.columns ?? 0;
   const terminalHeight = process.stdout.rows ?? 0;
   const minHistoryPaneHeight = 5;
-  const cockpitHeight = parseCockpitHeight(options.cockpitHeight);
-  const cockpitPaneHeight = Math.min(cockpitHeight ?? DEFAULT_CHAT_COCKPIT_HEIGHT, terminalHeight - minHistoryPaneHeight);
+  const requestedCockpitHeight = parseCockpitHeight(options.cockpitHeight);
+  const hasRoomForHistoryPane =
+    history === "watch" &&
+    terminalWidth >= 80 &&
+    terminalHeight >= MIN_CHAT_COCKPIT_HEIGHT + minHistoryPaneHeight;
 
   const leftCmd = buildLeftPaneCommand({ nodeCmd, cliCmd, runId, brand, agentFile: options.agentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, mcpScope: options.mcpScope, provider: options.provider, model: options.model, execution: options.execution, ui: options.ui });
-  const rightTopCmd = buildRightPaneCommand({ nodeCmd, cliCmd, runId, refreshMs, redraw, height: cockpitPaneHeight });
+  // When no explicit --cockpit-height is provided, pass undefined so the child
+  // measures its actual tmux pane after splits/resizes and keeps the right rail pinned.
+  const rightTopCmd = buildRightPaneCommand({ nodeCmd, cliCmd, runId, refreshMs, redraw, height: requestedCockpitHeight });
   const rightBottomCmd = `${nodeCmd} ${cliCmd} runs --watch --limit 15 --refresh 5000`;
 
   // 3. Create detached tmux session with left-pane command already running
@@ -225,17 +307,18 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
     console.warn(msg);
   }
 
-  // 6. Split right pane horizontally for bottom history pane only when there's enough space
-  if (history === "watch" && terminalWidth >= 80 && terminalHeight >= cockpitPaneHeight + minHistoryPaneHeight && rightTopPaneId) {
+  // 6. Split right pane horizontally for bottom history pane only when there's enough space.
+  // Keep the history pane small and fixed so it cannot steal space from the cockpit rail.
+  if (hasRoomForHistoryPane && rightTopPaneId) {
     let bottomSplitResult = await runShell(
       "tmux",
-      ["split-window", "-v", "-P", "-F", "#{pane_id}", "-t", rightTopPaneId, "-p", "50", rightBottomCmd],
+      ["split-window", "-v", "-P", "-F", "#{pane_id}", "-t", rightTopPaneId, "-l", String(minHistoryPaneHeight), rightBottomCmd],
       { cwd, timeout: 5000 }
     );
     if (bottomSplitResult.failed) {
       bottomSplitResult = await runShell(
         "tmux",
-        ["split-window", "-v", "-P", "-F", "#{pane_id}", "-t", rightTopPaneId, rightBottomCmd],
+        ["split-window", "-v", "-P", "-F", "#{pane_id}", "-t", rightTopPaneId, "-p", "25", rightBottomCmd],
         { cwd, timeout: 5000 }
       );
     }
@@ -243,6 +326,8 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
       console.warn(`Failed to split bottom pane: ${bottomSplitResult.stderr || bottomSplitResult.stdout}`);
     }
   }
+
+  await pinTmuxRightDashboard({ session, cwd, leftPaneId, terminalWidth, sideWidthPercent: sideWidth });
 
   // 7. Enable mouse mode so scrolling shows output history, not shell input history
   const mouseResult = await runShell(
@@ -263,6 +348,8 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
   if (historyResult.failed) {
     console.warn(`Failed to set tmux history limit: ${historyResult.stderr || historyResult.stdout}`);
   }
+
+  await applyTmuxNightCityTheme(session, cwd);
 
   // 8. Set a hook so the session is destroyed when the chat pane dies
   const hookResult = await runShell(

@@ -28,6 +28,7 @@ test("scoped agent wrapper renders capability flags from effective scopes", () =
   assert.match(yaml, /OMK_MCP_ENABLED: "false"/);
   assert.match(yaml, /OMK_SKILLS_ENABLED: "true"/);
   assert.match(yaml, /OMK_HOOKS_ENABLED: "true"/);
+  assert.match(yaml, /OMK_REASONING_VARIANT: "balanced-medium"/);
   assert.doesNotMatch(yaml, /mcpServers|Authorization|API_TOKEN|skills_dir/i);
 });
 
@@ -43,6 +44,7 @@ test("scoped agent wrapper enables explicit routed names even when global scope 
       mcpNames: ["omk-project"],
       skillNames: ["omk-typescript-strict"],
       hookNames: ["protect-secrets.sh"],
+      reasoningVariant: "code-medium",
     },
   });
 
@@ -52,6 +54,7 @@ test("scoped agent wrapper enables explicit routed names even when global scope 
   assert.match(yaml, /OMK_MCP_HINTS: "count=1;digest=[0-9a-f]+;top=omk-project"/);
   assert.match(yaml, /OMK_SKILL_HINTS: "count=1;digest=[0-9a-f]+;top=omk-typescript-strict"/);
   assert.match(yaml, /OMK_HOOK_HINTS: "count=1;digest=[0-9a-f]+;top=protect-secrets\.sh"/);
+  assert.match(yaml, /OMK_REASONING_VARIANT: "code-medium"/);
 });
 
 test("scoped agent wrapper writes custom agent safety flags", async () => {

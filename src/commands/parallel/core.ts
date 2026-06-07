@@ -3,7 +3,7 @@ import { join } from "path";
 import { getOmkPath, getProjectRoot, getRunPath, sanitizeRunId } from "../../util/fs.js";
 import { header, label, status } from "../../util/theme.js";
 import { t } from "../../util/i18n.js";
-import { getOmkResourceSettings } from "../../util/resource-profile.js";
+import { getActiveRuntimePreset, getOmkResourceSettings, type OmkActivePreset, type OmkRuntimeScope } from "../../util/resource-profile.js";
 import { parseRuntimeScopeOption } from "../../util/runtime-scope.js";
 import { createRoutedRunState, routeRunState } from "../../orchestration/run-state.js";
 import { UsageError } from "../../util/cli-contract.js";
@@ -18,6 +18,7 @@ import type { IntentFrame } from "../../contracts/goal.js";
 import type { DagNodeDefinition } from "../../orchestration/dag.js";
 import { renderCapabilityRoutingArtifact } from "../../orchestration/capability-routing.js";
 
+import { ensureCompletionArtifactContract } from "../../orchestration/completion-artifacts.js";
 import { buildParallelRouteDecision, resolveParallelCommandExecutionDecision, createInteractiveRunState, createExecutableDagFromState } from "./orchestrator.js";
 import { normalizeWorkerCount, executeParallelRun } from "./worker.js";
 import { buildPromptText, buildDeepSeekPromptPrefix, normalizeApprovalPolicy } from "./utils.js";
@@ -45,6 +46,8 @@ export interface ParallelCommandOptions {
   intentFrame?: IntentFrame;
   /** Analyzed user intent for dynamic DAG construction and role routing. */
   intent?: UserIntent;
+  /** Full orchestration prompt from buildOrchestratedPrompt() for OMK control instructions. */
+  orchestrationPrompt?: string;
   signal?: AbortSignal;
 }
 
@@ -72,6 +75,7 @@ export async function parallelCommand(
   const startedAt = new Date().toISOString();
 
   await mkdir(runDir, { recursive: true });
+  await ensureCompletionArtifactContract(root, runId);
 
   let runState: RunState;
   let effectiveGoal = goal ?? "";
@@ -142,7 +146,7 @@ export async function parallelCommand(
   if (executionDecision.strategy === "plan-only") {
     await writeFile(
       join(runDir, "plan.md"),
-      `# Plan\n\nFlow: parallel\nWorkers: 0\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nExecution policy: ${executionPrompt}\nExecution strategy: plan-only\nApproval policy: ${approvalPolicy}\nProvider policy: ${providerPolicy}\n`
+      `# Plan\n\nFlow: parallel\nIdentity: OMK root orchestrator\nDoctrine: Models execute. OMK routes, verifies, measures, and controls.\nWorkers: 0\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nSkills scope: ${resources.skillsScope}\nHooks scope: ${resources.hooksScope}\nCapability assignment: goal-scoped MCP/skills/hooks per worker lane\nExecution policy: ${executionPrompt}\nExecution strategy: plan-only\nApproval policy: ${approvalPolicy}\nProvider policy: ${providerPolicy}\n`
     );
     await writeFile(join(runDir, "goal.md"), `# Goal\n\n${effectiveGoal}\n`);
     await writeFile(join(runDir, "intent-frame.json"), `${JSON.stringify(intentFrame, null, 2)}\n`);
@@ -161,7 +165,7 @@ export async function parallelCommand(
 
   await writeFile(
     join(runDir, "plan.md"),
-    `# Plan\n\nFlow: parallel\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nExecution policy: ${executionPrompt}\nExecution strategy: ${executionStrategy}\nApproval policy: ${approvalPolicy}\nProvider policy: ${providerPolicy}\n`
+    `# Plan\n\nFlow: parallel\nIdentity: OMK root orchestrator\nDoctrine: Models execute. OMK routes, verifies, measures, and controls.\nWorkers: ${workerCount}\nResource profile: ${resources.profile}\nMCP scope: ${mcpScope}\nSkills scope: ${resources.skillsScope}\nHooks scope: ${resources.hooksScope}\nCapability assignment: goal-scoped MCP/skills/hooks per worker lane\nExecution policy: ${executionPrompt}\nExecution strategy: ${executionStrategy}\nApproval policy: ${approvalPolicy}\nProvider policy: ${providerPolicy}\n`
   );
 
   if (specNodes) {
@@ -210,16 +214,25 @@ export async function parallelCommand(
   console.log(label("Provider policy", providerPolicy));
 
   const agentFile = getOmkPath("agents/root.yaml");
-  const promptText = buildPromptText(effectiveGoal, runId, resources.profile, workerCount, mcpScope, resolvedIntent, intentFrame, memoryRecall.summary, executionStrategy);
+  const promptText = buildPromptText(effectiveGoal, runId, resources.profile, workerCount, mcpScope, resolvedIntent, intentFrame, memoryRecall.summary, executionStrategy, options.orchestrationPrompt);
   const statePath = join(runDir, "state.json");
 
-  const routedState = routeRunState(runState, workerCount);
+  const activePreset = await getActiveRuntimePreset();
+  const routedState = assignPresetCapabilitiesToWorkers(
+    routeRunState(runState, workerCount),
+    activePreset,
+    {
+      mcpScope,
+      skillsScope: resources.skillsScope,
+      hooksScope: resources.hooksScope,
+    }
+  );
   await writeFile(statePath, JSON.stringify(routedState, null, 2));
 
   const dag = createExecutableDagFromState(routedState);
   await writeFile(
     join(runDir, "capability-routing.json"),
-    `${JSON.stringify(renderCapabilityRoutingArtifact(dag.nodes), null, 2)}\n`
+    `${JSON.stringify(renderCapabilityRoutingArtifact(dag.nodes, { goal: effectiveGoal }), null, 2)}\n`
   );
 
   const result = await executeParallelRun({
@@ -256,4 +269,124 @@ export async function parallelCommand(
   });
 
   return result;
+}
+
+function assignPresetCapabilitiesToWorkers(
+  state: RunState,
+  preset: OmkActivePreset | undefined,
+  scopes: {
+    mcpScope: OmkRuntimeScope;
+    skillsScope: OmkRuntimeScope;
+    hooksScope: OmkRuntimeScope;
+  }
+): RunState {
+  if (!preset) return state;
+
+  const next: RunState = {
+    ...state,
+    nodes: state.nodes.map((node) => {
+      if (!node.routing || node.id === "bootstrap") return node;
+      const roleScopes = capabilityScopesForRole(node.role, preset, scopes);
+      const routing = {
+        ...node.routing,
+        skills: mergeUnique(node.routing.skills, roleScopes.skills),
+        mcpServers: mergeUnique(node.routing.mcpServers, roleScopes.mcpServers),
+        hooks: mergeUnique(node.routing.hooks, roleScopes.hooks),
+        tools: mergeUnique(node.routing.tools, roleScopes.tools),
+      };
+      return {
+        ...node,
+        routing: {
+          ...routing,
+          assignedCapabilities: {
+            ...(node.routing.assignedCapabilities ?? {}),
+            skills: mergeUnique(node.routing.assignedCapabilities?.skills, routing.skills),
+            mcpServers: mergeUnique(node.routing.assignedCapabilities?.mcpServers, routing.mcpServers),
+            hooks: mergeUnique(node.routing.assignedCapabilities?.hooks, routing.hooks),
+            tools: mergeUnique(node.routing.assignedCapabilities?.tools, routing.tools),
+          },
+        },
+      };
+    }),
+  };
+  return routeRunState(next, state.estimate?.totalNodes);
+}
+
+function capabilityScopesForRole(
+  role: string,
+  preset: OmkActivePreset,
+  scopes: {
+    mcpScope: OmkRuntimeScope;
+    skillsScope: OmkRuntimeScope;
+    hooksScope: OmkRuntimeScope;
+  }
+): { skills: string[]; mcpServers: string[]; hooks: string[]; tools: string[] } {
+  const normalizedRole = role.toLowerCase();
+  const skillHints = roleSkillHints(normalizedRole);
+  const mcpHints = roleMcpHints(normalizedRole);
+  const hookHints = roleHookHints(normalizedRole);
+
+  return {
+    skills: scopes.skillsScope === "none" ? [] : filterAvailable(preset.skills, skillHints),
+    mcpServers: scopes.mcpScope === "none" ? [] : filterAvailable(preset.mcpServers, mcpHints),
+    hooks: scopes.hooksScope === "none" ? [] : filterAvailable(preset.hooks, hookHints),
+    tools: [],
+  };
+}
+
+function roleSkillHints(role: string): string[] {
+  if (role === "orchestrator" || role === "architect" || role === "planner") {
+    return ["omk-plan-first", "omk-context-broker", "omk-task-router", "multica"];
+  }
+  if (role === "coder" || role === "executor" || role === "refactorer") {
+    return ["omk-repo-explorer", "omk-context-broker", "omk-test-debug-loop", "omk-quality-gate"];
+  }
+  if (role === "reviewer" || role === "aggregator") {
+    return ["omk-code-review", "omk-quality-gate", "omk-context-broker"];
+  }
+  if (role === "qa" || role === "tester") {
+    return ["omk-quality-gate", "omk-test-debug-loop", "omk-context-broker"];
+  }
+  if (role === "security") {
+    return ["omk-secret-guard", "omk-security-review", "omk-quality-gate", "omk-context-broker"];
+  }
+  if (role === "designer") {
+    return ["omk-design-system", "omk-code-review", "omk-context-broker"];
+  }
+  return ["omk-context-broker", "omk-repo-explorer"];
+}
+
+function roleMcpHints(role: string): string[] {
+  if (role === "orchestrator" || role === "architect" || role === "planner") {
+    return ["omk-project", "context7", "github", "memory", "sequential-thinking"];
+  }
+  if (role === "coder" || role === "executor" || role === "refactorer") {
+    return ["omk-project", "filesystem-readonly", "git", "context7"];
+  }
+  if (role === "reviewer" || role === "aggregator" || role === "qa" || role === "tester" || role === "security") {
+    return ["omk-project", "filesystem-readonly", "git", "github"];
+  }
+  return ["omk-project", "filesystem-readonly"];
+}
+
+function roleHookHints(role: string): string[] {
+  if (role === "coder" || role === "executor" || role === "refactorer") {
+    return ["pre-shell-guard.sh", "protect-secrets.sh", "post-format.sh", "stop-verify.sh", "subagent-stop-audit.sh"];
+  }
+  if (role === "qa" || role === "tester" || role === "reviewer" || role === "aggregator" || role === "security") {
+    return ["protect-secrets.sh", "stop-verify.sh", "subagent-stop-audit.sh"];
+  }
+  return ["subagent-stop-audit.sh", "protect-secrets.sh"];
+}
+
+function filterAvailable(available: readonly string[], requested: readonly string[]): string[] {
+  const availableSet = new Set(available);
+  return requested.filter((name) => availableSet.has(name));
+}
+
+function mergeUnique(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined
+): string[] {
+  return [...new Set([...(left ?? []), ...(right ?? [])].filter(Boolean))];
 }

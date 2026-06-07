@@ -21,10 +21,19 @@ export interface CapabilityRoutingEntry extends NodeCapabilityScopes {
   readonly actionAtom?: DagNodeRouting["actionAtom"];
 }
 
+export interface CapabilityRoutingIdentity {
+  readonly owner: "omk";
+  readonly identity: "OMK root orchestrator";
+  readonly doctrine: "Models execute. OMK routes, verifies, measures, and controls.";
+  readonly goal?: string;
+  readonly capabilityAssignment: "goal-scoped";
+}
+
 export interface CapabilityRoutingArtifact {
   readonly schemaVersion: 1;
   readonly generatedAt: string;
   readonly nodes: readonly CapabilityRoutingEntry[];
+  readonly orchestrator: CapabilityRoutingIdentity;
 }
 
 export function uniqueCapabilityNames(values: readonly (string | undefined)[]): string[] {
@@ -89,11 +98,22 @@ export function capabilityRoutingEntry(node: DagNode): CapabilityRoutingEntry {
 
 export function renderCapabilityRoutingArtifact(
   nodes: readonly DagNode[],
-  generatedAt = new Date().toISOString()
+  options: string | {
+    readonly generatedAt?: string;
+    readonly goal?: string;
+  } = {}
 ): CapabilityRoutingArtifact {
+  const metadata = typeof options === "string" ? { generatedAt: options } : options;
   return {
     schemaVersion: 1,
-    generatedAt,
+    generatedAt: metadata.generatedAt ?? new Date().toISOString(),
+    orchestrator: {
+      owner: "omk",
+      identity: "OMK root orchestrator",
+      doctrine: "Models execute. OMK routes, verifies, measures, and controls.",
+      goal: metadata.goal,
+      capabilityAssignment: "goal-scoped",
+    },
     nodes: nodes.map(capabilityRoutingEntry),
   };
 }

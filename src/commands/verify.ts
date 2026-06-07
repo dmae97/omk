@@ -5,6 +5,12 @@ import { getProjectRoot, pathExists, getRunsDir, getRunPath } from "../util/fs.j
 import { readFile, writeFile } from "fs/promises";
 import { createStatePersister } from "../orchestration/state-persister.js";
 import { checkEvidenceGates } from "../orchestration/evidence-gate.js";
+import {
+  captureGitDiffArtifacts,
+  ensureCompletionArtifactContract,
+  getCompletionArtifactStatus,
+  writeTestEvidenceLog,
+} from "../orchestration/completion-artifacts.js";
 
 const SCHEMA_VERSION = 1;
 
@@ -31,11 +37,35 @@ interface MissingEvidence {
 interface VerifyJsonOutput {
   runId: string;
   schemaVersion: number;
+  ok: boolean;
+  command?: string;
+  checkedAt?: string;
+  errors: string[];
+  warnings: string[];
   gates: VerifyGate[];
   evidence: VerifyEvidence[];
   passed: VerifyEvidence[];
   failed: VerifyEvidence[];
   missing: MissingEvidence[];
+  data?: {
+    runId: string;
+    gates: number;
+    passed: number;
+    failed: number;
+    missing: number;
+  };
+  goalEvidence?: unknown[];
+  goalScore?: unknown;
+  artifacts: {
+    diffPatch?: string;
+    diffStat?: string;
+    testLog?: string;
+    runLog?: string;
+    verifyJson?: string;
+    resultJson?: string;
+    evidenceJson?: string;
+    goalJson?: string;
+  };
 }
 
 export async function verifyCommand(options: { run?: string; json?: boolean } = {}): Promise<void> {
@@ -56,6 +86,8 @@ export async function verifyCommand(options: { run?: string; json?: boolean } = 
     emitError(msg, Boolean(options.json));
     throw new NotFoundError(msg);
   }
+
+  await ensureCompletionArtifactContract(root, runId);
 
   if (!options.json && state.schemaVersion !== 1) {
     console.warn(status.warn(`Run state schemaVersion is missing or outdated for ${runId}. Continuing with verification.`));
@@ -205,37 +237,87 @@ export async function verifyCommand(options: { run?: string; json?: boolean } = 
     }
   }
 
-  if (options.json) {
-    const errors = [
-      ...failed.map((f) => `${f.nodeId}: ${f.gate}${f.ref ? ` (${f.ref})` : ""} — ${f.message}`),
-      ...missing.map((m) => m.message),
-    ];
-    const output: VerifyJsonOutput & Record<string, unknown> = {
-      ok: errors.length === 0,
-      command: "verify",
-      checkedAt: new Date().toISOString(),
-      errors,
-      warnings: [],
+  await captureGitDiffArtifacts(root, runId);
+  const commandEvidence = evidence.filter((item) => item.gate === "command-pass");
+  await writeTestEvidenceLog(
+    root,
+    runId,
+    commandEvidence.length > 0
+      ? commandEvidence.map((item) => `${item.nodeId}: ${item.ref ?? item.gate} => ${item.passed ? "pass" : "fail"} :: ${item.message}`)
+      : ["No command-pass evidence captured for this run."],
+  );
+
+  const provisionalArtifactStatus = await getCompletionArtifactStatus(root, runId);
+  const artifactMissingMessages = [
+    ...provisionalArtifactStatus.missing.filter((entry) => entry !== "result json missing"),
+    ...(commandEvidence.length === 0 ? ["test evidence missing: no command-pass gate was captured"] : []),
+  ];
+  const artifactMissing: MissingEvidence[] = artifactMissingMessages.map((message) => ({
+    nodeId: "run-artifacts",
+    message,
+  }));
+
+  const errors = [
+    ...failed.map((f) => `${f.nodeId}: ${f.gate}${f.ref ? ` (${f.ref})` : ""} — ${f.message}`),
+    ...missing.map((m) => m.message),
+    ...artifactMissing.map((m) => m.message),
+  ];
+
+  const output: VerifyJsonOutput = {
+    ok: errors.length === 0,
+    command: "verify",
+    checkedAt: new Date().toISOString(),
+    errors,
+    warnings: [],
+    runId,
+    schemaVersion: SCHEMA_VERSION,
+    gates,
+    evidence,
+    passed,
+    failed,
+    missing: [...missing, ...artifactMissing],
+    data: {
       runId,
-      schemaVersion: SCHEMA_VERSION,
-      gates,
-      evidence,
-      passed,
-      failed,
-      missing,
-      data: {
-        runId,
-        gates: gates.length,
-        passed: passed.length,
-        failed: failed.length,
-        missing: missing.length,
-      },
-    };
-    if (goalEvidence.length > 0) {
-      output.goalEvidence = goalEvidence;
-      output.goalScore = goalScore;
-    }
-    console.log(JSON.stringify(output, null, 2));
+      gates: gates.length,
+      passed: passed.length,
+      failed: failed.length,
+      missing: missing.length + artifactMissing.length,
+    },
+    artifacts: {
+      ...provisionalArtifactStatus.paths,
+    },
+  };
+  if (goalEvidence.length > 0) {
+    output.goalEvidence = goalEvidence;
+    output.goalScore = goalScore;
+  }
+
+  await writeFile(output.artifacts.verifyJson!, `${JSON.stringify(output, null, 2)}\n`, "utf-8");
+  await writeFile(output.artifacts.resultJson!, `${JSON.stringify({
+    ok: output.ok,
+    runId,
+    checkedAt: output.checkedAt,
+    artifacts: {
+      diffPatch: output.artifacts.diffPatch,
+      diffStat: output.artifacts.diffStat,
+      testLog: output.artifacts.testLog,
+      runLog: output.artifacts.runLog,
+      verifyJson: output.artifacts.verifyJson,
+      evidenceJson: output.artifacts.evidenceJson,
+    },
+    errors,
+  }, null, 2)}\n`, "utf-8");
+
+  const artifactStatus = await getCompletionArtifactStatus(root, runId);
+  const artifactErrors = artifactStatus.missing.filter((entry) => !errors.includes(entry));
+  const finalOutput = {
+    ...output,
+    ok: output.ok && artifactStatus.ok,
+    errors: [...errors, ...artifactErrors],
+  };
+
+  if (options.json) {
+    console.log(JSON.stringify(finalOutput, null, 2));
   } else {
     console.log("");
     for (const ev of evidence) {
@@ -243,10 +325,16 @@ export async function verifyCommand(options: { run?: string; json?: boolean } = 
       const color = ev.passed ? style.mint : style.pink;
       console.log(color(`  ${icon} ${ev.nodeId}: ${ev.gate}${ev.ref ? ` (${ev.ref})` : ""} — ${ev.message}`));
     }
+    if (artifactMissing.length > 0) {
+      console.log("");
+      for (const item of artifactMissing) {
+        console.log(style.pink(`  ✗ ${item.nodeId}: ${item.message}`));
+      }
+    }
     console.log("");
     console.log(style.mint(`Passed: ${passed.length}`));
     if (failed.length > 0) console.log(style.pink(`Failed: ${failed.length}`));
-    if (missing.length > 0) console.log(style.pink(`Missing: ${missing.length}`));
+    if (finalOutput.missing.length > 0) console.log(style.pink(`Missing: ${finalOutput.missing.length}`));
     if (goalScore) {
       console.log("");
       console.log(style.purpleBold("Goal Score"));
@@ -267,14 +355,24 @@ export async function verifyCommand(options: { run?: string; json?: boolean } = 
   }
 
   const nodeFailed = failed.length > 0 || missing.length > 0;
+  const artifactFailed = finalOutput.errors.length > 0;
   const goalFailed = goalScore ? goalScore.overall === "fail" : false;
-  if (nodeFailed || goalFailed) {
+  if (nodeFailed || artifactFailed || goalFailed) {
     throw new VerificationError("Verification failed", [
       ...(nodeFailed ? [`${failed.length} failed gates, ${missing.length} missing`] : []),
+      ...(artifactFailed ? ["required diff/test/log/result artifacts missing or incomplete"] : []),
       ...(goalFailed ? ["goal score: fail"] : []),
     ]);
   }
-  await saveEvidenceJson(root, runId, { gates, evidence, passed, failed, missing, goalEvidence: goalEvidence.map(e => ({ ...e, message: e.message ?? "" })), goalScore: goalScore ?? null });
+  await saveEvidenceJson(root, runId, {
+    gates,
+    evidence,
+    passed,
+    failed,
+    missing: [...missing, ...artifactMissing],
+    goalEvidence: goalEvidence.map((e) => ({ ...e, message: e.message ?? "" })),
+    goalScore: goalScore ?? null,
+  });
 }
 
 async function loadNodeStdout(root: string, runId: string, nodeId: string): Promise<string> {
