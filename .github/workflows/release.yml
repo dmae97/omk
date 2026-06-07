@@ -9,7 +9,7 @@ on:
       version:
         description: 'Version to release (must match package.json)'
         required: true
-        default: '0.78.0'
+        default: '0.78.1'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
