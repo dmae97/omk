@@ -11,6 +11,7 @@ import {
   formatStartupUpdateBanner,
   maybePromptForOmkUpdate,
   resolveOmkUpdatePromptState,
+  resolveAutoUpdateMode,
 } from "../dist/util/update-check.js";
 
 function fakeUpdateStatus(overrides = {}) {
@@ -370,6 +371,87 @@ test("checkUpdates returns expected structure via import", async () => {
   assert.ok(!jsonStr.includes("\u001b"), "JSON contains ANSI codes");
   assert.ok(!jsonStr.includes("\\u001b"), "JSON contains escaped ANSI codes");
   assert.ok(status.kimi.fallbackInstallCmd.length > 0, "fallbackInstallCmd is empty");
+});
+
+test("resolveAutoUpdateMode returns true only for explicit opt-in values", () => {
+  for (const v of ["1", "true", "TRUE", "True", "yes", "YES", "on", "ON", "always", "ALWAYS"]) {
+    assert.equal(resolveAutoUpdateMode({ OMK_AUTO_UPDATE: v }), true, `expected true for OMK_AUTO_UPDATE=${v}`);
+  }
+  for (const v of ["0", "false", "no", "off", "", "random", "auto"]) {
+    assert.equal(resolveAutoUpdateMode({ OMK_AUTO_UPDATE: v }), false, `expected false for OMK_AUTO_UPDATE=${v}`);
+  }
+  assert.equal(resolveAutoUpdateMode({}), false, "expected false when OMK_AUTO_UPDATE is unset");
+});
+
+test("auto-update: OMK_AUTO_UPDATE=1 + outdated => updates without prompting", async () => {
+  let runUpdateCalls = 0;
+  let selectPromptCalls = 0;
+  const logs = [];
+  const result = await maybePromptForOmkUpdate({
+    status: fakeUpdateStatus(),
+    env: { OMK_AUTO_UPDATE: "1" },
+    isTTY: true,
+    isCI: false,
+    selectPrompt: async () => { selectPromptCalls += 1; throw new Error("should not prompt"); },
+    runUpdate: async () => { runUpdateCalls += 1; return { failed: false, stdout: "ok", stderr: "", exitCode: 0 }; },
+    onLog: (msg) => logs.push(msg),
+  });
+  assert.equal(result.action, "updated");
+  assert.equal(result.shouldExit, true);
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.version, "1.1.18");
+  assert.equal(runUpdateCalls, 1, "runUpdate should be called exactly once");
+  assert.equal(selectPromptCalls, 0, "selectPrompt should NOT be called");
+  assert.match(logs.join("\n"), /Auto-updating OMK to v1\.1\.18/);
+});
+
+test("auto-update: OMK_AUTO_UPDATE=1 + CI=1 => skips auto-update", async () => {
+  let runUpdateCalls = 0;
+  const result = await maybePromptForOmkUpdate({
+    status: fakeUpdateStatus(),
+    env: { OMK_AUTO_UPDATE: "1", CI: "1" },
+    isTTY: true,
+    isCI: true,
+    selectPrompt: async () => { throw new Error("should not prompt"); },
+    runUpdate: async () => { runUpdateCalls += 1; return { failed: false, stdout: "", stderr: "", exitCode: 0 }; },
+    onLog: () => {},
+  });
+  assert.equal(result.action, "ci");
+  assert.equal(result.shouldExit, false);
+  assert.equal(runUpdateCalls, 0, "runUpdate should NOT be called in CI");
+});
+
+test("auto-update: OMK_AUTO_UPDATE=1 + not outdated => not-outdated, no update", async () => {
+  let runUpdateCalls = 0;
+  const status = fakeUpdateStatus({ omk: { current: "1.1.18", latest: "1.1.18", outdated: false, error: null, installCmd: "npm i -g open-multi-agent-kit" } });
+  const result = await maybePromptForOmkUpdate({
+    status,
+    env: { OMK_AUTO_UPDATE: "1" },
+    isTTY: true,
+    isCI: false,
+    selectPrompt: async () => { throw new Error("should not prompt"); },
+    runUpdate: async () => { runUpdateCalls += 1; return { failed: false, stdout: "", stderr: "", exitCode: 0 }; },
+    onLog: () => {},
+  });
+  assert.equal(result.action, "not-outdated");
+  assert.equal(result.shouldExit, false);
+  assert.equal(runUpdateCalls, 0, "runUpdate should NOT be called when not outdated");
+});
+
+test("auto-update: OMK_AUTO_UPDATE unset + outdated => uses prompt path", async () => {
+  let selectPromptCalls = 0;
+  const result = await maybePromptForOmkUpdate({
+    status: fakeUpdateStatus(),
+    env: {},
+    isTTY: true,
+    isCI: false,
+    statePath: join(mkdtempSync(join(tmpdir(), "omk-update-prompt-unset-")), "update-prompt.json"),
+    selectPrompt: async (config) => { selectPromptCalls += 1; return "skip-version"; },
+    runUpdate: async () => { throw new Error("should not update"); },
+    onLog: () => {},
+  });
+  assert.equal(result.action, "prompted-skip");
+  assert.equal(selectPromptCalls, 1, "selectPrompt should be invoked on default path");
 });
 
 test("omk update check --json outputs valid JSON", () => {

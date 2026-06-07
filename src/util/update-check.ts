@@ -47,6 +47,15 @@ type UpdatePromptEnv = Record<string, string | undefined>;
 
 export type OmkUpdatePromptChoice = "update-now" | "skip-version" | "remind-later";
 
+/**
+ * Returns true when `env.OMK_AUTO_UPDATE` is one of 1/true/yes/on/always
+ * (case-insensitive), indicating the user wants non-interactive auto-updates.
+ */
+export function resolveAutoUpdateMode(env: UpdatePromptEnv): boolean {
+  const raw = env.OMK_AUTO_UPDATE?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on" || raw === "always";
+}
+
 export type OmkUpdatePromptDecisionReason =
   | "disabled"
   | "ci"
@@ -252,6 +261,33 @@ export async function maybePromptForOmkUpdate(options: OmkUpdatePromptOptions = 
   const isTTY = options.isTTY ?? Boolean(process.stdout.isTTY && process.stdin.isTTY);
   const isCI = options.isCI ?? (isTruthyCiValue(env.CI) || isTruthyCiValue(env.GITHUB_ACTIONS));
   const log = options.onLog ?? ((message: string) => console.log(message));
+
+  const autoUpdate = resolveAutoUpdateMode(env);
+  if (autoUpdate && !isCI && getUpdatePromptMode(env) !== "off") {
+    let updateStatus: UpdateStatus;
+    try {
+      updateStatus = options.status ?? await (options.checkUpdatesFn ?? checkUpdates)();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { action: "suppressed", shouldExit: false, message };
+    }
+
+    const latestVersion = updateStatus.omk.latest;
+    if (updateStatus.omk.outdated && latestVersion) {
+      log(`Auto-updating OMK to ${normalizeVersionForPrompt(latestVersion)} ...`);
+      const runUpdate = options.runUpdate ?? (() => runShell("npm", ["i", "-g", OMK_NPM_PACKAGE_NAME], { timeout: 120_000 }));
+      const updateResult = await runUpdate();
+      if (updateResult.failed) {
+        const detail = updateResult.stderr.trim() || updateResult.stdout.trim() || `exit ${updateResult.exitCode}`;
+        log(`Auto-update failed: ${detail}`);
+        log(`Manual update command: ${OMK_UPDATE_INSTALL_CMD}`);
+        return { action: "update-failed", shouldExit: true, exitCode: 1, version: latestVersion, message: detail };
+      }
+      log("OMK auto-update completed successfully. Restart omk chat to use the new version.");
+      return { action: "updated", shouldExit: true, exitCode: 0, version: latestVersion };
+    }
+    return { action: "not-outdated", shouldExit: false };
+  }
 
   const preflight = resolveOmkUpdatePromptState({
     status: null,
