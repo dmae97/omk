@@ -13,10 +13,10 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@omk/cli"><img alt="npm version" src="https://img.shields.io/npm/v/%40omk%2Fcli?color=00D6FF"></a>
-  <a href="https://www.npmjs.com/package/@omk/cli"><img alt="npm package" src="https://img.shields.io/badge/package-%40omk%2Fcli-FF47B2"></a>
-  <a href="docs/versioning.md"><img alt="runtime" src="https://img.shields.io/badge/runtime-v1.2-9D4EDD"></a>
-  <a href="https://github.com/dmae97/open_multi-agent_kit/blob/main/proof/PROOF_INDEX.md"><img alt="proof gate" src="https://img.shields.io/badge/proof--gate-passing-00FFC2"></a>
+  <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm version" src="https://img.shields.io/npm/v/open-multi-agent-kit?color=00D6FF"></a>
+  <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm package" src="https://img.shields.io/badge/package-open--multi--agent--kit-FF47B2"></a>
+  <a href="docs/versioning.md"><img alt="runtime contract" src="https://img.shields.io/badge/contract-v1.2_pre--1.0-9D4EDD"></a>
+  <a href="https://github.com/dmae97/open-multi-agent-kit/blob/main/proof/PROOF_INDEX.md"><img alt="proof check" src="https://img.shields.io/badge/proof--check-source-00FFC2"></a>
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
 </p>
 
@@ -30,10 +30,22 @@
 
 `OMK` (`omk`) turns a coding goal into a bounded, evidence-gated agent run.
 
-> Current package source version: `@omk/cli@0.78.0-alpha.1`.
-> Runtime contract family: `v1.2`.
-> Release channel: `pre-1.0`.
+> Current package source target: `open-multi-agent-kit@0.78.1`.
+> Public package name: `open-multi-agent-kit` (`@omk/cli` is not the active npm package).
+> Runtime contract family: `v1.2` (contract family, not a stable npm `1.x` release).
+> Release channel: `pre-1.0` / beta.
 > See [versioning](docs/versioning.md) and [provider maturity](docs/provider-maturity.md).
+
+## Current release reality
+
+- The public npm line is `open-multi-agent-kit@0.78.x`.
+- The `v1.2` label in docs is a runtime contract family for the source tree, not a claim that
+  an npm `1.2.x` stable release exists.
+- Provider support is intentionally uneven: Kimi remains the most mature authority path;
+  Codex/OpenCode/CommandCode depend on local CLIs; MiMo/DeepSeek/Qwen/OpenRouter/local LLM
+  lanes are scoped by the provider-maturity contract.
+- Safety and evidence claims apply to the exact adapter, command, and verification gate that
+  produced them.
 
 ## Why OMK
 
@@ -71,14 +83,14 @@ The GitHub visual set presents OMK as a Night City Ops Console: route status, DA
 Requires Node.js `>=20` and npm `>=10`.
 
 ```bash
-npm install -g @omk/cli
+npm install -g open-multi-agent-kit
 omk --help
 ```
 
 No global install:
 
 ```bash
-npx -p @omk/cli omk doctor
+npx -p open-multi-agent-kit omk doctor
 ```
 
 ## Quick start
@@ -86,8 +98,8 @@ npx -p @omk/cli omk doctor
 ```bash
 omk init                         # scaffold AGENTS.md, DESIGN.md, .omk/
 omk doctor                       # check runtime, providers, MCP, skills, hooks
-omk codex auth --choice plus-pro # prefer official Codex app/CLI OAuth for Codex lanes
-omk chat --provider codex --mode agent
+omk codex auth --choice plus-pro # optional; requires official Codex app/CLI login
+omk chat --provider auto --mode agent
 omk orchestrate "ship feature" --workers 4 --dry-run
 ```
 
@@ -133,7 +145,7 @@ DAG node
   → TaskResult with selected runtime + fallback chain
 ```
 
-OMK converts DAG context into an adapter-neutral task so Codex, MiMo, Kimi API/print lanes, DeepSeek, Qwen, OpenRouter, local adapters, or future runtimes can participate through the same contract.
+OMK converts DAG context into an adapter-neutral task so Codex, MiMo, Kimi API/print lanes, DeepSeek, Qwen, OpenRouter, local adapters, or future runtimes can participate through the same contract when configured. That contract does not imply equal write/merge authority for every adapter.
 
 ### 4. Intent-aware runtime routing and fallback
 
@@ -180,13 +192,16 @@ Goal → DAG plan → parallel lanes → evidence bundle → verify gate → mer
 
 ## Provider lanes
 
-OMK is provider-neutral. The configured runtime decides which adapters are available, but the control plane is the same:
+OMK is provider-neutral, but providers are not equally mature or equally authorized:
 
-- **Codex app / CLI OAuth lanes** for Codex-backed coding sessions;
-- **MiMo** as the default provider path when configured;
-- **Kimi API / print lanes** as explicit provider adapters, not the root identity;
-- **DeepSeek, Qwen, OpenRouter, local adapters** for advisory or execution lanes when capability contracts match;
-- **GPT Image 2 asset lane** for visual assets when the image workflow is explicitly selected.
+- **Kimi API / print lanes**: most mature authority path and compatibility fallback when configured.
+- **MiMo**: default/read-review-thinking path when configured; direct workspace-write authority is not claimed for the API runtime.
+- **Codex app / CLI OAuth lanes**: compatibility path through the official Codex CLI/app login; local CLI availability and policy decide what can run.
+- **OpenCode / CommandCode CLI lanes**: compatibility paths when the local CLI and auth are present.
+- **DeepSeek, Qwen, OpenRouter, local LLM adapters**: advisory/read/review/QA/research lanes unless a tested contract grants more authority.
+- **GPT Image 2 asset lane**: visual asset workflow only when explicitly selected and separately configured.
+
+See [provider maturity](docs/provider-maturity.md) before treating any non-Kimi lane as an authority/write/merge path.
 
 ## Codex app / OAuth first
 
@@ -206,9 +221,9 @@ The npm package is intentionally package-safe:
 
 | Contract          | Value                                                                                                                                                                                                                          |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Package           | [`@omk/cli`](https://www.npmjs.com/package/@omk/cli)                                                                                                                                                                           |
-| Version           | `0.78.0-alpha.1`                                                                                                                                                                                                               |
-| Runtime family    | `v1.2`                                                                                                                                                                                                                         |
+| Package           | [`open-multi-agent-kit`](https://www.npmjs.com/package/open-multi-agent-kit)                                                                                                                                                   |
+| Version           | `0.78.1`                                                                                                                                                                                                                       |
+| Runtime contract family | `v1.2`                                                                                                                                                                                                                         |
 | Bins              | `omk`, `omk-project-mcp`, `omk-acp`, `omk-mcp-host`                                                                                                                                                                            |
 | Packaged docs     | `README.md`, `docs/`, `SECURITY.md`, `ROADMAP.md`, `MATURITY.md`, `DESIGN.md`                                                                                                                                                  |
 | Packaged branding | Canonical hero/social/TUI/runtime images plus the curated derivative gallery documented in [`readmeasset/ASSET_INDEX.md`](readmeasset/ASSET_INDEX.md) and [`readmeasset/ASSET_PROVENANCE.md`](readmeasset/ASSET_PROVENANCE.md) |
@@ -270,9 +285,9 @@ Safe by default: child env is sanitized, ambient secrets are dropped, and worksp
 
 ## Links
 
-- GitHub: <https://github.com/dmae97/open_multi-agent_kit>
-- NPM: <https://www.npmjs.com/package/@omk/cli>
-- Releases: <https://github.com/dmae97/open_multi-agent_kit/releases>
+- GitHub: <https://github.com/dmae97/open-multi-agent-kit>
+- NPM: <https://www.npmjs.com/package/open-multi-agent-kit>
+- Releases: <https://github.com/dmae97/open-multi-agent-kit/releases>
 
 ## License
 

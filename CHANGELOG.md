@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.78.1 — package-name and release-reality alignment (2026-06-07)
+
+### Overview
+
+Pre-1.0 source release target for `open-multi-agent-kit`. This entry aligns the public docs with the actual npm package name, makes the `v1.2` runtime label explicit as a contract family, and avoids implying that every provider lane has the same write/merge authority.
+
+### Changed
+
+- README install, badge, package contract, and npm links now use `open-multi-agent-kit` instead of the unavailable `@omk/cli` scope.
+- ROADMAP now separates public `0.78.x` package releases from historical v1.1.x/v1.2 source milestones.
+- Provider-lane wording now points readers to the provider-maturity contract before treating non-Kimi lanes as authority paths.
+- Release wording now treats npm publish/tag claims as gated by the exact target commit, CI/smoke status, package audit, and dist-tag state.
+
+### Verification
+
+Release readiness requires `npm run release:check` or the documented CI equivalent, native safety build, package audit, and tarball install smoke before npm publish or git tag.
+
+## v0.78.0 — initial public npm release (2026-06-07)
+
+### Overview
+
+Initial `0.78.0` npm publication for `open-multi-agent-kit` as a pre-1.0 provider-neutral multi-agent control plane for coding workflows. OMK routes, verifies, measures, and controls agent execution with DAG orchestration, evidence gates, and scoped MCP/skills/hooks injection.
+
+### Core
+
+- **OMK//CONTROL** brand system with operator TUI, runtime-flow diagrams, and telemetry.
+- **Provider-neutral architecture** with provider-specific maturity limits; Kimi remains the most mature authority path.
+- **DAG orchestration**: Goal → DAG plan → parallel lanes → evidence bundle → verify gate → merge / replay / inspect.
+- **Evidence gates**: command output, diff, artifact, metric, and review proof before completion claims.
+- **Scoped capability injection**: project MCP, skills, hooks, and graph memory scoped per-run; global secrets not imported silently.
+- **Worktree isolation**: parallel lanes stay bounded, reviewable, and recoverable.
+
+### Package contract
+
+- Package: `open-multi-agent-kit`
+- Bins: `omk`, `omk-project-mcp`, `omk-acp`, `omk-mcp-host`
+- Engine: Node.js >=20, npm >=10
+- License: MIT
+
 ## v1.2.0-rc.0 — Version and provider documentation alignment (2026-05-31)
 
 ### Added
