@@ -50,6 +50,17 @@ const DEFAULT_SAFETY_MARGIN_TOKENS = 1024;
 const MIN_INPUT_TOKENS = 64;
 const CHARS_PER_TOKEN = 4;
 
+export async function compactContext(
+  input: string,
+  options: ContextPreflightOptions,
+): Promise<InputPreflightResult> {
+  return preflightProviderInput(input, options);
+}
+
+export function estimateInputTokens(text: string): number {
+  return estimateTokens(text);
+}
+
 export async function preflightProviderInput(
   input: string,
   options: ContextPreflightOptions,
