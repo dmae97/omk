@@ -291,6 +291,7 @@ Public copy stays OMK-owned: **OMK//CONTROL**, **NEON GRID ONLINE**, route/evide
 - [Provider maturity](docs/provider-maturity.md)
 - [Native root runtime algorithms](docs/native-root-runtime-algorithms.md)
 - [Codex OAuth setup](docs/codex-oauth-setup.md)
+- [Ouroboros integration](docs/integrations/ouroboros.md)
 - [Security policy](SECURITY.md)
 
 ## Security
