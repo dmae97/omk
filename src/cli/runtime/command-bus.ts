@@ -7,6 +7,9 @@
  */
 
 import type { CommandEnvelope, CommandKind } from "./types.js";
+import { readProviderRegistry } from "../../providers/model-registry.js";
+import { renderProviderModelTable } from "../../providers/model-table.js";
+import { formatThinkingModelVariant, nextThinkingLevel, normalizeThinkingLevel, thinkingLevelsFor } from "../../providers/thinking-levels.js";
 
 export type SlashCommandHandler = (
   args: string[],
@@ -129,19 +132,39 @@ registerSlashCommand({
   name: "model",
   aliases: ["m"],
   description: "Show or switch model",
-  handler: (args, envelope) => {
+  handler: async (args, envelope) => {
     if (args.length === 0) {
+      const providers = await readProviderRegistry({ env: envelope.config.env });
       return {
         handled: true,
-        output: `Current provider: ${envelope.runtime.provider ?? "auto"}`,
+        output: renderProviderModelTable(providers, { currentProvider: envelope.runtime.provider }),
         exitCode: 0,
       };
     }
-    // Model switching is handled at a higher level
     return {
       handled: true,
       output: `Model switch requested: ${args[0]}`,
       exitCode: 0,
     };
+  },
+});
+
+registerSlashCommand({
+  name: "think",
+  aliases: ["thinking"],
+  description: "Cycle thinking variant (medium → high → xhigh → max)",
+  handler: (args, envelope) => {
+    const provider = envelope.runtime.provider ?? "auto";
+    const model = envelope.config.env.OMK_PROVIDER_MODEL;
+    const levels = thinkingLevelsFor(provider, model);
+    const requested = args[0]?.toLowerCase();
+    const level = !requested || requested === "next" || requested === "tab"
+      ? nextThinkingLevel(envelope.config.env.OMK_THINKING, provider, model)
+      : normalizeThinkingLevel(requested);
+    if (!level || !levels.includes(level)) {
+      return { handled: true, output: `Supported thinking levels: ${levels.join(" -> ")}`, exitCode: 1 };
+    }
+    const variant = formatThinkingModelVariant(model, level);
+    return { handled: true, output: `Thinking: ${level}\nModel variant: ${variant}\nCycle: ${levels.join(" -> ")}`, exitCode: 0 };
   },
 });

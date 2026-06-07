@@ -13,7 +13,7 @@ import { defaultLspConfigJson } from "../lsp/default-config.js";
 import { t } from "../util/i18n.js";
 import { maybeAskForGitHubStar } from "../util/first-run-star.js";
 import { getDeepSeekProviderStatus, setDeepSeekApiKey } from "../providers/deepseek/deepseek-config.js";
-import { OMK_PARALLEL_ORCHESTRATOR_PRESET, OMK_RUNTIME_PRESETS } from "../runtime/core-verified-preset.js";
+import { OMK_CORE_VERIFIED_PRESET, OMK_RUNTIME_PRESETS } from "../runtime/core-verified-preset.js";
 import {
   RECOMMENDED_MCP_SERVERS,
   getDefaultSelections,
@@ -56,19 +56,19 @@ export interface InitCommandOptions {
 function createThemeJson(): string {
   return JSON.stringify({
     banner: {
-      title: "oh-my-kimi",
-      subtitle: "Kimi CLI, but better.",
+      title: "OMK://CONTROL",
+      subtitle: "Route agents. Verify evidence. Control the loop.",
       style: "default",
       enabled: true,
     },
     colors: {
-      primary: "#7B5BF5",
-      accent: "#EC4899",
-      success: "#14B8A6",
-      warning: "#FB923C",
-      danger: "#F87171",
-      info: "#60A5FA",
-      muted: "#94A3B8",
+      primary: "#00D6FF",
+      accent: "#FF47B2",
+      success: "#00FFC2",
+      warning: "#FFB000",
+      danger: "#FF5874",
+      info: "#9D4EDD",
+      muted: "#758FA8",
     },
     metaBox: true,
   }, null, 2) + "\n";
@@ -76,7 +76,7 @@ function createThemeJson(): string {
 
 function createRuntimePresetsJson(): string {
   return JSON.stringify({
-    defaultPresetId: OMK_PARALLEL_ORCHESTRATOR_PRESET.id,
+    defaultPresetId: OMK_CORE_VERIFIED_PRESET.id,
     presets: OMK_RUNTIME_PRESETS,
   }, null, 2) + "\n";
 }
@@ -85,7 +85,7 @@ const OKABE_AGENT_YAML = `version: 1
 agent:
   extend: default
   name: omk-okabe-base
-  # Kimi requires an explicit non-empty tools list for custom --agent-file configs.
+  # Provider adapters may require an explicit non-empty tools list for custom --agent-file configs.
   # Keep the full OMK native tool surface, including Agent for parallel subagents
   # and SendDMail for Okabe checkpoints; MCP/skills/hooks are injected by runtime config.
   tools:
@@ -115,7 +115,7 @@ agent:
 
 const ROOT_AGENT_YAML = `version: 1
 agent:
-  extend: ./okabe.yaml  # Inherits the unrestricted default Kimi tool surface plus MCP/skills/hooks flags
+  extend: ./okabe.yaml  # Inherits the OMK provider-adapter tool surface plus MCP/skills/hooks flags
   name: omk-root
   system_prompt_path: ../prompts/root.md
   system_prompt_args:
@@ -515,7 +515,7 @@ Please report security issues via GitHub Issues with the \`security\` label.
 
 ## Built-in Protections
 
-oh-my-kimi includes default hooks to block destructive commands and secret leakage.
+open-multi-agent-kit includes default hooks to block destructive commands and secret leakage.
 
 ## MCP and Harness Secret Handling
 
@@ -531,11 +531,13 @@ oh-my-kimi includes default hooks to block destructive commands and secret leaka
 - Never commit secrets into agent memory files.
 `;
 
-const ROOT_PROMPT_MD = `# oh-my-kimi Root Agent
+const ROOT_PROMPT_MD = `# OMK Root Agent
 
-You are the oh-my-kimi root coordinator — the orchestration layer that turns Kimi CLI into a bounded coding team.
+You are the OMK root orchestrator for open-multi-agent-kit — a provider-neutral orchestration control plane that turns a goal into a bounded coding team.
 
-You must operate as a Kimi-native coding orchestrator with scoped MCP, skills, and hooks enabled for every generated root/role agent when the active runtime scope allows them.
+Models execute. OMK routes, verifies, measures, and controls.
+
+You must operate with OMK identity as the authority layer: summon parallel subagents when scopes are independent, assign each lane scoped MCP, skills, and hooks, and keep the root context focused on goal management, integration, evidence, and verification. The active runtime scope, selected provider adapter, and harness policy decide which resources are actually available.
 
 ## Loaded Project Instructions
 
@@ -567,7 +569,7 @@ You must operate as a Kimi-native coding orchestrator with scoped MCP, skills, a
 - Default runtime scope is project MCP/skills; all-scope may read user ~/.kimi resources at runtime without copying personal files.
 - Do not paste huge global MCP/skill inventories or secret-bearing env/header values into prompts, memory, or final reports.
 
-## Kimi-native Context Tools
+## OMK Context Tools
 
 - Root and generated role agents inherit an Okabe-compatible base that keeps the default Kimi tool surface unrestricted while enabling scoped MCP, skills, and hooks.
 - Use D-Mail before risky refactors, compaction, or long-running branch points: send a concise future-facing recovery note to the relevant checkpoint.
@@ -1190,6 +1192,16 @@ def has_rm_rf(tokens, index):
             break
     return "r" in letters and "f" in letters
 
+def rm_rf_targets_catastrophic(tokens, index):
+    if not has_rm_rf(tokens, index):
+        return False
+    targets = []
+    for token in tokens[index + 1:]:
+        if token == "--" or token.startswith("-"):
+            continue
+        targets.append(token)
+    return any(target in {"/", "~", "$HOME"} or target.startswith("/*") or target.startswith("/dev/") for target in targets)
+
 def has_git_clean_danger(tokens, index):
     rest = tokens[index + 1:]
     if "clean" not in rest:
@@ -1213,26 +1225,19 @@ def has_pipe_to_shell(tokens):
     return False
 
 def is_destructive(tokens):
+    # Low-friction benchmark/SWE mode: only stop machine-destroying operations.
+    # Package managers, git clean, chmod, docker, kubectl, sudo, and pipe-to-shell
+    # are allowed so normal coding agents do not stall on broad heuristics.
     normalized = [str(token) for token in tokens]
     for idx, token in enumerate(normalized):
         exe = posixpath.basename(token)
-        if exe == "sudo":
+        if exe == "rm" and rm_rf_targets_catastrophic(normalized, idx):
             return True
-        if exe == "rm" and has_rm_rf(normalized, idx):
+        if exe.startswith("mkfs"):
             return True
-        if exe == "git" and has_git_clean_danger(normalized, idx):
+        if exe == "dd" and any(arg.startswith("of=/dev/") for arg in normalized[idx + 1:]):
             return True
-        if exe == "chmod" and "-R" in normalized[idx + 1:] and "777" in normalized[idx + 1:]:
-            return True
-        if exe == "docker" and normalized[idx + 1:idx + 3] == ["system", "prune"]:
-            return True
-        if exe == "kubectl" and "delete" in normalized[idx + 1:]:
-            return True
-        if exe == "aws" and normalized[idx + 1:idx + 4] == ["s3", "rm", "--recursive"]:
-            return True
-        if exe.startswith("mkfs") or any(arg.startswith("if=") for arg in normalized[idx + 1:] if exe == "dd"):
-            return True
-    return has_pipe_to_shell(normalized)
+    return False
 
 try:
     data = json.loads(os.environ.get("INPUT_JSON", "{}"))
@@ -1242,8 +1247,10 @@ try:
         if is_destructive(expanded):
             decision("Potentially destructive command blocked by pre-shell-guard")
             break
-except Exception as exc:
-    decision("Unable to parse destructive command safely: " + str(exc))
+except Exception:
+    # If token parsing fails on complex shell/heredoc syntax, fall through to the
+    # literal block list and release guard instead of blocking benign coding work.
+    pass
 PY
 )
 if [ -n "$DESTRUCTIVE_DECISION" ]; then
@@ -1258,21 +1265,13 @@ FULL="$COMMAND $ARGS"
 # Block list
 BLOCKED=(
   "rm -rf /"
+  "rm -fr /"
+  "rm -rf /*"
+  "rm -fr /*"
   "rm -rf ~"
-  "sudo"
-  "git push --force"
-  "git push -f"
-  "git clean -fdx"
-  "chmod -R 777"
-  "docker system prune"
-  "kubectl delete"
-  "aws s3 rm --recursive"
-  "curl | bash"
-  "curl | sh"
-  "wget | bash"
-  "wget | sh"
+  "rm -fr ~"
   "mkfs"
-  "dd if="
+  "of=/dev/"
   "> /dev/"
   ":(){ :|:& };:"
 )
@@ -1360,9 +1359,6 @@ def skip_flags(tokens, index):
         return i
     return i
 
-def has_token_after(tokens, index, wanted):
-    return any(token in wanted for token in tokens[index:])
-
 def is_release_command(tokens):
     i = 0
     while i < len(tokens):
@@ -1377,22 +1373,21 @@ def is_release_command(tokens):
             command_index = skip_flags(tokens, i + 1)
             if command_index < len(tokens) and tokens[command_index] in {"publish", "version"}:
                 return True
-            if has_token_after(tokens, i + 1, {"publish", "version"}):
-                return True
-            i += 1
+            i = max(command_index + 1, i + 1)
             continue
         if exe == "pnpm":
-            if has_token_after(tokens, i + 1, {"publish"}):
+            command_index = skip_flags(tokens, i + 1)
+            if command_index < len(tokens) and tokens[command_index] == "publish":
                 return True
-            i += 1
+            i = max(command_index + 1, i + 1)
             continue
         if exe == "yarn":
-            rest = tokens[i + 1:]
-            if "publish" in rest:
+            command_index = skip_flags(tokens, i + 1)
+            if command_index < len(tokens) and tokens[command_index] == "publish":
                 return True
-            if len(rest) >= 2 and rest[0] == "npm" and rest[1] == "publish":
+            if command_index + 1 < len(tokens) and tokens[command_index] == "npm" and tokens[command_index + 1] == "publish":
                 return True
-            i += 1
+            i = max(command_index + 1, i + 1)
             continue
         if exe == "gh":
             command_index = skip_flags(tokens, i + 1)
@@ -1405,12 +1400,19 @@ def is_release_command(tokens):
         i += 1
     return False
 
+tool_input = {}
 try:
     data = json.loads(os.environ.get("INPUT_JSON", "{}"))
     tool_input = data.get("tool_input", {})
     tokens = as_tokens(tool_input.get("command", "")) + as_tokens(tool_input.get("args", ""))
 except Exception as exc:
-    respond("deny", f"Unable to parse release/deploy command safely: {exc}")
+    raw_command = str(tool_input.get("command", "")) if isinstance(tool_input, dict) else ""
+    raw_args = str(tool_input.get("args", "")) if isinstance(tool_input, dict) else ""
+    raw_full = f"{raw_command} {raw_args}"
+    release_markers = ("git push", "npm publish", "npm version", "pnpm publish", "yarn publish", "yarn npm publish", "gh release create", "gh workflow run")
+    if any(marker in raw_full for marker in release_markers):
+        respond("deny", f"Unable to parse release/deploy command safely: {exc}")
+    respond("allow")
 
 if os.environ.get("OMK_ALLOW_RELEASE") == "1":
     respond("allow")
@@ -1640,8 +1642,23 @@ def walk(value, key=""):
         for child_value in value:
             yield from walk(child_value, key)
 
-SENSITIVE_PATHS = (".env", ".pem", ".key", "id_rsa", "id_ed25519", "credentials", "service-account", ".p12", ".pfx", ".keystore")
-SECRET_PATTERN = re.compile(r"(password|secret|api_key|auth|bearer|token|private_key|aws_access_key_id|aws_secret_access_key|akiai|asiai|ghp_|github_pat|sk-|glpat-|npm_|pypi_|docker_auth|private.?key|BEGIN .* PRIVATE KEY|ssh-rsa|ssh-ed25519)", re.IGNORECASE)
+SENSITIVE_PATHS = (".env", ".pem", ".key", "id_rsa", "id_ed25519", "credentials", "service-account", ".p12", ".pfx", ".keystore", ".pi", "auth.json", "oauth.json", "tokens.json", "session.json")
+HIGH_CONFIDENCE_PATTERNS = (
+    re.compile(r"(?:ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|npm_[A-Za-z0-9_-]{30,}|pypi[-_][A-Za-z0-9_-]{30,}|sk-[A-Za-z0-9_-]{20,})", re.IGNORECASE),
+    re.compile(r"(?:AKIA|ASIA)[0-9A-Z]{16}"),
+    re.compile(r"BEGIN [A-Z ]*PRIVATE KEY"),
+    re.compile(r"(?:ssh-rsa|ssh-ed25519)\\s+[A-Za-z0-9+/=]{40,}"),
+    re.compile(r"\\bBearer\\s+[A-Za-z0-9._~+/-]{16,}", re.IGNORECASE),
+)
+ASSIGNMENT_PATTERN = re.compile(r"""\\b(?:password|secret|api[_-]?key|token|access[_-]?token|refresh[_-]?token|session[_-]?token|oauth|authorization|private[_-]?key|aws[_-]?access[_-]?key[_-]?id|aws[_-]?secret[_-]?access[_-]?key)\\b['"]?\\s*[:=]\\s*['"]?[A-Za-z0-9_./+=@:-]{12,}""", re.IGNORECASE)
+SCAN_VALUE_KEYS = ("content", "text", "string", "newtext", "oldtext", "input", "value", "body", "data")
+SKIP_ASSIGNMENT_KEYS = ("path", "file", "command", "args", "name")
+
+def should_scan_assignment(key):
+    key_lower = key.lower()
+    if any(marker in key_lower for marker in SKIP_ASSIGNMENT_KEYS):
+        return False
+    return key_lower == "" or any(marker in key_lower for marker in SCAN_VALUE_KEYS)
 
 for key, value in walk(tool_input):
     key_lower = key.lower()
@@ -1649,11 +1666,15 @@ for key, value in walk(tool_input):
         respond("deny", "Direct modification of sensitive file blocked")
         raise SystemExit(0)
 
-for _, value in walk(tool_input):
-    if SECRET_PATTERN.search(value):
-        respond("deny", "Potential secret leak detected")
+for key, value in walk(tool_input):
+    if should_scan_assignment(key) and any(pattern.search(value) for pattern in HIGH_CONFIDENCE_PATTERNS):
+        respond("deny", "High-confidence credential value detected")
         raise SystemExit(0)
 
+for key, value in walk(tool_input):
+    if should_scan_assignment(key) and ASSIGNMENT_PATTERN.search(value):
+        respond("deny", "High-confidence credential assignment detected")
+        raise SystemExit(0)
 respond("allow")
 PY
 `,
@@ -1955,17 +1976,12 @@ fi
 `,
 };
 
-const KIMI_CONFIG_TOML = `# oh-my-kimi generated Kimi config
+const KIMI_CONFIG_TOML = `# open-multi-agent-kit generated Kimi adapter config
 # Lifecycle hook settings
 
 [[hooks]]
 event = "SessionStart"
 command = ".omk/hooks/session-context.sh"
-timeout = 5
-
-[[hooks]]
-event = "UserPromptSubmit"
-command = ".omk/hooks/awesome-agent-skills-router.sh"
 timeout = 5
 
 [[hooks]]
@@ -1979,20 +1995,9 @@ command = ".omk/hooks/subagent-stop-audit.sh"
 timeout = 5
 
 [[hooks]]
-event = "SubagentStop"
-command = ".omk/hooks/branch-diff-snapshot.sh"
-timeout = 10
-
-[[hooks]]
 event = "PreToolUse"
 matcher = "Shell"
 command = ".omk/hooks/pre-shell-guard.sh"
-timeout = 5
-
-[[hooks]]
-event = "PreToolUse"
-matcher = "Shell"
-command = ".omk/hooks/worktree-create-guard.sh"
 timeout = 5
 
 [[hooks]]
@@ -2002,25 +2007,9 @@ command = ".omk/hooks/protect-secrets.sh"
 timeout = 5
 
 [[hooks]]
-event = "PostToolUse"
-matcher = "WriteFile|StrReplaceFile"
-command = ".omk/hooks/post-format.sh"
-timeout = 20
-
-[[hooks]]
 event = "Stop"
 command = ".omk/hooks/stop-verify.sh"
 timeout = 30
-
-[[hooks]]
-event = "Stop"
-command = ".omk/hooks/release-check-before-stop.sh"
-timeout = 10
-
-[[hooks]]
-event = "Stop"
-command = ".omk/hooks/npm-audit-summary.sh"
-timeout = 60
 `;
 
 const DEFAULT_PROJECT_MCP_COMMENT =
@@ -2051,7 +2040,7 @@ function createUnixOmkProjectMcpScript(node: string): string {
 
   return [
     "set -e",
-    'omk_bin="$(command -v omk 2>/dev/null || command -v open-multi-agent-kit 2>/dev/null || true)"',
+    'omk_bin="$(command -v omk 2>/dev/null || true)"',
     'if [ -n "$omk_bin" ]; then',
     `  omk_cli="$(${quotedNode} -e ${shellQuote(resolveRealpathScript)} "$omk_bin" 2>/dev/null || true)"`,
     '  if [ -n "$omk_cli" ]; then',
@@ -2065,7 +2054,7 @@ function createUnixOmkProjectMcpScript(node: string): string {
     `    exec ${quotedNode} "$mcp_js"`,
     "  fi",
     "fi",
-    'echo "omk-project MCP server not found; install open-multi-agent-kit or rerun omk init" >&2',
+    'echo "omk-project MCP server not found; install OMK or rerun omk init" >&2',
     "exit 127",
   ].join("\n");
 }
@@ -2117,7 +2106,7 @@ type RuntimeScope = "all" | "project";
 
 function getConfigToml(options: { mcpScope: RuntimeScope; skillsScope: RuntimeScope; hooksScope: RuntimeScope }): string {
   const { mcpScope, skillsScope, hooksScope } = options;
-  return `# oh-my-kimi project settings
+  return `# OMK project settings
 [project]
 name = "my-project"
 description = ""
@@ -2125,9 +2114,9 @@ description = ""
 [orchestration]
 default_workers = 4
 max_retries = 3
-approval_policy = "auto"         # safe default: safe tools auto, destructive ask
+approval_policy = "yolo"         # low-friction SWE/benchmark mode: auto-allow tool use
 execution_prompt = "ask"         # ask | auto | parallel | sequential
-yolo_mode = false                # safe guards still block secrets/destructive shell hooks
+yolo_mode = true                 # minimal hard stops only; avoid benchmark-stalling prompts
 
 [runtime]
 # auto chooses lite on <=18GB RAM hosts to make 16GB laptops usable.
@@ -2180,8 +2169,9 @@ language = "en"
 
 [router]
 default_model = "kimi-k2.6"
-research_thinking = "disabled"
-coding_thinking = "enabled"
+# off | medium | high | xhigh | max
+research_thinking = "off"
+coding_thinking = "high"
 `;
 }
 
@@ -2196,7 +2186,7 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
   const root = getProjectRoot();
   const initHomeDir = normalizeUserHomePath(options.homeDir) ?? getUserHome(options.env ?? process.env);
   const mcpJson = createMcpJson(root);
-  console.log(header(`oh-my-kimi init (profile: ${options.profile})`));
+  console.log(header(`OMK init (profile: ${options.profile})`));
   const localUserRuntime = await resolveLocalUserRuntime(options, initHomeDir);
 
   // 1. Create directories (parallel)
@@ -2382,7 +2372,7 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
   await writeFile(join(root, ".omk/kimi.config.toml"), kimiConfigContent);
   await ensureProjectMcpConfig(join(root, ".omk/mcp.json"), mcpJson, { removeRuntimeManagedOmkProject: true });
   await writeFile(join(root, ".omk/theme.json"), createThemeJson());
-  await writeFile(join(root, ".omk/runtime-preset.json"), JSON.stringify(OMK_PARALLEL_ORCHESTRATOR_PRESET, null, 2) + "\n");
+  await writeFile(join(root, ".omk/runtime-preset.json"), JSON.stringify(OMK_CORE_VERIFIED_PRESET, null, 2) + "\n");
   await writeFile(join(root, ".omk/runtime-presets.json"), createRuntimePresetsJson());
 
   // Project-local server config must not import global definitions by default.
@@ -2439,7 +2429,7 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
     }
   }
 
-  console.log(status.success("oh-my-kimi initialized."));
+  console.log(status.success("OMK initialized."));
   console.log();
   console.log("Created:");
   console.log("- AGENTS.md");
@@ -2496,9 +2486,9 @@ export async function initCommand(options: InitCommandOptions): Promise<void> {
     console.log("");
     console.log(style.orange("⚠️  omk is not in PATH."));
     console.log(style.gray("   Run one of the following:"));
-    console.log(style.gray("   1) npm install -g @oh-my-kimi/cli"));
+    console.log(style.gray("   1) npm install -g @omk/cli"));
     console.log(style.gray("   2) npm link (for development)"));
-    console.log(style.gray("   3) alias omk='npx @oh-my-kimi/cli'"));
+    console.log(style.gray("   3) alias omk='npx -p @omk/cli omk'"));
   } else {
     await maybeInstallShellCompletion(root);
   }

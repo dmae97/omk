@@ -4,12 +4,12 @@ OMK uses two version fields in release artifacts:
 
 | Field | Current value | Source | Meaning |
 | --- | --- | --- | --- |
-| Package version | `1.2.0-rc.0` | `package.json`, `package-lock.json` | npm/package release candidate version. |
+| Package version | `0.78.0` | `package.json`, `package-lock.json` | npm/package source version. |
 | Runtime version | `v1.2` | `src/version.ts`, JSON schemas | Contract/runtime family used by OMK envelopes. |
-| Release channel | `rc` | `src/version.ts` | Release candidate channel; not a GA claim. |
+| Release channel | `pre-1.0` | `src/version.ts` | Pre-1.0 package channel. |
 
-`v1.2.0-rc.0` is the package release candidate for the `v1.2` runtime contract family.
-Do not describe it as a stable `v1.2` release until the release gates pass and a final tag/package is published.
+`0.78.0` is the package version for the `v1.2` runtime contract family.
+Use `v1.2` only for runtime contracts; do not substitute it for the package version.
 
 ## Contract versions
 
@@ -44,8 +44,6 @@ The `version --json` command emits one `omk.contract.v1` envelope whose data pay
 
 ## Documentation rules
 
-- Use `v1.2.0-rc.0` when referring to the current package source version.
-- Use `v1.2 RC` when referring to the release-candidate milestone or runtime-family work.
-- Use `v1.2` only for the runtime contract family or future stable milestone.
+- Use `0.78.0` when referring to the current package source version.
+- Use `v1.2` only for the runtime contract family.
 - Keep historical changelog entries unchanged unless the text is not clearly historical.
-- Include the release-candidate limitation when writing README, roadmap, maturity, or issue-template copy.

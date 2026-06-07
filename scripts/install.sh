@@ -115,7 +115,7 @@ main() {
     warn "Direct download not available. Falling back to npm..."
     if command -v npm >/dev/null 2>&1; then
       info "Installing via npm..."
-      npm install -g open-multi-agent-kit 2>/dev/null || err "npm install failed"
+      npm install -g @omk/cli 2>/dev/null || err "npm install failed"
       ok "OMK installed via npm"
       echo ""
       echo "  Run: omk doctor"

@@ -6,7 +6,7 @@ Please report security issues via GitHub Issues with the `security` label.
 
 ## Built-in Protections
 
-open_multi-agent_kit includes scoped default hooks to block destructive commands and secret leakage when the active runtime/harness enables them.
+open-multi-agent-kit includes scoped default hooks to block destructive commands and secret leakage when the active runtime/harness enables them.
 
 ## Native Runtime Safety Gates
 

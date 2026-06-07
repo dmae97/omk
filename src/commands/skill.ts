@@ -80,6 +80,7 @@ const PACKS: SkillPack[] = [
       "omk-task-router",
       "graph-view",
       "provider",
+      "think",
       "deepseek-api",
       "deepseek-enable",
       "deepseek-disable",
@@ -158,6 +159,7 @@ const SLASH_COMMAND_SKILLS = new Set([
   "deepseekset",
   "graph-view",
   "provider",
+  "think",
   "open-design",
   "awesome-design-md",
 ]);

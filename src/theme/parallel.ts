@@ -3,55 +3,123 @@
  * Extracted from util/theme.ts to break God Module coupling
  */
 
-import { OMK_MATRIX_ASCII_ART } from "../brand/omk-matrix-art.js";
-import { P, hexToRgb, colorFromHex } from "../brand/palette.js";
-import { esc, rgb, stripAnsi, padEndAnsi } from "./ansi.js";
+import figlet from "figlet";
+import gradientString from "gradient-string";
+import { OMK_SIMPLE_ASCII_ART } from "../brand/omk-simple-art.js";
+import { P, colorFromHex } from "../brand/palette.js";
+import { esc, rgb, stripAnsi, padEndAnsi, sanitizeTerminalText, isColorEnabled } from "./ansi.js";
 import { style } from "./colors.js";
 import { box, gradient } from "./layout.js";
 import { label } from "./layout.js";
 
 export const emoji = {
-  shell: "🐚",
-  code: "💜",
-  search: "🔍",
-  download: "📥",
-  package: "📦",
-  sparkles: "✨",
-  heart: "🩷",
-  star: "🌟",
-  magic: "🪄",
-  cat: "🐱",
-  cookie: "🍪",
-  leaf: "🌿",
-  candy: "🍬",
-  flower: "🌸",
-  moon: "🌙",
-  cloud: "☁️",
-  fire: "🔥",
+  shell: "⌘",
+  code: "◈",
+  search: "⌕",
+  download: "⇣",
+  package: "▣",
+  sparkles: "✦",
+  control: "◆",
+  star: "✦",
+  loop: "⟲",
+  node: "◉",
+  ledger: "▤",
+  trace: "⌁",
+  route: "◬",
+  signal: "◎",
+  phase: "◐",
+  queue: "☰",
+  risk: "▲",
   zap: "⚡",
-  checklist: "☑️",
-  wand: "✨",
+  checklist: "☑",
+  switch: "⎇",
 };
 
 export function omkStatusChips(): string {
   const chips = [
-    style.purpleBold("[provider-neutral]"),
-    style.blue("[agent-first]"),
-    style.mintBold("[plan-first]"),
-    style.orange("[safe]"),
-    style.lightPurple("[open]"),
+    style.blueBold("[ROUTE]"),
+    style.mintBold("[VERIFY]"),
+    style.purpleBold("[CONTROL]"),
+    style.pinkBold("[METRICS]"),
+    style.orange("[MCP]"),
+    style.lightPurple("[HOOKS]"),
+    style.creamBold("[AGENTS]"),
   ];
   return chips.join(" ");
 }
 
+function renderDefaultHeroArt(): string[] {
+  const palettes: Array<[string, string]> = [
+    ["#00D6FF", "#9D4EDD"],
+    ["#9D4EDD", "#FF47B2"],
+    ["#00FFC2", "#00D6FF"],
+    ["#FFB000", "#FF47B2"],
+    ["#00D6FF", "#00FFC2"],
+  ];
+  return OMK_SIMPLE_ASCII_ART.split("\n").map((line, index) => {
+    const [start, end] = palettes[index % palettes.length] ?? ["#00D6FF", "#FF47B2"];
+    return themedGradient(line, start, end);
+  });
+}
+
+function applyLibraryGradient(text: string, colors: string[]): string {
+  if (!isColorEnabled()) return text;
+  return gradientString(colors).multiline(text);
+}
+
+function trimTrailingBlankLines(lines: string[]): string[] {
+  const next = [...lines];
+  while (next.length > 0 && next[next.length - 1]?.trim() === "") next.pop();
+  return next;
+}
+
+function renderFigletTitleLines(title: string, colors: string[]): string[] {
+  const safeTitle = sanitizeTerminalText(title).trim().toUpperCase();
+  const width = process.stdout.columns ?? 80;
+  if (!safeTitle || safeTitle.length > 8 || width < 48) {
+    return [gradient(`◢█ ${safeTitle || "OMK"} █◣`)];
+  }
+
+  try {
+    const font = width >= 96 ? "ANSI Shadow" : "Small";
+    const rendered = figlet.textSync(safeTitle, { font });
+    const normalized = trimTrailingBlankLines(rendered.split("\n").map((line) => line.replace(/\s+$/u, "")));
+    if (normalized.length === 0) return [gradient(`◢█ ${safeTitle} █◣`)];
+    const painted = applyLibraryGradient(normalized.join("\n"), colors);
+    return painted.split("\n");
+  } catch {
+    return [gradient(`◢█ ${safeTitle} █◣`)];
+  }
+}
+
+function renderThemedHeroArt(
+  art: string,
+  primaryHex: string | undefined,
+  accentHex: string | undefined,
+  infoHex: string | undefined
+): string[] {
+  const palettes: Array<[string | undefined, string | undefined]> = [
+    [primaryHex, accentHex],
+    [accentHex, infoHex],
+    [infoHex, primaryHex],
+    [primaryHex, infoHex],
+    [accentHex, primaryHex],
+  ];
+  return art.split("\n").map((line, index) => {
+    const [start, end] = palettes[index % palettes.length] ?? [primaryHex, accentHex];
+    return themedGradient(line, start, end);
+  });
+}
+
 export function omkCliHero(footer?: string): string {
   const heroLines = [
-    gradient("✦ OMK ✦"),
-    style.phosphorBold("Open Multi-agent Kit."),
-    style.phosphor("Provider-neutral runtime for AI coding teams."),
-    style.phosphorDim("DAG scheduling · evidence gates · worktree isolation · replay · memory"),
+    ...renderFigletTitleLines("OMK", ["#00D6FF", "#9D4EDD", "#FF47B2", "#00FFC2"]),
+    style.creamBold("open-multi-agent-kit"),
+    style.blueBold("Night City Ops Console // cyberpunk metrics wall"),
+    style.phosphorDim("OMK//CONTROL · neon grid · evidence loop · telemetry bus"),
+    style.phosphorDim("goal-scoped MCP · skills · hooks · worktrees · replay · memory"),
     "",
-    ...OMK_MATRIX_ASCII_ART.split("\n").map((line) => style.matrixGreen(line)),
+    ...renderDefaultHeroArt(),
     "",
     omkStatusChips(),
   ];
@@ -60,13 +128,8 @@ export function omkCliHero(footer?: string): string {
     heroLines.push("", style.gray(footer));
   }
 
-  return box(heroLines, "OMK — Open Multi-agent Kit");
+  return box(heroLines, "OMK — open-multi-agent-kit");
 }
-
-/** @deprecated use omkCliHero */
-export const kimicatCliHero = omkCliHero;
-/** @deprecated use omkStatusChips */
-export const kimicatStatusChips = omkStatusChips;
 
 export function omkMetaBox(meta?: { directory?: string; session?: string; model?: string }): string {
   const metaLines: string[] = [];
@@ -78,8 +141,6 @@ export function omkMetaBox(meta?: { directory?: string; session?: string; model?
   return box(metaLines, "Session Info") + "\n";
 }
 
-/** @deprecated use omkMetaBox */
-export const kimicatMetaBox = omkMetaBox;
 
 export interface OmkThemeConfig {
   banner?: {
@@ -103,8 +164,6 @@ export interface OmkThemeConfig {
   metaBox?: boolean;
 }
 
-export { P, hexToRgb, colorFromHex };
-
 export async function loadThemeConfig(): Promise<OmkThemeConfig | null> {
   const { readFile } = await import("fs/promises");
   const { join } = await import("path");
@@ -122,7 +181,7 @@ export async function loadThemeConfig(): Promise<OmkThemeConfig | null> {
 function themedGradient(text: string, startHex: string | undefined, endHex: string | undefined): string {
   const start = colorFromHex(startHex, P.purple);
   const end = colorFromHex(endHex, P.pink);
-  const chars = [...text];
+  const chars = [...sanitizeTerminalText(text)];
   const result: string[] = [];
   for (let i = 0; i < chars.length; i++) {
     const t = chars.length === 1 ? 0.5 : i / (chars.length - 1);
@@ -140,7 +199,7 @@ function themedBox(
   primary: { r: number; g: number; b: number },
   _accent: { r: number; g: number; b: number }
 ): string {
-  const primaryFn = (s: string) => esc(rgb(primary.r, primary.g, primary.b)) + s + esc("0");
+  const primaryFn = (s: string) => esc(rgb(primary.r, primary.g, primary.b)) + sanitizeTerminalText(s) + esc("0");
   const termWidth = process.stdout.columns || 80;
   const rawInner = Math.max(
     ...lines.map((l) => stripAnsi(l).length),
@@ -164,8 +223,8 @@ function buildThemedMetaBox(
 ): string {
   if (!meta) return "";
   const metaLines: string[] = [];
-  const textFn = (s: string) => esc(rgb(text.r, text.g, text.b)) + s + esc("0");
-  const mutedFn = (s: string) => esc(rgb(muted.r, muted.g, muted.b)) + s + esc("0");
+  const textFn = (s: string) => esc(rgb(text.r, text.g, text.b)) + sanitizeTerminalText(s) + esc("0");
+  const mutedFn = (s: string) => esc(rgb(muted.r, muted.g, muted.b)) + sanitizeTerminalText(s) + esc("0");
   if (meta.directory) metaLines.push("  " + mutedFn("Directory:") + " " + textFn(meta.directory));
   if (meta.session) metaLines.push("  " + mutedFn("Session:") + " " + textFn(meta.session));
   if (meta.model) metaLines.push("  " + mutedFn("Model:") + " " + textFn(meta.model));
@@ -193,18 +252,18 @@ export function omkBanner(
     return parts.join("\n");
   }
 
-  const title = theme.banner?.title ?? "OMK";
-  const subtitle = theme.banner?.subtitle ?? "Open Multi-agent Kit.";
+  const title = sanitizeTerminalText(theme.banner?.title ?? "OMK");
+  const subtitle = sanitizeTerminalText(theme.banner?.subtitle ?? "open-multi-agent-kit");
   const styleName = theme.banner?.style ?? "default";
-  const art = theme.banner?.asciiArt ?? "";
+  const art = sanitizeTerminalText(theme.banner?.asciiArt ?? OMK_SIMPLE_ASCII_ART);
   const primary = colorFromHex(theme.colors?.primary, P.purple);
   const accent = colorFromHex(theme.colors?.accent, P.pink);
   const muted = colorFromHex(theme.colors?.muted, P.gray);
   const text = colorFromHex(theme.colors?.text, P.cream);
 
-  const primaryFn = (s: string) => esc(rgb(primary.r, primary.g, primary.b)) + s + esc("0");
-  const accentFn = (s: string) => esc(rgb(accent.r, accent.g, accent.b)) + s + esc("0");
-  const mutedFn = (s: string) => esc(rgb(muted.r, muted.g, muted.b)) + s + esc("0");
+  const primaryFn = (s: string) => esc(rgb(primary.r, primary.g, primary.b)) + sanitizeTerminalText(s) + esc("0");
+  const accentFn = (s: string) => esc(rgb(accent.r, accent.g, accent.b)) + sanitizeTerminalText(s) + esc("0");
+  const mutedFn = (s: string) => esc(rgb(muted.r, muted.g, muted.b)) + sanitizeTerminalText(s) + esc("0");
 
   if (styleName === "minimal") {
     const parts: string[] = ["", primaryFn("▸ " + title) + " " + mutedFn(subtitle)];
@@ -220,14 +279,23 @@ export function omkBanner(
     return parts.join("\n");
   }
 
+  const heroTitleLines = title.length <= 8
+    ? renderFigletTitleLines(title, [
+        theme.colors?.primary ?? "#00D6FF",
+        theme.colors?.accent ?? "#9D4EDD",
+        theme.colors?.info ?? "#FF47B2",
+        theme.colors?.primary ?? "#00FFC2",
+      ])
+    : [themedGradient("◢█ " + title + " █◣", theme.colors?.primary, theme.colors?.accent)];
   const heroLines: string[] = [
-    themedGradient("✦ " + title + " ✦", theme.colors?.primary, theme.colors?.accent),
+    ...heroTitleLines,
     accentFn(subtitle),
-    mutedFn("Provider-neutral runtime for AI coding teams."),
+    mutedFn("Night City Ops Console // cyberpunk metrics wall // provider-neutral orchestration."),
+    mutedFn("goal-scoped MCP · skills · hooks · evidence · worktrees · replay · memory"),
   ];
 
   if (art) {
-    heroLines.push("", ...art.split("\n").map((line) => primaryFn(line)), "");
+    heroLines.push("", ...renderThemedHeroArt(art, theme.colors?.primary, theme.colors?.accent, theme.colors?.info), "");
   } else {
     heroLines.push("");
   }
@@ -246,8 +314,6 @@ export function omkBanner(
   return result.join("\n");
 }
 
-/** @deprecated use omkBanner */
-export const kimicatBanner = omkBanner;
 
 const ROLE_COLORS: Record<string, (s: string) => string> = {
   orchestrator: style.purple,
@@ -334,5 +400,5 @@ export function approvalPromptBox(toolName: string, nodeId: string): string {
 }
 
 export function orangeBold(s: string): string {
-  return esc("1;" + rgb(P.orange.r, P.orange.g, P.orange.b)) + s + esc("0");
+  return style.orangeBold(s);
 }

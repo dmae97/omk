@@ -207,11 +207,11 @@ export async function printChatExitBanner(options: {
 
   const lines: string[] = [
     "",
-    style.purpleBold("  🌸 Session Ended"),
+    style.phosphorBold("  ◈ Session Closed"),
     separator(50),
     label("Run ID", runId),
     label("OMK Session", sessionId),
-    ...(kimiSessionId ? [label("Primary Session", kimiSessionId)] : []),
+    ...(kimiSessionId ? [label("Provider Session", kimiSessionId)] : []),
     label("Resume", `omk runs`),
     label("Workers", workersText),
     label("MCP", mcpText),

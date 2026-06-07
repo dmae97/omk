@@ -66,3 +66,48 @@ test("provider use and model use persist defaults without secret values", () => 
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test("model list renders provider tabs with deepseek max thinking", () => {
+  const home = mkdtempSync(join(tmpdir(), "omk-model-list-home-"));
+  try {
+    const result = runModelCli(home, ["model", "list"]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /OMK Model Control · provider tabs/);
+    assert.match(result.stdout, /\[mimo\]/);
+    assert.match(result.stdout, /\[deepseek\]/);
+    assert.match(result.stdout, /deepseek-v4-pro:max/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("think command previews model variant without persisting settings", () => {
+  const home = mkdtempSync(join(tmpdir(), "omk-think-home-"));
+  try {
+    const result = runModelCli(home, ["think", "high", "--provider", "codex", "--model", "codex", "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.command, "think");
+    assert.equal(payload.provider, "codex");
+    assert.equal(payload.model, "codex-cli");
+    assert.equal(payload.thinking, "high");
+    assert.equal(payload.modelVariant, "codex-cli:high");
+    assert.equal(payload.persisted, false);
+    assert.equal(payload.secretValuesPrinted, false);
+    assert.equal(payload.tokenFilesRead, false);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("think command exports custom variants as shell env only", () => {
+  const home = mkdtempSync(join(tmpdir(), "omk-think-export-home-"));
+  try {
+    const result = runModelCli(home, ["think", "variant", "code-high", "--model", "codex", "--export"]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /export OMK_THINKING='code-high'/);
+    assert.match(result.stdout, /export OMK_MODEL_VARIANT='codex-cli:code-high'/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

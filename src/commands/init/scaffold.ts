@@ -77,7 +77,7 @@ function createUnixOmkProjectMcpScript(node: string): string {
 
   return [
     "set -e",
-    'omk_bin="$(command -v omk 2>/dev/null || command -v open-multi-agent-kit 2>/dev/null || true)"',
+    'omk_bin="$(command -v omk 2>/dev/null || true)"',
     'if [ -n "$omk_bin" ]; then',
     `  omk_cli="$(${quotedNode} -e ${shellQuote(resolveRealpathScript)} "$omk_bin" 2>/dev/null || true)"`,
     '  if [ -n "$omk_cli" ]; then',
@@ -91,7 +91,7 @@ function createUnixOmkProjectMcpScript(node: string): string {
     `    exec ${quotedNode} "$mcp_js"`,
     "  fi",
     "fi",
-    'echo "omk-project MCP server not found; install open-multi-agent-kit or rerun omk init" >&2',
+    'echo "omk-project MCP server not found; install OMK or rerun omk init" >&2',
     "exit 127",
   ].join("\n");
 }

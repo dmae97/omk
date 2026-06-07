@@ -510,22 +510,21 @@ function shouldSpawnCapabilityAgents(workerCount: number, taskType: string, inte
 }
 
 function workerCandidateProviders(providerPolicy: ProviderPolicy): ProviderId[] {
-  const omkAuthorityCandidates: ProviderId[] = [DEFAULT_AUTHORITY_PROVIDER, "codex", "qwen", "openrouter"];
   if (providerPolicy === "kimi") return ["kimi"];
-  if (providerPolicy === "auto" || providerPolicy === "authority") return omkAuthorityCandidates;
-  return [
-    providerPolicy,
-    ...omkAuthorityCandidates.filter((provider) => provider !== providerPolicy),
-  ];
+  if (providerPolicy === "auto" || providerPolicy === "authority") return [DEFAULT_AUTHORITY_PROVIDER];
+  return providerPolicy === DEFAULT_AUTHORITY_PROVIDER
+    ? [DEFAULT_AUTHORITY_PROVIDER]
+    : [providerPolicy, DEFAULT_AUTHORITY_PROVIDER];
 }
 
 function defaultModelForProviderPolicy(providerPolicy: ProviderPolicy): string {
+  if (providerPolicy === "auto" || providerPolicy === "authority") return "auto";
   if (providerPolicy === "qwen") return "qwen3-max";
   if (providerPolicy === "codex") return "codex-cli";
   if (providerPolicy === "deepseek") return "deepseek-v4-flash";
   if (providerPolicy === "openrouter") return "openrouter/auto";
   if (providerPolicy === "kimi") return "kimi-api";
-  return "kimi-api";
+  return "auto";
 }
 
 function buildDeepSeekAgentNodes(input: {
@@ -584,11 +583,11 @@ function createDeepSeekAgentNode(input: {
     outputs: [{ name: input.outputName, gate: "none", required: false }],
     routing: {
       provider: "deepseek",
-      fallbackProvider: resolveFallbackProvider([DEFAULT_AUTHORITY_PROVIDER, "codex", "qwen", "openrouter"]),
+      fallbackProvider: DEFAULT_AUTHORITY_PROVIDER,
       providerModel: input.tier === "flash" ? "deepseek-v4-flash" : "deepseek-v4-pro",
       providerModelTier: input.tier,
       assignedProvider: "deepseek",
-      candidateProviders: ["deepseek", DEFAULT_AUTHORITY_PROVIDER, "codex", "qwen", "openrouter"],
+      candidateProviders: ["deepseek", DEFAULT_AUTHORITY_PROVIDER],
       assignedModel: input.tier === "flash" ? "deepseek-v4-flash" : "deepseek-v4-pro",
       assignedProviderAuthority: "direct",
       assignedProviderCapabilities: ["read", "plan", "review"],

@@ -1,6 +1,6 @@
 version: 1
 agent:
-  extend: ./okabe.yaml  # Inherits the unrestricted default Kimi tool surface plus MCP/skills/hooks flags
+  extend: ./okabe.yaml  # Inherits the OMK provider-adapter tool surface plus MCP/skills/hooks flags
   name: omk-root
   system_prompt_path: ../prompts/root.md
   system_prompt_args:

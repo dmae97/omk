@@ -298,6 +298,16 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       latestAttempt.fallbackFrom = fallback.from;
       latestAttempt.fallbackReason = fallback.reason;
     }
+
+    // Capture error from failed attempts for debugging
+    if (!result.success) {
+      const errorMsg = (result.stderr?.trim() || result.stdout?.trim() || "").slice(0, 1000);
+      if (errorMsg) {
+        latestAttempt.error = errorMsg;
+      } else if (typeof metadata.error === "string") {
+        latestAttempt.error = metadata.error.slice(0, 1000);
+      }
+    }
   }
 
   function etaEnv(estimate: RunProgressEstimate | undefined): Record<string, string> {

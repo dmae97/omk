@@ -294,21 +294,80 @@ export class ThemeCommand extends OmkCommand {
     examples: [
       ["Show current theme", "omk theme"],
       ["Set theme", "omk theme dark"],
+      ["Preview theme", "omk theme preview matrix"],
+      ["List all themes", "omk theme list"],
     ],
   });
 
-  nameArgs = Option.Rest();
+  nameArgs = Option.Rest({ required: 0 });
 
   async execute(): Promise<number> {
-    const name = this.nameArgs.join(" ");
+    const name = this.nameArgs.join(" ").trim();
+    const subcommand = this.nameArgs[0] ?? "";
+    const target = this.nameArgs.slice(1).join(" ").trim();
+
+    // omk theme list — show all themes with color swatches
+    if (subcommand === "list") {
+      const { renderAllThemePreviews, getBuiltinTheme } = await import(
+        "../theme/theme-registry.js"
+      );
+      const current = process.env.OMK_THEME ?? "omk";
+      const currentPalette = getBuiltinTheme(current) ?? getBuiltinTheme("omk");
+      this.context.stdout.write(
+        (currentPalette?.render("header", `Current theme: ${current}`) ?? `Current theme: ${current}`) + "\n\n",
+      );
+      this.context.stdout.write(renderAllThemePreviews() + "\n");
+      return 0;
+    }
+
+    // omk theme preview <name> — show color swatch without switching
+    if (subcommand === "preview") {
+      if (!target) {
+        this.context.stderr.write("Usage: omk theme preview <name>\n");
+        return 2;
+      }
+      const { renderThemePreview, getBuiltinTheme, listBuiltinThemes } = await import(
+        "../theme/theme-registry.js"
+      );
+      const palette = getBuiltinTheme(target);
+      if (!palette) {
+        const available = listBuiltinThemes().join(", ");
+        this.context.stderr.write(`Unknown theme: ${target}\n`);
+        this.context.stderr.write(`Available: ${available}\n`);
+        return 2;
+      }
+      this.context.stdout.write(renderThemePreview(palette) + "\n");
+      const current = process.env.OMK_THEME ?? "omk";
+      this.context.stdout.write(
+        `\nCurrent theme: ${current}. Use \`omk theme ${target}\` to switch.\n`,
+      );
+      return 0;
+    }
+
+    // omk theme <name> — set theme
     if (name) {
       process.env.OMK_THEME = name;
-      this.context.stdout.write(`Theme set to: ${name}\n`);
-    } else {
-      const current = process.env.OMK_THEME ?? "omk (default)";
-      this.context.stdout.write(`Current theme: ${current}\n`);
-      this.context.stdout.write("Available: omk, minimal, mono, dark, light\n");
+      const { getBuiltinTheme, renderThemePreview } = await import(
+        "../theme/theme-registry.js"
+      );
+      const palette = getBuiltinTheme(name);
+      if (palette) {
+        this.context.stdout.write(renderThemePreview(palette) + "\n");
+      }
+      this.context.stdout.write(`\nTheme set to: ${name}\n`);
+      return 0;
     }
+
+    // omk theme — show current + all with swatches
+    const { renderAllThemePreviews, getBuiltinTheme } = await import(
+      "../theme/theme-registry.js"
+    );
+    const current = process.env.OMK_THEME ?? "omk";
+    const currentPalette = getBuiltinTheme(current) ?? getBuiltinTheme("omk");
+    this.context.stdout.write(
+      (currentPalette?.render("header", `Current theme: ${current}`) ?? `Current theme: ${current}`) + "\n\n",
+    );
+    this.context.stdout.write(renderAllThemePreviews() + "\n");
     return 0;
   }
 }

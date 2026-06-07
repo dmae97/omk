@@ -49,7 +49,7 @@ const REQUIRED_INIT_ARTIFACTS: InitArtifact[] = [
   { path: ".omk/agents/root.yaml", description: "root coordinator agent", critical: true },
   { path: ".kimi/mcp.json", description: "Kimi project MCP registry", critical: true },
   { path: ".omk/mcp.json", description: "legacy OMK MCP fallback", critical: false },
-  { path: ".omk/lsp.json", description: "TypeScript LSP config", critical: false },
+  { path: ".omk/lsp.json", description: "bundled TypeScript/Python LSP config", critical: false },
   { path: ".omk/hooks/pre-shell-guard.sh", description: "destructive shell guard", critical: true },
   { path: ".omk/hooks/protect-secrets.sh", description: "secret write guard", critical: true },
   { path: ".omk/memory/graph-state.json", description: "local ontology graph database", critical: true },

@@ -1,5 +1,5 @@
 /**
- * Curated catalog of MCP servers that pair well with oh-my-kimi.
+ * Curated catalog of MCP servers that pair well with open-multi-agent-kit.
  *
  * These servers were discovered via the GitHub MCP ecosystem and verified
  * against the npm registry. They cover categories useful for agentic
@@ -190,8 +190,9 @@ export function getCatalogForInit(
 
 /**
  * Get default selections for OMK init.
- * Returns names of servers marked `bundled: true`.
+ * Fresh projects start with the virtual `omk-project` runtime baseline only,
+ * so no external catalog MCP servers are preselected here.
  */
 export function getDefaultSelections(): string[] {
-  return RECOMMENDED_MCP_SERVERS.filter((s) => s.bundled).map((s) => s.name);
+  return [];
 }

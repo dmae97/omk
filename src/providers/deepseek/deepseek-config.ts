@@ -17,6 +17,8 @@ export interface DeepSeekProviderConfig {
   defaultModel?: string;
   aliases?: Record<string, string>;
   capabilities?: string[];
+  contextWindow?: number;
+  reservedOutputTokens?: number;
 }
 
 export interface GenericProviderConfig {
@@ -34,6 +36,8 @@ export interface GenericProviderConfig {
   planKind?: string;
   routing?: string;
   headers?: Record<string, string>;
+  contextWindow?: number;
+  reservedOutputTokens?: number;
   disabledAt?: string;
   disabledReason?: string;
   disabledBy?: string;
@@ -271,6 +275,8 @@ function normalizeDeepSeekProviderConfig(value: unknown): DeepSeekProviderConfig
     defaultModel: typeof value.defaultModel === "string" && value.defaultModel.trim() ? value.defaultModel : undefined,
     aliases: normalizeStringMap(value.aliases),
     capabilities: normalizeStringList(value.capabilities),
+    contextWindow: normalizePositiveInteger(value.contextWindow),
+    reservedOutputTokens: normalizePositiveInteger(value.reservedOutputTokens),
   };
 }
 
@@ -285,6 +291,8 @@ function normalizeGenericProviderConfig(value: unknown): GenericProviderConfig {
     model: typeof value.model === "string" && value.model.trim() ? value.model : undefined,
     aliases: normalizeStringMap(value.aliases),
     capabilities: normalizeStringList(value.capabilities),
+    contextWindow: normalizePositiveInteger(value.contextWindow),
+    reservedOutputTokens: normalizePositiveInteger(value.reservedOutputTokens),
     disabledAt: typeof value.disabledAt === "string" ? value.disabledAt : undefined,
     disabledReason: typeof value.disabledReason === "string" ? value.disabledReason : undefined,
     disabledBy: typeof value.disabledBy === "string" && value.disabledBy.trim() ? value.disabledBy : undefined,
@@ -304,6 +312,11 @@ function normalizeStringList(value: unknown): string[] | undefined {
   const list = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
     .map((item) => item.trim());
   return list.length > 0 ? [...new Set(list)] : undefined;
+}
+function normalizePositiveInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

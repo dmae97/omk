@@ -8,6 +8,8 @@ import { join } from "path";
 import type { RunState, TeamRuntimeStatus } from "../contracts/orchestration.js";
 import { createRoutedRunState, refreshRunStateEstimate } from "../orchestration/run-state.js";
 
+import { createInteractiveRunState as createParallelRunState } from "./parallel/orchestrator.js";
+import { ensureCompletionArtifactContract } from "../orchestration/completion-artifacts.js";
 export async function teamCommand(options: { workers?: string; runId?: string } = {}): Promise<void> {
   const root = getProjectRoot();
   const resources = await getOmkResourceSettings();
@@ -48,7 +50,7 @@ export async function teamCommand(options: { workers?: string; runId?: string } 
   console.log(label("Resource profile", `${resources.profile} (${resources.reason})`));
   console.log(label("Worker windows", String(workerCount)) + "\n");
 
-  const statePath = await writeTeamRunState(root, runId, workerCount);
+  const statePath = await writeTeamRunState(root, runId, workerCount, "omk-team", resources.profile);
   const teamEnv = {
     OMK_RUN_ID: runId,
     OMK_WORKERS: String(workerCount),
@@ -173,61 +175,33 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
-export async function writeTeamRunState(root: string, runId: string, workerCount: number, session = "omk-team"): Promise<string> {
+export async function writeTeamRunState(root: string, runId: string, workerCount: number, session = "omk-team", profile = "standard"): Promise<string> {
   const startedAt = new Date().toISOString();
   const runDir = join(root, ".omk", "runs", runId);
   const statePath = join(runDir, "state.json");
-  const state: RunState = createRoutedRunState({
+  const state: RunState = createParallelRunState({
     runId,
-    startedAt,
+    flow: "team",
+    goal: "Coordinate tmux team run and manage parallel worker lanes toward the active goal",
     workerCount,
-    nodes: [
-      {
-        id: "coordinator",
-        name: "tmux coordinator pane plans DAG worker split",
-        role: "orchestrator",
-        dependsOn: [],
-        maxRetries: 1,
-        startedAt,
-        outputs: [{ name: "team plan", gate: "summary" }],
-      },
-      ...Array.from({ length: workerCount }, (_, index) => ({
-        id: `worker-${index + 1}`,
-        name: `worker-${index + 1} pane executes scoped implementation`,
-        role: "coder",
-        dependsOn: ["coordinator"],
-        maxRetries: 1,
-        inputs: [{ name: "team plan", ref: "plan.md", from: "coordinator" }],
-        outputs: [{ name: `worker-${index + 1} output`, gate: "summary" as const }],
-      })),
-      {
-        id: "reviewer",
-        name: "reviewer pane",
-        role: "reviewer",
-        dependsOn: Array.from({ length: workerCount }, (_, index) => `worker-${index + 1}`),
-        maxRetries: 1,
-        inputs: Array.from({ length: workerCount }, (_, index) => ({
-          name: `worker-${index + 1} output`,
-          ref: "state.json",
-          from: `worker-${index + 1}`,
-        })),
-        outputs: [{ name: "review verdict", gate: "review-pass" }],
-      },
-    ],
+    startedAt,
+    approvalPolicy: "ask",
+    profile,
+    executionStrategy: "parallel",
   });
-  const coordinator = state.nodes.find((node) => node.id === "coordinator");
-  if (coordinator) {
-    coordinator.status = "running";
-    coordinator.startedAt = startedAt;
-  }
   state.teamRuntime = buildExpectedTeamRuntimeStatus(session, statePath, workerCount, "starting");
   state.updatedAt = startedAt;
   state.lastActivityAt = startedAt;
   refreshRunStateEstimate(state, workerCount);
 
+  await ensureCompletionArtifactContract(root, runId);
   await mkdir(runDir, { recursive: true });
-  await writeFile(join(runDir, "goal.md"), "# Goal\n\nTeam runtime session\n", "utf-8");
-  await writeFile(join(runDir, "plan.md"), `# Plan\n\nTeam workers: ${workerCount}\n`, "utf-8");
+  await writeFile(join(runDir, "goal.md"), "# Goal\n\nCoordinate tmux team run and manage parallel worker lanes toward the active goal.\n", "utf-8");
+  await writeFile(
+    join(runDir, "plan.md"),
+    `# Plan\n\nFlow: team\nWorkers: ${workerCount}\nResource profile: ${profile}\nCapability assignment: goal-scoped MCP/skills/hooks per worker lane\nExecution strategy: parallel\n`,
+    "utf-8"
+  );
   await writeFile(statePath, JSON.stringify(state, null, 2), "utf-8");
   return statePath;
 }
@@ -244,7 +218,7 @@ export function buildExpectedTeamRuntimeStatus(
       index: 0,
       name: "coordinator",
       role: "coordinator",
-      nodeId: "coordinator",
+      nodeId: "root-coordinator",
       status: presentWindows.has("coordinator") ? "present" : "expected",
       paneCount: presentWindows.get("coordinator"),
     },
@@ -263,7 +237,7 @@ export function buildExpectedTeamRuntimeStatus(
       index: workerCount + 1,
       name: "reviewer",
       role: "reviewer",
-      nodeId: "reviewer",
+      nodeId: "review-merge",
       status: presentWindows.has("reviewer") ? "present" : "expected",
       paneCount: presentWindows.get("reviewer"),
     },

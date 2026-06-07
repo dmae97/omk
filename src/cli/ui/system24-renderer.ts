@@ -85,11 +85,25 @@ interface WritableStreamLike {
   write(chunk: string): unknown;
   isTTY?: boolean;
   columns?: number;
+  rows?: number;
 }
 
 function termWidth(stream: WritableStreamLike): number {
   const width = stream.columns ?? process.stdout.columns ?? 80;
   return Number.isFinite(width) ? Math.max(40, width) : 80;
+}
+
+function termRows(stream: WritableStreamLike): number {
+  const rows = stream.rows ?? process.stderr.rows ?? 24;
+  return Number.isFinite(rows) ? Math.max(10, rows) : 24;
+}
+
+function shouldUseTerminalControls(stream: WritableStreamLike): boolean {
+  return stream.isTTY === true && process.env.TERM !== "dumb";
+}
+
+function countRows(chunk: string): number {
+  return (chunk.match(/\n/g) ?? []).length;
 }
 
 function stripAnsi(s: string): string {
@@ -198,7 +212,7 @@ function renderInline(c: System24Palette, text: string): string {
 const SPIN = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
 let spinIdx = 0;
 
-function renderThinking(c: System24Palette, summary: string | undefined, elapsedMs: number, todoPercent?: number): string {
+function renderThinking(c: System24Palette, summary: string | undefined, elapsedMs: number, todoPercent?: number, activity?: string): string {
   const frame = SPIN[spinIdx++ % SPIN.length];
   const time = `${DIM}${c.text5}${formatElapsed(elapsedMs)}${RST}`;
   const parts: string[] = [`  ${c.accent}${frame}${RST}`];
@@ -213,7 +227,7 @@ function renderThinking(c: System24Palette, summary: string | undefined, elapsed
   if (summary) {
     parts.push(DIM + c.text5 + truncate(summary, 40) + RST);
   } else {
-    parts.push(DIM + c.text5 + "thinking..." + RST);
+    parts.push(DIM + c.text5 + truncate(activity ?? "routing turn · evidence gate armed", 48) + RST);
   }
 
   parts.push(time);
@@ -250,6 +264,8 @@ export interface System24RendererStreams {
 export interface System24RendererOptions {
   sessionHeader?: "full" | "compact" | "off";
   noColor?: boolean;
+  /** Keep terminal cursor/scroll controls independent from NO_COLOR. */
+  terminalControls?: boolean;
 }
 
 export class System24Renderer implements CliRenderer {
@@ -258,6 +274,7 @@ export class System24Renderer implements CliRenderer {
   private readonly palette: System24Palette;
   private readonly sessionHeader: "full" | "compact" | "off";
   private readonly noColor: boolean;
+  private readonly terminalControls: boolean;
   private heartbeatOpen = false;
   private thinkingSummary: string | undefined;
   private lastRoute: { provider: string; model?: string; risk: string; sandbox: string; mcp?: readonly string[]; skills?: readonly string[] } | null = null;
@@ -270,6 +287,10 @@ export class System24Renderer implements CliRenderer {
   private promptOpen = false;
   private codeBlockLang = "";
   private codeBlockLines: string[] = [];
+  private rowsWritten = 0;
+  private stickyHeaderPrefixRows = 0;
+  private alternateScreenActive = false;
+  private stickyScrollRegionActive = false;
 
   constructor(streams: System24RendererStreams = {}, theme: OmkBrandTheme = SYSTEM24_THEME, options: System24RendererOptions = {}) {
     this.out = streams.stdout ?? process.stdout;
@@ -277,11 +298,23 @@ export class System24Renderer implements CliRenderer {
     this.palette = paletteFromTheme(theme);
     this.sessionHeader = options.sessionHeader ?? "full";
     this.noColor = options.noColor ?? !shouldUseAnsiColor();
+    this.terminalControls = options.terminalControls ?? options.noColor !== true;
   }
 
   start(): void {
     this.panelWidth = Math.min(76, termWidth(this.out) - 2);
     this.sessionStartTime = Date.now();
+    this.rowsWritten = 0;
+    this.stickyHeaderPrefixRows = 0;
+    this.stickyScrollRegionActive = false;
+    this.alternateScreenActive = this.terminalControls && shouldUseTerminalControls(this.err);
+    if (this.alternateScreenActive) {
+      this.writeErrControl(`${ESC}?1049h${ESC}2J${ESC}H`);
+    }
+  }
+
+  setStickyHeaderPrefixRows(rows: number): void {
+    this.stickyHeaderPrefixRows = Math.max(0, Math.floor(rows));
   }
 
   emit(event: CliUiEvent): void {
@@ -290,7 +323,12 @@ export class System24Renderer implements CliRenderer {
 
     switch (event.type) {
       case "session:start": {
-        if (this.sessionHeader === "off") break;
+        if (this.sessionHeader === "off") {
+          this.activateStickyScrollRegion(this.stickyHeaderPrefixRows);
+          this.stickyHeaderPrefixRows = 0;
+          break;
+        }
+        const rowsBeforeSession = this.rowsWritten;
         this.runId = event.runId;
         const provider = event.provider === "auto" ? "omk" : event.provider;
         const model = event.model ?? "auto";
@@ -322,6 +360,8 @@ export class System24Renderer implements CliRenderer {
         }
         this.writeErr(renderPanelBottom(c, w));
         this.writeErr("\n\n");
+        this.activateStickyScrollRegion(this.stickyHeaderPrefixRows + (this.rowsWritten - rowsBeforeSession));
+        this.stickyHeaderPrefixRows = 0;
         break;
       }
 
@@ -384,7 +424,7 @@ export class System24Renderer implements CliRenderer {
         break;
 
       case "turn:heartbeat": {
-        const line = renderThinking(c, this.thinkingSummary, event.elapsedMs, this.todoPercent >= 0 ? this.todoPercent : undefined);
+        const line = renderThinking(c, this.thinkingSummary, event.elapsedMs, this.todoPercent >= 0 ? this.todoPercent : undefined, event.activity);
         if (this.err.isTTY) {
           this.writeErr("\r" + " ".repeat(w) + "\r");
           this.writeErr(c.border + BORDER_V + RST + line);
@@ -529,7 +569,7 @@ export class System24Renderer implements CliRenderer {
         const statusLine =
           parts.join(c.text5 + " · " + RST) +
           "  " + c.text5 + "─ " + elapsed + " ─" + RST +
-          "  " + DIM + c.text5 + "⏱" + uptime + RST;
+          "  " + DIM + c.text5 + "turn settled · ⏱" + uptime + RST;
 
         this.writeErr(renderPanelDivider(c, w, "status"));
         this.writeErr("\n");
@@ -554,8 +594,29 @@ export class System24Renderer implements CliRenderer {
   }
 
   private writeErr(chunk: string): void {
-    this.err.write(this.noColor ? stripAnsi(chunk) : chunk);
+    const rendered = this.noColor ? stripAnsi(chunk) : chunk;
+    this.err.write(rendered);
+    this.rowsWritten += countRows(rendered);
   }
 
-  stop(): void {}
+  private writeErrControl(chunk: string): void {
+    this.err.write(chunk);
+  }
+
+  private activateStickyScrollRegion(headerRows: number): void {
+    if (!this.alternateScreenActive || this.stickyScrollRegionActive) return;
+    const rows = termRows(this.err);
+    const top = Math.min(rows - 1, Math.max(2, headerRows + 1));
+    if (top >= rows) return;
+    this.writeErrControl(`${ESC}${top};${rows}r${ESC}${top};1H`);
+    this.stickyScrollRegionActive = true;
+  }
+
+  stop(): void {
+    if (this.alternateScreenActive) {
+      this.writeErrControl(`${ESC}r${ESC}?1049l`);
+      this.alternateScreenActive = false;
+      this.stickyScrollRegionActive = false;
+    }
+  }
 }

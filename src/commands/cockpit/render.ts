@@ -20,7 +20,6 @@ import {
 } from "../../util/run-view-model.js";
 import {
   style,
-  gradient,
   sanitizeTerminalText,
   getSystemUsage,
 } from "../../util/theme.js";
@@ -54,6 +53,7 @@ import {
   getCockpitResources,
   getCockpitDeepSeekSnapshot,
   formatDeepSeekBalance,
+  computeCockpitLayout,
 } from "./utils.js";
 import {
   buildCockpitSnapshot,
@@ -66,6 +66,13 @@ import {
   normalizeCockpitFrameHeight,
   DEFAULT_COCKPIT_HEIGHT,
 } from "./update-loop.js";
+import {
+  renderWorkingHud,
+  renderSweepRule,
+  type WorkingState,
+} from "../../ui/omk-working-sweep.js";
+import { sliceFromBottom } from "./scroll.js";
+import { renderOmkSparkleText } from "../../ui/omk-sigil.js";
 
 function renderCockpitPanel(lines: string[], innerWidth: number): string {
   const safeInnerWidth = Math.max(1, innerWidth);
@@ -76,6 +83,86 @@ function renderCockpitPanel(lines: string[], innerWidth: number): string {
     style.darkPurple("┃ ") + padEndVisible(truncateLine(line, safeInnerWidth), safeInnerWidth) + style.darkPurple(" ┃")
   );
   return [top, ...body, bottom].join("\n");
+}
+
+function updateRendererScrollState(args: {
+  renderer: NonNullable<CockpitRenderOptions["renderer"]>;
+  width: number;
+  frameHeight: number;
+  bodyHeight: number;
+  viewportHeight: number;
+  lineCount: number;
+  stickyTopRows: number;
+  workingRows: number;
+  composerRows: number;
+}): void {
+  const layout = computeCockpitLayout({
+    cols: args.width,
+    rows: args.frameHeight,
+    rightRailPinned: false,
+    composerHeight: Math.max(2, args.composerRows || 2),
+    workingHeight: args.workingRows,
+    composerLiftRows: 0,
+  });
+
+  const viewportHeight = Math.max(1, args.viewportHeight);
+  const leftWidth = Math.max(1, args.width - PANEL_HORIZONTAL_OVERHEAD);
+  const previousLineCount = args.renderer.lastLeftLineCount;
+  const contentY = 2;
+  const transcriptY = contentY + args.stickyTopRows;
+  const workingY = transcriptY + viewportHeight;
+  const composerY = workingY + args.workingRows;
+
+  args.renderer.currentLayout = {
+    ...layout,
+    leftPane: {
+      x: 1,
+      y: contentY,
+      w: leftWidth,
+      h: Math.max(1, args.bodyHeight),
+    },
+    transcript: {
+      x: 1,
+      y: transcriptY,
+      w: leftWidth,
+      h: viewportHeight,
+    },
+    working: {
+      x: 1,
+      y: workingY,
+      w: leftWidth,
+      h: args.workingRows,
+    },
+    composer: {
+      x: 1,
+      y: composerY,
+      w: leftWidth,
+      h: args.composerRows,
+    },
+    rightRail: null,
+    footer: {
+      x: 1,
+      y: Math.max(1, args.frameHeight - 1),
+      w: args.width,
+      h: 1,
+    },
+  };
+
+  args.renderer.leftTranscriptLineCount = args.lineCount;
+  args.renderer.leftTranscriptHeight = viewportHeight;
+  args.renderer.lastLeftLineCount = args.lineCount;
+  args.renderer.lastTranscriptHeight = viewportHeight;
+  if (!args.renderer.followTail && args.lineCount > previousLineCount) {
+    args.renderer.leftScrollFromBottom += args.lineCount - previousLineCount;
+  }
+  args.renderer.onLeftContentChanged();
+}
+
+function renderStickyComposer(text: string | undefined, width: number): string[] {
+  if (text === undefined) return [];
+  const safe = sanitizeTerminalText(text).replace(/\s+/g, " ").trim();
+  const body = safe.length > 0 ? truncateText(safe, Math.max(1, width - 14)) : "ready";
+  return [`${style.gray("composer")} ${style.cream("›")} ${style.cream(body)}`];
 }
 
 function todoMarker(statusValue: string): string {
@@ -247,7 +334,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
   const width = getTerminalWidth(options.terminalWidth);
   const targetWidth = Math.max(1, width - PANEL_HORIZONTAL_OVERHEAD);
   const fixedFrameHeight = normalizeCockpitFrameHeight(options.height);
-  const fixedBodyHeight = fixedFrameHeight != null ? fixedFrameHeight - 2 : undefined;
+  const fixedBodyHeight = fixedFrameHeight != null ? Math.max(0, fixedFrameHeight - 2) : undefined;
   const root = await getProjectRootAsync();
   const now = Date.now();
   const cache = options.cache;
@@ -434,14 +521,51 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
   }
 
   // ── Build sections as separate arrays ──
+  const animFrame = options.animFrame ?? 0;
 
-  // Header (Matrix rain + title)
+  // Header (Green Rain signal + OMK control title)
   const rainWidth = Math.min(targetWidth, 60);
   const rain = renderMatrixRain(latestRunName ?? "omk", rainWidth, 3);
   const rainLines = process.stdout.isTTY
     ? rain.split("\n").map((l: string) => style.phosphor(l))
     : [];
-  const headerLines: string[] = ["", ...rainLines, gradient("OMK Cockpit"), ""];
+  const headerLines: string[] = [
+    "",
+    ...rainLines,
+    renderOmkSparkleText("◢█ OMK//CONTROL COCKPIT █◣", {
+      frame: animFrame,
+      colors: ["#00D6FF", "#f4ffff", "#ffd166", "#FF47B2", "#00FFC2"],
+    }),
+    style.gray("NEON GRID · GREEN RAIN · METRICS WALL"),
+    style.gray("route · verify · loop · control · evidence gated"),
+    "",
+  ];
+
+  // ── Sweep animation line ──
+  let sweepLine = "";
+  if (animFrame > 0 || process.env.OMK_ANIM !== "0") {
+    const activeNode = vm.activeNode;
+    const sweepState: WorkingState = activeNode
+      ? {
+          kind: vm.progress.running > 0 ? "loop" : "idle",
+          label: activeNode.role || "working",
+          detail: activeNode.thinking || activeNode.name || "running",
+          startedAtMs: Date.now(),
+        }
+      : {
+          kind: "idle",
+          label: "idle",
+          detail: "waiting for instruction",
+          startedAtMs: Date.now(),
+        };
+    const sweepHud = renderWorkingHud({
+      state: sweepState,
+      frame: animFrame,
+      width: Math.max(24, targetWidth),
+      compact: false,
+    });
+    sweepLine = sweepHud;
+  }
 
   // Info section — compact priority-ordered lines
   const infoLines: string[] = [];
@@ -493,7 +617,13 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     const gateParts: string[] = [];
     if (snapshot.evidence.failedGates > 0) gateParts.push(`${style.red(String(snapshot.evidence.failedGates))} failed`);
     if (snapshot.evidence.skippedGates > 0) gateParts.push(`${style.orange(String(snapshot.evidence.skippedGates))} skipped`);
-    mcpLines.push(`${style.gray("evidence")} ${gateParts.join(" · ")}`);
+    const evidenceSample = (vm.workers ?? [])
+      .find((node) => (node.state === "failed" || node.state === "blocked") && node.lastEvidence)
+      ?.lastEvidence;
+    const evidenceDetail = evidenceSample
+      ? ` · ${truncateText(sanitizeForDisplay(evidenceSample.message || evidenceSample.gate), targetWidth - 24)}`
+      : "";
+    mcpLines.push(`${style.gray("evidence")} ${gateParts.join(" · ")}${evidenceDetail}`);
   }
 
   const goalLineParts: string[] = [];
@@ -752,7 +882,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
   }
 
   // ── Assemble responsive rectangle ──
-  const heightMode = fixedFrameHeight == null ? "auto" : `${fixedFrameHeight}`;
+  const heightMode = options.height == null || fixedFrameHeight == null ? "auto" : `${fixedFrameHeight}`;
   const footerLine = buildFooter(targetWidth, heightMode);
   const agentHeaderIndex = workerLines.findIndex((line) => sanitizeTerminalText(line).includes("AGENTS"));
   const selectedWorkerLines = section === "todos"
@@ -763,7 +893,9 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
         ? []
         : workerLines;
   const selectedInfoLines = section === "all" ? infoLines : [];
-  const selectedMcpLines = section === "all" || section === "mcp" ? mcpLines : [];
+  const selectedMcpLines = section === "all" || section === "mcp"
+    ? (resources ? mcpLines : mcpLines.slice(1))
+    : [];
   const selectedChangedLines = section === "all" ? changedLines : [];
 
   const activePanels: Array<{ title: string; lines: string[]; key: string }> = [];
@@ -772,13 +904,61 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
   if (selectedMcpLines.length > 0) activePanels.push({ title: "Resources", lines: selectedMcpLines, key: "mcp" });
   if (selectedChangedLines.length > 0) activePanels.push({ title: "Changes & History", lines: selectedChangedLines, key: "changed" });
 
+  const stickyHeaderLines = [...headerLines];
+  const stickyWorkingLines = sweepLine ? [sweepLine, renderSweepRule(targetWidth, animFrame + 7)] : [];
+  const stickyComposerLines = renderStickyComposer(options.composerText, targetWidth);
+  const transcriptLines = activePanels.flatMap((p) => layoutPanel(p.title, p.lines, targetWidth).split("\n"));
+  const scrollableLeftLines = transcriptLines;
+  const fullLeftLines = [
+    ...stickyHeaderLines,
+    ...scrollableLeftLines,
+    ...stickyWorkingLines,
+    ...stickyComposerLines,
+    footerLine,
+  ];
+
+  const renderer = options.renderer;
   let body: string[];
 
-  if (fixedBodyHeight != null) {
-    const headerRows = 2;
+  if (renderer) {
+    const bodyHeight = fixedBodyHeight ?? DEFAULT_COCKPIT_HEIGHT - 2;
+    const frameHeight = fixedFrameHeight ?? bodyHeight + 2;
+    const stickyBottomLines = [
+      ...stickyWorkingLines,
+      ...stickyComposerLines,
+      footerLine,
+    ];
+    const viewportHeight = Math.max(1, bodyHeight - stickyHeaderLines.length - stickyBottomLines.length);
+
+    updateRendererScrollState({
+      renderer,
+      width,
+      frameHeight,
+      bodyHeight,
+      viewportHeight,
+      lineCount: transcriptLines.length,
+      stickyTopRows: stickyHeaderLines.length,
+      workingRows: stickyWorkingLines.length,
+      composerRows: stickyComposerLines.length,
+    });
+
+    body = [
+      ...stickyHeaderLines,
+      ...sliceFromBottom({
+        lines: transcriptLines,
+        viewportHeight,
+        scrollFromBottom: renderer.leftScrollFromBottom,
+      }),
+      ...stickyBottomLines,
+    ];
+
+    while (body.length < bodyHeight) body.splice(stickyHeaderLines.length, 0, "");
+    if (body.length > bodyHeight) body.length = bodyHeight;
+  } else if (fixedBodyHeight != null) {
+    const headerRows = headerLines.length + (sweepLine ? 2 : 0);
     const footerRows = 1;
-    const sepRows = 2;
-    const available = Math.max(0, fixedBodyHeight - headerRows - footerRows - sepRows);
+    const panelOverheadRows = activePanels.length * 2;
+    const available = Math.max(0, fixedBodyHeight - headerRows - footerRows - panelOverheadRows);
 
     // Priority-based budget: critical info > active agents/TODO > MCP compact > changed/history
     const infoMin = Math.min(selectedInfoLines.length, 3);
@@ -794,17 +974,17 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     let remaining = available - (infoBudget + workerBudget + mcpBudget + changedBudget);
 
     if (remaining < 0) {
-      // Emergency shrink from lowest priority upward
+      // Emergency shrink from lowest priority upward, preserving a compact MCP row when possible.
       changedBudget = Math.max(0, changedBudget + remaining);
       remaining = available - (infoBudget + workerBudget + mcpBudget + changedBudget);
       if (remaining < 0) {
-        mcpBudget = Math.max(0, mcpBudget + remaining);
+        workerBudget = Math.max(0, workerBudget + remaining);
         remaining = available - (infoBudget + workerBudget + mcpBudget + changedBudget);
         if (remaining < 0) {
-          workerBudget = Math.max(0, workerBudget + remaining);
+          infoBudget = Math.max(selectedInfoLines.length > 0 ? 1 : 0, infoBudget + remaining);
           remaining = available - (infoBudget + workerBudget + mcpBudget + changedBudget);
           if (remaining < 0) {
-            infoBudget = Math.max(1, infoBudget + remaining);
+            mcpBudget = Math.max(0, mcpBudget + remaining);
             remaining = 0;
           }
         }
@@ -843,6 +1023,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
 
     body = [
       ...headerLines,
+      ...(sweepLine ? [sweepLine, renderSweepRule(targetWidth, animFrame + 7)] : []),
       ...panelContents.flatMap((p) => layoutPanel(p.title, p.lines, targetWidth).split("\n")),
       footerLine,
     ];
@@ -850,11 +1031,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     while (body.length < fixedBodyHeight) body.push("");
     if (body.length > fixedBodyHeight) body.length = fixedBodyHeight;
   } else {
-    body = [
-      ...headerLines,
-      ...activePanels.flatMap((p) => layoutPanel(p.title, p.lines, targetWidth).split("\n")),
-      footerLine,
-    ];
+    body = [...fullLeftLines];
 
     const minimumBodyHeight = DEFAULT_COCKPIT_HEIGHT - 2;
     while (body.length < minimumBodyHeight) body.push("");

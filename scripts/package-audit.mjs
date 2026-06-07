@@ -69,7 +69,9 @@ export const REQUIRED_ENTRIES = [
   "templates/.omk/agents/roles/tester.yaml",
   "templates/.omk/agents/roles/vision-debugger.yaml",
   "templates/.omk/prompts/root.md",
-  "readmeasset/kimicat.png",
+  "readmeasset/omk-social-preview.png",
+  "readmeasset/omk-control.webp",
+  "readmeasset/ASSET_PROVENANCE.md",
 ];
 
 export const NON_EMPTY_TEXT_ENTRIES = [
@@ -84,6 +86,7 @@ export const FORBIDDEN_PATTERNS = [
   "scripts/**",
   ".github/**",
   ".omk/**",
+  ".pi/**",
   ".kimi/**",
   ".agents/**",
   ".specify/**",

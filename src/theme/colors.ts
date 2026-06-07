@@ -4,7 +4,19 @@
  */
 
 import { P } from "../brand/palette.js";
-import { esc, rgb, bgRgb } from "./ansi.js";
+import { esc, rgb, bgRgb, sanitizeTerminalText } from "./ansi.js";
+
+type StyleValue = string | ((s: string) => string);
+
+function sanitizeStyleMap<T extends Record<string, StyleValue>>(styles: T): T {
+  const sanitized: Record<string, StyleValue> = {};
+  for (const [key, value] of Object.entries(styles)) {
+    sanitized[key] = typeof value === "function"
+      ? ((s: string) => value(sanitizeTerminalText(s)))
+      : value;
+  }
+  return sanitized as T;
+}
 
 export const glyph = {
   routed: "◇",
@@ -18,7 +30,7 @@ export const glyph = {
   warning: "⟁",
 } as const;
 
-export const style = {
+export const style = sanitizeStyleMap({
   reset: esc("0"),
   bold: esc("1"),
   dim: esc("2"),
@@ -39,6 +51,10 @@ export const style = {
   cream: (s: string) => esc(rgb(P.cream.r, P.cream.g, P.cream.b)) + s + esc("0"),
   gray: (s: string) => esc(rgb(P.gray.r, P.gray.g, P.gray.b)) + s + esc("0"),
   skin: (s: string) => esc(rgb(P.skin.r, P.skin.g, P.skin.b)) + s + esc("0"),
+  rust: (s: string) => esc(rgb(P.rustOrange.r, P.rustOrange.g, P.rustOrange.b)) + s + esc("0"),
+  rustBold: (s: string) => esc("1;" + rgb(P.rustOrange.r, P.rustOrange.g, P.rustOrange.b)) + s + esc("0"),
+  rustOxide: (s: string) => esc(rgb(P.rustOxide.r, P.rustOxide.g, P.rustOxide.b)) + s + esc("0"),
+  cargoGreen: (s: string) => esc(rgb(P.cargoGreen.r, P.cargoGreen.g, P.cargoGreen.b)) + s + esc("0"),
   matrixGreen: (s: string) => esc(rgb(P.matrixGreen.r, P.matrixGreen.g, P.matrixGreen.b)) + s + esc("0"),
   matrixDark: (s: string) => esc(rgb(P.matrixDark.r, P.matrixDark.g, P.matrixDark.b)) + s + esc("0"),
 
@@ -65,6 +81,14 @@ export const style = {
   matrixBlack: (s: string) => esc(rgb(0, 0, 0)) + s + esc("0"),
   bgMatrix: (s: string) => esc(bgRgb(0, 8, 0) + ";" + rgb(P.matrixGreen.r, P.matrixGreen.g, P.matrixGreen.b)) + s + esc("0"),
 
+  // Matrix rain palette entries
+  rainGreen: (s: string) => esc(rgb(P.matrixRainGreen.r, P.matrixRainGreen.g, P.matrixRainGreen.b)) + s + esc("0"),
+  rainGreenBold: (s: string) => esc("1;" + rgb(P.matrixRainGreen.r, P.matrixRainGreen.g, P.matrixRainGreen.b)) + s + esc("0"),
+  rainGreenDim: (s: string) => esc("2;" + rgb(P.matrixRainGreen.r, P.matrixRainGreen.g, P.matrixRainGreen.b)) + s + esc("0"),
+  rainBgDeep: (s: string) => esc(bgRgb(P.matrixDeepBg.r, P.matrixDeepBg.g, P.matrixDeepBg.b) + ";" + rgb(P.matrixRainGreen.r, P.matrixRainGreen.g, P.matrixRainGreen.b)) + s + esc("0"),
+  rainWarning: (s: string) => esc(rgb(P.matrixWarningAmber.r, P.matrixWarningAmber.g, P.matrixWarningAmber.b)) + s + esc("0"),
+  rainError: (s: string) => esc(rgb(P.matrixErrorRed.r, P.matrixErrorRed.g, P.matrixErrorRed.b)) + s + esc("0"),
+
   // Metrics
   cyan: (s: string) => esc(rgb(P.metricsCyan.r, P.metricsCyan.g, P.metricsCyan.b)) + s + esc("0"),
   cyanBold: (s: string) => esc("1;" + rgb(P.metricsCyan.r, P.metricsCyan.g, P.metricsCyan.b)) + s + esc("0"),
@@ -85,7 +109,7 @@ export const style = {
 
   amberBold: (s: string) => esc("1;" + rgb(P.metricsAmber.r, P.metricsAmber.g, P.metricsAmber.b)) + s + esc("0"),
   metricsRedBold: (s: string) => esc("1;" + rgb(P.metricsRed.r, P.metricsRed.g, P.metricsRed.b)) + s + esc("0"),
-};
+});
 
 export const status = {
   ok: (s: string) => style.mintBold(`${glyph.verified} ${s}`),

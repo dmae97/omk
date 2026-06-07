@@ -1,8 +1,7 @@
 import type { TaskRunner } from "../contracts/orchestration.js";
-import { createKimiTaskRunner, type KimiTaskRunnerOptions } from "../kimi/runner.js";
+import type { KimiTaskRunnerOptions } from "../kimi/runner.js";
 import { style, status } from "../util/theme.js";
 import { getProjectRoot } from "../util/fs.js";
-import { checkCommand, resolveKimiBin } from "../util/shell.js";
 import { checkDeepSeekBalance } from "./deepseek/deepseek-balance.js";
 import { createDeepSeekReadOnlyTaskRunner } from "./deepseek/deepseek-provider.js";
 import {
@@ -13,7 +12,6 @@ import {
 import { ProviderHealthRegistry } from "./health.js";
 import { createProviderTaskRunner } from "./provider-task-runner.js";
 import { DEFAULT_AUTHORITY_PROVIDER, type ProviderId, type ProviderModelDefault, type ProviderPolicy } from "./types.js";
-import { createKimiProvider } from "./kimi-provider.js";
 import { createDeepSeekProvider } from "./deepseek-provider.js";
 import { createProviderRouter } from "./provider-router.js";
 import type { AgentProvider } from "./provider.js";
@@ -22,8 +20,6 @@ import { createCodexCliAdvisoryTaskRunner } from "./codex-cli-runner.js";
 import { providerDoctorStatus, readProviderRegistry, type ProviderRegistryEntry } from "./model-registry.js";
 import { createContextBroker } from "../runtime/context-broker.js";
 import type { AgentRuntime } from "../runtime/agent-runtime.js";
-import { createKimiPrintRuntime } from "../runtime/kimi-print-runtime.js";
-import { createKimiWireRuntime } from "../runtime/kimi-wire-runtime.js";
 import { createRuntimeRouter } from "../runtime/runtime-router.js";
 export interface ProviderBackedTaskRunnerOptions {
   kimi?: KimiTaskRunnerOptions;
@@ -42,22 +38,14 @@ export async function createProviderBackedTaskRunner(
 ): Promise<TaskRunner> {
   const providerPolicy = options.providerPolicy ?? "auto";
   const kimiOptions: KimiTaskRunnerOptions = options.kimi ?? { cwd: options.cwd ?? getProjectRoot() };
-  const legacyKimiRequested = shouldEnableLegacyKimi(providerPolicy, options.fallbackChain);
-  const kimiRunner = legacyKimiRequested
-    ? createKimiTaskRunner(kimiOptions)
-    : createDisabledLegacyKimiRunner();
+  const runnerCwd = kimiOptions.cwd ?? options.cwd ?? getProjectRoot();
+  const kimiRunner = createDisabledLegacyKimiRunner();
   const providerHealth = new ProviderHealthRegistry();
 
   const providers: AgentProvider[] = [];
-
   let deepseekRunnerRef: TaskRunner | undefined;
   const providerRunners: Partial<Record<ProviderId, TaskRunner>> = {};
   const providerModels: Partial<Record<ProviderId, ProviderModelDefault>> = {};
-  if (legacyKimiRequested) {
-    const kimiProvider = createKimiProvider({ runner: kimiRunner });
-    providers.push(kimiProvider);
-    providerRunners.kimi = kimiRunner;
-  }
   for (const provider of options.providers ?? []) {
     providers.push(provider);
     const providerId = provider.id as ProviderId;
@@ -113,6 +101,8 @@ export async function createProviderBackedTaskRunner(
         model: entry.defaultModel,
         promptPrefix: options.deepseekPromptPrefix,
         headers: openAICompatibleHeaders(entry, process.env),
+        contextWindow: entry.contextWindow,
+        reservedOutputTokens: entry.reservedOutputTokens,
       });
       providerModels[entry.id] = providerModelDefault(entry);
     } else if (providerPolicy === entry.id) {
@@ -122,40 +112,32 @@ export async function createProviderBackedTaskRunner(
 
   const codex = registry.find((entry) => entry.id === "codex");
   if (codex && codex.enabled && (providerPolicy === "auto" || providerPolicy === "codex")) {
-    const codexStatus = await providerDoctorStatus("codex");
-    if (codexStatus.available) {
-      providerRunners.codex = createCodexCliAdvisoryTaskRunner({
-        cwd: kimiOptions.cwd ?? options.cwd ?? getProjectRoot(),
-        model: codex.defaultModel,
-      });
-      providerModels.codex = providerModelDefault(codex);
-    } else if (providerPolicy === "codex") {
-      console.error(status.warn("Codex unavailable or unauthenticated; configured authority fallback is active."));
+    // Don't override custom providers passed via options.providers
+    const hasCustomCodex = (options.providers ?? []).some((p) => p.id === "codex");
+    if (!hasCustomCodex) {
+      const codexStatus = await providerDoctorStatus("codex");
+      if (codexStatus.available) {
+        providerRunners.codex = createCodexCliAdvisoryTaskRunner({
+          cwd: runnerCwd,
+          model: codex.defaultModel,
+          contextWindow: codex.contextWindow,
+          reservedOutputTokens: codex.reservedOutputTokens,
+        });
+        providerModels.codex = providerModelDefault(codex);
+      } else if (providerPolicy === "codex") {
+        console.error(status.warn("Codex unavailable or unauthenticated; configured authority fallback is active."));
+      }
     }
   }
 
   const router = createProviderRouter({
     providers,
-    defaultStrategy: legacyKimiRequested ? "compatibility-first" : "cost-aware",
+    defaultStrategy: "cost-aware",
   });
 
   // Create runtime instances for the RuntimeRouter
   const runtimes: AgentRuntime[] = [];
   runtimes.push(...(options.runtimes ?? []));
-  if (legacyKimiRequested) {
-    const kimiBin = resolveKimiBin(kimiOptions.env as NodeJS.ProcessEnv | undefined);
-    if (await checkCommand(kimiBin).catch(() => false)) {
-      const kimiPrintRuntime = createKimiPrintRuntime(kimiOptions);
-      runtimes.push(kimiPrintRuntime);
-
-      // Wire runtime is available but lower priority (incomplete tool handling)
-      const kimiWireRuntime = createKimiWireRuntime({
-        cwd: kimiOptions.cwd,
-        env: kimiOptions.env as NodeJS.ProcessEnv | undefined,
-      });
-      runtimes.push(kimiWireRuntime);
-    }
-  }
 
   const runtimeRouter = createRuntimeRouter({
     runtimes,
@@ -272,9 +254,6 @@ function resolveProviderBackedAuthorityProvider(
   return DEFAULT_AUTHORITY_PROVIDER;
 }
 
-function shouldEnableLegacyKimi(providerPolicy: ProviderPolicy, fallbackChain: readonly string[] | undefined): boolean {
-  return providerPolicy === "kimi" || (fallbackChain ?? []).some((runtimeId) => runtimeId === "kimi" || runtimeId.startsWith("kimi-"));
-}
 
 function createDisabledLegacyKimiRunner(): TaskRunner {
   return {

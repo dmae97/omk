@@ -2,6 +2,8 @@ import { strictEqual, match, doesNotMatch } from "node:assert/strict";
 import { test } from "node:test";
 
 const { System24Renderer } = await import("../dist/cli/ui/system24-renderer.js");
+const { NeonGridRenderer } = await import("../dist/cli/ui/neon-grid-renderer.js");
+const { GreenRainRenderer } = await import("../dist/cli/ui/green-rain-renderer.js");
 const { GREEN_RAIN_THEME } = await import("../dist/brand/theme.js");
 
 test("System24Renderer renders the real prompt at prompt:ready instead of a fake post-turn input panel", () => {
@@ -90,8 +92,28 @@ test("System24Renderer accepts Green Rain theme tokens", () => {
 
   strictEqual(stdout.join(""), "");
   const output = stderr.join("");
-  match(output, /38;2;90;255;120m/);
+  match(output, /38;2;0;255;194m/);
   match(output, /OMK/);
+});
+
+
+test("System24Renderer brands heartbeat as concrete routed work", () => {
+  const stdout = [];
+  const stderr = [];
+  const renderer = new System24Renderer({
+    stdout: { write: (chunk) => stdout.push(String(chunk)), columns: 100 },
+    stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY: true, columns: 100 },
+  }, GREEN_RAIN_THEME, { noColor: true });
+
+  renderer.start();
+  renderer.emit({ type: "turn:start" });
+  renderer.emit({ type: "turn:heartbeat", elapsedMs: 1500, activity: "repo read · evidence gate · local ctx · auto" });
+
+  strictEqual(stdout.join(""), "");
+  const output = stderr.join("");
+  match(output, /repo read/);
+  match(output, /evidence gate/);
+  doesNotMatch(output, /thinking\.\.\.|Working\.\.\./);
 });
 
 
@@ -116,4 +138,83 @@ test("System24Renderer honors noColor output option", () => {
 
   strictEqual(stdout.join(""), "");
   doesNotMatch(stderr.join(""), /\x1b\[/);
+});
+
+test("System24Renderer pins session chrome in an alternate screen scroll region on TTY", () => {
+  const stdout = [];
+  const stderr = [];
+  const renderer = new System24Renderer({
+    stdout: { write: (chunk) => stdout.push(String(chunk)), columns: 100, rows: 32 },
+    stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY: true, columns: 100, rows: 32 },
+  }, GREEN_RAIN_THEME, { noColor: false });
+
+  renderer.start();
+  renderer.emit({
+    type: "session:start",
+    runId: "sticky-system24",
+    provider: "codex",
+    model: "codex-cli",
+    root: "/tmp/current-bash-root",
+    cwd: "/tmp/current-bash-root",
+    rootSource: "cwd",
+  });
+  renderer.stop();
+
+  const output = stderr.join("");
+  match(output, /\x1b\[\?1049h/);
+  match(output, /\x1b\[\d+;32r/);
+  match(output, /\x1b\[\?1049l/);
+});
+
+test("System24Renderer skips pinned terminal controls for non-TTY and noColor", () => {
+  for (const [isTTY, noColor] of [[false, false], [true, true]]) {
+    const stderr = [];
+    const renderer = new System24Renderer({
+      stdout: { write: () => undefined, columns: 100, rows: 32 },
+      stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY, columns: 100, rows: 32 },
+    }, GREEN_RAIN_THEME, { noColor });
+
+    renderer.start();
+    renderer.emit({
+      type: "session:start",
+      runId: "sticky-disabled",
+      provider: "auto",
+      model: "auto",
+      root: "/tmp/current-bash-root",
+      cwd: "/tmp/current-bash-root",
+      rootSource: "cwd",
+    });
+    renderer.stop();
+
+    const output = stderr.join("");
+    doesNotMatch(output, /\x1b\[\?1049h/);
+    doesNotMatch(output, /\x1b\[\d+;32r/);
+  }
+});
+
+test("NeonGridRenderer and GreenRainRenderer include their brand header in the pinned region", () => {
+  for (const Renderer of [NeonGridRenderer, GreenRainRenderer]) {
+    const stderr = [];
+    const renderer = new Renderer({
+      stdout: { write: () => undefined, columns: 100, rows: 40 },
+      stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY: true, columns: 100, rows: 40 },
+    });
+
+    renderer.start();
+    renderer.emit({
+      type: "session:start",
+      runId: "sticky-brand-renderer",
+      provider: "codex",
+      model: "codex-cli",
+      root: "/tmp/current-bash-root",
+      cwd: "/tmp/current-bash-root",
+      rootSource: "cwd",
+    });
+    renderer.stop();
+
+    const output = stderr.join("");
+    match(output, /\x1b\[\?1049h/);
+    match(output, /\x1b\[(1[0-9]|2[0-9]);40r/);
+    match(output, /\x1b\[\?1049l/);
+  }
 });

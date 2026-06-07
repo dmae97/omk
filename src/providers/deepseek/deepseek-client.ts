@@ -1,4 +1,5 @@
 import { deepseekStatusReason } from "./deepseek-balance.js";
+import { ThinkingLevel } from "../thinking-levels.js";
 
 export interface DeepSeekChatMessage {
   role: "system" | "user" | "assistant";
@@ -10,7 +11,7 @@ export interface DeepSeekClientOptions {
   apiKeyEnv?: string;
   baseUrl?: string;
   model?: string;
-  thinking?: "enabled" | "disabled";
+  thinking?: ThinkingLevel;
   reasoningEffort?: "high" | "max";
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
@@ -21,7 +22,7 @@ export interface DeepSeekCompleteOptions {
   messages: DeepSeekChatMessage[];
   temperature?: number;
   maxTokens?: number;
-  thinking?: "enabled" | "disabled";
+  thinking?: ThinkingLevel;
   reasoningEffort?: "high" | "max";
   signal?: AbortSignal;
 }
@@ -42,7 +43,7 @@ export class DeepSeekClient {
   private readonly apiKeyEnv: string;
   private readonly baseUrl: string;
   private readonly model: string;
-  private readonly thinking: "enabled" | "disabled";
+  private readonly thinking: ThinkingLevel;
   private readonly reasoningEffort?: "high" | "max";
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
@@ -53,7 +54,7 @@ export class DeepSeekClient {
     this.apiKeyEnv = options.apiKeyEnv ?? "DEEPSEEK_API_KEY";
     this.baseUrl = (options.baseUrl ?? "https://api.deepseek.com").replace(/\/+$/, "");
     this.model = options.model ?? "deepseek-v4-flash";
-    this.thinking = options.thinking ?? "enabled";
+    this.thinking = options.thinking ?? "max";
     this.reasoningEffort = options.reasoningEffort ?? "max";
     this.timeoutMs = options.timeoutMs ?? 60_000;
     this.fetchImpl = options.fetchImpl ?? fetch;
@@ -156,20 +157,26 @@ export class DeepSeekClient {
       sanitizedMessages.push({ role: "user", content: "[omk] Continue with the task." });
     }
 
+    // Map ThinkingLevel to DeepSeek API format
+    const isDisabled = thinking === "off" || (thinking as string) === "disabled";
     const body: Record<string, unknown> = {
       model: this.model,
       messages: sanitizedMessages,
       max_tokens: options.maxTokens,
       thinking: {
-        type: thinking,
+        type: isDisabled ? "disabled" : "enabled",
       },
     };
-    const reasoningEffort = options.reasoningEffort ?? this.reasoningEffort;
-    if (thinking === "enabled" && reasoningEffort) {
-      body.reasoning_effort = reasoningEffort;
-    } else if (thinking === "disabled") {
+
+    if (isDisabled) {
+      // off/disabled → keep existing behavior: set temperature
       body.temperature = options.temperature ?? 0.2;
+    } else if (thinking === "high") {
+      body.reasoning_effort = options.reasoningEffort ?? this.reasoningEffort ?? "high";
+    } else if (thinking === "xhigh" || thinking === "max") {
+      body.reasoning_effort = options.reasoningEffort ?? this.reasoningEffort ?? "max";
     }
+    // "enabled", "medium", "minimal", "low" → no reasoning_effort
     return body;
   }
 

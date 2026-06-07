@@ -848,7 +848,7 @@ async function resolveDeepSeekGoalDecisionVote(
         { role: "user", content: buildDeepSeekGoalDecisionPrompt(goal, runState, evidence, score) },
       ],
       maxTokens: options?.maxTokens ?? 512,
-      thinking: "disabled",
+      thinking: "max",
       signal: options?.signal,
     });
 

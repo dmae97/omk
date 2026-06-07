@@ -24,6 +24,7 @@ import {
   style,
   roleColor,
   padEndAnsi,
+  gradient,
 } from "../util/theme.js";
 
 let stdoutLock: Promise<void> = Promise.resolve();
@@ -134,6 +135,43 @@ function etaConfidence(vm: RunViewModel): { text: string; level: "high" | "mediu
   return { text: "low confidence", level: "low" };
 }
 
+function neonSectionTitle(title: string, detail?: string): string {
+  const head = `${style.pinkBold("▣")} ${gradient(title)}`;
+  return detail ? `${head} ${style.gray(detail)}` : head;
+}
+
+function summarizeCapabilityList(label: string, values: readonly string[] | undefined, maxItems = 2): string | null {
+  if (!values || values.length === 0) return null;
+  const preview = values.slice(0, maxItems).join(",");
+  return `${label}:${preview}${values.length > maxItems ? ",…" : ""}`;
+}
+
+function formatCapabilitySummary(worker: RunViewModelWorker, maxWidth: number): string | null {
+  const assignment = worker.assignment;
+  if (!assignment) return null;
+  const parts = [
+    assignment.provider || assignment.model
+      ? `lane:${assignment.provider ?? "auto"}${assignment.model ? `/${assignment.model}` : ""}`
+      : null,
+    summarizeCapabilityList("skills", assignment.skills),
+    summarizeCapabilityList("mcp", assignment.mcpServers),
+    summarizeCapabilityList("hooks", assignment.hooks),
+    summarizeCapabilityList("tools", assignment.tools, 1),
+  ].filter((value): value is string => Boolean(value));
+  if (parts.length === 0) return null;
+  return truncate(parts.join(" · "), maxWidth);
+}
+
+function neonHeaderLine(text: string, maxWidth: number): string {
+  return gradient(truncate(`◢█ ${text} █◣`, maxWidth));
+}
+
+function neonSignalRule(width: number): string {
+  const unit = "═◇═";
+  const repeat = Math.max(1, Math.ceil(width / unit.length));
+  return style.gray(unit.repeat(repeat).slice(0, Math.max(12, width)));
+}
+
 /* ── Table mode append-only state ───────────────────────────── */
 
 const tablePrintedRows = new Map<string, Set<string>>();
@@ -213,9 +251,12 @@ export function renderParallelCockpit(
 
   // Section 1 — Header
   if (termWidth >= 80) {
-    const titlePart = style.creamBold("OMK Parallel Execution");
-    const goalPart = style.gray(`[${truncate(goalTitle, termWidth - 30)}]`);
-    lines.push(`${titlePart}  ${goalPart}`);
+    const bannerWidth = Math.max(24, termWidth - 2);
+    lines.push(neonHeaderLine("OMK//CONTROL :: PARALLEL ORCHESTRATION", bannerWidth));
+    lines.push(neonSignalRule(Math.min(72, Math.max(24, bannerWidth - 4))));
+    lines.push(style.gray(`[goal] ${truncate(goalTitle, termWidth - 10)}`));
+    lines.push(style.gray("Neon metrics console · route lanes · verify evidence · control the loop"));
+    lines.push(style.gray("Scoped MCP/skills/hooks · live telemetry · goal-bound orchestration"));
   }
   lines.push(
     `Run: ${vm.runId ?? "—"}  |  Workers: ${workers}  |  Policy: ${formatCompactPolicyChip(policy)}  |  Mode: ${modeLabel}`
@@ -225,9 +266,10 @@ export function renderParallelCockpit(
   // Section 2 — Progress
   const conf = etaConfidence(vm);
   const etaText = vm.eta ?? "--";
-  lines.push(`Progress  ${buildBar(vm.progress.percent)} ${vm.progress.percent}%  ·  ETA ${etaText} · ${conf.text}`);
+  lines.push(neonSectionTitle("METRICS WALL"));
+  lines.push(`◇ Progress  ${buildBar(vm.progress.percent)} ${vm.progress.percent}%  ·  ETA ${etaText} · ${conf.text}`);
   const pending = vm.progress.total - vm.progress.settled - vm.progress.running;
-  lines.push(`${vm.progress.settled} settled · ${vm.progress.done} done · ${vm.progress.running} running · ${vm.progress.failed} failed · ${vm.progress.blocked} blocked · ${vm.progress.skipped} skipped · ${pending} pending`);
+  lines.push(`◎ ${vm.progress.settled} settled · ${vm.progress.done} done · ${vm.progress.running} running · ${vm.progress.failed} failed · ${vm.progress.blocked} blocked · ${vm.progress.skipped} skipped · ${pending} pending`);
   lines.push("");
 
   // Section 3 — Workers
@@ -239,7 +281,7 @@ export function renderParallelCockpit(
     const evidenceW = 12;
     const nodeW = Math.max(12, termWidth - 53);
 
-    lines.push(style.purpleBold("▸ Workers"));
+    lines.push(neonSectionTitle("AGENT LANES", `${vm.workers.length} worker lanes`));
     const header = `  ${padEndAnsi(style.gray("ROLE"), roleW)} ${padEndAnsi(style.gray("NODE"), nodeW)} ${padEndAnsi(style.gray("STATE"), stateW)} ${padEndAnsi(style.gray("ELAPSED"), elapsedW)} ${padEndAnsi(style.gray("RETRY"), retryW)} ${style.gray("EVIDENCE")}`;
     lines.push(header);
 
@@ -281,6 +323,10 @@ export function renderParallelCockpit(
       if (w.state === "running" && w.phase) {
         lines.push(`    ${style.gray("→")} ${truncate(w.phase, nodeW)}`);
       }
+      const capabilitySummary = formatCapabilitySummary(w, termWidth - 8);
+      if (capabilitySummary) {
+        lines.push(`    ${style.gray("⇢")} ${style.gray(capabilitySummary)}`);
+      }
     }
     lines.push("");
   }
@@ -291,7 +337,7 @@ export function renderParallelCockpit(
   const doneWithoutEvidence = vm.workers.filter((w) => w.state === "done" && !w.lastEvidence);
 
   if (hasBlockers) {
-    lines.push(style.pinkBold("▸ Blockers"));
+    lines.push(neonSectionTitle("BLOCKER TRACE"));
     if (vm.blocker) {
       const recoverableIcon = vm.blocker.recoverable ? "🔄" : "❌";
       lines.push(`  ${style.red("Node:")} ${style.creamBold(vm.blocker.nodeId)} ${recoverableIcon}`);
@@ -325,13 +371,13 @@ export function renderParallelCockpit(
   } else if (allSettled) {
     const success = vm.progress.failed === 0 && vm.progress.blocked === 0;
     if (success && doneWithoutEvidence.length > 0) {
-      lines.push(style.orangeBold("▸ Complete (with warnings)"));
+      lines.push(neonSectionTitle("CONTROL RESULT", "complete with warnings"));
       lines.push(`  ${style.orange("⚠")} ${doneWithoutEvidence.length} done node(s) missing evidence`);
     } else if (success) {
-      lines.push(style.mintBold("▸ Complete"));
+      lines.push(neonSectionTitle("CONTROL RESULT", "verified"));
       lines.push(`  ${style.mint("✓ All workers finished successfully")}`);
     } else {
-      lines.push(style.pinkBold("▸ Complete (with issues)"));
+      lines.push(neonSectionTitle("CONTROL RESULT", "with issues"));
       lines.push(`  ${style.pink("✕ Some workers failed or blocked")}`);
     }
     if (options.statePath) {
@@ -343,7 +389,7 @@ export function renderParallelCockpit(
 
   // Section 5 — Final failure summary (when run ended with failures)
   if (allSettled && hasBlockers) {
-    lines.push(style.pinkBold("▸ Failure Summary"));
+    lines.push(neonSectionTitle("FAILURE TRACE"));
     for (const item of vm.blockers ?? []) {
       const icon = item.status === "failed" ? style.pink("✕") : style.orangeBold("⊘");
       lines.push(`  ${icon} ${style.creamBold(item.nodeId)}`);

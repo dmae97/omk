@@ -42,12 +42,12 @@ export function registerBasicCommands(program: Command): void {
 
   program
     .command("update")
-    .description("Check or run OMK and explicit Kimi adapter updates")
-    .argument("[action]", "check (default) | omk | kimi-adapter | kimi")
+    .description("Check or run OMK updates")
+    .argument("[action]", "check (default) | omk | kimi")
     .option("--json", "Output update status as JSON")
     .option("--refresh", "Force refresh update cache")
     .option("--yes", "Skip confirmation prompt")
-    .option("--install-script", "Print official Kimi install script (no execution)")
+    .option("--install-script", "Print Kimi API setup guidance")
     .action(async (action, options) => {
       const { checkUpdates } = await import("../util/update-check.js");
       const actionMode = action ?? "check";
@@ -66,8 +66,6 @@ export function registerBasicCommands(program: Command): void {
         return;
       }
 
-        // install-script handled inside actionMode === "kimi" block
-
       const isKimiAdapterAction = actionMode === "kimi" || actionMode === "kimi-adapter";
       const isInstallScript = isKimiAdapterAction && options.installScript;
       if (!process.stdout.isTTY && !options.yes && !isInstallScript) {
@@ -76,60 +74,23 @@ export function registerBasicCommands(program: Command): void {
       }
       if (actionMode === "omk") {
         if (!options.yes) {
-          console.log("Upgrade omk via: npm i -g open-multi-agent-kit");
+          console.log("Upgrade omk via: npm i -g @omk/cli");
           console.log("Press Enter to continue or Ctrl+C to cancel...");
           const rl = (await import("readline")).createInterface({ input: process.stdin, output: process.stdout });
           await new Promise<void>((resolve) => rl.question("", () => { rl.close(); resolve(); }));
         }
         const { runShell } = await import("../util/shell.js");
-        const result = await runShell("npm", ["i", "-g", "open-multi-agent-kit"], { stdio: "inherit", timeout: 120_000 });
+        const result = await runShell("npm", ["i", "-g", "@omk/cli"], { stdio: "inherit", timeout: 120_000 });
         process.exit(result.failed ? (result.exitCode ?? 1) : 0);
       }
       if (isKimiAdapterAction) {
-        // --install-script is safe without TTY
-        if (options.installScript) {
-          console.log([
-            "kimi-api uses direct Moonshot HTTP API; Kimi CLI is not installed as the OMK default runtime.",
-            "Configure ~/.kimi/config.toml or the MOONSHOT_API_KEY/KIMI_API_KEY environment variable for explicit Kimi API usage.",
-            "Legacy Kimi CLI remains available only through explicit adapter configuration.",
-          ].join("\n"));
-          return;
-        }
-
-        const { runShell } = await import("../util/shell.js");
-        const kimiCheck = await runShell("kimi", ["--version"], { timeout: 10000 });
-        const needsInstall = kimiCheck.failed;
-
-        if (!options.yes && !needsInstall) {
-          console.log("Upgrade kimi-cli via: uv tool upgrade kimi-cli --no-cache");
-          console.log("Press Enter to continue or Ctrl+C to cancel...");
-          const rl = (await import("readline")).createInterface({ input: process.stdin, output: process.stdout });
-          await new Promise<void>((resolve) => rl.question("", () => { rl.close(); resolve(); }));
-        }
-
-        if (needsInstall) {
-          const script = process.platform === "win32"
-            ? "Invoke-RestMethod https://code.kimi.com/install.ps1 | Invoke-Expression"
-            : "curl -LsSf https://code.kimi.com/install.sh | bash";
-          console.log(`Kimi CLI not found. Installing via official script...`);
-          if (process.platform === "win32") {
-            console.error("Please run the following in PowerShell:");
-            console.log(script);
-            process.exit(1);
-          }
-          const result = await runShell("bash", ["-c", script], { stdio: "inherit", timeout: 300_000 });
-          process.exit(result.failed ? (result.exitCode ?? 1) : 0);
-        }
-
-        const result = await runShell("uv", ["tool", "upgrade", "kimi-cli", "--no-cache"], { stdio: "inherit", timeout: 120_000 });
-        if (result.failed) {
-          console.error("uv tool upgrade failed. Is uv installed? (pip install uv)");
-          console.error("Fallback: try the official install script:");
-          console.error(process.platform === "win32"
-            ? "Invoke-RestMethod https://code.kimi.com/install.ps1 | Invoke-Expression"
-            : "curl -LsSf https://code.kimi.com/install.sh | bash");
-        }
-        process.exit(result.failed ? (result.exitCode ?? 1) : 0);
+        console.log([
+          "Kimi support in OMK uses the direct Moonshot HTTP API.",
+          "Set KIMI_API_KEY to enable explicit Kimi usage.",
+          "Optional: set KIMI_MODEL or configure [providers.kimi] in ~/.omk/config.toml.",
+          "There is no Kimi CLI package to install or upgrade for the default OMK runtime path.",
+        ].join("\n"));
+        return;
       }
       console.error(`Unknown update action: ${actionMode}`);
       process.exit(1);
@@ -344,14 +305,14 @@ export function registerBasicCommands(program: Command): void {
     .option("--model <model>", "provider model or provider/model override")
     .option("--max-steps-per-turn <n>", t("cmd.chatMaxStepsOption"))
     .option("--layout <auto|tmux|inline|plain>", t("cmd.chatLayoutOption"), "auto")
-    .option("--ui <legacy|plain-modern|rich|system24|green-rain|neon-grid>", "Chat UI renderer (legacy | plain-modern | rich | system24 | green-rain | neon-grid)")
-    .option("--brand <omk|minimal|plain|green-rain|neon-grid>", "Chat branding (omk | minimal | plain | green-rain | neon-grid)", "omk")
+    .option("--ui <legacy|plain-modern|rich|system24|green-rain|neon-grid|rust-forge>", "Chat UI renderer (legacy | plain-modern | rich | system24 | green-rain | neon-grid | rust-forge)")
+    .option("--brand <omk|minimal|plain|green-rain|neon-grid|rust-forge>", "Chat branding (omk | minimal | plain | green-rain | neon-grid | rust-forge)", "omk")
     .option("--mode <agent|plan|chat|debugging|review>", "OMK execution mode")
     .option("--cockpit-refresh <ms>", "Cockpit refresh interval in milliseconds", "2000")
     .option("--cockpit-redraw <diff|full|append>", "Cockpit redraw mode", "diff")
     .option("--cockpit-history <off|static|watch>", "Cockpit history pane mode", "static")
     .option("--cockpit-side-width <percent>", "Cockpit side pane width percentage (default: auto, about 45-50%)")
-    .option("--cockpit-height <rows>", "Cockpit fixed height in rows (default: auto)")
+    .option("--cockpit-height <rows>", "Cockpit height override in rows (watch default: auto-fit pane)")
     .option("--smoke", "Run chat startup preflight and runtime MCP merge checks without launching Kimi")
     .option("--json", "With --smoke, output machine-readable JSON")
     .action(async (options) => {
@@ -422,7 +383,7 @@ export function registerBasicCommands(program: Command): void {
     .option("-w, --watch", t("cmd.cockpitWatchOption"))
     .option("--refresh <ms>", t("cmd.cockpitRefreshOption"), "1500")
     .option("--redraw <diff|full|append>", "Redraw mode", "diff")
-    .option("--height <rows>", "Cockpit fixed height in rows", "18")
+    .option("--height <rows>", "Cockpit height in rows (watch default: auto-fit pane; one-shot default: auto)")
     .option("--section <agents|todos|mcp|all>", "Cockpit section to render", "all")
     .option("--events <on|off>", "Use events.jsonl telemetry when available", "on")
     .option("--no-clear", "Do not clear screen between refreshes")
@@ -448,7 +409,7 @@ export function registerBasicCommands(program: Command): void {
     .option("-w, --watch", t("cmd.cockpitWatchOption"))
     .option("--refresh <ms>", t("cmd.cockpitRefreshOption"), "1500")
     .option("--redraw <diff|full|append>", "Redraw mode", "diff")
-    .option("--height <rows>", "Cockpit fixed height in rows", "18")
+    .option("--height <rows>", "Cockpit height in rows (watch default: auto-fit pane; one-shot default: auto)")
     .option("--section <agents|todos|mcp|all>", "Cockpit section to render", "all")
     .option("--events <on|off>", "Use events.jsonl telemetry when available", "on")
     .option("--no-clear", "Do not clear screen between refreshes")

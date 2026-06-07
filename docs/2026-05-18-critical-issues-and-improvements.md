@@ -2,7 +2,7 @@
 
 ## Scope
 
-분석 범위는 현재 `/home/yu/oh-my-kimi` working tree 전체다. 병렬 subagent fan-out으로 architecture, source archaeology, security, infra/release, QA/test, docs 방향성을 분리 검토했고, 로컬에서 핵심 파일을 추가 확인했다.
+분석 범위는 현재 `open-multi-agent-kit` working tree 전체다. 병렬 subagent fan-out으로 architecture, source archaeology, security, infra/release, QA/test, docs 방향성을 분리 검토했고, 로컬에서 핵심 파일을 추가 확인했다.
 
 주의:
 

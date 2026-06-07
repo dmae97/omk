@@ -1,12 +1,14 @@
-import { pathExists, collectMcpConfigs, getKimiSkillsDir, getUserHome } from "../../util/fs.js";
+import { pathExists, collectMcpConfigs, getProjectRoot, getUserHome } from "../../util/fs.js";
 import { style } from "../../util/theme.js";
 import { OMK_MATRIX_ASCII_ART } from "../../brand/omk-matrix-art.js";
+import { OMK_SIMPLE_ASCII_ART } from "../../brand/omk-simple-art.js";
 import { renderMatrixRain } from "../../brand/matrix-rain.js";
 import { dirname, join, isAbsolute } from "path";
 import type { TodoItem } from "../../util/todo-sync.js";
 import { readFile, readdir } from "fs/promises";
 import YAML from "yaml";
 import { t } from "../../util/i18n.js";
+import { getActiveRuntimePreset } from "../../util/resource-profile.js";
 
 export function mergeTodos(existing: TodoItem[], incoming: TodoItem[]): TodoItem[] {
   const map = new Map<string, TodoItem>();
@@ -50,12 +52,16 @@ export function formatResourceCount(count: number, scope: string): string {
 }
 
 export type ChatLayout = "auto" | "tmux" | "inline" | "plain";
-export type ChatBrand = "omk" | "minimal" | "plain" | "kimicat" | "green-rain" | "neon-grid";
-export type ChatUi = "legacy" | "plain-modern" | "rich" | "system24" | "green-rain" | "neon-grid";
+export type ChatBrand = "omk" | "minimal" | "plain" | "green-rain" | "neon-grid" | "rust-forge";
+export type ChatUi = "legacy" | "plain-modern" | "rich" | "system24" | "green-rain" | "neon-grid" | "rust-forge";
 
 export function resolveLayout(requested: ChatLayout | undefined): ChatLayout {
   if (requested && requested !== "auto") return requested;
   return "inline";
+}
+export function defaultChatUiForBrand(brand: ChatBrand | undefined): ChatUi | undefined {
+  if (brand === "green-rain" || brand === "neon-grid" || brand === "rust-forge") return brand;
+  return undefined;
 }
 
 export function resolveChatUi(requested: string | undefined, env: NodeJS.ProcessEnv = process.env): ChatUi {
@@ -65,7 +71,8 @@ export function resolveChatUi(requested: string | undefined, env: NodeJS.Process
   if (normalized === "rich") return "rich";
   if (normalized === "system24" || normalized === "s24") return "system24";
   if (normalized === "green-rain" || normalized === "green" || normalized === "matrix" || normalized === "rain") return "green-rain";
-  if (normalized === "neon-grid" || normalized === "neon" || normalized === "grid" || normalized === "control" || normalized === "omk-control") return "neon-grid";
+  if (normalized === "neon-grid" || normalized === "neon" || normalized === "grid" || normalized === "control" || normalized === "omk-control" || normalized === "night-city" || normalized === "metrics-control") return "neon-grid";
+  if (normalized === "rust-forge" || normalized === "rust" || normalized === "cargo" || normalized === "oxide" || normalized === "forge") return "rust-forge";
   return "legacy";
 }
 
@@ -83,9 +90,9 @@ export function renderChatIntro(
 ): string {
   const titleKey: Record<ChatBrand, string> = {
     omk: "chat.intro.omk",
-    kimicat: "chat.intro.omk",
     "green-rain": "chat.intro.greenRain",
     "neon-grid": "chat.intro.neonGrid",
+    "rust-forge": "chat.intro.rustForge",
     minimal: "chat.intro.minimal",
     plain: "chat.intro.plain",
   };
@@ -102,10 +109,18 @@ export function renderChatIntro(
       lines.push(style.phosphor(artLine));
     }
     lines.push("");
+  } else if (brand === "rust-forge") {
+    lines.push(style.rustBold("▣ OMK//RUST-FORGE"));
+    lines.push(style.gray("  CARGO SAFETY ONLINE"));
+    lines.push(style.gray("  Native: hot · Verify: armed · Loop: controlled."));
+    for (const artLine of OMK_SIMPLE_ASCII_ART.split("\n")) {
+      lines.push(style.rust(artLine));
+    }
+    lines.push("");
   } else if (brand !== "plain") {
-    lines.push(style.phosphorBold("◇ OMK//CONTROL"));
-    lines.push(style.gray("  NEON GRID ONLINE"));
-    lines.push(style.gray("  Route agents. Verify evidence. Control the loop."));
+    lines.push(style.phosphorBold("◇ PI+OMK//CONTROL"));
+    lines.push(style.gray("  PI+OMK ONLINE"));
+    lines.push(style.gray("  Route: online · Verify: armed · Loop: controlled."));
     lines.push("");
   }
   lines.push(style.phosphorBold(`▸ ${title}`));
@@ -163,16 +178,16 @@ export async function getActiveMcpNames(scope: "all" | "project" | "none"): Prom
       }
     })
   );
-  return [...new Set(results.flat())];
+  return [...new Set(["omk-project", ...results.flat()])];
 }
 
 export async function getActiveSkillNames(skillsScope: "all" | "project" | "none"): Promise<string[]> {
   if (skillsScope === "none") return [];
   const dirs: string[] = [];
-  const projectDir = getKimiSkillsDir();
+  const projectDir = join(getProjectRoot(), ".agents", "skills");
   if (await pathExists(projectDir)) dirs.push(projectDir);
   if (skillsScope === "all") {
-    const globalDir = join(getUserHome(), ".kimi", "skills");
+    const globalDir = join(getUserHome(), ".agents", "skills");
     if (await pathExists(globalDir)) dirs.push(globalDir);
   }
   const results = await Promise.all(
@@ -185,13 +200,20 @@ export async function getActiveSkillNames(skillsScope: "all" | "project" | "none
       }
     })
   );
-  return [...new Set(results.flat())];
+  const discovered = [...new Set(results.flat())];
+  if (skillsScope === "all") return discovered;
+  const activePreset = await getActiveRuntimePreset();
+  return activePreset ? discovered.filter((name) => activePreset.skills.includes(name)) : discovered;
 }
 
-export async function getActiveHookNames(root: string): Promise<string[]> {
+export async function getActiveHookNames(root: string, hooksScope: "all" | "project" | "none"): Promise<string[]> {
+  if (hooksScope === "none") return [];
   try {
     const { discoverRoutingInventory } = await import("../../orchestration/routing/inventory.js");
-    return [...discoverRoutingInventory(root).hooks.keys()];
+    const discovered = [...discoverRoutingInventory(root).hooks.keys()];
+    if (hooksScope === "all") return discovered;
+    const activePreset = await getActiveRuntimePreset();
+    return activePreset ? discovered.filter((name) => activePreset.hooks.includes(name)) : discovered;
   } catch {
     return [];
   }

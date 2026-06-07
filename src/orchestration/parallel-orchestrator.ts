@@ -157,6 +157,13 @@ export function buildParallelWorkerEnv(
   return workerEnv;
 }
 
+function formatWorkerError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack ?? error.message;
+  }
+  return String(error);
+}
+
 export class ParallelOrchestrator {
   private dag: Dag;
   private runId: string;
@@ -303,9 +310,13 @@ export class ParallelOrchestrator {
   private async executeLoop(): Promise<void> {
     while (!this.isComplete() && !this.isAborted()) {
       // 다음 실행 가능한 배치 찾기
-      const batch = getNextExecutableBatch(this.executionPlan, this.completedNodes);
+      const batch = getNextExecutableBatch(this.executionPlan, this.completedNodes, this.terminalNodes());
 
       if (!batch) {
+        if (this.activeWorkers.size === 0) {
+          this.logStreamer.log("error", "No executable nodes remain; stopping orchestration to avoid a stalled run");
+          break;
+        }
         // 실행할 배치가 없으면 대기
         await this.waitForCompletion();
         continue;
@@ -479,7 +490,7 @@ export class ParallelOrchestrator {
       // 활성 워커 목록에서 제거
       this.activeWorkers.delete(workerNode.id);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatWorkerError(error);
       logHandle.log("error", `Worker failed: ${message}`);
 
       // 실패 처리
@@ -618,6 +629,10 @@ export class ParallelOrchestrator {
     const completedOrFailed = this.completedNodes.size + this.failedNodes.size;
 
     return completedOrFailed >= totalNodes;
+  }
+
+  private terminalNodes(): Set<string> {
+    return new Set([...this.completedNodes, ...this.failedNodes]);
   }
 
   /**

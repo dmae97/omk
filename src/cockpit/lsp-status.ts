@@ -13,6 +13,16 @@ export async function getLspStatus(root: string): Promise<LspStatusEntry[]> {
     try {
       const raw = await readFile(lspConfigPath, "utf-8");
       const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const config = parsed as { enabled?: unknown; servers?: Record<string, unknown> };
+        if (config.servers && typeof config.servers === "object") {
+          const enabled = config.enabled !== false;
+          return Object.keys(config.servers).map((name) => ({
+            name,
+            status: enabled ? "connected" : "disabled",
+          }));
+        }
+      }
       if (Array.isArray(parsed)) {
         return parsed
           .map((item): LspStatusEntry | null => {
@@ -32,6 +42,14 @@ export async function getLspStatus(root: string): Promise<LspStatusEntry[]> {
   const entries: LspStatusEntry[] = [];
   if (await pathExists(join(root, "tsconfig.json"))) {
     entries.push({ name: "typescript", status: "disabled" });
+  }
+  if (
+    await pathExists(join(root, "pyproject.toml"))
+    || await pathExists(join(root, "requirements.txt"))
+    || await pathExists(join(root, "uv.lock"))
+    || await pathExists(join(root, "setup.py"))
+  ) {
+    entries.push({ name: "python", status: "disabled" });
   }
   return entries;
 }

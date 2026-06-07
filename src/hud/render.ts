@@ -21,6 +21,7 @@ import {
 } from "../util/run-view-model.js";
 import type { HudTheme } from "./types.js";
 import { hudTheme } from "../util/theme.js";
+import { renderWorkingIndicator, type WorkingPhase, type WorkingSpinner } from "../theme/working-indicator.js";
 
 import { loadTodos, type TodoItem } from "../util/todo-sync.js";
 import { readSessionMeta, type SessionMeta } from "../util/session.js";
@@ -59,6 +60,10 @@ export interface HudRenderOptions {
   showUptime?: boolean;
   systemRefreshMs?: number;
   thinking?: import("./types.js").HudThinkingEntry[];
+  /** Current working phase for gradient-animated status line */
+  workingPhase?: import("../theme/working-indicator.js").WorkingPhase | null;
+  /** Spinner animation type (defaults to "braille") */
+  workingSpinner?: import("../theme/working-indicator.js").WorkingSpinner;
 }
 
 export interface HudCommandOptions extends HudRenderOptions {
@@ -344,15 +349,22 @@ function buildStateErrorPanel(
   return theme.panel(lines, "ROUTE WARNING");
 }
 
-function renderNeonControlHeader(runId: string): string {
+function renderNeonControlHeader(runId: string, workingPhase?: WorkingPhase | null, workingSpinner?: WorkingSpinner): string {
   const runLabel = theme.style.gray(`run ${truncateText(runId, 28)}`);
-  return [
+  const workingLine = workingPhase
+    ? renderWorkingIndicator(workingPhase, workingSpinner ?? "braille")
+    : "";
+  const parts = [
     "",
     theme.style.phosphor("OMK//HUD") + "  " + runLabel,
     theme.style.gray("NEON GRID ONLINE"),
     theme.style.gray("Route agents. Verify evidence. Control the loop."),
-    "",
-  ].join("\n");
+  ];
+  if (workingLine) {
+    parts.push(workingLine);
+  }
+  parts.push("");
+  return parts.join("\n");
 }
 
 export function buildHudSidebar(
@@ -985,7 +997,7 @@ function buildHudHeader(
 ): string {
   const width = options.terminalWidth ?? defaultHudTerminalWidth();
   const lines: string[] = [];
-  lines.push(renderNeonControlHeader(options.runId ?? "omk"));
+  lines.push(renderNeonControlHeader(options.runId ?? "omk", options.workingPhase, options.workingSpinner));
   lines.push(buildSummaryBar(vm, stateError, goalTitle, width - 4));
   lines.push("");
   return lines.join("\n");

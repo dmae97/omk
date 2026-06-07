@@ -1,8 +1,8 @@
 /**
- * KimiPrintRuntime — wraps createKimiTaskRunner (kimi --print via execa).
+ * KimiPrintRuntime — legacy compatibility adapter for kimi --print.
  *
- * This is the active runtime used for DAG node execution.
- * Builds prompt from ContextCapsule and delegates to existing runner.
+ * Provider-neutral OMK paths do not register this runtime. It is available only
+ * when an explicit legacy fallback chain requests a Kimi CLI adapter.
  */
 
 import type { AgentRuntime, AgentRunResult } from "./agent-runtime.js";

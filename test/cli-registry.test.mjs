@@ -81,6 +81,7 @@ test("sliced CLI registry preserves ordered top-level commands", () => {
     "provider",
     "deepseek",
     "model",
+    "think",
     "deepseekset",
     "codex",
     "openai",

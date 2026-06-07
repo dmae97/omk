@@ -36,7 +36,7 @@ const SERVER_NAME = "filesystem-readonly";
 const SERVER_VERSION = getOmkVersionSync();
 const MAX_READ_BYTES = 256_000;
 const MAX_SEARCH_RESULTS = 200;
-const SKIP_DIRS = new Set([".git", "node_modules", "dist", ".omk/cache", ".", ".."]);
+const SKIP_DIRS = new Set([".git", "node_modules", "dist", ".omk/cache", ".pi", ".", ".."]);
 
 /** Secret-bearing file patterns that must not be read even if inside the project root. */
 const SECRET_SUFFIXES = [".pem", ".key", ".p12", ".pfx", ".crt", ".cer", ".der"];
@@ -44,10 +44,11 @@ const SECRET_BASENAMES = new Set([
   "id_rsa", "id_rsa.pub", "id_ed25519", "id_ed25519.pub", "id_ecdsa", "id_ecdsa.pub",
   "id_dsa", "id_dsa.pub", "known_hosts", "authorized_keys",
   "credentials.json", "service-account.json", "service-account-key.json",
+  "auth.json", "oauth.json", "session.json", "tokens.json",
   ".npmrc", ".pypirc", ".netrc", ".dockercfg", ".git-credentials",
   "token", "tokens", "secret", "secrets", "password", "passwords",
 ]);
-const SECRET_DIR_PATTERNS = [".omk/cache", ".kimi", ".ssh", ".aws", ".kube"];
+const SECRET_DIR_PATTERNS = [".omk/cache", ".pi", ".kimi", ".codex", ".ssh", ".aws", ".kube"];
 
 function isSecretPath(relPath: string): boolean {
   const normalized = relPath.replace(/\\/g, "/").toLowerCase();

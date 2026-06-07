@@ -34,7 +34,7 @@ import {
   classifyKimiProviderFailure,
   formatKimiProviderFailureHint,
   type KimiProviderFailureDiagnosis,
-} from "../kimi/runner.js";
+} from "./kimi-provider-failure.js";
 
 export interface ProviderTaskRunnerOptions {
   kimiRunner: TaskRunner;
@@ -380,7 +380,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
             provider: "deepseek",
             requestedProvider: "deepseek",
             decision,
-            reason: `${fallbackReason || "DeepSeek provider failed"}; Kimi CLI fallback disabled by provider-neutral policy`,
+            reason: `${fallbackReason || "DeepSeek provider failed"}; legacy CLI fallback disabled by provider-neutral policy`,
             failureKind,
             attempts: failures.length,
             traceMetadata,
@@ -481,7 +481,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
               provider: decision.provider,
               requestedProvider: decision.provider,
               decision,
-              reason: `${fallbackReason}; Kimi CLI fallback disabled by provider-neutral policy`,
+              reason: `${fallbackReason}; legacy CLI fallback disabled by provider-neutral policy`,
               failureKind: "availability",
               attempts: 1,
               traceMetadata,
@@ -529,7 +529,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           provider: decision.provider,
           requestedProvider: decision.provider,
           decision,
-          reason: `${providerDisplayName(decision.provider)} runner unavailable; Kimi CLI fallback disabled by provider-neutral policy`,
+          reason: `${providerDisplayName(decision.provider)} runner unavailable; legacy CLI fallback disabled by provider-neutral policy`,
           failureKind: "availability",
           attempts: 0,
           traceMetadata,
@@ -538,7 +538,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
             success: false,
             exitCode: 1,
             stdout: "",
-            stderr: `${providerDisplayName(decision.provider)} runner unavailable; Kimi CLI fallback disabled by provider-neutral policy`,
+            stderr: `${providerDisplayName(decision.provider)} runner unavailable; legacy CLI fallback disabled by provider-neutral policy`,
           },
         });
       }
@@ -847,7 +847,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
           provider: decision.provider,
           requestedProvider: decision.provider,
           decision,
-          reason: `${providerDisplayName(decision.provider)} selected, but no provider runner is available and Kimi CLI fallback is disabled by provider-neutral policy`,
+          reason: `${providerDisplayName(decision.provider)} selected, but no provider runner is available and legacy CLI fallback is disabled by provider-neutral policy`,
           failureKind: "availability",
           attempts: 0,
           traceMetadata,
@@ -856,7 +856,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
             success: false,
             exitCode: 1,
             stdout: "",
-            stderr: `${providerDisplayName(decision.provider)} selected, but no provider runner is available and Kimi CLI fallback is disabled by provider-neutral policy`,
+            stderr: `${providerDisplayName(decision.provider)} selected, but no provider runner is available and legacy CLI fallback is disabled by provider-neutral policy`,
           },
         });
       }

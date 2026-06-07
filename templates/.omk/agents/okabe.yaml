@@ -2,7 +2,7 @@ version: 1
 agent:
   extend: default
   name: omk-okabe-base
-  # Kimi requires an explicit non-empty tools list for custom --agent-file configs.
+  # Provider adapters may require an explicit non-empty tools list for custom --agent-file configs.
   # Keep the full OMK native tool surface, including Agent for parallel subagents
   # and SendDMail for Okabe checkpoints; MCP/skills/hooks are injected by runtime config.
   tools:

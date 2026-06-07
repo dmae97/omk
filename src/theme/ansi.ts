@@ -3,15 +3,23 @@
  * Extracted from util/theme.ts to break God Module coupling
  */
 
-export const colorEnabled = process.env.FORCE_COLOR === "1"
-  || process.env.FORCE_COLOR === "true"
-  || (
-    process.env.NO_COLOR === undefined
-    && process.env.TERM !== "dumb"
-    && Boolean(process.stdout.isTTY)
-  );
+export function isColorEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+  stream: Pick<NodeJS.WriteStream, "isTTY"> = process.stdout,
+): boolean {
+  if (env.NO_COLOR !== undefined || env.TERM === "dumb") return false;
+  if (env.FORCE_COLOR === "1" || env.FORCE_COLOR === "true") return true;
+  return Boolean(stream.isTTY);
+}
 
-export const esc = (codes: string) => colorEnabled ? `\x1b[${codes}m` : "";
+/** Backward-compatible snapshot; new ANSI rendering paths call isColorEnabled() dynamically. */
+export const colorEnabled = isColorEnabled();
+
+function isSafeAnsiCode(codes: string): boolean {
+  return /^[0-9;]{1,48}$/.test(codes);
+}
+
+export const esc = (codes: string) => isColorEnabled() && isSafeAnsiCode(codes) ? `\x1b[${codes}m` : "";
 export const rgb = (r: number, g: number, b: number) => `38;2;${r};${g};${b}`;
 export const bgRgb = (r: number, g: number, b: number) => `48;2;${r};${g};${b}`;
 

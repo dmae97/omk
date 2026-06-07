@@ -2,8 +2,9 @@ use std::env;
 use std::process;
 
 use omk_safety::{
-    SafetyError, resolve_run_artifact_path, run_self_test, sanitize_run_id, validate_artifact_path,
-    validate_run_artifact, validate_run_id,
+    SafetyError, omk_theme_ascii_json, omk_theme_glyphs_json, omk_theme_list_json,
+    omk_theme_snapshot_json, resolve_run_artifact_path, run_self_test, sanitize_run_id,
+    validate_artifact_path, validate_run_artifact, validate_run_id,
 };
 
 fn json_escape(value: &str) -> String {
@@ -54,7 +55,7 @@ fn print_self_test_ok(checks: usize) {
 
 fn usage() -> ! {
     eprintln!(
-        "Usage: omk-safety <self-test|validate-run-id|sanitize-run-id|validate-artifact-path|validate-run-artifact|resolve-run-artifact> <args...>"
+        "Usage: omk-safety <self-test|theme-snapshot|theme-list|theme-ascii|theme-glyphs|validate-run-id|sanitize-run-id|validate-artifact-path|validate-run-artifact|resolve-run-artifact> <args...>"
     );
     process::exit(2);
 }
@@ -79,6 +80,18 @@ fn main() {
             Ok(checks) => print_self_test_ok(checks),
             Err(err) => exit_err(err),
         },
+        "theme-snapshot" => {
+            println!("{}", omk_theme_snapshot_json());
+        }
+        "theme-list" => {
+            println!("{}", omk_theme_list_json());
+        }
+        "theme-ascii" => {
+            println!("{}", omk_theme_ascii_json());
+        }
+        "theme-glyphs" => {
+            println!("{}", omk_theme_glyphs_json());
+        }
         "validate-run-id" => {
             let value = next_arg(&mut args);
             match validate_run_id(&value) {

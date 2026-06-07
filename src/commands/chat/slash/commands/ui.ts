@@ -27,13 +27,13 @@ export function buildUiSlashCommands(): SlashCommandSpec[] {
       aliases: [":theme"],
       group: "ui",
       summary: "Set session theme",
-      usage: "/theme <system24|green-rain|neon-grid|plain|high-contrast>",
-      examples: ["/theme green-rain"],
+      usage: "/theme <system24|green-rain|neon-grid|rust-forge|plain|high-contrast>",
+      examples: ["/theme green-rain", "/theme rust"],
       handler: (_ctx, args) => {
         const requested = args.positional[0];
         const theme = normalizeTheme(requested);
         if (!theme) {
-          return okSlashResult({ text: style.phosphorDim("\n  Usage: /theme system24|green-rain|neon-grid|plain|high-contrast\n") });
+          return okSlashResult({ text: style.phosphorDim("\n  Usage: /theme system24|green-rain|neon-grid|rust-forge|plain|high-contrast\n") });
         }
         return okSlashResult({
           statePatch: { theme },
@@ -86,7 +86,8 @@ function normalizeTheme(value: string | undefined): OmkBrandThemeName | undefine
   const normalized = value?.trim().toLowerCase();
   if (normalized === "green" || normalized === "rain") return "green-rain";
   if (normalized === "neon" || normalized === "grid" || normalized === "control" || normalized === "omk-control") return "neon-grid";
-  if (normalized === "system24" || normalized === "green-rain" || normalized === "neon-grid" || normalized === "plain" || normalized === "high-contrast") {
+  if (normalized === "rust" || normalized === "cargo" || normalized === "oxide" || normalized === "forge") return "rust-forge";
+  if (normalized === "system24" || normalized === "green-rain" || normalized === "neon-grid" || normalized === "rust-forge" || normalized === "plain" || normalized === "high-contrast") {
     return normalized;
   }
   return undefined;

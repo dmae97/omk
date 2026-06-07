@@ -1,7 +1,7 @@
 import { readProviderDefaults, readProviderRegistry, normalizeProviderId, type ProviderRegistryEntry } from "../providers/model-registry.js";
 import type { ProviderId } from "../providers/types.js";
 import { DEFAULT_AUTHORITY_PROVIDER } from "../providers/types.js";
-import { checkCommand, resolveKimiBin } from "../util/shell.js";
+import { checkCommand } from "../util/shell.js";
 import { style, box } from "../util/theme.js";
 
 export interface AuthCommandOptions {
@@ -162,7 +162,6 @@ function renderAuthCenter(report: AuthCenterReport, options: AuthCommandOptions)
 }
 
 function commandForProvider(provider: ProviderId, env: NodeJS.ProcessEnv): string | undefined {
-  if (provider === "kimi") return resolveKimiBin(env);
   if (provider === "codex") return env.CODEX_BIN ?? "codex";
   if (provider === "opencode") return env.OPENCODE_BIN ?? "opencode";
   if (provider === "commandcode") return env.COMMANDCODE_BIN ?? "commandcode";
@@ -170,7 +169,7 @@ function commandForProvider(provider: ProviderId, env: NodeJS.ProcessEnv): strin
 }
 
 function runtimeName(entry: ProviderRegistryEntry): string {
-  if (entry.id === "kimi") return "kimi-print";
+  if (entry.id === "kimi") return "kimi-api";
   if (entry.id === "codex") return "codex-cli";
   if (entry.id === "deepseek") return "deepseek-api";
   if (entry.id === "openrouter") return "openrouter-api";
@@ -199,7 +198,7 @@ function setupActions(entry: ProviderRegistryEntry): string[] {
       `omk provider doctor ${entry.id} --soft`,
     ];
   }
-  if (entry.id === "kimi") return ["npm install -g @anthropic-ai/kimi-code", "kimi login"];
+  if (entry.id === "kimi") return ["export KIMI_API_KEY=...", "omk provider doctor kimi --soft", "Optional: set KIMI_MODEL=..."];
   if (entry.id === "codex") return ["npm install -g @openai/codex", "codex login"];
   if (entry.id === "opencode") return ["cargo install opencode", "opencode login"];
   if (entry.id === "commandcode") return ["npm install -g commandcode", "commandcode login"];

@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const { renderCockpit, visibleTerminalWidth } = await import("../dist/commands/cockpit.js");
+const { CockpitRenderer, renderCockpit, visibleTerminalWidth } = await import("../dist/commands/cockpit.js");
 
 function stripAnsi(str) {
   return str.replace(/\x1b\[[0-9;]*m/g, "");
@@ -25,7 +25,8 @@ describe("renderCockpit", () => {
   it("returns a string with default placeholder run", async () => {
     const output = await renderCockpit({ terminalWidth: 80, quick: true });
     assert.strictEqual(typeof output, "string");
-    assert.ok(output.includes("OMK Cockpit"), "should contain header");
+    assert.ok(output.includes("OMK//CONTROL COCKPIT"), "should contain themed OMK control header");
+    assert.ok(output.includes("NEON GRID"), "should contain neon-grid theme copy");
     assert.ok(output.includes("run"), "should contain run id placeholder");
   });
 
@@ -94,6 +95,36 @@ describe("renderCockpit", () => {
     }
   });
 
+  it("watch renderer pins to a fixed fallback height when pane rows are unavailable", () => {
+    const originalRows = process.stdout.rows;
+    try {
+      delete process.stdout.rows;
+      const renderer = new CockpitRenderer(1000);
+      assert.strictEqual(renderer.height, 32);
+    } finally {
+      if (originalRows === undefined) {
+        delete process.stdout.rows;
+      } else {
+        process.stdout.rows = originalRows;
+      }
+    }
+  });
+
+  it("watch renderer pins to tmux pane rows when available", () => {
+    const originalRows = process.stdout.rows;
+    try {
+      process.stdout.rows = 20;
+      const renderer = new CockpitRenderer(1000);
+      assert.strictEqual(renderer.height, 20);
+    } finally {
+      if (originalRows === undefined) {
+        delete process.stdout.rows;
+      } else {
+        process.stdout.rows = originalRows;
+      }
+    }
+  });
+
   it("returns exactly 18 lines for height 18 (panel borders + body)", async () => {
     const output = await renderCockpit({ terminalWidth: 80, height: 18, quick: true });
     const lines = countLines(output);
@@ -119,6 +150,22 @@ describe("renderCockpit", () => {
       const output = await renderCockpit({ terminalWidth: 80, quick: true });
       const lines = countLines(output);
       assert.ok(lines <= 20, `auto height should not exceed mocked process.stdout.rows (20), got ${lines}`);
+    } finally {
+      if (originalRows === undefined) {
+        delete process.stdout.rows;
+      } else {
+        process.stdout.rows = originalRows;
+      }
+    }
+  });
+
+  it("clamps fixed height to very short tmux pane rows to avoid scrolling", async () => {
+    const originalRows = process.stdout.rows;
+    process.stdout.rows = 10;
+    try {
+      const output = await renderCockpit({ terminalWidth: 80, height: 18, quick: true });
+      const lines = countLines(output);
+      assert.strictEqual(lines, 10, `fixed height should clamp to pane rows (10), got ${lines}`);
     } finally {
       if (originalRows === undefined) {
         delete process.stdout.rows;

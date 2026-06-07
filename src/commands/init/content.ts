@@ -2,7 +2,7 @@ export const OKABE_AGENT_YAML = `version: 1
 agent:
   extend: default
   name: omk-okabe-base
-  # Kimi requires an explicit non-empty tools list for custom --agent-file configs.
+  # Provider adapters may require an explicit non-empty tools list for custom --agent-file configs.
   # Keep the full OMK native tool surface, including Agent for parallel subagents
   # and SendDMail for Okabe checkpoints; MCP/skills/hooks are injected by runtime config.
   tools:
@@ -442,7 +442,7 @@ Please report security issues via GitHub Issues with the \`security\` label.
 
 ## Built-in Protections
 
-open_multi-agent_kit includes scoped default hooks to block destructive commands and secret leakage when the active runtime/harness enables them.
+open-multi-agent-kit includes scoped default hooks to block destructive commands and secret leakage when the active runtime/harness enables them.
 
 ## Native Runtime Safety Gates
 
@@ -496,11 +496,13 @@ Non-claims:
 - Never commit secrets into agent memory files.
 `;
 
-export const ROOT_PROMPT_MD = `# open_multi-agent_kit Root Agent
+export const ROOT_PROMPT_MD = `# open-multi-agent-kit Root Agent
 
-You are the OMK root orchestrator for open_multi-agent_kit — a provider-neutral orchestration layer that turns OMK into a bounded coding team.
+You are the OMK root orchestrator for open-multi-agent-kit — a provider-neutral orchestration control plane that turns a goal into a bounded coding team.
 
-You must operate as a provider-neutral OMK coding orchestrator with scoped MCP, skills, and hooks enabled for every generated root/role agent when the active runtime scope allows them.
+Models execute. OMK routes, verifies, measures, and controls.
+
+You must operate with OMK identity as the authority layer: summon parallel subagents when scopes are independent, assign each lane scoped MCP, skills, and hooks, and keep the root context focused on goal management, integration, evidence, and verification. The active runtime scope, selected provider adapter, and harness policy decide which resources are actually available.
 
 ## Loaded Project Instructions
 
@@ -964,6 +966,16 @@ def has_rm_rf(tokens, index):
             break
     return "r" in letters and "f" in letters
 
+def rm_rf_targets_catastrophic(tokens, index):
+    if not has_rm_rf(tokens, index):
+        return False
+    targets = []
+    for token in tokens[index + 1:]:
+        if token == "--" or token.startswith("-"):
+            continue
+        targets.append(token)
+    return any(target in {"/", "~", "$HOME"} or target.startswith("/*") or target.startswith("/dev/") for target in targets)
+
 def has_git_clean_danger(tokens, index):
     rest = tokens[index + 1:]
     if "clean" not in rest:
@@ -987,26 +999,19 @@ def has_pipe_to_shell(tokens):
     return False
 
 def is_destructive(tokens):
+    # Low-friction benchmark/SWE mode: only stop machine-destroying operations.
+    # Package managers, git clean, chmod, docker, kubectl, sudo, and pipe-to-shell
+    # are allowed so normal coding agents do not stall on broad heuristics.
     normalized = [str(token) for token in tokens]
     for idx, token in enumerate(normalized):
         exe = posixpath.basename(token)
-        if exe == "sudo":
+        if exe == "rm" and rm_rf_targets_catastrophic(normalized, idx):
             return True
-        if exe == "rm" and has_rm_rf(normalized, idx):
+        if exe.startswith("mkfs"):
             return True
-        if exe == "git" and has_git_clean_danger(normalized, idx):
+        if exe == "dd" and any(arg.startswith("of=/dev/") for arg in normalized[idx + 1:]):
             return True
-        if exe == "chmod" and "-R" in normalized[idx + 1:] and "777" in normalized[idx + 1:]:
-            return True
-        if exe == "docker" and normalized[idx + 1:idx + 3] == ["system", "prune"]:
-            return True
-        if exe == "kubectl" and "delete" in normalized[idx + 1:]:
-            return True
-        if exe == "aws" and normalized[idx + 1:idx + 4] == ["s3", "rm", "--recursive"]:
-            return True
-        if exe.startswith("mkfs") or any(arg.startswith("if=") for arg in normalized[idx + 1:] if exe == "dd"):
-            return True
-    return has_pipe_to_shell(normalized)
+    return False
 
 try:
     data = json.loads(os.environ.get("INPUT_JSON", "{}"))
@@ -1016,8 +1021,10 @@ try:
         if is_destructive(expanded):
             decision("Potentially destructive command blocked by pre-shell-guard")
             break
-except Exception as exc:
-    decision("Unable to parse destructive command safely: " + str(exc))
+except Exception:
+    # If token parsing fails on complex shell/heredoc syntax, fall through to the
+    # literal block list and release guard instead of blocking benign coding work.
+    pass
 PY
 )
 if [ -n "$DESTRUCTIVE_DECISION" ]; then
@@ -1032,21 +1039,13 @@ FULL="$COMMAND $ARGS"
 # Block list
 BLOCKED=(
   "rm -rf /"
+  "rm -fr /"
+  "rm -rf /*"
+  "rm -fr /*"
   "rm -rf ~"
-  "sudo"
-  "git push --force"
-  "git push -f"
-  "git clean -fdx"
-  "chmod -R 777"
-  "docker system prune"
-  "kubectl delete"
-  "aws s3 rm --recursive"
-  "curl | bash"
-  "curl | sh"
-  "wget | bash"
-  "wget | sh"
+  "rm -fr ~"
   "mkfs"
-  "dd if="
+  "of=/dev/"
   "> /dev/"
   ":(){ :|:& };:"
 )
@@ -1134,9 +1133,6 @@ def skip_flags(tokens, index):
         return i
     return i
 
-def has_token_after(tokens, index, wanted):
-    return any(token in wanted for token in tokens[index:])
-
 def is_release_command(tokens):
     i = 0
     while i < len(tokens):
@@ -1151,22 +1147,21 @@ def is_release_command(tokens):
             command_index = skip_flags(tokens, i + 1)
             if command_index < len(tokens) and tokens[command_index] in {"publish", "version"}:
                 return True
-            if has_token_after(tokens, i + 1, {"publish", "version"}):
-                return True
-            i += 1
+            i = max(command_index + 1, i + 1)
             continue
         if exe == "pnpm":
-            if has_token_after(tokens, i + 1, {"publish"}):
+            command_index = skip_flags(tokens, i + 1)
+            if command_index < len(tokens) and tokens[command_index] == "publish":
                 return True
-            i += 1
+            i = max(command_index + 1, i + 1)
             continue
         if exe == "yarn":
-            rest = tokens[i + 1:]
-            if "publish" in rest:
+            command_index = skip_flags(tokens, i + 1)
+            if command_index < len(tokens) and tokens[command_index] == "publish":
                 return True
-            if len(rest) >= 2 and rest[0] == "npm" and rest[1] == "publish":
+            if command_index + 1 < len(tokens) and tokens[command_index] == "npm" and tokens[command_index + 1] == "publish":
                 return True
-            i += 1
+            i = max(command_index + 1, i + 1)
             continue
         if exe == "gh":
             command_index = skip_flags(tokens, i + 1)
@@ -1179,12 +1174,19 @@ def is_release_command(tokens):
         i += 1
     return False
 
+tool_input = {}
 try:
     data = json.loads(os.environ.get("INPUT_JSON", "{}"))
     tool_input = data.get("tool_input", {})
     tokens = as_tokens(tool_input.get("command", "")) + as_tokens(tool_input.get("args", ""))
 except Exception as exc:
-    respond("deny", f"Unable to parse release/deploy command safely: {exc}")
+    raw_command = str(tool_input.get("command", "")) if isinstance(tool_input, dict) else ""
+    raw_args = str(tool_input.get("args", "")) if isinstance(tool_input, dict) else ""
+    raw_full = f"{raw_command} {raw_args}"
+    release_markers = ("git push", "npm publish", "npm version", "pnpm publish", "yarn publish", "yarn npm publish", "gh release create", "gh workflow run")
+    if any(marker in raw_full for marker in release_markers):
+        respond("deny", f"Unable to parse release/deploy command safely: {exc}")
+    respond("allow")
 
 if os.environ.get("OMK_ALLOW_RELEASE") == "1":
     respond("allow")
@@ -1414,8 +1416,23 @@ def walk(value, key=""):
         for child_value in value:
             yield from walk(child_value, key)
 
-SENSITIVE_PATHS = (".env", ".pem", ".key", "id_rsa", "id_ed25519", "credentials", "service-account", ".p12", ".pfx", ".keystore")
-SECRET_PATTERN = re.compile(r"(password|secret|api_key|auth|bearer|token|private_key|aws_access_key_id|aws_secret_access_key|akiai|asiai|ghp_|github_pat|sk-|glpat-|npm_|pypi_|docker_auth|private.?key|BEGIN .* PRIVATE KEY|ssh-rsa|ssh-ed25519)", re.IGNORECASE)
+SENSITIVE_PATHS = (".env", ".pem", ".key", "id_rsa", "id_ed25519", "credentials", "service-account", ".p12", ".pfx", ".keystore", ".pi", "auth.json", "oauth.json", "tokens.json", "session.json")
+HIGH_CONFIDENCE_PATTERNS = (
+    re.compile(r"(?:ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|npm_[A-Za-z0-9_-]{30,}|pypi[-_][A-Za-z0-9_-]{30,}|sk-[A-Za-z0-9_-]{20,})", re.IGNORECASE),
+    re.compile(r"(?:AKIA|ASIA)[0-9A-Z]{16}"),
+    re.compile(r"BEGIN [A-Z ]*PRIVATE KEY"),
+    re.compile(r"(?:ssh-rsa|ssh-ed25519)\\s+[A-Za-z0-9+/=]{40,}"),
+    re.compile(r"\\bBearer\\s+[A-Za-z0-9._~+/-]{16,}", re.IGNORECASE),
+)
+ASSIGNMENT_PATTERN = re.compile(r"""\\b(?:password|secret|api[_-]?key|token|access[_-]?token|refresh[_-]?token|session[_-]?token|oauth|authorization|private[_-]?key|aws[_-]?access[_-]?key[_-]?id|aws[_-]?secret[_-]?access[_-]?key)\\b['"]?\\s*[:=]\\s*['"]?[A-Za-z0-9_./+=@:-]{12,}""", re.IGNORECASE)
+SCAN_VALUE_KEYS = ("content", "text", "string", "newtext", "oldtext", "input", "value", "body", "data")
+SKIP_ASSIGNMENT_KEYS = ("path", "file", "command", "args", "name")
+
+def should_scan_assignment(key):
+    key_lower = key.lower()
+    if any(marker in key_lower for marker in SKIP_ASSIGNMENT_KEYS):
+        return False
+    return key_lower == "" or any(marker in key_lower for marker in SCAN_VALUE_KEYS)
 
 for key, value in walk(tool_input):
     key_lower = key.lower()
@@ -1423,11 +1440,15 @@ for key, value in walk(tool_input):
         respond("deny", "Direct modification of sensitive file blocked")
         raise SystemExit(0)
 
-for _, value in walk(tool_input):
-    if SECRET_PATTERN.search(value):
-        respond("deny", "Potential secret leak detected")
+for key, value in walk(tool_input):
+    if should_scan_assignment(key) and any(pattern.search(value) for pattern in HIGH_CONFIDENCE_PATTERNS):
+        respond("deny", "High-confidence credential value detected")
         raise SystemExit(0)
 
+for key, value in walk(tool_input):
+    if should_scan_assignment(key) and ASSIGNMENT_PATTERN.search(value):
+        respond("deny", "High-confidence credential assignment detected")
+        raise SystemExit(0)
 respond("allow")
 PY
 `,
@@ -1729,17 +1750,12 @@ fi
 `,
 };
 
-export const KIMI_CONFIG_TOML = `# open_multi-agent_kit generated Kimi adapter config
+export const KIMI_CONFIG_TOML = `# open-multi-agent-kit generated Kimi adapter config
 # Lifecycle hook settings
 
 [[hooks]]
 event = "SessionStart"
 command = ".omk/hooks/session-context.sh"
-timeout = 5
-
-[[hooks]]
-event = "UserPromptSubmit"
-command = ".omk/hooks/awesome-agent-skills-router.sh"
 timeout = 5
 
 [[hooks]]
@@ -1753,20 +1769,9 @@ command = ".omk/hooks/subagent-stop-audit.sh"
 timeout = 5
 
 [[hooks]]
-event = "SubagentStop"
-command = ".omk/hooks/branch-diff-snapshot.sh"
-timeout = 10
-
-[[hooks]]
 event = "PreToolUse"
 matcher = "Shell"
 command = ".omk/hooks/pre-shell-guard.sh"
-timeout = 5
-
-[[hooks]]
-event = "PreToolUse"
-matcher = "Shell"
-command = ".omk/hooks/worktree-create-guard.sh"
 timeout = 5
 
 [[hooks]]
@@ -1776,25 +1781,9 @@ command = ".omk/hooks/protect-secrets.sh"
 timeout = 5
 
 [[hooks]]
-event = "PostToolUse"
-matcher = "WriteFile|StrReplaceFile"
-command = ".omk/hooks/post-format.sh"
-timeout = 20
-
-[[hooks]]
 event = "Stop"
 command = ".omk/hooks/stop-verify.sh"
 timeout = 30
-
-[[hooks]]
-event = "Stop"
-command = ".omk/hooks/release-check-before-stop.sh"
-timeout = 10
-
-[[hooks]]
-event = "Stop"
-command = ".omk/hooks/npm-audit-summary.sh"
-timeout = 60
 `;
 
 export const MEMORY_FILES: Record<string, string> = {

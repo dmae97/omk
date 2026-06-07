@@ -3,6 +3,10 @@ import type { DagNode } from "../orchestration/dag.js";
 import { renderPromptDigest } from "../goal/prompt-digest.js";
 import { inferNodeRisk } from "./router.js";
 import type { ProviderId } from "./types.js";
+import {
+  contextPreflightErrorMessage,
+  preflightProviderMessages,
+} from "./context-preflight.js";
 
 export interface OpenAICompatibleRunnerOptions {
   provider: ProviderId;
@@ -13,6 +17,9 @@ export interface OpenAICompatibleRunnerOptions {
   promptPrefix?: string;
   headers?: Record<string, string | undefined>;
   maxTokens?: number;
+  contextWindow?: number;
+  reservedOutputTokens?: number;
+  safetyMarginTokens?: number;
   fetchImpl?: typeof fetch;
 }
 
@@ -53,22 +60,42 @@ export function createOpenAICompatibleReadOnlyTaskRunner(
       const model = env.OMK_PROVIDER_MODEL || options.model;
       currentOnThinking?.(`${options.provider} ${env.OMK_PROVIDER_AUTHORITY ?? "direct"} worker: ${node.name}`);
       try {
+        const messages: ChatMessage[] = [
+          {
+            role: "system",
+            content: [
+              `You are a ${options.provider} read-only/advisory worker inside OMK.`,
+              "OMK and the configured authority provider are the root orchestrator and final authority.",
+              "Do not claim file writes, shell execution, secret access, MCP access, or merge authority.",
+              advisoryMode ? "For this file-affecting node, provide advisory strategy only." : "",
+              "Return concise findings, evidence, risks, and recommended authority-provider follow-up.",
+            ].filter(Boolean).join(" "),
+          },
+          { role: "user", content: buildNodePrompt(node, env, options) },
+        ];
+        const preflight = await preflightProviderMessages(messages, {
+          provider: options.provider,
+          model,
+          contextWindow: options.contextWindow,
+          reservedOutputTokens: options.reservedOutputTokens ?? options.maxTokens ?? 4096,
+          safetyMarginTokens: options.safetyMarginTokens,
+          runId: env.OMK_RUN_ID,
+          nodeId: node.id,
+          projectRoot: env.OMK_PROJECT_ROOT,
+        });
+        if (!preflight.ok) {
+          return {
+            success: false,
+            exitCode: 1,
+            stdout: "",
+            stderr: contextPreflightErrorMessage(preflight.report),
+            metadata: { contextPreflight: preflight.report },
+          };
+        }
         const content = await completeChat({
           ...options,
           model,
-          messages: [
-            {
-              role: "system",
-              content: [
-                `You are a ${options.provider} read-only/advisory worker inside OMK.`,
-                "OMK and the configured authority provider are the root orchestrator and final authority.",
-                "Do not claim file writes, shell execution, secret access, MCP access, or merge authority.",
-                advisoryMode ? "For this file-affecting node, provide advisory strategy only." : "",
-                "Return concise findings, evidence, risks, and recommended authority-provider follow-up.",
-              ].filter(Boolean).join(" "),
-            },
-            { role: "user", content: buildNodePrompt(node, env, options) },
-          ],
+          messages: preflight.messages as ChatMessage[],
           signal,
         });
         return {
@@ -76,6 +103,7 @@ export function createOpenAICompatibleReadOnlyTaskRunner(
           exitCode: 0,
           stdout: `[${node.id}:${node.role}:${options.provider}] ${content}\n`,
           stderr: "",
+          metadata: preflight.report.compacted ? { contextPreflight: preflight.report } : undefined,
         };
       } catch (err) {
         return {

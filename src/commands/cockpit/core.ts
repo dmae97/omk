@@ -44,9 +44,11 @@ export async function cockpitCommand(options: CockpitCommandOptions = {}): Promi
         quick: firstPaint,
         showHistory: renderer.showHistory,
         height: renderer.height,
+        animFrame: renderer.getAnimFrame(),
         section: options.section,
         events: options.events,
         view: options.view,
+        renderer,
       });
 
       if (firstPaint) {

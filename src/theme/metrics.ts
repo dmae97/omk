@@ -49,7 +49,7 @@ export function metricsGradient(text: string): string {
     const r = Math.round(P.metricsCyan.r + (P.metricsViolet.r - P.metricsCyan.r) * t);
     const g = Math.round(P.metricsCyan.g + (P.metricsViolet.g - P.metricsCyan.g) * t);
     const b = Math.round(P.metricsCyan.b + (P.metricsViolet.b - P.metricsCyan.b) * t);
-    result.push(esc("38;2;" + r + ";" + g + ";" + b + "m") + chars[i] + esc("0"));
+    result.push(esc("38;2;" + r + ";" + g + ";" + b) + chars[i] + esc("0"));
   }
   return result.join("");
 }

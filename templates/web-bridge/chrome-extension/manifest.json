@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "OMK Web Bridge",
   "version": "0.1.0",
-  "description": "Local-first read-only page context bridge for oh-my-kimi.",
+  "description": "Local-first read-only page context bridge for open-multi-agent-kit.",
   "permissions": ["activeTab", "scripting", "nativeMessaging"],
   "host_permissions": [],
   "background": {

@@ -1,6 +1,6 @@
 # Kimi Okabe + D-Mail context recovery
 
-oh-my-kimi is Kimi Code-native. Generated root and role agents inherit an Okabe-compatible base agent that keeps the default tools and adds Kimi's `SendDMail` tool.
+open-multi-agent-kit exposes a Kimi adapter lane. Generated root and role agents inherit an Okabe-compatible base agent that keeps the default tools and adds Kimi's `SendDMail` tool.
 
 ## Why it matters
 
@@ -14,7 +14,7 @@ Project-local ontology graph memory is the durable project/session memory layer.
 
 ## Generated agent default
 
-Official Kimi docs expose built-in `okabe` via `kimi --agent okabe`, and note `--agent` / `--agent-file` are mutually exclusive. Because oh-my-kimi uses custom `--agent-file` configs, it ships an `okabe.yaml` base that extends `default` and adds `kimi_cli.tools.dmail:SendDMail`.
+Official Kimi docs expose built-in `okabe` via `kimi --agent okabe`, and note `--agent` / `--agent-file` are mutually exclusive. Because OMK uses custom `--agent-file` configs, it ships an `okabe.yaml` base that extends `default` and adds `kimi_cli.tools.dmail:SendDMail`.
 
 
 Generated `.omk/agents/*.yaml` files use:

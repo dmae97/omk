@@ -1,12 +1,15 @@
+import gradientString from "gradient-string";
 import type { CliUiEvent } from "./event.js";
 import type { CliRenderer } from "./renderer.js";
 import { System24Renderer, type System24RendererStreams } from "./system24-renderer.js";
 import { NEON_GRID_THEME, resolveTuiMotion, shouldUseAnsiColor, type OmkTuiMotion } from "../../brand/theme.js";
+import { renderOmkSparkleText } from "../../ui/omk-sigil.js";
 
 interface WritableStreamLike {
   write(chunk: string): unknown;
   isTTY?: boolean;
   columns?: number;
+  rows?: number;
 }
 
 const ESC = "\x1b[";
@@ -45,6 +48,10 @@ function signalScanline(seed: string, width: number): string {
   return chars.join("").trimEnd();
 }
 
+function gradientLine(text: string, colors: string[], noColor: boolean): string {
+  return noColor ? text : gradientString(colors).multiline(text);
+}
+
 export class NeonGridRenderer implements CliRenderer {
   private readonly base: System24Renderer;
   private readonly err: WritableStreamLike;
@@ -59,6 +66,7 @@ export class NeonGridRenderer implements CliRenderer {
     this.base = new System24Renderer(streams, NEON_GRID_THEME, {
       sessionHeader: "compact",
       noColor: this.noColor,
+      terminalControls: true,
     });
   }
 
@@ -69,6 +77,7 @@ export class NeonGridRenderer implements CliRenderer {
 
   emit(event: CliUiEvent): void {
     if (event.type === "session:start") {
+      this.base.setStickyHeaderPrefixRows(this.neonGridHeaderRows());
       this.renderNeonGridHeader(event);
     }
     this.base.emit(event);
@@ -82,26 +91,34 @@ export class NeonGridRenderer implements CliRenderer {
     this.base.stop();
   }
 
+  private neonGridHeaderRows(): number {
+    const shouldRenderScanline = this.motion !== "off" && this.started && this.err.isTTY !== false;
+    return (shouldRenderScanline ? 1 : 0) + 5;
+  }
+
   private renderNeonGridHeader(event: Extract<CliUiEvent, { type: "session:start" }>): void {
     const width = Math.min(76, Math.max(40, this.err.columns ?? process.stderr.columns ?? 80) - 2);
-    const color = NEON_GRID_THEME.colors.primary;
     const dim = NEON_GRID_THEME.colors.muted;
-    const hot = NEON_GRID_THEME.colors.borderHot;
-    const success = NEON_GRID_THEME.colors.success;
     const run = event.runId ? `run#${event.runId.slice(0, 7)}` : "run#pending";
     const root = event.root ? truncate(event.root, Math.max(12, width - 16)) : "root:unknown";
     const shouldRenderScanline = this.motion !== "off" && this.started && this.err.isTTY !== false;
-    const routeLine = truncate(`${NEON_GRID_THEME.symbols.signal} ${run} · ${event.provider} · ${event.model ?? "auto"}`, width);
-    const statusLine = truncate(`▣ agent grid online · evidence gate armed · runtime protected`, width);
-    const rootLine = truncate(`${NEON_GRID_THEME.symbols.pending} root ${root}`, width);
+    const titleLine = center("◢█ PI+OMK//CONTROL █◣", width);
+    const mottoLine = center(truncate(NEON_GRID_THEME.motto, width), width);
+    const routeLine = truncate(`${NEON_GRID_THEME.symbols.signal} ROUTE ${run} · provider:${event.provider} · model:${event.model ?? "auto"}`, width);
+    const statusLine = truncate(`▣ NEON metrics live · VERIFY armed · SCOPE MCP/skills/hooks · LOOP controlled`, width);
+    const rootLine = truncate(`${NEON_GRID_THEME.symbols.pending} PENDING root ${root}`, width);
 
     if (shouldRenderScanline) {
       line(this.err, `${dim}${signalScanline(event.runId ?? "omk-control", width)}${RST}`, this.noColor);
     }
-    line(this.err, `${hot}${center(NEON_GRID_THEME.label, width)}${RST}`, this.noColor);
-    line(this.err, `${color}${center(NEON_GRID_THEME.motto, width)}${RST}`, this.noColor);
+    line(this.err, renderOmkSparkleText(titleLine, {
+      frame: Math.floor(Date.now() / 80),
+      noColor: this.noColor,
+      colors: ["#00D6FF", "#f4ffff", "#ffd166", "#FF47B2", "#00FFC2"],
+    }), this.noColor);
+    line(this.err, gradientLine(mottoLine, ["#00FFC2", "#00D6FF", "#9D4EDD"], this.noColor), this.noColor);
     line(this.err, `${dim}${routeLine}${RST}`, this.noColor);
-    line(this.err, `${success}${statusLine}${RST}`, this.noColor);
+    line(this.err, gradientLine(statusLine, ["#00FFC2", "#00D6FF", "#FFB000"], this.noColor), this.noColor);
     line(this.err, `${dim}${rootLine}${RST}`, this.noColor);
   }
 }

@@ -1,12 +1,12 @@
 # Provider maturity
 
-This page documents provider status for the current source tree. It is a release-candidate snapshot, not a stability guarantee.
+This page documents provider status for the current source tree.
 
 ## Current source target
 
-- Package version: `1.2.0-rc.0`
+- Package version: `0.78.0`
 - Runtime contract family: `v1.2`
-- Release channel: `rc`
+- Release channel: `pre-1.0`
 
 ## Provider matrix
 

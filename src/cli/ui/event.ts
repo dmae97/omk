@@ -39,6 +39,7 @@ export type CliUiEvent =
       elapsedMs: number;
       provider?: string;
       model?: string;
+      activity?: string;
     }
   | {
       type: "assistant:final";

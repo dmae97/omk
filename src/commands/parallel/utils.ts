@@ -16,6 +16,21 @@ export function normalizeApprovalPolicy(
   return "interactive";
 }
 
+/**
+ * Returns the minimal OMK control block with critical authority ownership instructions.
+ * Used when no rich orchestrationPrompt is available (e.g. direct `omk parallel` calls).
+ */
+export function buildOmkMinimalControlBlock(): string {
+  return [
+    `OMK AUTHORITY & GUARDRAILS:`,
+    `- The configured OMK authority provider is the sole orchestrator, planner, merger, and final synthesis runtime. Never delegate merge, destructive shell, MCP routing, or final synthesis to any other provider.`,
+    `- Merge authority: Only the Authority provider resolves conflicts across parallel worker outputs and produces the final unified evidence.`,
+    `- MCP routing authority: Only the Authority provider assigns MCP servers, skills, and hooks to worker lanes. Workers request resources; they must not self-assign.`,
+    `- Synthesis authority: The Authority provider owns the final summary, verification report, and evidence aggregation. Workers produce scoped outputs; Authority merges.`,
+    `- Destructive operations: Shell commands with write/delete/install side effects must route through the Authority provider approval gate (unless approval policy is auto/yolo with explicit lane-level approval).`,
+  ].join("\n");
+}
+
 export function buildPromptText(
   goal: string,
   runId: string,
@@ -25,7 +40,8 @@ export function buildPromptText(
   intent?: UserIntent,
   intentFrame: IntentFrame = buildIntentFrame(goal),
   memorySummary?: string,
-  executionStrategy: ExecutionStrategy = "parallel"
+  executionStrategy: ExecutionStrategy = "parallel",
+  omkControlBlock?: string
 ): string {
   const taskType = intent?.taskType ?? "general";
   const lines: string[] = [
@@ -130,11 +146,33 @@ export function buildPromptText(
     );
   }
 
+  // Always inject OMK Orchestration Control Block (minimal when no rich prompt is available)
+  const effectiveControlBlock = (omkControlBlock?.trim())
+    ? omkControlBlock.trim()
+    : buildOmkMinimalControlBlock();
+  lines.push(
+    ``,
+    `## OMK Orchestration Control Block`,
+    effectiveControlBlock,
+  );
+
+  lines.push(
+    ``,
+    `PROVIDER FALLBACK:`,
+    `- If a provider (including DeepSeek) becomes unavailable due to rate-limit, payment, or confidence, immediately fall back to the OMK authority provider and continue without blocking the DAG.`,
+    `- Never stall the DAG waiting for a non-authority provider.`,
+  );
+
   lines.push(
     ``,
     `MEMORY RECALL (MANDATORY):`,
     `- Before planning, the coordinator MUST read memory-recall-summary.md and call omk_memory_mindmap or omk_search_memory when more detail is needed.`,
     `- Workers MUST only use skills and MCP servers relevant to their assigned role.`,
+    ``,
+    `MEMORY WRITEBACK (MANDATORY):`,
+    `- After completing DAG nodes, write final decisions to .omk/memory/decisions.md.`,
+    `- Write identified risks and mitigations to .omk/memory/risks.md.`,
+    `- Use omk_write_memory or direct file write for persistence.`,
     ``,
     `SKILLS & MCP USAGE (MANDATORY):`,
     `- Activate relevant skills from the routing hints for each node.`,
@@ -145,6 +183,20 @@ export function buildPromptText(
         : `- MCP scope is all for this run: global and project MCP servers may be available; never expose secrets or raw config.`,
     `- Prefer omk-project MCP tools for checkpoint, memory, and run-state operations when MCP is enabled.`,
     `- Use SearchWeb / FetchURL for external docs, official APIs, or citations.`
+  );
+
+  lines.push(
+    ``,
+    `DEEPSEEK RESTRICTIONS: DeepSeek nodes are read-only advisory. Never assign merge, destructive shell, MCP routing, secret handling, or write authority to DeepSeek workers.`
+  );
+  
+  lines.push(
+    ``, 
+    `CONTINUE ENGINE:`,
+    `- If this is a continuation, synthesize a fresh next prompt from Current Execution Context instead of repeating the goal objective.`,
+    `- Do NOT redo completed work unless the evidence is invalid or stale.`,
+    `- Focus on missing success criteria, failed evidence gates, and the highest-confidence next action.`,
+    `- Re-select worker roles and MCP/skills based on the remaining work.`
   );
 
   return lines.join("\n");
@@ -162,6 +214,7 @@ export function buildDeepSeekPromptPrefix(
     `OMK DeepSeek model-agent worker.`,
     `Initial primary provider orchestration may spawn dedicated DeepSeek Flash/Pro read-only agents; opportunistic routing may also offload low-risk workers.`,
     `Direct mode is read-only. For file-affecting advisory mode, propose patch strategy only; Authority provider owns actual edits, merge authority, and final synthesis.`,
+    `DeepSeek MUST NOT: merge, destructive shell, MCP routing, secret handling, write authority. DeepSeek is READ-ONLY advisory/composition only.`,
     `Do not repeat or restart the user's original goal. Read the current primary provider / goal context below and answer only for the assigned DAG node.`,
     ``,
     `## Current Run Context`,

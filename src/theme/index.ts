@@ -6,6 +6,7 @@
 // ANSI & text utilities
 export {
   colorEnabled,
+  isColorEnabled,
   esc,
   rgb,
   bgRgb,
@@ -32,6 +33,7 @@ export {
   panel,
   sparkleHeader,
   matrixHeader,
+  omkHudHeader,
   stat,
 } from "./layout.js";
 
@@ -51,14 +53,10 @@ export {
   emoji,
   omkStatusChips,
   omkCliHero,
-  kimicatCliHero,
-  kimicatStatusChips,
   omkMetaBox,
-  kimicatMetaBox,
   OmkThemeConfig,
   loadThemeConfig,
   omkBanner,
-  kimicatBanner,
   roleColor,
   parallelStatusBadge,
   workerLabel,
@@ -74,3 +72,12 @@ export { P, hexToRgb, colorFromHex } from "../brand/palette.js";
 
 // HUD Theme contract implementation
 export { hudTheme } from "./hud-theme.js";
+
+// Working indicator — gradient-animated status line
+export {
+  renderWorkingIndicator,
+  renderCompactWorking,
+  renderWorkingPanel,
+  type WorkingPhase,
+  type WorkingSpinner,
+} from "./working-indicator.js";

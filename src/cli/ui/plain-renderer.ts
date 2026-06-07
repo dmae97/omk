@@ -9,9 +9,12 @@ import type { CliRenderer } from "./renderer.js";
 import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
 import { isUnsupportedRuntimeError, renderRouteBlockedPanel } from "./route-blocked-panel.js";
 
+const ESC = "\x1b[";
+
 interface WritableStreamLike {
   write(chunk: string): unknown;
   isTTY?: boolean;
+  rows?: number;
 }
 
 export interface PlainRendererStreams {
@@ -21,6 +24,19 @@ export interface PlainRendererStreams {
 
 function ensureTrailingNewline(text: string): string {
   return text.endsWith("\n") ? text : `${text}\n`;
+}
+
+function termRows(stream: WritableStreamLike): number {
+  const rows = stream.rows ?? process.stderr.rows ?? 24;
+  return Number.isFinite(rows) ? Math.max(10, rows) : 24;
+}
+
+function shouldUseTerminalControls(stream: WritableStreamLike): boolean {
+  return stream.isTTY === true && process.env.TERM !== "dumb";
+}
+
+function countRows(chunk: string): number {
+  return (chunk.match(/\n/g) ?? []).length;
 }
 
 function joinList(values: readonly string[] | undefined): string {
@@ -50,20 +66,30 @@ export class PlainModernRenderer implements CliRenderer {
   private readonly stderr: WritableStreamLike;
   private heartbeatOpen = false;
   private promptOpen = false;
+  private alternateScreenActive = false;
+  private stickyScrollRegionActive = false;
 
   constructor(streams: PlainRendererStreams = {}) {
     this.stdout = streams.stdout ?? process.stdout;
     this.stderr = streams.stderr ?? process.stderr;
   }
 
-  start(): void {}
+  start(): void {
+    this.stickyScrollRegionActive = false;
+    this.alternateScreenActive = shouldUseTerminalControls(this.stderr);
+    if (this.alternateScreenActive) {
+      this.writeStderrControl(`${ESC}?1049h${ESC}2J${ESC}H`);
+    }
+  }
 
   emit(event: CliUiEvent): void {
     switch (event.type) {
       case "session:start": {
         const provider = event.provider === "auto" ? "omk" : event.provider;
         const model = event.model ?? "auto";
-        this.stderr.write(`\nOMK Agent Console\n> ${provider} · ${model}\n\n`);
+        const header = `\nOMK Agent Console\n> ${provider} · ${model}\n\n`;
+        this.stderr.write(header);
+        this.activateStickyScrollRegion(countRows(header));
         break;
       }
       case "input:submitted":
@@ -93,7 +119,9 @@ export class PlainModernRenderer implements CliRenderer {
         break;
       case "turn:heartbeat": {
         const seconds = Math.floor(event.elapsedMs / 1000);
-        const line = `◌ Running ${seconds}s`;
+        const activity = event.activity ?? `routing ${event.provider ?? "auto"} turn`;
+        const truncated = activity.length > 72 ? activity.slice(0, 69) + "..." : activity;
+        const line = `◌ ${truncated} · ${seconds}s`;
         if (this.stderr.isTTY) {
           this.stderr.write(`\r${line}   `);
           this.heartbeatOpen = true;
@@ -138,5 +166,25 @@ export class PlainModernRenderer implements CliRenderer {
   }
 
   setThinkingSummary(_summary: string | undefined): void {}
-  stop(): void {}
+
+  private writeStderrControl(chunk: string): void {
+    this.stderr.write(chunk);
+  }
+
+  private activateStickyScrollRegion(headerRows: number): void {
+    if (!this.alternateScreenActive || this.stickyScrollRegionActive) return;
+    const rows = termRows(this.stderr);
+    const top = Math.min(rows - 1, Math.max(2, headerRows + 1));
+    if (top >= rows) return;
+    this.writeStderrControl(`${ESC}${top};${rows}r${ESC}${top};1H`);
+    this.stickyScrollRegionActive = true;
+  }
+
+  stop(): void {
+    if (this.alternateScreenActive) {
+      this.writeStderrControl(`${ESC}r${ESC}?1049l`);
+      this.alternateScreenActive = false;
+      this.stickyScrollRegionActive = false;
+    }
+  }
 }

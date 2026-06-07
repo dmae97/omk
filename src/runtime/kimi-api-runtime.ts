@@ -186,7 +186,7 @@ export const createKimiWireRuntime = createKimiApiRuntime;
 export class KimiApiRuntime implements AgentRuntime {
   readonly id: string;
   readonly providerId = "kimi";
-  readonly legacy = true;
+  readonly legacy = false;
   readonly runtimeMode = "api";
   readonly kind = "api";
   readonly priority: number;

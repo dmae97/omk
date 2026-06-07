@@ -1,6 +1,6 @@
 ---
 name: omk-global-rules
-description: Global oh-my-kimi operating rules: avoid repeated instructions, use todos, subagents, relevant skills, MCP tools, quality gates, and concise factual reports.
+description: Global open-multi-agent-kit operating rules: avoid repeated instructions, use todos, subagents, relevant skills, MCP tools, quality gates, and concise factual reports.
 ---
 
 ## Rules

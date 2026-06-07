@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository is configured for oh-my-kimi.
+This repository is configured for open-multi-agent-kit.
 
 The agent must avoid making the user repeat common instructions. Apply this file silently and execute the workflow directly.
 
@@ -16,7 +16,7 @@ Keep these surfaces aligned when editing init/runtime docs:
 
 - Init markdown: `AGENTS.md`, `.kimi/AGENTS.md`, `.omk/prompts/root.md`, plus generated companion docs `DESIGN.md`, `GEMINI.md`, `CLAUDE.md`, `ROADMAP.md`, and `SECURITY.md`.
 - Skills: project portable skills live in `.agents/skills`; Kimi runtime skills live in `.kimi/skills`; init templates live under `templates/skills/agents` and `templates/skills/kimi`.
-- Default runtime preset: `.omk/runtime-preset.json` uses `omk-parallel-orchestrator` so agent/non-simple work prefers parallel worker, capability, review, QA, and security lanes; `.omk/runtime-presets.json` keeps `omk-core-verified` as the fallback/baseline preset and also includes `omk-ts-product` for strict TS/React/Next/Nest product work, `omk-worktree-team` for isolated parallel worktree lanes before merge, and `omk-release-guard` for secret/security/release evidence gates with narrowed MCP authority, strong hooks, and no auto-publish authority.
+- Default runtime preset: `.omk/runtime-preset.json` uses `omk-core-verified` as the conservative default for goal-oriented orchestration with project-local MCP, minimal hooks, and only bounded core skills; `.omk/runtime-presets.json` still includes `omk-parallel-orchestrator` as the explicit high-trust mode for parallel worker/capability/review lanes, plus `omk-ts-product`, `omk-worktree-team`, and `omk-release-guard`.
 - MCP: fresh init is project-scoped and writes only local `omk-project` into `.kimi/mcp.json` / `.omk/mcp.json`. `omk init --local-user` or `OMK_MCP_SCOPE=all OMK_SKILLS_SCOPE=all` reads user `~/.kimi/mcp.json` and `~/.kimi/skills` at runtime without copying personal/global files. `--import-user-skills` is a trusted local opt-in copy path.
 - Agents: generated agents extend the Okabe-compatible base with `SendDMail`. Default root aliases are `explorer`/`explore`, `planner`/`plan`, `router`, `architect`, `coder`, `reviewer`, `security`, `qa`, `tester`, `researcher`, `integrator`, `aggregator`, `interviewer`, `ontology`, and `vision-debugger`; each is scaffolded with MCP, skills, and hooks enabled. Use additional local roles such as `coordinator`, `docs`, `merger`, or `release` only when the current `.omk/agents/root.yaml` or harness exposes them.
 - Harness: chat agent mode writes `.omk/runs/<run-id>/chat-agent-harness.json`. Prompts carry compact MCP/skills/hooks counts; read the harness manifest for the full inventory, worker limits, authority boundaries, virtual DAG, and gate list.
@@ -245,13 +245,13 @@ Rules:
 
 ---
 
-## Kimi K2.6 Runtime Policy
+## Provider Runtime Policy
 
-Use Kimi K2.6 as a long-horizon coding and agentic execution model.
+Use the selected provider runtime as a long-horizon coding and agentic execution model, with OMK as the root orchestrator identity and every model/provider treated as an adapter lane. Models execute; OMK routes, verifies, measures, and controls.
 
 Rules:
 
-* Use thinking mode for planning, coding, debugging, architecture, review, and multi-step tool work.
+* Use thinking mode for planning, coding, debugging, architecture, review, and multi-step tool work when the selected runtime supports it.
 * Use no-thinking or fast mode for short summaries, commit messages, simple classification, and web-search-heavy research when configured.
 * Do not rely on long context as an excuse to read the whole repository.
 * Build a repo map first, then read targeted files.
@@ -264,7 +264,7 @@ For web-heavy research, prefer a no-thinking research profile when the runtime s
 
 ## Okabe / D-Mail Policy
 
-This project is Kimi Code-native. Generated agents should inherit the Okabe-compatible base agent so the `SendDMail` tool is available. Use Okabe smart context management plus D-Mail checkpoints before risky refactors, context compaction, multi-agent handoffs, or rollback-prone work. D-Mail notes should be concise recovery records: current goal, changed files, verification state, blockers, and intended next action.
+This project is a provider-neutral agent runtime for coding workflows. Generated agents should inherit the Okabe-compatible base agent so the `SendDMail` tool is available. Use Okabe smart context management plus D-Mail checkpoints before risky refactors, context compaction, multi-agent handoffs, or rollback-prone work. D-Mail notes should be concise recovery records: current goal, changed files, verification state, blockers, and intended next action.
 
 ## Context Policy
 

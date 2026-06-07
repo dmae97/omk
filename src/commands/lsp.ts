@@ -10,10 +10,11 @@ interface LspCommandOptions {
   check?: boolean;
 }
 
-type BundledLspServer = "typescript";
+type BundledLspServer = "typescript" | "python";
 
 const BUNDLED_LSP_BINARIES: Record<BundledLspServer, string> = {
   typescript: "typescript-language-server",
+  python: "pyright-langserver",
 };
 
 function packageRoot(): string {
@@ -30,6 +31,10 @@ export function resolveBundledLspBinary(server: BundledLspServer, root = package
   return existsSync(localBinary) ? localBinary : binary;
 }
 
+function bundledLspArgs(_server: BundledLspServer): string[] {
+  return ["--stdio"];
+}
+
 export async function lspCommand(server: string = "typescript", options: LspCommandOptions = {}): Promise<void> {
   if (options.printConfig) {
     process.stdout.write(defaultLspConfigJson());
@@ -41,7 +46,7 @@ export async function lspCommand(server: string = "typescript", options: LspComm
   }
 
   const command = resolveBundledLspBinary(server);
-  const args = ["--stdio"];
+  const args = bundledLspArgs(server);
 
   if (options.check) {
     console.log(`${server}: ${command}`);
@@ -70,5 +75,5 @@ export async function lspCommand(server: string = "typescript", options: LspComm
 }
 
 function isBundledLspServer(value: string): value is BundledLspServer {
-  return value === "typescript";
+  return value === "typescript" || value === "python";
 }

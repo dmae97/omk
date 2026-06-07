@@ -15,10 +15,10 @@ test("logo image path accepts safe project-relative images", async () => {
 
   try {
     await mkdir(join(projectRoot, ".omk"), { recursive: true });
-    await writeFile(join(projectRoot, "kimicat.png"), Buffer.concat([PNG_HEADER, Buffer.from("tiny")]));
-    await writeFile(join(projectRoot, ".omk", "config.toml"), '[theme]\nlogo_image = "kimicat.png"\n');
+    await writeFile(join(projectRoot, "omk-logo.png"), Buffer.concat([PNG_HEADER, Buffer.from("tiny")]));
+    await writeFile(join(projectRoot, ".omk", "config.toml"), '[theme]\nlogo_image = "omk-logo.png"\n');
 
-    assert.equal(await getOmkLogoImagePath(), join(projectRoot, "kimicat.png"));
+    assert.equal(await getOmkLogoImagePath(), join(projectRoot, "omk-logo.png"));
   } finally {
     if (previousRoot === undefined) {
       delete process.env.OMK_PROJECT_ROOT;
@@ -38,7 +38,7 @@ test("logo image path rejects absolute images unless trusted-local opt-in is set
   delete process.env.OMK_TRUST_ABSOLUTE_LOGO_PATH;
 
   try {
-    const logoPath = join(outsideRoot, "kimicat.png");
+    const logoPath = join(outsideRoot, "omk-logo.png");
     await mkdir(join(projectRoot, ".omk"), { recursive: true });
     await writeFile(logoPath, Buffer.concat([PNG_HEADER, Buffer.from("tiny")]));
     await writeFile(join(projectRoot, ".omk", "config.toml"), `[theme]\nlogo_image = "${logoPath}"\n`);

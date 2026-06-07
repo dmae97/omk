@@ -603,7 +603,7 @@ test("doctor --fix --dry-run emits typed fixPlan without writing safe repairs", 
     assert.equal(report.fixes.fixPlan.dryRun, true);
     assert.equal(report.fixes.fixPlan.changed, false);
     const operations = report.fixes.fixPlan.operations;
-    assert.ok(operations.some((op) => op.id === "runtime-preset-default" && op.status === "planned"));
+    assert.ok(!operations.some((op) => op.id === "runtime-preset-default"));
     assert.ok(operations.some((op) => op.id === "project-config-safe-defaults" && op.status === "planned"));
     assert.ok(operations.some((op) => op.id === "lsp-config" && op.status === "planned"));
     assert.ok(operations.some((op) => op.id === "memory-graph-state" && op.status === "planned"));
@@ -654,10 +654,10 @@ test("doctor --fix repairs safe runtime scaffold and includes post-check summary
     assert.equal(report.fixes.fixPlan.changed, true);
     assert.ok(report.fixes.fixPlan.postCheck);
     assert.ok(report.fixes.fixPlan.postCheck.before.warnings + report.fixes.fixPlan.postCheck.before.errors >= report.fixes.fixPlan.postCheck.after.warnings + report.fixes.fixPlan.postCheck.after.errors);
-    assert.ok(report.fixes.fixPlan.operations.some((op) => op.id === "runtime-preset-default" && op.status === "applied"));
-    assert.ok(report.fixes.actions.some((action) => /repaired \.omk\/runtime-preset\.json/.test(action)));
-    assert.match(await readFile(join(project, ".omk", "runtime-preset.json"), "utf-8"), /omk-parallel-orchestrator/);
-    assert.match(await readFile(join(project, ".omk", "runtime-presets.json"), "utf-8"), /"defaultPresetId": "omk-parallel-orchestrator"/);
+    assert.ok(!report.fixes.fixPlan.operations.some((op) => op.id === "runtime-preset-default"));
+    assert.ok(!report.fixes.actions.some((action) => /repaired \.omk\/runtime-preset\.json/.test(action)));
+    assert.match(await readFile(join(project, ".omk", "runtime-preset.json"), "utf-8"), /omk-core-verified/);
+    assert.match(await readFile(join(project, ".omk", "runtime-presets.json"), "utf-8"), /"defaultPresetId": "omk-core-verified"/);
     const config = await readFile(join(project, ".omk", "config.toml"), "utf-8");
     assert.match(config, /execution_prompt = "ask"/);
     assert.match(config, /mcp_scope = "project"/);
@@ -929,13 +929,32 @@ test("verify --json emits common machine-readable fields for a valid run", async
   const runId = "json-contract-run";
   const runDir = join(cwd, ".omk", "runs", runId);
   await mkdir(runDir, { recursive: true });
+  assert.equal(spawnSync("git", ["init"], { cwd, encoding: "utf-8" }).status, 0);
+  await writeFile(join(cwd, "tracked.txt"), "before\n", "utf-8");
+  assert.equal(spawnSync("git", ["add", "tracked.txt"], { cwd, encoding: "utf-8" }).status, 0);
+  assert.equal(spawnSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=OMK Test", "commit", "-m", "init"], { cwd, encoding: "utf-8" }).status, 0);
+  await writeFile(join(cwd, "tracked.txt"), "after\n", "utf-8");
+  await writeFile(join(cwd, "package.json"), JSON.stringify({ scripts: { test: "node -e \"process.exit(0)\"" } }, null, 2), "utf-8");
+  await writeFile(join(runDir, "events.jsonl"), '{"seq":1,"type":"worker.done"}\n', "utf-8");
+  await writeFile(join(runDir, "summary.md"), "## Summary\n\nDone.\n", "utf-8");
   await writeFile(join(runDir, "state.json"), JSON.stringify({
     schemaVersion: 1,
     runId,
     status: "done",
     startedAt: "2026-05-08T00:00:00.000Z",
     completedAt: "2026-05-08T00:00:01.000Z",
-    nodes: [],
+    nodes: [
+      {
+        id: "worker-1",
+        name: "worker",
+        role: "coder",
+        status: "done",
+        outputs: [
+          { name: "summary", gate: "summary", ref: "## Summary" },
+          { name: "tests", gate: "test-pass", ref: "npm test" },
+        ],
+      },
+    ],
   }), "utf-8");
   const prevCwd = process.cwd();
   const prevProjectRoot = process.env.OMK_PROJECT_ROOT;

@@ -578,8 +578,7 @@ function isLegacyRuntime(runtime: AgentRuntime): boolean {
 }
 
 function legacyRuntimeExplicitlyRequested(runtime: AgentRuntime, policy: LegacyRuntimePolicy): boolean {
-  return policy.preferredProviders.some((provider) => runtimeMatchesProvider(runtime, provider)) ||
-    (policy.fallbackChain ?? []).some((request) => fallbackRequestMatchesRuntime(runtime, request));
+  return (policy.fallbackChain ?? []).some((request) => fallbackRequestMatchesRuntime(runtime, request));
 }
 
 function fallbackRequestMatchesRuntime(runtime: AgentRuntime, request: string): boolean {

@@ -104,6 +104,16 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
       );
     }
 
+    // If the external provider is the authority provider, route to it as authority
+    if (externalProvider === authorityProvider) {
+      return withRouteEnsemble(
+        authorityDecision(`${providerLabel(externalProvider)} is the configured authority provider`, 0.9, undefined, {
+          providerModel: genericProviderModelRef(input, externalProvider, "authority"),
+        }),
+        "authority-provider"
+      );
+    }
+
     if (input.risk === "read" && canUseGenericDirectProvider(role, input)) {
       return withRouteEnsemble(
         genericDirectDecision(

@@ -10,7 +10,7 @@ export interface OmkLspServerConfig {
 export interface OmkLspConfig {
   version: 1;
   enabled: boolean;
-  defaultServer: "typescript";
+  defaultServer: "typescript" | "python";
   servers: Record<string, OmkLspServerConfig>;
 }
 
@@ -26,6 +26,14 @@ export const DEFAULT_LSP_CONFIG: OmkLspConfig = {
       rootPatterns: ["tsconfig.json", "jsconfig.json", "package.json"],
       bundled: true,
       description: "Bundled TypeScript LSP via typescript-language-server --stdio",
+    },
+    python: {
+      command: "omk",
+      args: ["lsp", "python"],
+      languages: ["python"],
+      rootPatterns: ["pyproject.toml", "requirements.txt", "uv.lock", "setup.py"],
+      bundled: true,
+      description: "Bundled Python LSP via pyright-langserver --stdio",
     },
   },
 };

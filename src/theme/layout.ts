@@ -6,6 +6,7 @@
 import { P } from "../brand/palette.js";
 import { esc, rgb, stripAnsi, padEndAnsi, sanitizeTerminalText, visibleTerminalWidth } from "./ansi.js";
 import { style } from "./colors.js";
+import { renderOmkSparkleText } from "../ui/omk-sigil.js";
 
 export function header(text: string): string {
   return [
@@ -53,15 +54,22 @@ export function box(lines: string[], title?: string): string {
   return [top, ...body, bottom].join("\n");
 }
 
-/** Generate Matrix green text */
+/** Generate OMK neon gradient text */
 export function gradient(text: string): string {
   const chars = [...sanitizeTerminalText(text)];
+  const stops = [P.blue, P.purple, P.pink, P.orange, P.mint];
   const result: string[] = [];
   for (let i = 0; i < chars.length; i++) {
     const t = chars.length === 1 ? 0.5 : i / (chars.length - 1);
-    const r = Math.round(0 + (P.matrixGreen.r - 0) * t * 0.7);
-    const g = Math.round(50 + (P.matrixGreen.g - 50) * t);
-    const b = Math.round(0 + (P.matrixGreen.b - 0) * t * 0.7);
+    const segment = t * (stops.length - 1);
+    const startIndex = Math.min(stops.length - 2, Math.floor(segment));
+    const endIndex = Math.min(stops.length - 1, startIndex + 1);
+    const localT = segment - startIndex;
+    const start = stops[startIndex] ?? P.blue;
+    const end = stops[endIndex] ?? P.mint;
+    const r = Math.round(start.r + (end.r - start.r) * localT);
+    const g = Math.round(start.g + (end.g - start.g) * localT);
+    const b = Math.round(start.b + (end.b - start.b) * localT);
     result.push(esc(rgb(r, g, b)) + chars[i] + esc("0"));
   }
   return result.join("");
@@ -106,11 +114,11 @@ export function panel(lines: string[], title?: string): string {
   return [top, ...body, bottom].join("\n");
 }
 
-/** Sparkle header with stars */
+/** Control-room header */
 export function sparkleHeader(text: string): string {
-  const deco = "✨ 💜 ✨";
+  const deco = "◈ ◆ ◈";
   const total = text.length + deco.length + 4;
-  const line = "~".repeat(Math.min(total, 60));
+  const line = "═".repeat(Math.min(total, 60));
   return [
     "",
     style.lightPurple(line),
@@ -122,10 +130,29 @@ export function sparkleHeader(text: string): string {
 
 /** Matrix-style OMK header */
 export function matrixHeader(text: string): string {
+  const safeText = sanitizeTerminalText(text);
   return [
     "",
-    style.phosphorBold(text),
-    style.phosphorDim("═".repeat(Math.min(visibleTerminalWidth(text), 56))),
+    style.phosphorBold(safeText),
+    style.phosphorDim("═".repeat(Math.min(visibleTerminalWidth(safeText), 56))),
+    "",
+  ].join("\n");
+}
+
+/** Compact HUD masthead for root entry and non-interactive HUD command output. */
+export function omkHudHeader(runId?: string): string {
+  const safeRun = runId ? sanitizeTerminalText(runId).slice(0, 28) : "latest run";
+  const signalRule = gradient("═◇═".repeat(18).slice(0, 54));
+  return [
+    "",
+    renderOmkSparkleText("◢█ OMK//CONTROL █◣", {
+      colors: ["#00D6FF", "#f4ffff", "#ffd166", "#FF47B2", "#00FFC2"],
+    }),
+    style.phosphorBold("NEON GRID ONLINE") + style.gray(" · ") + style.mintBold("GREEN RAIN SIGNAL") + style.gray(" · ") + style.pinkBold("METRICS WALL"),
+    style.gray("Models execute. OMK routes, verifies, measures, and controls."),
+    style.gray("goal-scoped MCP · skills · hooks · evidence · worktrees · replay · memory"),
+    style.gray(`run: ${safeRun}`),
+    signalRule,
     "",
   ].join("\n");
 }

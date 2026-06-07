@@ -9,12 +9,11 @@ import { normalizeProviderPolicy, parseProviderModelArg } from "../../providers/
 import { DEFAULT_AUTHORITY_PROVIDER } from "../../providers/types.js";
 import { validateAgentYamlFile, formatAgentYamlIssues } from "../../util/agent-schema.js";
 import { ensureChatStartupArtifacts } from "../../util/chat-startup.js";
-import { ensureChatRunState } from "../../util/chat-cockpit.js";
-import { buildChatAgentRuntimeMcpAllowlist, buildChatAgentRuntimeSkillAllowlist, prepareChatAgentModeAgent, type ChatAgentModeResources } from "../../util/chat-agent-mode.js";
+import { detectTmux, ensureChatRunState, isCockpitChild, launchChatCockpit } from "../../util/chat-cockpit.js";
+import { buildChatAgentRuntimeMcpAllowlist, buildChatAgentRuntimeSkillAllowlist, prepareChatAgentModeAgent, readChatAgentModelVariantProfilesFromEnv, type ChatAgentModeResources } from "../../util/chat-agent-mode.js";
 import { parseRuntimeScopeOption } from "../../util/runtime-scope.js";
 import { queueChatStatePatch } from "../../util/chat-state.js";
 import { initCommand } from "../init.js";
-import { checkCommand, resolveKimiBin } from "../../util/shell.js";
 import { readTodos } from "../../util/todo-sync.js";
 import { relative, join, resolve } from "path";
 import { readFile } from "fs/promises";
@@ -26,6 +25,7 @@ import {
   resolveLayout,
   resolveChatUi,
   resolveChatWorkerCount,
+  defaultChatUiForBrand,
   renderChatIntro,
   getActiveMcpNames,
   getActiveSkillNames,
@@ -42,13 +42,22 @@ function resolveChatProjectRoot(options: {
   const cwd = resolve(options.cwd ?? process.cwd());
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    OMK_PREFER_CWD_ROOT: process.env.OMK_PREFER_CWD_ROOT ?? "1",
   };
+  const home = resolve(env.HOME ?? env.USERPROFILE ?? cwd);
+
+  if (env.OMK_DEFAULT_PROJECT_ROOT || cwd === home) {
+    delete env.OMK_PREFER_CWD_ROOT;
+  } else if (env.OMK_PREFER_CWD_ROOT === undefined) {
+    env.OMK_PREFER_CWD_ROOT = "1";
+  }
 
   if (options.projectRoot) {
     env.OMK_PROJECT_ROOT = resolve(options.projectRoot);
   } else if (process.env.OMK_CHAT_RESPECT_PROJECT_ROOT_ENV !== "1") {
-    delete env.OMK_PROJECT_ROOT;
+    const defaultRoot = process.env.OMK_DEFAULT_PROJECT_ROOT?.trim();
+    if (!defaultRoot) {
+      delete env.OMK_PROJECT_ROOT;
+    }
   }
 
   return resolveProjectRoot({ cwd, env });
@@ -115,9 +124,10 @@ export async function chatCommand(options: {
   const sessionId = createOmkSessionId("chat");
   const runId = options.runId;
   const effectiveRunId = runId ?? sessionId;
+  const requestedLayout = options.layout ?? "auto";
   const layout = resolveLayout(options.layout);
-  const ui = resolveChatUi(options.ui);
-  const brand = options.brand ?? "minimal";
+  const brand = options.brand ?? "omk";
+  const ui = resolveChatUi(options.ui ?? process.env.OMK_UI ?? process.env.OMK_CHAT_UI ?? defaultChatUiForBrand(brand));
   const resources = await getOmkResourceSettings();
   const modelArg = parseProviderModelArg(options.model);
   const providerInput = options.provider
@@ -130,39 +140,6 @@ export async function chatCommand(options: {
   const effectiveWorkers = resolveChatWorkerCount(options.workers, resources.maxWorkers);
   const executionPrompt = parseExecutionPromptPolicy(options.execution, "--execution") ?? resources.executionPrompt;
 
-  // Dependency preflight: the Kimi binary + node-pty are required only when the
-  // Kimi adapter is explicitly selected. Provider-neutral auto mode can route to
-  // non-Kimi runtimes, so it must not fail before OMK runtime routing runs.
-  const kimiBin = resolveKimiBin();
-  const needsKimi = providerPolicy === "kimi";
-  if (needsKimi) {
-    const kimiAvailable = await checkCommand(kimiBin);
-    if (!kimiAvailable) {
-      console.error(
-        status.error(
-          `[omk] \`${kimiBin}\` command not found in PATH. ` +
-            "Install the primary CLI first: npm i -g @anthropic-ai/kimi-code\n" +
-            "If already installed, check your PATH or set KIMI_BIN env var.\n" +
-            "To use a non-Kimi provider: omk chat --provider mimo (or codex, opencode, openrouter, qwen)"
-        )
-      );
-      process.exit(1);
-    }
-    try {
-      await import("node-pty");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(
-        status.error(
-          `[omk] Failed to load node-pty native module. (${message})\n` +
-            "This usually happens when installed with --ignore-scripts.\n" +
-            "Fix: npm rebuild -g open-multi-agent-kit\n" +
-            "Or reinstall: npm uninstall -g open-multi-agent-kit && npm install -g open-multi-agent-kit"
-        )
-      );
-      process.exit(1);
-    }
-  }
 
   const promptOk = await verifyAgentPrompt(agentFile);
   if (!promptOk) {
@@ -203,7 +180,7 @@ export async function chatCommand(options: {
       const [mcpNames, skillNames, hookNames] = await Promise.all([
         getActiveMcpNames(effectiveResources.mcpScope),
         getActiveSkillNames(resources.skillsScope),
-        getActiveHookNames(root),
+        getActiveHookNames(root, resources.hooksScope),
       ]);
       const chatAgentResources: ChatAgentModeResources = {
         workers: effectiveWorkers,
@@ -213,6 +190,7 @@ export async function chatCommand(options: {
         providerPolicy,
         authorityProvider: process.env.OMK_AUTHORITY_PROVIDER,
         providerModel: modelArg.model,
+        modelVariantProfiles: readChatAgentModelVariantProfilesFromEnv(),
         ensembleDefaultEnabled: effectiveResources.ensembleDefaultEnabled,
         executionPrompt,
         executionPromptSource: options.execution ? "cli" : "config",
@@ -311,13 +289,58 @@ export async function chatCommand(options: {
     }
   }
 
-  // ── tmux/auto layout: use System24 renderer inline ──
-  // cockpit removed — System24 TUI handles all rendering
+  // ── tmux cockpit layout: keep prompt pane clean; move cockpit/HUD telemetry to the side pane ──
+  const explicitTmux = layout === "tmux";
+  const autoTmux = requestedLayout === "auto"
+    && process.stdin.isTTY === true
+    && process.stdout.isTTY === true
+    && !isCockpitChild()
+    && await detectTmux();
 
-  // ── plain / inline: run Kimi directly ──
+  if (explicitTmux || autoTmux) {
+    if (isCockpitChild()) {
+      console.error(status.error("tmux cockpit cannot be launched from an existing cockpit child pane"));
+      process.exitCode = 1;
+      return;
+    }
+    if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) {
+      if (explicitTmux) {
+        console.error(status.error("tmux layout requires an interactive TTY"));
+        process.exitCode = 1;
+        return;
+      }
+    } else if (explicitTmux && !(await detectTmux())) {
+      console.error(status.error("tmux layout requested but tmux was not found"));
+      process.exitCode = 1;
+      return;
+    } else {
+      await launchChatCockpit({
+        runId: effectiveRunId,
+        brand,
+        cwd: root,
+        agentFile: effectiveAgentFile,
+        workers: effectiveWorkers,
+        maxStepsPerTurn: options.maxStepsPerTurn,
+        mcpScope,
+        provider: providerPolicy,
+        model: options.model,
+        execution: options.execution,
+        ui,
+        cockpitRefresh: options.cockpitRefresh,
+        cockpitRedraw: options.cockpitRedraw,
+        cockpitHistory: options.cockpitHistory,
+        cockpitSideWidth: options.cockpitSideWidth,
+        cockpitHeight: options.cockpitHeight,
+      });
+      return;
+    }
+  }
+
+  // ── plain / inline: run OMK native chat loop ──
   const isPlain = layout === "plain";
+  const isPiOmkEntry = process.env.OMK_ENTRY_SURFACE === "pi-omk";
 
-  if (!isPlain && ui !== "green-rain" && ui !== "neon-grid") {
+  if (!isPlain && ui !== "green-rain" && ui !== "neon-grid" && ui !== "rust-forge") {
     const trust = `${effectiveResources.mcpScope} MCP / ${effectiveResources.skillsScope} skills`;
     const agentDisplay = relative(root, effectiveAgentFile);
     const { getModePreset } = await import("../../util/mode-preset.js");
@@ -335,7 +358,7 @@ export async function chatCommand(options: {
   }
 
   // ── Deferred HUD + history: fire-and-forget, let the agent loop start immediately ──
-  if (!isPlain) {
+  if (!isPlain && !isPiOmkEntry) {
     // Show a minimal status line while we defer the full HUD
     const providerLabel = providerPolicy === "auto" ? "auto-detect" : providerPolicy;
     const modeLabel = currentMode;

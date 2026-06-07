@@ -92,9 +92,7 @@ test("chat startup is idempotent and does not overwrite daily docs", async () =>
   }
 });
 
-test("chat command fails loudly when Kimi exits immediately with code 0", {
-  skip: process.platform === "linux" ? false : "native node-pty fake-shell startup classification is covered on Linux",
-}, async () => {
+test("chat command fails loudly when explicit Kimi API credentials are missing", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-chat-fast-exit-project-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-chat-fast-exit-home-"));
   const binRoot = await mkdtemp(join(tmpdir(), "omk-chat-fast-exit-bin-"));
@@ -125,14 +123,12 @@ test("chat command fails loudly when Kimi exits immediately with code 0", {
         OMK_STAR_PROMPT: "0",
         OMK_CHAT_NO_BANNER: "1",
         OMK_CHAT_FAST_EXIT_MS: "5000",
-        OMK_LEGACY_CHAT: "1",
-        KIMI_BIN: kimiBin,
       },
     });
 
     assert.equal(result.status, 1, result.stderr || result.stdout);
-    assert.match(result.stderr, /Kimi exited immediately/i);
-    assert.match(result.stderr, /resume: omk chat --run-id immediate-exit/);
+    assert.match(result.stderr, /No runnable runtime for provider=kimi/i);
+    assert.match(result.stderr, /KIMI_API_KEY is not set/i);
 
     const state = JSON.parse(await readFile(join(projectRoot, ".omk", "runs", runId, "state.json"), "utf-8"));
     assert.equal(state.status, "failed");
@@ -145,7 +141,6 @@ test("chat command fails loudly when Kimi exits immediately with code 0", {
     assert.equal(failure.runId, runId);
     assert.equal(failure.exitCode, 1);
     assert.equal(failure.mcpScope, "project");
-    assert.match(failure.recentOutput, /fake kimi started/);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(homeRoot, { recursive: true, force: true });
@@ -153,9 +148,7 @@ test("chat command fails loudly when Kimi exits immediately with code 0", {
   }
 });
 
-test("chat command startup watchdog fails a silent Kimi launch", {
-  skip: process.platform === "linux" ? false : "native node-pty fake-shell startup classification is covered on Linux",
-}, async () => {
+test("chat command reports bootstrap failure before any legacy Kimi launch path", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-chat-silent-project-"));
   const homeRoot = await mkdtemp(join(tmpdir(), "omk-chat-silent-home-"));
   const binRoot = await mkdtemp(join(tmpdir(), "omk-chat-silent-bin-"));
@@ -185,13 +178,12 @@ test("chat command startup watchdog fails a silent Kimi launch", {
         OMK_STAR_PROMPT: "0",
         OMK_CHAT_NO_BANNER: "1",
         OMK_CHAT_STARTUP_TIMEOUT_MS: "1000",
-        OMK_LEGACY_CHAT: "1",
-        KIMI_BIN: kimiBin,
       },
     });
 
     assert.equal(result.status, 1, result.stderr || result.stdout);
-    assert.match(result.stderr, /Kimi startup timed out after 1000ms/);
+    assert.match(result.stderr, /No runnable runtime for provider=kimi/i);
+    assert.match(result.stderr, /KIMI_API_KEY is not set/i);
     const failure = JSON.parse(await readFile(join(projectRoot, ".omk", "runs", runId, "chat-startup-failure.json"), "utf-8"));
     assert.equal(failure.runId, runId);
     assert.equal(failure.exitCode, 1);
@@ -532,12 +524,12 @@ test("chat smoke provider auto does not require Kimi preflight", async () => {
   }
 });
 
-test("chat runtime direct Kimi fallback requires explicit Kimi policy or legacy opt-in", () => {
+test("chat runtime direct Kimi fallback is disabled", () => {
   assert.equal(shouldUseDirectKimiFallback("auto", {}), false);
   assert.equal(shouldUseDirectKimiFallback("qwen", {}), false);
   assert.equal(shouldUseDirectKimiFallback("kimi", {}), false);
-  assert.equal(shouldUseDirectKimiFallback("kimi", { OMK_LEGACY_CHAT: "1" }), true);
-  assert.equal(shouldUseDirectKimiFallback("auto", { OMK_LEGACY_CHAT: "1" }), true);
+  assert.equal(shouldUseDirectKimiFallback("kimi", { OMK_LEGACY_CHAT: "1" }), false);
+  assert.equal(shouldUseDirectKimiFallback("auto", { OMK_LEGACY_CHAT: "1" }), false);
 });
 
 test("chat smoke prefers current shell cwd over stale OMK_PROJECT_ROOT", async () => {

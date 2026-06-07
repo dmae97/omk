@@ -1,6 +1,6 @@
 import type { TaskResult, TaskRunner } from "../contracts/orchestration.js";
 
-export type KnownProviderId = "kimi" | "deepseek" | "codex" | "qwen" | "openrouter";
+export type KnownProviderId = "mimo" | "kimi" | "deepseek" | "codex" | "qwen" | "openrouter";
 export type ProviderId = KnownProviderId | (string & {});
 export type ProviderPolicy = "auto" | ProviderId;
 export const DEFAULT_AUTHORITY_PROVIDER: ProviderId = "mimo";

@@ -12,6 +12,9 @@ import {
 } from "./scoped-agent-file.js";
 import { DEFAULT_AUTHORITY_PROVIDER } from "../providers/types.js";
 
+export type ChatAgentModelVariantProfile = Record<string, string>;
+export type ChatAgentModelVariantProfiles = Record<string, ChatAgentModelVariantProfile>;
+
 export interface ChatAgentModeResources {
   workers: string;
   maxStepsPerTurn?: string;
@@ -20,6 +23,7 @@ export interface ChatAgentModeResources {
   authorityProvider?: string;
   providerPolicy?: string;
   providerModel?: string;
+  modelVariantProfiles?: ChatAgentModelVariantProfiles;
   ensembleDefaultEnabled?: boolean;
   executionPrompt?: ExecutionPromptPolicy;
   executionPromptSource?: ExecutionSelectionSource;
@@ -61,6 +65,12 @@ export interface ChatAgentHarnessManifest {
     providerPolicy: string;
     authorityProvider: string;
     providerModel: string;
+    variantProfile: {
+      provider: string;
+      model: string;
+      source: string;
+      variants: Record<string, string>;
+    };
     ensembleDefault: "enabled" | "disabled";
     scopes: {
       mcp: string;
@@ -127,6 +137,7 @@ export interface ChatAgentHarnessNode {
   assignedProvider?: string;
   candidateProviders?: string[];
   assignedModel?: string;
+  assignedVariant?: string;
   assignedProviderAuthority?: "authority" | "advisory" | "read-only";
   assignedProviderCapabilities?: string[];
   assignedCapabilities?: {
@@ -143,6 +154,7 @@ export interface ChatAgentLaneCapabilityAssignment {
   assignedProvider: string;
   candidateProviders: string[];
   assignedModel: string;
+  assignedVariant: string;
   assignedCapabilities: string[];
   skills: string[];
   hooks: string[];
@@ -159,8 +171,81 @@ interface HarnessProviderSelection {
   provider: string;
   candidateProviders: string[];
   model: string;
+  variant: string;
   authority: "authority" | "advisory" | "read-only";
   capabilities: string[];
+}
+
+const DEFAULT_LANE_VARIANTS: Record<string, string> = {
+  default: "balanced-medium",
+  explorer: "fast-low",
+  researcher: "fast-low",
+  "vision-debugger": "fast-low",
+  planner: "plan-high",
+  architect: "plan-high",
+  coder: "code-medium",
+  worker: "code-medium",
+  integrator: "code-medium",
+  orchestrator: "code-medium",
+  reviewer: "review-high",
+  qa: "review-high",
+  tester: "review-high",
+  security: "security-xhigh",
+};
+
+const BUILT_IN_MODEL_VARIANT_PROFILES: ChatAgentModelVariantProfiles = {
+  "mimo-v2.5-pro": DEFAULT_LANE_VARIANTS,
+  "qwen3-max": DEFAULT_LANE_VARIANTS,
+  "codex-cli": { ...DEFAULT_LANE_VARIANTS, coder: "code-high" },
+  "deepseek-v4-flash": {
+    ...DEFAULT_LANE_VARIANTS,
+    default: "fast-low",
+    planner: "plan-medium",
+    architect: "plan-medium",
+    coder: "code-low",
+    worker: "code-low",
+    reviewer: "review-medium",
+    qa: "review-medium",
+    tester: "review-medium",
+    security: "security-high",
+  },
+  "deepseek-v4-pro": DEFAULT_LANE_VARIANTS,
+};
+
+const VARIANT_ROLE_ALIASES: Record<string, string> = {
+  explore: "explorer",
+  researcher: "researcher",
+  designer: "vision-debugger",
+  plan: "planner",
+  implementer: "coder",
+  test: "tester",
+  reviewer: "reviewer",
+  review: "reviewer",
+};
+
+const VARIANT_ROLES = new Set(Object.keys(DEFAULT_LANE_VARIANTS));
+
+export function parseChatAgentModelVariantProfiles(raw: string | undefined): ChatAgentModelVariantProfiles | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+    const profiles: ChatAgentModelVariantProfiles = {};
+    for (const [modelKey, profileValue] of Object.entries(parsed)) {
+      const normalizedModelKey = normalizeModelVariantKey(modelKey);
+      if (!normalizedModelKey || !profileValue || typeof profileValue !== "object" || Array.isArray(profileValue)) continue;
+      const normalizedProfile = normalizeModelVariantProfile(profileValue as Record<string, unknown>);
+      if (Object.keys(normalizedProfile).length > 0) profiles[normalizedModelKey] = normalizedProfile;
+    }
+    return Object.keys(profiles).length > 0 ? profiles : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function readChatAgentModelVariantProfilesFromEnv(env: Record<string, string | undefined> = process.env): ChatAgentModelVariantProfiles | undefined {
+  return parseChatAgentModelVariantProfiles(env.OMK_MODEL_VARIANTS ?? env.OMK_MODEL_VARIANT_PROFILES);
 }
 
 export function buildChatAgentModeContract(input: {
@@ -209,6 +294,7 @@ export function buildChatAgentModeContract(input: {
     `- Provider policy: ${resources.providerPolicy ?? "auto"}`,
     `- Authority provider: ${harness.resources.authorityProvider}`,
     `- Provider model: ${resources.providerModel ?? "auto"}`,
+    `- Variant profile: model=${harness.resources.variantProfile.model}; source=${harness.resources.variantProfile.source}; ${formatVariantProfile(harness.resources.variantProfile.variants)}`,
     `- Execution selection: ${harness.execution.policy} (${harness.execution.source})`,
     `- Ensemble default: ${resources.ensembleDefaultEnabled === false ? "disabled" : "enabled"}`,
     `- MCP scope: ${resources.mcpScope}`,
@@ -306,7 +392,7 @@ export function buildChatAgentHarnessManifest(input: {
     ],
     authority: [
       "The configured OMK authority provider owns edits, merge, and final synthesis",
-      "DeepSeek/Qwen/Codex lanes are read-only or advisory unless explicitly configured otherwise",
+      "Subagent lanes inherit the default provider/model; variant profiles are advisory unless explicitly configured otherwise",
       "MCP/tool lanes may use live authority only through configured OMK authority-provider guarded execution",
       "Hooks are constraints and guardrails, not bypasses",
       "Secrets must never be printed, stored, or copied into artifacts",
@@ -346,20 +432,20 @@ export function buildParallelAlgorithmInjection(resources: ChatAgentModeResource
       "## Injected parallel DAG algorithm",
       "- Treat OMK agent mode as the interactive orchestrator front-door for the same planning model used by `omk parallel`.",
       "- Progressive intent algorithm: Raw Input -> IntentFrame -> ActionAtoms -> Evidence DAG -> Novelty Guard -> Replan/Continue.",
-      "- Strict action DAG: keep raw input in audit/digest artifacts only; worker/capability/model lanes receive role, scope, input evidence, expected output, and done condition from ActionAtoms.",
-      "- For every non-trivial prompt, synthesize a virtual DAG before acting: bootstrap(done) -> root-coordinator -> model/capability/worker lanes -> review-merge -> quality/security/design gates.",
+      "- Strict action DAG: keep raw input in audit/digest artifacts only; worker/capability/variant lanes receive role, scope, input evidence, expected output, and done condition from ActionAtoms.",
+      "- For every non-trivial prompt, synthesize a virtual DAG before acting: bootstrap(done) -> root-coordinator -> variant/capability/worker lanes -> review-merge -> quality/security/design gates.",
     `- Runtime defaults: profile=${resourceProfile}; approval=${approvalPolicy}; provider=${providerPolicy}; authority=${authorityProvider}; ensemble=${ensembleDefault}; workerCap=${workerCap}; model=${providerModel}; workerLanes=${lanePlan.workerNodes.length}; capabilityLanes=${lanePlan.capabilityNodes.length}; providerLanes=${lanePlan.providerNodes.length}.`,
       "- Intent schema to infer before delegation: taskType, complexity, estimatedWorkers, requiredRoles, isReadOnly, needsResearch, needsSecurityReview, needsTesting, needsDesignReview, parallelizable, rationale.",
       "- Effective lanes: use OMK_WORKERS for worker lanes; capability lanes are independent orchestration lanes and remain available when active inventory exists.",
       "- Coordinator role: use architect for plan/migrate/security; otherwise use orchestrator. Coordinator owns plan, lane boundaries, conflict control, and final synthesis.",
       "- Worker role selection: remove planner/orchestrator/architect/router from requiredRoles; cycle remaining roles across worker-N lanes; default to coder when no worker role remains.",
       `- Capability-agent routing: when active inventory exists and intent is parallelizable, non-simple, or taskType is bugfix/implement/migrate/plan/refactor/review/security/test/general, allocate up to ${lanePlan.capabilityNodes.length} independent lanes to active MCP, skills, and hooks routing.`,
-      "- DeepSeek model-agent routing: for read-only, parallelizable, non-simple, or bugfix/implement/migrate/plan/refactor/review/security/test tasks, spawn read-only Flash quick-decomposition and Pro critique lanes when DeepSeek is available.",
-      "- Multi-provider model routing: lane assignments must name assignedProvider, assignedModel, assignedCapabilities, skills, hooks, and MCP; the configured authority provider keeps root/integrator authority while external providers default read-only/advisory.",
-      "- Provider lane defaults: explorer may use Qwen/DeepSeek fast read-only; planner may use Codex or configured-authority advisory; coder uses the configured authority provider with external advisory only; reviewer/qa/security may fan out across DeepSeek/Qwen/Codex; integrator stays on the configured authority provider.",
-    "- DeepSeek direct lanes are read-only; Qwen/Codex direct lanes are also read-only; file-affecting external output is advisory only; the configured OMK authority provider owns edits, merge authority, shell/MCP authority, and final verification.",
-      "- Worker failure policy: worker/deepseek/capability lanes are retryable and may be skipped without blocking synthesis; security-audit blocks dependents; QA/design report risks without widening scope.",
-      "- Synthesis: review-merge depends on every model, capability, and worker lane; DeepSeek/capability lane outputs are optional evidence, normal worker outputs are required unless explicitly marked unavailable.",
+      "- Subagent model invariant: every subagent lane inherits the same default provider/model selected for the run; lanes may change only assignedVariant/thinking profile, scope, tools, MCP, hooks, and skills.",
+      "- Variant routing: explorer/researcher use fast-low, planner uses plan-high, coder uses code-medium, reviewer/qa use review-high, security uses security-xhigh; these variants are advisory metadata and must not switch provider/model.",
+      "- Lane assignments must name assignedProvider, assignedModel, assignedVariant, assignedCapabilities, skills, hooks, and MCP; the default provider/model stays constant while the configured authority boundary still owns edits, shell/MCP authority, merge, and final verification.",
+      "- External provider/model fanout is disabled for subagents by default; any non-default provider lane must be explicitly requested and recorded as an exception, not inferred from role.",
+      "- Worker failure policy: worker/variant/capability lanes are retryable and may be skipped without blocking synthesis; security-audit blocks dependents; QA/design report risks without widening scope.",
+      "- Synthesis: review-merge depends on every variant, capability, and worker lane; capability lane outputs are optional evidence, normal worker outputs are required unless explicitly marked unavailable.",
       "- Quality gate: for implement/bugfix/refactor/migrate/security/test/general, run the smallest proving check first; default command-pass gate is `npm run check`, then targeted tests, then full suite when risk warrants.",
       "- Security/design gates: add security-audit when intent.needsSecurityReview is true; add design-review when intent.needsDesignReview is true; do not expose secrets in findings.",
       "- Task playbooks:",
@@ -457,6 +543,11 @@ function modeBehaviorLines(mode: OmkMode): string[] {
 function normalizeHarnessResources(resources: ChatAgentModeResources): ChatAgentHarnessManifest["resources"] {
   const workerBudget = parseWorkerBudget(resources.workers);
   const workerCap = Math.min(workerBudget, 6);
+  const providerPolicy = resources.providerPolicy ?? "auto";
+  const authorityProvider = resources.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER;
+  const providerModel = resources.providerModel ?? "auto";
+  const defaultProvider = providerPolicy !== "auto" && providerPolicy !== "authority" ? providerPolicy : authorityProvider;
+  const defaultModel = providerModel === "auto" ? defaultModelForProvider(defaultProvider) : providerModel;
   return {
     workers: resources.workers,
     workerBudget,
@@ -464,9 +555,14 @@ function normalizeHarnessResources(resources: ChatAgentModeResources): ChatAgent
     maxStepsPerTurn: resources.maxStepsPerTurn ?? "runtime-default",
     resourceProfile: resources.resourceProfile ?? "runtime-default",
     approvalPolicy: resources.approvalPolicy ?? "interactive",
-    providerPolicy: resources.providerPolicy ?? "auto",
-    authorityProvider: resources.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER,
-    providerModel: resources.providerModel ?? "auto",
+    providerPolicy,
+    authorityProvider,
+    providerModel,
+    variantProfile: resolveModelVariantProfile({
+      provider: defaultProvider,
+      model: defaultModel,
+      configuredProfiles: resources.modelVariantProfiles,
+    }),
     ensembleDefault: resources.ensembleDefaultEnabled === false ? "disabled" : "enabled",
     scopes: {
       mcp: resources.mcpScope,
@@ -507,6 +603,7 @@ function createWorkerHarnessNode(index: number, resources: ChatAgentHarnessManif
     assignedProvider: provider.provider,
     candidateProviders: provider.candidateProviders,
     assignedModel: provider.model,
+    assignedVariant: provider.variant,
     assignedProviderAuthority: provider.authority,
     assignedProviderCapabilities: provider.capabilities,
     assignedCapabilities: selectHarnessCapabilitiesForRole(`worker-${index}`, resources),
@@ -527,6 +624,7 @@ function buildCapabilityHarnessNodeCandidates(resources: ChatAgentHarnessManifes
       assignedProvider: provider.provider,
       candidateProviders: provider.candidateProviders,
       assignedModel: provider.model,
+      assignedVariant: provider.variant,
       assignedProviderAuthority: provider.authority,
       assignedProviderCapabilities: provider.capabilities,
       assignedCapabilities: { skills: resources.active.skills, mcp: [], hooks: [] },
@@ -544,6 +642,7 @@ function buildCapabilityHarnessNodeCandidates(resources: ChatAgentHarnessManifes
       assignedProvider: provider.provider,
       candidateProviders: provider.candidateProviders,
       assignedModel: provider.model,
+      assignedVariant: provider.variant,
       assignedProviderAuthority: provider.authority,
       assignedProviderCapabilities: provider.capabilities,
       assignedCapabilities: { skills: [], mcp: resources.active.mcp, hooks: [] },
@@ -561,6 +660,7 @@ function buildCapabilityHarnessNodeCandidates(resources: ChatAgentHarnessManifes
       assignedProvider: provider.provider,
       candidateProviders: provider.candidateProviders,
       assignedModel: provider.model,
+      assignedVariant: provider.variant,
       assignedProviderAuthority: provider.authority,
       assignedProviderCapabilities: provider.capabilities,
       assignedCapabilities: { skills: [], mcp: [], hooks: resources.active.hooks },
@@ -629,6 +729,7 @@ function buildLaneCapabilityAssignments(resources: ChatAgentHarnessManifest["res
       assignedProvider: provider.provider,
       candidateProviders: provider.candidateProviders,
       assignedModel: provider.model,
+      assignedVariant: provider.variant,
       assignedCapabilities: provider.capabilities,
       skills: assigned?.skills ?? [],
       hooks: assigned?.hooks ?? [],
@@ -677,39 +778,23 @@ function selectProviderForLane(
   resources: ChatAgentHarnessManifest["resources"]
 ): HarnessProviderSelection {
   const roleKey = role.replace(/^worker-\d+$/, "coder");
-  const authorityProvider = resources.authorityProvider;
-  const requested = resources.providerPolicy === "authority" ? authorityProvider : resources.providerPolicy;
-  const model = resources.providerModel === "auto" ? "" : resources.providerModel;
-  if (roleKey === "coder" || roleKey === "integrator" || roleKey === "orchestrator" || roleKey === "security") {
-    if (roleKey === "security" && requested !== authorityProvider && requested !== "auto") {
-      return providerSelection(requested, model || defaultModelForProvider(requested), "read-only", ["read", "review", "security"], [requested, authorityProvider]);
-    }
-    return providerSelection(authorityProvider, model || defaultModelForProvider(authorityProvider), "authority", ["write", "shell", "mcp", "merge"], [authorityProvider]);
-  }
-  if (requested !== "auto" && requested !== authorityProvider) {
-    return providerSelection(
-      requested,
-      model || defaultModelForProvider(requested),
-      roleKey === "planner" && requested === "codex" ? "advisory" : "read-only",
-      capabilitiesForProvider(requested),
-      [requested, authorityProvider]
-    );
-  }
-  if (roleKey === "explorer" || roleKey === "researcher" || roleKey === "vision-debugger") {
-    return providerSelection("deepseek", model || "deepseek-v4-flash", "read-only", ["read", "research", "web"], ["deepseek", "qwen", "openrouter", authorityProvider]);
-  }
-  if (roleKey === "planner") {
-    return providerSelection("codex", model || "codex-cli", "advisory", ["plan", "review"], ["codex", authorityProvider]);
-  }
-  if (roleKey === "reviewer" || roleKey === "qa" || roleKey === "tester") {
-    return providerSelection("deepseek", model || "deepseek-v4-pro", "read-only", ["review", "qa", "advisory"], ["deepseek", "qwen", "openrouter", "codex", authorityProvider]);
-  }
-  return providerSelection(authorityProvider, model || defaultModelForProvider(authorityProvider), "authority", ["authority"], [authorityProvider]);
+  const defaultProvider = defaultProviderForSubagents(resources);
+  const defaultModel = defaultModelForSubagents(resources, defaultProvider);
+  const authority = authorityForDefaultProviderLane(roleKey, resources, defaultProvider);
+  return providerSelection(
+    defaultProvider,
+    defaultModel,
+    variantForLane(roleKey, resources),
+    authority,
+    capabilitiesForLane(roleKey),
+    [defaultProvider]
+  );
 }
 
 function providerSelection(
   provider: string,
   model: string,
+  variant: string,
   authority: HarnessProviderSelection["authority"],
   capabilities: string[],
   candidateProviders: string[]
@@ -718,9 +803,120 @@ function providerSelection(
     provider,
     candidateProviders: uniqueProviderCandidates(candidateProviders),
     model,
+    variant,
     authority,
     capabilities,
   };
+}
+
+function defaultProviderForSubagents(resources: ChatAgentHarnessManifest["resources"]): string {
+  if (resources.providerPolicy !== "auto" && resources.providerPolicy !== "authority") return resources.providerPolicy;
+  return resources.authorityProvider;
+}
+
+function defaultModelForSubagents(resources: ChatAgentHarnessManifest["resources"], provider: string): string {
+  return resources.providerModel === "auto" ? defaultModelForProvider(provider) : resources.providerModel;
+}
+
+function authorityForDefaultProviderLane(
+  roleKey: string,
+  resources: ChatAgentHarnessManifest["resources"],
+  provider: string
+): HarnessProviderSelection["authority"] {
+  const writeAuthorityRoles = new Set(["coder", "integrator", "orchestrator", "worker"]);
+  if (provider === resources.authorityProvider && writeAuthorityRoles.has(roleKey)) return "authority";
+  if (roleKey === "planner" || roleKey === "coder") return "advisory";
+  return "read-only";
+}
+
+function variantForLane(roleKey: string, resources?: ChatAgentHarnessManifest["resources"]): string {
+  const normalizedRole = normalizeVariantRole(roleKey);
+  const profile = resources?.variantProfile.variants ?? DEFAULT_LANE_VARIANTS;
+  return profile[normalizedRole] ?? profile.default ?? DEFAULT_LANE_VARIANTS[normalizedRole] ?? DEFAULT_LANE_VARIANTS.default ?? "balanced-medium";
+}
+
+function resolveModelVariantProfile(input: {
+  provider: string;
+  model: string;
+  configuredProfiles?: ChatAgentModelVariantProfiles;
+}): ChatAgentHarnessManifest["resources"]["variantProfile"] {
+  const configuredProfiles = normalizeModelVariantProfiles(input.configuredProfiles);
+  const sources = ["built-in:default"];
+  const variants: Record<string, string> = { ...DEFAULT_LANE_VARIANTS };
+  const mergeProfile = (source: string, profile: ChatAgentModelVariantProfile | undefined): void => {
+    if (!profile) return;
+    Object.assign(variants, profile);
+    sources.push(source);
+  };
+  mergeProfile(`built-in:${input.provider}`, BUILT_IN_MODEL_VARIANT_PROFILES[input.provider]);
+  mergeProfile(`built-in:${input.model}`, BUILT_IN_MODEL_VARIANT_PROFILES[input.model]);
+  mergeProfile("configured:*", configuredProfiles["*"]);
+  mergeProfile(`configured:${input.provider}`, configuredProfiles[input.provider]);
+  mergeProfile(`configured:${input.provider}:${input.model}`, configuredProfiles[`${input.provider}:${input.model}`]);
+  mergeProfile(`configured:${input.model}`, configuredProfiles[input.model]);
+  return {
+    provider: input.provider,
+    model: input.model,
+    source: sources.at(-1) ?? "built-in:default",
+    variants,
+  };
+}
+
+function normalizeModelVariantProfiles(input: ChatAgentModelVariantProfiles | undefined): ChatAgentModelVariantProfiles {
+  if (!input) return {};
+  const out: ChatAgentModelVariantProfiles = {};
+  for (const [modelKey, profile] of Object.entries(input)) {
+    const normalizedModelKey = normalizeModelVariantKey(modelKey);
+    if (!normalizedModelKey) continue;
+    const normalizedProfile = normalizeModelVariantProfile(profile);
+    if (Object.keys(normalizedProfile).length > 0) out[normalizedModelKey] = normalizedProfile;
+  }
+  return out;
+}
+
+function normalizeModelVariantProfile(input: Record<string, unknown>): ChatAgentModelVariantProfile {
+  const out: ChatAgentModelVariantProfile = {};
+  for (const [roleKey, variantValue] of Object.entries(input)) {
+    if (typeof variantValue !== "string") continue;
+    const role = normalizeConfiguredVariantRole(roleKey);
+    const variant = normalizeVariantValue(variantValue);
+    if (role && variant) out[role] = variant;
+  }
+  return out;
+}
+
+function normalizeModelVariantKey(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed === "*") return "*";
+  if (trimmed.length === 0 || trimmed.length > 160) return undefined;
+  return /^[A-Za-z0-9._:/@+-]+$/.test(trimmed) ? trimmed : undefined;
+}
+
+function normalizeVariantRole(value: string): string {
+  const normalized = value.trim().toLowerCase().replace(/^worker-\d+$/, "worker");
+  const role = VARIANT_ROLE_ALIASES[normalized] ?? normalized;
+  return VARIANT_ROLES.has(role) ? role : "default";
+}
+
+function normalizeConfiguredVariantRole(value: string): string | undefined {
+  const normalized = value.trim().toLowerCase().replace(/^worker-\d+$/, "worker");
+  const role = VARIANT_ROLE_ALIASES[normalized] ?? normalized;
+  return VARIANT_ROLES.has(role) ? role : undefined;
+}
+
+function normalizeVariantValue(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > 80) return undefined;
+  return /^[A-Za-z0-9._:-]+$/.test(trimmed) ? trimmed : undefined;
+}
+
+function capabilitiesForLane(roleKey: string): string[] {
+  if (roleKey === "explorer" || roleKey === "researcher" || roleKey === "vision-debugger") return ["read", "research", "web"];
+  if (roleKey === "planner" || roleKey === "architect") return ["plan", "review", "advisory"];
+  if (roleKey === "reviewer" || roleKey === "qa" || roleKey === "tester") return ["review", "qa", "advisory"];
+  if (roleKey === "security") return ["read", "review", "security"];
+  if (roleKey === "coder" || roleKey === "integrator" || roleKey === "orchestrator") return ["write", "shell", "mcp", "merge"];
+  return ["authority"];
 }
 
 function uniqueProviderCandidates(values: string[]): string[] {
@@ -744,12 +940,9 @@ function defaultModelForProvider(provider: string): string {
   return "kimi-k2.6";
 }
 
-function capabilitiesForProvider(provider: string): string[] {
-  if (provider === "codex") return ["read", "plan", "review", "advisory"];
-  if (provider === "qwen") return ["read", "research", "review", "qa", "advisory"];
-  if (provider === "deepseek") return ["read", "review", "qa", "advisory"];
-  if (provider === "openrouter") return ["read", "research", "review", "qa", "advisory"];
-  return ["authority", "write", "shell", "mcp", "merge"];
+function formatVariantProfile(variants: Record<string, string>): string {
+  const orderedRoles = ["explorer", "planner", "coder", "reviewer", "qa", "security"];
+  return orderedRoles.map((role) => `${role}=${variants[role] ?? variants.default}`).join("; ");
 }
 
 function formatInventoryList(values: string[]): string {
@@ -865,11 +1058,13 @@ async function writeRunScopedSubagentWrappers(input: {
   resources: ChatAgentModeResources;
 }): Promise<ScopedSubagentRef[]> {
   const refs = await readRootAgentSubagents(input.baseAgentFile);
+  const normalizedResources = normalizeHarnessResources(input.resources);
   const outputs = new Map<string, string>();
   for (const ref of refs) {
     if (outputs.has(ref.role)) continue;
     const outputFile = resolve(input.roleWrappersDir, `${ref.role}.yaml`);
     const roleResources = roleRouteProfile(ref.role, input.resources);
+    const reasoningVariant = variantForLane(ref.role.replace(/^worker-\d+$/, "coder"), normalizedResources);
     outputs.set(ref.role, outputFile);
     await writeScopedAgentFile({
       baseAgentFile: ref.baseAgentFile,
@@ -882,6 +1077,7 @@ async function writeRunScopedSubagentWrappers(input: {
         mcpNames: roleResources.mcpNames,
         skillNames: roleResources.skillNames,
         hookNames: roleResources.hookNames,
+        reasoningVariant,
       },
     });
   }
@@ -900,6 +1096,7 @@ function renderChatAgentYaml(baseAgentRel: string, resources: ChatAgentModeResou
   const mcpEnabled = resources.mcpScope === "none" ? "false" : "true";
   const skillsEnabled = resources.skillsScope === "none" ? "false" : "true";
   const hooksEnabled = resources.hooksScope === "none" ? "false" : "true";
+  const variantProfile = normalizeHarnessResources(resources).variantProfile;
   const lines = [
     "version: 1",
     "agent:",
@@ -920,6 +1117,7 @@ function renderChatAgentYaml(baseAgentRel: string, resources: ChatAgentModeResou
     `    OMK_PROVIDER_POLICY: ${JSON.stringify(resources.providerPolicy ?? "auto")}`,
     `    OMK_PROVIDER_AUTHORITY: ${JSON.stringify(resources.authorityProvider ?? DEFAULT_AUTHORITY_PROVIDER)}`,
     `    OMK_PROVIDER_MODEL: ${JSON.stringify(resources.providerModel ?? "auto")}`,
+    `    OMK_MODEL_VARIANT_PROFILE: ${JSON.stringify(`${variantProfile.source};${formatVariantProfile(variantProfile.variants)}`)}`,
   ];
   if (subagents.length) {
     lines.push("  subagents:");
@@ -937,10 +1135,12 @@ function renderChatAgentYaml(baseAgentRel: string, resources: ChatAgentModeResou
 
 function defaultRootPrompt(): string {
   return [
-    "# open_multi-agent_kit Root Agent",
+    "# open-multi-agent-kit Root Agent",
     "",
-    "You are the open_multi-agent_kit root coordinator — a provider-neutral orchestration layer that turns the configured authority provider into a bounded coding team.",
+    "You are the OMK root orchestrator for open-multi-agent-kit — a provider-neutral orchestration control plane that turns a goal into a bounded coding team.",
     "",
-    "Apply AGENTS.md silently, keep MCP/skills/hooks scoped by runtime policy, launch independent subagents in parallel for non-trivial work, and verify before completion.",
+    "Models execute. OMK routes, verifies, measures, and controls.",
+    "",
+    "Apply AGENTS.md silently, keep MCP/skills/hooks scoped by runtime policy, summon independent subagents in parallel for non-trivial work, assign each lane goal-scoped capabilities, and verify before completion.",
   ].join("\n");
 }

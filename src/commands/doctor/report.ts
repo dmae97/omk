@@ -45,17 +45,17 @@ export function emitDoctorJsonReport(
       npmGlobalBin: findMsg("npm global bin"),
     },
     kimi: {
-      installed: findOk("Primary CLI"),
-      version: findMsg("Primary CLI"),
-      runnable: findOk("Primary Runnable"),
-      session: findMsg("Primary Session"),
+      installed: findOk("Primary Runtime"),
+      version: findMsg("Primary Runtime"),
+      runnable: findOk("Primary Auth"),
+      session: findMsg("Primary Auth"),
       config: findOk("Primary Config"),
       hooks: findOk("OMK Hooks"),
       capabilities: findMsg("Primary Capabilities"),
-      agentFile: findOk("Primary Agent File"),
+      agentFile: false,
       webTools: findOk("Primary Web Tools"),
-      swarmStatus: findMsg("Primary Swarm"),
-      installGuide: "curl -LsSf https://code.kimi.com/install.sh | bash or see https://github.com/dmae97/open_multi-agent_kit#install",
+      swarmStatus: null,
+      installGuide: "Set KIMI_API_KEY or configure [providers.kimi] in ~/.omk/config.toml for explicit Kimi API usage",
     },
     git: {
       installed: findOk("Git Installed"),
@@ -128,7 +128,7 @@ export async function emitDoctorConsoleReport(
   fixes: DoctorFixReport | undefined,
   options: DoctorOptions
 ): Promise<void> {
-  console.log(header("open_multi-agent_kit doctor"));
+  console.log(header("open-multi-agent-kit doctor"));
   console.log(separator());
 
   for (const { title, results } of categoryResults) {

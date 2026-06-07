@@ -61,6 +61,11 @@ export async function promptThemeSelection(
 ): Promise<string | null> {
   const themes = [
     { value: "omk", label: "OMK", hint: "Default colorful theme" },
+    { value: "night-city", label: "Night City", hint: "README control image palette" },
+    { value: "green-rain", label: "Green Rain", hint: "Phosphor signal console" },
+    { value: "rust-forge", label: "Rust Forge", hint: "Rust/native safety console" },
+    { value: "neon-circuit", label: "Neon Circuit", hint: "High-energy neon terminal" },
+    { value: "matrix", label: "Matrix", hint: "Classic green-on-black phosphor" },
     { value: "minimal", label: "Minimal", hint: "Clean, few colors" },
     { value: "mono", label: "Mono", hint: "Monochrome" },
     { value: "dark", label: "Dark", hint: "Dark terminal optimized" },

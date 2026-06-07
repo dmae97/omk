@@ -400,7 +400,7 @@ test("omk update kimi-adapter --install-script reports direct Moonshot API confi
   const output = result.stdout.trim();
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.ok(
-    output.includes("kimi-api uses direct Moonshot HTTP API") && output.includes("~/.kimi/config.toml"),
+    output.includes("Kimi support in OMK uses the direct Moonshot HTTP API.") && output.includes("~/.omk/config.toml"),
     `Expected direct API configuration guidance, got: ${output}`
   );
 });

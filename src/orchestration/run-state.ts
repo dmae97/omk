@@ -66,6 +66,8 @@ export function assignNodeCapabilitiesToRunState(
           mcpServers,
           hooks,
           ...(tools.length > 0 ? { tools } : {}),
+          ...(routing.assignedProvider ?? routing.provider ? { provider: routing.assignedProvider ?? routing.provider } : {}),
+          ...(routing.assignedModel ?? routing.providerModel ? { model: routing.assignedModel ?? routing.providerModel } : {}),
           source: routing.autoSpawned ? "capability-router" : "routing",
           rationale: routing.rationale,
         }];

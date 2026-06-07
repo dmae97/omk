@@ -1,4 +1,6 @@
-import { checkCommand, resolveKimiBin } from "../util/shell.js";
+import { checkCommand } from "../util/shell.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 export type RuntimeSessionMode = "interactive-tty" | "one-shot-cli" | "api-turn" | "advisory-only";
 
@@ -24,17 +26,17 @@ function detectProvider(
   switch (provider) {
     case "kimi":
       return {
-        bin: resolveKimiBin(env),
-        sessionMode: "interactive-tty",
-        installHint: "npm install -g @anthropic-ai/kimi-code",
-        authHint: "kimi login",
-        modelHint: "kimi-code default",
+        envKey: "KIMI_API_KEY",
+        sessionMode: "api-turn",
+        installHint: "Set KIMI_API_KEY env var or configure [providers.kimi] in ~/.omk/config.toml",
+        authHint: "Set KIMI_API_KEY env var",
+        modelHint: env.KIMI_MODEL ?? "kimi-k2.6",
       };
     case "mimo":
       return {
         envKey: "MIMO_API_KEY",
         sessionMode: "api-turn",
-        installHint: "Set MIMO_API_KEY env var or configure [providers.mimo] in ~/.kimi/config.toml",
+        installHint: "Set MIMO_API_KEY env var or configure [providers.mimo] in ~/.omk/config.toml",
         authHint: "Set MIMO_API_KEY env var",
         modelHint: env.MIMO_MODEL ?? "mimo-v2.5-pro",
       };
@@ -90,25 +92,23 @@ function detectProvider(
 }
 
 async function resolveAutoProvider(env: Record<string, string | undefined>): Promise<{ provider: string; runtimeId: string } | undefined> {
-  // 1. Check config.toml for explicit default_model (highest priority)
-  try {
-    const { readFileSync } = await import("node:fs");
-    const { join } = await import("node:path");
-    const home = env.HOME ?? env.USERPROFILE ?? "";
-    const configPath = join(home, ".kimi", "config.toml");
-    const configContent = readFileSync(configPath, "utf-8");
+  // 1. Check OMK config.toml for explicit default_model (highest priority)
+  const configContent = readHomeProviderConfig(env, ".omk");
+  if (configContent) {
     const defaultModelMatch = configContent.match(/default_model\s*=\s*"([^"]+)"/);
     if (defaultModelMatch) {
       const defaultModel = defaultModelMatch[1];
-      if (defaultModel.startsWith("mimo")) return { provider: "mimo", runtimeId: "mimo-api" };
-      if (defaultModel.startsWith("kimi") || defaultModel.startsWith("moonshot")) return { provider: "kimi", runtimeId: "kimi-api" };
-      if (defaultModel.startsWith("deepseek")) return { provider: "deepseek", runtimeId: "deepseek-api" };
+      if (defaultModel.startsWith("mimo") && (env.MIMO_API_KEY || providerConfigHasApiKey(configContent, "mimo"))) return { provider: "mimo", runtimeId: "mimo-api" };
+      if ((defaultModel.startsWith("kimi") || defaultModel.startsWith("moonshot")) && (env.KIMI_API_KEY || providerConfigHasApiKey(configContent, "kimi"))) return { provider: "kimi", runtimeId: "kimi-api" };
+      if (defaultModel.startsWith("deepseek") && env.DEEPSEEK_API_KEY) return { provider: "deepseek", runtimeId: "deepseek-api" };
     }
-    if (/\[providers\.mimo\]/.test(configContent)) return { provider: "mimo", runtimeId: "mimo-api" };
-  } catch { /* config not found */ }
+    if (providerConfigHasApiKey(configContent, "mimo")) return { provider: "mimo", runtimeId: "mimo-api" };
+    if (providerConfigHasApiKey(configContent, "kimi")) return { provider: "kimi", runtimeId: "kimi-api" };
+  }
 
   // 2. Check for API keys in env
   if (env.MIMO_API_KEY) return { provider: "mimo", runtimeId: "mimo-api" };
+  if (env.KIMI_API_KEY) return { provider: "kimi", runtimeId: "kimi-api" };
   if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", runtimeId: "deepseek-api" };
   if (env.LOCAL_LLM_BASE_URL) return { provider: "local-llm", runtimeId: "local-llm" };
 
@@ -127,9 +127,6 @@ async function resolveAutoProvider(env: Record<string, string | undefined>): Pro
   const opencodeBin = env.OPENCODE_BIN ?? "opencode";
   if (await checkCommand(opencodeBin).catch(() => false)) return { provider: "opencode", runtimeId: "opencode-cli" };
 
-  // 4. kimi binary (legacy — lowest priority)
-  const kimiBin = resolveKimiBin(env);
-  if (await checkCommand(kimiBin).catch(() => false)) return { provider: "kimi", runtimeId: "kimi-print" };
 
   return undefined;
 }
@@ -168,16 +165,9 @@ export async function resolveRuntimeBootstrap(options: {
     }
   } else if (info.envKey) {
     runtimeOk = Boolean(env[info.envKey]);
-    if (!runtimeOk && selectedProvider === "mimo") {
-      // Also check config.toml for mimo API key
-      try {
-        const { readFileSync } = await import("node:fs");
-        const { join } = await import("node:path");
-        const home = env.HOME ?? env.USERPROFILE ?? "";
-        const configPath = join(home, ".kimi", "config.toml");
-        const configContent = readFileSync(configPath, "utf-8");
-        runtimeOk = /\[providers\.mimo\][\s\S]*?api_key\s*=\s*"[^"]+"/.test(configContent);
-      } catch { /* config not found */ }
+    if (!runtimeOk && (selectedProvider === "mimo" || selectedProvider === "kimi")) {
+      const configContent = readHomeProviderConfig(env, ".omk");
+      runtimeOk = configContent ? providerConfigHasApiKey(configContent, selectedProvider) : false;
     }
     if (!runtimeOk) {
       reasons.push(`${info.envKey} is not set`);
@@ -210,6 +200,24 @@ export async function resolveRuntimeBootstrap(options: {
     reason: reasons.length > 0 ? reasons.join("; ") : undefined,
     setupHints: hints,
   };
+}
+
+function readHomeProviderConfig(env: Record<string, string | undefined>, configDir: ".omk"): string | undefined {
+  try {
+    const home = env.HOME ?? env.USERPROFILE;
+    if (!home) return undefined;
+    return readFileSync(join(home, configDir, "config.toml"), "utf-8");
+  } catch {
+    return undefined;
+  }
+}
+
+function providerConfigHasApiKey(configContent: string, provider: string): boolean {
+  return new RegExp(`\\[providers\\.${escapeRegExp(provider)}\\][\\s\\S]*?api_key\\s*=\\s*"[^"]+"`).test(configContent);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function resolveAuthorityProviderPolicy(

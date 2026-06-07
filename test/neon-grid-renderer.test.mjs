@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { NeonGridRenderer } = await import("../dist/cli/ui/neon-grid-renderer.js");
-const { resolveChatUi, renderChatIntro } = await import("../dist/commands/chat/utils.js");
+const { defaultChatUiForBrand, resolveChatUi, renderChatIntro } = await import("../dist/commands/chat/utils.js");
 
 function createStreams(columns = 80, isTTY = false) {
   const stdout = [];
@@ -36,10 +36,13 @@ test("NeonGridRenderer renders OMK Control copy without cloning external brands"
 
   assert.equal(stdout.join(""), "");
   const output = stderr.join("");
-  assert.match(output, /OMK\/\/CONTROL/);
+  assert.match(output, /PI\+OMK\/\/CONTROL/);
+  assert.match(output, /◢█ PI\+OMK\/\/CONTROL █◣/);
   assert.match(output, /Route agents\. Verify evidence\. Control the loop\./);
-  assert.match(output, /agent grid online/);
-  assert.match(output, /evidence gate armed/);
+  assert.match(output, /ROUTE run#neon-g/);
+  assert.match(output, /NEON metrics live/);
+  assert.match(output, /VERIFY armed/);
+  assert.match(output, /SCOPE MCP\/skills\/hooks/);
   assert.match(output, /route agents and verify evidence/);
   assert.doesNotMatch(output, /Cyberpunk|THE\s+MATRIX/i);
 });
@@ -49,7 +52,16 @@ test("chat UI resolver accepts neon-grid aliases", () => {
   assert.equal(resolveChatUi("neon"), "neon-grid");
   assert.equal(resolveChatUi("grid"), "neon-grid");
   assert.equal(resolveChatUi("control"), "neon-grid");
+  assert.equal(resolveChatUi("night-city"), "neon-grid");
+  assert.equal(resolveChatUi("metrics-control"), "neon-grid");
   assert.equal(resolveChatUi(undefined, { OMK_UI: "omk-control" }), "neon-grid");
+});
+
+test("branded chat entry defaults to the matching neon UI renderer", () => {
+  assert.equal(defaultChatUiForBrand("neon-grid"), "neon-grid");
+  assert.equal(defaultChatUiForBrand("green-rain"), "green-rain");
+  assert.equal(defaultChatUiForBrand("rust-forge"), "rust-forge");
+  assert.equal(defaultChatUiForBrand("omk"), undefined);
 });
 
 test("neon-grid chat intro uses compact OMK Control copy", () => {
@@ -61,9 +73,9 @@ test("neon-grid chat intro uses compact OMK Control copy", () => {
     mode: "agent",
   });
 
-  assert.match(output, /OMK\/\/CONTROL ready/);
-  assert.match(output, /OMK\/\/CONTROL/);
-  assert.match(output, /NEON GRID ONLINE/);
+  assert.match(output, /PI\+OMK\/\/CONTROL ready/);
+  assert.match(output, /PI\+OMK\/\/CONTROL/);
+  assert.match(output, /PI\+OMK ONLINE/);
   assert.doesNotMatch(output, /GREEN\s+RAIN\s+MODE|THE\s+MATRIX/i);
 });
 
@@ -76,8 +88,8 @@ test("default OMK chat intro uses Neon Grid copy instead of Matrix splash", () =
     mode: "agent",
   });
 
-  assert.match(output, /OMK\/\/CONTROL/);
-  assert.match(output, /NEON GRID ONLINE/);
+  assert.match(output, /PI\+OMK\/\/CONTROL/);
+  assert.match(output, /PI\+OMK ONLINE/);
   assert.doesNotMatch(output, /GREEN\s+RAIN\s+MODE|THE\s+MATRIX/i);
 });
 
@@ -101,8 +113,9 @@ test("NeonGridRenderer honors NO_COLOR and clamps visible width", () => {
     });
 
     const output = stderr.join("");
-    assert.doesNotMatch(output, /\x1b\[/);
-    for (const line of output.split("\n").filter(Boolean)) {
+    assert.doesNotMatch(output, /\x1b\[[0-9;]*m/);
+    const visibleOutput = output.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
+    for (const line of visibleOutput.split("\n").filter(Boolean)) {
       assert.ok(line.length <= 48, `line exceeded width: ${line}`);
     }
   } finally {

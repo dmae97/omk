@@ -1,10 +1,10 @@
-# open_multi-agent_kit
+# open-multi-agent-kit
 
 > Provider-neutral multi-agent orchestration harness for OMK-managed coding agents.
 
-## What is open_multi-agent_kit?
+## What is open-multi-agent-kit?
 
-open_multi-agent_kit (OMK) is an open-source CLI tool that turns agent CLIs and model APIs into a parallel, multi-role coding team. OMK is the root orchestrator: it assigns provider lanes, skills, hooks, MCP scope, real-time quality gates, Git worktree-based isolated agent workspaces, local graph memory, and built-in MCP / LSP integration.
+open-multi-agent-kit (OMK) is an open-source CLI tool that turns agent CLIs and model APIs into a parallel, multi-role coding team. OMK is the root orchestrator: it assigns provider lanes, skills, hooks, MCP scope, real-time quality gates, Git worktree-based isolated agent workspaces, local graph memory, and built-in MCP / LSP integration.
 
 ## Key Features
 
@@ -33,6 +33,6 @@ omk hud       # Launch live dashboard
 
 ## Repository
 
-- GitHub: https://github.com/dmae97/open_multi-agent_kit
+- GitHub: https://github.com/dmae97/open-multi-agent-kit
 - npm: https://www.npmjs.com/package/open-multi-agent-kit
 - License: MIT
