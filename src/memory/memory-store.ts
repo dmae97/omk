@@ -14,6 +14,8 @@ import type {
   MemorySearchResult,
 } from "./local-graph-memory-store.js";
 import type { MemoryBackend } from "./memory-config.js";
+import { loadMemorySettings as loadMemorySettingsForLink } from "./memory-config.js";
+import type { RunManifest } from "../contracts/run.js";
 
 export interface MemoryStoreOptions {
   projectRoot?: string;
@@ -34,6 +36,35 @@ export interface UnifiedMemoryStore {
   ontology?: () => Promise<MemoryOntology | null>;
   mindmap?: (query?: string, limit?: number) => Promise<MemoryMindmap | null>;
   graphQuery?: (query: string) => Promise<GraphQueryResult>;
+  linkRun?: (runId: string, manifest: RunManifest) => Promise<void>;
+}
+
+export interface LinkRunToGraphOptions {
+  projectRoot?: string;
+  sessionId?: string;
+  source?: string;
+  env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * Idempotent, non-fatal finalizer: links a finalized run manifest into the
+ * local graph memory backend. Returns true when the active backend linked the
+ * run, false when no graph backend is available (e.g. file-only backend).
+ *
+ * Only ids/status/paths/sha256/counts are persisted — never raw evidence or
+ * decision bodies, and never secrets. Callers should still wrap this in their
+ * own try/catch so a graph write failure can never fail a run.
+ */
+export async function linkRunToGraph(
+  runId: string,
+  manifest: RunManifest,
+  options: LinkRunToGraphOptions = {}
+): Promise<boolean> {
+  const settings = await loadMemorySettingsForLink(options.projectRoot, options.env);
+  const store = await createMemoryStore(settings.backend, options);
+  if (!store || typeof store.linkRun !== "function") return false;
+  await store.linkRun(runId, manifest);
+  return true;
 }
 
 export async function createMemoryStore(

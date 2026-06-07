@@ -251,6 +251,10 @@ export class ParallelOrchestrator {
       this.stateManager.setStatus(success ? "completed" : "failed");
       this.stateManager.setCompletedAt(new Date().toISOString());
 
+      // Wave-3 p8: link the finalized run manifest into the local graph.
+      // Non-fatal: a graph write failure must never fail the run.
+      await this.linkRunManifestToGraph();
+
       // 결과 반환
       return this.createResult(success);
     } catch (error) {
@@ -263,6 +267,32 @@ export class ParallelOrchestrator {
     } finally {
       // 정리
       await this.cleanup();
+    }
+  }
+
+  /**
+   * Non-fatal finalizer: if a run-manifest.json was persisted for this run,
+   * link its run -> providerRoute -> provider / evidence / decision / artifact
+   * nodes into the local graph. Failures are swallowed so the run is unaffected.
+   */
+  private async linkRunManifestToGraph(): Promise<void> {
+    try {
+      const { readFile } = await import("fs/promises");
+      const { getRunArtifactPath } = await import("../util/run-store.js");
+      let raw: string;
+      try {
+        raw = await readFile(getRunArtifactPath(this.runId, "run-manifest.json", this.cwd), "utf-8");
+      } catch {
+        return; // no manifest persisted for this run; nothing to link
+      }
+      const { RunManifestSchema } = await import("../schema/run-manifest.schema.js");
+      const parsed = RunManifestSchema.safeParse(JSON.parse(raw));
+      if (!parsed.success) return;
+      const { linkRunToGraph } = await import("../memory/memory-store.js");
+      await linkRunToGraph(this.runId, parsed.data, { projectRoot: this.cwd });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logStreamer.log("warn", `graph link skipped: ${message}`);
     }
   }
 

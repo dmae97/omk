@@ -8,6 +8,7 @@ import {
   type MemorySettings,
   type MemoryStatus,
 } from "./memory-config.js";
+import type { RunManifest } from "../contracts/run.js";
 
 export interface MemorySearchResult {
   path: string;
@@ -485,6 +486,203 @@ export class LocalGraphMemoryStore {
       .map((edge) => ({ from: edge.from, to: edge.to, type: edge.type, label: edge.label }));
     const root = this.buildMindmapTree(rootNode, state, includedIds, new Set<string>());
     return { root, nodes: flatNodes, edges, ontology: ONTOLOGY };
+  }
+
+  /**
+   * Idempotent finalizer that links a finalized run manifest into the local
+   * graph. Emits run -> providerRoute -> provider, run -> evidence,
+   * run -> decision, and run -> artifact nodes/edges.
+   *
+   * Privacy: only ids, status, paths, sha256, and aggregate counts are stored.
+   * Raw evidence/decision message bodies and secrets are never persisted.
+   *
+   * Idempotency: node/edge ids are deterministic and prior run-generated
+   * nodes/edges (tagged `generatedFromRun`) are pruned before re-inserting, so
+   * re-running with the same (or a changed) manifest never duplicates state.
+   */
+  async linkRun(runId: string, manifest: RunManifest): Promise<void> {
+    const canonicalRunId = manifest.runId || runId;
+    if (runId && manifest.runId && runId !== manifest.runId) {
+      throw new Error(`linkRun: runId mismatch (param=${runId}, manifest=${manifest.runId})`);
+    }
+    await this.mutateState((state, now) => {
+      this.applyRunManifest(state, canonicalRunId, manifest, now);
+    });
+  }
+
+  private applyRunManifest(state: LocalGraphState, runId: string, manifest: RunManifest, now: string): void {
+    state.updatedAt = now;
+    state.project = { ...this.settings.project };
+    state.ontology = ONTOLOGY;
+
+    // Prune prior run-generated child nodes/edges for idempotent re-runs. The
+    // Run node and shared Provider nodes are intentionally not pruned (the Run
+    // node is re-upserted preserving createdAt; Providers are shared by runs).
+    const staleNodeIds = new Set(
+      state.nodes.filter((node) => node.properties.generatedFromRun === runId).map((node) => node.id)
+    );
+    state.nodes = state.nodes.filter((node) => !staleNodeIds.has(node.id));
+    state.edges = state.edges.filter(
+      (edge) =>
+        edge.properties.generatedFromRun !== runId && !staleNodeIds.has(edge.from) && !staleNodeIds.has(edge.to)
+    );
+
+    const tag = { generatedFromRun: runId } satisfies Properties;
+
+    const projectId = this.nodeId("Project", this.settings.project.key);
+    this.upsertNode(state, {
+      id: projectId,
+      type: "Project",
+      labels: ["OmkProject", "Project"],
+      label: this.settings.project.name,
+      summary: this.settings.project.root,
+      tags: ["project"],
+      properties: { key: this.settings.project.key, root: this.settings.project.root },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const runNodeId = this.nodeId("Run", runId);
+    this.upsertNode(state, {
+      id: runNodeId,
+      type: "Run",
+      labels: ["OmkRun", "Run"],
+      label: runId,
+      summary: `Run ${runId} (${manifest.status})`,
+      tags: ["run", manifest.status],
+      properties: {
+        runId,
+        status: manifest.status,
+        schemaVersion: manifest.schemaVersion,
+        createdAt: manifest.createdAt,
+        completedAt: manifest.completedAt ?? null,
+        promptHash: manifest.promptHash ?? null,
+        decisionTracePath: manifest.decisionTracePath ?? null,
+        evidenceRequired: manifest.evidenceSummary.required,
+        evidencePassed: manifest.evidenceSummary.passed,
+        evidenceFailed: manifest.evidenceSummary.failed,
+        evidenceMissing: manifest.evidenceSummary.missing,
+        nodeCount: manifest.nodes.length,
+        artifactCount: manifest.artifacts.length,
+        projectKey: this.settings.project.key,
+        source: this.source,
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+    this.upsertEdge(state, projectId, runNodeId, "HAS_RUN", now, tag);
+
+    // Provider route -> provider.
+    const provider = manifest.providerPolicy.provider;
+    const mode = manifest.providerPolicy.mode ?? "auto";
+    const routeNodeId = this.nodeId("ProviderRoute", `${runId}:${provider}:${mode}`);
+    this.upsertNode(state, {
+      id: routeNodeId,
+      type: "ProviderRoute",
+      labels: ["OmkProviderRoute", "ProviderRoute"],
+      label: `${provider} (${mode})`,
+      summary: `Provider route for run ${runId}`,
+      tags: ["provider-route", provider, mode],
+      properties: { runId, provider, mode, projectKey: this.settings.project.key, generatedFromRun: runId },
+      createdAt: now,
+      updatedAt: now,
+    });
+    this.upsertEdge(state, runNodeId, routeNodeId, "HAS_PROVIDER_ROUTE", now, tag);
+
+    const providerNodeId = this.nodeId("Provider", provider);
+    this.upsertNode(state, {
+      id: providerNodeId,
+      type: "Provider",
+      labels: ["OmkProvider", "Provider"],
+      label: provider,
+      summary: `Provider ${provider}`,
+      tags: ["provider", provider],
+      properties: { provider, projectKey: this.settings.project.key },
+      createdAt: now,
+      updatedAt: now,
+    });
+    this.upsertEdge(state, routeNodeId, providerNodeId, "ROUTES_TO", now, tag);
+
+    // Evidence summary node (counts/paths/sha only — never raw bodies).
+    const evidenceArtifact = manifest.artifacts.find(
+      (artifact) => artifact.kind === "evidence" || /(^|\/)evidence\.jsonl$/i.test(artifact.path)
+    );
+    const evidenceNodeId = this.nodeId("Evidence", `${runId}:evidence`);
+    this.upsertNode(state, {
+      id: evidenceNodeId,
+      type: "Evidence",
+      labels: ["OmkEvidence", "Evidence"],
+      label: `evidence:${runId}`,
+      summary: `Evidence ${manifest.evidenceSummary.passed}/${manifest.evidenceSummary.required} passed`,
+      tags: ["evidence", manifest.status],
+      properties: {
+        runId,
+        required: manifest.evidenceSummary.required,
+        passed: manifest.evidenceSummary.passed,
+        failed: manifest.evidenceSummary.failed,
+        missing: manifest.evidenceSummary.missing,
+        path: evidenceArtifact?.path ?? null,
+        sha256: evidenceArtifact?.sha256 ?? null,
+        projectKey: this.settings.project.key,
+        generatedFromRun: runId,
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+    this.upsertEdge(state, runNodeId, evidenceNodeId, "HAS_EVIDENCE", now, tag);
+
+    // Decision trace node (path/sha only — never raw bodies).
+    const decisionArtifact = manifest.artifacts.find(
+      (artifact) =>
+        artifact.kind === "decision" ||
+        artifact.kind === "decisions" ||
+        /(^|\/)decisions\.jsonl$/i.test(artifact.path)
+    );
+    const decisionPath = manifest.decisionTracePath ?? decisionArtifact?.path ?? null;
+    const decisionNodeId = this.nodeId("Decision", `${runId}:decision`);
+    this.upsertNode(state, {
+      id: decisionNodeId,
+      type: "Decision",
+      labels: ["OmkDecision", "Decision"],
+      label: `decisions:${runId}`,
+      summary: `Decision trace for run ${runId}`,
+      tags: ["decision", manifest.status],
+      properties: {
+        runId,
+        path: decisionPath,
+        sha256: decisionArtifact?.sha256 ?? null,
+        projectKey: this.settings.project.key,
+        generatedFromRun: runId,
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+    this.upsertEdge(state, runNodeId, decisionNodeId, "HAS_DECISION", now, tag);
+
+    // Artifacts -> File/Artifact nodes (id/kind/path/sha only).
+    for (const artifact of manifest.artifacts) {
+      const artifactNodeId = this.nodeId("Artifact", `${runId}:${artifact.kind}:${artifact.path}`);
+      this.upsertNode(state, {
+        id: artifactNodeId,
+        type: "Artifact",
+        labels: ["OmkArtifact", "Artifact", "File"],
+        label: artifact.path,
+        path: artifact.path,
+        summary: `${artifact.kind} artifact`,
+        tags: ["artifact", artifact.kind, ...pathTags(artifact.path)],
+        properties: {
+          runId,
+          kind: artifact.kind,
+          path: artifact.path,
+          sha256: artifact.sha256 ?? null,
+          projectKey: this.settings.project.key,
+          generatedFromRun: runId,
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+      this.upsertEdge(state, runNodeId, artifactNodeId, "TOUCHES_FILE", now, tag);
+    }
   }
 
   async graphQuery(query: string): Promise<GraphQueryResult> {
