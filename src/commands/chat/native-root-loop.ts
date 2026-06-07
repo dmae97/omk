@@ -32,6 +32,7 @@ import { persistInputEnvelope } from "../../input/input-artifacts.js";
 import { buildDagCompileResult } from "../../orchestration/dag-compiler.js";
 import { persistDagCompileArtifacts } from "../../orchestration/dag-artifacts.js";
 import { TerminalOwner } from "../../util/terminal-owner.js";
+import { resumeInteractiveInput } from "../../util/terminal-input.js";
 import type { CliRenderer } from "../../cli/ui/renderer.js";
 import type { TaskRunContext } from "../../contracts/worker-context.js";
 import { executeHarnessRun } from "../../harness/execute-harness-run.js";
@@ -950,6 +951,14 @@ export async function runNativeOmkRootLoop(
     if (renderer) renderer.emit({ type: "control:output", text });
     else process.stdout.write(`${text}\n`);
   };
+
+  // Defensive stdin re-validation before the chat readline takes ownership.
+  // The first-run GitHub-star / update prompts (@inquirer/prompts) can take
+  // over raw mode and leave the shared interactive stdin paused; a paused TTY
+  // makes the readline below see an immediate EOF/'close' and exit the loop
+  // with "Session ended". This only resumes an explicitly-paused TTY and never
+  // touches non-TTY stdin (its EOF/exit behavior must stay unchanged).
+  resumeInteractiveInput(process.stdin);
 
   const { createInterface } = await import("readline");
   const rl = createInterface({
