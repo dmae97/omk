@@ -97,6 +97,7 @@ Screenshot *.png
 # Local scratch / foreign checkout directories
 .bg-shell/
 .codegraph/
+.playwright-mcp/
 .gsd/
 .commandcode/
 agent-skills/
@@ -117,4 +118,3 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
-.npmrc

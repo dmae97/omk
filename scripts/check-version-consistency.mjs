@@ -6,7 +6,7 @@ const root = process.cwd();
 const expectedPackageName = "open-multi-agent-kit";
 const expectedRuntimeVersion = "v1.2";
 const expectedContractVersion = "omk.contract.v1";
-const expectedPackageVersion = "0.78.0";
+const expectedPackageVersion = "0.78.1";
 
 const schemaFiles = {
   "omk.contract.v1": "schemas/omk.contract.v1.schema.json",
