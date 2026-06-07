@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (must match package.json)'
+        required: true
+        default: '0.78.0'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -12,6 +17,9 @@ env:
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   quality:
@@ -74,6 +82,8 @@ jobs:
   package:
     runs-on: ubuntu-latest
     needs: [quality, native]
+    outputs:
+      tarball: ${{ steps.pack.outputs.tarball }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -93,22 +103,22 @@ jobs:
         run: npm run native:normalize
       - run: npm run audit:package
       - name: Pack tarball
-        run: npm pack --ignore-scripts --json
+        id: pack
+        run: |
+          PACK_JSON=$(npm pack --ignore-scripts --json)
+          printf '%s\n' "${PACK_JSON}" > npm-pack.json
+          TARBALL=$(node -e "const fs = require('fs'); const pack = JSON.parse(fs.readFileSync('npm-pack.json', 'utf8')); const filename = pack?.[0]?.filename; if (!filename) { throw new Error('npm pack did not return a filename'); } console.log(filename);")
+          echo "tarball=${TARBALL}" >> "$GITHUB_OUTPUT"
         env:
           TMPDIR: /tmp
           TMP: /tmp
           TEMP: /tmp
           npm_config_cache: /tmp/omk-npm-cache
-      - name: Resolve tarball filename
-        id: tarball
-        run: |
-          TARBALL=$(ls *.tgz | head -n 1)
-          echo "path=${TARBALL}" >> "$GITHUB_OUTPUT"
       - name: Upload tarball
         uses: actions/upload-artifact@v4
         with:
           name: tarball
-          path: ${{ steps.tarball.outputs.path }}
+          path: ${{ steps.pack.outputs.tarball }}
 
   audit:
     runs-on: ubuntu-latest
@@ -153,7 +163,7 @@ jobs:
 
   publish:
     runs-on: ubuntu-latest
-    needs: [smoke]
+    needs: [package, smoke]
     permissions:
       contents: write
       id-token: write
@@ -173,6 +183,10 @@ jobs:
             echo "Git tag ${GITHUB_REF_NAME} does not match package version v${PKG_VERSION}" >&2
             exit 1
           fi
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.version }}" != "${PKG_VERSION}" ]; then
+            echo "Workflow dispatch version ${{ github.event.inputs.version }} does not match package version ${PKG_VERSION}" >&2
+            exit 1
+          fi
           if echo "${PKG_VERSION}" | grep -q -- '-'; then
             PRERELEASE=true
             NPM_TAG=$(node -e "const v=require('./package.json').version; const m=v.match(/-([0-9A-Za-z]+)(?:[.-].*)?$/); console.log(m ? m[1] : 'alpha')")
@@ -185,17 +199,44 @@ jobs:
             echo "pkg_version=${PKG_VERSION}"
             echo "prerelease=${PRERELEASE}"
             echo "npm_tag=${NPM_TAG}"
+            echo "release_tag=v${PKG_VERSION}"
           } >> "$GITHUB_OUTPUT"
       - name: Download tarball
         uses: actions/download-artifact@v4
         with:
           name: tarball
+      - name: Validate tarball metadata
+        env:
+          PKG_NAME: ${{ steps.meta.outputs.pkg_name }}
+          PKG_VERSION: ${{ steps.meta.outputs.pkg_version }}
+        run: |
+          TARBALL="${{ needs.package.outputs.tarball }}"
+          tar -xzf "${TARBALL}" package/package.json -O | node -e '
+            const chunks = [];
+            process.stdin.on("data", c => chunks.push(c));
+            process.stdin.on("end", () => {
+              const pkg = JSON.parse(Buffer.concat(chunks).toString());
+              if (pkg.name !== process.env.PKG_NAME) {
+                console.error("Tarball name mismatch: expected", process.env.PKG_NAME, "got", pkg.name);
+                process.exit(1);
+              }
+              if (pkg.version !== process.env.PKG_VERSION) {
+                console.error("Tarball version mismatch: expected", process.env.PKG_VERSION, "got", pkg.version);
+                process.exit(1);
+              }
+              console.log("Tarball metadata valid:", pkg.name, pkg.version);
+            });
+          '
       - name: Publish to npm
         run: |
-          TARBALL=$(ls *.tgz | head -n 1)
+          TARBALL="${{ needs.package.outputs.tarball }}"
           if npm view "${{ steps.meta.outputs.pkg_name }}@${{ steps.meta.outputs.pkg_version }}" version >/dev/null 2>&1; then
             echo "Version ${{ steps.meta.outputs.pkg_version }} already exists on npm; skipping publish."
             exit 0
+          fi
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "NPM_TOKEN secret is required to publish ${{ steps.meta.outputs.pkg_name }}@${{ steps.meta.outputs.pkg_version }}" >&2
+            exit 1
           fi
           if [ "${{ steps.meta.outputs.npm_tag }}" = "latest" ]; then
             npm publish "${TARBALL}" --provenance --access public
@@ -207,6 +248,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.meta.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
-          files: "*.tgz"
+          files: ${{ needs.package.outputs.tarball }}

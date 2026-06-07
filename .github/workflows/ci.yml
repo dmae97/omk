@@ -10,6 +10,9 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   OMK_MCP_SUPPRESS_PRUNE_WARNINGS: "1"
 
+permissions:
+  contents: read
+
 jobs:
   verify-no-kimi:
     runs-on: ubuntu-latest

@@ -56,9 +56,13 @@ export const OMK_CORE_VERIFIED_PRESET: OmkCoreVerifiedPreset = {
   skills: [
     "omk-repo-explorer",
     "omk-context-broker",
+    "omk-industrial-control-loop",
     "omk-plan-first",
     "omk-quality-gate",
+    "omk-test-debug-loop",
+    "omk-code-review",
     "omk-secret-guard",
+    "omk-python-typing",
   ],
   hooks: [
     "pre-shell-guard.sh",

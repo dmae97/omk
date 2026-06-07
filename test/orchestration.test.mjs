@@ -376,7 +376,7 @@ test("routing inventory reports invalid MCP JSON without dropping valid project 
   }
 });
 
-test("project MCP scope excludes project-local Kimi MCP config and uses .omk/mcp.json", async () => {
+test("project MCP scope prefers project-local .kimi MCP config and keeps .omk as fallback", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-scope-"));
   const previousRoot = process.env.OMK_PROJECT_ROOT;
   process.env.OMK_PROJECT_ROOT = projectRoot;
@@ -389,8 +389,8 @@ test("project MCP scope excludes project-local Kimi MCP config and uses .omk/mcp
 
     const configs = await collectMcpConfigs("project");
 
-    assert.deepEqual(configs, [join(projectRoot, ".omk", "mcp.json")]);
-    assert.equal(configs.includes(join(projectRoot, ".kimi", "mcp.json")), false);
+    assert.deepEqual(configs, [join(projectRoot, ".kimi", "mcp.json")]);
+    assert.equal(configs.includes(join(projectRoot, ".omk", "mcp.json")), false);
     assert.equal(configs.some((path) => path.startsWith(join(homedir(), ".omk"))), false);
   } finally {
     restoreEnv("OMK_PROJECT_ROOT", previousRoot);

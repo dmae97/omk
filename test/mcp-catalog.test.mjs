@@ -3,21 +3,21 @@ import assert from "node:assert/strict";
 
 import { getDefaultSelections, RECOMMENDED_MCP_SERVERS } from "../dist/mcp/server-catalog.js";
 
-test("MCP catalog default selections match omk-core-verified external MCPs", () => {
-  assert.deepEqual(getDefaultSelections().sort(), ["context7", "fetch", "github"].sort());
+test("MCP catalog starts fresh projects with no external defaults", () => {
+  assert.deepEqual(getDefaultSelections(), []);
 });
 
-test("MCP catalog uses secret-free commands for core verified defaults", () => {
-  const defaults = new Set(getDefaultSelections());
-  const entries = RECOMMENDED_MCP_SERVERS.filter((server) => defaults.has(server.name));
+test("MCP catalog keeps bundled recommendations secret-free without preselecting them", () => {
+  const bundled = RECOMMENDED_MCP_SERVERS.filter((server) => server.bundled);
 
-  assert.equal(entries.length, 3);
-  for (const entry of entries) {
+  assert.deepEqual(bundled.map((entry) => entry.name).sort(), ["context7", "fetch", "github"].sort());
+  for (const entry of bundled) {
     const serialized = JSON.stringify(entry);
     assert.doesNotMatch(serialized, /PERSONAL_ACCESS_TOKEN|Bearer|API_KEY|PASSWORD|SECRET/);
+    assert.equal(getDefaultSelections().includes(entry.name), false);
   }
 
-  const github = entries.find((entry) => entry.name === "github");
+  const github = bundled.find((entry) => entry.name === "github");
   assert.equal(github?.command, "https://api.githubcopilot.com/mcp/");
   assert.deepEqual(github?.args, []);
 });

@@ -765,18 +765,33 @@ export async function syncAllKimiGlobals(
   };
 }
 
-/** Canonical OMK MCP config collection; Kimi project/global files are not part of the root OMK runtime path. */
+/** Canonical OMK MCP config collection with project `.kimi/mcp.json` compatibility. */
 export async function collectMcpConfigs(scope: OmkRuntimeScope = "project"): Promise<string[]> {
   const configs: string[] = [];
   if (scope === "none") return configs;
 
   const root = await getProjectRootAsync();
-  const omkMcp = join(root, ".omk", "mcp.json");
-  const globalOmkMcp = join(getUserHome(), ".omk", "mcp.json");
+  const home = getUserHome();
+  const projectOmkMcp = join(root, ".omk", "mcp.json");
+  const projectKimiMcp = join(root, ".kimi", "mcp.json");
+  const globalOmkMcp = join(home, ".omk", "mcp.json");
+  const globalKimiMcp = join(home, ".kimi", "mcp.json");
 
-  if (scope === "all" && await pathExists(globalOmkMcp)) configs.push(globalOmkMcp);
+  // Precedence is left-to-right with later files winning during runtime merge:
+  // global first, project second. Project `.kimi/mcp.json` is the active
+  // compatibility surface; `.omk/mcp.json` is used only as a project fallback
+  // when the `.kimi` companion does not exist.
+  if (scope === "all") {
+    for (const candidate of [globalOmkMcp, globalKimiMcp]) {
+      if (await pathExists(candidate)) configs.push(candidate);
+    }
+  }
 
-  if (await pathExists(omkMcp)) configs.push(omkMcp);
+  if (await pathExists(projectKimiMcp)) {
+    configs.push(projectKimiMcp);
+  } else if (await pathExists(projectOmkMcp)) {
+    configs.push(projectOmkMcp);
+  }
 
   return [...new Set(configs)];
 }

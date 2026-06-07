@@ -36,8 +36,8 @@ test("NeonGridRenderer renders OMK Control copy without cloning external brands"
 
   assert.equal(stdout.join(""), "");
   const output = stderr.join("");
-  assert.match(output, /PI\+OMK\/\/CONTROL/);
-  assert.match(output, /◢█ PI\+OMK\/\/CONTROL █◣/);
+  assert.match(output, /OMK\/\/CONTROL/);
+  assert.match(output, /◢█ OMK\/\/CONTROL █◣/);
   assert.match(output, /Route agents\. Verify evidence\. Control the loop\./);
   assert.match(output, /ROUTE run#neon-g/);
   assert.match(output, /NEON metrics live/);
@@ -73,9 +73,9 @@ test("neon-grid chat intro uses compact OMK Control copy", () => {
     mode: "agent",
   });
 
-  assert.match(output, /PI\+OMK\/\/CONTROL ready/);
-  assert.match(output, /PI\+OMK\/\/CONTROL/);
-  assert.match(output, /PI\+OMK ONLINE/);
+  assert.match(output, /OMK\/\/CONTROL ready/);
+  assert.match(output, /OMK\/\/CONTROL/);
+  assert.match(output, /OMK ONLINE/);
   assert.doesNotMatch(output, /GREEN\s+RAIN\s+MODE|THE\s+MATRIX/i);
 });
 
@@ -88,8 +88,8 @@ test("default OMK chat intro uses Neon Grid copy instead of Matrix splash", () =
     mode: "agent",
   });
 
-  assert.match(output, /PI\+OMK\/\/CONTROL/);
-  assert.match(output, /PI\+OMK ONLINE/);
+  assert.match(output, /OMK\/\/CONTROL/);
+  assert.match(output, /OMK ONLINE/);
   assert.doesNotMatch(output, /GREEN\s+RAIN\s+MODE|THE\s+MATRIX/i);
 });
 

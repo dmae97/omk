@@ -97,7 +97,7 @@ describe("omk with no arguments", () => {
     assert.match(activeSkillNamesSource, /\.agents/);
     assert.doesNotMatch(activeSkillNamesSource, /\.kimi/);
     assert.match(collectMcpSource, /\.omk/);
-    assert.doesNotMatch(collectMcpSource, /\.kimi/);
+    assert.match(collectMcpSource, /\.kimi/);
 
     const providerRunnerSource = readFileSync(DIST_PROVIDER_TASK_RUNNER, "utf-8");
     assert.equal(providerRunnerSource.includes("../kimi/runner"), false);

@@ -28,8 +28,8 @@ test("green-rain theme is OMK-native and evidence-oriented", () => {
 
 test("neon-grid theme defines OMK Control visual language", () => {
   assert.equal(NEON_GRID_THEME.name, "neon-grid");
-  assert.equal(NEON_GRID_THEME.label, "PI+OMK//CONTROL");
-  assert.match(NEON_GRID_THEME.tagline, /PI\+OMK control plane/);
+  assert.equal(NEON_GRID_THEME.label, "OMK//CONTROL");
+  assert.match(NEON_GRID_THEME.tagline, /OMK control plane/);
   assert.match(NEON_GRID_THEME.motto, /Control the loop/);
   assert.equal(NEON_GRID_THEME.symbols.active, "●");
   assert.match(NEON_GRID_THEME.colors.info, /38;2;0;214;255m/);

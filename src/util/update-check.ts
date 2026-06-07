@@ -38,7 +38,7 @@ interface UpdateCache {
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_UPDATE_REMIND_HOURS = 24;
 const UPDATE_PROMPT_TIMEOUT_MS = 30_000;
-export const OMK_NPM_PACKAGE_NAME = "@omk/cli";
+export const OMK_NPM_PACKAGE_NAME = "open-multi-agent-kit";
 const OMK_UPDATE_INSTALL_CMD = `npm i -g ${OMK_NPM_PACKAGE_NAME}`;
 
 const FALLBACK_INSTALL_SCRIPT = "Set KIMI_API_KEY and optionally KIMI_MODEL for direct Moonshot API access.";

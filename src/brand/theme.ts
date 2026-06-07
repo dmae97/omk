@@ -106,8 +106,8 @@ export const GREEN_RAIN_THEME: OmkBrandTheme = {
 
 export const NEON_GRID_THEME: OmkBrandTheme = {
   name: "neon-grid",
-  label: "PI+OMK//CONTROL",
-  tagline: "PI+OMK control plane for coding agents.",
+  label: "OMK//CONTROL",
+  tagline: "OMK control plane for coding agents.",
   motto: "Route agents. Verify evidence. Control the loop.",
   symbols: {
     prompt: "›",

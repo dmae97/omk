@@ -118,8 +118,8 @@ export function renderChatIntro(
     }
     lines.push("");
   } else if (brand !== "plain") {
-    lines.push(style.phosphorBold("◇ PI+OMK//CONTROL"));
-    lines.push(style.gray("  PI+OMK ONLINE"));
+    lines.push(style.phosphorBold("◇ OMK//CONTROL"));
+    lines.push(style.gray("  OMK ONLINE"));
     lines.push(style.gray("  Route: online · Verify: armed · Loop: controlled."));
     lines.push("");
   }

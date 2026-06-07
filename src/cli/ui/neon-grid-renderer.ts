@@ -102,7 +102,7 @@ export class NeonGridRenderer implements CliRenderer {
     const run = event.runId ? `run#${event.runId.slice(0, 7)}` : "run#pending";
     const root = event.root ? truncate(event.root, Math.max(12, width - 16)) : "root:unknown";
     const shouldRenderScanline = this.motion !== "off" && this.started && this.err.isTTY !== false;
-    const titleLine = center("◢█ PI+OMK//CONTROL █◣", width);
+    const titleLine = center("◢█ OMK//CONTROL █◣", width);
     const mottoLine = center(truncate(NEON_GRID_THEME.motto, width), width);
     const routeLine = truncate(`${NEON_GRID_THEME.symbols.signal} ROUTE ${run} · provider:${event.provider} · model:${event.model ?? "auto"}`, width);
     const statusLine = truncate(`▣ NEON metrics live · VERIFY armed · SCOPE MCP/skills/hooks · LOOP controlled`, width);
