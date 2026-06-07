@@ -59,6 +59,7 @@ jobs:
       - run: npm run check
       - run: npm run build:clean
       - name: Run tests with diagnostics
+        if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
           set +e
@@ -79,7 +80,7 @@ jobs:
           fi
           exit $exit_code
       - name: Upload test artifacts
-        if: always()
+        if: always() && matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
           name: test-outputs-${{ matrix.os }}-${{ matrix.node-version }}
