@@ -6,7 +6,7 @@ import { t } from "../util/i18n.js";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import type { RunState, TeamRuntimeStatus } from "../contracts/orchestration.js";
-import { createRoutedRunState, refreshRunStateEstimate } from "../orchestration/run-state.js";
+import { refreshRunStateEstimate } from "../orchestration/run-state.js";
 
 import { createInteractiveRunState as createParallelRunState } from "./parallel/orchestrator.js";
 import { ensureCompletionArtifactContract } from "../orchestration/completion-artifacts.js";
