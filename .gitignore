@@ -36,6 +36,15 @@ yarn-error.log*
 !templates/skills/agents/
 !templates/skills/agents/**
 
+# Local spec outputs / generated daily docs
+.specify/
+specs/
+/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
+/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-plan.md
+/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-improvements.md
+/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-critical-issues.md
+/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-init-checklist.md
+
 # Environment / local config / registry credentials
 .env
 .env.*

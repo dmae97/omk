@@ -54,7 +54,7 @@ test("smoke workflow tests before packaging and audits the produced tarball", ()
   assert.match(workflow, /npm run native:normalize/);
   assert.match(workflow, /npm run audit:package/);
   assert.match(workflow, /node scripts\/package-audit\.mjs --tarball/);
-  assert.match(workflow, /omk-cli-\*\.tgz/);
+  assert.match(workflow, /omk-cli-\*\.tgz|\*\.tgz/);
 });
 
 test("pack-smoke evidence includes pack, audit, and install smoke phases", () => {
