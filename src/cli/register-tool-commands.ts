@@ -16,6 +16,16 @@ export function registerToolCommands(program: Command): void {
       const { graphViewCommand } = await import("../commands/graph.js");
       await graphViewCommand(options);
     });
+  graph
+    .command("audit")
+    .description("Audit linked run subgraphs (run -> route/provider/evidence/decision/artifact)")
+    .option("--run <id>", "Audit a single run id (default: all runs under .omk/runs)")
+    .option("--input <path>", "Graph state JSON path (default: .omk/memory/graph-state.json)")
+    .option("--json", "Output machine-readable omk.contract.v1 JSON verdict")
+    .action(async (options) => {
+      const { graphAuditCommand } = await import("../commands/graph.js");
+      await graphAuditCommand({ run: options.run, input: options.input, json: Boolean(options.json) });
+    });
 
   program
     .command("hud")
@@ -53,6 +63,7 @@ export function registerToolCommands(program: Command): void {
     .option("--run <id>", "run ID", "latest")
     .option("--strategy <strategy>", "merge strategy (first | best)", "first")
     .option("--dry-run", "preview merge without applying")
+    .option("--json", "Output the merge preview as a JSON envelope")
     .action(async (runIdArg, options) => {
       const globalOpts = program.opts();
       const { mergeCommand } = await import("../commands/merge.js");
