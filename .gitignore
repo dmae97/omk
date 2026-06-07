@@ -1,41 +1,34 @@
-# Dependencies
+# Dependencies / package-manager caches
 node_modules/
 .pnp
 .pnp.js
+.pnpm-store/
+.yarn/
+.yarn-cache/
+.npm/
 
-# Build outputs
+# Build outputs / compiled artifacts
 dist/
-dist.old/
 target/
 *.tsbuildinfo
 .eslintcache
 
-# Logs
+# Test output / coverage
+coverage/
+.nyc_output/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-lerna-debug.log*
 
-# OMK runtime / local data (NEVER commit)
+# OMK runtime / local state (never commit)
 .omk/
-# Legacy local Pi harness data is imported into .omk only; never commit it.
 .pi/
+.omx/
 !templates/.omk/
 !templates/.omk/**
 
-# Local spec outputs
-.specify/
-specs/
-
-# Generated docs / daily reports
-/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
-/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-plan.md
-/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-improvements.md
-/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-critical-issues.md
-/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-init-checklist.md
-
-# Kimi / Agent local user settings
+# Kimi / agent local user settings
 .kimi/
 .agents/
 !templates/.kimi/
@@ -43,7 +36,7 @@ specs/
 !templates/skills/agents/
 !templates/skills/agents/**
 
-# Environment / local config
+# Environment / local config / registry credentials
 .env
 .env.*
 .envrc
@@ -54,30 +47,11 @@ specs/
 !.env.example
 !.env.template
 *.local
+.npmrc
+.pypirc
+.netrc
 
-# IDE / Editor
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
-
-
-# Source-only public reference assets (provenance required before packaging/commit)
-/public/assets/**
-!/public/assets/
-!/public/assets/.gitkeep
-
-# Local screenshot captures
-화면 캡처*.png
-Screenshot *.png
-
-# Secrets (never commit)
+# Secrets / keys / certificates
 *.pem
 *.key
 *.p8
@@ -96,24 +70,26 @@ secrets/
 .secrets.*
 *.secret
 *.secret.*
-.npmrc
-.pypirc
-.netrc
 
-# Testing / coverage
-coverage/
-.nyc_output/
-.playwright-mcp/
-
-# Archives
+# Archives / package tarballs
 *.zip
 *.tgz
 *.tar.gz
 
-# Local scratch / foreign checkout directories (NEVER commit)
+# Source-only public reference assets (provenance required before packaging/commit)
+/public/assets/**
+!/public/assets/
+!/public/assets/.gitkeep
+
+# Local screenshots
+화면 캡처*.png
+Screenshot *.png
+
+# Local scratch / foreign checkout directories
 .bg-shell/
 .codegraph/
 .gsd/
+.commandcode/
 agent-skills/
 continuous-claude-v3/
 headroom/
@@ -122,3 +98,14 @@ logs/
 *.bak
 *.bak2
 *:Zone.Identifier
+
+# IDE / editor / OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+.npmrc

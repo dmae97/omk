@@ -1,6 +1,6 @@
 {
-  "name": "@omk/cli",
-  "version": "0.78.0-alpha.1",
+  "name": "open-multi-agent-kit",
+  "version": "0.78.0",
   "description": "Provider-neutral multi-agent control plane for coding workflows: route agents, verify evidence, orchestrate MCP-aware DAGs, and control the loop from the omk CLI.",
   "type": "module",
   "bin": {
@@ -163,15 +163,15 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dmae97/open_multi-agent_kit.git"
+    "url": "git+https://github.com/dmae97/open-multi-agent-kit.git"
   },
   "bugs": {
-    "url": "https://github.com/dmae97/open_multi-agent_kit/issues"
+    "url": "https://github.com/dmae97/open-multi-agent-kit/issues"
   },
   "publishConfig": {
     "access": "public"
   },
-  "homepage": "https://github.com/dmae97/open_multi-agent_kit#readme",
+  "homepage": "https://github.com/dmae97/open-multi-agent-kit#readme",
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
