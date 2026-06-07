@@ -1,17 +1,17 @@
 # Getting Started
 
-Source release target: `@omk/cli@0.78.0-alpha.1`.
+Source release target: `open-multi-agent-kit@0.78.1` (`pre-1.0`).
 
 ## Prerequisites
 
 - Node.js 20+
 - Git
-- At least one supported provider or local runtime adapter (Codex CLI, Gemini CLI, Claude Code, OpenRouter, DeepSeek, Kimi, etc.)
+- At least one configured provider or local runtime adapter. Kimi is the most mature authority path; other lanes depend on local CLI/API availability and the provider-maturity contract.
 
 ## Install
 
 ```bash
-npm install -g @omk/cli
+npm install -g open-multi-agent-kit
 ```
 
 ## Initialize a project

@@ -1,21 +1,27 @@
 # Roadmap
 
-Current source version: v1.2.0-rc.0 package RC (`v1.2` runtime contract family)
-Last updated: 2026-05-31
+Current source version: v0.78.1 (`v1.2` runtime contract family)
+Last updated: 2026-06-07
 
-## 2026-05-31 v1.2 RC status
+## 2026-06-07 release reality
 
-The local source tree is aligned to package version `1.2.0-rc.0`, runtime version `v1.2`, and release channel `rc`. The architecture direction is OMK-as-root with providers as adapters. Kimi remains the most mature authority path in this RC line; other providers have narrower or advisory maturity unless tests and contracts say otherwise.
+The public npm package line is `open-multi-agent-kit@0.78.x`. The `v1.2` label below is the source-tree runtime contract family, not a claim that a stable npm `1.2.x` package has shipped.
+
+The v1.1.x/v1.2 rows in this file are historical source checkpoints and architecture milestones unless a row explicitly says it was npm-published. Current public-release work should be judged against the exact target commit, CI/smoke status, package audit, and npm dist-tag state.
+
+## Historical 2026-05-31 v1.2 contract checkpoint
+
+At the 2026-05-31 checkpoint, the source tree was being aligned toward a `v1.2` runtime contract and an internal RC packaging target. That checkpoint is useful architectural history, but it is not the current public npm package line. The architecture direction is OMK-as-root with providers as adapters. Kimi remains the most mature authority path; other providers have narrower or advisory maturity unless tests and contracts say otherwise.
 
 - Version contract details: `docs/versioning.md`.
 - Provider status and limitations: `docs/provider-maturity.md`.
 - Public proof index: `proof/PROOF_INDEX.md`.
 - Active native-runtime backlog: `docs/native-root-runtime-hardening.md`, `docs/native-root-runtime-algorithms.md`, and `.omk/specs/native-orchestrator-phase1/`.
-- Do not claim stable `v1.2` until release gates pass on the exact target commit and the stable package/tag is published.
+- Do not claim stable npm `1.x` status until release gates pass on the exact target commit and the stable package/tag is published.
 
-## Historical v1.1.9 reality
+## Historical v1.1.9 source reality
 
-Provider routing and graph viewing are no longer purely future work:
+Provider routing and graph viewing are no longer purely future work in the source tree, but these notes are historical and provider-dependent:
 
 - `omk run`, `omk parallel`, and DAG replay expose `--provider auto|kimi`.
 - `omk provider` / `omk deepseek` manage DeepSeek enablement, key setup, availability checks, and default fallback to the most mature adapter.
@@ -23,7 +29,7 @@ Provider routing and graph viewing are no longer purely future work:
 - `omk graph view` generates an HTML view from `.omk/memory/graph-state.json`.
 - `omk goal` has a persisted lifecycle, continue loop, generated plan/evidence criteria, and verification flow.
 
-## v1.2 RC — Native Orchestrator Decoupling
+## v1.2 contract hardening — Native Orchestrator Decoupling
 
 ### Phase 0: Foundation & Spec
 
@@ -64,35 +70,35 @@ Provider routing and graph viewing are no longer purely future work:
 - Deprecate Kimi-only subagent language where OMK `ParallelOrchestrator` is the actual spawn surface.
 - Mark v1.2.x stable only after provider fallback, evidence gates, DAG replay, version contracts, and provider-maturity docs are green across supported adapters.
 
-## v1.3 — Hardening the current surface
+## Post-0.78 hardening — current surface
 
 ### P0: release and contract gates
 
-- Done: YAML validation now runs in local `verify` plus CI/smoke workflows.
-- Done: package dry-pack, package audit, tarball smoke, native safety build, and release matrix gates were re-verified during the v1.1.x release-prep line; v1.2 RC publish/tag claims now depend on `npm run release:check` on the exact target commit.
-- Required before stable v1.2 publish/tag: regenerate the native safety binary, pass package audit, pass smoke-pack/tarball install smoke, and pass `npm run release:check` on the exact intended release diff.
-- Required before stable v1.2 publish/tag: CI and smoke checks must pass on the exact intended commit.
-- Done: provider/deepseek and screenshot JSON command contracts gained hermetic regression tests.
-- Done: proof bundle schema/check/index scaffolding exists, with ten scoped RC hardening bundles covering no-Kimi smoke, doctor-provider, fallback-route, native-safety, contract-version, evidence-block, replay/inspect, graph-audit, deeper no-Kimi verification, and provider fallback-routing gates.
-- Done: proof integrity now enforces artifact linkage plus per-bundle `sha256sums.txt` hash validation.
-- Done: current AGENTS/init templates and packaged workflow skills were aligned with the active skills/MCP/agents/harness surface, including all generated agent MCP/skills/hooks flags and parallel subagent orchestration guidance.
-- Remaining: lock runtime safety gates for native turn risk, approval/sandbox propagation, authority-provider resolution, provider health probes, and DeepSeek read-only routing.
-- Remaining: lock broader provider fallback metadata with tests for rate limit, timeout, and default fallback variants.
-- Remaining: define minimum machine-readable CLI envelopes for the rest of the automation-critical commands.
-- Remaining: promote additional real proof bundles beyond the RC ten-bundle baseline, especially provider fallback variants for rate limit, timeout, and default route behavior.
+- Source implemented: YAML validation runs in local `verify` plus CI/smoke workflows.
+- Source verified in recent gates: package dry-pack, package audit, tarball smoke, native safety build, and release matrix coverage. Public publish/tag claims still depend on the exact target commit.
+- Required before a public npm publish/tag: regenerate the native safety binary if the target platform artifacts changed, pass package audit, pass smoke-pack/tarball install smoke, and pass `npm run release:check` or the documented CI equivalent on the exact intended release diff.
+- Required before a public npm publish/tag: CI and smoke checks must pass on the exact intended commit.
+- Source implemented: provider/deepseek and screenshot JSON command contracts have hermetic regression tests.
+- Source implemented: proof bundle schema/check/index scaffolding exists, with scoped hardening bundles covering no-Kimi smoke, doctor-provider, fallback-route, native-safety, contract-version, evidence-block, replay/inspect, graph-audit, deeper no-Kimi verification, and provider fallback-routing gates.
+- Source implemented: proof integrity enforces artifact linkage plus per-bundle `sha256sums.txt` hash validation.
+- Source implemented: current AGENTS/init templates and packaged workflow skills align with the active skills/MCP/agents/harness surface.
+- Still required: lock runtime safety gates for native turn risk, approval/sandbox propagation, authority-provider resolution, provider health probes, and DeepSeek read-only routing.
+- Still required: lock broader provider fallback metadata with tests for rate limit, timeout, and default fallback variants.
+- Still required: define minimum machine-readable CLI envelopes for the rest of the automation-critical commands.
+- Still required: promote additional proof bundles beyond the current baseline, especially provider fallback variants for rate limit, timeout, and default route behavior.
 
 ### P1: observability and diagnostics
 
-- Done: provider route/fallback counts are now emitted in run summaries/reports and summary terminal output.
-- Done: invalid MCP JSON is reported as a visible diagnostic without leaking secret-like config values.
-- Done: `omk mcp doctor --json` exposes structured server status, command resolution, timeout, permission, and config-source fields.
+- Source implemented: provider route/fallback counts are emitted in run summaries/reports and summary terminal output.
+- Source implemented: invalid MCP JSON is reported as a visible diagnostic without leaking secret-like config values.
+- Source implemented: `omk mcp doctor --json` exposes structured server status, command resolution, timeout, permission, and config-source fields.
 - Expand JSON output for DAG, summary, and workflow commands where CI or agents consume results.
 - Link live graph nodes back to runs, goals, providers, and evidence so `omk graph audit` can validate real project graph memory, not only compact proof fixtures.
 
 ### P2: execution depth and planner quality
 
 - Deepen `omk team` runtime reporting: worker state, pane/session health, artifacts, and verification handoff.
-- Done: replace the `omk goal plan` stub with a planner that emits steps, acceptance criteria, risks, and evidence gates.
+- Source implemented: replace the `omk goal plan` stub with a planner that emits steps, acceptance criteria, risks, and evidence gates.
 - Add provider-quality gates before broader non-Kimi worker pools.
 - Keep Kimi execution as the safe fallback path for every run.
 
@@ -109,10 +115,12 @@ Provider routing and graph viewing are no longer purely future work:
 - Materialize provider routes, fallback events, goals, evidence gates, and run artifacts in the local graph/Kuzu ontology.
 - Keep `omk graph view` local-first and safe for private repositories.
 
-### Historical milestones
+### Historical source milestones
 
-| Version | Focus |
-|---------|-------|
+These are source/development checkpoints unless a release note explicitly says the version was npm-published.
+
+| Source checkpoint | Focus |
+| --- | --- |
 | v0.1 | init / doctor / chat, P0 skills, AGENTS.md / DESIGN.md generation, quality gate hooks |
 | v0.2 | wire controller, HUD, run state, worker logs |
 | v0.3 | worktree team, merge queue, reviewer / QA / integrator agents |
@@ -127,4 +135,4 @@ Provider routing and graph viewing are no longer purely future work:
 | v1.1.16 | Deterministic IntentFrame/ActionAtom orchestration, chat schema preflight, MCP duplicate policy, agent capability propagation, and doctor/init/pack smoke fixes |
 | v1.1.17 | Full generated-agent MCP/skills/hooks enablement, parallel subagent orchestration emphasis, and v1.1.17 release docs |
 | v1.1.18 | Historical Kimi-wrapper dominant release-prep line: package source version alignment, native safety package gate, typed doctor repair plans, startup update prompt UX, and parallel subagent orchestration release-doc alignment |
-| v1.2.0-rc.0 | Package RC for the `v1.2` runtime contract family, provider-neutral docs alignment, version contract docs, and provider maturity limits |
+| v1.2.0-rc.0 | Internal RC target for the `v1.2` runtime contract family, provider-neutral docs alignment, version contract docs, and provider maturity limits |
