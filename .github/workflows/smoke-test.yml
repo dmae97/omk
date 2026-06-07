@@ -10,6 +10,9 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
+permissions:
+  contents: read
+
 jobs:
   native:
     name: Native Safety (${{ matrix.os }})
@@ -78,7 +81,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tarball
-          path: omk-cli-*.tgz
+          path: "*.tgz"
 
   install-smoke:
     name: Install Smoke (${{ matrix.os }} / Node ${{ matrix.node-version }})
@@ -100,7 +103,7 @@ jobs:
         with:
           name: tarball
       - name: Run smoke tests
-        run: node scripts/smoke-test.mjs --tarball omk-cli-*.tgz
+        run: node scripts/smoke-test.mjs --tarball "*.tgz"
 
   audit:
     name: Package Audit
@@ -119,4 +122,4 @@ jobs:
         with:
           name: tarball
       - name: Audit tarball
-        run: node scripts/package-audit.mjs --tarball omk-cli-*.tgz
+        run: node scripts/package-audit.mjs --tarball "*.tgz"
