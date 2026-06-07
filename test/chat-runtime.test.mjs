@@ -13,6 +13,7 @@ const { compileBloatToNlp, filterMcpConfigForRuntime } = await import("../dist/r
 const { capsuleToTask } = await import("../dist/runtime/context-broker-converter.js");
 const { buildPromptEnvelope, renderPromptEnvelope } = await import("../dist/runtime/prompt-envelope.js");
 const { buildOmkToolPlaneManifest } = await import("../dist/runtime/tool-plane.js");
+const { resumeInteractiveInput } = await import("../dist/util/terminal-input.js");
 
 const codexBootstrap = {
   ok: true,
@@ -1085,6 +1086,60 @@ test("non-Kimi chat branch fails fast in non-TTY without Kimi fallback", () => {
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+// Regression: first-run GitHub-star / update prompts (@inquirer/prompts) can
+// take over raw mode and leave the shared interactive stdin paused. Before the
+// native chat loop builds its readline it calls resumeInteractiveInput(); a
+// paused TTY must be resumed (so readline does not see an immediate EOF/'close'
+// and exit with "Session ended"), while non-TTY stdin must stay untouched so the
+// existing non-interactive EOF/exit behavior is preserved.
+test("resumeInteractiveInput resumes a paused TTY left behind by inquirer prompts", () => {
+  function makeStream({ isTTY, readableFlowing }) {
+    let resumed = false;
+    let paused = false;
+    return {
+      isTTY,
+      readableFlowing,
+      resume() {
+        resumed = true;
+        return this;
+      },
+      pause() {
+        paused = true;
+        return this;
+      },
+      get resumed() {
+        return resumed;
+      },
+      get paused() {
+        return paused;
+      },
+    };
+  }
+
+  // Paused interactive TTY (the post-inquirer-prompt state): must be resumed so
+  // the subsequent readline does not treat input as an immediate EOF.
+  const pausedTty = makeStream({ isTTY: true, readableFlowing: false });
+  deepStrictEqual(resumeInteractiveInput(pausedTty), true);
+  ok(pausedTty.resumed, "paused TTY should be resumed before the chat readline");
+
+  // Non-TTY stdin (pipe/EOF/CI): must NOT be resumed; non-interactive EOF/exit
+  // behavior (e.g. the "requires an interactive TTY" path) stays unchanged.
+  const nonTty = makeStream({ isTTY: false, readableFlowing: false });
+  deepStrictEqual(resumeInteractiveInput(nonTty), false);
+  ok(!nonTty.resumed, "non-TTY stdin must never be resumed by the chat loop");
+
+  // Already-flowing TTY: no-op (do not double-resume).
+  const flowingTty = makeStream({ isTTY: true, readableFlowing: true });
+  deepStrictEqual(resumeInteractiveInput(flowingTty), false);
+  ok(!flowingTty.resumed, "already-flowing TTY must not be touched");
+
+  // Fresh, never-started TTY (readableFlowing === null): leave it for readline
+  // to manage its own initial resume; avoid racing for the first byte.
+  const freshTty = makeStream({ isTTY: true, readableFlowing: null });
+  deepStrictEqual(resumeInteractiveInput(freshTty), false);
+  ok(!freshTty.resumed, "fresh TTY should be left for readline to resume");
 });
 
 function restoreEnv(name, value) {

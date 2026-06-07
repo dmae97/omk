@@ -287,6 +287,11 @@ export async function chatCommand(options: {
     } catch {
       // Update prompts are advisory and must not block chat startup.
     }
+    // NOTE: the star/update prompts above use @inquirer/prompts (raw mode + their
+    // own readline) and can leave interactive stdin paused. The native root loop
+    // re-validates and resumes a paused TTY via resumeInteractiveInput() right
+    // before it builds its readline (see runNativeOmkRootLoop), so the first run
+    // after `omk init` does not exit immediately with "Session ended".
   }
 
   // ── tmux cockpit layout: keep prompt pane clean; move cockpit/HUD telemetry to the side pane ──

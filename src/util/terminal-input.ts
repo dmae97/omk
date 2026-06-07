@@ -41,6 +41,36 @@ export function enableRawTerminalInput(input: TerminalInputLike = process.stdin)
   return state;
 }
 
+/**
+ * Defensive re-validation of interactive stdin before a fresh readline takes
+ * ownership of the TTY.
+ *
+ * The first-run GitHub-star prompt (maybeAskForGitHubStarAtChatStart) and the
+ * update prompt (maybePromptForOmkUpdate) use @inquirer/prompts, which take
+ * over raw mode and run their own readline on process.stdin. On completion they
+ * can leave the shared interactive stdin explicitly paused
+ * (readableFlowing === false). A freshly created readline then observes an
+ * immediate EOF/'close' and the native chat loop exits with "Session ended".
+ *
+ * This helper only resumes a real TTY that was explicitly paused. Non-TTY
+ * stdin (pipes/EOF, CI, non-interactive callers) is intentionally left
+ * untouched so existing exit/EOF behavior is preserved. A fresh, never-started
+ * stream (readableFlowing === null) is also left alone so readline can manage
+ * its own initial resume without racing for the first byte.
+ *
+ * Returns true only when it actually resumed a paused interactive stream.
+ */
+export function resumeInteractiveInput(input: TerminalInputLike = process.stdin): boolean {
+  if (!input.isTTY) return false;
+  if (input.readableFlowing !== false) return false;
+  try {
+    input.resume();
+  } catch {
+    return false;
+  }
+  return true;
+}
+
 export function restoreTerminalInputState(
   input: TerminalInputLike = process.stdin,
   state: TerminalInputState
