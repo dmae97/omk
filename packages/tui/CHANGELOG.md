@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed prompt history navigation to place the cursor at the start when browsing upward and at the end when browsing downward, so repeated Up/Down traverses multiline prompts immediately ([#5454](https://github.com/earendil-works/pi/issues/5454)).
+
 ## [0.78.1] - 2026-06-04
 
 ### Fixed
