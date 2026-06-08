@@ -1,10 +1,23 @@
 # Changelog
 
-## v0.78.1 — package-name and release-reality alignment (2026-06-07)
+## v0.78.1 — package alignment, JSON contract envelopes, and adaptive runtime algorithms (2026-06-07)
 
 ### Overview
 
-Pre-1.0 source release target for `open-multi-agent-kit`. This entry aligns the public docs with the actual npm package name, makes the `v1.2` runtime label explicit as a contract family, and avoids implying that every provider lane has the same write/merge authority.
+Pre-1.0 source release target for `open-multi-agent-kit`. This entry aligns the public docs with the actual npm package name, makes the `v1.2` runtime label explicit as a contract family, and avoids implying that every provider lane has the same write/merge authority. It also records the runtime, CI, and orchestration work that ships between the prior release commit and this release: machine-readable `omk.contract.v1` JSON envelopes, real-run graph/proof linkage, an opt-in tool-authority gate, opt-in self-update and first-run star, and adaptorch/headroom/ouroboros adaptive runtime algorithms.
+
+### Added
+
+- Fast-gate CI job and a unified release-truthfulness check that ties publish/tag claims to the exact target commit and gate state.
+- Standard `ProviderHealth` shape embedded additively in `omk provider doctor --json`.
+- `omk.contract.v1` JSON envelope for `omk summary --json`.
+- `omk.contract.v1` JSON envelopes for the `omk dag`, `omk team`, and `omk merge` machine-readable surfaces.
+- Real-run linkage into graph memory plus `omk graph audit`, which validates links across run manifest, evidence JSONL, decision JSONL, and provider-route nodes.
+- Pure tool-authority decision-gate primitive that classifies tool calls against per-lane write authority.
+- `OMK_AUTO_UPDATE` opt-in for non-interactive startup self-update.
+- First-run GitHub star with a browser-open fallback when the `gh` CLI is unavailable.
+- Adaptive runtime algorithms in the package: adaptorch-style topology routing on first DAG composition (`OMK_ADAPTORCH_ROUTING`), headroom context-guard compaction before the 90% context window (`OMK_HEADROOM` / `OMK_HEADROOM_THRESHOLD`), and embedded-ouroboros preference for goal/spec intents with native fallback (`OMK_OUROBOROS`).
+- Ouroboros integration documentation covering the MCP server, bridge, and skills surface.
 
 ### Changed
 
@@ -12,6 +25,13 @@ Pre-1.0 source release target for `open-multi-agent-kit`. This entry aligns the 
 - ROADMAP now separates public `0.78.x` package releases from historical v1.1.x/v1.2 source milestones.
 - Provider-lane wording now points readers to the provider-maturity contract before treating non-Kimi lanes as authority paths.
 - Release wording now treats npm publish/tag claims as gated by the exact target commit, CI/smoke status, package audit, and dist-tag state.
+- The tool-authority gate is wired into dispatch in shadow/opt-in mode; enforcement stays off by default and is enabled only by `OMK_TOOL_AUTHORITY_ENFORCE`.
+- Chat startup now resumes paused stdin before the native loop so first-run chat stays interactive.
+
+### Notes
+
+- Default MCP configuration excludes the adaptorch MCP server; adaptorch is not auto-injected and is opt-in only.
+- The new runtime behaviors are opt-in through environment flags and default to off, so existing default runs are unchanged.
 
 ### Verification
 
