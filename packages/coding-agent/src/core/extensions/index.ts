@@ -100,6 +100,7 @@ export type {
 	ModelSelectSource,
 	ProjectTrustContext,
 	ProjectTrustEvent,
+	ProjectTrustEventDecision,
 	ProjectTrustEventResult,
 	ProjectTrustHandler,
 	// Provider Registration

@@ -503,8 +503,10 @@ export interface ProjectTrustEvent {
 	cwd: string;
 }
 
+export type ProjectTrustEventDecision = "yes" | "no" | "undecided";
+
 export interface ProjectTrustEventResult {
-	trusted: boolean;
+	trusted: ProjectTrustEventDecision;
 	remember?: boolean;
 }
 

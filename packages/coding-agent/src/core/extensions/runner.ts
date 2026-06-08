@@ -202,13 +202,16 @@ export async function emitProjectTrustEvent(
 	const errors: ExtensionError[] = [];
 	for (const ext of extensionsResult.extensions) {
 		// A single extension may register multiple handlers for the same event.
-		// The first project_trust handler that returns a decision wins.
+		// The first project_trust handler that returns yes/no wins; undecided falls through.
 		const handlers = ext.handlers.get("project_trust");
 		if (!handlers || handlers.length === 0) continue;
 
 		for (const handler of handlers) {
 			try {
 				const handlerResult = (await handler(event, ctx)) as ProjectTrustEventResult;
+				if (handlerResult.trusted === "undecided") {
+					continue;
+				}
 				return { result: handlerResult, errors };
 			} catch (error) {
 				errors.push({

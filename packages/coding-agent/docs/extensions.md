@@ -346,12 +346,13 @@ pi.on("project_trust", async (event, ctx) => {
   // event.cwd - current working directory
   // ctx has a limited trust context: cwd, mode, hasUI, and select/confirm/input/notify UI helpers
   if (await ctx.ui.confirm("Trust project?", event.cwd)) {
-    return { trusted: true, remember: true };
+    return { trusted: "yes", remember: true };
   }
+  return { trusted: "undecided" };
 });
 ```
 
-A `project_trust` handler must return `{ trusted }`; if a user/global or CLI extension registers this handler, it owns the decision. The first returned decision wins and suppresses the built-in trust prompt. Use `remember: true` to persist the decision; otherwise it applies only to the current process. Check `ctx.hasUI` before prompting. If no extension handles `project_trust`, normal trust resolution continues, including the built-in trust prompt when UI is available.
+A `project_trust` handler must return `{ trusted: "yes" | "no" | "undecided" }`. A user/global or CLI extension that returns `"yes"` or `"no"` owns the decision; the first yes/no decision wins and suppresses the built-in trust prompt. Use `remember: true` to persist a yes/no decision; otherwise it applies only to the current process. Return `"undecided"` to let later handlers or the built-in trust flow decide. Check `ctx.hasUI` before prompting. If no handler returns yes/no, normal trust resolution continues, including the built-in trust prompt when UI is available.
 
 ### Resource Events
 
@@ -2586,7 +2587,7 @@ All examples in [examples/extensions/](../examples/extensions/).
 | `shutdown-command.ts` | Graceful shutdown command | `registerCommand`, `shutdown()` |
 | **Events & Gates** |||
 | `permission-gate.ts` | Block dangerous commands | `on("tool_call")`, `ui.confirm` |
-| `project-trust.ts` | Decide project trust from a user/global or CLI extension | `on("project_trust")`, trust UI, required trust result |
+| `project-trust.ts` | Decide or defer project trust from a user/global or CLI extension | `on("project_trust")`, trust UI, required trust result |
 | `protected-paths.ts` | Block writes to specific paths | `on("tool_call")` |
 | `confirm-destructive.ts` | Confirm session changes | `on("session_before_switch")`, `on("session_before_fork")` |
 | `dirty-repo-guard.ts` | Warn on dirty git repo | `on("session_before_*")`, `exec` |

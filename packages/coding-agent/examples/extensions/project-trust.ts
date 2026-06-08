@@ -20,13 +20,14 @@ export default function (pi: ExtensionAPI) {
 	loadCount++;
 
 	// Multiple handlers in one extension are allowed. The first handler that returns
-	// { trusted } wins and suppresses the built-in trust prompt. A project_trust
-	// handler must return a decision.
+	// { trusted: "yes" } or { trusted: "no" } wins and suppresses the built-in
+	// trust prompt. Return { trusted: "undecided" } to let another handler or the
+	// built-in flow decide.
 	pi.on("project_trust", async (event, ctx): Promise<ProjectTrustEventResult> => {
 		ctx.ui.notify(`project_trust fired for ${event.cwd} (mode: ${ctx.mode}, load: ${loadCount})`, "info");
 
 		if (!ctx.hasUI) {
-			return { trusted: false };
+			return { trusted: "undecided" };
 		}
 
 		const choice = await ctx.ui.select(`Project trust for:\n${event.cwd}`, [
@@ -34,23 +35,27 @@ export default function (pi: ExtensionAPI) {
 			"Trust with note and remember",
 			"Trust this session",
 			"Do not trust this session",
+			"Let built-in prompt decide",
 		]);
 
 		if (choice === "Trust with note and remember") {
 			const note = await ctx.ui.input("Project trust note", "Optional note for this demo");
 			ctx.ui.notify(note ? `Recorded demo note: ${note}` : "No demo note entered", "info");
-			return { trusted: true, remember: true };
+			return { trusted: "yes", remember: true };
 		}
 		if (choice === "Trust and remember") {
-			return { trusted: true, remember: true };
+			return { trusted: "yes", remember: true };
 		}
 		if (choice === "Trust this session") {
-			return { trusted: true };
+			return { trusted: "yes" };
 		}
 		if (choice === "Do not trust this session") {
-			return { trusted: false };
+			return { trusted: "no" };
 		}
-		return { trusted: false };
+		if (choice === "Let built-in prompt decide") {
+			return { trusted: "undecided" };
+		}
+		return { trusted: "undecided" };
 	});
 
 	pi.on("session_start", (_event, ctx) => {

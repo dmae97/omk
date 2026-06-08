@@ -199,7 +199,7 @@ Project skill`,
 				join(userExtDir, "user.ts"),
 				`globalThis[${JSON.stringify(loadCountKey)}] = (globalThis[${JSON.stringify(loadCountKey)}] ?? 0) + 1;
 export default function(pi) {
-	pi.on("project_trust", () => ({ trusted: true }));
+	pi.on("project_trust", () => ({ trusted: "yes" }));
 	pi.registerCommand("user-trust", {
 		description: "user trust",
 		handler: async () => {},

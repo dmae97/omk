@@ -100,6 +100,7 @@ export type {
 	MessageRenderOptions,
 	ProjectTrustContext,
 	ProjectTrustEvent,
+	ProjectTrustEventDecision,
 	ProjectTrustEventResult,
 	ProjectTrustHandler,
 	ProviderConfig,

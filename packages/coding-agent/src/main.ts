@@ -648,10 +648,11 @@ async function resolveProjectTrusted(options: {
 			options.onExtensionError?.(`Extension "${error.extensionPath}" project_trust error: ${error.error}`);
 		}
 		if (result) {
+			const trusted = result.trusted === "yes";
 			if (result.remember === true) {
-				options.trustStore.set(options.cwd, result.trusted);
+				options.trustStore.set(options.cwd, trusted);
 			}
-			return result.trusted;
+			return trusted;
 		}
 	}
 
