@@ -105,12 +105,23 @@ export interface CapabilityManifest extends RuntimeCapabilities {
   readonly structuredOutput?: boolean;
 }
 
+export interface AgentTaskAttachment {
+  readonly name: string;
+  readonly path?: string;
+  readonly mimeType: string;
+  readonly dataUri: string;
+  readonly ext: string;
+  readonly source: "clipboard" | "file" | "drag";
+}
+
 export interface AgentTask {
   readonly prompt: string;
   readonly context: AgentContext;
   readonly tools: ToolManifest;
   readonly providerPolicy: ProviderPolicy;
   readonly capabilities: CapabilityManifest;
+  /** Images/files attached to this task (clipboard paste, --image, drag). */
+  readonly attachments?: readonly AgentTaskAttachment[];
 }
 
 export interface AgentResult {

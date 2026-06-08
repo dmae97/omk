@@ -5,6 +5,8 @@
  * Calls https://api.moonshot.cn/v1/chat/completions directly.
  */
 
+import { readFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
 import type {
   AgentRuntime,
   AgentRunResult,
@@ -20,9 +22,54 @@ import { capsuleToTask } from "./context-broker-converter.js";
 import { buildProviderToolPayload } from "./provider-tool-contracts.js";
 import { repairToolCalls, type ToolCallRepairResult } from "./tool-call-repair.js";
 
+/**
+ * Detect "Image file: <path>" patterns in the prompt text (inserted by /paste
+ * or Ctrl+V clipboard image) and load the referenced images as base64 data URIs
+ * for multimodal API calls.
+ */
+function extractInlineImageParts(
+  prompt: string,
+): Array<{ dataUri: string }> {
+  const results: Array<{ dataUri: string }> = [];
+  // Match "Image file: .omk/screenshots/.../screenshot-xxx.png" lines
+  const pattern = /^Image file:\s+(.+\.(?:png|jpg|jpeg|webp|gif))\s*$/gim;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(prompt)) !== null) {
+    const filePath = match[1].trim();
+    const absPath = resolve(filePath);
+    if (!existsSync(absPath)) continue;
+    try {
+      const buf = readFileSync(absPath);
+      if (buf.length === 0 || buf.length > 20 * 1024 * 1024) continue;
+      // Detect mime type from magic bytes
+      let mimeType = "image/png";
+      if (buf[0] === 0xff && buf[1] === 0xd8) mimeType = "image/jpeg";
+      else if (buf[0] === 0x52 && buf[1] === 0x49) mimeType = "image/webp";
+      else if (buf[0] === 0x47 && buf[1] === 0x49) mimeType = "image/gif";
+      const base64 = buf.toString("base64");
+      results.push({ dataUri: `data:${mimeType};base64,${base64}` });
+    } catch {
+      // Skip unreadable files
+    }
+  }
+  return results;
+}
+
+interface MoonshotTextPart {
+  type: "text";
+  text: string;
+}
+
+interface MoonshotImagePart {
+  type: "image_url";
+  image_url: { url: string };
+}
+
+type MoonshotContentPart = MoonshotTextPart | MoonshotImagePart;
+
 interface MoonshotChatMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content: string;
+  content: string | MoonshotContentPart[];
 }
 
 interface MoonshotTool {
@@ -301,7 +348,26 @@ export class KimiApiRuntime implements AgentRuntime {
     if (task.context.system) {
       messages.push({ role: "system", content: task.context.system });
     }
-    messages.push({ role: "user", content: task.prompt });
+    // Build multimodal content when attachments are present or when
+    // the prompt contains "Image file: <path>" references (from /paste or
+    // Ctrl+V clipboard image). This makes clipboard-pasted images send as
+    // image_url content parts to OpenAI-compatible multimodal endpoints.
+    const attachments = task.attachments ?? [];
+    const inlineImages = extractInlineImageParts(task.prompt);
+    if (attachments.length > 0 || inlineImages.length > 0) {
+      const parts: MoonshotContentPart[] = [{ type: "text", text: task.prompt }];
+      for (const attachment of attachments) {
+        if (attachment.dataUri) {
+          parts.push({ type: "image_url", image_url: { url: attachment.dataUri } });
+        }
+      }
+      for (const image of inlineImages) {
+        parts.push({ type: "image_url", image_url: { url: image.dataUri } });
+      }
+      messages.push({ role: "user", content: parts });
+    } else {
+      messages.push({ role: "user", content: task.prompt });
+    }
 
     const providerTools = task.capabilities.toolCalling
       ? buildProviderToolPayload(task.tools.available)
