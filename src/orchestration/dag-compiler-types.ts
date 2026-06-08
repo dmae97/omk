@@ -6,6 +6,7 @@ import type {
 } from "../contracts/orchestration.js";
 import type { InputEnvelope } from "../input/input-envelope.js";
 import type { Dag } from "./dag.js";
+import type { TopologyDecision } from "./adaptorch-topology.js";
 
 export interface DagCompileInput {
   input: InputEnvelope;
@@ -33,6 +34,8 @@ export interface DagCompileResult {
   intentFrame?: IntentFrame;
   artifacts: DagCompileArtifactSummary;
   compiledAt: string;
+  /** AdaptOrch topology routing — additive, optional, non-fatal */
+  topology?: TopologyDecision;
 }
 
 export interface BuildDagCompileResultInput {
