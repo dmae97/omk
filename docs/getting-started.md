@@ -48,6 +48,14 @@ interactive prompt (Update now / Skip this version / Remind me later). Choosing
   checks entirely.
 - Manual check: `omk update check` (add `--refresh` to bypass the cache).
 
+## Adaptive runtime algorithms
+
+OMK embeds three adaptive control behaviors (all additive, safe defaults, non-fatal fallback):
+
+- **Topology-routed first run** — on the first DAG composition OMK derives structural features (width, critical depth, coupling, parallel ratio) and selects an execution topology (parallel / pipeline / map-reduce / hierarchical / hybrid / dag) with layered waves. Toggle with `OMK_ADAPTORCH_ROUTING=off`.
+- **Context guard before 90%** — before the context window crosses a threshold (default `0.90`) OMK compacts via [headroom](https://github.com/chopratejas/headroom) when available, otherwise its built-in budget optimizer. Tune with `OMK_HEADROOM_THRESHOLD` (0.50–0.99), `OMK_CONTEXT_WINDOW`, or disable with `OMK_HEADROOM=off`.
+- **Spec-first via Ouroboros** — goal/spec/orchestration intents prefer the embedded Ouroboros flow by default; when Ouroboros is not installed OMK degrades to the native path with no error. Modes: `OMK_OUROBOROS=always` (default) `| auto | off`. See [Ouroboros integration](integrations/ouroboros.md).
+
 ## Support the project (GitHub star)
 
 First-time users get a one-time prompt to star the repository. If the GitHub CLI
