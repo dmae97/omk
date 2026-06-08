@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hasProjectTrustInputs, ProjectTrustStore } from "../src/core/trust-manager.ts";
+import { hasProjectConfigDir, hasProjectTrustInputs, ProjectTrustStore } from "../src/core/trust-manager.ts";
 
 describe("ProjectTrustStore", () => {
 	let tempDir: string;
@@ -44,9 +44,11 @@ describe("ProjectTrustStore", () => {
 	});
 
 	it("detects project trust inputs", () => {
+		expect(hasProjectConfigDir(cwd)).toBe(false);
 		expect(hasProjectTrustInputs(cwd)).toBe(false);
 
 		mkdirSync(join(cwd, ".pi"), { recursive: true });
+		expect(hasProjectConfigDir(cwd)).toBe(true);
 		expect(hasProjectTrustInputs(cwd)).toBe(true);
 		rmSync(join(cwd, ".pi"), { recursive: true, force: true });
 

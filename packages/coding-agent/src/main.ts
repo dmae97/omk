@@ -647,9 +647,12 @@ export async function main(args: string[], options?: MainOptions) {
 	time("createSessionManager");
 
 	const trustStore = new ProjectTrustStore(agentDir);
+	const sessionCwd = sessionManager.getCwd();
+	const autoTrustOnReloadCwd =
+		parsed.projectTrustOverride === undefined && !hasProjectTrustInputs(sessionCwd) ? sessionCwd : undefined;
 	const trustPromptMode: AppMode = parsed.help || parsed.listModels !== undefined ? "print" : appMode;
 	const projectTrustedForSession = await resolveProjectTrusted({
-		cwd: sessionManager.getCwd(),
+		cwd: sessionCwd,
 		trustStore,
 		trustOverride: parsed.projectTrustOverride,
 		appMode: trustPromptMode,
@@ -827,6 +830,7 @@ export async function main(args: string[], options?: MainOptions) {
 		const interactiveMode = new InteractiveMode(runtime, {
 			migratedProviders,
 			modelFallbackMessage,
+			autoTrustOnReloadCwd,
 			initialMessage,
 			initialImages,
 			initialMessages: parsed.messages,
