@@ -17,6 +17,10 @@ import type {
   DagCompileInput,
   DagCompileResult,
 } from "./dag-compiler-types.js";
+import {
+  isAdaptorchRoutingEnabled,
+  routeTopology,
+} from "./adaptorch-topology.js";
 
 export async function compileInputEnvelopeToDag(
   input: DagCompileInput,
@@ -68,7 +72,7 @@ export async function compileInputEnvelopeToDag(
 export function buildDagCompileResult(
   input: BuildDagCompileResultInput,
 ): DagCompileResult {
-  return {
+  const result: DagCompileResult = {
     schemaVersion: 1,
     inputId: input.input.inputId,
     runId: input.input.runId,
@@ -83,6 +87,21 @@ export function buildDagCompileResult(
     },
     compiledAt: input.compiledAt ?? new Date().toISOString(),
   };
+
+  // AdaptOrch topology routing — additive, non-fatal
+  try {
+    if (isAdaptorchRoutingEnabled()) {
+      const nodeIds = input.dag.nodes.map((n) => n.id);
+      const edges = input.dag.nodes.flatMap((n) =>
+        n.dependsOn.map((from) => ({ from, to: n.id })),
+      );
+      result.topology = routeTopology(nodeIds, edges);
+    }
+  } catch {
+    // non-fatal: topology is optional
+  }
+
+  return result;
 }
 
 function selectExecutionStrategy(
