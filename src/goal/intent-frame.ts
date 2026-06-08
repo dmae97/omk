@@ -271,20 +271,34 @@ export function evaluatePromptNovelty(input: {
   };
 }
 
+const SECRET_REDACTION_PATTERNS: Array<{ name: string; pattern: RegExp; replacement: string }> = [
+  { name: "bearer-token", pattern: /Bearer\s+[A-Za-z0-9._~+/=-]{12,}/gi, replacement: "Bearer [REDACTED_TOKEN]" },
+  { name: "openai-key", pattern: /\bsk-[A-Za-z0-9_-]{16,}\b/g, replacement: "[REDACTED_API_KEY]" },
+  { name: "github-token", pattern: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{16,}\b/g, replacement: "[REDACTED_GITHUB_TOKEN]" },
+  { name: "aws-key", pattern: /\bAKIA[0-9A-Z]{16}\b/g, replacement: "[REDACTED_AWS_KEY]" },
+  { name: "env-secret", pattern: /\b[A-Z][A-Z0-9_]*(?:SECRET|TOKEN|KEY|PASSWORD)\s*=\s*[^\s`'"]{6,}/g, replacement: "[REDACTED_ENV_SECRET]" },
+  { name: "private-key", pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, replacement: "[REDACTED_PRIVATE_KEY]" },
+];
+
+/**
+ * Redact high-confidence secrets from free text while preserving layout
+ * (no normalization). Use before persisting or echoing prompts/answers so
+ * tokens never land in interview artifacts, GoalSpec fields, or --json output.
+ */
+export function redactSecretText(text: string): string {
+  let redacted = text;
+  for (const item of SECRET_REDACTION_PATTERNS) {
+    redacted = redacted.replace(item.pattern, item.replacement);
+  }
+  return redacted;
+}
+
 function sanitizePrompt(rawPrompt: string): SanitizedPrompt {
   const normalized = normalizeText(rawPrompt);
-  const patterns: Array<{ name: string; pattern: RegExp; replacement: string }> = [
-    { name: "bearer-token", pattern: /Bearer\s+[A-Za-z0-9._~+/=-]{12,}/gi, replacement: "Bearer [REDACTED_TOKEN]" },
-    { name: "openai-key", pattern: /\bsk-[A-Za-z0-9_-]{16,}\b/g, replacement: "[REDACTED_API_KEY]" },
-    { name: "github-token", pattern: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{16,}\b/g, replacement: "[REDACTED_GITHUB_TOKEN]" },
-    { name: "aws-key", pattern: /\bAKIA[0-9A-Z]{16}\b/g, replacement: "[REDACTED_AWS_KEY]" },
-    { name: "env-secret", pattern: /\b[A-Z][A-Z0-9_]*(?:SECRET|TOKEN|KEY|PASSWORD)\s*=\s*[^\s`'"]{6,}/g, replacement: "[REDACTED_ENV_SECRET]" },
-    { name: "private-key", pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, replacement: "[REDACTED_PRIVATE_KEY]" },
-  ];
   let redacted = normalized;
   let redactionCount = 0;
   const diagnostics: IntentDiagnostic[] = [];
-  for (const item of patterns) {
+  for (const item of SECRET_REDACTION_PATTERNS) {
     let count = 0;
     redacted = redacted.replace(item.pattern, () => {
       count += 1;

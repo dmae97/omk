@@ -6,6 +6,7 @@ Curated OMK//CONTROL assets in this directory. Assets are provenance-covered and
 | ------------------------------- | --------- | ---------------------------------------------- | ------------------------------------------ | ----------- | ------ | -----: |
 | `omk-control.webp`              | yes       | Canonical README hero                          | Codex/OpenAI Images reviewed source        | `1536x1024` | `WEBP` | 164502 |
 | `omk-social-preview.png`        | yes       | GitHub/NPM social preview                      | local crop from omk-control.webp           | `1200x630`  | `PNG`  | 737974 |
+| `social-preview.png`            | repo-only | GitHub social preview upload candidate         | local Pillow render from omk-control.webp  | `1280x640`  | `PNG`  | 441349 |
 | `omk-tui-0.78.0.webp`           | yes       | 0.78.0 TUI mockup                              | Codex OAuth gpt-image-2 + local correction | `1536x1024` | `WEBP` | 244008 |
 | `omk_tui.png`                   | yes       | GitHub README terminal dashboard screenshot    | existing OMK TUI capture                   | `1712x1129` | `PNG`  | 141653 |
 | `omk-runtime-flow-0.78.0.webp`  | yes       | 0.78.0 runtime flow diagram                    | Codex OAuth gpt-image-2 + local correction | `1536x1024` | `WEBP` | 235842 |

@@ -126,7 +126,7 @@ test("sliced CLI registry preserves ordered nested command groups", () => {
   assert.deepEqual(commandNames(findCommand(program, "openai")), ["setup"]);
   assert.deepEqual(commandNames(findCommand(program, "image")), ["generate", "edit"]);
   assert.deepEqual(commandNames(findCommand(program, "design")), ["init", "list", "apply", "search", "open-design", "lint", "diff", "export"]);
-  assert.deepEqual(commandNames(findCommand(program, "goal")), ["create", "list", "show", "plan", "run", "verify", "close", "block", "continue", "auto", "watch", "wake", "sleep", "daemon"]);
+  assert.deepEqual(commandNames(findCommand(program, "goal")), ["create", "interview", "refine", "list", "show", "plan", "run", "verify", "close", "block", "continue", "auto", "watch", "wake", "sleep", "daemon"]);
   assert.deepEqual(commandNames(findCommand(program, "servarr")), [
     "config-path",
     "instances",

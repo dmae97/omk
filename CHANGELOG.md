@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — OMK Deep Interview: uncertainty reducer for goal-driven agent runs
+
+### Added
+
+- `omk goal interview [input]` and `omk goal refine <goal-id>` commands under the existing `goal` group, adding an evidence-driven clarification step before planning.
+- Deterministic deep interview that scores goal ambiguity (`0..1`), ranks targeted questions (`informationGain*0.35 + riskReduction*0.25 + dagImpact*0.20 + evidenceImpact*0.15 - userCost*0.05`), and computes a completeness score from assimilated answers.
+- Spec-delta assimilation that folds interview answers into a structured `GoalSpec` with conflict resolution, selectable depth (`light|standard|deep`, auto-selected by ambiguity when omitted), and `--write-spec` persistence.
+- `omk.interview.v1` JSON contract (`schemas/omk.interview.v1.schema.json`) plus the `omk.interview-delta.v1` spec-delta envelope.
+- Per-session interview artifacts (`interview.json`, `spec-delta.json`, `questions.md`, `answers.jsonl`, `interview-report.md`) under `.omk/goals/<goalId>/interviews/<sessionId>/` (or `.omk/interviews/<sessionId>/` before `--write-spec`).
+- GitHub organic growth kit: README first-screen positioning, runnable awesome-list examples, a 1280x640 social preview upload candidate, and reusable Topics/About/awesome-list PR copy in `docs/github-organic-promotion.md`.
+
 ## v0.78.1 — package alignment, JSON contract envelopes, and adaptive runtime algorithms (2026-06-07)
 
 ### Overview

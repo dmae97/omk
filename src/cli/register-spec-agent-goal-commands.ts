@@ -161,6 +161,46 @@ export function registerSpecAgentGoalCommands(program: Command): void {
       }
     });
   goal
+    .command("interview [input]")
+    .description("[Alpha] Run a deep interview to reduce goal uncertainty before planning")
+    .option("--goal-id <id>", "Existing goal id to refine")
+    .option("--mode <create|refine>", "Interview mode (create | refine)", "create")
+    .option("--depth <light|standard|deep>", "Interview depth (omit to auto-select by ambiguity)")
+    .option("--max-questions <n>", "Maximum number of questions")
+    .option("--answers <file>", "Answers JSON file: { \"answers\": [{ \"questionId\", \"answer\" }] }")
+    .option("--write-spec", "Create or update the goal spec from interview answers")
+    .option("--json", t("cmd.goalJsonOption"))
+    .action(async (input, options) => {
+      const { goalInterviewCommand } = await import("../commands/goal-interview.js");
+      try {
+        await goalInterviewCommand(input, options);
+      } catch (err) {
+        if (err instanceof CliError) {
+          if (process.exitCode === undefined) process.exitCode = err.exitCode;
+          return;
+        }
+        throw err;
+      }
+    });
+  goal
+    .command("refine <goal-id>")
+    .description("[Alpha] Apply the latest interview spec delta to a goal and optionally replan")
+    .option("--from-interview <id>", "Interview session id (default: latest)", "latest")
+    .option("--plan", "Rebuild the plan after applying the interview delta")
+    .option("--json", t("cmd.goalJsonOption"))
+    .action(async (goalId, options) => {
+      const { goalRefineCommand } = await import("../commands/goal-interview.js");
+      try {
+        await goalRefineCommand(goalId, options);
+      } catch (err) {
+        if (err instanceof CliError) {
+          if (process.exitCode === undefined) process.exitCode = err.exitCode;
+          return;
+        }
+        throw err;
+      }
+    });
+  goal
     .command("list")
     .description(t("cmd.goalListDesc"))
     .option("--json", t("cmd.goalJsonOption"))

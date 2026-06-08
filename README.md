@@ -23,12 +23,21 @@
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
+  <a href="#who-is-this-for">Who is this for?</a> ·
   <a href="#current-runtime-algorithm">Runtime algorithm</a> ·
   <a href="docs/getting-started.md">Docs</a> ·
   <a href="readmeasset/ASSET_INDEX.md">Visual assets</a>
 </p>
 
 `OMK` (`omk`) turns a coding goal into a bounded, evidence-gated agent run.
+
+Use OMK when one coding agent is not enough: route Codex, OpenCode, Kimi, DeepSeek, Qwen, OpenRouter, and local runtimes through one evidence-gated control loop.
+
+## Who is this for?
+
+- Developers running multiple coding agents from the terminal.
+- Teams that need MCP-scoped agent execution instead of unrestricted tool access.
+- Agent builders who want routing, fallback, evidence gates, telemetry, and replay.
 
 > Current package source target: `open-multi-agent-kit@0.78.1`.
 > Public package name: `open-multi-agent-kit` (`@omk/cli` is not the active npm package).
@@ -38,7 +47,7 @@
 
 ## Quickstart (3 minutes)
 
-A beginner reads this, runs four commands, and succeeds.
+A beginner reads this, runs four commands, and reaches an initialized OMK chat/doctor flow.
 
 ```bash
 npm i -g open-multi-agent-kit
@@ -46,6 +55,11 @@ omk init
 omk doctor
 omk chat
 ```
+
+## Examples for agent tooling lists
+
+- [Codex MCP evidence run](examples/codex-mcp-evidence-run/README.md): project-scoped MCP setup plus evidence-gated DAG dry run.
+- [Provider fallback](examples/provider-fallback/README.md): `--provider auto` routing with parallel worker planning.
 
 ## Current release reality
 
@@ -191,6 +205,59 @@ Kimi worker prompts use stdin with `--input-format text` where that adapter path
 ```text
 Goal → DAG plan → parallel lanes → evidence bundle → verify gate → merge / replay / inspect
 ```
+
+## Goal lifecycle
+
+`omk goal` turns a raw goal into a planned, evidence-gated run. The **OMK Deep Interview** is an uncertainty reducer that clarifies the goal before planning, so the DAG is compiled from a structured spec instead of a vague prompt.
+
+Recommended flow:
+
+```bash
+omk goal interview "<raw goal>" --depth deep --write-spec
+omk goal plan <goal-id>
+omk goal run <goal-id> --provider auto --approval-policy interactive
+omk goal verify <goal-id>
+```
+
+### `omk goal interview [input]`
+
+Runs a deterministic deep interview that scores goal ambiguity (`0..1`), ranks targeted questions, assimilates answers into a structured spec delta, computes a completeness score, and (with `--write-spec`) creates or updates a `GoalSpec`. Question ranking is deterministic:
+
+```text
+score = informationGain*0.35 + riskReduction*0.25 + dagImpact*0.20 + evidenceImpact*0.15 - userCost*0.05
+```
+
+| Option                     | Purpose                                                         |
+| -------------------------- | -------------------------------------------------------------- |
+| `--goal-id <id>`           | Target an existing goal.                                       |
+| `--mode <create\|refine>`  | Create a new spec or refine an existing one.                   |
+| `--depth <light\|standard\|deep>` | Interview depth; omit to auto-select by ambiguity.      |
+| `--max-questions <n>`      | Cap the number of ranked questions.                           |
+| `--answers <file>`         | Supply answers non-interactively.                             |
+| `--write-spec`             | Persist the spec delta into a `GoalSpec`.                     |
+| `--json`                   | Emit the `omk.interview.v1` JSON contract.                    |
+
+### `omk goal refine <goal-id>`
+
+Applies the latest interview spec delta to a goal and optionally replans.
+
+| Option                  | Purpose                                          |
+| ----------------------- | ------------------------------------------------ |
+| `--from-interview <id>` | Source interview session (default: latest).      |
+| `--plan`                | Replan the goal after applying the delta.         |
+| `--json`                | Emit machine-readable output.                     |
+
+Answers file format (`--answers answers.json`):
+
+```json
+{
+  "answers": [
+    { "questionId": "q-success-criteria", "answer": "..." }
+  ]
+}
+```
+
+Session artifacts (`interview.json`, `spec-delta.json`, `questions.md`, `answers.jsonl`, `interview-report.md`) are written under `.omk/goals/<goalId>/interviews/<sessionId>/`, or `.omk/interviews/<sessionId>/` before `--write-spec`.
 
 ## What OMK controls
 
