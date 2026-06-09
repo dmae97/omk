@@ -1,5 +1,9 @@
 import type { DagNode } from "../orchestration/dag.js";
 import type {
+  ProviderHealthVector,
+} from "../contracts/provider-health.js";
+import { PROVIDER_CAPABILITY_ORDINAL } from "../contracts/provider-health.js";
+import type {
   DeepSeekModelTier,
   DeepSeekRoutePlan,
   ProviderId,
@@ -62,13 +66,28 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
   const role = input.role.toLowerCase();
   const seed = `${input.nodeId ?? ""}:${role}:${input.taskType}`;
   const authorityProvider = resolveFallbackProvider(input.authorityProvider);
+  const authorityVector = input.providerHealthVectors?.[authorityProvider];
+  const authorityProviderAllowed = providerVectorAllowsAuthority(authorityVector);
+  const authorityProviderFallbackOnly = authorityVector
+    ? !providerVectorQuotaOk(authorityVector) && providerVectorAllowsDirect(authorityVector)
+    : false;
   const authorityDecision = (
     reason: string,
     confidence: number,
     deepseek?: DeepSeekRoutePlan,
     extra: { providerModel?: ProviderModelRef } = {}
-  ): Omit<ProviderRouteDecision, "routeEnsemble"> =>
-    authorityProviderDecision(authorityProvider, reason, confidence, deepseek, extra);
+  ): Omit<ProviderRouteDecision, "routeEnsemble"> => {
+    if (!authorityProviderAllowed || authorityProviderFallbackOnly) {
+      return authorityProviderDecision(
+        authorityProvider,
+        `${providerLabel(authorityProvider)} ${authorityProviderFallbackOnly ? "quota exhausted" : "auth insufficient"}; using fallback-only route`,
+        Math.max(0.5, confidence - 0.15),
+        deepseek,
+        extra,
+      );
+    }
+    return authorityProviderDecision(authorityProvider, reason, confidence, deepseek, extra);
+  };
   const directDeepSeekAllowed = canUseDirectDeepSeek(role, input);
   const dedicatedDeepSeekAgent = isDedicatedDeepSeekAgent(input);
   const withRouteEnsemble = (
@@ -93,6 +112,19 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
     return withRouteEnsemble(authorityDecision("Core orchestration and merge authority stay with the configured authority provider", 1), "safety-gate");
   }
 
+  // Hard constraint: if authority provider is blocked by vector, skip to safety gate
+  // unless an explicit, fully-available external provider is requested.
+  if (!authorityProviderAllowed && !requestedExternalProvider(input)) {
+    return withRouteEnsemble(
+      authorityProviderDecision(
+        authorityProvider,
+        `${providerLabel(authorityProvider)} auth/quota insufficient for authority lanes; safety gate active`,
+        0.5,
+      ),
+      "safety-gate",
+    );
+  }
+
   const externalProvider = requestedExternalProvider(input);
   if (externalProvider) {
     if (!isProviderAvailable(input, externalProvider)) {
@@ -106,6 +138,15 @@ export function routeProvider(input: ProviderRouteInput): ProviderRouteDecision 
 
     // If the external provider is the authority provider, route to it as authority
     if (externalProvider === authorityProvider) {
+      // Hard constraint: auth != ok → exclude authority lanes
+      if (!authorityProviderAllowed) {
+        return withRouteEnsemble(
+          authorityDecision(`${providerLabel(externalProvider)} auth/quota insufficient for authority; using configured fallback`, 0.86, undefined, {
+            providerModel: genericProviderModelRef(input, externalProvider, "veto"),
+          }),
+          "safety-gate"
+        );
+      }
       return withRouteEnsemble(
         authorityDecision(`${providerLabel(externalProvider)} is the configured authority provider`, 0.9, undefined, {
           providerModel: genericProviderModelRef(input, externalProvider, "authority"),
@@ -268,21 +309,74 @@ function isGenericExternalProvider(value: unknown): value is ProviderId {
   return typeof value === "string" && value !== "auto" && value !== "kimi" && value !== "deepseek";
 }
 
+function providerVectorMeets(vector: ProviderHealthVector | undefined, minState: ProviderHealthVector["binary"]): boolean {
+  if (!vector) return true;
+  const current = PROVIDER_CAPABILITY_ORDINAL[vector.auth];
+  const required = PROVIDER_CAPABILITY_ORDINAL[minState];
+  return current >= required;
+}
+
+function providerVectorQuotaOk(vector: ProviderHealthVector | undefined): boolean {
+  if (!vector) return true;
+  return PROVIDER_CAPABILITY_ORDINAL[vector.quota] >= PROVIDER_CAPABILITY_ORDINAL["quota_available"];
+}
+
+function providerVectorAllowsAuthority(vector: ProviderHealthVector | undefined): boolean {
+  if (!vector) return true;
+  return (
+    PROVIDER_CAPABILITY_ORDINAL[vector.auth] >= PROVIDER_CAPABILITY_ORDINAL["auth_valid"] &&
+    PROVIDER_CAPABILITY_ORDINAL[vector.model] >= PROVIDER_CAPABILITY_ORDINAL["model_available"] &&
+    PROVIDER_CAPABILITY_ORDINAL[vector.quota] >= PROVIDER_CAPABILITY_ORDINAL["quota_available"]
+  );
+}
+
+function providerVectorAllowsDirect(vector: ProviderHealthVector | undefined): boolean {
+  if (!vector) return true;
+  return (
+    PROVIDER_CAPABILITY_ORDINAL[vector.auth] >= PROVIDER_CAPABILITY_ORDINAL["auth_valid"] &&
+    PROVIDER_CAPABILITY_ORDINAL[vector.model] >= PROVIDER_CAPABILITY_ORDINAL["model_available"] &&
+    PROVIDER_CAPABILITY_ORDINAL[vector.quota] >= PROVIDER_CAPABILITY_ORDINAL["quota_available"]
+  );
+}
+
+function providerVectorAllowsAdvisory(vector: ProviderHealthVector | undefined): boolean {
+  if (!vector) return true;
+  return PROVIDER_CAPABILITY_ORDINAL[vector.auth] >= PROVIDER_CAPABILITY_ORDINAL["auth_present"];
+}
+
 function isProviderAvailable(input: ProviderRouteInput, provider: ProviderId): boolean {
   const explicit = input.providerAvailability?.[provider];
+  const vector = input.providerHealthVectors?.[provider];
+  if (vector) {
+    // Hard constraint: quota exhausted → fallback only (not fully available)
+    if (!providerVectorQuotaOk(vector)) return false;
+    // Hard constraint: auth not valid → not available for any lane
+    if (PROVIDER_CAPABILITY_ORDINAL[vector.auth] < PROVIDER_CAPABILITY_ORDINAL["auth_valid"]) return false;
+  }
   return explicit === undefined ? true : explicit;
 }
 
 function canUseGenericDirectProvider(role: string, input: ProviderRouteInput): boolean {
   if (input.risk !== "read") return false;
   if (input.needsMcp || input.needsToolCalling) return false;
-  return input.readOnly === true || GENERIC_EXTERNAL_READ_ONLY_ROLES.has(role);
+  if (!input.readOnly && !GENERIC_EXTERNAL_READ_ONLY_ROLES.has(role)) return false;
+  const externalProvider = requestedExternalProvider(input);
+  if (externalProvider) {
+    const vector = input.providerHealthVectors?.[externalProvider];
+    if (vector && !providerVectorAllowsDirect(vector)) return false;
+  }
+  return true;
 }
 
 function canUseGenericAdvisoryProvider(role: string, input: ProviderRouteInput): boolean {
   if (!GENERIC_EXTERNAL_ADVISORY_FILE_ROLES.has(role)) return false;
   if (input.complexity === "simple") return false;
   if (input.needsMcp || input.needsToolCalling) return false;
+  const externalProvider = requestedExternalProvider(input);
+  if (externalProvider) {
+    const vector = input.providerHealthVectors?.[externalProvider];
+    if (vector && !providerVectorAllowsAdvisory(vector)) return false;
+  }
   return true;
 }
 
@@ -290,12 +384,17 @@ function canUseDeepSeekProAdvisory(role: string, input: ProviderRouteInput): boo
   if (!DEEPSEEK_PRO_ADVISORY_FILE_ROLES.has(role)) return false;
   if (input.complexity === "simple") return false;
   if (input.needsMcp || input.needsToolCalling) return false;
+  const vector = input.providerHealthVectors?.["deepseek"];
+  if (vector && !providerVectorAllowsAdvisory(vector)) return false;
   return true;
 }
 
 function canUseDirectDeepSeek(role: string, input: ProviderRouteInput): boolean {
   if (input.risk !== "read") return false;
-  return input.readOnly === true || DEEPSEEK_READ_ONLY_ROLES.has(role);
+  if (!(input.readOnly === true || DEEPSEEK_READ_ONLY_ROLES.has(role))) return false;
+  const vector = input.providerHealthVectors?.["deepseek"];
+  if (vector && !providerVectorAllowsDirect(vector)) return false;
+  return true;
 }
 
 function buildProviderRouteEnsemble(options: {

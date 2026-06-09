@@ -17,7 +17,8 @@ const allowedDecisionActors = new Set(["runtime-router", "scheduler", "evidence-
 const args = process.argv.slice(2);
 const jsonMode = args.includes("--json");
 const trustMode = args.includes("--trust");
-const explicitTargets = args.filter((arg) => arg !== "--json" && arg !== "--trust");
+const etsV2Mode = args.includes("--ets-v2");
+const explicitTargets = args.filter((arg) => arg !== "--json" && arg !== "--trust" && arg !== "--ets-v2");
 const placeholderPattern = /\b(TODO|FIXME|TBD|PLACEHOLDER|CHANGEME|REPLACE_ME|FABRICATED)\b|<capture>|capture pending/i;
 const localPathPattern = /(^|[\s"'`=:(])(?:\/home\/|\/Users\/|[A-Za-z]:\\)/;
 const secretPatterns = [
@@ -386,12 +387,52 @@ if (trustMode) {
   }
 }
 
+let etsV2Results = [];
+if (etsV2Mode) {
+  try {
+    const { createEvidenceTrustScoreV2Engine, collectEvidenceFromRunDir } = await import("../dist/evidence/evidence-trust-score.js");
+    const engine = createEvidenceTrustScoreV2Engine();
+    for (const result of results) {
+      if (!result.bundlePath.endsWith(".json")) continue;
+      const absoluteBundlePath = resolveRepoPath(result.bundlePath);
+      const bundle = JSON.parse(await readFile(absoluteBundlePath ?? join(root, result.bundlePath), "utf8"));
+      const runId = bundle.runId ?? result.proofId ?? result.bundlePath;
+      const runDir = join(root, ".omk/runs", runId);
+      const meta = {
+        runId,
+        provider: bundle.providerPolicy?.provider ?? "unknown",
+        model: bundle.providerPolicy?.model ?? "unknown",
+        cwd: "[repo-root]",
+        treeHashBefore: bundle.commit ?? "",
+        treeHashAfter: bundle.commit ?? "",
+        commandHash: "",
+        timestamp: new Date().toISOString(),
+      };
+      const runArtifacts = await collectEvidenceFromRunDir(runDir, meta);
+      const etsResult = await engine.evaluate({
+        output: JSON.stringify(bundle),
+        taskType: "release",
+        risk: "high",
+        runArtifacts,
+      });
+      etsV2Results.push({ bundlePath: result.bundlePath, ...etsResult });
+    }
+  } catch (error) {
+    etsV2Results = [];
+    console.error(`ets-v2-check failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 const ok = results.every((result) => result.ok);
 if (jsonMode) {
-  const output = trustMode
+  const output = trustMode || etsV2Mode
     ? { ok, checkedBundles: results.length, schemaVersion: expectedSchemaVersion, results: results.map((r) => {
         const tr = trustResults.find((t) => t.bundlePath === r.bundlePath);
-        return tr ? { ...r, trust: { trustScore: tr.trustScore, missingFields: tr.missingFields } } : r;
+        const ev = etsV2Results.find((t) => t.bundlePath === r.bundlePath);
+        let enriched = r;
+        if (tr) enriched = { ...enriched, trust: { trustScore: tr.trustScore, missingFields: tr.missingFields } };
+        if (ev) enriched = { ...enriched, etsV2: { score: ev.score, verdict: ev.verdict, reasons: ev.reasons } };
+        return enriched;
       }) }
     : { ok, checkedBundles: results.length, schemaVersion: expectedSchemaVersion, results };
   console.log(JSON.stringify(output, null, 2));
@@ -404,6 +445,11 @@ if (jsonMode) {
     for (const tr of trustResults) {
       const scoreLabel = tr.trustScore >= 0.9 ? "high" : tr.trustScore >= 0.75 ? "medium" : "low";
       console.log(`trust ${scoreLabel}: ${tr.bundlePath} score=${tr.trustScore} missing=[${tr.missingFields.join(", ")}]`);
+    }
+  }
+  if (etsV2Mode) {
+    for (const ev of etsV2Results) {
+      console.log(`ets-v2 ${ev.verdict}: ${ev.bundlePath} score=${ev.score} reasons=[${ev.reasons.join(", ")}]`);
     }
   }
 }

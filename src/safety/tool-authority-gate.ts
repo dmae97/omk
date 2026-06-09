@@ -141,3 +141,146 @@ export function decideToolAuthority(ctx: ToolAuthorityContext): ToolAuthorityDec
   // interactive: ask only when a TTY is attached; non-TTY ask = deny-by-default.
   return ctx.tty ? "ask" : "block";
 }
+
+// ---------------------------------------------------------------------------
+// v2 Enforcement Engine integration (0.78.3)
+// ---------------------------------------------------------------------------
+
+import type {
+  CapabilityLattice,
+  CapabilityLevel,
+  EnforcementProof,
+  SandboxCapability,
+} from "./enforcement-engine.js";
+
+/**
+ * Extended operation class for v2 gate.
+ * Adds "network" and "secret" ops so the lattice can express finer
+ * restrictions without weakening the existing 4-class gate.
+ */
+export type ToolOpV2 = ToolOp | "network" | "secret";
+
+/** Authority context enriched with enforcement proof. */
+export interface ToolAuthorityContextV2 extends ToolAuthorityContext {
+  /** v2 enforcement proof — required for authority lanes. */
+  readonly enforcementProof?: EnforcementProof;
+  /** Full capability lattice when available. */
+  readonly lattice?: Readonly<CapabilityLattice>;
+}
+
+/**
+ * Derive the effective capability level for a tool operation from the lattice.
+ */
+export function toolOpToCapability(op: ToolOpV2): SandboxCapability {
+  switch (op) {
+    case "read":
+      return "read";
+    case "write":
+      return "write";
+    case "shell":
+      return "shell";
+    case "merge":
+      return "merge";
+    case "network":
+      return "network";
+    case "secret":
+      return "secret_write";
+  }
+}
+
+/**
+ * Build a ToolAuthorityContext from an enforcement proof.
+ * Bridges the v2 lattice into the legacy gate.
+ */
+export function buildToolAuthorityContextFromProof(
+  op: ToolOpV2,
+  proof: EnforcementProof,
+  tty: boolean,
+): ToolAuthorityContext {
+  const cap = toolOpToCapability(op);
+  const blocked = proof.blockedCapabilities.includes(cap);
+  const approvalPolicy: ToolAuthorityContext["approvalPolicy"] = blocked
+    ? "block"
+    : proof.approvalRequired.includes(cap)
+      ? "interactive"
+      : "auto";
+
+  const writeBlocked = proof.blockedCapabilities.includes("write") || proof.blockedCapabilities.includes("publish");
+  const shellBlocked = proof.blockedCapabilities.includes("shell");
+  const writeApproval = proof.approvalRequired.includes("write") || proof.approvalRequired.includes("publish");
+  const shellApproval = proof.approvalRequired.includes("shell");
+
+  const writeAuthority: ProviderAuthorityLevel = writeBlocked
+    ? "none"
+    : writeApproval
+      ? "advisory"
+      : "full";
+  const shellAuthority: ProviderAuthorityLevel = shellBlocked
+    ? "none"
+    : shellApproval
+      ? "advisory"
+      : "full";
+
+  const sandboxMode: ToolAuthorityContext["sandboxMode"] =
+    proof.sandboxMode === "read-only" ? "read-only" : "workspace-write";
+
+  return {
+    op: op === "network" || op === "secret" ? "shell" : op,
+    writeAuthority,
+    shellAuthority,
+    approvalPolicy,
+    sandboxMode,
+    tty,
+  };
+}
+
+/**
+ * Decide using v2 enforcement proof when available, else fall back to legacy.
+ */
+export function decideToolAuthorityV2(ctx: ToolAuthorityContextV2): ToolAuthorityDecision {
+  if (ctx.enforcementProof) {
+    const legacyCtx = buildToolAuthorityContextFromProof(
+      ctx.op,
+      ctx.enforcementProof,
+      ctx.tty,
+    );
+    return decideToolAuthority(legacyCtx);
+  }
+  return decideToolAuthority(ctx);
+}
+
+/**
+ * Pure v2 capability check.
+ */
+export function effectiveCapabilityLevel(
+  cap: SandboxCapability,
+  lattice?: Readonly<CapabilityLattice>,
+): CapabilityLevel {
+  if (!lattice) return "full";
+  return lattice[cap] ?? "full";
+}
+
+/**
+ * Adapter-enforced capability resolution.
+ * Runtimes without enforcement proof cannot enter authority lanes.
+ */
+export function isOperationAllowedByProof(
+  op: ToolOpV2,
+  proof: EnforcementProof | undefined,
+): boolean {
+  if (!proof) return false;
+  const cap = toolOpToCapability(op);
+  return !proof.blockedCapabilities.includes(cap);
+}
+
+/**
+ * Returns true when the operation requires explicit approval per the proof.
+ */
+export function isOperationApprovalRequiredByProof(
+  op: ToolOpV2,
+  proof: EnforcementProof | undefined,
+): boolean {
+  if (!proof) return true;
+  const cap = toolOpToCapability(op);
+  return proof.approvalRequired.includes(cap);
+}

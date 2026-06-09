@@ -48,6 +48,30 @@ export type { ProofTrustMvpEngine, ProofTrustResult } from "./proof-trust.js";
 export { createProofTrustMvpEngine } from "./proof-trust.js";
 
 export type {
+  EtsClaim,
+  EtsClaimCategory,
+  EtsTaskType,
+  EtsRiskTier,
+  RequiredEvidenceItem,
+  RunArtifactMeta,
+  CollectedEvidence,
+  EvidenceVerificationResult,
+  EtsV2Result,
+  EtsV2Engine,
+  EtsV2Params,
+  EtsV2EngineOptions,
+} from "./evidence-trust-score.js";
+
+export {
+  extractClaims,
+  requiredEvidenceForClaim,
+  collectEvidenceFromRunDir,
+  verifyEvidence,
+  createEvidenceTrustScoreV2Engine,
+  createEvidenceTrustScore,
+} from "./evidence-trust-score.js";
+
+export type {
   AlgorithmSpec,
   ReleaseCandidate,
   RegressionProofMatrixResult,

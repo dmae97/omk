@@ -47,7 +47,10 @@
     "native:no-kimi:turn": "OMK_MCP_PREFLIGHT=off OMK_PROJECT_ROOT=\"$PWD\" node --test test/no-kimi-native-turn.test.mjs",
     "no-kimi:default-surface": "node scripts/no-kimi-default-surface.mjs",
     "test:no-kimi:runtime-routing": "node --test --test-timeout=300000 test/provider-router.test.mjs test/runtime-router.test.mjs && node --test --test-timeout=300000 --test-name-pattern='authority provider write-risk routes|configured non-Kimi authority|implicit default authority|unavailable DeepSeek|external direct fallback|Super OMK config|scoreProviders includes|computeProviderRouteScore|runtime fallback' test/provider-routing.test.mjs && node --test test/no-kimi-cli-hud-surface.test.mjs test/v2-regression.test.mjs",
-    "legacy-identity:check": "node scripts/no-legacy-identity-surface.mjs"
+    "legacy-identity:check": "node scripts/no-legacy-identity-surface.mjs",
+    "benchmark:shadow": "node scripts/run-benchmark.mjs --shadow",
+    "benchmark:live": "node scripts/run-benchmark.mjs --live",
+    "benchmark:ci": "node scripts/run-benchmark.mjs --shadow --summary-json proof/benchmarks/ci-run.json"
   },
   "keywords": [
     "agent-runtime",

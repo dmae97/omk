@@ -14,6 +14,7 @@ export * from "./provider-stats.js";
 export * from "./openai-compatible-runner.js";
 export * from "./codex-cli-runner.js";
 export * from "./context-preflight.js";
+export { toProviderHealth, toProviderHealthVector } from "./provider-health.js";
 // New provider system (provider.ts) — explicit exports to avoid conflicts with types.ts
 export {
   type AgentRunInput,

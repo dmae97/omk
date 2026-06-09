@@ -38,6 +38,8 @@ export interface ProviderHealth {
   latencyMs?: number;
   lastCheckedAt: number;
   reason?: string;
+  /** v2 capability vector (optional; present when profiler v2 is active). */
+  vector?: import("../contracts/provider-health.js").ProviderHealthVector;
 }
 
 export interface AgentProvider {

@@ -11,6 +11,7 @@ import type {
   ProviderAuthorityLevel,
   ProviderFailureKind,
   ProviderHealth,
+  ProviderHealthVector,
 } from "../contracts/provider-health.js";
 import type { ProviderDoctorStatus } from "./model-registry.js";
 
@@ -220,6 +221,48 @@ function fromDeepSeekDoctor(input: DeepSeekDoctorHealthInput, extras?: ProviderH
     failureKind,
     remediation,
   };
+}
+
+function toProviderHealthVectorFromHealth(health: ProviderHealth): ProviderHealthVector {
+  const binary: ProviderHealthVector["binary"] = health.runtimeOk ? "ready" : "missing";
+  const auth: ProviderHealthVector["auth"] = health.authOk
+    ? "ready"
+    : health.failureKind === "auth"
+      ? "auth_present"
+      : "missing";
+  const model: ProviderHealthVector["model"] = health.modelOk ? "ready" : "missing";
+  const quota: ProviderHealthVector["quota"] = health.quotaOk
+    ? "ready"
+    : health.failureKind === "quota"
+      ? "auth_valid"
+      : "missing";
+
+  return {
+    provider: health.provider,
+    binary,
+    auth,
+    model,
+    quota,
+    latencyP50Ms: 0,
+    latencyP95Ms: 0,
+    supportsRead: true,
+    supportsWrite: health.writeAuthority !== "none" && health.writeAuthority !== "advisory",
+    supportsShell: health.shellAuthority !== "none",
+    supportsSandbox: health.shellAuthority !== "none",
+    evidencePassRate7d: health.failureKind === "none" ? 1.0 : 0.5,
+    failureEwma: health.failureKind === "none" ? 0 : 0.5,
+  };
+}
+
+/**
+ * Maps a provider doctor payload onto a v2 {@link ProviderHealthVector}.
+ *
+ * @param status A {@link ProviderDoctorStatus} or DeepSeek doctor object.
+ * @param extras Optional non-sensitive context overrides.
+ */
+export function toProviderHealthVector(status: ProviderHealthInput, extras?: ProviderHealthExtras): ProviderHealthVector {
+  const health = toProviderHealth(status, extras);
+  return toProviderHealthVectorFromHealth(health);
 }
 
 /**

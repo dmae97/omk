@@ -1,0 +1,1625 @@
+{
+  "schemaVersion": "omk.benchmark.v1",
+  "runId": "sample-run",
+  "startedAt": "2026-06-09T06:19:59.478Z",
+  "completedAt": "2026-06-09T06:19:59.484Z",
+  "durationMs": 6,
+  "treeHash": "synthetic",
+  "seed": 42,
+  "providerConfigHash": "b2e6e1b5d989b46d",
+  "omkVersion": "0.0.0",
+  "mode": "shadow",
+  "totalTasks": 20,
+  "solvedCount": 10,
+  "solveRate": 0.5,
+  "evidenceTrustScoreMean": 0.9800000000000001,
+  "falseDoneRate": 0.5,
+  "fallbackSuccessRate": 0,
+  "routerRegretMean": 0,
+  "costPerSolvedTask": 0.038389999999999994,
+  "p95LatencyMs": 3009,
+  "rollbackRate": 0,
+  "sandboxViolationCount": 0,
+  "results": [
+    {
+      "taskId": "bench-read-only-repo-qa-000",
+      "solved": false,
+      "evidenceTrustScore": 0.8,
+      "falseDone": true,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.020372,
+      "latencyMs": 2606,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=coding; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=coding; bayesianE=0.50; confidence=0.10; capability=1.00; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.638",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6380000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9280000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6175999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.85,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5847500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.016,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.33245
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-read-only-repo-qa-001",
+      "solved": true,
+      "evidenceTrustScore": 0.8,
+      "falseDone": false,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.018018,
+      "latencyMs": 3009,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=coding; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=coding; bayesianE=0.50; confidence=0.10; capability=1.00; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.638",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6380000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9280000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6175999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.85,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5847500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.016,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.33245
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-small-bug-fix-000",
+      "solved": false,
+      "evidenceTrustScore": 1,
+      "falseDone": true,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.020372,
+      "latencyMs": 2606,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=debugging; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=debugging; bayesianE=0.50; confidence=0.10; capability=1.05; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.648",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1.05,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6480000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9780000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6275999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5947500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.21600000000000003,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.37245000000000006
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-small-bug-fix-001",
+      "solved": true,
+      "evidenceTrustScore": 1,
+      "falseDone": false,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.018018,
+      "latencyMs": 3009,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=debugging; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=debugging; bayesianE=0.50; confidence=0.10; capability=1.05; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.648",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1.05,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6480000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9780000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6275999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5947500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.21600000000000003,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.37245000000000006
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-failing-test-repair-000",
+      "solved": false,
+      "evidenceTrustScore": 1,
+      "falseDone": true,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.020372,
+      "latencyMs": 2606,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "openai-compatible",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=test-generation; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=test-generation; bayesianE=0.50; confidence=0.10; capability=0.90; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.618",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.8999999999999999,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6180000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.8280000000000001,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5975999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.8999999999999999,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5947499999999999
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.016,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.33245
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-failing-test-repair-001",
+      "solved": true,
+      "evidenceTrustScore": 1,
+      "falseDone": false,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.018018,
+      "latencyMs": 3009,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "openai-compatible",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=test-generation; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=test-generation; bayesianE=0.50; confidence=0.10; capability=0.90; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.618",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.8999999999999999,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6180000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.8280000000000001,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5975999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.8999999999999999,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5947499999999999
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.016,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.33245
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-multi-file-refactor-000",
+      "solved": false,
+      "evidenceTrustScore": 1,
+      "falseDone": true,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.020372,
+      "latencyMs": 2606,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "openai-compatible",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=refactor; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=refactor; bayesianE=0.50; confidence=0.10; capability=0.95; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.628",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.95,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6280000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.8780000000000001,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6075999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.95,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6047499999999999
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.016,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.33245
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-multi-file-refactor-001",
+      "solved": true,
+      "evidenceTrustScore": 1,
+      "falseDone": false,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.018018,
+      "latencyMs": 3009,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "openai-compatible",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=refactor; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=refactor; bayesianE=0.50; confidence=0.10; capability=0.95; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.628",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.95,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6280000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.8780000000000001,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6075999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.95,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6047499999999999
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.016,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.33245
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-cli-command-task-000",
+      "solved": false,
+      "evidenceTrustScore": 1,
+      "falseDone": true,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.020372,
+      "latencyMs": 2606,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=shell-operation; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=shell-operation; bayesianE=0.50; confidence=0.10; capability=0.85; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.608",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.85,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6080000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.778,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5875999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.44999999999999996,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.50475
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.166,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.36245000000000005
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-cli-command-task-001",
+      "solved": true,
+      "evidenceTrustScore": 1,
+      "falseDone": false,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.018018,
+      "latencyMs": 3009,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=shell-operation; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=shell-operation; bayesianE=0.50; confidence=0.10; capability=0.85; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.608",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.85,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6080000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.778,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5875999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.44999999999999996,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.50475
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.166,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.36245000000000005
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-dependency-update-000",
+      "solved": false,
+      "evidenceTrustScore": 1,
+      "falseDone": true,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.020372,
+      "latencyMs": 2606,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=coding; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=coding; bayesianE=0.50; confidence=0.10; capability=1.00; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.638",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6380000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9280000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6175999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.85,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5847500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.016,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.33245
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-dependency-update-001",
+      "solved": true,
+      "evidenceTrustScore": 1,
+      "falseDone": false,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.018018,
+      "latencyMs": 3009,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=coding; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=coding; bayesianE=0.50; confidence=0.10; capability=1.00; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.638",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6380000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9280000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6175999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.85,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5847500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.016,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.33245
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-merge-conflict-task-000",
+      "solved": false,
+      "evidenceTrustScore": 1,
+      "falseDone": true,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.020372,
+      "latencyMs": 2606,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=coding; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=coding; bayesianE=0.50; confidence=0.10; capability=1.00; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.638",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6380000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9280000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6175999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.85,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5847500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.016,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.33245
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-merge-conflict-task-001",
+      "solved": true,
+      "evidenceTrustScore": 1,
+      "falseDone": false,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.018018,
+      "latencyMs": 3009,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=coding; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=coding; bayesianE=0.50; confidence=0.10; capability=1.00; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.638",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6380000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9280000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6175999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.85,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5847500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.016,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.33245
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-security-sensitive-task-000",
+      "solved": false,
+      "evidenceTrustScore": 1,
+      "falseDone": true,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.020372,
+      "latencyMs": 2606,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=coding; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=coding; bayesianE=0.50; confidence=0.10; capability=1.00; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.638",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6380000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9280000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6175999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.85,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5847500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.016,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.33245
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-security-sensitive-task-001",
+      "solved": true,
+      "evidenceTrustScore": 1,
+      "falseDone": false,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.018018,
+      "latencyMs": 3009,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=coding; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=coding; bayesianE=0.50; confidence=0.10; capability=1.00; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.638",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6380000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9280000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6175999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.85,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5847500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.016,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.33245
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-provider-failure-fallback-000",
+      "solved": false,
+      "evidenceTrustScore": 1,
+      "falseDone": true,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.020372,
+      "latencyMs": 2606,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=debugging; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=debugging; bayesianE=0.50; confidence=0.10; capability=1.05; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.648",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1.05,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6480000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9780000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6275999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5947500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.21600000000000003,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.37245000000000006
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-provider-failure-fallback-001",
+      "solved": true,
+      "evidenceTrustScore": 1,
+      "falseDone": false,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.018018,
+      "latencyMs": 3009,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=debugging; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=debugging; bayesianE=0.50; confidence=0.10; capability=1.05; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.648",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1.05,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6480000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9780000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6275999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5947500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.21600000000000003,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.37245000000000006
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-quota-auth-failure-fallback-000",
+      "solved": false,
+      "evidenceTrustScore": 1,
+      "falseDone": true,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.020372,
+      "latencyMs": 2606,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=debugging; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=debugging; bayesianE=0.50; confidence=0.10; capability=1.05; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.648",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1.05,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6480000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9780000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6275999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5947500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.21600000000000003,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.37245000000000006
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "taskId": "bench-quota-auth-failure-fallback-001",
+      "solved": true,
+      "evidenceTrustScore": 1,
+      "falseDone": false,
+      "fallbackUsed": false,
+      "fallbackSucceeded": false,
+      "routerRegret": 0,
+      "costUsd": 0.018018,
+      "latencyMs": 3009,
+      "rolledBack": false,
+      "sandboxViolations": 0,
+      "attemptCount": 1,
+      "decisions": [
+        {
+          "component": "runtime-router-v1",
+          "selectedRuntime": "deepseek",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0.020000000000000018,
+          "reason": "intent=debugging; quality=0.60; evidencePassRate=0.50; recentPenalty=0.00"
+        },
+        {
+          "component": "runtime-router-v2",
+          "selectedRuntime": "kimi-wire",
+          "bestAvailableRuntime": "kimi-wire",
+          "regret": 0,
+          "reason": "intent=debugging; bayesianE=0.50; confidence=0.10; capability=1.05; maturity=0.92; latency=0.85; cost=0.75; penalty=0.00; blast=0.00; composite=0.648",
+          "scoresV2": [
+            {
+              "runtimeId": "kimi-wire",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 1.05,
+              "maturityScore": 0.92,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6480000000000001
+            },
+            {
+              "runtimeId": "deepseek",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9780000000000002,
+              "maturityScore": 0.8799999999999999,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.6275999999999999
+            },
+            {
+              "runtimeId": "openai-compatible",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.9,
+              "maturityScore": 0.765,
+              "latencyScore": 0.85,
+              "costScore": 0.75,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.5947500000000001
+            },
+            {
+              "runtimeId": "local",
+              "bayesianEvidenceScore": 0.5,
+              "confidence": 0.1,
+              "capabilityFit": 0.21600000000000003,
+              "maturityScore": 0.195,
+              "latencyScore": 0.7,
+              "costScore": 0.9,
+              "recentFailurePenalty": 0,
+              "blastRadiusPenalty": 0,
+              "composite": 0.37245000000000006
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -12,6 +12,9 @@ import { defaultScopedRoleAgentFile, writeScopedAgentFile } from "../util/scoped
 import { createOmkJsonEnvelope } from "../util/json-envelope.js";
 import { emitJson } from "../util/cli-contract.js";
 import type { OmkErrorCode } from "../contracts/index.js";
+import {
+  runMergeArbiter,
+} from "../orchestration/merge-arbiter.js";
 
 interface MergeOptions {
   run?: string;
@@ -203,78 +206,127 @@ export async function mergeCommand(options: MergeOptions): Promise<void> {
   if (dryRun) console.log(style.orange("🟡 DRY RUN — no changes will be applied"));
   console.log("");
 
-  // ── 1. Collect diffs from all worktrees ──
-  const workers: WorkerDiff[] = [];
-  for (const name of workerNames) {
-    const wtPath = join(worktreesDir, name);
-    const diffResult = await runShell("git", ["-C", wtPath, "diff", currentBranch], { timeout: 15000 });
+  let report: MergeReport;
+  let winner: WorkerDiff | null = null;
 
-    if (diffResult.failed || !diffResult.stdout.trim()) {
-      console.log(style.gray(`  ${name}: no changes`));
-      continue;
+  if (strategy === "arbiter") {
+    // ── Arbiter path ──
+    console.log(style.purple("Running merge arbiter..."));
+    const config = await readTextFile(join(root, ".omk", "config.toml"), "");
+    const arbiterResult = await runMergeArbiter(worktreesDir, currentBranch, root, config, {
+      threshold: 0.6,
+      testTimeoutMs: 120_000,
+    });
+
+    // Map arbiter candidates back to WorkerDiff for reporting
+    const arbiterWorkers: WorkerDiff[] = arbiterResult.trace.steps
+      .filter((s) => s.step === "evidence-suite" || s.step === "score")
+      .map((s) => {
+        return {
+          name: s.candidateId.replace("candidate-", ""),
+          path: "",
+          diff: "",
+          diffLines: 0,
+          canApply: s.detail.includes("apply=true"),
+          reviewScore: 50,
+          reviewReason: s.detail,
+          testsPassed: s.detail.includes("tests=true"),
+        };
+      });
+
+    // De-duplicate by name
+    const workerMap = new Map<string, WorkerDiff>();
+    for (const w of arbiterWorkers) workerMap.set(w.name, w);
+
+    report = {
+      winner: arbiterResult.winner?.name ?? null,
+      reason: arbiterResult.rationale.summary,
+      conflicts: arbiterResult.rationale.conflicts,
+      filesApplied: 0,
+      dryRun,
+      workers: [...workerMap.values()],
+    };
+
+    if (arbiterResult.requiresHumanApproval) {
+      console.log(status.error(arbiterResult.rationale.humanApprovalReason ?? "No candidate meets threshold — human approval required."));
+      printReport(report);
+      process.exit(1);
     }
 
-    const diff = diffResult.stdout;
-    const diffLines = diff.split("\n").length;
+    winner = arbiterResult.winner ? { name: arbiterResult.winner.name, path: arbiterResult.winner.path, diff: arbiterResult.winner.diff, diffLines: arbiterResult.winner.diffLines, canApply: arbiterResult.winner.canApply, reviewScore: arbiterResult.winner.evidence.reviewerScore, reviewReason: arbiterResult.winner.evidence.reviewerReason, testsPassed: arbiterResult.winner.evidence.testsPassed } : null;
+  } else {
+    // ── 1. Collect diffs from all worktrees ──
+    const workers: WorkerDiff[] = [];
+    for (const name of workerNames) {
+      const wtPath = join(worktreesDir, name);
+      const diffResult = await runShell("git", ["-C", wtPath, "diff", currentBranch], { timeout: 15000 });
 
-    // Check apply-ability
-    const applyCheck = await runShell("git", ["apply", "--check"], {
-      cwd: root,
-      input: diff,
-      timeout: 15000,
-    });
-    const canApply = !applyCheck.failed;
+      if (diffResult.failed || !diffResult.stdout.trim()) {
+        console.log(style.gray(`  ${name}: no changes`));
+        continue;
+      }
 
-    workers.push({ name, path: wtPath, diff, diffLines, canApply });
-    console.log(
-      `  ${style.purpleBold(name)} ${canApply ? style.mint("(clean)") : style.pink("(conflicts)")} ${style.gray(`${diffLines} lines`)}`
-    );
+      const diff = diffResult.stdout;
+      const diffLines = diff.split("\n").length;
+
+      // Check apply-ability
+      const applyCheck = await runShell("git", ["apply", "--check"], {
+        cwd: root,
+        input: diff,
+        timeout: 15000,
+      });
+      const canApply = !applyCheck.failed;
+
+      workers.push({ name, path: wtPath, diff, diffLines, canApply });
+      console.log(
+        `  ${style.purpleBold(name)} ${canApply ? style.mint("(clean)") : style.pink("(conflicts)")} ${style.gray(`${diffLines} lines`)}`
+      );
+    }
+
+    if (workers.length === 0) {
+      console.log(status.warn("No worker changes to merge."));
+      return;
+    }
+
+    // ── 2. Reviewer scoring ──
+    console.log("");
+    console.log(style.purple("Scoring diffs with reviewer..."));
+    for (const w of workers) {
+      const score = await scoreDiff(w.diff, w.name);
+      w.reviewScore = score.score;
+      w.reviewReason = score.reason;
+      const color = score.score >= 80 ? style.mint : score.score >= 50 ? style.orange : style.pink;
+      console.log(`  ${w.name}: ${color(`${score.score}/100`)} ${style.gray(score.reason)}`);
+    }
+
+    // ── 3. Test verification in worktrees ──
+    console.log("");
+    console.log(style.purple("Running tests in worktrees..."));
+    for (const w of workers) {
+      const testResult = await runShell("sh", ["-c", "npm test 2>/dev/null || pnpm test 2>/dev/null || yarn test 2>/dev/null || true"], {
+        cwd: w.path,
+        timeout: 120_000,
+      });
+      w.testsPassed = !testResult.failed;
+      console.log(
+        `  ${w.name}: ${w.testsPassed ? style.mint("tests passed") : style.pink("tests failed")}`
+      );
+    }
+
+    // ── 4. Select winner ──
+    console.log("");
+    console.log(style.purple("Selecting winner..."));
+    winner = selectWinner(workers, strategy);
+
+    report = {
+      winner: winner?.name ?? null,
+      reason: winner?.reviewReason ?? "No suitable candidate",
+      conflicts: workers.filter((w) => !w.canApply).map((w) => w.name),
+      filesApplied: 0,
+      dryRun,
+      workers,
+    };
   }
-
-  if (workers.length === 0) {
-    console.log(status.warn("No worker changes to merge."));
-    return;
-  }
-
-  // ── 2. Reviewer scoring ──
-  console.log("");
-  console.log(style.purple("Scoring diffs with reviewer..."));
-  for (const w of workers) {
-    const score = await scoreDiff(w.diff, w.name);
-    w.reviewScore = score.score;
-    w.reviewReason = score.reason;
-    const color = score.score >= 80 ? style.mint : score.score >= 50 ? style.orange : style.pink;
-    console.log(`  ${w.name}: ${color(`${score.score}/100`)} ${style.gray(score.reason)}`);
-  }
-
-  // ── 3. Test verification in worktrees ──
-  console.log("");
-  console.log(style.purple("Running tests in worktrees..."));
-  for (const w of workers) {
-    const testResult = await runShell("sh", ["-c", "npm test 2>/dev/null || pnpm test 2>/dev/null || yarn test 2>/dev/null || true"], {
-      cwd: w.path,
-      timeout: 120_000,
-    });
-    w.testsPassed = !testResult.failed;
-    console.log(
-      `  ${w.name}: ${w.testsPassed ? style.mint("tests passed") : style.pink("tests failed")}`
-    );
-  }
-
-  // ── 4. Select winner ──
-  console.log("");
-  console.log(style.purple("Selecting winner..."));
-  const winner = selectWinner(workers, strategy);
-
-  // ── 5. Apply or preview ──
-  const report: MergeReport = {
-    winner: winner?.name ?? null,
-    reason: winner?.reviewReason ?? "No suitable candidate",
-    conflicts: workers.filter((w) => !w.canApply).map((w) => w.name),
-    filesApplied: 0,
-    dryRun,
-    workers,
-  };
 
   if (!winner) {
     console.log(status.error("No worker diff can be applied cleanly."));

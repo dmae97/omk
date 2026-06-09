@@ -2,11 +2,14 @@ import type { OmkToolCall, OmkToolDefinition } from "./tool-registry-contract.js
 import { createToolExecutionBatches } from "./tool-registry-contract.js";
 import {
   decideToolAuthority,
+  decideToolAuthorityV2,
   mapToolNameToOp,
   type ToolAuthorityDecision,
   type ToolOp,
+  type ToolOpV2,
 } from "../safety/tool-authority-gate.js";
 import type { ProviderAuthorityLevel } from "../contracts/provider-health.js";
+import type { EnforcementProof } from "../safety/enforcement-engine.js";
 
 export interface ToolDispatchResult<R = unknown> {
   readonly call: OmkToolCall;
@@ -24,13 +27,15 @@ export type ToolAuthorityMode = "shadow" | "enforce";
  */
 export interface ToolAuthorityDecisionRecord {
   readonly toolName: string;
-  readonly op: ToolOp;
+  readonly op: ToolOp | ToolOpV2;
   readonly decision: ToolAuthorityDecision;
   readonly mode: ToolAuthorityMode;
   /** True only when the verdict actually rejected the call (enforce + block). */
   readonly enforced: boolean;
   /** Redacted, human-readable reason. Never includes args or secret values. */
   readonly reason: string;
+  /** v2 enforcement proof hash when available. */
+  readonly policyHash?: string;
 }
 
 /**
@@ -52,6 +57,12 @@ export interface ToolAuthorityWiring {
   readonly enforce?: boolean;
   /** Optional sink for computed verdicts (invoked in both shadow and enforce). */
   readonly onDecision?: (record: ToolAuthorityDecisionRecord) => void;
+  /**
+   * v2 enforcement proof from the adapter / runtime.
+   * When present, the gate uses policy-dependent capability resolution.
+   * Runtimes without a valid proof cannot enter authority lanes.
+   */
+  readonly enforcementProof?: EnforcementProof;
 }
 
 const ENFORCE_PATTERN = /^(1|true|yes|on)$/i;
@@ -83,14 +94,16 @@ function redactedAuthorityReason(
 /** Error used to reject a tool call rejected by the authority gate (enforce mode). */
 export class ToolAuthorityBlockedError extends Error {
   readonly toolName: string;
-  readonly op: ToolOp;
+  readonly op: ToolOp | ToolOpV2;
   readonly decision: ToolAuthorityDecision;
+  readonly policyHash?: string;
   constructor(record: ToolAuthorityDecisionRecord) {
     super(record.reason);
     this.name = "ToolAuthorityBlockedError";
     this.toolName = record.toolName;
     this.op = record.op;
     this.decision = record.decision;
+    this.policyHash = record.policyHash;
   }
 }
 
@@ -128,6 +141,50 @@ export function evaluateToolAuthority(
 }
 
 /**
+ * Compute the gate verdict for a single call using v2 enforcement proof.
+ * Pure (no IO, no env reads).
+ *
+ * If `enforcementProof` is present, the gate uses policy-dependent capability
+ * resolution. Runtimes without a valid proof cannot enter authority lanes.
+ */
+export function evaluateToolAuthorityV2(
+  toolName: string,
+  wiring: ToolAuthorityWiring,
+): { readonly record: ToolAuthorityDecisionRecord; readonly blocked: boolean } {
+  const op = mapToolNameToOp(toolName);
+
+  if (wiring.enforcementProof) {
+    const decision = decideToolAuthorityV2({
+      op,
+      writeAuthority: wiring.writeAuthority,
+      shellAuthority: wiring.shellAuthority,
+      approvalPolicy: wiring.approvalPolicy,
+      sandboxMode: wiring.sandboxMode,
+      tty: wiring.tty,
+      enforcementProof: wiring.enforcementProof,
+    });
+    const enforce = wiring.enforce === true;
+    const wouldBlock = decision === "block" || (decision === "ask" && !wiring.tty);
+    const blocked = enforce && wouldBlock;
+    return {
+      record: {
+        toolName,
+        op,
+        decision,
+        mode: enforce ? "enforce" : "shadow",
+        enforced: blocked,
+        reason: redactedAuthorityReason(op, decision, wiring),
+        policyHash: wiring.enforcementProof.policyHash,
+      },
+      blocked,
+    };
+  }
+
+  // Fall back to legacy evaluation when no proof is present.
+  return evaluateToolAuthority(toolName, wiring);
+}
+
+/**
  * Wrap a dispatch function with the authority checkpoint. In shadow mode the
  * wrapper records the verdict and always delegates to `dispatchOne`. In enforce
  * mode a blocked verdict rejects the call with a redacted reason.
@@ -137,7 +194,7 @@ function buildGatedDispatch<A, R>(
   dispatchOne: (call: OmkToolCall<A>) => Promise<R>,
 ): (call: OmkToolCall<A>) => Promise<R> {
   return async (call: OmkToolCall<A>): Promise<R> => {
-    const { record, blocked } = evaluateToolAuthority(call.toolName, wiring);
+    const { record, blocked } = evaluateToolAuthorityV2(call.toolName, wiring);
     wiring.onDecision?.(record);
     if (blocked) {
       throw new ToolAuthorityBlockedError(record);

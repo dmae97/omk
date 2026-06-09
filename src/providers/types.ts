@@ -141,6 +141,8 @@ export interface ProviderRouteInput {
   authorityProvider?: ProviderId;
   preferredModel?: string;
   preferredDeepSeekTier?: DeepSeekModelTier;
+  /** v2 capability vectors for hard-constraint filtering. */
+  providerHealthVectors?: Partial<Record<ProviderId, import("../contracts/provider-health.js").ProviderHealthVector>>;
 }
 
 export interface ProviderRouteDecision {
@@ -163,6 +165,8 @@ export interface ProviderAvailability {
   checkedAt: number;
   reason?: string;
   disableForRun: boolean;
+  /** v2 capability vector (optional; present when profiler v2 is active). */
+  healthVector?: import("../contracts/provider-health.js").ProviderHealthVector;
 }
 
 export interface AgentProvider {

@@ -207,6 +207,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         deepseekAvailable,
         providerRunners
       );
+      const providerHealthVectors = providerHealthVectorsFromRegistry(providerHealth, providerRunners);
       const routeInput: ProviderRouteInput = {
         role: node.role,
         taskType: env.OMK_TASK_TYPE ?? "general",
@@ -218,6 +219,7 @@ export function createProviderTaskRunner(options: ProviderTaskRunnerOptions): Ta
         estimatedTokens: Number(env.OMK_ESTIMATED_TOKENS ?? 0),
         deepseekAvailable,
         providerAvailability,
+        providerHealthVectors,
         providerModels: options.providerModels,
         nodeId: node.id,
         providerHint: node.routing?.provider,
@@ -976,6 +978,36 @@ function providerAvailabilityForNode(
     availability[provider] = provider === "deepseek" ? deepseekAvailable : Boolean(providerRunners?.[provider]);
   }
   return availability;
+}
+
+function providerHealthVectorsFromRegistry(
+  providerHealth: ProviderHealthRegistry,
+  providerRunners: Partial<Record<ProviderId, TaskRunner>> | undefined
+): Partial<Record<ProviderId, import("../contracts/provider-health.js").ProviderHealthVector>> {
+  const vectors: Partial<Record<ProviderId, import("../contracts/provider-health.js").ProviderHealthVector>> = {};
+  const kimiVector = providerHealth.getKimiVector();
+  if (kimiVector) vectors.kimi = kimiVector;
+  const deepseekVector = providerHealth.getDeepSeekVector();
+  if (deepseekVector) vectors.deepseek = deepseekVector;
+  for (const provider of Object.keys(providerRunners ?? {})) {
+    if (vectors[provider as ProviderId]) continue;
+    vectors[provider as ProviderId] = {
+      provider,
+      binary: "ready",
+      auth: "ready",
+      model: "ready",
+      quota: "ready",
+      latencyP50Ms: 0,
+      latencyP95Ms: 0,
+      supportsRead: true,
+      supportsWrite: true,
+      supportsShell: false,
+      supportsSandbox: false,
+      evidencePassRate7d: 1.0,
+      failureEwma: 0,
+    };
+  }
+  return vectors;
 }
 
 function resolveUnavailableSkippableProviderLane(options: {
