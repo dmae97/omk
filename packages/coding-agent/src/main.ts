@@ -112,6 +112,10 @@ function toPrintOutputMode(appMode: AppMode): Exclude<Mode, "rpc"> {
 	return appMode === "json" ? "json" : "text";
 }
 
+function isPlainRuntimeMetadataCommand(parsed: Args): boolean {
+	return !parsed.print && parsed.mode === undefined && (parsed.help === true || parsed.listModels !== undefined);
+}
+
 async function prepareInitialMessage(
 	parsed: Args,
 	autoResizeImages: boolean,
@@ -480,11 +484,6 @@ export async function main(args: string[], options?: MainOptions) {
 		}
 	}
 	time("parseArgs");
-	let appMode = resolveAppMode(parsed, process.stdin.isTTY, process.stdout.isTTY);
-	const shouldTakeOverStdout = appMode !== "interactive";
-	if (shouldTakeOverStdout) {
-		takeOverStdout();
-	}
 
 	if (parsed.version) {
 		console.log(VERSION);
@@ -503,6 +502,12 @@ export async function main(args: string[], options?: MainOptions) {
 		}
 		console.log(`Exported to: ${result}`);
 		process.exit(0);
+	}
+
+	let appMode = resolveAppMode(parsed, process.stdin.isTTY, process.stdout.isTTY);
+	const shouldTakeOverStdout = appMode !== "interactive" && !isPlainRuntimeMetadataCommand(parsed);
+	if (shouldTakeOverStdout) {
+		takeOverStdout();
 	}
 
 	if (parsed.mode === "rpc" && parsed.fileArgs.length > 0) {
