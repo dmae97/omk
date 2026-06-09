@@ -15,65 +15,60 @@ const CWD = process.cwd();
 
 const ALGORITHM_COVERAGE_TOPOLOGY = Object.freeze([
   {
-    name: "no-kimi-codex-smoke",
+    name: "stage-controller",
+    proofIds: ["005-contract-version-smoke", "011-regression-proof-matrix"],
+    scenarios: ["contract-version-smoke", "regression-proof-matrix"],
+    tests: ["workflow-harness", "cli-json-contract"],
+    cliTokens: ["stage", "release", "workflow", "goal"],
+  },
+  {
+    name: "public-surface-freeze",
     proofIds: ["001-no-kimi-codex-smoke", "009-no-kimi-smoke"],
     scenarios: ["no-kimi-smoke"],
-    tests: [
-      "no-kimi-cli-hud-surface",
-      "no-kimi-default-surface",
-      "no-kimi-native-turn",
-      "no-kimi-verification-contract",
-    ],
+    tests: ["no-kimi-default-surface", "no-kimi-verification-contract"],
     cliTokens: ["chat", "codex", "no-kimi"],
   },
   {
-    name: "doctor-provider",
-    proofIds: ["002-doctor-provider"],
-    scenarios: ["doctor-provider"],
-    tests: ["doctor-agent-schema", "provider-health"],
-    cliTokens: ["doctor"],
+    name: "proof-trust-mvp",
+    proofIds: ["006-evidence-block", "011-regression-proof-matrix"],
+    scenarios: ["evidence-block", "regression-proof-matrix"],
+    tests: ["evidence-system", "regression-proof-matrix"],
+    cliTokens: ["proof", "verify"],
   },
   {
-    name: "fallback-route",
-    proofIds: ["003-fallback-route", "010-fallback-routing"],
-    scenarios: ["fallback-route"],
-    tests: ["provider-router", "provider-routing", "runtime-router"],
-    cliTokens: ["fallback", "provider"],
-  },
-  {
-    name: "native-safety",
-    proofIds: ["004-native-safety"],
-    scenarios: ["native-safety"],
-    tests: ["native-safety-loader", "rust-safety-harness"],
-    cliTokens: ["native", "safety"],
-  },
-  {
-    name: "contract-version-smoke",
-    proofIds: ["005-contract-version-smoke"],
-    scenarios: ["contract-version-smoke"],
-    tests: ["cli-json-contract", "version-contract"],
-    cliTokens: ["contract", "version"],
-  },
-  {
-    name: "evidence-block",
-    proofIds: ["006-evidence-block"],
-    scenarios: ["evidence-block"],
-    tests: ["evidence-system", "proof-bundle-trust", "quality-gate", "verify-artifacts"],
+    name: "evidence-item-trust",
+    proofIds: ["006-evidence-block", "007-replay-inspect"],
+    scenarios: ["evidence-block", "replay-inspect"],
+    tests: ["evidence-system", "replay-kernel"],
     cliTokens: ["evidence", "verify"],
   },
   {
-    name: "replay-inspect",
-    proofIds: ["007-replay-inspect"],
-    scenarios: ["replay-inspect"],
-    tests: ["replay-kernel"],
-    cliTokens: ["inspect", "replay"],
+    name: "provider-maturity-mvp",
+    proofIds: ["002-doctor-provider", "003-fallback-route", "010-fallback-routing"],
+    scenarios: ["doctor-provider", "fallback-route"],
+    tests: ["doctor-agent-schema", "provider-routing", "runtime-bootstrap"],
+    cliTokens: ["doctor", "provider"],
   },
   {
-    name: "graph-audit",
-    proofIds: ["008-graph-audit"],
-    scenarios: ["graph-audit"],
-    tests: ["graph-link-run", "graph-viewer", "local-graph-memory"],
-    cliTokens: ["graph", "audit"],
+    name: "router-v2-cutover",
+    proofIds: ["003-fallback-route", "010-fallback-routing"],
+    scenarios: ["fallback-route"],
+    tests: ["runtime-router", "provider-routing"],
+    cliTokens: ["route", "fallback", "provider"],
+  },
+  {
+    name: "minimal-verified-demo-run",
+    proofIds: ["001-no-kimi-codex-smoke", "004-native-safety", "009-no-kimi-smoke"],
+    scenarios: ["no-kimi-smoke", "native-safety"],
+    tests: ["no-kimi-native-turn", "native-safety-loader", "runtime-bootstrap"],
+    cliTokens: ["demo", "doctor", "verify", "init"],
+  },
+  {
+    name: "release-promotion-gate",
+    proofIds: ["005-contract-version-smoke", "011-regression-proof-matrix"],
+    scenarios: ["contract-version-smoke", "regression-proof-matrix"],
+    tests: ["cli-json-contract", "package-audit", "workflow-harness"],
+    cliTokens: ["release", "check", "verify"],
   },
   {
     name: "regression-proof-matrix",
@@ -305,6 +300,8 @@ async function main() {
   });
 
   const testSuite = { testsByAlgorithm: testCounts };
+  // Deterministic proof fixture. Release promotion must replace these values with
+  // live proof-trust, router-shadow, provider-maturity, and demo-run gate inputs.
   const releaseCandidate = {
     medianProofTrust: 0.85,
     routerShadowSafety: 1,

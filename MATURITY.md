@@ -63,6 +63,10 @@ Current source version: v0.78.1 (`v1.2` runtime contract family)
 | `omk research` | Core runtime web research wrapper; depends on Kimi tool availability. |
 | `omk open-design-agent` | Local Open Design CLI bridge. |
 
+## Regression Proof Matrix Claim Boundary
+
+Regression Proof Matrix is a release-defense gate, not a stable-release claim. Stable promotion still requires full `npm test`, live provider maturity data, and a minimal verified demo pass.
+
 ## Automation Contract Status
 
 | Area | Current state | Next hardening |
