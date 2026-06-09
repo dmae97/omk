@@ -4,7 +4,7 @@
  * All synthetic traces are deterministic given a seed.
  */
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type {

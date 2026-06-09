@@ -26,6 +26,9 @@ export function createReleasePromotionGate(): ReleasePromotionGate {
 
       const demoRun = inputs.demoRun ?? false;
       const maturity = inputs.maturity ?? inputs.providerMinimum ?? 0;
+      const versionConsistency = inputs.versionConsistency ?? inputs.semver ?? 1;
+      const liveBenchmarkPass = inputs.liveBenchmarkPass ?? false;
+      const sandboxViolationCount = inputs.sandboxViolationCount ?? Number.POSITIVE_INFINITY;
 
       const rawScore: number =
         w.ci * inputs.ci +
@@ -36,14 +39,14 @@ export function createReleasePromotionGate(): ReleasePromotionGate {
         w.demo * (demoRun ? 1 : 0) +
         w.proof * inputs.proofMedian +
         w.maturity * maturity +
-        w.docs * inputs.docs -
+        w.docs * inputs.docs * versionConsistency -
         w.regression * inputs.regressionSeverity;
 
       const score = clamp01(rawScore);
       const reasons: string[] = [];
 
       const blocked =
-        inputs.ci === 0 || inputs.freshInstallSmoke === 0 || !demoRun;
+        inputs.ci === 0 || inputs.freshInstallSmoke === 0 || versionConsistency === 0 || !demoRun;
 
       if (blocked) {
         if (inputs.ci === 0) {
@@ -52,22 +55,30 @@ export function createReleasePromotionGate(): ReleasePromotionGate {
         if (inputs.freshInstallSmoke === 0) {
           reasons.push("Fresh install smoke is 0 (blocking)");
         }
+        if (versionConsistency === 0) {
+          reasons.push("Version/package/proof consistency is 0 (blocking)");
+        }
         if (!demoRun) {
           reasons.push("Minimal verified demo run failed or missing (blocking)");
         }
       }
 
+      const stableEligible = liveBenchmarkPass && sandboxViolationCount === 0;
+
       let verdict: ReleaseVerdict;
       if (blocked) {
         verdict = "block";
-      } else if (score >= 0.90 && inputs.proofMedian >= 0.85 && maturity >= 0.80) {
+      } else if (score >= 0.90 && inputs.proofMedian >= 0.85 && maturity >= 0.80 && stableEligible) {
         verdict = "stable";
         reasons.push(
-          `Score ${formatScore(score)} meets stable threshold (≥0.90) with proof≥0.85 and maturity≥0.80`,
+          `Score ${formatScore(score)} meets stable threshold (≥0.90) with proof≥0.85, maturity≥0.80, live benchmark pass, and sandbox violations=0`,
         );
       } else if (score >= 0.75 && inputs.proofMedian >= 0.75) {
         verdict = "pre-release";
         reasons.push(`Score ${formatScore(score)} meets pre-release threshold (≥0.75) with proof≥0.75`);
+        if (score >= 0.90 && inputs.proofMedian >= 0.85 && maturity >= 0.80 && !stableEligible) {
+          reasons.push("Stable verdict withheld until live benchmark passes and sandboxViolationCount is 0");
+        }
       } else {
         verdict = "block";
         reasons.push(`Score ${formatScore(score)} below pre-release threshold (≥0.75) or proof below 0.75`);

@@ -122,7 +122,6 @@ export function computeRouterRegret(
   history: EvidenceHistoryEntry[],
   selectedId: string,
 ): number {
-  const engine = createRouterV2ScoringEngine();
   const scores = scoreRuntimes(
     candidates,
     intent as NodeIntent,

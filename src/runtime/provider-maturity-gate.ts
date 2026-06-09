@@ -154,8 +154,6 @@ export function createProviderMaturityTable(): ProviderMaturityTable {
 function vectorToAdapterResults(vector: ProviderHealthVector): AdapterTestResult[] {
   const authOrdinal = PROVIDER_CAPABILITY_ORDINAL[vector.auth];
   const binaryOrdinal = PROVIDER_CAPABILITY_ORDINAL[vector.binary];
-  const modelOrdinal = PROVIDER_CAPABILITY_ORDINAL[vector.model];
-  const quotaOrdinal = PROVIDER_CAPABILITY_ORDINAL[vector.quota];
 
   const authScore = authOrdinal >= PROVIDER_CAPABILITY_ORDINAL["auth_valid"] ? 1.0 : authOrdinal / PROVIDER_CAPABILITY_ORDINAL["auth_valid"];
   const readScore = vector.supportsRead ? 1.0 : 0.0;

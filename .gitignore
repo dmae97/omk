@@ -37,6 +37,12 @@ proof/**/*.jsonl
 !proof/verified-runs/011-regression-proof-matrix/*.sh
 !proof/verified-runs/011-regression-proof-matrix/*.out
 !proof/verified-runs/011-regression-proof-matrix/*.stderr
+!proof/verified-runs/012-release-truthfulness/
+!proof/verified-runs/012-release-truthfulness/*.json
+!proof/verified-runs/012-release-truthfulness/*.jsonl
+!proof/verified-runs/012-release-truthfulness/*.txt
+!proof/verified-runs/012-release-truthfulness/*.md
+!proof/verified-runs/012-release-truthfulness/*.sh
 
 # OMK runtime / local state (never commit)
 .omk/

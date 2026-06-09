@@ -39,7 +39,7 @@ Use OMK when one coding agent is not enough: route Codex, OpenCode, Kimi, DeepSe
 - Teams that need MCP-scoped agent execution instead of unrestricted tool access.
 - Agent builders who want routing, fallback, evidence gates, telemetry, and replay.
 
-> Current package source target: `open-multi-agent-kit@0.78.1`.
+> Current package source target: `open-multi-agent-kit@0.78.4`.
 > Public package name: `open-multi-agent-kit` (`@omk/cli` is not the active npm package).
 > Runtime contract family: `v1.2` (contract family, not a stable npm `1.x` release).
 > Release channel: `pre-1.0`.
@@ -63,8 +63,8 @@ omk chat
 
 ## Current release reality
 
-- The public npm line is `open-multi-agent-kit@0.78.x`. Published npm `latest` is `0.78.0`;
-  source/target is `0.78.1` and is published only after the release workflow passes on the tagged commit.
+- The public npm line is `open-multi-agent-kit@0.78.x`. Published npm `latest` is `0.78.4`;
+  source/target is `0.78.4` and is published only after the release workflow passes on the tagged commit.
 - The `v1.2` label in docs is a runtime contract family for the source tree, not a claim that
   an npm `1.2.x` stable release exists.
 - Provider support is intentionally uneven: Kimi remains the most mature authority path;
@@ -305,7 +305,7 @@ The npm package is intentionally package-safe:
 | Contract          | Value                                                                                                                                                                                                                          |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Package           | [`open-multi-agent-kit`](https://www.npmjs.com/package/open-multi-agent-kit)                                                                                                                                                   |
-| Version           | `0.78.1`                                                                                                                                                                                                                       |
+| Version           | `0.78.4`                                                                                                                                                                                                                       |
 | Runtime contract family | `v1.2`                                                                                                                                                                                                                         |
 | Bins              | `omk`, `omk-project-mcp`, `omk-acp`, `omk-mcp-host`                                                                                                                                                                            |
 | Packaged docs     | `README.md`, `docs/`, `SECURITY.md`, `ROADMAP.md`, `MATURITY.md`, `DESIGN.md`                                                                                                                                                  |

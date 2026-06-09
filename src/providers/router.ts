@@ -309,13 +309,6 @@ function isGenericExternalProvider(value: unknown): value is ProviderId {
   return typeof value === "string" && value !== "auto" && value !== "kimi" && value !== "deepseek";
 }
 
-function providerVectorMeets(vector: ProviderHealthVector | undefined, minState: ProviderHealthVector["binary"]): boolean {
-  if (!vector) return true;
-  const current = PROVIDER_CAPABILITY_ORDINAL[vector.auth];
-  const required = PROVIDER_CAPABILITY_ORDINAL[minState];
-  return current >= required;
-}
-
 function providerVectorQuotaOk(vector: ProviderHealthVector | undefined): boolean {
   if (!vector) return true;
   return PROVIDER_CAPABILITY_ORDINAL[vector.quota] >= PROVIDER_CAPABILITY_ORDINAL["quota_available"];

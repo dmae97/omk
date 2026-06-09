@@ -4,8 +4,7 @@
  * Reproducible evaluation surface for OMK control plane tasks.
  */
 
-import type { AttemptRecord, AttemptStatus, RuntimeId } from "../evidence/attempt-record.js";
-import type { DecisionTraceEntry } from "../contracts/replay.js";
+import type { AttemptStatus, RuntimeId } from "../evidence/attempt-record.js";
 import type { RuntimeRouterDecisionV2, RuntimeScoreV2 } from "../runtime/contracts/router-v2.js";
 import type { RuntimeRouteDecision } from "../runtime/runtime-router.js";
 

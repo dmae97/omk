@@ -69,6 +69,12 @@ export interface ReleasePromotionInputs {
   readonly maturity?: number;
   /** Algorithm 8 — minimal verified demo run gate. Hard block when false/undefined. */
   readonly demoRun?: boolean;
+  /** Stable claim gate — live/recorded benchmark must pass before stable verdict. */
+  readonly liveBenchmarkPass?: boolean;
+  /** Stable claim gate — must be exactly 0 before stable verdict. */
+  readonly sandboxViolationCount?: number;
+  /** Stable claim gate — package/lock/docs/proof/bin invariant. */
+  readonly versionConsistency?: number;
 }
 
 export interface ReleasePromotionResult {
