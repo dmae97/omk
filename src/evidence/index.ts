@@ -43,3 +43,15 @@ export type { RepairContext } from "../orchestration/repair-policy.js";
 
 export type { DecisionTraceStore } from "./decision-trace.js";
 export { createDecisionTraceStore } from "./decision-trace.js";
+
+export type { ProofTrustMvpEngine, ProofTrustResult } from "./proof-trust.js";
+export { createProofTrustMvpEngine } from "./proof-trust.js";
+
+export type {
+  AlgorithmSpec,
+  ReleaseCandidate,
+  RegressionProofMatrixResult,
+  RegressionProofMatrixEngine,
+  RegressionProofMatrixOptions,
+} from "./regression-proof-matrix.js";
+export { createRegressionProofMatrixEngine } from "./regression-proof-matrix.js";

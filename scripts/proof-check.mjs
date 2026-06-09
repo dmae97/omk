@@ -8,7 +8,7 @@ const root = process.cwd();
 const proofRoot = "proof/verified-runs";
 const expectedSchemaVersion = "omk.proof-bundle.v1";
 const requiredFileKeys = ["rawPrompt", "commands", "verifyJson", "decisionsJsonl", "runManifest", "evidenceJsonl", "limitations", "sha256sums"];
-const allowedScenarios = new Set(["no-kimi-smoke", "evidence-block", "fallback-route", "dag-dependent-block", "replay-inspect", "graph-audit", "example-generation", "doctor-provider", "native-safety", "contract-version-smoke"]);
+const allowedScenarios = new Set(["no-kimi-smoke", "evidence-block", "fallback-route", "dag-dependent-block", "replay-inspect", "graph-audit", "example-generation", "doctor-provider", "native-safety", "contract-version-smoke", "regression-proof-matrix"]);
 const allowedVerdicts = new Set(["passed", "failed", "partial"]);
 const allowedEvidenceKinds = new Set(["file-exists", "command-passes", "git-diff-non-empty", "summary-present", "marker-present", "screenshot-present", "custom"]);
 const allowedEvidenceStatuses = new Set(["passed", "failed", "missing", "skipped", "blocked"]);
@@ -16,7 +16,8 @@ const allowedDecisionKinds = new Set(["provider-selection", "fallback-routing", 
 const allowedDecisionActors = new Set(["runtime-router", "scheduler", "evidence-gate", "provider-router", "operator"]);
 const args = process.argv.slice(2);
 const jsonMode = args.includes("--json");
-const explicitTargets = args.filter((arg) => arg !== "--json");
+const trustMode = args.includes("--trust");
+const explicitTargets = args.filter((arg) => arg !== "--json" && arg !== "--trust");
 const placeholderPattern = /\b(TODO|FIXME|TBD|PLACEHOLDER|CHANGEME|REPLACE_ME|FABRICATED)\b|<capture>|capture pending/i;
 const localPathPattern = /(^|[\s"'`=:(])(?:\/home\/|\/Users\/|[A-Za-z]:\\)/;
 const secretPatterns = [
@@ -364,10 +365,46 @@ const results = [];
 for (const bundlePath of await findBundles()) results.push(await checkBundle(bundlePath));
 if (results.length === 0) results.push({ bundlePath: proofRoot, proofId: proofRoot, ok: false, errors: ["no proof bundles found"] });
 if (schemaErrors.length > 0) results.unshift({ bundlePath: schemaPath, proofId: schemaPath, ok: false, errors: schemaErrors });
+let trustResults = [];
+if (trustMode) {
+  try {
+    const { createProofTrustMvpEngine } = await import("../dist/evidence/proof-trust.js");
+    const engine = createProofTrustMvpEngine();
+    for (const result of results) {
+      if (!result.bundlePath.endsWith(".json")) continue;
+      const absoluteBundlePath = resolveRepoPath(result.bundlePath);
+      const bundleDir = absoluteBundlePath ? dirname(absoluteBundlePath) : join(root, result.bundlePath, "..");
+      const runId = result.proofId ?? result.bundlePath;
+      const runDir = join(root, ".omk/runs", runId);
+      const bundle = JSON.parse(await readFile(absoluteBundlePath ?? join(root, result.bundlePath), "utf8"));
+      const trustResult = await engine.evaluate(runDir, bundle);
+      trustResults.push({ bundlePath: result.bundlePath, ...trustResult });
+    }
+  } catch (error) {
+    trustResults = [];
+    console.error(`trust-check failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 const ok = results.every((result) => result.ok);
-if (jsonMode) console.log(JSON.stringify({ ok, checkedBundles: results.length, schemaVersion: expectedSchemaVersion, results }, null, 2));
-else for (const result of results) {
-  console.log(`${result.ok ? "passed" : "failed"}: ${result.proofId} (${result.bundlePath})`);
-  for (const error of result.errors) console.error(`  - ${error}`);
+if (jsonMode) {
+  const output = trustMode
+    ? { ok, checkedBundles: results.length, schemaVersion: expectedSchemaVersion, results: results.map((r) => {
+        const tr = trustResults.find((t) => t.bundlePath === r.bundlePath);
+        return tr ? { ...r, trust: { trustScore: tr.trustScore, missingFields: tr.missingFields } } : r;
+      }) }
+    : { ok, checkedBundles: results.length, schemaVersion: expectedSchemaVersion, results };
+  console.log(JSON.stringify(output, null, 2));
+} else {
+  for (const result of results) {
+    console.log(`${result.ok ? "passed" : "failed"}: ${result.proofId} (${result.bundlePath})`);
+    for (const error of result.errors) console.error(`  - ${error}`);
+  }
+  if (trustMode) {
+    for (const tr of trustResults) {
+      const scoreLabel = tr.trustScore >= 0.9 ? "high" : tr.trustScore >= 0.75 ? "medium" : "low";
+      console.log(`trust ${scoreLabel}: ${tr.bundlePath} score=${tr.trustScore} missing=[${tr.missingFields.join(", ")}]`);
+    }
+  }
 }
 if (!ok) process.exit(1);
