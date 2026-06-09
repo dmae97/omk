@@ -72,6 +72,8 @@ omk chat
   lanes are scoped by the provider-maturity contract.
 - Safety and evidence claims apply to the exact adapter, command, and verification gate that
   produced them.
+- Regression Proof Matrix is a release-defense coverage gate, not a stable-release claim.
+  Stable promotion still requires full tests, live provider maturity data, and a minimal verified demo pass.
 
 ## Why OMK
 
