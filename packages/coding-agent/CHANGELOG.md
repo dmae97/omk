@@ -4,8 +4,12 @@
 
 ### Added
 
+<<<<<<< Updated upstream
 - Added `areExperimentalFeaturesEnabled` feature guard to allow users to opt-in to early features.
 - Added `ctx.isProjectTrusted()` for extensions to observe the effective project trust decision, including temporary trust decisions ([#5523](https://github.com/earendil-works/pi/issues/5523)).
+=======
+- Added a global `defaultProjectTrust` setting to choose whether unresolved project trust asks, always trusts, or never trusts by default.
+>>>>>>> Stashed changes
 
 ### Fixed
 

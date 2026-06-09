@@ -57,6 +57,8 @@ export interface WarningSettings {
 	anthropicExtraUsage?: boolean; // default: true
 }
 
+export type DefaultProjectTrust = "ask" | "always" | "never";
+
 export type TransportSetting = Transport;
 
 /**
@@ -89,6 +91,7 @@ export interface Settings {
 	hideThinkingBlock?: boolean;
 	shellPath?: string; // Custom shell path (e.g., for Cygwin users on Windows)
 	quietStartup?: boolean;
+	defaultProjectTrust?: DefaultProjectTrust; // default: "ask"; global setting only
 	shellCommandPrefix?: string; // Prefix prepended to every bash command (e.g., "shopt -s expand_aliases" for alias support)
 	npmCommand?: string[]; // Command used for npm package lookup/install operations, argv-style (e.g., ["mise", "exec", "node@20", "--", "npm"])
 	collapseChangelog?: boolean; // Show condensed changelog after update (use /changelog for full)
@@ -850,6 +853,17 @@ export class SettingsManager {
 	setQuietStartup(quiet: boolean): void {
 		this.globalSettings.quietStartup = quiet;
 		this.markModified("quietStartup");
+		this.save();
+	}
+
+	getDefaultProjectTrust(): DefaultProjectTrust {
+		const value = this.globalSettings.defaultProjectTrust;
+		return value === "always" || value === "never" ? value : "ask";
+	}
+
+	setDefaultProjectTrust(defaultProjectTrust: DefaultProjectTrust): void {
+		this.globalSettings.defaultProjectTrust = defaultProjectTrust;
+		this.markModified("defaultProjectTrust");
 		this.save();
 	}
 
