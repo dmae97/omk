@@ -1,10 +1,9 @@
 {
   "name": "open-multi-agent-kit",
-  "version": "0.78.1",
+  "version": "0.78.2",
   "description": "Provider-neutral multi-agent control plane for coding workflows: route agents, verify evidence, orchestrate MCP-aware DAGs, and control the loop from the omk CLI.",
   "type": "module",
   "bin": {
-    "omk": "dist/cli.js",
     "omk-project-mcp": "dist/mcp/omk-project-server.js",
     "omk-acp": "dist/mcp/acp-server.js",
     "omk-mcp-host": "dist/mcp/host.js"
@@ -33,7 +32,9 @@
     "version:check": "node scripts/check-version-consistency.mjs",
     "contract:check": "npm run build:clean && npm run schema:check && node scripts/check-json-stdout.mjs",
     "verify:contracts": "npm run contract:check",
-    "release:check": "npm run verify && npm run verify:no-kimi && npm run contract:check && npm run schema:check && npm run version:check && npm run proof:check && npm run smoke:execution && npm run native:build && npm run pack:dry && npm run audit:package && npm run smoke:pack",
+    "release:check": "node scripts/release-gate.mjs",
+    "release:full": "npm run verify && npm run verify:no-kimi && npm run contract:check && npm run schema:check && npm run version:check && npm run proof:check && npm run smoke:execution && npm run native:build && npm run pack:dry && npm run audit:package && npm run smoke:pack",
+    "regression:matrix": "node scripts/regression-proof-matrix.mjs",
     "release:rc": "npm run verify && npm run verify:no-kimi && npm run contract:check && npm run schema:check && npm run version:check && npm run proof:check && npm run smoke:execution && npm run native:build && npm run pack:dry && npm run audit:package && npm run smoke:pack",
     "smoke:no-kimi:chat": "OMK_MCP_PREFLIGHT=off OMK_PROJECT_ROOT=\"$PWD\" node dist/cli.js chat --provider auto --mode agent --execution ask --layout plain --mcp-scope none --smoke --json",
     "smoke:no-kimi:codex": "OMK_MCP_PREFLIGHT=off OMK_PROJECT_ROOT=\"$PWD\" node dist/cli.js chat --provider codex --mode agent --execution ask --layout plain --mcp-scope none --smoke --json",
