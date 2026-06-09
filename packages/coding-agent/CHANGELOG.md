@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added default-value expansion for prompt template positional arguments, e.g. `${1:-7}` ([#5507](https://github.com/earendil-works/pi/issues/5507)).
+
 ## [0.79.0] - 2026-06-08
 
 ### New Features
