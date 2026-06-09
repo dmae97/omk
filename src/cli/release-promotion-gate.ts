@@ -29,6 +29,7 @@ export function createReleasePromotionGate(): ReleasePromotionGate {
       const versionConsistency = inputs.versionConsistency ?? inputs.semver ?? 1;
       const liveBenchmarkPass = inputs.liveBenchmarkPass ?? false;
       const sandboxViolationCount = inputs.sandboxViolationCount ?? Number.POSITIVE_INFINITY;
+      const exactTagCiPass = inputs.exactTagCiPass ?? false;
 
       const rawScore: number =
         w.ci * inputs.ci +
@@ -63,7 +64,7 @@ export function createReleasePromotionGate(): ReleasePromotionGate {
         }
       }
 
-      const stableEligible = liveBenchmarkPass && sandboxViolationCount === 0;
+      const stableEligible = liveBenchmarkPass && sandboxViolationCount === 0 && exactTagCiPass;
 
       let verdict: ReleaseVerdict;
       if (blocked) {
@@ -71,13 +72,13 @@ export function createReleasePromotionGate(): ReleasePromotionGate {
       } else if (score >= 0.90 && inputs.proofMedian >= 0.85 && maturity >= 0.80 && stableEligible) {
         verdict = "stable";
         reasons.push(
-          `Score ${formatScore(score)} meets stable threshold (≥0.90) with proof≥0.85, maturity≥0.80, live benchmark pass, and sandbox violations=0`,
+          `Score ${formatScore(score)} meets stable threshold (≥0.90) with proof≥0.85, maturity≥0.80, live benchmark pass, sandbox violations=0, and exact-tag CI pass`,
         );
       } else if (score >= 0.75 && inputs.proofMedian >= 0.75) {
         verdict = "pre-release";
         reasons.push(`Score ${formatScore(score)} meets pre-release threshold (≥0.75) with proof≥0.75`);
         if (score >= 0.90 && inputs.proofMedian >= 0.85 && maturity >= 0.80 && !stableEligible) {
-          reasons.push("Stable verdict withheld until live benchmark passes and sandboxViolationCount is 0");
+          reasons.push("Stable verdict withheld until live benchmark passes, sandboxViolationCount is 0, and exact-tag CI passes");
         }
       } else {
         verdict = "block";

@@ -1,6 +1,6 @@
 431abd192b4e409cbe9a37033e858d1f55d4e3fed1f403c153e503e4b113694d  proof/verified-runs/012-release-truthfulness/raw-prompt.md
 ed111e3f850760bca01c371c13bb8f30a02368e8a7c0b82e81cb1b53912bd6aa  proof/verified-runs/012-release-truthfulness/commands.sh
-e055cfe9f04ff55750df54e3f0b4e04877939ec77b4d40705bdfebb971dc9546  proof/verified-runs/012-release-truthfulness/verify.json
+cec0ea907677948352768180c0181503803c8230cf8b165e33d7018157ca39f3  proof/verified-runs/012-release-truthfulness/verify.json
 5c993a63580387e75ac36c1701f2f0e8d98bad96ad0c742a12526e94a9e4ba55  proof/verified-runs/012-release-truthfulness/decisions.jsonl
 e464479ee493564cd13a9ff97a1bcfd638df6d7eb0b0c6be91e242628ac89bed  proof/verified-runs/012-release-truthfulness/run-manifest.json
 d1a23032e119f78b401f407313de23a8144237de69a2287ac6bc90a70e2dc08c  proof/verified-runs/012-release-truthfulness/evidence.jsonl

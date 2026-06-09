@@ -26,6 +26,8 @@ const docsVersionFiles = [
   "MATURITY.md",
 ];
 
+const changelogFile = "CHANGELOG.md";
+
 const requiredBins = {
   omk: "dist/cli.js",
   "omk-project-mcp": "dist/mcp/omk-project-server.js",
@@ -47,6 +49,14 @@ function expectEqual(file, field, expected, actual) {
   if (actual !== expected) {
     mismatches.push({ file, field, expected, actual });
   }
+}
+
+function extractTopChangelogVersion(text) {
+  return text.match(/^##\s+(v\d+\.\d+\.\d+)\b/m)?.[1];
+}
+
+function hasUnverifiedPublishedLatestClaim(text) {
+  return /Published npm [`']?latest[`']? is/i.test(text);
 }
 
 async function findLatestReleaseTruthProof() {
@@ -99,6 +109,28 @@ for (const file of docsVersionFiles) {
   }
 }
 
+const changelogText = await readText(changelogFile);
+const expectedChangelogVersion = `v${expectedPackageVersion}`;
+expectEqual(changelogFile, "top release entry", expectedChangelogVersion, extractTopChangelogVersion(changelogText));
+
+const readmeText = await readText("README.md");
+if (hasUnverifiedPublishedLatestClaim(readmeText)) {
+  mismatches.push({
+    file: "README.md",
+    field: "npm latest claim",
+    expected: "conditional registry-verification wording",
+    actual: "direct Published npm latest claim",
+  });
+}
+if (!readmeText.includes("registry verification")) {
+  mismatches.push({
+    file: "README.md",
+    field: "npm latest claim guard",
+    expected: "registry verification wording",
+    actual: "missing",
+  });
+}
+
 const releaseProof = await findLatestReleaseTruthProof();
 if (!releaseProof) {
   mismatches.push({ file: "proof/verified-runs", field: "release-truthfulness proof", expected: expectedPackageVersion, actual: "missing" });
@@ -139,10 +171,12 @@ console.log(JSON.stringify({
   runtimeVersion: expectedRuntimeVersion,
   contractVersion: expectedContractVersion,
   releaseTruthProof: releaseProof?.proofPath,
+  changelogTopVersion: extractTopChangelogVersion(changelogText),
   checkedFiles: [
     "package.json",
     "package-lock.json",
     ...docsVersionFiles,
+    changelogFile,
     releaseProof?.proofPath,
     "src/version.ts",
     ...Object.values(schemaFiles),

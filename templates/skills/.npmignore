@@ -1,0 +1,3 @@
+# Exclude optional skill templates from the npm package.
+omk-adaptorch-orchestration-review/
+mcp-install/

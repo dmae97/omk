@@ -44,6 +44,7 @@ const inputs = {
   demoRun: boolInput(["OMK_RELEASE_DEMO_RUN", "OMK_RELEASE_DEMO"], false),
   liveBenchmarkPass: boolInput(["OMK_RELEASE_LIVE_BENCHMARK", "OMK_RELEASE_LIVE_BENCHMARK_PASS"], false),
   sandboxViolationCount: numberInput("OMK_RELEASE_SANDBOX_VIOLATIONS", -1),
+  exactTagCiPass: boolInput(["OMK_RELEASE_EXACT_TAG_CI", "OMK_RELEASE_EXACT_TAG_CI_PASS"], false),
 };
 
 const result = gate.evaluate(inputs);
@@ -55,6 +56,9 @@ console.log(JSON.stringify({
     demoRun: inputs.demoRun
       ? "explicit OMK_RELEASE_DEMO/OMK_RELEASE_DEMO_RUN after local release gates"
       : "missing explicit minimal verified demo signal",
+    exactTagCiPass: inputs.exactTagCiPass
+      ? "explicit OMK_RELEASE_EXACT_TAG_CI/OMK_RELEASE_EXACT_TAG_CI_PASS after tagged-commit CI verification"
+      : "missing exact-tag CI verification signal",
   },
 }, null, 2));
 
