@@ -58,8 +58,8 @@ omk chat
 
 ## Examples for agent tooling lists
 
-- [Codex MCP evidence run](examples/codex-mcp-evidence-run/README.md): project-scoped MCP setup plus evidence-gated DAG dry run.
-- [Provider fallback](examples/provider-fallback/README.md): `--provider auto` routing with parallel worker planning.
+- [Codex MCP evidence run](https://github.com/dmae97/open-multi-agent-kit/tree/main/examples/codex-mcp-evidence-run): project-scoped MCP setup plus evidence-gated DAG dry run.
+- [Provider fallback](https://github.com/dmae97/open-multi-agent-kit/tree/main/examples/provider-fallback): `--provider auto` routing with parallel worker planning.
 
 ## Current release reality
 
