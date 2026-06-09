@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "omk.proof-bundle.v1",
+  "proofId": "011-regression-proof-matrix",
+  "title": "Regression Proof Matrix verification bundle",
+  "omkVersion": "0.78.1",
+  "runtimeVersion": "v2-shadow",
+  "commit": "4701243",
+  "runId": "proof-011-regression-proof-matrix-20260609t000000z",
+  "providerPolicy": "local deterministic regression proof matrix verification",
+  "scenario": "regression-proof-matrix",
+  "files": {
+    "rawPrompt": "proof/verified-runs/011-regression-proof-matrix/raw-prompt.md",
+    "commands": "proof/verified-runs/011-regression-proof-matrix/commands.sh",
+    "stdout": "proof/verified-runs/011-regression-proof-matrix/stdout.txt",
+    "verifyJson": "proof/verified-runs/011-regression-proof-matrix/verify.json",
+    "decisionsJsonl": "proof/verified-runs/011-regression-proof-matrix/decisions.jsonl",
+    "runManifest": "proof/verified-runs/011-regression-proof-matrix/run-manifest.json",
+    "evidenceJsonl": "proof/verified-runs/011-regression-proof-matrix/evidence.jsonl",
+    "limitations": "proof/verified-runs/011-regression-proof-matrix/limitations.md",
+    "inspectJson": "proof/verified-runs/011-regression-proof-matrix/inspect.json",
+    "sha256sums": "proof/verified-runs/011-regression-proof-matrix/sha256sums.txt"
+  },
+  "verdict": "passed",
+  "knownLimitations": [
+    "This bundle proves the regression proof matrix contract using deterministic local artifacts.",
+    "Stable release still requires live provider maturity data and a live minimal verified demo run."
+  ],
+  "checksums": {
+    "proof/verified-runs/011-regression-proof-matrix/raw-prompt.md": "c6ba72c1f9831206c216f4fbc960c0b7e953ca100f10470f9dac27cfcf6f51ef",
+    "proof/verified-runs/011-regression-proof-matrix/commands.sh": "1e768a3f92261b3c0a3665b36130ed06b355f82f27d67f7b8ecec9d122be41c2",
+    "proof/verified-runs/011-regression-proof-matrix/stdout.txt": "1991af35892df9871e71642afd305d17376c470110c9eaeef094e7ddc84c96ef",
+    "proof/verified-runs/011-regression-proof-matrix/verify.json": "7c11f77e5d77b2de16ccab6bd22fd4c8eee340db84cd50596cd4ad3fdf26331c",
+    "proof/verified-runs/011-regression-proof-matrix/decisions.jsonl": "412e9bc02b243154d2c9687b12e1019b6e777b08ab38f37cf61db91a50aa6957",
+    "proof/verified-runs/011-regression-proof-matrix/run-manifest.json": "6ac4394dab19cfc8052e117ce561975d3fb82c772b3968dfcbe52cecfdd7f987",
+    "proof/verified-runs/011-regression-proof-matrix/evidence.jsonl": "61928e421ddf9fe3c87aebb6d84685fb80d5c1bcf6e65139796c506811593f09",
+    "proof/verified-runs/011-regression-proof-matrix/limitations.md": "477999c6ff3f212f743781521374e41a4cfaa3671d8278622c02b0a08c66715d",
+    "proof/verified-runs/011-regression-proof-matrix/inspect.json": "c78c229c6b57eb646c8afffdc17ab9537d5a44075bfb9abb91847ac6eda7bbf5",
+    "proof/verified-runs/011-regression-proof-matrix/sha256sums.txt": "d0173ef6f563d0495d924f6c6b0a3d75c928d4030b6afdae1110e5ea19484dec"
+  }
+}

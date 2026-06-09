@@ -21,6 +21,23 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Proof raw artifacts (future dumps only; existing tracked proof evidence is unaffected until separately archived/untracked)
+proof/**/*.out
+proof/**/*.stderr
+proof/**/*.png
+proof/**/*.webp
+proof/**/*.jsonl
+!proof/
+!proof/verified-runs/
+!proof/verified-runs/011-regression-proof-matrix/
+!proof/verified-runs/011-regression-proof-matrix/*.json
+!proof/verified-runs/011-regression-proof-matrix/*.jsonl
+!proof/verified-runs/011-regression-proof-matrix/*.txt
+!proof/verified-runs/011-regression-proof-matrix/*.md
+!proof/verified-runs/011-regression-proof-matrix/*.sh
+!proof/verified-runs/011-regression-proof-matrix/*.out
+!proof/verified-runs/011-regression-proof-matrix/*.stderr
+
 # OMK runtime / local state (never commit)
 .omk/
 .pi/
