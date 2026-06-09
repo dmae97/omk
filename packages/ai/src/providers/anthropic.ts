@@ -200,7 +200,7 @@ export interface AnthropicOptions extends StreamOptions {
 	 * Effort level for adaptive thinking models.
 	 * Controls how much thinking Claude allocates:
 	 * - "max": Always thinks with no constraints (Opus 4.6 only)
-	 * - "xhigh": Highest reasoning level (Opus 4.7)
+	 * - "xhigh": Highest reasoning level (Opus 4.7+, Fable 5)
 	 * - "high": Always thinks, deep reasoning
 	 * - "medium": Moderate thinking, may skip for simple queries
 	 * - "low": Minimal thinking, skips for simple tasks
@@ -711,7 +711,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 
 /**
  * Map ThinkingLevel to Anthropic effort levels for adaptive thinking.
- * Note: effort "max" is only valid on Opus 4.6, while Opus 4.7 supports "xhigh".
+ * Note: effort "max" is only valid on Opus 4.6, while Opus 4.7+ and Fable 5 support "xhigh".
  */
 function mapThinkingLevelToEffort(
 	model: Model<"anthropic-messages">,

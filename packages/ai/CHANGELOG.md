@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added Claude Fable 5 to Anthropic and Amazon Bedrock model metadata, with adaptive thinking and `xhigh` effort support.
+
 ### Fixed
 
 - Fixed Amazon Bedrock inference profile ARN region resolution to prefer the ARN's embedded region over `AWS_REGION` ([#5527](https://github.com/earendil-works/pi/pull/5527) by [@AJM10565](https://github.com/AJM10565)).

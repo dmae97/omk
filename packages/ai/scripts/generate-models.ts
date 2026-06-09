@@ -232,7 +232,8 @@ function isAnthropicAdaptiveThinkingModel(modelId: string): boolean {
 		modelId.includes("opus-4-8") ||
 		modelId.includes("opus-4.8") ||
 		modelId.includes("sonnet-4-6") ||
-		modelId.includes("sonnet-4.6")
+		modelId.includes("sonnet-4.6") ||
+		modelId.includes("fable-5")
 	);
 }
 
@@ -291,6 +292,12 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 		model.id.includes("opus-4.7") ||
 		model.id.includes("opus-4-8") ||
 		model.id.includes("opus-4.8")
+	) {
+		mergeThinkingLevelMap(model, { xhigh: "xhigh" });
+	}
+	if (
+		(model.api === "anthropic-messages" || model.api === "bedrock-converse-stream") &&
+		model.id.includes("fable-5")
 	) {
 		mergeThinkingLevelMap(model, { xhigh: "xhigh" });
 	}
