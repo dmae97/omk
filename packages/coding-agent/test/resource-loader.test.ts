@@ -376,7 +376,7 @@ Content`,
 			expect(loader.getSystemPrompt()).toBe("You are a helpful assistant.");
 		});
 
-		it("should skip project resources when project is not trusted", async () => {
+		it("should skip trust-gated project resources when project is not trusted", async () => {
 			const piDir = join(cwd, ".pi");
 			const extensionsDir = join(piDir, "extensions");
 			const skillDir = join(piDir, "skills", "project-skill");
@@ -414,7 +414,7 @@ Project skill content`,
 			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(agentDir, "AGENTS.md"))).toBe(
 				true,
 			);
-			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(cwd, "AGENTS.md"))).toBe(false);
+			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(cwd, "AGENTS.md"))).toBe(true);
 			expect(loader.getExtensions().extensions).toHaveLength(0);
 			expect(loader.getExtensions().errors).toEqual([]);
 			expect(loader.getSkills().skills.some((skill) => skill.name === "project-skill")).toBe(false);

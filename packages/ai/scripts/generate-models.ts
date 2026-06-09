@@ -92,7 +92,6 @@ const TOGETHER_TOGGLE_REASONING_EFFORT_COMPAT: OpenAICompletionsCompat = {
 };
 const TOGETHER_REASONING_ONLY_MODELS = new Set([
 	"deepseek-ai/DeepSeek-R1",
-	"MiniMaxAI/MiniMax-M2.5",
 	"MiniMaxAI/MiniMax-M2.7",
 ]);
 const TOGETHER_REASONING_EFFORT_MODELS = new Set(["openai/gpt-oss-20b", "openai/gpt-oss-120b"]);
@@ -1058,6 +1057,10 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					}
 				}
 
+				if (api === "openai-completions") {
+					compat = { ...(compat ?? {}), maxTokensField: "max_tokens" };
+				}
+
 				models.push({
 					id: modelId,
 					name: m.name || modelId,
@@ -1216,6 +1219,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 			supportsReasoningEffort: false,
 			maxTokensField: "max_tokens",
 			supportsStrictMode: false,
+			thinkingFormat: "deepseek",
 		};
 
 		for (const { key, provider, baseUrl } of moonshotVariants) {

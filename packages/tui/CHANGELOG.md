@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added `AutocompleteProvider.triggerCharacters` so editor autocomplete can naturally trigger on provider-defined token prefixes ([#4703](https://github.com/earendil-works/pi/issues/4703)).
+
+### Fixed
+
+- Fixed prompt history navigation to restore the current draft when returning from history browsing ([#5494](https://github.com/earendil-works/pi/issues/5494)).
+- Fixed wrapping for mixed Latin and CJK text so unspaced CJK runs can break at grapheme boundaries without leaving large trailing gaps ([#5495](https://github.com/earendil-works/pi/issues/5495)).
+
 ## [0.79.0] - 2026-06-08
 
 ### Fixed

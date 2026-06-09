@@ -554,7 +554,8 @@ function buildParams(
 	}
 
 	if (compat.thinkingFormat === "zai" && model.reasoning) {
-		(params as any).enable_thinking = !!options?.reasoningEffort;
+		const zaiParams = params as typeof params & { thinking?: { type: "enabled" | "disabled" } };
+		zaiParams.thinking = { type: options?.reasoningEffort ? "enabled" : "disabled" };
 	} else if (compat.thinkingFormat === "qwen" && model.reasoning) {
 		(params as any).enable_thinking = !!options?.reasoningEffort;
 	} else if (compat.thinkingFormat === "qwen-chat-template" && model.reasoning) {

@@ -314,6 +314,8 @@ export interface ExtensionContext {
 	model: Model<any> | undefined;
 	/** Whether the agent is idle (not streaming) */
 	isIdle(): boolean;
+	/** Whether project-local trust is active for this context. */
+	isProjectTrusted(): boolean;
 	/** The current abort signal, or undefined when the agent is not streaming. */
 	signal: AbortSignal | undefined;
 	/** Abort the current agent operation */
@@ -1528,6 +1530,7 @@ export interface ExtensionActions {
 export interface ExtensionContextActions {
 	getModel: () => Model<any> | undefined;
 	isIdle: () => boolean;
+	isProjectTrusted: () => boolean;
 	getSignal: () => AbortSignal | undefined;
 	abort: () => void;
 	hasPendingMessages: () => boolean;

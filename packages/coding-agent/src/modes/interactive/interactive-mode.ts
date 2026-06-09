@@ -87,7 +87,7 @@ import type { SourceInfo } from "../../core/source-info.ts";
 import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { hasProjectConfigDir, hasProjectTrustInputs, ProjectTrustStore } from "../../core/trust-manager.ts";
-import { getChangelogPath, getNewEntries, parseChangelog } from "../../utils/changelog.ts";
+import { getChangelogPath, getNewEntries, normalizeChangelogLinks, parseChangelog } from "../../utils/changelog.ts";
 import { copyToClipboard } from "../../utils/clipboard.ts";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.ts";
 import { parseGitUrl } from "../../utils/git.ts";
@@ -555,8 +555,13 @@ export class InteractiveMode {
 
 	private setupAutocompleteProvider(): void {
 		let provider = this.createBaseAutocompleteProvider();
+		const triggerCharacters: string[] = [];
 		for (const wrapProvider of this.autocompleteProviderWrappers) {
 			provider = wrapProvider(provider);
+			triggerCharacters.push(...(provider.triggerCharacters ?? []));
+		}
+		if (triggerCharacters.length > 0) {
+			provider.triggerCharacters = [...new Set(triggerCharacters)];
 		}
 
 		this.autocompleteProvider = provider;
@@ -909,7 +914,7 @@ export class InteractiveMode {
 		if (newEntries.length > 0) {
 			this.settingsManager.setLastChangelogVersion(VERSION);
 			this.reportInstallTelemetry(VERSION);
-			return newEntries.map((e) => e.content).join("\n\n");
+			return newEntries.map((e) => normalizeChangelogLinks(e.content, e)).join("\n\n");
 		}
 
 		return undefined;
@@ -1669,6 +1674,7 @@ export class InteractiveMode {
 			modelRegistry: this.session.modelRegistry,
 			model: this.session.model,
 			isIdle: () => !this.session.isStreaming,
+			isProjectTrusted: () => this.settingsManager.isProjectTrusted(),
 			signal: this.session.agent.signal,
 			abort: () => {
 				this.restoreQueuedMessagesToEditor({ abort: true });
@@ -3276,7 +3282,7 @@ export class InteractiveMode {
 			new Text(
 				theme.fg(
 					"warning",
-					"This project is not trusted. Project instructions (AGENTS.md/CLAUDE.md), .pi resources, and project packages are ignored. Use /trust to save a trust decision, then restart pi.",
+					"This project is not trusted. Project .pi resources and packages are ignored. Use /trust to save a trust decision, then restart pi.",
 				),
 				1,
 				0,
@@ -3965,6 +3971,7 @@ export class InteractiveMode {
 					doubleEscapeAction: this.settingsManager.getDoubleEscapeAction(),
 					treeFilterMode: this.settingsManager.getTreeFilterMode(),
 					showHardwareCursor: this.settingsManager.getShowHardwareCursor(),
+					defaultProjectTrust: this.settingsManager.getDefaultProjectTrust(),
 					editorPaddingX: this.settingsManager.getEditorPaddingX(),
 					autocompleteMaxVisible: this.settingsManager.getAutocompleteMaxVisible(),
 					quietStartup: this.settingsManager.getQuietStartup(),
@@ -4057,6 +4064,9 @@ export class InteractiveMode {
 					},
 					onQuietStartupChange: (enabled) => {
 						this.settingsManager.setQuietStartup(enabled);
+					},
+					onDefaultProjectTrustChange: (defaultProjectTrust) => {
+						this.settingsManager.setDefaultProjectTrust(defaultProjectTrust);
 					},
 					onDoubleEscapeActionChange: (action) => {
 						this.settingsManager.setDoubleEscapeAction(action);
@@ -4212,17 +4222,17 @@ export class InteractiveMode {
 	private showTrustSelector(): void {
 		const cwd = this.sessionManager.getCwd();
 		const trustStore = new ProjectTrustStore(this.runtimeHost.services.agentDir);
-		const savedDecision = trustStore.get(cwd);
+		const savedDecision = trustStore.getEntry(cwd);
 		this.showSelector((done) => {
 			const selector = new TrustSelectorComponent({
 				cwd,
 				savedDecision,
 				projectTrusted: this.settingsManager.isProjectTrusted(),
-				onSelect: (trusted) => {
-					trustStore.set(cwd, trusted);
+				onSelect: (selection) => {
+					trustStore.setMany(selection.updates);
 					done();
 					this.showStatus(
-						`Saved trust decision: ${trusted ? "trusted" : "untrusted"}. Restart pi for this to take effect.`,
+						`Saved trust decision: ${selection.trusted ? "trusted" : "untrusted"}. Restart pi for this to take effect.`,
 					);
 				},
 				onCancel: () => {
@@ -5380,7 +5390,7 @@ export class InteractiveMode {
 			allEntries.length > 0
 				? allEntries
 						.reverse()
-						.map((e) => e.content)
+						.map((e) => normalizeChangelogLinks(e.content, e))
 						.join("\n\n")
 				: "No changelog entries found.";
 
@@ -5454,7 +5464,7 @@ export class InteractiveMode {
 **Navigation**
 | Key | Action |
 |-----|--------|
-| \`${cursorUp}\` / \`${cursorDown}\` / \`${cursorLeft}\` / \`${cursorRight}\` | Move cursor / browse history (Up when empty) |
+| \`${cursorUp}\` / \`${cursorDown}\` / \`${cursorLeft}\` / \`${cursorRight}\` | Move cursor / browse history |
 | \`${cursorWordLeft}\` / \`${cursorWordRight}\` | Move by word |
 | \`${cursorLineStart}\` | Start of line |
 | \`${cursorLineEnd}\` | End of line |

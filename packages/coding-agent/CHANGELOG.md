@@ -5,6 +5,18 @@
 ### Added
 
 - Added default-value expansion for prompt template positional arguments, e.g. `${1:-7}` ([#5507](https://github.com/earendil-works/pi/issues/5507)).
+- Added `areExperimentalFeaturesEnabled` feature guard to allow users to opt-in to early features.
+- Added `ctx.isProjectTrusted()` for extensions to observe the effective project trust decision, including temporary trust decisions ([#5523](https://github.com/earendil-works/pi/issues/5523)).
+- Added a global `defaultProjectTrust` setting to choose whether unresolved project trust asks, always trusts, or never trusts by default.
+- Added extension autocomplete trigger character support for `ctx.ui.addAutocompleteProvider()` wrappers ([#4703](https://github.com/earendil-works/pi/issues/4703)).
+
+### Fixed
+
+- Fixed extension OAuth login prompts to keep previous submitted prompt rows stable instead of mirroring the active input value ([#5433](https://github.com/earendil-works/pi/issues/5433)).
+- Fixed `/reload` to apply updated `steeringMode` and `followUpMode` settings to the current session ([#5377](https://github.com/earendil-works/pi/issues/5377)).
+- Fixed invalid `models.json` syntax to skip startup config migrations and report the normal file-path-aware models error instead of a raw JSON parse stack trace ([#5418](https://github.com/earendil-works/pi/issues/5418)).
+- Fixed GitHub release notes and interactive changelog links to resolve package-relative documentation URLs correctly ([#5516](https://github.com/earendil-works/pi/issues/5516)).
+- Clarified custom model docs that `name` and `modelOverrides.name` do not replace model IDs in the footer or primary model lists ([#4841](https://github.com/earendil-works/pi/issues/4841)).
 
 ## [0.79.0] - 2026-06-08
 
