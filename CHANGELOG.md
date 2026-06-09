@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.78.6 — exclude AdaptOrch skills and MCP install template from package (2026-06-09)
+
+### Changed
+
+- Added `.npmignore` exclusions so the published package no longer ships:
+  - `templates/skills/**/omk-adaptorch-orchestration-review/`
+  - `templates/skills/**/mcp-install/`
+- Core AdaptOrch topology routing and MCP runtime code remain in the package;
+  only the optional skill templates are removed from the npm tarball.
+
+### Notes
+
+- This remains a pre-1.0 release line.
+- Stable release claims are still withheld pending exact-tag CI, live benchmark pass,
+  and sandbox violation count equal to zero.
+
+## v0.78.5 — release truthfulness, CLI bin restoration, and gate hardening (2026-06-09)
+
+### Fixed
+
+- Restored the public `omk` CLI bin in `package.json` and `package-lock.json`.
+- Aligned package, lockfile, docs, provider maturity notes, and release-truthfulness proof metadata to `0.78.5`.
+- Reworked `version:check` to derive the expected package version from `package.json`.
+- Extended `version:check` to validate required bins, docs, lockfile, schemas, and release-truthfulness proof metadata.
+- Wired `release:check` to pass an explicit demo signal to the release promotion gate only after local package, smoke, proof, and audit gates pass.
+
+### Changed
+
+- Stable release claims are withheld until exact-tag CI, live benchmark pass, and sandbox violation count equal to zero are available.
+- `release:full` and `release:rc` now finish with the same explicit final release promotion gate as `release:check`.
+- README release wording treats npm `latest` as release-truthful only after tagged workflow and registry verification both pass.
+
+### Notes
+
+- This remains a pre-1.0 release line.
+- The `v1.2` label is a runtime contract family, not an npm stable `1.x` release.
+- `v0.78.4` was superseded by `v0.78.5` after benchmark shadow fixture gate repair.
+
 ## v0.78.2 — Regression Proof Matrix, deep interview, clipboard image paste, and README hardening (2026-06-09)
 
 ### Overview

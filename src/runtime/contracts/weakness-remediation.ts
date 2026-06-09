@@ -75,6 +75,8 @@ export interface ReleasePromotionInputs {
   readonly sandboxViolationCount?: number;
   /** Stable claim gate — package/lock/docs/proof/bin invariant. */
   readonly versionConsistency?: number;
+  /** Stable claim gate — CI must pass on the exact release tag/commit before stable verdict. */
+  readonly exactTagCiPass?: boolean;
 }
 
 export interface ReleasePromotionResult {

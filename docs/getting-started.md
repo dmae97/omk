@@ -1,6 +1,6 @@
 # Getting Started
 
-Source release target: `open-multi-agent-kit@0.78.5` (`pre-1.0`).
+Source release target: `open-multi-agent-kit@0.78.6` (`pre-1.0`).
 
 ## Prerequisites
 
