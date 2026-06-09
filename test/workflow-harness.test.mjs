@@ -68,8 +68,6 @@ test("package release:check composes the full local gate", () => {
   const pkg = JSON.parse(read("package.json"));
   assert.match(pkg.scripts.verify, /npm run secret:scan:runtime/);
   assert.match(pkg.scripts["verify:no-kimi"], /npm run native:no-kimi:turn/);
-  assert.match(pkg.scripts["release:check"], /npm run verify/);
-  assert.match(pkg.scripts["release:check"], /npm run native:build/);
-  assert.match(pkg.scripts["release:check"], /npm run audit:package/);
-  assert.match(pkg.scripts["release:check"], /npm run smoke:pack/);
+  assert.match(pkg.scripts["release:check"], /node scripts\/release-gate\.mjs/);
+  assert.ok(read("scripts/release-gate.mjs").includes("createReleasePromotionGate"));
 });
