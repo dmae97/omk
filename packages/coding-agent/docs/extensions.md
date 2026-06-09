@@ -2281,6 +2281,7 @@ ctx.ui.pasteToEditor("pasted content");
 
 // Stack custom autocomplete behavior on top of the built-in provider
 ctx.ui.addAutocompleteProvider((current) => ({
+  triggerCharacters: ["#"],
   async getSuggestions(lines, line, col, options) {
     const beforeCursor = (lines[line] ?? "").slice(0, col);
     const match = beforeCursor.match(/(?:^|[ \t])#([^\s#]*)$/);
@@ -2329,7 +2330,7 @@ Custom working-indicator frames are rendered verbatim. If you want colors, add t
 
 ### Autocomplete Providers
 
-Use `ctx.ui.addAutocompleteProvider()` to stack custom autocomplete logic on top of the built-in slash-command and path provider.
+Use `ctx.ui.addAutocompleteProvider()` to stack custom autocomplete logic on top of the built-in slash-command and path provider. Set `triggerCharacters` for custom natural triggers such as `$`.
 
 Typical pattern:
 
@@ -2341,6 +2342,7 @@ Typical pattern:
 ```typescript
 pi.on("session_start", (_event, ctx) => {
   ctx.ui.addAutocompleteProvider((current) => ({
+    triggerCharacters: ["#"],
     async getSuggestions(lines, cursorLine, cursorCol, options) {
       const line = lines[cursorLine] ?? "";
       const beforeCursor = line.slice(0, cursorCol);

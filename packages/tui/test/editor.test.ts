@@ -2347,6 +2347,58 @@ describe("Editor component", () => {
 			assert.strictEqual(editor.isShowingAutocomplete(), true);
 		});
 
+		it("debounces custom triggerCharacters autocomplete while typing", async () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			let suggestionCalls = 0;
+
+			editor.setAutocompleteProvider({
+				triggerCharacters: ["$"],
+				getSuggestions: async (lines, _cursorLine, cursorCol) => {
+					suggestionCalls += 1;
+					const prefix = (lines[0] || "").slice(0, cursorCol);
+					return { items: [{ value: "$skill-name", label: "skill-name" }], prefix };
+				},
+				applyCompletion,
+			});
+
+			editor.handleInput("$");
+			editor.handleInput("s");
+			editor.handleInput("k");
+
+			assert.strictEqual(suggestionCalls, 0);
+			await new Promise((resolve) => setTimeout(resolve, 50));
+			await flushAutocomplete();
+
+			assert.strictEqual(suggestionCalls, 1);
+			assert.strictEqual(editor.isShowingAutocomplete(), true);
+		});
+
+		it("resets custom triggerCharacters when provider changes", async () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			let suggestionCalls = 0;
+
+			editor.setAutocompleteProvider({
+				triggerCharacters: ["$"],
+				getSuggestions: async () => ({ items: [{ value: "$skill-name", label: "skill-name" }], prefix: "$" }),
+				applyCompletion,
+			});
+			editor.setAutocompleteProvider({
+				getSuggestions: async () => {
+					suggestionCalls += 1;
+					return { items: [{ value: "$skill-name", label: "skill-name" }], prefix: "$" };
+				},
+				applyCompletion,
+			});
+
+			editor.handleInput("$");
+			editor.handleInput("s");
+			await new Promise((resolve) => setTimeout(resolve, 50));
+			await flushAutocomplete();
+
+			assert.strictEqual(suggestionCalls, 0);
+			assert.strictEqual(editor.isShowingAutocomplete(), false);
+		});
+
 		it("aborts active @ autocomplete when typing continues", async () => {
 			const editor = new Editor(createTestTUI(), defaultEditorTheme);
 			let aborts = 0;
