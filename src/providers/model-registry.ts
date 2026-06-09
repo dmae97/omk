@@ -178,6 +178,10 @@ const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEnt
       auto: "openrouter/auto",
       "openrouter-default": "openrouter/auto",
       "openrouter/auto": "openrouter/auto",
+      fable: "anthropic/claude-fable-5",
+      "fable-5": "anthropic/claude-fable-5",
+      "claude-fable-5": "anthropic/claude-fable-5",
+      "anthropic/claude-fable-5": "anthropic/claude-fable-5",
     },
     capabilities: ["read", "research", "review", "qa", "advisory"],
     contextWindow: 128_000,
@@ -250,7 +254,7 @@ export function parseProviderModelArg(value: string | undefined): ProviderModelA
   const model = normalizeModelAlias(modelPart);
   if (model === "codex-cli") return withThinking({ provider: "codex", model });
   if (model.startsWith("deepseek-v4-")) return withThinking({ provider: "deepseek", model });
-  if (model.startsWith("claude-") || model.startsWith("gpt-")) return withThinking({ provider: "openrouter", model });
+  if (model.startsWith("claude-") || model.startsWith("gpt-") || model.startsWith("anthropic/")) return withThinking({ provider: "openrouter", model });
   return withThinking({ model });
 }
 
@@ -270,6 +274,7 @@ export function normalizeModelAlias(value: string): string {
   if (lower === "sonnet") return "claude-sonnet";
   if (lower === "opus") return "claude-opus";
   if (lower === "haiku") return "claude-haiku";
+  if (lower === "fable" || lower === "fable-5" || lower === "claude-fable-5") return "anthropic/claude-fable-5";
   if (lower === "flash" || lower === "thinking" || lower === "non-thinking" || lower === "reasoner") return "deepseek-v4-flash";
   if (lower === "pro") return "deepseek-v4-pro";
   if (lower === "codex") return "codex-cli";
