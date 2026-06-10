@@ -3,7 +3,8 @@
  * Extracted from util/theme.ts to break God Module coupling
  */
 
-import { P, BRAND_HEX } from "../brand/palette.js";
+import { P, BRAND_HEX, setBrandPaletteTheme } from "../brand/palette.js";
+import { getActiveBrandHudStatus, getActiveBrandThemeName } from "../brand/theme-compiled.js";
 import { esc, rgb, stripAnsi, sanitizeTerminalText, visibleTerminalWidth } from "./ansi.js";
 import { style } from "./colors.js";
 import { renderOmkSparkleText } from "../ui/omk-sigil.js";
@@ -151,8 +152,14 @@ export function matrixHeader(text: string): string {
 
 /** Compact HUD masthead for root entry and non-interactive HUD command output. */
 export function omkHudHeader(runId?: string): string {
+  if (process.env.OMK_THEME !== undefined) {
+    setBrandPaletteTheme(process.env.OMK_THEME);
+  }
   const safeRun = runId ? sanitizeTerminalText(runId).slice(0, 28) : "latest run";
   const signalRule = gradient("═◇═".repeat(18).slice(0, 54));
+  const chromeLine = getActiveBrandThemeName() === "rust-forge"
+    ? style.phosphorBold(getActiveBrandHudStatus()) + style.gray(" · ") + style.mintBold("ROUTE VERIFY") + style.gray(" · ") + style.pinkBold("CONTROL LOOP")
+    : style.phosphorBold("NEON GRID ONLINE") + style.gray(" · ") + style.mintBold("GREEN RAIN SIGNAL") + style.gray(" · ") + style.pinkBold("METRICS WALL");
   return [
     "",
     renderOmkSparkleText("◢█ OMK//CONTROL █◣", {
@@ -164,7 +171,7 @@ export function omkHudHeader(runId?: string): string {
         BRAND_HEX.mint,
       ],
     }),
-    style.phosphorBold("NEON GRID ONLINE") + style.gray(" · ") + style.mintBold("GREEN RAIN SIGNAL") + style.gray(" · ") + style.pinkBold("METRICS WALL"),
+    chromeLine,
     style.gray("Models execute. OMK routes, verifies, measures, and controls."),
     style.gray("goal-scoped MCP · skills · hooks · evidence · worktrees · replay · memory"),
     style.gray(`run: ${safeRun}`),

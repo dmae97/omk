@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "omk.goal-result.v1",
+  "goalId": "brand-layer-theme-aware-refactor-for-live-omk-control-chrome-usi",
+  "goal": "Brand-layer theme-aware refactor for live OMK//CONTROL chrome using Adaptorch MCP routing",
+  "workers": 4,
+  "mode": "pi-omk-hardfork-adaptorch",
+  "status": "completed",
+  "summary": "Completed theme-aware brand layer. Night City remains the byte-compatible default; rust-forge now drives live OMK//CONTROL cockpit/tmux/HUD chrome via active brand theme selection. Fixed reviewer must-fix so OMK_THEME=rust-forge wins over default chat brand=omk in tmux layout. Version footer remains dynamic from package.json and renders omk v0.78.6.",
+  "changedFiles": [
+    "src/brand/rust-forge.theme.json",
+    "src/brand/theme-compiled.ts",
+    "src/brand/palette.ts",
+    "src/brand/theme.ts",
+    "src/util/chat-cockpit.ts",
+    "src/commands/cockpit/render.ts",
+    "src/hud/render.ts",
+    "src/theme/layout.ts",
+    "src/theme/parallel.ts",
+    "src/cli/ui/rust-forge-renderer.ts",
+    "src/cli/v2/interactive-prompt.ts",
+    "src/commands/chat/runtime.ts",
+    "src/commands/chat/utils.ts",
+    "src/commands/cockpit/utils.ts",
+    "test/brand-theme.test.mjs",
+    "test/chat-cockpit.test.mjs",
+    "test/cockpit-render-core.test.mjs",
+    "test/rust-forge-renderer.test.mjs",
+    "proof/orchestration-2026-06-10/impl-theme-aware-brand.md",
+    "proof/orchestration-2026-06-10/review-theme-aware-brand.md"
+  ],
+  "evidence": [
+    "npm run build PASS",
+    "node --test test/chat-cockpit.test.mjs test/brand-theme.test.mjs test/cockpit-render-core.test.mjs test/hud-branding.test.mjs => 61/61 PASS",
+    "npm run schema:check PASS",
+    "npm run theme:check PASS: rust-forge 80 pairs, 0 failed; matrix 160 pairs",
+    "npm run color:gate PASS",
+    "npm run secret:scan PASS",
+    "version smoke: formatOmkVersionFooter() => omk v0.78.6 • GitHub: https://github.com/dmae97/open-multi-agent-kit",
+    "chrome smoke: OMK_THEME=rust-forge resolves rust-forge; tmux status-left => OMK//CONTROL Oxidized Forge",
+    "review-theme-aware-brand.md VERDICT: PASS"
+  ],
+  "risks": [
+    "Theme palette remains process-global; tests reset to night-city after rust-forge cases",
+    "Tmux coverage composes helper output rather than launching a real tmux session",
+    "Concurrent worker files AGENTS.md, CLAUDE.md, src/providers/*, fable artifacts were intentionally excluded"
+  ],
+  "nextAction": "Optionally push the new brand-aware theme commits after maintainer review, then run a real tmux smoke with OMK_THEME=rust-forge.",
+  "updatedAt": "2026-06-10T00:00:00Z"
+}

@@ -9,6 +9,7 @@ import { readFile, readdir } from "fs/promises";
 import YAML from "yaml";
 import { t } from "../../util/i18n.js";
 import { getActiveRuntimePreset } from "../../util/resource-profile.js";
+import { setBrandPaletteTheme } from "../../brand/palette.js";
 
 export function mergeTodos(existing: TodoItem[], incoming: TodoItem[]): TodoItem[] {
   const map = new Map<string, TodoItem>();
@@ -88,6 +89,7 @@ export function renderChatIntro(
   brand: ChatBrand,
   meta: { agent: string; runId?: string; layout: ChatLayout; trust: string; mode?: string }
 ): string {
+  setBrandPaletteTheme(brand === "rust-forge" ? "rust-forge" : process.env.OMK_THEME);
   const titleKey: Record<ChatBrand, string> = {
     omk: "chat.intro.omk",
     "green-rain": "chat.intro.greenRain",
@@ -111,8 +113,8 @@ export function renderChatIntro(
     lines.push("");
   } else if (brand === "rust-forge") {
     lines.push(style.rustBold("▣ OMK//RUST-FORGE"));
-    lines.push(style.gray("  CARGO SAFETY ONLINE"));
-    lines.push(style.gray("  Native: hot · Verify: armed · Loop: controlled."));
+    lines.push(style.gray("  OXIDIZED FORGE ONLINE"));
+    lines.push(style.gray("  Route: hot · Verify: armed · Loop: controlled."));
     for (const artLine of OMK_SIMPLE_ASCII_ART.split("\n")) {
       lines.push(style.rust(artLine));
     }

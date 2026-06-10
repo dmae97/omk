@@ -1,7 +1,8 @@
 import { resolve, join } from "path";
 import { mkdir, writeFile } from "fs/promises";
 import { runShell, type ShellResult } from "./shell.js";
-import { BRAND_HEX } from "../brand/palette.js";
+import { BRAND_HEX, setBrandPaletteTheme } from "../brand/palette.js";
+import { getActiveBrandChromeLabel } from "../brand/theme-compiled.js";
 import { getProjectRoot, getRunPath, pathExists } from "./fs.js";
 import { writeSessionMeta } from "./session.js";
 import { writeTodos } from "./todo-sync.js";
@@ -103,6 +104,48 @@ function parseCockpitHeight(value?: string): number | undefined {
   return Math.min(MAX_CHAT_COCKPIT_HEIGHT, Math.max(MIN_CHAT_COCKPIT_HEIGHT, parsed));
 }
 
+function normalizeBrandChromeTheme(value?: string): "night-city" | "rust-forge" | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (
+    normalized === "rust-forge" ||
+    normalized === "rust" ||
+    normalized === "cargo" ||
+    normalized === "oxide" ||
+    normalized === "forge" ||
+    normalized === "oxidized-forge" ||
+    normalized === "oxidized" ||
+    normalized === "rust-native"
+  ) {
+    return "rust-forge";
+  }
+  if (
+    normalized === "night-city" ||
+    normalized === "night-city-ops" ||
+    normalized === "neon-grid" ||
+    normalized === "neon" ||
+    normalized === "grid" ||
+    normalized === "control" ||
+    normalized === "omk-control" ||
+    normalized === "metrics" ||
+    normalized === "metrics-control" ||
+    normalized === "cyberpunk"
+  ) {
+    return "night-city";
+  }
+  return undefined;
+}
+
+export function resolveCockpitChromeTheme(options: {
+  brand?: string;
+  env?: NodeJS.ProcessEnv;
+}): "night-city" | "rust-forge" | undefined {
+  // OMK_THEME is the user-selected control chrome theme. Chat `--brand omk`
+  // is only the left-pane skin and must not overwrite an env/project theme.
+  return normalizeBrandChromeTheme(options.env?.OMK_THEME)
+    ?? normalizeBrandChromeTheme(options.brand);
+}
+
 export function buildRightPaneCommand(options: {
   nodeCmd: string;
   cliCmd: string;
@@ -110,8 +153,13 @@ export function buildRightPaneCommand(options: {
   refreshMs: number;
   redraw?: "diff" | "full" | "append";
   height?: number;
+  theme?: string;
 }): string {
   let cmd = `${options.nodeCmd} ${options.cliCmd} cockpit --run-id ${shellQuote(options.runId)} --watch --refresh ${options.refreshMs}`;
+  const theme = normalizeBrandChromeTheme(options.theme);
+  if (theme) {
+    cmd = `OMK_THEME=${shellQuote(theme)} ${cmd}`;
+  }
   if (options.redraw && options.redraw !== "diff") {
     cmd += ` --redraw ${shellQuote(options.redraw)}`;
   }
@@ -121,35 +169,42 @@ export function buildRightPaneCommand(options: {
   return cmd;
 }
 
-// Night City tmux chrome — colors derive from the compiled brand theme
-// (src/brand/night-city.theme.json) instead of hardcoded hex literals.
-const TMUX_NIGHT_CITY_STATUS_LEFT = `#[fg=${BRAND_HEX.mint},bold] OMK//CONTROL #[fg=${BRAND_HEX.gray}]Night City`;
-const TMUX_NIGHT_CITY_STATUS_RIGHT = `#[fg=${BRAND_HEX.cyan}]#S #[fg=${BRAND_HEX.gray}]%H:%M`;
+// Active brand tmux chrome. Values are built at launch time so P/BRAND_HEX
+// mutations from setBrandPaletteTheme() are reflected without changing imports.
+export function buildTmuxBrandChromeOptions(brand?: string): {
+  sessionOptions: Array<readonly [string, string]>;
+  windowOptions: Array<readonly [string, string]>;
+} {
+  setBrandPaletteTheme(brand);
+  const statusLeft = `#[fg=${BRAND_HEX.mint},bold] OMK//CONTROL #[fg=${BRAND_HEX.gray}]${getActiveBrandChromeLabel()}`;
+  const statusRight = `#[fg=${BRAND_HEX.cyan}]#S #[fg=${BRAND_HEX.gray}]%H:%M`;
+  return {
+    sessionOptions: [
+      ["status", "on"],
+      ["status-style", `bg=${BRAND_HEX.dark},fg=${BRAND_HEX.cream}`],
+      ["message-style", `bg=${BRAND_HEX.purple},fg=${BRAND_HEX.cream},bold`],
+      ["window-status-style", `fg=${BRAND_HEX.gray},bg=${BRAND_HEX.dark}`],
+      ["window-status-current-style", `fg=${BRAND_HEX.dark},bg=${BRAND_HEX.mint},bold`],
+      ["status-left", statusLeft],
+      ["status-right", statusRight],
+    ],
+    windowOptions: [
+      ["pane-border-style", `fg=${BRAND_HEX.gridLine}`],
+      ["pane-active-border-style", `fg=${BRAND_HEX.magenta}`],
+    ],
+  };
+}
 
-const TMUX_NIGHT_CITY_SESSION_OPTIONS: Array<readonly [string, string]> = [
-  ["status", "on"],
-  ["status-style", `bg=${BRAND_HEX.dark},fg=${BRAND_HEX.cream}`],
-  ["message-style", `bg=${BRAND_HEX.purple},fg=${BRAND_HEX.cream},bold`],
-  ["window-status-style", `fg=${BRAND_HEX.gray},bg=${BRAND_HEX.dark}`],
-  ["window-status-current-style", `fg=${BRAND_HEX.dark},bg=${BRAND_HEX.mint},bold`],
-  ["status-left", TMUX_NIGHT_CITY_STATUS_LEFT],
-  ["status-right", TMUX_NIGHT_CITY_STATUS_RIGHT],
-];
-
-const TMUX_NIGHT_CITY_WINDOW_OPTIONS: Array<readonly [string, string]> = [
-  ["pane-border-style", `fg=${BRAND_HEX.gridLine}`],
-  ["pane-active-border-style", `fg=${BRAND_HEX.magenta}`],
-];
-
-async function applyTmuxNightCityTheme(session: string, cwd: string): Promise<void> {
-  for (const [option, value] of TMUX_NIGHT_CITY_SESSION_OPTIONS) {
+async function applyTmuxBrandTheme(session: string, cwd: string, brand?: string): Promise<void> {
+  const chrome = buildTmuxBrandChromeOptions(brand);
+  for (const [option, value] of chrome.sessionOptions) {
     const result = await runShell("tmux", ["set-option", "-t", session, option, value], { cwd, timeout: 5000 });
     if (result.failed) {
       console.warn(`Failed to set tmux ${option}: ${result.stderr || result.stdout}`);
     }
   }
 
-  for (const [option, value] of TMUX_NIGHT_CITY_WINDOW_OPTIONS) {
+  for (const [option, value] of chrome.windowOptions) {
     const result = await runShell("tmux", ["set-window-option", "-t", `${session}:chat`, option, value], { cwd, timeout: 5000 });
     if (result.failed) {
       console.warn(`Failed to set tmux ${option}: ${result.stderr || result.stdout}`);
@@ -249,10 +304,19 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
     terminalWidth >= 80 &&
     terminalHeight >= MIN_CHAT_COCKPIT_HEIGHT + minHistoryPaneHeight;
 
+  const chromeTheme = resolveCockpitChromeTheme({ brand, env: process.env });
   const leftCmd = buildLeftPaneCommand({ nodeCmd, cliCmd, runId, brand, agentFile: options.agentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, mcpScope: options.mcpScope, provider: options.provider, model: options.model, execution: options.execution, ui: options.ui });
   // When no explicit --cockpit-height is provided, pass undefined so the child
   // measures its actual tmux pane after splits/resizes and keeps the right rail pinned.
-  const rightTopCmd = buildRightPaneCommand({ nodeCmd, cliCmd, runId, refreshMs, redraw, height: requestedCockpitHeight });
+  const rightTopCmd = buildRightPaneCommand({
+    nodeCmd,
+    cliCmd,
+    runId,
+    refreshMs,
+    redraw,
+    height: requestedCockpitHeight,
+    theme: chromeTheme,
+  });
   const rightBottomCmd = `${nodeCmd} ${cliCmd} runs --watch --limit 15 --refresh 5000`;
 
   // 3. Create detached tmux session with left-pane command already running
@@ -352,7 +416,7 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
     console.warn(`Failed to set tmux history limit: ${historyResult.stderr || historyResult.stdout}`);
   }
 
-  await applyTmuxNightCityTheme(session, cwd);
+  await applyTmuxBrandTheme(session, cwd, chromeTheme);
 
   // 8. Set a hook so the session is destroyed when the chat pane dies
   const hookResult = await runShell(

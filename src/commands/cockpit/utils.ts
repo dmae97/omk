@@ -64,6 +64,8 @@ export interface CockpitRenderOptions {
   section?: "agents" | "todos" | "mcp" | "all";
   events?: "on" | "off";
   view?: "panel" | "rail" | "compact" | "json";
+  /** Optional live brand theme override; OMK_THEME is used when this is absent. */
+  theme?: string;
   /** CockpitRenderer for scroll state and left-pane viewport management */
   renderer?: import("./update-loop.js").CockpitRenderer;
 }

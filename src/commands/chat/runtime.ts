@@ -29,6 +29,7 @@ import { GreenRainRenderer } from "../../cli/ui/green-rain-renderer.js";
 import { NeonGridRenderer } from "../../cli/ui/neon-grid-renderer.js";
 import { RustForgeRenderer } from "../../cli/ui/rust-forge-renderer.js";
 import { sanitizeUserVisibleOutput } from "../../util/user-visible-output.js";
+import { setBrandPaletteTheme } from "../../brand/palette.js";
 
 export interface ChatRuntimeInput {
   root: string;
@@ -328,6 +329,7 @@ export async function runChatRuntime(
           process.stdout.write(sanitizeUserVisibleOutput(text));
         },
       });
+      setBrandPaletteTheme(ui === "rust-forge" ? "rust-forge" : process.env.OMK_THEME);
       const renderer = ui === "neon-grid"
         ? new NeonGridRenderer()
         : ui === "green-rain"

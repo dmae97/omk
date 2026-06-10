@@ -1,5 +1,5 @@
 import { P } from "./palette.js";
-import { brandTruecolorSgr } from "./theme-compiled.js";
+import { brandThemeRgbByRole, brandTruecolorSgr } from "./theme-compiled.js";
 import type { BrandRgb } from "./theme-compiled.js";
 
 /**
@@ -14,6 +14,10 @@ function fg(color: BrandRgb): string {
 
 function rgb(r: number, g: number, b: number): string {
   return fg({ r, g, b });
+}
+
+function rustFg(role: string): string {
+  return brandTruecolorSgr(brandThemeRgbByRole("rust-forge", role));
 }
 
 export type OmkBrandThemeName =
@@ -149,8 +153,8 @@ export const NEON_GRID_THEME: OmkBrandTheme = {
 export const RUST_FORGE_THEME: OmkBrandTheme = {
   name: "rust-forge",
   label: "OMK Rust Forge",
-  tagline: "Rust-native safety console for OMK orchestration.",
-  motto: "Forge native checks. Verify the evidence. Control the loop.",
+  tagline: "Oxidized forge console for OMK control.",
+  motto: "Forge the route. Verify the evidence. Control the loop.",
   symbols: {
     prompt: "›",
     active: "◉",
@@ -160,15 +164,15 @@ export const RUST_FORGE_THEME: OmkBrandTheme = {
     signal: "▣",
   },
   colors: {
-    border: fg(P.rustOxide),
-    borderHot: fg(P.rustOrange),
-    text: fg(P.cream),
-    muted: fg(P.gray),
-    primary: fg(P.rustOrange),
-    success: fg(P.cargoGreen),
-    warning: fg(P.orange),
-    danger: fg(P.red),
-    info: fg(P.blue),
+    border: rustFg("route.fallback"),
+    borderHot: rustFg("control.accent"),
+    text: rustFg("control.fg"),
+    muted: rustFg("control.dim"),
+    primary: rustFg("control.accent"),
+    success: rustFg("evidence.pass"),
+    warning: rustFg("telemetry.warn"),
+    danger: rustFg("telemetry.error"),
+    info: rustFg("route.active"),
   },
   motion: {
     rain: false,

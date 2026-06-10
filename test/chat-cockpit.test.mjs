@@ -5,7 +5,15 @@ import { join } from "path";
 import { tmpdir } from "os";
 
 // ESM dynamic import so we can test env-sensitive behavior
-const { isCockpitChild, detectTmux, shellQuote, buildLeftPaneCommand, buildRightPaneCommand } = await import("../dist/util/chat-cockpit.js");
+const {
+  isCockpitChild,
+  detectTmux,
+  shellQuote,
+  buildLeftPaneCommand,
+  buildRightPaneCommand,
+  buildTmuxBrandChromeOptions,
+  resolveCockpitChromeTheme,
+} = await import("../dist/util/chat-cockpit.js");
 const { ensureChatRunState } = await import("../dist/util/chat-cockpit.js");
 const { updateChatHeartbeat, updateChatThinking, finalizeChatRunState } = await import("../dist/commands/chat.js");
 const { finalizeChatState } = await import("../dist/util/chat-state.js");
@@ -356,6 +364,35 @@ describe("tmux lifecycle commands", () => {
     assert.ok(!cmd.includes("--height"), "height should be omitted so the cockpit child can pin to its own tmux pane rows");
   });
 
+  it("buildRightPaneCommand omits OMK_THEME for neutral chat brand", () => {
+    const cmd = buildRightPaneCommand({
+      nodeCmd: "node",
+      cliCmd: "omk",
+      runId: "run-neutral",
+      refreshMs: 2000,
+      theme: "omk",
+    });
+    assert.ok(!cmd.startsWith("OMK_THEME="), "neutral chat brand must not override an env-selected theme");
+  });
+
+  it("resolves cockpit chrome from OMK_THEME before chat brand", () => {
+    assert.strictEqual(resolveCockpitChromeTheme({ brand: "omk", env: { OMK_THEME: "rust-forge" } }), "rust-forge");
+    assert.strictEqual(resolveCockpitChromeTheme({ brand: "rust", env: {} }), "rust-forge");
+    assert.strictEqual(resolveCockpitChromeTheme({ brand: "omk", env: {} }), undefined);
+  });
+
+  it("buildRightPaneCommand forwards rust-forge chrome theme when explicitly resolved", () => {
+    const cmd = buildRightPaneCommand({
+      nodeCmd: "node",
+      cliCmd: "omk",
+      runId: "run-rust",
+      refreshMs: 2000,
+      theme: "rust-forge",
+    });
+    assert.ok(cmd.startsWith("OMK_THEME='rust-forge' "));
+    assert.ok(cmd.includes("cockpit --run-id 'run-rust' --watch --refresh 2000"));
+  });
+
   it("buildRightPaneCommand preserves explicit fixed height when requested", () => {
     const cmd = buildRightPaneCommand({
       nodeCmd: "node",
@@ -390,16 +427,31 @@ describe("tmux lifecycle commands", () => {
     assert.ok(src.includes('-p", "25"'), "should fall back to a small proportional history pane");
   });
 
-  it("dist source applies session-scoped Night City tmux branding and pins the right dashboard", async () => {
-    const src = await readFile(new URL("../dist/util/chat-cockpit.js", import.meta.url), "utf8");
-    assert.ok(src.includes("OMK//CONTROL"), "tmux status should carry OMK control branding");
-    assert.ok(src.includes("Night City"), "tmux status should carry Night City branding");
-    assert.ok(src.includes("status-style"), "tmux session should style the status bar");
-    assert.ok(src.includes("pane-active-border-style"), "tmux window should style the active pane border");
-    assert.ok(src.includes("window-status-current-style"), "tmux session should style the active window");
-    assert.ok(src.includes("main-pane-width"), "tmux layout should pin the main chat pane width");
-    assert.ok(src.includes("main-vertical"), "tmux layout should keep the dashboard stack on the right");
-    assert.ok(src.includes('"-t", session'), "tmux theme options should be scoped to the OMK chat session");
+  it("buildTmuxBrandChromeOptions applies session-scoped live brand chrome", async () => {
+    const night = buildTmuxBrandChromeOptions("night-city");
+    assert.deepStrictEqual(night.sessionOptions.find(([option]) => option === "status-left"), [
+      "status-left",
+      "#[fg=#00FFC2,bold] OMK//CONTROL #[fg=#758FA8]Night City",
+    ]);
+    assert.deepStrictEqual(night.sessionOptions.find(([option]) => option === "status-style"), [
+      "status-style",
+      "bg=#070B14,fg=#E8F8FF",
+    ]);
+    assert.ok(night.sessionOptions.some(([option]) => option === "window-status-current-style"), "tmux session should style the active window");
+    assert.ok(night.windowOptions.some(([option]) => option === "pane-active-border-style"), "tmux window should style the active pane border");
+
+    const rust = buildTmuxBrandChromeOptions("rust");
+    assert.deepStrictEqual(rust.sessionOptions.find(([option]) => option === "status-left"), [
+      "status-left",
+      "#[fg=#4FB39B,bold] OMK//CONTROL #[fg=#9FB0BD]Oxidized Forge",
+    ]);
+    assert.deepStrictEqual(rust.sessionOptions.find(([option]) => option === "status-style"), [
+      "status-style",
+      "bg=#0E0B09,fg=#F2E4D6",
+    ]);
+
+    const { setBrandPaletteTheme } = await import("../dist/brand/palette.js");
+    setBrandPaletteTheme("night-city");
   });
 
   it("dist chat command re-enables tmux cockpit before inline HUD rendering", async () => {

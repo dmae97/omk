@@ -31,6 +31,22 @@ describe("renderCockpit", () => {
     assert.ok(output.includes("run"), "should contain run id placeholder");
   });
 
+  it("renders oxidized-forge cockpit chrome when OMK_THEME=rust-forge", async () => {
+    const previousTheme = process.env.OMK_THEME;
+    process.env.OMK_THEME = "rust-forge";
+    try {
+      const output = await renderCockpit({ terminalWidth: 100, quick: true });
+      assert.ok(output.includes("OMK//CONTROL COCKPIT"), "control header should remain");
+      assert.ok(output.includes("OXIDIZED FORGE"), "rust-forge subtitle should be live");
+      assert.match(output, /\x1b\[38;2;255;106;61m/, "rust-forge route/accent color should render");
+    } finally {
+      if (previousTheme === undefined) delete process.env.OMK_THEME;
+      else process.env.OMK_THEME = previousTheme;
+      const { setBrandPaletteTheme } = await import("../dist/brand/palette.js");
+      setBrandPaletteTheme("night-city");
+    }
+  });
+
   it("does not exceed the requested visible columns when terminalWidth is 40", async () => {
     const output = await renderCockpit({ terminalWidth: 40, quick: true });
     const maxWidth = maxVisibleWidth(output);

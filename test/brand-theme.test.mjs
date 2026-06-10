@@ -36,13 +36,13 @@ test("neon-grid theme defines OMK Control visual language", () => {
   assert.equal(NEON_GRID_THEME.motion.rain, false);
 });
 
-test("rust-forge theme defines Rust-native OMK safety visuals", () => {
+test("rust-forge theme defines oxidized OMK control visuals", () => {
   assert.equal(RUST_FORGE_THEME.name, "rust-forge");
   assert.equal(RUST_FORGE_THEME.label, "OMK Rust Forge");
-  assert.match(RUST_FORGE_THEME.tagline, /Rust-native safety console/);
-  assert.match(RUST_FORGE_THEME.motto, /Forge native checks/);
-  assert.match(RUST_FORGE_THEME.colors.primary, /38;2;249;115;22m/);
-  assert.match(RUST_FORGE_THEME.colors.border, /38;2;124;45;18m/);
+  assert.match(RUST_FORGE_THEME.tagline, /Oxidized forge console/);
+  assert.match(RUST_FORGE_THEME.motto, /Forge the route/);
+  assert.match(RUST_FORGE_THEME.colors.primary, /38;2;255;106;61m/);
+  assert.match(RUST_FORGE_THEME.colors.border, /38;2;224;138;75m/);
   assert.equal(RUST_FORGE_THEME.motion.rain, false);
 });
 
@@ -163,4 +163,41 @@ test("night-city snapshot stays in sync with themes/night-city.theme.json", asyn
       );
     }
   }
+});
+
+test("rust-forge snapshot stays in sync with themes/rust-forge.theme.json", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const snapshot = await readFile(new URL("../src/brand/rust-forge.theme.json", import.meta.url), "utf8");
+  const canonical = await readFile(new URL("../themes/rust-forge.theme.json", import.meta.url), "utf8");
+  assert.equal(snapshot, canonical, "refresh src/brand/rust-forge.theme.json from themes/rust-forge.theme.json");
+});
+
+test("active brand palette can switch to rust-forge and back without replacing exports", async () => {
+  const { P, BRAND_HEX, setBrandPaletteTheme } = await import("../dist/brand/palette.js");
+  const { getActiveBrandThemeName, RUST_FORGE_THEME: COMPILED_RUST_FORGE_THEME } =
+    await import("../dist/brand/theme-compiled.js");
+  const pRef = P;
+  const hexRef = BRAND_HEX;
+  const original = {
+    blue: { ...P.blue },
+    mintHex: BRAND_HEX.mint,
+    rustOrange: { ...P.rustOrange },
+  };
+
+  assert.equal(setBrandPaletteTheme("rust-forge"), "rust-forge");
+  assert.equal(getActiveBrandThemeName(), "rust-forge");
+  assert.equal(P, pRef);
+  assert.equal(BRAND_HEX, hexRef);
+  assert.deepEqual(P.blue, { r: 255, g: 106, b: 61 });
+  assert.deepEqual(P.rustOrange, { r: 255, g: 106, b: 61 });
+  assert.equal(BRAND_HEX.mint, COMPILED_RUST_FORGE_THEME.primitives.oxide.toUpperCase());
+  assert.equal(BRAND_HEX.magenta, COMPILED_RUST_FORGE_THEME.primitives.rust.toUpperCase());
+
+  assert.equal(setBrandPaletteTheme("night-city"), "night-city");
+  assert.equal(getActiveBrandThemeName(), "night-city");
+  assert.equal(P, pRef);
+  assert.equal(BRAND_HEX, hexRef);
+  assert.deepEqual(P.blue, original.blue);
+  assert.deepEqual(P.rustOrange, original.rustOrange);
+  assert.equal(BRAND_HEX.mint, original.mintHex);
 });
