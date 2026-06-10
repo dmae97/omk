@@ -10,6 +10,7 @@ import {
 } from "../safety/tool-authority-gate.js";
 import type { ProviderAuthorityLevel } from "../contracts/provider-health.js";
 import type { EnforcementProof } from "../safety/enforcement-engine.js";
+import { assertWritable } from "./sandbox-profile.js";
 
 export interface ToolDispatchResult<R = unknown> {
   readonly call: OmkToolCall;
@@ -63,6 +64,21 @@ export interface ToolAuthorityWiring {
    * Runtimes without a valid proof cannot enter authority lanes.
    */
   readonly enforcementProof?: EnforcementProof;
+  /**
+   * Optional writable-root allowlist for filesystem write enforcement (Lane C2).
+   * Only consulted when `enforce === true` AND {@link resolveWritePath} is
+   * provided AND it returns a non-empty path. ABSENT or empty => NO path check
+   * runs and dispatch is byte-identical to the ungated path.
+   */
+  readonly writableRoots?: readonly string[];
+  /**
+   * Optional resolver mapping a tool call to its filesystem write target. Only
+   * consulted when `enforce === true` AND `writableRoots` is non-empty. When this
+   * is ABSENT (or returns undefined/empty), NO write-path check runs and dispatch
+   * is byte-identical to now. When it returns a non-empty path, that path is
+   * checked against `writableRoots` via {@link assertWritable}; a deny throws.
+   */
+  readonly resolveWritePath?: (call: OmkToolCall) => string | undefined;
 }
 
 const ENFORCE_PATTERN = /^(1|true|yes|on)$/i;
@@ -198,6 +214,17 @@ function buildGatedDispatch<A, R>(
     wiring.onDecision?.(record);
     if (blocked) {
       throw new ToolAuthorityBlockedError(record);
+    }
+    // Lane C2 filesystem write enforcement. NON-BREAKING: this block is entered
+    // only when ALL opt-ins are present (enforce === true AND a non-empty
+    // writableRoots AND a resolveWritePath that yields a non-empty path). When
+    // any is absent the dispatch path is byte-identical to the pre-C2 behavior.
+    // A symlink/escape deny throws SandboxWriteDeniedError from assertWritable.
+    if (wiring.enforce === true && wiring.writableRoots?.length && wiring.resolveWritePath) {
+      const writeTarget = wiring.resolveWritePath(call);
+      if (writeTarget) {
+        assertWritable(writeTarget, wiring.writableRoots);
+      }
     }
     return dispatchOne(call);
   };
