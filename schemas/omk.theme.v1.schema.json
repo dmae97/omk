@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-multi-agent-kit.dev/schemas/omk.theme.v1.schema.json",
+  "title": "OMK Theme Contract",
+  "description": "Versioned theme token contract: primitive palette -> semantic roles -> component slots. Strictly one-directional references. Every semantic state pairs color with a glyph so NO_COLOR tiers keep meaning.",
+  "type": "object",
+  "required": ["schemaVersion", "name", "mode", "primitives", "backgrounds", "semantics", "fallback16"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": "omk.theme.v1" },
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "displayName": { "type": "string" },
+    "mode": { "enum": ["dark", "light"] },
+    "primitives": {
+      "type": "object",
+      "description": "Layer 1: the only place brand hexes exist.",
+      "minProperties": 2,
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-zA-Z0-9]*$": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+      }
+    },
+    "backgrounds": {
+      "type": "array",
+      "description": "Primitive names that serve as render backgrounds; every foreground role is contrast-gated against each.",
+      "items": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*$" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "semantics": {
+      "type": "object",
+      "description": "Layer 2: domain roles. Values reference primitive names only. kind=state requires a glyph; kind=chrome/background may omit it.",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["color", "usage"],
+          "properties": {
+            "color": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*$" },
+            "glyph": { "type": "string", "minLength": 1, "maxLength": 4 },
+            "kind": { "enum": ["state", "chrome", "background"], "default": "state" },
+            "usage": {
+              "enum": ["text", "indicator", "background"],
+              "description": "Contrast gate class: text >= 4.5, indicator (glyphs/large text/borders, WCAG 1.4.11) >= 3.0, background = gated as bg only."
+            },
+            "adjusted": {
+              "type": "object",
+              "description": "Present when the shipped value was OKLCH-lightness-adjusted from the brand primitive to satisfy its gate.",
+              "required": ["original", "crBefore", "crAfter"],
+              "additionalProperties": false,
+              "properties": {
+                "original": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+                "crBefore": { "type": "number" },
+                "crAfter": { "type": "number" }
+              }
+            }
+          },
+          "if": {
+            "not": { "required": ["kind"], "properties": { "kind": { "enum": ["chrome", "background"] } } }
+          },
+          "then": { "required": ["color", "glyph", "usage"] }
+        }
+      }
+    },
+    "components": {
+      "type": "object",
+      "description": "Layer 3: component slots reference semantic role names only (never primitives).",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-zA-Z0-9]*$": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$" }
+        }
+      }
+    },
+    "fallback16": {
+      "type": "object",
+      "description": "Hand-authored 16-color tier (auto-mapping to 16 is too lossy). Keys must cover every semantic role; values are standard ANSI-16 names, contrast-gated against the VGA palette.",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$": {
+          "enum": [
+            "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+            "brightBlack", "brightRed", "brightGreen", "brightYellow",
+            "brightBlue", "brightMagenta", "brightCyan", "brightWhite"
+          ]
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "provenance": { "type": "string" },
+        "derivedAssets": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

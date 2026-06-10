@@ -13,6 +13,7 @@ const expectedSchemas = [
   ["omk.version.v1", "schemas/omk.version.v1.schema.json"],
   ["omk.proof-bundle.v1", "schemas/omk.proof-bundle.v1.schema.json"],
   ["omk.interview.v1", "schemas/omk.interview.v1.schema.json"],
+  ["omk.theme.v1", "schemas/omk.theme.v1.schema.json"],
 ];
 
 function fail(message) {
