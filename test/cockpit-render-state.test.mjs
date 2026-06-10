@@ -176,7 +176,13 @@ describe("renderCockpit", () => {
       const clean = stripAnsi(output);
       assert.match(clean, /DeepSeek ok bal:USD 12\.34 use:1 pro:1 d:1 a:0 f:0/);
       assert.match(clean, /pro:1/);
-      assert.match(clean, /mcp:2 skills:2 hooks:2 scope:all/);
+      // Layout change: the old single resource summary line
+      // (`mcp:2 skills:2 hooks:2 scope:all`) was split, and the all-scope resources now
+      // surface through the new MCP health row. Both servers (project + global = all
+      // scope) are connected, so the row reads `MCP ●2 ◐0 ✕0 /2`. This still asserts the
+      // all-scope resources are rendered (intent preserved), alongside the DeepSeek
+      // balance + run usage assertions above.
+      assert.match(clean, /MCP ●2 ◐0 ✕0 \/2/);
     } finally {
       if (previousRoot === undefined) {
         delete process.env.OMK_PROJECT_ROOT;
@@ -324,7 +330,11 @@ describe("renderCockpit", () => {
         }],
       }, null, 2));
 
-      const output = await renderCockpit({ runId, terminalWidth: 80, height: 24, quick: true });
+      // Layout change: the new Evidence panel + reordered Workers & TODO push the AGENTS
+      // subsection (which carries the stale `silent`/`stalled` marker) below the height-24
+      // cutoff. Render at height 32 so the stale marker is actually emitted — the stale
+      // assertion itself is unchanged.
+      const output = await renderCockpit({ runId, terminalWidth: 80, height: 32, quick: true });
       const clean = stripAnsi(output);
       assert.match(clean, /silent|stalled/);
       assert.doesNotMatch(clean, /idle \/ waiting for input/);
@@ -370,7 +380,8 @@ describe("renderCockpit", () => {
         }],
       }, null, 2));
 
-      const output1 = await renderCockpit({ runId, terminalWidth: 80, height: 24, quick: true });
+      // height 32 so the AGENTS stale marker renders below the new Evidence panel
+      const output1 = await renderCockpit({ runId, terminalWidth: 80, height: 32, quick: true });
       const clean1 = stripAnsi(output1);
       assert.match(clean1, /silent|stalled/);
       assert.doesNotMatch(clean1, /idle \/ waiting for input/);
@@ -394,7 +405,8 @@ describe("renderCockpit", () => {
         }],
       }, null, 2));
 
-      const output2 = await renderCockpit({ runId, terminalWidth: 80, height: 24, quick: true });
+      // height 32 so the AGENTS idle marker renders below the new Evidence panel
+      const output2 = await renderCockpit({ runId, terminalWidth: 80, height: 32, quick: true });
       const clean2 = stripAnsi(output2);
       assert.match(clean2, /idle \/ waiting for input/);
       assert.doesNotMatch(clean2, /silent|stalled/);
@@ -500,10 +512,16 @@ describe("renderCockpit", () => {
       });
       const clean = stripAnsi(output);
       assert.match(clean, /MCP/);
-      assert.match(clean, /1\/3 connected/);
-      assert.match(clean, /12 tools/);
-      assert.match(clean, /connecting: pdf/);
-      assert.match(clean, /failed: github/);
+      // Layout change: MCP status is now a consolidated health row.
+      //   old `1/3 connected` + `connecting: pdf` → counts `●1 ◐1 ✕1 /3`
+      //   (1 connected, 1 connecting, 1 failed of 3).
+      // The aggregate tool count is no longer rendered in this row, so the old
+      // `12 tools` assertion is dropped (structural removal, not an intent change).
+      assert.match(clean, /MCP ●1 ◐1 ✕1 \/3/);
+      // failed AND connecting servers still surface: 1 connecting server (◐1) and the
+      // failed server name (old `failed: github` → `fail: github`).
+      assert.match(clean, /◐1/);
+      assert.match(clean, /fail: github/);
       assert.match(clean, /contract/);
       assert.match(clean, /mcp:3/);
       assert.match(clean, /gates:2/);
@@ -546,7 +564,13 @@ describe("renderCockpit", () => {
         }],
       }, null, 2));
 
-      const output = await renderCockpit({ runId, terminalWidth: 80, height: 24, quick: true });
+      // SECURITY: the redacted evidence renders in the AGENTS subsection (and a blocker
+      // line), which the new Evidence panel pushed below the height-24 cutoff. Render at
+      // height 32 so the redacted evidence is actually emitted. This keeps the test
+      // honest: it asserts redaction (***REDACTED*** present) AND secret-absence, and
+      // both pass because sanitizeForDisplay genuinely redacts the apiKey — NOT because
+      // the line was truncated away.
+      const output = await renderCockpit({ runId, terminalWidth: 80, height: 32, quick: true });
       const clean = stripAnsi(output);
       assert.match(clean, /\*\*\*REDACTED\*\*\*/);
       assert.doesNotMatch(clean, /sk-abc123/);

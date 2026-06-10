@@ -230,30 +230,57 @@ function redactResourceName(name: string): string {
   return looksLikeSecret(name) ? "***REDACTED***" : name;
 }
 
-function formatResourceSummary(resources: CockpitResourceSnapshot | null, maxWidth: number): string {
-  if (!resources) return `${style.gray("MCP")} ${style.gray("?:? connected · ? tools")}`;
-  const connected = resources.mcpServers.filter((r) => r.status === "connected" || r.status == null).length;
-  const connecting = resources.mcpServers.filter((r) => r.status === "connecting");
-  const failed = resources.mcpServers.filter((r) => r.status === "failed");
-  const toolsCount = resources.mcpServers.reduce((sum, r) => sum + (r.toolsCount ?? 0), 0);
-  const statusBits = [
-    `${style.mintBold(`${connected}/${resources.mcpServers.length}`)} connected`,
-    `${style.mintBold(String(toolsCount))} tools`,
-    connecting.length > 0 ? `connecting: ${sampleNamesPlain(connecting.map((r) => ({ ...r, name: redactResourceName(r.name) })), 3)}` : "",
-    failed.length > 0 ? `failed: ${sampleNamesPlain(failed.map((r) => ({ ...r, name: redactResourceName(r.name) })), 3)}` : "",
-  ].filter(Boolean);
-  const sample = sampleNames([
-    ...resources.mcpServers.slice(0, 2).map((r) => ({ ...r, name: redactResourceName(r.name) })),
-    ...resources.skills.slice(0, 2).map((r) => ({ ...r, name: redactResourceName(r.name) })),
-    ...resources.hooks.slice(0, 2).map((r) => ({ ...r, name: redactResourceName(r.name) })),
-  ], 3);
-  const base = `${style.gray("MCP")} ${statusBits.join(" · ")} ` +
-    `mcp:${style.mintBold(String(resources.mcpServers.length))} ` +
-    `skills:${style.mintBold(String(resources.skills.length))} ` +
-    `hooks:${style.mintBold(String(resources.hooks.length))} ` +
-    `${style.gray(`scope:${resources.scope}`)}`;
-  const result = sample ? `${base} ${style.gray(truncateText(sample, maxWidth - 32))}` : base;
+function formatMcpHealth(resources: CockpitResourceSnapshot | null, maxWidth: number): string {
+  if (!resources || resources.mcpServers.length === 0) {
+    return `${style.gray("MCP")} ${style.gray("no servers")}`;
+  }
+  const ok = resources.mcpServers.filter((r) => r.status === "connected" || r.status == null).length;
+  const degraded = resources.mcpServers.filter((r) => r.status === "connecting").length;
+  const down = resources.mcpServers.filter((r) => r.status === "failed").length;
+  const total = resources.mcpServers.length;
+  const offenders = resources.mcpServers
+    .filter((r) => r.status === "failed")
+    .slice(0, 3)
+    .map((r) => redactResourceName(r.name))
+    .join(", ");
+  const summary = `${style.gray("MCP")} ${style.mint("●")}${style.mintBold(String(ok))} ${style.orange("◐")}${style.orangeBold(String(degraded))} ${style.red("✕")}${style.redBold(String(down))} ${style.gray(`/${total}`)}`;
+  const topOffenders = offenders ? ` ${style.gray("fail:")} ${style.red(offenders)}` : "";
+  const result = summary + topOffenders;
   return visibleTerminalWidth(result) > maxWidth ? truncateLine(result, maxWidth) : result;
+}
+
+function formatEvidenceGate(vm: RunViewModel, snapshot: CockpitDashboardSnapshot, maxWidth: number): string[] {
+  const workers = vm.workers ?? [];
+  if (workers.length === 0) return [];
+  const passed = workers.filter((w) => w.lastEvidence?.passed).length;
+  const failed = snapshot.evidence.failedGates;
+  const pending = workers.length - passed - failed;
+  const lines: string[] = [];
+  const tally = `${style.gray("evidence")} ${style.mint("✓")}${style.mintBold(String(passed))} ${style.red("✗")}${style.redBold(String(failed))} ${style.orange("◐")}${style.orangeBold(String(pending))} ${style.gray(`of ${workers.length}`)}`;
+  lines.push(visibleTerminalWidth(tally) > maxWidth ? truncateLine(tally, maxWidth) : tally);
+  if (snapshot.evidence.latestVerification) {
+    const latest = `  ${style.gray("latest")} ${truncateText(sanitizeForDisplay(snapshot.evidence.latestVerification), Math.max(8, maxWidth - 12))}`;
+    lines.push(latest);
+  }
+  return lines;
+}
+
+function buildTeamRuntimeLines(vm: RunViewModel, maxWidth: number): string[] {
+  if (!vm.teamRuntime) return [];
+  const team = vm.teamRuntime;
+  const presentWindows = team.windows.filter((w) => w.status === "present").length;
+  const missingWindows = team.windows.filter((w) => w.status === "missing").length;
+  const lines: string[] = [];
+  lines.push(`${style.pinkBold("Team Runtime")}`);
+  lines.push(`  ${style.gray("session")} ${style.cream(team.session)} ${style.gray("status")} ${healthColor(missingWindows > 0 ? "warn" : "ok")(team.status)}`);
+  lines.push(`  ${style.gray("windows")} ${style.mintBold(`${presentWindows}/${team.windows.length}`)} ${style.gray(`present · workers ${team.workerCount} · reviewer ${team.reviewerCount}`)}`);
+  if (team.coordinatorPanes > 0) {
+    lines.push(`  ${style.gray("coordinator panes")} ${style.mint(String(team.coordinatorPanes))}`);
+  }
+  if (missingWindows > 0) {
+    lines.push(`  ${style.orange(`${missingWindows} expected window(s) missing`)}`);
+  }
+  return lines.map((l) => (visibleTerminalWidth(l) > maxWidth ? truncateLine(l, maxWidth) : l));
 }
 
 function formatRuntimeContract(contract: CockpitDashboardSnapshot["runtimeContract"], maxWidth: number): string {
@@ -298,15 +325,6 @@ function formatDeepSeekSummary(
   const livePart = liveParts.length > 0 ? ` ${liveParts.join(" · ")}` : "";
   return `${style.gray("DeepSeek")} ${state}${livePart} bal:${balance} use:${usage.attempts}${modelPart} ` +
     `d:${usage.directCount} a:${usage.advisoryCount} f:${usage.fallbackCount}${reason}`;
-}
-
-function sampleNames(entries: { name: string }[], limit: number): string {
-  const names = [...new Set(entries.map((entry) => entry.name))].slice(0, limit);
-  return names.length > 0 ? `[${names.join(",")}]` : "";
-}
-
-function sampleNamesPlain(entries: { name: string }[], limit: number): string {
-  return [...new Set(entries.map((entry) => entry.name))].slice(0, limit).join(",");
 }
 
 function formatDeepSeekModelUsage(usage: CockpitDashboardSnapshot["deepSeekUsage"]): string {
@@ -610,22 +628,13 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
   }
 
   infoLines.push(formatDeepSeekSummary(deepSeek, deepSeekUsage, snapshot.deepSeekRequests, targetWidth));
-  const mcpLines: string[] = [formatResourceSummary(resources, targetWidth)];
+  const mcpLines: string[] = [];
+  mcpLines.push(formatMcpHealth(resources, targetWidth));
   if (snapshot.runtimeContract) {
     mcpLines.push(formatRuntimeContract(snapshot.runtimeContract, targetWidth));
   }
-  if (snapshot.evidence.failedGates > 0 || snapshot.evidence.skippedGates > 0) {
-    const gateParts: string[] = [];
-    if (snapshot.evidence.failedGates > 0) gateParts.push(`${style.red(String(snapshot.evidence.failedGates))} failed`);
-    if (snapshot.evidence.skippedGates > 0) gateParts.push(`${style.orange(String(snapshot.evidence.skippedGates))} skipped`);
-    const evidenceSample = (vm.workers ?? [])
-      .find((node) => (node.state === "failed" || node.state === "blocked") && node.lastEvidence)
-      ?.lastEvidence;
-    const evidenceDetail = evidenceSample
-      ? ` · ${truncateText(sanitizeForDisplay(evidenceSample.message || evidenceSample.gate), targetWidth - 24)}`
-      : "";
-    mcpLines.push(`${style.gray("evidence")} ${gateParts.join(" · ")}${evidenceDetail}`);
-  }
+
+  const evidenceLines = formatEvidenceGate(vm, snapshot, targetWidth);
 
   const goalLineParts: string[] = [];
   if (sessionMeta?.type === "chat") {
@@ -680,6 +689,10 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
 
   // ── Worker / TODO section ──
   const workerLines: string[] = [];
+  const teamRuntimeLines = buildTeamRuntimeLines(vm, targetWidth);
+  if (teamRuntimeLines.length > 0) {
+    workerLines.push(...teamRuntimeLines, "");
+  }
   const sortedNodes = [...(vm.workers ?? [])].sort((a, b) => {
     const rank = statusRank(a.state) - statusRank(b.state);
     return rank !== 0 ? rank : a.id.localeCompare(b.id);
@@ -897,12 +910,14 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
   const selectedMcpLines = section === "all" || section === "mcp"
     ? (resources ? mcpLines : mcpLines.slice(1))
     : [];
+  const selectedEvidenceLines = section === "all" ? evidenceLines : [];
   const selectedChangedLines = section === "all" ? changedLines : [];
 
   const activePanels: Array<{ title: string; lines: string[]; key: string }> = [];
   if (selectedInfoLines.length > 0) activePanels.push({ title: "Run", lines: selectedInfoLines, key: "info" });
-  if (selectedWorkerLines.length > 0) activePanels.push({ title: "Workers & TODO", lines: selectedWorkerLines, key: "worker" });
   if (selectedMcpLines.length > 0) activePanels.push({ title: "Resources", lines: selectedMcpLines, key: "mcp" });
+  if (selectedEvidenceLines.length > 0) activePanels.push({ title: "Evidence", lines: selectedEvidenceLines, key: "evidence" });
+  if (selectedWorkerLines.length > 0) activePanels.push({ title: "Workers & TODO", lines: selectedWorkerLines, key: "worker" });
   if (selectedChangedLines.length > 0) activePanels.push({ title: "Changes & History", lines: selectedChangedLines, key: "changed" });
 
   const stickyHeaderLines = [...headerLines];
@@ -968,32 +983,38 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     const panelOverheadRows = activePanels.length * 2;
     const available = Math.max(0, fixedBodyHeight - headerRows - footerRows - panelOverheadRows);
 
-    // Priority-based budget: critical info > active agents/TODO > MCP compact > changed/history
+    // Priority-based budget: critical info > resources > evidence > active agents/TODO > changed/history
     const infoMin = Math.min(selectedInfoLines.length, 3);
     const workerMin = Math.min(selectedWorkerLines.length, section === "all" ? 5 : 8);
     const mcpMin = Math.min(selectedMcpLines.length, 1);
+    const evidenceMin = Math.min(selectedEvidenceLines.length, 1);
     const changedMin = Math.min(selectedChangedLines.length, 1);
 
     let infoBudget = infoMin;
     let workerBudget = workerMin;
     let mcpBudget = mcpMin;
+    let evidenceBudget = evidenceMin;
     let changedBudget = changedMin;
 
-    let remaining = available - (infoBudget + workerBudget + mcpBudget + changedBudget);
+    let remaining = available - (infoBudget + workerBudget + mcpBudget + evidenceBudget + changedBudget);
 
     if (remaining < 0) {
-      // Emergency shrink from lowest priority upward, preserving a compact MCP row when possible.
+      // Emergency shrink from lowest priority upward, preserving a compact row when possible.
       changedBudget = Math.max(0, changedBudget + remaining);
-      remaining = available - (infoBudget + workerBudget + mcpBudget + changedBudget);
+      remaining = available - (infoBudget + workerBudget + mcpBudget + evidenceBudget + changedBudget);
       if (remaining < 0) {
         workerBudget = Math.max(0, workerBudget + remaining);
-        remaining = available - (infoBudget + workerBudget + mcpBudget + changedBudget);
+        remaining = available - (infoBudget + workerBudget + mcpBudget + evidenceBudget + changedBudget);
         if (remaining < 0) {
-          infoBudget = Math.max(selectedInfoLines.length > 0 ? 1 : 0, infoBudget + remaining);
-          remaining = available - (infoBudget + workerBudget + mcpBudget + changedBudget);
+          evidenceBudget = Math.max(0, evidenceBudget + remaining);
+          remaining = available - (infoBudget + workerBudget + mcpBudget + evidenceBudget + changedBudget);
           if (remaining < 0) {
-            mcpBudget = Math.max(0, mcpBudget + remaining);
-            remaining = 0;
+            infoBudget = Math.max(selectedInfoLines.length > 0 ? 1 : 0, infoBudget + remaining);
+            remaining = available - (infoBudget + workerBudget + mcpBudget + evidenceBudget + changedBudget);
+            if (remaining < 0) {
+              mcpBudget = Math.max(0, mcpBudget + remaining);
+              remaining = 0;
+            }
           }
         }
       }
@@ -1016,6 +1037,11 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
       remaining -= extraMcp;
     }
     if (remaining > 0) {
+      const extraEvidence = Math.min(remaining, selectedEvidenceLines.length - evidenceBudget);
+      evidenceBudget += extraEvidence;
+      remaining -= extraEvidence;
+    }
+    if (remaining > 0) {
       changedBudget += remaining;
     }
 
@@ -1024,6 +1050,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
         const budget = p.key === "info" ? infoBudget
           : p.key === "worker" ? workerBudget
           : p.key === "mcp" ? mcpBudget
+          : p.key === "evidence" ? evidenceBudget
           : changedBudget;
         return { title: p.title, lines: fitLines(p.lines, budget) };
       })
