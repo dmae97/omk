@@ -188,6 +188,56 @@ test("/model applies deepseek/pro:max as provider, model, and thinking", async (
   assert.match(result.text, /Thinking: max/);
 });
 
+test("/model applies fable-5:max as model and max thinking", async () => {
+  const commands = new Map(
+    buildNativeChatSlashCommands().map((command) => [command.name, command]),
+  );
+  const model = commands.get("/model");
+  assert.ok(model, "/model should be registered");
+
+  const ctx = {
+    input: { root: process.cwd(), runId: "slash-model-fable-max-test", layout: "plain" },
+    state: {
+      bootstrap: { provider: "openrouter", selectedRuntimeId: "openrouter" },
+      provider: "openrouter",
+      model: "anthropic/claude-fable-5",
+    },
+    env: { OPENROUTER_API_KEY: "test-openrouter-key" },
+  };
+
+  const result = await model.handler(ctx, parseSlashArgs("fable-5:max"));
+  assert.equal(result.ok, true);
+  assert.equal(result.statePatch.model, "anthropic/claude-fable-5");
+  assert.equal(result.statePatch.thinking, "max");
+  assert.equal(ctx.env.OMK_MODEL_VARIANT, "anthropic/claude-fable-5:max");
+  assert.match(result.text, /Thinking: max/);
+});
+
+test("/think max is allowed when current model is fable-5", async () => {
+  const commands = new Map(
+    buildNativeChatSlashCommands().map((command) => [command.name, command]),
+  );
+  const think = commands.get("/think");
+  assert.ok(think, "/think should be registered");
+
+  const ctx = {
+    input: { root: process.cwd(), runId: "slash-think-fable-max-test", layout: "plain" },
+    state: {
+      bootstrap: { provider: "openrouter", selectedRuntimeId: "openrouter" },
+      provider: "openrouter",
+      model: "anthropic/claude-fable-5",
+    },
+    env: {},
+  };
+
+  const result = await think.handler(ctx, parseSlashArgs("max"));
+  assert.equal(result.ok, true);
+  assert.equal(result.statePatch.thinking, "max");
+  assert.equal(ctx.env.OMK_THINKING, "max");
+  assert.equal(ctx.env.OMK_MODEL_VARIANT, "anthropic/claude-fable-5:max");
+  assert.match(result.text, /Thinking variant: max/);
+});
+
 test("/model and /use reject unsupported thinking before mutating state", async () => {
   const commands = new Map(
     buildNativeChatSlashCommands().map((command) => [command.name, command]),
