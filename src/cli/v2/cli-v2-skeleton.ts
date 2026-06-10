@@ -230,7 +230,51 @@ export class DoctorCommand extends OmkCommand {
     description: "Run OMK health checks",
   });
 
+  noColor = Option.Boolean("--no-color", false, { description: "Disable color output (NO_COLOR equivalent)" });
+
+  /** Color-tier / theme / NO_COLOR diagnostic section (theme contract T5a). */
+  private async writeColorThemeSection(): Promise<void> {
+    const { explainColorTier } = await import("../theme/tier-explain.js");
+    const { resolveTheme } = await import("../theme/theme-resolver.js");
+    const { loadThemeDocument, validateThemeDocument } = await import("../theme/theme-doc.js");
+
+    const argv: readonly string[] = this.noColor ? ["--no-color"] : [];
+    const explanation = explainColorTier(argv);
+    const active = resolveTheme({ cwd: this.cwd, flagTheme: this.theme || undefined });
+    const doc = loadThemeDocument(active.name, this.cwd);
+    const schemaStatus = doc === undefined
+      ? "builtin palette (no omk.theme.v1 document)"
+      : ((): string => {
+          const errors = validateThemeDocument(doc);
+          return errors.length === 0 ? "omk.theme.v1 document: valid" : `omk.theme.v1 document: INVALID (${errors.length} error(s): ${errors[0]})`;
+        })();
+
+    if (this.json) {
+      this.context.stdout.write(JSON.stringify({
+        section: "color-theme",
+        tier: explanation.tier,
+        reasons: explanation.reasons,
+        noColorRequested: explanation.noColorRequested,
+        noColorHonored: explanation.noColorHonored,
+        activeTheme: active.name,
+        themeMode: active.mode,
+        schema: schemaStatus,
+      }) + "\n");
+      return;
+    }
+    this.context.stdout.write([
+      "Color tier & theme",
+      `  detected tier : ${explanation.tier}`,
+      `  why           : ${explanation.reasons.join("; ")}`,
+      `  NO_COLOR      : requested=${explanation.noColorRequested ? "yes" : "no"} honored=${explanation.noColorHonored ? "yes" : "no"}`,
+      `  active theme  : ${active.name} (mode ${active.mode})`,
+      `  theme schema  : ${schemaStatus}`,
+      "",
+    ].join("\n"));
+  }
+
   async execute(): Promise<number> {
+    await this.writeColorThemeSection();
     return this.executePipeline("run health checks", "doctor");
   }
 }
@@ -300,38 +344,112 @@ export class ThemeCommand extends OmkCommand {
   });
 
   nameArgs = Option.Rest({ required: 0 });
+  noColor = Option.Boolean("--no-color", false, { description: "Disable color output (NO_COLOR equivalent)" });
+
+  /** Detect the degradation tier, honoring the command's --no-color flag. */
+  private async detectTier(): Promise<"truecolor" | "256" | "16" | "no-color"> {
+    const { detectColorTier } = await import("../theme/terminal-capability.js");
+    return detectColorTier(this.noColor ? ["--no-color"] : []);
+  }
 
   async execute(): Promise<number> {
     const name = this.nameArgs.join(" ").trim();
     const subcommand = this.nameArgs[0] ?? "";
     const target = this.nameArgs.slice(1).join(" ").trim();
 
-    // omk theme list — show all themes with color swatches
+    // omk theme list — active theme + omk.theme.v1 documents + builtin swatches
     if (subcommand === "list") {
       const { renderAllThemePreviews, getBuiltinTheme } = await import(
         "../theme/theme-registry.js"
       );
-      const current = process.env.OMK_THEME ?? "omk";
-      const currentPalette = getBuiltinTheme(current) ?? getBuiltinTheme("omk");
-      this.context.stdout.write(
-        (currentPalette?.render("header", `Current theme: ${current}`) ?? `Current theme: ${current}`) + "\n\n",
+      const { resolveTheme } = await import("../theme/theme-resolver.js");
+      const { listThemeDocuments, loadThemeDocument, validateThemeDocument } = await import(
+        "../theme/theme-doc.js"
       );
+      const active = resolveTheme({ cwd: this.cwd, flagTheme: this.theme || undefined });
+      const tier = await this.detectTier();
+      const currentPalette = getBuiltinTheme(active.name) ?? getBuiltinTheme("omk");
+      this.context.stdout.write(
+        (currentPalette?.render("header", `Active theme: ${active.name}`) ?? `Active theme: ${active.name}`)
+        + ` (mode ${active.mode}, tier ${tier})\n\n`,
+      );
+      const docs = listThemeDocuments(this.cwd);
+      if (docs.length > 0) {
+        this.context.stdout.write("Theme documents (omk.theme.v1):\n");
+        for (const ref of docs) {
+          const doc = loadThemeDocument(ref.name, this.cwd);
+          const valid = doc !== undefined && validateThemeDocument(doc).length === 0;
+          const marker = ref.name === active.name ? "●" : "○";
+          this.context.stdout.write(`  ${marker} ${ref.name} — ${ref.path} (${valid ? "valid" : "INVALID"})\n`);
+        }
+        this.context.stdout.write("\n");
+      }
+      this.context.stdout.write("Built-in palettes:\n");
       this.context.stdout.write(renderAllThemePreviews() + "\n");
       return 0;
     }
 
-    // omk theme preview <name> — show color swatch without switching
+    // omk theme set <name> — validate + persist choice to project config
+    if (subcommand === "set") {
+      if (!target) {
+        this.context.stderr.write("Usage: omk theme set <name>\n");
+        return 2;
+      }
+      const { getBuiltinTheme, listBuiltinThemes } = await import("../theme/theme-registry.js");
+      const { listThemeDocuments } = await import("../theme/theme-doc.js");
+      const docNames = listThemeDocuments(this.cwd).map((r) => r.name);
+      const known = getBuiltinTheme(target) !== undefined || docNames.includes(target);
+      if (!known) {
+        this.context.stderr.write(`Unknown theme: ${target}\n`);
+        this.context.stderr.write(`Available: ${[...new Set([...docNames, ...listBuiltinThemes()])].join(", ")}\n`);
+        return 2;
+      }
+      const { readFile, writeFile } = await import("node:fs/promises");
+      const { resolve } = await import("node:path");
+      const cfgPath = resolve(this.cwd, ".omkrc.json");
+      let existing: Record<string, unknown> = {};
+      try {
+        existing = JSON.parse(await readFile(cfgPath, "utf8")) as Record<string, unknown>;
+      } catch {
+        existing = {};
+      }
+      const next = { ...existing, theme: target };
+      await writeFile(cfgPath, JSON.stringify(next, null, 2) + "\n");
+      process.env.OMK_THEME = target;
+      this.context.stdout.write(`Theme set to: ${target} (persisted to ${cfgPath})\n`);
+      return 0;
+    }
+
+    // omk theme preview <name> — representative status frame at detected tier
+    // (same frame as test/theme-degradation.test.mjs) for omk.theme.v1 docs;
+    // falls back to the builtin palette swatch for registry-only themes.
     if (subcommand === "preview") {
       if (!target) {
         this.context.stderr.write("Usage: omk theme preview <name>\n");
         return 2;
+      }
+      const { loadThemeDocument, listThemeDocuments } = await import("../theme/theme-doc.js");
+      const doc = loadThemeDocument(target, this.cwd);
+      if (doc !== undefined) {
+        const { compileTheme } = await import("../theme/render-table.js");
+        const { renderStatusFrame } = await import("../theme/status-frame.js");
+        const tier = await this.detectTier();
+        const compiled = compileTheme(doc, tier);
+        this.context.stdout.write(`${doc.displayName ?? doc.name} — tier ${tier}\n\n`);
+        this.context.stdout.write(renderStatusFrame(compiled) + "\n");
+        const current = process.env.OMK_THEME ?? "omk";
+        this.context.stdout.write(
+          `\nCurrent theme: ${current}. Use \`omk theme set ${target}\` to switch.\n`,
+        );
+        return 0;
       }
       const { renderThemePreview, getBuiltinTheme, listBuiltinThemes } = await import(
         "../theme/theme-registry.js"
       );
       const palette = getBuiltinTheme(target);
       if (!palette) {
-        const available = listBuiltinThemes().join(", ");
+        const docNames = listThemeDocuments(this.cwd).map((r) => r.name);
+        const available = [...new Set([...docNames, ...listBuiltinThemes()])].join(", ");
         this.context.stderr.write(`Unknown theme: ${target}\n`);
         this.context.stderr.write(`Available: ${available}\n`);
         return 2;
@@ -339,7 +457,7 @@ export class ThemeCommand extends OmkCommand {
       this.context.stdout.write(renderThemePreview(palette) + "\n");
       const current = process.env.OMK_THEME ?? "omk";
       this.context.stdout.write(
-        `\nCurrent theme: ${current}. Use \`omk theme ${target}\` to switch.\n`,
+        `\nCurrent theme: ${current}. Use \`omk theme set ${target}\` to switch.\n`,
       );
       return 0;
     }
