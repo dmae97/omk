@@ -39,6 +39,14 @@ Codex/ChatGPT OAuth proves the Codex CLI login state only. It is not an OpenAI P
 OPENAI_API_KEY=<platform-project-key> omk image generate "OMK control-plane hero" --model gpt-image-2
 ```
 
+You can also run the guided key setup instead of exporting the variable manually:
+
+```bash
+omk openai setup
+```
+
+Do not store the API key in project files; prefer environment variables or a user-local secret store.
+
 See [`openai-platform-image-keys.md`](openai-platform-image-keys.md) for the one-shot key flow.
 
 ## Troubleshooting
@@ -46,3 +54,9 @@ See [`openai-platform-image-keys.md`](openai-platform-image-keys.md) for the one
 - If `codex` is not found, install the official Codex CLI/app or add it to `PATH`.
 - If login status is unclear, run `codex login`, then `omk provider doctor codex --soft`.
 - If MCP import finds nothing, check whether your Codex config has importable MCP servers.
+
+## Security principles
+
+- Never print token/session files.
+- OMK never reuses Codex OAuth values as OpenAI API bearer keys.
+- In shared environments, keep per-provider authentication and project configuration separate.

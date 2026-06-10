@@ -147,10 +147,10 @@ orchestrate_goal({
 ## 7. 문서
 
 ### 7.1 생성된 문서
-1. `headroom-omk-integration.md`: 통합指南
-2. `headroom-omk-usage-examples.md`: 사용 예시
-3. `headroom-omk-setup-guide.md`: 설정指南
-4. `headroom-omk-final-summary.md`: 최종 요약 (본 문서)
+1. `docs/headroom-omk-integration.md`: 통합指南
+2. `docs/headroom-omk-usage-examples.md`: 사용 예시
+3. `docs/headroom-omk-setup-guide.md`: 설정指南
+4. `docs/headroom-omk-final-summary.md`: 최종 요약 (본 문서)
 
 ### 7.2 주요 내용
 - **설치 방법**: headroom 및 OMK extensions 설치

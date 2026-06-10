@@ -101,7 +101,7 @@ OMK CLI는 기능적으로 성숙했으나 구조적 부채가 누적된 상태.
 
 ## 11. OMK CLI V2 런타임 아키텍처 (2026-05-28)
 
-> 아키텍처 문서: `OMK_CLI_V2_RUNTIME_ARCHITECTURE.md` (2058 lines)
+> 아키텍처 문서: `docs/OMK_CLI_V2_RUNTIME_ARCHITECTURE.md` (2058 lines)
 > 구현 진행률: ~85%
 
 ### 11.1 핵심 문제 (해결됨)

@@ -22,6 +22,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # Proof raw artifacts (future dumps only; existing tracked proof evidence is unaffected until separately archived/untracked)
+proof/theme-check/
 proof/**/*.out
 proof/**/*.stderr
 proof/**/*.png
@@ -141,3 +142,16 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Deploy-Exclusion Guard (Lane 1): re-ignore persona stack even under templates/.
+# These MUST come AFTER the templates/.omk and templates/.kimi negations above so
+# the ENI/SOUL/JAILBREAK persona stack can never be tracked or published.
+templates/.kimi/SOUL.md
+templates/.kimi/JAILBREAK.md
+templates/.kimi/soul.md
+templates/.kimi/jailbreak.md
+templates/.omk/prompts/soul.md
+templates/.omk/prompts/jailbreak.md
+templates/.omk/agents/roles/unrestricted-orchestrator.yaml
+templates/**/*SOUL*.md
+templates/**/*JAILBREAK*

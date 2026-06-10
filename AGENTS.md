@@ -25,7 +25,7 @@ Keep these surfaces aligned when editing init/runtime docs:
 - Reasoning Trace Engine: `src/runtime/reasoning-trace.ts` stores intent, plan, tools, evidence, results, privacy. Consent-aware NLG via `src/runtime/nlg-renderer.ts`.
 - Harness: chat agent mode writes `.omk/runs/<run-id>/chat-agent-harness.json`. Prompts carry compact MCP/skills/hooks counts; read the harness manifest for the full inventory.
 - Evidence: `scripts/run-tests.mjs` and OMK verification surfaces record sanitized MCP/skill/hook resource metadata. Do not emit resource secrets, headers, or raw env values.
-- Architecture doc: `OMK_CLI_V2_RUNTIME_ARCHITECTURE.md` (2058 lines), ~85% implemented.
+- Architecture doc: `docs/OMK_CLI_V2_RUNTIME_ARCHITECTURE.md` (2058 lines), ~85% implemented.
 - Obsidian knowledge base: `/home/yu/.openclaw/workspace/llm-wiki/projects/omk/`
 
 ---

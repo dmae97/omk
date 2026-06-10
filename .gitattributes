@@ -1,3 +1,6 @@
 * text=auto eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# Hand-written extension templates; exclude from linguist language stats
+templates/web-bridge/chrome-extension/** linguist-vendored
