@@ -31,7 +31,7 @@
 
 `OMK` (`omk`) turns a coding goal into a bounded, evidence-gated agent run.
 
-Use OMK when one coding agent is not enough: route Codex, OpenCode, Kimi, DeepSeek, Qwen, OpenRouter, and local runtimes through one evidence-gated control loop.
+Use OMK when one coding agent is not enough: route Codex, OpenCode, DeepSeek, Qwen, OpenRouter, MiMo, local runtimes, and optional Kimi-compatible adapters through one evidence-gated control loop.
 
 ## Who is this for?
 
@@ -63,13 +63,13 @@ omk chat
 
 ## Current release reality
 
-- The public npm line is `open-multi-agent-kit@0.78.x`. The source target is `open-multi-agent-kit@0.78.8`;
-  treat npm `latest` as release-truthful only after the tagged release workflow and registry verification both pass.
+- The public npm package is `open-multi-agent-kit@0.78.x`. This source tree targets `open-multi-agent-kit@0.78.8`;
+  treat future npm `latest` claims as release-truthful only after the tagged release workflow and registry verification both pass.
 - The `v1.2` label in docs is a runtime contract family for the source tree, not a claim that
   an npm `1.2.x` stable release exists.
-- Provider support is intentionally uneven: Kimi remains the most mature authority path;
-  Codex/OpenCode/CommandCode depend on local CLIs; MiMo/DeepSeek/Qwen/OpenRouter/local LLM
-  lanes are scoped by the provider-maturity contract.
+- Provider support is intentionally adapter-specific: Codex/OpenCode/CommandCode depend on local CLIs and auth;
+  DeepSeek/Qwen/OpenRouter/MiMo/local LLM lanes follow the provider-maturity contract; optional Kimi-compatible
+  lanes are compatibility adapters, not the OMK package identity or default command surface.
 - Safety and evidence claims apply to the exact adapter, command, and verification gate that
   produced them.
 - Regression Proof Matrix is a release-defense coverage gate, not a stable-release claim.
@@ -96,7 +96,7 @@ The GitHub visual set presents OMK as a Night City Ops Console: route status, DA
 
 | Operator TUI                                                                                                                                                                                            | Runtime flow                                                                                                                                                                                                                            |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| <img src="readmeasset/omk-tui-0.78.0.webp" alt="OMK//CONTROL TUI for OMK 0.78.0 showing Codex App OAuth routing, GPT Image 2 asset lane, DAG lanes, scoped MCP, and evidence gates" /> | <img src="readmeasset/omk-runtime-flow-0.78.0.webp" alt="OMK 0.78.0 runtime flow diagram: user goal, intent classifier, DAG compiler, runtime router, parallel workers, evidence bundle, verify gate, and merge replay inspect loop" /> |
+| <img src="readmeasset/omk-tui-0.78.0.webp" alt="OMK//CONTROL TUI showing Codex App OAuth routing, GPT Image 2 asset lane, DAG lanes, scoped MCP, and evidence gates" /> | <img src="readmeasset/omk-runtime-flow-0.78.0.webp" alt="OMK runtime flow diagram: user goal, intent classifier, DAG compiler, runtime router, parallel workers, evidence bundle, verify gate, and merge replay inspect loop" /> |
 
 | Install lane                                                                     | Provider router                                                                       | Evidence gate                                                                     |
 | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
@@ -112,34 +112,50 @@ The GitHub visual set presents OMK as a Night City Ops Console: route status, DA
 
 ## Install
 
-Requires Node.js `>=20` and npm `>=10`. The [3-minute route](#quickstart-3-minutes) uses the global install; these are the alternatives:
+Requires Node.js `>=20` and npm `>=10`. The [3-minute route](#quickstart-3-minutes) uses the current public package name. Use `open-multi-agent-kit`; legacy Kimi-branded package names are not the active install path.
+
+Global install:
+
+```bash
+npm install -g open-multi-agent-kit@latest
+omk --version
+```
 
 Project/local install:
 
 ```bash
-npm i open-multi-agent-kit
-npx omk --help
+npm install --save-dev open-multi-agent-kit
+npx --no-install omk --help
 ```
 
 No install:
 
 ```bash
-npx -p open-multi-agent-kit omk doctor
+npx -y -p open-multi-agent-kit omk doctor
 ```
 
 ## Quick start
 
-The [3-minute route](#quickstart-3-minutes) is the canonical path. Beyond it, add provider auth and orchestration:
+The [3-minute route](#quickstart-3-minutes) is the canonical path. Beyond it, inspect provider health and then start a control-loop run:
 
 ```bash
-omk codex auth --choice plus-pro # optional; requires official Codex app/CLI login
+omk auth --doctor --soft
+omk provider list
 omk chat --provider auto --mode agent
 omk orchestrate "ship feature" --workers 4 --dry-run
 ```
 
+Optional Codex CLI lane:
+
+```bash
+codex login
+omk codex auth --choice plus-pro --run
+omk provider doctor codex --soft
+```
+
 ## Current runtime algorithm
 
-The canonical algorithm definitions live in [Native Root Runtime Algorithms](docs/native-root-runtime-algorithms.md). README summary:
+The canonical TypeScript runtime definitions live in [Native Root Runtime Algorithms](docs/native-root-runtime-algorithms.md). README summary:
 
 ### 1. Native root turn execution
 
@@ -179,7 +195,7 @@ DAG node
   → TaskResult with selected runtime + fallback chain
 ```
 
-OMK converts DAG context into an adapter-neutral task so Codex, MiMo, Kimi API/print lanes, DeepSeek, Qwen, OpenRouter, local adapters, or future runtimes can participate through the same contract when configured. That contract does not imply equal write/merge authority for every adapter.
+OMK converts DAG context into an adapter-neutral task so Codex, OpenCode/CommandCode, DeepSeek, Qwen, OpenRouter, MiMo, local adapters, optional Kimi-compatible API/print lanes, or future runtimes can participate through the same contract when configured. That contract does not imply equal write/merge authority for every adapter.
 
 ### 4. Intent-aware runtime routing and fallback
 
@@ -204,7 +220,7 @@ Worker prompt
   → OMK_RUN_ID / OMK_NODE_ID / OMK_NODE_ROLE metadata
 ```
 
-Kimi worker prompts use stdin with `--input-format text` where that adapter path applies. All worker environment claims are scoped to the exact adapter and evidence gates; private prompt envelopes and run artifacts remain trusted local data.
+Adapters that support stdin transport receive worker prompts through stdin instead of process argv. Adapter-specific prompt envelopes and scoped agent files are used only when the selected runtime requires them. All worker environment claims are scoped to the exact adapter and evidence gates; private prompt envelopes and run artifacts remain trusted local data.
 
 ## Core loop
 
@@ -279,16 +295,15 @@ Session artifacts (`interview.json`, `spec-delta.json`, `questions.md`, `answers
 
 ## Provider lanes
 
-OMK is provider-neutral, but providers are not equally mature or equally authorized:
+OMK is provider-neutral, but providers are not equally mature or equally authorized. No README command requires a legacy Kimi-branded package; install and run the current `open-multi-agent-kit` package with the `omk` binary.
 
-- **Kimi API / print lanes**: most mature authority path and compatibility fallback when configured.
-- **MiMo**: default/read-review-thinking path when configured; direct workspace-write authority is not claimed for the API runtime.
 - **Codex app / CLI OAuth lanes**: compatibility path through the official Codex CLI/app login; local CLI availability and policy decide what can run.
 - **OpenCode / CommandCode CLI lanes**: compatibility paths when the local CLI and auth are present.
-- **DeepSeek, Qwen, OpenRouter, local LLM adapters**: advisory/read/review/QA/research lanes unless a tested contract grants more authority.
+- **DeepSeek, Qwen, OpenRouter, MiMo, local LLM adapters**: advisory/read/review/QA/research lanes unless a tested contract grants more authority.
+- **Kimi-compatible API / print lanes**: optional compatibility adapter when explicitly configured; not the OMK package identity or default command surface.
 - **GPT Image 2 asset lane**: visual asset workflow only when explicitly selected and separately configured.
 
-See [provider maturity](docs/provider-maturity.md) before treating any non-Kimi lane as an authority/write/merge path.
+See [provider maturity](docs/provider-maturity.md) before treating any lane as an authority/write/merge path.
 
 ## Codex app / OAuth first
 
@@ -331,7 +346,7 @@ What those checks assert before publish:
 - `package.json` and `package-lock.json` agree on `open-multi-agent-kit` and the current package version.
 - The npm tarball exposes `omk`, `omk-project-mcp`, `omk-acp`, and `omk-mcp-host` from `dist/` with executable shebangs.
 - README/docs/changelog/release-truthfulness proof metadata mention the same package version and keep `v1.2` scoped to runtime contracts.
-- The packaged file set includes docs, templates, and provenance-covered README assets while excluding source, tests, local `.omk`/`.kimi` state, logs, tarballs, and secret-shaped files.
+- The packaged file set includes docs, templates, and provenance-covered README assets while excluding source, tests, local `.omk` state, optional adapter-local state such as `.kimi`, logs, tarballs, and secret-shaped files.
 - Published-version claims remain conditional until the tagged workflow and npm registry verification both pass.
 
 ## Contract versions
