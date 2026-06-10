@@ -41,9 +41,9 @@ test("RustForgeRenderer renders OMK Rust Forge copy without provider-specific br
   assert.equal(stdout.join(""), "");
   const output = stderr.join("");
   assert.match(output, /OMK RUST FORGE/i);
-  assert.match(output, /Forge native checks\. Verify the evidence\. Control the loop\./);
+  assert.match(output, /Forge the route\. Verify the evidence\. Control the loop\./);
   assert.match(output, /FORGE run#rust-fo/);
-  assert.match(output, /CARGO safety armed/);
+  assert.match(output, /FORGE route armed/);
   assert.match(output, /SCOPE MCP\/skills\/hooks/);
   assert.match(output, /run cargo-native safety review/);
   assert.doesNotMatch(output, /cargo install|crates\.io|rustup/i);
@@ -114,7 +114,7 @@ test("rust-forge chat intro uses OMK Rust Forge copy", () => {
 
   assert.match(output, /OMK Rust Forge ready/);
   assert.match(output, /OMK\/\/RUST-FORGE/);
-  assert.match(output, /CARGO SAFETY ONLINE/);
+  assert.match(output, /OXIDIZED FORGE ONLINE/);
   assert.match(output, /METRICS \/\/ LIVE/);
   assert.doesNotMatch(output, /THE\s+MATRIX|kimi/i);
 });

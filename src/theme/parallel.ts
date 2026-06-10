@@ -6,7 +6,8 @@
 import figlet from "figlet";
 import gradientString from "gradient-string";
 import { OMK_SIMPLE_ASCII_ART } from "../brand/omk-simple-art.js";
-import { P, BRAND_HEX, colorFromHex } from "../brand/palette.js";
+import { P, BRAND_HEX, colorFromHex, setBrandPaletteTheme } from "../brand/palette.js";
+import { getActiveBrandConsoleLine, getActiveBrandThemeName } from "../brand/theme-compiled.js";
 import { esc, rgb, stripAnsi, padEndAnsi, sanitizeTerminalText, isColorEnabled } from "./ansi.js";
 import { style } from "./colors.js";
 import { box, gradient } from "./layout.js";
@@ -112,11 +113,17 @@ function renderThemedHeroArt(
 }
 
 export function omkCliHero(footer?: string): string {
+  if (process.env.OMK_THEME !== undefined) {
+    setBrandPaletteTheme(process.env.OMK_THEME);
+  }
+  const controlLine = getActiveBrandThemeName() === "rust-forge"
+    ? "OMK//CONTROL · oxidized forge · evidence loop · telemetry bus"
+    : "OMK//CONTROL · neon grid · evidence loop · telemetry bus";
   const heroLines = [
     ...renderFigletTitleLines("OMK", [BRAND_HEX.cyan, BRAND_HEX.purple, BRAND_HEX.magenta, BRAND_HEX.mint]),
     style.creamBold("open-multi-agent-kit"),
-    style.blueBold("Night City Ops Console // cyberpunk metrics wall"),
-    style.phosphorDim("OMK//CONTROL · neon grid · evidence loop · telemetry bus"),
+    style.blueBold(getActiveBrandConsoleLine()),
+    style.phosphorDim(controlLine),
     style.phosphorDim("goal-scoped MCP · skills · hooks · worktrees · replay · memory"),
     "",
     ...renderDefaultHeroArt(),
@@ -243,6 +250,9 @@ export function omkBanner(
   footer?: string,
   theme?: OmkThemeConfig
 ): string {
+  if (process.env.OMK_THEME !== undefined) {
+    setBrandPaletteTheme(process.env.OMK_THEME);
+  }
   if (theme?.banner?.enabled === false) return "";
 
   if (!theme || (!theme.banner && !theme.colors)) {
@@ -290,7 +300,7 @@ export function omkBanner(
   const heroLines: string[] = [
     ...heroTitleLines,
     accentFn(subtitle),
-    mutedFn("Night City Ops Console // cyberpunk metrics wall // provider-neutral orchestration."),
+    mutedFn(`${getActiveBrandConsoleLine()} // provider-neutral orchestration.`),
     mutedFn("goal-scoped MCP · skills · hooks · evidence · worktrees · replay · memory"),
   ];
 

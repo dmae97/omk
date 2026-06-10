@@ -119,7 +119,7 @@ export class RustForgeRenderer implements CliRenderer {
     const root = event.root ? truncate(event.root, Math.max(12, width - 16)) : "root:unknown";
     const shouldRenderScanline = this.motion !== "off" && this.started && this.err.isTTY !== false;
     const routeLine = truncate(`${RUST_FORGE_THEME.symbols.signal} FORGE ${run} · provider:${event.provider} · model:${event.model ?? "auto"}`, width);
-    const statusLine = truncate(`■ CARGO safety armed · VERIFY native evidence · SCOPE MCP/skills/hooks`, width);
+    const statusLine = truncate(`■ FORGE route armed · VERIFY evidence · SCOPE MCP/skills/hooks`, width);
     const rootLine = truncate(`${RUST_FORGE_THEME.symbols.pending} PENDING root ${root}`, width);
 
     const sigilName = this.resolveSigilName();

@@ -24,7 +24,11 @@ import {
   getSystemUsage,
 } from "../../util/theme.js";
 import { renderMatrixRain } from "../../brand/matrix-rain.js";
-import { BRAND_HEX } from "../../brand/palette.js";
+import { BRAND_HEX, setBrandPaletteTheme } from "../../brand/palette.js";
+import {
+  getActiveBrandCockpitDetail,
+  getActiveBrandCockpitSubtitle,
+} from "../../brand/theme-compiled.js";
 import {
   visibleTerminalWidth,
   truncateLine,
@@ -350,6 +354,11 @@ function buildFooter(targetWidth: number, heightMode: string): string {
 }
 
 export async function renderCockpit(options: CockpitRenderOptions = {}) {
+  const requestedBrandTheme = options.theme ?? process.env.OMK_THEME;
+  if (requestedBrandTheme !== undefined) {
+    setBrandPaletteTheme(requestedBrandTheme);
+  }
+
   const width = getTerminalWidth(options.terminalWidth);
   const targetWidth = Math.max(1, width - PANEL_HORIZONTAL_OVERHEAD);
   const fixedFrameHeight = normalizeCockpitFrameHeight(options.height);
@@ -555,8 +564,8 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
       frame: animFrame,
       colors: [BRAND_HEX.cyan, BRAND_HEX.sparkleWhite, BRAND_HEX.sparkleGold, BRAND_HEX.magenta, BRAND_HEX.mint],
     }),
-    style.gray("NEON GRID · GREEN RAIN · METRICS WALL"),
-    style.gray("route · verify · loop · control · evidence gated"),
+    style.gray(getActiveBrandCockpitSubtitle()),
+    style.gray(getActiveBrandCockpitDetail()),
     "",
   ];
 

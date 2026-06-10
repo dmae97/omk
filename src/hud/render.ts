@@ -22,6 +22,8 @@ import {
 import type { HudTheme } from "./types.js";
 import { hudTheme } from "../util/theme.js";
 import { renderWorkingIndicator, type WorkingPhase, type WorkingSpinner } from "../theme/working-indicator.js";
+import { setBrandPaletteTheme } from "../brand/palette.js";
+import { getActiveBrandHudStatus } from "../brand/theme-compiled.js";
 
 import { loadTodos, type TodoItem } from "../util/todo-sync.js";
 import { readSessionMeta, type SessionMeta } from "../util/session.js";
@@ -60,6 +62,8 @@ export interface HudRenderOptions {
   showUptime?: boolean;
   systemRefreshMs?: number;
   thinking?: import("./types.js").HudThinkingEntry[];
+  /** Optional live brand theme override; OMK_THEME is used when this is absent. */
+  theme?: string;
   /** Current working phase for gradient-animated status line */
   workingPhase?: import("../theme/working-indicator.js").WorkingPhase | null;
   /** Spinner animation type (defaults to "braille") */
@@ -357,7 +361,7 @@ function renderNeonControlHeader(runId: string, workingPhase?: WorkingPhase | nu
   const parts = [
     "",
     theme.style.phosphor("OMK//HUD") + "  " + runLabel,
-    theme.style.gray("NEON GRID ONLINE"),
+    theme.style.gray(getActiveBrandHudStatus()),
     theme.style.gray("Route agents. Verify evidence. Control the loop."),
   ];
   if (workingLine) {
@@ -1122,6 +1126,11 @@ async function renderSectionDashboard(options: HudRenderOptions): Promise<string
 }
 
 export async function renderHudDashboard(options: HudRenderOptions = {}): Promise<string> {
+  const requestedBrandTheme = options.theme ?? process.env.OMK_THEME;
+  if (requestedBrandTheme !== undefined) {
+    setBrandPaletteTheme(requestedBrandTheme);
+  }
+
   const width = options.terminalWidth ?? defaultHudTerminalWidth();
 
   if (options.section) {

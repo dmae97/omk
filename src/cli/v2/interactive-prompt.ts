@@ -63,7 +63,7 @@ export async function promptThemeSelection(
     { value: "omk", label: "OMK", hint: "Default colorful theme" },
     { value: "night-city", label: "Night City", hint: "README control image palette" },
     { value: "green-rain", label: "Green Rain", hint: "Phosphor signal console" },
-    { value: "rust-forge", label: "Rust Forge", hint: "Rust/native safety console" },
+    { value: "rust-forge", label: "Rust Forge", hint: "Oxidized forge control console" },
     { value: "neon-circuit", label: "Neon Circuit", hint: "High-energy neon terminal" },
     { value: "matrix", label: "Matrix", hint: "Classic green-on-black phosphor" },
     { value: "minimal", label: "Minimal", hint: "Clean, few colors" },

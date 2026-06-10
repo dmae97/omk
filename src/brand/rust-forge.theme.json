@@ -1,0 +1,72 @@
+{
+  "$schema": "../schemas/omk.theme.v1.schema.json",
+  "schemaVersion": "omk.theme.v1",
+  "name": "rust-forge",
+  "displayName": "OMK Rust Forge — Oxidized Forge Console",
+  "mode": "dark",
+  "primitives": {
+    "iron": "#0E0B09",
+    "forge": "#1A1310",
+    "rust": "#FF6A3D",
+    "copper": "#E08A4B",
+    "ember": "#FFB454",
+    "oxide": "#4FB39B",
+    "verdigris": "#6FD7B8",
+    "crimson": "#FF5468",
+    "steel": "#9FB0BD",
+    "ash": "#C9B8A8",
+    "slag": "#8F7B6D",
+    "bone": "#F2E4D6"
+  },
+  "backgrounds": ["iron", "forge"],
+  "semantics": {
+    "route.active": { "color": "rust", "glyph": "▸", "usage": "text" },
+    "route.fallback": { "color": "copper", "glyph": "↻", "usage": "text" },
+    "route.dead": { "color": "crimson", "glyph": "✕", "usage": "text" },
+    "evidence.pass": { "color": "oxide", "glyph": "✓", "usage": "text" },
+    "evidence.fail": { "color": "crimson", "glyph": "✗", "usage": "text" },
+    "evidence.pending": { "color": "ember", "glyph": "◐", "usage": "text" },
+    "dag.lane.running": { "color": "rust", "glyph": "▶", "usage": "text" },
+    "dag.lane.blocked": { "color": "copper", "glyph": "⏸", "usage": "text" },
+    "dag.lane.done": { "color": "verdigris", "glyph": "●", "usage": "text" },
+    "dag.lane.queued": { "color": "slag", "glyph": "◌", "usage": "text", "adjusted": { "original": "#6E5B4E", "crBefore": 2.86, "crAfter": 4.56 } },
+    "telemetry.info": { "color": "bone", "glyph": "·", "usage": "text" },
+    "telemetry.warn": { "color": "ember", "glyph": "▲", "usage": "text" },
+    "telemetry.error": { "color": "crimson", "glyph": "✖", "usage": "text" },
+    "control.accent": { "color": "rust", "glyph": "◆", "kind": "chrome", "usage": "indicator" },
+    "control.dim": { "color": "steel", "glyph": "┊", "kind": "chrome", "usage": "text" },
+    "control.fg": { "color": "bone", "kind": "chrome", "usage": "text" },
+    "control.bg": { "color": "iron", "kind": "background", "usage": "background" }
+  },
+  "components": {
+    "statusCard": { "border": "control.accent", "title": "control.fg", "body": "telemetry.info", "meta": "control.dim" },
+    "routerTable": { "active": "route.active", "fallback": "route.fallback", "dead": "route.dead", "header": "control.accent" },
+    "evidenceGate": { "pass": "evidence.pass", "fail": "evidence.fail", "pending": "evidence.pending" },
+    "dagLanes": { "running": "dag.lane.running", "blocked": "dag.lane.blocked", "done": "dag.lane.done", "queued": "dag.lane.queued" },
+    "logStream": { "info": "telemetry.info", "warn": "telemetry.warn", "error": "telemetry.error", "dim": "control.dim" }
+  },
+  "fallback16": {
+    "route.active": "brightRed",
+    "route.fallback": "brightYellow",
+    "route.dead": "brightRed",
+    "evidence.pass": "brightGreen",
+    "evidence.fail": "brightRed",
+    "evidence.pending": "brightYellow",
+    "dag.lane.running": "brightRed",
+    "dag.lane.blocked": "brightYellow",
+    "dag.lane.done": "brightGreen",
+    "dag.lane.queued": "white",
+    "telemetry.info": "brightWhite",
+    "telemetry.warn": "brightYellow",
+    "telemetry.error": "brightRed",
+    "control.accent": "brightRed",
+    "control.dim": "white",
+    "control.fg": "brightWhite",
+    "control.bg": "black"
+  },
+  "meta": {
+    "provenance": "Oxidized rust-forge palette for OMK orchestration console. Warm-iron/charcoal backgrounds, rust-orange + copper + ember-amber accents, oxide/verdigris patina greens for pass/done, crimson for fail/dead, warm steel/ash grays, bone/cream foreground. All semantic roles and glyphs mirror night-city for NO_COLOR compatibility.",
+    "tierAssumptions": "16-color tier gated against stock VGA/xterm ANSI values; terminals with remapped ANSI-16 palettes are outside the contract — glyphs are the safety net. NO_COLOR note: control.dim uses ┊ so logStream info (telemetry.info ·) and dim rows stay distinguishable without color.",
+    "omkVersion": "0.78.6"
+  }
+}

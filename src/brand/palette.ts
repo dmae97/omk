@@ -1,96 +1,152 @@
 /**
- * OMK brand color palette — compiled from the night-city theme document
+ * OMK brand color palette -- compiled from active omk.theme.v1 documents
  * (theme contract T5b) plus conversion helpers.
  *
- * Night City colors come from src/brand/night-city.theme.json (snapshot of
- * themes/night-city.theme.json, drift-guarded in test/brand-theme.test.mjs).
- * Families without a theme document yet (matrix rain, rust forge, metrics
- * dashboard, sparkle accents) stay as numeric RGB constants until their own
- * omk.theme.v1 documents land — no hex or SGR literals live in this file.
+ * P and BRAND_HEX keep their public object shapes, but shared brand slots are
+ * updated in place when setBrandPaletteTheme() switches the live brand theme.
+ * Night-city remains the default and preserves the legacy RGB/HEX bytes.
  */
 
-import { nightCityHex, nightCityRgb, rgbToHex } from "./theme-compiled.js";
-import type { BrandRgb } from "./theme-compiled.js";
+import {
+  activeThemeHexByPrimitive,
+  activeThemeHexByRole,
+  activeThemeRgbByRole,
+  getActiveBrandThemeName,
+  rgbToHex,
+  setActiveBrandTheme,
+} from "./theme-compiled.js";
+import type { BrandRgb, BrandThemeName } from "./theme-compiled.js";
 
-export type { BrandRgb } from "./theme-compiled.js";
+export type { BrandRgb, BrandThemeName } from "./theme-compiled.js";
 
 const rgb = (r: number, g: number, b: number): BrandRgb => ({ r, g, b });
 
-export const P = {
-  // ── Night City theme primitives (theme-derived) ──
-  purple: nightCityRgb("purple"),          // primitive "purple"  orchestration/control accent
-  lightPurple: rgb(214, 108, 255),         // neon highlight (no theme primitive yet)
-  darkPurple: rgb(64, 18, 133),            // deep control shadow (no theme primitive yet)
-  pink: nightCityRgb("magenta"),           // primitive "magenta" control/focus accent
-  hotPink: nightCityRgb("magenta"),        // primitive "magenta" hot accent (alias)
-  mint: nightCityRgb("mint"),              // primitive "mint"    telemetry/success
-  darkMint: rgb(0, 196, 153),              // telemetry shadow (no theme primitive yet)
-  orange: nightCityRgb("amber"),           // primitive "amber"   warning/pending
-  red: nightCityRgb("red"),                // primitive "red"     fault/danger
-  blue: nightCityRgb("cyan"),              // primitive "cyan"    route/signal/info
-  cream: nightCityRgb("cream"),            // primitive "cream"   bright console text
-  dark: nightCityRgb("dark"),              // primitive "dark"    cockpit background
-  gray: nightCityRgb("gray"),              // primitive "gray"    muted telemetry
-  skin: rgb(255, 214, 102),                // metric gold (no theme primitive yet)
-  gridLine: rgb(34, 50, 74),               // neon grid border / tmux pane border
+type MutableBrandRgb = { r: number; g: number; b: number };
 
-  // ── Rust forge family (awaiting its own theme document) ──
-  rustOrange: rgb(249, 115, 22),           // Rust/native toolchain accent
-  rustOxide: rgb(124, 45, 18),             // Rust/native warning shadow
-  rustEmber: rgb(255, 122, 24),            // forge sparkle ember
-  rustCrimson: rgb(255, 49, 93),           // forge sparkle crimson
-  cargoGreen: nightCityRgb("mint"),        // primitive "mint"    verified native check
+function rgbByPrimitive(primitive: string): BrandRgb {
+  const parsed = hexToRgb(activeThemeHexByPrimitive(primitive));
+  if (parsed === null) {
+    throw new Error(`brand palette: active primitive "${primitive}" did not resolve to RGB`);
+  }
+  return parsed;
+}
 
-  // ── Matrix family (awaiting its own theme document) ──
-  matrixGreen: nightCityRgb("mint"),       // primitive "mint"    OMK signal phosphor
-  matrixDark: rgb(8, 39, 31),              // success/signal background
-  matrixRainGreen: rgb(0, 255, 65),        // iconic Matrix rain code green
-  matrixDeepBg: rgb(0, 8, 0),              // matrix rain deep background
-  matrixRainDim: rgb(0, 95, 25),           // matrix rain dark green
-  matrixWarningAmber: nightCityRgb("amber"), // primitive "amber" matrix warning amber
-  matrixErrorRed: rgb(255, 50, 50),        // matrix error red
+function isRustForgeActive(): boolean {
+  return getActiveBrandThemeName() === "rust-forge";
+}
 
-  // ── Sparkle ramp accents (decorative highlight ramps) ──
-  sparkleWhite: rgb(244, 255, 255),        // sparkle highlight tip
-  sparkleGold: rgb(255, 209, 102),         // sparkle gold mid-tone
+export function buildBrandPalette() {
+  const rustForge = isRustForgeActive();
+  return {
+    // Shared brand slots driven by active theme semantics.
+    purple: activeThemeRgbByRole("control.accent"),
+    lightPurple: rustForge ? activeThemeRgbByRole("route.fallback") : rgb(214, 108, 255),
+    darkPurple: rustForge ? rgbByPrimitive("forge") : rgb(64, 18, 133),
+    pink: rgbByPrimitive("magenta"),
+    hotPink: rgbByPrimitive("magenta"),
+    mint: activeThemeRgbByRole("evidence.pass"),
+    darkMint: rgb(0, 196, 153),
+    orange: activeThemeRgbByRole("route.fallback"),
+    red: activeThemeRgbByRole("telemetry.error"),
+    blue: activeThemeRgbByRole("route.active"),
+    cream: activeThemeRgbByRole("control.fg"),
+    dark: activeThemeRgbByRole("control.bg"),
+    gray: activeThemeRgbByRole("control.dim"),
+    skin: rgb(255, 214, 102),
+    gridLine: rustForge ? rgbByPrimitive("slag") : rgb(34, 50, 74),
 
-  // ── Metrics theme (professional dashboard, awaiting its own theme doc) ──
-  metricsCyan: rgb(6, 182, 212),           // Metrics primary
-  metricsTeal: rgb(20, 184, 166),          // Metrics secondary
-  metricsNavy: rgb(10, 25, 41),            // Metrics bg dark
-  metricsSlate: rgb(30, 41, 59),           // Metrics bg light
-  metricsSilver: rgb(203, 213, 225),       // Metrics muted text
-  metricsWhite: rgb(241, 245, 249),        // Metrics bright
-  metricsAmber: rgb(245, 158, 11),         // Metrics warning
-  metricsGreen: rgb(34, 197, 94),          // Metrics success
-  metricsRed: rgb(239, 68, 68),            // Metrics error
-  metricsBlue: rgb(59, 130, 246),          // Metrics info
-  metricsViolet: rgb(139, 92, 246),        // Metrics highlight
-} as const;
+    // Rust forge family. Defaults stay legacy for night-city parity.
+    rustOrange: rustForge ? activeThemeRgbByRole("route.active") : rgb(249, 115, 22),
+    rustOxide: rustForge ? activeThemeRgbByRole("route.fallback") : rgb(124, 45, 18),
+    rustEmber: rustForge ? activeThemeRgbByRole("telemetry.warn") : rgb(255, 122, 24),
+    rustCrimson: rustForge ? activeThemeRgbByRole("telemetry.error") : rgb(255, 49, 93),
+    cargoGreen: activeThemeRgbByRole("evidence.pass"),
 
-/**
- * Canonical uppercase hex strings for theme-derived brand colors. Use these
- * wherever a hex string is required (sparkle/gradient ramps, tmux options)
- * instead of hardcoding literals.
- */
-export const BRAND_HEX = {
-  dark: nightCityHex("dark"),
-  surface: nightCityHex("surface"),
-  cyan: nightCityHex("cyan"),
-  mint: nightCityHex("mint"),
-  magenta: nightCityHex("magenta"),
-  purple: nightCityHex("purple"),
-  amber: nightCityHex("amber"),
-  red: nightCityHex("red"),
-  cream: nightCityHex("cream"),
-  muted: nightCityHex("muted"),
-  gray: nightCityHex("gray"),
-  gridLine: rgbToHex(P.gridLine),
-  sparkleWhite: rgbToHex(P.sparkleWhite),
-  sparkleGold: rgbToHex(P.sparkleGold),
-  rustEmber: rgbToHex(P.rustEmber),
-  rustCrimson: rgbToHex(P.rustCrimson),
-} as const;
+    // Matrix family: signal slots follow active success/warn semantics; rain constants stay iconic.
+    matrixGreen: activeThemeRgbByRole("evidence.pass"),
+    matrixDark: rgb(8, 39, 31),
+    matrixRainGreen: rgb(0, 255, 65),
+    matrixDeepBg: rgb(0, 8, 0),
+    matrixRainDim: rgb(0, 95, 25),
+    matrixWarningAmber: activeThemeRgbByRole("telemetry.warn"),
+    matrixErrorRed: rgb(255, 50, 50),
+
+    // Sparkle ramp accents (decorative highlight ramps).
+    sparkleWhite: rgb(244, 255, 255),
+    sparkleGold: rgb(255, 209, 102),
+
+    // Metrics theme constants (professional dashboard specialty palette).
+    metricsCyan: rgb(6, 182, 212),
+    metricsTeal: rgb(20, 184, 166),
+    metricsNavy: rgb(10, 25, 41),
+    metricsSlate: rgb(30, 41, 59),
+    metricsSilver: rgb(203, 213, 225),
+    metricsWhite: rgb(241, 245, 249),
+    metricsAmber: rgb(245, 158, 11),
+    metricsGreen: rgb(34, 197, 94),
+    metricsRed: rgb(239, 68, 68),
+    metricsBlue: rgb(59, 130, 246),
+    metricsViolet: rgb(139, 92, 246),
+  };
+}
+
+export type BrandPalette = ReturnType<typeof buildBrandPalette>;
+
+export function buildBrandHex(palette: BrandPalette) {
+  return {
+    dark: activeThemeHexByRole("control.bg"),
+    surface: activeThemeHexByPrimitive("surface"),
+    cyan: activeThemeHexByRole("route.active"),
+    mint: activeThemeHexByRole("evidence.pass"),
+    magenta: activeThemeHexByPrimitive("magenta"),
+    purple: activeThemeHexByRole("control.accent"),
+    amber: activeThemeHexByRole("route.fallback"),
+    red: activeThemeHexByRole("telemetry.error"),
+    cream: activeThemeHexByRole("control.fg"),
+    muted: activeThemeHexByPrimitive("muted"),
+    gray: activeThemeHexByRole("control.dim"),
+    gridLine: rgbToHex(palette.gridLine),
+    sparkleWhite: rgbToHex(palette.sparkleWhite),
+    sparkleGold: rgbToHex(palette.sparkleGold),
+    rustEmber: rgbToHex(palette.rustEmber),
+    rustCrimson: rgbToHex(palette.rustCrimson),
+  };
+}
+
+export type BrandHex = ReturnType<typeof buildBrandHex>;
+
+export const P: BrandPalette = buildBrandPalette();
+export const BRAND_HEX: BrandHex = buildBrandHex(P);
+
+function assignRgb(target: BrandRgb, next: BrandRgb): void {
+  const mutable = target as MutableBrandRgb;
+  mutable.r = next.r;
+  mutable.g = next.g;
+  mutable.b = next.b;
+}
+
+function updatePaletteInPlace(target: BrandPalette, next: BrandPalette): void {
+  for (const key of Object.keys(next) as Array<keyof BrandPalette>) {
+    assignRgb(target[key], next[key]);
+  }
+}
+
+function updateHexInPlace(target: BrandHex, next: BrandHex): void {
+  for (const key of Object.keys(next) as Array<keyof BrandHex>) {
+    target[key] = next[key];
+  }
+}
+
+export function setBrandPaletteTheme(name: string | undefined): BrandThemeName {
+  const resolved = setActiveBrandTheme(name);
+  updatePaletteInPlace(P, buildBrandPalette());
+  updateHexInPlace(BRAND_HEX, buildBrandHex(P));
+  return resolved;
+}
+
+export function resetBrandPaletteTheme(): BrandThemeName {
+  return setBrandPaletteTheme("night-city");
+}
 
 export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const normalized = hex.replace("#", "").trim();
