@@ -7,6 +7,7 @@ const PROVIDER_LEVELS: Record<string, readonly ThinkingLevel[]> = {
   mimo: ["medium", "high", "xhigh", "max"],
   deepseek: ["off", "high", "xhigh", "max"],
   qwen: ["off", "medium", "high", "max"],
+  anthropic: ["minimal", "low", "medium", "high", "xhigh", "max"],
   openrouter: ["minimal", "low", "medium", "high", "xhigh", "max"],
   codex: ["minimal", "low", "medium", "high", "xhigh"],
 };
@@ -15,7 +16,7 @@ const MODEL_LEVELS: readonly { pattern: RegExp; levels: readonly ThinkingLevel[]
   { pattern: /kimi|mimo/i, levels: PROVIDER_LEVELS.kimi },
   { pattern: /deepseek/i, levels: PROVIDER_LEVELS.deepseek },
   { pattern: /qwen/i, levels: PROVIDER_LEVELS.qwen },
-  { pattern: /claude|sonnet|opus|haiku|gpt|openrouter/i, levels: PROVIDER_LEVELS.openrouter },
+  { pattern: /fable|claude|sonnet|opus|haiku|anthropic|gpt|openrouter/i, levels: PROVIDER_LEVELS.anthropic },
   { pattern: /codex/i, levels: PROVIDER_LEVELS.codex },
 ];
 
