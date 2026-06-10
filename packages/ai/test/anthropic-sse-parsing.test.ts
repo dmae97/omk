@@ -186,4 +186,54 @@ describe("Anthropic raw SSE parsing", () => {
 		expect(result.errorMessage).toBeUndefined();
 		expect(result.content).toEqual([{ type: "text", text: "Hello" }]);
 	});
+
+	it("surfaces refusal stop reason instead of a generic unknown error", async () => {
+		const model = getModel("anthropic", "claude-haiku-4-5");
+		const context: Context = {
+			messages: [{ role: "user", content: "Say hello.", timestamp: Date.now() }],
+		};
+		const response = createSseResponse([
+			{
+				event: "message_start",
+				data: JSON.stringify({
+					type: "message_start",
+					message: {
+						id: "msg_refusal",
+						usage: {
+							input_tokens: 12,
+							output_tokens: 0,
+							cache_read_input_tokens: 0,
+							cache_creation_input_tokens: 0,
+						},
+					},
+				}),
+			},
+			{
+				event: "message_delta",
+				data: JSON.stringify({
+					type: "message_delta",
+					delta: { stop_reason: "refusal" },
+					usage: {
+						input_tokens: 12,
+						output_tokens: 4,
+						cache_read_input_tokens: 0,
+						cache_creation_input_tokens: 0,
+					},
+				}),
+			},
+			{
+				event: "message_stop",
+				data: JSON.stringify({ type: "message_stop" }),
+			},
+		]);
+
+		const stream = streamAnthropic(model, context, {
+			client: createFakeAnthropicClient(response),
+		});
+		const result = await stream.result();
+
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toContain('stop_reason: "refusal"');
+		expect(result.errorMessage).not.toBe("An unknown error occurred");
+	});
 });

@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ENV_AGENT_DIR, PACKAGE_NAME, VERSION } from "../src/config.ts";
+import { APP_NAME, ENV_AGENT_DIR, PACKAGE_NAME, VERSION } from "../src/config.ts";
 import { main } from "../src/main.ts";
 
 describe("package commands", () => {
@@ -12,7 +12,9 @@ describe("package commands", () => {
 	let packageDir: string;
 	let originalCwd: string;
 	let originalAgentDir: string | undefined;
-	let originalPiPackageDir: string | undefined;
+	let originalPackageDir: string | undefined;
+	let originalVersionCheckUrl: string | undefined;
+	let originalOmkCodingAgent: string | undefined;
 	let originalExitCode: typeof process.exitCode;
 	let originalExecPath: string;
 
@@ -32,7 +34,8 @@ describe("package commands", () => {
 
 		originalCwd = process.cwd();
 		originalAgentDir = process.env[ENV_AGENT_DIR];
-		originalPiPackageDir = process.env.PI_PACKAGE_DIR;
+		originalPackageDir = process.env.OMK_PACKAGE_DIR;
+		originalVersionCheckUrl = process.env.OMK_VERSION_CHECK_URL;
 		originalExitCode = process.exitCode;
 		originalExecPath = process.execPath;
 		process.exitCode = undefined;
@@ -49,10 +52,20 @@ describe("package commands", () => {
 		} else {
 			process.env[ENV_AGENT_DIR] = originalAgentDir;
 		}
-		if (originalPiPackageDir === undefined) {
-			delete process.env.PI_PACKAGE_DIR;
+		if (originalPackageDir === undefined) {
+			delete process.env.OMK_PACKAGE_DIR;
 		} else {
-			process.env.PI_PACKAGE_DIR = originalPiPackageDir;
+			process.env.OMK_PACKAGE_DIR = originalPackageDir;
+		}
+		if (originalVersionCheckUrl === undefined) {
+			delete process.env.OMK_VERSION_CHECK_URL;
+		} else {
+			process.env.OMK_VERSION_CHECK_URL = originalVersionCheckUrl;
+		}
+		if (originalOmkCodingAgent === undefined) {
+			delete process.env.OMK_CODING_AGENT;
+		} else {
+			process.env.OMK_CODING_AGENT = originalOmkCodingAgent;
 		}
 		Object.defineProperty(process, "execPath", { value: originalExecPath, configurable: true });
 		rmSync(tempDir, { recursive: true, force: true });
@@ -94,7 +107,7 @@ describe("package commands", () => {
 
 			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
 			expect(stdout).toContain("Usage:");
-			expect(stdout).toContain("pi install <source> [-l]");
+			expect(stdout).toContain(`${APP_NAME} install <source> [-l]`);
 			expect(errorSpy).not.toHaveBeenCalled();
 			expect(process.exitCode).toBeUndefined();
 		} finally {
@@ -111,7 +124,7 @@ describe("package commands", () => {
 
 			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
 			expect(stderr).toContain('Unknown option --unknown for "install".');
-			expect(stderr).toContain('Use "pi --help" or "pi install <source> [-l]".');
+			expect(stderr).toContain(`Use "${APP_NAME} --help" or "${APP_NAME} install <source> [-l]".`);
 			expect(process.exitCode).toBe(1);
 		} finally {
 			errorSpy.mockRestore();
@@ -126,7 +139,7 @@ describe("package commands", () => {
 
 			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
 			expect(stderr).toContain("Missing install source.");
-			expect(stderr).toContain("Usage: pi install <source> [-l]");
+			expect(stderr).toContain(`Usage: ${APP_NAME} install <source> [-l]`);
 			expect(stderr).not.toContain("at ");
 			expect(process.exitCode).toBe(1);
 		} finally {
@@ -141,7 +154,7 @@ describe("package commands", () => {
 		const fakeNpmPath = join(tempDir, "fake-npm.cjs");
 		const recordPath = join(tempDir, "self-update.json");
 		mkdirSync(selfPackageDir, { recursive: true });
-		mkdirSync(join(projectDir, ".pi"), { recursive: true });
+		mkdirSync(join(projectDir, ".omk"), { recursive: true });
 		writeFileSync(
 			fakeNpmPath,
 			`const fs=require("node:fs"),path=require("node:path"),args=process.argv.slice(2),prefix=args[args.indexOf("--prefix")+1];
@@ -154,10 +167,10 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 			JSON.stringify({ npmCommand: [originalExecPath, fakeNpmPath, "--prefix", globalPrefix] }, null, 2),
 		);
 		writeFileSync(
-			join(projectDir, ".pi", "settings.json"),
+			join(projectDir, ".omk", "settings.json"),
 			JSON.stringify({ npmCommand: [originalExecPath, fakeNpmPath, "--prefix", projectPrefix] }, null, 2),
 		);
-		process.env.PI_PACKAGE_DIR = selfPackageDir;
+		process.env.OMK_PACKAGE_DIR = selfPackageDir;
 		Object.defineProperty(process, "execPath", {
 			value: join(selfPackageDir, "dist", "cli.js"),
 			configurable: true,
@@ -184,9 +197,58 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 		}
 	});
 
+	it("treats omk update omk --force as self-update in OMK runtime", async () => {
+		const globalPrefix = join(tempDir, "global-prefix");
+		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@earendil-works", "pi-coding-agent");
+		const fakeNpmPath = join(tempDir, "fake-npm.cjs");
+		const recordPath = join(tempDir, "omk-self-update.json");
+		mkdirSync(selfPackageDir, { recursive: true });
+		mkdirSync(join(projectDir, ".omk"), { recursive: true });
+		mkdirSync(join(projectDir, "omk"), { recursive: true });
+		writeFileSync(
+			fakeNpmPath,
+			`const fs=require("node:fs"),path=require("node:path"),args=process.argv.slice(2),prefix=args[args.indexOf("--prefix")+1];
+if(args.includes("root")) console.log(path.join(prefix,"lib","node_modules"));
+else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
+`,
+		);
+		writeFileSync(
+			join(agentDir, "settings.json"),
+			JSON.stringify({ npmCommand: [originalExecPath, fakeNpmPath, "--prefix", globalPrefix] }, null, 2),
+		);
+		writeFileSync(join(projectDir, ".omk", "settings.json"), JSON.stringify({ packages: ["../omk"] }, null, 2));
+		process.env.OMK_CODING_AGENT = "true";
+		process.env.OMK_PACKAGE_DIR = selfPackageDir;
+		Object.defineProperty(process, "execPath", {
+			value: join(selfPackageDir, "dist", "cli.js"),
+			configurable: true,
+		});
+
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		try {
+			await expect(main(["update", "--help"])).resolves.toBeUndefined();
+			await expect(main(["update", "omk", "--force"])).resolves.toBeUndefined();
+
+			expect(process.exitCode).toBeUndefined();
+			expect(errorSpy).not.toHaveBeenCalled();
+			expect(logSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain("source|self|omk");
+			const recordedArgs = JSON.parse(readFileSync(recordPath, "utf-8")) as string[];
+			expect(recordedArgs).toContain(globalPrefix);
+			expect(recordedArgs).toContain(PACKAGE_NAME);
+			expect(recordedArgs).not.toContain("open-multi-agent-kit");
+			expect(recordedArgs).not.toContain("../omk");
+			expect(recordedArgs).not.toContain("omk");
+		} finally {
+			logSpy.mockRestore();
+			errorSpy.mockRestore();
+		}
+	});
+
 	it("uses the current package name when the update check omits packageName", async () => {
 		const globalPrefix = join(tempDir, "global-prefix");
-		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@mariozechner", "pi-coding-agent");
+		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@earendil-works", "pi-coding-agent");
 		const fakeNpmPath = join(tempDir, "fake-npm.cjs");
 		const recordPath = join(tempDir, "self-update.json");
 		mkdirSync(selfPackageDir, { recursive: true });
@@ -201,7 +263,8 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 			join(agentDir, "settings.json"),
 			JSON.stringify({ npmCommand: [originalExecPath, fakeNpmPath, "--prefix", globalPrefix] }, null, 2),
 		);
-		process.env.PI_PACKAGE_DIR = selfPackageDir;
+		process.env.OMK_PACKAGE_DIR = selfPackageDir;
+		process.env.OMK_VERSION_CHECK_URL = "https://omk.dev/api/latest-version";
 		Object.defineProperty(process, "execPath", {
 			value: join(selfPackageDir, "dist", "cli.js"),
 			configurable: true,
@@ -226,9 +289,9 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 		}
 	});
 
-	it("installs the active package name from the update check during self-update", async () => {
+	it("ignores disallowed package names from the update check during self-update", async () => {
 		const globalPrefix = join(tempDir, "global-prefix");
-		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@mariozechner", "pi-coding-agent");
+		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@earendil-works", "pi-coding-agent");
 		const fakeNpmPath = join(tempDir, "fake-npm.cjs");
 		const recordPath = join(tempDir, "self-update.json");
 		mkdirSync(selfPackageDir, { recursive: true });
@@ -247,16 +310,17 @@ else {
 			join(agentDir, "settings.json"),
 			JSON.stringify({ npmCommand: [originalExecPath, fakeNpmPath, "--prefix", globalPrefix] }, null, 2),
 		);
-		process.env.PI_PACKAGE_DIR = selfPackageDir;
+		process.env.OMK_PACKAGE_DIR = selfPackageDir;
+		process.env.OMK_VERSION_CHECK_URL = "https://omk.dev/api/latest-version";
 		Object.defineProperty(process, "execPath", {
 			value: join(selfPackageDir, "dist", "cli.js"),
 			configurable: true,
 		});
-		const activePackageName = PACKAGE_NAME === "@new-scope/pi" ? "@newer-scope/pi" : "@new-scope/pi";
-		vi.stubGlobal(
-			"fetch",
-			vi.fn(async () => Response.json({ packageName: activePackageName, version: "0.73.0" })),
+		const disallowedPackageName = "open-multi-agent-kit";
+		const fetchMock = vi.fn(async () =>
+			Response.json({ packageName: disallowedPackageName, version: getNewerPatchVersion() }),
 		);
+		vi.stubGlobal("fetch", fetchMock);
 
 		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -266,20 +330,20 @@ else {
 
 			expect(process.exitCode).toBeUndefined();
 			expect(errorSpy).not.toHaveBeenCalled();
+			expect(fetchMock).toHaveBeenCalledOnce();
 			const recordedCalls = JSON.parse(readFileSync(recordPath, "utf-8")) as string[][];
-			expect(recordedCalls).toEqual([
-				expect.arrayContaining(["uninstall", "-g", PACKAGE_NAME]),
-				expect.arrayContaining(["install", "-g", activePackageName]),
-			]);
+			expect(recordedCalls).toEqual([expect.arrayContaining(["install", "-g", PACKAGE_NAME])]);
+			expect(recordedCalls.some((args) => args.includes(disallowedPackageName))).toBe(false);
+			expect(recordedCalls.some((args) => args.includes("uninstall"))).toBe(false);
 		} finally {
 			logSpy.mockRestore();
 			errorSpy.mockRestore();
 		}
 	});
 
-	it("fails self-update when renamed npm package installation fails", async () => {
+	it("fails self-update when current package installation fails after ignoring a disallowed rename", async () => {
 		const globalPrefix = join(tempDir, "global-prefix");
-		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@mariozechner", "pi-coding-agent");
+		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@earendil-works", "pi-coding-agent");
 		const fakeNpmPath = join(tempDir, "fake-npm-fail.cjs");
 		const recordPath = join(tempDir, "self-update-fail.json");
 		mkdirSync(selfPackageDir, { recursive: true });
@@ -300,15 +364,15 @@ if(args.includes("install")) process.exit(23);
 			join(agentDir, "settings.json"),
 			JSON.stringify({ npmCommand: [originalExecPath, fakeNpmPath, "--prefix", globalPrefix] }, null, 2),
 		);
-		process.env.PI_PACKAGE_DIR = selfPackageDir;
+		process.env.OMK_PACKAGE_DIR = selfPackageDir;
 		Object.defineProperty(process, "execPath", {
 			value: join(selfPackageDir, "dist", "cli.js"),
 			configurable: true,
 		});
-		const activePackageName = PACKAGE_NAME === "@new-scope/pi" ? "@newer-scope/pi" : "@new-scope/pi";
+		const disallowedPackageName = "open-multi-agent-kit";
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async () => Response.json({ packageName: activePackageName, version: "0.73.0" })),
+			vi.fn(async () => Response.json({ packageName: disallowedPackageName, version: getNewerPatchVersion() })),
 		);
 
 		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -320,13 +384,12 @@ if(args.includes("install")) process.exit(23);
 			expect(process.exitCode).toBe(1);
 			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
 			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
-			expect(stdout).not.toContain(`Updated pi`);
+			expect(stdout).not.toContain(`Updated ${APP_NAME}`);
 			expect(stderr).toContain("exited with code 23");
 			const recordedCalls = JSON.parse(readFileSync(recordPath, "utf-8")) as string[][];
-			expect(recordedCalls).toEqual([
-				expect.arrayContaining(["uninstall", "-g", PACKAGE_NAME]),
-				expect.arrayContaining(["install", "-g", activePackageName]),
-			]);
+			expect(recordedCalls).toEqual([expect.arrayContaining(["install", "-g", PACKAGE_NAME])]);
+			expect(recordedCalls.some((args) => args.includes(disallowedPackageName))).toBe(false);
+			expect(recordedCalls.some((args) => args.includes("uninstall"))).toBe(false);
 		} finally {
 			logSpy.mockRestore();
 			errorSpy.mockRestore();

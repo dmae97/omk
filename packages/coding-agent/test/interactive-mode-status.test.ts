@@ -1,13 +1,14 @@
 import { homedir } from "node:os";
 import * as path from "node:path";
-import { type AutocompleteProvider, CombinedAutocompleteProvider } from "@earendil-works/pi-tui";
-import { beforeAll, describe, expect, test, vi } from "vitest";
+import { type AutocompleteProvider, CombinedAutocompleteProvider } from "@earendil-works/omk-tui";
+import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { type Component, Container, type Focusable, TUI } from "../../tui/src/tui.ts";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
 import type { AutocompleteProviderFactory } from "../src/core/extensions/types.ts";
 import type { SourceInfo } from "../src/core/source-info.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { createHarness, type Harness } from "./suite/harness.ts";
 
 function renderLastLine(container: Container, width = 120): string {
 	const last = container.children[container.children.length - 1];
@@ -113,6 +114,148 @@ describe("InteractiveMode.showStatus", () => {
 		// adds spacer + text
 		expect(fakeThis.chatContainer.children).toHaveLength(5);
 		expect(renderLastLine(fakeThis.chatContainer)).toContain("STATUS_TWO");
+	});
+});
+
+describe("InteractiveMode.handleThinkCommand", () => {
+	beforeAll(() => {
+		initTheme("dark");
+	});
+
+	test("accepts max and updates session thinking state", () => {
+		const setThinkingLevel = vi.fn((level: string) => {
+			fakeThis.session.thinkingLevel = level;
+		});
+		const fakeThis: any = {
+			session: {
+				thinkingLevel: "high",
+				getAvailableThinkingLevels: () => ["off", "high", "xhigh", "max"],
+				setThinkingLevel,
+			},
+			footer: { invalidate: vi.fn() },
+			updateEditorBorderColor: vi.fn(),
+			showStatus: vi.fn(),
+			showWarning: vi.fn(),
+			showThinkingSelector: vi.fn(),
+		};
+
+		(InteractiveMode as any).prototype.handleThinkCommand.call(fakeThis, "max");
+
+		expect(setThinkingLevel).toHaveBeenCalledWith("max");
+		expect(fakeThis.footer.invalidate).toHaveBeenCalled();
+		expect(fakeThis.updateEditorBorderColor).toHaveBeenCalled();
+		expect(fakeThis.showStatus).toHaveBeenCalledWith("Thinking level: max");
+		expect(fakeThis.showWarning).not.toHaveBeenCalled();
+	});
+
+	test("rejects unsupported max before state mutation", () => {
+		const setThinkingLevel = vi.fn();
+		const fakeThis: any = {
+			session: {
+				thinkingLevel: "high",
+				getAvailableThinkingLevels: () => ["off", "high", "xhigh"],
+				setThinkingLevel,
+			},
+			footer: { invalidate: vi.fn() },
+			updateEditorBorderColor: vi.fn(),
+			showStatus: vi.fn(),
+			showWarning: vi.fn(),
+			showThinkingSelector: vi.fn(),
+		};
+
+		(InteractiveMode as any).prototype.handleThinkCommand.call(fakeThis, "max");
+
+		expect(setThinkingLevel).not.toHaveBeenCalled();
+		expect(fakeThis.showWarning).toHaveBeenCalledWith("Invalid thinking level: max");
+		expect(fakeThis.session.thinkingLevel).toBe("high");
+	});
+});
+
+describe("InteractiveMode.handleModelCommand", () => {
+	const harnesses: Harness[] = [];
+
+	beforeAll(() => {
+		initTheme("dark");
+	});
+
+	afterEach(() => {
+		while (harnesses.length > 0) {
+			harnesses.pop()?.cleanup();
+		}
+	});
+
+	test("resolves deepseek/pro:max to model plus max thinking", async () => {
+		const harness = await createHarness({ models: [{ id: "faux-default", name: "Faux", reasoning: true }] });
+		harnesses.push(harness);
+		const baseModel = harness.models[0];
+		harness.authStorage.setRuntimeApiKey("deepseek", "deepseek-key");
+		harness.session.modelRegistry.registerProvider("deepseek", {
+			baseUrl: baseModel.baseUrl,
+			apiKey: "deepseek-key",
+			api: baseModel.api,
+			models: [
+				{
+					id: "deepseek-v4-pro",
+					name: "DeepSeek V4 Pro",
+					api: baseModel.api,
+					baseUrl: baseModel.baseUrl,
+					reasoning: true,
+					thinkingLevelMap: { minimal: null, low: null, medium: null, high: "high", xhigh: "max", max: "max" },
+					input: baseModel.input,
+					cost: baseModel.cost,
+					contextWindow: baseModel.contextWindow,
+					maxTokens: baseModel.maxTokens,
+				},
+			],
+		});
+
+		const fakeThis: any = {
+			normalizeInteractiveModelQuery: (InteractiveMode as any).prototype.normalizeInteractiveModelQuery,
+			normalizeProviderAlias: (InteractiveMode as any).prototype.normalizeProviderAlias,
+			session: harness.session,
+			footer: { invalidate: vi.fn() },
+			updateEditorBorderColor: vi.fn(),
+			showStatus: vi.fn(),
+			showWarning: vi.fn(),
+			showError: vi.fn(),
+			showModelSelector: vi.fn(),
+			maybeWarnAboutAnthropicSubscriptionAuth: vi.fn(),
+		};
+
+		await (InteractiveMode as any).prototype.handleModelCommand.call(fakeThis, "deepseek/pro:max");
+
+		expect(harness.session.model?.provider).toBe("deepseek");
+		expect(harness.session.model?.id).toBe("deepseek-v4-pro");
+		expect(harness.session.thinkingLevel).toBe("max");
+		expect(fakeThis.showStatus).toHaveBeenCalledWith("Model: deepseek-v4-pro:max");
+		expect(fakeThis.showWarning).not.toHaveBeenCalled();
+		expect(fakeThis.showModelSelector).not.toHaveBeenCalled();
+	});
+	test("opens thinking selector after model picker selection", async () => {
+		const harness = await createHarness({ models: [{ id: "faux-default", name: "Faux", reasoning: true }] });
+		harnesses.push(harness);
+		const model = harness.models[0];
+		const done = vi.fn();
+		const fakeThis: any = {
+			session: harness.session,
+			footer: { invalidate: vi.fn() },
+			updateEditorBorderColor: vi.fn(),
+			showStatus: vi.fn(),
+			showThinkingSelector: vi.fn(),
+			showError: vi.fn(),
+			maybeWarnAboutAnthropicSubscriptionAuth: vi.fn(),
+		};
+
+		await (InteractiveMode as any).prototype.handleModelSelectorSelection.call(fakeThis, model, done);
+
+		expect(harness.session.model?.id).toBe(model.id);
+		expect(fakeThis.footer.invalidate).toHaveBeenCalled();
+		expect(fakeThis.updateEditorBorderColor).toHaveBeenCalled();
+		expect(done).toHaveBeenCalledOnce();
+		expect(fakeThis.showStatus).toHaveBeenCalledWith(`Model: ${model.id}`);
+		expect(fakeThis.showThinkingSelector).toHaveBeenCalledOnce();
+		expect(fakeThis.showError).not.toHaveBeenCalled();
+		expect(done.mock.invocationCallOrder[0]).toBeLessThan(fakeThis.showThinkingSelector.mock.invocationCallOrder[0]);
 	});
 });
 
@@ -592,8 +735,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  @scope/pi-scoped, answer.ts, cli-extension.ts, HazAT/pi-interactive-subagents, HazAT/pi-interactive-subagents:subagents, local-index, pi-markdown-preview, user-index"`);
+			"[Extensions]
+			  8 loaded · @scope/pi-scoped, answer.ts, cli-extension.ts, HazAT/pi-interactive-subagents, +4 more"
+		`);
 	});
 
 	test("adds more parent folders until local extension labels are unique", () => {
@@ -638,8 +782,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  alpha/one, beta/one, gamma/one"`);
+			"[Extensions]
+			  3 loaded · alpha/one, beta/one, gamma/one"
+		`);
 	});
 
 	test("strips index.ts from local extension label, showing parent dir", () => {
@@ -666,8 +811,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  plan-mode"`);
+			"[Extensions]
+			  1 loaded · plan-mode"
+		`);
 	});
 
 	test("strips index.js from local extension label, showing parent dir", () => {
@@ -694,8 +840,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  plan-mode"`);
+			"[Extensions]
+			  1 loaded · plan-mode"
+		`);
 	});
 
 	test("mixed single-file and subdirectory index.ts extensions strip index.ts", () => {
@@ -731,8 +878,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  plan-mode, webfetch.ts"`);
+			"[Extensions]
+			  2 loaded · plan-mode, webfetch.ts"
+		`);
 	});
 
 	test("multiple index.ts with unique parent dirs need no disambiguation", () => {
@@ -768,8 +916,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  bar, foo"`);
+			"[Extensions]
+			  2 loaded · bar, foo"
+		`);
 	});
 
 	test("multiple index.ts with same parent dir name disambiguated with grandparent", () => {
@@ -805,8 +954,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  alpha/tools, beta/tools"`);
+			"[Extensions]
+			  2 loaded · alpha/tools, beta/tools"
+		`);
 	});
 
 	test("non-index file in subdirectory stays as filename", () => {
@@ -833,8 +983,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  main.ts"`);
+			"[Extensions]
+			  1 loaded · main.ts"
+		`);
 	});
 
 	test("package extensions still strip index.ts correctly (regression guard)", () => {
@@ -861,8 +1012,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  pi-markdown-preview"`);
+			"[Extensions]
+			  1 loaded · pi-markdown-preview"
+		`);
 	});
 	test("captures mixed extension layouts in expanded output", () => {
 		const fakeThis = createShowLoadedResourcesThis({
@@ -877,21 +1029,19 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  project
-    /tmp/project/.pi/extensions/answer.ts
-    /tmp/project/.pi/extensions/local-index
-    git:github.com/HazAT/pi-interactive-subagents
-      extensions
-      extensions/subagents
-    npm:@scope/pi-scoped
-      extensions
-    npm:pi-markdown-preview
-      extensions
-  user
-    /tmp/agent/extensions/user-index
-  path
-    /tmp/temp/cli-extension.ts"`);
+			"[Extensions]
+			  project
+			    /tmp/project/.pi/extensions/answer.ts
+			    /tmp/project/.pi/extensions/local-index
+			    git:github.com/HazAT/pi-interactive-subagents
+			      extensions
+			      extensions/subagents
+			    npm:@scope/pi-scoped
+			      extensions
+			    npm:pi-markdown-preview
+			      extensions
+			  … 4 more entries"
+		`);
 	});
 
 	test("shows context paths relative to cwd while preserving full external paths", () => {

@@ -1,4 +1,4 @@
-import { type Model, modelsAreEqual } from "@earendil-works/pi-ai";
+import { getSupportedThinkingLevels, type Model, modelsAreEqual } from "@earendil-works/omk-ai";
 import {
 	Container,
 	type Focusable,
@@ -8,7 +8,7 @@ import {
 	Spacer,
 	Text,
 	type TUI,
-} from "@earendil-works/pi-tui";
+} from "@earendil-works/omk-tui";
 import type { ModelRegistry } from "../../../core/model-registry.ts";
 import type { SettingsManager } from "../../../core/settings-manager.ts";
 import { theme } from "../theme/theme.ts";
@@ -27,6 +27,37 @@ interface ScopedModelItem {
 }
 
 type ModelScope = "all" | "scoped";
+export const ALL_MODEL_PROVIDER_TAB = "all" as const;
+
+export const MODEL_PROVIDER_TAB_ORDER = [
+	"anthropic",
+	"deepseek",
+	"google",
+	"mimo",
+	"minimax",
+	"openai-codex",
+	"openrouter",
+	"zai",
+] as const;
+
+export function modelProviderTabLabel(provider: string): string {
+	if (provider === "xiaomi") return "mimo";
+	if (provider === "xiaomi-token-plan-cn") return "mimo-cn";
+	if (provider === "xiaomi-token-plan-ams") return "mimo-ams";
+	if (provider === "xiaomi-token-plan-sgp") return "mimo-sgp";
+	return provider;
+}
+
+export function buildModelProviderTabs(_providerIds: readonly string[]): string[] {
+	return [ALL_MODEL_PROVIDER_TAB, ...MODEL_PROVIDER_TAB_ORDER];
+}
+
+export function nextModelProviderTab(tabs: readonly string[], activeProvider: string, direction: 1 | -1 = 1): string {
+	if (tabs.length === 0) return ALL_MODEL_PROVIDER_TAB;
+	const currentIndex = tabs.indexOf(activeProvider);
+	const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+	return tabs[(safeIndex + direction + tabs.length) % tabs.length] ?? ALL_MODEL_PROVIDER_TAB;
+}
 
 /**
  * Component that renders a model selector with search
@@ -60,6 +91,12 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	private scope: ModelScope = "all";
 	private scopeText?: Text;
 	private scopeHintText?: Text;
+	private providerTabsText: Text;
+	private providerHintText: Text;
+	private providers: string[] = [];
+	private activeProvider: string = ALL_MODEL_PROVIDER_TAB;
+	private hasAppliedInitialProvider = false;
+	private readonly initialSearchInput?: string;
 
 	constructor(
 		tui: TUI,
@@ -79,6 +116,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		this.modelRegistry = modelRegistry;
 		this.scopedModels = scopedModels;
 		this.scope = scopedModels.length > 0 ? "scoped" : "all";
+		this.initialSearchInput = initialSearchInput;
 		this.onSelectCallback = onSelect;
 		this.onCancelCallback = onCancel;
 
@@ -92,10 +130,11 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			this.addChild(this.scopeText);
 			this.scopeHintText = new Text(this.getScopeHintText(), 0, 0);
 			this.addChild(this.scopeHintText);
-		} else {
-			const hintText = "Only showing models from configured providers. Use /login to add providers.";
-			this.addChild(new Text(theme.fg("warning", hintText), 0, 0));
 		}
+		this.providerTabsText = new Text(theme.fg("muted", "Provider tabs: loading..."), 0, 0);
+		this.addChild(this.providerTabsText);
+		this.providerHintText = new Text(this.getProviderHintText(), 0, 0);
+		this.addChild(this.providerHintText);
 		this.addChild(new Spacer(1));
 
 		// Create search input
@@ -173,11 +212,8 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			id: scoped.model.id,
 			model: scoped.model,
 		}));
-		this.activeModels = this.scope === "scoped" ? this.scopedModelItems : this.allModels;
-		this.filteredModels = this.activeModels;
-		const currentIndex = this.filteredModels.findIndex((item) => modelsAreEqual(this.currentModel, item.model));
-		this.selectedIndex =
-			currentIndex >= 0 ? currentIndex : Math.min(this.selectedIndex, Math.max(0, this.filteredModels.length - 1));
+		this.applyScopeAndProvider();
+		this.debugProviderTabs(this.initialSearchInput ? "/model explicit" : "/model");
 	}
 
 	private sortModels(models: ModelItem[]): ModelItem[] {
@@ -188,9 +224,100 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			const bIsCurrent = modelsAreEqual(this.currentModel, b.model);
 			if (aIsCurrent && !bIsCurrent) return -1;
 			if (!aIsCurrent && bIsCurrent) return 1;
-			return a.provider.localeCompare(b.provider);
+			return a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id);
 		});
 		return sorted;
+	}
+
+	private getBaseModels(): ModelItem[] {
+		return this.scope === "scoped" ? this.scopedModelItems : this.allModels;
+	}
+
+	private getProviderTabs(models: ModelItem[]): string[] {
+		return buildModelProviderTabs(models.map((item) => item.provider)).slice(1);
+	}
+
+	private inferInitialProvider(providerTabs: string[]): string {
+		const query = this.initialSearchInput?.trim().toLowerCase();
+		if (!query) return ALL_MODEL_PROVIDER_TAB;
+
+		const slashIndex = query.indexOf("/");
+		const providerQuery = slashIndex === -1 ? query : query.slice(0, slashIndex);
+		const providerQueryTab = modelProviderTabLabel(providerQuery);
+		const matched = providerTabs.find(
+			(provider) => provider.toLowerCase() === providerQuery || provider === providerQueryTab,
+		);
+		return matched ?? ALL_MODEL_PROVIDER_TAB;
+	}
+
+	private getProviderLabel(provider: string): string {
+		if (provider === "xiaomi") return "mimo";
+		if (provider === "xiaomi-token-plan-cn") return "mimo-cn";
+		if (provider === "xiaomi-token-plan-ams") return "mimo-ams";
+		if (provider === "xiaomi-token-plan-sgp") return "mimo-sgp";
+		return provider;
+	}
+
+	private getProviderHintText(): string {
+		if (this.scopedModelItems.length > 0) {
+			return theme.fg("muted", "Provider tabs reflect the current all/scoped model set.");
+		}
+		return keyHint("tui.input.tab", "provider") + theme.fg("muted", " (provider tab)");
+	}
+
+	private getProviderTabsText(): string {
+		const labels = [ALL_MODEL_PROVIDER_TAB, ...this.providers].map((provider) => {
+			const label = provider === ALL_MODEL_PROVIDER_TAB ? ALL_MODEL_PROVIDER_TAB : this.getProviderLabel(provider);
+			const marker = this.activeProvider === provider ? "●" : "○";
+			const tab = `[${marker} ${label}]`;
+			return this.activeProvider === provider ? theme.fg("accent", tab) : theme.fg("muted", tab);
+		});
+		return `${theme.fg("muted", "Provider tabs: ")}${labels.join(theme.fg("muted", " "))}`;
+	}
+
+	private updateProviderTabs(): void {
+		this.providerTabsText.setText(this.getProviderTabsText());
+		this.providerHintText.setText(this.getProviderHintText());
+	}
+
+	private debugProviderTabs(key: string, previousActiveProvider?: string): void {
+		if (process.env.OMK_DEBUG_MODEL_TABS !== "1") return;
+
+		const baseModels = this.getBaseModels();
+		const providerIds = [...new Set(baseModels.map((item) => item.provider))];
+		const tabs = [ALL_MODEL_PROVIDER_TAB, ...this.providers];
+		const active = previousActiveProvider ?? this.activeProvider;
+		const next = previousActiveProvider ? ` next=${this.activeProvider}` : "";
+		const runtimeProvider = this.currentModel ? modelProviderTabLabel(this.currentModel.provider) : "unknown";
+		const runtimeModel = this.currentModel?.id ?? "unknown";
+		process.stderr.write(
+			`[model-tabs] providerIds=${providerIds.join(",")} tabs=${tabs.join(",")} active=${active} key=${key}${next} runtime=${runtimeProvider}/${runtimeModel} rows=${this.activeModels.length}\n`,
+		);
+	}
+
+	private applyScopeAndProvider(): void {
+		const baseModels = this.getBaseModels();
+		this.providers = this.getProviderTabs(baseModels);
+
+		if (!this.hasAppliedInitialProvider) {
+			this.activeProvider = this.inferInitialProvider(this.providers);
+			this.hasAppliedInitialProvider = true;
+		}
+
+		const tabs = [ALL_MODEL_PROVIDER_TAB, ...this.providers];
+		if (!tabs.includes(this.activeProvider)) {
+			this.activeProvider = ALL_MODEL_PROVIDER_TAB;
+		}
+
+		this.activeModels =
+			this.activeProvider === ALL_MODEL_PROVIDER_TAB
+				? baseModels
+				: baseModels.filter((item) => modelProviderTabLabel(item.provider) === this.activeProvider);
+		this.filteredModels = this.activeModels;
+		const currentIndex = this.filteredModels.findIndex((item) => modelsAreEqual(this.currentModel, item.model));
+		this.selectedIndex =
+			currentIndex >= 0 ? currentIndex : Math.min(this.selectedIndex, Math.max(0, this.filteredModels.length - 1));
+		this.updateProviderTabs();
 	}
 
 	private getScopeText(): string {
@@ -206,13 +333,22 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	private setScope(scope: ModelScope): void {
 		if (this.scope === scope) return;
 		this.scope = scope;
-		this.activeModels = this.scope === "scoped" ? this.scopedModelItems : this.allModels;
-		const currentIndex = this.activeModels.findIndex((item) => modelsAreEqual(this.currentModel, item.model));
-		this.selectedIndex = currentIndex >= 0 ? currentIndex : 0;
+		this.activeProvider = ALL_MODEL_PROVIDER_TAB;
+		this.applyScopeAndProvider();
 		this.filterModels(this.searchInput.getValue());
 		if (this.scopeText) {
 			this.scopeText.setText(this.getScopeText());
 		}
+	}
+
+	private cycleProvider(): void {
+		const tabs = [ALL_MODEL_PROVIDER_TAB, ...this.providers];
+		if (tabs.length <= 1) return;
+		const previousActiveProvider = this.activeProvider;
+		this.activeProvider = nextModelProviderTab(tabs, this.activeProvider, 1);
+		this.applyScopeAndProvider();
+		this.filterModels(this.searchInput.getValue());
+		this.debugProviderTabs("Tab", previousActiveProvider);
 	}
 
 	private filterModels(query: string): void {
@@ -246,17 +382,16 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			const isCurrent = modelsAreEqual(this.currentModel, item.model);
 
 			let line = "";
+			const providerBadge = theme.fg("muted", `[${this.getProviderLabel(item.provider)}]`);
+			const checkmark = isCurrent ? theme.fg("success", " ✓") : "";
+			const maxHint = this.getMaxThinkingVariantHint(item.model);
 			if (isSelected) {
 				const prefix = theme.fg("accent", "→ ");
 				const modelText = `${item.id}`;
-				const providerBadge = theme.fg("muted", `[${item.provider}]`);
-				const checkmark = isCurrent ? theme.fg("success", " ✓") : "";
-				line = `${prefix + theme.fg("accent", modelText)} ${providerBadge}${checkmark}`;
+				line = `${prefix + theme.fg("accent", modelText)} ${providerBadge}${checkmark}${maxHint}`;
 			} else {
 				const modelText = `  ${item.id}`;
-				const providerBadge = theme.fg("muted", `[${item.provider}]`);
-				const checkmark = isCurrent ? theme.fg("success", " ✓") : "";
-				line = `${modelText} ${providerBadge}${checkmark}`;
+				line = `${modelText} ${providerBadge}${checkmark}${maxHint}`;
 			}
 
 			this.listContainer.addChild(new Text(line, 0, 0));
@@ -281,7 +416,16 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			const selected = this.filteredModels[this.selectedIndex];
 			this.listContainer.addChild(new Spacer(1));
 			this.listContainer.addChild(new Text(theme.fg("muted", `  Model Name: ${selected.model.name}`), 0, 0));
+			this.listContainer.addChild(
+				new Text(theme.fg("muted", `  Thinking: ${getSupportedThinkingLevels(selected.model).join(" · ")}`), 0, 0),
+			);
 		}
+	}
+
+	private getMaxThinkingVariantHint(model: Model<any>): string {
+		const levels = getSupportedThinkingLevels(model);
+		if (!levels.includes("max")) return "";
+		return `${theme.fg("muted", "  max:")} ${theme.fg("accent", `${model.id}:max`)}`;
 	}
 
 	handleInput(keyData: string): void {
@@ -293,6 +437,8 @@ export class ModelSelectorComponent extends Container implements Focusable {
 				if (this.scopeHintText) {
 					this.scopeHintText.setText(this.getScopeHintText());
 				}
+			} else {
+				this.cycleProvider();
 			}
 			return;
 		}

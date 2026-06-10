@@ -524,6 +524,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 
 			type Block = (ThinkingContent | TextContent | (ToolCall & { partialJson: string })) & { index: number };
 			const blocks = output.content as Block[];
+			let rawStopReason: string | undefined;
 
 			for await (const event of iterateAnthropicEvents(response, options?.signal)) {
 				if (event.type === "message_start") {
@@ -660,6 +661,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 					}
 				} else if (event.type === "message_delta") {
 					if (event.delta.stop_reason) {
+						rawStopReason = event.delta.stop_reason;
 						output.stopReason = mapStopReason(event.delta.stop_reason);
 					}
 					// Only update usage fields if present (not null).
@@ -688,7 +690,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 			}
 
 			if (output.stopReason === "aborted" || output.stopReason === "error") {
-				throw new Error("An unknown error occurred");
+				throw new Error(describeErrorStopReason(rawStopReason));
 			}
 
 			stream.push({ type: "done", reason: output.stopReason, message: output });
@@ -1200,6 +1202,24 @@ function convertTools(
 			...(cacheControl && index === tools.length - 1 ? { cache_control: cacheControl } : {}),
 		};
 	});
+}
+
+/**
+ * Build an actionable error message for streams that end with an error-mapped
+ * stop reason. Without this, refusal/safety stops surface as
+ * "An unknown error occurred" and the real cause is lost.
+ */
+function describeErrorStopReason(rawStopReason?: string): string {
+	switch (rawStopReason) {
+		case "refusal":
+			return 'Claude declined to continue this response (stop_reason: "refusal"). Retry the request, rephrase it, or start a fresh session if earlier context keeps triggering the refusal.';
+		case "sensitive":
+			return 'The response was stopped by Anthropic safety filters (stop_reason: "sensitive"). Rephrase the request or remove the flagged content and retry.';
+		default:
+			return rawStopReason
+				? `The stream ended with an error stop reason (stop_reason: "${rawStopReason}").`
+				: "An unknown error occurred";
+	}
 }
 
 function mapStopReason(reason: Anthropic.Messages.StopReason | string): StopReason {

@@ -5,16 +5,16 @@ Sessions are stored as JSONL (JSON Lines) files. Each line is a JSON object with
 ## File Location
 
 ```
-~/.pi/agent/sessions/--<path>--/<timestamp>_<uuid>.jsonl
+~/.omk/agent/sessions/--<path>--/<timestamp>_<uuid>.jsonl
 ```
 
 Where `<path>` is the working directory with `/` replaced by `-`.
 
 ## Deleting Sessions
 
-Sessions can be removed by deleting their `.jsonl` files under `~/.pi/agent/sessions/`.
+Sessions can be removed by deleting their `.jsonl` files under `~/.omk/agent/sessions/`.
 
-Pi also supports deleting sessions interactively from `/resume` (select a session and press `Ctrl+D`, then confirm). When available, pi uses the `trash` CLI to avoid permanent deletion.
+OMK also supports deleting sessions interactively from `/resume` (select a session and press `Ctrl+D`, then confirm). When available, OMK uses the `trash` CLI to avoid permanent deletion.
 
 ## Session Version
 
@@ -34,7 +34,7 @@ Source on GitHub ([pi-mono](https://github.com/earendil-works/pi-mono)):
 - [`packages/ai/src/types.ts`](https://github.com/earendil-works/pi-mono/blob/main/packages/ai/src/types.ts) - Base message types (UserMessage, AssistantMessage, ToolResultMessage)
 - [`packages/agent/src/types.ts`](https://github.com/earendil-works/pi-mono/blob/main/packages/agent/src/types.ts) - AgentMessage union type
 
-For TypeScript definitions in your project, inspect `node_modules/@earendil-works/pi-coding-agent/dist/` and `node_modules/@earendil-works/pi-ai/dist/`.
+For TypeScript definitions in your project, inspect `node_modules/@earendil-works/omk-coding-agent/dist/` and `node_modules/@earendil-works/omk-ai/dist/`.
 
 ## Message Types
 
@@ -69,7 +69,7 @@ interface ToolCall {
 }
 ```
 
-### Base Message Types (from pi-ai)
+### Base Message Types (from the core AI package)
 
 ```typescript
 interface UserMessage {
@@ -116,7 +116,7 @@ interface Usage {
 }
 ```
 
-### Extended Message Types (from pi-coding-agent)
+### Extended Message Types (from the coding-agent package)
 
 ```typescript
 interface BashExecutionMessage {
@@ -282,7 +282,7 @@ Set `label` to `undefined` to clear a label.
 
 ### SessionInfoEntry
 
-Session metadata (e.g., user-defined display name). Set via `/name`, `--name` / `-n`, or `pi.setSessionName()` in extensions.
+Session metadata (e.g., user-defined display name). Set via `/name`, `--name` / `-n`, or `runtime.setSessionName()` in extensions.
 
 ```json
 {"type":"session_info","id":"k1l2m3n4","parentId":"j0k1l2m3","timestamp":"2024-12-03T14:35:00.000Z","name":"Refactor auth module"}

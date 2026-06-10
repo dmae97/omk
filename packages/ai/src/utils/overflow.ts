@@ -22,7 +22,7 @@ import type { AssistantMessage } from "../types.ts";
  * - LM Studio: "tokens to keep from the initial prompt is greater than the context length"
  * - GitHub Copilot: "prompt token count of X exceeds the limit of Y"
  * - MiniMax: "invalid params, context window exceeds limit"
- * - Kimi For Coding: "Your request exceeded model token limit: X (requested: Y)"
+ * - Anthropic-compatible coding APIs: "Your request exceeded model token limit: X (requested: Y)"
  * - Cerebras: "400/413 status code (no body)"
  * - Mistral: "Prompt contains X tokens ... too large for model with Y maximum context length"
  * - z.ai: Does NOT error, accepts overflow silently - handled via usage.input > contextWindow
@@ -47,7 +47,7 @@ const OVERFLOW_PATTERNS = [
 	/exceeds the available context size/i, // llama.cpp server
 	/greater than the context length/i, // LM Studio
 	/context window exceeds limit/i, // MiniMax
-	/exceeded model token limit/i, // Kimi For Coding
+	/exceeded model token limit/i, // Anthropic-compatible coding APIs
 	/too large for model with \d+ maximum context length/i, // Mistral
 	/model_context_window_exceeded/i, // z.ai non-standard finish_reason surfaced as error text
 	/prompt too long; exceeded (?:max )?context length/i, // Ollama explicit overflow error
@@ -96,7 +96,7 @@ const NON_OVERFLOW_PATTERNS = [
  * - Together AI: "The input (X tokens) is longer than the model's context length (Y tokens)."
  * - llama.cpp: "exceeds the available context size"
  * - LM Studio: "greater than the context length"
- * - Kimi For Coding: "exceeded model token limit: X (requested: Y)"
+ * - Anthropic-compatible coding APIs: "exceeded model token limit: X (requested: Y)"
  *
  * **Unreliable detection:**
  * - z.ai: Sometimes accepts overflow silently (detectable via usage.input > contextWindow),

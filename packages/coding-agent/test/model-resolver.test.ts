@@ -1,4 +1,4 @@
-import type { Model } from "@earendil-works/pi-ai";
+import type { Model } from "@earendil-works/omk-ai";
 import { describe, expect, test } from "vitest";
 import {
 	defaultModelPerProvider,
@@ -390,6 +390,26 @@ describe("default model selection", () => {
 		expect(defaultModelPerProvider["vercel-ai-gateway"]).toBe("zai/glm-5.1");
 	});
 
+	test("provider-neutral defaults avoid Kimi-branded fallback models", () => {
+		const fallbackDefaults = [
+			defaultModelPerProvider.openrouter,
+			defaultModelPerProvider.huggingface,
+			defaultModelPerProvider.fireworks,
+			defaultModelPerProvider.together,
+			defaultModelPerProvider.opencode,
+			defaultModelPerProvider["opencode-go"],
+			defaultModelPerProvider["cloudflare-workers-ai"],
+			defaultModelPerProvider["cloudflare-ai-gateway"],
+		];
+
+		for (const defaultModel of fallbackDefaults) {
+			expect(defaultModel).toBeDefined();
+			expect(defaultModel).not.toMatch(/kimi/i);
+		}
+		expect(defaultModelPerProvider.moonshotai).toBeUndefined();
+		expect(defaultModelPerProvider["moonshotai-cn"]).toBeUndefined();
+	});
+
 	test("findInitialModel accepts explicit provider custom model ids", async () => {
 		const registry = {
 			getAll: () => allModels,
@@ -409,16 +429,16 @@ describe("default model selection", () => {
 
 	test("findInitialModel selects ai-gateway default when available", async () => {
 		const aiGatewayModel: Model<"anthropic-messages"> = {
-			id: "anthropic/claude-opus-4-6",
-			name: "Claude Opus 4.6",
+			id: "gpt-5.4",
+			name: "GPT-5.4",
 			api: "anthropic-messages",
 			provider: "vercel-ai-gateway",
 			baseUrl: "https://ai-gateway.vercel.sh",
 			reasoning: true,
 			input: ["text", "image"],
-			cost: { input: 5, output: 15, cacheRead: 0.5, cacheWrite: 5 },
-			contextWindow: 200000,
-			maxTokens: 8192,
+			cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 0 },
+			contextWindow: 272000,
+			maxTokens: 128000,
 		};
 
 		const registry = {
@@ -432,6 +452,6 @@ describe("default model selection", () => {
 		});
 
 		expect(result.model?.provider).toBe("vercel-ai-gateway");
-		expect(result.model?.id).toBe("anthropic/claude-opus-4-6");
+		expect(result.model?.id).toBe("gpt-5.4");
 	});
 });

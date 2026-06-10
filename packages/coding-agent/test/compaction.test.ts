@@ -1,6 +1,6 @@
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
-import { getModel } from "@earendil-works/pi-ai";
+import type { AgentMessage } from "@earendil-works/omk-agent-core";
+import type { AssistantMessage, Usage } from "@earendil-works/omk-ai";
+import { getModel } from "@earendil-works/omk-ai";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -225,7 +225,7 @@ describe("getLastAssistantUsage", () => {
 });
 
 describe("shouldCompact", () => {
-	it("should return true when context exceeds threshold", () => {
+	it("should trigger at the 90% utilization threshold by default", () => {
 		const settings: CompactionSettings = {
 			enabled: true,
 			reserveTokens: 10000,
@@ -233,7 +233,32 @@ describe("shouldCompact", () => {
 		};
 
 		expect(shouldCompact(95000, 100000, settings)).toBe(true);
+		// Exactly at 90% triggers (>= semantics).
+		expect(shouldCompact(90000, 100000, settings)).toBe(true);
+		// Just below 90% does not.
+		expect(shouldCompact(89999, 100000, settings)).toBe(false);
 		expect(shouldCompact(89000, 100000, settings)).toBe(false);
+	});
+
+	it("should ignore reserveTokens for the trigger point (90% semantics)", () => {
+		const small: CompactionSettings = { enabled: true, reserveTokens: 1000, keepRecentTokens: 20000 };
+		const large: CompactionSettings = { enabled: true, reserveTokens: 50000, keepRecentTokens: 20000 };
+
+		// Both settings share the same 90% trigger regardless of reserveTokens.
+		expect(shouldCompact(90000, 100000, small)).toBe(true);
+		expect(shouldCompact(90000, 100000, large)).toBe(true);
+		expect(shouldCompact(89000, 100000, small)).toBe(false);
+		expect(shouldCompact(89000, 100000, large)).toBe(false);
+	});
+
+	it("should honor an explicit threshold override", () => {
+		const settings: CompactionSettings = { enabled: true, reserveTokens: 10000, keepRecentTokens: 20000 };
+
+		expect(shouldCompact(80000, 100000, settings, 0.8)).toBe(true);
+		expect(shouldCompact(79999, 100000, settings, 0.8)).toBe(false);
+		// Threshold is clamped to [0.5, 0.99].
+		expect(shouldCompact(50000, 100000, settings, 0.1)).toBe(true);
+		expect(shouldCompact(49999, 100000, settings, 0.1)).toBe(false);
 	});
 
 	it("should return false when disabled", () => {
@@ -244,6 +269,11 @@ describe("shouldCompact", () => {
 		};
 
 		expect(shouldCompact(95000, 100000, settings)).toBe(false);
+	});
+
+	it("should return false for a non-positive context window", () => {
+		const settings: CompactionSettings = { enabled: true, reserveTokens: 10000, keepRecentTokens: 20000 };
+		expect(shouldCompact(95000, 0, settings)).toBe(false);
 	});
 });
 

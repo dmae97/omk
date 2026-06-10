@@ -57,6 +57,14 @@ export {
 	parseKey,
 	setKittyProtocolActive,
 } from "./keys.ts";
+export {
+	formatOmkStatusLine,
+	getOmkStatusSegments,
+	OMK_BRAND_LABEL,
+	type OmkStatusKind,
+	type OmkStatusSegment,
+	type OmkStatusSnapshot,
+} from "./omk-status.ts";
 // Input buffering for batch splitting
 export { StdinBuffer, type StdinBufferEventMap, type StdinBufferOptions } from "./stdin-buffer.ts";
 // Terminal interface and implementations

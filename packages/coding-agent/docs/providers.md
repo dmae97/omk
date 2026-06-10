@@ -1,6 +1,6 @@
 # Providers
 
-Pi supports subscription-based providers via OAuth and API key providers via environment variables or auth file. For each provider, pi knows all available models. The list is updated with every pi release.
+OMK supports subscription-based providers via OAuth and API key providers via environment variables or auth file. For each provider, OMK knows all available models. The list is updated with every release.
 
 ## Table of Contents
 
@@ -19,7 +19,7 @@ Use `/login` in interactive mode, then select a provider:
 - Claude Pro/Max
 - GitHub Copilot
 
-Use `/logout` to clear credentials. Tokens are stored in `~/.pi/agent/auth.json` and auto-refresh when expired.
+Use `/logout` to clear credentials. Tokens are stored in `~/.omk/agent/auth.json` and auto-refresh when expired.
 
 ### OpenAI Codex
 
@@ -43,7 +43,7 @@ Use `/login` in interactive mode and select a provider to store an API key in `a
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-pi
+omk
 ```
 
 | Provider | Environment Variable | `auth.json` key |
@@ -82,7 +82,7 @@ Reference for environment variables and `auth.json` keys: [`const envMap`](https
 
 #### Auth File
 
-Store credentials in `~/.pi/agent/auth.json`:
+Store credentials in `~/.omk/agent/auth.json`:
 
 ```json
 {

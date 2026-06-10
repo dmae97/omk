@@ -12,7 +12,7 @@
           "path": "quickstart.md"
         },
         {
-          "title": "Using Pi",
+          "title": "Using OMK",
           "path": "usage.md"
         },
         {
@@ -61,7 +61,7 @@
           "path": "themes.md"
         },
         {
-          "title": "Pi Packages",
+          "title": "OMK Packages",
           "path": "packages.md"
         },
         {

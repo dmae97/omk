@@ -1,13 +1,14 @@
 {
-	"name": "@earendil-works/pi-coding-agent",
-	"version": "0.78.0",
-	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
+	"name": "@earendil-works/omk-coding-agent",
+	"version": "0.78.6",
+	"description": "Standalone OMK coding-agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
-	"piConfig": {
-		"configDir": ".pi"
+	"omkConfig": {
+		"name": "omk",
+		"configDir": ".omk"
 	},
 	"bin": {
-		"pi": "dist/cli.js"
+		"omk": "dist/omk.js"
 	},
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
@@ -31,29 +32,31 @@
 	],
 	"scripts": {
 		"clean": "shx rm -rf dist",
-		"build": "tsgo -p tsconfig.build.json && shx chmod +x dist/cli.js && npm run copy-assets",
-		"build:binary": "npm --prefix ../tui run build && npm --prefix ../ai run build && npm --prefix ../agent run build && npm run build && bun build --compile ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile dist/pi && npm run copy-binary-assets",
-		"copy-assets": "shx mkdir -p dist/modes/interactive/theme && shx cp src/modes/interactive/theme/*.json dist/modes/interactive/theme/ && shx mkdir -p dist/modes/interactive/assets && shx cp src/modes/interactive/assets/*.png dist/modes/interactive/assets/ && shx mkdir -p dist/core/export-html/vendor && shx cp src/core/export-html/template.html src/core/export-html/template.css src/core/export-html/template.js dist/core/export-html/ && shx cp src/core/export-html/vendor/*.js dist/core/export-html/vendor/",
-		"copy-binary-assets": "shx cp package.json dist/ && shx cp README.md dist/ && shx cp CHANGELOG.md dist/ && shx mkdir -p dist/theme && shx cp src/modes/interactive/theme/*.json dist/theme/ && shx mkdir -p dist/assets && shx cp src/modes/interactive/assets/*.png dist/assets/ && shx mkdir -p dist/export-html/vendor && shx cp src/core/export-html/template.html dist/export-html/ && shx cp src/core/export-html/vendor/*.js dist/export-html/vendor/ && shx cp -r docs dist/ && shx cp -r examples dist/ && shx cp ../../node_modules/@silvia-odwyer/photon-node/photon_rs_bg.wasm dist/",
+		"build": "tsgo -p tsconfig.build.json && shx chmod +x dist/omk.js dist/cli.js && npm run copy-assets",
+		"build:binary": "npm --prefix ../tui run build && npm --prefix ../ai run build && npm --prefix ../agent run build && npm run build && bun build --compile ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile dist/omk && npm run copy-binary-assets",
+		"copy-assets": "shx cp package.json dist/ && shx mkdir -p dist/modes/interactive/theme && shx cp src/modes/interactive/theme/*.json dist/modes/interactive/theme/ && shx mkdir -p dist/modes/interactive/assets && shx cp src/modes/interactive/assets/*.png src/modes/interactive/assets/*.webp dist/modes/interactive/assets/ && shx mkdir -p dist/core/export-html/vendor && shx cp src/core/export-html/template.html src/core/export-html/template.css src/core/export-html/template.js dist/core/export-html/ && shx cp src/core/export-html/vendor/*.js dist/core/export-html/vendor/",
+		"copy-binary-assets": "shx cp package.json dist/ && shx cp README.md dist/ && shx cp CHANGELOG.md dist/ && shx mkdir -p dist/theme && shx cp src/modes/interactive/theme/*.json dist/theme/ && shx mkdir -p dist/assets && shx cp src/modes/interactive/assets/*.png src/modes/interactive/assets/*.webp dist/assets/ && shx mkdir -p dist/export-html/vendor && shx cp src/core/export-html/template.html dist/export-html/ && shx cp src/core/export-html/vendor/*.js dist/export-html/vendor/ && shx cp -r docs dist/ && shx cp -r examples dist/ && shx cp ../../node_modules/@silvia-odwyer/photon-node/photon_rs_bg.wasm dist/",
 		"test": "vitest --run",
 		"shrinkwrap": "node ../../scripts/generate-coding-agent-shrinkwrap.mjs",
 		"prepublishOnly": "npm run clean && npm run build && npm run shrinkwrap"
 	},
 	"dependencies": {
-		"@earendil-works/pi-agent-core": "^0.78.0",
-		"@earendil-works/pi-ai": "^0.78.0",
-		"@earendil-works/pi-tui": "^0.78.0",
+		"@earendil-works/omk-agent-core": "^0.78.6",
+		"@earendil-works/omk-ai": "^0.78.6",
+		"@earendil-works/omk-tui": "^0.78.6",
 		"@silvia-odwyer/photon-node": "0.3.4",
 		"chalk": "5.6.2",
 		"cross-spawn": "7.0.6",
 		"diff": "8.0.4",
 		"glob": "13.0.6",
+		"gradient-string": "3.0.0",
 		"highlight.js": "10.7.3",
 		"hosted-git-info": "9.0.3",
 		"ignore": "7.0.5",
 		"jiti": "2.7.0",
 		"minimatch": "10.2.5",
 		"proper-lockfile": "4.1.2",
+		"string-width": "4.2.3",
 		"typebox": "1.1.38",
 		"undici": "8.3.0",
 		"yaml": "2.9.0"
@@ -88,11 +91,6 @@
 	],
 	"author": "Mario Zechner",
 	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/earendil-works/pi.git",
-		"directory": "packages/coding-agent"
-	},
 	"engines": {
 		"node": ">=22.19.0"
 	}

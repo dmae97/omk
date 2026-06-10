@@ -16,7 +16,7 @@ import {
 	Spacer,
 	Text,
 	type TUI,
-} from "@earendil-works/pi-tui";
+} from "@earendil-works/omk-tui";
 import type { KeybindingsManager } from "../../../core/keybindings.ts";
 import { getEditorTheme, theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
@@ -117,7 +117,7 @@ export class ExtensionEditorComponent extends Container implements Focusable {
 		}
 
 		const currentText = this.editor.getText();
-		const tmpFile = path.join(os.tmpdir(), `pi-extension-editor-${Date.now()}.md`);
+		const tmpFile = path.join(os.tmpdir(), `omk-extension-editor-${Date.now()}.md`);
 
 		try {
 			fs.writeFileSync(tmpFile, currentText, "utf-8");

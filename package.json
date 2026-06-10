@@ -1,5 +1,5 @@
 {
-	"name": "pi-monorepo",
+	"name": "omk-monorepo",
 	"private": true,
 	"type": "module",
 	"workspaces": [
@@ -50,7 +50,7 @@
 	"engines": {
 		"node": ">=22.19.0"
 	},
-	"version": "0.0.3",
+	"version": "0.78.6",
 	"overrides": {
 		"rimraf": "6.1.2",
 		"gaxios": {

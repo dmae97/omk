@@ -22,8 +22,8 @@ import type {
 	AgentState,
 	AgentTool,
 	ThinkingLevel,
-} from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai";
+} from "@earendil-works/omk-agent-core";
+import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/omk-ai";
 import {
 	clampThinkingLevel,
 	cleanupSessionResources,
@@ -32,11 +32,12 @@ import {
 	modelsAreEqual,
 	resetApiProviders,
 	streamSimple,
-} from "@earendil-works/pi-ai";
+} from "@earendil-works/omk-ai";
 import { theme } from "../modes/interactive/theme/theme.ts";
 import { stripFrontmatter } from "../utils/frontmatter.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { sleep } from "../utils/sleep.ts";
+import { resolveAdaptiveHeadroomThreshold } from "./adaptive-runtime.ts";
 import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth-guidance.ts";
 import { type BashResult, executeBashWithOperations } from "./bash-executor.ts";
 import {
@@ -247,7 +248,7 @@ interface ToolDefinitionEntry {
 // ============================================================================
 
 /** Standard thinking levels */
-const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high"];
+const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 // ============================================================================
 // AgentSession Class
@@ -1445,7 +1446,7 @@ export class AgentSession {
 		}
 
 		const previousModel = this.model;
-		const thinkingLevel = this._getThinkingLevelForModelSwitch();
+		const thinkingLevel = this._getThinkingLevelForModelSwitch(model);
 		this.agent.state.model = model;
 		this.sessionManager.appendModelChange(model.provider, model.id);
 		this.settingsManager.setDefaultModelAndProvider(model.provider, model.id);
@@ -1480,7 +1481,7 @@ export class AgentSession {
 		const len = scopedModels.length;
 		const nextIndex = direction === "forward" ? (currentIndex + 1) % len : (currentIndex - 1 + len) % len;
 		const next = scopedModels[nextIndex];
-		const thinkingLevel = this._getThinkingLevelForModelSwitch(next.thinkingLevel);
+		const thinkingLevel = this._getThinkingLevelForModelSwitch(next.model, next.thinkingLevel);
 
 		// Apply model
 		this.agent.state.model = next.model;
@@ -1510,7 +1511,7 @@ export class AgentSession {
 		const nextIndex = direction === "forward" ? (currentIndex + 1) % len : (currentIndex - 1 + len) % len;
 		const nextModel = availableModels[nextIndex];
 
-		const thinkingLevel = this._getThinkingLevelForModelSwitch();
+		const thinkingLevel = this._getThinkingLevelForModelSwitch(nextModel);
 		this.agent.state.model = nextModel;
 		this.sessionManager.appendModelChange(nextModel.provider, nextModel.id);
 		this.settingsManager.setDefaultModelAndProvider(nextModel.provider, nextModel.id);
@@ -1588,9 +1589,13 @@ export class AgentSession {
 		return !!this.model?.reasoning;
 	}
 
-	private _getThinkingLevelForModelSwitch(explicitLevel?: ThinkingLevel): ThinkingLevel {
+	private _getThinkingLevelForModelSwitch(targetModel?: Model<any>, explicitLevel?: ThinkingLevel): ThinkingLevel {
 		if (explicitLevel !== undefined) {
 			return explicitLevel;
+		}
+		const modelThinkingLevel = targetModel ? this.settingsManager.getModelThinkingLevel(targetModel) : undefined;
+		if (modelThinkingLevel) {
+			return modelThinkingLevel as ThinkingLevel;
 		}
 		if (!this.supportsThinking()) {
 			return this.settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL;
@@ -1864,7 +1869,11 @@ export class AgentSession {
 		} else {
 			contextTokens = calculateContextTokens(assistantMessage.usage);
 		}
-		if (shouldCompact(contextTokens, contextWindow, settings)) {
+		// Adaptive headroom threshold (default 90%); falls back to the compaction default when disabled.
+		const headroomThreshold = resolveAdaptiveHeadroomThreshold(process.env);
+		if (
+			shouldCompact(contextTokens, contextWindow, settings, headroomThreshold > 0 ? headroomThreshold : undefined)
+		) {
 			return await this._runAutoCompaction("threshold", false);
 		}
 		return false;

@@ -28,6 +28,8 @@ describe("formatSkillsForSystemPrompt", () => {
 		expect(formatSkillsForSystemPrompt([visibleSkill, disabledSkill, secondSkill])).toBe(
 			`The following skills provide specialized instructions for specific tasks.
 Read the full skill file when the task matches its description.
+Treat skills as OMK DAG lanes: activate only the skills that match the current role, intent, and available MCP/tool envelope.
+When a selected skill implies hooks or MCP usage, keep the request scoped and report which capability was actually used.
 When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.
 
 <available_skills>

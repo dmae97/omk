@@ -49,7 +49,6 @@ export type KnownProvider =
 	| "together"
 	| "opencode"
 	| "opencode-go"
-	| "kimi-coding"
 	| "cloudflare-workers-ai"
 	| "cloudflare-ai-gateway"
 	| "xiaomi"
@@ -62,7 +61,7 @@ export type KnownImagesProvider = "openrouter";
 
 export type ImagesProvider = KnownImagesProvider | string;
 
-export type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh";
+export type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type ModelThinkingLevel = "off" | ThinkingLevel;
 export type ThinkingLevelMap = Partial<Record<ModelThinkingLevel, string | null>>;
 

@@ -12,8 +12,8 @@ import {
 	type OAuthCredentials,
 	type OAuthLoginCallbacks,
 	type OAuthProviderId,
-} from "@earendil-works/pi-ai";
-import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from "@earendil-works/pi-ai/oauth";
+} from "@earendil-works/omk-ai";
+import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from "@earendil-works/omk-ai/oauth";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
@@ -275,12 +275,13 @@ export class AuthStorage {
 		}
 	}
 
-	private persistProviderChange(provider: string, credential: AuthCredential | undefined): void {
+	private persistProviderChange(provider: string, credential: AuthCredential | undefined): AuthStorageData {
 		if (this.loadError) {
-			return;
+			throw this.loadError;
 		}
 
 		try {
+			let nextData: AuthStorageData = {};
 			this.storage.withLock((current) => {
 				const currentData = this.parseStorageData(current);
 				const merged: AuthStorageData = { ...currentData };
@@ -289,10 +290,13 @@ export class AuthStorage {
 				} else {
 					delete merged[provider];
 				}
+				nextData = merged;
 				return { result: undefined, next: JSON.stringify(merged, null, 2) };
 			});
+			return nextData;
 		} catch (error) {
 			this.recordError(error);
+			throw error;
 		}
 	}
 
@@ -307,16 +311,14 @@ export class AuthStorage {
 	 * Set credential for a provider.
 	 */
 	set(provider: string, credential: AuthCredential): void {
-		this.data[provider] = credential;
-		this.persistProviderChange(provider, credential);
+		this.data = this.persistProviderChange(provider, credential);
 	}
 
 	/**
 	 * Remove credential for a provider.
 	 */
 	remove(provider: string): void {
-		delete this.data[provider];
-		this.persistProviderChange(provider, undefined);
+		this.data = this.persistProviderChange(provider, undefined);
 	}
 
 	/**

@@ -1,10 +1,10 @@
-> pi can create TUI components. Ask it to build one for your use case.
+> OMK can create TUI components. Ask it to build one for your use case.
 
 # TUI Components
 
 Extensions and custom tools can render custom TUI components for interactive user interfaces. This page covers the component system and available building blocks.
 
-**Source:** [`@earendil-works/pi-tui`](https://github.com/earendil-works/pi-mono/tree/main/packages/tui)
+**Source:** [`@earendil-works/omk-tui`](https://github.com/earendil-works/pi-mono/tree/main/packages/tui)
 
 ## Component Interface
 
@@ -33,7 +33,7 @@ The TUI appends a full SGR reset and OSC 8 reset at the end of each rendered lin
 Components that display a text cursor and need IME (Input Method Editor) support should implement the `Focusable` interface:
 
 ```typescript
-import { CURSOR_MARKER, type Component, type Focusable } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, type Component, type Focusable } from "@earendil-works/omk-tui";
 
 class MyInput implements Component, Focusable {
   focused: boolean = false;  // Set by TUI when focus changes
@@ -52,14 +52,14 @@ When a `Focusable` component has focus, TUI:
 3. Positions the hardware terminal cursor at that location
 4. Shows the hardware cursor only when `showHardwareCursor` is enabled
 
-The cursor remains hidden by default. This keeps the fake cursor rendering, while still positioning the hardware cursor for terminals that track IME candidate windows with hidden cursors. Some terminals require a visible hardware cursor for IME positioning; enable it with `showHardwareCursor`, `setShowHardwareCursor(true)`, or `PI_HARDWARE_CURSOR=1`. The `Editor` and `Input` built-in components already implement this interface.
+The cursor remains hidden by default. This keeps the fake cursor rendering, while still positioning the hardware cursor for terminals that track IME candidate windows with hidden cursors. Some terminals require a visible hardware cursor for IME positioning; enable it with `showHardwareCursor`, `setShowHardwareCursor(true)`, or `OMK_HARDWARE_CURSOR=1`. The `Editor` and `Input` built-in components already implement this interface.
 
 ### Container Components with Embedded Inputs
 
 When a container component (dialog, selector, etc.) contains an `Input` or `Editor` child, the container must implement `Focusable` and propagate the focus state to the child. Otherwise, the hardware cursor won't be positioned correctly for IME input.
 
 ```typescript
-import { Container, type Focusable, Input } from "@earendil-works/pi-tui";
+import { Container, type Focusable, Input } from "@earendil-works/omk-tui";
 
 class SearchDialog extends Container implements Focusable {
   private searchInput: Input;
@@ -188,10 +188,10 @@ See [overlay-qa-tests.ts](../examples/extensions/overlay-qa-tests.ts) for compre
 
 ## Built-in Components
 
-Import from `@earendil-works/pi-tui`:
+Import from `@earendil-works/omk-tui`:
 
 ```typescript
-import { Text, Box, Container, Spacer, Markdown } from "@earendil-works/pi-tui";
+import { Text, Box, Container, Spacer, Markdown } from "@earendil-works/omk-tui";
 ```
 
 ### Text
@@ -273,7 +273,7 @@ const image = new Image(
 Use `matchesKey()` for key detection:
 
 ```typescript
-import { matchesKey, Key } from "@earendil-works/pi-tui";
+import { matchesKey, Key } from "@earendil-works/omk-tui";
 
 handleInput(data: string) {
   if (matchesKey(data, Key.up)) {
@@ -299,7 +299,7 @@ handleInput(data: string) {
 **Critical:** Each line from `render()` must not exceed the `width` parameter.
 
 ```typescript
-import { visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
+import { visibleWidth, truncateToWidth } from "@earendil-works/omk-tui";
 
 render(width: number): string[] {
   // Truncate long lines
@@ -320,7 +320,7 @@ Example: Interactive selector
 import {
   matchesKey, Key,
   truncateToWidth, visibleWidth
-} from "@earendil-works/pi-tui";
+} from "@earendil-works/omk-tui";
 
 class MySelector {
   private items: string[];
@@ -434,8 +434,8 @@ renderResult(result, options, theme, context) {
 **For Markdown**, use `getMarkdownTheme()`:
 
 ```typescript
-import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
-import { Markdown } from "@earendil-works/pi-tui";
+import { getMarkdownTheme } from "@earendil-works/omk-coding-agent";
+import { Markdown } from "@earendil-works/omk-tui";
 
 renderResult(result, options, theme, context) {
   const mdTheme = getMarkdownTheme();
@@ -454,10 +454,10 @@ interface MyTheme {
 
 ## Debug logging
 
-Set `PI_TUI_WRITE_LOG` to capture the raw ANSI stream written to stdout.
+Set `OMK_TUI_WRITE_LOG` to capture the raw ANSI stream written to stdout.
 
 ```bash
-PI_TUI_WRITE_LOG=/tmp/tui-ansi.log npx tsx packages/tui/test/chat-simple.ts
+OMK_TUI_WRITE_LOG=/tmp/tui-ansi.log npx tsx packages/tui/test/chat-simple.ts
 ```
 
 ## Performance
@@ -596,12 +596,12 @@ These patterns cover the most common UI needs in extensions. **Copy these patter
 
 ### Pattern 1: Selection Dialog (SelectList)
 
-For letting users pick from a list of options. Use `SelectList` from `@earendil-works/pi-tui` with `DynamicBorder` for framing.
+For letting users pick from a list of options. Use `SelectList` from `@earendil-works/omk-tui` with `DynamicBorder` for framing.
 
 ```typescript
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { DynamicBorder } from "@earendil-works/pi-coding-agent";
-import { Container, type SelectItem, SelectList, Text } from "@earendil-works/pi-tui";
+import type { ExtensionAPI } from "@earendil-works/omk-coding-agent";
+import { DynamicBorder } from "@earendil-works/omk-coding-agent";
+import { Container, type SelectItem, SelectList, Text } from "@earendil-works/omk-tui";
 
 pi.registerCommand("pick", {
   handler: async (_args, ctx) => {
@@ -659,7 +659,7 @@ pi.registerCommand("pick", {
 For operations that take time and should be cancellable. `BorderedLoader` shows a spinner and handles escape to cancel.
 
 ```typescript
-import { BorderedLoader } from "@earendil-works/pi-coding-agent";
+import { BorderedLoader } from "@earendil-works/omk-coding-agent";
 
 pi.registerCommand("fetch", {
   handler: async (_args, ctx) => {
@@ -688,11 +688,11 @@ pi.registerCommand("fetch", {
 
 ### Pattern 3: Settings/Toggles (SettingsList)
 
-For toggling multiple settings. Use `SettingsList` from `@earendil-works/pi-tui` with `getSettingsListTheme()`.
+For toggling multiple settings. Use `SettingsList` from `@earendil-works/omk-tui` with `getSettingsListTheme()`.
 
 ```typescript
-import { getSettingsListTheme } from "@earendil-works/pi-coding-agent";
-import { Container, type SettingItem, SettingsList, Text } from "@earendil-works/pi-tui";
+import { getSettingsListTheme } from "@earendil-works/omk-coding-agent";
+import { Container, type SettingItem, SettingsList, Text } from "@earendil-works/omk-tui";
 
 pi.registerCommand("settings", {
   handler: async (_args, ctx) => {
@@ -831,8 +831,8 @@ Token stats available via `ctx.sessionManager.getBranch()` and `ctx.model`.
 Replace the main input editor with a custom implementation. Useful for modal editing (vim), different keybindings (emacs), or specialized input handling.
 
 ```typescript
-import { CustomEditor, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
+import { CustomEditor, type ExtensionAPI } from "@earendil-works/omk-coding-agent";
+import { matchesKey, truncateToWidth } from "@earendil-works/omk-tui";
 
 type Mode = "normal" | "insert";
 

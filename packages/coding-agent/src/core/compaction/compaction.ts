@@ -5,9 +5,9 @@
  * and after compaction the session is reloaded.
  */
 
-import type { AgentMessage, StreamFn, ThinkingLevel } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, Context, Model, SimpleStreamOptions, Usage } from "@earendil-works/pi-ai";
-import { completeSimple } from "@earendil-works/pi-ai";
+import type { AgentMessage, StreamFn, ThinkingLevel } from "@earendil-works/omk-agent-core";
+import type { AssistantMessage, Context, Model, SimpleStreamOptions, Usage } from "@earendil-works/omk-ai";
+import { completeSimple } from "@earendil-works/omk-ai";
 import {
 	convertToLlm,
 	createBranchSummaryMessage,
@@ -214,11 +214,32 @@ export function estimateContextTokens(messages: AgentMessage[]): ContextUsageEst
 }
 
 /**
- * Check if compaction should trigger based on context usage.
+ * Default auto-compaction trigger as a fraction of the context window.
+ *
+ * Compaction now uses utilization semantics (trigger at 90% of the context
+ * window by default) instead of a fixed reserve-token margin. `reserveTokens`
+ * still drives the summarization budget, but no longer the trigger point.
  */
-export function shouldCompact(contextTokens: number, contextWindow: number, settings: CompactionSettings): boolean {
+export const DEFAULT_COMPACTION_THRESHOLD = 0.9;
+const MIN_COMPACTION_THRESHOLD = 0.5;
+const MAX_COMPACTION_THRESHOLD = 0.99;
+
+/**
+ * Check if compaction should trigger based on context usage.
+ *
+ * Triggers when utilization (contextTokens / contextWindow) meets `threshold`
+ * (default 0.90, clamped to [0.5, 0.99]). `settings.enabled` is always honored.
+ */
+export function shouldCompact(
+	contextTokens: number,
+	contextWindow: number,
+	settings: CompactionSettings,
+	threshold: number = DEFAULT_COMPACTION_THRESHOLD,
+): boolean {
 	if (!settings.enabled) return false;
-	return contextTokens > contextWindow - settings.reserveTokens;
+	if (!Number.isFinite(contextWindow) || contextWindow <= 0) return false;
+	const clamped = Math.min(MAX_COMPACTION_THRESHOLD, Math.max(MIN_COMPACTION_THRESHOLD, threshold));
+	return contextTokens / contextWindow >= clamped;
 }
 
 // ============================================================================

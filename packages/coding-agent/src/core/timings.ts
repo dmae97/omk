@@ -1,9 +1,10 @@
 /**
  * Central timing instrumentation for startup profiling.
- * Enable with PI_TIMING=1 environment variable.
+ * Enable with the hardforked OMK_TIMING runtime environment variable.
  */
+import { ENV_TIMING_ALIASES, isAliasedEnvFlagEnabled } from "../config.ts";
 
-const ENABLED = process.env.PI_TIMING === "1";
+const ENABLED = isAliasedEnvFlagEnabled(ENV_TIMING_ALIASES);
 const timings: Array<{ label: string; ms: number }> = [];
 let lastTime = Date.now();
 

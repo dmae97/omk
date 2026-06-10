@@ -11,6 +11,14 @@ import type { Terminal } from "./terminal.ts";
 import { deleteKittyImage, getCapabilities, isImageLine, setCellDimensions } from "./terminal-image.ts";
 import { extractSegments, normalizeTerminalOutput, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils.ts";
 
+function readRuntimeEnv(omkName: string, piName: string): string | undefined {
+	return process.env[omkName] ?? process.env[piName];
+}
+
+function isRuntimeFlagEnabled(omkName: string, piName: string): boolean {
+	const value = readRuntimeEnv(omkName, piName);
+	return value === "1" || value === "true";
+}
 const KITTY_SEQUENCE_PREFIX = "\x1b_G";
 
 function extractKittyImageIds(line: string): number[] {
@@ -38,11 +46,14 @@ function extractKittyImageIds(line: string): number[] {
  */
 export interface Component {
 	/**
-	 * Render the component to lines for the given viewport width
+	 * Render the component to lines for the given viewport width.
+	 * The optional height is the visible terminal viewport height; components
+	 * that need screen-pinned layout may use it, and all others can ignore it.
 	 * @param width - Current viewport width
+	 * @param height - Current viewport height when known
 	 * @returns Array of strings, each representing a line
 	 */
-	render(width: number): string[];
+	render(width: number, height?: number): string[];
 
 	/**
 	 * Optional handler for keyboard input when component has focus
@@ -247,10 +258,10 @@ export class Container implements Component {
 		}
 	}
 
-	render(width: number): string[] {
+	render(width: number, height?: number): string[] {
 		const lines: string[] = [];
 		for (const child of this.children) {
-			const childLines = child.render(width);
+			const childLines = child.render(width, height);
 			for (const line of childLines) {
 				lines.push(line);
 			}
@@ -279,12 +290,13 @@ export class TUI extends Container {
 	private static readonly MIN_RENDER_INTERVAL_MS = 16;
 	private cursorRow = 0; // Logical cursor row (end of rendered content)
 	private hardwareCursorRow = 0; // Actual terminal cursor row (may differ due to IME positioning)
-	private showHardwareCursor = process.env.PI_HARDWARE_CURSOR === "1";
-	private clearOnShrink = process.env.PI_CLEAR_ON_SHRINK === "1"; // Clear empty rows when content shrinks (default: off)
+	private showHardwareCursor = isRuntimeFlagEnabled("OMK_HARDWARE_CURSOR", "PI_HARDWARE_CURSOR");
+	private clearOnShrink = isRuntimeFlagEnabled("OMK_CLEAR_ON_SHRINK", "PI_CLEAR_ON_SHRINK"); // Clear empty rows when content shrinks (default: off)
 	private maxLinesRendered = 0; // Track terminal's working area (max lines ever rendered)
 	private previousViewportTop = 0; // Track previous viewport top for resize-aware cursor moves
+	private fullscreenViewport = false;
 	private fullRedrawCount = 0;
-	private stopped = false;
+	private stopped = true;
 
 	// Overlay stack for modal components rendered on top of base content
 	private focusOrderCounter = 0;
@@ -327,6 +339,16 @@ export class TUI extends Container {
 	 */
 	setClearOnShrink(enabled: boolean): void {
 		this.clearOnShrink = enabled;
+	}
+
+	getFullscreenViewport(): boolean {
+		return this.fullscreenViewport;
+	}
+
+	setFullscreenViewport(enabled: boolean): void {
+		if (this.fullscreenViewport === enabled) return;
+		this.fullscreenViewport = enabled;
+		this.requestRender(true);
 	}
 
 	setFocus(component: Component | null): void {
@@ -600,13 +622,16 @@ export class TUI extends Container {
 
 	start(): void {
 		this.stopped = false;
+		if (this.fullscreenViewport) {
+			this.terminal.write("\x1b[?1049h\x1b[2J\x1b[H\x1b[?25l\x1b[?1000h\x1b[?1002h\x1b[?1006h");
+		}
 		this.terminal.start(
 			(data) => this.handleInput(data),
 			() => this.requestRender(),
 		);
 		this.terminal.hideCursor();
 		this.queryCellSize();
-		this.requestRender();
+		this.requestRender(true);
 	}
 
 	addInputListener(listener: InputListener): () => void {
@@ -636,20 +661,27 @@ export class TUI extends Container {
 			clearTimeout(this.renderTimer);
 			this.renderTimer = undefined;
 		}
-		// Move cursor to the end of the content to prevent overwriting/artifacts on exit
-		if (this.previousLines.length > 0) {
-			const targetRow = this.previousLines.length; // Line after the last content
-			const lineDiff = targetRow - this.hardwareCursorRow;
-			if (lineDiff > 0) {
-				this.terminal.write(`\x1b[${lineDiff}B`);
-			} else if (lineDiff < 0) {
-				this.terminal.write(`\x1b[${-lineDiff}A`);
+		if (!this.fullscreenViewport) {
+			// Move cursor to the end of the content to prevent overwriting/artifacts on exit
+			if (this.previousLines.length > 0) {
+				const targetRow = this.previousLines.length; // Line after the last content
+				const lineDiff = targetRow - this.hardwareCursorRow;
+				if (lineDiff > 0) {
+					this.terminal.write(`\x1b[${lineDiff}B`);
+				} else if (lineDiff < 0) {
+					this.terminal.write(`\x1b[${-lineDiff}A`);
+				}
+				this.terminal.write("\r\n");
 			}
-			this.terminal.write("\r\n");
+
+			this.terminal.showCursor();
+			this.terminal.stop();
+			return;
 		}
 
 		this.terminal.showCursor();
 		this.terminal.stop();
+		this.terminal.write("\x1b[?1006l\x1b[?1002l\x1b[?1000l\x1b[?25h\x1b[?1049l");
 	}
 
 	requestRender(force = false): void {
@@ -1141,7 +1173,7 @@ export class TUI extends Container {
 		};
 
 		// Render all components to get new lines
-		let newLines = this.render(width);
+		let newLines = this.render(width, height);
 
 		// Composite overlays into the rendered lines (before differential compare)
 		if (this.overlayStack.length > 0) {
@@ -1152,6 +1184,11 @@ export class TUI extends Container {
 		const cursorPos = this.extractCursorPosition(newLines, height);
 
 		newLines = this.applyLineResets(newLines);
+
+		if (this.fullscreenViewport) {
+			this.renderFullscreenViewport(newLines, cursorPos, width, height);
+			return;
+		}
 
 		// Helper to clear scrollback and viewport and render all new lines
 		const fullRender = (clear: boolean): void => {
@@ -1184,10 +1221,12 @@ export class TUI extends Container {
 			this.previousHeight = height;
 		};
 
-		const debugRedraw = process.env.PI_DEBUG_REDRAW === "1";
+		const debugRedraw = isRuntimeFlagEnabled("OMK_DEBUG_REDRAW", "PI_DEBUG_REDRAW");
 		const logRedraw = (reason: string): void => {
 			if (!debugRedraw) return;
-			const logPath = path.join(os.homedir(), ".pi", "agent", "pi-debug.log");
+			const debugRoot = process.env.OMK_CODING_AGENT ? ".omk" : ".pi";
+			const debugName = process.env.OMK_CODING_AGENT ? "omk-debug.log" : "pi-debug.log";
+			const logPath = path.join(os.homedir(), debugRoot, "agent", debugName);
 			const msg = `[${new Date().toISOString()}] fullRender: ${reason} (prev=${this.previousLines.length}, new=${newLines.length}, height=${height})\n`;
 			fs.appendFileSync(logPath, msg);
 		};
@@ -1217,7 +1256,7 @@ export class TUI extends Container {
 
 		// Content shrunk below the working area and no overlays - re-render to clear empty rows
 		// (overlays need the padding, so only do this when no overlays are active)
-		// Configurable via setClearOnShrink() or PI_CLEAR_ON_SHRINK=0 env var
+		// Configurable via setClearOnShrink() or runtime clear-on-shrink env var
 		if (this.clearOnShrink && newLines.length < this.maxLinesRendered && this.overlayStack.length === 0) {
 			logRedraw(`clearOnShrink (maxLinesRendered=${this.maxLinesRendered})`);
 			fullRender(true);
@@ -1403,7 +1442,7 @@ export class TUI extends Container {
 
 		buffer += "\x1b[?2026l"; // End synchronized output
 
-		if (process.env.PI_TUI_DEBUG === "1") {
+		if (isRuntimeFlagEnabled("OMK_TUI_DEBUG", "PI_TUI_DEBUG")) {
 			const debugDir = "/tmp/tui";
 			fs.mkdirSync(debugDir, { recursive: true });
 			const debugPath = path.join(debugDir, `render-${Date.now()}-${Math.random().toString(36).slice(2)}.log`);
@@ -1451,6 +1490,69 @@ export class TUI extends Container {
 		this.previousKittyImageIds = this.collectKittyImageIds(newLines);
 		this.previousWidth = width;
 		this.previousHeight = height;
+	}
+
+	private fitViewportLine(line: string, width: number): string {
+		if (isImageLine(line) || visibleWidth(line) <= width) return line;
+		return sliceByColumn(line, 0, width, true);
+	}
+
+	private renderFullscreenViewport(
+		newLines: string[],
+		cursorPos: { row: number; col: number } | null,
+		width: number,
+		height: number,
+	): void {
+		this.fullRedrawCount += 1;
+		const safeHeight = Math.max(1, height);
+		const viewportTop = Math.max(0, newLines.length - safeHeight);
+		const viewportLines = newLines
+			.slice(viewportTop, viewportTop + safeHeight)
+			.map((line) => this.fitViewportLine(line, width));
+		while (viewportLines.length < safeHeight) {
+			viewportLines.push("");
+		}
+
+		let buffer = "\x1b[?2026h";
+		buffer += this.deleteKittyImages(this.previousKittyImageIds);
+		buffer += "\x1b[H\x1b[2J";
+		for (let i = 0; i < viewportLines.length; i++) {
+			if (i > 0) buffer += "\r\n";
+			buffer += viewportLines[i];
+		}
+		buffer += "\x1b[?2026l";
+		this.terminal.write(buffer);
+
+		this.cursorRow = Math.max(0, newLines.length - 1);
+		this.maxLinesRendered = viewportLines.length;
+		this.previousViewportTop = viewportTop;
+		this.previousLines = newLines;
+		this.previousKittyImageIds = this.collectKittyImageIds(newLines);
+		this.previousWidth = width;
+		this.previousHeight = height;
+		this.positionFullscreenHardwareCursor(cursorPos, viewportTop, width, safeHeight);
+	}
+
+	private positionFullscreenHardwareCursor(
+		cursorPos: { row: number; col: number } | null,
+		viewportTop: number,
+		width: number,
+		height: number,
+	): void {
+		if (!cursorPos || cursorPos.row < viewportTop || cursorPos.row >= viewportTop + height) {
+			this.terminal.hideCursor();
+			return;
+		}
+
+		const targetRow = cursorPos.row - viewportTop;
+		const targetCol = Math.max(0, Math.min(cursorPos.col, Math.max(0, width - 1)));
+		this.terminal.write(`\x1b[${targetRow + 1};${targetCol + 1}H`);
+		this.hardwareCursorRow = cursorPos.row;
+		if (this.showHardwareCursor) {
+			this.terminal.showCursor();
+		} else {
+			this.terminal.hideCursor();
+		}
 	}
 
 	/**

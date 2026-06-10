@@ -1,8 +1,14 @@
-import type { Transport } from "@earendil-works/pi-ai";
+import type { ModelThinkingLevel, ThinkingLevelMap, Transport } from "@earendil-works/omk-ai";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
-import { CONFIG_DIR_NAME, getAgentDir } from "../config.ts";
+import {
+	CONFIG_DIR_NAME,
+	ENV_CLEAR_ON_SHRINK_ALIASES,
+	ENV_HARDWARE_CURSOR_ALIASES,
+	getAgentDir,
+	isAliasedEnvFlagEnabled,
+} from "../config.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dispatcher.ts";
 
@@ -58,6 +64,28 @@ export interface WarningSettings {
 }
 
 export type TransportSetting = Transport;
+export type ModelThinkingLevelOverride = ModelThinkingLevel | "max";
+
+const MODEL_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+
+function normalizeModelThinkingLevelOverride(value: unknown): ModelThinkingLevelOverride | undefined {
+	if (typeof value !== "string") return undefined;
+	const normalized = value.trim().toLowerCase();
+	if (normalized === "maximum" || normalized === "full") return "max";
+	if (normalized === "max") return "max";
+	return MODEL_THINKING_LEVELS.includes(normalized as ModelThinkingLevel)
+		? (normalized as ModelThinkingLevel)
+		: undefined;
+}
+
+function mapModelThinkingLevelOverride(
+	override: ModelThinkingLevelOverride,
+	thinkingLevelMap: ThinkingLevelMap | undefined,
+): ModelThinkingLevel {
+	if (override !== "max") return override;
+	const mappedLevel = MODEL_THINKING_LEVELS.find((level) => thinkingLevelMap?.[level] === "max");
+	return mappedLevel ?? "xhigh";
+}
 
 /**
  * Package source for npm/git packages.
@@ -78,7 +106,8 @@ export interface Settings {
 	lastChangelogVersion?: string;
 	defaultProvider?: string;
 	defaultModel?: string;
-	defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+	defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+	modelThinkingLevels?: Record<string, ModelThinkingLevelOverride>;
 	transport?: TransportSetting; // default: "auto"
 	steeringMode?: "all" | "one-at-a-time";
 	followUpMode?: "all" | "one-at-a-time";
@@ -602,6 +631,30 @@ export class SettingsManager {
 		return this.settings.defaultModel;
 	}
 
+	getModelThinkingLevel(model: {
+		provider?: string;
+		id?: string;
+		thinkingLevelMap?: ThinkingLevelMap;
+	}): ModelThinkingLevel | undefined {
+		if (!model.provider || !model.id) return undefined;
+		const configuredLevels = this.settings.modelThinkingLevels;
+		if (!configuredLevels) return undefined;
+
+		const keys = [`${model.provider}//${model.id}`, `${model.provider}/${model.id}`, model.id];
+		for (const key of keys) {
+			const override = normalizeModelThinkingLevelOverride(configuredLevels[key]);
+			if (override) return mapModelThinkingLevelOverride(override, model.thinkingLevelMap);
+		}
+
+		const lowerEntries = new Map(Object.entries(configuredLevels).map(([key, value]) => [key.toLowerCase(), value]));
+		for (const key of keys) {
+			const override = normalizeModelThinkingLevelOverride(lowerEntries.get(key.toLowerCase()));
+			if (override) return mapModelThinkingLevelOverride(override, model.thinkingLevelMap);
+		}
+
+		return undefined;
+	}
+
 	setDefaultProvider(provider: string): void {
 		this.globalSettings.defaultProvider = provider;
 		this.markModified("defaultProvider");
@@ -652,11 +705,11 @@ export class SettingsManager {
 		this.save();
 	}
 
-	getDefaultThinkingLevel(): "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | undefined {
+	getDefaultThinkingLevel(): "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | undefined {
 		return this.settings.defaultThinkingLevel;
 	}
 
-	setDefaultThinkingLevel(level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh"): void {
+	setDefaultThinkingLevel(level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"): void {
 		this.globalSettings.defaultThinkingLevel = level;
 		this.markModified("defaultThinkingLevel");
 		this.save();
@@ -962,7 +1015,7 @@ export class SettingsManager {
 		if (this.settings.terminal?.clearOnShrink !== undefined) {
 			return this.settings.terminal.clearOnShrink;
 		}
-		return process.env.PI_CLEAR_ON_SHRINK === "1";
+		return isAliasedEnvFlagEnabled(ENV_CLEAR_ON_SHRINK_ALIASES);
 	}
 
 	setClearOnShrink(enabled: boolean): void {
@@ -1046,7 +1099,7 @@ export class SettingsManager {
 	}
 
 	getShowHardwareCursor(): boolean {
-		return this.settings.showHardwareCursor ?? process.env.PI_HARDWARE_CURSOR === "1";
+		return this.settings.showHardwareCursor ?? isAliasedEnvFlagEnabled(ENV_HARDWARE_CURSOR_ALIASES);
 	}
 
 	setShowHardwareCursor(enabled: boolean): void {

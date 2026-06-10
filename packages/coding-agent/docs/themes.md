@@ -1,27 +1,19 @@
-> pi can create themes. Ask it to build one for your setup.
+> OMK can create themes. Ask it to build one for your setup.
 
 # Themes
 
-Themes are JSON files that define colors for the TUI.
+Themes control colors and styling in the interactive interface. Built-in themes are `dark`, `light`, `omk-control`, and `omk-rust`. The `omk` runtime defaults to `omk-control` via `getDefaultTheme()`.
 
-## Table of Contents
+`omk-rust` is a Rust-inspired dark theme with oxide/copper accents, Ferris-orange highlights, and syntax colors tuned for `.rs` files.
 
-- [Locations](#locations)
-- [Selecting a Theme](#selecting-a-theme)
-- [Creating a Custom Theme](#creating-a-custom-theme)
-- [Theme Format](#theme-format)
-- [Color Tokens](#color-tokens)
-- [Color Values](#color-values)
-- [Tips](#tips)
+## Theme Locations
 
-## Locations
+OMK loads themes from:
 
-Pi loads themes from:
-
-- Built-in: `dark`, `light`
-- Global: `~/.pi/agent/themes/*.json`
-- Project: `.pi/themes/*.json`
-- Packages: `themes/` directories or `pi.themes` entries in `package.json`
+- Built-in: `dark`, `light`, `omk-control`, `omk-rust`
+- Global: `~/.omk/agent/themes/*.json`
+- Project: `.omk/themes/*.json`
+- Packages: `themes/` directories or `omk.themes` entries in `package.json`
 - Settings: `themes` array with files or directories
 - CLI: `--theme <path>` (repeatable)
 
@@ -37,22 +29,45 @@ Select a theme via `/settings` or in `settings.json`:
 }
 ```
 
-On first run, pi detects your terminal background and defaults to `dark` or `light`.
+On first run, OMK detects your terminal background and defaults to `dark` or `light`. The `omk` runtime defaults to `omk-control` via `getDefaultTheme()`. To force the Rust theme, set `theme` to `omk-rust` or one of its aliases (`rust`, `oxide`, `ferris`, `cargo`).
+
+## Built-in Theme Aliases
+
+Several names are aliases that `resolveBuiltinThemeName()` maps onto built-in themes:
+
+| Alias | Resolves to |
+|-------|-------------|
+| `cyberpunk2077` | `omk-control` |
+| `neon-grid` | `omk-control` |
+| `omk-neon-grid` | `omk-control` |
+| `omk-grid-dark` | `omk-control` |
+| `omk-control-grid-dark` | `omk-control` |
+| `green-rain` | `omk-control` |
+| `night-city` | `omk-control` |
+| `rust` | `omk-rust` |
+| `rust-dark` | `omk-rust` |
+| `rust-oxide` | `omk-rust` |
+| `oxide` | `omk-rust` |
+| `ferris` | `omk-rust` |
+| `cargo` | `omk-rust` |
+
+Aliases resolve anywhere a theme name is accepted (`settings.json`, `/settings`, and `--theme`).
 
 ## Creating a Custom Theme
 
 1. Create a theme file:
 
 ```bash
-mkdir -p ~/.pi/agent/themes
-vim ~/.pi/agent/themes/my-theme.json
+mkdir -p ~/.omk/agent/themes
+vim ~/.omk/agent/themes/my-theme.json
+```
 ```
 
 2. Define the theme with all required colors (see [Color Tokens](#color-tokens)):
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/earendil-works/pi/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
+  "$schema": "https://raw.githubusercontent.com/earendil-works/pi-mono/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
   "name": "my-theme",
   "vars": {
     "primary": "#00aaff",
@@ -109,6 +124,7 @@ vim ~/.pi/agent/themes/my-theme.json
     "thinkingMedium": "#00ffff",
     "thinkingHigh": "#ff00ff",
     "thinkingXhigh": "#ff0000",
+    "thinkingMax": "#ff44ff",
     "bashMode": "#ffaa00"
   }
 }
@@ -116,13 +132,13 @@ vim ~/.pi/agent/themes/my-theme.json
 
 3. Select the theme via `/settings`.
 
-**Hot reload:** When you edit the currently active custom theme file, pi reloads it automatically for immediate visual feedback.
+**Hot reload:** When you edit the currently active custom theme file, OMK reloads it automatically for immediate visual feedback.
 
 ## Theme Format
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/earendil-works/pi/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
+  "$schema": "https://raw.githubusercontent.com/earendil-works/pi-mono/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
   "name": "my-theme",
   "vars": {
     "blue": "#0066cc",
@@ -139,13 +155,13 @@ vim ~/.pi/agent/themes/my-theme.json
 
 - `name` is required and must be unique.
 - `vars` is optional. Define reusable colors here, then reference them in `colors`.
-- `colors` must define all 51 required tokens.
+- `colors` must define all 52 required tokens.
 
 The `$schema` field enables editor auto-completion and validation.
 
 ## Color Tokens
 
-Every theme must define all 51 color tokens. There are no optional colors.
+Every theme must define all 52 color tokens. There are no optional colors.
 
 ### Core UI (11 colors)
 
@@ -216,7 +232,7 @@ Every theme must define all 51 color tokens. There are no optional colors.
 | `syntaxOperator` | Operators |
 | `syntaxPunctuation` | Punctuation |
 
-### Thinking Level Borders (6 colors)
+### Thinking Level Borders (7 colors)
 
 Editor border colors indicating thinking level (visual hierarchy from subtle to prominent):
 
@@ -228,6 +244,7 @@ Editor border colors indicating thinking level (visual hierarchy from subtle to 
 | `thinkingMedium` | Medium thinking |
 | `thinkingHigh` | High thinking |
 | `thinkingXhigh` | Extra high thinking |
+| `thinkingMax` | Maximum thinking (unconstrained/max reasoning variant) |
 
 ### Bash Mode (1 color)
 
@@ -268,13 +285,25 @@ Four formats are supported:
 
 ### Terminal Compatibility
 
-Pi uses 24-bit RGB colors. Most modern terminals support this (iTerm2, Kitty, WezTerm, Windows Terminal, VS Code). For older terminals with only 256-color support, pi falls back to the nearest approximation.
+OMK uses 24-bit RGB colors. Most modern terminals support this (iTerm2, Kitty, WezTerm, Windows Terminal, VS Code). For older terminals with only 256-color support, OMK falls back to the nearest approximation.
 
 Check truecolor support:
 
 ```bash
 echo $COLORTERM  # Should output "truecolor" or "24bit"
 ```
+
+## Gradients
+
+`Theme.gradient(from, to, text)` renders `text` with a smooth per-character RGB gradient that interpolates between two foreground color tokens. OMK uses it for accents such as the startup logo.
+
+```ts
+theme.gradient("accent", "borderAccent", "OMK");
+```
+
+Both endpoints are resolved from the theme's foreground tokens and must be hex colors (`#rrggbb`). The gradient is computed in RGB space: each character is assigned a color linearly interpolated by its position from `from` to `to`, then emitted using the active color mode (truecolor, or the nearest 256-color approximation).
+
+If either endpoint is not a hex color (for example a 256-color index, a `vars` reference that resolves to an index, or the empty default `""`), or if `text` is empty, `gradient()` falls back to a solid fill using the `from` color.
 
 ## Tips
 
@@ -293,3 +322,5 @@ echo $COLORTERM  # Should output "truecolor" or "24bit"
 See the built-in themes:
 - [dark.json](../src/modes/interactive/theme/dark.json)
 - [light.json](../src/modes/interactive/theme/light.json)
+- [omk-control.json](../src/modes/interactive/theme/omk-control.json)
+- [omk-rust.json](../src/modes/interactive/theme/omk-rust.json)

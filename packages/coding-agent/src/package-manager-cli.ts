@@ -1,13 +1,15 @@
-import { Markdown, type MarkdownTheme } from "@earendil-works/pi-tui";
+import { Markdown, type MarkdownTheme } from "@earendil-works/omk-tui";
 import chalk from "chalk";
 import { selectConfig } from "./cli/config-selector.ts";
 import {
 	APP_NAME,
+	CONFIG_DIR_NAME,
 	detectInstallMethod,
 	getAgentDir,
 	getPackageDir,
 	getSelfUpdateCommand,
 	getSelfUpdateUnavailableInstruction,
+	IS_OMK_RUNTIME,
 	PACKAGE_NAME,
 	type SelfUpdateCommand,
 	VERSION,
@@ -65,6 +67,16 @@ function reportSettingsErrors(settingsManager: SettingsManager, context: string)
 	}
 }
 
+const RUNTIME_LABEL = IS_OMK_RUNTIME ? "standalone OMK coding-agent installation" : APP_NAME;
+const RUNTIME_SELF_TARGET = APP_NAME;
+const RUNTIME_SELF_TARGETS = IS_OMK_RUNTIME ? "self|omk" : `self|${RUNTIME_SELF_TARGET}`;
+const RUNTIME_SELF_ALIAS_HELP = "self works as alias";
+const RUNTIME_UPDATE_HELP_NOTE = IS_OMK_RUNTIME
+	? "\nPackage commands manage the standalone OMK coding-agent installation.\n\n"
+	: "\n";
+const PROJECT_SETTINGS_PATH = `${CONFIG_DIR_NAME}/settings.json`;
+const SELF_UPDATE_PACKAGE_NAME_ALLOWLIST: ReadonlySet<string> = new Set([PACKAGE_NAME]);
+
 function getPackageCommandUsage(command: PackageCommand): string {
 	switch (command) {
 		case "install":
@@ -72,7 +84,7 @@ function getPackageCommandUsage(command: PackageCommand): string {
 		case "remove":
 			return `${APP_NAME} remove <source> [-l]`;
 		case "update":
-			return `${APP_NAME} update [source|self|pi] [--self] [--extensions] [--extension <source>] [--force]`;
+			return `${APP_NAME} update [source|${RUNTIME_SELF_TARGETS}] [--self] [--extensions] [--extension <source>] [--force]`;
 		case "list":
 			return `${APP_NAME} list`;
 	}
@@ -87,7 +99,7 @@ function printPackageCommandHelp(command: PackageCommand): void {
 Install a package and add it to settings.
 
 Options:
-  -l, --local    Install project-locally (.pi/settings.json)
+  -l, --local    Install project-locally (${PROJECT_SETTINGS_PATH})
 
 Examples:
   ${APP_NAME} install npm:@foo/bar
@@ -107,7 +119,7 @@ Remove a package and its source from settings.
 Alias: ${APP_NAME} uninstall <source> [-l]
 
 Options:
-  -l, --local    Remove from project settings (.pi/settings.json)
+  -l, --local    Remove from project settings (${PROJECT_SETTINGS_PATH})
 
 Examples:
   ${APP_NAME} remove npm:@foo/bar
@@ -119,18 +131,17 @@ Examples:
 			console.log(`${chalk.bold("Usage:")}
   ${getPackageCommandUsage("update")}
 
-Update pi and installed packages.
-
-Options:
-  --self                  Update pi only
+Update ${RUNTIME_LABEL} and installed packages.
+${RUNTIME_UPDATE_HELP_NOTE}Options:
+  --self                  Update ${RUNTIME_LABEL} only
   --extensions            Update installed packages only
   --extension <source>    Update one package only
-  --force                 Reinstall pi even if the current version is latest
+  --force                 Reinstall ${RUNTIME_LABEL} even if the current version is latest
 
 Short forms:
-  ${APP_NAME} update                Update pi and all extensions
+  ${APP_NAME} update                Update ${RUNTIME_LABEL} and all extensions
   ${APP_NAME} update <source>       Update one package
-  ${APP_NAME} update pi             Update pi only (self works as alias to pi)
+  ${APP_NAME} update ${RUNTIME_SELF_TARGET}             Update ${RUNTIME_LABEL} only (${RUNTIME_SELF_ALIAS_HELP} to ${RUNTIME_SELF_TARGET})
 `);
 			return;
 
@@ -253,7 +264,7 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 			}
 			updateTarget = { type: "extensions", source: extensionFlagSource };
 		} else if (source) {
-			const sourceIsSelf = source === "self" || source === "pi";
+			const sourceIsSelf = source === "self" || source === RUNTIME_SELF_TARGET;
 			if (sourceIsSelf) {
 				updateTarget = extensionsFlag ? { type: "all" } : { type: "self" };
 			} else {
@@ -303,7 +314,7 @@ function printSelfUpdateUnavailable(npmCommand?: string[], updatePackageName = P
 	const entrypoint = process.argv[1];
 	if (entrypoint) {
 		console.error("");
-		console.error(`Location of pi executable: ${entrypoint}`);
+		console.error(`Location of ${APP_NAME} executable: ${entrypoint}`);
 	}
 }
 
@@ -341,10 +352,16 @@ async function getSelfUpdatePlan(force: boolean): Promise<SelfUpdatePlan> {
 	if (force) {
 		return { packageName: PACKAGE_NAME, shouldRun: true };
 	}
+	if (IS_OMK_RUNTIME && !process.env.OMK_VERSION_CHECK_URL?.trim()) {
+		return { packageName: PACKAGE_NAME, shouldRun: true };
+	}
 
 	try {
 		const latestRelease = await getLatestPiRelease(VERSION);
-		const packageName = latestRelease?.packageName ?? PACKAGE_NAME;
+		const packageName =
+			latestRelease?.packageName && SELF_UPDATE_PACKAGE_NAME_ALLOWLIST.has(latestRelease.packageName)
+				? latestRelease.packageName
+				: PACKAGE_NAME;
 		if (!latestRelease || packageName !== PACKAGE_NAME || isNewerPackageVersion(latestRelease.version, VERSION)) {
 			return { packageName, shouldRun: true, ...(latestRelease?.note ? { note: latestRelease.note } : {}) };
 		}

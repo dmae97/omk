@@ -1,11 +1,10 @@
-> pi can create skills. Ask it to build one for your use case.
+> OMK can create skills. Ask it to build one for your use case.
 
 # Skills
 
 Skills are self-contained capability packages that the agent loads on-demand. A skill provides specialized workflows, setup instructions, helper scripts, and reference documentation for specific tasks.
 
-Pi implements the [Agent Skills standard](https://agentskills.io/specification), warning about most violations but remaining lenient. Pi allows skill names to differ from their parent directory even though the standard disallows it; that rule is suboptimal for shared skill directories used across multiple agent harnesses.
-
+OMK implements the [Agent Skills standard](https://agentskills.io/specification), warning about most violations but remaining lenient. OMK allows skill names to differ from their parent directory even though the standard disallows it; that rule is suboptimal for shared skill directories used across multiple agent harnesses.
 ## Table of Contents
 
 - [Locations](#locations)
@@ -21,20 +20,20 @@ Pi implements the [Agent Skills standard](https://agentskills.io/specification),
 
 > **Security:** Skills can instruct the model to perform any action and may include executable code the model invokes. Review skill content before use.
 
-Pi loads skills from:
+OMK loads skills from:
 
 - Global:
-  - `~/.pi/agent/skills/`
+  - `~/.omk/agent/skills/`
   - `~/.agents/skills/`
 - Project:
-  - `.pi/skills/`
+  - `.omk/skills/`
   - `.agents/skills/` in `cwd` and ancestor directories (up to git repo root, or filesystem root when not in a repo)
-- Packages: `skills/` directories or `pi.skills` entries in `package.json`
+- Packages: `skills/` directories or `omk.skills` entries in `package.json`
 - Settings: `skills` array with files or directories
 - CLI: `--skill <path>` (repeatable, additive even with `--no-skills`)
 
 Discovery rules:
-- In `~/.pi/agent/skills/` and `.pi/skills/`, direct root `.md` files are discovered as individual skills
+- In `~/.omk/agent/skills/` and `.omk/skills/`, direct root `.md` files are discovered as individual skills
 - In all skill locations, directories containing `SKILL.md` are discovered recursively
 - In `~/.agents/skills/` and project `.agents/skills/`, root `.md` files are ignored
 
@@ -53,7 +52,7 @@ To use skills from Claude Code or OpenAI Codex, add their directories to setting
 }
 ```
 
-For project-level Claude Code skills, add to `.pi/settings.json`:
+For project-level Claude Code skills, add to `.omk/settings.json`:
 
 ```json
 {
@@ -63,7 +62,7 @@ For project-level Claude Code skills, add to `.pi/settings.json`:
 
 ## How Skills Work
 
-1. At startup, pi scans skill locations and extracts names and descriptions
+1. At startup, OMK scans skill locations and extracts names and descriptions
 2. The system prompt includes available skills in XML format per the [specification](https://agentskills.io/integrate-skills)
 3. When a task matches, the agent uses `read` to load the full SKILL.md (models don't always do this; use prompting or `/skill:name` to force it)
 4. The agent follows the instructions, using relative paths to reference scripts and assets

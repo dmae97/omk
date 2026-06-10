@@ -2,9 +2,24 @@
  * CLI argument parsing and help display
  */
 
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ThinkingLevel } from "@earendil-works/omk-agent-core";
 import chalk from "chalk";
-import { APP_NAME, CONFIG_DIR_NAME, ENV_AGENT_DIR, ENV_SESSION_DIR } from "../config.ts";
+import {
+	APP_NAME,
+	CONFIG_DIR_NAME,
+	ENV_AGENT_DIR,
+	ENV_OFFLINE,
+	ENV_OFFLINE_ALIASES,
+	ENV_PACKAGE_DIR,
+	ENV_PACKAGE_DIR_ALIASES,
+	ENV_SESSION_DIR,
+	ENV_SHARE_VIEWER_URL,
+	ENV_SHARE_VIEWER_URL_ALIASES,
+	ENV_TELEMETRY,
+	ENV_TELEMETRY_ALIASES,
+	formatAliasedEnvLabel,
+	IS_OMK_RUNTIME,
+} from "../config.ts";
 import type { ExtensionFlag } from "../core/extensions/types.ts";
 
 export type Mode = "text" | "json" | "rpc";
@@ -53,7 +68,7 @@ export interface Args {
 	diagnostics: Array<{ type: "warning" | "error"; message: string }>;
 }
 
-const VALID_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
+const VALID_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
 export function isValidThinkingLevel(level: string): level is ThinkingLevel {
 	return VALID_THINKING_LEVELS.includes(level as ThinkingLevel);
@@ -205,6 +220,28 @@ export function parseArgs(args: string[]): Args {
 }
 
 export function printHelp(extensionFlags?: ExtensionFlag[]): void {
+	const runtimeSelfTarget = APP_NAME;
+	const runtimeSelfTargets = IS_OMK_RUNTIME ? "self|omk" : `self|${runtimeSelfTarget}`;
+	const appDescription = IS_OMK_RUNTIME
+		? "Standalone OMK coding-agent control surface: route tasks, verify evidence, observe loops"
+		: "AI coding assistant with read, bash, edit, write tools";
+	const updateCommandDescription = IS_OMK_RUNTIME
+		? "Update the standalone OMK coding-agent installation and installed extensions"
+		: `Update ${APP_NAME} and installed extensions`;
+	const omkPackageCommandNote = IS_OMK_RUNTIME
+		? "\nPackage commands manage the standalone OMK coding-agent installation.\n"
+		: "";
+	const offlineEnvLabel = IS_OMK_RUNTIME ? ENV_OFFLINE : formatAliasedEnvLabel(ENV_OFFLINE, ENV_OFFLINE_ALIASES);
+	const packageDirEnvLabel = IS_OMK_RUNTIME
+		? ENV_PACKAGE_DIR
+		: formatAliasedEnvLabel(ENV_PACKAGE_DIR, ENV_PACKAGE_DIR_ALIASES);
+	const telemetryEnvLabel = IS_OMK_RUNTIME
+		? ENV_TELEMETRY
+		: formatAliasedEnvLabel(ENV_TELEMETRY, ENV_TELEMETRY_ALIASES);
+	const shareViewerEnvLabel = IS_OMK_RUNTIME
+		? ENV_SHARE_VIEWER_URL
+		: formatAliasedEnvLabel(ENV_SHARE_VIEWER_URL, ENV_SHARE_VIEWER_URL_ALIASES);
+	const shareViewerDefaultText = "direct GitHub gist URL";
 	const extensionFlagsText =
 		extensionFlags && extensionFlags.length > 0
 			? `\n${chalk.bold("Extension CLI Flags:")}\n${extensionFlags
@@ -215,7 +252,7 @@ export function printHelp(extensionFlags?: ExtensionFlag[]): void {
 					})
 					.join("\n")}\n`
 			: "";
-	console.log(`${chalk.bold(APP_NAME)} - AI coding assistant with read, bash, edit, write tools
+	console.log(`${chalk.bold(APP_NAME)} - ${appDescription}
 
 ${chalk.bold("Usage:")}
   ${APP_NAME} [options] [@files...] [messages...]
@@ -224,11 +261,11 @@ ${chalk.bold("Commands:")}
   ${APP_NAME} install <source> [-l]     Install extension source and add to settings
   ${APP_NAME} remove <source> [-l]      Remove extension source from settings
   ${APP_NAME} uninstall <source> [-l]   Alias for remove
-  ${APP_NAME} update [source|self|pi]   Update pi and installed extensions
+  ${APP_NAME} update [source|${runtimeSelfTargets}]   ${updateCommandDescription}
   ${APP_NAME} list                      List installed extensions from settings
   ${APP_NAME} config                    Open TUI to enable/disable package resources
   ${APP_NAME} <command> --help          Show help for install/remove/uninstall/update/list
-
+${omkPackageCommandNote}
 ${chalk.bold("Options:")}
   --provider <name>              Provider name (default: google)
   --model <pattern>              Model pattern or ID (supports "provider/id" and optional ":<thinking>")
@@ -266,7 +303,7 @@ ${chalk.bold("Options:")}
   --export <file>                Export session file to HTML and exit
   --list-models [search]         List available models (with optional fuzzy search)
   --verbose                      Force verbose startup (overrides quietStartup setting)
-  --offline                      Disable startup network operations (same as PI_OFFLINE=1)
+  --offline                      Disable startup network operations (same as ${offlineEnvLabel}=1)
   --help, -h                     Show this help
   --version, -v                  Show version number
 
@@ -351,7 +388,6 @@ ${chalk.bold("Environment Variables:")}
   MINIMAX_API_KEY                  - MiniMax API key
   MOONSHOT_API_KEY                 - Moonshot AI API key
   OPENCODE_API_KEY                 - OpenCode Zen/OpenCode Go API key
-  KIMI_API_KEY                     - Kimi For Coding API key
   CLOUDFLARE_API_KEY               - Cloudflare API token (Workers AI and AI Gateway)
   CLOUDFLARE_ACCOUNT_ID            - Cloudflare account id (required for both)
   CLOUDFLARE_GATEWAY_ID            - Cloudflare AI Gateway slug (required for AI Gateway)
@@ -366,10 +402,10 @@ ${chalk.bold("Environment Variables:")}
   AWS_REGION                       - AWS region for Amazon Bedrock (e.g., us-east-1)
   ${ENV_AGENT_DIR.padEnd(32)} - Config directory (default: ~/${CONFIG_DIR_NAME}/agent)
   ${ENV_SESSION_DIR.padEnd(32)} - Session storage directory (overridden by --session-dir)
-  PI_PACKAGE_DIR                   - Override package directory (for Nix/Guix store paths)
-  PI_OFFLINE                       - Disable startup network operations when set to 1/true/yes
-  PI_TELEMETRY                     - Override install telemetry when set to 1/true/yes or 0/false/no
-  PI_SHARE_VIEWER_URL              - Base URL for /share command (default: https://pi.dev/session/)
+  ${packageDirEnvLabel.padEnd(32)} - Override package directory (for Nix/Guix store paths)
+  ${offlineEnvLabel.padEnd(32)} - Disable startup network operations when set to 1/true/yes
+  ${telemetryEnvLabel.padEnd(32)} - Override install telemetry when set to 1/true/yes or 0/false/no
+  ${shareViewerEnvLabel.padEnd(32)} - Base URL for /share command (default: ${shareViewerDefaultText})
 
 ${chalk.bold("Built-in Tool Names:")}
   read   - Read file contents

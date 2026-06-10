@@ -20,8 +20,9 @@ export function buildBaseOptions(_model: Model<Api>, options?: SimpleStreamOptio
 	};
 }
 
-export function clampReasoning(effort: ThinkingLevel | undefined): Exclude<ThinkingLevel, "xhigh"> | undefined {
-	return effort === "xhigh" ? "high" : effort;
+export function clampReasoning(effort: ThinkingLevel | undefined): Exclude<ThinkingLevel, "xhigh" | "max"> | undefined {
+	if (effort === "xhigh" || effort === "max") return "high";
+	return effort;
 }
 
 export function adjustMaxTokensForThinking(

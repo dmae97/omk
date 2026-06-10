@@ -1,7 +1,7 @@
 {
 	"$schema": "http://json-schema.org/draft-07/schema#",
-	"title": "Pi Coding Agent Theme",
-	"description": "Theme schema for Pi coding agent",
+	"title": "OMK Coding Agent Theme",
+	"description": "Theme schema for the standalone OMK coding agent",
 	"type": "object",
 	"required": ["name", "colors"],
 	"properties": {
@@ -85,6 +85,7 @@
 				"thinkingMedium",
 				"thinkingHigh",
 				"thinkingXhigh",
+				"thinkingMax",
 				"bashMode"
 			],
 			"properties": {
@@ -287,6 +288,10 @@
 				"thinkingXhigh": {
 					"$ref": "#/$defs/colorValue",
 					"description": "Thinking level border: xhigh (OpenAI codex-max only)"
+				},
+				"thinkingMax": {
+					"$ref": "#/$defs/colorValue",
+					"description": "Thinking level border: max (unconstrained reasoning variant)"
 				},
 				"bashMode": {
 					"$ref": "#/$defs/colorValue",

@@ -17,8 +17,8 @@ import {
 	registerApiProvider,
 	resetApiProviders,
 	type SimpleStreamOptions,
-} from "@earendil-works/pi-ai";
-import { registerOAuthProvider, resetOAuthProviders } from "@earendil-works/pi-ai/oauth";
+} from "@earendil-works/omk-ai";
+import { registerOAuthProvider, resetOAuthProviders } from "@earendil-works/omk-ai/oauth";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { type Static, Type } from "typebox";
@@ -96,6 +96,7 @@ const ThinkingLevelMapSchema = Type.Object({
 	medium: Type.Optional(ThinkingLevelMapValueSchema),
 	high: Type.Optional(ThinkingLevelMapValueSchema),
 	xhigh: Type.Optional(ThinkingLevelMapValueSchema),
+	max: Type.Optional(ThinkingLevelMapValueSchema),
 });
 
 const OpenAICompletionsCompatSchema = Type.Object({
@@ -599,12 +600,11 @@ export class ModelRegistry {
 					);
 				}
 			} else if (!isBuiltIn) {
-				// Non-built-in providers with custom models require endpoint + auth.
+				// Non-built-in providers with custom models require an endpoint.
+				// Auth may come from models.json apiKey, auth.json via /login, or OAuth
+				// registered by an extension.
 				if (!providerConfig.baseUrl) {
 					throw new Error(`Provider ${providerName}: "baseUrl" is required when defining custom models.`);
-				}
-				if (!providerConfig.apiKey) {
-					throw new Error(`Provider ${providerName}: "apiKey" is required when defining custom models.`);
 				}
 			}
 			// Built-in providers with custom models: baseUrl/apiKey/api are optional,
@@ -634,17 +634,23 @@ export class ModelRegistry {
 		const models: Model<Api>[] = [];
 		const builtInProviders = new Set<string>(getProviders());
 
-		// Cache built-in defaults (api, baseUrl) per provider, extracted from first model.
-		const builtInDefaultsCache = new Map<string, { api: string; baseUrl: string }>();
-		const getBuiltInDefaults = (providerName: string): { api: string; baseUrl: string } | undefined => {
-			if (!builtInProviders.has(providerName)) return undefined;
-			if (builtInDefaultsCache.has(providerName)) return builtInDefaultsCache.get(providerName);
+		// Cache built-in defaults per provider, extracted from built-in models.
+		const builtInModelsCache = new Map<string, Model<Api>[]>();
+		const getBuiltInModels = (providerName: string): Model<Api>[] => {
+			if (!builtInProviders.has(providerName)) return [];
+			const cached = builtInModelsCache.get(providerName);
+			if (cached) return cached;
 			const builtIn = getModels(providerName as KnownProvider) as Model<Api>[];
-			if (builtIn.length === 0) return undefined;
-			const defaults = { api: builtIn[0].api, baseUrl: builtIn[0].baseUrl };
-			builtInDefaultsCache.set(providerName, defaults);
-			return defaults;
+			builtInModelsCache.set(providerName, builtIn);
+			return builtIn;
 		};
+		const getBuiltInDefaults = (providerName: string): { api: string; baseUrl: string } | undefined => {
+			const builtIn = getBuiltInModels(providerName);
+			if (builtIn.length === 0) return undefined;
+			return { api: builtIn[0].api, baseUrl: builtIn[0].baseUrl };
+		};
+		const getBuiltInModel = (providerName: string, modelId: string): Model<Api> | undefined =>
+			getBuiltInModels(providerName).find((model) => model.id === modelId);
 
 		for (const [providerName, providerConfig] of Object.entries(config.providers)) {
 			const modelDefs = providerConfig.models ?? [];
@@ -653,28 +659,30 @@ export class ModelRegistry {
 			const builtInDefaults = getBuiltInDefaults(providerName);
 
 			for (const modelDef of modelDefs) {
-				const api = modelDef.api ?? providerConfig.api ?? builtInDefaults?.api;
+				const builtInModel = getBuiltInModel(providerName, modelDef.id);
+				const api = modelDef.api ?? providerConfig.api ?? builtInModel?.api ?? builtInDefaults?.api;
 				if (!api) continue;
 
-				const baseUrl = modelDef.baseUrl ?? providerConfig.baseUrl ?? builtInDefaults?.baseUrl;
+				const baseUrl =
+					modelDef.baseUrl ?? providerConfig.baseUrl ?? builtInModel?.baseUrl ?? builtInDefaults?.baseUrl;
 				if (!baseUrl) continue;
 
-				const compat = mergeCompat(providerConfig.compat, modelDef.compat);
+				const compat = mergeCompat(mergeCompat(builtInModel?.compat, providerConfig.compat), modelDef.compat);
 				this.storeModelHeaders(providerName, modelDef.id, modelDef.headers);
 
 				const defaultCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 				models.push({
 					id: modelDef.id,
-					name: modelDef.name ?? modelDef.id,
+					name: modelDef.name ?? builtInModel?.name ?? modelDef.id,
 					api: api as Api,
 					provider: providerName,
 					baseUrl,
-					reasoning: modelDef.reasoning ?? false,
-					thinkingLevelMap: modelDef.thinkingLevelMap,
-					input: (modelDef.input ?? ["text"]) as ("text" | "image")[],
-					cost: modelDef.cost ?? defaultCost,
-					contextWindow: modelDef.contextWindow ?? 128000,
-					maxTokens: modelDef.maxTokens ?? 16384,
+					reasoning: modelDef.reasoning ?? builtInModel?.reasoning ?? false,
+					thinkingLevelMap: modelDef.thinkingLevelMap ?? builtInModel?.thinkingLevelMap,
+					input: (modelDef.input ?? builtInModel?.input ?? ["text"]) as ("text" | "image")[],
+					cost: modelDef.cost ?? builtInModel?.cost ?? defaultCost,
+					contextWindow: modelDef.contextWindow ?? builtInModel?.contextWindow ?? 128000,
+					maxTokens: modelDef.maxTokens ?? builtInModel?.maxTokens ?? 16384,
 					headers: undefined,
 					compat,
 				} as Model<Api>);
@@ -920,9 +928,6 @@ export class ModelRegistry {
 		if (!config.baseUrl) {
 			throw new Error(`Provider ${providerName}: "baseUrl" is required when defining models.`);
 		}
-		if (!config.apiKey && !config.oauth) {
-			throw new Error(`Provider ${providerName}: "apiKey" or "oauth" is required when defining models.`);
-		}
 
 		for (const modelDef of config.models) {
 			const api = modelDef.api || config.api;
@@ -958,28 +963,33 @@ export class ModelRegistry {
 		this.storeProviderRequestConfig(providerName, config);
 
 		if (config.models && config.models.length > 0) {
+			const existingModelsById = new Map(
+				this.models.filter((model) => model.provider === providerName).map((model) => [model.id, model]),
+			);
+
 			// Full replacement: remove existing models for this provider
 			this.models = this.models.filter((m) => m.provider !== providerName);
 
 			// Parse and add new models
 			for (const modelDef of config.models) {
-				const api = modelDef.api || config.api;
+				const existingModel = existingModelsById.get(modelDef.id);
+				const api = modelDef.api || config.api || existingModel?.api;
 				this.storeModelHeaders(providerName, modelDef.id, modelDef.headers);
 
 				this.models.push({
 					id: modelDef.id,
-					name: modelDef.name,
+					name: modelDef.name ?? existingModel?.name,
 					api: api as Api,
 					provider: providerName,
-					baseUrl: modelDef.baseUrl ?? config.baseUrl!,
-					reasoning: modelDef.reasoning,
-					thinkingLevelMap: modelDef.thinkingLevelMap,
-					input: modelDef.input as ("text" | "image")[],
-					cost: modelDef.cost,
-					contextWindow: modelDef.contextWindow,
-					maxTokens: modelDef.maxTokens,
+					baseUrl: modelDef.baseUrl ?? config.baseUrl ?? existingModel?.baseUrl,
+					reasoning: modelDef.reasoning ?? existingModel?.reasoning,
+					thinkingLevelMap: modelDef.thinkingLevelMap ?? existingModel?.thinkingLevelMap,
+					input: (modelDef.input ?? existingModel?.input) as ("text" | "image")[],
+					cost: modelDef.cost ?? existingModel?.cost,
+					contextWindow: modelDef.contextWindow ?? existingModel?.contextWindow,
+					maxTokens: modelDef.maxTokens ?? existingModel?.maxTokens,
 					headers: undefined,
-					compat: modelDef.compat,
+					compat: modelDef.compat ?? existingModel?.compat,
 				} as Model<Api>);
 			}
 

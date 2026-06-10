@@ -17,6 +17,10 @@ const KITTY_KEYBOARD_PROTOCOL_FALLBACK_TIMEOUT_MS = 150;
 const KEYBOARD_PROTOCOL_RESPONSE_FRAGMENT_TIMEOUT_MS = 150;
 const KITTY_KEYBOARD_PROTOCOL_QUERY = `\x1b[>${DESIRED_KITTY_KEYBOARD_PROTOCOL_FLAGS}u\x1b[?u\x1b[c`;
 
+function readRuntimeEnv(omkName: string, piName: string): string {
+	return process.env[omkName] ?? process.env[piName] ?? "";
+}
+
 export type KeyboardProtocolNegotiationSequence =
 	| { type: "kitty-flags"; flags: number }
 	| { type: "device-attributes" };
@@ -113,7 +117,7 @@ export class ProcessTerminal implements Terminal {
 	private stdinDataHandler?: (data: string) => void;
 	private progressInterval?: ReturnType<typeof setInterval>;
 	private writeLogPath = (() => {
-		const env = process.env.PI_TUI_WRITE_LOG || "";
+		const env = readRuntimeEnv("OMK_TUI_WRITE_LOG", "PI_TUI_WRITE_LOG");
 		if (!env) return "";
 		try {
 			if (fs.statSync(env).isDirectory()) {

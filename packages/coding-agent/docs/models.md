@@ -1,6 +1,6 @@
 # Custom Models
 
-Add custom providers and models (Ollama, vLLM, LM Studio, proxies) via `~/.pi/agent/models.json`.
+Add custom providers and models (Ollama, vLLM, LM Studio, proxies) via `~/.omk/agent/models.json`.
 
 ## Table of Contents
 
@@ -36,7 +36,7 @@ For local models (Ollama, LM Studio, vLLM), only `id` is required per model:
 
 The `apiKey` is required but Ollama ignores it, so any value works.
 
-Some OpenAI-compatible servers do not understand the `developer` role used for reasoning-capable models. For those providers, set `compat.supportsDeveloperRole` to `false` so pi sends the system prompt as a `system` message instead. If the server also does not support `reasoning_effort`, set `compat.supportsReasoningEffort` to `false` too.
+Some OpenAI-compatible servers do not understand the `developer` role used for reasoning-capable models. For those providers, set `compat.supportsDeveloperRole` to `false` so OMK sends the system prompt as a `system` message instead. If the server also does not support `reasoning_effort`, set `compat.supportsReasoningEffort` to `false` too.
 
 You can set `compat` at the provider level to apply to all models, or at the model level to override a specific model. This commonly applies to Ollama, vLLM, SGLang, and similar OpenAI-compatible servers.
 

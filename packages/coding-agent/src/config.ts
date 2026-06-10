@@ -342,7 +342,7 @@ export function getUpdateInstruction(packageName: string): string {
  */
 export function getPackageDir(): string {
 	// Allow override via environment variable (useful for Nix/Guix where store paths tokenize poorly)
-	const envDir = process.env.PI_PACKAGE_DIR;
+	const envDir = process.env.OMK_PACKAGE_DIR;
 	if (envDir) {
 		return normalizePath(envDir);
 	}
@@ -440,16 +440,18 @@ export function getBundledInteractiveAssetPath(name: string): string {
 }
 
 // =============================================================================
-// App Config (from package.json piConfig)
+// App Config (from package.json omkConfig)
 // =============================================================================
+
+interface RuntimePackageConfig {
+	name?: string;
+	configDir?: string;
+}
 
 interface PackageJson {
 	name?: string;
 	version?: string;
-	piConfig?: {
-		name?: string;
-		configDir?: string;
-	};
+	omkConfig?: RuntimePackageConfig;
 }
 
 let pkg: PackageJson = {};
@@ -460,36 +462,136 @@ try {
 	if (err.code !== "ENOENT") throw e;
 }
 
-const piConfigName: string | undefined = pkg.piConfig?.name;
-export const PACKAGE_NAME: string = pkg.name || "@earendil-works/pi-coding-agent";
-export const APP_NAME: string = piConfigName || "pi";
-export const APP_TITLE: string = piConfigName ? APP_NAME : "π";
-export const CONFIG_DIR_NAME: string = pkg.piConfig?.configDir || ".pi";
-export const VERSION: string = pkg.version || "0.0.0";
+function envFlagEnabled(value: string | undefined): boolean {
+	return value === "1" || value === "true" || value === "yes" || value === "on";
+}
 
-// e.g., PI_CODING_AGENT_DIR or TAU_CODING_AGENT_DIR
-export const ENV_AGENT_DIR = `${APP_NAME.toUpperCase()}_CODING_AGENT_DIR`;
-export const ENV_SESSION_DIR = `${APP_NAME.toUpperCase()}_CODING_AGENT_SESSION_DIR`;
+export function resolveRuntimeAppName(
+	configuredName: string | undefined,
+	_argv1: string | undefined = process.argv[1],
+	_env: NodeJS.ProcessEnv = process.env,
+): string {
+	const trimmedConfigName = configuredName?.trim();
+	if (trimmedConfigName) return trimmedConfigName;
+	return "omk";
+}
+
+export function resolveRuntimeConfigDir(configuredDir: string | undefined, _appName: string): string {
+	if (configuredDir && configuredDir !== ".pi") return configuredDir;
+	return ".omk";
+}
+
+const runtimeConfig: RuntimePackageConfig | undefined = pkg.omkConfig;
+const runtimeConfigName: string | undefined = runtimeConfig?.name;
+export const PACKAGE_NAME: string = pkg.name || "@earendil-works/omk-coding-agent";
+export const APP_NAME: string = resolveRuntimeAppName(runtimeConfigName);
+export const APP_TITLE: string = APP_NAME === "omk" ? "OMK" : APP_NAME;
+export const CONFIG_DIR_NAME: string = resolveRuntimeConfigDir(runtimeConfig?.configDir, APP_NAME);
+export const VERSION: string = pkg.version || "0.0.0";
+export const IS_OMK_RUNTIME = APP_NAME === "omk";
+export const RUNTIME_DISPLAY_NAME: string = IS_OMK_RUNTIME ? "OMK" : APP_NAME;
+export const RUNTIME_USER_AGENT_NAME: string = APP_NAME.toLowerCase();
+
+// OMK hardfork runtime environment variables.
+export const ENV_AGENT_DIR = "OMK_CODING_AGENT_DIR";
+export const ENV_SESSION_DIR = "OMK_CODING_AGENT_SESSION_DIR";
+export const ENV_PACKAGE_DIR = "OMK_PACKAGE_DIR";
+export const ENV_OFFLINE = "OMK_OFFLINE";
+export const ENV_TELEMETRY = "OMK_TELEMETRY";
+export const ENV_SHARE_VIEWER_URL = "OMK_SHARE_VIEWER_URL";
+export const ENV_SKIP_VERSION_CHECK = "OMK_SKIP_VERSION_CHECK";
+export const ENV_FULLSCREEN = "OMK_FULLSCREEN";
+export const ENV_NO_ALT_SCREEN = "OMK_NO_ALT_SCREEN";
+export const ENV_TMUX_ALT_SCREEN_AUTO = "OMK_TMUX_ALT_SCREEN_AUTO";
+export const ENV_CLEAR_ON_SHRINK = "OMK_CLEAR_ON_SHRINK";
+export const ENV_HARDWARE_CURSOR = "OMK_HARDWARE_CURSOR";
+export const ENV_STARTUP_BENCHMARK = "OMK_STARTUP_BENCHMARK";
+export const ENV_TIMING = "OMK_TIMING";
+// OMK-only: controls the neon HUD gap between the sticky composer and footer.
+export const ENV_COMPOSER_LIFT_ROWS = "OMK_COMPOSER_LIFT_ROWS";
+
+export const ENV_AGENT_DIR_ALIASES = [ENV_AGENT_DIR];
+export const ENV_SESSION_DIR_ALIASES = [ENV_SESSION_DIR];
+export const ENV_PACKAGE_DIR_ALIASES = [ENV_PACKAGE_DIR];
+export const ENV_OFFLINE_ALIASES = [ENV_OFFLINE];
+export const ENV_TELEMETRY_ALIASES = [ENV_TELEMETRY];
+export const ENV_SHARE_VIEWER_URL_ALIASES = [ENV_SHARE_VIEWER_URL];
+export const ENV_SKIP_VERSION_CHECK_ALIASES = [ENV_SKIP_VERSION_CHECK];
+export const ENV_FULLSCREEN_ALIASES = [ENV_FULLSCREEN];
+export const ENV_NO_ALT_SCREEN_ALIASES = [ENV_NO_ALT_SCREEN];
+export const ENV_TMUX_ALT_SCREEN_AUTO_ALIASES = [ENV_TMUX_ALT_SCREEN_AUTO];
+export const ENV_CLEAR_ON_SHRINK_ALIASES = [ENV_CLEAR_ON_SHRINK];
+export const ENV_HARDWARE_CURSOR_ALIASES = [ENV_HARDWARE_CURSOR];
+export const ENV_STARTUP_BENCHMARK_ALIASES = [ENV_STARTUP_BENCHMARK];
+export const ENV_TIMING_ALIASES = [ENV_TIMING];
+export const ENV_COMPOSER_LIFT_ROWS_ALIASES = [ENV_COMPOSER_LIFT_ROWS];
+
+export function readAliasedEnv(names: readonly string[], env: NodeJS.ProcessEnv = process.env): string | undefined {
+	for (const name of names) {
+		const value = env[name];
+		if (value !== undefined && value.length > 0) return value;
+	}
+	return undefined;
+}
+
+export function isAliasedEnvFlagEnabled(names: readonly string[], env: NodeJS.ProcessEnv = process.env): boolean {
+	return envFlagEnabled(readAliasedEnv(names, env));
+}
+
+export function getComposerLiftRows(env: NodeJS.ProcessEnv = process.env): number {
+	const raw = readAliasedEnv(ENV_COMPOSER_LIFT_ROWS_ALIASES, env);
+	if (raw === undefined) return 0;
+
+	const parsed = Number.parseInt(raw, 10);
+	if (!Number.isFinite(parsed) || parsed < 0) return 0;
+	return Math.min(parsed, 8);
+}
+
+export function formatAliasedEnvLabel(primary: string, aliases: readonly string[]): string {
+	const legacy = aliases.filter((name) => name !== primary);
+	return legacy.length === 0 ? primary : `${primary} (legacy: ${legacy.join(", ")})`;
+}
 
 export function expandTildePath(path: string): string {
 	return normalizePath(path);
 }
 
-const DEFAULT_SHARE_VIEWER_URL = "https://pi.dev/session/";
+export function getDefaultVersionCheckUrl(env: NodeJS.ProcessEnv = process.env): string | undefined {
+	const explicitUrl = env.OMK_VERSION_CHECK_URL?.trim();
+	if (explicitUrl) return explicitUrl;
+	return undefined;
+}
+
+export function getDefaultInstallTelemetryUrl(env: NodeJS.ProcessEnv = process.env): string | undefined {
+	const explicitUrl = env.OMK_INSTALL_TELEMETRY_URL?.trim();
+	if (explicitUrl) return explicitUrl;
+	return undefined;
+}
+
+export function getDefaultChangelogUrl(env: NodeJS.ProcessEnv = process.env): string | undefined {
+	const explicitUrl = env.OMK_CHANGELOG_URL?.trim();
+	if (explicitUrl) return explicitUrl;
+	return undefined;
+}
 
 /** Get the share viewer URL for a gist ID */
 export function getShareViewerUrl(gistId: string): string {
-	const baseUrl = process.env.PI_SHARE_VIEWER_URL || DEFAULT_SHARE_VIEWER_URL;
-	return `${baseUrl}#${gistId}`;
+	const configuredUrl = readAliasedEnv(ENV_SHARE_VIEWER_URL_ALIASES);
+	if (configuredUrl) {
+		return configuredUrl.includes("{gistId}")
+			? configuredUrl.replaceAll("{gistId}", gistId)
+			: `${configuredUrl}#${gistId}`;
+	}
+	return `https://gist.github.com/${gistId}`;
 }
 
 // =============================================================================
-// User Config Paths (~/.pi/agent/*)
+// User Config Paths (~/.omk/agent/*)
 // =============================================================================
 
-/** Get the agent config directory (e.g., ~/.pi/agent/) */
+/** Get the agent config directory (e.g., ~/.omk/agent/) */
 export function getAgentDir(): string {
-	const envDir = process.env[ENV_AGENT_DIR];
+	const envDir = readAliasedEnv(ENV_AGENT_DIR_ALIASES);
 	if (envDir) {
 		return expandTildePath(envDir);
 	}

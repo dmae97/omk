@@ -5,7 +5,7 @@ import {
 	type Message,
 	type Model,
 	type UserMessage,
-} from "@earendil-works/pi-ai";
+} from "@earendil-works/omk-ai";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { agentLoop, agentLoopContinue } from "../src/agent-loop.ts";
@@ -731,6 +731,78 @@ describe("agentLoop with AgentMessage", () => {
 			return [event.message.toolCallId];
 		});
 		expect(toolResultIds).toEqual(["tool-1", "tool-2"]);
+	});
+
+	it("should force sequential execution when OMK prompt reports disconnected MCP in parallel mode", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		let firstResolved = false;
+		let parallelObserved = false;
+		let releaseFirst: (() => void) | undefined;
+		const firstDone = new Promise<void>((resolve) => {
+			releaseFirst = resolve;
+		});
+
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "echo",
+			label: "Echo",
+			description: "Echo tool",
+			parameters: toolSchema,
+			async execute(_toolCallId, params) {
+				if (params.value === "first") {
+					await firstDone;
+					firstResolved = true;
+				}
+				if (params.value === "second" && !firstResolved) {
+					parallelObserved = true;
+				}
+				return {
+					content: [{ type: "text", text: `echoed: ${params.value}` }],
+					details: { value: params.value },
+				};
+			},
+		};
+
+		const context: AgentContext = {
+			systemPrompt: "Disconnected MCP: memory\nWarnings: memory unavailable or disconnected",
+			messages: [],
+			tools: [tool],
+		};
+
+		const userPrompt: AgentMessage = createUserMessage("echo both");
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			toolExecution: "parallel",
+		};
+
+		let callIndex = 0;
+		const stream = agentLoop([userPrompt], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					const message = createAssistantMessage(
+						[
+							{ type: "toolCall", id: "tool-1", name: "echo", arguments: { value: "first" } },
+							{ type: "toolCall", id: "tool-2", name: "echo", arguments: { value: "second" } },
+						],
+						"toolUse",
+					);
+					mockStream.push({ type: "done", reason: "toolUse", message });
+					setTimeout(() => releaseFirst?.(), 20);
+				} else {
+					const message = createAssistantMessage([{ type: "text", text: "done" }]);
+					mockStream.push({ type: "done", reason: "stop", message });
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		for await (const _event of stream) {
+			// exhaust stream
+		}
+
+		expect(parallelObserved).toBe(false);
 	});
 
 	it("should force sequential execution when one of multiple tools has executionMode=sequential", async () => {

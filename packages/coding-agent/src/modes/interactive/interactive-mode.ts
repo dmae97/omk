@@ -7,16 +7,17 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/omk-agent-core";
 import {
 	type AssistantMessage,
 	getProviders,
+	getSupportedThinkingLevels,
 	type ImageContent,
 	type Message,
 	type Model,
 	type OAuthProviderId,
 	type OAuthSelectPrompt,
-} from "@earendil-works/pi-ai";
+} from "@earendil-works/omk-ai";
 import type {
 	AutocompleteItem,
 	AutocompleteProvider,
@@ -27,7 +28,7 @@ import type {
 	OverlayHandle,
 	OverlayOptions,
 	SlashCommand,
-} from "@earendil-works/pi-tui";
+} from "@earendil-works/omk-tui";
 import {
 	CombinedAutocompleteProvider,
 	type Component,
@@ -46,17 +47,26 @@ import {
 	TruncatedText,
 	TUI,
 	visibleWidth,
-} from "@earendil-works/pi-tui";
+} from "@earendil-works/omk-tui";
 import chalk from "chalk";
 import { spawn, spawnSync } from "child_process";
 import {
 	APP_NAME,
 	APP_TITLE,
+	ENV_FULLSCREEN_ALIASES,
+	ENV_NO_ALT_SCREEN_ALIASES,
+	ENV_OFFLINE_ALIASES,
+	ENV_TMUX_ALT_SCREEN_AUTO_ALIASES,
 	getAgentDir,
 	getAuthPath,
+	getComposerLiftRows,
 	getDebugLogPath,
+	getDefaultChangelogUrl,
+	getDefaultInstallTelemetryUrl,
 	getDocsPath,
 	getShareViewerUrl,
+	isAliasedEnvFlagEnabled,
+	readAliasedEnv,
 	VERSION,
 } from "../../config.ts";
 import { type AgentSession, type AgentSessionEvent, parseSkillBlock } from "../../core/agent-session.ts";
@@ -74,14 +84,28 @@ import type {
 import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/footer-data-provider.ts";
 import { configureHttpDispatcher, formatHttpIdleTimeoutMs } from "../../core/http-dispatcher.ts";
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.ts";
-import { createCompactionSummaryMessage } from "../../core/messages.ts";
-import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScope } from "../../core/model-resolver.ts";
+import {
+	createBranchSummaryMessage,
+	createCompactionSummaryMessage,
+	createCustomMessage,
+} from "../../core/messages.ts";
+import { defaultModelPerProvider, resolveCliModel, resolveModelScope } from "../../core/model-resolver.ts";
+import {
+	buildOmkControlSurface,
+	formatOmkTuiDoctorReport,
+	isOmkRuntimeName,
+	OMK_CONTROL_DASHBOARD_GUTTER_WIDTH,
+	OMK_CONTROL_DASHBOARD_MIN_WIDTH,
+	OMK_CONTROL_DASHBOARD_WIDTH,
+	resolveOmkTuiEnvironment,
+	summarizeOmkLoadedResources,
+	truncateOmkExpandedResourceBody,
+} from "../../core/omk-control.ts";
 import { DefaultPackageManager } from "../../core/package-manager.ts";
-import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "../../core/provider-display-names.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
-import { type SessionContext, SessionManager } from "../../core/session-manager.ts";
-import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
+import { type SessionContext, type SessionEntry, SessionManager } from "../../core/session-manager.ts";
+import { BUILTIN_SLASH_COMMANDS, findBuiltinSlashCommand, parseSlashCommandInput } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
@@ -94,6 +118,7 @@ import { getPiUserAgent } from "../../utils/pi-user-agent.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
 import { checkForNewPiVersion, type LatestPiRelease } from "../../utils/version-check.ts";
+import { type CockpitLayout, consumeCockpitScrollInput, debugInputEscaped, debugInputHex } from "./cockpit-scroll.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
 import { BashExecutionComponent } from "./components/bash-execution.ts";
@@ -103,7 +128,6 @@ import { CompactionSummaryMessageComponent } from "./components/compaction-summa
 import { CountdownTimer } from "./components/countdown-timer.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
 import { CustomMessageComponent } from "./components/custom-message.ts";
-import { DaxnutsComponent } from "./components/daxnuts.ts";
 import { DynamicBorder } from "./components/dynamic-border.ts";
 import { EarendilAnnouncementComponent } from "./components/earendil-announcement.ts";
 import { ExtensionEditorComponent } from "./components/extension-editor.ts";
@@ -114,10 +138,19 @@ import { formatKeyText, keyDisplayText, keyHint, keyText, rawKeyHint } from "./c
 import { LoginDialogComponent } from "./components/login-dialog.ts";
 import { ModelSelectorComponent } from "./components/model-selector.ts";
 import { type AuthSelectorProvider, OAuthSelectorComponent } from "./components/oauth-selector.ts";
+import { OmkBrandComponent } from "./components/omk-brand.ts";
+import { OmkBrandStartupComponent, type OmkBrandSurfaceData } from "./components/omk-brand-surface.ts";
+import type { OmkControlDashboardActivity } from "./components/omk-control-dashboard.ts";
+import { OmkControlLayout, type OmkControlPanelMode } from "./components/omk-control-layout.ts";
+import { OmkNeonHudComponent } from "./components/omk-neon-hud.ts";
+import { OmkTabbedPanel, type OmkTabId } from "./components/omk-tabbed-panel.ts";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.ts";
+import { ScrollableTranscriptComponent } from "./components/scrollable-transcript.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
+import { ThemeSelectorComponent } from "./components/theme-selector.ts";
+import { ThinkingSelectorComponent } from "./components/thinking-selector.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
@@ -202,6 +235,15 @@ function quoteIfNeeded(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+function normalizeSlashSetArgument(value: string | undefined): string | undefined {
+	const trimmed = value?.trim();
+	if (!trimmed) return undefined;
+	if (trimmed.toLowerCase().startsWith("set ")) {
+		return trimmed.slice(4).trim() || undefined;
+	}
+	return trimmed;
+}
+
 export function formatResumeCommand(sessionManager: SessionManager): string | undefined {
 	if (!process.stdout.isTTY) return undefined;
 	if (!sessionManager.isPersisted()) return undefined;
@@ -224,17 +266,18 @@ function hasDefaultModelProvider(providerId: string): providerId is keyof typeof
 const BEDROCK_PROVIDER_ID = "amazon-bedrock";
 
 const BUILT_IN_MODEL_PROVIDERS = new Set<string>(getProviders());
+const OAUTH_ONLY_MODEL_PROVIDERS = new Set<string>(["github-copilot", "openai-codex"]);
 
 export function isApiKeyLoginProvider(
 	providerId: string,
 	oauthProviderIds: ReadonlySet<string>,
 	builtInProviderIds: ReadonlySet<string> = BUILT_IN_MODEL_PROVIDERS,
 ): boolean {
-	if (BUILT_IN_PROVIDER_DISPLAY_NAMES[providerId]) {
-		return true;
+	if (OAUTH_ONLY_MODEL_PROVIDERS.has(providerId)) {
+		return false;
 	}
 	if (builtInProviderIds.has(providerId)) {
-		return false;
+		return true;
 	}
 	return !oauthProviderIds.has(providerId);
 }
@@ -261,6 +304,7 @@ export class InteractiveMode {
 	private runtimeHost: AgentSessionRuntime;
 	private ui: TUI;
 	private chatContainer: Container;
+	private transcriptContainer: ScrollableTranscriptComponent;
 	private pendingMessagesContainer: Container;
 	private statusContainer: Container;
 	private defaultEditor: CustomEditor;
@@ -272,17 +316,34 @@ export class InteractiveMode {
 	private editorContainer: Container;
 	private footer: FooterComponent;
 	private footerDataProvider: FooterDataProvider;
+	private composerLiftRows: number;
+	private composerLiftSpacer: Spacer;
+	private omkNeonHud: OmkNeonHudComponent | undefined;
+	private omkDashboard: OmkTabbedPanel | undefined;
+	private omkLayout: OmkControlLayout | undefined;
+	private leftScrollFromBottom = 0;
+	private followTail = true;
+	private leftTranscriptLineCount = 0;
+	private leftTranscriptHeight = 0;
+	private leftTranscriptWidth = 0;
+	private currentLayout: CockpitLayout | undefined;
+	private cockpitInputUnsubscribe: (() => void) | undefined;
+	private tmuxAlternateScreenWasChanged = false;
+	private tmuxPreviousAlternateScreen: string | undefined;
+	private tuiDiagnosticsStatus = "fullscreen:pending";
 	// Stored so the same manager can be injected into custom editors, selectors, and extension UI.
 	private keybindings: KeybindingsManager;
 	private version: string;
 	private isInitialized = false;
 	private onInputCallback?: (text: string) => void;
 	private pendingUserInputs: string[] = [];
+	private queuedSteeringCount = 0;
+	private queuedFollowUpCount = 0;
 	private loadingAnimation: Loader | undefined = undefined;
 	private workingMessage: string | undefined = undefined;
 	private workingVisible = true;
 	private workingIndicatorOptions: LoaderIndicatorOptions | undefined = undefined;
-	private readonly defaultWorkingMessage = "Working...";
+	private readonly defaultWorkingMessage = isOmkRuntimeName(APP_NAME) ? "working..." : "Working...";
 	private readonly defaultHiddenThinkingLabel = "Thinking...";
 	private hiddenThinkingLabel = this.defaultHiddenThinkingLabel;
 
@@ -394,6 +455,21 @@ export class InteractiveMode {
 		this.ui.setClearOnShrink(this.settingsManager.getClearOnShrink());
 		this.headerContainer = new Container();
 		this.chatContainer = new Container();
+		this.transcriptContainer = new ScrollableTranscriptComponent(this.chatContainer, {
+			getScrollFromBottom: (lineCount, viewportHeight) =>
+				this.getDesiredTranscriptScrollFromBottom(lineCount, viewportHeight),
+			getViewportHeight: (width, totalHeight) => {
+				this.leftTranscriptWidth = width;
+				return this.getTranscriptViewportHeight(width, totalHeight);
+			},
+			onMetrics: (metrics) =>
+				this.updateTranscriptMetrics(
+					this.leftTranscriptWidth,
+					metrics.viewportHeight,
+					metrics.lineCount,
+					metrics.clampedScrollFromBottom,
+				),
+		});
 		this.pendingMessagesContainer = new Container();
 		this.statusContainer = new Container();
 		this.widgetContainerAbove = new Container();
@@ -412,6 +488,25 @@ export class InteractiveMode {
 		this.footerDataProvider = new FooterDataProvider(this.sessionManager.getCwd());
 		this.footer = new FooterComponent(this.session, this.footerDataProvider);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
+		this.composerLiftRows = getComposerLiftRows();
+		this.composerLiftSpacer = new Spacer(this.composerLiftRows);
+		if (isOmkRuntimeName(APP_NAME) && this.composerLiftRows > 0) {
+			this.omkNeonHud = new OmkNeonHudComponent(this.session, this.footerDataProvider, {
+				getRows: () => this.composerLiftRows,
+				getActivity: () => this.getOmkDashboardActivity(),
+			});
+		}
+		if (isOmkRuntimeName(APP_NAME)) {
+			this.omkDashboard = new OmkTabbedPanel(this.session, this.footerDataProvider, () =>
+				this.getOmkDashboardActivity(),
+			);
+			this.omkLayout = new OmkControlLayout(this.omkDashboard, {
+				dashboardWidth: OMK_CONTROL_DASHBOARD_WIDTH,
+				minWidth: OMK_CONTROL_DASHBOARD_MIN_WIDTH,
+				gutterWidth: OMK_CONTROL_DASHBOARD_GUTTER_WIDTH,
+				onActiveChange: (active) => this.footer.setOmkControlCompact(active),
+			});
+		}
 
 		// Load hide thinking block setting
 		this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
@@ -475,11 +570,9 @@ export class InteractiveMode {
 			name: command.name,
 			description: command.description,
 		}));
-
 		const modelCommand = slashCommands.find((command) => command.name === "model");
 		if (modelCommand) {
 			modelCommand.getArgumentCompletions = (prefix: string): AutocompleteItem[] | null => {
-				// Get available models (scoped or from registry)
 				const models =
 					this.session.scopedModels.length > 0
 						? this.session.scopedModels.map((s) => s.model)
@@ -487,22 +580,86 @@ export class InteractiveMode {
 
 				if (models.length === 0) return null;
 
-				// Create items with provider/id format
 				const items = models.map((m) => ({
 					id: m.id,
 					provider: m.provider,
 					label: `${m.provider}/${m.id}`,
 				}));
 
-				// Fuzzy filter by model ID + provider (allows "opus anthropic" to match)
 				const filtered = fuzzyFilter(items, prefix, (item) => `${item.id} ${item.provider}`);
-
 				if (filtered.length === 0) return null;
 
 				return filtered.map((item) => ({
 					value: item.label,
 					label: item.id,
 					description: item.provider,
+				}));
+			};
+		}
+
+		const thinkCommand = slashCommands.find((command) => command.name === "think");
+		if (thinkCommand) {
+			thinkCommand.getArgumentCompletions = (prefix: string): AutocompleteItem[] | null => {
+				const levels = this.session.getAvailableThinkingLevels();
+				const filtered = fuzzyFilter(
+					levels.map((level) => ({ level })),
+					prefix,
+					(item) => item.level,
+				);
+				if (filtered.length === 0) return null;
+				return filtered.map((item) => ({
+					value: item.level,
+					label: item.level,
+					description: "thinking level",
+				}));
+			};
+		}
+
+		const themeCommand = slashCommands.find((command) => command.name === "theme");
+		if (themeCommand) {
+			themeCommand.getArgumentCompletions = (prefix: string): AutocompleteItem[] | null => {
+				const themes = getAvailableThemesWithPaths();
+				const filtered = fuzzyFilter(
+					themes.map((item) => ({ ...item, description: item.path ? item.path.split("/").pop() : "built-in" })),
+					prefix,
+					(item) => `${item.name} ${item.path ?? ""}`,
+				);
+				if (filtered.length === 0) return null;
+				return filtered.map((item) => ({
+					value: item.name,
+					label: item.name,
+					description: item.description,
+				}));
+			};
+		}
+
+		const panelCommand = slashCommands.find((command) => command.name === "panel");
+		if (panelCommand) {
+			panelCommand.getArgumentCompletions = (prefix: string): AutocompleteItem[] | null => {
+				const modes: (OmkControlPanelMode | OmkTabId)[] = ["pin", "hide", "compact", "wide", "control", "history"];
+				const filtered = fuzzyFilter(
+					modes.map((mode) => ({ mode })),
+					prefix,
+					(item) => item.mode,
+				);
+				if (filtered.length === 0) return null;
+				return filtered.map((item) => ({
+					value: item.mode,
+					label: item.mode,
+					description: item.mode === "control" || item.mode === "history" ? "tab" : "panel mode",
+				}));
+			};
+		}
+
+		const doctorCommand = slashCommands.find((command) => command.name === "doctor");
+		if (doctorCommand) {
+			doctorCommand.getArgumentCompletions = (prefix: string): AutocompleteItem[] | null => {
+				const filtered = fuzzyFilter([{ target: "tui" }], prefix, (item) => item.target);
+				if (filtered.length === 0) return null;
+				return filtered.map((item) => ({
+					value: item.target,
+					label: item.target,
+					description: "diagnostics target",
 				}));
 			};
 		}
@@ -602,32 +759,23 @@ export class InteractiveMode {
 		const [fdPath] = await Promise.all([ensureTool("fd"), ensureTool("rg")]);
 		this.fdPath = fdPath;
 
-		if (this.session.scopedModels.length > 0 && (this.options.verbose || !this.settingsManager.getQuietStartup())) {
-			const modelList = this.session.scopedModels
-				.map((sm) => {
-					const thinkingStr = sm.thinkingLevel ? `:${sm.thinkingLevel}` : "";
-					return `${sm.model.id}${thinkingStr}`;
-				})
-				.join(", ");
-			const cycleKeys = this.keybindings.getKeys("app.model.cycleForward");
-			const cycleHint =
-				cycleKeys.length > 0
-					? theme.fg("muted", ` (${formatKeyText(cycleKeys.join("/"), { capitalize: true })} to cycle)`)
-					: "";
-			console.log(theme.fg("dim", `Model scope: ${modelList}${cycleHint}`));
+		const rootContainer = this.getRootContainer();
+		if (this.omkLayout) {
+			this.ui.addChild(this.omkLayout);
 		}
 
 		// Add header container as first child
-		this.ui.addChild(this.headerContainer);
+		rootContainer.addChild(this.headerContainer);
 
 		// Add header with keybindings from config (unless silenced)
 		if (this.options.verbose || !this.settingsManager.getQuietStartup()) {
-			const logo = theme.bold(theme.fg("accent", APP_NAME)) + theme.fg("dim", ` v${this.version}`);
+			const omkSurface = isOmkRuntimeName(APP_NAME) ? buildOmkControlSurface() : undefined;
 
 			// Build startup instructions using keybinding hint helpers
 			const hint = (keybinding: AppKeybinding, description: string) => keyHint(keybinding, description);
 
 			const expandedInstructions = [
+				...(omkSurface ? [theme.fg("accent", omkSurface.expandedStatus)] : []),
 				hint("app.interrupt", "to interrupt"),
 				hint("app.clear", "to clear"),
 				rawKeyHint(`${keyText("app.clear")} twice`, "to exit"),
@@ -649,6 +797,7 @@ export class InteractiveMode {
 				rawKeyHint("drop files", "to attach"),
 			].join("\n");
 			const compactInstructions = [
+				...(omkSurface ? [theme.fg("accent", omkSurface.compactStatus)] : []),
 				hint("app.interrupt", "interrupt"),
 				rawKeyHint(`${keyText("app.clear")}/${keyText("app.exit")}`, "clear/exit"),
 				rawKeyHint("/", "commands"),
@@ -661,15 +810,31 @@ export class InteractiveMode {
 			);
 			const onboarding = theme.fg(
 				"dim",
-				`Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.`,
+				omkSurface?.onboarding ??
+					`${APP_TITLE} can explain its own features and look up its docs. Ask it how to use or extend ${APP_TITLE}.`,
 			);
-			this.builtInHeader = new ExpandableText(
-				() => `${logo}\n${compactInstructions}\n${compactOnboarding}\n\n${onboarding}`,
-				() => `${logo}\n${expandedInstructions}\n\n${onboarding}`,
-				this.getStartupExpansionState(),
-				1,
-				0,
-			);
+
+			if (omkSurface) {
+				this.builtInHeader = new OmkBrandStartupComponent({
+					getData: () => this.getOmkBrandSurfaceData(),
+					expanded: this.getStartupExpansionState(),
+					getCollapsedHint: () => `${compactInstructions}\n${compactOnboarding}`,
+					getExpandedHelp: () => `${expandedInstructions}\n\n${onboarding}`,
+					ui: this.ui,
+					animate: true,
+					intervalMs: 120,
+					maxFrames: 14,
+				});
+			} else {
+				const logo = theme.bold(theme.fg("accent", APP_NAME)) + theme.fg("dim", ` v${this.version}`);
+				this.builtInHeader = new ExpandableText(
+					() => `${logo}\n${compactInstructions}\n${compactOnboarding}\n\n${onboarding}`,
+					() => `${logo}\n${expandedInstructions}\n\n${onboarding}`,
+					this.getStartupExpansionState(),
+					1,
+					0,
+				);
+			}
 
 			// Setup UI layout
 			this.headerContainer.addChild(new Spacer(1));
@@ -681,21 +846,28 @@ export class InteractiveMode {
 			this.headerContainer.addChild(this.builtInHeader);
 		}
 
-		this.ui.addChild(this.chatContainer);
-		this.ui.addChild(this.pendingMessagesContainer);
-		this.ui.addChild(this.statusContainer);
+		rootContainer.addChild(this.transcriptContainer);
+		rootContainer.addChild(this.pendingMessagesContainer);
+		rootContainer.addChild(this.statusContainer);
 		this.renderWidgets(); // Initialize with default spacer
-		this.ui.addChild(this.widgetContainerAbove);
-		this.ui.addChild(this.editorContainer);
-		this.ui.addChild(this.widgetContainerBelow);
-		this.ui.addChild(this.footer);
+		rootContainer.addChild(this.widgetContainerAbove);
+		rootContainer.addChild(this.editorContainer);
+		rootContainer.addChild(this.widgetContainerBelow);
+		rootContainer.addChild(this.omkNeonHud ?? this.composerLiftSpacer);
+		rootContainer.addChild(this.footer);
 		this.ui.setFocus(this.editor);
 
 		this.setupKeyHandlers();
+		this.setupCockpitInputRouting();
 		this.setupEditorSubmitHandler();
+
+		const tmuxViewportWarning = this.configureOmkFullscreenViewport();
 
 		// Start the UI before initializing extensions so session_start handlers can use interactive dialogs
 		this.ui.start();
+		if (tmuxViewportWarning) {
+			this.showWarning(tmuxViewportWarning);
+		}
 		this.isInitialized = true;
 
 		// Initialize extensions first so resources are shown before messages
@@ -720,6 +892,29 @@ export class InteractiveMode {
 		await this.updateAvailableProviderCount();
 	}
 
+	private getOmkBrandSurfaceData(): OmkBrandSurfaceData {
+		const model = this.session.state.model;
+		const thinkingLevel = model?.reasoning ? this.session.state.thinkingLevel : undefined;
+		const modelLabel = model
+			? `${model.id}${thinkingLevel && thinkingLevel !== "off" ? `:${thinkingLevel}` : ""}`
+			: undefined;
+		const cwd = this.sessionManager.getCwd();
+		const home = os.homedir();
+		const cwdLabel = cwd.startsWith(home) ? `~${cwd.slice(home.length)}` : cwd;
+
+		return {
+			version: `v${this.version}`,
+			provider: model?.provider,
+			model: modelLabel,
+			cwd: cwdLabel,
+			branch: this.footerDataProvider.getGitBranch() ?? undefined,
+		};
+	}
+
+	private getRootContainer(): Container {
+		return this.omkLayout ?? this.ui;
+	}
+
 	/**
 	 * Update terminal title with session name and cwd.
 	 */
@@ -740,12 +935,14 @@ export class InteractiveMode {
 	async run(): Promise<void> {
 		await this.init();
 
-		// Start version check asynchronously
-		checkForNewPiVersion(this.version).then((newRelease) => {
-			if (newRelease) {
-				this.showNewVersionNotification(newRelease);
-			}
-		});
+		if (!isOmkRuntimeName(APP_NAME)) {
+			// Only non-OMK runtimes use the remote Pi release check by default.
+			checkForNewPiVersion(this.version).then((newRelease) => {
+				if (newRelease) {
+					this.showNewVersionNotification(newRelease);
+				}
+			});
+		}
 
 		// Start package update check asynchronously
 		this.checkForPackageUpdates().then((updates) => {
@@ -813,7 +1010,7 @@ export class InteractiveMode {
 	}
 
 	private async checkForPackageUpdates(): Promise<string[]> {
-		if (process.env.PI_OFFLINE) {
+		if (isAliasedEnvFlagEnabled(ENV_OFFLINE_ALIASES)) {
 			return [];
 		}
 
@@ -830,18 +1027,97 @@ export class InteractiveMode {
 		}
 	}
 
-	private async checkTmuxKeyboardSetup(): Promise<string | undefined> {
-		if (!process.env.TMUX) return undefined;
+	private configureOmkFullscreenViewport(): string | undefined {
+		if (!isOmkRuntimeName(APP_NAME)) return undefined;
 
-		const runTmuxShow = (option: string): Promise<string | undefined> => {
+		const envDecision = resolveOmkTuiEnvironment({
+			fullscreen: readAliasedEnv(ENV_FULLSCREEN_ALIASES),
+			noAltScreen: readAliasedEnv(ENV_NO_ALT_SCREEN_ALIASES),
+			tmuxAltScreenAuto: readAliasedEnv(ENV_TMUX_ALT_SCREEN_AUTO_ALIASES),
+		});
+
+		if (!envDecision.fullscreenEnabled) {
+			this.ui.setFullscreenViewport(false);
+			this.setTuiDiagnosticsStatus(`fullscreen:off env:${envDecision.disabledReason ?? "disabled"}`);
+			return undefined;
+		}
+
+		this.ui.setFullscreenViewport(true);
+		if (!process.env.TMUX) {
+			this.setTuiDiagnosticsStatus("fullscreen:on tmux:no sidebar:pinned");
+			return undefined;
+		}
+
+		const current = this.readTmuxWindowAlternateScreen();
+		if (current === undefined) {
+			this.setTuiDiagnosticsStatus("fullscreen:on tmux:unknown sidebar:pinned");
+			return undefined;
+		}
+		if (current === "on") {
+			this.setTuiDiagnosticsStatus("fullscreen:on tmux-alt:on sidebar:pinned");
+			return undefined;
+		}
+		if (!envDecision.tmuxAltScreenAutoEnabled) {
+			this.ui.setFullscreenViewport(false);
+			this.setTuiDiagnosticsStatus("fullscreen:off tmux-alt:off auto:off");
+			return "tmux alternate-screen is off and OMK_TMUX_ALT_SCREEN_AUTO=0, so OMK fullscreen pinning is disabled for this run.";
+		}
+
+		if (this.setTmuxWindowAlternateScreen("on")) {
+			this.tmuxAlternateScreenWasChanged = true;
+			this.tmuxPreviousAlternateScreen = current;
+			this.setTuiDiagnosticsStatus(`fullscreen:on tmux-alt:${current}->window-on sidebar:pinned`);
+			return undefined;
+		}
+
+		this.ui.setFullscreenViewport(false);
+		this.setTuiDiagnosticsStatus("fullscreen:off tmux-alt:set-failed");
+		return "tmux alternate-screen is off. OMK could not auto-enable it for the current window, so fullscreen pinning is disabled.";
+	}
+
+	private readTmuxWindowAlternateScreen(): string | undefined {
+		const result = spawnSync("tmux", ["show-options", "-wqv", "alternate-screen"], {
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "ignore"],
+			timeout: 2000,
+		});
+		if (result.status !== 0) return undefined;
+		return result.stdout.trim() || undefined;
+	}
+
+	private setTmuxWindowAlternateScreen(value: string): boolean {
+		const result = spawnSync("tmux", ["set-option", "-wq", "alternate-screen", value], {
+			encoding: "utf8",
+			stdio: ["ignore", "ignore", "ignore"],
+			timeout: 2000,
+		});
+		return result.status === 0;
+	}
+
+	private restoreTmuxViewportSupport(): void {
+		if (!this.tmuxAlternateScreenWasChanged || this.tmuxPreviousAlternateScreen === undefined) return;
+		this.setTmuxWindowAlternateScreen(this.tmuxPreviousAlternateScreen);
+		this.tmuxAlternateScreenWasChanged = false;
+		this.tmuxPreviousAlternateScreen = undefined;
+	}
+
+	private setTuiDiagnosticsStatus(text: string): void {
+		this.tuiDiagnosticsStatus = text;
+		this.footerDataProvider.setExtensionStatus("tui", text);
+	}
+
+	private async checkTmuxKeyboardSetup(): Promise<string | undefined> {
+		if (!process.env.TMUX || !isOmkRuntimeName(APP_NAME)) return undefined;
+
+		const runTmux = (args: string[]): Promise<{ code: number | null; stdout: string }> => {
 			return new Promise((resolve) => {
-				const proc = spawn("tmux", ["show", "-gv", option], {
+				const proc = spawn("tmux", args, {
 					stdio: ["ignore", "pipe", "ignore"],
 				});
 				let stdout = "";
 				const timer = setTimeout(() => {
 					proc.kill();
-					resolve(undefined);
+					resolve({ code: null, stdout: "" });
 				}, 2000);
 
 				proc.stdout?.on("data", (data) => {
@@ -849,29 +1125,50 @@ export class InteractiveMode {
 				});
 				proc.on("error", () => {
 					clearTimeout(timer);
-					resolve(undefined);
+					resolve({ code: null, stdout: "" });
 				});
 				proc.on("close", (code) => {
 					clearTimeout(timer);
-					resolve(code === 0 ? stdout.trim() : undefined);
+					resolve({ code, stdout: stdout.trim() });
 				});
 			});
 		};
 
-		const [extendedKeys, extendedKeysFormat] = await Promise.all([
+		const runTmuxShow = async (option: string): Promise<string | undefined> => {
+			const result = await runTmux(["show", "-gv", option]);
+			return result.code === 0 ? result.stdout : undefined;
+		};
+
+		const runTmuxSet = async (option: string, value: string): Promise<boolean> => {
+			const result = await runTmux(["set", "-g", option, value]);
+			return result.code === 0;
+		};
+
+		let [extendedKeys, extendedKeysFormat] = await Promise.all([
 			runTmuxShow("extended-keys"),
 			runTmuxShow("extended-keys-format"),
 		]);
 
-		// If we couldn't query tmux (timeout, sandbox, etc.), don't warn
 		if (extendedKeys === undefined) return undefined;
 
 		if (extendedKeys !== "on" && extendedKeys !== "always") {
-			return "tmux extended-keys is off. Modified Enter keys may not work. Add `set -g extended-keys on` to ~/.tmux.conf and restart tmux.";
+			if (await runTmuxSet("extended-keys", "on")) {
+				extendedKeys = await runTmuxShow("extended-keys");
+			}
 		}
 
 		if (extendedKeysFormat === "xterm") {
-			return "tmux extended-keys-format is xterm. Pi works best with csi-u. Add `set -g extended-keys-format csi-u` to ~/.tmux.conf and restart tmux.";
+			if (await runTmuxSet("extended-keys-format", "csi-u")) {
+				extendedKeysFormat = await runTmuxShow("extended-keys-format");
+			}
+		}
+
+		if (extendedKeys !== "on" && extendedKeys !== "always") {
+			return "tmux extended-keys is off. OMK could not auto-enable it. Add `set -g extended-keys on` to ~/.tmux.conf and restart tmux.";
+		}
+
+		if (extendedKeysFormat === "xterm") {
+			return "tmux extended-keys-format is xterm. OMK could not switch it to csi-u. Add `set -g extended-keys-format csi-u` to ~/.tmux.conf and restart tmux.";
 		}
 
 		return undefined;
@@ -909,7 +1206,7 @@ export class InteractiveMode {
 	}
 
 	private reportInstallTelemetry(version: string): void {
-		if (process.env.PI_OFFLINE) {
+		if (isAliasedEnvFlagEnabled(ENV_OFFLINE_ALIASES)) {
 			return;
 		}
 
@@ -917,7 +1214,10 @@ export class InteractiveMode {
 			return;
 		}
 
-		void fetch(`https://pi.dev/api/report-install?version=${encodeURIComponent(version)}`, {
+		const telemetryUrl = getDefaultInstallTelemetryUrl();
+		if (!telemetryUrl) return;
+
+		void fetch(`${telemetryUrl}?version=${encodeURIComponent(version)}`, {
 			headers: {
 				"User-Agent": getPiUserAgent(version),
 			},
@@ -1315,22 +1615,22 @@ export class InteractiveMode {
 		}
 
 		const sectionHeader = (name: string, color: ThemeColor = "mdHeading") => theme.fg(color, `[${name}]`);
-		const formatCompactList = (items: string[], options?: { sort?: boolean }): string => {
-			const labels = items.map((item) => item.trim()).filter((item) => item.length > 0);
-			if (options?.sort !== false) {
-				labels.sort((a, b) => a.localeCompare(b));
-			}
-			return theme.fg("dim", `  ${labels.join(", ")}`);
-		};
+		const formatCompactList = (
+			items: string[],
+			options?: { sort?: boolean; maxItems?: number; showCount?: boolean },
+		): string => theme.fg("dim", `  ${summarizeOmkLoadedResources(items, options)}`);
 		const addLoadedSection = (
 			name: string,
 			collapsedBody: string,
 			expandedBody = collapsedBody,
 			color: ThemeColor = "mdHeading",
 		): void => {
+			const omkExpandedBody = isOmkRuntimeName(APP_NAME)
+				? truncateOmkExpandedResourceBody(expandedBody, 10)
+				: expandedBody;
 			const section = new ExpandableText(
 				() => `${sectionHeader(name, color)}\n${collapsedBody}`,
-				() => `${sectionHeader(name, color)}\n${expandedBody}`,
+				() => `${sectionHeader(name, color)}\n${omkExpandedBody}`,
 				this.getStartupExpansionState(),
 				0,
 				0,
@@ -1379,9 +1679,19 @@ export class InteractiveMode {
 					.join("\n");
 				const contextCompactList = formatCompactList(
 					contextFiles.map((contextFile) => this.formatContextPath(contextFile.path)),
-					{ sort: false },
+					{ sort: false, maxItems: 2 },
 				);
 				addLoadedSection("Context", contextCompactList, contextList);
+			}
+			const scopedModels = this.session.scopedModels ?? [];
+			if (scopedModels.length > 0) {
+				const scopedModelLabels = scopedModels.map((scopedModel) => {
+					const thinkingSuffix = scopedModel.thinkingLevel ? `:${scopedModel.thinkingLevel}` : "";
+					return `${scopedModel.model.provider}/${scopedModel.model.id}${thinkingSuffix}`;
+				});
+				const scopedModelBody = scopedModelLabels.map((label) => theme.fg("dim", `  ${label}`)).join("\n");
+				const modelCompactList = formatCompactList(scopedModelLabels, { sort: false, maxItems: 3 });
+				addLoadedSection("Models", modelCompactList, scopedModelBody);
 			}
 
 			const skills = skillsResult.skills;
@@ -1393,7 +1703,10 @@ export class InteractiveMode {
 					formatPath: (item) => this.formatDisplayPath(item.path),
 					formatPackagePath: (item) => this.getShortPath(item.path, item.sourceInfo),
 				});
-				const skillCompactList = formatCompactList(skills.map((skill) => skill.name));
+				const skillCompactList = formatCompactList(
+					skills.map((skill) => skill.name),
+					{ maxItems: 5 },
+				);
 				addLoadedSection("Skills", skillCompactList, skillList);
 			}
 
@@ -1413,7 +1726,10 @@ export class InteractiveMode {
 						return template ? `/${template.name}` : this.formatDisplayPath(item.path);
 					},
 				});
-				const promptCompactList = formatCompactList(templates.map((template) => `/${template.name}`));
+				const promptCompactList = formatCompactList(
+					templates.map((template) => `/${template.name}`),
+					{ maxItems: 3 },
+				);
 				addLoadedSection("Prompts", promptCompactList, templateList);
 			}
 
@@ -1424,7 +1740,7 @@ export class InteractiveMode {
 					formatPackagePath: (item) =>
 						this.formatExtensionDisplayPath(this.getShortPath(item.path, item.sourceInfo)),
 				});
-				const extensionCompactList = formatCompactList(this.getCompactExtensionLabels(extensions));
+				const extensionCompactList = formatCompactList(this.getCompactExtensionLabels(extensions), { maxItems: 4 });
 				addLoadedSection("Extensions", extensionCompactList, extList, "mdHeading");
 			}
 
@@ -1447,6 +1763,7 @@ export class InteractiveMode {
 						(loadedTheme) =>
 							loadedTheme.name ?? this.getCompactPathLabel(loadedTheme.sourcePath!, loadedTheme.sourceInfo),
 					),
+					{ maxItems: 3 },
 				);
 				addLoadedSection("Themes", themeCompactList, themeList);
 			}
@@ -1595,6 +1912,8 @@ export class InteractiveMode {
 		configureHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
 		this.footer.setSession(this.session);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
+		this.omkDashboard?.setSession(this.session);
+		this.omkNeonHud?.setSession(this.session);
 		this.footerDataProvider.setCwd(this.sessionManager.getCwd());
 		this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
 		this.ui.setShowHardwareCursor(this.settingsManager.getShowHardwareCursor());
@@ -1618,6 +1937,7 @@ export class InteractiveMode {
 		await this.updateAvailableProviderCount();
 		this.updateEditorBorderColor();
 		this.updateTerminalTitle();
+		this.setTuiDiagnosticsStatus(this.tuiDiagnosticsStatus);
 	}
 
 	private async handleFatalRuntimeError(prefix: string, error: unknown): Promise<never> {
@@ -1632,6 +1952,8 @@ export class InteractiveMode {
 		this.chatContainer.clear();
 		this.pendingMessagesContainer.clear();
 		this.compactionQueuedMessages = [];
+		this.queuedSteeringCount = 0;
+		this.queuedFollowUpCount = 0;
 		this.streamingComponent = undefined;
 		this.streamingMessage = undefined;
 		this.pendingTools.clear();
@@ -1711,6 +2033,31 @@ export class InteractiveMode {
 
 	private getWorkingLoaderMessage(): string {
 		return this.workingMessage ?? this.defaultWorkingMessage;
+	}
+
+	private getOmkDashboardActivity(): OmkControlDashboardActivity {
+		const queuedMessageCount =
+			this.queuedSteeringCount +
+			this.queuedFollowUpCount +
+			this.compactionQueuedMessages.length +
+			this.pendingUserInputs.length;
+		const pendingToolCount = this.pendingTools.size;
+		const base = { pendingToolCount, queuedMessageCount };
+
+		if (this.session.isCompacting) {
+			return { ...base, label: "compacting", detail: "context checkpoint and rewrite in progress" };
+		}
+		if (this.retryLoader) {
+			return { ...base, label: "retrying", detail: "fallback loop waiting for recovery" };
+		}
+		if (this.session.isBashRunning) {
+			return { ...base, label: "shell", detail: "local command lane is active" };
+		}
+		if (this.session.isStreaming) {
+			const detail = pendingToolCount > 0 ? "tool execution loop active" : "planning/read/write loop active";
+			return { ...base, label: "working...", detail };
+		}
+		return { ...base, label: "ready", detail: "route · evidence · loop · control" };
 	}
 
 	private createWorkingLoader(): Loader {
@@ -1902,21 +2249,23 @@ export class InteractiveMode {
 			this.customFooter.dispose();
 		}
 
+		const rootContainer = this.getRootContainer();
+
 		// Remove current footer from UI
 		if (this.customFooter) {
-			this.ui.removeChild(this.customFooter);
+			rootContainer.removeChild(this.customFooter);
 		} else {
-			this.ui.removeChild(this.footer);
+			rootContainer.removeChild(this.footer);
 		}
 
 		if (factory) {
 			// Create and add custom footer, passing the data provider
 			this.customFooter = factory(this.ui, theme, this.footerDataProvider);
-			this.ui.addChild(this.customFooter);
+			rootContainer.addChild(this.customFooter);
 		} else {
 			// Restore built-in footer
 			this.customFooter = undefined;
-			this.ui.addChild(this.footer);
+			rootContainer.addChild(this.footer);
 		}
 
 		this.ui.requestRender();
@@ -1982,6 +2331,155 @@ export class InteractiveMode {
 			unsubscribe();
 		}
 		this.extensionTerminalInputUnsubscribers.clear();
+	}
+
+	private getDesiredTranscriptScrollFromBottom(lineCount: number, _viewportHeight: number): number {
+		if (!this.followTail && lineCount > this.leftTranscriptLineCount) {
+			return this.leftScrollFromBottom + (lineCount - this.leftTranscriptLineCount);
+		}
+		return this.leftScrollFromBottom;
+	}
+
+	private getTranscriptViewportHeight(width: number, totalHeight: number | undefined): number {
+		if (totalHeight === undefined) {
+			return Math.max(1, this.chatContainer.render(width).length);
+		}
+		const available = totalHeight - this.getHeaderLineCount(width) - this.getFixedBottomLineCount(width);
+		return Math.max(1, available);
+	}
+
+	private updateTranscriptMetrics(
+		mainWidth: number,
+		transcriptHeight: number,
+		lineCount: number,
+		clampedScrollFromBottom: number,
+	): void {
+		this.leftTranscriptLineCount = lineCount;
+		this.leftTranscriptHeight = transcriptHeight;
+		this.leftScrollFromBottom = clampedScrollFromBottom;
+		this.followTail = clampedScrollFromBottom === 0;
+
+		const totalWidth = this.ui.terminal.columns;
+		const totalHeight = this.ui.terminal.rows;
+		const layoutMetrics = this.omkLayout?.getLayoutMetrics(totalWidth);
+		const headerHeight = this.getHeaderLineCount(mainWidth);
+		const pendingHeight = this.pendingMessagesContainer.render(mainWidth).length;
+		const statusHeight = this.statusContainer.render(mainWidth).length;
+		const widgetAboveHeight = this.widgetContainerAbove.render(mainWidth).length;
+		const composerHeight = this.editorContainer.render(mainWidth).length;
+		const widgetBelowHeight = this.widgetContainerBelow.render(mainWidth).length;
+		const workingHeight = this.getWorkingComponent().render(mainWidth).length;
+		const footerHeight = this.getFooterComponent().render(mainWidth).length;
+		const transcriptY = headerHeight + 1;
+		const composerY = transcriptY + transcriptHeight + pendingHeight + statusHeight + widgetAboveHeight;
+		const workingY = composerY + composerHeight + widgetBelowHeight;
+		const footerY = workingY + workingHeight;
+		const mainPaneWidth = layoutMetrics?.useSplit ? layoutMetrics.mainWidth : totalWidth;
+		const rightRailX = layoutMetrics?.useSplit
+			? layoutMetrics.mainWidth + layoutMetrics.gutterWidth + layoutMetrics.separatorWidth + 1
+			: totalWidth + 1;
+		const rightRailWidth = layoutMetrics?.useSplit ? layoutMetrics.railWidth : 0;
+
+		this.currentLayout = {
+			width: totalWidth,
+			height: totalHeight,
+			mainWidth: mainPaneWidth,
+			transcript: { x: 1, y: transcriptY, w: mainPaneWidth, h: transcriptHeight },
+			composer: { x: 1, y: composerY, w: mainPaneWidth, h: composerHeight + widgetBelowHeight },
+			working: { x: 1, y: workingY, w: mainPaneWidth, h: workingHeight },
+			footer: { x: 1, y: footerY, w: mainPaneWidth, h: footerHeight },
+			rightRail: { x: rightRailX, y: 1, w: rightRailWidth, h: totalHeight },
+		};
+	}
+
+	private getHeaderLineCount(width: number): number {
+		return this.headerContainer.render(width).length;
+	}
+
+	private getFixedBottomLineCount(width: number): number {
+		return (
+			this.pendingMessagesContainer.render(width).length +
+			this.statusContainer.render(width).length +
+			this.widgetContainerAbove.render(width).length +
+			this.editorContainer.render(width).length +
+			this.widgetContainerBelow.render(width).length +
+			this.getWorkingComponent().render(width).length +
+			this.getFooterComponent().render(width).length
+		);
+	}
+
+	private getWorkingComponent(): Component {
+		return this.omkNeonHud ?? this.composerLiftSpacer;
+	}
+
+	private getFooterComponent(): Component {
+		return this.customFooter ?? this.footer;
+	}
+
+	private setupCockpitInputRouting(): void {
+		if (!isOmkRuntimeName(APP_NAME)) return;
+		this.cockpitInputUnsubscribe?.();
+		this.cockpitInputUnsubscribe = this.ui.addInputListener((data) => this.handleCockpitInputBeforeComposer(data));
+	}
+
+	private handleCockpitInputBeforeComposer(data: string): { consume?: boolean; data?: string } | undefined {
+		const result = consumeCockpitScrollInput(data, {
+			leftScrollFromBottom: this.leftScrollFromBottom,
+			leftTranscriptLineCount: this.leftTranscriptLineCount,
+			leftTranscriptHeight: this.leftTranscriptHeight,
+			followTail: this.followTail,
+			currentLayout: this.currentLayout,
+		});
+		if (!result) return undefined;
+		if (result.target === "leftTranscript") {
+			this.applyTranscriptScroll(result.nextScrollFromBottom);
+		}
+		if (result.kind === "wheel" && result.wheel) {
+			this.logCockpitWheelInput(
+				data,
+				result.wheel.direction,
+				result.wheel.x,
+				result.wheel.y,
+				result.target,
+				result.consumed,
+			);
+		} else if (result.kind === "paging" && result.pagingKey) {
+			this.logCockpitPagingInput(data, result.pagingKey, result.consumed);
+		}
+		return { consume: result.consumed };
+	}
+
+	private applyTranscriptScroll(nextScrollFromBottom: number): void {
+		this.leftScrollFromBottom = Math.max(0, Math.floor(nextScrollFromBottom));
+		this.followTail = this.leftScrollFromBottom === 0;
+		this.ui.requestRender();
+	}
+
+	private logCockpitWheelInput(
+		rawInput: string,
+		direction: "up" | "down",
+		x: number,
+		y: number,
+		target: "leftTranscript" | "rightRail" | "none",
+		consumed: boolean,
+	): void {
+		if (process.env.OMK_DEBUG_INPUT !== "1") return;
+		process.stderr.write(`[input] raw hex=${debugInputHex(rawInput)} raw=${debugInputEscaped(rawInput)}\n`);
+		process.stderr.write(
+			`[input] wheel ${direction} x=${x} y=${y} target=${target} consumed=${consumed} scroll=${this.leftScrollFromBottom}/${this.leftTranscriptLineCount} height=${this.leftTranscriptHeight} followTail=${this.followTail}\n`,
+		);
+	}
+
+	private logCockpitPagingInput(
+		rawInput: string,
+		key: "pageUp" | "pageDown" | "home" | "end",
+		consumed: boolean,
+	): void {
+		if (process.env.OMK_DEBUG_INPUT !== "1") return;
+		process.stderr.write(`[input] raw hex=${debugInputHex(rawInput)} raw=${debugInputEscaped(rawInput)}\n`);
+		process.stderr.write(
+			`[input] key=${key} target=leftTranscript consumed=${consumed} scroll=${this.leftScrollFromBottom}/${this.leftTranscriptLineCount} height=${this.leftTranscriptHeight} followTail=${this.followTail}\n`,
+		);
 	}
 
 	/**
@@ -2493,6 +2991,8 @@ export class InteractiveMode {
 			if (!text) return;
 
 			// Handle commands
+			const slashInput = parseSlashCommandInput(text);
+			const builtinCommand = slashInput ? findBuiltinSlashCommand(slashInput.name) : undefined;
 			if (text === "/settings") {
 				this.showSettingsSelector();
 				this.editor.setText("");
@@ -2503,10 +3003,34 @@ export class InteractiveMode {
 				await this.showModelsSelector();
 				return;
 			}
-			if (text === "/model" || text.startsWith("/model ")) {
-				const searchTerm = text.startsWith("/model ") ? text.slice(7).trim() : undefined;
+			if (builtinCommand?.name === "panel") {
 				this.editor.setText("");
-				await this.handleModelCommand(searchTerm);
+				this.handlePanelCommand(slashInput?.argsText || undefined);
+				return;
+			}
+			if (builtinCommand?.name === "doctor") {
+				this.editor.setText("");
+				this.handleDoctorCommand(slashInput?.argsText || undefined);
+				return;
+			}
+			if (builtinCommand?.name === "model") {
+				this.editor.setText("");
+				await this.handleModelCommand(slashInput?.argsText || undefined);
+				return;
+			}
+			if (builtinCommand?.name === "think") {
+				this.editor.setText("");
+				this.handleThinkCommand(slashInput?.argsText || undefined);
+				return;
+			}
+			if (builtinCommand?.name === "theme") {
+				this.editor.setText("");
+				await this.handleThemeCommand(slashInput?.argsText || undefined);
+				return;
+			}
+			if (builtinCommand?.name === "brand") {
+				this.editor.setText("");
+				this.handleBrandCommand();
 				return;
 			}
 			if (text === "/export" || text.startsWith("/export ")) {
@@ -2712,6 +3236,8 @@ export class InteractiveMode {
 				break;
 
 			case "queue_update":
+				this.queuedSteeringCount = event.steering.length;
+				this.queuedFollowUpCount = event.followUp.length;
 				this.updatePendingMessagesDisplay();
 				this.ui.requestRender();
 				break;
@@ -3218,10 +3744,46 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
+	private buildTranscriptMessagesFromEntries(entries: SessionEntry[]): AgentMessage[] {
+		const messages: AgentMessage[] = [];
+		for (const entry of entries) {
+			switch (entry.type) {
+				case "message":
+					messages.push(entry.message);
+					break;
+				case "compaction":
+					messages.push(createCompactionSummaryMessage(entry.summary, entry.tokensBefore, entry.timestamp));
+					break;
+				case "branch_summary":
+					messages.push(createBranchSummaryMessage(entry.summary, entry.fromId, entry.timestamp));
+					break;
+				case "custom_message":
+					messages.push(
+						createCustomMessage(entry.customType, entry.content, entry.display, entry.details, entry.timestamp),
+					);
+					break;
+				default:
+					break;
+			}
+		}
+		return messages;
+	}
+
+	private renderTranscriptEntries(
+		entries: SessionEntry[],
+		options: { updateFooter?: boolean; populateHistory?: boolean } = {},
+	): void {
+		const stateModel = this.session.state.model;
+		const context: SessionContext = {
+			messages: this.buildTranscriptMessagesFromEntries(entries),
+			thinkingLevel: this.session.thinkingLevel,
+			model: stateModel ? { provider: stateModel.provider, modelId: stateModel.id } : null,
+		};
+		this.renderSessionContext(context, options);
+	}
+
 	renderInitialMessages(): void {
-		// Get aligned messages and entries from session context
-		const context = this.sessionManager.buildSessionContext();
-		this.renderSessionContext(context, {
+		this.renderTranscriptEntries(this.sessionManager.getEntries(), {
 			updateFooter: true,
 			populateHistory: true,
 		});
@@ -3251,8 +3813,7 @@ export class InteractiveMode {
 
 	private rebuildChatFromMessages(): void {
 		this.chatContainer.clear();
-		const context = this.sessionManager.buildSessionContext();
-		this.renderSessionContext(context);
+		this.renderTranscriptEntries(this.sessionManager.getEntries());
 	}
 
 	// =========================================================================
@@ -3351,6 +3912,9 @@ export class InteractiveMode {
 		} catch {}
 		try {
 			this.ui.stop();
+		} catch {}
+		try {
+			this.restoreTmuxViewportSupport();
 		} catch {}
 		console.error("pi exiting due to uncaughtException:");
 		console.error(error);
@@ -3511,6 +4075,181 @@ export class InteractiveMode {
 		}
 	}
 
+	private handleThinkCommand(levelArg?: string): void {
+		const requested = normalizeSlashSetArgument(levelArg)?.toLowerCase();
+		if (!requested) {
+			this.showThinkingSelector();
+			return;
+		}
+		if (requested === "list") {
+			this.showStatus(`Thinking levels: ${this.session.getAvailableThinkingLevels().join(", ") || "none"}`);
+			return;
+		}
+		const levels = this.session.getAvailableThinkingLevels();
+		if (!levels.includes(requested as (typeof levels)[number])) {
+			this.showWarning(`Invalid thinking level: ${requested}`);
+			return;
+		}
+		this.session.setThinkingLevel(requested as (typeof levels)[number]);
+		this.footer.invalidate();
+		this.updateEditorBorderColor();
+		this.showStatus(`Thinking level: ${this.session.thinkingLevel}`);
+	}
+
+	private async handleThemeCommand(themeArg?: string): Promise<void> {
+		const themeName = normalizeSlashSetArgument(themeArg);
+		if (!themeName || themeName === "list") {
+			this.showThemeSelector();
+			return;
+		}
+		const result = setTheme(themeName, true);
+		if (!result.success) {
+			this.showWarning(result.error ?? `Theme not found: ${themeArg}`);
+			return;
+		}
+		this.settingsManager.setTheme(themeName);
+		this.showStatus(`Theme: ${themeName}`);
+		this.ui.requestRender(true);
+	}
+
+	private handlePanelCommand(panelArg?: string): void {
+		const requested = normalizeSlashSetArgument(panelArg)?.toLowerCase();
+		if (!requested || requested === "list") {
+			this.showStatus("Panel modes: pin, hide, compact, wide | Tabs: control, history");
+			return;
+		}
+		// Tab switching: /panel control | /panel history
+		if (requested === "control" || requested === "history") {
+			if (!this.omkDashboard) {
+				this.showWarning("OMK panel is not active in this runtime");
+				return;
+			}
+			this.omkDashboard.switchTab(requested);
+			this.showStatus(`Tab: ${requested}`);
+			this.ui.requestRender(true);
+			return;
+		}
+		if (requested !== "pin" && requested !== "hide" && requested !== "compact" && requested !== "wide") {
+			this.showWarning(`Invalid panel mode: ${requested}`);
+			return;
+		}
+		if (!this.omkLayout) {
+			this.showWarning("OMK control panel is not active in this runtime");
+			return;
+		}
+		this.omkLayout.setPanelMode(requested);
+		this.footer.setOmkControlCompact(requested !== "hide");
+		this.showStatus(`Panel: ${requested}`);
+		this.ui.requestRender(true);
+	}
+
+	private handleDoctorCommand(doctorArg?: string): void {
+		const requested = normalizeSlashSetArgument(doctorArg)?.toLowerCase();
+		if (requested && requested !== "tui") {
+			this.showWarning(`Invalid doctor target: ${requested}`);
+			return;
+		}
+		this.showStatus(this.buildTuiDoctorReport());
+	}
+	private handleBrandCommand(): void {
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(
+			new OmkBrandComponent({
+				getData: () => this.getOmkBrandSurfaceData(),
+				ui: this.ui,
+				animate: true,
+				intervalMs: 90,
+				maxFrames: 36,
+			}),
+		);
+		this.ui.requestRender();
+	}
+
+	private buildTuiDoctorReport(): string {
+		const currentAltScreen = process.env.TMUX ? (this.readTmuxWindowAlternateScreen() ?? "unknown") : "n/a";
+		const tmuxAlternateScreen =
+			this.tmuxAlternateScreenWasChanged && this.tmuxPreviousAlternateScreen
+				? `${this.tmuxPreviousAlternateScreen} -> auto-enabled`
+				: currentAltScreen;
+		const sidebar = this.omkLayout ? this.omkLayout.getPanelMode() : "inactive";
+		const envOverrides = this.getActiveTuiEnvOverrides();
+		return formatOmkTuiDoctorReport({
+			terminal: process.env.TERM || "unknown",
+			tmux: !!process.env.TMUX,
+			tmuxAlternateScreen,
+			fullscreen: this.ui.getFullscreenViewport() ? "active" : "disabled",
+			sidebar,
+			diagnostics: this.tuiDiagnosticsStatus,
+			envOverrides,
+		});
+	}
+
+	private getActiveTuiEnvOverrides(): string[] {
+		const overrides: string[] = [];
+		const fullscreen = readAliasedEnv(ENV_FULLSCREEN_ALIASES);
+		if (fullscreen) overrides.push(`OMK_FULLSCREEN=${fullscreen}`);
+		const noAltScreen = readAliasedEnv(ENV_NO_ALT_SCREEN_ALIASES);
+		if (noAltScreen) overrides.push(`OMK_NO_ALT_SCREEN=${noAltScreen}`);
+		const tmuxAltScreenAuto = readAliasedEnv(ENV_TMUX_ALT_SCREEN_AUTO_ALIASES);
+		if (tmuxAltScreenAuto) overrides.push(`OMK_TMUX_ALT_SCREEN_AUTO=${tmuxAltScreenAuto}`);
+		return overrides;
+	}
+
+	private showThinkingSelector(): void {
+		const availableLevels = this.session.getAvailableThinkingLevels();
+		if (availableLevels.length === 0) {
+			this.showWarning("Current model does not support thinking");
+			return;
+		}
+		this.showSelector((done) => {
+			const selector = new ThinkingSelectorComponent(
+				this.session.thinkingLevel,
+				availableLevels,
+				(level) => {
+					this.session.setThinkingLevel(level);
+					this.footer.invalidate();
+					this.updateEditorBorderColor();
+					done();
+					this.showStatus(`Thinking level: ${level}`);
+				},
+				() => done(),
+			);
+			return { component: selector, focus: selector.getSelectList() };
+		});
+	}
+
+	private showThemeSelector(): void {
+		const previousTheme = this.settingsManager.getTheme() || theme.name || "omk-control";
+		this.showSelector((done) => {
+			const selector = new ThemeSelectorComponent(
+				previousTheme,
+				(themeName) => {
+					const result = setTheme(themeName, true);
+					if (!result.success) {
+						this.showWarning(result.error ?? `Theme not found: ${themeName}`);
+						return;
+					}
+					this.settingsManager.setTheme(themeName);
+					done();
+					this.showStatus(`Theme: ${themeName}`);
+					this.ui.requestRender(true);
+				},
+				() => {
+					setTheme(previousTheme, true);
+					done();
+					this.ui.requestRender(true);
+				},
+				(themeName) => {
+					const result = setTheme(themeName, true);
+					if (result.success) {
+						this.ui.requestRender(true);
+					}
+				},
+			);
+			return { component: selector, focus: selector.getSelectList() };
+		});
+	}
+
 	private async cycleModel(direction: "forward" | "backward"): Promise<void> {
 		try {
 			const result = await this.session.cycleModel(direction);
@@ -3647,14 +4386,32 @@ export class InteractiveMode {
 	showNewVersionNotification(release: LatestPiRelease): void {
 		const action = theme.fg("accent", `${APP_NAME} update`);
 		const updateInstruction = theme.fg("muted", `New version ${release.version} is available. Run `) + action;
-		const changelogUrl = "https://pi.dev/changelog";
-		const changelogLink = getCapabilities().hyperlinks
-			? hyperlink(theme.fg("accent", "open changelog"), changelogUrl)
-			: theme.fg("accent", changelogUrl);
+		const changelogUrl = getDefaultChangelogUrl();
+		const changelogLink = changelogUrl
+			? getCapabilities().hyperlinks
+				? hyperlink(theme.fg("accent", "open changelog"), changelogUrl)
+				: theme.fg("accent", changelogUrl)
+			: theme.fg("dim", "changelog unavailable");
 		const changelogLine = theme.fg("muted", "Changelog: ") + changelogLink;
 		const note = release.note?.trim();
 
 		this.chatContainer.addChild(new Spacer(1));
+		if (isOmkRuntimeName(APP_NAME)) {
+			this.chatContainer.addChild(
+				new Text(
+					`${theme.bold(theme.fg("warning", "UPDATE"))} ${updateInstruction}${changelogUrl ? ` ${theme.fg("muted", "·")} ${changelogLink}` : ""}`,
+					1,
+					0,
+				),
+			);
+			if (note) {
+				this.chatContainer.addChild(new Spacer(1));
+				this.chatContainer.addChild(new Text(theme.fg("muted", note.replace(/\s+/g, " ").trim()), 1, 0));
+			}
+			this.ui.requestRender();
+			return;
+		}
+
 		this.chatContainer.addChild(new DynamicBorder((text) => theme.fg("warning", text)));
 		this.chatContainer.addChild(
 			new Text(`${theme.bold(theme.fg("warning", "Update Available"))}\n${updateInstruction}`, 1, 0),
@@ -3668,7 +4425,9 @@ export class InteractiveMode {
 			);
 			this.chatContainer.addChild(new Spacer(1));
 		}
-		this.chatContainer.addChild(new Text(changelogLine, 1, 0));
+		if (changelogUrl) {
+			this.chatContainer.addChild(new Text(changelogLine, 1, 0));
+		}
 		this.chatContainer.addChild(new DynamicBorder((text) => theme.fg("warning", text)));
 		this.ui.requestRender();
 	}
@@ -4054,32 +4813,82 @@ export class InteractiveMode {
 	}
 
 	private async handleModelCommand(searchTerm?: string): Promise<void> {
-		if (!searchTerm) {
+		const query = normalizeSlashSetArgument(searchTerm);
+		if (!query || query === "list") {
 			this.showModelSelector();
 			return;
 		}
 
-		const model = await this.findExactModelMatch(searchTerm);
-		if (model) {
+		const normalizedQuery = this.normalizeInteractiveModelQuery(query);
+		const resolved = resolveCliModel({ cliModel: normalizedQuery, modelRegistry: this.session.modelRegistry });
+		if (resolved.error) {
+			this.showWarning(resolved.error);
+			return;
+		}
+		if (resolved.model) {
+			if (!this.session.modelRegistry.hasConfiguredAuth(resolved.model)) {
+				this.showWarning(`No API key for ${resolved.model.provider}/${resolved.model.id}`);
+				return;
+			}
+			if (resolved.thinkingLevel && !getSupportedThinkingLevels(resolved.model).includes(resolved.thinkingLevel)) {
+				this.showWarning(`Invalid thinking level for ${resolved.model.id}: ${resolved.thinkingLevel}`);
+				return;
+			}
 			try {
-				await this.session.setModel(model);
+				await this.session.setModel(resolved.model);
+				if (resolved.thinkingLevel) {
+					this.session.setThinkingLevel(resolved.thinkingLevel);
+				}
 				this.footer.invalidate();
 				this.updateEditorBorderColor();
-				this.showStatus(`Model: ${model.id}`);
-				void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
-				this.checkDaxnutsEasterEgg(model);
+				const thinkingSuffix = resolved.thinkingLevel ? `:${this.session.thinkingLevel}` : "";
+				this.showStatus(`Model: ${resolved.model.id}${thinkingSuffix}`);
+				if (resolved.warning) {
+					this.showWarning(resolved.warning);
+				}
+				void this.maybeWarnAboutAnthropicSubscriptionAuth(resolved.model);
 			} catch (error) {
 				this.showError(error instanceof Error ? error.message : String(error));
 			}
 			return;
 		}
 
-		this.showModelSelector(searchTerm);
+		this.showModelSelector(query);
 	}
 
-	private async findExactModelMatch(searchTerm: string): Promise<Model<any> | undefined> {
-		const models = await this.getModelCandidates();
-		return findExactModelReferenceMatch(searchTerm, models);
+	private normalizeInteractiveModelQuery(query: string): string {
+		const trimmed = query.trim();
+		const colonIndex = trimmed.lastIndexOf(":");
+		const base = colonIndex === -1 ? trimmed : trimmed.slice(0, colonIndex);
+		const suffix = colonIndex === -1 ? "" : trimmed.slice(colonIndex);
+		const slashIndex = base.indexOf("/");
+
+		if (slashIndex !== -1) {
+			const provider = this.normalizeProviderAlias(base.slice(0, slashIndex));
+			return `${provider}/${base.slice(slashIndex + 1)}${suffix}`;
+		}
+
+		if (base.toLowerCase() === "mimo-v2.5-pro") {
+			return `xiaomi/${base}${suffix}`;
+		}
+
+		const provider = this.normalizeProviderAlias(base);
+		const canonicalProvider = this.session.modelRegistry
+			.getAll()
+			.find((model) => model.provider.toLowerCase() === provider.toLowerCase())?.provider;
+		if (!canonicalProvider) return trimmed;
+
+		const defaultModel = defaultModelPerProvider[canonicalProvider as keyof typeof defaultModelPerProvider];
+		return defaultModel ? `${canonicalProvider}/${defaultModel}${suffix}` : trimmed;
+	}
+
+	private normalizeProviderAlias(provider: string): string {
+		const normalized = provider.trim().toLowerCase();
+		if (normalized === "mimo") return "xiaomi";
+		if (normalized === "mimo-cn") return "xiaomi-token-plan-cn";
+		if (normalized === "mimo-ams") return "xiaomi-token-plan-ams";
+		if (normalized === "mimo-sgp") return "xiaomi-token-plan-sgp";
+		return provider;
 	}
 
 	private async getModelCandidates(): Promise<Model<any>[]> {
@@ -4134,6 +4943,21 @@ export class InteractiveMode {
 		}
 	}
 
+	private async handleModelSelectorSelection(model: Model<any>, done: () => void): Promise<void> {
+		try {
+			await this.session.setModel(model);
+			this.footer.invalidate();
+			this.updateEditorBorderColor();
+			done();
+			this.showStatus(`Model: ${model.id}`);
+			this.showThinkingSelector();
+			void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
+		} catch (error) {
+			done();
+			this.showError(error instanceof Error ? error.message : String(error));
+		}
+	}
+
 	private showModelSelector(initialSearchInput?: string): void {
 		this.showSelector((done) => {
 			const selector = new ModelSelectorComponent(
@@ -4142,19 +4966,8 @@ export class InteractiveMode {
 				this.settingsManager,
 				this.session.modelRegistry,
 				this.session.scopedModels,
-				async (model) => {
-					try {
-						await this.session.setModel(model);
-						this.footer.invalidate();
-						this.updateEditorBorderColor();
-						done();
-						this.showStatus(`Model: ${model.id}`);
-						void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
-						this.checkDaxnutsEasterEgg(model);
-					} catch (error) {
-						done();
-						this.showError(error instanceof Error ? error.message : String(error));
-					}
+				(model) => {
+					void this.handleModelSelectorSelection(model, done);
 				},
 				() => {
 					done();
@@ -4711,7 +5524,6 @@ export class InteractiveMode {
 		if (selectedModel) {
 			this.showStatus(`${actionLabel}. Selected ${selectedModel.id}. Credentials saved to ${getAuthPath()}`);
 			void this.maybeWarnAboutAnthropicSubscriptionAuth(selectedModel);
-			this.checkDaxnutsEasterEgg(selectedModel);
 		} else {
 			this.showStatus(`${actionLabel}. Credentials saved to ${getAuthPath()}`);
 			if (selectionError) {
@@ -5480,18 +6292,6 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
-	private handleDaxnuts(): void {
-		this.chatContainer.addChild(new Spacer(1));
-		this.chatContainer.addChild(new DaxnutsComponent(this.ui));
-		this.ui.requestRender();
-	}
-
-	private checkDaxnutsEasterEgg(model: { provider: string; id: string }): void {
-		if (model.provider === "opencode" && model.id.toLowerCase().includes("kimi-k2.5")) {
-			this.handleDaxnuts();
-		}
-	}
-
 	private async handleBashCommand(command: string, excludeFromContext = false): Promise<void> {
 		const extensionRunner = this.session.extensionRunner;
 
@@ -5611,6 +6411,8 @@ export class InteractiveMode {
 			this.loadingAnimation = undefined;
 		}
 		this.clearExtensionTerminalInputListeners();
+		this.cockpitInputUnsubscribe?.();
+		this.cockpitInputUnsubscribe = undefined;
 		this.footer.dispose();
 		this.footerDataProvider.dispose();
 		if (this.unsubscribe) {
@@ -5620,5 +6422,6 @@ export class InteractiveMode {
 			this.ui.stop();
 			this.isInitialized = false;
 		}
+		this.restoreTmuxViewportSupport();
 	}
 }

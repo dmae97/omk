@@ -64,9 +64,6 @@ const COPILOT_STATIC_HEADERS = {
 	"Copilot-Integration-Id": "vscode-chat",
 } as const;
 
-const KIMI_STATIC_HEADERS = {
-	"User-Agent": "KimiCLI/1.5",
-} as const;
 
 const TOGETHER_BASE_URL = "https://api.together.ai/v1";
 const TOGETHER_BASE_COMPAT: OpenAICompletionsCompat = {
@@ -167,6 +164,7 @@ const DEEPSEEK_V4_THINKING_LEVEL_MAP = {
 	medium: null,
 	high: "high",
 	xhigh: "max",
+	max: "max",
 } as const;
 
 const ANT_LING_RING_THINKING_LEVEL_MAP = {
@@ -305,7 +303,7 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 		mergeThinkingLevelMap(
 			model,
 			model.provider === "openrouter"
-				? { ...DEEPSEEK_V4_THINKING_LEVEL_MAP, xhigh: "xhigh" }
+				? { ...DEEPSEEK_V4_THINKING_LEVEL_MAP, xhigh: "xhigh", max: "max" }
 				: DEEPSEEK_V4_THINKING_LEVEL_MAP,
 		);
 	}
@@ -330,10 +328,6 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 		// instead of defaulting to {reasoning:{effort:"none"}} (see openai-completions.ts:575).
 		// Pi's low/medium/high pass through verbatim; OpenRouter normalizes to Mercury's vocabulary.
 		mergeThinkingLevelMap(model, { off: null });
-	}
-	if (model.provider === "opencode-go" && model.id === "kimi-k2.6") {
-		// OpenCode Go exposes Kimi K2.6 thinking as on/off, not distinct effort tiers.
-		mergeThinkingLevelMap(model, { minimal: null, low: null, medium: null });
 	}
 	if (model.provider === "opencode" && model.id === "grok-build-0.1") {
 		// OpenCode Zen Grok Build reasons by default but rejects explicit reasoningEffort.
@@ -1032,11 +1026,6 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					compat = { ...(compat ?? {}), supportsReasoningEffort: false };
 				}
 
-				if ((variant.provider === "opencode" || variant.provider === "opencode-go") && modelId === "kimi-k2.6") {
-					// OpenCode Kimi K2.6 accepts Anthropic-style thinking objects
-					// and rejects string thinking values or combined reasoning_effort.
-					compat = { ...(compat ?? {}), thinkingFormat: "deepseek", supportsReasoningEffort: false };
-				}
 
 				// Fix known mismatches between models.dev npm data and actual
 				// OpenCode Go endpoint behaviour. models.dev reports these models
@@ -1166,44 +1155,6 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 			}
 		}
 
-		// Process Kimi For Coding models
-		if (data["kimi-for-coding"]?.models) {
-			const kimiModels = data["kimi-for-coding"].models as Record<string, ModelsDevModel>;
-			const hasCanonicalModel = Object.prototype.hasOwnProperty.call(kimiModels, "kimi-for-coding");
-
-			const kimiAliases = new Set(["k2p5", "k2p6"]);
-
-			for (const [modelId, model] of Object.entries(kimiModels)) {
-				const m = model as ModelsDevModel;
-				if (m.tool_call !== true) continue;
-				// models.dev may expose versioned aliases (e.g. k2p5/k2p6).
-				// Normalize aliases to the canonical model id and drop duplicates when canonical exists.
-				if (kimiAliases.has(modelId) && hasCanonicalModel) continue;
-
-				const normalizedId = kimiAliases.has(modelId) ? "kimi-for-coding" : modelId;
-				const normalizedName = kimiAliases.has(modelId) ? "Kimi For Coding" : m.name || normalizedId;
-
-				models.push({
-					id: normalizedId,
-					name: normalizedName,
-					api: "anthropic-messages",
-					provider: "kimi-coding",
-					// Kimi For Coding's Anthropic-compatible API - SDK appends /v1/messages
-					baseUrl: "https://api.kimi.com/coding",
-					headers: { ...KIMI_STATIC_HEADERS },
-					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
-					cost: {
-						input: m.cost?.input || 0,
-						output: m.cost?.output || 0,
-						cacheRead: m.cost?.cache_read || 0,
-						cacheWrite: m.cost?.cache_write || 0,
-					},
-					contextWindow: m.limit?.context || 4096,
-					maxTokens: m.limit?.output || 4096,
-				});
-			}
-		}
 
 		// Process Moonshot AI models
 		const moonshotVariants = [
@@ -1354,20 +1305,6 @@ async function generateModels() {
 		if (candidate.provider === "openai" && (candidate.id === "gpt-5.4" || candidate.id === "gpt-5.5")) {
 			candidate.contextWindow = 272000;
 			candidate.maxTokens = 128000;
-		}
-		// Keep selected OpenRouter model metadata stable until upstream settles.
-		if (candidate.provider === "openrouter" && candidate.id === "moonshotai/kimi-k2.5") {
-			candidate.cost.input = 0.41;
-			candidate.cost.output = 2.06;
-			candidate.cost.cacheRead = 0.07;
-			candidate.maxTokens = 4096;
-		}
-		if (candidate.provider === "openrouter" && candidate.id.startsWith("moonshotai/kimi-k2.6")) {
-			candidate.compat = {
-				...candidate.compat,
-				supportsDeveloperRole: false,
-				requiresReasoningContentOnAssistantMessages: true,
-			};
 		}
 		if (candidate.provider === "openrouter" && candidate.id === "z-ai/glm-5") {
 			candidate.cost.input = 0.6;
@@ -1621,6 +1558,7 @@ async function generateModels() {
 
 	const deepseekCompat: OpenAICompletionsCompat = {
 		requiresReasoningContentOnAssistantMessages: true,
+		supportsReasoningEffort: true,
 		thinkingFormat: "deepseek",
 	};
 	const deepseekV4Models: Model<"openai-completions">[] = [
@@ -1713,6 +1651,7 @@ async function generateModels() {
 	];
 	allModels.push(...antLingModels);
 
+	const deepseekV4ThinkingLevelMap = { minimal: null, low: null, medium: null, high: "high", xhigh: "max", max: "max" };
 	for (const candidate of allModels) {
 		if (candidate.api === "openai-completions" && candidate.id.includes("deepseek-v4")) {
 			candidate.compat = {
@@ -1721,9 +1660,11 @@ async function generateModels() {
 					? {
 							requiresReasoningContentOnAssistantMessages:
 								deepseekCompat.requiresReasoningContentOnAssistantMessages,
+							supportsReasoningEffort: deepseekCompat.supportsReasoningEffort,
 						}
 					: deepseekCompat),
 			};
+			mergeThinkingLevelMap(candidate, deepseekV4ThinkingLevelMap);
 		}
 	}
 

@@ -68,10 +68,6 @@ async function testTokensOnAbort<TApi extends Api>(llm: Model<TApi>, options: St
 		// MiniMax M2.7 does not report token usage for aborted requests.
 		expect(msg.usage.input).toBe(0);
 		expect(msg.usage.output).toBe(0);
-	} else if (llm.provider === "kimi-coding") {
-		// Kimi reports input tokens early but output tokens only in the final chunk.
-		expect(msg.usage.input).toBeGreaterThan(0);
-		expect(msg.usage.output).toBe(0);
 	} else {
 		expect(msg.usage.input).toBeGreaterThan(0);
 		expect(msg.usage.output).toBeGreaterThan(0);
@@ -212,14 +208,6 @@ describe("Token Statistics on Abort", () => {
 
 	describe.skipIf(!process.env.MINIMAX_API_KEY)("MiniMax Provider", () => {
 		const llm = getModel("minimax", "MiniMax-M2.7");
-
-		it("should include token stats when aborted mid-stream", { retry: 3, timeout: 30000 }, async () => {
-			await testTokensOnAbort(llm);
-		});
-	});
-
-	describe.skipIf(!process.env.KIMI_API_KEY)("Kimi For Coding Provider", () => {
-		const llm = getModel("kimi-coding", "kimi-for-coding");
 
 		it("should include token stats when aborted mid-stream", { retry: 3, timeout: 30000 }, async () => {
 			await testTokensOnAbort(llm);

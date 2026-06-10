@@ -6,7 +6,7 @@ import {
 	type MarkdownTheme,
 	type SelectListTheme,
 	type SettingsListTheme,
-} from "@earendil-works/pi-tui";
+} from "@earendil-works/omk-tui";
 import chalk from "chalk";
 import { type Static, Type } from "typebox";
 import { Compile } from "typebox/compile";
@@ -80,13 +80,14 @@ const ThemeJsonSchema = Type.Object({
 		syntaxType: ColorValueSchema,
 		syntaxOperator: ColorValueSchema,
 		syntaxPunctuation: ColorValueSchema,
-		// Thinking Level Borders (6 colors)
+		// Thinking Level Borders (7 colors)
 		thinkingOff: ColorValueSchema,
 		thinkingMinimal: ColorValueSchema,
 		thinkingLow: ColorValueSchema,
 		thinkingMedium: ColorValueSchema,
 		thinkingHigh: ColorValueSchema,
 		thinkingXhigh: ColorValueSchema,
+		thinkingMax: ColorValueSchema,
 		// Bash Mode (1 color)
 		bashMode: ColorValueSchema,
 	}),
@@ -102,6 +103,26 @@ const ThemeJsonSchema = Type.Object({
 type ThemeJson = Static<typeof ThemeJsonSchema>;
 
 const validateThemeJson = Compile(ThemeJsonSchema);
+const BUILTIN_THEME_NAMES = ["dark", "light", "omk-control", "omk-rust"] as const;
+const BUILTIN_THEME_ALIASES: Readonly<Record<string, (typeof BUILTIN_THEME_NAMES)[number]>> = {
+	"omk-control-grid-dark": "omk-control",
+	"omk-grid-dark": "omk-control",
+	"omk-neon-grid": "omk-control",
+	"neon-grid": "omk-control",
+	"green-rain": "omk-control",
+	"night-city": "omk-control",
+	cyberpunk2077: "omk-control",
+	rust: "omk-rust",
+	"rust-dark": "omk-rust",
+	"rust-oxide": "omk-rust",
+	oxide: "omk-rust",
+	ferris: "omk-rust",
+	cargo: "omk-rust",
+};
+
+function resolveBuiltinThemeName(name: string): string {
+	return BUILTIN_THEME_ALIASES[name] ?? name;
+}
 
 export type ThemeColor =
 	| "accent"
@@ -148,6 +169,7 @@ export type ThemeColor =
 	| "thinkingMedium"
 	| "thinkingHigh"
 	| "thinkingXhigh"
+	| "thinkingMax"
 	| "bashMode";
 
 export type ThemeBg =
@@ -271,6 +293,31 @@ function fgAnsi(color: string | number, mode: ColorMode): string {
 	throw new Error(`Invalid color value: ${color}`);
 }
 
+function colorToRgb(color: string | number): { r: number; g: number; b: number } | undefined {
+	if (typeof color !== "string" || !color.startsWith("#")) return undefined;
+	return hexToRgb(color);
+}
+
+function rgbToHex({ r, g, b }: { r: number; g: number; b: number }): string {
+	const hex = (value: number) =>
+		Math.max(0, Math.min(255, Math.round(value)))
+			.toString(16)
+			.padStart(2, "0");
+	return `#${hex(r)}${hex(g)}${hex(b)}`;
+}
+
+function mixRgb(
+	from: { r: number; g: number; b: number },
+	to: { r: number; g: number; b: number },
+	ratio: number,
+): { r: number; g: number; b: number } {
+	return {
+		r: from.r + (to.r - from.r) * ratio,
+		g: from.g + (to.g - from.g) * ratio,
+		b: from.b + (to.b - from.b) * ratio,
+	};
+}
+
 function bgAnsi(color: string | number, mode: ColorMode): string {
 	if (color === "") return "\x1b[49m";
 	if (typeof color === "number") return `\x1b[48;5;${color}m`;
@@ -325,6 +372,7 @@ export class Theme {
 	sourceInfo?: SourceInfo;
 	private fgColors: Map<ThemeColor, string>;
 	private bgColors: Map<ThemeBg, string>;
+	private rawFgColors: Map<ThemeColor, string | number>;
 	private mode: ColorMode;
 
 	constructor(
@@ -338,7 +386,9 @@ export class Theme {
 		this.sourceInfo = options.sourceInfo;
 		this.mode = mode;
 		this.fgColors = new Map();
+		this.rawFgColors = new Map();
 		for (const [key, value] of Object.entries(fgColors) as [ThemeColor, string | number][]) {
+			this.rawFgColors.set(key, value);
 			this.fgColors.set(key, fgAnsi(value, mode));
 		}
 		this.bgColors = new Map();
@@ -351,6 +401,20 @@ export class Theme {
 		const ansi = this.fgColors.get(color);
 		if (!ansi) throw new Error(`Unknown theme color: ${color}`);
 		return `${ansi}${text}\x1b[39m`; // Reset only foreground color
+	}
+
+	gradient(from: ThemeColor, to: ThemeColor, text: string): string {
+		const fromRgb = colorToRgb(this.rawFgColors.get(from) ?? "");
+		const toRgb = colorToRgb(this.rawFgColors.get(to) ?? "");
+		if (!fromRgb || !toRgb || text.length === 0) {
+			return this.fg(from, text);
+		}
+		const chars = Array.from(text);
+		const last = Math.max(1, chars.length - 1);
+		const styled = chars
+			.map((char, index) => `${fgAnsi(rgbToHex(mixRgb(fromRgb, toRgb, index / last)), this.mode)}${char}`)
+			.join("");
+		return `${styled}\x1b[39m`;
 	}
 
 	bg(color: ThemeBg, text: string): string {
@@ -395,7 +459,9 @@ export class Theme {
 		return this.mode;
 	}
 
-	getThinkingBorderColor(level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh"): (str: string) => string {
+	getThinkingBorderColor(
+		level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
+	): (str: string) => string {
 		// Map thinking levels to dedicated theme colors
 		switch (level) {
 			case "off":
@@ -410,6 +476,8 @@ export class Theme {
 				return (str: string) => this.fg("thinkingHigh", str);
 			case "xhigh":
 				return (str: string) => this.fg("thinkingXhigh", str);
+			case "max":
+				return (str: string) => this.fg("thinkingMax", str);
 			default:
 				return (str: string) => this.fg("thinkingOff", str);
 		}
@@ -429,12 +497,12 @@ let BUILTIN_THEMES: Record<string, ThemeJson> | undefined;
 function getBuiltinThemes(): Record<string, ThemeJson> {
 	if (!BUILTIN_THEMES) {
 		const themesDir = getThemesDir();
-		const darkPath = path.join(themesDir, "dark.json");
-		const lightPath = path.join(themesDir, "light.json");
-		BUILTIN_THEMES = {
-			dark: JSON.parse(fs.readFileSync(darkPath, "utf-8")) as ThemeJson,
-			light: JSON.parse(fs.readFileSync(lightPath, "utf-8")) as ThemeJson,
-		};
+		BUILTIN_THEMES = Object.fromEntries(
+			BUILTIN_THEME_NAMES.map((name) => {
+				const themePath = path.join(themesDir, `${name}.json`);
+				return [name, JSON.parse(fs.readFileSync(themePath, "utf-8")) as ThemeJson];
+			}),
+		) as Record<(typeof BUILTIN_THEME_NAMES)[number], ThemeJson>;
 	}
 	return BUILTIN_THEMES;
 }
@@ -552,25 +620,26 @@ function parseThemeJsonContent(label: string, content: string): ThemeJson {
 }
 
 function loadThemeJson(name: string): ThemeJson {
+	const resolvedName = resolveBuiltinThemeName(name);
 	const builtinThemes = getBuiltinThemes();
-	if (name in builtinThemes) {
-		return builtinThemes[name];
+	if (resolvedName in builtinThemes) {
+		return builtinThemes[resolvedName]!;
 	}
-	const registeredTheme = registeredThemes.get(name);
+	const registeredTheme = registeredThemes.get(resolvedName);
 	if (registeredTheme?.sourcePath) {
 		const content = fs.readFileSync(registeredTheme.sourcePath, "utf-8");
 		return parseThemeJsonContent(registeredTheme.sourcePath, content);
 	}
 	if (registeredTheme) {
-		throw new Error(`Theme "${name}" does not have a source path for export`);
+		throw new Error(`Theme "${resolvedName}" does not have a source path for export`);
 	}
 	const customThemesDir = getCustomThemesDir();
-	const themePath = path.join(customThemesDir, `${name}.json`);
+	const themePath = path.join(customThemesDir, `${resolvedName}.json`);
 	if (!fs.existsSync(themePath)) {
-		throw new Error(`Theme not found: ${name}`);
+		throw new Error(`Theme not found: ${resolvedName}`);
 	}
 	const content = fs.readFileSync(themePath, "utf-8");
-	return parseThemeJsonContent(name, content);
+	return parseThemeJsonContent(resolvedName, content);
 }
 
 function createTheme(themeJson: ThemeJson, mode?: ColorMode, sourcePath?: string): Theme {
@@ -606,11 +675,12 @@ export function loadThemeFromPath(themePath: string, mode?: ColorMode): Theme {
 }
 
 function loadTheme(name: string, mode?: ColorMode): Theme {
-	const registeredTheme = registeredThemes.get(name);
+	const resolvedName = resolveBuiltinThemeName(name);
+	const registeredTheme = registeredThemes.get(resolvedName);
 	if (registeredTheme) {
 		return registeredTheme;
 	}
-	const themeJson = loadThemeJson(name);
+	const themeJson = loadThemeJson(resolvedName);
 	return createTheme(themeJson, mode);
 }
 
@@ -733,7 +803,9 @@ export function detectTerminalBackground(options: TerminalThemeDetectionOptions 
 }
 
 export function getDefaultTheme(): string {
-	return detectTerminalBackground().theme;
+	// OMK runtime (signaled by the OMK_CODING_AGENT flag set in cli entrypoints)
+	// defaults to the omk-control theme; otherwise detect from terminal background.
+	return process.env.OMK_CODING_AGENT === "true" ? "omk-control" : detectTerminalBackground().theme;
 }
 
 // ============================================================================
@@ -741,7 +813,7 @@ export function getDefaultTheme(): string {
 // ============================================================================
 
 // Use globalThis to share theme across module loaders (tsx + jiti in dev mode)
-const THEME_KEY = Symbol.for("@earendil-works/pi-coding-agent:theme");
+const THEME_KEY = Symbol.for("@earendil-works/omk-coding-agent:theme");
 const THEME_KEY_OLD = Symbol.for("@mariozechner/pi-coding-agent:theme");
 
 // Export theme as a getter that reads from globalThis
@@ -775,7 +847,7 @@ export function setRegisteredThemes(themes: Theme[]): void {
 }
 
 export function initTheme(themeName?: string, enableWatcher: boolean = false): void {
-	const name = themeName ?? getDefaultTheme();
+	const name = resolveBuiltinThemeName(themeName ?? getDefaultTheme());
 	currentThemeName = name;
 	try {
 		setGlobalTheme(loadTheme(name));
@@ -791,9 +863,10 @@ export function initTheme(themeName?: string, enableWatcher: boolean = false): v
 }
 
 export function setTheme(name: string, enableWatcher: boolean = false): { success: boolean; error?: string } {
-	currentThemeName = name;
+	const resolvedName = resolveBuiltinThemeName(name);
+	currentThemeName = resolvedName;
 	try {
-		setGlobalTheme(loadTheme(name));
+		setGlobalTheme(loadTheme(resolvedName));
 		if (enableWatcher) {
 			startThemeWatcher();
 		}
@@ -830,7 +903,7 @@ function startThemeWatcher(): void {
 	stopThemeWatcher();
 
 	// Only watch if it's a custom theme (not built-in)
-	if (!currentThemeName || currentThemeName === "dark" || currentThemeName === "light") {
+	if (!currentThemeName || currentThemeName in getBuiltinThemes()) {
 		return;
 	}
 

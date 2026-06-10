@@ -27,7 +27,7 @@ import type { Readable } from "node:stream";
 import { globSync } from "glob";
 import ignore from "ignore";
 import { minimatch } from "minimatch";
-import { CONFIG_DIR_NAME } from "../config.ts";
+import { CONFIG_DIR_NAME, ENV_OFFLINE_ALIASES, isAliasedEnvFlagEnabled } from "../config.ts";
 import { spawnProcess, spawnProcessSync } from "../utils/child-process.ts";
 import { type GitSource, parseGitUrl } from "../utils/git.ts";
 import { canonicalizePath, isLocalPath, markPathIgnoredByCloudSync, resolvePath } from "../utils/paths.ts";
@@ -39,9 +39,7 @@ const UPDATE_CHECK_CONCURRENCY = 4;
 const GIT_UPDATE_CONCURRENCY = 4;
 
 function isOfflineModeEnabled(): boolean {
-	const value = process.env.PI_OFFLINE;
-	if (!value) return false;
-	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
+	return isAliasedEnvFlagEnabled(ENV_OFFLINE_ALIASES);
 }
 
 export interface PathMetadata {
@@ -524,8 +522,8 @@ function collectAutoThemeEntries(dir: string): string[] {
 function readPiManifestFile(packageJsonPath: string): PiManifest | null {
 	try {
 		const content = readFileSync(packageJsonPath, "utf-8");
-		const pkg = JSON.parse(content) as { pi?: PiManifest };
-		return pkg.pi ?? null;
+		const pkg = JSON.parse(content) as { omk?: PiManifest; pi?: PiManifest };
+		return pkg.omk ?? pkg.pi ?? null;
 	} catch {
 		return null;
 	}
@@ -2144,8 +2142,8 @@ export class DefaultPackageManager implements PackageManager {
 
 		try {
 			const content = readFileSync(packageJsonPath, "utf-8");
-			const pkg = JSON.parse(content) as { pi?: PiManifest };
-			return pkg.pi ?? null;
+			const pkg = JSON.parse(content) as { omk?: PiManifest; pi?: PiManifest };
+			return pkg.omk ?? pkg.pi ?? null;
 		} catch {
 			return null;
 		}
@@ -2257,6 +2255,7 @@ export class DefaultPackageManager implements PackageManager {
 			themes: join(projectBaseDir, "themes"),
 		};
 		const userAgentsSkillsDir = join(getHomeDir(), ".agents", "skills");
+		const includeLegacyUserAgentsSkillsDir = process.env.OMK_CODING_AGENT !== "true";
 		const projectAgentsSkillDirs = collectAncestorAgentsSkillDirs(this.cwd).filter(
 			(dir) => resolve(dir) !== resolve(userAgentsSkillsDir),
 		);
@@ -2343,18 +2342,20 @@ export class DefaultPackageManager implements PackageManager {
 		);
 
 		// User skills from ~/.agents/ (with its own baseDir)
-		const userAgentsBaseDir = dirname(userAgentsSkillsDir);
-		const userAgentsMetadata: PathMetadata = {
-			...userMetadata,
-			baseDir: userAgentsBaseDir,
-		};
-		addResources(
-			"skills",
-			collectAutoSkillEntries(userAgentsSkillsDir, "agents"),
-			userAgentsMetadata,
-			userOverrides.skills,
-			userAgentsBaseDir,
-		);
+		if (includeLegacyUserAgentsSkillsDir) {
+			const userAgentsBaseDir = dirname(userAgentsSkillsDir);
+			const userAgentsMetadata: PathMetadata = {
+				...userMetadata,
+				baseDir: userAgentsBaseDir,
+			};
+			addResources(
+				"skills",
+				collectAutoSkillEntries(userAgentsSkillsDir, "agents"),
+				userAgentsMetadata,
+				userOverrides.skills,
+				userAgentsBaseDir,
+			);
+		}
 
 		addResources(
 			"prompts",

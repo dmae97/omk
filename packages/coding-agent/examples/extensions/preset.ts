@@ -40,10 +40,10 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Api, Model } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { DynamicBorder, getAgentDir } from "@earendil-works/pi-coding-agent";
-import { Container, Key, type SelectItem, SelectList, Text } from "@earendil-works/pi-tui";
+import type { Api, Model } from "@earendil-works/omk-ai";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/omk-coding-agent";
+import { DynamicBorder, getAgentDir } from "@earendil-works/omk-coding-agent";
+import { Container, Key, type SelectItem, SelectList, Text } from "@earendil-works/omk-tui";
 
 // Preset configuration
 interface Preset {
@@ -52,7 +52,7 @@ interface Preset {
 	/** Model ID (e.g., "claude-sonnet-4-5") */
 	model?: string;
 	/** Thinking level */
-	thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+	thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 	/** Tools to enable (replaces default set) */
 	tools?: string[];
 	/** Instructions to append to system prompt */
@@ -100,7 +100,7 @@ function loadPresets(cwd: string): PresetsConfig {
 
 interface OriginalState {
 	model: Model<Api> | undefined;
-	thinkingLevel: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+	thinkingLevel: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 	tools: string[];
 }
 

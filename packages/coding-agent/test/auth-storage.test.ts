@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { registerOAuthProvider } from "@earendil-works/pi-ai/oauth";
+import { registerOAuthProvider } from "@earendil-works/omk-ai/oauth";
 import lockfile from "proper-lockfile";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
@@ -528,7 +528,7 @@ describe("AuthStorage", () => {
 			expect(updated.google.key).toBe("google-key");
 		});
 
-		test("does not overwrite malformed auth file after load error", () => {
+		test("set surfaces malformed auth file errors without overwriting the file", () => {
 			writeAuthJson({
 				anthropic: { type: "api_key", key: "anthropic-key" },
 			});
@@ -537,7 +537,9 @@ describe("AuthStorage", () => {
 			writeFileSync(authJsonPath, "{invalid-json", "utf-8");
 
 			authStorage.reload();
-			authStorage.set("openai", { type: "api_key", key: "openai-key" });
+
+			expect(() => authStorage.set("openai", { type: "api_key", key: "openai-key" })).toThrow();
+			expect(authStorage.get("openai")).toBeUndefined();
 
 			const raw = readFileSync(authJsonPath, "utf-8");
 			expect(raw).toBe("{invalid-json");

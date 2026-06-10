@@ -32,10 +32,12 @@ compaction-results/
 syntax.jsonl
 out.jsonl
 pi-*.html
+omk-*.html
 out.html
 packages/coding-agent/binaries/
 todo.md
 plans/
 .pi/hf-sessions/
 .pi/hf-sessions-backup/
+.omk/runs/
 collect.sh

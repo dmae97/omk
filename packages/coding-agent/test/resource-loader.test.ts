@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ExtensionRunner } from "../src/core/extensions/runner.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
@@ -79,6 +79,50 @@ Skill content here.`,
 			expect(diagnostics.some((d) => d.path?.endsWith("EFFICIENCY.md"))).toBe(false);
 		});
 
+		it("omk skips legacy ~/.agents skills while still loading ~/.omk agent skills", async () => {
+			const originalHome = process.env.HOME;
+			const originalOmk = process.env.OMK_CODING_AGENT;
+			try {
+				process.env.HOME = tempDir;
+				process.env.OMK_CODING_AGENT = "true";
+
+				const legacySkillDir = join(tempDir, ".agents", "skills", "legacy-bad-skill");
+				mkdirSync(legacySkillDir, { recursive: true });
+				writeFileSync(
+					join(legacySkillDir, "SKILL.md"),
+					`---
+name: Legacy Skill
+description: invalid legacy skill
+---
+Should be skipped.`,
+				);
+
+				const omkSkillDir = join(agentDir, "skills", "omk-global-skill");
+				mkdirSync(omkSkillDir, { recursive: true });
+				writeFileSync(
+					join(omkSkillDir, "SKILL.md"),
+					`---
+name: omk-global-skill
+description: valid omk skill
+---
+Loaded globally.`,
+				);
+
+				const loader = new DefaultResourceLoader({ cwd, agentDir });
+				await loader.reload();
+
+				const { skills, diagnostics } = loader.getSkills();
+				expect(skills.some((skill) => skill.name === "omk-global-skill")).toBe(true);
+				expect(diagnostics.some((diag) => diag.path?.includes("legacy-bad-skill"))).toBe(false);
+			} finally {
+				if (originalHome === undefined) delete process.env.HOME;
+				else process.env.HOME = originalHome;
+				if (originalOmk === undefined) delete process.env.OMK_CODING_AGENT;
+				else process.env.OMK_CODING_AGENT = originalOmk;
+				vi.unstubAllEnvs();
+			}
+		});
+
 		it("should discover prompts from agentDir", async () => {
 			const promptsDir = join(agentDir, "prompts");
 			mkdirSync(promptsDir, { recursive: true });
@@ -97,9 +141,27 @@ Prompt content.`,
 			expect(prompts.some((p) => p.name === "test-prompt")).toBe(true);
 		});
 
+		it("should not report prompt collisions when the same file is discovered twice", async () => {
+			const promptsDir = join(agentDir, "prompts");
+			const promptPath = join(promptsDir, "same-prompt.md");
+			mkdirSync(promptsDir, { recursive: true });
+			writeFileSync(promptPath, "Same prompt content.");
+
+			const loader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				additionalPromptTemplatePaths: [promptPath],
+			});
+			await loader.reload();
+
+			const { prompts, diagnostics } = loader.getPrompts();
+			expect(prompts.filter((p) => p.name === "same-prompt")).toHaveLength(1);
+			expect(diagnostics.filter((d) => d.type === "collision")).toHaveLength(0);
+		});
+
 		it("should prefer project resources over user on name collisions", async () => {
 			const userPromptsDir = join(agentDir, "prompts");
-			const projectPromptsDir = join(cwd, ".pi", "prompts");
+			const projectPromptsDir = join(cwd, ".omk", "prompts");
 			mkdirSync(userPromptsDir, { recursive: true });
 			mkdirSync(projectPromptsDir, { recursive: true });
 			const userPromptPath = join(userPromptsDir, "commit.md");
@@ -108,7 +170,7 @@ Prompt content.`,
 			writeFileSync(projectPromptPath, "Project prompt");
 
 			const userSkillDir = join(agentDir, "skills", "collision-skill");
-			const projectSkillDir = join(cwd, ".pi", "skills", "collision-skill");
+			const projectSkillDir = join(cwd, ".omk", "skills", "collision-skill");
 			mkdirSync(userSkillDir, { recursive: true });
 			mkdirSync(projectSkillDir, { recursive: true });
 			const userSkillPath = join(userSkillDir, "SKILL.md");
@@ -135,9 +197,9 @@ Project skill`,
 			) as { name: string; vars?: Record<string, string> };
 			baseTheme.name = "collision-theme";
 			const userThemePath = join(agentDir, "themes", "collision.json");
-			const projectThemePath = join(cwd, ".pi", "themes", "collision.json");
+			const projectThemePath = join(cwd, ".omk", "themes", "collision.json");
 			mkdirSync(join(agentDir, "themes"), { recursive: true });
-			mkdirSync(join(cwd, ".pi", "themes"), { recursive: true });
+			mkdirSync(join(cwd, ".omk", "themes"), { recursive: true });
 			writeFileSync(userThemePath, JSON.stringify(baseTheme, null, 2));
 			if (baseTheme.vars) {
 				baseTheme.vars.accent = "#ff00ff";
@@ -171,9 +233,9 @@ Project skill`,
 			);
 
 			mkdirSync(agentDir, { recursive: true });
-			mkdirSync(join(cwd, ".pi"), { recursive: true });
+			mkdirSync(join(cwd, ".omk"), { recursive: true });
 			symlinkSync(sharedExtDir, join(agentDir, "extensions"), "dir");
-			symlinkSync(sharedExtDir, join(cwd, ".pi", "extensions"), "dir");
+			symlinkSync(sharedExtDir, join(cwd, ".omk", "extensions"), "dir");
 
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload();
@@ -184,12 +246,12 @@ Project skill`,
 
 			// mergePaths processes project paths before user paths, so the project
 			// alias is the canonical survivor.
-			expect(extensionsResult.extensions[0].path).toBe(join(cwd, ".pi", "extensions", "shared.ts"));
+			expect(extensionsResult.extensions[0].path).toBe(join(cwd, ".omk", "extensions", "shared.ts"));
 		});
 
 		it("should keep both extensions loaded when command names collide", async () => {
 			const userExtDir = join(agentDir, "extensions");
-			const projectExtDir = join(cwd, ".pi", "extensions");
+			const projectExtDir = join(cwd, ".omk", "extensions");
 			mkdirSync(userExtDir, { recursive: true });
 			mkdirSync(projectExtDir, { recursive: true });
 
@@ -318,8 +380,8 @@ Content`,
 			expect(agentsFiles).toEqual([]);
 		});
 
-		it("should discover SYSTEM.md from cwd/.pi", async () => {
-			const piDir = join(cwd, ".pi");
+		it("should discover SYSTEM.md from cwd/.omk", async () => {
+			const piDir = join(cwd, ".omk");
 			mkdirSync(piDir, { recursive: true });
 			writeFileSync(join(piDir, "SYSTEM.md"), "You are a helpful assistant.");
 
@@ -330,7 +392,7 @@ Content`,
 		});
 
 		it("should discover APPEND_SYSTEM.md", async () => {
-			const piDir = join(cwd, ".pi");
+			const piDir = join(cwd, ".omk");
 			mkdirSync(piDir, { recursive: true });
 			writeFileSync(join(piDir, "APPEND_SYSTEM.md"), "Additional instructions.");
 
@@ -420,7 +482,7 @@ description: File URL skill
 Extra content`,
 			);
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = new DefaultResourceLoader({ cwd, agentDir, noSkills: true });
 			await loader.reload();
 
 			loader.extendResources({
@@ -539,7 +601,7 @@ Content`,
 			writeFileSync(
 				join(ext1Dir, "index.ts"),
 				`
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/omk-coding-agent";
 import { Type } from "typebox";
 export default function(pi: ExtensionAPI) {
   pi.registerTool({
@@ -554,7 +616,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(
 				join(ext2Dir, "index.ts"),
 				`
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/omk-coding-agent";
 import { Type } from "typebox";
 export default function(pi: ExtensionAPI) {
   pi.registerTool({
@@ -581,7 +643,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(
 				join(globalExtDir, "global.ts"),
 				`
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/omk-coding-agent";
 import { Type } from "typebox";
 export default function(pi: ExtensionAPI) {
   pi.registerTool({
@@ -600,7 +662,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(
 				explicitExtPath,
 				`
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/omk-coding-agent";
 import { Type } from "typebox";
 export default function(pi: ExtensionAPI) {
   pi.registerTool({

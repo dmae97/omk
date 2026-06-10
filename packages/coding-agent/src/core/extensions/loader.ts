@@ -7,11 +7,11 @@ import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as _bundledPiAgentCore from "@earendil-works/pi-agent-core";
-import * as _bundledPiAi from "@earendil-works/pi-ai";
-import * as _bundledPiAiOauth from "@earendil-works/pi-ai/oauth";
-import type { KeyId } from "@earendil-works/pi-tui";
-import * as _bundledPiTui from "@earendil-works/pi-tui";
+import * as _bundledPiAgentCore from "@earendil-works/omk-agent-core";
+import * as _bundledPiAi from "@earendil-works/omk-ai";
+import * as _bundledPiAiOauth from "@earendil-works/omk-ai/oauth";
+import type { KeyId } from "@earendil-works/omk-tui";
+import * as _bundledPiTui from "@earendil-works/omk-tui";
 import { createJiti } from "jiti/static";
 // Static imports of packages that extensions may use.
 // These MUST be static so Bun bundles them into the compiled binary.
@@ -21,7 +21,7 @@ import * as _bundledTypeboxCompile from "typebox/compile";
 import * as _bundledTypeboxValue from "typebox/value";
 import { CONFIG_DIR_NAME, getAgentDir, isBunBinary } from "../../config.ts";
 // NOTE: This import works because loader.ts exports are NOT re-exported from index.ts,
-// avoiding a circular dependency. Extensions can import from @earendil-works/pi-coding-agent.
+// avoiding a circular dependency. Extensions can import from @earendil-works/omk-coding-agent.
 import * as _bundledPiCodingAgent from "../../index.ts";
 import { resolvePath } from "../../utils/paths.ts";
 import { createEventBus, type EventBus } from "../event-bus.ts";
@@ -48,12 +48,17 @@ const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@sinclair/typebox": _bundledTypebox,
 	"@sinclair/typebox/compile": _bundledTypeboxCompile,
 	"@sinclair/typebox/value": _bundledTypeboxValue,
+	"@earendil-works/omk-agent-core": _bundledPiAgentCore,
+	"@earendil-works/omk-tui": _bundledPiTui,
+	"@earendil-works/omk-ai": _bundledPiAi,
+	"@earendil-works/omk-ai/oauth": _bundledPiAiOauth,
+	"@earendil-works/pi-ai/oauth": _bundledPiAiOauth,
+	"@earendil-works/omk-coding-agent": _bundledPiCodingAgent,
+	"@earendil-works/pi-coding-agent": _bundledPiCodingAgent,
+	"@mariozechner/pi-agent-core": _bundledPiAgentCore,
 	"@earendil-works/pi-agent-core": _bundledPiAgentCore,
 	"@earendil-works/pi-tui": _bundledPiTui,
 	"@earendil-works/pi-ai": _bundledPiAi,
-	"@earendil-works/pi-ai/oauth": _bundledPiAiOauth,
-	"@earendil-works/pi-coding-agent": _bundledPiCodingAgent,
-	"@mariozechner/pi-agent-core": _bundledPiAgentCore,
 	"@mariozechner/pi-tui": _bundledPiTui,
 	"@mariozechner/pi-ai": _bundledPiAi,
 	"@mariozechner/pi-ai/oauth": _bundledPiAiOauth,
@@ -88,12 +93,17 @@ function getAliases(): Record<string, string> {
 	};
 
 	const piCodingAgentEntry = packageIndex;
-	const piAgentCoreEntry = resolveWorkspaceOrImport("agent/dist/index.js", "@earendil-works/pi-agent-core");
-	const piTuiEntry = resolveWorkspaceOrImport("tui/dist/index.js", "@earendil-works/pi-tui");
-	const piAiEntry = resolveWorkspaceOrImport("ai/dist/index.js", "@earendil-works/pi-ai");
-	const piAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@earendil-works/pi-ai/oauth");
+	const piAgentCoreEntry = resolveWorkspaceOrImport("agent/dist/index.js", "@earendil-works/omk-agent-core");
+	const piTuiEntry = resolveWorkspaceOrImport("tui/dist/index.js", "@earendil-works/omk-tui");
+	const piAiEntry = resolveWorkspaceOrImport("ai/dist/index.js", "@earendil-works/omk-ai");
+	const piAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@earendil-works/omk-ai/oauth");
 
 	_aliases = {
+		"@earendil-works/omk-coding-agent": piCodingAgentEntry,
+		"@earendil-works/omk-agent-core": piAgentCoreEntry,
+		"@earendil-works/omk-tui": piTuiEntry,
+		"@earendil-works/omk-ai": piAiEntry,
+		"@earendil-works/omk-ai/oauth": piAiOauthEntry,
 		"@earendil-works/pi-coding-agent": piCodingAgentEntry,
 		"@earendil-works/pi-agent-core": piAgentCoreEntry,
 		"@earendil-works/pi-tui": piTuiEntry,
@@ -447,7 +457,10 @@ interface PiManifest {
 function readPiManifest(packageJsonPath: string): PiManifest | null {
 	try {
 		const content = fs.readFileSync(packageJsonPath, "utf-8");
-		const pkg = JSON.parse(content);
+		const pkg = JSON.parse(content) as { omk?: PiManifest; pi?: PiManifest };
+		if (pkg.omk && typeof pkg.omk === "object") {
+			return pkg.omk;
+		}
 		if (pkg.pi && typeof pkg.pi === "object") {
 			return pkg.pi as PiManifest;
 		}

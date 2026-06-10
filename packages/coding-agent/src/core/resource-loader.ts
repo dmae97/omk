@@ -799,9 +799,16 @@ export class DefaultResourceLoader implements ResourceLoader {
 
 	private dedupePrompts(prompts: PromptTemplate[]): { prompts: PromptTemplate[]; diagnostics: ResourceDiagnostic[] } {
 		const seen = new Map<string, PromptTemplate>();
+		const seenPaths = new Set<string>();
 		const diagnostics: ResourceDiagnostic[] = [];
 
 		for (const prompt of prompts) {
+			const canonicalPath = canonicalizePath(prompt.filePath);
+			if (seenPaths.has(canonicalPath)) {
+				continue;
+			}
+			seenPaths.add(canonicalPath);
+
 			const existing = seen.get(prompt.name);
 			if (existing) {
 				diagnostics.push({

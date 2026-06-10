@@ -10,7 +10,7 @@ import {
 	streamSimple,
 	type ToolResultMessage,
 	validateToolArguments,
-} from "@earendil-works/pi-ai";
+} from "@earendil-works/omk-ai";
 import type {
 	AgentContext,
 	AgentEvent,
@@ -381,7 +381,10 @@ async function executeToolCalls(
 	const hasSequentialToolCall = toolCalls.some(
 		(tc) => currentContext.tools?.find((t) => t.name === tc.name)?.executionMode === "sequential",
 	);
-	if (config.toolExecution === "sequential" || hasSequentialToolCall) {
+	const hasDisconnectedMcpWarning =
+		toolCalls.length > 1 &&
+		/Disconnected MCP:|Warnings: .*unavailable or disconnected/i.test(currentContext.systemPrompt);
+	if (config.toolExecution === "sequential" || hasSequentialToolCall || hasDisconnectedMcpWarning) {
 		return executeToolCallsSequential(currentContext, assistantMessage, toolCalls, config, signal, emit);
 	}
 	return executeToolCallsParallel(currentContext, assistantMessage, toolCalls, config, signal, emit);

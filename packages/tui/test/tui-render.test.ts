@@ -225,6 +225,48 @@ describe("TUI resize handling", () => {
 	});
 });
 
+describe("TUI fullscreen viewport", () => {
+	it("renders only the visible viewport on the alternate screen", async () => {
+		const terminal = new LoggingVirtualTerminal(20, 4);
+		const tui = new TUI(terminal);
+		tui.setFullscreenViewport(true);
+		const component = new TestComponent();
+		tui.addChild(component);
+
+		component.lines = Array.from({ length: 8 }, (_, i) => `Line ${i}`);
+		tui.start();
+		await terminal.waitForRender();
+
+		const viewport = terminal.getViewport();
+		assert.ok(viewport[0]?.includes("Line 4"), "fullscreen viewport should start at visible tail");
+		assert.ok(viewport[3]?.includes("Line 7"), "fullscreen viewport should end at visible tail");
+		assert.ok(terminal.getWrites().includes("\x1b[?1049h"), "fullscreen mode enters alternate screen");
+
+		terminal.clearWrites();
+		tui.stop();
+		assert.ok(terminal.getWrites().includes("\x1b[?1049l"), "fullscreen mode leaves alternate screen");
+	});
+
+	it("restores cursor visibility when leaving fullscreen viewport", async () => {
+		const terminal = new LoggingVirtualTerminal(20, 4);
+		const tui = new TUI(terminal);
+		tui.setFullscreenViewport(true);
+		const component = new TestComponent();
+		tui.addChild(component);
+
+		component.lines = ["Line 0"];
+		tui.start();
+		await terminal.waitForRender();
+
+		terminal.clearWrites();
+		tui.stop();
+
+		const writes = terminal.getWrites();
+		assert.ok(writes.includes("\x1b[?25h"), "fullscreen stop should show the cursor");
+		assert.ok(writes.includes("\x1b[?1049l"), "fullscreen stop should leave alternate screen");
+	});
+});
+
 describe("TUI content shrinkage", () => {
 	it("clears empty rows when content shrinks significantly", async () => {
 		const terminal = new VirtualTerminal(40, 10);

@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AnthropicMessagesCompat, Api, Context, Model, OpenAICompletionsCompat } from "@earendil-works/pi-ai";
-import { getApiProvider } from "@earendil-works/pi-ai";
-import { getOAuthProvider } from "@earendil-works/pi-ai/oauth";
+import type { AnthropicMessagesCompat, Api, Context, Model, OpenAICompletionsCompat } from "@earendil-works/omk-ai";
+import { getApiProvider, getProviders } from "@earendil-works/omk-ai";
+import { getOAuthProvider } from "@earendil-works/omk-ai/oauth";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { clearApiKeyCache, ModelRegistry, type ProviderConfigInput } from "../src/core/model-registry.ts";
@@ -243,7 +243,7 @@ describe("ModelRegistry", () => {
 			expect(model?.baseUrl).toBe("https://openrouter.ai/api/v1");
 		});
 
-		test("non-built-in provider custom models still require baseUrl and apiKey", () => {
+		test("non-built-in provider custom models still require baseUrl", () => {
 			writeRawModelsJson({
 				"my-custom-provider": {
 					models: [
@@ -261,6 +261,42 @@ describe("ModelRegistry", () => {
 			expect(registry.getError()).toContain("baseUrl");
 		});
 
+		test("non-built-in provider custom models can rely on stored API keys", async () => {
+			writeRawModelsJson({
+				"my-custom-provider": {
+					baseUrl: "https://custom-provider.example.com/v1",
+					api: "openai-completions",
+					models: [
+						{
+							id: "my-model",
+							reasoning: false,
+							input: ["text"],
+						},
+					],
+				},
+			});
+
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
+			expect(registry.getError()).toBeUndefined();
+			expect(registry.find("my-custom-provider", "my-model")).toBeDefined();
+			expect(registry.getAvailable().some((model) => model.provider === "my-custom-provider")).toBe(false);
+
+			authStorage.set("my-custom-provider", { type: "api_key", key: "stored-custom-key" });
+
+			expect(registry.getProviderAuthStatus("my-custom-provider")).toEqual({
+				configured: true,
+				source: "stored",
+			});
+			expect(registry.getAvailable().some((model) => model.provider === "my-custom-provider")).toBe(true);
+
+			const model = registry.find("my-custom-provider", "my-model");
+			expect(model).toBeDefined();
+			expect(await registry.getApiKeyAndHeaders(model!)).toEqual({
+				ok: true,
+				apiKey: "stored-custom-key",
+				headers: undefined,
+			});
+		});
 		test("custom provider with same name as built-in merges with built-in models", () => {
 			writeModelsJson({
 				anthropic: providerConfig("https://my-proxy.example.com/v1", [{ id: "claude-custom" }]),
@@ -416,7 +452,8 @@ describe("ModelRegistry", () => {
 							maxTokens: 100,
 							thinkingLevelMap: {
 								minimal: null,
-								high: "max",
+								high: "high",
+								max: "max",
 							},
 							compat: {
 								supportsStrictMode: false,
@@ -432,9 +469,36 @@ describe("ModelRegistry", () => {
 			const compat = model?.compat as OpenAICompletionsCompat | undefined;
 
 			expect(registry.getError()).toBeUndefined();
-			expect(model?.thinkingLevelMap).toEqual({ minimal: null, high: "max" });
+			expect(model?.thinkingLevelMap).toEqual({ minimal: null, high: "high", max: "max" });
 			expect(compat?.supportsStrictMode).toBe(false);
 			expect(compat?.cacheControlFormat).toBe("anthropic");
+		});
+
+		test("custom provider model overrides preserve built-in thinking level maps when omitted", () => {
+			writeRawModelsJson({
+				deepseek: {
+					baseUrl: "https://api.deepseek.com",
+					apiKey: "DEEPSEEK_API_KEY",
+					api: "openai-completions",
+					models: [
+						{
+							id: "deepseek-v4-pro",
+							name: "DeepSeek V4 Pro Override",
+							reasoning: true,
+							input: ["text"],
+							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+							contextWindow: 1000,
+							maxTokens: 100,
+						},
+					],
+				},
+			});
+
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
+			const model = registry.find("deepseek", "deepseek-v4-pro");
+
+			expect(registry.getError()).toBeUndefined();
+			expect(model?.thinkingLevelMap?.max).toBe("max");
 		});
 
 		test("compat schema accepts Anthropic eager tool input streaming flag", () => {
@@ -1086,6 +1150,34 @@ describe("ModelRegistry", () => {
 				]);
 			});
 
+			test("models-only custom provider registration can rely on stored API keys", async () => {
+				const registry = ModelRegistry.create(authStorage, modelsJsonPath);
+
+				registry.registerProvider("custom-provider", {
+					baseUrl: "https://custom.test/v1",
+					api: "openai-completions",
+					models: [
+						{
+							id: "custom-a",
+							name: "custom-a",
+							reasoning: false,
+							input: ["text"],
+							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+							contextWindow: 100000,
+							maxTokens: 8000,
+						},
+					],
+				});
+				registry.refresh();
+
+				expect(registry.getAvailable().some((model) => model.provider === "custom-provider")).toBe(false);
+
+				authStorage.set("custom-provider", { type: "api_key", key: "stored-custom-key" });
+
+				expect(await registry.getApiKeyForProvider("custom-provider")).toBe("stored-custom-key");
+				expect(registry.getAvailable().some((model) => model.provider === "custom-provider")).toBe(true);
+			});
+
 			test("baseUrl-only override keeps custom provider models after refresh", () => {
 				const registry = ModelRegistry.create(authStorage, modelsJsonPath);
 
@@ -1148,6 +1240,45 @@ describe("ModelRegistry", () => {
 				],
 			};
 		}
+
+		test("stored API keys work for all built-in API-key providers", async () => {
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
+			const oauthOnlyProviders = new Set(["github-copilot", "openai-codex", "amazon-bedrock"]);
+
+			for (const provider of getProviders()) {
+				if (oauthOnlyProviders.has(provider)) {
+					continue;
+				}
+
+				const storedKey = `stored-${provider}`;
+				authStorage.set(provider, { type: "api_key", key: storedKey });
+
+				expect(await registry.getApiKeyForProvider(provider)).toBe(storedKey);
+				expect(registry.getProviderAuthStatus(provider)).toEqual({
+					configured: true,
+					source: "stored",
+				});
+				expect(registry.getAvailable().some((model) => model.provider === provider)).toBe(true);
+			}
+		});
+
+		test("stored API keys take precedence over models.json apiKey values", async () => {
+			writeRawModelsJson({
+				"custom-provider": providerWithApiKey("literal-config-key"),
+			});
+			authStorage.set("custom-provider", { type: "api_key", key: "stored-custom-key" });
+
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
+			const model = registry.find("custom-provider", "test-model");
+
+			expect(await registry.getApiKeyForProvider("custom-provider")).toBe("stored-custom-key");
+			expect(model).toBeDefined();
+			expect(await registry.getApiKeyAndHeaders(model!)).toEqual({
+				ok: true,
+				apiKey: "stored-custom-key",
+				headers: undefined,
+			});
+		});
 
 		test("apiKey with ! prefix executes command and uses stdout", async () => {
 			writeRawModelsJson({

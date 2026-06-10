@@ -151,6 +151,18 @@ export {
 export type { ReadonlyFooterDataProvider } from "./core/footer-data-provider.ts";
 export { convertToLlm } from "./core/messages.ts";
 export { ModelRegistry } from "./core/model-registry.ts";
+export {
+	buildOmkControlDecision,
+	buildOmkControlSurface,
+	classifyOmkTurnIntent,
+	inferOmkTurnRisk,
+	isOmkRuntimeName,
+	type OmkCapability,
+	type OmkControlDecision,
+	type OmkControlSurface,
+	type OmkTurnIntent,
+	type OmkTurnRisk,
+} from "./core/omk-control.ts";
 export type {
 	PackageManager,
 	PathMetadata,

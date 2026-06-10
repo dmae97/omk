@@ -111,6 +111,30 @@ describe("SettingsManager", () => {
 		});
 	});
 
+	describe("model thinking levels", () => {
+		it("maps provider max overrides to the model Pi thinking level", () => {
+			const settingsPath = join(agentDir, "settings.json");
+			writeFileSync(
+				settingsPath,
+				JSON.stringify({
+					modelThinkingLevels: {
+						"deepseek//deepseek-v4-pro": "max",
+					},
+				}),
+			);
+
+			const manager = SettingsManager.create(projectDir, agentDir);
+
+			expect(
+				manager.getModelThinkingLevel({
+					provider: "deepseek",
+					id: "deepseek-v4-pro",
+					thinkingLevelMap: { xhigh: "max" },
+				}),
+			).toBe("xhigh");
+		});
+	});
+
 	describe("packages migration", () => {
 		it("should keep local-only extensions in extensions array", () => {
 			const settingsPath = join(agentDir, "settings.json");

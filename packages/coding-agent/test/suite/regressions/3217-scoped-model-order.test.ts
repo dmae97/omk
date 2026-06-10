@@ -1,4 +1,4 @@
-import { setKeybindings, type TUI } from "@earendil-works/pi-tui";
+import { setKeybindings, type TUI } from "@earendil-works/omk-tui";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { KeybindingsManager } from "../../../src/core/keybindings.ts";
 import { ModelSelectorComponent } from "../../../src/modes/interactive/components/model-selector.ts";
@@ -64,6 +64,61 @@ describe("issue #3217 scoped model ordering", () => {
 		selector.handleInput("\x1b[1;3B");
 
 		expect(changes).toEqual([[orderedIds[1], orderedIds[0], orderedIds[2]]]);
+	});
+
+	it("renders provider tabs and max thinking variants in the /model selector", async () => {
+		const harness = await createHarness({
+			models: [{ id: "faux-max", name: "Faux Max", reasoning: true }],
+		});
+		harnesses.push(harness);
+
+		const baseModel = harness.models[0];
+		harness.authStorage.setRuntimeApiKey("beta", "beta-key");
+		harness.session.modelRegistry.registerProvider("beta", {
+			baseUrl: baseModel.baseUrl,
+			apiKey: "beta-key",
+			api: baseModel.api,
+			models: [
+				{
+					id: "beta-max",
+					name: "Beta Max",
+					api: baseModel.api,
+					baseUrl: baseModel.baseUrl,
+					reasoning: true,
+					thinkingLevelMap: { high: "high", xhigh: "max", max: "max" },
+					input: baseModel.input,
+					cost: baseModel.cost,
+					contextWindow: baseModel.contextWindow,
+					maxTokens: baseModel.maxTokens,
+				},
+			],
+		});
+
+		const betaModel = harness.session.modelRegistry.find("beta", "beta-max")!;
+		const selector = new ModelSelectorComponent(
+			createFakeTui(),
+			betaModel,
+			harness.settingsManager,
+			harness.session.modelRegistry,
+			[],
+			() => {},
+			() => {},
+		);
+
+		await waitForAsyncRender();
+
+		const initialOutput = stripAnsi(selector.render(140).join("\n"));
+		expect(initialOutput).toContain("Provider tabs:");
+		expect(initialOutput).toContain("[○ all]");
+		expect(initialOutput).toContain("[● beta]");
+		expect(initialOutput).toContain("[○ faux]");
+		expect(initialOutput).toContain("beta-max:max");
+		expect(initialOutput).not.toContain("faux-max [faux]");
+
+		selector.handleInput("\t");
+		const nextProviderOutput = stripAnsi(selector.render(140).join("\n"));
+		expect(nextProviderOutput).toMatch(/\[● (?!beta\])[a-z0-9-]+\]/);
+		expect(nextProviderOutput).not.toContain("beta-max [beta]");
 	});
 
 	it("preserves scoped model order in the /model scoped tab", async () => {

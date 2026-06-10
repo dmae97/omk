@@ -2,16 +2,16 @@
  * Model resolution, scoping, and initial selection
  */
 
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
-import { type Api, type KnownProvider, type Model, modelsAreEqual } from "@earendil-works/pi-ai";
+import type { ThinkingLevel } from "@earendil-works/omk-agent-core";
+import { type Api, type KnownProvider, type Model, modelsAreEqual } from "@earendil-works/omk-ai";
 import chalk from "chalk";
 import { minimatch } from "minimatch";
 import { isValidThinkingLevel } from "../cli/args.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 
-/** Default model IDs for each known provider */
-export const defaultModelPerProvider: Record<KnownProvider, string> = {
+/** Preferred default model IDs for providers with a provider-neutral OMK default. */
+export const defaultModelPerProvider: Partial<Record<KnownProvider, string>> = {
 	"amazon-bedrock": "us.anthropic.claude-opus-4-6-v1",
 	"ant-ling": "Ring-2.6-1T",
 	anthropic: "claude-opus-4-8",
@@ -23,7 +23,7 @@ export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	google: "gemini-3.1-pro-preview",
 	"google-vertex": "gemini-3.1-pro-preview",
 	"github-copilot": "gpt-5.4",
-	openrouter: "moonshotai/kimi-k2.6",
+	openrouter: "auto",
 	"vercel-ai-gateway": "zai/glm-5.1",
 	xai: "grok-4.20-0309-reasoning",
 	groq: "openai/gpt-oss-120b",
@@ -33,16 +33,13 @@ export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	mistral: "devstral-medium-latest",
 	minimax: "MiniMax-M2.7",
 	"minimax-cn": "MiniMax-M2.7",
-	moonshotai: "kimi-k2.6",
-	"moonshotai-cn": "kimi-k2.6",
-	huggingface: "moonshotai/Kimi-K2.6",
-	fireworks: "accounts/fireworks/models/kimi-k2p6",
-	together: "moonshotai/Kimi-K2.6",
-	opencode: "kimi-k2.6",
-	"opencode-go": "kimi-k2.6",
-	"kimi-coding": "kimi-for-coding",
-	"cloudflare-workers-ai": "@cf/moonshotai/kimi-k2.6",
-	"cloudflare-ai-gateway": "workers-ai/@cf/moonshotai/kimi-k2.6",
+	huggingface: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+	fireworks: "accounts/fireworks/models/deepseek-v4-pro",
+	together: "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+	opencode: "claude-sonnet-4-6",
+	"opencode-go": "qwen3.7-plus",
+	"cloudflare-workers-ai": "@cf/qwen/qwen3-30b-a3b-fp8",
+	"cloudflare-ai-gateway": "gpt-5.4",
 	xiaomi: "mimo-v2.5-pro",
 	"xiaomi-token-plan-cn": "mimo-v2.5-pro",
 	"xiaomi-token-plan-ams": "mimo-v2.5-pro",
