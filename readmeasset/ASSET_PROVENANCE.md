@@ -87,8 +87,20 @@
 | `omk-evidence-loop-0.78.0.webp` | omk-runtime-flow-0.78.0.webp | Evidence bundle and verify gate crop | `900x774` | `WEBP` | 60808 | `2c4bf27d738710461b9979144759e06a99729ffcc97f53d1bd985b503b0f99da` |
 | `omk-runtime-flow-wide.webp` | omk-runtime-flow-0.78.0.webp | Runtime flow wide strip | `1485x178` | `WEBP` | 45258 | `9edac732cd8de0533e345337392f3dca464a9d8a2f08d8b7a464b685a8da45ce` |
 | `omk-architecture-strip.webp` | omk-tui-0.78.0.webp | TUI command timeline and evidence ledger strip | `1536x273` | `WEBP` | 71128 | `c76b825863260ecff832e31d986b91d341903f929faa62727511a594cb714cfe` |
-| `omk-core-loop.svg` | local SVG render from OMK palette | OMK Core Loop | `1200x420` | `SVG` | 2671 | `95ffbc24fb6c52bb91172e05a77360f7604dcd3c383840139f851c7066af4184` |
-| `omk-provider-lanes.svg` | local SVG render from OMK palette | Provider Lanes | `1200x420` | `SVG` | 2693 | `84dd51d8835c0b8a682945958f1121d3d65530904b3818739fa47f9b8a2b6ef6` |
-| `omk-evidence-ledger.svg` | local SVG render from OMK palette | Evidence Ledger | `1200x420` | `SVG` | 2351 | `ef07178bf9fc3e6a9dd56e0150b1b410cf1c5e457b6a4b42511a9f2f16ed8465` |
-| `omk-badges.svg` | local SVG render from OMK palette | OMK Badges | `1200x420` | `SVG` | 2345 | `cb1980381dfac48c665c23517450419ca91860db96968bff8f9c158888c08b69` |
-| `omk-logo-mark.svg` | local SVG render from OMK palette | Vector OMK logo mark | `512x512` | `SVG` | 589 | `b98505c0a72d50af8a7d432af6c7563498c04c355a0b8d5057b33457a8dd1be0` |
+| `omk-core-loop.svg` | themes/night-city.theme.json via scripts/assets-build.mjs | OMK Core Loop | `1200x420` | `SVG` | 2731 | `0f60a453833c541a05db3b509f9d56fae02c38c89334c7c57357f281cad439f2` |
+| `omk-provider-lanes.svg` | themes/night-city.theme.json via scripts/assets-build.mjs | Provider Lanes | `1200x420` | `SVG` | 2753 | `d7d85098e02e78d37d10a9886a041a8546bfa8438dd3f29bb157ce848bfd0b83` |
+| `omk-evidence-ledger.svg` | themes/night-city.theme.json via scripts/assets-build.mjs | Evidence Ledger | `1200x420` | `SVG` | 2411 | `01f0d66d2ba9915d9975bd7f93bb790e7ab0e11adbaedf84b4e5c25be6fe837c` |
+| `omk-badges.svg` | themes/night-city.theme.json via scripts/assets-build.mjs | OMK Badges | `1200x420` | `SVG` | 2405 | `4a4c94daca5d81e10a1ca185d3c07d4dfa6ac732363ecbc4bdbde841d4624cf6` |
+| `omk-logo-mark.svg` | themes/night-city.theme.json via scripts/assets-build.mjs | Vector OMK logo mark | `512x512` | `SVG` | 649 | `f5ba6323a9bf471b3c6001d063b90087dece0491ef15c4f0f1ea314785bef124` |
+
+## Theme-derived SVG assets (2026-06-10)
+
+- Source of truth: `themes/night-city.theme.json` (`omk.theme.v1` contract, contrast-gated by `npm run theme:check`).
+- Generator: `scripts/assets-build.mjs` resolves every `fill`/`stroke`/`stop-color` value from theme primitives and embeds a provenance comment; geometry, layout, and text are preserved.
+- Regeneration command: `npm run assets:build` (re-run after any theme token change; the `@<hash>` suffix is the first 12 hex of the theme file's SHA-256).
+- Light variant: not built — dark-only by ADR, see `docs/decisions/ADR-theme-dark-only-assets.md`. Non-dark themes are refused unless every used pair passes the 4.5/3.0 WCAG gates inline.
+- derived-from: omk.theme.v1/night-city@e5daf40d789d — `omk-badges.svg`
+- derived-from: omk.theme.v1/night-city@e5daf40d789d — `omk-core-loop.svg`
+- derived-from: omk.theme.v1/night-city@e5daf40d789d — `omk-evidence-ledger.svg`
+- derived-from: omk.theme.v1/night-city@e5daf40d789d — `omk-logo-mark.svg`
+- derived-from: omk.theme.v1/night-city@e5daf40d789d — `omk-provider-lanes.svg`
