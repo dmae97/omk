@@ -1,7 +1,19 @@
-const ESC = "\x1b[";
+import { P } from "./palette.js";
+import { brandTruecolorSgr } from "./theme-compiled.js";
+import type { BrandRgb } from "./theme-compiled.js";
+
+/**
+ * Truecolor SGR open sequence for a brand color, produced via the theme
+ * compiler (compileTheme) — no raw escape literals in this file. Brand theme
+ * constants stay truecolor on purpose for byte parity; tier-aware rendering
+ * lives in src/brand/theme-compiled.ts (getCompiledBrandTheme).
+ */
+function fg(color: BrandRgb): string {
+  return brandTruecolorSgr(color);
+}
 
 function rgb(r: number, g: number, b: number): string {
-  return `${ESC}38;2;${r};${g};${b}m`;
+  return fg({ r, g, b });
 }
 
 export type OmkBrandThemeName =
@@ -88,15 +100,15 @@ export const GREEN_RAIN_THEME: OmkBrandTheme = {
     signal: "◆",
   },
   colors: {
-    border: rgb(8, 39, 31),
-    borderHot: rgb(0, 255, 194),
-    text: rgb(232, 248, 255),
-    muted: rgb(117, 143, 168),
-    primary: rgb(0, 255, 194),
-    success: rgb(0, 255, 194),
-    warning: rgb(255, 176, 0),
-    danger: rgb(255, 88, 116),
-    info: rgb(0, 214, 255),
+    border: fg(P.matrixDark),
+    borderHot: fg(P.mint),
+    text: fg(P.cream),
+    muted: fg(P.gray),
+    primary: fg(P.mint),
+    success: fg(P.mint),
+    warning: fg(P.orange),
+    danger: fg(P.red),
+    info: fg(P.blue),
   },
   motion: {
     rain: true,
@@ -118,15 +130,15 @@ export const NEON_GRID_THEME: OmkBrandTheme = {
     signal: "◇",
   },
   colors: {
-    border: rgb(34, 50, 74),
-    borderHot: rgb(0, 214, 255),
-    text: rgb(232, 248, 255),
-    muted: rgb(117, 143, 168),
-    primary: rgb(0, 214, 255),
-    success: rgb(0, 255, 194),
-    warning: rgb(255, 176, 0),
-    danger: rgb(255, 88, 116),
-    info: rgb(0, 214, 255),
+    border: fg(P.gridLine),
+    borderHot: fg(P.blue),
+    text: fg(P.cream),
+    muted: fg(P.gray),
+    primary: fg(P.blue),
+    success: fg(P.mint),
+    warning: fg(P.orange),
+    danger: fg(P.red),
+    info: fg(P.blue),
   },
   motion: {
     rain: false,
@@ -148,15 +160,15 @@ export const RUST_FORGE_THEME: OmkBrandTheme = {
     signal: "▣",
   },
   colors: {
-    border: rgb(124, 45, 18),
-    borderHot: rgb(249, 115, 22),
-    text: rgb(232, 248, 255),
-    muted: rgb(117, 143, 168),
-    primary: rgb(249, 115, 22),
-    success: rgb(0, 255, 194),
-    warning: rgb(255, 176, 0),
-    danger: rgb(255, 88, 116),
-    info: rgb(0, 214, 255),
+    border: fg(P.rustOxide),
+    borderHot: fg(P.rustOrange),
+    text: fg(P.cream),
+    muted: fg(P.gray),
+    primary: fg(P.rustOrange),
+    success: fg(P.cargoGreen),
+    warning: fg(P.orange),
+    danger: fg(P.red),
+    info: fg(P.blue),
   },
   motion: {
     rain: false,
@@ -179,13 +191,13 @@ export const MATRIX_THEME: OmkBrandTheme = {
   },
   colors: {
     border: rgb(0, 20, 0),
-    borderHot: rgb(0, 255, 65),
+    borderHot: fg(P.matrixRainGreen),
     text: rgb(200, 255, 200),
-    muted: rgb(0, 95, 25),
-    primary: rgb(0, 255, 65),
-    success: rgb(0, 255, 65),
-    warning: rgb(255, 176, 0),
-    danger: rgb(255, 50, 50),
+    muted: fg(P.matrixRainDim),
+    primary: fg(P.matrixRainGreen),
+    success: fg(P.matrixRainGreen),
+    warning: fg(P.matrixWarningAmber),
+    danger: fg(P.matrixErrorRed),
     info: rgb(0, 200, 50),
   },
   motion: {

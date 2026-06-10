@@ -1,45 +1,95 @@
 /**
- * OMK brand color palette — hex values and conversion helpers.
+ * OMK brand color palette — compiled from the night-city theme document
+ * (theme contract T5b) plus conversion helpers.
+ *
+ * Night City colors come from src/brand/night-city.theme.json (snapshot of
+ * themes/night-city.theme.json, drift-guarded in test/brand-theme.test.mjs).
+ * Families without a theme document yet (matrix rain, rust forge, metrics
+ * dashboard, sparkle accents) stay as numeric RGB constants until their own
+ * omk.theme.v1 documents land — no hex or SGR literals live in this file.
  */
 
-export const P = {
-  purple: { r: 157, g: 78, b: 221 },        // #9D4EDD  orchestration/control accent
-  lightPurple: { r: 214, g: 108, b: 255 },  // #D66CFF  neon highlight
-  darkPurple: { r: 64, g: 18, b: 133 },     // #401285  deep control shadow
-  pink: { r: 255, g: 71, b: 178 },          // #FF47B2  control/focus accent
-  hotPink: { r: 255, g: 71, b: 178 },       // #FF47B2  hot accent (alias)
-  mint: { r: 0, g: 255, b: 194 },           // #00FFC2  telemetry/success
-  darkMint: { r: 0, g: 196, b: 153 },       // #00C499  telemetry shadow
-  orange: { r: 255, g: 176, b: 0 },         // #FFB000  warning/pending
-  red: { r: 255, g: 88, b: 116 },           // #FF5874  fault/danger
-  blue: { r: 0, g: 214, b: 255 },           // #00D6FF  route/signal/info
-  cream: { r: 232, g: 248, b: 255 },        // #E8F8FF  bright console text
-  dark: { r: 7, g: 11, b: 20 },             // #070B14  cockpit background
-  gray: { r: 117, g: 143, b: 168 },         // #758FA8  muted telemetry
-  skin: { r: 255, g: 214, b: 102 },         // #FFD666  metric gold
-  rustOrange: { r: 249, g: 115, b: 22 },    // #F97316  Rust/native toolchain accent
-  rustOxide: { r: 124, g: 45, b: 18 },      // #7C2D12  Rust/native warning shadow
-  cargoGreen: { r: 0, g: 255, b: 194 },     // #00FFC2  verified native check
-  matrixGreen: { r: 0, g: 255, b: 194 },    // #00FFC2  OMK signal phosphor
-  matrixDark: { r: 8, g: 39, b: 31 },       // #08271F  success/signal background
-  matrixRainGreen: { r: 0, g: 255, b: 65 },  // #00FF41  iconic Matrix rain code green
-  matrixDeepBg: { r: 0, g: 8, b: 0 },       // #000800  matrix rain deep background
-  matrixRainDim: { r: 0, g: 95, b: 25 },    // #005F19  matrix rain dark green
-  matrixWarningAmber: { r: 255, g: 176, b: 0 }, // #FFB000  matrix warning amber
-  matrixErrorRed: { r: 255, g: 50, b: 50 }, // #FF3232  matrix error red
+import { nightCityHex, nightCityRgb, rgbToHex } from "./theme-compiled.js";
+import type { BrandRgb } from "./theme-compiled.js";
 
-  // ── Metrics theme (professional dashboard) ──
-  metricsCyan: { r: 6, g: 182, b: 212 },    // #06B6D4  Metrics primary
-  metricsTeal: { r: 20, g: 184, b: 166 },   // #14B8A6  Metrics secondary (same as mint)
-  metricsNavy: { r: 10, g: 25, b: 41 },     // #0A1929  Metrics bg dark
-  metricsSlate: { r: 30, g: 41, b: 59 },    // #1E293B  Metrics bg light
-  metricsSilver: { r: 203, g: 213, b: 225 }, // #CBD5E1  Metrics muted text
-  metricsWhite: { r: 241, g: 245, b: 249 }, // #F1F5F9  Metrics bright
-  metricsAmber: { r: 245, g: 158, b: 11 },  // #F59E0B  Metrics warning
-  metricsGreen: { r: 34, g: 197, b: 94 },   // #22C55E  Metrics success
-  metricsRed: { r: 239, g: 68, b: 68 },     // #EF4444  Metrics error
-  metricsBlue: { r: 59, g: 130, b: 246 },   // #3B82F6  Metrics info
-  metricsViolet: { r: 139, g: 92, b: 246 }, // #8B5CF6  Metrics highlight
+export type { BrandRgb } from "./theme-compiled.js";
+
+const rgb = (r: number, g: number, b: number): BrandRgb => ({ r, g, b });
+
+export const P = {
+  // ── Night City theme primitives (theme-derived) ──
+  purple: nightCityRgb("purple"),          // primitive "purple"  orchestration/control accent
+  lightPurple: rgb(214, 108, 255),         // neon highlight (no theme primitive yet)
+  darkPurple: rgb(64, 18, 133),            // deep control shadow (no theme primitive yet)
+  pink: nightCityRgb("magenta"),           // primitive "magenta" control/focus accent
+  hotPink: nightCityRgb("magenta"),        // primitive "magenta" hot accent (alias)
+  mint: nightCityRgb("mint"),              // primitive "mint"    telemetry/success
+  darkMint: rgb(0, 196, 153),              // telemetry shadow (no theme primitive yet)
+  orange: nightCityRgb("amber"),           // primitive "amber"   warning/pending
+  red: nightCityRgb("red"),                // primitive "red"     fault/danger
+  blue: nightCityRgb("cyan"),              // primitive "cyan"    route/signal/info
+  cream: nightCityRgb("cream"),            // primitive "cream"   bright console text
+  dark: nightCityRgb("dark"),              // primitive "dark"    cockpit background
+  gray: nightCityRgb("gray"),              // primitive "gray"    muted telemetry
+  skin: rgb(255, 214, 102),                // metric gold (no theme primitive yet)
+  gridLine: rgb(34, 50, 74),               // neon grid border / tmux pane border
+
+  // ── Rust forge family (awaiting its own theme document) ──
+  rustOrange: rgb(249, 115, 22),           // Rust/native toolchain accent
+  rustOxide: rgb(124, 45, 18),             // Rust/native warning shadow
+  rustEmber: rgb(255, 122, 24),            // forge sparkle ember
+  rustCrimson: rgb(255, 49, 93),           // forge sparkle crimson
+  cargoGreen: nightCityRgb("mint"),        // primitive "mint"    verified native check
+
+  // ── Matrix family (awaiting its own theme document) ──
+  matrixGreen: nightCityRgb("mint"),       // primitive "mint"    OMK signal phosphor
+  matrixDark: rgb(8, 39, 31),              // success/signal background
+  matrixRainGreen: rgb(0, 255, 65),        // iconic Matrix rain code green
+  matrixDeepBg: rgb(0, 8, 0),              // matrix rain deep background
+  matrixRainDim: rgb(0, 95, 25),           // matrix rain dark green
+  matrixWarningAmber: nightCityRgb("amber"), // primitive "amber" matrix warning amber
+  matrixErrorRed: rgb(255, 50, 50),        // matrix error red
+
+  // ── Sparkle ramp accents (decorative highlight ramps) ──
+  sparkleWhite: rgb(244, 255, 255),        // sparkle highlight tip
+  sparkleGold: rgb(255, 209, 102),         // sparkle gold mid-tone
+
+  // ── Metrics theme (professional dashboard, awaiting its own theme doc) ──
+  metricsCyan: rgb(6, 182, 212),           // Metrics primary
+  metricsTeal: rgb(20, 184, 166),          // Metrics secondary
+  metricsNavy: rgb(10, 25, 41),            // Metrics bg dark
+  metricsSlate: rgb(30, 41, 59),           // Metrics bg light
+  metricsSilver: rgb(203, 213, 225),       // Metrics muted text
+  metricsWhite: rgb(241, 245, 249),        // Metrics bright
+  metricsAmber: rgb(245, 158, 11),         // Metrics warning
+  metricsGreen: rgb(34, 197, 94),          // Metrics success
+  metricsRed: rgb(239, 68, 68),            // Metrics error
+  metricsBlue: rgb(59, 130, 246),          // Metrics info
+  metricsViolet: rgb(139, 92, 246),        // Metrics highlight
+} as const;
+
+/**
+ * Canonical uppercase hex strings for theme-derived brand colors. Use these
+ * wherever a hex string is required (sparkle/gradient ramps, tmux options)
+ * instead of hardcoding literals.
+ */
+export const BRAND_HEX = {
+  dark: nightCityHex("dark"),
+  surface: nightCityHex("surface"),
+  cyan: nightCityHex("cyan"),
+  mint: nightCityHex("mint"),
+  magenta: nightCityHex("magenta"),
+  purple: nightCityHex("purple"),
+  amber: nightCityHex("amber"),
+  red: nightCityHex("red"),
+  cream: nightCityHex("cream"),
+  muted: nightCityHex("muted"),
+  gray: nightCityHex("gray"),
+  gridLine: rgbToHex(P.gridLine),
+  sparkleWhite: rgbToHex(P.sparkleWhite),
+  sparkleGold: rgbToHex(P.sparkleGold),
+  rustEmber: rgbToHex(P.rustEmber),
+  rustCrimson: rgbToHex(P.rustCrimson),
 } as const;
 
 export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {

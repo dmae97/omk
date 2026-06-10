@@ -3,6 +3,7 @@ import type { CliUiEvent } from "./event.js";
 import type { CliRenderer } from "./renderer.js";
 import { System24Renderer, type System24RendererStreams } from "./system24-renderer.js";
 import { NEON_GRID_THEME, resolveTuiMotion, shouldUseAnsiColor, type OmkTuiMotion } from "../../brand/theme.js";
+import { BRAND_HEX } from "../../brand/palette.js";
 import { renderOmkSparkleText } from "../../ui/omk-sigil.js";
 
 interface WritableStreamLike {
@@ -114,11 +115,11 @@ export class NeonGridRenderer implements CliRenderer {
     line(this.err, renderOmkSparkleText(titleLine, {
       frame: Math.floor(Date.now() / 80),
       noColor: this.noColor,
-      colors: ["#00D6FF", "#f4ffff", "#ffd166", "#FF47B2", "#00FFC2"],
+      colors: [BRAND_HEX.cyan, BRAND_HEX.sparkleWhite, BRAND_HEX.sparkleGold, BRAND_HEX.magenta, BRAND_HEX.mint],
     }), this.noColor);
-    line(this.err, gradientLine(mottoLine, ["#00FFC2", "#00D6FF", "#9D4EDD"], this.noColor), this.noColor);
+    line(this.err, gradientLine(mottoLine, [BRAND_HEX.mint, BRAND_HEX.cyan, BRAND_HEX.purple], this.noColor), this.noColor);
     line(this.err, `${dim}${routeLine}${RST}`, this.noColor);
-    line(this.err, gradientLine(statusLine, ["#00FFC2", "#00D6FF", "#FFB000"], this.noColor), this.noColor);
+    line(this.err, gradientLine(statusLine, [BRAND_HEX.mint, BRAND_HEX.cyan, BRAND_HEX.amber], this.noColor), this.noColor);
     line(this.err, `${dim}${rootLine}${RST}`, this.noColor);
   }
 }

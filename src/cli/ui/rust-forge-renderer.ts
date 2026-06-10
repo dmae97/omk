@@ -2,6 +2,7 @@ import type { CliUiEvent } from "./event.js";
 import type { CliRenderer } from "./renderer.js";
 import { System24Renderer, type System24RendererStreams } from "./system24-renderer.js";
 import { RUST_FORGE_THEME, resolveTuiMotion, shouldUseAnsiColor, type OmkTuiMotion } from "../../brand/theme.js";
+import { BRAND_HEX } from "../../brand/palette.js";
 import { renderOmkSigil, renderOmkSparkleText } from "../../ui/omk-sigil.js";
 
 interface WritableStreamLike {
@@ -132,7 +133,7 @@ export class RustForgeRenderer implements CliRenderer {
     line(this.err, renderOmkSparkleText(center(RUST_FORGE_THEME.label.toUpperCase(), width), {
       frame: sigilFrame,
       noColor: this.noColor,
-      colors: [hot, "#f4ffff", "#ffd166", "#ff7a18", "#ff315d"],
+      colors: [hot, BRAND_HEX.sparkleWhite, BRAND_HEX.sparkleGold, BRAND_HEX.rustEmber, BRAND_HEX.rustCrimson],
     }), this.noColor);
     line(this.err, `${success}${center(truncate(RUST_FORGE_THEME.motto, width), width)}${RST}`, this.noColor);
 
