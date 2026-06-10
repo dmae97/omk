@@ -367,6 +367,16 @@ Public copy stays OMK-owned: **OMK//CONTROL**, **NEON GRID ONLINE**, route/evide
 
 Safe by default: child env is sanitized, ambient secrets are dropped, and workspace-write routes require approval. OS-level sandboxing is planned, not claimed; see [SECURITY.md](SECURITY.md).
 
+### Native safety binary (crates/omk-safety)
+
+OMK ships a small, intentional Rust safety probe (725 LOC) rather than relying on JS-only checks:
+
+- Built by `npm run native:build` (`scripts/build-native.mjs` runs `cargo build -p omk-safety --release`).
+- Self-tested at build time: the binary's `self-test` command must return `{ "ok": true, "checks": <n> }` or the build fails.
+- Packed into the npm tarball at `dist/native/<platform-arch>/omk-safety` (`.exe` on Windows).
+- Pure-TypeScript fallback lives in `src/util/native-safety.ts`, so OMK still works when the native binary is absent for a platform.
+- The crate is `publish = false`; it is shipped only as a compiled artifact inside this package. See [crates/omk-safety/README.md](crates/omk-safety/README.md).
+
 ## Links
 
 - GitHub: <https://github.com/dmae97/open-multi-agent-kit>

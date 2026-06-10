@@ -3,14 +3,21 @@
  *
  * Computes a release viability score R_v from ten normalized input
  * dimensions and derives a verdict: block, pre-release, or stable.
+ *
+ * Weights are sourced from the omk.weights.v1 contract (releaseGate vector,
+ * normalize:true). The historical raw weights summed to 1.05; normalization
+ * divides weights, the regression penalty, and the verdict thresholds by the
+ * SAME factor (1/1.05), a pure uniform scaling — verdicts are mathematically
+ * identical for every input. Effective thresholds: preRelease ≈ 0.714286,
+ * stable ≈ 0.857143 (printed dynamically in reason strings).
  */
 
-import {
-  RELEASE_GATE_WEIGHTS,
-  type ReleasePromotionInputs,
-  type ReleasePromotionResult,
-  type ReleaseVerdict,
+import type {
+  ReleasePromotionInputs,
+  ReleasePromotionResult,
+  ReleaseVerdict,
 } from "../runtime/contracts/weakness-remediation.js";
+import { releaseGateEffective } from "../runtime/weights-config.js";
 
 /** Gate engine contract. */
 export interface ReleasePromotionGate {
@@ -20,9 +27,14 @@ export interface ReleasePromotionGate {
 
 /** Factory that creates the default release promotion gate. */
 export function createReleasePromotionGate(): ReleasePromotionGate {
+  const effective = releaseGateEffective();
+  const w = effective.weights;
+  const penalties = effective.penalties;
+  const preReleaseThreshold = effective.thresholds.preRelease;
+  const stableThreshold = effective.thresholds.stable;
+
   return {
     evaluate(inputs: ReleasePromotionInputs): ReleasePromotionResult {
-      const w = RELEASE_GATE_WEIGHTS;
 
       const demoRun = inputs.demoRun ?? false;
       const maturity = inputs.maturity ?? inputs.providerMinimum ?? 0;
@@ -41,7 +53,7 @@ export function createReleasePromotionGate(): ReleasePromotionGate {
         w.proof * inputs.proofMedian +
         w.maturity * maturity +
         w.docs * inputs.docs * versionConsistency -
-        w.regression * inputs.regressionSeverity;
+        penalties.regression * inputs.regressionSeverity;
 
       const score = clamp01(rawScore);
       const reasons: string[] = [];
@@ -69,20 +81,20 @@ export function createReleasePromotionGate(): ReleasePromotionGate {
       let verdict: ReleaseVerdict;
       if (blocked) {
         verdict = "block";
-      } else if (score >= 0.90 && inputs.proofMedian >= 0.85 && maturity >= 0.80 && stableEligible) {
+      } else if (score >= stableThreshold && inputs.proofMedian >= 0.85 && maturity >= 0.80 && stableEligible) {
         verdict = "stable";
         reasons.push(
-          `Score ${formatScore(score)} meets stable threshold (≥0.90) with proof≥0.85, maturity≥0.80, live benchmark pass, sandbox violations=0, and exact-tag CI pass`,
+          `Score ${formatScore(score)} meets stable threshold (≥${stableThreshold.toFixed(2)}) with proof≥0.85, maturity≥0.80, live benchmark pass, sandbox violations=0, and exact-tag CI pass`,
         );
-      } else if (score >= 0.75 && inputs.proofMedian >= 0.75) {
+      } else if (score >= preReleaseThreshold && inputs.proofMedian >= 0.75) {
         verdict = "pre-release";
-        reasons.push(`Score ${formatScore(score)} meets pre-release threshold (≥0.75) with proof≥0.75`);
-        if (score >= 0.90 && inputs.proofMedian >= 0.85 && maturity >= 0.80 && !stableEligible) {
+        reasons.push(`Score ${formatScore(score)} meets pre-release threshold (≥${preReleaseThreshold.toFixed(2)}) with proof≥0.75`);
+        if (score >= stableThreshold && inputs.proofMedian >= 0.85 && maturity >= 0.80 && !stableEligible) {
           reasons.push("Stable verdict withheld until live benchmark passes, sandboxViolationCount is 0, and exact-tag CI passes");
         }
       } else {
         verdict = "block";
-        reasons.push(`Score ${formatScore(score)} below pre-release threshold (≥0.75) or proof below 0.75`);
+        reasons.push(`Score ${formatScore(score)} below pre-release threshold (≥${preReleaseThreshold.toFixed(2)}) or proof below 0.75`);
       }
 
       return {

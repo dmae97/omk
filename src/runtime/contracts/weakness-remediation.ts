@@ -31,7 +31,15 @@ export const SURFACE_BUDGET_K = 8;
 
 // ── Phase 5 Release Promotion Gate ──────────────────────────────
 
-/** Algorithm 8 release gate weights. */
+/**
+ * Algorithm 8 release gate weights — raw (unnormalized) historical values.
+ *
+ * @deprecated Source of truth is the omk.weights.v1 contract
+ * (schemas/omk.weights.v1.json, mirrored by DEFAULT_WEIGHTS in
+ * src/runtime/weights-config.ts). The release promotion gate now consumes
+ * normalized effective weights via releaseGateEffective(); these raw values
+ * (positive Σ = 1.05) are kept only for backward compatibility.
+ */
 export const RELEASE_GATE_WEIGHTS = {
   ci: 0.15,
   build: 0.10,

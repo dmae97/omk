@@ -1,9 +1,14 @@
 /**
  * Router V2 Scoring Engine — Bayesian-smoothed evidence calibration (Algorithm 6).
  *
- * Composite formula:
- *   0.25*E + 0.15*conf + 0.20*cap + 0.15*mat + 0.10*lat + 0.10*cost
- *   - 0.15*pen - 0.10*blast
+ * Composite formula (omk.weights.v1 routerV2Composite vector, normalize:true):
+ *   ŵ_E*E + ŵ_conf*conf + ŵ_cap*cap + ŵ_mat*mat + ŵ_lat*lat + ŵ_cost*cost
+ *   - p̂_fail*pen - p̂_blast*blast
+ *
+ * Historical raw weights (0.25/0.15/0.20/0.15/0.10/0.10 − 0.15/0.10) had a
+ * positive Σ = 0.95; normalization divides weights AND penalties by the same
+ * factor (1/0.95), a pure uniform scaling. The composite is ranking-only
+ * (no absolute threshold compares it), so rankings are identical.
  */
 
 import type { AgentRuntime } from "./agent-runtime.js";
@@ -18,24 +23,23 @@ import type {
   BlastRadiusParams,
 } from "./contracts/router-v2.js";
 import { computeBlastRadiusPenalty } from "./blast-radius.js";
+import { intentCapabilityWeights, routerV2CompositeEffective } from "./weights-config.js";
 
 const ALPHA_0 = 1;
 const BETA_0 = 1;
 
+/**
+ * Intent → capability emphasis vectors, sourced verbatim from the
+ * omk.weights.v1 intentCapability vector family (normalize:false — sub-unit
+ * sums are intentional feature-fit emphasis templates).
+ */
 const INTENT_CAPABILITY_WEIGHTS: Record<
   NodeIntent,
   ReadonlyArray<readonly [keyof RuntimeCapabilities | "toolCalling", number]>
-> = {
-  research: [["read", 0.35], ["review", 0.2], ["toolCalling", 0.15], ["vision", 0.1]],
-  planning: [["read", 0.3], ["review", 0.2], ["toolCalling", 0.15]],
-  coding: [["write", 0.3], ["patch", 0.25], ["shell", 0.15], ["toolCalling", 0.1]],
-  debugging: [["read", 0.2], ["write", 0.2], ["patch", 0.2], ["shell", 0.15], ["toolCalling", 0.1]],
-  refactor: [["write", 0.25], ["patch", 0.25], ["review", 0.15], ["toolCalling", 0.1]],
-  review: [["review", 0.35], ["read", 0.25], ["toolCalling", 0.1]],
-  "test-generation": [["write", 0.25], ["patch", 0.2], ["review", 0.15], ["toolCalling", 0.1]],
-  documentation: [["read", 0.25], ["write", 0.15], ["review", 0.15], ["toolCalling", 0.1]],
-  "shell-operation": [["shell", 0.4], ["read", 0.15], ["write", 0.1]],
-};
+> = intentCapabilityWeights();
+
+/** Effective (normalized) composite weights/penalties — raw values ÷ 0.95. */
+const COMPOSITE_EFFECTIVE = routerV2CompositeEffective();
 
 function runtimeCapabilityEnabled(
   capabilities: RuntimeCapabilities,
@@ -133,15 +137,17 @@ export function createRouterV2ScoringEngine(
 
     const blastRadiusPenalty = enableBlastRadius ? blastRadiusFn(blastRadiusParams) : 0;
 
+    const cw = COMPOSITE_EFFECTIVE.weights;
+    const cp = COMPOSITE_EFFECTIVE.penalties;
     const composite =
-      0.25 * bayesianEvidenceScore +
-      0.15 * confidence +
-      0.20 * capabilityFit +
-      0.15 * maturityScore +
-      0.10 * latencyScore +
-      0.10 * costScore -
-      0.15 * recentFailurePenalty -
-      0.10 * blastRadiusPenalty;
+      cw.bayesianEvidence * bayesianEvidenceScore +
+      cw.confidence * confidence +
+      cw.capabilityFit * capabilityFit +
+      cw.maturity * maturityScore +
+      cw.latency * latencyScore +
+      cw.cost * costScore -
+      cp.recentFailure * recentFailurePenalty -
+      cp.blastRadius * blastRadiusPenalty;
 
     return {
       runtimeId: runtime.id,
