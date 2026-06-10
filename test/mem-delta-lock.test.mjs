@@ -13,7 +13,7 @@ function runWorker(graphPath, workerId, n) {
   return new Promise((resolve, reject) => {
     const cp = spawn(
       "node",
-      ["--import", "tsx", join(__dirname, "fixtures/delta-lock-worker.mjs"), graphPath, workerId, String(n)],
+      [join(__dirname, "fixtures/delta-lock-worker.mjs"), graphPath, workerId, String(n)],
       {
         env: { ...process.env, OMK_MEMORY_DURABILITY: "delta" },
         cwd: process.cwd(),
@@ -69,7 +69,7 @@ describe("delta-lock", () => {
       );
     }
 
-    const { loadStateViaDelta } = await import("../src/memory/graph-delta-log.ts");
+    const { loadStateViaDelta } = await import("../dist/memory/graph-delta-log.js");
     const result = await loadStateViaDelta(graphPath, false, emptyState);
     assert.equal(result.state.nodes.length, 24, `expected 24 nodes after replay, got ${result.state.nodes.length}`);
 
@@ -98,7 +98,7 @@ describe("delta-lock", () => {
     };
     writeFileSync(lockPath, JSON.stringify(stale));
 
-    const { withDeltaLock } = await import("../src/memory/graph-delta-log.ts");
+    const { withDeltaLock } = await import("../dist/memory/graph-delta-log.js");
     let acquired = false;
     await withDeltaLock(
       graphPath,
@@ -132,7 +132,7 @@ describe("delta-lock", () => {
     };
     writeFileSync(lockPath, JSON.stringify(stale));
 
-    const { withDeltaLock } = await import("../src/memory/graph-delta-log.ts");
+    const { withDeltaLock } = await import("../dist/memory/graph-delta-log.js");
     let acquired = false;
     await withDeltaLock(
       graphPath,
@@ -166,7 +166,7 @@ describe("delta-lock", () => {
     };
     writeFileSync(lockPath, JSON.stringify(live));
 
-    const { withDeltaLock } = await import("../src/memory/graph-delta-log.ts");
+    const { withDeltaLock } = await import("../dist/memory/graph-delta-log.js");
     await assert.rejects(
       withDeltaLock(
         graphPath,
