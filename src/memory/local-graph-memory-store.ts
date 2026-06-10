@@ -21,6 +21,7 @@ import {
   resolveDurabilityMode,
   setupDeltaMode,
   statDeltaFiles,
+  withDeltaLock,
   type DeltaFileStats,
   type DeltaManifest,
   type DurabilityMode,
@@ -987,70 +988,78 @@ export class LocalGraphMemoryStore {
   private async mutateState(mutator: (state: LocalGraphState, now: string) => void): Promise<void> {
     const graphPath = this.settings.localGraph.path;
     await enqueueGraphWrite(graphPath, async () => {
-      const state = await this.loadStateForMutation(graphPath);
-
       if (this.durability === "delta") {
-        // Capture pre-mutation id→object maps for diffing
-        const preNodes = new Map(state.nodes.map((n) => [n.id, n]));
-        const preEdges = new Map(state.edges.map((e) => [e.id, e]));
+        await withDeltaLock(graphPath, async () => {
+          const state = await this.loadStateForMutation(graphPath);
 
-        const now = new Date().toISOString();
-        mutator(state, now);
+          // Capture pre-mutation id→object maps for diffing
+          const preNodes = new Map(state.nodes.map((n) => [n.id, n]));
+          const preEdges = new Map(state.edges.map((e) => [e.id, e]));
 
-        // Compute delta (changed/added/deleted nodes and edges)
-        const delta = computeDelta(preNodes, preEdges, state);
+          const now = new Date().toISOString();
+          mutator(state, now);
 
-        // Ensure delta mode is set up (first write migrates if needed)
-        if (!this.deltaManifest) {
-          this.deltaManifest = await setupDeltaMode(graphPath, state);
-          this.deltaEpoch = this.deltaManifest.snapshotEpoch;
-          this.deltaLastSeq = 0;
-          this.deltaOpCount = this.deltaManifest.deltaOpCount;
-        }
+          // Compute delta (changed/added/deleted nodes and edges)
+          const delta = computeDelta(preNodes, preEdges, state);
 
-        const seq = this.deltaLastSeq + 1;
-        await appendDelta(
-          graphPath,
-          this.deltaEpoch,
-          seq,
-          now,
-          {
-            updatedAt: state.updatedAt,
-            project: state.project,
-            ontology: state.ontology.version,
-          },
-          delta.nodes,
-          delta.edges
-        );
+          // Ensure delta mode is set up (first write migrates if needed)
+          if (!this.deltaManifest) {
+            this.deltaManifest = await setupDeltaMode(graphPath, state);
+            this.deltaEpoch = this.deltaManifest.snapshotEpoch;
+            this.deltaLastSeq = 0;
+            this.deltaOpCount = this.deltaManifest.deltaOpCount;
+          }
 
-        this.deltaLastSeq = seq;
-        this.deltaOpCount += 1;
+          const seq = this.deltaLastSeq + 1;
+          await appendDelta(
+            graphPath,
+            this.deltaEpoch,
+            seq,
+            now,
+            {
+              updatedAt: state.updatedAt,
+              project: state.project,
+              ontology: state.ontology.version,
+            },
+            delta.nodes,
+            delta.edges
+          );
 
-        // Check compaction thresholds
-        const thresholds = resolveCompactionThresholds(this.env);
-        const compactResult = await compactIfNeeded(
-          graphPath,
-          state,
-          this.deltaEpoch,
-          this.deltaOpCount,
-          thresholds
-        );
-        if (compactResult.compacted) {
-          this.deltaEpoch = compactResult.newEpoch;
-          this.deltaOpCount = compactResult.newOpCount;
-          this.deltaLastSeq = 0;
-        }
+          this.deltaLastSeq = seq;
+          this.deltaOpCount += 1;
+
+          // Check compaction thresholds
+          const thresholds = resolveCompactionThresholds(this.env);
+          const compactResult = await compactIfNeeded(
+            graphPath,
+            state,
+            this.deltaEpoch,
+            this.deltaOpCount,
+            thresholds
+          );
+          if (compactResult.compacted) {
+            this.deltaEpoch = compactResult.newEpoch;
+            this.deltaOpCount = compactResult.newOpCount;
+            this.deltaLastSeq = 0;
+          }
+
+          // Refresh the process-local cache from the file we just wrote so the next
+          // mutation in this process can reuse the parsed object and skip the disk
+          // read + JSON.parse entirely (on-disk format/durability are unchanged).
+          this.refreshGraphStateCache(graphPath, state);
+          if (this.settings.mirrorFiles) {
+            await this.writeMirrorFiles(state);
+          }
+        }, this.env);
       } else {
+        const state = await this.loadStateForMutation(graphPath);
         mutator(state, new Date().toISOString());
         await this.saveState(state);
-      }
 
-      // Refresh the process-local cache from the file we just wrote so the next
-      // mutation in this process can reuse the parsed object and skip the disk
-      // read + JSON.parse entirely (on-disk format/durability are unchanged).
-      this.refreshGraphStateCache(graphPath, state);
-      if (this.settings.mirrorFiles) {
-        await this.writeMirrorFiles(state);
+        this.refreshGraphStateCache(graphPath, state);
+        if (this.settings.mirrorFiles) {
+          await this.writeMirrorFiles(state);
+        }
       }
     });
   }
