@@ -153,8 +153,8 @@ export const NEON_GRID_THEME: OmkBrandTheme = {
 export const RUST_FORGE_THEME: OmkBrandTheme = {
   name: "rust-forge",
   label: "OMK Rust Forge",
-  tagline: "Oxidized forge console for OMK control.",
-  motto: "Forge the route. Verify the evidence. Control the loop.",
+  tagline: "Oxidized forge console for standalone OMK control.",
+  motto: "Forge the route. Verify the evidence. OMK controls the loop.",
   symbols: {
     prompt: "›",
     active: "◉",

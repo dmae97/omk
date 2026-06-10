@@ -9,6 +9,7 @@ const PROVIDER_LEVELS: Record<string, readonly ThinkingLevel[]> = {
   qwen: ["off", "medium", "high", "max"],
   anthropic: ["minimal", "low", "medium", "high", "xhigh", "max"],
   openrouter: ["minimal", "low", "medium", "high", "xhigh", "max"],
+  duckcoding: ["minimal", "low", "medium", "high", "xhigh", "max"],
   codex: ["minimal", "low", "medium", "high", "xhigh"],
 };
 
@@ -16,6 +17,7 @@ const MODEL_LEVELS: readonly { pattern: RegExp; levels: readonly ThinkingLevel[]
   { pattern: /kimi|mimo/i, levels: PROVIDER_LEVELS.kimi },
   { pattern: /deepseek/i, levels: PROVIDER_LEVELS.deepseek },
   { pattern: /qwen/i, levels: PROVIDER_LEVELS.qwen },
+  { pattern: /duck[-_ ]?coding/i, levels: PROVIDER_LEVELS.duckcoding },
   { pattern: /fable|claude|sonnet|opus|haiku|anthropic|gpt|openrouter/i, levels: PROVIDER_LEVELS.anthropic },
   { pattern: /codex/i, levels: PROVIDER_LEVELS.codex },
 ];

@@ -41,14 +41,19 @@ export type NightCityPrimitive =
 
 export type RustForgePrimitive =
   | "iron"
+  | "coal"
   | "forge"
+  | "anvil"
   | "rust"
+  | "molten"
   | "copper"
   | "ember"
   | "oxide"
+  | "quench"
   | "verdigris"
   | "crimson"
   | "steel"
+  | "scale"
   | "ash"
   | "slag"
   | "bone";
@@ -71,14 +76,19 @@ const REQUIRED_NIGHT_CITY_PRIMITIVES: readonly NightCityPrimitive[] = [
 
 const REQUIRED_RUST_FORGE_PRIMITIVES: readonly RustForgePrimitive[] = [
   "iron",
+  "coal",
   "forge",
+  "anvil",
   "rust",
+  "molten",
   "copper",
   "ember",
   "oxide",
+  "quench",
   "verdigris",
   "crimson",
   "steel",
+  "scale",
   "ash",
   "slag",
   "bone",
@@ -298,7 +308,7 @@ export function getActiveBrandCockpitSubtitle(): string {
 
 export function getActiveBrandCockpitDetail(): string {
   return activeBrandThemeName === "rust-forge"
-    ? "forge · verify · loop · control · evidence gated"
+    ? "forge heat · anvil evidence · quench safety · OMK control"
     : "route · verify · loop · control · evidence gated";
 }
 
@@ -308,7 +318,7 @@ export function getActiveBrandHudStatus(): string {
 
 export function getActiveBrandConsoleLine(): string {
   return activeBrandThemeName === "rust-forge"
-    ? "Oxidized Forge Console // route verify control"
+    ? "Oxidized Forge Console // OMK independent control // heat anvil quench"
     : "Night City Ops Console // cyberpunk metrics wall";
 }
 

@@ -114,6 +114,13 @@ export interface ChatAgentHarnessManifest {
     promptChoices: ["parallel", "sequential", "plan-only"];
     chatModeExempt: boolean;
   };
+  orchestrationKernel: {
+    goalLifecycle: "enabled";
+    topologyRouting: "enabled";
+    synthesisRouting: "enabled";
+    durableMemory: "enabled";
+    perLaneGrantRequired: true;
+  };
   hardGateContract: {
     requiresPromptBeforeNonTrivialTTY: boolean;
     nonTTYAutoParallelForComplex: boolean;
@@ -159,6 +166,10 @@ export interface ChatAgentLaneCapabilityAssignment {
   skills: string[];
   hooks: string[];
   mcpServers: string[];
+  scope: string;
+  acceptance: string[];
+  evidenceOutput: string;
+  authority: "read-only" | "advisory" | "write";
 }
 
 interface SharedLanePlan {
@@ -304,6 +315,8 @@ export function buildChatAgentModeContract(input: {
     `- Active skills (${harness.resources.active.skills.length}): ${formatInventoryList(harness.resources.active.skills)}`,
     `- Active hooks (${harness.resources.active.hooks.length}): ${formatInventoryList(harness.resources.active.hooks)}`,
     `- Initial memory recall: ${harness.memoryRecall.summaryPath}`,
+    `- Orchestration kernel: goal lifecycle, topology routing, synthesis routing, and durable memory are enabled internally`,
+    `- Per-lane grant contract: skills/hooks/MCP/scope/acceptance/evidenceOutput required for every subagent lane`,
     `- Harness manifest: ./chat-agent-harness.json`,
     "",
     "## Mode behavior",
@@ -372,6 +385,13 @@ export function buildChatAgentHarnessManifest(input: {
       allowed: ["ask", "auto", "parallel", "sequential"],
       promptChoices: ["parallel", "sequential", "plan-only"],
       chatModeExempt: input.mode === "chat",
+    },
+    orchestrationKernel: {
+      goalLifecycle: "enabled",
+      topologyRouting: "enabled",
+      synthesisRouting: "enabled",
+      durableMemory: "enabled",
+      perLaneGrantRequired: true,
     },
     hardGateContract: {
       requiresPromptBeforeNonTrivialTTY: executionGateApplies && executionPolicy === "ask",
@@ -734,8 +754,26 @@ function buildLaneCapabilityAssignments(resources: ChatAgentHarnessManifest["res
       skills: assigned?.skills ?? [],
       hooks: assigned?.hooks ?? [],
       mcpServers: assigned?.mcp ?? [],
+      scope: laneScope(lane.role),
+      acceptance: laneAcceptance(lane.role),
+      evidenceOutput: `.omk/runs/${resources.workers === "auto" ? "<run-id>" : "<run-id>"}/lanes/${lane.laneId}/evidence.json`,
+      authority: lane.role === "coder" ? "write" : lane.role === "planner" ? "advisory" : "read-only",
     };
   });
+}
+
+function laneScope(role: string): string {
+  if (role === "coder") return "assigned implementation files only";
+  if (role === "qa") return "tests and verification artifacts only";
+  if (role === "security") return "security-relevant changed scope only";
+  return "goal-scoped read-only analysis";
+}
+
+function laneAcceptance(role: string): string[] {
+  if (role === "coder") return ["scoped diff complete", "targeted check passes", "no out-of-scope edits"];
+  if (role === "qa") return ["smallest proving check run", "failures and gaps recorded"];
+  if (role === "security") return ["trust boundaries reviewed", "secret and permission risks reported"];
+  return ["findings cite evidence", "unknowns and next actions reported"];
 }
 
 export function buildChatAgentRuntimeMcpAllowlist(input: {
@@ -980,30 +1018,32 @@ type CapabilityRouteKind = "skill" | "mcp" | "hook";
 
 const ROLE_ROUTE_KEYWORDS: Record<CapabilityRouteKind, Record<string, string[]>> = {
   skill: {
+    coordinator: ["plan", "route", "synthesize", "memory", "goal", "orchestration"],
     explorer: ["explore", "repo", "context", "research"],
-    researcher: ["research", "docs", "context", "repo"],
+    researcher: ["research", "docs", "context", "repo", "memory"],
     "vision-debugger": ["vision", "design", "screenshot", "browser", "web"],
-    planner: ["plan", "context", "industrial", "control"],
+    planner: ["plan", "context", "industrial", "control", "route", "orchestration"],
     architect: ["plan", "architecture", "context", "industrial"],
     coder: ["typescript", "python", "frontend", "backend", "test", "implementation"],
-    reviewer: ["review", "quality", "security", "secret"],
+    reviewer: ["review", "quality", "security", "secret", "synthesize"],
     security: ["security", "secret", "guard"],
     qa: ["quality", "test", "debug"],
     tester: ["test", "debug", "quality"],
-    ontology: ["memory", "context", "graph"],
+    ontology: ["memory", "context", "graph", "supermemory"],
   },
   mcp: {
+    coordinator: ["omk", "memory", "adaptorch", "ouroboros", "supermemory", "sequential"],
     explorer: ["omk", "filesystem", "git", "github", "web", "bridge", "browser", "chrome"],
-    researcher: ["context", "fetch", "firecrawl", "github", "web", "bridge", "browser", "chrome", "page"],
+    researcher: ["context", "fetch", "firecrawl", "github", "web", "bridge", "browser", "chrome", "page", "supermemory"],
     "vision-debugger": ["web", "bridge", "browser", "chrome", "screenshot", "playwright"],
-    planner: ["omk", "memory", "sequential"],
+    planner: ["omk", "memory", "sequential", "adaptorch", "ouroboros"],
     architect: ["omk", "memory", "github"],
     coder: ["omk", "filesystem", "git"],
-    reviewer: ["github", "git", "omk"],
+    reviewer: ["github", "git", "omk", "adaptorch"],
     security: ["omk", "git", "filesystem"],
     qa: ["omk", "playwright", "github", "web", "bridge", "browser", "chrome"],
     tester: ["omk", "playwright", "web", "bridge", "browser", "chrome"],
-    ontology: ["omk", "memory"],
+    ontology: ["omk", "memory", "supermemory"],
   },
   hook: {
     coder: ["shell", "format", "typecheck", "eslint", "protect"],

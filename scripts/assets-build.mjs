@@ -31,10 +31,12 @@ const themePath = args.includes("--theme")
 
 const DERIVED_SVGS = [
   "readmeasset/omk-badges.svg",
+  "readmeasset/omk-control-surfaces.svg",
   "readmeasset/omk-core-loop.svg",
   "readmeasset/omk-evidence-ledger.svg",
   "readmeasset/omk-logo-mark.svg",
   "readmeasset/omk-provider-lanes.svg",
+  "readmeasset/omk-release-assertions.svg",
 ];
 
 // Migration anchors: the hex values the hand-authored SVGs originally shipped with,

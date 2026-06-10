@@ -26,10 +26,12 @@ const LEDGER_PATH = join("readmeasset", "ASSET_PROVENANCE.md");
 
 const DERIVED_SVGS = [
   "readmeasset/omk-badges.svg",
+  "readmeasset/omk-control-surfaces.svg",
   "readmeasset/omk-core-loop.svg",
   "readmeasset/omk-evidence-ledger.svg",
   "readmeasset/omk-logo-mark.svg",
   "readmeasset/omk-provider-lanes.svg",
+  "readmeasset/omk-release-assertions.svg",
 ];
 
 const REMEDIATION = "run: npm run assets:build && refresh ASSET_PROVENANCE.md";

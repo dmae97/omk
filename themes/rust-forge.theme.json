@@ -2,48 +2,187 @@
   "$schema": "../schemas/omk.theme.v1.schema.json",
   "schemaVersion": "omk.theme.v1",
   "name": "rust-forge",
-  "displayName": "OMK Rust Forge — Oxidized Forge Console",
+  "displayName": "OMK Rust Forge — Standalone Oxidized Forge Console",
   "mode": "dark",
   "primitives": {
     "iron": "#0E0B09",
+    "coal": "#080605",
     "forge": "#1A1310",
+    "anvil": "#241914",
     "rust": "#FF6A3D",
+    "molten": "#FF7A4A",
     "copper": "#E08A4B",
     "ember": "#FFB454",
     "oxide": "#4FB39B",
+    "quench": "#78E4C9",
     "verdigris": "#6FD7B8",
     "crimson": "#FF5468",
     "steel": "#9FB0BD",
+    "scale": "#BFA08A",
     "ash": "#C9B8A8",
     "slag": "#8F7B6D",
     "bone": "#F2E4D6"
   },
-  "backgrounds": ["iron", "forge"],
+  "backgrounds": [
+    "iron",
+    "forge"
+  ],
   "semantics": {
-    "route.active": { "color": "rust", "glyph": "▸", "usage": "text" },
-    "route.fallback": { "color": "copper", "glyph": "↻", "usage": "text" },
-    "route.dead": { "color": "crimson", "glyph": "✕", "usage": "text" },
-    "evidence.pass": { "color": "oxide", "glyph": "✓", "usage": "text" },
-    "evidence.fail": { "color": "crimson", "glyph": "✗", "usage": "text" },
-    "evidence.pending": { "color": "ember", "glyph": "◐", "usage": "text" },
-    "dag.lane.running": { "color": "rust", "glyph": "▶", "usage": "text" },
-    "dag.lane.blocked": { "color": "copper", "glyph": "⏸", "usage": "text" },
-    "dag.lane.done": { "color": "verdigris", "glyph": "●", "usage": "text" },
-    "dag.lane.queued": { "color": "slag", "glyph": "◌", "usage": "text", "adjusted": { "original": "#6E5B4E", "crBefore": 2.86, "crAfter": 4.56 } },
-    "telemetry.info": { "color": "bone", "glyph": "·", "usage": "text" },
-    "telemetry.warn": { "color": "ember", "glyph": "▲", "usage": "text" },
-    "telemetry.error": { "color": "crimson", "glyph": "✖", "usage": "text" },
-    "control.accent": { "color": "rust", "glyph": "◆", "kind": "chrome", "usage": "indicator" },
-    "control.dim": { "color": "steel", "glyph": "┊", "kind": "chrome", "usage": "text" },
-    "control.fg": { "color": "bone", "kind": "chrome", "usage": "text" },
-    "control.bg": { "color": "iron", "kind": "background", "usage": "background" }
+    "route.active": {
+      "color": "rust",
+      "glyph": "▸",
+      "usage": "text"
+    },
+    "route.fallback": {
+      "color": "copper",
+      "glyph": "↻",
+      "usage": "text"
+    },
+    "route.dead": {
+      "color": "crimson",
+      "glyph": "✕",
+      "usage": "text"
+    },
+    "evidence.pass": {
+      "color": "oxide",
+      "glyph": "✓",
+      "usage": "text"
+    },
+    "evidence.fail": {
+      "color": "crimson",
+      "glyph": "✗",
+      "usage": "text"
+    },
+    "evidence.pending": {
+      "color": "ember",
+      "glyph": "◐",
+      "usage": "text"
+    },
+    "dag.lane.running": {
+      "color": "rust",
+      "glyph": "▶",
+      "usage": "text"
+    },
+    "dag.lane.blocked": {
+      "color": "copper",
+      "glyph": "⏸",
+      "usage": "text"
+    },
+    "dag.lane.done": {
+      "color": "verdigris",
+      "glyph": "●",
+      "usage": "text"
+    },
+    "dag.lane.queued": {
+      "color": "slag",
+      "glyph": "◌",
+      "usage": "text",
+      "adjusted": {
+        "original": "#6E5B4E",
+        "crBefore": 2.86,
+        "crAfter": 4.56
+      }
+    },
+    "telemetry.info": {
+      "color": "bone",
+      "glyph": "·",
+      "usage": "text"
+    },
+    "telemetry.warn": {
+      "color": "ember",
+      "glyph": "▲",
+      "usage": "text"
+    },
+    "telemetry.error": {
+      "color": "crimson",
+      "glyph": "✖",
+      "usage": "text"
+    },
+    "control.accent": {
+      "color": "rust",
+      "glyph": "◆",
+      "kind": "chrome",
+      "usage": "indicator"
+    },
+    "control.dim": {
+      "color": "steel",
+      "glyph": "┊",
+      "kind": "chrome",
+      "usage": "text"
+    },
+    "control.fg": {
+      "color": "bone",
+      "kind": "chrome",
+      "usage": "text"
+    },
+    "control.bg": {
+      "color": "iron",
+      "kind": "background",
+      "usage": "background"
+    },
+    "forge.heat": {
+      "color": "molten",
+      "glyph": "▰",
+      "usage": "text"
+    },
+    "forge.anvil": {
+      "color": "scale",
+      "glyph": "▣",
+      "usage": "text"
+    },
+    "forge.quench": {
+      "color": "quench",
+      "glyph": "◈",
+      "usage": "text"
+    },
+    "forge.slag": {
+      "color": "slag",
+      "glyph": "◌",
+      "usage": "text",
+      "adjusted": {
+        "original": "#6E5B4E",
+        "crBefore": 2.86,
+        "crAfter": 4.56
+      }
+    }
   },
   "components": {
-    "statusCard": { "border": "control.accent", "title": "control.fg", "body": "telemetry.info", "meta": "control.dim" },
-    "routerTable": { "active": "route.active", "fallback": "route.fallback", "dead": "route.dead", "header": "control.accent" },
-    "evidenceGate": { "pass": "evidence.pass", "fail": "evidence.fail", "pending": "evidence.pending" },
-    "dagLanes": { "running": "dag.lane.running", "blocked": "dag.lane.blocked", "done": "dag.lane.done", "queued": "dag.lane.queued" },
-    "logStream": { "info": "telemetry.info", "warn": "telemetry.warn", "error": "telemetry.error", "dim": "control.dim" }
+    "statusCard": {
+      "border": "control.accent",
+      "title": "control.fg",
+      "body": "telemetry.info",
+      "meta": "control.dim"
+    },
+    "routerTable": {
+      "active": "route.active",
+      "fallback": "route.fallback",
+      "dead": "route.dead",
+      "header": "control.accent"
+    },
+    "evidenceGate": {
+      "pass": "evidence.pass",
+      "fail": "evidence.fail",
+      "pending": "evidence.pending"
+    },
+    "dagLanes": {
+      "running": "dag.lane.running",
+      "blocked": "dag.lane.blocked",
+      "done": "dag.lane.done",
+      "queued": "dag.lane.queued"
+    },
+    "logStream": {
+      "info": "telemetry.info",
+      "warn": "telemetry.warn",
+      "error": "telemetry.error",
+      "dim": "control.dim"
+    },
+    "forgeConsole": {
+      "heat": "forge.heat",
+      "anvil": "forge.anvil",
+      "quench": "forge.quench",
+      "slag": "forge.slag",
+      "title": "control.fg"
+    }
   },
   "fallback16": {
     "route.active": "brightRed",
@@ -62,11 +201,16 @@
     "control.accent": "brightRed",
     "control.dim": "white",
     "control.fg": "brightWhite",
-    "control.bg": "black"
+    "control.bg": "black",
+    "forge.heat": "brightRed",
+    "forge.anvil": "white",
+    "forge.quench": "brightGreen",
+    "forge.slag": "white"
   },
   "meta": {
-    "provenance": "Oxidized rust-forge palette for OMK orchestration console. Warm-iron/charcoal backgrounds, rust-orange + copper + ember-amber accents, oxide/verdigris patina greens for pass/done, crimson for fail/dead, warm steel/ash grays, bone/cream foreground. All semantic roles and glyphs mirror night-city for NO_COLOR compatibility.",
+    "provenance": "Standalone oxidized rust-forge palette for the OMK orchestration console. Warm coal/iron/anvil backgrounds, rust-orange + molten + copper + ember heat accents, oxide/quench/verdigris patina greens for pass/done, crimson for fail/dead, steel/scale/ash grays, and bone foreground. Forge-specific heat/anvil/quench semantics make OMK control surfaces distinct from provider branding while preserving NO_COLOR glyph safety.",
     "tierAssumptions": "16-color tier gated against stock VGA/xterm ANSI values; terminals with remapped ANSI-16 palettes are outside the contract — glyphs are the safety net. NO_COLOR note: control.dim uses ┊ so logStream info (telemetry.info ·) and dim rows stay distinguishable without color.",
-    "omkVersion": "0.78.6"
+    "omkVersion": "0.78.6",
+    "independence": "OMK is the control plane; providers and models are adapter lanes, never the product identity or final authority."
   }
 }

@@ -16,6 +16,7 @@ import { createDeepSeekProvider } from "./deepseek-provider.js";
 import { createProviderRouter } from "./provider-router.js";
 import type { AgentProvider } from "./provider.js";
 import { createOpenAICompatibleReadOnlyTaskRunner } from "./openai-compatible-runner.js";
+import { createAnthropicMessagesReadOnlyTaskRunner } from "./anthropic-messages-runner.js";
 import { createCodexCliAdvisoryTaskRunner } from "./codex-cli-runner.js";
 import { providerDoctorStatus, readProviderRegistry, type ProviderRegistryEntry } from "./model-registry.js";
 import { createContextBroker } from "../runtime/context-broker.js";
@@ -93,17 +94,31 @@ export async function createProviderBackedTaskRunner(
     if (!shouldUseOpenAICompatibleProvider(entry, providerPolicy)) continue;
     const apiKey = entry.apiKeyEnv ? process.env[entry.apiKeyEnv] : undefined;
     if (apiKey && entry.baseUrl) {
-      providerRunners[entry.id] = createOpenAICompatibleReadOnlyTaskRunner({
-        provider: entry.id,
-        baseUrl: entry.baseUrl,
-        apiKey,
-        apiKeyEnv: entry.apiKeyEnv,
-        model: entry.defaultModel,
-        promptPrefix: options.deepseekPromptPrefix,
-        headers: openAICompatibleHeaders(entry, process.env),
-        contextWindow: entry.contextWindow,
-        reservedOutputTokens: entry.reservedOutputTokens,
-      });
+      if (entry.wireApi === "anthropic-messages") {
+        providerRunners[entry.id] = createAnthropicMessagesReadOnlyTaskRunner({
+          provider: entry.id,
+          baseUrl: entry.baseUrl,
+          apiKey,
+          apiKeyEnv: entry.apiKeyEnv,
+          model: entry.defaultModel,
+          promptPrefix: options.deepseekPromptPrefix,
+          headers: openAICompatibleHeaders(entry, process.env),
+          contextWindow: entry.contextWindow,
+          reservedOutputTokens: entry.reservedOutputTokens,
+        });
+      } else {
+        providerRunners[entry.id] = createOpenAICompatibleReadOnlyTaskRunner({
+          provider: entry.id,
+          baseUrl: entry.baseUrl,
+          apiKey,
+          apiKeyEnv: entry.apiKeyEnv,
+          model: entry.defaultModel,
+          promptPrefix: options.deepseekPromptPrefix,
+          headers: openAICompatibleHeaders(entry, process.env),
+          contextWindow: entry.contextWindow,
+          reservedOutputTokens: entry.reservedOutputTokens,
+        });
+      }
       providerModels[entry.id] = providerModelDefault(entry);
     } else if (providerPolicy === entry.id) {
       console.error(status.warn(`${providerDisplayName(entry.id)} unavailable: missing ${entry.apiKeyEnv ?? "API key env"} or base URL. Configured authority fallback is active.`));

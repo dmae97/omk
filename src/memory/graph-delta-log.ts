@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { closeSync, openSync, readFileSync, statSync, truncateSync, unlinkSync, writeSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, statSync, truncateSync, unlinkSync, writeSync } from "node:fs";
 import { open as fsOpen, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { dirname, join } from "node:path";
@@ -695,6 +695,7 @@ function isLockHolderDead(holder: LockHolder): boolean {
 
 export async function acquireDeltaLock(graphPath: string, maxWaitMs = LOCK_MAX_WAIT_MS): Promise<void> {
   const path = deltaLockPath(graphPath);
+  mkdirSync(dirname(path), { recursive: true });
   const deadline = Date.now() + maxWaitMs;
 
   while (true) {

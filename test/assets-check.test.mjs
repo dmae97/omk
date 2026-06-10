@@ -11,10 +11,12 @@ const execFileAsync = promisify(execFile);
 
 const SVG_NAMES = [
   "omk-badges.svg",
+  "omk-control-surfaces.svg",
   "omk-core-loop.svg",
   "omk-evidence-ledger.svg",
   "omk-logo-mark.svg",
   "omk-provider-lanes.svg",
+  "omk-release-assertions.svg",
 ];
 
 async function themeHash() {

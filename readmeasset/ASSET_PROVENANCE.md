@@ -88,6 +88,8 @@
 | `omk-runtime-flow-wide.webp` | omk-runtime-flow-0.78.0.webp | Runtime flow wide strip | `1485x178` | `WEBP` | 45258 | `9edac732cd8de0533e345337392f3dca464a9d8a2f08d8b7a464b685a8da45ce` |
 | `omk-architecture-strip.webp` | omk-tui-0.78.0.webp | TUI command timeline and evidence ledger strip | `1536x273` | `WEBP` | 71128 | `c76b825863260ecff832e31d986b91d341903f929faa62727511a594cb714cfe` |
 | `omk-core-loop.svg` | themes/night-city.theme.json via scripts/assets-build.mjs | OMK Core Loop | `1200x420` | `SVG` | 2731 | `0f60a453833c541a05db3b509f9d56fae02c38c89334c7c57357f281cad439f2` |
+| `omk-control-surfaces.svg` | themes/night-city.theme.json via scripts/assets-build.mjs | Operator control surfaces | `1200x420` | `SVG` | 3325 | `2295e2048336452a7abef90c0636107be36845946976fd79563f10092b22bd99` |
+| `omk-release-assertions.svg` | themes/night-city.theme.json via scripts/assets-build.mjs | Release assertion card | `1200x420` | `SVG` | 3052 | `8040d23c46bf48fd7f946f9ff491dcad8aa41ce023b7b062ff5475667c8f283d` |
 | `omk-provider-lanes.svg` | themes/night-city.theme.json via scripts/assets-build.mjs | Provider Lanes | `1200x420` | `SVG` | 2753 | `d7d85098e02e78d37d10a9886a041a8546bfa8438dd3f29bb157ce848bfd0b83` |
 | `omk-evidence-ledger.svg` | themes/night-city.theme.json via scripts/assets-build.mjs | Evidence Ledger | `1200x420` | `SVG` | 2411 | `01f0d66d2ba9915d9975bd7f93bb790e7ab0e11adbaedf84b4e5c25be6fe837c` |
 | `omk-badges.svg` | themes/night-city.theme.json via scripts/assets-build.mjs | OMK Badges | `1200x420` | `SVG` | 2405 | `4a4c94daca5d81e10a1ca185d3c07d4dfa6ac732363ecbc4bdbde841d4624cf6` |
@@ -100,7 +102,9 @@
 - Regeneration command: `npm run assets:build` (re-run after any theme token change; the `@<hash>` suffix is the first 12 hex of the theme file's SHA-256).
 - Light variant: not built — dark-only by ADR, see `docs/decisions/ADR-theme-dark-only-assets.md`. Non-dark themes are refused unless every used pair passes the 4.5/3.0 WCAG gates inline.
 - derived-from: omk.theme.v1/night-city@e5daf40d789d — `omk-badges.svg`
+- derived-from: omk.theme.v1/night-city@e5daf40d789d — `omk-control-surfaces.svg`
 - derived-from: omk.theme.v1/night-city@e5daf40d789d — `omk-core-loop.svg`
 - derived-from: omk.theme.v1/night-city@e5daf40d789d — `omk-evidence-ledger.svg`
 - derived-from: omk.theme.v1/night-city@e5daf40d789d — `omk-logo-mark.svg`
 - derived-from: omk.theme.v1/night-city@e5daf40d789d — `omk-provider-lanes.svg`
+- derived-from: omk.theme.v1/night-city@e5daf40d789d — `omk-release-assertions.svg`

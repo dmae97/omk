@@ -100,6 +100,31 @@ test("think command previews model variant without persisting settings", () => {
   }
 });
 
+test("think command allows max for duckcoding and fable-5", () => {
+  const home = mkdtempSync(join(tmpdir(), "omk-think-max-home-"));
+  try {
+    const duck = runModelCli(home, ["think", "max", "--provider", "duckcoding", "--model", "duckcoding", "--json"]);
+    assert.equal(duck.status, 0, duck.stderr);
+    const duckPayload = JSON.parse(duck.stdout);
+    assert.equal(duckPayload.provider, "duckcoding");
+    assert.equal(duckPayload.model, "duckcoding");
+    assert.equal(duckPayload.thinking, "max");
+    assert.equal(duckPayload.modelVariant, "duckcoding:max");
+    assert.deepEqual(duckPayload.supportedLevels, ["minimal", "low", "medium", "high", "xhigh", "max"]);
+
+    const fable = runModelCli(home, ["think", "max", "--model", "fable-5", "--json"]);
+    assert.equal(fable.status, 0, fable.stderr);
+    const fablePayload = JSON.parse(fable.stdout);
+    assert.equal(fablePayload.provider, "openrouter");
+    assert.equal(fablePayload.model, "anthropic/claude-fable-5");
+    assert.equal(fablePayload.thinking, "max");
+    assert.equal(fablePayload.modelVariant, "anthropic/claude-fable-5:max");
+    assert.ok(fablePayload.supportedLevels.includes("max"));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("think command exports custom variants as shell env only", () => {
   const home = mkdtempSync(join(tmpdir(), "omk-think-export-home-"));
   try {

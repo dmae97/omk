@@ -1,6 +1,6 @@
 import type { TaskResult, TaskRunner } from "../contracts/orchestration.js";
 
-export type KnownProviderId = "mimo" | "kimi" | "deepseek" | "codex" | "qwen" | "openrouter";
+export type KnownProviderId = "mimo" | "kimi" | "deepseek" | "codex" | "qwen" | "openrouter" | "anthropic";
 export type ProviderId = KnownProviderId | (string & {});
 export type ProviderPolicy = "auto" | ProviderId;
 export const DEFAULT_AUTHORITY_PROVIDER: ProviderId = "mimo";
@@ -67,7 +67,7 @@ function runtimeModeId(runtimeId: string): string {
 export type ProviderRisk = "read" | "write" | "shell" | "merge";
 export type ProviderComplexity = "simple" | "moderate" | "complex";
 export type ProviderKind = "kimi-native" | "openai-compatible" | "external-cli" | "codex-cli" | "local";
-export type ProviderWireApi = "kimi-native" | "openai-chat-completions" | "openai-responses" | "external-cli";
+export type ProviderWireApi = "kimi-native" | "openai-chat-completions" | "openai-responses" | "anthropic-messages" | "external-cli";
 export type ProviderAuthMethod = "api-key-env" | "oauth" | "external-cli" | "none";
 export type ProviderProfileType = "runtime" | "compatibility";
 export type ProviderPlanKind =
@@ -157,7 +157,7 @@ export interface ProviderRouteDecision {
   trace?: import("../contracts/replay.js").DecisionTraceEntry[];
 }
 
-export type ProviderFailureKind = "availability" | "transient" | "policy" | "quota" | "unknown";
+export type ProviderFailureKind = "availability" | "transient" | "policy" | "quota" | "refusal" | "unknown";
 
 export interface ProviderAvailability {
   provider: ProviderId;

@@ -40,7 +40,8 @@ test("rust-forge theme defines oxidized OMK control visuals", () => {
   assert.equal(RUST_FORGE_THEME.name, "rust-forge");
   assert.equal(RUST_FORGE_THEME.label, "OMK Rust Forge");
   assert.match(RUST_FORGE_THEME.tagline, /Oxidized forge console/);
-  assert.match(RUST_FORGE_THEME.motto, /Forge the route/);
+  assert.match(RUST_FORGE_THEME.tagline, /standalone OMK control/);
+  assert.match(RUST_FORGE_THEME.motto, /OMK controls the loop/);
   assert.match(RUST_FORGE_THEME.colors.primary, /38;2;255;106;61m/);
   assert.match(RUST_FORGE_THEME.colors.border, /38;2;224;138;75m/);
   assert.equal(RUST_FORGE_THEME.motion.rain, false);

@@ -406,7 +406,8 @@ test("star flow on starRepo throwing still resolves and attempts browser open", 
 
 test("OMK version footer reads package version", () => {
   assert.match(getOmkVersionSync(), /^\d+\.\d+\.\d+/);
-  assert.match(formatOmkVersionFooter(), /omk v\d+\.\d+\.\d+/);
+  assert.match(formatOmkVersionFooter(), /omk package v\d+\.\d+\.\d+/);
+  assert.match(formatOmkVersionFooter(), /runtime v\d+\.\d+/);
   assert.match(formatOmkVersionFooter(), /github\.com\/dmae97\/open-multi-agent-kit/);
 });
 
