@@ -10,6 +10,21 @@ import {
   type MemoryStatus,
 } from "./memory-config.js";
 import type { RunManifest } from "../contracts/run.js";
+import {
+  appendDelta,
+  compactIfNeeded,
+  computeDelta,
+  deltaStatsMatch,
+  loadStateViaDelta,
+  readManifest,
+  resolveCompactionThresholds,
+  resolveDurabilityMode,
+  setupDeltaMode,
+  statDeltaFiles,
+  type DeltaFileStats,
+  type DeltaManifest,
+  type DurabilityMode,
+} from "./graph-delta-log.js";
 
 export interface MemorySearchResult {
   path: string;
@@ -62,7 +77,7 @@ export interface LocalGraphMemoryStoreOptions {
 type Primitive = string | number | boolean | null;
 type Properties = Record<string, Primitive>;
 
-interface LocalGraphNode {
+export interface LocalGraphNode {
   id: string;
   type: string;
   labels: string[];
@@ -76,7 +91,7 @@ interface LocalGraphNode {
   updatedAt: string;
 }
 
-interface LocalGraphEdge {
+export interface LocalGraphEdge {
   id: string;
   type: string;
   from: string;
@@ -227,6 +242,11 @@ interface GraphStateCacheEntry {
   size: number;
   ctimeMs: number;
   ino: number;
+  /** Delta-mode stats for snapshot + delta file change detection */
+  deltaStats?: DeltaFileStats | null;
+  deltaEpoch?: number;
+  deltaOpCount?: number;
+  deltaLastSeq?: number;
 }
 
 /**
@@ -295,10 +315,19 @@ async function writeFileAtomic(path: string, payload: string): Promise<void> {
 }
 
 export class LocalGraphMemoryStore {
+  private readonly durability: DurabilityMode;
+  private deltaEpoch = 0;
+  private deltaLastSeq = 0;
+  private deltaOpCount = 0;
+  private deltaManifest: DeltaManifest | null = null;
+
   constructor(
     private readonly settings: MemorySettings,
-    private readonly source = "omk-local-graph-memory"
-  ) {}
+    private readonly source = "omk-local-graph-memory",
+    private readonly env?: NodeJS.ProcessEnv
+  ) {
+    this.durability = resolveDurabilityMode(env);
+  }
 
   static async create(options: LocalGraphMemoryStoreOptions = {}): Promise<LocalGraphMemoryStore | null> {
     const env = options.sessionId
@@ -306,7 +335,7 @@ export class LocalGraphMemoryStore {
       : options.env ?? process.env;
     const settings = await loadMemorySettings(options.projectRoot, env);
     if (!usesLocalGraphBackend(settings.backend)) return null;
-    return new LocalGraphMemoryStore(settings, options.source ?? "omk-local-graph-memory");
+    return new LocalGraphMemoryStore(settings, options.source ?? "omk-local-graph-memory", env);
   }
 
   get status(): MemoryStatus {
@@ -834,6 +863,13 @@ export class LocalGraphMemoryStore {
   }
 
   private async loadState(): Promise<LocalGraphState> {
+    if (this.durability === "delta") {
+      return this.loadStateDelta();
+    }
+    return this.loadStateLegacy();
+  }
+
+  private async loadStateLegacy(): Promise<LocalGraphState> {
     let raw: string;
     try {
       raw = await readFile(this.settings.localGraph.path, "utf-8");
@@ -863,6 +899,33 @@ export class LocalGraphMemoryStore {
     } catch (err) {
       return this.handleInvalidState(raw, `invalid JSON: ${errorMessage(err)}`);
     }
+  }
+
+  private async loadStateDelta(): Promise<LocalGraphState> {
+    const graphPath = this.settings.localGraph.path;
+    // Check if manifest exists; if not, try to load legacy file for migration
+    const manifest = await readManifest(graphPath);
+    if (!manifest) {
+      // Load legacy file as base state for migration
+      let legacyState: LocalGraphState;
+      try {
+        legacyState = await this.loadStateLegacy();
+      } catch {
+        legacyState = this.emptyState();
+      }
+      this.deltaManifest = await setupDeltaMode(graphPath, legacyState);
+      this.deltaEpoch = this.deltaManifest.snapshotEpoch;
+      this.deltaLastSeq = 0;
+      this.deltaOpCount = this.deltaManifest.deltaOpCount;
+      return legacyState;
+    }
+
+    this.deltaManifest = manifest;
+    const result = await loadStateViaDelta(graphPath, this.settings.strict, this.emptyState());
+    this.deltaEpoch = result.epoch;
+    this.deltaLastSeq = result.lastSeq;
+    this.deltaOpCount = result.deltaOpCount;
+    return result.state;
   }
 
   private emptyState(): LocalGraphState {
@@ -925,8 +988,63 @@ export class LocalGraphMemoryStore {
     const graphPath = this.settings.localGraph.path;
     await enqueueGraphWrite(graphPath, async () => {
       const state = await this.loadStateForMutation(graphPath);
-      mutator(state, new Date().toISOString());
-      await this.saveState(state);
+
+      if (this.durability === "delta") {
+        // Capture pre-mutation id→object maps for diffing
+        const preNodes = new Map(state.nodes.map((n) => [n.id, n]));
+        const preEdges = new Map(state.edges.map((e) => [e.id, e]));
+
+        const now = new Date().toISOString();
+        mutator(state, now);
+
+        // Compute delta (changed/added/deleted nodes and edges)
+        const delta = computeDelta(preNodes, preEdges, state);
+
+        // Ensure delta mode is set up (first write migrates if needed)
+        if (!this.deltaManifest) {
+          this.deltaManifest = await setupDeltaMode(graphPath, state);
+          this.deltaEpoch = this.deltaManifest.snapshotEpoch;
+          this.deltaLastSeq = 0;
+          this.deltaOpCount = this.deltaManifest.deltaOpCount;
+        }
+
+        const seq = this.deltaLastSeq + 1;
+        await appendDelta(
+          graphPath,
+          this.deltaEpoch,
+          seq,
+          now,
+          {
+            updatedAt: state.updatedAt,
+            project: state.project,
+            ontology: state.ontology.version,
+          },
+          delta.nodes,
+          delta.edges
+        );
+
+        this.deltaLastSeq = seq;
+        this.deltaOpCount += 1;
+
+        // Check compaction thresholds
+        const thresholds = resolveCompactionThresholds(this.env);
+        const compactResult = await compactIfNeeded(
+          graphPath,
+          state,
+          this.deltaEpoch,
+          this.deltaOpCount,
+          thresholds
+        );
+        if (compactResult.compacted) {
+          this.deltaEpoch = compactResult.newEpoch;
+          this.deltaOpCount = compactResult.newOpCount;
+          this.deltaLastSeq = 0;
+        }
+      } else {
+        mutator(state, new Date().toISOString());
+        await this.saveState(state);
+      }
+
       // Refresh the process-local cache from the file we just wrote so the next
       // mutation in this process can reuse the parsed object and skip the disk
       // read + JSON.parse entirely (on-disk format/durability are unchanged).
@@ -940,23 +1058,37 @@ export class LocalGraphMemoryStore {
   /**
    * Load state for a write, reusing the process-local cache only when the file
    * is unchanged on mtimeMs + size + ctimeMs + inode since this process last
-   * persisted it. Any divergence (concurrent external writer) or a missing entry
-   * invalidates the cache and falls back to a full loadState(), preserving
-   * multi-writer correctness and loadState's ENOENT / empty / invalid / strict
-   * semantics.
+   * persisted it. In delta mode, also checks snapshot + delta file stats.
+   * Any divergence (concurrent external writer) or a missing entry invalidates
+   * the cache and falls back to a full loadState(), preserving multi-writer
+   * correctness and loadState's ENOENT / empty / invalid / strict semantics.
    */
   private async loadStateForMutation(graphPath: string): Promise<LocalGraphState> {
     const cached = graphStateCache.get(graphPath);
     if (cached) {
-      const stat = statSyncSafe(graphPath);
-      if (
-        stat &&
-        stat.mtimeMs === cached.mtimeMs &&
-        stat.size === cached.size &&
-        stat.ctimeMs === cached.ctimeMs &&
-        stat.ino === cached.ino
-      ) {
-        return cached.state;
+      if (this.durability === "delta") {
+        const currentDeltaStats = statDeltaFiles(graphPath);
+        if (
+          currentDeltaStats &&
+          deltaStatsMatch(currentDeltaStats, cached.deltaStats ?? null)
+        ) {
+          // Restore delta tracking from cache
+          if (cached.deltaEpoch !== undefined) this.deltaEpoch = cached.deltaEpoch;
+          if (cached.deltaOpCount !== undefined) this.deltaOpCount = cached.deltaOpCount;
+          if (cached.deltaLastSeq !== undefined) this.deltaLastSeq = cached.deltaLastSeq;
+          return cached.state;
+        }
+      } else {
+        const stat = statSyncSafe(graphPath);
+        if (
+          stat &&
+          stat.mtimeMs === cached.mtimeMs &&
+          stat.size === cached.size &&
+          stat.ctimeMs === cached.ctimeMs &&
+          stat.ino === cached.ino
+        ) {
+          return cached.state;
+        }
       }
       graphStateCache.delete(graphPath);
     }
@@ -964,11 +1096,32 @@ export class LocalGraphMemoryStore {
   }
 
   /**
-   * Record the just-written state plus its fresh mtimeMs+size+ctimeMs+inode so
-   * the next cache hit can be validated. If the file cannot be stat'd, drop the
-   * entry rather than risk serving stale data on a later write.
+   * Record the just-written state plus its fresh on-disk stats so the next
+   * cache hit can be validated. In delta mode, tracks snapshot + delta file
+   * stats. If the files cannot be stat'd, drop the entry rather than risk
+   * serving stale data on a later write.
    */
   private refreshGraphStateCache(graphPath: string, state: LocalGraphState): void {
+    if (this.durability === "delta") {
+      const deltaStats = statDeltaFiles(graphPath);
+      if (deltaStats) {
+        graphStateCache.set(graphPath, {
+          state,
+          mtimeMs: deltaStats.snapshotMtimeMs,
+          size: deltaStats.snapshotSize,
+          ctimeMs: deltaStats.snapshotCtimeMs,
+          ino: deltaStats.snapshotIno,
+          deltaStats,
+          deltaEpoch: this.deltaEpoch,
+          deltaOpCount: this.deltaOpCount,
+          deltaLastSeq: this.deltaLastSeq,
+        });
+      } else {
+        graphStateCache.delete(graphPath);
+      }
+      return;
+    }
+
     const stat = statSyncSafe(graphPath);
     if (stat) {
       graphStateCache.set(graphPath, {
