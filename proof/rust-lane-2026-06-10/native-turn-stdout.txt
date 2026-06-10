@@ -1,0 +1,22 @@
+TAP version 13
+# Subtest: native no-Kimi turn executes OMK-owned worker context through non-Kimi runtime
+ok 1 - native no-Kimi turn executes OMK-owned worker context through non-Kimi runtime
+  ---
+  duration_ms: 539.629209
+  type: 'test'
+  ...
+# Subtest: native no-Kimi turn keeps optional MCP available without requiring runtime MCP
+ok 2 - native no-Kimi turn keeps optional MCP available without requiring runtime MCP
+  ---
+  duration_ms: 834.198786
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1880.264788

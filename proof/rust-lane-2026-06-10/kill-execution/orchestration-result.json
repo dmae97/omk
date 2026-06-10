@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "goalId": "execute-the-omk-safety-kill-gate-after-reviewer-sign-off-of-proo",
+  "goal": "Execute the omk-safety Kill Gate after reviewer sign-off of proof/rust-lane-2026-06-10/r2-gate-table.md: (1) commit ADR docs/adr/ (from adr-draft-no-native-lane.md); (2) remove crates/, Cargo.toml, Cargo.lock, scripts/build-native.mjs, scripts/rust-safety-check.mjs, scripts/normalize-native-artifacts.mjs native branch, src/util/native-safety.ts, doctor native lane checks, package.json rust:build/native:build wiring and release-gate steps, CI cargo steps; (3) land TS follow-ups: fix O(matches×n) SecretScanner.getLineColumn (secret-scanner.ts:729) with newline-offset index + regression bench, enforce writableRoots in tool dispatch, dedupe buildSafeKimiChildEnv clones; (4) quality gates: npm run schema:check, lint, secret:scan, build:clean, test; evidence to proof/rust-lane-2026-06-10/kill-execution/. Lanes: coder (removal), coder (TS perf fix), security (writableRoots), reviewer+qa gates. Store decision summary in supermemory and route DAG via adaptorch when MCP lanes are available.",
+  "workers": 4,
+  "mode": "pi-omk-hardfork",
+  "status": "queued",
+  "createdAt": "2026-06-09T20:00:21.106Z",
+  "updatedAt": "2026-06-09T20:00:21.106Z",
+  "requestPath": ".omk/goals/execute-the-omk-safety-kill-gate-after-reviewer-sign-off-of-proo-request.json",
+  "resultPath": "proof/rust-lane-2026-06-10/kill-execution/orchestration-result.json",
+  "summary": null,
+  "changedFiles": [],
+  "evidence": [],
+  "risks": [],
+  "nextAction": "Queued OMK hard-fork orchestration follow-up."
+}
