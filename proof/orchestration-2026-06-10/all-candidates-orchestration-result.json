@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "omk.goal-result.v1",
+  "goalId": "native-removal-2026-06-10",
+  "goal": "Remove native(Rust) safety lane per ADR-0001: all candidates fail Amdahl gate <1.004 (≥1.15 unreachable)",
+  "workers": 1,
+  "mode": "lane-execution",
+  "status": "completed",
+  "summary": "Executed lane B-EXEC: deleted 11 SAFE-TO-DELETE paths (crates/, Cargo.toml, Cargo.lock, 3 build scripts, native-safety.ts, 2 tests, target/, dist/native/). Updated 11 consumer files + 2 script files (proof-check + regression-proof-matrix) to remove native-safety imports/assertions/references. Removed 5 standalone scripts + 4 composite sub-steps from package.json. Removed 3× dtolnay/rust-toolchain, 2× native:build, entire native: jobs from CI. Created ADR at docs/adr/0001-no-native-rust-lane.md. All 16 PRESERVE items intact. Build/schema/secret/affected-tests green. Zero dangling references in grep.",
+  "changedFiles": [
+    "docs/adr/0001-no-native-rust-lane.md (created)",
+    "src/schema/proof-bundle.schema.ts",
+    "src/contracts/proof.ts",
+    "src/commands/doctor/checks.ts",
+    "src/commands/doctor/report.ts",
+    "scripts/package-audit.mjs",
+    "test/package-audit.test.mjs",
+    "test/no-kimi-verification-contract.test.mjs",
+    "test/workflow-harness.test.mjs",
+    "src/commands/init.ts",
+    "src/commands/init/content.ts",
+    "scripts/regression-proof-matrix.mjs",
+    "scripts/proof-check.mjs",
+    "package.json",
+    ".github/workflows/ci.yml",
+    ".github/workflows/release.yml",
+    ".github/workflows/smoke-test.yml",
+    "crates/omk-safety/ (deleted 5 files)",
+    "Cargo.toml (deleted)",
+    "Cargo.lock (deleted)",
+    "scripts/build-native.mjs (deleted)",
+    "scripts/rust-safety-check.mjs (deleted)",
+    "scripts/normalize-native-artifacts.mjs (deleted)",
+    "src/util/native-safety.ts (deleted)",
+    "test/native-safety-loader.test.mjs (deleted)",
+    "test/rust-safety-harness.test.mjs (deleted)"
+  ],
+  "evidence": {
+    "build:clean": "PASS",
+    "schema:check": "PASS (9 schemas)",
+    "lint": "2 pre-existing warnings in sibling lane file (graph-delta-log.ts), not introduced by this lane",
+    "secret:scan": "PASS",
+    "affectedTests": "PASS (64/64)",
+    "danglingRefGrep": "ZERO matches"
+  },
+  "risks": [
+    "2 pre-existing lint warnings in src/memory/graph-delta-log.ts (sibling memory lane)",
+    "Full npm test suite not run (timeout); affected-file targeted tests all pass",
+    "test/no-kimi-native-turn.test.mjs preserved but npm script removed — intentional per manifest C11"
+  ],
+  "nextAction": "Resolve pre-existing lint warnings via memory lane; run full npm test suite to confirm zero regressions",
+  "updatedAt": "2026-06-10T00:00:00Z"
+}
