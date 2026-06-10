@@ -10,6 +10,7 @@
 
 import * as clack from "@clack/prompts";
 import type { RuntimeSidecar } from "../../runtime/debloat-nlp.js";
+import { OMK_RUNTIME_VERSION } from "../../version.js";
 
 /**
  * Interactive provider selection.
@@ -207,8 +208,12 @@ export async function withSpinner<T>(
 /**
  * Intro/outro for OMK session.
  */
+export function formatOmkIntroTitle(version: string): string {
+  return `OMK root orchestrator · package v${version} · runtime ${OMK_RUNTIME_VERSION}`;
+}
+
 export function omkIntro(version: string): void {
-  clack.intro(`OMK v${version}`);
+  clack.intro(formatOmkIntroTitle(version));
 }
 
 export function omkOutro(message: string): void {

@@ -8,7 +8,7 @@ const DIST_CHAT_UTILS = join(process.cwd(), "dist", "commands", "chat", "utils.j
 const DIST_CHAT_CORE = join(process.cwd(), "dist", "commands", "chat", "core.js");
 const DIST_FS = join(process.cwd(), "dist", "util", "fs.js");
 const DIST_PROVIDER_TASK_RUNNER = join(process.cwd(), "dist", "providers", "provider-task-runner.js");
-const { buildRootChatLaunchArgs } = await import("../dist/cli/root.js");
+import { OMK_ROOT_ENTRY_SURFACE, buildRootChatLaunchArgs } from "../dist/cli/root.js";
 function sliceFunction(source, startNeedle, endNeedle) {
   const start = source.indexOf(startNeedle);
   assert.notEqual(start, -1, `missing ${startNeedle}`);
@@ -80,12 +80,15 @@ describe("omk with no arguments", () => {
     assert.doesNotMatch(rootSource, /suggestionChat/);
     assert.doesNotMatch(rootSource, /suggestionHud/);
     assert.match(rootSource, /OMK_ENTRY_SURFACE/);
+    assert.match(rootSource, /omk-root-orchestrator/);
+    assert.doesNotMatch(rootSource, /pi-omk|isPiOmkEntry/);
     assert.doesNotMatch(rootSource, /OMK_MCP_SCOPE/);
     assert.doesNotMatch(rootSource, /OMK_SKILLS_SCOPE/);
     assert.doesNotMatch(rootSource, /OMK_HOOKS_SCOPE/);
     const chatCoreSource = readFileSync(DIST_CHAT_CORE, "utf-8");
     assert.match(chatCoreSource, /OMK_ENTRY_SURFACE/);
-    assert.match(chatCoreSource, /!isPiOmkEntry/);
+    assert.match(chatCoreSource, /!isOmkRootEntry/);
+    assert.doesNotMatch(chatCoreSource, /pi-omk|isPiOmkEntry/);
   });
   it("keeps root runtime discovery on OMK and portable agent paths", () => {
     const chatUtilsSource = readFileSync(DIST_CHAT_UTILS, "utf-8");
@@ -108,6 +111,10 @@ describe("omk with no arguments", () => {
     const providerRunnerSource = readFileSync(DIST_PROVIDER_TASK_RUNNER, "utf-8");
     assert.equal(providerRunnerSource.includes("../kimi/runner"), false);
     assert.match(providerRunnerSource, /kimi-provider-failure/);
+  });
+
+  it("exports an OMK-native root entry marker", () => {
+    assert.equal(OMK_ROOT_ENTRY_SURFACE, "omk-root-orchestrator");
   });
 
   it("keeps bare omk routed into the OMK chat entry", () => {

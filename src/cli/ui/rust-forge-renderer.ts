@@ -36,6 +36,14 @@ function center(text: string, width: number): string {
   return `${" ".repeat(pad)}${text}`;
 }
 
+function forgeGauge(label: string, value: number, width: number): string {
+  const clamped = Math.max(0, Math.min(1, value));
+  const barWidth = Math.max(6, Math.min(16, width - label.length - 10));
+  const filled = Math.round(clamped * barWidth);
+  const bar = `${"█".repeat(filled)}${"░".repeat(Math.max(0, barWidth - filled))}`;
+  return truncate(`${label} [${bar}] ${Math.round(clamped * 100)}%`, width);
+}
+
 function forgeScanline(seed: string, width: number): string {
   const glyphs = ["═", "─", "■", "▣", "◉", "◆"];
   let hash = 0;
@@ -91,7 +99,7 @@ export class RustForgeRenderer implements CliRenderer {
     const shouldRenderScanline = this.motion !== "off" && this.started && this.err.isTTY !== false;
     const sigilName = this.resolveSigilName();
     const sigilRows = sigilName !== "none" ? this.sigilHeight(sigilName) : 0;
-    return (shouldRenderScanline ? 1 : 0) + 5 + sigilRows;
+    return (shouldRenderScanline ? 1 : 0) + 7 + sigilRows;
   }
 
   private resolveSigilName(): string {
@@ -121,6 +129,10 @@ export class RustForgeRenderer implements CliRenderer {
     const routeLine = truncate(`${RUST_FORGE_THEME.symbols.signal} FORGE ${run} · provider:${event.provider} · model:${event.model ?? "auto"}`, width);
     const statusLine = truncate(`■ FORGE route armed · VERIFY evidence · SCOPE MCP/skills/hooks`, width);
     const rootLine = truncate(`${RUST_FORGE_THEME.symbols.pending} PENDING root ${root}`, width);
+    const independentLine = truncate("OMK INDEPENDENT CONTROL · adapters are lanes, not authority", width);
+    const heatSeed = (event.runId ?? "rust-forge").split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    const heat = 0.72 + (heatSeed % 19) / 100;
+    const forgeStateLine = truncate(`${forgeGauge("HEAT", heat, Math.floor(width / 2))} · ANVIL locked · QUENCH ready`, width);
 
     const sigilName = this.resolveSigilName();
     const showSigil = sigilName !== "none";
@@ -136,6 +148,8 @@ export class RustForgeRenderer implements CliRenderer {
       colors: [hot, BRAND_HEX.sparkleWhite, BRAND_HEX.sparkleGold, BRAND_HEX.rustEmber, BRAND_HEX.rustCrimson],
     }), this.noColor);
     line(this.err, `${success}${center(truncate(RUST_FORGE_THEME.motto, width), width)}${RST}`, this.noColor);
+    line(this.err, `${hot}${center(independentLine, width)}${RST}`, this.noColor);
+    line(this.err, `${success}${center(forgeStateLine, width)}${RST}`, this.noColor);
 
     // Render sigil art with animated sweep
     if (showSigil) {

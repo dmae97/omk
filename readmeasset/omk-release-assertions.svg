@@ -1,0 +1,51 @@
+<!-- derived-from: omk.theme.v1/night-city@e5daf40d789d -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">OMK release assertions</title>
+  <desc id="desc">Package, binary, gate, and package-safety assertions for open-multi-agent-kit releases.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#070B14"/>
+      <stop offset="0.52" stop-color="#101826"/>
+      <stop offset="1" stop-color="#070B14"/>
+    </linearGradient>
+    <linearGradient id="cyanMagenta" x1="0" x2="1">
+      <stop offset="0" stop-color="#00D6FF"/>
+      <stop offset="0.5" stop-color="#00FFC2"/>
+      <stop offset="1" stop-color="#FF47B2"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="1200" height="420" rx="34" fill="url(#bg)"/>
+  <rect x="24" y="24" width="1152" height="372" rx="24" fill="none" stroke="url(#cyanMagenta)" stroke-width="3" filter="url(#glow)"/>
+  <path d="M54 96 H1146" stroke="#00D6FF" stroke-width="1" stroke-dasharray="8 14" opacity="0.72"/>
+  <text x="60" y="72" fill="#E8F8FF" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="34" font-weight="800">OMK//RELEASE ASSERTIONS</text>
+  <text x="60" y="112" fill="#9DB3C7" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">npm truth surface for open-multi-agent-kit</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">
+    <rect x="60" y="148" width="500" height="58" rx="14" fill="#101826" stroke="#00D6FF"/>
+    <text x="86" y="184" fill="#00D6FF" font-weight="700">assert package.name</text>
+    <text x="330" y="184" fill="#E8F8FF">open-multi-agent-kit</text>
+
+    <rect x="640" y="148" width="500" height="58" rx="14" fill="#101826" stroke="#00FFC2"/>
+    <text x="666" y="184" fill="#00FFC2" font-weight="700">assert bins</text>
+    <text x="826" y="184" fill="#E8F8FF">omk + MCP + ACP</text>
+
+    <rect x="60" y="226" width="500" height="58" rx="14" fill="#101826" stroke="#FFB000"/>
+    <text x="86" y="262" fill="#FFB000" font-weight="700">assert gates</text>
+    <text x="252" y="262" fill="#E8F8FF">version proof pack audit smoke</text>
+
+    <rect x="640" y="226" width="500" height="58" rx="14" fill="#101826" stroke="#FF47B2"/>
+    <text x="666" y="262" fill="#FF47B2" font-weight="700">assert excluded</text>
+    <text x="880" y="262" fill="#E8F8FF">local state + secrets</text>
+
+    <rect x="60" y="304" width="1080" height="58" rx="14" fill="#070B14" stroke="#9D4EDD"/>
+    <text x="86" y="340" fill="#9D4EDD" font-weight="700">assert release_truth</text>
+    <text x="346" y="340" fill="#E8F8FF">tagged checks + registry verification before claims</text>
+  </g>
+</svg>

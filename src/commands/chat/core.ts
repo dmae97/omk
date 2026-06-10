@@ -343,7 +343,7 @@ export async function chatCommand(options: {
 
   // ── plain / inline: run OMK native chat loop ──
   const isPlain = layout === "plain";
-  const isPiOmkEntry = process.env.OMK_ENTRY_SURFACE === "pi-omk";
+  const isOmkRootEntry = process.env.OMK_ENTRY_SURFACE === "omk-root-orchestrator";
 
   if (!isPlain && ui !== "green-rain" && ui !== "neon-grid" && ui !== "rust-forge") {
     const trust = `${effectiveResources.mcpScope} MCP / ${effectiveResources.skillsScope} skills`;
@@ -363,7 +363,7 @@ export async function chatCommand(options: {
   }
 
   // ── Deferred HUD + history: fire-and-forget, let the agent loop start immediately ──
-  if (!isPlain && !isPiOmkEntry) {
+  if (!isPlain && !isOmkRootEntry) {
     // Show a minimal status line while we defer the full HUD
     const providerLabel = providerPolicy === "auto" ? "auto-detect" : providerPolicy;
     const modeLabel = currentMode;

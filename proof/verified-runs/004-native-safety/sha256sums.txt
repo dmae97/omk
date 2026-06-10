@@ -1,8 +1,0 @@
-7feaa419c5955d5f7e8ed1bd537fd9257033d75cf3ccc8fdf1b4372d3d03e637  proof/verified-runs/004-native-safety/command-1.out
-4682dc2425e1cc6a9d15257badfdcad1c0070f23bc84ad21ae8aced84567a54c  proof/verified-runs/004-native-safety/commands.sh
-fac97eea791250178f419b94079b48e14efc820a14e6452c7a37f468aa720b95  proof/verified-runs/004-native-safety/decisions.jsonl
-b4b513f3080d55eee93ee87e60419817dd06963e6f239beed7a19aa59503802f  proof/verified-runs/004-native-safety/evidence.jsonl
-9dee1e6e9e8b32f25ad29963dd3ac1821c220e1498b725a88c008fcc324ba58c  proof/verified-runs/004-native-safety/limitations.md
-fab90b97c125ed40e7236d9797a2588f14219e877d6ec336c4b31bd2bc95b193  proof/verified-runs/004-native-safety/raw-prompt.md
-7da75fdd7ab64ba411360487236244d4e40a47f5616320448dbb847b5b737caa  proof/verified-runs/004-native-safety/run-manifest.json
-d8b7926b8d67b774f714ac916e39dfedfcf389a5cc592ebb490958bd76b2e84c  proof/verified-runs/004-native-safety/verify.json

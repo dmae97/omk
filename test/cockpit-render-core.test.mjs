@@ -33,7 +33,11 @@ describe("renderCockpit", () => {
 
   it("renders oxidized-forge cockpit chrome when OMK_THEME=rust-forge", async () => {
     const previousTheme = process.env.OMK_THEME;
+    const previousNoColor = process.env.NO_COLOR;
+    const previousForceColor = process.env.FORCE_COLOR;
     process.env.OMK_THEME = "rust-forge";
+    delete process.env.NO_COLOR;
+    process.env.FORCE_COLOR = "3";
     try {
       const output = await renderCockpit({ terminalWidth: 100, quick: true });
       assert.ok(output.includes("OMK//CONTROL COCKPIT"), "control header should remain");
@@ -42,6 +46,10 @@ describe("renderCockpit", () => {
     } finally {
       if (previousTheme === undefined) delete process.env.OMK_THEME;
       else process.env.OMK_THEME = previousTheme;
+      if (previousNoColor === undefined) delete process.env.NO_COLOR;
+      else process.env.NO_COLOR = previousNoColor;
+      if (previousForceColor === undefined) delete process.env.FORCE_COLOR;
+      else process.env.FORCE_COLOR = previousForceColor;
       const { setBrandPaletteTheme } = await import("../dist/brand/palette.js");
       setBrandPaletteTheme("night-city");
     }

@@ -1,6 +1,7 @@
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+import { OMK_RUNTIME_VERSION } from "../version.js";
 
 export const OMK_REPO_URL = "https://github.com/dmae97/open-multi-agent-kit";
 
@@ -54,5 +55,5 @@ export function getOmkRepoUrlSync(): string {
 }
 
 export function formatOmkVersionFooter(version: string = getOmkVersionSync()): string {
-  return `omk v${version} • GitHub: ${getOmkRepoUrlSync()}`;
+  return `omk package v${version} • runtime ${OMK_RUNTIME_VERSION} • GitHub: ${getOmkRepoUrlSync()}`;
 }

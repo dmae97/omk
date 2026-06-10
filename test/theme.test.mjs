@@ -138,7 +138,8 @@ test("rust-forge.theme.json validates as omk.theme.v1 and compiles for all tiers
     assert.equal(compiled.name, "rust-forge");
     assert.equal(compiled.tokens["control.accent"].role, "control.accent");
     assert.equal(compiled.surfaces.statusCard.border.role, "control.accent");
-    assert.equal(compiled.surfaces.evidenceGate.pass.role, "evidence.pass");
+    assert.equal(compiled.surfaces.forgeConsole.heat.role, "forge.heat");
+    assert.equal(compiled.surfaces.forgeConsole.quench.role, "forge.quench");
   }
 });
 
@@ -152,5 +153,5 @@ test("rust-forge compiled palette passes WCAG contrast gates", async () => {
     stdio: ["pipe", "pipe", "pipe"],
   });
 
-  assert.match(output, /rust-forge: 80 pairs checked, 0 failed/);
+  assert.match(output, /rust-forge: 100 pairs checked, 0 failed/);
 });

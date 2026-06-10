@@ -30,8 +30,10 @@ Curated OMK//CONTROL assets in this directory. Assets are provenance-covered and
 | `omk-evidence-loop-0.78.0.webp` | repo-only | Evidence bundle and verify gate crop           | omk-runtime-flow-0.78.0.webp               | `900x774`   | `WEBP` |  60808 |
 | `omk-runtime-flow-wide.webp`    | repo-only | Runtime flow wide strip                        | omk-runtime-flow-0.78.0.webp               | `1485x178`  | `WEBP` |  45258 |
 | `omk-architecture-strip.webp`   | repo-only | TUI command timeline and evidence ledger strip | omk-tui-0.78.0.webp                        | `1536x273`  | `WEBP` |  71128 |
-| `omk-core-loop.svg`             | yes       | OMK Core Loop                                  | local SVG render from OMK palette          | `1200x420`  | `SVG`  |   2671 |
-| `omk-provider-lanes.svg`        | repo-only | Provider Lanes                                 | local SVG render from OMK palette          | `1200x420`  | `SVG`  |   2693 |
-| `omk-evidence-ledger.svg`       | repo-only | Evidence Ledger                                | local SVG render from OMK palette          | `1200x420`  | `SVG`  |   2351 |
-| `omk-badges.svg`                | repo-only | OMK Badges                                     | local SVG render from OMK palette          | `1200x420`  | `SVG`  |   2345 |
-| `omk-logo-mark.svg`             | yes       | Vector OMK logo mark                           | local SVG render from OMK palette          | `512x512`   | `SVG`  |    589 |
+| `omk-core-loop.svg`             | yes       | OMK Core Loop                                  | local SVG render from OMK palette          | `1200x420`  | `SVG`  |   2731 |
+| `omk-control-surfaces.svg`      | yes       | Operator control surfaces                      | local SVG render from OMK palette          | `1200x420`  | `SVG`  |   3325 |
+| `omk-release-assertions.svg`    | yes       | Release assertion card                         | local SVG render from OMK palette          | `1200x420`  | `SVG`  |   3052 |
+| `omk-provider-lanes.svg`        | repo-only | Provider Lanes                                 | local SVG render from OMK palette          | `1200x420`  | `SVG`  |   2753 |
+| `omk-evidence-ledger.svg`       | repo-only | Evidence Ledger                                | local SVG render from OMK palette          | `1200x420`  | `SVG`  |   2411 |
+| `omk-badges.svg`                | repo-only | OMK Badges                                     | local SVG render from OMK palette          | `1200x420`  | `SVG`  |   2405 |
+| `omk-logo-mark.svg`             | yes       | Vector OMK logo mark                           | local SVG render from OMK palette          | `512x512`   | `SVG`  |    649 |

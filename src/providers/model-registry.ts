@@ -18,7 +18,7 @@ import type {
 } from "./types.js";
 import { DEFAULT_AUTHORITY_PROVIDER } from "./types.js";
 
-export const KNOWN_PROVIDER_IDS = ["mimo", "kimi", "deepseek", "qwen", "codex", "openrouter"] as const satisfies readonly KnownProviderId[];
+export const KNOWN_PROVIDER_IDS = ["mimo", "kimi", "deepseek", "qwen", "codex", "openrouter", "anthropic"] as const satisfies readonly KnownProviderId[];
 export const QWEN_DASHSCOPE_COMPAT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 export const OPENROUTER_COMPAT_BASE_URL = "https://openrouter.ai/api/v1";
 
@@ -75,6 +75,30 @@ export interface ProviderConfigSetInput {
 }
 
 const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEntry, "id" | "configured" | "updatedAt">> = {
+  anthropic: {
+    enabled: false,
+    kind: "openai-compatible",
+    baseUrl: "https://api.anthropic.com",
+    apiKeyEnv: "ANTHROPIC_API_KEY",
+    defaultModel: "claude-fable-5",
+    aliases: {
+      default: "claude-fable-5",
+      fable: "claude-fable-5",
+      "fable-5": "claude-fable-5",
+      "claude-fable-5": "claude-fable-5",
+      "opus-4-8": "claude-opus-4-8",
+      "claude-opus-4-8": "claude-opus-4-8",
+    },
+    capabilities: ["read", "review", "qa", "research", "advisory"],
+    contextWindow: 200_000,
+    reservedOutputTokens: 8192,
+    wireApi: "anthropic-messages",
+    auth: { method: "oauth" },
+    profileType: "runtime",
+    planKind: "openai-api",
+    routing: "advisory",
+    headers: { "anthropic-version": "2023-06-01" },
+  },
   mimo: {
     enabled: true,
     kind: "openai-compatible",
@@ -214,6 +238,7 @@ export function normalizeProviderId(value: string | undefined): ProviderId | "au
   if (lower === "codex" || lower === "openai-codex") return "codex";
   if (lower === "qwen" || lower === "dashscope" || lower === "qwen3" || lower === "qwen-max") return "qwen";
   if (lower === "openrouter" || lower === "openrouter-ai" || lower === "claude" || lower === "anthropic") return "openrouter";
+  if (lower === "anthropic-api" || lower === "anthropic-direct" || lower === "claude-api") return "anthropic";
   return lower;
 }
 
@@ -273,6 +298,7 @@ export function normalizeModelAlias(value: string): string {
   const lower = trimmed.toLowerCase().replace(/[_\s]+/g, "-");
   if (lower === "sonnet") return "claude-sonnet";
   if (lower === "opus") return "claude-opus";
+  if (lower === "opus-4-8" || lower === "claude-opus-4-8") return "claude-opus-4-8";
   if (lower === "haiku") return "claude-haiku";
   if (lower === "fable" || lower === "fable-5" || lower === "claude-fable-5") return "anthropic/claude-fable-5";
   if (lower === "flash" || lower === "thinking" || lower === "non-thinking" || lower === "reasoner") return "deepseek-v4-flash";
@@ -496,7 +522,7 @@ function isKnownProviderId(value: string): value is KnownProviderId {
 }
 
 function normalizeWireApi(value: string | undefined): ProviderWireApi | undefined {
-  if (value === "kimi-native" || value === "openai-chat-completions" || value === "openai-responses" || value === "external-cli") return value;
+  if (value === "kimi-native" || value === "openai-chat-completions" || value === "openai-responses" || value === "anthropic-messages" || value === "external-cli") return value;
   return undefined;
 }
 

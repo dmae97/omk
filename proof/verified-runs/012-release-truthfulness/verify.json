@@ -2,7 +2,7 @@
   "ok": true,
   "schemaVersion": "omk.contract.v1",
   "command": "release-truthfulness:012",
-  "omkVersion": "0.78.6",
+  "omkVersion": "0.78.7",
   "runtimeVersion": "v1.2",
   "commit": "release-truthfulness-tree",
   "runId": "proof-012-release-truthfulness-20260609t000000z",
@@ -10,21 +10,42 @@
   "status": "passed",
   "data": {
     "scenario": "release-truthfulness",
-    "packageVersion": "0.78.6",
+    "packageVersion": "0.78.7",
     "requiredCliBin": "omk",
-    "stableClaim": false
+    "stableClaim": false,
+    "readmeAssertions": "package/bin/proof/package-audit/registry-verification guarded"
   },
   "warnings": [
     "Stable release claim remains blocked until live benchmark and exact-tag CI evidence pass."
   ],
   "errors": [],
   "evidenceRefs": [
-    { "schemaVersion": "omk.evidence.v1", "evidenceId": "012-package-bin-omk", "runId": "proof-012-release-truthfulness-20260609t000000z", "path": "proof/verified-runs/012-release-truthfulness/evidence.jsonl" },
-    { "schemaVersion": "omk.evidence.v1", "evidenceId": "012-version-consistency-gate", "runId": "proof-012-release-truthfulness-20260609t000000z", "path": "proof/verified-runs/012-release-truthfulness/evidence.jsonl" },
-    { "schemaVersion": "omk.evidence.v1", "evidenceId": "012-release-gate-demo-wired", "runId": "proof-012-release-truthfulness-20260609t000000z", "path": "proof/verified-runs/012-release-truthfulness/evidence.jsonl" }
+    {
+      "schemaVersion": "omk.evidence.v1",
+      "evidenceId": "012-package-bin-omk",
+      "runId": "proof-012-release-truthfulness-20260609t000000z",
+      "path": "proof/verified-runs/012-release-truthfulness/evidence.jsonl"
+    },
+    {
+      "schemaVersion": "omk.evidence.v1",
+      "evidenceId": "012-version-consistency-gate",
+      "runId": "proof-012-release-truthfulness-20260609t000000z",
+      "path": "proof/verified-runs/012-release-truthfulness/evidence.jsonl"
+    },
+    {
+      "schemaVersion": "omk.evidence.v1",
+      "evidenceId": "012-release-gate-demo-wired",
+      "runId": "proof-012-release-truthfulness-20260609t000000z",
+      "path": "proof/verified-runs/012-release-truthfulness/evidence.jsonl"
+    }
   ],
   "decisionRefs": [
-    { "schemaVersion": "omk.decision.v1", "decisionId": "012-release-truthfulness-verdict", "runId": "proof-012-release-truthfulness-20260609t000000z", "path": "proof/verified-runs/012-release-truthfulness/decisions.jsonl" }
+    {
+      "schemaVersion": "omk.decision.v1",
+      "decisionId": "012-release-truthfulness-verdict",
+      "runId": "proof-012-release-truthfulness-20260609t000000z",
+      "path": "proof/verified-runs/012-release-truthfulness/decisions.jsonl"
+    }
   ],
   "metadata": {
     "cwd": "[repo-root]",

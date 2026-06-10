@@ -560,7 +560,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
   const headerLines: string[] = [
     "",
     ...rainLines,
-    renderOmkSparkleText("◢█ OMK//CONTROL COCKPIT █◣", {
+    renderOmkSparkleText("◢█ OMK//CONTROL COCKPIT · ROOT ORCHESTRATOR █◣", {
       frame: animFrame,
       colors: [BRAND_HEX.cyan, BRAND_HEX.sparkleWhite, BRAND_HEX.sparkleGold, BRAND_HEX.magenta, BRAND_HEX.mint],
     }),

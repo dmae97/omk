@@ -17,6 +17,8 @@ import { registerSlashCommands } from "../../runtime/slash-commands.js";
 import { registerProviderCommandsV2 } from "./provider-commands.js";
 import { registerWorkflowCommandsV2 } from "./workflow-commands.js";
 import { DEFAULT_AUTHORITY_PROVIDER } from "../../providers/types.js";
+import { getOmkVersionSync } from "../../util/version.js";
+import { OMK_RUNTIME_VERSION } from "../../version.js";
 import type { RequestIntent } from "../../runtime/debloat-nlp.js";
 import type { OutputProfile } from "../../runtime/contracts/command-envelope.js";
 /**
@@ -494,10 +496,11 @@ export class ThemeCommand extends OmkCommand {
  * Register all v2 commands on a Clipanion CLI instance.
  */
 export function createCliV2() {
+  const packageVersion = getOmkVersionSync();
   const cli = new Cli({
-    binaryLabel: "OMK CLI",
+    binaryLabel: "OMK root orchestrator",
     binaryName: "omk",
-    binaryVersion: "1.1.18",
+    binaryVersion: `${packageVersion} (${OMK_RUNTIME_VERSION})`,
   });
 
   cli.register(ChatCommand);

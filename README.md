@@ -39,7 +39,7 @@ Use OMK when one coding agent is not enough: route Codex, OpenCode, Kimi, DeepSe
 - Teams that need MCP-scoped agent execution instead of unrestricted tool access.
 - Agent builders who want routing, fallback, evidence gates, telemetry, and replay.
 
-> Current package source target: `open-multi-agent-kit@0.78.6`.
+> Current package source target: `open-multi-agent-kit@0.78.7`.
 > Public package name: `open-multi-agent-kit` (`@omk/cli` is not the active npm package).
 > Runtime contract family: `v1.2` (contract family, not a stable npm `1.x` release).
 > Release channel: `pre-1.0`.
@@ -63,7 +63,7 @@ omk chat
 
 ## Current release reality
 
-- The public npm line is `open-multi-agent-kit@0.78.x`. The source target is `open-multi-agent-kit@0.78.6`;
+- The public npm line is `open-multi-agent-kit@0.78.x`. The source target is `open-multi-agent-kit@0.78.7`;
   treat npm `latest` as release-truthful only after the tagged release workflow and registry verification both pass.
 - The `v1.2` label in docs is a runtime contract family for the source tree, not a claim that
   an npm `1.2.x` stable release exists.
@@ -88,7 +88,7 @@ Most coding agents optimize for a single prompt/result loop. OMK wraps agent exe
 
 ## OMK//CONTROL visual console
 
-The GitHub visual set presents OMK as a Night City Ops Console: route status, DAG lanes, provider fallback, scoped MCP, evidence gates, and replayable run telemetry. Assets are provenance-covered in [`readmeasset/ASSET_PROVENANCE.md`](readmeasset/ASSET_PROVENANCE.md).
+The GitHub visual set presents OMK as a Night City Ops Console: route status, DAG lanes, provider fallback, scoped MCP, evidence gates, replayable run telemetry, and publish-time assertions. Assets are provenance-covered in [`readmeasset/ASSET_PROVENANCE.md`](readmeasset/ASSET_PROVENANCE.md).
 
 <p align="center">
   <img src="readmeasset/omk_tui.png" alt="OMK//CONTROL terminal dashboard — live DAG lanes, provider routing, MCP health, evidence gates, and telemetry in Night City Ops Console style" width="100%" />
@@ -105,6 +105,10 @@ The GitHub visual set presents OMK as a Night City Ops Console: route status, DA
 <p align="center">
   <img src="readmeasset/omk-core-loop.svg" alt="OMK core loop: goal to DAG plan to evidence to verify to replay" width="100%" />
 </p>
+
+| Control surfaces | Release assertions |
+| ---------------- | ------------------ |
+| <img src="readmeasset/omk-control-surfaces.svg" alt="OMK control surfaces: CLI, provider router, MCP scope, evidence gate, replay ledger, and package audit" /> | <img src="readmeasset/omk-release-assertions.svg" alt="OMK release assertions: package name, CLI bins, release gates, package-safe exclusions, and registry verification" /> |
 
 ## Install
 
@@ -305,11 +309,12 @@ The npm package is intentionally package-safe:
 | Contract          | Value                                                                                                                                                                                                                          |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Package           | [`open-multi-agent-kit`](https://www.npmjs.com/package/open-multi-agent-kit)                                                                                                                                                   |
-| Version           | `0.78.6`                                                                                                                                                                                                                       |
+| Version           | `0.78.7`                                                                                                                                                                                                                       |
 | Runtime contract family | `v1.2`                                                                                                                                                                                                                         |
 | Bins              | `omk`, `omk-project-mcp`, `omk-acp`, `omk-mcp-host`                                                                                                                                                                            |
 | Packaged docs     | `README.md`, `docs/`, `SECURITY.md`, `ROADMAP.md`, `MATURITY.md`, `DESIGN.md`                                                                                                                                                  |
 | Packaged branding | Canonical hero/social/TUI/runtime images plus the curated derivative gallery documented in [`readmeasset/ASSET_INDEX.md`](readmeasset/ASSET_INDEX.md) and [`readmeasset/ASSET_PROVENANCE.md`](readmeasset/ASSET_PROVENANCE.md) |
+| Release assertions | README and package audit assert package name/version, required CLI bins, package-safe file set, local-state exclusions, proof metadata, and registry-verification wording. |
 | Excluded          | source-only tests, scripts, local state, logs, secrets, private runtime directories                                                                                                                                            |
 
 Release checks:
@@ -320,6 +325,14 @@ npm run proof:check
 npm run pack:dry
 npm run audit:package
 ```
+
+What those checks assert before publish:
+
+- `package.json` and `package-lock.json` agree on `open-multi-agent-kit` and the current package version.
+- The npm tarball exposes `omk`, `omk-project-mcp`, `omk-acp`, and `omk-mcp-host` from `dist/` with executable shebangs.
+- README/docs/changelog/release-truthfulness proof metadata mention the same package version and keep `v1.2` scoped to runtime contracts.
+- The packaged file set includes docs, templates, and provenance-covered README assets while excluding source, tests, local `.omk`/`.kimi` state, logs, tarballs, and secret-shaped files.
+- Published-version claims remain conditional until the tagged workflow and npm registry verification both pass.
 
 ## Contract versions
 

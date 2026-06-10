@@ -2,13 +2,20 @@
 
 ## [Unreleased]
 
+## v0.78.7 — README assertions, Fable enablement, and release gates (2026-06-11)
+
 ### Added
 
+- **README/NPM assertion assets** — Added packaged `readmeasset/omk-control-surfaces.svg` and `readmeasset/omk-release-assertions.svg`, wired them into README, asset provenance, asset index, and `assets:check`.
+- **Fable/OpenRouter activation coverage** — Added tests documenting `fable`/`fable-5` alias resolution, OpenRouter advisory routing, and the explicit enable + API-key activation contract.
 - **Opt-in append-only memory durability** — `OMK_MEMORY_DURABILITY=legacy|delta` (default `legacy`). Delta mode uses CRC-framed JSONL append + replay with snapshot compaction, avoiding per-write full serialization. Legacy mode remains byte-identical and the default.
 - **Opt-in sandbox writableRoots enforcement** — `assertWritable` with deepest-existing-ancestor realpath resolution denies symlink escapes outside declared writable roots. Safe-default unrestricted when roots are empty; wired into `buildGatedDispatch` only when enforce, roots, resolver, and path are all present.
 
 ### Changed
 
+- **Release truthfulness assertions** — README now states the exact package/bin/proof/package-audit assertions used before publish and keeps published-version claims conditional on tagged checks plus registry verification.
+- **Provider/runtime metadata** — Added Anthropic Messages wire API support, direct Anthropic provider metadata, Fable/Opus aliases, and max-thinking coverage for Fable/DuckCoding-style routes while preserving advisory boundaries.
+- **Root-orchestrator chrome** — Reworded OMK entry/HUD/cockpit surfaces around root-orchestrator control, dynamic package/runtime version labels, and Rust Forge independent-control copy.
 - **Performance: hot-path optimizations** — `secret-scanner` `getLineColumn` reduced from O(matches × n) to O(n + matches × log lines) via precomputed newline-offset binary search. Memory store search reduced from O(N²) to O(N + E) one-pass content index; `mutateState` reuses a process-local parsed-state cache guarded by mtime/size/ctime/inode. Routing regex cache (~150× fewer recompiles per node). `runtime-router` precomputes capability scores before sort. `control-loop` six filters collapsed to one bucket pass. `cockpit`/`system24`/`terminal-layout` reduced ANSI strip/regex passes.
 
 ### Removed

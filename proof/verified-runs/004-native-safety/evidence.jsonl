@@ -1,1 +1,0 @@
-{"schemaVersion":"omk.evidence.v1","runId":"proof-004-native-safety-20260531t063440z","evidenceId":"command-1-exit","kind":"command-passes","status":"passed","required":true,"observedAt":"2026-05-31T06:34:40Z","command":"npm run native:no-kimi:turn","exitCode":0,"path":"proof/verified-runs/004-native-safety/command-1.out","message":"Command 1 exit code 0"}

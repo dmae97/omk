@@ -182,29 +182,24 @@ const KNOWN_SOFT_ISSUES = new Set([
 ]);
 
 
-function expectedNativePlatformArch() {
-  return `${platform()}-${process.arch}`;
-}
-
-function assertNativeSafety(parsed, label) {
-  const rustSafety = parsed?.data?.rustSafety ?? parsed?.rustSafety;
-  if (typeof rustSafety !== "object" || rustSafety === null) {
-    throw new Error(`${label} missing rustSafety doctor data`);
+function assertDoctorRuntimeContract(parsed, label) {
+  if (parsed?.rustSafety !== undefined || parsed?.data?.rustSafety !== undefined) {
+    throw new Error(`${label} still exposes retired rustSafety doctor data`);
   }
-  const native = String(rustSafety.native ?? "");
-  if (!native.includes("self-test passed")) {
-    throw new Error(`${label} native safety self-test not passing: ${native}`);
+  const security = parsed?.data?.security ?? parsed?.security;
+  if (typeof security !== "object" || security === null) {
+    throw new Error(`${label} missing security doctor data`);
   }
-  if (rustSafety.nativeSource !== "bundled") {
-    throw new Error(`${label} native safety did not resolve from bundled binary: ${rustSafety.nativeSource}`);
+  if (typeof security.childEnvIsolation !== "string" || security.childEnvIsolation.length === 0) {
+    throw new Error(`${label} missing child environment isolation status`);
   }
-  const expected = expectedNativePlatformArch();
-  if (rustSafety.nativePlatformArch !== expected) {
-    throw new Error(`${label} native safety platform mismatch: ${rustSafety.nativePlatformArch} !== ${expected}`);
+  const sandbox = security.sandboxMetadata;
+  if (typeof sandbox !== "object" || sandbox === null || typeof sandbox.enforcement !== "string") {
+    throw new Error(`${label} missing sandbox enforcement metadata`);
   }
 }
 
-const NATIVE_SMOKE_ENV = { OMK_SAFETY_BIN: "" };
+const DOCTOR_SMOKE_ENV = {};
 
 function assertNoUnexpectedIssues(parsed, label) {
   const errors = Array.isArray(parsed.errors) ? parsed.errors : [];
@@ -220,13 +215,13 @@ function assertNoUnexpectedIssues(parsed, label) {
 }
 
 try {
-  const raw = run(localOmkCmd("doctor --json --soft"), installDir, NATIVE_SMOKE_ENV);
+  const raw = run(localOmkCmd("doctor --json --soft"), installDir, DOCTOR_SMOKE_ENV);
   const parsed = JSON.parse(raw);
   if (typeof parsed !== "object" || parsed === null) {
     throw new Error("doctor output is not a JSON object");
   }
   assertNoUnexpectedIssues(parsed, "local omk");
-  assertNativeSafety(parsed, "local omk");
+  assertDoctorRuntimeContract(parsed, "local omk");
   logPass("Local omk doctor --json --soft");
 } catch (err) {
   logFail("Local omk doctor --json --soft", err);
@@ -298,7 +293,6 @@ try {
   const raw = run(localOmkCmd("update check --json --refresh"), installDir, {
     ...isolatedEnv,
     PATH: isolatedPath,
-    OMK_SAFETY_BIN: "",
   });
   const parsed = JSON.parse(raw);
   if (typeof parsed !== "object" || parsed === null) {
@@ -322,14 +316,13 @@ try {
   const raw = run(localOmkCmd("doctor --json --soft"), installDir, {
     ...isolatedEnv,
     PATH: isolatedPath,
-    OMK_SAFETY_BIN: "",
   });
   const parsed = JSON.parse(raw);
   if (typeof parsed !== "object" || parsed === null) {
     throw new Error("doctor output is not a JSON object");
   }
   assertNoUnexpectedIssues(parsed, "isolated-home");
-  assertNativeSafety(parsed, "isolated-home");
+  assertDoctorRuntimeContract(parsed, "isolated-home");
   logPass("Doctor soft smoke under isolated HOME");
 } catch (err) {
   logFail("Doctor soft smoke under isolated HOME", err);
@@ -393,13 +386,13 @@ const projectDir = mkdtempSync(smokeTmpPrefix("omk-smoke-project-"));
 try {
   runSilently("git init", projectDir);
   run(localOmkCmd("init"), projectDir);
-  const raw = run(localOmkCmd("doctor --json --soft"), projectDir, NATIVE_SMOKE_ENV);
+  const raw = run(localOmkCmd("doctor --json --soft"), projectDir, DOCTOR_SMOKE_ENV);
   const parsed = JSON.parse(raw);
   if (typeof parsed !== "object" || parsed === null) {
     throw new Error("doctor output is not a JSON object");
   }
   assertNoUnexpectedIssues(parsed, "Project");
-  assertNativeSafety(parsed, "Project");
+  assertDoctorRuntimeContract(parsed, "Project");
   logPass("Fresh project init smoke");
 } catch (err) {
   logFail("Fresh project init smoke", err);

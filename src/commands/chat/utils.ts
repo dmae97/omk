@@ -10,6 +10,8 @@ import YAML from "yaml";
 import { t } from "../../util/i18n.js";
 import { getActiveRuntimePreset } from "../../util/resource-profile.js";
 import { setBrandPaletteTheme } from "../../brand/palette.js";
+import { getOmkVersionSync } from "../../util/version.js";
+import { OMK_RUNTIME_VERSION } from "../../version.js";
 
 export function mergeTodos(existing: TodoItem[], incoming: TodoItem[]): TodoItem[] {
   const map = new Map<string, TodoItem>();
@@ -112,18 +114,22 @@ export function renderChatIntro(
     }
     lines.push("");
   } else if (brand === "rust-forge") {
-    lines.push(style.rustBold("▣ OMK//RUST-FORGE"));
+    lines.push(style.rustBold("▣ OMK//RUST-FORGE · ROOT ORCHESTRATOR"));
     lines.push(style.gray("  OXIDIZED FORGE ONLINE"));
-    lines.push(style.gray("  Route: hot · Verify: armed · Loop: controlled."));
+    lines.push(style.gray("  OMK independent control: adapters are lanes, evidence is authority."));
+    lines.push(style.gray("  Heat: hot · Anvil: locked · Quench: ready · Loop: controlled."));
     for (const artLine of OMK_SIMPLE_ASCII_ART.split("\n")) {
       lines.push(style.rust(artLine));
     }
     lines.push("");
   } else if (brand !== "plain") {
-    lines.push(style.phosphorBold("◇ OMK//CONTROL"));
+    lines.push(style.phosphorBold("◇ OMK//CONTROL · ROOT ORCHESTRATOR"));
     lines.push(style.gray("  OMK ONLINE"));
     lines.push(style.gray("  Route: online · Verify: armed · Loop: controlled."));
     lines.push("");
+  }
+  if (brand !== "plain") {
+    lines.push(style.gray(`  package v${getOmkVersionSync()} · runtime ${OMK_RUNTIME_VERSION}`));
   }
   lines.push(style.phosphorBold(`▸ ${title}`));
   if (brand !== "plain") {

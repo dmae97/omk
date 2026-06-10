@@ -1,8 +1,8 @@
 {
   "schemaVersion": "omk.proof-bundle.v1",
   "proofId": "012-release-truthfulness",
-  "title": "Release Truthfulness verification bundle",
-  "omkVersion": "0.78.6",
+  "title": "Release Truthfulness and README Assertions verification bundle",
+  "omkVersion": "0.78.7",
   "runtimeVersion": "v1.2",
   "commit": "release-truthfulness-tree",
   "runId": "proof-012-release-truthfulness-20260609t000000z",
@@ -20,17 +20,17 @@
   },
   "verdict": "passed",
   "knownLimitations": [
-    "This bundle proves local release truthfulness metadata and release gate wiring for the current package version.",
+    "This bundle proves local release truthfulness metadata, README assertion wording, and release gate wiring for the current package version.",
     "Stable release still requires CI completion on the exact tagged commit, live benchmark pass, and sandbox violation count equal to zero."
   ],
   "checksums": {
     "proof/verified-runs/012-release-truthfulness/raw-prompt.md": "431abd192b4e409cbe9a37033e858d1f55d4e3fed1f403c153e503e4b113694d",
     "proof/verified-runs/012-release-truthfulness/commands.sh": "ed111e3f850760bca01c371c13bb8f30a02368e8a7c0b82e81cb1b53912bd6aa",
-    "proof/verified-runs/012-release-truthfulness/verify.json": "cec0ea907677948352768180c0181503803c8230cf8b165e33d7018157ca39f3",
+    "proof/verified-runs/012-release-truthfulness/verify.json": "9561226652789c7e2e6136c326f1c17b46b7e28e86259e10bee60884a9c0f02e",
     "proof/verified-runs/012-release-truthfulness/decisions.jsonl": "5c993a63580387e75ac36c1701f2f0e8d98bad96ad0c742a12526e94a9e4ba55",
     "proof/verified-runs/012-release-truthfulness/run-manifest.json": "e464479ee493564cd13a9ff97a1bcfd638df6d7eb0b0c6be91e242628ac89bed",
-    "proof/verified-runs/012-release-truthfulness/evidence.jsonl": "d1a23032e119f78b401f407313de23a8144237de69a2287ac6bc90a70e2dc08c",
+    "proof/verified-runs/012-release-truthfulness/evidence.jsonl": "190d3b3e8c598b654ac7015126a3bb30ebcfbdfd76f9d6a01bcc79c7f0dbe1f4",
     "proof/verified-runs/012-release-truthfulness/limitations.md": "92b1464840fd9dea4cf2a50463c268b8e7e3fc144bf9e2d9123601c89473ca8b",
-    "proof/verified-runs/012-release-truthfulness/sha256sums.txt": "1f4d2f24477373f660bf4db1205dac33386761c8f3b4efc6dd3261026caab593"
+    "proof/verified-runs/012-release-truthfulness/sha256sums.txt": "691a26ef7f027c24568a6d78ea76832fbb2f9fdbf5d52ad1e4a407b72e0a98a4"
   }
 }
