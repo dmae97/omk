@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { statSync, truncateSync } from "node:fs";
+import { closeSync, openSync, readFileSync, statSync, truncateSync, unlinkSync, writeSync } from "node:fs";
 import { open as fsOpen, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { hostname } from "node:os";
 import { dirname, join } from "node:path";
 import type { LocalGraphState, LocalGraphNode, LocalGraphEdge } from "./local-graph-memory-store.js";
 
@@ -654,4 +655,148 @@ export function deltaStatsMatch(a: DeltaFileStats | null, b: DeltaFileStats | nu
     a.snapshotIno === b.snapshotIno &&
     a.deltaSize === b.deltaSize
   );
+}
+
+// ── Cross-process advisory lock (delta mode only) ───────────────────────────
+
+interface LockHolder {
+  pid: number;
+  hostname: string;
+  startedAt: string;
+}
+
+const LOCK_TTL_MS = 30000;
+const LOCK_MAX_WAIT_MS = 30000;
+const LOCK_BASE_BACKOFF_MS = 50;
+const LOCK_MAX_BACKOFF_MS = 1000;
+
+function deltaLockPath(graphPath: string): string {
+  return `${graphPath}.delta.lock`;
+}
+
+function isLockHolderDead(holder: LockHolder): boolean {
+  const started = Date.parse(holder.startedAt);
+  if (Number.isNaN(started)) return true;
+  if (Date.now() - started > LOCK_TTL_MS) return true;
+  if (holder.hostname === hostname()) {
+    try {
+      process.kill(holder.pid, 0);
+      return false;
+    } catch (err) {
+      const code = errorCode(err);
+      if (code === "ESRCH") return true;
+      // EPERM or other errors mean the process exists but we cannot signal it;
+      // treat as alive to stay safe.
+      return false;
+    }
+  }
+  return false;
+}
+
+export async function acquireDeltaLock(graphPath: string, maxWaitMs = LOCK_MAX_WAIT_MS): Promise<void> {
+  const path = deltaLockPath(graphPath);
+  const deadline = Date.now() + maxWaitMs;
+
+  while (true) {
+    try {
+      const record: LockHolder = {
+        pid: process.pid,
+        hostname: hostname(),
+        startedAt: new Date().toISOString(),
+      };
+      const fd = openSync(path, "wx");
+      try {
+        writeSync(fd, JSON.stringify(record));
+      } finally {
+        closeSync(fd);
+      }
+      return;
+    } catch (err) {
+      const code = errorCode(err);
+      if (code !== "EEXIST") throw err;
+
+      let holder: LockHolder | null = null;
+      try {
+        const raw = readFileSync(path, "utf-8");
+        const parsed = JSON.parse(raw) as unknown;
+        if (
+          typeof parsed === "object" &&
+          parsed !== null &&
+          "pid" in parsed &&
+          "hostname" in parsed &&
+          "startedAt" in parsed
+        ) {
+          holder = parsed as LockHolder;
+        }
+      } catch {
+        // unreadable / unparseable → treat as stale below
+      }
+
+      if (holder && isLockHolderDead(holder)) {
+        try {
+          unlinkSync(path);
+        } catch (unlinkErr) {
+          if (errorCode(unlinkErr) !== "ENOENT") throw unlinkErr;
+        }
+        continue;
+      }
+
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `Delta lock acquisition timed out after ${maxWaitMs}ms on ${path}` +
+            (holder ? ` (held by pid=${holder.pid} host=${holder.hostname} since=${holder.startedAt})` : "")
+        );
+      }
+
+      const backoff = Math.min(LOCK_MAX_BACKOFF_MS, LOCK_BASE_BACKOFF_MS * (1 + Math.random()));
+      await new Promise<void>((resolve) => setTimeout(resolve, backoff));
+    }
+  }
+}
+
+export function releaseDeltaLock(graphPath: string): void {
+  const path = deltaLockPath(graphPath);
+  let holder: LockHolder | null = null;
+  try {
+    const raw = readFileSync(path, "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "pid" in parsed &&
+      "hostname" in parsed &&
+      "startedAt" in parsed
+    ) {
+      holder = parsed as LockHolder;
+    }
+  } catch {
+    return;
+  }
+
+  if (holder && (holder.pid !== process.pid || holder.hostname !== hostname())) {
+    return;
+  }
+
+  try {
+    unlinkSync(path);
+  } catch (err) {
+    if (errorCode(err) !== "ENOENT") throw err;
+  }
+}
+
+export async function withDeltaLock<T>(
+  graphPath: string,
+  fn: () => Promise<T>,
+  env: NodeJS.ProcessEnv = process.env,
+  maxWaitMs = LOCK_MAX_WAIT_MS
+): Promise<T> {
+  if (resolveDurabilityMode(env) === "legacy") {
+    return fn();
+  }
+  await acquireDeltaLock(graphPath, maxWaitMs);
+  try {
+    return await fn();
+  } finally {
+    releaseDeltaLock(graphPath);
+  }
 }
