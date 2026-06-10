@@ -454,7 +454,7 @@ Provider routing and graph viewing are no longer purely future work:
 ### P0: release and contract gates
 
 - Done: YAML validation now runs in local \`verify\` plus CI/smoke workflows.
-- Done: package dry-pack, package audit, tarball smoke, native safety build, and release matrix gates were re-verified against v1.1.17 artifacts.
+- Done: package dry-pack, package audit, tarball smoke, and release matrix gates were re-verified against v1.1.17 artifacts.
 - Done: provider/deepseek and screenshot JSON command contracts gained hermetic regression tests.
 - Done: current AGENTS/init templates and packaged workflow skills were aligned with the active skills/MCP/agents/harness surface, including all generated agent MCP/skills/hooks flags and parallel subagent orchestration guidance.
 - Remaining: lock broader provider fallback metadata with tests for rate limit, timeout, and Kimi fallback variants.
@@ -498,7 +498,7 @@ Provider routing and graph viewing are no longer purely future work:
 | v0.4 | Google DESIGN.md integration, Stitch skills installer, screenshot UI review, Spec Kit planning + DAG execution, agent registry, project index, run summary |
 | v0.5 | MCP project server, plugin pack, CI agent mode |
 | v1.1.6 | provider/deepseek commands, provider policy flags, graph view, goal lifecycle, expanded run history and update JSON |
-| v1.1.9 | chat harness manifest, capability DAG lanes, Rust native safety loader, Windows clipboard screenshot bridge, release native matrix |
+| v1.1.9 | chat harness manifest, capability DAG lanes, Windows clipboard screenshot bridge, release matrix |
 | v1.1.12 | Replay system, skill assigner, decision trace coverage, evidence gates, and repair policy |
 | v1.1.13 | Bundled MCP server entrypoints, ACP/host transport groundwork, deployment-ready package metadata |
 | v1.1.14 | Current harness docs, external-inspired workflow skills, and release-safe public wording |

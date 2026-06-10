@@ -9,7 +9,6 @@ export type ProofBundleScenario =
   | "graph-audit"
   | "example-generation"
   | "doctor-provider"
-  | "native-safety"
   | "contract-version-smoke";
 
 export type ProofBundleVerdict = "passed" | "failed" | "partial";

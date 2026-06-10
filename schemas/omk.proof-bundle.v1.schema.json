@@ -14,7 +14,7 @@
     "commit": { "type": "string", "minLength": 1 },
     "runId": { "type": "string", "minLength": 1 },
     "providerPolicy": { "type": "string", "minLength": 1 },
-    "scenario": { "enum": ["no-kimi-smoke", "evidence-block", "fallback-route", "dag-dependent-block", "replay-inspect", "graph-audit", "example-generation", "doctor-provider", "native-safety", "contract-version-smoke"] },
+    "scenario": { "enum": ["no-kimi-smoke", "evidence-block", "fallback-route", "dag-dependent-block", "replay-inspect", "graph-audit", "example-generation", "doctor-provider", "contract-version-smoke"] },
     "files": {
       "type": "object",
       "additionalProperties": { "type": "string", "minLength": 1 },

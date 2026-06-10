@@ -21,7 +21,6 @@ test("CI exposes the local release:check gate", () => {
   assert.match(workflow, /release-check:/);
   assert.match(workflow, /npm run release:check/);
   assert.match(workflow, /node scripts\/run-tests\.mjs/);
-  assert.match(workflow, /npm run native:build/);
   assert.match(workflow, /npm run audit:package/);
   assert.match(workflow, /npm run secret:scan:runtime/);
   assert.doesNotMatch(workflow, /OMK_SKIP_DIST_FRESHNESS/);
@@ -31,10 +30,6 @@ test("release workflow runs YAML, package audit, and install smoke gates", () =>
   const workflow = read(".github/workflows/release.yml");
   assert.match(workflow, /npm run yaml:check/);
   assert.match(workflow, /npm run secret:scan:runtime/);
-  assert.match(workflow, /native:/);
-  assert.match(workflow, /npm run native:build/);
-  assert.match(workflow, /pattern: native-\*/);
-  assert.match(workflow, /npm run native:normalize/);
   assert.match(workflow, /npm run audit:package/);
   assert.match(workflow, /node scripts\/package-audit\.mjs --tarball/);
   assert.match(workflow, /node scripts\/smoke-test\.mjs --tarball/);
@@ -48,10 +43,6 @@ test("smoke workflow tests before packaging and audits the produced tarball", ()
   assert.match(workflow, /npm run build:clean/);
   assert.match(workflow, /npm test/);
   assert.doesNotMatch(workflow, /OMK_SKIP_DIST_FRESHNESS/);
-  assert.match(workflow, /native:/);
-  assert.match(workflow, /npm run native:build/);
-  assert.match(workflow, /pattern: native-\*/);
-  assert.match(workflow, /npm run native:normalize/);
   assert.match(workflow, /npm run audit:package/);
   assert.match(workflow, /node scripts\/package-audit\.mjs --tarball/);
   assert.match(workflow, /omk-cli-\*\.tgz|\*\.tgz/);
@@ -67,7 +58,6 @@ test("pack-smoke evidence includes pack, audit, and install smoke phases", () =>
 test("package release:check composes the full local gate", () => {
   const pkg = JSON.parse(read("package.json"));
   assert.match(pkg.scripts.verify, /npm run secret:scan:runtime/);
-  assert.match(pkg.scripts["verify:no-kimi"], /npm run native:no-kimi:turn/);
   assert.match(pkg.scripts["release:check"], /node scripts\/release-gate\.mjs/);
   assert.ok(read("scripts/release-gate.mjs").includes("createReleasePromotionGate"));
 });

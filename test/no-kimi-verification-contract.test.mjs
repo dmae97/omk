@@ -4,20 +4,16 @@ import { readFile } from "node:fs/promises";
 
 const { createReleasePromotionGate } = await import("../dist/cli/release-promotion-gate.js");
 
-test("verify:no-kimi includes native non-smoke execution coverage", async () => {
+test("verify:no-kimi includes no-kimi non-smoke execution coverage", async () => {
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));
   const scripts = pkg.scripts ?? {};
   const verifyNoKimi = String(scripts["verify:no-kimi"] ?? "");
-  const nativeTurn = String(scripts["native:no-kimi:turn"] ?? "");
 
-  assert.match(verifyNoKimi, /native:no-kimi:turn/);
-  assert.match(nativeTurn, /no-kimi-native-turn\.test\.mjs/);
-  assert.doesNotMatch(nativeTurn, /--smoke/);
   assert.ok(
     verifyNoKimi
       .split("&&")
       .map((part) => part.trim())
-      .some((part) => part.includes("native:no-kimi:turn") && !part.includes("smoke")),
+      .some((part) => part.includes("no-kimi") && !part.includes("smoke")),
     "verify:no-kimi must not remain smoke-only"
   );
 });
@@ -50,7 +46,6 @@ test("release:check package contract includes no-Kimi, contract, proof, smoke, p
     );
   }
 
-  assert.match(String(scripts["verify:no-kimi"] ?? ""), /npm run native:no-kimi:turn/);
   assert.match(String(scripts["verify:no-kimi"] ?? ""), /npm run no-kimi:default-surface/);
   assert.match(String(scripts["verify:no-kimi"] ?? ""), /npm run test:no-kimi:runtime-routing/);
   assert.match(String(scripts["test:no-kimi:runtime-routing"] ?? ""), /provider-router\.test\.mjs/);

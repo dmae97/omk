@@ -25,7 +25,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
       - run: npm rebuild
       - run: npm run lint
@@ -39,7 +38,6 @@ jobs:
         run: npm run assets:check
       - run: npm run proof:check
       - run: npm run test
-      - run: npm run native:build
       - run: npm run audit:package
 
   verify-no-kimi:
@@ -147,8 +145,6 @@ jobs:
             failed-tests.txt
             test-summary.json
           if-no-files-found: ignore
-      - uses: dtolnay/rust-toolchain@stable
-      - run: npm run native:build
       - run: npm run audit:package
 
   release-check:
@@ -159,7 +155,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
       - run: npm rebuild
       - run: npm run release:check

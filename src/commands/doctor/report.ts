@@ -19,7 +19,6 @@ export function emitDoctorJsonReport(
   const find = (name: string) => allResults.find((r) => r.name === name);
   const findMsg = (name: string) => find(name)?.message ?? null;
   const findOk = (name: string) => find(name)?.status === "ok";
-  const findMeta = (name: string, key: string) => find(name)?.metadata?.[key] ?? null;
 
   const warnings = allResults
     .filter((r) => r.status === "warn")
@@ -96,16 +95,7 @@ export function emitDoctorJsonReport(
       sandboxEnforcement: findMsg("Sandbox Enforcement"),
       sandboxMetadata: find("Sandbox Enforcement")?.metadata ?? null,
     },
-    rustSafety: {
-      cargo: findMsg("Rust Cargo"),
-      rustc: findMsg("Rust Compiler"),
-      crate: findMsg("Rust Safety Crate"),
-      native: findMsg("Rust Safety Native"),
-      nativeSource: findMeta("Rust Safety Native", "source"),
-      nativePlatformArch: findMeta("Rust Safety Native", "platformArch"),
-      nativeBuiltFromSource: findMeta("Rust Safety Native", "builtFromSource"),
-      nativePath: findMeta("Rust Safety Native", "path"),
-    },
+
   };
   const output = {
     ok: errors.length === 0,

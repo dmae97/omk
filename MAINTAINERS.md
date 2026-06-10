@@ -8,7 +8,7 @@
 
 1. Ensure CI passes on the `main` branch.
 2. Update `CHANGELOG.md` with release notes.
-3. Run local gates: `npm run verify && npm run native:build && npm run audit:package`.
+3. Run local gates: `npm run verify && npm run audit:package`.
 4. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 5. The Release workflow handles the rest.
 

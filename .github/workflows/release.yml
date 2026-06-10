@@ -42,8 +42,6 @@ jobs:
       - run: npm run version:check
       - run: npm run proof:check
       - run: npm run verify:no-kimi
-      - uses: dtolnay/rust-toolchain@stable
-      - run: npm run rust:check
       - name: Run tests
         run: |
           set -o pipefail
@@ -55,33 +53,9 @@ jobs:
           name: test-output-release
           path: test-output.log
 
-  native:
-    name: Native Safety (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci --ignore-scripts
-      - run: npm rebuild
-      - uses: dtolnay/rust-toolchain@stable
-      - run: npm run native:build
-      - name: Upload native safety artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-${{ matrix.os }}
-          path: dist/native
-          if-no-files-found: error
-
   package:
     runs-on: ubuntu-latest
-    needs: [quality, native]
+    needs: [quality]
     outputs:
       tarball: ${{ steps.pack.outputs.tarball }}
     steps:
@@ -93,14 +67,6 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm rebuild
       - run: npm run build:clean
-      - name: Download native safety artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: native-*
-          path: dist/native
-          merge-multiple: true
-      - name: Normalize native safety artifact modes
-        run: npm run native:normalize
       - run: npm run audit:package
       - name: Pack tarball
         id: pack

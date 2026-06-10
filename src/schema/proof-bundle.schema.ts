@@ -9,7 +9,6 @@ export const ProofBundleScenarioSchema = z.enum([
   "replay-inspect",
   "example-generation",
   "doctor-provider",
-  "native-safety",
   "contract-version-smoke",
 ]);
 

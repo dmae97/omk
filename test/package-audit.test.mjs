@@ -17,11 +17,7 @@ import {
   validateMarkdownLinks,
   validateTemplateAgentReferences,
   validateSizeBudgets,
-  validateNativeSafety,
   modeFromTarPermissions,
-  nativePlatformArch,
-  nativeBinaryName,
-  expectedNativeSafetyPath,
   globMatch,
   parseMarkdownLocalLinks,
   resolveLink,
@@ -444,46 +440,6 @@ describe("globMatch", () => {
   it("matches double star suffix", () => {
     assert.ok(globMatch("**/*.log", "logs/debug.log"));
     assert.ok(globMatch("**/*.log", "a/b/c.log"));
-  });
-});
-
-// ---------------------------------------------------------------------------
-// validateNativeSafety
-// ---------------------------------------------------------------------------
-
-describe("validateNativeSafety", () => {
-  it("computes platform-arch native paths", () => {
-    assert.strictEqual(nativePlatformArch("linux", "x64"), "linux-x64");
-    assert.strictEqual(nativePlatformArch("darwin", "arm64"), "darwin-arm64");
-    assert.strictEqual(nativeBinaryName("win32"), "omk-safety.exe");
-    assert.strictEqual(expectedNativeSafetyPath("win32", "x64"), "dist/native/win32-x64/omk-safety.exe");
-  });
-
-  it("passes when current platform native binary is packed", () => {
-    const files = [makeFile("dist/native/linux-x64/omk-safety", 100, 0o755)];
-    const result = validateNativeSafety(files, "linux", "x64");
-    assert.strictEqual(result.errors.length, 0);
-  });
-
-  it("fails when non-Windows native binary is not executable", () => {
-    const files = [makeFile("dist/native/linux-x64/omk-safety", 100, 0o644)];
-    const result = validateNativeSafety(files, "linux", "x64");
-    assert.ok(result.errors.some((e) => e.includes("not executable")));
-  });
-
-  it("fails when current platform native binary is missing", () => {
-    const files = [makeFile("dist/cli.js")];
-    const result = validateNativeSafety(files, "darwin", "arm64");
-    assert.ok(result.errors.some((e) => e.includes("dist/native/darwin-arm64/omk-safety")));
-  });
-
-  it("rejects unexpected native layout entries", () => {
-    const files = [
-      makeFile("dist/native/linux-x64/omk-safety", 100, 0o755),
-      makeFile("dist/native/omk-safety", 100, 0o755),
-    ];
-    const result = validateNativeSafety(files, "linux", "x64");
-    assert.ok(result.errors.some((e) => e.includes("Unexpected native safety layout")));
   });
 });
 

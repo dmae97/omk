@@ -2,7 +2,6 @@ import { join, resolve, isAbsolute, dirname } from "path";
 import { execSync } from "child_process";
 import YAML from "yaml";
 import { checkCommand, runShell } from "../../util/shell.js";
-import { runOmkSafetySelfTest } from "../../util/native-safety.js";
 import { readdir } from "fs/promises";
 import { pathExists, readTextFile, getUserHome } from "../../util/fs.js";
 import { isGitAvailable, getCurrentBranch, getGitStatus } from "../../util/git.js";
@@ -244,13 +243,10 @@ export async function runtimeChecks(resources: OmkResourceSettings): Promise<Che
 // ── Toolchain ─────────────────────────────────────────────────
 
 export async function toolchainChecks(root: string): Promise<CheckResult[]> {
-  const [gitAvailable, jqExists, tmuxExists, cargoExists, rustcExists, rustSafetyCrateExists] = await Promise.all([
+  const [gitAvailable, jqExists, tmuxExists] = await Promise.all([
     isGitAvailable(),
     checkCommand("jq"),
     checkCommand("tmux"),
-    checkCommand("cargo"),
-    checkCommand("rustc"),
-    pathExists(join(root, "crates", "omk-safety", "Cargo.toml")),
   ]);
 
   const results: CheckResult[] = [];
@@ -340,26 +336,6 @@ export async function toolchainChecks(root: string): Promise<CheckResult[]> {
     message: tmuxExists ? t("doctor.tmuxInstalled") : t("doctor.tmuxRecommend"),
   });
 
-  results.push({
-    name: "Rust Cargo",
-    status: cargoExists ? "ok" : "info",
-    message: cargoExists ? "cargo available" : "cargo not found — Rust safety harness checks will be skipped",
-  });
-
-  results.push({
-    name: "Rust Compiler",
-    status: rustcExists ? "ok" : "info",
-    message: rustcExists ? "rustc available" : "rustc not found — Rust safety harness checks will be skipped",
-  });
-
-  results.push({
-    name: "Rust Safety Crate",
-    status: rustSafetyCrateExists ? "ok" : "info",
-    message: rustSafetyCrateExists ? "crates/omk-safety configured" : "no Rust safety crate configured",
-  });
-
-  results.push(await rustSafetyNativeCheck(root));
-
   const pkgMgr = detectPackageManager(root);
   results.push({ name: "Pkg Manager", status: "ok", message: `${pkgMgr} detected` });
 
@@ -371,22 +347,6 @@ export async function toolchainChecks(root: string): Promise<CheckResult[]> {
   });
 
   return results;
-}
-
-export async function rustSafetyNativeCheck(root: string): Promise<CheckResult> {
-  const result = await runOmkSafetySelfTest({ root });
-  return {
-    name: "Rust Safety Native",
-    status: result.status,
-    message: result.message,
-    metadata: {
-      source: result.source,
-      platformArch: result.platformArch,
-      builtFromSource: result.builtFromSource,
-      path: result.path,
-      checks: result.checks,
-    },
-  };
 }
 
 // ── Primary Kimi API runtime ───────────────────────────────────────

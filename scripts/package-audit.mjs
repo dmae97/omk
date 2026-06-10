@@ -113,7 +113,7 @@ export const FORBIDDEN_PATTERNS = [
 export const SIZE_BUDGETS = {
   tarballMb: 35,
   unpackedMb: 40,
-  // 0.78 packages ship compiled dist, native safety, docs, templates, and skill packs.
+  // 0.78 packages ship compiled dist, docs, templates, and skill packs.
   // Keep this high enough for intentional packaged surface growth but low enough
   // to catch accidental source/test/archive inclusion.
   entryCount: 1500,
@@ -360,41 +360,6 @@ export function validateFilesAllowlist(localFiles, pathSet) {
   return { errors };
 }
 
-
-export function nativePlatformArch(platform = process.platform, arch = process.arch) {
-  return `${platform}-${arch}`;
-}
-
-export function nativeBinaryName(platform = process.platform) {
-  return platform === "win32" ? "omk-safety.exe" : "omk-safety";
-}
-
-export function expectedNativeSafetyPath(platform = process.platform, arch = process.arch) {
-  return `dist/native/${nativePlatformArch(platform, arch)}/${nativeBinaryName(platform)}`;
-}
-
-export function validateNativeSafety(files, platform = process.platform, arch = process.arch) {
-  const errors = [];
-  const pathSet = new Set(files.map((f) => toPosix(f.path || "")));
-  const expected = expectedNativeSafetyPath(platform, arch);
-  if (!pathSet.has(expected)) {
-    errors.push(`Native safety binary missing for current platform: ${expected}. Run npm run native:build before packing.`);
-  }
-
-  const nativeEntries = files.filter((f) => toPosix(f.path || "").startsWith("dist/native/"));
-  for (const file of nativeEntries) {
-    const entry = toPosix(file.path || "");
-    if (!/^dist\/native\/[^/]+-[^/]+\/omk-safety(?:\.exe)?$/.test(entry)) {
-      errors.push(`Unexpected native safety layout: ${entry}`);
-      continue;
-    }
-    if (!entry.endsWith(".exe") && typeof file.mode === "number" && (file.mode & 0o111) === 0) {
-      errors.push(`Native safety binary not executable: ${entry}. Run npm run native:normalize before packing downloaded artifacts.`);
-    }
-  }
-
-  return { errors };
-}
 
 export function validateBinTruth(binEntries, pathSet) {
   const errors = [];
@@ -811,8 +776,6 @@ export function main(tarballPath) {
     ? Object.entries(localPkg.bin)
     : [];
   failed = runValidator("BIN", validateBinTruth(binEntries, pathSet), "BIN") || failed;
-  failed = runValidator("NATIVE_SAFETY", validateNativeSafety(files), "NATIVE_SAFETY") || failed;
-
   // Dist drift
   if (existsSync("src") && existsSync("dist")) {
     const srcFiles = walkDir("src");
@@ -874,7 +837,6 @@ export function main(tarballPath) {
     `- Size: ${sizeMb.toFixed(2)} MB (compressed) / ${unpackedMb.toFixed(2)} MB (unpacked)`,
     `- Entries: ${entryCount}`,
     `- Required: ${REQUIRED_ENTRIES.join(", ")}`,
-    `- Native safety: ${expectedNativeSafetyPath()}`,
     `- Forbidden patterns: ${FORBIDDEN_PATTERNS.length} rules`,
     `- Result: ${failed ? "FAILED" : "PASSED"}`,
   ];

@@ -58,9 +58,9 @@ const ALGORITHM_COVERAGE_TOPOLOGY = Object.freeze([
   },
   {
     name: "minimal-verified-demo-run",
-    proofIds: ["001-no-kimi-codex-smoke", "004-native-safety", "009-no-kimi-smoke"],
-    scenarios: ["no-kimi-smoke", "native-safety"],
-    tests: ["no-kimi-native-turn", "native-safety-loader", "runtime-bootstrap"],
+    proofIds: ["001-no-kimi-codex-smoke", "009-no-kimi-smoke"],
+    scenarios: ["no-kimi-smoke"],
+    tests: ["no-kimi-native-turn", "runtime-bootstrap"],
     cliTokens: ["demo", "doctor", "verify", "init"],
   },
   {
