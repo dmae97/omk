@@ -142,17 +142,17 @@ async function main() {
     let body = raw.replace(/^<!-- derived-from:[^>]*-->\r?\n?/, "");
     let replaced = 0;
     body = body.replace(colorAttrRe, (full, attr, hex) => {
-      const token = hexToToken.get(hex.toUpperCase());
-      if (!token) {
+      const colorToken = hexToToken.get(hex.toUpperCase());
+      if (!colorToken) {
         throw new Error(
           `${rel}: color ${hex} (${attr}) has no theme token mapping — extend the theme or the migration anchors`,
         );
       }
-      const value = theme.primitives[token];
+      const value = theme.primitives[colorToken];
       if (typeof value !== "string") {
-        throw new Error(`${rel}: token "${token}" missing from theme.primitives`);
+        throw new Error(`${rel}: token "${colorToken}" missing from theme.primitives`);
       }
-      if (!backgrounds.includes(token)) usedFgTokens.add(token);
+      if (!backgrounds.includes(colorToken)) usedFgTokens.add(colorToken);
       replaced += 1;
       return `${attr}="${value}"`;
     });

@@ -20,6 +20,7 @@ const SYNTHETIC_SECRET_FIXTURE_FILES = new Set([
   "test/secret-scanner.test.mjs",
   "test/secret-scan-runtime.test.mjs",
   "test/cockpit-render.test.mjs",
+  "test/cockpit-render-state.test.mjs",
 ]);
 
 const RUNTIME_TRUST_BOUNDARY_FILES = [
