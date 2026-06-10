@@ -75,7 +75,7 @@ Scope: docs reorg verification, ignore-file hygiene, junk quarantine, AGENTS.md/
 ### .dockerignore (new, untracked)
 Content:
 - Excludes `.git`, `node_modules`
-- Excludes OMK/Kimi runtime local state (`.kimi/`, `.omk/`, `.pi/`, `.omx/`)
+- Excludes OMK/Kimi runtime local state (`.kimi/`, `.omk/`, `.omx/`, and similar runtime dot-dirs)
 - Excludes persona stack filenames anywhere (`**/SOUL.md`, `**/JAILBREAK.md`, etc.)
 - Excludes build caches (`dist/`, `coverage/`, `.nyc_output/`, `*.log`)
 **Workstream:** Docker build-context hygiene + persona deploy exclusion.
