@@ -52,7 +52,7 @@
 		}
 	},
 	"bin": {
-		"omk-ai": "dist/cli.js"
+		"omk-ai": "./dist/cli.js"
 	},
 	"files": [
 		"dist",

@@ -13,7 +13,6 @@ const packages = [
 
 const dryRun = process.argv.includes("--dry-run");
 const unknownArgs = process.argv.slice(2).filter((arg) => arg !== "--dry-run");
-const provenanceEnabled = process.env.OMK_NPM_PROVENANCE === "1" || process.env.GITHUB_ACTIONS === "true";
 
 if (unknownArgs.length > 0) {
 	console.error(`Usage: node scripts/publish.mjs [--dry-run]`);
@@ -89,9 +88,6 @@ if (versions.length !== 1) {
 }
 
 console.log(`Publishing pi packages at ${versions[0]}${dryRun ? " (dry run)" : ""}\n`);
-if (!dryRun && !provenanceEnabled) {
-	console.log("Skipping npm provenance for local publish; set OMK_NPM_PROVENANCE=1 to force it.\n");
-}
 
 for (const pkg of packages) {
 	const version = packageVersions.get(pkg.name);
@@ -114,8 +110,6 @@ for (const pkg of packages) {
 		continue;
 	}
 
-	const publishArgs = ["publish", "--access", "public", "--ignore-scripts"];
-	if (provenanceEnabled) publishArgs.splice(3, 0, "--provenance");
-	run("npm", publishArgs, { cwd: pkg.directory });
+	run("npm", ["publish", "--access", "public", "--provenance", "--ignore-scripts"], { cwd: pkg.directory });
 	console.log();
 }
