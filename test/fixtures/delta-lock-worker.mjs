@@ -1,4 +1,4 @@
-import { appendDelta, loadStateViaDelta, setupDeltaMode, withDeltaLock } from "../../src/memory/graph-delta-log.ts";
+import { appendDelta, loadStateViaDelta, setupDeltaMode, withDeltaLock } from "../../dist/memory/graph-delta-log.js";
 
 const graphPath = process.argv[2];
 const workerId = process.argv[3];
