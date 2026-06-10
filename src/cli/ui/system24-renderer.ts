@@ -79,6 +79,17 @@ const BORDER_BR = "┘";
 const BORDER_ML = "├";
 const BORDER_MR = "┤";
 
+// ── Hoisted regex constants (avoid per-call compilation) ───────────────────
+
+const RE_HEADER = /^(#{1,3})\s+(.+)$/;
+const RE_LIST_ITEM = /^(\s*)[-*]\s+(.+)$/;
+const RE_HR = /^[-*_]{3,}$/;
+const RE_BOLD_STAR = /\*\*(.+?)\*\*/g;
+const RE_BOLD_UNDER = /__(.+?)__/g;
+const RE_ITALIC = /(?<!\w)\*(.+?)\*(?!\w)/g;
+const RE_INLINE_CODE = /`([^`]+)`/g;
+const RE_LINK = /\[([^\]]+)\]\([^)]+\)/g;
+
 // ── Layout Helpers ─────────────────────────────────────────────────────────
 
 interface WritableStreamLike {
@@ -108,6 +119,10 @@ function countRows(chunk: string): number {
 
 function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
+export function visibleLenForTest(s: string): number {
+  return stripAnsi(s).length;
 }
 
 function visibleLen(s: string): number {
@@ -160,12 +175,24 @@ function renderPanelDivider(c: System24Palette, width: number, label?: string): 
   return c.border + BORDER_ML + SEP_CHAR.repeat(inner) + BORDER_MR + RST;
 }
 
+export function renderPanelLineForTest(c: System24Palette, content: string, width: number): string {
+  return renderPanelLine(c, content, width);
+}
+
 function renderPanelLine(c: System24Palette, content: string, width: number): string {
   const inner = width - 2;
-  const safeContent = visibleLen(content) > inner
-    ? `${stripAnsi(content).slice(0, Math.max(0, inner - 1))}…`
-    : content;
-  const padded = padRight(safeContent, inner);
+  const plain = stripAnsi(content);
+  const vLen = plain.length;
+  let safeContent: string;
+  let safeVLen: number;
+  if (vLen > inner) {
+    safeContent = plain.slice(0, Math.max(0, inner - 1)) + "…";
+    safeVLen = inner; // inner-1 chars + "…" (1 wide) = inner
+  } else {
+    safeContent = content;
+    safeVLen = vLen;
+  }
+  const padded = safeVLen < inner ? safeContent + " ".repeat(inner - safeVLen) : safeContent;
   return c.border + BORDER_V + RST + padded + c.border + BORDER_V + RST;
 }
 
@@ -194,16 +221,16 @@ function renderCodeBlock(c: System24Palette, codeLines: string[], lang: string, 
 
 // ── Inline Markdown (system24 style) ───────────────────────────────────────
 
+export function renderInlineForTest(c: System24Palette, text: string): string {
+  return renderInline(c, text);
+}
+
 function renderInline(c: System24Palette, text: string): string {
-  // Bold
-  let s = text.replace(/\*\*(.+?)\*\*/g, (_, m) => BOLD + c.text1 + m + RST);
-  s = s.replace(/__(.+?)__/g, (_, m) => BOLD + c.text1 + m + RST);
-  // Italic
-  s = s.replace(/(?<!\w)\*(.+?)\*(?!\w)/g, (_, m) => ITALIC + c.text3 + m + RST);
-  // Inline code
-  s = s.replace(/`([^`]+)`/g, (_, m) => c.bg3 + c.text1 + " " + m + " " + RST);
-  // Links
-  s = s.replace(/\[([^\]]+)\]\([^)]+\)/g, (_, m) => c.cyan + m + RST);
+  let s = text.replace(RE_BOLD_STAR, (_, m) => BOLD + c.text1 + m + RST);
+  s = s.replace(RE_BOLD_UNDER, (_, m) => BOLD + c.text1 + m + RST);
+  s = s.replace(RE_ITALIC, (_, m) => ITALIC + c.text3 + m + RST);
+  s = s.replace(RE_INLINE_CODE, (_, m) => c.bg3 + c.text1 + " " + m + " " + RST);
+  s = s.replace(RE_LINK, (_, m) => c.cyan + m + RST);
   return s;
 }
 
@@ -478,7 +505,7 @@ export class System24Renderer implements CliRenderer {
           }
 
           // Headers
-          const hMatch = line.match(/^(#{1,3})\s+(.+)$/);
+          const hMatch = line.match(RE_HEADER);
           if (hMatch) {
             const level = hMatch[1].length;
             const text = hMatch[2];
@@ -488,13 +515,13 @@ export class System24Renderer implements CliRenderer {
             continue;
           }
           // List items
-          const lMatch = line.match(/^(\s*)[-*]\s+(.+)$/);
+          const lMatch = line.match(RE_LIST_ITEM);
           if (lMatch) {
             this.writeOut(renderPanelLine(c, "  " + c.accent + "◆" + RST + " " + renderInline(c, lMatch[2]), w) + "\n");
             continue;
           }
           // Horizontal rule
-          if (/^[-*_]{3,}$/.test(line.trim())) {
+          if (RE_HR.test(line.trim())) {
             this.writeOut(renderPanelLine(c, "  " + c.text5 + SEP_CHAR.repeat(Math.min(w - 6, 40)) + RST, w) + "\n");
             continue;
           }

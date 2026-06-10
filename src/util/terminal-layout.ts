@@ -108,7 +108,11 @@ export function fitHeight(lines: string[], height?: number): string[] {
 
 /** Wrap lines in a themed box panel. */
 export function panel(title: string, lines: string[], width: number): string {
-  const processed = lines.map((line) => padEndVisible(truncateLine(line, width), width));
+  const processed = lines.map((line) => {
+    const truncated = truncateLine(line, width);
+    const vw = visibleTerminalWidth(truncated);
+    return vw < width ? truncated + " ".repeat(width - vw) : truncated;
+  });
   return box(processed, title || undefined);
 }
 
