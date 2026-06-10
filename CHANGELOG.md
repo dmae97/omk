@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## v0.78.8 — persona-token surface cleanup and CI-gated hotfix (2026-06-11)
+
+### Fixed
+
+- Removed exact legacy persona-token strings from source, proof notes, ignore-file comments, doctor allowlists, tests, and published `dist` output while retaining bracketed deploy-exclusion globs and runtime guard coverage.
+- Extended the persona isolation guard to scan publishable artifacts plus tracked source paths for exact legacy identity/override tokens before release.
+
+### Notes
+
+- Supersedes `0.78.7` for package consumers because `0.78.7` still exposed guard-only filename strings in the npm tarball.
+- Stable release claims remain gated on exact-tag CI and registry verification.
+
 ## v0.78.7 — README assertions, Fable enablement, and release gates (2026-06-11)
 
 ### Added

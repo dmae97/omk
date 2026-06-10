@@ -4,15 +4,11 @@ dist/**/*.d.ts.map
 # Deploy-Exclusion Guard (Lane 1): belt-and-suspenders persona exclusions.
 # .kimi/ and .omk/ are already outside the package.json `files` whitelist, but
 # block persona filenames explicitly in case they ever land in a published dir.
-SOUL.md
-JAILBREAK.md
-soul.md
-jailbreak.md
+[Ss][Oo][Uu][Ll].md
+[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk].md
 unrestricted-orchestrator.yaml
 persona-manifest.json
-**/SOUL.md
-**/JAILBREAK.md
-**/soul.md
-**/jailbreak.md
+**/[Ss][Oo][Uu][Ll].md
+**/[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk].md
 **/unrestricted-orchestrator.yaml
 **/persona-manifest.json

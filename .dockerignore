@@ -1,5 +1,5 @@
-# Deploy-Exclusion Guard (Lane 1): keep runtime/local state and the
-# ENI/SOUL/JAILBREAK persona stack out of every docker build context.
+# Deploy-Exclusion Guard (Lane 1): keep runtime/local state and
+# legacy persona surfaces out of every docker build context.
 .git
 node_modules
 
@@ -10,10 +10,8 @@ node_modules
 .omx/
 
 # Persona stack filenames anywhere in the build context
-**/SOUL.md
-**/JAILBREAK.md
-**/soul.md
-**/jailbreak.md
+**/[Ss][Oo][Uu][Ll].md
+**/[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk].md
 **/unrestricted-orchestrator.yaml
 **/persona-manifest.json
 

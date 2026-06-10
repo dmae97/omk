@@ -145,13 +145,11 @@ desktop.ini
 
 # Deploy-Exclusion Guard (Lane 1): re-ignore persona stack even under templates/.
 # These MUST come AFTER the templates/.omk and templates/.kimi negations above so
-# the ENI/SOUL/JAILBREAK persona stack can never be tracked or published.
-templates/.kimi/SOUL.md
-templates/.kimi/JAILBREAK.md
-templates/.kimi/soul.md
-templates/.kimi/jailbreak.md
-templates/.omk/prompts/soul.md
-templates/.omk/prompts/jailbreak.md
+# legacy persona surfaces can never be tracked or published.
+templates/.kimi/[Ss][Oo][Uu][Ll].md
+templates/.kimi/[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk].md
+templates/.omk/prompts/[Ss][Oo][Uu][Ll].md
+templates/.omk/prompts/[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk].md
 templates/.omk/agents/roles/unrestricted-orchestrator.yaml
-templates/**/*SOUL*.md
-templates/**/*JAILBREAK*
+templates/**/*[Ss][Oo][Uu][Ll]*.md
+templates/**/*[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk]*

@@ -11,8 +11,7 @@ Mode: goal → DAG → parallel lanes → evidence → review. supermemory/ourob
 | #2 Theme contract T3–T5 | **Already DONE** (prior orchestration run) | recon-goal2.md |
 | #3 omk-safety Kill Gate | **PARTIAL — executed safe subset** | recon-goal3.md |
 
-> `.omk/goals/god-goal.md` ("Underground-God / ENI / SHADOW / VAULT" = carding, Amazon BAS
-> account farming, fraud-detection evasion) was **REFUSED and excluded** from all lanes.
+> A local disallowed persona-goal artifact involving fraud and evasion content was **REFUSED and excluded** from all lanes.
 
 ## Wave structure (parallel subagents)
 
