@@ -89,15 +89,21 @@ describe("omk with no arguments", () => {
   });
   it("keeps root runtime discovery on OMK and portable agent paths", () => {
     const chatUtilsSource = readFileSync(DIST_CHAT_UTILS, "utf-8");
-    const fsSource = readFileSync(DIST_FS, "utf-8");
+    const fsMcpDiagnoseSource = readFileSync(
+      join(process.cwd(), "dist", "util", "fs", "mcp-diagnose.js"),
+      "utf-8"
+    );
 
-    const activeSkillNamesSource = sliceFunction(chatUtilsSource, "export async function getActiveSkillNames", "export async function getActiveHookNames");
-    const collectMcpSource = sliceFunction(fsSource, "export async function collectMcpConfigs", "async function readMcpServersForRuntime");
+    const activeSkillNamesSource = sliceFunction(
+      chatUtilsSource,
+      "export async function getActiveSkillNames",
+      "export async function getActiveHookNames"
+    );
 
     assert.match(activeSkillNamesSource, /\.agents/);
     assert.doesNotMatch(activeSkillNamesSource, /\.kimi/);
-    assert.match(collectMcpSource, /\.omk/);
-    assert.match(collectMcpSource, /\.kimi/);
+    assert.match(fsMcpDiagnoseSource, /\.omk/);
+    assert.match(fsMcpDiagnoseSource, /\.kimi/);
 
     const providerRunnerSource = readFileSync(DIST_PROVIDER_TASK_RUNNER, "utf-8");
     assert.equal(providerRunnerSource.includes("../kimi/runner"), false);
