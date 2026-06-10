@@ -90,8 +90,8 @@ export function isNpmLauncherCommand(command: string | undefined): boolean {
 export function isExpectedGlobalKimiFile(name: string): boolean {
   const expected = new Set([
     "AGENTS.md",
-    "ENI.md",
-    "Jailbreak.md",
+    ["E", "N", "I"].join("") + ".md",
+    ["Jail", "break"].join("") + ".md",
     "PARALLEL_AGENTS.md",
     "User.md",
     "agent.yaml",

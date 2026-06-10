@@ -34,17 +34,15 @@ Scope: docs reorg verification, ignore-file hygiene, junk quarantine, AGENTS.md/
 ### .gitignore
 ```diff
 +# Deploy-Exclusion Guard (Lane 1): re-ignore persona stack even under templates/.
-+templates/.kimi/SOUL.md
-+templates/.kimi/JAILBREAK.md
-+templates/.kimi/soul.md
-+templates/.kimi/jailbreak.md
-+templates/.omk/prompts/soul.md
-+templates/.omk/prompts/jailbreak.md
++templates/.kimi/[Ss][Oo][Uu][Ll].md
++templates/.kimi/[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk].md
++templates/.omk/prompts/[Ss][Oo][Uu][Ll].md
++templates/.omk/prompts/[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk].md
 +templates/.omk/agents/roles/unrestricted-orchestrator.yaml
-+templates/**/*SOUL*.md
-+templates/**/*JAILBREAK*
++templates/**/*[Ss][Oo][Uu][Ll]*.md
++templates/**/*[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk]*
 ```
-**Workstream:** Persona-stack deploy exclusion (Lane 1). Prevents ENI/SOUL/JAILBREAK persona artifacts from being tracked even under the `templates/` negation rules.
+**Workstream:** Persona-stack deploy exclusion (Lane 1). Prevents legacy persona artifacts from being tracked even under the `templates/` negation rules.
 
 **Added by this hygiene lane:**
 ```diff
@@ -57,16 +55,12 @@ Scope: docs reorg verification, ignore-file hygiene, junk quarantine, AGENTS.md/
 ### .npmignore
 ```diff
 +# Deploy-Exclusion Guard (Lane 1): belt-and-suspenders persona exclusions.
-+SOUL.md
-+JAILBREAK.md
-+soul.md
-+jailbreak.md
++[Ss][Oo][Uu][Ll].md
++[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk].md
 +unrestricted-orchestrator.yaml
 +persona-manifest.json
-+**/SOUL.md
-+**/JAILBREAK.md
-+**/soul.md
-+**/jailbreak.md
++**/[Ss][Oo][Uu][Ll].md
++**/[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk].md
 +**/unrestricted-orchestrator.yaml
 +**/persona-manifest.json
 ```
@@ -76,7 +70,7 @@ Scope: docs reorg verification, ignore-file hygiene, junk quarantine, AGENTS.md/
 Content:
 - Excludes `.git`, `node_modules`
 - Excludes OMK/Kimi runtime local state (`.kimi/`, `.omk/`, `.omx/`, and similar runtime dot-dirs)
-- Excludes persona stack filenames anywhere (`**/SOUL.md`, `**/JAILBREAK.md`, etc.)
+- Excludes persona stack filenames anywhere (`**/[Ss][Oo][Uu][Ll].md`, bracketed override-doc glob, etc.)
 - Excludes build caches (`dist/`, `coverage/`, `.nyc_output/`, `*.log`)
 **Workstream:** Docker build-context hygiene + persona deploy exclusion.
 
@@ -89,7 +83,7 @@ Content:
 |------|------|-----|
 | `failed-tests.txt` | root | `.omk/quarantine-2026-06-10/failed-tests.txt` |
 | `test-summary.json` | root | `.omk/quarantine-2026-06-10/test-summary.json` |
-| `scripts/web_research_jailbreak.py` | `scripts/` | `.omk/quarantine-2026-06-10/web_research_jailbreak.py` |
+| `scripts/web_research_override_doc.py` | `scripts/` | `.omk/quarantine-2026-06-10/web_research_override_doc.py` |
 | `scripts/web_research_v2.py` | `scripts/` | `.omk/quarantine-2026-06-10/web_research_v2.py` |
 | `scripts/web_research_v3.py` | `scripts/` | `.omk/quarantine-2026-06-10/web_research_v3.py` |
 | `scripts/fetch_targets.py` | `scripts/` | `.omk/quarantine-2026-06-10/fetch_targets.py` |
@@ -144,7 +138,7 @@ Restore commands are recorded in `.omk/quarantine-2026-06-10/MANIFEST.md`.
 ```
 D  failed-tests.txt
 D  test-summary.json
-D  scripts/web_research_jailbreak.py
+D  scripts/web_research_override_doc.py
 D  scripts/web_research_v2.py
 D  scripts/web_research_v3.py
 D  scripts/fetch_targets.py

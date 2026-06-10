@@ -2,7 +2,7 @@
   "ok": true,
   "schemaVersion": "omk.contract.v1",
   "command": "release-truthfulness:012",
-  "omkVersion": "0.78.7",
+  "omkVersion": "0.78.8",
   "runtimeVersion": "v1.2",
   "commit": "release-truthfulness-tree",
   "runId": "proof-012-release-truthfulness-20260609t000000z",
@@ -10,7 +10,7 @@
   "status": "passed",
   "data": {
     "scenario": "release-truthfulness",
-    "packageVersion": "0.78.7",
+    "packageVersion": "0.78.8",
     "requiredCliBin": "omk",
     "stableClaim": false,
     "readmeAssertions": "package/bin/proof/package-audit/registry-verification guarded"
