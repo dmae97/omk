@@ -1,6 +1,7 @@
 import { resolve, join } from "path";
 import { mkdir, writeFile } from "fs/promises";
 import { runShell, type ShellResult } from "./shell.js";
+import { BRAND_HEX } from "../brand/palette.js";
 import { getProjectRoot, getRunPath, pathExists } from "./fs.js";
 import { writeSessionMeta } from "./session.js";
 import { writeTodos } from "./todo-sync.js";
@@ -120,22 +121,24 @@ export function buildRightPaneCommand(options: {
   return cmd;
 }
 
-const TMUX_NIGHT_CITY_STATUS_LEFT = "#[fg=#00FFC2,bold] OMK//CONTROL #[fg=#758FA8]Night City";
-const TMUX_NIGHT_CITY_STATUS_RIGHT = "#[fg=#00D6FF]#S #[fg=#758FA8]%H:%M";
+// Night City tmux chrome — colors derive from the compiled brand theme
+// (src/brand/night-city.theme.json) instead of hardcoded hex literals.
+const TMUX_NIGHT_CITY_STATUS_LEFT = `#[fg=${BRAND_HEX.mint},bold] OMK//CONTROL #[fg=${BRAND_HEX.gray}]Night City`;
+const TMUX_NIGHT_CITY_STATUS_RIGHT = `#[fg=${BRAND_HEX.cyan}]#S #[fg=${BRAND_HEX.gray}]%H:%M`;
 
 const TMUX_NIGHT_CITY_SESSION_OPTIONS: Array<readonly [string, string]> = [
   ["status", "on"],
-  ["status-style", "bg=#070B14,fg=#E8F8FF"],
-  ["message-style", "bg=#9D4EDD,fg=#E8F8FF,bold"],
-  ["window-status-style", "fg=#758FA8,bg=#070B14"],
-  ["window-status-current-style", "fg=#070B14,bg=#00FFC2,bold"],
+  ["status-style", `bg=${BRAND_HEX.dark},fg=${BRAND_HEX.cream}`],
+  ["message-style", `bg=${BRAND_HEX.purple},fg=${BRAND_HEX.cream},bold`],
+  ["window-status-style", `fg=${BRAND_HEX.gray},bg=${BRAND_HEX.dark}`],
+  ["window-status-current-style", `fg=${BRAND_HEX.dark},bg=${BRAND_HEX.mint},bold`],
   ["status-left", TMUX_NIGHT_CITY_STATUS_LEFT],
   ["status-right", TMUX_NIGHT_CITY_STATUS_RIGHT],
 ];
 
 const TMUX_NIGHT_CITY_WINDOW_OPTIONS: Array<readonly [string, string]> = [
-  ["pane-border-style", "fg=#22324A"],
-  ["pane-active-border-style", "fg=#FF47B2"],
+  ["pane-border-style", `fg=${BRAND_HEX.gridLine}`],
+  ["pane-active-border-style", `fg=${BRAND_HEX.magenta}`],
 ];
 
 async function applyTmuxNightCityTheme(session: string, cwd: string): Promise<void> {

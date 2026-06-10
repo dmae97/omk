@@ -3,6 +3,7 @@ import type { CliUiEvent } from "./event.js";
 import type { CliRenderer } from "./renderer.js";
 import { System24Renderer, type System24RendererStreams } from "./system24-renderer.js";
 import { GREEN_RAIN_THEME, resolveTuiMotion, shouldUseAnsiColor, type OmkTuiMotion } from "../../brand/theme.js";
+import { BRAND_HEX } from "../../brand/palette.js";
 import { renderMatrixRain } from "../../brand/matrix-rain.js";
 import { renderOmkSparkleText } from "../../ui/omk-sigil.js";
 interface WritableStreamLike {
@@ -110,9 +111,9 @@ export class GreenRainRenderer implements CliRenderer {
     line(this.err, renderOmkSparkleText(titleLine, {
       frame: Math.floor(Date.now() / 80),
       noColor: this.noColor,
-      colors: ["#00FFC2", "#f4ffff", "#ffd166", "#00D6FF", "#9D4EDD"],
+      colors: [BRAND_HEX.mint, BRAND_HEX.sparkleWhite, BRAND_HEX.sparkleGold, BRAND_HEX.cyan, BRAND_HEX.purple],
     }), this.noColor);
-    line(this.err, gradientLine(mottoLine, ["#00FFC2", "#00D6FF"], this.noColor), this.noColor);
+    line(this.err, gradientLine(mottoLine, [BRAND_HEX.mint, BRAND_HEX.cyan], this.noColor), this.noColor);
     line(this.err, `${dim}${routeLine}${RST}`, this.noColor);
     line(this.err, `${dim}${rootLine}${RST}`, this.noColor);
   }

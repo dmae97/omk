@@ -100,3 +100,67 @@ test("shouldUseAnsiColor honors NO_COLOR and TERM=dumb", () => {
   assert.equal(shouldUseAnsiColor({ NO_COLOR: "1", FORCE_COLOR: "1" }), false);
   assert.equal(shouldUseAnsiColor({ TERM: "dumb", FORCE_COLOR: "1" }), false);
 });
+
+// ── Theme contract T5b: brand colors are compiled from the night-city theme ──
+
+test("brand palette night-city entries are theme-derived (compiled, not hardcoded)", async () => {
+  const { P, BRAND_HEX } = await import("../dist/brand/palette.js");
+  const { NIGHT_CITY_THEME, nightCityRgb } = await import("../dist/brand/theme-compiled.js");
+
+  assert.equal(NIGHT_CITY_THEME.schemaVersion, "omk.theme.v1");
+  assert.equal(NIGHT_CITY_THEME.name, "night-city");
+
+  // P entries that map to night-city primitives must equal the compiled values.
+  assert.deepEqual(P.blue, nightCityRgb("cyan"));
+  assert.deepEqual(P.mint, nightCityRgb("mint"));
+  assert.deepEqual(P.pink, nightCityRgb("magenta"));
+  assert.deepEqual(P.purple, nightCityRgb("purple"));
+  assert.deepEqual(P.orange, nightCityRgb("amber"));
+  assert.deepEqual(P.red, nightCityRgb("red"));
+  assert.deepEqual(P.cream, nightCityRgb("cream"));
+  assert.deepEqual(P.dark, nightCityRgb("dark"));
+  assert.deepEqual(P.gray, nightCityRgb("gray"));
+
+  // BRAND_HEX exposes canonical hex strings for every required primitive.
+  for (const name of ["dark", "cyan", "mint", "magenta", "purple", "amber", "red", "cream", "gray"]) {
+    assert.match(BRAND_HEX[name], /^#[0-9A-F]{6}$/, `BRAND_HEX.${name} should be canonical hex`);
+    assert.equal(BRAND_HEX[name], NIGHT_CITY_THEME.primitives[name].toUpperCase());
+  }
+});
+
+test("brand theme SGR sequences come from the theme compiler and keep legacy bytes", async () => {
+  const { compileTheme } = await import("../dist/cli/theme/render-table.js");
+  const { NIGHT_CITY_THEME, brandTruecolorSgr } = await import("../dist/brand/theme-compiled.js");
+  const compiled = compileTheme(NIGHT_CITY_THEME, "truecolor");
+
+  // NEON_GRID info/primary = night-city cyan = route.active token at truecolor.
+  assert.equal(NEON_GRID_THEME.colors.info, compiled.tokens["route.active"].sgr);
+  assert.equal(GREEN_RAIN_THEME.colors.success, compiled.tokens["evidence.pass"].sgr);
+  assert.equal(NEON_GRID_THEME.colors.text, compiled.tokens["control.fg"].sgr);
+  assert.equal(NEON_GRID_THEME.colors.muted, compiled.tokens["control.dim"].sgr);
+
+  // The single SGR factory emits classic truecolor bytes.
+  assert.equal(brandTruecolorSgr({ r: 0, g: 214, b: 255 }), "\u001b[38;2;0;214;255m");
+});
+
+test("night-city snapshot stays in sync with themes/night-city.theme.json", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const snapshot = JSON.parse(
+    await readFile(new URL("../src/brand/night-city.theme.json", import.meta.url), "utf8"),
+  );
+  const canonical = JSON.parse(
+    await readFile(new URL("../themes/night-city.theme.json", import.meta.url), "utf8"),
+  );
+  assert.equal(snapshot.schemaVersion, "omk.theme.v1");
+  // Every primitive present in both documents must agree — a hex change in
+  // themes/ requires refreshing the src/brand snapshot (cp themes/night-city.theme.json src/brand/).
+  for (const [name, hex] of Object.entries(snapshot.primitives)) {
+    if (name in canonical.primitives) {
+      assert.equal(
+        hex.toUpperCase(),
+        canonical.primitives[name].toUpperCase(),
+        `primitive "${name}" drifted — refresh src/brand/night-city.theme.json from themes/`,
+      );
+    }
+  }
+});

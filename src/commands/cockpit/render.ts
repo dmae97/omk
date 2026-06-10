@@ -24,6 +24,7 @@ import {
   getSystemUsage,
 } from "../../util/theme.js";
 import { renderMatrixRain } from "../../brand/matrix-rain.js";
+import { BRAND_HEX } from "../../brand/palette.js";
 import {
   visibleTerminalWidth,
   truncateLine,
@@ -534,7 +535,7 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
     ...rainLines,
     renderOmkSparkleText("◢█ OMK//CONTROL COCKPIT █◣", {
       frame: animFrame,
-      colors: ["#00D6FF", "#f4ffff", "#ffd166", "#FF47B2", "#00FFC2"],
+      colors: [BRAND_HEX.cyan, BRAND_HEX.sparkleWhite, BRAND_HEX.sparkleGold, BRAND_HEX.magenta, BRAND_HEX.mint],
     }),
     style.gray("NEON GRID · GREEN RAIN · METRICS WALL"),
     style.gray("route · verify · loop · control · evidence gated"),
