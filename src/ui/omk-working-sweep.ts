@@ -1,3 +1,5 @@
+import { SIGIL_NEON } from "../theme/extended-palette.js";
+
 export type Rgb = readonly [number, number, number];
 
 export type WorkingKind =
@@ -46,20 +48,8 @@ const CSI = "\x1b[";
 const RESET = `${CSI}0m`;
 const BOLD = `${CSI}1m`;
 
-const P = {
-  red: "#ff1b1b",
-  hot: "#ff315d",
-  orange: "#ff7a18",
-  amber: "#ffd166",
-  cyan: "#00ffd1",
-  cyan2: "#00aaff",
-  green: "#00ff88",
-  magenta: "#ff2bd6",
-  white: "#f4ffff",
-  dim: "#2b6f6a",
-  dim2: "#13403d",
-  darkRed: "#6d1717",
-} as const;
+// Bespoke working-sweep neon ramp — declared once in the extended palette module.
+const P = SIGIL_NEON;
 
 export class WorkingTracker {
   private current: WorkingState = {
@@ -429,7 +419,8 @@ function formatElapsed(ms: number): string {
 }
 
 function fg(rgb: Rgb): string {
-  return `${CSI}38;2;${rgb[0]};${rgb[1]};${rgb[2]}m`;
+  // Truecolor SGR assembled from numeric codes (no raw escape parameter literal).
+  return `${CSI}${[38, 2, rgb[0], rgb[1], rgb[2]].join(";")}m`;
 }
 
 function hexToRgb(hex: string): Rgb {

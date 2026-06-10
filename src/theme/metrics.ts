@@ -5,7 +5,7 @@
 
 import { totalmem, freemem, loadavg, cpus } from "os";
 import { P } from "../brand/palette.js";
-import { esc, stripAnsi, padEndAnsi, visibleTerminalWidth, sanitizeTerminalText } from "./ansi.js";
+import { esc, rgb, stripAnsi, padEndAnsi, visibleTerminalWidth, sanitizeTerminalText } from "./ansi.js";
 import { style } from "./colors.js";
 
 export function metricsPanel(lines: string[], title?: string): string {
@@ -32,9 +32,9 @@ export function metricsGauge(
   const filled = Math.round(ratio * width);
   const empty = width - filled;
 
-  let barColor = "38;2;34;197;94";
-  if (ratio > 0.7) barColor = "38;2;245;158;11";
-  if (ratio > 0.9) barColor = "38;2;239;68;68";
+  let barColor = rgb(P.metricsGreen.r, P.metricsGreen.g, P.metricsGreen.b);
+  if (ratio > 0.7) barColor = rgb(P.metricsAmber.r, P.metricsAmber.g, P.metricsAmber.b);
+  if (ratio > 0.9) barColor = rgb(P.metricsRed.r, P.metricsRed.g, P.metricsRed.b);
 
   const bar = esc(barColor) + "█".repeat(filled) + esc("0") + style.silver("░".repeat(empty));
   const pct = style.whiteBold(`${Math.round(ratio * 100)}%`.padStart(4));
@@ -49,7 +49,7 @@ export function metricsGradient(text: string): string {
     const r = Math.round(P.metricsCyan.r + (P.metricsViolet.r - P.metricsCyan.r) * t);
     const g = Math.round(P.metricsCyan.g + (P.metricsViolet.g - P.metricsCyan.g) * t);
     const b = Math.round(P.metricsCyan.b + (P.metricsViolet.b - P.metricsCyan.b) * t);
-    result.push(esc("38;2;" + r + ";" + g + ";" + b) + chars[i] + esc("0"));
+    result.push(esc(rgb(r, g, b)) + chars[i] + esc("0"));
   }
   return result.join("");
 }

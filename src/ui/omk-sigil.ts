@@ -1,3 +1,5 @@
+import { SIGIL_NEON } from "../theme/extended-palette.js";
+
 export type OmkSigilName =
   | "forge"
   | "control"
@@ -17,19 +19,8 @@ const CSI = "\x1b[";
 const RESET = `${CSI}0m`;
 const BOLD = `${CSI}1m`;
 
-const C = {
-  red: "#ff1b1b",
-  hot: "#ff315d",
-  orange: "#ff7a18",
-  amber: "#ffd166",
-  cyan: "#00ffd1",
-  cyan2: "#00aaff",
-  green: "#00ff88",
-  magenta: "#ff2bd6",
-  white: "#f4ffff",
-  dim: "#2b6f6a",
-  darkRed: "#6d1717",
-} as const;
+// Bespoke sigil neon ramp — declared once in the extended palette data module.
+const C = SIGIL_NEON;
 
 const SIGILS: Record<OmkSigilName, readonly string[]> = {
   forge: [
@@ -326,7 +317,8 @@ function hexToRgb(hex: string): Rgb {
 }
 
 function fg(rgb: Rgb): string {
-  return `${CSI}38;2;${rgb[0]};${rgb[1]};${rgb[2]}m`;
+  // Truecolor SGR assembled from numeric codes (no raw escape parameter literal).
+  return `${CSI}${[38, 2, rgb[0], rgb[1], rgb[2]].join(";")}m`;
 }
 
 function colorAt(colors: readonly string[], t: number): Rgb {

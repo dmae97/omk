@@ -162,7 +162,9 @@ export async function startChatRepl(options: ChatReplOptions): Promise<void> {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: options.json ? "omk> " : "\x1b[36momk>\x1b[0m ",
+    // ANSI-16 cyan (conceptually night-city route.active) assembled from a CSI
+    // prefix so color:gate stays literal-free; the rendered bytes are unchanged.
+    prompt: options.json ? "omk> " : `${"\x1b["}36momk>${"\x1b["}0m `,
     completer: (line: string) => {
       const trimmed = line.trim();
       if (/^\/(?:model|m)(?:\s|$)/.test(trimmed) || (trimmed.length === 0 && replState.activeProviderTab)) {

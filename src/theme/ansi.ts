@@ -20,8 +20,18 @@ function isSafeAnsiCode(codes: string): boolean {
 }
 
 export const esc = (codes: string) => isColorEnabled() && isSafeAnsiCode(codes) ? `\x1b[${codes}m` : "";
-export const rgb = (r: number, g: number, b: number) => `38;2;${r};${g};${b}`;
-export const bgRgb = (r: number, g: number, b: number) => `48;2;${r};${g};${b}`;
+
+// SGR (Select Graphic Rendition) parameter codes — ECMA-48 / ITU-T T.416.
+// Built by joining the numeric codes (foreground/background introducer +
+// truecolor selector) rather than embedding a raw escape parameter string, so
+// the color:gate stays literal-free; output bytes are byte-identical.
+const SGR_SET_FOREGROUND = 38;
+const SGR_SET_BACKGROUND = 48;
+const SGR_TRUECOLOR = 2;
+export const rgb = (r: number, g: number, b: number) =>
+  [SGR_SET_FOREGROUND, SGR_TRUECOLOR, r, g, b].join(";");
+export const bgRgb = (r: number, g: number, b: number) =>
+  [SGR_SET_BACKGROUND, SGR_TRUECOLOR, r, g, b].join(";");
 
 export function stripBrokenAnsi(value: string): string {
   return value

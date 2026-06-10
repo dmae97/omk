@@ -6,7 +6,7 @@
 import figlet from "figlet";
 import gradientString from "gradient-string";
 import { OMK_SIMPLE_ASCII_ART } from "../brand/omk-simple-art.js";
-import { P, colorFromHex } from "../brand/palette.js";
+import { P, BRAND_HEX, colorFromHex } from "../brand/palette.js";
 import { esc, rgb, stripAnsi, padEndAnsi, sanitizeTerminalText, isColorEnabled } from "./ansi.js";
 import { style } from "./colors.js";
 import { box, gradient } from "./layout.js";
@@ -50,14 +50,14 @@ export function omkStatusChips(): string {
 
 function renderDefaultHeroArt(): string[] {
   const palettes: Array<[string, string]> = [
-    ["#00D6FF", "#9D4EDD"],
-    ["#9D4EDD", "#FF47B2"],
-    ["#00FFC2", "#00D6FF"],
-    ["#FFB000", "#FF47B2"],
-    ["#00D6FF", "#00FFC2"],
+    [BRAND_HEX.cyan, BRAND_HEX.purple],
+    [BRAND_HEX.purple, BRAND_HEX.magenta],
+    [BRAND_HEX.mint, BRAND_HEX.cyan],
+    [BRAND_HEX.amber, BRAND_HEX.magenta],
+    [BRAND_HEX.cyan, BRAND_HEX.mint],
   ];
   return OMK_SIMPLE_ASCII_ART.split("\n").map((line, index) => {
-    const [start, end] = palettes[index % palettes.length] ?? ["#00D6FF", "#FF47B2"];
+    const [start, end] = palettes[index % palettes.length] ?? [BRAND_HEX.cyan, BRAND_HEX.magenta];
     return themedGradient(line, start, end);
   });
 }
@@ -113,7 +113,7 @@ function renderThemedHeroArt(
 
 export function omkCliHero(footer?: string): string {
   const heroLines = [
-    ...renderFigletTitleLines("OMK", ["#00D6FF", "#9D4EDD", "#FF47B2", "#00FFC2"]),
+    ...renderFigletTitleLines("OMK", [BRAND_HEX.cyan, BRAND_HEX.purple, BRAND_HEX.magenta, BRAND_HEX.mint]),
     style.creamBold("open-multi-agent-kit"),
     style.blueBold("Night City Ops Console // cyberpunk metrics wall"),
     style.phosphorDim("OMK//CONTROL · neon grid · evidence loop · telemetry bus"),
@@ -281,10 +281,10 @@ export function omkBanner(
 
   const heroTitleLines = title.length <= 8
     ? renderFigletTitleLines(title, [
-        theme.colors?.primary ?? "#00D6FF",
-        theme.colors?.accent ?? "#9D4EDD",
-        theme.colors?.info ?? "#FF47B2",
-        theme.colors?.primary ?? "#00FFC2",
+        theme.colors?.primary ?? BRAND_HEX.cyan,
+        theme.colors?.accent ?? BRAND_HEX.purple,
+        theme.colors?.info ?? BRAND_HEX.magenta,
+        theme.colors?.primary ?? BRAND_HEX.mint,
       ])
     : [themedGradient("◢█ " + title + " █◣", theme.colors?.primary, theme.colors?.accent)];
   const heroLines: string[] = [

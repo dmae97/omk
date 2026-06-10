@@ -5,6 +5,8 @@ import { chmod, lstat, mkdir, readdir, rm } from "fs/promises";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { createServer } from "net";
 import { style, header, status } from "../util/theme.js";
+import { BRAND_HEX } from "../brand/palette.js";
+import { DESIGN_SCAFFOLD } from "../theme/extended-palette.js";
 import { t } from "../util/i18n.js";
 
 const GITHUB_API_URL = "https://api.github.com/repos/voltagent/awesome-design-md/contents/design-md";
@@ -270,23 +272,23 @@ const OPEN_DESIGN_OMK_VISUAL_BLOCK_RE = /[ ]{2}\/\/ OMK — (?:Control-plane neo
 
 const OPEN_DESIGN_OMK_VISUAL = `  // ${OPEN_DESIGN_OMK_VISUAL_MARKER}
   omk: {
-    bg: 'linear-gradient(135deg, #070B14 0%, #00D6FF 45%, #FF47B2 100%)',
-    fg: '#E8F8FF',
-    glyph: (s) => star4(s, '#E8F8FF'),
+    bg: 'linear-gradient(135deg, ${BRAND_HEX.dark} 0%, ${BRAND_HEX.cyan} 45%, ${BRAND_HEX.magenta} 100%)',
+    fg: '${BRAND_HEX.cream}',
+    glyph: (s) => star4(s, '${BRAND_HEX.cream}'),
   },
 `;
 
 const OPEN_DESIGN_OMK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OMK">
   <defs>
     <linearGradient id="omk" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#070B14"/>
-      <stop offset=".45" stop-color="#00D6FF"/>
-      <stop offset="1" stop-color="#FF47B2"/>
+      <stop stop-color="${BRAND_HEX.dark}"/>
+      <stop offset=".45" stop-color="${BRAND_HEX.cyan}"/>
+      <stop offset="1" stop-color="${BRAND_HEX.magenta}"/>
     </linearGradient>
   </defs>
   <rect width="64" height="64" rx="18" fill="url(#omk)"/>
-  <path d="M20 35c0-8 5-14 12-14s12 6 12 14v7h-6v-7c0-5-2-8-6-8s-6 3-6 8v7h-6v-7Z" fill="#E8F8FF"/>
-  <path d="M17 20l4 3 4-3-3 5 3 5-4-3-4 3 3-5-3-5Zm25 0 4 3 4-3-3 5 3 5-4-3-4 3 3-5-3-5Z" fill="#FFB000"/>
+  <path d="M20 35c0-8 5-14 12-14s12 6 12 14v7h-6v-7c0-5-2-8-6-8s-6 3-6 8v7h-6v-7Z" fill="${BRAND_HEX.cream}"/>
+  <path d="M17 20l4 3 4-3-3 5 3 5-4-3-4 3 3-5-3-5Zm25 0 4 3 4-3-3 5 3 5-4-3-4 3 3-5-3-5Z" fill="${BRAND_HEX.amber}"/>
 </svg>
 `;
 
@@ -1248,14 +1250,14 @@ version: "alpha"
 name: "my-project"
 description: "Project design system"
 colors:
-  primary: "#111827"
-  secondary: "#4B5563"
-  accent: "#7C3AED"
-  success: "#059669"
-  warning: "#D97706"
-  danger: "#DC2626"
-  background: "#F9FAFB"
-  surface: "#FFFFFF"
+  primary: "${DESIGN_SCAFFOLD.primary}"
+  secondary: "${DESIGN_SCAFFOLD.secondary}"
+  accent: "${DESIGN_SCAFFOLD.accent}"
+  success: "${DESIGN_SCAFFOLD.success}"
+  warning: "${DESIGN_SCAFFOLD.warning}"
+  danger: "${DESIGN_SCAFFOLD.danger}"
+  background: "${DESIGN_SCAFFOLD.background}"
+  surface: "${DESIGN_SCAFFOLD.surface}"
 typography:
   h1:
     fontFamily: "Inter"

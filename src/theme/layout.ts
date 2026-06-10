@@ -3,7 +3,7 @@
  * Extracted from util/theme.ts to break God Module coupling
  */
 
-import { P } from "../brand/palette.js";
+import { P, BRAND_HEX } from "../brand/palette.js";
 import { esc, rgb, stripAnsi, padEndAnsi, sanitizeTerminalText, visibleTerminalWidth } from "./ansi.js";
 import { style } from "./colors.js";
 import { renderOmkSparkleText } from "../ui/omk-sigil.js";
@@ -146,7 +146,13 @@ export function omkHudHeader(runId?: string): string {
   return [
     "",
     renderOmkSparkleText("◢█ OMK//CONTROL █◣", {
-      colors: ["#00D6FF", "#f4ffff", "#ffd166", "#FF47B2", "#00FFC2"],
+      colors: [
+        BRAND_HEX.cyan,
+        BRAND_HEX.sparkleWhite,
+        BRAND_HEX.sparkleGold,
+        BRAND_HEX.magenta,
+        BRAND_HEX.mint,
+      ],
     }),
     style.phosphorBold("NEON GRID ONLINE") + style.gray(" · ") + style.mintBold("GREEN RAIN SIGNAL") + style.gray(" · ") + style.pinkBold("METRICS WALL"),
     style.gray("Models execute. OMK routes, verifies, measures, and controls."),

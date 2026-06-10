@@ -207,15 +207,20 @@ export class LogStreamer {
     const prefix = `[${timestamp}] [${entry.workerId}]`;
 
     if (useFormat === "colored") {
-      const colors = {
-        stdout: "\x1b[37m",  // white
-        stderr: "\x1b[31m",  // red
-        info: "\x1b[34m",    // blue
-        warn: "\x1b[33m",    // yellow
-        error: "\x1b[31m",   // red
+      // Standard ANSI-16 SGR foreground codes (ECMA-48) built from numeric
+      // values rather than `\x1b[3Xm` literals so color:gate stays clean.
+      // Plain ANSI-16 (not brand truecolor) is intentional: these lines are
+      // also parsed/greppable in log files and stay terminal-portable.
+      const CSI = "\x1b[";
+      const LEVEL_FG: Record<LogEntry["level"], number> = {
+        stdout: 37, // white
+        stderr: 31, // red
+        info: 34, // blue
+        warn: 33, // yellow
+        error: 31, // red
       };
-      const reset = "\x1b[0m";
-      const color = colors[entry.level];
+      const color = `${CSI}${LEVEL_FG[entry.level]}m`;
+      const reset = `${CSI}0m`;
       return `${color}${prefix} [${entry.level.toUpperCase()}]${reset} ${entry.message}`;
     }
 

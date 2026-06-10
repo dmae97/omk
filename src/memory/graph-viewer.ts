@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile, stat } from "fs/promises";
 import { dirname } from "path";
 import { pathToFileURL } from "url";
 import { checkCommand } from "../util/shell.js";
+import { GRAPH_VIEWER } from "../theme/extended-palette.js";
 
 export interface GraphState {
   ontology?: {
@@ -77,29 +78,8 @@ export interface GraphBrowserOpenerOptions {
   commandExists?: (command: string) => boolean | Promise<boolean>;
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  Project: "#7c3aed",
-  Session: "#2563eb",
-  Memory: "#059669",
-  MemoryVersion: "#6b7280",
-  Run: "#14b8a6",
-  Goal: "#f59e0b",
-  Topic: "#64748b",
-  Decision: "#dc2626",
-  Task: "#ea580c",
-  Risk: "#be123c",
-  Command: "#0f766e",
-  File: "#0891b2",
-  Evidence: "#16a34a",
-  Provider: "#a855f7",
-  ProviderRoute: "#8b5cf6",
-  ProviderFallback: "#f97316",
-  AuditLink: "#eab308",
-  Constraint: "#9333ea",
-  Question: "#0284c7",
-  Answer: "#22c55e",
-  Concept: "#4f46e5",
-};
+// Web/SVG document palette declared once in the extended palette data module.
+const TYPE_COLORS: Record<string, string> = GRAPH_VIEWER.typeColors;
 
 const REL_BY_TYPE: Record<string, string> = {
   Session: "HAS_SESSION",
@@ -271,7 +251,7 @@ export function toCytoscapeElements(nodes: GraphNode[], edges: GraphEdge[]): Arr
         summary: sanitizeText(node.summary ?? node.content ?? "", 500),
         path: node.path ?? "",
         tags: (node.tags ?? []).join(", "),
-        color: TYPE_COLORS[node.type] ?? "#94a3b8",
+        color: TYPE_COLORS[node.type] ?? GRAPH_VIEWER.defaultNode,
       },
     })),
     ...edges.map((edge) => ({
@@ -292,6 +272,7 @@ function renderGraphHtml(
   const encodedElements = JSON.stringify(elements).replace(/</g, "\\u003c");
   const title = sanitizeText(meta.projectName ? `OMK Ontology Graph — ${meta.projectName}` : "OMK Ontology Graph", 120);
   const ontology = sanitizeText(meta.ontologyVersion ?? "unknown", 80);
+  const G = GRAPH_VIEWER.ui;
 
   return `<!doctype html>
 <html lang="en">
@@ -301,12 +282,12 @@ function renderGraphHtml(
   <title>${escapeHtml(title)}</title>
   <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
   <style>
-    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f172a; color: #e5e7eb; }
-    #top { min-height: 56px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 16px; background: #111827; border-bottom: 1px solid #334155; box-sizing: border-box; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: ${G.bodyBg}; color: ${G.bodyFg}; }
+    #top { min-height: 56px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 16px; background: ${G.topBg}; border-bottom: 1px solid ${G.topBorder}; box-sizing: border-box; }
     #cy { width: 100vw; height: calc(100vh - 72px); display: block; }
-    input { background: #020617; color: #e5e7eb; border: 1px solid #475569; border-radius: 8px; padding: 8px 10px; width: min(420px, 70vw); }
-    .stat { color: #94a3b8; font-size: 13px; }
-    .pill { color: #c4b5fd; background: #312e81; border: 1px solid #4c1d95; border-radius: 999px; padding: 3px 8px; font-size: 12px; }
+    input { background: ${G.inputBg}; color: ${G.bodyFg}; border: 1px solid ${G.inputBorder}; border-radius: 8px; padding: 8px 10px; width: min(420px, 70vw); }
+    .stat { color: ${G.statText}; font-size: 13px; }
+    .pill { color: ${G.pillText}; background: ${G.pillBg}; border: 1px solid ${G.pillBorder}; border-radius: 999px; padding: 3px 8px; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -325,9 +306,9 @@ function renderGraphHtml(
       elements: allElements,
       wheelSensitivity: 0.15,
       style: [
-        { selector: "node", style: { "background-color": "data(color)", "label": "data(label)", "color": "#e5e7eb", "font-size": 9, "text-wrap": "wrap", "text-max-width": 130, "width": 24, "height": 24, "border-width": 1, "border-color": "#f8fafc" } },
-        { selector: "edge", style: { "width": 1, "line-color": "#64748b", "target-arrow-color": "#64748b", "target-arrow-shape": "triangle", "curve-style": "bezier", "label": "data(label)", "font-size": 7, "color": "#94a3b8", "text-rotation": "autorotate" } },
-        { selector: ":selected", style: { "border-width": 4, "border-color": "#facc15", "line-color": "#facc15", "target-arrow-color": "#facc15" } }
+        { selector: "node", style: { "background-color": "data(color)", "label": "data(label)", "color": "${G.nodeLabel}", "font-size": 9, "text-wrap": "wrap", "text-max-width": 130, "width": 24, "height": 24, "border-width": 1, "border-color": "${G.nodeBorder}" } },
+        { selector: "edge", style: { "width": 1, "line-color": "${G.edgeLine}", "target-arrow-color": "${G.edgeLine}", "target-arrow-shape": "triangle", "curve-style": "bezier", "label": "data(label)", "font-size": 7, "color": "${G.edgeLabel}", "text-rotation": "autorotate" } },
+        { selector: ":selected", style: { "border-width": 4, "border-color": "${G.selected}", "line-color": "${G.selected}", "target-arrow-color": "${G.selected}" } }
       ],
       layout: { name: "cose", animate: false, nodeRepulsion: 9000, idealEdgeLength: 90, edgeElasticity: 80, gravity: 0.18, numIter: 1600 }
     });
