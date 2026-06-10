@@ -4,17 +4,10 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const { CockpitRenderer, renderCockpit, visibleTerminalWidth } = await import("../dist/commands/cockpit.js");
+const { renderCockpit, visibleTerminalWidth } = await import("../dist/commands/cockpit.js");
 
 function stripAnsi(str) {
   return str.replace(/\x1b\[[0-9;]*m/g, "");
-}
-
-function maxVisibleWidth(output) {
-  return output.split("\n").reduce((max, line) => {
-    const len = visibleTerminalWidth(line);
-    return len > max ? len : max;
-  }, 0);
 }
 
 function countLines(output) {

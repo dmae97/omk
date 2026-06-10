@@ -18,6 +18,7 @@
  */
 import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const root = process.cwd();
 const args = process.argv.slice(2);
@@ -255,7 +256,10 @@ function computeMatrix(theme) {
   return rows;
 }
 
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+
 // ── Main ────────────────────────────────────────────────────────────────────
+if (isMain) {
 if (selfTest) {
   // Prove the OKLCH repair engine on a known-failing pair: purple as running text on dark.
   const fg = "#9D4EDD";
@@ -320,3 +324,6 @@ console.log(`matrix: ${allRows.length} pairs -> ${outDir}/contrast-matrix.{csv,m
 
 if (failed) process.exit(1);
 console.log("theme:check passed");
+}
+
+export { CUBE_LEVELS, quantizeXterm256, xterm256Hex };
