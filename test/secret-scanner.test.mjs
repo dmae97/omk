@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { writeFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 import {
   SecretScanner,
   SecretSeverity,
@@ -121,6 +122,88 @@ describe("SecretScanner: Text Scanning", () => {
     const report = scanner.scanText(text);
     assert.equal(report.findings.length, 1);
     assert.equal(report.findings[0].line, 3);
+  });
+
+  // ── Lane C1: getLineColumn perf fix (binary search over precomputed
+  //    line-start offsets). These guard against behavior regressions and
+  //    quadratic blowup on large inputs with many matches.
+
+  // Brute-force reference identical to the original O(offset) implementation.
+  function refLineColumn(text, offset) {
+    let line = 1;
+    let column = 1;
+    for (let i = 0; i < offset && i < text.length; i++) {
+      if (text[i] === "\n") {
+        line++;
+        column = 1;
+      } else {
+        column++;
+      }
+    }
+    return { line, column };
+  }
+
+  it("line/col match brute-force reference on multi-line input with many matches", () => {
+    const scanner = new SecretScanner({ mode: ScanMode.QUICK });
+    // Build a multi-line input with many AWS-key matches scattered across lines,
+    // including matches right after a \n, at varied columns, and CRLF lines.
+    const secret = "AKIAIOSFODNN7EXAMPLE";
+    const parts = [];
+    for (let i = 0; i < 300; i++) {
+      if (i % 3 === 0) parts.push(`${secret} leading on line ${i}`);
+      else if (i % 3 === 1) parts.push(`pad ${"x".repeat(i % 17)} ${secret} mid`);
+      else parts.push(`crlf line ${i} ${secret}\r`); // \r kept as ordinary char
+    }
+    const text = parts.join("\n");
+    const report = scanner.scanText(text);
+    assert.ok(report.findings.length >= 300);
+    for (const f of report.findings) {
+      const expected = refLineColumn(text, f.offset);
+      assert.equal(f.line, expected.line, `line mismatch at offset ${f.offset}`);
+      assert.equal(f.column, expected.column, `column mismatch at offset ${f.offset}`);
+    }
+  });
+
+  it("line/col correct at edge offsets (start, after \\n, EOF)", () => {
+    const scanner = new SecretScanner({ mode: ScanMode.QUICK });
+    const secret = "AKIAIOSFODNN7EXAMPLE";
+    // match at offset 0, match right after a \n, match at EOF
+    const text = `${secret}\n${secret}\ntail ${secret}`;
+    const report = scanner.scanText(text);
+    assert.equal(report.findings.length, 3);
+    for (const f of report.findings) {
+      const expected = refLineColumn(text, f.offset);
+      assert.equal(f.line, expected.line);
+      assert.equal(f.column, expected.column);
+    }
+    assert.equal(report.findings[0].line, 1);
+    assert.equal(report.findings[0].column, 1);
+    assert.equal(report.findings[1].line, 2);
+    assert.equal(report.findings[1].column, 1);
+    assert.equal(report.findings[2].line, 3);
+    assert.equal(report.findings[2].column, 6);
+  });
+
+  it("micro-bench: 200KB input with 500 matches completes well under threshold", () => {
+    const scanner = new SecretScanner({ mode: ScanMode.QUICK });
+    const secret = "AKIAIOSFODNN7EXAMPLE";
+    const matches = 500;
+    const targetBytes = 200 * 1024;
+    // Spread 500 matches across many lines totaling ~200KB.
+    const filler = "x".repeat(Math.max(1, Math.floor((targetBytes - matches * secret.length) / matches)));
+    const lines = [];
+    for (let i = 0; i < matches; i++) lines.push(`${filler} ${secret}`);
+    const text = lines.join("\n");
+    assert.ok(text.length >= targetBytes * 0.9, `input too small: ${text.length}`);
+
+    const t0 = performance.now();
+    const report = scanner.scanText(text);
+    const elapsed = performance.now() - t0;
+
+    assert.equal(report.findings.length, matches);
+    // Generous threshold: linear+log path should finish far under this even on
+    // slow CI; the old quadratic path would blow past it on 200KB×500 matches.
+    assert.ok(elapsed < 1500, `scan too slow: ${elapsed.toFixed(1)}ms (expected < 1500ms)`);
   });
 
   it("provides context around matches", () => {

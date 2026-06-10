@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { statSync } from "fs";
 import { mkdir, readFile, rename, rm, writeFile } from "fs/promises";
 import { dirname, resolve } from "path";
 import {
@@ -220,6 +221,38 @@ interface InvalidGraphStateRepair {
 
 const graphWriteQueues = new Map<string, Promise<void>>();
 
+interface GraphStateCacheEntry {
+  state: LocalGraphState;
+  mtimeMs: number;
+  size: number;
+  ctimeMs: number;
+  ino: number;
+}
+
+/**
+ * Process-local cache of the most-recently-persisted parsed graph state, keyed
+ * by graph-state.json path. A cache hit is only honored when the on-disk file
+ * is unchanged on ALL of mtimeMs + size + ctimeMs + inode since the cached
+ * snapshot was written. ctimeMs catches a same-millisecond, same-size overwrite
+ * that mtimeMs+size alone would miss, and inode catches an atomic-rename replace
+ * (new file) — so any concurrent external writer forces a fresh disk re-read
+ * (multi-writer safe). The entry is populated exclusively from a state we just
+ * wrote via saveState, so it never masks loadState's ENOENT / empty / invalid /
+ * strict-mode handling.
+ */
+const graphStateCache = new Map<string, GraphStateCacheEntry>();
+
+function statSyncSafe(
+  path: string,
+): { mtimeMs: number; size: number; ctimeMs: number; ino: number } | undefined {
+  try {
+    const stat = statSync(path);
+    return { mtimeMs: stat.mtimeMs, size: stat.size, ctimeMs: stat.ctimeMs, ino: stat.ino };
+  } catch {
+    return undefined;
+  }
+}
+
 function enqueueGraphWrite<T>(graphPath: string, operation: () => Promise<T>): Promise<T> {
   const previous = graphWriteQueues.get(graphPath) ?? Promise.resolve();
   const running = previous.catch(() => undefined).then(operation);
@@ -435,10 +468,15 @@ export class LocalGraphMemoryStore {
     const state = await this.loadState();
     const normalizedQuery = query.trim().toLowerCase();
     const safeLimit = Math.max(1, Math.min(50, Math.floor(limit)) || 10);
+    // Build the per-path latest-content resolver ONCE in O(N + E) and reuse it
+    // for every Memory node, instead of rescanning all nodes+edges per node via
+    // readFromState() (which made search O(N^2)). Results are identical & same
+    // order; resolver output is memoized so the filter+map phases stay O(1).
+    const resolveContent = this.buildMemoryContentIndex(state);
     return state.nodes
       .filter((node) => node.type === "Memory")
       .filter((node) => {
-        const content = this.readFromState(state, node.path ?? node.label);
+        const content = resolveContent(node.path ?? node.label);
         if (!normalizedQuery) return true;
         return [node.path, node.label, node.summary, content]
           .filter((value): value is string => typeof value === "string")
@@ -448,11 +486,58 @@ export class LocalGraphMemoryStore {
       .slice(0, safeLimit)
       .map((node) => ({
         path: node.path ?? node.label,
-        content: this.readFromState(state, node.path ?? node.label),
+        content: resolveContent(node.path ?? node.label),
         sessionId: String(node.properties.sessionId ?? ""),
         updatedAt: node.updatedAt,
         source: String(node.properties.source ?? this.source),
       }));
+  }
+
+  /**
+   * Build a reusable `path -> latest-content` resolver from a single pass over
+   * nodes and edges. Mirrors readFromState()/findLatestMemoryVersionNode()
+   * selection and ordering exactly (same memory-by-id lookup, same UPDATES-edge
+   * filter, same descending updatedAt/createdAt/id tiebreak), but pays
+   * O(N + E) once instead of O(N) per Memory node, removing the O(N^2) search
+   * hot path. Resolved content is memoized per path for O(1) repeat lookups.
+   */
+  private buildMemoryContentIndex(state: LocalGraphState): (path: string) => string {
+    const memoryById = new Map<string, LocalGraphNode>();
+    const versionsByPath = new Map<string, LocalGraphNode[]>();
+    for (const node of state.nodes) {
+      if (node.type === "Memory") {
+        if (!memoryById.has(node.id)) memoryById.set(node.id, node);
+      } else if (node.type === "MemoryVersion" && node.path !== undefined) {
+        const existing = versionsByPath.get(node.path);
+        if (existing) existing.push(node);
+        else versionsByPath.set(node.path, [node]);
+      }
+    }
+    const updateFromByMemoryId = new Map<string, Set<string>>();
+    for (const edge of state.edges) {
+      if (edge.type !== "UPDATES") continue;
+      const existing = updateFromByMemoryId.get(edge.to);
+      if (existing) existing.add(edge.from);
+      else updateFromByMemoryId.set(edge.to, new Set([edge.from]));
+    }
+    const contentCache = new Map<string, string>();
+    return (path: string): string => {
+      const cached = contentCache.get(path);
+      if (cached !== undefined) return cached;
+      const memory = memoryById.get(this.memoryNodeId(path));
+      const updateIds = memory ? updateFromByMemoryId.get(memory.id) : undefined;
+      const version = (versionsByPath.get(path) ?? [])
+        .filter((node) => !updateIds || updateIds.size === 0 || updateIds.has(node.id))
+        .sort(
+          (a, b) =>
+            b.updatedAt.localeCompare(a.updatedAt) ||
+            b.createdAt.localeCompare(a.createdAt) ||
+            b.id.localeCompare(a.id)
+        )[0];
+      const content = version?.content ?? memory?.content ?? "";
+      contentCache.set(path, content);
+      return content;
+    };
   }
 
   async ontology(): Promise<MemoryOntology> {
@@ -837,14 +922,65 @@ export class LocalGraphMemoryStore {
   }
 
   private async mutateState(mutator: (state: LocalGraphState, now: string) => void): Promise<void> {
-    await enqueueGraphWrite(this.settings.localGraph.path, async () => {
-      const state = await this.loadState();
+    const graphPath = this.settings.localGraph.path;
+    await enqueueGraphWrite(graphPath, async () => {
+      const state = await this.loadStateForMutation(graphPath);
       mutator(state, new Date().toISOString());
       await this.saveState(state);
+      // Refresh the process-local cache from the file we just wrote so the next
+      // mutation in this process can reuse the parsed object and skip the disk
+      // read + JSON.parse entirely (on-disk format/durability are unchanged).
+      this.refreshGraphStateCache(graphPath, state);
       if (this.settings.mirrorFiles) {
         await this.writeMirrorFiles(state);
       }
     });
+  }
+
+  /**
+   * Load state for a write, reusing the process-local cache only when the file
+   * is unchanged on mtimeMs + size + ctimeMs + inode since this process last
+   * persisted it. Any divergence (concurrent external writer) or a missing entry
+   * invalidates the cache and falls back to a full loadState(), preserving
+   * multi-writer correctness and loadState's ENOENT / empty / invalid / strict
+   * semantics.
+   */
+  private async loadStateForMutation(graphPath: string): Promise<LocalGraphState> {
+    const cached = graphStateCache.get(graphPath);
+    if (cached) {
+      const stat = statSyncSafe(graphPath);
+      if (
+        stat &&
+        stat.mtimeMs === cached.mtimeMs &&
+        stat.size === cached.size &&
+        stat.ctimeMs === cached.ctimeMs &&
+        stat.ino === cached.ino
+      ) {
+        return cached.state;
+      }
+      graphStateCache.delete(graphPath);
+    }
+    return this.loadState();
+  }
+
+  /**
+   * Record the just-written state plus its fresh mtimeMs+size+ctimeMs+inode so
+   * the next cache hit can be validated. If the file cannot be stat'd, drop the
+   * entry rather than risk serving stale data on a later write.
+   */
+  private refreshGraphStateCache(graphPath: string, state: LocalGraphState): void {
+    const stat = statSyncSafe(graphPath);
+    if (stat) {
+      graphStateCache.set(graphPath, {
+        state,
+        mtimeMs: stat.mtimeMs,
+        size: stat.size,
+        ctimeMs: stat.ctimeMs,
+        ino: stat.ino,
+      });
+    } else {
+      graphStateCache.delete(graphPath);
+    }
   }
 
   private readFromState(state: LocalGraphState, path: string): string {

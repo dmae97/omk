@@ -62,7 +62,14 @@ export function createStatePersister(basePath: string = ".omk/runs"): StatePersi
     async save(state: RunState): Promise<void> {
       const valid = validateRunId(state.runId);
       const filePath = join(basePath, valid, "state.json");
-      const cloned = JSON.parse(JSON.stringify(state)) as RunState;
+      // structuredClone (Node >=17) deep-clones without the JSON parse+stringify
+      // round-trip. INVARIANT: RunState must stay structuredClone-compatible and
+      // JSON-plain — no functions/symbols/non-cloneable handles (structuredClone
+      // throws), and no Date/Map/Set whose JSON shape differs from a live value;
+      // the final JSON.stringify below is the serializer, so output stays
+      // byte-identical to the old clone at ~half the CPU/peak-heap cost. If a
+      // non-plain field is ever added to RunState, revisit this clone.
+      const cloned = structuredClone(state);
       const toSave: RunState = { ...(redactSecrets(cloned) as RunState), schemaVersion: 1 };
       const tempPath = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
       try {

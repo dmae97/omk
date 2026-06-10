@@ -953,7 +953,14 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
       ...stickyBottomLines,
     ];
 
-    while (body.length < bodyHeight) body.splice(stickyHeaderLines.length, 0, "");
+    // Pad the body to the target height in a single splice. The previous
+    // per-iteration `body.splice(h, 0, "")` loop was O(n^2): each insertion
+    // shifted the entire tail. Inserting N empty strings at the same index in
+    // one call yields a byte-identical array (same elements, same order).
+    if (body.length < bodyHeight) {
+      const padCount = bodyHeight - body.length;
+      body.splice(stickyHeaderLines.length, 0, ...Array<string>(padCount).fill(""));
+    }
     if (body.length > bodyHeight) body.length = bodyHeight;
   } else if (fixedBodyHeight != null) {
     const headerRows = headerLines.length + (sweepLine ? 2 : 0);

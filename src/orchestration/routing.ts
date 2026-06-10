@@ -752,12 +752,37 @@ function normalizeText(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function textMatchesKeyword(text: string, keyword: string): boolean {
+// Module-level cache of compiled keyword matchers. `textMatchesKeyword` is invoked
+// ~150x per `selectTaskRouting` (per DAG node), so recompiling `new RegExp(...)` on
+// every call is pure overhead. The keys are normalized keywords drawn from a fixed,
+// bounded route-candidate keyword set, so this Map cannot grow without bound; no
+// eviction policy is required. The compiled RegExps carry no flags (no /g, /y), so
+// they are stateless across `.test()` calls and safe to share between callers.
+const keywordRegExpCache = new Map<string, RegExp>();
+
+function getKeywordRegExp(normalized: string): RegExp {
+  const cached = keywordRegExpCache.get(normalized);
+  if (cached !== undefined) return cached;
+  const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`);
+  keywordRegExpCache.set(normalized, regex);
+  return regex;
+}
+
+/** Exported for focused cache-equivalence tests. Returns the cached matcher for an
+ * already-normalized alphanumeric keyword (or null when no regex path applies). */
+export function getKeywordMatcherRegExp(keyword: string): RegExp | null {
+  const normalized = normalizeText(keyword);
+  if (normalized.length < 2) return null;
+  if (!/^[a-z0-9]+$/.test(normalized)) return null;
+  return getKeywordRegExp(normalized);
+}
+
+export function textMatchesKeyword(text: string, keyword: string): boolean {
   const normalized = normalizeText(keyword);
   if (normalized.length < 2) return false;
   if (/^[a-z0-9]+$/.test(normalized)) {
-    const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`).test(text);
+    return getKeywordRegExp(normalized).test(text);
   }
   return text.includes(normalized);
 }

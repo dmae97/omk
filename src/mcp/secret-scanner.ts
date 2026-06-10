@@ -443,6 +443,7 @@ export class SecretScanner extends EventEmitter {
     const findings: SecretFinding[] = [];
     let redacted = text;
     const activePatterns = this.getActivePatterns();
+    const lineStarts = this.computeLineStarts(text);
 
     for (const pattern of activePatterns) {
       pattern.pattern.lastIndex = 0;
@@ -451,7 +452,7 @@ export class SecretScanner extends EventEmitter {
       while ((match = pattern.pattern.exec(text)) !== null) {
         const matchedText = match[0];
         const offset = match.index;
-        const { line, column } = this.getLineColumn(text, offset);
+        const { line, column } = this.getLineColumn(text, offset, lineStarts);
         const context = this.getContext(text, offset, matchedText.length);
 
         findings.push({
@@ -685,6 +686,7 @@ export class SecretScanner extends EventEmitter {
   private findInText(text: string, sourceFile: string): SecretFinding[] {
     const findings: SecretFinding[] = [];
     const activePatterns = this.getActivePatterns();
+    const lineStarts = this.computeLineStarts(text);
 
     for (const pattern of activePatterns) {
       pattern.pattern.lastIndex = 0;
@@ -693,7 +695,7 @@ export class SecretScanner extends EventEmitter {
       while ((match = pattern.pattern.exec(text)) !== null) {
         const matchedText = match[0];
         const offset = match.index;
-        const { line, column } = this.getLineColumn(text, offset);
+        const { line, column } = this.getLineColumn(text, offset, lineStarts);
         const context = this.getContext(text, offset, matchedText.length);
 
         findings.push({
@@ -726,18 +728,53 @@ export class SecretScanner extends EventEmitter {
     return result;
   }
 
-  private getLineColumn(text: string, offset: number): { line: number; column: number } {
-    let line = 1;
-    let column = 1;
-    for (let i = 0; i < offset && i < text.length; i++) {
-      if (text[i] === "\n") {
-        line++;
-        column = 1;
+  /**
+   * Precompute the byte offset at which each line begins.
+   * lineStarts[0] is always 0; each subsequent entry is the index just after a
+   * "\n". Used to make getLineColumn O(log n) per lookup instead of O(offset).
+   */
+  private computeLineStarts(text: string): number[] {
+    const lineStarts: number[] = [0];
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === "\n") lineStarts.push(i + 1);
+    }
+    return lineStarts;
+  }
+
+  private getLineColumn(
+    text: string,
+    offset: number,
+    lineStarts?: number[],
+  ): { line: number; column: number } {
+    // Backward-compatible fallback: original O(offset) scan when no precomputed
+    // index is supplied. Produces identical line/column numbers.
+    if (!lineStarts) {
+      let line = 1;
+      let column = 1;
+      for (let i = 0; i < offset && i < text.length; i++) {
+        if (text[i] === "\n") {
+          line++;
+          column = 1;
+        } else {
+          column++;
+        }
+      }
+      return { line, column };
+    }
+
+    // Binary search for the rightmost line start that is <= offset.
+    let lo = 0;
+    let hi = lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (lineStarts[mid] <= offset) {
+        lo = mid;
       } else {
-        column++;
+        hi = mid - 1;
       }
     }
-    return { line, column };
+    const lineStartOffset = lineStarts[lo];
+    return { line: lo + 1, column: offset - lineStartOffset + 1 };
   }
 
   private getContext(text: string, offset: number, matchLength: number): string {

@@ -202,7 +202,8 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
       composite: computeComposite(scores[i], r, intent),
     }));
 
-    scored.sort((a, b) => compareScoredRuntimes(a, b, intent));
+    const capabilityScoreCache = buildCapabilityScoreCache(supporting, intent);
+    scored.sort((a, b) => compareScoredRuntimes(a, b, intent, capabilityScoreCache));
 
     const primary = scored[0].runtime;
     const fallbacks = scored.slice(1).map((s) => s.runtime);
@@ -234,7 +235,12 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
       runtime: r,
       composite: computeRuntimeCapabilityScore(r, intent),
     }));
-    scored.sort((a, b) => compareRuntimeCandidates(a.runtime, b.runtime, intent));
+    // Reuse the capability scores already computed above instead of recomputing
+    // them inside the comparator on every comparison.
+    const capabilityScoreCache = new Map<AgentRuntime, number>(
+      scored.map((s): [AgentRuntime, number] => [s.runtime, s.composite]),
+    );
+    scored.sort((a, b) => compareRuntimeCandidates(a.runtime, b.runtime, intent, capabilityScoreCache));
 
     const primary = scored[0].runtime;
     const fallbacks = scored.slice(1).map((s) => s.runtime);
@@ -433,6 +439,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     }
 
     const preferredRuntimeIds = task.providerPolicy?.fallbackChain ?? options.fallbackChain ?? [];
+    const capabilityScoreCache = buildCapabilityScoreCache(candidates, intent);
     candidates.sort((a, b) => {
       const runtimeDelta = runtimePreferenceIndex(a.id, preferredRuntimeIds)
         - runtimePreferenceIndex(b.id, preferredRuntimeIds);
@@ -442,7 +449,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
           - providerPreferenceIndex(b.id, preferredProviders);
         if (providerDelta !== 0) return providerDelta;
       }
-      return compareRuntimeCandidates(a, b, intent);
+      return compareRuntimeCandidates(a, b, intent, capabilityScoreCache);
     });
 
     let lastError: AgentRunResult | undefined;
@@ -681,21 +688,66 @@ function compareScoredRuntimes(
   a: { runtime: AgentRuntime; composite: number },
   b: { runtime: AgentRuntime; composite: number },
   intent: NodeIntent,
+  scoreCache: Map<AgentRuntime, number>,
 ): number {
   const compositeDelta = b.composite - a.composite;
   if (compositeDelta !== 0) return compositeDelta;
-  return compareRuntimeCandidates(a.runtime, b.runtime, intent);
+  return compareRuntimeCandidates(a.runtime, b.runtime, intent, scoreCache);
 }
 
-function compareRuntimeCandidates(a: AgentRuntime, b: AgentRuntime, intent: NodeIntent): number {
-  const capabilityDelta = computeRuntimeCapabilityScore(b, intent) - computeRuntimeCapabilityScore(a, intent);
+function compareRuntimeCandidates(
+  a: AgentRuntime,
+  b: AgentRuntime,
+  intent: NodeIntent,
+  scoreCache: Map<AgentRuntime, number>,
+): number {
+  const capabilityDelta =
+    capabilityScoreFromCache(scoreCache, b, intent) - capabilityScoreFromCache(scoreCache, a, intent);
   if (capabilityDelta !== 0) return capabilityDelta;
   const priorityDelta = b.priority - a.priority;
   if (priorityDelta !== 0) return priorityDelta;
   return a.id.localeCompare(b.id);
 }
 
-function computeRuntimeCapabilityScore(runtime: AgentRuntime, intent: NodeIntent): number {
+// Precompute each candidate's capability score ONCE before sorting. Without this the
+// comparator recomputed `computeRuntimeCapabilityScore` for both operands on every
+// comparison, making the sort O(r log r * c) instead of O(r log r). Keyed by runtime
+// object reference so identical ids with distinct objects can never alias.
+function buildCapabilityScoreCache(
+  runtimes: readonly AgentRuntime[],
+  intent: NodeIntent,
+): Map<AgentRuntime, number> {
+  const cache = new Map<AgentRuntime, number>();
+  for (const runtime of runtimes) {
+    if (!cache.has(runtime)) cache.set(runtime, computeRuntimeCapabilityScore(runtime, intent));
+  }
+  return cache;
+}
+
+function capabilityScoreFromCache(
+  cache: Map<AgentRuntime, number>,
+  runtime: AgentRuntime,
+  intent: NodeIntent,
+): number {
+  const cached = cache.get(runtime);
+  if (cached !== undefined) return cached;
+  const computed = computeRuntimeCapabilityScore(runtime, intent);
+  cache.set(runtime, computed);
+  return computed;
+}
+
+/** Test-only: deterministic capability-ordered sort using the precomputed score cache.
+ * Mirrors the production comparator so tests can assert identical ordering to the
+ * pre-change recompute-in-comparator reference. */
+export function sortRuntimesByCapabilityScore(
+  runtimes: readonly AgentRuntime[],
+  intent: NodeIntent,
+): AgentRuntime[] {
+  const cache = buildCapabilityScoreCache(runtimes, intent);
+  return [...runtimes].sort((a, b) => compareRuntimeCandidates(a, b, intent, cache));
+}
+
+export function computeRuntimeCapabilityScore(runtime: AgentRuntime, intent: NodeIntent): number {
   const capabilities = runtime.capabilities;
   if (capabilities == null) return 0;
 

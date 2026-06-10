@@ -9,6 +9,7 @@ import { analyzeUserIntent, createGoalSpec, normalizeGoal, updateGoalStatus } fr
 import { createGoalPersister } from "../dist/goal/persistence.js";
 import { compileGoalToDagNodes, attachGoalToRunState } from "../dist/goal/compiler.js";
 import {
+  bucketRunStateNodesByStatus,
   cleanupControlLoopRun,
   evaluateAdaptiveLoopGuard,
   evaluateGoalProgressDelta,
@@ -17,6 +18,34 @@ import {
   getControlLoopCacheStats,
   pruneControlLoopRunCaches,
 } from "../dist/goal/control-loop.js";
+
+test("bucketRunStateNodesByStatus single pass equals the prior five per-status filters", () => {
+  const statuses = [
+    "failed", "blocked", "running", "pending", "done",
+    "queued", "failed", "done", "running", "blocked", "pending", "cancelled",
+  ];
+  const nodes = statuses.map((status, i) => ({ id: `n${i}`, status }));
+  const runState = { schemaVersion: 1, runId: "bucket-test", nodes, startedAt: new Date().toISOString() };
+
+  const buckets = bucketRunStateNodesByStatus(runState);
+
+  // Each bucket must equal exactly what the pre-change filter would have produced.
+  assert.deepEqual(buckets.failed, runState.nodes.filter((n) => n.status === "failed"));
+  assert.deepEqual(buckets.blocked, runState.nodes.filter((n) => n.status === "blocked"));
+  assert.deepEqual(buckets.running, runState.nodes.filter((n) => n.status === "running"));
+  assert.deepEqual(buckets.pending, runState.nodes.filter((n) => n.status === "pending"));
+  assert.deepEqual(buckets.success, runState.nodes.filter((n) => n.status === "done"));
+
+  // Order is preserved (iteration order), and unrelated statuses are dropped.
+  assert.deepEqual(buckets.failed.map((n) => n.id), ["n0", "n6"]);
+  assert.deepEqual(buckets.success.map((n) => n.id), ["n4", "n7"]);
+  assert.deepEqual(buckets.blocked.map((n) => n.id), ["n1", "n9"]);
+
+  // Undefined run state yields five empty buckets (matches `?? []` fallbacks).
+  assert.deepEqual(bucketRunStateNodesByStatus(undefined), {
+    failed: [], blocked: [], running: [], pending: [], success: [],
+  });
+});
 import { buildIntentFrame, evaluatePromptNovelty } from "../dist/goal/intent-frame.js";
 import { scoreGoal } from "../dist/goal/scoring.js";
 import { checkGoalEvidence } from "../dist/goal/evidence.js";

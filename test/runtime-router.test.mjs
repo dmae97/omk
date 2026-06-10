@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createRuntimeBackedTaskRunner } from "../dist/runtime/runtime-backed-task-runner.js";
-import { createRuntimeRouter } from "../dist/runtime/runtime-router.js";
+import {
+  createRuntimeRouter,
+  sortRuntimesByCapabilityScore,
+  computeRuntimeCapabilityScore,
+} from "../dist/runtime/runtime-router.js";
 import { createKimiApiRuntime } from "../dist/runtime/kimi-api-runtime.js";
 import { buildTaskRunContext } from "../dist/runtime/worker-manifest.js";
 
@@ -763,6 +767,62 @@ test("runtime-backed runner forwards OMK-owned scoped worker manifest into nativ
   assert.equal(captured.context.env.OMK_NODE_MCP_SERVERS, "omk-project,custom-mcp");
   assert.equal(captured.context.env.OMK_NODE_HOOKS, "protect-secrets.sh,custom-hook");
   assert.equal(captured.context.env.OMK_NODE_TOOLS, "custom-tool");
+});
+
+test("capability sort precomputes scores into a Map without changing order vs recompute-in-comparator reference", () => {
+  const intents = [
+    "research",
+    "planning",
+    "coding",
+    "debugging",
+    "refactor",
+    "review",
+    "test-generation",
+    "documentation",
+    "shell-operation",
+  ];
+
+  const base = [
+    fakeRuntime("alpha-api", [], advisoryApiCapabilities({ supportsToolCalling: true }), { priority: 70 }),
+    fakeRuntime("zeta-api", [], advisoryApiCapabilities({ supportsToolCalling: true }), { priority: 70 }),
+    fakeRuntime("codex-cli", [], workspaceCliCapabilities(), { priority: 60 }),
+    fakeRuntime("omega-cli", [], workspaceCliCapabilities(), { priority: 90 }),
+    fakeRuntime("vision-api", [], advisoryApiCapabilities({ vision: true, supportsToolCalling: true }), { priority: 60 }),
+    fakeRuntime("nocaps-runtime", [], undefined, { priority: 50 }),
+  ];
+
+  // Exact pre-change comparator: recompute capability score for both operands per comparison.
+  const referenceOrder = (runtimes, intent) =>
+    [...runtimes]
+      .sort((a, b) => {
+        const capabilityDelta =
+          computeRuntimeCapabilityScore(b, intent) - computeRuntimeCapabilityScore(a, intent);
+        if (capabilityDelta !== 0) return capabilityDelta;
+        const priorityDelta = b.priority - a.priority;
+        if (priorityDelta !== 0) return priorityDelta;
+        return a.id.localeCompare(b.id);
+      })
+      .map((r) => r.id);
+
+  const permutations = [
+    base,
+    [...base].reverse(),
+    [...base.slice(3), ...base.slice(0, 3)],
+  ];
+
+  for (const intent of intents) {
+    const expected = referenceOrder(base, intent);
+    for (const perm of permutations) {
+      const cached = sortRuntimesByCapabilityScore(perm, intent).map((r) => r.id);
+      assert.deepEqual(
+        cached,
+        referenceOrder(perm, intent),
+        `intent=${intent}: cached sort must equal recompute reference`
+      );
+      // total-order comparator => order is independent of input permutation
+      assert.deepEqual(cached, expected, `intent=${intent}: order must be permutation-independent`);
+    }
+  }
 });
 
 async function selectedRuntimeFor({ task, runtimes }) {

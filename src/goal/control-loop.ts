@@ -1105,6 +1105,51 @@ export async function generateNextPrompt(
   });
 }
 
+/** Buckets of run-state nodes grouped by lifecycle status. */
+export interface RunStateNodeBuckets {
+  failed: RunState["nodes"];
+  blocked: RunState["nodes"];
+  running: RunState["nodes"];
+  pending: RunState["nodes"];
+  success: RunState["nodes"];
+}
+
+/**
+ * Classify `runState.nodes` into status buckets in a SINGLE pass. Behavior-preserving
+ * replacement for five separate `.filter()` passes: each bucket holds exactly the nodes
+ * the matching `status === ...` filter would have selected, in the same order. `success`
+ * collects `status === "done"` nodes. Statuses outside these five are ignored.
+ */
+export function bucketRunStateNodesByStatus(runState: RunState | undefined): RunStateNodeBuckets {
+  const failed: RunState["nodes"] = [];
+  const blocked: RunState["nodes"] = [];
+  const running: RunState["nodes"] = [];
+  const pending: RunState["nodes"] = [];
+  const success: RunState["nodes"] = [];
+  for (const node of runState?.nodes ?? []) {
+    switch (node.status) {
+      case "failed":
+        failed.push(node);
+        break;
+      case "blocked":
+        blocked.push(node);
+        break;
+      case "running":
+        running.push(node);
+        break;
+      case "pending":
+        pending.push(node);
+        break;
+      case "done":
+        success.push(node);
+        break;
+      default:
+        break;
+    }
+  }
+  return { failed, blocked, running, pending, success };
+}
+
 async function generateNextPromptInner(
   goal: GoalSpec,
   evidence: GoalEvidence[],
@@ -1141,11 +1186,16 @@ async function generateNextPromptInner(
     return ev?.passed ?? false;
   });
 
-  const failedNodes = runState?.nodes.filter((n) => n.status === "failed") ?? [];
-  const blockedNodes = runState?.nodes.filter((n) => n.status === "blocked") ?? [];
-  const runningNodes = runState?.nodes.filter((n) => n.status === "running") ?? [];
-  const pendingNodes = runState?.nodes.filter((n) => n.status === "pending") ?? [];
-  const successNodes = runState?.nodes.filter((n) => n.status === "done") ?? [];
+  // Single pass over runState.nodes replaces five separate .filter() passes per
+  // iteration. Bucket contents and order are identical to the prior per-status
+  // filters because nodes are appended in iteration order.
+  const {
+    failed: failedNodes,
+    blocked: blockedNodes,
+    running: runningNodes,
+    pending: pendingNodes,
+    success: successNodes,
+  } = bucketRunStateNodesByStatus(runState);
   const proposedAction: NextAction = suggestion.type === "close"
     ? "close"
     : failedNodes.length > 0 || blockedNodes.length > 0

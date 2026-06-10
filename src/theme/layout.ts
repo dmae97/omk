@@ -4,7 +4,7 @@
  */
 
 import { P, BRAND_HEX } from "../brand/palette.js";
-import { esc, rgb, stripAnsi, padEndAnsi, sanitizeTerminalText, visibleTerminalWidth } from "./ansi.js";
+import { esc, rgb, stripAnsi, sanitizeTerminalText, visibleTerminalWidth } from "./ansi.js";
 import { style } from "./colors.js";
 import { renderOmkSparkleText } from "../ui/omk-sigil.js";
 
@@ -39,8 +39,13 @@ export function box(lines: string[], title?: string): string {
   const termWidth = process.stdout.columns || 80;
   const rawTitle = title ? sanitizeTerminalText(title) : "";
   const rawTitleWidth = rawTitle ? visibleTerminalWidth(rawTitle) : 0;
+  // Strip each line once and reuse its visible width for both the inner-width
+  // calculation and right-padding. This removes the redundant second strip that
+  // padEndAnsi() performed internally. Output bytes are identical:
+  // padEndAnsi(l, innerWidth) === l + " ".repeat(max(0, innerWidth - strip(l))).
+  const measured = lines.map((l) => ({ line: l, width: stripAnsi(l).length }));
   const rawInner = Math.max(
-    ...lines.map((l) => stripAnsi(l).length),
+    ...measured.map((m) => m.width),
     rawTitle ? rawTitleWidth + 4 : 0
   );
   const innerWidth = Math.min(rawInner, Math.max(termWidth - 4, 20));
@@ -50,7 +55,9 @@ export function box(lines: string[], title?: string): string {
     ? style.phosphorDim("╔" + "═".repeat(2) + " ") + titleText + style.phosphorDim(" " + "═".repeat(Math.max(0, width - rawTitleWidth - 6)) + "╗")
     : style.phosphorDim("╔" + "═".repeat(width) + "╗");
   const bottom = style.phosphorDim("╚" + "═".repeat(width) + "╝");
-  const body = lines.map((l) => style.phosphorDim("║ ") + padEndAnsi(l, innerWidth) + style.phosphorDim(" ║"));
+  const body = measured.map(({ line, width: w }) =>
+    style.phosphorDim("║ ") + line + " ".repeat(Math.max(0, innerWidth - w)) + style.phosphorDim(" ║")
+  );
   return [top, ...body, bottom].join("\n");
 }
 
@@ -100,7 +107,10 @@ export function panel(lines: string[], title?: string): string {
   const termWidth = process.stdout.columns || 80;
   const rawTitle = title ? sanitizeTerminalText(title) : "";
   const rawTitleWidth = rawTitle ? visibleTerminalWidth(rawTitle) : 0;
-  const rawInner = Math.max(...lines.map((l) => stripAnsi(l).length), rawTitle ? rawTitleWidth + 4 : 0);
+  // Same single-strip optimization as box(): measure each line once and reuse
+  // the visible width for inner-width + padding (byte-identical to padEndAnsi).
+  const measured = lines.map((l) => ({ line: l, width: stripAnsi(l).length }));
+  const rawInner = Math.max(...measured.map((m) => m.width), rawTitle ? rawTitleWidth + 4 : 0);
   const innerWidth = Math.min(rawInner, Math.max(termWidth - 4, 20));
   const width = innerWidth + 4;
   const titleText = rawTitle ? gradient(rawTitle) : "";
@@ -108,8 +118,8 @@ export function panel(lines: string[], title?: string): string {
     ? style.phosphorDim("┏" + "━".repeat(2) + " ") + titleText + style.phosphorDim(" " + "━".repeat(Math.max(0, width - rawTitleWidth - 6)) + "┓")
     : style.phosphorDim("┏" + "━".repeat(width) + "┓");
   const bottom = style.phosphorDim("┗" + "━".repeat(width) + "┛");
-  const body = lines.map((l) =>
-    style.phosphorDim("┃ ") + padEndAnsi(l, innerWidth) + style.phosphorDim(" ┃")
+  const body = measured.map(({ line, width: w }) =>
+    style.phosphorDim("┃ ") + line + " ".repeat(Math.max(0, innerWidth - w)) + style.phosphorDim(" ┃")
   );
   return [top, ...body, bottom].join("\n");
 }

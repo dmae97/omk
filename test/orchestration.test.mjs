@@ -12,7 +12,61 @@ import { estimateRunProgress } from "../dist/orchestration/eta.js";
 import { renderCapabilityRoutingArtifact } from "../dist/orchestration/capability-routing.js";
 import { createRoutedRunState, refreshRunStateEstimate, routeRunState, createExecutableDagFromState, buildRunGoalState } from "../dist/orchestration/run-state.js";
 import { renderParallelCockpit } from "../dist/orchestration/parallel-ui.js";
-import { dagNodeRoutingEnv, discoverRoutingInventory, resetRoutingInventoryCache } from "../dist/orchestration/routing.js";
+import {
+  dagNodeRoutingEnv,
+  discoverRoutingInventory,
+  resetRoutingInventoryCache,
+  textMatchesKeyword,
+  getKeywordMatcherRegExp,
+} from "../dist/orchestration/routing.js";
+
+test("keyword regex cache reuses one compiled RegExp and preserves identical match results", () => {
+  // Cache hit: identical normalized keyword must return the SAME RegExp object.
+  const first = getKeywordMatcherRegExp("deploy");
+  const second = getKeywordMatcherRegExp("Deploy");
+  assert.ok(first instanceof RegExp, "alphanumeric keyword should compile to a RegExp");
+  assert.equal(first, second, "normalized-equal keywords must reuse the cached RegExp instance");
+  assert.equal(getKeywordMatcherRegExp("x"), null, "sub-2-char keyword has no regex path");
+  assert.equal(getKeywordMatcherRegExp("multi word"), null, "non-alphanumeric keyword uses includes, not regex");
+
+  // Reference: recompile a fresh RegExp on every call (pre-cache behavior).
+  const referenceMatches = (text, keyword) => {
+    const normalized = keyword.toLowerCase().replace(/\s+/g, " ").trim();
+    if (normalized.length < 2) return false;
+    if (/^[a-z0-9]+$/.test(normalized)) {
+      const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`).test(text);
+    }
+    return text.includes(normalized);
+  };
+
+  const texts = [
+    "please deploy the service",
+    "redeploy now",
+    "deploy",
+    "DEPLOY pipeline",
+    "ci/cd deploy step",
+    "run tests and build node18",
+    "no relevant words here",
+    "deploy the deploy twice",
+  ];
+  const keywords = ["deploy", "ci", "build", "test", "x", "multi word", "node18"];
+
+  for (const text of texts) {
+    for (const keyword of keywords) {
+      assert.equal(
+        textMatchesKeyword(text, keyword),
+        referenceMatches(text, keyword),
+        `cached matcher must equal fresh-recompile reference for text="${text}" keyword="${keyword}"`
+      );
+    }
+  }
+
+  // Stateless (no /g) RegExp => repeated calls are stable, no lastIndex drift.
+  for (let i = 0; i < 5; i++) {
+    assert.equal(textMatchesKeyword("deploy the deploy twice", "deploy"), true);
+  }
+});
 import { OMK_RELEASE_GUARD_PRESET } from "../dist/runtime/core-verified-preset.js";
 import { collectMcpConfigs, getUserHome, injectKimiGlobals, normalizeUserHomePath, pruneRuntimeMcpServers } from "../dist/util/fs.js";
 import { sanitizeTerminalText } from "../dist/util/theme.js";
