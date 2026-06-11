@@ -3,6 +3,7 @@ import type { GoalSpec, GoalEvidence, IntentFrame } from "../contracts/goal.js";
 import { evaluateMissingCriteria, suggestNextAction } from "../goal/eval-criteria.js";
 import { scoreGoal } from "../goal/scoring.js";
 import { renderPromptDigest } from "../goal/prompt-digest.js";
+import { applyPersonaWeights, type PersonaWeightState } from "./hedge-persona-weights.js";
 
 export interface DecisionCandidate {
   id: string;
@@ -17,6 +18,7 @@ export interface EnsembleDecisionPolicy {
   candidates?: DecisionCandidate[];
   extraVotes?: EnsembleDecisionCandidateVote[];
   intentFrame?: IntentFrame;
+  personaWeights?: PersonaWeightState;
 }
 
 export interface EnsembleDecisionResult {
@@ -308,6 +310,9 @@ export function evaluateEnsembleDecision(goal: GoalSpec, runState: RunState, evi
   ];
 
   votes = calibrateVoteWeights(votes, runState, evidence);
+  if (policy.personaWeights) {
+    votes = applyPersonaWeights(votes, policy.personaWeights);
+  }
 
   const actionScores = new Map<NextAction, number>();
   for (const vote of votes) {

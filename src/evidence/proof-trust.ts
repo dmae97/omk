@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
+import { DEFAULT_TRUST_WEIGHTS } from "./trust-calibration.js";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -25,16 +26,7 @@ export interface ProofTrustResult {
 
 const EXPECTED_SCHEMA_VERSION = "omk.proof-bundle.v1";
 
-const WEIGHTS = {
-  schema: 0.15,
-  commands: 0.15,
-  stdout: 0.10,
-  hashes: 0.15,
-  decisions: 0.15,
-  evidence: 0.15,
-  limitations: 0.05,
-  replay: 0.10,
-} as const;
+const WEIGHTS = DEFAULT_TRUST_WEIGHTS;
 
 type FieldKey = keyof typeof WEIGHTS;
 

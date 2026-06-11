@@ -62,6 +62,23 @@ export interface DagNodeRouting {
   readOnly?: boolean;
   evidenceRequired?: boolean;
   rationale?: string;
+  routeTrace?: Array<{
+    id: string;
+    kind: "skill" | "mcp" | "tool" | "hook";
+    source: "project" | "global" | "builtin";
+    baseScore: number;
+    sourcePrior: number;
+    score: number;
+    features: {
+      roleMatch: number;
+      keywordScore: number;
+      evidenceFit: number;
+      contextFit: number;
+      safetyFit: number;
+      keywordMatches: number;
+    };
+    reason: string;
+  }>;
   replanHint?: {
     criterionId?: string;
     artifactRef?: string;

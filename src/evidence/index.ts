@@ -46,6 +46,8 @@ export { createDecisionTraceStore } from "./decision-trace.js";
 
 export type { ProofTrustMvpEngine, ProofTrustResult } from "./proof-trust.js";
 export { createProofTrustMvpEngine } from "./proof-trust.js";
+export type { TrustCalibrationExample, TrustCalibrationResult, TrustFieldKey, TrustWeights } from "./trust-calibration.js";
+export { calibrateTrustWeights, DEFAULT_TRUST_WEIGHTS, scoreTrustFeatures, TRUST_FIELD_KEYS } from "./trust-calibration.js";
 
 export type {
   EtsClaim,

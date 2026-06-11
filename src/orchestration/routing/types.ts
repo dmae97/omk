@@ -18,9 +18,32 @@ export interface RouteCandidate {
   capabilities: string[];
 }
 
+export interface RouteScoreFeatures {
+  roleMatch: number;
+  keywordScore: number;
+  evidenceFit: number;
+  contextFit: number;
+  safetyFit: number;
+  keywordMatches: number;
+}
+
+export interface RouteScoreTrace {
+  id: string;
+  kind: RouteKind;
+  source: RouteSource;
+  baseScore: number;
+  sourcePrior: number;
+  score: number;
+  features: RouteScoreFeatures;
+  reason: string;
+}
+
 export interface ScoredRoute {
   candidate: RouteCandidate;
   score: number;
+  baseScore: number;
+  sourcePrior: number;
+  features: RouteScoreFeatures;
   reason: string;
 }
 

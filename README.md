@@ -393,6 +393,7 @@ Public copy stays OMK-owned: **OMK//CONTROL**, **NEON GRID ONLINE**, route/evide
 
 - [Getting started](docs/getting-started.md)
 - [Runtime versioning](docs/versioning.md)
+- [Decision-layer calibration](docs/decision-layer-calibration.md)
 - [Provider maturity](docs/provider-maturity.md)
 - [Native root runtime algorithms](docs/native-root-runtime-algorithms.md)
 - [Codex OAuth setup](docs/codex-oauth-setup.md)

@@ -26,13 +26,56 @@ interface RouteCandidate {
   capabilities: string[];
 }
 
+interface RouteScoreFeatures {
+  roleMatch: number;
+  keywordScore: number;
+  evidenceFit: number;
+  contextFit: number;
+  safetyFit: number;
+  keywordMatches: number;
+}
+
+interface RouteScoreTrace {
+  id: string;
+  kind: RouteKind;
+  source: RouteSource;
+  baseScore: number;
+  sourcePrior: number;
+  score: number;
+  features: RouteScoreFeatures;
+  reason: string;
+}
+
 interface ScoredRoute {
   candidate: RouteCandidate;
   score: number;
+  baseScore: number;
+  sourcePrior: number;
+  features: RouteScoreFeatures;
   reason: string;
 }
 
 export type RoutingInput = Pick<DagNodeDefinition, "id" | "name" | "role" | "inputs" | "outputs" | "cost" | "routing">;
+
+const ROUTE_SCORE_WEIGHTS = {
+  role: 0.30,
+  keyword: 0.25,
+  evidence: 0.20,
+  context: 0.15,
+  safety: 0.10,
+} as const;
+
+const ROUTE_SOURCE_PRIOR: Record<RouteSource, number> = {
+  project: 0.02,
+  builtin: 0.01,
+  global: 0,
+};
+
+const ROUTE_SCORE_SCALE = 1_000_000;
+
+const ROUTE_BASE_SCORE_MIN_GAP = computeRouteBaseScoreMinGap(ROUTE_SCORE_WEIGHTS);
+
+assertRoutePriorTiebreakInvariant(ROUTE_SOURCE_PRIOR, ROUTE_BASE_SCORE_MIN_GAP);
 
 const MAX_SKILLS = 3;
 const MAX_MCP_SERVERS = 2;
@@ -428,6 +471,7 @@ export function selectTaskRouting(input: RoutingInput): DagNodeRouting {
   const mergedRationale = autoAssignment.skills.length > 0
     ? `${renderRationale(scored.slice(0, 3), contextBudget)} | Auto: ${autoAssignment.rationale}`
     : renderRationale(scored.slice(0, 3), contextBudget);
+  const routeTrace = scored.slice(0, 8).map(toRouteScoreTrace);
 
   return {
     provider: "auto",
@@ -440,6 +484,7 @@ export function selectTaskRouting(input: RoutingInput): DagNodeRouting {
     readOnly,
     evidenceRequired,
     rationale: mergedRationale,
+    routeTrace,
     rejected: rejected.slice(0, 6),
     requiresMcp: input.routing?.requiresMcp ?? false,
     requiresToolCalling: input.routing?.requiresToolCalling ?? false,
@@ -533,6 +578,64 @@ export function dagNodeRoutingEnv(node: DagNode, dag?: import("./dag.js").Dag): 
   };
 }
 
+export function computeRouteBaseScoreMinGap(weights: typeof ROUTE_SCORE_WEIGHTS): number {
+  const increments = [
+    weights.role,
+    weights.keyword / 2,
+    weights.keyword,
+    weights.evidence,
+    weights.context / 2,
+    weights.context,
+    weights.safety / 2,
+    weights.safety,
+  ].map((value) => Math.round(value * ROUTE_SCORE_SCALE)).filter((value) => value > 0);
+  const gap = increments.reduce((acc, value) => gcd(acc, value));
+  return gap / ROUTE_SCORE_SCALE;
+}
+
+export function routeSourcePrior(source: RouteSource): number {
+  return ROUTE_SOURCE_PRIOR[source] ?? 0;
+}
+
+export function assertRoutePriorTiebreakInvariant(
+  priors: Record<RouteSource, number>,
+  minBaseGap = ROUTE_BASE_SCORE_MIN_GAP
+): void {
+  const values = Object.values(priors);
+  const spread = Math.max(...values) - Math.min(...values);
+  if (!(spread < minBaseGap)) {
+    throw new Error(`Route source prior spread ${spread.toFixed(6)} must be < base-score min gap ${minBaseGap.toFixed(6)}`);
+  }
+}
+
+function gcd(a: number, b: number): number {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y !== 0) {
+    const next = x % y;
+    x = y;
+    y = next;
+  }
+  return x;
+}
+
+function roundScore(value: number): number {
+  return Math.round(value * ROUTE_SCORE_SCALE) / ROUTE_SCORE_SCALE;
+}
+
+function toRouteScoreTrace(route: ScoredRoute): RouteScoreTrace {
+  return {
+    id: route.candidate.id,
+    kind: route.candidate.kind,
+    source: route.candidate.source,
+    baseScore: route.baseScore,
+    sourcePrior: route.sourcePrior,
+    score: route.score,
+    features: route.features,
+    reason: route.reason,
+  };
+}
+
 function scoreRoute(
   candidate: RouteCandidate,
   role: string,
@@ -548,12 +651,30 @@ function scoreRoute(
     ? candidate.contextCost === 1 ? 1 : 0
     : candidate.contextCost <= 2 ? 1 : 0.5;
   const safetyFit = candidate.writeRisk === "none" ? 1 : candidate.writeRisk === "low" ? 0.5 : 0;
-  const localFit = candidate.source === "project" ? 0.08 : candidate.source === "builtin" ? 0.04 : 0;
-  const score = (0.3 * roleMatch) + (0.25 * keywordScore) + (0.2 * evidenceFit) + (0.15 * smallContextFit) + (0.1 * safetyFit) + localFit;
+  const sourcePrior = routeSourcePrior(candidate.source);
+  const features: RouteScoreFeatures = {
+    roleMatch,
+    keywordScore,
+    evidenceFit,
+    contextFit: smallContextFit,
+    safetyFit,
+    keywordMatches,
+  };
+  const baseScore = roundScore(
+    (ROUTE_SCORE_WEIGHTS.role * roleMatch)
+    + (ROUTE_SCORE_WEIGHTS.keyword * keywordScore)
+    + (ROUTE_SCORE_WEIGHTS.evidence * evidenceFit)
+    + (ROUTE_SCORE_WEIGHTS.context * smallContextFit)
+    + (ROUTE_SCORE_WEIGHTS.safety * safetyFit)
+  );
+  const score = roundScore(baseScore + sourcePrior);
 
   return {
     candidate,
     score,
+    baseScore,
+    sourcePrior,
+    features,
     reason: [
       roleMatch ? "role" : "",
       keywordMatches > 0 ? `${keywordMatches} keyword` : "",

@@ -32,6 +32,8 @@
     "assets:build": "node scripts/assets-build.mjs",
     "assets:check": "node scripts/assets-check.mjs",
     "color:gate": "node scripts/color-literal-gate.mjs",
+    "file-size:check": "node scripts/check-file-size.mjs",
+    "provenance:ratio": "node scripts/provenance-ratio.mjs",
     "proof:index": "node scripts/build-proof-index.mjs",
     "proof:check": "node scripts/proof-check.mjs",
     "version:check": "node scripts/check-version-consistency.mjs",

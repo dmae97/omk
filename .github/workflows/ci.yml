@@ -21,12 +21,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm rebuild
+      - name: file size guard
+        run: npm run file-size:check
+        env:
+          OMK_FILE_SIZE_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
       - run: npm run lint
       - run: npm run check
       - run: npm run build:clean

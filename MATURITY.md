@@ -1,6 +1,6 @@
 # OMK Command Maturity Matrix
 
-Last updated: 2026-06-07
+Last updated: 2026-06-11
 Current source version: v0.78.8 (`v1.2` runtime contract family)
 
 | Level | Meaning |
@@ -77,5 +77,6 @@ Regression Proof Matrix is a release-defense gate, not a stable-release claim. S
 | MCP diagnostics | `mcp list/doctor/test` exist; invalid project/global MCP JSON now fails visibly through diagnostics without exposing config contents. | Add machine-readable MCP JSON and structured failure categories for command resolution, timeout, permission, and server health. |
 | Skills and harness templates | `omk skill` exposes current core/TypeScript/review packs, while init templates document project MCP scope, runtime skills, portable `.agents/skills`, and run-scoped harness manifests. | Keep external-inspired skills compact, source-linked, and non-vendored; verify install/sync through `skill-command` tests and package audit. |
 | Release docs and site | README, CHANGELOG, MATURITY, ROADMAP, versioning docs, provider-maturity docs, package audit, and release-gate commands distinguish the `0.78.x` public package line from the `v1.2` runtime contract family while documenting alpha/experimental surfaces, current harness templates, provider limits, and the public project repository at `https://github.com/dmae97/open-multi-agent-kit`. | Treat `npm run release:check`, native safety packaging, tarball install smoke, and CI evidence on the exact commit as the publish/deploy gate before claiming `0.78.8` published or release-ready. |
+| Decision calibration | Route source priors are bounded as strict tiebreakers (`project=0.02`, `builtin=0.01`, `global=0`) with a load-time lattice invariant. Route traces, route-weight calibration helpers, proof-trust calibration helpers, Hedge persona weights, provenance-ratio reporting, and a new-file size guard are implemented. See `docs/decision-layer-calibration.md`. | Run the benchmark replay suite with at least 50 paired tasks before adopting route-weight changes; collect at least 100 labeled proof bundles before adopting trust/Hedge learned weights. |
 | Public proof bundles | `omk.proof-bundle.v1`, `npm run proof:check`, `npm run proof:index`, and ten scoped RC hardening bundles now cover no-Kimi, provider/doctor, fallback routing, native safety, contract/version, evidence-block, replay/inspect, and graph-audit axes. Proof integrity includes runId/commit/evidence/decision linkage and per-bundle `sha256sums.txt` artifact hashes. | Keep strengthening proof authenticity with sanitized repo-relative artifacts, non-empty known limitations, and broader provider fallback variants. |
 | Goal planner | Goal lifecycle exists, including continue, generated plan/evidence criteria, and verification. | Expand planner quality scoring and release evidence. |
