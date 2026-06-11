@@ -910,7 +910,11 @@ function loadMergedMcpConfigSync(
     return { servers, sources, diagnostics };
   }
 
-  const globalFiles = scope === "all" ? [join(getRoutingUserHome(), ".kimi", "mcp.json"), join(getRoutingUserHome(), ".omk", "mcp.json")] : [];
+  const globalFiles = scope === "all" ? [
+    join(getRoutingUserHome(), ".omk", "agent", "mcp.json"),
+    join(getRoutingUserHome(), ".omk", "mcp.json"),
+    join(getRoutingUserHome(), ".kimi", "mcp.json"),
+  ] : [];
 
   for (const path of globalFiles) {
     if (!existsSync(path)) continue;

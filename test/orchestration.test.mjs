@@ -453,6 +453,51 @@ test("project MCP scope prefers project-local .kimi MCP config and keeps .omk as
 });
 
 
+test("all MCP scope includes trusted OMK agent global MCP config", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-agent-mcp-scope-"));
+  const originalHome = await mkdtemp(join(tmpdir(), "omk-agent-mcp-home-"));
+  const previousRoot = process.env.OMK_PROJECT_ROOT;
+  const previousHome = process.env.HOME;
+  const previousOriginalHome = process.env.OMK_ORIGINAL_HOME;
+  const previousMcpScope = process.env.OMK_MCP_SCOPE;
+  const previousSkillsScope = process.env.OMK_SKILLS_SCOPE;
+
+  try {
+    await mkdir(join(originalHome, ".omk", "agent"), { recursive: true });
+    await mkdir(join(projectRoot, ".kimi"), { recursive: true });
+    await writeFile(join(originalHome, ".omk", "agent", "mcp.json"), JSON.stringify({
+      mcpServers: { adaptorch: { command: "bash", args: ["run_adaptorch_mcp.sh"] } },
+    }));
+    await writeFile(join(projectRoot, ".kimi", "mcp.json"), JSON.stringify({ mcpServers: {} }));
+
+    process.env.OMK_PROJECT_ROOT = projectRoot;
+    process.env.HOME = originalHome;
+    process.env.OMK_ORIGINAL_HOME = originalHome;
+    process.env.OMK_MCP_SCOPE = "all";
+    process.env.OMK_SKILLS_SCOPE = "none";
+    resetRoutingInventoryCache();
+
+    const configs = await collectMcpConfigs("all");
+    assert.deepEqual(configs, [
+      join(originalHome, ".omk", "agent", "mcp.json"),
+      join(projectRoot, ".kimi", "mcp.json"),
+    ]);
+
+    const inventory = discoverRoutingInventory(projectRoot);
+    assert.equal(inventory.mcpServers.get("adaptorch"), "global");
+  } finally {
+    resetRoutingInventoryCache();
+    restoreEnv("OMK_PROJECT_ROOT", previousRoot);
+    restoreEnv("HOME", previousHome);
+    restoreEnv("OMK_ORIGINAL_HOME", previousOriginalHome);
+    restoreEnv("OMK_MCP_SCOPE", previousMcpScope);
+    restoreEnv("OMK_SKILLS_SCOPE", previousSkillsScope);
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(originalHome, { recursive: true, force: true });
+  }
+});
+
+
 test("injectKimiGlobals passes one merged MCP config to Kimi to avoid duplicate server warnings", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "omk-merged-mcp-project-"));
   const originalHome = await mkdtemp(join(tmpdir(), "omk-merged-mcp-home-"));

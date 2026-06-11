@@ -13,6 +13,8 @@ import { McpClientSession } from "../../mcp/client.js";
 import {
   collectServers,
   formatArgsForDisplay,
+  normalizeMcpEnv,
+  normalizeMcpServerName,
   resolveAllConfigs,
   sanitizeMcpUrlForDisplay,
   selectEffectiveServer,
@@ -33,12 +35,13 @@ interface JsonRpcProbeResponse {
 }
 
 export async function mcpTestCommand(serverName: string): Promise<void> {
+  const normalizedServerName = normalizeMcpServerName(serverName);
   const sources = await resolveAllConfigs();
   const servers = collectServers(sources);
-  const info = servers.get(serverName);
+  const info = servers.get(normalizedServerName);
 
   if (!info) {
-    console.error(status.error(`Server not found: ${serverName}`));
+    console.error(status.error(`Server not found: ${normalizedServerName}`));
     console.error(style.gray("Run `omk mcp list` to see available servers."));
     process.exit(1);
   }
@@ -47,33 +50,33 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
   const activePathOrder = await collectMcpConfigs(resources.mcpScope);
   const activeSources = info.sources.filter((source) => activePathOrder.includes(source));
   if (activeSources.length === 0) {
-    console.error(status.error(`Server ${serverName} is not active in MCP scope "${resources.mcpScope}".`));
+    console.error(status.error(`Server ${normalizedServerName} is not active in MCP scope "${resources.mcpScope}".`));
     console.error(style.gray(`Defined in: ${info.sources.join(", ")}`));
     process.exit(1);
   }
   const server = selectEffectiveServer(info, activePathOrder);
   if (!server.url && !server.command) {
-    console.error(status.error(`Server ${serverName} has no command`));
+    console.error(status.error(`Server ${normalizedServerName} has no command`));
     process.exit(1);
   }
 
-  console.log(header(`MCP Test: ${serverName}`));
+  console.log(header(`MCP Test: ${normalizedServerName}`));
   if (server.url) {
     console.log(label("URL", sanitizeMcpUrlForDisplay(server.url)));
-    await testRemoteMcpServer(serverName, server);
+    await testRemoteMcpServer(normalizedServerName, server);
     return;
   }
 
   const command = server.command;
   if (!command) {
-    console.error(status.error(`Server ${serverName} has no command`));
+    console.error(status.error(`Server ${normalizedServerName} has no command`));
     process.exit(1);
   }
 
   console.log(label("Command", maskSensitiveText(command)));
   if (server.args) console.log(label("Args", formatArgsForDisplay(server.args)));
   console.log("");
-  const testEnv = buildSubprocessEnv(process.env, server.env ?? {});
+  const testEnv = buildSubprocessEnv(process.env, normalizeMcpEnv(server.env));
 
   // Test 1: executable exists
   const resolved = await which(command);
@@ -162,8 +165,8 @@ export async function mcpTestCommand(serverName: string): Promise<void> {
     process.exit(1);
   }
 
-  if (shouldRunOmkProjectProbe(serverName, server)) {
-    await runOmkProjectToolProbe(command, smokeArgs, server.env);
+  if (shouldRunOmkProjectProbe(normalizedServerName, server)) {
+    await runOmkProjectToolProbe(command, smokeArgs, normalizeMcpEnv(server.env));
   }
 }
 
@@ -251,7 +254,7 @@ export async function mcpPrewarmCommand(
   console.log(header(`${isCheck ? "MCP Check" : "MCP Prewarm/Check"}: ${serverName}`));
   console.log(style.gray("Runs the MCP startup probe outside chat; package-manager caches may warm as a side effect."));
   console.log(style.gray("For a zero-global-noise session, run chat/goal/parallel with `--mcp-scope project` or `--mcp-scope none`."));
-  await mcpTestCommand(serverName);
+  await mcpTestCommand(normalizeMcpServerName(serverName));
 }
 
 function shouldRunOmkProjectProbe(serverName: string, server: McpServerConfig): boolean {

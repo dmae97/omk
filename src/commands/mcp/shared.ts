@@ -11,7 +11,7 @@ export interface McpServerConfig {
   url?: string;
   command?: string;
   args?: string[];
-  env?: Record<string, string>;
+  env?: Record<string, string> | string[];
   headers?: Record<string, string>;
   http_headers?: Record<string, string>;
   startup_timeout_sec?: number;
@@ -52,13 +52,19 @@ export async function loadConfig(filePath: string): Promise<ConfigSource> {
   }
 }
 
+export function normalizeMcpServerName(name: string): string {
+  return name.trim().toLowerCase() === "adptorch" ? "adaptorch" : name;
+}
+
 export async function resolveAllConfigs(): Promise<ConfigSource[]> {
   const root = getProjectRoot();
+  const home = getUserHome();
   const paths = [
     join(root, ".omk", "mcp.json"),
     join(root, ".kimi", "mcp.json"),
-    join(getUserHome(), ".kimi", "mcp.json"),
-    join(getUserHome(), ".omk", "mcp.json"),
+    join(home, ".omk", "agent", "mcp.json"),
+    join(home, ".kimi", "mcp.json"),
+    join(home, ".omk", "mcp.json"),
   ];
   const results: ConfigSource[] = [];
   for (const p of paths) {
@@ -157,6 +163,22 @@ export function formatArgsForDisplay(args: string[]): string {
   return sanitizeMcpArgsForProject(args).join(" ");
 }
 
+export function normalizeMcpEnv(env: McpServerConfig["env"]): Record<string, string> {
+  if (!env) return {};
+  if (Array.isArray(env)) {
+    return Object.fromEntries(
+      env
+        .filter((key): key is string => typeof key === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
+        .map((key) => [key, `\${${key}}`])
+    );
+  }
+  return env;
+}
+
+export function formatMcpEnvKeys(env: McpServerConfig["env"]): string[] {
+  return Object.keys(normalizeMcpEnv(env));
+}
+
 export function sanitizeMcpServerForProject(server: McpServerConfig): McpServerConfig {
   const cleaned = JSON.parse(JSON.stringify(server)) as McpServerConfig & Record<string, unknown>;
   if (typeof cleaned.url === "string") {
@@ -170,7 +192,7 @@ export function sanitizeMcpServerForProject(server: McpServerConfig): McpServerC
   }
   if (cleaned.env && typeof cleaned.env === "object") {
     const env: Record<string, string> = {};
-    for (const [key, value] of Object.entries(cleaned.env)) {
+    for (const [key, value] of Object.entries(normalizeMcpEnv(cleaned.env))) {
       env[key] = isSecretEnvName(key) ? `\${${key}}` : value;
     }
     cleaned.env = env;

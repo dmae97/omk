@@ -32,6 +32,7 @@ export async function collectMcpConfigs(scope: OmkRuntimeScope = "project"): Pro
   const home = getUserHome();
   const projectOmkMcp = join(root, ".omk", "mcp.json");
   const projectKimiMcp = join(root, ".kimi", "mcp.json");
+  const globalAgentMcp = join(home, ".omk", "agent", "mcp.json");
   const globalOmkMcp = join(home, ".omk", "mcp.json");
   const globalKimiMcp = join(home, ".kimi", "mcp.json");
 
@@ -40,7 +41,7 @@ export async function collectMcpConfigs(scope: OmkRuntimeScope = "project"): Pro
   // compatibility surface; `.omk/mcp.json` is used only as a project fallback
   // when the `.kimi` companion does not exist.
   if (scope === "all") {
-    for (const candidate of [globalOmkMcp, globalKimiMcp]) {
+    for (const candidate of [globalAgentMcp, globalOmkMcp, globalKimiMcp]) {
       if (await pathExists(candidate)) configs.push(candidate);
     }
   }

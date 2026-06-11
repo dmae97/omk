@@ -13,6 +13,7 @@ import {
   isHttpUrl,
   isSecretEnvName,
   loadConfig,
+  normalizeMcpServerName,
   RAILWAY_REMOTE_MCP_URL,
   sanitizeMcpServerForProject,
   sanitizeMcpUrlForDisplay,
@@ -21,13 +22,18 @@ import {
 } from "./shared.js";
 
 export async function mcpRemoveCommand(serverName: string, options: { global?: boolean } = {}): Promise<void> {
+  const normalizedServerName = normalizeMcpServerName(serverName);
   const root = getProjectRoot();
   const localPath = join(root, ".kimi", "mcp.json");
   const omkPath = join(root, ".omk", "mcp.json");
   const globalPath = join(getUserHome(), ".kimi", "mcp.json");
 
   const sources: Array<{ path: string; label: string }> = options.global
-    ? [{ path: globalPath, label: "global" }]
+    ? [
+        { path: join(getUserHome(), ".omk", "agent", "mcp.json"), label: "global-agent" },
+        { path: globalPath, label: "global" },
+        { path: join(getUserHome(), ".omk", "mcp.json"), label: "global-omk" },
+      ]
     : [
         { path: localPath, label: "project-local" },
         { path: omkPath, label: "omk-project" },
@@ -36,37 +42,53 @@ export async function mcpRemoveCommand(serverName: string, options: { global?: b
   let removed = false;
   for (const src of sources) {
     const cfg = await loadConfig(src.path);
-    if (!cfg.parsed || !cfg.config.mcpServers || !(serverName in cfg.config.mcpServers)) {
+    if (!cfg.parsed || !cfg.config.mcpServers || !(normalizedServerName in cfg.config.mcpServers)) {
       continue;
     }
     const next = { ...cfg.config.mcpServers };
-    delete next[serverName];
+    delete next[normalizedServerName];
     await writeFile(src.path, JSON.stringify({ mcpServers: next }, null, 2) + "\n", "utf-8");
-    console.log(status.ok(`Removed "${serverName}" from ${src.label} MCP config: ${src.path}`));
+    console.log(status.ok(`Removed "${normalizedServerName}" from ${src.label} MCP config: ${src.path}`));
     removed = true;
     break;
   }
 
   if (!removed) {
-    console.log(status.error(`Server "${serverName}" not found in ${options.global ? "global" : "project-local"} MCP configs.`));
+    console.log(status.error(`Server "${normalizedServerName}" not found in ${options.global ? "global" : "project-local"} MCP configs.`));
     console.log(style.gray(`Checked: ${sources.map((s) => s.path).join(", ")}`));
     if (!options.global) {
-      console.log(style.gray(`To remove from global config, run \`omk mcp remove ${serverName} --global\`, or edit ~/.kimi/mcp.json manually.`));
+      console.log(style.gray(`To remove from global config, run \`omk mcp remove ${normalizedServerName} --global\`, or edit ~/.kimi/mcp.json manually.`));
     } else {
-      console.log(style.gray(`To remove from project-local configs, run \`omk mcp remove ${serverName}\`.`));
+      console.log(style.gray(`To remove from project-local configs, run \`omk mcp remove ${normalizedServerName}\`.`));
     }
     process.exit(1);
   }
 }
 
 export async function mcpAddCommand(serverName: string): Promise<void> {
+  const normalizedServerName = normalizeMcpServerName(serverName);
   const root = getProjectRoot();
-  const globalPath = join(getUserHome(), ".kimi", "mcp.json");
+  const home = getUserHome();
+  const globalPaths = [
+    join(home, ".omk", "agent", "mcp.json"),
+    join(home, ".kimi", "mcp.json"),
+    join(home, ".omk", "mcp.json"),
+  ];
   const projectMcpPath = join(root, ".kimi", "mcp.json");
 
-  const globalSource = await loadConfig(globalPath);
-  if (!globalSource.parsed || !globalSource.config.mcpServers || !(serverName in globalSource.config.mcpServers)) {
-    console.log(status.error(`Server "${serverName}" not found in global MCP config: ${globalPath}`));
+  let selected: McpServerConfig | undefined;
+  let selectedPath = "";
+  for (const globalPath of globalPaths) {
+    const globalSource = await loadConfig(globalPath);
+    if (globalSource.parsed && globalSource.config.mcpServers && normalizedServerName in globalSource.config.mcpServers) {
+      selected = globalSource.config.mcpServers[normalizedServerName];
+      selectedPath = globalPath;
+      break;
+    }
+  }
+  if (!selected) {
+    console.log(status.error(`Server "${normalizedServerName}" not found in trusted global MCP configs.`));
+    console.log(style.gray(`Checked: ${globalPaths.join(", ")}`));
     process.exit(1);
   }
 
@@ -75,17 +97,18 @@ export async function mcpAddCommand(serverName: string): Promise<void> {
     ? { ...projectMcpSource.config.mcpServers }
     : {};
 
-  if (serverName in projectMcpServers) {
-    console.log(status.error(`Server "${serverName}" already exists in ${projectMcpPath}`));
+  if (normalizedServerName in projectMcpServers) {
+    console.log(status.error(`Server "${normalizedServerName}" already exists in ${projectMcpPath}`));
     process.exit(1);
   }
 
-  projectMcpServers[serverName] = sanitizeMcpServerForProject(globalSource.config.mcpServers[serverName]);
+  projectMcpServers[normalizedServerName] = sanitizeMcpServerForProject(selected);
   await mkdir(join(root, ".kimi"), { recursive: true });
   await writeFile(projectMcpPath, JSON.stringify({ mcpServers: projectMcpServers }, null, 2) + "\n", "utf-8");
 
   console.log(header("MCP Add"));
-  console.log(status.ok(`Added "${serverName}" to ${projectMcpPath}`));
+  console.log(status.ok(`Added "${normalizedServerName}" to ${projectMcpPath}`));
+  console.log(label("Source", selectedPath));
 }
 
 export async function mcpInstallCommand(

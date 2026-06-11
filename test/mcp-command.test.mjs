@@ -43,7 +43,7 @@ function runMcpScript(projectRoot, homeRoot, scriptBody, extraEnv = {}) {
       import { mkdir, readFile, writeFile } from "node:fs/promises";
       import { createServer } from "node:http";
       import { join } from "node:path";
-      import { buildMcpDoctorReport, mcpDoctorCommand, mcpInstallCommand, mcpListCommand, mcpPrewarmCommand, mcpSyncGlobalCommand, mcpTestCommand } from ${JSON.stringify(MCP_MODULE_URL)};
+      import { buildMcpDoctorReport, mcpAddCommand, mcpDoctorCommand, mcpInstallCommand, mcpListCommand, mcpPrewarmCommand, mcpSyncGlobalCommand, mcpTestCommand } from ${JSON.stringify(MCP_MODULE_URL)};
       import { doctorCommand } from ${JSON.stringify(pathToFileURL(join(OMK_ROOT, "dist", "commands", "doctor.js")).href)};
       import { resolveRuntimeMcpPreflightOptions, syncKimiMcpGlobal, writeRuntimeMcpConfig } from ${JSON.stringify(pathToFileURL(join(OMK_ROOT, "dist", "util", "fs.js")).href)};
       ${scriptBody}
@@ -599,6 +599,65 @@ test("mcp prewarm --all reports active server results without leaking secrets", 
     await removeTree(projectRoot);
     await removeTree(homeRoot);
     await removeTree(binDir);
+  }
+});
+
+test("mcp add imports adaptorch from OMK agent global config and accepts adptorch alias", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-add-adaptorch-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    await writeEmptyConfigs(projectRoot, homeRoot, { mcpServers: {} });
+    const result = runMcpScript(projectRoot, homeRoot, `
+      await mkdir(join(process.env.OMK_ORIGINAL_HOME, ".omk", "agent"), { recursive: true });
+      await writeFile(join(process.env.OMK_ORIGINAL_HOME, ".omk", "agent", "mcp.json"), JSON.stringify({
+        mcpServers: {
+          adaptorch: {
+            command: "bash",
+            args: ["/opt/adaptorch/run_adaptorch_mcp.sh", "--api-key", "SHOULD_NOT_STORE"],
+            env: { ADAPTORCH_CONTROL_PLANE_TOKEN: "ak_should_not_store", ADAPTORCH_CONTROL_PLANE_BASE_URL: "http://127.0.0.1:8080" },
+          },
+        },
+      }), "utf-8");
+      await mcpAddCommand("adptorch");
+    `);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /Source: .*\.omk\/agent\/mcp\.json/);
+
+    const raw = await readFile(join(projectRoot, ".kimi", "mcp.json"), "utf-8");
+    const parsed = JSON.parse(raw);
+    assert.equal(parsed.mcpServers.adaptorch.command, "bash");
+    assert.deepEqual(parsed.mcpServers.adaptorch.args, ["/opt/adaptorch/run_adaptorch_mcp.sh", "--api-key", "[REDACTED]"]);
+    assert.equal(parsed.mcpServers.adaptorch.env.ADAPTORCH_CONTROL_PLANE_TOKEN, "${ADAPTORCH_CONTROL_PLANE_TOKEN}");
+    assert.equal(parsed.mcpServers.adaptorch.env.ADAPTORCH_CONTROL_PLANE_BASE_URL, "http://127.0.0.1:8080");
+    assert.doesNotMatch(raw + result.stdout + result.stderr, /SHOULD_NOT_STORE|ak_should_not_store/);
+  } finally {
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
+  }
+});
+
+test("mcp list marks OMK agent global adaptorch active only in all scope", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "omk-mcp-list-adaptorch-"));
+  const homeRoot = await mkdtemp(join(tmpdir(), "omk-mcp-home-"));
+
+  try {
+    await writeEmptyConfigs(projectRoot, homeRoot, { mcpServers: {} });
+    await mkdir(join(homeRoot, ".omk", "agent"), { recursive: true });
+    await writeFile(join(homeRoot, ".omk", "agent", "mcp.json"), JSON.stringify({
+      mcpServers: { adaptorch: { command: "bash", args: ["/opt/adaptorch/run_adaptorch_mcp.sh"] } },
+    }), "utf-8");
+
+    const projectResult = runMcpScript(projectRoot, homeRoot, `await mcpListCommand();`, { OMK_MCP_SCOPE: "project" });
+    assert.equal(projectResult.status, 0, projectResult.stderr || projectResult.stdout);
+    assert.match(projectResult.stdout, /adaptorch[\s\S]*\[inactive\]/);
+
+    const allResult = runMcpScript(projectRoot, homeRoot, `await mcpListCommand();`, { OMK_MCP_SCOPE: "all" });
+    assert.equal(allResult.status, 0, allResult.stderr || allResult.stdout);
+    assert.match(allResult.stdout, /adaptorch[\s\S]*\[active\]/);
+  } finally {
+    await removeTree(projectRoot);
+    await removeTree(homeRoot);
   }
 });
 
