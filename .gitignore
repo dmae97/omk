@@ -9,8 +9,28 @@ packages/*/dist-chrome/
 packages/*/dist-firefox/
 *.cpuprofile
 
+# Local orchestration artifacts
+.omk/
+packages/coding-agent/omk-session-*.html
+/GOAL-GJC-OMK-CONTROL-PORT.md
+
 # Environment
-.env
+.env*
+!.env.example
+!.env.sample
+!.env.*.example
+!.env.*.sample
+
+# Private key artifacts
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
 
 # Editor files
 .vscode/
