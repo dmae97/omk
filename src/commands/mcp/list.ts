@@ -5,6 +5,7 @@ import { maskSensitiveText } from "../../util/secret-mask.js";
 import {
   collectServers,
   formatArgsForDisplay,
+  formatMcpEnvKeys,
   resolveAllConfigs,
   sanitizeMcpUrlForDisplay,
   selectEffectiveServer,
@@ -50,8 +51,9 @@ export async function mcpListCommand(): Promise<void> {
     if (server.args && server.args.length > 0) {
       console.log(`  ${style.gray("args:")} ${formatArgsForDisplay(server.args)}`);
     }
-    if (server.env && Object.keys(server.env).length > 0) {
-      console.log(`  ${style.gray("env:")} ${Object.keys(server.env).join(", ")}`);
+    const envKeys = formatMcpEnvKeys(server.env);
+    if (envKeys.length > 0) {
+      console.log(`  ${style.gray("env:")} ${envKeys.join(", ")}`);
     }
     console.log(`  ${style.gray("from:")} ${info.sources.join(", ")}`);
     if (activeSources.length > 0) {

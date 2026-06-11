@@ -17,6 +17,7 @@ import {
   isHttpUrl,
   isRailwayMcpServer,
   isSupabaseMcpServer,
+  normalizeMcpEnv,
   RAILWAY_REMOTE_MCP_URL,
   resolveAllConfigs,
   sanitizeMcpUrlForDisplay,
@@ -229,13 +230,12 @@ export async function buildMcpDoctorReport(): Promise<McpDoctorReport> {
       }
     }
 
-    if (server.env) {
-      for (const [key, value] of Object.entries(server.env)) {
-        if (value.startsWith("${") && value.endsWith("}")) {
-          const envName = value.slice(2, -1);
-          if (!process.env[envName]) {
-            checks.push({ severity: "warn", kind: "env-reference-undefined", message: `env reference undefined: ${key} → ${envName}` });
-          }
+    const env = normalizeMcpEnv(server.env);
+    for (const [key, value] of Object.entries(env)) {
+      if (value.startsWith("${") && value.endsWith("}")) {
+        const envName = value.slice(2, -1);
+        if (!process.env[envName]) {
+          checks.push({ severity: "warn", kind: "env-reference-undefined", message: `env reference undefined: ${key} → ${envName}` });
         }
       }
     }

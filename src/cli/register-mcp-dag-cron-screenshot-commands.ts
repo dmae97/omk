@@ -107,7 +107,7 @@ export function registerMcpDagCronScreenshotCommands(program: Command): void {
     });
   mcp
     .command("add <server>")
-    .description("Copy an MCP server from global ~/.kimi/mcp.json into project .kimi/mcp.json")
+    .description("Copy an MCP server from trusted global config into project .kimi/mcp.json")
     .action(async (server) => {
       const { mcpAddCommand } = await import("../commands/mcp.js");
       await mcpAddCommand(server);

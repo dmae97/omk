@@ -173,11 +173,26 @@ function normalizeRuntimeMcpServer(
   };
 }
 
+function normalizeRuntimeMcpEnv(env: unknown): Record<string, unknown> {
+  if (Array.isArray(env)) {
+    return Object.fromEntries(
+      env
+        .filter((key): key is string => typeof key === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
+        .map((key) => [key, `\${${key}}`])
+    );
+  }
+  return isRecord(env) ? env : {};
+}
+
 function prepareRuntimeMcpServer(server: unknown): unknown {
-  if (!isRecord(server) || typeof server.url === "string" || !isPackageManagerRuntimeServer(server)) {
+  if (!isRecord(server) || typeof server.url === "string") {
     return server;
   }
-  const existingEnv = isRecord(server.env) ? server.env : {};
+  const existingEnv = normalizeRuntimeMcpEnv(server.env);
+  const hasEnvArray = Array.isArray(server.env);
+  if (!isPackageManagerRuntimeServer(server)) {
+    return hasEnvArray ? { ...server, env: existingEnv } : server;
+  }
   const env = { ...QUIET_PACKAGE_MANAGER_ENV, ...existingEnv };
   return { ...server, env };
 }
