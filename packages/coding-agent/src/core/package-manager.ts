@@ -66,6 +66,14 @@ export interface ResolvedPaths {
 
 export type MissingSourceAction = "install" | "skip" | "error";
 
+/** Thrown when an `onMissing` callback explicitly requests aborting resolution. */
+export class MissingSourceError extends Error {
+	constructor(source: string) {
+		super(`Missing source: ${source}`);
+		this.name = "MissingSourceError";
+	}
+}
+
 export interface ProgressEvent {
 	type: "start" | "progress" | "complete" | "error";
 	action: "install" | "remove" | "update" | "clone" | "pull";
@@ -1231,38 +1239,62 @@ export class DefaultPackageManager implements PackageManager {
 				}
 				const action = await onMissing(sourceStr);
 				if (action === "skip") return false;
-				if (action === "error") throw new Error(`Missing source: ${sourceStr}`);
+				if (action === "error") throw new MissingSourceError(sourceStr);
 				await this.installParsedSource(parsed, scope);
 				return true;
 			};
 
-			if (parsed.type === "npm") {
-				let installedPath = this.getNpmInstallPath(parsed, scope);
-				const needsInstall =
-					!existsSync(installedPath) ||
-					(parsed.pinned && !(await this.installedNpmMatchesPinnedVersion(parsed, installedPath)));
-				if (needsInstall) {
-					const installed = await installMissing();
-					if (!installed) continue;
-					installedPath = this.getNpmInstallPath(parsed, scope);
+			try {
+				if (parsed.type === "npm") {
+					let installedPath = this.getNpmInstallPath(parsed, scope);
+					const needsInstall =
+						!existsSync(installedPath) ||
+						(parsed.pinned && !(await this.installedNpmMatchesPinnedVersion(parsed, installedPath)));
+					if (needsInstall) {
+						let installed: boolean;
+						try {
+							installed = await installMissing();
+						} catch (error) {
+							if (error instanceof MissingSourceError || !existsSync(installedPath)) {
+								throw error;
+							}
+							// Install failed but a previously installed copy exists: keep using it.
+							this.warnPackageSourceFailure(sourceStr, error, "using existing install");
+							installed = true;
+						}
+						if (!installed) continue;
+						installedPath = this.getNpmInstallPath(parsed, scope);
+					}
+					metadata.baseDir = installedPath;
+					this.collectPackageResources(installedPath, accumulator, filter, metadata);
+					continue;
 				}
-				metadata.baseDir = installedPath;
-				this.collectPackageResources(installedPath, accumulator, filter, metadata);
-				continue;
-			}
 
-			if (parsed.type === "git") {
-				const installedPath = this.getGitInstallPath(parsed, scope);
-				if (!existsSync(installedPath)) {
-					const installed = await installMissing();
-					if (!installed) continue;
-				} else if (scope === "temporary" && !parsed.pinned && !isOfflineModeEnabled()) {
-					await this.refreshTemporaryGitSource(parsed, sourceStr);
+				if (parsed.type === "git") {
+					const installedPath = this.getGitInstallPath(parsed, scope);
+					if (!existsSync(installedPath)) {
+						const installed = await installMissing();
+						if (!installed) continue;
+					} else if (scope === "temporary" && !parsed.pinned && !isOfflineModeEnabled()) {
+						await this.refreshTemporaryGitSource(parsed, sourceStr);
+					}
+					metadata.baseDir = installedPath;
+					this.collectPackageResources(installedPath, accumulator, filter, metadata);
 				}
-				metadata.baseDir = installedPath;
-				this.collectPackageResources(installedPath, accumulator, filter, metadata);
+			} catch (error) {
+				if (error instanceof MissingSourceError) {
+					throw error;
+				}
+				// Isolate per-source failures so one broken package does not abort
+				// the entire startup/resource load.
+				this.warnPackageSourceFailure(sourceStr, error, "skipping package");
 			}
 		}
+	}
+
+	private warnPackageSourceFailure(source: string, error: unknown, resolution: string): void {
+		const message = error instanceof Error ? error.message : String(error);
+		console.error(`Warning: failed to load package ${source} (${resolution}): ${message}`);
 	}
 
 	private resolveLocalExtensionSource(

@@ -28,6 +28,12 @@ import {
 	toError,
 } from "../types.ts";
 
+// After a child emits "exit", give its stdio pipes a short grace period to flush
+// remaining data before force-destroying them. Waiting only for "close" hangs when
+// a background/daemon descendant inherits the pipes and keeps them open past the
+// shell's exit (see waitForChildProcess in coding-agent/src/utils/child-process.ts).
+const EXIT_STDIO_GRACE_MS = 100;
+
 function resolvePath(cwd: string, path: string): string {
 	return isAbsolute(path) ? path : resolve(cwd, path);
 }
@@ -258,6 +264,7 @@ export class NodeExecutionEnv implements ExecutionEnv {
 			let callbackError: ExecutionError | undefined;
 			let child: ReturnType<typeof spawn> | undefined;
 			let timeoutId: ReturnType<typeof setTimeout> | undefined;
+			let exitGraceTimer: ReturnType<typeof setTimeout> | undefined;
 
 			const onAbort = () => {
 				if (child?.pid) {
@@ -267,6 +274,7 @@ export class NodeExecutionEnv implements ExecutionEnv {
 
 			const settle = (result: Result<{ stdout: string; stderr: string; exitCode: number }, ExecutionError>) => {
 				if (timeoutId) clearTimeout(timeoutId);
+				if (exitGraceTimer) clearTimeout(exitGraceTimer);
 				if (options?.abortSignal) options.abortSignal.removeEventListener("abort", onAbort);
 				if (settled) return;
 				settled = true;
@@ -332,7 +340,7 @@ export class NodeExecutionEnv implements ExecutionEnv {
 				settle(err(new ExecutionError("spawn_error", error.message, error)));
 			});
 
-			child.on("close", (code) => {
+			const finalize = (code: number | null) => {
 				if (callbackError) {
 					settle(err(callbackError));
 					return;
@@ -346,6 +354,23 @@ export class NodeExecutionEnv implements ExecutionEnv {
 					return;
 				}
 				settle(ok({ stdout, stderr, exitCode: code ?? 0 }));
+			};
+
+			// Settle on "exit" (the shell terminated) with a short grace period for stdio
+			// to flush, preferring "close" if it arrives first. Waiting only for "close"
+			// hangs when a background/daemon descendant inherits the stdio pipes and keeps
+			// them open past the shell's exit, which also unbounds the timeout/abort paths.
+			child.on("exit", (code) => {
+				if (settled) return;
+				exitGraceTimer = setTimeout(() => {
+					child?.stdout?.destroy();
+					child?.stderr?.destroy();
+					finalize(code);
+				}, EXIT_STDIO_GRACE_MS);
+			});
+
+			child.on("close", (code) => {
+				finalize(code);
 			});
 		});
 	}

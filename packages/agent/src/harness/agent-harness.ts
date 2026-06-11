@@ -317,14 +317,22 @@ export class AgentHarness<
 		});
 	}
 
-	private startRunPromise(): () => void {
+	private startRunPromise(): { runPromise: Promise<void>; finishRunPromise: () => void } {
 		let finish = () => {};
-		this.runPromise = new Promise<void>((resolve) => {
+		const runPromise = new Promise<void>((resolve) => {
 			finish = resolve;
 		});
-		return () => {
-			this.runPromise = undefined;
-			finish();
+		this.runPromise = runPromise;
+		return {
+			runPromise,
+			finishRunPromise: () => {
+				// A settled/agent_end listener may have started a new run while this
+				// one was still unwinding; only clear state still owned by this run.
+				if (this.runPromise === runPromise) {
+					this.runPromise = undefined;
+				}
+				finish();
+			},
 		};
 	}
 
@@ -527,7 +535,13 @@ export class AgentHarness<
 			return;
 		}
 		if (event.type === "agent_end") {
+			// Finish this run's cleanup before flipping to "idle": listeners observing
+			// agent_end/settled may start the next prompt() immediately, and that run
+			// must not inherit state still owned by the run that just completed.
 			await this.flushPendingSessionWrites();
+			if (this.runAbortController && this.runAbortController.signal === signal) {
+				this.runAbortController = undefined;
+			}
 			this.phase = "idle";
 			await this.emitAny(event, signal);
 			await this.emitOwn({ type: "settled", nextTurnCount: this.nextTurnQueue.length }, signal);
@@ -622,7 +636,11 @@ export class AgentHarness<
 			try {
 				await this.flushPendingSessionWrites();
 			} finally {
-				this.runAbortController = undefined;
+				// Ownership check: a re-entrant run started from a settled/agent_end
+				// listener may have installed its own controller already.
+				if (this.runAbortController === abortController) {
+					this.runAbortController = undefined;
+				}
 			}
 		}
 	}
@@ -630,12 +648,14 @@ export class AgentHarness<
 	async prompt(text: string, options?: { images?: ImageContent[] }): Promise<AssistantMessage> {
 		if (this.phase !== "idle") throw new AgentHarnessError("busy", "AgentHarness is busy");
 		this.phase = "turn";
-		const finishRunPromise = this.startRunPromise();
+		const { runPromise, finishRunPromise } = this.startRunPromise();
 		try {
 			const turnState = await this.createTurnState();
 			return await this.executeTurn(turnState, text, options);
 		} catch (error) {
-			this.phase = "idle";
+			// Only reset the phase if this call still owns the run; a listener may
+			// have started the next run while this one was unwinding.
+			if (this.runPromise === runPromise) this.phase = "idle";
 			throw normalizeHarnessError(error, "unknown");
 		} finally {
 			finishRunPromise();
@@ -645,14 +665,14 @@ export class AgentHarness<
 	async skill(name: string, additionalInstructions?: string): Promise<AssistantMessage> {
 		if (this.phase !== "idle") throw new AgentHarnessError("busy", "AgentHarness is busy");
 		this.phase = "turn";
-		const finishRunPromise = this.startRunPromise();
+		const { runPromise, finishRunPromise } = this.startRunPromise();
 		try {
 			const turnState = await this.createTurnState();
 			const skill = (turnState.resources.skills ?? []).find((candidate) => candidate.name === name);
 			if (!skill) throw new AgentHarnessError("invalid_argument", `Unknown skill: ${name}`);
 			return await this.executeTurn(turnState, formatSkillInvocation(skill, additionalInstructions));
 		} catch (error) {
-			this.phase = "idle";
+			if (this.runPromise === runPromise) this.phase = "idle";
 			throw normalizeHarnessError(error, "unknown");
 		} finally {
 			finishRunPromise();
@@ -662,14 +682,14 @@ export class AgentHarness<
 	async promptFromTemplate(name: string, args: string[] = []): Promise<AssistantMessage> {
 		if (this.phase !== "idle") throw new AgentHarnessError("busy", "AgentHarness is busy");
 		this.phase = "turn";
-		const finishRunPromise = this.startRunPromise();
+		const { runPromise, finishRunPromise } = this.startRunPromise();
 		try {
 			const turnState = await this.createTurnState();
 			const template = (turnState.resources.promptTemplates ?? []).find((candidate) => candidate.name === name);
 			if (!template) throw new AgentHarnessError("invalid_argument", `Unknown prompt template: ${name}`);
 			return await this.executeTurn(turnState, formatPromptTemplateInvocation(template, args));
 		} catch (error) {
-			this.phase = "idle";
+			if (this.runPromise === runPromise) this.phase = "idle";
 			throw normalizeHarnessError(error, "unknown");
 		} finally {
 			finishRunPromise();
@@ -1032,7 +1052,11 @@ export class AgentHarness<
 	}
 
 	async waitForIdle(): Promise<void> {
-		await this.runPromise;
+		// Runs can chain: a settled listener may start the next prompt() before the
+		// previous run's promise resolves, so keep waiting until no run is active.
+		while (this.runPromise) {
+			await this.runPromise;
+		}
 	}
 
 	subscribe(

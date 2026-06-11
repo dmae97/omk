@@ -187,6 +187,8 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private appendSystemPromptOverride?: (base: string[]) => string[];
 
 	private extensionsResult: LoadExtensionsResult;
+	/** Extensions from the most recent load (pre-override), tracked so their event-bus subscriptions can be disposed on reload. */
+	private loadedExtensions: Extension[];
 	private skills: Skill[];
 	private skillDiagnostics: ResourceDiagnostic[];
 	private prompts: PromptTemplate[];
@@ -234,6 +236,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.appendSystemPromptOverride = options.appendSystemPromptOverride;
 
 		this.extensionsResult = { extensions: [], errors: [], runtime: createExtensionRuntime() };
+		this.loadedExtensions = [];
 		this.skills = [];
 		this.skillDiagnostics = [];
 		this.prompts = [];
@@ -395,10 +398,16 @@ export class DefaultResourceLoader implements ResourceLoader {
 			? cliEnabledExtensions
 			: this.mergePaths(cliEnabledExtensions, enabledExtensions);
 
+		// Unsubscribe event-bus listeners registered by the previous load before
+		// re-running extension factories, so /reload does not stack duplicate
+		// handlers (or keep stale extensions alive) on the shared event bus.
+		this.disposeExtensionEventSubscriptions();
+
 		const extensionsResult = await loadExtensions(extensionPaths, this.cwd, this.eventBus);
 		const inlineExtensions = await this.loadExtensionFactories(extensionsResult.runtime);
 		extensionsResult.extensions.push(...inlineExtensions.extensions);
 		extensionsResult.errors.push(...inlineExtensions.errors);
+		this.loadedExtensions = [...extensionsResult.extensions];
 
 		// Detect extension conflicts (tools, commands, flags with same names from different extensions)
 		// Keep all extensions loaded. Conflicts are reported as diagnostics, and precedence is handled by load order.
@@ -774,6 +783,23 @@ export class DefaultResourceLoader implements ResourceLoader {
 			const message = error instanceof Error ? error.message : "failed to load theme";
 			diagnostics.push({ type: "warning", message, path: filePath });
 		}
+	}
+
+	/**
+	 * Unsubscribe pi.events listeners registered by the previously loaded
+	 * extensions. Only subscriptions made through the extension API are
+	 * removed, so listeners added directly on an injected event bus survive.
+	 */
+	private disposeExtensionEventSubscriptions(): void {
+		for (const extension of this.loadedExtensions) {
+			const subscriptions = extension.eventBusSubscriptions;
+			if (!subscriptions) continue;
+			for (const unsubscribe of subscriptions) {
+				unsubscribe();
+			}
+			subscriptions.length = 0;
+		}
+		this.loadedExtensions = [];
 	}
 
 	private async loadExtensionFactories(runtime: ExtensionRuntime): Promise<{

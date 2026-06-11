@@ -8,6 +8,7 @@
 
 import { randomBytes } from "node:crypto";
 import { createWriteStream, type WriteStream } from "node:fs";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stripAnsi } from "../utils/ansi.ts";
@@ -67,9 +68,31 @@ export async function executeBashWithOperations(
 		}
 		const id = randomBytes(8).toString("hex");
 		tempFilePath = join(tmpdir(), `pi-bash-${id}.log`);
-		tempFileStream = createWriteStream(tempFilePath);
+		// Owner-only permissions: full output can contain secrets (env vars, tokens, etc.).
+		tempFileStream = createWriteStream(tempFilePath, { mode: 0o600 });
 		for (const chunk of outputChunks) {
 			tempFileStream.write(chunk);
+		}
+	};
+
+	/** Close and delete the temp file when its path is never surfaced to the caller. */
+	const discardTempFile = async () => {
+		if (!tempFilePath) {
+			return;
+		}
+		const path = tempFilePath;
+		const stream = tempFileStream;
+		tempFilePath = undefined;
+		tempFileStream = undefined;
+		if (stream) {
+			await new Promise<void>((resolve) => {
+				stream.end(() => resolve());
+			});
+		}
+		try {
+			await rm(path, { force: true });
+		} catch {
+			// Best effort: a stale temp file must not fail the command.
 		}
 	};
 
@@ -114,6 +137,9 @@ export async function executeBashWithOperations(
 		const truncationResult = truncateTail(fullOutput);
 		if (truncationResult.truncated) {
 			ensureTempFile();
+		} else {
+			// fullOutputPath is only surfaced when output is truncated; don't leave the spill file behind.
+			await discardTempFile();
 		}
 		if (tempFileStream) {
 			tempFileStream.end();
@@ -134,6 +160,9 @@ export async function executeBashWithOperations(
 			const truncationResult = truncateTail(fullOutput);
 			if (truncationResult.truncated) {
 				ensureTempFile();
+			} else {
+				// fullOutputPath is only surfaced when output is truncated; don't leave the spill file behind.
+				await discardTempFile();
 			}
 			if (tempFileStream) {
 				tempFileStream.end();
@@ -147,9 +176,8 @@ export async function executeBashWithOperations(
 			};
 		}
 
-		if (tempFileStream) {
-			tempFileStream.end();
-		}
+		// The path is never reported when the command throws; clean up the spill file.
+		await discardTempFile();
 
 		throw err;
 	}

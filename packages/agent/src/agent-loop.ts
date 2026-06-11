@@ -24,6 +24,48 @@ import type {
 
 export type AgentEventSink = (event: AgentEvent) => Promise<void> | void;
 
+const EMPTY_USAGE = {
+	input: 0,
+	output: 0,
+	cacheRead: 0,
+	cacheWrite: 0,
+	totalTokens: 0,
+	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+};
+
+/**
+ * Terminate the public event stream after the underlying loop rejected.
+ *
+ * Mirrors `Agent.handleRunFailure`: synthesizes an assistant failure message
+ * (stopReason "error") so consumers observe a coherent
+ * message_start/message_end/turn_end/agent_end sequence, then ends the stream
+ * so `for await` consumers and `stream.result()` always settle.
+ */
+function endStreamWithFailure(
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+	config: AgentLoopConfig,
+	completedMessages: AgentMessage[],
+	error: unknown,
+): void {
+	const failureMessage = {
+		role: "assistant",
+		content: [{ type: "text", text: "" }],
+		api: config.model.api,
+		provider: config.model.provider,
+		model: config.model.id,
+		usage: EMPTY_USAGE,
+		stopReason: "error",
+		errorMessage: error instanceof Error ? error.message : String(error),
+		timestamp: Date.now(),
+	} satisfies AgentMessage;
+	const messages = [...completedMessages, failureMessage];
+	stream.push({ type: "message_start", message: failureMessage });
+	stream.push({ type: "message_end", message: failureMessage });
+	stream.push({ type: "turn_end", message: failureMessage, toolResults: [] });
+	stream.push({ type: "agent_end", messages });
+	stream.end(messages);
+}
+
 /**
  * Start an agent loop with a new prompt message.
  * The prompt is added to the context and events are emitted for it.
@@ -36,19 +78,28 @@ export function agentLoop(
 	streamFn?: StreamFn,
 ): EventStream<AgentEvent, AgentMessage[]> {
 	const stream = createAgentStream();
+	const completedMessages: AgentMessage[] = [];
 
 	void runAgentLoop(
 		prompts,
 		context,
 		config,
 		async (event) => {
+			if (event.type === "message_end") {
+				completedMessages.push(event.message);
+			}
 			stream.push(event);
 		},
 		signal,
 		streamFn,
-	).then((messages) => {
-		stream.end(messages);
-	});
+	).then(
+		(messages) => {
+			stream.end(messages);
+		},
+		(error: unknown) => {
+			endStreamWithFailure(stream, config, completedMessages, error);
+		},
+	);
 
 	return stream;
 }
@@ -76,18 +127,27 @@ export function agentLoopContinue(
 	}
 
 	const stream = createAgentStream();
+	const completedMessages: AgentMessage[] = [];
 
 	void runAgentLoopContinue(
 		context,
 		config,
 		async (event) => {
+			if (event.type === "message_end") {
+				completedMessages.push(event.message);
+			}
 			stream.push(event);
 		},
 		signal,
 		streamFn,
-	).then((messages) => {
-		stream.end(messages);
-	});
+	).then(
+		(messages) => {
+			stream.end(messages);
+		},
+		(error: unknown) => {
+			endStreamWithFailure(stream, config, completedMessages, error);
+		},
+	);
 
 	return stream;
 }

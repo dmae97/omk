@@ -10,6 +10,7 @@ import {
 	openSync,
 	readdirSync,
 	readSync,
+	renameSync,
 	statSync,
 	writeFileSync,
 } from "fs";
@@ -507,6 +508,28 @@ export function loadEntriesFromFile(filePath: string): FileEntry[] {
 	return entries;
 }
 
+/**
+ * Preserve a corrupt (non-empty, headerless) session file by renaming it to
+ * `<file>.corrupt-<timestamp>` so recovery never destroys user data.
+ * Returns the backup path, or null if the file was empty (nothing to preserve).
+ */
+function backupCorruptSessionFile(filePath: string): string | null {
+	try {
+		if (statSync(filePath).size === 0) return null;
+	} catch {
+		return null;
+	}
+	const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+	let backupPath = `${filePath}.corrupt-${timestamp}`;
+	let counter = 0;
+	while (existsSync(backupPath)) {
+		counter++;
+		backupPath = `${filePath}.corrupt-${timestamp}-${counter}`;
+	}
+	renameSync(filePath, backupPath);
+	return backupPath;
+}
+
 function readSessionHeader(filePath: string): SessionHeader | null {
 	try {
 		const fd = openSync(filePath, "r");
@@ -794,10 +817,15 @@ export class SessionManager {
 		if (existsSync(this.sessionFile)) {
 			this.fileEntries = loadEntriesFromFile(this.sessionFile);
 
-			// If file was empty or corrupted (no valid header), truncate and start fresh
-			// to avoid appending messages without a session header (which breaks the session)
+			// If file was empty or corrupted (no valid header), start fresh to avoid
+			// appending messages without a session header (which breaks the session).
+			// Never destroy existing data: if the file has content, preserve the
+			// original as a .corrupt-* backup before rewriting.
 			if (this.fileEntries.length === 0) {
 				const explicitPath = this.sessionFile;
+				if (this.persist) {
+					backupCorruptSessionFile(explicitPath);
+				}
 				this.newSession();
 				this.sessionFile = explicitPath;
 				this._rewriteFile();

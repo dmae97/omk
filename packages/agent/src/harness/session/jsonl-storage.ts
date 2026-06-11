@@ -140,6 +140,7 @@ async function loadJsonlStorage(
 	header: SessionHeader;
 	entries: SessionTreeEntry[];
 	leafId: string | null;
+	needsTailRepair: boolean;
 }> {
 	const content = getFileSystemResultOrThrow(await fs.readTextFile(filePath), `Failed to read session ${filePath}`);
 	const lines = content.split("\n").filter((line) => line.trim());
@@ -150,22 +151,37 @@ async function loadJsonlStorage(
 	const header = parseHeaderLine(lines[0]!, filePath);
 	const entries: SessionTreeEntry[] = [];
 	let leafId: string | null = null;
+	let droppedTornTail = false;
 	for (let i = 1; i < lines.length; i++) {
-		const entry = parseEntryLine(lines[i]!, filePath, i + 1);
+		let entry: SessionTreeEntry;
+		try {
+			entry = parseEntryLine(lines[i]!, filePath, i + 1);
+		} catch (error) {
+			// A crash mid-append (SIGKILL, power loss, ENOSPC) can leave a torn
+			// partial line at the end of the file. Drop a malformed final line
+			// instead of making the whole session permanently unloadable.
+			if (i === lines.length - 1 && error instanceof SessionError && error.code === "invalid_entry") {
+				droppedTornTail = true;
+				break;
+			}
+			throw error;
+		}
 		entries.push(entry);
 		leafId = leafIdAfterEntry(entry);
 	}
-	return { header, entries, leafId };
+	return { header, entries, leafId, needsTailRepair: droppedTornTail || !content.endsWith("\n") };
 }
 
 export class JsonlSessionStorage implements SessionStorage<JsonlSessionMetadata> {
 	private readonly fs: JsonlSessionStorageFileSystem;
 	private readonly filePath: string;
+	private readonly header: SessionHeader;
 	private readonly metadata: JsonlSessionMetadata;
 	private entries: SessionTreeEntry[];
 	private byId: Map<string, SessionTreeEntry>;
 	private labelsById: Map<string, string>;
 	private currentLeafId: string | null;
+	private needsTailRepair: boolean;
 
 	private constructor(
 		fs: JsonlSessionStorageFileSystem,
@@ -173,19 +189,29 @@ export class JsonlSessionStorage implements SessionStorage<JsonlSessionMetadata>
 		header: SessionHeader,
 		entries: SessionTreeEntry[],
 		leafId: string | null,
+		needsTailRepair = false,
 	) {
 		this.fs = fs;
 		this.filePath = filePath;
+		this.header = header;
 		this.metadata = headerToSessionMetadata(header, this.filePath);
 		this.entries = entries;
 		this.byId = new Map(entries.map((entry) => [entry.id, entry]));
 		this.labelsById = buildLabelsById(entries);
 		this.currentLeafId = leafId;
+		this.needsTailRepair = needsTailRepair;
 	}
 
 	static async open(fs: JsonlSessionStorageFileSystem, filePath: string): Promise<JsonlSessionStorage> {
 		const loaded = await loadJsonlStorage(fs, filePath);
-		return new JsonlSessionStorage(fs, filePath, loaded.header, loaded.entries, loaded.leafId);
+		return new JsonlSessionStorage(
+			fs,
+			filePath,
+			loaded.header,
+			loaded.entries,
+			loaded.leafId,
+			loaded.needsTailRepair,
+		);
 	}
 
 	static async create(
@@ -234,10 +260,7 @@ export class JsonlSessionStorage implements SessionStorage<JsonlSessionMetadata>
 			timestamp: new Date().toISOString(),
 			targetId: leafId,
 		};
-		getFileSystemResultOrThrow(
-			await this.fs.appendFile(this.filePath, `${JSON.stringify(entry)}\n`),
-			`Failed to append session leaf ${entry.id}`,
-		);
+		await this.persistEntry(entry, `Failed to append session leaf ${entry.id}`);
 		this.entries.push(entry);
 		this.byId.set(entry.id, entry);
 		this.currentLeafId = leafId;
@@ -247,11 +270,28 @@ export class JsonlSessionStorage implements SessionStorage<JsonlSessionMetadata>
 		return generateEntryId(this.byId);
 	}
 
+	/**
+	 * Persist an entry line. When the file has a torn tail (partial trailing
+	 * line left by a crash mid-append), rewrite the whole file from the valid
+	 * in-memory state instead of appending, so the new entry is never
+	 * concatenated onto a partial line.
+	 */
+	private async persistEntry(entry: SessionTreeEntry, errorContext: string): Promise<void> {
+		const line = `${JSON.stringify(entry)}\n`;
+		if (this.needsTailRepair) {
+			const validLines = [JSON.stringify(this.header), ...this.entries.map((existing) => JSON.stringify(existing))];
+			getFileSystemResultOrThrow(
+				await this.fs.writeFile(this.filePath, `${validLines.join("\n")}\n${line}`),
+				errorContext,
+			);
+			this.needsTailRepair = false;
+			return;
+		}
+		getFileSystemResultOrThrow(await this.fs.appendFile(this.filePath, line), errorContext);
+	}
+
 	async appendEntry(entry: SessionTreeEntry): Promise<void> {
-		getFileSystemResultOrThrow(
-			await this.fs.appendFile(this.filePath, `${JSON.stringify(entry)}\n`),
-			`Failed to append session entry ${entry.id}`,
-		);
+		await this.persistEntry(entry, `Failed to append session entry ${entry.id}`);
 		this.entries.push(entry);
 		this.byId.set(entry.id, entry);
 		updateLabelCache(this.labelsById, entry);

@@ -1,10 +1,22 @@
 import { access, chmod, realpath, symlink } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { NodeExecutionEnv } from "../../src/harness/env/nodejs.ts";
 import { FileError, getOrThrow } from "../../src/harness/types.ts";
 import { executeShellWithCapture } from "../../src/harness/utils/shell-output.ts";
 import { createTempDir } from "./session-test-utils.ts";
+
+// Hosts may have a locale configured that is not installed (e.g. LC_ALL=ko_KR.UTF-8),
+// which makes spawned shells print a setlocale warning on stderr and break the exact
+// stderr assertions below. Pin LC_ALL to the always-available C locale for this file.
+const savedLcAll = process.env.LC_ALL;
+beforeAll(() => {
+	process.env.LC_ALL = "C";
+});
+afterAll(() => {
+	if (savedLcAll === undefined) delete process.env.LC_ALL;
+	else process.env.LC_ALL = savedLcAll;
+});
 
 const chmodRestorePaths: string[] = [];
 

@@ -322,7 +322,19 @@ function createExtensionAPI(
 			runtime.unregisterProvider(name, extension.path);
 		},
 
-		events: eventBus,
+		// Track pi.events subscriptions on the extension so they can be
+		// unsubscribed on reload instead of stacking duplicate listeners
+		// on the shared event bus.
+		events: {
+			emit: (channel, data) => {
+				eventBus.emit(channel, data);
+			},
+			on: (channel, handler) => {
+				const unsubscribe = eventBus.on(channel, handler);
+				extension.eventBusSubscriptions?.push(unsubscribe);
+				return unsubscribe;
+			},
+		},
 	} as ExtensionAPI;
 
 	return api;
@@ -362,6 +374,7 @@ function createExtension(extensionPath: string, resolvedPath: string): Extension
 		commands: new Map(),
 		flags: new Map(),
 		shortcuts: new Map(),
+		eventBusSubscriptions: [],
 	};
 }
 

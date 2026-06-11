@@ -2,7 +2,7 @@ import { applyPatch } from "diff";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeBashWithOperations } from "../src/core/bash-executor.ts";
 import { type BashOperations, createBashTool, createLocalBashOperations } from "../src/core/tools/bash.ts";
 import { computeEditsDiff } from "../src/core/tools/edit-diff.ts";
@@ -15,6 +15,18 @@ import {
 	createWriteTool,
 } from "../src/index.ts";
 import * as shellModule from "../src/utils/shell.ts";
+
+// Hosts may have a locale configured that is not installed (e.g. LC_ALL=ko_KR.UTF-8),
+// which makes spawned shells print a setlocale warning on stderr and break exact
+// output assertions below. Pin LC_ALL to the always-available C locale for this file.
+const savedLcAll = process.env.LC_ALL;
+beforeAll(() => {
+	process.env.LC_ALL = "C";
+});
+afterAll(() => {
+	if (savedLcAll === undefined) delete process.env.LC_ALL;
+	else process.env.LC_ALL = savedLcAll;
+});
 
 const readTool = createReadTool(process.cwd());
 const writeTool = createWriteTool(process.cwd());

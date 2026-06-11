@@ -213,7 +213,8 @@ export class OutputAccumulator {
 			return;
 		}
 		this.tempFilePath = defaultTempFilePath(this.tempFilePrefix);
-		this.tempFileStream = createWriteStream(this.tempFilePath);
+		// Owner-only permissions: full output can contain secrets (env vars, tokens, etc.).
+		this.tempFileStream = createWriteStream(this.tempFilePath, { mode: 0o600 });
 		for (const chunk of this.rawChunks) {
 			this.tempFileStream.write(chunk);
 		}
