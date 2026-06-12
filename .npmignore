@@ -1,6 +1,11 @@
 dist/**/*.map
 dist/**/*.d.ts.map
 
+# Optional AdaptOrch/MCP skill templates must not ship in npm tarballs.
+# Core AdaptOrch runtime/docs may remain packaged; only skill installers/review skills are excluded.
+templates/skills/**/omk-adaptorch-orchestration-review/**
+templates/skills/**/mcp-install/**
+
 # Deploy-Exclusion Guard (Lane 1): belt-and-suspenders persona exclusions.
 # .kimi/ and .omk/ are already outside the package.json `files` whitelist, but
 # block persona filenames explicitly in case they ever land in a published dir.
