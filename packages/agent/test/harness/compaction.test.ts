@@ -14,10 +14,12 @@ import {
 	compact,
 	DEFAULT_COMPACTION_SETTINGS,
 	estimateContextTokens,
+	estimateProjectedContextTokens,
 	estimateTokens,
 	findCutPoint,
 	findTurnStartIndex,
 	generateSummary,
+	getCompactionHeadroomThreshold,
 	getLastAssistantUsage,
 	prepareCompaction,
 	serializeConversation,
@@ -157,15 +159,45 @@ describe("harness compaction", () => {
 		expect(calculateContextTokens(createMockUsage(0, 0, 0, 0))).toBe(0);
 	});
 
-	it("checks compaction threshold", () => {
-		const settings: CompactionSettings = {
+	it("checks the earlier of 90% usage and reserve threshold", () => {
+		const ratioLimited: CompactionSettings = {
 			enabled: true,
-			reserveTokens: 10000,
+			reserveTokens: 5000,
 			keepRecentTokens: 20000,
 		};
-		expect(shouldCompact(95000, 100000, settings)).toBe(true);
-		expect(shouldCompact(89000, 100000, settings)).toBe(false);
-		expect(shouldCompact(95000, 100000, { ...settings, enabled: false })).toBe(false);
+		const reserveLimited: CompactionSettings = {
+			enabled: true,
+			reserveTokens: 20000,
+			keepRecentTokens: 20000,
+		};
+
+		expect(getCompactionHeadroomThreshold(100000, ratioLimited)).toMatchObject({
+			triggerTokens: 90000,
+			headroomTokens: 10000,
+			limitedBy: "max_usage_ratio",
+		});
+		expect(shouldCompact(89999, 100000, ratioLimited)).toBe(false);
+		expect(shouldCompact(90000, 100000, ratioLimited)).toBe(true);
+		expect(shouldCompact(95000, 100000, ratioLimited)).toBe(true);
+
+		expect(getCompactionHeadroomThreshold(100000, reserveLimited)).toMatchObject({
+			triggerTokens: 80000,
+			headroomTokens: 20000,
+			limitedBy: "reserve_tokens",
+		});
+		expect(shouldCompact(79999, 100000, reserveLimited)).toBe(false);
+		expect(shouldCompact(80000, 100000, reserveLimited)).toBe(true);
+
+		expect(getCompactionHeadroomThreshold(10000, { ...reserveLimited, reserveTokens: 16384 })).toMatchObject({
+			triggerTokens: 9000,
+			headroomTokens: 1000,
+			limitedBy: "reserve_tokens",
+		});
+		expect(shouldCompact(8999, 10000, { ...reserveLimited, reserveTokens: 16384 })).toBe(false);
+		expect(shouldCompact(9000, 10000, { ...reserveLimited, reserveTokens: 16384 })).toBe(true);
+		expect(shouldCompact(95000, 100000, { ...ratioLimited, enabled: false })).toBe(false);
+		expect(shouldCompact(95000, 0, ratioLimited)).toBe(false);
+		expect(shouldCompact(Number.NaN, 100000, ratioLimited)).toBe(false);
 	});
 
 	it("finds a cut point based on token differences", () => {
@@ -309,6 +341,12 @@ describe("harness compaction", () => {
 		expect(estimateContextTokens([createUserMessage("no usage")]).lastUsageIndex).toBeNull();
 		expect(estimateContextTokens([assistant, createUserMessage("tail")])).toMatchObject({
 			usageTokens: 20,
+			lastUsageIndex: 0,
+		});
+		expect(estimateProjectedContextTokens([assistant], [createUserMessage("x".repeat(80))])).toMatchObject({
+			tokens: 40,
+			usageTokens: 20,
+			trailingTokens: 20,
 			lastUsageIndex: 0,
 		});
 	});

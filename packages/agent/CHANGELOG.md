@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed harness auto-compaction to trigger before provider requests when the projected prompt would exceed the configured context headroom.
+
 ## [0.78.0] - 2026-05-29
 
 ## [0.77.0] - 2026-05-28

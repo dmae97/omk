@@ -10,7 +10,9 @@ import {
 	compact,
 	DEFAULT_COMPACTION_SETTINGS,
 	estimateContextTokens,
+	estimateProjectedContextTokens,
 	findCutPoint,
+	getCompactionHeadroomThreshold,
 	getLastAssistantUsage,
 	prepareCompaction,
 	shouldCompact,
@@ -225,25 +227,67 @@ describe("getLastAssistantUsage", () => {
 });
 
 describe("shouldCompact", () => {
-	it("should return true when context exceeds threshold", () => {
+	it("should trigger at the earlier of 90% usage and reserve boundary", () => {
+		const ratioLimited: CompactionSettings = {
+			enabled: true,
+			reserveTokens: 5000,
+			keepRecentTokens: 20000,
+		};
+		const reserveLimited: CompactionSettings = {
+			enabled: true,
+			reserveTokens: 20000,
+			keepRecentTokens: 20000,
+		};
+
+		expect(getCompactionHeadroomThreshold(100000, ratioLimited)).toMatchObject({
+			triggerTokens: 90000,
+			headroomTokens: 10000,
+			limitedBy: "max_usage_ratio",
+		});
+		expect(shouldCompact(89999, 100000, ratioLimited)).toBe(false);
+		expect(shouldCompact(90000, 100000, ratioLimited)).toBe(true);
+		expect(shouldCompact(95000, 100000, ratioLimited)).toBe(true);
+
+		expect(getCompactionHeadroomThreshold(100000, reserveLimited)).toMatchObject({
+			triggerTokens: 80000,
+			headroomTokens: 20000,
+			limitedBy: "reserve_tokens",
+		});
+		expect(shouldCompact(79999, 100000, reserveLimited)).toBe(false);
+		expect(shouldCompact(80000, 100000, reserveLimited)).toBe(true);
+
+		expect(getCompactionHeadroomThreshold(10000, { ...reserveLimited, reserveTokens: 16384 })).toMatchObject({
+			triggerTokens: 9000,
+			headroomTokens: 1000,
+			limitedBy: "reserve_tokens",
+		});
+		expect(shouldCompact(8999, 10000, { ...reserveLimited, reserveTokens: 16384 })).toBe(false);
+		expect(shouldCompact(9000, 10000, { ...reserveLimited, reserveTokens: 16384 })).toBe(true);
+	});
+
+	it("should return false when disabled or inputs are invalid", () => {
 		const settings: CompactionSettings = {
 			enabled: true,
 			reserveTokens: 10000,
 			keepRecentTokens: 20000,
 		};
 
-		expect(shouldCompact(95000, 100000, settings)).toBe(true);
-		expect(shouldCompact(89000, 100000, settings)).toBe(false);
+		expect(shouldCompact(95000, 100000, { ...settings, enabled: false })).toBe(false);
+		expect(shouldCompact(95000, 0, settings)).toBe(false);
+		expect(shouldCompact(Number.NaN, 100000, settings)).toBe(false);
+		expect(getCompactionHeadroomThreshold(Number.POSITIVE_INFINITY, settings)).toBeUndefined();
 	});
 
-	it("should return false when disabled", () => {
-		const settings: CompactionSettings = {
-			enabled: false,
-			reserveTokens: 10000,
-			keepRecentTokens: 20000,
-		};
+	it("should estimate projected context with pending messages", () => {
+		const assistant = createAssistantMessage("prior", createMockUsage(100, 50));
+		const pending = createUserMessage("x".repeat(80));
 
-		expect(shouldCompact(95000, 100000, settings)).toBe(false);
+		expect(estimateProjectedContextTokens([assistant], [pending])).toMatchObject({
+			tokens: 170,
+			usageTokens: 150,
+			trailingTokens: 20,
+			lastUsageIndex: 0,
+		});
 	});
 });
 

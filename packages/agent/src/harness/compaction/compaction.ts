@@ -106,13 +106,19 @@ export interface CompactionSettings {
 	reserveTokens: number;
 	/** Approximate recent-context tokens to keep after compaction. */
 	keepRecentTokens: number;
+	/** Maximum fraction of the context window to use before compaction. Default: 0.9. */
+	maxUsageRatio?: number;
 }
+
+/** Default context-window ratio used before compaction triggers. */
+export const DEFAULT_COMPACTION_MAX_USAGE_RATIO = 0.9;
 
 /** Default compaction settings used by the harness. */
 export const DEFAULT_COMPACTION_SETTINGS: CompactionSettings = {
 	enabled: true,
 	reserveTokens: 16384,
 	keepRecentTokens: 20000,
+	maxUsageRatio: DEFAULT_COMPACTION_MAX_USAGE_RATIO,
 };
 
 /** Calculate total context tokens from provider usage. */
@@ -192,10 +198,64 @@ export function estimateContextTokens(messages: AgentMessage[]): ContextUsageEst
 	};
 }
 
+/** Estimate context tokens after adding messages that have not been sent yet. */
+export function estimateProjectedContextTokens(
+	messages: AgentMessage[],
+	pendingMessages: AgentMessage[],
+): ContextUsageEstimate {
+	return estimateContextTokens([...messages, ...pendingMessages]);
+}
+
+export type CompactionHeadroomLimit = "max_usage_ratio" | "reserve_tokens";
+
+/** Threshold calculation details for automatic compaction. */
+export interface CompactionHeadroomThreshold {
+	/** Context-token count that triggers compaction. */
+	triggerTokens: number;
+	/** Tokens kept free at the trigger point. */
+	headroomTokens: number;
+	/** Boundary derived from the configured max usage ratio. */
+	maxUsageRatioTokens: number;
+	/** Boundary derived from the absolute reserve token setting. */
+	reserveBoundaryTokens: number;
+	/** Which boundary triggered earlier. */
+	limitedBy: CompactionHeadroomLimit;
+}
+
+/** Return the earliest compaction threshold from ratio-based headroom and absolute reserve. */
+export function getCompactionHeadroomThreshold(
+	contextWindow: number,
+	settings: CompactionSettings,
+): CompactionHeadroomThreshold | undefined {
+	if (!settings.enabled || !Number.isFinite(contextWindow) || contextWindow <= 0) {
+		return undefined;
+	}
+
+	const windowTokens = Math.floor(contextWindow);
+	const reserveTokens = Number.isFinite(settings.reserveTokens) ? Math.max(0, Math.floor(settings.reserveTokens)) : 0;
+	const configuredMaxUsageRatio = settings.maxUsageRatio ?? DEFAULT_COMPACTION_MAX_USAGE_RATIO;
+	const maxUsageRatio =
+		Number.isFinite(configuredMaxUsageRatio) && configuredMaxUsageRatio > 0 && configuredMaxUsageRatio < 1
+			? configuredMaxUsageRatio
+			: DEFAULT_COMPACTION_MAX_USAGE_RATIO;
+	const maxUsageRatioTokens = Math.max(1, Math.floor(windowTokens * maxUsageRatio));
+	const reserveBoundaryTokens =
+		reserveTokens >= windowTokens ? maxUsageRatioTokens : Math.max(1, windowTokens - reserveTokens);
+	const triggerTokens = Math.min(maxUsageRatioTokens, reserveBoundaryTokens);
+
+	return {
+		triggerTokens,
+		headroomTokens: windowTokens - triggerTokens,
+		maxUsageRatioTokens,
+		reserveBoundaryTokens,
+		limitedBy: reserveBoundaryTokens <= maxUsageRatioTokens ? "reserve_tokens" : "max_usage_ratio",
+	};
+}
+
 /** Return whether context usage exceeds the configured compaction threshold. */
 export function shouldCompact(contextTokens: number, contextWindow: number, settings: CompactionSettings): boolean {
-	if (!settings.enabled) return false;
-	return contextTokens > contextWindow - settings.reserveTokens;
+	const threshold = getCompactionHeadroomThreshold(contextWindow, settings);
+	return threshold !== undefined && Number.isFinite(contextTokens) && contextTokens >= threshold.triggerTokens;
 }
 
 const ESTIMATED_IMAGE_CHARS = 4800;

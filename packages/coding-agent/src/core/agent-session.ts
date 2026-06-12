@@ -45,6 +45,7 @@ import {
 	collectEntriesForBranchSummary,
 	compact,
 	estimateContextTokens,
+	estimateProjectedContextTokens,
 	generateBranchSummary,
 	prepareCompaction,
 	shouldCompact,
@@ -1123,6 +1124,8 @@ export class AgentSession {
 				// Ensure we're using the base prompt (in case previous turn had modifications)
 				this.agent.state.systemPrompt = this._baseSystemPrompt;
 			}
+
+			await this._checkProjectedCompaction(messages);
 		} catch (error) {
 			preflightResult?.(false);
 			throw error;
@@ -1777,6 +1780,32 @@ export class AgentSession {
 	 */
 	abortBranchSummary(): void {
 		this._branchSummaryAbortController?.abort();
+	}
+
+	private async _checkProjectedCompaction(pendingMessages: AgentMessage[]): Promise<boolean> {
+		const settings = this.settingsManager.getCompactionSettings();
+		if (!settings.enabled || pendingMessages.length === 0) return false;
+
+		const contextWindow = this.model?.contextWindow ?? 0;
+		if (contextWindow <= 0) return false;
+
+		const messages = [...this.agent.state.messages, ...pendingMessages];
+		const estimate = estimateProjectedContextTokens(this.agent.state.messages, pendingMessages);
+		const compactionEntry = getLatestCompactionEntry(this.sessionManager.getBranch());
+		if (estimate.lastUsageIndex !== null && compactionEntry) {
+			const usageMsg = messages[estimate.lastUsageIndex];
+			if (
+				usageMsg.role === "assistant" &&
+				(usageMsg as AssistantMessage).timestamp <= new Date(compactionEntry.timestamp).getTime()
+			) {
+				return false;
+			}
+		}
+
+		if (shouldCompact(estimate.tokens, contextWindow, settings)) {
+			return await this._runAutoCompaction("threshold", false);
+		}
+		return false;
 	}
 
 	/**
