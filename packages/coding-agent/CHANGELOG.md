@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- Fixed `/share` and `/export` HTML exports to use the active fallback theme when the configured custom theme no longer exists ([#5596](https://github.com/earendil-works/pi/issues/5596)).
 - Fixed custom fallback model IDs with `:<thinking>` suffixes to preserve the requested thinking level when the provider template model does not advertise reasoning ([#5552](https://github.com/earendil-works/pi/issues/5552)).
 
 ## [0.79.1] - 2026-06-09
