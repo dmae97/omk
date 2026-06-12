@@ -340,7 +340,7 @@ export interface ResolveCliModelResult {
 export function resolveCliModel(options: {
 	cliProvider?: string;
 	cliModel?: string;
-	cliThinking?: string;
+	cliThinking?: ThinkingLevel;
 	modelRegistry: ModelRegistry;
 }): ResolveCliModelResult {
 	const { cliProvider, cliModel, cliThinking, modelRegistry } = options;
@@ -470,10 +470,13 @@ export function resolveCliModel(options: {
 
 		const fallbackModel = buildFallbackModel(provider, fallbackPattern, availableModels);
 		if (fallbackModel) {
+			const requestedThinking = cliThinking ?? fallbackThinking;
+			const model =
+				requestedThinking && requestedThinking !== "off" ? { ...fallbackModel, reasoning: true } : fallbackModel;
 			const fallbackWarning = warning
 				? `${warning} Model "${fallbackPattern}" not found for provider "${provider}". Using custom model id.`
 				: `Model "${fallbackPattern}" not found for provider "${provider}". Using custom model id.`;
-			return { model: fallbackModel, thinkingLevel: fallbackThinking, warning: fallbackWarning, error: undefined };
+			return { model, thinkingLevel: fallbackThinking, warning: fallbackWarning, error: undefined };
 		}
 	}
 

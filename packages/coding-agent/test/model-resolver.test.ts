@@ -403,6 +403,7 @@ describe("resolveCliModel", () => {
 			expect(result.model?.provider).toBe("neuralwatt");
 			// The :high suffix must NOT leak into the model id sent to the API
 			expect(result.model?.id).toBe("zai-org/GLM-5.1-FP8");
+			expect(result.model?.reasoning).toBe(true);
 			expect(result.thinkingLevel).toBe("high");
 		});
 

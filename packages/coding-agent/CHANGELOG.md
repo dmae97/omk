@@ -6,6 +6,10 @@
 
 - Added an experimental first-time setup flow behind `PI_EXPERIMENTAL=1` that asks for a dark/light theme choice (preselecting the detected appearance) and opt-in analytics data sharing on first launch with the default agent directory; opting in stores a `trackingId` in `settings.json`.
 
+### Fixed
+
+- Fixed custom fallback model IDs with `:<thinking>` suffixes to preserve the requested thinking level when the provider template model does not advertise reasoning ([#5552](https://github.com/earendil-works/pi/issues/5552)).
+
 ## [0.79.1] - 2026-06-09
 
 ### New Features
