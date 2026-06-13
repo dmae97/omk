@@ -18,7 +18,7 @@ Themes are JSON files that define colors for the TUI.
 
 Pi loads themes from:
 
-- Built-in: `dark`, `light`
+- Built-in: `dark`, `light`, `omk-control`, `omk-control-light`
 - Global: `~/.pi/agent/themes/*.json`
 - Project: `.pi/themes/*.json`
 - Packages: `themes/` directories or `pi.themes` entries in `package.json`
@@ -37,7 +37,7 @@ Select a theme via `/settings` or in `settings.json`:
 }
 ```
 
-On first run, pi detects your terminal background and defaults to `dark` or `light`.
+On first run, pi detects your terminal background and defaults to `dark` or `light`. The `omk-control` theme is a dark OMK control aesthetic with teal/cyan accents on near-black, and `omk-control-light` is its light-terminal variant.
 
 ## Creating a Custom Theme
 
@@ -293,3 +293,5 @@ echo $COLORTERM  # Should output "truecolor" or "24bit"
 See the built-in themes:
 - [dark.json](../src/modes/interactive/theme/dark.json)
 - [light.json](../src/modes/interactive/theme/light.json)
+- [omk-control.json](../src/modes/interactive/theme/omk-control.json)
+- [omk-control-light.json](../src/modes/interactive/theme/omk-control-light.json)

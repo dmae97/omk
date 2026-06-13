@@ -27,6 +27,16 @@ function formatTokens(count: number): string {
 	return `${Math.round(count / 1000000)}M`;
 }
 
+/**
+ * Format byte counts for compact footer display.
+ */
+function formatBytes(bytes: number): string {
+	if (bytes < 1024) return `${bytes}B`;
+	if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}K`;
+	if (bytes < 1024 * 1024 * 1024) return `${Math.round(bytes / (1024 * 1024))}M`;
+	return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}G`;
+}
+
 export function formatCwdForFooter(cwd: string, home: string | undefined): string {
 	if (!home) return cwd;
 
@@ -61,6 +71,38 @@ export class FooterComponent implements Component {
 
 	setAutoCompactEnabled(enabled: boolean): void {
 		this.autoCompactEnabled = enabled;
+	}
+
+	/**
+	 * Build a compact CPU/memory metrics segment for the footer.
+	 * Degrades gracefully to shorter forms (or is omitted entirely) when the
+	 * terminal is very narrow so the rest of the footer can still render.
+	 */
+	private buildMetricsSegment(width: number): string | undefined {
+		const cpu = this.footerData.getCpuPercent();
+		const mem = this.footerData.getMemoryRssBytes();
+		if (cpu === null || mem === null) {
+			return undefined;
+		}
+
+		const memWarningThreshold = 1024 * 1024 * 1024; // 1 GiB
+		const memErrorThreshold = 1.5 * 1024 * 1024 * 1024; // 1.5 GiB
+		const color: "error" | "warning" | "dim" =
+			cpu >= 90 || mem >= memErrorThreshold ? "error" : cpu >= 70 || mem >= memWarningThreshold ? "warning" : "dim";
+
+		const cpuStr = `${Math.round(cpu)}%`;
+		const memStr = formatBytes(mem);
+
+		if (width >= 48) {
+			return theme.fg(color, `CPU ${cpuStr} MEM ${memStr}`);
+		}
+		if (width >= 30) {
+			return theme.fg(color, `${cpuStr} ${memStr}`);
+		}
+		if (width >= 18) {
+			return theme.fg(color, cpuStr);
+		}
+		return undefined;
 	}
 
 	/**
@@ -133,6 +175,12 @@ export class FooterComponent implements Component {
 		if (totalCost || usingSubscription) {
 			const costStr = `$${totalCost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`;
 			statsParts.push(costStr);
+		}
+
+		// Add CPU/memory metrics; degrade gracefully when horizontal space is tight.
+		const metricsSegment = this.buildMetricsSegment(width);
+		if (metricsSegment) {
+			statsParts.push(metricsSegment);
 		}
 
 		// Colorize context percentage based on usage

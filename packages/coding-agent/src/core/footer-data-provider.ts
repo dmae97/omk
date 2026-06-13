@@ -2,6 +2,7 @@ import { type ExecFileException, execFile, spawnSync } from "child_process";
 import { existsSync, type FSWatcher, readFileSync, type Stats, statSync, unwatchFile, watchFile } from "fs";
 import { dirname, join, resolve } from "path";
 import { closeWatcher, FS_WATCH_RETRY_DELAY_MS, watchWithErrorHandler } from "../utils/fs-watch.ts";
+import { MetricsSampler } from "./metrics-sampler.ts";
 
 type GitPaths = {
 	repoDir: string;
@@ -116,11 +117,14 @@ export class FooterDataProvider {
 	private refreshInFlight = false;
 	private refreshPending = false;
 	private disposed = false;
+	private metricsSampler: MetricsSampler;
 
 	constructor(cwd: string) {
 		this.cwd = cwd;
 		this.gitPaths = findGitPaths(cwd);
 		this.setupGitWatcher();
+		this.metricsSampler = new MetricsSampler();
+		this.metricsSampler.start();
 	}
 
 	/** Current git branch, null if not in repo, "detached" if detached HEAD */
@@ -161,6 +165,16 @@ export class FooterDataProvider {
 		return this.availableProviderCount;
 	}
 
+	/** Most recent process CPU percent (0-100), or `null` if not yet sampled. */
+	getCpuPercent(): number | null {
+		return this.metricsSampler.getCpuPercent();
+	}
+
+	/** Most recent process RSS memory size in bytes, or `null` if not yet sampled. */
+	getMemoryRssBytes(): number | null {
+		return this.metricsSampler.getMemoryRssBytes();
+	}
+
 	/** Internal: update available provider count */
 	setAvailableProviderCount(count: number): void {
 		this.availableProviderCount = count;
@@ -192,6 +206,7 @@ export class FooterDataProvider {
 		}
 		this.clearGitWatchers();
 		this.branchChangeCallbacks.clear();
+		this.metricsSampler.stop();
 	}
 
 	private notifyBranchChange(): void {
@@ -384,5 +399,10 @@ export class FooterDataProvider {
 /** Read-only view for extensions - excludes setExtensionStatus, setAvailableProviderCount and dispose */
 export type ReadonlyFooterDataProvider = Pick<
 	FooterDataProvider,
-	"getGitBranch" | "getExtensionStatuses" | "getAvailableProviderCount" | "onBranchChange"
+	| "getGitBranch"
+	| "getExtensionStatuses"
+	| "getAvailableProviderCount"
+	| "onBranchChange"
+	| "getCpuPercent"
+	| "getMemoryRssBytes"
 >;

@@ -257,6 +257,13 @@ export interface InteractiveModeOptions {
 	verbose?: boolean;
 }
 
+export function buildWorkingLoaderMessage(base: string, reasoning: boolean, level: string | undefined): string {
+	if (!reasoning || level === undefined || level === "off") {
+		return base;
+	}
+	return `${base} · thinking: ${level}`;
+}
+
 export class InteractiveMode {
 	private runtimeHost: AgentSessionRuntime;
 	private ui: TUI;
@@ -272,6 +279,7 @@ export class InteractiveMode {
 	private editorContainer: Container;
 	private footer: FooterComponent;
 	private footerDataProvider: FooterDataProvider;
+	private metricsTimer: ReturnType<typeof setInterval> | null = null;
 	// Stored so the same manager can be injected into custom editors, selectors, and extension UI.
 	private keybindings: KeybindingsManager;
 	private version: string;
@@ -715,6 +723,13 @@ export class InteractiveMode {
 		this.footerDataProvider.onBranchChange(() => {
 			this.ui.requestRender();
 		});
+
+		// Periodically refresh footer metrics (CPU / memory).
+		this.metricsTimer = setInterval(() => {
+			this.footer.invalidate();
+			this.ui.requestRender();
+		}, 2000);
+		this.metricsTimer.unref();
 
 		// Initialize available provider count for footer display
 		await this.updateAvailableProviderCount();
@@ -1710,7 +1725,11 @@ export class InteractiveMode {
 	}
 
 	private getWorkingLoaderMessage(): string {
-		return this.workingMessage ?? this.defaultWorkingMessage;
+		return buildWorkingLoaderMessage(
+			this.workingMessage ?? this.defaultWorkingMessage,
+			!!this.session.model?.reasoning,
+			this.session.thinkingLevel,
+		);
 	}
 
 	private createWorkingLoader(): Loader {
@@ -2725,6 +2744,8 @@ export class InteractiveMode {
 			case "thinking_level_changed":
 				this.footer.invalidate();
 				this.updateEditorBorderColor();
+				this.loadingAnimation?.setMessage(this.getWorkingLoaderMessage());
+				this.ui.requestRender();
 				break;
 
 			case "message_start":
@@ -5613,6 +5634,10 @@ export class InteractiveMode {
 		this.clearExtensionTerminalInputListeners();
 		this.footer.dispose();
 		this.footerDataProvider.dispose();
+		if (this.metricsTimer) {
+			clearInterval(this.metricsTimer);
+			this.metricsTimer = null;
+		}
 		if (this.unsubscribe) {
 			this.unsubscribe();
 		}

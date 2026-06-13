@@ -184,6 +184,11 @@ const CUBE_VALUES = [0, 95, 135, 175, 215, 255];
 // Grayscale ramp values (indices 232-255, 24 grays from 8 to 238)
 const GRAY_VALUES = Array.from({ length: 24 }, (_, i) => 8 + i * 10);
 
+// 256-color quantization spread-region constants
+const SPREAD_NEUTRAL_CUTOFF = 10;
+const SPREAD_HARD_LIMIT = 25;
+const SATURATION_PENALTY_K = 0.25;
+
 function findClosestCubeIndex(value: number): number {
 	let minDist = Infinity;
 	let minIdx = 0;
@@ -218,7 +223,7 @@ function colorDistance(r1: number, g1: number, b1: number, r2: number, g2: numbe
 	return dr * dr * 0.299 + dg * dg * 0.587 + db * db * 0.114;
 }
 
-function rgbTo256(r: number, g: number, b: number): number {
+export function rgbTo256(r: number, g: number, b: number): number {
 	// Find closest color in the 6x6x6 cube
 	const rIdx = findClosestCubeIndex(r);
 	const gIdx = findClosestCubeIndex(g);
@@ -236,22 +241,32 @@ function rgbTo256(r: number, g: number, b: number): number {
 	const grayIndex = 232 + grayIdx;
 	const grayDist = colorDistance(r, g, b, grayValue, grayValue, grayValue);
 
-	// Check if color has noticeable saturation (hue matters)
-	// If max-min spread is significant, prefer cube to preserve tint
+	// Decide between grayscale and color cube based on saturation spread.
+	// - Near-neutral colors (spread < SPREAD_NEUTRAL_CUTOFF) use the original
+	//   strict rule so existing 256-color output stays byte-identical.
+	// - Mid-spread near-neutrals (SPREAD_NEUTRAL_CUTOFF <= spread < SPREAD_HARD_LIMIT)
+	//   may still pick gray if it is clearly closer, with a saturation penalty
+	//   applied to the excess spread beyond the neutral cutoff.
+	// - Saturated colors (spread >= SPREAD_HARD_LIMIT) always use the cube.
 	const maxC = Math.max(r, g, b);
 	const minC = Math.min(r, g, b);
 	const spread = maxC - minC;
 
-	// Only consider grayscale if color is nearly neutral (spread < 10)
-	// AND grayscale is actually closer
-	if (spread < 10 && grayDist < cubeDist) {
-		return grayIndex;
+	if (spread < SPREAD_NEUTRAL_CUTOFF) {
+		if (grayDist < cubeDist) {
+			return grayIndex;
+		}
+	} else if (spread < SPREAD_HARD_LIMIT) {
+		const excessSpread = spread - SPREAD_NEUTRAL_CUTOFF;
+		if (grayDist + SATURATION_PENALTY_K * excessSpread * excessSpread <= cubeDist) {
+			return grayIndex;
+		}
 	}
 
 	return cubeIndex;
 }
 
-function hexTo256(hex: string): number {
+export function hexTo256(hex: string): number {
 	const { r, g, b } = hexToRgb(hex);
 	return rgbTo256(r, g, b);
 }
@@ -431,9 +446,13 @@ function getBuiltinThemes(): Record<string, ThemeJson> {
 		const themesDir = getThemesDir();
 		const darkPath = path.join(themesDir, "dark.json");
 		const lightPath = path.join(themesDir, "light.json");
+		const omkControlPath = path.join(themesDir, "omk-control.json");
+		const omkControlLightPath = path.join(themesDir, "omk-control-light.json");
 		BUILTIN_THEMES = {
 			dark: JSON.parse(fs.readFileSync(darkPath, "utf-8")) as ThemeJson,
 			light: JSON.parse(fs.readFileSync(lightPath, "utf-8")) as ThemeJson,
+			"omk-control": JSON.parse(fs.readFileSync(omkControlPath, "utf-8")) as ThemeJson,
+			"omk-control-light": JSON.parse(fs.readFileSync(omkControlLightPath, "utf-8")) as ThemeJson,
 		};
 	}
 	return BUILTIN_THEMES;
