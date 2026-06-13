@@ -30,12 +30,16 @@ function identityConverter(messages: AgentMessage[]): Message[] {
 	return messages.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "toolResult") as Message[];
 }
 
-function expectAssistantFailure(message: AgentMessage, errorText: string): AssistantMessage {
+function expectAssistantFailure(
+	message: AgentMessage,
+	errorText: string,
+	stopReason: "error" | "aborted" = "error",
+): AssistantMessage {
 	expect(message.role).toBe("assistant");
 	if (message.role !== "assistant") {
 		throw new Error("expected an assistant failure message");
 	}
-	expect(message.stopReason).toBe("error");
+	expect(message.stopReason).toBe(stopReason);
 	expect(message.errorMessage).toContain(errorText);
 	return message;
 }
@@ -93,6 +97,35 @@ describe("agentLoop/agentLoopContinue stream termination on loop rejection", () 
 		if (lastEvent.type === "agent_end") {
 			expect(lastEvent.messages).toEqual(messages);
 		}
+	});
+
+	it("agentLoop reports an aborted failure when the signal is already aborted", async () => {
+		const context: AgentContext = {
+			systemPrompt: "You are helpful.",
+			messages: [],
+			tools: [],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+		};
+		const failingStreamFn: StreamFn = () => {
+			throw new Error("stream rejected after abort");
+		};
+		const controller = new AbortController();
+		controller.abort();
+
+		const stream = agentLoop([createUserMessage("Hello")], context, config, controller.signal, failingStreamFn);
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		const messages = await stream.result();
+		const types = events.map((e) => e.type);
+		expect(types.slice(-4)).toEqual(["message_start", "message_end", "turn_end", "agent_end"]);
+		expectAssistantFailure(messages[messages.length - 1], "stream rejected after abort", "aborted");
 	});
 
 	it("agentLoop settles when convertToLlm rejects", async () => {

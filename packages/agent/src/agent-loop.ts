@@ -37,15 +37,20 @@ const EMPTY_USAGE = {
  * Terminate the public event stream after the underlying loop rejected.
  *
  * Mirrors `Agent.handleRunFailure`: synthesizes an assistant failure message
- * (stopReason "error") so consumers observe a coherent
- * message_start/message_end/turn_end/agent_end sequence, then ends the stream
- * so `for await` consumers and `stream.result()` always settle.
+ * so consumers observe a coherent message_start/message_end/turn_end/agent_end
+ * sequence, then ends the stream so `for await` consumers and `stream.result()`
+ * always settle.
+ *
+ * Invariant: non-abort failures keep stopReason "error" and the same event
+ * sequence; when the loop signal was aborted, the synthetic message reports
+ * stopReason "aborted".
  */
 function endStreamWithFailure(
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 	config: AgentLoopConfig,
 	completedMessages: AgentMessage[],
 	error: unknown,
+	signal?: AbortSignal,
 ): void {
 	const failureMessage = {
 		role: "assistant",
@@ -54,7 +59,7 @@ function endStreamWithFailure(
 		provider: config.model.provider,
 		model: config.model.id,
 		usage: EMPTY_USAGE,
-		stopReason: "error",
+		stopReason: signal?.aborted ? "aborted" : "error",
 		errorMessage: error instanceof Error ? error.message : String(error),
 		timestamp: Date.now(),
 	} satisfies AgentMessage;
@@ -97,7 +102,7 @@ export function agentLoop(
 			stream.end(messages);
 		},
 		(error: unknown) => {
-			endStreamWithFailure(stream, config, completedMessages, error);
+			endStreamWithFailure(stream, config, completedMessages, error, signal);
 		},
 	);
 
@@ -145,7 +150,7 @@ export function agentLoopContinue(
 			stream.end(messages);
 		},
 		(error: unknown) => {
-			endStreamWithFailure(stream, config, completedMessages, error);
+			endStreamWithFailure(stream, config, completedMessages, error, signal);
 		},
 	);
 

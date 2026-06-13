@@ -4,8 +4,36 @@ import { describe, expect, it } from "vitest";
 import { NodeExecutionEnv } from "../../src/harness/env/nodejs.ts";
 import { JsonlSessionStorage, loadJsonlSessionMetadata } from "../../src/harness/session/jsonl-storage.ts";
 import { InMemorySessionStorage } from "../../src/harness/session/memory-storage.ts";
-import { type MessageEntry, ok, type SessionMetadata } from "../../src/harness/types.ts";
+import { type FileSystem, type MessageEntry, ok, type SessionMetadata } from "../../src/harness/types.ts";
 import { createAssistantMessage, createTempDir, createUserMessage } from "./session-test-utils.ts";
+
+type JsonlTestFileSystem = Pick<FileSystem, "readTextFile" | "readTextLines" | "writeFile" | "appendFile">;
+
+function fileContentToString(content: string | Uint8Array): string {
+	return typeof content === "string" ? content : Buffer.from(content).toString("utf8");
+}
+
+function trackJsonlWrites(base: JsonlTestFileSystem): {
+	fs: JsonlTestFileSystem;
+	writes: string[];
+	appends: string[];
+} {
+	const writes: string[] = [];
+	const appends: string[] = [];
+	const fs: JsonlTestFileSystem = {
+		readTextFile: (path, abortSignal) => base.readTextFile(path, abortSignal),
+		readTextLines: (path, options) => base.readTextLines(path, options),
+		writeFile: async (path, content, abortSignal) => {
+			writes.push(fileContentToString(content));
+			return base.writeFile(path, content, abortSignal);
+		},
+		appendFile: async (path, content, abortSignal) => {
+			appends.push(fileContentToString(content));
+			return base.appendFile(path, content, abortSignal);
+		},
+	};
+	return { fs, writes, appends };
+}
 
 describe("InMemorySessionStorage", () => {
 	it("returns configured session metadata", async () => {
@@ -158,6 +186,83 @@ describe("JsonlSessionStorage", () => {
 		};
 		writeFileSync(filePath, `${JSON.stringify(header)}\nnot json\n${JSON.stringify(entry)}\n`);
 		await expect(JsonlSessionStorage.open(env, filePath)).rejects.toMatchObject({ code: "invalid_entry" });
+	});
+
+	it("repairs a missing final newline by append without rewriting", async () => {
+		const dir = createTempDir();
+		const env = new NodeExecutionEnv({ cwd: dir });
+		const filePath = join(dir, "session.jsonl");
+		const header = {
+			type: "session",
+			version: 3,
+			id: "session-1",
+			timestamp: "2026-01-01T00:00:00.000Z",
+			cwd: dir,
+		};
+		const root: MessageEntry = {
+			type: "message",
+			id: "root",
+			parentId: null,
+			timestamp: "2026-01-01T00:00:00.000Z",
+			message: createUserMessage("root"),
+		};
+		const next: MessageEntry = {
+			...root,
+			id: "next",
+			parentId: "root",
+			message: createUserMessage("next"),
+		};
+		const last: MessageEntry = {
+			...root,
+			id: "last",
+			parentId: "next",
+			message: createUserMessage("last"),
+		};
+		writeFileSync(filePath, `${JSON.stringify(header)}\n${JSON.stringify(root)}`);
+		const tracked = trackJsonlWrites(env);
+		const storage = await JsonlSessionStorage.open(tracked.fs, filePath);
+		expect((await storage.getEntries()).map((entry) => entry.id)).toEqual(["root"]);
+		await storage.appendEntry(next);
+		await storage.appendEntry(last);
+		expect(tracked.writes).toEqual([]);
+		expect(tracked.appends).toEqual([`\n${JSON.stringify(next)}\n`, `${JSON.stringify(last)}\n`]);
+		const reloaded = await JsonlSessionStorage.open(env, filePath);
+		expect((await reloaded.getEntries()).map((entry) => entry.id)).toEqual(["root", "next", "last"]);
+	});
+
+	it("drops and rewrites a torn final line before appending", async () => {
+		const dir = createTempDir();
+		const env = new NodeExecutionEnv({ cwd: dir });
+		const filePath = join(dir, "session.jsonl");
+		const header = {
+			type: "session",
+			version: 3,
+			id: "session-1",
+			timestamp: "2026-01-01T00:00:00.000Z",
+			cwd: dir,
+		};
+		const root: MessageEntry = {
+			type: "message",
+			id: "root",
+			parentId: null,
+			timestamp: "2026-01-01T00:00:00.000Z",
+			message: createUserMessage("root"),
+		};
+		const next: MessageEntry = {
+			...root,
+			id: "next",
+			parentId: "root",
+			message: createUserMessage("next"),
+		};
+		writeFileSync(filePath, `${JSON.stringify(header)}\n${JSON.stringify(root)}\n{"type":"message","id":"torn`);
+		const tracked = trackJsonlWrites(env);
+		const storage = await JsonlSessionStorage.open(tracked.fs, filePath);
+		expect((await storage.getEntries()).map((entry) => entry.id)).toEqual(["root"]);
+		await storage.appendEntry(next);
+		expect(tracked.appends).toEqual([]);
+		expect(tracked.writes).toEqual([`${JSON.stringify(header)}\n${JSON.stringify(root)}\n${JSON.stringify(next)}\n`]);
+		const reloaded = await JsonlSessionStorage.open(env, filePath);
+		expect((await reloaded.getEntries()).map((entry) => entry.id)).toEqual(["root", "next"]);
 	});
 
 	it("creates and reads session metadata from the header", async () => {
