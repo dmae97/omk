@@ -2,9 +2,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Changed `estimateTokens` to add a per-message structural overhead and a non-zero floor for unknown-role messages, making compaction triggering more conservative.
+- Changed `prepareCompaction` to skip true no-op compaction when the only oversized message would drop nothing.
+- Changed `AgentHarness` failure events (`agent_end`) to include the completed turn messages before the synthetic failure message.
+- Changed JSONL session storage to repair a complete-but-newline-missing tail via append instead of a full rewrite, keeping drop+rewrite only for genuinely torn tails.
+
 ### Fixed
 
 - Fixed harness auto-compaction to trigger before provider requests when the projected prompt would exceed the configured context headroom.
+- Fixed agent loop stopReason to report `"aborted"` when the loop signal is aborted instead of always `"error"`.
+- Fixed `truncateLine` to be code-point-safe middle-out, preserving head and tail without splitting surrogate pairs.
 
 ## [0.78.0] - 2026-05-29
 

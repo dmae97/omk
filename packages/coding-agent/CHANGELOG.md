@@ -9,6 +9,13 @@
 - Added NVIDIA NIM provider selection, setup documentation, and direct NIM request attribution headers.
 - Added `ctx.mode` to extension contexts so extensions can distinguish TUI, RPC, JSON, and print mode.
 - Added `ctx.getSystemPromptOptions()` for extension commands to inspect the current base system prompt inputs.
+- The interactive control footer now shows sampled process CPU% and RSS memory (width-adaptive segment).
+- Two new built-in themes `omk-control` and `omk-control-light`.
+- The working loader now exposes the model thinking level while streaming.
+
+### Changed
+
+- 256-color theme quantization generalizes the cube/grayscale selection for near-neutral colors (colors with channel spread < 10 keep byte-identical output).
 
 ### Fixed
 
