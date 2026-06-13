@@ -271,6 +271,20 @@ describe("harness compaction", () => {
 		expect(findCutPoint([user, compaction, assistant], 0, 3, 1).firstKeptEntryIndex).toBe(2);
 	});
 
+	it("does not prepare a true no-op compaction for an oversized single message", () => {
+		const oversizedUser = createMessageEntry(createUserMessage("x".repeat(120_000)));
+		const settings: CompactionSettings = { enabled: true, reserveTokens: 100, keepRecentTokens: 1 };
+		const cutPoint = findCutPoint([oversizedUser], 0, 1, settings.keepRecentTokens);
+		expect(cutPoint).toEqual({ firstKeptEntryIndex: 0, turnStartIndex: -1, isSplitTurn: false });
+
+		const preparation = getOrThrow(prepareCompaction([oversizedUser], settings));
+		expect(preparation).toBeUndefined();
+
+		const context = buildSessionContext([oversizedUser]);
+		expect(context.messages.map((message) => message.role)).toEqual(["user"]);
+		expect(context.messages.some((message) => message.role === "compactionSummary")).toBe(false);
+	});
+
 	it("estimates tokens and context usage across supported message roles", () => {
 		const usage = createMockUsage(10, 5, 3, 2);
 		const assistant = createAssistantMessage("assistant", usage);
@@ -328,7 +342,8 @@ describe("harness compaction", () => {
 		expect(estimateTokens(bashExecution)).toBeGreaterThan(0);
 		expect(estimateTokens(branchSummaryMessage)).toBeGreaterThan(0);
 		expect(estimateTokens(compactionSummaryMessage)).toBeGreaterThan(0);
-		expect(estimateTokens({ role: "unknown", timestamp: Date.now() } as unknown as AgentMessage)).toBe(0);
+		expect(estimateTokens({ role: "user", content: "", timestamp: Date.now() })).toBe(4);
+		expect(estimateTokens({ role: "unknown", timestamp: Date.now() } as unknown as AgentMessage)).toBe(4);
 		expect(
 			getLastAssistantUsage([createMessageEntry(createUserMessage("user")), createMessageEntry(assistant)]),
 		).toBe(usage);
@@ -344,9 +359,9 @@ describe("harness compaction", () => {
 			lastUsageIndex: 0,
 		});
 		expect(estimateProjectedContextTokens([assistant], [createUserMessage("x".repeat(80))])).toMatchObject({
-			tokens: 40,
+			tokens: 44,
 			usageTokens: 20,
-			trailingTokens: 20,
+			trailingTokens: 24,
 			lastUsageIndex: 0,
 		});
 	});
@@ -383,7 +398,9 @@ describe("harness compaction", () => {
 		const u3 = createMessageEntry(createUserMessage("user msg 3"), compaction1.id);
 		const a3 = createMessageEntry(createAssistantMessage("assistant msg 3", createMockUsage(8000, 2000)), u3.id);
 		const pathEntries = [u1, a1, u2, a2, compaction1, u3, a3];
-		const preparation = getOrThrow(prepareCompaction(pathEntries, DEFAULT_COMPACTION_SETTINGS));
+		const preparation = getOrThrow(
+			prepareCompaction(pathEntries, { ...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: 9 }),
+		);
 		expect(preparation).toBeDefined();
 		expect(preparation?.previousSummary).toBe("First summary");
 		expect(preparation?.firstKeptEntryId).toBeTruthy();
@@ -696,7 +713,9 @@ describe("harness compaction", () => {
 		const a1 = createMessageEntry(assistantMessage, u1.id);
 		const u2 = createMessageEntry(createUserMessage("continue"), a1.id);
 		const a2 = createMessageEntry(createAssistantMessage("done", createMockUsage(4000, 500)), u2.id);
-		const preparation = getOrThrow(prepareCompaction([u1, a1, u2, a2], DEFAULT_COMPACTION_SETTINGS));
+		const preparation = getOrThrow(
+			prepareCompaction([u1, a1, u2, a2], { ...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: 6 }),
+		);
 		expect(preparation).toBeDefined();
 		const { faux, model } = createFauxModel(false);
 		faux.setResponses([fauxAssistantMessage("## Goal\nTest summary")]);

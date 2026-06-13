@@ -555,13 +555,15 @@ export class AgentHarness<
 		error: unknown,
 		aborted: boolean,
 		signal: AbortSignal,
+		completedMessages: readonly AgentMessage[],
 	): Promise<AgentMessage[]> {
 		const failureMessage = createFailureMessage(model, error, aborted);
+		const messages = [...completedMessages, failureMessage];
 		await this.handleAgentEvent({ type: "message_start", message: failureMessage }, signal);
 		await this.handleAgentEvent({ type: "message_end", message: failureMessage }, signal);
 		await this.handleAgentEvent({ type: "turn_end", message: failureMessage, toolResults: [] }, signal);
-		await this.handleAgentEvent({ type: "agent_end", messages: [failureMessage] }, signal);
-		return [failureMessage];
+		await this.handleAgentEvent({ type: "agent_end", messages }, signal);
+		return messages;
 	}
 
 	private async executeTurn(
@@ -596,13 +598,17 @@ export class AgentHarness<
 			activeTurnState = nextTurnState;
 		};
 		this.runAbortController = abortController;
+		const completedMessages: AgentMessage[] = [];
 		const runResultPromise = (async () => {
 			try {
 				return await runAgentLoop(
 					messages,
 					this.createContext(turnState, beforeResult?.systemPrompt),
 					this.createLoopConfig(getTurnState, setTurnState),
-					(event) => this.handleAgentEvent(event, abortController.signal),
+					async (event) => {
+						if (event.type === "message_end") completedMessages.push(event.message);
+						await this.handleAgentEvent(event, abortController.signal);
+					},
 					abortController.signal,
 					this.createStreamFn(getTurnState),
 				);
@@ -613,6 +619,7 @@ export class AgentHarness<
 						error,
 						abortController.signal.aborted,
 						abortController.signal,
+						completedMessages,
 					);
 				} catch (failureError) {
 					const cause = new AggregateError(

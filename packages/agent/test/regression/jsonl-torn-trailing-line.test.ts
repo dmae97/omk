@@ -3,8 +3,36 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NodeExecutionEnv } from "../../src/harness/env/nodejs.ts";
 import { JsonlSessionStorage } from "../../src/harness/session/jsonl-storage.ts";
-import type { MessageEntry } from "../../src/harness/types.ts";
+import type { FileSystem, MessageEntry } from "../../src/harness/types.ts";
 import { createTempDir, createUserMessage } from "../harness/session-test-utils.ts";
+
+type JsonlTestFileSystem = Pick<FileSystem, "readTextFile" | "readTextLines" | "writeFile" | "appendFile">;
+
+function fileContentToString(content: string | Uint8Array): string {
+	return typeof content === "string" ? content : Buffer.from(content).toString("utf8");
+}
+
+function trackJsonlWrites(base: JsonlTestFileSystem): {
+	fs: JsonlTestFileSystem;
+	writes: string[];
+	appends: string[];
+} {
+	const writes: string[] = [];
+	const appends: string[] = [];
+	const fs: JsonlTestFileSystem = {
+		readTextFile: (path, abortSignal) => base.readTextFile(path, abortSignal),
+		readTextLines: (path, options) => base.readTextLines(path, options),
+		writeFile: async (path, content, abortSignal) => {
+			writes.push(fileContentToString(content));
+			return base.writeFile(path, content, abortSignal);
+		},
+		appendFile: async (path, content, abortSignal) => {
+			appends.push(fileContentToString(content));
+			return base.appendFile(path, content, abortSignal);
+		},
+	};
+	return { fs, writes, appends };
+}
 
 function makeHeader(cwd: string): string {
 	return JSON.stringify({
@@ -50,8 +78,11 @@ describe("JsonlSessionStorage torn trailing line recovery", () => {
 		const filePath = join(dir, "session.jsonl");
 		const root = makeEntry("root", null);
 		writeFileSync(filePath, `${makeHeader(dir)}\n${JSON.stringify(root)}\n{"type":"message","id":"torn`);
-		const storage = await JsonlSessionStorage.open(env, filePath);
+		const tracked = trackJsonlWrites(env);
+		const storage = await JsonlSessionStorage.open(tracked.fs, filePath);
 		await storage.appendEntry(makeEntry("next", "root"));
+		expect(tracked.appends).toEqual([]);
+		expect(tracked.writes).toHaveLength(1);
 		// Every line in the repaired file must be valid JSON again.
 		const lines = readFileSync(filePath, "utf8").trim().split("\n");
 		expect(lines.map((line) => JSON.parse(line).id)).toEqual(["session-1", "root", "next"]);
@@ -65,11 +96,15 @@ describe("JsonlSessionStorage torn trailing line recovery", () => {
 		const env = new NodeExecutionEnv({ cwd: dir });
 		const filePath = join(dir, "session.jsonl");
 		const root = makeEntry("root", null);
+		const next = makeEntry("next", "root");
 		// The final entry is complete JSON but the trailing newline byte was lost.
 		writeFileSync(filePath, `${makeHeader(dir)}\n${JSON.stringify(root)}`);
-		const storage = await JsonlSessionStorage.open(env, filePath);
+		const tracked = trackJsonlWrites(env);
+		const storage = await JsonlSessionStorage.open(tracked.fs, filePath);
 		expect((await storage.getEntries()).map((entry) => entry.id)).toEqual(["root"]);
-		await storage.appendEntry(makeEntry("next", "root"));
+		await storage.appendEntry(next);
+		expect(tracked.writes).toEqual([]);
+		expect(tracked.appends).toEqual([`\n${JSON.stringify(next)}\n`]);
 		const reloaded = await JsonlSessionStorage.open(env, filePath);
 		expect((await reloaded.getEntries()).map((entry) => entry.id)).toEqual(["root", "next"]);
 	});

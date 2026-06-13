@@ -259,8 +259,12 @@ describe("AgentHarness", () => {
 			model: registration.getModel(),
 		});
 		const events: string[] = [];
+		const agentEndMessages: AgentMessage[][] = [];
 		harness.subscribe((event) => {
 			events.push(event.type);
+			if (event.type === "agent_end") {
+				agentEndMessages.push(event.messages);
+			}
 		});
 		harness.on("context", () => {
 			throw new Error("context exploded");
@@ -275,6 +279,8 @@ describe("AgentHarness", () => {
 		expect(response.errorMessage).toBe("context exploded");
 		expect(messages[0]?.role).toBe("user");
 		expect(messages[1]).toMatchObject({ role: "assistant", stopReason: "error", errorMessage: "context exploded" });
+		expect(agentEndMessages[0]).toEqual(messages.slice(0, 2));
+		expect(agentEndMessages[0]?.map((message) => message.role)).toEqual(["user", "assistant"]);
 		expect(events).toContain("agent_end");
 		expect(events).toContain("settled");
 	});

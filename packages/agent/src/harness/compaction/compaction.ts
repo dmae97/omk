@@ -259,6 +259,8 @@ export function shouldCompact(contextTokens: number, contextWindow: number, sett
 }
 
 const ESTIMATED_IMAGE_CHARS = 4800;
+const ESTIMATED_MESSAGE_OVERHEAD_TOKENS = 4;
+const ESTIMATED_UNKNOWN_MESSAGE_TOKENS = 4;
 
 function estimateTextAndImageContentChars(content: string | Array<{ type: string; text?: string }>): number {
 	if (typeof content === "string") {
@@ -285,7 +287,7 @@ export function estimateTokens(message: AgentMessage): number {
 			chars = estimateTextAndImageContentChars(
 				(message as { content: string | Array<{ type: string; text?: string }> }).content,
 			);
-			return Math.ceil(chars / 4);
+			return ESTIMATED_MESSAGE_OVERHEAD_TOKENS + Math.ceil(chars / 4);
 		}
 		case "assistant": {
 			const assistant = message as AssistantMessage;
@@ -298,25 +300,28 @@ export function estimateTokens(message: AgentMessage): number {
 					chars += block.name.length + safeJsonStringify(block.arguments).length;
 				}
 			}
-			return Math.ceil(chars / 4);
+			return ESTIMATED_MESSAGE_OVERHEAD_TOKENS + Math.ceil(chars / 4);
 		}
 		case "custom":
 		case "toolResult": {
 			chars = estimateTextAndImageContentChars(message.content);
-			return Math.ceil(chars / 4);
+			return ESTIMATED_MESSAGE_OVERHEAD_TOKENS + Math.ceil(chars / 4);
 		}
 		case "bashExecution": {
 			chars = message.command.length + message.output.length;
-			return Math.ceil(chars / 4);
+			return ESTIMATED_MESSAGE_OVERHEAD_TOKENS + Math.ceil(chars / 4);
 		}
 		case "branchSummary":
 		case "compactionSummary": {
 			chars = message.summary.length;
-			return Math.ceil(chars / 4);
+			return ESTIMATED_MESSAGE_OVERHEAD_TOKENS + Math.ceil(chars / 4);
 		}
 	}
 
-	return 0;
+	// Invariant: this estimate is always >= the old estimate for every message,
+	// so compaction can only trigger earlier, never later; this conservative
+	// floor aligns with the compact-before-context-headroom-overflow fix.
+	return ESTIMATED_UNKNOWN_MESSAGE_TOKENS;
 }
 function findValidCutPoints(entries: SessionTreeEntry[], startIndex: number, endIndex: number): number[] {
 	const cutPoints: number[] = [];
@@ -628,6 +633,14 @@ export function prepareCompaction(
 	const tokensBefore = estimateContextTokens(buildSessionContext(pathEntries).messages).tokens;
 
 	const cutPoint = findCutPoint(pathEntries, boundaryStart, boundaryEnd, settings.keepRecentTokens);
+	const dropsHistoryEntries = cutPoint.firstKeptEntryIndex > boundaryStart;
+	const summarizesSplitTurnPrefix = cutPoint.isSplitTurn && cutPoint.firstKeptEntryIndex > cutPoint.turnStartIndex;
+	// Invariant: normal compactions that drop at least one entry, or summarize a
+	// split-turn prefix, are unchanged. Only true no-ops are skipped.
+	if (!dropsHistoryEntries && !summarizesSplitTurnPrefix) {
+		return ok(undefined);
+	}
+
 	const firstKeptEntry = pathEntries[cutPoint.firstKeptEntryIndex];
 	if (!firstKeptEntry?.id) {
 		return err(new CompactionError("invalid_session", "First kept entry has no UUID - session may need migration"));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { truncateHead, truncateTail } from "../../src/harness/utils/truncate.ts";
+import { truncateHead, truncateLine, truncateTail } from "../../src/harness/utils/truncate.ts";
 
 const encoder = new TextEncoder();
 
@@ -13,6 +13,14 @@ function bufferTail(content: string, maxBytes: number): string {
 	let start = bytes.length - maxBytes;
 	while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) start++;
 	return bytes.subarray(start).toString("utf8");
+}
+
+function hasLoneSurrogate(text: string): boolean {
+	return [...text].some((character) => {
+		if (character.length !== 1) return false;
+		const code = character.charCodeAt(0);
+		return code >= 0xd800 && code <= 0xdfff;
+	});
 }
 
 function assertMatchesBufferTail(input: string, maxByteValues?: readonly number[]): void {
@@ -62,6 +70,21 @@ function sampledByteLimits(input: string): number[] {
 }
 
 describe("truncate utilities", () => {
+	it("truncates grep lines from the middle with ASCII input", () => {
+		const result = truncateLine("abcdefghijklmnopqrstuvwxyz", 10);
+
+		expect(result).toEqual({ text: "abcde... [truncated] ...vwxyz", wasTruncated: true });
+	});
+
+	it("truncates grep lines without splitting surrogate pairs", () => {
+		const result = truncateLine("a\u{1F642}b\u{1F642}c", 4);
+
+		expect(result.wasTruncated).toBe(true);
+		expect(result.text).toBe("a\u{1F642}... [truncated] ...\u{1F642}c");
+		expect([...result.text].join("")).toBe(result.text);
+		expect(hasLoneSurrogate(result.text)).toBe(false);
+	});
+
 	it("counts UTF-8 bytes without Node Buffer", () => {
 		const content = "aé🙂\nb";
 		const result = truncateHead(content, { maxBytes: 100, maxLines: 10 });

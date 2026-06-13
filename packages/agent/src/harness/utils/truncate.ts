@@ -330,15 +330,24 @@ function truncateStringToBytesFromEnd(str: string, maxBytes: number): string {
 }
 
 /**
- * Truncate a single line to max characters, adding [truncated] suffix.
+ * Truncate a single line to max characters, adding [truncated] marker.
  * Used for grep match lines.
  */
 export function truncateLine(
 	line: string,
 	maxChars: number = GREP_MAX_LINE_LENGTH,
 ): { text: string; wasTruncated: boolean } {
-	if (line.length <= maxChars) {
+	const codePoints = Array.from(line);
+	if (codePoints.length <= maxChars) {
 		return { text: line, wasTruncated: false };
 	}
-	return { text: `${line.slice(0, maxChars)}... [truncated]`, wasTruncated: true };
+
+	const marker = "... [truncated] ...";
+	const remaining = Math.max(0, maxChars);
+	const headLength = Math.ceil(remaining / 2);
+	const tailLength = Math.floor(remaining / 2);
+	const head = codePoints.slice(0, headLength).join("");
+	const tail = tailLength === 0 ? "" : codePoints.slice(-tailLength).join("");
+
+	return { text: `${head}${marker}${tail}`, wasTruncated: true };
 }

@@ -4,6 +4,7 @@ import { getFileSystemResultOrThrow } from "./repo-utils.ts";
 import { uuidv7 } from "./uuid.ts";
 
 type JsonlSessionStorageFileSystem = Pick<FileSystem, "readTextFile" | "readTextLines" | "writeFile" | "appendFile">;
+type JsonlTailRepair = "none" | "missing-newline" | "torn-tail";
 
 interface SessionHeader {
 	type: "session";
@@ -140,7 +141,7 @@ async function loadJsonlStorage(
 	header: SessionHeader;
 	entries: SessionTreeEntry[];
 	leafId: string | null;
-	needsTailRepair: boolean;
+	tailRepair: JsonlTailRepair;
 }> {
 	const content = getFileSystemResultOrThrow(await fs.readTextFile(filePath), `Failed to read session ${filePath}`);
 	const lines = content.split("\n").filter((line) => line.trim());
@@ -151,17 +152,18 @@ async function loadJsonlStorage(
 	const header = parseHeaderLine(lines[0]!, filePath);
 	const entries: SessionTreeEntry[] = [];
 	let leafId: string | null = null;
-	let droppedTornTail = false;
+	let tailRepair: JsonlTailRepair = "none";
 	for (let i = 1; i < lines.length; i++) {
 		let entry: SessionTreeEntry;
 		try {
 			entry = parseEntryLine(lines[i]!, filePath, i + 1);
 		} catch (error) {
-			// A crash mid-append (SIGKILL, power loss, ENOSPC) can leave a torn
-			// partial line at the end of the file. Drop a malformed final line
-			// instead of making the whole session permanently unloadable.
-			if (i === lines.length - 1 && error instanceof SessionError && error.code === "invalid_entry") {
-				droppedTornTail = true;
+			// Invariants: malformed middle lines are still rejected; only an
+			// incomplete final line may be dropped. Valid final JSON is never
+			// dropped: a missing newline is repaired by append instead.
+			const isIncompleteFinalLine = i === lines.length - 1 && !content.endsWith("\n");
+			if (isIncompleteFinalLine && error instanceof SessionError && error.code === "invalid_entry") {
+				tailRepair = "torn-tail";
 				break;
 			}
 			throw error;
@@ -169,7 +171,10 @@ async function loadJsonlStorage(
 		entries.push(entry);
 		leafId = leafIdAfterEntry(entry);
 	}
-	return { header, entries, leafId, needsTailRepair: droppedTornTail || !content.endsWith("\n") };
+	if (tailRepair === "none" && !content.endsWith("\n")) {
+		tailRepair = "missing-newline";
+	}
+	return { header, entries, leafId, tailRepair };
 }
 
 export class JsonlSessionStorage implements SessionStorage<JsonlSessionMetadata> {
@@ -181,7 +186,7 @@ export class JsonlSessionStorage implements SessionStorage<JsonlSessionMetadata>
 	private byId: Map<string, SessionTreeEntry>;
 	private labelsById: Map<string, string>;
 	private currentLeafId: string | null;
-	private needsTailRepair: boolean;
+	private tailRepair: JsonlTailRepair;
 
 	private constructor(
 		fs: JsonlSessionStorageFileSystem,
@@ -189,7 +194,7 @@ export class JsonlSessionStorage implements SessionStorage<JsonlSessionMetadata>
 		header: SessionHeader,
 		entries: SessionTreeEntry[],
 		leafId: string | null,
-		needsTailRepair = false,
+		tailRepair: JsonlTailRepair = "none",
 	) {
 		this.fs = fs;
 		this.filePath = filePath;
@@ -199,19 +204,12 @@ export class JsonlSessionStorage implements SessionStorage<JsonlSessionMetadata>
 		this.byId = new Map(entries.map((entry) => [entry.id, entry]));
 		this.labelsById = buildLabelsById(entries);
 		this.currentLeafId = leafId;
-		this.needsTailRepair = needsTailRepair;
+		this.tailRepair = tailRepair;
 	}
 
 	static async open(fs: JsonlSessionStorageFileSystem, filePath: string): Promise<JsonlSessionStorage> {
 		const loaded = await loadJsonlStorage(fs, filePath);
-		return new JsonlSessionStorage(
-			fs,
-			filePath,
-			loaded.header,
-			loaded.entries,
-			loaded.leafId,
-			loaded.needsTailRepair,
-		);
+		return new JsonlSessionStorage(fs, filePath, loaded.header, loaded.entries, loaded.leafId, loaded.tailRepair);
 	}
 
 	static async create(
@@ -271,23 +269,27 @@ export class JsonlSessionStorage implements SessionStorage<JsonlSessionMetadata>
 	}
 
 	/**
-	 * Persist an entry line. When the file has a torn tail (partial trailing
-	 * line left by a crash mid-append), rewrite the whole file from the valid
-	 * in-memory state instead of appending, so the new entry is never
-	 * concatenated onto a partial line.
+	 * Persist an entry line. A complete final JSON line that is only missing its
+	 * trailing newline is repaired by a cheap append, so it is never dropped. A
+	 * torn final line is repaired by rewriting only the valid in-memory prefix,
+	 * preserving id order and ensuring the next append cannot concatenate onto
+	 * broken JSON. After a successful repair the state is reset, making repair
+	 * idempotent for later appends.
 	 */
 	private async persistEntry(entry: SessionTreeEntry, errorContext: string): Promise<void> {
 		const line = `${JSON.stringify(entry)}\n`;
-		if (this.needsTailRepair) {
+		if (this.tailRepair === "torn-tail") {
 			const validLines = [JSON.stringify(this.header), ...this.entries.map((existing) => JSON.stringify(existing))];
 			getFileSystemResultOrThrow(
 				await this.fs.writeFile(this.filePath, `${validLines.join("\n")}\n${line}`),
 				errorContext,
 			);
-			this.needsTailRepair = false;
+			this.tailRepair = "none";
 			return;
 		}
-		getFileSystemResultOrThrow(await this.fs.appendFile(this.filePath, line), errorContext);
+		const appendLine = this.tailRepair === "missing-newline" ? `\n${line}` : line;
+		getFileSystemResultOrThrow(await this.fs.appendFile(this.filePath, appendLine), errorContext);
+		this.tailRepair = "none";
 	}
 
 	async appendEntry(entry: SessionTreeEntry): Promise<void> {
