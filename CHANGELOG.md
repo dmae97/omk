@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## v0.78.9 — Landing conversion, GEO canonical docs, and metadata consistency (2026-06-13)
+
+### Added
+
+- Canonical generative-engine (GEO) source docs: `docs/what-is-omk.md`, `docs/use-cases/*`, `docs/comparisons/*`, `docs/claims.md`, and `docs/geo-eval-prompts.md`.
+- Release-risk showcase under `examples/showcase/` with an evidence-honest dry-run shape.
+
+### Changed
+
+- Reworked the README first screen for conversion: user-outcome lead, 30-second `omk do --dry-run --json` demo with real artifact names, comparison table, use-case list, and community links.
+- Aligned `llms.txt` with the canonical definition and the new GEO docs.
+- Normalized license/repository metadata to MIT and `dmae97/open-multi-agent-kit`, and aligned current-version references to `0.78.9`.
+
 ## v0.78.8 — persona-token surface cleanup and CI-gated hotfix (2026-06-11)
 
 ### Fixed

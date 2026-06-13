@@ -1,6 +1,6 @@
 # Getting Started
 
-Source release target: `open-multi-agent-kit@0.78.8`. Treat npm latest claims as valid only after registry verification and release gates pass.
+Source release target: `open-multi-agent-kit@0.78.9`. Treat npm latest claims as valid only after registry verification and release gates pass.
 
 ## Prerequisites
 
