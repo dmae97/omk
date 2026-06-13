@@ -16,7 +16,7 @@ npm run build
 npm run verify:no-kimi
 ```
 
-`verify:no-kimi` exercises doctor, chat, codex, default-surface, and runtime-routing paths with `KIMI_BIN=/nonexistent/kimi` so the legacy Kimi fallback is disabled.
+`verify:no-kimi` exercises doctor, chat, codex, default-surface, and runtime-routing paths with provider pinning, smoke mode, and `--mcp-scope none` so the legacy Kimi fallback is not used. The source-controlled `009-no-kimi-smoke` proof bundle additionally pins `KIMI_BIN=/nonexistent/kimi`.
 
 ## Quick start without Kimi
 
