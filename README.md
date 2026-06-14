@@ -1,13 +1,13 @@
 <p align="center">
   <a href="https://pi.dev">
-    <img alt="pi logo" src="https://pi.dev/logo-auto.svg" width="128">
+    <img alt="omk logo" src="https://pi.dev/logo-auto.svg" width="128">
   </a>
 </p>
 <p align="center">
   <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
 </p>
 <p align="center">
-  <a href="https://pi.dev">pi.dev</a> domain graciously donated by
+  <a href="https://pi.dev">omk.dev</a> domain graciously donated by
   <br /><br />
   <a href="https://exe.dev"><img src="packages/coding-agent/docs/images/exy.png" alt="Exy mascot" width="48" /><br />exe.dev</a>
 </p>
@@ -16,22 +16,22 @@
 
 ---
 
-# Pi Agent Harness Mono Repo
+# OMK Agent Harness Mono Repo
 
-This is the home of the pi agent harness project including our self extensible coding agent.
+This is the home of the omk agent harness project including our self extensible coding agent.
 
 * **[open-multi-agent-kit](packages/coding-agent)**: Interactive coding agent CLI
 * **[@earendil-works/omk-agent-core](packages/agent)**: Agent runtime with tool calling and state management
 * **[@earendil-works/omk-ai](packages/ai)**: Unified multi-provider LLM API (OpenAI, Anthropic, Google, …)
 
-To learn more about pi:
+To learn more about omk:
 
-* [Visit pi.dev](https://pi.dev), the project website with demos
+* [Visit omk.dev](https://pi.dev), the project website with demos
 * [Read the documentation](https://pi.dev/docs/latest), but you can also ask the agent to explain itself
 
 ## Share your OSS coding agent sessions
 
-If you use pi or other coding agents for open source work, please share your sessions.
+If you use omk or other coding agents for open source work, please share your sessions.
 
 Public OSS session data helps improve coding agents with real-world tasks, tool use, failures, and fixes instead of toy benchmarks.
 
@@ -58,13 +58,13 @@ For Slack/chat automation and workflows see [earendil-works/pi-chat](https://git
 
 ## Permissions & Containerization
 
-Pi does not include a built-in permission system for restricting filesystem, process, network, or credential access. By default, it runs with the permissions of the user and process that launched it.
+OMK does not include a built-in permission system for restricting filesystem, process, network, or credential access. By default, it runs with the permissions of the user and process that launched it.
 
-If you need stronger boundaries, containerize or sandbox Pi. See [packages/coding-agent/docs/containerization.md](packages/coding-agent/docs/containerization.md) for three patterns:
+If you need stronger boundaries, containerize or sandbox OMK. See [packages/coding-agent/docs/containerization.md](packages/coding-agent/docs/containerization.md) for three patterns:
 
-- **OpenShell**: run the whole `pi` process in a policy-controlled sandbox.
-- **Gondolin extension**: keep `pi` and provider auth on the host while routing built-in tools and `!` commands into a local Linux micro-VM.
-- **Plain Docker**: run the whole `pi` process in a local container for simple isolation.
+- **OpenShell**: run the whole `omk` process in a policy-controlled sandbox.
+- **Gondolin extension**: keep `omk` and provider auth on the host while routing built-in tools and `!` commands into a local Linux micro-VM.
+- **Plain Docker**: run the whole `omk` process in a local container for simple isolation.
 
 ## Contributing
 
@@ -90,7 +90,7 @@ We treat npm dependency changes as reviewed code changes.
 - `npm run check` verifies pinned direct deps, native TypeScript import compatibility, and the generated coding-agent shrinkwrap.
 - The published CLI package includes `packages/coding-agent/npm-shrinkwrap.json`, generated from the root lockfile, to pin transitive deps for npm users.
 - Release smoke tests use `npm run release:local` to build, pack, and create isolated npm and Bun installs outside the repo before tagging a release.
-- Local release installs, documented npm installs, and `pi update --self` use `--ignore-scripts` where supported.
+- Local release installs, documented npm installs, and `omk update --self` use `--ignore-scripts` where supported.
 - CI installs with `npm ci --ignore-scripts`, and a scheduled GitHub workflow runs `npm audit --omit=dev` plus `npm audit signatures --omit=dev`.
 - Shrinkwrap generation has an explicit allowlist for dependency lifecycle scripts; new lifecycle-script deps fail checks until reviewed.
 
