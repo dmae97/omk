@@ -48,8 +48,8 @@ describe("package install failure isolation (regression)", () => {
 	const warningCalls = (): string[] => consoleErrorSpy.mock.calls.map((call) => call.map(String).join(" "));
 
 	beforeEach(() => {
-		previousOfflineEnv = process.env.PI_OFFLINE;
-		delete process.env.PI_OFFLINE;
+		previousOfflineEnv = process.env.OMK_OFFLINE;
+		delete process.env.OMK_OFFLINE;
 		tempDir = join(tmpdir(), `pm-isolation-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		agentDir = join(tempDir, "agent");
 		mkdirSync(agentDir, { recursive: true });
@@ -58,9 +58,9 @@ describe("package install failure isolation (regression)", () => {
 
 	afterEach(() => {
 		if (previousOfflineEnv === undefined) {
-			delete process.env.PI_OFFLINE;
+			delete process.env.OMK_OFFLINE;
 		} else {
-			process.env.PI_OFFLINE = previousOfflineEnv;
+			process.env.OMK_OFFLINE = previousOfflineEnv;
 		}
 		vi.restoreAllMocks();
 		rmSync(tempDir, { recursive: true, force: true });

@@ -1,5 +1,5 @@
 {
-	"name": "pi-extension-gondolin",
+	"name": "omk-extension-gondolin",
 	"private": true,
 	"version": "0.78.0",
 	"type": "module",
@@ -8,12 +8,12 @@
 		"build": "echo 'nothing to build'",
 		"check": "echo 'nothing to check'"
 	},
-	"pi": {
+	"dependencies": {
+		"@earendil-works/gondolin": "0.12.0"
+	},
+	"omk": {
 		"extensions": [
 			"./index.ts"
 		]
-	},
-	"dependencies": {
-		"@earendil-works/gondolin": "0.12.0"
 	}
 }

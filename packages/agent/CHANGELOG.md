@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
-### Changed
+### Breaking Changes
 
+- Renamed the npm package from `@earendil-works/pi-agent-core` to `@earendil-works/omk-agent-core` and updated internal OMK package dependencies.
+
+### Changed
 - Changed `estimateTokens` to add a per-message structural overhead and a non-zero floor for unknown-role messages, making compaction triggering more conservative.
 - Changed `prepareCompaction` to skip true no-op compaction when the only oversized message would drop nothing.
 - Changed `AgentHarness` failure events (`agent_end`) to include the completed turn messages before the synthetic failure message.

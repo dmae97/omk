@@ -1,14 +1,14 @@
 # JSON Event Stream Mode
 
 ```bash
-pi --mode json "Your prompt"
+omk --mode json "Your prompt"
 ```
 
-Outputs all session events as JSON lines to stdout. Useful for integrating pi into other tools or custom UIs.
+Outputs all session events as JSON lines to stdout. Useful for integrating omk into other tools or custom UIs.
 
 ## Event Types
 
-Events are defined in [`AgentSessionEvent`](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/src/core/agent-session.ts#L102):
+Events are defined in [`AgentSessionEvent`](https://github.com/earendil-works/omk-mono/blob/main/packages/coding-agent/src/core/agent-session.ts#L102):
 
 ```typescript
 type AgentSessionEvent =
@@ -22,7 +22,7 @@ type AgentSessionEvent =
 
 `queue_update` emits the full pending steering and follow-up queues whenever they change. `compaction_start` and `compaction_end` cover both manual and automatic compaction.
 
-Base events from [`AgentEvent`](https://github.com/earendil-works/pi-mono/blob/main/packages/agent/src/types.ts#L179):
+Base events from [`AgentEvent`](https://github.com/earendil-works/omk-mono/blob/main/packages/agent/src/types.ts#L179):
 
 ```typescript
 type AgentEvent =
@@ -44,12 +44,12 @@ type AgentEvent =
 
 ## Message Types
 
-Base messages from [`packages/ai/src/types.ts`](https://github.com/earendil-works/pi-mono/blob/main/packages/ai/src/types.ts#L134):
+Base messages from [`packages/ai/src/types.ts`](https://github.com/earendil-works/omk-mono/blob/main/packages/ai/src/types.ts#L134):
 - `UserMessage` (line 134)
 - `AssistantMessage` (line 140)
 - `ToolResultMessage` (line 152)
 
-Extended messages from [`packages/coding-agent/src/core/messages.ts`](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/src/core/messages.ts#L29):
+Extended messages from [`packages/coding-agent/src/core/messages.ts`](https://github.com/earendil-works/omk-mono/blob/main/packages/coding-agent/src/core/messages.ts#L29):
 - `BashExecutionMessage` (line 29)
 - `CustomMessage` (line 46)
 - `BranchSummaryMessage` (line 55)
@@ -78,5 +78,5 @@ Followed by events as they occur:
 ## Example
 
 ```bash
-pi --mode json "List files" 2>/dev/null | jq -c 'select(.type == "message_end")'
+omk --mode json "List files" 2>/dev/null | jq -c 'select(.type == "message_end")'
 ```

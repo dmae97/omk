@@ -1,6 +1,6 @@
 {
-	"name": "@earendil-works/pi-tui",
-	"version": "0.79.1",
+	"name": "@earendil-works/omk-tui",
+	"version": "0.79.2",
 	"description": "Terminal User Interface library with differential rendering for efficient text-based applications",
 	"type": "module",
 	"main": "dist/index.js",
@@ -29,7 +29,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/earendil-works/pi.git",
+		"url": "git+https://github.com/dmae97/open-multi-agent-kit.git",
 		"directory": "packages/tui"
 	},
 	"engines": {

@@ -66,7 +66,7 @@ async function runCli(
 			env: {
 				...process.env,
 				[ENV_AGENT_DIR]: dirs.agentDir,
-				PI_OFFLINE: "1",
+				OMK_OFFLINE: "1",
 				TSX_TSCONFIG_PATH: resolve(__dirname, "../../../tsconfig.json"),
 			},
 			stdio: ["ignore", "ignore", "pipe"],

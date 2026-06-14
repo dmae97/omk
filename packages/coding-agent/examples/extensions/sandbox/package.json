@@ -1,5 +1,5 @@
 {
-	"name": "pi-extension-sandbox",
+	"name": "omk-extension-sandbox",
 	"private": true,
 	"version": "1.8.0",
 	"type": "module",
@@ -8,12 +8,12 @@
 		"build": "echo 'nothing to build'",
 		"check": "echo 'nothing to check'"
 	},
-	"pi": {
+	"dependencies": {
+		"@anthropic-ai/sandbox-runtime": "0.0.26"
+	},
+	"omk": {
 		"extensions": [
 			"./index.ts"
 		]
-	},
-	"dependencies": {
-		"@anthropic-ai/sandbox-runtime": "0.0.26"
 	}
 }

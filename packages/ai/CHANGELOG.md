@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Renamed the npm package from `@earendil-works/pi-ai` to `@earendil-works/omk-ai`, renamed the CLI binary to `omk-ai`, and updated package metadata to the OMK repository.
+
 ### Added
 
 - Added Ant Ling as a built-in OpenAI-compatible provider with Ling 2.6 and Ring 2.6 models.

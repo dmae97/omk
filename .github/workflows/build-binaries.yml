@@ -71,20 +71,20 @@ jobs:
           gh release create "${RELEASE_TAG}" \
             --title "${RELEASE_TAG}" \
             --notes-file /tmp/release-notes.md \
-            pi-darwin-arm64.tar.gz \
-            pi-darwin-x64.tar.gz \
-            pi-linux-x64.tar.gz \
-            pi-linux-arm64.tar.gz \
-            pi-windows-x64.zip \
-            pi-windows-arm64.zip \
+            omk-darwin-arm64.tar.gz \
+            omk-darwin-x64.tar.gz \
+            omk-linux-x64.tar.gz \
+            omk-linux-arm64.tar.gz \
+            omk-windows-x64.zip \
+            omk-windows-arm64.zip \
             2>/dev/null || \
           gh release upload "${RELEASE_TAG}" \
-            pi-darwin-arm64.tar.gz \
-            pi-darwin-x64.tar.gz \
-            pi-linux-x64.tar.gz \
-            pi-linux-arm64.tar.gz \
-            pi-windows-x64.zip \
-            pi-windows-arm64.zip \
+            omk-darwin-arm64.tar.gz \
+            omk-darwin-x64.tar.gz \
+            omk-linux-x64.tar.gz \
+            omk-linux-arm64.tar.gz \
+            omk-windows-x64.zip \
+            omk-windows-arm64.zip \
             --clobber
 
   publish-npm:

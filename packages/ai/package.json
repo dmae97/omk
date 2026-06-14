@@ -1,6 +1,6 @@
 {
-	"name": "@earendil-works/pi-ai",
-	"version": "0.79.1",
+	"name": "@earendil-works/omk-ai",
+	"version": "0.79.2",
 	"description": "Unified LLM API with automatic model discovery and provider configuration",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -52,7 +52,7 @@
 		}
 	},
 	"bin": {
-		"pi-ai": "./dist/cli.js"
+		"omk-ai": "./dist/cli.js"
 	},
 	"files": [
 		"dist",
@@ -92,7 +92,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/earendil-works/pi.git",
+		"url": "git+https://github.com/dmae97/open-multi-agent-kit.git",
 		"directory": "packages/ai"
 	},
 	"engines": {

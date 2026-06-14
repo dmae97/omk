@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from "node:fs
 import { basename, dirname, join, relative, resolve, toNamespacedPath } from "node:path";
 import { getCwdRelativePath } from "./paths.ts";
 
-const QUARANTINE_DIR_NAME = ".pi-native-quarantine";
+const QUARANTINE_DIR_NAME = ".omk-native-quarantine";
 
 function normalizePath(path: string): string {
 	return toNamespacedPath(resolve(path));
