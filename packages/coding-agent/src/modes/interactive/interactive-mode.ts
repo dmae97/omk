@@ -3362,7 +3362,9 @@ export class InteractiveMode {
 	private async shutdown(options?: { fromSignal?: boolean }): Promise<void> {
 		if (this.isShuttingDown) return;
 		this.isShuttingDown = true;
-		this.unregisterSignalHandlers();
+		// Keep signal handlers registered until terminal cleanup has completed.
+		// `signal-exit` checks the listener list during the same SIGTERM/SIGHUP
+		// dispatch and re-sends the signal if only its own listeners remain.
 
 		if (options?.fromSignal) {
 			// Signal-triggered shutdown (SIGTERM/SIGHUP). Emit extension cleanup
@@ -5742,7 +5744,6 @@ export class InteractiveMode {
 	}
 
 	stop(): void {
-		this.unregisterSignalHandlers();
 		if (this.settingsManager.getShowTerminalProgress()) {
 			this.ui.terminal.setProgress(false);
 		}
@@ -5760,5 +5761,6 @@ export class InteractiveMode {
 			this.ui.stop();
 			this.isInitialized = false;
 		}
+		this.unregisterSignalHandlers();
 	}
 }
