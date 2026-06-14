@@ -12,10 +12,13 @@ const packages = [
 ];
 
 const dryRun = process.argv.includes("--dry-run");
-const unknownArgs = process.argv.slice(2).filter((arg) => arg !== "--dry-run");
+const noProvenance = process.argv.includes("--no-provenance");
+const unknownArgs = process.argv.slice(2).filter(
+	(arg) => arg !== "--dry-run" && arg !== "--no-provenance",
+);
 
 if (unknownArgs.length > 0) {
-	console.error(`Usage: node scripts/publish.mjs [--dry-run]`);
+	console.error(`Usage: node scripts/publish.mjs [--dry-run] [--no-provenance]`);
 	process.exit(1);
 }
 
@@ -110,6 +113,11 @@ for (const pkg of packages) {
 		continue;
 	}
 
-	run("npm", ["publish", "--access", "public", "--provenance", "--ignore-scripts"], { cwd: pkg.directory });
+	const publishArgs = ["publish", "--access", "public"];
+	if (!noProvenance) {
+		publishArgs.push("--provenance");
+	}
+	publishArgs.push("--ignore-scripts");
+	run("npm", publishArgs, { cwd: pkg.directory });
 	console.log();
 }
