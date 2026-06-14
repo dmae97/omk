@@ -467,6 +467,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handlePackageCommand(args, { extensionFactories: options?.extensionFactories })) {
+		process.exit(process.exitCode ?? 0);
 		return;
 	}
 
