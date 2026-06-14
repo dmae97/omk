@@ -2,7 +2,7 @@
  * GitLab Duo Provider Extension
  *
  * Provides access to GitLab Duo AI models (Claude and GPT) through GitLab's AI Gateway.
- * Delegates to pi-ai's built-in Anthropic and OpenAI streaming implementations.
+ * Delegates to omk-ai's built-in Anthropic and OpenAI streaming implementations.
  *
  * Usage:
  *   pi -e ./packages/coding-agent/examples/extensions/custom-provider-gitlab-duo
@@ -21,8 +21,8 @@ import {
 	streamSimpleAnthropic,
 	streamSimpleOpenAIResponses,
 	type ThinkingLevelMap,
-} from "@earendil-works/pi-ai";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+} from "@earendil-works/omk-ai";
+import type { ExtensionAPI } from "open-multi-agent-kit";
 
 // =============================================================================
 // Constants

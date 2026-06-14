@@ -9,8 +9,11 @@ const repoRoot = resolve(scriptDir, "..");
 const codingAgentDir = join(repoRoot, "packages/coding-agent");
 const rootLockfilePath = join(repoRoot, "package-lock.json");
 const shrinkwrapPath = join(codingAgentDir, "npm-shrinkwrap.json");
-const internalPackagePrefix = "@earendil-works/pi-";
-const allowedInstallScriptPackages = new Map([]);
+const internalPackagePrefix = "@earendil-works/omk-";
+const allowedInstallScriptPackages = new Map([
+	["@google/genai@1.52.0", "runtime dependency of @earendil-works/omk-ai; postinstall validates optional transports"],
+	["protobufjs@7.5.9", "runtime dependency pulled by @google/genai; postinstall prepares protobuf helpers"],
+]);
 
 const args = new Set(process.argv.slice(2));
 const checkOnly = args.has("--check");

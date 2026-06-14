@@ -60,7 +60,7 @@ const context: Context = {
 	messages: [{ role: "user", content: "hello", timestamp: Date.now() }],
 };
 
-const MIDDLEWARE_NAME = "pi-ai-custom-headers";
+const MIDDLEWARE_NAME = "omk-ai-custom-headers";
 
 function getModelFixture(): Model<"bedrock-converse-stream"> {
 	return getModel("amazon-bedrock", "us.anthropic.claude-opus-4-8");

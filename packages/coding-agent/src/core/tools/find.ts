@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { Text } from "@earendil-works/pi-tui";
+import type { AgentTool } from "@earendil-works/omk-agent-core";
+import { Text } from "@earendil-works/omk-tui";
 import { spawn } from "child_process";
 import path from "path";
 import { type Static, Type } from "typebox";

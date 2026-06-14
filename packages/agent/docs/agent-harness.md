@@ -230,7 +230,7 @@ Preferred future structure:
 - `agent-harness-tools.test.ts`: tool registry getters, active-tool semantics, and update events.
 - `agent-harness-lifecycle.test.ts`: phase/save-point/settled/reentrancy behavior.
 
-Use the `pi-ai` faux provider (`registerFauxProvider`, `fauxAssistantMessage`) for deterministic harness/provider tests. Faux response factories can inspect `StreamOptions`, invoke `options.onPayload`, and return scripted assistant messages without real provider APIs or network access.
+Use the `omk-ai` faux provider (`registerFauxProvider`, `fauxAssistantMessage`) for deterministic harness/provider tests. Faux response factories can inspect `StreamOptions`, invoke `options.onPayload`, and return scripted assistant messages without real provider APIs or network access.
 
 Harness coverage is configured separately from the default package test run:
 

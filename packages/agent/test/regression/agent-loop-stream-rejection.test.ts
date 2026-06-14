@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message, Model, UserMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Message, Model, UserMessage } from "@earendil-works/omk-ai";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { agentLoop, agentLoopContinue } from "../../src/agent-loop.ts";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, StreamFn } from "../../src/types.ts";
@@ -68,7 +68,7 @@ describe("agentLoop/agentLoopContinue stream termination on loop rejection", () 
 			model: createModel(),
 			convertToLlm: identityConverter,
 		};
-		// Mimics pi-ai's streamSimple throwing synchronously for an unregistered API.
+		// Mimics omk-ai's streamSimple throwing synchronously for an unregistered API.
 		const failingStreamFn: StreamFn = () => {
 			throw new Error("No API provider registered for api: mock");
 		};

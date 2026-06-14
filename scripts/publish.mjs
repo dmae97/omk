@@ -5,6 +5,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const packages = [
+	{ directory: "packages/ai", name: "@earendil-works/omk-ai" },
+	{ directory: "packages/tui", name: "@earendil-works/omk-tui" },
+	{ directory: "packages/agent", name: "@earendil-works/omk-agent-core" },
 	{ directory: "packages/coding-agent", name: "open-multi-agent-kit" },
 ];
 
@@ -84,7 +87,7 @@ if (versions.length !== 1) {
 	throw new Error(`Publish packages are not lockstep versioned: ${versions.join(", ")}`);
 }
 
-console.log(`Publishing pi packages at ${versions[0]}${dryRun ? " (dry run)" : ""}\n`);
+console.log(`Publishing OMK packages at ${versions[0]}${dryRun ? " (dry run)" : ""}\n`);
 
 for (const pkg of packages) {
 	const version = packageVersions.get(pkg.name);
