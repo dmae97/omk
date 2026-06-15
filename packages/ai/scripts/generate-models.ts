@@ -68,6 +68,8 @@ const KIMI_STATIC_HEADERS = {
 	"User-Agent": "KimiCLI/1.5",
 } as const;
 
+const MOONSHOT_CN_MIRRORED_MODEL_IDS = new Set(["kimi-k2.7-code", "kimi-k2.7-code-highspeed"]);
+
 const TOGETHER_BASE_URL = "https://api.together.ai/v1";
 const TOGETHER_BASE_COMPAT: OpenAICompletionsCompat = {
 	supportsStore: false,
@@ -346,6 +348,15 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 	}
 	if (model.provider === "openai-codex" && supportsOpenAiXhigh(model.id)) {
 		mergeThinkingLevelMap(model, { minimal: "low" });
+	}
+	if (
+		(model.provider === "moonshotai" || model.provider === "moonshotai-cn") &&
+		(model.id === "kimi-k2.7-code" || model.id === "kimi-k2.7-code-highspeed")
+	) {
+		// Kimi K2.7 Code is always-thinking. Official docs say
+		// `thinking: { type: "disabled" }` is rejected, and callers can omit
+		// the thinking parameter to use the enabled default.
+		mergeThinkingLevelMap(model, { off: null });
 	}
 	if (model.provider === "openrouter" && model.id.startsWith("inception/mercury-2")) {
 		// Mercury 2 in instant mode (reasoning_effort: "none") disables tool calling.
@@ -1262,12 +1273,27 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 			supportsStrictMode: false,
 			thinkingFormat: "deepseek",
 		};
+		const getMoonshotProviderModels = (key: "moonshotai" | "moonshotai-cn"): Record<string, ModelsDevModel> => {
+			const providerModels = data[key]?.models as Record<string, ModelsDevModel> | undefined;
+			return providerModels ? { ...providerModels } : {};
+		};
+		const moonshotModels = {
+			moonshotai: getMoonshotProviderModels("moonshotai"),
+			"moonshotai-cn": getMoonshotProviderModels("moonshotai-cn"),
+		};
+
+		// models.dev can lag the CN catalog while the global Moonshot catalog already
+		// has the model. Mirror selected current model IDs into moonshotai-cn until
+		// upstream CN metadata catches up.
+		for (const modelId of MOONSHOT_CN_MIRRORED_MODEL_IDS) {
+			const model = moonshotModels.moonshotai[modelId];
+			if (model && !moonshotModels["moonshotai-cn"][modelId]) {
+				moonshotModels["moonshotai-cn"][modelId] = model;
+			}
+		}
 
 		for (const { key, provider, baseUrl } of moonshotVariants) {
-			if (!data[key]?.models) continue;
-
-			for (const [modelId, model] of Object.entries(data[key].models)) {
-				const m = model as ModelsDevModel;
+			for (const [modelId, m] of Object.entries(moonshotModels[key])) {
 				if (m.tool_call !== true) continue;
 
 				models.push({
