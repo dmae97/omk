@@ -55,6 +55,9 @@ proof/**/*.jsonl
 # Kimi / agent local user settings
 .kimi/
 .agents/
+.gjc/
+.serena/
+.mcp.json
 !templates/.kimi/
 !templates/.kimi/**
 !templates/skills/agents/

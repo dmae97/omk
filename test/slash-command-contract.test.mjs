@@ -238,6 +238,33 @@ test("/think max is allowed when current model is fable-5", async () => {
   assert.match(result.text, /Thinking variant: max/);
 });
 
+test("/think without args shows the level list without mutating thinking", async () => {
+  const commands = new Map(
+    buildNativeChatSlashCommands().map((command) => [command.name, command]),
+  );
+  const think = commands.get("/think");
+  assert.ok(think, "/think should be registered");
+
+  const ctx = {
+    input: { root: process.cwd(), runId: "slash-think-list-test", layout: "plain" },
+    state: {
+      bootstrap: { provider: "codex", selectedRuntimeId: "codex-cli" },
+      provider: "codex",
+      model: "codex-cli",
+    },
+    env: {},
+  };
+
+  const result = await think.handler(ctx, parseSlashArgs(""));
+  assert.equal(result.ok, true);
+  assert.equal(result.statePatch.thinking, undefined);
+  assert.equal(result.statePatch.thinkingPickerOpen, true);
+  assert.equal(ctx.env.OMK_THINKING, undefined);
+  assert.equal(ctx.env.OMK_MODEL_VARIANT, undefined);
+  assert.match(result.text, /OMK Thinking Control · choose level/);
+  assert.match(result.text, /Choose directly: \/think minimal/);
+});
+
 test("/model and /use reject unsupported thinking before mutating state", async () => {
   const commands = new Map(
     buildNativeChatSlashCommands().map((command) => [command.name, command]),
@@ -458,7 +485,7 @@ test("native root loop slash handler emits structured results without console hi
     source,
     /console\.log\s*=|console\.warn\s*=|console\.error\s*=/,
   );
-  assert.match(source, /emitSlashResult\(normalized, ctx\.renderer\)/);
-  assert.match(source, /printSlashResult\(normalized\)/);
+  assert.match(source, /emitSlashResult\(visibleResult, ctx\.renderer\)/);
+  assert.match(source, /printSlashResult\(visibleResult\)/);
   assert.match(source, /buildNativeChatSlashCommands\(\)/);
 });

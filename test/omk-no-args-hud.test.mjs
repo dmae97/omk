@@ -6,9 +6,11 @@ import { join } from "node:path";
 const DIST_ROOT = join(process.cwd(), "dist", "cli", "root.js");
 const DIST_CHAT_UTILS = join(process.cwd(), "dist", "commands", "chat", "utils.js");
 const DIST_CHAT_CORE = join(process.cwd(), "dist", "commands", "chat", "core.js");
+const DIST_CHAT_RUNTIME = join(process.cwd(), "dist", "commands", "chat", "runtime.js");
+const DIST_I18N = join(process.cwd(), "dist", "util", "i18n.js");
 const DIST_FS = join(process.cwd(), "dist", "util", "fs.js");
 const DIST_PROVIDER_TASK_RUNNER = join(process.cwd(), "dist", "providers", "provider-task-runner.js");
-import { OMK_ROOT_ENTRY_SURFACE, buildRootChatLaunchArgs } from "../dist/cli/root.js";
+import { OMK_ROOT_ENTRY_DISPLAY_NAME, OMK_ROOT_ENTRY_SURFACE, buildRootChatLaunchArgs } from "../dist/cli/root.js";
 function sliceFunction(source, startNeedle, endNeedle) {
   const start = source.indexOf(startNeedle);
   assert.notEqual(start, -1, `missing ${startNeedle}`);
@@ -81,6 +83,13 @@ describe("omk with no arguments", () => {
     assert.doesNotMatch(rootSource, /suggestionHud/);
     assert.match(rootSource, /OMK_ENTRY_SURFACE/);
     assert.match(rootSource, /omk-root-orchestrator/);
+    assert.match(rootSource, /OMK_ENTRY_DISPLAY_NAME/);
+    assert.doesNotMatch(rootSource, /omk foundation cli/i);
+    const chatRuntimeSource = readFileSync(DIST_CHAT_RUNTIME, "utf-8");
+    assert.match(chatRuntimeSource, /OMK_ENTRY_DISPLAY_NAME/);
+    const i18nSource = readFileSync(DIST_I18N, "utf-8");
+    assert.match(i18nSource, /omk: multi-agent control plane/);
+    assert.doesNotMatch(i18nSource, /omk foundation cli/i);
     assert.doesNotMatch(rootSource, /pi-omk|isPiOmkEntry/);
     assert.doesNotMatch(rootSource, /OMK_MCP_SCOPE/);
     assert.doesNotMatch(rootSource, /OMK_SKILLS_SCOPE/);
@@ -115,6 +124,9 @@ describe("omk with no arguments", () => {
 
   it("exports an OMK-native root entry marker", () => {
     assert.equal(OMK_ROOT_ENTRY_SURFACE, "omk-root-orchestrator");
+  });
+  it("exports the bare omk display label", () => {
+    assert.equal(OMK_ROOT_ENTRY_DISPLAY_NAME, "omk");
   });
 
   it("keeps bare omk routed into the OMK chat entry", () => {

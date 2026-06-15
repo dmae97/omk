@@ -61,8 +61,9 @@ export async function promptThemeSelection(
   currentTheme?: string,
 ): Promise<string | null> {
   const themes = [
-    { value: "omk", label: "OMK", hint: "Default colorful theme" },
-    { value: "night-city", label: "Night City", hint: "README control image palette" },
+    { value: "omk-control-grid-dark", label: "OMK//CONTROL", hint: "Original README omk_tui.png palette" },
+    { value: "night-city", label: "Night City", hint: "Alias for OMK//CONTROL" },
+    { value: "omk", label: "OMK", hint: "Legacy colorful theme" },
     { value: "green-rain", label: "Green Rain", hint: "Phosphor signal console" },
     { value: "rust-forge", label: "Rust Forge", hint: "Oxidized forge control console" },
     { value: "neon-circuit", label: "Neon Circuit", hint: "High-energy neon terminal" },
@@ -76,7 +77,7 @@ export async function promptThemeSelection(
   const theme = await clack.select({
     message: "Select theme:",
     options: themes,
-    initialValue: currentTheme ?? "omk",
+    initialValue: currentTheme ?? "omk-control-grid-dark",
   });
 
   if (clack.isCancel(theme)) {

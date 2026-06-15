@@ -2,7 +2,7 @@
   "schemaVersion": "omk.proof-bundle.v1",
   "proofId": "012-release-truthfulness",
   "title": "Release Truthfulness and README Assertions verification bundle",
-  "omkVersion": "0.78.9",
+  "omkVersion": "0.79.3",
   "runtimeVersion": "v1.2",
   "commit": "release-truthfulness-tree",
   "runId": "proof-012-release-truthfulness-20260609t000000z",
@@ -26,11 +26,11 @@
   "checksums": {
     "proof/verified-runs/012-release-truthfulness/raw-prompt.md": "431abd192b4e409cbe9a37033e858d1f55d4e3fed1f403c153e503e4b113694d",
     "proof/verified-runs/012-release-truthfulness/commands.sh": "ed111e3f850760bca01c371c13bb8f30a02368e8a7c0b82e81cb1b53912bd6aa",
-    "proof/verified-runs/012-release-truthfulness/verify.json": "033bb9d5d76dcf553e4a2b8e0f4ae492d47e890dee4dce6f3fb1751891a29fd8",
+    "proof/verified-runs/012-release-truthfulness/verify.json": "e113f6428ae487d9d5ba9458255a79b4428a336ecf2819b46c1da78ab80f05df",
     "proof/verified-runs/012-release-truthfulness/decisions.jsonl": "5c993a63580387e75ac36c1701f2f0e8d98bad96ad0c742a12526e94a9e4ba55",
     "proof/verified-runs/012-release-truthfulness/run-manifest.json": "e464479ee493564cd13a9ff97a1bcfd638df6d7eb0b0c6be91e242628ac89bed",
     "proof/verified-runs/012-release-truthfulness/evidence.jsonl": "190d3b3e8c598b654ac7015126a3bb30ebcfbdfd76f9d6a01bcc79c7f0dbe1f4",
     "proof/verified-runs/012-release-truthfulness/limitations.md": "92b1464840fd9dea4cf2a50463c268b8e7e3fc144bf9e2d9123601c89473ca8b",
-    "proof/verified-runs/012-release-truthfulness/sha256sums.txt": "70cdbcd03065491a2a200cd262eb717f3c8c2135153afcdadb5c4fc823f13e19"
+    "proof/verified-runs/012-release-truthfulness/sha256sums.txt": "1424c52a1848e732b9f18c2d655688e4000df84a468380612ef8e2df5971b937"
   }
 }

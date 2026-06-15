@@ -145,6 +145,21 @@ export function resolveCockpitChromeTheme(options: {
   return normalizeBrandChromeTheme(options.env?.OMK_THEME)
     ?? normalizeBrandChromeTheme(options.brand);
 }
+function normalizeEntryDisplayName(value?: string): string | undefined {
+  const normalized = value
+    ?.replace(/[^A-Za-z0-9+:/._ -]/g, "")
+    .trim();
+  return normalized && normalized.length > 0 ? normalized.slice(0, 20) : undefined;
+}
+
+function normalizeEntrySurface(value?: string): string | undefined {
+  const normalized = value
+    ?.replace(/[^A-Za-z0-9._:-]/g, "")
+    .trim();
+  return normalized && normalized.length > 0 ? normalized.slice(0, 64) : undefined;
+}
+
+
 
 export function buildRightPaneCommand(options: {
   nodeCmd: string;
@@ -171,12 +186,13 @@ export function buildRightPaneCommand(options: {
 
 // Active brand tmux chrome. Values are built at launch time so P/BRAND_HEX
 // mutations from setBrandPaletteTheme() are reflected without changing imports.
-export function buildTmuxBrandChromeOptions(brand?: string): {
+export function buildTmuxBrandChromeOptions(brand?: string, entryDisplayName?: string): {
   sessionOptions: Array<readonly [string, string]>;
   windowOptions: Array<readonly [string, string]>;
 } {
   setBrandPaletteTheme(brand);
-  const statusLeft = `#[fg=${BRAND_HEX.mint},bold] OMK//CONTROL #[fg=${BRAND_HEX.gray}]${getActiveBrandChromeLabel()}`;
+  const controlLabel = normalizeEntryDisplayName(entryDisplayName) ?? "OMK//CONTROL";
+  const statusLeft = `#[fg=${BRAND_HEX.mint},bold] ${controlLabel} #[fg=${BRAND_HEX.gray}]${getActiveBrandChromeLabel()}`;
   const statusRight = `#[fg=${BRAND_HEX.cyan}]#S #[fg=${BRAND_HEX.gray}]%H:%M`;
   return {
     sessionOptions: [
@@ -196,7 +212,7 @@ export function buildTmuxBrandChromeOptions(brand?: string): {
 }
 
 async function applyTmuxBrandTheme(session: string, cwd: string, brand?: string): Promise<void> {
-  const chrome = buildTmuxBrandChromeOptions(brand);
+  const chrome = buildTmuxBrandChromeOptions(brand, process.env.OMK_ENTRY_DISPLAY_NAME);
   for (const [option, value] of chrome.sessionOptions) {
     const result = await runShell("tmux", ["set-option", "-t", session, option, value], { cwd, timeout: 5000 });
     if (result.failed) {
@@ -305,7 +321,24 @@ export async function launchChatCockpit(options: LaunchChatCockpitOptions = {}):
     terminalHeight >= MIN_CHAT_COCKPIT_HEIGHT + minHistoryPaneHeight;
 
   const chromeTheme = resolveCockpitChromeTheme({ brand, env: process.env });
-  const leftCmd = buildLeftPaneCommand({ nodeCmd, cliCmd, runId, brand, agentFile: options.agentFile, workers: options.workers, maxStepsPerTurn: options.maxStepsPerTurn, mcpScope: options.mcpScope, provider: options.provider, model: options.model, execution: options.execution, ui: options.ui });
+  const entryDisplayName = normalizeEntryDisplayName(process.env.OMK_ENTRY_DISPLAY_NAME);
+  const entrySurface = normalizeEntrySurface(process.env.OMK_ENTRY_SURFACE);
+  const leftCmd = buildLeftPaneCommand({
+    nodeCmd,
+    cliCmd,
+    runId,
+    brand,
+    agentFile: options.agentFile,
+    workers: options.workers,
+    maxStepsPerTurn: options.maxStepsPerTurn,
+    mcpScope: options.mcpScope,
+    provider: options.provider,
+    model: options.model,
+    execution: options.execution,
+    ui: options.ui,
+    entrySurface,
+    entryDisplayName,
+  });
   // When no explicit --cockpit-height is provided, pass undefined so the child
   // measures its actual tmux pane after splits/resizes and keeps the right rail pinned.
   const rightTopCmd = buildRightPaneCommand({
@@ -460,8 +493,25 @@ export function buildLeftPaneCommand(options: {
   model?: string;
   execution?: string;
   ui?: string;
+  entryDisplayName?: string;
+  entrySurface?: string;
 }): string {
-  const { nodeCmd, cliCmd, runId, brand, agentFile, workers, maxStepsPerTurn, mcpScope, provider, model, execution, ui } = options;
+  const {
+    nodeCmd,
+    cliCmd,
+    runId,
+    brand,
+    agentFile,
+    workers,
+    maxStepsPerTurn,
+    mcpScope,
+    provider,
+    model,
+    execution,
+    ui,
+    entrySurface,
+    entryDisplayName,
+  } = options;
   let cmd = `${nodeCmd} ${cliCmd} chat --layout plain --run-id ${shellQuote(runId)} --brand ${shellQuote(brand)}`;
   if (agentFile) cmd += ` --agent-file ${shellQuote(agentFile)}`;
   if (workers) cmd += ` --workers ${shellQuote(workers)}`;
@@ -471,6 +521,12 @@ export function buildLeftPaneCommand(options: {
   if (model) cmd += ` --model ${shellQuote(model)}`;
   if (execution) cmd += ` --execution ${shellQuote(execution)}`;
   if (ui) cmd += ` --ui ${shellQuote(ui)}`;
+  const envAssignments: string[] = [];
+  const normalizedEntrySurface = normalizeEntrySurface(entrySurface);
+  if (normalizedEntrySurface) envAssignments.push(`OMK_ENTRY_SURFACE=${shellQuote(normalizedEntrySurface)}`);
+  const normalizedEntryDisplayName = normalizeEntryDisplayName(entryDisplayName);
+  if (normalizedEntryDisplayName) envAssignments.push(`OMK_ENTRY_DISPLAY_NAME=${shellQuote(normalizedEntryDisplayName)}`);
+  if (envAssignments.length > 0) cmd = `${envAssignments.join(" ")} ${cmd}`;
   return cmd;
 }
 

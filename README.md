@@ -91,7 +91,7 @@ Goal → DAG plan → scoped lanes → evidence bundle → verify gate → repla
 
 ## Maturity and safety claims
 
-Current source version: `open-multi-agent-kit@0.78.9`.
+Current source version: `open-multi-agent-kit@0.79.3`.
 
 - Public package name: `open-multi-agent-kit`.
 - Runtime contract family: `v1.2` means contract family, not a stable npm `1.x` release.

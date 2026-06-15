@@ -56,6 +56,16 @@ function detectProvider(
         authHint: "Set DEEPSEEK_API_KEY env var",
         modelHint: env.DEEPSEEK_MODEL ?? "deepseek-chat",
       };
+    case "glm":
+    case "bigmodel":
+    case "zhipu":
+      return {
+        envKey: env.GLM_API_KEY && !env.BIGMODEL_API_KEY ? "GLM_API_KEY" : "BIGMODEL_API_KEY",
+        sessionMode: "api-turn",
+        installHint: "export BIGMODEL_API_KEY=...",
+        authHint: "Set BIGMODEL_API_KEY env var",
+        modelHint: env.GLM_MODEL ?? "glm-5.2",
+      };
     case "local":
     case "llama":
     case "local-llm":
@@ -101,15 +111,18 @@ async function resolveAutoProvider(env: Record<string, string | undefined>): Pro
       if (defaultModel.startsWith("mimo") && (env.MIMO_API_KEY || providerConfigHasApiKey(configContent, "mimo"))) return { provider: "mimo", runtimeId: "mimo-api" };
       if ((defaultModel.startsWith("kimi") || defaultModel.startsWith("moonshot")) && (env.KIMI_API_KEY || providerConfigHasApiKey(configContent, "kimi"))) return { provider: "kimi", runtimeId: "kimi-api" };
       if (defaultModel.startsWith("deepseek") && env.DEEPSEEK_API_KEY) return { provider: "deepseek", runtimeId: "deepseek-api" };
+      if (defaultModel.startsWith("glm") && (env.BIGMODEL_API_KEY || env.GLM_API_KEY || providerConfigHasApiKey(configContent, "glm"))) return { provider: "glm", runtimeId: "glm-api" };
     }
     if (providerConfigHasApiKey(configContent, "mimo")) return { provider: "mimo", runtimeId: "mimo-api" };
     if (providerConfigHasApiKey(configContent, "kimi")) return { provider: "kimi", runtimeId: "kimi-api" };
+    if (providerConfigHasApiKey(configContent, "glm")) return { provider: "glm", runtimeId: "glm-api" };
   }
 
   // 2. Check for API keys in env
   if (env.MIMO_API_KEY) return { provider: "mimo", runtimeId: "mimo-api" };
   if (env.KIMI_API_KEY) return { provider: "kimi", runtimeId: "kimi-api" };
   if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", runtimeId: "deepseek-api" };
+  if (env.BIGMODEL_API_KEY || env.GLM_API_KEY) return { provider: "glm", runtimeId: "glm-api" };
   if (env.LOCAL_LLM_BASE_URL) return { provider: "local-llm", runtimeId: "local-llm" };
 
   // 3. CLI binary detection (lowest priority)
@@ -165,7 +178,7 @@ export async function resolveRuntimeBootstrap(options: {
     }
   } else if (info.envKey) {
     runtimeOk = Boolean(env[info.envKey]);
-    if (!runtimeOk && (selectedProvider === "mimo" || selectedProvider === "kimi")) {
+    if (!runtimeOk && (selectedProvider === "mimo" || selectedProvider === "kimi" || selectedProvider === "glm")) {
       const configContent = readHomeProviderConfig(env, ".omk");
       runtimeOk = configContent ? providerConfigHasApiKey(configContent, selectedProvider) : false;
     }

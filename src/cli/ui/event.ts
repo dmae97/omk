@@ -8,6 +8,7 @@ export type CliUiEvent =
       root?: string;
       cwd?: string;
       rootSource?: string;
+      brandLabel?: string;
     }
   | {
       type: "input:submitted";

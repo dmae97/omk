@@ -1,4 +1,4 @@
-const HOST_NAME = "io.ohmykimi.web_bridge";
+const HOST_NAME = "io.omk.web_bridge";
 const SCHEMA_VERSION = 1;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

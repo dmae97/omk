@@ -439,7 +439,8 @@ export class ThemeCommand extends OmkCommand {
         const compiled = compileTheme(doc, tier);
         this.context.stdout.write(`${doc.displayName ?? doc.name} — tier ${tier}\n\n`);
         this.context.stdout.write(renderStatusFrame(compiled) + "\n");
-        const current = process.env.OMK_THEME ?? "omk";
+        const { resolveTheme } = await import("../theme/theme-resolver.js");
+        const current = resolveTheme({ cwd: this.cwd, flagTheme: this.theme || undefined }).name;
         this.context.stdout.write(
           `\nCurrent theme: ${current}. Use \`omk theme set ${target}\` to switch.\n`,
         );
@@ -457,7 +458,8 @@ export class ThemeCommand extends OmkCommand {
         return 2;
       }
       this.context.stdout.write(renderThemePreview(palette) + "\n");
-      const current = process.env.OMK_THEME ?? "omk";
+      const { resolveTheme } = await import("../theme/theme-resolver.js");
+      const current = resolveTheme({ cwd: this.cwd, flagTheme: this.theme || undefined }).name;
       this.context.stdout.write(
         `\nCurrent theme: ${current}. Use \`omk theme set ${target}\` to switch.\n`,
       );
@@ -482,8 +484,9 @@ export class ThemeCommand extends OmkCommand {
     const { renderAllThemePreviews, getBuiltinTheme } = await import(
       "../theme/theme-registry.js"
     );
-    const current = process.env.OMK_THEME ?? "omk";
-    const currentPalette = getBuiltinTheme(current) ?? getBuiltinTheme("omk");
+    const { resolveTheme } = await import("../theme/theme-resolver.js");
+    const current = resolveTheme({ cwd: this.cwd, flagTheme: this.theme || undefined }).name;
+    const currentPalette = getBuiltinTheme(current) ?? getBuiltinTheme("omk-control-grid-dark");
     this.context.stdout.write(
       (currentPalette?.render("header", `Current theme: ${current}`) ?? `Current theme: ${current}`) + "\n\n",
     );

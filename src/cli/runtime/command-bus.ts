@@ -158,7 +158,20 @@ registerSlashCommand({
     const model = envelope.config.env.OMK_PROVIDER_MODEL;
     const levels = thinkingLevelsFor(provider, model);
     const requested = args[0]?.toLowerCase();
-    const level = !requested || requested === "next" || requested === "tab"
+    if (!requested) {
+      return {
+        handled: true,
+        output: [
+          "OMK Thinking Control · choose level",
+          `Target: ${provider}/${model ?? "auto"}`,
+          levels.map((level) => `${level === envelope.config.env.OMK_THINKING ? "●" : "○"} ${level}`).join("  "),
+          `Choose directly: ${levels.map((level) => `/think ${level}`).join(" | ")}`,
+          "Cycle only when explicit: /think next",
+        ].join("\n"),
+        exitCode: 0,
+      };
+    }
+    const level = requested === "next" || requested === "tab"
       ? nextThinkingLevel(envelope.config.env.OMK_THINKING, provider, model)
       : normalizeThinkingLevel(requested);
     if (!level || !levels.includes(level)) {

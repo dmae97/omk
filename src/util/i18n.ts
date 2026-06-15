@@ -83,7 +83,7 @@ const en: Record<string, string> = {
   "cli.menuExit": "exit     — Exit",
   "cli.menuUnavailable": "\n  (Cannot display menu in this environment. Type a command below.)\n",
   "cli.unknownChoice": "Unknown choice: {0}, proceeding to chat.",
-  "cli.description": "open-multi-agent-kit: multi-agent control plane for AI coding teams",
+  "cli.description": "omk: multi-agent control plane for AI coding teams",
   "cli.runIdOption": "run ID (resume / reference)",
   "cli.sudoOption": "Run shell commands with sudo (admin privileges)",
 
@@ -519,7 +519,7 @@ const ko: Record<string, string> = {
   "cli.menuExit": "exit     — 종료",
   "cli.menuUnavailable": "\n  (메뉴를 표시할 수 없는 환경입니다. 아래 명령어를 직접 입력하세요.)\n",
   "cli.unknownChoice": "알 수 없는 선택: {0}, chat으로 진행합니다.",
-  "cli.description": "open-multi-agent-kit: AI 코딩 팀용 멀티 에이전트 컨트롤 플레인",
+  "cli.description": "omk: AI 코딩 팀용 멀티 에이전트 컨트롤 플레인",
   "cli.runIdOption": "run ID 지정 (resume / 참조)",
   "cli.sudoOption": "셸 명령어를 sudo로 실행 (관리자 권한)",
 

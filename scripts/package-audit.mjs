@@ -113,10 +113,10 @@ export const FORBIDDEN_PATTERNS = [
 export const SIZE_BUDGETS = {
   tarballMb: 35,
   unpackedMb: 40,
-  // 0.78 packages ship compiled dist, docs, templates, and skill packs.
+  // 0.79 packages ship compiled dist declarations, docs, templates, and skill packs.
   // Keep this high enough for intentional packaged surface growth but low enough
   // to catch accidental source/test/archive inclusion.
-  entryCount: 1500,
+  entryCount: 1520,
   singleFileMb: 20,
   readmeassetMb: 30,
   distMb: 20,

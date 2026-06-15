@@ -5,6 +5,7 @@ import { buildCustomHelp } from "../util/help-text.js";
 const OMK_ENTRY_BRAND = "neon-grid";
 const OMK_ENTRY_UI = "neon-grid";
 export const OMK_ROOT_ENTRY_SURFACE = "omk-root-orchestrator";
+export const OMK_ROOT_ENTRY_DISPLAY_NAME = "omk";
 
 interface RootChatLaunchArgsOptions {
   readonly cliPath: string;
@@ -100,6 +101,7 @@ export function configureRootProgram(program: Command, OMK_VERSION: string, OMK_
       const childEnv = {
         ...process.env,
         OMK_ENTRY_SURFACE: OMK_ROOT_ENTRY_SURFACE,
+        OMK_ENTRY_DISPLAY_NAME: OMK_ROOT_ENTRY_DISPLAY_NAME,
       };
       const result = spawnSync(process.execPath, chatArgs, { stdio: "inherit", env: childEnv });
       if (result.status && result.status !== 0) {

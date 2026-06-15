@@ -123,8 +123,8 @@ export const GREEN_RAIN_THEME: OmkBrandTheme = {
 export const NEON_GRID_THEME: OmkBrandTheme = {
   name: "neon-grid",
   label: "OMK//CONTROL",
-  tagline: "OMK control plane for coding agents.",
-  motto: "Route agents. Verify evidence. Control the loop.",
+  tagline: "Cyberpunk OMK control plane for routed agent work.",
+  motto: "Control the loop — route · verify · loop · control",
   symbols: {
     prompt: "›",
     active: "●",

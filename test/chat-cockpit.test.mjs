@@ -314,6 +314,20 @@ describe("tmux lifecycle commands", () => {
     assert.ok(cmd.includes("--execution 'parallel'"), "chat child should inherit the execution policy");
     assert.ok(cmd.includes("--ui 'plain-modern'"), "chat child should inherit the UI renderer mode");
   });
+  it("buildLeftPaneCommand forwards the root entry display label", () => {
+    const cmd = buildLeftPaneCommand({
+      nodeCmd: "node",
+      cliCmd: "omk",
+      runId: "run-root-label",
+      brand: "neon-grid",
+      ui: "neon-grid",
+      entryDisplayName: "omk",
+      entrySurface: "omk-root-orchestrator",
+    });
+    assert.ok(cmd.startsWith("OMK_ENTRY_SURFACE='omk-root-orchestrator' OMK_ENTRY_DISPLAY_NAME='omk' "), "plain chat child should inherit the bare omk entry markers");
+    assert.ok(cmd.includes("--ui 'neon-grid'"), "chat child should keep the selected UI renderer");
+  });
+
 
   it("buildLeftPaneCommand properly quotes values containing single quotes", () => {
     const runId = "it's-a-test";
@@ -438,6 +452,11 @@ describe("tmux lifecycle commands", () => {
       "bg=#070B14,fg=#E8F8FF",
     ]);
     assert.ok(night.sessionOptions.some(([option]) => option === "window-status-current-style"), "tmux session should style the active window");
+    const rootEntry = buildTmuxBrandChromeOptions("night-city", "omk");
+    assert.deepStrictEqual(rootEntry.sessionOptions.find(([option]) => option === "status-left"), [
+      "status-left",
+      "#[fg=#00FFC2,bold] omk #[fg=#758FA8]Night City",
+    ]);
     assert.ok(night.windowOptions.some(([option]) => option === "pane-active-border-style"), "tmux window should style the active pane border");
 
     const rust = buildTmuxBrandChromeOptions("rust");

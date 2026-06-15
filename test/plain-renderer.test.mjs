@@ -87,21 +87,39 @@ test("PlainModernRenderer sanitizes control and error output", () => {
   doesNotMatch(output, /raw payload/);
 });
 
-test("PlainModernRenderer pins its compact header in an alternate screen scroll region on TTY", () => {
-  const stdout = [];
-  const stderr = [];
-  const renderer = new PlainModernRenderer({
-    stdout: { write: (chunk) => stdout.push(String(chunk)) },
-    stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY: true, rows: 30 },
-  });
+test("PlainModernRenderer keeps scroll-stable output by default and pins only when explicitly enabled", () => {
+  const previousAltScreen = process.env.OMK_TUI_ALT_SCREEN;
+  try {
+    delete process.env.OMK_TUI_ALT_SCREEN;
+    const defaultStderr = [];
+    const defaultRenderer = new PlainModernRenderer({
+      stdout: { write: () => undefined },
+      stderr: { write: (chunk) => defaultStderr.push(String(chunk)), isTTY: true, rows: 30 },
+    });
+    defaultRenderer.start();
+    defaultRenderer.emit({ type: "session:start", runId: "plain-stable", provider: "codex", model: "codex-cli", layout: "plain" });
+    defaultRenderer.stop();
+    doesNotMatch(defaultStderr.join(""), /\x1b\[\?1049h/);
 
-  renderer.start();
-  renderer.emit({ type: "session:start", runId: "plain-sticky", provider: "codex", model: "codex-cli", layout: "plain" });
-  renderer.stop();
+    process.env.OMK_TUI_ALT_SCREEN = "1";
+    const stdout = [];
+    const stderr = [];
+    const renderer = new PlainModernRenderer({
+      stdout: { write: (chunk) => stdout.push(String(chunk)) },
+      stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY: true, rows: 30 },
+    });
 
-  strictEqual(stdout.join(""), "");
-  const output = stderr.join("");
-  match(output, /\x1b\[\?1049h/);
-  match(output, /\x1b\[5;30r/);
-  match(output, /\x1b\[\?1049l/);
+    renderer.start();
+    renderer.emit({ type: "session:start", runId: "plain-sticky", provider: "codex", model: "codex-cli", layout: "plain" });
+    renderer.stop();
+
+    strictEqual(stdout.join(""), "");
+    const output = stderr.join("");
+    match(output, /\x1b\[\?1049h/);
+    match(output, /\x1b\[5;30r/);
+    match(output, /\x1b\[\?1049l/);
+  } finally {
+    if (previousAltScreen === undefined) delete process.env.OMK_TUI_ALT_SCREEN;
+    else process.env.OMK_TUI_ALT_SCREEN = previousAltScreen;
+  }
 });

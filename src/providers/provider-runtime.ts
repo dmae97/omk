@@ -92,7 +92,7 @@ export async function createProviderBackedTaskRunner(
   const registry = await readProviderRegistry();
   for (const entry of registry) {
     if (!shouldUseOpenAICompatibleProvider(entry, providerPolicy)) continue;
-    const apiKey = entry.apiKeyEnv ? process.env[entry.apiKeyEnv] : undefined;
+    const apiKey = resolveOpenAICompatibleApiKey(entry, process.env);
     if (apiKey && entry.baseUrl) {
       if (entry.wireApi === "anthropic-messages") {
         providerRunners[entry.id] = createAnthropicMessagesReadOnlyTaskRunner({
@@ -217,6 +217,16 @@ function shouldUseOpenAICompatibleProvider(entry: ProviderRegistryEntry, provide
   if (entry.kind !== "openai-compatible") return false;
   if (!entry.enabled) return false;
   return providerPolicy === "auto" || providerPolicy === entry.id;
+}
+
+function resolveOpenAICompatibleApiKey(
+  entry: ProviderRegistryEntry,
+  env: NodeJS.ProcessEnv,
+): string | undefined {
+  const primary = entry.apiKeyEnv ? env[entry.apiKeyEnv] : undefined;
+  if (primary?.trim()) return primary;
+  if (entry.id === "glm") return env.GLM_API_KEY ?? env.BIGMODEL_API_KEY;
+  return primary;
 }
 
 function providerModelDefault(entry: ProviderRegistryEntry): ProviderModelDefault {

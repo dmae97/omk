@@ -1,7 +1,7 @@
 import { maskSensitiveText } from "../util/secret-mask.js";
 
 export const WEB_BRIDGE_SCHEMA_VERSION = 1 as const;
-export const WEB_BRIDGE_NATIVE_HOST_NAME = "io.ohmykimi.web_bridge";
+export const WEB_BRIDGE_NATIVE_HOST_NAME = "io.omk.web_bridge";
 export const WEB_BRIDGE_MCP_SERVER_NAME = "omk-web-bridge";
 export const WEB_BRIDGE_MAX_TEXT_CHARS = 120_000;
 export const WEB_BRIDGE_MAX_PAYLOAD_BYTES = 1_000_000;

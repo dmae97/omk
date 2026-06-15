@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## v0.79.3 — GLM 5.2 max thinking, scroll-safe TTY, and OSS CLI polish (2026-06-15)
+
+### Added
+
+- Added direct GLM provider support with `glm-5.2` alias resolution, `BIGMODEL_API_KEY` / `GLM_API_KEY` runtime bootstrap, and `max` thinking support.
+- Added theme-library adapters for `chalk-animation`, `ink-gradient`, and `terminal-kit` capability metadata.
+
+### Changed
+
+- Improved `/model` → thinking selection UX and made `/think` list choices by default, with `/think next` reserved for cycling.
+- Made default terminal/chat rendering scroll-safe by avoiding alternate-screen, sticky scroll-region, cursor-home, and async repaint controls unless explicitly opted in.
+- Reworded remaining legacy user-facing identity strings toward the public `omk` surface.
+
+### Fixed
+
+- Normalized GLM shorthand forms such as `glm5.2max`, `glm 5.2 max`, and `zai/glm5.2` to the real `glm-5.2` model plus thinking metadata instead of custom fallback model IDs.
+- Fixed terminal drag/select/scroll jump regressions in default renderer paths.
+- Avoided slow latest-run scanning during quick cockpit renders when no run id is specified.
+
 ## v0.78.9 — Landing conversion, GEO canonical docs, and metadata consistency (2026-06-13)
 
 ### Added

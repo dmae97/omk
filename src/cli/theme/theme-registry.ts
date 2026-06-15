@@ -4,6 +4,7 @@
  */
 
 import { style } from "../../theme/colors.js";
+import { renderChalkAnimationKeyframe, renderInkGradientFallback, renderTerminalKitCapabilityBadge } from "../../theme/library-effects.js";
 import { compileTheme } from "./render-table.js";
 import type { OmkThemeV1 } from "./render-table.js";
 import { readFileSync } from "node:fs";
@@ -64,10 +65,10 @@ const omkPalette: ThemePalette = {
   },
 };
 
-// --- night-city (README control image / Night City Ops Console) ---
+// --- omk-control-grid-dark (README omk_tui.png / Night City Ops Console) ---
 
 const nightCityPalette: ThemePalette = {
-  name: "night-city",
+  name: "omk-control-grid-dark",
   mode: "dark",
   supportsColor: true,
   render(semantic, text) {
@@ -173,6 +174,89 @@ const neonCircuitPalette: ThemePalette = {
       case "reset": return style.reset + text;
       case "separator": return style.gray(text);
       case "bullet": return style.pink("⟐ " + text);
+      case "labelKey": return style.gray(text);
+      case "labelValue": return style.cream(text);
+      default: return text;
+    }
+  },
+};
+
+// --- library-enhanced palettes (external theme adapters) ---
+
+const chalkRainbowPalette: ThemePalette = {
+  name: "chalk-rainbow",
+  mode: "dark",
+  supportsColor: true,
+  render(token, text) {
+    switch (token) {
+      case "success": return renderChalkAnimationKeyframe(text, "karaoke");
+      case "warning": return renderChalkAnimationKeyframe(text, "pulse");
+      case "error": return style.hotPink(text);
+      case "info": return renderChalkAnimationKeyframe(text, "radar");
+      case "agent": return renderChalkAnimationKeyframe(text, "rainbow");
+      case "task": return renderChalkAnimationKeyframe(text, "neon");
+      case "tool": return style.cyanBold(text);
+      case "header": return renderChalkAnimationKeyframe(text, "rainbow");
+      case "subheader": return renderChalkAnimationKeyframe(text, "neon");
+      case "dim": return style.dim + text + style.reset;
+      case "bold": return style.bold + text + style.reset;
+      case "reset": return style.reset + text;
+      case "separator": return renderChalkAnimationKeyframe(text, "radar");
+      case "bullet": return renderChalkAnimationKeyframe("▸ " + text, "rainbow");
+      case "labelKey": return style.gray(text);
+      case "labelValue": return renderChalkAnimationKeyframe(text, "karaoke");
+      default: return text;
+    }
+  },
+};
+
+const inkGradientPalette: ThemePalette = {
+  name: "ink-gradient",
+  mode: "dark",
+  supportsColor: true,
+  render(token, text) {
+    switch (token) {
+      case "success": return renderInkGradientFallback(text, "summer");
+      case "warning": return renderInkGradientFallback(text, "morning");
+      case "error": return renderInkGradientFallback(text, "passion");
+      case "info": return renderInkGradientFallback(text, "cristal");
+      case "agent": return renderInkGradientFallback(text, "atlas");
+      case "task": return renderInkGradientFallback(text, "fruit");
+      case "tool": return renderInkGradientFallback(text, "teen");
+      case "header": return renderInkGradientFallback(text, "pastel");
+      case "subheader": return renderInkGradientFallback(text, "instagram");
+      case "dim": return style.dim + text + style.reset;
+      case "bold": return style.bold + text + style.reset;
+      case "reset": return style.reset + text;
+      case "separator": return renderInkGradientFallback(text, "mind");
+      case "bullet": return renderInkGradientFallback("◆ " + text, "pastel");
+      case "labelKey": return style.gray(text);
+      case "labelValue": return renderInkGradientFallback(text, "retro");
+      default: return text;
+    }
+  },
+};
+
+const terminalKitPalette: ThemePalette = {
+  name: "terminal-kit",
+  mode: "auto",
+  supportsColor: true,
+  render(token, text) {
+    switch (token) {
+      case "success": return style.greenBold(text);
+      case "warning": return style.amberBold(text);
+      case "error": return style.metricsRedBold(text);
+      case "info": return renderTerminalKitCapabilityBadge(text);
+      case "agent": return style.cyanBold(text);
+      case "task": return style.silver(text);
+      case "tool": return style.mintBold(text);
+      case "header": return renderTerminalKitCapabilityBadge(style.whiteBold(text));
+      case "subheader": return style.blueBold(text);
+      case "dim": return style.dim + text + style.reset;
+      case "bold": return style.bold + text + style.reset;
+      case "reset": return style.reset + text;
+      case "separator": return style.slate(text);
+      case "bullet": return style.cyan("▣ " + text);
       case "labelKey": return style.gray(text);
       case "labelValue": return style.cream(text);
       default: return text;
@@ -332,6 +416,8 @@ const lightPalette: ThemePalette = {
 
 const registry = new Map<string, ThemePalette>([
   ["omk", omkPalette],
+  ["omk-control-grid-dark", nightCityPalette],
+  ["omk-control-grid", nightCityPalette],
   ["night-city", nightCityPalette],
   ["night-city-ops", nightCityPalette],
   ["omk-control", nightCityPalette],
@@ -350,6 +436,12 @@ const registry = new Map<string, ThemePalette>([
   ["forge", rustForgePalette],
   ["rust-native", rustForgePalette],
   ["neon-circuit", neonCircuitPalette],
+  ["chalk-rainbow", chalkRainbowPalette],
+  ["chalk-animation", chalkRainbowPalette],
+  ["ink-gradient", inkGradientPalette],
+  ["ink-pastel", inkGradientPalette],
+  ["terminal-kit", terminalKitPalette],
+  ["terminal", terminalKitPalette],
   ["minimal", minimalPalette],
   ["mono", monoPalette],
   ["dark", darkPalette],

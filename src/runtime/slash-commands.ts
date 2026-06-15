@@ -146,6 +146,24 @@ function renderSlashResultContent(result: SlashCommandResult, fallback: string):
       lines.push("  Persistent default unchanged; use `omk model use` to persist.\n");
       return lines.join("\n");
     }
+    case "think.show": {
+      const provider = stringValue(payload, "provider", "auto");
+      const model = stringValue(payload, "model", "auto");
+      const current = stringValue(payload, "currentThinking", "");
+      const levels = stringListValue(payload, "supportedThinkingLevels");
+      const levelLine = levels
+        .map((level) => `${level === current ? "●" : "○"} ${level}`)
+        .join("  ");
+      return [
+        "\n  OMK Thinking Control · choose level",
+        `  Target: ${provider}/${model}`,
+        levelLine ? `  ${levelLine}` : undefined,
+        levels.length > 0 ? `  Choose directly: ${levels.map((level) => `/think ${level}`).join(" | ")}` : undefined,
+        "  Cycle only when explicit: /think next",
+        `  Active: ${current || "not selected"}`,
+        "",
+      ].filter((line): line is string => typeof line === "string").join("\n");
+    }
     case "think.set": {
       const thinking = stringValue(payload, "thinking");
       const modelVariant = stringValue(payload, "modelVariant", "auto");
@@ -160,12 +178,12 @@ function renderSlashResultContent(result: SlashCommandResult, fallback: string):
     case "status.show":
       return `\n  Status: ${stringValue(payload, "provider")}/${stringValue(payload, "model")}  theme=${stringValue(payload, "theme")}`;
     case "theme.show": {
-      const current = stringValue(payload, "current", stringValue(payload, "theme", "omk"));
+      const current = stringValue(payload, "current", stringValue(payload, "theme", "omk-control-grid-dark"));
       const available = stringListValue(payload, "available");
       return `\n  Theme: ${current}${available.length > 0 ? `\n  Available: ${available.join(", ")}` : ""}`;
     }
     case "theme.set":
-      return `\n  Theme updated: ${stringValue(payload, "theme", "omk")}`;
+      return `\n  Theme updated: ${stringValue(payload, "theme", "omk-control-grid-dark")}`;
     case "help": {
       const commands = stringListValue(payload, "commands");
       return [`\n  OMK Slash Commands`, ...commands.map((command) => `  - ${command}`), ""].join("\n");
@@ -366,7 +384,22 @@ class ThinkCommandHandler implements SlashCommandHandler {
         sideEffects: [{ type: "thinking_changed", thinking: variant, modelVariant }],
       };
     }
-    const level = !requested || requested === "next" || requested === "tab"
+    if (!requested) {
+      return {
+        kind: "status",
+        command: "think.show",
+        payload: {
+          provider: input.state.provider ?? "auto",
+          model: input.state.model ?? "auto",
+          currentThinking: input.state.thinking,
+          supportedThinkingLevels: levels,
+          usage: `/think ${levels.join(" | ")} | next | variant <name>`,
+        },
+        renderMode: "theme",
+        sideEffects: [],
+      };
+    }
+    const level = requested === "next" || requested === "tab"
       ? nextThinkingLevel(input.state.thinking, input.state.provider, input.state.model)
       : normalizeThinkingLevel(requested);
     if (!level || !levels.includes(level)) {
@@ -413,9 +446,9 @@ class ThemeCommandHandler implements SlashCommandHandler {
         kind: "status",
         command: "theme.show",
         payload: {
-          current: input.state.theme ?? "omk",
+          current: input.state.theme ?? "omk-control-grid-dark",
           usage: "/theme <name>",
-          available: ["omk", "night-city", "omk-control", "green-rain", "rust-forge", "neon-circuit", "minimal", "mono", "dark", "light"],
+          available: ["omk-control-grid-dark", "night-city", "omk-control", "green-rain", "rust-forge", "neon-circuit", "omk", "minimal", "mono", "dark", "light"],
         },
         renderMode: "theme",
         sideEffects: [],

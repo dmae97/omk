@@ -401,7 +401,8 @@ export async function renderCockpit(options: CockpitRenderOptions = {}) {
   let stateContent: string | null = null;
   let sessionMeta: SessionMeta | null = null;
 
-  if (await pathExists(runsDir)) {
+  const shouldLoadRunState = !quick || Boolean(latestRunName);
+  if (shouldLoadRunState && await pathExists(runsDir)) {
     if (!latestRunName) {
       const entries = await readdir(runsDir, { withFileTypes: true });
       const dirs = entries.filter((e) => e.isDirectory());

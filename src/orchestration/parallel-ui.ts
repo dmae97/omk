@@ -473,6 +473,7 @@ export class ParallelLiveRenderer {
 
   start(stateProvider: () => RunState | undefined): void {
     this.stopped = false;
+    this.firstCockpitFrame = true;
     if (this.useAlternateScreen) {
       process.stdout.write("\x1b[?1049h");
     }
@@ -499,6 +500,8 @@ export class ParallelLiveRenderer {
     this.lastFrame = frame;
     return frame;
   }
+
+  private firstCockpitFrame = true;
 
   private renderNow(stateProvider: () => RunState | undefined): void {
     const state = stateProvider();
@@ -532,9 +535,15 @@ export class ParallelLiveRenderer {
       return;
     }
 
-    // Cockpit mode
-    const clearPrefix = this.useAlternateScreen ? "\x1b[2J\x1b[H" : "\x1b[H\x1b[J";
-    const output = clearPrefix + frame + "\n";
+    // Cockpit mode: use alternate-screen clear+home only when explicitly opted in.
+    // On the main screen, append frames so drag/scroll do not snap to the top.
+    let output: string;
+    if (this.useAlternateScreen) {
+      output = `${this.firstCockpitFrame ? "" : "\x1b[2J\x1b[H"}${frame}\n`;
+    } else {
+      output = `${this.firstCockpitFrame ? "" : "\n\n"}${frame}\n`;
+    }
+    this.firstCockpitFrame = false;
     void lockedStdoutWrite(output);
   }
 }

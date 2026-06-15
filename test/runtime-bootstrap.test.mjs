@@ -85,6 +85,35 @@ test("resolveRuntimeBootstrap treats explicit Kimi as direct API, not CLI", asyn
   assert.equal(bootstrap.sessionMode, "api-turn");
 });
 
+test("resolveRuntimeBootstrap supports GLM API credentials", async () => {
+  const bootstrap = await resolveRuntimeBootstrap({
+    provider: "glm",
+    env: {
+      BIGMODEL_API_KEY: "test-key",
+    },
+  });
+
+  assert.equal(bootstrap.ok, true);
+  assert.equal(bootstrap.selectedProvider, "glm");
+  assert.equal(bootstrap.selectedRuntimeId, "BIGMODEL_API_KEY");
+  assert.equal(bootstrap.selectedModel, "glm-5.2");
+  assert.equal(bootstrap.sessionMode, "api-turn");
+});
+
+test("resolveRuntimeBootstrap auto mode detects GLM API credentials", async () => {
+  const bootstrap = await resolveRuntimeBootstrap({
+    provider: "auto",
+    env: {
+      BIGMODEL_API_KEY: "test-key",
+    },
+  });
+
+  assert.equal(bootstrap.ok, true);
+  assert.equal(bootstrap.providerPolicy, "auto");
+  assert.equal(bootstrap.selectedProvider, "glm");
+  assert.equal(bootstrap.selectedRuntimeId, "glm-api");
+});
+
 test("resolveRuntimeBootstrap auto mode ignores Kimi CLI without API credentials", async () => {
   const kimiBin = await fakeExecutable("kimi");
   const home = await mkdtemp(join(tmpdir(), "omk-runtime-bootstrap-home-"));

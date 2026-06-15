@@ -28,6 +28,7 @@ import { LocalLlmRuntime } from "./local-llm-runtime.js";
 import { checkCommand } from "../util/shell.js";
 import { createMimoApiRuntime } from "./mimo-api-runtime.js";
 import { createKimiApiRuntime } from "./kimi-api-runtime.js";
+import { createGlmApiRuntime } from "./glm-api-runtime.js";
 import { getUserHome } from "../util/fs.js";
 
 export interface RuntimeBackedTaskRunnerOptions {
@@ -61,6 +62,16 @@ async function createDefaultRuntimeRegistry(
   }
   if (kimiApiKey) {
     registry.register(createKimiApiRuntime({ apiKey: kimiApiKey }));
+  }
+
+  // ── GLM API runtime (Zhipu AI — OpenAI-compatible advisory lane) ──
+  const glmKey = options.env?.BIGMODEL_API_KEY
+    ?? options.env?.GLM_API_KEY
+    ?? process.env.BIGMODEL_API_KEY
+    ?? process.env.GLM_API_KEY
+    ?? readConfiguredProviderApiKey("glm");
+  if (glmKey) {
+    registry.register(createGlmApiRuntime({ apiKey: glmKey, env: options.env }));
   }
 
   // ── codex-cli ──

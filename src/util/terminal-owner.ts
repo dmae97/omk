@@ -65,6 +65,35 @@ export class TerminalOwner {
     }
   }
 
+  async withRawSelector<T>(readline: ReadlineOwnerLike | undefined, fn: () => Promise<T>): Promise<T> {
+    if (this.active !== "idle" && this.active !== "readline") {
+      throw new Error(`Terminal already owned by ${this.active}; cannot start raw selector`);
+    }
+
+    const previous = this.active;
+    this.active = "raw-selector";
+    try {
+      try {
+        readline?.pause();
+      } catch {
+        // Piped input can close readline before queued work finishes.
+      }
+      try {
+        this.input.resume();
+      } catch {
+        // Non-standard test streams may already be closed.
+      }
+      return await fn();
+    } finally {
+      try {
+        readline?.resume();
+      } catch {
+        // Readline may already be closed; ownership must still reset.
+      }
+      this.active = previous;
+    }
+  }
+
   private assertCanOwn(next: TerminalOwnerState): void {
     if (this.active !== "idle") {
       throw new Error(`Terminal already owned by ${this.active}; cannot start ${next}`);

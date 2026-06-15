@@ -195,6 +195,9 @@ function mapToolCalls(
 
 export interface KimiApiRuntimeOptions {
   id?: string;
+  providerId?: string;
+  providerName?: string;
+  apiKeyEnvName?: string;
   priority?: number;
   apiKey?: string;
   model?: string;
@@ -221,6 +224,7 @@ export type KimiWireRuntimeOptions = KimiApiRuntimeOptions;
 export function createKimiApiRuntime(options: KimiApiRuntimeOptions = {}): AgentRuntime {
   const env = options.env ?? process.env;
   return new KimiApiRuntime({
+    ...options,
     apiKey: options.apiKey ?? env.KIMI_API_KEY,
     model: options.model ?? env.KIMI_MODEL,
     baseUrl: options.baseUrl ?? env.KIMI_BASE_URL,
@@ -232,7 +236,7 @@ export const createKimiWireRuntime = createKimiApiRuntime;
 
 export class KimiApiRuntime implements AgentRuntime {
   readonly id: string;
-  readonly providerId = "kimi";
+  readonly providerId: string;
   readonly legacy = false;
   readonly runtimeMode = "api";
   readonly kind = "api";
@@ -252,12 +256,17 @@ export class KimiApiRuntime implements AgentRuntime {
   };
 
   private readonly apiKey: string | undefined;
+  private readonly apiKeyEnvName: string;
+  private readonly providerName: string;
   private readonly model: string;
   private readonly baseUrl: string;
 
   constructor(options: KimiApiRuntimeOptions = {}) {
     this.id = options.id ?? "kimi-api";
+    this.providerId = options.providerId ?? "kimi";
     this.priority = options.priority ?? 90;
+    this.apiKeyEnvName = options.apiKeyEnvName ?? "KIMI_API_KEY";
+    this.providerName = options.providerName ?? "Moonshot";
     this.apiKey = options.apiKey ?? process.env.KIMI_API_KEY;
     this.model = options.model ?? process.env.KIMI_MODEL ?? "kimi-k2-6";
     this.baseUrl = (options.baseUrl ?? "https://api.moonshot.cn/v1").replace(/\/+$/, "");
@@ -283,7 +292,7 @@ export class KimiApiRuntime implements AgentRuntime {
     return {
       runtimeId: this.id,
       available,
-      reason: available ? undefined : "KIMI_API_KEY is not set",
+      reason: available ? undefined : `${this.apiKeyEnvName} is not set`,
       checkedAt: new Date().toISOString(),
     };
   }
@@ -323,7 +332,7 @@ export class KimiApiRuntime implements AgentRuntime {
         output: "",
         exitCode: 1,
         thinking: "",
-        metadata: { error: "KIMI_API_KEY is not set" },
+        metadata: { error: `${this.apiKeyEnvName} is not set` },
       };
     }
     if (
@@ -407,7 +416,7 @@ export class KimiApiRuntime implements AgentRuntime {
           output: "",
           exitCode: 1,
           thinking: "",
-          metadata: { error: `Moonshot API error ${response.status}: ${errorText}` },
+          metadata: { error: `${this.providerName} API error ${response.status}: ${errorText}` },
         };
       }
 
