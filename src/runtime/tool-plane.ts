@@ -8,7 +8,15 @@ import { type OmkToolPrefixSpec, sortToolPrefixSpecs } from "./tool-registry-con
 
 export interface OmkToolPlaneDiagnostic {
   readonly level: "warning" | "error";
-  readonly code: "mcp_config_parse_failed" | "mcp_config_read_failed" | "runtime_mcp_config_parse_failed" | "runtime_mcp_required_unavailable";
+  readonly code:
+    | "mcp_config_parse_failed"
+    | "mcp_config_read_failed"
+    | "runtime_mcp_config_parse_failed"
+    | "runtime_mcp_required_unavailable"
+    | "skill_reference_unknown"
+    | "skill_config_read_failed"
+    | "hook_reference_unknown"
+    | "hook_config_read_failed";
   readonly path?: string;
   readonly message: string;
 }
@@ -43,7 +51,9 @@ export async function buildOmkToolPlaneManifest(
   const requiresRuntimeMcp = input.requiresRuntimeMcp === true;
   const resolved = await resolveRuntimeMcpConfigFile(input.mcpScope, input.mcpAllowlist);
   const runtimeRead = resolved.mcpConfigFile ? await readMcpServerNames(resolved.mcpConfigFile) : { servers: [], diagnostics: [] };
-  const diagnostics = [...resolved.diagnostics, ...runtimeRead.diagnostics];
+  const skillDiagnostics = await validateSkillReferences(input.skills ?? []);
+  const hookDiagnostics = await validateHookReferences(input.hooks ?? []);
+  const diagnostics = [...resolved.diagnostics, ...runtimeRead.diagnostics, ...skillDiagnostics, ...hookDiagnostics];
   if (requiresRuntimeMcp && (diagnostics.some((diagnostic) => diagnostic.level === "error") || !resolved.mcpConfigFile || runtimeRead.servers.length === 0)) {
     throw new Error(formatRequiredRuntimeMcpError(diagnostics, resolved.mcpConfigFile, runtimeRead.servers));
   }
@@ -142,6 +152,52 @@ function mcpDiagnosticMessage(err: unknown): string {
     return `unreadable MCP config (${(err as { code: string }).code})`;
   }
   return "invalid MCP config";
+}
+
+async function validateSkillReferences(skills: readonly string[]): Promise<OmkToolPlaneDiagnostic[]> {
+  if (skills.length === 0) return [];
+  const diagnostics: OmkToolPlaneDiagnostic[] = [];
+  const projectRoot = resolve(await getProjectRootAsync());
+  for (const skill of skills) {
+    const safeName = skill.replace(/[^a-zA-Z0-9_-]/g, "");
+    if (safeName !== skill) {
+      diagnostics.push({ level: "warning", code: "skill_reference_unknown", message: `skill name contains unsafe characters: ${skill}` });
+      continue;
+    }
+    const paths = [
+      resolve(projectRoot, ".agents/skills", safeName, "SKILL.md"),
+      resolve(projectRoot, ".kimi/skills", safeName, "SKILL.md"),
+      resolve(getUserHome(), ".omk/agent/skills", safeName, "SKILL.md"),
+    ];
+    const found = await Promise.all(paths.map((p) => readFile(p, "utf-8").then(() => true).catch(() => false)));
+    if (!found.some(Boolean)) {
+      diagnostics.push({ level: "warning", code: "skill_reference_unknown", message: `skill not found in project or user skill paths: ${skill}` });
+    }
+  }
+  return diagnostics;
+}
+
+async function validateHookReferences(hooks: readonly string[]): Promise<OmkToolPlaneDiagnostic[]> {
+  if (hooks.length === 0) return [];
+  const diagnostics: OmkToolPlaneDiagnostic[] = [];
+  const projectRoot = resolve(await getProjectRootAsync());
+  for (const hook of hooks) {
+    const safeName = hook.replace(/[^a-zA-Z0-9_.-]/g, "");
+    if (safeName !== hook) {
+      diagnostics.push({ level: "warning", code: "hook_reference_unknown", message: `hook name contains unsafe characters: ${hook}` });
+      continue;
+    }
+    const paths = [
+      resolve(projectRoot, ".agents/hooks", safeName),
+      resolve(projectRoot, ".kimi/hooks", safeName),
+      resolve(getUserHome(), ".omk/agent/hooks", safeName),
+    ];
+    const found = await Promise.all(paths.map((p) => readFile(p, "utf-8").then(() => true).catch(() => false)));
+    if (!found.some(Boolean)) {
+      diagnostics.push({ level: "warning", code: "hook_reference_unknown", message: `hook not found in project or user hook paths: ${hook}` });
+    }
+  }
+  return diagnostics;
 }
 
 function formatRequiredRuntimeMcpError(

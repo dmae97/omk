@@ -353,8 +353,8 @@ Do not duplicate runtime inventories; follow AGENTS.md and \`chat-agent-harness.
 
 export const ROADMAP_MD = `# Roadmap
 
-Current source version: v1.1.18
-Last updated: 2026-05-24
+Current source version: \`open-multi-agent-kit@0.79.3\` (\`pre-1.0\`; runtime contract family \`v1.2\`)
+Last updated: 2026-06-15
 
 ## Current runtime stance
 
@@ -372,7 +372,7 @@ OMK is the root orchestrator. Kimi is an authority-capable compatibility provide
 ### P0: release and contract gates
 
 - Done: YAML validation now runs in local \`verify\` plus CI/smoke workflows.
-- Done: package dry-pack, package audit, tarball smoke, and release matrix gates were re-verified against v1.1.17 artifacts.
+- Done: package dry-pack, package audit, tarball smoke, release matrix gates, GitHub Release, and npm registry verification were re-verified for \`0.79.3\`.
 - Done: provider/deepseek and screenshot JSON command contracts gained hermetic regression tests.
 - Done: current AGENTS/init templates and packaged workflow skills were aligned with the active skills/MCP/agents/harness surface, including all generated agent MCP/skills/hooks flags and parallel subagent orchestration guidance.
 - Remaining: lock broader provider fallback metadata with tests for rate limit, timeout, and authority fallback variants.

@@ -89,12 +89,22 @@ export class CodexRuntime implements AgentRuntime {
   }
 
   async health(): Promise<RuntimeHealth> {
-    const available = await checkCommand(this.bin).catch(() => false);
+    const runtimeOk = await checkCommand(this.bin).catch(() => false);
+    const authOk = runtimeOk; // CLI auth is external; treat as ok if installed
+    const modelOk = true; // codex-cli uses its own default model
+    const available = runtimeOk && authOk && modelOk;
     return {
       runtimeId: this.id,
       available,
       reason: available ? undefined : "codex CLI is not available on PATH",
       checkedAt: new Date().toISOString(),
+      vector: {
+        runtimeOk,
+        authOk,
+        modelOk,
+        quotaOk: true,
+        rateLimitOk: true,
+      },
     };
   }
 
@@ -168,13 +178,7 @@ export class CodexRuntime implements AgentRuntime {
       },
     });
 
-    const sandboxMode =
-      task.context.sandboxMode === "read-only" || task.context.sandboxMode === "workspace-write"
-        ? task.context.sandboxMode
-        :
-      task.capabilities.write || task.capabilities.patch || task.capabilities.shell
-        ? "workspace-write"
-        : "read-only";
+    const sandboxMode = resolveCodexSandboxMode(task);
     const approvalPolicy = codexApprovalPolicy(
       task.context.approvalPolicy ?? task.context.env?.OMK_APPROVAL_POLICY,
       sandboxMode
@@ -292,12 +296,25 @@ export class CodexRuntime implements AgentRuntime {
   }
 }
 
+function resolveCodexSandboxMode(task: AgentTask): "read-only" | "workspace-write" {
+  if (task.context.sandboxMode === "read-only" || task.context.sandboxMode === "workspace-write") {
+    return task.context.sandboxMode;
+  }
+  // Advisory API runtimes must stay read-only even if capabilities request write.
+  if (task.context.env?.OMK_PROVIDER_AUTHORITY === "advisory") return "read-only";
+  if (task.capabilities.write || task.capabilities.patch || task.capabilities.shell) {
+    return "workspace-write";
+  }
+  return "read-only";
+}
+
 function codexApprovalPolicy(
   value: string | undefined,
   sandboxMode: "read-only" | "workspace-write"
 ): "on-request" | "never" {
   if (sandboxMode !== "read-only") return "on-request";
   const normalized = value?.trim().toLowerCase();
+  // OMK "ask" must never map to provider "never"; only explicit "never"/"yolo" does.
   if (normalized === "never" || normalized === "yolo") return "never";
   return "on-request";
 }

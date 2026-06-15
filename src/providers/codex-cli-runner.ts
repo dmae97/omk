@@ -73,8 +73,8 @@ export function createCodexCliAdvisoryTaskRunner(options: CodexCliRunnerOptions)
           };
         }
         const prompt = preflight.input;
-        const sandboxMode = risk === "read" || advisoryMode ? "read-only" : "workspace-write";
-        const approvalPolicy = sandboxMode === "workspace-write" ? "on-request" : "never";
+        const sandboxMode = resolveCodexCliSandboxMode(risk, advisoryMode, env);
+        const approvalPolicy = codexCliApprovalPolicy(env.OMK_APPROVAL_POLICY ?? env.OMK_EXECUTION, sandboxMode);
         const childEnv = buildChildEnv({
           overrideEnv: {
             ...env,
@@ -115,6 +115,26 @@ export function createCodexCliAdvisoryTaskRunner(options: CodexCliRunnerOptions)
     },
   };
   return runner;
+}
+
+function resolveCodexCliSandboxMode(
+  risk: string,
+  advisoryMode: boolean,
+  env: Record<string, string>
+): "read-only" | "workspace-write" {
+  if (risk === "read" || advisoryMode) return "read-only";
+  if (env.OMK_PROVIDER_AUTHORITY === "advisory") return "read-only";
+  return "workspace-write";
+}
+
+function codexCliApprovalPolicy(
+  value: string | undefined,
+  sandboxMode: "read-only" | "workspace-write"
+): "on-request" | "never" {
+  if (sandboxMode !== "read-only") return "on-request";
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "never" || normalized === "yolo") return "never";
+  return "on-request";
 }
 
 function buildCodexPrompt(node: DagNode, env: Record<string, string>): string {

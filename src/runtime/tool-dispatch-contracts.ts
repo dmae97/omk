@@ -19,8 +19,8 @@ export interface ToolDispatchResult<R = unknown> {
   readonly reason?: unknown;
 }
 
-/** Shadow = record only; enforce = a block/ask(non-TTY) verdict rejects the call. */
-export type ToolAuthorityMode = "shadow" | "enforce";
+/** Shadow = record only; warn = visible diagnostic; enforce = a block/ask(non-TTY) verdict rejects the call. */
+export type ToolAuthorityMode = "shadow" | "warn" | "enforce";
 
 /**
  * Per-call verdict recorded at the dispatch checkpoint. Carries only coarse,
@@ -84,14 +84,25 @@ export interface ToolAuthorityWiring {
 const ENFORCE_PATTERN = /^(1|true|yes|on)$/i;
 
 /**
- * Resolve the global enforcement opt-in from the environment. Default OFF means
- * the gate runs in shadow mode (record only). Set `OMK_TOOL_AUTHORITY_ENFORCE=1`
- * to enable fail-closed enforcement at the dispatch checkpoint.
+ * Resolve staged authority mode from the environment. Default OFF means the gate
+ * runs in shadow mode (record only). `warn` emits visible diagnostics without
+ * blocking. `enforce` fail-closes block/ask(non-TTY) verdicts.
  */
+export function resolveToolAuthorityMode(
+  env: Record<string, string | undefined> = process.env,
+): ToolAuthorityMode {
+  const rawMode = (env.OMK_TOOL_AUTHORITY_MODE ?? "").trim().toLowerCase();
+  if (rawMode === "enforce" || rawMode === "warn" || rawMode === "shadow") return rawMode;
+  if (ENFORCE_PATTERN.test((env.OMK_TOOL_AUTHORITY_ENFORCE ?? "").trim())) return "enforce";
+  if (ENFORCE_PATTERN.test((env.OMK_TOOL_AUTHORITY_WARN ?? "").trim())) return "warn";
+  return "shadow";
+}
+
+/** Backward-compatible boolean resolver for existing dispatch call sites. */
 export function resolveToolAuthorityEnforcement(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
-  return ENFORCE_PATTERN.test((env.OMK_TOOL_AUTHORITY_ENFORCE ?? "").trim());
+  return resolveToolAuthorityMode(env) === "enforce";
 }
 
 /** Build a redacted reason string from non-secret authority signals only. */

@@ -2,7 +2,8 @@
 
 > 분석일: 2026-05-25
 > 도구: CodeGraph (SQLite 기반 코드 의존성 그래프)
-> 대상: /home/yu/open_multi-agent_kit (open-multi-agent-kit v1.1.18)
+> 대상: /home/yu/open_multi-agent_kit (open-multi-agent-kit@0.79.3, runtime contract family v1.2, pre-1.0)
+> 최신화: 2026-06-15 — release truth, authority/evidence gates, health-aware routing, and spec-kit docs refreshed.
 
 ---
 

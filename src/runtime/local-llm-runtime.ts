@@ -57,6 +57,7 @@ export interface LocalLlmRuntimeOptions {
 
 export class LocalLlmRuntime implements AgentRuntime {
   readonly id = "local-llm";
+  readonly advisory = true;
   readonly kind = "api";
   readonly priority = 35;
   readonly capabilities: RuntimeCapabilities = {

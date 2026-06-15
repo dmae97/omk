@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -539,6 +539,7 @@ test("runtime-backed runner routes non-Kimi CLI turns without optional capabilit
     status: "running",
     retries: 0,
     maxRetries: 1,
+    outputs: [{ name: "diff", gate: "summary" }],
     routing: {
       provider: "opencode",
       readOnly: false,
@@ -682,6 +683,143 @@ test("runtime-backed runner forwards per-turn env and routing providerModel", as
   });
 });
 
+test("runtime router excludes unhealthy runtimes before execution", async () => {
+  const calls = [];
+  const router = createRuntimeRouter({
+    runtimes: [
+      fakeRuntime("unhealthy-cli", calls, workspaceCliCapabilities(), {
+        priority: 100,
+        health: async () => ({ runtimeId: "unhealthy-cli", available: false, reason: "quota exhausted", checkedAt: new Date().toISOString() }),
+      }),
+      fakeRuntime("healthy-cli", calls, workspaceCliCapabilities(), {
+        priority: 10,
+        health: async () => ({ runtimeId: "healthy-cli", available: true, checkedAt: new Date().toISOString() }),
+      }),
+    ],
+  });
+
+  const result = await router.execute(fakeTask({ prompt: "implement with healthy fallback" }));
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.metadata.selectedRuntime, "healthy-cli");
+  assert.deepEqual(calls, ["healthy-cli"]);
+});
+
+test("runtime router records decision trace for executeTask path", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "omk-router-trace-"));
+  const previousCwd = process.cwd();
+  const calls = [];
+  try {
+    process.chdir(temp);
+    const router = createRuntimeRouter({
+      runtimes: [fakeRuntime("codex-cli", calls, workspaceCliCapabilities(), { priority: 80 })],
+    });
+    const node = {
+      id: "trace-node",
+      name: "Implement trace evidence",
+      role: "coder",
+      dependsOn: [],
+      status: "running",
+      retries: 0,
+      maxRetries: 1,
+      routing: {
+        assignedProviderCapabilities: ["write", "patch"],
+        contextBudget: "small",
+      },
+    };
+    const capsule = {
+      runId: "trace-run",
+      nodeId: node.id,
+      goal: "trace goal",
+      task: node.name,
+      system: "",
+      node,
+      dependencySummaries: [],
+      evidenceRequirements: [],
+      relevantFiles: [],
+      graphMemory: [],
+      priorAttempts: [],
+      budget: { maxInputTokens: 4096, reservedOutputTokens: 1024, maxFileTokens: 0, maxToolResultTokens: 0, maxMemoryFacts: 0, compression: "summary" },
+    };
+
+    const result = await router.executeTask(fakeTask({
+      prompt: "implement trace evidence",
+      context: { ...fakeTask().context, runId: "trace-run", nodeId: node.id },
+    }), capsule, new AbortController().signal);
+
+    assert.equal(result.exitCode, 0);
+    const trace = await readFile(join(temp, ".omk", "runs", "trace-run", "decisions.jsonl"), "utf8");
+    assert.match(trace, /"component":"runtime-router"/);
+    assert.match(trace, /path=executeTask/);
+  } finally {
+    process.chdir(previousCwd);
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("runtime-backed runner applies headroom compacted capsule to AgentTask", async () => {
+  const previousEnv = {
+    OMK_CONTEXT_WINDOW: process.env.OMK_CONTEXT_WINDOW,
+    OMK_HEADROOM_THRESHOLD: process.env.OMK_HEADROOM_THRESHOLD,
+  };
+  try {
+    process.env.OMK_CONTEXT_WINDOW = "1";
+    process.env.OMK_HEADROOM_THRESHOLD = "0.5";
+    const runner = await createRuntimeBackedTaskRunner({
+      cwd: process.cwd(),
+      env: {},
+      runId: "local-headroom-compact",
+      headroomCompactor: async () => "compact capsule summary",
+    });
+    const registry = runner._registry;
+    for (const runtime of [...registry.list()]) registry.unregister(runtime.id);
+
+    let captured;
+    registry.register({
+      id: "codex-cli",
+      priority: 100,
+      capabilities: workspaceCliCapabilities(),
+      supports: () => true,
+      async runNode() {
+        throw new Error("execute path expected");
+      },
+      async execute(task) {
+        captured = task;
+        return { output: "ok", exitCode: 0, metadata: { runtime: "codex-cli" } };
+      },
+    });
+
+    const result = await runner.run({
+      id: "headroom-node",
+      name: "Implement compacted context handoff",
+      role: "coder",
+      dependsOn: [],
+      status: "running",
+      retries: 0,
+      maxRetries: 1,
+      outputs: [{ name: "diff", gate: "summary" }],
+      routing: {
+        readOnly: false,
+        assignedProviderCapabilities: ["write", "patch"],
+        contextBudget: "small",
+      },
+    }, {});
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.metadata.headroomCompaction.compacted, true);
+    assert.equal(result.metadata.headroomCompaction.via, "headroom");
+    assert.match(
+      captured.context.system,
+      /compact capsule summary|Headroom compaction removed required/,
+    );
+  } finally {
+    if (previousEnv.OMK_CONTEXT_WINDOW === undefined) delete process.env.OMK_CONTEXT_WINDOW;
+    else process.env.OMK_CONTEXT_WINDOW = previousEnv.OMK_CONTEXT_WINDOW;
+    if (previousEnv.OMK_HEADROOM_THRESHOLD === undefined) delete process.env.OMK_HEADROOM_THRESHOLD;
+    else process.env.OMK_HEADROOM_THRESHOLD = previousEnv.OMK_HEADROOM_THRESHOLD;
+  }
+});
+
 test("runtime-backed runner forwards OMK-owned scoped worker manifest into native AgentTask", async () => {
   const runner = await createRuntimeBackedTaskRunner({ cwd: process.cwd(), env: {}, runId: "local-runtime-backed-owner" });
   const registry = runner._registry;
@@ -724,6 +862,7 @@ test("runtime-backed runner forwards OMK-owned scoped worker manifest into nativ
     status: "running",
     retries: 0,
     maxRetries: 1,
+    outputs: [{ name: "diff", gate: "summary" }],
     routing: {
       provider: "codex",
       readOnly: false,
@@ -842,6 +981,7 @@ function fakeRuntime(id, calls, capabilities, options = {}) {
     priority: options.priority ?? 60,
     capabilities,
     supports: options.supports ?? (() => true),
+    ...(options.health && { health: options.health }),
     async runNode() {
       return {
         success: true,
@@ -934,3 +1074,67 @@ function fakeTask(overrides = {}) {
     ...overrides,
   };
 }
+
+test("headroom guard keeps original capsule when compactor drops required sections", async () => {
+  const previousEnv = {
+    OMK_CONTEXT_WINDOW: process.env.OMK_CONTEXT_WINDOW,
+    OMK_HEADROOM_THRESHOLD: process.env.OMK_HEADROOM_THRESHOLD,
+  };
+  try {
+    process.env.OMK_CONTEXT_WINDOW = "1";
+    process.env.OMK_HEADROOM_THRESHOLD = "0.5";
+    const runner = await createRuntimeBackedTaskRunner({
+      cwd: process.cwd(),
+      env: {},
+      runId: "local-headroom-guard",
+      // Malicious compactor that strips task and routing information.
+      headroomCompactor: async () => "compact summary without task or routing",
+    });
+    const registry = runner._registry;
+    for (const runtime of [...registry.list()]) registry.unregister(runtime.id);
+
+    let captured;
+    registry.register({
+      id: "codex-cli",
+      priority: 100,
+      capabilities: workspaceCliCapabilities(),
+      supports: () => true,
+      async runNode() {
+        throw new Error("execute path expected");
+      },
+      async execute(task) {
+        captured = task;
+        return { output: "ok", exitCode: 0, metadata: { runtime: "codex-cli" } };
+      },
+    });
+
+    const result = await runner.run({
+      id: "headroom-guard-node",
+      name: "Implement compacted context handoff",
+      role: "coder",
+      dependsOn: [],
+      status: "running",
+      retries: 0,
+      maxRetries: 1,
+      outputs: [{ name: "diff", gate: "summary" }],
+      routing: {
+        readOnly: false,
+        assignedProviderCapabilities: ["write", "patch"],
+        contextBudget: "small",
+      },
+    }, {});
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.metadata.headroomCompaction.compacted, true);
+    assert.equal(result.metadata.headroomCompaction.via, "headroom");
+    assert.match(
+      captured.context.system,
+      /Headroom compaction removed required sections/,
+    );
+  } finally {
+    if (previousEnv.OMK_CONTEXT_WINDOW === undefined) delete process.env.OMK_CONTEXT_WINDOW;
+    else process.env.OMK_CONTEXT_WINDOW = previousEnv.OMK_CONTEXT_WINDOW;
+    if (previousEnv.OMK_HEADROOM_THRESHOLD === undefined) delete process.env.OMK_HEADROOM_THRESHOLD;
+    else process.env.OMK_HEADROOM_THRESHOLD = previousEnv.OMK_HEADROOM_THRESHOLD;
+  }
+});

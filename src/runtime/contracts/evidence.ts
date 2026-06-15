@@ -119,6 +119,88 @@ export interface AdapterTestResult {
   readonly details?: string;
 }
 
+// ── Evidence Gate Requirement ───────────────────────────────────
+
+/** Kinds of output gates that can satisfy evidence-required turns. */
+export type EvidenceGateKind =
+  | "file-exists"
+  | "test-pass"
+  | "review-pass"
+  | "command-pass"
+  | "summary"
+  | "artifact"
+  | "diff";
+
+/** Result of checking whether a node/task produced required evidence. */
+export interface EvidenceGateCheck {
+  readonly required: boolean;
+  readonly satisfied: boolean;
+  readonly gates: readonly EvidenceGateKind[];
+  readonly missing: readonly EvidenceGateKind[];
+  readonly reason: string;
+}
+
+export function checkEvidenceGate(
+  required: boolean | undefined,
+  outputs: readonly { gate?: string; ref?: string; required?: boolean }[] | undefined,
+  metadata?: Record<string, unknown> | null
+): EvidenceGateCheck {
+  const gateKinds: EvidenceGateKind[] = [
+    "file-exists",
+    "test-pass",
+    "review-pass",
+    "command-pass",
+    "summary",
+    "artifact",
+    "diff",
+  ];
+  const satisfiedKinds = new Set<EvidenceGateKind>();
+
+  // Direct output gates
+  for (const output of outputs ?? []) {
+    const kind = output.gate?.toLowerCase();
+    if (kind && gateKinds.includes(kind as EvidenceGateKind) && (output.ref || output.required !== false)) {
+      satisfiedKinds.add(kind as EvidenceGateKind);
+    }
+  }
+
+  // Metadata-captured gates (e.g. from runtime-router or task runner)
+  const metaGates = metadata?.evidenceGates;
+  if (Array.isArray(metaGates)) {
+    for (const g of metaGates) {
+      if (gateKinds.includes(g as EvidenceGateKind)) satisfiedKinds.add(g as EvidenceGateKind);
+    }
+  }
+  const metaCommandPass = metadata?.commandPass === true || metadata?.testPass === true || metadata?.buildPass === true;
+  if (metaCommandPass) satisfiedKinds.add("command-pass");
+  const metaDiff = metadata?.diff || metadata?.patch || metadata?.changedFiles;
+  if (metaDiff) satisfiedKinds.add("diff");
+  const metaArtifact = metadata?.artifact || metadata?.artifactPath || metadata?.evidenceRef;
+  if (metaArtifact) satisfiedKinds.add("artifact");
+
+  if (!required) {
+    return { required: false, satisfied: true, gates: [...satisfiedKinds], missing: [], reason: "evidence not required" };
+  }
+
+  if (satisfiedKinds.size > 0) {
+    return {
+      required: true,
+      satisfied: true,
+      gates: [...satisfiedKinds],
+      missing: [],
+      reason: `evidence satisfied by ${[...satisfiedKinds].join(", ")}`,
+    };
+  }
+
+  return {
+    required: true,
+    satisfied: false,
+    gates: [],
+    missing: gateKinds,
+    reason: "required evidence gate missing: no command-pass, test-pass, review-pass, file-exists, summary, artifact, or diff output",
+  };
+}
+
 // ── Release Gate Result ─────────────────────────────────────────
 
 /** Per-gate check result. */

@@ -1,6 +1,7 @@
-import { writeFile, readdir, readFile } from "fs/promises";
+import { writeFile, readdir, readFile, mkdir } from "fs/promises";
 import { join } from "path";
-import { getRunPath, getOmkPath, pathExists, ensureDir, validateRunId } from "./fs.js";
+import { getOmkPath, pathExists, ensureDir, validateRunId } from "./fs.js";
+import { getRunArtifactPath } from "./run-store.js";
 
 export function createOmkSessionId(prefix: "chat" | "plan" | "run" | "team" | "session" | "feature" | "bugfix" | "refactor" | "review" = "session"): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -30,8 +31,8 @@ export interface SessionMeta {
 
 export async function ensureSessionDir(runId: string): Promise<string> {
   const sanitized = validateRunId(runId);
-  const dir = getRunPath(sanitized);
-  await ensureDir(dir);
+  const dir = getRunArtifactPath(sanitized, ".");
+  await mkdir(dir, { recursive: true });
   return dir;
 }
 
@@ -49,7 +50,7 @@ export async function writeSessionMeta(runId: string, meta: SessionMeta): Promis
 
 export async function readSessionMeta(runId: string): Promise<SessionMeta | null> {
   const sanitized = validateRunId(runId);
-  const metaPath = join(getRunPath(sanitized), "session.json");
+  const metaPath = getRunArtifactPath(sanitized, "session.json");
   if (!(await pathExists(metaPath))) return null;
   try {
     const content = await readFile(metaPath, "utf-8");

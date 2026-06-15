@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 const {
   dispatchToolCallsByContract,
   resolveToolAuthorityEnforcement,
+  resolveToolAuthorityMode,
   evaluateToolAuthority,
   ToolAuthorityBlockedError,
 } = await import("../dist/runtime/tool-dispatch-contracts.js");
@@ -141,6 +142,14 @@ test("resolveToolAuthorityEnforcement defaults OFF and honors opt-in flag", () =
   assert.equal(resolveToolAuthorityEnforcement({ OMK_TOOL_AUTHORITY_ENFORCE: "0" }), false);
   assert.equal(resolveToolAuthorityEnforcement({ OMK_TOOL_AUTHORITY_ENFORCE: "1" }), true);
   assert.equal(resolveToolAuthorityEnforcement({ OMK_TOOL_AUTHORITY_ENFORCE: "true" }), true);
+});
+
+test("resolveToolAuthorityMode supports staged shadow/warn/enforce", () => {
+  assert.equal(resolveToolAuthorityMode({}), "shadow");
+  assert.equal(resolveToolAuthorityMode({ OMK_TOOL_AUTHORITY_MODE: "warn" }), "warn");
+  assert.equal(resolveToolAuthorityMode({ OMK_TOOL_AUTHORITY_MODE: "enforce" }), "enforce");
+  assert.equal(resolveToolAuthorityMode({ OMK_TOOL_AUTHORITY_WARN: "1" }), "warn");
+  assert.equal(resolveToolAuthorityMode({ OMK_TOOL_AUTHORITY_ENFORCE: "1" }), "enforce");
 });
 
 test("capabilityScopesFromRouting defaults authority to full (coder lane stays full)", () => {

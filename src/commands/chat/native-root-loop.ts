@@ -7,7 +7,10 @@ import type {
 import type { RuntimeBootstrap } from "../../runtime/runtime-bootstrap.js";
 import type { ChatLayout } from "./utils.js";
 import { style } from "../../util/theme.js";
+import { getRunArtifactPath } from "../../util/run-store.js";
 import { runShell } from "../../util/shell.js";
+import { mkdir, writeFile, appendFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { createDag, type Dag, type DagNode } from "../../orchestration/dag.js";
 import {
   applyCapabilityInjectionToRouting,
@@ -18,7 +21,7 @@ import {
   decideToolAuthority,
   type ToolOp,
 } from "../../safety/tool-authority-gate.js";
-import { resolveToolAuthorityEnforcement } from "../../runtime/tool-dispatch-contracts.js";
+import { resolveToolAuthorityMode } from "../../runtime/tool-dispatch-contracts.js";
 import {
   compileBloatToNlp,
   type DebloatRisk,
@@ -460,27 +463,28 @@ function nativeTurnRiskToToolOp(risk: string | undefined): ToolOp {
   }
 }
 
+interface NativeTurnToolAuthorityRecord {
+  readonly mode: "shadow" | "warn" | "enforce";
+  readonly op: ToolOp;
+  readonly decision: "allow" | "ask" | "block";
+  readonly enforced: boolean;
+  readonly reason: string;
+}
+
 /**
- * Shadow-only tool-authority observability at the live turn dispatch
- * checkpoint. The kimi runner executes tools inside a spawned CLI, so per-tool
- * enforcement lives in dispatchToolCallsByContract; here we only compute and
- * record the turn-level verdict for the trace. Default output is byte-identical
- * (emitted only under OMK_DEBUG / OMK_TOOL_AUTHORITY_TRACE); this path never
- * blocks dispatch.
+ * Turn-level tool-authority checkpoint. Shadow mode records only when tracing is
+ * enabled, warn mode emits a diagnostic, and enforce mode fail-closes block/ask
+ * verdicts before dispatching the native turn.
  */
 function recordNativeTurnToolAuthority(input: {
   node: DagNode;
   env: Record<string, string>;
   renderer?: CliRenderer;
-}): void {
-  const traceEnabled =
-    input.env.OMK_DEBUG === "1" ||
-    /^(1|true|yes|on)$/i.test(input.env.OMK_TOOL_AUTHORITY_TRACE ?? "");
-  if (!traceEnabled) return;
+}): NativeTurnToolAuthorityRecord {
   const routing = input.node.routing;
   const scopes = capabilityScopesFromRouting(routing);
   const op = nativeTurnRiskToToolOp(routing?.risk);
-  const enforce = resolveToolAuthorityEnforcement(input.env);
+  const mode = resolveToolAuthorityMode(input.env);
   const decision = decideToolAuthority({
     op,
     writeAuthority: scopes.writeAuthority,
@@ -492,15 +496,24 @@ function recordNativeTurnToolAuthority(input: {
       routing?.sandboxMode === "read-only" ? "read-only" : "workspace-write",
     tty: Boolean(process.stdout.isTTY),
   });
-  const line =
-    `  tool-authority(${enforce ? "enforce" : "shadow"}): node=${input.node.id} ` +
-    `op=${op} decision=${decision} write=${scopes.writeAuthority} ` +
-    `shell=${scopes.shellAuthority} sandbox=${routing?.sandboxMode ?? "auto"}\n`;
-  if (input.renderer) {
-    input.renderer.emit({ type: "control:output", text: style.phosphorDim(line) });
-  } else {
-    process.stderr.write(style.phosphorDim(line));
+  const enforced = mode === "enforce" && decision !== "allow";
+  const reason =
+    `tool-authority ${decision} for ${op} op ` +
+    `(write=${scopes.writeAuthority}, shell=${scopes.shellAuthority}, ` +
+    `sandbox=${routing?.sandboxMode ?? "auto"}, mode=${mode})`;
+  const traceEnabled =
+    mode !== "shadow" ||
+    input.env.OMK_DEBUG === "1" ||
+    /^(1|true|yes|on)$/i.test(input.env.OMK_TOOL_AUTHORITY_TRACE ?? "");
+  if (traceEnabled) {
+    const line = `  ${reason}${enforced ? " [enforced]" : ""}\n`;
+    if (input.renderer) {
+      input.renderer.emit({ type: "control:output", text: style.phosphorDim(line) });
+    } else {
+      process.stderr.write(style.phosphorDim(line));
+    }
   }
+  return { mode, op, decision, enforced, reason };
 }
 
 function emitNativeTurnRoute(input: {
@@ -638,7 +651,14 @@ async function persistNativeDagCompileArtifacts(input: {
   }
 }
 
-export type NativeTurnRisk = "read" | "write" | "shell" | "merge";
+export type NativeTurnRisk = "read" | "write" | "shell" | "merge" | "ask";
+
+export interface NativeTurnRiskTrace {
+  readonly risk: NativeTurnRisk;
+  readonly confidence: number;
+  readonly matchedSignal: string;
+  readonly readOnlyOverride: boolean;
+}
 
 const API_ADVISORY_PROVIDERS = new Set([
   "deepseek",
@@ -649,42 +669,51 @@ const API_ADVISORY_PROVIDERS = new Set([
   "qwen",
 ]);
 
-function hasExplicitReadOnlyIntent(text: string): boolean {
+function hasExplicitReadOnlyConstraint(text: string): boolean {
   return (
-    /\b(read|inspect|look|show|list|summarize|explain|describe|review|audit|status|diagnose)\b/.test(
+    /\b(without changing|without editing|do not change|don't change|do not edit|don't edit|no edits?|no file changes?|read[- ]only)\b/.test(
       text,
     ) ||
-    /\b(without changing|without editing|do not change|don't change|do not edit|don't edit|no edits?|no file changes?)\b/.test(
-      text,
-    ) ||
-    /읽기\s*전용|수정하지\s*말|변경하지\s*말|파일\s*(수정|변경)\s*(없이|하지\s*말)|요약|설명|상태|검토만|분석만|읽어|살펴/.test(
+    /읽기\s*전용|수정하지\s*말|변경하지\s*말|파일\s*(수정|변경)\s*(없이|하지\s*말)|검토만|분석만/.test(
       text,
     )
   );
 }
 
-export function inferNativeTurnRisk(prompt: string): NativeTurnRisk {
+function hasReadOnlyIntent(text: string): boolean {
+  return (
+    /\b(read|inspect|look|show|list|summarize|explain|describe|review|audit|status|diagnose)\b/.test(
+      text,
+    ) ||
+    /요약|설명|상태|검토|분석|읽어|살펴/.test(text)
+  );
+}
+
+export function inferNativeTurnRisk(prompt: string): NativeTurnRiskTrace {
   const text = prompt.toLowerCase();
+  if (hasExplicitReadOnlyConstraint(text)) {
+    return { risk: "read", confidence: 0.95, matchedSignal: "explicit-read-only-constraint", readOnlyOverride: true };
+  }
   if (
     /\b(push|publish|release|merge|tag|deploy)\b|푸시|퍼블리시|릴리즈|머지|배포/.test(
       text,
     )
   )
-    return "merge";
+    return { risk: "merge", confidence: 0.9, matchedSignal: "merge/release-keyword", readOnlyOverride: false };
   if (
     /\b(run|test|build|exec|execute|shell|terminal|command|npm|pnpm|yarn|bun|pytest|cargo|go test|tsc|lint|verify|check)\b|테스트|빌드|실행|검증|쉘|터미널/.test(
       text,
     )
   )
-    return "shell";
+    return { risk: "shell", confidence: 0.85, matchedSignal: "shell/execution-keyword", readOnlyOverride: false };
   if (
     /\b(fix|edit|write|implement|modify|patch|refactor|add|create|delete|update|change)\b|수정|구현|패치|리팩터|추가|삭제|변경/.test(
       text,
     )
   )
-    return "write";
-  if (hasExplicitReadOnlyIntent(text)) return "read";
-  return "write";
+    return { risk: "write", confidence: 0.85, matchedSignal: "write/modify-keyword", readOnlyOverride: false };
+  if (hasReadOnlyIntent(text)) return { risk: "read", confidence: 0.75, matchedSignal: "read-only-intent", readOnlyOverride: false };
+  return { risk: "ask", confidence: 0.5, matchedSignal: "no-clear-signal", readOnlyOverride: false };
 }
 
 function nativeTurnRoutingPolicy(
@@ -704,7 +733,7 @@ function nativeTurnRoutingPolicy(
       providerReasonSuffix: `; ${provider} API is advisory/read-only for ${risk} intent; OMK owns write, shell, MCP, and merge authority`,
     };
   }
-  if (risk === "read") {
+  if (risk === "read" || risk === "ask") {
     return { capabilities: ["read"], readOnly: true, sandboxMode: "read-only" };
   }
   if (risk === "write") {
@@ -733,9 +762,24 @@ function isApiAdvisoryProvider(provider: string): boolean {
 }
 
 function debloatRiskFromNativeTurnRisk(risk: NativeTurnRisk): DebloatRisk {
-  if (risk === "read") return "read";
+  if (risk === "read" || risk === "ask") return "read";
   if (risk === "write") return "write";
   return "dangerous";
+}
+
+function nativeTurnRequiresEvidence(risk: NativeTurnRisk): boolean {
+  return risk === "write" || risk === "shell" || risk === "merge";
+}
+
+function nativeEvidenceOutputForRisk(risk: NativeTurnRisk): DagNode["outputs"] {
+  if (!nativeTurnRequiresEvidence(risk)) return undefined;
+  if (risk === "shell") {
+    return [{ name: "command evidence", gate: "command-pass", required: true }];
+  }
+  if (risk === "merge") {
+    return [{ name: "release evidence", ref: "## Evidence", gate: "summary", required: true }];
+  }
+  return [{ name: "change evidence", ref: "## Evidence", gate: "summary", required: true }];
 }
 
 export function buildNativeRootLoopTurnNode(input: {
@@ -748,7 +792,13 @@ export function buildNativeRootLoopTurnNode(input: {
   executionPrompt?: string;
 }): DagNode {
   const id = input.nodeId ?? `turn-${Date.now()}`;
-  const turnRisk = inferNativeTurnRisk(input.prompt);
+  const riskTrace = inferNativeTurnRisk(input.prompt);
+  let turnRisk = riskTrace.risk;
+  // Low-confidence prompts fall back to ask/read-only to preserve safety.
+  if (riskTrace.confidence < 0.6 && turnRisk !== "read") {
+    turnRisk = "ask";
+  }
+  const evidenceRequired = nativeTurnRequiresEvidence(turnRisk);
   const routingPolicy = nativeTurnRoutingPolicy(
     input.bootstrap.provider,
     turnRisk,
@@ -778,7 +828,7 @@ export function buildNativeRootLoopTurnNode(input: {
     sandbox: routingPolicy.sandboxMode,
     executionSelection: input.executionPrompt,
     role: "coordinator",
-    evidenceRequired: false,
+    evidenceRequired,
     capabilityEnvelope: {
       mcpEnabled: capabilityInjection.mcpServers,
       skillsEnabled: capabilityInjection.skills,
@@ -807,6 +857,7 @@ export function buildNativeRootLoopTurnNode(input: {
     status: "running",
     retries: 0,
     maxRetries: 1,
+    outputs: nativeEvidenceOutputForRisk(turnRisk),
     routing: applyCapabilityInjectionToRouting(
       {
         provider: input.bootstrap.provider,
@@ -816,6 +867,8 @@ export function buildNativeRootLoopTurnNode(input: {
         contextBudget: "normal",
         readOnly: routingPolicy.readOnly,
         risk: turnRisk,
+        riskTrace,
+        evidenceRequired,
         promptMode: "dnc-nlp",
         runtimeSidecar: {
           ...compiled.runtimeSidecar,
@@ -832,6 +885,61 @@ export function buildNativeRootLoopTurnNode(input: {
       selectedCapabilityInjection,
     ),
   };
+}
+
+async function writeTurnRoutingArtifact(
+  runId: string,
+  node: DagNode,
+  runContext?: { runId?: string; worker?: { owner?: string } },
+): Promise<{ error?: string } | undefined> {
+  const artifact = getRunArtifactPath(runId, `turns/${sanitizeRunIdForPath(node.id)}-routing.json`);
+  const payload = {
+    schemaVersion: "omk.native-turn.routing.v1" as const,
+    nodeId: node.id,
+    runId,
+    workerRunId: runContext?.runId,
+    workerOwner: runContext?.worker?.owner,
+    routing: node.routing,
+    outputs: node.outputs,
+    timestamp: new Date().toISOString(),
+  };
+  try {
+    await mkdir(dirname(artifact), { recursive: true });
+    await writeFile(artifact, JSON.stringify(payload, null, 2), "utf-8");
+    return undefined;
+  } catch (err) {
+    // Non-fatal: artifact write failures must not block turn execution, but must be observable.
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function appendTurnResultArtifact(
+  runId: string,
+  node: DagNode,
+  result: TaskResult,
+): Promise<{ error?: string } | undefined> {
+  const artifact = getRunArtifactPath(runId, `turns/${sanitizeRunIdForPath(node.id)}-result.jsonl`);
+  const payload = {
+    schemaVersion: "omk.native-turn.result.v1" as const,
+    nodeId: node.id,
+    runId,
+    exitCode: result.exitCode,
+    success: result.success,
+    evidenceRequired: result.metadata?.evidenceRequired,
+    timestamp: new Date().toISOString(),
+  };
+  try {
+    await mkdir(dirname(artifact), { recursive: true });
+    await appendFile(artifact, `${JSON.stringify(payload)}\n`, "utf-8");
+    return undefined;
+  } catch (err) {
+    // Non-fatal: artifact write failures must not block turn execution, but must be observable.
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+function sanitizeRunIdForPath(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 64);
 }
 
 function runtimeSidecarIntent(node: DagNode): string | undefined {
@@ -855,7 +963,7 @@ function describeNativeTurnActivity(node: DagNode): string {
   return `${intentPart} · ${guardPart} · ${scopePart} · ${provider}`;
 }
 
-async function executeNativeRootTurn(input: {
+export async function executeNativeRootTurn(input: {
   taskRunner: TaskRunner;
   node: DagNode;
   env: Record<string, string>;
@@ -871,7 +979,28 @@ async function executeNativeRootTurn(input: {
   const routing = input.node.routing;
   const activity = describeNativeTurnActivity(input.node);
   emitNativeTurnRoute(input);
-  recordNativeTurnToolAuthority({ node: input.node, env: input.env, renderer: input.renderer });
+  const authorityRecord = recordNativeTurnToolAuthority({ node: input.node, env: input.env, renderer: input.renderer });
+  if (authorityRecord.enforced) {
+    const message = `${authorityRecord.reason}; native turn dispatch blocked`;
+    if (input.renderer) {
+      input.renderer.emit({ type: "turn:error", message });
+    } else {
+      process.stderr.write(style.metricsRed(message) + "\n");
+    }
+    return {
+      success: false,
+      exitCode: 78,
+      stdout: "",
+      stderr: message,
+      metadata: {
+        code: "TOOL_AUTHORITY_BLOCKED",
+        nodeId: input.node.id,
+        op: authorityRecord.op,
+        decision: authorityRecord.decision,
+        authorityMode: authorityRecord.mode,
+      },
+    };
+  }
 
   let heartbeatPrinted = false;
   let heartbeatLineClosed = false;
@@ -898,13 +1027,25 @@ async function executeNativeRootTurn(input: {
     : undefined;
   heartbeat?.unref?.();
 
+  const diagnostics: { routingWrite?: string; resultWrite?: string } = {};
   try {
+    const turnRunId = input.env.OMK_RUN_ID ?? input.runContext?.goal.runId ?? input.node.id;
+    const routingWrite = await writeTurnRoutingArtifact(turnRunId, input.node, input.runContext);
+    if (routingWrite?.error) diagnostics.routingWrite = routingWrite.error;
     const result = await input.taskRunner.run(
       input.node,
       input.env,
       input.signal,
       input.runContext,
     );
+    const resultWrite = await appendTurnResultArtifact(turnRunId, input.node, result);
+    if (resultWrite?.error) diagnostics.resultWrite = resultWrite.error;
+    if (Object.keys(diagnostics).length > 0) {
+      result.metadata = {
+        ...(result.metadata ?? {}),
+        artifactWriteDiagnostics: diagnostics,
+      };
+    }
     if (input.heartbeatEnabled) {
       const sec = ((Date.now() - startedAt) / 1000).toFixed(1);
       if (input.renderer) {

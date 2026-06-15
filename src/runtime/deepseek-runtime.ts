@@ -95,6 +95,7 @@ export interface DeepSeekRuntimeOptions {
 
 export class DeepSeekRuntime implements AgentRuntime {
   readonly id = "deepseek-api";
+  readonly advisory = true;
   readonly kind = "api";
   readonly priority = 40;
   readonly capabilities: RuntimeCapabilities = {
@@ -131,12 +132,22 @@ export class DeepSeekRuntime implements AgentRuntime {
   }
 
   async health(): Promise<RuntimeHealth> {
-    const available = Boolean(this.apiKey);
+    const authOk = Boolean(this.apiKey);
+    const runtimeOk = true;
+    const modelOk = this.model !== "" && this.model !== "default";
+    const available = authOk && runtimeOk && modelOk;
     return {
       runtimeId: this.id,
       available,
       reason: available ? undefined : "DEEPSEEK_API_KEY is not set",
       checkedAt: new Date().toISOString(),
+      vector: {
+        runtimeOk,
+        authOk,
+        modelOk,
+        quotaOk: true,
+        rateLimitOk: true,
+      },
     };
   }
 

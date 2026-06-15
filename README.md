@@ -105,7 +105,7 @@ See [versioning](docs/versioning.md), [provider maturity](docs/provider-maturity
 
 - Ask setup and provider questions in [Discussions](https://github.com/dmae97/open-multi-agent-kit/discussions).
 - File reproducible bugs in [Issues](https://github.com/dmae97/open-multi-agent-kit/issues).
-- If you want safer multi-agent coding runs, star the repo to follow the `v0.8` release line.
+- If you want safer multi-agent coding runs, star the repo to follow the `0.79.x` pre-1.0 release line.
 
 ## License
 

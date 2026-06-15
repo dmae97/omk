@@ -12,7 +12,7 @@ export interface PromptEnvelopeInput {
   readonly nodeId?: string;
   readonly runId?: string;
   readonly executionPrompt?: string;
-  readonly turnRisk?: "read" | "write" | "shell" | "merge";
+  readonly turnRisk?: "read" | "write" | "shell" | "merge" | "ask";
   readonly sandboxMode?: "read-only" | "workspace-write";
 }
 

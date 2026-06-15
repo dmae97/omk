@@ -384,6 +384,14 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     });
   }
 
+  function nodeRequiresEvidence(node: DagNode): boolean {
+    const highRisk =
+      node.routing?.assignedProviderCapabilities?.some((cap) =>
+        ["write", "patch", "shell", "merge"].includes(cap)
+      ) ?? false;
+    return (node.routing?.evidenceRequired === true) || highRisk;
+  }
+
   async function runNode(
     node: DagNode,
     dag: Dag,
@@ -393,6 +401,31 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     signal?: AbortSignal,
     outAbort?: { abort: () => void }
   ): Promise<void> {
+    if (nodeRequiresEvidence(node)) {
+      const hasGate = (node.outputs ?? []).some((output) =>
+        ["file-exists", "test-pass", "review-pass", "command-pass", "summary"].includes(output.gate ?? "")
+      );
+      if (!hasGate) {
+        scheduler.updateNodeStatus(dag, node.id, "failed", options.runId);
+        markNodeStarted(node);
+        const completedAt = new Date().toISOString();
+        const startedAtMs = Date.parse(node.startedAt ?? completedAt);
+        const durationMs = Math.max(0, Date.parse(completedAt) - startedAtMs);
+        const latestAttempt = { attempt: node.retries + 1, startedAt: node.startedAt ?? completedAt, completedAt, durationMs, status: "failed" as const, error: "[omk] Evidence gate required but missing: high-risk node has no command-pass, test-pass, review-pass, file-exists, or summary output gate" };
+        node.attempts = [...(node.attempts ?? []), latestAttempt];
+        node.evidence = [
+          ...(node.evidence ?? []),
+          { gate: "evidence-required", passed: false, message: latestAttempt.error, failureKind: "missing-evidence-gate" },
+        ];
+        markNodeFinished(node, "failed");
+        refreshState(state, dag, options);
+        await commitState(state);
+        emit(cloneState(state));
+        emitTelemetry({ type: "lane.failed", runId: options.runId, nodeId: node.id, laneId: node.id, status: "failed", data: { success: false, exitCode: 78 } });
+        return;
+      }
+    }
+
     scheduler.updateNodeStatus(dag, node.id, "running", options.runId);
     markNodeStarted(node);
     bumpActivity(state);

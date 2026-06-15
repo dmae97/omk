@@ -236,6 +236,7 @@ export const createKimiWireRuntime = createKimiApiRuntime;
 
 export class KimiApiRuntime implements AgentRuntime {
   readonly id: string;
+  readonly advisory = true;
   readonly providerId: string;
   readonly legacy = false;
   readonly runtimeMode = "api";
@@ -288,12 +289,22 @@ export class KimiApiRuntime implements AgentRuntime {
   }
 
   async health(): Promise<RuntimeHealth> {
-    const available = Boolean(this.apiKey);
+    const authOk = Boolean(this.apiKey);
+    const runtimeOk = true; // HTTP endpoint is assumed reachable unless probe fails
+    const modelOk = this.model !== "" && this.model !== "default";
+    const available = authOk && runtimeOk && modelOk;
     return {
       runtimeId: this.id,
       available,
       reason: available ? undefined : `${this.apiKeyEnvName} is not set`,
       checkedAt: new Date().toISOString(),
+      vector: {
+        runtimeOk,
+        authOk,
+        modelOk,
+        quotaOk: true, // quota can only be known at call time; default to true and let failures update
+        rateLimitOk: true,
+      },
     };
   }
 

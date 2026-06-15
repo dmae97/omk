@@ -29,6 +29,7 @@
     "yaml:check": "node scripts/validate-yaml.mjs",
     "schema:check": "node scripts/validate-json-contracts.mjs",
     "theme:check": "node scripts/theme-check.mjs --out proof/theme-check",
+    "theme:sync": "node scripts/sync-themes.mjs",
     "assets:build": "node scripts/assets-build.mjs",
     "assets:check": "node scripts/assets-check.mjs",
     "color:gate": "node scripts/color-literal-gate.mjs",

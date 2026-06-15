@@ -25,7 +25,22 @@ const docsVersionFiles = [
   "docs/versioning.md",
   "docs/getting-started.md",
   "docs/provider-maturity.md",
+  "docs/what-is-omk.md",
+  "docs/claims.md",
   "MATURITY.md",
+  "ROADMAP.md",
+  "src/commands/init.ts",
+  "src/commands/init/content.ts",
+];
+
+const currentVersionClaimFiles = [
+  "README.md",
+  "docs/what-is-omk.md",
+  "docs/claims.md",
+  "MATURITY.md",
+  "ROADMAP.md",
+  "src/commands/init.ts",
+  "src/commands/init/content.ts",
 ];
 
 const changelogFile = "CHANGELOG.md";
@@ -59,6 +74,26 @@ function extractTopChangelogVersion(text) {
 
 function hasUnverifiedPublishedLatestClaim(text) {
   return /Published npm [`']?latest[`']? is/i.test(text);
+}
+
+function normalizeVersionClaim(value) {
+  return value.trim().replace(/^open-multi-agent-kit@/, "").replace(/^v(?=\d+\.\d+\.\d+$)/, "");
+}
+
+function extractCurrentVersionClaims(text) {
+  const patterns = [
+    /Current source version:\s*\\?`?((?:open-multi-agent-kit@)?v?\d+\.\d+\.\d+)\\?`?/gi,
+    /Current source version is\s*\\?`?((?:open-multi-agent-kit@)?v?\d+\.\d+\.\d+)\\?`?/gi,
+    /Source release target:\s*\\?`?((?:open-multi-agent-kit@)?v?\d+\.\d+\.\d+)\\?`?/gi,
+    /Package version:\s*\\?`?(v?\d+\.\d+\.\d+)\\?`?/gi,
+  ];
+  const claims = [];
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      claims.push(match[1]);
+    }
+  }
+  return claims;
 }
 
 async function findLatestReleaseTruthProof() {
@@ -108,6 +143,21 @@ for (const file of docsVersionFiles) {
   const text = await readText(file);
   if (!text.includes(expectedPackageVersion)) {
     mismatches.push({ file, field: "current package version reference", expected: expectedPackageVersion, actual: "missing" });
+  }
+}
+
+for (const file of currentVersionClaimFiles) {
+  const text = await readText(file);
+  const claims = extractCurrentVersionClaims(text);
+  if (claims.length === 0) {
+    mismatches.push({ file, field: "current-version claim", expected: expectedPackageVersion, actual: "missing" });
+    continue;
+  }
+  for (const claim of claims) {
+    const normalized = normalizeVersionClaim(claim);
+    if (normalized !== expectedPackageVersion) {
+      mismatches.push({ file, field: "current-version claim", expected: expectedPackageVersion, actual: claim });
+    }
   }
 }
 
@@ -163,6 +213,36 @@ for (const [schemaVersion, file] of Object.entries(schemaFiles)) {
   expectEqual(file, "properties.schemaVersion.const", schemaVersion, schema.properties?.schemaVersion?.const);
 }
 
+const trackedThemeFiles = [];
+
+async function checkThemeVersionSync() {
+  const themeDirs = ["src/brand", "themes"];
+  const expectedOmkVersion = expectedPackageVersion;
+  for (const dir of themeDirs) {
+    const absoluteDir = join(root, dir);
+    if (!existsSync(absoluteDir)) continue;
+    const entries = await readdir(absoluteDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".theme.json")) continue;
+      const file = join(dir, entry.name);
+      trackedThemeFiles.push(file);
+      let theme;
+      try {
+        theme = await readJson(file);
+      } catch (err) {
+        mismatches.push({ file, field: "meta.omkVersion", expected: expectedOmkVersion, actual: `invalid JSON: ${err.message}` });
+        continue;
+      }
+      const actual = theme?.meta?.omkVersion;
+      if (actual !== expectedOmkVersion) {
+        mismatches.push({ file, field: "meta.omkVersion", expected: expectedOmkVersion, actual: actual ?? "missing" });
+      }
+    }
+  }
+}
+
+await checkThemeVersionSync();
+
 if (mismatches.length > 0) {
   console.error(JSON.stringify({ ok: false, mismatches }, null, 2));
   process.exit(1);
@@ -184,5 +264,6 @@ console.log(JSON.stringify({
     releaseProof?.proofPath,
     "src/version.ts",
     ...Object.values(schemaFiles),
+    ...trackedThemeFiles,
   ].filter(Boolean),
 }, null, 2));

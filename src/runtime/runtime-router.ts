@@ -10,7 +10,7 @@
 
 import { readFile } from "fs/promises";
 import { join } from "path";
-import type { AgentResult, AgentRuntime, AgentRunResult, AgentTask, RuntimeCapabilities } from "./agent-runtime.js";
+import type { AgentResult, AgentRuntime, AgentRunResult, AgentTask, RuntimeCapabilities, RuntimeHealth } from "./agent-runtime.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import { createDecisionTraceStore } from "../evidence/decision-trace.js";
 
@@ -30,8 +30,11 @@ export interface RuntimeScore {
   readonly qualityScore: number;
   readonly costScore: number;
   readonly latencyScore: number;
+  readonly healthScore: number;
   readonly evidencePassRate: number;
   readonly recentFailurePenalty: number;
+  readonly healthAvailable?: boolean;
+  readonly healthReason?: string;
 }
 
 export interface RuntimeRouterOptions {
@@ -145,7 +148,17 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     runtime: AgentRuntime,
     intent: NodeIntent,
     history: EvidenceHistoryEntry[],
+    health?: RuntimeHealth,
   ): RuntimeScore {
+    const vector = health?.vector;
+    const healthPenalty = vector
+      ? (vector.runtimeOk === false ? 0.25 : 0) +
+        (vector.authOk === false ? 0.25 : 0) +
+        (vector.modelOk === false ? 0.2 : 0) +
+        (vector.quotaOk === false ? 0.2 : 0) +
+        (vector.rateLimitOk === false ? 0.1 : 0)
+      : health?.available === false ? 1 : 0;
+
     const runtimeHistory = history.filter((e) => e.runtime === runtime.id);
     const intentHistory = runtimeHistory.filter((e) => e.intent === intent);
 
@@ -168,33 +181,72 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     const latencyScore = runtime.capabilities?.supportsStreaming === true || runtime.capabilities?.streaming === true
       ? 0.7
       : 0.6;
+    const baseHealthScore = runtimeHealthScore(health);
+    const healthScore = Math.max(0, baseHealthScore - healthPenalty);
 
     return {
       runtime: runtime.id,
       qualityScore,
       costScore,
       latencyScore,
+      healthScore,
       evidencePassRate,
       recentFailurePenalty,
+      ...(health && { healthAvailable: health.available }),
+      ...(health?.reason && { healthReason: health.reason }),
     };
+  }
+
+  async function collectRuntimeHealth(candidates: readonly AgentRuntime[]): Promise<Map<string, RuntimeHealth>> {
+    const entries = await Promise.all(candidates.map(async (runtime): Promise<[string, RuntimeHealth]> => {
+      if (!runtime.health) {
+        return [runtime.id, {
+          runtimeId: runtime.id,
+          available: true,
+          checkedAt: new Date().toISOString(),
+        }];
+      }
+      try {
+        return [runtime.id, await runtime.health()];
+      } catch (err) {
+        return [runtime.id, {
+          runtimeId: runtime.id,
+          available: false,
+          reason: err instanceof Error ? err.message : String(err),
+          checkedAt: new Date().toISOString(),
+        }];
+      }
+    }));
+    return new Map(entries);
+  }
+
+  function runtimeHealthy(runtime: AgentRuntime, healthMap: ReadonlyMap<string, RuntimeHealth>): boolean {
+    const health = healthMap.get(runtime.id);
+    if (!health) return true;
+    if (health.available === false) return false;
+    const vector = health.vector;
+    if (!vector) return true;
+    return vector.runtimeOk !== false && vector.authOk !== false && vector.modelOk !== false && vector.quotaOk !== false;
   }
 
   function selectByIntent(
     capsule: ContextCapsule,
     history: EvidenceHistoryEntry[],
+    healthMap?: ReadonlyMap<string, RuntimeHealth>,
   ): RuntimeRouteDecision {
     const intent = classifyIntent(capsule);
     const sorted = [...runtimes].sort((a, b) => b.priority - a.priority);
     const supporting = sorted.filter((runtime) =>
       runtime.supports(capsule) &&
-      runtimeAllowedByLegacyPolicy(runtime, { preferredProviders: [], fallbackChain: options.fallbackChain })
+      runtimeAllowedByLegacyPolicy(runtime, { preferredProviders: [], fallbackChain: options.fallbackChain }) &&
+      (healthMap ? runtimeHealthy(runtime, healthMap) : true)
     );
 
     if (supporting.length === 0) {
       throw new UnsupportedRuntimeError(capsule, detectedRuntimeLabels(sorted));
     }
 
-    const scores = supporting.map((r) => computeScores(r, intent, history));
+    const scores = supporting.map((r) => computeScores(r, intent, history, healthMap?.get(r.id)));
 
     const scored = supporting.map((r, i) => ({
       runtime: r,
@@ -213,6 +265,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
       `intent=${intent}`,
       `quality=${bestScore.qualityScore.toFixed(2)}`,
       `evidencePassRate=${bestScore.evidencePassRate.toFixed(2)}`,
+      `health=${bestScore.healthScore.toFixed(2)}`,
       `recentPenalty=${bestScore.recentFailurePenalty.toFixed(2)}`,
     ].join("; ");
 
@@ -256,9 +309,10 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
 
   async function runNode(capsule: ContextCapsule, signal: AbortSignal): Promise<AgentRunResult> {
     const history = await loadEvidenceHistory();
+    const healthMap = await collectRuntimeHealth(runtimes);
     let decision: RuntimeRouteDecision;
     try {
-      decision = selectByIntent(capsule, history);
+      decision = selectByIntent(capsule, history, healthMap);
     } catch (err) {
       if (err instanceof UnsupportedRuntimeError) {
         return unsupportedRuntimeResult(err);
@@ -342,9 +396,10 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     signal: AbortSignal,
   ): Promise<AgentRunResult> {
     const history = await loadEvidenceHistory();
+    const healthMap = await collectRuntimeHealth(runtimes);
     let decision: RuntimeRouteDecision;
     try {
-      decision = selectByIntent(capsule, history);
+      decision = selectByIntent(capsule, history, healthMap);
     } catch (err) {
       if (err instanceof UnsupportedRuntimeError) {
         return unsupportedRuntimeResult(err);
@@ -353,8 +408,42 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     }
 
     const allCandidates = [decision.runtime, ...decision.fallbacks];
+
+    // Record runtime-router decision trace for executeTask, the native runtime pipeline path.
+    const runId = capsule.runId;
+    const attemptNumber = (capsule.node?.attempts?.length ?? 0) + 1;
+    const attemptId = `${capsule.nodeId}__${attemptNumber}`;
+    if (runId && !runId.startsWith("local-")) {
+      const traceStore = createDecisionTraceStore();
+      traceStore.record(runId, {
+        component: "runtime-router",
+        inputSummary: `node=${capsule.nodeId} intent=${decision.intent} path=executeTask`,
+        outputDecision: `runtime=${decision.runtime.id} fallbacks=${decision.fallbacks.map((r) => r.id).join(",")}`,
+        reason: decision.reason,
+        scores: decision.scores.reduce((acc, s) => {
+          acc[s.runtime] = computeComposite(s, allCandidates.find((candidate) => candidate.id === s.runtime) ?? decision.runtime, decision.intent);
+          return acc;
+        }, {} as Record<string, number>),
+        nodeId: capsule.nodeId,
+        attemptId,
+      });
+    }
+
+    const executionCandidates = allCandidates.filter((runtime) => {
+      const boundary = runtimeSatisfiesAdvisoryBoundary(runtime, task);
+      if (!boundary.ok) {
+        if (decision.reason && !decision.reason.includes("advisory boundary")) {
+          decision = {
+            ...decision,
+            reason: `${decision.reason}; advisory boundary excluded ${runtime.id}`,
+          };
+        }
+      }
+      return boundary.ok;
+    });
+
     let lastError: AgentRunResult | undefined;
-    for (const runtime of allCandidates) {
+    for (const runtime of executionCandidates) {
       if (signal.aborted) {
         return {
           success: false,
@@ -375,7 +464,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
             ...result.metadata,
             selectedRuntime: runtime.id,
             intent: decision.intent,
-            fallbackChain: allCandidates.map((r) => r.id),
+            fallbackChain: executionCandidates.map((r) => r.id),
             scores: decision.scores,
           },
         };
@@ -390,6 +479,19 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
           metadata: { runtime: runtime.id, selectedRuntime: runtime.id, error: String(err) },
         };
       }
+    }
+
+    if (executionCandidates.length === 0 && allCandidates.length > 0) {
+      const advisoryFailures = allCandidates
+        .map((runtime) => runtimeSatisfiesAdvisoryBoundary(runtime, task))
+        .filter((boundary) => !boundary.ok);
+      return {
+        success: false,
+        exitCode: 78,
+        stdout: "",
+        stderr: advisoryFailures.map((boundary) => boundary.reason).join("\n") || "All candidate runtimes are advisory-only for this task",
+        metadata: { authorityMode: "advisory", advisoryBoundaryFailures: advisoryFailures.map((boundary) => boundary.reason) },
+      };
     }
 
     return (
@@ -427,6 +529,27 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
       );
     }
 
+    const healthMap = await collectRuntimeHealth(candidates);
+    candidates = candidates.filter((runtime) => runtimeHealthy(runtime, healthMap));
+
+    const advisoryBoundaryFailures: string[] = [];
+    const nonAdvisoryCandidates = candidates.filter((runtime) => {
+      const boundary = runtimeSatisfiesAdvisoryBoundary(runtime, task);
+      if (!boundary.ok) advisoryBoundaryFailures.push(`${runtime.id}: ${boundary.reason}`);
+      return boundary.ok;
+    });
+    if (nonAdvisoryCandidates.length > 0) {
+      candidates = nonAdvisoryCandidates;
+    } else if (advisoryBoundaryFailures.length > 0) {
+      return {
+        success: false,
+        exitCode: 78,
+        stdout: "",
+        stderr: `Advisory runtime boundary blocked execution:\n${advisoryBoundaryFailures.join("\n")}`,
+        metadata: { authorityMode: "advisory", advisoryBoundaryFailures },
+      };
+    }
+
     if (candidates.length === 0) {
       const mcpBlocked = task.capabilities.mcp || task.capabilities.toolCalling;
       if (mcpBlocked && runtimes.length > 0) {
@@ -434,6 +557,15 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
         throw new Error(
           `Node requires MCP authority. ${runtimeDisplayName(runtime)} runtime does not receive OMK MCP authority.`
         );
+      }
+      if (advisoryBoundaryFailures.length > 0) {
+        return {
+          success: false,
+          exitCode: 78,
+          stdout: "",
+          stderr: `Advisory runtime boundary blocked execution:\n${advisoryBoundaryFailures.join("\n")}`,
+          metadata: { authorityMode: "advisory", advisoryBoundaryFailures },
+        };
       }
       throw new UnsupportedRuntimeError(capsule, detectedRuntimeLabels(runtimes));
     }
@@ -566,6 +698,34 @@ function runtimeSatisfiesTask(runtime: AgentRuntime, task: AgentTask): boolean {
   return true;
 }
 
+/**
+ * Detect advisory-only runtimes that claim broad capabilities but are not allowed
+ * to execute write/shell/merge/patch/tool-calling authority. If a non-read-only
+ * task reaches such a runtime, reroute it to the first non-advisory fallback.
+ */
+function runtimeSatisfiesAdvisoryBoundary(runtime: AgentRuntime, task: AgentTask): {
+  ok: boolean;
+  reroute?: AgentRuntime;
+  reason?: string;
+} {
+  if (runtime.capabilities?.advisory !== true) return { ok: true };
+  const required = task.capabilities;
+  if (
+    required.write ||
+    required.patch ||
+    required.shell ||
+    required.merge ||
+    required.mcp ||
+    required.toolCalling
+  ) {
+    return {
+      ok: false,
+      reason: `advisory runtime ${runtime.id} cannot execute write/shell/merge/patch/MCP/tool-calling authority`,
+    };
+  }
+  return { ok: true };
+}
+
 function runtimeMatchesProvider(runtime: AgentRuntime, provider: string): boolean {
   const normalizedProvider = normalizeRuntimeToken(provider);
   if (normalizedProvider.length === 0) return false;
@@ -672,16 +832,41 @@ function agentResultToRunResult(result: AgentResult, runtimeId: string): AgentRu
   };
 }
 
+const NORMALIZED_COMPOSITE_WEIGHTS = {
+  quality: 0.28,
+  evidence: 0.18,
+  health: 0.16,
+  cost: 0.10,
+  latency: 0.08,
+  recentSuccess: 0.10,
+  capability: 0.07,
+  priority: 0.03,
+} as const;
+
 function computeComposite(score: RuntimeScore, runtime: AgentRuntime, intent: NodeIntent): number {
   return (
-    0.35 * score.qualityScore +
-    0.25 * score.evidencePassRate +
-    0.15 * score.costScore +
-    0.1 * score.latencyScore +
-    0.15 * (1 - score.recentFailurePenalty) +
-    0.15 * computeRuntimeCapabilityScore(runtime, intent) +
-    0.05 * runtimePriorityScore(runtime)
+    NORMALIZED_COMPOSITE_WEIGHTS.quality * score.qualityScore +
+    NORMALIZED_COMPOSITE_WEIGHTS.evidence * score.evidencePassRate +
+    NORMALIZED_COMPOSITE_WEIGHTS.health * score.healthScore +
+    NORMALIZED_COMPOSITE_WEIGHTS.cost * score.costScore +
+    NORMALIZED_COMPOSITE_WEIGHTS.latency * score.latencyScore +
+    NORMALIZED_COMPOSITE_WEIGHTS.recentSuccess * (1 - score.recentFailurePenalty) +
+    NORMALIZED_COMPOSITE_WEIGHTS.capability * computeRuntimeCapabilityScore(runtime, intent) +
+    NORMALIZED_COMPOSITE_WEIGHTS.priority * runtimePriorityScore(runtime)
   );
+}
+
+function runtimeHealthScore(health: RuntimeHealth | undefined): number {
+  if (!health) return 1;
+  const vector = health.vector;
+  if (!vector) return health.available ? 1 : 0;
+  let score = 1;
+  if (vector.runtimeOk === false) score -= 0.25;
+  if (vector.authOk === false) score -= 0.25;
+  if (vector.modelOk === false) score -= 0.2;
+  if (vector.quotaOk === false) score -= 0.2;
+  if (vector.rateLimitOk === false) score -= 0.1;
+  return Math.max(0, score);
 }
 
 function compareScoredRuntimes(

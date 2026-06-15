@@ -75,6 +75,7 @@
       "readmeasset/omk-evidence-ledger.svg",
       "readmeasset/omk-logo-mark.svg",
       "readmeasset/omk-provider-lanes.svg"
-    ]
+    ],
+    "omkVersion": "0.79.3"
   }
 }

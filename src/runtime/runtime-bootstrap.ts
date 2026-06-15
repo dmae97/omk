@@ -152,8 +152,25 @@ export async function resolveRuntimeBootstrap(options: {
 }): Promise<RuntimeBootstrap> {
   const providerPolicy = options.provider.trim().toLowerCase() || "auto";
   const env = options.env ?? process.env;
-  const authorityProvider = resolveAuthorityProviderPolicy(providerPolicy, env);
-  const effectiveProviderPolicy = authorityProvider ?? providerPolicy;
+  const resolvedPolicy = await resolveProviderPolicy(providerPolicy, env);
+  if (!resolvedPolicy.ok) {
+    return {
+      ok: false,
+      provider: providerPolicy,
+      providerPolicy,
+      selectedProvider: providerPolicy,
+      selectedRuntimeId: "unresolved",
+      selectedModel: options.model,
+      sessionMode: "advisory-only",
+      authOk: false,
+      modelOk: false,
+      runtimeOk: false,
+      reason: resolvedPolicy.reason,
+      setupHints: resolvedPolicy.remediation,
+    };
+  }
+  const authorityProvider = resolvedPolicy.provider;
+  const effectiveProviderPolicy = authorityProvider;
   const autoSelection = effectiveProviderPolicy === "auto" ? await resolveAutoProvider(env) : undefined;
   const selectedProvider = autoSelection?.provider ?? effectiveProviderPolicy;
   const info = detectProvider(selectedProvider, env);
@@ -204,7 +221,7 @@ export async function resolveRuntimeBootstrap(options: {
     provider: selectedProvider,
     providerPolicy,
     selectedProvider,
-    selectedRuntimeId: autoSelection?.runtimeId ?? info.bin ?? info.envKey ?? "auto",
+    selectedRuntimeId: autoSelection?.runtimeId ?? resolvedPolicy.runtimeId ?? info.bin ?? info.envKey ?? "auto",
     selectedModel: options.model ?? info.modelHint,
     sessionMode: info.sessionMode,
     authOk,
@@ -231,6 +248,56 @@ function providerConfigHasApiKey(configContent: string, provider: string): boole
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export type ResolvedProviderPolicy =
+  | { ok: true; provider: string; runtimeId?: string; reason?: string }
+  | { ok: false; provider: string; reason: string; remediation: string[] };
+
+export async function resolveProviderPolicy(
+  providerPolicy: string,
+  env: Record<string, string | undefined>
+): Promise<ResolvedProviderPolicy> {
+  const normalized = providerPolicy.trim().toLowerCase() || "auto";
+  if (!["authority", "primary", "omk"].includes(normalized)) {
+    return { ok: true, provider: normalized };
+  }
+
+  const configured =
+    env.OMK_AUTHORITY_PROVIDER?.trim().toLowerCase()
+    || env.OMK_DEFAULT_PROVIDER?.trim().toLowerCase();
+
+  if (configured && !["authority", "primary", "omk"].includes(configured)) {
+    return { ok: true, provider: configured, reason: `resolved from OMK_AUTHORITY_PROVIDER` };
+  }
+
+  // Default authority chain: mimo > kimi > auto
+  if (env.MIMO_API_KEY || (await hasProviderConfigApiKey(env, "mimo"))) {
+    return { ok: true, provider: "mimo", runtimeId: "mimo-api", reason: "default authority resolved to mimo" };
+  }
+  if (env.KIMI_API_KEY || (await hasProviderConfigApiKey(env, "kimi"))) {
+    return { ok: true, provider: "kimi", runtimeId: "kimi-api", reason: "default authority resolved to kimi" };
+  }
+  const auto = await resolveAutoProvider(env);
+  if (auto) {
+    return { ok: true, provider: auto.provider, runtimeId: auto.runtimeId, reason: "authority fell back to auto-selected provider" };
+  }
+
+  return {
+    ok: false,
+    provider: normalized,
+    reason: "no authority provider is configured or healthy",
+    remediation: [
+      "Set OMK_AUTHORITY_PROVIDER to a concrete provider (e.g. mimo, kimi, codex).",
+      "Set the provider API key env var (e.g. MIMO_API_KEY, KIMI_API_KEY).",
+      "Or configure [providers.<name>] api_key in ~/.omk/config.toml.",
+    ],
+  };
+}
+
+async function hasProviderConfigApiKey(env: Record<string, string | undefined>, provider: string): Promise<boolean> {
+  const configContent = readHomeProviderConfig(env, ".omk");
+  return configContent ? providerConfigHasApiKey(configContent, provider) : false;
 }
 
 function resolveAuthorityProviderPolicy(

@@ -11,14 +11,83 @@ import type { TaskRunner, TaskResult } from "../contracts/orchestration.js";
 import type { TaskRunContext } from "../contracts/worker-context.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentRunResult } from "./agent-runtime.js";
+import type { AgentRunResult, AgentTask } from "./agent-runtime.js";
 import { toTaskResult } from "./agent-runtime.js";
+import { checkEvidenceGate } from "./contracts/evidence.js";
 import { capsuleToTask } from "./context-broker-converter.js";
 import { applyTaskRunContextToAgentTask, envFromWorkerManifest } from "./worker-manifest.js";
 import { createRuntimeRegistry, type RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRouter } from "./runtime-router.js";
 import { createContextBroker } from "./context-broker.js";
+import type { ContextCapsule } from "./context-capsule.js";
 import { maybeCompactWithHeadroom } from "./headroom-policy.js";
+
+const REQUIRED_CONTEXT_SECTIONS = [
+  "task",
+  "node routing",
+  "evidence requirements",
+  "safety constraints",
+  "capabilities",
+];
+
+interface CompactValidationResult {
+  readonly ok: boolean;
+  readonly missing: readonly string[];
+}
+
+function validateCompactedContext(
+  compactedText: string,
+  capsule: ContextCapsule,
+): CompactValidationResult {
+  const lower = compactedText.toLowerCase();
+  const missing: string[] = [];
+
+  // Task section: compacted text should mention at least part of the task prompt.
+  const taskLower = capsule.task.toLowerCase().trim();
+  if (taskLower.length > 0 && !lower.includes(taskLower.slice(0, Math.min(40, taskLower.length)))) {
+    missing.push("task");
+  }
+
+  // Node routing section: provider, risk, and sandbox/readOnly must be recoverable.
+  const routing = capsule.node.routing;
+  if (routing) {
+    if (routing.provider && !lower.includes(routing.provider.toLowerCase())) missing.push("node routing provider");
+    if (routing.risk && !lower.includes(routing.risk.toLowerCase())) missing.push("node routing risk");
+    if (routing.sandboxMode && !lower.includes(routing.sandboxMode.toLowerCase())) missing.push("node routing sandboxMode");
+    if (routing.readOnly === true && !lower.includes("read-only") && !lower.includes("readonly")) {
+      missing.push("node routing readOnly");
+    }
+  }
+
+  // Evidence requirements: required gates should be preserved.
+  const requiredGates = capsule.evidenceRequirements
+    .filter((e) => e.required)
+    .map((e) => e.gate.toLowerCase());
+  if (requiredGates.length > 0) {
+    const hasAnyGate = requiredGates.some((gate) => lower.includes(gate));
+    if (!hasAnyGate) missing.push("evidence requirements");
+  }
+
+  // Safety constraints: system instruction should remain in the compacted text or explicitly referenced.
+  const systemLower = capsule.system.toLowerCase();
+  const safetyMarkers = ["preserve", "safety", "constraints", "evidence required", "capabilities"];
+  const hasSafetyMarker = safetyMarkers.some((marker) => lower.includes(marker));
+  const hasSystemOverlap = systemLower.length > 0 && lower.includes(systemLower.slice(0, Math.min(60, systemLower.length)));
+  if (!hasSafetyMarker && !hasSystemOverlap) missing.push("safety constraints");
+
+  // Capability manifest: assigned provider capabilities should be mentioned.
+  const assignedCaps = new Set(routing?.assignedProviderCapabilities?.map((c) => c.toLowerCase()) ?? []);
+  if (assignedCaps.size > 0) {
+    const hasAnyCap = Array.from(assignedCaps).some((cap) => lower.includes(cap));
+    if (!hasAnyCap) missing.push("capabilities");
+  }
+
+  return { ok: missing.length === 0, missing };
+}
+
+function buildMissingContextGuardNote(missing: readonly string[]): string {
+  return `Headroom compaction removed required sections: ${missing.join(", ")}; using original capsule.`;
+}
 import { DeepSeekRuntime } from "./deepseek-runtime.js";
 import { CodexRuntime } from "./codex-runtime.js";
 import { createOpencodeCliAdapter } from "../adapters/opencode/opencode-cli-adapter.js";
@@ -40,6 +109,7 @@ export interface RuntimeBackedTaskRunnerOptions {
   runId?: string;
   goal?: string;
   onOutput?: (text: string) => void;
+  headroomCompactor?: (text: string) => Promise<string | null>;
 }
 
 async function createDefaultRuntimeRegistry(
@@ -147,6 +217,47 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+
+
+function applyCompactedTextToCapsule(
+  capsule: ContextCapsule,
+  compactedText: string,
+): ContextCapsule {
+  const trimmed = compactedText.trim();
+  if (trimmed.length === 0) return capsule;
+  const originalSize = JSON.stringify(capsule).length;
+  if (trimmed.length >= originalSize) return capsule;
+  // If compaction stripped required structural context, keep original but note the guard.
+  const validation = validateCompactedContext(trimmed, capsule);
+  if (!validation.ok) {
+    return {
+      ...capsule,
+      system: [
+        capsule.system,
+        "",
+        "[OMK headroom compacted context]",
+        `Headroom compaction removed required sections: ${validation.missing.join(", ")}; using original capsule.`,
+      ].filter(Boolean).join("\n"),
+      budget: { ...capsule.budget, compression: "summary" },
+    };
+  }
+  return {
+    ...capsule,
+    system: [
+      capsule.system,
+      "",
+      "[OMK headroom compacted context]",
+      "The original context capsule was compacted before runtime dispatch. Preserve task, node routing, evidence requirements, and safety constraints below.",
+      trimmed,
+    ].filter(Boolean).join("\n"),
+    dependencySummaries: [],
+    relevantFiles: [],
+    graphMemory: [],
+    priorAttempts: [],
+    budget: { ...capsule.budget, compression: "summary" },
+  };
+}
+
 export async function createRuntimeBackedTaskRunner(
   options: RuntimeBackedTaskRunnerOptions
 ): Promise<TaskRunner> {
@@ -177,14 +288,23 @@ export async function createRuntimeBackedTaskRunner(
           }
         : undefined;
       const { capsule, headroomDecision } = await contextBroker.buildCapsule(node, runState);
+      let effectiveCapsule = capsule;
+      let headroomCompaction: { compacted: boolean; via: string } | undefined;
       // CTX guard: compact via headroom before the context window crosses the threshold (~90%).
       if (headroomDecision?.shouldCompact) {
-        await maybeCompactWithHeadroom({
+        const compactResult = await maybeCompactWithHeadroom({
           decision: headroomDecision,
           text: JSON.stringify(capsule),
+          runHeadroom: options.headroomCompactor,
         }).catch(() => undefined);
+        if (compactResult) {
+          headroomCompaction = { compacted: compactResult.compacted, via: compactResult.via };
+          if (compactResult.compactedText) {
+            effectiveCapsule = applyCompactedTextToCapsule(capsule, compactResult.compactedText);
+          }
+        }
       }
-      const routing = capsule.node.routing;
+      const routing = effectiveCapsule.node.routing;
       const providerFallbackChain = options.fallbackChain
         ?? (routing?.fallbackProvider ? [routing.fallbackProvider] : []);
       const abortSignal = signal ?? new AbortController().signal;
@@ -194,7 +314,7 @@ export async function createRuntimeBackedTaskRunner(
         ...(env ?? {}),
         ...(runContext ? envFromWorkerManifest(runContext.worker) : {}),
       };
-      const baseTask = applyTaskRunContextToAgentTask(await capsuleToTask(capsule, {
+      const baseTask = applyTaskRunContextToAgentTask(await capsuleToTask(effectiveCapsule, {
         signal: abortSignal,
         cwd: options.cwd,
         env: taskEnv,
@@ -204,14 +324,50 @@ export async function createRuntimeBackedTaskRunner(
         ? { ...baseTask, context: { ...baseTask.context, onOutput: options.onOutput } }
         : baseTask;
 
-      const agentResult: AgentRunResult = await runtimeRouter.executeTask(task, capsule, abortSignal);
+      const evidenceRequired = effectiveCapsule.node.routing?.evidenceRequired === true || isHighRiskTask(task);
+      const evidenceCheck = checkEvidenceGate(evidenceRequired, effectiveCapsule.node.outputs, null);
+      if (evidenceRequired && !evidenceCheck.satisfied) {
+        return {
+          success: false,
+          exitCode: 78,
+          stdout: "",
+          stderr: `[omk] Evidence gate required but missing: ${evidenceCheck.reason}`,
+          metadata: {
+            evidenceRequired,
+            evidenceCheck,
+            fallbackChain: task.providerPolicy.fallbackChain,
+          },
+        };
+      }
+
+      const agentResult: AgentRunResult = await runtimeRouter.executeTask(task, effectiveCapsule, abortSignal);
       const taskResult = toTaskResult(agentResult);
+
+      // Post-execution evidence check for tasks that produced no metadata gate
+      if (evidenceRequired && agentResult.success) {
+        const postCheck = checkEvidenceGate(true, effectiveCapsule.node.outputs, taskResult.metadata ?? null);
+        if (!postCheck.satisfied) {
+          return {
+            success: false,
+            exitCode: 78,
+            stdout: taskResult.stdout,
+            stderr: `[omk] Evidence gate required but task produced no replayable evidence: ${postCheck.reason}`,
+            metadata: {
+              ...taskResult.metadata,
+              evidenceRequired,
+              evidenceCheck: postCheck,
+            },
+          };
+        }
+      }
 
       // Ensure routing metadata is present even if the router failed to attach it
       taskResult.metadata = {
         ...(taskResult.metadata ?? {}),
         fallbackChain: task.providerPolicy.fallbackChain,
+        ...(headroomCompaction && { headroomCompaction }),
         ...(runContext && { workerOwner: runContext.worker.owner }),
+        ...(evidenceRequired && { evidenceRequired, evidenceCheck: evidenceCheck }),
       };
 
       return taskResult;
@@ -224,4 +380,8 @@ export async function createRuntimeBackedTaskRunner(
   (runner as unknown as Record<string, unknown>)._registry = registry;
 
   return runner;
+}
+
+function isHighRiskTask(task: AgentTask): boolean {
+  return task.capabilities.write === true || task.capabilities.patch === true || task.capabilities.shell === true || task.capabilities.merge === true;
 }

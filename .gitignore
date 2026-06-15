@@ -66,6 +66,12 @@ proof/**/*.jsonl
 # Local spec outputs / generated daily docs
 .specify/
 specs/
+!specs/
+!specs/constitution.md
+!specs/templates/
+!specs/templates/**
+!specs/001-omk-0793-machine-checkable-hardening/
+!specs/001-omk-0793-machine-checkable-hardening/**
 /docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
 /docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-plan.md
 /docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-improvements.md

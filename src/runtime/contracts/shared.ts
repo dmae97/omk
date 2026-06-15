@@ -39,9 +39,20 @@ export interface RuntimeCapabilities {
   supportsToolCalling?: boolean;
 }
 
+export interface RuntimeHealthVector {
+  runtimeOk: boolean;
+  authOk: boolean;
+  modelOk: boolean;
+  quotaOk: boolean;
+  rateLimitOk?: boolean;
+  latencyMs?: number;
+}
+
 export interface RuntimeHealth {
   runtimeId: RuntimeId;
   available: boolean;
   reason?: string;
   checkedAt: string;
+  /** Structured health signals beyond a binary available flag. */
+  vector?: RuntimeHealthVector;
 }

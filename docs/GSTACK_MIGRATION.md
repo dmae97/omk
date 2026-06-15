@@ -1,7 +1,7 @@
 # External Multi-Agent Stack → OMK Migration Guide
 
 > Generic migration path from any external multi-agent orchestration stack (e.g., gstack, custom frameworks) to OMK.
-> OMK v1.1.18+ with externalized skill presets.
+> OMK `open-multi-agent-kit@0.79.3` (`v1.2` runtime contract family, `pre-1.0`) with externalized skill presets, scoped MCP/skills/hooks, evidence gates, and provider-neutral runtime routing.
 
 ## Why Migrate to OMK
 

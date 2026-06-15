@@ -25,6 +25,7 @@ export interface HeadroomDecision {
 export interface HeadroomCompactResult {
   readonly compacted: boolean;
   readonly via: "headroom" | "fallback" | "none";
+  readonly compactedText?: string;
 }
 
 // ─── Defaults ────────────────────────────────────────────────────────────────
@@ -141,7 +142,7 @@ export async function maybeCompactWithHeadroom(args: {
       const runner = args.runHeadroom ?? defaultRunHeadroom;
       const result = await runner(args.text);
       if (result !== null) {
-        return { compacted: true, via: "headroom" };
+        return { compacted: true, via: "headroom", compactedText: result };
       }
     } catch {
       // Headroom threw — fall through to fallback

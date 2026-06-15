@@ -79,6 +79,12 @@ export interface DagNodeRouting {
     };
     reason: string;
   }>;
+  riskTrace?: {
+    risk?: string;
+    confidence?: number;
+    matchedSignal?: string;
+    readOnlyOverride?: boolean;
+  };
   replanHint?: {
     criterionId?: string;
     artifactRef?: string;

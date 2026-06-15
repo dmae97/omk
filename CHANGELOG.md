@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added project-local spec-kit artifacts under `.speckit/` and `specs/` for OMK 0.79.3 machine-checkable hardening.
+
+### Changed
+
+- Refreshed current-facing docs and roadmap language to align with `open-multi-agent-kit@0.79.3`, runtime contract family `v1.2`, and `pre-1.0` release-channel claims.
+
 ## v0.79.3 — GLM 5.2 max thinking, scroll-safe TTY, and OSS CLI polish (2026-06-15)
 
 ### Added

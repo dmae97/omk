@@ -1,15 +1,17 @@
 # Roadmap
 
-Current source version: v1.1.18
-Last updated: 2026-05-24
+Current source version: `open-multi-agent-kit@0.79.3` (`pre-1.0`; runtime contract family `v1.2`)
+Last updated: 2026-06-15
 
-## 2026-05-24 runtime hardening status
+## 2026-06-15 release truth status
 
-Latest pushed source on `new-origin/main` is `6305e2b62185c11549f59e2340936769a3027cdd`. This supersedes the earlier native-root pivot commit in the same line. The architecture direction remains OMK-as-root with Kimi as the default coding adapter, but the current line is still hardening-gated:
+Current source and npm target is `open-multi-agent-kit@0.79.3` on the `v1.2` runtime contract family and `pre-1.0` release channel.
 
-- GitHub Actions Smoke Test is green on `6305e2b`.
-- GitHub Actions CI is red on Windows jobs on `6305e2b`; do not publish/tag v1.1.18 until this is fixed.
-- The active architecture backlog is now tracked in `docs/native-root-runtime-hardening.md`, `docs/native-root-runtime-algorithms.md`, and `.omk/specs/native-orchestrator-phase1/`.
+- Main CI and main Smoke are green on the `0.79.3` release commit.
+- Tag Release and tag Smoke are green for `v0.79.3`.
+- npm `latest` is registry-verified as `open-multi-agent-kit@0.79.3`.
+- OS-level sandboxing is still planned, not claimed; current safety relies on authority gates, approval policy, evidence, replay, and scoped runtime capabilities.
+- The active architecture backlog is tracked in `docs/native-root-runtime-hardening.md`, `docs/native-root-runtime-algorithms.md`, and `.omk/specs/native-orchestrator-phase1/`.
 
 ## v1.1.9 reality
 
@@ -17,7 +19,7 @@ Provider routing and graph viewing are no longer purely future work:
 
 - `omk run`, `omk parallel`, and DAG replay expose `--provider auto|kimi`.
 - `omk provider` / `omk deepseek` manage DeepSeek enablement, key setup, availability checks, and default fallback to the most mature adapter.
-- DeepSeek is an opportunistic read-only/advisory worker; Kimi remains the most mature adapter, orchestrator, writer, merger, and final authority.
+- DeepSeek and similar API providers remain read/review/advisory by default; write/shell/merge authority is selected by runtime-mode capability, health, approval policy, and sandbox constraints.
 - `omk graph view` generates an HTML view from `.omk/memory/graph-state.json`.
 - `omk goal` has a persisted lifecycle, continue loop, generated plan/evidence criteria, and verification flow.
 
@@ -67,13 +69,14 @@ Provider routing and graph viewing are no longer purely future work:
 ### P0: release and contract gates
 
 - Done: YAML validation now runs in local `verify` plus CI/smoke workflows.
-- Done: package dry-pack, package audit, tarball smoke, native safety build, and release matrix gates were re-verified against v1.1.17 artifacts.
-- Required before v1.1.18 publish/tag: regenerate the native safety binary, pass package audit, pass smoke-pack/tarball install smoke, and pass `npm run release:check` on the exact intended release diff.
-- Required before v1.1.18 publish/tag: GitHub Actions CI and Smoke Test must both pass on the exact intended commit.
-- Done: provider/deepseek and screenshot JSON command contracts gained hermetic regression tests.
-- Done: current AGENTS/init templates and packaged workflow skills were aligned with the active skills/MCP/agents/harness surface, including all generated agent MCP/skills/hooks flags and parallel subagent orchestration guidance.
-- Remaining: lock runtime safety gates for native turn risk, approval/sandbox propagation, authority-provider resolution, provider health probes, and DeepSeek read-only routing.
-- Remaining: lock broader provider fallback metadata with tests for rate limit, timeout, and default fallback variants.
+- Done: package dry-pack, package audit, tarball smoke, release matrix gates, GitHub Release, and npm registry verification were re-verified for `0.79.3`.
+- Done: `version:check` now validates current-version Markdown claims in README, docs, ROADMAP, and init templates.
+- Done: native turn risk defaults are safer: explicit read-only constraints override write keywords, ambiguous turns fall back to `ask`, and write/shell/merge turns require evidence gates.
+- Done: tool authority has staged `shadow|warn|enforce` modes, with native turn dispatch blocking in enforce mode.
+- Done: runtime routing is health-aware for async execution paths and records `executeTask` decision traces.
+- Done: headroom compaction can feed the effective runtime context capsule.
+- Required before any future publish/tag: pass `npm run release:check`, tag CI/smoke, tarball install smoke, package audit, and registry verification on the exact intended release diff.
+- Remaining: expand provider health from available/unavailable to binary/auth/model/quota/rate-limit/latency vectors across all adapters.
 - Remaining: define minimum machine-readable CLI envelopes for the rest of the automation-critical commands.
 
 ### P1: observability and diagnostics
@@ -95,8 +98,8 @@ Provider routing and graph viewing are no longer purely future work:
 
 ### Provider routing maturity
 
-- Keep Kimi as the most mature adapter and main orchestrator, planner, merger, and final synthesis runtime.
-- Use provider hints for explorer, reviewer, QA, planner, and documentation roles only when preflight is healthy and task risk is low.
+- Keep authority at the runtime-mode level: API runtimes are advisory/read/review unless a runtime-mode contract grants write/shell/merge authority.
+- Use provider hints for explorer, reviewer, QA, planner, and documentation roles only when runtime health is acceptable and task risk is low.
 - Record provider attempts, route confidence, fallback reason, and final authority in run evidence.
 
 ### Graph and memory maturity

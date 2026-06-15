@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
 const { shouldUseDirectKimiFallback } = await import("../dist/commands/chat/runtime.js");
-const { buildNativeRootLoopTurnNode, shouldRunNativeParallelTurn } = await import("../dist/commands/chat/native-root-loop.js");
+const { buildNativeRootLoopTurnNode, shouldRunNativeParallelTurn, executeNativeRootTurn } = await import("../dist/commands/chat/native-root-loop.js");
 const { buildCapabilityInjection, applyCapabilityInjectionToRouting } = await import("../dist/runtime/capability-injection.js");
 const { compileBloatToNlp, filterMcpConfigForRuntime } = await import("../dist/runtime/debloat-nlp.js");
 const { capsuleToTask } = await import("../dist/runtime/context-broker-converter.js");
@@ -393,7 +393,7 @@ test("filterMcpConfigForRuntime keeps only sidecar-selected servers", () => {
 test("buildNativeRootLoopTurnNode compiles scoped MCP, skills, and hooks through DNC", () => {
   const node = buildNativeRootLoopTurnNode({
     bootstrap: codexBootstrap,
-    prompt: "hello",
+    prompt: "implement hello handler",
     nodeId: "turn-test",
     mcpAllowlist: ["github", "omk-project"],
     skillNames: ["omk-repo-explorer"],
@@ -413,9 +413,9 @@ test("buildNativeRootLoopTurnNode compiles scoped MCP, skills, and hooks through
   deepStrictEqual(node.routing?.assignedCapabilities?.mcpServers, ["omk-project"]);
   deepStrictEqual(node.routing?.assignedCapabilities?.skills, []);
   deepStrictEqual(node.routing?.promptMode, "dnc-nlp");
-  deepStrictEqual(node.routing?.runtimeSidecar?.intent, "chat");
+  deepStrictEqual(node.routing?.runtimeSidecar?.intent, "code_edit");
   ok(node.name.includes("You are the OMK root coordinator."));
-  ok(node.name.includes(JSON.stringify("hello")));
+  ok(node.name.includes(JSON.stringify("implement hello handler")));
   ok(!node.name.includes("Schema: omk.prompt-envelope/v1"));
   ok(!node.name.includes("github"));
   ok(!node.name.includes("omk-repo-explorer"));
@@ -441,7 +441,7 @@ test("native root loop treats optional MCP as non-required runtime MCP", () => {
   ok(node.routing?.rationale?.includes("required-only"));
 });
 
-test("ambiguous native chat turns default to full orchestration authority", async () => {
+test("ambiguous native chat turns default to ask/read-only authority", async () => {
   for (const prompt of ["g", "ㅎ", "ㅎㅇ", "hello"]) {
     const node = buildNativeRootLoopTurnNode({
       bootstrap: codexBootstrap,
@@ -464,16 +464,107 @@ test("ambiguous native chat turns default to full orchestration authority", asyn
       budget: { maxInputTokens: 16000, compression: "normal" },
     });
 
-    deepStrictEqual(node.routing?.risk, "write");
-    deepStrictEqual(node.routing?.readOnly, false);
-    deepStrictEqual(node.routing?.sandboxMode, "workspace-write");
-    deepStrictEqual(node.routing?.assignedProviderCapabilities, ["write", "patch"]);
-    ok(node.name.includes("Sandbox: workspace-write"));
-    deepStrictEqual(task.context.risk, "write");
-    deepStrictEqual(task.context.sandboxMode, "workspace-write");
-    deepStrictEqual(task.capabilities.write, true);
-    deepStrictEqual(task.capabilities.patch, true);
+    deepStrictEqual(node.routing?.risk, "ask");
+    deepStrictEqual(node.routing?.readOnly, true);
+    deepStrictEqual(node.routing?.sandboxMode, "read-only");
+    deepStrictEqual(node.routing?.assignedProviderCapabilities, ["read"]);
+    ok(node.name.includes("Sandbox: read-only"));
+    deepStrictEqual(task.context.risk, "ask");
+    deepStrictEqual(task.context.sandboxMode, "read-only");
+    deepStrictEqual(task.capabilities.write, false);
+    deepStrictEqual(task.capabilities.patch, false);
     deepStrictEqual(task.capabilities.shell, false);
+  }
+});
+
+test("native read-only constraints override write keywords", () => {
+  const node = buildNativeRootLoopTurnNode({
+    bootstrap: codexBootstrap,
+    prompt: "fix without changing files; read-only review only",
+    nodeId: "turn-readonly-override",
+  });
+
+  deepStrictEqual(node.routing?.risk, "read");
+  deepStrictEqual(node.routing?.readOnly, true);
+  deepStrictEqual(node.routing?.sandboxMode, "read-only");
+  deepStrictEqual(node.routing?.evidenceRequired, false);
+  deepStrictEqual(node.outputs, undefined);
+});
+
+test("native write/shell/merge turns require evidence by default", () => {
+  const cases = [
+    ["implement a small patch", "write", "summary"],
+    ["run npm test", "shell", "command-pass"],
+    ["publish this release", "merge", "summary"],
+  ];
+
+  for (const [prompt, risk, gate] of cases) {
+    const node = buildNativeRootLoopTurnNode({
+      bootstrap: codexBootstrap,
+      prompt,
+      nodeId: `turn-${risk}-evidence`,
+    });
+
+    deepStrictEqual(node.routing?.risk, risk);
+    deepStrictEqual(node.routing?.evidenceRequired, true);
+    deepStrictEqual(node.routing?.riskTrace?.risk, risk);
+    ok(node.routing?.riskTrace?.confidence >= 0.6, `expected confidence >= 0.6 for ${prompt}`);
+    deepStrictEqual(node.outputs?.[0]?.gate, gate);
+    deepStrictEqual(node.outputs?.[0]?.required, true);
+  }
+});
+
+test("native low-confidence ambiguous prompts fall back to ask with trace", () => {
+  const node = buildNativeRootLoopTurnNode({
+    bootstrap: codexBootstrap,
+    prompt: "hmm maybe something",
+    nodeId: "turn-ambiguous",
+  });
+
+  deepStrictEqual(node.routing?.risk, "ask");
+  deepStrictEqual(node.routing?.riskTrace?.risk, "ask");
+  ok(node.routing?.riskTrace?.confidence < 0.6, "expected low confidence for ambiguous prompt");
+  deepStrictEqual(node.routing?.evidenceRequired, false);
+});
+
+test("executeNativeRootTurn captures artifact write failures in metadata", async () => {
+  const node = buildNativeRootLoopTurnNode({
+    bootstrap: codexBootstrap,
+    prompt: "hello",
+    nodeId: "turn-artifact-diag",
+  });
+  const tmpRoot = mkdtempSync(join(tmpdir(), "omk-artifact-diag-"));
+  const runId = "run-artifact-diag";
+  const runDir = join(tmpRoot, ".omk", "runs", runId);
+  mkdirSync(runDir, { recursive: true });
+  // Create a regular file at the turns path so mkdir/append fail deterministically.
+  writeFileSync(join(runDir, "turns"), "block-dir", "utf8");
+
+  const previousProjectRoot = process.env.OMK_PROJECT_ROOT;
+  process.env.OMK_PROJECT_ROOT = tmpRoot;
+  try {
+    const result = await executeNativeRootTurn({
+      taskRunner: {
+        async run() {
+          return { success: true, exitCode: 0, stdout: "ok", stderr: "", metadata: {} };
+        },
+      },
+      node,
+      env: { OMK_RUN_ID: runId },
+      signal: new AbortController().signal,
+      heartbeatEnabled: false,
+    });
+
+    deepStrictEqual(result.success, true);
+    ok(result.metadata?.artifactWriteDiagnostics, "expected artifact write diagnostics");
+    ok(
+      result.metadata.artifactWriteDiagnostics.routingWrite || result.metadata.artifactWriteDiagnostics.resultWrite,
+      JSON.stringify(result.metadata.artifactWriteDiagnostics),
+    );
+  } finally {
+    if (previousProjectRoot === undefined) delete process.env.OMK_PROJECT_ROOT;
+    else process.env.OMK_PROJECT_ROOT = previousProjectRoot;
+    rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
 
@@ -557,12 +648,12 @@ test("/model applies a session model override to the next native turn", () => {
   deepStrictEqual(capture.envModel, "codex-cli");
 });
 
-test("native loop routes ambiguous Korean input as workspace-write orchestration", () => {
+test("native loop routes ambiguous Korean input as ask/read-only orchestration", () => {
   const result = runNativeLoopInput("ㅎㅇ\n/exit\n");
 
   const combinedOutput = `${result.stdout}\n${result.stderr}`;
   deepStrictEqual(result.status, 0, result.stderr);
-  ok(/routing: provider=codex model=codex-cli default risk=write sandbox=workspace-write/.test(combinedOutput), combinedOutput);
+  ok(/routing: provider=codex model=codex-cli default risk=ask sandbox=read-only/.test(combinedOutput), combinedOutput);
   ok(/TASK_RUNNER_CALLS=1/.test(combinedOutput), combinedOutput);
 });
 

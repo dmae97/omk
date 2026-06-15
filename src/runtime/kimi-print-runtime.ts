@@ -40,6 +40,29 @@ export function createKimiPrintRuntime(options: KimiPrintRuntimeOptions = {}): A
         };
       }
 
+      const routing = capsule.node?.routing;
+      const approvalPolicy = routing?.approvalPolicy ?? routing?.executionPrompt;
+      const sandboxMode = routing?.sandboxMode;
+      const capabilities = routing?.assignedProviderCapabilities ?? [];
+      const isAdvisory =
+        sandboxMode === "read-only" ||
+        capabilities.length === 0 ||
+        capabilities.every((c) => ["read", "review"].includes(c));
+      const requiresWriteShellMerge = capabilities.some((c) =>
+        ["write", "patch", "shell", "merge"].includes(c)
+      );
+      if (requiresWriteShellMerge && isAdvisory) {
+        const errorMsg = `[omk] kimi-print runtime is advisory/read-only and does not receive write, patch, shell, or merge authority`;
+        process.stderr.write(`${errorMsg}\n`);
+        return {
+          success: false,
+          exitCode: 1,
+          stdout: `[ERROR] ${errorMsg}`,
+          stderr: errorMsg,
+          metadata: { runtime: "kimi-print", error: errorMsg, authorityMode: "advisory" },
+        };
+      }
+
       const runner = createKimiTaskRunner(options);
 
       const resources = await getOmkResourceSettings();
@@ -52,6 +75,8 @@ export function createKimiPrintRuntime(options: KimiPrintRuntimeOptions = {}): A
         OMK_HOOKS_ENABLED: resources.hooksScope === "none" ? "false" : "true",
         OMK_CONTEXT_BUDGET: capsule.budget.compression,
         OMK_TOTAL_TOKENS: String(capsule.budget.maxInputTokens),
+        OMK_APPROVAL_POLICY: approvalPolicy ?? "",
+        OMK_SANDBOX_MODE: sandboxMode ?? (isAdvisory ? "read-only" : "workspace-write"),
         ...(capsule.node ? dagNodeRoutingEnv(capsule.node) : {}),
       };
 

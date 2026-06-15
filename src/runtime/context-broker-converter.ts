@@ -107,7 +107,9 @@ function capabilitiesFromNode(capsule: ContextCapsule): CapabilityManifest {
   const assigned = new Set(routing?.assignedProviderCapabilities ?? []);
   const merge = assigned.has("merge") || role === "merger" || role === "integrator" || role === "orchestrator";
   const write = assigned.has("write") || merge || role === "coder" || role === "executor" || role === "refactorer";
-  const shell = assigned.has("shell") || routing?.requiresToolCalling === true || gates.includes("command-pass") || gates.includes("test-pass");
+  const shell = routing?.readOnly === true
+    ? false
+    : assigned.has("shell") || routing?.requiresToolCalling === true || gates.includes("command-pass") || gates.includes("test-pass");
   const review = assigned.has("review") || role === "reviewer" || role === "qa" || role === "tester" || gates.includes("review-pass");
   const mcp = assigned.has("mcp") || routing?.requiresMcp === true;
   const vision = assigned.has("vision");
@@ -119,7 +121,7 @@ function capabilitiesFromNode(capsule: ContextCapsule): CapabilityManifest {
     mcp,
     patch: routing?.readOnly === true ? false : write,
     review,
-    merge,
+    merge: routing?.readOnly === true ? false : merge,
     vision,
     toolCalling: routing?.requiresToolCalling === true || assigned.has("toolCalling"),
     maxTokens: capsule.budget.maxInputTokens,
