@@ -110,7 +110,9 @@ function termRows(stream: WritableStreamLike): number {
 }
 
 function shouldUseTerminalControls(stream: WritableStreamLike): boolean {
-  return stream.isTTY === true && process.env.TERM !== "dumb";
+  const requested = process.env.OMK_TUI_ALT_SCREEN ?? process.env.OMK_TUI_TERMINAL_CONTROLS;
+  const enabled = /^(1|true|yes|on|full|alt-screen)$/i.test(requested ?? "");
+  return enabled && stream.isTTY === true && process.env.TERM !== "dumb";
 }
 
 function countRows(chunk: string): number {

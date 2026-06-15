@@ -165,7 +165,13 @@ export function buildRoutingSlashCommands(): SlashCommandSpec[] {
             ].join("\n"),
           });
         }
-        const level = !requested || requested === "next" || requested === "tab"
+        if (!requested) {
+          return okSlashResult({
+            statePatch: { thinkingPickerOpen: true, updatedAt: new Date().toISOString() },
+            text: renderThinkingLevelList(ctx, levels),
+          });
+        }
+        const level = requested === "next" || requested === "tab"
           ? nextThinkingLevel(ctx.state.thinking ?? ctx.env.OMK_THINKING, ctx.state.provider, ctx.state.model)
           : normalizeThinkingLevel(requested);
         if (!level || !levels.includes(level)) {
@@ -215,6 +221,32 @@ export function buildRoutingSlashCommands(): SlashCommandSpec[] {
       },
     },
   ];
+}
+
+function renderThinkingLevelList(
+  ctx: SlashCommandContext,
+  levels: readonly string[],
+): string {
+  const current = ctx.state.thinking ?? ctx.env.OMK_THINKING;
+  const levelLine = levels
+    .map((level) => {
+      const label = `${level === current ? "●" : "○"} ${level}`;
+      if (level === current) return style.mintBold(label);
+      if (level === "max" || level === "xhigh") return style.cyanBold(label);
+      return style.gray(label);
+    })
+    .join(style.gray("  "));
+  const active = current
+    ? `${current} (${formatThinkingModelVariant(ctx.state.model, current)})`
+    : "not selected";
+  return [
+    style.phosphorBold("\n  OMK Thinking Control · choose level"),
+    style.phosphorDim(`  Target: ${ctx.state.provider ?? "auto"}/${ctx.state.model ?? "auto"}`),
+    `  ${levelLine}`,
+    style.phosphorDim(`  Choose directly: /think ${levels.join(" | /think ")}`),
+    style.phosphorDim("  Cycle only when explicit: /think next"),
+    style.phosphorDim(`  Active: ${active}\n`),
+  ].join("\n");
 }
 
 function modelRefFromParsed(parsed: ReturnType<typeof parseProviderModelArg>, raw: string): string {

@@ -104,6 +104,7 @@ export interface NativeRootSessionState {
   view?: TuiView;
   animation?: OmkTuiMotion;
   modelPickerOpen?: boolean;
+  thinkingPickerOpen?: boolean;
   activeProviderTab?: string;
   updatedAt?: string;
 }
@@ -112,12 +113,16 @@ async function runSlashHandler(
   handler: SlashCommandSpec,
   parsed: ParsedSlashInput,
   ctx: SlashCommandContext,
+  options: { suppressOutput?: boolean } = {},
 ): Promise<SlashCommandResult> {
   const result = await handler.handler(ctx, parsed.args);
   const normalized = result ?? okSlashResult();
   if (normalized.statePatch) Object.assign(ctx.state, normalized.statePatch);
-  if (ctx.renderer) emitSlashResult(normalized, ctx.renderer);
-  else printSlashResult(normalized);
+  const visibleResult = options.suppressOutput
+    ? { ...normalized, text: undefined, json: undefined, events: [] }
+    : normalized;
+  if (ctx.renderer) emitSlashResult(visibleResult, ctx.renderer);
+  else printSlashResult(visibleResult);
   return normalized;
 }
 
@@ -172,7 +177,125 @@ function explicitProviderTabFromModelLine(
 function isModelPickerLine(line: string, state: NativeRootSessionState): boolean {
   const trimmed = line.trim();
   return /^\/(?:model|m)(?:\s|$)/.test(trimmed)
-    || (state.modelPickerOpen === true && trimmed.length === 0);
+    || (state.modelPickerOpen === true && state.thinkingPickerOpen !== true && trimmed.length === 0);
+}
+
+function isThinkingPickerLine(line: string, state: NativeRootSessionState): boolean {
+  const trimmed = line.trim();
+  return (state.thinkingPickerOpen === true && trimmed.length === 0)
+    || (state.modelPickerOpen !== true && trimmed.length === 0);
+}
+
+function isThinkingSlashCommand(parsed: ParsedSlashInput): boolean {
+  return parsed.command === "/think" || parsed.command === "/thinking" || parsed.command === ":think";
+}
+
+function isThinkingShowSlash(parsed: ParsedSlashInput): boolean {
+  return isThinkingSlashCommand(parsed)
+    && parsed.args.positional.length === 0
+    && parsed.args.flags.json !== true;
+}
+
+function isThinkingFollowupSlash(parsed: ParsedSlashInput): boolean {
+  return parsed.command === "/model"
+    || parsed.command === "/m"
+    || parsed.command === "/use"
+    || parsed.command === ":use";
+}
+
+function shouldOpenThinkingPickerAfterSlash(
+  parsed: ParsedSlashInput,
+  result: SlashCommandResult,
+): boolean {
+  if (!result.ok || !isThinkingFollowupSlash(parsed)) return false;
+  if (parsed.args.positional.length === 0) return false;
+  if (result.statePatch?.thinking) return false;
+  return Boolean(result.statePatch?.model || result.statePatch?.provider || result.statePatch?.bootstrap);
+}
+
+function renderThinkingPickerText(state: NativeRootSessionState): string {
+  const levels = thinkingLevelsFor(state.provider, state.model);
+  const current = state.thinking;
+  const levelLine = levels
+    .map((level) => {
+      const label = `${level === current ? "●" : "○"} ${level}`;
+      if (level === current) return style.mintBold(label);
+      if (level === "max" || level === "xhigh") return style.cyanBold(label);
+      return style.gray(label);
+    })
+    .join(style.gray("  "));
+  const active = current
+    ? `${current} (${formatThinkingModelVariant(state.model, current)})`
+    : "not selected";
+  const firstLevel = levels[0] ?? "medium";
+  return [
+    style.phosphorBold("\n  OMK Thinking Control · choose level"),
+    style.phosphorDim(`  Target: ${state.provider ?? "auto"}/${state.model ?? "auto"}`),
+    `  ${levelLine}`,
+    style.phosphorDim("  Press Tab on an empty prompt to cycle, or run /think <level>."),
+    style.phosphorDim(`  Shortcut: /model ${state.provider ?? "auto"}/${state.model ?? "auto"}:${firstLevel}`),
+    style.phosphorDim(`  Active: ${active}\n`),
+  ].join("\n");
+}
+
+function canUseInteractiveThinkingSelector(
+  input: NativeRootLoopInput,
+  renderer?: CliRenderer,
+): boolean {
+  if (renderer) return false;
+  if (isDisabledEnvValue(input.env.OMK_INTERACTIVE_THINKING_SELECT)) return false;
+  return process.stdin.isTTY === true && process.stderr.isTTY === true;
+}
+
+function applyThinkingLevelToNativeState(
+  input: NativeRootLoopInput,
+  state: NativeRootSessionState,
+  level: string,
+): void {
+  state.thinking = level;
+  state.thinkingPickerOpen = true;
+  state.modelPickerOpen = false;
+  state.updatedAt = new Date().toISOString();
+  input.env.OMK_THINKING = level;
+  input.env.OMK_MODEL_VARIANT = formatThinkingModelVariant(state.model, level);
+}
+
+async function promptThinkingSelection(
+  input: NativeRootLoopInput,
+  state: NativeRootSessionState,
+  renderer?: CliRenderer,
+): Promise<boolean> {
+  if (!canUseInteractiveThinkingSelector(input, renderer)) return false;
+  const levels = thinkingLevelsFor(state.provider, state.model);
+  if (levels.length === 0) return false;
+  try {
+    const { select } = await import("@inquirer/prompts");
+    const selected = await select<string>({
+      message: `Select thinking level for ${state.provider ?? "auto"}/${state.model ?? "auto"}`,
+      choices: levels.map((level) => ({
+        value: level,
+        name: `${level === state.thinking ? "● " : ""}${level}`,
+        description: formatThinkingModelVariant(state.model, level),
+      })),
+      pageSize: Math.min(levels.length, 8),
+      loop: true,
+      default: state.thinking ?? input.env.OMK_THINKING ?? levels[0],
+    }, {
+      input: process.stdin,
+      output: process.stderr,
+      clearPromptOnDone: true,
+    });
+    applyThinkingLevelToNativeState(input, state, selected);
+    process.stderr.write(style.phosphorDim(`\n  Thinking variant: ${selected}\n  Active: ${input.env.OMK_MODEL_VARIANT}\n`));
+    return true;
+  } catch (err: unknown) {
+    const name = err instanceof Error ? err.name : "Error";
+    if (name === "ExitPromptError") {
+      process.stderr.write(style.phosphorDim("\n  Thinking selection cancelled.\n"));
+      return true;
+    }
+    return false;
+  }
 }
 
 function countModelPickerRows(
@@ -983,6 +1106,7 @@ export async function runNativeOmkRootLoop(
     root: input.root,
     cwd: input.activeCwd,
     rootSource: input.rootSource,
+    brandLabel: input.env.OMK_ENTRY_DISPLAY_NAME,
   });
 
   // opencode-style: banner handled by PlainModernRenderer session:start event
@@ -1015,6 +1139,11 @@ export async function runNativeOmkRootLoop(
     if (renderer) renderer.emit({ type: "control:output", text });
     else process.stdout.write(`${text}\n`);
   };
+  const renderThinkingPicker = (): void => {
+    const text = renderThinkingPickerText(state);
+    if (renderer) renderer.emit({ type: "control:output", text });
+    else process.stdout.write(`${text}\n`);
+  };
 
   // Defensive stdin re-validation before the chat readline takes ownership.
   // The first-run GitHub-star / update prompts (@inquirer/prompts) can take
@@ -1040,6 +1169,7 @@ export async function runNativeOmkRootLoop(
             explicitProviderTab,
           });
           state.modelPickerOpen = true;
+          state.thinkingPickerOpen = false;
           state.activeProviderTab = modelPickerState.activeProviderTab;
           modelPickerState.query = line;
           renderModelPicker(explicitProviderTab ? "/model explicit" : "/model");
@@ -1049,6 +1179,7 @@ export async function runNativeOmkRootLoop(
           providerIds: modelProviderIds,
         })) {
           state.modelPickerOpen = true;
+          state.thinkingPickerOpen = false;
           state.activeProviderTab = modelPickerState.activeProviderTab;
           modelPickerState.query = line;
           renderModelPicker("\t", previousActiveProviderTab);
@@ -1056,16 +1187,22 @@ export async function runNativeOmkRootLoop(
         return [[], line];
       }
 
-      if (line.trim().length === 0 || line.trimStart().startsWith("/think")) {
+      if (/^\/(?:think|thinking)\s*$/.test(line.trim()) && state.thinkingPickerOpen !== true) {
+        state.thinkingPickerOpen = true;
+        state.modelPickerOpen = false;
+        renderThinkingPicker();
+        return [[], line];
+      }
+
+      if (isThinkingPickerLine(line, state)) {
         const next = nextThinkingLevel(state.thinking ?? input.env.OMK_THINKING, state.provider, state.model);
         state.thinking = next;
+        state.thinkingPickerOpen = true;
+        state.modelPickerOpen = false;
         state.updatedAt = new Date().toISOString();
         input.env.OMK_THINKING = next;
         input.env.OMK_MODEL_VARIANT = formatThinkingModelVariant(state.model, next);
-        const levels = thinkingLevelsFor(state.provider, state.model).join(" → ");
-        const message = `\n  Thinking: ${next} (${levels}) · ${input.env.OMK_MODEL_VARIANT}\n`;
-        if (renderer) renderer.emit({ type: "control:output", text: style.phosphorDim(message) });
-        else process.stdout.write(style.phosphorDim(message));
+        renderThinkingPicker();
       }
       return [[], line];
     },
@@ -1181,6 +1318,7 @@ export async function runNativeOmkRootLoop(
           });
           modelPickerState.query = "";
           state.modelPickerOpen = true;
+          state.thinkingPickerOpen = false;
           state.activeProviderTab = modelPickerState.activeProviderTab;
           const tabs = buildProviderTabs(modelProviderIds);
           debugModelTabs({
@@ -1198,12 +1336,17 @@ export async function runNativeOmkRootLoop(
         }
 
         try {
+          let slashResult: SlashCommandResult | undefined;
+          const thinkingShow = isThinkingShowSlash(parsedSlash);
+          const interactiveThinkingSelector = canUseInteractiveThinkingSelector(input, renderer);
           await terminalOwner.withChildProcess(rl, async () => {
             const result = await runSlashHandler(
               handler,
               parsedSlash,
               slashContext,
+              { suppressOutput: thinkingShow && interactiveThinkingSelector },
             );
+            slashResult = result;
             if (parsedSlash.command === "/paste" && result.ok) {
               const pasteLine = result.text?.trim();
               if (pasteLine) {
@@ -1214,8 +1357,26 @@ export async function runNativeOmkRootLoop(
             }
             if (result.exit) running = false;
           });
-          if (!modelShow && !isModelSlashCommand(parsedSlash)) {
+          const shouldSelectThinking = slashResult
+            ? (thinkingShow && interactiveThinkingSelector) || shouldOpenThinkingPickerAfterSlash(parsedSlash, slashResult)
+            : false;
+          if (shouldSelectThinking) {
             state.modelPickerOpen = false;
+            state.thinkingPickerOpen = true;
+            state.activeProviderTab = ALL_PROVIDER_TAB;
+            const selected = await terminalOwner.withRawSelector(rl, () =>
+              promptThinkingSelection(input, state, renderer)
+            );
+            if (!selected) renderThinkingPicker();
+          } else if (isThinkingSlashCommand(parsedSlash)) {
+            state.modelPickerOpen = false;
+            state.thinkingPickerOpen = true;
+          } else if (!modelShow && isThinkingFollowupSlash(parsedSlash)) {
+            state.modelPickerOpen = false;
+            state.thinkingPickerOpen = false;
+          } else if (!modelShow && !isModelSlashCommand(parsedSlash)) {
+            state.modelPickerOpen = false;
+            state.thinkingPickerOpen = false;
           }
         } catch (err: unknown) {
           const m = err instanceof Error ? err.message : String(err);
@@ -1230,6 +1391,8 @@ export async function runNativeOmkRootLoop(
         }
         continue;
       }
+      state.modelPickerOpen = false;
+      state.thinkingPickerOpen = false;
       const message = `Unknown command: ${parsedSlash.command}. Type /help for commands.`;
       if (renderer) {
         renderer.emit({ type: "turn:error", message });
@@ -1240,6 +1403,7 @@ export async function runNativeOmkRootLoop(
     }
 
     state.modelPickerOpen = false;
+    state.thinkingPickerOpen = false;
 
     if (shouldRunNativeParallelTurn(state.approvalPolicy)) {
       const turnStartedAt = Date.now();

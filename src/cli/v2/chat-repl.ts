@@ -29,6 +29,7 @@ import {
   initializeModelPickerState,
   providerTabIdForProvider,
 } from "../../providers/model-tabs.js";
+import { formatThinkingModelVariant, nextThinkingLevel, thinkingLevelsFor } from "../../providers/thinking-levels.js";
 
 export interface ChatReplOptions {
   provider?: string;
@@ -43,6 +44,7 @@ export interface ChatReplState {
   thinking?: string;
   modelVariant?: string;
   activeProviderTab?: string;
+  thinkingPickerOpen?: boolean;
 }
 
 export function createChatReplState(options: ChatReplOptions = {}): ChatReplState {
@@ -61,7 +63,11 @@ export function createChatReplCommandBus(
   return bus;
 }
 
-export function applyChatReplSlashResultToState(state: ChatReplState, result: CommandBusResult): void {
+export function applyChatReplSlashResultToState(
+  state: ChatReplState,
+  result: CommandBusResult,
+  rawText?: string,
+): void {
   if (!result.handled || !result.output) return;
   let payload: unknown;
   try {
@@ -72,6 +78,8 @@ export function applyChatReplSlashResultToState(state: ChatReplState, result: Co
   if (!payload || typeof payload !== "object") return;
   const data = payload as { provider?: unknown; model?: unknown; thinking?: unknown; modelVariant?: unknown };
   const routeChanged = typeof data.provider === "string" || typeof data.model === "string";
+  const modelSetRequested = rawText ? /^\/(?:model|m)\s+\S/.test(rawText.trim()) : false;
+  const thinkRequested = rawText ? /^\/(?:think|thinking)(?:\s|$)/.test(rawText.trim()) : false;
   if (typeof data.provider === "string") state.provider = data.provider;
   if (typeof data.model === "string") state.model = data.model;
   if (typeof data.thinking === "string") state.thinking = data.thinking;
@@ -79,6 +87,13 @@ export function applyChatReplSlashResultToState(state: ChatReplState, result: Co
     state.modelVariant = data.modelVariant;
   } else if (routeChanged) {
     delete state.modelVariant;
+  }
+  if (modelSetRequested && routeChanged && typeof data.thinking !== "string") {
+    state.thinkingPickerOpen = true;
+  } else if (thinkRequested || typeof data.thinking === "string") {
+    state.thinkingPickerOpen = true;
+  } else if (rawText && rawText.trimStart().startsWith("/")) {
+    state.thinkingPickerOpen = false;
   }
 }
 function explicitProviderTabFromModelLine(line: string, providerIds: readonly string[]): string | undefined {
@@ -144,7 +159,32 @@ export function prepareChatReplModelPickerForShow(args: {
   });
   args.modelPickerState.query = "";
   args.state.activeProviderTab = args.modelPickerState.activeProviderTab;
+  args.state.thinkingPickerOpen = false;
   return true;
+}
+
+function isThinkingPickerInput(input: string, state: ChatReplState): boolean {
+  return state.thinkingPickerOpen === true && input.trim().length === 0;
+}
+
+function renderChatReplThinkingPicker(state: ChatReplState): string {
+  const levels = thinkingLevelsFor(state.provider, state.model);
+  const current = state.thinking;
+  const levelsText = levels
+    .map((level) => level === current ? `● ${level}` : `○ ${level}`)
+    .join("  ");
+  const active = current
+    ? `${current} (${formatThinkingModelVariant(state.model, current)})`
+    : "not selected";
+  const firstLevel = levels[0] ?? "medium";
+  return [
+    "\n  OMK Thinking Control · choose level",
+    `  Target: ${state.provider ?? "auto"}/${state.model ?? "auto"}`,
+    `  ${levelsText}`,
+    "  Press Tab on an empty prompt to cycle, or run /think <level>.",
+    `  Shortcut: /model ${state.provider ?? "auto"}/${state.model ?? "auto"}:${firstLevel}`,
+    `  Active: ${active}\n`,
+  ].join("\n");
 }
 
 
@@ -167,6 +207,21 @@ export async function startChatRepl(options: ChatReplOptions): Promise<void> {
     prompt: options.json ? "omk> " : `${"\x1b["}36momk>${"\x1b["}0m `,
     completer: (line: string) => {
       const trimmed = line.trim();
+      if (/^\/(?:think|thinking)\s*$/.test(trimmed) && replState.thinkingPickerOpen !== true) {
+        replState.thinkingPickerOpen = true;
+        delete replState.activeProviderTab;
+        console.log(renderChatReplThinkingPicker(replState));
+        return [[], line];
+      }
+      if (isThinkingPickerInput(line, replState)) {
+        const next = nextThinkingLevel(replState.thinking, replState.provider, replState.model);
+        replState.thinking = next;
+        replState.modelVariant = formatThinkingModelVariant(replState.model, next);
+        replState.thinkingPickerOpen = true;
+        delete replState.activeProviderTab;
+        console.log(renderChatReplThinkingPicker(replState));
+        return [[], line];
+      }
       if (/^\/(?:model|m)(?:\s|$)/.test(trimmed) || (trimmed.length === 0 && replState.activeProviderTab)) {
         const previousActiveProviderTab = modelPickerState.activeProviderTab;
         const explicitProviderTab = explicitProviderTabFromModelLine(line, modelProviderIds);
@@ -184,6 +239,7 @@ export async function startChatRepl(options: ChatReplOptions): Promise<void> {
 
         modelPickerState.query = line;
         replState.activeProviderTab = modelPickerState.activeProviderTab;
+        replState.thinkingPickerOpen = false;
         const tabs = buildProviderTabs(modelProviderIds);
         debugModelTabs({
           providerIds: modelProviderIds,
@@ -273,7 +329,8 @@ export async function startChatRepl(options: ChatReplOptions): Promise<void> {
     });
 
     if (busResult.handled) {
-      applyChatReplSlashResultToState(replState, busResult);
+      const thinkingPickerWasOpen = replState.thinkingPickerOpen === true;
+      applyChatReplSlashResultToState(replState, busResult, input);
       if (preparedModelPicker) {
         replState.activeProviderTab = modelPickerState.activeProviderTab;
       } else if (input.startsWith("/") || input.startsWith(":")) {
@@ -283,9 +340,14 @@ export async function startChatRepl(options: ChatReplOptions): Promise<void> {
         router.route(ev);
       }
       router.flush();
+      if (replState.thinkingPickerOpen && !thinkingPickerWasOpen && /^\/(?:model|m)\s+\S/.test(input)) {
+        console.log(renderChatReplThinkingPicker(replState));
+      }
       rl.prompt();
       return;
     }
+
+    replState.thinkingPickerOpen = false;
 
     // For regular messages: classify intent → build sidecar → render
     const intent = classifyIntent(input);

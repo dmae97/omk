@@ -13,7 +13,7 @@ function git(args) {
 
 function revExists(rev) {
   try {
-    git(["rev-parse", "--verify", rev]);
+    execFileSync("git", ["cat-file", "-e", `${rev}^{commit}`], { stdio: "ignore" });
     return true;
   } catch {
     return false;
@@ -25,7 +25,15 @@ if (!revExists(BASE)) {
   process.exit(0);
 }
 
-const added = git(["diff", "--name-only", "--diff-filter=A", `${BASE}..HEAD`])
+let addedRaw = "";
+try {
+  addedRaw = git(["diff", "--name-only", "--diff-filter=A", `${BASE}..HEAD`]);
+} catch {
+  console.log(`[file-size] base ${BASE} cannot be diffed against HEAD; skipping new-file guard`);
+  process.exit(0);
+}
+
+const added = addedRaw
   .split(/\r?\n/)
   .filter(Boolean)
   .filter((file) => INCLUDE.test(file) && EXT.test(file) && existsSync(file));

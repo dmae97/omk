@@ -125,5 +125,5 @@ export function defaultThemeForCapability(cap: TerminalCapability): { name: stri
   if (cap.isCi) {
     return { name: "minimal", mode: "auto" };
   }
-  return { name: "omk", mode: "dark" };
+  return { name: "omk-control-grid-dark", mode: "dark" };
 }

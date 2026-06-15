@@ -24,6 +24,9 @@ test("normalizeModelAlias maps popular model aliases", () => {
   assert.equal(normalizeModelAlias("codex"), "codex-cli");
   assert.equal(normalizeModelAlias("qwen-max"), "qwen3-max");
   assert.equal(normalizeModelAlias("Qwen 3.7 MAX"), "qwen3-max");
+  assert.equal(normalizeModelAlias("glm-5"), "glm-5");
+  assert.equal(normalizeModelAlias("glm5max"), "glm-5");
+  assert.equal(normalizeModelAlias("glm 5.2 max"), "glm-5.2");
 });
 
 test("normalizeModelAlias maps DeepSeek variant aliases", () => {
@@ -60,6 +63,8 @@ test("normalizeProviderId maps popular provider aliases", () => {
   assert.equal(normalizeProviderId("codex"), "codex");
   assert.equal(normalizeProviderId("qwen"), "qwen");
   assert.equal(normalizeProviderId("kimi"), "kimi");
+  assert.equal(normalizeProviderId("bigmodel"), "glm");
+  assert.equal(normalizeProviderId("zhipu"), "glm");
 });
 
 test("parseProviderModelArg resolves provider and model aliases", () => {
@@ -85,5 +90,23 @@ test("parseProviderModelArg resolves provider and model aliases", () => {
   assert.deepEqual(parseProviderModelArg("gpt-4o"), {
     provider: "openrouter",
     model: "gpt-4o",
+  });
+  assert.deepEqual(parseProviderModelArg("glm-5"), {
+    provider: "glm",
+    model: "glm-5",
+  });
+  assert.deepEqual(parseProviderModelArg("glm 5.2 max"), {
+    provider: "glm",
+    model: "glm-5.2",
+    thinkingLevel: "max",
+  });
+  assert.deepEqual(parseProviderModelArg("bigmodel/glm-5-air"), {
+    provider: "glm",
+    model: "glm-5-air",
+  });
+  assert.deepEqual(parseProviderModelArg("zhipu/glm 5.2 max"), {
+    provider: "glm",
+    model: "glm-5.2",
+    thinkingLevel: "max",
   });
 });

@@ -18,7 +18,7 @@ import type {
 } from "./types.js";
 import { DEFAULT_AUTHORITY_PROVIDER } from "./types.js";
 
-export const KNOWN_PROVIDER_IDS = ["mimo", "kimi", "deepseek", "qwen", "codex", "openrouter", "anthropic"] as const satisfies readonly KnownProviderId[];
+export const KNOWN_PROVIDER_IDS = ["mimo", "kimi", "deepseek", "qwen", "codex", "openrouter", "anthropic", "glm"] as const satisfies readonly KnownProviderId[];
 export const QWEN_DASHSCOPE_COMPAT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 export const OPENROUTER_COMPAT_BASE_URL = "https://openrouter.ai/api/v1";
 
@@ -191,6 +191,29 @@ const DEFAULT_PROVIDER_CONFIGS: Record<KnownProviderId, Omit<ProviderRegistryEnt
     planKind: "qwen-coding-plan",
     routing: "advisory",
   },
+  glm: {
+    enabled: false,
+    kind: "openai-compatible",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v1",
+    apiKeyEnv: "BIGMODEL_API_KEY",
+    defaultModel: "glm-5.2",
+    aliases: {
+      default: "glm-5.2",
+      glm: "glm-5.2",
+      "glm-5": "glm-5",
+      "glm-5.2": "glm-5.2",
+      "glm-5-air": "glm-5-air",
+      "glm-5-airx": "glm-5-airx",
+    },
+    capabilities: ["read", "research", "review", "qa", "advisory"],
+    contextWindow: 128_000,
+    reservedOutputTokens: 4096,
+    wireApi: "openai-chat-completions",
+    auth: { method: "api-key-env" },
+    profileType: "runtime",
+    planKind: "runtime",
+    routing: "advisory",
+  },
   openrouter: {
     enabled: false,
     kind: "openai-compatible",
@@ -239,6 +262,7 @@ export function normalizeProviderId(value: string | undefined): ProviderId | "au
   if (lower === "qwen" || lower === "dashscope" || lower === "qwen3" || lower === "qwen-max") return "qwen";
   if (lower === "openrouter" || lower === "openrouter-ai" || lower === "claude" || lower === "anthropic") return "openrouter";
   if (lower === "anthropic-api" || lower === "anthropic-direct" || lower === "claude-api") return "anthropic";
+  if (lower === "glm" || lower === "bigmodel" || lower === "zhipu") return "glm";
   return lower;
 }
 
@@ -272,14 +296,26 @@ export function parseProviderModelArg(value: string | undefined): ProviderModelA
   const slash = modelPart.indexOf("/");
   if (slash > 0) {
     const provider = normalizeProviderId(modelPart.slice(0, slash));
-    const arg: ProviderModelArg = { model: normalizeModelAlias(modelPart.slice(slash + 1)) };
+    let modelSegment = modelPart.slice(slash + 1);
+    const inlineThinking = extractInlineThinkingLevel(modelSegment);
+    if (inlineThinking && !thinkingLevel) {
+      modelSegment = inlineThinking.modelPart;
+      thinkingLevel = inlineThinking.thinkingLevel;
+    }
+    const arg: ProviderModelArg = { model: normalizeModelAlias(modelSegment) };
     if (provider !== "auto") arg.provider = provider;
     return withThinking(arg);
+  }
+  const inlineThinking = extractInlineThinkingLevel(modelPart);
+  if (inlineThinking && !thinkingLevel) {
+    modelPart = inlineThinking.modelPart;
+    thinkingLevel = inlineThinking.thinkingLevel;
   }
   const model = normalizeModelAlias(modelPart);
   if (model === "codex-cli") return withThinking({ provider: "codex", model });
   if (model.startsWith("deepseek-v4-")) return withThinking({ provider: "deepseek", model });
   if (model.startsWith("claude-") || model.startsWith("gpt-") || model.startsWith("anthropic/")) return withThinking({ provider: "openrouter", model });
+  if (model.startsWith("glm-")) return withThinking({ provider: "glm", model });
   return withThinking({ model });
 }
 
@@ -291,6 +327,19 @@ function isThinkingLevelSuffix(suffix: string): boolean {
     "max", "maximum", "full",
   ];
   return thinkingAliases.includes(suffix);
+}
+
+function extractInlineThinkingLevel(
+  value: string,
+): { modelPart: string; thinkingLevel: string } | undefined {
+  const lower = value.trim().toLowerCase().replace(/[_\s]+/g, "-");
+  const match = lower.match(/^(glm-?5(?:\.\d+)?)-?([a-z_ -]+)$/);
+  if (!match) return undefined;
+  const suffix = match[2]?.replace(/[-\s]+/g, "_") ?? "";
+  if (!isThinkingLevelSuffix(suffix)) return undefined;
+  const modelPart = match[1]?.replace(/^glm-?/, "glm-");
+  if (!modelPart) return undefined;
+  return { modelPart, thinkingLevel: suffix.replace(/_/g, "-") };
 }
 
 export function normalizeModelAlias(value: string): string {
@@ -306,6 +355,12 @@ export function normalizeModelAlias(value: string): string {
   if (lower === "codex") return "codex-cli";
   if (lower === "qwen-max" || lower === "qwen3-max") return "qwen3-max";
   if (lower === "qwen-3.7-max" || lower === "qwen3.7-max" || lower === "qwen-3-7-max") return "qwen3-max";
+  const inlineThinking = extractInlineThinkingLevel(trimmed);
+  if (inlineThinking) return inlineThinking.modelPart;
+  if (lower === "glm-5" || lower === "glm5") return "glm-5";
+  if (lower === "glm-5.2" || lower === "glm5.2") return "glm-5.2";
+  if (lower === "glm-5-air") return "glm-5-air";
+  if (lower === "glm-5-airx" || lower === "glm-5-air-x") return "glm-5-airx";
   return trimmed;
 }
 
@@ -455,7 +510,8 @@ export async function providerDoctorStatus(
         : "Codex CLI missing/disabled or authentication not verified; configured authority fallback is active",
     };
   }
-  const apiKeySet = entry.apiKeyEnv ? Boolean((options.env ?? process.env)[entry.apiKeyEnv]?.trim()) : undefined;
+  const env = options.env ?? process.env;
+  const apiKeySet = entry.apiKeyEnv ? Boolean(resolveProviderApiKeyEnvValue(entry, env)?.trim()) : undefined;
   const needsKey = entry.kind === "openai-compatible";
   const available = entry.enabled && (!needsKey || apiKeySet === true);
   return {
@@ -481,6 +537,16 @@ export async function providerDoctorStatus(
         ? `Missing ${entry.apiKeyEnv ?? "provider"} environment variable; configured authority fallback is active`
         : entry.disabledReason ?? "Provider disabled; configured authority fallback is active",
   };
+}
+
+function resolveProviderApiKeyEnvValue(
+  entry: ProviderRegistryEntry,
+  env: NodeJS.ProcessEnv,
+): string | undefined {
+  const primary = entry.apiKeyEnv ? env[entry.apiKeyEnv] : undefined;
+  if (primary?.trim()) return primary;
+  if (entry.id === "glm") return env.GLM_API_KEY ?? env.BIGMODEL_API_KEY;
+  return primary;
 }
 
 function mergeProviderConfig(id: string, stored: GenericProviderConfig | undefined): ProviderRegistryEntry {
@@ -570,6 +636,7 @@ export interface UserModelAliasResolution {
   input: string;
   provider?: ProviderId;
   model: string;
+  thinkingLevel?: string;
   source: "user-alias" | "provider-alias" | "literal";
 }
 
@@ -652,11 +719,12 @@ export async function resolveUserModelAlias(
   const aliased = aliases[normalizeUserAlias(raw)];
   const candidate = aliased ?? raw;
   const parsed = parseProviderModelArg(candidate);
-  if (parsed.provider || parsed.model !== raw) {
+  if (parsed.provider || parsed.model !== raw || parsed.thinkingLevel) {
     return {
       input: raw,
       provider: parsed.provider,
       model: parsed.model ?? candidate,
+      thinkingLevel: parsed.thinkingLevel,
       source: aliased ? "user-alias" : "literal",
     };
   }

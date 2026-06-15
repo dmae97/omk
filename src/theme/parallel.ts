@@ -121,7 +121,8 @@ export function omkCliHero(footer?: string): string {
     : "OMK//CONTROL · neon grid · evidence loop · telemetry bus";
   const heroLines = [
     ...renderFigletTitleLines("OMK", [BRAND_HEX.cyan, BRAND_HEX.purple, BRAND_HEX.magenta, BRAND_HEX.mint]),
-    style.creamBold("open-multi-agent-kit"),
+    style.creamBold("omk"),
+    style.gray("open-multi-agent-kit"),
     style.blueBold(getActiveBrandConsoleLine()),
     style.phosphorDim(controlLine),
     style.phosphorDim("goal-scoped MCP · skills · hooks · worktrees · replay · memory"),
@@ -135,7 +136,7 @@ export function omkCliHero(footer?: string): string {
     heroLines.push("", style.gray(footer));
   }
 
-  return box(heroLines, "OMK — open-multi-agent-kit");
+  return box(heroLines, "omk — open-multi-agent-kit");
 }
 
 export function omkMetaBox(meta?: { directory?: string; session?: string; model?: string }): string {

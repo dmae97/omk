@@ -82,6 +82,8 @@ function buildBaseChatRuntimeEnv(root: string, sessionId: string): Record<string
   const omkNames = [
     "OMK_AUTHORITY_PROVIDER",
     "OMK_CHAT_NO_BANNER",
+    "OMK_ENTRY_DISPLAY_NAME",
+    "OMK_ENTRY_SURFACE",
     "OMK_DEBUG",
     "OMK_DEFAULT_PROVIDER",
     "OMK_MCP_PREFLIGHT",
@@ -126,6 +128,13 @@ function attachSelectedProviderEnv(
     add("KIMI_API_KEY");
     add("KIMI_MODEL");
     add("KIMI_BASE_URL");
+  }
+  if (provider === "glm" || provider === "auto") {
+    add("BIGMODEL_API_KEY");
+    add("GLM_API_KEY");
+    add("GLM_MODEL");
+    add("GLM_BASE_URL");
+    add("BIGMODEL_BASE_URL");
   }
   return next;
 }

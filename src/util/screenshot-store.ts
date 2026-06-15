@@ -30,6 +30,44 @@ export interface PasteScreenshotOptions {
   procVersion?: string;
 }
 
+export interface ScreenshotCaptureCapability {
+  readonly name: string;
+  readonly supported: boolean;
+  readonly mode: "image" | "text" | "raw-key";
+  readonly note: string;
+}
+
+export function listScreenshotCaptureCapabilities(options: PasteScreenshotOptions = {}): ScreenshotCaptureCapability[] {
+  const platform = options.platform ?? process.platform;
+  const wsl = platform === "linux" && isWslEnvironment(options.env, options.procVersion);
+  return [
+    {
+      name: "windows-clipboard-image",
+      supported: platform === "win32" || wsl,
+      mode: "image",
+      note: "PowerShell STA bridge reads Snipping Tool / Ctrl+V image clipboard data.",
+    },
+    {
+      name: "macos-clipboard-image",
+      supported: platform === "darwin",
+      mode: "image",
+      note: "pngpaste or osascript reads image clipboard data.",
+    },
+    {
+      name: "linux-clipboard-image",
+      supported: platform === "linux",
+      mode: "image",
+      note: "wl-paste/xclip reads image clipboard data; WSL tries Windows first.",
+    },
+    {
+      name: "terminal-kit-ctrl-v-text",
+      supported: true,
+      mode: "raw-key",
+      note: "terminal-kit can capture Ctrl+V-style raw key/text clipboard hooks, not image screenshots.",
+    },
+  ];
+}
+
 const IMAGE_MAGIC = new Map<string, number[]>([
   ["png", [0x89, 0x50, 0x4e, 0x47]],
   ["jpg", [0xff, 0xd8, 0xff]],

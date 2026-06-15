@@ -187,6 +187,7 @@ function providerLabel(provider: ProviderId): string {
   if (provider === "commandcode") return "CommandCode";
   if (provider === "openrouter") return "OpenRouter";
   if (provider === "qwen") return "Qwen/DashScope";
+  if (provider === "glm") return "Zhipu GLM";
   return provider;
 }
 

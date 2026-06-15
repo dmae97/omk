@@ -140,30 +140,56 @@ test("System24Renderer honors noColor output option", () => {
   doesNotMatch(stderr.join(""), /\x1b\[/);
 });
 
-test("System24Renderer pins session chrome in an alternate screen scroll region on TTY", () => {
-  const stdout = [];
-  const stderr = [];
-  const renderer = new System24Renderer({
-    stdout: { write: (chunk) => stdout.push(String(chunk)), columns: 100, rows: 32 },
-    stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY: true, columns: 100, rows: 32 },
-  }, GREEN_RAIN_THEME, { noColor: false });
+test("System24Renderer stays scroll-stable by default and pins only when explicitly enabled", () => {
+  const previousAltScreen = process.env.OMK_TUI_ALT_SCREEN;
+  try {
+    delete process.env.OMK_TUI_ALT_SCREEN;
+    const defaultStderr = [];
+    const defaultRenderer = new System24Renderer({
+      stdout: { write: () => undefined, columns: 100, rows: 32 },
+      stderr: { write: (chunk) => defaultStderr.push(String(chunk)), isTTY: true, columns: 100, rows: 32 },
+    }, GREEN_RAIN_THEME, { noColor: false });
+    defaultRenderer.start();
+    defaultRenderer.emit({
+      type: "session:start",
+      runId: "stable-system24",
+      provider: "codex",
+      model: "codex-cli",
+      root: "/tmp/current-bash-root",
+      cwd: "/tmp/current-bash-root",
+      rootSource: "cwd",
+    });
+    defaultRenderer.stop();
+    doesNotMatch(defaultStderr.join(""), /\x1b\[\?1049h/);
 
-  renderer.start();
-  renderer.emit({
-    type: "session:start",
-    runId: "sticky-system24",
-    provider: "codex",
-    model: "codex-cli",
-    root: "/tmp/current-bash-root",
-    cwd: "/tmp/current-bash-root",
-    rootSource: "cwd",
-  });
-  renderer.stop();
+    process.env.OMK_TUI_ALT_SCREEN = "1";
+    const stdout = [];
+    const stderr = [];
+    const renderer = new System24Renderer({
+      stdout: { write: (chunk) => stdout.push(String(chunk)), columns: 100, rows: 32 },
+      stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY: true, columns: 100, rows: 32 },
+    }, GREEN_RAIN_THEME, { noColor: false });
 
-  const output = stderr.join("");
-  match(output, /\x1b\[\?1049h/);
-  match(output, /\x1b\[\d+;32r/);
-  match(output, /\x1b\[\?1049l/);
+    renderer.start();
+    renderer.emit({
+      type: "session:start",
+      runId: "sticky-system24",
+      provider: "codex",
+      model: "codex-cli",
+      root: "/tmp/current-bash-root",
+      cwd: "/tmp/current-bash-root",
+      rootSource: "cwd",
+    });
+    renderer.stop();
+
+    const output = stderr.join("");
+    match(output, /\x1b\[\?1049h/);
+    match(output, /\x1b\[\d+;32r/);
+    match(output, /\x1b\[\?1049l/);
+  } finally {
+    if (previousAltScreen === undefined) delete process.env.OMK_TUI_ALT_SCREEN;
+    else process.env.OMK_TUI_ALT_SCREEN = previousAltScreen;
+  }
 });
 
 test("System24Renderer skips pinned terminal controls for non-TTY and noColor", () => {
@@ -192,29 +218,36 @@ test("System24Renderer skips pinned terminal controls for non-TTY and noColor", 
   }
 });
 
-test("NeonGridRenderer and GreenRainRenderer include their brand header in the pinned region", () => {
-  for (const Renderer of [NeonGridRenderer, GreenRainRenderer]) {
-    const stderr = [];
-    const renderer = new Renderer({
-      stdout: { write: () => undefined, columns: 100, rows: 40 },
-      stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY: true, columns: 100, rows: 40 },
-    });
+test("NeonGridRenderer and GreenRainRenderer include their brand header in the pinned region when opt-in", () => {
+  const previousAltScreen = process.env.OMK_TUI_ALT_SCREEN;
+  try {
+    process.env.OMK_TUI_ALT_SCREEN = "1";
+    for (const Renderer of [NeonGridRenderer, GreenRainRenderer]) {
+      const stderr = [];
+      const renderer = new Renderer({
+        stdout: { write: () => undefined, columns: 100, rows: 40 },
+        stderr: { write: (chunk) => stderr.push(String(chunk)), isTTY: true, columns: 100, rows: 40 },
+      });
 
-    renderer.start();
-    renderer.emit({
-      type: "session:start",
-      runId: "sticky-brand-renderer",
-      provider: "codex",
-      model: "codex-cli",
-      root: "/tmp/current-bash-root",
-      cwd: "/tmp/current-bash-root",
-      rootSource: "cwd",
-    });
-    renderer.stop();
+      renderer.start();
+      renderer.emit({
+        type: "session:start",
+        runId: "sticky-brand-renderer",
+        provider: "codex",
+        model: "codex-cli",
+        root: "/tmp/current-bash-root",
+        cwd: "/tmp/current-bash-root",
+        rootSource: "cwd",
+      });
+      renderer.stop();
 
-    const output = stderr.join("");
-    match(output, /\x1b\[\?1049h/);
-    match(output, /\x1b\[(1[0-9]|2[0-9]);40r/);
-    match(output, /\x1b\[\?1049l/);
+      const output = stderr.join("");
+      match(output, /\x1b\[\?1049h/);
+      match(output, /\x1b\[(1[0-9]|2[0-9]);40r/);
+      match(output, /\x1b\[\?1049l/);
+    }
+  } finally {
+    if (previousAltScreen === undefined) delete process.env.OMK_TUI_ALT_SCREEN;
+    else process.env.OMK_TUI_ALT_SCREEN = previousAltScreen;
   }
 });

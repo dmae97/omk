@@ -539,6 +539,8 @@ test("/model applies a session model override without running a provider turn", 
   deepStrictEqual(result.status, 0, result.stderr);
   ok(/Model override for this session/i.test(result.stdout));
   ok(/codex\/codex-cli → codex-cli/.test(result.stdout));
+  ok(/OMK Thinking Control · choose level/.test(result.stdout));
+  ok(/Target: codex\/codex-cli/.test(result.stdout));
   ok(/TASK_RUNNER_CALLS=0/.test(result.stdout));
 });
 

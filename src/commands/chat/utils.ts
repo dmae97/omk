@@ -64,11 +64,12 @@ export function resolveLayout(requested: ChatLayout | undefined): ChatLayout {
 }
 export function defaultChatUiForBrand(brand: ChatBrand | undefined): ChatUi | undefined {
   if (brand === "green-rain" || brand === "neon-grid" || brand === "rust-forge") return brand;
+  if (brand === undefined || brand === "omk") return "neon-grid";
   return undefined;
 }
 
 export function resolveChatUi(requested: string | undefined, env: NodeJS.ProcessEnv = process.env): ChatUi {
-  const raw = requested ?? env.OMK_UI ?? env.OMK_CHAT_UI ?? "system24";
+  const raw = requested ?? env.OMK_UI ?? env.OMK_CHAT_UI ?? "neon-grid";
   const normalized = raw.trim().toLowerCase();
   if (normalized === "plain-modern" || normalized === "modern" || normalized === "agent-console") return "plain-modern";
   if (normalized === "rich") return "rich";

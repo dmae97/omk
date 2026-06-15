@@ -220,11 +220,29 @@ test("20.7 v2 interactive REPL bus registers /think and applies session state", 
   assert.equal(state.modelVariant, payload.modelVariant);
 
   const modelResult = await bus.dispatch({ kind: "chat", source: "cli", rawText: "/model kimi/kimi-code" });
-  replMod.applyChatReplSlashResultToState(state, modelResult);
+  replMod.applyChatReplSlashResultToState(state, modelResult, "/model kimi/kimi-code");
   assert.equal(state.provider, "kimi");
   assert.equal(state.model, "kimi-code");
   assert.equal(state.modelVariant, undefined, "route changes should clear stale thinking model variants");
+  assert.equal(state.thinkingPickerOpen, true, "model changes should open the follow-up thinking picker");
 });
+test("20.7 v2 interactive REPL /think without args lists levels", async () => {
+  const replMod = await import("../dist/cli/v2/chat-repl.js");
+  const state = replMod.createChatReplState({ provider: "codex", model: "codex-cli" });
+  const bus = replMod.createChatReplCommandBus({}, state);
+
+  const result = await bus.dispatch({ kind: "chat", source: "cli", rawText: "/think" });
+  replMod.applyChatReplSlashResultToState(state, result, "/think");
+
+  assert.equal(result.handled, true, "/think should be handled");
+  const payload = JSON.parse(result.output);
+  assert.equal(payload.thinking, undefined);
+  assert.ok(payload.supportedThinkingLevels.includes("xhigh"));
+  assert.match(result.events.at(-1).data.content, /OMK Thinking Control · choose level/);
+  assert.equal(state.thinking, undefined);
+  assert.equal(state.thinkingPickerOpen, true);
+});
+
 test("20.7 chat REPL prepares /model show with activeProviderTab all before dispatch", async () => {
   const replMod = await import("../dist/cli/v2/chat-repl.js");
   const tabsMod = await import("../dist/providers/model-tabs.js");

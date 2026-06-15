@@ -677,7 +677,9 @@ export function buildProviderOAuthResult(
     ? "DeepSeek"
     : target === "qwen"
       ? "Qwen/DashScope"
-      : target;
+      : target === "glm"
+        ? "Zhipu GLM"
+        : target;
   const setCommand = `omk provider set ${target} --api-key-env ${apiKeyEnv}`;
   const apiKeySetup = target === "deepseek"
     ? `For user-local DeepSeek secret storage, use \`omk deepseek api --from-env ${apiKeyEnv}\`; this command does not do that storage.`
@@ -731,6 +733,7 @@ function defaultApiKeyEnvForProvider(provider: ProviderId): string {
   if (provider === "deepseek") return "DEEPSEEK_API_KEY";
   if (provider === "openrouter") return "OPENROUTER_API_KEY";
   if (provider === "qwen") return "DASHSCOPE_API_KEY";
+  if (provider === "glm") return "BIGMODEL_API_KEY";
   return "PROVIDER_API_KEY";
 }
 

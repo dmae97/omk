@@ -10,6 +10,8 @@ test("OMK CLI hero uses the compact control-plane theme", () => {
 
   const cleanHero = sanitizeTerminalText(hero);
   assert.match(cleanHero, /OMK/);
+  assert.match(cleanHero, /omk — open-multi-agent-kit/i);
+  assert.doesNotMatch(cleanHero, /omk\+/i);
   assert.match(cleanHero, /open-multi-agent-kit/i);
   assert.match(cleanHero, /cyberpunk metrics wall/i);
   assert.match(cleanHero, /goal-scoped MCP .* skills .* hooks/i);
@@ -28,9 +30,11 @@ test("OMK CLI hero uses the compact control-plane theme", () => {
   assert.doesNotMatch(OMK_SIMPLE_ASCII_ART, /kimi❯|hoodie|chocomint/i);
 });
 
-test("CLI theme registry exposes researched OMK control palettes", () => {
+test("CLI theme registry exposes researched OMK control palettes", async () => {
+  const { defaultThemeForCapability } = await import("../dist/cli/theme/terminal-capability.js");
   const themes = listBuiltinThemes();
 
+  assert.ok(themes.includes("omk-control-grid-dark"));
   assert.ok(themes.includes("night-city"));
   assert.ok(themes.includes("night-city-ops"));
   assert.ok(themes.includes("omk-control"));
@@ -41,12 +45,23 @@ test("CLI theme registry exposes researched OMK control palettes", () => {
   assert.ok(themes.includes("rust"));
   assert.ok(themes.includes("cargo"));
   assert.ok(themes.includes("neon-circuit"));
+  assert.ok(themes.includes("chalk-rainbow"));
+  assert.ok(themes.includes("ink-gradient"));
+  assert.ok(themes.includes("terminal-kit"));
+  assert.equal(getBuiltinTheme("omk-control-grid-dark")?.mode, "dark");
   assert.equal(getBuiltinTheme("night-city")?.mode, "dark");
   assert.equal(getBuiltinTheme("neon-grid"), getBuiltinTheme("night-city"));
   assert.equal(getBuiltinTheme("metrics-control"), getBuiltinTheme("night-city"));
   assert.equal(getBuiltinTheme("green-rain")?.mode, "dark");
   assert.equal(getBuiltinTheme("rust"), getBuiltinTheme("rust-forge"));
   assert.equal(getBuiltinTheme("cargo"), getBuiltinTheme("rust-forge"));
+  assert.equal(getBuiltinTheme("chalk-animation"), getBuiltinTheme("chalk-rainbow"));
+  assert.equal(getBuiltinTheme("ink-pastel"), getBuiltinTheme("ink-gradient"));
+  assert.equal(getBuiltinTheme("terminal"), getBuiltinTheme("terminal-kit"));
+  assert.equal(
+    defaultThemeForCapability({ isTty: true, isCi: false, colorDisabled: false, colorDepth: 24, colorTier: "truecolor", unicode: true, width: 120 }).name,
+    "omk-control-grid-dark",
+  );
 });
 
 test("Rust-native accent styles are exposed for terminal theme surfaces", async () => {
