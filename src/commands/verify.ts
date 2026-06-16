@@ -138,6 +138,12 @@ export async function verifyCommand(options: { run?: string; json?: boolean } = 
           gates.push({ nodeId: node.id, type: "command-pass", ref: command });
           break;
         }
+        case "command-pass": {
+          const command = output.ref ?? "";
+          nodeGates.push({ type: "command-pass", command });
+          gates.push({ nodeId: node.id, type: "command-pass", ref: command });
+          break;
+        }
         case "review-pass":
         case "summary": {
           const marker = output.ref ?? "## Summary";
@@ -152,6 +158,14 @@ export async function verifyCommand(options: { run?: string; json?: boolean } = 
             message: `Node "${node.id}" has unrecognized gate type: ${output.gate}`,
           });
       }
+    }
+
+    if (node.routing?.evidenceRequired === true && nodeGates.length === 0) {
+      missing.push({
+        nodeId: node.id,
+        message: `Node "${node.id}" requires evidence but has no replayable evidence gates`,
+      });
+      continue;
     }
 
     if (nodeGates.length === 0) {

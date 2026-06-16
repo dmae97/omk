@@ -993,6 +993,50 @@ test("runtime router redacts secret-like provider stderr before exposing failure
   assert.equal(result.metadata.secretLikeContentRedacted, true);
 });
 
+test("runtime router retains full redacted stderr in private debug artifact", async () => {
+  const root = await mkdtemp(join(tmpdir(), "omk-stderr-retention-"));
+  try {
+    const router = createRuntimeRouter({
+      runtimes: [{
+        id: "codex-cli",
+        providerId: "codex",
+        runtimeMode: "cli",
+        priority: 100,
+        capabilities: workspaceCliCapabilities(),
+        supports: () => true,
+        async runNode() {
+          throw new Error("execute path expected");
+        },
+        async execute() {
+          return { output: `provider failed\n${"x".repeat(700)}\nOPENAI_API_KEY=shortvalue`, exitCode: 1, metadata: { runtime: "codex-cli" } };
+        },
+      }],
+    });
+
+    const result = await router.execute(fakeTask({
+      context: {
+        ...fakeTask().context,
+        runId: "stderr-retention-test",
+        nodeId: "coder-node",
+        cwd: root,
+        env: { OMK_PRIVATE_STDERR_ARTIFACTS: "1" },
+      },
+    }));
+
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.metadata.stderrRetainedPrivately, true);
+    assert.match(result.metadata.stderrPrivateArtifact, /^private\/stderr\//);
+    assert.doesNotMatch(result.stderr, /shortvalue/);
+    const artifact = JSON.parse(await readFile(join(root, ".omk", "runs", "stderr-retention-test", result.metadata.stderrPrivateArtifact), "utf8"));
+    assert.equal(artifact.schemaVersion, "omk.private-stderr.v1");
+    assert.match(artifact.stderr, /x{700}/);
+    assert.doesNotMatch(artifact.stderr, /shortvalue/);
+    assert.match(artifact.stderr, /OPENAI_API_KEY=\*\*\*/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("runtime router synthetic capsule redacts direct task prompt from public node label", async () => {
   let capturedCapsule;
   const secretPrompt = "implement private customer bugfix with token-like marker demo-token-12345";

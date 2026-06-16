@@ -154,6 +154,9 @@ export async function dagReplayCommand(
           case "test-pass":
             gates.push({ type: "command-pass", command: output.ref ?? "npm test" });
             break;
+          case "command-pass":
+            gates.push({ type: "command-pass", command: output.ref ?? "" });
+            break;
           case "review-pass":
           case "summary":
             gates.push({ type: "summary-present", summaryMarker: output.ref ?? "## Summary" });
@@ -161,6 +164,12 @@ export async function dagReplayCommand(
           default:
             break;
         }
+      }
+
+      if (node.routing?.evidenceRequired === true && gates.length === 0) {
+        console.log(style.pink(`  ✗ ${node.id}: evidence-required — no replayable evidence gates declared`));
+        failedCount++;
+        continue;
       }
 
       if (gates.length === 0) continue;

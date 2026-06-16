@@ -102,25 +102,23 @@ Completed foundations:
 - Runtime authority is resolved by `(provider, runtimeMode)` through `src/runtime/authority-matrix.ts`.
 - `OMK_TOOL_AUTHORITY_MODE=enforce` coverage is release-gated through the shared `release:gate-core` script and includes a native-turn subprocess enforcement smoke.
 - Native prompt payloads are private artifacts; public synthetic node labels carry prompt hashes, not raw prompts.
-- `prompt:privacy:check` audits private prompt artifacts against public run artifacts and is part of the release gate.
+- `prompt:privacy:check` audits private prompt artifacts against public run artifacts, decision traces, and graph-memory snapshots, and is part of the release gate.
 - Per-turn route/result artifacts are written best-effort and replay-indexed with SHA-256 hashes.
 - Evidence declarations and produced observations are type-separated; command/test evidence requires high-confidence metadata or artifact observations, not stdout keywords alone.
-- Provider route/evidence audit nodes are materialized into local graph memory on native turns, with Provider/Artifact nodes and route/evidence/artifact edges.
+- Provider route/evidence audit nodes are materialized into local graph memory on native turns, with Provider/Artifact nodes, `EvidenceRequirement -> SATISFIED_BY -> EvidenceObservation` semantics, and route/evidence/artifact edges.
 - Runtime health checks accept requested probe levels so high-risk tasks can trigger cheap/live probe escalation when adapters support it.
-- Runtime router failure stderr is redacted before public exposure.
+- Runtime router failure stderr is redacted before public exposure and can be retained as a private redacted full artifact in debug mode.
 - Mixed-provider advisory reviewer + CLI coder/verifier routing has regression coverage.
 
 ## P0 Backlog
 
 1. Expand individual adapters from accepting requested cheap/live probe levels into real auth/model/quota/rate-limit/latency probe implementations.
-2. Make evidence-required completion blocking uniform across remaining DAG executor, verify, and replay paths.
-3. Keep release evidence current; do not tag/publish while exact-diff CI/smoke or registry verification is missing.
+2. Keep release evidence current; do not tag/publish while exact-diff CI/smoke or registry verification is missing.
 
 ## P1 Backlog
 
-1. Extend prompt-privacy audit from run artifacts to graph memory snapshots and decision traces.
-2. Refine audit graph semantics further with `EvidenceRequirement -> SATISFIED_BY -> EvidenceObservation` edges.
-3. Add provider stderr private full-artifact retention for debug mode while keeping public previews redacted.
+1. Add broader provider stderr private artifact retention to non-router adapter surfaces that bypass `RuntimeRouter`.
+2. Extend exact-diff CI status ingestion once a remote check surface is available in the current runtime.
 
 ## P2 Backlog
 
