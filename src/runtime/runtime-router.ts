@@ -17,8 +17,8 @@ import type { ContextCapsule } from "./context-capsule.js";
 import { createDecisionTraceStore } from "../evidence/decision-trace.js";
 import { runtimeIsAdvisory, runtimeSatisfiesAuthority } from "./authority-matrix.js";
 
-function isAgentFreedomMode(): boolean {
-  const raw = process.env.OMK_AGENT_FREEDOM ?? process.env.OMK_SWEBENCH_MODE ?? "";
+function isStrictGuardrailMode(): boolean {
+  const raw = process.env.OMK_STRICT_GUARDRAIL ?? "";
   const normalized = raw.trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "on";
 }
@@ -1016,7 +1016,7 @@ function runtimeSatisfiesAdvisoryBoundary(runtime: AgentRuntime, task: AgentTask
       reason: `advisory runtime ${runtime.id} cannot execute write/shell/merge/patch/MCP authority`,
     };
   }
-  if (required.toolCalling && !isAgentFreedomMode()) {
+  if (required.toolCalling && isStrictGuardrailMode()) {
     return {
       ok: false,
       reason: `advisory runtime ${runtime.id} cannot execute tool-calling authority unless agent-freedom mode is enabled`,

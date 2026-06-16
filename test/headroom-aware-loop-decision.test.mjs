@@ -1,8 +1,22 @@
-import { describe, it } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { evaluateHeadroomAwareLoopDecision } from "../dist/runtime/headroom-aware-loop-decision.js";
 
 describe("headroom-aware loop decision", () => {
+  const originalStrict = process.env.OMK_STRICT_GUARDRAIL;
+
+  before(() => {
+    process.env.OMK_STRICT_GUARDRAIL = "1";
+  });
+
+  after(() => {
+    if (originalStrict === undefined) {
+      delete process.env.OMK_STRICT_GUARDRAIL;
+    } else {
+      process.env.OMK_STRICT_GUARDRAIL = originalStrict;
+    }
+  });
+
   it("continues when headroom risk is none", () => {
     const result = evaluateHeadroomAwareLoopDecision({
       baseAction: "continue",
@@ -60,5 +74,36 @@ describe("headroom-aware loop decision", () => {
     assert.equal(result.action, "continue");
     assert.equal(result.risk.headroom.kind, "low-compaction-yield");
     assert.equal(result.contextAdjustment.dropLowPriorityGraphMemory, true);
+  });
+});
+
+describe("headroom-aware loop decision default freedom", () => {
+  const originalStrict = process.env.OMK_STRICT_GUARDRAIL;
+
+  before(() => {
+    delete process.env.OMK_STRICT_GUARDRAIL;
+  });
+
+  after(() => {
+    if (originalStrict === undefined) {
+      delete process.env.OMK_STRICT_GUARDRAIL;
+    } else {
+      process.env.OMK_STRICT_GUARDRAIL = originalStrict;
+    }
+  });
+
+  it("does not block repeated validation drift by default", () => {
+    const history = [
+      { attempted: true, applied: false, validated: false, compactedTextProduced: true, beforeTokens: 1000, afterTokens: 900 },
+      { attempted: true, applied: false, validated: false, compactedTextProduced: true, beforeTokens: 1000, afterTokens: 900 },
+    ];
+    const result = evaluateHeadroomAwareLoopDecision({
+      baseAction: "continue",
+      baseReason: "pending nodes remain",
+      baseConfidence: 0.8,
+      headroomHistory: history,
+    });
+    assert.equal(result.action, "continue");
+    assert.ok(result.reason.includes("freedom"));
   });
 });

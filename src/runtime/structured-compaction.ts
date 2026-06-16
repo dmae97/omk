@@ -120,8 +120,8 @@ export function resolveCompactionQualityThreshold(input: { readonly risk?: strin
   return 0.60;
 }
 
-function isAgentFreedomMode(): boolean {
-  const raw = process.env.OMK_AGENT_FREEDOM ?? process.env.OMK_SWEBENCH_MODE ?? "";
+function isStrictGuardrailMode(): boolean {
+  const raw = process.env.OMK_STRICT_GUARDRAIL ?? "";
   const normalized = raw.trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "on";
 }
@@ -140,8 +140,8 @@ export function evaluateCompactionQualityGate(input: CompactionQualityGateInput)
     return { gateDecision: "accept-with-warning", warning: "low compaction quality", threshold };
   }
 
-  if (isAgentFreedomMode()) {
-    return { gateDecision: "accept-with-warning", warning: "low compaction quality accepted under agent-freedom mode", threshold };
+  if (!isStrictGuardrailMode()) {
+    return { gateDecision: "accept-with-warning", warning: "low compaction quality accepted under default freedom mode", threshold };
   }
 
   return {

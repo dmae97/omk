@@ -493,38 +493,48 @@ test("native read-only constraints override write keywords", () => {
 });
 
 test("native risk classifier honors excluded release/npm scopes", () => {
-  const node = buildNativeRootLoopTurnNode({
-    bootstrap: codexBootstrap,
-    prompt: "알고리즘만 수정하고 릴리즈/배포/npm 체크 스크립트는 제외해주세요",
-    nodeId: "turn-negated-release",
-  });
+  process.env.OMK_STRICT_GUARDRAIL = "1";
+  try {
+    const node = buildNativeRootLoopTurnNode({
+      bootstrap: codexBootstrap,
+      prompt: "알고리즘만 수정하고 릴리즈/배포/npm 체크 스크립트는 제외해주세요",
+      nodeId: "turn-negated-release",
+    });
 
-  deepStrictEqual(node.routing?.risk, "write");
-  deepStrictEqual(node.routing?.riskTrace?.excludedOps?.includes("merge"), true);
-  deepStrictEqual(node.routing?.riskTrace?.excludedOps?.includes("shell"), true);
-  deepStrictEqual(node.routing?.evidenceRequired, true);
+    deepStrictEqual(node.routing?.risk, "write");
+    deepStrictEqual(node.routing?.riskTrace?.excludedOps?.includes("merge"), true);
+    deepStrictEqual(node.routing?.riskTrace?.excludedOps?.includes("shell"), true);
+    deepStrictEqual(node.routing?.evidenceRequired, true);
+  } finally {
+    delete process.env.OMK_STRICT_GUARDRAIL;
+  }
 });
 
-test("native write/shell/merge turns require evidence by default", () => {
+test("native write/shell/merge turns require evidence only in strict mode", () => {
+  process.env.OMK_STRICT_GUARDRAIL = "1";
   const cases = [
     ["implement a small patch", "write", "summary"],
     ["run npm test", "shell", "command-pass"],
     ["publish this release", "merge", "summary"],
   ];
 
-  for (const [prompt, risk, gate] of cases) {
-    const node = buildNativeRootLoopTurnNode({
-      bootstrap: codexBootstrap,
-      prompt,
-      nodeId: `turn-${risk}-evidence`,
-    });
+  try {
+    for (const [prompt, risk, gate] of cases) {
+      const node = buildNativeRootLoopTurnNode({
+        bootstrap: codexBootstrap,
+        prompt,
+        nodeId: `turn-${risk}-evidence`,
+      });
 
-    deepStrictEqual(node.routing?.risk, risk);
-    deepStrictEqual(node.routing?.evidenceRequired, true);
-    deepStrictEqual(node.routing?.riskTrace?.risk, risk);
-    ok(node.routing?.riskTrace?.confidence >= 0.6, `expected confidence >= 0.6 for ${prompt}`);
-    deepStrictEqual(node.outputs?.[0]?.gate, gate);
-    deepStrictEqual(node.outputs?.[0]?.required, true);
+      deepStrictEqual(node.routing?.risk, risk);
+      deepStrictEqual(node.routing?.evidenceRequired, true);
+      deepStrictEqual(node.routing?.riskTrace?.risk, risk);
+      ok(node.routing?.riskTrace?.confidence >= 0.6, `expected confidence >= 0.6 for ${prompt}`);
+      deepStrictEqual(node.outputs?.[0]?.gate, gate);
+      deepStrictEqual(node.outputs?.[0]?.required, true);
+    }
+  } finally {
+    delete process.env.OMK_STRICT_GUARDRAIL;
   }
 });
 

@@ -1,8 +1,22 @@
-import { describe, it } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { evaluateHeadroomAwareLoopController } from "../dist/orchestration/loop-controller-headroom.js";
 
 describe("loop controller headroom integration", () => {
+  const originalStrict = process.env.OMK_STRICT_GUARDRAIL;
+
+  before(() => {
+    process.env.OMK_STRICT_GUARDRAIL = "1";
+  });
+
+  after(() => {
+    if (originalStrict === undefined) {
+      delete process.env.OMK_STRICT_GUARDRAIL;
+    } else {
+      process.env.OMK_STRICT_GUARDRAIL = originalStrict;
+    }
+  });
+
   function baseInput(overrides = {}) {
     return {
       runId: "run-1",
@@ -43,5 +57,46 @@ describe("loop controller headroom integration", () => {
     const result = evaluateHeadroomAwareLoopController(baseInput({ headroomHistory: history }));
     assert.equal(result.action, "replan");
     assert.equal(result.risk.headroom.kind, "headroom-no-apply");
+  });
+});
+
+describe("loop controller headroom default freedom", () => {
+  const originalStrict = process.env.OMK_STRICT_GUARDRAIL;
+
+  before(() => {
+    delete process.env.OMK_STRICT_GUARDRAIL;
+  });
+
+  after(() => {
+    if (originalStrict === undefined) {
+      delete process.env.OMK_STRICT_GUARDRAIL;
+    } else {
+      process.env.OMK_STRICT_GUARDRAIL = originalStrict;
+    }
+  });
+
+  function baseInput(overrides = {}) {
+    return {
+      runId: "run-1",
+      inputId: "input-1",
+      runState: {
+        runId: "run-1",
+        iterationCount: 1,
+        maxIterations: 3,
+        nodes: [],
+      },
+      headroomHistory: [],
+      ...overrides,
+    };
+  }
+
+  it("does not block repeated validation drift by default", () => {
+    const history = [
+      { attempted: true, applied: false, validated: false, compactedTextProduced: true, beforeTokens: 1000, afterTokens: 900 },
+      { attempted: true, applied: false, validated: false, compactedTextProduced: true, beforeTokens: 1000, afterTokens: 900 },
+    ];
+    const result = evaluateHeadroomAwareLoopController(baseInput({ headroomHistory: history }));
+    assert.equal(result.action, "continue");
+    assert.ok(result.reason.includes("freedom"));
   });
 });

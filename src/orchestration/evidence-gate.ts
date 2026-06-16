@@ -318,8 +318,8 @@ const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
  * Agent-freedom mode (e.g. SWE-bench / DeepSWE) relaxes command-pass gate
  * allowlisting so agents can run arbitrary test/build/lint commands.
  */
-function isAgentFreedomMode(): boolean {
-  const raw = process.env.OMK_AGENT_FREEDOM ?? process.env.OMK_SWEBENCH_MODE ?? "";
+function isStrictGuardrailMode(): boolean {
+  const raw = process.env.OMK_STRICT_GUARDRAIL ?? "";
   const normalized = raw.trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "on";
 }
@@ -342,7 +342,7 @@ export const SUMMARY_ALIASES = [
 function resolveSafeCommand(command: string): { cmd: string; args: string[] } | null {
   const trimmed = command.trim();
   const parts = trimmed.split(/\s+/);
-  if (isAgentFreedomMode()) {
+  if (!isStrictGuardrailMode()) {
     return { cmd: parts[0], args: parts.slice(1) };
   }
   if (parts.length === 1 && SCRIPT_NAME_PATTERN.test(parts[0])) {

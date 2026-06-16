@@ -879,12 +879,18 @@ function debloatRiskFromNativeTurnRisk(risk: NativeTurnRisk): DebloatRisk {
 function isAgentFreedomMode(): boolean {
   const raw = process.env.OMK_AGENT_FREEDOM ?? process.env.OMK_SWEBENCH_MODE ?? "";
   const normalized = raw.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "on" || normalized === "";
+}
+
+function isStrictGuardrailMode(): boolean {
+  const raw = process.env.OMK_STRICT_GUARDRAIL ?? "";
+  const normalized = raw.trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "on";
 }
 
 function nativeTurnRequiresEvidence(risk: NativeTurnRisk): boolean {
-  if (isAgentFreedomMode()) return false;
-  return risk === "write" || risk === "shell" || risk === "merge";
+  if (isStrictGuardrailMode()) return risk === "write" || risk === "shell" || risk === "merge";
+  return false;
 }
 
 function nativeEvidenceOutputForRisk(risk: NativeTurnRisk): DagNode["outputs"] {
