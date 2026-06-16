@@ -42,6 +42,7 @@ import {
 import { persistInputEnvelope } from "../../input/input-artifacts.js";
 import { buildDagCompileResult } from "../../orchestration/dag-compiler.js";
 import { persistDagCompileArtifacts } from "../../orchestration/dag-artifacts.js";
+import { evidenceObservationsFromResult, evidenceRequirementsFromOutputs } from "../../runtime/contracts/evidence.js";
 import { TerminalOwner } from "../../util/terminal-owner.js";
 import { resumeInteractiveInput } from "../../util/terminal-input.js";
 import type { CliRenderer } from "../../cli/ui/renderer.js";
@@ -1092,6 +1093,12 @@ async function recordTurnAuditGraph(input: {
       evidenceKind: input.result.success ? "turn-result-pass" : "turn-result-fail",
       evidenceArtifactPath: input.resultArtifact,
       evidenceHash: artifactHash,
+      evidenceRequirements: evidenceRequirementsFromOutputs(input.node.outputs),
+      evidenceObservations: evidenceObservationsFromResult({
+        metadata: input.result.metadata,
+        stdout: input.result.stdout,
+        artifactPaths: input.resultArtifact ? [input.resultArtifact] : [],
+      }),
     });
   } catch {
     // Best-effort audit graph materialization must not block turn completion.

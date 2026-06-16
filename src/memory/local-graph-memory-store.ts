@@ -496,6 +496,16 @@ export class LocalGraphMemoryStore {
     readonly evidenceKind?: string;
     readonly evidenceArtifactPath?: string;
     readonly evidenceHash?: string;
+    readonly evidenceRequirements?: readonly { readonly gate: string; readonly ref?: string; readonly required?: boolean }[];
+    readonly evidenceObservations?: readonly {
+      readonly kind: string;
+      readonly source: string;
+      readonly ref?: string;
+      readonly artifactPath?: string;
+      readonly confidence?: number;
+      readonly replayable?: boolean;
+      readonly redacted?: boolean;
+    }[];
   }): Promise<void> {
     await this.mutateState((state, now) => {
       state.updatedAt = now;
@@ -511,6 +521,17 @@ export class LocalGraphMemoryStore {
       const artifactId = input.evidenceArtifactPath
         ? this.nodeId("Artifact", `${input.runId}:${input.evidenceArtifactPath}`)
         : undefined;
+      const requirementEntries = (input.evidenceRequirements ?? [])
+        .filter((requirement) => requirement.required !== false)
+        .map((requirement) => ({
+          requirement,
+          id: this.nodeId("EvidenceRequirement", `${input.runId}:${input.nodeId}:${requirement.gate}:${requirement.ref ?? ""}`),
+        }));
+      const observationEntries = (input.evidenceObservations ?? [])
+        .map((observation, index) => ({
+          observation,
+          id: this.nodeId("Evidence", `${input.runId}:${input.nodeId}:observation:${index}:${observation.kind}:${observation.ref ?? observation.artifactPath ?? ""}`),
+        }));
 
       const projectId = this.nodeId("Project", this.settings.project.key);
       this.upsertNode(state, {
@@ -612,6 +633,50 @@ export class LocalGraphMemoryStore {
           updatedAt: now,
         });
       }
+      for (const { requirement, id } of requirementEntries) {
+        this.upsertNode(state, {
+          id,
+          type: "EvidenceRequirement",
+          labels: ["OmkEvidenceRequirement", "EvidenceRequirement"],
+          label: requirement.gate,
+          summary: requirement.ref ?? requirement.gate,
+          tags: ["evidence", "audit", "requirement"],
+          properties: {
+            key: `${input.runId}:${input.nodeId}:requirement:${requirement.gate}:${requirement.ref ?? ""}`,
+            runId: input.runId,
+            nodeId: input.nodeId,
+            gate: requirement.gate,
+            ref: requirement.ref ?? "",
+            required: requirement.required !== false,
+          },
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      for (const { observation, id } of observationEntries) {
+        this.upsertNode(state, {
+          id,
+          type: "Evidence",
+          labels: ["OmkEvidence", "Evidence", "EvidenceObservation"],
+          label: observation.kind,
+          summary: observation.ref ?? observation.artifactPath ?? observation.kind,
+          tags: ["evidence", "audit", "observation"],
+          properties: {
+            key: `${input.runId}:${input.nodeId}:observation:${observation.kind}:${observation.ref ?? observation.artifactPath ?? ""}`,
+            runId: input.runId,
+            nodeId: input.nodeId,
+            kind: observation.kind,
+            source: observation.source,
+            ref: observation.ref ?? "",
+            artifactRef: observation.artifactPath ?? "",
+            confidence: observation.confidence ?? 0,
+            replayable: observation.replayable !== false,
+            redacted: observation.redacted !== false,
+          },
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
 
       this.upsertEdge(state, projectId, runId, "HAS_RUN", now);
       this.upsertEdge(state, runId, turnId, "HAS_TASK", now);
@@ -621,6 +686,20 @@ export class LocalGraphMemoryStore {
       this.upsertEdge(state, turnId, evidenceId, "OBSERVED_EVIDENCE", now);
       this.upsertEdge(state, routeId, evidenceId, "EVIDENCED_BY", now);
       if (artifactId) this.upsertEdge(state, evidenceId, artifactId, "STORED_AT", now);
+      for (const { id } of requirementEntries) {
+        this.upsertEdge(state, turnId, id, "DECLARES_EVIDENCE_REQUIREMENT", now);
+      }
+      for (const { id, observation } of observationEntries) {
+        this.upsertEdge(state, turnId, id, "OBSERVED_EVIDENCE", now);
+        if (observation.artifactPath && artifactId && observation.artifactPath === input.evidenceArtifactPath) {
+          this.upsertEdge(state, id, artifactId, "STORED_AT", now);
+        }
+        for (const { id: requirementId, requirement } of requirementEntries) {
+          if (evidenceObservationSatisfiesRequirement(requirement.gate, observation.kind)) {
+            this.upsertEdge(state, requirementId, id, "SATISFIED_BY", now);
+          }
+        }
+      }
     });
   }
 
@@ -1702,6 +1781,13 @@ function readStringArg(query: string, name: string): string | undefined {
 function readNumberArg(query: string, name: string): number | undefined {
   const match = query.match(new RegExp(`${name}\\s*:\\s*(\\d+)`, "i"));
   return match ? Number.parseInt(match[1], 10) : undefined;
+}
+
+function evidenceObservationSatisfiesRequirement(requirementGate: string, observationKind: string): boolean {
+  if (observationKind === requirementGate) return true;
+  if (requirementGate === "test-pass" && observationKind === "command-pass") return true;
+  if (requirementGate === "file-exists" && observationKind === "artifact") return true;
+  return false;
 }
 
 function hash(value: string): string {

@@ -20,6 +20,8 @@ describe("turn audit graph materialization", () => {
         evidenceKind: "turn-result-pass",
         evidenceArtifactPath: ".omk/runs/run-audit-test/turns/turn-1-result.jsonl",
         evidenceHash: "abc123",
+        evidenceRequirements: [{ gate: "command-pass", ref: "npm run check", required: true }],
+        evidenceObservations: [{ kind: "command-pass", source: "metadata", confidence: 0.9, replayable: true, redacted: true }],
       });
       const raw = await readFile(join(root, ".omk", "memory", "graph-state.json"), "utf8");
       const state = JSON.parse(raw);
@@ -33,6 +35,10 @@ describe("turn audit graph materialization", () => {
       assert.ok(state.edges.some((edge) => edge.type === "OBSERVED_EVIDENCE"));
       assert.ok(state.edges.some((edge) => edge.type === "STORED_AT"));
       assert.ok(state.edges.some((edge) => edge.type === "EVIDENCED_BY"));
+      assert.ok(state.nodes.some((node) => node.type === "EvidenceRequirement" && node.properties.gate === "command-pass"));
+      assert.ok(state.nodes.some((node) => node.labels.includes("EvidenceObservation") && node.properties.kind === "command-pass"));
+      assert.ok(state.edges.some((edge) => edge.type === "DECLARES_EVIDENCE_REQUIREMENT"));
+      assert.ok(state.edges.some((edge) => edge.type === "SATISFIED_BY"));
     } finally {
       await rm(root, { recursive: true, force: true });
     }

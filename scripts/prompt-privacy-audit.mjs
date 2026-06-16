@@ -53,34 +53,85 @@ async function readJson(path) {
 function isPublicRunArtifact(runDir, file) {
   const rel = relative(runDir, file).replace(/\\/g, "/");
   if (rel.startsWith("private/")) return false;
-  return rel === "replay-index.json" || rel.startsWith("turns/") || rel === "dag.json" || rel === "dag-compile-report.json" || rel === "summary.json";
+  return rel === "replay-index.json" ||
+    rel === "decisions.jsonl" ||
+    rel.startsWith("turns/") ||
+    rel === "dag.json" ||
+    rel === "dag-compile-report.json" ||
+    rel === "summary.json";
 }
 
-async function auditRun(runDir) {
-  const promptFiles = (await walk(join(runDir, "private", "prompts"))).filter((file) => file.endsWith(".json"));
-  const publicFiles = (await walk(runDir)).filter((file) => isPublicRunArtifact(runDir, file));
-  const leaks = [];
-  const publicTexts = [];
-  for (const file of publicFiles) {
-    const text = await readFile(file, "utf8").catch(() => "");
-    publicTexts.push({ file, text });
-    for (const match of secretLikeMatches(text)) leaks.push({ file, kind: "secret-like", match });
-  }
+function isAuditableMemoryArtifact(memoryDir, file) {
+  const rel = relative(memoryDir, file).replace(/\\/g, "/");
+  if (rel.startsWith("private/")) return false;
+  return /(?:^|\/)(graph-state|decisions|project|risks|commands|goals)\.(?:json|jsonl|md|txt)$/.test(rel);
+}
 
-  for (const promptFile of promptFiles) {
-    const prompt = await readJson(promptFile).catch(() => ({}));
-    const promptHash = typeof prompt.promptHash === "string" ? prompt.promptHash : undefined;
-    const needles = [
-      ...significantNeedles(prompt.userPrompt),
-      ...significantNeedles(prompt.compiledPrompt),
-    ];
-    for (const { file, text } of publicTexts) {
-      for (const needle of needles) {
-        if (text.includes(needle)) leaks.push({ file, promptFile, kind: "compiled-prompt-leak", promptHash, sample: needle.slice(0, 48) });
+async function promptRecordFromFile(runDir, promptFile) {
+  const prompt = await readJson(promptFile).catch(() => ({}));
+  const promptHash = typeof prompt.promptHash === "string" ? prompt.promptHash : undefined;
+  const needles = [
+    ...significantNeedles(prompt.userPrompt),
+    ...significantNeedles(prompt.compiledPrompt),
+  ];
+  return { runDir, promptFile, promptHash, needles };
+}
+
+async function collectPromptRecords(runDirs) {
+  const records = [];
+  for (const runDir of runDirs) {
+    const promptFiles = (await walk(join(runDir, "private", "prompts"))).filter((file) => file.endsWith(".json"));
+    for (const promptFile of promptFiles) {
+      const record = await promptRecordFromFile(runDir, promptFile);
+      if (record.needles.length > 0) records.push(record);
+    }
+  }
+  return records;
+}
+
+function auditTextForLeaks({ file, text, promptRecords, scope }) {
+  const leaks = [];
+  for (const match of secretLikeMatches(text)) leaks.push({ file, scope, kind: "secret-like", match });
+  for (const record of promptRecords) {
+    for (const needle of record.needles) {
+      if (text.includes(needle)) {
+        leaks.push({
+          file,
+          scope,
+          promptFile: record.promptFile,
+          kind: "compiled-prompt-leak",
+          promptHash: record.promptHash,
+          sample: needle.slice(0, 48),
+        });
       }
     }
   }
-  return { runDir, promptFiles: promptFiles.length, publicFiles: publicFiles.length, leaks };
+  return leaks;
+}
+
+async function auditRun(runDir, allPromptRecords) {
+  const promptFiles = (await walk(join(runDir, "private", "prompts"))).filter((file) => file.endsWith(".json"));
+  const publicFiles = (await walk(runDir)).filter((file) => isPublicRunArtifact(runDir, file));
+  const runPromptRecords = allPromptRecords.filter((record) => record.runDir === runDir);
+  const leaks = [];
+  let decisionTraceFiles = 0;
+  for (const file of publicFiles) {
+    if (relative(runDir, file).replace(/\\/g, "/") === "decisions.jsonl") decisionTraceFiles += 1;
+    const text = await readFile(file, "utf8").catch(() => "");
+    leaks.push(...auditTextForLeaks({ file, text, promptRecords: runPromptRecords, scope: "run-artifact" }));
+  }
+  return { runDir, promptFiles: promptFiles.length, publicFiles: publicFiles.length, decisionTraceFiles, leaks };
+}
+
+async function auditGraphMemory(projectRoot, allPromptRecords) {
+  const memoryDir = join(projectRoot, ".omk", "memory");
+  const memoryFiles = (await walk(memoryDir)).filter((file) => isAuditableMemoryArtifact(memoryDir, file));
+  const leaks = [];
+  for (const file of memoryFiles) {
+    const text = await readFile(file, "utf8").catch(() => "");
+    leaks.push(...auditTextForLeaks({ file, text, promptRecords: allPromptRecords, scope: "graph-memory" }));
+  }
+  return { memoryFiles: memoryFiles.length, leaks };
 }
 
 async function runSelfTest() {
@@ -89,14 +140,28 @@ async function runSelfTest() {
     const runDir = join(dir, ".omk", "runs", "self-test");
     await mkdir(join(runDir, "private", "prompts"), { recursive: true });
     await mkdir(join(runDir, "turns"), { recursive: true });
+    await mkdir(join(dir, ".omk", "memory"), { recursive: true });
     const prompt = "private customer incident prompt should never appear in public artifacts";
     await writeFile(join(runDir, "private", "prompts", "turn.json"), JSON.stringify({ promptHash: "abc", userPrompt: prompt, compiledPrompt: prompt }), "utf8");
     await writeFile(join(runDir, "turns", "turn-routing.json"), JSON.stringify({ promptHash: "abc" }), "utf8");
-    const clean = await auditRun(runDir);
-    assert.equal(clean.leaks.length, 0);
+    await writeFile(join(runDir, "decisions.jsonl"), JSON.stringify({ outputDecision: "runtime=codex-cli" }) + "\n", "utf8");
+    await writeFile(join(dir, ".omk", "memory", "graph-state.json"), JSON.stringify({ nodes: [{ summary: "safe" }] }), "utf8");
+    const records = await collectPromptRecords([runDir]);
+    const clean = await auditRun(runDir, records);
+    const cleanMemory = await auditGraphMemory(dir, records);
+    assert.equal(clean.leaks.length + cleanMemory.leaks.length, 0);
+
+    await writeFile(join(runDir, "decisions.jsonl"), JSON.stringify({ leaked: prompt }) + "\n", "utf8");
+    const decisionLeaking = await auditRun(runDir, records);
+    assert.ok(decisionLeaking.leaks.some((leak) => leak.scope === "run-artifact" && leak.kind === "compiled-prompt-leak"));
+
+    await writeFile(join(dir, ".omk", "memory", "graph-state.json"), JSON.stringify({ leaked: prompt }), "utf8");
+    const memoryLeaking = await auditGraphMemory(dir, records);
+    assert.ok(memoryLeaking.leaks.some((leak) => leak.scope === "graph-memory" && leak.kind === "compiled-prompt-leak"));
+
     await writeFile(join(runDir, "turns", "turn-result.jsonl"), JSON.stringify({ leaked: prompt }), "utf8");
-    const leaking = await auditRun(runDir);
-    assert.ok(leaking.leaks.some((leak) => leak.kind === "compiled-prompt-leak"));
+    const publicLeaking = await auditRun(runDir, records);
+    assert.ok(publicLeaking.leaks.some((leak) => leak.kind === "compiled-prompt-leak"));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -108,18 +173,24 @@ const runsDir = join(root, ".omk", "runs");
 const runDirs = existsSync(runsDir)
   ? (await readdir(runsDir, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => join(runsDir, entry.name))
   : [];
+const promptRecords = await collectPromptRecords(runDirs);
 const results = [];
 for (const runDir of runDirs) {
-  const result = await auditRun(runDir);
-  if (result.promptFiles > 0 || result.leaks.length > 0) results.push(result);
+  const result = await auditRun(runDir, promptRecords);
+  if (result.promptFiles > 0 || result.leaks.length > 0 || result.decisionTraceFiles > 0) results.push(result);
 }
-const leaks = results.flatMap((result) => result.leaks);
+const graphMemory = await auditGraphMemory(root, promptRecords);
+const leaks = [...results.flatMap((result) => result.leaks), ...graphMemory.leaks];
 await mkdir(join(root, "proof"), { recursive: true });
 await writeFile(proofPath, JSON.stringify({
   schemaVersion: "omk.prompt-privacy-audit.v1",
   checkedAt: new Date().toISOString(),
   runCount: runDirs.length,
+  promptEnvelopeCount: promptRecords.length,
   auditedRuns: results.length,
+  auditedPublicFiles: results.reduce((sum, result) => sum + result.publicFiles, 0),
+  auditedDecisionTraceFiles: results.reduce((sum, result) => sum + result.decisionTraceFiles, 0),
+  auditedGraphMemoryFiles: graphMemory.memoryFiles,
   leakCount: leaks.length,
   leaks,
 }, null, 2), "utf8");
@@ -128,4 +199,4 @@ if (leaks.length > 0) {
   console.error(`prompt privacy audit failed: ${leaks.length} leak(s); artifact=proof/prompt-privacy-audit.json`);
   process.exit(1);
 }
-console.log(`prompt privacy audit passed; auditedRuns=${results.length}; artifact=proof/prompt-privacy-audit.json`);
+console.log(`prompt privacy audit passed; auditedRuns=${results.length}; graphMemoryFiles=${graphMemory.memoryFiles}; artifact=proof/prompt-privacy-audit.json`);
