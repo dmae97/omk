@@ -966,6 +966,63 @@ test("capability sort precomputes scores into a Map without changing order vs re
   }
 });
 
+test("runtime router redacts secret-like provider stderr before exposing failures", async () => {
+  const router = createRuntimeRouter({
+    runtimes: [{
+      id: "codex-cli",
+      providerId: "codex",
+      runtimeMode: "cli",
+      priority: 100,
+      capabilities: workspaceCliCapabilities(),
+      supports: () => true,
+      async runNode() {
+        throw new Error("execute path expected");
+      },
+      async execute() {
+        return { output: "provider failed with OPENAI_API_KEY=shortvalue", exitCode: 1, metadata: { runtime: "codex-cli" } };
+      },
+    }],
+  });
+
+  const result = await router.execute(fakeTask());
+
+  assert.equal(result.exitCode, 1);
+  assert.doesNotMatch(result.stderr, /shortvalue/);
+  assert.match(result.stderr, /OPENAI_API_KEY=\*\*\*/);
+  assert.equal(result.metadata.stderrRedacted, true);
+  assert.equal(result.metadata.secretLikeContentRedacted, true);
+});
+
+test("runtime router synthetic capsule redacts direct task prompt from public node label", async () => {
+  let capturedCapsule;
+  const secretPrompt = "implement private customer bugfix with token-like marker demo-token-12345";
+  const router = createRuntimeRouter({
+    runtimes: [{
+      id: "codex-cli",
+      providerId: "codex",
+      runtimeMode: "cli",
+      priority: 100,
+      capabilities: workspaceCliCapabilities(),
+      supports: () => true,
+      async runNode(capsule) {
+        capturedCapsule = capsule;
+        return { success: true, exitCode: 0, stdout: "ok", stderr: "", metadata: { runtime: "codex-cli" } };
+      },
+    }],
+  });
+
+  const result = await router.execute(fakeTask({ prompt: secretPrompt }));
+
+  assert.equal(result.exitCode, 0);
+  assert.ok(capturedCapsule, "expected runtime to receive a synthetic capsule");
+  assert.equal(capturedCapsule.task, secretPrompt);
+  assert.doesNotMatch(capturedCapsule.node.name, /private customer bugfix/);
+  assert.doesNotMatch(capturedCapsule.node.name, /demo-token-12345/);
+  assert.match(capturedCapsule.node.name, /^runtime task:[a-f0-9]{12}$/);
+  assert.equal(capturedCapsule.node.routing.promptMode, "synthetic-private");
+  assert.match(capturedCapsule.node.routing.promptHash, /^[a-f0-9]{64}$/);
+});
+
 async function selectedRuntimeFor({ task, runtimes }) {
   const router = createRuntimeRouter({ runtimes });
   const result = await router.execute(task);

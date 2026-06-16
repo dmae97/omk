@@ -55,9 +55,10 @@ test("pack-smoke evidence includes pack, audit, and install smoke phases", () =>
   assert.match(script, /install smoke/);
 });
 
-test("package release:check composes the full local gate", () => {
+test("package release:check delegates to the shared full local gate", () => {
   const pkg = JSON.parse(read("package.json"));
   assert.match(pkg.scripts.verify, /npm run secret:scan:runtime/);
-  assert.match(pkg.scripts["release:check"], /node scripts\/release-gate\.mjs/);
+  assert.equal(pkg.scripts["release:check"], "npm run release:gate-core");
+  assert.match(pkg.scripts["release:gate-core"], /node scripts\/release-gate\.mjs/);
   assert.ok(read("scripts/release-gate.mjs").includes("createReleasePromotionGate"));
 });

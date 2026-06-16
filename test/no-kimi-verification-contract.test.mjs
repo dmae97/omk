@@ -18,31 +18,36 @@ test("verify:no-kimi includes no-kimi non-smoke execution coverage", async () =>
   );
 });
 
-test("release:check package contract includes no-Kimi, contract, proof, smoke, pack, and audit gates", async () => {
+test("release gate core package contract includes no-Kimi, authority, contract, proof, smoke, pack, and audit gates", async () => {
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));
   const scripts = pkg.scripts ?? {};
-  const releaseCheck = String(scripts["release:check"] ?? "");
-  const releaseCommands = releaseCheck
+  const releaseGateCore = String(scripts["release:gate-core"] ?? "");
+  const releaseCommands = releaseGateCore
     .split("&&")
     .map((part) => part.trim())
     .filter(Boolean);
   const requiredGates = [
     "verify:no-kimi",
+    "verify:no-persona",
     "contract:check",
     "schema:check",
     "version:check",
     "proof:check",
+    "authority:smoke",
+    "prompt:privacy:check",
     "smoke:execution",
     "pack:dry",
     "audit:package",
     "smoke:pack",
   ];
 
+  assert.equal(String(scripts["release:check"] ?? ""), "npm run release:gate-core");
+
   for (const gate of requiredGates) {
     assert.ok(String(scripts[gate] ?? "").length > 0, `${gate} script must exist`);
     assert.ok(
       releaseCommands.includes(`npm run ${gate}`),
-      `release:check must include npm run ${gate}`
+      `release:gate-core must include npm run ${gate}`
     );
   }
 
@@ -57,13 +62,14 @@ test("all package release commands finish with the final release promotion gate"
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));
   const scripts = pkg.scripts ?? {};
 
-  for (const command of ["release:check", "release:full", "release:rc"]) {
-    const script = String(scripts[command] ?? "");
-    assert.match(script, /npm run version:check/);
-    assert.match(script, /npm run proof:check/);
-    assert.match(script, /npm run smoke:pack/);
-    assert.match(script, /OMK_RELEASE_DEMO=1 node scripts\/release-gate\.mjs$/);
+  const core = String(scripts["release:gate-core"] ?? "");
+  for (const gate of ["version:check", "proof:check", "authority:smoke", "prompt:privacy:check", "smoke:pack"]) {
+    assert.match(core, new RegExp(`npm run ${gate}`));
   }
+  assert.match(core, /OMK_RELEASE_DEMO=1 node scripts\/release-gate\.mjs$/);
+  assert.equal(String(scripts["release:check"] ?? ""), "npm run release:gate-core");
+  assert.equal(String(scripts["release:full"] ?? ""), "npm run verify && npm run release:gate-core");
+  assert.equal(String(scripts["release:rc"] ?? ""), "npm run verify && npm run release:gate-core");
 });
 
 test("release truthfulness docs match package version and avoid unverified npm latest claims", async () => {

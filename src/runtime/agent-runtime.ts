@@ -9,6 +9,7 @@ import type { ContextCapsule } from "./context-capsule.js";
 import type {
   RuntimeCapabilities as SharedRuntimeCapabilities,
   RuntimeHealth as SharedRuntimeHealth,
+  RuntimeHealthProbeRequest,
   RuntimeId,
   RuntimeKind,
 } from "./contracts/shared.js";
@@ -153,7 +154,7 @@ export interface AgentRuntime {
   readonly priority: number;
   readonly capabilities?: RuntimeCapabilities;
   supports(capsule: ContextCapsule): boolean;
-  health?(): Promise<RuntimeHealth>;
+  health?(input?: RuntimeHealthProbeRequest): Promise<RuntimeHealth>;
   runNode(capsule: ContextCapsule, signal: AbortSignal): Promise<AgentRunResult>;
   execute?(task: AgentTask): Promise<AgentResult>;
 }

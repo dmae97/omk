@@ -8,13 +8,15 @@
  * 4. Fallback chain with runtime.supports() check
  */
 
+import { createHash } from "crypto";
 import { readFile } from "fs/promises";
 import { join } from "path";
+import { maskSensitiveText } from "../util/secret-mask.js";
 import type { AgentResult, AgentRuntime, AgentRunResult, AgentTask, RuntimeCapabilities, RuntimeHealth } from "./agent-runtime.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import { createDecisionTraceStore } from "../evidence/decision-trace.js";
 import { runtimeIsAdvisory, runtimeSatisfiesAuthority } from "./authority-matrix.js";
-import type { HealthState } from "./contracts/shared.js";
+import type { HealthState, RuntimeHealthProbeKind } from "./contracts/shared.js";
 
 export type NodeIntent =
   | "research"
@@ -193,11 +195,15 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     };
   }
 
-  async function collectRuntimeHealth(candidates: readonly AgentRuntime[]): Promise<Map<string, RuntimeHealth>> {
+  async function collectRuntimeHealth(
+    candidates: readonly AgentRuntime[],
+    probeKind: RuntimeHealthProbeKind = "static",
+    taskRisk?: string,
+  ): Promise<Map<string, RuntimeHealth>> {
     const nowMs = Date.now();
     const entries = await Promise.all(candidates.map(async (runtime): Promise<[string, RuntimeHealth]> => {
       const cached = healthCache.get(runtime.id);
-      if (cached?.vector?.expiresAt && Date.parse(cached.vector.expiresAt) > nowMs) {
+      if (cached?.vector?.expiresAt && Date.parse(cached.vector.expiresAt) > nowMs && probeRank(cached.vector.lastProbeKind) >= probeRank(probeKind)) {
         return [runtime.id, cached];
       }
       if (!runtime.health) {
@@ -226,15 +232,16 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
         return [runtime.id, health];
       }
       try {
-        const health = normalizeRuntimeHealth(await runtime.health());
+        const health = normalizeRuntimeHealth(await runtime.health({ probeKind, taskRisk, highRisk: probeKind !== "static" }));
         healthCache.set(runtime.id, health);
         return [runtime.id, health];
       } catch (err) {
         const now = new Date();
+        const reason = maskSensitiveText(err instanceof Error ? err.message : String(err));
         const health: RuntimeHealth = {
           runtimeId: runtime.id,
           available: false,
-          reason: err instanceof Error ? err.message : String(err),
+          reason,
           checkedAt: now.toISOString(),
           vector: {
             runtimeOk: false,
@@ -247,7 +254,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
             model: "unknown",
             quota: "unknown",
             rateLimit: "unknown",
-            lastProbeKind: "static",
+            lastProbeKind: probeKind,
             checkedAt: now.toISOString(),
             expiresAt: new Date(now.getTime() + 30_000).toISOString(),
           },
@@ -257,6 +264,22 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
       }
     }));
     return new Map(entries);
+  }
+
+  function requiredProbeForTask(task: AgentTask): RuntimeHealthProbeKind {
+    const risk = task.safety?.risk;
+    if (risk === "merge") return "live-call";
+    if (risk === "write" || risk === "shell" || task.capabilities.write || task.capabilities.patch || task.capabilities.shell || task.capabilities.merge) {
+      return "cheap-call";
+    }
+    return "static";
+  }
+
+  function requiredProbeForCapsule(capsule: ContextCapsule): RuntimeHealthProbeKind {
+    const risk = capsule.node.routing?.risk;
+    if (risk === "merge") return "live-call";
+    if (risk === "write" || risk === "shell") return "cheap-call";
+    return "static";
   }
 
   function runtimeHealthy(runtime: AgentRuntime, healthMap: ReadonlyMap<string, RuntimeHealth>): boolean {
@@ -351,7 +374,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
 
   async function runNode(capsule: ContextCapsule, signal: AbortSignal): Promise<AgentRunResult> {
     const history = await loadEvidenceHistory();
-    const healthMap = await collectRuntimeHealth(runtimes);
+    const healthMap = await collectRuntimeHealth(runtimes, requiredProbeForCapsule(capsule), capsule.node.routing?.risk);
     let decision: RuntimeRouteDecision;
     try {
       decision = selectByIntent(capsule, history, healthMap);
@@ -397,27 +420,27 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
 
       try {
         const result = await runtime.runNode(capsule, signal);
-        if (result.success) {
-          return {
-            ...result,
-            metadata: {
-              ...result.metadata,
-              selectedRuntime: runtime.id,
-              intent: decision.intent,
-              fallbackChain: allCandidates.map((r) => r.id),
-              scores: decision.scores,
-            },
-          };
-        }
-        lastError = result;
+        const routedResult = sanitizeAgentRunResult({
+          ...result,
+          metadata: {
+            ...result.metadata,
+            selectedRuntime: runtime.id,
+            intent: decision.intent,
+            fallbackChain: allCandidates.map((r) => r.id),
+            scores: decision.scores,
+          },
+        });
+        if (routedResult.success) return routedResult;
+        lastError = routedResult;
       } catch (err) {
-        lastError = {
+        const error = maskSensitiveText(String(err));
+        lastError = sanitizeAgentRunResult({
           success: false,
           exitCode: 1,
           stdout: "",
-          stderr: String(err),
-          metadata: { runtime: runtime.id, error: String(err) },
-        };
+          stderr: error,
+          metadata: { runtime: runtime.id, error },
+        });
       }
     }
 
@@ -438,7 +461,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     signal: AbortSignal,
   ): Promise<AgentRunResult> {
     const history = await loadEvidenceHistory();
-    const healthMap = await collectRuntimeHealth(runtimes);
+    const healthMap = await collectRuntimeHealth(runtimes, requiredProbeForTask(task), task.safety?.risk);
     let decision: RuntimeRouteDecision;
     try {
       decision = selectByIntent(capsule, history, healthMap);
@@ -500,7 +523,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
         const result = runtime.execute
           ? agentResultToRunResult(await runtime.execute(task), runtime.id)
           : await runtime.runNode(capsule, signal);
-        const routedResult: AgentRunResult = {
+        const routedResult = sanitizeAgentRunResult({
           ...result,
           metadata: {
             ...result.metadata,
@@ -509,17 +532,18 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
             fallbackChain: executionCandidates.map((r) => r.id),
             scores: decision.scores,
           },
-        };
+        });
         if (routedResult.success) return routedResult;
         lastError = routedResult;
       } catch (err) {
-        lastError = {
+        const error = maskSensitiveText(String(err));
+        lastError = sanitizeAgentRunResult({
           success: false,
           exitCode: 1,
           stdout: "",
-          stderr: String(err),
-          metadata: { runtime: runtime.id, selectedRuntime: runtime.id, error: String(err) },
-        };
+          stderr: error,
+          metadata: { runtime: runtime.id, selectedRuntime: runtime.id, error },
+        });
       }
     }
 
@@ -571,7 +595,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
       );
     }
 
-    const healthMap = await collectRuntimeHealth(candidates);
+    const healthMap = await collectRuntimeHealth(candidates, requiredProbeForTask(task), task.safety?.risk);
     candidates = candidates.filter((runtime) => runtimeHealthy(runtime, healthMap));
 
     const advisoryBoundaryFailures: string[] = [];
@@ -642,7 +666,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
         const result = runtime.execute
           ? agentResultToRunResult(await runtime.execute(task), runtime.id)
           : await runtime.runNode(capsule, signal);
-        const routedResult: AgentRunResult = {
+        const routedResult = sanitizeAgentRunResult({
           ...result,
           metadata: {
             ...result.metadata,
@@ -650,17 +674,18 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
             intent,
             fallbackChain: candidates.map((candidate) => candidate.id),
           },
-        };
+        });
         if (routedResult.success) return routedResult;
         lastError = routedResult;
       } catch (err) {
-        lastError = {
+        const error = maskSensitiveText(String(err));
+        lastError = sanitizeAgentRunResult({
           success: false,
           exitCode: 1,
           stdout: "",
-          stderr: String(err),
-          metadata: { runtime: runtime.id, selectedRuntime: runtime.id, error: String(err) },
-        };
+          stderr: error,
+          metadata: { runtime: runtime.id, selectedRuntime: runtime.id, error },
+        });
       }
     }
 
@@ -697,20 +722,30 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
 
 function capsuleFromTask(task: AgentTask): ContextCapsule {
   const nodeId = task.context.nodeId || "runtime-task";
+  const promptHash = createHash("sha256").update(task.prompt).digest("hex");
+  const publicLabel = `runtime task:${promptHash.slice(0, 12)}`;
   return {
     runId: task.context.runId || "local-runtime-router",
     nodeId,
-    goal: task.context.goal || task.prompt,
+    goal: task.context.goal || publicLabel,
     task: task.prompt,
     system: task.context.system || "",
     node: {
       id: nodeId,
-      name: task.prompt,
+      name: publicLabel,
       role: task.context.role || "coder",
       dependsOn: [],
       status: "running",
       retries: 0,
       maxRetries: 1,
+      routing: {
+        promptHash,
+        promptMode: "synthetic-private",
+        risk: task.safety?.risk,
+        approvalPolicy: task.safety?.approvalPolicy,
+        sandboxMode: task.safety?.sandboxMode,
+        evidenceRequired: task.safety?.evidenceRequired,
+      },
     },
     dependencySummaries: [],
     evidenceRequirements: [],
@@ -863,7 +898,7 @@ function unsupportedRuntimeResult(err: UnsupportedRuntimeError): AgentRunResult 
 
 function agentResultToRunResult(result: AgentResult, runtimeId: string): AgentRunResult {
   const success = result.exitCode === 0;
-  return {
+  return sanitizeAgentRunResult({
     success,
     exitCode: result.exitCode,
     stdout: result.output,
@@ -875,6 +910,22 @@ function agentResultToRunResult(result: AgentResult, runtimeId: string): AgentRu
     },
     tokenUsage: result.tokenUsage,
     toolCalls: result.toolCalls,
+  });
+}
+
+function sanitizeAgentRunResult(result: AgentRunResult): AgentRunResult {
+  const sanitizedStderr = maskSensitiveText(result.stderr ?? "");
+  const redacted = sanitizedStderr !== (result.stderr ?? "");
+  if (!redacted && sanitizedStderr === result.stderr) return result;
+  return {
+    ...result,
+    stderr: sanitizedStderr,
+    metadata: {
+      ...(result.metadata ?? {}),
+      stderrRedacted: true,
+      secretLikeContentRedacted: redacted,
+      stderrPreview: sanitizedStderr.slice(0, 500),
+    },
   };
 }
 
@@ -940,6 +991,19 @@ function normalizeRuntimeHealth(health: RuntimeHealth): RuntimeHealth {
       expiresAt: vector.expiresAt ?? new Date(Date.parse(checkedAt) + 60_000).toISOString(),
     },
   };
+}
+
+function probeRank(kind: RuntimeHealthProbeKind | undefined): number {
+  switch (kind) {
+    case "live-call":
+      return 3;
+    case "cheap-call":
+      return 2;
+    case "static":
+      return 1;
+    default:
+      return 0;
+  }
 }
 
 function legacyBoolToState(value: boolean | undefined): HealthState {

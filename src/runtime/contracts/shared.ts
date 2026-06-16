@@ -62,6 +62,12 @@ export interface RuntimeHealthVector {
   expiresAt?: string;
 }
 
+export interface RuntimeHealthProbeRequest {
+  readonly probeKind: RuntimeHealthProbeKind;
+  readonly taskRisk?: string;
+  readonly highRisk: boolean;
+}
+
 export interface RuntimeHealth {
   runtimeId: RuntimeId;
   available: boolean;

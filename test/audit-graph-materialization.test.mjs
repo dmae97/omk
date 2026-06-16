@@ -24,9 +24,14 @@ describe("turn audit graph materialization", () => {
       const raw = await readFile(join(root, ".omk", "memory", "graph-state.json"), "utf8");
       const state = JSON.parse(raw);
       assert.ok(state.nodes.some((node) => node.type === "Run" && node.properties.runId === "run-audit-test"));
+      assert.ok(state.nodes.some((node) => node.type === "Provider" && node.properties.provider === "codex"));
       assert.ok(state.nodes.some((node) => node.type === "ProviderRoute" && node.properties.selectedRuntime === "codex-cli"));
       assert.ok(state.nodes.some((node) => node.type === "Evidence" && node.properties.sha256 === "abc123"));
+      assert.ok(state.nodes.some((node) => node.type === "Artifact" && node.properties.sha256 === "abc123"));
       assert.ok(state.edges.some((edge) => edge.type === "HAS_PROVIDER_ROUTE"));
+      assert.ok(state.edges.some((edge) => edge.type === "ROUTES_TO"));
+      assert.ok(state.edges.some((edge) => edge.type === "OBSERVED_EVIDENCE"));
+      assert.ok(state.edges.some((edge) => edge.type === "STORED_AT"));
       assert.ok(state.edges.some((edge) => edge.type === "EVIDENCED_BY"));
     } finally {
       await rm(root, { recursive: true, force: true });
