@@ -11,7 +11,7 @@ import type { TaskRunner, TaskResult } from "../contracts/orchestration.js";
 import type { TaskRunContext } from "../contracts/worker-context.js";
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentContextCompaction, AgentRunResult, AgentTask } from "./agent-runtime.js";
+import type { AgentContextCompaction, AgentRunResult, AgentRuntime, AgentTask } from "./agent-runtime.js";
 import { toTaskResult } from "./agent-runtime.js";
 import { checkEvidenceGate, hasDeclaredEvidenceRequirement } from "./contracts/evidence.js";
 
@@ -24,6 +24,7 @@ import { capsuleToTask } from "./context-broker-converter.js";
 import { applyTaskRunContextToAgentTask, envFromWorkerManifest } from "./worker-manifest.js";
 import { createRuntimeRegistry, type RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRouter } from "./runtime-router.js";
+import { createFreedomdRuntimeRouter } from "./freedomd-router.js";
 import { createContextBroker } from "./context-broker.js";
 import { estimateCapsuleTokens, type ContextCapsule } from "./context-capsule.js";
 import { maybeCompactWithHeadroom } from "./headroom-policy.js";
@@ -392,12 +393,23 @@ export async function createRuntimeBackedTaskRunner(
   const registry = await createDefaultRuntimeRegistry(options);
   const runtimes = registry.list();
 
-  const runtimeRouter = createRuntimeRouter({
-    runtimes,
-    fallbackChain: options.fallbackChain,
-  });
+  const freedomdEnabled = (process.env.OMK_FREEDOMD_MODE ?? "off").trim().toLowerCase() !== "off";
+  const runtimeRouter = freedomdEnabled
+    ? await createFreedomdRuntimeRouter({
+        runtimes,
+        fallbackChain: options.fallbackChain,
+        projectRoot: options.cwd,
+        autoLoadIncidents: true,
+        isTty: process.stdin.isTTY,
+      })
+    : createRuntimeRouter({
+        runtimes,
+        fallbackChain: options.fallbackChain,
+      });
   registry.onChange((nextRuntimes) => {
-    runtimeRouter.setRuntimes(nextRuntimes);
+    if ("setRuntimes" in runtimeRouter) {
+      (runtimeRouter as { setRuntimes?: (r: AgentRuntime[]) => void }).setRuntimes?.(nextRuntimes);
+    }
   });
 
   const contextBroker = createContextBroker({

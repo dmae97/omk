@@ -21,6 +21,8 @@ import {
   buildFreedomdDegradedPlan,
 } from "../dist/runtime/freedomd-router.js";
 import { buildLocalFirstEvidenceEnvelope, hashTaskPrompt } from "../dist/runtime/freedomd-evidence-envelope.js";
+import { loadProviderIncidents } from "../dist/runtime/freedomd-incidents.js";
+import { requestProviderException } from "../dist/runtime/freedomd-exception.js";
 import { LocalGraphMemoryStore } from "../dist/memory/local-graph-memory-store.js";
 import { sha256Hex } from "../dist/util/hash.js";
 
@@ -189,7 +191,7 @@ describe("data retention gate", () => {
 
 describe("freedomd router", () => {
   it("routes to local-llm in strict mode even with lower priority", async () => {
-    const router = createFreedomdRuntimeRouter({
+    const router = await createFreedomdRuntimeRouter({
       freedomdMode: "strict",
       runtimes: [
         fakeRuntime("kimi-api", { read: true, review: true }, { providerId: "kimi", priority: 100 }),
@@ -203,7 +205,7 @@ describe("freedomd router", () => {
   });
 
   it("blocks export-restricted provider and degrades", async () => {
-    const router = createFreedomdRuntimeRouter({
+    const router = await createFreedomdRuntimeRouter({
       freedomdMode: "balanced",
       runtimes: [
         fakeRuntime("kimi-api", { read: true, review: true }, { providerId: "kimi", priority: 100 }),
@@ -220,7 +222,7 @@ describe("freedomd router", () => {
   });
 
   it("selects cloud runtime in off mode", async () => {
-    const router = createFreedomdRuntimeRouter({
+    const router = await createFreedomdRuntimeRouter({
       freedomdMode: "off",
       runtimes: [
         fakeRuntime("kimi-api", { read: true, review: true }, { providerId: "kimi", priority: 100 }),
@@ -235,7 +237,7 @@ describe("freedomd router", () => {
   it("executes selected runtime and persists evidence envelope", async () => {
     const tmp = await mkdtemp(join(tmpdir(), "omk-freedomd-"));
     const store = await LocalGraphMemoryStore.create({ projectRoot: tmp, sessionId: "freedomd-test" });
-    const router = createFreedomdRuntimeRouter({
+    const router = await createFreedomdRuntimeRouter({
       freedomdMode: "balanced",
       runtimes: [
         fakeRuntime("codex-cli", { read: true, write: true, shell: true, patch: true }, { providerId: "codex", runtimeMode: "cli", priority: 100 }),
@@ -288,6 +290,71 @@ describe("freedomd evidence envelope", () => {
     for (const artifact of result.localArtifacts) {
       assert.equal(artifact.sha256, sha256Hex(await readFile(artifact.path, "utf-8")));
     }
+    await rm(tmp, { recursive: true, force: true });
+  });
+});
+
+describe("freedomd incident monitor", () => {
+  it("loads incidents from env JSON", async () => {
+    const incidents = await loadProviderIncidents({
+      projectRoot: process.cwd(),
+      env: {
+        OMK_PROVIDER_INCIDENTS: JSON.stringify([
+          { providerId: "anthropic", kind: "export-control", severity: "block", reason: "Fable5", updatedAt: new Date().toISOString() },
+        ]),
+      },
+    });
+    assert.equal(incidents.length, 1);
+    assert.equal(incidents[0].providerId, "anthropic");
+    assert.equal(incidents[0].severity, "block");
+  });
+
+  it("returns empty when no sources are configured", async () => {
+    const incidents = await loadProviderIncidents({ projectRoot: process.cwd(), env: {} });
+    assert.equal(incidents.length, 0);
+  });
+});
+
+describe("freedomd provider exception approval", () => {
+  it("denies in non-interactive mode", async () => {
+    const result = await requestProviderException(
+      {
+        providerId: "anthropic",
+        blockedReason: "export-control",
+        retentionDays: 30,
+        jurisdictionRisk: 0.8,
+        localFallbackAvailable: false,
+        taskSensitivity: "internal",
+      },
+      { runId: "exc-run", nodeId: "exc-node", isTty: false },
+    );
+    assert.equal(result.decision, "deny");
+    assert.match(result.reason, /non-interactive/);
+  });
+
+  it("records allow-once artifact", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "omk-freedomd-exc-"));
+    const result = await requestProviderException(
+      {
+        providerId: "anthropic",
+        blockedReason: "export-control",
+        retentionDays: 30,
+        jurisdictionRisk: 0.8,
+        localFallbackAvailable: false,
+        taskSensitivity: "internal",
+      },
+      {
+        runId: "exc-run",
+        nodeId: "exc-node",
+        projectRoot: tmp,
+        isTty: true,
+        promptUser: async () => "allow once",
+      },
+    );
+    assert.equal(result.decision, "once");
+    assert.ok(result.artifactPath);
+    const artifact = await readFile(result.artifactPath, "utf-8");
+    assert.match(artifact, /"scope":\s*"once"/);
     await rm(tmp, { recursive: true, force: true });
   });
 });

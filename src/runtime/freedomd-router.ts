@@ -8,7 +8,7 @@
  */
 
 import type { AgentResult, AgentRunResult, AgentRuntime, AgentTask, AgentTaskSovereignty } from "./agent-runtime.js";
-import type { ContextCapsule, MemoryFact } from "./context-capsule.js";
+import type { ContextCapsule } from "./context-capsule.js";
 import type { LocalGraphMemoryStore } from "../memory/local-graph-memory-store.js";
 import { createRuntimeRouter, type RuntimeRouterOptions } from "./runtime-router.js";
 import { compileFreedomdPolicy, type FreedomdMode, type FreedomdPolicy } from "./freedomd-policy.js";
@@ -24,6 +24,8 @@ import { evaluateDataRetentionGate, type DataRetentionGateResult } from "./data-
 import { buildLocalFirstEvidenceEnvelope, type FreedomdEvidenceEnvelope } from "./freedomd-evidence-envelope.js";
 import { runtimeProviderId, runtimeModeOf } from "./authority-matrix.js";
 import { maskSensitiveText } from "../util/secret-mask.js";
+import { loadProviderIncidents } from "./freedomd-incidents.js";
+import { requestProviderException, type ProviderExceptionResult } from "./freedomd-exception.js";
 
 export type { FreedomdMode };
 
@@ -35,6 +37,9 @@ export interface FreedomdRouterOptions extends RuntimeRouterOptions {
   readonly graphStore?: LocalGraphMemoryStore;
   readonly allowRedaction?: boolean;
   readonly projectRoot?: string;
+  readonly autoLoadIncidents?: boolean;
+  readonly promptUser?: (message: string) => Promise<string>;
+  readonly isTty?: boolean;
 }
 
 export interface FreedomdScoredRuntime {
@@ -58,6 +63,7 @@ export interface FreedomdRouteResult {
   readonly degradedPlan?: FreedomdDegradedPlan;
   readonly sovereignty: AgentTaskSovereignty;
   readonly diagnostics: string;
+  readonly providerException?: ProviderExceptionResult;
 }
 
 function severityOrdinal(severity: string): number {
@@ -217,12 +223,13 @@ function agentResultToRunResult(result: AgentResult, runtimeId: string): AgentRu
   };
 }
 
-export function createFreedomdRuntimeRouter(options: FreedomdRouterOptions = {}) {
+export async function createFreedomdRuntimeRouter(options: FreedomdRouterOptions = {}) {
   const policy = compileFreedomdPolicy({
     taskFlags: options.freedomdMode ? { mode: options.freedomdMode } : undefined,
   });
   const profiles = options.sovereigntyProfiles ?? buildProviderSovereigntyProfiles();
-  const incidents = options.incidents ?? [];
+  const loadedIncidents = options.autoLoadIncidents !== false ? await loadProviderIncidents({ projectRoot: options.projectRoot }) : [];
+  const incidents = options.incidents ?? loadedIncidents;
   const graphStore = options.graphStore;
   const projectRoot = options.projectRoot ?? process.cwd();
 
@@ -286,6 +293,42 @@ export function createFreedomdRuntimeRouter(options: FreedomdRouterOptions = {})
 
     if (scored.length === 0) {
       const degraded = buildFreedomdDegradedPlan(task, "NO_FREEDOMD_COMPATIBLE_RUNTIME", options.runtimes ?? []);
+
+      if (policy.allowProviderExceptions && options.isTty !== false) {
+        const blocked = options.runtimes?.[0];
+        if (blocked) {
+          const profile = lookupSovereigntyProfile(blocked, profiles);
+          const exception = await requestProviderException(
+            {
+              providerId: runtimeProviderId(blocked),
+              runtimeMode: runtimeModeOf(blocked),
+              blockedReason: "NO_FREEDOMD_COMPATIBLE_RUNTIME",
+              retentionDays: profile?.retentionDays ?? 0,
+              jurisdictionRisk: profile ? computeProviderSovereigntyScore(blocked, task, { profile, incidents }).diagnostics.jurisdictionRisk : 0,
+              localFallbackAvailable: hasLocalRuntime(options.runtimes ?? []),
+              taskSensitivity: task.safety?.risk ?? "unknown",
+            },
+            {
+              runId: task.context.runId,
+              nodeId: task.context.nodeId,
+              projectRoot,
+              graphStore,
+              isTty: options.isTty,
+              promptUser: options.promptUser,
+            },
+          );
+          if (exception.decision === "once" || exception.decision === "run") {
+            return {
+              selectedRuntime: blocked,
+              fallbackChain: [],
+              sovereignty,
+              diagnostics: `provider exception ${exception.decision} for ${blocked.id}`,
+              providerException: exception,
+            };
+          }
+        }
+      }
+
       return {
         fallbackChain: [],
         degradedPlan: degraded,
@@ -442,8 +485,11 @@ export function createFreedomdRuntimeRouter(options: FreedomdRouterOptions = {})
 
   return {
     policy,
+    // baseRouter intentionally omitted from public return type to avoid leaking
+    // internal RuntimeRouter history types; use executeTask for routing.
+    baseRouter: baseRouter as unknown,
     freedomdRoute,
-    scoreRuntimesWithSovereignty: (task: AgentTask) =>
+    scoreRuntimesWithSovereignty: (task: AgentTask): FreedomdScoredRuntime[] =>
       scoreRuntimesWithSovereignty(task, options.runtimes ?? [], policy, {
         profiles,
         incidents,
@@ -451,5 +497,5 @@ export function createFreedomdRuntimeRouter(options: FreedomdRouterOptions = {})
         allowRedaction: options.allowRedaction,
       }),
     executeTask,
-  };
+  } as const;
 }
