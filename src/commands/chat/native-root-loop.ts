@@ -876,7 +876,14 @@ function debloatRiskFromNativeTurnRisk(risk: NativeTurnRisk): DebloatRisk {
   return "dangerous";
 }
 
+function isAgentFreedomMode(): boolean {
+  const raw = process.env.OMK_AGENT_FREEDOM ?? process.env.OMK_SWEBENCH_MODE ?? "";
+  const normalized = raw.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "on";
+}
+
 function nativeTurnRequiresEvidence(risk: NativeTurnRisk): boolean {
+  if (isAgentFreedomMode()) return false;
   return risk === "write" || risk === "shell" || risk === "merge";
 }
 

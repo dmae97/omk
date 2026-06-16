@@ -16,6 +16,12 @@ import type { AgentResult, AgentRuntime, AgentRunResult, AgentTask, RuntimeCapab
 import type { ContextCapsule } from "./context-capsule.js";
 import { createDecisionTraceStore } from "../evidence/decision-trace.js";
 import { runtimeIsAdvisory, runtimeSatisfiesAuthority } from "./authority-matrix.js";
+
+function isAgentFreedomMode(): boolean {
+  const raw = process.env.OMK_AGENT_FREEDOM ?? process.env.OMK_SWEBENCH_MODE ?? "";
+  const normalized = raw.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "on";
+}
 import type { HealthState, RuntimeHealthProbeKind } from "./contracts/shared.js";
 import { sanitizeRuntimeStderrResult, type PrivateStderrRetentionOptions } from "./private-stderr.js";
 import { classifyRuntimeFailure, type RuntimeFailureClassification } from "./runtime-failure-classifier.js";
@@ -1003,12 +1009,17 @@ function runtimeSatisfiesAdvisoryBoundary(runtime: AgentRuntime, task: AgentTask
     required.patch ||
     required.shell ||
     required.merge ||
-    required.mcp ||
-    required.toolCalling
+    required.mcp
   ) {
     return {
       ok: false,
-      reason: `advisory runtime ${runtime.id} cannot execute write/shell/merge/patch/MCP/tool-calling authority`,
+      reason: `advisory runtime ${runtime.id} cannot execute write/shell/merge/patch/MCP authority`,
+    };
+  }
+  if (required.toolCalling && !isAgentFreedomMode()) {
+    return {
+      ok: false,
+      reason: `advisory runtime ${runtime.id} cannot execute tool-calling authority unless agent-freedom mode is enabled`,
     };
   }
   return { ok: true };

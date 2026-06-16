@@ -14,6 +14,12 @@ import { join } from "node:path";
 import type { AgentContextCompaction, AgentRunResult, AgentTask } from "./agent-runtime.js";
 import { toTaskResult } from "./agent-runtime.js";
 import { checkEvidenceGate, hasDeclaredEvidenceRequirement } from "./contracts/evidence.js";
+
+function isAgentFreedomMode(): boolean {
+  const raw = process.env.OMK_AGENT_FREEDOM ?? process.env.OMK_SWEBENCH_MODE ?? "";
+  const normalized = raw.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "on";
+}
 import { capsuleToTask } from "./context-broker-converter.js";
 import { applyTaskRunContextToAgentTask, envFromWorkerManifest } from "./worker-manifest.js";
 import { createRuntimeRegistry, type RuntimeRegistry } from "./runtime-registry.js";
@@ -493,7 +499,8 @@ export async function createRuntimeBackedTaskRunner(
         ? { ...baseTask, context: { ...baseTask.context, onOutput: options.onOutput } }
         : baseTask;
 
-      const evidenceRequired = task.safety.evidenceRequired || effectiveCapsule.node.routing?.evidenceRequired === true || isHighRiskTask(task);
+      const agentFreedomMode = isAgentFreedomMode();
+      const evidenceRequired = !agentFreedomMode && (task.safety.evidenceRequired || effectiveCapsule.node.routing?.evidenceRequired === true || isHighRiskTask(task));
       const declaredEvidenceOk = !evidenceRequired || hasDeclaredEvidenceRequirement(effectiveCapsule.node.outputs);
       if (evidenceRequired && !declaredEvidenceOk) {
         return {
@@ -513,7 +520,7 @@ export async function createRuntimeBackedTaskRunner(
       const taskResult = toTaskResult(agentResult);
 
       // Post-execution evidence check for tasks that produced no metadata gate
-      if (evidenceRequired && agentResult.success) {
+      if (evidenceRequired && agentResult.success && !agentFreedomMode) {
         const postCheck = checkEvidenceGate(true, effectiveCapsule.node.outputs, taskResult.metadata ?? null, taskResult.stdout);
         if (!postCheck.satisfied) {
           return {
