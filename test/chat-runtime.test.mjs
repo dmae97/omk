@@ -1,6 +1,6 @@
 import { deepStrictEqual, ok, rejects } from "node:assert";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -566,6 +566,33 @@ test("executeNativeRootTurn captures artifact write failures in metadata", async
     if (previousProjectRoot === undefined) delete process.env.OMK_PROJECT_ROOT;
     else process.env.OMK_PROJECT_ROOT = previousProjectRoot;
     rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test("executeNativeRootTurn upserts replay index without dropping earlier turn artifacts", async () => {
+  const runId = "run-replay-index-test";
+  const runDir = join(process.cwd(), ".omk", "runs", runId);
+  rmSync(runDir, { recursive: true, force: true });
+  try {
+    const taskRunner = {
+      async run(node) {
+        return { success: true, exitCode: 0, stdout: `ok ${node.id}`, stderr: "", metadata: {} };
+      },
+    };
+    const first = buildNativeRootLoopTurnNode({ bootstrap: codexBootstrap, prompt: "first", nodeId: "turn-one" });
+    const second = buildNativeRootLoopTurnNode({ bootstrap: codexBootstrap, prompt: "second", nodeId: "turn-two" });
+
+    await executeNativeRootTurn({ taskRunner, node: first, env: { OMK_RUN_ID: runId }, signal: new AbortController().signal, heartbeatEnabled: false });
+    await executeNativeRootTurn({ taskRunner, node: second, env: { OMK_RUN_ID: runId }, signal: new AbortController().signal, heartbeatEnabled: false });
+
+    const index = JSON.parse(readFileSync(join(runDir, "replay-index.json"), "utf8"));
+    deepStrictEqual(index.schemaVersion, "omk.replay-index.v1");
+    const paths = index.artifacts.map((artifact) => artifact.path).sort();
+    ok(paths.some((path) => path.endsWith("turn-one-result.jsonl")), JSON.stringify(paths));
+    ok(paths.some((path) => path.endsWith("turn-two-result.jsonl")), JSON.stringify(paths));
+    deepStrictEqual(new Set(paths).size, paths.length);
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
   }
 });
 

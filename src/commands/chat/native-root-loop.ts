@@ -998,6 +998,63 @@ async function sha256File(path: string): Promise<string | undefined> {
   }
 }
 
+interface ReplayIndexArtifact {
+  readonly path: string;
+  readonly sha256?: string;
+  readonly kind: string;
+  readonly updatedAt: string;
+}
+
+interface ReplayIndexFile {
+  readonly schemaVersion: "omk.replay-index.v1";
+  readonly runId: string;
+  readonly updatedAt: string;
+  readonly artifacts: readonly ReplayIndexArtifact[];
+}
+
+function parseReplayIndex(raw: string, runId: string): ReplayIndexFile {
+  try {
+    const parsed = JSON.parse(raw) as Partial<ReplayIndexFile>;
+    if (parsed.schemaVersion !== "omk.replay-index.v1" || parsed.runId !== runId || !Array.isArray(parsed.artifacts)) {
+      throw new Error("invalid replay index");
+    }
+    return {
+      schemaVersion: "omk.replay-index.v1",
+      runId,
+      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
+      artifacts: parsed.artifacts.filter((artifact): artifact is ReplayIndexArtifact =>
+        Boolean(artifact && typeof artifact.path === "string" && typeof artifact.kind === "string")
+      ),
+    };
+  } catch {
+    return { schemaVersion: "omk.replay-index.v1", runId, updatedAt: new Date().toISOString(), artifacts: [] };
+  }
+}
+
+async function upsertReplayIndexArtifact(input: {
+  readonly replayIndexPath: string;
+  readonly runId: string;
+  readonly artifactPath: string;
+  readonly artifactHash?: string;
+  readonly artifactKind: string;
+}): Promise<void> {
+  const now = new Date().toISOString();
+  let existing: ReplayIndexFile = { schemaVersion: "omk.replay-index.v1", runId: input.runId, updatedAt: now, artifacts: [] };
+  try {
+    existing = parseReplayIndex(await readFile(input.replayIndexPath, "utf-8"), input.runId);
+  } catch {
+    // Missing replay index is expected for the first turn.
+  }
+  const artifacts = existing.artifacts.filter((artifact) => artifact.path !== input.artifactPath);
+  artifacts.push({ path: input.artifactPath, sha256: input.artifactHash, kind: input.artifactKind, updatedAt: now });
+  await writeFile(input.replayIndexPath, JSON.stringify({
+    schemaVersion: "omk.replay-index.v1",
+    runId: input.runId,
+    updatedAt: now,
+    artifacts,
+  }, null, 2), "utf-8");
+}
+
 async function recordTurnAuditGraph(input: {
   root: string;
   runId: string;
@@ -1009,14 +1066,15 @@ async function recordTurnAuditGraph(input: {
     const artifactHash = input.resultArtifact ? await sha256File(input.resultArtifact) : undefined;
     const replayIndex = getRunArtifactPath(input.runId, "replay-index.json", input.root);
     await mkdir(dirname(replayIndex), { recursive: true });
-    await writeFile(replayIndex, JSON.stringify({
-      schemaVersion: "omk.replay-index.v1",
-      runId: input.runId,
-      updatedAt: new Date().toISOString(),
-      artifacts: [
-        ...(input.resultArtifact ? [{ path: input.resultArtifact, sha256: artifactHash, kind: "turn-result" }] : []),
-      ],
-    }, null, 2), "utf-8");
+    if (input.resultArtifact) {
+      await upsertReplayIndexArtifact({
+        replayIndexPath: replayIndex,
+        runId: input.runId,
+        artifactPath: input.resultArtifact,
+        artifactHash,
+        artifactKind: "turn-result",
+      });
+    }
 
     const store = await LocalGraphMemoryStore.create({ projectRoot: input.root, sessionId: input.runId, source: "native-root-loop-audit" });
     await store?.materializeTurnAudit({

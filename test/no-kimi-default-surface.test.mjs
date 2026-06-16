@@ -20,5 +20,6 @@ test("release gate includes the no-KIMI default-surface check", async () => {
   const scripts = pkg.scripts ?? {};
 
   assert.match(String(scripts["verify:no-kimi"] ?? ""), /no-kimi:default-surface/);
-  assert.match(String(scripts["release:check"] ?? ""), /verify:no-kimi/);
+  assert.match(String(scripts["release:check"] ?? ""), /release:gate-core/);
+  assert.match(String(scripts["release:gate-core"] ?? ""), /verify:no-kimi/);
 });

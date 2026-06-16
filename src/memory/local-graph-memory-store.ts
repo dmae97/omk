@@ -504,8 +504,13 @@ export class LocalGraphMemoryStore {
 
       const runId = this.nodeId("Run", input.runId);
       const turnId = this.nodeId("Task", `${input.runId}:${input.nodeId}`);
-      const routeId = this.nodeId("ProviderRoute", `${input.runId}:${input.nodeId}:${input.selectedRuntime ?? input.provider ?? "unknown"}`);
+      const providerName = input.provider ?? input.selectedRuntime?.split("-")[0] ?? "unknown";
+      const routeId = this.nodeId("ProviderRoute", `${input.runId}:${input.nodeId}:${input.selectedRuntime ?? providerName}`);
       const evidenceId = this.nodeId("Evidence", `${input.runId}:${input.nodeId}:${input.evidenceArtifactPath ?? input.evidenceKind ?? "result"}`);
+      const providerId = this.nodeId("Provider", providerName);
+      const artifactId = input.evidenceArtifactPath
+        ? this.nodeId("Artifact", `${input.runId}:${input.evidenceArtifactPath}`)
+        : undefined;
 
       const projectId = this.nodeId("Project", this.settings.project.key);
       this.upsertNode(state, {
@@ -552,7 +557,7 @@ export class LocalGraphMemoryStore {
           key: `${input.runId}:${input.nodeId}:route`,
           runId: input.runId,
           nodeId: input.nodeId,
-          provider: input.provider ?? "unknown",
+          provider: providerName,
           selectedRuntime: input.selectedRuntime ?? "unknown",
           fallbackChain: (input.fallbackChain ?? []).join(","),
         },
@@ -560,12 +565,23 @@ export class LocalGraphMemoryStore {
         updatedAt: now,
       });
       this.upsertNode(state, {
+        id: providerId,
+        type: "Provider",
+        labels: ["OmkProvider", "Provider"],
+        label: providerName,
+        summary: `Provider ${providerName}`,
+        tags: ["provider", "audit"],
+        properties: { key: providerName, provider: providerName },
+        createdAt: now,
+        updatedAt: now,
+      });
+      this.upsertNode(state, {
         id: evidenceId,
         type: "Evidence",
-        labels: ["OmkEvidence", "Evidence"],
+        labels: ["OmkEvidence", "Evidence", "EvidenceObservation"],
         label: input.evidenceKind ?? "turn-result",
         summary: input.evidenceArtifactPath ?? "turn result artifact",
-        tags: ["evidence", "audit"],
+        tags: ["evidence", "audit", "observation"],
         properties: {
           key: `${input.runId}:${input.nodeId}:evidence`,
           runId: input.runId,
@@ -577,11 +593,34 @@ export class LocalGraphMemoryStore {
         createdAt: now,
         updatedAt: now,
       });
+      if (artifactId && input.evidenceArtifactPath) {
+        const artifactPath = input.evidenceArtifactPath;
+        this.upsertNode(state, {
+          id: artifactId,
+          type: "Artifact",
+          labels: ["OmkArtifact", "Artifact"],
+          label: artifactPath,
+          summary: artifactPath,
+          tags: ["artifact", "audit"],
+          properties: {
+            key: `${input.runId}:${artifactPath}`,
+            runId: input.runId,
+            path: artifactPath,
+            sha256: input.evidenceHash ?? "",
+          },
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
 
       this.upsertEdge(state, projectId, runId, "HAS_RUN", now);
       this.upsertEdge(state, runId, turnId, "HAS_TASK", now);
+      this.upsertEdge(state, runId, turnId, "HAS_TURN", now);
       this.upsertEdge(state, turnId, routeId, "HAS_PROVIDER_ROUTE", now);
+      this.upsertEdge(state, routeId, providerId, "ROUTES_TO", now);
+      this.upsertEdge(state, turnId, evidenceId, "OBSERVED_EVIDENCE", now);
       this.upsertEdge(state, routeId, evidenceId, "EVIDENCED_BY", now);
+      if (artifactId) this.upsertEdge(state, evidenceId, artifactId, "STORED_AT", now);
     });
   }
 

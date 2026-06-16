@@ -14,7 +14,8 @@
       },
       "expected": "allow",
       "actual": "allow",
-      "passed": true
+      "passed": true,
+      "layer": "decision"
     },
     {
       "name": "enforce write prompt without authority blocks",
@@ -29,7 +30,8 @@
       },
       "expected": "block",
       "actual": "block",
-      "passed": true
+      "passed": true,
+      "layer": "decision"
     },
     {
       "name": "enforce shell prompt in read-only sandbox blocks",
@@ -44,7 +46,8 @@
       },
       "expected": "block",
       "actual": "block",
-      "passed": true
+      "passed": true,
+      "layer": "decision"
     },
     {
       "name": "warn mode would diagnose but pure decision still blocks insufficient authority",
@@ -59,7 +62,8 @@
       },
       "expected": "block",
       "actual": "block",
-      "passed": true
+      "passed": true,
+      "layer": "decision"
     },
     {
       "name": "shadow mode records trace only; authority-sufficient auto write allows",
@@ -74,7 +78,16 @@
       },
       "expected": "allow",
       "actual": "allow",
-      "passed": true
+      "passed": true,
+      "layer": "decision"
+    },
+    {
+      "name": "enforce native turn blocks before task runner dispatch",
+      "mode": "enforce",
+      "actual": "block",
+      "expected": "block",
+      "passed": true,
+      "layer": "native-turn-subprocess"
     }
   ]
 }

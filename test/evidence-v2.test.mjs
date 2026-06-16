@@ -39,8 +39,21 @@ describe("Evidence model v2", () => {
     assert.ok(result.observations?.every((observation) => observation.replayable));
   });
 
-  it("extracts command observations from stdout", () => {
+  it("treats stdout-only command observations as weak evidence", () => {
     const observations = evidenceObservationsFromResult({ stdout: "npm test passed" });
-    assert.ok(observations.some((observation) => observation.kind === "command-pass"));
+    const commandObservation = observations.find((observation) => observation.kind === "command-pass");
+    assert.ok(commandObservation);
+    assert.equal(commandObservation.source, "stdout");
+    assert.ok(commandObservation.confidence < 0.8);
+
+    const result = checkEvidenceGate(true, [{ gate: "command-pass", ref: "npm test" }], null, "npm test passed");
+    assert.equal(result.satisfied, false);
+    assert.ok(result.missing.includes("command-pass"));
+  });
+
+  it("accepts metadata-backed command observations as high-confidence evidence", () => {
+    const result = checkEvidenceGate(true, [{ gate: "command-pass", ref: "npm test" }], { commandPass: true });
+    assert.equal(result.satisfied, true);
+    assert.ok(result.observations?.some((observation) => observation.kind === "command-pass" && observation.confidence >= 0.8));
   });
 });

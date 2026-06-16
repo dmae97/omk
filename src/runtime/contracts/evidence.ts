@@ -147,6 +147,8 @@ export interface EvidenceObservation {
   readonly timestamp: string;
   readonly replayable: boolean;
   readonly redacted: boolean;
+  /** Confidence that this observation is replayable, command-backed evidence. */
+  readonly confidence: number;
 }
 
 /** Result of checking whether a node/task produced required evidence. */
@@ -208,37 +210,43 @@ export function evidenceObservationsFromResult(input: {
     for (const raw of metaGates) {
       const gate = typeof raw === "string" ? raw.toLowerCase() : undefined;
       if (isEvidenceGateKind(gate)) {
-        observations.push({ kind: gate, source: "metadata", timestamp, replayable: true, redacted: true });
+        observations.push({ kind: gate, source: "metadata", timestamp, replayable: true, redacted: true, confidence: 0.9 });
       }
     }
   }
   if (metadata?.commandPass === true || metadata?.testPass === true || metadata?.buildPass === true) {
-    observations.push({ kind: "command-pass", source: "metadata", timestamp, replayable: true, redacted: true });
+    observations.push({ kind: "command-pass", source: "metadata", timestamp, replayable: true, redacted: true, confidence: 0.9 });
   }
   if (metadata?.diff || metadata?.patch || metadata?.changedFiles) {
-    observations.push({ kind: "diff", source: "metadata", timestamp, replayable: true, redacted: true });
+    observations.push({ kind: "diff", source: "metadata", timestamp, replayable: true, redacted: true, confidence: 0.9 });
   }
   const artifactRef = metadata?.artifact ?? metadata?.artifactPath ?? metadata?.evidenceRef;
   if (typeof artifactRef === "string" && artifactRef.trim().length > 0) {
-    observations.push({ kind: "artifact", source: "metadata", ref: artifactRef, artifactPath: artifactRef, timestamp, replayable: true, redacted: true });
+    observations.push({ kind: "artifact", source: "metadata", ref: artifactRef, artifactPath: artifactRef, timestamp, replayable: true, redacted: true, confidence: 0.95 });
   }
   for (const artifactPath of input.artifactPaths ?? []) {
-    observations.push({ kind: "artifact", source: "artifact", artifactPath, ref: artifactPath, timestamp, replayable: true, redacted: true });
+    observations.push({ kind: "artifact", source: "artifact", artifactPath, ref: artifactPath, timestamp, replayable: true, redacted: true, confidence: 0.95 });
   }
 
   const stdout = input.stdout ?? "";
   if (stdout.trim().length > 0) {
-    observations.push({ kind: "summary", source: "stdout", timestamp, replayable: true, redacted: true });
+    observations.push({ kind: "summary", source: "stdout", timestamp, replayable: true, redacted: true, confidence: 0.4 });
   }
   if (/\b(pass(ed)?|success|ok)\b/i.test(stdout) && /\b(test|check|build|lint|command)\b/i.test(stdout)) {
-    observations.push({ kind: "command-pass", source: "stdout", timestamp, replayable: true, redacted: true });
+    observations.push({ kind: "command-pass", source: "stdout", timestamp, replayable: true, redacted: true, confidence: 0.4 });
   }
 
   return observations;
 }
 
+function minimumConfidenceFor(requirement: EvidenceRequirement): number {
+  if (requirement.gate === "command-pass" || requirement.gate === "test-pass") return 0.8;
+  return 0;
+}
+
 function observationSatisfies(requirement: EvidenceRequirement, observation: EvidenceObservation): boolean {
   if (!observation.replayable || !observation.redacted) return false;
+  if (observation.confidence < minimumConfidenceFor(requirement)) return false;
   if (observation.kind === requirement.gate) return true;
   if (requirement.gate === "test-pass" && observation.kind === "command-pass") return true;
   if (requirement.gate === "file-exists" && observation.kind === "artifact") return true;
@@ -261,15 +269,18 @@ export function checkEvidenceGate(
   }
 
   if (requirements.length === 0 && observations.length > 0) {
-    return {
-      required: true,
-      satisfied: true,
-      gates: [...observedKinds],
-      missing: [],
-      reason: `evidence satisfied by observations without explicit gate: ${[...observedKinds].join(", ")}`,
-      requirements,
-      observations,
-    };
+    const strongObservations = observations.filter((observation) => observation.confidence >= 0.8 && observation.replayable && observation.redacted);
+    if (strongObservations.length > 0) {
+      return {
+        required: true,
+        satisfied: true,
+        gates: [...new Set(strongObservations.map((observation) => observation.kind))],
+        missing: [],
+        reason: `evidence satisfied by high-confidence observations without explicit gate: ${[...new Set(strongObservations.map((observation) => observation.kind))].join(", ")}`,
+        requirements,
+        observations,
+      };
+    }
   }
 
   const effectiveRequirements = requirements.length > 0
