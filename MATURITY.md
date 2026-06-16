@@ -1,7 +1,7 @@
 # OMK Command Maturity Matrix
 
 Last updated: 2026-05-24
-Current source version: v0.79.3
+Current source version: v0.80.0
 
 | Level | Meaning |
 |-------|---------|
@@ -72,5 +72,5 @@ Current source version: v0.79.3
 | Native runtime safety | OMK owns the root-orchestrator direction, but native chat must still lock turn-risk inference, approval/sandbox propagation, authority resolution, provider health probes, and DeepSeek read-only enforcement before stable provider-neutral claims. | Treat `docs/native-root-runtime-hardening.md` and `.omk/specs/native-orchestrator-phase1/` as the active hardening contract. |
 | MCP diagnostics | `mcp list/doctor/test` exist; invalid project/global MCP JSON now fails visibly through diagnostics without exposing config contents. | Add machine-readable MCP JSON and structured failure categories for command resolution, timeout, permission, and server health. |
 | Skills and harness templates | `omk skill` exposes current core/TypeScript/review packs, while init templates document project MCP scope, runtime skills, portable `.agents/skills`, and run-scoped harness manifests. | Keep external-inspired skills compact, source-linked, and non-vendored; verify install/sync through `skill-command` tests and package audit. |
-| Release docs and site | README, CHANGELOG, MATURITY, ROADMAP, getting-started docs, package audit, and release-gate commands now distinguish the v0.79.3 source target from registry-published claims while documenting alpha/experimental surfaces, parallel subagent orchestration, typed doctor repair plans, startup update prompts, native safety package readiness, current harness templates, packaged workflow skills, and the public project repository at `https://github.com/dmae97/open-multi-agent-kit`. | Treat `npm run release:check`, native safety packaging, tarball install smoke, GitHub Smoke Test, registry verification, and GitHub CI evidence on the exact commit as the publish/deploy gate before claiming v0.79.3 as released. |
+| Release docs and site | README, CHANGELOG, MATURITY, ROADMAP, getting-started docs, package audit, and release-gate commands now distinguish the v0.80.0 source target from registry-published claims while documenting alpha/experimental surfaces, parallel subagent orchestration, typed doctor repair plans, startup update prompts, native safety package readiness, current harness templates, packaged workflow skills, and the public project repository at `https://github.com/dmae97/open-multi-agent-kit`. | Treat `npm run release:check`, native safety packaging, tarball install smoke, GitHub Smoke Test, registry verification, and GitHub CI evidence on the exact commit as the publish/deploy gate before claiming v0.80.0 as released. |
 | Goal planner | Goal lifecycle exists, including continue, generated plan/evidence criteria, and verification. | Expand planner quality scoring and release evidence. |

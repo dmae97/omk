@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "omk.contract.v1",
+  "command": "release-truthfulness:013",
+  "omkVersion": "0.80.0",
+  "runtimeVersion": "v1.2",
+  "ok": true,
+  "status": "passed",
+  "commit": "release-truthfulness-tree",
+  "runId": "proof-013-release-truthfulness-20260616t000000z",
+  "traceId": "proof-013-release-truthfulness",
+  "metadata": {
+    "cwd": "[repo-root]",
+    "platform": "linux",
+    "nodeVersion": "v22.22.3",
+    "durationMs": 0,
+    "timestamp": "2026-06-16T00:00:00.000Z"
+  },
+  "warnings": [
+    "Registry verification must be read after npm publish before claiming npm latest publicly."
+  ],
+  "errors": [],
+  "evidenceRefs": [
+    {
+      "schemaVersion": "omk.evidence.v1",
+      "evidenceId": "013-package-bin-omk",
+      "runId": "proof-013-release-truthfulness-20260616t000000z",
+      "path": "proof/verified-runs/013-release-truthfulness-0800/evidence.jsonl"
+    },
+    {
+      "schemaVersion": "omk.evidence.v1",
+      "evidenceId": "013-version-consistency-gate",
+      "runId": "proof-013-release-truthfulness-20260616t000000z",
+      "path": "proof/verified-runs/013-release-truthfulness-0800/evidence.jsonl"
+    },
+    {
+      "schemaVersion": "omk.evidence.v1",
+      "evidenceId": "013-release-gate-demo-wired",
+      "runId": "proof-013-release-truthfulness-20260616t000000z",
+      "path": "proof/verified-runs/013-release-truthfulness-0800/evidence.jsonl"
+    }
+  ],
+  "data": {
+    "scenario": "release-truthfulness",
+    "packageVersion": "0.80.0",
+    "requiredCliBin": "omk",
+    "stableClaim": false,
+    "readmeAssertions": "package/bin/proof/package-audit/registry-verification guarded"
+  },
+  "decisionRefs": [
+    {
+      "schemaVersion": "omk.decision.v1",
+      "decisionId": "013-release-truthfulness-verdict",
+      "runId": "proof-013-release-truthfulness-20260616t000000z",
+      "path": "proof/verified-runs/013-release-truthfulness-0800/decisions.jsonl"
+    }
+  ]
+}

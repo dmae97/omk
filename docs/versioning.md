@@ -4,11 +4,11 @@ OMK uses two version fields in release artifacts:
 
 | Field | Current value | Source | Meaning |
 | --- | --- | --- | --- |
-| Package version | `0.79.3` | `package.json`, `package-lock.json` | npm/package source version. |
+| Package version | `0.80.0` | `package.json`, `package-lock.json` | npm/package source version. |
 | Runtime version | `v1.2` | `src/version.ts`, JSON schemas | Contract/runtime family used by OMK envelopes. |
 | Release channel | `pre-1.0` | `src/version.ts` | Pre-1.0 package channel. |
 
-`0.79.3` is the package source version for the `v1.2` runtime contract family.
+`0.80.0` is the package source version for the `v1.2` runtime contract family.
 Use `v1.2` only for runtime contracts; do not substitute it for the package version.
 
 ## Contract versions
@@ -50,6 +50,6 @@ The `version --json` command emits one `omk.contract.v1` envelope whose data pay
 
 ## Documentation rules
 
-- Use `0.79.3` when referring to the current package source version.
+- Use `0.80.0` when referring to the current package source version.
 - Use `v1.2` only for the runtime contract family.
 - Keep historical changelog entries unchanged unless the text is not clearly historical.

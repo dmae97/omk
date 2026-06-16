@@ -4,14 +4,25 @@
 
 ### Added
 
-- Added post-0.79.3 algorithm hardening roadmap and playbook docs for phased authority, evidence, health, prompt privacy, audit graph, and release-gate improvements.
-- Added runtime-mode authority matrix, `AgentTask.safety`, evidence observation semantics, tri-state health signals, prompt-private turn artifacts, audit graph materialization, and authority smoke coverage.
-- Added project-local spec-kit artifacts under `.speckit/` and `specs/` for OMK 0.79.3 machine-checkable hardening.
+- Reserved for changes after v0.80.0.
+
+## v0.80.0 — Freedomd sovereignty, default agent freedom, and release-ready GitHub docs (2026-06-16)
+
+### Added
+
+- Added Freedomd provider-sovereignty control plane: policy compiler, sovereignty scoring, retention gate, cutoff-resilient routing, degraded plans, local-first evidence envelopes, incident feeds, and provider exception artifacts.
+- Added default agent freedom behavior with strict guardrails opt-in via `OMK_STRICT_GUARDRAIL=1`; Freedomd routing remains explicitly controlled with `OMK_FREEDOMD_MODE=balanced|strict`.
+- Added Headroom control-plane hardening: loop-risk signals, replay verifier, compaction quality gate, artifact hashing, ontology relation gate, and adapter compaction consumption.
+- Added Freedomd README/release asset provenance and GitHub-facing documentation for provider independence, retention safety, and evidence portability.
 
 ### Changed
 
-- Refreshed provider maturity docs around `(provider, runtimeMode)` authority instead of provider identity alone.
-- Refreshed current-facing docs and roadmap language to align with `open-multi-agent-kit@0.79.3`, runtime contract family `v1.2`, and `pre-1.0` release-channel claims.
+- Refreshed README, docs, roadmap, maturity notes, init templates, themes, and package metadata to align with `open-multi-agent-kit@0.80.0` and runtime contract family `v1.2`.
+- Wired Freedomd routing into the runtime-backed task runner and propagated sovereignty metadata through DAG/node routing, task context, and worker manifests.
+
+### Fixed
+
+- Closed remaining post-0.79.3 runtime hardening risks around prompt privacy, evidence gates, private stderr retention, provider health escalation, adapter cutoff handling, and graph ontology consistency.
 
 ## v0.79.3 — GLM 5.2 max thinking, scroll-safe TTY, and OSS CLI polish (2026-06-15)
 

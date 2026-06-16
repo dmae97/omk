@@ -1,4 +1,4 @@
-<!-- derived-from: omk.theme.v1/night-city@e5daf40d789d -->
+<!-- derived-from: omk.theme.v1/night-city@a2cd88dd38e2 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
   <title id="title">OMK init to control loop</title>
   <desc id="desc">The OMK setup path creates scoped project files, runs doctor checks, then enters the evidence-gated control loop.</desc>

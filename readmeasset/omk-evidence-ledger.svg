@@ -1,4 +1,4 @@
-<!-- derived-from: omk.theme.v1/night-city@e5daf40d789d -->
+<!-- derived-from: omk.theme.v1/night-city@a2cd88dd38e2 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420">
 <rect width="1200" height="420" fill="#070B14"/>
 <defs><filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>

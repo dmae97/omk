@@ -210,7 +210,7 @@
   "meta": {
     "provenance": "Standalone oxidized rust-forge palette for the OMK orchestration console. Warm coal/iron/anvil backgrounds, rust-orange + molten + copper + ember heat accents, oxide/quench/verdigris patina greens for pass/done, crimson for fail/dead, steel/scale/ash grays, and bone foreground. Forge-specific heat/anvil/quench semantics make OMK control surfaces distinct from provider branding while preserving NO_COLOR glyph safety.",
     "tierAssumptions": "16-color tier gated against stock VGA/xterm ANSI values; terminals with remapped ANSI-16 palettes are outside the contract — glyphs are the safety net. NO_COLOR note: control.dim uses ┊ so logStream info (telemetry.info ·) and dim rows stay distinguishable without color.",
-    "omkVersion": "0.79.3",
+    "omkVersion": "0.80.0",
     "independence": "OMK is the control plane; providers and models are adapter lanes, never the product identity or final authority."
   }
 }

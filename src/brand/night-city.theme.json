@@ -17,32 +17,129 @@
     "muted": "#9DB3C7",
     "gray": "#758FA8"
   },
-  "backgrounds": ["dark", "surface"],
+  "backgrounds": [
+    "dark",
+    "surface"
+  ],
   "semantics": {
-    "route.active": { "color": "cyan", "glyph": "▸", "usage": "text" },
-    "route.fallback": { "color": "amber", "glyph": "↻", "usage": "text" },
-    "route.dead": { "color": "red", "glyph": "✕", "usage": "text" },
-    "evidence.pass": { "color": "mint", "glyph": "✓", "usage": "text" },
-    "evidence.fail": { "color": "red", "glyph": "✗", "usage": "text" },
-    "evidence.pending": { "color": "amber", "glyph": "◐", "usage": "text" },
-    "dag.lane.running": { "color": "cyan", "glyph": "▶", "usage": "text" },
-    "dag.lane.blocked": { "color": "amber", "glyph": "⏸", "usage": "text" },
-    "dag.lane.done": { "color": "mint", "glyph": "●", "usage": "text" },
-    "dag.lane.queued": { "color": "muted", "glyph": "◌", "usage": "text" },
-    "telemetry.info": { "color": "cream", "glyph": "·", "usage": "text" },
-    "telemetry.warn": { "color": "amber", "glyph": "▲", "usage": "text" },
-    "telemetry.error": { "color": "red", "glyph": "✖", "usage": "text" },
-    "control.accent": { "color": "purple", "glyph": "◆", "kind": "chrome", "usage": "indicator" },
-    "control.dim": { "color": "gray", "glyph": "┊", "kind": "chrome", "usage": "text" },
-    "control.fg": { "color": "cream", "kind": "chrome", "usage": "text" },
-    "control.bg": { "color": "dark", "kind": "background", "usage": "background" }
+    "route.active": {
+      "color": "cyan",
+      "glyph": "▸",
+      "usage": "text"
+    },
+    "route.fallback": {
+      "color": "amber",
+      "glyph": "↻",
+      "usage": "text"
+    },
+    "route.dead": {
+      "color": "red",
+      "glyph": "✕",
+      "usage": "text"
+    },
+    "evidence.pass": {
+      "color": "mint",
+      "glyph": "✓",
+      "usage": "text"
+    },
+    "evidence.fail": {
+      "color": "red",
+      "glyph": "✗",
+      "usage": "text"
+    },
+    "evidence.pending": {
+      "color": "amber",
+      "glyph": "◐",
+      "usage": "text"
+    },
+    "dag.lane.running": {
+      "color": "cyan",
+      "glyph": "▶",
+      "usage": "text"
+    },
+    "dag.lane.blocked": {
+      "color": "amber",
+      "glyph": "⏸",
+      "usage": "text"
+    },
+    "dag.lane.done": {
+      "color": "mint",
+      "glyph": "●",
+      "usage": "text"
+    },
+    "dag.lane.queued": {
+      "color": "muted",
+      "glyph": "◌",
+      "usage": "text"
+    },
+    "telemetry.info": {
+      "color": "cream",
+      "glyph": "·",
+      "usage": "text"
+    },
+    "telemetry.warn": {
+      "color": "amber",
+      "glyph": "▲",
+      "usage": "text"
+    },
+    "telemetry.error": {
+      "color": "red",
+      "glyph": "✖",
+      "usage": "text"
+    },
+    "control.accent": {
+      "color": "purple",
+      "glyph": "◆",
+      "kind": "chrome",
+      "usage": "indicator"
+    },
+    "control.dim": {
+      "color": "gray",
+      "glyph": "┊",
+      "kind": "chrome",
+      "usage": "text"
+    },
+    "control.fg": {
+      "color": "cream",
+      "kind": "chrome",
+      "usage": "text"
+    },
+    "control.bg": {
+      "color": "dark",
+      "kind": "background",
+      "usage": "background"
+    }
   },
   "components": {
-    "statusCard": { "border": "control.accent", "title": "control.fg", "body": "telemetry.info", "meta": "control.dim" },
-    "routerTable": { "active": "route.active", "fallback": "route.fallback", "dead": "route.dead", "header": "control.accent" },
-    "evidenceGate": { "pass": "evidence.pass", "fail": "evidence.fail", "pending": "evidence.pending" },
-    "dagLanes": { "running": "dag.lane.running", "blocked": "dag.lane.blocked", "done": "dag.lane.done", "queued": "dag.lane.queued" },
-    "logStream": { "info": "telemetry.info", "warn": "telemetry.warn", "error": "telemetry.error", "dim": "control.dim" }
+    "statusCard": {
+      "border": "control.accent",
+      "title": "control.fg",
+      "body": "telemetry.info",
+      "meta": "control.dim"
+    },
+    "routerTable": {
+      "active": "route.active",
+      "fallback": "route.fallback",
+      "dead": "route.dead",
+      "header": "control.accent"
+    },
+    "evidenceGate": {
+      "pass": "evidence.pass",
+      "fail": "evidence.fail",
+      "pending": "evidence.pending"
+    },
+    "dagLanes": {
+      "running": "dag.lane.running",
+      "blocked": "dag.lane.blocked",
+      "done": "dag.lane.done",
+      "queued": "dag.lane.queued"
+    },
+    "logStream": {
+      "info": "telemetry.info",
+      "warn": "telemetry.warn",
+      "error": "telemetry.error",
+      "dim": "control.dim"
+    }
   },
   "fallback16": {
     "route.active": "brightCyan",
@@ -76,6 +173,6 @@
       "readmeasset/omk-logo-mark.svg",
       "readmeasset/omk-provider-lanes.svg"
     ],
-    "omkVersion": "0.79.3"
+    "omkVersion": "0.80.0"
   }
 }
