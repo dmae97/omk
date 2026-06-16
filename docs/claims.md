@@ -66,7 +66,7 @@ Evidence:
 
 ## Claim: OMK is a stable 1.x release
 
-Status: not claimed. Current source version is `0.80.1` (`pre-1.0`); `v1.2` is a runtime contract family.
+Status: not claimed. Current source version is `0.80.2` (`pre-1.0`); `v1.2` is a runtime contract family.
 
 Evidence:
 - [versioning](versioning.md)

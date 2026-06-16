@@ -1,4 +1,4 @@
-<!-- derived-from: omk.theme.v1/night-city@a0a6a1b0712f -->
+<!-- derived-from: omk.theme.v1/night-city@3d22ce435823 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
   <title id="title">OMK release assertions</title>
   <desc id="desc">Package, binary, gate, and package-safety assertions for open-multi-agent-kit releases.</desc>

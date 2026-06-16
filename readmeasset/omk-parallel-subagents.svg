@@ -1,4 +1,4 @@
-<!-- derived-from: omk.theme.v1/night-city@a0a6a1b0712f -->
+<!-- derived-from: omk.theme.v1/night-city@3d22ce435823 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
   <title id="title">OMK parallel subagents</title>
   <desc id="desc">OMK root control fans out scoped subagent lanes, collects evidence, then synthesizes and verifies the result.</desc>

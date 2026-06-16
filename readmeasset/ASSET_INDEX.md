@@ -4,8 +4,8 @@ Curated OMK//CONTROL assets in this directory. Assets are provenance-covered and
 
 | File                            | Packaged  | Purpose                                        | Source                                     | Dimensions  | Format |  Bytes |
 | ------------------------------- | --------- | ---------------------------------------------- | ------------------------------------------ | ----------- | ------ | -----: |
-| `omk-freedomd-control-plane.webp` | yes | v0.80.1 Freedomd README hero | Codex OAuth gpt-image-2 with `omk-control.webp` style reference | `1983x793` | `WEBP` | 1877984 |
-| `omk-freedomd-control-plane.svg` | yes | v0.80.1 Freedomd README fallback | deterministic local SVG fallback retained for provenance | `1600x640` | `SVG` | 4415 |
+| `omk-freedomd-control-plane.webp` | yes | v0.80.2 Freedomd README hero | Codex OAuth gpt-image-2 with `omk-control.webp` style reference | `1983x793` | `WEBP` | 1877984 |
+| `omk-freedomd-control-plane.svg` | yes | v0.80.2 Freedomd README fallback | deterministic local SVG fallback retained for provenance | `1600x640` | `SVG` | 4415 |
 | `omk-control.webp`              | yes       | Canonical README hero                          | Codex/OpenAI Images reviewed source        | `1536x1024` | `WEBP` | 164502 |
 | `omk-social-preview.png`        | yes       | GitHub/NPM social preview                      | local crop from omk-control.webp           | `1200x630`  | `PNG`  | 737974 |
 | `social-preview.png`            | repo-only | GitHub social preview upload candidate         | local Pillow render from omk-control.webp  | `1280x640`  | `PNG`  | 441349 |

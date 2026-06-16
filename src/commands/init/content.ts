@@ -353,7 +353,7 @@ Do not duplicate runtime inventories; follow AGENTS.md and \`chat-agent-harness.
 
 export const ROADMAP_MD = `# Roadmap
 
-Current source version: \`open-multi-agent-kit@0.80.1\` (\`pre-1.0\`; runtime contract family \`v1.2\`)
+Current source version: \`open-multi-agent-kit@0.80.2\` (\`pre-1.0\`; runtime contract family \`v1.2\`)
 Last updated: 2026-06-15
 
 ## Current runtime stance

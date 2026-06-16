@@ -53,7 +53,7 @@ omk do "review this repo for release risk" --dry-run --json
 
 ## Maturity
 
-Current source version: `open-multi-agent-kit@0.80.1` (`pre-1.0`). The `v1.2` label is a runtime contract family, not a stable npm `1.x` release. OS-level sandboxing is planned, not claimed. See [versioning](versioning.md), [claims](claims.md), and [SECURITY.md](../SECURITY.md).
+Current source version: `open-multi-agent-kit@0.80.2` (`pre-1.0`). The `v1.2` label is a runtime contract family, not a stable npm `1.x` release. OS-level sandboxing is planned, not claimed. See [versioning](versioning.md), [claims](claims.md), and [SECURITY.md](../SECURITY.md).
 
 ## Related
 

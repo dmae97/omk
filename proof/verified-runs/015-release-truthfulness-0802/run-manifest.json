@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "omk.run-manifest.v1",
+  "runId": "proof-015-release-truthfulness-20260616t000000z",
+  "decisionTracePath": "proof/verified-runs/015-release-truthfulness-0802/decisions.jsonl",
+  "evidenceSummary": {
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0
+  }
+}

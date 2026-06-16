@@ -1,6 +1,6 @@
 {
   "name": "open-multi-agent-kit",
-  "version": "0.80.1",
+  "version": "0.80.2",
   "description": "Provider-neutral multi-agent control plane for coding workflows: route agents, verify evidence, orchestrate MCP-aware DAGs, and control the loop from the omk CLI.",
   "type": "module",
   "bin": {

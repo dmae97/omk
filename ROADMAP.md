@@ -1,15 +1,15 @@
 # Roadmap
 
-Current source version: `open-multi-agent-kit@0.80.1` (`pre-1.0`; runtime contract family `v1.2`)
+Current source version: `open-multi-agent-kit@0.80.2` (`pre-1.0`; runtime contract family `v1.2`)
 Last updated: 2026-06-15
 
 ## 2026-06-15 release truth status
 
-Current source and npm target is `open-multi-agent-kit@0.80.1` on the `v1.2` runtime contract family and `pre-1.0` release channel.
+Current source and npm target is `open-multi-agent-kit@0.80.2` on the `v1.2` runtime contract family and `pre-1.0` release channel.
 
-- Main CI and main Smoke are green on the `0.80.1` release commit.
-- Tag Release and tag Smoke are green for `v0.80.1`.
-- npm `latest` is registry-verified as `open-multi-agent-kit@0.80.1`.
+- Main CI and main Smoke are green on the `0.80.2` release commit.
+- Tag Release and tag Smoke are green for `v0.80.2`.
+- npm `latest` is registry-verified as `open-multi-agent-kit@0.80.2`.
 - OS-level sandboxing is still planned, not claimed; current safety relies on authority gates, approval policy, evidence, replay, and scoped runtime capabilities.
 - The active architecture backlog is tracked in `docs/native-root-runtime-hardening.md`, `docs/native-root-runtime-algorithms.md`, and `.omk/specs/native-orchestrator-phase1/`.
 
@@ -69,7 +69,7 @@ Provider routing and graph viewing are no longer purely future work:
 ### P0: release and contract gates
 
 - Done: YAML validation now runs in local `verify` plus CI/smoke workflows.
-- Done: package dry-pack, package audit, tarball smoke, release matrix gates, GitHub Release, and npm registry verification were re-verified for `0.80.1`.
+- Done: package dry-pack, package audit, tarball smoke, release matrix gates, GitHub Release, and npm registry verification were re-verified for `0.80.2`.
 - Done: `version:check` now validates current-version Markdown claims in README, docs, ROADMAP, and init templates.
 - Done: native turn risk defaults are safer: explicit read-only constraints override write keywords, ambiguous turns fall back to `ask`, and write/shell/merge turns require evidence gates.
 - Done: tool authority has staged `shadow|warn|enforce` modes, with native turn dispatch blocking in enforce mode.
