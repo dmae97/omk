@@ -492,6 +492,19 @@ test("native read-only constraints override write keywords", () => {
   deepStrictEqual(node.outputs, undefined);
 });
 
+test("native risk classifier honors excluded release/npm scopes", () => {
+  const node = buildNativeRootLoopTurnNode({
+    bootstrap: codexBootstrap,
+    prompt: "알고리즘만 수정하고 릴리즈/배포/npm 체크 스크립트는 제외해주세요",
+    nodeId: "turn-negated-release",
+  });
+
+  deepStrictEqual(node.routing?.risk, "write");
+  deepStrictEqual(node.routing?.riskTrace?.excludedOps?.includes("merge"), true);
+  deepStrictEqual(node.routing?.riskTrace?.excludedOps?.includes("shell"), true);
+  deepStrictEqual(node.routing?.evidenceRequired, true);
+});
+
 test("native write/shell/merge turns require evidence by default", () => {
   const cases = [
     ["implement a small patch", "write", "summary"],

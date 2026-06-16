@@ -6,7 +6,7 @@ import type { DeepSeekModelTier, DeepSeekParticipation, ProviderAuthority, Provi
 
 export type TaskStatus = "pending" | "running" | "done" | "failed" | "blocked" | "skipped";
 export type DagContextBudget = "tiny" | "small" | "normal";
-export type DagOutputGate = "file-exists" | "test-pass" | "review-pass" | "command-pass" | "summary" | "none";
+export type DagOutputGate = "file-exists" | "test-pass" | "review-pass" | "command-pass" | "summary" | "artifact" | "diff" | "none";
 
 export interface DagNodeInput {
   name: string;

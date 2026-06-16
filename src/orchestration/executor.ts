@@ -8,6 +8,7 @@ import { estimateRunProgress } from "./eta.js";
 import { dagNodeRoutingEnv } from "./routing.js";
 import { getOmkResourceSettings } from "../util/resource-profile.js";
 import { checkEvidenceGates } from "./evidence-gate.js";
+import { checkEvidenceGate, type EvidenceGateCheck, type EvidenceGateKind } from "../runtime/contracts/evidence.js";
 import { invalidateTaskDagGraph } from "./task-graph.js";
 import { resolveTimeoutMs } from "../util/timeout-config.js";
 import { createNodeMonitorEngine } from "./node-monitor.js";
@@ -338,50 +339,107 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     result: TaskResult,
     options: RunOptions
   ): Promise<{ passed: boolean; evidence: import("./dag.js").DagNodeEvidence[] }> {
-    const gates: import("./evidence-gate.js").EvidenceGate[] = [];
+    const cwd = options.worktreeRoot ?? process.cwd();
+    const latestAttempt = node.attempts?.[node.attempts.length - 1];
+    const attemptId = latestAttempt ? `${node.id}__${latestAttempt.attempt}` : `${node.id}__1`;
+    const bridge = await legacyEvidenceBridge(node, result, { cwd, runId: options.runId, attemptId });
+    const metadata = {
+      ...(result.metadata ?? {}),
+      ...(bridge.evidenceGates.length > 0 && { evidenceGates: bridge.evidenceGates }),
+      ...(bridge.diffObserved && { diff: true }),
+    };
+    const required = nodeRequiresEvidence(node) || hasRequiredEvidenceOutput(node);
+    const check = checkEvidenceGate(required, node.outputs, metadata, result.stdout, bridge.artifactPaths);
+    return {
+      passed: check.satisfied,
+      evidence: evidenceGateCheckToDagEvidence(check, bridge.evidence),
+    };
+  }
 
+  async function legacyEvidenceBridge(
+    node: DagNode,
+    result: TaskResult,
+    options: { cwd: string; runId: string; attemptId: string },
+  ): Promise<{ evidenceGates: EvidenceGateKind[]; artifactPaths: string[]; diffObserved: boolean; evidence: DagNodeEvidence[] }> {
+    const legacyGates: import("./evidence-gate.js").EvidenceGate[] = [];
     for (const output of node.outputs ?? []) {
       switch (output.gate) {
         case "file-exists":
-          if (output.ref) gates.push({ type: "file-exists", path: output.ref });
+        case "artifact":
+          if (output.ref) legacyGates.push({ type: "file-exists", path: output.ref });
           break;
         case "test-pass":
-          gates.push({ type: "command-pass", command: output.ref ?? "npm test" });
+          legacyGates.push({ type: "command-pass", command: output.ref ?? "npm test" });
           break;
         case "command-pass":
-          gates.push({ type: "command-pass", command: output.ref ?? "" });
+          legacyGates.push({ type: "command-pass", command: output.ref ?? "" });
+          break;
+        case "diff":
+          legacyGates.push({ type: "diff-nonempty" });
           break;
         case "review-pass":
         case "summary":
-          gates.push({ type: "summary-present", summaryMarker: output.ref ?? "## Summary" });
+          legacyGates.push({ type: "summary-present", summaryMarker: output.ref ?? "## Summary" });
           break;
         case "none":
         default:
           break;
       }
     }
-
-    const hasCommandGate = (node.outputs ?? []).some(
-      (o) => o.gate === "command-pass" || o.gate === "test-pass"
-    );
-    if (node.routing?.evidenceRequired && !hasCommandGate) {
-      gates.push({ type: "summary-present", summaryMarker: "## Evidence" });
+    if (node.routing?.evidenceRequired && !legacyGates.some((gate) => gate.type === "command-pass")) {
+      legacyGates.push({ type: "summary-present", summaryMarker: "## Evidence" });
     }
-
-    if (gates.length === 0) {
-      return { passed: true, evidence: [] };
+    if (legacyGates.length === 0) {
+      return { evidenceGates: [], artifactPaths: [], diffObserved: false, evidence: [] };
     }
-
-    const latestAttempt = node.attempts?.[node.attempts.length - 1];
-    const attemptId = latestAttempt ? `${node.id}__${latestAttempt.attempt}` : `${node.id}__1`;
-
-    return checkEvidenceGates(gates, {
-      cwd: options.worktreeRoot ?? process.cwd(),
+    const legacy = await checkEvidenceGates(legacyGates, {
+      cwd: options.cwd,
       stdout: result.stdout,
       nodeId: node.id,
       runId: options.runId,
-      attemptId,
+      attemptId: options.attemptId,
     });
+    const evidenceGates: EvidenceGateKind[] = [];
+    const artifactPaths: string[] = [];
+    let diffObserved = false;
+    for (const item of legacy.evidence) {
+      if (!item.passed) continue;
+      if (item.gate === "command-pass") evidenceGates.push("command-pass");
+      else if (item.gate === "summary-present") evidenceGates.push("summary");
+      else if (item.gate === "file-exists") {
+        evidenceGates.push("artifact");
+        if (item.ref) artifactPaths.push(item.ref);
+      } else if (item.gate === "diff-nonempty") {
+        evidenceGates.push("diff");
+        diffObserved = true;
+      }
+    }
+    return { evidenceGates, artifactPaths, diffObserved, evidence: legacy.evidence };
+  }
+
+  function evidenceGateCheckToDagEvidence(check: EvidenceGateCheck, bridgeEvidence: DagNodeEvidence[]): DagNodeEvidence[] {
+    const evidence: DagNodeEvidence[] = [...bridgeEvidence];
+    for (const observation of check.observations ?? []) {
+      evidence.push({
+        gate: observation.kind,
+        passed: check.satisfied,
+        ref: observation.ref ?? observation.artifactPath,
+        message: `Evidence observation ${observation.kind} from ${observation.source} confidence=${observation.confidence}`,
+      });
+    }
+    for (const missing of check.missing) {
+      evidence.push({
+        gate: missing,
+        passed: false,
+        failureKind: "missing-evidence-observation",
+        message: check.reason,
+      });
+    }
+    return evidence;
+  }
+
+  function hasRequiredEvidenceOutput(node: DagNode): boolean {
+    return (node.outputs ?? []).some((output) => output.required !== false && output.gate !== undefined && output.gate !== "none");
   }
 
   function nodeRequiresEvidence(node: DagNode): boolean {
@@ -403,7 +461,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
   ): Promise<void> {
     if (nodeRequiresEvidence(node)) {
       const hasGate = (node.outputs ?? []).some((output) =>
-        ["file-exists", "test-pass", "review-pass", "command-pass", "summary"].includes(output.gate ?? "")
+        ["file-exists", "test-pass", "review-pass", "command-pass", "summary", "artifact", "diff"].includes(output.gate ?? "")
       );
       if (!hasGate) {
         scheduler.updateNodeStatus(dag, node.id, "failed", options.runId);

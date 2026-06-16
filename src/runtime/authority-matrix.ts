@@ -87,6 +87,20 @@ export const RUNTIME_AUTHORITY_MATRIX: readonly RuntimeAuthorityMatrixEntry[] = 
     authorities: ["read", "review"],
     advisory: true,
   },
+  {
+    providerId: "openrouter",
+    runtimeMode: "api",
+    authorities: ["read", "review", "vision", "toolCalling"],
+    advisory: true,
+    notes: "OpenRouter API is advisory unless paired with an OMK-owned write/shell adapter.",
+  },
+  {
+    providerId: "qwen",
+    runtimeMode: "api",
+    authorities: ["read", "review", "vision", "toolCalling"],
+    advisory: true,
+    notes: "Qwen API is advisory unless paired with an OMK-owned write/shell adapter.",
+  },
 ];
 
 export function runtimeProviderId(runtime: Pick<AgentRuntime, "providerId" | "id">): string {

@@ -5,6 +5,7 @@ import { getProjectRoot, pathExists, getRunsDir, getRunPath } from "../util/fs.j
 import { readFile, writeFile } from "fs/promises";
 import { createStatePersister } from "../orchestration/state-persister.js";
 import { checkEvidenceGates } from "../orchestration/evidence-gate.js";
+import { checkEvidenceGate, type EvidenceGateKind } from "../runtime/contracts/evidence.js";
 import {
   captureGitDiffArtifacts,
   ensureCompletionArtifactContract,
@@ -144,6 +145,20 @@ export async function verifyCommand(options: { run?: string; json?: boolean } = 
           gates.push({ nodeId: node.id, type: "command-pass", ref: command });
           break;
         }
+        case "artifact": {
+          if (!output.ref) {
+            missing.push({ nodeId: node.id, gate: output.gate, message: `Node "${node.id}" artifact gate is missing a ref/path` });
+          } else {
+            nodeGates.push({ type: "file-exists", path: output.ref });
+            gates.push({ nodeId: node.id, type: "file-exists", ref: output.ref });
+          }
+          break;
+        }
+        case "diff": {
+          nodeGates.push({ type: "diff-nonempty" });
+          gates.push({ nodeId: node.id, type: "diff-nonempty" });
+          break;
+        }
         case "review-pass":
         case "summary": {
           const marker = output.ref ?? "## Summary";
@@ -172,11 +187,34 @@ export async function verifyCommand(options: { run?: string; json?: boolean } = 
       continue;
     }
 
+    const stdout = await loadNodeStdout(root, runId, node.id);
     const result = await checkEvidenceGates(nodeGates, {
       cwd: root,
-      stdout: await loadNodeStdout(root, runId, node.id),
+      stdout,
       nodeId: node.id,
     });
+    const evidenceGates: EvidenceGateKind[] = [];
+    const artifactPaths: string[] = [];
+    const metadata: Record<string, unknown> = {};
+    for (const ev of result.evidence) {
+      if (!ev.passed) continue;
+      if (ev.gate === "command-pass") evidenceGates.push("command-pass");
+      else if (ev.gate === "summary-present") evidenceGates.push("summary");
+      else if (ev.gate === "file-exists") {
+        evidenceGates.push("artifact");
+        if (ev.ref) artifactPaths.push(ev.ref);
+      } else if (ev.gate === "diff-nonempty") {
+        evidenceGates.push("diff");
+        metadata.diff = true;
+      }
+    }
+    if (evidenceGates.length > 0) metadata.evidenceGates = evidenceGates;
+    const v2 = checkEvidenceGate(true, node.outputs, metadata, stdout, artifactPaths);
+    if (!v2.satisfied) {
+      for (const gate of v2.missing) {
+        failed.push({ nodeId: node.id, gate, passed: false, message: v2.reason });
+      }
+    }
 
     for (const ev of result.evidence) {
       const item: VerifyEvidence = {

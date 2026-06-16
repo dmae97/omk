@@ -4,7 +4,7 @@ import type { DeepSeekModelTier, DeepSeekParticipation, ProviderId } from "../pr
 
 export type TaskStatus = "pending" | "running" | "done" | "failed" | "blocked" | "skipped";
 export type DagContextBudget = "tiny" | "small" | "normal";
-export type DagOutputGate = "file-exists" | "test-pass" | "review-pass" | "command-pass" | "summary" | "none";
+export type DagOutputGate = "file-exists" | "test-pass" | "review-pass" | "command-pass" | "summary" | "artifact" | "diff" | "none";
 
 export interface DagNodeInput {
   name: string;
@@ -87,6 +87,10 @@ export interface DagNodeRouting {
     confidence?: number;
     matchedSignal?: string;
     readOnlyOverride?: boolean;
+    positiveSignals?: readonly string[];
+    negativeScopes?: readonly string[];
+    requestedOps?: readonly string[];
+    excludedOps?: readonly string[];
   };
   replanHint?: {
     criterionId?: string;

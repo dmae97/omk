@@ -80,6 +80,7 @@ import type {
   SlashCommandSpec,
 } from "./slash/types.js";
 import { LocalGraphMemoryStore } from "../../memory/local-graph-memory-store.js";
+import { runtimeIsAdvisory } from "../../runtime/authority-matrix.js";
 
 export interface NativeRootLoopInput {
   bootstrap: RuntimeBootstrap;
@@ -662,16 +663,11 @@ export interface NativeTurnRiskTrace {
   readonly confidence: number;
   readonly matchedSignal: string;
   readonly readOnlyOverride: boolean;
+  readonly positiveSignals: readonly string[];
+  readonly negativeScopes: readonly string[];
+  readonly requestedOps: readonly NativeTurnRisk[];
+  readonly excludedOps: readonly NativeTurnRisk[];
 }
-
-const API_ADVISORY_PROVIDERS = new Set([
-  "deepseek",
-  "kimi",
-  "local-llm",
-  "mimo",
-  "openrouter",
-  "qwen",
-]);
 
 function hasExplicitReadOnlyConstraint(text: string): boolean {
   return (
@@ -693,31 +689,98 @@ function hasReadOnlyIntent(text: string): boolean {
   );
 }
 
+function detectExcludedOps(text: string): { ops: NativeTurnRisk[]; scopes: string[] } {
+  const excluded = new Set<NativeTurnRisk>();
+  const scopes: string[] = [];
+  const add = (op: NativeTurnRisk, scope: string): void => {
+    excluded.add(op);
+    scopes.push(scope);
+  };
+  const mergeTerms = "push|publish|release|merge|tag|deploy|version|npm publish|릴리즈|머지|배포|태그|푸시|버전|퍼블리시";
+  const shellTerms = "run|test|build|exec|execute|shell|terminal|command|npm|pnpm|yarn|bun|pytest|cargo|tsc|lint|verify|check|테스트|빌드|실행|검증|쉘|터미널|체크|명령";
+  const writeTerms = "fix|edit|write|implement|modify|patch|refactor|add|create|delete|update|change|수정|구현|패치|리팩터|추가|삭제|변경";
+  const englishNegationPrefix = "no|not|without|excluding|exclude|except|skip|skipping|omit|avoid|but not|do not|don't";
+  const englishNegationSuffix = "excluded|excepted|skipped|omitted|disabled|only on explicit request|only when requested";
+  if (new RegExp(`\\b(?:${englishNegationPrefix})\\b.{0,40}\\b(?:${mergeTerms})\\b`, "i").test(text) ||
+    new RegExp(`\\b(?:${mergeTerms})\\b.{0,40}\\b(?:${englishNegationSuffix})\\b`, "i").test(text) ||
+    /(?:릴리즈|머지|배포|태그|푸시|버전|퍼블리시).{0,16}(?:빼고|제외|없이|말고|하지\s*말|금지|명령시(?:에)?만|요청시(?:에)?만)/.test(text) ||
+    /(?:빼고|제외|없이|말고).{0,16}(?:릴리즈|머지|배포|태그|푸시|버전|퍼블리시)/.test(text)) {
+    add("merge", "excluded-merge-scope");
+  }
+  if (new RegExp(`\\b(?:${englishNegationPrefix})\\b.{0,40}\\b(?:${shellTerms})\\b`, "i").test(text) ||
+    new RegExp(`\\b(?:${shellTerms})\\b.{0,40}\\b(?:${englishNegationSuffix})\\b`, "i").test(text) ||
+    /(?:npm|테스트|빌드|실행|검증|체크|명령|쉘|터미널).{0,16}(?:빼고|제외|없이|말고|하지\s*말|금지|명령시(?:에)?만|요청시(?:에)?만)/.test(text) ||
+    /(?:빼고|제외|없이|말고).{0,16}(?:npm|테스트|빌드|실행|검증|체크|명령|쉘|터미널)/.test(text)) {
+    add("shell", "excluded-shell-scope");
+  }
+  if (new RegExp(`\\b(?:${englishNegationPrefix})\\b.{0,40}\\b(?:${writeTerms})\\b`, "i").test(text) ||
+    /(?:수정|구현|패치|리팩터|추가|삭제|변경).{0,16}(?:빼고|제외|없이|말고|하지\s*말|금지)/.test(text)) {
+    add("write", "excluded-write-scope");
+  }
+  return { ops: [...excluded], scopes };
+}
+
+function nativeRiskTrace(input: {
+  risk: NativeTurnRisk;
+  confidence: number;
+  matchedSignal: string;
+  readOnlyOverride?: boolean;
+  positiveSignals?: readonly string[];
+  negativeScopes?: readonly string[];
+  requestedOps?: readonly NativeTurnRisk[];
+  excludedOps?: readonly NativeTurnRisk[];
+}): NativeTurnRiskTrace {
+  return {
+    risk: input.risk,
+    confidence: input.confidence,
+    matchedSignal: input.matchedSignal,
+    readOnlyOverride: input.readOnlyOverride ?? false,
+    positiveSignals: [...(input.positiveSignals ?? [])],
+    negativeScopes: [...(input.negativeScopes ?? [])],
+    requestedOps: [...(input.requestedOps ?? [])],
+    excludedOps: [...(input.excludedOps ?? [])],
+  };
+}
+
 export function inferNativeTurnRisk(prompt: string): NativeTurnRiskTrace {
   const text = prompt.toLowerCase();
+  const excluded = detectExcludedOps(text);
   if (hasExplicitReadOnlyConstraint(text)) {
-    return { risk: "read", confidence: 0.95, matchedSignal: "explicit-read-only-constraint", readOnlyOverride: true };
+    return nativeRiskTrace({ risk: "read", confidence: 0.95, matchedSignal: "explicit-read-only-constraint", readOnlyOverride: true, negativeScopes: excluded.scopes, excludedOps: excluded.ops });
   }
-  if (
-    /\b(push|publish|release|merge|tag|deploy)\b|푸시|퍼블리시|릴리즈|머지|배포/.test(
-      text,
-    )
-  )
-    return { risk: "merge", confidence: 0.9, matchedSignal: "merge/release-keyword", readOnlyOverride: false };
-  if (
-    /\b(run|test|build|exec|execute|shell|terminal|command|npm|pnpm|yarn|bun|pytest|cargo|go test|tsc|lint|verify|check)\b|테스트|빌드|실행|검증|쉘|터미널/.test(
-      text,
-    )
-  )
-    return { risk: "shell", confidence: 0.85, matchedSignal: "shell/execution-keyword", readOnlyOverride: false };
-  if (
-    /\b(fix|edit|write|implement|modify|patch|refactor|add|create|delete|update|change)\b|수정|구현|패치|리팩터|추가|삭제|변경/.test(
-      text,
-    )
-  )
-    return { risk: "write", confidence: 0.85, matchedSignal: "write/modify-keyword", readOnlyOverride: false };
-  if (hasReadOnlyIntent(text)) return { risk: "read", confidence: 0.75, matchedSignal: "read-only-intent", readOnlyOverride: false };
-  return { risk: "ask", confidence: 0.5, matchedSignal: "no-clear-signal", readOnlyOverride: false };
+  const candidates: Array<{ risk: NativeTurnRisk; confidence: number; signal: string; pattern: RegExp }> = [
+    { risk: "merge", confidence: 0.9, signal: "merge/release-keyword", pattern: /\b(push|publish|release|merge|tag|deploy)\b|푸시|퍼블리시|릴리즈|머지|배포/ },
+    { risk: "shell", confidence: 0.85, signal: "shell/execution-keyword", pattern: /\b(run|test|build|exec|execute|shell|terminal|command|npm|pnpm|yarn|bun|pytest|cargo|go test|tsc|lint|verify|check)\b|테스트|빌드|실행|검증|쉘|터미널/ },
+    { risk: "write", confidence: 0.85, signal: "write/modify-keyword", pattern: /\b(fix|edit|write|implement|modify|patch|refactor|add|create|delete|update|change)\b|수정|구현|패치|리팩터|추가|삭제|변경/ },
+  ];
+  const positive = candidates.filter((candidate) => candidate.pattern.test(text));
+  const requestedOps = positive.map((candidate) => candidate.risk);
+  const selected = positive.find((candidate) => !excluded.ops.includes(candidate.risk));
+  if (selected) {
+    return nativeRiskTrace({
+      risk: selected.risk,
+      confidence: selected.confidence,
+      matchedSignal: selected.signal,
+      positiveSignals: positive.map((candidate) => candidate.signal),
+      negativeScopes: excluded.scopes,
+      requestedOps,
+      excludedOps: excluded.ops,
+    });
+  }
+  if (positive.length > 0) {
+    const risk = hasReadOnlyIntent(text) ? "read" : "ask";
+    return nativeRiskTrace({
+      risk,
+      confidence: risk === "read" ? 0.75 : 0.55,
+      matchedSignal: `all-positive-risk-signals-excluded:${positive.map((candidate) => candidate.signal).join(",")}`,
+      positiveSignals: positive.map((candidate) => candidate.signal),
+      negativeScopes: excluded.scopes,
+      requestedOps,
+      excludedOps: excluded.ops,
+    });
+  }
+  if (hasReadOnlyIntent(text)) return nativeRiskTrace({ risk: "read", confidence: 0.75, matchedSignal: "read-only-intent", negativeScopes: excluded.scopes, excludedOps: excluded.ops });
+  return nativeRiskTrace({ risk: "ask", confidence: 0.5, matchedSignal: "no-clear-signal", negativeScopes: excluded.scopes, excludedOps: excluded.ops });
 }
 
 function nativeTurnRoutingPolicy(
@@ -762,7 +825,12 @@ function nativeTurnRoutingPolicy(
 }
 
 function isApiAdvisoryProvider(provider: string): boolean {
-  return API_ADVISORY_PROVIDERS.has(provider);
+  return runtimeIsAdvisory({
+    id: `${provider}-api`,
+    providerId: provider,
+    runtimeMode: "api",
+    kind: "api",
+  });
 }
 
 function hashPrompt(value: string): string {
