@@ -156,8 +156,6 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     history: EvidenceHistoryEntry[],
     health?: RuntimeHealth,
   ): RuntimeScore {
-    const healthPenalty = health ? (1 - runtimeHealthScore(health)) : 0;
-
     const runtimeHistory = history.filter((e) => e.runtime === runtime.id);
     const intentHistory = runtimeHistory.filter((e) => e.intent === intent);
 
@@ -180,8 +178,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     const latencyScore = runtime.capabilities?.supportsStreaming === true || runtime.capabilities?.streaming === true
       ? 0.7
       : 0.6;
-    const baseHealthScore = runtimeHealthScore(health);
-    const healthScore = Math.max(0, baseHealthScore - healthPenalty);
+    const healthScore = runtimeHealthScore(health);
 
     return {
       runtime: runtime.id,
@@ -219,9 +216,9 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
             modelOk: true,
             quotaOk: true,
             rateLimitOk: true,
-            runtime: "unknown",
-            auth: "unknown",
-            model: "unknown",
+            runtime: "pass",
+            auth: "pass",
+            model: "pass",
             quota: "unknown",
             rateLimit: "unknown",
             lastProbeKind: "none",
@@ -283,29 +280,37 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     return "static";
   }
 
-  function runtimeHealthy(runtime: AgentRuntime, healthMap: ReadonlyMap<string, RuntimeHealth>): boolean {
+  function runtimeHealthy(runtime: AgentRuntime, healthMap: ReadonlyMap<string, RuntimeHealth>, probeKind: RuntimeHealthProbeKind = "static"): boolean {
     const health = healthMap.get(runtime.id);
     if (!health) return true;
     if (health.available === false) return false;
     const vector = health.vector;
     if (!vector) return true;
-    return statePassOrUnknown(vector.runtime, vector.runtimeOk)
-      && statePassOrUnknown(vector.auth, vector.authOk)
-      && statePassOrUnknown(vector.model, vector.modelOk)
-      && statePassOrUnknown(vector.quota, vector.quotaOk);
+    const highRiskProbe = probeRank(probeKind) >= probeRank("cheap-call");
+    const hardDimensionsOk = highRiskProbe
+      ? statePassStrict(vector.runtime, vector.runtimeOk)
+        && statePassStrict(vector.auth, vector.authOk)
+        && statePassStrict(vector.model, vector.modelOk)
+      : statePassOrUnknown(vector.runtime, vector.runtimeOk)
+        && statePassOrUnknown(vector.auth, vector.authOk)
+        && statePassOrUnknown(vector.model, vector.modelOk);
+    return hardDimensionsOk
+      && statePassOrUnknown(vector.quota, vector.quotaOk)
+      && statePassOrUnknown(vector.rateLimit, vector.rateLimitOk);
   }
 
   function selectByIntent(
     capsule: ContextCapsule,
     history: EvidenceHistoryEntry[],
     healthMap?: ReadonlyMap<string, RuntimeHealth>,
+    probeKind: RuntimeHealthProbeKind = "static",
   ): RuntimeRouteDecision {
     const intent = classifyIntent(capsule);
     const sorted = [...runtimes].sort((a, b) => b.priority - a.priority);
     const supporting = sorted.filter((runtime) =>
       runtime.supports(capsule) &&
       runtimeAllowedByLegacyPolicy(runtime, { preferredProviders: [], fallbackChain: options.fallbackChain }) &&
-      (healthMap ? runtimeHealthy(runtime, healthMap) : true)
+      (healthMap ? runtimeHealthy(runtime, healthMap, probeKind) : true)
     );
 
     if (supporting.length === 0) {
@@ -375,10 +380,11 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
 
   async function runNode(capsule: ContextCapsule, signal: AbortSignal): Promise<AgentRunResult> {
     const history = await loadEvidenceHistory();
-    const healthMap = await collectRuntimeHealth(runtimes, requiredProbeForCapsule(capsule), capsule.node.routing?.risk);
+    const probeKind = requiredProbeForCapsule(capsule);
+    const healthMap = await collectRuntimeHealth(runtimes, probeKind, capsule.node.routing?.risk);
     let decision: RuntimeRouteDecision;
     try {
-      decision = selectByIntent(capsule, history, healthMap);
+      decision = selectByIntent(capsule, history, healthMap, probeKind);
     } catch (err) {
       if (err instanceof UnsupportedRuntimeError) {
         return unsupportedRuntimeResult(err);
@@ -462,10 +468,11 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     signal: AbortSignal,
   ): Promise<AgentRunResult> {
     const history = await loadEvidenceHistory();
-    const healthMap = await collectRuntimeHealth(runtimes, requiredProbeForTask(task), task.safety?.risk);
+    const probeKind = requiredProbeForTask(task);
+    const healthMap = await collectRuntimeHealth(runtimes, probeKind, task.safety?.risk);
     let decision: RuntimeRouteDecision;
     try {
-      decision = selectByIntent(capsule, history, healthMap);
+      decision = selectByIntent(capsule, history, healthMap, probeKind);
     } catch (err) {
       if (err instanceof UnsupportedRuntimeError) {
         return unsupportedRuntimeResult(err);
@@ -596,8 +603,9 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
       );
     }
 
-    const healthMap = await collectRuntimeHealth(candidates, requiredProbeForTask(task), task.safety?.risk);
-    candidates = candidates.filter((runtime) => runtimeHealthy(runtime, healthMap));
+    const probeKind = requiredProbeForTask(task);
+    const healthMap = await collectRuntimeHealth(candidates, probeKind, task.safety?.risk);
+    candidates = candidates.filter((runtime) => runtimeHealthy(runtime, healthMap, probeKind));
 
     const advisoryBoundaryFailures: string[] = [];
     const nonAdvisoryCandidates = candidates.filter((runtime) => {
@@ -955,13 +963,13 @@ function normalizeRuntimeHealth(health: RuntimeHealth): RuntimeHealth {
       ...health,
       vector: {
         runtimeOk: health.available,
-        authOk: true,
-        modelOk: true,
+        authOk: health.available,
+        modelOk: health.available,
         quotaOk: true,
         rateLimitOk: true,
         runtime: health.available ? "pass" : "fail",
-        auth: "unknown",
-        model: "unknown",
+        auth: health.available ? "pass" : "fail",
+        model: health.available ? "pass" : "fail",
         quota: "unknown",
         rateLimit: "unknown",
         lastProbeKind: "none",
@@ -1008,6 +1016,11 @@ function legacyBoolToState(value: boolean | undefined): HealthState {
 function statePassOrUnknown(state: HealthState | undefined, legacy?: boolean): boolean {
   const normalized = state ?? legacyBoolToState(legacy);
   return normalized !== "fail";
+}
+
+function statePassStrict(state: HealthState | undefined, legacy?: boolean): boolean {
+  const normalized = state ?? legacyBoolToState(legacy);
+  return normalized === "pass";
 }
 
 function healthStatePenalty(state: HealthState | undefined, legacy: boolean | undefined, failWeight: number, unknownWeight: number): number {

@@ -99,16 +99,17 @@ MCP, skills, and hooks must not disappear silently. Runtime manifests should inc
 
 Completed foundations:
 
-- Runtime authority is resolved by `(provider, runtimeMode)` through `src/runtime/authority-matrix.ts`.
+- Runtime authority is resolved by `(provider, runtimeMode)` through `src/runtime/authority-matrix.ts`; native routing also consults this matrix instead of maintaining a separate advisory-provider list.
 - `OMK_TOOL_AUTHORITY_MODE=enforce` coverage is release-gated through the shared `release:gate-core` script and includes a native-turn subprocess enforcement smoke.
 - Native prompt payloads are private artifacts; public synthetic node labels carry prompt hashes, not raw prompts.
 - `prompt:privacy:check` audits private prompt artifacts against public run artifacts, decision traces, and graph-memory snapshots, and is part of the release gate.
 - Per-turn route/result artifacts are written best-effort and replay-indexed with SHA-256 hashes.
-- Evidence declarations and produced observations are type-separated; command/test evidence requires high-confidence metadata or artifact observations, not stdout keywords alone.
+- Evidence declarations and produced observations are type-separated; command/test evidence requires high-confidence metadata or artifact observations, not stdout keywords alone, and DAG executor/verify/replay paths bridge through the same EvidenceGate v2 contract.
 - Provider route/evidence audit nodes are materialized into local graph memory on native turns, with Provider/Artifact nodes, `EvidenceRequirement -> SATISFIED_BY -> EvidenceObservation` semantics, and route/evidence/artifact edges.
-- Runtime health checks accept requested probe levels; API, local LLM, Codex CLI, and external CLI adapters perform static/cheap/live probes with latency and auth/model/quota/rate-limit dimensions where observable.
+- Runtime health checks accept requested probe levels; API, local LLM, Codex CLI, and external CLI adapters perform static/cheap/live probes with latency and auth/model/quota/rate-limit dimensions where observable. Router health scoring is normalized and high-risk probes fail closed on unknown runtime/auth/model dimensions.
 - Runtime failure stderr is redacted before public exposure and can be retained as a private redacted full artifact in debug mode, including direct `toTaskResult` conversion paths outside `RuntimeRouter`.
 - Mixed-provider advisory reviewer + CLI coder/verifier routing has regression coverage.
+- Native risk classification is negation-aware, so excluded scopes such as `릴리즈 제외`, `no release`, or `npm 체크 제외` do not trigger false merge/shell routing.
 
 ## P0 Backlog
 

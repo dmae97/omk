@@ -65,15 +65,59 @@ describe("Runtime health vector v2", () => {
     assert.equal(result.metadata.selectedRuntime, "unknown-cli");
     assert.deepEqual(calls, ["unknown-cli"]);
   });
+
+  it("fails closed on high-risk runtime/auth/model unknown health", async () => {
+    const calls = [];
+    const unknown = fakeRuntime("unknown-cli", calls, {
+      runtimeId: "unknown-cli",
+      available: true,
+      checkedAt: new Date().toISOString(),
+      vector: {
+        runtime: "unknown",
+        auth: "unknown",
+        model: "unknown",
+        quota: "unknown",
+        rateLimit: "unknown",
+        lastProbeKind: "cheap-call",
+        checkedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    }, { write: true, patch: true });
+    const passing = fakeRuntime("passing-cli", calls, {
+      runtimeId: "passing-cli",
+      available: true,
+      checkedAt: new Date().toISOString(),
+      vector: {
+        runtime: "pass",
+        auth: "pass",
+        model: "pass",
+        quota: "unknown",
+        rateLimit: "unknown",
+        lastProbeKind: "cheap-call",
+        checkedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    }, { write: true, patch: true });
+
+    const router = createRuntimeRouter({ runtimes: [unknown, passing] });
+    const result = await router.execute(fakeTask({
+      prompt: "implement a patch",
+      capabilities: { read: true, write: true, shell: false, mcp: false, patch: true, review: false, merge: false, vision: false },
+      safety: { risk: "write", approvalPolicy: "ask", sandboxMode: "workspace-write", evidenceRequired: true, authorityMode: "enforce" },
+    }));
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.metadata.selectedRuntime, "passing-cli");
+    assert.deepEqual(calls, ["passing-cli"]);
+  });
 });
 
-function fakeRuntime(id, calls, health) {
+function fakeRuntime(id, calls, health, capabilityOverrides = {}) {
   return {
     id,
     providerId: id.split("-")[0],
     runtimeMode: "cli",
     priority: 50,
-    capabilities: { read: true, write: false, shell: false, mcp: false, patch: false, review: true, merge: false, vision: false },
+    capabilities: { read: true, write: false, shell: false, mcp: false, patch: false, review: true, merge: false, vision: false, ...capabilityOverrides },
     supports: () => true,
     health: async () => health,
     async runNode() {
@@ -86,7 +130,7 @@ function fakeRuntime(id, calls, health) {
   };
 }
 
-function fakeTask() {
+function fakeTask(overrides = {}) {
   return {
     prompt: "review this change",
     context: { runId: "health-v2", nodeId: "node", role: "reviewer", goal: "health", system: "", cwd: process.cwd() },
@@ -94,5 +138,6 @@ function fakeTask() {
     providerPolicy: { strategy: "priority-first", preferredProviders: [], fallbackChain: [] },
     capabilities: { read: true, write: false, shell: false, mcp: false, patch: false, review: true, merge: false, vision: false },
     safety: { risk: "read", approvalPolicy: "ask", sandboxMode: "read-only", evidenceRequired: false, authorityMode: "advisory" },
+    ...overrides,
   };
 }

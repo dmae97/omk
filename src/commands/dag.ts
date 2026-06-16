@@ -5,6 +5,7 @@ import { getProjectRoot, pathExists, readTextFile, getOmkPath, getRunPath, getRu
 import { createDag } from "../orchestration/dag.js";
 import { createStatePersister } from "../orchestration/state-persister.js";
 import { checkEvidenceGates } from "../orchestration/evidence-gate.js";
+import { checkEvidenceGate, type EvidenceGateKind } from "../runtime/contracts/evidence.js";
 import { createExecutor } from "../orchestration/executor.js";
 import { createExecutableDagFromState, routeRunState } from "../orchestration/run-state.js";
 import { createOmkSessionEnv } from "../util/session.js";
@@ -157,6 +158,12 @@ export async function dagReplayCommand(
           case "command-pass":
             gates.push({ type: "command-pass", command: output.ref ?? "" });
             break;
+          case "artifact":
+            if (output.ref) gates.push({ type: "file-exists", path: output.ref });
+            break;
+          case "diff":
+            gates.push({ type: "diff-nonempty" });
+            break;
           case "review-pass":
           case "summary":
             gates.push({ type: "summary-present", summaryMarker: output.ref ?? "## Summary" });
@@ -179,6 +186,29 @@ export async function dagReplayCommand(
         stdout: "",
         nodeId: node.id,
       });
+      const evidenceGates: EvidenceGateKind[] = [];
+      const artifactPaths: string[] = [];
+      const metadata: Record<string, unknown> = {};
+      for (const ev of result.evidence) {
+        if (!ev.passed) continue;
+        if (ev.gate === "command-pass") evidenceGates.push("command-pass");
+        else if (ev.gate === "summary-present") evidenceGates.push("summary");
+        else if (ev.gate === "file-exists") {
+          evidenceGates.push("artifact");
+          if (ev.ref) artifactPaths.push(ev.ref);
+        } else if (ev.gate === "diff-nonempty") {
+          evidenceGates.push("diff");
+          metadata.diff = true;
+        }
+      }
+      if (evidenceGates.length > 0) metadata.evidenceGates = evidenceGates;
+      const v2 = checkEvidenceGate(true, node.outputs, metadata, "", artifactPaths);
+      if (!v2.satisfied) {
+        for (const gate of v2.missing) {
+          console.log(style.pink(`  ✗ ${node.id}: ${gate} — ${v2.reason}`));
+          failedCount++;
+        }
+      }
 
       for (const ev of result.evidence) {
         const icon = ev.passed ? "✓" : "✗";
