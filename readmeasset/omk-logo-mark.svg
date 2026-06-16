@@ -1,4 +1,4 @@
-<!-- derived-from: omk.theme.v1/night-city@a0a6a1b0712f -->
+<!-- derived-from: omk.theme.v1/night-city@3d22ce435823 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
 <rect width="512" height="512" rx="96" fill="#070B14"/>
 <path d="M256 48 424 144v224L256 464 88 368V144Z" fill="#101826" stroke="#00D6FF" stroke-width="16"/>

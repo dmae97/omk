@@ -230,7 +230,15 @@ export function evidenceObservationsFromResult(input: {
 
   const stdout = input.stdout ?? "";
   if (stdout.trim().length > 0) {
-    observations.push({ kind: "summary", source: "stdout", timestamp, replayable: true, redacted: true, confidence: 0.4 });
+    const hasStructuredSummaryMarker = /^##\s+(Summary|Evidence|Verification)\b/im.test(stdout);
+    observations.push({
+      kind: "summary",
+      source: "stdout",
+      timestamp,
+      replayable: true,
+      redacted: true,
+      confidence: hasStructuredSummaryMarker ? 0.9 : 0.4,
+    });
   }
   if (/\b(pass(ed)?|success|ok)\b/i.test(stdout) && /\b(test|check|build|lint|command)\b/i.test(stdout)) {
     observations.push({ kind: "command-pass", source: "stdout", timestamp, replayable: true, redacted: true, confidence: 0.4 });
@@ -240,7 +248,7 @@ export function evidenceObservationsFromResult(input: {
 }
 
 function minimumConfidenceFor(requirement: EvidenceRequirement): number {
-  if (requirement.gate === "command-pass" || requirement.gate === "test-pass") return 0.8;
+  if (["command-pass", "test-pass", "summary", "review-pass"].includes(requirement.gate)) return 0.8;
   return 0;
 }
 
@@ -249,6 +257,7 @@ function observationSatisfies(requirement: EvidenceRequirement, observation: Evi
   if (observation.confidence < minimumConfidenceFor(requirement)) return false;
   if (observation.kind === requirement.gate) return true;
   if (requirement.gate === "test-pass" && observation.kind === "command-pass") return true;
+  if (requirement.gate === "review-pass" && observation.kind === "summary") return true;
   if (requirement.gate === "file-exists" && observation.kind === "artifact") return true;
   return false;
 }

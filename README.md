@@ -13,7 +13,7 @@ OMK turns a coding goal into a scoped DAG run, routes it across compatible runti
   <a href="https://github.com/dmae97/open-multi-agent-kit/discussions"><img alt="discussions" src="https://img.shields.io/badge/discussions-open-9D4EDD"></a>
 </p>
 
-## What changed in v0.80.1
+## What changed in v0.80.2
 
 OMK now has a **Freedomd** control-plane direction:
 
@@ -132,7 +132,7 @@ Goal -> DAG -> lane grants -> runtime routing -> evidence envelope -> verify -> 
 
 ## Release and safety claims
 
-Current source version: `open-multi-agent-kit@0.80.1`.
+Current source version: `open-multi-agent-kit@0.80.2`.
 
 - Runtime contract family: `v1.2`.
 - Release channel: `pre-1.0`.

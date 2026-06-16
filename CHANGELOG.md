@@ -4,7 +4,16 @@
 
 ### Added
 
-- Reserved for changes after v0.80.1.
+- Reserved for changes after v0.80.2.
+
+## v0.80.2 — CI release gate stabilization (2026-06-16)
+
+### Fixed
+
+- Fixed run directory creation after stricter run artifact path validation.
+- Stabilized executor evidence gates so explicit output gates stay enforced while routing-only evidence hints do not block low-risk read/review lanes.
+- Preserved explicit runtime MCP/tool-calling capabilities when applying the provider authority matrix.
+- Required structured summary markers for summary/review evidence gates, preventing plain stdout from satisfying release evidence.
 
 ## v0.80.1 — CI lint cleanup and registry-aligned patch release (2026-06-16)
 

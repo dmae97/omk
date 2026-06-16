@@ -123,8 +123,18 @@ export function getRuntimeAuthorityEntry(runtime: Pick<AgentRuntime, "providerId
 
 export function authoritiesForRuntime(runtime: Pick<AgentRuntime, "providerId" | "runtimeMode" | "kind" | "id" | "capabilities">): readonly AuthorityOperation[] {
   const entry = getRuntimeAuthorityEntry(runtime);
-  if (entry) return entry.authorities;
   const caps = runtime.capabilities;
+  if (entry) {
+    const granted = new Set<AuthorityOperation>(entry.authorities);
+    // Provider/mode entries remain the source of truth for write/shell/merge.
+    // Add only explicitly declared auxiliary capabilities so test/fake runtimes
+    // and future adapters can expose MCP/tool contracts without broadening
+    // destructive authority by provider name alone.
+    if (caps?.mcp === true) granted.add("mcp");
+    if (caps?.vision === true) granted.add("vision");
+    if (caps?.toolCalling === true || caps?.supportsToolCalling === true) granted.add("toolCalling");
+    return [...granted];
+  }
   if (!caps) return ["read"];
   const derived: AuthorityOperation[] = [];
   for (const op of ["read", "review", "write", "patch", "shell", "mcp", "merge", "vision"] as const) {

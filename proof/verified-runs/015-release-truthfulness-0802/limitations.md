@@ -1,0 +1,3 @@
+- This proof validates source metadata alignment for 0.80.2.
+- Public npm latest claims require reading registry output after npm publish.
+- Stable 1.x claims remain out of scope; runtime contract family remains v1.2.

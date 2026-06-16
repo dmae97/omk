@@ -342,13 +342,13 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
     const cwd = options.worktreeRoot ?? process.cwd();
     const latestAttempt = node.attempts?.[node.attempts.length - 1];
     const attemptId = latestAttempt ? `${node.id}__${latestAttempt.attempt}` : `${node.id}__1`;
-    const bridge = await legacyEvidenceBridge(node, result, { cwd, runId: options.runId, attemptId });
+    const required = nodeRequiresEvidence(node);
+    const bridge = await legacyEvidenceBridge(node, result, { cwd, runId: options.runId, attemptId, required });
     const metadata = {
       ...(result.metadata ?? {}),
       ...(bridge.evidenceGates.length > 0 && { evidenceGates: bridge.evidenceGates }),
       ...(bridge.diffObserved && { diff: true }),
     };
-    const required = nodeRequiresEvidence(node) || hasRequiredEvidenceOutput(node);
     const check = checkEvidenceGate(required, node.outputs, metadata, result.stdout, bridge.artifactPaths);
     return {
       passed: check.satisfied,
@@ -359,7 +359,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
   async function legacyEvidenceBridge(
     node: DagNode,
     result: TaskResult,
-    options: { cwd: string; runId: string; attemptId: string },
+    options: { cwd: string; runId: string; attemptId: string; required: boolean },
   ): Promise<{ evidenceGates: EvidenceGateKind[]; artifactPaths: string[]; diffObserved: boolean; evidence: DagNodeEvidence[] }> {
     const legacyGates: import("./evidence-gate.js").EvidenceGate[] = [];
     for (const output of node.outputs ?? []) {
@@ -386,7 +386,7 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
           break;
       }
     }
-    if (node.routing?.evidenceRequired && !legacyGates.some((gate) => gate.type === "command-pass")) {
+    if (options.required && node.routing?.evidenceRequired && !legacyGates.some((gate) => gate.type === "command-pass")) {
       legacyGates.push({ type: "summary-present", summaryMarker: "## Evidence" });
     }
     if (legacyGates.length === 0) {
@@ -443,16 +443,19 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
   }
 
   function nodeRequiresEvidence(node: DagNode): boolean {
-    const highRisk =
-      node.routing?.assignedProviderCapabilities?.some((cap) =>
-        ["write", "patch", "shell", "merge"].includes(cap)
-      ) ?? false;
+    const highRisk = nodeHasHighRiskCapabilities(node);
     const outputs = node.outputs ?? [];
     const explicitlyNoEvidence = outputs.length > 0 && outputs.every((output) =>
       output.required === false || output.gate === undefined || output.gate === "none"
     );
     if (explicitlyNoEvidence && !highRisk) return false;
-    return (node.routing?.evidenceRequired === true) || highRisk;
+    return hasRequiredEvidenceOutput(node) || highRisk;
+  }
+
+  function nodeHasHighRiskCapabilities(node: DagNode): boolean {
+    return node.routing?.assignedProviderCapabilities?.some((cap) =>
+      ["write", "patch", "shell", "merge"].includes(cap)
+    ) ?? false;
   }
 
   async function runNode(

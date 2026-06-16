@@ -1,7 +1,7 @@
 import { writeFile, readdir, readFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { getOmkPath, pathExists, validateRunId } from "./fs.js";
-import { getRunArtifactPath } from "./run-store.js";
+import { getRunArtifactPath, getRunPath } from "./run-store.js";
 
 export function createOmkSessionId(prefix: "chat" | "plan" | "run" | "team" | "session" | "feature" | "bugfix" | "refactor" | "review" = "session"): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -31,7 +31,7 @@ export interface SessionMeta {
 
 export async function ensureSessionDir(runId: string): Promise<string> {
   const sanitized = validateRunId(runId);
-  const dir = getRunArtifactPath(sanitized, ".");
+  const dir = getRunPath(sanitized);
   await mkdir(dir, { recursive: true });
   return dir;
 }

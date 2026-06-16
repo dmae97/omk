@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="640" viewBox="0 0 1600 640" role="img" aria-labelledby="title desc">
   <title id="title">OMK Freedomd runtime control plane</title>
   <desc id="desc">Local-first multi-provider agent control plane with sovereignty routing, evidence envelopes, degraded fallback, and strict guardrail opt-in.</desc>
-  <metadata>omk.asset.v1 name=omk-freedomd-control-plane packaged=yes source=local-svg-render prompt-ready=gpt-image-2.0 text=ascii version=0.80.1</metadata>
+  <metadata>omk.asset.v1 name=omk-freedomd-control-plane packaged=yes source=local-svg-render prompt-ready=gpt-image-2.0 text=ascii version=0.80.2</metadata>
   <defs>
     <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
       <stop stop-color="#FFF8EF" offset="0"/>
