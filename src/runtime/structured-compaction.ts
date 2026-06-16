@@ -93,6 +93,54 @@ export const DEFAULT_STRUCTURED_COMPACTION_CONTRACT: StructuredCompactionContrac
 
 export const STRUCTURED_COMPACTION_V2_SCHEMA_VERSION = "omk.structured-compaction.v2" as const;
 
+export interface CompactionQualityGateInput {
+  readonly applied: boolean;
+  readonly validated: boolean;
+  readonly qualityScore: number;
+  readonly contractScore: number;
+  readonly risk?: string;
+  readonly capabilities?: { readonly write?: boolean; readonly patch?: boolean; readonly shell?: boolean; readonly merge?: boolean };
+}
+
+export type CompactionGateDecision = "not-attempted" | "not-applied" | "accept" | "accept-with-warning" | "reject";
+
+export interface CompactionQualityGateResult {
+  readonly gateDecision: CompactionGateDecision;
+  readonly warning?: string;
+  readonly threshold: number;
+}
+
+export function resolveCompactionQualityThreshold(input: { readonly risk?: string; readonly capabilities?: CompactionQualityGateInput["capabilities"] }): number {
+  const risk = (input.risk ?? "").toLowerCase();
+  const caps = input.capabilities ?? {};
+  if (caps.merge === true || caps.shell === true) return 0.85;
+  if (caps.write === true || caps.patch === true) return 0.75;
+  if (risk.includes("shell") || risk.includes("merge") || risk.includes("release")) return 0.85;
+  if (risk.includes("write") || risk.includes("patch")) return 0.75;
+  return 0.60;
+}
+
+export function evaluateCompactionQualityGate(input: CompactionQualityGateInput): CompactionQualityGateResult {
+  if (!input.applied) {
+    return { gateDecision: input.validated ? "not-applied" : "not-attempted", threshold: resolveCompactionQualityThreshold(input) };
+  }
+
+  const threshold = resolveCompactionQualityThreshold(input);
+  if (input.qualityScore >= threshold) {
+    return { gateDecision: "accept", threshold };
+  }
+
+  if (input.qualityScore >= Math.max(0, threshold - 0.20) && input.contractScore === 1) {
+    return { gateDecision: "accept-with-warning", warning: "low compaction quality", threshold };
+  }
+
+  return {
+    gateDecision: "reject",
+    warning: "compaction quality below safety threshold",
+    threshold,
+  };
+}
+
 export function validateStructuredCompaction(
   compactedText: string,
   capsule: ContextCapsule,
@@ -405,7 +453,7 @@ export function estimateTextTokens(text: string, options: TokenEstimationOptions
   if (base <= 0) return 0;
   const hangulChars = text.match(/[\u3131-\u318E\uAC00-\uD7A3]/g)?.length ?? 0;
   const hangulRatio = hangulChars / Math.max(1, text.length);
-  const hasJsonOrCode = /```|[{][\s\S]*?:[\s\S]*?[}]|\b(function|class|interface|const|let|import|export)\b/.test(text);
+  const hasJsonOrCode = /```|[{}[\]\s\S]*?:[\s\S]*?[}]|\b(function|class|interface|const|let|import|export)\b/.test(text);
   const languageFactor = hangulRatio > 0.1 ? 1.25 : 1;
   const structureFactor = hasJsonOrCode ? 1.10 : 1;
   const multiplier = options.calibration?.multiplier ?? 1;

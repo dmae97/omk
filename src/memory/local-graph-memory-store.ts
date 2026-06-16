@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { statSync } from "fs";
+import { sha256FileSync } from "../util/hash.js";
 import { mkdir, readFile, rename, rm, writeFile } from "fs/promises";
 import { dirname, resolve } from "path";
 import {
@@ -194,6 +195,9 @@ export const ONTOLOGY: MemoryOntology = {
     "DEPENDS_ON",
     "BLOCKED_BY",
     "EVIDENCED_BY",
+    "DECLARES_EVIDENCE_REQUIREMENT",
+    "OBSERVED_EVIDENCE",
+    "SATISFIED_BY",
     "STORED_AT",
     "TOUCHES_FILE",
   ],
@@ -820,6 +824,20 @@ export class LocalGraphMemoryStore {
         updatedAt: now,
       });
       if (artifactId && input.artifactRef) {
+        const artifactPath = resolve(this.settings.project.root, input.artifactRef);
+        let sha256: string | null = null;
+        let sizeBytes: number | null = null;
+        let exists = false;
+        try {
+          const stats = statSync(artifactPath);
+          sizeBytes = stats.size;
+          sha256 = sha256FileSync(artifactPath) ?? null;
+          exists = true;
+        } catch {
+          sha256 = null;
+          sizeBytes = null;
+          exists = false;
+        }
         this.upsertNode(state, {
           id: artifactId,
           type: "Artifact",
@@ -832,10 +850,34 @@ export class LocalGraphMemoryStore {
             runId: input.runId,
             path: input.artifactRef,
             kind: "headroom-decision",
+            sha256,
+            sizeBytes,
+            exists,
           },
           createdAt: now,
           updatedAt: now,
         });
+        if (!exists) {
+          const missingArtifactRiskId = this.nodeId("Risk", `${input.runId}:${input.nodeId}:missing-headroom-artifact`);
+          this.upsertNode(state, {
+            id: missingArtifactRiskId,
+            type: "Risk",
+            labels: ["OmkRisk", "Risk"],
+            label: "missing-headroom-artifact",
+            summary: "headroom decision artifactRef did not resolve",
+            tags: ["risk", "headroom", "artifact"],
+            properties: {
+              key: `${input.runId}:${input.nodeId}:missing-headroom-artifact`,
+              runId: input.runId,
+              nodeId: input.nodeId,
+              kind: "missing-headroom-artifact",
+              artifactRef: input.artifactRef,
+            },
+            createdAt: now,
+            updatedAt: now,
+          });
+          this.upsertEdge(state, decisionId, missingArtifactRiskId, "HAS_RISK", now);
+        }
       }
 
       this.upsertEdge(state, projectId, runId, "HAS_RUN", now);

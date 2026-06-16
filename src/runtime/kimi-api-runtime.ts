@@ -332,12 +332,13 @@ export class KimiApiRuntime implements AgentRuntime {
   }
 
   async execute(task: AgentTask): Promise<AgentResult> {
+    const compactionMeta = this.consumeCompactionContext(task);
     if (!this.apiKey) {
       return {
         output: "",
         exitCode: 1,
         thinking: "",
-        metadata: { error: `${this.apiKeyEnvName} is not set` },
+        metadata: { error: `${this.apiKeyEnvName} is not set`, ...compactionMeta },
       };
     }
     if (
@@ -354,6 +355,7 @@ export class KimiApiRuntime implements AgentRuntime {
         metadata: {
           error: `${this.id} is advisory/read-only and does not receive write, shell, MCP, merge, or patch authority`,
           authorityMode: "advisory",
+          ...compactionMeta,
         },
       };
     }
@@ -421,7 +423,7 @@ export class KimiApiRuntime implements AgentRuntime {
           output: "",
           exitCode: 1,
           thinking: "",
-          metadata: { error: `${this.providerName} API error ${response.status}: ${errorText}` },
+          metadata: { error: `${this.providerName} API error ${response.status}: ${errorText}`, ...compactionMeta },
         };
       }
 
@@ -429,6 +431,7 @@ export class KimiApiRuntime implements AgentRuntime {
         return this.parseStreamResponse(response, {
           toolPlaneHash: providerTools.toolPlaneHash,
           toolContracts: providerTools.contracts,
+          compactionMeta,
         });
       }
 
@@ -437,6 +440,7 @@ export class KimiApiRuntime implements AgentRuntime {
         return this.parseStreamResponse(response, {
           toolPlaneHash: providerTools.toolPlaneHash,
           toolContracts: providerTools.contracts,
+          compactionMeta,
         });
       }
 
@@ -470,6 +474,7 @@ export class KimiApiRuntime implements AgentRuntime {
           toolPlaneHash: providerTools.toolPlaneHash,
           toolContracts: providerTools.contracts,
           toolCallRepair: mappedToolCalls.repair,
+          ...compactionMeta,
         },
       };
     } catch (err) {
@@ -478,21 +483,36 @@ export class KimiApiRuntime implements AgentRuntime {
           output: "",
           exitCode: 130,
           thinking: "",
-          metadata: { error: "Request aborted" },
+          metadata: { error: "Request aborted", ...compactionMeta },
         };
       }
       return {
         output: "",
         exitCode: 1,
         thinking: "",
-        metadata: { error: String(err) },
+        metadata: { error: String(err), ...compactionMeta },
       };
     }
   }
 
+  private consumeCompactionContext(task: AgentTask): Record<string, unknown> {
+    const compaction = task.context.compaction;
+    if (!compaction || compaction.schemaVersion !== "omk.task-compaction.v1") {
+      return { compactionConsumed: false };
+    }
+    return {
+      compactionConsumed: true,
+      compactionContract: typeof (compaction.contract as { schemaVersion?: string }).schemaVersion === "string"
+        ? (compaction.contract as { schemaVersion: string }).schemaVersion
+        : "unknown",
+      compactionArtifactRef: compaction.artifactRef,
+      compactionQualityScore: compaction.diagnostics?.qualityScore,
+    };
+  }
+
   private async parseStreamResponse(
     response: Response,
-    metadata: { toolPlaneHash: string; toolContracts: readonly { name: string }[] },
+    metadata: { toolPlaneHash: string; toolContracts: readonly { name: string }[]; compactionMeta?: Record<string, unknown> },
   ): Promise<AgentResult> {
     const reader = response.body?.getReader();
     if (!reader) {
@@ -608,6 +628,7 @@ export class KimiApiRuntime implements AgentRuntime {
         model,
         finishReason,
         ...metadata,
+        ...(metadata.compactionMeta ?? {}),
         toolCallRepair: mappedToolCalls.repair,
       },
     };
