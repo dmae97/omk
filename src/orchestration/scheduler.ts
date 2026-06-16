@@ -1,10 +1,12 @@
 import type { Dag, DagNode, TaskStatus } from "./dag.js";
+import type { RunnableNodePlan } from "./task-graph.js";
 import { skipNode, dependsOnRequiredOutput } from "./dag.js";
 import { getTaskDagGraph } from "./task-graph.js";
 import { createDecisionTraceStore } from "../evidence/decision-trace.js";
 
 export interface Scheduler {
   getRunnableNodes(dag: Dag): DagNode[];
+  getRunnablePlan(dag: Dag): RunnableNodePlan[];
   updateNodeStatus(dag: Dag, id: string, status: TaskStatus, runId?: string): void;
   isComplete(dag: Dag): boolean;
   isFailed(dag: Dag): boolean;
@@ -15,6 +17,10 @@ export function createScheduler(): Scheduler {
   return {
     getRunnableNodes(dag: Dag): DagNode[] {
       return getTaskDagGraph(dag).runnableNodes().slice();
+    },
+
+    getRunnablePlan(dag: Dag): RunnableNodePlan[] {
+      return getTaskDagGraph(dag).runnablePlan();
     },
 
     updateNodeStatus(dag: Dag, id: string, status: TaskStatus, runId?: string): void {

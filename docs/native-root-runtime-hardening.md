@@ -110,6 +110,10 @@ Completed foundations:
 - Runtime failure stderr is redacted before public exposure and can be retained as a private redacted full artifact in debug mode, including direct `toTaskResult` conversion paths outside `RuntimeRouter`.
 - Mixed-provider advisory reviewer + CLI coder/verifier routing has regression coverage.
 - Native risk classification is negation-aware, so excluded scopes such as `릴리즈 제외`, `no release`, or `npm 체크 제외` do not trigger false merge/shell routing.
+- Runtime routing now classifies failed attempts (`auth`, `quota`, `rate_limit`, `timeout`, `model`, `runtime`, `authority`, `transient`) and opens short-lived in-process circuit breakers so fallback runtimes are tried without repeatedly hitting known-bad adapters.
+- Runtime scoring reads audit-graph `ProviderRoute -> EVIDENCED_BY -> Evidence` pass/fail observations, so local graph memory can influence future route ordering without exposing raw logs.
+- The scheduler exposes critical-path runnable-plan metadata (`criticalPathDepth`, downstream fanout, score, evidence flags) for replay/debug panels.
+- Headroom compaction uses an explicit `omk.structured-compaction.v1` contract for required task/routing/evidence/safety/capability sections.
 
 ## P0 Backlog
 

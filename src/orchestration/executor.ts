@@ -447,6 +447,11 @@ export function createExecutor(executorOptions: ExecutorOptions = {}): DagExecut
       node.routing?.assignedProviderCapabilities?.some((cap) =>
         ["write", "patch", "shell", "merge"].includes(cap)
       ) ?? false;
+    const outputs = node.outputs ?? [];
+    const explicitlyNoEvidence = outputs.length > 0 && outputs.every((output) =>
+      output.required === false || output.gate === undefined || output.gate === "none"
+    );
+    if (explicitlyNoEvidence && !highRisk) return false;
     return (node.routing?.evidenceRequired === true) || highRisk;
   }
 

@@ -1,5 +1,19 @@
 import { dependsOnRequiredOutput, type Dag, type DagNode } from "./dag.js";
 
+export interface RunnableNodePlan {
+  readonly node: DagNode;
+  readonly nodeId: string;
+  readonly rank: number;
+  readonly score: number;
+  readonly criticalPathDepth: number;
+  readonly downstreamCount: number;
+  readonly priority: number;
+  readonly cost: number;
+  readonly evidenceProducer: boolean;
+  readonly evidenceRequired: boolean;
+  readonly reason: string;
+}
+
 export class TaskDagGraph {
   private readonly nodeById = new Map<string, DagNode>();
   private readonly predecessorIds = new Map<string, string[]>();
@@ -211,12 +225,54 @@ export class TaskDagGraph {
     return this.criticalPathDepth(id);
   }
 
+  getDownstreamCount(id: string): number {
+    return this.downstreamCount(id);
+  }
+
+  getRunnableScore(id: string): number {
+    return this.runnableScore(id);
+  }
+
+  runnablePlan(): RunnableNodePlan[] {
+    return this.runnableNodes().map((node, index) => this.describeRunnableNode(node, index));
+  }
+
   private compareOrder(a: string, b: string): number {
     return (this.order.get(a) ?? 0) - (this.order.get(b) ?? 0);
   }
 
   private compareRunnable(a: string, b: string): number {
     return this.runnableScore(b) - this.runnableScore(a) || this.compareOrder(a, b);
+  }
+
+  private describeRunnableNode(node: DagNode, index: number): RunnableNodePlan {
+    const criticalPathDepth = this.criticalPathDepth(node.id);
+    const downstreamCount = this.downstreamCount(node.id);
+    const evidenceProducer = (node.outputs ?? []).some((output) => output.gate && output.gate !== "none");
+    const evidenceRequired = node.routing?.evidenceRequired === true;
+    const priority = Number.isFinite(node.priority) ? node.priority ?? 0 : 0;
+    const cost = node.cost ?? 1;
+    const score = this.runnableScore(node.id);
+    return {
+      node,
+      nodeId: node.id,
+      rank: index + 1,
+      score,
+      criticalPathDepth,
+      downstreamCount,
+      priority,
+      cost,
+      evidenceProducer,
+      evidenceRequired,
+      reason: [
+        `criticalDepth=${criticalPathDepth}`,
+        `downstream=${downstreamCount}`,
+        `priority=${priority}`,
+        `cost=${cost}`,
+        evidenceProducer ? "evidenceProducer" : "noEvidenceGate",
+        evidenceRequired ? "evidenceRequired" : "evidenceOptional",
+      ].join("; "),
+    };
   }
 
   private runnableScore(id: string): number {

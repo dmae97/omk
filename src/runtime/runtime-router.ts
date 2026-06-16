@@ -18,6 +18,7 @@ import { createDecisionTraceStore } from "../evidence/decision-trace.js";
 import { runtimeIsAdvisory, runtimeSatisfiesAuthority } from "./authority-matrix.js";
 import type { HealthState, RuntimeHealthProbeKind } from "./contracts/shared.js";
 import { sanitizeRuntimeStderrResult, type PrivateStderrRetentionOptions } from "./private-stderr.js";
+import { classifyRuntimeFailure, type RuntimeFailureClassification } from "./runtime-failure-classifier.js";
 
 export type NodeIntent =
   | "research"
@@ -64,6 +65,16 @@ interface EvidenceHistoryEntry {
   readonly nodeId: string;
 }
 
+interface RuntimeCircuitState {
+  readonly runtimeId: string;
+  readonly failureClass: RuntimeFailureClassification["failureClass"];
+  readonly retryable: boolean;
+  readonly openedAt: number;
+  readonly expiresAt: number;
+  readonly failureCount: number;
+  readonly reason: string;
+}
+
 class UnsupportedRuntimeError extends Error {
   readonly code = "RUNTIME_UNSUPPORTED_TASK";
   readonly nodeId: string;
@@ -106,6 +117,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
   const memoryPath = options.memoryPath;
   let evidenceCache: EvidenceHistoryEntry[] | undefined;
   const healthCache = new Map<string, RuntimeHealth>();
+  const circuitBreakers = new Map<string, RuntimeCircuitState>();
 
   function classifyIntent(capsule: ContextCapsule): NodeIntent {
     const text = `${capsule.nodeId} ${capsule.goal} ${capsule.task} ${capsule.system}`.toLowerCase();
@@ -129,13 +141,16 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
       const raw = await readFile(filePath, "utf-8");
       const data = JSON.parse(raw) as Record<string, unknown>;
       const nodes = (data.nodes ?? []) as Array<Record<string, unknown>>;
+      const edges = (data.edges ?? []) as Array<Record<string, unknown>>;
+      const nodeById = new Map(nodes.map((node) => [String(node.id ?? ""), node]));
       const entries: EvidenceHistoryEntry[] = [];
+
       for (const n of nodes) {
         if (n.type !== "Evidence") continue;
         const props = (n.properties ?? {}) as Record<string, unknown>;
         const kind = String(props.kind ?? "");
         if (kind !== "failure_pattern" && kind !== "successful_fix") continue;
-        entries.push({
+        pushEvidenceHistory(entries, {
           runtime: String(props.runtime ?? "unknown"),
           intent: String(props.intent ?? "coding"),
           passed: kind === "successful_fix",
@@ -143,6 +158,42 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
           nodeId: String(props.sourceNodeId ?? ""),
         });
       }
+
+      // Audit graph v2 materializes ProviderRoute -> EVIDENCED_BY -> Evidence
+      // with turn-result-pass/fail evidence. Feed those observations back into
+      // routing scores so successful recent routes become preferred and failed
+      // runtime paths decay without relying on raw logs.
+      const evidenceEdgesByRoute = new Map<string, Record<string, unknown>[]>();
+      for (const edge of edges) {
+        if (edge.type !== "EVIDENCED_BY") continue;
+        const from = String(edge.from ?? "");
+        const to = String(edge.to ?? "");
+        const evidence = nodeById.get(to);
+        if (!evidence || evidence.type !== "Evidence") continue;
+        const list = evidenceEdgesByRoute.get(from) ?? [];
+        list.push(evidence);
+        evidenceEdgesByRoute.set(from, list);
+      }
+
+      for (const route of nodes) {
+        if (route.type !== "ProviderRoute") continue;
+        const props = (route.properties ?? {}) as Record<string, unknown>;
+        const runtime = routeRuntimeId(props);
+        if (!runtime) continue;
+        for (const evidence of evidenceEdgesByRoute.get(String(route.id ?? "")) ?? []) {
+          const evidenceProps = (evidence.properties ?? {}) as Record<string, unknown>;
+          const pass = auditEvidencePassState(String(evidenceProps.kind ?? ""));
+          if (pass === undefined) continue;
+          pushEvidenceHistory(entries, {
+            runtime,
+            intent: String(props.intent ?? props.role ?? "coding"),
+            passed: pass,
+            timestamp: String(evidence.updatedAt ?? evidence.createdAt ?? route.updatedAt ?? route.createdAt ?? ""),
+            nodeId: String(props.nodeId ?? evidenceProps.nodeId ?? ""),
+          });
+        }
+      }
+
       evidenceCache = entries;
       return entries;
     } catch {
@@ -299,6 +350,96 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
       && statePassOrUnknown(vector.rateLimit, vector.rateLimitOk);
   }
 
+  function runtimeCircuitOpen(runtime: AgentRuntime): RuntimeCircuitState | undefined {
+    const state = circuitBreakers.get(runtime.id);
+    if (!state) return undefined;
+    if (state.expiresAt <= Date.now()) {
+      circuitBreakers.delete(runtime.id);
+      return undefined;
+    }
+    return state;
+  }
+
+  function clearRuntimeCircuit(runtime: AgentRuntime): void {
+    circuitBreakers.delete(runtime.id);
+  }
+
+  function recordRuntimeFailure(runtime: AgentRuntime, result: AgentRunResult): AgentRunResult {
+    const classification = classifyRuntimeFailure({
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      metadata: result.metadata,
+    });
+    if (classification.failureClass === "none") return result;
+
+    const opened = maybeOpenRuntimeCircuit(runtime.id, classification);
+    return {
+      ...result,
+      metadata: {
+        ...(result.metadata ?? {}),
+        failureClass: classification.failureClass,
+        failureRetryable: classification.retryable,
+        failureReason: classification.reason,
+        ...(opened && {
+          circuitBreaker: {
+            runtimeId: opened.runtimeId,
+            failureClass: opened.failureClass,
+            retryable: opened.retryable,
+            failureCount: opened.failureCount,
+            openedAt: new Date(opened.openedAt).toISOString(),
+            expiresAt: new Date(opened.expiresAt).toISOString(),
+            reason: opened.reason,
+          },
+        }),
+      },
+    };
+  }
+
+  function maybeOpenRuntimeCircuit(runtimeId: string, classification: RuntimeFailureClassification): RuntimeCircuitState | undefined {
+    if (!classification.circuitBreaker || classification.cooldownMs <= 0) return undefined;
+    const now = Date.now();
+    const previous = circuitBreakers.get(runtimeId);
+    const state: RuntimeCircuitState = {
+      runtimeId,
+      failureClass: classification.failureClass,
+      retryable: classification.retryable,
+      openedAt: now,
+      expiresAt: now + classification.cooldownMs,
+      failureCount: (previous?.failureCount ?? 0) + 1,
+      reason: classification.reason,
+    };
+    circuitBreakers.set(runtimeId, state);
+    return state;
+  }
+
+  function circuitOpenResult(runtime: AgentRuntime, state: RuntimeCircuitState, fallbackChain: readonly AgentRuntime[], intent: NodeIntent): AgentRunResult {
+    return {
+      success: false,
+      exitCode: 78,
+      stdout: "",
+      stderr: `Runtime ${runtime.id} skipped by circuit breaker: ${state.failureClass}`,
+      metadata: {
+        runtime: runtime.id,
+        selectedRuntime: runtime.id,
+        intent,
+        fallbackChain: fallbackChain.map((candidate) => candidate.id),
+        failureClass: state.failureClass,
+        failureRetryable: state.retryable,
+        circuitBreakerOpen: true,
+        circuitBreaker: {
+          runtimeId: state.runtimeId,
+          failureClass: state.failureClass,
+          retryable: state.retryable,
+          failureCount: state.failureCount,
+          openedAt: new Date(state.openedAt).toISOString(),
+          expiresAt: new Date(state.expiresAt).toISOString(),
+          reason: state.reason,
+        },
+      },
+    };
+  }
+
   function selectByIntent(
     capsule: ContextCapsule,
     history: EvidenceHistoryEntry[],
@@ -425,6 +566,12 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
         };
       }
 
+      const openCircuit = runtimeCircuitOpen(runtime);
+      if (openCircuit) {
+        lastError = circuitOpenResult(runtime, openCircuit, allCandidates, decision.intent);
+        continue;
+      }
+
       try {
         const result = await runtime.runNode(capsule, signal);
         const routedResult = sanitizeAgentRunResult({
@@ -437,17 +584,20 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
             scores: decision.scores,
           },
         }, stderrArtifactOptions({ runId: capsule.runId, nodeId: capsule.nodeId, runtimeId: runtime.id, root: process.cwd(), env: process.env }));
-        if (routedResult.success) return routedResult;
-        lastError = routedResult;
+        if (routedResult.success) {
+          clearRuntimeCircuit(runtime);
+          return routedResult;
+        }
+        lastError = recordRuntimeFailure(runtime, routedResult);
       } catch (err) {
         const error = maskSensitiveText(String(err));
-        lastError = sanitizeAgentRunResult({
+        lastError = recordRuntimeFailure(runtime, sanitizeAgentRunResult({
           success: false,
           exitCode: 1,
           stdout: "",
           stderr: error,
           metadata: { runtime: runtime.id, error },
-        }, stderrArtifactOptions({ runId: capsule.runId, nodeId: capsule.nodeId, runtimeId: runtime.id, root: process.cwd(), env: process.env }));
+        }, stderrArtifactOptions({ runId: capsule.runId, nodeId: capsule.nodeId, runtimeId: runtime.id, root: process.cwd(), env: process.env })));
       }
     }
 
@@ -527,6 +677,12 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
         };
       }
 
+      const openCircuit = runtimeCircuitOpen(runtime);
+      if (openCircuit) {
+        lastError = circuitOpenResult(runtime, openCircuit, executionCandidates, decision.intent);
+        continue;
+      }
+
       try {
         const result = runtime.execute
           ? agentResultToRunResult(await runtime.execute(task), runtime.id)
@@ -541,17 +697,20 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
             scores: decision.scores,
           },
         }, stderrArtifactOptions({ runId: task.context.runId, nodeId: task.context.nodeId, runtimeId: runtime.id, root: task.context.cwd, env: task.context.env ?? process.env }));
-        if (routedResult.success) return routedResult;
-        lastError = routedResult;
+        if (routedResult.success) {
+          clearRuntimeCircuit(runtime);
+          return routedResult;
+        }
+        lastError = recordRuntimeFailure(runtime, routedResult);
       } catch (err) {
         const error = maskSensitiveText(String(err));
-        lastError = sanitizeAgentRunResult({
+        lastError = recordRuntimeFailure(runtime, sanitizeAgentRunResult({
           success: false,
           exitCode: 1,
           stdout: "",
           stderr: error,
           metadata: { runtime: runtime.id, selectedRuntime: runtime.id, error },
-        }, stderrArtifactOptions({ runId: task.context.runId, nodeId: task.context.nodeId, runtimeId: runtime.id, root: task.context.cwd, env: task.context.env ?? process.env }));
+        }, stderrArtifactOptions({ runId: task.context.runId, nodeId: task.context.nodeId, runtimeId: runtime.id, root: task.context.cwd, env: task.context.env ?? process.env })));
       }
     }
 
@@ -646,6 +805,10 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
     }
 
     const preferredRuntimeIds = task.providerPolicy?.fallbackChain ?? options.fallbackChain ?? [];
+    const history = await loadEvidenceHistory();
+    const scoreByRuntime = new Map<AgentRuntime, RuntimeScore>(
+      candidates.map((runtime): [AgentRuntime, RuntimeScore] => [runtime, computeScores(runtime, intent, history, healthMap.get(runtime.id))]),
+    );
     const capabilityScoreCache = buildCapabilityScoreCache(candidates, intent);
     candidates.sort((a, b) => {
       const runtimeDelta = runtimePreferenceIndex(a.id, preferredRuntimeIds)
@@ -656,7 +819,14 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
           - providerPreferenceIndex(b.id, preferredProviders);
         if (providerDelta !== 0) return providerDelta;
       }
-      return compareRuntimeCandidates(a, b, intent, capabilityScoreCache);
+      const aScore = scoreByRuntime.get(a) ?? computeScores(a, intent, history, healthMap.get(a.id));
+      const bScore = scoreByRuntime.get(b) ?? computeScores(b, intent, history, healthMap.get(b.id));
+      return compareScoredRuntimes(
+        { runtime: a, composite: computeComposite(aScore, a, intent) },
+        { runtime: b, composite: computeComposite(bScore, b, intent) },
+        intent,
+        capabilityScoreCache,
+      );
     });
 
     let lastError: AgentRunResult | undefined;
@@ -671,6 +841,12 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
         };
       }
 
+      const openCircuit = runtimeCircuitOpen(runtime);
+      if (openCircuit) {
+        lastError = circuitOpenResult(runtime, openCircuit, candidates, intent);
+        continue;
+      }
+
       try {
         const result = runtime.execute
           ? agentResultToRunResult(await runtime.execute(task), runtime.id)
@@ -682,19 +858,23 @@ export function createRuntimeRouter(options: RuntimeRouterOptions = {}) {
             selectedRuntime: runtime.id,
             intent,
             fallbackChain: candidates.map((candidate) => candidate.id),
+            scores: candidates.map((candidate) => scoreByRuntime.get(candidate)).filter((score): score is RuntimeScore => score !== undefined),
           },
         }, stderrArtifactOptions({ runId: task.context.runId, nodeId: task.context.nodeId, runtimeId: runtime.id, root: task.context.cwd, env: task.context.env ?? process.env }));
-        if (routedResult.success) return routedResult;
-        lastError = routedResult;
+        if (routedResult.success) {
+          clearRuntimeCircuit(runtime);
+          return routedResult;
+        }
+        lastError = recordRuntimeFailure(runtime, routedResult);
       } catch (err) {
         const error = maskSensitiveText(String(err));
-        lastError = sanitizeAgentRunResult({
+        lastError = recordRuntimeFailure(runtime, sanitizeAgentRunResult({
           success: false,
           exitCode: 1,
           stdout: "",
           stderr: error,
           metadata: { runtime: runtime.id, selectedRuntime: runtime.id, error },
-        }, stderrArtifactOptions({ runId: task.context.runId, nodeId: task.context.nodeId, runtimeId: runtime.id, root: task.context.cwd, env: task.context.env ?? process.env }));
+        }, stderrArtifactOptions({ runId: task.context.runId, nodeId: task.context.nodeId, runtimeId: runtime.id, root: task.context.cwd, env: task.context.env ?? process.env })));
       }
     }
 
@@ -763,6 +943,24 @@ function capsuleFromTask(task: AgentTask): ContextCapsule {
     priorAttempts: [],
     budget: { maxInputTokens: 0, compression: "small" },
   } as unknown as ContextCapsule;
+}
+
+function pushEvidenceHistory(entries: EvidenceHistoryEntry[], entry: EvidenceHistoryEntry): void {
+  if (!entry.runtime || entry.runtime === "unknown") return;
+  entries.push(entry);
+}
+
+function routeRuntimeId(props: Record<string, unknown>): string | undefined {
+  const selectedRuntime = String(props.selectedRuntime ?? "").trim();
+  if (selectedRuntime && selectedRuntime !== "unknown") return selectedRuntime;
+  const provider = String(props.provider ?? "").trim();
+  return provider && provider !== "unknown" ? provider : undefined;
+}
+
+function auditEvidencePassState(kind: string): boolean | undefined {
+  if (kind === "turn-result-pass" || kind === "command-pass" || kind === "test-pass") return true;
+  if (kind === "turn-result-fail" || kind === "command-fail" || kind === "test-fail") return false;
+  return undefined;
 }
 
 function detectedRuntimeLabels(runtimes: readonly AgentRuntime[]): string[] {

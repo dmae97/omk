@@ -12,6 +12,7 @@ import {
 } from "../dist/runtime/runtime-router.js";
 import { createKimiApiRuntime } from "../dist/runtime/kimi-api-runtime.js";
 import { buildTaskRunContext } from "../dist/runtime/worker-manifest.js";
+import { classifyRuntimeFailure } from "../dist/runtime/runtime-failure-classifier.js";
 
 test("runtime router prefers configured advisory API for advisory coding intent when API and CLI runtimes are available", async () => {
   const calls = [];
@@ -703,6 +704,75 @@ test("runtime router excludes unhealthy runtimes before execution", async () => 
   assert.equal(result.exitCode, 0);
   assert.equal(result.metadata.selectedRuntime, "healthy-cli");
   assert.deepEqual(calls, ["healthy-cli"]);
+});
+
+test("runtime router classifies failures, opens circuit, and falls back", async () => {
+  assert.equal(classifyRuntimeFailure({ exitCode: 1, stderr: "429 rate limit" }).failureClass, "rate_limit");
+  const calls = [];
+  const flaky = {
+    id: "flaky-cli",
+    providerId: "flaky",
+    runtimeMode: "cli",
+    priority: 100,
+    capabilities: workspaceCliCapabilities(),
+    supports: () => true,
+    async runNode() {
+      throw new Error("execute path expected");
+    },
+    async execute() {
+      calls.push("flaky-cli");
+      return { output: "429 rate limit", exitCode: 1, metadata: { runtime: "flaky-cli" } };
+    },
+  };
+  const healthy = fakeRuntime("healthy-cli", calls, workspaceCliCapabilities(), { priority: 10 });
+  const router = createRuntimeRouter({ runtimes: [flaky, healthy] });
+
+  const first = await router.execute(fakeTask({ prompt: "implement with fallback after rate limit" }));
+  const second = await router.execute(fakeTask({ prompt: "implement with circuit breaker skip" }));
+
+  assert.equal(first.exitCode, 0);
+  assert.equal(first.metadata.selectedRuntime, "healthy-cli");
+  assert.equal(second.exitCode, 0);
+  assert.equal(second.metadata.selectedRuntime, "healthy-cli");
+  assert.deepEqual(calls, ["flaky-cli", "healthy-cli", "healthy-cli"]);
+});
+
+test("runtime router feeds audit graph route evidence into execute scoring", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "omk-router-memory-"));
+  const memoryPath = join(temp, "graph-state.json");
+  const now = new Date().toISOString();
+  await writeFile(memoryPath, JSON.stringify({
+    nodes: [
+      { id: "route-bad", type: "ProviderRoute", createdAt: now, updatedAt: now, properties: { selectedRuntime: "bad-cli", nodeId: "n1", intent: "coding" } },
+      { id: "evidence-bad", type: "Evidence", createdAt: now, updatedAt: now, properties: { kind: "turn-result-fail", nodeId: "n1" } },
+      { id: "route-good", type: "ProviderRoute", createdAt: now, updatedAt: now, properties: { selectedRuntime: "good-cli", nodeId: "n2", intent: "coding" } },
+      { id: "evidence-good", type: "Evidence", createdAt: now, updatedAt: now, properties: { kind: "turn-result-pass", nodeId: "n2" } },
+    ],
+    edges: [
+      { id: "edge-bad", type: "EVIDENCED_BY", from: "route-bad", to: "evidence-bad" },
+      { id: "edge-good", type: "EVIDENCED_BY", from: "route-good", to: "evidence-good" },
+    ],
+  }), "utf8");
+
+  try {
+    const calls = [];
+    const router = createRuntimeRouter({
+      memoryPath,
+      runtimes: [
+        fakeRuntime("bad-cli", calls, workspaceCliCapabilities(), { priority: 50 }),
+        fakeRuntime("good-cli", calls, workspaceCliCapabilities(), { priority: 50 }),
+      ],
+    });
+
+    const result = await router.execute(fakeTask({ prompt: "implement using audit graph scoring" }));
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.metadata.selectedRuntime, "good-cli");
+    assert.equal(result.metadata.scores.find((score) => score.runtime === "good-cli").evidencePassRate, 1);
+    assert.equal(result.metadata.scores.find((score) => score.runtime === "bad-cli").evidencePassRate, 0);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
 });
 
 test("runtime router records decision trace for executeTask path", async () => {
