@@ -878,6 +878,10 @@ test("runtime-backed runner applies headroom compacted capsule to AgentTask", as
     assert.equal(result.exitCode, 0);
     assert.equal(result.metadata.headroomCompaction.compacted, true);
     assert.equal(result.metadata.headroomCompaction.via, "headroom");
+    assert.equal(result.metadata.headroomCompaction.backend, "headroom");
+    assert.equal(result.metadata.headroomCompaction.compactedTextProduced, true);
+    assert.equal(result.metadata.headroomCompaction.applied, false);
+    assert.equal(result.metadata.headroomCompaction.validated, false);
     assert.match(
       captured.context.system,
       /compact capsule summary|Headroom compaction removed required/,
@@ -932,7 +936,7 @@ test("runtime-backed runner autocompacts with structured fallback when headroom 
 
     const result = await runner.run({
       id: "headroom-fallback-node",
-      name: "Implement fallback autocompact handoff",
+      name: `Implement fallback autocompact handoff ${"with large original context ".repeat(400)}`,
       role: "coder",
       dependsOn: [],
       status: "running",
@@ -953,7 +957,16 @@ test("runtime-backed runner autocompacts with structured fallback when headroom 
     assert.equal(result.exitCode, 0);
     assert.equal(result.metadata.headroomCompaction.compacted, true);
     assert.equal(result.metadata.headroomCompaction.via, "fallback");
-    assert.match(captured.context.system, /omk\.structured-compaction\.v1/);
+    assert.equal(result.metadata.headroomCompaction.backend, "structured-fallback");
+    assert.equal(result.metadata.headroomCompaction.compactedTextProduced, true);
+    assert.equal(result.metadata.headroomCompaction.validated, true);
+    assert.equal(result.metadata.headroomCompaction.applied, true);
+    assert.equal(result.metadata.headroomCompaction.contract, "omk.structured-compaction.v2");
+    assert.match(result.metadata.headroomCompaction.artifactRef, /headroom-decisions\.jsonl/);
+    const decisions = await readFile(join(process.cwd(), result.metadata.headroomCompaction.artifactRef), "utf8");
+    assert.match(decisions, /"schemaVersion":"omk.headroom-decision.v1"/);
+    assert.match(decisions, /"applied":true/);
+    assert.match(captured.context.system, /omk\.structured-compaction\.v2/);
     assert.match(captured.context.system, /command-pass/);
   } finally {
     if (previousEnv.OMK_CONTEXT_WINDOW === undefined) delete process.env.OMK_CONTEXT_WINDOW;
@@ -1321,6 +1334,68 @@ function fakeTask(overrides = {}) {
   };
 }
 
+test("headroom guard rejects oversized compacted text before applying to capsule", async () => {
+  const previousEnv = {
+    OMK_CONTEXT_WINDOW: process.env.OMK_CONTEXT_WINDOW,
+    OMK_HEADROOM_THRESHOLD: process.env.OMK_HEADROOM_THRESHOLD,
+  };
+  try {
+    process.env.OMK_CONTEXT_WINDOW = "1";
+    process.env.OMK_HEADROOM_THRESHOLD = "0.5";
+    const runner = await createRuntimeBackedTaskRunner({
+      cwd: process.cwd(),
+      env: {},
+      runId: "local-headroom-oversized",
+      headroomCompactor: async () => "oversized compacted text ".repeat(10_000),
+    });
+    const registry = runner._registry;
+    for (const runtime of [...registry.list()]) registry.unregister(runtime.id);
+
+    let captured;
+    registry.register({
+      id: "codex-cli",
+      priority: 100,
+      capabilities: workspaceCliCapabilities(),
+      supports: () => true,
+      async runNode() {
+        throw new Error("execute path expected");
+      },
+      async execute(task) {
+        captured = task;
+        return { output: "ok", exitCode: 0, metadata: { runtime: "codex-cli" } };
+      },
+    });
+
+    const result = await runner.run({
+      id: "headroom-oversized-node",
+      name: "Implement compacted context handoff",
+      role: "coder",
+      dependsOn: [],
+      status: "running",
+      retries: 0,
+      maxRetries: 1,
+      outputs: [{ name: "diff", gate: "summary" }],
+      routing: {
+        readOnly: false,
+        assignedProviderCapabilities: ["write", "patch"],
+        contextBudget: "small",
+      },
+    }, {});
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.metadata.headroomCompaction.compactedTextProduced, true);
+    assert.equal(result.metadata.headroomCompaction.applied, false);
+    assert.equal(result.metadata.headroomCompaction.validated, false);
+    assert.match(result.metadata.headroomCompaction.reason, /not smaller/);
+    assert.doesNotMatch(captured.context.system, /oversized compacted text/);
+  } finally {
+    if (previousEnv.OMK_CONTEXT_WINDOW === undefined) delete process.env.OMK_CONTEXT_WINDOW;
+    else process.env.OMK_CONTEXT_WINDOW = previousEnv.OMK_CONTEXT_WINDOW;
+    if (previousEnv.OMK_HEADROOM_THRESHOLD === undefined) delete process.env.OMK_HEADROOM_THRESHOLD;
+    else process.env.OMK_HEADROOM_THRESHOLD = previousEnv.OMK_HEADROOM_THRESHOLD;
+  }
+});
+
 test("headroom guard keeps original capsule when compactor drops required sections", async () => {
   const previousEnv = {
     OMK_CONTEXT_WINDOW: process.env.OMK_CONTEXT_WINDOW,
@@ -1373,6 +1448,8 @@ test("headroom guard keeps original capsule when compactor drops required sectio
     assert.equal(result.exitCode, 0);
     assert.equal(result.metadata.headroomCompaction.compacted, true);
     assert.equal(result.metadata.headroomCompaction.via, "headroom");
+    assert.equal(result.metadata.headroomCompaction.applied, false);
+    assert.equal(result.metadata.headroomCompaction.validated, false);
     assert.match(
       captured.context.system,
       /Headroom compaction removed required sections/,

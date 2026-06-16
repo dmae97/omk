@@ -9,7 +9,7 @@
 
 import type { TaskRunner, TaskResult } from "../contracts/orchestration.js";
 import type { TaskRunContext } from "../contracts/worker-context.js";
-import { readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentRunResult, AgentTask } from "./agent-runtime.js";
 import { toTaskResult } from "./agent-runtime.js";
@@ -19,11 +19,12 @@ import { applyTaskRunContextToAgentTask, envFromWorkerManifest } from "./worker-
 import { createRuntimeRegistry, type RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRouter } from "./runtime-router.js";
 import { createContextBroker } from "./context-broker.js";
-import type { ContextCapsule } from "./context-capsule.js";
+import { estimateCapsuleTokens, type ContextCapsule } from "./context-capsule.js";
 import { maybeCompactWithHeadroom } from "./headroom-policy.js";
 import {
   DEFAULT_STRUCTURED_COMPACTION_CONTRACT,
   buildStructuredCompactionText,
+  estimateTextTokens,
   structuredCompactionGuardNote,
   structuredCompactionInstruction,
   validateStructuredCompaction,
@@ -159,43 +160,170 @@ function escapeRegExp(value: string): string {
 
 
 
+interface HeadroomApplyDiagnostics {
+  readonly beforeChars: number;
+  readonly afterChars: number | null;
+  readonly beforeTokens: number;
+  readonly afterTokens: number | null;
+  readonly compactedTextProduced: boolean;
+  readonly validated: boolean;
+  readonly applied: boolean;
+  readonly missingSections: readonly string[];
+  readonly contract?: string;
+  readonly reason: string;
+}
+
 function applyCompactedTextToCapsule(
   capsule: ContextCapsule,
   compactedText: string,
-): ContextCapsule {
+): { capsule: ContextCapsule; diagnostics: HeadroomApplyDiagnostics } {
   const trimmed = compactedText.trim();
-  if (trimmed.length === 0) return capsule;
-  const originalSize = JSON.stringify(capsule).length;
-  if (trimmed.length >= originalSize) return capsule;
+  const beforeChars = JSON.stringify(capsule).length;
+  const beforeTokens = estimateCapsuleTokens(capsule);
+  const baseDiagnostics = {
+    beforeChars,
+    beforeTokens,
+    compactedTextProduced: trimmed.length > 0,
+  };
+
+  if (trimmed.length === 0) {
+    return {
+      capsule,
+      diagnostics: {
+        ...baseDiagnostics,
+        afterChars: 0,
+        afterTokens: 0,
+        validated: false,
+        applied: false,
+        missingSections: [],
+        reason: "empty compacted text",
+      },
+    };
+  }
+
+  const afterChars = trimmed.length;
+  const afterTokens = estimateTextTokens(trimmed);
+  if (afterChars >= beforeChars) {
+    return {
+      capsule,
+      diagnostics: {
+        ...baseDiagnostics,
+        afterChars,
+        afterTokens,
+        validated: false,
+        applied: false,
+        missingSections: [],
+        reason: "compacted text is not smaller than original capsule",
+      },
+    };
+  }
+
   // If compaction stripped required structural context, keep original but note the guard.
   const validation = validateStructuredCompaction(trimmed, capsule);
   if (!validation.ok) {
     return {
+      capsule: {
+        ...capsule,
+        system: [
+          capsule.system,
+          "",
+          "[OMK headroom compacted context]",
+          structuredCompactionGuardNote(validation),
+        ].filter(Boolean).join("\n"),
+        budget: { ...capsule.budget, compression: "summary" },
+      },
+      diagnostics: {
+        ...baseDiagnostics,
+        afterChars,
+        afterTokens,
+        validated: false,
+        applied: false,
+        missingSections: validation.missing,
+        contract: validation.contract.schemaVersion,
+        reason: "structured compaction contract validation failed",
+      },
+    };
+  }
+
+  return {
+    capsule: {
       ...capsule,
       system: [
         capsule.system,
         "",
         "[OMK headroom compacted context]",
-        structuredCompactionGuardNote(validation),
+        structuredCompactionInstruction(validation.contract),
+        trimmed,
       ].filter(Boolean).join("\n"),
+      dependencySummaries: [],
+      relevantFiles: [],
+      graphMemory: [],
+      priorAttempts: [],
       budget: { ...capsule.budget, compression: "summary" },
-    };
-  }
-  return {
-    ...capsule,
-    system: [
-      capsule.system,
-      "",
-      "[OMK headroom compacted context]",
-      structuredCompactionInstruction(DEFAULT_STRUCTURED_COMPACTION_CONTRACT),
-      trimmed,
-    ].filter(Boolean).join("\n"),
-    dependencySummaries: [],
-    relevantFiles: [],
-    graphMemory: [],
-    priorAttempts: [],
-    budget: { ...capsule.budget, compression: "summary" },
+    },
+    diagnostics: {
+      ...baseDiagnostics,
+      afterChars,
+      afterTokens,
+      validated: true,
+      applied: true,
+      missingSections: [],
+      contract: validation.contract.schemaVersion,
+      reason: "compaction applied",
+    },
   };
+}
+
+interface HeadroomCompactionMetadata extends Record<string, unknown> {
+  readonly attempted: boolean;
+  readonly compacted: boolean;
+  readonly via: string;
+  readonly backend: string;
+  readonly compactedTextProduced: boolean;
+  readonly validated: boolean;
+  readonly applied: boolean;
+  readonly beforeChars?: number;
+  readonly afterChars?: number | null;
+  readonly beforeTokens?: number;
+  readonly afterTokens?: number | null;
+  readonly threshold?: number;
+  readonly utilization?: number;
+  readonly contract?: string;
+  readonly missingSections?: readonly string[];
+  readonly reason?: string;
+  readonly artifactRef?: string;
+}
+
+function persistHeadroomDecisionArtifact(input: {
+  cwd: string;
+  runId: string | undefined;
+  nodeId: string;
+  metadata: HeadroomCompactionMetadata;
+}): string | undefined {
+  const rawRunId = input.runId?.trim() || "runtime-backed-task-runner";
+  const runId = sanitizeArtifactSegment(rawRunId);
+  const nodeId = sanitizeArtifactSegment(input.nodeId || "node");
+  const relativePath = `.omk/runs/${runId}/headroom-decisions.jsonl`;
+  try {
+    const dir = join(input.cwd, ".omk", "runs", runId);
+    mkdirSync(dir, { recursive: true });
+    const record = {
+      schemaVersion: "omk.headroom-decision.v1",
+      runId,
+      nodeId,
+      timestamp: new Date().toISOString(),
+      ...input.metadata,
+      artifactRef: undefined,
+    };
+    appendFileSync(join(input.cwd, relativePath), `${JSON.stringify(record)}\n`, "utf-8");
+    return relativePath;
+  } catch {
+    return undefined;
+  }
+}
+
+function sanitizeArtifactSegment(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 128) || "unknown";
 }
 
 export async function createRuntimeBackedTaskRunner(
@@ -229,7 +357,7 @@ export async function createRuntimeBackedTaskRunner(
         : undefined;
       const { capsule, headroomDecision } = await contextBroker.buildCapsule(node, runState);
       let effectiveCapsule = capsule;
-      let headroomCompaction: { compacted: boolean; via: string; contract?: string } | undefined;
+      let headroomCompaction: HeadroomCompactionMetadata | undefined;
       // CTX guard: compact via headroom before the context window crosses the threshold (~90%).
       if (headroomDecision?.shouldCompact) {
         const compactResult = await maybeCompactWithHeadroom({
@@ -239,10 +367,37 @@ export async function createRuntimeBackedTaskRunner(
           fallbackText: () => buildStructuredCompactionText(capsule),
         }).catch(() => undefined);
         if (compactResult) {
-          headroomCompaction = { compacted: compactResult.compacted, via: compactResult.via, contract: DEFAULT_STRUCTURED_COMPACTION_CONTRACT.schemaVersion };
+          let applyDiagnostics: HeadroomApplyDiagnostics | undefined;
           if (compactResult.compactedText) {
-            effectiveCapsule = applyCompactedTextToCapsule(capsule, compactResult.compactedText);
+            const applied = applyCompactedTextToCapsule(capsule, compactResult.compactedText);
+            effectiveCapsule = applied.capsule;
+            applyDiagnostics = applied.diagnostics;
           }
+          headroomCompaction = {
+            attempted: compactResult.attempted,
+            compacted: compactResult.compacted,
+            via: compactResult.via,
+            backend: compactResult.backend,
+            compactedTextProduced: compactResult.compactedTextProduced,
+            validated: applyDiagnostics?.validated ?? false,
+            applied: applyDiagnostics?.applied ?? false,
+            beforeChars: applyDiagnostics?.beforeChars,
+            afterChars: applyDiagnostics?.afterChars,
+            beforeTokens: applyDiagnostics?.beforeTokens,
+            afterTokens: applyDiagnostics?.afterTokens,
+            threshold: headroomDecision.threshold,
+            utilization: headroomDecision.utilization,
+            contract: applyDiagnostics?.contract ?? DEFAULT_STRUCTURED_COMPACTION_CONTRACT.schemaVersion,
+            missingSections: applyDiagnostics?.missingSections ?? [],
+            reason: applyDiagnostics?.reason ?? compactResult.reason,
+          };
+          const artifactRef = persistHeadroomDecisionArtifact({
+            cwd: options.cwd,
+            runId: options.runId ?? capsule.runId,
+            nodeId: capsule.nodeId,
+            metadata: headroomCompaction,
+          });
+          if (artifactRef) headroomCompaction = { ...headroomCompaction, artifactRef };
         }
       }
       const routing = effectiveCapsule.node.routing;

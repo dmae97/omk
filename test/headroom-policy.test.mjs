@@ -89,6 +89,9 @@ test("maybeCompactWithHeadroom returns via=headroom on success", async () => {
   });
   assert.equal(result.compacted, true);
   assert.equal(result.via, "headroom");
+  assert.equal(result.attempted, true);
+  assert.equal(result.backend, "headroom");
+  assert.equal(result.compactedTextProduced, true);
 });
 
 test("maybeCompactWithHeadroom falls back when headroom returns null", async () => {
@@ -102,6 +105,8 @@ test("maybeCompactWithHeadroom falls back when headroom returns null", async () 
   });
   assert.equal(result.compacted, true);
   assert.equal(result.via, "fallback");
+  assert.equal(result.backend, "side-effect-fallback");
+  assert.equal(result.compactedTextProduced, false);
   assert.equal(fallbackCalled, true);
 });
 
@@ -115,6 +120,8 @@ test("maybeCompactWithHeadroom returns fallback compactedText when direct headro
   });
   assert.equal(result.compacted, true);
   assert.equal(result.via, "fallback");
+  assert.equal(result.backend, "structured-fallback");
+  assert.equal(result.compactedTextProduced, true);
   assert.equal(result.compactedText, "structured compact context");
   assert.match(result.reason ?? "", /structured fallback/);
 });
@@ -124,6 +131,22 @@ test("maybeCompactWithHeadroom returns via=none when shouldCompact is false", as
   const result = await maybeCompactWithHeadroom({ decision });
   assert.equal(result.compacted, false);
   assert.equal(result.via, "none");
+  assert.equal(result.attempted, false);
+});
+
+test("maybeCompactWithHeadroom returns explicit diagnostics when fallbackText is empty", async () => {
+  const decision = { shouldCompact: true, utilization: 0.95, threshold: 0.90, usedTokens: 190_000, contextWindow: 200_000, reason: "test" };
+  const result = await maybeCompactWithHeadroom({
+    decision,
+    text: "context",
+    runHeadroom: async () => null,
+    fallbackText: async () => "   ",
+  });
+  assert.equal(result.compacted, false);
+  assert.equal(result.via, "none");
+  assert.equal(result.attempted, true);
+  assert.equal(result.compactedTextProduced, false);
+  assert.match(result.reason ?? "", /empty fallback text/);
 });
 
 test("maybeCompactWithHeadroom never throws even if runner and fallback fail", async () => {
@@ -136,4 +159,5 @@ test("maybeCompactWithHeadroom never throws even if runner and fallback fail", a
   });
   assert.equal(result.compacted, false);
   assert.equal(result.via, "none");
+  assert.equal(result.attempted, true);
 });
