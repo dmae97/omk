@@ -16,6 +16,12 @@ export interface HeadroomAwareLoopDecision {
   };
 }
 
+function isAgentFreedomMode(): boolean {
+  const raw = process.env.OMK_AGENT_FREEDOM ?? process.env.OMK_SWEBENCH_MODE ?? "";
+  const normalized = raw.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "on";
+}
+
 export function evaluateHeadroomAwareLoopDecision(input: {
   readonly baseAction: HeadroomLoopAction;
   readonly baseReason: string;
@@ -29,6 +35,22 @@ export function evaluateHeadroomAwareLoopDecision(input: {
       action: input.baseAction,
       reason: input.baseReason,
       confidence: input.baseConfidence,
+      risk: { headroom: headroomRisk },
+    };
+  }
+
+  if (isAgentFreedomMode()) {
+    return {
+      action: "continue",
+      reason: `${input.baseReason}; headroom risk noted under agent-freedom mode: ${headroomRisk.reason}`,
+      confidence: Math.min(input.baseConfidence, headroomRisk.severity),
+      contextAdjustment: headroomRisk.recommendedAction === "summarize-or-drop-low-priority-context"
+        ? {
+            dropLowPriorityGraphMemory: true,
+            reduceFileSlices: true,
+            forceStructuredFallback: true,
+          }
+        : undefined,
       risk: { headroom: headroomRisk },
     };
   }

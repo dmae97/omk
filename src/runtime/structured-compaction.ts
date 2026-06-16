@@ -120,6 +120,12 @@ export function resolveCompactionQualityThreshold(input: { readonly risk?: strin
   return 0.60;
 }
 
+function isAgentFreedomMode(): boolean {
+  const raw = process.env.OMK_AGENT_FREEDOM ?? process.env.OMK_SWEBENCH_MODE ?? "";
+  const normalized = raw.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "on";
+}
+
 export function evaluateCompactionQualityGate(input: CompactionQualityGateInput): CompactionQualityGateResult {
   if (!input.applied) {
     return { gateDecision: input.validated ? "not-applied" : "not-attempted", threshold: resolveCompactionQualityThreshold(input) };
@@ -132,6 +138,10 @@ export function evaluateCompactionQualityGate(input: CompactionQualityGateInput)
 
   if (input.qualityScore >= Math.max(0, threshold - 0.20) && input.contractScore === 1) {
     return { gateDecision: "accept-with-warning", warning: "low compaction quality", threshold };
+  }
+
+  if (isAgentFreedomMode()) {
+    return { gateDecision: "accept-with-warning", warning: "low compaction quality accepted under agent-freedom mode", threshold };
   }
 
   return {
