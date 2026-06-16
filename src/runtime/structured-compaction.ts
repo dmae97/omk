@@ -46,6 +46,36 @@ export interface StructuredCompactionBuildOptions {
   readonly redact?: boolean;
   readonly maxMemoryFacts?: number;
   readonly maxDependencySummaries?: number;
+  readonly estimator?: TokenEstimationOptions;
+}
+
+export interface TokenEstimationCalibration {
+  readonly multiplier?: number;
+  readonly bias?: number;
+}
+
+export interface TokenEstimationOptions {
+  readonly provider?: string;
+  readonly model?: string;
+  readonly calibration?: TokenEstimationCalibration;
+}
+
+export interface CompactionQualityInput {
+  readonly applied: boolean;
+  readonly validated: boolean;
+  readonly beforeTokens?: number | null;
+  readonly afterTokens?: number | null;
+  readonly missingSections?: readonly string[];
+}
+
+export interface CompactionQualityScore {
+  readonly qualityScore: number;
+  readonly compressionRatio: number | null;
+  readonly contractScore: number;
+  readonly compressionScore: number;
+  readonly evidenceScore: number;
+  readonly safetyScore: number;
+  readonly capabilityScore: number;
 }
 
 export const DEFAULT_STRUCTURED_COMPACTION_CONTRACT: StructuredCompactionContractV1 = {
@@ -277,7 +307,8 @@ export function buildStructuredCompactionText(
   ].join("\n");
 
   const targetTokens = Math.max(256, Math.floor(options.maxTokens ?? (capsule.budget.maxInputTokens - capsule.budget.reservedOutputTokens)));
-  let remainingTokens = Math.max(0, targetTokens - estimateTextTokens(hardSections));
+  const estimator = options.estimator;
+  let remainingTokens = Math.max(0, targetTokens - estimateTextTokens(hardSections, estimator));
   const selected = selectCandidateSections(capsule, remainingTokens, options, redact);
 
   return [hardSections, ...selected].join("\n");
@@ -333,20 +364,20 @@ function selectCandidateSections(
 
   const selected: Record<string, string[]> = {};
   const sorted = candidates
-    .map((candidate) => ({ ...candidate, cost: Math.max(1, estimateTextTokens(candidate.text)) }))
+    .map((candidate) => ({ ...candidate, cost: Math.max(1, estimateTextTokens(candidate.text, options.estimator)) }))
     .sort((a, b) => (b.priority / b.cost) - (a.priority / a.cost));
 
   let remaining = budgetTokens;
   for (const candidate of sorted) {
     if (remaining <= 0) break;
-    const cost = Math.max(1, estimateTextTokens(candidate.text));
+    const cost = Math.max(1, estimateTextTokens(candidate.text, options.estimator));
     const text = cost <= remaining
       ? candidate.text
       : truncateToTokenBudget(candidate.text, remaining);
     if (!text.trim()) continue;
     selected[candidate.heading] ??= [];
     selected[candidate.heading].push(text);
-    remaining -= estimateTextTokens(text);
+    remaining -= estimateTextTokens(text, options.estimator);
   }
 
   const headings = ["dependency summaries", "graph memory", "file summaries", "prior attempts"];
@@ -369,8 +400,60 @@ function memoryPriority(kind: string): number {
   }
 }
 
-export function estimateTextTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+export function estimateTextTokens(text: string, options: TokenEstimationOptions = {}): number {
+  const base = Math.ceil(text.length / 4);
+  if (base <= 0) return 0;
+  const hangulChars = text.match(/[\u3131-\u318E\uAC00-\uD7A3]/g)?.length ?? 0;
+  const hangulRatio = hangulChars / Math.max(1, text.length);
+  const hasJsonOrCode = /```|[{][\s\S]*?:[\s\S]*?[}]|\b(function|class|interface|const|let|import|export)\b/.test(text);
+  const languageFactor = hangulRatio > 0.1 ? 1.25 : 1;
+  const structureFactor = hasJsonOrCode ? 1.10 : 1;
+  const multiplier = options.calibration?.multiplier ?? 1;
+  const bias = options.calibration?.bias ?? 0;
+  return Math.max(0, Math.ceil(base * languageFactor * structureFactor * multiplier + bias));
+}
+
+export function computeCompactionQualityScore(input: CompactionQualityInput): CompactionQualityScore {
+  if (!input.applied) {
+    return {
+      qualityScore: 0,
+      compressionRatio: null,
+      contractScore: 0,
+      compressionScore: 0,
+      evidenceScore: 0,
+      safetyScore: 0,
+      capabilityScore: 0,
+    };
+  }
+  const before = Math.max(1, input.beforeTokens ?? 0);
+  const after = Math.max(0, input.afterTokens ?? 0);
+  const compressionRatio = after / before;
+  const compressionScore = clamp01(1 - compressionRatio);
+  const missing = new Set(input.missingSections ?? []);
+  const contractScore = input.validated ? 1 : 0;
+  const evidenceScore = missing.has("evidence requirements") || missing.has("typed evidence requirements") ? 0 : 1;
+  const safetyScore = missing.has("safety constraints") || missing.has("typed safety evidenceRequired") || missing.has("typed safety preserve") ? 0 : 1;
+  const capabilityScore = missing.has("capabilities") || missing.has("typed capabilities") ? 0 : 1;
+  const qualityScore = clamp01(
+    0.35 * contractScore
+      + 0.25 * compressionScore
+      + 0.15 * evidenceScore
+      + 0.15 * safetyScore
+      + 0.10 * capabilityScore,
+  );
+  return {
+    qualityScore,
+    compressionRatio,
+    contractScore,
+    compressionScore,
+    evidenceScore,
+    safetyScore,
+    capabilityScore,
+  };
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
 
 function truncateToTokenBudget(text: string, budgetTokens: number): string {

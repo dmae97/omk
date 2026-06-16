@@ -84,6 +84,13 @@ export interface AgentTaskSafety {
   readonly authorityMode: string;
 }
 
+export interface AgentContextCompaction {
+  readonly schemaVersion: "omk.task-compaction.v1";
+  readonly contract: unknown;
+  readonly diagnostics: Readonly<Record<string, unknown>>;
+  readonly artifactRef?: string;
+}
+
 export interface AgentContext {
   readonly runId: string;
   readonly nodeId: string;
@@ -94,6 +101,7 @@ export interface AgentContext {
   readonly memory?: ReadonlyArray<{ key: string; source: string; summary: string }>;
   readonly goalContext?: unknown;
   readonly workerManifest?: unknown;
+  readonly compaction?: AgentContextCompaction;
   readonly abortSignal?: AbortSignal;
   readonly cwd?: string;
   readonly env?: Record<string, string>;

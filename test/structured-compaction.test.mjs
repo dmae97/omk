@@ -6,6 +6,8 @@ import {
   STRUCTURED_COMPACTION_V2_SCHEMA_VERSION,
   buildStructuredCompactionText,
   buildTypedStructuredCompactionContract,
+  computeCompactionQualityScore,
+  estimateTextTokens,
   parseTypedStructuredCompactionContract,
   structuredCompactionInstruction,
   validateStructuredCompaction,
@@ -150,4 +152,24 @@ test("typed contract parser extracts generated v2 contract", () => {
   assert.equal(parsed?.schemaVersion, STRUCTURED_COMPACTION_V2_SCHEMA_VERSION);
   assert.equal(parsed?.routing.provider, "codex");
   assert.equal(parsed?.evidence.required[0].gate, "command-pass");
+});
+
+test("calibrated token estimator accounts for Korean/code text and explicit calibration", () => {
+  const plain = estimateTextTokens("a".repeat(400));
+  const korean = estimateTextTokens("한글".repeat(200));
+  const calibrated = estimateTextTokens("a".repeat(400), { calibration: { multiplier: 2, bias: 5 } });
+  assert.ok(korean > plain);
+  assert.equal(calibrated, plain * 2 + 5);
+  assert.ok(estimateTextTokens("```ts\nconst x = 1\n```") > Math.ceil("```ts\nconst x = 1\n```".length / 4));
+});
+
+test("compaction quality score separates applied from produced diagnostics", () => {
+  const failed = computeCompactionQualityScore({ applied: false, validated: false, beforeTokens: 1000, afterTokens: 100 });
+  assert.equal(failed.qualityScore, 0);
+  assert.equal(failed.compressionRatio, null);
+
+  const applied = computeCompactionQualityScore({ applied: true, validated: true, beforeTokens: 1000, afterTokens: 200, missingSections: [] });
+  assert.ok(applied.qualityScore > 0.9);
+  assert.equal(applied.compressionRatio, 0.2);
+  assert.equal(applied.contractScore, 1);
 });

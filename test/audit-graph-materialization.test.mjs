@@ -6,6 +6,46 @@ import { join } from "node:path";
 import { LocalGraphMemoryStore } from "../dist/memory/local-graph-memory-store.js";
 
 describe("turn audit graph materialization", () => {
+  it("creates headroom decision, artifact, and risk nodes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "omk-headroom-graph-"));
+    try {
+      const store = await LocalGraphMemoryStore.create({ projectRoot: root, sessionId: "run-headroom-test", source: "test" });
+      assert.ok(store, "local graph store should be available");
+      await store.materializeHeadroomDecision({
+        runId: "run-headroom-test",
+        nodeId: "node-1",
+        artifactRef: ".omk/runs/run-headroom-test/headroom-decisions.jsonl",
+        metadata: {
+          attempted: true,
+          backend: "structured-fallback",
+          compacted: true,
+          compactedTextProduced: true,
+          validated: false,
+          applied: false,
+          beforeTokens: 1000,
+          afterTokens: 100,
+          utilization: 0.95,
+          threshold: 0.9,
+          contract: "omk.structured-compaction.v2",
+          reason: "structured compaction contract validation failed",
+          missingSections: ["typed routing provider"],
+          qualityScore: 0,
+          compressionRatio: 0.1,
+        },
+      });
+      const raw = await readFile(join(root, ".omk", "memory", "graph-state.json"), "utf8");
+      const state = JSON.parse(raw);
+      assert.ok(state.nodes.some((node) => node.type === "HeadroomDecision" && node.properties.backend === "structured-fallback"));
+      assert.ok(state.nodes.some((node) => node.type === "Artifact" && node.properties.kind === "headroom-decision"));
+      assert.ok(state.nodes.some((node) => node.type === "Risk" && node.properties.kind === "headroom-compaction-not-applied"));
+      assert.ok(state.edges.some((edge) => edge.type === "HAS_HEADROOM_DECISION"));
+      assert.ok(state.edges.some((edge) => edge.type === "STORED_AT"));
+      assert.ok(state.edges.some((edge) => edge.type === "HAS_RISK"));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("creates run, turn, route, and evidence nodes", async () => {
     const root = await mkdtemp(join(tmpdir(), "omk-audit-graph-"));
     try {

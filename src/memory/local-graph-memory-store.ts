@@ -149,6 +149,10 @@ export const ONTOLOGY: MemoryOntology = {
     "Command",
     "File",
     "Evidence",
+    "EvidenceRequirement",
+    "EvidenceObservation",
+    "Artifact",
+    "HeadroomDecision",
     "Provider",
     "ProviderRoute",
     "ProviderFallback",
@@ -168,10 +172,12 @@ export const ONTOLOGY: MemoryOntology = {
     "HAS_TOPIC",
     "HAS_DECISION",
     "HAS_TASK",
+    "HAS_TURN",
     "HAS_RISK",
     "HAS_COMMAND",
     "HAS_FILE",
     "HAS_EVIDENCE",
+    "HAS_HEADROOM_DECISION",
     "USES_PROVIDER",
     "HAS_PROVIDER_ROUTE",
     "ROUTES_TO",
@@ -188,6 +194,7 @@ export const ONTOLOGY: MemoryOntology = {
     "DEPENDS_ON",
     "BLOCKED_BY",
     "EVIDENCED_BY",
+    "STORED_AT",
     "TOUCHES_FILE",
   ],
 };
@@ -202,6 +209,10 @@ const GENERATED_TYPES = new Set([
   "Command",
   "File",
   "Evidence",
+  "EvidenceRequirement",
+  "EvidenceObservation",
+  "Artifact",
+  "HeadroomDecision",
   "Provider",
   "ProviderRoute",
   "ProviderFallback",
@@ -218,6 +229,10 @@ const CANONICAL_NODE_TYPES = new Set([
   "Decision",
   "Risk",
   "Evidence",
+  "EvidenceRequirement",
+  "EvidenceObservation",
+  "Artifact",
+  "HeadroomDecision",
   "Goal",
   "Run",
   "Task",
@@ -699,6 +714,156 @@ export class LocalGraphMemoryStore {
             this.upsertEdge(state, requirementId, id, "SATISFIED_BY", now);
           }
         }
+      }
+    });
+  }
+
+  async materializeHeadroomDecision(input: {
+    readonly runId: string;
+    readonly nodeId: string;
+    readonly metadata: {
+      readonly attempted?: boolean;
+      readonly backend?: string;
+      readonly compacted?: boolean;
+      readonly compactedTextProduced?: boolean;
+      readonly validated?: boolean;
+      readonly applied?: boolean;
+      readonly beforeTokens?: number;
+      readonly afterTokens?: number | null;
+      readonly utilization?: number;
+      readonly threshold?: number;
+      readonly contract?: string;
+      readonly reason?: string;
+      readonly missingSections?: readonly string[];
+      readonly qualityScore?: number;
+      readonly compressionRatio?: number | null;
+    };
+    readonly artifactRef?: string;
+  }): Promise<void> {
+    await this.mutateState((state, now) => {
+      state.updatedAt = now;
+      state.project = { ...this.settings.project };
+      state.ontology = ONTOLOGY;
+
+      const projectId = this.nodeId("Project", this.settings.project.key);
+      const runId = this.nodeId("Run", input.runId);
+      const taskId = this.nodeId("Task", `${input.runId}:${input.nodeId}`);
+      const decisionId = this.nodeId("HeadroomDecision", `${input.runId}:${input.nodeId}`);
+      const artifactId = input.artifactRef
+        ? this.nodeId("Artifact", `${input.runId}:${input.artifactRef}`)
+        : undefined;
+      const attempted = input.metadata.attempted === true;
+      const applied = input.metadata.applied === true;
+      const reason = input.metadata.reason ?? "headroom decision";
+
+      this.upsertNode(state, {
+        id: projectId,
+        type: "Project",
+        labels: ["OmkProject", "Project"],
+        label: this.settings.project.name,
+        summary: this.settings.project.root,
+        tags: ["project"],
+        properties: { key: this.settings.project.key, root: this.settings.project.root },
+        createdAt: now,
+        updatedAt: now,
+      });
+      this.upsertNode(state, {
+        id: runId,
+        type: "Run",
+        labels: ["OmkRun", "Run"],
+        label: input.runId,
+        summary: `Run ${input.runId}`,
+        tags: ["run", "audit"],
+        properties: { key: input.runId, runId: input.runId, projectKey: this.settings.project.key },
+        createdAt: now,
+        updatedAt: now,
+      });
+      this.upsertNode(state, {
+        id: taskId,
+        type: "Task",
+        labels: ["OmkTurn", "Task"],
+        label: input.nodeId,
+        summary: `Turn ${input.nodeId}`,
+        tags: ["turn", "audit"],
+        properties: { key: `${input.runId}:${input.nodeId}`, runId: input.runId, nodeId: input.nodeId },
+        createdAt: now,
+        updatedAt: now,
+      });
+      this.upsertNode(state, {
+        id: decisionId,
+        type: "HeadroomDecision",
+        labels: ["OmkHeadroomDecision", "HeadroomDecision"],
+        label: `${input.nodeId}:headroom`,
+        summary: reason,
+        tags: ["headroom", "compaction", "audit"],
+        properties: {
+          key: `${input.runId}:${input.nodeId}:headroom`,
+          runId: input.runId,
+          nodeId: input.nodeId,
+          attempted,
+          backend: input.metadata.backend ?? "none",
+          compacted: input.metadata.compacted === true,
+          compactedTextProduced: input.metadata.compactedTextProduced === true,
+          validated: input.metadata.validated === true,
+          applied,
+          beforeTokens: input.metadata.beforeTokens ?? 0,
+          afterTokens: input.metadata.afterTokens ?? 0,
+          utilization: input.metadata.utilization ?? 0,
+          threshold: input.metadata.threshold ?? 0,
+          contract: input.metadata.contract ?? "unknown",
+          reason,
+          missingSections: (input.metadata.missingSections ?? []).join(","),
+          qualityScore: input.metadata.qualityScore ?? 0,
+          compressionRatio: input.metadata.compressionRatio ?? 0,
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+      if (artifactId && input.artifactRef) {
+        this.upsertNode(state, {
+          id: artifactId,
+          type: "Artifact",
+          labels: ["OmkArtifact", "Artifact"],
+          label: input.artifactRef,
+          summary: input.artifactRef,
+          tags: ["artifact", "headroom", "audit"],
+          properties: {
+            key: `${input.runId}:${input.artifactRef}`,
+            runId: input.runId,
+            path: input.artifactRef,
+            kind: "headroom-decision",
+          },
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      this.upsertEdge(state, projectId, runId, "HAS_RUN", now);
+      this.upsertEdge(state, runId, taskId, "HAS_TASK", now);
+      this.upsertEdge(state, taskId, decisionId, "HAS_HEADROOM_DECISION", now);
+      if (artifactId) this.upsertEdge(state, decisionId, artifactId, "STORED_AT", now);
+
+      if (attempted && !applied) {
+        const riskId = this.nodeId("Risk", `${input.runId}:${input.nodeId}:headroom`);
+        this.upsertNode(state, {
+          id: riskId,
+          type: "Risk",
+          labels: ["OmkRisk", "Risk"],
+          label: "headroom-compaction-not-applied",
+          summary: reason,
+          tags: ["risk", "headroom", "compaction"],
+          properties: {
+            key: `${input.runId}:${input.nodeId}:headroom-risk`,
+            runId: input.runId,
+            nodeId: input.nodeId,
+            kind: "headroom-compaction-not-applied",
+            reason,
+            missingSections: (input.metadata.missingSections ?? []).join(","),
+          },
+          createdAt: now,
+          updatedAt: now,
+        });
+        this.upsertEdge(state, taskId, riskId, "HAS_RISK", now);
       }
     });
   }

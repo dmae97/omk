@@ -1,11 +1,11 @@
 {
   "schemaVersion": "omk.prompt-privacy-audit.v1",
-  "checkedAt": "2026-06-16T08:11:14.725Z",
-  "runCount": 1394,
+  "checkedAt": "2026-06-16T08:59:54.795Z",
+  "runCount": 1397,
   "promptEnvelopeCount": 0,
-  "auditedRuns": 142,
-  "auditedPublicFiles": 167,
-  "auditedDecisionTraceFiles": 142,
+  "auditedRuns": 143,
+  "auditedPublicFiles": 168,
+  "auditedDecisionTraceFiles": 143,
   "auditedGraphMemoryFiles": 6,
   "leakCount": 0,
   "leaks": []

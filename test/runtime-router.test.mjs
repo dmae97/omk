@@ -962,10 +962,15 @@ test("runtime-backed runner autocompacts with structured fallback when headroom 
     assert.equal(result.metadata.headroomCompaction.validated, true);
     assert.equal(result.metadata.headroomCompaction.applied, true);
     assert.equal(result.metadata.headroomCompaction.contract, "omk.structured-compaction.v2");
+    assert.ok(result.metadata.headroomCompaction.qualityScore > 0);
+    assert.ok(result.metadata.headroomCompaction.compressionRatio < 1);
     assert.match(result.metadata.headroomCompaction.artifactRef, /headroom-decisions\.jsonl/);
     const decisions = await readFile(join(process.cwd(), result.metadata.headroomCompaction.artifactRef), "utf8");
     assert.match(decisions, /"schemaVersion":"omk.headroom-decision.v1"/);
     assert.match(decisions, /"applied":true/);
+    assert.equal(captured.context.compaction.schemaVersion, "omk.task-compaction.v1");
+    assert.equal(captured.context.compaction.contract.schemaVersion, "omk.structured-compaction.v2");
+    assert.equal(captured.context.compaction.diagnostics.applied, true);
     assert.match(captured.context.system, /omk\.structured-compaction\.v2/);
     assert.match(captured.context.system, /command-pass/);
   } finally {
@@ -973,6 +978,74 @@ test("runtime-backed runner autocompacts with structured fallback when headroom 
     else process.env.OMK_CONTEXT_WINDOW = previousEnv.OMK_CONTEXT_WINDOW;
     if (previousEnv.OMK_HEADROOM_THRESHOLD === undefined) delete process.env.OMK_HEADROOM_THRESHOLD;
     else process.env.OMK_HEADROOM_THRESHOLD = previousEnv.OMK_HEADROOM_THRESHOLD;
+  }
+});
+
+test("runtime-backed runner appends headroom decision artifacts and graph materialization for non-local runs", async () => {
+  const previousEnv = {
+    OMK_CONTEXT_WINDOW: process.env.OMK_CONTEXT_WINDOW,
+    OMK_HEADROOM_THRESHOLD: process.env.OMK_HEADROOM_THRESHOLD,
+  };
+  const temp = await mkdtemp(join(tmpdir(), "omk-headroom-artifact-"));
+  try {
+    process.env.OMK_CONTEXT_WINDOW = "1";
+    process.env.OMK_HEADROOM_THRESHOLD = "0.5";
+    const runner = await createRuntimeBackedTaskRunner({
+      cwd: temp,
+      env: {},
+      runId: "headroom-artifact-run",
+      headroomCompactor: async () => null,
+    });
+    const registry = runner._registry;
+    for (const runtime of [...registry.list()]) registry.unregister(runtime.id);
+    registry.register({
+      id: "codex-cli",
+      priority: 100,
+      capabilities: workspaceCliCapabilities(),
+      supports: () => true,
+      async runNode() {
+        throw new Error("execute path expected");
+      },
+      async execute() {
+        return { output: "ok", exitCode: 0, metadata: { runtime: "codex-cli", evidenceGates: ["command-pass"], commandPass: true } };
+      },
+    });
+
+    const node = {
+      id: "headroom-artifact-node",
+      name: `Implement fallback autocompact handoff ${"with large original context ".repeat(400)}`,
+      role: "coder",
+      dependsOn: [],
+      status: "running",
+      retries: 0,
+      maxRetries: 1,
+      outputs: [{ name: "command evidence", gate: "command-pass" }],
+      routing: {
+        provider: "codex",
+        risk: "write",
+        sandboxMode: "workspace-write",
+        readOnly: false,
+        evidenceRequired: true,
+        assignedProviderCapabilities: ["write", "patch"],
+        contextBudget: "small",
+      },
+    };
+
+    await runner.run(node, {});
+    await runner.run(node, {});
+
+    const artifact = await readFile(join(temp, ".omk", "runs", "headroom-artifact-run", "headroom-decisions.jsonl"), "utf8");
+    assert.equal(artifact.trim().split(/\n/).length, 2);
+    const graph = JSON.parse(await readFile(join(temp, ".omk", "memory", "graph-state.json"), "utf8"));
+    assert.ok(graph.nodes.some((node) => node.type === "HeadroomDecision" && node.properties.applied === true));
+    assert.ok(graph.edges.some((edge) => edge.type === "HAS_HEADROOM_DECISION"));
+    assert.ok(graph.edges.some((edge) => edge.type === "STORED_AT"));
+  } finally {
+    if (previousEnv.OMK_CONTEXT_WINDOW === undefined) delete process.env.OMK_CONTEXT_WINDOW;
+    else process.env.OMK_CONTEXT_WINDOW = previousEnv.OMK_CONTEXT_WINDOW;
+    if (previousEnv.OMK_HEADROOM_THRESHOLD === undefined) delete process.env.OMK_HEADROOM_THRESHOLD;
+    else process.env.OMK_HEADROOM_THRESHOLD = previousEnv.OMK_HEADROOM_THRESHOLD;
+    await rm(temp, { recursive: true, force: true });
   }
 });
 

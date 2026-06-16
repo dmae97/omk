@@ -11,7 +11,7 @@ import type { TaskRunner, TaskResult } from "../contracts/orchestration.js";
 import type { TaskRunContext } from "../contracts/worker-context.js";
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentRunResult, AgentTask } from "./agent-runtime.js";
+import type { AgentContextCompaction, AgentRunResult, AgentTask } from "./agent-runtime.js";
 import { toTaskResult } from "./agent-runtime.js";
 import { checkEvidenceGate, hasDeclaredEvidenceRequirement } from "./contracts/evidence.js";
 import { capsuleToTask } from "./context-broker-converter.js";
@@ -24,6 +24,8 @@ import { maybeCompactWithHeadroom } from "./headroom-policy.js";
 import {
   DEFAULT_STRUCTURED_COMPACTION_CONTRACT,
   buildStructuredCompactionText,
+  buildTypedStructuredCompactionContract,
+  computeCompactionQualityScore,
   estimateTextTokens,
   structuredCompactionGuardNote,
   structuredCompactionInstruction,
@@ -40,6 +42,7 @@ import { createMimoApiRuntime } from "./mimo-api-runtime.js";
 import { createKimiApiRuntime } from "./kimi-api-runtime.js";
 import { createGlmApiRuntime } from "./glm-api-runtime.js";
 import { getUserHome } from "../util/fs.js";
+import { LocalGraphMemoryStore } from "../memory/local-graph-memory-store.js";
 
 export interface RuntimeBackedTaskRunnerOptions {
   cwd: string;
@@ -292,6 +295,13 @@ interface HeadroomCompactionMetadata extends Record<string, unknown> {
   readonly missingSections?: readonly string[];
   readonly reason?: string;
   readonly artifactRef?: string;
+  readonly qualityScore?: number;
+  readonly compressionRatio?: number | null;
+  readonly contractScore?: number;
+  readonly compressionScore?: number;
+  readonly evidenceScore?: number;
+  readonly safetyScore?: number;
+  readonly capabilityScore?: number;
 }
 
 function persistHeadroomDecisionArtifact(input: {
@@ -320,6 +330,50 @@ function persistHeadroomDecisionArtifact(input: {
   } catch {
     return undefined;
   }
+}
+
+async function materializeHeadroomDecisionGraph(input: {
+  cwd: string;
+  runId: string | undefined;
+  nodeId: string;
+  metadata: HeadroomCompactionMetadata;
+}): Promise<void> {
+  const runId = input.runId?.trim();
+  if (!runId || runId.startsWith("local-")) return;
+  try {
+    const store = await LocalGraphMemoryStore.create({ projectRoot: input.cwd, sessionId: runId, source: "headroom-compaction" });
+    await store?.materializeHeadroomDecision({
+      runId,
+      nodeId: input.nodeId,
+      metadata: input.metadata,
+      artifactRef: input.metadata.artifactRef,
+    });
+  } catch {
+    // Best-effort graph materialization must never block runtime dispatch.
+  }
+}
+
+function buildAgentContextCompaction(input: {
+  capsule: ContextCapsule;
+  metadata: HeadroomCompactionMetadata | undefined;
+}): AgentContextCompaction | undefined {
+  if (!input.metadata?.applied) return undefined;
+  return {
+    schemaVersion: "omk.task-compaction.v1",
+    contract: buildTypedStructuredCompactionContract(input.capsule),
+    diagnostics: {
+      backend: input.metadata.backend,
+      beforeTokens: input.metadata.beforeTokens,
+      afterTokens: input.metadata.afterTokens,
+      validated: input.metadata.validated,
+      applied: input.metadata.applied,
+      qualityScore: input.metadata.qualityScore,
+      compressionRatio: input.metadata.compressionRatio,
+      contract: input.metadata.contract,
+      reason: input.metadata.reason,
+    },
+    artifactRef: input.metadata.artifactRef,
+  };
 }
 
 function sanitizeArtifactSegment(value: string): string {
@@ -373,6 +427,13 @@ export async function createRuntimeBackedTaskRunner(
             effectiveCapsule = applied.capsule;
             applyDiagnostics = applied.diagnostics;
           }
+          const quality = computeCompactionQualityScore({
+            applied: applyDiagnostics?.applied ?? false,
+            validated: applyDiagnostics?.validated ?? false,
+            beforeTokens: applyDiagnostics?.beforeTokens,
+            afterTokens: applyDiagnostics?.afterTokens,
+            missingSections: applyDiagnostics?.missingSections ?? [],
+          });
           headroomCompaction = {
             attempted: compactResult.attempted,
             compacted: compactResult.compacted,
@@ -390,14 +451,22 @@ export async function createRuntimeBackedTaskRunner(
             contract: applyDiagnostics?.contract ?? DEFAULT_STRUCTURED_COMPACTION_CONTRACT.schemaVersion,
             missingSections: applyDiagnostics?.missingSections ?? [],
             reason: applyDiagnostics?.reason ?? compactResult.reason,
+            ...quality,
           };
+          const materializedRunId = options.runId ?? capsule.runId;
           const artifactRef = persistHeadroomDecisionArtifact({
             cwd: options.cwd,
-            runId: options.runId ?? capsule.runId,
+            runId: materializedRunId,
             nodeId: capsule.nodeId,
             metadata: headroomCompaction,
           });
           if (artifactRef) headroomCompaction = { ...headroomCompaction, artifactRef };
+          await materializeHeadroomDecisionGraph({
+            cwd: options.cwd,
+            runId: materializedRunId,
+            nodeId: capsule.nodeId,
+            metadata: headroomCompaction,
+          });
         }
       }
       const routing = effectiveCapsule.node.routing;
@@ -410,12 +479,16 @@ export async function createRuntimeBackedTaskRunner(
         ...(env ?? {}),
         ...(runContext ? envFromWorkerManifest(runContext.worker) : {}),
       };
-      const baseTask = applyTaskRunContextToAgentTask(await capsuleToTask(effectiveCapsule, {
+      const rawTask = applyTaskRunContextToAgentTask(await capsuleToTask(effectiveCapsule, {
         signal: abortSignal,
         cwd: options.cwd,
         env: taskEnv,
         fallbackChain: providerFallbackChain,
       }), runContext);
+      const compactionContext = buildAgentContextCompaction({ capsule, metadata: headroomCompaction });
+      const baseTask = compactionContext
+        ? { ...rawTask, context: { ...rawTask.context, compaction: compactionContext } }
+        : rawTask;
       const task = options.onOutput
         ? { ...baseTask, context: { ...baseTask.context, onOutput: options.onOutput } }
         : baseTask;
