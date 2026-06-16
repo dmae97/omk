@@ -69,6 +69,14 @@ export interface DagNodeRouting {
     targetAtomId?: string;
     preserveEvidence?: boolean;
   };
+  /** Freedomd sovereignty metadata for provider-independent routing. */
+  freedomd?: {
+    dataBoundary?: "public" | "internal" | "customer" | "secret";
+    preferredProvider?: string;
+    allowProviderExceptions?: boolean;
+    degradedMode?: string;
+    sovereigntyReason?: string;
+  };
   rejected?: Array<{ id: string; reason: string }>;
   actionAtom?: {
     id: string;

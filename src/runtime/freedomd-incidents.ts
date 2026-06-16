@@ -19,6 +19,8 @@ export interface ProviderIncidentFile {
 export interface LoadIncidentsOptions {
   readonly projectRoot?: string;
   readonly env?: NodeJS.ProcessEnv;
+  readonly feedUrls?: readonly string[];
+  readonly fetch?: (url: string) => Promise<{ ok: boolean; text: () => Promise<string> }>;
 }
 
 function parseIncidentFile(raw: string): ProviderIncidentState[] {
@@ -72,10 +74,11 @@ export async function loadProviderIncidents(options: LoadIncidentsOptions = {}):
   }
 
   const envIncidents = incidentsFromEnv(env);
+  const feedIncidents = await fetchFeedIncidents(options.feedUrls ?? [], options.fetch);
 
   // Merge by providerId+kind, preferring the most recent and most severe.
   const map = new Map<string, ProviderIncidentState>();
-  for (const incident of [...fileIncidents, ...envIncidents]) {
+  for (const incident of [...fileIncidents, ...envIncidents, ...feedIncidents]) {
     const key = `${incident.providerId}:${incident.kind}:${incident.runtimeMode ?? ""}`;
     const existing = map.get(key);
     if (!existing || severityRank(incident.severity) > severityRank(existing.severity)) {
@@ -84,6 +87,32 @@ export async function loadProviderIncidents(options: LoadIncidentsOptions = {}):
   }
 
   return [...map.values()];
+}
+
+async function fetchFeedIncidents(
+  urls: readonly string[],
+  fetchImpl?: LoadIncidentsOptions["fetch"],
+): Promise<ProviderIncidentState[]> {
+  if (urls.length === 0) return [];
+  const fetcher = fetchImpl ?? defaultFetch;
+  const results: ProviderIncidentState[] = [];
+  for (const url of urls) {
+    try {
+      const response = await fetcher(url);
+      if (!response.ok) continue;
+      const text = await response.text();
+      const parsed = parseIncidentFile(text);
+      results.push(...parsed);
+    } catch {
+      // Best-effort: individual feed failures must not block routing.
+    }
+  }
+  return results;
+}
+
+async function defaultFetch(url: string): Promise<{ ok: boolean; text: () => Promise<string> }> {
+  const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+  return { ok: response.ok, text: () => response.text() };
 }
 
 function severityRank(severity: string): number {

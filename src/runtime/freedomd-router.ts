@@ -11,6 +11,7 @@ import type { AgentResult, AgentRunResult, AgentRuntime, AgentTask, AgentTaskSov
 import type { ContextCapsule } from "./context-capsule.js";
 import type { LocalGraphMemoryStore } from "../memory/local-graph-memory-store.js";
 import { createRuntimeRouter, type RuntimeRouterOptions } from "./runtime-router.js";
+import { computeRuntimeCapabilityScore, type NodeIntent } from "./runtime-router.js";
 import { compileFreedomdPolicy, type FreedomdMode, type FreedomdPolicy } from "./freedomd-policy.js";
 import {
   buildProviderSovereigntyProfiles,
@@ -115,6 +116,25 @@ export function evaluateTaskSovereignty(
   };
 }
 
+function classifyFreedomdIntent(task: AgentTask, capsule?: ContextCapsule): NodeIntent {
+  const text = `${task.context.nodeId} ${task.context.goal ?? ""} ${task.prompt} ${task.context.role ?? ""} ${capsule?.node?.role ?? ""}`.toLowerCase();
+  const role = (task.context.role ?? capsule?.node?.role ?? "").toLowerCase();
+
+  if (/debug|fix|error|failure|bug|trace/.test(text) || role === "debugger") return "debugging";
+  if (/review|audit|check|validate|verify/.test(text) || role === "reviewer") return "review";
+  if (/test|spec|coverage|assertion/.test(text) || role === "tester") return "test-generation";
+  if (/refactor|optimize|clean|improve|simplify/.test(text) || role === "refactor") return "refactor";
+  if (/research|investigate|explore|search|discover|analyze/.test(text) || role === "researcher") return "research";
+  if (/plan|design|architect|strategy|roadmap/.test(text) || role === "planner") return "planning";
+  if (/doc|readme|changelog|comment/.test(text) || role === "documenter") return "documentation";
+  if (/shell|command|run|exec|script/.test(text) || role === "shell") return "shell-operation";
+  return "coding";
+}
+
+function runtimePriorityScore(runtime: AgentRuntime): number {
+  return Math.max(0, Math.min(1, runtime.priority / 100));
+}
+
 export function scoreRuntimesWithSovereignty(
   task: AgentTask,
   runtimes: readonly AgentRuntime[],
@@ -124,10 +144,12 @@ export function scoreRuntimesWithSovereignty(
     readonly incidents?: readonly ProviderIncidentState[];
     readonly userCountry?: string;
     readonly allowRedaction?: boolean;
+    readonly capsule?: ContextCapsule;
   } = {},
 ): FreedomdScoredRuntime[] {
   const profiles = options.profiles ?? buildProviderSovereigntyProfiles();
   const incidents = options.incidents ?? [];
+  const intent = classifyFreedomdIntent(task, options.capsule);
   const scored: FreedomdScoredRuntime[] = [];
 
   for (const runtime of runtimes) {
@@ -158,13 +180,36 @@ export function scoreRuntimesWithSovereignty(
 
     if (retention.decision === "block") continue;
 
-    let baseScore = runtime.priority / 200;
+    const capabilityScore = computeRuntimeCapabilityScore(runtime, intent);
+    const priorityScore = runtimePriorityScore(runtime);
+
+    let capabilityWeight: number;
+    let priorityWeight: number;
+    let sovereigntyWeight: number;
+
     if (policy.mode === "strict") {
+      capabilityWeight = 0.3;
+      priorityWeight = 0.1;
+      sovereigntyWeight = 0.6;
       const isLocal = runtimeProviderId(runtime) === "local-llm" || runtime.id.startsWith("local-");
-      baseScore = isLocal ? Math.max(baseScore, 0.75) : baseScore * 0.5;
+      if (isLocal) {
+        sovereigntyWeight = 0.5;
+        capabilityWeight = 0.4;
+      }
+    } else if (policy.mode === "balanced") {
+      capabilityWeight = 0.5;
+      priorityWeight = 0.2;
+      sovereigntyWeight = 0.3;
+    } else {
+      capabilityWeight = 0.7;
+      priorityWeight = 0.3;
+      sovereigntyWeight = 0.0;
     }
-    const sovereigntyWeight = policy.mode === "strict" ? 0.5 : policy.mode === "balanced" ? 0.25 : 0.0;
-    const score = baseScore * (1 - sovereigntyWeight) + sovereignty.score * sovereigntyWeight;
+
+    const score =
+      capabilityWeight * capabilityScore +
+      priorityWeight * priorityScore +
+      sovereigntyWeight * sovereignty.score;
 
     scored.push({ runtime, score, sovereignty, retention });
   }
@@ -228,7 +273,7 @@ export async function createFreedomdRuntimeRouter(options: FreedomdRouterOptions
     taskFlags: options.freedomdMode ? { mode: options.freedomdMode } : undefined,
   });
   const profiles = options.sovereigntyProfiles ?? buildProviderSovereigntyProfiles();
-  const loadedIncidents = options.autoLoadIncidents !== false ? await loadProviderIncidents({ projectRoot: options.projectRoot }) : [];
+  const loadedIncidents = options.autoLoadIncidents !== false ? await loadProviderIncidents({ projectRoot: options.projectRoot, feedUrls: policy.incidentFeedUrls }) : [];
   const incidents = options.incidents ?? loadedIncidents;
   const graphStore = options.graphStore;
   const projectRoot = options.projectRoot ?? process.cwd();
@@ -289,6 +334,7 @@ export async function createFreedomdRuntimeRouter(options: FreedomdRouterOptions
       incidents,
       userCountry: options.userCountry,
       allowRedaction: options.allowRedaction,
+      capsule,
     });
 
     if (scored.length === 0) {

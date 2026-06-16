@@ -25,6 +25,8 @@ export interface FreedomdPolicy {
   readonly maxJurisdictionRisk: number;
   readonly maxRetentionRisk: number;
   readonly maxCutoffRisk: number;
+  /** Optional public/provider incident feed URLs. Best-effort only. */
+  readonly incidentFeedUrls: readonly string[];
 }
 
 export interface FreedomdPolicyInputs {
@@ -44,6 +46,7 @@ const DEFAULT_POLICY: FreedomdPolicy = {
   maxJurisdictionRisk: 1.0,
   maxRetentionRisk: 1.0,
   maxCutoffRisk: 1.0,
+  incidentFeedUrls: [],
 };
 
 function parseMode(raw: string | undefined): FreedomdMode | undefined {
@@ -108,6 +111,12 @@ export function compileFreedomdPolicy(inputs: FreedomdPolicyInputs = {}): Freedo
   const allowProviderExceptions = parseBoolean(env.OMK_ALLOW_PROVIDER_EXCEPTIONS);
   if (allowProviderExceptions !== undefined) {
     policy = mergePolicy(policy, { allowProviderExceptions });
+  }
+
+  const incidentFeedUrlsRaw = env.OMK_FREEDOMD_FEED_URLS;
+  if (incidentFeedUrlsRaw) {
+    const urls = incidentFeedUrlsRaw.split(",").map((u) => u.trim()).filter(Boolean);
+    policy = mergePolicy(policy, { incidentFeedUrls: urls });
   }
 
   policy = mergePolicy(policy, inputs.taskFlags ?? {});

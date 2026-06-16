@@ -6,6 +6,7 @@ import type {
   ProviderPolicy,
   CapabilityManifest,
   AgentTaskSafety,
+  AgentTaskSovereignty,
 } from "./agent-runtime.js";
 
 export async function capsuleToTask(
@@ -79,6 +80,18 @@ export async function capsuleToTask(
   const capabilities = capabilitiesFromNode(capsule);
   const safety = safetyFromCapsule(capsule, capabilities);
 
+  const sovereignty: AgentTask["sovereignty"] | undefined = routing?.freedomd
+    ? {
+        mode: (routing.freedomd.degradedMode ?? routing.freedomd.dataBoundary) ? "freedomd" : "standard",
+        dataBoundary: routing.freedomd.dataBoundary ?? "internal",
+        retentionDecision: "allow",
+        jurisdictionDecision: "allow",
+        providerCutoffRisk: 0,
+        localFallbackAvailable: false,
+        reason: routing.freedomd.sovereigntyReason ?? "from dag routing",
+      }
+    : undefined;
+
   const task: AgentTask = {
     prompt: capsule.task,
     context,
@@ -86,6 +99,7 @@ export async function capsuleToTask(
     providerPolicy,
     capabilities,
     safety,
+    sovereignty,
   };
 
   return task;

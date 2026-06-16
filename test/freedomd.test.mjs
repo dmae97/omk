@@ -313,6 +313,57 @@ describe("freedomd incident monitor", () => {
     const incidents = await loadProviderIncidents({ projectRoot: process.cwd(), env: {} });
     assert.equal(incidents.length, 0);
   });
+
+  it("fetches public feed URLs and falls back to local overrides", async () => {
+    const feed = JSON.stringify({
+      incidents: [
+        { providerId: "anthropic", kind: "export-control", severity: "warn", reason: "feed", updatedAt: new Date().toISOString() },
+      ],
+    });
+    const fetcher = async (url) => {
+      assert.equal(url, "https://example.com/freedomd-feed.json");
+      return { ok: true, text: async () => feed };
+    };
+    const incidents = await loadProviderIncidents({
+      projectRoot: process.cwd(),
+      env: {},
+      feedUrls: ["https://example.com/freedomd-feed.json"],
+      fetch: fetcher,
+    });
+    assert.equal(incidents.length, 1);
+    assert.equal(incidents[0].severity, "warn");
+  });
+
+  it("prefers local override over feed on severity", async () => {
+    const feed = JSON.stringify({
+      incidents: [
+        { providerId: "anthropic", kind: "export-control", severity: "warn", reason: "feed", updatedAt: new Date().toISOString() },
+      ],
+    });
+    const incidents = await loadProviderIncidents({
+      projectRoot: process.cwd(),
+      env: {
+        OMK_PROVIDER_INCIDENTS: JSON.stringify([
+          { providerId: "anthropic", kind: "export-control", severity: "block", reason: "local", updatedAt: new Date().toISOString() },
+        ]),
+      },
+      feedUrls: ["https://example.com/freedomd-feed.json"],
+      fetch: async () => ({ ok: true, text: async () => feed }),
+    });
+    assert.equal(incidents.length, 1);
+    assert.equal(incidents[0].severity, "block");
+    assert.equal(incidents[0].reason, "local");
+  });
+
+  it("ignores failing feed URLs", async () => {
+    const incidents = await loadProviderIncidents({
+      projectRoot: process.cwd(),
+      env: {},
+      feedUrls: ["https://example.com/bad"],
+      fetch: async () => ({ ok: false, text: async () => "" }),
+    });
+    assert.equal(incidents.length, 0);
+  });
 });
 
 describe("freedomd provider exception approval", () => {

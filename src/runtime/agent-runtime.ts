@@ -112,6 +112,8 @@ export interface AgentContext {
   readonly goalContext?: unknown;
   readonly workerManifest?: unknown;
   readonly compaction?: AgentContextCompaction;
+  /** Freedomd sovereignty decision surfaced to runtime adapters. */
+  readonly sovereignty?: AgentTaskSovereignty;
   readonly abortSignal?: AbortSignal;
   readonly cwd?: string;
   readonly env?: Record<string, string>;

@@ -181,7 +181,7 @@ function deriveWorkerCapabilities(node: DagNode, toolPlane: WorkerToolPlaneManif
   const role = node.role?.toLowerCase() ?? "";
   const gates = node.outputs?.map((output) => output.gate).filter(Boolean) ?? [];
   const assigned = new Set(routing?.assignedProviderCapabilities ?? []);
-  const readOnly = routing?.readOnly === true;
+  const readOnly = routing?.readOnly === true || routing?.freedomd?.degradedMode === "read-only-local-review";
   const merge = !readOnly && (assigned.has("merge") || role === "merger" || role === "integrator" || role === "orchestrator");
   const write = !readOnly && (assigned.has("write") || merge || role === "coder" || role === "executor" || role === "refactorer");
   const shell = !readOnly && (assigned.has("shell") || routing?.requiresToolCalling === true || gates.includes("command-pass") || gates.includes("test-pass"));

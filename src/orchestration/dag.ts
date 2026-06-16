@@ -92,6 +92,14 @@ export interface DagNodeRouting {
     requestedOps?: readonly string[];
     excludedOps?: readonly string[];
   };
+  /** Freedomd sovereignty metadata for provider-independent routing. */
+  freedomd?: {
+    dataBoundary?: "public" | "internal" | "customer" | "secret";
+    preferredProvider?: string;
+    allowProviderExceptions?: boolean;
+    degradedMode?: string;
+    sovereigntyReason?: string;
+  };
   replanHint?: {
     criterionId?: string;
     artifactRef?: string;
