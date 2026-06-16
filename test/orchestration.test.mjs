@@ -185,6 +185,26 @@ test("task graph ranks critical-path runnable nodes before low-impact siblings",
   assert.deepEqual(createScheduler().getRunnableNodes(dag).map((node) => node.id), ["root", "side"]);
 });
 
+test("scheduler exposes critical-path runnable plan metadata", () => {
+  const dag = createDag({
+    nodes: [
+      { id: "side", name: "Side task", role: "coder", dependsOn: [], maxRetries: 1, cost: 2 },
+      { id: "root", name: "Root critical task", role: "planner", dependsOn: [], maxRetries: 1, outputs: [{ name: "plan", gate: "summary" }] },
+      { id: "mid", name: "Middle", role: "coder", dependsOn: ["root"], maxRetries: 1 },
+      { id: "leaf", name: "Leaf", role: "reviewer", dependsOn: ["mid"], maxRetries: 1 },
+    ],
+  });
+
+  const plan = createScheduler().getRunnablePlan(dag);
+
+  assert.deepEqual(plan.map((entry) => entry.nodeId), ["root", "side"]);
+  assert.equal(plan[0].criticalPathDepth, 2);
+  assert.equal(plan[0].downstreamCount, 2);
+  assert.equal(plan[0].evidenceProducer, true);
+  assert.match(plan[0].reason, /criticalDepth=2/);
+  assert.equal(plan[1].cost, 2);
+});
+
 test("createDag adds bounded OMK routing hints without changing node contract", async () => {
   await withRoutingSkills(["omk-research-verify"], async () => {
     const dag = createDag({
@@ -1945,6 +1965,7 @@ test("executor passes OMK-owned worker context to parallel TaskRunner nodes", as
         role: "coder",
         dependsOn: [],
         maxRetries: 1,
+        outputs: [{ name: "context evidence", gate: "summary" }],
         routing: {
           provider: "codex",
           readOnly: false,

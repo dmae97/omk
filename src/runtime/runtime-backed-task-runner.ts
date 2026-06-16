@@ -21,73 +21,12 @@ import { createRuntimeRouter } from "./runtime-router.js";
 import { createContextBroker } from "./context-broker.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import { maybeCompactWithHeadroom } from "./headroom-policy.js";
-
-const REQUIRED_CONTEXT_SECTIONS = [
-  "task",
-  "node routing",
-  "evidence requirements",
-  "safety constraints",
-  "capabilities",
-];
-
-interface CompactValidationResult {
-  readonly ok: boolean;
-  readonly missing: readonly string[];
-}
-
-function validateCompactedContext(
-  compactedText: string,
-  capsule: ContextCapsule,
-): CompactValidationResult {
-  const lower = compactedText.toLowerCase();
-  const missing: string[] = [];
-
-  // Task section: compacted text should mention at least part of the task prompt.
-  const taskLower = capsule.task.toLowerCase().trim();
-  if (taskLower.length > 0 && !lower.includes(taskLower.slice(0, Math.min(40, taskLower.length)))) {
-    missing.push("task");
-  }
-
-  // Node routing section: provider, risk, and sandbox/readOnly must be recoverable.
-  const routing = capsule.node.routing;
-  if (routing) {
-    if (routing.provider && !lower.includes(routing.provider.toLowerCase())) missing.push("node routing provider");
-    if (routing.risk && !lower.includes(routing.risk.toLowerCase())) missing.push("node routing risk");
-    if (routing.sandboxMode && !lower.includes(routing.sandboxMode.toLowerCase())) missing.push("node routing sandboxMode");
-    if (routing.readOnly === true && !lower.includes("read-only") && !lower.includes("readonly")) {
-      missing.push("node routing readOnly");
-    }
-  }
-
-  // Evidence requirements: required gates should be preserved.
-  const requiredGates = capsule.evidenceRequirements
-    .filter((e) => e.required)
-    .map((e) => e.gate.toLowerCase());
-  if (requiredGates.length > 0) {
-    const hasAnyGate = requiredGates.some((gate) => lower.includes(gate));
-    if (!hasAnyGate) missing.push("evidence requirements");
-  }
-
-  // Safety constraints: system instruction should remain in the compacted text or explicitly referenced.
-  const systemLower = capsule.system.toLowerCase();
-  const safetyMarkers = ["preserve", "safety", "constraints", "evidence required", "capabilities"];
-  const hasSafetyMarker = safetyMarkers.some((marker) => lower.includes(marker));
-  const hasSystemOverlap = systemLower.length > 0 && lower.includes(systemLower.slice(0, Math.min(60, systemLower.length)));
-  if (!hasSafetyMarker && !hasSystemOverlap) missing.push("safety constraints");
-
-  // Capability manifest: assigned provider capabilities should be mentioned.
-  const assignedCaps = new Set(routing?.assignedProviderCapabilities?.map((c) => c.toLowerCase()) ?? []);
-  if (assignedCaps.size > 0) {
-    const hasAnyCap = Array.from(assignedCaps).some((cap) => lower.includes(cap));
-    if (!hasAnyCap) missing.push("capabilities");
-  }
-
-  return { ok: missing.length === 0, missing };
-}
-
-function buildMissingContextGuardNote(missing: readonly string[]): string {
-  return `Headroom compaction removed required sections: ${missing.join(", ")}; using original capsule.`;
-}
+import {
+  DEFAULT_STRUCTURED_COMPACTION_CONTRACT,
+  structuredCompactionGuardNote,
+  structuredCompactionInstruction,
+  validateStructuredCompaction,
+} from "./structured-compaction.js";
 import { DeepSeekRuntime } from "./deepseek-runtime.js";
 import { CodexRuntime } from "./codex-runtime.js";
 import { createOpencodeCliAdapter } from "../adapters/opencode/opencode-cli-adapter.js";
@@ -228,7 +167,7 @@ function applyCompactedTextToCapsule(
   const originalSize = JSON.stringify(capsule).length;
   if (trimmed.length >= originalSize) return capsule;
   // If compaction stripped required structural context, keep original but note the guard.
-  const validation = validateCompactedContext(trimmed, capsule);
+  const validation = validateStructuredCompaction(trimmed, capsule);
   if (!validation.ok) {
     return {
       ...capsule,
@@ -236,7 +175,7 @@ function applyCompactedTextToCapsule(
         capsule.system,
         "",
         "[OMK headroom compacted context]",
-        `Headroom compaction removed required sections: ${validation.missing.join(", ")}; using original capsule.`,
+        structuredCompactionGuardNote(validation),
       ].filter(Boolean).join("\n"),
       budget: { ...capsule.budget, compression: "summary" },
     };
@@ -247,7 +186,7 @@ function applyCompactedTextToCapsule(
       capsule.system,
       "",
       "[OMK headroom compacted context]",
-      "The original context capsule was compacted before runtime dispatch. Preserve task, node routing, evidence requirements, and safety constraints below.",
+      structuredCompactionInstruction(DEFAULT_STRUCTURED_COMPACTION_CONTRACT),
       trimmed,
     ].filter(Boolean).join("\n"),
     dependencySummaries: [],
@@ -289,7 +228,7 @@ export async function createRuntimeBackedTaskRunner(
         : undefined;
       const { capsule, headroomDecision } = await contextBroker.buildCapsule(node, runState);
       let effectiveCapsule = capsule;
-      let headroomCompaction: { compacted: boolean; via: string } | undefined;
+      let headroomCompaction: { compacted: boolean; via: string; contract?: string } | undefined;
       // CTX guard: compact via headroom before the context window crosses the threshold (~90%).
       if (headroomDecision?.shouldCompact) {
         const compactResult = await maybeCompactWithHeadroom({
@@ -298,7 +237,7 @@ export async function createRuntimeBackedTaskRunner(
           runHeadroom: options.headroomCompactor,
         }).catch(() => undefined);
         if (compactResult) {
-          headroomCompaction = { compacted: compactResult.compacted, via: compactResult.via };
+          headroomCompaction = { compacted: compactResult.compacted, via: compactResult.via, contract: DEFAULT_STRUCTURED_COMPACTION_CONTRACT.schemaVersion };
           if (compactResult.compactedText) {
             effectiveCapsule = applyCompactedTextToCapsule(capsule, compactResult.compactedText);
           }
