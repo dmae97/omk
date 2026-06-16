@@ -3813,6 +3813,24 @@ export const MODELS = {
 			contextWindow: 131072,
 			maxTokens: 131072,
 		} satisfies Model<"openai-completions">,
+		"@cf/zai-org/glm-5.2": {
+			id: "@cf/zai-org/glm-5.2",
+			name: "Glm 5.2",
+			api: "openai-completions",
+			provider: "cloudflare-workers-ai",
+			baseUrl: "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+			compat: {"sendSessionAffinityHeaders":true},
+			reasoning: true,
+			input: ["text"],
+			cost: {
+				input: 1.4,
+				output: 4.4,
+				cacheRead: 0.26,
+				cacheWrite: 0,
+			},
+			contextWindow: 262144,
+			maxTokens: 262144,
+		} satisfies Model<"openai-completions">,
 	},
 	"deepseek": {
 		"deepseek-v4-flash": {
@@ -12955,6 +12973,23 @@ export const MODELS = {
 			},
 			contextWindow: 202752,
 			maxTokens: 4096,
+		} satisfies Model<"openai-completions">,
+		"z-ai/glm-5.2": {
+			id: "z-ai/glm-5.2",
+			name: "Z.ai: GLM 5.2",
+			api: "openai-completions",
+			provider: "openrouter",
+			baseUrl: "https://openrouter.ai/api/v1",
+			reasoning: true,
+			input: ["text"],
+			cost: {
+				input: 1.4,
+				output: 4.4,
+				cacheRead: 0.26,
+				cacheWrite: 0,
+			},
+			contextWindow: 1048576,
+			maxTokens: 131072,
 		} satisfies Model<"openai-completions">,
 		"~anthropic/claude-fable-latest": {
 			id: "~anthropic/claude-fable-latest",
