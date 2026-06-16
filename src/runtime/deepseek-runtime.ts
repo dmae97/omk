@@ -14,9 +14,11 @@ import type {
   RuntimeHealth,
   TokenUsage,
 } from "./agent-runtime.js";
+import type { RuntimeHealthProbeRequest } from "./contracts/shared.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import { capsuleToTask } from "./context-broker-converter.js";
 import { buildProviderToolPayload } from "./provider-tool-contracts.js";
+import { probeOpenAiCompatibleModels } from "./runtime-health-probes.js";
 
 interface DeepSeekChatMessage {
   role: "system" | "user" | "assistant" | "tool";
@@ -133,32 +135,16 @@ export class DeepSeekRuntime implements AgentRuntime {
     return true;
   }
 
-  async health(): Promise<RuntimeHealth> {
-    const authOk = Boolean(this.apiKey);
-    const runtimeOk = true;
-    const modelOk = this.model !== "" && this.model !== "default";
-    const available = authOk && runtimeOk && modelOk;
-    return {
+  async health(input: RuntimeHealthProbeRequest = { probeKind: "static", highRisk: false }): Promise<RuntimeHealth> {
+    return probeOpenAiCompatibleModels({
       runtimeId: this.id,
-      available,
-      reason: available ? undefined : "DEEPSEEK_API_KEY is not set",
-      checkedAt: new Date().toISOString(),
-      vector: {
-        runtimeOk,
-        authOk,
-        modelOk,
-        quotaOk: true,
-        rateLimitOk: true,
-        runtime: runtimeOk ? "pass" : "fail",
-        auth: authOk ? "pass" : "fail",
-        model: modelOk ? "pass" : "fail",
-        quota: "unknown",
-        rateLimit: "unknown",
-        lastProbeKind: "static",
-        checkedAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      },
-    };
+      baseUrl: this.baseUrl,
+      apiKey: this.apiKey,
+      apiKeyName: "DEEPSEEK_API_KEY",
+      model: this.model,
+      providerName: "DeepSeek",
+      probeKind: input.probeKind,
+    });
   }
 
   async runNode(capsule: ContextCapsule, signal: AbortSignal): Promise<AgentRunResult> {

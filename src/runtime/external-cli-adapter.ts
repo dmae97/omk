@@ -12,16 +12,19 @@ import type {
   RuntimeCapabilities,
   RuntimeHealth,
 } from "./agent-runtime.js";
+import type { RuntimeHealthProbeRequest } from "./contracts/shared.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import type { DagNodeRouting } from "../contracts/dag.js";
 import type { AgentTask, AgentResult } from "./agent-runtime.js";
 import {
   checkCommand,
+  runShell,
   type ShellResult,
 } from "../util/shell.js";
 import { runtimeMetadataEnv } from "./child-env.js";
 import { runProcessSession } from "./process-session.js";
 import { createRuntimeSandboxProfile, type RuntimeSandboxMode } from "./sandbox-profile.js";
+import { staticRuntimeHealth } from "./runtime-health-probes.js";
 
 export type ExternalCliPromptTransport = "argv" | "stdin" | "tempfile";
 
@@ -71,30 +74,24 @@ export function createExternalCliAdapter(
       return runtimeCapabilitiesSupportCapsule(options.capabilities, capsule);
     },
 
-    async health(): Promise<RuntimeHealth> {
-      const available = await checkCommand(options.bin);
-      const now = new Date();
-      return {
+    async health(input: RuntimeHealthProbeRequest = { probeKind: "static", highRisk: false }): Promise<RuntimeHealth> {
+      const started = Date.now();
+      const available = input.probeKind === "static"
+        ? await checkCommand(options.bin)
+        : (await runShell(options.bin, ["--version"], { cwd: options.cwd ?? process.cwd(), timeout: 5000 }).catch(() => ({ exitCode: 1 }))).exitCode === 0;
+      return staticRuntimeHealth({
         runtimeId: options.id,
         available,
-        reason: available ? undefined : `Command not found: ${options.bin}`,
-        checkedAt: now.toISOString(),
-        vector: {
-          runtimeOk: available,
-          authOk: available,
-          modelOk: true,
-          quotaOk: true,
-          rateLimitOk: true,
-          runtime: available ? "pass" : "fail",
-          auth: available ? "unknown" : "fail",
-          model: "unknown",
-          quota: "unknown",
-          rateLimit: "unknown",
-          lastProbeKind: "static",
-          checkedAt: now.toISOString(),
-          expiresAt: new Date(now.getTime() + 60_000).toISOString(),
-        },
-      };
+        reason: available ? undefined : `Command not found or failed --version probe: ${options.bin}`,
+        runtimeOk: available,
+        authOk: available,
+        modelOk: true,
+        quotaOk: true,
+        rateLimitOk: true,
+        latencyMs: input.probeKind === "static" ? undefined : Date.now() - started,
+        probeKind: input.probeKind,
+        ttlMs: input.probeKind === "static" ? 60_000 : 30_000,
+      });
     },
 
     async execute(task: AgentTask): Promise<AgentResult> {

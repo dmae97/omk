@@ -1,8 +1,31 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createRuntimeRouter } from "../dist/runtime/runtime-router.js";
+import { createKimiApiRuntime } from "../dist/runtime/kimi-api-runtime.js";
 
 describe("Runtime health vector v2", () => {
+  it("performs adapter cheap/live probes with latency and rate-limit dimensions", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "content-type": "application/json" } });
+      const runtime = createKimiApiRuntime({ apiKey: "test-api-key", model: "kimi-test" });
+      const ok = await runtime.health({ probeKind: "cheap-call", highRisk: true, taskRisk: "write" });
+      assert.equal(ok.available, true);
+      assert.equal(ok.vector.lastProbeKind, "cheap-call");
+      assert.equal(ok.vector.auth, "pass");
+      assert.equal(ok.vector.model, "pass");
+      assert.equal(typeof ok.vector.latencyMs, "number");
+
+      globalThis.fetch = async () => new Response("rate limited", { status: 429 });
+      const limited = await runtime.health({ probeKind: "live-call", highRisk: true, taskRisk: "merge" });
+      assert.equal(limited.available, false);
+      assert.equal(limited.vector.lastProbeKind, "live-call");
+      assert.equal(limited.vector.rateLimit, "fail");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("penalizes unknown health less than fail and filters failed hard dimensions", async () => {
     const calls = [];
     const unknown = fakeRuntime("unknown-cli", calls, {

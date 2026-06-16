@@ -12,6 +12,7 @@ import type {
   RuntimeCapabilities,
   RuntimeHealth,
 } from "./agent-runtime.js";
+import type { RuntimeHealthProbeRequest } from "./contracts/shared.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import { capsuleToTask } from "./context-broker-converter.js";
 import { runShell, runShellStreaming, checkCommand } from "../util/shell.js";
@@ -22,6 +23,7 @@ import {
   preflightProviderInput,
 } from "../providers/context-preflight.js";
 import { createRuntimeSandboxProfile } from "./sandbox-profile.js";
+import { staticRuntimeHealth } from "./runtime-health-probes.js";
 
 export interface CodexRuntimeOptions {
   bin?: string;
@@ -90,32 +92,25 @@ export class CodexRuntime implements AgentRuntime {
     return true;
   }
 
-  async health(): Promise<RuntimeHealth> {
-    const runtimeOk = await checkCommand(this.bin).catch(() => false);
-    const authOk = runtimeOk; // CLI auth is external; treat as ok if installed
-    const modelOk = true; // codex-cli uses its own default model
-    const available = runtimeOk && authOk && modelOk;
-    return {
+  async health(input: RuntimeHealthProbeRequest = { probeKind: "static", highRisk: false }): Promise<RuntimeHealth> {
+    const started = Date.now();
+    const runtimeOk = input.probeKind === "static"
+      ? await checkCommand(this.bin).catch(() => false)
+      : (await runShell(this.bin, ["--version"], { cwd: this.cwd, timeout: 5000 }).catch(() => ({ exitCode: 1 }))).exitCode === 0;
+    const available = runtimeOk;
+    return staticRuntimeHealth({
       runtimeId: this.id,
       available,
-      reason: available ? undefined : "codex CLI is not available on PATH",
-      checkedAt: new Date().toISOString(),
-      vector: {
-        runtimeOk,
-        authOk,
-        modelOk,
-        quotaOk: true,
-        rateLimitOk: true,
-        runtime: runtimeOk ? "pass" : "fail",
-        auth: authOk ? "pass" : "unknown",
-        model: modelOk ? "pass" : "unknown",
-        quota: "unknown",
-        rateLimit: "unknown",
-        lastProbeKind: "static",
-        checkedAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      },
-    };
+      reason: available ? undefined : "codex CLI is not available or failed --version probe",
+      runtimeOk,
+      authOk: runtimeOk,
+      modelOk: true,
+      quotaOk: true,
+      rateLimitOk: true,
+      latencyMs: input.probeKind === "static" ? undefined : Date.now() - started,
+      probeKind: input.probeKind,
+      ttlMs: input.probeKind === "static" ? 60_000 : 30_000,
+    });
   }
 
   async runNode(capsule: ContextCapsule, signal: AbortSignal): Promise<AgentRunResult> {

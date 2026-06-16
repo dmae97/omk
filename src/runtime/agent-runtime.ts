@@ -6,6 +6,7 @@
 
 import type { TaskResult } from "../contracts/orchestration.js";
 import type { ContextCapsule } from "./context-capsule.js";
+import { sanitizeRuntimeStderrResult } from "./private-stderr.js";
 import type {
   RuntimeCapabilities as SharedRuntimeCapabilities,
   RuntimeHealth as SharedRuntimeHealth,
@@ -160,15 +161,27 @@ export interface AgentRuntime {
 }
 
 export function toTaskResult(result: AgentRunResult): TaskResult {
+  const runtimeId = typeof result.metadata?.selectedRuntime === "string"
+    ? result.metadata.selectedRuntime
+    : typeof result.metadata?.runtime === "string"
+      ? result.metadata.runtime
+      : undefined;
+  const sanitized = sanitizeRuntimeStderrResult(result, {
+    runId: typeof result.metadata?.runId === "string" ? result.metadata.runId : process.env.OMK_RUN_ID,
+    nodeId: typeof result.metadata?.nodeId === "string" ? result.metadata.nodeId : process.env.OMK_NODE_ID,
+    runtimeId,
+    root: process.env.OMK_PROJECT_ROOT ?? process.cwd(),
+    env: process.env,
+  });
   return {
-    success: result.success,
-    exitCode: result.exitCode,
-    stdout: result.stdout,
-    stderr: result.stderr,
+    success: sanitized.success,
+    exitCode: sanitized.exitCode,
+    stdout: sanitized.stdout,
+    stderr: sanitized.stderr,
     metadata: {
-      ...result.metadata,
-      ...(result.tokenUsage != null && { tokenUsage: result.tokenUsage }),
-      ...(result.toolCalls != null && result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
+      ...sanitized.metadata,
+      ...(sanitized.tokenUsage != null && { tokenUsage: sanitized.tokenUsage }),
+      ...(sanitized.toolCalls != null && sanitized.toolCalls.length > 0 && { toolCalls: sanitized.toolCalls }),
     },
   };
 }

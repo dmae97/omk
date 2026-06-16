@@ -106,19 +106,18 @@ Completed foundations:
 - Per-turn route/result artifacts are written best-effort and replay-indexed with SHA-256 hashes.
 - Evidence declarations and produced observations are type-separated; command/test evidence requires high-confidence metadata or artifact observations, not stdout keywords alone.
 - Provider route/evidence audit nodes are materialized into local graph memory on native turns, with Provider/Artifact nodes, `EvidenceRequirement -> SATISFIED_BY -> EvidenceObservation` semantics, and route/evidence/artifact edges.
-- Runtime health checks accept requested probe levels so high-risk tasks can trigger cheap/live probe escalation when adapters support it.
-- Runtime router failure stderr is redacted before public exposure and can be retained as a private redacted full artifact in debug mode.
+- Runtime health checks accept requested probe levels; API, local LLM, Codex CLI, and external CLI adapters perform static/cheap/live probes with latency and auth/model/quota/rate-limit dimensions where observable.
+- Runtime failure stderr is redacted before public exposure and can be retained as a private redacted full artifact in debug mode, including direct `toTaskResult` conversion paths outside `RuntimeRouter`.
 - Mixed-provider advisory reviewer + CLI coder/verifier routing has regression coverage.
 
 ## P0 Backlog
 
-1. Expand individual adapters from accepting requested cheap/live probe levels into real auth/model/quota/rate-limit/latency probe implementations.
-2. Keep release evidence current; do not tag/publish while exact-diff CI/smoke or registry verification is missing.
+1. Keep release evidence current; do not tag/publish while exact-diff CI/smoke or registry verification is missing.
 
 ## P1 Backlog
 
-1. Add broader provider stderr private artifact retention to non-router adapter surfaces that bypass `RuntimeRouter`.
-2. Extend exact-diff CI status ingestion once a remote check surface is available in the current runtime.
+1. Extend exact-diff CI status ingestion once a remote check surface is available in the current runtime.
+2. Add provider-specific model-existence probes where vendors expose safe no-token model metadata or non-generating validation endpoints.
 
 ## P2 Backlog
 

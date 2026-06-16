@@ -15,9 +15,11 @@ import type {
   RuntimeHealth,
   TokenUsage,
 } from "./agent-runtime.js";
+import type { RuntimeHealthProbeRequest } from "./contracts/shared.js";
 import type { ContextCapsule } from "./context-capsule.js";
 import { capsuleToTask } from "./context-broker-converter.js";
 import { sanitizeUserVisibleOutput } from "../util/user-visible-output.js";
+import { probeOpenAiCompatibleModels } from "./runtime-health-probes.js";
 
 interface LocalLlmChatMessage {
   role: "system" | "user" | "assistant";
@@ -97,60 +99,16 @@ export class LocalLlmRuntime implements AgentRuntime {
     return true;
   }
 
-  async health(): Promise<RuntimeHealth> {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      const resp = await fetch(`${this.baseUrl}/models`, {
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      const now = new Date();
-      return {
-        runtimeId: this.id,
-        available: resp.ok,
-        reason: resp.ok ? undefined : `Local LLM returned ${resp.status}`,
-        checkedAt: now.toISOString(),
-        vector: {
-          runtimeOk: resp.ok,
-          authOk: true,
-          modelOk: true,
-          quotaOk: true,
-          rateLimitOk: true,
-          runtime: resp.ok ? "pass" : "fail",
-          auth: "pass",
-          model: "unknown",
-          quota: "unknown",
-          rateLimit: "unknown",
-          lastProbeKind: "cheap-call",
-          checkedAt: now.toISOString(),
-          expiresAt: new Date(now.getTime() + 30_000).toISOString(),
-        },
-      };
-    } catch (err) {
-      const now = new Date();
-      return {
-        runtimeId: this.id,
-        available: false,
-        reason: `Local LLM not reachable: ${err instanceof Error ? err.message : String(err)}`,
-        checkedAt: now.toISOString(),
-        vector: {
-          runtimeOk: false,
-          authOk: true,
-          modelOk: true,
-          quotaOk: true,
-          rateLimitOk: true,
-          runtime: "fail",
-          auth: "pass",
-          model: "unknown",
-          quota: "unknown",
-          rateLimit: "unknown",
-          lastProbeKind: "cheap-call",
-          checkedAt: now.toISOString(),
-          expiresAt: new Date(now.getTime() + 30_000).toISOString(),
-        },
-      };
-    }
+  async health(input: RuntimeHealthProbeRequest = { probeKind: "static", highRisk: false }): Promise<RuntimeHealth> {
+    return probeOpenAiCompatibleModels({
+      runtimeId: this.id,
+      baseUrl: this.baseUrl,
+      apiKey: this.apiKey,
+      apiKeyName: "LOCAL_LLM_API_KEY",
+      model: this.model,
+      providerName: "Local LLM",
+      probeKind: input.probeKind === "static" ? "static" : input.probeKind,
+    });
   }
 
   async runNode(capsule: ContextCapsule, signal: AbortSignal): Promise<AgentRunResult> {
