@@ -23,6 +23,7 @@ import type { ContextCapsule } from "./context-capsule.js";
 import { maybeCompactWithHeadroom } from "./headroom-policy.js";
 import {
   DEFAULT_STRUCTURED_COMPACTION_CONTRACT,
+  buildStructuredCompactionText,
   structuredCompactionGuardNote,
   structuredCompactionInstruction,
   validateStructuredCompaction,
@@ -235,6 +236,7 @@ export async function createRuntimeBackedTaskRunner(
           decision: headroomDecision,
           text: JSON.stringify(capsule),
           runHeadroom: options.headroomCompactor,
+          fallbackText: () => buildStructuredCompactionText(capsule),
         }).catch(() => undefined);
         if (compactResult) {
           headroomCompaction = { compacted: compactResult.compacted, via: compactResult.via, contract: DEFAULT_STRUCTURED_COMPACTION_CONTRACT.schemaVersion };

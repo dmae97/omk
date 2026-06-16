@@ -47,6 +47,13 @@ test("evaluateHeadroom returns shouldCompact=false when disabled", () => {
   assert.match(decision.reason, /disabled/);
 });
 
+test("evaluateHeadroom treats non-finite context windows as unknown", () => {
+  const decision = evaluateHeadroom({ usedTokens: 190_000, contextWindow: Number.NaN, env: {} });
+  assert.equal(decision.shouldCompact, false);
+  assert.equal(decision.utilization, 0);
+  assert.match(decision.reason, /unknown/);
+});
+
 test("evaluateHeadroom returns shouldCompact=false below 90% threshold", () => {
   const env = {};
   // 170k / 200k = 85% < 90%
@@ -96,6 +103,20 @@ test("maybeCompactWithHeadroom falls back when headroom returns null", async () 
   assert.equal(result.compacted, true);
   assert.equal(result.via, "fallback");
   assert.equal(fallbackCalled, true);
+});
+
+test("maybeCompactWithHeadroom returns fallback compactedText when direct headroom command is unavailable", async () => {
+  const decision = { shouldCompact: true, utilization: 0.95, threshold: 0.90, usedTokens: 190_000, contextWindow: 200_000, reason: "test" };
+  const result = await maybeCompactWithHeadroom({
+    decision,
+    text: "some context text",
+    runHeadroom: async (_text) => null,
+    fallbackText: async () => "structured compact context",
+  });
+  assert.equal(result.compacted, true);
+  assert.equal(result.via, "fallback");
+  assert.equal(result.compactedText, "structured compact context");
+  assert.match(result.reason ?? "", /structured fallback/);
 });
 
 test("maybeCompactWithHeadroom returns via=none when shouldCompact is false", async () => {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   DEFAULT_STRUCTURED_COMPACTION_CONTRACT,
+  buildStructuredCompactionText,
   structuredCompactionInstruction,
   validateStructuredCompaction,
 } from "../dist/runtime/structured-compaction.js";
@@ -38,4 +39,20 @@ test("structured compaction contract validates required routing/evidence/safety 
   assert.equal(valid.ok, true);
   assert.equal(valid.contract.schemaVersion, DEFAULT_STRUCTURED_COMPACTION_CONTRACT.schemaVersion);
   assert.match(structuredCompactionInstruction(), /omk\.structured-compaction\.v1/);
+
+  const generated = buildStructuredCompactionText({
+    ...capsule,
+    runId: "run",
+    nodeId: "node",
+    goal: "compact safely",
+    dependencySummaries: [],
+    relevantFiles: [],
+    graphMemory: [],
+    priorAttempts: [],
+    budget: { maxInputTokens: 1000, reservedOutputTokens: 100, maxFileTokens: 100, maxToolResultTokens: 100, maxMemoryFacts: 3, compression: "summary" },
+    node: { id: "node", name: "Node", role: "coder", dependsOn: [], status: "running", retries: 0, maxRetries: 1, routing: capsule.node.routing },
+  });
+  assert.equal(validateStructuredCompaction(generated, capsule).ok, true);
+  assert.match(generated, /command-pass/);
+  assert.match(generated, /write, patch/);
 });

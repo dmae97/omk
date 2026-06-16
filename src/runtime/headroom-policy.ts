@@ -26,6 +26,7 @@ export interface HeadroomCompactResult {
   readonly compacted: boolean;
   readonly via: "headroom" | "fallback" | "none";
   readonly compactedText?: string;
+  readonly reason?: string;
 }
 
 // ─── Defaults ────────────────────────────────────────────────────────────────
@@ -81,14 +82,14 @@ export function evaluateHeadroom(input: {
     };
   }
 
-  if (contextWindow <= 0) {
+  if (!Number.isFinite(contextWindow) || contextWindow <= 0) {
     return {
       shouldCompact: false,
       utilization: 0,
       threshold,
       usedTokens,
       contextWindow,
-      reason: "context window size unknown (0)",
+      reason: `context window size unknown (${String(contextWindow)})`,
     };
   }
 
@@ -131,6 +132,7 @@ export async function maybeCompactWithHeadroom(args: {
   text?: string;
   runHeadroom?: (text: string) => Promise<string | null>;
   fallback?: () => Promise<void>;
+  fallbackText?: () => string | null | Promise<string | null>;
 }): Promise<HeadroomCompactResult> {
   if (!args.decision.shouldCompact) {
     return { compacted: false, via: "none" };
@@ -149,15 +151,34 @@ export async function maybeCompactWithHeadroom(args: {
     }
   }
 
-  // Fall back to built-in optimizer
+  // Fall back to a caller-provided textual compaction. This keeps autocompact
+  // effective even when the installed headroom CLI exposes proxy/MCP commands
+  // but no direct `compact --stdin` subcommand.
+  if (args.fallbackText) {
+    try {
+      const text = await args.fallbackText();
+      if (typeof text === "string" && text.trim().length > 0) {
+        return {
+          compacted: true,
+          via: "fallback",
+          compactedText: text,
+          reason: "headroom CLI compaction unavailable; used structured fallback text",
+        };
+      }
+    } catch {
+      // Text fallback failed — try side-effect fallback below.
+    }
+  }
+
+  // Fall back to built-in optimizer side effects when supplied by older callers.
   if (args.fallback) {
     try {
       await args.fallback();
-      return { compacted: true, via: "fallback" };
+      return { compacted: true, via: "fallback", reason: "side-effect fallback completed" };
     } catch {
       // Fallback also failed — graceful degradation
     }
   }
 
-  return { compacted: false, via: "none" };
+  return { compacted: false, via: "none", reason: "no compaction backend succeeded" };
 }

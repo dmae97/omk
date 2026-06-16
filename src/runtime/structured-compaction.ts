@@ -89,3 +89,58 @@ export function structuredCompactionInstruction(contract: StructuredCompactionCo
     "Preserve task, node routing, evidence requirements, safety constraints, and capability grants below.",
   ].join(" ");
 }
+
+export function buildStructuredCompactionText(
+  capsule: ContextCapsule,
+  contract: StructuredCompactionContract = DEFAULT_STRUCTURED_COMPACTION_CONTRACT,
+): string {
+  const routing = capsule.node.routing;
+  const requiredEvidence = capsule.evidenceRequirements
+    .filter((e) => e.required)
+    .map((e) => `${e.gate}${e.ref ? `:${e.ref}` : ""}`)
+    .join(", ") || "none";
+  const capabilities = routing?.assignedProviderCapabilities?.join(", ") || "none";
+  const dependencies = capsule.dependencySummaries.slice(0, 5).join(" | ") || "none";
+  const memory = capsule.graphMemory
+    .slice(0, Math.max(0, capsule.budget.maxMemoryFacts))
+    .map((fact) => `${fact.key}=${fact.value}`)
+    .join(" | ") || "none";
+
+  return [
+    structuredCompactionInstruction(contract),
+    "",
+    "## task",
+    capsule.task,
+    "",
+    "## node routing",
+    [
+      `node=${capsule.nodeId}`,
+      `role=${capsule.node.role}`,
+      `provider=${routing?.provider ?? "auto"}`,
+      `risk=${routing?.risk ?? capsule.node.routing?.risk ?? "read"}`,
+      `sandboxMode=${routing?.sandboxMode ?? "unknown"}`,
+      `readOnly=${routing?.readOnly === true ? "read-only" : "write-capable"}`,
+      `approvalPolicy=${routing?.approvalPolicy ?? "unknown"}`,
+    ].join("; "),
+    "",
+    "## evidence requirements",
+    requiredEvidence,
+    "",
+    "## safety constraints",
+    [
+      "preserve safety constraints",
+      routing?.evidenceRequired ? "evidence required" : "evidence optional",
+      `goal=${capsule.goal}`,
+      capsule.system.slice(0, 600),
+    ].filter(Boolean).join("; "),
+    "",
+    "## capabilities",
+    capabilities,
+    "",
+    "## dependency summaries",
+    dependencies,
+    "",
+    "## graph memory",
+    memory,
+  ].join("\n");
+}

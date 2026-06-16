@@ -890,6 +890,79 @@ test("runtime-backed runner applies headroom compacted capsule to AgentTask", as
   }
 });
 
+test("runtime-backed runner autocompacts with structured fallback when headroom CLI compaction is unavailable", async () => {
+  const previousEnv = {
+    OMK_CONTEXT_WINDOW: process.env.OMK_CONTEXT_WINDOW,
+    OMK_HEADROOM_THRESHOLD: process.env.OMK_HEADROOM_THRESHOLD,
+  };
+  try {
+    process.env.OMK_CONTEXT_WINDOW = "1";
+    process.env.OMK_HEADROOM_THRESHOLD = "0.5";
+    const runner = await createRuntimeBackedTaskRunner({
+      cwd: process.cwd(),
+      env: {},
+      runId: "local-headroom-fallback-autocompact",
+      headroomCompactor: async () => null,
+    });
+    const registry = runner._registry;
+    for (const runtime of [...registry.list()]) registry.unregister(runtime.id);
+
+    let captured;
+    registry.register({
+      id: "codex-cli",
+      priority: 100,
+      capabilities: workspaceCliCapabilities(),
+      supports: () => true,
+      async runNode() {
+        throw new Error("execute path expected");
+      },
+      async execute(task) {
+        captured = task;
+        return {
+          output: "ok",
+          exitCode: 0,
+          metadata: {
+            runtime: "codex-cli",
+            evidenceGates: ["command-pass"],
+            commandPass: true,
+          },
+        };
+      },
+    });
+
+    const result = await runner.run({
+      id: "headroom-fallback-node",
+      name: "Implement fallback autocompact handoff",
+      role: "coder",
+      dependsOn: [],
+      status: "running",
+      retries: 0,
+      maxRetries: 1,
+      outputs: [{ name: "command evidence", gate: "command-pass" }],
+      routing: {
+        provider: "codex",
+        risk: "write",
+        sandboxMode: "workspace-write",
+        readOnly: false,
+        evidenceRequired: true,
+        assignedProviderCapabilities: ["write", "patch"],
+        contextBudget: "small",
+      },
+    }, {});
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.metadata.headroomCompaction.compacted, true);
+    assert.equal(result.metadata.headroomCompaction.via, "fallback");
+    assert.match(captured.context.system, /omk\.structured-compaction\.v1/);
+    assert.match(captured.context.system, /command-pass/);
+  } finally {
+    if (previousEnv.OMK_CONTEXT_WINDOW === undefined) delete process.env.OMK_CONTEXT_WINDOW;
+    else process.env.OMK_CONTEXT_WINDOW = previousEnv.OMK_CONTEXT_WINDOW;
+    if (previousEnv.OMK_HEADROOM_THRESHOLD === undefined) delete process.env.OMK_HEADROOM_THRESHOLD;
+    else process.env.OMK_HEADROOM_THRESHOLD = previousEnv.OMK_HEADROOM_THRESHOLD;
+  }
+});
+
 test("runtime-backed runner forwards OMK-owned scoped worker manifest into native AgentTask", async () => {
   const runner = await createRuntimeBackedTaskRunner({ cwd: process.cwd(), env: {}, runId: "local-runtime-backed-owner" });
   const registry = runner._registry;
