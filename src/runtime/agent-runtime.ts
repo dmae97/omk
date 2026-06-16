@@ -84,6 +84,16 @@ export interface AgentTaskSafety {
   readonly authorityMode: string;
 }
 
+export interface AgentTaskSovereignty {
+  readonly mode: "freedomd" | "standard";
+  readonly dataBoundary: "public" | "internal" | "customer" | "secret";
+  readonly retentionDecision: "allow" | "redact" | "downgrade" | "block";
+  readonly jurisdictionDecision: "allow" | "downgrade" | "block";
+  readonly providerCutoffRisk: number;
+  readonly localFallbackAvailable: boolean;
+  readonly reason: string;
+}
+
 export interface AgentContextCompaction {
   readonly schemaVersion: "omk.task-compaction.v1";
   readonly contract: unknown;
@@ -142,6 +152,8 @@ export interface AgentTask {
   readonly safety: AgentTaskSafety;
   /** Images/files attached to this task (clipboard paste, --image, drag). */
   readonly attachments?: readonly AgentTaskAttachment[];
+  /** Freedomd sovereignty decision attached by retention/jurisdiction gates. */
+  readonly sovereignty?: AgentTaskSovereignty;
 }
 
 export interface AgentResult {

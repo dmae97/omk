@@ -157,6 +157,14 @@ export const ONTOLOGY: MemoryOntology = {
     "Provider",
     "ProviderRoute",
     "ProviderFallback",
+    "ProviderFreedomProfile",
+    "ProviderIncident",
+    "RetentionPolicy",
+    "JurisdictionPolicy",
+    "SovereigntyDecision",
+    "DegradedPlan",
+    "LocalFallback",
+    "EvidenceEnvelope",
     "AuditLink",
     "Constraint",
     "Question",
@@ -184,6 +192,14 @@ export const ONTOLOGY: MemoryOntology = {
     "ROUTES_TO",
     "FALLS_BACK_TO",
     "HAS_PROVIDER_FALLBACK",
+    "HAS_SOVEREIGNTY_DECISION",
+    "BLOCKED_BY_PROVIDER_POLICY",
+    "DEGRADED_TO",
+    "HAS_LOCAL_FALLBACK",
+    "HAS_RETENTION_POLICY",
+    "HAS_JURISDICTION_POLICY",
+    "AFFECTED_BY_INCIDENT",
+    "EVIDENCE_ENVELOPE_STORED_AT",
     "HAS_AUDIT_LINK",
     "LINKS_TO",
     "HAS_CONSTRAINT",
@@ -220,6 +236,14 @@ const GENERATED_TYPES = new Set([
   "Provider",
   "ProviderRoute",
   "ProviderFallback",
+  "ProviderFreedomProfile",
+  "ProviderIncident",
+  "RetentionPolicy",
+  "JurisdictionPolicy",
+  "SovereigntyDecision",
+  "DegradedPlan",
+  "LocalFallback",
+  "EvidenceEnvelope",
   "AuditLink",
   "Constraint",
   "Question",
@@ -245,6 +269,14 @@ const CANONICAL_NODE_TYPES = new Set([
   "Provider",
   "ProviderRoute",
   "ProviderFallback",
+  "ProviderFreedomProfile",
+  "ProviderIncident",
+  "RetentionPolicy",
+  "JurisdictionPolicy",
+  "SovereigntyDecision",
+  "DegradedPlan",
+  "LocalFallback",
+  "EvidenceEnvelope",
   "AuditLink",
 ]);
 
@@ -907,6 +939,191 @@ export class LocalGraphMemoryStore {
         });
         this.upsertEdge(state, taskId, riskId, "HAS_RISK", now);
       }
+    });
+  }
+
+  async materializeFreedomdSovereignty(input: {
+    readonly runId: string;
+    readonly nodeId: string;
+    readonly providerId: string;
+    readonly runtimeMode: string;
+    readonly sovereignty: {
+      readonly mode: "freedomd" | "standard";
+      readonly dataBoundary: string;
+      readonly retentionDecision: string;
+      readonly jurisdictionDecision: string;
+      readonly providerCutoffRisk: number;
+      readonly localFallbackAvailable: boolean;
+      readonly reason: string;
+    };
+    readonly degradedMode?: string;
+    readonly incident?: { readonly kind: string; readonly severity: string; readonly reason: string };
+  }): Promise<void> {
+    await this.mutateState((state, now) => {
+      state.updatedAt = now;
+      state.ontology = ONTOLOGY;
+
+      const runNodeId = this.nodeId("Run", input.runId);
+      const taskId = this.nodeId("Task", `${input.runId}:${input.nodeId}`);
+      const decisionId = this.nodeId("SovereigntyDecision", `${input.runId}:${input.nodeId}`);
+      const providerId = this.nodeId("Provider", `${input.providerId}:${input.runtimeMode}`);
+
+      this.upsertNode(state, {
+        id: runNodeId,
+        type: "Run",
+        labels: ["OmkRun", "Run"],
+        label: input.runId,
+        summary: `Run ${input.runId}`,
+        tags: ["run", "audit", "freedomd"],
+        properties: { key: input.runId, runId: input.runId },
+        createdAt: now,
+        updatedAt: now,
+      });
+      this.upsertNode(state, {
+        id: taskId,
+        type: "Task",
+        labels: ["OmkTurn", "Task"],
+        label: input.nodeId,
+        summary: `Turn ${input.nodeId}`,
+        tags: ["turn", "audit", "freedomd"],
+        properties: { key: `${input.runId}:${input.nodeId}`, runId: input.runId, nodeId: input.nodeId },
+        createdAt: now,
+        updatedAt: now,
+      });
+      this.upsertNode(state, {
+        id: providerId,
+        type: "Provider",
+        labels: ["OmkProvider", "Provider"],
+        label: `${input.providerId}:${input.runtimeMode}`,
+        summary: `Provider ${input.providerId} (${input.runtimeMode})`,
+        tags: ["provider", "freedomd"],
+        properties: { key: `${input.providerId}:${input.runtimeMode}`, providerId: input.providerId, runtimeMode: input.runtimeMode },
+        createdAt: now,
+        updatedAt: now,
+      });
+      this.upsertNode(state, {
+        id: decisionId,
+        type: "SovereigntyDecision",
+        labels: ["OmkSovereigntyDecision", "SovereigntyDecision"],
+        label: `${input.nodeId}:sovereignty`,
+        summary: input.sovereignty.reason,
+        tags: ["sovereignty", "freedomd", "audit"],
+        properties: {
+          key: `${input.runId}:${input.nodeId}:sovereignty`,
+          runId: input.runId,
+          nodeId: input.nodeId,
+          mode: input.sovereignty.mode,
+          dataBoundary: input.sovereignty.dataBoundary,
+          retentionDecision: input.sovereignty.retentionDecision,
+          jurisdictionDecision: input.sovereignty.jurisdictionDecision,
+          providerCutoffRisk: input.sovereignty.providerCutoffRisk,
+          localFallbackAvailable: input.sovereignty.localFallbackAvailable,
+          reason: input.sovereignty.reason,
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      this.upsertEdge(state, runNodeId, taskId, "HAS_TASK", now);
+      this.upsertEdge(state, taskId, decisionId, "HAS_SOVEREIGNTY_DECISION", now);
+      this.upsertEdge(state, taskId, providerId, "USES_PROVIDER", now);
+
+      if (input.degradedMode) {
+        const degradedId = this.nodeId("DegradedPlan", `${input.runId}:${input.nodeId}`);
+        this.upsertNode(state, {
+          id: degradedId,
+          type: "DegradedPlan",
+          labels: ["OmkDegradedPlan", "DegradedPlan"],
+          label: input.degradedMode,
+          summary: `Degraded to ${input.degradedMode}`,
+          tags: ["degraded", "freedomd"],
+          properties: { key: `${input.runId}:${input.nodeId}:degraded`, runId: input.runId, nodeId: input.nodeId, mode: input.degradedMode },
+          createdAt: now,
+          updatedAt: now,
+        });
+        this.upsertEdge(state, taskId, degradedId, "DEGRADED_TO", now);
+      }
+
+      if (input.incident) {
+        const incidentId = this.nodeId("ProviderIncident", `${input.runId}:${input.nodeId}:${input.providerId}`);
+        this.upsertNode(state, {
+          id: incidentId,
+          type: "ProviderIncident",
+          labels: ["OmkProviderIncident", "ProviderIncident"],
+          label: input.incident.kind,
+          summary: input.incident.reason,
+          tags: ["incident", "freedomd", input.incident.severity],
+          properties: {
+            key: `${input.runId}:${input.nodeId}:${input.providerId}:incident`,
+            runId: input.runId,
+            nodeId: input.nodeId,
+            providerId: input.providerId,
+            kind: input.incident.kind,
+            severity: input.incident.severity,
+            reason: input.incident.reason,
+          },
+          createdAt: now,
+          updatedAt: now,
+        });
+        this.upsertEdge(state, decisionId, incidentId, "AFFECTED_BY_INCIDENT", now);
+      }
+    });
+  }
+
+  async materializeFreedomdEvidenceEnvelope(input: {
+    readonly runId: string;
+    readonly nodeId: string;
+    readonly envelopePath: string;
+    readonly sha256?: string;
+    readonly sizeBytes?: number;
+    readonly exists?: boolean;
+  }): Promise<void> {
+    await this.mutateState((state, now) => {
+      state.updatedAt = now;
+      state.ontology = ONTOLOGY;
+
+      const taskId = this.nodeId("Task", `${input.runId}:${input.nodeId}`);
+      const envelopeId = this.nodeId("EvidenceEnvelope", `${input.runId}:${input.nodeId}`);
+      const artifactId = this.nodeId("Artifact", `${input.runId}:${input.envelopePath}`);
+
+      this.upsertNode(state, {
+        id: envelopeId,
+        type: "EvidenceEnvelope",
+        labels: ["OmkEvidenceEnvelope", "EvidenceEnvelope"],
+        label: `${input.nodeId}:evidence-envelope`,
+        summary: "Freedomd local-first evidence envelope",
+        tags: ["evidence", "freedomd", "audit"],
+        properties: {
+          key: `${input.runId}:${input.nodeId}:evidence-envelope`,
+          runId: input.runId,
+          nodeId: input.nodeId,
+          path: input.envelopePath,
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+      this.upsertNode(state, {
+        id: artifactId,
+        type: "Artifact",
+        labels: ["OmkArtifact", "Artifact"],
+        label: input.envelopePath,
+        summary: input.envelopePath,
+        tags: ["artifact", "evidence", "freedomd"],
+        properties: {
+          key: `${input.runId}:${input.envelopePath}`,
+          runId: input.runId,
+          path: input.envelopePath,
+          kind: "freedomd-evidence-envelope",
+          sha256: input.sha256 ?? null,
+          sizeBytes: input.sizeBytes ?? null,
+          exists: input.exists ?? false,
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      this.upsertEdge(state, taskId, envelopeId, "HAS_EVIDENCE", now);
+      this.upsertEdge(state, envelopeId, artifactId, "EVIDENCE_ENVELOPE_STORED_AT", now);
     });
   }
 
