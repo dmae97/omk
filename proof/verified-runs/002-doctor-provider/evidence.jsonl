@@ -1,1 +1,0 @@
-{"schemaVersion":"omk.evidence.v1","runId":"proof-002-doctor-provider-20260531t063424z","evidenceId":"command-1-exit","kind":"command-passes","status":"passed","required":true,"observedAt":"2026-05-31T06:34:34Z","command":"npm run smoke:no-kimi:doctor","exitCode":0,"path":"proof/verified-runs/002-doctor-provider/command-1.out","message":"Command 1 exit code 0"}

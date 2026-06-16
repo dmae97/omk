@@ -1,0 +1,19 @@
+{
+	"name": "omk-extension-custom-provider-anthropic",
+	"private": true,
+	"version": "0.78.0",
+	"type": "module",
+	"scripts": {
+		"clean": "echo 'nothing to clean'",
+		"build": "echo 'nothing to build'",
+		"check": "echo 'nothing to check'"
+	},
+	"dependencies": {
+		"@anthropic-ai/sdk": "0.52.0"
+	},
+	"omk": {
+		"extensions": [
+			"./index.ts"
+		]
+	}
+}

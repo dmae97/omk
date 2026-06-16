@@ -1,1 +1,0 @@
-{"schemaVersion":"omk.evidence.v1","runId":"proof-003-fallback-route-20260531t063434z","evidenceId":"command-1-exit","kind":"command-passes","status":"passed","required":true,"observedAt":"2026-05-31T06:34:40Z","command":"npm run smoke:no-kimi:chat","exitCode":0,"path":"proof/verified-runs/003-fallback-route/command-1.out","message":"Command 1 exit code 0"}

@@ -1,1 +1,0 @@
-This bundle proves local release truthfulness metadata and release gate wiring for the current package version. It does not prove a stable release claim. Stable still requires CI completion on the exact tagged commit, live benchmark pass, and sandbox violation count equal to zero.

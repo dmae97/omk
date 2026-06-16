@@ -1,9 +1,0 @@
-4082f97762500839286a0c0f6cd0962c719b40168cf8f25c53e7e987e1c4fe06  proof/verified-runs/009-no-kimi-smoke/commands.sh
-2bba0558f99675a18b7c0362f522735932e3106fd28bc4ae1fb8a61d228098bd  proof/verified-runs/009-no-kimi-smoke/decisions.jsonl
-cbcdf97b7a1e2c54d2498e189680cafb07fa7d4706f1274b5a725aeed86e256d  proof/verified-runs/009-no-kimi-smoke/evidence.jsonl
-65109dddf3595a3da5f6a95912f7ee1cb208334827446853cce82b8360bae9ee  proof/verified-runs/009-no-kimi-smoke/limitations.md
-65aa6bf0e15faab32197f619f6cd47f59a378853efbe2e56d90488f8d3220970  proof/verified-runs/009-no-kimi-smoke/raw-prompt.md
-76578f8afded0775d1e1fbb84ad86b729ffce4630919e5b2ebd52ea132405cb4  proof/verified-runs/009-no-kimi-smoke/run-manifest.json
-2f236b672edbbdaaa05888a181bbb9601fdd4b971d474004d6e98f094dbb3bb7  proof/verified-runs/009-no-kimi-smoke/verify-no-kimi.out
-01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b  proof/verified-runs/009-no-kimi-smoke/verify-no-kimi.stderr
-f689bc391417fbe52ad89fa1ee37c55a645758e944c7d25c707277dc7e5dcba3  proof/verified-runs/009-no-kimi-smoke/verify.json

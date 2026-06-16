@@ -1,83 +1,87 @@
 # Security Policy
 
-## Reporting Vulnerabilities
+This document should guide you about understanding the security concept behind
+Pi and also where the boundaries are.
 
-Please report security issues via GitHub Issues with the `security` label.
+In general Pi is a coding agent that runs locally within the security boundary
+of the user that is running it.  It's the responsibiltiy of the user to monitor
+its operations or to contain it within a container, virtual machine or other
+Sandbox solution.
 
-## Built-in Protections
+Pi treats the local user account and files writable by that account as inside
+the same trust boundary as the Pi process itself.  If an attacker can modify files
+under the user's home directory, workspace, shell startup files, environment, or
+Pi configuration, they can generally influence Pi or other local developer tools.
+Reports that depend on such prior local write access are not security
+vulnerabilities unless they demonstrate how Pi grants that write access or crosses
+an operating-system privilege boundary.
 
-open-multi-agent-kit includes scoped default hooks to block destructive commands and secret leakage when the active runtime/harness enables them.
+Pi relies on users installing trustworthy extensions and loading trustworthy
+skills and only to use pi within trusted repositories.  This is because files
+like `AGENTS.md` or instructions in comments can be used to prompt inject the
+coding agent trivially and this cannot be protected against.
 
-## Native Runtime Safety Gates
+## Reporting a Vulnerability
 
-Canonical algorithm references: Algorithm 2 covers native turn
-risk/capability routing, Algorithm 5 covers runtime fallback/authority
-selection, and Algorithms 6-7 cover Kimi prompt transport and scoped worker
-environments in
-[`docs/native-root-runtime-algorithms.md`](./docs/native-root-runtime-algorithms.md).
+If you believe you found a security vulnerability in pi or another package in
+this repository, please report it privately by either:
 
-- Root `omk` startup must keep MCP AutoConnect offline/read-only: it may
-  summarize active MCP configs and the virtual `omk-project` mount, but it must
-  not spawn stdio servers, call remote MCP endpoints, run OAuth, or prewarm
-  package managers. Use explicit `omk mcp connect --all`, `omk mcp check --all`,
-  or `omk mcp test <server>` for active validation.
-- Native chat turns should be default-safe: read/review prompts request read-only capability, edit prompts request write/patch, and shell capability is reserved for explicit command execution under the active approval policy.
-- `--execution ask|auto|never` must propagate into runtime routing and provider adapters. Do not treat `ask` as equivalent to provider-level `never`.
-- Provider policies such as `authority`, `primary`, and `omk` must resolve to a concrete healthy provider before execution; unresolved authority is a hard diagnostic, not an advisory-only fallback.
-- DeepSeek is read/review/advisory unless a future contract explicitly grants write/shell authority.
-- CLI provider bootstrap must not treat binary existence as authentication. Provider health should distinguish runtime availability, auth/session state, selected model support, and quota/rate-limit status.
-- Kimi/provider failure previews must be redacted and gated behind explicit debug mode such as `OMK_DEBUG=1`; any adapter path that still emits previews without that gate remains a release-blocking hardening gap.
-- MCP, skills, and hooks parse/read failures should be visible in tool-plane diagnostics. Required runtime MCP failures should block execution rather than silently dropping all servers.
+- Emailing `security@earendil.com`, or
+- Opening a private report through GitHub Security Advisories for this repository
 
-## MCP and Harness Secret Handling
+Please include:
 
-- Fresh init uses project scope by default: `omk-core-verified` treats project-local `omk-project` MCP as the baseline hint, while generated `.omk/mcp.json` / `.kimi/mcp.json` may stay minimal or empty until runtime materializes managed entries. User/global MCP and skills are runtime-only unless explicitly imported by a trusted local user.
-- `--local-user`, `mcp_scope = "all"`, `skills_scope = "all"`, and `hooks_scope = "all"` are trusted local-user modes, not public fresh-init defaults.
-- `.kimi` is the agent-facing runtime surface for provider-specific skills, MCP, and hooks; `.omk` is OMK runtime/evidence state. Do not treat the two generated trees as interchangeable.
-- Never print, commit, or summarize MCP `env`, headers, tokens, or provider keys.
-- Kimi child execution and default native worker spawn paths inherit a minimal allowlist from the parent process and drop inherited secret-like keys. External CLI adapters may have adapter-specific environment contracts; explicit `env` / DAG `nodeEnv` remains trusted local input so runtime variables such as `KIMI_BIN`, `PATH`, `HOME`, and non-secret `OMK_*` values keep working. Secret-like explicit keys emit warnings. Set `OMK_STRICT_KIMI_EXPLICIT_ENV=1` to drop secret-like explicit keys unless the local trusted session also sets `OMK_TRUST_KIMI_EXPLICIT_SECRET_ENV=1`.
-- `omk image generate/edit` requires an OpenAI Platform project API key supplied as an ephemeral runtime env var such as `OPENAI_API_KEY`; Codex/ChatGPT OAuth tokens are never accepted as Images API credentials.
-- Isolated agent HOME shell-profile bridging is off by default because sourcing user profiles can re-export secrets; enable it only in trusted local sessions with `OMK_ISOLATED_HOME_BRIDGE_SHELL_PROFILES=1`.
-- Treat `chat-agent-harness.json`, prompt envelopes, DAG node names, and run artifacts as private run metadata: use them for inventory/gates, but do not paste large inventories, prompts, or secret-like values into memory or reports.
-- Prefer sanitized `omk mcp doctor --json`, `omk verify --json`, test summaries, and secret scans as shareable evidence.
-- Run `npm run secret:scan:runtime` before release/demo when local `.omk` or `.kimi` trust-boundary files may contain user-added MCP wrappers or hook edits.
+- A description of the issue and its impact
+- Steps to reproduce, proof of concept, or relevant logs
+- Affected package, version, commit, or configuration
+- Any known mitigations
 
-## Child Runtime Isolation
+Do not open a public issue for security-sensitive reports.  We will review
+reports and coordinate disclosure as appropriate.
 
-OMK currently provides environment hardening for child runtimes.
+## Scope
 
-By default, child runtimes do not inherit the full parent process environment.
-OMK passes an allowlisted environment and drops common secret-bearing variables
-such as cloud provider credentials, GitHub/NPM tokens, SSH agent sockets,
-Kubernetes config, and dotenv/env-file references.
+Security issues in the distributed packages, command-line tools, APIs, and
+repository code are in scope as well as earendil operated infrastricture
+on `pi.dev`.
 
-This is not a full OS-level sandbox. Filesystem, process, and network isolation
-are future hardening work and must not be assumed unless explicitly provided by
-the selected runtime or host environment.
+## Out Of Scope
 
-Current security claims:
+- Local code execution or sandboxing behavior (the Pi coding agent intentionally does not have a sandbox)
+- Behavior of pi extensions or skills installed by the user
+- Risks from working in untrusted repositories
+- Risks from installing untrusted extensions, skills, packages, or tools
+- Isuses caused by non trustworthy MITM proxies
+- Public internet exposure of a Pi installation
+- Prompt injection attacks
+- Exposed secrets that are third-party/user-controlled credentials
+- Reports requiring the ability to create, modify, delete, or replace files,
+  directories, symlinks, environment variables, shell configuration, or other
+  user-controlled local state on the target machine. This includes `~/.pi`,
+  `~/.pi/agent/models.json`, workspace files, `AGENTS.md`, skills, extensions,
+  extension configuration, dotfiles, and files synchronized through NFS, roaming
+  profiles, or dotfile managers, unless the report shows how Pi itself grants
+  that access.
+- Issues caused by intentionally weakened user configuration.
+- Resource/DOS claims that require trusted local input/config against the pi coding agent.
+- Reports about malicious model output.
+- User-approved or user-initiated local actions presented as vulnerabilities.
 
-- OMK prevents ambient secret leakage into child runtimes by default.
-- OMK sanitizes child runtime environments.
-- OMK routes tasks according to declared runtime capabilities.
-- OMK forces approval for write-capable Codex workspace runs.
-- OMK exposes sandbox intent/profile metadata for future enforcement.
+## Notes for Reporters
 
-Non-claims:
+The most useful reports show a current, reproducible security boundary bypass
+with demonstrated impact.  Reports that only show expected local-agent behavior,
+prompt injection, or a malicious trusted extension/skill are not security
+vulnerabilities under this model.
 
-- OMK does not fully sandbox child CLIs.
-- OMK does not prevent all filesystem access outside the workspace.
-- OMK does not prevent network exfiltration.
-- OMK does not enforce OS-level process isolation.
+For example, a report showing that malicious contents written to a trusted Pi
+configuration file cause Pi to execute commands, load attacker-controlled tools,
+send credentials to an attacker-controlled endpoint, or otherwise change behavior
+is out of scope.
 
-## Public Asset Provenance
-
-- Treat `public/assets/**` as source-only reference material until license, source URL/origin, usage rights, reviewer, and review date are recorded.
-- Do not move unlicensed or unprovenanced public assets into `readmeasset/`, `docs/assets/`, templates, `dist/`, or npm package contents.
-- Package audit forbids `public/assets/**`; keep documentation assets in `readmeasset/` or `docs/assets/` only after provenance review.
-
-## Best Practices
-
-- Review hooks before running in production repositories.
-- Use `--print` mode only in disposable worktrees.
-- Never commit secrets into agent memory files.
+When possible, include the exact affected path, package version or commit SHA,
+configuration, and a proof of concept against the latest release or latest
+`main`.  For dependency reports, include evidence that the shipped dependency is
+affected and that the issue is reachable through Pi.  For exposed-secret reports,
+include evidence that the credential is owned by Earendil or grants access to
+Earendil-operated infrastructure or services.

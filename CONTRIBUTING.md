@@ -1,153 +1,93 @@
-# Contributing to OMK
+# Contributing to pi
 
-Thanks for your interest in contributing! OMK is a provider-neutral multi-agent coding runtime. Kimi is one supported provider adapter and remains the most mature authority path in this release-candidate line. We welcome bug reports, feature suggestions, documentation improvements, and code contributions.
+This guide exists to save both sides time.
 
-## Quick Start
+## The One Rule
 
-```bash
-# Clone and install
-git clone https://github.com/dmae97/open-multi-agent-kit.git
-cd open-multi-agent-kit
-npm ci
+**You must understand your code.** If you cannot explain what your changes do and how they interact with the rest of the system, your PR will be closed.
 
-# Run the main quality gate (must pass before PR)
-npm run verify
+Using AI to write code is fine. Submitting AI-generated slop without understanding it is not.
 
-# Run release-candidate gates when touching contracts, proof, versioning, or release docs
-npm run verify:no-kimi
-npm run contract:check
-npm run schema:check
-npm run version:check
-npm run proof:check
-```
+If you use an agent, run it from the `pi-mono` root directory so it picks up `AGENTS.md` automatically. Your agent must follow the rules and guidelines in that file.
 
-## Requirements
+## Contribution Gate
 
-- **Node.js**: 20.x or later (tested on 20, 22, 24)
-- **Git**: 2.30+
-- **Platform**: Linux, macOS, Windows (all are CI-tested)
+All issues and PRs from new contributors are auto-closed by default.
 
-## Project Structure
+Issues submitted Friday through Sunday are not reviewed. If something is urgent, ask on Discord: https://discord.com/invite/3cU7Bz4UPx
 
-| Directory | Purpose |
-|-----------|---------|
-| `src/cli.ts` | Commander.js CLI entrypoint |
-| `src/commands/` | Command implementations |
-| `src/orchestration/` | DAG executor, scheduler, ensemble runner, parallel UI |
-| `src/util/` | Theme, i18n, fs helpers, session/todo sync |
-| `src/goal/` | Goal spec intake, scoring, evidence, persistence |
-| `src/kimi/` | Kimi adapter compatibility, capability detection, banner replacement |
-| `src/mcp/` | MCP server integrations |
-| `src/memory/` | Graph memory backends (local, Neo4j, Kuzu) |
-| `templates/` | Project scaffolding templates |
-| `test/` | Node built-in test runner (`node --test`) |
+Maintainers review auto-closed issues daily and reopen worthwhile ones. Issues that do not meet the quality bar below will not be reopened or receive a reply.
 
-## Command Maturity
+Approval happens through maintainer replies on issues:
 
-OMK commands have maturity levels. See [`MATURITY.md`](./MATURITY.md), [`docs/versioning.md`](./docs/versioning.md), and [`docs/provider-maturity.md`](./docs/provider-maturity.md) for the current matrices.
+- `lgtmi`: your future issues will not be auto-closed
+- `lgtm`: your future issues and PRs will not be auto-closed
 
-| Level | Expectations |
-|-------|-------------|
-| **Stable** | Full test coverage, documented, safe for production |
-| **Alpha** | Basic implementation; tests/docs may be incomplete |
-| **Experimental** | Early prototype; API may change without notice |
+`lgtmi` does not grant rights to submit PRs. Only `lgtm` grants rights to submit PRs.
 
-## Development Workflow
+## Quality Bar For Issues
 
-### 1. Create a branch
+If you open an issue, you must use one of the two GitHub issue templates.
+
+If you open an issue, keep it short, concrete, and worth reading.
+
+- Keep it concise. If it does not fit on one screen, it is too long.
+- Write in your own voice.
+- State the bug or request clearly.
+- Explain why it matters.
+- If you want to implement the change yourself, say so.
+
+If the issue is real and written well, a maintainer may reopen it, reply `lgtmi`, or reply `lgtm`.
+
+## Blocking
+
+If you ignore this document twice, or if you spam the tracker with agent-generated issues, your GitHub account will be permanently blocked.
+
+If you send a large volume of issues through automation, your GitHub account will be permanently blocked. No taksies backsies.
+
+## Before Submitting a PR
+
+Do not open a PR unless you have already been approved with `lgtm`.
+
+Before submitting a PR:
 
 ```bash
-git checkout -b feat/your-feature-name
-```
-
-### 2. Make changes
-
-- Follow existing TypeScript strict mode conventions
-- Use design tokens from `src/util/theme.ts` for CLI output
-- Add i18n keys to `src/util/i18n.ts` for new user-facing strings
-- Keep changes focused
-
-### 3. Run quality gates
-
-All must pass:
-
-```bash
-npm run lint
 npm run check
-npm run build:clean
-npm test
-npm run secret:scan
-npm run audit:package
+./test.sh
 ```
 
-For release-candidate, contract, proof, provider, or versioning changes, also run:
+Both must pass.
 
-```bash
-npm run verify:no-kimi
-npm run contract:check
-npm run schema:check
-npm run version:check
-npm run proof:check
-```
+Do not edit `CHANGELOG.md`. Changelog entries are added by maintainers.
 
-Before publish/tag claims, run the full release gate:
+If you are adding a new provider to `packages/ai`, see `AGENTS.md` for required tests.
 
-```bash
-npm run release:check
-```
+## Philosophy
 
-### 4. Commit
-
-We use [Conventional Commits](https://www.conventionalcommits.org/):
-
-```
-feat(scope): add new omk command
-fix(scope): resolve race condition in state writer
-docs(scope): update CLI help text
-test(scope): add regression test for parallel UI
-chore(scope): bump dependency version
-```
-
-### 5. Open a Pull Request
-
-- Ensure CI is green (GitHub Actions runs on Ubuntu, macOS, Windows)
-- Link related issues with `Fixes #123`
-
-## Testing
-
-Tests use Node.js built-in test runner. Import from `../dist/...` (tests run against compiled output).
-
-Run a single test file:
-
-```bash
-node --test test/goal.test.mjs
-```
-
-Run full suite:
-
-```bash
-node --test --test-concurrency=1 test/*.test.mjs
-```
-
-## CLI Contract Rules
-
-When modifying commands that support `--json`:
-
-- `--json` outputs exactly one JSON document to stdout
-- No ANSI, banners, or human text in stdout when `--json` is set
-- Human diagnostics go to stderr only
-- Command functions must not call `process.exit`; throw `CliError` instead
-- Only `src/cli.ts` adapters set `process.exitCode`
-
-## Reporting Issues
-
-- **Bugs**: Include reproduction steps, Node version, OS, and `omk doctor --json` output
-- **Features**: Describe the use case and expected behavior
-- **Security**: See [`SECURITY.md`](./SECURITY.md) for responsible disclosure
+pi's core is minimal. If your feature does not belong in the core, it should be an extension. PRs that bloat the core will likely be rejected.
 
 ## Questions?
 
-- Open a [Discussion](https://github.com/dmae97/open-multi-agent-kit/discussions)
-- Check [`README.md`](./README.md) and [`DESIGN.md`](./DESIGN.md) for architecture context
+Ask on [Discord](https://discord.com/invite/nKXTsAcmbT).
 
-Thank you for helping make OMK better!
+## FAQ
+
+### Why are new issues and PRs auto-closed?
+
+pi receives more issues than the maintainers can responsibly review in real time. Many reports do not meet the quality bar in this guide or do not follow CONTRIBUTING.md. Some are slung at the repository mindlessly via an agent instead of being reviewed and shaped by the person submitting them. Auto-closing creates a buffer so maintainers can review the tracker on their own schedule and reopen the issues that meet the quality bar.
+
+### Why are weekend issues not reviewed?
+
+Maintainers need uninterrupted time away from the issue tracker. Issues submitted Friday through Sunday are auto-closed and are not part of the Monday review queue. If a problem is urgent, ask on Discord and include the short version, a repro, and the relevant logs.
+
+### Why do some issues get no reply?
+
+A reply is maintenance work too. Low-signal issues, unclear reports, duplicates, and issues that do not follow this guide may be closed without discussion. This keeps time available for reproducible bugs, thoughtful requests, and contributors who have done the work to make their report actionable.
+
+### Why not let AI triage everything?
+
+AI can help group duplicates, summarize reports, and spot missing information. It is not trusted to make final maintainer decisions. Polished AI-generated issues can still be wrong, misleading, or expensive to investigate. Human review remains the final gate.
+
+### Is this hostile to contributors?
+
+No. It is a guardrail against burnout and tracker spam. Short, concrete, reproducible issues are welcome. Thoughtful contributions are welcome. Automated slop, entitlement, and large volumes of low-effort reports are not.

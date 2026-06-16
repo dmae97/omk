@@ -1,1 +1,0 @@
-{"at":"2026-05-31T08:08:18Z","component":"runtime-router","inputSummary":"run=proof-007-replay-inspect-20260531t080818z node=collect-evidence","outputDecision":"selected local replay fixture","reason":"Controlled fixture keeps replay and inspect output deterministic for public proof.","scores":{"confidence":1},"nodeId":"collect-evidence","attemptId":"collect-evidence__1"}

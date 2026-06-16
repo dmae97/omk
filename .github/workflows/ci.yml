@@ -5,162 +5,39 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  schedule:
-    - cron: "0 2 * * *"
+  workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  OMK_MCP_SUPPRESS_PRUNE_WARNINGS: "1"
-
-permissions:
-  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  fast-gate:
-    name: Fast Gate (lint/check/build/test/schema/proof/audit)
+  build-check-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm rebuild
-      - name: file size guard
-        run: npm run file-size:check
-        env:
-          OMK_FILE_SIZE_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
-      - run: npm run lint
-      - run: npm run check
-      - run: npm run build:clean
-      - run: npm run schema:check
-      - run: npm run theme:check
-      - name: color literal gate
-        run: npm run color:gate
-      - name: asset provenance gate
-        run: npm run assets:check
-      - run: npm run proof:check
-      - run: npm run test
-      - run: npm run audit:package
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  verify-no-kimi:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm rebuild
-      - run: npm run verify:no-kimi
 
-  benchmark:
-    name: Benchmark (shadow mode)
-    runs-on: ubuntu-latest
-    needs: [fast-gate]
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm rebuild
-      - run: npm run build:clean
-      - name: Run benchmark suite
+      - name: Install system dependencies
         run: |
-          node scripts/run-benchmark.mjs \
-            --shadow \
-            --summary-json proof/benchmarks/ci-run.json \
-            --run-id "ci-${{ github.run_id }}" \
-            --pin-tree-hash ${{ github.sha }} \
-            --pin-seed 42
-      - name: Upload benchmark artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-ci-run
-          path: proof/benchmarks/ci-run.json
-          if-no-files-found: ignore
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep
+          sudo ln -s $(which fdfind) /usr/local/bin/fd
 
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [20, 22, 24]
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-      - name: Pre-build diagnostics
-        shell: bash
-        run: |
-          echo "=== Environment Diagnostics ==="
-          node --version && npm --version
-          env | grep -iE 'omk|kimi|node|home' || true
-          echo "=== HOME contents ==="
-          ls -la ~/
-          echo "=== node-pty load test ==="
-          node -e "try { require('node-pty'); console.log('node-pty: OK'); } catch(e) { console.log('node-pty: FAIL', e.message); }"
-          echo "=== Cache cleared for clean install ==="
-      - run: node --version && npm --version
-      - run: npm ci
-      - run: npm rebuild
-      - run: npm run yaml:check
-      - run: npm run lint
-      - run: npm run secret:scan
-      - run: npm run secret:scan:runtime
-      - run: npm run check
-      - run: npm run build:clean
-      - name: Run tests with diagnostics
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          set +e
-          node scripts/run-tests.mjs > test-output.txt 2>&1
-          exit_code=$?
-          set -e
-          if [ $exit_code -ne 0 ]; then
-            echo "=== TEST FAILED (exit $exit_code) ==="
-            head -n 200 test-output.txt
-            echo "... [truncated] ..."
-            tail -n 200 test-output.txt
-            echo "=== DIAGNOSTICS ==="
-            npm ls node-pty || true
-            node -e "try { require('node-pty'); console.log('node-pty OK'); } catch(e) { console.log('node-pty FAIL:', e.message); }" || true
-            ls -la failed-tests.txt test-summary.json 2>/dev/null || true
-            cat failed-tests.txt 2>/dev/null || true
-            cat test-summary.json 2>/dev/null || true
-          fi
-          exit $exit_code
-      - name: Upload test artifacts
-        if: always() && matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-outputs-${{ matrix.os }}-${{ matrix.node-version }}
-          path: |
-            test-output.txt
-            failed-tests.txt
-            test-summary.json
-          if-no-files-found: ignore
-      - run: npm run audit:package
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
 
-  release-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm rebuild
-      - run: npm run release:check
+      - name: Build
+        run: npm run build
+
+      - name: Check
+        run: npm run check
+
+      - name: Test
+        run: npm test

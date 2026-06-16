@@ -1,4 +1,0 @@
-[95m◆ OMK//CONTROL[0m [37m┊ night-city ops console[0m
-[96m▶ lane compile[0m  [92m● lane schema[0m  [37m◌ lane docs[0m
-[92m✓ contrast 48/48[0m  [93m◐ snapshots[0m  [93m↻ provider kimi[0m
-[93m▲ headroom 81%[0m  [97mtier ready[0m

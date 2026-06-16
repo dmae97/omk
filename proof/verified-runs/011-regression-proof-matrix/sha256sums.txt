@@ -1,9 +1,0 @@
-c6ba72c1f9831206c216f4fbc960c0b7e953ca100f10470f9dac27cfcf6f51ef  proof/verified-runs/011-regression-proof-matrix/raw-prompt.md
-1e768a3f92261b3c0a3665b36130ed06b355f82f27d67f7b8ecec9d122be41c2  proof/verified-runs/011-regression-proof-matrix/commands.sh
-1991af35892df9871e71642afd305d17376c470110c9eaeef094e7ddc84c96ef  proof/verified-runs/011-regression-proof-matrix/stdout.txt
-7c11f77e5d77b2de16ccab6bd22fd4c8eee340db84cd50596cd4ad3fdf26331c  proof/verified-runs/011-regression-proof-matrix/verify.json
-412e9bc02b243154d2c9687b12e1019b6e777b08ab38f37cf61db91a50aa6957  proof/verified-runs/011-regression-proof-matrix/decisions.jsonl
-6ac4394dab19cfc8052e117ce561975d3fb82c772b3968dfcbe52cecfdd7f987  proof/verified-runs/011-regression-proof-matrix/run-manifest.json
-61928e421ddf9fe3c87aebb6d84685fb80d5c1bcf6e65139796c506811593f09  proof/verified-runs/011-regression-proof-matrix/evidence.jsonl
-477999c6ff3f212f743781521374e41a4cfaa3671d8278622c02b0a08c66715d  proof/verified-runs/011-regression-proof-matrix/limitations.md
-c78c229c6b57eb646c8afffdc17ab9537d5a44075bfb9abb91847ac6eda7bbf5  proof/verified-runs/011-regression-proof-matrix/inspect.json

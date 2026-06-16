@@ -1,9 +1,0 @@
-465c82b84ea3becff2d9d19a3014d7e130eeea0cbdca5119286bdcd7959809a0  proof/verified-runs/010-fallback-routing/commands.sh
-678db42f14374e86e5f3c9309a0ea27817d7ed54c1838d18982db21a3cd311af  proof/verified-runs/010-fallback-routing/decisions.jsonl
-be12117fbf8580a1682c26a8848781a7f69965441787e3b4f163b7f5ed3c8f19  proof/verified-runs/010-fallback-routing/evidence.jsonl
-f8c0c7dcedc3b3772ff930445dd16fbb7bd04784137370f4e5206203d9590ad2  proof/verified-runs/010-fallback-routing/fallback-routing-test.out
-01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b  proof/verified-runs/010-fallback-routing/fallback-routing-test.stderr
-c38bbe0c533c964faf95c87bf1cb33c095f997e0947984b86442248ad0fd290c  proof/verified-runs/010-fallback-routing/limitations.md
-1e696e9e822bb6c78518f7329be83bcda151ec4c12789c1202c6bc06616785a7  proof/verified-runs/010-fallback-routing/raw-prompt.md
-b58b835093d5c4aa81309993e15afab71efbc61ea132df1111a1b2569c04418e  proof/verified-runs/010-fallback-routing/run-manifest.json
-36158dfeaa66b741724a466708d968f4d133064f336477a9ddc94a476aa16961  proof/verified-runs/010-fallback-routing/verify.json

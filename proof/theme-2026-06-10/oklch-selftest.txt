@@ -1,3 +1,0 @@
-[self-test] #9D4EDD on #070B14 @gate4.5: CR 4.28 -> #A253E2 CR 4.57
-[self-test] OKLCH hue held: 306.3° -> 306.5°; L 0.588 -> 0.603
-[self-test] OK

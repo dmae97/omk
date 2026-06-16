@@ -1,21 +1,25 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "lib": ["ES2022"],
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": false,
-    "sourceMap": false,
-    "noEmitOnError": false
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"paths": {
+			"*": ["./*"],
+			"@earendil-works/omk-ai": ["./packages/ai/src/index.ts"],
+			"@earendil-works/omk-ai/oauth": ["./packages/ai/src/oauth.ts"],
+			"@earendil-works/omk-ai/*": ["./packages/ai/src/*.ts", "./packages/ai/src/providers/*.ts"],
+			"@earendil-works/omk-ai/dist/*": ["./packages/ai/src/*"],
+			"@earendil-works/omk-agent-core": ["./packages/agent/src/index.ts"],
+			"@earendil-works/omk-agent-core/*": ["./packages/agent/src/*"],
+			"open-multi-agent-kit": ["./packages/coding-agent/src/index.ts"],
+			"open-multi-agent-kit/hooks": ["./packages/coding-agent/src/core/hooks/index.ts"],
+			"open-multi-agent-kit/*": ["./packages/coding-agent/src/*"],
+			"typebox": ["./node_modules/typebox"],
+			"@earendil-works/omk-tui": ["./packages/tui/src/index.ts"],
+			"@earendil-works/omk-tui/*": ["./packages/tui/src/*"],
+			"@earendil-works/omk-agent-old": ["./packages/agent-old/src/index.ts"],
+			"@earendil-works/omk-agent-old/*": ["./packages/agent-old/src/*"]
+		}
+	},
+	"include": ["packages/*/src/**/*", "packages/*/test/**/*", "packages/coding-agent/examples/**/*"],
+	"exclude": ["**/dist/**"]
 }

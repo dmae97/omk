@@ -1,164 +1,61 @@
-# Dependencies / package-manager caches
 node_modules/
-.pnp
-.pnp.js
-.pnpm-store/
-.yarn/
-.yarn-cache/
-.npm/
-
-# Build outputs / compiled artifacts
 dist/
-target/
-*.tsbuildinfo
-.eslintcache
-
-# Test output / coverage
-coverage/
-.nyc_output/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+.DS_Store
+*.tsbuildinfo
+# packages/*/node_modules/
+packages/*/dist/
+packages/*/dist-chrome/
+packages/*/dist-firefox/
+*.cpuprofile
 
-# Proof raw artifacts (future dumps only; existing tracked proof evidence is unaffected until separately archived/untracked)
-proof/theme-check/
-proof/**/*.out
-proof/**/*.stderr
-proof/**/*.png
-proof/**/*.webp
-proof/**/*.jsonl
-!proof/
-!proof/verified-runs/
-!proof/verified-runs/011-regression-proof-matrix/
-!proof/verified-runs/011-regression-proof-matrix/*.json
-!proof/verified-runs/011-regression-proof-matrix/*.jsonl
-!proof/verified-runs/011-regression-proof-matrix/*.txt
-!proof/verified-runs/011-regression-proof-matrix/*.md
-!proof/verified-runs/011-regression-proof-matrix/*.sh
-!proof/verified-runs/011-regression-proof-matrix/*.out
-!proof/verified-runs/011-regression-proof-matrix/*.stderr
-!proof/verified-runs/012-release-truthfulness/
-!proof/verified-runs/012-release-truthfulness/*.json
-!proof/verified-runs/012-release-truthfulness/*.jsonl
-!proof/verified-runs/012-release-truthfulness/*.txt
-!proof/verified-runs/012-release-truthfulness/*.md
-!proof/verified-runs/012-release-truthfulness/*.sh
-
-# OMK runtime / local state (never commit)
+# Local orchestration artifacts
 .omk/
-.pi/
-.omx/
-!templates/.omk/
-!templates/.omk/**
+packages/coding-agent/omk-session-*.html
+/GOAL-GJC-OMK-CONTROL-PORT.md
 
-# Kimi / agent local user settings
-.kimi/
-.agents/
-.gjc/
-.serena/
-.mcp.json
-!templates/.kimi/
-!templates/.kimi/**
-!templates/skills/agents/
-!templates/skills/agents/**
-
-# Local spec outputs / generated daily docs
-.specify/
-specs/
-!specs/
-!specs/constitution.md
-!specs/templates/
-!specs/templates/**
-!specs/001-omk-0793-machine-checkable-hardening/
-!specs/001-omk-0793-machine-checkable-hardening/**
-/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
-/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-plan.md
-/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-improvements.md
-/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-critical-issues.md
-/docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-init-checklist.md
-
-# Environment / local config / registry credentials
-.env
-.env.*
-.envrc
-.env.local
-.env.development
-.env.production
-.env.test
+# Environment
+.env*
 !.env.example
-!.env.template
-*.local
-.npmrc
-.pypirc
-.netrc
+!.env.sample
+!.env.*.example
+!.env.*.sample
 
-# Secrets / keys / certificates
+# Private key artifacts
 *.pem
 *.key
 *.p8
 *.p12
 *.pfx
-*.crt
-*.csr
-*.gpg
-*.asc
 id_rsa
+id_dsa
+id_ecdsa
 id_ed25519
-credentials.json
-service-account*.json
-secrets/
-.secrets
-.secrets.*
-*.secret
-*.secret.*
 
-# Archives / package tarballs
-*.zip
-*.tgz
-*.tar.gz
-
-# Source-only public reference assets (provenance required before packaging/commit)
-/public/assets/**
-!/public/assets/
-!/public/assets/.gitkeep
-
-# Local screenshots
-화면 캡처*.png
-Screenshot *.png
-
-# Local scratch / foreign checkout directories
-.bg-shell/
-.codegraph/
-.playwright-mcp/
-.gsd/
-.commandcode/
-agent-skills/
-continuous-claude-v3/
-headroom/
-lobehub/
-logs/
-*.bak
-*.bak2
-*:Zone.Identifier
-
-# IDE / editor / OS files
+# Editor files
 .vscode/
+.zed/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
-.DS_Store
-Thumbs.db
-desktop.ini
 
-# Deploy-Exclusion Guard (Lane 1): re-ignore persona stack even under templates/.
-# These MUST come AFTER the templates/.omk and templates/.kimi negations above so
-# legacy persona surfaces can never be tracked or published.
-templates/.kimi/[Ss][Oo][Uu][Ll].md
-templates/.kimi/[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk].md
-templates/.omk/prompts/[Ss][Oo][Uu][Ll].md
-templates/.omk/prompts/[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk].md
-templates/.omk/agents/roles/unrestricted-orchestrator.yaml
-templates/**/*[Ss][Oo][Uu][Ll]*.md
-templates/**/*[Jj][Aa][Ii][Ll][Bb][Rr][Ee][Aa][Kk]*
+# Package specific
+.npm/
+coverage/
+.nyc_output/
+.pi_config/
+tui-debug.log
+compaction-results/
+.opencode/
+syntax.jsonl
+out.jsonl
+pi-*.html
+out.html
+packages/coding-agent/binaries/
+todo.md
+plans/
+.pi/hf-sessions/
+.pi/hf-sessions-backup/
+collect.sh

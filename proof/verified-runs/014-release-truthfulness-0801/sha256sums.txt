@@ -1,7 +1,0 @@
-9a8aed091a951107b5a49d29140811c7d32a436f90fe2028dabdd5f95c00d258  proof/verified-runs/014-release-truthfulness-0801/raw-prompt.md
-8abac04cb57ec14b1a3b45eb412119b0f5a10dd937c3b7b5f3649f2808c27679  proof/verified-runs/014-release-truthfulness-0801/commands.sh
-12c9104f37bf1858536ba3f88b3fa786315452cf9f4d1428d6490d7501c6845c  proof/verified-runs/014-release-truthfulness-0801/verify.json
-1ab1a0b0d49d872b2bfb034986d9a67420f61b55111ad4147d1ab50530e50cbd  proof/verified-runs/014-release-truthfulness-0801/decisions.jsonl
-30a8178f90f1b27d9a6f308a94e5e7d0ea9cc5946277cc8a602506339e910fc4  proof/verified-runs/014-release-truthfulness-0801/run-manifest.json
-6d1aba8c8a2232254d155e684af722961914fa8b29952e8b80fd36959f63b300  proof/verified-runs/014-release-truthfulness-0801/evidence.jsonl
-8a86f4a5bbfefa18c4f61a948d2bb376a219964c459478be574a8806f87098f3  proof/verified-runs/014-release-truthfulness-0801/limitations.md

@@ -1,9 +1,0 @@
-c94cd53828e7adc84b1476e0b4e9d05025d7e32b9bd6f58bf871586d310ce9d7  proof/verified-runs/005-contract-version-smoke/command-1.out
-b888f580dc818753e35e541866a142921eb9a68d06c063e4160aa9cae5f3f16f  proof/verified-runs/005-contract-version-smoke/command-2.out
-2a246c7578fcb53d5cd7c5ea67a1e421fb3a023340f243c1dad99cda2bded713  proof/verified-runs/005-contract-version-smoke/commands.sh
-4fbbaeee6d7aabd192d53a88eb65671283b5ebff870a042858f4bd347819275c  proof/verified-runs/005-contract-version-smoke/decisions.jsonl
-fa5c01318b0d0e33e4d049af79bd0f415cde7d45f527cbf143c33a0628dea19d  proof/verified-runs/005-contract-version-smoke/evidence.jsonl
-137fe362602082fda8ec91ea10ece955bb3a4b09b77401979208638331234d25  proof/verified-runs/005-contract-version-smoke/limitations.md
-7341f50f67df89132fb94956f20f9980abe3a840df12e017cc2f4d208da53199  proof/verified-runs/005-contract-version-smoke/raw-prompt.md
-b48434c31c9231cb3251be84c875540b25c15e6998b6281e75ea653488b319ab  proof/verified-runs/005-contract-version-smoke/run-manifest.json
-a03546f1d4ecf83e69f382ca35ba2fdc769cc860b7b67656f22cb9c032a50c23  proof/verified-runs/005-contract-version-smoke/verify.json
