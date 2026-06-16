@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
-import type { GraphState, LocalGraphMemoryStore } from "../memory/local-graph-memory-store.js";
+import type { GraphState } from "../memory/local-graph-memory-store.js";
 
 export interface HeadroomReplayVerificationIssue {
   readonly kind: string;

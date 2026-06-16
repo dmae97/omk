@@ -4,7 +4,14 @@
 
 ### Added
 
-- Reserved for changes after v0.80.0.
+- Reserved for changes after v0.80.1.
+
+## v0.80.1 — CI lint cleanup and registry-aligned patch release (2026-06-16)
+
+### Fixed
+
+- Removed release-blocking ESLint warnings/errors in native root loop, Headroom replay verifier, Freedomd runtime files, structured compaction, and session utilities.
+- Aligned package/docs/theme metadata for the `0.80.1` patch release after publishing `0.80.0`.
 
 ## v0.80.0 — Freedomd sovereignty, default agent freedom, and release-ready GitHub docs (2026-06-16)
 

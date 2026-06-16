@@ -299,15 +299,3 @@ async function hasProviderConfigApiKey(env: Record<string, string | undefined>, 
   const configContent = readHomeProviderConfig(env, ".omk");
   return configContent ? providerConfigHasApiKey(configContent, provider) : false;
 }
-
-function resolveAuthorityProviderPolicy(
-  providerPolicy: string,
-  env: Record<string, string | undefined>
-): string | undefined {
-  if (providerPolicy !== "authority" && providerPolicy !== "primary" && providerPolicy !== "omk") return undefined;
-  const configured = env.OMK_AUTHORITY_PROVIDER?.trim().toLowerCase()
-    || env.OMK_DEFAULT_PROVIDER?.trim().toLowerCase()
-    || "mimo";
-  if (configured === "authority" || configured === "primary" || configured === "omk") return "mimo";
-  return configured || "mimo";
-}

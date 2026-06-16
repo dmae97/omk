@@ -126,7 +126,7 @@ async function materializeExceptionInGraph(
   options: ProviderExceptionApproverOptions,
   request: ProviderExceptionRequest,
   scope: ProviderExceptionScope,
-  artifactPath: string,
+  _artifactPath: string,
 ): Promise<void> {
   if (!options.graphStore) return;
   try {

@@ -4,7 +4,7 @@ This page documents provider status for the current source tree.
 
 ## Current source target
 
-- Package version: `0.80.0`
+- Package version: `0.80.1`
 - Runtime contract family: `v1.2`
 - Release channel: `pre-1.0`
 

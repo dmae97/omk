@@ -6,7 +6,6 @@
  * provider becomes unavailable or changes policy.
  */
 
-import { createHash } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import { dirname, join, resolve } from "path";
 import type { AgentRuntime, AgentRunResult, AgentTask, AgentTaskSovereignty } from "./agent-runtime.js";

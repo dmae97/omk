@@ -318,7 +318,7 @@ export function structuredCompactionInstruction(contract: StructuredCompactionCo
 
 export function buildStructuredCompactionText(
   capsule: ContextCapsule,
-  contract: StructuredCompactionContractV1 = DEFAULT_STRUCTURED_COMPACTION_CONTRACT,
+  _contract: StructuredCompactionContractV1 = DEFAULT_STRUCTURED_COMPACTION_CONTRACT,
   options: StructuredCompactionBuildOptions = {},
 ): string {
   const typedContract = buildTypedStructuredCompactionContract(capsule);
@@ -366,7 +366,7 @@ export function buildStructuredCompactionText(
 
   const targetTokens = Math.max(256, Math.floor(options.maxTokens ?? (capsule.budget.maxInputTokens - capsule.budget.reservedOutputTokens)));
   const estimator = options.estimator;
-  let remainingTokens = Math.max(0, targetTokens - estimateTextTokens(hardSections, estimator));
+  const remainingTokens = Math.max(0, targetTokens - estimateTextTokens(hardSections, estimator));
   const selected = selectCandidateSections(capsule, remainingTokens, options, redact);
 
   return [hardSections, ...selected].join("\n");

@@ -6,7 +6,6 @@ import type {
   ProviderPolicy,
   CapabilityManifest,
   AgentTaskSafety,
-  AgentTaskSovereignty,
 } from "./agent-runtime.js";
 
 export async function capsuleToTask(

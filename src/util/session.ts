@@ -1,6 +1,6 @@
 import { writeFile, readdir, readFile, mkdir } from "fs/promises";
 import { join } from "path";
-import { getOmkPath, pathExists, ensureDir, validateRunId } from "./fs.js";
+import { getOmkPath, pathExists, validateRunId } from "./fs.js";
 import { getRunArtifactPath } from "./run-store.js";
 
 export function createOmkSessionId(prefix: "chat" | "plan" | "run" | "team" | "session" | "feature" | "bugfix" | "refactor" | "review" = "session"): string {
