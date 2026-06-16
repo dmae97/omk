@@ -1095,7 +1095,9 @@
        */
       function buildShareUrl(entryId) {
         // Check for injected base URL (used when loaded in iframe via srcdoc)
-        const baseUrlMeta = document.querySelector('meta[name="pi-share-base-url"]');
+        const baseUrlMeta =
+          document.querySelector('meta[name="omk-share-base-url"]') ||
+          document.querySelector('meta[name="pi-share-base-url"]');
         const baseUrl = baseUrlMeta ? baseUrlMeta.content : window.location.href.split('?')[0];
 
         const url = new URL(window.location.href);
@@ -1663,7 +1665,7 @@
       const overlay = document.getElementById('sidebar-overlay');
       const hamburger = document.getElementById('hamburger');
       const sidebarResizer = document.getElementById('sidebar-resizer');
-      const SIDEBAR_WIDTH_STORAGE_KEY = 'pi-share:v1:sidebar-width';
+      const SIDEBAR_WIDTH_STORAGE_KEY = 'omk-share:v1:sidebar-width';
       const MIN_CONTENT_WIDTH = 320;
 
       function isMobileLayout() {
