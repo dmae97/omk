@@ -4,7 +4,7 @@
 
 OMK turns a coding goal into a scoped DAG run, routes it across compatible runtimes, limits authority per lane, records local evidence, and keeps the loop moving even when a provider is unavailable, retained, export-restricted, or policy-blocked.
 
-![OMK Freedomd runtime control plane](readmeasset/omk-freedomd-control-plane.svg)
+![OMK Freedomd runtime control plane](readmeasset/omk-freedomd-control-plane.webp)
 
 <p>
   <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm version" src="https://img.shields.io/npm/v/open-multi-agent-kit?color=F2A900"></a>
@@ -138,7 +138,7 @@ Current source version: `open-multi-agent-kit@0.80.0`.
 - Release channel: `pre-1.0`.
 - OS-level sandboxing is **not** claimed; safety relies on authority gates, approval/sandbox policy, scoped capabilities, evidence, and local artifacts.
 - npm `latest` claims are valid only after tagged CI and registry verification both pass.
-- `gpt-image-2` image generation requires an OpenAI Platform project API key provided at runtime; README assets in this release include a deterministic local SVG fallback plus a regeneration prompt.
+- README hero generation used the local Codex OAuth `gpt-image-2` workflow; the official `omk image` OpenAI Images API path still requires an OpenAI Platform project API key supplied only at runtime.
 
 See [versioning](docs/versioning.md), [claims](docs/claims.md), [provider maturity](docs/provider-maturity.md), and [SECURITY.md](SECURITY.md).
 

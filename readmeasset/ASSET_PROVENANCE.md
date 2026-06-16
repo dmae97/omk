@@ -99,13 +99,23 @@
 | `omk-logo-mark.svg` | themes/night-city.theme.json via scripts/assets-build.mjs | Vector OMK logo mark | `512x512` | `SVG` | 649 | `2e9b5b6f79b1f4fcd093fa794080f4c029ef9f8a0035fa5533dc56ed8bb4387a` |
 
 
+## omk-freedomd-control-plane.webp
+
+- Packaged path: `readmeasset/omk-freedomd-control-plane.webp`.
+- README usage: GitHub hero for OMK v0.80.0 Freedomd provider-sovereignty control plane.
+- Generator: Codex OAuth image workflow using `gpt-image-2` (`.agents/skills/codex-gpt-image/scripts/codex_gpt_image.py generate`) with `readmeasset/omk-control.webp` as the style reference.
+- Prompt artifact: `.omk/runs/freedomd-release-2026-06-16/codex-oauth-gpt-image-2-prompt.txt`.
+- Prompt SHA-256: `88fcb293216d544ef2794bfd7d64c0e8d13df2dfc0f715bd8933596709fb3f20`.
+- Auth handling: local Codex OAuth availability was checked with `auth-status`; no OAuth token or session secret is stored in this repository or provenance file.
+- Dimensions: `1983x793`; format: `WEBP`; bytes: 1877984; sha256: `ba07098f255b0b8f097485a97f02bba0f52ed44801fb1c4fc707a04a9242bbca`.
+- Review date: 2026-06-16.
+
 ## omk-freedomd-control-plane.svg
 
 - Packaged path: `readmeasset/omk-freedomd-control-plane.svg`.
-- README usage: GitHub hero for OMK v0.80.0 Freedomd provider-sovereignty control plane.
+- README usage: deterministic fallback for OMK v0.80.0 Freedomd provider-sovereignty control plane.
 - Source: deterministic local SVG fallback generated from `DESIGN.md` tokens and current Freedomd runtime features.
-- GPT Image 2.0 prompt artifact: `.omk/runs/freedomd-release-2026-06-16/gpt-image-2-prompt.md`.
-- Current run limitation: no `OPENAI_API_KEY` was present, so `gpt-image-2` generation was not executed in this session.
+- Original OpenAI Platform prompt artifact: `.omk/runs/freedomd-release-2026-06-16/gpt-image-2-prompt.md`.
 - Dimensions: `1600x640`; format: `SVG`; bytes: 4415; sha256: `00afea70a2cb826bb804d2cad9a2e452a033e6b90672a9d19f15a421a305ee26`.
 
 ## Theme-derived SVG assets (2026-06-10)
