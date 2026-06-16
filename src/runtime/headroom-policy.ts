@@ -6,7 +6,8 @@
  * a configurable threshold (default 90%).
  *
  * Prefers the external `headroom` CLI compressor when available;
- * falls back to the built-in `optimizeContextBudget` when not.
+ * falls back to caller-provided structured text and finally to legacy
+ * side-effect optimizers when not.
  *
  * Deterministic except for the injectable `runHeadroom` runner.
  */
@@ -22,11 +23,21 @@ export interface HeadroomDecision {
   readonly reason: string;
 }
 
+export type HeadroomBackend = "headroom" | "structured-fallback" | "side-effect-fallback" | "none";
+
 export interface HeadroomCompactResult {
+  /** Backward-compatible summary: a backend produced compacted text or completed a legacy fallback. */
   readonly compacted: boolean;
+  /** Backward-compatible backend family. */
   readonly via: "headroom" | "fallback" | "none";
   readonly compactedText?: string;
   readonly reason?: string;
+  /** Whether a compaction attempt was made because the policy threshold was crossed. */
+  readonly attempted: boolean;
+  /** Specific backend that produced this result. */
+  readonly backend: HeadroomBackend;
+  /** Whether a textual backend produced non-empty compacted text. */
+  readonly compactedTextProduced: boolean;
 }
 
 // ─── Defaults ────────────────────────────────────────────────────────────────
@@ -135,19 +146,34 @@ export async function maybeCompactWithHeadroom(args: {
   fallbackText?: () => string | null | Promise<string | null>;
 }): Promise<HeadroomCompactResult> {
   if (!args.decision.shouldCompact) {
-    return { compacted: false, via: "none" };
+    return {
+      compacted: false,
+      via: "none",
+      attempted: false,
+      backend: "none",
+      compactedTextProduced: false,
+      reason: args.decision.reason,
+    };
   }
 
-  // Try headroom first
+  // Try headroom first.
   if (args.text) {
     try {
       const runner = args.runHeadroom ?? defaultRunHeadroom;
       const result = await runner(args.text);
-      if (result !== null) {
-        return { compacted: true, via: "headroom", compactedText: result };
+      if (typeof result === "string" && result.trim().length > 0) {
+        return {
+          compacted: true,
+          via: "headroom",
+          backend: "headroom",
+          compactedText: result,
+          attempted: true,
+          compactedTextProduced: true,
+          reason: "headroom CLI compaction produced text",
+        };
       }
     } catch {
-      // Headroom threw — fall through to fallback
+      // Headroom threw — fall through to fallback.
     }
   }
 
@@ -161,8 +187,21 @@ export async function maybeCompactWithHeadroom(args: {
         return {
           compacted: true,
           via: "fallback",
+          backend: "structured-fallback",
           compactedText: text,
+          attempted: true,
+          compactedTextProduced: true,
           reason: "headroom CLI compaction unavailable; used structured fallback text",
+        };
+      }
+      if (typeof text === "string") {
+        return {
+          compacted: false,
+          via: "none",
+          backend: "none",
+          attempted: true,
+          compactedTextProduced: false,
+          reason: "empty fallback text",
         };
       }
     } catch {
@@ -174,11 +213,25 @@ export async function maybeCompactWithHeadroom(args: {
   if (args.fallback) {
     try {
       await args.fallback();
-      return { compacted: true, via: "fallback", reason: "side-effect fallback completed" };
+      return {
+        compacted: true,
+        via: "fallback",
+        backend: "side-effect-fallback",
+        attempted: true,
+        compactedTextProduced: false,
+        reason: "side-effect fallback completed",
+      };
     } catch {
-      // Fallback also failed — graceful degradation
+      // Fallback also failed — graceful degradation.
     }
   }
 
-  return { compacted: false, via: "none", reason: "no compaction backend succeeded" };
+  return {
+    compacted: false,
+    via: "none",
+    backend: "none",
+    attempted: true,
+    compactedTextProduced: false,
+    reason: "no compaction backend succeeded",
+  };
 }
