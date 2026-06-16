@@ -1,6 +1,6 @@
 {
 	"name": "open-multi-agent-kit",
-	"version": "0.80.3",
+	"version": "0.80.4",
 	"description": "OMK interactive coding agent CLI with read, bash, edit, write tools, skills, hooks, MCP, and session management",
 	"type": "module",
 	"omkConfig": {

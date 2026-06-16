@@ -309,7 +309,7 @@ export function getSelfUpdateUnavailableInstruction(
 ): string {
 	const method = detectInstallMethod();
 	if (method === "bun-binary") {
-		return `Download from: https://github.com/earendil-works/pi-mono/releases/latest`;
+		return `Download from: https://github.com/dmae97/open-multi-agent-kit/releases/latest`;
 	}
 	const command = getSelfUpdateCommandForMethod(method, packageName, updatePackageName, npmCommand);
 	if (command) {
