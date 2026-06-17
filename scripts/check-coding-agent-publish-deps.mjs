@@ -8,9 +8,9 @@ const shrinkwrapPath = join(repoRoot, "packages/coding-agent/npm-shrinkwrap.json
 const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
 const deps = pkg.dependencies ?? {};
 const expectedAliases = {
-	"@earendil-works/omk-agent-core": "npm:@earendil-works/pi-agent-core@0.79.2",
-	"@earendil-works/omk-ai": "npm:@earendil-works/pi-ai@0.79.2",
-	"@earendil-works/omk-tui": "npm:@earendil-works/pi-tui@0.79.2",
+	"@earendil-works/omk-agent-core": "npm:@earendil-works/pi-agent-core@0.79.6",
+	"@earendil-works/omk-ai": "npm:@earendil-works/pi-ai@0.79.6",
+	"@earendil-works/omk-tui": "npm:@earendil-works/pi-tui@0.79.6",
 };
 const errors = [];
 
