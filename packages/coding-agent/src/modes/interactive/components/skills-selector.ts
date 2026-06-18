@@ -1,11 +1,9 @@
 /**
- * Skills inventory selector.
- *
- * Renders the skills currently loaded by the active session. Read-only:
- * does not invoke or modify any skill. ESC/Ctrl+C close the selector.
+ * Skills inventory selector with fuzzy search input + counter.
+ * Read-only: never invokes or modifies a skill.
  */
 
-import { Container, getKeybindings, Spacer, Text } from "@earendil-works/omk-tui";
+import { Container, type Focusable, fuzzyFilter, getKeybindings, Input, Spacer, Text } from "@earendil-works/omk-tui";
 import type { ResourceDiagnostic } from "../../../core/resource-loader.ts";
 import type { Skill } from "../../../core/skills.ts";
 import { theme } from "../theme/theme.ts";
@@ -18,17 +16,30 @@ export interface SkillsSelectorInput {
 	enableSkillCommands: boolean;
 }
 
-export class SkillsSelectorComponent extends Container {
-	private skills: ReadonlyArray<Skill>;
+export class SkillsSelectorComponent extends Container implements Focusable {
+	private allSkills: ReadonlyArray<Skill>;
+	private filteredSkills: ReadonlyArray<Skill>;
 	private selectedIndex = 0;
 	private listContainer: Container;
 	private detailContainer: Container;
+	private counterText: Text;
+	private searchInput: Input;
 	private onCancelCallback: () => void;
+
+	private _focused = false;
+	get focused(): boolean {
+		return this._focused;
+	}
+	set focused(value: boolean) {
+		this._focused = value;
+		this.searchInput.focused = value;
+	}
 
 	constructor(input: SkillsSelectorInput, onCancel: () => void) {
 		super();
 
-		this.skills = input.skills;
+		this.allSkills = input.skills;
+		this.filteredSkills = input.skills;
 		this.onCancelCallback = onCancel;
 
 		this.addChild(new DynamicBorder());
@@ -39,7 +50,7 @@ export class SkillsSelectorComponent extends Container {
 			new Text(
 				theme.fg(
 					"muted",
-					`  ${this.skills.length} loaded · slash commands ${input.enableSkillCommands ? "enabled" : "disabled"}`,
+					`  ${this.allSkills.length} loaded · slash commands ${input.enableSkillCommands ? "enabled" : "disabled"}`,
 				),
 				1,
 				0,
@@ -62,6 +73,14 @@ export class SkillsSelectorComponent extends Container {
 			this.addChild(new Spacer(1));
 		}
 
+		this.counterText = new Text(this.getCounterText(), 1, 0);
+		this.addChild(this.counterText);
+
+		this.searchInput = new Input();
+		this.searchInput.onSubmit = () => this.updateDetail();
+		this.addChild(this.searchInput);
+		this.addChild(new Spacer(1));
+
 		this.listContainer = new Container();
 		this.addChild(this.listContainer);
 		this.addChild(new Spacer(1));
@@ -70,17 +89,7 @@ export class SkillsSelectorComponent extends Container {
 		this.addChild(this.detailContainer);
 		this.addChild(new Spacer(1));
 
-		this.addChild(
-			new Text(
-				rawKeyHint("↑↓", "navigate") +
-					"  " +
-					keyHint("tui.select.confirm", "details") +
-					"  " +
-					keyHint("tui.select.cancel", "close"),
-				1,
-				0,
-			),
-		);
+		this.addChild(new Text(`${rawKeyHint("↑↓", "navigate")}  ${keyHint("tui.select.cancel", "close")}`, 1, 0));
 		this.addChild(new Spacer(1));
 		this.addChild(new DynamicBorder());
 
@@ -88,14 +97,29 @@ export class SkillsSelectorComponent extends Container {
 		this.updateDetail();
 	}
 
+	private getCounterText(): string {
+		return theme.fg("muted", `  matched ${this.filteredSkills.length} / total ${this.allSkills.length}`);
+	}
+
+	private applyFilter(query: string): void {
+		this.filteredSkills = query
+			? fuzzyFilter(this.allSkills as Skill[], query, (s) => `${s.name} ${s.description}`)
+			: this.allSkills;
+		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredSkills.length - 1));
+		this.counterText.setText(this.getCounterText());
+		this.updateList();
+		this.updateDetail();
+	}
+
 	private updateList(): void {
 		this.listContainer.clear();
-		if (this.skills.length === 0) {
-			this.listContainer.addChild(new Text(theme.fg("muted", "  No skills loaded."), 1, 0));
+		if (this.filteredSkills.length === 0) {
+			const msg = this.allSkills.length === 0 ? "  No skills loaded." : "  No skills match the search.";
+			this.listContainer.addChild(new Text(theme.fg("muted", msg), 1, 0));
 			return;
 		}
-		for (let i = 0; i < this.skills.length; i++) {
-			const skill = this.skills[i];
+		for (let i = 0; i < this.filteredSkills.length; i++) {
+			const skill = this.filteredSkills[i];
 			const isSelected = i === this.selectedIndex;
 			const name = isSelected ? theme.fg("accent", `→ ${skill.name}`) : `  ${skill.name}`;
 			const scopeTag = theme.fg("muted", ` [${skill.sourceInfo.scope}]`);
@@ -106,7 +130,7 @@ export class SkillsSelectorComponent extends Container {
 
 	private updateDetail(): void {
 		this.detailContainer.clear();
-		const skill = this.skills[this.selectedIndex];
+		const skill = this.filteredSkills[this.selectedIndex];
 		if (!skill) return;
 		const desc = (skill.description || "").trim();
 		const oneLine = desc.length > 200 ? `${desc.slice(0, 197)}...` : desc;
@@ -120,19 +144,24 @@ export class SkillsSelectorComponent extends Container {
 	handleInput(keyData: string): void {
 		const kb = getKeybindings();
 		if (kb.matches(keyData, "tui.select.up")) {
-			if (this.skills.length === 0) return;
-			this.selectedIndex = this.selectedIndex === 0 ? this.skills.length - 1 : this.selectedIndex - 1;
+			if (this.filteredSkills.length === 0) return;
+			this.selectedIndex = this.selectedIndex === 0 ? this.filteredSkills.length - 1 : this.selectedIndex - 1;
 			this.updateList();
 			this.updateDetail();
-		} else if (kb.matches(keyData, "tui.select.down")) {
-			if (this.skills.length === 0) return;
-			this.selectedIndex = this.selectedIndex === this.skills.length - 1 ? 0 : this.selectedIndex + 1;
-			this.updateList();
-			this.updateDetail();
-		} else if (kb.matches(keyData, "tui.select.confirm")) {
-			this.updateDetail();
-		} else if (kb.matches(keyData, "tui.select.cancel")) {
-			this.onCancelCallback();
+			return;
 		}
+		if (kb.matches(keyData, "tui.select.down")) {
+			if (this.filteredSkills.length === 0) return;
+			this.selectedIndex = this.selectedIndex === this.filteredSkills.length - 1 ? 0 : this.selectedIndex + 1;
+			this.updateList();
+			this.updateDetail();
+			return;
+		}
+		if (kb.matches(keyData, "tui.select.cancel")) {
+			this.onCancelCallback();
+			return;
+		}
+		this.searchInput.handleInput(keyData);
+		this.applyFilter(this.searchInput.getValue());
 	}
 }

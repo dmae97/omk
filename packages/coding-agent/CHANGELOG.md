@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added fuzzy search input, result counter, and provider auth glyphs to the interactive `/mcp`, `/skills`, and model selectors so large registries stay scannable while clearly signaling which providers have authentication configured.
+
+### Changed
+
+- Collapsed the dead-code positional `ThinkingSelectorComponent` in `components/thinking-selector.ts` into a backward-compatible re-export from `components/settings-selector.ts` so external SDK imports keep resolving while removing duplicate UI logic.
+
 ## [0.80.6] - 2026-06-18
 
 ### Added

@@ -2,26 +2,39 @@
  * MCP inventory selector.
  *
  * Renders the merged inventory produced by `loadMcpInventory`. Read-only: env
- * values are never displayed, only key names. ESC/Ctrl+C close the selector.
+ * values are never displayed, only key names. Adds fuzzy search input + counter.
  */
 
-import { Container, getKeybindings, Spacer, Text } from "@earendil-works/omk-tui";
+import { Container, type Focusable, fuzzyFilter, getKeybindings, Input, Spacer, Text } from "@earendil-works/omk-tui";
 import type { McpInventory, McpServerEntry } from "../../../core/mcp-inventory.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, rawKeyHint } from "./keybinding-hints.ts";
 
-export class McpSelectorComponent extends Container {
-	private entries: McpServerEntry[];
+export class McpSelectorComponent extends Container implements Focusable {
+	private allEntries: McpServerEntry[];
+	private filteredEntries: McpServerEntry[];
 	private selectedIndex = 0;
 	private listContainer: Container;
 	private detailContainer: Container;
+	private counterText: Text;
+	private searchInput: Input;
 	private onCancelCallback: () => void;
+
+	private _focused = false;
+	get focused(): boolean {
+		return this._focused;
+	}
+	set focused(value: boolean) {
+		this._focused = value;
+		this.searchInput.focused = value;
+	}
 
 	constructor(inventory: McpInventory, onCancel: () => void) {
 		super();
 
-		this.entries = inventory.entries;
+		this.allEntries = inventory.entries;
+		this.filteredEntries = inventory.entries;
 		this.onCancelCallback = onCancel;
 
 		this.addChild(new DynamicBorder());
@@ -30,7 +43,6 @@ export class McpSelectorComponent extends Container {
 		this.addChild(new Text(theme.fg("accent", theme.bold("MCP servers (read-only inventory)")), 1, 0));
 		this.addChild(new Spacer(1));
 
-		// Source summary lines
 		for (const src of inventory.sources) {
 			const status = src.exists ? theme.fg("muted", `${src.serverCount} server(s)`) : theme.fg("dim", "missing");
 			this.addChild(new Text(`  ${theme.fg("muted", src.path)}  ·  ${status}`, 1, 0));
@@ -38,6 +50,14 @@ export class McpSelectorComponent extends Container {
 		for (const err of inventory.errors) {
 			this.addChild(new Text(theme.fg("error", `  parse error: ${err.path}: ${err.message}`), 1, 0));
 		}
+		this.addChild(new Spacer(1));
+
+		this.counterText = new Text(this.getCounterText(), 1, 0);
+		this.addChild(this.counterText);
+
+		this.searchInput = new Input();
+		this.searchInput.onSubmit = () => this.updateDetail();
+		this.addChild(this.searchInput);
 		this.addChild(new Spacer(1));
 
 		this.listContainer = new Container();
@@ -52,8 +72,6 @@ export class McpSelectorComponent extends Container {
 			new Text(
 				rawKeyHint("↑↓", "navigate") +
 					"  " +
-					keyHint("tui.select.confirm", "details") +
-					"  " +
 					keyHint("tui.select.cancel", "close") +
 					theme.fg("muted", "  (read-only · env values hidden)"),
 				1,
@@ -67,14 +85,31 @@ export class McpSelectorComponent extends Container {
 		this.updateDetail();
 	}
 
+	private getCounterText(): string {
+		const total = this.allEntries.length;
+		const matched = this.filteredEntries.length;
+		return theme.fg("muted", `  matched ${matched} / total ${total}`);
+	}
+
+	private applyFilter(query: string): void {
+		this.filteredEntries = query
+			? fuzzyFilter(this.allEntries, query, (e) => `${e.name} ${e.commandSummary} ${e.source}`)
+			: this.allEntries;
+		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredEntries.length - 1));
+		this.counterText.setText(this.getCounterText());
+		this.updateList();
+		this.updateDetail();
+	}
+
 	private updateList(): void {
 		this.listContainer.clear();
-		if (this.entries.length === 0) {
-			this.listContainer.addChild(new Text(theme.fg("muted", "  No MCP servers configured."), 1, 0));
+		if (this.filteredEntries.length === 0) {
+			const msg = this.allEntries.length === 0 ? "  No MCP servers configured." : "  No entries match the search.";
+			this.listContainer.addChild(new Text(theme.fg("muted", msg), 1, 0));
 			return;
 		}
-		for (let i = 0; i < this.entries.length; i++) {
-			const entry = this.entries[i];
+		for (let i = 0; i < this.filteredEntries.length; i++) {
+			const entry = this.filteredEntries[i];
 			const isSelected = i === this.selectedIndex;
 			const name = isSelected ? theme.fg("accent", `→ ${entry.name}`) : `  ${entry.name}`;
 			const meta = theme.fg(
@@ -88,7 +123,7 @@ export class McpSelectorComponent extends Container {
 
 	private updateDetail(): void {
 		this.detailContainer.clear();
-		const entry = this.entries[this.selectedIndex];
+		const entry = this.filteredEntries[this.selectedIndex];
 		if (!entry) return;
 
 		this.detailContainer.addChild(new Text(theme.fg("muted", `  source:   ${entry.source}`), 1, 0));
@@ -109,20 +144,24 @@ export class McpSelectorComponent extends Container {
 	handleInput(keyData: string): void {
 		const kb = getKeybindings();
 		if (kb.matches(keyData, "tui.select.up")) {
-			if (this.entries.length === 0) return;
-			this.selectedIndex = this.selectedIndex === 0 ? this.entries.length - 1 : this.selectedIndex - 1;
+			if (this.filteredEntries.length === 0) return;
+			this.selectedIndex = this.selectedIndex === 0 ? this.filteredEntries.length - 1 : this.selectedIndex - 1;
 			this.updateList();
 			this.updateDetail();
-		} else if (kb.matches(keyData, "tui.select.down")) {
-			if (this.entries.length === 0) return;
-			this.selectedIndex = this.selectedIndex === this.entries.length - 1 ? 0 : this.selectedIndex + 1;
-			this.updateList();
-			this.updateDetail();
-		} else if (kb.matches(keyData, "tui.select.confirm")) {
-			// Re-render detail (no-op when nothing selected); confirm acts as "show details".
-			this.updateDetail();
-		} else if (kb.matches(keyData, "tui.select.cancel")) {
-			this.onCancelCallback();
+			return;
 		}
+		if (kb.matches(keyData, "tui.select.down")) {
+			if (this.filteredEntries.length === 0) return;
+			this.selectedIndex = this.selectedIndex === this.filteredEntries.length - 1 ? 0 : this.selectedIndex + 1;
+			this.updateList();
+			this.updateDetail();
+			return;
+		}
+		if (kb.matches(keyData, "tui.select.cancel")) {
+			this.onCancelCallback();
+			return;
+		}
+		this.searchInput.handleInput(keyData);
+		this.applyFilter(this.searchInput.getValue());
 	}
 }

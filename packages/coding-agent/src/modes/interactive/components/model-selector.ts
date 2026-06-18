@@ -1,4 +1,4 @@
-import { type Model, modelsAreEqual } from "@earendil-works/omk-ai";
+import { getSupportedThinkingLevels, type Model, modelsAreEqual } from "@earendil-works/omk-ai";
 import {
 	Container,
 	type Focusable,
@@ -11,6 +11,18 @@ import {
 } from "@earendil-works/omk-tui";
 import type { ModelRegistry } from "../../../core/model-registry.ts";
 import type { SettingsManager } from "../../../core/settings-manager.ts";
+
+function formatThinkingBadge(model: Model<any>): string {
+	const levels = getSupportedThinkingLevels(model) as string[];
+	if (!levels || levels.length === 0) return "think:-";
+	if (levels.length === 1) return `think:${levels[0]}`;
+	return `think:${levels[0]}…${levels[levels.length - 1]}`;
+}
+
+function providerAuthGlyph(authConfigured: boolean): string {
+	return authConfigured ? "✓" : "✗";
+}
+
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint } from "./keybinding-hints.ts";
@@ -227,10 +239,20 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		return sorted;
 	}
 
+	private isProviderAuthenticated(provider: string): boolean {
+		if (provider === ALL_PROVIDER_TAB) return true;
+		const status = this.modelRegistry.authStorage.getAuthStatus(provider);
+		return status.configured || status.source !== undefined;
+	}
+
 	private getProviderText(): string {
-		const tabs = this.providerTabs.map((provider) =>
-			provider === this.activeProviderTab ? theme.fg("accent", provider) : theme.fg("muted", provider),
-		);
+		const tabs = this.providerTabs.map((provider) => {
+			const auth = this.isProviderAuthenticated(provider);
+			const glyph = provider === ALL_PROVIDER_TAB ? "" : ` ${providerAuthGlyph(auth)}`;
+			const label = `${provider}${glyph}`;
+			if (provider === this.activeProviderTab) return theme.fg("accent", label);
+			return auth ? theme.fg("muted", label) : theme.fg("dim", label);
+		});
 		return `${theme.fg("muted", "Provider: ")}${tabs.join(theme.fg("dim", " | "))}`;
 	}
 
@@ -326,19 +348,18 @@ export class ModelSelectorComponent extends Container implements Focusable {
 
 			const isSelected = i === this.selectedIndex;
 			const isCurrent = modelsAreEqual(this.currentModel, item.model);
+			const providerAuthed = this.isProviderAuthenticated(item.provider);
+			const providerLabel = `[${item.provider}${providerAuthed ? "" : " no-auth"}]`;
+			const providerBadge = providerAuthed ? theme.fg("muted", providerLabel) : theme.fg("warning", providerLabel);
+			const thinkingBadge = theme.fg("dim", ` · ${formatThinkingBadge(item.model)}`);
+			const checkmark = isCurrent ? theme.fg("success", " ✓") : "";
 
 			let line = "";
 			if (isSelected) {
 				const prefix = theme.fg("accent", "→ ");
-				const modelText = `${item.id}`;
-				const providerBadge = theme.fg("muted", `[${item.provider}]`);
-				const checkmark = isCurrent ? theme.fg("success", " ✓") : "";
-				line = `${prefix + theme.fg("accent", modelText)} ${providerBadge}${checkmark}`;
+				line = `${prefix + theme.fg("accent", item.id)} ${providerBadge}${thinkingBadge}${checkmark}`;
 			} else {
-				const modelText = `  ${item.id}`;
-				const providerBadge = theme.fg("muted", `[${item.provider}]`);
-				const checkmark = isCurrent ? theme.fg("success", " ✓") : "";
-				line = `${modelText} ${providerBadge}${checkmark}`;
+				line = `  ${item.id} ${providerBadge}${thinkingBadge}${checkmark}`;
 			}
 
 			this.listContainer.addChild(new Text(line, 0, 0));
