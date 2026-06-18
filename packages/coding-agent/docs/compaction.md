@@ -26,13 +26,14 @@ Both use the same structured summary format and track file operations cumulative
 
 ### When It Triggers
 
-Auto-compaction triggers when:
+Auto-compaction triggers at the earlier of:
 
-```
-contextTokens > contextWindow - reserveTokens
+```text
+contextTokens >= contextWindow * maxUsageRatio
+contextTokens >= contextWindow - reserveTokens
 ```
 
-By default, `reserveTokens` is 16384 tokens (configurable in `~/.omk/agent/settings.json` or `<project-dir>/.omk/settings.json`). This leaves room for the LLM's response.
+By default, `maxUsageRatio` is `0.9` and `reserveTokens` is `16384` tokens (configurable in `~/.omk/agent/settings.json` or `<project-dir>/.omk/settings.json`). This leaves room for the LLM's response.
 
 You can also trigger manually with `/compact [instructions]`, where optional instructions focus the summary.
 
@@ -40,9 +41,10 @@ You can also trigger manually with `/compact [instructions]`, where optional ins
 
 1. **Find cut point**: Walk backwards from newest message, accumulating token estimates until `keepRecentTokens` (default 20k, configurable in `~/.omk/agent/settings.json` or `<project-dir>/.omk/settings.json`) is reached
 2. **Extract messages**: Collect messages from the previous kept boundary (or session start) up to the cut point
-3. **Generate summary**: Call LLM to summarize with structured format, passing the previous summary as iterative context when present
-4. **Append entry**: Save `CompactionEntry` with summary and `firstKeptEntryId`
-5. **Reload**: Session reloads, using summary + messages from `firstKeptEntryId` onwards
+3. **Pack summary input**: If the serialized history is larger than `summaryInputTokens` (default 80k), apply deterministic extractive packing before the summarizer call. OMK keeps the opening context, recent tail, and high-signal middle lines such as file paths, commands, failures, and decisions, then marks omitted low-signal text.
+4. **Generate summary**: Call LLM to summarize with structured format, passing the previous summary as iterative context when present
+5. **Append entry**: Save `CompactionEntry` with summary and `firstKeptEntryId`
+6. **Reload**: Session reloads, using summary + messages from `firstKeptEntryId` onwards
 
 ```
 Before compaction:
@@ -240,6 +242,11 @@ Both compaction and branch summarization use the same structured format:
 ## Critical Context
 - [Data needed to continue]
 
+## Resume Handoff
+- **First action**: [Single concrete next action]
+- **Re-check before editing**: [Workspace state, files, or commands to verify first; use "(none)" if not needed]
+- **Evidence status**: [Checks/tests already run and results, or "(not run)"]
+
 <read-files>
 path/to/file1.ts
 path/to/file2.ts
@@ -265,6 +272,8 @@ Before summarization, messages are serialized to text via [`serializeConversatio
 This prevents the model from treating it as a conversation to continue.
 
 Tool results are truncated to 2000 characters during serialization. Content beyond that limit is replaced with a marker indicating how many characters were truncated. This keeps summarization requests within reasonable token budgets, since tool results (especially from `read` and `bash`) are typically the largest contributors to context size.
+
+After serialization, compaction also applies summary-input packing when the serialized history exceeds `summaryInputTokens`. The packer is deterministic and dependency-free: it preserves the start of the summarized range, the recent tail, and high-signal middle lines containing paths, commands, errors, warnings, decisions, goals, and verification status. This reduces the token cost of auto-compaction itself while keeping handoff-critical evidence recoverable.
 
 ## Custom Summarization via Extensions
 
@@ -380,7 +389,9 @@ Configure compaction in `~/.omk/agent/settings.json` or `<project-dir>/.omk/sett
   "compaction": {
     "enabled": true,
     "reserveTokens": 16384,
-    "keepRecentTokens": 20000
+    "keepRecentTokens": 20000,
+    "maxUsageRatio": 0.9,
+    "summaryInputTokens": 80000
   }
 }
 ```
@@ -390,5 +401,7 @@ Configure compaction in `~/.omk/agent/settings.json` or `<project-dir>/.omk/sett
 | `enabled` | `true` | Enable auto-compaction |
 | `reserveTokens` | `16384` | Tokens to reserve for LLM response |
 | `keepRecentTokens` | `20000` | Recent tokens to keep (not summarized) |
+| `maxUsageRatio` | `0.9` | Ratio trigger for auto-compaction before the reserve boundary |
+| `summaryInputTokens` | `80000` | Maximum serialized-history tokens sent to the summarizer before extractive packing; set `0` to disable packing |
 
 Disable auto-compaction with `"enabled": false`. You can still compact manually with `/compact`.

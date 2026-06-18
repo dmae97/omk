@@ -11,6 +11,7 @@ export interface CompactionSettings {
 	reserveTokens?: number; // default: 16384
 	keepRecentTokens?: number; // default: 20000
 	maxUsageRatio?: number; // default: 0.9
+	summaryInputTokens?: number; // default: 80000 (0 disables pre-summary input packing)
 }
 
 export interface BranchSummarySettings {
@@ -698,17 +699,23 @@ export class SettingsManager {
 		return this.settings.compaction?.maxUsageRatio ?? 0.9;
 	}
 
+	getCompactionSummaryInputTokens(): number {
+		return this.settings.compaction?.summaryInputTokens ?? 80000;
+	}
+
 	getCompactionSettings(): {
 		enabled: boolean;
 		reserveTokens: number;
 		keepRecentTokens: number;
 		maxUsageRatio: number;
+		summaryInputTokens: number;
 	} {
 		return {
 			enabled: this.getCompactionEnabled(),
 			reserveTokens: this.getCompactionReserveTokens(),
 			keepRecentTokens: this.getCompactionKeepRecentTokens(),
 			maxUsageRatio: this.getCompactionMaxUsageRatio(),
+			summaryInputTokens: this.getCompactionSummaryInputTokens(),
 		};
 	}
 

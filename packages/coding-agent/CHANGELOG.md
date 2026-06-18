@@ -16,6 +16,7 @@
 
 ### Changed
 
+- Changed auto-compaction summarizer inputs to use deterministic token-budget packing before the LLM summary call, preserving high-signal paths, commands, failures, decisions, and recent context while omitting low-signal repeated text.
 - Changed internal runtime package dependencies to OMK-scoped packages and publish them before `open-multi-agent-kit` so installed `omk` can resolve its runtime imports.
 - Changed published coding-agent package metadata and source config defaults to use OMK/Open Multi-Agent Kit names, `omkConfig`, `.omk`, and the OMK repository.
 - 256-color theme quantization generalizes the cube/grayscale selection for near-neutral colors (colors with channel spread < 10 keep byte-identical output).

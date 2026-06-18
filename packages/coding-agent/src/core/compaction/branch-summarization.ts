@@ -274,7 +274,12 @@ Use this EXACT format:
 ## Next Steps
 1. [What should happen next to continue this work]
 
-Keep each section concise. Preserve exact file paths, function names, and error messages.`;
+## Resume Handoff
+- **First action**: [Single concrete next action when returning to this branch]
+- **Re-check before editing**: [Workspace state, files, or commands to verify first; use "(none)" if not needed]
+- **Evidence status**: [Checks/tests already run and results, or "(not run)"]
+
+Keep each section concise. Preserve exact file paths, function names, command results, and error messages.`;
 
 /**
  * Generate a summary of abandoned branch entries.
