@@ -3,9 +3,21 @@
  */
 
 import chalk from "chalk";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import {
+	chmodSync,
+	existsSync,
+	lstatSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	renameSync,
+	rmSync,
+	writeFileSync,
+} from "fs";
+import { basename, dirname, join, relative, resolve, sep } from "path";
 import { CONFIG_DIR_NAME, getAgentDir, getBinDir } from "./config.ts";
+import { recordHarnessControlEvent } from "./core/harness-control-events.ts";
 import { migrateKeybindingsConfig } from "./core/keybindings.ts";
 import { isLegacyEnvVarNameConfigValue } from "./core/resolve-config-value.ts";
 import { stripJsonComments } from "./utils/json.ts";
@@ -350,65 +362,372 @@ function migrateToolsToBin(): void {
  * Check for deprecated hooks/ and tools/ directories.
  * Note: tools/ may contain fd/rg binaries extracted by pi, so only warn if it has other files.
  */
-function isExtensionSourceFile(name: string): boolean {
-	return name.endsWith(".ts") || name.endsWith(".js");
+const EXTENSION_SOURCE_EXTENSIONS = new Set([".ts", ".js", ".mts", ".cts", ".mjs", ".cjs", ".tsx", ".jsx"]);
+const LEGACY_MANIFEST_FIELDS = ["hooks", "customTools", "extensions"] as const;
+const MAX_LEGACY_EXTENSION_SCAN_DEPTH = 8;
+
+export type LegacyExtensionClassification = "legacy" | "not-legacy" | "unknown";
+
+export interface ExtensionDeprecationDiagnostic {
+	code: "LEGACY_EXTENSION_ENTRYPOINT" | "LEGACY_EXTENSION_UNKNOWN";
+	scope: "global" | "project";
+	path: string;
+	classification: LegacyExtensionClassification;
+	confidence: number;
+	evidence: string[];
+	recommendedAction: "move-to-extensions" | "inspect-manifest";
 }
 
-function hasLegacyExtensionManifest(dir: string): boolean {
+export interface ExtensionMigrationAction {
+	action: "move";
+	scope: "global" | "project";
+	from: string;
+	to: string;
+	status: "ready" | "blocked" | "applied";
+	reason: string;
+	blocker?: string;
+}
+
+export interface ExtensionMigrationPlan {
+	diagnostics: ExtensionDeprecationDiagnostic[];
+	actions: ExtensionMigrationAction[];
+}
+
+function extensionName(name: string): string {
+	const dotIndex = name.lastIndexOf(".");
+	return dotIndex >= 0 ? name.slice(dotIndex) : "";
+}
+
+function isExtensionSourceFile(name: string): boolean {
+	return EXTENSION_SOURCE_EXTENSIONS.has(extensionName(name));
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function manifestEntrypointReferencesSource(value: unknown): boolean {
+	if (typeof value === "string") return isExtensionSourceFile(value);
+	if (Array.isArray(value)) return value.some((entry) => manifestEntrypointReferencesSource(entry));
+	if (isObjectRecord(value)) return Object.values(value).some((entry) => manifestEntrypointReferencesSource(entry));
+	return false;
+}
+
+function inspectLegacyExtensionManifest(
+	dir: string,
+	scope: "global" | "project",
+): ExtensionDeprecationDiagnostic | undefined {
 	const packageJsonPath = join(dir, "package.json");
-	if (!existsSync(packageJsonPath)) return false;
+	if (!existsSync(packageJsonPath)) return undefined;
 
 	try {
-		const parsed = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as Record<string, unknown>;
-		const piManifest = typeof parsed.pi === "object" && parsed.pi !== null ? parsed.pi : undefined;
-		const omkManifest = typeof parsed.omk === "object" && parsed.omk !== null ? parsed.omk : undefined;
-		const legacyManifest = (piManifest ?? omkManifest) as Record<string, unknown> | undefined;
-		return (
-			Array.isArray(legacyManifest?.hooks) ||
-			Array.isArray(legacyManifest?.customTools) ||
-			Array.isArray(legacyManifest?.extensions)
+		const parsed = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as unknown;
+		if (!isObjectRecord(parsed)) return undefined;
+		const manifests = [parsed.pi, parsed.omk].filter(isObjectRecord);
+		const hasLegacyManifestArray = manifests.some((manifest) =>
+			LEGACY_MANIFEST_FIELDS.some((field) => Array.isArray(manifest[field])),
 		);
+		const hasManifestEntrypoint = [parsed.main, parsed.module, parsed.exports].some(
+			manifestEntrypointReferencesSource,
+		);
+		if (!hasLegacyManifestArray && !hasManifestEntrypoint) return undefined;
+		return {
+			code: "LEGACY_EXTENSION_ENTRYPOINT",
+			scope,
+			path: packageJsonPath,
+			classification: "legacy",
+			confidence: hasLegacyManifestArray ? 0.96 : 0.82,
+			evidence: [hasLegacyManifestArray ? "manifest legacy array" : "manifest entrypoint"],
+			recommendedAction: "move-to-extensions",
+		};
 	} catch {
-		return false;
+		return {
+			code: "LEGACY_EXTENSION_UNKNOWN",
+			scope,
+			path: packageJsonPath,
+			classification: "unknown",
+			confidence: 0.5,
+			evidence: ["package.json parse failed"],
+			recommendedAction: "inspect-manifest",
+		};
 	}
 }
 
-function hasLegacyExtensionEntrypoints(hooksDir: string): boolean {
-	if (!existsSync(hooksDir)) return false;
+function isPathWithin(parent: string, child: string): boolean {
+	const resolvedParent = resolve(parent);
+	const resolvedChild = resolve(child);
+	return resolvedChild === resolvedParent || resolvedChild.startsWith(`${resolvedParent}${sep}`);
+}
 
+function addLegacySourceDiagnostic(
+	diagnostics: ExtensionDeprecationDiagnostic[],
+	scope: "global" | "project",
+	entryPath: string,
+	evidence: string,
+): void {
+	diagnostics.push({
+		code: "LEGACY_EXTENSION_ENTRYPOINT",
+		scope,
+		path: entryPath,
+		classification: "legacy",
+		confidence: 0.98,
+		evidence: [evidence],
+		recommendedAction: "move-to-extensions",
+	});
+}
+
+function addUnknownExtensionDiagnostic(
+	diagnostics: ExtensionDeprecationDiagnostic[],
+	scope: "global" | "project",
+	entryPath: string,
+	evidence: string,
+	confidence = 0.4,
+): void {
+	diagnostics.push({
+		code: "LEGACY_EXTENSION_UNKNOWN",
+		scope,
+		path: entryPath,
+		classification: "unknown",
+		confidence,
+		evidence: [evidence],
+		recommendedAction: "inspect-manifest",
+	});
+}
+
+function collectLegacyExtensionDiagnostics(
+	entryPath: string,
+	hooksRealPath: string,
+	scope: "global" | "project",
+	depth: number,
+	visitedRealPaths: Set<string>,
+	diagnostics: ExtensionDeprecationDiagnostic[],
+): void {
+	if (depth > MAX_LEGACY_EXTENSION_SCAN_DEPTH) {
+		addUnknownExtensionDiagnostic(diagnostics, scope, entryPath, "maximum scan depth exceeded");
+		return;
+	}
+
+	let currentPath = entryPath;
+	let stats: ReturnType<typeof lstatSync>;
 	try {
-		const entries = readdirSync(hooksDir, { withFileTypes: true });
-		for (const entry of entries) {
-			if (entry.name.startsWith(".")) continue;
-			const entryPath = join(hooksDir, entry.name);
-
-			if ((entry.isFile() || entry.isSymbolicLink()) && isExtensionSourceFile(entry.name)) {
-				return true;
+		stats = lstatSync(currentPath);
+		if (stats.isSymbolicLink()) {
+			const targetPath = realpathSync(currentPath);
+			if (!isPathWithin(hooksRealPath, targetPath)) {
+				addUnknownExtensionDiagnostic(
+					diagnostics,
+					scope,
+					currentPath,
+					"symlink target outside hooks directory",
+					0.6,
+				);
+				return;
 			}
-
-			if (entry.isDirectory() || entry.isSymbolicLink()) {
-				if (
-					existsSync(join(entryPath, "index.ts")) ||
-					existsSync(join(entryPath, "index.js")) ||
-					hasLegacyExtensionManifest(entryPath)
-				) {
-					return true;
-				}
-			}
+			currentPath = targetPath;
+			stats = lstatSync(currentPath);
 		}
 	} catch {
-		return false;
+		addUnknownExtensionDiagnostic(diagnostics, scope, entryPath, "path stat failed");
+		return;
 	}
 
-	return false;
+	if (stats.isFile()) {
+		if (isExtensionSourceFile(entryPath) || isExtensionSourceFile(currentPath)) {
+			addLegacySourceDiagnostic(diagnostics, scope, entryPath, basename(entryPath));
+		}
+		return;
+	}
+
+	if (!stats.isDirectory()) return;
+
+	let directoryRealPath: string;
+	try {
+		directoryRealPath = realpathSync(currentPath);
+	} catch {
+		addUnknownExtensionDiagnostic(diagnostics, scope, entryPath, "directory realpath failed");
+		return;
+	}
+	if (visitedRealPaths.has(directoryRealPath)) return;
+	visitedRealPaths.add(directoryRealPath);
+
+	const manifestDiagnostic = inspectLegacyExtensionManifest(currentPath, scope);
+	if (manifestDiagnostic) diagnostics.push({ ...manifestDiagnostic, path: join(entryPath, "package.json") });
+
+	let entries: Array<{ name: string }>;
+	try {
+		entries = readdirSync(currentPath, { withFileTypes: true });
+	} catch {
+		addUnknownExtensionDiagnostic(diagnostics, scope, entryPath, "directory read failed");
+		return;
+	}
+
+	for (const entry of entries) {
+		if (entry.name.startsWith(".")) continue;
+		collectLegacyExtensionDiagnostics(
+			join(entryPath, entry.name),
+			hooksRealPath,
+			scope,
+			depth + 1,
+			visitedRealPaths,
+			diagnostics,
+		);
+	}
+}
+
+function getLegacyExtensionDiagnosticsForHooksDir(
+	hooksDir: string,
+	scope: "global" | "project",
+): ExtensionDeprecationDiagnostic[] {
+	if (!existsSync(hooksDir)) return [];
+
+	try {
+		const hooksRealPath = realpathSync(hooksDir);
+		const diagnostics: ExtensionDeprecationDiagnostic[] = [];
+		const visitedRealPaths = new Set<string>();
+		for (const entry of readdirSync(hooksDir, { withFileTypes: true })) {
+			if (entry.name.startsWith(".")) continue;
+			collectLegacyExtensionDiagnostics(
+				join(hooksDir, entry.name),
+				hooksRealPath,
+				scope,
+				1,
+				visitedRealPaths,
+				diagnostics,
+			);
+		}
+		return diagnostics;
+	} catch {
+		return [
+			{
+				code: "LEGACY_EXTENSION_UNKNOWN",
+				scope,
+				path: hooksDir,
+				classification: "unknown",
+				confidence: 0.4,
+				evidence: ["directory read failed"],
+				recommendedAction: "inspect-manifest",
+			},
+		];
+	}
+}
+
+function getExtensionDeprecationScanTargets(cwd: string): Array<{
+	scope: "global" | "project";
+	hooksDir: string;
+	extensionsDir: string;
+}> {
+	const agentDir = getAgentDir();
+	const projectDir = join(cwd, CONFIG_DIR_NAME);
+	return [
+		{
+			scope: "global",
+			hooksDir: join(agentDir, "hooks"),
+			extensionsDir: join(agentDir, "extensions"),
+		},
+		{
+			scope: "project",
+			hooksDir: join(projectDir, "hooks"),
+			extensionsDir: join(projectDir, "extensions"),
+		},
+	];
+}
+
+export function getExtensionDeprecationDiagnostics(cwd: string): ExtensionDeprecationDiagnostic[] {
+	return getExtensionDeprecationScanTargets(cwd).flatMap((target) =>
+		getLegacyExtensionDiagnosticsForHooksDir(target.hooksDir, target.scope),
+	);
+}
+
+function getMigrationSourcePath(diagnostic: ExtensionDeprecationDiagnostic): string {
+	const name = basename(diagnostic.path);
+	if (name === "package.json" || /^index\.[cm]?[tj]sx?$/.test(name)) {
+		return dirname(diagnostic.path);
+	}
+	return diagnostic.path;
+}
+
+export function createExtensionMigrationPlan(cwd: string): ExtensionMigrationPlan {
+	const diagnostics = getExtensionDeprecationDiagnostics(cwd);
+	const targets = getExtensionDeprecationScanTargets(cwd);
+	const actions: ExtensionMigrationAction[] = [];
+	const seenSources = new Set<string>();
+
+	for (const diagnostic of diagnostics) {
+		if (diagnostic.classification !== "legacy") continue;
+		const target = targets.find((candidate) => candidate.scope === diagnostic.scope);
+		if (!target) continue;
+		const sourcePath = getMigrationSourcePath(diagnostic);
+		if (!isPathWithin(target.hooksDir, sourcePath)) continue;
+		if ([...seenSources].some((seenSource) => isPathWithin(seenSource, sourcePath))) continue;
+		for (const seenSource of [...seenSources]) {
+			if (isPathWithin(sourcePath, seenSource)) {
+				seenSources.delete(seenSource);
+				const actionIndex = actions.findIndex((action) => action.from === seenSource);
+				if (actionIndex >= 0) actions.splice(actionIndex, 1);
+			}
+		}
+		seenSources.add(sourcePath);
+		const relativeSource = relative(target.hooksDir, sourcePath);
+		const destinationPath = join(target.extensionsDir, relativeSource);
+		const destinationExists = existsSync(destinationPath);
+		actions.push({
+			action: "move",
+			scope: diagnostic.scope,
+			from: sourcePath,
+			to: destinationPath,
+			status: destinationExists ? "blocked" : "ready",
+			reason: diagnostic.evidence.join(", "),
+			blocker: destinationExists ? "target already exists" : undefined,
+		});
+	}
+
+	recordHarnessControlEvent("extension.migration.plan", "completed", {
+		diagnostics: diagnostics.length,
+		legacyDiagnostics: diagnostics.filter((diagnostic) => diagnostic.classification === "legacy").length,
+		unknownDiagnostics: diagnostics.filter((diagnostic) => diagnostic.classification === "unknown").length,
+		actions: actions.length,
+		blockedActions: actions.filter((action) => action.status === "blocked").length,
+	});
+	return { diagnostics, actions };
+}
+
+export function applyExtensionMigrationPlan(
+	cwd: string,
+	plan: ExtensionMigrationPlan = createExtensionMigrationPlan(cwd),
+): ExtensionMigrationPlan {
+	const actions = plan.actions.map((action) => {
+		if (action.status !== "ready") return action;
+		try {
+			mkdirSync(dirname(action.to), { recursive: true });
+			renameSync(action.from, action.to);
+			return { ...action, status: "applied" as const };
+		} catch (error) {
+			return {
+				...action,
+				status: "blocked" as const,
+				blocker: error instanceof Error ? error.message : String(error),
+			};
+		}
+	});
+	recordHarnessControlEvent("extension.migration.apply", "completed", {
+		actions: actions.length,
+		appliedActions: actions.filter((action) => action.status === "applied").length,
+		blockedActions: actions.filter((action) => action.status === "blocked").length,
+	});
+	return { diagnostics: plan.diagnostics, actions };
 }
 
 function checkDeprecatedExtensionDirs(baseDir: string, label: string): string[] {
 	const hooksDir = join(baseDir, "hooks");
 	const toolsDir = join(baseDir, "tools");
 	const warnings: string[] = [];
+	const scope = label === "Global" ? "global" : "project";
 
-	if (hasLegacyExtensionEntrypoints(hooksDir)) {
+	if (
+		getLegacyExtensionDiagnosticsForHooksDir(hooksDir, scope).some(
+			(diagnostic) => diagnostic.classification === "legacy",
+		)
+	) {
 		warnings.push(`${label} hooks/ directory found. Hooks have been renamed to extensions.`);
 	}
 
