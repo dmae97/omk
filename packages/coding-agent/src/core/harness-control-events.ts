@@ -13,7 +13,16 @@ import {
 } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 
-export type HarnessControlEventStatus = "started" | "completed" | "failed" | "blocked" | "rolled_back" | "in_doubt";
+export type HarnessControlEventStatus =
+	| "prepared"
+	| "started"
+	| "applying"
+	| "verifying"
+	| "completed"
+	| "failed"
+	| "blocked"
+	| "rolled_back"
+	| "in_doubt";
 
 export type HarnessControlEventKind =
 	| "compaction.summary.generated"

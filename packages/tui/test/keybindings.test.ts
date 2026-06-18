@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { KeybindingsManager, TUI_KEYBINDINGS } from "../src/keybindings.ts";
+import { KeybindingScopeStack, KeybindingsManager, TUI_KEYBINDINGS } from "../src/keybindings.ts";
 
 describe("KeybindingsManager", () => {
 	it("does not evict selector confirm when input submit is rebound", () => {
@@ -61,5 +61,31 @@ describe("KeybindingsManager", () => {
 				keybindings: ["tui.input.submit", "tui.select.confirm"],
 			},
 		]);
+	});
+
+	it("uses the active keybinding scope stack for dispatch", () => {
+		const keybindings = new KeybindingsManager(TUI_KEYBINDINGS);
+		const scopes = new KeybindingScopeStack();
+
+		scopes.push("input", ["tui.input.submit"]);
+		assert.deepStrictEqual(scopes.match("\r", keybindings), {
+			keybinding: "tui.input.submit",
+			conflicts: [],
+		});
+
+		scopes.push("selector", ["tui.select.confirm"]);
+		assert.deepStrictEqual(scopes.match("\r", keybindings), {
+			keybinding: "tui.select.confirm",
+			conflicts: [],
+		});
+
+		assert.deepStrictEqual(scopes.pop("selector"), {
+			id: "selector",
+			keybindings: ["tui.select.confirm"],
+		});
+		assert.deepStrictEqual(scopes.match("\r", keybindings), {
+			keybinding: "tui.input.submit",
+			conflicts: [],
+		});
 	});
 });

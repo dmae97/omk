@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+	collectSpecEvidencePaths,
 	compileSpecKit,
 	parseSpecRequirements,
 	parseSpecTasks,
 	validateSpecKit,
+	validateTaskCompletionDependencies,
 } from "../src/core/spec-kit/compiler.ts";
 
 const specMarkdown = `# Feature Specification: Harness Control Plane V2
@@ -100,5 +102,48 @@ describe("spec-kit compiler", () => {
 
 		expect(result.ok).toBe(false);
 		expect(result.errors).toContain("Provider-hardcoded authority: Kimi is final writer");
+	});
+
+	it("rejects completed tasks whose dependencies are incomplete", () => {
+		const tasks = parseSpecTasks(`# Tasks
+
+- [ ] HCP-01 Dependency
+  > role: coder
+  > deps: none
+  > files: []
+  > verify: \`echo ok\`
+  > gate: command-pass
+  > requirementIds: [R1]
+
+- [x] HCP-02 Completed too early
+  > role: coder
+  > deps: HCP-01
+  > files: []
+  > verify: \`echo ok\`
+  > gate: command-pass
+  > requirementIds: [R1]
+`);
+
+		expect(validateTaskCompletionDependencies(tasks)).toEqual([
+			"Task HCP-02 is completed but dependency HCP-01 is incomplete",
+		]);
+	});
+
+	it("collects strict evidence paths from task files and verify text", () => {
+		const tasks = parseSpecTasks(`# Tasks
+
+- [x] HCP-15 Review
+  > role: reviewer
+  > deps: none
+  > files: [\`.omk/runs/harness-control-plane-v2/result.json\`]
+  > verify: \`write review artifact under .omk/runs/harness-control-plane-v2/review.md\`
+  > gate: command-pass
+  > requirementIds: [R1]
+`);
+
+		expect(collectSpecEvidencePaths(tasks)).toEqual([
+			".omk/runs/harness-control-plane-v2/result.json",
+			".omk/runs/harness-control-plane-v2/review.md",
+		]);
 	});
 });

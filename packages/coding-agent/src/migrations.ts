@@ -389,6 +389,8 @@ export interface ExtensionMigrationAction {
 	reason: string;
 	blocker?: string;
 	sourceStatHash?: string;
+	sourceContentHash?: string;
+	recoveryJournalPath?: string;
 	sourceStat?: {
 		isDirectory: boolean;
 		size: number;
@@ -682,8 +684,36 @@ function createMigrationSourceStatTree(path: string, depth = 0): unknown {
 	return { name: basename(path), sourceStat, children };
 }
 
+function createMigrationSourceContentTree(path: string, depth = 0): unknown {
+	const sourceStat = createMigrationSourceStat(path);
+	if (!sourceStat) return undefined;
+	if (!sourceStat.isDirectory) {
+		try {
+			return {
+				name: basename(path),
+				type: "file",
+				sha256: createHash("sha256").update(readFileSync(path)).digest("hex"),
+			};
+		} catch {
+			return undefined;
+		}
+	}
+	if (depth >= MAX_LEGACY_EXTENSION_SCAN_DEPTH) return { name: basename(path), type: "directory", truncated: true };
+	const children = readdirSync(path)
+		.filter((entry) => !entry.startsWith("."))
+		.sort()
+		.map((entry) => createMigrationSourceContentTree(join(path, entry), depth + 1));
+	return { name: basename(path), type: "directory", children };
+}
+
 function hashMigrationSourceStat(path: string): string | undefined {
 	const tree = createMigrationSourceStatTree(path);
+	if (!tree) return undefined;
+	return createHash("sha256").update(JSON.stringify(tree)).digest("hex");
+}
+
+function hashMigrationSourceContent(path: string): string | undefined {
+	const tree = createMigrationSourceContentTree(path);
 	if (!tree) return undefined;
 	return createHash("sha256").update(JSON.stringify(tree)).digest("hex");
 }
@@ -694,6 +724,7 @@ function addMigrationSourceStat(action: ExtensionMigrationAction): ExtensionMigr
 		...action,
 		sourceStat,
 		sourceStatHash: hashMigrationSourceStat(action.from),
+		sourceContentHash: hashMigrationSourceContent(action.from),
 	};
 }
 
@@ -773,6 +804,7 @@ export function applyExtensionMigrationPlan(
 			to: action.to,
 			status: action.status,
 			sourceStatHash: action.sourceStatHash,
+			sourceContentHash: action.sourceContentHash,
 		})),
 		afterState: () =>
 			appliedPlan.actions.map((action) => ({ from: action.from, to: action.to, status: action.status })),
@@ -780,6 +812,10 @@ export function applyExtensionMigrationPlan(
 			for (const action of readyActions) {
 				if (!existsSync(action.from)) throw new Error(`source missing: ${action.from}`);
 				if (existsSync(action.to)) throw new Error(`target already exists: ${action.to}`);
+				const currentContentHash = hashMigrationSourceContent(action.from);
+				if (action.sourceContentHash && currentContentHash !== action.sourceContentHash) {
+					throw new Error(`source content changed before migration: ${action.from}`);
+				}
 				const currentHash = hashMigrationSourceStat(action.from);
 				if (action.sourceStatHash && currentHash !== action.sourceStatHash) {
 					throw new Error(`source changed before migration: ${action.from}`);
@@ -816,6 +852,16 @@ export function applyExtensionMigrationPlan(
 	});
 
 	if (transaction.status === "completed") return appliedPlan;
+	const recoveryJournalPath =
+		transaction.status === "in_doubt" ? join(cwd, ".omk", "runs", "extension-migration-recovery.json") : undefined;
+	if (recoveryJournalPath) {
+		mkdirSync(dirname(recoveryJournalPath), { recursive: true });
+		writeFileSync(
+			recoveryJournalPath,
+			`${JSON.stringify({ status: "in_doubt", appliedMoves, error: String(transaction.error) }, null, 2)}\n`,
+			"utf-8",
+		);
+	}
 	return {
 		diagnostics: plan.diagnostics,
 		actions: plan.actions.map((action) =>
@@ -824,6 +870,7 @@ export function applyExtensionMigrationPlan(
 						...action,
 						status: transaction.status === "in_doubt" ? "in_doubt" : "blocked",
 						blocker: transaction.error instanceof Error ? transaction.error.message : String(transaction.error),
+						recoveryJournalPath,
 					}
 				: action,
 		),

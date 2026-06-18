@@ -174,6 +174,30 @@ describe("extension deprecation migrations", () => {
 		expect(fs.existsSync(path.join(agentDir, "extensions", "first.mjs"))).toBe(false);
 	});
 
+	it("records and verifies content hashes for migration sources", () => {
+		const root = createTempDir();
+		const agentDir = path.join(root, "agent");
+		const legacyPath = path.join(agentDir, "hooks", "legacy.mjs");
+		fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+		fs.writeFileSync(legacyPath, "export default function () { return 1 }\n");
+
+		const plan = withAgentDir(agentDir, () => createExtensionMigrationPlan(root));
+		expect(plan.actions[0]?.sourceContentHash).toMatch(/^[a-f0-9]{64}$/);
+
+		fs.writeFileSync(legacyPath, "export default function () { return 2 }\n");
+		const applied = withAgentDir(agentDir, () => applyExtensionMigrationPlan(root, plan));
+
+		expect(applied.actions).toContainEqual(
+			expect.objectContaining({
+				from: legacyPath,
+				status: "blocked",
+				blocker: expect.stringContaining("source content changed before migration"),
+			}),
+		);
+		expect(fs.existsSync(legacyPath)).toBe(true);
+		expect(fs.existsSync(path.join(agentDir, "extensions", "legacy.mjs"))).toBe(false);
+	});
+
 	it("bounds recursive scans and does not migrate symlinks outside hooks", () => {
 		const root = createTempDir();
 		const agentDir = path.join(root, "agent");
