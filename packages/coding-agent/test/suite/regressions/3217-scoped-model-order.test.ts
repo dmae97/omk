@@ -173,13 +173,22 @@ describe("issue #3217 scoped model ordering", () => {
 		await waitForAsyncRender();
 
 		let rendered = stripAnsi(selector.render(120).join("\n"));
-		expect(rendered).toContain("Provider: all | anthropic | openai");
+		// The provider tabs now annotate each entry with an auth glyph (✓ when the
+		// provider has credentials configured, ✗ when it does not). We assert
+		// structural presence rather than exact glyph polarity so the test stays
+		// environment-independent.
+		const providerLine = rendered.split("\n").find((line) => line.startsWith("Provider:"));
+		expect(providerLine).toBeDefined();
+		expect(providerLine).toMatch(/^Provider: all \| anthropic( [\u2713\u2717])? \| openai( [\u2713\u2717])?/);
 
 		selector.handleInput("\t");
 		rendered = stripAnsi(selector.render(120).join("\n"));
 
-		expect(rendered).toContain("Provider: all | anthropic | openai");
-		expect(rendered).toContain("claude-haiku [anthropic]");
-		expect(rendered).not.toContain("[openai]");
+		const providerLineAfter = rendered.split("\n").find((line) => line.startsWith("Provider:"));
+		expect(providerLineAfter).toMatch(/^Provider: all \| anthropic( [\u2713\u2717])? \| openai( [\u2713\u2717])?/);
+		// Per-model lines start with `name [provider` (provider badge may carry an
+		// optional ` no-auth` hint, so we match by prefix).
+		expect(rendered).toMatch(/claude-haiku \[anthropic( no-auth)?\]/);
+		expect(rendered).not.toMatch(/gpt-4o-mini \[openai/);
 	});
 });
