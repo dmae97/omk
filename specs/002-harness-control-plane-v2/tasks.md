@@ -50,7 +50,7 @@
 
 ## Phase 2 — Ledger Verification, Transactions, Compaction, Router Primitives
 
-- [ ] HCP-03 Implement ledger verifier and operation completeness checks
+- [x] HCP-03 Implement ledger verifier and operation completeness checks
   > role: tester
   > deps: HCP-02
   > lane: ledger-security-architect
@@ -63,7 +63,7 @@
   > requirementIds: [R1, R7]
   > risk: high
 
-- [ ] HCP-04 Implement transaction coordinator core
+- [x] HCP-04 Implement transaction coordinator core
   > role: architect
   > deps: HCP-02
   > lane: transaction-migration-architect
@@ -76,7 +76,7 @@
   > requirementIds: [R2]
   > risk: high
 
-- [ ] HCP-07 Implement compaction emergency budget path and typed Markdown summary parser
+- [x] HCP-07 Implement compaction emergency budget path and typed Markdown summary parser
   > role: coder
   > deps: HCP-02
   > lane: continuity-input-router
@@ -89,7 +89,7 @@
   > requirementIds: [R4]
   > risk: medium
 
-- [ ] HCP-09 Implement keybinding scope stack and runtime dispatch router
+- [x] HCP-09 Implement keybinding scope stack and runtime dispatch router
   > role: coder
   > deps: HCP-02
   > lane: continuity-input-router
@@ -102,7 +102,7 @@
   > requirementIds: [R5]
   > risk: high
 
-- [ ] HCP-10 Add ledger lock, fsync, rotation, and artifact root policy
+- [x] HCP-10 Add ledger lock, fsync, rotation, and artifact root policy
   > role: security
   > deps: HCP-02
   > lane: ledger-security-architect
