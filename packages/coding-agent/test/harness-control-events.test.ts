@@ -167,6 +167,28 @@ describe("harness control event ledger", () => {
 		expect(result.errors.join("\n")).toContain("hash mismatch");
 	});
 
+	it("rotates oversized ledgers under the append lock", () => {
+		const root = createTempDir();
+		const logPath = path.join(root, "events.jsonl");
+		recordHarnessControlEvent("spec.compile", "completed", { large: "x".repeat(120) }, { cwd: root, logPath });
+
+		const second = recordHarnessControlEvent(
+			"spec.compile",
+			"completed",
+			{},
+			{
+				cwd: root,
+				logPath,
+				maxLedgerBytes: 20,
+				now: new Date("2026-06-18T02:00:00Z"),
+			},
+		);
+
+		expect(second.ok).toBe(true);
+		expect(fs.existsSync(`${logPath}.2026-06-18T02-00-00-000Z.rotated`)).toBe(true);
+		expect(verifyHarnessControlLedger(logPath)).toMatchObject({ ok: true });
+	});
+
 	it("hashes allowed artifact references and blocks sensitive paths", () => {
 		const root = createTempDir();
 		const artifact = path.join(root, "artifact.txt");

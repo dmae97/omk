@@ -6,6 +6,7 @@ import {
 	mkdirSync,
 	openSync,
 	readFileSync,
+	renameSync,
 	rmSync,
 	statSync,
 	writeSync,
@@ -82,6 +83,7 @@ export interface HarnessControlEventOptions {
 	artifactRefs?: string[];
 	allowedArtifactRoots?: string[];
 	lockTimeoutMs?: number;
+	maxLedgerBytes?: number;
 }
 
 export interface HarnessControlLedgerVerificationResult {
@@ -297,6 +299,19 @@ function acquireLock(lockPath: string, timeoutMs: number): number {
 	}
 }
 
+function formatRotationTimestamp(date: Date): string {
+	return date.toISOString().replace(/[:.]/g, "-");
+}
+
+function rotateLedgerIfNeeded(path: string, maxLedgerBytes: number | undefined, now: Date): string | undefined {
+	if (!Number.isFinite(maxLedgerBytes) || (maxLedgerBytes ?? 0) <= 0 || !existsSync(path)) return undefined;
+	const stats = statSync(path);
+	if (stats.size < Math.floor(maxLedgerBytes ?? 0)) return undefined;
+	const rotatedPath = `${path}.${formatRotationTimestamp(now)}.rotated`;
+	renameSync(path, rotatedPath);
+	return rotatedPath;
+}
+
 function appendJsonLineWithFsync(path: string, line: string): void {
 	const fd = openSync(path, "a", 0o600);
 	try {
@@ -365,6 +380,7 @@ export function recordHarnessControlEvent(
 	try {
 		mkdirSync(dirname(logPath), { recursive: true });
 		lockFd = acquireLock(lockPath, options.lockTimeoutMs ?? 1000);
+		rotateLedgerIfNeeded(logPath, options.maxLedgerBytes, options.now ?? new Date());
 		const previous = readPreviousEventState(logPath);
 		const event = createHarnessControlEvent(kind, status, data, options, previous);
 		appendJsonLineWithFsync(logPath, JSON.stringify(event));
