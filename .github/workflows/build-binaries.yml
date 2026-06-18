@@ -67,7 +67,15 @@ jobs:
         run: |
           cd packages/coding-agent/binaries
           
-          # Create release with changelog notes (or update if exists)
+          # Create release with changelog notes. Recovery reruns may use a newer
+          # source_ref after the release was already created; immutable releases
+          # cannot have assets clobbered, so let the build job pass and continue
+          # to npm publishing when the release already exists.
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_TAG} already exists; skipping binary upload."
+            exit 0
+          fi
+
           gh release create "${RELEASE_TAG}" \
             --title "${RELEASE_TAG}" \
             --notes-file /tmp/release-notes.md \
@@ -76,16 +84,7 @@ jobs:
             omk-linux-x64.tar.gz \
             omk-linux-arm64.tar.gz \
             omk-windows-x64.zip \
-            omk-windows-arm64.zip \
-            2>/dev/null || \
-          gh release upload "${RELEASE_TAG}" \
-            omk-darwin-arm64.tar.gz \
-            omk-darwin-x64.tar.gz \
-            omk-linux-x64.tar.gz \
-            omk-linux-arm64.tar.gz \
-            omk-windows-x64.zip \
-            omk-windows-arm64.zip \
-            --clobber
+            omk-windows-arm64.zip
 
   publish-npm:
     runs-on: ubuntu-latest
