@@ -3,6 +3,7 @@ import {
 	type KeybindingDefinitions,
 	type KeybindingsConfig,
 	type KeyId,
+	matchesKey,
 	TUI_KEYBINDINGS,
 	KeybindingsManager as TuiKeybindingsManager,
 } from "@earendil-works/omk-tui";
@@ -359,6 +360,39 @@ export class KeybindingsManager extends TuiKeybindingsManager {
 	reload(): void {
 		if (!this.configPath) return;
 		this.setUserBindings(KeybindingsManager.loadFromFile(this.configPath));
+	}
+
+	matchInScope(
+		data: string,
+		keybindings: readonly Keybinding[],
+	): { keybinding: Keybinding | undefined; conflicts: Array<{ key: KeyId; keybindings: Keybinding[] }> } {
+		const matches: Array<{ keybinding: Keybinding; key: KeyId }> = [];
+		for (const keybinding of keybindings) {
+			for (const key of this.getKeys(keybinding)) {
+				if (matchesKey(data, key)) {
+					matches.push({ keybinding, key });
+					break;
+				}
+			}
+		}
+
+		if (matches.length <= 1) {
+			return { keybinding: matches[0]?.keybinding, conflicts: [] };
+		}
+
+		const conflictsByKey = new Map<KeyId, Set<Keybinding>>();
+		for (const match of matches) {
+			const conflict = conflictsByKey.get(match.key) ?? new Set<Keybinding>();
+			conflict.add(match.keybinding);
+			conflictsByKey.set(match.key, conflict);
+		}
+
+		return {
+			keybinding: undefined,
+			conflicts: [...conflictsByKey]
+				.map(([key, conflicted]) => ({ key, keybindings: [...conflicted] }))
+				.filter((conflict) => conflict.keybindings.length > 1),
+		};
 	}
 
 	getEffectiveConfig(): KeybindingsConfig {

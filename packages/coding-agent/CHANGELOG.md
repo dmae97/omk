@@ -10,6 +10,10 @@
 
 - Collapsed the dead-code positional `ThinkingSelectorComponent` in `components/thinking-selector.ts` into a backward-compatible re-export from `components/settings-selector.ts` so external SDK imports keep resolving while removing duplicate UI logic.
 
+### Fixed
+
+- Restored interactive editor input on installations that resolve `@earendil-works/omk-tui` to the published `@earendil-works/pi-tui` alias by providing a backward-compatible `matchInScope` implementation on the coding-agent `KeybindingsManager` subclass. Crash signature: `TypeError: this.keybindings.matchInScope is not a function` in `CustomEditor.handleInput`.
+
 ## [0.80.6] - 2026-06-18
 
 ### Added
