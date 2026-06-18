@@ -85,4 +85,18 @@ describe("keybindings migration", () => {
 		expect(effective["tui.select.confirm"]).toBe("enter");
 		expect(effective["app.interrupt"]).toBe("ctrl+x");
 	});
+
+	it("owns scoped matching for runtime compatibility with older TUI packages", () => {
+		expect(Object.hasOwn(KeybindingsManager.prototype, "matchInScope")).toBe(true);
+
+		const keybindings = new KeybindingsManager({
+			"app.interrupt": "ctrl+x",
+			"app.exit": "ctrl+x",
+		});
+
+		expect(keybindings.matchInScope("\u0018", ["app.interrupt", "app.exit"])).toEqual({
+			keybinding: undefined,
+			conflicts: [{ key: "ctrl+x", keybindings: ["app.interrupt", "app.exit"] }],
+		});
+	});
 });
