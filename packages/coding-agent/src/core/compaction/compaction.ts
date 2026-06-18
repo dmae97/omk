@@ -540,24 +540,32 @@ export interface SummaryInputTokenBudgetOptions {
 	safetyMarginTokens?: number;
 }
 
-export function resolveSummaryInputTokenBudget(
+export interface SummaryInputTokenBudgetResolution {
+	budgetTokens?: number;
+	emergency: boolean;
+	reason?: string;
+	fixedPromptTokens: number;
+	availableInputTokens?: number;
+}
+
+export function resolveSummaryInputTokenBudgetV3(
 	model: Model<any>,
 	maxOutputTokens: number,
 	options?: number | SummaryInputTokenBudgetOptions,
-): number | undefined {
+): SummaryInputTokenBudgetResolution {
 	const configuredSummaryInputTokens = typeof options === "number" ? options : options?.configuredSummaryInputTokens;
 	if (configuredSummaryInputTokens !== undefined && configuredSummaryInputTokens <= 0) {
-		return undefined;
+		return { emergency: false, fixedPromptTokens: 0 };
 	}
 
 	const configuredBudget = configuredSummaryInputTokens ?? DEFAULT_COMPACTION_SUMMARY_INPUT_TOKENS;
 	if (!isFinitePositiveInteger(configuredBudget)) {
-		return undefined;
+		return { emergency: false, fixedPromptTokens: 0 };
 	}
 
 	const contextWindow = model.contextWindow > 0 ? Math.floor(model.contextWindow) : Number.POSITIVE_INFINITY;
 	if (!Number.isFinite(contextWindow)) {
-		return Math.floor(configuredBudget);
+		return { budgetTokens: Math.floor(configuredBudget), emergency: false, fixedPromptTokens: 0 };
 	}
 
 	const fixedPromptTokens =
@@ -576,12 +584,32 @@ export function resolveSummaryInputTokenBudget(
 			: SUMMARY_INPUT_PROMPT_OVERHEAD_TOKENS;
 	const safetyMarginTokens =
 		typeof options === "object" ? (options.safetyMarginTokens ?? SUMMARY_INPUT_TOKENIZER_SAFETY_MARGIN) : 0;
+	const availableInputTokens =
+		contextWindow - Math.max(0, Math.floor(maxOutputTokens)) - fixedPromptTokens - safetyMarginTokens;
 
-	const availableInputTokens = Math.max(
-		MIN_SUMMARY_INPUT_TOKENS,
-		contextWindow - Math.max(0, Math.floor(maxOutputTokens)) - fixedPromptTokens - safetyMarginTokens,
-	);
-	return Math.max(MIN_SUMMARY_INPUT_TOKENS, Math.min(Math.floor(configuredBudget), availableInputTokens));
+	if (availableInputTokens < MIN_SUMMARY_INPUT_TOKENS) {
+		return {
+			emergency: true,
+			reason: "fixed prompt overhead exceeds viable summarization input budget",
+			fixedPromptTokens,
+			availableInputTokens,
+		};
+	}
+
+	return {
+		budgetTokens: Math.max(MIN_SUMMARY_INPUT_TOKENS, Math.min(Math.floor(configuredBudget), availableInputTokens)),
+		emergency: false,
+		fixedPromptTokens,
+		availableInputTokens,
+	};
+}
+
+export function resolveSummaryInputTokenBudget(
+	model: Model<any>,
+	maxOutputTokens: number,
+	options?: number | SummaryInputTokenBudgetOptions,
+): number | undefined {
+	return resolveSummaryInputTokenBudgetV3(model, maxOutputTokens, options).budgetTokens;
 }
 
 function scoreSummaryLine(line: string): number {
@@ -908,6 +936,25 @@ const REQUIRED_SUMMARY_SECTIONS = [
 	"## Resume Handoff",
 ] as const;
 
+export type CompactionSummarySection = (typeof REQUIRED_SUMMARY_SECTIONS)[number];
+
+export interface ParsedCompactionSummary {
+	sections: Partial<Record<CompactionSummarySection, string>>;
+	missingSections: CompactionSummarySection[];
+}
+
+export function parseCompactionSummary(summary: string): ParsedCompactionSummary {
+	const sections: Partial<Record<CompactionSummarySection, string>> = {};
+	for (const heading of REQUIRED_SUMMARY_SECTIONS) {
+		const value = extractSection(summary, heading);
+		if (value !== undefined) sections[heading] = value;
+	}
+	return {
+		sections,
+		missingSections: REQUIRED_SUMMARY_SECTIONS.filter((heading) => sections[heading] === undefined),
+	};
+}
+
 export interface CompactionSummaryValidationOptions {
 	previousSummary?: string;
 	fallbackFacts?: readonly string[];
@@ -933,6 +980,52 @@ function extractCriticalFactsFromText(text: string, limit = 12): string[] {
 		.map((line) => line.trim())
 		.filter((line) => line.length > 0 && scoreSummaryLine(line) >= 4)
 		.slice(0, limit);
+}
+
+export function createEmergencyCompactionHandoff(options: {
+	reason: string;
+	conversationText: string;
+	previousSummary?: string;
+	fallbackFacts?: readonly string[];
+}): string {
+	const facts = options.fallbackFacts ?? extractCriticalFactsFromText(options.conversationText, 16);
+	const previousBlocked = options.previousSummary
+		? (extractSection(options.previousSummary, "### Blocked") ??
+			extractSection(options.previousSummary, "## Blocked"))
+		: undefined;
+	return [
+		"## Goal",
+		"Deterministic emergency compaction handoff because normal summarization could exceed context budget.",
+		"",
+		"## Constraints & Preferences",
+		`- Emergency reason: ${options.reason}`,
+		"- Preserve exact paths, commands, blockers, and evidence before continuing.",
+		"",
+		"## Progress",
+		"### Done",
+		"- [x] Created emergency handoff without calling the summarization model.",
+		"",
+		"### In Progress",
+		"- [ ] Re-check workspace state and continue from critical facts.",
+		"",
+		"### Blocked",
+		previousBlocked && previousBlocked.length > 0 ? previousBlocked : "- (none)",
+		"",
+		"## Key Decisions",
+		"- **Emergency handoff**: Avoided forced minimum input budget that could overflow the model context.",
+		"",
+		"## Next Steps",
+		"1. Re-check workspace state before editing.",
+		"2. Resume from Critical Context and run verification before completion.",
+		"",
+		"## Critical Context",
+		formatFallbackFacts(facts),
+		"",
+		"## Resume Handoff",
+		"- **First action**: Re-check workspace state and relevant files from Critical Context.",
+		"- **Re-check before editing**: git status and target file contents.",
+		"- **Evidence status**: emergency handoff generated; downstream checks not run by compaction.",
+	].join("\n");
 }
 
 function formatFallbackFacts(fallbackFacts: readonly string[] | undefined): string {
@@ -1064,13 +1157,34 @@ export async function generateSummary(
 	// Convert to LLM messages first (handles custom types like bashExecution, custom, etc.)
 	const llmMessages = convertToLlm(currentMessages);
 	const conversationText = serializeConversation(llmMessages);
-	const summaryInputBudget = resolveSummaryInputTokenBudget(model, maxTokens, {
+	const summaryInputBudgetResolution = resolveSummaryInputTokenBudgetV3(model, maxTokens, {
 		configuredSummaryInputTokens: summaryInputTokens,
 		basePrompt,
 		previousSummary,
 		systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
 		wrapperText: "<conversation></conversation><previous-summary></previous-summary>",
 	});
+	if (summaryInputBudgetResolution.emergency) {
+		const summary = createEmergencyCompactionHandoff({
+			reason: summaryInputBudgetResolution.reason ?? "summary input budget unavailable",
+			conversationText,
+			previousSummary,
+		});
+		recordHarnessControlEvent("compaction.summary.generated", "completed", {
+			model: model.id,
+			provider: model.provider,
+			maxTokens,
+			emergency: true,
+			reason: summaryInputBudgetResolution.reason,
+			fixedPromptTokens: summaryInputBudgetResolution.fixedPromptTokens,
+			availableInputTokens: summaryInputBudgetResolution.availableInputTokens,
+		});
+		return validateCompactionSummaryContract(summary, {
+			previousSummary,
+			fallbackFacts: extractCriticalFactsFromText(conversationText),
+		}).summary;
+	}
+	const summaryInputBudget = summaryInputBudgetResolution.budgetTokens;
 	const packedConversation = packSummaryInputForTokenBudget(conversationText, summaryInputBudget);
 
 	// Build the prompt with conversation wrapped in tags

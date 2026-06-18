@@ -8,6 +8,7 @@ import {
 	type CompactionSettings,
 	calculateContextTokens,
 	compact,
+	createEmergencyCompactionHandoff,
 	DEFAULT_COMPACTION_SETTINGS,
 	estimateContextTokens,
 	estimateProjectedContextTokens,
@@ -16,8 +17,10 @@ import {
 	getCompactionHeadroomThreshold,
 	getLastAssistantUsage,
 	packSummaryInputForTokenBudget,
+	parseCompactionSummary,
 	prepareCompaction,
 	resolveSummaryInputTokenBudget,
+	resolveSummaryInputTokenBudgetV3,
 	shouldCompact,
 	validateCompactionSummaryContract,
 } from "../src/core/compaction/index.ts";
@@ -250,6 +253,38 @@ describe("summary input packing", () => {
 		expect(withPrevious).toBeGreaterThanOrEqual(512);
 	});
 
+	it("returns emergency budget status instead of forcing minimum tokens when fixed overhead does not fit", () => {
+		const model = { ...getModel("anthropic", "claude-sonnet-4-5"), contextWindow: 1200, maxTokens: 4096 };
+		const resolution = resolveSummaryInputTokenBudgetV3(model, 900, {
+			configuredSummaryInputTokens: 8000,
+			basePrompt: "base".repeat(1000),
+			previousSummary: "previous".repeat(1000),
+			systemPrompt: "system".repeat(1000),
+		});
+
+		expect(resolution.emergency).toBe(true);
+		expect(
+			resolveSummaryInputTokenBudget(model, 900, {
+				configuredSummaryInputTokens: 8000,
+				basePrompt: "base".repeat(1000),
+				previousSummary: "previous".repeat(1000),
+				systemPrompt: "system".repeat(1000),
+			}),
+		).toBeUndefined();
+	});
+
+	it("creates a valid deterministic emergency handoff", () => {
+		const summary = createEmergencyCompactionHandoff({
+			reason: "fixed prompt overhead exceeds viable summarization input budget",
+			conversationText: "npm run check failed in packages/coding-agent/src/core/compaction/compaction.ts",
+			previousSummary: "## Blocked\n- Existing blocker",
+		});
+
+		expect(summary).toContain("## Resume Handoff");
+		expect(summary).toContain("Existing blocker");
+		expect(summary).toContain("packages/coding-agent/src/core/compaction/compaction.ts");
+	});
+
 	it("preserves Korean failure and evidence lines when packing high-signal middle context", () => {
 		const lowSignalHead = Array.from({ length: 200 }, (_, index) => `잡담 head ${index}`).join("\n");
 		const critical =
@@ -276,6 +311,36 @@ describe("summary input packing", () => {
 
 		expect(packed.wasCompressed).toBe(true);
 		expect(packed.text).toContain(codeBlock);
+	});
+
+	it("parses typed compaction summary sections", () => {
+		const parsed = parseCompactionSummary(
+			[
+				"## Goal",
+				"Ship control plane",
+				"## Constraints & Preferences",
+				"- Korean summaries preserved",
+				"## Progress",
+				"### Done",
+				"- [x] Work",
+				"### In Progress",
+				"- [ ] Continue",
+				"### Blocked",
+				"- (none)",
+				"## Key Decisions",
+				"- **Decision**: ok",
+				"## Next Steps",
+				"1. Verify",
+				"## Critical Context",
+				"- path",
+				"## Resume Handoff",
+				"- **First action**: status",
+			].join("\n"),
+		);
+
+		expect(parsed.missingSections).toEqual([]);
+		expect(parsed.sections["## Goal"]).toContain("Ship control plane");
+		expect(parsed.sections["### Done"]).toContain("Work");
 	});
 
 	it("repairs missing required compaction summary sections deterministically", () => {
