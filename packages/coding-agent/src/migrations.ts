@@ -2,6 +2,7 @@
  * One-time migrations that run on startup.
  */
 
+import { createHash } from "node:crypto";
 import chalk from "chalk";
 import {
 	chmodSync,
@@ -20,6 +21,7 @@ import { CONFIG_DIR_NAME, getAgentDir, getBinDir } from "./config.ts";
 import { recordHarnessControlEvent } from "./core/harness-control-events.ts";
 import { migrateKeybindingsConfig } from "./core/keybindings.ts";
 import { isLegacyEnvVarNameConfigValue } from "./core/resolve-config-value.ts";
+import { runHarnessControlTransactionSync } from "./core/transaction-coordinator.ts";
 import { stripJsonComments } from "./utils/json.ts";
 
 const MIGRATION_GUIDE_URL =
@@ -383,9 +385,16 @@ export interface ExtensionMigrationAction {
 	scope: "global" | "project";
 	from: string;
 	to: string;
-	status: "ready" | "blocked" | "applied";
+	status: "ready" | "blocked" | "applied" | "rolled_back" | "in_doubt";
 	reason: string;
 	blocker?: string;
+	sourceStatHash?: string;
+	sourceStat?: {
+		isDirectory: boolean;
+		size: number;
+		mtimeMs: number;
+		mode: number;
+	};
 }
 
 export interface ExtensionMigrationPlan {
@@ -646,6 +655,48 @@ function getMigrationSourcePath(diagnostic: ExtensionDeprecationDiagnostic): str
 	return diagnostic.path;
 }
 
+function createMigrationSourceStat(path: string): ExtensionMigrationAction["sourceStat"] | undefined {
+	try {
+		const stats = lstatSync(path);
+		return {
+			isDirectory: stats.isDirectory(),
+			size: stats.size,
+			mtimeMs: stats.mtimeMs,
+			mode: stats.mode,
+		};
+	} catch {
+		return undefined;
+	}
+}
+
+function createMigrationSourceStatTree(path: string, depth = 0): unknown {
+	const sourceStat = createMigrationSourceStat(path);
+	if (!sourceStat) return undefined;
+	if (!sourceStat.isDirectory || depth >= MAX_LEGACY_EXTENSION_SCAN_DEPTH) {
+		return { name: basename(path), sourceStat };
+	}
+	const children = readdirSync(path)
+		.filter((entry) => !entry.startsWith("."))
+		.sort()
+		.map((entry) => createMigrationSourceStatTree(join(path, entry), depth + 1));
+	return { name: basename(path), sourceStat, children };
+}
+
+function hashMigrationSourceStat(path: string): string | undefined {
+	const tree = createMigrationSourceStatTree(path);
+	if (!tree) return undefined;
+	return createHash("sha256").update(JSON.stringify(tree)).digest("hex");
+}
+
+function addMigrationSourceStat(action: ExtensionMigrationAction): ExtensionMigrationAction {
+	const sourceStat = createMigrationSourceStat(action.from);
+	return {
+		...action,
+		sourceStat,
+		sourceStatHash: hashMigrationSourceStat(action.from),
+	};
+}
+
 export function createExtensionMigrationPlan(cwd: string): ExtensionMigrationPlan {
 	const diagnostics = getExtensionDeprecationDiagnostics(cwd);
 	const targets = getExtensionDeprecationScanTargets(cwd);
@@ -670,15 +721,17 @@ export function createExtensionMigrationPlan(cwd: string): ExtensionMigrationPla
 		const relativeSource = relative(target.hooksDir, sourcePath);
 		const destinationPath = join(target.extensionsDir, relativeSource);
 		const destinationExists = existsSync(destinationPath);
-		actions.push({
-			action: "move",
-			scope: diagnostic.scope,
-			from: sourcePath,
-			to: destinationPath,
-			status: destinationExists ? "blocked" : "ready",
-			reason: diagnostic.evidence.join(", "),
-			blocker: destinationExists ? "target already exists" : undefined,
-		});
+		actions.push(
+			addMigrationSourceStat({
+				action: "move",
+				scope: diagnostic.scope,
+				from: sourcePath,
+				to: destinationPath,
+				status: destinationExists ? "blocked" : "ready",
+				reason: diagnostic.evidence.join(", "),
+				blocker: destinationExists ? "target already exists" : undefined,
+			}),
+		);
 	}
 
 	recordHarnessControlEvent("extension.migration.plan", "completed", {
@@ -695,26 +748,86 @@ export function applyExtensionMigrationPlan(
 	cwd: string,
 	plan: ExtensionMigrationPlan = createExtensionMigrationPlan(cwd),
 ): ExtensionMigrationPlan {
-	const actions = plan.actions.map((action) => {
-		if (action.status !== "ready") return action;
-		try {
-			mkdirSync(dirname(action.to), { recursive: true });
-			renameSync(action.from, action.to);
-			return { ...action, status: "applied" as const };
-		} catch (error) {
-			return {
-				...action,
-				status: "blocked" as const,
-				blocker: error instanceof Error ? error.message : String(error),
+	const readyActions = plan.actions.filter((action) => action.status === "ready");
+	const preflightBlocked = plan.actions.filter((action) => action.status !== "ready");
+	if (preflightBlocked.length > 0) {
+		recordHarnessControlEvent("extension.migration.apply", "blocked", {
+			actions: plan.actions.length,
+			blockedActions: preflightBlocked.length,
+			reason: "preflight blocked actions present",
+		});
+		return plan;
+	}
+
+	const appliedMoves: Array<{ from: string; to: string }> = [];
+	let appliedPlan: ExtensionMigrationPlan = plan;
+	const transaction = runHarnessControlTransactionSync({
+		kind: "extension.migration.apply",
+		data: {
+			actions: plan.actions.length,
+			readyActions: readyActions.length,
+			cwd,
+		},
+		beforeState: plan.actions.map((action) => ({
+			from: action.from,
+			to: action.to,
+			status: action.status,
+			sourceStatHash: action.sourceStatHash,
+		})),
+		afterState: () =>
+			appliedPlan.actions.map((action) => ({ from: action.from, to: action.to, status: action.status })),
+		commit: () => {
+			for (const action of readyActions) {
+				if (!existsSync(action.from)) throw new Error(`source missing: ${action.from}`);
+				if (existsSync(action.to)) throw new Error(`target already exists: ${action.to}`);
+				const currentHash = hashMigrationSourceStat(action.from);
+				if (action.sourceStatHash && currentHash !== action.sourceStatHash) {
+					throw new Error(`source changed before migration: ${action.from}`);
+				}
+			}
+
+			for (const action of readyActions) {
+				mkdirSync(dirname(action.to), { recursive: true });
+				renameSync(action.from, action.to);
+				appliedMoves.push({ from: action.from, to: action.to });
+			}
+			appliedPlan = {
+				diagnostics: plan.diagnostics,
+				actions: plan.actions.map((action) =>
+					action.status === "ready" ? { ...action, status: "applied" as const } : action,
+				),
 			};
-		}
+			return appliedPlan;
+		},
+		rollback: () => {
+			for (const move of [...appliedMoves].reverse()) {
+				if (existsSync(move.to) && !existsSync(move.from)) {
+					mkdirSync(dirname(move.from), { recursive: true });
+					renameSync(move.to, move.from);
+				}
+			}
+			appliedPlan = {
+				diagnostics: plan.diagnostics,
+				actions: plan.actions.map((action) =>
+					action.status === "ready" ? { ...action, status: "rolled_back" as const } : action,
+				),
+			};
+		},
 	});
-	recordHarnessControlEvent("extension.migration.apply", "completed", {
-		actions: actions.length,
-		appliedActions: actions.filter((action) => action.status === "applied").length,
-		blockedActions: actions.filter((action) => action.status === "blocked").length,
-	});
-	return { diagnostics: plan.diagnostics, actions };
+
+	if (transaction.status === "completed") return appliedPlan;
+	return {
+		diagnostics: plan.diagnostics,
+		actions: plan.actions.map((action) =>
+			action.status === "ready"
+				? {
+						...action,
+						status: transaction.status === "in_doubt" ? "in_doubt" : "blocked",
+						blocker: transaction.error instanceof Error ? transaction.error.message : String(transaction.error),
+					}
+				: action,
+		),
+	};
 }
 
 function checkDeprecatedExtensionDirs(baseDir: string, label: string): string[] {

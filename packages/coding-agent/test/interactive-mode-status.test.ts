@@ -1,4 +1,5 @@
-import { homedir } from "node:os";
+import * as fs from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import * as path from "node:path";
 import { type AutocompleteProvider, CombinedAutocompleteProvider } from "@earendil-works/omk-tui";
 import { beforeAll, describe, expect, test, vi } from "vitest";
@@ -6,6 +7,7 @@ import { type Component, Container, type Focusable, TUI } from "../../tui/src/tu
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
 import type { ResourceDiagnostic } from "../src/core/diagnostics.ts";
 import type { AutocompleteProviderFactory } from "../src/core/extensions/types.ts";
+import { verifyHarnessControlReplay } from "../src/core/harness-control-replay.ts";
 import type { SourceInfo } from "../src/core/source-info.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
@@ -139,6 +141,23 @@ describe("InteractiveMode.setToolsExpanded", () => {
 });
 
 describe("InteractiveMode settings theme changes", () => {
+	function withEventLog<T>(fn: (logPath: string) => T): T {
+		const dir = fs.mkdtempSync(path.join(tmpdir(), "omk-interactive-events-"));
+		const logPath = path.join(dir, "events.jsonl");
+		const previousEventLog = process.env.OMK_HARNESS_CONTROL_EVENT_LOG;
+		process.env.OMK_HARNESS_CONTROL_EVENT_LOG = logPath;
+		try {
+			return fn(logPath);
+		} finally {
+			if (previousEventLog === undefined) {
+				delete process.env.OMK_HARNESS_CONTROL_EVENT_LOG;
+			} else {
+				process.env.OMK_HARNESS_CONTROL_EVENT_LOG = previousEventLog;
+			}
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	}
+
 	test("does not persist invalid themes from the settings selector path", () => {
 		initTheme("dark");
 		const settingsManager = { setTheme: vi.fn() };
@@ -171,6 +190,24 @@ describe("InteractiveMode settings theme changes", () => {
 		expect(settingsManager.setTheme).toHaveBeenCalledWith("light");
 		expect(fakeThis.ui.invalidate).toHaveBeenCalledTimes(1);
 		expect(fakeThis.showError).not.toHaveBeenCalled();
+	});
+
+	test("records settings theme changes as complete transactions", () => {
+		withEventLog((logPath) => {
+			initTheme("dark");
+			const settingsManager = { getTheme: vi.fn(() => "dark"), setTheme: vi.fn() };
+			const fakeThis: any = {
+				settingsManager,
+				ui: { invalidate: vi.fn() },
+				showError: vi.fn(),
+			};
+
+			const result = (InteractiveMode as any).prototype.applySettingsThemeChange.call(fakeThis, "light");
+
+			expect(result.success).toBe(true);
+			expect(verifyHarnessControlReplay(logPath)).toMatchObject({ ok: true });
+			expect(verifyHarnessControlReplay(logPath).operations[0]).toMatchObject({ terminalStatus: "completed" });
+		});
 	});
 });
 
