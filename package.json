@@ -18,6 +18,8 @@
 		"check:pinned-deps": "node scripts/check-pinned-deps.mjs",
 		"check:shrinkwrap": "node scripts/check-coding-agent-publish-deps.mjs",
 		"check:ts-imports": "node scripts/check-ts-relative-imports.mjs",
+		"spec:check": "tsx scripts/spec-check.mjs",
+		"spec:compile": "tsx scripts/spec-compile.mjs",
 		"profile:tui": "node scripts/profile-coding-agent-node.mjs --mode tui",
 		"profile:rpc": "node scripts/profile-coding-agent-node.mjs --mode rpc",
 		"test": "npm run test --workspaces --if-present",

@@ -16,7 +16,8 @@ description: "OMK Implementation Plan template with current agent routing and ev
 - **Harness**: [Path to `.omk/runs/<runId>/chat-agent-harness.json` if present, else "not present"]
 - **MCP Scope**: [project | all | none]
 - **Skills**: [Relevant skill names only]
-- **Authority**: Kimi is final writer/merger unless harness says otherwise.
+- **Authority**: root coordinator is final writer/merger unless an explicit lane grant delegates write or merge authority.
+- **Authority Policy**: `{ "finalWriter": "root", "requiredCapabilities": ["write", "patch"], "providerConstraint": "none" }`
 
 ## Agent Routing
 
