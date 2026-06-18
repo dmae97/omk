@@ -75,7 +75,6 @@ import type {
 	ExtensionWidgetOptions,
 } from "../../core/extensions/index.ts";
 import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/footer-data-provider.ts";
-import { recordHarnessControlEvent } from "../../core/harness-control-events.ts";
 import { configureHttpDispatcher, formatHttpIdleTimeoutMs } from "../../core/http-dispatcher.ts";
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.ts";
 import { createCompactionSummaryMessage } from "../../core/messages.ts";
@@ -89,6 +88,7 @@ import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
+import { runHarnessControlTransaction, runHarnessControlTransactionSync } from "../../core/transaction-coordinator.ts";
 import { getChangelogPath, getNewEntries, parseChangelog } from "../../utils/changelog.ts";
 import { copyToClipboard } from "../../utils/clipboard.ts";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.ts";
@@ -4185,25 +4185,36 @@ export class InteractiveMode {
 
 	private applySettingsThemeChange(themeName: string): { success: boolean; error?: string } {
 		const previousTheme = this.settingsManager.getTheme?.() || "dark";
-		const result = setTheme(themeName, true);
-		if (!result.success) {
-			setTheme(previousTheme, true);
-			recordHarnessControlEvent("interactive.theme.apply", "failed", {
-				themeName,
-				previousTheme,
-				error: result.error,
-				restored: previousTheme,
-			});
-			this.showError(`Failed to load theme "${themeName}": ${result.error}\nRestored theme "${previousTheme}".`);
-			return result;
-		}
-		this.settingsManager.setTheme(themeName);
-		recordHarnessControlEvent("interactive.theme.apply", "completed", {
-			themeName,
-			previousTheme,
+		let applyResult: { success: boolean; error?: string } = {
+			success: false,
+			error: "theme transaction did not run",
+		};
+		const transaction = runHarnessControlTransactionSync({
+			kind: "interactive.theme.apply",
+			data: { themeName, previousTheme, persistenceScope: "default" },
+			beforeState: { theme: previousTheme },
+			afterState: () => ({ theme: themeName }),
+			commit: () => {
+				const result = setTheme(themeName, true);
+				applyResult = result;
+				if (!result.success) {
+					throw new Error(result.error ?? `Failed to load theme "${themeName}"`);
+				}
+				this.settingsManager.setTheme(themeName);
+				this.ui.invalidate();
+				return { theme: themeName };
+			},
+			rollback: () => {
+				setTheme(previousTheme, true);
+			},
 		});
-		this.ui.invalidate();
-		return result;
+		if (transaction.status !== "completed") {
+			this.showError(
+				`Failed to load theme "${themeName}": ${applyResult.error}\nRestored theme "${previousTheme}".`,
+			);
+			return applyResult;
+		}
+		return applyResult;
 	}
 
 	private handleThinkCommand(level?: string): void {
@@ -4222,10 +4233,25 @@ export class InteractiveMode {
 	}
 
 	private applyThinkingLevel(level: ThinkingLevel): void {
-		this.session.setThinkingLevel(level);
-		this.footer.invalidate();
-		this.updateEditorBorderColor();
-		this.showStatus(`Thinking: ${this.session.thinkingLevel}`);
+		const previousThinkingLevel = this.session.thinkingLevel;
+		const transaction = runHarnessControlTransactionSync({
+			kind: "interactive.model_thinking.commit",
+			data: { thinkingLevel: level, previousThinkingLevel, persistenceScope: "session" },
+			beforeState: { thinkingLevel: previousThinkingLevel },
+			afterState: () => ({ thinkingLevel: level }),
+			commit: () => {
+				this.session.setThinkingLevel(level);
+				this.footer.invalidate();
+				this.updateEditorBorderColor();
+				return { thinkingLevel: level };
+			},
+			rollback: () => {
+				this.session.setThinkingLevel(previousThinkingLevel);
+			},
+		});
+		if (transaction.status === "completed") {
+			this.showStatus(`Thinking: ${this.session.thinkingLevel}`);
+		}
 	}
 
 	private async handleModelCommand(searchTerm?: string): Promise<void> {
@@ -4353,40 +4379,45 @@ export class InteractiveMode {
 	private async commitModelThinkingSelection(model: Model<any>, thinkingLevel: ThinkingLevel): Promise<void> {
 		const previousModel = this.session.model;
 		const previousThinkingLevel = this.session.thinkingLevel;
-		try {
-			await this.session.setModel(model);
-			this.session.setThinkingLevel(thinkingLevel);
-			recordHarnessControlEvent("interactive.model_thinking.commit", "completed", {
-				provider: model.provider,
-				model: model.id,
-				thinkingLevel: this.session.thinkingLevel,
-				previousProvider: previousModel?.provider,
-				previousModel: previousModel?.id,
-				previousThinkingLevel,
-			});
-			this.footer.invalidate();
-			this.updateEditorBorderColor();
-			this.showStatus(`Model: ${model.id} · Thinking: ${this.session.thinkingLevel}`);
-			void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
-			this.checkDaxnutsEasterEgg(model);
-		} catch (error) {
-			try {
-				if (previousModel && !modelsAreEqual(this.session.model, previousModel)) {
-					await this.session.setModel(previousModel);
-				}
-				this.session.setThinkingLevel(previousThinkingLevel);
-			} catch {}
-			recordHarnessControlEvent("interactive.model_thinking.commit", "failed", {
+		const transaction = await runHarnessControlTransaction({
+			kind: "interactive.model_thinking.commit",
+			data: {
 				provider: model.provider,
 				model: model.id,
 				thinkingLevel,
 				previousProvider: previousModel?.provider,
 				previousModel: previousModel?.id,
 				previousThinkingLevel,
-				error,
-			});
-			this.showError(error instanceof Error ? error.message : String(error));
+				persistenceScope: "session",
+			},
+			beforeState: {
+				provider: previousModel?.provider,
+				model: previousModel?.id,
+				thinkingLevel: previousThinkingLevel,
+			},
+			afterState: () => ({ provider: model.provider, model: model.id, thinkingLevel }),
+			commit: async () => {
+				await this.session.setModel(model);
+				this.session.setThinkingLevel(thinkingLevel);
+				this.footer.invalidate();
+				this.updateEditorBorderColor();
+				return { provider: model.provider, model: model.id, thinkingLevel };
+			},
+			rollback: async () => {
+				if (previousModel && !modelsAreEqual(this.session.model, previousModel)) {
+					await this.session.setModel(previousModel);
+				}
+				this.session.setThinkingLevel(previousThinkingLevel);
+			},
+		});
+		if (transaction.status === "completed") {
+			this.showStatus(`Model: ${model.id} · Thinking: ${this.session.thinkingLevel}`);
+			void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
+			this.checkDaxnutsEasterEgg(model);
+			return;
 		}
+		const error = transaction.error ?? transaction.rollbackError ?? "Model transaction failed";
+		this.showError(error instanceof Error ? error.message : String(error));
 	}
 
 	private showModelSelector(initialSearchInput?: string): void {

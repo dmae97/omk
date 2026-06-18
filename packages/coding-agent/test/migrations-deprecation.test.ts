@@ -151,6 +151,29 @@ describe("extension deprecation migrations", () => {
 		expect(fs.existsSync(path.join(agentDir, "extensions", "legacy.mjs"))).toBe(true);
 	});
 
+	it("does not apply any migration action when one ready action fails preflight", () => {
+		const root = createTempDir();
+		const agentDir = path.join(root, "agent");
+		const firstLegacy = path.join(agentDir, "hooks", "first.mjs");
+		const secondLegacy = path.join(agentDir, "hooks", "second.mjs");
+		fs.mkdirSync(path.dirname(firstLegacy), { recursive: true });
+		fs.writeFileSync(firstLegacy, "export default function () {}\n");
+		fs.writeFileSync(secondLegacy, "export default function () {}\n");
+		const plan = withAgentDir(agentDir, () => createExtensionMigrationPlan(root));
+		const tamperedPlan = {
+			...plan,
+			actions: plan.actions.map((action) =>
+				action.from === secondLegacy ? { ...action, from: path.join(agentDir, "hooks", "missing.mjs") } : action,
+			),
+		};
+
+		const applied = withAgentDir(agentDir, () => applyExtensionMigrationPlan(root, tamperedPlan));
+
+		expect(applied.actions.filter((action) => action.status === "blocked")).toHaveLength(2);
+		expect(fs.existsSync(firstLegacy)).toBe(true);
+		expect(fs.existsSync(path.join(agentDir, "extensions", "first.mjs"))).toBe(false);
+	});
+
 	it("bounds recursive scans and does not migrate symlinks outside hooks", () => {
 		const root = createTempDir();
 		const agentDir = path.join(root, "agent");

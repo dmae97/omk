@@ -45,6 +45,77 @@ function createEventOptions(
 	};
 }
 
+export function runHarnessControlTransactionSync<T>(
+	options: HarnessControlTransactionOptions<T>,
+): HarnessControlTransactionResult<T> {
+	const operationId = options.eventOptions?.operationId ?? randomUUID();
+	const data = options.data ?? {};
+	const events: HarnessControlEventWriteResult[] = [];
+	const started = recordHarnessControlEvent(options.kind, "started", data, {
+		...createEventOptions(options.eventOptions, operationId),
+		beforeState: options.beforeState,
+	});
+	events.push(started);
+	const causationId = started.event?.eventId ?? null;
+
+	try {
+		const value = options.commit() as T;
+		events.push(
+			recordHarnessControlEvent(options.kind, "completed", data, {
+				...createEventOptions(options.eventOptions, operationId, causationId),
+				beforeState: options.beforeState,
+				afterState: options.afterState ? options.afterState(value) : value,
+			}),
+		);
+		return { status: "completed", operationId, value, events };
+	} catch (error) {
+		if (!options.rollback) {
+			events.push(
+				recordHarnessControlEvent(
+					options.kind,
+					"failed",
+					{ ...data, error: errorSummary(error) },
+					{
+						...createEventOptions(options.eventOptions, operationId, causationId),
+						beforeState: options.beforeState,
+					},
+				),
+			);
+			return { status: "failed", operationId, error, events };
+		}
+
+		try {
+			(options.rollback as (error: unknown) => void)(error);
+			events.push(
+				recordHarnessControlEvent(
+					options.kind,
+					"rolled_back",
+					{ ...data, error: errorSummary(error) },
+					{
+						...createEventOptions(options.eventOptions, operationId, causationId),
+						beforeState: options.beforeState,
+						afterState: options.beforeState,
+					},
+				),
+			);
+			return { status: "rolled_back", operationId, error, events };
+		} catch (rollbackError) {
+			events.push(
+				recordHarnessControlEvent(
+					options.kind,
+					"in_doubt",
+					{ ...data, error: errorSummary(error), rollbackError: errorSummary(rollbackError) },
+					{
+						...createEventOptions(options.eventOptions, operationId, causationId),
+						beforeState: options.beforeState,
+					},
+				),
+			);
+			return { status: "in_doubt", operationId, error, rollbackError, events };
+		}
+	}
+}
+
 export async function runHarnessControlTransaction<T>(
 	options: HarnessControlTransactionOptions<T>,
 ): Promise<HarnessControlTransactionResult<T>> {

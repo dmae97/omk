@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { verifyHarnessControlReplay } from "../src/core/harness-control-replay.ts";
-import { runHarnessControlTransaction } from "../src/core/transaction-coordinator.ts";
+import { runHarnessControlTransaction, runHarnessControlTransactionSync } from "../src/core/transaction-coordinator.ts";
 
 const tempDirs: string[] = [];
 
@@ -56,6 +56,22 @@ describe("harness control transactions", () => {
 		expect(rolledBack).toBe(true);
 		expect(result.status).toBe("rolled_back");
 		expect(verifyHarnessControlReplay(logPath).operations[0]).toMatchObject({ terminalStatus: "rolled_back" });
+	});
+
+	it("records sync transactions for non-async UI changes", () => {
+		const root = createTempDir();
+		const logPath = path.join(root, "events.jsonl");
+
+		const result = runHarnessControlTransactionSync({
+			kind: "interactive.theme.apply",
+			beforeState: { theme: "dark" },
+			afterState: (value) => ({ theme: value }),
+			commit: () => "light",
+			eventOptions: { cwd: root, logPath, operationId: "tx-sync" },
+		});
+
+		expect(result).toMatchObject({ status: "completed", operationId: "tx-sync", value: "light" });
+		expect(verifyHarnessControlReplay(logPath)).toMatchObject({ ok: true });
 	});
 
 	it("records in_doubt when rollback fails", async () => {
