@@ -1,0 +1,14 @@
+schemaVersion: omk.spec-kit.v1
+preset: omk
+project: open-multi-agent-kit
+createdAt: 2026-06-18
+artifacts:
+  constitution: specs/constitution.md
+  templates:
+    spec: specs/templates/spec-template.md
+    plan: specs/templates/plan-template.md
+    tasks: specs/templates/tasks-template.md
+policy:
+  noSecrets: true
+  evidenceRequired: true
+  architectureMode: true
