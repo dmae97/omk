@@ -37,5 +37,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "compact", description: "Manually compact the session context" },
 	{ name: "resume", description: "Resume a different session" },
 	{ name: "reload", description: "Reload keybindings, extensions, skills, prompts, and themes" },
+	{ name: "mcp", description: "Show configured MCP servers (read-only inventory)" },
+	{ name: "skills", description: "Show loaded skills and diagnostics" },
 	{ name: "quit", description: `Quit ${APP_NAME}` },
 ];

@@ -77,6 +77,7 @@ import type {
 import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/footer-data-provider.ts";
 import { configureHttpDispatcher, formatHttpIdleTimeoutMs } from "../../core/http-dispatcher.ts";
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.ts";
+import { loadMcpInventory } from "../../core/mcp-inventory.ts";
 import { createCompactionSummaryMessage } from "../../core/messages.ts";
 import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScope } from "../../core/model-resolver.ts";
 import { DefaultPackageManager } from "../../core/package-manager.ts";
@@ -116,12 +117,14 @@ import { ExtensionSelectorComponent } from "./components/extension-selector.ts";
 import { FooterComponent } from "./components/footer.ts";
 import { formatKeyText, keyDisplayText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.ts";
 import { LoginDialogComponent } from "./components/login-dialog.ts";
+import { McpSelectorComponent } from "./components/mcp-selector.ts";
 import { ModelSelectorComponent } from "./components/model-selector.ts";
 import { type AuthSelectorProvider, OAuthSelectorComponent } from "./components/oauth-selector.ts";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent, ThinkingSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
+import { SkillsSelectorComponent } from "./components/skills-selector.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
@@ -2723,6 +2726,16 @@ export class InteractiveMode {
 				await this.handleReloadCommand();
 				return;
 			}
+			if (text === "/mcp") {
+				this.editor.setText("");
+				this.handleMcpCommand();
+				return;
+			}
+			if (text === "/skills") {
+				this.editor.setText("");
+				this.handleSkillsCommand();
+				return;
+			}
 			if (text === "/debug") {
 				this.handleDebugCommand();
 				this.editor.setText("");
@@ -4354,6 +4367,12 @@ export class InteractiveMode {
 	private showModelThinkingTransaction(model: Model<any>): void {
 		const availableThinkingLevels = getSupportedThinkingLevels(model) as ThinkingLevel[];
 		const thinkingLevel = clampThinkingLevel(model, this.session.thinkingLevel) as ThinkingLevel;
+		// Auto-skip selector when the model offers at most one thinking level (T04 routing safeguard).
+		if (availableThinkingLevels.length <= 1) {
+			const chosen = (availableThinkingLevels[0] ?? thinkingLevel ?? "off") as ThinkingLevel;
+			void this.commitModelThinkingSelection(model, chosen);
+			return;
+		}
 		this.showSelector((done) => {
 			const selector = new ThinkingSelectorComponent(
 				{
@@ -5539,6 +5558,40 @@ export class InteractiveMode {
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new Text(info, 1, 0));
 		this.ui.requestRender();
+	}
+
+	private handleMcpCommand(): void {
+		const inventory = loadMcpInventory(this.sessionManager.getCwd());
+		this.showSelector((done) => {
+			const selector = new McpSelectorComponent(inventory, () => {
+				done();
+				this.ui.requestRender();
+			});
+			return { component: selector, focus: selector };
+		});
+		const summary = inventory.entries.length === 1 ? "1 MCP server" : `${inventory.entries.length} MCP servers`;
+		this.showStatus(`${summary} loaded (env values hidden)`);
+	}
+
+	private handleSkillsCommand(): void {
+		const result = this.session.resourceLoader.getSkills();
+		const enableSkillCommands = this.settingsManager.getEnableSkillCommands();
+		this.showSelector((done) => {
+			const selector = new SkillsSelectorComponent(
+				{
+					skills: result.skills,
+					diagnostics: result.diagnostics,
+					enableSkillCommands,
+				},
+				() => {
+					done();
+					this.ui.requestRender();
+				},
+			);
+			return { component: selector, focus: selector };
+		});
+		const summary = result.skills.length === 1 ? "1 skill" : `${result.skills.length} skills`;
+		this.showStatus(`${summary} loaded`);
 	}
 
 	private handleChangelogCommand(): void {

@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added read-only interactive `/mcp` and `/skills` inventory panels that expose configured runtime resources without displaying secret environment values.
 - Added Harness Control Plane V2 primitives: tamper-evident event ledger V2, replay verification, transaction coordinator, and runtime transaction integration for auditable state changes.
 - Added spec-kit compiler and verification commands (`spec:check`, `spec:compile`, `spec:verify`) with replay gates for validating harness-control specs before release.
 - Added source-backed public hooks fail-closed primitives for the `./hooks` export.
@@ -26,6 +27,7 @@
 
 ### Fixed
 
+- Fixed Bun binary package asset resolution when `OMK_PACKAGE_DIR` points at a source or package layout instead of the extracted binary asset layout.
 - Fixed agent-session regression tests to use the workspace faux provider stream directly, keeping source-run tests aligned with dynamic provider registration while preserving built runtime behavior.
 - Fixed auto-compaction to trigger before provider requests when the projected prompt would exceed the configured context headroom.
 - Fixed temporary extension package installs to use a private `~/.omk/agent/tmp/extensions` directory with `0700` permissions instead of a shared OS temp extension directory.

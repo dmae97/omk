@@ -12,15 +12,21 @@ import { normalizePath } from "./utils/paths.ts";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-/**
- * Detect if we're running as a Bun compiled binary.
- * Bun binaries have import.meta.url containing "$bunfs", "~BUN", or "%7EBUN" (Bun's virtual filesystem path)
- */
-export const isBunBinary =
-	import.meta.url.includes("$bunfs") || import.meta.url.includes("~BUN") || import.meta.url.includes("%7EBUN");
-
 /** Detect if Bun is the runtime (compiled binary or bun run) */
 export const isBunRuntime = !!process.versions.bun;
+
+const bunMain = (globalThis as { Bun?: { main?: string } }).Bun?.main ?? "";
+
+/**
+ * Detect if we're running as a Bun compiled binary.
+ * Bun binaries may expose the virtual filesystem path through import.meta.url,
+ * Bun.main, or process.argv depending on Bun and bundle shape.
+ */
+export const isBunBinary =
+	isBunRuntime &&
+	(isBunVirtualPath(import.meta.url) ||
+		isBunVirtualPath(bunMain) ||
+		process.argv.some((value) => isBunVirtualPath(value)));
 
 // =============================================================================
 // Install Method Detection
@@ -340,6 +346,32 @@ export function getUpdateInstruction(packageName: string): string {
  * - For Node.js (dist/): returns __dirname (the dist/ directory)
  * - For tsx (src/): returns parent directory (the package root)
  */
+function isBunVirtualPath(value: string): boolean {
+	return value.includes("$bunfs") || value.includes("~BUN") || value.includes("%7EBUN");
+}
+
+function getProcSelfExePath(): string | undefined {
+	try {
+		return realpathSync("/proc/self/exe");
+	} catch {
+		return undefined;
+	}
+}
+
+function getBunBinaryPackageDir(): string {
+	const candidates = [getProcSelfExePath(), process.execPath, process.env._, process.argv[0], process.argv[1]];
+	for (const candidate of candidates) {
+		if (!candidate || candidate === "bun" || isBunVirtualPath(candidate)) {
+			continue;
+		}
+		const candidateDir = dirname(resolve(candidate));
+		if (existsSync(join(candidateDir, "theme")) || existsSync(join(candidateDir, "package.json"))) {
+			return candidateDir;
+		}
+	}
+	return dirname(process.execPath);
+}
+
 export function getPackageDir(): string {
 	// Allow override via environment variable (useful for Nix/Guix where store paths tokenize poorly)
 	const envDir = process.env.OMK_PACKAGE_DIR ?? process.env.PI_PACKAGE_DIR;
@@ -348,8 +380,7 @@ export function getPackageDir(): string {
 	}
 
 	if (isBunBinary) {
-		// Bun binary: process.execPath points to the compiled executable
-		return dirname(process.execPath);
+		return getBunBinaryPackageDir();
 	}
 	// Node.js: walk up from __dirname until we find package.json
 	let dir = __dirname;
@@ -370,11 +401,12 @@ export function getPackageDir(): string {
  * - For tsx (src/): src/modes/interactive/theme/
  */
 export function getThemesDir(): string {
-	if (isBunBinary) {
-		return join(getPackageDir(), "theme");
+	const packageDir = getPackageDir();
+	const bunBinaryThemeDir = join(packageDir, "theme");
+	if (isBunBinary && existsSync(bunBinaryThemeDir)) {
+		return bunBinaryThemeDir;
 	}
 	// Theme is in modes/interactive/theme/ relative to src/ or dist/
-	const packageDir = getPackageDir();
 	const srcOrDist = existsSync(join(packageDir, "src")) ? "src" : "dist";
 	return join(packageDir, srcOrDist, "modes", "interactive", "theme");
 }
@@ -386,10 +418,11 @@ export function getThemesDir(): string {
  * - For tsx (src/): src/core/export-html/
  */
 export function getExportTemplateDir(): string {
-	if (isBunBinary) {
-		return join(getPackageDir(), "export-html");
-	}
 	const packageDir = getPackageDir();
+	const bunBinaryExportDir = join(packageDir, "export-html");
+	if (isBunBinary && existsSync(bunBinaryExportDir)) {
+		return bunBinaryExportDir;
+	}
 	const srcOrDist = existsSync(join(packageDir, "src")) ? "src" : "dist";
 	return join(packageDir, srcOrDist, "core", "export-html");
 }
@@ -426,10 +459,11 @@ export function getChangelogPath(): string {
  * - For tsx (src/): src/modes/interactive/assets/
  */
 export function getInteractiveAssetsDir(): string {
-	if (isBunBinary) {
-		return join(getPackageDir(), "assets");
-	}
 	const packageDir = getPackageDir();
+	const bunBinaryAssetsDir = join(packageDir, "assets");
+	if (isBunBinary && existsSync(bunBinaryAssetsDir)) {
+		return bunBinaryAssetsDir;
+	}
 	const srcOrDist = existsSync(join(packageDir, "src")) ? "src" : "dist";
 	return join(packageDir, srcOrDist, "modes", "interactive", "assets");
 }
