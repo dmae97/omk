@@ -5,11 +5,13 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+	buildSummaryDependencyGraph,
 	type CompactionSettings,
 	calculateContextTokens,
 	compact,
 	createEmergencyCompactionHandoff,
 	DEFAULT_COMPACTION_SETTINGS,
+	deduplicateSummaryFactsByNovelty,
 	estimateContextTokens,
 	estimateProjectedContextTokens,
 	findCutPoint,
@@ -21,7 +23,9 @@ import {
 	prepareCompaction,
 	resolveSummaryInputTokenBudget,
 	resolveSummaryInputTokenBudgetV3,
+	selectSummaryDependencyClosure,
 	shouldCompact,
+	splitSummaryInputSemanticUnits,
 	validateCompactionSummaryContract,
 } from "../src/core/compaction/index.ts";
 import {
@@ -295,6 +299,30 @@ describe("summary input packing", () => {
 
 		expect(packed.wasCompressed).toBe(true);
 		expect(packed.text).toContain(critical);
+	});
+
+	it("builds dependency closure for semantic units sharing paths and task ids", () => {
+		const units = splitSummaryInputSemanticUnits(
+			[
+				"HCP-08 failed in packages/coding-agent/src/core/compaction/compaction.ts",
+				"Unrelated note",
+				"Fix packages/coding-agent/src/core/compaction/compaction.ts and rerun npm run check",
+			].join("\n\n"),
+		);
+		const graph = buildSummaryDependencyGraph(units);
+		const closure = selectSummaryDependencyClosure(graph, [units[0]!.index]);
+
+		expect(graph.edges.length).toBeGreaterThan(0);
+		expect(closure.has(units[2]!.index)).toBe(true);
+	});
+
+	it("deduplicates repeated semantic units by novelty", () => {
+		const units = splitSummaryInputSemanticUnits("npm run check failed\n\nnpm run check failed\n\nHCP-08 fixed");
+
+		expect(deduplicateSummaryFactsByNovelty(units).map((unit) => unit.text)).toEqual([
+			"npm run check failed",
+			"HCP-08 fixed",
+		]);
 	});
 
 	it("keeps fenced semantic units intact when a high-signal line is selected", () => {
