@@ -350,12 +350,65 @@ function migrateToolsToBin(): void {
  * Check for deprecated hooks/ and tools/ directories.
  * Note: tools/ may contain fd/rg binaries extracted by pi, so only warn if it has other files.
  */
+function isExtensionSourceFile(name: string): boolean {
+	return name.endsWith(".ts") || name.endsWith(".js");
+}
+
+function hasLegacyExtensionManifest(dir: string): boolean {
+	const packageJsonPath = join(dir, "package.json");
+	if (!existsSync(packageJsonPath)) return false;
+
+	try {
+		const parsed = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as Record<string, unknown>;
+		const piManifest = typeof parsed.pi === "object" && parsed.pi !== null ? parsed.pi : undefined;
+		const omkManifest = typeof parsed.omk === "object" && parsed.omk !== null ? parsed.omk : undefined;
+		const legacyManifest = (piManifest ?? omkManifest) as Record<string, unknown> | undefined;
+		return (
+			Array.isArray(legacyManifest?.hooks) ||
+			Array.isArray(legacyManifest?.customTools) ||
+			Array.isArray(legacyManifest?.extensions)
+		);
+	} catch {
+		return false;
+	}
+}
+
+function hasLegacyExtensionEntrypoints(hooksDir: string): boolean {
+	if (!existsSync(hooksDir)) return false;
+
+	try {
+		const entries = readdirSync(hooksDir, { withFileTypes: true });
+		for (const entry of entries) {
+			if (entry.name.startsWith(".")) continue;
+			const entryPath = join(hooksDir, entry.name);
+
+			if ((entry.isFile() || entry.isSymbolicLink()) && isExtensionSourceFile(entry.name)) {
+				return true;
+			}
+
+			if (entry.isDirectory() || entry.isSymbolicLink()) {
+				if (
+					existsSync(join(entryPath, "index.ts")) ||
+					existsSync(join(entryPath, "index.js")) ||
+					hasLegacyExtensionManifest(entryPath)
+				) {
+					return true;
+				}
+			}
+		}
+	} catch {
+		return false;
+	}
+
+	return false;
+}
+
 function checkDeprecatedExtensionDirs(baseDir: string, label: string): string[] {
 	const hooksDir = join(baseDir, "hooks");
 	const toolsDir = join(baseDir, "tools");
 	const warnings: string[] = [];
 
-	if (existsSync(hooksDir)) {
+	if (hasLegacyExtensionEntrypoints(hooksDir)) {
 		warnings.push(`${label} hooks/ directory found. Hooks have been renamed to extensions.`);
 	}
 
