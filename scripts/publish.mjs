@@ -37,6 +37,7 @@ function run(command, args, options = {}) {
 	const result = spawnSync(commandForPlatform(command), args, {
 		cwd: options.cwd,
 		encoding: "utf8",
+		env: options.env,
 		stdio: options.capture ? ["inherit", "pipe", "pipe"] : "inherit",
 	});
 
@@ -62,6 +63,19 @@ function validatePack(directory) {
 	const result = run("npm", ["pack", "--dry-run", "--ignore-scripts", "--json"], { capture: true, cwd: directory });
 	const packed = JSON.parse(result.stdout)[0];
 	console.log(`  ${packed.filename}: ${packed.files.length} files, ${packed.size} bytes packed, ${packed.unpackedSize} bytes unpacked`);
+}
+
+function getTrustedPublishingEnv() {
+	const env = { ...process.env };
+	if (process.env.GITHUB_ACTIONS === "true" && !noProvenance) {
+		// Trusted publishing should authenticate through GitHub OIDC. setup-node's
+		// registry-url path injects NODE_AUTH_TOKEN/.npmrc auth, which can shadow OIDC
+		// and produce npm's misleading 404 "package not found or no permission" error.
+		delete env.NODE_AUTH_TOKEN;
+		delete env.NPM_TOKEN;
+		delete env.NPM_CONFIG_USERCONFIG;
+	}
+	return env;
 }
 
 function isPublished(name, version) {
@@ -137,6 +151,6 @@ for (const pkg of publishPackages) {
 		publishArgs.push("--provenance");
 	}
 	publishArgs.push("--ignore-scripts");
-	run("npm", publishArgs, { cwd: pkg.directory });
+	run("npm", publishArgs, { cwd: pkg.directory, env: getTrustedPublishingEnv() });
 	console.log();
 }
