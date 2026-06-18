@@ -680,10 +680,15 @@ function selectHighSignalLines(text: string, budgetChars: number): string {
 		.join("\n");
 }
 
-interface SummaryInputSemanticUnit {
+export interface SummaryInputSemanticUnit {
 	index: number;
 	text: string;
 	score: number;
+}
+
+export interface SummaryDependencyGraph {
+	nodes: SummaryInputSemanticUnit[];
+	edges: Array<{ from: number; to: number; reason: string }>;
 }
 
 function scoreSummaryUnit(unit: string): number {
@@ -697,7 +702,25 @@ function scoreSummaryUnit(unit: string): number {
 	return score;
 }
 
-function splitSummaryInputSemanticUnits(text: string): SummaryInputSemanticUnit[] {
+function extractSummaryUnitSignals(text: string): string[] {
+	const signals = new Set<string>();
+	for (const match of text.matchAll(
+		/\b(?:[\w.-]+\/)+[\w.-]+\.(?:ts|tsx|js|jsx|json|md|css|scss|py|rs|go|java|kt|swift|sh|yml|yaml|toml)\b/g,
+	)) {
+		signals.add(`path:${match[0]}`);
+	}
+	for (const match of text.matchAll(
+		/\b(?:npm|node|pnpm|yarn|bun|git|gh|tsgo|vitest|biome|pytest|cargo|go test)\b[^\n]*/g,
+	)) {
+		signals.add(`cmd:${match[0].trim().slice(0, 160)}`);
+	}
+	for (const match of text.matchAll(/\b(?:HCP-\d+|R\d+)\b/g)) {
+		signals.add(`id:${match[0]}`);
+	}
+	return [...signals];
+}
+
+export function splitSummaryInputSemanticUnits(text: string): SummaryInputSemanticUnit[] {
 	const lines = text.split("\n");
 	const units: SummaryInputSemanticUnit[] = [];
 	let start = 0;
@@ -751,11 +774,80 @@ function splitSummaryInputSemanticUnits(text: string): SummaryInputSemanticUnit[
 	return units;
 }
 
+export function buildSummaryDependencyGraph(units: SummaryInputSemanticUnit[]): SummaryDependencyGraph {
+	const edges: SummaryDependencyGraph["edges"] = [];
+	const signalsByIndex = new Map<number, Set<string>>();
+	for (const unit of units) {
+		signalsByIndex.set(unit.index, new Set(extractSummaryUnitSignals(unit.text)));
+	}
+	for (let i = 0; i < units.length; i++) {
+		for (let j = i + 1; j < units.length; j++) {
+			const left = signalsByIndex.get(units[i]!.index) ?? new Set<string>();
+			const right = signalsByIndex.get(units[j]!.index) ?? new Set<string>();
+			const shared = [...left].find((signal) => right.has(signal));
+			if (shared) {
+				edges.push({ from: units[i]!.index, to: units[j]!.index, reason: shared });
+				edges.push({ from: units[j]!.index, to: units[i]!.index, reason: shared });
+			}
+		}
+	}
+	return { nodes: units, edges };
+}
+
+export function selectSummaryDependencyClosure(
+	graph: SummaryDependencyGraph,
+	seedIndexes: readonly number[],
+	maxAdditionalNodes = 8,
+): Set<number> {
+	const selected = new Set(seedIndexes);
+	const queue = [...seedIndexes];
+	while (queue.length > 0 && selected.size < seedIndexes.length + maxAdditionalNodes) {
+		const index = queue.shift()!;
+		const neighbors = graph.edges
+			.filter((edge) => edge.from === index)
+			.map((edge) => edge.to)
+			.filter((neighbor) => !selected.has(neighbor));
+		for (const neighbor of neighbors) {
+			selected.add(neighbor);
+			queue.push(neighbor);
+			if (selected.size >= seedIndexes.length + maxAdditionalNodes) break;
+		}
+	}
+	return selected;
+}
+
+function normalizeSummaryNovelty(text: string): string {
+	return text
+		.toLowerCase()
+		.replace(/\b\d+\b/g, "#")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+export function deduplicateSummaryFactsByNovelty(units: SummaryInputSemanticUnit[]): SummaryInputSemanticUnit[] {
+	const seen = new Set<string>();
+	const result: SummaryInputSemanticUnit[] = [];
+	for (const unit of units) {
+		const key = normalizeSummaryNovelty(unit.text);
+		if (seen.has(key)) continue;
+		seen.add(key);
+		result.push(unit);
+	}
+	return result;
+}
+
 function selectHighSignalSemanticUnits(text: string, budgetChars: number): string {
 	if (budgetChars <= 0) return "";
 
-	const units = splitSummaryInputSemanticUnits(text)
-		.filter((unit) => unit.score > 0)
+	const candidateUnits = deduplicateSummaryFactsByNovelty(
+		splitSummaryInputSemanticUnits(text).filter((unit) => unit.score > 0),
+	);
+	const graph = buildSummaryDependencyGraph(candidateUnits);
+	const rankedUnits = [...candidateUnits].sort((a, b) => b.score - a.score || a.index - b.index);
+	const seedIndexes = rankedUnits.slice(0, Math.min(12, rankedUnits.length)).map((unit) => unit.index);
+	const closureIndexes = selectSummaryDependencyClosure(graph, seedIndexes);
+	const units = rankedUnits
+		.filter((unit) => closureIndexes.has(unit.index))
 		.sort((a, b) => b.score - a.score || a.index - b.index);
 
 	const selected: SummaryInputSemanticUnit[] = [];
