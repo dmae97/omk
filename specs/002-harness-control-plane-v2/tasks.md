@@ -117,7 +117,7 @@
 
 ## Phase 3 — Transaction Integrations and Continuity Enhancements
 
-- [ ] HCP-05 Integrate interactive model/thinking/theme changes with transaction coordinator
+- [x] HCP-05 Integrate interactive model/thinking/theme changes with transaction coordinator
   > role: coder
   > deps: HCP-04
   > lane: transaction-migration-architect
@@ -130,7 +130,7 @@
   > requirementIds: [R2]
   > risk: high
 
-- [ ] HCP-06 Implement atomic extension migration transaction
+- [x] HCP-06 Implement atomic extension migration transaction
   > role: security
   > deps: HCP-04
   > lane: transaction-migration-architect
@@ -143,7 +143,7 @@
   > requirementIds: [R3]
   > risk: high
 
-- [ ] HCP-08 Implement compaction semantic dependency graph, dependency closure, and dedup novelty
+- [x] HCP-08 Implement compaction semantic dependency graph, dependency closure, and dedup novelty
   > role: coder
   > deps: HCP-07
   > lane: continuity-input-router
@@ -156,7 +156,7 @@
   > requirementIds: [R4]
   > risk: medium
 
-- [ ] HCP-11 Add spec scripts and traceability CLI
+- [x] HCP-11 Add spec scripts and traceability CLI
   > role: coder
   > deps: HCP-01, HCP-03
   > lane: spec-replay-qa
@@ -171,7 +171,7 @@
 
 ## Phase 4 — Replay Reduce
 
-- [ ] HCP-12 Implement integrated replay verifier
+- [x] HCP-12 Implement integrated replay verifier
   > role: qa
   > deps: HCP-03, HCP-04, HCP-06, HCP-08, HCP-09, HCP-11
   > lane: spec-replay-qa
@@ -186,7 +186,7 @@
 
 ## Phase 5 — Review, QA, Shipping
 
-- [ ] HCP-13 Run subsystem regression suite
+- [x] HCP-13 Run subsystem regression suite
   > role: qa
   > deps: HCP-12
   > lane: spec-replay-qa
@@ -199,7 +199,7 @@
   > requirementIds: [R8]
   > risk: low
 
-- [ ] HCP-14 Run full repository check
+- [x] HCP-14 Run full repository check
   > role: qa
   > deps: HCP-13
   > lane: spec-replay-qa
@@ -212,7 +212,7 @@
   > requirementIds: [R8]
   > risk: low
 
-- [ ] HCP-15 Run adversarial code/security review
+- [x] HCP-15 Run adversarial code/security review
   > role: reviewer
   > deps: HCP-14
   > lane: spec-replay-qa
@@ -225,7 +225,7 @@
   > requirementIds: [R8]
   > risk: low
 
-- [ ] HCP-16 Update final result artifact
+- [x] HCP-16 Update final result artifact
   > role: reviewer
   > deps: HCP-15
   > lane: spec-replay-qa
