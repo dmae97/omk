@@ -10,10 +10,13 @@ import * as path from "node:path";
 import type { AgentMessage, ThinkingLevel } from "@earendil-works/omk-agent-core";
 import {
 	type AssistantMessage,
+	clampThinkingLevel,
 	getProviders,
+	getSupportedThinkingLevels,
 	type ImageContent,
 	type Message,
 	type Model,
+	modelsAreEqual,
 	type OAuthProviderId,
 	type OAuthSelectPrompt,
 } from "@earendil-works/omk-ai";
@@ -72,6 +75,7 @@ import type {
 	ExtensionWidgetOptions,
 } from "../../core/extensions/index.ts";
 import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/footer-data-provider.ts";
+import { recordHarnessControlEvent } from "../../core/harness-control-events.ts";
 import { configureHttpDispatcher, formatHttpIdleTimeoutMs } from "../../core/http-dispatcher.ts";
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.ts";
 import { createCompactionSummaryMessage } from "../../core/messages.ts";
@@ -4106,12 +4110,7 @@ export class InteractiveMode {
 						this.updateEditorBorderColor();
 					},
 					onThemeChange: (themeName) => {
-						const result = setTheme(themeName, true);
-						this.settingsManager.setTheme(themeName);
-						this.ui.invalidate();
-						if (!result.success) {
-							this.showError(`Failed to load theme "${themeName}": ${result.error}\nFell back to dark theme.`);
-						}
+						this.applySettingsThemeChange(themeName);
 					},
 					onThemePreview: (themeName) => {
 						const result = setTheme(themeName, true);
@@ -4184,6 +4183,29 @@ export class InteractiveMode {
 		});
 	}
 
+	private applySettingsThemeChange(themeName: string): { success: boolean; error?: string } {
+		const previousTheme = this.settingsManager.getTheme?.() || "dark";
+		const result = setTheme(themeName, true);
+		if (!result.success) {
+			setTheme(previousTheme, true);
+			recordHarnessControlEvent("interactive.theme.apply", "failed", {
+				themeName,
+				previousTheme,
+				error: result.error,
+				restored: previousTheme,
+			});
+			this.showError(`Failed to load theme "${themeName}": ${result.error}\nRestored theme "${previousTheme}".`);
+			return result;
+		}
+		this.settingsManager.setTheme(themeName);
+		recordHarnessControlEvent("interactive.theme.apply", "completed", {
+			themeName,
+			previousTheme,
+		});
+		this.ui.invalidate();
+		return result;
+	}
+
 	private handleThinkCommand(level?: string): void {
 		if (!level) {
 			this.showThinkingSelector();
@@ -4214,17 +4236,7 @@ export class InteractiveMode {
 
 		const model = await this.findExactModelMatch(searchTerm);
 		if (model) {
-			try {
-				await this.session.setModel(model);
-				this.footer.invalidate();
-				this.updateEditorBorderColor();
-				this.showStatus(`Model: ${model.id}`);
-				void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
-				this.checkDaxnutsEasterEgg(model);
-				this.showThinkingSelector();
-			} catch (error) {
-				this.showError(error instanceof Error ? error.message : String(error));
-			}
+			this.showModelThinkingTransaction(model);
 			return;
 		}
 
@@ -4313,6 +4325,70 @@ export class InteractiveMode {
 		});
 	}
 
+	private showModelThinkingTransaction(model: Model<any>): void {
+		const availableThinkingLevels = getSupportedThinkingLevels(model) as ThinkingLevel[];
+		const thinkingLevel = clampThinkingLevel(model, this.session.thinkingLevel) as ThinkingLevel;
+		this.showSelector((done) => {
+			const selector = new ThinkingSelectorComponent(
+				{
+					thinkingLevel,
+					availableThinkingLevels,
+				},
+				{
+					onThinkingLevelChange: () => {},
+					onSelectComplete: (level) => {
+						done();
+						void this.commitModelThinkingSelection(model, level);
+					},
+					onCancel: () => {
+						done();
+						this.ui.requestRender();
+					},
+				},
+			);
+			return { component: selector, focus: selector };
+		});
+	}
+
+	private async commitModelThinkingSelection(model: Model<any>, thinkingLevel: ThinkingLevel): Promise<void> {
+		const previousModel = this.session.model;
+		const previousThinkingLevel = this.session.thinkingLevel;
+		try {
+			await this.session.setModel(model);
+			this.session.setThinkingLevel(thinkingLevel);
+			recordHarnessControlEvent("interactive.model_thinking.commit", "completed", {
+				provider: model.provider,
+				model: model.id,
+				thinkingLevel: this.session.thinkingLevel,
+				previousProvider: previousModel?.provider,
+				previousModel: previousModel?.id,
+				previousThinkingLevel,
+			});
+			this.footer.invalidate();
+			this.updateEditorBorderColor();
+			this.showStatus(`Model: ${model.id} · Thinking: ${this.session.thinkingLevel}`);
+			void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
+			this.checkDaxnutsEasterEgg(model);
+		} catch (error) {
+			try {
+				if (previousModel && !modelsAreEqual(this.session.model, previousModel)) {
+					await this.session.setModel(previousModel);
+				}
+				this.session.setThinkingLevel(previousThinkingLevel);
+			} catch {}
+			recordHarnessControlEvent("interactive.model_thinking.commit", "failed", {
+				provider: model.provider,
+				model: model.id,
+				thinkingLevel,
+				previousProvider: previousModel?.provider,
+				previousModel: previousModel?.id,
+				previousThinkingLevel,
+				error,
+			});
+			this.showError(error instanceof Error ? error.message : String(error));
+		}
+	}
+
 	private showModelSelector(initialSearchInput?: string): void {
 		this.showSelector((done) => {
 			const selector = new ModelSelectorComponent(
@@ -4321,20 +4397,9 @@ export class InteractiveMode {
 				this.settingsManager,
 				this.session.modelRegistry,
 				this.session.scopedModels,
-				async (model) => {
-					try {
-						await this.session.setModel(model);
-						this.footer.invalidate();
-						this.updateEditorBorderColor();
-						done();
-						this.showStatus(`Model: ${model.id}`);
-						void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
-						this.checkDaxnutsEasterEgg(model);
-						this.showThinkingSelector();
-					} catch (error) {
-						done();
-						this.showError(error instanceof Error ? error.message : String(error));
-					}
+				(model) => {
+					done();
+					this.showModelThinkingTransaction(model);
 				},
 				() => {
 					done();

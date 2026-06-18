@@ -1,5 +1,5 @@
 import { setKeybindings, type TUI } from "@earendil-works/omk-tui";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../../../src/core/keybindings.ts";
 import { ModelSelectorComponent } from "../../../src/modes/interactive/components/model-selector.ts";
 import { ScopedModelsSelectorComponent } from "../../../src/modes/interactive/components/scoped-models-selector.ts";
@@ -120,6 +120,36 @@ describe("issue #3217 scoped model ordering", () => {
 		});
 
 		expect(orderedIds).toEqual([modelTwo.id, modelOne.id, modelThree.id]);
+	});
+
+	it("does not persist defaults before the session accepts the selected model", async () => {
+		const harness = await createHarness({
+			models: [
+				{ id: "faux-1", name: "One", reasoning: true },
+				{ id: "faux-2", name: "Two", reasoning: true },
+			],
+		});
+		harnesses.push(harness);
+		const setDefault = vi.spyOn(harness.settingsManager, "setDefaultModelAndProvider");
+		let selectedModelId: string | undefined;
+
+		const selector = new ModelSelectorComponent(
+			createFakeTui(),
+			harness.getModel("faux-1"),
+			harness.settingsManager,
+			harness.session.modelRegistry,
+			[],
+			(model) => {
+				selectedModelId = model.id;
+			},
+			() => {},
+		);
+
+		await waitForAsyncRender();
+		selector.handleInput("\r");
+
+		expect(selectedModelId).toBe("faux-1");
+		expect(setDefault).not.toHaveBeenCalled();
 	});
 
 	it("filters available models by provider tabs", async () => {

@@ -138,6 +138,42 @@ describe("InteractiveMode.setToolsExpanded", () => {
 	});
 });
 
+describe("InteractiveMode settings theme changes", () => {
+	test("does not persist invalid themes from the settings selector path", () => {
+		initTheme("dark");
+		const settingsManager = { setTheme: vi.fn() };
+		const fakeThis: any = {
+			settingsManager,
+			ui: { invalidate: vi.fn() },
+			showError: vi.fn(),
+		};
+
+		const result = (InteractiveMode as any).prototype.applySettingsThemeChange.call(fakeThis, "__missing_theme__");
+
+		expect(result.success).toBe(false);
+		expect(settingsManager.setTheme).not.toHaveBeenCalled();
+		expect(fakeThis.ui.invalidate).not.toHaveBeenCalled();
+		expect(fakeThis.showError).toHaveBeenCalled();
+	});
+
+	test("persists valid themes from the settings selector path", () => {
+		initTheme("dark");
+		const settingsManager = { setTheme: vi.fn() };
+		const fakeThis: any = {
+			settingsManager,
+			ui: { invalidate: vi.fn() },
+			showError: vi.fn(),
+		};
+
+		const result = (InteractiveMode as any).prototype.applySettingsThemeChange.call(fakeThis, "light");
+
+		expect(result.success).toBe(true);
+		expect(settingsManager.setTheme).toHaveBeenCalledWith("light");
+		expect(fakeThis.ui.invalidate).toHaveBeenCalledTimes(1);
+		expect(fakeThis.showError).not.toHaveBeenCalled();
+	});
+});
+
 describe("InteractiveMode.createExtensionUIContext setTheme", () => {
 	test("persists theme changes to settings manager", () => {
 		initTheme("dark");
