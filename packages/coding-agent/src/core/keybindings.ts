@@ -18,6 +18,7 @@ export interface AppKeybindings {
 	"app.thinking.cycle": true;
 	"app.model.cycleForward": true;
 	"app.model.cycleBackward": true;
+	"app.model.providerPrevious": true;
 	"app.model.select": true;
 	"app.tools.expand": true;
 	"app.thinking.toggle": true;
@@ -80,6 +81,10 @@ export const KEYBINDINGS = {
 	"app.model.cycleBackward": {
 		defaultKeys: "shift+ctrl+p",
 		description: "Cycle to previous model",
+	},
+	"app.model.providerPrevious": {
+		defaultKeys: "shift+tab",
+		description: "Cycle to previous provider in the model selector",
 	},
 	"app.model.select": { defaultKeys: "ctrl+l", description: "Open model selector" },
 	"app.tools.expand": { defaultKeys: "ctrl+o", description: "Toggle tool output" },

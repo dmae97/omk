@@ -1,0 +1,98 @@
+import { fileURLToPath } from "node:url";
+import { visibleWidth } from "@earendil-works/omk-tui";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { ControlPanelComponent } from "../src/modes/interactive/components/control-panel.ts";
+import {
+	getAvailableThemes,
+	getThemeByName,
+	initTheme,
+	resolveThemeName,
+} from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
+
+function createPanel(): ControlPanelComponent {
+	return new ControlPanelComponent({
+		appName: "omk",
+		version: "0.80.5",
+		compactInstructions: () => "Ctrl+C interrupt · / commands · ! bash",
+		expandedInstructions: () => "Ctrl+C to interrupt\n/ for commands\n! to run bash",
+		compactOnboarding: () => "Press Ctrl+O to show full startup help and loaded resources.",
+		onboarding: () => "OMK can explain its own features and look up its docs.",
+	});
+}
+
+let previousPackageDir: string | undefined;
+
+beforeAll(() => {
+	previousPackageDir = process.env.OMK_PACKAGE_DIR;
+	process.env.OMK_PACKAGE_DIR = fileURLToPath(new URL("../", import.meta.url));
+	initTheme("omk-control-panel");
+});
+
+afterAll(() => {
+	if (previousPackageDir === undefined) {
+		delete process.env.OMK_PACKAGE_DIR;
+	} else {
+		process.env.OMK_PACKAGE_DIR = previousPackageDir;
+	}
+});
+
+describe("ControlPanelComponent", () => {
+	test("renders a compact ANSI control panel without exceeding terminal width", () => {
+		const panel = createPanel();
+		const lines = panel.render(48);
+		const plain = stripAnsi(lines.join("\n"));
+
+		expect(plain).toContain("OMK//CONTROL PANEL");
+		expect(plain).toContain("CORE:READY");
+		expect(plain).toContain("Ctrl+C interrupt");
+		expect(lines.every((line) => visibleWidth(line) <= 48)).toBe(true);
+	});
+
+	test("renders expanded ASCII branding and command map", () => {
+		const panel = createPanel();
+		panel.setExpanded(true);
+		const lines = panel.render(96);
+		const plain = stripAnsi(lines.join("\n"));
+
+		expect(plain).toContain("OMK//CONTROL PANEL");
+		expect(plain).toContain("____");
+		expect(plain).toContain("SYSTEM MAP");
+		expect(plain).toContain("! to run bash");
+		expect(lines.every((line) => visibleWidth(line) <= 96)).toBe(true);
+	});
+
+	test("re-renders compact output after expansion is disabled", () => {
+		const panel = createPanel();
+		panel.setExpanded(true);
+		expect(stripAnsi(panel.render(80).join("\n"))).toContain("SYSTEM MAP");
+
+		panel.setExpanded(false);
+		const compact = stripAnsi(panel.render(80).join("\n"));
+		expect(compact).not.toContain("SYSTEM MAP");
+		expect(compact).toContain("Press Ctrl+O");
+	});
+});
+
+describe("omk control panel theme", () => {
+	test("registers the elevated control-panel theme and aliases", () => {
+		expect(getAvailableThemes()).toEqual(
+			expect.arrayContaining([
+				"omk-control-panel",
+				"catppuccin-mocha",
+				"dracula",
+				"gruvbox-dark",
+				"kanagawa-dragon",
+				"tokyo-night-storm",
+			]),
+		);
+		expect(resolveThemeName("g0dm0d3")).toBe("omk-control-panel");
+		expect(resolveThemeName("control-panel")).toBe("omk-control-panel");
+		expect(resolveThemeName("catppuccin")).toBe("catppuccin-mocha");
+		expect(resolveThemeName("tokyo-night")).toBe("tokyo-night-storm");
+		expect(resolveThemeName("kanagawa")).toBe("kanagawa-dragon");
+		expect(resolveThemeName("gruvbox")).toBe("gruvbox-dark");
+		expect(getThemeByName("g0dm0d3")?.name).toBe("omk-control-panel");
+		expect(getThemeByName("catppuccin")?.name).toBe("catppuccin-mocha");
+	});
+});

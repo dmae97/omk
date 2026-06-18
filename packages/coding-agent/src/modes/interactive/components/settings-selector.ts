@@ -31,6 +31,17 @@ const THINKING_DESCRIPTIONS: Record<ThinkingLevel, string> = {
 	xhigh: "Maximum reasoning (~32k tokens)",
 };
 
+export interface ThinkingSelectorConfig {
+	thinkingLevel: ThinkingLevel;
+	availableThinkingLevels: ThinkingLevel[];
+}
+
+export interface ThinkingSelectorCallbacks {
+	onThinkingLevelChange: (level: ThinkingLevel) => void;
+	onSelectComplete?: (level: ThinkingLevel) => void;
+	onCancel: () => void;
+}
+
 export interface SettingsConfig {
 	autoCompact: boolean;
 	showImages: boolean;
@@ -198,6 +209,27 @@ class SelectSubmenu extends Container {
 	}
 }
 
+export class ThinkingSelectorComponent extends SelectSubmenu {
+	constructor(config: ThinkingSelectorConfig, callbacks: ThinkingSelectorCallbacks) {
+		super(
+			"Thinking Level",
+			"Select reasoning depth for thinking-capable models",
+			config.availableThinkingLevels.map((level) => ({
+				value: level,
+				label: level,
+				description: THINKING_DESCRIPTIONS[level],
+			})),
+			config.thinkingLevel,
+			(value) => {
+				const level = value as ThinkingLevel;
+				callbacks.onThinkingLevelChange(level);
+				callbacks.onSelectComplete?.(level);
+			},
+			callbacks.onCancel,
+		);
+	}
+}
+
 /**
  * Main settings selector component.
  */
@@ -312,20 +344,16 @@ export class SettingsSelectorComponent extends Container {
 				description: "Reasoning depth for thinking-capable models",
 				currentValue: config.thinkingLevel,
 				submenu: (currentValue, done) =>
-					new SelectSubmenu(
-						"Thinking Level",
-						"Select reasoning depth for thinking-capable models",
-						config.availableThinkingLevels.map((level) => ({
-							value: level,
-							label: level,
-							description: THINKING_DESCRIPTIONS[level],
-						})),
-						currentValue,
-						(value) => {
-							callbacks.onThinkingLevelChange(value as ThinkingLevel);
-							done(value);
+					new ThinkingSelectorComponent(
+						{
+							thinkingLevel: currentValue as ThinkingLevel,
+							availableThinkingLevels: config.availableThinkingLevels,
 						},
-						() => done(),
+						{
+							onThinkingLevelChange: callbacks.onThinkingLevelChange,
+							onSelectComplete: done,
+							onCancel: () => done(),
+						},
 					),
 			},
 			{

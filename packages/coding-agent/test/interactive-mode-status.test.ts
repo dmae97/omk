@@ -4,6 +4,7 @@ import { type AutocompleteProvider, CombinedAutocompleteProvider } from "@earend
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import { type Component, Container, type Focusable, TUI } from "../../tui/src/tui.ts";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
+import type { ResourceDiagnostic } from "../src/core/diagnostics.ts";
 import type { AutocompleteProviderFactory } from "../src/core/extensions/types.ts";
 import type { SourceInfo } from "../src/core/source-info.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
@@ -339,7 +340,8 @@ describe("InteractiveMode.showLoadedResources", () => {
 		contextFiles?: Array<{ path: string; content?: string }>;
 		extensions?: ExtensionFixture[];
 		skills?: Array<{ filePath: string; name: string }>;
-		skillDiagnostics?: Array<{ type: "warning" | "error" | "collision"; message: string }>;
+		skillDiagnostics?: ResourceDiagnostic[];
+		promptDiagnostics?: ResourceDiagnostic[];
 		useRealScopeGroups?: boolean;
 	}) {
 		const fakeThis: any = {
@@ -365,7 +367,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 						skills: options.skills ?? [],
 						diagnostics: options.skillDiagnostics ?? [],
 					}),
-					getPrompts: () => ({ prompts: [], diagnostics: [] }),
+					getPrompts: () => ({ prompts: [], diagnostics: options.promptDiagnostics ?? [] }),
 					getExtensions: () => ({ extensions: options.extensions ?? [], errors: [], runtime: {} }),
 					getThemes: () => ({ themes: [], diagnostics: [] }),
 				},
@@ -397,6 +399,8 @@ describe("InteractiveMode.showLoadedResources", () => {
 			getCompactExtensionLabels: (extensions: ExtensionFixture[]) =>
 				(InteractiveMode as any).prototype.getCompactExtensionLabels.call(fakeThis, extensions),
 			formatDiagnostics: () => "diagnostics",
+			formatDiagnosticsSummary: (diagnostics: readonly ResourceDiagnostic[]) =>
+				(InteractiveMode as any).prototype.formatDiagnosticsSummary.call(fakeThis, diagnostics),
 			getBuiltInCommandConflictDiagnostics: () => [],
 		};
 
@@ -964,5 +968,55 @@ describe("InteractiveMode.showLoadedResources", () => {
 		const output = renderAll(fakeThis.chatContainer);
 		expect(output).toContain("[Skill conflicts]");
 		expect(output).not.toContain("[Skills]");
+	});
+
+	test("hides collision-only skill diagnostics on quiet startup", () => {
+		const fakeThis = createShowLoadedResourcesThis({
+			quietStartup: true,
+			skillDiagnostics: [
+				{
+					type: "collision",
+					message: "name collision",
+					collision: {
+						resourceType: "skill",
+						name: "commit",
+						winnerPath: "/tmp/winner/SKILL.md",
+						loserPath: "/tmp/loser/SKILL.md",
+					},
+				},
+			],
+		});
+
+		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
+			force: false,
+			showDiagnosticsWhenQuiet: true,
+		});
+
+		expect(fakeThis.chatContainer.children).toHaveLength(0);
+	});
+
+	test("hides collision-only prompt diagnostics on quiet startup", () => {
+		const fakeThis = createShowLoadedResourcesThis({
+			quietStartup: true,
+			promptDiagnostics: [
+				{
+					type: "collision",
+					message: "name collision",
+					collision: {
+						resourceType: "prompt",
+						name: "review",
+						winnerPath: "/tmp/winner/review.md",
+						loserPath: "/tmp/loser/review.md",
+					},
+				},
+			],
+		});
+
+		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
+			force: false,
+			showDiagnosticsWhenQuiet: true,
+		});
+
+		expect(fakeThis.chatContainer.children).toHaveLength(0);
 	});
 });

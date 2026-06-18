@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
 	type EditorTheme,
 	getCapabilities,
@@ -444,31 +445,58 @@ const THEME_NAME_ALIASES: Record<string, string> = {
 	rust: "rust-forge",
 	cargo: "rust-forge",
 	oxide: "rust-forge",
+	oxidized: "rust-forge",
+	"oxidized-forge": "rust-forge",
 	forge: "rust-forge",
 	"rust-native": "rust-forge",
+	control: "omk-control-grid-dark",
+	"night-city": "omk-control-grid-dark",
+	"night-city-ops": "omk-control-grid-dark",
+	"neon-grid": "omk-control-grid-dark",
+	cyberpunk: "omk-control-grid-dark",
 	"omk-control-dark": "omk-control-grid-dark",
+	"control-panel": "omk-control-panel",
+	"omk-control-ansi": "omk-control-panel",
+	g0dm0d3: "omk-control-panel",
+	catppuccin: "catppuccin-mocha",
+	mocha: "catppuccin-mocha",
+	"tokyo-night": "tokyo-night-storm",
+	tokyo: "tokyo-night-storm",
+	kanagawa: "kanagawa-dragon",
+	gruvbox: "gruvbox-dark",
 };
 
 export function resolveThemeName(name: string): string {
 	return THEME_NAME_ALIASES[name] ?? name;
 }
 
+function getBuiltinThemePath(fileName: string): string {
+	const configuredPath = path.join(getThemesDir(), fileName);
+	if (fs.existsSync(configuredPath)) {
+		return configuredPath;
+	}
+	return path.join(path.dirname(fileURLToPath(import.meta.url)), fileName);
+}
+
+function readBuiltinTheme(fileName: string): ThemeJson {
+	return JSON.parse(fs.readFileSync(getBuiltinThemePath(fileName), "utf-8")) as ThemeJson;
+}
+
 function getBuiltinThemes(): Record<string, ThemeJson> {
 	if (!BUILTIN_THEMES) {
-		const themesDir = getThemesDir();
-		const darkPath = path.join(themesDir, "dark.json");
-		const lightPath = path.join(themesDir, "light.json");
-		const omkControlPath = path.join(themesDir, "omk-control.json");
-		const omkControlGridDarkPath = path.join(themesDir, "omk-control-grid-dark.json");
-		const omkControlLightPath = path.join(themesDir, "omk-control-light.json");
-		const rustForgePath = path.join(themesDir, "rust-forge.json");
 		BUILTIN_THEMES = {
-			dark: JSON.parse(fs.readFileSync(darkPath, "utf-8")) as ThemeJson,
-			light: JSON.parse(fs.readFileSync(lightPath, "utf-8")) as ThemeJson,
-			"omk-control": JSON.parse(fs.readFileSync(omkControlPath, "utf-8")) as ThemeJson,
-			"omk-control-grid-dark": JSON.parse(fs.readFileSync(omkControlGridDarkPath, "utf-8")) as ThemeJson,
-			"omk-control-light": JSON.parse(fs.readFileSync(omkControlLightPath, "utf-8")) as ThemeJson,
-			"rust-forge": JSON.parse(fs.readFileSync(rustForgePath, "utf-8")) as ThemeJson,
+			dark: readBuiltinTheme("dark.json"),
+			light: readBuiltinTheme("light.json"),
+			"catppuccin-mocha": readBuiltinTheme("catppuccin-mocha.json"),
+			dracula: readBuiltinTheme("dracula.json"),
+			"gruvbox-dark": readBuiltinTheme("gruvbox-dark.json"),
+			"kanagawa-dragon": readBuiltinTheme("kanagawa-dragon.json"),
+			"omk-control": readBuiltinTheme("omk-control.json"),
+			"omk-control-grid-dark": readBuiltinTheme("omk-control-grid-dark.json"),
+			"omk-control-light": readBuiltinTheme("omk-control-light.json"),
+			"omk-control-panel": readBuiltinTheme("omk-control-panel.json"),
+			"rust-forge": readBuiltinTheme("rust-forge.json"),
+			"tokyo-night-storm": readBuiltinTheme("tokyo-night-storm.json"),
 		};
 	}
 	return BUILTIN_THEMES;
@@ -484,7 +512,6 @@ export interface ThemeInfo {
 }
 
 export function getAvailableThemesWithPaths(): ThemeInfo[] {
-	const themesDir = getThemesDir();
 	const result: ThemeInfo[] = [];
 	const seen = new Set<string>();
 	const addTheme = (themeInfo: ThemeInfo) => {
@@ -497,7 +524,7 @@ export function getAvailableThemesWithPaths(): ThemeInfo[] {
 
 	// Built-in themes
 	for (const name of Object.keys(getBuiltinThemes())) {
-		addTheme({ name, path: path.join(themesDir, `${name}.json`) });
+		addTheme({ name, path: getBuiltinThemePath(`${name}.json`) });
 	}
 
 	// Custom themes
@@ -770,7 +797,7 @@ export function detectTerminalBackground(options: TerminalThemeDetectionOptions 
 }
 
 export function getDefaultTheme(): string {
-	return detectTerminalBackground().theme === "light" ? "omk-control-light" : "rust-forge";
+	return detectTerminalBackground().theme === "light" ? "omk-control-light" : "omk-control-grid-dark";
 }
 
 // ============================================================================

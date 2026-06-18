@@ -17,6 +17,26 @@ async function waitForAsyncRender(): Promise<void> {
 	await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function registerProviderModel(harness: Harness, provider: string, id: string, name: string): void {
+	const baseModel = harness.models[0];
+	harness.session.modelRegistry.registerProvider(provider, {
+		baseUrl: `https://${provider}.example.test`,
+		apiKey: `${provider}-key`,
+		api: baseModel.api,
+		models: [
+			{
+				id,
+				name,
+				reasoning: false,
+				input: ["text" as const],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: 128000,
+				maxTokens: 4096,
+			},
+		],
+	});
+}
+
 describe("issue #3217 scoped model ordering", () => {
 	const harnesses: Harness[] = [];
 
@@ -100,5 +120,36 @@ describe("issue #3217 scoped model ordering", () => {
 		});
 
 		expect(orderedIds).toEqual([modelTwo.id, modelOne.id, modelThree.id]);
+	});
+
+	it("filters available models by provider tabs", async () => {
+		const harness = await createHarness({
+			models: [{ id: "faux-local", name: "Faux Local", reasoning: true }],
+		});
+		harnesses.push(harness);
+		registerProviderModel(harness, "anthropic", "claude-haiku", "Claude Haiku");
+		registerProviderModel(harness, "openai", "gpt-4o-mini", "GPT-4o mini");
+
+		const selector = new ModelSelectorComponent(
+			createFakeTui(),
+			harness.getModel("faux-local"),
+			harness.settingsManager,
+			harness.session.modelRegistry,
+			[],
+			() => {},
+			() => {},
+		);
+
+		await waitForAsyncRender();
+
+		let rendered = stripAnsi(selector.render(120).join("\n"));
+		expect(rendered).toContain("Provider: all | anthropic | openai");
+
+		selector.handleInput("\t");
+		rendered = stripAnsi(selector.render(120).join("\n"));
+
+		expect(rendered).toContain("Provider: all | anthropic | openai");
+		expect(rendered).toContain("claude-haiku [anthropic]");
+		expect(rendered).not.toContain("[openai]");
 	});
 });

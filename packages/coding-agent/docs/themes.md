@@ -18,7 +18,7 @@ Themes are JSON files that define colors for the TUI.
 
 OMK loads themes from:
 
-- Built-in: `dark`, `light`, `omk-control`, `omk-control-light`
+- Built-in: `dark`, `light`, `catppuccin-mocha`, `dracula`, `gruvbox-dark`, `kanagawa-dragon`, `omk-control`, `omk-control-grid-dark`, `omk-control-light`, `omk-control-panel`, `rust-forge`, `tokyo-night-storm`
 - Global: `~/.omk/agent/themes/*.json`
 - Project: `.omk/themes/*.json`
 - Packages: `themes/` directories or `omk.themes` entries in `package.json`
@@ -37,7 +37,7 @@ Select a theme via `/settings` or in `settings.json`:
 }
 ```
 
-On first run, omk detects your terminal background and defaults to `dark` or `light`. The `omk-control` theme is a dark OMK control aesthetic with teal/cyan accents on near-black, and `omk-control-light` is its light-terminal variant.
+On first run, omk detects your terminal background and defaults to `omk-control-grid-dark` on dark terminals or `omk-control-light` on light terminals. `omk-control-grid-dark` is the dark control-grid palette; `control`, `night-city`, `night-city-ops`, `neon-grid`, `cyberpunk`, and `omk-control-dark` also resolve to it. `omk-control-panel` remains available via the `g0dm0d3`, `control-panel`, and `omk-control-ansi` aliases. Additional aliases include `catppuccin`/`mocha`, `tokyo-night`/`tokyo`, `kanagawa`, and `gruvbox`.
 
 ## Creating a Custom Theme
 
@@ -293,5 +293,13 @@ echo $COLORTERM  # Should output "truecolor" or "24bit"
 See the built-in themes:
 - [dark.json](../src/modes/interactive/theme/dark.json)
 - [light.json](../src/modes/interactive/theme/light.json)
+- [catppuccin-mocha.json](../src/modes/interactive/theme/catppuccin-mocha.json)
+- [dracula.json](../src/modes/interactive/theme/dracula.json)
+- [gruvbox-dark.json](../src/modes/interactive/theme/gruvbox-dark.json)
+- [kanagawa-dragon.json](../src/modes/interactive/theme/kanagawa-dragon.json)
 - [omk-control.json](../src/modes/interactive/theme/omk-control.json)
+- [omk-control-grid-dark.json](../src/modes/interactive/theme/omk-control-grid-dark.json)
 - [omk-control-light.json](../src/modes/interactive/theme/omk-control-light.json)
+- [omk-control-panel.json](../src/modes/interactive/theme/omk-control-panel.json)
+- [rust-forge.json](../src/modes/interactive/theme/rust-forge.json)
+- [tokyo-night-storm.json](../src/modes/interactive/theme/tokyo-night-storm.json)
