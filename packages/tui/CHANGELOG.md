@@ -6,8 +6,13 @@
 
 - Renamed the npm package from `@earendil-works/pi-tui` to `@earendil-works/omk-tui` and updated package metadata to the OMK repository.
 
+### Added
+
+- Added scoped keybinding stack primitives for deterministic nested keybinding resolution.
+
 ### Fixed
 
+- Fixed scoped keybinding conflict handling to fail closed when multiple handlers match the same key sequence.
 - Fixed tab width accounting in column slicing and overlay compositing so tab-containing output cannot exceed the terminal width ([#5218](https://github.com/earendil-works/pi/issues/5218)).
 
 ## [0.78.0] - 2026-05-29

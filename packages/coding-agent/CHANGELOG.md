@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added Harness Control Plane V2 primitives: tamper-evident event ledger V2, replay verification, transaction coordinator, and runtime transaction integration for auditable state changes.
+- Added spec-kit compiler and verification commands (`spec:check`, `spec:compile`, `spec:verify`) with replay gates for validating harness-control specs before release.
 - Added source-backed public hooks fail-closed primitives for the `./hooks` export.
 - Added containerization documentation and a Gondolin extension example for routing built-in tools into a local micro-VM.
 - Added Ant Ling provider selection and setup documentation.
@@ -16,13 +18,15 @@
 
 ### Changed
 
-- Changed auto-compaction summarizer inputs to use deterministic token-budget packing before the LLM summary call, preserving high-signal paths, commands, failures, decisions, and recent context while omitting low-signal repeated text.
+- Changed auto-compaction summarizer inputs to use deterministic token-budget packing, semantic dependency closure, emergency handoff generation, and summary contract repair before returning compacted context.
+- Changed interactive model, theme, thinking-level, and editor keybinding paths to route through scoped transaction/keybinding flows with rollback-safe failure handling.
 - Changed internal runtime package dependencies to OMK-scoped packages and publish them before `open-multi-agent-kit` so installed `omk` can resolve its runtime imports.
 - Changed published coding-agent package metadata and source config defaults to use OMK/Open Multi-Agent Kit names, `omkConfig`, `.omk`, and the OMK repository.
 - 256-color theme quantization generalizes the cube/grayscale selection for near-neutral colors (colors with channel spread < 10 keep byte-identical output).
 
 ### Fixed
 
+- Fixed agent-session regression tests to use the workspace faux provider stream directly, keeping source-run tests aligned with dynamic provider registration while preserving built runtime behavior.
 - Fixed auto-compaction to trigger before provider requests when the projected prompt would exceed the configured context headroom.
 - Fixed temporary extension package installs to use a private `~/.omk/agent/tmp/extensions` directory with `0700` permissions instead of a shared OS temp extension directory.
 - Fixed git package source handling to reject unsafe host/path components and keep managed clone paths inside install roots.
