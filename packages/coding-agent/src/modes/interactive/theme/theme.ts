@@ -440,20 +440,50 @@ export class Theme {
 // ============================================================================
 
 let BUILTIN_THEMES: Record<string, ThemeJson> | undefined;
+const THEME_NAME_ALIASES: Record<string, string> = {
+	rust: "rust-forge",
+	cargo: "rust-forge",
+	oxide: "rust-forge",
+	oxidized: "rust-forge",
+	"oxidized-forge": "rust-forge",
+	forge: "rust-forge",
+	"rust-native": "rust-forge",
+	control: "omk-control-grid-dark",
+	"night-city": "omk-control-grid-dark",
+	"night-city-ops": "omk-control-grid-dark",
+	"neon-grid": "omk-control-grid-dark",
+	cyberpunk: "omk-control-grid-dark",
+	"omk-control-dark": "omk-control-grid-dark",
+	"omk-control-ansi": "omk-control-panel",
+	"control-panel": "omk-control-panel",
+	g0dm0d3: "omk-control-panel",
+	catppuccin: "catppuccin-mocha",
+	mocha: "catppuccin-mocha",
+	"tokyo-night": "tokyo-night-storm",
+	tokyo: "tokyo-night-storm",
+	kanagawa: "kanagawa-dragon",
+	gruvbox: "gruvbox-dark",
+};
+
+export function resolveThemeName(name: string): string {
+	return THEME_NAME_ALIASES[name] ?? name;
+}
 
 function getBuiltinThemes(): Record<string, ThemeJson> {
 	if (!BUILTIN_THEMES) {
 		const themesDir = getThemesDir();
-		const darkPath = path.join(themesDir, "dark.json");
-		const lightPath = path.join(themesDir, "light.json");
-		const omkControlPath = path.join(themesDir, "omk-control.json");
-		const omkControlLightPath = path.join(themesDir, "omk-control-light.json");
-		BUILTIN_THEMES = {
-			dark: JSON.parse(fs.readFileSync(darkPath, "utf-8")) as ThemeJson,
-			light: JSON.parse(fs.readFileSync(lightPath, "utf-8")) as ThemeJson,
-			"omk-control": JSON.parse(fs.readFileSync(omkControlPath, "utf-8")) as ThemeJson,
-			"omk-control-light": JSON.parse(fs.readFileSync(omkControlLightPath, "utf-8")) as ThemeJson,
-		};
+		const themes: Record<string, ThemeJson> = {};
+		for (const file of fs.readdirSync(themesDir)) {
+			if (!file.endsWith(".json") || file === "theme-schema.json") {
+				continue;
+			}
+			const themePath = path.join(themesDir, file);
+			const parsed = JSON.parse(fs.readFileSync(themePath, "utf-8")) as Partial<ThemeJson>;
+			if (typeof parsed.name === "string" && parsed.colors) {
+				themes[parsed.name] = parsed as ThemeJson;
+			}
+		}
+		BUILTIN_THEMES = themes;
 	}
 	return BUILTIN_THEMES;
 }
@@ -571,11 +601,12 @@ function parseThemeJsonContent(label: string, content: string): ThemeJson {
 }
 
 function loadThemeJson(name: string): ThemeJson {
+	const resolvedName = resolveThemeName(name);
 	const builtinThemes = getBuiltinThemes();
-	if (name in builtinThemes) {
-		return builtinThemes[name];
+	if (resolvedName in builtinThemes) {
+		return builtinThemes[resolvedName];
 	}
-	const registeredTheme = registeredThemes.get(name);
+	const registeredTheme = registeredThemes.get(resolvedName);
 	if (registeredTheme?.sourcePath) {
 		const content = fs.readFileSync(registeredTheme.sourcePath, "utf-8");
 		return parseThemeJsonContent(registeredTheme.sourcePath, content);
@@ -584,12 +615,12 @@ function loadThemeJson(name: string): ThemeJson {
 		throw new Error(`Theme "${name}" does not have a source path for export`);
 	}
 	const customThemesDir = getCustomThemesDir();
-	const themePath = path.join(customThemesDir, `${name}.json`);
+	const themePath = path.join(customThemesDir, `${resolvedName}.json`);
 	if (!fs.existsSync(themePath)) {
 		throw new Error(`Theme not found: ${name}`);
 	}
 	const content = fs.readFileSync(themePath, "utf-8");
-	return parseThemeJsonContent(name, content);
+	return parseThemeJsonContent(resolvedName, content);
 }
 
 function createTheme(themeJson: ThemeJson, mode?: ColorMode, sourcePath?: string): Theme {
@@ -625,11 +656,12 @@ export function loadThemeFromPath(themePath: string, mode?: ColorMode): Theme {
 }
 
 function loadTheme(name: string, mode?: ColorMode): Theme {
-	const registeredTheme = registeredThemes.get(name);
+	const resolvedName = resolveThemeName(name);
+	const registeredTheme = registeredThemes.get(resolvedName);
 	if (registeredTheme) {
 		return registeredTheme;
 	}
-	const themeJson = loadThemeJson(name);
+	const themeJson = loadThemeJson(resolvedName);
 	return createTheme(themeJson, mode);
 }
 
@@ -752,7 +784,7 @@ export function detectTerminalBackground(options: TerminalThemeDetectionOptions 
 }
 
 export function getDefaultTheme(): string {
-	return detectTerminalBackground().theme;
+	return detectTerminalBackground().theme === "light" ? "omk-control-light" : "omk-control-panel";
 }
 
 // ============================================================================

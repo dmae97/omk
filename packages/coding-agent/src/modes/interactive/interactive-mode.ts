@@ -99,6 +99,7 @@ import { BashExecutionComponent } from "./components/bash-execution.ts";
 import { BorderedLoader } from "./components/bordered-loader.ts";
 import { BranchSummaryMessageComponent } from "./components/branch-summary-message.ts";
 import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.ts";
+import { ControlPanelComponent } from "./components/control-panel.ts";
 import { CountdownTimer } from "./components/countdown-timer.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
 import { CustomMessageComponent } from "./components/custom-message.ts";
@@ -150,6 +151,7 @@ function isExpandable(obj: unknown): obj is Expandable {
 class ExpandableText extends Text implements Expandable {
 	private readonly getCollapsedText: () => string;
 	private readonly getExpandedText: () => string;
+	private expanded: boolean;
 
 	constructor(
 		getCollapsedText: () => string,
@@ -161,10 +163,17 @@ class ExpandableText extends Text implements Expandable {
 		super(expanded ? getExpandedText() : getCollapsedText(), paddingX, paddingY);
 		this.getCollapsedText = getCollapsedText;
 		this.getExpandedText = getExpandedText;
+		this.expanded = expanded;
 	}
 
 	setExpanded(expanded: boolean): void {
+		this.expanded = expanded;
 		this.setText(expanded ? this.getExpandedText() : this.getCollapsedText());
+	}
+
+	override invalidate(): void {
+		this.setText(this.expanded ? this.getExpandedText() : this.getCollapsedText());
+		super.invalidate();
 	}
 }
 
@@ -494,23 +503,64 @@ export class InteractiveMode {
 
 				if (models.length === 0) return null;
 
-				// Create items with provider/id format
-				const items = models.map((m) => ({
-					id: m.id,
-					provider: m.provider,
-					label: `${m.provider}/${m.id}`,
-				}));
+				const normalizedPrefix = prefix.trimStart();
+				const slashIndex = normalizedPrefix.indexOf("/");
+				const providerPrefix = slashIndex >= 0 ? normalizedPrefix.slice(0, slashIndex) : normalizedPrefix;
+				const modelPrefix = slashIndex >= 0 ? normalizedPrefix.slice(slashIndex + 1) : "";
+				const providers = Array.from(new Set(models.map((model) => model.provider))).sort((a, b) =>
+					a.localeCompare(b),
+				);
 
-				// Fuzzy filter by model ID + provider (allows "opus anthropic" to match)
-				const filtered = fuzzyFilter(items, prefix, (item) => `${item.id} ${item.provider}`);
+				if (slashIndex === -1) {
+					const providerItems = fuzzyFilter(
+						providers.map((provider) => ({ provider })),
+						providerPrefix,
+						(item) => item.provider,
+					).map((item) => ({
+						value: `${item.provider}/`,
+						label: item.provider,
+						description: "provider",
+					}));
 
-				if (filtered.length === 0) return null;
+					const modelItems = fuzzyFilter(
+						models.map((model) => ({
+							id: model.id,
+							provider: model.provider,
+							label: `${model.provider}/${model.id}`,
+						})),
+						normalizedPrefix,
+						(item) => `${item.id} ${item.provider} ${item.provider}/${item.id}`,
+					).map((item) => ({
+						value: item.label,
+						label: item.id,
+						description: item.provider,
+					}));
 
-				return filtered.map((item) => ({
-					value: item.label,
-					label: item.id,
-					description: item.provider,
-				}));
+					const combined = [...providerItems, ...modelItems].slice(0, 50);
+					return combined.length > 0 ? combined : null;
+				}
+
+				const matchedProvider = providers.find((provider) => provider === providerPrefix);
+				if (!matchedProvider) {
+					return null;
+				}
+
+				const providerModels = models
+					.filter((model) => model.provider === matchedProvider)
+					.map((model) => ({
+						id: model.id,
+						provider: model.provider,
+						label: `${model.provider}/${model.id}`,
+					}));
+				const filtered = fuzzyFilter(providerModels, modelPrefix, (item) => `${item.id} ${item.provider}`);
+
+				return filtered.length > 0
+					? filtered.map((item) => ({
+							value: item.label,
+							label: item.id,
+							description: item.provider,
+						}))
+					: null;
 			};
 		}
 
@@ -629,54 +679,52 @@ export class InteractiveMode {
 
 		// Add header with keybindings from config (unless silenced)
 		if (this.options.verbose || !this.settingsManager.getQuietStartup()) {
-			const logo = theme.bold(theme.fg("accent", APP_NAME)) + theme.fg("dim", ` v${this.version}`);
-
-			// Build startup instructions using keybinding hint helpers
+			// Build startup instructions lazily so theme changes do not retain stale ANSI sequences.
 			const hint = (keybinding: AppKeybinding, description: string) => keyHint(keybinding, description);
-
-			const expandedInstructions = [
-				hint("app.interrupt", "to interrupt"),
-				hint("app.clear", "to clear"),
-				rawKeyHint(`${keyText("app.clear")} twice`, "to exit"),
-				hint("app.exit", "to exit (empty)"),
-				hint("app.suspend", "to suspend"),
-				keyHint("tui.editor.deleteToLineEnd", "to delete to end"),
-				hint("app.thinking.cycle", "to cycle thinking level"),
-				rawKeyHint(`${keyText("app.model.cycleForward")}/${keyText("app.model.cycleBackward")}`, "to cycle models"),
-				hint("app.model.select", "to select model"),
-				hint("app.tools.expand", "to expand tools"),
-				hint("app.thinking.toggle", "to expand thinking"),
-				hint("app.editor.external", "for external editor"),
-				rawKeyHint("/", "for commands"),
-				rawKeyHint("!", "to run bash"),
-				rawKeyHint("!!", "to run bash (no context)"),
-				hint("app.message.followUp", "to queue follow-up"),
-				hint("app.message.dequeue", "to edit all queued messages"),
-				hint("app.clipboard.pasteImage", "to paste image"),
-				rawKeyHint("drop files", "to attach"),
-			].join("\n");
-			const compactInstructions = [
-				hint("app.interrupt", "interrupt"),
-				rawKeyHint(`${keyText("app.clear")}/${keyText("app.exit")}`, "clear/exit"),
-				rawKeyHint("/", "commands"),
-				rawKeyHint("!", "bash"),
-				hint("app.tools.expand", "more"),
-			].join(theme.fg("muted", " · "));
-			const compactOnboarding = theme.fg(
-				"dim",
-				`Press ${keyText("app.tools.expand")} to show full startup help and loaded resources.`,
-			);
-			const onboarding = theme.fg(
-				"dim",
-				`OMK can explain its own features and look up its docs. Ask it how to use or extend OMK.`,
-			);
-			this.builtInHeader = new ExpandableText(
-				() => `${logo}\n${compactInstructions}\n${compactOnboarding}\n\n${onboarding}`,
-				() => `${logo}\n${expandedInstructions}\n\n${onboarding}`,
-				this.getStartupExpansionState(),
-				1,
-				0,
-			);
+			const expandedInstructions = () =>
+				[
+					hint("app.interrupt", "to interrupt"),
+					hint("app.clear", "to clear"),
+					rawKeyHint(`${keyText("app.clear")} twice`, "to exit"),
+					hint("app.exit", "to exit (empty)"),
+					hint("app.suspend", "to suspend"),
+					keyHint("tui.editor.deleteToLineEnd", "to delete to end"),
+					hint("app.thinking.cycle", "to cycle thinking level"),
+					rawKeyHint(
+						`${keyText("app.model.cycleForward")}/${keyText("app.model.cycleBackward")}`,
+						"to cycle models",
+					),
+					hint("app.model.select", "to select model"),
+					hint("app.tools.expand", "to expand tools"),
+					hint("app.thinking.toggle", "to expand thinking"),
+					hint("app.editor.external", "for external editor"),
+					rawKeyHint("/", "for commands"),
+					rawKeyHint("!", "to run bash"),
+					rawKeyHint("!!", "to run bash (no context)"),
+					hint("app.message.followUp", "to queue follow-up"),
+					hint("app.message.dequeue", "to edit all queued messages"),
+					hint("app.clipboard.pasteImage", "to paste image"),
+					rawKeyHint("drop files", "to attach"),
+				].join("\n");
+			const compactInstructions = () =>
+				[
+					hint("app.interrupt", "interrupt"),
+					rawKeyHint(`${keyText("app.clear")}/${keyText("app.exit")}`, "clear/exit"),
+					rawKeyHint("/", "commands"),
+					rawKeyHint("!", "bash"),
+					hint("app.tools.expand", "more"),
+				].join(theme.fg("muted", " · "));
+			const controlPanel = new ControlPanelComponent({
+				appName: APP_NAME,
+				version: this.version,
+				compactInstructions,
+				expandedInstructions,
+				compactOnboarding: () =>
+					`Press ${keyText("app.tools.expand")} to show full startup help and loaded resources.`,
+				onboarding: () => `OMK can explain its own features and look up its docs. Ask it how to use or extend OMK.`,
+			});
+			controlPanel.setExpanded(this.getStartupExpansionState());
+			this.builtInHeader = controlPanel;
 
 			// Setup UI layout
 			this.headerContainer.addChild(new Spacer(1));
@@ -1311,6 +1359,33 @@ export class InteractiveMode {
 		return lines.join("\n");
 	}
 
+	private formatDiagnosticsSummary(diagnostics: readonly ResourceDiagnostic[]): string {
+		const collisionDiagnostics = diagnostics.filter((d) => d.type === "collision" && d.collision);
+		const collisionNames = new Set(
+			collisionDiagnostics.map(
+				(d) => `${d.collision?.resourceType ?? "resource"}:${d.collision?.name ?? "unknown"}`,
+			),
+		);
+		const errorCount = diagnostics.filter((d) => d.type === "error").length;
+		const warningCount = diagnostics.filter((d) => d.type === "warning").length;
+		const parts: string[] = [];
+
+		if (collisionDiagnostics.length > 0) {
+			parts.push(
+				`${collisionDiagnostics.length} duplicate resource${collisionDiagnostics.length === 1 ? "" : "s"} skipped across ${collisionNames.size} name${collisionNames.size === 1 ? "" : "s"}`,
+			);
+		}
+		if (errorCount > 0) {
+			parts.push(`${errorCount} error${errorCount === 1 ? "" : "s"}`);
+		}
+		if (warningCount > 0) {
+			parts.push(`${warningCount} warning${warningCount === 1 ? "" : "s"}`);
+		}
+
+		const summary = parts.length > 0 ? parts.join(", ") : "No issues";
+		return theme.fg("dim", `  ${summary}. ${keyHint("app.tools.expand", "for details")}`);
+	}
+
 	private showLoadedResources(options?: {
 		extensions?: Array<{ path: string; sourceInfo?: SourceInfo }>;
 		force?: boolean;
@@ -1323,22 +1398,29 @@ export class InteractiveMode {
 		}
 
 		const sectionHeader = (name: string, color: ThemeColor = "mdHeading") => theme.fg(color, `[${name}]`);
-		const formatCompactList = (items: string[], options?: { sort?: boolean }): string => {
+		const formatCompactList = (items: string[], options?: { sort?: boolean; maxItems?: number }): string => {
 			const labels = items.map((item) => item.trim()).filter((item) => item.length > 0);
 			if (options?.sort !== false) {
 				labels.sort((a, b) => a.localeCompare(b));
 			}
-			return theme.fg("dim", `  ${labels.join(", ")}`);
+			const maxItems = options?.maxItems ?? 24;
+			const visibleLabels = labels.slice(0, maxItems);
+			const overflow = labels.length - visibleLabels.length;
+			const suffix = overflow > 0 ? `, … +${overflow} more (${keyText("app.tools.expand")} for full list)` : "";
+			const body = visibleLabels.length > 0 ? `${visibleLabels.join(", ")}${suffix}` : "(none)";
+			return theme.fg("dim", `  ${body}`);
 		};
 		const addLoadedSection = (
 			name: string,
-			collapsedBody: string,
-			expandedBody = collapsedBody,
+			collapsedBody: string | (() => string),
+			expandedBody: string | (() => string) = collapsedBody,
 			color: ThemeColor = "mdHeading",
 		): void => {
+			const getCollapsedBody = typeof collapsedBody === "function" ? collapsedBody : () => collapsedBody;
+			const getExpandedBody = typeof expandedBody === "function" ? expandedBody : () => expandedBody;
 			const section = new ExpandableText(
-				() => `${sectionHeader(name, color)}\n${collapsedBody}`,
-				() => `${sectionHeader(name, color)}\n${expandedBody}`,
+				() => `${sectionHeader(name, color)}\n${getCollapsedBody()}`,
+				() => `${sectionHeader(name, color)}\n${getExpandedBody()}`,
 				this.getStartupExpansionState(),
 				0,
 				0,
@@ -1382,14 +1464,15 @@ export class InteractiveMode {
 			const contextFiles = this.session.resourceLoader.getAgentsFiles().agentsFiles;
 			if (contextFiles.length > 0) {
 				this.chatContainer.addChild(new Spacer(1));
-				const contextList = contextFiles
-					.map((f) => theme.fg("dim", `  ${this.formatDisplayPath(f.path)}`))
-					.join("\n");
-				const contextCompactList = formatCompactList(
-					contextFiles.map((contextFile) => this.formatContextPath(contextFile.path)),
-					{ sort: false },
+				addLoadedSection(
+					"Context",
+					() =>
+						formatCompactList(
+							contextFiles.map((contextFile) => this.formatContextPath(contextFile.path)),
+							{ sort: false },
+						),
+					() => contextFiles.map((f) => theme.fg("dim", `  ${this.formatDisplayPath(f.path)}`)).join("\n"),
 				);
-				addLoadedSection("Context", contextCompactList, contextList);
 			}
 
 			const skills = skillsResult.skills;
@@ -1397,12 +1480,15 @@ export class InteractiveMode {
 				const groups = this.buildScopeGroups(
 					skills.map((skill) => ({ path: skill.filePath, sourceInfo: skill.sourceInfo })),
 				);
-				const skillList = this.formatScopeGroups(groups, {
-					formatPath: (item) => this.formatDisplayPath(item.path),
-					formatPackagePath: (item) => this.getShortPath(item.path, item.sourceInfo),
-				});
-				const skillCompactList = formatCompactList(skills.map((skill) => skill.name));
-				addLoadedSection("Skills", skillCompactList, skillList);
+				addLoadedSection(
+					"Skills",
+					() => formatCompactList(skills.map((skill) => skill.name)),
+					() =>
+						this.formatScopeGroups(groups, {
+							formatPath: (item) => this.formatDisplayPath(item.path),
+							formatPackagePath: (item) => this.getShortPath(item.path, item.sourceInfo),
+						}),
+				);
 			}
 
 			const templates = this.session.promptTemplates;
@@ -1411,29 +1497,36 @@ export class InteractiveMode {
 					templates.map((template) => ({ path: template.filePath, sourceInfo: template.sourceInfo })),
 				);
 				const templateByPath = new Map(templates.map((t) => [t.filePath, t]));
-				const templateList = this.formatScopeGroups(groups, {
-					formatPath: (item) => {
-						const template = templateByPath.get(item.path);
-						return template ? `/${template.name}` : this.formatDisplayPath(item.path);
-					},
-					formatPackagePath: (item) => {
-						const template = templateByPath.get(item.path);
-						return template ? `/${template.name}` : this.formatDisplayPath(item.path);
-					},
-				});
-				const promptCompactList = formatCompactList(templates.map((template) => `/${template.name}`));
-				addLoadedSection("Prompts", promptCompactList, templateList);
+				addLoadedSection(
+					"Prompts",
+					() => formatCompactList(templates.map((template) => `/${template.name}`)),
+					() =>
+						this.formatScopeGroups(groups, {
+							formatPath: (item) => {
+								const template = templateByPath.get(item.path);
+								return template ? `/${template.name}` : this.formatDisplayPath(item.path);
+							},
+							formatPackagePath: (item) => {
+								const template = templateByPath.get(item.path);
+								return template ? `/${template.name}` : this.formatDisplayPath(item.path);
+							},
+						}),
+				);
 			}
 
 			if (extensions.length > 0) {
 				const groups = this.buildScopeGroups(extensions);
-				const extList = this.formatScopeGroups(groups, {
-					formatPath: (item) => this.formatExtensionDisplayPath(item.path),
-					formatPackagePath: (item) =>
-						this.formatExtensionDisplayPath(this.getShortPath(item.path, item.sourceInfo)),
-				});
-				const extensionCompactList = formatCompactList(this.getCompactExtensionLabels(extensions));
-				addLoadedSection("Extensions", extensionCompactList, extList, "mdHeading");
+				addLoadedSection(
+					"Extensions",
+					() => formatCompactList(this.getCompactExtensionLabels(extensions)),
+					() =>
+						this.formatScopeGroups(groups, {
+							formatPath: (item) => this.formatExtensionDisplayPath(item.path),
+							formatPackagePath: (item) =>
+								this.formatExtensionDisplayPath(this.getShortPath(item.path, item.sourceInfo)),
+						}),
+					"mdHeading",
+				);
 			}
 
 			// Show loaded themes (excluding built-in)
@@ -1446,36 +1539,43 @@ export class InteractiveMode {
 						sourceInfo: loadedTheme.sourceInfo,
 					})),
 				);
-				const themeList = this.formatScopeGroups(groups, {
-					formatPath: (item) => this.formatDisplayPath(item.path),
-					formatPackagePath: (item) => this.getShortPath(item.path, item.sourceInfo),
-				});
-				const themeCompactList = formatCompactList(
-					customThemes.map(
-						(loadedTheme) =>
-							loadedTheme.name ?? this.getCompactPathLabel(loadedTheme.sourcePath!, loadedTheme.sourceInfo),
-					),
+				addLoadedSection(
+					"Themes",
+					() =>
+						formatCompactList(
+							customThemes.map(
+								(loadedTheme) =>
+									loadedTheme.name ??
+									this.getCompactPathLabel(loadedTheme.sourcePath!, loadedTheme.sourceInfo),
+							),
+						),
+					() =>
+						this.formatScopeGroups(groups, {
+							formatPath: (item) => this.formatDisplayPath(item.path),
+							formatPackagePath: (item) => this.getShortPath(item.path, item.sourceInfo),
+						}),
 				);
-				addLoadedSection("Themes", themeCompactList, themeList);
 			}
 		}
 
 		if (showDiagnostics) {
+			const addDiagnosticsSection = (name: string, diagnostics: readonly ResourceDiagnostic[]): void => {
+				if (diagnostics.length === 0) {
+					return;
+				}
+				addLoadedSection(
+					name,
+					() => this.formatDiagnosticsSummary(diagnostics),
+					() => this.formatDiagnostics(diagnostics, sourceInfos),
+					"warning",
+				);
+			};
+
 			const skillDiagnostics = skillsResult.diagnostics;
-			if (skillDiagnostics.length > 0) {
-				const warningLines = this.formatDiagnostics(skillDiagnostics, sourceInfos);
-				this.chatContainer.addChild(new Text(`${theme.fg("warning", "[Skill conflicts]")}\n${warningLines}`, 0, 0));
-				this.chatContainer.addChild(new Spacer(1));
-			}
+			addDiagnosticsSection("Skill conflicts", skillDiagnostics);
 
 			const promptDiagnostics = promptsResult.diagnostics;
-			if (promptDiagnostics.length > 0) {
-				const warningLines = this.formatDiagnostics(promptDiagnostics, sourceInfos);
-				this.chatContainer.addChild(
-					new Text(`${theme.fg("warning", "[Prompt conflicts]")}\n${warningLines}`, 0, 0),
-				);
-				this.chatContainer.addChild(new Spacer(1));
-			}
+			addDiagnosticsSection("Prompt conflicts", promptDiagnostics);
 
 			const extensionDiagnostics: ResourceDiagnostic[] = [];
 			const extensionErrors = this.session.resourceLoader.getExtensions().errors;
@@ -1492,20 +1592,10 @@ export class InteractiveMode {
 			const shortcutDiagnostics = this.session.extensionRunner.getShortcutDiagnostics();
 			extensionDiagnostics.push(...shortcutDiagnostics);
 
-			if (extensionDiagnostics.length > 0) {
-				const warningLines = this.formatDiagnostics(extensionDiagnostics, sourceInfos);
-				this.chatContainer.addChild(
-					new Text(`${theme.fg("warning", "[Extension issues]")}\n${warningLines}`, 0, 0),
-				);
-				this.chatContainer.addChild(new Spacer(1));
-			}
+			addDiagnosticsSection("Extension issues", extensionDiagnostics);
 
 			const themeDiagnostics = themesResult.diagnostics;
-			if (themeDiagnostics.length > 0) {
-				const warningLines = this.formatDiagnostics(themeDiagnostics, sourceInfos);
-				this.chatContainer.addChild(new Text(`${theme.fg("warning", "[Theme conflicts]")}\n${warningLines}`, 0, 0));
-				this.chatContainer.addChild(new Spacer(1));
-			}
+			addDiagnosticsSection("Theme conflicts", themeDiagnostics);
 		}
 	}
 
