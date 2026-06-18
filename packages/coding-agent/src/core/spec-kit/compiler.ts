@@ -43,6 +43,7 @@ export interface EvidenceManifestEntry {
 	gate?: string;
 	verify?: string;
 	files: string[];
+	evidencePaths: string[];
 }
 
 export interface CompiledSpecKit {
@@ -215,6 +216,42 @@ function findHardcodedAuthority(input: SpecKitCompileInput): string[] {
 	return violations;
 }
 
+function extractEvidencePathsFromText(value: string | undefined): string[] {
+	if (!value) return [];
+	return [...value.matchAll(/\.omk\/[\w./-]+/g)].map((match) => match[0]!.replace(/[),.;:]+$/, ""));
+}
+
+export function collectSpecEvidencePaths(tasks: readonly SpecTask[]): string[] {
+	const paths: string[] = [];
+	const seen = new Set<string>();
+	for (const task of tasks) {
+		for (const path of [
+			...task.files.filter((file) => file.startsWith(".omk/")),
+			...extractEvidencePathsFromText(task.verify),
+		]) {
+			if (seen.has(path)) continue;
+			seen.add(path);
+			paths.push(path);
+		}
+	}
+	return paths;
+}
+
+export function validateTaskCompletionDependencies(tasks: readonly SpecTask[]): string[] {
+	const errors: string[] = [];
+	const byId = new Map(tasks.map((task) => [task.id, task]));
+	for (const task of tasks) {
+		if (!task.completed) continue;
+		for (const dep of task.deps) {
+			const dependency = byId.get(dep);
+			if (dependency && !dependency.completed) {
+				errors.push(`Task ${task.id} is completed but dependency ${dep} is incomplete`);
+			}
+		}
+	}
+	return errors;
+}
+
 export function validateSpecKit(input: SpecKitCompileInput, compiled?: CompiledSpecKit): SpecKitValidationResult {
 	const spec = compiled ?? compileSpecKit(input);
 	const errors: string[] = [];
@@ -237,6 +274,7 @@ export function validateSpecKit(input: SpecKitCompileInput, compiled?: CompiledS
 			if (!requirementIds.has(requirementId)) errors.push(`Task ${task.id} references missing ${requirementId}`);
 		}
 	}
+	errors.push(...validateTaskCompletionDependencies(spec.tasks));
 	const cycle = detectCycle(spec.tasks);
 	if (cycle) errors.push(`Task DAG has cycle: ${cycle}`);
 	for (const requirement of spec.requirements) {
@@ -274,6 +312,7 @@ export function compileSpecKit(input: SpecKitCompileInput): CompiledSpecKit {
 		gate: task.gate,
 		verify: task.verify,
 		files: task.files,
+		evidencePaths: collectSpecEvidencePaths([task]),
 	}));
 	const hashInput = stableJson({ requirements, compiledDag, traceability, evidenceManifest });
 	return {

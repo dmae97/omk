@@ -143,6 +143,54 @@ export interface ScopedKeybindingMatch {
 	conflicts: KeybindingConflict[];
 }
 
+export interface KeybindingScopeFrame {
+	id: string;
+	keybindings: readonly Keybinding[];
+}
+
+export class KeybindingScopeStack {
+	private frames: KeybindingScopeFrame[] = [];
+
+	push(id: string, keybindings: readonly Keybinding[]): KeybindingScopeFrame {
+		const frame = { id, keybindings: [...keybindings] };
+		this.frames.push(frame);
+		return frame;
+	}
+
+	pop(id?: string): KeybindingScopeFrame | undefined {
+		if (id === undefined) return this.frames.pop();
+		let index = -1;
+		for (let i = this.frames.length - 1; i >= 0; i--) {
+			if (this.frames[i]?.id === id) {
+				index = i;
+				break;
+			}
+		}
+		if (index < 0) return undefined;
+		const [frame] = this.frames.splice(index, 1);
+		return frame;
+	}
+
+	clear(): void {
+		this.frames = [];
+	}
+
+	getFrames(): KeybindingScopeFrame[] {
+		return this.frames.map((frame) => ({ id: frame.id, keybindings: [...frame.keybindings] }));
+	}
+
+	getActiveFrame(): KeybindingScopeFrame | undefined {
+		const frame = this.frames.at(-1);
+		return frame ? { id: frame.id, keybindings: [...frame.keybindings] } : undefined;
+	}
+
+	match(data: string, keybindings: KeybindingsManager): ScopedKeybindingMatch {
+		const activeFrame = this.frames.at(-1);
+		if (!activeFrame) return { keybinding: undefined, conflicts: [] };
+		return keybindings.matchInScope(data, activeFrame.keybindings);
+	}
+}
+
 function normalizeKeys(keys: KeyId | KeyId[] | undefined): KeyId[] {
 	if (keys === undefined) return [];
 	const keyList = Array.isArray(keys) ? keys : [keys];

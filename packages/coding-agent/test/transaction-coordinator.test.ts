@@ -92,4 +92,49 @@ describe("harness control transactions", () => {
 		expect(result.status).toBe("in_doubt");
 		expect(verifyHarnessControlReplay(logPath).operations[0]).toMatchObject({ terminalStatus: "in_doubt" });
 	});
+
+	it("emits prepare/apply/verify phases and rolls back when verification fails", async () => {
+		const root = createTempDir();
+		const logPath = path.join(root, "events.jsonl");
+		let rollbackValue: unknown;
+
+		const result = await runHarnessControlTransaction({
+			kind: "interactive.theme.apply",
+			beforeState: { theme: "light" },
+			prepare: () => ({ previousTheme: "light" }),
+			commit: () => "dark",
+			verify: () => {
+				throw new Error("verify failed");
+			},
+			rollback: (_error, context) => {
+				rollbackValue = context?.value;
+			},
+			eventOptions: { cwd: root, logPath, operationId: "tx-verify" },
+		});
+
+		expect(result.status).toBe("rolled_back");
+		expect(rollbackValue).toBe("dark");
+		const statuses = fs
+			.readFileSync(logPath, "utf-8")
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(line) as { status: string })
+			.map((event) => event.status);
+		expect(statuses).toEqual(["prepared", "started", "applying", "verifying", "rolled_back"]);
+	});
+
+	it("fails sync transactions when commit returns a thenable", () => {
+		const root = createTempDir();
+		const logPath = path.join(root, "events.jsonl");
+
+		const result = runHarnessControlTransactionSync({
+			kind: "interactive.theme.apply",
+			commit: () => Promise.resolve("dark") as never,
+			eventOptions: { cwd: root, logPath, operationId: "tx-sync-thenable" },
+		});
+
+		expect(result.status).toBe("failed");
+		expect(result.error).toBeInstanceOf(Error);
+		expect(verifyHarnessControlReplay(logPath).operations[0]).toMatchObject({ terminalStatus: "failed" });
+	});
 });

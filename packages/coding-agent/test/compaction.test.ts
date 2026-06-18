@@ -325,6 +325,51 @@ describe("summary input packing", () => {
 		]);
 	});
 
+	it("annotates semantic units with section paths, refs, and status kind", () => {
+		const units = splitSummaryInputSemanticUnits(
+			[
+				"## Progress",
+				"### Blocked",
+				"- HCP-08 blocked by packages/coding-agent/src/core/compaction/compaction.ts failure",
+			].join("\n"),
+		);
+		const blocked = units.find((unit) => unit.text.includes("HCP-08"));
+
+		expect(blocked).toMatchObject({
+			kind: "blocker",
+			sectionPath: ["Progress", "Blocked"],
+			status: "blocked",
+		});
+		expect(blocked?.refs).toEqual(
+			expect.arrayContaining(["id:HCP-08", "path:packages/coding-agent/src/core/compaction/compaction.ts"]),
+		);
+	});
+
+	it("keeps duplicate facts when section chronology differs", () => {
+		const units = splitSummaryInputSemanticUnits(
+			["### Attempt 1", "npm run check failed", "", "### Attempt 2", "npm run check failed"].join("\n"),
+		);
+
+		expect(deduplicateSummaryFactsByNovelty(units).map((unit) => unit.sectionPath.join(" > "))).toEqual([
+			"Attempt 1",
+			"Attempt 2",
+		]);
+	});
+
+	it("keeps repeated facts when status chronology changes from failed to passed", () => {
+		const units = splitSummaryInputSemanticUnits(
+			[
+				"### Attempt 1",
+				"npm run check failed in packages/coding-agent/src/core/compaction/compaction.ts",
+				"",
+				"### Attempt 2",
+				"npm run check passed in packages/coding-agent/src/core/compaction/compaction.ts",
+			].join("\n"),
+		);
+
+		expect(deduplicateSummaryFactsByNovelty(units).map((unit) => unit.status)).toEqual(["failed", "passed"]);
+	});
+
 	it("keeps fenced semantic units intact when a high-signal line is selected", () => {
 		const lowSignalHead = Array.from({ length: 220 }, (_, index) => `low signal head ${index}`).join("\n");
 		const codeBlock = [

@@ -680,10 +680,24 @@ function selectHighSignalLines(text: string, budgetChars: number): string {
 		.join("\n");
 }
 
+export type SummaryInputSemanticUnitKind =
+	| "heading"
+	| "checklist"
+	| "code"
+	| "command"
+	| "evidence"
+	| "blocker"
+	| "text";
+export type SummaryInputSemanticUnitStatus = "done" | "in_progress" | "blocked" | "failed" | "passed";
+
 export interface SummaryInputSemanticUnit {
 	index: number;
 	text: string;
 	score: number;
+	sectionPath: string[];
+	kind: SummaryInputSemanticUnitKind;
+	refs: string[];
+	status?: SummaryInputSemanticUnitStatus;
 }
 
 export interface SummaryDependencyGraph {
@@ -717,7 +731,68 @@ function extractSummaryUnitSignals(text: string): string[] {
 	for (const match of text.matchAll(/\b(?:HCP-\d+|R\d+)\b/g)) {
 		signals.add(`id:${match[0]}`);
 	}
+	for (const match of text.matchAll(/\.omk\/[\w./-]+/g)) {
+		signals.add(`evidence:${match[0]}`);
+	}
 	return [...signals];
+}
+
+function updateHeadingStack(
+	headingStack: Array<{ level: number; title: string }>,
+	headingLine: string,
+): Array<{ level: number; title: string }> {
+	const match = headingLine.match(/^(#{1,6})\s+(.+)$/);
+	if (!match) return headingStack;
+	const level = match[1]!.length;
+	const title = match[2]!.replace(/\s+#+\s*$/, "").trim();
+	const nextStack = [...headingStack];
+	while (nextStack.length > 0 && nextStack.at(-1)!.level >= level) {
+		nextStack.pop();
+	}
+	nextStack.push({ level, title });
+	return nextStack;
+}
+
+function inferSummaryUnitStatus(text: string): SummaryInputSemanticUnitStatus | undefined {
+	if (/^- \[[xX]]/m.test(text) || /\b(?:completed|done|fixed)\b/i.test(text) || /(?:완료|수정됨)/.test(text)) {
+		return "done";
+	}
+	if (/^- \[ ]/m.test(text) || /\b(?:in progress|todo|next)\b/i.test(text) || /(?:진행|다음)/.test(text)) {
+		return "in_progress";
+	}
+	if (/\b(?:blocked|blocker)\b/i.test(text) || /(?:차단|블로커)/.test(text)) return "blocked";
+	if (/\b(?:failed|failure|error|exception|regression)\b/i.test(text) || /(?:실패|오류|회귀)/.test(text)) {
+		return "failed";
+	}
+	if (/\b(?:passed|success|ok)\b/i.test(text) || /(?:통과|성공)/.test(text)) return "passed";
+	return undefined;
+}
+
+function inferSummaryUnitKind(
+	text: string,
+	status: SummaryInputSemanticUnitStatus | undefined,
+): SummaryInputSemanticUnitKind {
+	const trimmed = text.trim();
+	if (status === "blocked") return "blocker";
+	if (trimmed.startsWith("```")) return "code";
+	if (/\.omk\/[\w./-]+|\bevidence\b/i.test(text)) return "evidence";
+	if (/\b(?:npm|node|pnpm|yarn|bun|git|gh|tsgo|vitest|biome|pytest|cargo|go test)\b/.test(text)) return "command";
+	if (/^(?:[-*]\s+\[[ xX]])/m.test(text)) return "checklist";
+	if (/^#{1,6}\s/m.test(text)) return "heading";
+	return "text";
+}
+
+function createSummaryInputSemanticUnit(index: number, text: string, sectionPath: string[]): SummaryInputSemanticUnit {
+	const status = inferSummaryUnitStatus(text);
+	return {
+		index,
+		text,
+		score: scoreSummaryUnit(text),
+		sectionPath,
+		kind: inferSummaryUnitKind(text, status),
+		refs: extractSummaryUnitSignals(text),
+		status,
+	};
 }
 
 export function splitSummaryInputSemanticUnits(text: string): SummaryInputSemanticUnit[] {
@@ -726,6 +801,8 @@ export function splitSummaryInputSemanticUnits(text: string): SummaryInputSemant
 	let start = 0;
 	let current: string[] = [];
 	let inFence = false;
+	let activeHeadingStack: Array<{ level: number; title: string }> = [];
+	let currentSectionPath: string[] = [];
 
 	function flush(nextIndex: number): void {
 		while (current.length > 0 && current[0]?.trim() === "") {
@@ -737,12 +814,14 @@ export function splitSummaryInputSemanticUnits(text: string): SummaryInputSemant
 		}
 		if (current.length === 0) {
 			start = nextIndex;
+			currentSectionPath = activeHeadingStack.map((heading) => heading.title);
 			return;
 		}
 		const unitText = current.join("\n");
-		units.push({ index: start, text: unitText, score: scoreSummaryUnit(unitText) });
+		units.push(createSummaryInputSemanticUnit(start, unitText, [...currentSectionPath]));
 		current = [];
 		start = nextIndex;
+		currentSectionPath = activeHeadingStack.map((heading) => heading.title);
 	}
 
 	for (let index = 0; index < lines.length; index++) {
@@ -754,9 +833,13 @@ export function splitSummaryInputSemanticUnits(text: string): SummaryInputSemant
 		if (!inFence && startsHeading && current.some((entry) => entry.trim().length > 0)) {
 			flush(index);
 		}
+		if (!inFence && startsHeading) {
+			activeHeadingStack = updateHeadingStack(activeHeadingStack, trimmed);
+		}
 
 		if (current.length === 0) {
 			start = index;
+			currentSectionPath = activeHeadingStack.map((heading) => heading.title);
 		}
 		current.push(line);
 
@@ -778,16 +861,21 @@ export function buildSummaryDependencyGraph(units: SummaryInputSemanticUnit[]): 
 	const edges: SummaryDependencyGraph["edges"] = [];
 	const signalsByIndex = new Map<number, Set<string>>();
 	for (const unit of units) {
-		signalsByIndex.set(unit.index, new Set(extractSummaryUnitSignals(unit.text)));
+		signalsByIndex.set(unit.index, new Set(unit.refs));
 	}
 	for (let i = 0; i < units.length; i++) {
 		for (let j = i + 1; j < units.length; j++) {
-			const left = signalsByIndex.get(units[i]!.index) ?? new Set<string>();
-			const right = signalsByIndex.get(units[j]!.index) ?? new Set<string>();
+			const leftUnit = units[i]!;
+			const rightUnit = units[j]!;
+			const left = signalsByIndex.get(leftUnit.index) ?? new Set<string>();
+			const right = signalsByIndex.get(rightUnit.index) ?? new Set<string>();
 			const shared = [...left].find((signal) => right.has(signal));
-			if (shared) {
-				edges.push({ from: units[i]!.index, to: units[j]!.index, reason: shared });
-				edges.push({ from: units[j]!.index, to: units[i]!.index, reason: shared });
+			const sameSection =
+				leftUnit.sectionPath.length > 0 && leftUnit.sectionPath.join("/") === rightUnit.sectionPath.join("/");
+			if (shared || sameSection) {
+				const reason = shared ?? `section:${leftUnit.sectionPath.join("/")}`;
+				edges.push({ from: leftUnit.index, to: rightUnit.index, reason });
+				edges.push({ from: rightUnit.index, to: leftUnit.index, reason });
 			}
 		}
 	}
@@ -828,7 +916,8 @@ export function deduplicateSummaryFactsByNovelty(units: SummaryInputSemanticUnit
 	const seen = new Set<string>();
 	const result: SummaryInputSemanticUnit[] = [];
 	for (const unit of units) {
-		const key = normalizeSummaryNovelty(unit.text);
+		const sectionKey = unit.sectionPath.join("/");
+		const key = [sectionKey, unit.kind, unit.status ?? "", normalizeSummaryNovelty(unit.text)].join("|");
 		if (seen.has(key)) continue;
 		seen.add(key);
 		result.push(unit);
