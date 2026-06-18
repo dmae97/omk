@@ -138,6 +138,11 @@ export interface KeybindingConflict {
 	keybindings: string[];
 }
 
+export interface ScopedKeybindingMatch {
+	keybinding: Keybinding | undefined;
+	conflicts: KeybindingConflict[];
+}
+
 function normalizeKeys(keys: KeyId | KeyId[] | undefined): KeyId[] {
 	if (keys === undefined) return [];
 	const keyList = Array.isArray(keys) ? keys : [keys];
@@ -197,6 +202,51 @@ export class KeybindingsManager {
 			if (matchesKey(data, key)) return true;
 		}
 		return false;
+	}
+
+	matchInScope(data: string, keybindings: readonly Keybinding[]): ScopedKeybindingMatch {
+		const matches: Array<{ keybinding: Keybinding; key: KeyId }> = [];
+		for (const keybinding of keybindings) {
+			for (const key of this.keysById.get(keybinding) ?? []) {
+				if (matchesKey(data, key)) {
+					matches.push({ keybinding, key });
+					break;
+				}
+			}
+		}
+
+		if (matches.length <= 1) {
+			return { keybinding: matches[0]?.keybinding, conflicts: [] };
+		}
+
+		const conflictsByKey = new Map<KeyId, Set<Keybinding>>();
+		for (const match of matches) {
+			const conflict = conflictsByKey.get(match.key) ?? new Set<Keybinding>();
+			conflict.add(match.keybinding);
+			conflictsByKey.set(match.key, conflict);
+		}
+
+		return {
+			keybinding: undefined,
+			conflicts: [...conflictsByKey]
+				.map(([key, conflicted]) => ({ key, keybindings: [...conflicted] }))
+				.filter((conflict) => conflict.keybindings.length > 1),
+		};
+	}
+
+	getConflictsForScope(keybindings: readonly Keybinding[]): KeybindingConflict[] {
+		const claimsByKey = new Map<KeyId, Set<Keybinding>>();
+		for (const keybinding of keybindings) {
+			for (const key of this.keysById.get(keybinding) ?? []) {
+				const claimants = claimsByKey.get(key) ?? new Set<Keybinding>();
+				claimants.add(keybinding);
+				claimsByKey.set(key, claimants);
+			}
+		}
+
+		return [...claimsByKey]
+			.filter(([, keybindingsForKey]) => keybindingsForKey.size > 1)
+			.map(([key, keybindingsForKey]) => ({ key, keybindings: [...keybindingsForKey] }));
 	}
 
 	getKeys(keybinding: Keybinding): KeyId[] {

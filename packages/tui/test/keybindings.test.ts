@@ -35,4 +35,31 @@ describe("KeybindingsManager", () => {
 		]);
 		assert.deepStrictEqual(keybindings.getKeys("tui.editor.cursorLeft"), ["left", "ctrl+b"]);
 	});
+
+	it("resolves only unambiguous matches inside an explicit scope", () => {
+		const keybindings = new KeybindingsManager(TUI_KEYBINDINGS, {
+			"tui.input.submit": "ctrl+x",
+			"tui.select.confirm": "ctrl+x",
+		});
+
+		assert.deepStrictEqual(keybindings.matchInScope("\u0018", ["tui.input.submit"]), {
+			keybinding: "tui.input.submit",
+			conflicts: [],
+		});
+		assert.deepStrictEqual(keybindings.matchInScope("\u0018", ["tui.input.submit", "tui.select.confirm"]), {
+			keybinding: undefined,
+			conflicts: [
+				{
+					key: "ctrl+x",
+					keybindings: ["tui.input.submit", "tui.select.confirm"],
+				},
+			],
+		});
+		assert.deepStrictEqual(keybindings.getConflictsForScope(["tui.input.submit", "tui.select.confirm"]), [
+			{
+				key: "ctrl+x",
+				keybindings: ["tui.input.submit", "tui.select.confirm"],
+			},
+		]);
+	});
 });
