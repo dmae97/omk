@@ -8,6 +8,7 @@
 import type { AgentMessage, StreamFn, ThinkingLevel } from "@earendil-works/omk-agent-core";
 import type { AssistantMessage, Context, Model, SimpleStreamOptions, Usage } from "@earendil-works/omk-ai";
 import { completeSimple } from "@earendil-works/omk-ai";
+import { recordHarnessControlEvent } from "../harness-control-events.ts";
 import {
 	convertToLlm,
 	createBranchSummaryMessage,
@@ -510,6 +511,7 @@ export function findCutPoint(
 
 const CHARS_PER_TOKEN_ESTIMATE = 4;
 const SUMMARY_INPUT_PROMPT_OVERHEAD_TOKENS = 2048;
+const SUMMARY_INPUT_TOKENIZER_SAFETY_MARGIN = 512;
 const MIN_SUMMARY_INPUT_TOKENS = 512;
 
 export interface SummaryInputPackingResult {
@@ -528,11 +530,22 @@ function isFinitePositiveInteger(value: number | undefined): value is number {
 	return value !== undefined && Number.isFinite(value) && value > 0;
 }
 
-function resolveSummaryInputTokenBudget(
+export interface SummaryInputTokenBudgetOptions {
+	configuredSummaryInputTokens?: number;
+	basePrompt?: string;
+	customInstructions?: string;
+	previousSummary?: string;
+	systemPrompt?: string;
+	wrapperText?: string;
+	safetyMarginTokens?: number;
+}
+
+export function resolveSummaryInputTokenBudget(
 	model: Model<any>,
 	maxOutputTokens: number,
-	configuredSummaryInputTokens?: number,
+	options?: number | SummaryInputTokenBudgetOptions,
 ): number | undefined {
+	const configuredSummaryInputTokens = typeof options === "number" ? options : options?.configuredSummaryInputTokens;
 	if (configuredSummaryInputTokens !== undefined && configuredSummaryInputTokens <= 0) {
 		return undefined;
 	}
@@ -547,9 +560,26 @@ function resolveSummaryInputTokenBudget(
 		return Math.floor(configuredBudget);
 	}
 
+	const fixedPromptTokens =
+		typeof options === "object"
+			? estimateTextTokens(
+					[
+						options.systemPrompt,
+						options.basePrompt,
+						options.customInstructions,
+						options.previousSummary,
+						options.wrapperText,
+					]
+						.filter((value): value is string => typeof value === "string" && value.length > 0)
+						.join("\n"),
+				)
+			: SUMMARY_INPUT_PROMPT_OVERHEAD_TOKENS;
+	const safetyMarginTokens =
+		typeof options === "object" ? (options.safetyMarginTokens ?? SUMMARY_INPUT_TOKENIZER_SAFETY_MARGIN) : 0;
+
 	const availableInputTokens = Math.max(
 		MIN_SUMMARY_INPUT_TOKENS,
-		contextWindow - Math.max(0, Math.floor(maxOutputTokens)) - SUMMARY_INPUT_PROMPT_OVERHEAD_TOKENS,
+		contextWindow - Math.max(0, Math.floor(maxOutputTokens)) - fixedPromptTokens - safetyMarginTokens,
 	);
 	return Math.max(MIN_SUMMARY_INPUT_TOKENS, Math.min(Math.floor(configuredBudget), availableInputTokens));
 }
@@ -566,7 +596,10 @@ function scoreSummaryLine(line: string): number {
 	) {
 		score += 6;
 	}
-	if (/\b(?:error|failed|failure|exception|warning|blocked|regression|timeout|overflow|abort)\b/i.test(trimmed)) {
+	if (
+		/\b(?:error|failed|failure|exception|warning|blocked|regression|timeout|overflow|abort)\b/i.test(trimmed) ||
+		/(?:오류|실패|경고|차단|회귀|시간 초과|타임아웃)/.test(trimmed)
+	) {
 		score += 5;
 	}
 	if (/\b(?:npm|node|pnpm|yarn|bun|git|gh|tsgo|vitest|biome|pytest|cargo|go test)\b/.test(trimmed)) {
@@ -576,7 +609,10 @@ function scoreSummaryLine(line: string): number {
 		score += 3;
 	}
 	if (
-		/\b(?:goal|constraint|decision|next step|todo|changed|created|modified|verified|passed|failed)\b/i.test(trimmed)
+		/\b(?:goal|constraint|decision|next step|todo|changed|created|modified|verified|passed|failed)\b/i.test(
+			trimmed,
+		) ||
+		/(?:목표|제약|결정|다음 단계|검증|통과|수정|생성|변경|증거)/.test(trimmed)
 	) {
 		score += 3;
 	}
@@ -616,6 +652,111 @@ function selectHighSignalLines(text: string, budgetChars: number): string {
 		.join("\n");
 }
 
+interface SummaryInputSemanticUnit {
+	index: number;
+	text: string;
+	score: number;
+}
+
+function scoreSummaryUnit(unit: string): number {
+	const lineScores = unit.split("\n").map(scoreSummaryLine);
+	const maxLineScore = Math.max(0, ...lineScores);
+	const aggregateScore = lineScores.reduce((sum, score) => sum + Math.max(0, score), 0);
+	let score = maxLineScore * 2 + Math.min(aggregateScore, 12);
+	if (/^```/m.test(unit)) score += 3;
+	if (/^#{1,6}\s/m.test(unit)) score += 2;
+	if (unit.length > 2400) score -= 4;
+	return score;
+}
+
+function splitSummaryInputSemanticUnits(text: string): SummaryInputSemanticUnit[] {
+	const lines = text.split("\n");
+	const units: SummaryInputSemanticUnit[] = [];
+	let start = 0;
+	let current: string[] = [];
+	let inFence = false;
+
+	function flush(nextIndex: number): void {
+		while (current.length > 0 && current[0]?.trim() === "") {
+			current.shift();
+			start++;
+		}
+		while (current.length > 0 && current.at(-1)?.trim() === "") {
+			current.pop();
+		}
+		if (current.length === 0) {
+			start = nextIndex;
+			return;
+		}
+		const unitText = current.join("\n");
+		units.push({ index: start, text: unitText, score: scoreSummaryUnit(unitText) });
+		current = [];
+		start = nextIndex;
+	}
+
+	for (let index = 0; index < lines.length; index++) {
+		const line = lines[index]!;
+		const trimmed = line.trim();
+		const startsFence = trimmed.startsWith("```");
+		const startsHeading = /^#{1,6}\s/.test(trimmed);
+
+		if (!inFence && startsHeading && current.some((entry) => entry.trim().length > 0)) {
+			flush(index);
+		}
+
+		if (current.length === 0) {
+			start = index;
+		}
+		current.push(line);
+
+		if (startsFence) {
+			inFence = !inFence;
+			if (!inFence) flush(index + 1);
+			continue;
+		}
+
+		if (!inFence && trimmed.length === 0) {
+			flush(index + 1);
+		}
+	}
+	flush(lines.length);
+	return units;
+}
+
+function selectHighSignalSemanticUnits(text: string, budgetChars: number): string {
+	if (budgetChars <= 0) return "";
+
+	const units = splitSummaryInputSemanticUnits(text)
+		.filter((unit) => unit.score > 0)
+		.sort((a, b) => b.score - a.score || a.index - b.index);
+
+	const selected: SummaryInputSemanticUnit[] = [];
+	let usedChars = 0;
+	for (const unit of units) {
+		const unitChars = unit.text.length + 2;
+		if (unitChars > budgetChars) {
+			const excerpt = selectHighSignalLines(unit.text, Math.max(0, budgetChars - usedChars));
+			if (excerpt.length > 0) {
+				selected.push({ ...unit, text: excerpt });
+				usedChars += excerpt.length + 2;
+			}
+			continue;
+		}
+		if (usedChars + unitChars > budgetChars) continue;
+		selected.push(unit);
+		usedChars += unitChars;
+	}
+
+	if (selected.length === 0) {
+		return text.slice(0, budgetChars);
+	}
+
+	return selected
+		.sort((a, b) => a.index - b.index)
+		.map((unit) => unit.text)
+		.join("\n\n");
+}
+
 function trimToCharBudget(text: string, budgetChars: number, fromEnd = false): string {
 	if (budgetChars <= 0) return "";
 	if (text.length <= budgetChars) return text;
@@ -645,7 +786,7 @@ export function packSummaryInputForTokenBudget(
 	const targetChars = Math.max(MIN_SUMMARY_INPUT_TOKENS * CHARS_PER_TOKEN_ESTIMATE, Math.floor(maxInputTokens) * 4);
 	const marker = `<omk-summary-input-compressed originalTokens="${originalTokens}" targetTokens="${Math.floor(
 		maxInputTokens,
-	)}">\nOlder serialized history was packed before summarization. Opening context, high-signal middle lines, and the recent tail were retained; low-signal repeated text was omitted.\n</omk-summary-input-compressed>`;
+	)}">\nOlder serialized history was packed before summarization. Opening context, high-signal semantic units, and the recent tail were retained; low-signal repeated text was omitted.\n</omk-summary-input-compressed>`;
 	const contentBudgetChars = Math.max(512, targetChars - marker.length - 64);
 	const headBudgetChars = Math.floor(contentBudgetChars * 0.18);
 	const tailBudgetChars = Math.floor(contentBudgetChars * 0.52);
@@ -655,7 +796,7 @@ export function packSummaryInputForTokenBudget(
 	const tail = trimToCharBudget(text, tailBudgetChars, true);
 	const middleStart = Math.min(headBudgetChars, text.length);
 	const middleEnd = Math.max(middleStart, text.length - tailBudgetChars);
-	const middle = selectHighSignalLines(text.slice(middleStart, middleEnd), middleBudgetChars);
+	const middle = selectHighSignalSemanticUnits(text.slice(middleStart, middleEnd), middleBudgetChars);
 	const packedText = [head.trimEnd(), marker, middle.trim(), tail.trimStart()].filter(Boolean).join("\n\n");
 	const packedTokens = estimateTextTokens(packedText);
 
@@ -754,6 +895,115 @@ Use this EXACT format:
 
 Keep each section concise. Preserve exact file paths, function names, command results, and error messages.`;
 
+const REQUIRED_SUMMARY_SECTIONS = [
+	"## Goal",
+	"## Constraints & Preferences",
+	"## Progress",
+	"### Done",
+	"### In Progress",
+	"### Blocked",
+	"## Key Decisions",
+	"## Next Steps",
+	"## Critical Context",
+	"## Resume Handoff",
+] as const;
+
+export interface CompactionSummaryValidationOptions {
+	previousSummary?: string;
+	fallbackFacts?: readonly string[];
+}
+
+export interface CompactionSummaryValidationResult {
+	summary: string;
+	wasRepaired: boolean;
+	missingSections: string[];
+}
+
+function extractSection(summary: string, heading: string): string | undefined {
+	const start = summary.indexOf(heading);
+	if (start < 0) return undefined;
+	const nextHeading = summary.slice(start + heading.length).search(/\n#{2,3}\s/);
+	if (nextHeading < 0) return summary.slice(start + heading.length).trim();
+	return summary.slice(start + heading.length, start + heading.length + nextHeading).trim();
+}
+
+function extractCriticalFactsFromText(text: string, limit = 12): string[] {
+	return text
+		.split("\n")
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0 && scoreSummaryLine(line) >= 4)
+		.slice(0, limit);
+}
+
+function formatFallbackFacts(fallbackFacts: readonly string[] | undefined): string {
+	if (!fallbackFacts || fallbackFacts.length === 0) return "- (not captured)";
+	return fallbackFacts.map((fact) => `- ${fact}`).join("\n");
+}
+
+export function validateCompactionSummaryContract(
+	summary: string,
+	options: CompactionSummaryValidationOptions = {},
+): CompactionSummaryValidationResult {
+	const trimmedSummary = summary.trim();
+	const missingSections = REQUIRED_SUMMARY_SECTIONS.filter((section) => !trimmedSummary.includes(section));
+	const previousBlocked = options.previousSummary
+		? (extractSection(options.previousSummary, "### Blocked") ??
+			extractSection(options.previousSummary, "## Blocked"))
+		: undefined;
+	const shouldPreservePreviousBlocked =
+		previousBlocked !== undefined && previousBlocked.length > 0 && !trimmedSummary.includes(previousBlocked);
+
+	if (missingSections.length === 0 && !shouldPreservePreviousBlocked) {
+		return { summary: trimmedSummary, wasRepaired: false, missingSections: [] };
+	}
+
+	const repairedSections: string[] = [trimmedSummary || "## Goal\n(not captured)"];
+	if (!trimmedSummary.includes("## Constraints & Preferences")) {
+		repairedSections.push("## Constraints & Preferences\n- (not captured)");
+	}
+	if (!trimmedSummary.includes("## Progress")) {
+		repairedSections.push("## Progress");
+	}
+	if (!trimmedSummary.includes("### Done")) {
+		repairedSections.push("### Done\n- [x] (not captured)");
+	}
+	if (!trimmedSummary.includes("### In Progress")) {
+		repairedSections.push("### In Progress\n- [ ] Continue from preserved context");
+	}
+	if (!trimmedSummary.includes("### Blocked")) {
+		repairedSections.push(
+			`### Blocked\n${previousBlocked && previousBlocked.length > 0 ? previousBlocked : "- (none)"}`,
+		);
+	} else if (shouldPreservePreviousBlocked) {
+		repairedSections.push(`### Blocked\n${previousBlocked}`);
+	}
+	if (!trimmedSummary.includes("## Key Decisions")) {
+		repairedSections.push("## Key Decisions\n- **Preserved context**: Summary contract repaired deterministically.");
+	}
+	if (!trimmedSummary.includes("## Next Steps")) {
+		repairedSections.push("## Next Steps\n1. Re-check workspace state before editing.");
+	}
+	if (!trimmedSummary.includes("## Critical Context")) {
+		repairedSections.push(`## Critical Context\n${formatFallbackFacts(options.fallbackFacts)}`);
+	}
+	if (!trimmedSummary.includes("## Resume Handoff")) {
+		repairedSections.push(
+			[
+				"## Resume Handoff",
+				"- **First action**: Re-check workspace state and continue the latest requested task.",
+				"- **Re-check before editing**: git status and relevant files from Critical Context.",
+				"- **Evidence status**: (not run)",
+			].join("\n"),
+		);
+	}
+
+	return {
+		summary: repairedSections.join("\n\n"),
+		wasRepaired: true,
+		missingSections,
+	};
+}
+
 function createSummarizationOptions(
 	model: Model<any>,
 	maxTokens: number,
@@ -814,10 +1064,14 @@ export async function generateSummary(
 	// Convert to LLM messages first (handles custom types like bashExecution, custom, etc.)
 	const llmMessages = convertToLlm(currentMessages);
 	const conversationText = serializeConversation(llmMessages);
-	const packedConversation = packSummaryInputForTokenBudget(
-		conversationText,
-		resolveSummaryInputTokenBudget(model, maxTokens, summaryInputTokens),
-	);
+	const summaryInputBudget = resolveSummaryInputTokenBudget(model, maxTokens, {
+		configuredSummaryInputTokens: summaryInputTokens,
+		basePrompt,
+		previousSummary,
+		systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+		wrapperText: "<conversation></conversation><previous-summary></previous-summary>",
+	});
+	const packedConversation = packSummaryInputForTokenBudget(conversationText, summaryInputBudget);
 
 	// Build the prompt with conversation wrapped in tags
 	let promptText = `<conversation>\n${packedConversation.text}\n</conversation>\n\n`;
@@ -852,7 +1106,22 @@ export async function generateSummary(
 		.map((c) => c.text)
 		.join("\n");
 
-	return textContent;
+	const validation = validateCompactionSummaryContract(textContent, {
+		previousSummary,
+		fallbackFacts: extractCriticalFactsFromText(conversationText),
+	});
+	recordHarnessControlEvent("compaction.summary.generated", "completed", {
+		model: model.id,
+		provider: model.provider,
+		maxTokens,
+		summaryInputBudget,
+		packedTokens: packedConversation.packedTokens,
+		omittedTokens: packedConversation.omittedTokens,
+		wasCompressed: packedConversation.wasCompressed,
+		wasRepaired: validation.wasRepaired,
+		missingSections: validation.missingSections,
+	});
+	return validation.summary;
 }
 
 // ============================================================================
@@ -1091,7 +1360,12 @@ async function generateTurnPrefixSummary(
 	const conversationText = serializeConversation(llmMessages);
 	const packedConversation = packSummaryInputForTokenBudget(
 		conversationText,
-		resolveSummaryInputTokenBudget(model, maxTokens, summaryInputTokens),
+		resolveSummaryInputTokenBudget(model, maxTokens, {
+			configuredSummaryInputTokens: summaryInputTokens,
+			basePrompt: TURN_PREFIX_SUMMARIZATION_PROMPT,
+			systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+			wrapperText: "<conversation></conversation>",
+		}),
 	);
 	const promptText = `<conversation>\n${packedConversation.text}\n</conversation>\n\n${TURN_PREFIX_SUMMARIZATION_PROMPT}`;
 	const summarizationMessages = [

@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@earendil-works/omk-agent-core";
 import type { AssistantMessage, Usage } from "@earendil-works/omk-ai";
-import { getModel } from "@earendil-works/omk-ai";
+import { createAssistantMessageEventStream, getModel } from "@earendil-works/omk-ai";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -12,10 +12,14 @@ import {
 	estimateContextTokens,
 	estimateProjectedContextTokens,
 	findCutPoint,
+	generateSummary,
 	getCompactionHeadroomThreshold,
 	getLastAssistantUsage,
+	packSummaryInputForTokenBudget,
 	prepareCompaction,
+	resolveSummaryInputTokenBudget,
 	shouldCompact,
+	validateCompactionSummaryContract,
 } from "../src/core/compaction/index.ts";
 import {
 	buildSessionContext,
@@ -223,6 +227,92 @@ describe("getLastAssistantUsage", () => {
 	it("should return undefined if no assistant messages", () => {
 		const entries: SessionEntry[] = [createMessageEntry(createUserMessage("Hello"))];
 		expect(getLastAssistantUsage(entries)).toBeUndefined();
+	});
+});
+
+describe("summary input packing", () => {
+	it("accounts for previous summary and prompt overhead when resolving conversation budget", () => {
+		const model = { ...getModel("anthropic", "claude-sonnet-4-5"), contextWindow: 12000, maxTokens: 4096 };
+
+		const withoutPrevious = resolveSummaryInputTokenBudget(model, 1000, {
+			configuredSummaryInputTokens: 8000,
+			basePrompt: "base".repeat(100),
+			systemPrompt: "system".repeat(100),
+		});
+		const withPrevious = resolveSummaryInputTokenBudget(model, 1000, {
+			configuredSummaryInputTokens: 8000,
+			basePrompt: "base".repeat(100),
+			previousSummary: "previous-summary".repeat(1000),
+			systemPrompt: "system".repeat(100),
+		});
+
+		expect(withPrevious).toBeLessThan(withoutPrevious!);
+		expect(withPrevious).toBeGreaterThanOrEqual(512);
+	});
+
+	it("preserves Korean failure and evidence lines when packing high-signal middle context", () => {
+		const lowSignalHead = Array.from({ length: 200 }, (_, index) => `잡담 head ${index}`).join("\n");
+		const critical =
+			"오류: packages/coding-agent/src/core/compaction/compaction.ts 검증 실패, 다음 단계는 npm run check 재실행";
+		const lowSignalTail = Array.from({ length: 200 }, (_, index) => `잡담 tail ${index}`).join("\n");
+
+		const packed = packSummaryInputForTokenBudget(`${lowSignalHead}\n${critical}\n${lowSignalTail}`, 700);
+
+		expect(packed.wasCompressed).toBe(true);
+		expect(packed.text).toContain(critical);
+	});
+
+	it("keeps fenced semantic units intact when a high-signal line is selected", () => {
+		const lowSignalHead = Array.from({ length: 220 }, (_, index) => `low signal head ${index}`).join("\n");
+		const codeBlock = [
+			"```ts",
+			"const result = await runHarnessControlPlane();",
+			"throw new Error('failed packages/coding-agent/src/core/compaction/compaction.ts');",
+			"```",
+		].join("\n");
+		const lowSignalTail = Array.from({ length: 220 }, (_, index) => `low signal tail ${index}`).join("\n");
+
+		const packed = packSummaryInputForTokenBudget(`${lowSignalHead}\n\n${codeBlock}\n\n${lowSignalTail}`, 760);
+
+		expect(packed.wasCompressed).toBe(true);
+		expect(packed.text).toContain(codeBlock);
+	});
+
+	it("repairs missing required compaction summary sections deterministically", () => {
+		const repaired = validateCompactionSummaryContract("## Goal\nShip control plane", {
+			previousSummary: "## Blocked\n- Existing blocker must remain",
+			fallbackFacts: ["packages/coding-agent/src/core/compaction/compaction.ts", "npm run check: not run"],
+		});
+
+		expect(repaired.wasRepaired).toBe(true);
+		expect(repaired.summary).toContain("## Resume Handoff");
+		expect(repaired.summary).toContain("Existing blocker must remain");
+		expect(repaired.summary).toContain("packages/coding-agent/src/core/compaction/compaction.ts");
+	});
+
+	it("passes the repaired summary through generateSummary before returning", async () => {
+		const model = { ...getModel("anthropic", "claude-sonnet-4-5"), contextWindow: 12000, maxTokens: 4096 };
+		const summary = await generateSummary(
+			[createUserMessage("Need to edit packages/coding-agent/src/core/compaction/compaction.ts")],
+			model,
+			2000,
+			"test-key",
+			undefined,
+			undefined,
+			undefined,
+			"## Blocked\n- Preserve me",
+			undefined,
+			async () => {
+				const stream = createAssistantMessageEventStream();
+				stream.push({ type: "done", reason: "stop", message: createAssistantMessage("## Goal\nOnly goal") });
+				stream.end();
+				return stream;
+			},
+			8000,
+		);
+
+		expect(summary).toContain("## Resume Handoff");
+		expect(summary).toContain("Preserve me");
 	});
 });
 
