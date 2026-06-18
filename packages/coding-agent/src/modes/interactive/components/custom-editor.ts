@@ -33,42 +33,51 @@ export class CustomEditor extends Editor {
 			return;
 		}
 
-		// Check for paste image keybinding
-		if (this.keybindings.matches(data, "app.clipboard.pasteImage")) {
+		const actionScope = [
+			"app.clipboard.pasteImage",
+			"app.interrupt",
+			"app.exit",
+			...this.actionHandlers.keys(),
+		].filter((action, index, actions): action is AppKeybinding => actions.indexOf(action) === index);
+		const scopedAction = this.keybindings.matchInScope(data, actionScope);
+		if (scopedAction.conflicts.length > 0) {
+			// Ambiguous app-level shortcuts must fail closed and fall through to editor handling.
+			super.handleInput(data);
+			return;
+		}
+
+		const action = scopedAction.keybinding as AppKeybinding | undefined;
+
+		if (action === "app.clipboard.pasteImage") {
 			this.onPasteImage?.();
 			return;
 		}
 
-		// Check app keybindings first
-
-		// Escape/interrupt - only if autocomplete is NOT active
-		if (this.keybindings.matches(data, "app.interrupt")) {
+		if (action === "app.interrupt") {
 			if (!this.isShowingAutocomplete()) {
-				// Use dynamic onEscape if set, otherwise registered handler
 				const handler = this.onEscape ?? this.actionHandlers.get("app.interrupt");
 				if (handler) {
 					handler();
 					return;
 				}
 			}
-			// Let parent handle escape for autocomplete cancellation
 			super.handleInput(data);
 			return;
 		}
 
-		// Exit (Ctrl+D) - only when editor is empty
-		if (this.keybindings.matches(data, "app.exit")) {
+		if (action === "app.exit") {
 			if (this.getText().length === 0) {
 				const handler = this.onCtrlD ?? this.actionHandlers.get("app.exit");
 				if (handler) handler();
 				return;
 			}
-			// Fall through to editor handling for delete-char-forward when not empty
+			super.handleInput(data);
+			return;
 		}
 
-		// Check all other app actions
-		for (const [action, handler] of this.actionHandlers) {
-			if (action !== "app.interrupt" && action !== "app.exit" && this.keybindings.matches(data, action)) {
+		if (action) {
+			const handler = this.actionHandlers.get(action);
+			if (handler) {
 				handler();
 				return;
 			}
