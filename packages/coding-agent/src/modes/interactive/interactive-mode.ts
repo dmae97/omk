@@ -643,6 +643,17 @@ export class InteractiveMode {
 		}
 		this.startupNoticesShown = true;
 
+		const freedomBanner = this.session.consumeFreedomBanner();
+		if (freedomBanner) {
+			if (this.chatContainer.children.length > 0) {
+				this.chatContainer.addChild(new Spacer(1));
+			}
+			for (const line of freedomBanner.split("\n")) {
+				if (line.length === 0) continue;
+				this.chatContainer.addChild(new Text(theme.fg("warning", line), 1, 0));
+			}
+		}
+
 		if (!this.changelogMarkdown) {
 			return;
 		}
