@@ -268,3 +268,102 @@ export function modelSelectorReducer(state: ModelSelectorState, action: ModelSel
 export function selectedModelKey(state: ModelSelectorState): string | undefined {
 	return state.visibleModelKeys[state.selectedIndex];
 }
+
+export interface ProviderStripLayout {
+	/** Tab indices to render, in ascending order. Always includes 0 and the active index. */
+	readonly indices: readonly number[];
+	/** Render an ellipsis between the first tab ("all") and the rest (hidden middle). */
+	readonly ellipsisAfterFirst: boolean;
+	/** Render a trailing ellipsis (tabs hidden after the last shown). */
+	readonly trailingEllipsis: boolean;
+}
+
+function providerStripWidth(
+	indices: readonly number[],
+	tabWidths: readonly number[],
+	separatorWidth: number,
+	ellipsisWidth: number,
+): number {
+	if (indices.length === 0) return 0;
+	let total = 0;
+	let gaps = 0;
+	for (let k = 0; k < indices.length; k++) {
+		const current = indices[k] ?? 0;
+		total += tabWidths[current] ?? 0;
+		if (k > 0) {
+			total += separatorWidth;
+			if (current - (indices[k - 1] ?? 0) > 1) gaps += 1;
+		}
+	}
+	const last = indices[indices.length - 1] ?? 0;
+	const trailing = last < tabWidths.length - 1 ? 1 : 0;
+	return total + ellipsisWidth * (gaps + trailing);
+}
+
+/**
+ * Window a provider tab strip into a visible-column budget so the row never
+ * overflows the terminal while always keeping the "all" anchor (index 0) and the
+ * active tab visible. When the full strip fits, every tab is shown. Otherwise a
+ * contiguous window is grown around the active tab (right-biased, then left),
+ * with a single leading ellipsis for a hidden middle and a trailing ellipsis for
+ * hidden tail tabs.
+ *
+ * Pure and presentation-agnostic: callers pass the visible width of each themed
+ * tab label (via omk-tui `visibleWidth`) plus the separator/ellipsis widths.
+ * If the budget cannot even hold the mandatory {all, active} tabs, those are
+ * still returned (the caller may then hard-truncate).
+ */
+export function fitProviderStrip(
+	tabWidths: readonly number[],
+	activeIndex: number,
+	budget: number,
+	separatorWidth: number,
+	ellipsisWidth: number,
+): ProviderStripLayout {
+	const n = tabWidths.length;
+	if (n === 0) return { indices: [], ellipsisAfterFirst: false, trailingEllipsis: false };
+
+	const allIndices = Array.from({ length: n }, (_, i) => i);
+	if (providerStripWidth(allIndices, tabWidths, separatorWidth, ellipsisWidth) <= budget) {
+		return { indices: allIndices, ellipsisAfterFirst: false, trailingEllipsis: false };
+	}
+
+	const active = Math.max(0, Math.min(activeIndex, n - 1));
+	const shown = new Set<number>([0, active]);
+	const sortedShown = (): number[] => [...shown].sort((a, b) => a - b);
+
+	let low = active;
+	let high = active;
+	let progressed = true;
+	while (progressed) {
+		progressed = false;
+		if (high + 1 < n && !shown.has(high + 1)) {
+			shown.add(high + 1);
+			if (providerStripWidth(sortedShown(), tabWidths, separatorWidth, ellipsisWidth) <= budget) {
+				high += 1;
+				progressed = true;
+			} else {
+				shown.delete(high + 1);
+			}
+		}
+		if (low - 1 > 0 && !shown.has(low - 1)) {
+			shown.add(low - 1);
+			if (providerStripWidth(sortedShown(), tabWidths, separatorWidth, ellipsisWidth) <= budget) {
+				low -= 1;
+				progressed = true;
+			} else {
+				shown.delete(low - 1);
+			}
+		}
+	}
+
+	const indices = sortedShown();
+	const first = indices[0] ?? 0;
+	const second = indices[1] ?? first;
+	const last = indices[indices.length - 1] ?? 0;
+	return {
+		indices,
+		ellipsisAfterFirst: indices.length > 1 && second - first > 1,
+		trailingEllipsis: last < n - 1,
+	};
+}
