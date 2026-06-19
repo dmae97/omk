@@ -39,9 +39,9 @@ interface ScopedModelItem {
 }
 
 type ModelScope = "all" | "scoped";
-type ProviderTab = "all" | string;
+export type ProviderTab = "all" | string;
 
-const ALL_PROVIDER_TAB = "all" as const;
+export const ALL_PROVIDER_TAB = "all" as const;
 const PROVIDER_TAB_ORDER = [
 	"anthropic",
 	"openai",
@@ -102,6 +102,8 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	private scopeText?: Text;
 	private scopeHintText?: Text;
 
+	onProviderTabChange?: (tab: ProviderTab) => void;
+
 	constructor(
 		tui: TUI,
 		currentModel: Model<any> | undefined,
@@ -111,6 +113,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		onSelect: (model: Model<any>) => void,
 		onCancel: () => void,
 		initialSearchInput?: string,
+		initialProviderTab?: ProviderTab,
 	) {
 		super();
 
@@ -121,6 +124,13 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		this.scope = scopedModels.length > 0 ? "scoped" : "all";
 		this.onSelectCallback = onSelect;
 		this.onCancelCallback = onCancel;
+		if (initialProviderTab) {
+			// Restored across showModelSelector() invocations so the user does not
+			// lose the provider tab they picked last time. rebuildProviderTabs()
+			// will downgrade this to ALL_PROVIDER_TAB if the tab no longer exists
+			// after models are loaded (e.g. provider deauthenticated or scoped).
+			this.activeProviderTab = initialProviderTab;
+		}
 
 		// Add top border
 		this.addChild(new DynamicBorder());
@@ -293,12 +303,16 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	}
 
 	private rebuildProviderTabs(): void {
+		const previousTab = this.activeProviderTab;
 		this.providerTabs = buildProviderTabs(this.activeModels);
 		if (!this.providerTabs.includes(this.activeProviderTab)) {
 			this.activeProviderTab = ALL_PROVIDER_TAB;
 		}
 		this.providerText.setText(this.getProviderText());
 		this.providerHintText.setText(this.getProviderHintText());
+		if (previousTab !== this.activeProviderTab) {
+			this.onProviderTabChange?.(this.activeProviderTab);
+		}
 	}
 
 	private getProviderFilteredModels(): ModelItem[] {
@@ -316,6 +330,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		this.providerText.setText(this.getProviderText());
 		this.selectedIndex = 0;
 		this.filterModels(this.searchInput.getValue());
+		this.onProviderTabChange?.(this.activeProviderTab);
 	}
 
 	private filterModels(query: string): void {

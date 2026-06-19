@@ -118,7 +118,7 @@ import { FooterComponent } from "./components/footer.ts";
 import { formatKeyText, keyDisplayText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.ts";
 import { LoginDialogComponent } from "./components/login-dialog.ts";
 import { McpSelectorComponent } from "./components/mcp-selector.ts";
-import { ModelSelectorComponent } from "./components/model-selector.ts";
+import { ALL_PROVIDER_TAB, ModelSelectorComponent, type ProviderTab } from "./components/model-selector.ts";
 import { type AuthSelectorProvider, OAuthSelectorComponent } from "./components/oauth-selector.ts";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
@@ -4439,6 +4439,12 @@ export class InteractiveMode {
 		this.showError(error instanceof Error ? error.message : String(error));
 	}
 
+	// Preserved across showModelSelector() invocations so the provider tab a
+	// user picked (Tab key inside /model) is restored when the selector is
+	// reopened. Defaults to undefined so the first open behaves exactly like
+	// before (ALL_PROVIDER_TAB).
+	private lastModelProviderTab?: ProviderTab;
+
 	private showModelSelector(initialSearchInput?: string): void {
 		this.showSelector((done) => {
 			const selector = new ModelSelectorComponent(
@@ -4456,7 +4462,13 @@ export class InteractiveMode {
 					this.ui.requestRender();
 				},
 				initialSearchInput,
+				this.lastModelProviderTab,
 			);
+			selector.onProviderTabChange = (tab) => {
+				// Forget the override when the user is back on the default tab so
+				// a fresh session does not stay stuck on a stale provider.
+				this.lastModelProviderTab = tab === ALL_PROVIDER_TAB ? undefined : tab;
+			};
 			return { component: selector, focus: selector };
 		});
 	}
