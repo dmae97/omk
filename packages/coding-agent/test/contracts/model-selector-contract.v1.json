@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "omk.cli-contract.v1",
+  "modelSelector": {
+    "providerTabsRequired": true,
+    "allTabRequired": true,
+    "nextProviderKey": "tab",
+    "previousProviderKey": "shift+tab",
+    "scopeForwardKey": "ctrl+p",
+    "scopeBackwardKey": "shift+ctrl+p",
+    "retainProviderWithinSession": true,
+    "fallbackToAllWhenUnavailable": true,
+    "customProvidersAfterPredefinedOrder": true,
+    "hideProviderTabsDuringSearch": false,
+    "tabKeyReservedForProviderNext": true
+  }
+}

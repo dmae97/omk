@@ -119,13 +119,13 @@ describe("redactSecrets", () => {
 	});
 
 	it("redacts GitHub and Slack tokens", () => {
-		expect(redactSecrets("auth ghp_" + "A".repeat(36))).toContain("***REDACTED***");
+		expect(redactSecrets(`auth ghp_${"A".repeat(36)}`)).toContain("***REDACTED***");
 		expect(redactSecrets("xoxb-12345-abcdef")).toContain("***REDACTED***");
 	});
 
 	it("redacts AWS and OpenAI-style tokens", () => {
-		expect(redactSecrets("AKIA" + "ABCDEFGHIJ123456")).toContain("***REDACTED***");
-		expect(redactSecrets("sk-proj-" + "A".repeat(40))).toContain("***REDACTED***");
+		expect(redactSecrets("AKIAABCDEFGHIJ123456")).toContain("***REDACTED***");
+		expect(redactSecrets(`sk-proj-${"A".repeat(40)}`)).toContain("***REDACTED***");
 	});
 
 	it("returns input unchanged when no secret is present", () => {

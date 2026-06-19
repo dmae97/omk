@@ -12,7 +12,7 @@ export interface BannerMemo {
 	shown?: boolean;
 }
 
-const BANNER_TEMPLATE = String.raw`
+const BANNER_TEMPLATE = `
 ╔══════════════════════════════════════════════════════════╗
 ║            OMK FREEDOM MODE — ACTIVE                    ║
 ║                                                          ║
