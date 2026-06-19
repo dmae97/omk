@@ -10,26 +10,29 @@ const ELL = 1; // "…"
 
 // Independent mirror of the rendered strip width (kept out of the production
 // module so the property check is not a tautology).
+// Segment model: tabs and ellipses are all segments joined by SEP, so each
+// ellipsis costs ELL plus a separator. Mirrors providerStripWidth().
 function renderedWidth(layout: ProviderStripLayout, widths: readonly number[]): number {
-	const idx = layout.indices;
-	if (idx.length === 0) return 0;
-	let total = 0;
-	for (let k = 0; k < idx.length; k++) {
-		total += widths[idx[k] ?? 0] ?? 0;
-		if (k > 0) total += SEP;
-	}
-	if (layout.ellipsisAfterFirst) total += ELL;
-	if (layout.trailingEllipsis) total += ELL;
-	return total;
+	const tabs = layout.indices.length;
+	if (tabs === 0) return 0;
+	let tabsTotal = 0;
+	for (const i of layout.indices) tabsTotal += widths[i ?? 0] ?? 0;
+	const ellipses = (layout.ellipsisAfterFirst ? 1 : 0) + (layout.trailingEllipsis ? 1 : 0);
+	const segments = tabs + ellipses;
+	return tabsTotal + ELL * ellipses + SEP * (segments - 1);
 }
 
 function mandatoryWidth(widths: readonly number[], active: number): number {
-	if (active === 0) return widths[0] ?? 0;
-	// {0, active}: two tabs + separator + a leading ellipsis (gap) + trailing if active<last.
-	let w = (widths[0] ?? 0) + SEP + (widths[active] ?? 0);
-	if (active > 1) w += ELL;
-	if (active < widths.length - 1) w += ELL;
-	return w;
+	if (active === 0) {
+		const trailing = widths.length - 1 > 0 ? 1 : 0;
+		const segments = 1 + trailing;
+		return (widths[0] ?? 0) + ELL * trailing + SEP * (segments - 1);
+	}
+	const gap = active > 1 ? 1 : 0;
+	const trailing = active < widths.length - 1 ? 1 : 0;
+	const ellipses = gap + trailing;
+	const segments = 2 + ellipses;
+	return (widths[0] ?? 0) + (widths[active] ?? 0) + ELL * ellipses + SEP * (segments - 1);
 }
 
 describe("fitProviderStrip", () => {
