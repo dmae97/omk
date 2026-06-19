@@ -1,14 +1,5 @@
 import { getSupportedThinkingLevels, type Model, modelsAreEqual } from "@earendil-works/omk-ai";
-import {
-	Container,
-	type Focusable,
-	fuzzyFilter,
-	getKeybindings,
-	Input,
-	Spacer,
-	Text,
-	type TUI,
-} from "@earendil-works/omk-tui";
+import { Container, type Focusable, getKeybindings, Input, Spacer, Text, type TUI } from "@earendil-works/omk-tui";
 import type { ModelRegistry } from "../../../core/model-registry.ts";
 import type { SettingsManager } from "../../../core/settings-manager.ts";
 
@@ -26,6 +17,21 @@ function providerAuthGlyph(authConfigured: boolean): string {
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint } from "./keybinding-hints.ts";
+import {
+	ALL_PROVIDER_TAB,
+	createInitialModelSelectorState,
+	type ModelScope,
+	type ModelSelectorAction,
+	type ModelSelectorModel,
+	type ModelSelectorState,
+	modelSelectorModelKey,
+	modelSelectorReducer,
+	type ProviderTab,
+	selectedModelKey,
+} from "./model-selector-state.ts";
+
+export { ALL_PROVIDER_TAB };
+export type { ModelScope, ProviderTab };
 
 interface ModelItem {
 	provider: string;
@@ -38,32 +44,18 @@ interface ScopedModelItem {
 	thinkingLevel?: string;
 }
 
-type ModelScope = "all" | "scoped";
-export type ProviderTab = "all" | string;
+export interface ModelSelectorSemanticState {
+	readonly scope: ModelScope;
+	readonly activeProvider: ProviderTab;
+	readonly providerIds: readonly ProviderTab[];
+	readonly query: string;
+	readonly selectedIndex: number;
+	readonly selectedModelKey?: string;
+	readonly visibleModelKeys: readonly string[];
+}
 
-export const ALL_PROVIDER_TAB = "all" as const;
-const PROVIDER_TAB_ORDER = [
-	"anthropic",
-	"openai",
-	"google",
-	"deepseek",
-	"kimi",
-	"openrouter",
-	"mistral",
-	"xai",
-	"groq",
-	"zai",
-	"together",
-	"fireworks",
-] as const;
-
-function buildProviderTabs(models: readonly ModelItem[]): ProviderTab[] {
-	const providerIds = Array.from(new Set(models.map((model) => model.provider)));
-	const ordered = PROVIDER_TAB_ORDER.filter((provider) => providerIds.includes(provider));
-	const extras = providerIds
-		.filter((provider) => !PROVIDER_TAB_ORDER.includes(provider as (typeof PROVIDER_TAB_ORDER)[number]))
-		.sort((a, b) => a.localeCompare(b));
-	return [ALL_PROVIDER_TAB, ...ordered, ...extras];
+function toSelectorModel(item: ModelItem): ModelSelectorModel {
+	return { provider: item.provider, id: item.id, name: item.model.name };
 }
 
 /**
@@ -82,12 +74,12 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		this.searchInput.focused = value;
 	}
 	private listContainer: Container;
-	private allModels: ModelItem[] = [];
-	private scopedModelItems: ModelItem[] = [];
-	private activeModels: ModelItem[] = [];
 	private filteredModels: ModelItem[] = [];
 	private selectedIndex: number = 0;
 	private currentModel?: Model<any>;
+	private currentModelKey?: string;
+	private itemsByKey = new Map<string, ModelItem>();
+	private state: ModelSelectorState = createInitialModelSelectorState();
 	private modelRegistry: ModelRegistry;
 	private onSelectCallback: (model: Model<any>) => void;
 	private onCancelCallback: () => void;
@@ -126,11 +118,12 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		this.onCancelCallback = onCancel;
 		if (initialProviderTab) {
 			// Restored across showModelSelector() invocations so the user does not
-			// lose the provider tab they picked last time. rebuildProviderTabs()
-			// will downgrade this to ALL_PROVIDER_TAB if the tab no longer exists
-			// after models are loaded (e.g. provider deauthenticated or scoped).
+			// lose the provider tab they picked last time. REFRESH_MODELS will
+			// downgrade this to ALL_PROVIDER_TAB if the tab no longer exists after
+			// models are loaded (e.g. provider deauthenticated or scoped).
 			this.activeProviderTab = initialProviderTab;
 		}
+		this.state = createInitialModelSelectorState({ scope: this.scope, activeProvider: this.activeProviderTab });
 
 		// Add top border
 		this.addChild(new DynamicBorder());
@@ -180,9 +173,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		// Load models and do initial render
 		this.loadModels().then(() => {
 			if (initialSearchInput) {
-				this.filterModels(initialSearchInput);
-			} else {
-				this.updateList();
+				this.applyAction({ type: "SEARCH", query: initialSearchInput });
 			}
 			// Request re-render after models are loaded
 			this.tui.requestRender();
@@ -210,30 +201,50 @@ export class ModelSelectorComponent extends Container implements Focusable {
 				model,
 			}));
 		} catch (error) {
-			this.allModels = [];
-			this.scopedModelItems = [];
-			this.activeModels = [];
-			this.filteredModels = [];
 			this.errorMessage = error instanceof Error ? error.message : String(error);
+			this.itemsByKey.clear();
+			this.currentModelKey = undefined;
+			this.applyAction({ type: "REFRESH_MODELS", allModels: [], scopedModels: [], currentModelKey: undefined });
 			return;
 		}
 
-		this.allModels = this.sortModels(models);
+		const allItems = this.sortModels(models);
 		this.scopedModels = this.scopedModels.map((scoped) => {
 			const refreshed = this.modelRegistry.find(scoped.model.provider, scoped.model.id);
 			return refreshed ? { ...scoped, model: refreshed } : scoped;
 		});
-		this.scopedModelItems = this.scopedModels.map((scoped) => ({
+		const scopedItems: ModelItem[] = this.scopedModels.map((scoped) => ({
 			provider: scoped.model.provider,
 			id: scoped.model.id,
 			model: scoped.model,
 		}));
-		this.activeModels = this.scope === "scoped" ? this.scopedModelItems : this.allModels;
-		this.rebuildProviderTabs();
-		this.filteredModels = this.getProviderFilteredModels();
-		const currentIndex = this.filteredModels.findIndex((item) => modelsAreEqual(this.currentModel, item.model));
-		this.selectedIndex =
-			currentIndex >= 0 ? currentIndex : Math.min(this.selectedIndex, Math.max(0, this.filteredModels.length - 1));
+
+		this.itemsByKey.clear();
+		for (const item of allItems) {
+			this.itemsByKey.set(modelSelectorModelKey(item), item);
+		}
+		for (const item of scopedItems) {
+			this.itemsByKey.set(modelSelectorModelKey(item), item);
+		}
+
+		this.currentModelKey = this.resolveCurrentModelKey(allItems, scopedItems);
+		this.applyAction({
+			type: "REFRESH_MODELS",
+			allModels: allItems.map(toSelectorModel),
+			scopedModels: scopedItems.map(toSelectorModel),
+			currentModelKey: this.currentModelKey,
+		});
+	}
+
+	private resolveCurrentModelKey(
+		allItems: readonly ModelItem[],
+		scopedItems: readonly ModelItem[],
+	): string | undefined {
+		if (!this.currentModel) return undefined;
+		const match =
+			allItems.find((item) => modelsAreEqual(this.currentModel, item.model)) ??
+			scopedItems.find((item) => modelsAreEqual(this.currentModel, item.model));
+		return match ? modelSelectorModelKey(match) : undefined;
 	}
 
 	private sortModels(models: ModelItem[]): ModelItem[] {
@@ -284,66 +295,42 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		return keyHint("app.model.cycleForward", "scope") + theme.fg("muted", " (all/scoped)");
 	}
 
-	private setScope(scope: ModelScope): void {
-		if (this.scope === scope) return;
-		this.scope = scope;
-		this.activeModels = this.scope === "scoped" ? this.scopedModelItems : this.allModels;
-		this.rebuildProviderTabs();
-		const currentIndex = this.getProviderFilteredModels().findIndex((item) =>
-			modelsAreEqual(this.currentModel, item.model),
-		);
-		this.selectedIndex = currentIndex >= 0 ? currentIndex : 0;
-		this.filterModels(this.searchInput.getValue());
+	private applyAction(action: ModelSelectorAction): void {
+		const previousProvider = this.state.activeProvider;
+		this.state = modelSelectorReducer(this.state, action);
+		this.syncRenderState();
+		this.updateList();
+		if (this.state.activeProvider !== previousProvider) {
+			this.onProviderTabChange?.(this.state.activeProvider);
+		}
+	}
+
+	/**
+	 * Mirror the reducer's semantic state into the fields the renderer reads.
+	 * The reducer is the single source of truth; these fields are a derived view
+	 * kept in sync after every transition.
+	 */
+	private syncRenderState(): void {
+		this.scope = this.state.scope;
+		this.activeProviderTab = this.state.activeProvider;
+		this.providerTabs = [...this.state.providerIds];
+		this.selectedIndex = this.state.selectedIndex;
+
+		const visibleItems: ModelItem[] = [];
+		for (const modelKey of this.state.visibleModelKeys) {
+			const item = this.itemsByKey.get(modelKey);
+			if (item) visibleItems.push(item);
+		}
+		this.filteredModels = visibleItems;
+
+		this.providerText.setText(this.getProviderText());
+		this.providerHintText.setText(this.getProviderHintText());
 		if (this.scopeText) {
 			this.scopeText.setText(this.getScopeText());
 		}
 		if (this.scopeHintText) {
 			this.scopeHintText.setText(this.getScopeHintText());
 		}
-	}
-
-	private rebuildProviderTabs(): void {
-		const previousTab = this.activeProviderTab;
-		this.providerTabs = buildProviderTabs(this.activeModels);
-		if (!this.providerTabs.includes(this.activeProviderTab)) {
-			this.activeProviderTab = ALL_PROVIDER_TAB;
-		}
-		this.providerText.setText(this.getProviderText());
-		this.providerHintText.setText(this.getProviderHintText());
-		if (previousTab !== this.activeProviderTab) {
-			this.onProviderTabChange?.(this.activeProviderTab);
-		}
-	}
-
-	private getProviderFilteredModels(): ModelItem[] {
-		if (this.activeProviderTab === ALL_PROVIDER_TAB) {
-			return this.activeModels;
-		}
-		return this.activeModels.filter((item) => item.provider === this.activeProviderTab);
-	}
-
-	private cycleProvider(direction: 1 | -1): void {
-		if (this.providerTabs.length === 0) return;
-		const currentIndex = Math.max(0, this.providerTabs.indexOf(this.activeProviderTab));
-		const nextIndex = (currentIndex + direction + this.providerTabs.length) % this.providerTabs.length;
-		this.activeProviderTab = this.providerTabs[nextIndex] ?? ALL_PROVIDER_TAB;
-		this.providerText.setText(this.getProviderText());
-		this.selectedIndex = 0;
-		this.filterModels(this.searchInput.getValue());
-		this.onProviderTabChange?.(this.activeProviderTab);
-	}
-
-	private filterModels(query: string): void {
-		const providerModels = this.getProviderFilteredModels();
-		this.filteredModels = query
-			? fuzzyFilter(
-					providerModels,
-					query,
-					({ id, provider }) => `${id} ${provider} ${provider}/${id} ${provider} ${id}`,
-				)
-			: providerModels;
-		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredModels.length - 1));
-		this.updateList();
 	}
 
 	private updateList(): void {
@@ -405,32 +392,30 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	handleInput(keyData: string): void {
 		const kb = getKeybindings();
 		if (kb.matches(keyData, "tui.input.tab")) {
-			this.cycleProvider(1);
+			this.applyAction({ type: "NEXT_PROVIDER" });
 			return;
 		}
 		if (kb.matches(keyData, "app.model.providerPrevious")) {
-			this.cycleProvider(-1);
+			this.applyAction({ type: "PREVIOUS_PROVIDER" });
 			return;
 		}
-		if (
-			(kb.matches(keyData, "app.model.cycleForward") || kb.matches(keyData, "app.model.cycleBackward")) &&
-			this.scopedModelItems.length > 0
-		) {
-			const nextScope: ModelScope = this.scope === "all" ? "scoped" : "all";
-			this.setScope(nextScope);
-			return;
+		if (this.state.scopedModels.length > 0) {
+			if (kb.matches(keyData, "app.model.cycleForward")) {
+				this.applyAction({ type: "TOGGLE_SCOPE_FORWARD" });
+				return;
+			}
+			if (kb.matches(keyData, "app.model.cycleBackward")) {
+				this.applyAction({ type: "TOGGLE_SCOPE_BACKWARD" });
+				return;
+			}
 		}
 		// Up arrow - wrap to bottom when at top
 		if (kb.matches(keyData, "tui.select.up")) {
-			if (this.filteredModels.length === 0) return;
-			this.selectedIndex = this.selectedIndex === 0 ? this.filteredModels.length - 1 : this.selectedIndex - 1;
-			this.updateList();
+			this.applyAction({ type: "MOVE_SELECTION", delta: -1 });
 		}
 		// Down arrow - wrap to top when at bottom
 		else if (kb.matches(keyData, "tui.select.down")) {
-			if (this.filteredModels.length === 0) return;
-			this.selectedIndex = this.selectedIndex === this.filteredModels.length - 1 ? 0 : this.selectedIndex + 1;
-			this.updateList();
+			this.applyAction({ type: "MOVE_SELECTION", delta: 1 });
 		}
 		// Enter
 		else if (kb.matches(keyData, "tui.select.confirm")) {
@@ -446,12 +431,29 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		// Pass everything else to search input
 		else {
 			this.searchInput.handleInput(keyData);
-			this.filterModels(this.searchInput.getValue());
+			this.applyAction({ type: "SEARCH", query: this.searchInput.getValue() });
 		}
 	}
 
 	private handleSelect(model: Model<any>): void {
 		this.onSelectCallback(model);
+	}
+
+	/**
+	 * Structured /model contract state. Tests and future reducer/property
+	 * harnesses should assert this semantic snapshot instead of parsing themed
+	 * presentation text or reaching into private fields.
+	 */
+	getSemanticState(): ModelSelectorSemanticState {
+		return {
+			scope: this.state.scope,
+			activeProvider: this.state.activeProvider,
+			providerIds: [...this.state.providerIds],
+			query: this.state.query,
+			selectedIndex: this.state.selectedIndex,
+			selectedModelKey: selectedModelKey(this.state),
+			visibleModelKeys: [...this.state.visibleModelKeys],
+		};
 	}
 
 	getSearchInput(): Input {
