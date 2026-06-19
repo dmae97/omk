@@ -50,11 +50,20 @@ const EXTENDED_THINKING_LEVELS: ModelThinkingLevel[] = ["off", "minimal", "low",
 export function getSupportedThinkingLevels<TApi extends Api>(model: Model<TApi>): ModelThinkingLevel[] {
 	if (!model.reasoning) return ["off"];
 
+	// Every reasoning-capable model exposes the full extended thinking ladder by
+	// default, including xhigh ("max" in the UI). A level only disappears when
+	// the model author has explicitly opted out by mapping it to null in
+	// thinkingLevelMap. Earlier revisions required xhigh to be explicitly mapped
+	// (`mapped !== undefined`), which silently hid "max" from Anthropic
+	// Sonnet/Haiku, DeepSeek non-V4 reasoning models, zai/GLM 5.x, and ~595 other
+	// reasoning-capable models that had no thinkingLevelMap.xhigh entry.
+	// Provider runtimes downgrade xhigh safely: simple-options.clampReasoning
+	// excludes xhigh and falls back to the next available level; amazon-bedrock
+	// and openai-* providers consume the clamped value through
+	// clampThinkingLevel + ThinkingBudgets.
 	return EXTENDED_THINKING_LEVELS.filter((level) => {
 		const mapped = model.thinkingLevelMap?.[level];
-		if (mapped === null) return false;
-		if (level === "xhigh") return mapped !== undefined;
-		return true;
+		return mapped !== null;
 	});
 }
 
