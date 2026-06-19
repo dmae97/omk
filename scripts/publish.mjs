@@ -65,9 +65,17 @@ function validatePack(directory) {
 	console.log(`  ${packed.filename}: ${packed.files.length} files, ${packed.size} bytes packed, ${packed.unpackedSize} bytes unpacked`);
 }
 
-function getTrustedPublishingEnv() {
+function getPublishAuthMode() {
+	if (process.env.GITHUB_ACTIONS !== "true") return "local";
+	if (process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN) return "oidc";
+	if (process.env.NPM_TOKEN) return "npm-token-fallback";
+	return "missing";
+}
+
+function getPublishEnv() {
 	const env = { ...process.env };
-	if (process.env.GITHUB_ACTIONS === "true" && !noProvenance) {
+	const mode = getPublishAuthMode();
+	if (mode === "oidc" && !noProvenance) {
 		// Trusted publishing should authenticate through GitHub OIDC. setup-node's
 		// registry-url path injects NODE_AUTH_TOKEN/.npmrc auth, which can shadow OIDC
 		// and produce npm's misleading 404 "package not found or no permission" error.
@@ -76,6 +84,54 @@ function getTrustedPublishingEnv() {
 		delete env.NPM_CONFIG_USERCONFIG;
 	}
 	return env;
+}
+
+function preflightAccessCheck() {
+	const mode = getPublishAuthMode();
+	console.log(`Publish auth mode: ${mode}`);
+	if (mode === "missing") {
+		throw new Error(
+			"npm publish prerequisites missing in CI:\n" +
+				"  - ACTIONS_ID_TOKEN_REQUEST_TOKEN is empty (OIDC trusted publishing unavailable)\n" +
+				"  - NPM_TOKEN secret is not set (classic auth unavailable)\n" +
+				"Fix one of:\n" +
+				"  1. Configure a trusted publisher on npmjs.com at\n" +
+				"     https://www.npmjs.com/settings/<npm-user>/trusted-publishers\n" +
+				"     binding package + repo owner + repo name + workflow file + environment name.\n" +
+				"  2. Add an NPM_TOKEN automation token as a secret on the 'npm-publish'\n" +
+				"     GitHub Actions environment.",
+		);
+	}
+	if (mode === "npm-token-fallback") {
+		console.warn(
+			"OIDC token absent; using NPM_TOKEN fallback. Provenance attestation will be skipped automatically.",
+		);
+	}
+	const whoami = spawnSync(
+		commandForPlatform("npm"),
+		["whoami", "--registry=https://registry.npmjs.org/"],
+		{ encoding: "utf8", env: getPublishEnv() },
+	);
+	if (whoami.status === 0 && whoami.stdout.trim()) {
+		console.log(`Authenticated npm user: ${whoami.stdout.trim()}`);
+		return;
+	}
+	const output = [whoami.stdout, whoami.stderr]
+		.filter(Boolean)
+		.join("\n")
+		.trim();
+	if (mode === "oidc") {
+		// Under OIDC, whoami without a token-exchange will return ENEEDAUTH; the real
+		// authentication happens inside npm publish via the GitHub OIDC token. Only
+		// warn so we still surface the verbose log evidence when publish fails.
+		console.log(
+			`Preflight whoami unauthenticated (expected under OIDC): ${output || "(no output)"}`,
+		);
+		return;
+	}
+	throw new Error(
+		`npm whoami failed under ${mode} auth (cannot publish):\n${output || "(no output from npm)"}`,
+	);
 }
 
 function isPublished(name, version) {
@@ -125,6 +181,11 @@ if (usesPublishedInternalAliases) {
 }
 console.log();
 
+if (!dryRun) {
+	preflightAccessCheck();
+	console.log();
+}
+
 for (const pkg of publishPackages) {
 	const version = packageVersions.get(pkg.name);
 	assertBuildOutputExists(pkg.directory);
@@ -147,10 +208,14 @@ for (const pkg of publishPackages) {
 	}
 
 	const publishArgs = ["publish", "--access", "public"];
-	if (!noProvenance) {
+	// Provenance attestation only works under OIDC trusted publishing. Skip it on
+	// the NPM_TOKEN fallback path and when running outside GitHub Actions so we
+	// don't fail the publish with a misleading provenance error.
+	const useProvenance = !noProvenance && getPublishAuthMode() === "oidc";
+	if (useProvenance) {
 		publishArgs.push("--provenance");
 	}
 	publishArgs.push("--ignore-scripts");
-	run("npm", publishArgs, { cwd: pkg.directory, env: getTrustedPublishingEnv() });
+	run("npm", publishArgs, { cwd: pkg.directory, env: getPublishEnv() });
 	console.log();
 }

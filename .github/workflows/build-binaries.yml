@@ -140,6 +140,26 @@ jobs:
           npm install -g npm@11.16.0 --ignore-scripts
           npm --version
 
+      - name: Configure NPM_TOKEN fallback (only when OIDC unavailable)
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "OIDC token present; trusted publishing will be used. Skipping NPM_TOKEN fallback."
+          elif [ -n "${NPM_TOKEN:-}" ]; then
+            echo "OIDC token absent; configuring NPM_TOKEN fallback for npm publish."
+            # npm expands ${NPM_TOKEN} at runtime, so the literal token is not
+            # persisted to disk inside .npmrc. The runner is ephemeral and the
+            # token is scoped to the npm-publish environment.
+            cat > "${HOME}/.npmrc" <<'EOF'
+          //registry.npmjs.org/:_authToken=${NPM_TOKEN}
+          registry=https://registry.npmjs.org/
+          always-auth=true
+          EOF
+          else
+            echo "::warning::Neither OIDC nor NPM_TOKEN is available. scripts/publish.mjs will fail with an actionable error."
+          fi
+
       - name: Publish npm packages
         env:
           # Surface npm OIDC verbose log lines so trusted-publishing failures stop
@@ -148,4 +168,8 @@ jobs:
           # whether the runner did not expose ACTIONS_ID_TOKEN_REQUEST_* to the
           # publish step. The token itself is never logged by npm.
           NPM_CONFIG_LOGLEVEL: verbose
+          # NPM_TOKEN is forwarded only so publish.mjs's getPublishAuthMode() can
+          # detect the npm-token-fallback path. The OIDC code path strips it from
+          # the env before calling npm publish to avoid shadowing the OIDC token.
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node scripts/publish.mjs

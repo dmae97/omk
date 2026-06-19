@@ -154,7 +154,26 @@ Attribution:
 
 4. **CI publishes npm packages**: pushing the `vX.Y.Z` tag triggers `.github/workflows/build-binaries.yml`. The `publish-npm` job uses npm trusted publishing through GitHub Actions OIDC with environment `npm-publish`; no local `npm publish`, `npm whoami`, OTP, or WebAuthn flow is required.
 
-5. **If CI publish fails**: inspect the failed `publish-npm` job. The publish helper is idempotent and skips package versions already present on npm, so rerun the tag workflow after fixing CI or transient npm issues. Do not rerun `npm run release:patch` or `npm run release:minor` for the same version.
+   **First-time trusted publisher setup** (one-shot per package name; required before the first release on a new repo or after rotating the npm-publish environment). Performed manually on the npm web UI by the npm owner of the package; the AI agent cannot do this:
+
+   1. Sign in to https://www.npmjs.com as the user that will own the package.
+   2. Open `https://www.npmjs.com/settings/<npm-user>/trusted-publishers`.
+   3. Click `Add trusted publisher` and fill in:
+      - Publisher: `GitHub Actions`
+      - Package: the unscoped name being published (e.g. `open-multi-agent-kit`). Scoped internal packages do not need separate bindings if `scripts/publish.mjs` skips them through `usesPublishedInternalAliases`.
+      - Organization or user: the GitHub repo owner (e.g. `dmae97`).
+      - Repository: the repo name (e.g. `open-multi-agent-kit`).
+      - Workflow filename: `build-binaries.yml`.
+      - Environment: `npm-publish`.
+   4. Save. The binding takes effect immediately for the next workflow run.
+
+   **Optional NPM_TOKEN fallback** (used only when OIDC trusted publishing is unavailable, e.g. npm OIDC outage or a runner that did not expose `ACTIONS_ID_TOKEN_REQUEST_TOKEN`). `scripts/publish.mjs` and `.github/workflows/build-binaries.yml` activate this path automatically when the OIDC token is missing and `NPM_TOKEN` is set on the `npm-publish` environment. Provenance attestations are skipped on the fallback path because they require OIDC. To enable:
+
+   1. https://www.npmjs.com/settings/<npm-user>/tokens → `Generate New Token` → `Automation`.
+   2. GitHub repo → `Settings` → `Environments` → `npm-publish` → `Add environment secret` named `NPM_TOKEN`.
+   3. Rotate the token periodically; the OIDC path is preferred when available.
+
+5. **If CI publish fails**: inspect the failed `publish-npm` job. `scripts/publish.mjs` runs a `preflightAccessCheck()` and prints the auth mode (`oidc`, `npm-token-fallback`, `local`, or `missing`) before attempting any publish, so the failure mode is visible at the top of the log. The publish helper is idempotent and skips package versions already present on npm, so rerun the tag workflow after fixing CI or transient npm issues. Do not rerun `npm run release:patch` or `npm run release:minor` for the same version.
 
 ## User Override
 
