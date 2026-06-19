@@ -1,5 +1,14 @@
 import { getSupportedThinkingLevels, type Model, modelsAreEqual } from "@earendil-works/omk-ai";
-import { Container, type Focusable, getKeybindings, Input, Spacer, Text, type TUI } from "@earendil-works/omk-tui";
+import {
+	Container,
+	type Focusable,
+	getKeybindings,
+	Input,
+	Spacer,
+	Text,
+	type TUI,
+	visibleWidth,
+} from "@earendil-works/omk-tui";
 import type { ModelRegistry } from "../../../core/model-registry.ts";
 import type { SettingsManager } from "../../../core/settings-manager.ts";
 
@@ -20,6 +29,7 @@ import { keyHint } from "./keybinding-hints.ts";
 import {
 	ALL_PROVIDER_TAB,
 	createInitialModelSelectorState,
+	fitProviderStrip,
 	type ModelScope,
 	type ModelSelectorAction,
 	type ModelSelectorModel,
@@ -266,15 +276,55 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		return status.configured || status.source !== undefined;
 	}
 
-	private getProviderText(): string {
-		const tabs = this.providerTabs.map((provider) => {
-			const auth = this.isProviderAuthenticated(provider);
-			const glyph = provider === ALL_PROVIDER_TAB ? "" : ` ${providerAuthGlyph(auth)}`;
-			const label = `${provider}${glyph}`;
-			if (provider === this.activeProviderTab) return theme.fg("accent", label);
-			return auth ? theme.fg("muted", label) : theme.fg("dim", label);
-		});
-		return `${theme.fg("muted", "Provider: ")}${tabs.join(theme.fg("dim", " | "))}`;
+	private providerTabLabel(provider: ProviderTab): string {
+		const auth = this.isProviderAuthenticated(provider);
+		const glyph = provider === ALL_PROVIDER_TAB ? "" : ` ${providerAuthGlyph(auth)}`;
+		return `${provider}${glyph}`;
+	}
+
+	private themedProviderTab(provider: ProviderTab): string {
+		const label = this.providerTabLabel(provider);
+		if (provider === this.activeProviderTab) return theme.fg("accent", label);
+		return this.isProviderAuthenticated(provider) ? theme.fg("muted", label) : theme.fg("dim", label);
+	}
+
+	/**
+	 * Build the provider tab row. When a render width is supplied, the strip is
+	 * windowed with fitProviderStrip() so it always fits the terminal while keeping
+	 * the "all" anchor and the active tab visible; otherwise every tab is shown
+	 * (used for non-render measurement contexts).
+	 */
+	private getProviderText(width?: number): string {
+		const prefix = theme.fg("muted", "Provider: ");
+		if (this.providerTabs.length === 0) return prefix;
+		const separator = theme.fg("dim", " | ");
+		const ellipsis = theme.fg("dim", "…");
+
+		let indices: readonly number[];
+		let leadingEllipsis = false;
+		let trailingEllipsis = false;
+		if (width === undefined) {
+			indices = this.providerTabs.map((_, index) => index);
+		} else {
+			const budget = Math.max(0, width - visibleWidth("Provider: "));
+			const tabWidths = this.providerTabs.map((provider) => visibleWidth(this.providerTabLabel(provider)));
+			const activeIndex = Math.max(0, this.providerTabs.indexOf(this.activeProviderTab));
+			const layout = fitProviderStrip(tabWidths, activeIndex, budget, visibleWidth(" | "), visibleWidth("…"));
+			indices = layout.indices;
+			leadingEllipsis = layout.ellipsisAfterFirst;
+			trailingEllipsis = layout.trailingEllipsis;
+		}
+
+		const segments: string[] = [];
+		for (let position = 0; position < indices.length; position++) {
+			if (position === 1 && leadingEllipsis) segments.push(ellipsis);
+			const tabIndex = indices[position];
+			if (tabIndex === undefined) continue;
+			const provider = this.providerTabs[tabIndex];
+			if (provider !== undefined) segments.push(this.themedProviderTab(provider));
+		}
+		if (trailingEllipsis) segments.push(ellipsis);
+		return `${prefix}${segments.join(separator)}`;
 	}
 
 	private getProviderHintText(): string {
@@ -454,6 +504,15 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			selectedModelKey: selectedModelKey(this.state),
 			visibleModelKeys: [...this.state.visibleModelKeys],
 		};
+	}
+
+	/**
+	 * Width-aware render: recompute the provider row for the actual terminal width
+	 * so the strip fits without wrapping, then delegate to the container renderer.
+	 */
+	render(width: number): string[] {
+		this.providerText.setText(this.getProviderText(width));
+		return super.render(width);
 	}
 
 	getSearchInput(): Input {

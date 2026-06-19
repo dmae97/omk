@@ -297,7 +297,9 @@ function providerStripWidth(
 	}
 	const last = indices[indices.length - 1] ?? 0;
 	const trailing = last < tabWidths.length - 1 ? 1 : 0;
-	return total + ellipsisWidth * (gaps + trailing);
+	// Each ellipsis renders as its own segment joined by a separator, so it costs
+	// a separator in addition to the ellipsis glyph.
+	return total + (ellipsisWidth + separatorWidth) * (gaps + trailing);
 }
 
 /**
