@@ -80,6 +80,15 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
+import {
+	applyFreedomEnv,
+	type BannerMemo,
+	bannerOnce,
+	FREEDOM_CONFIG_DEFAULTS,
+	type FreedomConfig,
+	gate,
+	loadFreedomConfig,
+} from "./freedom/index.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
@@ -323,6 +332,13 @@ export class AgentSession {
 	private _baseSystemPrompt = "";
 	private _baseSystemPromptOptions!: BuildSystemPromptOptions;
 
+	// Freedom mode (AGENTS.md §0) — loaded once from .omk/config.toml at the
+	// project cwd. The safety floor inside FreedomConfig is always enforced;
+	// approval_policy controls whether ordinary tool calls auto-allow under
+	// yolo mode or fall back to the historical confirm flow.
+	private _freedomConfig: FreedomConfig = FREEDOM_CONFIG_DEFAULTS;
+	private _freedomBannerMemo: BannerMemo = {};
+
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
 		this.sessionManager = config.sessionManager;
@@ -339,6 +355,20 @@ export class AgentSession {
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 
+		// Load freedom config from the project cwd. Returns FREEDOM_CONFIG_DEFAULTS
+		// when .omk/config.toml is absent, so projects without an opt-in see no
+		// behavioral change.
+		try {
+			this._freedomConfig = loadFreedomConfig(this._cwd);
+		} catch (error) {
+			// Surface config errors loudly. The session still starts with defaults
+			// so a single typo cannot brick interactive mode.
+			console.error(
+				`OMK freedom config error: ${error instanceof Error ? error.message : String(error)}. Falling back to defaults.`,
+			);
+			this._freedomConfig = FREEDOM_CONFIG_DEFAULTS;
+		}
+
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
 		this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
@@ -353,6 +383,34 @@ export class AgentSession {
 	/** Model registry for API key resolution and model discovery */
 	get modelRegistry(): ModelRegistry {
 		return this._modelRegistry;
+	}
+
+	/**
+	 * Current freedom-mode configuration loaded from `.omk/config.toml`.
+	 * Returns defaults when the file is absent or invalid. The TUI consumes
+	 * this through `badgeText()` to render the footer badge; the session
+	 * itself consumes it via the safety-floor gate before each tool call.
+	 */
+	get freedomConfig(): FreedomConfig {
+		return this._freedomConfig;
+	}
+
+	/**
+	 * One-shot banner per interactive session. Returns the banner text the
+	 * first time it is called when freedom mode is enabled; returns undefined
+	 * afterward. The memo lives on the session so re-renders never repeat it.
+	 */
+	consumeFreedomBanner(): string | undefined {
+		return bannerOnce(this._freedomConfig, this._freedomBannerMemo);
+	}
+
+	/**
+	 * Apply freedom-mode env exports to a spawn env. Used by bash spawners
+	 * that want subprocesses to see OMK_FREEDOM_MODE without reaching into
+	 * the freedom module directly.
+	 */
+	decorateFreedomEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+		return applyFreedomEnv(env, this._freedomConfig);
 	}
 
 	private async _getRequiredRequestAuth(model: Model<any>): Promise<{
@@ -2604,6 +2662,16 @@ export class AgentSession {
 		onChunk?: (chunk: string) => void,
 		options?: { excludeFromContext?: boolean; operations?: BashOperations },
 	): Promise<BashResult> {
+		// Freedom-mode safety floor: enforce §0.1 (secrets, privilege, fs
+		// destruction, scope) before spawning any shell. Hard-denied commands
+		// never reach the executor. require-confirm and allow both continue,
+		// because OMK's CLI does not own an interactive confirmation prompt;
+		// the caller decides UX policy from this point on.
+		const freedomDecision = gate({ tool: "bash", args: { command } }, this._freedomConfig);
+		if (freedomDecision.kind === "deny-hard") {
+			throw new Error(`OMK §0.1 safety floor blocked bash: ${freedomDecision.reason}`);
+		}
+
 		this._bashAbortController = new AbortController();
 
 		// Apply command prefix if configured (e.g., "shopt -s expand_aliases" for alias support)

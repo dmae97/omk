@@ -2,6 +2,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/omk-tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
+import { badgeText as freedomBadgeText } from "../../../core/freedom/index.ts";
 import { theme } from "../theme/theme.ts";
 
 /**
@@ -181,6 +182,14 @@ export class FooterComponent implements Component {
 		const metricsSegment = this.buildMetricsSegment(width);
 		if (metricsSegment) {
 			statsParts.push(metricsSegment);
+		}
+
+		// Add freedom-mode badge when the project opted in via .omk/config.toml.
+		// Returns undefined when freedom is off, so the footer is unchanged for
+		// projects that never created the config file.
+		const freedomBadge = freedomBadgeText(this.session.freedomConfig);
+		if (freedomBadge) {
+			statsParts.push(theme.fg("warning", freedomBadge));
 		}
 
 		// Colorize context percentage based on usage
