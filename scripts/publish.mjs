@@ -67,23 +67,23 @@ function validatePack(directory) {
 
 function getPublishAuthMode() {
 	if (process.env.GITHUB_ACTIONS !== "true") return "local";
-	if (process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN) return "oidc";
-	if (process.env.NPM_TOKEN) return "npm-token-fallback";
+	const hasOidc = !!process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+	const hasToken = !!process.env.NPM_TOKEN;
+	if (hasOidc && hasToken) return "hybrid";
+	if (hasOidc) return "oidc";
+	if (hasToken) return "npm-token";
 	return "missing";
 }
 
 function getPublishEnv() {
-	const env = { ...process.env };
-	const mode = getPublishAuthMode();
-	if (mode === "oidc" && !noProvenance) {
-		// Trusted publishing should authenticate through GitHub OIDC. setup-node's
-		// registry-url path injects NODE_AUTH_TOKEN/.npmrc auth, which can shadow OIDC
-		// and produce npm's misleading 404 "package not found or no permission" error.
-		delete env.NODE_AUTH_TOKEN;
-		delete env.NPM_TOKEN;
-		delete env.NPM_CONFIG_USERCONFIG;
-	}
-	return env;
+	// Do not strip env. The workflow writes ~/.npmrc with NPM_TOKEN when
+	// available, so npm authenticates via that .npmrc; the OIDC token is still
+	// used for the --provenance attestation when present. Earlier revisions
+	// stripped NODE_AUTH_TOKEN/NPM_TOKEN/NPM_CONFIG_USERCONFIG to force the OIDC
+	// trusted-publishing path, but trusted publishing only works when a binding
+	// exists on npmjs.com — when it does not, that strip turned a recoverable
+	// NPM_TOKEN publish into a hard ENEEDAUTH/404 "package not found".
+	return { ...process.env };
 }
 
 function preflightAccessCheck() {
@@ -102,9 +102,13 @@ function preflightAccessCheck() {
 				"     GitHub Actions environment.",
 		);
 	}
-	if (mode === "npm-token-fallback") {
+	if (mode === "npm-token") {
 		console.warn(
-			"OIDC token absent; using NPM_TOKEN fallback. Provenance attestation will be skipped automatically.",
+			"OIDC token absent; authenticating with NPM_TOKEN only. Provenance attestation will be skipped (requires OIDC).",
+		);
+	} else if (mode === "hybrid") {
+		console.log(
+			"Hybrid auth: NPM_TOKEN authenticates the publish, OIDC token signs the provenance attestation.",
 		);
 	}
 	const whoami = spawnSync(
@@ -121,14 +125,19 @@ function preflightAccessCheck() {
 		.join("\n")
 		.trim();
 	if (mode === "oidc") {
-		// Under OIDC, whoami without a token-exchange will return ENEEDAUTH; the real
-		// authentication happens inside npm publish via the GitHub OIDC token. Only
-		// warn so we still surface the verbose log evidence when publish fails.
+		// Pure-OIDC path: whoami has no token to exchange (the exchange happens
+		// inside npm publish), so ENEEDAUTH is expected. Warn so verbose logs are
+		// still visible if publish itself fails because no trusted publisher
+		// binding exists for the package.
 		console.log(
 			`Preflight whoami unauthenticated (expected under OIDC): ${output || "(no output)"}`,
 		);
 		return;
 	}
+	// hybrid / npm-token: ~/.npmrc should already be configured by the workflow.
+	// If whoami still fails, the .npmrc is broken or the token lacks publish
+	// rights — surface that immediately instead of letting npm publish emit a
+	// confusing ENEEDAUTH downstream.
 	throw new Error(
 		`npm whoami failed under ${mode} auth (cannot publish):\n${output || "(no output from npm)"}`,
 	);
@@ -208,10 +217,12 @@ for (const pkg of publishPackages) {
 	}
 
 	const publishArgs = ["publish", "--access", "public"];
-	// Provenance attestation only works under OIDC trusted publishing. Skip it on
-	// the NPM_TOKEN fallback path and when running outside GitHub Actions so we
-	// don't fail the publish with a misleading provenance error.
-	const useProvenance = !noProvenance && getPublishAuthMode() === "oidc";
+	// --provenance only requires an OIDC token (id-token: write) and the
+	// Sigstore attestation endpoint; it does NOT require a trusted publisher
+	// binding. So enable it whenever an OIDC token is present, regardless of
+	// whether NPM_TOKEN or OIDC is the actual auth path for the publish itself.
+	const useProvenance =
+		!noProvenance && !!process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
 	if (useProvenance) {
 		publishArgs.push("--provenance");
 	}

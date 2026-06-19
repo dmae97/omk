@@ -140,22 +140,31 @@ jobs:
           npm install -g npm@11.16.0 --ignore-scripts
           npm --version
 
-      - name: Configure NPM_TOKEN fallback (only when OIDC unavailable)
+      - name: Configure NPM_TOKEN authentication
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
-            echo "OIDC token present; trusted publishing will be used. Skipping NPM_TOKEN fallback."
-          elif [ -n "${NPM_TOKEN:-}" ]; then
-            echo "OIDC token absent; configuring NPM_TOKEN fallback for npm publish."
-            # npm expands ${NPM_TOKEN} at runtime, so the literal token is not
-            # persisted to disk inside .npmrc. The runner is ephemeral and the
-            # token is scoped to the npm-publish environment.
+          # An OIDC token alone is not enough to publish under npm trusted
+          # publishing: the package owner must also have a trusted publisher
+          # binding configured on npmjs.com. When the binding is missing, the
+          # token-exchange endpoint returns a 404 'OIDC token exchange error -
+          # package not found' and the publish fails. To stay resilient against
+          # that misconfiguration, always wire NPM_TOKEN into ~/.npmrc when the
+          # secret is set. The OIDC token is still used for the --provenance
+          # attestation (which only requires id-token:write, not trusted
+          # publishing).
+          if [ -n "${NPM_TOKEN:-}" ]; then
             cat > "${HOME}/.npmrc" <<'EOF'
           //registry.npmjs.org/:_authToken=${NPM_TOKEN}
           registry=https://registry.npmjs.org/
           always-auth=true
           EOF
+            echo "NPM_TOKEN configured for npm publish via ~/.npmrc."
+            if [ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+              echo "OIDC token also available; provenance attestation will be attached."
+            fi
+          elif [ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "NPM_TOKEN not set; relying on OIDC trusted publishing. Requires a trusted publisher binding at https://www.npmjs.com/settings/<owner>/trusted-publishers."
           else
             echo "::warning::Neither OIDC nor NPM_TOKEN is available. scripts/publish.mjs will fail with an actionable error."
           fi
