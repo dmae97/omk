@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { type Component, Container, setKeybindings, type TUI } from "@earendil-works/omk-tui";
+import { type Component, Container, setKeybindings, type TUI, visibleWidth } from "@earendil-works/omk-tui";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../../src/core/keybindings.ts";
 import type { ModelRegistry } from "../../src/core/model-registry.ts";
@@ -13,6 +13,21 @@ import { createHarness, type Harness } from "../suite/harness.ts";
 
 const SHIFT_TAB = "\x1b[Z";
 const CTRL_P = "\x10";
+const SHIFT_CTRL_P = "\x1b[112;6u";
+const KNOWN_PROVIDER_ORDER = [
+	"anthropic",
+	"openai",
+	"google",
+	"deepseek",
+	"kimi",
+	"openrouter",
+	"mistral",
+	"xai",
+	"groq",
+	"zai",
+	"together",
+	"fireworks",
+] as const;
 
 function createFakeTui(): TUI {
 	return {
@@ -35,16 +50,12 @@ function getProviderLine(rendered: string): string {
 	return line ?? "";
 }
 
-function extractProviderNames(providerLine: string): string[] {
-	return providerLine
-		.replace(/^Provider:\s*/, "")
-		.split("|")
-		.map((part) => part.trim().replace(/\s+[✓✗]$/, ""))
-		.filter(Boolean);
+function stateOf(selector: ModelSelectorComponent) {
+	return selector.getSemanticState();
 }
 
 function activeProvider(selector: ModelSelectorComponent): string {
-	return (selector as unknown as { activeProviderTab: string }).activeProviderTab;
+	return stateOf(selector).activeProvider;
 }
 
 function expectProvidersInOrder(providers: readonly string[], expectedOrder: readonly string[]): void {
@@ -56,8 +67,19 @@ function expectProvidersInOrder(providers: readonly string[], expectedOrder: rea
 	}
 }
 
+function expectKnownProvidersBeforeCustom(providers: readonly string[], customProvider: string): void {
+	const presentKnown = KNOWN_PROVIDER_ORDER.filter((provider) => providers.includes(provider));
+	expectProvidersInOrder(providers, [ALL_PROVIDER_TAB, ...presentKnown]);
+	const customIndex = providers.indexOf(customProvider);
+	expect(customIndex).toBeGreaterThan(-1);
+	for (const provider of presentKnown) {
+		expect(customIndex).toBeGreaterThan(providers.indexOf(provider));
+	}
+}
+
 function cycleToProvider(selector: ModelSelectorComponent, provider: string): void {
-	for (let i = 0; i < 32 && activeProvider(selector) !== provider; i++) {
+	const limit = stateOf(selector).providerIds.length + 1;
+	for (let i = 0; i < limit && activeProvider(selector) !== provider; i++) {
 		selector.handleInput("\t");
 	}
 	expect(activeProvider(selector)).toBe(provider);
@@ -141,7 +163,7 @@ type InteractiveModeFake = {
 	showSelector: (create: (done: () => void) => { component: Component; focus: Component }) => void;
 };
 
-describe("OMK CLI Contract v1 /model provider tabs", () => {
+describe("OMK CLI Contract v1.1 /model provider tabs", () => {
 	const harnesses: Harness[] = [];
 
 	beforeAll(() => {
@@ -158,38 +180,57 @@ describe("OMK CLI Contract v1 /model provider tabs", () => {
 		}
 	});
 
-	it("matches the provider-tab compatibility manifest", () => {
+	it("matches the semantic/presentation compatibility manifest", () => {
 		const manifestPath = fileURLToPath(new URL("./model-selector-contract.v1.json", import.meta.url));
 		const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
 			schemaVersion: string;
-			modelSelector: Record<string, unknown>;
+			modelSelector: {
+				semantic: Record<string, unknown>;
+				bindings: Record<string, { default: string; policy?: string }>;
+				presentation: Record<string, unknown>;
+			};
 		};
 
-		expect(manifest.schemaVersion).toBe("omk.cli-contract.v1");
-		expect(manifest.modelSelector).toMatchObject({
+		expect(manifest.schemaVersion).toBe("omk.cli-contract.v1.1");
+		expect(manifest.modelSelector.semantic).toMatchObject({
 			providerTabsRequired: true,
 			allTabRequired: true,
-			nextProviderKey: "tab",
-			previousProviderKey: "shift+tab",
-			scopeForwardKey: "ctrl+p",
-			scopeBackwardKey: "shift+ctrl+p",
-			retainProviderWithinSession: true,
-			fallbackToAllWhenUnavailable: true,
-			customProvidersAfterPredefinedOrder: true,
-			hideProviderTabsDuringSearch: false,
+			searchPreservesProviderTabs: true,
+			searchScope: "active-provider",
+			retainProviderLifetime: "interactive-session",
+			invalidProviderFallback: "all",
+			customProviderOrder: "after-known-lexicographic",
 			tabKeyReservedForProviderNext: true,
+		});
+		expect(manifest.modelSelector.presentation).toMatchObject({
+			providerHeaderText: "non-contractual",
+			authGlyph: "non-contractual",
+			ansiStyle: "non-contractual",
 		});
 	});
 
-	it("renders required provider tabs in stable order, including custom providers", async () => {
+	it("keeps default keybindings aligned with the manifest", () => {
+		const kb = new KeybindingsManager();
+		expect(kb.getKeys("tui.input.tab")).toEqual(["tab"]);
+		expect(kb.getKeys("app.model.providerPrevious")).toEqual(["shift+tab"]);
+		expect(kb.getKeys("app.model.cycleForward")).toEqual(["ctrl+p"]);
+		expect(kb.getKeys("app.model.cycleBackward")).toEqual(["shift+ctrl+p"]);
+	});
+
+	it("exposes structured semantic state without depending on presentation text", async () => {
 		const harness = await createSelectorHarness();
 		harnesses.push(harness);
 		const selector = makeSelector(harness);
 		await waitForAsyncRender();
 
-		const providers = extractProviderNames(getProviderLine(renderPlain(selector, 120)));
-		expectProvidersInOrder(providers, ["all", "anthropic", "openai", "google", "deepseek", "kimi"]);
-		expectProvidersInOrder(providers, ["kimi", "custom-provider"]);
+		const state = stateOf(selector);
+		expect(state.scope).toBe("all");
+		expect(state.activeProvider).toBe(ALL_PROVIDER_TAB);
+		expect(state.providerIds[0]).toBe(ALL_PROVIDER_TAB);
+		expect(state.providerIds).toContain("custom-provider");
+		expectKnownProvidersBeforeCustom(state.providerIds, "custom-provider");
+		expect(state.query).toBe("");
+		expect(state.visibleModelKeys.length).toBeGreaterThan(0);
 	});
 
 	it("keeps Tab and Shift+Tab dedicated to provider navigation", async () => {
@@ -199,13 +240,11 @@ describe("OMK CLI Contract v1 /model provider tabs", () => {
 		await waitForAsyncRender();
 
 		expect(activeProvider(selector)).toBe(ALL_PROVIDER_TAB);
+		const initialState = stateOf(selector);
 		selector.handleInput("\t");
 		expect(activeProvider(selector)).toBe("anthropic");
-
-		const anthropicRendered = renderPlain(selector, 120);
-		expect(anthropicRendered).toMatch(/claude-haiku \[anthropic/);
-		expect(anthropicRendered).not.toMatch(/gpt-4o-mini \[openai/);
-		expect(anthropicRendered).not.toMatch(/kimi-k2 \[kimi/);
+		expect(stateOf(selector).providerIds).toEqual(initialState.providerIds);
+		expect(stateOf(selector).visibleModelKeys.every((key) => key.startsWith("anthropic/"))).toBe(true);
 
 		selector.handleInput(SHIFT_TAB);
 		expect(activeProvider(selector)).toBe(ALL_PROVIDER_TAB);
@@ -235,12 +274,12 @@ describe("OMK CLI Contract v1 /model provider tabs", () => {
 
 		selector = openModelSelectorThroughInteractiveMode(fakeThis);
 		await waitForAsyncRender();
-		expect(activeProvider(selector)).toBe("kimi");
+		expect(stateOf(selector).activeProvider).toBe("kimi");
 
 		harness.session.modelRegistry.unregisterProvider("kimi");
 		selector = openModelSelectorThroughInteractiveMode(fakeThis);
 		await waitForAsyncRender();
-		expect(activeProvider(selector)).toBe(ALL_PROVIDER_TAB);
+		expect(stateOf(selector).activeProvider).toBe(ALL_PROVIDER_TAB);
 		expect(fakeThis.lastModelProviderTab).toBeUndefined();
 	});
 
@@ -252,17 +291,17 @@ describe("OMK CLI Contract v1 /model provider tabs", () => {
 
 		selector.handleInput("\t");
 		expect(activeProvider(selector)).toBe("anthropic");
+		const providerIdsBeforeSearch = stateOf(selector).providerIds;
 		for (const key of "gpt") selector.handleInput(key);
 
-		const rendered = renderPlain(selector, 120);
-		const providers = extractProviderNames(getProviderLine(rendered));
-		expectProvidersInOrder(providers, ["all", "anthropic", "openai", "google", "deepseek", "kimi"]);
-		expectProvidersInOrder(providers, ["kimi", "custom-provider"]);
-		expect(rendered).toContain("No matching models");
-		expect(rendered).not.toMatch(/gpt-4o-mini \[openai/);
+		const state = stateOf(selector);
+		expect(state.query).toBe("gpt");
+		expect(state.providerIds).toEqual(providerIdsBeforeSearch);
+		expect(state.visibleModelKeys).toHaveLength(0);
+		expect(state.visibleModelKeys).not.toContain("openai/gpt-4o-mini");
 	});
 
-	it("keeps provider tabs after Ctrl+P scope changes", async () => {
+	it("keeps provider tabs after Ctrl+P and Shift+Ctrl+P scope changes", async () => {
 		const harness = await createSelectorHarness();
 		harnesses.push(harness);
 		const anthropic = harness.session.modelRegistry.find("anthropic", "claude-haiku");
@@ -272,16 +311,22 @@ describe("OMK CLI Contract v1 /model provider tabs", () => {
 		const selector = makeSelector(harness, [{ model: anthropic! }, { model: kimi! }]);
 		await waitForAsyncRender();
 
-		let providers = extractProviderNames(getProviderLine(renderPlain(selector, 120)));
-		expect(providers).toEqual(["all", "anthropic", "kimi"]);
+		let state = stateOf(selector);
+		expect(state.scope).toBe("scoped");
+		expect(state.providerIds).toEqual([ALL_PROVIDER_TAB, "anthropic", "kimi"]);
 
 		selector.handleInput(CTRL_P);
-		providers = extractProviderNames(getProviderLine(renderPlain(selector, 120)));
-		expectProvidersInOrder(providers, ["all", "anthropic", "openai", "google", "deepseek", "kimi"]);
-		expectProvidersInOrder(providers, ["kimi", "custom-provider"]);
+		state = stateOf(selector);
+		expect(state.scope).toBe("all");
+		expectKnownProvidersBeforeCustom(state.providerIds, "custom-provider");
+
+		selector.handleInput(SHIFT_CTRL_P);
+		state = stateOf(selector);
+		expect(state.scope).toBe("scoped");
+		expect(state.providerIds).toEqual([ALL_PROVIDER_TAB, "anthropic", "kimi"]);
 	});
 
-	it("keeps provider tabs renderable across release-gate width and color-mode matrix", async () => {
+	it("keeps provider row renderable across release-gate width and color-mode smoke matrix", async () => {
 		const harness = await createSelectorHarness();
 		harnesses.push(harness);
 		const selector = makeSelector(harness);
@@ -306,13 +351,10 @@ describe("OMK CLI Contract v1 /model provider tabs", () => {
 				else process.env.NO_COLOR = env.NO_COLOR;
 
 				for (const width of [48, 80, 120, 200]) {
-					const providers = extractProviderNames(getProviderLine(renderPlain(selector, width)));
-					expect(providers[0]).toBe("all");
-					expect(providers).toContain("anthropic");
-					if (width >= 120) {
-						expectProvidersInOrder(providers, ["all", "anthropic", "openai", "google", "deepseek", "kimi"]);
-						expectProvidersInOrder(providers, ["kimi", "custom-provider"]);
-					}
+					const providerLine = getProviderLine(renderPlain(selector, width));
+					expect(visibleWidth(providerLine)).toBeLessThanOrEqual(width);
+					expect(providerLine).toContain(ALL_PROVIDER_TAB);
+					expect(providerLine).toContain("anthropic");
 				}
 			}
 		} finally {
