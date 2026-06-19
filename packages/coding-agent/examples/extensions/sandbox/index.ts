@@ -10,10 +10,10 @@
  * via `tool_call` input mutation without replacing the tool.
  *
  * Config files (merged, project takes precedence):
- * - ~/.pi/agent/extensions/sandbox.json (global)
- * - <cwd>/.pi/sandbox.json (project-local)
+ * - ~/.omk/agent/extensions/sandbox.json (global)
+ * - <cwd>/.omk/sandbox.json (project-local)
  *
- * Example .pi/sandbox.json:
+ * Example .omk/sandbox.json:
  * ```json
  * {
  *   "enabled": true,
@@ -35,8 +35,8 @@
  * - `/sandbox` - show current sandbox configuration
  *
  * Setup:
- * 1. Copy sandbox/ directory to ~/.pi/agent/extensions/
- * 2. Run `npm install` in ~/.pi/agent/extensions/sandbox/
+ * 1. Copy sandbox/ directory to ~/.omk/agent/extensions/
+ * 2. Run `npm install` in ~/.omk/agent/extensions/sandbox/
  *
  * Linux also requires: bubblewrap, socat, ripgrep
  */
@@ -46,7 +46,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
 import type { ExtensionAPI } from "open-multi-agent-kit";
-import { type BashOperations, createBashTool, getAgentDir } from "open-multi-agent-kit";
+import { type BashOperations, CONFIG_DIR_NAME, createBashTool, getAgentDir } from "open-multi-agent-kit";
 
 interface SandboxConfig extends SandboxRuntimeConfig {
 	enabled?: boolean;
@@ -77,7 +77,7 @@ const DEFAULT_CONFIG: SandboxConfig = {
 };
 
 function loadConfig(cwd: string): SandboxConfig {
-	const projectConfigPath = join(cwd, ".pi", "sandbox.json");
+	const projectConfigPath = join(cwd, CONFIG_DIR_NAME, "sandbox.json");
 	const globalConfigPath = join(getAgentDir(), "extensions", "sandbox.json");
 
 	let globalConfig: Partial<SandboxConfig> = {};

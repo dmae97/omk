@@ -1,7 +1,7 @@
 /**
  * Subagent Tool - Delegate tasks to specialized agents
  *
- * Spawns a separate `pi` process for each subagent invocation,
+ * Spawns a separate `omk` process for each subagent invocation,
  * giving it an isolated context window.
  *
  * Supports three modes:
@@ -20,7 +20,7 @@ import type { AgentToolResult } from "@earendil-works/omk-agent-core";
 import type { Message } from "@earendil-works/omk-ai";
 import { StringEnum } from "@earendil-works/omk-ai";
 import { Container, Markdown, Spacer, Text } from "@earendil-works/omk-tui";
-import { type ExtensionAPI, getMarkdownTheme, withFileMutationQueue } from "open-multi-agent-kit";
+import { CONFIG_DIR_NAME, type ExtensionAPI, getMarkdownTheme, withFileMutationQueue } from "open-multi-agent-kit";
 import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.ts";
 
@@ -231,7 +231,7 @@ async function mapWithConcurrencyLimit<TIn, TOut>(
 }
 
 async function writePromptToTempFile(agentName: string, prompt: string): Promise<{ dir: string; filePath: string }> {
-	const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pi-subagent-"));
+	const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "omk-subagent-"));
 	const safeName = agentName.replace(/[^\w.-]+/g, "_");
 	const filePath = path.join(tmpDir, `prompt-${safeName}.md`);
 	await withFileMutationQueue(filePath, async () => {
@@ -240,7 +240,18 @@ async function writePromptToTempFile(agentName: string, prompt: string): Promise
 	return { dir: tmpDir, filePath };
 }
 
-function getPiInvocation(args: string[]): { command: string; args: string[] } {
+/**
+ * Resolve how to spawn a child OMK process for a subagent.
+ *
+ * Resolution order:
+ *  1. Self-invoke the current script with the active runtime (works for both
+ *     `node script.js` and packaged single-file launchers) when a real script
+ *     path is available and is not a bun virtual path.
+ *  2. If the runtime itself is a packaged binary (not generic node/bun), invoke
+ *     it directly.
+ *  3. Otherwise fall back to the `omk` command on PATH.
+ */
+export function getOmkInvocation(args: string[]): { command: string; args: string[] } {
 	const currentScript = process.argv[1];
 	const isBunVirtualScript = currentScript?.startsWith("/$bunfs/root/");
 	if (currentScript && !isBunVirtualScript && fs.existsSync(currentScript)) {
@@ -253,7 +264,7 @@ function getPiInvocation(args: string[]): { command: string; args: string[] } {
 		return { command: process.execPath, args };
 	}
 
-	return { command: "pi", args };
+	return { command: "omk", args };
 }
 
 type OnUpdateCallback = (partial: AgentToolResult<SubagentDetails>) => void;
@@ -325,7 +336,7 @@ async function runSingleAgent(
 		let wasAborted = false;
 
 		const exitCode = await new Promise<number>((resolve) => {
-			const invocation = getPiInvocation(args);
+			const invocation = getOmkInvocation(args);
 			const proc = spawn(invocation.command, invocation.args, {
 				cwd: cwd ?? defaultCwd,
 				shell: false,
@@ -458,8 +469,8 @@ export default function (pi: ExtensionAPI) {
 		description: [
 			"Delegate tasks to specialized subagents with isolated context.",
 			"Modes: single (agent + task), parallel (tasks array), chain (sequential with {previous} placeholder).",
-			'Default agent scope is "user" (from ~/.pi/agent/agents).',
-			'To enable project-local agents in .pi/agents, set agentScope: "both" (or "project").',
+			`Default agent scope is "user" (from ~/${CONFIG_DIR_NAME}/agent/agents).`,
+			`To enable project-local agents in ${CONFIG_DIR_NAME}/agents, set agentScope: "both" (or "project").`,
 		].join(" "),
 		parameters: SubagentParams,
 

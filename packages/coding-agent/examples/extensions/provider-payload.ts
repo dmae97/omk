@@ -1,9 +1,9 @@
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ExtensionAPI } from "open-multi-agent-kit";
+import { CONFIG_DIR_NAME, type ExtensionAPI } from "open-multi-agent-kit";
 
 export default function (pi: ExtensionAPI) {
-	const logFile = join(process.cwd(), ".pi", "provider-payload.log");
+	const logFile = join(process.cwd(), CONFIG_DIR_NAME, "provider-payload.log");
 
 	pi.on("before_provider_request", (event) => {
 		appendFileSync(logFile, `${JSON.stringify(event.payload, null, 2)}\n\n`, "utf8");
