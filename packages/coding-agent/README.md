@@ -493,16 +493,18 @@ omk [options] [@files...] [messages...]
 omk install <source> [-l]     # Install package, -l for project-local
 omk remove <source> [-l]      # Remove package
 omk uninstall <source> [-l]   # Alias for remove
-omk update [source|self|omk]   # Update omk and packages (skips pinned packages)
-omk update --extensions       # Update packages only
-omk update --self             # Update omk only
-omk update --self --force     # Reinstall omk even if current
-omk update --extension <src>  # Update one package
-omk list                      # List installed packages
+omk update [source|self|omk]   # Update OMK packages/extensions and OMK 본체 when supported
+omk update --extensions       # Update OMK packages/extensions only; skip OMK 본체
+omk update --self             # Update OMK 본체 only
+omk update --self --force     # Reinstall OMK 본체 even if current
+omk update --extension <src>  # Update one OMK package
+omk list                      # List installed OMK packages
 omk config                    # Enable/disable package resources
 ```
 
 `omk config` and project package commands accept `--approve`/`--no-approve` to trust or ignore project-local settings for one command. `omk update` never prompts for project trust.
+
+`omk update` reports two lanes: `OMK 본체` (the main OMK CLI) and `OMK packages/extensions`. The default command exits 0 when OMK packages/extensions update successfully, even if `OMK 본체` reports `unsupported` because the installation is managed by a source checkout, package manager, or wrapper. It exits 1 when OMK packages/extensions fail or when an attempted `OMK 본체` update fails. `omk update --self` and `omk update omk` target `OMK 본체` only, so `unsupported` exits 1 there.
 
 ### Modes
 

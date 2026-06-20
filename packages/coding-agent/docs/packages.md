@@ -42,15 +42,17 @@ omk install ./relative/path/to/package
 
 omk remove npm:@foo/bar
 omk list                     # show installed packages from settings
-omk update                   # update omk, update packages, and reconcile pinned git refs
-omk update --extensions      # update packages and reconcile pinned git refs only
-omk update --self            # update omk only
-omk update --self --force    # reinstall omk even if current
-omk update npm:@foo/bar      # update one package
+omk update                   # update OMK packages/extensions and OMK 본체 when supported
+omk update --extensions      # update OMK packages/extensions only; skip OMK 본체
+omk update --self            # update OMK 본체 only
+omk update --self --force    # reinstall OMK 본체 even if current
+omk update npm:@foo/bar      # update one OMK package
 omk update --extension npm:@foo/bar
 ```
 
-These commands manage omk packages, not the omk CLI installation. To uninstall omk itself, see [Quickstart](quickstart.md#uninstall).
+Except for `omk update --self` and `omk update omk`, these commands manage OMK packages, not `OMK 본체` (the main OMK CLI). To uninstall `OMK 본체`, see [Quickstart](quickstart.md#uninstall).
+
+`omk update` reports separate `OMK 본체` and `OMK packages/extensions` results. The default command exits 0 when OMK packages/extensions update successfully, even if `OMK 본체` reports `unsupported` because the installation is managed by a source checkout, package manager, or wrapper. It exits 1 when OMK packages/extensions fail or when an attempted `OMK 본체` update fails. `omk update --self` and `omk update omk` target `OMK 본체` only, so `unsupported` exits 1 there.
 
 By default, `install` and `remove` write to user settings (`~/.omk/agent/settings.json`). Use `-l` to write to project settings (`.omk/settings.json`) instead. Project settings can be shared with your team, and omk installs any missing packages automatically on startup.
 

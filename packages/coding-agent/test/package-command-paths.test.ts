@@ -150,6 +150,126 @@ describe("package commands", () => {
 		}
 	});
 
+	it("treats unsupported OMK 본체 self-update as a soft warning for default update", async () => {
+		writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ packages: [packageDir] }, null, 2));
+		Object.defineProperty(process, "execPath", { value: "/usr/local/bin/node", configurable: true });
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				throw new Error("offline");
+			}),
+		);
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		try {
+			await expect(main(["update"])).resolves.toBeUndefined();
+
+			expect(process.exitCode).toBeUndefined();
+			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
+			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
+			expect(stdout).toContain("OMK packages/extensions: updated");
+			expect(stderr).toContain("warning: OMK 본체 cannot self-update this installation.");
+			expect(stderr).toContain("Update OMK 본체");
+		} finally {
+			logSpy.mockRestore();
+			errorSpy.mockRestore();
+		}
+	});
+
+	it("keeps unsupported OMK 본체 self-update as a hard failure for self-only update", async () => {
+		Object.defineProperty(process, "execPath", { value: "/usr/local/bin/node", configurable: true });
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		try {
+			await expect(main(["update", "--self", "--force"])).resolves.toBeUndefined();
+
+			expect(process.exitCode).toBe(1);
+			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
+			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
+			expect(stdout).toContain("OMK packages/extensions: skipped (--self)");
+			expect(stderr).toContain("error: OMK 본체 cannot self-update this installation.");
+			expect(stderr).toContain("Update OMK 본체");
+		} finally {
+			logSpy.mockRestore();
+			errorSpy.mockRestore();
+		}
+	});
+
+	it("keeps attempted OMK 본체 self-update failures hard for default update", async () => {
+		const globalPrefix = join(tempDir, "global-prefix");
+		const selfPackageDir = join(globalPrefix, "lib", "node_modules", PACKAGE_NAME);
+		const fakeNpmPath = join(tempDir, "fake-npm-fail.cjs");
+		const recordPath = join(tempDir, "default-self-update-fail.json");
+		mkdirSync(selfPackageDir, { recursive: true });
+		writeFileSync(
+			fakeNpmPath,
+			`const fs=require("node:fs"),path=require("node:path"),args=process.argv.slice(2),prefix=args[args.indexOf("--prefix")+1];
+if(args.includes("root")) {
+	console.log(path.join(prefix,"lib","node_modules"));
+	process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
+process.exit(23);
+`,
+		);
+		writeFileSync(
+			join(agentDir, "settings.json"),
+			JSON.stringify(
+				{ npmCommand: [originalExecPath, fakeNpmPath, "--prefix", globalPrefix], packages: [packageDir] },
+				null,
+				2,
+			),
+		);
+		process.env.OMK_PACKAGE_DIR = selfPackageDir;
+		Object.defineProperty(process, "execPath", {
+			value: join(selfPackageDir, "dist", "cli.js"),
+			configurable: true,
+		});
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		try {
+			await expect(main(["update", "--force"])).resolves.toBeUndefined();
+
+			expect(process.exitCode).toBe(1);
+			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
+			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
+			expect(stdout).toContain("OMK packages/extensions: updated");
+			expect(stdout).not.toContain("OMK 본체: updated");
+			expect(stderr).toContain("OMK 본체 update failed");
+			expect(stderr).toContain("exited with code 23");
+			const recordedArgs = JSON.parse(readFileSync(recordPath, "utf-8")) as string[];
+			expect(recordedArgs).toContain(PACKAGE_NAME);
+		} finally {
+			logSpy.mockRestore();
+			errorSpy.mockRestore();
+		}
+	});
+
+	it("skips OMK 본체 update for extensions-only update", async () => {
+		writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ packages: [packageDir] }, null, 2));
+		const fetchMock = vi.fn(async () => Response.json({ version: getNewerPatchVersion() }));
+		vi.stubGlobal("fetch", fetchMock);
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		try {
+			await expect(main(["update", "--extensions"])).resolves.toBeUndefined();
+
+			expect(process.exitCode).toBeUndefined();
+			expect(fetchMock).not.toHaveBeenCalled();
+			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
+			expect(stdout).toContain("OMK packages/extensions: updated");
+			expect(stdout).toContain("OMK 본체: skipped (--extensions)");
+			expect(errorSpy).not.toHaveBeenCalled();
+		} finally {
+			logSpy.mockRestore();
+			errorSpy.mockRestore();
+		}
+	});
+
 	it("uses global npmCommand and current package name for forced self updates without checking the api", async () => {
 		const globalPrefix = join(tempDir, "global-prefix");
 		const projectPrefix = join(tempDir, "project-prefix");

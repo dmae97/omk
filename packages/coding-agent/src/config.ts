@@ -315,16 +315,16 @@ export function getSelfUpdateUnavailableInstruction(
 ): string {
 	const method = detectInstallMethod();
 	if (method === "bun-binary") {
-		return `Download from: https://github.com/dmae97/open-multi-agent-kit/releases/latest`;
+		return `Download ${APP_CORE_LABEL} from: https://github.com/dmae97/open-multi-agent-kit/releases/latest`;
 	}
 	const command = getSelfUpdateCommandForMethod(method, packageName, updatePackageName, npmCommand);
 	if (command) {
 		if (isManagedByGlobalPackageManager(method, packageName, npmCommand) && !isSelfUpdatePathWritable()) {
-			return `This installation is managed by a global ${method} install, but the install path is not writable. Update it yourself with: ${command.display}`;
+			return `This ${APP_CORE_LABEL} installation is managed by a global ${method} install, but the install path is not writable. Update it yourself with: ${command.display}`;
 		}
-		return `This installation is not managed by a global ${method} install. Update it with the package manager, wrapper, or source checkout that provides it.`;
+		return `This ${APP_CORE_LABEL} installation is not managed by a global ${method} install. Update it with the package manager, wrapper, or source checkout that provides it.`;
 	}
-	return `Update ${updatePackageName} using the package manager, wrapper, or source checkout that provides this installation.`;
+	return `Update ${APP_CORE_LABEL} (${updatePackageName}) using the package manager, wrapper, or source checkout that provides this installation.`;
 }
 
 export function getUpdateInstruction(packageName: string): string {
@@ -501,6 +501,7 @@ const packageAppConfigName: string | undefined = packageAppConfig?.name;
 export const PACKAGE_NAME: string = pkg.name || "open-multi-agent-kit";
 export const APP_NAME: string = packageAppConfigName || "omk";
 export const APP_TITLE: string = APP_NAME === "omk" ? "OMK" : APP_NAME;
+export const APP_CORE_LABEL: string = `${APP_TITLE} 본체`;
 export const CONFIG_DIR_NAME: string = packageAppConfig?.configDir || ".omk";
 export const VERSION: string = pkg.version || "0.0.0";
 

@@ -162,8 +162,9 @@ describe("detectInstallMethod", () => {
 
 		expect(detectInstallMethod()).toBe("unknown");
 		expect(getSelfUpdateCommand("open-multi-agent-kit")).toBeUndefined();
+		expect(getSelfUpdateUnavailableInstruction("open-multi-agent-kit")).toContain("OMK 본체");
 		expect(getUpdateInstruction("open-multi-agent-kit")).toBe(
-			"Update open-multi-agent-kit using the package manager, wrapper, or source checkout that provides this installation.",
+			"Update OMK 본체 (open-multi-agent-kit) using the package manager, wrapper, or source checkout that provides this installation.",
 		);
 	});
 

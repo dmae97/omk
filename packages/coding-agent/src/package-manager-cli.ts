@@ -2,7 +2,9 @@ import { Markdown, type MarkdownTheme } from "@earendil-works/omk-tui";
 import chalk from "chalk";
 import { selectConfig } from "./cli/config-selector.ts";
 import {
+	APP_CORE_LABEL,
 	APP_NAME,
+	APP_TITLE,
 	detectInstallMethod,
 	getAgentDir,
 	getPackageDir,
@@ -24,6 +26,9 @@ import {
 export type PackageCommand = "install" | "remove" | "update" | "list";
 
 type UpdateTarget = { type: "all" } | { type: "self" } | { type: "extensions"; source?: string };
+type SelfUpdateFailureMode = "hard" | "soft";
+
+const OMK_PACKAGES_LABEL = `${APP_TITLE} packages/extensions`;
 
 const SELF_UPDATE_NOTE_MARKDOWN_THEME: MarkdownTheme = {
 	heading: (text) => chalk.bold(chalk.yellow(text)),
@@ -46,6 +51,7 @@ interface PackageCommandOptions {
 	command: PackageCommand;
 	source?: string;
 	updateTarget?: UpdateTarget;
+	updateTargetWasImplicitDefault: boolean;
 	local: boolean;
 	force: boolean;
 	help: boolean;
@@ -127,18 +133,18 @@ Examples:
 			console.log(`${chalk.bold("Usage:")}
   ${getPackageCommandUsage("update")}
 
-Update OMK and installed packages.
+Update ${OMK_PACKAGES_LABEL} and ${APP_CORE_LABEL} when supported.
 
 Options:
-  --self                  Update OMK only
-  --extensions            Update installed packages only
-  --extension <source>    Update one package only
-  --force                 Reinstall OMK even if the current version is latest
+  --self                  Update ${APP_CORE_LABEL} only
+  --extensions            Update ${OMK_PACKAGES_LABEL} only
+  --extension <source>    Update one OMK package only
+  --force                 Reinstall ${APP_CORE_LABEL} even if the current version is latest
 
 Short forms:
-  ${APP_NAME} update                Update OMK and all extensions
-  ${APP_NAME} update <source>       Update one package
-  ${APP_NAME} update omk            Update OMK only (self works as alias to omk)
+  ${APP_NAME} update                Update ${OMK_PACKAGES_LABEL} and ${APP_CORE_LABEL} when supported
+  ${APP_NAME} update <source>       Update one OMK package
+  ${APP_NAME} update omk            Update ${APP_CORE_LABEL} only (self works as alias to omk)
 `);
 			return;
 
@@ -301,10 +307,14 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 		}
 	}
 
+	const updateTargetWasImplicitDefault =
+		command === "update" && !source && !selfFlag && !extensionsFlag && !extensionFlagSource;
+
 	return {
 		command,
 		source,
 		updateTarget,
+		updateTargetWasImplicitDefault,
 		local,
 		force,
 		help,
@@ -324,8 +334,13 @@ function updateTargetIncludesExtensions(target: UpdateTarget): boolean {
 	return target.type === "all" || target.type === "extensions";
 }
 
-function printSelfUpdateUnavailable(npmCommand?: string[], updatePackageName = PACKAGE_NAME): void {
-	console.error(`error: ${APP_NAME} cannot self-update this installation.`);
+function printSelfUpdateUnavailable(
+	npmCommand?: string[],
+	updatePackageName = PACKAGE_NAME,
+	mode: SelfUpdateFailureMode = "hard",
+): void {
+	const prefix = mode === "soft" ? "warning" : "error";
+	console.error(`${prefix}: ${APP_CORE_LABEL} cannot self-update this installation.`);
 	console.error(getSelfUpdateUnavailableInstruction(PACKAGE_NAME, npmCommand, updatePackageName));
 
 	const entrypoint = process.argv[1];
@@ -336,7 +351,7 @@ function printSelfUpdateUnavailable(npmCommand?: string[], updatePackageName = P
 }
 
 function printSelfUpdateFallback(command: SelfUpdateCommand): void {
-	console.error(chalk.dim(`If this keeps failing, run this command yourself: ${command.display}`));
+	console.error(chalk.dim(`If ${APP_CORE_LABEL} update keeps failing, run this command yourself: ${command.display}`));
 }
 
 function printSelfUpdateNote(note: string): void {
@@ -380,12 +395,12 @@ async function getSelfUpdatePlan(force: boolean): Promise<SelfUpdatePlan> {
 		return { packageName: PACKAGE_NAME, shouldRun: true };
 	}
 
-	console.log(chalk.green(`${APP_NAME} is already up to date (v${VERSION})`));
+	console.log(chalk.green(`${APP_CORE_LABEL} is already up to date (v${VERSION})`));
 	return { packageName: PACKAGE_NAME, shouldRun: false };
 }
 
 async function runSelfUpdate(command: SelfUpdateCommand): Promise<void> {
-	console.log(chalk.dim(`Updating ${APP_NAME} with ${command.display}...`));
+	console.log(chalk.dim(`Updating ${APP_CORE_LABEL} with ${command.display}...`));
 	for (const step of command.steps ?? [command]) {
 		await new Promise<void>((resolve, reject) => {
 			const child = spawnProcess(step.command, step.args, {
@@ -585,56 +600,74 @@ export async function handlePackageCommand(args: string[]): Promise<boolean> {
 
 			case "update": {
 				const target = options.updateTarget ?? { type: "all" };
+				const softSelfUnsupported = target.type === "all" && options.updateTargetWasImplicitDefault;
 				if (updateTargetIncludesExtensions(target)) {
 					const updateSource = target.type === "extensions" ? target.source : undefined;
 					await packageManager.update(updateSource);
 					if (updateSource) {
-						console.log(chalk.green(`Updated ${updateSource}`));
+						console.log(chalk.green(`${OMK_PACKAGES_LABEL}: updated ${updateSource}`));
 					} else {
-						console.log(chalk.green("Updated packages"));
+						console.log(chalk.green(`${OMK_PACKAGES_LABEL}: updated`));
 					}
+				} else {
+					console.log(chalk.dim(`${OMK_PACKAGES_LABEL}: skipped (--self)`));
 				}
-				if (updateTargetIncludesSelf(target)) {
-					const selfUpdatePlan = await getSelfUpdatePlan(options.force);
-					if (!selfUpdatePlan.shouldRun) {
-						return true;
+				if (!updateTargetIncludesSelf(target)) {
+					if (target.type === "extensions" && !target.source) {
+						console.log(chalk.dim(`${APP_CORE_LABEL}: skipped (--extensions)`));
 					}
-					const installMethod = detectInstallMethod();
-					if (process.platform === "win32" && installMethod !== "npm" && installMethod !== "pnpm") {
-						console.error(
-							chalk.red(`${APP_NAME} self-update on Windows is only supported for npm and pnpm installs.`),
-						);
-						console.error(chalk.dim(`Detected install method: ${installMethod}. Update ${APP_NAME} manually.`));
-						process.exitCode = 1;
-						return true;
-					}
-					const selfUpdateCommand = getSelfUpdateCommand(
-						PACKAGE_NAME,
-						selfUpdateNpmCommand,
-						selfUpdatePlan.packageName,
+					return true;
+				}
+
+				const selfUpdatePlan = await getSelfUpdatePlan(options.force);
+				if (!selfUpdatePlan.shouldRun) {
+					return true;
+				}
+				const installMethod = detectInstallMethod();
+				if (process.platform === "win32" && installMethod !== "npm" && installMethod !== "pnpm") {
+					const mode: SelfUpdateFailureMode = softSelfUnsupported ? "soft" : "hard";
+					console.error(
+						(mode === "soft" ? chalk.yellow : chalk.red)(
+							`${APP_CORE_LABEL} self-update on Windows is only supported for npm and pnpm installs.`,
+						),
 					);
-					if (!selfUpdateCommand) {
-						printSelfUpdateUnavailable(selfUpdateNpmCommand, selfUpdatePlan.packageName);
+					console.error(
+						chalk.dim(`Detected install method: ${installMethod}. Update ${APP_CORE_LABEL} manually.`),
+					);
+					if (mode === "hard") {
 						process.exitCode = 1;
-						return true;
 					}
-					if (selfUpdatePlan.note) {
-						printSelfUpdateNote(selfUpdatePlan.note);
-					}
-					try {
-						if (installMethod === "npm") {
-							prepareWindowsNpmSelfUpdate();
-						}
-						await runSelfUpdate(selfUpdateCommand);
-					} catch (error: unknown) {
-						const message = error instanceof Error ? error.message : "Unknown package command error";
-						console.error(chalk.red(`Error: ${message}`));
-						printSelfUpdateFallback(selfUpdateCommand);
-						process.exitCode = 1;
-						return true;
-					}
-					console.log(chalk.green(`Updated ${APP_NAME}`));
+					return true;
 				}
+				const selfUpdateCommand = getSelfUpdateCommand(
+					PACKAGE_NAME,
+					selfUpdateNpmCommand,
+					selfUpdatePlan.packageName,
+				);
+				if (!selfUpdateCommand) {
+					const mode: SelfUpdateFailureMode = softSelfUnsupported ? "soft" : "hard";
+					printSelfUpdateUnavailable(selfUpdateNpmCommand, selfUpdatePlan.packageName, mode);
+					if (mode === "hard") {
+						process.exitCode = 1;
+					}
+					return true;
+				}
+				if (selfUpdatePlan.note) {
+					printSelfUpdateNote(selfUpdatePlan.note);
+				}
+				try {
+					if (installMethod === "npm") {
+						prepareWindowsNpmSelfUpdate();
+					}
+					await runSelfUpdate(selfUpdateCommand);
+				} catch (error: unknown) {
+					const message = error instanceof Error ? error.message : "Unknown package command error";
+					console.error(chalk.red(`${APP_CORE_LABEL} update failed: ${message}`));
+					printSelfUpdateFallback(selfUpdateCommand);
+					process.exitCode = 1;
+					return true;
+				}
+				console.log(chalk.green(`${APP_CORE_LABEL}: updated`));
 				return true;
 			}
 		}
