@@ -1,12 +1,12 @@
 <!-- Synced from jot qe0ikdqs. Edit this file in-repo going forward. -->
 
-# Pi Observability Design Notes
+# OMK Observability Design Notes
 
 ## Goal
 
 Make `packages/ai` and `packages/agent`/harness observable without depending on OpenTelemetry, Sentry, or any APM vendor.
 
-Pi should emit stable, structured lifecycle events. External listeners can convert those events into OTel spans, Sentry spans, logs, metrics, or custom telemetry.
+OMK should emit stable, structured lifecycle events. External listeners can convert those events into OTel spans, Sentry spans, logs, metrics, or custom telemetry.
 
 ## Mental model
 
@@ -30,11 +30,11 @@ interface SpanRecord {
 Example tree:
 
 ```text
-traceId=t1 spanId=s1 parent=-  name=pi.agent.prompt
-traceId=t1 spanId=s2 parent=s1 name=pi.agent.turn
-traceId=t1 spanId=s3 parent=s2 name=pi.ai.provider.request
-traceId=t1 spanId=s4 parent=s2 name=pi.agent.tool_call
-traceId=t1 spanId=s5 parent=s4 name=pi.session.append_entry
+traceId=t1 spanId=s1 parent=-  name=omk.agent.prompt
+traceId=t1 spanId=s2 parent=s1 name=omk.agent.turn
+traceId=t1 spanId=s3 parent=s2 name=omk.ai.provider.request
+traceId=t1 spanId=s4 parent=s2 name=omk.agent.tool_call
+traceId=t1 spanId=s5 parent=s4 name=omk.session.append_entry
 ```
 
 ## Async context
@@ -52,11 +52,11 @@ await Promise.all([
 
 Deep code can then read the correct current context for the active async chain.
 
-Pi must run in Node, Bun, browser, workers, and other JS runtimes, so ALS cannot be the core abstraction. It should be a runtime adapter.
+OMK must run in Node, Bun, browser, workers, and other JS runtimes, so ALS cannot be the core abstraction. It should be a runtime adapter.
 
 ## Core design
 
-Pi owns a small runtime-agnostic observability abstraction:
+OMK owns a small runtime-agnostic observability abstraction:
 
 ```ts
 export interface PiObservabilityContext {
@@ -147,25 +147,25 @@ For Node, diagnostics channels can be used as a passive event bus:
 
 ```ts
 import { channel } from "diagnostics_channel";
-channel("pi.observability").publish(event);
+channel("omk.observability").publish(event);
 ```
 
-Subscribers can create OTel/Sentry spans without monkey-patching pi.
+Subscribers can create OTel/Sentry spans without monkey-patching OMK.
 
-## What pi emits
+## What OMK emits
 
-Pi emits what happened. It does not create OTel/Sentry spans directly.
+OMK emits what happened. It does not create OTel/Sentry spans directly.
 
 Initial minimal event names:
 
 ```text
-pi.agent.prompt
-pi.agent.skill
-pi.agent.prompt_template
-pi.agent.compaction
-pi.agent.branch_navigation
-pi.agent.session.append_entry
-pi.ai.provider.request
+omk.agent.prompt
+omk.agent.skill
+omk.agent.prompt_template
+omk.agent.compaction
+omk.agent.branch_navigation
+omk.agent.session.append_entry
+omk.ai.provider.request
 ```
 
 Each operation emits:
@@ -179,14 +179,14 @@ error
 Later additions:
 
 ```text
-pi.agent.turn
-pi.agent.tool_call
-pi.agent.queue_update
-pi.ai.provider.retry
-pi.ai.provider.first_token
-pi.ai.provider.usage
-pi.session.read
-pi.session.write
+omk.agent.turn
+omk.agent.tool_call
+omk.agent.queue_update
+omk.ai.provider.retry
+omk.ai.provider.first_token
+omk.ai.provider.usage
+omk.session.read
+omk.session.write
 ```
 
 ## Minimal instrumentation points
@@ -206,7 +206,7 @@ Example:
 
 ```ts
 return traceOperation(
-  "pi.agent.prompt",
+  "omk.agent.prompt",
   {
     sessionId: turnState.sessionId,
     provider: turnState.model.provider,
@@ -222,7 +222,7 @@ Session write:
 
 ```ts
 return traceOperation(
-  "pi.agent.session.append_entry",
+  "omk.agent.session.append_entry",
   { entryType: entry.type },
   async () => {
     await this.unwrap(this.storage.appendEntry(entry));
@@ -242,7 +242,7 @@ Example:
 
 ```ts
 return traceOperation(
-  "pi.ai.provider.request",
+  "omk.ai.provider.request",
   {
     api: model.api,
     provider: model.provider,
@@ -298,7 +298,7 @@ Content capture can be opt-in later with explicit redaction hooks.
 
 ## Listener behavior
 
-Observability must never affect pi execution.
+Observability must never affect OMK execution.
 
 Subscriber errors should be swallowed or isolated. Harness hooks are control-plane and may affect execution; observability subscribers are passive and must not.
 
@@ -322,7 +322,7 @@ Every emitted event inside that async chain includes the context:
 ```ts
 {
   type: "start",
-  name: "pi.ai.provider.request",
+  name: "omk.ai.provider.request",
   traceId: "t1",
   spanId: "s3",
   parentSpanId: "s1",
@@ -353,10 +353,10 @@ Then:
 
 ```text
 packages/ai
-  emits pi.ai.* events
+  emits omk.ai.* events
 
 packages/agent
-  emits pi.agent.* / pi.session.* events
+  emits omk.agent.* / omk.session.* events
 ```
 
 Optional later:
@@ -366,11 +366,11 @@ packages/observability-node
   AsyncLocalStorage + diagnostics_channel bridge
 
 packages/otel
-  subscribes to pi events and creates OpenTelemetry spans
+  subscribes to OMK events and creates OpenTelemetry spans
 ```
 
 ## Thesis
 
-Pi defines a stable, safe event contract. Adapters define where events go.
+OMK defines a stable, safe event contract. Adapters define where events go.
 
 This makes ai/harness observable without binding core packages to OTel, Sentry, Node-only APIs, or monkey-patching.

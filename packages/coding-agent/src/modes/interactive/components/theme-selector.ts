@@ -7,6 +7,17 @@ const THEME_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
 	maxPrimaryColumnWidth: 32,
 };
 
+const THEME_NAME_COLLATOR = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+
+export function orderThemesForSelector(themes: readonly string[]): string[] {
+	const isOmkTheme = (name: string): boolean => name.startsWith("omk-");
+	return [...themes].sort((left, right) => {
+		const leftPriority = isOmkTheme(left) ? 0 : 1;
+		const rightPriority = isOmkTheme(right) ? 0 : 1;
+		return leftPriority !== rightPriority ? leftPriority - rightPriority : THEME_NAME_COLLATOR.compare(left, right);
+	});
+}
+
 /**
  * Component that renders a theme selector
  */
@@ -24,7 +35,7 @@ export class ThemeSelectorComponent extends Container {
 		this.onPreview = onPreview;
 
 		// Get available themes and create select items
-		const themes = getAvailableThemes();
+		const themes = orderThemesForSelector(getAvailableThemes());
 		const themeItems: SelectItem[] = themes.map((name) => ({
 			value: name,
 			label: name,

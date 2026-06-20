@@ -362,7 +362,7 @@ function migrateToolsToBin(): void {
 
 /**
  * Check for deprecated hooks/ and tools/ directories.
- * Note: tools/ may contain fd/rg binaries extracted by pi, so only warn if it has other files.
+ * Note: tools/ may contain fd/rg binaries extracted by OMK, so only warn if it has other files.
  */
 const EXTENSION_SOURCE_EXTENSIONS = new Set([".ts", ".js", ".mts", ".cts", ".mjs", ".cjs", ".tsx", ".jsx"]);
 const LEGACY_MANIFEST_FIELDS = ["hooks", "customTools", "extensions"] as const;

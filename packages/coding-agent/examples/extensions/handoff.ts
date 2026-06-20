@@ -77,8 +77,8 @@ function getHandoffMessages(branch: SessionEntry[]): AgentMessage[] {
 	return compactedBranch.map(entryToMessage).filter((message) => message !== undefined);
 }
 
-export default function (pi: ExtensionAPI) {
-	pi.registerCommand("handoff", {
+export default function (omk: ExtensionAPI) {
+	omk.registerCommand("handoff", {
 		description: "Transfer context to a new focused session",
 		handler: async (args, ctx) => {
 			if (ctx.mode !== "tui") {

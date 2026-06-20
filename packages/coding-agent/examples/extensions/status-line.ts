@@ -7,15 +7,15 @@
 
 import type { ExtensionAPI } from "open-multi-agent-kit";
 
-export default function (pi: ExtensionAPI) {
+export default function (omk: ExtensionAPI) {
 	let turnCount = 0;
 
-	pi.on("session_start", async (_event, ctx) => {
+	omk.on("session_start", async (_event, ctx) => {
 		const theme = ctx.ui.theme;
 		ctx.ui.setStatus("status-demo", theme.fg("dim", "Ready"));
 	});
 
-	pi.on("turn_start", async (_event, ctx) => {
+	omk.on("turn_start", async (_event, ctx) => {
 		turnCount++;
 		const theme = ctx.ui.theme;
 		const spinner = theme.fg("accent", "●");
@@ -23,7 +23,7 @@ export default function (pi: ExtensionAPI) {
 		ctx.ui.setStatus("status-demo", spinner + text);
 	});
 
-	pi.on("turn_end", async (_event, ctx) => {
+	omk.on("turn_end", async (_event, ctx) => {
 		const theme = ctx.ui.theme;
 		const check = theme.fg("success", "✓");
 		const text = theme.fg("dim", ` Turn ${turnCount} complete`);

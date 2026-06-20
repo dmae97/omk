@@ -1,4 +1,4 @@
-# Contributing to pi
+# Contributing to OMK
 
 This guide exists to save both sides time.
 
@@ -8,7 +8,7 @@ This guide exists to save both sides time.
 
 Using AI to write code is fine. Submitting AI-generated slop without understanding it is not.
 
-If you use an agent, run it from the `pi-mono` root directory so it picks up `AGENTS.md` automatically. Your agent must follow the rules and guidelines in that file.
+If you use an agent, run it from the `open-multi-agent-kit` root directory so it picks up `AGENTS.md` automatically. Your agent must follow the rules and guidelines in that file.
 
 ## Contribution Gate
 
@@ -64,7 +64,7 @@ If you are adding a new provider to `packages/ai`, see `AGENTS.md` for required 
 
 ## Philosophy
 
-pi's core is minimal. If your feature does not belong in the core, it should be an extension. PRs that bloat the core will likely be rejected.
+OMK's core is minimal. If your feature does not belong in the core, it should be an extension. PRs that bloat the core will likely be rejected.
 
 ## Questions?
 
@@ -74,7 +74,7 @@ Ask on [Discord](https://discord.com/invite/nKXTsAcmbT).
 
 ### Why are new issues and PRs auto-closed?
 
-pi receives more issues than the maintainers can responsibly review in real time. Many reports do not meet the quality bar in this guide or do not follow CONTRIBUTING.md. Some are slung at the repository mindlessly via an agent instead of being reviewed and shaped by the person submitting them. Auto-closing creates a buffer so maintainers can review the tracker on their own schedule and reopen the issues that meet the quality bar.
+OMK receives more issues than the maintainers can responsibly review in real time. Many reports do not meet the quality bar in this guide or do not follow CONTRIBUTING.md. Some are slung at the repository mindlessly via an agent instead of being reviewed and shaped by the person submitting them. Auto-closing creates a buffer so maintainers can review the tracker on their own schedule and reopen the issues that meet the quality bar.
 
 ### Why are weekend issues not reviewed?
 

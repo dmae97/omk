@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getModel, getSupportedThinkingLevels } from "../src/models.ts";
+import { getModel, getModels, getSupportedThinkingLevels } from "../src/models.ts";
+import { adjustMaxTokensForThinking } from "../src/providers/simple-options.ts";
 
 describe("getSupportedThinkingLevels", () => {
 	it("includes xhigh for Anthropic Opus 4.6 on anthropic-messages API", () => {
@@ -45,6 +46,34 @@ describe("getSupportedThinkingLevels", () => {
 			checked++;
 		}
 		expect(checked).toBeGreaterThan(0);
+	});
+
+	it("registers Kimi For Coding Anthropic-compatible models", () => {
+		const modelIds = getModels("kimi-coding")
+			.map((model) => model.id)
+			.sort();
+		expect(modelIds).toEqual(expect.arrayContaining(["k2p7", "kimi-for-coding", "kimi-k2-thinking"]));
+
+		const model = getModel("kimi-coding", "kimi-for-coding");
+		expect(model).toMatchObject({
+			api: "anthropic-messages",
+			provider: "kimi-coding",
+			baseUrl: "https://api.kimi.com/coding",
+			reasoning: true,
+			contextWindow: 262144,
+			maxTokens: 32768,
+		});
+		expect(model.headers?.["User-Agent"]).toBe("KimiCLI/1.5");
+	});
+
+	it("keeps xhigh safe when provider-specific xhigh mapping is undefined", () => {
+		const model = getModel("zai", "glm-5.2");
+		expect(model.thinkingLevelMap?.xhigh).toBeUndefined();
+		expect(getSupportedThinkingLevels(model)).toContain("xhigh");
+		expect(adjustMaxTokensForThinking(undefined, 32768, "xhigh")).toEqual({
+			maxTokens: 32768,
+			thinkingBudget: 16384,
+		});
 	});
 
 	it("excludes xhigh only when a model explicitly opts out via thinkingLevelMap.xhigh = null", () => {

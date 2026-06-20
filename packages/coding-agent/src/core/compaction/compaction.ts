@@ -15,6 +15,7 @@ import {
 	createCompactionSummaryMessage,
 	createCustomMessage,
 } from "../messages.ts";
+import { boundConversationTextForSummary } from "../session-digest.ts";
 import { buildSessionContext, type CompactionEntry, type SessionEntry } from "../session-manager.ts";
 import {
 	computeFileLists,
@@ -46,7 +47,7 @@ function extractFileOperations(
 ): FileOperations {
 	const fileOps = createFileOps();
 
-	// Collect from previous compaction's details (if pi-generated)
+	// Collect from previous compaction's details (if omk-generated)
 	if (prevCompactionIndex >= 0) {
 		const prevCompaction = entries[prevCompactionIndex] as CompactionEntry;
 		if (!prevCompaction.fromHook && prevCompaction.details) {
@@ -125,6 +126,7 @@ export interface CompactionSettings {
 
 export const DEFAULT_COMPACTION_MAX_USAGE_RATIO = 0.9;
 export const DEFAULT_COMPACTION_SUMMARY_INPUT_TOKENS = 80000;
+export const DEFAULT_COMPACTION_RAW_INPUT_CHAR_CEILING = 1_200_000;
 
 export const DEFAULT_COMPACTION_SETTINGS: CompactionSettings = {
 	enabled: true,
@@ -966,12 +968,6 @@ function selectHighSignalSemanticUnits(text: string, budgetChars: number): strin
 		.join("\n\n");
 }
 
-function trimToCharBudget(text: string, budgetChars: number, fromEnd = false): string {
-	if (budgetChars <= 0) return "";
-	if (text.length <= budgetChars) return text;
-	return fromEnd ? text.slice(text.length - budgetChars) : text.slice(0, budgetChars);
-}
-
 /**
  * Pack serialized conversation text under a token budget using a deterministic
  * extractive strategy: preserve the opening, recent tail, and high-signal
@@ -980,15 +976,19 @@ function trimToCharBudget(text: string, budgetChars: number, fromEnd = false): s
 export function packSummaryInputForTokenBudget(
 	text: string,
 	maxInputTokens: number | undefined,
+	maxRawChars: number = DEFAULT_COMPACTION_RAW_INPUT_CHAR_CEILING,
 ): SummaryInputPackingResult {
 	const originalTokens = estimateTextTokens(text);
-	if (!isFinitePositiveInteger(maxInputTokens) || originalTokens <= maxInputTokens) {
+	const boundedText = boundConversationTextForSummary(text, maxRawChars);
+	const boundedTokens = estimateTextTokens(boundedText);
+	const rawWasCompressed = boundedText.length < text.length;
+	if (!isFinitePositiveInteger(maxInputTokens) || boundedTokens <= maxInputTokens) {
 		return {
-			text,
+			text: boundedText,
 			originalTokens,
-			packedTokens: originalTokens,
-			omittedTokens: 0,
-			wasCompressed: false,
+			packedTokens: boundedTokens,
+			omittedTokens: Math.max(0, originalTokens - boundedTokens),
+			wasCompressed: rawWasCompressed,
 		};
 	}
 
@@ -1001,11 +1001,11 @@ export function packSummaryInputForTokenBudget(
 	const tailBudgetChars = Math.floor(contentBudgetChars * 0.52);
 	const middleBudgetChars = Math.max(0, contentBudgetChars - headBudgetChars - tailBudgetChars);
 
-	const head = trimToCharBudget(text, headBudgetChars);
-	const tail = trimToCharBudget(text, tailBudgetChars, true);
-	const middleStart = Math.min(headBudgetChars, text.length);
-	const middleEnd = Math.max(middleStart, text.length - tailBudgetChars);
-	const middle = selectHighSignalSemanticUnits(text.slice(middleStart, middleEnd), middleBudgetChars);
+	const headEnd = Math.min(headBudgetChars, boundedText.length);
+	const tailStart = Math.max(headEnd, boundedText.length - tailBudgetChars);
+	const head = boundedText.slice(0, headEnd);
+	const tail = boundedText.slice(tailStart);
+	const middle = selectHighSignalSemanticUnits(boundedText.slice(headEnd, tailStart), middleBudgetChars);
 	const packedText = [head.trimEnd(), marker, middle.trim(), tail.trimStart()].filter(Boolean).join("\n\n");
 	const packedTokens = estimateTextTokens(packedText);
 

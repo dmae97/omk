@@ -202,6 +202,7 @@ export const MODELS = {
 			provider: "amazon-bedrock",
 			baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text", "image"],
 			cost: {
 				input: 3,
@@ -289,6 +290,7 @@ export const MODELS = {
 			provider: "amazon-bedrock",
 			baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text", "image"],
 			cost: {
 				input: 3.3,
@@ -479,6 +481,7 @@ export const MODELS = {
 			provider: "amazon-bedrock",
 			baseUrl: "https://bedrock-runtime.eu-central-1.amazonaws.com",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text", "image"],
 			cost: {
 				input: 3.3,
@@ -618,6 +621,7 @@ export const MODELS = {
 			provider: "amazon-bedrock",
 			baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text", "image"],
 			cost: {
 				input: 3,
@@ -722,6 +726,7 @@ export const MODELS = {
 			provider: "amazon-bedrock",
 			baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text", "image"],
 			cost: {
 				input: 3,
@@ -1526,6 +1531,7 @@ export const MODELS = {
 			provider: "amazon-bedrock",
 			baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text", "image"],
 			cost: {
 				input: 3,
@@ -2153,6 +2159,7 @@ export const MODELS = {
 			baseUrl: "https://api.anthropic.com",
 			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text", "image"],
 			cost: {
 				input: 3,
@@ -3227,6 +3234,7 @@ export const MODELS = {
 			baseUrl: "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
 			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text", "image"],
 			cost: {
 				input: 3,
@@ -3814,6 +3822,7 @@ export const MODELS = {
 			baseUrl: "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
 			compat: {"sendSessionAffinityHeaders":true},
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text"],
 			cost: {
 				input: 1.4,
@@ -4301,6 +4310,7 @@ export const MODELS = {
 			headers: {"User-Agent":"GitHubCopilotChat/0.35.0","Editor-Version":"vscode/1.107.0","Editor-Plugin-Version":"copilot-chat/0.35.0","Copilot-Integration-Id":"vscode-chat"},
 			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text", "image"],
 			cost: {
 				input: 3,
@@ -4840,42 +4850,6 @@ export const MODELS = {
 			},
 			contextWindow: 262144,
 			maxTokens: 32768,
-		} satisfies Model<"google-generative-ai">,
-		"gemma-4-E2B-it": {
-			id: "gemma-4-E2B-it",
-			name: "Gemma 4 E2B IT",
-			api: "google-generative-ai",
-			provider: "google",
-			baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":"MINIMAL","low":null,"medium":null,"high":"HIGH"},
-			input: ["text", "image"],
-			cost: {
-				input: 0,
-				output: 0,
-				cacheRead: 0,
-				cacheWrite: 0,
-			},
-			contextWindow: 131072,
-			maxTokens: 8192,
-		} satisfies Model<"google-generative-ai">,
-		"gemma-4-E4B-it": {
-			id: "gemma-4-E4B-it",
-			name: "Gemma 4 E4B IT",
-			api: "google-generative-ai",
-			provider: "google",
-			baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":"MINIMAL","low":null,"medium":null,"high":"HIGH"},
-			input: ["text", "image"],
-			cost: {
-				input: 0,
-				output: 0,
-				cacheRead: 0,
-				cacheWrite: 0,
-			},
-			contextWindow: 131072,
-			maxTokens: 8192,
 		} satisfies Model<"google-generative-ai">,
 	},
 	"google-vertex": {
@@ -7972,6 +7946,7 @@ export const MODELS = {
 			baseUrl: "https://opencode.ai/zen",
 			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text", "image"],
 			cost: {
 				input: 3,
@@ -8652,6 +8627,7 @@ export const MODELS = {
 			provider: "opencode-go",
 			baseUrl: "https://opencode.ai/zen/go/v1",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text"],
 			cost: {
 				input: 1.4,
@@ -9190,6 +9166,7 @@ export const MODELS = {
 			provider: "openrouter",
 			baseUrl: "https://openrouter.ai/api/v1",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text", "image"],
 			cost: {
 				input: 3,
@@ -9209,13 +9186,13 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text"],
 			cost: {
-				input: 0.22,
-				output: 0.85,
+				input: 0.25,
+				output: 0.7999999999999999,
 				cacheRead: 0.06,
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
-			maxTokens: 262144,
+			maxTokens: 80000,
 		} satisfies Model<"openai-completions">,
 		"arcee-ai/trinity-mini": {
 			id: "arcee-ai/trinity-mini",
@@ -10592,13 +10569,13 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
-				input: 0.67,
+				input: 0.66,
 				output: 3.5,
-				cacheRead: 0.19999999999999998,
+				cacheRead: 0.33,
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
-			maxTokens: 262144,
+			maxTokens: 262142,
 		} satisfies Model<"openai-completions">,
 		"moonshotai/kimi-k2.7-code": {
 			id: "moonshotai/kimi-k2.7-code",
@@ -10609,13 +10586,13 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
-				input: 0.74,
-				output: 3.5,
-				cacheRead: 0.15,
+				input: 0.612,
+				output: 3.0690000000000004,
+				cacheRead: 0.1296,
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
-			maxTokens: 16384,
+			maxTokens: 262144,
 		} satisfies Model<"openai-completions">,
 		"nex-agi/nex-n2-pro:free": {
 			id: "nex-agi/nex-n2-pro:free",
@@ -12763,13 +12740,13 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text"],
 			cost: {
-				input: 0.06599999999999999,
-				output: 0.26,
-				cacheRead: 0.029,
+				input: 0.063,
+				output: 0.21,
+				cacheRead: 0.020999999999999998,
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
-			maxTokens: 262144,
+			maxTokens: 4096,
 		} satisfies Model<"openai-completions">,
 		"thedrummer/rocinante-12b": {
 			id: "thedrummer/rocinante-12b",
@@ -13071,11 +13048,11 @@ export const MODELS = {
 			cost: {
 				input: 0.98,
 				output: 3.08,
-				cacheRead: 0.182,
+				cacheRead: 0.49,
 				cacheWrite: 0,
 			},
 			contextWindow: 202752,
-			maxTokens: 4096,
+			maxTokens: 65535,
 		} satisfies Model<"openai-completions">,
 		"z-ai/glm-5.2": {
 			id: "z-ai/glm-5.2",
@@ -13084,6 +13061,7 @@ export const MODELS = {
 			provider: "openrouter",
 			baseUrl: "https://openrouter.ai/api/v1",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text"],
 			cost: {
 				input: 1.2,
@@ -13205,13 +13183,13 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
-				input: 0.67,
+				input: 0.66,
 				output: 3.5,
-				cacheRead: 0.19999999999999998,
+				cacheRead: 0.33,
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
-			maxTokens: 262144,
+			maxTokens: 262142,
 		} satisfies Model<"openai-completions">,
 		"~openai/gpt-latest": {
 			id: "~openai/gpt-latest",
@@ -14182,6 +14160,7 @@ export const MODELS = {
 			baseUrl: "https://ai-gateway.vercel.sh",
 			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"max"},
 			input: ["text", "image"],
 			cost: {
 				input: 3,
@@ -15983,8 +15962,8 @@ export const MODELS = {
 			cost: {
 				input: 0.09,
 				output: 0.3,
-				cacheRead: 0,
-				cacheWrite: 0.02,
+				cacheRead: 0.02,
+				cacheWrite: 0,
 			},
 			contextWindow: 262114,
 			maxTokens: 262114,

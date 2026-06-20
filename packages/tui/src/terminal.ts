@@ -113,7 +113,7 @@ export class ProcessTerminal implements Terminal {
 	private stdinDataHandler?: (data: string) => void;
 	private progressInterval?: ReturnType<typeof setInterval>;
 	private writeLogPath = (() => {
-		const env = process.env.OMK_TUI_WRITE_LOG || process.env.PI_TUI_WRITE_LOG || "";
+		const env = process.env.OMK_TUI_WRITE_LOG || process.env.OMK_TUI_WRITE_LOG || "";
 		if (!env) return "";
 		try {
 			if (fs.statSync(env).isDirectory()) {

@@ -178,6 +178,37 @@ const ANT_LING_RING_THINKING_LEVEL_MAP = {
 	xhigh: "xhigh",
 } as const;
 
+// GLM "max" reasoning tier (user-mandated Option A): effort-string GLM hosts
+// (OpenRouter reasoning.effort + openai-style reasoning_effort) receive the literal
+// wire value "max" when the user selects xhigh ("max" in the UI). Some hosts may
+// reject "max" as out-of-enum (HTTP 400) -- this risk is explicitly accepted.
+// Toggle hosts (zai/zai-coding-cn, together) and the anthropic-messages budget path
+// ignore thinkingLevelMap and are intentionally excluded by isGlmEffortStringHost
+// (they still expose "max" and route to their own max thinking).
+// To fall back to the safe highest in-vocabulary value, change "max" to "high".
+const GLM_THINKING_LEVEL_MAP = {
+	xhigh: "max",
+} as const;
+
+const GLM_TOGGLE_PROVIDERS = new Set(["zai", "zai-coding-cn"]);
+
+function isGlm52Model(model: Model<any>): boolean {
+	const id = model.id.toLowerCase();
+	return id.includes("glm-5.2") || id.includes("glm-5p2") || id.includes("glm5.2");
+}
+
+function isGlmEffortStringHost(model: Model<any>): boolean {
+	// Only openai-completions GLM hosts whose runtime transmits a graduated effort
+	// string consult thinkingLevelMap. zai/zai-coding-cn use the boolean "zai"
+	// thinkingFormat, together uses the toggle path (supportsReasoningEffort:false),
+	// and fireworks/vercel host GLM on anthropic-messages (budget path) -- all ignore
+	// the map and are excluded here so they keep "max" without dead/invalid config.
+	if (model.api !== "openai-completions") return false;
+	if (GLM_TOGGLE_PROVIDERS.has(model.provider)) return false;
+	if (model.provider === "together") return false;
+	return true;
+}
+
 const OPENAI_RESPONSES_NONE_REASONING_MODELS = new Set([
 	"gpt-5.1",
 	"gpt-5.2",
@@ -242,6 +273,20 @@ function isAnthropicTemperatureUnsupportedModel(modelId: string): boolean {
 	return id.includes("opus-4-7") || id.includes("opus-4.7") || id.includes("opus-4-8") || id.includes("opus-4.8");
 }
 
+// The Claude 4.6 generation (Opus + Sonnet) exposes adaptive thinking with the
+// "max" effort tier. Newer 4.7/4.8 models use "xhigh" instead. Both Opus 4.6 and
+// Sonnet 4.6 must therefore map the xhigh thinking level ("max" in the UI) to the
+// Anthropic `effort: "max"` value; otherwise xhigh silently falls back to "high".
+function isAnthropicMaxEffortModel(modelId: string): boolean {
+	const id = modelId.toLowerCase();
+	return (
+		id.includes("opus-4-6") ||
+		id.includes("opus-4.6") ||
+		id.includes("sonnet-4-6") ||
+		id.includes("sonnet-4.6")
+	);
+}
+
 function mergeAnthropicMessagesCompat(model: Model<Api>, compat: AnthropicMessagesCompat): void {
 	model.compat = { ...(model.compat as AnthropicMessagesCompat | undefined), ...compat };
 }
@@ -284,7 +329,7 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 	if (model.id.endsWith("gpt-5.5-pro")) {
 		mergeThinkingLevelMap(model, { off: null, minimal: null, low: null });
 	}
-	if (model.id.includes("opus-4-6") || model.id.includes("opus-4.6")) {
+	if (isAnthropicMaxEffortModel(model.id)) {
 		mergeThinkingLevelMap(model, { xhigh: "max" });
 	}
 	if (
@@ -309,6 +354,11 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 				: DEEPSEEK_V4_THINKING_LEVEL_MAP,
 		);
 	}
+	if (isGlm52Model(model) && isGlmEffortStringHost(model)) {
+		// Keep "max" (xhigh) selectable but send the highest GLM-valid effort instead of
+		// the raw literal "xhigh"/"max", which OpenRouter/Cloudflare/opencode-go reject.
+		mergeThinkingLevelMap(model, GLM_THINKING_LEVEL_MAP);
+	}
 	if (isGoogleThinkingApi(model) && isGemini3ProModel(model.id)) {
 		mergeThinkingLevelMap(model, { off: null, minimal: null, low: "LOW", medium: null, high: "HIGH" });
 	}
@@ -328,7 +378,7 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 		// Mercury 2 in instant mode (reasoning_effort: "none") disables tool calling.
 		// Mark "off" unsupported so the openai-completions provider omits the reasoning param
 		// instead of defaulting to {reasoning:{effort:"none"}} (see openai-completions.ts:575).
-		// Pi's low/medium/high pass through verbatim; OpenRouter normalizes to Mercury's vocabulary.
+		// OMK's low/medium/high pass through verbatim; OpenRouter normalizes to Mercury's vocabulary.
 		mergeThinkingLevelMap(model, { off: null });
 	}
 	if (model.provider === "opencode-go" && model.id === "kimi-k2.6") {

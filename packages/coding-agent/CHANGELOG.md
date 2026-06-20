@@ -4,15 +4,19 @@
 
 ### Added
 
+- Added the `omk-neon-ops` built-in theme and prioritized OMK-branded themes in the interactive theme selector.
 - Added fuzzy search input, result counter, and provider auth glyphs to the interactive `/mcp`, `/skills`, and model selectors so large registries stay scannable while clearly signaling which providers have authentication configured.
 
 ### Changed
 
+- Added a raw input character ceiling before compaction summary packing so pathological serialized histories are bounded before semantic token packing.
+- Switched `open-multi-agent-kit` runtime dependencies from legacy published aliases to OMK-scoped internal packages and added a coding-agent shrinkwrap generated from those packages.
 - Collapsed the dead-code positional `ThinkingSelectorComponent` in `components/thinking-selector.ts` into a backward-compatible re-export from `components/settings-selector.ts` so external SDK imports keep resolving while removing duplicate UI logic.
 
 ### Fixed
 
-- Restored interactive editor input on installations that resolve `@earendil-works/omk-tui` to the published `@earendil-works/pi-tui` alias by providing a backward-compatible `matchInScope` implementation on the coding-agent `KeybindingsManager` subclass. Crash signature: `TypeError: this.keybindings.matchInScope is not a function` in `CustomEditor.handleInput`.
+- Bounded session selector search digests while preserving first and recent prompt matches, avoiding unbounded transcript accumulation when listing large JSONL sessions.
+- Restored interactive editor input by keeping the coding-agent `KeybindingsManager` subclass aligned with the OMK TUI `matchInScope` contract. Crash signature: `TypeError: this.keybindings.matchInScope is not a function` in `CustomEditor.handleInput`.
 
 ## [0.80.6] - 2026-06-18
 

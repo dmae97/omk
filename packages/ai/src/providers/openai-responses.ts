@@ -25,16 +25,13 @@ const OPENAI_TOOL_CALL_PROVIDERS = new Set(["openai", "openai-codex", "opencode"
 
 /**
  * Resolve cache retention preference.
- * Defaults to "short" and uses OMK_CACHE_RETENTION with PI_CACHE_RETENTION fallback.
+ * Defaults to "short" and uses OMK_CACHE_RETENTION.
  */
 function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRetention {
 	if (cacheRetention) {
 		return cacheRetention;
 	}
-	if (
-		typeof process !== "undefined" &&
-		(process.env.OMK_CACHE_RETENTION ?? process.env.PI_CACHE_RETENTION) === "long"
-	) {
+	if (typeof process !== "undefined" && process.env.OMK_CACHE_RETENTION === "long") {
 		return "long";
 	}
 	return "short";

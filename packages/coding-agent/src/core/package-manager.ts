@@ -39,10 +39,98 @@ const UPDATE_CHECK_CONCURRENCY = 4;
 const GIT_UPDATE_CONCURRENCY = 4;
 
 function isOfflineModeEnabled(): boolean {
-	const value = process.env.OMK_OFFLINE ?? process.env.PI_OFFLINE;
+	const value = process.env.OMK_OFFLINE;
 	if (!value) return false;
 	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
 }
+
+export function buildGitDependencyInstallArgs(hasConfiguredNpmCommand: boolean, allowScripts = false): string[] {
+	// Default (allowScripts=false) appends --ignore-scripts, leaving the historical arg vector byte-identical.
+	// Opt-in allowScripts simply omits --ignore-scripts so reviewed packages may run lifecycle scripts.
+	const scriptArgs = allowScripts ? [] : ["--ignore-scripts"];
+	if (hasConfiguredNpmCommand) {
+		return ["install", ...scriptArgs];
+	}
+	return ["install", "--omit=dev", ...scriptArgs];
+}
+
+export function buildNpmInstallArgs(
+	packageManagerName: string,
+	specs: string[],
+	installRoot: string,
+	allowScripts = false,
+): string[] {
+	// Extension packages run inside OMK and resolve OMK APIs through loader aliases/virtual modules.
+	// Disable peer dependency resolution for managed installs (npm's --legacy-peer-deps, and
+	// equivalent bun/pnpm settings) so package managers do not install or solve host-provided
+	// @earendil-works/omk-* peers. Stale auto-installed legacy peers can otherwise block updates.
+	//
+	// Lifecycle scripts stay disabled by default (--ignore-scripts). allowScripts=true omits that flag
+	// for the whole install unit; npm/pnpm/bun cannot scope script execution to specific top-level specs.
+	const scriptArgs = allowScripts ? [] : ["--ignore-scripts"];
+	if (packageManagerName === "bun") {
+		return ["install", ...specs, "--cwd", installRoot, "--omit=peer", ...scriptArgs];
+	}
+	if (packageManagerName === "pnpm") {
+		return [
+			"install",
+			...specs,
+			"--prefix",
+			installRoot,
+			"--config.auto-install-peers=false",
+			"--config.strict-peer-dependencies=false",
+			"--config.strict-dep-builds=false",
+			...scriptArgs,
+		];
+	}
+	return ["install", ...specs, "--prefix", installRoot, "--legacy-peer-deps", ...scriptArgs];
+}
+
+// Entries that can never describe a real npm/git canonical key. Rejecting them keeps membership a strict
+// exact-string match (no glob/minimatch/semver/override semantics) even if such junk lands in settings.
+const ALLOW_SCRIPT_ENTRY_FORBIDDEN = /[*?\s\u0000-\u001f]/;
+
+function isUsableAllowScriptEntry(entry: string): boolean {
+	if (!entry) return false;
+	if (ALLOW_SCRIPT_ENTRY_FORBIDDEN.test(entry)) return false;
+	// Filter-style override prefixes are not allowlist semantics.
+	if (entry.startsWith("!") || entry.startsWith("+") || entry.startsWith("-")) return false;
+	return true;
+}
+
+function parseNpmPackageName(spec: string): string {
+	const match = spec.match(/^(@?[^@]+(?:\/[^@]+)?)(?:@(.+))?$/);
+	return match?.[1] ?? spec;
+}
+
+/**
+ * Exact-match membership for npm install units. Returns true only when the install unit is non-empty and
+ * EVERY top-level spec is listed (by `npm:<name>` identity or `npm:<spec>`). Mixed/partial lists stay false
+ * so a single unlisted spec keeps the whole install fail-closed under --ignore-scripts.
+ */
+export function isNpmInstallAllowed(specs: string[], allowList: readonly string[]): boolean {
+	if (specs.length === 0) return false;
+	const allowed = new Set(allowList.filter(isUsableAllowScriptEntry));
+	if (allowed.size === 0) return false;
+	return specs.every((spec) => {
+		const name = parseNpmPackageName(spec);
+		return allowed.has(`npm:${name}`) || allowed.has(`npm:${spec}`);
+	});
+}
+
+/** Exact-match membership for a git install unit by `git:<host>/<path>` identity or `...@<ref>` spec. */
+export function isGitInstallAllowed(
+	source: { host: string; path: string; ref?: string },
+	allowList: readonly string[],
+): boolean {
+	const allowed = new Set(allowList.filter(isUsableAllowScriptEntry));
+	if (allowed.size === 0) return false;
+	const identity = `git:${source.host}/${source.path}`;
+	const spec = source.ref ? `${identity}@${source.ref}` : identity;
+	return allowed.has(identity) || allowed.has(spec);
+}
+
+export type InstallAllowScriptResolution = { ok: true; entry: string } | { ok: false; expected: string[] };
 
 export interface PathMetadata {
 	source: string;
@@ -113,6 +201,7 @@ export interface PackageManager {
 	removeSourceFromSettings(source: string, options?: { local?: boolean }): boolean;
 	setProgressCallback(callback: ProgressCallback | undefined): void;
 	getInstalledPath(source: string, scope: "user" | "project"): string | undefined;
+	resolveInstallAllowScriptEntry(source: string, requested: string): InstallAllowScriptResolution;
 }
 
 interface PackageManagerOptions {
@@ -340,7 +429,7 @@ function collectFiles(
 	return files;
 }
 
-type SkillDiscoveryMode = "pi" | "agents";
+type SkillDiscoveryMode = "omk" | "agents";
 
 function collectSkillEntries(
 	dir: string,
@@ -399,7 +488,7 @@ function collectSkillEntries(
 			}
 
 			const relPath = toPosixPath(relative(root, fullPath));
-			if (mode === "pi" && dir === root && isFile && entry.name.endsWith(".md") && !ig.ignores(relPath)) {
+			if (mode === "omk" && dir === root && isFile && entry.name.endsWith(".md") && !ig.ignores(relPath)) {
 				entries.push(fullPath);
 				continue;
 			}
@@ -629,7 +718,7 @@ function collectAutoExtensionEntries(dir: string): string[] {
  */
 function collectResourceFiles(dir: string, resourceType: ResourceType): string[] {
 	if (resourceType === "skills") {
-		return collectSkillEntries(dir, "pi");
+		return collectSkillEntries(dir, "omk");
 	}
 	if (resourceType === "extensions") {
 		return collectAutoExtensionEntries(dir);
@@ -1144,7 +1233,10 @@ export class DefaultPackageManager implements PackageManager {
 	private async installNpmBatch(specs: string[], scope: InstalledSourceScope): Promise<void> {
 		const installRoot = this.getNpmInstallRoot(scope, false);
 		this.ensureNpmProject(installRoot);
-		await this.runNpmCommand(this.getNpmInstallArgs(specs, installRoot));
+		const allowScripts = this.shouldAllowNpmInstallScripts(specs);
+		const unit = specs.length === 1 ? `npm:${parseNpmPackageName(specs[0])}` : `${scope} npm packages`;
+		this.logInstallScriptDecision(unit, allowScripts);
+		await this.runNpmCommand(this.getNpmInstallArgs(specs, installRoot, allowScripts));
 	}
 
 	async checkForAvailableUpdates(): Promise<PackageUpdate[]> {
@@ -1730,12 +1822,9 @@ export class DefaultPackageManager implements PackageManager {
 		await this.runCommand(npmCommand.command, [...npmCommand.args, ...args], options);
 	}
 
-	private getGitDependencyInstallArgs(): string[] {
+	private getGitDependencyInstallArgs(allowScripts: boolean): string[] {
 		const configuredCommand = this.settingsManager.getNpmCommand();
-		if (configuredCommand && configuredCommand.length > 0) {
-			return ["install"];
-		}
-		return ["install", "--omit=dev"];
+		return buildGitDependencyInstallArgs(Boolean(configuredCommand && configuredCommand.length > 0), allowScripts);
 	}
 
 	private runNpmCommandSync(args: string[]): string {
@@ -1743,33 +1832,67 @@ export class DefaultPackageManager implements PackageManager {
 		return this.runCommandSync(npmCommand.command, [...npmCommand.args, ...args]);
 	}
 
-	private getNpmInstallArgs(specs: string[], installRoot: string): string[] {
-		const packageManagerName = this.getPackageManagerName();
-		// Extension packages run inside pi and resolve pi APIs through loader aliases/virtual modules.
-		// Disable peer dependency resolution for managed installs (npm's --legacy-peer-deps, and
-		// equivalent bun/pnpm settings) so package managers do not install or solve host-provided
-		// @earendil-works/omk-* peers. Stale auto-installed pi peers can otherwise block updates.
-		if (packageManagerName === "bun") {
-			return ["install", ...specs, "--cwd", installRoot, "--omit=peer"];
+	private getNpmInstallArgs(specs: string[], installRoot: string, allowScripts: boolean): string[] {
+		return buildNpmInstallArgs(this.getPackageManagerName(), specs, installRoot, allowScripts);
+	}
+
+	// Caller-side exact-match membership. The pure builders stay membership-agnostic; only here do we read the
+	// configured allowlist and decide whether an install unit may run lifecycle scripts.
+	private shouldAllowNpmInstallScripts(specs: string[]): boolean {
+		return isNpmInstallAllowed(specs, this.settingsManager.getInstallAllowScripts());
+	}
+
+	private shouldAllowGitInstallScripts(source: GitSource): boolean {
+		return isGitInstallAllowed(source, this.settingsManager.getInstallAllowScripts());
+	}
+
+	private logInstallScriptDecision(unit: string, allowScripts: boolean): void {
+		if (allowScripts) {
+			console.error(
+				`[omk install] lifecycle scripts enabled for ${unit} via install.allowScripts; dependency tree scripts may run.`,
+			);
+		} else {
+			console.error(`[omk install] lifecycle scripts disabled for ${unit} (default --ignore-scripts).`);
 		}
-		if (packageManagerName === "pnpm") {
-			return [
-				"install",
-				...specs,
-				"--prefix",
-				installRoot,
-				"--config.auto-install-peers=false",
-				"--config.strict-peer-dependencies=false",
-				"--config.strict-dep-builds=false",
-			];
+	}
+
+	/**
+	 * Validate a CLI `--allow-scripts <name>` value against an install source and return the canonical allowlist
+	 * entry to persist. Exact match only; an unrelated name yields `{ ok: false, expected }` so the CLI can abort
+	 * and print the manual settings example.
+	 */
+	resolveInstallAllowScriptEntry(source: string, requested: string): InstallAllowScriptResolution {
+		const parsed = this.parseSource(source);
+		const value = requested.trim();
+		if (parsed.type === "npm") {
+			const identity = `npm:${parsed.name}`;
+			const spec = `npm:${parsed.spec}`;
+			const accepted = new Set([identity, spec, parsed.name, parsed.spec]);
+			if (accepted.has(value)) {
+				return { ok: true, entry: parsed.pinned ? spec : identity };
+			}
+			return { ok: false, expected: parsed.pinned ? [identity, spec] : [identity] };
 		}
-		return ["install", ...specs, "--prefix", installRoot, "--legacy-peer-deps"];
+		if (parsed.type === "git") {
+			const identity = `git:${parsed.host}/${parsed.path}`;
+			const spec = parsed.ref ? `${identity}@${parsed.ref}` : identity;
+			const shorthand = `${parsed.host}/${parsed.path}`;
+			const shorthandSpec = parsed.ref ? `${shorthand}@${parsed.ref}` : shorthand;
+			const accepted = new Set([identity, spec, shorthand, shorthandSpec]);
+			if (accepted.has(value)) {
+				return { ok: true, entry: spec };
+			}
+			return { ok: false, expected: parsed.ref ? [identity, spec] : [identity] };
+		}
+		return { ok: false, expected: [] };
 	}
 
 	private async installNpm(source: NpmSource, scope: SourceScope, temporary: boolean): Promise<void> {
 		const installRoot = this.getNpmInstallRoot(scope, temporary);
 		this.ensureNpmProject(installRoot);
-		await this.runNpmCommand(this.getNpmInstallArgs([source.spec], installRoot));
+		const allowScripts = this.shouldAllowNpmInstallScripts([source.spec]);
+		this.logInstallScriptDecision(`npm:${source.name}`, allowScripts);
+		await this.runNpmCommand(this.getNpmInstallArgs([source.spec], installRoot, allowScripts));
 	}
 
 	private async uninstallNpm(source: NpmSource, scope: SourceScope): Promise<void> {
@@ -1785,14 +1908,15 @@ export class DefaultPackageManager implements PackageManager {
 	}
 
 	private async installGit(source: GitSource, scope: SourceScope): Promise<void> {
+		const allowScripts = this.shouldAllowGitInstallScripts(source);
 		const targetDir = this.getGitInstallPath(source, scope);
 		if (existsSync(targetDir)) {
 			if (source.ref) {
-				await this.ensureGitRef(targetDir, ["fetch", "origin", source.ref], "FETCH_HEAD");
+				await this.ensureGitRef(targetDir, ["fetch", "origin", source.ref], "FETCH_HEAD", allowScripts);
 				return;
 			}
 			const target = await this.getLocalGitUpdateTarget(targetDir);
-			await this.ensureGitRef(targetDir, target.fetchArgs, target.ref);
+			await this.ensureGitRef(targetDir, target.fetchArgs, target.ref, allowScripts);
 			return;
 		}
 		const gitRoot = this.getGitInstallRoot(scope);
@@ -1807,7 +1931,8 @@ export class DefaultPackageManager implements PackageManager {
 		}
 		const packageJsonPath = join(targetDir, "package.json");
 		if (existsSync(packageJsonPath)) {
-			await this.runNpmCommand(this.getGitDependencyInstallArgs(), { cwd: targetDir });
+			this.logInstallScriptDecision(`git:${source.host}/${source.path}`, allowScripts);
+			await this.runNpmCommand(this.getGitDependencyInstallArgs(allowScripts), { cwd: targetDir });
 		}
 	}
 
@@ -1818,16 +1943,22 @@ export class DefaultPackageManager implements PackageManager {
 			return;
 		}
 
+		const allowScripts = this.shouldAllowGitInstallScripts(source);
 		if (source.ref) {
-			await this.ensureGitRef(targetDir, ["fetch", "origin", source.ref], "FETCH_HEAD");
+			await this.ensureGitRef(targetDir, ["fetch", "origin", source.ref], "FETCH_HEAD", allowScripts);
 			return;
 		}
 
 		const target = await this.getLocalGitUpdateTarget(targetDir);
-		await this.ensureGitRef(targetDir, target.fetchArgs, target.ref);
+		await this.ensureGitRef(targetDir, target.fetchArgs, target.ref, allowScripts);
 	}
 
-	private async ensureGitRef(targetDir: string, fetchArgs: string[], ref: string): Promise<void> {
+	private async ensureGitRef(
+		targetDir: string,
+		fetchArgs: string[],
+		ref: string,
+		allowScripts: boolean,
+	): Promise<void> {
 		// Fetch only the ref we will reset to, avoiding unrelated branch/tag noise.
 		await this.runCommand("git", fetchArgs, { cwd: targetDir });
 
@@ -1851,7 +1982,8 @@ export class DefaultPackageManager implements PackageManager {
 
 		const packageJsonPath = join(targetDir, "package.json");
 		if (existsSync(packageJsonPath)) {
-			await this.runNpmCommand(this.getGitDependencyInstallArgs(), { cwd: targetDir });
+			this.logInstallScriptDecision(`git:${basename(targetDir)}`, allowScripts);
+			await this.runNpmCommand(this.getGitDependencyInstallArgs(allowScripts), { cwd: targetDir });
 		}
 	}
 
@@ -1905,7 +2037,7 @@ export class DefaultPackageManager implements PackageManager {
 		this.ensureGitIgnore(installRoot);
 		const packageJsonPath = join(installRoot, "package.json");
 		if (!existsSync(packageJsonPath)) {
-			const pkgJson = { name: "pi-extensions", private: true };
+			const pkgJson = { name: "omk-extensions", private: true };
 			writeFileSync(packageJsonPath, JSON.stringify(pkgJson, null, 2), "utf-8");
 		}
 	}
@@ -2319,7 +2451,7 @@ export class DefaultPackageManager implements PackageManager {
 		// Project skills from .omk/
 		addResources(
 			"skills",
-			collectAutoSkillEntries(projectDirs.skills, "pi"),
+			collectAutoSkillEntries(projectDirs.skills, "omk"),
 			projectMetadata,
 			projectOverrides.skills,
 			projectBaseDir,
@@ -2368,7 +2500,7 @@ export class DefaultPackageManager implements PackageManager {
 		// User skills from ~/.omk/agent/
 		addResources(
 			"skills",
-			collectAutoSkillEntries(userDirs.skills, "pi"),
+			collectAutoSkillEntries(userDirs.skills, "omk"),
 			userMetadata,
 			userOverrides.skills,
 			globalBaseDir,

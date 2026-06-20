@@ -374,7 +374,7 @@ function getBunBinaryPackageDir(): string {
 
 export function getPackageDir(): string {
 	// Allow override via environment variable (useful for Nix/Guix where store paths tokenize poorly)
-	const envDir = process.env.OMK_PACKAGE_DIR ?? process.env.PI_PACKAGE_DIR;
+	const envDir = process.env.OMK_PACKAGE_DIR;
 	if (envDir) {
 		return normalizePath(envDir);
 	}
@@ -474,7 +474,7 @@ export function getBundledInteractiveAssetPath(name: string): string {
 }
 
 // =============================================================================
-// App Config (from package.json omkConfig, with legacy piConfig fallback)
+// App Config (from package.json omkConfig)
 // =============================================================================
 
 interface PackageAppConfig {
@@ -486,7 +486,6 @@ interface PackageJson {
 	name?: string;
 	version?: string;
 	omkConfig?: PackageAppConfig;
-	piConfig?: PackageAppConfig;
 }
 
 let pkg: PackageJson = {};
@@ -497,7 +496,7 @@ try {
 	if (err.code !== "ENOENT") throw e;
 }
 
-const packageAppConfig: PackageAppConfig | undefined = pkg.omkConfig ?? pkg.piConfig;
+const packageAppConfig: PackageAppConfig | undefined = pkg.omkConfig;
 const packageAppConfigName: string | undefined = packageAppConfig?.name;
 export const PACKAGE_NAME: string = pkg.name || "open-multi-agent-kit";
 export const APP_NAME: string = packageAppConfigName || "omk";
@@ -517,7 +516,7 @@ const DEFAULT_SHARE_VIEWER_URL = "https://omk.dev/session/";
 
 /** Get the share viewer URL for a gist ID */
 export function getShareViewerUrl(gistId: string): string {
-	const baseUrl = process.env.OMK_SHARE_VIEWER_URL || process.env.PI_SHARE_VIEWER_URL || DEFAULT_SHARE_VIEWER_URL;
+	const baseUrl = process.env.OMK_SHARE_VIEWER_URL || DEFAULT_SHARE_VIEWER_URL;
 	return `${baseUrl}#${gistId}`;
 }
 
@@ -527,7 +526,7 @@ export function getShareViewerUrl(gistId: string): string {
 
 /** Get the agent config directory (e.g., ~/.omk/agent/) */
 export function getAgentDir(): string {
-	const envDir = process.env[ENV_AGENT_DIR] ?? process.env.PI_CODING_AGENT_DIR;
+	const envDir = process.env[ENV_AGENT_DIR];
 	if (envDir) {
 		return expandTildePath(envDir);
 	}

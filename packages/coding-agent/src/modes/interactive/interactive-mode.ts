@@ -97,7 +97,7 @@ import { parseGitUrl } from "../../utils/git.ts";
 import { getCwdRelativePath } from "../../utils/paths.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
-import { checkForNewPiVersion, type LatestPiRelease } from "../../utils/version-check.ts";
+import { checkForNewOmkVersion, type LatestOmkRelease } from "../../utils/version-check.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
 import { BashExecutionComponent } from "./components/bash-execution.ts";
@@ -386,6 +386,9 @@ export class InteractiveMode {
 
 	// Custom header from extension (undefined = use built-in header)
 	private customHeader: (Component & { dispose?(): void }) | undefined = undefined;
+
+	// Banner motion: true at startup, set false on first submit / busy start
+	private isStartupHeaderMotionAllowed = true;
 
 	private options: InteractiveModeOptions;
 
@@ -746,15 +749,25 @@ export class InteractiveMode {
 					rawKeyHint("!", "bash"),
 					hint("app.tools.expand", "more"),
 				].join(theme.fg("muted", " · "));
-			const controlPanel = new ControlPanelComponent({
-				appName: APP_NAME,
-				version: this.version,
-				compactInstructions,
-				expandedInstructions,
-				compactOnboarding: () =>
-					`Press ${keyText("app.tools.expand")} to show full startup help and loaded resources.`,
-				onboarding: () => `OMK can explain its own features and look up its docs. Ask it how to use or extend OMK.`,
-			});
+			const controlPanel = new ControlPanelComponent(
+				{
+					appName: APP_NAME,
+					version: this.version,
+					compactInstructions,
+					expandedInstructions,
+					compactOnboarding: () =>
+						`Press ${keyText("app.tools.expand")} to show full startup help and loaded resources.`,
+					onboarding: () =>
+						`OMK can explain its own features and look up its docs. Ask it how to use or extend OMK.`,
+				},
+				{
+					requestRender: () => this.ui.requestRender(),
+					isTTY: () => process.stdout.isTTY === true,
+					isReducedMotion: () => this.settingsManager.getReducedMotion(),
+					isIdleDriftEnabled: () => this.settingsManager.getGradientBannerIdleMotion(),
+					isHeaderVisibleHint: () => this.isStartupHeaderMotionAllowed,
+				},
+			);
 			controlPanel.setExpanded(this.getStartupExpansionState());
 			this.builtInHeader = controlPanel;
 
@@ -835,7 +848,7 @@ export class InteractiveMode {
 		await this.init();
 
 		// Start version check asynchronously
-		checkForNewPiVersion(this.version).then((newRelease) => {
+		checkForNewOmkVersion(this.version).then((newRelease) => {
 			if (newRelease) {
 				this.showNewVersionNotification(newRelease);
 			}
@@ -907,7 +920,7 @@ export class InteractiveMode {
 	}
 
 	private async checkForPackageUpdates(): Promise<string[]> {
-		if (process.env.OMK_OFFLINE || process.env.PI_OFFLINE) {
+		if (process.env.OMK_OFFLINE) {
 			return [];
 		}
 
@@ -1003,7 +1016,7 @@ export class InteractiveMode {
 	}
 
 	private reportInstallTelemetry(version: string): void {
-		if (process.env.OMK_OFFLINE || process.env.PI_OFFLINE) {
+		if (process.env.OMK_OFFLINE) {
 			return;
 		}
 
@@ -2616,7 +2629,7 @@ export class InteractiveMode {
 			// Write to temp file
 			const tmpDir = os.tmpdir();
 			const ext = extensionForImageMimeType(image.mimeType) ?? "png";
-			const fileName = `pi-clipboard-${crypto.randomUUID()}.${ext}`;
+			const fileName = `omk-clipboard-${crypto.randomUUID()}.${ext}`;
 			const filePath = path.join(tmpDir, fileName);
 			fs.writeFileSync(filePath, Buffer.from(image.bytes));
 
@@ -2814,6 +2827,14 @@ export class InteractiveMode {
 				return;
 			}
 
+			// Stop banner motion on first submit (prevents header redraw after scroll)
+			if (this.isStartupHeaderMotionAllowed) {
+				this.isStartupHeaderMotionAllowed = false;
+				if (this.builtInHeader && "stopMotion" in this.builtInHeader) {
+					(this.builtInHeader as { stopMotion: () => void }).stopMotion();
+				}
+			}
+
 			// Normal message submission
 			// First, move any pending bash components to chat
 			this.flushPendingBashComponents();
@@ -2843,6 +2864,13 @@ export class InteractiveMode {
 		switch (event.type) {
 			case "agent_start":
 				this.pendingTools.clear();
+				// Stop banner motion when agent starts working
+				if (this.isStartupHeaderMotionAllowed) {
+					this.isStartupHeaderMotionAllowed = false;
+					if (this.builtInHeader && "stopMotion" in this.builtInHeader) {
+						(this.builtInHeader as { stopMotion: () => void }).stopMotion();
+					}
+				}
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
 				}
@@ -3511,7 +3539,7 @@ export class InteractiveMode {
 		try {
 			this.ui.stop();
 		} catch {}
-		console.error("pi exiting due to uncaughtException:");
+		console.error("omk exiting due to uncaughtException:");
 		console.error(error);
 		process.exit(1);
 	}
@@ -3558,7 +3586,7 @@ export class InteractiveMode {
 
 		// Restore the terminal before the process dies on any uncaught throw.
 		// Without this, an unhandled exception from extension code (or anywhere
-		// in pi) leaves the terminal in raw mode with no cursor.
+		// in omk) leaves the terminal in raw mode with no cursor.
 		const uncaughtExceptionHandler = (error: Error) => this.uncaughtCrash(error);
 		process.prependListener("uncaughtException", uncaughtExceptionHandler);
 		this.signalCleanupHandlers.push(() => process.off("uncaughtException", uncaughtExceptionHandler));
@@ -3734,7 +3762,7 @@ export class InteractiveMode {
 		}
 
 		const currentText = this.editor.getExpandedText?.() ?? this.editor.getText();
-		const tmpFile = path.join(os.tmpdir(), `pi-editor-${Date.now()}.omk.md`);
+		const tmpFile = path.join(os.tmpdir(), `omk-editor-${Date.now()}.omk.md`);
 
 		try {
 			// Write current content to temp file
@@ -3746,7 +3774,7 @@ export class InteractiveMode {
 			// Split by space to support editor arguments (e.g., "code --wait")
 			const [editor, ...editorArgs] = editorCmd.split(" ");
 
-			process.stdout.write(`Launching external editor: ${editorCmd}\nPi will resume when the editor exits.\n`);
+			process.stdout.write(`Launching external editor: ${editorCmd}\nOMK will resume when the editor exits.\n`);
 
 			// Do not use spawnSync here. On Windows, synchronous child_process calls can keep
 			// Node/libuv's console input read active after ui.stop() pauses stdin, racing
@@ -3803,7 +3831,7 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
-	showNewVersionNotification(release: LatestPiRelease): void {
+	showNewVersionNotification(release: LatestOmkRelease): void {
 		const action = theme.fg("accent", `${APP_NAME} update`);
 		const updateInstruction = theme.fg("muted", `New version ${release.version} is available. Run `) + action;
 		const changelogUrl = "https://github.com/dmae97/omk/releases";
@@ -5961,6 +5989,10 @@ export class InteractiveMode {
 		if (this.loadingAnimation) {
 			this.loadingAnimation.stop();
 			this.loadingAnimation = undefined;
+		}
+		// Dispose banner motion timer on shutdown
+		if (this.builtInHeader && "dispose" in this.builtInHeader) {
+			(this.builtInHeader as { dispose: () => void }).dispose();
 		}
 		this.clearExtensionTerminalInputListeners();
 		this.footer.dispose();

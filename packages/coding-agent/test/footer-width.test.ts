@@ -2,6 +2,7 @@ import { visibleWidth } from "@earendil-works/omk-tui";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
+import { FREEDOM_CONFIG_DEFAULTS } from "../src/core/freedom/config.ts";
 import { FooterComponent, formatCwdForFooter } from "../src/modes/interactive/components/footer.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 
@@ -54,6 +55,7 @@ function createSession(options: {
 		modelRegistry: {
 			isUsingOAuth: () => false,
 		},
+		freedomConfig: FREEDOM_CONFIG_DEFAULTS,
 	};
 
 	return session as unknown as AgentSession;

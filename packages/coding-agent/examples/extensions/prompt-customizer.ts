@@ -83,8 +83,8 @@ If you have additional requirements, configure them via --append-system-prompt o
 	return extensionSpecific;
 }
 
-export default function promptCustomizer(pi: ExtensionAPI) {
-	pi.on("before_agent_start", async (event) => {
+export default function promptCustomizer(omk: ExtensionAPI) {
+	omk.on("before_agent_start", async (event) => {
 		const { systemPrompt, systemPromptOptions } = event;
 
 		const customPrompt = addToolGuidance(systemPromptOptions, systemPrompt);

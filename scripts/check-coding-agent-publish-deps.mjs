@@ -1,33 +1,30 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const repoRoot = resolve(new URL("..", import.meta.url).pathname);
 const packagePath = join(repoRoot, "packages/coding-agent/package.json");
-const shrinkwrapPath = join(repoRoot, "packages/coding-agent/npm-shrinkwrap.json");
+const internalPackageDirs = new Map([
+	["@earendil-works/omk-agent-core", "packages/agent"],
+	["@earendil-works/omk-ai", "packages/ai"],
+	["@earendil-works/omk-tui", "packages/tui"],
+]);
 const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
 const deps = pkg.dependencies ?? {};
-const expectedAliases = {
-	"@earendil-works/omk-agent-core": "npm:@earendil-works/pi-agent-core@0.79.6",
-	"@earendil-works/omk-ai": "npm:@earendil-works/pi-ai@0.79.6",
-	"@earendil-works/omk-tui": "npm:@earendil-works/pi-tui@0.79.6",
-};
 const errors = [];
 
-for (const [name, expected] of Object.entries(expectedAliases)) {
+for (const [name, dir] of internalPackageDirs) {
+	const internalPkg = JSON.parse(readFileSync(join(repoRoot, dir, "package.json"), "utf8"));
+	const expected = `^${internalPkg.version}`;
 	if (deps[name] !== expected) {
-		errors.push(`${name} must resolve through published package alias ${expected}; got ${deps[name] ?? "<missing>"}`);
+		errors.push(`${name} must use OMK-scoped lockstep dependency ${expected}; got ${deps[name] ?? "<missing>"}`);
 	}
 }
 
 for (const [name, spec] of Object.entries(deps)) {
-	if (name.startsWith("@earendil-works/omk-") && !String(spec).startsWith("npm:@earendil-works/pi-")) {
-		errors.push(`${name} uses unpublished OMK-scoped dependency spec ${spec}`);
+	if (name.startsWith("@earendil-works/omk-") && String(spec).startsWith("npm:@earendil-works/pi-")) {
+		errors.push(`${name} still resolves through legacy package alias ${spec}`);
 	}
-}
-
-if (existsSync(shrinkwrapPath)) {
-	errors.push("packages/coding-agent/npm-shrinkwrap.json must not be published until OMK-scoped internal packages exist on npm");
 }
 
 if (errors.length > 0) {
@@ -35,4 +32,4 @@ if (errors.length > 0) {
 	process.exit(1);
 }
 
-console.log("coding-agent publish dependencies resolve through published npm aliases.");
+console.log("coding-agent publish dependencies use OMK-scoped internal packages.");
