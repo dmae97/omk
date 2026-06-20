@@ -17,7 +17,7 @@
 		"check:browser-smoke": "node scripts/check-browser-smoke.mjs",
 		"check:cli-contracts": "npm --prefix packages/coding-agent run test -- test/contracts/model-selector-contract.test.ts",
 		"check:pinned-deps": "node scripts/check-pinned-deps.mjs",
-		"check:shrinkwrap": "node scripts/check-coding-agent-publish-deps.mjs",
+		"check:shrinkwrap": "node scripts/check-coding-agent-publish-deps.mjs && node scripts/generate-coding-agent-shrinkwrap.mjs --check",
 		"check:ts-imports": "node scripts/check-ts-relative-imports.mjs",
 		"spec:check": "tsx scripts/spec-check.mjs",
 		"spec:compile": "tsx scripts/spec-compile.mjs",

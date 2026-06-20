@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Release script for pi-mono
+ * Release script for open-multi-agent-kit
  *
  * Usage:
  *   node scripts/release.mjs <major|minor|patch>
@@ -125,16 +125,6 @@ function updateChangelogsForRelease(version) {
 	}
 }
 
-function codingAgentUsesPublishedAliases() {
-	const pkg = JSON.parse(readFileSync("packages/coding-agent/package.json", "utf-8"));
-	const deps = pkg.dependencies ?? {};
-	return [
-		"@earendil-works/omk-agent-core",
-		"@earendil-works/omk-ai",
-		"@earendil-works/omk-tui",
-	].every((name) => String(deps[name] ?? "").startsWith("npm:@earendil-works/pi-"));
-}
-
 function addUnreleasedSection() {
 	const changelogs = getChangelogs();
 	const unreleasedSection = "## [Unreleased]\n\n";
@@ -178,11 +168,7 @@ console.log();
 console.log("Regenerating release artifacts...");
 run("npm --prefix packages/ai run generate-models");
 run("npm --prefix packages/ai run generate-image-models");
-if (codingAgentUsesPublishedAliases()) {
-	console.log("Skipping coding-agent shrinkwrap while internal dependencies resolve through published package aliases.");
-} else {
-	run("npm run shrinkwrap:coding-agent");
-}
+run("npm run shrinkwrap:coding-agent");
 console.log();
 
 // 5. Run checks

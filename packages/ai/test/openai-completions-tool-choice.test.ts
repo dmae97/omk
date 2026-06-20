@@ -257,6 +257,43 @@ describe("openai-completions tool_choice", () => {
 		expect(getModel("zai", "glm-4.5-air")?.compat?.zaiToolStream).toBeUndefined();
 	});
 
+	it("sends boolean thinking only for direct z.ai GLM-5.2 when xhigh is requested", async () => {
+		const model = getModel("zai", "glm-5.2")!;
+		let payload: unknown;
+
+		await streamSimple(
+			model,
+			{
+				messages: [
+					{
+						role: "user",
+						content: "Hi",
+						timestamp: Date.now(),
+					},
+				],
+			},
+			{
+				apiKey: "test",
+				reasoning: "xhigh",
+				onPayload: (params: unknown) => {
+					payload = params;
+				},
+			},
+		).result();
+
+		const params = (payload ?? mockState.lastParams) as {
+			enable_thinking?: boolean;
+			reasoning_effort?: string;
+			reasoning?: unknown;
+			thinking?: unknown;
+		};
+		expect(model.thinkingLevelMap?.xhigh).toBeUndefined();
+		expect(params.enable_thinking).toBe(true);
+		expect(params.reasoning_effort).toBeUndefined();
+		expect(params.reasoning).toBeUndefined();
+		expect(params.thinking).toBeUndefined();
+	});
+
 	it("omits tool_stream for unsupported z.ai models", async () => {
 		const model = getModel("zai", "glm-4.5-air")!;
 		const tools: Tool[] = [

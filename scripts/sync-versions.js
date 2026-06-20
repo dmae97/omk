@@ -16,16 +16,6 @@ const packageDirs = readdirSync(packagesDir, { withFileTypes: true })
 // Read all package.json files and build version map
 const packages = {};
 const versionMap = {};
-const preservedPublishedAliases = new Set([
-	'@earendil-works/omk-agent-core',
-	'@earendil-works/omk-ai',
-	'@earendil-works/omk-tui',
-]);
-
-function shouldPreservePublishedAlias(depName, currentVersion) {
-	return preservedPublishedAliases.has(depName) && String(currentVersion).startsWith('npm:@earendil-works/pi-');
-}
-
 for (const dir of packageDirs) {
 	const pkgPath = join(packagesDir, dir, 'package.json');
 	try {
@@ -63,9 +53,6 @@ for (const [dir, pkg] of Object.entries(packages)) {
 	// Check dependencies
 	if (pkg.data.dependencies) {
 		for (const [depName, currentVersion] of Object.entries(pkg.data.dependencies)) {
-			if (shouldPreservePublishedAlias(depName, currentVersion)) {
-				continue;
-			}
 			if (versionMap[depName]) {
 				const newVersion = `^${versionMap[depName]}`;
 				if (currentVersion !== newVersion) {
@@ -82,9 +69,6 @@ for (const [dir, pkg] of Object.entries(packages)) {
 	// Check devDependencies
 	if (pkg.data.devDependencies) {
 		for (const [depName, currentVersion] of Object.entries(pkg.data.devDependencies)) {
-			if (shouldPreservePublishedAlias(depName, currentVersion)) {
-				continue;
-			}
 			if (versionMap[depName]) {
 				const newVersion = `^${versionMap[depName]}`;
 				if (currentVersion !== newVersion) {

@@ -314,6 +314,71 @@ describe("SettingsManager", () => {
 		});
 	});
 
+	describe("install allowScripts", () => {
+		it("defaults to an empty array", () => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ theme: "dark" }));
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getInstallAllowScripts()).toEqual([]);
+		});
+
+		it("returns the user-scoped array when only global settings define it", () => {
+			writeFileSync(
+				join(agentDir, "settings.json"),
+				JSON.stringify({ install: { allowScripts: ["npm:@scope/pkg"] } }),
+			);
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getInstallAllowScripts()).toEqual(["npm:@scope/pkg"]);
+		});
+
+		it("lets a project install.allowScripts array override the user array", () => {
+			writeFileSync(
+				join(agentDir, "settings.json"),
+				JSON.stringify({ install: { allowScripts: ["npm:user-pkg"] } }),
+			);
+			writeFileSync(
+				join(projectDir, ".omk", "settings.json"),
+				JSON.stringify({ install: { allowScripts: ["npm:project-pkg"] } }),
+			);
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getInstallAllowScripts()).toEqual(["npm:project-pkg"]);
+		});
+
+		it("blocks all scripts when the project array is explicitly empty", () => {
+			writeFileSync(
+				join(agentDir, "settings.json"),
+				JSON.stringify({ install: { allowScripts: ["npm:user-pkg"] } }),
+			);
+			writeFileSync(join(projectDir, ".omk", "settings.json"), JSON.stringify({ install: { allowScripts: [] } }));
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getInstallAllowScripts()).toEqual([]);
+		});
+
+		it("persists a project allowScripts array while preserving unrelated fields", async () => {
+			const projectSettingsPath = join(projectDir, ".omk", "settings.json");
+			writeFileSync(projectSettingsPath, JSON.stringify({ theme: "dark", packages: ["npm:keep-me"] }));
+
+			const manager = SettingsManager.create(projectDir, agentDir);
+			manager.setProjectInstallAllowScripts(["npm:@scope/pkg"]);
+			await manager.flush();
+
+			const saved = JSON.parse(readFileSync(projectSettingsPath, "utf-8"));
+			expect(saved.install).toEqual({ allowScripts: ["npm:@scope/pkg"] });
+			expect(saved.theme).toBe("dark");
+			expect(saved.packages).toEqual(["npm:keep-me"]);
+		});
+
+		it("adds an entry idempotently to the chosen scope", async () => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ theme: "dark" }));
+			const manager = SettingsManager.create(projectDir, agentDir);
+
+			expect(manager.addInstallAllowScript("npm:@scope/pkg", "global")).toBe(true);
+			expect(manager.addInstallAllowScript("npm:@scope/pkg", "global")).toBe(false);
+			await manager.flush();
+
+			expect(manager.getInstallAllowScripts()).toEqual(["npm:@scope/pkg"]);
+		});
+	});
+
 	describe("getSessionDir", () => {
 		it("should return undefined when not set", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ theme: "dark" }));

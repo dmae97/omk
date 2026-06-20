@@ -1,7 +1,7 @@
 /**
  * DOOM Overlay Demo - Play DOOM as an overlay
  *
- * Usage: pi --extension ./examples/extensions/doom-overlay
+ * Usage: omk --extension ./examples/extensions/doom-overlay
  *
  * Commands:
  *   /doom-overlay - Play DOOM in an overlay (Q to pause/exit)
@@ -18,8 +18,8 @@ import { ensureWadFile } from "./wad-finder.ts";
 let activeEngine: DoomEngine | null = null;
 let activeWadPath: string | null = null;
 
-export default function (pi: ExtensionAPI) {
-	pi.registerCommand("doom-overlay", {
+export default function (omk: ExtensionAPI) {
+	omk.registerCommand("doom-overlay", {
 		description: "Play DOOM as an overlay. Q to pause and exit.",
 
 		handler: async (args, ctx) => {

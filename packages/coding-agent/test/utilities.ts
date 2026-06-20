@@ -113,8 +113,8 @@ export function hasAuthForProvider(provider: string): boolean {
 	return provider in storage;
 }
 
-/** Path to the real pi agent config directory */
-export const PI_AGENT_DIR = join(homedir(), ".omk", "agent");
+/** Path to the real omk agent config directory */
+export const OMK_AGENT_DIR = join(homedir(), ".omk", "agent");
 
 /**
  * Get an AuthStorage instance backed by ~/.omk/agent/auth.json
@@ -232,7 +232,7 @@ export function createTestResourceLoader(options: CreateTestResourceLoaderOption
  * Use this for e2e tests that need real LLM calls.
  */
 export function createTestSession(options: TestSessionOptions = {}): TestSessionContext {
-	const tempDir = join(tmpdir(), `pi-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const tempDir = join(tmpdir(), `omk-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 	mkdirSync(tempDir, { recursive: true });
 
 	const model = getModel("anthropic", "claude-sonnet-4-5")!;

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Removed legacy `PI_*` terminal debug/control environment variable fallbacks; use the matching `OMK_*` names.
+
 ## [0.80.6] - 2026-06-18
 
 ### Breaking Changes

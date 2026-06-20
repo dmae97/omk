@@ -9,6 +9,7 @@ export type { ResourceCollision, ResourceDiagnostic } from "./diagnostics.ts";
 
 import { canonicalizePath, isLocalPath, resolvePath } from "../utils/paths.ts";
 import { createEventBus, type EventBus } from "./event-bus.ts";
+import commandSafetyGate from "./extensions/builtin/command-safety-gate.ts";
 import { createExtensionRuntime, loadExtensionFromFactory, loadExtensions } from "./extensions/loader.ts";
 import type { Extension, ExtensionFactory, ExtensionRuntime, LoadExtensionsResult } from "./extensions/types.ts";
 import { DefaultPackageManager, type PathMetadata } from "./package-manager.ts";
@@ -404,6 +405,17 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.disposeExtensionEventSubscriptions();
 
 		const extensionsResult = await loadExtensions(extensionPaths, this.cwd, this.eventBus);
+		// Built-in command-safety gate runs FIRST: tool_call block short-circuits on
+		// first block and user_bash short-circuits on first truthy result, so this
+		// fail-closed gate must precede every discovered and inline extension.
+		const commandSafetyExtension = await loadExtensionFromFactory(
+			commandSafetyGate,
+			this.cwd,
+			this.eventBus,
+			extensionsResult.runtime,
+			"<builtin:command-safety>",
+		);
+		extensionsResult.extensions.unshift(commandSafetyExtension);
 		const inlineExtensions = await this.loadExtensionFactories(extensionsResult.runtime);
 		extensionsResult.extensions.push(...inlineExtensions.extensions);
 		extensionsResult.errors.push(...inlineExtensions.errors);
@@ -786,7 +798,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	}
 
 	/**
-	 * Unsubscribe pi.events listeners registered by the previously loaded
+	 * Unsubscribe omk.events listeners registered by the previously loaded
 	 * extensions. Only subscriptions made through the extension API are
 	 * removed, so listeners added directly on an injected event bus survive.
 	 */

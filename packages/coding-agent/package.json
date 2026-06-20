@@ -40,9 +40,9 @@
 		"prepublishOnly": "npm run clean && npm run build"
 	},
 	"dependencies": {
-		"@earendil-works/omk-agent-core": "npm:@earendil-works/pi-agent-core@0.79.6",
-		"@earendil-works/omk-ai": "npm:@earendil-works/pi-ai@0.79.6",
-		"@earendil-works/omk-tui": "npm:@earendil-works/pi-tui@0.79.6",
+		"@earendil-works/omk-agent-core": "^0.80.6",
+		"@earendil-works/omk-ai": "^0.80.6",
+		"@earendil-works/omk-tui": "^0.80.6",
 		"@silvia-odwyer/photon-node": "0.3.4",
 		"chalk": "5.6.2",
 		"cross-spawn": "7.0.6",

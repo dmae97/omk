@@ -83,6 +83,16 @@ describe("Anthropic forceAdaptiveThinking compat override", () => {
 		expect(payload.output_config).toEqual({ effort: "medium" });
 	});
 
+	it("maps built-in Claude Sonnet 4.6 xhigh to Anthropic max effort", async () => {
+		const model = getModel("anthropic", "claude-sonnet-4-6");
+		expect(model.thinkingLevelMap?.xhigh).toBe("max");
+
+		const payload = await capturePayload(model, { reasoning: "xhigh" });
+
+		expect(payload.thinking).toEqual({ type: "adaptive", display: "summarized" });
+		expect(payload.output_config).toEqual({ effort: "max" });
+	});
+
 	it("allows built-in adaptive models to opt out with compat.forceAdaptiveThinking false", async () => {
 		const model: Model<"anthropic-messages"> = {
 			...getModel("anthropic", "claude-opus-4-8"),

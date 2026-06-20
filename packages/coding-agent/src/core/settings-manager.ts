@@ -37,6 +37,8 @@ export interface TerminalSettings {
 	imageWidthCells?: number; // default: 60 (preferred inline image width in terminal cells)
 	clearOnShrink?: boolean; // default: false (clear empty rows when content shrinks)
 	showTerminalProgress?: boolean; // default: false (OSC 9;4 terminal progress indicators)
+	gradientBannerIdleMotion?: boolean; // default: false (Phase 3 idle drift on gradient banner)
+	reducedMotion?: boolean; // default: false; env OMK_REDUCED_MOTION=1 takes precedence
 }
 
 export interface ImageSettings {
@@ -57,6 +59,13 @@ export interface MarkdownSettings {
 
 export interface WarningSettings {
 	anthropicExtraUsage?: boolean; // default: true
+}
+
+export interface InstallSettings {
+	// Exact-match package identities/specs (e.g. "npm:@scope/pkg", "npm:@scope/pkg@1.2.3",
+	// "git:github.com/org/repo") permitted to run lifecycle scripts during install. Default behavior
+	// stays fail-closed (--ignore-scripts); only listed install units opt in. No glob/semver/wildcard.
+	allowScripts?: string[];
 }
 
 export type TransportSetting = Transport;
@@ -95,6 +104,7 @@ export interface Settings {
 	npmCommand?: string[]; // Command used for npm package lookup/install operations, argv-style (e.g., ["mise", "exec", "node@20", "--", "npm"])
 	collapseChangelog?: boolean; // Show condensed changelog after update (use /changelog for full)
 	enableInstallTelemetry?: boolean; // default: true - anonymous version/update ping after changelog-detected updates
+	install?: InstallSettings; // Opt-in install behavior (e.g. lifecycle-script allowlist); default is fail-closed
 	packages?: PackageSource[]; // Array of npm/git package sources (string or object with filtering)
 	extensions?: string[]; // Array of local extension file paths or directories
 	skills?: string[]; // Array of local skill file paths or directories
@@ -863,6 +873,42 @@ export class SettingsManager {
 		this.saveProjectSettings(projectSettings);
 	}
 
+	/** Merged install-script allowlist ([] when unset). project install.allowScripts overrides the user array. */
+	getInstallAllowScripts(): string[] {
+		return [...(this.settings.install?.allowScripts ?? [])];
+	}
+
+	setInstallAllowScripts(entries: string[]): void {
+		this.globalSettings.install = { ...this.globalSettings.install, allowScripts: entries };
+		this.markModified("install", "allowScripts");
+		this.save();
+	}
+
+	setProjectInstallAllowScripts(entries: string[]): void {
+		const projectSettings = structuredClone(this.projectSettings);
+		projectSettings.install = { ...projectSettings.install, allowScripts: entries };
+		this.markProjectModified("install", "allowScripts");
+		this.saveProjectSettings(projectSettings);
+	}
+
+	/** Append a single allowlist entry to the chosen scope. Returns false when already present (no-op). */
+	addInstallAllowScript(entry: string, scope: "global" | "project"): boolean {
+		const current =
+			scope === "project"
+				? [...(this.projectSettings.install?.allowScripts ?? [])]
+				: [...(this.globalSettings.install?.allowScripts ?? [])];
+		if (current.includes(entry)) {
+			return false;
+		}
+		const next = [...current, entry];
+		if (scope === "project") {
+			this.setProjectInstallAllowScripts(next);
+		} else {
+			this.setInstallAllowScripts(next);
+		}
+		return true;
+	}
+
 	getExtensionPaths(): string[] {
 		return [...(this.settings.extensions ?? [])];
 	}
@@ -980,7 +1026,7 @@ export class SettingsManager {
 		if (this.settings.terminal?.clearOnShrink !== undefined) {
 			return this.settings.terminal.clearOnShrink;
 		}
-		return process.env.OMK_CLEAR_ON_SHRINK === "1" || process.env.PI_CLEAR_ON_SHRINK === "1";
+		return process.env.OMK_CLEAR_ON_SHRINK === "1" || process.env.OMK_CLEAR_ON_SHRINK === "1";
 	}
 
 	setClearOnShrink(enabled: boolean): void {
@@ -1003,6 +1049,17 @@ export class SettingsManager {
 		this.globalSettings.terminal.showTerminalProgress = enabled;
 		this.markModified("terminal", "showTerminalProgress");
 		this.save();
+	}
+
+	getGradientBannerIdleMotion(): boolean {
+		return this.settings.terminal?.gradientBannerIdleMotion ?? false;
+	}
+
+	getReducedMotion(): boolean {
+		if (process.env.OMK_REDUCED_MOTION === "1" || process.env.OMK_REDUCED_MOTION === "true") {
+			return true;
+		}
+		return this.settings.terminal?.reducedMotion ?? false;
 	}
 
 	getImageAutoResize(): boolean {
@@ -1066,7 +1123,7 @@ export class SettingsManager {
 	getShowHardwareCursor(): boolean {
 		return (
 			this.settings.showHardwareCursor ??
-			(process.env.OMK_HARDWARE_CURSOR === "1" || process.env.PI_HARDWARE_CURSOR === "1")
+			(process.env.OMK_HARDWARE_CURSOR === "1" || process.env.OMK_HARDWARE_CURSOR === "1")
 		);
 	}
 

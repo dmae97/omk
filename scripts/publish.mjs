@@ -4,12 +4,6 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const internalPackageNames = [
-	"@earendil-works/omk-ai",
-	"@earendil-works/omk-tui",
-	"@earendil-works/omk-agent-core",
-];
-
 const packages = [
 	{ directory: "packages/ai", name: "@earendil-works/omk-ai" },
 	{ directory: "packages/tui", name: "@earendil-works/omk-tui" },
@@ -175,19 +169,7 @@ if (versions.length !== 1) {
 	throw new Error(`Publish packages are not lockstep versioned: ${versions.join(", ")}`);
 }
 
-const codingAgentPackageJson = readPackageJson("packages/coding-agent");
-const codingAgentDeps = codingAgentPackageJson.dependencies ?? {};
-const usesPublishedInternalAliases = internalPackageNames.every((name) =>
-	String(codingAgentDeps[name] ?? "").startsWith("npm:@earendil-works/pi-"),
-);
-const publishPackages = usesPublishedInternalAliases
-	? packages.filter((pkg) => pkg.name === "open-multi-agent-kit")
-	: packages;
-
 console.log(`Publishing OMK packages at ${versions[0]}${dryRun ? " (dry run)" : ""}`);
-if (usesPublishedInternalAliases) {
-	console.log("Skipping OMK-scoped internal package publish because open-multi-agent-kit uses published pi package aliases.");
-}
 console.log();
 
 if (!dryRun) {
@@ -195,7 +177,7 @@ if (!dryRun) {
 	console.log();
 }
 
-for (const pkg of publishPackages) {
+for (const pkg of packages) {
 	const version = packageVersions.get(pkg.name);
 	assertBuildOutputExists(pkg.directory);
 	const published = isPublished(pkg.name, version);

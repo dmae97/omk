@@ -269,6 +269,22 @@ export function getOmkInvocation(args: string[]): { command: string; args: strin
 
 type OnUpdateCallback = (partial: AgentToolResult<SubagentDetails>) => void;
 
+export interface AbortHandlerSignal {
+	readonly aborted: boolean;
+	addEventListener(type: "abort", listener: () => void, options?: { once?: boolean }): void;
+	removeEventListener(type: "abort", listener: () => void): void;
+}
+
+export function attachAbortHandler(signal: AbortHandlerSignal | undefined, handler: () => void): () => void {
+	if (!signal) return () => {};
+	if (signal.aborted) {
+		handler();
+		return () => {};
+	}
+	signal.addEventListener("abort", handler, { once: true });
+	return () => signal.removeEventListener("abort", handler);
+}
+
 async function runSingleAgent(
 	defaultCwd: string,
 	agents: AgentConfig[],
@@ -343,6 +359,12 @@ async function runSingleAgent(
 				stdio: ["ignore", "pipe", "pipe"],
 			});
 			let buffer = "";
+			let removeAbortHandler = () => {};
+			let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
+			const cleanupProcessLifecycle = () => {
+				removeAbortHandler();
+				if (forceKillTimer) clearTimeout(forceKillTimer);
+			};
 
 			const processLine = (line: string) => {
 				if (!line.trim()) return;
@@ -393,25 +415,24 @@ async function runSingleAgent(
 			});
 
 			proc.on("close", (code) => {
+				cleanupProcessLifecycle();
 				if (buffer.trim()) processLine(buffer);
 				resolve(code ?? 0);
 			});
 
 			proc.on("error", () => {
+				cleanupProcessLifecycle();
 				resolve(1);
 			});
 
-			if (signal) {
-				const killProc = () => {
-					wasAborted = true;
-					proc.kill("SIGTERM");
-					setTimeout(() => {
-						if (!proc.killed) proc.kill("SIGKILL");
-					}, 5000);
-				};
-				if (signal.aborted) killProc();
-				else signal.addEventListener("abort", killProc, { once: true });
-			}
+			const killProc = () => {
+				wasAborted = true;
+				proc.kill("SIGTERM");
+				forceKillTimer = setTimeout(() => {
+					if (!proc.killed) proc.kill("SIGKILL");
+				}, 5000);
+			};
+			removeAbortHandler = attachAbortHandler(signal, killProc);
 		});
 
 		currentResult.exitCode = exitCode;
@@ -462,8 +483,8 @@ const SubagentParams = Type.Object({
 	cwd: Type.Optional(Type.String({ description: "Working directory for the agent process (single mode)" })),
 });
 
-export default function (pi: ExtensionAPI) {
-	pi.registerTool({
+export default function (omk: ExtensionAPI) {
+	omk.registerTool({
 		name: "subagent",
 		label: "Subagent",
 		description: [

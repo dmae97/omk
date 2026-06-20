@@ -20,7 +20,7 @@
 
       // Parse URL parameters for deep linking: leafId and targetId
       // Check for injected params (when loaded in iframe via srcdoc) or use window.location
-      const injectedParams = document.querySelector('meta[name="pi-url-params"]');
+      const injectedParams = document.querySelector('meta[name="omk-url-params"]');
       const searchString = injectedParams ? injectedParams.content : window.location.search.substring(1);
       const urlParams = new URLSearchParams(searchString);
       const urlLeafId = urlParams.get('leafId');
@@ -1097,7 +1097,7 @@
         // Check for injected base URL (used when loaded in iframe via srcdoc)
         const baseUrlMeta =
           document.querySelector('meta[name="omk-share-base-url"]') ||
-          document.querySelector('meta[name="pi-share-base-url"]');
+          document.querySelector('meta[name="omk-share-base-url"]');
         const baseUrl = baseUrlMeta ? baseUrlMeta.content : window.location.href.split('?')[0];
 
         const url = new URL(window.location.href);

@@ -15,7 +15,7 @@ import {
 import { DefaultPackageManager } from "./core/package-manager.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 import { spawnProcess } from "./utils/child-process.ts";
-import { getLatestPiRelease, isNewerPackageVersion } from "./utils/version-check.ts";
+import { getLatestOmkRelease, isNewerPackageVersion } from "./utils/version-check.ts";
 import {
 	cleanupWindowsSelfUpdateQuarantine,
 	quarantineWindowsNativeDependencies,
@@ -49,6 +49,7 @@ interface PackageCommandOptions {
 	local: boolean;
 	force: boolean;
 	help: boolean;
+	allowScriptsName?: string;
 	invalidOption?: string;
 	invalidArgument?: string;
 	missingOptionValue?: string;
@@ -86,11 +87,18 @@ function printPackageCommandHelp(command: PackageCommand): void {
 
 Install a package and add it to settings.
 
+By default, installs run with --ignore-scripts so package lifecycle scripts do NOT execute.
+Use --allow-scripts <name> to opt a reviewed package into running lifecycle scripts. The value
+must exactly match the install source identity/spec, and the whole dependency tree may run scripts.
+
 Options:
-  -l, --local    Install project-locally (.omk/settings.json)
+  -l, --local             Install project-locally (.omk/settings.json)
+  --allow-scripts <name>  Allow lifecycle scripts for this reviewed package (exact identity/spec match)
 
 Examples:
   ${APP_NAME} install npm:@foo/bar
+  ${APP_NAME} install npm:@foo/bar --allow-scripts npm:@foo/bar
+  ${APP_NAME} install git:github.com/user/repo --allow-scripts git:github.com/user/repo
   ${APP_NAME} install git:github.com/user/repo
   ${APP_NAME} install git:git@github.com:user/repo
   ${APP_NAME} install https://github.com/user/repo
@@ -167,6 +175,7 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 	let selfFlag = false;
 	let extensionsFlag = false;
 	let extensionFlagSource: string | undefined;
+	let allowScriptsName: string | undefined;
 
 	for (let index = 0; index < rest.length; index++) {
 		const arg = rest[index];
@@ -207,6 +216,24 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 				force = true;
 			} else {
 				invalidOption = invalidOption ?? arg;
+			}
+			continue;
+		}
+
+		if (arg === "--allow-scripts") {
+			if (command !== "install") {
+				invalidOption = invalidOption ?? arg;
+				continue;
+			}
+			const value = rest[index + 1];
+			if (!value || value.startsWith("-")) {
+				missingOptionValue = missingOptionValue ?? arg;
+			} else if (allowScriptsName) {
+				conflictingOptions = conflictingOptions ?? "--allow-scripts can only be provided once";
+				index++;
+			} else {
+				allowScriptsName = value;
+				index++;
 			}
 			continue;
 		}
@@ -281,6 +308,7 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 		local,
 		force,
 		help,
+		allowScriptsName,
 		invalidOption,
 		invalidArgument,
 		missingOptionValue,
@@ -343,7 +371,7 @@ async function getSelfUpdatePlan(force: boolean): Promise<SelfUpdatePlan> {
 	}
 
 	try {
-		const latestRelease = await getLatestPiRelease(VERSION);
+		const latestRelease = await getLatestOmkRelease(VERSION);
 		const packageName = latestRelease?.packageName ?? PACKAGE_NAME;
 		if (!latestRelease || packageName !== PACKAGE_NAME || isNewerPackageVersion(latestRelease.version, VERSION)) {
 			return { packageName, shouldRun: true, ...(latestRelease?.note ? { note: latestRelease.note } : {}) };
@@ -474,10 +502,39 @@ export async function handlePackageCommand(args: string[]): Promise<boolean> {
 
 	try {
 		switch (options.command) {
-			case "install":
+			case "install": {
+				if (options.allowScriptsName) {
+					const resolution = packageManager.resolveInstallAllowScriptEntry(source!, options.allowScriptsName);
+					if (!resolution.ok) {
+						console.error(
+							chalk.red(
+								`--allow-scripts value "${options.allowScriptsName}" does not match install source ${source}.`,
+							),
+						);
+						if (resolution.expected.length > 0) {
+							console.error(chalk.dim(`Expected one of: ${resolution.expected.join(", ")}`));
+						}
+						const example = resolution.expected[0] ?? "npm:@scope/pkg";
+						console.error(
+							chalk.dim(`To allow lifecycle scripts manually, add the package to install.allowScripts, e.g.:`),
+						);
+						console.error(chalk.dim(`  { "install": { "allowScripts": ["${example}"] } }`));
+						process.exitCode = 1;
+						return true;
+					}
+					const scopeLabel = options.local ? "project" : "user";
+					settingsManager.addInstallAllowScript(resolution.entry, options.local ? "project" : "global");
+					await settingsManager.flush();
+					console.error(
+						chalk.yellow(
+							`Lifecycle scripts allowed for ${resolution.entry} (${scopeLabel} settings). Dependency tree scripts may run during install.`,
+						),
+					);
+				}
 				await packageManager.installAndPersist(source!, { local: options.local });
 				console.log(chalk.green(`Installed ${source}`));
 				return true;
+			}
 
 			case "remove": {
 				const removed = await packageManager.removeAndPersist(source!, { local: options.local });

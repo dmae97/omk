@@ -7,11 +7,11 @@ import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as _bundledPiAgentCore from "@earendil-works/omk-agent-core";
-import * as _bundledPiAi from "@earendil-works/omk-ai";
-import * as _bundledPiAiOauth from "@earendil-works/omk-ai/oauth";
+import * as _bundledOmkAgentCore from "@earendil-works/omk-agent-core";
+import * as _bundledOmkAi from "@earendil-works/omk-ai";
+import * as _bundledOmkAiOauth from "@earendil-works/omk-ai/oauth";
 import type { KeyId } from "@earendil-works/omk-tui";
-import * as _bundledPiTui from "@earendil-works/omk-tui";
+import * as _bundledOmkTui from "@earendil-works/omk-tui";
 import { createJiti } from "jiti/static";
 // Static imports of packages that extensions may use.
 // These MUST be static so Bun bundles them into the compiled binary.
@@ -22,7 +22,7 @@ import * as _bundledTypeboxValue from "typebox/value";
 import { CONFIG_DIR_NAME, getAgentDir, isBunBinary } from "../../config.ts";
 // NOTE: This import works because loader.ts exports are NOT re-exported from index.ts,
 // avoiding a circular dependency. Extensions can import from open-multi-agent-kit.
-import * as _bundledPiCodingAgent from "../../index.ts";
+import * as _bundledOmkCodingAgent from "../../index.ts";
 import { resolvePath } from "../../utils/paths.ts";
 import { createEventBus, type EventBus } from "../event-bus.ts";
 import type { ExecOptions } from "../exec.ts";
@@ -48,21 +48,21 @@ const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@sinclair/typebox": _bundledTypebox,
 	"@sinclair/typebox/compile": _bundledTypeboxCompile,
 	"@sinclair/typebox/value": _bundledTypeboxValue,
-	"@earendil-works/omk-agent-core": _bundledPiAgentCore,
-	"@earendil-works/omk-tui": _bundledPiTui,
-	"@earendil-works/omk-ai": _bundledPiAi,
-	"@earendil-works/omk-ai/oauth": _bundledPiAiOauth,
-	"open-multi-agent-kit": _bundledPiCodingAgent,
-	"@earendil-works/pi-agent-core": _bundledPiAgentCore,
-	"@earendil-works/pi-tui": _bundledPiTui,
-	"@earendil-works/pi-ai": _bundledPiAi,
-	"@earendil-works/pi-ai/oauth": _bundledPiAiOauth,
-	"@earendil-works/pi-coding-agent": _bundledPiCodingAgent,
-	"@mariozechner/pi-agent-core": _bundledPiAgentCore,
-	"@mariozechner/pi-tui": _bundledPiTui,
-	"@mariozechner/pi-ai": _bundledPiAi,
-	"@mariozechner/pi-ai/oauth": _bundledPiAiOauth,
-	"@mariozechner/pi-coding-agent": _bundledPiCodingAgent,
+	"@earendil-works/omk-agent-core": _bundledOmkAgentCore,
+	"@earendil-works/omk-tui": _bundledOmkTui,
+	"@earendil-works/omk-ai": _bundledOmkAi,
+	"@earendil-works/omk-ai/oauth": _bundledOmkAiOauth,
+	"open-multi-agent-kit": _bundledOmkCodingAgent,
+	"@earendil-works/pi-agent-core": _bundledOmkAgentCore,
+	"@earendil-works/pi-tui": _bundledOmkTui,
+	"@earendil-works/pi-ai": _bundledOmkAi,
+	"@earendil-works/pi-ai/oauth": _bundledOmkAiOauth,
+	"@earendil-works/pi-coding-agent": _bundledOmkCodingAgent,
+	"@mariozechner/pi-agent-core": _bundledOmkAgentCore,
+	"@mariozechner/pi-tui": _bundledOmkTui,
+	"@mariozechner/pi-ai": _bundledOmkAi,
+	"@mariozechner/pi-ai/oauth": _bundledOmkAiOauth,
+	"@mariozechner/pi-coding-agent": _bundledOmkCodingAgent,
 };
 
 const require = createRequire(import.meta.url);
@@ -92,28 +92,28 @@ function getAliases(): Record<string, string> {
 		return fileURLToPath(import.meta.resolve(specifier));
 	};
 
-	const piCodingAgentEntry = packageIndex;
-	const piAgentCoreEntry = resolveWorkspaceOrImport("agent/dist/index.js", "@earendil-works/omk-agent-core");
-	const piTuiEntry = resolveWorkspaceOrImport("tui/dist/index.js", "@earendil-works/omk-tui");
-	const piAiEntry = resolveWorkspaceOrImport("ai/dist/index.js", "@earendil-works/omk-ai");
-	const piAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@earendil-works/omk-ai/oauth");
+	const omkCodingAgentEntry = packageIndex;
+	const omkAgentCoreEntry = resolveWorkspaceOrImport("agent/dist/index.js", "@earendil-works/omk-agent-core");
+	const omkTuiEntry = resolveWorkspaceOrImport("tui/dist/index.js", "@earendil-works/omk-tui");
+	const omkAiEntry = resolveWorkspaceOrImport("ai/dist/index.js", "@earendil-works/omk-ai");
+	const omkAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@earendil-works/omk-ai/oauth");
 
 	_aliases = {
-		"open-multi-agent-kit": piCodingAgentEntry,
-		"@earendil-works/omk-agent-core": piAgentCoreEntry,
-		"@earendil-works/omk-tui": piTuiEntry,
-		"@earendil-works/omk-ai": piAiEntry,
-		"@earendil-works/omk-ai/oauth": piAiOauthEntry,
-		"@earendil-works/pi-coding-agent": piCodingAgentEntry,
-		"@earendil-works/pi-agent-core": piAgentCoreEntry,
-		"@earendil-works/pi-tui": piTuiEntry,
-		"@earendil-works/pi-ai": piAiEntry,
-		"@earendil-works/pi-ai/oauth": piAiOauthEntry,
-		"@mariozechner/pi-coding-agent": piCodingAgentEntry,
-		"@mariozechner/pi-agent-core": piAgentCoreEntry,
-		"@mariozechner/pi-tui": piTuiEntry,
-		"@mariozechner/pi-ai": piAiEntry,
-		"@mariozechner/pi-ai/oauth": piAiOauthEntry,
+		"open-multi-agent-kit": omkCodingAgentEntry,
+		"@earendil-works/omk-agent-core": omkAgentCoreEntry,
+		"@earendil-works/omk-tui": omkTuiEntry,
+		"@earendil-works/omk-ai": omkAiEntry,
+		"@earendil-works/omk-ai/oauth": omkAiOauthEntry,
+		"@earendil-works/pi-coding-agent": omkCodingAgentEntry,
+		"@earendil-works/pi-agent-core": omkAgentCoreEntry,
+		"@earendil-works/pi-tui": omkTuiEntry,
+		"@earendil-works/pi-ai": omkAiEntry,
+		"@earendil-works/pi-ai/oauth": omkAiOauthEntry,
+		"@mariozechner/pi-coding-agent": omkCodingAgentEntry,
+		"@mariozechner/pi-agent-core": omkAgentCoreEntry,
+		"@mariozechner/pi-tui": omkTuiEntry,
+		"@mariozechner/pi-ai": omkAiEntry,
+		"@mariozechner/pi-ai/oauth": omkAiOauthEntry,
 		typebox: typeboxEntry,
 		"typebox/compile": typeboxCompileEntry,
 		"typebox/value": typeboxValueEntry,
@@ -164,7 +164,7 @@ export function createExtensionRuntime(): ExtensionRuntime {
 		invalidate: (message) => {
 			state.staleMessage ??=
 				message ??
-				"This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().";
+				"This extension ctx is stale after session replacement or reload. Do not use a captured omk or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().";
 		},
 		// Pre-bind: queue registrations so bindCore() can flush them once the
 		// model registry is available. bindCore() replaces both with direct calls.
@@ -332,7 +332,7 @@ function createExtensionAPI(
 			runtime.unregisterProvider(name, extension.path);
 		},
 
-		// Track pi.events subscriptions on the extension so they can be
+		// Track omk.events subscriptions on the extension so they can be
 		// unsubscribed on reload instead of stacking duplicate listeners
 		// on the shared event bus.
 		events: {
@@ -528,8 +528,8 @@ function resolveExtensionEntries(dir: string): string[] | null {
  *
  * Discovery rules:
  * 1. Direct files: `extensions/*.ts` or `*.js` → load
- * 2. Subdirectory with index: `extensions/* /index.ts` or `index.js` → load
- * 3. Subdirectory with package.json: `extensions/* /package.json` with "pi" field → load what it declares
+ * 2. Subdirectory with index: `extensions/<name>/index.ts` or `index.js` → load
+ * 3. Subdirectory with package.json: `extensions/<name>/package.json` with an `omk` manifest → load what it declares
  *
  * No recursion beyond one level. Complex packages must use package.json manifest.
  */
@@ -603,7 +603,7 @@ export async function discoverAndLoadExtensions(
 	for (const p of configuredPaths) {
 		const resolved = resolvePath(p, resolvedCwd, { normalizeUnicodeSpaces: true });
 		if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
-			// Check for package.json with pi manifest or index.ts
+			// Check for package.json with omk manifest or index.ts
 			const entries = resolveExtensionEntries(resolved);
 			if (entries) {
 				addPaths(entries);

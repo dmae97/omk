@@ -73,8 +73,8 @@ function errorResult(
 	};
 }
 
-export default function questionnaire(pi: ExtensionAPI) {
-	pi.registerTool({
+export default function questionnaire(omk: ExtensionAPI) {
+	omk.registerTool({
 		name: "questionnaire",
 		label: "Questionnaire",
 		description:

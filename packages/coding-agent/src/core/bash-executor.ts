@@ -67,7 +67,7 @@ export async function executeBashWithOperations(
 			return;
 		}
 		const id = randomBytes(8).toString("hex");
-		tempFilePath = join(tmpdir(), `pi-bash-${id}.log`);
+		tempFilePath = join(tmpdir(), `omk-bash-${id}.log`);
 		// Owner-only permissions: full output can contain secrets (env vars, tokens, etc.).
 		tempFileStream = createWriteStream(tempFilePath, { mode: 0o600 });
 		for (const chunk of outputChunks) {

@@ -8,6 +8,7 @@ import {
 	validateTaskCompletionDependencies,
 } from "../packages/coding-agent/src/core/spec-kit/compiler.ts";
 import { verifyHarnessControlReplay } from "../packages/coding-agent/src/core/harness-control-replay.ts";
+import { verifyCliContract } from "../packages/coding-agent/src/core/contract-verification.ts";
 
 const args = process.argv.slice(2);
 const strict = args.includes("--strict");
@@ -72,6 +73,38 @@ const ledgerReports = findLedgers(join(root, ".omk", "runs")).map((ledgerPath) =
 	...verifyHarnessControlReplay(ledgerPath),
 }));
 const ledgerErrors = ledgerReports.flatMap((report) => report.errors.map((error) => `${report.ledgerPath}: ${error}`));
+
+// Tamper-evident verification of the /model CLI contract: hash the manifest+test
+// and append a cli.contract.verify event, then require the hash-chain ledger to
+// verify. Only gates when the contract artifacts are present.
+const contractManifestPath = join(root, "packages", "coding-agent", "test", "contracts", "model-selector-contract.v1.json");
+const contractTestPath = join(root, "packages", "coding-agent", "test", "contracts", "model-selector-contract.test.ts");
+const contractErrors = [];
+let contractVerification = null;
+if (existsSync(contractManifestPath) && existsSync(contractTestPath)) {
+	const contractManifest = JSON.parse(readFileSync(contractManifestPath, "utf-8"));
+	const contractVersion = typeof contractManifest.schemaVersion === "string" ? contractManifest.schemaVersion : "unknown";
+	const contractResult = await verifyCliContract({
+		contractId: "model-selector",
+		contractVersion,
+		manifestPath: contractManifestPath,
+		testPath: contractTestPath,
+		runGate: () => ({ ok: contractVersion === "omk.cli-contract.v1.1", details: contractVersion }),
+		cwd: root,
+		logPath: join(outDir, "cli-contract", "events.jsonl"),
+		resultPath: join(".omk", "runs", "spec-kit", feature, "cli-contract", "contract-result.json"),
+	});
+	contractVerification = {
+		status: contractResult.status,
+		contractVersion: contractResult.contractVersion,
+		manifestHash: contractResult.manifestHash,
+		testFileHash: contractResult.testFileHash,
+		ledgerVerified: contractResult.ledger.verified,
+	};
+	if (contractResult.status !== "passed") {
+		contractErrors.push(`cli.contract.verify blocked (gate=${contractResult.gate.ok}, ledger=${contractResult.ledger.verified})`);
+	}
+}
 const evidencePaths = collectSpecEvidencePaths(compiled.tasks);
 const strictEvidenceErrors = strict
 	? evidencePaths
@@ -79,7 +112,7 @@ const strictEvidenceErrors = strict
 			.map((evidencePath) => `strict evidence missing: ${evidencePath}`)
 	: [];
 const completionErrors = validateTaskCompletionDependencies(compiled.tasks);
-const errors = [...validation.errors, ...traceabilityErrors, ...ledgerErrors, ...strictEvidenceErrors];
+const errors = [...validation.errors, ...traceabilityErrors, ...ledgerErrors, ...strictEvidenceErrors, ...contractErrors];
 const taskGateStatus = createTaskGateStatus(compiled.tasks, evidencePaths);
 const report = {
 	ok: errors.length === 0,
@@ -101,6 +134,7 @@ const report = {
 		errors: report.errors,
 		warnings: report.warnings,
 	})),
+	contractVerification,
 	errors,
 	warnings: validation.warnings,
 };

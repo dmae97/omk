@@ -19,6 +19,20 @@ OMK packages bundle extensions, skills, prompt templates, and themes so you can 
 
 > **Security:** OMK packages run with full system access. Extensions execute arbitrary code, and skills can instruct the model to perform any action including running executables. Review source code before installing third-party packages.
 
+> **Lifecycle scripts:** By default, `install` and `update` run with `--ignore-scripts`, so package `preinstall`/`install`/`postinstall` scripts do not execute. Only opt a reviewed package in via the `install.allowScripts` allowlist or `omk install --allow-scripts <name>`. Entries are exact-match identities/specs (`npm:@scope/pkg`, `npm:@scope/pkg@1.2.3`, `git:github.com/org/repo`) — no glob, semver range, download count, or gallery popularity is ever used, and entries are never added silently. The allowlist is per install unit: when allowed, lifecycle scripts for the entire dependency tree may run (package managers cannot scope script execution to a single top-level package). A mixed install where any top-level spec is not listed stays fail-closed under `--ignore-scripts`. This is independent of gallery `code-execution` trust; the source-review warning above still applies.
+
+Manual settings example:
+
+```json
+{
+  "install": {
+    "allowScripts": ["npm:@scope/pkg", "git:github.com/org/repo"]
+  }
+}
+```
+
+Project `install.allowScripts` overrides the user array; set it to `[]` in a project to block all lifecycle scripts for that repo. Use `-l` with `--allow-scripts` to persist the entry to project settings (`.omk/settings.json`) instead of user settings.
+
 ```bash
 omk install npm:@foo/bar@1.0.0
 omk install git:github.com/user/repo@v1

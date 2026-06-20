@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "open-multi-agent-kit";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { discoverAgents } from "../examples/extensions/subagent/agents.ts";
-import subagentExtension, { getOmkInvocation } from "../examples/extensions/subagent/index.ts";
+import subagentExtension, { attachAbortHandler, getOmkInvocation } from "../examples/extensions/subagent/index.ts";
 
 const AGENT_MD = `---
 name: scout
@@ -101,6 +101,50 @@ describe("subagent extension — runtime invocation resolution", () => {
 
 		expect(invocation.command).toBe("/opt/omk/bin/omk");
 		expect(invocation.args).toEqual(["-p", "task"]);
+	});
+});
+
+describe("subagent extension — abort listener lifecycle", () => {
+	it("returns cleanup that removes abort listeners after a child process settles", () => {
+		const listeners = new Set<() => void>();
+		const signal = {
+			aborted: false,
+			addEventListener: (_type: "abort", listener: () => void) => {
+				listeners.add(listener);
+			},
+			removeEventListener: (_type: "abort", listener: () => void) => {
+				listeners.delete(listener);
+			},
+		};
+		let aborts = 0;
+
+		const cleanup = attachAbortHandler(signal, () => {
+			aborts++;
+		});
+
+		expect(listeners.size).toBe(1);
+		cleanup();
+		expect(listeners.size).toBe(0);
+		for (const listener of listeners) listener();
+		expect(aborts).toBe(0);
+	});
+
+	it("runs abort handler immediately when the signal is already aborted", () => {
+		const signal = {
+			aborted: true,
+			addEventListener: () => {
+				throw new Error("must not add listener for already-aborted signal");
+			},
+			removeEventListener: () => {},
+		};
+		let aborts = 0;
+
+		const cleanup = attachAbortHandler(signal, () => {
+			aborts++;
+		});
+
+		expect(aborts).toBe(1);
+		expect(() => cleanup()).not.toThrow();
 	});
 });
 

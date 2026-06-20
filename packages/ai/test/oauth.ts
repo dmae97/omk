@@ -1,5 +1,5 @@
 /**
- * Test helper for resolving API keys from ~/.pi/agent/auth.json
+ * Test helper for resolving API keys from ~/.omk/agent/auth.json
  *
  * Supports both API key and OAuth credentials.
  * OAuth tokens are automatically refreshed if expired and saved back to auth.json.
@@ -11,7 +11,7 @@ import { dirname, join } from "path";
 import { getOAuthApiKey } from "../src/utils/oauth/index.ts";
 import type { OAuthCredentials, OAuthProvider } from "../src/utils/oauth/types.ts";
 
-const AUTH_PATH = join(homedir(), ".pi", "agent", "auth.json");
+const AUTH_PATH = join(homedir(), ".omk", "agent", "auth.json");
 
 type ApiKeyCredential = {
 	type: "api_key";
@@ -48,7 +48,7 @@ function saveAuthStorage(storage: AuthStorage): void {
 }
 
 /**
- * Resolve API key for a provider from ~/.pi/agent/auth.json
+ * Resolve API key for a provider from ~/.omk/agent/auth.json
  *
  * For API key credentials, returns the key directly.
  * For OAuth credentials, returns the access token (refreshing if expired and saving back).
