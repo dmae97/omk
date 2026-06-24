@@ -7,7 +7,7 @@ function isTruthyEnvFlag(value: string | undefined): boolean {
 
 export function isInstallTelemetryEnabled(
 	settingsManager: SettingsManager,
-	telemetryEnv: string | undefined = process.env.OMK_TELEMETRY ?? process.env.PI_TELEMETRY,
+	telemetryEnv: string | undefined = process.env.OMK_TELEMETRY ?? process.env.OMK_TELEMETRY,
 ): boolean {
 	return telemetryEnv !== undefined ? isTruthyEnvFlag(telemetryEnv) : settingsManager.getEnableInstallTelemetry();
 }

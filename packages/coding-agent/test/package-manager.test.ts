@@ -262,15 +262,15 @@ Content`,
 			expect(result.prompts.some((r) => r.path === promptPath && !r.enabled)).toBe(true);
 		});
 
-		it("should resolve directory with package.json pi.extensions in extensions setting", async () => {
-			// Create a package with pi.extensions in package.json
+		it("should resolve directory with package.json omk.extensions in extensions setting", async () => {
+			// Create a package with omk.extensions in package.json
 			const pkgDir = join(tempDir, "my-extensions-pkg");
 			mkdirSync(join(pkgDir, "extensions"), { recursive: true });
 			writeFileSync(
 				join(pkgDir, "package.json"),
 				JSON.stringify({
 					name: "my-extensions-pkg",
-					pi: {
+					omk: {
 						extensions: ["./extensions/clip.ts", "./extensions/cost.ts"],
 					},
 				}),
@@ -284,7 +284,7 @@ Content`,
 
 			const result = await packageManager.resolve();
 
-			// Should find the extensions declared in package.json pi.extensions
+			// Should find the extensions declared in package.json omk.extensions
 			expect(result.extensions.some((r) => r.path === join(pkgDir, "extensions", "clip.ts") && r.enabled)).toBe(
 				true,
 			);
@@ -299,9 +299,9 @@ Content`,
 
 	describe("auto-discovered skill metadata", () => {
 		it("should use the agent dir as baseDir for user .omk/agent skills", async () => {
-			const skillPath = join(agentDir, "skills", "user-pi", "SKILL.md");
-			mkdirSync(join(agentDir, "skills", "user-pi"), { recursive: true });
-			writeFileSync(skillPath, "---\nname: user-pi\ndescription: user pi\n---\n");
+			const skillPath = join(agentDir, "skills", "user-omk", "SKILL.md");
+			mkdirSync(join(agentDir, "skills", "user-omk"), { recursive: true });
+			writeFileSync(skillPath, "---\nname: user-omk\ndescription: user omk\n---\n");
 
 			const result = await packageManager.resolve();
 			const skill = result.skills.find((r) => r.path === skillPath);
@@ -313,9 +313,9 @@ Content`,
 
 		it("should use the project .omk dir as baseDir for project .omk skills", async () => {
 			const projectBaseDir = join(tempDir, ".omk");
-			const skillPath = join(projectBaseDir, "skills", "project-pi", "SKILL.md");
-			mkdirSync(join(projectBaseDir, "skills", "project-pi"), { recursive: true });
-			writeFileSync(skillPath, "---\nname: project-pi\ndescription: project pi\n---\n");
+			const skillPath = join(projectBaseDir, "skills", "project-omk", "SKILL.md");
+			mkdirSync(join(projectBaseDir, "skills", "project-omk"), { recursive: true });
+			writeFileSync(skillPath, "---\nname: project-omk\ndescription: project omk\n---\n");
 
 			const result = await packageManager.resolve();
 			const skill = result.skills.find((r) => r.path === skillPath);
@@ -569,14 +569,14 @@ Content`,
 			expect(result.extensions.some((r) => r.path === extPath && r.enabled)).toBe(true);
 		});
 
-		it("should handle directories with pi manifest", async () => {
+		it("should handle directories with omk manifest", async () => {
 			const pkgDir = join(tempDir, "my-package");
 			mkdirSync(pkgDir, { recursive: true });
 			writeFileSync(
 				join(pkgDir, "package.json"),
 				JSON.stringify({
 					name: "my-package",
-					pi: {
+					omk: {
 						extensions: ["./src/index.ts"],
 						skills: ["./skills"],
 					},
@@ -598,7 +598,7 @@ Content`,
 			);
 		});
 
-		it("should keep pi manifest entries with leading tilde package-relative", async () => {
+		it("should keep omk manifest entries with leading tilde package-relative", async () => {
 			const pkgDir = join(tempDir, "tilde-manifest-package");
 			const directExtensionPath = join(pkgDir, "~extensions", "main.ts");
 			const slashExtensionPath = join(pkgDir, "~", "extensions", "alt.ts");
@@ -617,7 +617,7 @@ Content`,
 				join(pkgDir, "package.json"),
 				JSON.stringify({
 					name: "tilde-manifest-package",
-					pi: {
+					omk: {
 						extensions: ["~extensions/main.ts", "~/extensions/alt.ts"],
 						skills: ["~skills", "~/skills"],
 					},
@@ -952,7 +952,7 @@ Content`,
 			expect(runCommandSyncSpy).toHaveBeenNthCalledWith(2, "mise", ["exec", "node@22", "--", "npm", "root", "-g"]);
 		});
 
-		it("should install user npm packages into the pi-managed npm root", async () => {
+		it("should install user npm packages into the omk-managed npm root", async () => {
 			settingsManager = SettingsManager.inMemory({
 				npmCommand: ["pnpm"],
 				packages: ["npm:pnpm-pkg"],
@@ -1184,7 +1184,7 @@ Content`,
 
 			expect(pathEndsWith(installPath, "node_modules/left-pad")).toBe(true);
 			expect(relative(tempRoot, installPath).startsWith("..")).toBe(false);
-			expect(installPath.startsWith(join(tmpdir(), "pi-extensions"))).toBe(false);
+			expect(installPath.startsWith(join(tmpdir(), "omk-extensions"))).toBe(false);
 			if (process.platform !== "win32") {
 				expect(statSync(tempRoot).mode & 0o777).toBe(0o700);
 			}
@@ -1460,7 +1460,7 @@ Content`,
 		});
 	});
 
-	describe("pattern filtering in pi manifest", () => {
+	describe("pattern filtering in omk manifest", () => {
 		it("should support glob patterns in manifest extensions", async () => {
 			const pkgDir = join(tempDir, "manifest-pkg");
 			mkdirSync(join(pkgDir, "extensions"), { recursive: true });
@@ -1472,7 +1472,7 @@ Content`,
 				join(pkgDir, "package.json"),
 				JSON.stringify({
 					name: "manifest-pkg",
-					pi: {
+					omk: {
 						extensions: ["extensions", "node_modules/dep/extensions", "!**/skip.ts"],
 					},
 				}),
@@ -1500,7 +1500,7 @@ Content`,
 				join(pkgDir, "package.json"),
 				JSON.stringify({
 					name: "skill-manifest-pkg",
-					pi: {
+					omk: {
 						skills: ["skills", "!**/bad-skill"],
 					},
 				}),
@@ -1527,7 +1527,7 @@ Content`,
 				join(pkgDir, "package.json"),
 				JSON.stringify({
 					name: "skill-manifest-glob-pkg",
-					pi: {
+					omk: {
 						skills: ["./plugins/*/skills"],
 					},
 				}),
@@ -1552,7 +1552,7 @@ Content`,
 				join(pkgDir, "package.json"),
 				JSON.stringify({
 					name: "layered-pkg",
-					pi: {
+					omk: {
 						extensions: ["extensions", "!**/baz.ts"],
 					},
 				}),
@@ -1756,7 +1756,7 @@ Content`,
 				join(pkgDir, "package.json"),
 				JSON.stringify({
 					name: "manifest-force-pkg",
-					pi: {
+					omk: {
 						extensions: ["extensions", "!**/two.ts", "+extensions/two.ts"],
 					},
 				}),
@@ -1978,7 +1978,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			expect(result.extensions.some((r) => pathEndsWith(r.path, "agents.ts"))).toBe(false);
 		});
 
-		it("should respect package.json pi.extensions manifest in subdirectories", async () => {
+		it("should respect package.json omk.extensions manifest in subdirectories", async () => {
 			const pkgDir = join(tempDir, "manifest-subdir-pkg");
 			mkdirSync(join(pkgDir, "extensions", "custom"), { recursive: true });
 
@@ -1986,7 +1986,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			writeFileSync(
 				join(pkgDir, "extensions", "custom", "package.json"),
 				JSON.stringify({
-					pi: {
+					omk: {
 						extensions: ["./main.ts"],
 					},
 				}),

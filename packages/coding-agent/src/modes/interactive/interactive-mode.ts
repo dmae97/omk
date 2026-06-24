@@ -889,7 +889,7 @@ export class InteractiveMode {
 	}
 
 	private async checkForPackageUpdates(): Promise<string[]> {
-		if (process.env.OMK_OFFLINE || process.env.PI_OFFLINE) {
+		if (process.env.OMK_OFFLINE || process.env.OMK_OFFLINE) {
 			return [];
 		}
 
@@ -985,7 +985,7 @@ export class InteractiveMode {
 	}
 
 	private reportInstallTelemetry(version: string): void {
-		if (process.env.OMK_OFFLINE || process.env.PI_OFFLINE) {
+		if (process.env.OMK_OFFLINE || process.env.OMK_OFFLINE) {
 			return;
 		}
 
@@ -2591,7 +2591,7 @@ export class InteractiveMode {
 			// Write to temp file
 			const tmpDir = os.tmpdir();
 			const ext = extensionForImageMimeType(image.mimeType) ?? "png";
-			const fileName = `pi-clipboard-${crypto.randomUUID()}.${ext}`;
+			const fileName = `omk-clipboard-${crypto.randomUUID()}.${ext}`;
 			const filePath = path.join(tmpDir, fileName);
 			fs.writeFileSync(filePath, Buffer.from(image.bytes));
 
@@ -3476,7 +3476,7 @@ export class InteractiveMode {
 		try {
 			this.ui.stop();
 		} catch {}
-		console.error("pi exiting due to uncaughtException:");
+		console.error("omk exiting due to uncaughtException:");
 		console.error(error);
 		process.exit(1);
 	}
@@ -3523,7 +3523,7 @@ export class InteractiveMode {
 
 		// Restore the terminal before the process dies on any uncaught throw.
 		// Without this, an unhandled exception from extension code (or anywhere
-		// in pi) leaves the terminal in raw mode with no cursor.
+		// in omk) leaves the terminal in raw mode with no cursor.
 		const uncaughtExceptionHandler = (error: Error) => this.uncaughtCrash(error);
 		process.prependListener("uncaughtException", uncaughtExceptionHandler);
 		this.signalCleanupHandlers.push(() => process.off("uncaughtException", uncaughtExceptionHandler));
@@ -3699,7 +3699,7 @@ export class InteractiveMode {
 		}
 
 		const currentText = this.editor.getExpandedText?.() ?? this.editor.getText();
-		const tmpFile = path.join(os.tmpdir(), `pi-editor-${Date.now()}.omk.md`);
+		const tmpFile = path.join(os.tmpdir(), `omk-editor-${Date.now()}.omk.md`);
 
 		try {
 			// Write current content to temp file

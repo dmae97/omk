@@ -31,7 +31,7 @@ describe.skipIf(!API_KEY)("AgentSession forking", () => {
 	let sessionManager: SessionManager;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `pi-branching-test-${Date.now()}`);
+		tempDir = join(tmpdir(), `omk-branching-test-${Date.now()}`);
 		mkdirSync(tempDir, { recursive: true });
 	});
 

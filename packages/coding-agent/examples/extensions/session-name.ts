@@ -9,17 +9,17 @@
 
 import type { ExtensionAPI } from "open-multi-agent-kit";
 
-export default function (pi: ExtensionAPI) {
-	pi.registerCommand("session-name", {
+export default function (omk: ExtensionAPI) {
+	omk.registerCommand("session-name", {
 		description: "Set or show session name (usage: /session-name [new name])",
 		handler: async (args, ctx) => {
 			const name = args.trim();
 
 			if (name) {
-				pi.setSessionName(name);
+				omk.setSessionName(name);
 				ctx.ui.notify(`Session named: ${name}`, "info");
 			} else {
-				const current = pi.getSessionName();
+				const current = omk.getSessionName();
 				ctx.ui.notify(current ? `Session: ${current}` : "No session name set", "info");
 			}
 		},

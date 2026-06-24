@@ -35,7 +35,7 @@ export function createAssistantMessage(text: string): AgentMessage {
 const tempDirs: string[] = [];
 
 export function createTempDir(): string {
-	const dir = join(tmpdir(), `pi-agent-session-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const dir = join(tmpdir(), `omk-agent-session-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 	mkdirSync(dir, { recursive: true });
 	tempDirs.push(dir);
 	return dir;

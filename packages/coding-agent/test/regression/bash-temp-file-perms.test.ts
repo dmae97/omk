@@ -23,7 +23,7 @@ function fakeOperations(chunks: string[], options?: { fail?: boolean }): BashOpe
 }
 
 function listBashTempFiles(): Set<string> {
-	return new Set(readdirSync(tmpdir()).filter((name) => name.startsWith("pi-bash-") && name.endsWith(".log")));
+	return new Set(readdirSync(tmpdir()).filter((name) => name.startsWith("omk-bash-") && name.endsWith(".log")));
 }
 
 function expectOwnerOnly(path: string): void {

@@ -17,13 +17,13 @@ vulnerabilities unless they demonstrate how Pi grants that write access or cross
 an operating-system privilege boundary.
 
 Pi relies on users installing trustworthy extensions and loading trustworthy
-skills and only to use pi within trusted repositories.  This is because files
+skills and only to use omk within trusted repositories.  This is because files
 like `AGENTS.md` or instructions in comments can be used to prompt inject the
 coding agent trivially and this cannot be protected against.
 
 ## Reporting a Vulnerability
 
-If you believe you found a security vulnerability in pi or another package in
+If you believe you found a security vulnerability in omk or another package in
 this repository, please report it privately by either:
 
 - Emailing `security@earendil.com`, or
@@ -43,12 +43,12 @@ reports and coordinate disclosure as appropriate.
 
 Security issues in the distributed packages, command-line tools, APIs, and
 repository code are in scope as well as earendil operated infrastricture
-on `pi.dev`.
+on `omk.dev`.
 
 ## Out Of Scope
 
 - Local code execution or sandboxing behavior (the Pi coding agent intentionally does not have a sandbox)
-- Behavior of pi extensions or skills installed by the user
+- Behavior of omk extensions or skills installed by the user
 - Risks from working in untrusted repositories
 - Risks from installing untrusted extensions, skills, packages, or tools
 - Isuses caused by non trustworthy MITM proxies
@@ -57,13 +57,13 @@ on `pi.dev`.
 - Exposed secrets that are third-party/user-controlled credentials
 - Reports requiring the ability to create, modify, delete, or replace files,
   directories, symlinks, environment variables, shell configuration, or other
-  user-controlled local state on the target machine. This includes `~/.pi`,
-  `~/.pi/agent/models.json`, workspace files, `AGENTS.md`, skills, extensions,
+  user-controlled local state on the target machine. This includes `~/.omk`,
+  `~/.omk/agent/models.json`, workspace files, `AGENTS.md`, skills, extensions,
   extension configuration, dotfiles, and files synchronized through NFS, roaming
   profiles, or dotfile managers, unless the report shows how Pi itself grants
   that access.
 - Issues caused by intentionally weakened user configuration.
-- Resource/DOS claims that require trusted local input/config against the pi coding agent.
+- Resource/DOS claims that require trusted local input/config against the omk coding agent.
 - Reports about malicious model output.
 - User-approved or user-initiated local actions presented as vulnerabilities.
 

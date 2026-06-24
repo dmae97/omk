@@ -55,7 +55,7 @@ function createSymlinkedSessionPaths(): {
 	parentAliasB: string;
 	childAliasB: string;
 } {
-	const baseDir = mkdtempSync(join(tmpdir(), "pi-session-selector-"));
+	const baseDir = mkdtempSync(join(tmpdir(), "omk-session-selector-"));
 	const realDir = join(baseDir, "real");
 	const aliasADir = join(baseDir, "alias-a");
 	const aliasBDir = join(baseDir, "alias-b");

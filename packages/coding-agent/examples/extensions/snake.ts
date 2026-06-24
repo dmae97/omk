@@ -306,8 +306,8 @@ class SnakeComponent {
 
 const SNAKE_SAVE_TYPE = "snake-save";
 
-export default function (pi: ExtensionAPI) {
-	pi.registerCommand("snake", {
+export default function (omk: ExtensionAPI) {
+	omk.registerCommand("snake", {
 		description: "Play Snake!",
 
 		handler: async (_args, ctx) => {
@@ -333,7 +333,7 @@ export default function (pi: ExtensionAPI) {
 					() => done(undefined),
 					(state) => {
 						// Save or clear state
-						pi.appendEntry(SNAKE_SAVE_TYPE, state);
+						omk.appendEntry(SNAKE_SAVE_TYPE, state);
 					},
 					savedState,
 				);

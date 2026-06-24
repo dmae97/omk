@@ -1,8 +1,8 @@
 /**
  * Inline Bash Extension - expands inline bash commands in user prompts.
  *
- * Start pi with this extension:
- *   pi -e ./examples/extensions/inline-bash.ts
+ * Start omk with this extension:
+ *   omk -e ./examples/extensions/inline-bash.ts
  *
  * Then type prompts with inline bash:
  *   What's in !{pwd}?
@@ -16,11 +16,11 @@
  */
 import type { ExtensionAPI } from "open-multi-agent-kit";
 
-export default function (pi: ExtensionAPI) {
+export default function (omk: ExtensionAPI) {
 	const PATTERN = /!\{([^}]+)\}/g;
 	const TIMEOUT_MS = 30000;
 
-	pi.on("input", async (event, ctx) => {
+	omk.on("input", async (event, ctx) => {
 		const text = event.text;
 
 		// Don't process if it's a whole-line bash command (starts with !)
@@ -51,7 +51,7 @@ export default function (pi: ExtensionAPI) {
 		// Execute each command and collect results
 		for (const { full, command } of matches) {
 			try {
-				const bashResult = await pi.exec("bash", ["-c", command], {
+				const bashResult = await omk.exec("bash", ["-c", command], {
 					timeout: TIMEOUT_MS,
 				});
 

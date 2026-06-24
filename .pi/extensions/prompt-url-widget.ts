@@ -1,5 +1,5 @@
-import { DynamicBorder, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Container, Text } from "@earendil-works/pi-tui";
+import { DynamicBorder, type ExtensionAPI, type ExtensionContext } from "@earendil-works/omk-coding-agent";
+import { Container, Text } from "@earendil-works/omk-tui";
 
 const PR_PROMPT_PATTERN = /^\s*You are given one or more GitHub PR URLs:\s*(\S+)/im;
 const ISSUE_PROMPT_PATTERN = /^\s*Analyze GitHub issue\(s\):\s*(\S+)/im;
@@ -32,7 +32,7 @@ function extractPromptMatch(prompt: string): PromptMatch | undefined {
 }
 
 async function fetchGhMetadata(
-	pi: ExtensionAPI,
+	omk: ExtensionAPI,
 	kind: PromptMatch["kind"],
 	url: string,
 ): Promise<GhMetadata | undefined> {
@@ -40,7 +40,7 @@ async function fetchGhMetadata(
 		kind === "pr" ? ["pr", "view", url, "--json", "title,author"] : ["issue", "view", url, "--json", "title,author"];
 
 	try {
-		const result = await pi.exec("gh", args);
+		const result = await omk.exec("gh", args);
 		if (result.code !== 0 || !result.stdout) return undefined;
 		return JSON.parse(result.stdout) as GhMetadata;
 	} catch {
@@ -58,7 +58,7 @@ function formatAuthor(author?: GhMetadata["author"]): string | undefined {
 	return undefined;
 }
 
-export default function promptUrlWidgetExtension(pi: ExtensionAPI) {
+export default function promptUrlWidgetExtension(omk: ExtensionAPI) {
 	const setWidget = (ctx: ExtensionContext, match: PromptMatch, title?: string, authorText?: string) => {
 		ctx.ui.setWidget("prompt-url", (_tui, thm) => {
 			const titleText = title ? thm.fg("accent", title) : thm.fg("accent", match.url);
@@ -81,17 +81,17 @@ export default function promptUrlWidgetExtension(pi: ExtensionAPI) {
 		const trimmedTitle = title?.trim();
 		const fallbackName = `${label}: ${match.url}`;
 		const desiredName = trimmedTitle ? `${label}: ${trimmedTitle} (${match.url})` : fallbackName;
-		const currentName = pi.getSessionName()?.trim();
+		const currentName = omk.getSessionName()?.trim();
 		if (!currentName) {
-			pi.setSessionName(desiredName);
+			omk.setSessionName(desiredName);
 			return;
 		}
 		if (currentName === match.url || currentName === fallbackName) {
-			pi.setSessionName(desiredName);
+			omk.setSessionName(desiredName);
 		}
 	};
 
-	pi.on("before_agent_start", async (event, ctx) => {
+	omk.on("before_agent_start", async (event, ctx) => {
 		if (!ctx.hasUI) return;
 		const match = extractPromptMatch(event.prompt);
 		if (!match) {
@@ -100,7 +100,7 @@ export default function promptUrlWidgetExtension(pi: ExtensionAPI) {
 
 		setWidget(ctx, match);
 		applySessionName(ctx, match);
-		void fetchGhMetadata(pi, match.kind, match.url).then((meta) => {
+		void fetchGhMetadata(omk, match.kind, match.url).then((meta) => {
 			const title = meta?.title?.trim();
 			const authorText = formatAuthor(meta?.author);
 			setWidget(ctx, match, title, authorText);
@@ -108,7 +108,7 @@ export default function promptUrlWidgetExtension(pi: ExtensionAPI) {
 		});
 	});
 
-	pi.on("session_switch", async (_event, ctx) => {
+	omk.on("session_switch", async (_event, ctx) => {
 		rebuildFromSession(ctx);
 	});
 
@@ -144,7 +144,7 @@ export default function promptUrlWidgetExtension(pi: ExtensionAPI) {
 
 		setWidget(ctx, match);
 		applySessionName(ctx, match);
-		void fetchGhMetadata(pi, match.kind, match.url).then((meta) => {
+		void fetchGhMetadata(omk, match.kind, match.url).then((meta) => {
 			const title = meta?.title?.trim();
 			const authorText = formatAuthor(meta?.author);
 			setWidget(ctx, match, title, authorText);
@@ -152,7 +152,7 @@ export default function promptUrlWidgetExtension(pi: ExtensionAPI) {
 		});
 	};
 
-	pi.on("session_start", async (_event, ctx) => {
+	omk.on("session_start", async (_event, ctx) => {
 		rebuildFromSession(ctx);
 	});
 }

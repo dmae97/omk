@@ -8,7 +8,7 @@
  * are currently active, respecting whatever the user has configured.
  *
  * Usage:
- * 1. Copy this file to ~/.pi/agent/extensions/ or your project's .pi/extensions/
+ * 1. Copy this file to ~/.omk/agent/extensions/ or your project's .omk/extensions/
  * 2. Use the extension — it automatically adapts to your active tools and skills
  */
 
@@ -83,8 +83,8 @@ If you have additional requirements, configure them via --append-system-prompt o
 	return extensionSpecific;
 }
 
-export default function promptCustomizer(pi: ExtensionAPI) {
-	pi.on("before_agent_start", async (event) => {
+export default function promptCustomizer(omk: ExtensionAPI) {
+	omk.on("before_agent_start", async (event) => {
 		const { systemPrompt, systemPromptOptions } = event;
 
 		const customPrompt = addToolGuidance(systemPromptOptions, systemPrompt);

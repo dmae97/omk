@@ -4,7 +4,7 @@
 
 ### Breaking Changes
 
-- Renamed the npm package from `@earendil-works/pi-agent-core` to `@earendil-works/omk-agent-core` and updated internal OMK package dependencies.
+- Renamed the npm package from `@earendil-works/omk-agent-core` to `@earendil-works/omk-agent-core` and updated internal OMK package dependencies.
 
 ### Changed
 - Changed `estimateTokens` to add a per-message structural overhead and a non-zero floor for unknown-role messages, making compaction triggering more conservative.
@@ -34,7 +34,7 @@
 
 ### Fixed
 
-- Fixed context token estimates to count user image attachments consistently with tool result images ([#4983](https://github.com/earendil-works/pi/issues/4983)).
+- Fixed context token estimates to count user image attachments consistently with tool result images ([#4983](https://github.com/earendil-works/omk/issues/4983)).
 
 ## [0.75.5] - 2026-05-23
 
@@ -47,9 +47,9 @@
 
 ### Fixed
 
-- Fixed tool-call preflight to stop preparing sibling tool calls after the run is aborted ([#4276](https://github.com/earendil-works/pi/issues/4276)).
-- Fixed tail truncation for oversized single-line output that ends with a trailing newline ([#4715](https://github.com/earendil-works/pi/issues/4715)).
-- Fixed Windows Node execution environment command spawns to hide helper console windows from background processes ([#4699](https://github.com/earendil-works/pi/issues/4699)).
+- Fixed tool-call preflight to stop preparing sibling tool calls after the run is aborted ([#4276](https://github.com/earendil-works/omk/issues/4276)).
+- Fixed tail truncation for oversized single-line output that ends with a trailing newline ([#4715](https://github.com/earendil-works/omk/issues/4715)).
+- Fixed Windows Node execution environment command spawns to hide helper console windows from background processes ([#4699](https://github.com/earendil-works/omk/issues/4699)).
 
 ## [0.75.3] - 2026-05-18
 
@@ -75,7 +75,7 @@
 
 ### Changed
 
-- Changed the default agent transport to `auto` so providers can use their best available transport by default ([#4083](https://github.com/badlogic/pi-mono/issues/4083)).
+- Changed the default agent transport to `auto` so providers can use their best available transport by default ([#4083](https://github.com/badlogic/omk-mono/issues/4083)).
 
 ## [0.72.0] - 2026-05-01
 
@@ -105,18 +105,18 @@
 
 ### Breaking Changes
 
-- Migrated public TypeBox-facing types and examples from `@sinclair/typebox` 0.34.x to `typebox` 1.x. Install and import from `typebox` instead of relying on `@sinclair/typebox` transitively ([#3112](https://github.com/badlogic/pi-mono/issues/3112))
+- Migrated public TypeBox-facing types and examples from `@sinclair/typebox` 0.34.x to `typebox` 1.x. Install and import from `typebox` instead of relying on `@sinclair/typebox` transitively ([#3112](https://github.com/badlogic/omk-mono/issues/3112))
 
 ### Added
 
-- Added `terminate: true` tool-result hints to skip the automatic follow-up LLM call when every finalized tool result in the current batch opts into early termination ([#3525](https://github.com/badlogic/pi-mono/issues/3525))
+- Added `terminate: true` tool-result hints to skip the automatic follow-up LLM call when every finalized tool result in the current batch opts into early termination ([#3525](https://github.com/badlogic/omk-mono/issues/3525))
 
 ## [0.68.1] - 2026-04-22
 
 ### Fixed
 
-- Fixed `streamProxy()` to preserve the proxy-safe serializable subset of stream options, including session, transport, retry-delay, metadata, header, cache-retention, and thinking-budget settings ([#3512](https://github.com/badlogic/pi-mono/issues/3512))
-- Fixed parallel tool execution to emit `tool_execution_end` as soon as each tool is finalized, while still emitting persisted tool-result messages in assistant source order ([#3503](https://github.com/badlogic/pi-mono/issues/3503))
+- Fixed `streamProxy()` to preserve the proxy-safe serializable subset of stream options, including session, transport, retry-delay, metadata, header, cache-retention, and thinking-budget settings ([#3512](https://github.com/badlogic/omk-mono/issues/3512))
+- Fixed parallel tool execution to emit `tool_execution_end` as soon as each tool is finalized, while still emitting persisted tool-result messages in assistant source order ([#3503](https://github.com/badlogic/omk-mono/issues/3503))
 
 ## [0.68.0] - 2026-04-20
 
@@ -130,7 +130,7 @@
 
 ### Fixed
 
-- Fixed parallel tool-call finalization to convert `afterToolCall` hook throws into error tool results instead of aborting the batch ([#3084](https://github.com/badlogic/pi-mono/issues/3084))
+- Fixed parallel tool-call finalization to convert `afterToolCall` hook throws into error tool results instead of aborting the batch ([#3084](https://github.com/badlogic/omk-mono/issues/3084))
 
 ## [0.67.6] - 2026-04-16
 
@@ -198,7 +198,7 @@
 
 ### Added
 
-- Added `Agent.signal` to expose the active abort signal for the current turn, allowing callers to forward cancellation into nested async work ([#2660](https://github.com/badlogic/pi-mono/issues/2660))
+- Added `Agent.signal` to expose the active abort signal for the current turn, allowing callers to forward cancellation into nested async work ([#2660](https://github.com/badlogic/omk-mono/issues/2660))
 
 ## [0.63.1] - 2026-03-27
 
@@ -286,7 +286,7 @@
 
 ### Fixed
 
-- Fixed `continue()` to resume queued steering/follow-up messages when context currently ends in an assistant message, and preserved one-at-a-time steering ordering during assistant-tail resumes ([#1312](https://github.com/badlogic/pi-mono/pull/1312) by [@ferologics](https://github.com/ferologics))
+- Fixed `continue()` to resume queued steering/follow-up messages when context currently ends in an assistant message, and preserved one-at-a-time steering ordering during assistant-tail resumes ([#1312](https://github.com/badlogic/omk-mono/pull/1312) by [@ferologics](https://github.com/ferologics))
 
 ## [0.52.6] - 2026-02-05
 
@@ -322,7 +322,7 @@
 
 ### Added
 
-- Added `maxRetryDelayMs` option to `AgentOptions` to cap server-requested retry delays. Passed through to the underlying stream function. ([#1123](https://github.com/badlogic/pi-mono/issues/1123))
+- Added `maxRetryDelayMs` option to `AgentOptions` to cap server-requested retry delays. Passed through to the underlying stream function. ([#1123](https://github.com/badlogic/omk-mono/issues/1123))
 
 ## [0.50.7] - 2026-01-31
 
@@ -398,7 +398,7 @@
 
 ### Added
 
-- `thinkingBudgets` option on `Agent` and `AgentOptions` to customize token budgets per thinking level ([#529](https://github.com/badlogic/pi-mono/pull/529) by [@melihmucuk](https://github.com/melihmucuk))
+- `thinkingBudgets` option on `Agent` and `AgentOptions` to customize token budgets per thinking level ([#529](https://github.com/badlogic/omk-mono/pull/529) by [@melihmucuk](https://github.com/melihmucuk))
 
 ## [0.37.8] - 2026-01-07
 
@@ -448,7 +448,7 @@
 
 ### Breaking Changes
 
-- **Queue API replaced with steer/followUp**: The `queueMessage()` method has been split into two methods with different delivery semantics ([#403](https://github.com/badlogic/pi-mono/issues/403)):
+- **Queue API replaced with steer/followUp**: The `queueMessage()` method has been split into two methods with different delivery semantics ([#403](https://github.com/badlogic/omk-mono/issues/403)):
   - `steer(msg)`: Interrupts the agent mid-run. Delivered after current tool execution, skips remaining tools.
   - `followUp(msg)`: Waits until the agent finishes. Delivered only when there are no more tool calls or steering messages.
 - **Queue mode renamed**: `queueMode` option renamed to `steeringMode`. Added new `followUpMode` option. Both control whether messages are delivered one-at-a-time or all at once.
@@ -481,11 +481,11 @@
 
 - **`UserMessageWithAttachments` and `Attachment` types removed**: Attachment handling is now the responsibility of the `convertToLlm` function.
 
-- **Agent loop moved from `@mariozechner/pi-ai`**: The `agentLoop`, `agentLoopContinue`, and related types have moved to this package. Import from `@mariozechner/pi-agent-core` instead.
+- **Agent loop moved from `@mariozechner/omk-ai`**: The `agentLoop`, `agentLoopContinue`, and related types have moved to this package. Import from `@mariozechner/omk-agent-core` instead.
 
 ### Added
 
-- `streamFn` option on `Agent` for custom stream implementations. Default uses `streamSimple` from pi-ai.
+- `streamFn` option on `Agent` for custom stream implementations. Default uses `streamSimple` from omk-ai.
 
 - `streamProxy()` utility function for browser apps that need to proxy LLM calls through a backend server. Replaces the removed `AppTransport`.
 

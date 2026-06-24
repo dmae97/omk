@@ -22,7 +22,7 @@ describe("issue #2753 reload stale resource settings", () => {
 	});
 
 	it("applies updated top-level prompt settings on reload after startup", async () => {
-		const tempDir = join(tmpdir(), `pi-2753-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		const tempDir = join(tmpdir(), `omk-2753-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		const agentDir = join(tempDir, "agent");
 		const promptsDir = join(agentDir, "prompts");
 		mkdirSync(promptsDir, { recursive: true });
@@ -41,8 +41,8 @@ describe("issue #2753 reload stale resource settings", () => {
 				authStorage,
 				resourceLoaderOptions: {
 					extensionFactories: [
-						(pi) => {
-							pi.registerProvider(faux.getModel().provider, {
+						(omk) => {
+							omk.registerProvider(faux.getModel().provider, {
 								baseUrl: faux.getModel().baseUrl,
 								apiKey: "faux-key",
 								api: faux.api,

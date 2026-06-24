@@ -280,7 +280,7 @@ describe("Tool Call Without Result Tests", () => {
 	});
 
 	// =========================================================================
-	// OAuth-based providers (credentials from ~/.pi/agent/oauth.json)
+	// OAuth-based providers (credentials from ~/.omk/agent/oauth.json)
 	// =========================================================================
 
 	describe("Anthropic OAuth Provider", () => {

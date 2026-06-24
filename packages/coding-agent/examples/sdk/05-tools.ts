@@ -7,7 +7,7 @@
  * createAgentSession() applies that cwd when it builds the actual built-in tools.
  *
  * For custom tools, see 06-extensions.ts - custom tools are registered via the
- * extensions system using pi.registerTool().
+ * extensions system using omk.registerTool().
  */
 
 import { createAgentSession, SessionManager } from "open-multi-agent-kit";

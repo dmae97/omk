@@ -59,7 +59,7 @@ Skill content here.`,
 		});
 
 		it("should ignore extra markdown files in auto-discovered skill dirs", async () => {
-			const skillDir = join(agentDir, "skills", "pi-skills", "browser-tools");
+			const skillDir = join(agentDir, "skills", "omk-skills", "browser-tools");
 			mkdirSync(skillDir, { recursive: true });
 			writeFileSync(
 				join(skillDir, "SKILL.md"),
@@ -162,8 +162,8 @@ Project skill`,
 			mkdirSync(sharedExtDir, { recursive: true });
 			writeFileSync(
 				join(sharedExtDir, "shared.ts"),
-				`export default function(pi) {
-	pi.registerCommand("shared", {
+				`export default function(omk) {
+	omk.registerCommand("shared", {
 		description: "shared command",
 		handler: async () => {},
 	});
@@ -195,12 +195,12 @@ Project skill`,
 
 			writeFileSync(
 				join(projectExtDir, "project.ts"),
-				`export default function(pi) {
-	pi.registerCommand("deploy", {
+				`export default function(omk) {
+	omk.registerCommand("deploy", {
 		description: "project deploy",
 		handler: async () => {},
 	});
-	pi.registerCommand("project-only", {
+	omk.registerCommand("project-only", {
 		description: "project only",
 		handler: async () => {},
 	});
@@ -209,12 +209,12 @@ Project skill`,
 
 			writeFileSync(
 				join(userExtDir, "user.ts"),
-				`export default function(pi) {
-	pi.registerCommand("deploy", {
+				`export default function(omk) {
+	omk.registerCommand("deploy", {
 		description: "user deploy",
 		handler: async () => {},
 	});
-	pi.registerCommand("user-only", {
+	omk.registerCommand("user-only", {
 		description: "user only",
 		handler: async () => {},
 	});
@@ -541,8 +541,8 @@ Content`,
 				`
 import type { ExtensionAPI } from "open-multi-agent-kit";
 import { Type } from "typebox";
-export default function(pi: ExtensionAPI) {
-  pi.registerTool({
+export default function(omk: ExtensionAPI) {
+  omk.registerTool({
     name: "duplicate-tool",
     description: "First",
     parameters: Type.Object({}),
@@ -556,8 +556,8 @@ export default function(pi: ExtensionAPI) {
 				`
 import type { ExtensionAPI } from "open-multi-agent-kit";
 import { Type } from "typebox";
-export default function(pi: ExtensionAPI) {
-  pi.registerTool({
+export default function(omk: ExtensionAPI) {
+  omk.registerTool({
     name: "duplicate-tool",
     description: "Second",
     parameters: Type.Object({}),
@@ -583,14 +583,14 @@ export default function(pi: ExtensionAPI) {
 				`
 import type { ExtensionAPI } from "open-multi-agent-kit";
 import { Type } from "typebox";
-export default function(pi: ExtensionAPI) {
-  pi.registerTool({
+export default function(omk: ExtensionAPI) {
+  omk.registerTool({
     name: "duplicate-tool",
     description: "global tool",
     parameters: Type.Object({}),
     execute: async () => ({ result: "global" }),
   });
-  pi.registerCommand("deploy", {
+  omk.registerCommand("deploy", {
     description: "global command",
     handler: async () => {},
   });
@@ -602,14 +602,14 @@ export default function(pi: ExtensionAPI) {
 				`
 import type { ExtensionAPI } from "open-multi-agent-kit";
 import { Type } from "typebox";
-export default function(pi: ExtensionAPI) {
-  pi.registerTool({
+export default function(omk: ExtensionAPI) {
+  omk.registerTool({
     name: "duplicate-tool",
     description: "explicit tool",
     parameters: Type.Object({}),
     execute: async () => ({ result: "explicit" }),
   });
-  pi.registerCommand("deploy", {
+  omk.registerCommand("deploy", {
     description: "explicit command",
     handler: async () => {},
   });

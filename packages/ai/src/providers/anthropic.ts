@@ -38,7 +38,7 @@ import { transformMessages } from "./transform-messages.ts";
 
 /**
  * Resolve cache retention preference.
- * Defaults to "short" and uses OMK_CACHE_RETENTION with PI_CACHE_RETENTION fallback.
+ * Defaults to "short" and uses OMK_CACHE_RETENTION with OMK_CACHE_RETENTION fallback.
  */
 function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRetention {
 	if (cacheRetention) {
@@ -46,7 +46,7 @@ function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRetention 
 	}
 	if (
 		typeof process !== "undefined" &&
-		(process.env.OMK_CACHE_RETENTION ?? process.env.PI_CACHE_RETENTION) === "long"
+		(process.env.OMK_CACHE_RETENTION ?? process.env.OMK_CACHE_RETENTION) === "long"
 	) {
 		return "long";
 	}

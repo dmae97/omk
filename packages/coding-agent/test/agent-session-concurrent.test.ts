@@ -63,7 +63,7 @@ describe("AgentSession concurrent prompt guard", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `pi-concurrent-test-${Date.now()}`);
+		tempDir = join(tmpdir(), `omk-concurrent-test-${Date.now()}`);
 		mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -240,11 +240,11 @@ describe("AgentSession concurrent prompt guard", () => {
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 
 		const extensionsResult = await createTestExtensionsResult([
-			(pi) => {
-				(globalThis as typeof globalThis & { testExtensionApi?: unknown }).testExtensionApi = pi;
+			(omk) => {
+				(globalThis as typeof globalThis & { testExtensionApi?: unknown }).testExtensionApi = omk;
 			},
-			(pi) => {
-				pi.on("input", async (event) => {
+			(omk) => {
+				omk.on("input", async (event) => {
 					lastInputSource = event.source;
 				});
 			},
@@ -268,16 +268,16 @@ describe("AgentSession concurrent prompt guard", () => {
 		await new Promise((resolve) => setTimeout(resolve, 10));
 		expect(session.isStreaming).toBe(true);
 
-		const pi = (
+		const omk = (
 			globalThis as typeof globalThis & {
 				testExtensionApi?: {
 					sendUserMessage: (content: string, options?: { deliverAs?: "steer" | "followUp" }) => void;
 				};
 			}
 		).testExtensionApi;
-		expect(pi).toBeDefined();
+		expect(omk).toBeDefined();
 
-		pi!.sendUserMessage("Steer from extension", { deliverAs: "steer" });
+		omk!.sendUserMessage("Steer from extension", { deliverAs: "steer" });
 		await new Promise((resolve) => setTimeout(resolve, 25));
 
 		expect(session.pendingMessageCount).toBe(1);

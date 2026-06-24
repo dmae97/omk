@@ -27,7 +27,7 @@ describe("ExtensionRunner", () => {
 	const defaultKeybindings = new KeybindingsManager().getEffectiveConfig();
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-runner-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "omk-runner-test-"));
 		extensionsDir = path.join(tempDir, "extensions");
 		fs.mkdirSync(extensionsDir);
 		sessionManager = SessionManager.inMemory();
@@ -88,8 +88,8 @@ describe("ExtensionRunner", () => {
 	describe("shortcut conflicts", () => {
 		it("warns when extension shortcut conflicts with built-in", async () => {
 			const extCode = `
-				export default function(pi) {
-					pi.registerShortcut("ctrl+c", {
+				export default function(omk) {
+					omk.registerShortcut("ctrl+c", {
 						description: "Conflicts with built-in",
 						handler: async () => {},
 					});
@@ -111,8 +111,8 @@ describe("ExtensionRunner", () => {
 
 		it("allows a shortcut when the reserved set no longer contains the default key", async () => {
 			const extCode = `
-				export default function(pi) {
-					pi.registerShortcut("ctrl+p", {
+				export default function(omk) {
+					omk.registerShortcut("ctrl+p", {
 						description: "Uses freed default",
 						handler: async () => {},
 					});
@@ -138,8 +138,8 @@ describe("ExtensionRunner", () => {
 				? (defaultKeybindings["app.clipboard.pasteImage"][0] ?? "")
 				: defaultKeybindings["app.clipboard.pasteImage"];
 			const extCode = `
-				export default function(pi) {
-					pi.registerShortcut("${pasteImageKey}", {
+				export default function(omk) {
+					omk.registerShortcut("${pasteImageKey}", {
 						description: "Overrides non-reserved",
 						handler: async () => {},
 					});
@@ -163,8 +163,8 @@ describe("ExtensionRunner", () => {
 
 		it("blocks shortcuts for reserved actions even when rebound", async () => {
 			const extCode = `
-				export default function(pi) {
-					pi.registerShortcut("ctrl+x", {
+				export default function(omk) {
+					omk.registerShortcut("ctrl+x", {
 						description: "Conflicts with rebound reserved",
 						handler: async () => {},
 					});
@@ -187,8 +187,8 @@ describe("ExtensionRunner", () => {
 
 		it("blocks shortcuts when reserved key is also bound to non-reserved actions", async () => {
 			const extCode = `
-				export default function(pi) {
-					pi.registerShortcut("ctrl+p", {
+				export default function(omk) {
+					omk.registerShortcut("ctrl+p", {
 						description: "Conflicts with shared reserved default",
 						handler: async () => {},
 					});
@@ -210,8 +210,8 @@ describe("ExtensionRunner", () => {
 
 		it("blocks shortcuts when reserved action has multiple keys", async () => {
 			const extCode = `
-				export default function(pi) {
-					pi.registerShortcut("ctrl+y", {
+				export default function(omk) {
+					omk.registerShortcut("ctrl+y", {
 						description: "Conflicts with multi-key reserved",
 						handler: async () => {},
 					});
@@ -234,8 +234,8 @@ describe("ExtensionRunner", () => {
 
 		it("warns but allows when non-reserved action has multiple keys", async () => {
 			const extCode = `
-				export default function(pi) {
-					pi.registerShortcut("ctrl+y", {
+				export default function(omk) {
+					omk.registerShortcut("ctrl+y", {
 						description: "Overrides multi-key non-reserved",
 						handler: async () => {},
 					});
@@ -261,16 +261,16 @@ describe("ExtensionRunner", () => {
 		it("warns when two extensions register same shortcut", async () => {
 			// Use a non-reserved shortcut
 			const extCode1 = `
-				export default function(pi) {
-					pi.registerShortcut("ctrl+shift+x", {
+				export default function(omk) {
+					omk.registerShortcut("ctrl+shift+x", {
 						description: "First extension",
 						handler: async () => {},
 					});
 				}
 			`;
 			const extCode2 = `
-				export default function(pi) {
-					pi.registerShortcut("ctrl+shift+x", {
+				export default function(omk) {
+					omk.registerShortcut("ctrl+shift+x", {
 						description: "Second extension",
 						handler: async () => {},
 					});
@@ -297,8 +297,8 @@ describe("ExtensionRunner", () => {
 		it("collects tools from multiple extensions", async () => {
 			const toolCode = (name: string) => `
 				import { Type } from "typebox";
-				export default function(pi) {
-					pi.registerTool({
+				export default function(omk) {
+					omk.registerTool({
 						name: "${name}",
 						label: "${name}",
 						description: "Test tool",
@@ -321,8 +321,8 @@ describe("ExtensionRunner", () => {
 		it("keeps first tool when two extensions register the same name", async () => {
 			const first = `
 				import { Type } from "typebox";
-				export default function(pi) {
-					pi.registerTool({
+				export default function(omk) {
+					omk.registerTool({
 						name: "shared",
 						label: "shared",
 						description: "first",
@@ -333,8 +333,8 @@ describe("ExtensionRunner", () => {
 			`;
 			const second = `
 				import { Type } from "typebox";
-				export default function(pi) {
-					pi.registerTool({
+				export default function(omk) {
+					omk.registerTool({
 						name: "shared",
 						label: "shared",
 						description: "second",
@@ -358,8 +358,8 @@ describe("ExtensionRunner", () => {
 	describe("command collection", () => {
 		it("collects commands from multiple extensions", async () => {
 			const cmdCode = (name: string) => `
-				export default function(pi) {
-					pi.registerCommand("${name}", {
+				export default function(omk) {
+					omk.registerCommand("${name}", {
 						description: "Test command",
 						handler: async () => {},
 					});
@@ -379,8 +379,8 @@ describe("ExtensionRunner", () => {
 
 		it("gets command by invocation name", async () => {
 			const cmdCode = `
-				export default function(pi) {
-					pi.registerCommand("my-cmd", {
+				export default function(omk) {
+					omk.registerCommand("my-cmd", {
 						description: "My command",
 						handler: async () => {},
 					});
@@ -403,8 +403,8 @@ describe("ExtensionRunner", () => {
 
 		it("suffixes duplicate extension commands in insertion order", async () => {
 			const cmdCode = (description: string) => `
-				export default function(pi) {
-					pi.registerCommand("shared-cmd", {
+				export default function(omk) {
+					omk.registerCommand("shared-cmd", {
 						description: "${description}",
 						handler: async () => {},
 					});
@@ -483,8 +483,8 @@ describe("ExtensionRunner", () => {
 	describe("error handling", () => {
 		it("calls error listeners when handler throws", async () => {
 			const extCode = `
-				export default function(pi) {
-					pi.on("context", async () => {
+				export default function(omk) {
+					omk.on("context", async () => {
 						throw new Error("Handler error!");
 					});
 				}
@@ -511,8 +511,8 @@ describe("ExtensionRunner", () => {
 	describe("message renderers", () => {
 		it("gets message renderer by type", async () => {
 			const extCode = `
-				export default function(pi) {
-					pi.registerMessageRenderer("my-type", (message, options, theme) => null);
+				export default function(omk) {
+					omk.registerMessageRenderer("my-type", (message, options, theme) => null);
 				}
 			`;
 			fs.writeFileSync(path.join(extensionsDir, "renderer.ts"), extCode);
@@ -531,8 +531,8 @@ describe("ExtensionRunner", () => {
 	describe("flags", () => {
 		it("collects flags from extensions", async () => {
 			const extCode = `
-				export default function(pi) {
-					pi.registerFlag("my-flag", {
+				export default function(omk) {
+					omk.registerFlag("my-flag", {
 						description: "My flag",
 						handler: async () => {},
 					});
@@ -549,8 +549,8 @@ describe("ExtensionRunner", () => {
 
 		it("keeps first flag when two extensions register the same name", async () => {
 			const first = `
-				export default function(pi) {
-					pi.registerFlag("shared-flag", {
+				export default function(omk) {
+					omk.registerFlag("shared-flag", {
 						description: "first",
 						type: "boolean",
 						default: true,
@@ -558,8 +558,8 @@ describe("ExtensionRunner", () => {
 				}
 			`;
 			const second = `
-				export default function(pi) {
-					pi.registerFlag("shared-flag", {
+				export default function(omk) {
+					omk.registerFlag("shared-flag", {
 						description: "second",
 						type: "boolean",
 						default: false,
@@ -579,8 +579,8 @@ describe("ExtensionRunner", () => {
 
 		it("can set flag values", async () => {
 			const extCode = `
-				export default function(pi) {
-					pi.registerFlag("test-flag", {
+				export default function(omk) {
+					omk.registerFlag("test-flag", {
 						description: "Test flag",
 						handler: async () => {},
 					});
@@ -602,8 +602,8 @@ describe("ExtensionRunner", () => {
 	describe("before_agent_start", () => {
 		it("keeps ctx.getSystemPrompt() in sync with chained system prompt updates", async () => {
 			const extCode1 = `
-				export default function(pi) {
-					pi.on("before_agent_start", async (_event, ctx) => {
+				export default function(omk) {
+					omk.on("before_agent_start", async (_event, ctx) => {
 						return {
 							systemPrompt: ctx.getSystemPrompt() + "\\nfirst",
 						};
@@ -611,8 +611,8 @@ describe("ExtensionRunner", () => {
 				}
 			`;
 			const extCode2 = `
-				export default function(pi) {
-					pi.on("before_agent_start", async (_event, ctx) => {
+				export default function(omk) {
+					omk.on("before_agent_start", async (_event, ctx) => {
 						return {
 							systemPrompt: ctx.getSystemPrompt() + "\\nsecond",
 						};
@@ -646,8 +646,8 @@ describe("ExtensionRunner", () => {
 	describe("tool_result chaining", () => {
 		it("chains content modifications across handlers", async () => {
 			const extCode1 = `
-				export default function(pi) {
-					pi.on("tool_result", async (event) => {
+				export default function(omk) {
+					omk.on("tool_result", async (event) => {
 						return {
 							content: [...event.content, { type: "text", text: "ext1" }],
 						};
@@ -655,8 +655,8 @@ describe("ExtensionRunner", () => {
 				}
 			`;
 			const extCode2 = `
-				export default function(pi) {
-					pi.on("tool_result", async (event) => {
+				export default function(omk) {
+					omk.on("tool_result", async (event) => {
 						return {
 							content: [...event.content, { type: "text", text: "ext2" }],
 						};
@@ -693,8 +693,8 @@ describe("ExtensionRunner", () => {
 
 		it("preserves previous modifications when later handlers return partial patches", async () => {
 			const extCode1 = `
-				export default function(pi) {
-					pi.on("tool_result", async () => {
+				export default function(omk) {
+					omk.on("tool_result", async () => {
 						return {
 							content: [{ type: "text", text: "first" }],
 							details: { source: "ext1" },
@@ -703,8 +703,8 @@ describe("ExtensionRunner", () => {
 				}
 			`;
 			const extCode2 = `
-				export default function(pi) {
-					pi.on("tool_result", async () => {
+				export default function(omk) {
+					omk.on("tool_result", async () => {
 						return {
 							isError: true,
 						};
@@ -826,8 +826,8 @@ describe("ExtensionRunner", () => {
 	describe("hasHandlers", () => {
 		it("returns true when handlers exist for event type", async () => {
 			const extCode = `
-				export default function(pi) {
-					pi.on("tool_call", async () => undefined);
+				export default function(omk) {
+					omk.on("tool_call", async () => undefined);
 				}
 			`;
 			fs.writeFileSync(path.join(extensionsDir, "handler.ts"), extCode);

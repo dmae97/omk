@@ -104,7 +104,7 @@ function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRetention 
 	}
 	if (
 		typeof process !== "undefined" &&
-		(process.env.OMK_CACHE_RETENTION ?? process.env.PI_CACHE_RETENTION) === "long"
+		(process.env.OMK_CACHE_RETENTION ?? process.env.OMK_CACHE_RETENTION) === "long"
 	) {
 		return "long";
 	}

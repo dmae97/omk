@@ -64,7 +64,7 @@ describe("SessionManager.newSession with custom id", () => {
 	});
 
 	it("uses the provided id when creating a persisted session", () => {
-		const tempDir = mkdtempSync(join(tmpdir(), "pi-session-manager-"));
+		const tempDir = mkdtempSync(join(tmpdir(), "omk-session-manager-"));
 		const session = SessionManager.create(tempDir, tempDir, { id: "created-session-id" });
 
 		expect(session.getSessionId()).toBe("created-session-id");
@@ -90,7 +90,7 @@ describe("SessionManager.newSession with custom id", () => {
 	});
 
 	it("generates a UUIDv7 id when forking from another session file", () => {
-		const tempDir = mkdtempSync(join(tmpdir(), "pi-session-manager-"));
+		const tempDir = mkdtempSync(join(tmpdir(), "omk-session-manager-"));
 		const sourcePath = join(tempDir, "source.jsonl");
 		writeFileSync(
 			sourcePath,
@@ -137,7 +137,7 @@ describe("SessionManager.newSession with custom id", () => {
 	});
 
 	it("uses the provided id when forking from another session file", () => {
-		const tempDir = mkdtempSync(join(tmpdir(), "pi-session-manager-"));
+		const tempDir = mkdtempSync(join(tmpdir(), "omk-session-manager-"));
 		const sourcePath = join(tempDir, "source.jsonl");
 		writeFileSync(
 			sourcePath,

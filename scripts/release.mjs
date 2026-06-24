@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Release script for pi-mono
+ * Release script for omk-mono
  *
  * Usage:
  *   node scripts/release.mjs <major|minor|patch>

@@ -32,7 +32,7 @@ describe.skipIf(!API_KEY)("Compaction extensions", () => {
 	let capturedEvents: SessionEvent[];
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `pi-compaction-extensions-test-${Date.now()}`);
+		tempDir = join(tmpdir(), `omk-compaction-extensions-test-${Date.now()}`);
 		mkdirSync(tempDir, { recursive: true });
 		capturedEvents = [];
 	});

@@ -48,8 +48,8 @@ function notify(title: string, body: string): void {
 	}
 }
 
-export default function (pi: ExtensionAPI) {
-	pi.on("agent_end", async () => {
+export default function (omk: ExtensionAPI) {
+	omk.on("agent_end", async () => {
 		notify("Pi", "Ready for input");
 	});
 }

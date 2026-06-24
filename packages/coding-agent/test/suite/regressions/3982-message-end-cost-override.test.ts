@@ -14,8 +14,8 @@ describe("regression #3982: message_end cost override", () => {
 	it("allows extensions to replace finalized assistant usage cost", async () => {
 		const harness = await createHarness({
 			extensionFactories: [
-				(pi) => {
-					pi.on("message_end", (event) => {
+				(omk) => {
+					omk.on("message_end", (event) => {
 						if (event.message.role !== "assistant") return;
 
 						return {

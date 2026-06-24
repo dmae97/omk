@@ -18,7 +18,7 @@ describe("theme picker", () => {
 	let tempRoot: string;
 
 	beforeEach(() => {
-		tempRoot = mkdtempSync(join(tmpdir(), "pi-theme-picker-"));
+		tempRoot = mkdtempSync(join(tmpdir(), "omk-theme-picker-"));
 		const agentDir = join(tempRoot, "agent");
 		vi.stubEnv("OMK_CODING_AGENT_DIR", agentDir);
 		mkdirSync(join(agentDir, "themes"), { recursive: true });

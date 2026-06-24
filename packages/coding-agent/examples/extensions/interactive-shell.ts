@@ -5,7 +5,7 @@
  * with full terminal access. The TUI suspends while they run.
  *
  * Usage:
- *   pi -e examples/extensions/interactive-shell.ts
+ *   omk -e examples/extensions/interactive-shell.ts
  *
  *   !vim file.txt        # Auto-detected as interactive
  *   !i any-command       # Force interactive mode with !i prefix
@@ -128,8 +128,8 @@ function isInteractiveCommand(command: string): boolean {
 	return false;
 }
 
-export default function (pi: ExtensionAPI) {
-	pi.on("user_bash", async (event, ctx) => {
+export default function (omk: ExtensionAPI) {
+	omk.on("user_bash", async (event, ctx) => {
 		let command = event.command;
 		let forceInteractive = false;
 

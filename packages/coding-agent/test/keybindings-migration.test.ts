@@ -16,7 +16,7 @@ describe("keybindings migration", () => {
 	});
 
 	function createAgentDir(config: Record<string, unknown>): string {
-		const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-keybindings-test-"));
+		const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "omk-keybindings-test-"));
 		tempDirs.push(agentDir);
 		fs.writeFileSync(path.join(agentDir, "keybindings.json"), `${JSON.stringify(config, null, 2)}\n`, "utf-8");
 		return agentDir;

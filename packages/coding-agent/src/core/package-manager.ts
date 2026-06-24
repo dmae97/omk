@@ -39,7 +39,7 @@ const UPDATE_CHECK_CONCURRENCY = 4;
 const GIT_UPDATE_CONCURRENCY = 4;
 
 function isOfflineModeEnabled(): boolean {
-	const value = process.env.OMK_OFFLINE ?? process.env.PI_OFFLINE;
+	const value = process.env.OMK_OFFLINE ?? process.env.OMK_OFFLINE;
 	if (!value) return false;
 	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
 }
@@ -340,7 +340,7 @@ function collectFiles(
 	return files;
 }
 
-type SkillDiscoveryMode = "pi" | "agents";
+type SkillDiscoveryMode = "omk" | "agents";
 
 function collectSkillEntries(
 	dir: string,
@@ -399,7 +399,7 @@ function collectSkillEntries(
 			}
 
 			const relPath = toPosixPath(relative(root, fullPath));
-			if (mode === "pi" && dir === root && isFile && entry.name.endsWith(".md") && !ig.ignores(relPath)) {
+			if (mode === "omk" && dir === root && isFile && entry.name.endsWith(".md") && !ig.ignores(relPath)) {
 				entries.push(fullPath);
 				continue;
 			}
@@ -532,8 +532,8 @@ function collectAutoThemeEntries(dir: string): string[] {
 function readOmkManifestFile(packageJsonPath: string): OmkManifest | null {
 	try {
 		const content = readFileSync(packageJsonPath, "utf-8");
-		const pkg = JSON.parse(content) as { omk?: OmkManifest; pi?: OmkManifest };
-		return pkg.omk ?? pkg.pi ?? null;
+		const pkg = JSON.parse(content) as { omk?: OmkManifest; omk?: OmkManifest };
+		return pkg.omk ?? pkg.omk ?? null;
 	} catch {
 		return null;
 	}
@@ -629,7 +629,7 @@ function collectAutoExtensionEntries(dir: string): string[] {
  */
 function collectResourceFiles(dir: string, resourceType: ResourceType): string[] {
 	if (resourceType === "skills") {
-		return collectSkillEntries(dir, "pi");
+		return collectSkillEntries(dir, "omk");
 	}
 	if (resourceType === "extensions") {
 		return collectAutoExtensionEntries(dir);
@@ -1745,10 +1745,10 @@ export class DefaultPackageManager implements PackageManager {
 
 	private getNpmInstallArgs(specs: string[], installRoot: string): string[] {
 		const packageManagerName = this.getPackageManagerName();
-		// Extension packages run inside pi and resolve pi APIs through loader aliases/virtual modules.
+		// Extension packages run inside omk and resolve omk APIs through loader aliases/virtual modules.
 		// Disable peer dependency resolution for managed installs (npm's --legacy-peer-deps, and
 		// equivalent bun/pnpm settings) so package managers do not install or solve host-provided
-		// @earendil-works/omk-* peers. Stale auto-installed pi peers can otherwise block updates.
+		// @earendil-works/omk-* peers. Stale auto-installed omk peers can otherwise block updates.
 		if (packageManagerName === "bun") {
 			return ["install", ...specs, "--cwd", installRoot, "--omit=peer"];
 		}
@@ -1905,7 +1905,7 @@ export class DefaultPackageManager implements PackageManager {
 		this.ensureGitIgnore(installRoot);
 		const packageJsonPath = join(installRoot, "package.json");
 		if (!existsSync(packageJsonPath)) {
-			const pkgJson = { name: "pi-extensions", private: true };
+			const pkgJson = { name: "omk-extensions", private: true };
 			writeFileSync(packageJsonPath, JSON.stringify(pkgJson, null, 2), "utf-8");
 		}
 	}
@@ -2176,8 +2176,8 @@ export class DefaultPackageManager implements PackageManager {
 
 		try {
 			const content = readFileSync(packageJsonPath, "utf-8");
-			const pkg = JSON.parse(content) as { omk?: OmkManifest; pi?: OmkManifest };
-			return pkg.omk ?? pkg.pi ?? null;
+			const pkg = JSON.parse(content) as { omk?: OmkManifest; omk?: OmkManifest };
+			return pkg.omk ?? pkg.omk ?? null;
 		} catch {
 			return null;
 		}
@@ -2319,7 +2319,7 @@ export class DefaultPackageManager implements PackageManager {
 		// Project skills from .omk/
 		addResources(
 			"skills",
-			collectAutoSkillEntries(projectDirs.skills, "pi"),
+			collectAutoSkillEntries(projectDirs.skills, "omk"),
 			projectMetadata,
 			projectOverrides.skills,
 			projectBaseDir,
@@ -2368,7 +2368,7 @@ export class DefaultPackageManager implements PackageManager {
 		// User skills from ~/.omk/agent/
 		addResources(
 			"skills",
-			collectAutoSkillEntries(userDirs.skills, "pi"),
+			collectAutoSkillEntries(userDirs.skills, "omk"),
 			userMetadata,
 			userOverrides.skills,
 			globalBaseDir,

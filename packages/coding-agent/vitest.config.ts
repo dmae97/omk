@@ -20,10 +20,10 @@ export default defineConfig({
 		alias: [
 			{ find: /^@earendil-works\/omk-ai$/, replacement: aiSrcIndex },
 			{ find: /^@earendil-works\/omk-ai\/oauth$/, replacement: aiSrcOAuth },
-			{ find: /^@earendil-works\/pi-agent-core$/, replacement: agentSrcIndex },
+			{ find: /^@earendil-works\/omk-agent-core$/, replacement: agentSrcIndex },
 			{ find: /^@mariozechner\/omk-ai$/, replacement: aiSrcIndex },
 			{ find: /^@mariozechner\/omk-ai\/oauth$/, replacement: aiSrcOAuth },
-			{ find: /^@mariozechner\/pi-agent-core$/, replacement: agentSrcIndex },
+			{ find: /^@mariozechner\/omk-agent-core$/, replacement: agentSrcIndex },
 		],
 	},
 });

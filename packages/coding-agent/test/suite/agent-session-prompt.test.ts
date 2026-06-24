@@ -145,7 +145,7 @@ describe("AgentSession prompt characterization", () => {
 	});
 
 	it("expands skill commands before sending the prompt", async () => {
-		const tempDir = join(tmpdir(), `pi-skill-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		const tempDir = join(tmpdir(), `omk-skill-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(tempDir, { recursive: true });
 		tempDirs.push(tempDir);
 		const skillPath = join(tempDir, "test-skill.md");
@@ -228,8 +228,8 @@ describe("AgentSession prompt characterization", () => {
 		const commandRuns: string[] = [];
 		const harness = await createHarness({
 			extensionFactories: [
-				(pi) => {
-					pi.registerCommand("testcmd", {
+				(omk) => {
+					omk.registerCommand("testcmd", {
 						description: "Test command",
 						handler: async (args) => {
 							commandRuns.push(args);
@@ -264,8 +264,8 @@ describe("AgentSession prompt characterization", () => {
 		const inputEvents: InputEvent[] = [];
 		const harness = await createHarness({
 			extensionFactories: [
-				(pi) => {
-					pi.on("input", (event) => {
+				(omk) => {
+					omk.on("input", (event) => {
 						inputEvents.push(event);
 					});
 				},
@@ -302,8 +302,8 @@ describe("AgentSession prompt characterization", () => {
 		const harness = await createHarness({
 			tools: [waitTool],
 			extensionFactories: [
-				(pi) => {
-					pi.on("input", (event) => {
+				(omk) => {
+					omk.on("input", (event) => {
 						inputEvents.push(event);
 					});
 				},

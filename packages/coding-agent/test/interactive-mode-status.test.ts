@@ -460,44 +460,47 @@ describe("InteractiveMode.showLoadedResources", () => {
 				}),
 			},
 			{
-				path: "/tmp/project/.omk/npm/node_modules/pi-markdown-preview/extensions/index.ts",
-				sourceInfo: createSourceInfo("/tmp/project/.omk/npm/node_modules/pi-markdown-preview/extensions/index.ts", {
-					source: "npm:pi-markdown-preview",
-					scope: "project",
-					origin: "package",
-					baseDir: "/tmp/project/.omk/npm/node_modules/pi-markdown-preview",
-				}),
-			},
-			{
-				path: "/tmp/project/.omk/npm/node_modules/@scope/pi-scoped/extensions/index.ts",
-				sourceInfo: createSourceInfo("/tmp/project/.omk/npm/node_modules/@scope/pi-scoped/extensions/index.ts", {
-					source: "npm:@scope/pi-scoped",
-					scope: "project",
-					origin: "package",
-					baseDir: "/tmp/project/.omk/npm/node_modules/@scope/pi-scoped",
-				}),
-			},
-			{
-				path: "/tmp/project/.omk/git/github.com/HazAT/pi-interactive-subagents/extensions/index.ts",
+				path: "/tmp/project/.omk/npm/node_modules/omk-markdown-preview/extensions/index.ts",
 				sourceInfo: createSourceInfo(
-					"/tmp/project/.omk/git/github.com/HazAT/pi-interactive-subagents/extensions/index.ts",
+					"/tmp/project/.omk/npm/node_modules/omk-markdown-preview/extensions/index.ts",
 					{
-						source: "git:github.com/HazAT/pi-interactive-subagents",
+						source: "npm:omk-markdown-preview",
 						scope: "project",
 						origin: "package",
-						baseDir: "/tmp/project/.omk/git/github.com/HazAT/pi-interactive-subagents",
+						baseDir: "/tmp/project/.omk/npm/node_modules/omk-markdown-preview",
 					},
 				),
 			},
 			{
-				path: "/tmp/project/.omk/git/github.com/HazAT/pi-interactive-subagents/extensions/subagents/index.ts",
+				path: "/tmp/project/.omk/npm/node_modules/@scope/omk-scoped/extensions/index.ts",
+				sourceInfo: createSourceInfo("/tmp/project/.omk/npm/node_modules/@scope/omk-scoped/extensions/index.ts", {
+					source: "npm:@scope/omk-scoped",
+					scope: "project",
+					origin: "package",
+					baseDir: "/tmp/project/.omk/npm/node_modules/@scope/omk-scoped",
+				}),
+			},
+			{
+				path: "/tmp/project/.omk/git/github.com/HazAT/omk-interactive-subagents/extensions/index.ts",
 				sourceInfo: createSourceInfo(
-					"/tmp/project/.omk/git/github.com/HazAT/pi-interactive-subagents/extensions/subagents/index.ts",
+					"/tmp/project/.omk/git/github.com/HazAT/omk-interactive-subagents/extensions/index.ts",
 					{
-						source: "git:github.com/HazAT/pi-interactive-subagents",
+						source: "git:github.com/HazAT/omk-interactive-subagents",
 						scope: "project",
 						origin: "package",
-						baseDir: "/tmp/project/.omk/git/github.com/HazAT/pi-interactive-subagents",
+						baseDir: "/tmp/project/.omk/git/github.com/HazAT/omk-interactive-subagents",
+					},
+				),
+			},
+			{
+				path: "/tmp/project/.omk/git/github.com/HazAT/omk-interactive-subagents/extensions/subagents/index.ts",
+				sourceInfo: createSourceInfo(
+					"/tmp/project/.omk/git/github.com/HazAT/omk-interactive-subagents/extensions/subagents/index.ts",
+					{
+						source: "git:github.com/HazAT/omk-interactive-subagents",
+						scope: "project",
+						origin: "package",
+						baseDir: "/tmp/project/.omk/git/github.com/HazAT/omk-interactive-subagents",
 					},
 				),
 			},
@@ -593,7 +596,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toMatchInlineSnapshot(`
 "[Extensions]
-  @scope/pi-scoped, answer.ts, cli-extension.ts, HazAT/pi-interactive-subagents, HazAT/pi-interactive-subagents:subagents, local-index, pi-markdown-preview, user-index"`);
+  @scope/omk-scoped, answer.ts, cli-extension.ts, HazAT/omk-interactive-subagents, HazAT/omk-interactive-subagents:subagents, local-index, omk-markdown-preview, user-index"`);
 	});
 
 	test("adds more parent folders until local extension labels are unique", () => {
@@ -840,13 +843,16 @@ describe("InteractiveMode.showLoadedResources", () => {
 	test("package extensions still strip index.ts correctly (regression guard)", () => {
 		const extensions: ExtensionFixture[] = [
 			{
-				path: "/tmp/project/.omk/npm/node_modules/pi-markdown-preview/extensions/index.ts",
-				sourceInfo: createSourceInfo("/tmp/project/.omk/npm/node_modules/pi-markdown-preview/extensions/index.ts", {
-					source: "npm:pi-markdown-preview",
-					scope: "project",
-					origin: "package",
-					baseDir: "/tmp/project/.omk/npm/node_modules/pi-markdown-preview",
-				}),
+				path: "/tmp/project/.omk/npm/node_modules/omk-markdown-preview/extensions/index.ts",
+				sourceInfo: createSourceInfo(
+					"/tmp/project/.omk/npm/node_modules/omk-markdown-preview/extensions/index.ts",
+					{
+						source: "npm:omk-markdown-preview",
+						scope: "project",
+						origin: "package",
+						baseDir: "/tmp/project/.omk/npm/node_modules/omk-markdown-preview",
+					},
+				),
 			},
 		];
 
@@ -862,7 +868,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toMatchInlineSnapshot(`
 "[Extensions]
-  pi-markdown-preview"`);
+  omk-markdown-preview"`);
 	});
 	test("captures mixed extension layouts in expanded output", () => {
 		const fakeThis = createShowLoadedResourcesThis({
@@ -881,12 +887,12 @@ describe("InteractiveMode.showLoadedResources", () => {
   project
     /tmp/project/.omk/extensions/answer.ts
     /tmp/project/.omk/extensions/local-index
-    git:github.com/HazAT/pi-interactive-subagents
+    git:github.com/HazAT/omk-interactive-subagents
       extensions
       extensions/subagents
-    npm:@scope/pi-scoped
+    npm:@scope/omk-scoped
       extensions
-    npm:pi-markdown-preview
+    npm:omk-markdown-preview
       extensions
   user
     /tmp/agent/extensions/user-index
@@ -896,7 +902,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 	test("shows context paths relative to cwd while preserving full external paths", () => {
 		const home = homedir();
-		const cwd = path.join(home, "Development", "pi-mono");
+		const cwd = path.join(home, "Development", "omk-mono");
 		const fakeThis = createShowLoadedResourcesThis({
 			quietStartup: false,
 			cwd,
@@ -915,7 +921,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 	test("shows full context paths when expanded", () => {
 		const home = homedir();
-		const cwd = path.join(home, "Development", "pi-mono");
+		const cwd = path.join(home, "Development", "omk-mono");
 		const fakeThis = createShowLoadedResourcesThis({
 			quietStartup: false,
 			toolOutputExpanded: true,
@@ -930,7 +936,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		const output = renderAll(fakeThis.chatContainer).replace(/\\/g, "/");
 		expect(output).toContain("[Context]");
 		expect(output).toContain("~/.omk/agent/AGENTS.md");
-		expect(output).toContain("~/Development/pi-mono/AGENTS.md");
+		expect(output).toContain("~/Development/omk-mono/AGENTS.md");
 		expect(output).not.toContain("~/.omk/agent/AGENTS.md, AGENTS.md");
 	});
 

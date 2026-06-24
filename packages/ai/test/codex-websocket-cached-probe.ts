@@ -107,7 +107,7 @@ function buildPrompt(turn: number): string {
 	];
 	for (let i = 1; i <= 180; i++) {
 		lines.push(
-			`Turn ${turn} synthetic record ${String(i).padStart(3, "0")}: alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega.`,
+			`Turn ${turn} synthetic record ${String(i).padStart(3, "0")}: alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron omk rho sigma tau upsilon phi chi psi omega.`,
 		);
 	}
 	return lines.join("\n");

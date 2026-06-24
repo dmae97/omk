@@ -1,6 +1,6 @@
 <p align="center">
-  <a href="https://pi.dev">
-    <img alt="omk logo" src="https://pi.dev/logo-auto.svg" width="128">
+  <a href="https://omk.dev">
+    <img alt="omk logo" src="https://omk.dev/logo-auto.svg" width="128">
   </a>
 </p>
 <p align="center">
@@ -8,7 +8,7 @@
   <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm" src="https://img.shields.io/npm/v/open-multi-agent-kit?style=flat-square" /></a>
 </p>
 <p align="center">
-  <a href="https://pi.dev">omk.dev</a> domain graciously donated by
+  <a href="https://omk.dev">omk.dev</a> domain graciously donated by
   <br /><br />
   <a href="https://exe.dev"><img src="docs/images/exy.png" alt="Exy mascot" width="48" /><br />exe.dev</a>
 </p>
@@ -31,13 +31,13 @@ Public OSS session data helps improve models, prompts, tools, and evaluations us
 
 For the full explanation, see [this post on X](https://x.com/badlogicgames/status/2037811643774652911).
 
-To publish sessions, use [`badlogic/pi-share-hf`](https://github.com/badlogic/pi-share-hf). Read its README.md for setup instructions. All you need is a Hugging Face account, the Hugging Face CLI, and `pi-share-hf`.
+To publish sessions, use [`badlogic/omk-share-hf`](https://github.com/badlogic/omk-share-hf). Read its README.md for setup instructions. All you need is a Hugging Face account, the Hugging Face CLI, and `omk-share-hf`.
 
-You can also watch [this video](https://x.com/badlogicgames/status/2041151967695634619), where I show how I publish my `pi-mono` sessions.
+You can also watch [this video](https://x.com/badlogicgames/status/2041151967695634619), where I show how I publish my `omk-mono` sessions.
 
-I regularly publish my own `pi-mono` work sessions here:
+I regularly publish my own `omk-mono` work sessions here:
 
-- [badlogicgames/pi-mono on Hugging Face](https://huggingface.co/datasets/badlogicgames/pi-mono)
+- [badlogicgames/omk-mono on Hugging Face](https://huggingface.co/datasets/badlogicgames/omk-mono)
 
 ## Table of Contents
 
@@ -76,7 +76,7 @@ npm install -g --ignore-scripts open-multi-agent-kit
 Installer alternative:
 
 ```bash
-curl -fsSL https://pi.dev/install.sh | sh
+curl -fsSL https://omk.dev/install.sh | sh
 ```
 
 Authenticate with an API key:
@@ -307,8 +307,8 @@ Use `/trust` in interactive mode to save a project trust decision for future ses
 
 OMK has two separate startup features:
 
-- **Update check:** fetches `https://pi.dev/api/latest-version` to check whether a newer OMK version exists. Disable it with `OMK_SKIP_VERSION_CHECK=1`. Disabling update checks only turns off this check.
-- **Install/update telemetry:** after first install or a changelog-detected update, sends an anonymous version ping to `https://pi.dev/api/report-install`. This setting also controls optional provider attribution headers for OpenRouter, Cloudflare, and direct NVIDIA NIM requests. Opt out by setting `enableInstallTelemetry` to `false` in `settings.json`, or by setting `OMK_TELEMETRY=0`. This does not disable update checks; OMK may still contact `omk.dev` for the latest version unless update checks are disabled or offline mode is enabled.
+- **Update check:** fetches `https://omk.dev/api/latest-version` to check whether a newer OMK version exists. Disable it with `OMK_SKIP_VERSION_CHECK=1`. Disabling update checks only turns off this check.
+- **Install/update telemetry:** after first install or a changelog-detected update, sends an anonymous version ping to `https://omk.dev/api/report-install`. This setting also controls optional provider attribution headers for OpenRouter, Cloudflare, and direct NVIDIA NIM requests. Opt out by setting `enableInstallTelemetry` to `false` in `settings.json`, or by setting `OMK_TELEMETRY=0`. This does not disable update checks; OMK may still contact `omk.dev` for the latest version unless update checks are disabled or offline mode is enabled.
 
 Use `--offline` or `OMK_OFFLINE=1` to disable all startup network operations described here, including update checks, package update checks, and install/update telemetry.
 
@@ -502,7 +502,7 @@ OMK is aggressively extensible so it doesn't have to dictate your workflow. Feat
 
 **No background bash.** Use tmux. Full observability, direct interaction.
 
-Read the [blog post](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/) for the full rationale.
+Read the [blog post](https://mariozechner.at/posts/2025-11-30-omk-coding-agent/) for the full rationale.
 
 ---
 

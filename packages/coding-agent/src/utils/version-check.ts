@@ -1,4 +1,4 @@
-import { getPiUserAgent } from "./pi-user-agent.ts";
+import { getPiUserAgent } from "./omk-user-agent.ts";
 
 const LATEST_VERSION_URL = "https://registry.npmjs.org/open-multi-agent-kit/latest";
 const DEFAULT_VERSION_CHECK_TIMEOUT_MS = 10000;
@@ -59,9 +59,9 @@ export async function getLatestPiRelease(
 ): Promise<LatestPiRelease | undefined> {
 	if (
 		process.env.OMK_SKIP_VERSION_CHECK ||
-		process.env.PI_SKIP_VERSION_CHECK ||
+		process.env.OMK_SKIP_VERSION_CHECK ||
 		process.env.OMK_OFFLINE ||
-		process.env.PI_OFFLINE
+		process.env.OMK_OFFLINE
 	)
 		return undefined;
 

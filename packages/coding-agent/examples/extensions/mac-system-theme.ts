@@ -1,8 +1,8 @@
 /**
- * Syncs pi theme with macOS system appearance (dark/light mode).
+ * Syncs omk theme with macOS system appearance (dark/light mode).
  *
  * Usage:
- *   pi -e examples/extensions/mac-system-theme.ts
+ *   omk -e examples/extensions/mac-system-theme.ts
  */
 
 import { exec } from "node:child_process";
@@ -22,10 +22,10 @@ async function isDarkMode(): Promise<boolean> {
 	}
 }
 
-export default function (pi: ExtensionAPI) {
+export default function (omk: ExtensionAPI) {
 	let intervalId: ReturnType<typeof setInterval> | null = null;
 
-	pi.on("session_start", async (_event, ctx) => {
+	omk.on("session_start", async (_event, ctx) => {
 		let currentTheme = (await isDarkMode()) ? "dark" : "light";
 		ctx.ui.setTheme(currentTheme);
 
@@ -38,7 +38,7 @@ export default function (pi: ExtensionAPI) {
 		}, 2000);
 	});
 
-	pi.on("session_shutdown", () => {
+	omk.on("session_shutdown", () => {
 		if (intervalId) {
 			clearInterval(intervalId);
 			intervalId = null;

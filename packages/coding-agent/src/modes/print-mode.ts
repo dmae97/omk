@@ -2,8 +2,8 @@
  * Print mode (single-shot): Send prompts, output result, exit.
  *
  * Used for:
- * - `pi -p "prompt"` - text output
- * - `pi --mode json "prompt"` - JSON event stream
+ * - `omk -p "prompt"` - text output
+ * - `omk --mode json "prompt"` - JSON event stream
  */
 
 import type { AssistantMessage, ImageContent } from "@earendil-works/omk-ai";

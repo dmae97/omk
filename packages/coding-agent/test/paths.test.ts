@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 function createTempDir(): string {
-	tempDir = mkdtempSync(join(tmpdir(), "pi-paths-"));
+	tempDir = mkdtempSync(join(tmpdir(), "omk-paths-"));
 	return tempDir;
 }
 
@@ -64,19 +64,19 @@ describe("canonicalizePath", () => {
 
 describe("getCwdRelativePath", () => {
 	it("keeps cwd-relative names that start with dots", () => {
-		const cwd = join(tmpdir(), "pi-paths-cwd");
+		const cwd = join(tmpdir(), "omk-paths-cwd");
 		expect(getCwdRelativePath(join(cwd, "..config", "AGENTS.md"), cwd)).toBe(join("..config", "AGENTS.md"));
 	});
 
 	it("rejects parent-directory traversals", () => {
-		const cwd = join(tmpdir(), "pi-paths-cwd");
+		const cwd = join(tmpdir(), "omk-paths-cwd");
 		expect(getCwdRelativePath(join(cwd, "..", "AGENTS.md"), cwd)).toBeUndefined();
 	});
 });
 
 describe("resolvePath", () => {
 	it("expands only home tilde shortcuts", () => {
-		const cwd = join(tmpdir(), "pi-paths-cwd");
+		const cwd = join(tmpdir(), "omk-paths-cwd");
 		expect(normalizePath("~")).toBe(homedir());
 		expect(normalizePath("~/file.txt")).toBe(join(homedir(), "file.txt"));
 		expect(resolvePath("~draft.md", cwd)).toBe(resolve(cwd, "~draft.md"));
@@ -84,7 +84,7 @@ describe("resolvePath", () => {
 	});
 
 	it("resolves relative paths against the base directory", () => {
-		const cwd = join(tmpdir(), "pi-paths-cwd");
+		const cwd = join(tmpdir(), "omk-paths-cwd");
 		expect(resolvePath("subdir/file.txt", cwd)).toBe(resolve(cwd, "subdir/file.txt"));
 		expect(resolvePath("subdir/file.txt", pathToFileURL(cwd).href)).toBe(resolve(cwd, "subdir/file.txt"));
 	});

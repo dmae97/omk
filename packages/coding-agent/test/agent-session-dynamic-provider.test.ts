@@ -15,7 +15,7 @@ describe("AgentSession dynamic provider registration", () => {
 	let agentDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `pi-dynamic-provider-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = join(tmpdir(), `omk-dynamic-provider-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		agentDir = join(tempDir, "agent");
 		mkdirSync(agentDir, { recursive: true });
 	});
@@ -66,8 +66,8 @@ describe("AgentSession dynamic provider registration", () => {
 
 	it("applies top-level registerProvider overrides to the active model", async () => {
 		const session = await createSession([
-			(pi) => {
-				pi.registerProvider("anthropic", { baseUrl: "http://localhost:8080/top-level" });
+			(omk) => {
+				omk.registerProvider("anthropic", { baseUrl: "http://localhost:8080/top-level" });
 			},
 		]);
 
@@ -79,9 +79,9 @@ describe("AgentSession dynamic provider registration", () => {
 
 	it("applies session_start registerProvider overrides to the active model", async () => {
 		const session = await createSession([
-			(pi) => {
-				pi.on("session_start", () => {
-					pi.registerProvider("anthropic", { baseUrl: "http://localhost:8080/session-start" });
+			(omk) => {
+				omk.on("session_start", () => {
+					omk.registerProvider("anthropic", { baseUrl: "http://localhost:8080/session-start" });
 				});
 			},
 		]);
@@ -96,11 +96,11 @@ describe("AgentSession dynamic provider registration", () => {
 
 	it("applies command-time registerProvider overrides without reload", async () => {
 		const session = await createSession([
-			(pi) => {
-				pi.registerCommand("use-proxy", {
+			(omk) => {
+				omk.registerCommand("use-proxy", {
 					description: "Use proxy",
 					handler: async () => {
-						pi.registerProvider("anthropic", { baseUrl: "http://localhost:8080/command" });
+						omk.registerProvider("anthropic", { baseUrl: "http://localhost:8080/command" });
 					},
 				});
 			},

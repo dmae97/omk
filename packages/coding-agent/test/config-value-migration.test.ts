@@ -16,7 +16,7 @@ describe("config value env var syntax migration", () => {
 	});
 
 	function createAgentDir(): string {
-		const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-config-value-migration-test-"));
+		const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "omk-config-value-migration-test-"));
 		tempDirs.push(agentDir);
 		return agentDir;
 	}

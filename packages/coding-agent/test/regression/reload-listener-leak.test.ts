@@ -22,7 +22,7 @@ describe("reload event-bus listener leak (regression)", () => {
 		rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	it("does not stack duplicate pi.events listeners across reloads", async () => {
+	it("does not stack duplicate omk.events listeners across reloads", async () => {
 		const eventBus = createEventBus();
 		let received = 0;
 		const loader = new DefaultResourceLoader({
@@ -30,8 +30,8 @@ describe("reload event-bus listener leak (regression)", () => {
 			agentDir,
 			eventBus,
 			extensionFactories: [
-				(pi) => {
-					pi.events.on("test-channel", () => {
+				(omk) => {
+					omk.events.on("test-channel", () => {
 						received++;
 					});
 				},
@@ -73,7 +73,7 @@ describe("reload event-bus listener leak (regression)", () => {
 		expect(external).toBe(1);
 	});
 
-	it("unsubscribe returned by pi.events.on still works and is idempotent across reload", async () => {
+	it("unsubscribe returned by omk.events.on still works and is idempotent across reload", async () => {
 		const eventBus = createEventBus();
 		let received = 0;
 		let unsubscribe: (() => void) | undefined;
@@ -82,8 +82,8 @@ describe("reload event-bus listener leak (regression)", () => {
 			agentDir,
 			eventBus,
 			extensionFactories: [
-				(pi) => {
-					unsubscribe = pi.events.on("manual-channel", () => {
+				(omk) => {
+					unsubscribe = omk.events.on("manual-channel", () => {
 						received++;
 					});
 				},

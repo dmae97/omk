@@ -25,7 +25,7 @@ async function resolvesWithin(promise: Promise<unknown>, ms: number): Promise<bo
 const tempDirs: string[] = [];
 
 async function createTempDir(): Promise<string> {
-	const dir = await mkdtemp(join(tmpdir(), "pi-file-mutation-queue-"));
+	const dir = await mkdtemp(join(tmpdir(), "omk-file-mutation-queue-"));
 	tempDirs.push(dir);
 	return dir;
 }

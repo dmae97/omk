@@ -9,9 +9,9 @@ import ms from "ms";
 import type { ExtensionAPI } from "open-multi-agent-kit";
 import { Type } from "typebox";
 
-export default function (pi: ExtensionAPI) {
+export default function (omk: ExtensionAPI) {
 	// Register a tool that uses ms
-	pi.registerTool({
+	omk.registerTool({
 		name: "parse_duration",
 		label: "Parse Duration",
 		description: "Parse a human-readable duration string (e.g., '2 days', '1h', '5m') to milliseconds",

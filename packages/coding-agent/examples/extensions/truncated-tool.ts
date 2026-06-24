@@ -45,8 +45,8 @@ interface RgDetails {
 	fullOutputPath?: string;
 }
 
-export default function (pi: ExtensionAPI) {
-	pi.registerTool({
+export default function (omk: ExtensionAPI) {
+	omk.registerTool({
 		name: "rg",
 		label: "ripgrep",
 		// Document the truncation limits in the tool description so the LLM knows
@@ -109,7 +109,7 @@ export default function (pi: ExtensionAPI) {
 
 			if (truncation.truncated) {
 				// Save full output to a temp file so LLM can access it if needed
-				const tempDir = await mkdtemp(join(tmpdir(), "pi-rg-"));
+				const tempDir = await mkdtemp(join(tmpdir(), "omk-rg-"));
 				const tempFile = join(tempDir, "output.txt");
 				await withFileMutationQueue(tempFile, async () => {
 					await writeFile(tempFile, output, "utf8");

@@ -12,10 +12,10 @@ import type { AssistantMessage } from "@earendil-works/omk-ai";
 import { truncateToWidth, visibleWidth } from "@earendil-works/omk-tui";
 import type { ExtensionAPI } from "open-multi-agent-kit";
 
-export default function (pi: ExtensionAPI) {
+export default function (omk: ExtensionAPI) {
 	let enabled = false;
 
-	pi.registerCommand("footer", {
+	omk.registerCommand("footer", {
 		description: "Toggle custom footer",
 		handler: async (_args, ctx) => {
 			enabled = !enabled;

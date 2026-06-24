@@ -30,8 +30,8 @@ describe("regressions #1717/#2113: agent session event settlement", () => {
 		const harness = await createHarness({
 			tools: [createEchoTool()],
 			extensionFactories: [
-				(pi) => {
-					pi.on("message_end", async (event) => {
+				(omk) => {
+					omk.on("message_end", async (event) => {
 						if (event.message.role === "assistant") {
 							await new Promise((resolve) => setTimeout(resolve, 20));
 						}
@@ -70,8 +70,8 @@ describe("regressions #1717/#2113: agent session event settlement", () => {
 		harness = await createHarness({
 			tools: [createEchoTool()],
 			extensionFactories: [
-				(pi) => {
-					pi.on("tool_call", () => {
+				(omk) => {
+					omk.on("tool_call", () => {
 						branchRolesAtToolCall.push(
 							harness.sessionManager
 								.getBranch()
