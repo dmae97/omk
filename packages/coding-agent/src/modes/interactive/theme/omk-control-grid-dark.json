@@ -1,0 +1,81 @@
+{
+	"$schema": "https://raw.githubusercontent.com/dmae97/omk/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
+	"name": "omk-control-grid-dark",
+	"vars": {
+		"dark": "#070B14",
+		"surface": "#101826",
+		"cyan": "#00D6FF",
+		"mint": "#00FFC2",
+		"magenta": "#FF47B2",
+		"purple": "#9D4EDD",
+		"amber": "#FFB000",
+		"red": "#FF5874",
+		"cream": "#E8F8FF",
+		"muted": "#9DB3C7",
+		"gray": "#758FA8"
+	},
+	"colors": {
+		"accent": "cyan",
+		"border": "gray",
+		"borderAccent": "magenta",
+		"borderMuted": "surface",
+		"success": "mint",
+		"error": "red",
+		"warning": "amber",
+		"muted": "muted",
+		"dim": "gray",
+		"text": "cream",
+		"thinkingText": "muted",
+
+		"selectedBg": "surface",
+		"userMessageBg": "surface",
+		"userMessageText": "cream",
+		"customMessageBg": "surface",
+		"customMessageText": "cream",
+		"customMessageLabel": "magenta",
+		"toolPendingBg": "surface",
+		"toolSuccessBg": "dark",
+		"toolErrorBg": "surface",
+		"toolTitle": "cyan",
+		"toolOutput": "muted",
+
+		"mdHeading": "cyan",
+		"mdLink": "mint",
+		"mdLinkUrl": "gray",
+		"mdCode": "magenta",
+		"mdCodeBlock": "cream",
+		"mdCodeBlockBorder": "purple",
+		"mdQuote": "muted",
+		"mdQuoteBorder": "purple",
+		"mdHr": "surface",
+		"mdListBullet": "mint",
+
+		"toolDiffAdded": "mint",
+		"toolDiffRemoved": "red",
+		"toolDiffContext": "gray",
+
+		"syntaxComment": "gray",
+		"syntaxKeyword": "purple",
+		"syntaxFunction": "cyan",
+		"syntaxVariable": "cream",
+		"syntaxString": "mint",
+		"syntaxNumber": "amber",
+		"syntaxType": "cyan",
+		"syntaxOperator": "muted",
+		"syntaxPunctuation": "gray",
+
+		"thinkingOff": "surface",
+		"thinkingMinimal": "gray",
+		"thinkingLow": "cyan",
+		"thinkingMedium": "mint",
+		"thinkingHigh": "purple",
+		"thinkingXhigh": "magenta",
+
+		"bashMode": "mint"
+	},
+	"export": {
+		"pageBg": "dark",
+		"cardBg": "surface",
+		"infoBg": "surface"
+	}
+}

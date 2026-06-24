@@ -5,6 +5,8 @@ import {
 	fuzzyFilter,
 	getKeybindings,
 	Input,
+	Key,
+	matchesKey,
 	Spacer,
 	Text,
 	type TUI,
@@ -28,8 +30,35 @@ interface ScopedModelItem {
 
 type ModelScope = "all" | "scoped";
 
+type ProviderTab = "all" | string;
+
+const ALL_PROVIDER_TAB = "all" as const;
+const PROVIDER_TAB_ORDER = [
+	"anthropic",
+	"openai",
+	"google",
+	"deepseek",
+	"kimi",
+	"openrouter",
+	"mistral",
+	"xai",
+	"groq",
+	"zai",
+	"together",
+	"fireworks",
+] as const;
+
+function buildProviderTabs(models: readonly ModelItem[]): ProviderTab[] {
+	const providerIds = Array.from(new Set(models.map((model) => model.provider)));
+	const ordered = PROVIDER_TAB_ORDER.filter((provider) => providerIds.includes(provider));
+	const extras = providerIds
+		.filter((provider) => !PROVIDER_TAB_ORDER.includes(provider as (typeof PROVIDER_TAB_ORDER)[number]))
+		.sort((a, b) => a.localeCompare(b));
+	return [ALL_PROVIDER_TAB, ...ordered, ...extras];
+}
+
 /**
- * Component that renders a model selector with search
+ * Component that renders a model selector with search and provider tabs.
  */
 export class ModelSelectorComponent extends Container implements Focusable {
 	private searchInput: Input;
@@ -58,6 +87,10 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	private tui: TUI;
 	private scopedModels: ReadonlyArray<ScopedModelItem>;
 	private scope: ModelScope = "all";
+	private providerTabs: ProviderTab[] = [ALL_PROVIDER_TAB];
+	private activeProviderTab: ProviderTab = ALL_PROVIDER_TAB;
+	private providerText: Text;
+	private providerHintText: Text;
 	private scopeText?: Text;
 	private scopeHintText?: Text;
 
@@ -85,6 +118,11 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		// Add top border
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
+
+		this.providerText = new Text(this.getProviderText(), 0, 0);
+		this.addChild(this.providerText);
+		this.providerHintText = new Text(this.getProviderHintText(), 0, 0);
+		this.addChild(this.providerHintText);
 
 		// Add hint about model filtering
 		if (scopedModels.length > 0) {
@@ -174,7 +212,8 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			model: scoped.model,
 		}));
 		this.activeModels = this.scope === "scoped" ? this.scopedModelItems : this.allModels;
-		this.filteredModels = this.activeModels;
+		this.rebuildProviderTabs();
+		this.filteredModels = this.getProviderFilteredModels();
 		const currentIndex = this.filteredModels.findIndex((item) => modelsAreEqual(this.currentModel, item.model));
 		this.selectedIndex =
 			currentIndex >= 0 ? currentIndex : Math.min(this.selectedIndex, Math.max(0, this.filteredModels.length - 1));
@@ -193,6 +232,17 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		return sorted;
 	}
 
+	private getProviderText(): string {
+		const tabs = this.providerTabs.map((provider) =>
+			provider === this.activeProviderTab ? theme.fg("accent", provider) : theme.fg("muted", provider),
+		);
+		return `${theme.fg("muted", "Provider: ")}${tabs.join(theme.fg("dim", " | "))}`;
+	}
+
+	private getProviderHintText(): string {
+		return keyHint("tui.input.tab", "provider") + theme.fg("muted", " · Shift+Tab previous provider");
+	}
+
 	private getScopeText(): string {
 		const allText = this.scope === "all" ? theme.fg("accent", "all") : theme.fg("muted", "all");
 		const scopedText = this.scope === "scoped" ? theme.fg("accent", "scoped") : theme.fg("muted", "scoped");
@@ -200,29 +250,62 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	}
 
 	private getScopeHintText(): string {
-		return keyHint("tui.input.tab", "scope") + theme.fg("muted", " (all/scoped)");
+		return theme.fg("muted", "Ctrl+P scope (all/scoped)");
 	}
 
 	private setScope(scope: ModelScope): void {
 		if (this.scope === scope) return;
 		this.scope = scope;
 		this.activeModels = this.scope === "scoped" ? this.scopedModelItems : this.allModels;
-		const currentIndex = this.activeModels.findIndex((item) => modelsAreEqual(this.currentModel, item.model));
+		this.rebuildProviderTabs();
+		const currentIndex = this.getProviderFilteredModels().findIndex((item) =>
+			modelsAreEqual(this.currentModel, item.model),
+		);
 		this.selectedIndex = currentIndex >= 0 ? currentIndex : 0;
 		this.filterModels(this.searchInput.getValue());
 		if (this.scopeText) {
 			this.scopeText.setText(this.getScopeText());
 		}
+		if (this.scopeHintText) {
+			this.scopeHintText.setText(this.getScopeHintText());
+		}
+	}
+
+	private rebuildProviderTabs(): void {
+		this.providerTabs = buildProviderTabs(this.activeModels);
+		if (!this.providerTabs.includes(this.activeProviderTab)) {
+			this.activeProviderTab = ALL_PROVIDER_TAB;
+		}
+		this.providerText.setText(this.getProviderText());
+		this.providerHintText.setText(this.getProviderHintText());
+	}
+
+	private getProviderFilteredModels(): ModelItem[] {
+		if (this.activeProviderTab === ALL_PROVIDER_TAB) {
+			return this.activeModels;
+		}
+		return this.activeModels.filter((item) => item.provider === this.activeProviderTab);
+	}
+
+	private cycleProvider(direction: 1 | -1): void {
+		if (this.providerTabs.length === 0) return;
+		const currentIndex = Math.max(0, this.providerTabs.indexOf(this.activeProviderTab));
+		const nextIndex = (currentIndex + direction + this.providerTabs.length) % this.providerTabs.length;
+		this.activeProviderTab = this.providerTabs[nextIndex] ?? ALL_PROVIDER_TAB;
+		this.providerText.setText(this.getProviderText());
+		this.selectedIndex = 0;
+		this.filterModels(this.searchInput.getValue());
 	}
 
 	private filterModels(query: string): void {
+		const providerModels = this.getProviderFilteredModels();
 		this.filteredModels = query
 			? fuzzyFilter(
-					this.activeModels,
+					providerModels,
 					query,
 					({ id, provider }) => `${id} ${provider} ${provider}/${id} ${provider} ${id}`,
 				)
-			: this.activeModels;
+			: providerModels;
 		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredModels.length - 1));
 		this.updateList();
 	}
@@ -287,13 +370,16 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	handleInput(keyData: string): void {
 		const kb = getKeybindings();
 		if (kb.matches(keyData, "tui.input.tab")) {
-			if (this.scopedModelItems.length > 0) {
-				const nextScope: ModelScope = this.scope === "all" ? "scoped" : "all";
-				this.setScope(nextScope);
-				if (this.scopeHintText) {
-					this.scopeHintText.setText(this.getScopeHintText());
-				}
-			}
+			this.cycleProvider(1);
+			return;
+		}
+		if (matchesKey(keyData, Key.shift("tab"))) {
+			this.cycleProvider(-1);
+			return;
+		}
+		if (kb.matches(keyData, "app.model.cycleForward") && this.scopedModelItems.length > 0) {
+			const nextScope: ModelScope = this.scope === "all" ? "scoped" : "all";
+			this.setScope(nextScope);
 			return;
 		}
 		// Up arrow - wrap to bottom when at top

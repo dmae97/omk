@@ -112,6 +112,28 @@ describe("CombinedAutocompleteProvider", () => {
 				assert.strictEqual(result.prefix, "/", "Prefix should be '/'");
 			}
 		});
+
+		it("uses slash command argument completions on explicit tab", async () => {
+			const provider = new CombinedAutocompleteProvider(
+				[
+					{
+						name: "model",
+						description: "Select model",
+						getArgumentCompletions: () => [{ value: "anthropic/", label: "anthropic", description: "provider" }],
+					},
+				],
+				"/tmp",
+			);
+			const lines = ["/model "];
+			const cursorLine = 0;
+			const cursorCol = 7; // After the command-space
+
+			const result = await getSuggestions(provider, lines, cursorLine, cursorCol, true);
+
+			assert.notEqual(result, null, "Should use command argument completions before file fallback");
+			assert.strictEqual(result?.prefix, "");
+			assert.strictEqual(result?.items[0]?.value, "anthropic/");
+		});
 	});
 
 	describe("fd @ file suggestions", { skip: !isFdInstalled }, () => {

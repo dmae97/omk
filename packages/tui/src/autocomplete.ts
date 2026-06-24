@@ -302,10 +302,12 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 			};
 		}
 
-		if (!options.force && textBeforeCursor.startsWith("/")) {
+		if (textBeforeCursor.startsWith("/")) {
 			const spaceIndex = textBeforeCursor.indexOf(" ");
 
 			if (spaceIndex === -1) {
+				if (options.force) return null;
+
 				const prefix = textBeforeCursor.slice(1);
 				const commandItems = this.commands.map((cmd) => {
 					const name = "name" in cmd ? cmd.name : cmd.value;
@@ -340,19 +342,17 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 				const name = "name" in cmd ? cmd.name : cmd.value;
 				return name === commandName;
 			});
-			if (!command || !("getArgumentCompletions" in command) || !command.getArgumentCompletions) {
-				return null;
+			if (command && "getArgumentCompletions" in command && command.getArgumentCompletions) {
+				const argumentSuggestions = await command.getArgumentCompletions(argumentText);
+				if (Array.isArray(argumentSuggestions) && argumentSuggestions.length > 0) {
+					return {
+						items: argumentSuggestions,
+						prefix: argumentText,
+					};
+				}
 			}
 
-			const argumentSuggestions = await command.getArgumentCompletions(argumentText);
-			if (!Array.isArray(argumentSuggestions) || argumentSuggestions.length === 0) {
-				return null;
-			}
-
-			return {
-				items: argumentSuggestions,
-				prefix: argumentText,
-			};
+			if (!options.force) return null;
 		}
 
 		const pathMatch = this.extractPathPrefix(textBeforeCursor, options.force ?? false);
@@ -773,8 +773,11 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		const currentLine = lines[cursorLine] || "";
 		const textBeforeCursor = currentLine.slice(0, cursorCol);
 
-		// Don't trigger if we're typing a slash command at the start of the line
-		if (textBeforeCursor.trim().startsWith("/") && !textBeforeCursor.trim().includes(" ")) {
+		// Don't trigger file completion if we're typing a slash command name.
+		// Slash command arguments (for example `/model `) are allowed through so
+		// command-specific argument completions can handle Tab before file fallback.
+		const leftTrimmed = textBeforeCursor.trimStart();
+		if (leftTrimmed.startsWith("/") && !leftTrimmed.includes(" ")) {
 			return false;
 		}
 
