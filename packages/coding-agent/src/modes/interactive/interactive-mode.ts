@@ -7,7 +7,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AgentMessage } from "@earendil-works/omk-agent-core";
+import type { AgentMessage, ThinkingLevel } from "@earendil-works/omk-agent-core";
 import {
 	type AssistantMessage,
 	getProviders,
@@ -116,7 +116,7 @@ import { ModelSelectorComponent } from "./components/model-selector.ts";
 import { type AuthSelectorProvider, OAuthSelectorComponent } from "./components/oauth-selector.ts";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
-import { SettingsSelectorComponent } from "./components/settings-selector.ts";
+import { SettingsSelectorComponent, ThinkingSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
@@ -491,6 +491,20 @@ export class InteractiveMode {
 			name: command.name,
 			description: command.description,
 		}));
+
+		const thinkCommand = slashCommands.find((command) => command.name === "think");
+		if (thinkCommand) {
+			thinkCommand.getArgumentCompletions = (prefix: string): AutocompleteItem[] | null => {
+				const levels = this.session.getAvailableThinkingLevels();
+				const filtered = fuzzyFilter(levels, prefix, (level) => level);
+				if (filtered.length === 0) return null;
+				return filtered.map((level) => ({
+					value: level,
+					label: level,
+					description: level === this.session.thinkingLevel ? "current" : undefined,
+				}));
+			};
+		}
 
 		const modelCommand = slashCommands.find((command) => command.name === "model");
 		if (modelCommand) {
@@ -2600,6 +2614,12 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
+			if (text === "/think" || text.startsWith("/think ")) {
+				const level = text.startsWith("/think ") ? text.slice(7).trim() : undefined;
+				this.editor.setText("");
+				this.handleThinkCommand(level);
+				return;
+			}
 			if (text === "/scoped-models") {
 				this.editor.setText("");
 				await this.showModelsSelector();
@@ -4157,6 +4177,28 @@ export class InteractiveMode {
 		});
 	}
 
+	private handleThinkCommand(level?: string): void {
+		if (!level) {
+			this.showThinkingSelector();
+			return;
+		}
+
+		const availableLevels = this.session.getAvailableThinkingLevels();
+		if (!availableLevels.includes(level as ThinkingLevel)) {
+			this.showError(`Thinking level "${level}" is not available. Available: ${availableLevels.join(", ")}`);
+			return;
+		}
+
+		this.applyThinkingLevel(level as ThinkingLevel);
+	}
+
+	private applyThinkingLevel(level: ThinkingLevel): void {
+		this.session.setThinkingLevel(level);
+		this.footer.invalidate();
+		this.updateEditorBorderColor();
+		this.showStatus(`Thinking: ${this.session.thinkingLevel}`);
+	}
+
 	private async handleModelCommand(searchTerm?: string): Promise<void> {
 		if (!searchTerm) {
 			this.showModelSelector();
@@ -4172,6 +4214,7 @@ export class InteractiveMode {
 				this.showStatus(`Model: ${model.id}`);
 				void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
 				this.checkDaxnutsEasterEgg(model);
+				this.showThinkingSelector();
 			} catch (error) {
 				this.showError(error instanceof Error ? error.message : String(error));
 			}
@@ -4238,6 +4281,31 @@ export class InteractiveMode {
 		}
 	}
 
+	private showThinkingSelector(): void {
+		this.showSelector((done) => {
+			const selector = new ThinkingSelectorComponent(
+				{
+					thinkingLevel: this.session.thinkingLevel,
+					availableThinkingLevels: this.session.getAvailableThinkingLevels(),
+				},
+				{
+					onThinkingLevelChange: (level) => {
+						this.applyThinkingLevel(level);
+					},
+					onSelectComplete: () => {
+						done();
+						this.ui.requestRender();
+					},
+					onCancel: () => {
+						done();
+						this.ui.requestRender();
+					},
+				},
+			);
+			return { component: selector, focus: selector };
+		});
+	}
+
 	private showModelSelector(initialSearchInput?: string): void {
 		this.showSelector((done) => {
 			const selector = new ModelSelectorComponent(
@@ -4255,6 +4323,7 @@ export class InteractiveMode {
 						this.showStatus(`Model: ${model.id}`);
 						void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
 						this.checkDaxnutsEasterEgg(model);
+						this.showThinkingSelector();
 					} catch (error) {
 						done();
 						this.showError(error instanceof Error ? error.message : String(error));

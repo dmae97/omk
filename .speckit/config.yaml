@@ -1,0 +1,16 @@
+schemaVersion: omk.speckit.v1
+projectRoot: /home/yu/omk
+preset:
+  name: omk
+  version: 1.1.0
+  source: ~/.omk/templates/spec-kit-omk-preset
+artifacts:
+  constitution: specs/constitution.md
+  templates:
+    spec: specs/templates/spec-template.md
+    plan: specs/templates/plan-template.md
+    tasks: specs/templates/tasks-template.md
+rules:
+  canonicalRuntimeRoot: /home/yu/omk
+  installedLauncher: /home/yu/.omk/agent/bin/omk
+  buildBeforeRuntimeVerification: true

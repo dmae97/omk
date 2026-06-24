@@ -1,15 +1,20 @@
 <p align="center">
-  <a href="https://pi.dev">
-    <img alt="omk logo" src="https://pi.dev/logo-auto.svg" width="128">
-  </a>
+  <img src="readmeasset/omk-control.webp" alt="OMK//CONTROL Night City Ops Console for routing agents, evidence gates, telemetry, MCP scope, and operator control" width="100%" />
 </p>
+
+<h1 align="center">OMK</h1>
+
+<p align="center">
+  <strong>OMK//CONTROL — provider-neutral multi-agent control plane for coding workflows.</strong>
+</p>
+
+<p align="center">
+  Models execute. OMK routes, verifies, measures, and controls.
+</p>
+
 <p align="center">
   <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
-</p>
-<p align="center">
-  <a href="https://pi.dev">omk.dev</a> domain graciously donated by
-  <br /><br />
-  <a href="https://exe.dev"><img src="packages/coding-agent/docs/images/exy.png" alt="Exy mascot" width="48" /><br />exe.dev</a>
+  <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm" src="https://img.shields.io/npm/v/open-multi-agent-kit?style=flat-square" /></a>
 </p>
 
 > New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -28,6 +33,14 @@ To learn more about omk:
 
 * [Visit omk.dev](https://pi.dev), the project website with demos
 * [Read the documentation](https://pi.dev/docs/latest), but you can also ask the agent to explain itself
+
+## OMK//CONTROL TUI
+
+<p align="center">
+  <img src="readmeasset/omk_tui.png" alt="OMK//CONTROL terminal dashboard — live DAG lanes, provider routing, MCP health, evidence gates, and telemetry in Night City Ops Console style" width="100%" />
+</p>
+
+The default dark TUI theme uses the `omk-control-grid-dark` Night City palette.
 
 ## Share your OSS coding agent sessions
 

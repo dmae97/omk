@@ -18,7 +18,7 @@ Themes are JSON files that define colors for the TUI.
 
 OMK loads themes from:
 
-- Built-in: `dark`, `light`, `omk-control`, `omk-control-light`
+- Built-in: `dark`, `light`, `omk-control`, `omk-control-grid-dark`, `omk-control-light`, `rust-forge`, plus bundled Tinted schemes (`catppuccin-mocha`, `tokyo-night-storm`, `kanagawa-dragon`, `gruvbox-dark`, `dracula`)
 - Global: `~/.omk/agent/themes/*.json`
 - Project: `.omk/themes/*.json`
 - Packages: `themes/` directories or `omk.themes` entries in `package.json`
@@ -37,7 +37,9 @@ Select a theme via `/settings` or in `settings.json`:
 }
 ```
 
-On first run, omk detects your terminal background and defaults to `dark` or `light`. The `omk-control` theme is a dark OMK control aesthetic with teal/cyan accents on near-black, and `omk-control-light` is its light-terminal variant.
+On first run, omk detects your terminal background and defaults to `omk-control-grid-dark` on dark terminals or `omk-control-light` on light terminals. `omk-control-grid-dark` ports the OMK//CONTROL Night City TUI palette from the 0.78.8 visual console (`cyan`, `mint`, `magenta`, `purple`, `amber`, `red`, `cream`, `muted`, `gray` on `dark`/`surface`). The `rust-forge` and Tinted scheme themes are installed as additional selectable built-in themes, but they do not change the default OMK//CONTROL brand/tone.
+
+The bundled Tinted themes are generated from [`tinted-theming/schemes`](https://github.com/tinted-theming/schemes) Base24 palettes (MIT): Catppuccin Mocha, Tokyo Night Storm, Kanagawa Dragon, Gruvbox Dark, and Dracula.
 
 ## Creating a Custom Theme
 
@@ -294,4 +296,11 @@ See the built-in themes:
 - [dark.json](../src/modes/interactive/theme/dark.json)
 - [light.json](../src/modes/interactive/theme/light.json)
 - [omk-control.json](../src/modes/interactive/theme/omk-control.json)
+- [omk-control-grid-dark.json](../src/modes/interactive/theme/omk-control-grid-dark.json)
 - [omk-control-light.json](../src/modes/interactive/theme/omk-control-light.json)
+- [rust-forge.json](../src/modes/interactive/theme/rust-forge.json)
+- [catppuccin-mocha.json](../src/modes/interactive/theme/catppuccin-mocha.json)
+- [tokyo-night-storm.json](../src/modes/interactive/theme/tokyo-night-storm.json)
+- [kanagawa-dragon.json](../src/modes/interactive/theme/kanagawa-dragon.json)
+- [gruvbox-dark.json](../src/modes/interactive/theme/gruvbox-dark.json)
+- [dracula.json](../src/modes/interactive/theme/dracula.json)
