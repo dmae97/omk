@@ -1,0 +1,9 @@
+{
+  "id": "read-login-page",
+  "goal": "verify login page",
+  "criteria": [{ "id": "c1", "description": "text:Welcome to the login page" }],
+  "observation": {
+    "url": "http://localhost:3000/login",
+    "text": "Welcome to the login page"
+  }
+}
