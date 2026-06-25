@@ -1,0 +1,20 @@
+[
+  {
+    "t": "observe",
+    "url": "http://localhost:3000/"
+  },
+  {
+    "t": "execute",
+    "kind": "open_page",
+    "url": "http://localhost:3000/docs"
+  },
+  {
+    "t": "observe",
+    "url": "http://localhost:3000/docs"
+  },
+  {
+    "t": "result",
+    "status": "completed",
+    "finalUrl": "http://localhost:3000/docs"
+  }
+]

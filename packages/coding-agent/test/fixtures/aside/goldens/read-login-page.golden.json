@@ -1,0 +1,11 @@
+[
+  {
+    "t": "observe",
+    "url": "http://localhost:3000/login"
+  },
+  {
+    "t": "result",
+    "status": "completed",
+    "finalUrl": "http://localhost:3000/login"
+  }
+]

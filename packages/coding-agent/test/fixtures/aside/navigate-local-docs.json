@@ -1,0 +1,22 @@
+{
+  "id": "navigate-local-docs",
+  "goal": "open local docs and verify they are ready",
+  "criteria": [{ "id": "c1", "description": "\"Docs Ready\"" }],
+  "observations": [
+    {
+      "url": "http://localhost:3000/",
+      "text": "Docs loading"
+    },
+    {
+      "url": "http://localhost:3000/docs",
+      "text": "Docs Ready"
+    }
+  ],
+  "scriptedActions": [
+    {
+      "kind": "open_page",
+      "url": "http://localhost:3000/docs",
+      "description": "Open local docs"
+    }
+  ]
+}

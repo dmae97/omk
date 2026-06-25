@@ -178,6 +178,10 @@ export function parseArgs(args: string[]): Args {
 			result.verbose = true;
 		} else if (arg === "--offline") {
 			result.offline = true;
+		} else if (arg === "--jailbreak-mode" && i + 1 < args.length) {
+			result.jailbreakMode = args[++i];
+		} else if (arg === "--jailbreak-target" && i + 1 < args.length) {
+			result.jailbreakTarget = args[++i];
 		} else if (arg.startsWith("@")) {
 			result.fileArgs.push(arg.slice(1)); // Remove @ prefix
 		} else if (arg.startsWith("--")) {
