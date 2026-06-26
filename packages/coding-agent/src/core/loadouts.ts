@@ -13,6 +13,8 @@
  * Erasable TypeScript only (no enum/namespace/parameter properties).
  */
 
+import type { HookPolicyMetadata } from "./hooks/index.ts";
+
 export type LoadoutAuthority =
 	| "advisory"
 	| "read-only"
@@ -51,6 +53,7 @@ export interface NamedResource {
 	/** Package-relative or absolute resource path, when meaningful (skills/prompts). */
 	path?: string;
 	origin?: ResourceOrigin;
+	policy?: HookPolicyMetadata;
 }
 
 /**

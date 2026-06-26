@@ -2,6 +2,19 @@ export type HookFailureCode = "hook_failed" | "hook_rejected" | "hook_timeout" |
 
 export type HookFailureStage = "tool_call" | "tool_result" | "unknown";
 
+export type HookPolicyStage = "tool_call" | "tool_result" | "session_start" | "pre_compact" | "session_stop";
+
+export type HookPolicyEffect = "validator" | "mutator" | "observer";
+
+export type HookFailureMode = "fail-closed";
+
+export interface HookPolicyMetadata {
+	stages: readonly HookPolicyStage[];
+	effects: readonly HookPolicyEffect[];
+	failureMode: HookFailureMode;
+	timeoutMs: number;
+}
+
 /**
  * Sanitized hook failure metadata safe to expose in tool results.
  *

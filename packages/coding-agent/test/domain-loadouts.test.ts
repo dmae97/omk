@@ -6,6 +6,7 @@ import {
 	FALLBACK_DOMAIN_ID,
 	getDomainProfile,
 } from "../src/core/domain-loadouts.ts";
+import { BUILTIN_HOOKS } from "../src/core/hook-inventory.ts";
 import { validateLoadoutProfile } from "../src/core/loadouts.ts";
 
 // Mirrors the private AUTHORITY_RANK keys in loadouts.ts.
@@ -104,17 +105,21 @@ describe("domain-loadouts registry", () => {
 });
 
 describe("domain-loadouts curated inventory", () => {
+	it("every builtin hook descriptor has explicit fail-closed policy metadata", () => {
+		for (const hook of BUILTIN_HOOKS) {
+			expect(hook.policy.failureMode, hook.name).toBe("fail-closed");
+			expect(hook.policy.timeoutMs, hook.name).toBeGreaterThan(0);
+			expect(hook.policy.timeoutMs, hook.name).toBeLessThanOrEqual(30_000);
+			expect(hook.policy.stages.length, hook.name).toBeGreaterThan(0);
+			expect(hook.policy.effects.length, hook.name).toBeGreaterThan(0);
+			for (const effect of hook.policy.effects) {
+				expect(["validator", "mutator", "observer"], hook.name).toContain(effect);
+			}
+		}
+	});
+
 	it("references only the real builtin hooks", () => {
-		const realHooks = new Set([
-			"pre-shell-guard",
-			"protect-secrets",
-			"session-context",
-			"precompact-checkpoint",
-			"typecheck-after-edit",
-			"stop-verify",
-			"subagent-stop-audit",
-			"npm-audit-summary",
-		]);
+		const realHooks = new Set(BUILTIN_HOOKS.map((hook) => hook.name));
 		for (const profile of Object.values(DOMAIN_PROFILES)) {
 			const hooks = profile.hooks?.allow?.[0]?.names ?? [];
 			for (const hook of hooks) {
