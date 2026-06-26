@@ -1,21 +1,52 @@
 <p align="center">
-  <a href="https://omk.dev">
-    <img alt="OMK logo" src="https://omk.dev/logo-auto.svg" width="128">
-  </a>
+  <img src="https://raw.githubusercontent.com/dmae97/open-multi-agent-kit/v0.80.8/readmeasset/omk-control.webp" alt="OMK//CONTROL Night City Ops Console for routing agents, evidence gates, telemetry, MCP scope, and operator control" width="100%" />
 </p>
+
+<h1 align="center">OMK</h1>
+
+<p align="center">
+  <strong>OMK//CONTROL — provider-neutral multi-agent control plane for coding workflows.</strong>
+</p>
+
+<p align="center">
+  Models execute. OMK routes, verifies, measures, and controls.
+</p>
+
 <p align="center">
   <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm" src="https://img.shields.io/npm/v/open-multi-agent-kit?style=flat-square" /></a>
-</p>
-<p align="center">
-  <a href="https://omk.dev">omk.dev</a> domain graciously donated by
-  <br /><br />
-  <a href="https://exe.dev"><img src="docs/images/exy.png" alt="Exy mascot" width="48" /><br />exe.dev</a>
+  <a href="https://github.com/dmae97/open-multi-agent-kit/releases/tag/v0.80.8"><img alt="Release" src="https://img.shields.io/badge/release-v0.80.8-00d7ff?style=flat-square" /></a>
 </p>
 
-> New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](../../CONTRIBUTING.md).
+> New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](https://github.com/dmae97/open-multi-agent-kit/blob/v0.80.8/CONTRIBUTING.md).
 
 ---
+
+## OMK//CONTROL TUI
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/dmae97/open-multi-agent-kit/v0.80.8/readmeasset/omk_tui.png" alt="OMK//CONTROL terminal dashboard — live DAG lanes, provider routing, MCP health, evidence gates, and telemetry in Night City Ops Console style" width="100%" />
+</p>
+
+`v0.80.8` ships the OMK//CONTROL startup surface as the default operator view. The header reads `omk v0.80.8 · OMK//CONTROL`, using the published `open-multi-agent-kit` package version as the single source of truth.
+
+The default dark TUI theme uses the `omk-control-grid-dark` Night City palette and keeps the control sidebar focused on route, evidence, loop, MCP, runtime, skills, and context budget state.
+
+## Release v0.80.8
+
+This release completes the OMK hard-fork pass and makes the current runtime, docs, and release pipeline line up around the OMK identity.
+
+| Area | What changed |
+|------|--------------|
+| OMK identity | Active Pi-era user-facing residue was removed from package metadata, runtime defaults, docs, and release surfaces. |
+| TUI | OMK//CONTROL now shows the package-backed `v0.80.8` startup header and Night City Ops control dashboard. |
+| MCP | Tools, resources, prompts, sampling, and auth are represented as deterministic capability/policy inventory. |
+| Hooks | Built-in and project hooks carry fail-closed policy metadata with staged effects and bounded timeouts. |
+| Skills | Skill discovery preserves source, scope, origin, path, and collision provenance without exposing raw contents. |
+| Harness | Context headroom, compaction, token budget, and tool execution evidence paths were hardened and verified. |
+| Release | Local smoke tests, shrinkwrap gates, package lockstep, GitHub release notes, and npm publish checks are part of the release path. |
+
+GitHub-focused release notes live in [RELEASE_NOTES_v0.80.8.md](https://github.com/dmae97/open-multi-agent-kit/blob/v0.80.8/.github/RELEASE_NOTES_v0.80.8.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](https://github.com/dmae97/open-multi-agent-kit/blob/v0.80.8/packages/coding-agent/CHANGELOG.md).
 
 OMK is a minimal terminal coding harness. Adapt omk to your workflows, not the other way around, without having to fork and modify omk internals. Extend it with TypeScript [Extensions](#extensions), [Skills](#skills), [Prompt Templates](#prompt-templates), and [Themes](#themes). Put your extensions, skills, prompt templates, and themes in [OMK Packages](#omk-packages) and share them with others via npm or git.
 
@@ -142,7 +173,7 @@ See [docs/providers.md](docs/providers.md) for detailed setup instructions.
 
 ## Interactive Mode
 
-<p align="center"><img src="docs/images/interactive-mode.png" alt="Interactive Mode" width="600"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/dmae97/open-multi-agent-kit/v0.80.8/packages/coding-agent/docs/images/interactive-mode.png" alt="Interactive Mode" width="600"></p>
 
 The interface from top to bottom:
 
@@ -248,7 +279,7 @@ Use `/session` in interactive mode to see the current session ID before reusing 
 
 **`/tree`** - Navigate the session tree in-place. Select any previous point, continue from there, and switch between branches. All history preserved in a single file.
 
-<p align="center"><img src="docs/images/tree-view.png" alt="Tree View" width="600"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/dmae97/open-multi-agent-kit/v0.80.8/packages/coding-agent/docs/images/tree-view.png" alt="Tree View" width="600"></p>
 
 - Search by typing, fold/unfold and jump between branches with Ctrl+←/Ctrl+→ or Alt+←/Alt+→, page with ←/→
 - Filter modes (Ctrl+O): default → no-tools → user-only → labeled-only → all
@@ -357,7 +388,7 @@ Place in `~/.omk/agent/skills/`, `~/.agents/skills/`, `.omk/skills/`, or `.agent
 
 ### Extensions
 
-<p align="center"><img src="docs/images/doom-extension.png" alt="Doom Extension" width="600"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/dmae97/open-multi-agent-kit/v0.80.8/packages/coding-agent/docs/images/doom-extension.png" alt="Doom Extension" width="600"></p>
 
 TypeScript modules that extend omk with custom tools, commands, keyboard shortcuts, event handlers, and UI components.
 
@@ -665,7 +696,7 @@ omk --thinking high "Solve this complex problem"
 
 ## Contributing & Development
 
-See [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines and [docs/development.md](docs/development.md) for setup, forking, and debugging.
+See [CONTRIBUTING.md](https://github.com/dmae97/open-multi-agent-kit/blob/v0.80.8/CONTRIBUTING.md) for guidelines and [docs/development.md](docs/development.md) for setup, forking, and debugging.
 
 ---
 
