@@ -1,10 +1,14 @@
 # Changelog
 
-## [Unreleased]
+## [0.80.8] - 2026-06-27
 
 ### Breaking Changes
 
 - Renamed the npm package from `@earendil-works/pi-tui` to `@earendil-works/omk-tui` and updated package metadata to the OMK repository.
+
+### Changed
+
+- Changed release metadata to lockstep OMK publishable packages at v0.80.8.
 
 ### Fixed
 

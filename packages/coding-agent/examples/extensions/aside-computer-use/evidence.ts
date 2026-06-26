@@ -49,6 +49,7 @@ const QUOTED_SECRET_KV_PATTERN =
 const UNQUOTED_SECRET_KV_PATTERN =
 	/((?:^|[?&\s,{])["']?(?:access[_-]?token|api[_-]?key|password|token|cvv|cvc)["']?\s*[:=]\s*)([^&\s"',;<>}]+)/gi;
 const CARD_LIKE_PATTERN = /\b(?:\d[ -]*?){13,19}\b/g;
+const SECRET_WORD_PATTERN = /(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|API|AUTH|BEARER|STRIPE)/;
 
 function looksSecret(key: string): boolean {
 	const lower = key.toLowerCase();
@@ -64,6 +65,7 @@ function looksLikeToken(value: string): boolean {
 	const hasDigit = /\d/.test(value);
 	const hasUpper = /[A-Z]/.test(value);
 	const hasLower = /[a-z]/.test(value);
+	if (!hasDigit && !hasLower && hasUpper && SECRET_WORD_PATTERN.test(value)) return true;
 	return hasDigit && (hasUpper || hasLower);
 }
 

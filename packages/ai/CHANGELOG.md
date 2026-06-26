@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.80.8] - 2026-06-27
 
 ### Breaking Changes
 
@@ -8,6 +8,7 @@
 
 ### Added
 
+- Added OMK v0.80.8 release metadata for lockstep publishing with the CLI, TUI, and agent runtime packages.
 - Added Ant Ling as a built-in OpenAI-compatible provider with Ling 2.6 and Ring 2.6 models.
 - Added MiniMax-M3 model to the `minimax` and `minimax-cn` direct providers, and removed the hardcoded context-window override that was masking models.dev values ([#5313](https://github.com/earendil-works/pi/issues/5313)).
 - Added NVIDIA NIM as a built-in OpenAI-compatible provider, exposing public NIM models that support tool use.
