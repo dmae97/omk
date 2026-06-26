@@ -3935,7 +3935,7 @@ export const MODELS = {
 				cacheRead: 0.26,
 				cacheWrite: 0,
 			},
-			contextWindow: 1048576,
+			contextWindow: 1048575,
 			maxTokens: 131072,
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/gpt-oss-120b": {
@@ -4080,6 +4080,24 @@ export const MODELS = {
 				cacheWrite: 0,
 			},
 			contextWindow: 202800,
+			maxTokens: 131072,
+		} satisfies Model<"anthropic-messages">,
+		"accounts/fireworks/routers/glm-5p2-fast": {
+			id: "accounts/fireworks/routers/glm-5p2-fast",
+			name: "GLM 5.2 Fast",
+			api: "anthropic-messages",
+			provider: "fireworks",
+			baseUrl: "https://api.fireworks.ai/inference",
+			compat: {"sendSessionAffinityHeaders":true,"supportsEagerToolInputStreaming":false,"supportsCacheControlOnTools":false,"supportsLongCacheRetention":false},
+			reasoning: true,
+			input: ["text"],
+			cost: {
+				input: 2.1,
+				output: 6.6,
+				cacheRead: 0.21,
+				cacheWrite: 0,
+			},
+			contextWindow: 1048575,
 			maxTokens: 131072,
 		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/routers/kimi-k2p6-fast": {
@@ -12923,7 +12941,7 @@ export const MODELS = {
 			input: ["text", "image"],
 			cost: {
 				input: 0.28850000000000003,
-				output: 3.17,
+				output: 2.65,
 				cacheRead: 0,
 				cacheWrite: 0,
 			},
