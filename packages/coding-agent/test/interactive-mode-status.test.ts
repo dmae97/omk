@@ -1042,6 +1042,33 @@ describe("InteractiveMode.showLoadedResources", () => {
 		expect(fakeThis.chatContainer.children).toHaveLength(0);
 	});
 
+	test("shows bounded duplicate-resource summary when collision diagnostics are forced", () => {
+		const skillDiagnostics: ResourceDiagnostic[] = Array.from({ length: 116 }, (_, index) => ({
+			type: "collision",
+			message: `duplicate skill name ${index}`,
+			collision: {
+				resourceType: "skill",
+				name: `skill-${index}`,
+				winnerPath: `/tmp/winner-${index}/SKILL.md`,
+				loserPath: `/tmp/loser-${index}/SKILL.md`,
+			},
+		}));
+		const fakeThis = createShowLoadedResourcesThis({
+			quietStartup: true,
+			skillDiagnostics,
+			useRealDiagnostics: true,
+		});
+
+		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
+			force: true,
+		});
+
+		const output = normalizeRenderedOutput(fakeThis.chatContainer);
+		expect(output).toContain("[Skill conflicts]");
+		expect(output).toContain("116 duplicate resources skipped across 116 names");
+		expect(output).not.toContain("/tmp/loser-0/SKILL.md");
+	});
+
 	test("shows source-aware collision diagnostics when verbose", () => {
 		const winnerPath = "/tmp/project/.omk/npm/node_modules/skill-pack/skills/commit/SKILL.md";
 		const fakeThis = createShowLoadedResourcesThis({
