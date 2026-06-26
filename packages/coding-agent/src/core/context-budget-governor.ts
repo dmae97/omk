@@ -95,19 +95,25 @@ export function planContextBudget(input: ContextBudgetGovernorInput): ContextBud
 	}
 
 	const selectedRedundancyKeys = new Set<string>();
-	const optionalItems = plannedItems
-		.filter((item) => item.priority !== "hard")
-		.map((item) => applyRedundancyPenalty(item, selectedRedundancyKeys))
-		.sort(comparePlannedItemsForSelection);
+	const remainingOptionalItems = plannedItems.filter((item) => item.priority !== "hard");
 
-	for (const item of optionalItems) {
-		if (usedTokens + item.estimatedTokens <= availableTokens) {
-			includedIds.add(item.id);
-			usedTokens += item.estimatedTokens;
-			if (item.redundancyKey) {
-				selectedRedundancyKeys.add(item.redundancyKey);
-			}
+	while (remainingOptionalItems.length > 0) {
+		const rankedItems = remainingOptionalItems
+			.map((item) => applyRedundancyPenalty(item, selectedRedundancyKeys))
+			.sort(comparePlannedItemsForSelection);
+		const selected = rankedItems.find((item) => usedTokens + item.estimatedTokens <= availableTokens);
+		if (!selected) {
+			break;
 		}
+
+		includedIds.add(selected.id);
+		usedTokens += selected.estimatedTokens;
+		if (selected.redundancyKey) {
+			selectedRedundancyKeys.add(selected.redundancyKey);
+		}
+
+		const selectedIndex = remainingOptionalItems.findIndex((item) => item.id === selected.id);
+		remainingOptionalItems.splice(selectedIndex, 1);
 	}
 
 	const includedItems = plannedItems.filter((item) => includedIds.has(item.id));

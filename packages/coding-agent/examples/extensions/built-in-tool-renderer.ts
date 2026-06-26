@@ -22,7 +22,7 @@
  *   toggled the tool output open (via ctrl+e or clicking)
  *
  * Usage:
- *   pi -e ./built-in-tool-renderer.ts
+ *   omk -e ./built-in-tool-renderer.ts
  */
 
 import { Text } from "@earendil-works/omk-tui";

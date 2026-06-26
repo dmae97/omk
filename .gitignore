@@ -10,7 +10,19 @@ packages/*/dist-firefox/
 *.cpuprofile
 
 # Local orchestration artifacts
-.omk/
+.omk/*
+!.omk/.codegraph/
+!.omk/.codegraph/.gitignore
+!.omk/extensions/
+!.omk/extensions/**
+!.omk/git/
+!.omk/git/.gitignore
+!.omk/npm/
+!.omk/npm/.gitignore
+!.omk/prompts/
+!.omk/prompts/**
+!.omk/skills/
+!.omk/skills/**
 packages/coding-agent/omk-session-*.html
 /GOAL-GJC-OMK-CONTROL-PORT.md
 
@@ -49,6 +61,7 @@ coverage/
 tui-debug.log
 compaction-results/
 .opencode/
+.pi/
 syntax.jsonl
 out.jsonl
 pi-*.html

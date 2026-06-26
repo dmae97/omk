@@ -13,7 +13,7 @@
  *   - candidate input normalization to a canonical pinned source string
  *   - license verdict gate (permissive / weak / strong / network copyleft / unknown)
  *   - lifecycle-script gate (fail-closed; reviewed allowlist exception only)
- *   - .pi/.omk compatibility scan over provided source text
+ *   - legacy/OMK compatibility scan over provided source text
  *   - source capability scan (credential reads, sockets, network, exec, fs writes)
  *   - risk/adoption decision matrix
  */
@@ -47,7 +47,7 @@ export type DeclaredUse =
 export type ResourceKind = "extension" | "skill" | "prompt" | "theme" | "tool";
 export type RiskLevel = "low" | "medium" | "high";
 export type GateVerdict = "pass" | "review" | "reject";
-export type PathCompatibility = "omk-native" | "pi-hardcoded" | "unknown";
+export type PathCompatibility = "omk-native" | "legacy-hardcoded" | "unknown";
 export type Adoption =
 	| "native"
 	| "vendor"
@@ -496,7 +496,7 @@ export function evaluateLifecycleScripts(input: LifecycleScriptInput): Lifecycle
 }
 
 // ---------------------------------------------------------------------------
-// .pi / .omk compatibility scan
+// Legacy / OMK compatibility scan
 // ---------------------------------------------------------------------------
 
 export type FindingSeverity = "info" | "warn" | "block";
@@ -520,14 +520,28 @@ interface PatternRule {
 	pattern: RegExp;
 }
 
+const LEGACY_CONFIG_DIR_NAME = "pi";
+
 const COMPATIBILITY_RULES: PatternRule[] = [
-	{ kind: "pi-home-path", severity: "block", pattern: /~\/\.pi(?:\/|\b)/ },
-	{ kind: "pi-state-dir", severity: "block", pattern: /\.pi\/agents\b/ },
-	{ kind: "pi-project-path", severity: "block", pattern: /(?:^|[^.\w])\.pi\// },
-	{ kind: "pi-coding-agent-path", severity: "block", pattern: /pi-coding-agent/ },
-	{ kind: "pi-cli-invocation", severity: "block", pattern: /\bpi\s+(?:install|update)\b/ },
-	{ kind: "pi-env", severity: "warn", pattern: /\bPI_[A-Z][A-Z0-9_]*\b/ },
-	{ kind: "legacy-pi-import", severity: "block", pattern: /@(?:mariozechner|earendil-works)\/pi-/ },
+	{
+		kind: "legacy-home-path",
+		severity: "block",
+		pattern: new RegExp(`${String.raw`~\/\.`}${LEGACY_CONFIG_DIR_NAME}${String.raw`(?:\/|\b)`}`),
+	},
+	{
+		kind: "legacy-state-dir",
+		severity: "block",
+		pattern: new RegExp(`${String.raw`\.`}${LEGACY_CONFIG_DIR_NAME}${String.raw`\/agents\b`}`),
+	},
+	{
+		kind: "legacy-project-path",
+		severity: "block",
+		pattern: new RegExp(`${String.raw`(?:^|[^.\w])\.`}${LEGACY_CONFIG_DIR_NAME}${String.raw`\/`}`),
+	},
+	{ kind: "legacy-package-path", severity: "block", pattern: /pi-coding-agent/ },
+	{ kind: "legacy-cli-invocation", severity: "block", pattern: /\bpi\s+(?:install|update)\b/ },
+	{ kind: "legacy-env", severity: "warn", pattern: /\bPI_[A-Z][A-Z0-9_]*\b/ },
+	{ kind: "legacy-import", severity: "block", pattern: /@(?:mariozechner|earendil-works)\/pi-/ },
 	{ kind: "omk-path", severity: "info", pattern: /(?:^|[^.\w])\.omk\// },
 ];
 
@@ -561,7 +575,7 @@ export function scanLegacyOmkCompatibility(sources: SourceText[]): Compatibility
 
 	let verdict: PathCompatibility;
 	if (hasBlock) {
-		verdict = "pi-hardcoded";
+		verdict = "legacy-hardcoded";
 	} else if (hasOmk) {
 		verdict = "omk-native";
 	} else if (hasWarn) {
@@ -787,7 +801,7 @@ export function decideAdoption(input: AdoptionInput): AdoptionDecision {
 		if (input.capabilities.includes("credential-read")) reasons.push("reads-credentials-upstream");
 		if (input.licenseVerdict === "reject") reasons.push("license-blocked-upstream");
 		if (input.lifecycleVerdict === "reject") reasons.push("lifecycle-scripts-blocked-upstream");
-		if (input.pathCompatibility === "pi-hardcoded") reasons.push("pi-hardcoded-paths-upstream");
+		if (input.pathCompatibility === "legacy-hardcoded") reasons.push("legacy-hardcoded-paths-upstream");
 		if (policy?.declaredUse === "sandbox" && !policy.sandboxBackend) return deferred("pending-sandbox-backend");
 		if (policy?.declaredUse === "sandbox") reasons.push("sandbox-risk-floor-high");
 		return { adoption: "native", rejectedReasons: reasons };
@@ -809,8 +823,8 @@ export function decideAdoption(input: AdoptionInput): AdoptionDecision {
 		reasons.push("lifecycle-scripts-blocked");
 		return { adoption: "reject", rejectedReasons: reasons };
 	}
-	if (input.pathCompatibility === "pi-hardcoded") {
-		reasons.push("pi-hardcoded-paths");
+	if (input.pathCompatibility === "legacy-hardcoded") {
+		reasons.push("legacy-hardcoded-paths");
 		return { adoption: "reject", rejectedReasons: reasons };
 	}
 

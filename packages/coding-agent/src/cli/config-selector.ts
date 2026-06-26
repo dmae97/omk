@@ -1,5 +1,5 @@
 /**
- * TUI config selector for `pi config` command
+ * TUI config selector for `omk config` command
  */
 
 import { ProcessTerminal, TUI } from "@earendil-works/omk-tui";

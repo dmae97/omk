@@ -186,7 +186,7 @@ describe("detectStarterDrift", () => {
 describe("compileLoopDefinitionFromPattern", () => {
 	it("compiles L1 as report-only safety", () => {
 		const definition = compileLoopDefinitionFromPattern(validEntry(), {
-			repo: "earendil-works/pi-mono",
+			repo: "dmae97/open-multi-agent-kit",
 			statePath: ".omk/loops/daily-triage/state.json",
 			runLogPath: ".omk/loops/daily-triage/run-log.ndjson",
 		});
@@ -196,7 +196,7 @@ describe("compileLoopDefinitionFromPattern", () => {
 			pattern: "daily-triage",
 			objective: "Prioritized morning scan of CI, issues, commits, and chat",
 			level: "L1",
-			watchedScope: { repos: ["earendil-works/pi-mono"] },
+			watchedScope: { repos: ["dmae97/open-multi-agent-kit"] },
 			statePath: ".omk/loops/daily-triage/state.json",
 			runLogPath: ".omk/loops/daily-triage/run-log.ndjson",
 		});
@@ -248,7 +248,7 @@ describe("compileLoopDefinitionFromPattern", () => {
 	it("requires independent verifier for L2 and L3", () => {
 		for (const level of ["L2", "L3"] as const) {
 			const definition = compileLoopDefinitionFromPattern(validEntry({ weekOneMode: level }), {
-				repo: "earendil-works/pi-mono",
+				repo: "dmae97/open-multi-agent-kit",
 				statePath: `.omk/loops/${level}/state.json`,
 				runLogPath: `.omk/loops/${level}/run-log.ndjson`,
 			});

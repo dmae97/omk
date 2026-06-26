@@ -15,10 +15,10 @@ import {
 } from "../src/core/package-gallery.ts";
 
 describe("package gallery manifest algorithms", () => {
-	it("normalizes omk manifests before legacy pi manifests", () => {
+	it("normalizes omk manifests and ignores unrelated manifest sections", () => {
 		expect(
 			normalizeGalleryManifest({
-				pi: { themes: ["legacy.json"], video: "https://cdn.example/legacy.mp4" },
+				other: { themes: ["legacy.json"], video: "https://cdn.example/legacy.mp4" },
 				omk: {
 					extensions: [" index.ts ", ""],
 					themes: ["theme.json"],
@@ -39,13 +39,13 @@ describe("package gallery manifest algorithms", () => {
 		});
 	});
 
-	it("falls back to legacy pi manifests and ignores invalid arrays", () => {
+	it("requires omk manifests and ignores invalid arrays", () => {
 		expect(
 			normalizeGalleryManifest({
-				pi: { extensions: "extension.ts", skills: [" skill.md "], themes: ["", "theme.json"] },
+				omk: { extensions: "extension.ts", skills: [" skill.md "], themes: ["", "theme.json"] },
 			}),
 		).toEqual({
-			manifestKey: "pi",
+			manifestKey: "omk",
 			extensions: [],
 			skills: ["skill.md"],
 			prompts: [],
@@ -54,13 +54,13 @@ describe("package gallery manifest algorithms", () => {
 			image: undefined,
 			description: undefined,
 		});
+		expect(normalizeGalleryManifest({ other: { themes: ["theme.json"] } })).toBeNull();
 		expect(normalizeGalleryManifest({})).toBeNull();
 		expect(normalizeGalleryManifest(null)).toBeNull();
 	});
 
-	it("detects OMK and legacy gallery keywords", () => {
+	it("detects OMK gallery keywords", () => {
 		expect(hasGalleryKeyword({ keywords: ["omk-package"] })).toBe(true);
-		expect(hasGalleryKeyword({ keywords: ["pi-package"] })).toBe(true);
 		expect(hasGalleryKeyword({ keywords: ["other"] })).toBe(false);
 		expect(hasGalleryKeyword(null)).toBe(false);
 	});

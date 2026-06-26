@@ -1,10 +1,10 @@
 /**
  * Input Transform Example - demonstrates the `input` event for intercepting user input.
  *
- * Start pi with this extension:
- *   pi -e ./examples/extensions/input-transform.ts
+ * Start OMK with this extension:
+ *   omk -e ./examples/extensions/input-transform.ts
  *
- * Then type these inside pi:
+ * Then type these inside OMK:
  *   ?quick What is TypeScript?  → "Respond briefly: What is TypeScript?"
  *   ping                        → "pong" (instant, no LLM)
  *   time                        → current time (instant, no LLM)

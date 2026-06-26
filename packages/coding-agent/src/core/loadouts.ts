@@ -8,7 +8,7 @@
  * prompt construction, MCP runtime, scheduler admission) lives in sibling
  * modules and consumes the decisions made here.
  *
- * Schema and presets follow `.omk/runs/omk-pi-package-hardening-plan/loadout.md`.
+ * Schema and presets follow the OMK package hardening loadout plan.
  *
  * Erasable TypeScript only (no enum/namespace/parameter properties).
  */

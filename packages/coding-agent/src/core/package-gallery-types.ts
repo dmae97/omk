@@ -6,7 +6,7 @@ import type {
 	ResourceKind,
 } from "./package-procurement.ts";
 
-export type GalleryManifestKey = "omk" | "pi";
+export type GalleryManifestKey = "omk";
 export type GalleryResourceType = "extension" | "skill" | "prompt" | "theme";
 export type GalleryTrust = "declarative" | "code-execution";
 

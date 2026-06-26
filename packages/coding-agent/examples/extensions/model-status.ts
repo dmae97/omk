@@ -4,7 +4,7 @@
  * Demonstrates the `model_select` hook which fires when the model changes
  * via /model command, Ctrl+P cycling, or session restore.
  *
- * Usage: pi -e ./model-status.ts
+ * Usage: omk -e ./model-status.ts
  */
 
 import type { ExtensionAPI } from "open-multi-agent-kit";

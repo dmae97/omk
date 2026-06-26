@@ -33,11 +33,7 @@ function manifestSection(input: Record<string, unknown>, key: GalleryManifestKey
 export function normalizeGalleryManifest(input: unknown): GalleryManifest | null {
 	if (!isRecord(input)) return null;
 
-	const manifestKey: GalleryManifestKey | undefined = manifestSection(input, "omk")
-		? "omk"
-		: manifestSection(input, "pi")
-			? "pi"
-			: undefined;
+	const manifestKey: GalleryManifestKey | undefined = manifestSection(input, "omk") ? "omk" : undefined;
 	if (!manifestKey) return null;
 
 	const section = manifestSection(input, manifestKey);
@@ -58,7 +54,7 @@ export function normalizeGalleryManifest(input: unknown): GalleryManifest | null
 
 export function hasGalleryKeyword(input: unknown): boolean {
 	if (!isRecord(input) || !Array.isArray(input.keywords)) return false;
-	return input.keywords.some((keyword) => keyword === "omk-package" || keyword === "pi-package");
+	return input.keywords.some((keyword) => keyword === "omk-package");
 }
 
 export function classifyGalleryResourceTypes(

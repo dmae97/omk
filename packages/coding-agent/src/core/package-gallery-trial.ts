@@ -30,7 +30,7 @@ export function assessGalleryTrialGate(
 	}
 	if (review.licenseVerdict === "reject") reasons.push("license-blocked");
 	if (review.lifecycleVerdict === "reject") reasons.push("lifecycle-scripts-blocked");
-	if (review.pathCompatibility === "pi-hardcoded") reasons.push("pi-hardcoded-paths");
+	if (review.pathCompatibility === "legacy-hardcoded") reasons.push("legacy-hardcoded-paths");
 	if (review.adoption === "reject" || review.adoption === "deferred") {
 		reasons.push(...review.rejectedReasons);
 	}

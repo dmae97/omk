@@ -295,7 +295,7 @@ async function pollOpenAICodexDeviceAuth(device: DeviceAuthInfo, signal?: AbortS
 }
 
 async function createAuthorizationFlow(
-	originator: string = "pi",
+	originator: string = "omk",
 ): Promise<{ verifier: string; state: string; url: string }> {
 	const { verifier, challenge } = await generatePKCE();
 	const state = createState();
@@ -459,7 +459,7 @@ export async function loginOpenAICodexDeviceCode(options: {
  * @param options.onManualCodeInput - Optional promise that resolves with user-pasted code.
  *                                    Races with browser callback - whichever completes first wins.
  *                                    Useful for showing paste input immediately alongside browser flow.
- * @param options.originator - OAuth originator parameter (defaults to "pi")
+ * @param options.originator - OAuth originator parameter (defaults to "omk")
  */
 export async function loginOpenAICodex(options: {
 	onAuth: (info: { url: string; instructions?: string }) => void;

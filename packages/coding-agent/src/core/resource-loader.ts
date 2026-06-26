@@ -828,7 +828,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	}
 
 	/**
-	 * Unsubscribe pi.events listeners registered by the previously loaded
+	 * Unsubscribe event listeners registered by the previously loaded
 	 * extensions. Only subscriptions made through the extension API are
 	 * removed, so listeners added directly on an injected event bus survive.
 	 */

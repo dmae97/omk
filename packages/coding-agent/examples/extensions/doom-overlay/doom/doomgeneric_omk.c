@@ -1,5 +1,5 @@
 /**
- * pi-doom platform implementation for doomgeneric
+ * OMK DOOM platform implementation for doomgeneric
  *
  * Minimal implementation - no sound, just framebuffer and input.
  */

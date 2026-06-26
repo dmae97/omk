@@ -287,17 +287,17 @@ describe("evaluateLifecycleScripts", () => {
 });
 
 describe("scanLegacyOmkCompatibility", () => {
-	it("flags hardcoded .pi state paths as pi-hardcoded", () => {
+	it("flags hardcoded legacy state paths as legacy-hardcoded", () => {
 		const result = scanLegacyOmkCompatibility([
 			{ path: "index.ts", text: 'const dir = "~/.pi/agents";\nwriteState(dir);\n' },
 		]);
-		expect(result.verdict).toBe("pi-hardcoded");
+		expect(result.verdict).toBe("legacy-hardcoded");
 		expect(result.findings.some((f) => f.severity === "block")).toBe(true);
 	});
 
 	it("flags pi CLI invocations as blocking", () => {
 		const result = scanLegacyOmkCompatibility([{ path: "setup.sh", text: "pi install\npi update\n" }]);
-		expect(result.verdict).toBe("pi-hardcoded");
+		expect(result.verdict).toBe("legacy-hardcoded");
 	});
 
 	it("treats omk paths with no pi state as omk-native", () => {
@@ -311,9 +311,9 @@ describe("scanLegacyOmkCompatibility", () => {
 		const result = scanLegacyOmkCompatibility([
 			{ path: "index.ts", text: 'import { x } from "@mariozechner/pi-tui";\n' },
 		]);
-		expect(result.findings.some((f) => f.kind === "legacy-pi-import")).toBe(true);
+		expect(result.findings.some((f) => f.kind === "legacy-import")).toBe(true);
 		expect(result.findings.some((f) => f.severity === "block")).toBe(true);
-		expect(result.verdict).toBe("pi-hardcoded");
+		expect(result.verdict).toBe("legacy-hardcoded");
 	});
 
 	it("returns unknown for source with no signals", () => {
@@ -379,7 +379,7 @@ describe("decideAdoption", () => {
 			pinOk: true,
 			licenseVerdict: "reject",
 			lifecycleVerdict: "reject",
-			pathCompatibility: "pi-hardcoded",
+			pathCompatibility: "legacy-hardcoded",
 			capabilities: ["credential-read"],
 		});
 		// native does not import or copy upstream code, so license/path/capabilities are advisory after pinning
@@ -505,14 +505,14 @@ describe("procureCandidate", () => {
 		expect(review.rejectedReasons).toContain("reads-credentials");
 	});
 
-	it("rejects a candidate with hardcoded .pi state paths", () => {
+	it("rejects a candidate with hardcoded legacy state paths", () => {
 		const review = procureCandidate({
 			candidate: baseInput({}),
 			declaredLicense: "MIT",
 			packageJsonScripts: { build: "tsc" },
 			sources: [{ path: "index.ts", text: 'const dir = "~/.pi/agents";\n' }],
 		});
-		expect(review.pathCompatibility).toBe("pi-hardcoded");
+		expect(review.pathCompatibility).toBe("legacy-hardcoded");
 		expect(review.adoption).toBe("reject");
 	});
 

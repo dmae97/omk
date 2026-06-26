@@ -1,15 +1,9 @@
-// [DEPRECATED — DEAD CODE] OMK v6.2 — Headroom Manager (TypeScript)
+// OMK v6.2 — Headroom Manager (TypeScript)
 // ==================================================================
 // packages/coding-agent/src/core/headroom.ts
 //
-// STATUS: DEAD CODE — Not imported by any module at runtime.
-// This file is NOT wired into AgentSession or any active pipeline.
-//
-// WHY DEAD:
-//   - agent-session.ts does NOT import this file.
-//   - No other file in src/ imports from headroom.ts.
-//   - All classes (HeadroomMonitor, DynamicContextAllocator, HeadroomManager)
-//     are only referenced within this file.
+// STATUS: compatibility utility.
+// This file is preserved for legacy extension/API consumers and regression tests.
 //
 // ACTUAL HEADROOM / TOKEN BUDGET SYSTEM:
 //   - types/jailbreak.ts → defines HeadroomSnapshot, HeadroomPrediction (different shape)
@@ -21,7 +15,7 @@
 // NOTE: types/jailbreak.ts defines similar types (HeadroomSnapshot, HeadroomPrediction)
 // but with different field structures. Both are distinct from this file's types.
 //
-// DO NOT MODIFY — preserved for reference only.
+// Keep this utility deterministic and aligned with the active context budget policy.
 
 import { EventEmitter } from "events";
 
@@ -60,12 +54,17 @@ export class HeadroomMonitor extends EventEmitter {
 		}
 
 		const recent = this.history.slice(-10);
-		const avg = recent.reduce((sum, s) => sum + s.totalTokens, 0) / recent.length;
-		const trend = recent[recent.length - 1].totalTokens > recent[0].totalTokens ? "increasing" : "decreasing";
+		const first = recent[0].totalTokens;
+		const last = recent[recent.length - 1].totalTokens;
+		const delta = last - first;
+		const slope = delta / Math.max(recent.length - 1, 1);
+		const trend = Math.abs(delta) <= Math.max(1, last * 0.02) ? "stable" : delta > 0 ? "increasing" : "decreasing";
+		const projectedTokens = trend === "increasing" ? last + Math.max(1, slope) : Math.max(0, last + slope);
+		const confidence = Math.min(0.95, 0.45 + recent.length * 0.05);
 
 		return {
-			predictedTokens: Math.round(avg * 1.2),
-			confidence: 0.7,
+			predictedTokens: Math.round(projectedTokens),
+			confidence,
 			trend,
 			recommendedAction: trend === "increasing" ? "compress context" : "maintain",
 		};
@@ -73,11 +72,27 @@ export class HeadroomMonitor extends EventEmitter {
 
 	getStatus(totalTokens: number, maxTokens: number): HeadroomSnapshot["status"] {
 		const ratio = totalTokens / maxTokens;
-		if (ratio < 0.4) return "idle";
-		if (ratio < 0.7) return "active";
-		if (ratio < 0.8) return "stressed";
-		if (ratio < 0.9) return "critical";
-		return "blocked";
+		let status: HeadroomSnapshot["status"];
+		if (ratio < 0.4) {
+			status = "idle";
+		} else if (ratio < 0.7) {
+			status = "active";
+		} else if (ratio < 0.8) {
+			status = "stressed";
+		} else if (ratio < 0.9) {
+			status = "critical";
+		} else {
+			status = "blocked";
+		}
+
+		const previous = this.history.at(-1)?.status;
+		if (previous === "critical" && status === "stressed" && ratio >= 0.75) {
+			return "critical";
+		}
+		if (previous === "blocked" && status !== "blocked" && ratio >= 0.85) {
+			return "blocked";
+		}
+		return status;
 	}
 }
 

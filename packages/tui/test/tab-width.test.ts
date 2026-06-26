@@ -4,7 +4,7 @@ import { extractSegments, sliceWithWidth, visibleWidth } from "../src/utils.ts";
 
 describe("tab width accounting", () => {
 	it("keeps slice helper widths consistent with visible width", () => {
-		const text = "out 192M\t.pi/skill-tests/results-ha";
+		const text = "out 192M\t.omk/skill-tests/results-ha";
 		const slice = sliceWithWidth(text, 0, 10, true);
 
 		assert.strictEqual(slice.text, "out 192M");
@@ -13,7 +13,7 @@ describe("tab width accounting", () => {
 	});
 
 	it("keeps overlay segment widths consistent with visible width", () => {
-		const text = "out 192M\t.pi/skill-tests/results-ha";
+		const text = "out 192M\t.omk/skill-tests/results-ha";
 		const segments = extractSegments(text, 10, 13, 10, true);
 
 		assert.strictEqual(segments.before, "out 192M\t");

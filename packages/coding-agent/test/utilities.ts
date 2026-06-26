@@ -113,8 +113,8 @@ export function hasAuthForProvider(provider: string): boolean {
 	return provider in storage;
 }
 
-/** Path to the real pi agent config directory */
-export const PI_AGENT_DIR = join(homedir(), ".omk", "agent");
+/** Path to the real OMK agent config directory */
+export const OMK_AGENT_DIR = join(homedir(), ".omk", "agent");
 
 /**
  * Get an AuthStorage instance backed by ~/.omk/agent/auth.json

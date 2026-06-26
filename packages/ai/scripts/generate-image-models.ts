@@ -77,23 +77,30 @@ async function fetchOpenRouterImageModels(): Promise<ImagesModel<"openrouter-ima
 }
 
 function generateImageModelsFile(models: ImagesModel<"openrouter-images">[]): string {
-	const imageModelsByProvider = {
-		openrouter: Object.fromEntries(
-			models
-				.sort((a, b) => a.id.localeCompare(b.id))
-				.map((model) => [
-					model.id,
-					`{
+	const serializeKey = (key: string): string => (/^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key));
+	const serializeStringArray = (values: string[]): string => `[${values.map((value) => JSON.stringify(value)).join(", ")}]`;
+	const serializeCost = (cost: ImagesModel<"openrouter-images">["cost"]): string => `{
+				input: ${cost.input},
+				output: ${cost.output},
+				cacheRead: ${cost.cacheRead},
+				cacheWrite: ${cost.cacheWrite},
+			},`;
+	const serializeModel = (model: ImagesModel<"openrouter-images">): string => `{
 			id: ${JSON.stringify(model.id)},
 			name: ${JSON.stringify(model.name)},
 			api: ${JSON.stringify(model.api)},
 			provider: ${JSON.stringify(model.provider)},
 			baseUrl: ${JSON.stringify(model.baseUrl)},
-			input: ${JSON.stringify(model.input)},
-			output: ${JSON.stringify(model.output)},
-			cost: ${JSON.stringify(model.cost, null, 2).replace(/^/gm, "\t")}
-		} satisfies ImagesModel<${JSON.stringify(model.api)}>`,
-				]),
+			input: ${serializeStringArray(model.input)},
+			output: ${serializeStringArray(model.output)},
+			cost: ${serializeCost(model.cost)}
+		} satisfies ImagesModel<${JSON.stringify(model.api)}>`;
+
+	const imageModelsByProvider = {
+		openrouter: Object.fromEntries(
+			models
+				.sort((a, b) => a.id.localeCompare(b.id))
+				.map((model) => [model.id, serializeModel(model)]),
 		),
 	};
 
@@ -102,7 +109,7 @@ function generateImageModelsFile(models: ImagesModel<"openrouter-images">[]): st
 			const modelEntries = Object.entries(providerModels)
 				.map(([id, serialized]) => `\t\t${JSON.stringify(id)}: ${serialized},`)
 				.join("\n");
-			return `\t${JSON.stringify(provider)}: {\n${modelEntries}\n\t},`;
+			return `\t${serializeKey(provider)}: {\n${modelEntries}\n\t},`;
 		})
 		.join("\n");
 

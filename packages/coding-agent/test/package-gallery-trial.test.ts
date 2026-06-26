@@ -85,12 +85,12 @@ describe("package gallery trial procurement gate", () => {
 				pinned: true,
 				capabilities: [],
 				adoption: "reject",
-				rejectedReasons: ["license-blocked", "pi-hardcoded-paths"],
+				rejectedReasons: ["license-blocked", "legacy-hardcoded-paths"],
 			},
 		);
 		const base = { pinned: true, capabilities: [], adoption: "ephemeral-trial", rejectedReasons: [] } as const;
 
-		expect(rejected).toMatchObject({ outcome: "blocked", reasons: ["license-blocked", "pi-hardcoded-paths"] });
+		expect(rejected).toMatchObject({ outcome: "blocked", reasons: ["license-blocked", "legacy-hardcoded-paths"] });
 		expect(assessGalleryTrialGate({ kind: "npm", name: "pkg" }, { ...base, licenseVerdict: "reject" })).toMatchObject(
 			{
 				outcome: "blocked",
@@ -101,8 +101,8 @@ describe("package gallery trial procurement gate", () => {
 			assessGalleryTrialGate({ kind: "npm", name: "pkg" }, { ...base, lifecycleVerdict: "reject" }),
 		).toMatchObject({ outcome: "blocked", reasons: ["lifecycle-scripts-blocked"] });
 		expect(
-			assessGalleryTrialGate({ kind: "npm", name: "pkg" }, { ...base, pathCompatibility: "pi-hardcoded" }),
-		).toMatchObject({ outcome: "blocked", reasons: ["pi-hardcoded-paths"] });
+			assessGalleryTrialGate({ kind: "npm", name: "pkg" }, { ...base, pathCompatibility: "legacy-hardcoded" }),
+		).toMatchObject({ outcome: "blocked", reasons: ["legacy-hardcoded-paths"] });
 	});
 
 	it("normalizes identity independent of git ref and .git suffix", () => {

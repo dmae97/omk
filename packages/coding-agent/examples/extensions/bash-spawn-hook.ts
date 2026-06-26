@@ -4,7 +4,7 @@
  * Adjusts command, cwd, and env before execution.
  *
  * Usage:
- *   pi -e ./bash-spawn-hook.ts
+ *   omk -e ./bash-spawn-hook.ts
  */
 
 import type { ExtensionAPI } from "open-multi-agent-kit";
