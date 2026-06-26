@@ -13,6 +13,8 @@ describe("package commands", () => {
 	let originalCwd: string;
 	let originalAgentDir: string | undefined;
 	let originalOmkPackageDir: string | undefined;
+	let originalOmkOffline: string | undefined;
+	let originalOmkSkipVersionCheck: string | undefined;
 	let originalExitCode: typeof process.exitCode;
 	let originalExecPath: string;
 
@@ -33,10 +35,14 @@ describe("package commands", () => {
 		originalCwd = process.cwd();
 		originalAgentDir = process.env[ENV_AGENT_DIR];
 		originalOmkPackageDir = process.env.OMK_PACKAGE_DIR;
+		originalOmkOffline = process.env.OMK_OFFLINE;
+		originalOmkSkipVersionCheck = process.env.OMK_SKIP_VERSION_CHECK;
 		originalExitCode = process.exitCode;
 		originalExecPath = process.execPath;
 		process.exitCode = undefined;
 		process.env[ENV_AGENT_DIR] = agentDir;
+		delete process.env.OMK_OFFLINE;
+		delete process.env.OMK_SKIP_VERSION_CHECK;
 		process.chdir(projectDir);
 	});
 
@@ -53,6 +59,16 @@ describe("package commands", () => {
 			delete process.env.OMK_PACKAGE_DIR;
 		} else {
 			process.env.OMK_PACKAGE_DIR = originalOmkPackageDir;
+		}
+		if (originalOmkOffline === undefined) {
+			delete process.env.OMK_OFFLINE;
+		} else {
+			process.env.OMK_OFFLINE = originalOmkOffline;
+		}
+		if (originalOmkSkipVersionCheck === undefined) {
+			delete process.env.OMK_SKIP_VERSION_CHECK;
+		} else {
+			process.env.OMK_SKIP_VERSION_CHECK = originalOmkSkipVersionCheck;
 		}
 		Object.defineProperty(process, "execPath", { value: originalExecPath, configurable: true });
 		rmSync(tempDir, { recursive: true, force: true });

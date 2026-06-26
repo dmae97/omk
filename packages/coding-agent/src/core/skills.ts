@@ -422,7 +422,7 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 				}
 				collisionDiagnostics.push({
 					type: "collision",
-					message: `name "${skill.name}" collision`,
+					message: `name "${skill.name}" collision: kept ${existing.filePath}; skipped ${skill.filePath}`,
 					path: skill.filePath,
 					collision: {
 						resourceType: "skill",
