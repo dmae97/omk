@@ -43,8 +43,6 @@ export interface CompactionResult {
 	compressionRatio: number;
 }
 
-export type CompactionLevel = "gentle" | "moderate" | "aggressive";
-
 export class SlidingWindowCompactor extends EventEmitter {
 	private windowSize: number;
 
@@ -104,20 +102,18 @@ export class ImportanceScorer extends EventEmitter {
 }
 
 export class ContextCompactor extends EventEmitter {
-	private baseWindowSize: number;
 	private slidingWindow: SlidingWindowCompactor;
 	private deduplicator: SemanticDeduplicator;
 	private scorer: ImportanceScorer;
 
 	constructor(windowSize = 10) {
 		super();
-		this.baseWindowSize = windowSize;
 		this.slidingWindow = new SlidingWindowCompactor(windowSize);
 		this.deduplicator = new SemanticDeduplicator();
 		this.scorer = new ImportanceScorer();
 	}
 
-	compact(turns: CompactionTurn[], level: CompactionLevel | string | undefined = "moderate"): CompactionResult {
+	compact(turns: CompactionTurn[], _level: "gentle" | "moderate" | "aggressive" = "moderate"): CompactionResult {
 		const originalCount = turns.length;
 
 		// 1. Importance scoring
@@ -128,8 +124,7 @@ export class ContextCompactor extends EventEmitter {
 		const candidates = scored.filter((t) => (t.importance ?? 0) < 3);
 
 		// 3. Sliding window
-		const compactor = this.compactorForLevel(level);
-		const { preserved, evicted } = compactor.compact(candidates);
+		const { preserved, evicted } = this.slidingWindow.compact(candidates);
 
 		// 4. Deduplicate evicted
 		const uniqueEvicted = this.deduplicator.deduplicate(evicted);
@@ -154,31 +149,8 @@ export class ContextCompactor extends EventEmitter {
 			summary,
 			originalCount,
 			finalCount: finalTurns.length,
-			compressionRatio: originalCount === 0 ? 1 : finalTurns.length / originalCount,
+			compressionRatio: finalTurns.length / originalCount,
 		};
-	}
-
-	private compactorForLevel(level: CompactionLevel | string | undefined): SlidingWindowCompactor {
-		const windowSize = this.windowSizeForLevel(level);
-		return windowSize === this.baseWindowSize ? this.slidingWindow : new SlidingWindowCompactor(windowSize);
-	}
-
-	private windowSizeForLevel(level: CompactionLevel | string | undefined): number {
-		switch (this.normalizeLevel(level)) {
-			case "gentle":
-				return Math.max(1, Math.ceil(this.baseWindowSize * 1.5));
-			case "aggressive":
-				return Math.max(1, Math.floor(this.baseWindowSize * 0.5));
-			case "moderate":
-				return this.baseWindowSize;
-		}
-	}
-
-	private normalizeLevel(level: CompactionLevel | string | undefined): CompactionLevel {
-		if (level === "gentle" || level === "aggressive") {
-			return level;
-		}
-		return "moderate";
 	}
 
 	private summarize(turns: CompactionTurn[]): string {
