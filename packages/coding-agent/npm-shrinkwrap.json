@@ -1,17 +1,17 @@
 {
 	"name": "open-multi-agent-kit",
-	"version": "0.79.2",
+	"version": "0.80.8",
 	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
 			"name": "open-multi-agent-kit",
-			"version": "0.79.2",
+			"version": "0.80.8",
 			"license": "MIT",
 			"dependencies": {
-				"@earendil-works/omk-agent-core": "^0.79.2",
-				"@earendil-works/omk-ai": "^0.79.2",
-				"@earendil-works/omk-tui": "^0.79.2",
+				"@earendil-works/omk-agent-core": "^0.80.8",
+				"@earendil-works/omk-ai": "^0.80.8",
+				"@earendil-works/omk-tui": "^0.80.8",
 				"@silvia-odwyer/photon-node": "0.3.4",
 				"chalk": "5.6.2",
 				"cross-spawn": "7.0.6",
@@ -473,11 +473,11 @@
 			}
 		},
 		"node_modules/@earendil-works/omk-agent-core": {
-			"version": "0.79.2",
-			"resolved": "https://registry.npmjs.org/@earendil-works/omk-agent-core/-/omk-agent-core-0.79.2.tgz",
+			"version": "0.80.8",
+			"resolved": "https://registry.npmjs.org/@earendil-works/omk-agent-core/-/omk-agent-core-0.80.8.tgz",
 			"license": "MIT",
 			"dependencies": {
-				"@earendil-works/omk-ai": "^0.79.2",
+				"@earendil-works/omk-ai": "^0.80.8",
 				"ignore": "7.0.5",
 				"typebox": "1.1.38",
 				"yaml": "2.9.0"
@@ -487,8 +487,8 @@
 			}
 		},
 		"node_modules/@earendil-works/omk-ai": {
-			"version": "0.79.2",
-			"resolved": "https://registry.npmjs.org/@earendil-works/omk-ai/-/omk-ai-0.79.2.tgz",
+			"version": "0.80.8",
+			"resolved": "https://registry.npmjs.org/@earendil-works/omk-ai/-/omk-ai-0.80.8.tgz",
 			"license": "MIT",
 			"dependencies": {
 				"@anthropic-ai/sdk": "0.91.1",
@@ -510,8 +510,8 @@
 			}
 		},
 		"node_modules/@earendil-works/omk-tui": {
-			"version": "0.79.2",
-			"resolved": "https://registry.npmjs.org/@earendil-works/omk-tui/-/omk-tui-0.79.2.tgz",
+			"version": "0.80.8",
+			"resolved": "https://registry.npmjs.org/@earendil-works/omk-tui/-/omk-tui-0.80.8.tgz",
 			"license": "MIT",
 			"dependencies": {
 				"get-east-asian-width": "1.6.0",

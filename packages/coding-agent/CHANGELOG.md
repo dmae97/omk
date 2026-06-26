@@ -1,9 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [0.80.8] - 2026-06-27
 
 ### Added
 
+- Added GitHub-focused v0.80.8 release notes and README release documentation for the OMK hard-fork release.
 - Added source-backed public hooks fail-closed primitives for the `./hooks` export.
 - Added containerization documentation and a Gondolin extension example for routing built-in tools into a local micro-VM.
 - Added Ant Ling provider selection and setup documentation.
@@ -13,11 +14,13 @@
 - The interactive control footer now shows sampled process CPU% and RSS memory (width-adaptive segment).
 - Two new built-in themes `omk-control` and `omk-control-light`.
 - The working loader now exposes the model thinking level while streaming.
+- The OMK//CONTROL startup dashboard now displays the package-backed `omk v0.80.8 · OMK//CONTROL` release header.
 
 ### Changed
 
 - Changed internal runtime package dependencies to OMK-scoped packages and publish them before `open-multi-agent-kit` so installed `omk` can resolve its runtime imports.
 - Changed published coding-agent package metadata and source config defaults to use OMK/Open Multi-Agent Kit names, `omkConfig`, `.omk`, and the OMK repository.
+- Changed release metadata to lockstep OMK publishable packages at v0.80.8.
 - 256-color theme quantization generalizes the cube/grayscale selection for near-neutral colors (colors with channel spread < 10 keep byte-identical output).
 
 ### Fixed
