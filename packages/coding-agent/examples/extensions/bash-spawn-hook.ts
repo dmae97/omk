@@ -10,7 +10,7 @@
 import type { ExtensionAPI } from "open-multi-agent-kit";
 import { createBashTool } from "open-multi-agent-kit";
 
-export default function (pi: ExtensionAPI) {
+export default function (omk: ExtensionAPI) {
 	const cwd = process.cwd();
 
 	const bashTool = createBashTool(cwd, {
@@ -21,7 +21,7 @@ export default function (pi: ExtensionAPI) {
 		}),
 	});
 
-	pi.registerTool({
+	omk.registerTool({
 		...bashTool,
 		execute: async (id, params, signal, onUpdate, _ctx) => {
 			return bashTool.execute(id, params, signal, onUpdate);

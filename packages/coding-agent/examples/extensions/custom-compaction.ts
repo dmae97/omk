@@ -17,8 +17,8 @@ import { complete } from "@earendil-works/omk-ai";
 import type { ExtensionAPI } from "open-multi-agent-kit";
 import { convertToLlm, serializeConversation } from "open-multi-agent-kit";
 
-export default function (pi: ExtensionAPI) {
-	pi.on("session_before_compact", async (event, ctx) => {
+export default function (omk: ExtensionAPI) {
+	omk.on("session_before_compact", async (event, ctx) => {
 		ctx.ui.notify("Custom compaction extension triggered", "info");
 
 		const { preparation, branchEntries: _, signal } = event;

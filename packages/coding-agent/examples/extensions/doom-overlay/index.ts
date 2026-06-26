@@ -18,8 +18,8 @@ import { ensureWadFile } from "./wad-finder.ts";
 let activeEngine: DoomEngine | null = null;
 let activeWadPath: string | null = null;
 
-export default function (pi: ExtensionAPI) {
-	pi.registerCommand("doom-overlay", {
+export default function (omk: ExtensionAPI) {
+	omk.registerCommand("doom-overlay", {
 		description: "Play DOOM as an overlay. Q to pause and exit.",
 
 		handler: async (args, ctx) => {

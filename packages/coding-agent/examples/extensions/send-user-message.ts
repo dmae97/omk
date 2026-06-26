@@ -1,8 +1,8 @@
 /**
  * Send User Message Example
  *
- * Demonstrates pi.sendUserMessage() for sending user messages from extensions.
- * Unlike pi.sendMessage() which sends custom messages, sendUserMessage() sends
+ * Demonstrates omk.sendUserMessage() for sending user messages from extensions.
+ * Unlike omk.sendMessage() which sends custom messages, sendUserMessage() sends
  * actual user messages that appear in the conversation as if typed by the user.
  *
  * Usage:
@@ -13,9 +13,9 @@
 
 import type { ExtensionAPI } from "open-multi-agent-kit";
 
-export default function (pi: ExtensionAPI) {
+export default function (omk: ExtensionAPI) {
 	// Simple command that sends a user message
-	pi.registerCommand("ask", {
+	omk.registerCommand("ask", {
 		description: "Send a user message to the agent",
 		handler: async (args, ctx) => {
 			if (!args.trim()) {
@@ -30,12 +30,12 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			pi.sendUserMessage(args);
+			omk.sendUserMessage(args);
 		},
 	});
 
 	// Command that steers the agent mid-conversation
-	pi.registerCommand("steer", {
+	omk.registerCommand("steer", {
 		description: "Send a steering message (interrupts current processing)",
 		handler: async (args, ctx) => {
 			if (!args.trim()) {
@@ -45,16 +45,16 @@ export default function (pi: ExtensionAPI) {
 
 			if (ctx.isIdle()) {
 				// Not streaming, just send normally
-				pi.sendUserMessage(args);
+				omk.sendUserMessage(args);
 			} else {
 				// Streaming - use steer to interrupt
-				pi.sendUserMessage(args, { deliverAs: "steer" });
+				omk.sendUserMessage(args, { deliverAs: "steer" });
 			}
 		},
 	});
 
 	// Command that queues a follow-up message
-	pi.registerCommand("followup", {
+	omk.registerCommand("followup", {
 		description: "Queue a follow-up message (waits for current processing)",
 		handler: async (args, ctx) => {
 			if (!args.trim()) {
@@ -64,17 +64,17 @@ export default function (pi: ExtensionAPI) {
 
 			if (ctx.isIdle()) {
 				// Not streaming, just send normally
-				pi.sendUserMessage(args);
+				omk.sendUserMessage(args);
 			} else {
 				// Streaming - queue as follow-up
-				pi.sendUserMessage(args, { deliverAs: "followUp" });
+				omk.sendUserMessage(args, { deliverAs: "followUp" });
 				ctx.ui.notify("Follow-up queued", "info");
 			}
 		},
 	});
 
 	// Example with content array (text + images would go here)
-	pi.registerCommand("askwith", {
+	omk.registerCommand("askwith", {
 		description: "Send a user message with structured content",
 		handler: async (args, ctx) => {
 			if (!args.trim()) {
@@ -88,7 +88,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			// sendUserMessage accepts string or (TextContent | ImageContent)[]
-			pi.sendUserMessage([
+			omk.sendUserMessage([
 				{ type: "text", text: `User request: ${args}` },
 				{ type: "text", text: "Please respond concisely." },
 			]);

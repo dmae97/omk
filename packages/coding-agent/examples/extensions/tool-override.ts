@@ -5,7 +5,7 @@
  * This is useful for:
  * - Adding logging or auditing to tool calls
  * - Implementing access control or sandboxing
- * - Routing tool calls to remote systems (e.g., pi-ssh-remote)
+ * - Routing tool calls to remote systems (e.g., omk-ssh-remote)
  * - Modifying tool behavior for specific workflows
  *
  * This example overrides the `read` tool to:
@@ -65,8 +65,8 @@ const readSchema = Type.Object({
 	limit: Type.Optional(Type.Number({ description: "Maximum number of lines to read" })),
 });
 
-export default function (pi: ExtensionAPI) {
-	pi.registerTool({
+export default function (omk: ExtensionAPI) {
+	omk.registerTool({
 		name: "read", // Same name as built-in - this will override it
 		label: "read (audited)",
 		description:
@@ -129,7 +129,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// Also register a command to view the access log
-	pi.registerCommand("read-log", {
+	omk.registerCommand("read-log", {
 		description: "View the file access log",
 		handler: async (_args, ctx) => {
 			try {

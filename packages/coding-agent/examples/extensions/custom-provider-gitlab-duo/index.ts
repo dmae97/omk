@@ -374,8 +374,8 @@ export function streamGitLabDuo(
 // Extension Entry Point
 // =============================================================================
 
-export default function (pi: ExtensionAPI) {
-	pi.registerProvider("gitlab-duo", {
+export default function (omk: ExtensionAPI) {
+	omk.registerProvider("gitlab-duo", {
 		baseUrl: AI_GATEWAY_URL,
 		apiKey: "$GITLAB_TOKEN",
 		api: "gitlab-duo-api",

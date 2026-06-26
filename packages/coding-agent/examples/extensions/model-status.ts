@@ -9,8 +9,8 @@
 
 import type { ExtensionAPI } from "open-multi-agent-kit";
 
-export default function (pi: ExtensionAPI) {
-	pi.on("model_select", async (event, ctx) => {
+export default function (omk: ExtensionAPI) {
+	omk.on("model_select", async (event, ctx) => {
 		const { model, previousModel, source } = event;
 
 		// Format model identifiers

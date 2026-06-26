@@ -1,6 +1,6 @@
 # DOOM Overlay Demo
 
-Play DOOM as an overlay in pi. Demonstrates that the overlay system can handle real-time game rendering at 35 FPS.
+Play DOOM as an overlay in OMK. Demonstrates that the overlay system can handle real-time game rendering at 35 FPS.
 
 ## Usage
 

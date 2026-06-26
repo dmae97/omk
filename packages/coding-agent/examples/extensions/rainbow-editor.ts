@@ -81,8 +81,8 @@ class RainbowEditor extends CustomEditor {
 	}
 }
 
-export default function (pi: ExtensionAPI) {
-	pi.on("session_start", (_event, ctx) => {
+export default function (omk: ExtensionAPI) {
+	omk.on("session_start", (_event, ctx) => {
 		ctx.ui.setEditorComponent((tui, theme, kb) => new RainbowEditor(tui, theme, kb));
 	});
 }

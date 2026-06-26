@@ -55,7 +55,7 @@ export function cleanupWindowsSelfUpdateQuarantine(packageDir: string): void {
 	try {
 		rmSync(quarantineRoot, { recursive: true, force: true });
 	} catch {
-		// A previous pi process may still be exiting and holding a native addon.
+		// A previous OMK process may still be exiting and holding a native addon.
 	}
 }
 
