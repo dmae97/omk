@@ -505,6 +505,69 @@ Extra content`,
 			expect(loadedSkill?.filePath).toBe(skillPath);
 			expect(loadedSkill?.sourceInfo?.source).toBe("extension:file-url");
 		});
+
+		it("should preserve package skill source info after extension skills are added", async () => {
+			const packageRoot = join(tempDir, "skill-package");
+			const packageSkillDir = join(packageRoot, "skills", "package-skill");
+			mkdirSync(packageSkillDir, { recursive: true });
+			const packageSkillPath = join(packageSkillDir, "SKILL.md");
+			writeFileSync(
+				packageSkillPath,
+				`---
+name: package-skill
+description: Package skill
+---
+Package content`,
+			);
+
+			const extensionSkillDir = join(tempDir, "extension-skills", "extension-skill");
+			mkdirSync(extensionSkillDir, { recursive: true });
+			writeFileSync(
+				join(extensionSkillDir, "SKILL.md"),
+				`---
+name: extension-skill
+description: Extension skill
+---
+Extension content`,
+			);
+
+			const settingsManager = SettingsManager.inMemory();
+			settingsManager.setProjectPackages([packageRoot]);
+			const loader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
+			await loader.reload();
+
+			const beforeExtend = loader.getSkills().skills.find((skill) => skill.name === "package-skill");
+			expect(beforeExtend?.sourceInfo).toMatchObject({
+				source: packageRoot,
+				scope: "project",
+				origin: "package",
+				path: packageSkillPath,
+				baseDir: packageRoot,
+			});
+
+			loader.extendResources({
+				skillPaths: [
+					{
+						path: extensionSkillDir,
+						metadata: {
+							source: "extension:extra",
+							scope: "temporary",
+							origin: "top-level",
+							baseDir: extensionSkillDir,
+						},
+					},
+				],
+			});
+
+			const afterExtend = loader.getSkills().skills.find((skill) => skill.name === "package-skill");
+			expect(afterExtend?.sourceInfo).toMatchObject({
+				source: packageRoot,
+				scope: "project",
+				origin: "package",
+				path: packageSkillPath,
+				baseDir: packageRoot,
+			});
+		});
 	});
 
 	describe("noSkills option", () => {

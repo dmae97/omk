@@ -227,6 +227,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private systemPrompt?: string;
 	private appendSystemPrompt: string[];
 	private lastSkillPaths: string[];
+	private resourceMetadataByPath: Map<string, PathMetadata>;
 	private extensionSkillSourceInfos: Map<string, SourceInfo>;
 	private extensionPromptSourceInfos: Map<string, SourceInfo>;
 	private extensionThemeSourceInfos: Map<string, SourceInfo>;
@@ -274,6 +275,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.agentsFiles = [];
 		this.appendSystemPrompt = [];
 		this.lastSkillPaths = [];
+		this.resourceMetadataByPath = new Map();
 		this.extensionSkillSourceInfos = new Map();
 		this.extensionPromptSourceInfos = new Map();
 		this.extensionThemeSourceInfos = new Map();
@@ -315,12 +317,15 @@ export class DefaultResourceLoader implements ResourceLoader {
 		const themePaths = this.normalizeExtensionPaths(paths.themePaths ?? []);
 
 		for (const entry of skillPaths) {
+			this.resourceMetadataByPath.set(entry.path, entry.metadata);
 			this.extensionSkillSourceInfos.set(entry.path, createSourceInfo(entry.path, entry.metadata));
 		}
 		for (const entry of promptPaths) {
+			this.resourceMetadataByPath.set(entry.path, entry.metadata);
 			this.extensionPromptSourceInfos.set(entry.path, createSourceInfo(entry.path, entry.metadata));
 		}
 		for (const entry of themePaths) {
+			this.resourceMetadataByPath.set(entry.path, entry.metadata);
 			this.extensionThemeSourceInfos.set(entry.path, createSourceInfo(entry.path, entry.metadata));
 		}
 
@@ -329,7 +334,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 				this.lastSkillPaths,
 				skillPaths.map((entry) => entry.path),
 			);
-			this.updateSkillsFromPaths(this.lastSkillPaths);
+			this.updateSkillsFromPaths(this.lastSkillPaths, this.resourceMetadataByPath);
 		}
 
 		if (promptPaths.length > 0) {
@@ -337,7 +342,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 				this.lastPromptPaths,
 				promptPaths.map((entry) => entry.path),
 			);
-			this.updatePromptsFromPaths(this.lastPromptPaths);
+			this.updatePromptsFromPaths(this.lastPromptPaths, this.resourceMetadataByPath);
 		}
 
 		if (themePaths.length > 0) {
@@ -345,7 +350,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 				this.lastThemePaths,
 				themePaths.map((entry) => entry.path),
 			);
-			this.updateThemesFromPaths(this.lastThemePaths);
+			this.updateThemesFromPaths(this.lastThemePaths, this.resourceMetadataByPath);
 		}
 	}
 
@@ -356,6 +361,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 			temporary: true,
 		});
 		const metadataByPath = new Map<string, PathMetadata>();
+		this.resourceMetadataByPath = metadataByPath;
 
 		this.extensionSkillSourceInfos = new Map();
 		this.extensionPromptSourceInfos = new Map();
@@ -573,7 +579,43 @@ export class DefaultResourceLoader implements ResourceLoader {
 				skill.sourceInfo ??
 				this.getDefaultSourceInfoForPath(skill.filePath),
 		}));
-		this.skillDiagnostics = resolvedSkills.diagnostics;
+		this.skillDiagnostics = this.enrichCollisionDiagnostics(
+			resolvedSkills.diagnostics,
+			this.extensionSkillSourceInfos,
+			metadataByPath,
+		);
+	}
+
+	private enrichCollisionDiagnostics(
+		diagnostics: ResourceDiagnostic[],
+		extraSourceInfos?: Map<string, SourceInfo>,
+		metadataByPath?: Map<string, PathMetadata>,
+	): ResourceDiagnostic[] {
+		return diagnostics.map((diagnostic) => {
+			const collision = diagnostic.collision;
+			if (!collision) {
+				return diagnostic;
+			}
+
+			const winnerSourceInfo = this.findSourceInfoForPath(collision.winnerPath, extraSourceInfos, metadataByPath);
+			const loserSourceInfo = this.findSourceInfoForPath(collision.loserPath, extraSourceInfos, metadataByPath);
+			if (!winnerSourceInfo && !loserSourceInfo) {
+				return diagnostic;
+			}
+
+			return {
+				...diagnostic,
+				collision: {
+					...collision,
+					winnerSource: winnerSourceInfo?.source ?? collision.winnerSource,
+					loserSource: loserSourceInfo?.source ?? collision.loserSource,
+					winnerScope: winnerSourceInfo?.scope ?? collision.winnerScope,
+					loserScope: loserSourceInfo?.scope ?? collision.loserScope,
+					winnerOrigin: winnerSourceInfo?.origin ?? collision.winnerOrigin,
+					loserOrigin: loserSourceInfo?.origin ?? collision.loserOrigin,
+				},
+			};
+		});
 	}
 
 	private updatePromptsFromPaths(promptPaths: string[], metadataByPath?: Map<string, PathMetadata>): void {

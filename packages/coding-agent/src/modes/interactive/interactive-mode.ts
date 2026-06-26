@@ -1323,6 +1323,24 @@ export class InteractiveMode {
 		return this.formatDisplayPath(p);
 	}
 
+	private formatCollisionPathWithSource(
+		p: string,
+		sourceInfos: Map<string, SourceInfo>,
+		fallback?: { source?: string; scope?: SourceInfo["scope"]; origin?: SourceInfo["origin"] },
+	): string {
+		const sourceInfo =
+			this.findSourceInfoForPath(p, sourceInfos) ??
+			(fallback?.source
+				? {
+						path: p,
+						source: fallback.source,
+						scope: fallback.scope ?? "temporary",
+						origin: fallback.origin ?? "top-level",
+					}
+				: undefined);
+		return this.formatPathWithSource(p, sourceInfo);
+	}
+
 	private formatDiagnostics(diagnostics: readonly ResourceDiagnostic[], sourceInfos: Map<string, SourceInfo>): string {
 		const lines: string[] = [];
 
@@ -1348,7 +1366,11 @@ export class InteractiveMode {
 			lines.push(
 				theme.fg(
 					"dim",
-					`    ${theme.fg("success", "✓")} ${this.formatPathWithSource(first.winnerPath, this.findSourceInfoForPath(first.winnerPath, sourceInfos))}`,
+					`    ${theme.fg("success", "✓")} ${this.formatCollisionPathWithSource(first.winnerPath, sourceInfos, {
+						source: first.winnerSource,
+						scope: first.winnerScope,
+						origin: first.winnerOrigin,
+					})}`,
 				),
 			);
 			for (const d of collisionList) {
@@ -1356,7 +1378,15 @@ export class InteractiveMode {
 					lines.push(
 						theme.fg(
 							"dim",
-							`    ${theme.fg("warning", "✗")} ${this.formatPathWithSource(d.collision.loserPath, this.findSourceInfoForPath(d.collision.loserPath, sourceInfos))} (skipped)`,
+							`    ${theme.fg("warning", "✗")} ${this.formatCollisionPathWithSource(
+								d.collision.loserPath,
+								sourceInfos,
+								{
+									source: d.collision.loserSource,
+									scope: d.collision.loserScope,
+									origin: d.collision.loserOrigin,
+								},
+							)} (skipped)`,
 						),
 					);
 				}

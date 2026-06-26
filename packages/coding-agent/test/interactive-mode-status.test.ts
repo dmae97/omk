@@ -339,9 +339,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 		cwd?: string;
 		contextFiles?: Array<{ path: string; content?: string }>;
 		extensions?: ExtensionFixture[];
-		skills?: Array<{ filePath: string; name: string }>;
+		skills?: Array<{ filePath: string; name: string; sourceInfo?: SourceInfo }>;
 		skillDiagnostics?: ResourceDiagnostic[];
 		useRealScopeGroups?: boolean;
+		useRealDiagnostics?: boolean;
 	}) {
 		const fakeThis: any = {
 			options: { verbose: options.verbose ?? false },
@@ -401,6 +402,26 @@ describe("InteractiveMode.showLoadedResources", () => {
 			formatDiagnostics: () => "diagnostics",
 			getBuiltInCommandConflictDiagnostics: () => [],
 		};
+
+		if (options.useRealDiagnostics) {
+			fakeThis.getDisplaySourceInfo = (sourceInfo?: SourceInfo) =>
+				(InteractiveMode as any).prototype.getDisplaySourceInfo.call(fakeThis, sourceInfo);
+			fakeThis.findSourceInfoForPath = (p: string, sourceInfos: Map<string, SourceInfo>) =>
+				(InteractiveMode as any).prototype.findSourceInfoForPath.call(fakeThis, p, sourceInfos);
+			fakeThis.formatPathWithSource = (p: string, sourceInfo?: SourceInfo) =>
+				(InteractiveMode as any).prototype.formatPathWithSource.call(fakeThis, p, sourceInfo);
+			fakeThis.formatCollisionPathWithSource = (
+				p: string,
+				sourceInfos: Map<string, SourceInfo>,
+				fallback?: { source?: string; scope?: SourceInfo["scope"]; origin?: SourceInfo["origin"] },
+			) => (InteractiveMode as any).prototype.formatCollisionPathWithSource.call(fakeThis, p, sourceInfos, fallback);
+			fakeThis.formatDiagnosticsSummary = (diagnostics: readonly ResourceDiagnostic[]) =>
+				(InteractiveMode as any).prototype.formatDiagnosticsSummary.call(fakeThis, diagnostics);
+			fakeThis.formatDiagnostics = (
+				diagnostics: readonly ResourceDiagnostic[],
+				sourceInfos: Map<string, SourceInfo>,
+			) => (InteractiveMode as any).prototype.formatDiagnostics.call(fakeThis, diagnostics, sourceInfos);
+		}
 
 		if (options.useRealScopeGroups) {
 			fakeThis.getScopeGroup = (sourceInfo?: SourceInfo) =>
@@ -1019,5 +1040,53 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(fakeThis.chatContainer.children).toHaveLength(0);
+	});
+
+	test("shows source-aware collision diagnostics when verbose", () => {
+		const winnerPath = "/tmp/project/.omk/npm/node_modules/skill-pack/skills/commit/SKILL.md";
+		const fakeThis = createShowLoadedResourcesThis({
+			quietStartup: true,
+			verbose: true,
+			skills: [
+				{
+					filePath: winnerPath,
+					name: "commit",
+					sourceInfo: createSourceInfo(winnerPath, {
+						source: "npm:skill-pack",
+						scope: "project",
+						origin: "package",
+						baseDir: "/tmp/project/.omk/npm/node_modules/skill-pack",
+					}),
+				},
+			],
+			skillDiagnostics: [
+				{
+					type: "collision",
+					message: "duplicate skill name",
+					collision: {
+						resourceType: "skill",
+						name: "commit",
+						winnerPath,
+						loserPath: "/tmp/legacy/SKILL.md",
+						winnerSource: "npm:skill-pack",
+						loserSource: "local",
+						winnerScope: "project",
+						loserScope: "user",
+						winnerOrigin: "package",
+						loserOrigin: "top-level",
+					},
+				},
+			],
+			useRealDiagnostics: true,
+		});
+
+		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
+			force: false,
+		});
+
+		const output = normalizeRenderedOutput(fakeThis.chatContainer);
+		expect(output).toContain("[Skill conflicts]");
+		expect(output).toContain("npm:skill-pack (project) skills/commit/SKILL.md");
+		expect(output).toContain("user /tmp/legacy/SKILL.md (skipped)");
 	});
 });

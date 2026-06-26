@@ -429,6 +429,12 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 						name: skill.name,
 						winnerPath: existing.filePath,
 						loserPath: skill.filePath,
+						winnerSource: existing.sourceInfo.source,
+						loserSource: skill.sourceInfo.source,
+						winnerScope: existing.sourceInfo.scope,
+						loserScope: skill.sourceInfo.scope,
+						winnerOrigin: existing.sourceInfo.origin,
+						loserOrigin: skill.sourceInfo.origin,
 					},
 				});
 			} else {
@@ -439,8 +445,8 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 	}
 
 	if (includeDefaults) {
-		addSkills(loadSkillsFromDirInternal(join(resolvedAgentDir, "skills"), "user", true));
 		addSkills(loadSkillsFromDirInternal(resolve(resolvedCwd, CONFIG_DIR_NAME, "skills"), "project", true));
+		addSkills(loadSkillsFromDirInternal(join(resolvedAgentDir, "skills"), "user", true));
 	}
 
 	const userSkillsDir = join(resolvedAgentDir, "skills");

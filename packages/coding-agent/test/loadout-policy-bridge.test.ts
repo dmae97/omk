@@ -12,6 +12,7 @@ import {
 	type LoadoutRuntimeState,
 } from "../src/core/loadout-runtime.ts";
 import type { ResourceLoader } from "../src/core/resource-loader.ts";
+import type { Skill } from "../src/core/skills.ts";
 import {
 	type BashOperations,
 	createBashToolDefinition,
@@ -246,6 +247,52 @@ describe("hook policy inventory bridge", () => {
 			});
 		} finally {
 			fs.rmSync(agentDir, { recursive: true, force: true });
+		}
+	});
+
+	it("exposes skill source metadata in runtime capability inventory", () => {
+		const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "omk-skill-inventory-"));
+		const skillPath = path.join(packageRoot, "skills", "package-skill", "SKILL.md");
+		const packageSkill: Skill = {
+			name: "package-skill",
+			description: "Package skill",
+			filePath: skillPath,
+			baseDir: path.dirname(skillPath),
+			sourceInfo: {
+				path: skillPath,
+				source: "npm:package-skill",
+				scope: "project",
+				origin: "package",
+				baseDir: packageRoot,
+			},
+			disableModelInvocation: false,
+		};
+		const session: LoadoutRuntimeSession = {
+			_baseToolDefinitions: new Map(),
+			_extensionRunner: { getAllRegisteredTools: () => [] },
+			_customTools: [],
+		};
+		const resourceLoader = {
+			getSkills: () => ({ skills: [packageSkill], diagnostics: [] }),
+		} as unknown as ResourceLoader;
+
+		try {
+			const inventory = buildCapabilityInventory(session, resourceLoader, packageRoot, {
+				hooks: [],
+			});
+
+			expect(inventory.skills).toEqual([
+				{
+					kind: "skill",
+					name: "package-skill",
+					source: "npm:package-skill",
+					scope: "project",
+					origin: "package",
+					path: skillPath,
+				},
+			]);
+		} finally {
+			fs.rmSync(packageRoot, { recursive: true, force: true });
 		}
 	});
 });

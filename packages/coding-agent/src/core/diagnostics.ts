@@ -5,6 +5,10 @@ export interface ResourceCollision {
 	loserPath: string;
 	winnerSource?: string; // e.g., "npm:foo", "git:...", "local"
 	loserSource?: string;
+	winnerScope?: "user" | "project" | "temporary";
+	loserScope?: "user" | "project" | "temporary";
+	winnerOrigin?: "package" | "top-level";
+	loserOrigin?: "package" | "top-level";
 }
 
 export interface ResourceDiagnostic {

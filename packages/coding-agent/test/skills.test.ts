@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { homedir } from "os";
 import { join, resolve } from "path";
@@ -390,6 +390,59 @@ describe("skills", () => {
 			});
 			expect(withTilde.length).toBe(withoutTilde.length);
 		});
+
+		it("should prefer project default skills over user default skills", () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "skills-default-precedence-"));
+			try {
+				const agentDir = join(tempDir, "agent");
+				const cwd = join(tempDir, "project");
+				const userSkillDir = join(agentDir, "skills", "shared-skill");
+				const projectSkillDir = join(cwd, ".omk", "skills", "shared-skill");
+				mkdirSync(userSkillDir, { recursive: true });
+				mkdirSync(projectSkillDir, { recursive: true });
+				const userSkillPath = join(userSkillDir, "SKILL.md");
+				const projectSkillPath = join(projectSkillDir, "SKILL.md");
+				writeFileSync(
+					userSkillPath,
+					`---
+name: shared-skill
+description: User skill
+---
+User content`,
+				);
+				writeFileSync(
+					projectSkillPath,
+					`---
+name: shared-skill
+description: Project skill
+---
+Project content`,
+				);
+
+				const { skills, diagnostics } = loadSkills({
+					agentDir,
+					cwd,
+					skillPaths: [],
+					includeDefaults: true,
+				});
+				const collision = diagnostics.find((diagnostic) => diagnostic.collision?.name === "shared-skill");
+
+				expect(skills).toHaveLength(1);
+				expect(skills[0].filePath).toBe(projectSkillPath);
+				expect(collision?.collision).toMatchObject({
+					winnerPath: projectSkillPath,
+					loserPath: userSkillPath,
+					winnerSource: "local",
+					loserSource: "local",
+					winnerScope: "project",
+					loserScope: "user",
+					winnerOrigin: "top-level",
+					loserOrigin: "top-level",
+				});
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
+		});
 	});
 
 	describe("collision handling", () => {
@@ -435,6 +488,56 @@ A`,
 			expect(collision?.message).toContain(collision?.collision?.winnerPath);
 			expect(collision?.message).toContain("skipped");
 			expect(collision?.message).toContain(collision?.collision?.loserPath);
+		});
+
+		it("should report collision diagnostics with source provenance and no skill content", () => {
+			const { diagnostics } = loadSkills({
+				agentDir: resolve(__dirname, "fixtures/empty-agent"),
+				cwd: resolve(__dirname, "fixtures/empty-cwd"),
+				skillPaths: [join(collisionFixturesDir, "first"), join(collisionFixturesDir, "second")],
+				includeDefaults: false,
+			});
+			const collision = diagnostics.find((d) => d.type === "collision" && d.collision?.name === "calendar");
+
+			expect(collision?.collision).toMatchObject({
+				winnerSource: "local",
+				loserSource: "local",
+				winnerScope: "temporary",
+				loserScope: "temporary",
+				winnerOrigin: "top-level",
+				loserOrigin: "top-level",
+			});
+			expect(JSON.stringify(collision)).not.toContain("This is the first calendar skill.");
+			expect(JSON.stringify(collision)).not.toContain("This is the second calendar skill.");
+		});
+
+		it("should skip identical-content duplicate skill names without diagnostics", () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "skills-identical-"));
+			try {
+				const firstDir = join(tempDir, "first", "same-skill");
+				const secondDir = join(tempDir, "second", "same-skill");
+				mkdirSync(firstDir, { recursive: true });
+				mkdirSync(secondDir, { recursive: true });
+				const content = `---
+name: same-skill
+description: Same skill
+---
+Same content`;
+				writeFileSync(join(firstDir, "SKILL.md"), content);
+				writeFileSync(join(secondDir, "SKILL.md"), content);
+
+				const { skills, diagnostics } = loadSkills({
+					agentDir: resolve(__dirname, "fixtures/empty-agent"),
+					cwd: resolve(__dirname, "fixtures/empty-cwd"),
+					skillPaths: [join(tempDir, "first"), join(tempDir, "second")],
+					includeDefaults: false,
+				});
+
+				expect(skills.map((skill) => skill.name)).toEqual(["same-skill"]);
+				expect(diagnostics.filter((diagnostic) => diagnostic.type === "collision")).toEqual([]);
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
 		});
 
 		it("should detect name collisions and keep first skill", () => {
