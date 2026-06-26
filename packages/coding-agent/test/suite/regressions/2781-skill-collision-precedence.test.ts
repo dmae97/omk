@@ -52,6 +52,14 @@ describe("issue #2781 skill collision precedence: user skills should override pa
 		return skillPath;
 	}
 
+	function createProjectSkillInDir(dirName: string, name: string, description: string, content: string): string {
+		const skillDir = join(cwd, ".omk", "skills", dirName);
+		mkdirSync(skillDir, { recursive: true });
+		const skillPath = join(skillDir, "SKILL.md");
+		writeFileSync(skillPath, `---\nname: ${name}\ndescription: ${description}\n---\n${content}`);
+		return skillPath;
+	}
+
 	function createSettingsWithPackage(pkgDir: string, scope: "user" | "project"): void {
 		const settingsDir = scope === "user" ? agentDir : join(cwd, ".omk");
 		mkdirSync(settingsDir, { recursive: true });
@@ -102,6 +110,42 @@ describe("issue #2781 skill collision precedence: user skills should override pa
 		expect(webFetch).toBeDefined();
 		expect(webFetch!.filePath).toBe(projectSkillPath);
 		expect(webFetch!.description).toBe("Project web-fetch override");
+	});
+
+	it("same-scope collisions should keep the lexicographically first discovered project skill", async () => {
+		const laterSkillPath = createProjectSkillInDir(
+			"z-web-fetch",
+			"web-fetch",
+			"Later project web-fetch",
+			"Later project content",
+		);
+		const earlierSkillPath = createProjectSkillInDir(
+			"a-web-fetch",
+			"web-fetch",
+			"Earlier project web-fetch",
+			"Earlier project content",
+		);
+
+		const loader = new DefaultResourceLoader({ cwd, agentDir });
+		await loader.reload();
+
+		const { diagnostics, skills } = loader.getSkills();
+		const webFetch = skills.find((s) => s.name === "web-fetch");
+		const collision = diagnostics.find((d) => d.type === "collision" && d.collision?.name === "web-fetch");
+
+		expect(webFetch).toBeDefined();
+		expect(webFetch!.filePath).toBe(earlierSkillPath);
+		expect(webFetch!.description).toBe("Earlier project web-fetch");
+		expect(collision?.collision).toMatchObject({
+			winnerPath: earlierSkillPath,
+			loserPath: laterSkillPath,
+			winnerSource: "auto",
+			loserSource: "auto",
+			winnerScope: "project",
+			loserScope: "project",
+			winnerOrigin: "top-level",
+			loserOrigin: "top-level",
+		});
 	});
 
 	it("collision diagnostics should report package skill as loser when user skill wins", async () => {

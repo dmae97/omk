@@ -112,6 +112,9 @@ describe("domain-loadouts curated inventory", () => {
 			expect(hook.policy.timeoutMs, hook.name).toBeLessThanOrEqual(30_000);
 			expect(hook.policy.stages.length, hook.name).toBeGreaterThan(0);
 			expect(hook.policy.effects.length, hook.name).toBeGreaterThan(0);
+			expect(Object.isFrozen(hook.policy), hook.name).toBe(true);
+			expect(Object.isFrozen(hook.policy.stages), hook.name).toBe(true);
+			expect(Object.isFrozen(hook.policy.effects), hook.name).toBe(true);
 			for (const effect of hook.policy.effects) {
 				expect(["validator", "mutator", "observer"], hook.name).toContain(effect);
 			}
