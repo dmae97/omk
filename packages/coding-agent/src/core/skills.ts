@@ -18,6 +18,12 @@ const IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"];
 
 type IgnoreMatcher = ReturnType<typeof ignore>;
 
+function compareDirentNames(a: { name: string }, b: { name: string }): number {
+	if (a.name < b.name) return -1;
+	if (a.name > b.name) return 1;
+	return 0;
+}
+
 function toPosixPath(p: string): string {
 	return p.split(sep).join("/");
 }
@@ -128,6 +134,32 @@ function validateDescription(description: string | undefined): string[] {
 	return errors;
 }
 
+function sanitizeSkillLoadError(error: unknown): string {
+	const fallback = "failed to parse skill file";
+	if (typeof error !== "object" || error === null || !("linePos" in error)) {
+		return fallback;
+	}
+
+	const linePos = error.linePos;
+	if (!Array.isArray(linePos)) {
+		return fallback;
+	}
+
+	const firstPosition = linePos[0];
+	if (
+		typeof firstPosition !== "object" ||
+		firstPosition === null ||
+		!("line" in firstPosition) ||
+		!("col" in firstPosition) ||
+		typeof firstPosition.line !== "number" ||
+		typeof firstPosition.col !== "number"
+	) {
+		return fallback;
+	}
+
+	return `${fallback} at line ${firstPosition.line}, column ${firstPosition.col}`;
+}
+
 export interface LoadSkillsFromDirOptions {
 	/** Directory to scan for skills */
 	dir: string;
@@ -191,7 +223,7 @@ function loadSkillsFromDirInternal(
 	addIgnoreRules(ig, dir, root);
 
 	try {
-		const entries = readdirSync(dir, { withFileTypes: true });
+		const entries = readdirSync(dir, { withFileTypes: true }).sort(compareDirentNames);
 
 		for (const entry of entries) {
 			if (entry.name !== "SKILL.md") {
@@ -321,8 +353,7 @@ function loadSkillFromFile(
 			diagnostics,
 		};
 	} catch (error) {
-		const message = error instanceof Error ? error.message : "failed to parse skill file";
-		diagnostics.push({ type: "warning", message, path: filePath });
+		diagnostics.push({ type: "warning", message: sanitizeSkillLoadError(error), path: filePath });
 		return { skill: null, diagnostics };
 	}
 }

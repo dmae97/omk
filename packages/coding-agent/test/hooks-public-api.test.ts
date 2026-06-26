@@ -77,6 +77,7 @@ describe("public hooks API", () => {
 			code: "hook_timeout",
 			stage: "tool_call",
 		});
+		expect(Object.isFrozen(result.details)).toBe(true);
 
 		const detailKeys = collectObjectKeys(result.details);
 		expect(detailKeys).not.toContain("cause");
@@ -114,5 +115,24 @@ describe("public hooks API", () => {
 			timeoutMs: DEFAULT_HOOK_POLICY.timeoutMs,
 		});
 		expect(JSON.stringify(policy)).not.toMatch(/\/home\/yu|rm -rf|raw cause|private\.sh/);
+	});
+
+	it("returns immutable hook policy metadata in canonical runtime order", () => {
+		const policy = sanitizeHookPolicy({
+			stages: ["session_stop", "tool_result", "pre_compact", "tool_call", "session_start"],
+			effects: ["observer", "mutator", "validator"],
+			failureMode: "fail-open",
+			timeoutMs: 10_000,
+		});
+
+		expect(policy).toEqual({
+			stages: ["tool_call", "tool_result", "session_start", "pre_compact", "session_stop"],
+			effects: ["validator", "mutator", "observer"],
+			failureMode: "fail-closed",
+			timeoutMs: 10_000,
+		});
+		expect(Object.isFrozen(policy)).toBe(true);
+		expect(Object.isFrozen(policy.stages)).toBe(true);
+		expect(Object.isFrozen(policy.effects)).toBe(true);
 	});
 });

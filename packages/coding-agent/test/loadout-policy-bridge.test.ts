@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ExtensionContext } from "../src/core/extensions/types.ts";
-import { loadHookInventory } from "../src/core/hook-inventory.ts";
+import { type HookInventory, loadHookInventory } from "../src/core/hook-inventory.ts";
 import { createLoadoutAccessPolicy, decideLoadoutAccess } from "../src/core/loadout-access-policy.ts";
 import { createLoadoutPolicyFromRuntimeState, validatePolicyIntegrity } from "../src/core/loadout-policy-bridge.ts";
 import {
@@ -11,6 +11,7 @@ import {
 	type LoadoutRuntimeSession,
 	type LoadoutRuntimeState,
 } from "../src/core/loadout-runtime.ts";
+import { applyLoadoutProfile } from "../src/core/loadouts.ts";
 import type { ResourceLoader } from "../src/core/resource-loader.ts";
 import type { Skill } from "../src/core/skills.ts";
 import {
@@ -250,6 +251,46 @@ describe("hook policy inventory bridge", () => {
 		}
 	});
 
+	it("sanitizes hook policy metadata again at the runtime inventory boundary", () => {
+		const session: LoadoutRuntimeSession = {
+			_baseToolDefinitions: new Map(),
+			_extensionRunner: { getAllRegisteredTools: () => [] },
+			_customTools: [],
+		};
+		const resourceLoader = {
+			getSkills: () => ({ skills: [] }),
+		} as unknown as ResourceLoader;
+		const hookInventory = {
+			hooks: [
+				{
+					name: "unsafe-hook",
+					scriptPath: "/tmp/unsafe-hook.sh",
+					builtin: false,
+					policy: {
+						stages: ["tool_call", "raw /home/yu/private"],
+						effects: ["mutator", "rm -rf /home/yu/omk"],
+						failureMode: "fail-open",
+						timeoutMs: 1_000_000,
+						command: "rm -rf /home/yu/omk",
+					},
+				},
+			],
+		} as unknown as HookInventory;
+
+		const inventory = buildCapabilityInventory(session, resourceLoader, "/repo", hookInventory);
+		const runtimeHook = inventory.hooks.find((hook) => hook.name === "unsafe-hook");
+
+		expect(runtimeHook).toBeDefined();
+		expect(runtimeHook?.policy).toEqual({
+			stages: ["tool_call"],
+			effects: ["mutator"],
+			failureMode: "fail-closed",
+			timeoutMs: 5_000,
+		});
+		expect(Object.isFrozen(runtimeHook?.policy)).toBe(true);
+		expect(JSON.stringify(runtimeHook?.policy)).not.toMatch(/\/home\/yu|rm -rf|fail-open|private/);
+	});
+
 	it("exposes skill source metadata in runtime capability inventory", () => {
 		const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "omk-skill-inventory-"));
 		const skillPath = path.join(packageRoot, "skills", "package-skill", "SKILL.md");
@@ -293,6 +334,72 @@ describe("hook policy inventory bridge", () => {
 			]);
 		} finally {
 			fs.rmSync(packageRoot, { recursive: true, force: true });
+		}
+	});
+
+	it("exposes configured MCP entries as selectable runtime inventory without leaking env values", () => {
+		const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "omk-mcp-inventory-"));
+		const mcpDir = path.join(projectRoot, ".omk");
+		const mcpPath = path.join(mcpDir, "mcp.json");
+		fs.mkdirSync(mcpDir, { recursive: true });
+		fs.writeFileSync(
+			mcpPath,
+			JSON.stringify({
+				mcpServers: {
+					context7: {
+						command: "npx",
+						args: ["-y", "@upstash/context7-mcp@1.0.0"],
+						env: {
+							CONTEXT7_API_KEY: "raw-secret-value",
+						},
+						network: {
+							mode: "domain-allowlist",
+							allowedDomains: ["context7.com"],
+						},
+					},
+				},
+			}),
+		);
+		const session: LoadoutRuntimeSession = {
+			_baseToolDefinitions: new Map(),
+			_extensionRunner: { getAllRegisteredTools: () => [] },
+			_customTools: [],
+		};
+		const resourceLoader = {
+			getSkills: () => ({ skills: [] }),
+		} as unknown as ResourceLoader;
+
+		try {
+			const inventory = buildCapabilityInventory(session, resourceLoader, projectRoot, {
+				hooks: [],
+			});
+			const context7 = inventory.mcp.find((entry) => entry.name === "context7");
+
+			expect(context7).toEqual({
+				kind: "mcp",
+				name: "context7",
+				source: mcpPath,
+				scope: "project",
+				origin: "top-level",
+				path: mcpPath,
+			});
+			expect(JSON.stringify(context7)).not.toContain("raw-secret-value");
+
+			const applied = applyLoadoutProfile(
+				{
+					schemaVersion: "omk.loadout.v1",
+					name: "mcp-path-selector",
+					authority: "read-only",
+					tools: { allow: [] },
+					mcp: { allow: [{ kind: "mcp", paths: [mcpPath] }] },
+				},
+				inventory,
+			);
+			expect(applied.activeMcp).toEqual(["context7"]);
+			expect(applied.warnings).toEqual([]);
+			expect(applied.blockers).toEqual([]);
+		} finally {
+			fs.rmSync(projectRoot, { recursive: true, force: true });
 		}
 	});
 });

@@ -107,6 +107,39 @@ describe("skills", () => {
 			expect(diagnostics).toHaveLength(0);
 		});
 
+		it("should discover nested skills in deterministic path order", () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "skills-nested-order-"));
+			try {
+				const laterSkillDir = join(tempDir, "z-skill");
+				const earlierSkillDir = join(tempDir, "a-skill");
+				mkdirSync(laterSkillDir, { recursive: true });
+				mkdirSync(earlierSkillDir, { recursive: true });
+				writeFileSync(
+					join(laterSkillDir, "SKILL.md"),
+					`---
+name: z-skill
+description: Z skill
+---
+Z`,
+				);
+				writeFileSync(
+					join(earlierSkillDir, "SKILL.md"),
+					`---
+name: a-skill
+description: A skill
+---
+A`,
+				);
+
+				const { skills, diagnostics } = loadSkillsFromDir({ dir: tempDir, source: "test" });
+
+				expect(diagnostics).toHaveLength(0);
+				expect(skills.map((skill) => skill.name)).toEqual(["a-skill", "z-skill"]);
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
+		});
+
 		it("should prefer a directory's root SKILL.md over nested SKILL.md files", () => {
 			const { skills, diagnostics } = loadSkillsFromDir({
 				dir: join(fixturesDir, "root-skill-preferred"),
@@ -138,6 +171,31 @@ describe("skills", () => {
 
 			expect(skills).toHaveLength(0);
 			expect(diagnostics.some((d: ResourceDiagnostic) => d.message.includes("at line"))).toBe(true);
+		});
+
+		it("should not leak raw SKILL.md content in invalid YAML diagnostics", () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "skills-invalid-yaml-"));
+			try {
+				const skillDir = join(tempDir, "invalid-yaml");
+				mkdirSync(skillDir, { recursive: true });
+				writeFileSync(
+					join(skillDir, "SKILL.md"),
+					`---
+name: [SECRET_RAW_SKILL_CONTENT
+---
+Body that should also stay out of diagnostics`,
+				);
+
+				const { skills, diagnostics } = loadSkillsFromDir({ dir: skillDir, source: "test" });
+
+				expect(skills).toHaveLength(0);
+				expect(diagnostics).toHaveLength(1);
+				expect(diagnostics[0].message).toContain("failed to parse skill file");
+				expect(JSON.stringify(diagnostics)).not.toContain("SECRET_RAW_SKILL_CONTENT");
+				expect(JSON.stringify(diagnostics)).not.toContain("Body that should also stay out of diagnostics");
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
 		});
 
 		it("should preserve multiline descriptions from YAML", () => {

@@ -6,8 +6,10 @@
  * `AgentSession`.
  */
 
+import path from "node:path";
 import type { ToolDefinition } from "./extensions/types.ts";
 import { type HookInventory, loadHookInventory } from "./hook-inventory.ts";
+import { sanitizeHookPolicy } from "./hooks/index.ts";
 import { createLoadoutAccessPolicy, type LoadoutAccessPolicy } from "./loadout-access-policy.ts";
 import {
 	type AppliedLoadout,
@@ -160,8 +162,9 @@ export function buildCapabilityInventory(
 		kind: "mcp",
 		name: entry.name,
 		source: entry.source,
-		scope: "project",
+		scope: mcpInventoryScope(cwd, entry.source),
 		origin: "top-level",
+		path: entry.source,
 	}));
 
 	const hooks: NamedResource[] = hookInventory.hooks.map((descriptor) => ({
@@ -171,10 +174,15 @@ export function buildCapabilityInventory(
 		scope: descriptor.builtin ? "builtin" : "project",
 		origin: "top-level",
 		path: descriptor.scriptPath,
-		policy: descriptor.policy,
+		policy: sanitizeHookPolicy(descriptor.policy),
 	}));
 
 	return { tools, skills, mcp, hooks };
+}
+
+function mcpInventoryScope(cwd: string, sourcePath: string): "project" | "user" {
+	const relative = path.relative(cwd, sourcePath);
+	return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative) ? "project" : "user";
 }
 
 export interface ApplyLoadoutToRuntimeRequest {
