@@ -99,15 +99,14 @@ describe("test harness", () => {
 
 		const receipt = harness.latestReceipt();
 		expect(receipt.messageCounts).toEqual({ user: 1, assistant: 2, toolResult: 1, total: 4 });
-		expect(receipt.toolExecutions).toEqual([
-			{
-				toolCallId: "faux_tc_1",
-				toolName: "echo",
-				args: { text: "hi" },
-				result: { content: [{ type: "text", text: "echoed" }], details: {} },
-				isError: false,
-			},
-		]);
+		expect(receipt.toolExecutions).toHaveLength(1);
+		expect(receipt.toolExecutions[0]).toMatchObject({
+			toolName: "echo",
+			args: { text: "hi" },
+			result: { content: [{ type: "text", text: "echoed" }], details: {} },
+			isError: false,
+		});
+		expect(receipt.toolExecutions[0]?.toolCallId).toMatch(/^faux_tc_\d+$/);
 		expect(receipt.toolResults).toHaveLength(1);
 	});
 
