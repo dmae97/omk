@@ -3,9 +3,15 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ExtensionContext } from "../src/core/extensions/types.ts";
+import { loadHookInventory } from "../src/core/hook-inventory.ts";
 import { createLoadoutAccessPolicy, decideLoadoutAccess } from "../src/core/loadout-access-policy.ts";
 import { createLoadoutPolicyFromRuntimeState, validatePolicyIntegrity } from "../src/core/loadout-policy-bridge.ts";
-import type { LoadoutRuntimeState } from "../src/core/loadout-runtime.ts";
+import {
+	buildCapabilityInventory,
+	type LoadoutRuntimeSession,
+	type LoadoutRuntimeState,
+} from "../src/core/loadout-runtime.ts";
+import type { ResourceLoader } from "../src/core/resource-loader.ts";
 import {
 	type BashOperations,
 	createBashToolDefinition,
@@ -177,5 +183,69 @@ describe("validatePolicyIntegrity", () => {
 		expect(result.warnings).toContain("policy active tools do not match runtime active tools");
 		expect(result.warnings).toContain("policy read roots do not match runtime scheduler read set");
 		expect(result.warnings).toContain("policy write roots do not match runtime scheduler write set");
+	});
+});
+
+describe("hook policy inventory bridge", () => {
+	it("assigns safe fail-closed policy metadata to project shell hooks without exposing script contents", () => {
+		const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "omk-agent-hooks-"));
+		fs.mkdirSync(path.join(agentDir, "hooks"), { recursive: true });
+		fs.writeFileSync(path.join(agentDir, "hooks", "project-check.sh"), "#!/bin/sh\nrm -rf /home/yu/omk\n");
+
+		try {
+			const inventory = loadHookInventory(agentDir);
+			const projectHook = inventory.hooks.find((hook) => hook.name === "project-check");
+
+			expect(projectHook).toBeDefined();
+			expect(projectHook?.builtin).toBe(false);
+			expect(projectHook?.policy).toEqual({
+				stages: ["tool_call", "tool_result"],
+				effects: ["validator"],
+				failureMode: "fail-closed",
+				timeoutMs: 5_000,
+			});
+			expect(JSON.stringify(projectHook?.policy)).not.toMatch(/rm -rf|\/home\/yu/);
+		} finally {
+			fs.rmSync(agentDir, { recursive: true, force: true });
+		}
+	});
+
+	it("exposes hook policy metadata in runtime capability inventory without executing hooks", () => {
+		const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "omk-agent-hooks-"));
+		fs.mkdirSync(path.join(agentDir, "hooks"), { recursive: true });
+		const scriptPath = path.join(agentDir, "hooks", "runtime-check.sh");
+		fs.writeFileSync(scriptPath, "#!/bin/sh\necho should-not-run\n");
+
+		const session: LoadoutRuntimeSession = {
+			_baseToolDefinitions: new Map(),
+			_extensionRunner: { getAllRegisteredTools: () => [] },
+			_customTools: [],
+		};
+		const resourceLoader = {
+			getSkills: () => ({ skills: [] }),
+		} as unknown as ResourceLoader;
+
+		try {
+			const hookInventory = loadHookInventory(agentDir);
+			const inventory = buildCapabilityInventory(session, resourceLoader, agentDir, hookInventory);
+			const runtimeHook = inventory.hooks.find((hook) => hook.name === "runtime-check");
+
+			expect(runtimeHook).toMatchObject({
+				kind: "hook",
+				name: "runtime-check",
+				source: "project",
+				scope: "project",
+				origin: "top-level",
+				path: scriptPath,
+				policy: {
+					stages: ["tool_call", "tool_result"],
+					effects: ["validator"],
+					failureMode: "fail-closed",
+					timeoutMs: 5_000,
+				},
+			});
+		} finally {
+			fs.rmSync(agentDir, { recursive: true, force: true });
+		}
 	});
 });

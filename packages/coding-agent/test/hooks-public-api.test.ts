@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
 	createFailClosedToolCallResult,
 	createFailClosedToolResult,
+	DEFAULT_HOOK_POLICY,
 	FAIL_CLOSED_REASON,
 	formatFailClosedReason,
 	sanitizeHookFailure,
+	sanitizeHookPolicy,
 } from "../src/core/hooks/index.ts";
 
 interface PackageJson {
@@ -92,5 +94,25 @@ describe("public hooks API", () => {
 			code: "hook_failed",
 			stage: "unknown",
 		});
+	});
+
+	it("normalizes malformed hook policy input to safe fail-closed defaults", () => {
+		const policy = sanitizeHookPolicy({
+			stages: ["tool_result", "raw /home/yu/path", "tool_call", "tool_result"],
+			effects: ["mutator", "command rm -rf /home/yu/omk", "validator"],
+			failureMode: "fail-open",
+			timeoutMs: 1_000_000,
+			cause: "raw cause should not be copied",
+			command: "rm -rf /home/yu/omk",
+			path: "/home/yu/omk/private.sh",
+		});
+
+		expect(policy).toEqual({
+			stages: ["tool_call", "tool_result"],
+			effects: ["validator", "mutator"],
+			failureMode: "fail-closed",
+			timeoutMs: DEFAULT_HOOK_POLICY.timeoutMs,
+		});
+		expect(JSON.stringify(policy)).not.toMatch(/\/home\/yu|rm -rf|raw cause|private\.sh/);
 	});
 });

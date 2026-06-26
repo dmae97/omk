@@ -167,9 +167,11 @@ export function buildCapabilityInventory(
 	const hooks: NamedResource[] = hookInventory.hooks.map((descriptor) => ({
 		kind: "hook",
 		name: descriptor.name,
-		source: descriptor.scriptPath ?? "builtin",
-		scope: "builtin",
+		source: descriptor.builtin ? "builtin" : "project",
+		scope: descriptor.builtin ? "builtin" : "project",
 		origin: "top-level",
+		path: descriptor.scriptPath,
+		policy: descriptor.policy,
 	}));
 
 	return { tools, skills, mcp, hooks };
