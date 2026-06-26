@@ -30,6 +30,36 @@ describe("headroom manager", () => {
 		expect(prediction.trend).toBe("stable");
 	});
 
+	it("keeps malformed maxTokens and input tokens finite on the check path", () => {
+		const manager = new HeadroomManager(Number.NaN);
+		const snapshot = manager.check(Number.POSITIVE_INFINITY, Number.NaN, -5);
+		const allocation = manager.getAllocation(Number.POSITIVE_INFINITY);
+
+		for (const value of [
+			snapshot.promptTokens,
+			snapshot.toolOutputTokens,
+			snapshot.responseTokens,
+			snapshot.totalTokens,
+			snapshot.headroomRemaining,
+			allocation.maxTokens,
+		]) {
+			expect(Number.isFinite(value)).toBe(true);
+		}
+		expect(snapshot).toEqual(expect.objectContaining({ totalTokens: 0, headroomRemaining: 0, status: "idle" }));
+		expect(allocation).toEqual({ maxTokens: 0, canAddAgents: false });
+	});
+
+	it("returns deterministic repeated predictions for unchanged history", () => {
+		const manager = new HeadroomManager(10_000);
+
+		manager.check(1_000);
+		manager.check(1_500);
+		manager.check(2_000);
+		manager.check(2_500);
+
+		expect(manager.predict()).toEqual(manager.predict());
+	});
+
 	it("uses hysteresis to avoid oscillating down immediately after critical pressure", () => {
 		const monitor = new HeadroomMonitor();
 

@@ -76,6 +76,7 @@ export interface TokenOptimizationResult {
 	tokensSaved: number;
 	technique: string;
 	cacheHit: boolean;
+	budgetExceeded: boolean;
 }
 
 export interface TokenOptimizerRuntimeStatus {
@@ -206,7 +207,7 @@ export class TokenOptimizer extends EventEmitter {
 
 		const cacheHit = false; // templateCache 제거됨 — 항상 false
 
-		this.budget.allocate(optimizedTokens);
+		const budgetAllocated = this.budget.allocate(optimizedTokens);
 
 		return {
 			originalQuery: query,
@@ -214,6 +215,7 @@ export class TokenOptimizer extends EventEmitter {
 			tokensSaved: Math.max(0, originalTokens - optimizedTokens),
 			technique: "whitespace_normalization",
 			cacheHit,
+			budgetExceeded: !budgetAllocated,
 		};
 	}
 

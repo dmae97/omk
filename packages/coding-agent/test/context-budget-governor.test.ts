@@ -40,6 +40,83 @@ describe("context budget governor", () => {
 		expect(first.diagnostics).toContainEqual(expect.objectContaining({ reason: "hard_pin_over_capacity" }));
 	});
 
+	it("keeps malformed budget inputs finite, diagnostic, and observable", () => {
+		const plan = planContextBudget({
+			maxTokens: Number.NaN,
+			responseReserveTokens: Number.POSITIVE_INFINITY,
+			items: [
+				{ id: "hard", kind: "system", priority: "hard", text: "hard", tokenEstimate: 4 },
+				{ id: "optional", kind: "history", priority: "high", text: "optional", tokenEstimate: 2 },
+			],
+		});
+
+		expect(plan.emergency).toBe(true);
+		expect(plan.diagnostics).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ reason: "invalid_budget", detail: expect.stringContaining("maxTokens") }),
+				expect.objectContaining({
+					reason: "invalid_budget",
+					detail: expect.stringContaining("responseReserveTokens"),
+				}),
+			]),
+		);
+		expect(plan.observability.diagnosticReasons).toEqual([
+			"hard_pin_over_capacity",
+			"invalid_budget",
+			"item_omitted",
+		]);
+		for (const value of [
+			plan.maxTokens,
+			plan.responseReserveTokens,
+			plan.availableTokens,
+			plan.usedTokens,
+			plan.omittedTokens,
+			plan.observability.tokens.available,
+			plan.observability.tokens.used,
+			plan.observability.tokens.omitted,
+			plan.observability.tokens.tokenSavings,
+		]) {
+			expect(Number.isFinite(value)).toBe(true);
+		}
+	});
+
+	it("sanitizes malformed item token estimates before scoring and hashing", () => {
+		const input = {
+			maxTokens: 10,
+			items: [
+				{
+					id: "bad-estimate",
+					kind: "tool-result" as const,
+					priority: "high" as const,
+					text: "SECRET_RAW_ITEM_TEXT",
+					tokenEstimate: Number.POSITIVE_INFINITY,
+				},
+				{
+					id: "negative-estimate",
+					kind: "history" as const,
+					priority: "medium" as const,
+					text: "negative",
+					tokenEstimate: -4,
+				},
+			],
+		};
+
+		const first = planContextBudget(input);
+		const second = planContextBudget(input);
+
+		expect(first).toEqual(second);
+		expect(first.includedItems.map((item) => item.estimatedTokens)).toEqual([0, 0]);
+		expect(first.diagnostics).toContainEqual(
+			expect.objectContaining({
+				itemId: "bad-estimate",
+				reason: "invalid_budget",
+				detail: expect.stringContaining("tokenEstimate"),
+			}),
+		);
+		expect(first.planHash).toMatch(/^[a-f0-9]{64}$/u);
+		expect(JSON.stringify(first.observability)).not.toContain("SECRET_RAW_ITEM_TEXT");
+	});
+
 	it("rewards relevance and penalizes token cost", () => {
 		const focused = scoreContextBudgetItem(
 			{ id: "a", kind: "skill", priority: "medium", text: "a", relevance: 1, evidenceValue: 1 },
