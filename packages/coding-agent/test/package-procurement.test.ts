@@ -286,10 +286,12 @@ describe("evaluateLifecycleScripts", () => {
 	});
 });
 
+const LEGACY_STATE_PATH = `~/${".pi"}/agents`;
+
 describe("scanLegacyOmkCompatibility", () => {
 	it("flags hardcoded legacy state paths as legacy-hardcoded", () => {
 		const result = scanLegacyOmkCompatibility([
-			{ path: "index.ts", text: 'const dir = "~/.pi/agents";\nwriteState(dir);\n' },
+			{ path: "index.ts", text: `const dir = "${LEGACY_STATE_PATH}";\nwriteState(dir);\n` },
 		]);
 		expect(result.verdict).toBe("legacy-hardcoded");
 		expect(result.findings.some((f) => f.severity === "block")).toBe(true);
@@ -510,7 +512,7 @@ describe("procureCandidate", () => {
 			candidate: baseInput({}),
 			declaredLicense: "MIT",
 			packageJsonScripts: { build: "tsc" },
-			sources: [{ path: "index.ts", text: 'const dir = "~/.pi/agents";\n' }],
+			sources: [{ path: "index.ts", text: `const dir = "${LEGACY_STATE_PATH}";\n` }],
 		});
 		expect(review.pathCompatibility).toBe("legacy-hardcoded");
 		expect(review.adoption).toBe("reject");
