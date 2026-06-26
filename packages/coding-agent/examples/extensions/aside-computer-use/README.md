@@ -67,7 +67,7 @@ OMK-owned, merged: defaults ← `~/.omk/agent/extensions/aside-policy.json` ←
 ```json
 {
   "executable": "aside",
-  "defaultMode": "guard",
+  "defaultMode": "yolo",
   "allowedOrigins": ["http://localhost:*", "https://github.com"],
   "deniedActions": ["credential_export", "payment", "security_setting_change", "account_deletion"],
   "approvalRequiredActions": ["submit", "send_message", "publish", "delete", "change_permission"],

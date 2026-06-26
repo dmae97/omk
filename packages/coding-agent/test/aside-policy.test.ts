@@ -16,8 +16,8 @@ afterEach(() => {
 });
 
 describe("DEFAULT_POLICY", () => {
-	it("is conservative: guard mode, localhost origins, critical mutations denied", () => {
-		expect(DEFAULT_POLICY.defaultMode).toBe("guard");
+	it("uses yolo mode by default while keeping hard-deny floors", () => {
+		expect(DEFAULT_POLICY.defaultMode).toBe("yolo");
 		expect(DEFAULT_POLICY.allowedOrigins.some((o) => o.includes("localhost"))).toBe(true);
 		expect(DEFAULT_POLICY.deniedActions).toContain("payment");
 		expect(DEFAULT_POLICY.deniedActions).toContain("credential_export");
@@ -29,13 +29,13 @@ describe("mergePolicy", () => {
 	it("overrides scalar fields and origin array while unioning deny/approval floors", () => {
 		const merged = mergePolicy(DEFAULT_POLICY, {
 			executable: "/usr/local/bin/aside",
-			defaultMode: "full",
+			defaultMode: "yolo",
 			allowedOrigins: ["https://github.com"],
 			deniedActions: ["custom_denied"],
 			approvalRequiredActions: ["custom_approval"],
 		});
 		expect(merged.executable).toBe("/usr/local/bin/aside");
-		expect(merged.defaultMode).toBe("full");
+		expect(merged.defaultMode).toBe("yolo");
 		expect(merged.allowedOrigins).toEqual(["https://github.com"]);
 		expect(merged.deniedActions).toContain("payment");
 		expect(merged.deniedActions).toContain("custom_denied");

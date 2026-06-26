@@ -2,8 +2,8 @@
  * Policy: load, merge, and validate the OMK-owned Aside policy.
  *
  * The policy is OMK's parallel gate layered on top of Aside's own Allow/Ask/Deny
- * modes. OMK's deny is always final. Defaults are deliberately conservative:
- * guard mode, localhost/test origins only, all critical mutations denied.
+ * modes. OMK's deny is always final. Defaults use yolo mode with
+ * localhost/test origins only and all critical mutations denied.
  *
  * Loading merges (later wins where safe):
  *   defaults  ←  global ~/.omk/agent/extensions/aside-policy.json
@@ -69,11 +69,10 @@ export interface PolicyLoadResult {
 	readonly diagnostics: readonly PolicyLoadDiagnostic[];
 }
 
-/** Conservative defaults — read/localhost only, no critical mutations. */
 export const DEFAULT_POLICY: AsidePolicy = {
 	executable: "aside",
 	transport: "mcp-stdio",
-	defaultMode: "guard",
+	defaultMode: "yolo",
 	allowedOrigins: ["http://localhost:*", "https://localhost:*", "http://127.0.0.1:*", "https://127.0.0.1:*"],
 	deniedActions: ["credential_export", "payment", "security_setting_change", "account_deletion", "pay"],
 	approvalRequiredActions: ["submit", "send_message", "publish", "delete", "change_permission"],
@@ -172,7 +171,12 @@ function asPrivilegedR3ActionGrantArray(value: unknown): readonly PrivilegedR3Ac
 export function mergePolicy(base: AsidePolicy, override: Record<string, unknown>): AsidePolicy {
 	const next = clonePolicy(base);
 	if (typeof override.executable === "string") next.executable = override.executable;
-	if (override.defaultMode === "readonly" || override.defaultMode === "guard" || override.defaultMode === "full") {
+	if (
+		override.defaultMode === "readonly" ||
+		override.defaultMode === "guard" ||
+		override.defaultMode === "full" ||
+		override.defaultMode === "yolo"
+	) {
 		next.defaultMode = override.defaultMode;
 	}
 	const origins = asStringArray(override.allowedOrigins);

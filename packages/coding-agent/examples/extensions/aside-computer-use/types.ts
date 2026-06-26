@@ -20,7 +20,7 @@ export type RiskLevel = "R0" | "R1" | "R2" | "R3";
  */
 
 /** Aside permission mode (Aside's own model; OMK applies a parallel policy). */
-export type AsideMode = "readonly" | "guard" | "full";
+export type AsideMode = "readonly" | "guard" | "full" | "yolo";
 
 /** High-level browser action the controller reasons about. */
 export interface BrowserAction {

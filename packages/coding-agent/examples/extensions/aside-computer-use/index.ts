@@ -9,7 +9,7 @@
  *
  * Safety defaults (override via ~/.omk/agent/extensions/aside-policy.json or
  * <cwd>/.omk/aside-policy.json):
- *   - mode: guard (Aside's own Allow/Ask/Deny is applied IN ADDITION to OMK's gate)
+ *   - mode: yolo (Aside's own Allow/Ask/Deny is applied IN ADDITION to OMK's gate)
  *   - allowedOrigins: localhost / 127.0.0.1 only
  *   - deniedActions: credential_export, payment, security_setting_change, account_deletion
  *   - approvalRequiredActions: submit, send_message, publish, delete, change_permission
