@@ -48,6 +48,25 @@ export interface ContextBudgetDiagnostic {
 	readonly detail: string;
 }
 
+export interface ContextBudgetObservabilityCounts {
+	readonly selected: number;
+	readonly omitted: number;
+}
+
+export interface ContextBudgetObservabilityTokens {
+	readonly available: number;
+	readonly used: number;
+	readonly omitted: number;
+	readonly tokenSavings: number;
+}
+
+export interface ContextBudgetObservability {
+	readonly counts: ContextBudgetObservabilityCounts;
+	readonly diagnosticReasons: readonly ContextBudgetDiagnosticReason[];
+	readonly tokens: ContextBudgetObservabilityTokens;
+	readonly planHash: string;
+}
+
 export interface ContextBudgetPlan {
 	readonly policyVersion: string;
 	readonly maxTokens: number;
@@ -61,6 +80,7 @@ export interface ContextBudgetPlan {
 	readonly omittedItems: readonly ContextBudgetPlannedItem[];
 	readonly diagnostics: readonly ContextBudgetDiagnostic[];
 	readonly planHash: string;
+	readonly observability: ContextBudgetObservability;
 }
 
 export const CONTEXT_BUDGET_POLICY_VERSION = "context-budget-v1";
@@ -68,14 +88,15 @@ export const CONTEXT_BUDGET_POLICY_VERSION = "context-budget-v1";
 export function planContextBudget(input: ContextBudgetGovernorInput): ContextBudgetPlan {
 	const tokenCounter = input.tokenCounter ?? createFallbackTokenCounter();
 	const modelId = input.modelId ?? "unknown";
-	const maxTokens = Math.floor(input.maxTokens);
-	const responseReserveTokens = Math.max(0, Math.floor(input.responseReserveTokens ?? 0));
 	const diagnostics: ContextBudgetDiagnostic[] = [];
-	if (!Number.isFinite(maxTokens) || maxTokens < 0) {
-		diagnostics.push({ reason: "invalid_budget", detail: `maxTokens must be non-negative, got ${input.maxTokens}` });
-	}
+	const maxTokens = normalizeBudgetTokens("maxTokens", input.maxTokens, diagnostics);
+	const responseReserveTokens = normalizeBudgetTokens(
+		"responseReserveTokens",
+		input.responseReserveTokens ?? 0,
+		diagnostics,
+	);
 	const availableTokens = Math.max(0, maxTokens - responseReserveTokens);
-	const plannedItems = input.items.map((item) => planItem(item, tokenCounter, modelId));
+	const plannedItems = input.items.map((item) => planItem(item, tokenCounter, modelId, diagnostics));
 	const includedIds = new Set<string>();
 	let usedTokens = 0;
 
@@ -129,7 +150,7 @@ export function planContextBudget(input: ContextBudgetGovernorInput): ContextBud
 
 	const planWithoutHash = {
 		policyVersion,
-		maxTokens: Number.isFinite(maxTokens) ? maxTokens : 0,
+		maxTokens,
 		responseReserveTokens,
 		availableTokens,
 		usedTokens,
@@ -140,10 +161,19 @@ export function planContextBudget(input: ContextBudgetGovernorInput): ContextBud
 		omitted: omittedItems.map((item) => [item.id, item.estimatedTokens, item.score]),
 	};
 	const planHash = createHash("sha256").update(JSON.stringify(planWithoutHash), "utf8").digest("hex");
+	const observability = buildObservability({
+		availableTokens,
+		diagnostics,
+		includedItems,
+		omittedItems,
+		omittedTokens,
+		planHash,
+		usedTokens,
+	});
 
 	return {
 		policyVersion,
-		maxTokens: Number.isFinite(maxTokens) ? maxTokens : 0,
+		maxTokens,
 		responseReserveTokens,
 		availableTokens,
 		usedTokens,
@@ -154,6 +184,7 @@ export function planContextBudget(input: ContextBudgetGovernorInput): ContextBud
 		omittedItems,
 		diagnostics,
 		planHash,
+		observability,
 	};
 }
 
@@ -165,7 +196,7 @@ export function scoreContextBudgetItem(item: ContextBudgetItem, estimatedTokens:
 	// G1: costPenalty 비례화 — sqrt 기반으로 대항목에 더 큰 불이익 부여.
 	// log2(t)*2는 1000토큰에서 ~19.9점으로 relevance(20점)와 동급 → 대항목 생존.
 	// sqrt(t)*0.5는 1000토큰 15.8점, 5000토큰 35.4점, 10000토큰 50점 → 비례적 증가.
-	const costPenalty = Math.sqrt(estimatedTokens) * 0.5;
+	const costPenalty = Math.sqrt(normalizeTokenCount(estimatedTokens)) * 0.5;
 	return priorityScore + relevance + recency + evidence - costPenalty;
 }
 
@@ -173,11 +204,10 @@ function planItem(
 	item: ContextBudgetItem,
 	tokenCounter: TokenCounterAdapter,
 	modelId: string,
+	diagnostics: ContextBudgetDiagnostic[],
 ): ContextBudgetPlannedItem {
-	const estimatedTokens = Math.max(
-		0,
-		Math.ceil(item.tokenEstimate ?? tokenCounter.countText(item.text, modelId).tokens),
-	);
+	const rawEstimate = item.tokenEstimate ?? tokenCounter.countText(item.text, modelId).tokens;
+	const estimatedTokens = normalizeItemTokenEstimate(item.id, rawEstimate, diagnostics);
 	return {
 		...item,
 		estimatedTokens,
@@ -262,4 +292,63 @@ function clampScore(value: number | undefined): number {
 		return 0;
 	}
 	return Math.max(0, Math.min(1, value));
+}
+
+function normalizeBudgetTokens(
+	field: "maxTokens" | "responseReserveTokens",
+	value: number,
+	diagnostics: ContextBudgetDiagnostic[],
+): number {
+	if (!Number.isFinite(value) || value < 0) {
+		diagnostics.push({
+			reason: "invalid_budget",
+			detail: `${field} must be a non-negative finite number, got ${value}`,
+		});
+		return 0;
+	}
+	return Math.floor(value);
+}
+
+function normalizeItemTokenEstimate(itemId: string, value: number, diagnostics: ContextBudgetDiagnostic[]): number {
+	if (!Number.isFinite(value) || value < 0) {
+		diagnostics.push({
+			reason: "invalid_budget",
+			itemId,
+			detail: `tokenEstimate must be a non-negative finite number, got ${value}`,
+		});
+		return 0;
+	}
+	return Math.ceil(value);
+}
+
+function normalizeTokenCount(value: number): number {
+	if (!Number.isFinite(value) || value < 0) {
+		return 0;
+	}
+	return value;
+}
+
+function buildObservability(input: {
+	readonly availableTokens: number;
+	readonly diagnostics: readonly ContextBudgetDiagnostic[];
+	readonly includedItems: readonly ContextBudgetPlannedItem[];
+	readonly omittedItems: readonly ContextBudgetPlannedItem[];
+	readonly omittedTokens: number;
+	readonly planHash: string;
+	readonly usedTokens: number;
+}): ContextBudgetObservability {
+	return {
+		counts: {
+			selected: input.includedItems.length,
+			omitted: input.omittedItems.length,
+		},
+		diagnosticReasons: [...new Set(input.diagnostics.map((diagnostic) => diagnostic.reason))].sort(),
+		tokens: {
+			available: input.availableTokens,
+			used: input.usedTokens,
+			omitted: input.omittedTokens,
+			tokenSavings: input.omittedTokens,
+		},
+		planHash: input.planHash,
+	};
 }

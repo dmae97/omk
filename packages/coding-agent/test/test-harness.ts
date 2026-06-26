@@ -10,8 +10,7 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentTool } from "@earendil-works/omk-agent-core";
-import { Agent } from "@earendil-works/omk-agent-core";
+import { Agent, type AgentMessage, type AgentTool } from "@earendil-works/omk-agent-core";
 import type {
 	AssistantMessage,
 	AssistantMessageEvent,
@@ -23,6 +22,7 @@ import type {
 	TextContent,
 	ThinkingContent,
 	ToolCall,
+	ToolResultMessage,
 	Usage,
 } from "@earendil-works/omk-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/omk-ai";
@@ -338,6 +338,39 @@ export interface HarnessOptions {
 	extensionFactories?: Array<ExtensionFactory | CreateTestExtensionsResultInput>;
 }
 
+export interface HarnessToolExecutionReceipt {
+	toolCallId: string;
+	toolName: string;
+	args: unknown;
+	result: unknown;
+	isError: boolean;
+}
+
+export interface HarnessMessageCounts {
+	user: number;
+	assistant: number;
+	toolResult: number;
+	total: number;
+}
+
+export interface HarnessPromptRunReceipt {
+	type: "prompt_run";
+	prompt: string;
+	startedAt: number;
+	endedAt: number;
+	model: { provider: string; id: string };
+	fauxCallStart: number;
+	fauxCallEnd: number;
+	events: AgentSessionEvent[];
+	contexts: Context[];
+	messages: AgentMessage[];
+	assistantMessages: AssistantMessage[];
+	toolResults: ToolResultMessage<unknown>[];
+	toolExecutions: HarnessToolExecutionReceipt[];
+	messageCounts: HarnessMessageCounts;
+	errorMessage?: string;
+}
+
 export interface Harness {
 	session: AgentSession;
 	agent: Agent;
@@ -349,6 +382,8 @@ export interface Harness {
 	events: AgentSessionEvent[];
 	/** Filter captured events by type. */
 	eventsOfType<T extends AgentSessionEvent["type"]>(type: T): Extract<AgentSessionEvent, { type: T }>[];
+	receipts: HarnessPromptRunReceipt[];
+	latestReceipt(): HarnessPromptRunReceipt;
 	/** Temp directory (cleaned up by cleanup()). */
 	tempDir: string;
 	/** Dispose session and remove temp directory. */
@@ -359,6 +394,45 @@ function createTempDir(): string {
 	const tempDir = join(tmpdir(), `pi-harness-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 	mkdirSync(tempDir, { recursive: true });
 	return tempDir;
+}
+
+function messageCounts(messages: readonly AgentMessage[]): HarnessMessageCounts {
+	let user = 0;
+	let assistant = 0;
+	let toolResult = 0;
+
+	for (const message of messages) {
+		if (message.role === "user") {
+			user++;
+		} else if (message.role === "assistant") {
+			assistant++;
+		} else if (message.role === "toolResult") {
+			toolResult++;
+		}
+	}
+
+	return { user, assistant, toolResult, total: messages.length };
+}
+
+function collectToolExecutions(events: readonly AgentSessionEvent[]): HarnessToolExecutionReceipt[] {
+	const starts = new Map<string, Extract<AgentSessionEvent, { type: "tool_execution_start" }>>();
+	const executions: HarnessToolExecutionReceipt[] = [];
+
+	for (const event of events) {
+		if (event.type === "tool_execution_start") {
+			starts.set(event.toolCallId, event);
+		} else if (event.type === "tool_execution_end") {
+			executions.push({
+				toolCallId: event.toolCallId,
+				toolName: event.toolName,
+				args: starts.get(event.toolCallId)?.args,
+				result: event.result,
+				isError: event.isError,
+			});
+		}
+	}
+
+	return executions;
 }
 
 function createHarnessWithResourceLoader(
@@ -406,6 +480,49 @@ function createHarnessWithResourceLoader(
 	session.subscribe((event) => {
 		events.push(event);
 	});
+	const receipts: HarnessPromptRunReceipt[] = [];
+	const originalPrompt = session.prompt.bind(session);
+	const promptWithReceipt: typeof session.prompt = async (text, promptOptions) => {
+		const startedAt = Date.now();
+		const eventStart = events.length;
+		const contextStart = fauxState.contexts.length;
+		const messageStart = session.messages.length;
+		const fauxCallStart = fauxState.callCount;
+		let errorMessage: string | undefined;
+
+		try {
+			await originalPrompt(text, promptOptions);
+		} catch (err) {
+			errorMessage = err instanceof Error ? err.message : String(err);
+			throw err;
+		} finally {
+			const runEvents = events.slice(eventStart);
+			const runMessages = session.messages.slice(messageStart);
+			const receipt: HarnessPromptRunReceipt = {
+				type: "prompt_run",
+				prompt: text,
+				startedAt,
+				endedAt: Date.now(),
+				model: { provider: model.provider, id: model.id },
+				fauxCallStart,
+				fauxCallEnd: fauxState.callCount,
+				events: runEvents,
+				contexts: fauxState.contexts.slice(contextStart),
+				messages: runMessages,
+				assistantMessages: runMessages.filter(
+					(message): message is AssistantMessage => message.role === "assistant",
+				),
+				toolResults: runMessages.filter(
+					(message): message is ToolResultMessage<unknown> => message.role === "toolResult",
+				),
+				toolExecutions: collectToolExecutions(runEvents),
+				messageCounts: messageCounts(runMessages),
+				errorMessage,
+			};
+			receipts.push(receipt);
+		}
+	};
+	session.prompt = promptWithReceipt;
 
 	const cleanup = () => {
 		session.dispose();
@@ -423,6 +540,14 @@ function createHarnessWithResourceLoader(
 		events,
 		eventsOfType<T extends AgentSessionEvent["type"]>(type: T) {
 			return events.filter((e): e is Extract<AgentSessionEvent, { type: T }> => e.type === type);
+		},
+		receipts,
+		latestReceipt() {
+			const receipt = receipts.at(-1);
+			if (!receipt) {
+				throw new Error("No harness receipt has been captured.");
+			}
+			return receipt;
 		},
 		tempDir,
 		cleanup,

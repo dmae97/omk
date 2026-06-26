@@ -41,11 +41,12 @@ export class HeadroomMonitor extends EventEmitter {
 	private maxHistory = 100;
 
 	record(snapshot: HeadroomSnapshot): void {
-		this.history.push(snapshot);
+		const sanitized = sanitizeSnapshot(snapshot);
+		this.history.push(sanitized);
 		if (this.history.length > this.maxHistory) {
 			this.history = this.history.slice(-this.maxHistory);
 		}
-		this.emit("snapshot", snapshot);
+		this.emit("snapshot", sanitized);
 	}
 
 	predict(): HeadroomPrediction {
@@ -71,7 +72,13 @@ export class HeadroomMonitor extends EventEmitter {
 	}
 
 	getStatus(totalTokens: number, maxTokens: number): HeadroomSnapshot["status"] {
-		const ratio = totalTokens / maxTokens;
+		const normalizedTotalTokens = normalizeTokenInput(totalTokens);
+		const normalizedMaxTokens = normalizeTokenLimit(maxTokens);
+		if (normalizedMaxTokens === 0) {
+			return normalizedTotalTokens === 0 ? "idle" : "blocked";
+		}
+
+		const ratio = normalizedTotalTokens / normalizedMaxTokens;
 		let status: HeadroomSnapshot["status"];
 		if (ratio < 0.4) {
 			status = "idle";
@@ -101,11 +108,14 @@ export class DynamicContextAllocator extends EventEmitter {
 
 	constructor(maxTokens = 15000) {
 		super();
-		this.maxTokens = maxTokens;
+		this.maxTokens = normalizeTokenLimit(maxTokens);
 	}
 
 	allocate(currentTokens: number): { maxTokens: number; canAddAgents: boolean } {
-		const ratio = currentTokens / this.maxTokens;
+		if (this.maxTokens === 0) {
+			return { maxTokens: 0, canAddAgents: false };
+		}
+		const ratio = normalizeTokenInput(currentTokens) / this.maxTokens;
 		if (ratio < 0.4) return { maxTokens: this.maxTokens, canAddAgents: true };
 		if (ratio < 0.7) return { maxTokens: this.maxTokens * 0.9, canAddAgents: true };
 		if (ratio < 0.8) return { maxTokens: this.maxTokens * 0.75, canAddAgents: false };
@@ -121,21 +131,24 @@ export class HeadroomManager extends EventEmitter {
 
 	constructor(maxTokens = 15000) {
 		super();
-		this.maxTokens = maxTokens;
+		this.maxTokens = normalizeTokenLimit(maxTokens);
 		this.monitor = new HeadroomMonitor();
-		this.allocator = new DynamicContextAllocator(maxTokens);
+		this.allocator = new DynamicContextAllocator(this.maxTokens);
 	}
 
 	check(promptTokens: number, toolOutputTokens = 0, responseTokens = 0): HeadroomSnapshot {
-		const totalTokens = promptTokens + toolOutputTokens + responseTokens;
+		const normalizedPromptTokens = normalizeTokenInput(promptTokens);
+		const normalizedToolOutputTokens = normalizeTokenInput(toolOutputTokens);
+		const normalizedResponseTokens = normalizeTokenInput(responseTokens);
+		const totalTokens = normalizedPromptTokens + normalizedToolOutputTokens + normalizedResponseTokens;
 		const status = this.monitor.getStatus(totalTokens, this.maxTokens);
 		this.allocator.allocate(totalTokens);
 
 		const snapshot: HeadroomSnapshot = {
 			timestamp: Date.now(),
-			promptTokens,
-			toolOutputTokens,
-			responseTokens,
+			promptTokens: normalizedPromptTokens,
+			toolOutputTokens: normalizedToolOutputTokens,
+			responseTokens: normalizedResponseTokens,
 			totalTokens,
 			headroomRemaining: this.maxTokens - totalTokens,
 			status,
@@ -160,3 +173,33 @@ export class HeadroomManager extends EventEmitter {
 }
 
 export default HeadroomManager;
+
+function sanitizeSnapshot(snapshot: HeadroomSnapshot): HeadroomSnapshot {
+	return {
+		timestamp: Number.isFinite(snapshot.timestamp) ? Math.floor(snapshot.timestamp) : 0,
+		promptTokens: normalizeTokenInput(snapshot.promptTokens),
+		toolOutputTokens: normalizeTokenInput(snapshot.toolOutputTokens),
+		responseTokens: normalizeTokenInput(snapshot.responseTokens),
+		totalTokens: normalizeTokenInput(snapshot.totalTokens),
+		headroomRemaining: normalizeFiniteInteger(snapshot.headroomRemaining),
+		status: snapshot.status,
+	};
+}
+
+function normalizeTokenLimit(value: number): number {
+	return normalizeTokenInput(value);
+}
+
+function normalizeTokenInput(value: number): number {
+	if (!Number.isFinite(value) || value < 0) {
+		return 0;
+	}
+	return Math.floor(value);
+}
+
+function normalizeFiniteInteger(value: number): number {
+	if (!Number.isFinite(value)) {
+		return 0;
+	}
+	return Math.floor(value);
+}

@@ -47,6 +47,29 @@ describe("test harness", () => {
 		expect(assistantTexts).toEqual(["first", "second", "third"]);
 	});
 
+	it("exposes a structured prompt run receipt", async () => {
+		harness = createHarness({ responses: ["hello world"] });
+
+		await harness.session.prompt("hi");
+
+		expect(harness.receipts).toHaveLength(1);
+		expect(harness.latestReceipt()).toMatchObject({
+			type: "prompt_run",
+			prompt: "hi",
+			model: { provider: "faux", id: "faux-1" },
+			fauxCallStart: 0,
+			fauxCallEnd: 1,
+			messageCounts: { user: 1, assistant: 1, toolResult: 0 },
+			toolExecutions: [],
+		});
+
+		const receipt = harness.latestReceipt();
+		expect(receipt.events[0]?.type).toBe("agent_start");
+		expect(receipt.events.at(-1)?.type).toBe("agent_end");
+		expect(receipt.contexts).toHaveLength(1);
+		expect(receipt.assistantMessages[0]?.stopReason).toBe("stop");
+	});
+
 	it("tool call response triggers tool execution", async () => {
 		let toolExecuted = false;
 		const echoTool: AgentTool = {
@@ -73,6 +96,19 @@ describe("test harness", () => {
 
 		const toolResults = harness.session.messages.filter((m) => m.role === "toolResult");
 		expect(toolResults).toHaveLength(1);
+
+		const receipt = harness.latestReceipt();
+		expect(receipt.messageCounts).toEqual({ user: 1, assistant: 2, toolResult: 1, total: 4 });
+		expect(receipt.toolExecutions).toEqual([
+			{
+				toolCallId: "faux_tc_1",
+				toolName: "echo",
+				args: { text: "hi" },
+				result: { content: [{ type: "text", text: "echoed" }], details: {} },
+				isError: false,
+			},
+		]);
+		expect(receipt.toolResults).toHaveLength(1);
 	});
 
 	it("error response", async () => {
