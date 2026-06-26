@@ -26,8 +26,11 @@ export { scoreContextBudgetItemV2 } from "./context-budget-v2-scoring.ts";
 export {
 	ALL_TIERS_V2,
 	CONTEXT_BUDGET_POLICY_VERSION_V2,
+	type ContextBudgetObservabilityCountsV2,
+	type ContextBudgetObservabilityTokensV2,
 	DEFAULT_TIER_POLICY_V2,
 	type PromptContextBudgetInputV2,
+	type PromptContextBudgetObservabilityV2,
 	type PromptContextBudgetPlanV2,
 	type QualityDiagnosticReasonV2,
 	type QualityDiagnosticV2,

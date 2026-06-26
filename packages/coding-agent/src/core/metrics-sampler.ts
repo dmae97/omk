@@ -1,17 +1,23 @@
 import * as os from "node:os";
 
 const DEFAULT_EMA_ALPHA = 0.3;
-
-// Cap the smoothed-sample history so a long-running process cannot grow it
-// without bound. The rolling average only ever reads the tail, so retaining a
-// fixed recent window is sufficient (120 samples = 4 minutes at a 2s interval).
-const MAX_CPU_HISTORY = 120;
+const DEFAULT_CPU_HISTORY_SIZE = 120;
+const DEFAULT_ROLLING_WINDOW_SIZE = 5;
+const DEFAULT_SPIKE_THRESHOLD = 80;
+const MIN_CPU_HISTORY_SIZE = 1;
+const MAX_CPU_HISTORY_SIZE = 120;
+const MIN_SPIKE_THRESHOLD = 0;
+const MAX_SPIKE_THRESHOLD = 100;
 
 type MetricsSamplerOptions = {
 	now?: () => number;
 	readCpu?: (prev?: NodeJS.CpuUsage) => NodeJS.CpuUsage;
 	readMemory?: () => { rss: number };
 	cpuCount?: number;
+	emaAlpha?: number;
+	historySize?: number;
+	rollingWindowSize?: number;
+	spikeThreshold?: number;
 };
 
 /**
@@ -37,6 +43,12 @@ export class MetricsSampler {
 	private cpuCount: number;
 	private cpuPeak: number | null = null;
 	private readonly smoothedHistory: number[] = [];
+	private readonly emaAlpha: number;
+	private readonly historySize: number;
+	private readonly rollingWindowSize: number;
+	private readonly spikeThreshold: number;
+	private cpuSpikeCount = 0;
+	private wasCpuSpike = false;
 
 	/**
 	 * Create a sampler. All dependencies can be injected for deterministic
@@ -46,7 +58,26 @@ export class MetricsSampler {
 		this.now = options?.now ?? (() => Date.now());
 		this.readCpu = options?.readCpu ?? ((prev?: NodeJS.CpuUsage) => process.cpuUsage(prev));
 		this.readMemory = options?.readMemory ?? (() => process.memoryUsage());
-		this.cpuCount = Math.max(1, options?.cpuCount ?? os.cpus().length);
+		this.cpuCount = sanitizeInteger(options?.cpuCount, os.cpus().length, 1, Number.MAX_SAFE_INTEGER);
+		this.emaAlpha = sanitizeNumber(options?.emaAlpha, DEFAULT_EMA_ALPHA, 0, 1);
+		this.historySize = sanitizeInteger(
+			options?.historySize,
+			DEFAULT_CPU_HISTORY_SIZE,
+			MIN_CPU_HISTORY_SIZE,
+			MAX_CPU_HISTORY_SIZE,
+		);
+		this.rollingWindowSize = sanitizeInteger(
+			options?.rollingWindowSize,
+			Math.min(DEFAULT_ROLLING_WINDOW_SIZE, this.historySize),
+			MIN_CPU_HISTORY_SIZE,
+			this.historySize,
+		);
+		this.spikeThreshold = sanitizeNumber(
+			options?.spikeThreshold,
+			DEFAULT_SPIKE_THRESHOLD,
+			MIN_SPIKE_THRESHOLD,
+			MAX_SPIKE_THRESHOLD,
+		);
 	}
 
 	/**
@@ -60,6 +91,8 @@ export class MetricsSampler {
 		this.cpuPercent = null;
 		this.memoryRssBytes = null;
 		this.cpuPeak = null;
+		this.cpuSpikeCount = 0;
+		this.wasCpuSpike = false;
 		this.smoothedHistory.length = 0;
 
 		this.timer = setInterval(() => this.sample(), intervalMs);
@@ -77,6 +110,8 @@ export class MetricsSampler {
 		this.cpuPercent = null;
 		this.memoryRssBytes = null;
 		this.cpuPeak = null;
+		this.cpuSpikeCount = 0;
+		this.wasCpuSpike = false;
 		this.smoothedHistory.length = 0;
 	}
 
@@ -95,20 +130,28 @@ export class MetricsSampler {
 		return this.cpuPeak;
 	}
 
+	getCpuSpikeCount(): number {
+		return this.cpuSpikeCount;
+	}
+
 	/**
 	 * The mean of the last `window` smoothed CPU percent samples, or `null` if
 	 * fewer than `window` samples have been collected.
 	 */
-	getCpuRollingAvg(window = 5): number | null {
-		if (window <= 0 || this.smoothedHistory.length < window) {
+	getCpuRollingAvg(window = this.rollingWindowSize): number | null {
+		if (!Number.isFinite(window) || window <= 0) {
 			return null;
 		}
-		const start = this.smoothedHistory.length - window;
+		const sampleWindow = Math.floor(window);
+		if (this.smoothedHistory.length < sampleWindow) {
+			return null;
+		}
+		const start = this.smoothedHistory.length - sampleWindow;
 		let sum = 0;
 		for (let i = start; i < this.smoothedHistory.length; i++) {
 			sum += this.smoothedHistory[i];
 		}
-		return sum / window;
+		return sum / sampleWindow;
 	}
 
 	private sample(): void {
@@ -134,19 +177,22 @@ export class MetricsSampler {
 
 		// First sample seeds the EMA; subsequent samples blend with prior value.
 		const smoothed =
-			this.cpuPercent === null
-				? clampedRaw
-				: DEFAULT_EMA_ALPHA * clampedRaw + (1 - DEFAULT_EMA_ALPHA) * this.cpuPercent;
+			this.cpuPercent === null ? clampedRaw : this.emaAlpha * clampedRaw + (1 - this.emaAlpha) * this.cpuPercent;
 
 		this.cpuPercent = smoothed;
 		this.memoryRssBytes = this.readMemory().rss;
 		this.smoothedHistory.push(smoothed);
-		if (this.smoothedHistory.length > MAX_CPU_HISTORY) {
+		if (this.smoothedHistory.length > this.historySize) {
 			this.smoothedHistory.shift();
 		}
 		if (this.cpuPeak === null || smoothed > this.cpuPeak) {
 			this.cpuPeak = smoothed;
 		}
+		const isCpuSpike = smoothed > this.spikeThreshold;
+		if (isCpuSpike && !this.wasCpuSpike) {
+			this.cpuSpikeCount++;
+		}
+		this.wasCpuSpike = isCpuSpike;
 
 		// Accumulate the delta so the next sample computes from the same baseline.
 		this.prevCpu = {
@@ -159,4 +205,18 @@ export class MetricsSampler {
 
 function clamp(value: number, min: number, max: number): number {
 	return Math.max(min, Math.min(max, value));
+}
+
+function sanitizeNumber(value: unknown, fallback: number, min: number, max: number): number {
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return fallback;
+	}
+	return clamp(value, min, max);
+}
+
+function sanitizeInteger(value: unknown, fallback: number, min: number, max: number): number {
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return fallback;
+	}
+	return Math.floor(clamp(value, min, max));
 }

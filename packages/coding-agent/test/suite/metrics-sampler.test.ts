@@ -19,6 +19,7 @@ describe("MetricsSampler", () => {
 		expect(sampler.getMemoryRssBytes()).toBeNull();
 		expect(sampler.getCpuPeak()).toBeNull();
 		expect(sampler.getCpuRollingAvg()).toBeNull();
+		expect(sampler.getCpuSpikeCount()).toBe(0);
 
 		sampler.stop();
 	});
@@ -101,6 +102,7 @@ describe("MetricsSampler", () => {
 		expect(sampler.getMemoryRssBytes()).toBeNull();
 		expect(sampler.getCpuPeak()).toBeNull();
 		expect(sampler.getCpuRollingAvg()).toBeNull();
+		expect(sampler.getCpuSpikeCount()).toBe(0);
 	});
 
 	it("unrefs the interval timer so it does not block process exit", () => {
@@ -229,6 +231,120 @@ describe("MetricsSampler", () => {
 
 		sampler.stop();
 		expect(sampler.getCpuRollingAvg()).toBeNull();
+	});
+
+	it("supports configurable EMA alpha, rolling window history, and spike counting", () => {
+		let time = 0;
+		const rawValues = [10, 50, 50, 10, 50];
+		let idx = 0;
+		const sampler = new MetricsSampler({
+			now: () => {
+				time += 1000;
+				return time;
+			},
+			readCpu: (prev?) => {
+				if (!prev) {
+					return { user: 0, system: 0 };
+				}
+				const p = rawValues[idx++];
+				return { user: p * 10_000, system: 0 };
+			},
+			readMemory: () => ({ rss: 0 }),
+			cpuCount: 1,
+			emaAlpha: 0.5,
+			historySize: 3,
+			rollingWindowSize: 3,
+			spikeThreshold: 30,
+		});
+
+		sampler.start(1000);
+
+		for (let i = 0; i < rawValues.length; i++) {
+			vi.advanceTimersByTime(1000);
+		}
+
+		expect(sampler.getCpuPercent()).toBeCloseTo(37.5, 4);
+		expect(sampler.getCpuSpikeCount()).toBe(2);
+		expect(sampler.getCpuRollingAvg()).toBeCloseTo((40 + 25 + 37.5) / 3, 4);
+		expect(sampler.getCpuRollingAvg(4)).toBeNull();
+
+		sampler.stop();
+		expect(sampler.getCpuSpikeCount()).toBe(0);
+	});
+
+	it("clamps malformed options to safe defaults", () => {
+		let time = 0;
+		const rawValues = [10, 50, 50, 50, 50];
+		let idx = 0;
+		const sampler = new MetricsSampler({
+			now: () => {
+				time += 1000;
+				return time;
+			},
+			readCpu: (prev?) => {
+				if (!prev) {
+					return { user: 0, system: 0 };
+				}
+				const p = rawValues[idx++];
+				return { user: p * 10_000, system: 0 };
+			},
+			readMemory: () => ({ rss: 0 }),
+			cpuCount: 1,
+			emaAlpha: Number.NaN,
+			historySize: Number.NaN,
+			rollingWindowSize: Number.NaN,
+			spikeThreshold: Number.NaN,
+		});
+
+		sampler.start(1000);
+
+		for (let i = 0; i < rawValues.length; i++) {
+			vi.advanceTimersByTime(1000);
+		}
+
+		expect(sampler.getCpuPercent()).toBeCloseTo(40.396, 4);
+		expect(sampler.getCpuRollingAvg()).toBeCloseTo(27.8152, 4);
+		expect(sampler.getCpuSpikeCount()).toBe(0);
+
+		sampler.stop();
+	});
+
+	it("clamps out-of-range option bounds", () => {
+		let time = 0;
+		const rawValues = [10, 50, 100, 100];
+		let idx = 0;
+		const sampler = new MetricsSampler({
+			now: () => {
+				time += 1000;
+				return time;
+			},
+			readCpu: (prev?) => {
+				if (!prev) {
+					return { user: 0, system: 0 };
+				}
+				const p = rawValues[idx++];
+				return { user: p * 10_000, system: 0 };
+			},
+			readMemory: () => ({ rss: 0 }),
+			cpuCount: 1,
+			emaAlpha: -5,
+			historySize: 2,
+			rollingWindowSize: 2,
+			spikeThreshold: 150,
+		});
+
+		sampler.start(1000);
+
+		for (let i = 0; i < rawValues.length; i++) {
+			vi.advanceTimersByTime(1000);
+		}
+
+		expect(sampler.getCpuPercent()).toBeCloseTo(10, 4);
+		expect(sampler.getCpuSpikeCount()).toBe(0);
+		expect(sampler.getCpuRollingAvg()).toBeCloseTo(10, 4);
+		expect(sampler.getCpuRollingAvg(3)).toBeNull();
+
+		sampler.stop();
 	});
 
 	it("supports deterministic dependency injection", () => {

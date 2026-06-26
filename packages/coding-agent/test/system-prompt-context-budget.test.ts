@@ -44,7 +44,7 @@ describe("buildSystemPrompt context budget", () => {
 			contextFiles: [
 				{
 					path: "/repo/AGENTS.md",
-					content: "Important project convention. ".repeat(200),
+					content: `SECRET_CONTEXT_BUDGET_RAW_RESOURCE_TEXT ${"Important project convention. ".repeat(200)}`,
 					isGlobal: false,
 				},
 			],
@@ -60,8 +60,18 @@ describe("buildSystemPrompt context budget", () => {
 		expect(prompt).toContain("<context_file_pointer");
 		expect(prompt).toContain("<context_budget>");
 		expect(prompt).toContain("<policy>context-budget-v2</policy>");
+		expect(prompt).toContain("<decision_observability>");
+		expect(prompt).toMatch(
+			/<counts selected="\d+" omitted="\d+" pointer="\d+" compressed="\d+" full="\d+" retrieval_fallbacks="\d+" \/>/u,
+		);
+		expect(prompt).toMatch(/<tokens available="\d+" used="\d+" raw="\d+" omitted="\d+" token_savings="\d+" \/>/u);
+		expect(prompt).toContain("<diagnostic_reasons");
+		expect(prompt).toContain(
+			'<token_optimizer optimizer_id="legacy-token-optimizer" status="quarantined_compatibility" active="false" active_context_budget_optimizer="context-budget-v2" compatibility_only="true" />',
+		);
 		expect(prompt).toContain("<name>skill-0</name>");
 		expect(prompt).not.toContain("<name>skill-39</name>");
+		expect(prompt).not.toContain("SECRET_CONTEXT_BUDGET_RAW_RESOURCE_TEXT");
 		expect(prompt).toContain("Current working directory: /repo");
 	});
 });

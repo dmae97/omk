@@ -21,11 +21,13 @@ import {
 	CONTEXT_BUDGET_POLICY_VERSION_V2,
 	DEFAULT_TIER_POLICY_V2,
 	type PromptContextBudgetInputV2,
+	type PromptContextBudgetObservabilityV2,
 	type PromptContextBudgetPlanV2,
 	type QualityDiagnosticV2,
 	type SelectedRepresentationV2,
 	type TierBudgetPolicyV2,
 } from "./context-budget-v2-types.ts";
+import { getTokenOptimizerRuntimeStatus } from "./token-optimizer.ts";
 
 export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): PromptContextBudgetPlanV2 {
 	const modelId = input.modelId ?? "unknown";
@@ -33,13 +35,18 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 	const policyVersion = input.policyVersion ?? CONTEXT_BUDGET_POLICY_VERSION_V2;
 	const diagnostics: QualityDiagnosticV2[] = [];
 
-	const maxTokens = Math.floor(input.maxTokens);
-	const responseReserve = Math.max(0, Math.floor(input.responseReserveTokens ?? 0));
-	const safetyMargin = Math.max(0, Math.floor(input.safetyMarginTokens ?? Math.ceil(maxTokens * 0.05)));
+	const maxTokens = normalizeBudgetTokens("maxTokens", input.maxTokens, diagnostics);
+	const responseReserve = normalizeBudgetTokens(
+		"responseReserveTokens",
+		input.responseReserveTokens ?? 0,
+		diagnostics,
+	);
+	const safetyMargin = normalizeBudgetTokens(
+		"safetyMarginTokens",
+		input.safetyMarginTokens ?? Math.ceil(maxTokens * 0.05),
+		diagnostics,
+	);
 	const available = Math.max(0, maxTokens - responseReserve - safetyMargin);
-	if (!Number.isFinite(input.maxTokens) || input.maxTokens < 0) {
-		diagnostics.push({ reason: "invalid_budget", detail: `maxTokens must be non-negative, got ${input.maxTokens}` });
-	}
 
 	const tierPolicy: Readonly<Record<ContextBudgetTierV2, TierBudgetPolicyV2>> = {
 		...DEFAULT_TIER_POLICY_V2,
@@ -101,12 +108,23 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 		allocations: tierAllocations,
 		omittedItemIds,
 	});
+	const observability = buildObservability({
+		available,
+		diagnostics,
+		omittedItemIds,
+		omittedTokens,
+		planHash,
+		rawTokens,
+		retrievalFallbacks,
+		selection,
+		usedTokens,
+	});
 
 	return {
 		policyVersion,
 		promptHash: input.promptHash,
 		planHash,
-		maxTokens: Number.isFinite(input.maxTokens) ? maxTokens : 0,
+		maxTokens,
 		responseReserveTokens: responseReserve,
 		safetyMarginTokens: safetyMargin,
 		availableTokens: available,
@@ -125,5 +143,59 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 		omittedItemIds,
 		diagnostics,
 		retrievalFallbacks,
+		observability,
 	};
+}
+
+function normalizeBudgetTokens(field: string, value: number, diagnostics: QualityDiagnosticV2[]): number {
+	if (!Number.isFinite(value) || value < 0) {
+		diagnostics.push({
+			reason: "invalid_budget",
+			detail: `${field} must be a non-negative finite number, got ${value}`,
+		});
+		return 0;
+	}
+	return Math.floor(value);
+}
+
+function buildObservability(input: {
+	readonly available: number;
+	readonly diagnostics: readonly QualityDiagnosticV2[];
+	readonly omittedItemIds: readonly string[];
+	readonly omittedTokens: number;
+	readonly planHash: string;
+	readonly rawTokens: number;
+	readonly retrievalFallbacks: readonly ContextSourceRefV2[];
+	readonly selection: ReadonlyMap<string, SelectedRepresentationV2>;
+	readonly usedTokens: number;
+}): PromptContextBudgetObservabilityV2 {
+	const selected = [...input.selection.values()];
+	return {
+		counts: {
+			selected: selected.length,
+			omitted: input.omittedItemIds.length,
+			pointer: selected.filter((representation) => representation.kind === "pointer").length,
+			compressed: selected.filter((representation) => representation.kind === "headroom-compressed").length,
+			full: selected.filter((representation) => representation.kind === "full").length,
+			retrievalFallback: countUniqueRetrievalFallbacks(input.retrievalFallbacks),
+		},
+		diagnosticReasons: [...new Set(input.diagnostics.map((diagnostic) => diagnostic.reason))].sort(),
+		tokens: {
+			available: input.available,
+			used: input.usedTokens,
+			raw: input.rawTokens,
+			omitted: input.omittedTokens,
+			tokenSavings: Math.max(0, input.rawTokens - input.usedTokens),
+		},
+		planHash: input.planHash,
+		tokenOptimizer: getTokenOptimizerRuntimeStatus(),
+	};
+}
+
+function countUniqueRetrievalFallbacks(retrievalFallbacks: readonly ContextSourceRefV2[]): number {
+	return new Set(
+		retrievalFallbacks.map((ref) =>
+			[ref.uri, ref.contentHash, ref.symbol ?? "", ref.range?.startLine ?? "", ref.range?.endLine ?? ""].join("\0"),
+		),
+	).size;
 }

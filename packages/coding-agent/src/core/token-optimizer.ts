@@ -78,6 +78,24 @@ export interface TokenOptimizationResult {
 	cacheHit: boolean;
 }
 
+export interface TokenOptimizerRuntimeStatus {
+	readonly optimizerId: "legacy-token-optimizer";
+	readonly status: "quarantined_compatibility";
+	readonly active: false;
+	readonly activeContextBudgetOptimizer: "context-budget-v2";
+	readonly compatibilityOnly: true;
+}
+
+export function getTokenOptimizerRuntimeStatus(): TokenOptimizerRuntimeStatus {
+	return {
+		optimizerId: "legacy-token-optimizer",
+		status: "quarantined_compatibility",
+		active: false,
+		activeContextBudgetOptimizer: "context-budget-v2",
+		compatibilityOnly: true,
+	};
+}
+
 // ---------------------------------------------------------------------------
 // LosslessCompressor — 진정한 무손실 압축
 // ---------------------------------------------------------------------------

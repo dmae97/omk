@@ -75,18 +75,40 @@ export function renderSystemPromptBudgetedResources(
 
 function renderBudgetNote(plan: PromptContextBudgetPlanV2, baseTokens: number): string {
 	const omitted = plan.omittedItemIds.length;
+	const { counts, diagnosticReasons, tokenOptimizer, tokens } = plan.observability;
+	const renderedDiagnosticReasons =
+		diagnosticReasons.length === 0
+			? '    <diagnostic_reasons count="0" />'
+			: [
+					`    <diagnostic_reasons count="${formatObservableInteger(diagnosticReasons.length)}">`,
+					...diagnosticReasons.map((reason) => `      <reason>${escapeXml(reason)}</reason>`),
+					"    </diagnostic_reasons>",
+				].join("\n");
 	return [
 		"<context_budget>",
 		`  <policy>${escapeXml(plan.policyVersion)}</policy>`,
-		`  <plan_hash>${plan.planHash}</plan_hash>`,
-		`  <base_prompt_tokens>${baseTokens}</base_prompt_tokens>`,
-		`  <resource_tokens_used>${plan.usedTokens}</resource_tokens_used>`,
-		`  <resource_tokens_omitted>${plan.omittedTokens}</resource_tokens_omitted>`,
-		`  <omitted_items>${omitted}</omitted_items>`,
+		`  <plan_hash>${escapeXml(plan.planHash)}</plan_hash>`,
+		`  <base_prompt_tokens>${formatObservableInteger(baseTokens)}</base_prompt_tokens>`,
+		`  <resource_tokens_used>${formatObservableInteger(plan.usedTokens)}</resource_tokens_used>`,
+		`  <resource_tokens_omitted>${formatObservableInteger(plan.omittedTokens)}</resource_tokens_omitted>`,
+		`  <omitted_items>${formatObservableInteger(omitted)}</omitted_items>`,
 		`  <emergency>${plan.emergency ? "true" : "false"}</emergency>`,
+		"  <decision_observability>",
+		`    <counts selected="${formatObservableInteger(counts.selected)}" omitted="${formatObservableInteger(counts.omitted)}" pointer="${formatObservableInteger(counts.pointer)}" compressed="${formatObservableInteger(counts.compressed)}" full="${formatObservableInteger(counts.full)}" retrieval_fallbacks="${formatObservableInteger(counts.retrievalFallback)}" />`,
+		`    <tokens available="${formatObservableInteger(tokens.available)}" used="${formatObservableInteger(tokens.used)}" raw="${formatObservableInteger(tokens.raw)}" omitted="${formatObservableInteger(tokens.omitted)}" token_savings="${formatObservableInteger(tokens.tokenSavings)}" />`,
+		renderedDiagnosticReasons,
+		`    <token_optimizer optimizer_id="${escapeXml(tokenOptimizer.optimizerId)}" status="${escapeXml(tokenOptimizer.status)}" active="${tokenOptimizer.active ? "true" : "false"}" active_context_budget_optimizer="${escapeXml(tokenOptimizer.activeContextBudgetOptimizer)}" compatibility_only="${tokenOptimizer.compatibilityOnly ? "true" : "false"}" />`,
+		"  </decision_observability>",
 		"  <note>Some low-priority resource inventory may be represented by pointers. Use read on referenced paths when needed.</note>",
 		"</context_budget>",
 	].join("\n");
+}
+
+function formatObservableInteger(value: number): string {
+	if (!Number.isFinite(value)) {
+		return "0";
+	}
+	return String(Math.max(0, Math.floor(value)));
 }
 
 /**

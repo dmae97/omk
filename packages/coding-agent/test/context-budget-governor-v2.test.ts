@@ -212,6 +212,124 @@ describe("context budget governor v2", () => {
 		expect(a.tierAllocations.length).toBe(Object.keys(DEFAULT_TIER_POLICY_V2).length);
 	});
 
+	it("emits deterministic observability metadata without raw prompt item text", () => {
+		const omittedFallback = sourceRef("file:///omitted.md");
+		const plan = planWith(
+			[
+				makeItem({
+					id: "sys",
+					tier: "system",
+					priority: "hard",
+					text: "system prompt SECRET_RAW_ITEM_TEXT",
+					tokenEstimate: 10,
+				}),
+				makeItem({
+					id: "pointer",
+					tier: "evidence",
+					priority: "high",
+					text: "pointer evidence SECRET_POINTER_TEXT",
+					tokenEstimate: 200,
+					sourceRef: sourceRef("file:///pointer.md"),
+				}),
+				makeItem({
+					id: "compressed",
+					tier: "current-files",
+					priority: "medium",
+					text: "full current file SECRET_COMPRESSED_TEXT",
+					tokenEstimate: 80,
+					sourceRef: sourceRef("file:///compressed.ts"),
+					representations: [
+						{
+							kind: "headroom-compressed",
+							text: "compressed digest SECRET_COMPRESSED_TEXT",
+							estimatedTokens: 9,
+							fidelity: "reversible",
+							sourceRef: sourceRef("file:///compressed.ts"),
+							compressorId: "headroom-shadow",
+						},
+					],
+				}),
+				makeItem({
+					id: "omitted",
+					tier: "scratch",
+					priority: "low",
+					text: "omitted body SECRET_OMITTED_TEXT",
+					tokenEstimate: 40,
+					sourceRef: omittedFallback,
+					representations: [
+						{
+							kind: "omit",
+							text: "",
+							estimatedTokens: 0,
+							fidelity: "lossy",
+							sourceRef: omittedFallback,
+						},
+					],
+				}),
+			],
+			{ maxTokens: 100, safetyMarginTokens: 0, promptHash: "prompt-hash" },
+		);
+
+		expect(plan.observability).toEqual({
+			counts: {
+				selected: 3,
+				omitted: 1,
+				pointer: 1,
+				compressed: 1,
+				full: 1,
+				retrievalFallback: 1,
+			},
+			diagnosticReasons: ["restore_on_demand_hint", "retrieval_miss_risk"],
+			tokens: {
+				available: plan.availableTokens,
+				used: plan.usedTokens,
+				raw: plan.rawTokens,
+				omitted: plan.omittedTokens,
+				tokenSavings: plan.rawTokens - plan.usedTokens,
+			},
+			planHash: plan.planHash,
+			tokenOptimizer: {
+				optimizerId: "legacy-token-optimizer",
+				status: "quarantined_compatibility",
+				active: false,
+				activeContextBudgetOptimizer: "context-budget-v2",
+				compatibilityOnly: true,
+			},
+		});
+		const metadata = JSON.stringify(plan.observability);
+		expect(metadata).not.toContain("SECRET_RAW_ITEM_TEXT");
+		expect(metadata).not.toContain("SECRET_POINTER_TEXT");
+		expect(metadata).not.toContain("SECRET_COMPRESSED_TEXT");
+		expect(metadata).not.toContain("SECRET_OMITTED_TEXT");
+	});
+
+	it("keeps malformed non-finite budget observability finite and diagnostic", () => {
+		const plan = planWith([makeItem({ id: "sys", tier: "system", priority: "hard", text: "s", tokenEstimate: 10 })], {
+			maxTokens: Number.NaN,
+			responseReserveTokens: Number.POSITIVE_INFINITY,
+			safetyMarginTokens: Number.NaN,
+		});
+
+		expect(plan.emergency).toBe(true);
+		expect(plan.observability.diagnosticReasons).toContain("invalid_budget");
+		for (const value of [
+			plan.maxTokens,
+			plan.responseReserveTokens,
+			plan.safetyMarginTokens,
+			plan.availableTokens,
+			plan.usedTokens,
+			plan.rawTokens,
+			plan.omittedTokens,
+			plan.observability.tokens.available,
+			plan.observability.tokens.used,
+			plan.observability.tokens.raw,
+			plan.observability.tokens.omitted,
+			plan.observability.tokens.tokenSavings,
+		]) {
+			expect(Number.isFinite(value)).toBe(true);
+		}
+	});
+
 	it("rewards relevance and penalizes token cost", () => {
 		const focused = scoreContextBudgetItemV2(
 			makeItem({ id: "a", tier: "skills", text: "a", relevance: 1, evidenceValue: 1 }),

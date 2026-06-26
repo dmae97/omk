@@ -7,6 +7,7 @@ import type {
 	HeadroomQualityPolicyV2,
 } from "./context-budget-headroom.ts";
 import type { TokenCounterAdapter } from "./context-budget-token-counter.ts";
+import type { TokenOptimizerRuntimeStatus } from "./token-optimizer.ts";
 
 export const CONTEXT_BUDGET_POLICY_VERSION_V2 = "context-budget-v2";
 
@@ -88,6 +89,31 @@ export interface QualityDiagnosticV2 {
 	readonly detail: string;
 }
 
+export interface ContextBudgetObservabilityCountsV2 {
+	readonly selected: number;
+	readonly omitted: number;
+	readonly pointer: number;
+	readonly compressed: number;
+	readonly full: number;
+	readonly retrievalFallback: number;
+}
+
+export interface ContextBudgetObservabilityTokensV2 {
+	readonly available: number;
+	readonly used: number;
+	readonly raw: number;
+	readonly omitted: number;
+	readonly tokenSavings: number;
+}
+
+export interface PromptContextBudgetObservabilityV2 {
+	readonly counts: ContextBudgetObservabilityCountsV2;
+	readonly diagnosticReasons: readonly QualityDiagnosticReasonV2[];
+	readonly tokens: ContextBudgetObservabilityTokensV2;
+	readonly planHash: string;
+	readonly tokenOptimizer: TokenOptimizerRuntimeStatus;
+}
+
 export interface PromptContextBudgetPlanV2 {
 	readonly policyVersion: string;
 	readonly promptHash?: string;
@@ -108,4 +134,5 @@ export interface PromptContextBudgetPlanV2 {
 	readonly omittedItemIds: readonly string[];
 	readonly diagnostics: readonly QualityDiagnosticV2[];
 	readonly retrievalFallbacks: readonly ContextSourceRefV2[];
+	readonly observability: PromptContextBudgetObservabilityV2;
 }
