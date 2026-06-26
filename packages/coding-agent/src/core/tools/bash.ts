@@ -62,9 +62,9 @@ export interface BashOperations {
 }
 
 /**
- * Create bash operations using pi's built-in local shell execution backend.
+ * Create bash operations using OMK's built-in local shell execution backend.
  *
- * This is useful for extensions that intercept user_bash and still want pi's
+ * This is useful for extensions that intercept user_bash and still want OMK's
  * standard local shell behavior while wrapping, sandboxing, or rewriting commands.
  */
 export function createLocalBashOperations(options?: {
@@ -363,7 +363,7 @@ export function createBashToolDefinition(
 				throw new Error(`command-safety: blocked\n[${effectiveVerdict.rule}] ${effectiveVerdict.reason}`);
 			}
 
-			const output = new OutputAccumulator({ tempFilePrefix: "pi-bash" });
+			const output = new OutputAccumulator({ tempFilePrefix: "omk-bash" });
 			let updateTimer: NodeJS.Timeout | undefined;
 			let updateDirty = false;
 			let lastUpdateAt = 0;
