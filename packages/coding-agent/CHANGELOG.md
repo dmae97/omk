@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added GitHub-focused v0.90.1 release notes and README release documentation for the current OMK package line.
+- Added an autopilot automation profile with browser-use integration for repeatable operator workflows.
+- Added materialized context-budget v2 representation and plan cache reuse with validation and telemetry.
+
+### Changed
+
+- Changed release docs, badges, install references, and OMK//CONTROL TUI copy to the package-backed `omk v0.90.1 · OMK//CONTROL` release surface.
+- Changed standalone package release metadata to keep `open-multi-agent-kit`, `omk-ai`, `omk-agent-core`, and `omk-tui` lockstep across npm and GitHub release surfaces.
+
 ## [0.80.8] - 2026-06-27
 
 ### Added

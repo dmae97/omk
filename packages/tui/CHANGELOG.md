@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Changed package metadata and lockstep release documentation to the standalone `omk-tui` package line used by OMK releases.
+
 ## [0.80.8] - 2026-06-27
 
 ### Breaking Changes
