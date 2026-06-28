@@ -65,9 +65,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "GitHub Release ${RELEASE_TAG} already exists; skipping binary upload."
+            exit 0
+          fi
+
           cd packages/coding-agent/binaries
-          
-          # Create release with changelog notes (or update if exists)
+
           gh release create "${RELEASE_TAG}" \
             --title "${RELEASE_TAG}" \
             --notes-file /tmp/release-notes.md \
@@ -76,16 +80,7 @@ jobs:
             omk-linux-x64.tar.gz \
             omk-linux-arm64.tar.gz \
             omk-windows-x64.zip \
-            omk-windows-arm64.zip \
-            2>/dev/null || \
-          gh release upload "${RELEASE_TAG}" \
-            omk-darwin-arm64.tar.gz \
-            omk-darwin-x64.tar.gz \
-            omk-linux-x64.tar.gz \
-            omk-linux-arm64.tar.gz \
-            omk-windows-x64.zip \
-            omk-windows-arm64.zip \
-            --clobber
+            omk-windows-arm64.zip
 
   publish-npm:
     runs-on: ubuntu-latest
