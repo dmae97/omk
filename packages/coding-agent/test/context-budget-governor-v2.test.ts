@@ -288,6 +288,29 @@ describe("context budget governor v2", () => {
 				tokenSavings: plan.rawTokens - plan.usedTokens,
 			},
 			planHash: plan.planHash,
+			cache: {
+				planCache: {
+					hit: false,
+					key: expect.any(String),
+				},
+				representationCache: {
+					exactHits: 0,
+					semanticHits: 0,
+					pointerHits: 0,
+					misses: 0,
+					staleRejects: 0,
+					poisonRejects: 0,
+					negativeHits: 0,
+					writes: 0,
+				},
+				tokens: {
+					raw: plan.rawTokens,
+					rendered: plan.usedTokens,
+					savedByCache: 0,
+					savedByCompression: plan.rawTokens - plan.usedTokens - plan.omittedTokens,
+					savedByOmission: plan.omittedTokens,
+				},
+			},
 			tokenOptimizer: {
 				optimizerId: "legacy-token-optimizer",
 				status: "quarantined_compatibility",

@@ -19,6 +19,20 @@ export {
 	heuristicTokenCount,
 	type RepresentationBudgetContext,
 } from "./context-budget-headroom.ts";
+export {
+	buildContextBudgetExactRepresentationCacheKeyV2,
+	buildContextBudgetMaterializedRepresentationCacheKeyV2,
+	buildContextBudgetMaterializedRepresentationCandidateKeyV2,
+	buildContextBudgetPlanCacheKeyV2,
+	buildContextBudgetRepresentationCacheKeyV2,
+	computeContextBudgetOutputTextHashV2,
+	computeContextBudgetQueryIntentHashV2,
+	computeContextBudgetRepresentationFingerprintV2,
+	computeContextBudgetTargetTokenBucketV2,
+	createMemoryContextBudgetCacheProviderV2,
+	DEFAULT_MATERIALIZED_COMPRESSOR_POLICY_HASH_V2,
+	DEFAULT_MATERIALIZED_QUALITY_POLICY_HASH_V2,
+} from "./context-budget-v2-cache.ts";
 export { computeCoverageGap } from "./context-budget-v2-coverage.ts";
 export { computePlanHash, contentHashOf } from "./context-budget-v2-plan-hash.ts";
 export { planPromptContextBudgetV2 } from "./context-budget-v2-planner.ts";
@@ -26,8 +40,15 @@ export { scoreContextBudgetItemV2 } from "./context-budget-v2-scoring.ts";
 export {
 	ALL_TIERS_V2,
 	CONTEXT_BUDGET_POLICY_VERSION_V2,
+	type ContextBudgetCacheProviderV2,
+	type ContextBudgetCacheTokenTelemetryV2,
+	type ContextBudgetMaterializedVerificationV2,
 	type ContextBudgetObservabilityCountsV2,
 	type ContextBudgetObservabilityTokensV2,
+	type ContextBudgetPlanCacheTelemetryV2,
+	type ContextBudgetRepresentationCacheEntryV2,
+	type ContextBudgetRepresentationCacheKeyKindV2,
+	type ContextBudgetRepresentationCacheTelemetryV2,
 	DEFAULT_TIER_POLICY_V2,
 	type PromptContextBudgetInputV2,
 	type PromptContextBudgetObservabilityV2,

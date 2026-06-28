@@ -4,6 +4,14 @@ import {
 	type ContextSourceRefV2,
 	DEFAULT_HEADROOM_QUALITY_POLICY,
 } from "./context-budget-headroom.ts";
+import {
+	buildContextBudgetPlanCacheKeyV2,
+	createContextBudgetCacheKeyBaseV2,
+	createContextBudgetSelectionCacheV2,
+	finalizeContextBudgetCacheTelemetryV2,
+	readValidPlanCacheV2,
+	writePlanCacheV2,
+} from "./context-budget-v2-cache.ts";
 import { computePlanHash } from "./context-budget-v2-plan-hash.ts";
 import { compareOptionalForSelection } from "./context-budget-v2-scoring.ts";
 import {
@@ -54,9 +62,48 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 	};
 	const basePlanned = createPlannedItems(input.items, input.tokenCounter, modelId);
 	applyPlannerRedundancyPenalties(basePlanned);
+	const rawTokens = basePlanned.reduce((sum, planned) => sum + planned.fullTokens, 0);
 
 	const demand = computeTierDemand(basePlanned);
 	const allocation = allocateTiers(available, tierPolicy, demand);
+	const cacheKeyBase = createContextBudgetCacheKeyBaseV2({
+		budgetBucket: input.cacheBudgetBucket ?? String(available),
+		modelId,
+		namespace: input.cacheNamespace,
+		policyVersion,
+		query: input.query,
+		queryIntentHash: input.queryIntentHash,
+		redactionPolicyHash: input.redactionPolicyHash,
+		safetyProfileHash: input.safetyProfileHash,
+		tokenizerId: input.tokenizerId,
+	});
+	const planCacheKey = buildContextBudgetPlanCacheKeyV2({
+		availableTokens: available,
+		keyBase: cacheKeyBase,
+		maxTokens,
+		planned: basePlanned,
+		promptHash: input.promptHash,
+		qualityPolicy,
+		responseReserveTokens: responseReserve,
+		safetyMarginTokens: safetyMargin,
+		tierPolicy,
+	});
+	const cache = createContextBudgetSelectionCacheV2({
+		keyBase: cacheKeyBase,
+		nowEpochMs: input.cacheNowEpochMs,
+		planCacheKey,
+		provider: input.cacheProvider,
+		ttlMs: input.cacheTtlMs,
+	});
+	const cachedPlan = readValidPlanCacheV2({
+		availableTokens: available,
+		cache,
+		key: planCacheKey,
+		planned: basePlanned,
+	});
+	if (cachedPlan) {
+		return cachedPlan;
+	}
 	const selection = new Map<string, SelectedRepresentationV2>();
 	const tierUsed = createTierUsage();
 	const omitted: ContextBudgetItemV2[] = [];
@@ -79,6 +126,7 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 		usedTokens = selectOptionalItem(planned, {
 			allocation,
 			available,
+			cache,
 			diagnostics,
 			omitted,
 			qualityPolicy,
@@ -94,7 +142,6 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 	emitCoverageDiagnostics(input.query, selection, diagnostics);
 
 	const tierAllocations = buildTierAllocations(allocation, demand, tierUsed);
-	const rawTokens = basePlanned.reduce((sum, planned) => sum + planned.fullTokens, 0);
 	const omittedTokens = omitted.reduce(
 		(sum, item) => sum + (basePlanned.find((planned) => planned.item.id === item.id)?.fullTokens ?? 0),
 		0,
@@ -118,9 +165,14 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 		retrievalFallbacks,
 		selection,
 		usedTokens,
+		cacheTelemetry: finalizeContextBudgetCacheTelemetryV2(cache.telemetry, {
+			omittedTokens,
+			rawTokens,
+			usedTokens,
+		}),
 	});
 
-	return {
+	const plan: PromptContextBudgetPlanV2 = {
 		policyVersion,
 		promptHash: input.promptHash,
 		planHash,
@@ -145,6 +197,13 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 		retrievalFallbacks,
 		observability,
 	};
+	writePlanCacheV2({
+		cache,
+		key: planCacheKey,
+		plan,
+		planned: basePlanned,
+	});
+	return plan;
 }
 
 function normalizeBudgetTokens(field: string, value: number, diagnostics: QualityDiagnosticV2[]): number {
@@ -168,6 +227,7 @@ function buildObservability(input: {
 	readonly retrievalFallbacks: readonly ContextSourceRefV2[];
 	readonly selection: ReadonlyMap<string, SelectedRepresentationV2>;
 	readonly usedTokens: number;
+	readonly cacheTelemetry: PromptContextBudgetObservabilityV2["cache"];
 }): PromptContextBudgetObservabilityV2 {
 	const selected = [...input.selection.values()];
 	return {
@@ -188,6 +248,7 @@ function buildObservability(input: {
 			tokenSavings: Math.max(0, input.rawTokens - input.usedTokens),
 		},
 		planHash: input.planHash,
+		cache: input.cacheTelemetry,
 		tokenOptimizer: getTokenOptimizerRuntimeStatus(),
 	};
 }

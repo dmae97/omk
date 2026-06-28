@@ -4,9 +4,15 @@ import {
 	type ContextRepresentationCandidateV2,
 	type ContextSourceRefV2,
 	chooseHeadroomRepresentation,
+	deriveRepresentationCandidates,
 	fullTextTokens,
 } from "./context-budget-headroom.ts";
 import { createFallbackTokenCounter, type TokenCounterAdapter } from "./context-budget-token-counter.ts";
+import {
+	applyRepresentationCacheV2,
+	type ContextBudgetSelectionCacheV2,
+	writeRepresentationCacheV2,
+} from "./context-budget-v2-cache.ts";
 import { computeCoverageGap } from "./context-budget-v2-coverage.ts";
 import { contentHashOf } from "./context-budget-v2-plan-hash.ts";
 import { applyRedundancyPenalties, type PlannedItemV2, scoreContextBudgetItemV2 } from "./context-budget-v2-scoring.ts";
@@ -20,6 +26,7 @@ import {
 export interface OptionalSelectionState {
 	readonly allocation: ReadonlyMap<ContextBudgetTierV2, { readonly ceiling: number }>;
 	readonly available: number;
+	readonly cache?: ContextBudgetSelectionCacheV2;
 	readonly diagnostics: QualityDiagnosticV2[];
 	readonly omitted: ContextBudgetItemV2[];
 	readonly qualityPolicy: Parameters<typeof chooseHeadroomRepresentation>[2];
@@ -88,8 +95,13 @@ export function selectOptionalItem(planned: PlannedItemV2, state: OptionalSelect
 	}
 	const tierCeiling = state.allocation.get(planned.item.tier)?.ceiling ?? state.available;
 	const remaining = Math.max(0, state.available - state.usedTokens);
+	const candidates = planned.item.representations ?? deriveRepresentationCandidates(planned.item, state.qualityPolicy);
+	const materializedEnabled = planned.item.representations === undefined;
+	const cachedCandidates = state.cache
+		? applyRepresentationCacheV2({ planned, candidates, cache: state.cache, materializedEnabled })
+		: candidates;
 	const chosen = chooseHeadroomRepresentation(
-		planned.item,
+		{ ...planned.item, representations: cachedCandidates },
 		{
 			tierUsedTokens: state.tierUsed[planned.item.tier],
 			tierCeilingTokens: tierCeiling,
@@ -113,6 +125,9 @@ export function selectOptionalItem(planned: PlannedItemV2, state: OptionalSelect
 	if (state.usedTokens + chosen.estimatedTokens > state.available) {
 		omitItem(planned, state);
 		return state.usedTokens;
+	}
+	if (state.cache) {
+		writeRepresentationCacheV2({ planned, selected: chosen, cache: state.cache, materializedEnabled });
 	}
 	state.selection.set(planned.item.id, toSelected(planned.item.id, chosen));
 	state.tierUsed[planned.item.tier] += chosen.estimatedTokens;
@@ -204,6 +219,7 @@ function toSelected(itemId: string, candidate: ContextRepresentationCandidateV2)
 		sourceRef: candidate.sourceRef,
 		summaryHash: candidate.summaryHash,
 		compressorId: candidate.compressorId,
+		cache: candidate.cache,
 	};
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createMemoryContextBudgetCacheProviderV2 } from "../src/core/context-budget-governor-v2.ts";
 import type { Skill } from "../src/core/skills.ts";
 import type { SourceInfo } from "../src/core/source-info.ts";
 import { buildSystemPrompt } from "../src/core/system-prompt.ts";
@@ -65,6 +66,9 @@ describe("buildSystemPrompt context budget", () => {
 			/<counts selected="\d+" omitted="\d+" pointer="\d+" compressed="\d+" full="\d+" retrieval_fallbacks="\d+" \/>/u,
 		);
 		expect(prompt).toMatch(/<tokens available="\d+" used="\d+" raw="\d+" omitted="\d+" token_savings="\d+" \/>/u);
+		expect(prompt).toMatch(
+			/<cache_decision plan_hit="false" selected_hits="\d+" misses="\d+" stale_rejects="\d+" negative_hits="\d+" writes="\d+" \/>/u,
+		);
 		expect(prompt).toContain("<diagnostic_reasons");
 		expect(prompt).toContain(
 			'<token_optimizer optimizer_id="legacy-token-optimizer" status="quarantined_compatibility" active="false" active_context_budget_optimizer="context-budget-v2" compatibility_only="true" />',
@@ -73,5 +77,36 @@ describe("buildSystemPrompt context budget", () => {
 		expect(prompt).not.toContain("<name>skill-39</name>");
 		expect(prompt).not.toContain("SECRET_CONTEXT_BUDGET_RAW_RESOURCE_TEXT");
 		expect(prompt).toContain("Current working directory: /repo");
+	});
+
+	it("renders bounded cache decision observability without cached raw text", () => {
+		const cacheProvider = createMemoryContextBudgetCacheProviderV2();
+		const budget = {
+			maxPromptTokens: 1700,
+			cacheProvider,
+			includeFullContextFiles: false,
+			queryContext: "cache surface",
+		};
+		const input = {
+			selectedTools: ["read"],
+			toolSnippets: { read: "Read files" },
+			contextFiles: [
+				{
+					path: "/repo/cache.md",
+					content: `SECRET_CACHE_SURFACE_TEXT ${"cache surface detail. ".repeat(200)}`,
+					isGlobal: false,
+				},
+			],
+			skills: [makeSkill(0)],
+			cwd: "/repo",
+			contextBudget: budget,
+		};
+
+		const first = buildSystemPrompt(input);
+		const second = buildSystemPrompt(input);
+
+		expect(first).toMatch(/<cache_decision plan_hit="false" selected_hits="0" misses="\d+"/u);
+		expect(second).toMatch(/<cache_decision plan_hit="true" selected_hits="0" misses="0"/u);
+		expect(second).not.toContain("SECRET_CACHE_SURFACE_TEXT");
 	});
 });

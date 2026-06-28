@@ -25,6 +25,14 @@ export interface ContextSourceRefV2 {
 
 export type ContextRepresentationFidelityV2 = "exact" | "bounded" | "lossy" | "reversible";
 
+export interface ContextRepresentationCacheMetadataV2 {
+	readonly hit: boolean;
+	readonly key: string;
+	readonly keyKind?: "exact" | "materialized";
+	readonly layer?: "turn" | "session" | "workspace" | "shared";
+	readonly rejectedReason?: string;
+}
+
 export interface ContextRepresentationCandidateV2 {
 	readonly kind: ContextRepresentationKindV2;
 	readonly text: string;
@@ -33,6 +41,7 @@ export interface ContextRepresentationCandidateV2 {
 	readonly sourceRef?: ContextSourceRefV2;
 	readonly summaryHash?: string;
 	readonly compressorId?: string;
+	readonly cache?: ContextRepresentationCacheMetadataV2;
 }
 
 export interface ContextBudgetItemV2 {

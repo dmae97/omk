@@ -23,6 +23,11 @@ const FIDELITY_BONUS: Record<ContextRepresentationCandidateV2["fidelity"], numbe
 	lossy: 0,
 };
 
+const CACHE_HIT_BONUS = 8;
+const TIGHT_CACHE_HIT_BONUS = 20;
+const MATERIALIZED_CACHE_HIT_BONUS = 8;
+const TIGHT_MATERIALIZED_CACHE_HIT_BONUS = 35;
+
 export function chooseHeadroomRepresentation(
 	item: ContextBudgetItemV2,
 	budget: RepresentationBudgetContext,
@@ -86,10 +91,20 @@ function representationPreference(
 	const cost = candidate.estimatedTokens;
 	const fidelity = FIDELITY_BONUS[candidate.fidelity];
 	const retrievable = item.sourceRef?.retrievable === true;
+	const cacheBonus =
+		candidate.cache?.hit === true
+			? candidate.cache.keyKind === "materialized"
+				? tight
+					? TIGHT_MATERIALIZED_CACHE_HIT_BONUS
+					: MATERIALIZED_CACHE_HIT_BONUS
+				: tight
+					? TIGHT_CACHE_HIT_BONUS
+					: CACHE_HIT_BONUS
+			: 0;
 
 	switch (candidate.kind) {
 		case "full": {
-			let score = priority + fidelity - cost * 0.05;
+			let score = priority + fidelity + cacheBonus - cost * 0.05;
 			if (tight) score -= 50;
 			if (isHistoryLike(item) && (item.ageTurns ?? 0) >= policy.summaryMaxAgeTurns) {
 				score -= 40;
@@ -100,13 +115,13 @@ function representationPreference(
 			if (!policy.preferPointerForRetrievable || !retrievable) {
 				return Number.NEGATIVE_INFINITY;
 			}
-			let score = 40 + fidelity - cost * 0.2;
+			let score = 40 + fidelity + cacheBonus - cost * 0.2;
 			if (tight) score += 20;
 			return score;
 		}
 		case "summary": {
 			const base = isHistoryLike(item) ? 30 : 10;
-			let score = base + ageBonus(item) + fidelity - cost * 0.3;
+			let score = base + ageBonus(item) + fidelity + cacheBonus - cost * 0.3;
 			if (tight) score += 15;
 			return score;
 		}
@@ -115,7 +130,7 @@ function representationPreference(
 				return Number.NEGATIVE_INFINITY;
 			}
 			const large = fullTextTokens(item) > policy.headroomThresholdTokens ? 35 : 5;
-			let score = large + 10 + fidelity - cost * 0.5;
+			let score = large + 10 + fidelity + cacheBonus - cost * 0.5;
 			if (tight) score += 18;
 			return score;
 		}
@@ -152,6 +167,7 @@ export {
 	type ContextBudgetPriorityV2,
 	type ContextBudgetTierV2,
 	type ContextEvidenceKindV2,
+	type ContextRepresentationCacheMetadataV2,
 	type ContextRepresentationCandidateV2,
 	type ContextRepresentationFidelityV2,
 	type ContextRepresentationKindV2,

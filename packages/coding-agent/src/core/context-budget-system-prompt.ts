@@ -1,5 +1,6 @@
 import {
 	CONTEXT_BUDGET_POLICY_VERSION_V2,
+	type ContextBudgetCacheProviderV2,
 	type ContextBudgetItemV2,
 	type PromptContextBudgetPlanV2,
 	planPromptContextBudgetV2,
@@ -22,6 +23,7 @@ export interface SystemPromptContextBudgetOptions {
 	readonly includeSkillInventory?: boolean;
 	readonly includeFullContextFiles?: boolean;
 	readonly tokenCounter?: TokenCounterAdapter;
+	readonly cacheProvider?: ContextBudgetCacheProviderV2;
 	/** Maximum number of inactive (non-active) skills to include as items. Default: 15. */
 	readonly maxInactiveSkills?: number;
 	/** Current user query text for relevance-aware skill ranking. */
@@ -58,6 +60,7 @@ export function renderSystemPromptBudgetedResources(
 		query: input.options.queryContext,
 		items,
 		tokenCounter,
+		cacheProvider: input.options.cacheProvider,
 	});
 	const included = new Set(plan.includedItemIds);
 	const filtered = deduplicatePointerFull(items, included);
@@ -75,7 +78,11 @@ export function renderSystemPromptBudgetedResources(
 
 function renderBudgetNote(plan: PromptContextBudgetPlanV2, baseTokens: number): string {
 	const omitted = plan.omittedItemIds.length;
-	const { counts, diagnosticReasons, tokenOptimizer, tokens } = plan.observability;
+	const { cache, counts, diagnosticReasons, tokenOptimizer, tokens } = plan.observability;
+	const selectedCacheHits =
+		cache.representationCache.exactHits +
+		cache.representationCache.semanticHits +
+		cache.representationCache.pointerHits;
 	const renderedDiagnosticReasons =
 		diagnosticReasons.length === 0
 			? '    <diagnostic_reasons count="0" />'
@@ -96,6 +103,7 @@ function renderBudgetNote(plan: PromptContextBudgetPlanV2, baseTokens: number): 
 		"  <decision_observability>",
 		`    <counts selected="${formatObservableInteger(counts.selected)}" omitted="${formatObservableInteger(counts.omitted)}" pointer="${formatObservableInteger(counts.pointer)}" compressed="${formatObservableInteger(counts.compressed)}" full="${formatObservableInteger(counts.full)}" retrieval_fallbacks="${formatObservableInteger(counts.retrievalFallback)}" />`,
 		`    <tokens available="${formatObservableInteger(tokens.available)}" used="${formatObservableInteger(tokens.used)}" raw="${formatObservableInteger(tokens.raw)}" omitted="${formatObservableInteger(tokens.omitted)}" token_savings="${formatObservableInteger(tokens.tokenSavings)}" />`,
+		`    <cache_decision plan_hit="${cache.planCache.hit ? "true" : "false"}" selected_hits="${formatObservableInteger(selectedCacheHits)}" misses="${formatObservableInteger(cache.representationCache.misses)}" stale_rejects="${formatObservableInteger(cache.representationCache.staleRejects)}" negative_hits="${formatObservableInteger(cache.representationCache.negativeHits)}" writes="${formatObservableInteger(cache.representationCache.writes)}" />`,
 		renderedDiagnosticReasons,
 		`    <token_optimizer optimizer_id="${escapeXml(tokenOptimizer.optimizerId)}" status="${escapeXml(tokenOptimizer.status)}" active="${tokenOptimizer.active ? "true" : "false"}" active_context_budget_optimizer="${escapeXml(tokenOptimizer.activeContextBudgetOptimizer)}" compatibility_only="${tokenOptimizer.compatibilityOnly ? "true" : "false"}" />`,
 		"  </decision_observability>",
