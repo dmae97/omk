@@ -1,6 +1,6 @@
 {
 	"name": "open-multi-agent-kit",
-	"version": "0.90.0",
+	"version": "0.90.1",
 	"description": "OMK (Open Multi-Agent Kit) coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
 	"omkConfig": {
@@ -41,9 +41,9 @@
 		"prepublishOnly": "npm run clean && npm run build && npm run shrinkwrap"
 	},
 	"dependencies": {
-		"omk-agent-core": "^0.90.0",
-		"omk-ai": "^0.90.0",
-		"omk-tui": "^0.90.0",
+		"omk-agent-core": "^0.90.1",
+		"omk-ai": "^0.90.1",
+		"omk-tui": "^0.90.1",
 		"@silvia-odwyer/photon-node": "0.3.4",
 		"chalk": "5.6.2",
 		"cross-spawn": "7.0.6",
