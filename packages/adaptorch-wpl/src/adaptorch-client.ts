@@ -1,0 +1,235 @@
+/**
+ * AdaptOrch MCP client wrapper.
+ *
+ * Design-stage / experimental: this module has no production
+ * `AdaptOrchTransport` implementation wired in yet. Callers must supply
+ * their own transport (e.g. an adapter around an MCP SDK client) until one
+ * ships in this package.
+ *
+ * Tool surface, names, and read/write classification are grounded in
+ * `.omk/runs/lazycodex-adaptorch-loop-plan-20260701/lane2-adaptorch-tool-surface.md`,
+ * which cross-checks the real AdaptOrch MCP server against
+ * `docs/tools.md`, `README.md`, `mcp_server.py` dispatch, and
+ * `diagnostics.py::EXPECTED_CORE_TOOLS`. There are exactly 10 real tools;
+ * no "benchmark" or "verification" tools exist in the shipped surface.
+ */
+
+import type { TopologyClassification } from "./types.ts";
+
+/**
+ * Abstract transport for invoking AdaptOrch MCP tools by name.
+ *
+ * See doc section "The real, current 10-tool MCP surface (grouped)". No
+ * concrete implementation ships with this package yet; a caller must
+ * provide one (e.g. wrapping an MCP SDK client's `callTool`).
+ */
+export interface AdaptOrchTransport {
+	callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
+}
+
+/**
+ * Payload accepted by `adaptorch_run`.
+ *
+ * See doc section "Run / lifecycle (submit, inspect, list, cancel)":
+ * `adaptorch_run` submits a task payload (prompt/context/raw payload,
+ * connector, synthesis mode, budget policy) to the control-plane, and can
+ * optionally block until the run reaches a terminal status.
+ */
+export interface AdaptOrchRunPayload {
+	taskPayload: unknown;
+	connector?: string;
+	synthesisMode?: string;
+	budgetPolicy?: unknown;
+	waitForTerminal?: boolean;
+	timeoutSeconds?: number;
+	pollIntervalSeconds?: number;
+}
+
+/**
+ * Result of `adaptorch_run`.
+ *
+ * Shape is inferred from the doc's description of the tool's purpose, not
+ * guaranteed by an official schema.
+ */
+export interface AdaptOrchRunResult {
+	run_id: string;
+	status?: string;
+}
+
+/**
+ * Result of `adaptorch_get_run`.
+ *
+ * Shape is inferred from the doc's description ("fetch a run summary by
+ * run_id"), not guaranteed by an official schema; extra fields are
+ * expected to vary by connector/synthesis mode.
+ */
+export interface AdaptOrchRunSummary {
+	run_id: string;
+	status: string;
+	[key: string]: unknown;
+}
+
+/**
+ * Entry in the result of `adaptorch_list_runs`.
+ *
+ * Shape is inferred, not guaranteed by an official schema.
+ */
+export interface AdaptOrchRunListEntry {
+	run_id: string;
+	status: string;
+}
+
+/**
+ * Result of `adaptorch_cancel_run`.
+ *
+ * Shape is inferred from the doc's description ("request cancellation of
+ * an in-flight run by run_id"), not guaranteed by an official schema.
+ */
+export interface AdaptOrchCancelResult {
+	run_id: string;
+	cancelled: boolean;
+}
+
+/**
+ * Entry in the result of `adaptorch_get_artifacts`.
+ *
+ * Shape is inferred from the doc's description ("fetch artifact metadata
+ * for a run"), not guaranteed by an official schema.
+ */
+export interface AdaptOrchArtifact {
+	path: string;
+	size_bytes?: number;
+	created_at?: string;
+	[key: string]: unknown;
+}
+
+/**
+ * Entry in the result of `adaptorch_get_traces`.
+ *
+ * Shape is inferred from the doc's description ("fetch execution traces
+ * for a run by run_id"), not guaranteed by an official schema.
+ */
+export interface AdaptOrchTraceSpan {
+	span_id?: string;
+	kind?: string;
+	severity?: string;
+	[key: string]: unknown;
+}
+
+/**
+ * Result of `adaptorch_route_topology`.
+ *
+ * `classification` is the topology router's decision
+ * (singleton/pipeline/DAG/ensemble, see doc section "Routing (pre-run
+ * planning, local/no dispatch)"); `raw` retains the untyped transport
+ * response for callers that need more than the classification.
+ */
+export interface AdaptOrchRouteTopologyResult {
+	classification: TopologyClassification;
+	raw: unknown;
+}
+
+/**
+ * Typed wrapper around the 10 real AdaptOrch MCP tools.
+ *
+ * See doc section "The real, current 10-tool MCP surface (grouped)" for
+ * the full tool list, purposes, and read/write classification. This
+ * class only translates method calls into `transport.callTool` calls
+ * with the exact tool names the doc lists; it does not implement a
+ * transport itself.
+ */
+export class AdaptOrchClient {
+	private readonly transport: AdaptOrchTransport;
+
+	constructor(transport: AdaptOrchTransport) {
+		this.transport = transport;
+	}
+
+	/**
+	 * `adaptorch_run` (write). Submit a task payload to the control-plane,
+	 * optionally blocking until the run reaches a terminal status.
+	 */
+	async run(payload: AdaptOrchRunPayload): Promise<AdaptOrchRunResult> {
+		// The transport result shape is not schema-validated here; callers
+		// relying on strict correctness should validate at the transport
+		// boundary.
+		return (await this.transport.callTool("adaptorch_run", { ...payload })) as AdaptOrchRunResult;
+	}
+
+	/**
+	 * `adaptorch_get_run` (read). Fetch a run summary by `run_id`.
+	 */
+	async getRun(runId: string): Promise<AdaptOrchRunSummary> {
+		return (await this.transport.callTool("adaptorch_get_run", { run_id: runId })) as AdaptOrchRunSummary;
+	}
+
+	/**
+	 * `adaptorch_list_runs` (read). List recent control-plane runs.
+	 */
+	async listRuns(params?: { limit?: number }): Promise<AdaptOrchRunListEntry[]> {
+		return (await this.transport.callTool("adaptorch_list_runs", { ...params })) as AdaptOrchRunListEntry[];
+	}
+
+	/**
+	 * `adaptorch_cancel_run` (write). Request cancellation of an in-flight
+	 * run by `run_id`.
+	 */
+	async cancelRun(runId: string): Promise<AdaptOrchCancelResult> {
+		return (await this.transport.callTool("adaptorch_cancel_run", { run_id: runId })) as AdaptOrchCancelResult;
+	}
+
+	/**
+	 * `adaptorch_get_artifacts` (read). Fetch artifact metadata for a run.
+	 */
+	async getArtifacts(runId: string): Promise<AdaptOrchArtifact[]> {
+		return (await this.transport.callTool("adaptorch_get_artifacts", { run_id: runId })) as AdaptOrchArtifact[];
+	}
+
+	/**
+	 * `adaptorch_get_traces` (read). Fetch execution traces for a run by
+	 * `run_id`.
+	 */
+	async getTraces(runId: string): Promise<AdaptOrchTraceSpan[]> {
+		return (await this.transport.callTool("adaptorch_get_traces", { run_id: runId })) as AdaptOrchTraceSpan[];
+	}
+
+	/**
+	 * `adaptorch_route_topology` (read/local). Route a DAG locally through
+	 * AdaptOrch's topology router (singleton/pipeline/DAG/ensemble) without
+	 * submitting a run.
+	 */
+	async routeTopology(payloadShape: unknown): Promise<AdaptOrchRouteTopologyResult> {
+		const raw = await this.transport.callTool("adaptorch_route_topology", { payload_shape: payloadShape });
+		// The transport response is not schema-validated; classification is
+		// extracted best-effort since no official schema is documented.
+		const classification = (raw as { classification?: TopologyClassification } | undefined)?.classification;
+		return {
+			classification: classification as TopologyClassification,
+			raw,
+		};
+	}
+
+	/**
+	 * `adaptorch_server_metrics` (read/local). Read redacted MCP server
+	 * metrics (tool-call counters, latency percentiles).
+	 */
+	async serverMetrics(): Promise<Record<string, unknown>> {
+		return (await this.transport.callTool("adaptorch_server_metrics", {})) as Record<string, unknown>;
+	}
+
+	/**
+	 * `adaptorch_capabilities` (read/local). Read supported synthesis
+	 * modes, connectors, and server features.
+	 */
+	async capabilities(): Promise<Record<string, unknown>> {
+		return (await this.transport.callTool("adaptorch_capabilities", {})) as Record<string, unknown>;
+	}
+
+	/**
+	 * `adaptorch_plan_catalog` (read/local). Read the hosted plan catalog
+	 * (Starter $0 / Pro $39 / Team $149).
+	 */
+	async planCatalog(): Promise<Record<string, unknown>> {
+		return (await this.transport.callTool("adaptorch_plan_catalog", {})) as Record<string, unknown>;
+	}
+}
