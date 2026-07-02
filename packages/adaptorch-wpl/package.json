@@ -1,6 +1,6 @@
 {
 	"name": "omk-adaptorch-wpl",
-	"version": "0.90.1",
+	"version": "0.90.2",
 	"private": true,
 	"description": "Experimental, design-stage AdaptOrch-native Work Packet Loop (WPL). Not wired into the coding-agent CLI yet.",
 	"type": "module",
@@ -13,13 +13,20 @@
 		},
 		"./package.json": "./package.json"
 	},
-	"files": ["dist", "README.md"],
+	"files": [
+		"dist",
+		"README.md"
+	],
 	"scripts": {
 		"clean": "shx rm -rf dist",
 		"build": "tsgo -p tsconfig.build.json",
 		"test": "vitest --run"
 	},
-	"keywords": ["adaptorch", "orchestration", "experimental"],
+	"keywords": [
+		"adaptorch",
+		"orchestration",
+		"experimental"
+	],
 	"author": "dmae",
 	"license": "MIT",
 	"repository": {
