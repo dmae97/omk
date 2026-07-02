@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Removed
+
+- Removed the entire jailbreak subsystem that shipped in 0.90.2 and earlier (the `omk jailbreak` command, `--jailbreak-mode`/`--jailbreak-target` CLI flags, `jailbreak-extension`, `agents/jailbreak/`, `utils/jailbreak/`, `types/jailbreak.ts`, and the `fuzzing/`, `routing/`, `encoding/`, `multiturn/`, and `modules/` attack modules). These generated cross-provider godmode/parseltongue/LRL-bypass payloads and are not a legitimate OMK feature. Defensive GOD Mode resistance in the system prompt and the context-file sanitization marker are retained.
+
+### Fixed
+
+- Fixed the 96-column control-panel visual-QA test to run its live-render coherence assertion unconditionally and only compare the recorded `.omo/` visual-QA artifact when it is present, so CI checkouts (where the gitignored artifact is absent) no longer fail.
+
 ## [0.90.2] - 2026-07-02
 
 ### Added

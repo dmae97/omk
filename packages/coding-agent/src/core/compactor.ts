@@ -19,9 +19,6 @@
 //   - agent-session.ts imports compact(), prepareCompaction(), shouldCompact()
 //     from compaction/index.ts
 //
-// NOTE: types/jailbreak.ts also defines a CompactionResult interface (different shape).
-// Both are distinct from the real CompactionResult in compaction/compaction.ts.
-//
 // DO NOT MODIFY — preserved for reference only.
 
 import { EventEmitter } from "events";
