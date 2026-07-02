@@ -15,6 +15,7 @@
 ### Changed
 
 - Changed release-surface consistency checks to accept the pre-release alignment state (README release surface and `RELEASE_NOTES` link ahead of the latest changelog release) outside `--release` mode, so `docs(release): align ...` commits can land before the release version bump.
+- Changed the changelog consistency check to require the `[Unreleased]` top section only outside `--release` mode, since the release script renames it to the release version before the release commit and re-adds it afterwards.
 
 ### Fixed
 

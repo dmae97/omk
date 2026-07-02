@@ -129,7 +129,10 @@ function validateCodingAgentChangelog(repoRoot, packageVersion, releaseMode) {
 	}
 	const text = readFileSync(changelogPath, "utf8");
 	const firstSection = text.match(/^## \[([^\]]+)\]/m);
-	if (firstSection?.[1] !== "Unreleased") {
+	// In --release mode the release script has already renamed [Unreleased] to the
+	// release version and only re-adds [Unreleased] after the release commit, so the
+	// top section is expected to be the release version (verified below).
+	if (!releaseMode && firstSection?.[1] !== "Unreleased") {
 		fail("missing_unreleased_top_section", { path: toRepoPath(repoRoot, changelogPath) });
 	}
 	const latestRelease = [...text.matchAll(/^## \[([^\]]+)\](?:\s*-\s*([0-9]{4}-[0-9]{2}-[0-9]{2}))?/gm)].find(
