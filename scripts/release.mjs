@@ -162,6 +162,7 @@ console.log(`  New version: ${version}\n`);
 // 3. Update changelogs
 console.log("Updating CHANGELOG.md files...");
 updateChangelogsForRelease(version);
+run("node scripts/check-release-consistency.mjs --release");
 console.log();
 
 // 4. Regenerate release artifacts
