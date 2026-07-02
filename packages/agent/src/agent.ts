@@ -358,7 +358,25 @@ export class Agent {
 				return;
 			}
 
-			throw new Error("Cannot continue from message role: assistant");
+			// Last message is a completed assistant turn. Two sub-cases:
+			//  1. The assistant message carries pending tool calls without matching
+			//     tool results -> the provider will reject this, so fail fast with a
+			//     clear, actionable error.
+			//  2. The assistant message is plain text/thinking (no tool calls). This is
+			//     a finished turn (e.g. after compaction, session resume, or an
+			//     explicit "continue" request). We honour it by injecting an empty
+			//     user prompt so the model can extend its previous answer rather than
+			//     throwing the opaque "Cannot continue from message role: assistant".
+			const hasPendingToolCalls = lastMessage.content.some((c) => c.type === "toolCall");
+			if (hasPendingToolCalls) {
+				throw new Error(
+					"Cannot continue: the last assistant message has pending tool calls without results. " +
+						"Provide tool results (or a new user message) before continuing.",
+				);
+			}
+
+			await this.runPromptMessages([{ role: "user", content: [{ type: "text", text: "" }], timestamp: Date.now() }]);
+			return;
 		}
 
 		await this.runContinuation();

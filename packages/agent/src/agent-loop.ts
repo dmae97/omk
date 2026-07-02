@@ -127,9 +127,12 @@ export function agentLoopContinue(
 		throw new Error("Cannot continue: no messages in context");
 	}
 
-	if (context.messages[context.messages.length - 1].role === "assistant") {
-		throw new Error("Cannot continue from message role: assistant");
-	}
+	// Guard: the last message must be one the provider can build on. A plain
+	// text/thinking assistant turn is acceptable (convertToLlm may merge or the
+	// provider supports assistant pre-fill); only an assistant turn that still
+	// carries unresolved tool calls is a hard error because the provider will
+	// reject the request without matching tool results.
+	assertContinuableTail(context.messages);
 
 	const stream = createAgentStream();
 	const completedMessages: AgentMessage[] = [];
@@ -193,9 +196,7 @@ export async function runAgentLoopContinue(
 		throw new Error("Cannot continue: no messages in context");
 	}
 
-	if (context.messages[context.messages.length - 1].role === "assistant") {
-		throw new Error("Cannot continue from message role: assistant");
-	}
+	assertContinuableTail(context.messages);
 
 	const newMessages: AgentMessage[] = [];
 	const currentContext: AgentContext = { ...context };
@@ -212,6 +213,36 @@ function createAgentStream(): EventStream<AgentEvent, AgentMessage[]> {
 		(event: AgentEvent) => event.type === "agent_end",
 		(event: AgentEvent) => (event.type === "agent_end" ? event.messages : []),
 	);
+}
+
+/**
+ * Validate that the final message in `messages` is one a provider can continue
+ * from without an opaque rejection.
+ *
+ * - A trailing user/toolResult message is always fine.
+ * - A trailing assistant turn is fine ONLY when it carries no unresolved tool
+ *   calls. If it does carry tool calls, there is no matching toolResult to send
+ *   and every provider (OpenAI/Anthropic/Google) rejects the request, so we
+ *   fail fast with a clear, actionable error.
+ *
+ * This intentionally does NOT inspect `convertToLlm` output: that transform is
+ * provider-specific and runs once per turn. The conservative check here keeps
+ * the common "continue after a finished text answer" path working (compaction,
+ * session resume, explicit retries) while still protecting the broken tool-call
+ * case.
+ */
+function assertContinuableTail(messages: AgentMessage[]): void {
+	const last = messages[messages.length - 1];
+	if (last.role !== "assistant") {
+		return;
+	}
+	const hasPendingToolCalls = last.content.some((c) => c.type === "toolCall");
+	if (hasPendingToolCalls) {
+		throw new Error(
+			"Cannot continue: the last assistant message has pending tool calls without matching results. " +
+				"Add tool results or a new user message before continuing.",
+		);
+	}
 }
 
 /**
