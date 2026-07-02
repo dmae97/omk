@@ -12,6 +12,10 @@
 - Added release consistency checks for package-backed OMK//CONTROL version display and release metadata drift, including git tag-lineage checks (flags a tagged/released version whose commits never merged to `main`, degrading gracefully when tags are absent) and README/`.github/RELEASE_NOTES_v*.md` release-surface drift checks; both report as warnings outside `--release` mode and as errors during `--release`.
 - Added `!` skill launcher support with `!skill:name` and `!name` turn-scoped active skill invocation while preserving `! command` and `!! command` bash shortcuts.
 
+### Changed
+
+- Changed release-surface consistency checks to accept the pre-release alignment state (README release surface and `RELEASE_NOTES` link ahead of the latest changelog release) outside `--release` mode, so `docs(release): align ...` commits can land before the release version bump.
+
 ### Fixed
 
 - Fixed the legacy `hooks/` deprecation warning blocking startup on every interactive launch. Project-level `.omk/hooks/` is now auto-archived to `hooks.migrated/` (project shell hooks are never executed), and the remaining global `hooks/`/`tools/` deprecation notice no longer waits for a keypress.
