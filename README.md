@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm" src="https://img.shields.io/npm/v/open-multi-agent-kit?style=flat-square" /></a>
-  <a href="https://github.com/dmae97/open-multi-agent-kit/releases/tag/v0.90.2"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.2-00d7ff?style=flat-square" /></a>
+  <a href="https://github.com/dmae97/open-multi-agent-kit/releases/tag/v0.90.3"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.3-00d7ff?style=flat-square" /></a>
 </p>
 
 > New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -45,20 +45,17 @@ The OMK//CONTROL startup surface is the default operator view. The header reads 
 
 The default dark TUI theme uses the `omk-control-grid-dark` Night City palette and keeps the control sidebar focused on route, evidence, loop, MCP, runtime, skills, and context budget state.
 
-## Release v0.90.2
+## Release v0.90.3
 
-This release lands the v0.90.2 feature set: a wider model and provider surface, the `!` skill launcher, reverse-skill workflow routing, computer-use MCP preset groundwork, and stronger release-consistency gates.
+This release removes the jailbreak subsystem that had shipped in the 0.90.x line and fixes a CI-only visual-QA test.
 
 | Area | What changed |
 |------|--------------|
-| Models | The `max` thinking level, Claude Sonnet 5, and the Zyloo OpenAI-compatible provider join the built-in catalog. |
-| Skills | The `!` skill launcher (`!skill:name`, `!name`) gives turn-scoped skill invocation with start-of-message autocomplete, preserving `!`/`!!` bash shortcuts. |
-| Reverse-skill | Canonical reverse-engineering workflow routing ships in `omk-agent-core` and is re-exported with a coding-agent project extension. |
-| MCP | Computer-use MCP preset catalogs (Playwright MCP default, browser-use advanced) land with public preset risk/auth metadata as groundwork. |
-| Startup | The legacy `hooks/` deprecation warning no longer blocks interactive startup; project `.omk/hooks/` auto-archives to `hooks.migrated/`. |
-| Release | Release-consistency checks flag tag-lineage drift and README/`RELEASE_NOTES` release-surface drift, erroring during `--release`. |
+| Safety | Removed the cross-provider jailbreak/godmode payload toolkit (`omk jailbreak` command, `--jailbreak-*` flags, `jailbreak-extension`, `agents/jailbreak`, `utils/jailbreak`, `types/jailbreak`, and the `fuzzing`/`routing`/`encoding`/`multiturn`/`modules` attack modules). It is not a legitimate OMK feature. |
+| Safety | Retained defensive GOD Mode resistance in the system prompt and the context-file sanitization marker. |
+| Tests | The 96-column control-panel visual-QA test now runs its live-render assertion unconditionally and only compares the gitignored `.omo/` artifact when present, so CI checkouts pass. |
 
-GitHub-focused release notes live in [.github/RELEASE_NOTES_v0.90.2.md](.github/RELEASE_NOTES_v0.90.2.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](packages/coding-agent/CHANGELOG.md).
+GitHub-focused release notes live in [.github/RELEASE_NOTES_v0.90.3.md](.github/RELEASE_NOTES_v0.90.3.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](packages/coding-agent/CHANGELOG.md).
 
 ## Share your OSS coding agent sessions
 
