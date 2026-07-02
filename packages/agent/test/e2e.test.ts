@@ -271,9 +271,12 @@ describe("Agent.continue() with faux provider", () => {
 			await expect(agent.continue()).rejects.toThrow("No messages to continue from");
 		});
 
-		it("throws when last message is assistant", async () => {
+		it("continues when last message is a plain-text assistant turn", async () => {
 			const faux = createFauxRegistration();
 			const model = faux.getModel();
+			// Faux provider returns a fixed assistant turn for the injected empty
+			// continuation prompt so the new turn completes cleanly.
+			faux.setResponses([fauxAssistantMessage([fauxText("Continued")])]);
 			const agent = new Agent({
 				initialState: {
 					systemPrompt: "Test",
@@ -300,7 +303,47 @@ describe("Agent.continue() with faux provider", () => {
 			};
 			agent.state.messages = [assistantMessage];
 
-			await expect(agent.continue()).rejects.toThrow("Cannot continue from message role: assistant");
+			// Plain-text assistant tail: continue() injects an empty user prompt
+			// and starts a new turn instead of throwing.
+			await expect(agent.continue()).resolves.toBeUndefined();
+			expect(agent.state.messages[agent.state.messages.length - 1].role).toBe("assistant");
+		});
+
+		it("throws when last assistant message has pending tool calls", async () => {
+			const faux = createFauxRegistration();
+			const model = faux.getModel();
+			const agent = new Agent({
+				initialState: {
+					systemPrompt: "Test",
+					model,
+				},
+			});
+
+			const assistantMessage: AssistantMessage = {
+				role: "assistant",
+				content: [
+					{ type: "text", text: "Calling tool" },
+					{ type: "toolCall", id: "call_1", name: "search", arguments: { q: "x" } },
+				],
+				api: model.api,
+				provider: model.provider,
+				model: model.id,
+				usage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				stopReason: "toolUse",
+				timestamp: Date.now(),
+			};
+			agent.state.messages = [assistantMessage];
+
+			// Assistant tail with unresolved tool calls cannot continue without
+			// matching tool results, so we fail fast with a clear, actionable error.
+			await expect(agent.continue()).rejects.toThrow(/pending tool calls without/);
 		});
 	});
 
