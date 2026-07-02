@@ -12,6 +12,7 @@ import {
 	InMemorySessionRepo,
 	ok,
 	parseCommandArgs,
+	routeReverseSkill,
 	streamProxy,
 	toError,
 	truncateHead,
@@ -30,6 +31,7 @@ const result = getOrThrow(ok({ value: 1 }));
 const customMessage = createCustomMessage("note", "hello", true, undefined, "2026-01-01T00:00:00.000Z");
 const llmMessages = convertToLlm([customMessage]);
 const skill = { name: "browser-safe", description: "Smoke test", content: "Use browser APIs.", filePath: "/skills/browser-safe/SKILL.md" };
+const reverseRoute = routeReverseSkill({ query: "recover a webpack request signature with playwright" });
 
 console.log(
 	model.id,
@@ -53,6 +55,7 @@ console.log(
 	formatSkillsForSystemPrompt([skill]).length,
 	formatSkillInvocation(skill).length,
 	formatPromptTemplateInvocation({ name: "example", content: "$1 $@" }, parseCommandArgs('one "two three"')),
+	reverseRoute.primary?.route.id,
 	truncateHead("a\nb", { maxLines: 1 }).content,
 	new FileError("not_found", "missing").code,
 	toError("boom").message,
