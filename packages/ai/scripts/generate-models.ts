@@ -68,6 +68,15 @@ const KIMI_STATIC_HEADERS = {
 	"User-Agent": "KimiCLI/1.5",
 } as const;
 
+const KIMI_CODING_THINKING_LEVEL_MAP = {
+	off: null,
+	minimal: null,
+	low: null,
+	medium: null,
+	high: "high",
+	xhigh: "xhigh",
+} as const;
+
 const TOGETHER_BASE_URL = "https://api.together.ai/v1";
 const TOGETHER_BASE_COMPAT: OpenAICompletionsCompat = {
 	supportsStore: false,
@@ -233,13 +242,20 @@ function isAnthropicAdaptiveThinkingModel(modelId: string): boolean {
 		modelId.includes("opus-4-8") ||
 		modelId.includes("opus-4.8") ||
 		modelId.includes("sonnet-4-6") ||
-		modelId.includes("sonnet-4.6")
+		modelId.includes("sonnet-4.6") ||
+		modelId.includes("sonnet-5")
 	);
 }
 
 function isAnthropicTemperatureUnsupportedModel(modelId: string): boolean {
 	const id = modelId.toLowerCase();
-	return id.includes("opus-4-7") || id.includes("opus-4.7") || id.includes("opus-4-8") || id.includes("opus-4.8");
+	return (
+		id.includes("opus-4-7") ||
+		id.includes("opus-4.7") ||
+		id.includes("opus-4-8") ||
+		id.includes("opus-4.8") ||
+		id.includes("sonnet-5")
+	);
 }
 
 function mergeAnthropicMessagesCompat(model: Model<Api>, compat: AnthropicMessagesCompat): void {
@@ -284,7 +300,13 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 	if (model.id.endsWith("gpt-5.5-pro")) {
 		mergeThinkingLevelMap(model, { off: null, minimal: null, low: null });
 	}
-	if (model.id.includes("opus-4-6") || model.id.includes("opus-4.6")) {
+	if (
+		model.id.includes("opus-4-6") ||
+		model.id.includes("opus-4.6") ||
+		model.id.includes("sonnet-4-6") ||
+		model.id.includes("sonnet-4.6")
+	) {
+		// Opus 4.6 / Sonnet 4.6 predate the xhigh tier; xhigh collapses to the model's max effort.
 		mergeThinkingLevelMap(model, { xhigh: "max" });
 	}
 	if (
@@ -293,7 +315,8 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 		model.id.includes("opus-4-8") ||
 		model.id.includes("opus-4.8")
 	) {
-		mergeThinkingLevelMap(model, { xhigh: "xhigh" });
+		// Per the changelog contract, only Opus 4.7 and 4.8 expose both top effort tiers: xhigh (effort xhigh) and max (effort max).
+		mergeThinkingLevelMap(model, { xhigh: "xhigh", max: "max" });
 	}
 	if (model.api === "anthropic-messages" && isAnthropicAdaptiveThinkingModel(model.id)) {
 		mergeAnthropicMessagesCompat(model, { forceAdaptiveThinking: true });
@@ -499,6 +522,137 @@ async function fetchAiGatewayModels(): Promise<Model<any>[]> {
 	} catch (error) {
 		console.error("Failed to fetch Vercel AI Gateway models:", error);
 		return [];
+	}
+}
+
+const ZYLOO_BASE_URL = "https://api.zyloo.io/v1";
+
+const ZYLOO_STATIC_MODELS: Model<"openai-completions">[] = [
+	{
+		id: "claude-opus-4-7",
+		name: "Zyloo Claude Opus 4.7",
+		api: "openai-completions",
+		provider: "zyloo",
+		baseUrl: ZYLOO_BASE_URL,
+		reasoning: true,
+		input: ["text", "image"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 200000,
+		maxTokens: 128000,
+	},
+	{
+		id: "claude-opus-4-7-thinking",
+		name: "Zyloo Claude Opus 4.7 Thinking",
+		api: "openai-completions",
+		provider: "zyloo",
+		baseUrl: ZYLOO_BASE_URL,
+		reasoning: true,
+		input: ["text"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 200000,
+		maxTokens: 128000,
+	},
+	{
+		id: "gpt-5.5",
+		name: "Zyloo GPT-5.5",
+		api: "openai-completions",
+		provider: "zyloo",
+		baseUrl: ZYLOO_BASE_URL,
+		reasoning: true,
+		input: ["text", "image"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 272000,
+		maxTokens: 128000,
+	},
+	{
+		id: "gemini-3.5-flash",
+		name: "Zyloo Gemini 3.5 Flash",
+		api: "openai-completions",
+		provider: "zyloo",
+		baseUrl: ZYLOO_BASE_URL,
+		reasoning: false,
+		input: ["text", "image"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 1000000,
+		maxTokens: 8192,
+	},
+	{
+		id: "deepseek-v4-pro",
+		name: "Zyloo DeepSeek V4 Pro",
+		api: "openai-completions",
+		provider: "zyloo",
+		baseUrl: ZYLOO_BASE_URL,
+		reasoning: true,
+		input: ["text"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 1000000,
+		maxTokens: 128000,
+		compat: { thinkingFormat: "deepseek" },
+	},
+	{
+		id: "grok-4.3",
+		name: "Zyloo Grok 4.3",
+		api: "openai-completions",
+		provider: "zyloo",
+		baseUrl: ZYLOO_BASE_URL,
+		reasoning: false,
+		input: ["text", "image"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 131072,
+		maxTokens: 8192,
+	},
+];
+
+async function fetchZylooModels(): Promise<Model<"openai-completions">[]> {
+	const apiKey = process.env.ZYLOO_API_KEY;
+	if (!apiKey) {
+		console.log("No ZYLOO_API_KEY set; using static Zyloo model list.");
+		return ZYLOO_STATIC_MODELS;
+	}
+
+	try {
+		console.log("Fetching models from Zyloo API...");
+		const response = await fetch(`${ZYLOO_BASE_URL}/models`, {
+			headers: { Authorization: `Bearer ${apiKey}` },
+		});
+		if (!response.ok) {
+			throw new Error(`HTTP ${response.status}`);
+		}
+		const data = (await response.json()) as { data?: Array<{ id: string }> };
+		const models: Model<"openai-completions">[] = [];
+
+		for (const item of data.data ?? []) {
+			const rawId = item.id;
+			if (!rawId || typeof rawId !== "string" || !rawId.startsWith("zyloo/")) continue;
+			const id = rawId.slice("zyloo/".length);
+			if (!id) continue;
+
+			const reasoning = id.endsWith("-thinking") || /(^|-)(gpt-5\.|deepseek-v4|claude-opus|grok-.*-reasoning)/.test(id);
+			const vision = /(gemini|gpt-5|claude-opus|claude-sonnet|grok)/.test(id);
+			const compat: OpenAICompletionsCompat | undefined = id.includes("deepseek-v4")
+				? { thinkingFormat: "deepseek" }
+				: undefined;
+
+			models.push({
+				id,
+				name: `Zyloo ${id}`,
+				api: "openai-completions",
+				provider: "zyloo",
+				baseUrl: ZYLOO_BASE_URL,
+				reasoning,
+				input: vision ? (["text", "image"] as const) : (["text"] as const),
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: 200000,
+				maxTokens: 128000,
+				...(compat ? { compat } : {}),
+			});
+		}
+
+		console.log(`Fetched ${models.length} models from Zyloo`);
+		return models.length > 0 ? models : ZYLOO_STATIC_MODELS;
+	} catch (error) {
+		console.error("Failed to fetch Zyloo models:", error);
+		return ZYLOO_STATIC_MODELS;
 	}
 }
 
@@ -1201,6 +1355,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					},
 					contextWindow: m.limit?.context || 4096,
 					maxTokens: m.limit?.output || 4096,
+					thinkingLevelMap: { ...KIMI_CODING_THINKING_LEVEL_MAP },
 				});
 			}
 		}
@@ -1306,9 +1461,10 @@ async function generateModels() {
 	const modelsDevModels = await loadModelsDevData();
 	const openRouterModels = await fetchOpenRouterModels();
 	const aiGatewayModels = await fetchAiGatewayModels();
+	const zylooModels = await fetchZylooModels();
 
 	// Combine models (models.dev has priority)
-	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels].filter(
+	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels, ...zylooModels].filter(
 		(model) =>
 			!((model.provider === "opencode" || model.provider === "opencode-go") && model.id === "gpt-5.3-codex-spark"),
 	);
@@ -1480,6 +1636,27 @@ async function generateModels() {
 			},
 			contextWindow: 1000000,
 			maxTokens: 64000,
+		});
+	}
+
+	// Add missing Claude Sonnet 5
+	if (!allModels.some(m => m.provider === "anthropic" && m.id === "claude-sonnet-5")) {
+		allModels.push({
+			id: "claude-sonnet-5",
+			name: "Claude Sonnet 5",
+			api: "anthropic-messages",
+			baseUrl: "https://api.anthropic.com",
+			provider: "anthropic",
+			reasoning: true,
+			input: ["text", "image"],
+			cost: {
+				input: 3,
+				output: 15,
+				cacheRead: 0.3,
+				cacheWrite: 3.75,
+			},
+			contextWindow: 1000000,
+			maxTokens: 128000,
 		});
 	}
 

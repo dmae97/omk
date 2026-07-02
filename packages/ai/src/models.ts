@@ -45,7 +45,7 @@ export function calculateCost<TApi extends Api>(model: Model<TApi>, usage: Usage
 	return usage.cost;
 }
 
-const EXTENDED_THINKING_LEVELS: ModelThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+const EXTENDED_THINKING_LEVELS: ModelThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 export function getSupportedThinkingLevels<TApi extends Api>(model: Model<TApi>): ModelThinkingLevel[] {
 	if (!model.reasoning) return ["off"];
@@ -53,7 +53,8 @@ export function getSupportedThinkingLevels<TApi extends Api>(model: Model<TApi>)
 	return EXTENDED_THINKING_LEVELS.filter((level) => {
 		const mapped = model.thinkingLevelMap?.[level];
 		if (mapped === null) return false;
-		if (level === "xhigh") return mapped !== undefined;
+		// xhigh and max are top-tier levels only exposed when a model explicitly maps them.
+		if (level === "xhigh" || level === "max") return mapped !== undefined;
 		return true;
 	});
 }

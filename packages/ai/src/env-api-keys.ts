@@ -130,6 +130,7 @@ function getApiKeyEnvVars(provider: string): readonly string[] | undefined {
 		"xiaomi-token-plan-cn": "XIAOMI_TOKEN_PLAN_CN_API_KEY",
 		"xiaomi-token-plan-ams": "XIAOMI_TOKEN_PLAN_AMS_API_KEY",
 		"xiaomi-token-plan-sgp": "XIAOMI_TOKEN_PLAN_SGP_API_KEY",
+		zyloo: "ZYLOO_API_KEY",
 	};
 
 	const envVar = envMap[provider];

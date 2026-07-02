@@ -498,6 +498,22 @@ describe("Context overflow error handling", () => {
 	});
 
 	// =============================================================================
+	// Zyloo
+	// Expected pattern: OpenAI-compatible "maximum context length" error
+	// =============================================================================
+
+	describe.skipIf(!process.env.ZYLOO_API_KEY)("Zyloo", () => {
+		it("claude-opus-4-7 - should detect overflow via isContextOverflow", async () => {
+			const model = getModel("zyloo", "claude-opus-4-7");
+			const result = await testContextOverflow(model, process.env.ZYLOO_API_KEY!);
+			logResult(result);
+
+			expect(result.stopReason).toBe("error");
+			expect(isContextOverflow(result.response, model.contextWindow)).toBe(true);
+		}, 120000);
+	});
+
+	// =============================================================================
 	// OpenRouter - Multiple backend providers
 	// Expected pattern: "maximum context length is X tokens"
 	// =============================================================================

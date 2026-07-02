@@ -23,3 +23,34 @@ export function sanitizeSurrogates(text: string): string {
 	// Replace unpaired low surrogates (0xDC00-0xDFFF not preceded by high surrogate)
 	return text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
 }
+
+/**
+ * Recursively removes unpaired Unicode surrogate characters from every string reachable
+ * inside a value (strings, arrays, and plain-object values), preserving structure and
+ * non-string primitives.
+ *
+ * Use this for structured payloads that get JSON-serialized into a provider request body
+ * but do not pass through {@link sanitizeSurrogates} on a per-field basis — most importantly
+ * tool-call argument objects, whose string fields are model-generated and can contain lone
+ * surrogates that make the request body invalid JSON ("no low surrogate in string").
+ *
+ * @param value - Any value; strings are sanitized, containers are walked, others returned as-is
+ * @returns A value of the same shape with all reachable strings sanitized
+ */
+export function sanitizeSurrogatesDeep<T>(value: T): T {
+	if (typeof value === "string") {
+		return sanitizeSurrogates(value) as unknown as T;
+	}
+	if (Array.isArray(value)) {
+		return value.map((item) => sanitizeSurrogatesDeep(item)) as unknown as T;
+	}
+	if (value !== null && typeof value === "object") {
+		const source = value as Record<string, unknown>;
+		const result: Record<string, unknown> = {};
+		for (const key of Object.keys(source)) {
+			result[key] = sanitizeSurrogatesDeep(source[key]);
+		}
+		return result as unknown as T;
+	}
+	return value;
+}

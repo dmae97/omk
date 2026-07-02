@@ -29,7 +29,7 @@ import type {
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord } from "../utils/headers.ts";
 import { parseJsonWithRepair, parseStreamingJson } from "../utils/json-parse.ts";
-import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
+import { sanitizeSurrogates, sanitizeSurrogatesDeep } from "../utils/sanitize-unicode.ts";
 
 import { resolveCloudflareBaseUrl } from "./cloudflare.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
@@ -711,7 +711,8 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 
 /**
  * Map ThinkingLevel to Anthropic effort levels for adaptive thinking.
- * Note: effort "max" is only valid on Opus 4.6, while Opus 4.7 supports "xhigh".
+ * Note: Opus 4.6 tops out at effort "max"; Opus 4.7/4.8 support both "xhigh" and "max".
+ * The concrete effort is resolved per-model from thinkingLevelMap.
  */
 function mapThinkingLevelToEffort(
 	model: Model<"anthropic-messages">,
@@ -1101,7 +1102,10 @@ function convertMessages(
 						type: "tool_use",
 						id: block.id,
 						name: isOAuthToken ? toClaudeCodeName(block.name) : block.name,
-						input: block.arguments ?? {},
+						// Tool-call arguments are model-generated and can carry unpaired surrogates,
+						// which make the serialized request body invalid JSON ("no low surrogate in
+						// string"). Deep-sanitize every string field before it reaches the wire.
+						input: sanitizeSurrogatesDeep(block.arguments ?? {}),
 					});
 				}
 			}

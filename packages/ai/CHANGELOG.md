@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added a `max` thinking level above `xhigh`. Claude Opus 4.7 and 4.8 now expose both `xhigh` (effort `xhigh`) and `max` (effort `max`); models that only support the top effort keep their existing single level, and `max` gracefully clamps down on models without it.
+- Added Claude Sonnet 5 (`claude-sonnet-5`) with adaptive thinking forced on, sampling parameters disabled, a 1M context window, and 128k max output tokens.
+- Added Zyloo as a built-in OpenAI-compatible provider with static model metadata for Claude Opus 4.7, GPT-5.5, Gemini 3.5 Flash, DeepSeek V4 Pro, and Grok 4.3, plus dynamic model fetching when `ZYLOO_API_KEY` is set.
+
 ## [0.90.1] - 2026-06-28
 
 ### Changed

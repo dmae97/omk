@@ -274,6 +274,18 @@ describe("AI Providers Abort Tests", () => {
 		});
 	});
 
+	describe.skipIf(!process.env.ZYLOO_API_KEY)("Zyloo Provider Abort", () => {
+		const llm = getModel("zyloo", "claude-opus-4-7");
+
+		it("should abort mid-stream", { retry: 3 }, async () => {
+			await testAbortSignal(llm);
+		});
+
+		it("should handle immediate abort", { retry: 3 }, async () => {
+			await testImmediateAbort(llm);
+		});
+	});
+
 	describe("OpenAI Codex Provider Abort", () => {
 		it.skipIf(!openaiCodexToken)("should abort mid-stream", { retry: 3 }, async () => {
 			const llm = getModel("openai-codex", "gpt-5.5");

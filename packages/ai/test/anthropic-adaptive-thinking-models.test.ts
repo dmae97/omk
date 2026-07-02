@@ -6,6 +6,8 @@ const EXPECTED_CURRENT_ADAPTIVE_THINKING_MODELS = [
 	"anthropic/claude-opus-4-8",
 	"opencode/claude-opus-4-8",
 	"vercel-ai-gateway/anthropic/claude-opus-4.8",
+	// Claude Sonnet 5 ships with adaptive thinking forced on (see packages/ai/CHANGELOG.md [Unreleased]).
+	"anthropic/claude-sonnet-5",
 ];
 
 function getAllModels(): Model<Api>[] {
@@ -22,7 +24,7 @@ describe("Anthropic adaptive thinking model metadata", () => {
 
 		expect(flaggedModels).toEqual(expect.arrayContaining([...EXPECTED_CURRENT_ADAPTIVE_THINKING_MODELS].sort()));
 		expect(flaggedModels).toEqual(
-			flaggedModels.filter((modelId) => /(opus[-.]4[-.][678]|sonnet[-.]4[-.]6)/.test(modelId)),
+			flaggedModels.filter((modelId) => /(opus[-.]4[-.][678]|sonnet[-.]4[-.]6|sonnet[-.]5)/.test(modelId)),
 		);
 	});
 });

@@ -614,6 +614,29 @@ describe("totalTokens field", () => {
 	});
 
 	// =========================================================================
+	// Zyloo
+	// =========================================================================
+
+	describe.skipIf(!process.env.ZYLOO_API_KEY)("Zyloo", () => {
+		it(
+			"claude-opus-4-7 - should return totalTokens equal to sum of components",
+			{ retry: 3, timeout: 60000 },
+			async () => {
+				const llm = getModel("zyloo", "claude-opus-4-7");
+
+				console.log(`\nZyloo / ${llm.id}:`);
+				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.ZYLOO_API_KEY });
+
+				logUsage("First request", first);
+				logUsage("Second request", second);
+
+				assertTotalTokensEqualsComponents(first);
+				assertTotalTokensEqualsComponents(second);
+			},
+		);
+	});
+
+	// =========================================================================
 	// OpenRouter - Multiple backend providers
 	// =========================================================================
 

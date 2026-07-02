@@ -76,7 +76,7 @@ function isImageContentBlock(block: { type: string }): block is ImageContent {
 
 export interface OpenAICompletionsOptions extends StreamOptions {
 	toolChoice?: "auto" | "none" | "required" | { type: "function"; function: { name: string } };
-	reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
+	reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 }
 
 interface OpenAICompatCacheControl {
@@ -504,7 +504,7 @@ function buildParams(
 	const cacheControl = getCompatCacheControl(compat, cacheRetention);
 
 	const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
-		model: model.id,
+		model: model.provider === "zyloo" && !model.id.startsWith("zyloo/") ? `zyloo/${model.id}` : model.id,
 		messages,
 		stream: true,
 		prompt_cache_key:
@@ -555,6 +555,10 @@ function buildParams(
 
 	if (compat.thinkingFormat === "zai" && model.reasoning) {
 		(params as any).enable_thinking = !!options?.reasoningEffort;
+		if (options?.reasoningEffort && compat.supportsReasoningEffort) {
+			(params as any).reasoning_effort =
+				model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort;
+		}
 	} else if (compat.thinkingFormat === "qwen" && model.reasoning) {
 		(params as any).enable_thinking = !!options?.reasoningEffort;
 	} else if (compat.thinkingFormat === "qwen-chat-template" && model.reasoning) {

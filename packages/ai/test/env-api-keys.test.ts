@@ -5,6 +5,7 @@ const originalCopilotGitHubToken = process.env.COPILOT_GITHUB_TOKEN;
 const originalGhToken = process.env.GH_TOKEN;
 const originalGitHubToken = process.env.GITHUB_TOKEN;
 const originalZaiCodingCnApiKey = process.env.ZAI_CODING_CN_API_KEY;
+const originalZylooApiKey = process.env.ZYLOO_API_KEY;
 
 afterEach(() => {
 	if (originalCopilotGitHubToken === undefined) {
@@ -29,6 +30,12 @@ afterEach(() => {
 		delete process.env.ZAI_CODING_CN_API_KEY;
 	} else {
 		process.env.ZAI_CODING_CN_API_KEY = originalZaiCodingCnApiKey;
+	}
+
+	if (originalZylooApiKey === undefined) {
+		delete process.env.ZYLOO_API_KEY;
+	} else {
+		process.env.ZYLOO_API_KEY = originalZylooApiKey;
 	}
 });
 
@@ -56,5 +63,12 @@ describe("environment API keys", () => {
 
 		expect(findEnvKeys("zai-coding-cn")).toEqual(["ZAI_CODING_CN_API_KEY"]);
 		expect(getEnvApiKey("zai-coding-cn")).toBe("zai-coding-cn-token");
+	});
+
+	it("resolves Zyloo credentials from ZYLOO_API_KEY", () => {
+		process.env.ZYLOO_API_KEY = "zyloo-token";
+
+		expect(findEnvKeys("zyloo")).toEqual(["ZYLOO_API_KEY"]);
+		expect(getEnvApiKey("zyloo")).toBe("zyloo-token");
 	});
 });
