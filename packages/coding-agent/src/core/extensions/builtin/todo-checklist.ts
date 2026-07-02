@@ -18,6 +18,7 @@
 
 import { StringEnum, Type } from "omk-ai";
 import { TodoChecklistComponent } from "../../../modes/interactive/components/todo-checklist.ts";
+import { resetCurrentTodoState, setCurrentTodoState } from "../../todo-runtime-state.ts";
 import type { TodoState, TodoStatus } from "../../todo-state.ts";
 import { EMPTY_TODO_STATE, setTodoItems, summary } from "../../todo-state.ts";
 import type { ExtensionAPI } from "../types.ts";
@@ -27,6 +28,7 @@ export default function todoChecklist(omk: ExtensionAPI): void {
 
 	omk.on("session_start", () => {
 		state = EMPTY_TODO_STATE;
+		resetCurrentTodoState();
 	});
 
 	omk.registerTool({
@@ -59,6 +61,7 @@ export default function todoChecklist(omk: ExtensionAPI): void {
 				state,
 				params.items.map((item) => ({ ...item, status: item.status as TodoStatus })),
 			);
+			setCurrentTodoState(state);
 			const snapshot = state;
 			try {
 				ctx.ui.setWidget("omk-todo", () => new TodoChecklistComponent(() => snapshot), {

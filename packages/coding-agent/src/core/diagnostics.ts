@@ -9,6 +9,8 @@ export interface ResourceCollision {
 	loserScope?: "user" | "project" | "temporary";
 	winnerOrigin?: "package" | "top-level";
 	loserOrigin?: "package" | "top-level";
+	resolutionReason?: string;
+	resolutionAction?: string;
 }
 
 export interface ResourceDiagnostic {

@@ -23,15 +23,16 @@ The editor can be replaced temporarily by built-in UI such as `/settings` or by 
 | Path completion | Press Tab to complete paths |
 | Multi-line input | Shift+Enter, or Ctrl+Enter on Windows Terminal |
 | Images | Paste with Ctrl+V, Alt+V on Windows, or drag into the terminal |
-| Shell command | `!command` runs and sends output to the model |
-| Hidden shell command | `!!command` runs without sending output to the model |
+| Skill/bash launcher | `!` opens skill completion; `!skill:name prompt` invokes a skill |
+| Shell command | `! command` runs and sends output to the model |
+| Hidden shell command | `!! command` runs without sending output to the model |
 | External editor | Ctrl+G opens `$VISUAL` or `$EDITOR` |
 
 See [Keybindings](keybindings.md) for all shortcuts and customization.
 
 ## Slash Commands
 
-Type `/` in the editor to open command completion. Extensions can register custom commands, skills are available as `/skill:name`, and prompt templates expand via `/templatename`.
+Type `/` in the editor to open command completion. Extensions can register custom commands, skills are available as `/skill:name`, `!skill:name`, or `!name` for known skills, and prompt templates expand via `/templatename`.
 
 | Command | Description |
 |---------|-------------|

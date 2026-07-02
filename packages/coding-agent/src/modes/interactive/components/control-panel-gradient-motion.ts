@@ -140,7 +140,8 @@ export function shouldAnimate(options: {
 	headerVisibleHint: boolean;
 	idleDriftEnabled: boolean;
 }): boolean {
-	if (!shouldGradient(options)) return false;
+	const forceColor = process.env.FORCE_COLOR !== undefined;
+	if (!shouldGradient({ ...options, isTTY: options.isTTY || forceColor })) return false;
 	if (options.reducedMotion || options.busy || !options.headerVisibleHint) return false;
 	if (options.phase === "idle" && !options.idleDriftEnabled) return false;
 	return true;

@@ -569,6 +569,8 @@ export class DefaultResourceLoader implements ResourceLoader {
 				agentDir: this.agentDir,
 				skillPaths,
 				includeDefaults: false,
+				resolveSourceInfo: (filePath) =>
+					this.findSourceInfoForPath(filePath, this.extensionSkillSourceInfos, metadataByPath),
 			});
 		}
 		const resolvedSkills = this.skillsOverride ? this.skillsOverride(skillsResult) : skillsResult;

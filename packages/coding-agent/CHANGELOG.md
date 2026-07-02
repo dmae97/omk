@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added the `max` thinking level to the CLI (`--thinking-level max`), thinking selector, and settings, exposed for models that support the top effort tier (e.g. Claude Opus 4.7/4.8).
+- Added Zyloo provider setup documentation, CLI env-var help, and `/login` display name.
+- Added the reverse-skill routing module and project extension for generating OMK reverse-engineering workflow skills.
+- Added regression coverage for the context-budget v2 cache hit path, including stale and negative cache rejection (the telemetry itself shipped in 0.90.1).
+- Added computer-use MCP preset catalogs (Playwright MCP as the default, browser-use as an optional advanced runner) and public MCP preset metadata with risk/auth policies, as groundwork modules that are not yet wired to a user-facing command.
+- Added release consistency checks for package-backed OMK//CONTROL version display and release metadata drift, including git tag-lineage checks (flags a tagged/released version whose commits never merged to `main`, degrading gracefully when tags are absent) and README/`.github/RELEASE_NOTES_v*.md` release-surface drift checks; both report as warnings outside `--release` mode and as errors during `--release`.
+- Added `!` skill launcher support with `!skill:name` and `!name` turn-scoped active skill invocation while preserving `! command` and `!! command` bash shortcuts.
+
+### Fixed
+
+- Fixed the legacy `hooks/` deprecation warning blocking startup on every interactive launch. Project-level `.omk/hooks/` is now auto-archived to `hooks.migrated/` (project shell hooks are never executed), and the remaining global `hooks/`/`tools/` deprecation notice no longer waits for a keypress.
+
 ## [0.90.1] - 2026-06-28
 
 ### Added

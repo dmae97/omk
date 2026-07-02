@@ -3,6 +3,7 @@ import { existsSync, type FSWatcher, readFileSync, type Stats, statSync, unwatch
 import { dirname, join, resolve } from "path";
 import { closeWatcher, FS_WATCH_RETRY_DELAY_MS, watchWithErrorHandler } from "../utils/fs-watch.ts";
 import { MetricsSampler } from "./metrics-sampler.ts";
+import { evaluatePiPackageIntake, type PiPackageIntakeSummary } from "./pi-package-intake.ts";
 
 type GitPaths = {
 	repoDir: string;
@@ -173,6 +174,10 @@ export class FooterDataProvider {
 	/** Most recent process RSS memory size in bytes, or `null` if not yet sampled. */
 	getMemoryRssBytes(): number | null {
 		return this.metricsSampler.getMemoryRssBytes();
+	}
+
+	getPackageIntakeSummary(): PiPackageIntakeSummary {
+		return evaluatePiPackageIntake().summary;
 	}
 
 	/** Internal: update available provider count */
@@ -405,4 +410,5 @@ export type ReadonlyFooterDataProvider = Pick<
 	| "onBranchChange"
 	| "getCpuPercent"
 	| "getMemoryRssBytes"
+	| "getPackageIntakeSummary"
 >;

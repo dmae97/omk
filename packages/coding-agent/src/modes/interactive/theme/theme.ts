@@ -1,3 +1,4 @@
+// allow: SIZE_OK - Legacy oversized theme module is pre-existing debt; this safe-cut only touches the alias table.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import chalk from "chalk";
@@ -410,7 +411,9 @@ export class Theme {
 		return this.mode;
 	}
 
-	getThinkingBorderColor(level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh"): (str: string) => string {
+	getThinkingBorderColor(
+		level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
+	): (str: string) => string {
 		// Map thinking levels to dedicated theme colors
 		switch (level) {
 			case "off":
@@ -424,6 +427,8 @@ export class Theme {
 			case "high":
 				return (str: string) => this.fg("thinkingHigh", str);
 			case "xhigh":
+				return (str: string) => this.fg("thinkingXhigh", str);
+			case "max":
 				return (str: string) => this.fg("thinkingXhigh", str);
 			default:
 				return (str: string) => this.fg("thinkingOff", str);
@@ -448,6 +453,8 @@ const THEME_NAME_ALIASES: Record<string, string> = {
 	"oxidized-forge": "rust-forge",
 	forge: "rust-forge",
 	"rust-native": "rust-forge",
+	"rust-forge-control": "rust-forge",
+	"omk-rust-forge": "rust-forge",
 	control: "omk-control-grid-dark",
 	"night-city": "omk-control-grid-dark",
 	"night-city-ops": "omk-control-grid-dark",

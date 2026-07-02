@@ -341,6 +341,8 @@ describe("InteractiveMode.showLoadedResources", () => {
 		extensions?: ExtensionFixture[];
 		skills?: Array<{ filePath: string; name: string; sourceInfo?: SourceInfo }>;
 		skillDiagnostics?: ResourceDiagnostic[];
+		promptTemplates?: Array<{ filePath: string; name: string; sourceInfo?: SourceInfo }>;
+		themes?: Array<{ name?: string; sourcePath?: string; sourceInfo?: SourceInfo }>;
 		useRealScopeGroups?: boolean;
 		useRealDiagnostics?: boolean;
 	}) {
@@ -355,7 +357,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 				getCwd: () => options.cwd ?? "/tmp/project",
 			},
 			session: {
-				promptTemplates: [],
+				promptTemplates: options.promptTemplates ?? [],
 				extensionRunner: {
 					getCommandDiagnostics: () => [],
 					getShortcutDiagnostics: () => [],
@@ -369,7 +371,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 					}),
 					getPrompts: () => ({ prompts: [], diagnostics: [] }),
 					getExtensions: () => ({ extensions: options.extensions ?? [], errors: [], runtime: {} }),
-					getThemes: () => ({ themes: [], diagnostics: [] }),
+					getThemes: () => ({ themes: options.themes ?? [], diagnostics: [] }),
 				},
 			},
 			formatDisplayPath: (p: string) => (InteractiveMode as any).prototype.formatDisplayPath.call(fakeThis, p),
@@ -963,6 +965,52 @@ describe("InteractiveMode.showLoadedResources", () => {
 		expect(output).not.toContain(`${cwd.replace(/\\/g, "/")}/AGENTS.md`);
 	});
 
+	test("shows bounded startup resource inventory sections in compact output", () => {
+		const makeItems = (prefix: string) =>
+			Array.from({ length: 26 }, (_, index) => `${prefix}-${index.toString().padStart(2, "0")}`);
+		const contextFiles = makeItems("context").map((name) => ({ path: `/tmp/project/${name}.md` }));
+		const skills = makeItems("skill").map((name) => ({ filePath: `/tmp/skills/${name}/SKILL.md`, name }));
+		const promptTemplates = makeItems("prompt").map((name) => ({
+			filePath: `/tmp/prompts/${name}.md`,
+			name,
+		}));
+		const extensions = makeItems("extension").map((name) => ({ path: `/tmp/extensions/${name}.ts` }));
+		const themes = makeItems("theme").map((name) => ({
+			name,
+			sourcePath: `/tmp/themes/${name}.json`,
+		}));
+		const fakeThis = createShowLoadedResourcesThis({
+			quietStartup: false,
+			contextFiles,
+			skills,
+			promptTemplates,
+			extensions,
+			themes,
+		});
+
+		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
+			force: false,
+		});
+
+		const output = normalizeRenderedOutput(fakeThis.chatContainer);
+		expect(output).toContain("[Context]");
+		expect(output).toContain("[Skills]");
+		expect(output).toContain("[Prompts]");
+		expect(output).toContain("[Extensions]");
+		expect(output).toContain("[Themes]");
+		expect(output).toContain("context-00.md");
+		expect(output).toContain("skill-00");
+		expect(output).toContain("/prompt-00");
+		expect(output).toContain("extension-00.ts");
+		expect(output).toContain("theme-00");
+		expect(output.match(/\+2 more/g) ?? []).toHaveLength(5);
+		expect(output).not.toContain("context-24.md");
+		expect(output).not.toContain("skill-24");
+		expect(output).not.toContain("/prompt-24");
+		expect(output).not.toContain("extension-24.ts");
+		expect(output).not.toContain("theme-24");
+	});
+
 	test("shows full context paths when expanded", () => {
 		const home = homedir();
 		const cwd = path.join(home, "Development", "omk");
@@ -1101,6 +1149,8 @@ describe("InteractiveMode.showLoadedResources", () => {
 						loserScope: "user",
 						winnerOrigin: "package",
 						loserOrigin: "top-level",
+						resolutionReason: "higher-precedence skill source",
+						resolutionAction: "Rename one skill or remove the lower-precedence duplicate.",
 					},
 				},
 			],
@@ -1115,5 +1165,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		expect(output).toContain("[Skill conflicts]");
 		expect(output).toContain("npm:skill-pack (project) skills/commit/SKILL.md");
 		expect(output).toContain("user /tmp/legacy/SKILL.md (skipped)");
+		expect(output).toContain("reason: higher-precedence skill source");
+		expect(output).toContain("action: Rename one skill or remove the lower-precedence duplicate.");
 	});
 });

@@ -75,6 +75,12 @@ export const BUILTIN_HOOKS: readonly HookDescriptor[] = [
 		failureMode: "fail-closed",
 		timeoutMs: 30_000,
 	}),
+	builtinHook("notify-sound-on-stop", {
+		stages: ["session_stop"],
+		effects: ["observer"],
+		failureMode: "fail-closed",
+		timeoutMs: 5_000,
+	}),
 	builtinHook("bounded-evidence", {
 		stages: ["tool_result", "session_stop"],
 		effects: ["validator"],

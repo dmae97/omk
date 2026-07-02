@@ -77,8 +77,20 @@ omk
 | Xiaomi MiMo Token Plan (China) | `XIAOMI_TOKEN_PLAN_CN_API_KEY` | `xiaomi-token-plan-cn` |
 | Xiaomi MiMo Token Plan (Amsterdam) | `XIAOMI_TOKEN_PLAN_AMS_API_KEY` | `xiaomi-token-plan-ams` |
 | Xiaomi MiMo Token Plan (Singapore) | `XIAOMI_TOKEN_PLAN_SGP_API_KEY` | `xiaomi-token-plan-sgp` |
+| Zyloo | `ZYLOO_API_KEY` | `zyloo` |
 
 Reference for environment variables and `auth.json` keys: [`const envMap`](https://github.com/earendil-works/omk-mono/blob/main/packages/ai/src/env-api-keys.ts) in [`packages/ai/src/env-api-keys.ts`](https://github.com/earendil-works/omk-mono/blob/main/packages/ai/src/env-api-keys.ts).
+
+#### Zyloo
+
+Zyloo is an OpenAI-compatible unified API gateway. Set `ZYLOO_API_KEY` and use any Zyloo-hosted model:
+
+```bash
+export ZYLOO_API_KEY=sk-zy-...
+omk --provider zyloo --model claude-opus-4-7
+```
+
+Model IDs in omk omit the `zyloo/` namespace that the upstream API requires; omk adds it automatically. Models include Claude Opus 4.7, GPT-5.5, Gemini 3.5 Flash, DeepSeek V4 Pro, and Grok 4.3. Run `--list-models` to see the full catalog.
 
 #### Auth File
 

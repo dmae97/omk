@@ -344,16 +344,57 @@ function migrateToolsToBin(): void {
 }
 
 /**
+ * Archive a legacy `hooks/` directory by renaming it to `hooks.migrated/`.
+ *
+ * Used for project-level hooks, which are never loaded or executed: the shell-hook
+ * inventory only scans the global agent directory, and built-in hooks take precedence
+ * on name collisions. Renaming is reversible and preserves the scripts.
+ *
+ * @returns The archived directory path, or null if there was nothing to archive (or the rename failed).
+ */
+export function archiveLegacyHooksDir(baseDir: string): string | null {
+	const hooksDir = join(baseDir, "hooks");
+	if (!existsSync(hooksDir)) return null;
+
+	let target = join(baseDir, "hooks.migrated");
+	if (existsSync(target)) {
+		target = join(baseDir, `hooks.migrated.${Date.now()}`);
+	}
+
+	try {
+		renameSync(hooksDir, target);
+		return target;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Check for deprecated hooks/ and tools/ directories.
+ * Project-level hooks/ (`autoArchiveHooks`) are archived automatically because project shell hooks
+ * are never executed; global hooks/ may still be live via the hook inventory, so it stays a warning.
  * Note: tools/ may contain legacy auto-extracted fd/rg binaries, so only warn if it has other files.
  */
-function checkDeprecatedExtensionDirs(baseDir: string, label: string): string[] {
+export function checkDeprecatedExtensionDirs(
+	baseDir: string,
+	label: string,
+	options?: { autoArchiveHooks?: boolean },
+): string[] {
 	const hooksDir = join(baseDir, "hooks");
 	const toolsDir = join(baseDir, "tools");
 	const warnings: string[] = [];
 
 	if (existsSync(hooksDir)) {
-		warnings.push(`${label} hooks/ directory found. Hooks have been renamed to extensions.`);
+		const archived = options?.autoArchiveHooks ? archiveLegacyHooksDir(baseDir) : null;
+		if (archived) {
+			console.log(
+				chalk.dim(
+					`Archived legacy ${label.toLowerCase()} hooks/ directory to ${archived} (shell hooks are superseded by extensions).`,
+				),
+			);
+		} else {
+			warnings.push(`${label} hooks/ directory found. Hooks have been renamed to extensions.`);
+		}
 	}
 
 	if (existsSync(toolsDir)) {
@@ -390,10 +431,11 @@ function migrateExtensionSystem(cwd: string): string[] {
 	migrateCommandsToPrompts(agentDir, "Global");
 	migrateCommandsToPrompts(projectDir, "Project");
 
-	// Check for deprecated directories
+	// Check for deprecated directories. Project hooks/ are archived automatically (never executed);
+	// global hooks/ may still be live, so it remains a non-blocking warning.
 	const warnings = [
-		...checkDeprecatedExtensionDirs(agentDir, "Global"),
-		...checkDeprecatedExtensionDirs(projectDir, "Project"),
+		...checkDeprecatedExtensionDirs(agentDir, "Global", { autoArchiveHooks: false }),
+		...checkDeprecatedExtensionDirs(projectDir, "Project", { autoArchiveHooks: true }),
 	];
 
 	return warnings;
@@ -411,17 +453,6 @@ export async function showDeprecationWarnings(warnings: string[]): Promise<void>
 	console.log(chalk.yellow(`\nMove your extensions to the extensions/ directory.`));
 	console.log(chalk.yellow(`Migration guide: ${MIGRATION_GUIDE_URL}`));
 	console.log(chalk.yellow(`Documentation: ${EXTENSIONS_DOC_URL}`));
-	console.log(chalk.dim(`\nPress any key to continue...`));
-
-	await new Promise<void>((resolve) => {
-		process.stdin.setRawMode?.(true);
-		process.stdin.resume();
-		process.stdin.once("data", () => {
-			process.stdin.setRawMode?.(false);
-			process.stdin.pause();
-			resolve();
-		});
-	});
 	console.log();
 }
 

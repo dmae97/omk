@@ -191,6 +191,91 @@ describe("AgentSession prompt characterization", () => {
 		expect(expandedPrompt).toContain("explain this");
 	});
 
+	it("expands bang skill commands before sending the prompt", async () => {
+		const tempDir = join(tmpdir(), `pi-bang-skill-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		mkdirSync(tempDir, { recursive: true });
+		tempDirs.push(tempDir);
+		const skillPath = join(tempDir, "browser-feedback.md");
+		writeFileSync(skillPath, "# Browser Feedback\n\nInspect the visible browser state.");
+		const template: PromptTemplate = {
+			name: "review",
+			description: "Review template",
+			content: "Template reviewed: $1",
+			filePath: "/virtual/review.md",
+			sourceInfo: createSyntheticSourceInfo("/virtual/review.md", {
+				source: "local",
+				scope: "temporary",
+				origin: "top-level",
+			}),
+		};
+
+		const resourceLoader = {
+			...createTestResourceLoader(),
+			getSkills: () => ({
+				skills: [
+					{
+						name: "browser-feedback",
+						description: "Browser feedback skill",
+						filePath: skillPath,
+						disableModelInvocation: false,
+						baseDir: tempDir,
+						sourceInfo: createSyntheticSourceInfo(skillPath, {
+							source: "local",
+							scope: "project",
+							origin: "top-level",
+							baseDir: tempDir,
+						}),
+					},
+				],
+				diagnostics: [],
+			}),
+			getPrompts: () => ({ prompts: [template], diagnostics: [] }),
+		};
+		const commandRuns: string[] = [];
+		const harness = await createHarness({
+			resourceLoader,
+			extensionFactories: [
+				(pi) => {
+					pi.registerCommand("review", {
+						description: "Review command",
+						handler: async (args) => {
+							commandRuns.push(args);
+						},
+					});
+				},
+			],
+		});
+		harnesses.push(harness);
+		let expandedPrompt = "";
+		let turnSystemPrompt = "";
+		let nextTurnSystemPrompt = "";
+
+		harness.setResponses([
+			(context) => {
+				const user = context.messages.find((message) => message.role === "user");
+				expandedPrompt = user ? getMessageText(user) : "";
+				turnSystemPrompt = context.systemPrompt ?? "";
+				return fauxAssistantMessage("ok");
+			},
+			(context) => {
+				nextTurnSystemPrompt = context.systemPrompt ?? "";
+				return fauxAssistantMessage("ok");
+			},
+		]);
+
+		await harness.session.prompt("!skill:browser-feedback /review src/index.ts");
+		await harness.session.prompt("normal turn");
+
+		expect(expandedPrompt).toContain('<skill name="browser-feedback" location="');
+		expect(expandedPrompt).toContain("Inspect the visible browser state.");
+		expect(expandedPrompt).toContain("/review src/index.ts");
+		expect(expandedPrompt).not.toContain("Template reviewed:");
+		expect(commandRuns).toEqual([]);
+		expect(turnSystemPrompt).toContain('<active_skills source="bang">');
+		expect(turnSystemPrompt).toContain("<name>browser-feedback</name>");
+		expect(nextTurnSystemPrompt).not.toContain('<active_skills source="bang">');
+	});
+
 	it("expands prompt templates before sending the prompt", async () => {
 		const template: PromptTemplate = {
 			name: "review",

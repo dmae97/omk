@@ -17,29 +17,29 @@ export function composeColumns(
 	);
 }
 
-export function sidebarRule(width: number, label: string): string {
+export function sidebarRule(width: number, label: string, borderColor: ThemeColor = "borderAccent"): string {
 	const bodyWidth = Math.max(0, width - 2);
 	const labelText = ` ${label} `;
 	const fill = Math.max(0, bodyWidth - visibleWidth(labelText));
 	const left = Math.floor(fill / 2);
 	const right = fill - left;
 	return clipLine(
-		`${theme.fg("border", "|")}${theme.fg("borderMuted", "-".repeat(left))}${theme.bold(theme.fg("accent", labelText))}${theme.fg("borderMuted", "-".repeat(right))}${theme.fg("border", "|")}`,
+		`${theme.fg(borderColor, "\u2502")}${theme.fg("borderMuted", "\u2500".repeat(left))}${theme.bold(theme.fg("accent", labelText))}${theme.fg("borderMuted", "\u2500".repeat(right))}${theme.fg(borderColor, "\u2502")}`,
 		width,
 	);
 }
 
-export function boxTop(width: number, label: string): string {
+export function boxTop(width: number, label: string, borderColor: ThemeColor = "borderAccent"): string {
 	const text = ` ${label} `;
 	const fillWidth = Math.max(0, width - visibleWidth("+") - visibleWidth(text) - visibleWidth("+"));
 	return clipLine(
-		`${theme.fg("border", "+")}${theme.bold(theme.fg("accent", text))}${theme.fg("border", "-".repeat(fillWidth))}${theme.fg("border", "+")}`,
+		`${theme.fg(borderColor, "\u256d")}${theme.bold(theme.fg("accent", text))}${theme.fg(borderColor, "\u2500".repeat(fillWidth))}${theme.fg(borderColor, "\u256e")}`,
 		width,
 	);
 }
 
-export function boxBottom(width: number): string {
-	return clipLine(theme.fg("border", `+${"-".repeat(Math.max(0, width - 2))}+`), width);
+export function boxBottom(width: number, borderColor: ThemeColor = "borderAccent"): string {
+	return clipLine(theme.fg(borderColor, `\u2570${"\u2500".repeat(Math.max(0, width - 2))}\u256f`), width);
 }
 
 export function boxBlankLine(width: number): string {
@@ -53,7 +53,7 @@ export function boxCenteredLine(width: number, text: string, color?: ThemeColor)
 export function boxTextLine(width: number, text: string, color?: ThemeColor): string {
 	const body = color ? theme.fg(color, text) : text;
 	return clipLine(
-		`${theme.fg("border", "| ")}${fitLine(body, Math.max(0, width - 4))}${theme.fg("border", " |")}`,
+		`${theme.fg("borderAccent", "\u2502 ")}${fitLine(body, Math.max(0, width - 4))}${theme.fg("borderAccent", " \u2502")}`,
 		width,
 	);
 }
@@ -69,16 +69,19 @@ export function centerText(width: number, text: string): string {
 }
 
 export function divider(width: number, label: string, color: ThemeColor): string {
-	const fillWidth = Math.max(0, width - visibleWidth("+-- ") - visibleWidth(label) - 1);
+	const fillWidth = Math.max(0, width - visibleWidth("+-- ") - visibleWidth(label) - visibleWidth(" +"));
 	return clipLine(
-		`${theme.fg("border", "+-- ")}${theme.bold(theme.fg(color, label))}${theme.fg("border", ` ${"-".repeat(fillWidth)}`)}`,
+		`${theme.fg("border", "+-- ")}${theme.bold(theme.fg(color, label))}${theme.fg("border", ` ${"-".repeat(fillWidth)}+`)}`,
 		width,
 	);
 }
 
 export function textLine(width: number, text: string, color?: ThemeColor): string {
 	const body = color ? theme.fg(color, text) : text;
-	return clipLine(`${theme.fg("borderMuted", "| ")}${body}`, width);
+	return clipLine(
+		`${theme.fg("borderMuted", "\u2502 ")}${fitLine(body, Math.max(0, width - 4))}${theme.fg("borderMuted", " \u2502")}`,
+		width,
+	);
 }
 
 export function fitLine(line: string, width: number): string {

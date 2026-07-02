@@ -62,6 +62,7 @@ import {
 } from "../../config.ts";
 import { type AgentSession, type AgentSessionEvent, parseSkillBlock } from "../../core/agent-session.ts";
 import { type AgentSessionRuntime, SessionImportFileNotFoundError } from "../../core/agent-session-runtime.ts";
+import { type BangInvocation, parseBangInvocation } from "../../core/bang-skill-invocation.ts";
 import type {
 	AutocompleteProviderFactory,
 	EditorFactory,
@@ -100,7 +101,8 @@ import { BashExecutionComponent } from "./components/bash-execution.ts";
 import { BorderedLoader } from "./components/bordered-loader.ts";
 import { BranchSummaryMessageComponent } from "./components/branch-summary-message.ts";
 import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.ts";
-import { ControlPanelComponent } from "./components/control-panel.ts";
+import { ControlPanelComponent, ControlPanelRightPaneComponent } from "./components/control-panel.ts";
+import { CONTROL_PANEL_OVERLAY_MIN_WIDTH, CONTROL_PANEL_SIDEBAR_WIDTH } from "./components/control-panel-layout.ts";
 import { createControlPanelStatusSnapshot } from "./components/control-panel-runtime-status.ts";
 import { CountdownTimer } from "./components/countdown-timer.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
@@ -148,6 +150,17 @@ interface Expandable {
 
 function isExpandable(obj: unknown): obj is Expandable {
 	return typeof obj === "object" && obj !== null && "setExpanded" in obj && typeof obj.setExpanded === "function";
+}
+
+function disposeComponent(component: unknown): void {
+	if (
+		typeof component === "object" &&
+		component !== null &&
+		"dispose" in component &&
+		typeof component.dispose === "function"
+	) {
+		component.dispose();
+	}
 }
 
 class ExpandableText extends Text implements Expandable {
@@ -334,7 +347,6 @@ export class InteractiveMode {
 	private unsubscribe?: () => void;
 	private signalCleanupHandlers: Array<() => void> = [];
 
-	// Track if editor is in bash mode (text starts with !)
 	private isBashMode = false;
 
 	// Track current bash execution component
@@ -715,8 +727,8 @@ export class InteractiveMode {
 					hint("app.thinking.toggle", "to expand thinking"),
 					hint("app.editor.external", "for external editor"),
 					rawKeyHint("/", "for commands"),
-					rawKeyHint("!", "to run bash"),
-					rawKeyHint("!!", "to run bash (no context)"),
+					rawKeyHint("!", "skills/bash"),
+					rawKeyHint("!!", "bash(no ctx)"),
 					hint("app.message.followUp", "to queue follow-up"),
 					hint("app.message.dequeue", "to edit all queued messages"),
 					hint("app.clipboard.pasteImage", "to paste image"),
@@ -727,10 +739,11 @@ export class InteractiveMode {
 					hint("app.interrupt", "interrupt"),
 					rawKeyHint(`${keyText("app.clear")}/${keyText("app.exit")}`, "clear/exit"),
 					rawKeyHint("/", "commands"),
-					rawKeyHint("!", "bash"),
+					rawKeyHint("!", "skills/bash"),
+					rawKeyHint("!!", "bash(no ctx)"),
 					hint("app.tools.expand", "more"),
 				].join(theme.fg("muted", " · "));
-			const controlPanel = new ControlPanelComponent({
+			const controlPanelContent = {
 				appName: APP_NAME,
 				version: this.version,
 				compactInstructions,
@@ -738,10 +751,30 @@ export class InteractiveMode {
 				compactOnboarding: () =>
 					`Press ${keyText("app.tools.expand")} to show full startup help and loaded resources.`,
 				onboarding: () => `OMK can explain its own features and look up its docs. Ask it how to use or extend OMK.`,
-				statusSnapshot: () => createControlPanelStatusSnapshot(this.session, this.sessionManager),
+				statusSnapshot: () =>
+					createControlPanelStatusSnapshot(this.session, this.sessionManager, this.footerDataProvider),
+			};
+			const controlPanel = new ControlPanelComponent(controlPanelContent, {
+				requestRender: () => this.ui.requestRender(),
+				isTTY: () => process.stdout.isTTY === true,
+				isReducedMotion: () => process.env.OMK_REDUCED_MOTION === "1" || process.env.OMK_REDUCE_MOTION === "1",
+				isIdleDriftEnabled: () => process.env.OMK_CONTROL_IDLE_DRIFT !== "0",
+				isHeaderVisibleHint: () => this.customHeader === undefined,
+				getRenderWidth: () => this.ui.terminal.columns,
 			});
 			controlPanel.setExpanded(this.getStartupExpansionState());
 			this.builtInHeader = controlPanel;
+			this.ui.showOverlay(new ControlPanelRightPaneComponent(controlPanelContent), {
+				anchor: "top-right",
+				width: CONTROL_PANEL_SIDEBAR_WIDTH,
+				maxHeight: "100%",
+				nonCapturing: true,
+				visible: (termWidth, termHeight) =>
+					this.customHeader === undefined &&
+					this.toolOutputExpanded &&
+					termWidth >= CONTROL_PANEL_OVERLAY_MIN_WIDTH &&
+					termHeight >= 12,
+			});
 
 			// Setup UI layout
 			this.headerContainer.addChild(new Spacer(1));
@@ -1389,6 +1422,12 @@ export class InteractiveMode {
 							)} (skipped)`,
 						),
 					);
+					if (d.collision.resolutionReason) {
+						lines.push(theme.fg("dim", `      reason: ${d.collision.resolutionReason}`));
+					}
+					if (d.collision.resolutionAction) {
+						lines.push(theme.fg("dim", `      action: ${d.collision.resolutionAction}`));
+					}
 				}
 			}
 		}
@@ -2609,7 +2648,7 @@ export class InteractiveMode {
 
 		this.defaultEditor.onChange = (text: string) => {
 			const wasBashMode = this.isBashMode;
-			this.isBashMode = text.trimStart().startsWith("!");
+			this.isBashMode = this.isBangBashInput(text);
 			if (wasBashMode !== this.isBashMode) {
 				this.updateEditorBorderColor();
 			}
@@ -2641,6 +2680,20 @@ export class InteractiveMode {
 		} catch {
 			// Silently ignore clipboard errors (may not have permission, etc.)
 		}
+	}
+
+	private parseBangInput(text: string): BangInvocation {
+		return parseBangInvocation(text.trim(), {
+			hasSkill: (name) => this.session.resourceLoader.getSkills().skills.some((skill) => skill.name === name),
+		});
+	}
+
+	private isBangBashInput(text: string): boolean {
+		const trimmed = text.trimStart();
+		if (!trimmed.startsWith("!")) {
+			return false;
+		}
+		return this.parseBangInput(trimmed).kind === "bash";
 	}
 
 	private setupEditorSubmitHandler(): void {
@@ -2778,18 +2831,25 @@ export class InteractiveMode {
 				return;
 			}
 
-			// Handle bash command (! for normal, !! for excluded from context)
 			if (text.startsWith("!")) {
-				const isExcluded = text.startsWith("!!");
-				const command = isExcluded ? text.slice(2).trim() : text.slice(1).trim();
-				if (command) {
+				const bangInvocation = parseBangInvocation(text, {
+					hasSkill: (name) => this.session.resourceLoader.getSkills().skills.some((skill) => skill.name === name),
+				});
+				if (bangInvocation.kind === "unknownSkill") {
+					this.showWarning(`Unknown skill: ${bangInvocation.skillName}`);
+					this.editor.setText(text);
+					this.isBashMode = false;
+					this.updateEditorBorderColor();
+					return;
+				}
+				if (bangInvocation.kind === "bash") {
 					if (this.session.isBashRunning) {
 						this.showWarning("A bash command is already running. Press Esc to cancel it first.");
 						this.editor.setText(text);
 						return;
 					}
 					this.editor.addToHistory?.(text);
-					await this.handleBashCommand(command, isExcluded);
+					await this.handleBashCommand(bangInvocation.command, !bangInvocation.includeContext);
 					this.isBashMode = false;
 					this.updateEditorBorderColor();
 					return;
@@ -5599,8 +5659,8 @@ export class InteractiveMode {
 | \`${dequeue}\` | Restore queued messages |
 | \`${pasteImage}\` | Paste image from clipboard |
 | \`/\` | Slash commands |
-| \`!\` | Run bash command |
-| \`!!\` | Run bash command (excluded from context) |
+| \`!\` | Skills/bash launcher |
+| \`!!\` | Bash command (excluded from context) |
 `;
 
 		// Add extension-registered shortcuts
@@ -5824,6 +5884,8 @@ export class InteractiveMode {
 			this.loadingAnimation = undefined;
 		}
 		this.clearExtensionTerminalInputListeners();
+		disposeComponent(this.builtInHeader);
+		disposeComponent(this.customHeader);
 		this.footer.dispose();
 		this.footerDataProvider.dispose();
 		if (this.metricsTimer) {

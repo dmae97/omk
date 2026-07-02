@@ -1,3 +1,4 @@
+import { visibleWidth } from "omk-tui";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
 	ControlPanelComponent,
@@ -50,10 +51,6 @@ const TEST_ART = ["  ____   __  __ _  __", " / __ \\ /  |/  / |/ /", "/ /_/ // /
 
 function stripAnsi(value: string): string {
 	return value.replace(ESC_RE, "");
-}
-
-function visibleWidth(value: string): number {
-	return stripAnsi(value).length;
 }
 
 function escapeCount(value: string, needle: string): number {
@@ -168,8 +165,15 @@ describe("shouldAnimate — truth table", () => {
 		expect(shouldAnimate({ ...base, noColor: true })).toBe(false);
 	});
 
-	test("false for non-TTY", () => {
-		expect(shouldAnimate({ ...base, isTTY: false })).toBe(false);
+	test("false for non-TTY without FORCE_COLOR", () => {
+		const previousForceColor = process.env.FORCE_COLOR;
+		try {
+			delete process.env.FORCE_COLOR;
+			expect(shouldAnimate({ ...base, isTTY: false })).toBe(false);
+		} finally {
+			if (previousForceColor === undefined) delete process.env.FORCE_COLOR;
+			else process.env.FORCE_COLOR = previousForceColor;
+		}
 	});
 
 	test("false for reducedMotion", () => {
@@ -204,6 +208,8 @@ describe("BannerMotion lifecycle with fake timers", () => {
 	beforeEach(() => {
 		clock.value = 0;
 		delete process.env.NO_COLOR;
+		delete process.env.FORCE_COLOR;
+		delete process.env.OMK_REDUCED_MOTION;
 		vi.useFakeTimers();
 	});
 
@@ -311,4 +317,229 @@ describe("render width regression — ControlPanelComponent", () => {
 			expect(stripAnsi(line)).toBe(line);
 		}
 	});
+});
+
+test("color and motion policy matrix derives ANSI and motion from control-panel behavior", () => {
+	type EnvKey = "NO_COLOR" | "FORCE_COLOR" | "OMK_REDUCED_MOTION";
+	type PolicyRow = {
+		name: string;
+		isTTY: boolean;
+		idleDriftEnabled: boolean;
+		env: Partial<Record<EnvKey, string | undefined>>;
+	};
+
+	const rows: PolicyRow[] = [
+		{
+			name: "default TTY",
+			isTTY: true,
+			idleDriftEnabled: false,
+			env: {},
+		},
+		{
+			name: "non-TTY",
+			isTTY: false,
+			idleDriftEnabled: false,
+			env: {},
+		},
+		{
+			name: "NO_COLOR=1",
+			isTTY: true,
+			idleDriftEnabled: false,
+			env: { NO_COLOR: "1" },
+		},
+		{
+			name: "FORCE_COLOR=1",
+			isTTY: false,
+			idleDriftEnabled: false,
+			env: { FORCE_COLOR: "1" },
+		},
+		{
+			name: "NO_COLOR=1 FORCE_COLOR=1",
+			isTTY: true,
+			idleDriftEnabled: false,
+			env: { NO_COLOR: "1", FORCE_COLOR: "1" },
+		},
+		{
+			name: "OMK_REDUCED_MOTION=1",
+			isTTY: true,
+			idleDriftEnabled: false,
+			env: { OMK_REDUCED_MOTION: "1" },
+		},
+		{
+			name: "idle drift opt-in",
+			isTTY: true,
+			idleDriftEnabled: true,
+			env: {},
+		},
+		{
+			name: "idle drift reduced motion",
+			isTTY: true,
+			idleDriftEnabled: true,
+			env: { OMK_REDUCED_MOTION: "1" },
+		},
+	];
+
+	const previousEnv: Record<EnvKey, string | undefined> = {
+		NO_COLOR: process.env.NO_COLOR,
+		FORCE_COLOR: process.env.FORCE_COLOR,
+		OMK_REDUCED_MOTION: process.env.OMK_REDUCED_MOTION,
+	};
+
+	function setPolicyEnv(values: Partial<Record<EnvKey, string | undefined>>): void {
+		for (const key of Object.keys(previousEnv) as EnvKey[]) {
+			const value = values[key];
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
+	}
+
+	try {
+		for (const row of rows) {
+			setPolicyEnv(row.env);
+			const noColor = process.env.NO_COLOR !== undefined;
+			const forceColor = process.env.FORCE_COLOR !== undefined;
+			const reducedMotion = process.env.OMK_REDUCED_MOTION !== undefined;
+			const policyAllowsAnsi = !noColor && (row.isTTY || forceColor);
+			const policyAllowsIntroMotion = policyAllowsAnsi && !reducedMotion;
+			const policyAllowsIdleMotion = policyAllowsIntroMotion && row.idleDriftEnabled;
+
+			const introMotion = shouldAnimate({
+				phase: "intro",
+				isTTY: row.isTTY,
+				noColor,
+				colorMode: "truecolor",
+				expanded: true,
+				width: 80,
+				reducedMotion,
+				busy: false,
+				headerVisibleHint: true,
+				idleDriftEnabled: row.idleDriftEnabled,
+			});
+			const idleMotion = shouldAnimate({
+				phase: "idle",
+				isTTY: row.isTTY,
+				noColor,
+				colorMode: "truecolor",
+				expanded: true,
+				width: 80,
+				reducedMotion,
+				busy: false,
+				headerVisibleHint: true,
+				idleDriftEnabled: row.idleDriftEnabled,
+			});
+
+			const clock = { value: 0 };
+			const requestRender = vi.fn();
+			const panel = new ControlPanelComponent(
+				makeContent(),
+				makeMotionOptions(clock, {
+					requestRender,
+					isTTY: () => row.isTTY,
+					isReducedMotion: () => reducedMotion,
+					isIdleDriftEnabled: () => row.idleDriftEnabled,
+					getRenderWidth: () => 80,
+				}),
+			);
+
+			vi.useFakeTimers();
+			try {
+				panel.render(80);
+				panel.setExpanded(true);
+				const renderedPanel = panel.render(80).join("\n");
+				const componentStartedMotion = requestRender.mock.calls.length > 0;
+				const actualAnsi = ESC_RE.test(renderedPanel);
+
+				expect(actualAnsi, `${row.name} ANSI policy must come from rendered control-panel output`).toBe(
+					policyAllowsAnsi,
+				);
+				expect(introMotion, `${row.name} reduced motion/NO_COLOR/FORCE_COLOR intro motion policy`).toBe(
+					policyAllowsIntroMotion,
+				);
+				expect(
+					componentStartedMotion,
+					`${row.name} component motion policy must be observable without vi.getTimerCount`,
+				).toBe(policyAllowsIntroMotion);
+				expect(idleMotion, `${row.name} idle drift reduced motion policy`).toBe(policyAllowsIdleMotion);
+			} finally {
+				panel.dispose();
+				vi.clearAllTimers();
+				vi.useRealTimers();
+			}
+		}
+	} finally {
+		setPolicyEnv(previousEnv);
+	}
+});
+test("OMK_REDUCED_MOTION=1 suppresses control-panel motion even when the TTY option is favorable", () => {
+	const previousReducedMotion = process.env.OMK_REDUCED_MOTION;
+	const previousNoColor = process.env.NO_COLOR;
+	let panel: ControlPanelComponent | undefined;
+
+	try {
+		delete process.env.NO_COLOR;
+		process.env.OMK_REDUCED_MOTION = "1";
+		vi.useFakeTimers();
+		const clock = { value: 0 };
+		panel = new ControlPanelComponent(
+			makeContent(),
+			makeMotionOptions(clock, {
+				isReducedMotion: () => false,
+				isTTY: () => true,
+				isHeaderVisibleHint: () => true,
+				getRenderWidth: () => 80,
+			}),
+		);
+		panel.render(80);
+		panel.setExpanded(true);
+
+		expect(vi.getTimerCount(), "reduced motion env must prevent motion timers").toBe(0);
+	} finally {
+		panel?.dispose();
+		vi.clearAllTimers();
+		vi.useRealTimers();
+		if (previousReducedMotion === undefined) delete process.env.OMK_REDUCED_MOTION;
+		else process.env.OMK_REDUCED_MOTION = previousReducedMotion;
+		if (previousNoColor === undefined) delete process.env.NO_COLOR;
+		else process.env.NO_COLOR = previousNoColor;
+	}
+});
+
+test("FORCE_COLOR=1 enables control-panel motion for color-capable non-TTY policy", () => {
+	const previousForceColor = process.env.FORCE_COLOR;
+	const previousNoColor = process.env.NO_COLOR;
+	const previousReducedMotion = process.env.OMK_REDUCED_MOTION;
+	let panel: ControlPanelComponent | undefined;
+
+	try {
+		process.env.FORCE_COLOR = "1";
+		delete process.env.NO_COLOR;
+		delete process.env.OMK_REDUCED_MOTION;
+		vi.useFakeTimers();
+
+		const clock = { value: 0 };
+		panel = new ControlPanelComponent(
+			makeContent(),
+			makeMotionOptions(clock, {
+				isReducedMotion: () => false,
+				isTTY: () => false,
+				isHeaderVisibleHint: () => true,
+				getRenderWidth: () => 80,
+			}),
+		);
+
+		panel.render(80);
+		panel.setExpanded(true);
+
+		expect(vi.getTimerCount(), "FORCE_COLOR policy must be explicit for non-TTY motion").toBe(1);
+	} finally {
+		panel?.dispose();
+		vi.clearAllTimers();
+		vi.useRealTimers();
+		if (previousForceColor === undefined) delete process.env.FORCE_COLOR;
+		else process.env.FORCE_COLOR = previousForceColor;
+		if (previousNoColor === undefined) delete process.env.NO_COLOR;
+		else process.env.NO_COLOR = previousNoColor;
+		if (previousReducedMotion === undefined) delete process.env.OMK_REDUCED_MOTION;
+		else process.env.OMK_REDUCED_MOTION = previousReducedMotion;
+	}
 });

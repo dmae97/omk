@@ -7,6 +7,7 @@ import {
 	renderSystemPromptBudgetedResources,
 	type SystemPromptContextBudgetOptions,
 } from "./context-budget-system-prompt.ts";
+import { escapeXml } from "./context-budget-system-prompt-items.ts";
 import type { ContextFile } from "./resource-loader.ts";
 import { formatSkillsForPrompt, type Skill } from "./skills.ts";
 
@@ -27,6 +28,8 @@ export interface BuildSystemPromptOptions {
 	contextFiles?: ContextFile[];
 	/** Pre-loaded skills. */
 	skills?: Skill[];
+	activeSkillNames?: readonly string[];
+	activeSkillSource?: string;
 	/** Optional prompt resource budget. Omitted by default to preserve legacy behavior. */
 	contextBudget?: SystemPromptContextBudgetOptions;
 }
@@ -42,6 +45,8 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 		cwd,
 		contextFiles: providedContextFiles,
 		skills: providedSkills,
+		activeSkillNames,
+		activeSkillSource,
 		contextBudget,
 	} = options;
 	const resolvedCwd = cwd;
@@ -57,6 +62,8 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 
 	const contextFiles = providedContextFiles ?? [];
 	const skills = providedSkills ?? [];
+	const activeSkillsSection = formatActiveSkillsForPrompt(skills, activeSkillNames, activeSkillSource ?? "prompt");
+	const budgetOptions = withActiveSkillBudgetOptions(contextBudget, activeSkillNames);
 
 	if (customPrompt) {
 		let prompt = customPrompt;
@@ -67,13 +74,13 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 
 		// Append project context files and skills. Budgeting is opt-in and preserves legacy behavior when omitted.
 		const customPromptHasRead = !selectedTools || selectedTools.includes("read");
-		if (contextBudget) {
+		if (budgetOptions) {
 			const budgeted = renderSystemPromptBudgetedResources({
 				basePrompt: prompt,
 				contextFiles: contextFiles as ContextFile[],
 				skills,
 				includeSkills: customPromptHasRead,
-				options: contextBudget,
+				options: budgetOptions,
 			});
 			prompt += `\n\n${budgeted.text}`;
 		} else {
@@ -90,6 +97,10 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 			if (customPromptHasRead && skills.length > 0) {
 				prompt += formatSkillsForPrompt(skills);
 			}
+		}
+
+		if (activeSkillsSection) {
+			prompt += activeSkillsSection;
 		}
 
 		// Add date and working directory last
@@ -174,13 +185,13 @@ OMK documentation (read only when the user asks about OMK itself, its SDK, exten
 	const parentFiles = typedContext.filter((f) => f.isGlobal);
 	const projectFiles = typedContext.filter((f) => !f.isGlobal);
 
-	if (contextBudget) {
+	if (budgetOptions) {
 		const budgeted = renderSystemPromptBudgetedResources({
 			basePrompt: prompt,
 			contextFiles: typedContext,
 			skills,
 			includeSkills: hasRead,
-			options: contextBudget,
+			options: budgetOptions,
 		});
 		prompt += `\n\n${budgeted.text}`;
 	} else {
@@ -211,9 +222,69 @@ OMK documentation (read only when the user asks about OMK itself, its SDK, exten
 		}
 	}
 
+	if (activeSkillsSection) {
+		prompt += activeSkillsSection;
+	}
+
 	// Add date and working directory last
 	prompt += `\nCurrent date: ${date}`;
 	prompt += `\nCurrent working directory: ${promptCwd}`;
 
 	return prompt;
+}
+
+function withActiveSkillBudgetOptions(
+	contextBudget: SystemPromptContextBudgetOptions | undefined,
+	activeSkillNames: readonly string[] | undefined,
+): SystemPromptContextBudgetOptions | undefined {
+	if (!contextBudget || !activeSkillNames || activeSkillNames.length === 0) {
+		return contextBudget;
+	}
+	return {
+		...contextBudget,
+		activeSkillNames: mergeNames(contextBudget.activeSkillNames, activeSkillNames),
+	};
+}
+
+function formatActiveSkillsForPrompt(
+	skills: readonly Skill[],
+	activeSkillNames: readonly string[] | undefined,
+	source: string,
+): string {
+	if (!activeSkillNames || activeSkillNames.length === 0) {
+		return "";
+	}
+	const skillByName = new Map(skills.map((skill) => [skill.name, skill]));
+	const activeSkills = mergeNames(undefined, activeSkillNames)
+		.map((name) => skillByName.get(name))
+		.filter((skill): skill is Skill => skill !== undefined);
+	if (activeSkills.length === 0) {
+		return "";
+	}
+	return [
+		`\n\n<active_skills source="${escapeXml(source)}">`,
+		"The user explicitly invoked these skills for this turn. Prefer them when relevant.",
+		...activeSkills.map((skill) =>
+			[
+				"  <skill>",
+				`    <name>${escapeXml(skill.name)}</name>`,
+				`    <description>${escapeXml(skill.description)}</description>`,
+				`    <location>${escapeXml(skill.filePath)}</location>`,
+				"  </skill>",
+			].join("\n"),
+		),
+		"</active_skills>",
+	].join("\n");
+}
+
+function mergeNames(first: readonly string[] | undefined, second: readonly string[] | undefined): readonly string[] {
+	const names: string[] = [];
+	const seen = new Set<string>();
+	for (const name of [...(first ?? []), ...(second ?? [])]) {
+		if (!seen.has(name)) {
+			seen.add(name);
+			names.push(name);
+		}
+	}
+	return names;
 }

@@ -72,4 +72,41 @@ describe("context budget headroom v2", () => {
 
 		expect(chosen.kind).toBe("omit");
 	});
+
+	it("lets cache hits change the selected representation", () => {
+		const chosen = chooseHeadroomRepresentation(
+			item({
+				id: "cache-aware-summary",
+				tier: "evidence",
+				priority: "medium",
+				text: "raw full evidence ".repeat(40),
+				tokenEstimate: 120,
+				ageTurns: 10,
+				representations: [
+					{
+						kind: "summary",
+						text: "uncached summary",
+						estimatedTokens: 40,
+						fidelity: "lossy",
+					},
+					{
+						kind: "summary",
+						text: "cached summary",
+						estimatedTokens: 40,
+						fidelity: "lossy",
+						cache: {
+							hit: true,
+							key: "context-representation-materialized:cached",
+							keyKind: "materialized",
+							layer: "turn",
+						},
+					},
+				],
+			}),
+			{ tierUsedTokens: 0, tierCeilingTokens: 200, remainingGlobalTokens: 200 },
+		);
+
+		expect(chosen.text).toBe("cached summary");
+		expect(chosen.cache?.hit).toBe(true);
+	});
 });

@@ -31,6 +31,7 @@ import { stripFrontmatter } from "../utils/frontmatter.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { sleep } from "../utils/sleep.ts";
 import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth-guidance.ts";
+import { parseBangInvocation } from "./bang-skill-invocation.ts";
 import { type BashResult, executeBashWithOperations } from "./bash-executor.ts";
 import { classifyShellCommand } from "./command-safety.ts";
 import {
@@ -220,8 +221,22 @@ export interface PromptOptions {
 	streamingBehavior?: "steer" | "followUp";
 	/** Source of input for extension input event handlers. Defaults to "interactive". */
 	source?: InputSource;
+	activeSkillNames?: readonly string[];
+	activeSkillSource?: string;
 	/** Internal hook used by RPC mode to observe prompt preflight acceptance or rejection. */
 	preflightResult?: (success: boolean) => void;
+}
+
+function mergePromptActiveSkillNames(first: readonly string[], second: readonly string[]): string[] {
+	const names: string[] = [];
+	const seen = new Set<string>();
+	for (const name of [...first, ...second]) {
+		if (!seen.has(name)) {
+			seen.add(name);
+			names.push(name);
+		}
+	}
+	return names;
 }
 
 /** Result from cycleModel() */
@@ -1164,13 +1179,33 @@ export class AgentSession {
 	async prompt(text: string, options?: PromptOptions): Promise<void> {
 		const expandPromptTemplates = options?.expandPromptTemplates ?? true;
 		const preflightResult = options?.preflightResult;
+		let currentText = text;
+		let promptActiveSkillNames = [...(options?.activeSkillNames ?? [])];
+		let promptActiveSkillSource = options?.activeSkillSource;
+		let isBangSkillInvocation = false;
+		if (expandPromptTemplates) {
+			const bangInvocation = parseBangInvocation(text, {
+				hasSkill: (name) => this._resourceLoader.getSkills().skills.some((skill) => skill.name === name),
+			});
+			if (bangInvocation.kind === "skill") {
+				isBangSkillInvocation = true;
+				currentText = bangInvocation.prompt
+					? `/skill:${bangInvocation.skillName} ${bangInvocation.prompt}`
+					: `/skill:${bangInvocation.skillName}`;
+				promptActiveSkillNames = mergePromptActiveSkillNames(
+					promptActiveSkillNames,
+					bangInvocation.activeSkillNames,
+				);
+				promptActiveSkillSource = bangInvocation.source;
+			}
+		}
 		let messages: AgentMessage[] | undefined;
 
 		try {
 			// Handle extension commands first (execute immediately, even during streaming)
 			// Extension commands manage their own LLM interaction via omk.sendMessage()
-			if (expandPromptTemplates && text.startsWith("/")) {
-				const handled = await this._tryExecuteExtensionCommand(text);
+			if (expandPromptTemplates && !isBangSkillInvocation && currentText.startsWith("/")) {
+				const handled = await this._tryExecuteExtensionCommand(currentText);
 				if (handled) {
 					// Extension command executed, no prompt to send
 					preflightResult?.(true);
@@ -1179,7 +1214,6 @@ export class AgentSession {
 			}
 
 			// Emit input event for extension interception (before skill/template expansion)
-			let currentText = text;
 			let currentImages = options?.images;
 			if (this._extensionRunner.hasHandlers("input")) {
 				const inputResult = await this._extensionRunner.emitInput(
@@ -1274,12 +1308,23 @@ export class AgentSession {
 			}
 			this._pendingNextTurnMessages = [];
 
+			const turnSystemPromptOptions =
+				promptActiveSkillNames.length > 0
+					? {
+							...this._baseSystemPromptOptions,
+							activeSkillNames: promptActiveSkillNames,
+							...(promptActiveSkillSource ? { activeSkillSource: promptActiveSkillSource } : {}),
+						}
+					: this._baseSystemPromptOptions;
+			const turnSystemPrompt =
+				promptActiveSkillNames.length > 0 ? buildSystemPrompt(turnSystemPromptOptions) : this._baseSystemPrompt;
+
 			// Emit before_agent_start extension event
 			const result = await this._extensionRunner.emitBeforeAgentStart(
 				expandedText,
 				currentImages,
-				this._baseSystemPrompt,
-				this._baseSystemPromptOptions,
+				turnSystemPrompt,
+				turnSystemPromptOptions,
 			);
 			// Add all custom messages from extensions
 			if (result?.messages) {
@@ -1299,7 +1344,7 @@ export class AgentSession {
 				this.agent.state.systemPrompt = result.systemPrompt;
 			} else {
 				// Ensure we're using the base prompt (in case previous turn had modifications)
-				this.agent.state.systemPrompt = this._baseSystemPrompt;
+				this.agent.state.systemPrompt = turnSystemPrompt;
 			}
 
 			await this._checkProjectedCompaction(messages);

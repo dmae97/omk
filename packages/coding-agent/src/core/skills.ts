@@ -165,7 +165,10 @@ export interface LoadSkillsFromDirOptions {
 	dir: string;
 	/** Source identifier for these skills */
 	source: string;
+	resolveSourceInfo?: SkillSourceInfoResolver;
 }
+
+type SkillSourceInfoResolver = (filePath: string) => SourceInfo | undefined;
 
 function createSkillSourceInfo(filePath: string, baseDir: string, source: string): SourceInfo {
 	switch (source) {
@@ -200,8 +203,8 @@ function createSkillSourceInfo(filePath: string, baseDir: string, source: string
  * - recurse into subdirectories to find SKILL.md
  */
 export function loadSkillsFromDir(options: LoadSkillsFromDirOptions): LoadSkillsResult {
-	const { dir, source } = options;
-	return loadSkillsFromDirInternal(dir, source, true);
+	const { dir, resolveSourceInfo, source } = options;
+	return loadSkillsFromDirInternal(dir, source, true, undefined, undefined, resolveSourceInfo);
 }
 
 function loadSkillsFromDirInternal(
@@ -210,6 +213,7 @@ function loadSkillsFromDirInternal(
 	includeRootFiles: boolean,
 	ignoreMatcher?: IgnoreMatcher,
 	rootDir?: string,
+	resolveSourceInfo?: SkillSourceInfoResolver,
 ): LoadSkillsResult {
 	const skills: Skill[] = [];
 	const diagnostics: ResourceDiagnostic[] = [];
@@ -246,7 +250,7 @@ function loadSkillsFromDirInternal(
 				continue;
 			}
 
-			const result = loadSkillFromFile(fullPath, source);
+			const result = loadSkillFromFile(fullPath, source, resolveSourceInfo?.(fullPath));
 			if (result.skill) {
 				skills.push(result.skill);
 			}
@@ -287,7 +291,7 @@ function loadSkillsFromDirInternal(
 			}
 
 			if (isDirectory) {
-				const subResult = loadSkillsFromDirInternal(fullPath, source, false, ig, root);
+				const subResult = loadSkillsFromDirInternal(fullPath, source, false, ig, root, resolveSourceInfo);
 				skills.push(...subResult.skills);
 				diagnostics.push(...subResult.diagnostics);
 				continue;
@@ -297,7 +301,7 @@ function loadSkillsFromDirInternal(
 				continue;
 			}
 
-			const result = loadSkillFromFile(fullPath, source);
+			const result = loadSkillFromFile(fullPath, source, resolveSourceInfo?.(fullPath));
 			if (result.skill) {
 				skills.push(result.skill);
 			}
@@ -311,6 +315,7 @@ function loadSkillsFromDirInternal(
 function loadSkillFromFile(
 	filePath: string,
 	source: string,
+	sourceInfoOverride?: SourceInfo,
 ): { skill: Skill | null; diagnostics: ResourceDiagnostic[] } {
 	const diagnostics: ResourceDiagnostic[] = [];
 
@@ -346,7 +351,7 @@ function loadSkillFromFile(
 				description: frontmatter.description,
 				filePath,
 				baseDir: skillDir,
-				sourceInfo: createSkillSourceInfo(filePath, skillDir, source),
+				sourceInfo: sourceInfoOverride ?? createSkillSourceInfo(filePath, skillDir, source),
 				disableModelInvocation: frontmatter["disable-model-invocation"] === true,
 				contentHash: hashSkillContent(rawContent),
 			},
@@ -416,6 +421,105 @@ export interface LoadSkillsOptions {
 	skillPaths: string[];
 	/** Include default skills directories. */
 	includeDefaults: boolean;
+	resolveSourceInfo?: SkillSourceInfoResolver;
+}
+
+interface SkillCandidate {
+	skill: Skill;
+	realPath: string;
+	order: number;
+}
+
+function skillPrecedenceRank(skill: Skill): number {
+	const { origin, scope, source } = skill.sourceInfo;
+	if (origin === "package") {
+		if (scope === "project") {
+			return 4;
+		}
+		if (scope === "user") {
+			return 5;
+		}
+		return 6;
+	}
+	if (scope === "project") {
+		return source === "auto" ? 1 : 0;
+	}
+	if (scope === "user") {
+		return source === "auto" ? 3 : 2;
+	}
+	return 7;
+}
+
+function compareStrings(a: string, b: string): number {
+	if (a < b) return -1;
+	if (a > b) return 1;
+	return 0;
+}
+
+function compareSkillCandidates(a: SkillCandidate, b: SkillCandidate): number {
+	const rankDelta = skillPrecedenceRank(a.skill) - skillPrecedenceRank(b.skill);
+	if (rankDelta !== 0) {
+		return rankDelta;
+	}
+
+	const pathDelta = compareStrings(a.realPath, b.realPath);
+	if (pathDelta !== 0) {
+		return pathDelta;
+	}
+
+	return a.order - b.order;
+}
+
+function getSkillCollisionReason(
+	winner: SkillCandidate,
+	loser: SkillCandidate,
+): {
+	reason: string;
+	action: string;
+} {
+	if (skillPrecedenceRank(winner.skill) !== skillPrecedenceRank(loser.skill)) {
+		return {
+			reason: "higher-precedence skill source",
+			action: "Rename one skill or remove the lower-precedence duplicate.",
+		};
+	}
+
+	if (winner.realPath !== loser.realPath) {
+		return {
+			reason: "same-precedence canonical path ordering",
+			action: "Rename one skill or move one duplicate so the intended canonical path sorts first.",
+		};
+	}
+
+	return {
+		reason: "earlier configured skill path",
+		action: "Rename one skill or reorder configured skill paths so the intended skill is loaded first.",
+	};
+}
+
+function createSkillCollisionDiagnostic(winner: SkillCandidate, loser: SkillCandidate): ResourceDiagnostic {
+	const { reason, action } = getSkillCollisionReason(winner, loser);
+	const winnerSkill = winner.skill;
+	const loserSkill = loser.skill;
+	return {
+		type: "collision",
+		message: `name "${loserSkill.name}" collision: kept ${winnerSkill.filePath}; skipped ${loserSkill.filePath}; reason: ${reason}; action: ${action}`,
+		path: loserSkill.filePath,
+		collision: {
+			resourceType: "skill",
+			name: loserSkill.name,
+			winnerPath: winnerSkill.filePath,
+			loserPath: loserSkill.filePath,
+			winnerSource: winnerSkill.sourceInfo.source,
+			loserSource: loserSkill.sourceInfo.source,
+			winnerScope: winnerSkill.sourceInfo.scope,
+			loserScope: loserSkill.sourceInfo.scope,
+			winnerOrigin: winnerSkill.sourceInfo.origin,
+			loserOrigin: loserSkill.sourceInfo.origin,
+			resolutionReason: reason,
+			resolutionAction: action,
+		},
+	};
 }
 
 /**
@@ -423,16 +527,17 @@ export interface LoadSkillsOptions {
  * Returns skills and any validation diagnostics.
  */
 export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
-	const { agentDir, skillPaths, includeDefaults } = options;
+	const { agentDir, skillPaths, includeDefaults, resolveSourceInfo } = options;
 
 	// Resolve agentDir - if not provided, use default from config
 	const resolvedCwd = resolvePath(options.cwd);
 	const resolvedAgentDir = resolvePath(agentDir ?? getAgentDir());
 
-	const skillMap = new Map<string, Skill>();
+	const skillCandidates = new Map<string, SkillCandidate[]>();
 	const realPathSet = new Set<string>();
 	const allDiagnostics: ResourceDiagnostic[] = [];
 	const collisionDiagnostics: ResourceDiagnostic[] = [];
+	let candidateOrder = 0;
 
 	function addSkills(result: LoadSkillsResult) {
 		allDiagnostics.push(...result.diagnostics);
@@ -445,39 +550,35 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 				continue;
 			}
 
-			const existing = skillMap.get(skill.name);
-			if (existing) {
-				realPathSet.add(realPath);
-				if (existing.contentHash && existing.contentHash === skill.contentHash) {
-					continue;
-				}
-				collisionDiagnostics.push({
-					type: "collision",
-					message: `name "${skill.name}" collision: kept ${existing.filePath}; skipped ${skill.filePath}`,
-					path: skill.filePath,
-					collision: {
-						resourceType: "skill",
-						name: skill.name,
-						winnerPath: existing.filePath,
-						loserPath: skill.filePath,
-						winnerSource: existing.sourceInfo.source,
-						loserSource: skill.sourceInfo.source,
-						winnerScope: existing.sourceInfo.scope,
-						loserScope: skill.sourceInfo.scope,
-						winnerOrigin: existing.sourceInfo.origin,
-						loserOrigin: skill.sourceInfo.origin,
-					},
-				});
-			} else {
-				skillMap.set(skill.name, skill);
-				realPathSet.add(realPath);
-			}
+			realPathSet.add(realPath);
+			const candidates = skillCandidates.get(skill.name) ?? [];
+			candidates.push({ skill, realPath, order: candidateOrder });
+			candidateOrder += 1;
+			skillCandidates.set(skill.name, candidates);
 		}
 	}
 
 	if (includeDefaults) {
-		addSkills(loadSkillsFromDirInternal(resolve(resolvedCwd, CONFIG_DIR_NAME, "skills"), "project", true));
-		addSkills(loadSkillsFromDirInternal(join(resolvedAgentDir, "skills"), "user", true));
+		addSkills(
+			loadSkillsFromDirInternal(
+				resolve(resolvedCwd, CONFIG_DIR_NAME, "skills"),
+				"project",
+				true,
+				undefined,
+				undefined,
+				resolveSourceInfo,
+			),
+		);
+		addSkills(
+			loadSkillsFromDirInternal(
+				join(resolvedAgentDir, "skills"),
+				"user",
+				true,
+				undefined,
+				undefined,
+				resolveSourceInfo,
+			),
+		);
 	}
 
 	const userSkillsDir = join(resolvedAgentDir, "skills");
@@ -511,9 +612,9 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 			const stats = statSync(resolvedPath);
 			const source = getSource(resolvedPath);
 			if (stats.isDirectory()) {
-				addSkills(loadSkillsFromDirInternal(resolvedPath, source, true));
+				addSkills(loadSkillsFromDirInternal(resolvedPath, source, true, undefined, undefined, resolveSourceInfo));
 			} else if (stats.isFile() && resolvedPath.endsWith(".md")) {
-				const result = loadSkillFromFile(resolvedPath, source);
+				const result = loadSkillFromFile(resolvedPath, source, resolveSourceInfo?.(resolvedPath));
 				if (result.skill) {
 					addSkills({ skills: [result.skill], diagnostics: result.diagnostics });
 				} else {
@@ -528,8 +629,24 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 		}
 	}
 
+	const skills: Skill[] = [];
+	for (const candidates of skillCandidates.values()) {
+		const sortedCandidates = [...candidates].sort(compareSkillCandidates);
+		const winner = sortedCandidates[0];
+		if (!winner) {
+			continue;
+		}
+		skills.push(winner.skill);
+		for (const loser of sortedCandidates.slice(1)) {
+			if (winner.skill.contentHash && winner.skill.contentHash === loser.skill.contentHash) {
+				continue;
+			}
+			collisionDiagnostics.push(createSkillCollisionDiagnostic(winner, loser));
+		}
+	}
+
 	return {
-		skills: Array.from(skillMap.values()),
+		skills,
 		diagnostics: [...allDiagnostics, ...collisionDiagnostics],
 	};
 }

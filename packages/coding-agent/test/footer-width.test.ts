@@ -2,6 +2,7 @@ import { visibleWidth } from "omk-tui";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
+import type { PiPackageIntakeSummary } from "../src/core/pi-package-intake.ts";
 import { FooterComponent, formatCwdForFooter } from "../src/modes/interactive/components/footer.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 
@@ -60,12 +61,30 @@ function createSession(options: {
 }
 
 function createFooterData(providerCount: number): ReadonlyFooterDataProvider {
+	const packageIntakeSummary: PiPackageIntakeSummary = {
+		total: 6,
+		acceptedNative: 2,
+		acceptedReference: 1,
+		acceptedMeasurement: 1,
+		deferred: 2,
+		reject: 0,
+		hardForkBlocked: 0,
+		topLanes: [
+			{ lane: "browser", label: "browser", total: 1, accepted: 1, deferred: 0, reject: 0, hardForkBlocked: 0 },
+			{ lane: "footer", label: "footer", total: 1, accepted: 1, deferred: 0, reject: 0, hardForkBlocked: 0 },
+			{ lane: "lens", label: "lens", total: 1, accepted: 1, deferred: 0, reject: 0, hardForkBlocked: 0 },
+			{ lane: "mcp", label: "MCP", total: 1, accepted: 1, deferred: 0, reject: 0, hardForkBlocked: 0 },
+			{ lane: "subagent", label: "subagent", total: 1, accepted: 0, deferred: 1, reject: 0, hardForkBlocked: 0 },
+			{ lane: "todo", label: "todo", total: 1, accepted: 0, deferred: 1, reject: 0, hardForkBlocked: 0 },
+		],
+	};
 	const provider = {
 		getGitBranch: () => "main",
 		getExtensionStatuses: () => new Map<string, string>(),
 		getAvailableProviderCount: () => providerCount,
 		getCpuPercent: () => null,
 		getMemoryRssBytes: () => null,
+		getPackageIntakeSummary: () => packageIntakeSummary,
 		onBranchChange: (callback: () => void) => {
 			void callback;
 			return () => {};
@@ -124,5 +143,14 @@ describe("FooterComponent width handling", () => {
 		for (const line of lines) {
 			expect(visibleWidth(line)).toBeLessThanOrEqual(width);
 		}
+	});
+
+	it("shows package intake status in the stats line", () => {
+		const session = createSession({ sessionName: "" });
+		const footer = new FooterComponent(session, createFooterData(1));
+
+		const lines = footer.render(120).join("\n");
+
+		expect(lines).toContain("PKG 4/6 R2 B0");
 	});
 });

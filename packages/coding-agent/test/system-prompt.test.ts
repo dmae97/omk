@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buildSystemPrompt } from "../src/core/system-prompt.ts";
+import { type BuildSystemPromptOptions, buildSystemPrompt } from "../src/core/system-prompt.ts";
 
 describe("buildSystemPrompt", () => {
 	describe("empty tools", () => {
@@ -83,6 +83,55 @@ describe("buildSystemPrompt", () => {
 			});
 
 			expect(prompt).not.toContain("dynamic_tool");
+		});
+	});
+
+	describe("active skills", () => {
+		test("renders bang-invoked active skills as a turn-scoped prompt section", () => {
+			const skillPath = "/skills/browser-feedback/SKILL.md";
+			const options: BuildSystemPromptOptions = {
+				selectedTools: ["read"],
+				contextFiles: [],
+				skills: [
+					{
+						name: "browser-feedback",
+						description: "Review browser UI state",
+						filePath: skillPath,
+						baseDir: "/skills/browser-feedback",
+						sourceInfo: {
+							source: "local",
+							scope: "project",
+							origin: "top-level",
+							path: skillPath,
+						},
+						disableModelInvocation: false,
+					},
+				],
+				activeSkillNames: ["browser-feedback"],
+				activeSkillSource: "bang",
+				cwd: process.cwd(),
+			};
+
+			const prompt = buildSystemPrompt(options);
+
+			expect(prompt).toContain('<active_skills source="bang">');
+			expect(prompt).toContain("<name>browser-feedback</name>");
+			expect(prompt).toContain("<description>Review browser UI state</description>");
+			expect(prompt).toContain(`<location>${skillPath}</location>`);
+		});
+
+		test("ignores missing active skill names", () => {
+			const prompt = buildSystemPrompt({
+				selectedTools: ["read"],
+				contextFiles: [],
+				skills: [],
+				activeSkillNames: ["missing"],
+				activeSkillSource: "bang",
+				cwd: process.cwd(),
+			});
+
+			expect(prompt).not.toContain('<active_skills source="bang">');
+			expect(prompt).not.toContain("<name>missing</name>");
 		});
 	});
 

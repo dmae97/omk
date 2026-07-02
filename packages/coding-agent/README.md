@@ -28,7 +28,7 @@
   <img src="https://raw.githubusercontent.com/dmae97/open-multi-agent-kit/v0.90.1/readmeasset/omk_tui.png" alt="OMK//CONTROL terminal dashboard — live DAG lanes, provider routing, MCP health, evidence gates, and telemetry in Night City Ops Console style" width="100%" />
 </p>
 
-`v0.90.1` ships the OMK//CONTROL startup surface as the default operator view. The header reads `omk v0.90.1 · OMK//CONTROL`, using the published `open-multi-agent-kit` package version as the single source of truth.
+The OMK//CONTROL startup surface is the default operator view. The header reads `omk v<package.version> · OMK//CONTROL`, using the published `open-multi-agent-kit` package version as the single source of truth.
 
 The default dark TUI theme uses the `omk-control-grid-dark` Night City palette and keeps the control sidebar focused on route, evidence, loop, MCP, runtime, skills, and context budget state.
 
@@ -38,11 +38,13 @@ This release keeps the OMK hard-fork surface current with the standalone package
 
 | Area | What changed |
 |------|--------------|
-| OMK identity | Standalone `open-multi-agent-kit`, `omk-ai`, `omk-agent-core`, and `omk-tui` packages stay lockstep across release docs, changelogs, and npm publishing. |
-| TUI | OMK//CONTROL shows the package-backed `v0.90.1` startup header and Night City Ops control dashboard. |
-| Autopilot | Browser-use automation is exposed through a local automation profile for repeatable operator workflows. |
-| Context budget | Materialized context-budget v2 cache reuse raises optimizer-cache hit rates while preserving validation and telemetry boundaries. |
-| Release | Local smoke tests, shrinkwrap gates, package lockstep, GitHub release notes, CI/CD, and npm publish checks remain part of the release path. |
+| OMK identity | Active Pi-era user-facing residue was removed from package metadata, runtime defaults, docs, and release surfaces. |
+| TUI | OMK//CONTROL shows the package-backed startup header and Night City Ops control dashboard. |
+| MCP | Tools, resources, prompts, sampling, and auth are represented as deterministic capability/policy inventory. |
+| Hooks | Built-in and project hooks carry fail-closed policy metadata with staged effects and bounded timeouts. |
+| Skills | Skill discovery preserves source, scope, origin, path, and collision provenance without exposing raw contents. |
+| Harness | Context headroom, compaction, token budget, and tool execution evidence paths were hardened and verified. |
+| Release | Local smoke tests, shrinkwrap gates, package lockstep, GitHub release notes, and npm publish checks are part of the release path. |
 
 GitHub-focused release notes live in [RELEASE_NOTES_v0.90.1.md](https://github.com/dmae97/open-multi-agent-kit/blob/v0.90.1/.github/RELEASE_NOTES_v0.90.1.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](https://github.com/dmae97/open-multi-agent-kit/blob/v0.90.1/packages/coding-agent/CHANGELOG.md).
 
@@ -102,18 +104,11 @@ Installer alternative:
 curl -fsSL https://omk.dev/install.sh | sh
 ```
 
-Authenticate with an API key:
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-omk
-```
-
-Or use your existing subscription:
+Authenticate with an API key or an existing subscription:
 
 ```bash
 omk
-/login  # Then select provider
+/login  # Then select provider and sign in with OAuth or save an API key
 ```
 
 Then just talk to omk. By default, omk gives the model four tools: `read`, `write`, `edit`, and `bash`. The model uses these to fulfill your requests. Add capabilities via [skills](#skills), [prompt templates](#prompt-templates), [extensions](#extensions), or [omk packages](#omk-packages).
@@ -162,6 +157,7 @@ For each built-in provider, omk maintains a list of tool-capable models, updated
 - Xiaomi MiMo Token Plan (China)
 - Xiaomi MiMo Token Plan (Amsterdam)
 - Xiaomi MiMo Token Plan (Singapore)
+- Zyloo
 
 See [docs/providers.md](docs/providers.md) for detailed setup instructions.
 
@@ -190,13 +186,13 @@ The editor can be temporarily replaced by other UI, like built-in `/settings` or
 | Path completion | Tab to complete paths |
 | Multi-line | Shift+Enter (or Ctrl+Enter on Windows Terminal) |
 | Images | Ctrl+V to paste (Alt+V on Windows), or drag onto terminal |
-| Bash commands | `!command` runs and sends output to LLM, `!!command` runs without sending |
+| Skills/bash launcher | `!` opens skill autocomplete, `!skill:name prompt` invokes a skill, `! command` runs bash with context, `!! command` runs bash without context |
 
 Standard editing keybindings for delete word, undo, etc. See [docs/keybindings.md](docs/keybindings.md).
 
 ### Commands
 
-Type `/` in the editor to trigger commands. [Extensions](#extensions) can register custom commands, [skills](#skills) are available as `/skill:name`, and [prompt templates](#prompt-templates) expand via `/templatename`.
+Type `/` in the editor to trigger commands. [Extensions](#extensions) can register custom commands, [skills](#skills) are available as `/skill:name`, `!skill:name`, or `!name` for known skills, and [prompt templates](#prompt-templates) expand via `/templatename`.
 
 | Command | Description |
 |---------|-------------|
@@ -370,7 +366,7 @@ Place in `~/.omk/agent/prompts/`, `.omk/prompts/`, or a [omk package](#omk-packa
 
 ### Skills
 
-On-demand capability packages following the [Agent Skills standard](https://agentskills.io). Invoke via `/skill:name` or let the agent load them automatically.
+On-demand capability packages following the [Agent Skills standard](https://agentskills.io). Invoke via `/skill:name`, `!skill:name`, or `!name` when the name is unambiguous, or let the agent load them automatically.
 
 ```markdown
 <!-- ~/.omk/agent/skills/my-skill/SKILL.md -->

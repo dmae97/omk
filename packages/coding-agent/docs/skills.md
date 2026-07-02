@@ -65,21 +65,25 @@ For project-level Claude Code skills, add to `.omk/settings.json`:
 
 1. At startup, omk scans skill locations and extracts names and descriptions
 2. The system prompt includes available skills in XML format per the [specification](https://agentskills.io/integrate-skills)
-3. When a task matches, the agent uses `read` to load the full SKILL.md (models don't always do this; use prompting or `/skill:name` to force it)
+3. When a task matches, the agent uses `read` to load the full SKILL.md (models don't always do this; use prompting, `/skill:name`, or `!skill:name` to force it)
 4. The agent follows the instructions, using relative paths to reference scripts and assets
 
 This is progressive disclosure: only descriptions are always in context, full instructions load on-demand.
 
 ## Skill Commands
 
-Skills register as `/skill:name` commands:
+Skills register as `/skill:name` commands and interactive `!` launcher entries:
 
 ```bash
 /skill:brave-search           # Load and execute the skill
 /skill:pdf-tools extract      # Load skill with arguments
+!skill:brave-search           # Load and execute from the bang launcher
+!brave-search query           # Shorthand when brave-search is a known skill
 ```
 
-Arguments after the command are appended to the skill content as `User: <args>`.
+Arguments after the command are appended after the skill content for the current turn.
+
+In interactive mode, type `!` to open skill autocomplete. Selecting a skill inserts the explicit `!skill:name ` form. Bash remains available as `! command`, and `!! command` runs bash without sending output to the model. If `!token` is not a known skill, it falls back to bash; use `! command` when a command name might collide with a skill.
 
 Toggle skill commands via `/settings` in interactive mode or in `settings.json`:
 
@@ -146,7 +150,7 @@ Per the [Agent Skills specification](https://agentskills.io/specification#frontm
 | `compatibility` | No | Max 500 chars. Environment requirements. |
 | `metadata` | No | Arbitrary key-value mapping. |
 | `allowed-tools` | No | Space-delimited list of pre-approved tools (experimental). |
-| `disable-model-invocation` | No | When `true`, skill is hidden from system prompt. Users must use `/skill:name`. |
+| `disable-model-invocation` | No | When `true`, skill is hidden from system prompt. Users must use `/skill:name` or `!skill:name`. |
 
 ### Name Rules
 

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	checkForNewOmkVersion,
 	comparePackageVersions,
@@ -9,6 +9,13 @@ import {
 
 const originalSkipVersionCheck = process.env.OMK_SKIP_VERSION_CHECK;
 const originalOffline = process.env.OMK_OFFLINE;
+
+beforeEach(() => {
+	// The harness environment may export these (e.g. OMK_SKIP_VERSION_CHECK=1),
+	// which short-circuits version checks and breaks the positive-path tests.
+	delete process.env.OMK_SKIP_VERSION_CHECK;
+	delete process.env.OMK_OFFLINE;
+});
 
 afterEach(() => {
 	vi.unstubAllGlobals();

@@ -2,6 +2,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { type Component, truncateToWidth, visibleWidth } from "omk-tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
+import type { PiPackageIntakeSummary } from "../../../core/pi-package-intake.ts";
 import { theme } from "../theme/theme.ts";
 
 /**
@@ -35,6 +36,12 @@ function formatBytes(bytes: number): string {
 	if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}K`;
 	if (bytes < 1024 * 1024 * 1024) return `${Math.round(bytes / (1024 * 1024))}M`;
 	return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}G`;
+}
+
+function formatPackageIntake(summary: PiPackageIntakeSummary): string {
+	const ready = summary.acceptedNative + summary.acceptedReference + summary.acceptedMeasurement;
+	const review = summary.deferred + summary.reject;
+	return `PKG ${ready}/${summary.total} R${review} B${summary.hardForkBlocked}`;
 }
 
 export function formatCwdForFooter(cwd: string, home: string | undefined): string {
@@ -182,6 +189,7 @@ export class FooterComponent implements Component {
 		if (metricsSegment) {
 			statsParts.push(metricsSegment);
 		}
+		statsParts.push(formatPackageIntake(this.footerData.getPackageIntakeSummary()));
 
 		// Colorize context percentage based on usage
 		let contextPercentStr: string;

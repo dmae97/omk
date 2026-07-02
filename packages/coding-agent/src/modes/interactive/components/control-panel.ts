@@ -1,8 +1,19 @@
 import type { Component } from "omk-tui";
 import { theme } from "../theme/theme.ts";
-import { MIN_BANNER_WIDTH } from "./control-panel-gradient.ts";
-import { IDLE_MS, INTRO_MS, shouldAnimate } from "./control-panel-gradient-motion.ts";
-import { type ControlPanelContent, renderControlPanelLayout } from "./control-panel-layout.ts";
+import { composeStaticBanner, MIN_BANNER_WIDTH } from "./control-panel-gradient.ts";
+import {
+	composeIdleBanner,
+	composeIntroBanner,
+	IDLE_MS,
+	INTRO_MS,
+	shouldAnimate,
+} from "./control-panel-gradient-motion.ts";
+import {
+	CONTROL_PANEL_ASCII_ART,
+	type ControlPanelContent,
+	renderControlPanelLayout,
+	renderControlPanelRightPane,
+} from "./control-panel-layout.ts";
 
 export type { ControlPanelContent, ControlPanelStatusSnapshot } from "./control-panel-layout.ts";
 
@@ -63,7 +74,20 @@ export class ControlPanelComponent implements Component {
 
 	render(width: number): string[] {
 		this.lastRenderWidth = width;
-		return renderControlPanelLayout(this.content, this.expanded, width);
+		const lines = renderControlPanelLayout(
+			this.content,
+			this.expanded,
+			width,
+			this.currentBannerFrame(),
+			this.currentSparkleMs(),
+		);
+		return this.shouldRenderPlainBanner() ? lines.map(stripAnsi) : lines;
+	}
+
+	private currentSparkleMs(): number {
+		const opts = this.motionOptions;
+		if (!opts || this.motionPhase === "static") return 0;
+		return Math.max(0, (opts.now ?? Date.now)() - this.motionStartMs);
 	}
 
 	private currentMotionWidth(): number {
@@ -82,6 +106,28 @@ export class ControlPanelComponent implements Component {
 			this.motionTimerId.unref();
 		}
 		opts.requestRender();
+	}
+
+	private currentBannerFrame(): string[] | undefined {
+		const opts = this.motionOptions;
+		if (!opts) return undefined;
+		const mode = theme.getColorMode();
+		const noColor = this.shouldRenderPlainBanner();
+		if (this.motionPhase === "static") {
+			return this.expanded ? composeStaticBanner(CONTROL_PANEL_ASCII_ART, mode, noColor) : undefined;
+		}
+		const elapsedMs = Math.max(0, (opts.now ?? Date.now)() - this.motionStartMs);
+		if (this.motionPhase === "idle") {
+			return composeIdleBanner(CONTROL_PANEL_ASCII_ART, mode, noColor, elapsedMs);
+		}
+		return composeIntroBanner(CONTROL_PANEL_ASCII_ART, mode, noColor, elapsedMs);
+	}
+
+	private shouldRenderPlainBanner(): boolean {
+		const opts = this.motionOptions;
+		if (process.env.NO_COLOR !== undefined) return true;
+		if (!opts) return false;
+		return !opts.isTTY() && process.env.FORCE_COLOR === undefined;
 	}
 
 	private tick(): void {
@@ -121,14 +167,34 @@ export class ControlPanelComponent implements Component {
 		return shouldAnimate({
 			phase,
 			isTTY: opts.isTTY(),
-			noColor: process.env.NO_COLOR !== undefined,
+			noColor: this.shouldRenderPlainBanner(),
 			colorMode: theme.getColorMode(),
 			expanded: this.expanded,
 			width: this.currentMotionWidth(),
-			reducedMotion: opts.isReducedMotion(),
+			reducedMotion: opts.isReducedMotion() || process.env.OMK_REDUCED_MOTION !== undefined,
 			busy: false,
 			headerVisibleHint: opts.isHeaderVisibleHint(),
 			idleDriftEnabled: opts.isIdleDriftEnabled(),
 		});
 	}
+}
+
+export class ControlPanelRightPaneComponent implements Component {
+	private readonly content: ControlPanelContent;
+
+	constructor(content: ControlPanelContent) {
+		this.content = content;
+	}
+
+	invalidate(): void {}
+
+	render(width: number): string[] {
+		return renderControlPanelRightPane(this.content, width);
+	}
+}
+
+const ANSI_ESCAPE_RE = /\x1b\[[0-?]*[ -/]*[@-~]/g;
+
+function stripAnsi(value: string): string {
+	return value.replace(ANSI_ESCAPE_RE, "");
 }

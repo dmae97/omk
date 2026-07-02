@@ -1,7 +1,6 @@
 // Core session management
 
 export { type Args, parseArgs } from "./cli/args.ts";
-
 // Config paths
 export { getAgentDir, VERSION } from "./config.ts";
 export {
@@ -209,6 +208,27 @@ export type {
 export { DefaultPackageManager } from "./core/package-manager.ts";
 export type { ResourceCollision, ResourceDiagnostic, ResourceLoader } from "./core/resource-loader.ts";
 export { DefaultResourceLoader, loadProjectContextFiles } from "./core/resource-loader.ts";
+export {
+	extractReverseSkillFactsFromMarkdown,
+	formatReverseSkillFromSource,
+	formatReverseSkillMarkdown,
+	formatReverseSkillRouteDecision,
+	getReverseSkillToolAliases,
+	normalizeReverseSkillName,
+	normalizeReverseSkillText,
+	planReverseSkillToolChecks,
+	REVERSE_SKILL_ROUTES,
+	type ReverseSkillPlatform,
+	type ReverseSkillRisk,
+	type ReverseSkillRoute,
+	type ReverseSkillRouteDecision,
+	type ReverseSkillRouteInput,
+	type ReverseSkillRouteScore,
+	type ReverseSkillSourceFacts,
+	type ReverseSkillSourceInput,
+	type ReverseSkillSpecInput,
+	routeReverseSkill,
+} from "./core/reverse-skill.ts";
 // SDK for programmatic usage
 export {
 	AgentSessionRuntime,
