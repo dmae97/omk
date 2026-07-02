@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added the canonical reverse-skill workflow-routing harness module (`harness/reverse-skill.ts`), exported from the package root and re-exported by the coding agent.
+
 ## [0.90.1] - 2026-06-28
 
 ### Changed

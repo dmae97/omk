@@ -147,7 +147,7 @@ function asList(value: unknown): unknown[] {
 function hasSubstance(item: unknown): boolean {
 	if (typeof item === "string") return item.trim().length > 0;
 	if (isRecord(item)) {
-		const size = item["size"] ?? item["byteLength"] ?? item["length"];
+		const size = item.size ?? item.byteLength ?? item.length;
 		if (typeof size === "number") return size > 0;
 		const text = readStringField(item, ["content", "text", "body"]);
 		if (text !== undefined) return text.trim().length > 0;
@@ -165,7 +165,7 @@ function countErrorSpans(traces: unknown[]): number {
 			count += 1;
 			continue;
 		}
-		if (span["error"] === true || span["isError"] === true) count += 1;
+		if (span.error === true || span.isError === true) count += 1;
 	}
 	return count;
 }
