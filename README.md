@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm" src="https://img.shields.io/npm/v/open-multi-agent-kit?style=flat-square" /></a>
-  <a href="https://github.com/dmae97/open-multi-agent-kit/releases/tag/v0.90.1"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.1-00d7ff?style=flat-square" /></a>
+  <a href="https://github.com/dmae97/open-multi-agent-kit/releases/tag/v0.90.2"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.2-00d7ff?style=flat-square" /></a>
 </p>
 
 > New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -45,21 +45,20 @@ The OMK//CONTROL startup surface is the default operator view. The header reads 
 
 The default dark TUI theme uses the `omk-control-grid-dark` Night City palette and keeps the control sidebar focused on route, evidence, loop, MCP, runtime, skills, and context budget state.
 
-## Release v0.90.1
+## Release v0.90.2
 
-This release keeps the OMK hard-fork surface current with the standalone package line, autopilot automation, and high-reuse context cache work.
+This release lands the v0.90.2 feature set: a wider model and provider surface, the `!` skill launcher, reverse-skill workflow routing, computer-use MCP preset groundwork, and stronger release-consistency gates.
 
 | Area | What changed |
 |------|--------------|
-| OMK identity | Active Pi-era user-facing residue was removed from package metadata, runtime defaults, docs, and release surfaces. |
-| TUI | OMK//CONTROL shows the package-backed startup header and Night City Ops control dashboard. |
-| MCP | Tools, resources, prompts, sampling, and auth are represented as deterministic capability/policy inventory. |
-| Hooks | Built-in and project hooks carry fail-closed policy metadata with staged effects and bounded timeouts. |
-| Skills | Skill discovery preserves source, scope, origin, path, and collision provenance without exposing raw contents. |
-| Harness | Context headroom, compaction, token budget, and tool execution evidence paths were hardened and verified. |
-| Release | Local smoke tests, shrinkwrap gates, package lockstep, GitHub release notes, and npm publish checks are part of the release path. |
+| Models | The `max` thinking level, Claude Sonnet 5, and the Zyloo OpenAI-compatible provider join the built-in catalog. |
+| Skills | The `!` skill launcher (`!skill:name`, `!name`) gives turn-scoped skill invocation with start-of-message autocomplete, preserving `!`/`!!` bash shortcuts. |
+| Reverse-skill | Canonical reverse-engineering workflow routing ships in `omk-agent-core` and is re-exported with a coding-agent project extension. |
+| MCP | Computer-use MCP preset catalogs (Playwright MCP default, browser-use advanced) land with public preset risk/auth metadata as groundwork. |
+| Startup | The legacy `hooks/` deprecation warning no longer blocks interactive startup; project `.omk/hooks/` auto-archives to `hooks.migrated/`. |
+| Release | Release-consistency checks flag tag-lineage drift and README/`RELEASE_NOTES` release-surface drift, erroring during `--release`. |
 
-GitHub-focused release notes live in [.github/RELEASE_NOTES_v0.90.1.md](.github/RELEASE_NOTES_v0.90.1.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](packages/coding-agent/CHANGELOG.md).
+GitHub-focused release notes live in [.github/RELEASE_NOTES_v0.90.2.md](.github/RELEASE_NOTES_v0.90.2.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](packages/coding-agent/CHANGELOG.md).
 
 ## Share your OSS coding agent sessions
 
