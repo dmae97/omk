@@ -47,8 +47,6 @@ export interface Args {
 	listModels?: string | true;
 	offline?: boolean;
 	verbose?: boolean;
-	jailbreakMode?: string;
-	jailbreakTarget?: string;
 	messages: string[];
 	fileArgs: string[];
 	/** Unknown flags (potentially extension flags) - map of flag name to value */
@@ -181,10 +179,6 @@ export function parseArgs(args: string[]): Args {
 			result.verbose = true;
 		} else if (arg === "--offline") {
 			result.offline = true;
-		} else if (arg === "--jailbreak-mode" && i + 1 < args.length) {
-			result.jailbreakMode = args[++i];
-		} else if (arg === "--jailbreak-target" && i + 1 < args.length) {
-			result.jailbreakTarget = args[++i];
 		} else if (arg.startsWith("@")) {
 			result.fileArgs.push(arg.slice(1)); // Remove @ prefix
 		} else if (arg.startsWith("--")) {

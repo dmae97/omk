@@ -248,35 +248,40 @@ test("96-column expanded fallback keeps coherent border framing on every row", (
 			const hasPairedContentEdges = (first === "|" && last === "|") || (first === "│" && last === "│");
 			return width !== 96 || (!hasPairedDivider && !hasPairedContentEdges);
 		});
+	// Live render coherence is the always-on assertion for current code.
+	expect(
+		liveMalformedRows,
+		"96-column fallback framing must be coherent for ASCII or Unicode boxes in live render",
+	).toEqual([]);
+
+	// The recorded visual-QA artifact lives under .omo/ (gitignored, local-only) and is kept
+	// for comparison, not trusted as current render truth. Skip the comparison when it is
+	// absent (e.g. CI checkouts) instead of failing the run.
 	const visualArtifactPath = fileURLToPath(
 		new URL(
 			"../../../.omo/visual-qa/20260629-advanced-omk-tui-control-panel/tui-check-render-96.json",
 			import.meta.url,
 		),
 	);
-	expect(existsSync(visualArtifactPath), `96-column visual QA artifact missing: ${visualArtifactPath}`).toBe(true);
-	const visualArtifact = JSON.parse(readFileSync(visualArtifactPath, "utf8")) as VisualQaArtifact;
-	const expectedColumns = visualArtifact.expectedColumns ?? 96;
-	const artifactWrongWidthRows = (visualArtifact.lineWidths ?? [])
-		.map((width, index) => ({ index, width }))
-		.filter(({ width }) => width !== expectedColumns);
-
-	expect(
-		liveMalformedRows,
-		"96-column fallback framing must be coherent for ASCII or Unicode boxes in live render",
-	).toEqual([]);
-	expect(
-		{
+	if (existsSync(visualArtifactPath)) {
+		const visualArtifact = JSON.parse(readFileSync(visualArtifactPath, "utf8")) as VisualQaArtifact;
+		const expectedColumns = visualArtifact.expectedColumns ?? 96;
+		const artifactWrongWidthRows = (visualArtifact.lineWidths ?? [])
+			.map((width, index) => ({ index, width }))
+			.filter(({ width }) => width !== expectedColumns);
+		expect(
+			{
+				borderMisaligned: visualArtifact.borderMisaligned === true,
+				wrongWidthRows: artifactWrongWidthRows,
+				summary: visualArtifact.summary,
+			},
+			"96-column visual QA artifact is recorded for comparison but is not trusted as current render truth",
+		).toEqual({
 			borderMisaligned: visualArtifact.borderMisaligned === true,
 			wrongWidthRows: artifactWrongWidthRows,
 			summary: visualArtifact.summary,
-		},
-		"96-column visual QA artifact is recorded for comparison but is not trusted as current render truth",
-	).toEqual({
-		borderMisaligned: visualArtifact.borderMisaligned === true,
-		wrongWidthRows: artifactWrongWidthRows,
-		summary: visualArtifact.summary,
-	});
+		});
+	}
 });
 
 test("empty status snapshot rejects unconditional healthy control claims", () => {

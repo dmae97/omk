@@ -6,14 +6,10 @@
 // This file is preserved for legacy extension/API consumers and regression tests.
 //
 // ACTUAL HEADROOM / TOKEN BUDGET SYSTEM:
-//   - types/jailbreak.ts → defines HeadroomSnapshot, HeadroomPrediction (different shape)
 //   - context-budget-compressors.ts → context budget compression with adapters
 //   - context-budget-token-counter.ts → token counting for budget decisions
 //   - compaction/compaction.ts getCompactionHeadroomThreshold() → headroom threshold
 //   - compaction/compaction.ts shouldCompact() → triggers compaction when headroom low
-//
-// NOTE: types/jailbreak.ts defines similar types (HeadroomSnapshot, HeadroomPrediction)
-// but with different field structures. Both are distinct from this file's types.
 //
 // Keep this utility deterministic and aligned with the active context budget policy.
 
