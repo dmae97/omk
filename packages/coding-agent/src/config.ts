@@ -384,14 +384,36 @@ export function getPackageDir(): string {
  * - For Node.js (dist/): dist/modes/interactive/theme/
  * - For tsx (src/): src/modes/interactive/theme/
  */
-export function getThemesDir(): string {
-	if (isBunBinary) {
-		return join(getPackageDir(), "theme");
+function resolveSourceOrDistAssetDir(packageDir: string, sourceSegments: readonly string[]): string {
+	const sourceAssetDir = join(packageDir, "src", ...sourceSegments);
+	if (existsSync(sourceAssetDir)) {
+		return sourceAssetDir;
 	}
-	// Theme is in modes/interactive/theme/ relative to src/ or dist/
-	const packageDir = getPackageDir();
-	const srcOrDist = existsSync(join(packageDir, "src")) ? "src" : "dist";
-	return join(packageDir, srcOrDist, "modes", "interactive", "theme");
+	return join(packageDir, "dist", ...sourceSegments);
+}
+
+export function resolvePackageAssetDir(
+	packageDir: string,
+	binarySubdir: string,
+	sourceSegments: readonly string[],
+	options: { preferBinaryLayout?: boolean } = {},
+): string {
+	const sourceAssetDir = resolveSourceOrDistAssetDir(packageDir, sourceSegments);
+	if (!options.preferBinaryLayout) {
+		return sourceAssetDir;
+	}
+
+	const binaryAssetDir = join(packageDir, binarySubdir);
+	if (existsSync(binaryAssetDir) || !existsSync(sourceAssetDir)) {
+		return binaryAssetDir;
+	}
+	return sourceAssetDir;
+}
+
+export function getThemesDir(): string {
+	return resolvePackageAssetDir(getPackageDir(), "theme", ["modes", "interactive", "theme"], {
+		preferBinaryLayout: isBunBinary,
+	});
 }
 
 /**
@@ -401,12 +423,9 @@ export function getThemesDir(): string {
  * - For tsx (src/): src/core/export-html/
  */
 export function getExportTemplateDir(): string {
-	if (isBunBinary) {
-		return join(getPackageDir(), "export-html");
-	}
-	const packageDir = getPackageDir();
-	const srcOrDist = existsSync(join(packageDir, "src")) ? "src" : "dist";
-	return join(packageDir, srcOrDist, "core", "export-html");
+	return resolvePackageAssetDir(getPackageDir(), "export-html", ["core", "export-html"], {
+		preferBinaryLayout: isBunBinary,
+	});
 }
 
 /** Get path to package.json */
@@ -441,12 +460,9 @@ export function getChangelogPath(): string {
  * - For tsx (src/): src/modes/interactive/assets/
  */
 export function getInteractiveAssetsDir(): string {
-	if (isBunBinary) {
-		return join(getPackageDir(), "assets");
-	}
-	const packageDir = getPackageDir();
-	const srcOrDist = existsSync(join(packageDir, "src")) ? "src" : "dist";
-	return join(packageDir, srcOrDist, "modes", "interactive", "assets");
+	return resolvePackageAssetDir(getPackageDir(), "assets", ["modes", "interactive", "assets"], {
+		preferBinaryLayout: isBunBinary,
+	});
 }
 
 /** Get path to a bundled interactive asset */

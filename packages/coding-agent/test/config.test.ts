@@ -7,6 +7,7 @@ import {
 	getSelfUpdateCommand,
 	getSelfUpdateUnavailableInstruction,
 	getUpdateInstruction,
+	resolvePackageAssetDir,
 } from "../src/config.ts";
 
 const execPathDescriptor = Object.getOwnPropertyDescriptor(process, "execPath");
@@ -144,6 +145,31 @@ function createFakeBunScript(bunBin: string): string {
 	const escapedBunBin = bunBin.replaceAll("'", "'\\''");
 	return `#!/bin/sh\nif [ "$1" = "pm" ] && [ "$2" = "bin" ] && [ "$3" = "-g" ]; then\n\tprintf '%s\\n' '${escapedBunBin}'\n\texit 0\nfi\nexit 1\n`;
 }
+
+describe("resolvePackageAssetDir", () => {
+	test("prefers binary asset directories when they exist", () => {
+		const root = mkdtempSync(join(tmpdir(), "omk-assets-"));
+		tempDir = root;
+		const binaryThemeDir = join(root, "theme");
+		mkdirSync(binaryThemeDir, { recursive: true });
+		mkdirSync(join(root, "src", "modes", "interactive", "theme"), { recursive: true });
+
+		expect(
+			resolvePackageAssetDir(root, "theme", ["modes", "interactive", "theme"], { preferBinaryLayout: true }),
+		).toBe(binaryThemeDir);
+	});
+
+	test("falls back to source asset directories for binary runs with source-package overrides", () => {
+		const root = mkdtempSync(join(tmpdir(), "omk-assets-"));
+		tempDir = root;
+		const sourceThemeDir = join(root, "src", "modes", "interactive", "theme");
+		mkdirSync(sourceThemeDir, { recursive: true });
+
+		expect(
+			resolvePackageAssetDir(root, "theme", ["modes", "interactive", "theme"], { preferBinaryLayout: true }),
+		).toBe(sourceThemeDir);
+	});
+});
 
 describe("detectInstallMethod", () => {
 	test("detects pnpm from Windows .pnpm install paths", () => {
