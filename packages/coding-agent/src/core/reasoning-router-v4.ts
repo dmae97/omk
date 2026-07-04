@@ -38,7 +38,7 @@
  * 3. BOUNDED NEGATION. Every whole-prompt keyword/contextual pattern scan
  *    (the ones v3 ran as a bare `PATTERN.test(prompt)`) is now negation-aware:
  *    a match is only counted if no negation cue (don't/doesn't/isn't/never/
- *    avoid/skip/without/no need to/...) appears within
+ *    avoid/skip/without/instead of/rather than/no need to|for/not a/...) appears within
  *    `weights.negationWindowChars` characters immediately before it, and the
  *    scan never crosses a `.,;!?` clause boundary. Patterns anchored to the
  *    START of the leading clause (hasLeadingDebugAction, hasLeadingReviewIntent,
@@ -140,7 +140,7 @@ const EXPLICIT_RELEASE_RUNBOOK_PATTERN =
 const REVIEW_SCOPE_PATTERN =
 	/\b(pr|pull\s+request|diff|codebase|strategy|plan|spec|schema|design|api|coverage|security\s+posture|licensing|risks?|edge\s+cases|clarity|consistency|dependencies|third-party|ci\s+pipeline|threat\s+model|retry\s+logic|error\s+handling\s+strategy|error\s+messages?)\b/i;
 const REFACTOR_CUE_PATTERN =
-	/\b(refactor|extract|rename|deduplicate|consolidate|modularize|reorganize|simplify|clean\s*up|restructure|split\s+module|move\s+logic|untangle|merge\s+duplicate)\b|리팩토링(?!하지\s*마|하지\s*말)|리팩터링(?!하지\s*마|하지\s*말)|구조\s*개선/i;
+	/\b(refactor(?:ing|ed)?|extract|rename|deduplicate|consolidate|modularize|reorganize|simplify|clean\s*up|restructure|split\s+module|move\s+logic|untangle|merge\s+duplicate)\b|리팩토링(?!하지\s*마|하지\s*말)|리팩터링(?!하지\s*마|하지\s*말)|구조\s*개선/i;
 const ADD_KEYWORD_PATTERN = /\badd\b/i;
 const LOW_RISK_EDIT_ACTION_PATTERN = /^(?:correct|update|swap|remove|reword|tweak|bump|trim)\b/i;
 
@@ -172,9 +172,14 @@ const COMPOUND_SPLIT_PATTERN = /\band\s+then\b|\bthen\b|\band\s+also\b|;/i;
  * before, a tracked keyword — see this lane's evidence file for the audit).
  */
 const NEGATION_CUE_PATTERN =
-	/\b(?:don't|do\s+not|doesn't|does\s+not|didn't|did\s+not|won't|will\s+not|shouldn't|should\s+not|wouldn't|would\s+not|can't|cannot|isn't|is\s+not|aren't|are\s+not|never|avoid|skip|without|no\s+need\s+to)\b/i;
+	/\b(?:don't|do\s+not|doesn't|does\s+not|didn't|did\s+not|won't|will\s+not|shouldn't|should\s+not|wouldn't|would\s+not|can't|cannot|isn't|is\s+not|aren't|are\s+not|never|avoid|skip|without|instead\s+of|rather\s+than|no\s+need\s+(?:to|for)|no\s+longer\s+need(?:\s+(?:to|for))?)\b/i;
+const DIRECT_NOT_OBJECT_CUE_PATTERN_V4 = /\b(?:not|no)\s+(?:a\s+|an\s+|the\s+)?$/i;
+const DOUBLE_NEGATION_RESCUE_PATTERN_V4 =
+	/\b(?:don't|do\s+not|doesn't|does\s+not|didn't|did\s+not|won't|will\s+not|shouldn't|should\s+not|wouldn't|would\s+not|can't|cannot)\s+(?:skip|avoid)\s+(?:the\s+|a\s+|an\s+)?$/i;
+const DELIBERATIVE_QUESTION_RESCUE_PATTERN_V4 =
+	/\b(?:shouldn't|should\s+not|wouldn't|would\s+not|can't|cannot)\s+(?:we|i|you)\s*$/i;
 const POSTPOSITIONED_NEGATION_CUE_PATTERN_V4 =
-	/^\s*(?:[은는이가을를도만]\s*)?(?:하지\s*(?:마(?:라|세요|십시오)?|말(?:고|아|라)?|않(?:아|는|고|을|게)?)|말고|금지)/;
+	/^\s*(?:-\s*free\b|(?:is|are|was|were)?\s*(?:not\s+(?:needed|required|desired)|unnecessary|not\s+necessary)|(?:[은는이가을를도만]\s*)?(?:하지\s*(?:마(?:라|세요|십시오)?|말(?:고|아|라)?|않(?:아|는|고|을|게)?)|말고|금지))/i;
 
 /** A closed set of clause-boundary characters; a negation cue never reaches across one of these into a prior clause. */
 const CLAUSE_BOUNDARY_CHARS = [".", "!", "?", ";", ","] as const;
@@ -213,7 +218,7 @@ function hasLeadingPlanIntent(text: string): boolean {
 }
 
 function hasLeadingRefactorIntent(text: string): boolean {
-	return /^(?:refactor|extract|rename|deduplicate|consolidate|modularize|reorganize|simplify|restructure|untangle)\b|^clean\s+up\b|^split\s+(?:the\s+)?module\b|^move\s+logic\b/i.test(
+	return /^(?:refactor(?:ing|ed)?|extract|rename|deduplicate|consolidate|modularize|reorganize|simplify|restructure|untangle)\b|^clean\s+up\b|^split\s+(?:the\s+)?module\b|^move\s+logic\b/i.test(
 		text,
 	);
 }
@@ -256,7 +261,7 @@ function matchOperationalRunbookV4(prompt: string, windowChars: number): Unnegat
 		if (result.suppressed) sawSuppressed = true;
 	}
 	const explicitRelease = matchUnnegated(prompt, EXPLICIT_RELEASE_RUNBOOK_PATTERN, windowChars).matched;
-	const matched = explicitRelease || distinctSignals >= 3 || (criticalSignals > 0 && distinctSignals >= 2);
+	const matched = explicitRelease || distinctSignals >= 3 || (criticalSignals >= 2 && distinctSignals >= 2);
 	return { matched, suppressed: !matched && sawSuppressed };
 }
 
@@ -270,6 +275,11 @@ function matchOperationalRunbookV4(prompt: string, windowChars: number): Unnegat
  * un-negated. Deterministic, single pass per pattern, no shared regex state (a
  * fresh global-flag RegExp is constructed per call).
  */
+function hasPrePositionedNegationCueV4(scoped: string): boolean {
+	if (!NEGATION_CUE_PATTERN.test(scoped) && !DIRECT_NOT_OBJECT_CUE_PATTERN_V4.test(scoped)) return false;
+	return !DOUBLE_NEGATION_RESCUE_PATTERN_V4.test(scoped) && !DELIBERATIVE_QUESTION_RESCUE_PATTERN_V4.test(scoped);
+}
+
 function hasPostPositionedNegationCueV4(prompt: string, matchEnd: number, windowChars: number): boolean {
 	const scoped = prompt.slice(matchEnd, Math.min(prompt.length, matchEnd + windowChars));
 	return POSTPOSITIONED_NEGATION_CUE_PATTERN_V4.test(scoped);
@@ -292,7 +302,7 @@ function matchUnnegated(prompt: string, pattern: RegExp, windowChars: number): U
 			if (idx > boundary) boundary = idx;
 		}
 		const scoped = boundary >= 0 ? windowText.slice(boundary + 1) : windowText;
-		const preNegated = NEGATION_CUE_PATTERN.test(scoped);
+		const preNegated = hasPrePositionedNegationCueV4(scoped);
 		const postNegated =
 			!preNegated && hasPostPositionedNegationCueV4(prompt, matchStart + match[0].length, windowChars);
 		if (!preNegated && !postNegated) sawUnnegated = true;
@@ -329,13 +339,27 @@ function splitCompoundClauseV4(prompt: string): string | null {
  */
 function secondClauseLeadingIntentV4(clause: string): TaskClassV4 | null {
 	const bounded = clause.slice(0, COMPOUND_SECOND_CLAUSE_SCAN_CHARS_V4);
-	if (hasLeadingDebugAction(bounded)) return "debug";
-	if (hasLeadingReviewIntent(bounded)) return "review";
-	if (hasLeadingPlanIntent(bounded)) return "plan";
-	if (hasLeadingRefactorIntent(bounded)) return "refactor";
-	if (hasLeadingSimpleEditIntent(bounded)) return "simple-edit";
-	if (hasLeadingCodeGenIntent(bounded)) return "code-gen";
+	return leadingIntentFromLeadingClauseV4(bounded);
+}
+
+function leadingIntentFromLeadingClauseV4(leading: string): TaskClassV4 | null {
+	if (hasLeadingDebugAction(leading)) return "debug";
+	if (hasLeadingReviewIntent(leading)) return "review";
+	if (hasLeadingPlanIntent(leading)) return "plan";
+	if (hasLeadingRefactorIntent(leading)) return "refactor";
+	if (hasLeadingSimpleEditIntent(leading)) return "simple-edit";
+	if (hasLeadingCodeGenIntent(leading)) return "code-gen";
 	return null;
+}
+
+function leadingIntentIsPostNegatedV4(leading: string, windowChars: number): boolean {
+	const leadingIntentMatch =
+		/^(?:debug|investigate\s+why|reproduce|trace\b|fix\s+this\s+(?:traceback|panic|error)|review|audit(?!\s+log\b)|critique|inspect|assess|approve|double-?check|lgtm|plan|design|architect|decompose|write\s+(?:a\s+)?(?:technical\s+)?(?:spec|roadmap|strategy|plan)|create\s+(?:a\s+)?(?:technical\s+)?(?:spec|roadmap|strategy|plan)|refactor(?:ing|ed)?|extract|rename|deduplicate|consolidate|modularize|reorganize|simplify|restructure|untangle|clean\s+up|split\s+(?:the\s+)?module|move\s+logic|correct|update|swap|remove|adjust|fix|add|change|trim|reword|tweak|bump|implement|build|generate|scaffold|prototype)\b/i.exec(
+			leading,
+		);
+	return (
+		leadingIntentMatch !== null && hasPostPositionedNegationCueV4(leading, leadingIntentMatch[0].length, windowChars)
+	);
 }
 
 function classifyShortKoreanZeroScoreTaskV4(prompt: string, windowChars: number): TaskClassV4 | null {
@@ -458,7 +482,9 @@ function extractFeaturesV4(prompt: string, weights: RouterWeightsV4, suppressed:
 	if (refactorCueResult.suppressed) suppressed.push("negation:refactor-cue");
 	const refactorCue = refactorCueResult.matched;
 
-	const primaryIntent = leadingIntentV4({ firstClause: leading, localEdit, diagnosticEvidence });
+	const rawPrimaryIntent = leadingIntentV4({ firstClause: leading, localEdit, diagnosticEvidence });
+	const primaryIntent =
+		rawPrimaryIntent !== null && leadingIntentIsPostNegatedV4(leading, window) ? null : rawPrimaryIntent;
 
 	const secondClauseText = splitCompoundClauseV4(prompt);
 	const secondClauseIntent = secondClauseText === null ? null : secondClauseLeadingIntentV4(secondClauseText);
