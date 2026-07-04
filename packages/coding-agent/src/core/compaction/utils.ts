@@ -88,6 +88,12 @@ export function formatFileOperations(readFiles: string[], modifiedFiles: string[
 /** Maximum characters for a tool result in serialized summaries. */
 const TOOL_RESULT_MAX_CHARS = 2000;
 
+/** Maximum characters for a single serialized tool-call argument. */
+const TOOL_CALL_ARGUMENT_MAX_CHARS = 500;
+
+/** Maximum characters for all tool calls in one assistant message. */
+const TOOL_CALLS_MAX_CHARS = 4000;
+
 /**
  * Truncate text to a maximum character length for summarization.
  * Keeps the beginning and appends a truncation marker.
@@ -96,6 +102,15 @@ function truncateForSummary(text: string, maxChars: number): string {
 	if (text.length <= maxChars) return text;
 	const truncatedChars = text.length - maxChars;
 	return `${text.slice(0, maxChars)}\n\n[... ${truncatedChars} more characters truncated]`;
+}
+
+function stringifyToolCallArgument(value: unknown): string {
+	try {
+		const serialized = JSON.stringify(value);
+		return truncateForSummary(serialized ?? String(value), TOOL_CALL_ARGUMENT_MAX_CHARS);
+	} catch {
+		return truncateForSummary(String(value), TOOL_CALL_ARGUMENT_MAX_CHARS);
+	}
 }
 
 /**
@@ -132,7 +147,7 @@ export function serializeConversation(messages: Message[]): string {
 				} else if (block.type === "toolCall") {
 					const args = block.arguments as Record<string, unknown>;
 					const argsStr = Object.entries(args)
-						.map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+						.map(([k, v]) => `${k}=${stringifyToolCallArgument(v)}`)
 						.join(", ");
 					toolCalls.push(`${block.name}(${argsStr})`);
 				}
@@ -145,7 +160,7 @@ export function serializeConversation(messages: Message[]): string {
 				parts.push(`[Assistant]: ${textParts.join("\n")}`);
 			}
 			if (toolCalls.length > 0) {
-				parts.push(`[Assistant tool calls]: ${toolCalls.join("; ")}`);
+				parts.push(`[Assistant tool calls]: ${truncateForSummary(toolCalls.join("; "), TOOL_CALLS_MAX_CHARS)}`);
 			}
 		} else if (msg.role === "toolResult") {
 			const content = msg.content

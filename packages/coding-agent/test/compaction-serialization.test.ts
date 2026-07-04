@@ -44,6 +44,50 @@ describe("serializeConversation", () => {
 		expect(result).not.toContain("truncated");
 	});
 
+	it("should truncate long tool call arguments", () => {
+		const longOldText = "x".repeat(5000);
+		const longNewText = "y".repeat(5000);
+		const messages: Message[] = [
+			{
+				role: "assistant",
+				content: [
+					{
+						type: "toolCall",
+						id: "tc1",
+						name: "edit",
+						arguments: {
+							path: "packages/coding-agent/src/core/agent-session.ts",
+							oldText: longOldText,
+							newText: longNewText,
+						},
+					},
+				],
+				api: "anthropic-messages",
+				provider: "anthropic",
+				model: "test",
+				usage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				stopReason: "toolUse",
+				timestamp: Date.now(),
+			},
+		];
+
+		const result = serializeConversation(messages);
+
+		expect(result).toContain("[Assistant tool calls]: edit(");
+		expect(result).toContain('path="packages/coding-agent/src/core/agent-session.ts"');
+		expect(result).toContain("more characters truncated");
+		expect(result).not.toContain("x".repeat(1000));
+		expect(result).not.toContain("y".repeat(1000));
+		expect(result.length).toBeLessThan(3000);
+	});
+
 	it("should not truncate assistant or user messages", () => {
 		const longText = "y".repeat(5000);
 		const messages: Message[] = [
