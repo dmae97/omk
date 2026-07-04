@@ -50,6 +50,24 @@ export interface ThinkingBudgetsSettings {
 	high?: number;
 }
 
+/**
+ * Opt-in reasoning-router learning bias settings (Goal 010 Lane I). Global
+ * scope only by construction: every `SettingsManager` getter for this field
+ * reads directly from the raw global settings file (`globalSettings`), never
+ * the merged/project-overridable view (`settings`) that most other fields
+ * use -- so a project-scope `.omk/settings.json` value for any key here is
+ * always ignored, never activates or redirects this feature. Default is
+ * fully off; there is no project-scope setter for this field.
+ */
+export interface ReasoningRouterLearningSettings {
+	/** default: false */
+	enabled?: boolean;
+	/** Override path for the compiled bias snapshot the v4 auto-router reads (see reasoning-router-bias.ts for the default). */
+	biasSnapshotPath?: string;
+	/** Override path for the local feedback ledger the v4 auto-router appends to (see router-feedback-collector.ts for the default). */
+	feedbackLedgerPath?: string;
+}
+
 export interface MarkdownSettings {
 	codeBlockIndent?: string; // default: "  "
 }
@@ -106,6 +124,7 @@ export interface Settings {
 	doubleEscapeAction?: "fork" | "tree" | "none"; // Action for double-escape with empty editor (default: "tree")
 	treeFilterMode?: "default" | "no-tools" | "user-only" | "labeled-only" | "all"; // Default filter when opening /tree
 	thinkingBudgets?: ThinkingBudgetsSettings; // Custom token budgets for thinking levels
+	reasoningRouterLearning?: ReasoningRouterLearningSettings; // Opt-in v4 learning bias (default off; global-only, see SettingsManager getters)
 	editorPaddingX?: number; // Horizontal padding for input editor (default: 0)
 	autocompleteMaxVisible?: number; // Max visible items in autocomplete dropdown (default: 5)
 	showHardwareCursor?: boolean; // Show terminal cursor while still positioning it for IME
@@ -936,6 +955,25 @@ export class SettingsManager {
 
 	getThinkingBudgets(): ThinkingBudgetsSettings | undefined {
 		return this.settings.thinkingBudgets;
+	}
+
+	/**
+	 * Reasoning-router learning opt-in (Goal 010 Lane I). Default off. Read
+	 * directly from `globalSettings`, never the merged `settings` view, so a
+	 * project-scope `.omk/settings.json` value can never turn this on.
+	 */
+	getReasoningRouterLearningEnabled(): boolean {
+		return this.globalSettings.reasoningRouterLearning?.enabled === true;
+	}
+
+	/** Global-only override path for the compiled reasoning-router bias snapshot; undefined uses the default. */
+	getReasoningRouterLearningBiasSnapshotPath(): string | undefined {
+		return this.globalSettings.reasoningRouterLearning?.biasSnapshotPath;
+	}
+
+	/** Global-only override path for the reasoning-router feedback ledger; undefined uses the default. */
+	getReasoningRouterLearningFeedbackLedgerPath(): string | undefined {
+		return this.globalSettings.reasoningRouterLearning?.feedbackLedgerPath;
 	}
 
 	getShowImages(): boolean {

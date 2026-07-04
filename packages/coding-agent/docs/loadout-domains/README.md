@@ -21,9 +21,11 @@ OMK routes incoming tasks to a **domain capability profile** ("inherited documen
 
 Thresholds: `STRONG_THRESHOLD = 8`, `WEAK_THRESHOLD = 4`, `AMBIGUITY_MARGIN = 2`.
 
-## Domains (10 + 1 fallback)
+## Domains (12 + 1 fallback)
 
 - [`frontend-ui`](frontend-ui.md) — Frontend & UI
+- [`visual-qa`](visual-qa.md) — Visual QA & Website Cloning
+- [`korean-document`](korean-document.md) — Korean Document (HWP/HWPX)
 - [`backend-api`](backend-api.md) — Backend & API
 - [`data-science`](data-science.md) — Data Science & Analysis
 - [`security-audit`](security-audit.md) — Security Audit
@@ -39,13 +41,13 @@ Thresholds: `STRONG_THRESHOLD = 8`, `WEAK_THRESHOLD = 4`, `AMBIGUITY_MARGIN = 2`
 
 | task | path hints | routed to | confidence | reason |
 |---|---|---|---|---|
-| `build a responsive login form with tailwind` | `src/app/page.tsx` | [`frontend-ui`](frontend-ui.md) | confident | Frontend & UI selected (23) |
-| `scan for xss and sql injection vulnerabilities` | — | [`security-audit`](security-audit.md) | confident | Security Audit selected (25) |
+| `build a responsive login form with tailwind` | `src/app/page.tsx` | [`frontend-ui`](frontend-ui.md) | confident | Frontend & UI selected (20) |
+| `scan for xss and sql injection vulnerabilities` | — | [`security-audit`](security-audit.md) | confident | Security Audit selected (19) |
 | `do a literature review on RLHF, cite arxiv` | — | [`research`](research.md) | confident | Research & Investigation selected (17) |
-| `write a dockerfile and deploy to vercel` | `Dockerfile` | [`devops-infra`](devops-infra.md) | confident | DevOps & Infrastructure selected (25) |
-| `fix the failing playwright e2e tests` | `tests/login.test.ts` | [`qa-testing`](qa-testing.md) | confident | QA & Testing selected (32) |
+| `write a dockerfile and deploy to vercel` | `Dockerfile` | [`devops-infra`](devops-infra.md) | confident | DevOps & Infrastructure selected (19) |
+| `fix the failing playwright e2e tests` | `tests/login.test.ts` | [`qa-testing`](qa-testing.md) | confident | QA & Testing selected (28) |
 | `add a postgres migration for the users table` | — | [`backend-api`](backend-api.md) | confident | Backend & API selected (11) |
-| `train a classifier on the dataset, plot results` | `notebooks/model.ipynb` | [`data-science`](data-science.md) | confident | Data Science & Analysis selected (25) |
+| `train a classifier on the dataset, plot results` | `notebooks/model.ipynb` | [`data-science`](data-science.md) | confident | Data Science & Analysis selected (22) |
 | `hello there` | — | [`general`](general.md) | fallback | no domain signals detected |
 
 ## Composition with role loadouts

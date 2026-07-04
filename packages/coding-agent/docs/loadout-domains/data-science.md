@@ -71,7 +71,7 @@ HARD RULES: report effect size + CI, not just p-values; never train on test; nev
 - `protect-secrets`
 - `stop-verify`
 
-## Routing triggers (23)
+## Routing triggers (24)
 
 | kind | pattern | weight |
 |---|---|---|
@@ -81,6 +81,7 @@ HARD RULES: report effect size + CI, not just p-values; never train on test; nev
 | keyword | `model` | 2 |
 | keyword | `training` | 4 |
 | keyword | `dataset` | 5 |
+| keyword | `vector search` | 6 |
 | keyword | `statistics` | 5 |
 | keyword | `regression` | 4 |
 | keyword | `classification` | 4 |
@@ -94,7 +95,7 @@ HARD RULES: report effect size + CI, not just p-values; never train on test; nev
 | keyword | `tensorflow` | 5 |
 | keyword | `scikit` | 6 |
 | keyword | `bayesian` | 5 |
-| regex | `\b(eda|ml|machine learning|inference|embedding)\b` | 5 |
+| regex | `\b(eda|ml|machine learning|inference|embeddings?)\b` | 5 |
 | extension | `.ipynb` | 7 |
 | path | `notebooks/` | 6 |
 | path | `models/` | 3 |

@@ -9,8 +9,18 @@ export type { AdaptOrchTransport } from "./adaptorch-client.ts";
 export { AdaptOrchClient } from "./adaptorch-client.ts";
 export type { AdjudicationRequest, AdjudicationResult, PerRunVerdict } from "./adjudicator.ts";
 export { adjudicate } from "./adjudicator.ts";
-export type { CheckResult, VerdictState, VerifierRegistryEntry } from "./adjudicator-registry.ts";
-export { createVerifierRegistry, DEFAULT_VERIFIER } from "./adjudicator-registry.ts";
+export type {
+	AdjudicationReasonCode,
+	CheckResult,
+	VerdictState,
+	VerifierRegistryEntry,
+} from "./adjudicator-registry.ts";
+export {
+	ADJUDICATION_REASON_CODES,
+	createVerifierRegistry,
+	DEFAULT_VERIFIER,
+	reduceReasonCodes,
+} from "./adjudicator-registry.ts";
 export type { NextActionKind, VerdictDisposition } from "./loop.ts";
 export {
 	decideNextTransition,

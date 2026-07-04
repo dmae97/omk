@@ -83,7 +83,7 @@ describe("ControlPanelComponent", () => {
 			thinkingLevel: "high",
 			contextPercent: 42.5,
 			contextWindowTokens: 128_000,
-			headroomStatus: "context-budget-v2",
+			headroomStatus: "headroom:0.29.0",
 			skillCount: 96,
 			mcpCount: 12,
 			cwdLabel: "~/open_multi-agent_kit",
@@ -121,7 +121,7 @@ describe("ControlPanelComponent", () => {
 		expect(plain).toContain("ctx: 42.5%/128k");
 		expect(plain).toContain("meter:");
 		expect(plain).toContain("pulse:");
-		expect(plain).toContain("headroom: context-budget-v2");
+		expect(plain).toContain("headroom: headroom:0.29.0");
 		expect(plain).toContain("cwd: ~/open_multi-agent_kit");
 		expect(plain).toContain("git: main");
 		expect(plain).toContain("res: MCP:12 skills:96");

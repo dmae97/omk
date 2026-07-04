@@ -84,7 +84,27 @@ import { assertLoadoutAccess, decideLoadoutAccess, type LoadoutAccessPolicy } fr
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
+import { classifyTask, resolveThinkingLevel } from "./reasoning-router.ts";
+import {
+	getBiasStepsForCell,
+	getDefaultRouterBiasSnapshotPath,
+	parseRouterBiasSnapshot,
+	type RouterBiasSnapshot,
+} from "./reasoning-router-bias.ts";
+import {
+	classifyTaskV2,
+	DEFAULT_WEIGHTS,
+	resolveThinkingLevelV2ForAuto,
+	type TaskClassV2,
+} from "./reasoning-router-v2.ts";
+import { classifyTaskV3, resolveThinkingLevelV3ForAuto } from "./reasoning-router-v3.ts";
+import { classifyTaskV4, resolveThinkingLevelV4WithUncertainty } from "./reasoning-router-v4.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
+import {
+	appendRouterFeedbackRecord,
+	type RouterFeedbackLenBucket,
+	type RouterFeedbackRecord,
+} from "./router-feedback-collector.ts";
 import { detectSandboxBackend } from "./sandbox/backend.ts";
 import type { SandboxBackendStatus } from "./sandbox/policy.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionManager } from "./session-manager.ts";
@@ -123,6 +143,14 @@ export function parseSkillBlock(text: string): ParsedSkillBlock | null {
 		userMessage: match[4]?.trim() || undefined,
 	};
 }
+
+/**
+ * Thinking mode: "manual" keeps the user-selected level; "auto" resolves the
+ * level per turn via the reasoning router. Manual `/think <level>` always wins
+ * because the router only runs in auto mode.
+ */
+export type ThinkingMode = "manual" | "auto";
+export type ThinkingRouterVersion = "v1" | "v2" | "v3" | "v4";
 
 /** Session-specific events that extend the core AgentEvent */
 export type AgentSessionEvent =
@@ -315,6 +343,39 @@ export class AgentSession {
 	readonly settingsManager: SettingsManager;
 
 	private _scopedModels: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
+
+	/**
+	 * Thinking mode (default "manual"). Persists across turns within the session;
+	 * auto-resolved levels are never written to the user's persisted settings.
+	 */
+	private _thinkingMode: ThinkingMode = "manual";
+
+	/**
+	 * Reasoning router version used by auto thinking mode. "v1" (default) keeps
+	 * the frozen v1 classifyTask/resolveThinkingLevel; "v2" uses the Goal 004
+	 * weighted router; "v3" uses the Goal 007 calibrated classifier; "v4" uses
+	 * the Goal 009 confidence-bearing classifier (classifyTaskV4 +
+	 * resolveThinkingLevelV4WithUncertainty). Default "v1" so behavior is
+	 * unchanged until explicitly opted in.
+	 */
+	private _thinkingRouterVersion: ThinkingRouterVersion = "v1";
+	/**
+	 * N=8 ring buffer of recent auto-turn task classes (newest first), feeding
+	 * the v2/v3 classifiers' multi-turn prior feature. Never persisted to settings.
+	 */
+	private _taskClassHistory: TaskClassV2[] = [];
+
+	/**
+	 * Compiled reasoning-router bias snapshot for the opt-in v4 learning path
+	 * (Goal 010 Lane I). Loaded at most once per session and pinned thereafter:
+	 * `_reasoningRouterBiasSnapshotLoaded` flips to `true` on the first v4
+	 * auto-turn that has learning enabled, and `_reasoningRouterBiasSnapshot`
+	 * then stays fixed for the rest of the session (even across later settings
+	 * reloads, and even if the on-disk file changes or the load failed/was
+	 * invalid, in which case it stays `null`). See `_getReasoningRouterBiasSnapshot`.
+	 */
+	private _reasoningRouterBiasSnapshot: RouterBiasSnapshot | null = null;
+	private _reasoningRouterBiasSnapshotLoaded = false;
 
 	// Event subscription state
 	private _unsubscribeAgent?: () => void;
@@ -825,6 +886,11 @@ export class AgentSession {
 		return this.agent.state.thinkingLevel;
 	}
 
+	/** Current thinking mode ("manual" = user-selected level, "auto" = per-turn router) */
+	get thinkingMode(): ThinkingMode {
+		return this._thinkingMode;
+	}
+
 	/** Whether agent is currently streaming a response */
 	get isStreaming(): boolean {
 		return this.agent.state.isStreaming;
@@ -1287,6 +1353,10 @@ export class AgentSession {
 					this._flushPendingBashMessages();
 				}
 			}
+
+			// Auto thinking mode: resolve this turn's level from the prompt content.
+			// Manual mode never enters the router, so /think <level> always wins.
+			this._applyAutoThinkingLevelForTurn(expandedText);
 
 			// Build messages array (custom message if any, then user message)
 			messages = [];
@@ -1779,6 +1849,273 @@ export class AgentSession {
 				previousLevel,
 			});
 		}
+	}
+
+	/**
+	 * Set the thinking mode. "auto" resolves a level per turn via the reasoning
+	 * router; "manual" keeps the explicitly selected level. The mode persists for
+	 * the session lifetime and is never written to user settings.
+	 */
+	setThinkingMode(mode: ThinkingMode): void {
+		this._thinkingMode = mode;
+	}
+
+	/**
+	 * Reasoning router version selection for auto thinking mode.
+	 * Default "v1". Switching to "v2", "v3", or "v4" activates the
+	 * corresponding opt-in router; the multi-turn history buffer is only
+	 * consulted there.
+	 */
+	get thinkingRouterVersion(): ThinkingRouterVersion {
+		return this._thinkingRouterVersion;
+	}
+
+	setThinkingRouterVersion(version: ThinkingRouterVersion): void {
+		this._thinkingRouterVersion = version;
+	}
+
+	/**
+	 * In auto thinking mode, resolve and apply this turn's thinking level from the
+	 * prompt content. Updates agent state, records the change in the session, and
+	 * notifies observers - but never overwrites the user's persisted default
+	 * thinking level in settings. Models without reasoning support bypass the
+	 * router entirely (level stays "off").
+	 */
+	private _applyAutoThinkingLevelForTurn(promptText: string): void {
+		if (this._thinkingMode !== "auto") return;
+		if (!this.supportsThinking()) return;
+
+		if (this._thinkingRouterVersion === "v4") {
+			this._applyAutoThinkingLevelV4(promptText);
+			return;
+		}
+		if (this._thinkingRouterVersion === "v3") {
+			this._applyAutoThinkingLevelV3(promptText);
+			return;
+		}
+		if (this._thinkingRouterVersion === "v2") {
+			this._applyAutoThinkingLevelV2(promptText);
+			return;
+		}
+
+		const taskClass = classifyTask({ prompt: promptText });
+		const resolved = resolveThinkingLevel(taskClass, this.getAvailableThinkingLevels());
+		const previousLevel = this.agent.state.thinkingLevel;
+		if (resolved === previousLevel) return;
+
+		this.agent.state.thinkingLevel = resolved;
+		this.sessionManager.appendThinkingLevelChange(resolved);
+		this._emit({ type: "thinking_level_changed", level: resolved });
+	}
+
+	/**
+	 * v2 auto-mode resolver (Goal 004). Builds the caller-side features the pure
+	 * classifier cannot reach on its own (multi-turn ring buffer, context-pressure
+	 * bucket), then applies classifyTaskV2 + resolveThinkingLevelV2ForAuto. The
+	 * resolved class is pushed to the N=8 history for the NEXT turn's prior.
+	 */
+	private _applyAutoThinkingLevelV2(promptText: string): void {
+		const availableLevels = this.getAvailableThinkingLevels();
+		const taskClass = classifyTaskV2(
+			{
+				prompt: promptText,
+				history: this._taskClassHistory,
+				pressureBucket: this._computePressureBucket(),
+			},
+			DEFAULT_WEIGHTS,
+		);
+
+		this._taskClassHistory.unshift(taskClass);
+		if (this._taskClassHistory.length > 8) this._taskClassHistory.length = 8;
+
+		const resolved = resolveThinkingLevelV2ForAuto(taskClass, availableLevels, undefined);
+		const previousLevel = this.agent.state.thinkingLevel;
+		if (resolved === previousLevel) return;
+
+		this.agent.state.thinkingLevel = resolved;
+		this.sessionManager.appendThinkingLevelChange(resolved);
+		this._emit({ type: "thinking_level_changed", level: resolved });
+	}
+
+	/**
+	 * v3 auto-mode resolver (Goal 007). Reuses the same N=8 recent-class history
+	 * and context-pressure bucket as v2, but routes through the v3 classifier and
+	 * resolver pair.
+	 */
+	private _applyAutoThinkingLevelV3(promptText: string): void {
+		const availableLevels = this.getAvailableThinkingLevels();
+		const taskClass = classifyTaskV3({
+			prompt: promptText,
+			history: this._taskClassHistory,
+			pressureBucket: this._computePressureBucket(),
+		});
+
+		this._taskClassHistory.unshift(taskClass);
+		if (this._taskClassHistory.length > 8) this._taskClassHistory.length = 8;
+
+		const resolved = resolveThinkingLevelV3ForAuto(taskClass, availableLevels, undefined);
+		const previousLevel = this.agent.state.thinkingLevel;
+		if (resolved === previousLevel) return;
+
+		this.agent.state.thinkingLevel = resolved;
+		this.sessionManager.appendThinkingLevelChange(resolved);
+		this._emit({ type: "thinking_level_changed", level: resolved });
+	}
+
+	/**
+	 * v4 auto-mode resolver (Goal 009 Wave 3 Lane V1; wired to the opt-in
+	 * learning bias by Goal 010 Lane I). Reuses the same N=8 recent-class
+	 * history and context-pressure bucket as v2/v3, routed through the
+	 * confidence-bearing v4 classifier and its uncertainty-aware resolver. No
+	 * `laneType` applies to the main session (always "none"/`undefined`);
+	 * `hint` is permanently `null` -- the Adaptorch advisory bridge has no
+	 * transport wired into the session (out of this lane's scope; see
+	 * adaptorch-bridge.ts). `bias` stays `0` unless BOTH hold: (a) the global,
+	 * owner-only `reasoningRouterLearning.enabled` setting is `true` (default
+	 * off; a project-scope `.omk/settings.json` value for this key is never
+	 * consulted -- see settings-manager.ts), and (b) a compiled
+	 * `RouterBiasSnapshot` was found and passed strict validation at the
+	 * configured/default path, loaded and cached ("pinned") at most once per
+	 * session (see `_getReasoningRouterBiasSnapshot`). When learning is
+	 * enabled, exactly one bounded "accepted" feedback record (no raw prompt/
+	 * path/diff/session/model/provider/tool/hook content; see
+	 * router-feedback-collector.ts's exact ten-key schema) is appended to the
+	 * local ledger after every v4 auto-turn resolution, for a future, separate
+	 * offline compile step to learn from -- this lane never records an
+	 * override/fail/hook-outcome signal, only the neutral "accepted" one. The
+	 * resolver's own confidence-band/fallback-reason escalation (see
+	 * reasoning-router-v4.ts) still applies on top of the base+lane+bias
+	 * target, so a low-confidence or fallback-decided verdict can still only
+	 * match or exceed the confident-path level.
+	 */
+	private _applyAutoThinkingLevelV4(promptText: string): void {
+		const availableLevels = this.getAvailableThinkingLevels();
+		const verdict = classifyTaskV4({
+			prompt: promptText,
+			history: this._taskClassHistory,
+			pressureBucket: this._computePressureBucket(),
+		});
+
+		this._taskClassHistory.unshift(verdict.taskClass);
+		if (this._taskClassHistory.length > 8) this._taskClassHistory.length = 8;
+
+		const learningEnabled = this.settingsManager.getReasoningRouterLearningEnabled();
+		const snapshot = learningEnabled ? this._getReasoningRouterBiasSnapshot() : null;
+		const features = this._deriveRouterFeedbackFeatures(promptText);
+		const bias =
+			snapshot === null
+				? 0
+				: getBiasStepsForCell(snapshot, {
+						predictedClass: verdict.taskClass,
+						laneType: "none",
+						lenBucket: features.lenBucket,
+						hadFence: features.hadFence,
+						hadDiff: features.hadDiff,
+					});
+
+		const resolved = resolveThinkingLevelV4WithUncertainty(verdict, availableLevels, undefined, bias, null);
+
+		if (learningEnabled && resolved !== "off") {
+			const record: RouterFeedbackRecord = {
+				routerVersion: "v4",
+				laneType: "none",
+				predictedClass: verdict.taskClass,
+				resolvedLevel: resolved,
+				acceptedLevel: resolved,
+				signal: "s2-accept",
+				outcome: "accepted",
+				lenBucket: features.lenBucket,
+				hadFence: features.hadFence,
+				hadDiff: features.hadDiff,
+			};
+			appendRouterFeedbackRecord(record, {
+				enabled: true,
+				ledgerPath: this.settingsManager.getReasoningRouterLearningFeedbackLedgerPath(),
+			});
+		}
+
+		const previousLevel = this.agent.state.thinkingLevel;
+		if (resolved === previousLevel) return;
+
+		this.agent.state.thinkingLevel = resolved;
+		this.sessionManager.appendThinkingLevelChange(resolved);
+		this._emit({ type: "thinking_level_changed", level: resolved });
+	}
+
+	/**
+	 * Loads and strictly validates the compiled reasoning-router bias snapshot
+	 * for the opt-in v4 learning path (Goal 010 Lane I), at most once per
+	 * session ("pinned"): the first call attempts the read and caches whatever
+	 * it finds (including a `null` miss/failure); every later call in the same
+	 * session reuses that cached result without touching disk again. Returns
+	 * `null` when no file exists at the configured/default path, the file
+	 * cannot be read, or its contents fail `parseRouterBiasSnapshot`'s schema
+	 * validation -- never throws.
+	 */
+	private _getReasoningRouterBiasSnapshot(): RouterBiasSnapshot | null {
+		if (this._reasoningRouterBiasSnapshotLoaded) return this._reasoningRouterBiasSnapshot;
+		this._reasoningRouterBiasSnapshotLoaded = true;
+
+		const path =
+			this.settingsManager.getReasoningRouterLearningBiasSnapshotPath() ?? getDefaultRouterBiasSnapshotPath();
+		try {
+			if (existsSync(path)) {
+				this._reasoningRouterBiasSnapshot = parseRouterBiasSnapshot(readFileSync(path, "utf-8"));
+			}
+		} catch {
+			this._reasoningRouterBiasSnapshot = null;
+		}
+		return this._reasoningRouterBiasSnapshot;
+	}
+
+	/**
+	 * Locally derives the same three bounded, privacy-safe feedback-ledger
+	 * features (`lenBucket`, `hadFence`, `hadDiff`) the v4 classifier computes
+	 * internally (reasoning-router-v4.ts keeps those helpers file-private, so
+	 * they cannot be imported here). Mirrors reasoning-router-v2.ts's
+	 * `clampLenBucket` and reasoning-router-v4.ts's `hasCodeFence`/
+	 * `hasDiffMarkers` byte-for-byte. Operates on the same trimmed prompt text
+	 * the classifier scores; never returns raw prompt content or its exact
+	 * length, only the clamped [0,7] bucket and two booleans.
+	 */
+	private _deriveRouterFeedbackFeatures(promptText: string): {
+		lenBucket: RouterFeedbackLenBucket;
+		hadFence: boolean;
+		hadDiff: boolean;
+	} {
+		const trimmed = promptText.trim();
+
+		let lenBucket = 0;
+		let remaining = trimmed.length + 1;
+		while (remaining > 1 && lenBucket < 7) {
+			remaining >>= 1;
+			lenBucket++;
+		}
+
+		const hadFence = trimmed.includes("```");
+		const hadDiff =
+			/^@@[^\n]*@@/m.test(trimmed) ||
+			/^diff --git /m.test(trimmed) ||
+			(/^\+(?!\+)/m.test(trimmed) && /^-(?!-)/m.test(trimmed));
+
+		return { lenBucket: lenBucket as RouterFeedbackLenBucket, hadFence, hadDiff };
+	}
+
+	/**
+	 * Context-pressure band 0..3 from the projected token estimate over the
+	 * model context window (reuses estimateProjectedContextTokens). 0..<0.5,
+	 * 1..<0.75, 2..<0.9, 3..>=0.9. Inert under DEFAULT_WEIGHTS (no pressure
+	 * coefficient); computed for future calibrated weight presets.
+	 */
+	private _computePressureBucket(): number {
+		const contextWindow = this.model?.contextWindow ?? 0;
+		if (contextWindow <= 0) return 0;
+		const estimate = estimateProjectedContextTokens(this.agent.state.messages, []);
+		const pressure = estimate.tokens / contextWindow;
+		if (pressure >= 0.9) return 3;
+		if (pressure >= 0.75) return 2;
+		if (pressure >= 0.5) return 1;
+		return 0;
 	}
 
 	/**

@@ -375,7 +375,19 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 							...(desc && { description: desc }),
 						};
 					});
-				const filtered = fuzzyFilter(skillItems, bangPrefix, (item) => item.name).map((item) => ({
+				const omkIndexAvailable = skillItems.some((item) => item.name === "omk-skills");
+				const bangItems = omkIndexAvailable
+					? [
+							{
+								name: "omk",
+								label: "omk",
+								value: "!omk ",
+								description: "Route through OMK role hubs (frontend, backend, loop, plan, security, etc.)",
+							},
+							...skillItems,
+						]
+					: skillItems;
+				const filtered = fuzzyFilter(bangItems, bangPrefix, (item) => item.name).map((item) => ({
 					value: item.value,
 					label: item.label,
 					...(item.description && { description: item.description }),

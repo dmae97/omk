@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added an `!omk` entry to bang autocomplete when the OMK hub skill index (`omk-skills`) is available, routing operators toward OMK role hubs from the TUI.
+
 ## [0.90.3] - 2026-07-02
 
 ## [0.90.2] - 2026-07-02

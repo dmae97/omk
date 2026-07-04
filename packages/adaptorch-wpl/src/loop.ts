@@ -39,8 +39,45 @@
 import type { AdaptOrchClient } from "./adaptorch-client.ts";
 import type { AdjudicationRequest, AdjudicationResult } from "./adjudicator.ts";
 import { adjudicate } from "./adjudicator.ts";
-import type { VerifierRegistryEntry } from "./adjudicator-registry.ts";
+import type { AdjudicationReasonCode, VerifierRegistryEntry } from "./adjudicator-registry.ts";
 import type { WorkPacket, WorkPacketState } from "./types.ts";
+
+/**
+ * How a `CONTRADICTED` verdict with a given reason code is dispositioned (Part 3 §1's
+ * three CONTRADICTED rows). Kept as a named class so {@link CONTRADICTED_DISPOSITION_CLASS}
+ * stays a *total* mapping over {@link AdjudicationReasonCode}.
+ */
+type ContradictedDispositionClass = "escalate" | "reroute_on_recurrence" | "retry_same_topology";
+
+/**
+ * Total mapping from every {@link AdjudicationReasonCode} to its CONTRADICTED disposition
+ * class. Totality is compile-time enforced: adding a new reason code without classifying
+ * it here is a type error, so a new code can never silently fall into an unintended
+ * disposition. Codes that cannot in practice accompany a `CONTRADICTED` verdict (e.g.
+ * `ALL_CHECKS_PASSED`, `RUN_NOT_TERMINAL`) still need a row; they take the conservative
+ * default (`retry_same_topology`).
+ */
+const CONTRADICTED_DISPOSITION_CLASS: Record<AdjudicationReasonCode, ContradictedDispositionClass> = {
+	// Part 3 §1: a scope violation is a safety signal that must never silently auto-retry.
+	SCOPE_VIOLATION: "escalate",
+	// Part 3 §1: recurring schema/shape drift means the topology/plan template itself may be
+	// structurally wrong for the payload - reroute instead of retrying the same topology.
+	SCHEMA_DRIFT: "reroute_on_recurrence",
+	CONTENT_CHECK_FAILED: "reroute_on_recurrence",
+	// Default CONTRADICTED row: same-topology retry (subject to the attempt budget).
+	NO_EVIDENCE_ON_SUCCESS: "retry_same_topology",
+	EMPTY_ARTIFACT_CONTENT: "retry_same_topology",
+	TRACE_CHECK_FAILED: "retry_same_topology",
+	TRACE_ERROR_SPAN: "retry_same_topology",
+	MIN_ACTIONS_UNMET: "retry_same_topology",
+	RUN_STATUS_UNPARSEABLE: "retry_same_topology",
+	RUN_FETCH_FAILED: "retry_same_topology",
+	MALFORMED_REQUEST: "retry_same_topology",
+	RUN_NOT_TERMINAL: "retry_same_topology",
+	EVIDENCE_EMPTY: "retry_same_topology",
+	FAILURE_REPORTED: "retry_same_topology",
+	ALL_CHECKS_PASSED: "retry_same_topology",
+};
 
 /**
  * Part 1 §6's `next_action` vocabulary, restricted to the values Part 3 §1's projection
@@ -67,11 +104,16 @@ export interface VerdictDisposition {
  * |---|---|---|---|
  * | `CONFIRMED` | - | `CONFIRMED` | `none` |
  * | `CORROBORATED-FAILURE` | - | `DECLINED` | `retry_same_topology` |
- * | `CONTRADICTED` | reason indicates a scope violation | `DECLINED` | `escalate` |
- * | `CONTRADICTED` | reason indicates schema/shape drift AND `packet.retry_count >= 1` | `DECLINED` | `reroute` |
- * | `CONTRADICTED` | default (no more specific reason matched) | `DECLINED` | `retry_same_topology` |
+ * | `CONTRADICTED` | `reason_code` = `SCOPE_VIOLATION` | `DECLINED` | `escalate` |
+ * | `CONTRADICTED` | `reason_code` ∈ {`SCHEMA_DRIFT`, `CONTENT_CHECK_FAILED`} AND `packet.retry_count >= 1` | `DECLINED` | `reroute` |
+ * | `CONTRADICTED` | any other `reason_code` | `DECLINED` | `retry_same_topology` |
  * | `INDETERMINATE` | - | `DECLINED` | `escalate` |
  * | `VERIFIER-ERROR` | - | `DECLINED` | `escalate` |
+ *
+ * Branching is driven exclusively by the structured `reason_code`
+ * ({@link CONTRADICTED_DISPOSITION_CLASS}); the free-text `reason` is never inspected, so
+ * incidental wording in a check's human-readable explanation (e.g. "scoped variable")
+ * can neither trigger a false escalation nor mask a real one.
  *
  * `VERIFIER-ERROR` vs. `ADJUDICATION_FAILED` (Part 3's dedicated section, restated here
  * because callers of this function must not conflate the two): `VERIFIER-ERROR` is a verdict
@@ -103,27 +145,26 @@ export async function projectVerdictToDisposition(
 			return { targetState: "DECLINED", nextActionKind: "retry_same_topology" };
 
 		case "CONTRADICTED": {
-			const reason = result.reason.toLowerCase();
-
-			// Part 3 §1: a scope-violation signal is a safety signal that must not
-			// silently auto-retry.
-			if (reason.includes("scope")) {
-				return { targetState: "DECLINED", nextActionKind: "escalate" };
+			const dispositionClass = CONTRADICTED_DISPOSITION_CLASS[result.reason_code];
+			switch (dispositionClass) {
+				case "escalate":
+					return { targetState: "DECLINED", nextActionKind: "escalate" };
+				case "reroute_on_recurrence":
+					// "Recurring" is approximated as "this packet has already had at least
+					// one prior dispatch attempt" (packet.retry_count >= 1), per Part 3 §1's
+					// "recurring across >= 2 attempts for this packet" condition. A first
+					// occurrence still takes the default same-topology retry.
+					if (packet.retry_count >= 1) {
+						return { targetState: "DECLINED", nextActionKind: "reroute" };
+					}
+					return { targetState: "DECLINED", nextActionKind: "retry_same_topology" };
+				case "retry_same_topology":
+					return { targetState: "DECLINED", nextActionKind: "retry_same_topology" };
+				default: {
+					const exhaustive: never = dispositionClass;
+					throw new Error(`unhandled CONTRADICTED disposition class: ${String(exhaustive)}`);
+				}
 			}
-
-			// Part 3 §1: recurring schema/shape drift indicates the topology/plan
-			// template itself may be structurally wrong for the payload - a
-			// same-topology retry cannot fix that, so reroute instead. "Recurring"
-			// is approximated here as "this packet has already had at least one
-			// prior dispatch attempt" (packet.retry_count >= 1), per Part 3 §1's
-			// "recurring across >= 2 attempts for this packet" condition.
-			const isSchemaShapeDrift = reason.includes("content-check-failed") || reason.includes("schema");
-			if (isSchemaShapeDrift && packet.retry_count >= 1) {
-				return { targetState: "DECLINED", nextActionKind: "reroute" };
-			}
-
-			// Default CONTRADICTED row: no more specific reason pattern matched.
-			return { targetState: "DECLINED", nextActionKind: "retry_same_topology" };
 		}
 
 		case "INDETERMINATE":

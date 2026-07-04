@@ -145,6 +145,7 @@ describe("CombinedAutocompleteProvider", () => {
 			[
 				{ name: "skill:browser-feedback", description: "Review browser UI state" },
 				{ name: "skill:agentmemory", description: "Use saved memory" },
+				{ name: "skill:omk-skills", description: "Route through OMK role hubs" },
 				{ name: "model", description: "Select model" },
 			],
 			"/tmp",
@@ -157,6 +158,26 @@ describe("CombinedAutocompleteProvider", () => {
 			assert.strictEqual(result?.prefix, "!");
 			assert.ok(result?.items.some((item) => item.value === "!skill:browser-feedback "));
 			assert.ok(result?.items.some((item) => item.label === "agentmemory"));
+			assert.ok(result?.items.some((item) => item.value === "!omk "));
+		});
+
+		it("filters OMK role hub shorthand by bang prefix", async () => {
+			const result = await getSuggestions(provider, ["!om"], 0, 3);
+
+			assert.notEqual(result, null);
+			assert.strictEqual(result?.prefix, "!om");
+			assert.strictEqual(result?.items[0]?.value, "!omk ");
+
+			if (!result) {
+				assert.fail("expected bang skill suggestions");
+			}
+			const item = result.items[0];
+			if (!item) {
+				assert.fail("expected first bang suggestion");
+			}
+			const applied = provider.applyCompletion(["!om"], 0, 3, item, result.prefix);
+			assert.strictEqual(applied.lines[0], "!omk ");
+			assert.strictEqual(applied.cursorCol, "!omk ".length);
 		});
 
 		it("filters skills by bang prefix and applies explicit skill insertion", async () => {

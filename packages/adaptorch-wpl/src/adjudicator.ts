@@ -13,7 +13,13 @@
  */
 
 import type { AdaptOrchClient } from "./adaptorch-client.ts";
-import type { CheckResult, VerdictState, VerifierRegistryEntry } from "./adjudicator-registry.ts";
+import type {
+	AdjudicationReasonCode,
+	CheckResult,
+	VerdictState,
+	VerifierRegistryEntry,
+} from "./adjudicator-registry.ts";
+import { reduceReasonCodes } from "./adjudicator-registry.ts";
 
 /** Raw payload shape returned by `AdaptOrchClient.getRun`, inferred rather than duplicated. */
 type RunPayload = Awaited<ReturnType<AdaptOrchClient["getRun"]>>;
@@ -41,6 +47,9 @@ export interface AdjudicationRequest {
 export interface PerRunVerdict {
 	run_id: string;
 	verdict: VerdictState;
+	/** Machine-readable classification; disposition logic branches on this, never on `reason`. */
+	reason_code: AdjudicationReasonCode;
+	/** Human-readable explanation, for logs and review UIs only. */
 	reason: string;
 	evidence_refs: unknown;
 }
@@ -52,6 +61,13 @@ export interface PerRunVerdict {
  */
 export interface AdjudicationResult {
 	verdict: VerdictState;
+	/**
+	 * Machine-readable classification, reduced worst-wins from the `per_run` entries that
+	 * share the record-level verdict. `projectVerdictToDisposition` branches on this code
+	 * exclusively; `reason` is never string-matched.
+	 */
+	reason_code: AdjudicationReasonCode;
+	/** Human-readable explanation, for logs and review UIs only. */
 	reason: string;
 	per_run: PerRunVerdict[];
 	augmented_payload?: unknown;
@@ -67,6 +83,7 @@ interface RunEvidence {
 interface RunOutcome {
 	run_id: string;
 	verdict: VerdictState;
+	reason_code: AdjudicationReasonCode;
 	reason: string;
 	evidence: RunEvidence;
 }
@@ -212,10 +229,22 @@ async function adjudicateRun(
 
 		const branch = interpretRunStatus(run);
 		if (branch === "unparseable") {
-			return { run_id: runId, verdict: "VERIFIER-ERROR", reason: "run-status-unparseable", evidence };
+			return {
+				run_id: runId,
+				verdict: "VERIFIER-ERROR",
+				reason_code: "RUN_STATUS_UNPARSEABLE",
+				reason: "run-status-unparseable",
+				evidence,
+			};
 		}
 		if (branch === "non-terminal") {
-			return { run_id: runId, verdict: "INDETERMINATE", reason: "run-not-terminal", evidence };
+			return {
+				run_id: runId,
+				verdict: "INDETERMINATE",
+				reason_code: "RUN_NOT_TERMINAL",
+				reason: "run-not-terminal",
+				evidence,
+			};
 		}
 
 		const artifacts = await client.getArtifacts(runId);
@@ -235,6 +264,7 @@ async function adjudicateRun(
 				return {
 					run_id: runId,
 					verdict: "CONTRADICTED",
+					reason_code: "NO_EVIDENCE_ON_SUCCESS",
 					reason: "no-evidence-on-success-is-contradiction",
 					evidence,
 				};
@@ -242,48 +272,86 @@ async function adjudicateRun(
 			const reasons: string[] = [];
 			if (artifactsEmpty && !entry.allow_zero_artifacts) reasons.push("artifacts-empty-unexpected");
 			if (tracesEmpty) reasons.push("traces-empty-unexpected");
-			return { run_id: runId, verdict: "INDETERMINATE", reason: reasons.join(","), evidence };
+			return {
+				run_id: runId,
+				verdict: "INDETERMINATE",
+				reason_code: "EVIDENCE_EMPTY",
+				reason: reasons.join(","),
+				evidence,
+			};
 		}
 
 		if (!isSuccess) {
 			// CORROBORATED-FAILURE: reported failure, and the ambiguous-data fork above
 			// already ruled out the case where evidence was too thin to say anything.
-			return { run_id: runId, verdict: "CORROBORATED-FAILURE", reason: "failure-reported", evidence };
+			return {
+				run_id: runId,
+				verdict: "CORROBORATED-FAILURE",
+				reason_code: "FAILURE_REPORTED",
+				reason: "failure-reported",
+				evidence,
+			};
 		}
 
-		const problems: string[] = [];
+		const problems: { code: AdjudicationReasonCode; message: string }[] = [];
 		if (artifactsList.some((artifact) => !hasSubstance(artifact))) {
-			problems.push("artifact-empty-or-whitespace");
+			problems.push({ code: "EMPTY_ARTIFACT_CONTENT", message: "artifact-empty-or-whitespace" });
 		}
 		if (entry.content_check) {
 			for (const artifact of artifactsList) {
 				const result: CheckResult = entry.content_check(artifact);
-				if (!result.ok) problems.push(`content-check-failed${result.reason ? `: ${result.reason}` : ""}`);
+				if (!result.ok) {
+					problems.push({
+						code: result.code ?? "CONTENT_CHECK_FAILED",
+						message: `content-check-failed${result.reason ? `: ${result.reason}` : ""}`,
+					});
+				}
 			}
 		}
 		if (entry.trace_check) {
 			const result: CheckResult = entry.trace_check(traces);
-			if (!result.ok) problems.push(`trace-check-failed${result.reason ? `: ${result.reason}` : ""}`);
+			if (!result.ok) {
+				problems.push({
+					code: result.code ?? "TRACE_CHECK_FAILED",
+					message: `trace-check-failed${result.reason ? `: ${result.reason}` : ""}`,
+				});
+			}
 		}
 		const errorSpanCount = countErrorSpans(tracesList);
 		if (errorSpanCount > 0) {
-			problems.push(`error-span-scan: ${errorSpanCount} error span(s) found`);
+			problems.push({ code: "TRACE_ERROR_SPAN", message: `error-span-scan: ${errorSpanCount} error span(s) found` });
 		}
 		if (typeof entry.expected_min_actions === "number" && entry.expected_min_actions > 0) {
 			const actionCount = countActionSpans(tracesList);
 			if (actionCount < entry.expected_min_actions) {
-				problems.push(`expected-min-actions-not-met: found ${actionCount}, needed ${entry.expected_min_actions}`);
+				problems.push({
+					code: "MIN_ACTIONS_UNMET",
+					message: `expected-min-actions-not-met: found ${actionCount}, needed ${entry.expected_min_actions}`,
+				});
 			}
 		}
 
 		if (problems.length > 0) {
-			return { run_id: runId, verdict: "CONTRADICTED", reason: problems.join("; "), evidence };
+			return {
+				run_id: runId,
+				verdict: "CONTRADICTED",
+				reason_code: reduceReasonCodes(problems.map((problem) => problem.code)),
+				reason: problems.map((problem) => problem.message).join("; "),
+				evidence,
+			};
 		}
-		return { run_id: runId, verdict: "CONFIRMED", reason: "all-checks-passed", evidence };
+		return {
+			run_id: runId,
+			verdict: "CONFIRMED",
+			reason_code: "ALL_CHECKS_PASSED",
+			reason: "all-checks-passed",
+			evidence,
+		};
 	} catch (error) {
 		return {
 			run_id: runId,
 			verdict: "VERIFIER-ERROR",
+			reason_code: "RUN_FETCH_FAILED",
 			reason: `run-adjudication-failed: ${describeError(error)}`,
 			evidence,
 		};
@@ -311,6 +379,11 @@ function buildRecordReason(verdict: VerdictState, perRun: PerRunVerdict[]): stri
 	return `${verdict} via ${contributing.join("; ")}`;
 }
 
+/** Worst-wins record-level reason code, reduced over the runs sharing the record verdict. */
+function buildRecordReasonCode(verdict: VerdictState, perRun: PerRunVerdict[]): AdjudicationReasonCode {
+	return reduceReasonCodes(perRun.filter((r) => r.verdict === verdict).map((r) => r.reason_code));
+}
+
 /**
  * Adjudicates an `AdjudicationRequest` end to end (Part 2 sections 2.1-2.5, 3, 5).
  *
@@ -331,6 +404,7 @@ export async function adjudicate(
 	if (!request.kind || request.run_ids.length === 0) {
 		return {
 			verdict: "VERIFIER-ERROR",
+			reason_code: "MALFORMED_REQUEST",
 			reason: !request.kind ? "malformed-request-missing-kind" : "malformed-request-empty-run-ids",
 			per_run: [],
 		};
@@ -345,6 +419,7 @@ export async function adjudicate(
 	const perRun: PerRunVerdict[] = outcomes.map((outcome) => ({
 		run_id: outcome.run_id,
 		verdict: outcome.verdict,
+		reason_code: outcome.reason_code,
 		reason: outcome.reason,
 		evidence_refs: outcome.evidence,
 	}));
@@ -352,6 +427,7 @@ export async function adjudicate(
 	const verdict = reduceVerdicts(perRun);
 	const result: AdjudicationResult = {
 		verdict,
+		reason_code: buildRecordReasonCode(verdict, perRun),
 		reason: buildRecordReason(verdict, perRun),
 		per_run: perRun,
 	};

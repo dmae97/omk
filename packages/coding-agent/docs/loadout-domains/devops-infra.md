@@ -59,11 +59,12 @@ HARD RULES: every deploy is reversible within one command; never bake secrets in
 - `protect-secrets`
 - `stop-verify`
 
-## Routing triggers (20)
+## Routing triggers (21)
 
 | kind | pattern | weight |
 |---|---|---|
 | keyword | `deploy` | 6 |
+| keyword | `배포` | 6 |
 | keyword | `deployment` | 6 |
 | keyword | `docker` | 6 |
 | keyword | `container` | 5 |

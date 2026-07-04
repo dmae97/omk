@@ -71,7 +71,7 @@ HARD RULES: every agent/skill change has an eval; prompts are versioned and test
 - `stop-verify`
 - `subagent-stop-audit`
 
-## Routing triggers (17)
+## Routing triggers (18)
 
 | kind | pattern | weight |
 |---|---|---|
@@ -80,8 +80,9 @@ HARD RULES: every agent/skill change has an eval; prompts are versioned and test
 | keyword | `prompt` | 4 |
 | keyword | `skill` | 3 |
 | keyword | `hook` | 3 |
+| keyword | `훅` | 4 |
 | keyword | `harness` | 6 |
-| keyword | `orchestrat` | 5 |
+| regex | `\borchestrat\w*\b` | 5 |
 | keyword | `eval` | 5 |
 | keyword | `subagent` | 6 |
 | keyword | `tool` | 2 |

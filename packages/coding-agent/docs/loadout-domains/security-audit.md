@@ -71,7 +71,7 @@ HARD RULES: read-only by default; every finding needs file:line + exploit sketch
 - `stop-verify`
 - `subagent-stop-audit`
 
-## Routing triggers (20)
+## Routing triggers (21)
 
 | kind | pattern | weight |
 |---|---|---|
@@ -88,6 +88,7 @@ HARD RULES: read-only by default; every finding needs file:line + exploit sketch
 | keyword | `leak` | 5 |
 | keyword | `crypto` | 4 |
 | keyword | `hardening` | 5 |
+| keyword | `threat model` | 5 |
 | keyword | `threat` | 5 |
 | keyword | `penetration` | 6 |
 | keyword | `malware` | 6 |

@@ -78,6 +78,7 @@ describe("adjudicate — single run_id", () => {
 			registry,
 		);
 		expect(result.verdict).toBe("INDETERMINATE");
+		expect(result.reason_code).toBe("EVIDENCE_EMPTY");
 		expect(result.per_run[0].reason).toContain("artifacts-empty-unexpected");
 	});
 
@@ -115,6 +116,7 @@ describe("adjudicate — single run_id", () => {
 			registry,
 		);
 		expect(result.verdict).toBe("CONTRADICTED");
+		expect(result.reason_code).toBe("TRACE_ERROR_SPAN");
 		expect(result.per_run[0].reason).toContain("error-span-scan");
 	});
 
@@ -140,7 +142,39 @@ describe("adjudicate — single run_id", () => {
 		});
 		const result = await adjudicate({ dispatch_record_id: "d6", kind: "code-edit", run_ids: [] }, client, registry);
 		expect(result.verdict).toBe("VERIFIER-ERROR");
+		expect(result.reason_code).toBe("MALFORMED_REQUEST");
 		expect(result.per_run).toHaveLength(0);
+	});
+
+	it("carries a hook-supplied reason code (SCOPE_VIOLATION) through to the record-level result", async () => {
+		const scopedRegistry = createVerifierRegistry([
+			{
+				kind: "code-edit",
+				content_check: () => ({
+					ok: false,
+					reason: "artifact touches a path outside the lane",
+					code: "SCOPE_VIOLATION",
+				}),
+			},
+		]);
+		const client = new AdaptOrchClient(
+			makeFakeTransport({
+				"run-scope": {
+					run: { run_id: "run-scope", status: "completed" },
+					artifacts: [{ path: "/etc/passwd", size_bytes: 12 }],
+					traces: [{ kind: "write", level: "info" }],
+				},
+			}),
+		);
+		const result = await adjudicate(
+			{ dispatch_record_id: "d-scope", kind: "code-edit", run_ids: ["run-scope"] },
+			client,
+			scopedRegistry,
+		);
+		expect(result.verdict).toBe("CONTRADICTED");
+		expect(result.reason_code).toBe("SCOPE_VIOLATION");
+		const disposition = await projectVerdictToDisposition(result, makePacket());
+		expect(disposition).toEqual({ targetState: "DECLINED", nextActionKind: "escalate" });
 	});
 });
 
@@ -197,7 +231,7 @@ describe("adjudicate — fanout_n aggregation (worst wins)", () => {
 describe("projectVerdictToDisposition", () => {
 	it("routes CONFIRMED to targetState CONFIRMED with no next action", async () => {
 		const disposition = await projectVerdictToDisposition(
-			{ verdict: "CONFIRMED", reason: "ok", per_run: [] },
+			{ verdict: "CONFIRMED", reason_code: "ALL_CHECKS_PASSED", reason: "ok", per_run: [] },
 			makePacket(),
 		);
 		expect(disposition).toEqual({ targetState: "CONFIRMED", nextActionKind: "none" });
@@ -205,23 +239,38 @@ describe("projectVerdictToDisposition", () => {
 
 	it("routes VERIFIER-ERROR to escalate — never to retry_same_topology or reroute", async () => {
 		const disposition = await projectVerdictToDisposition(
-			{ verdict: "VERIFIER-ERROR", reason: "run-status-unparseable", per_run: [] },
+			{
+				verdict: "VERIFIER-ERROR",
+				reason_code: "RUN_STATUS_UNPARSEABLE",
+				reason: "run-status-unparseable",
+				per_run: [],
+			},
 			makePacket({ retry_count: 2 }), // even with retries available, must still escalate
 		);
 		expect(disposition).toEqual({ targetState: "DECLINED", nextActionKind: "escalate" });
 	});
 
-	it("routes a scope-violation CONTRADICTED reason to escalate, not retry", async () => {
+	it("routes a SCOPE_VIOLATION CONTRADICTED code to escalate, not retry", async () => {
 		const disposition = await projectVerdictToDisposition(
-			{ verdict: "CONTRADICTED", reason: "scope-violation: path outside lane scope", per_run: [] },
+			{
+				verdict: "CONTRADICTED",
+				reason_code: "SCOPE_VIOLATION",
+				reason: "path outside lane scope",
+				per_run: [],
+			},
 			makePacket(),
 		);
 		expect(disposition.nextActionKind).toBe("escalate");
 	});
 
-	it("routes an ordinary CONTRADICTED reason to retry_same_topology by default", async () => {
+	it("routes an ordinary CONTRADICTED code to retry_same_topology by default", async () => {
 		const disposition = await projectVerdictToDisposition(
-			{ verdict: "CONTRADICTED", reason: "error-span-scan: 1 error span(s) found", per_run: [] },
+			{
+				verdict: "CONTRADICTED",
+				reason_code: "TRACE_ERROR_SPAN",
+				reason: "error-span-scan: 1 error span(s) found",
+				per_run: [],
+			},
 			makePacket(),
 		);
 		expect(disposition.nextActionKind).toBe("retry_same_topology");
@@ -260,7 +309,12 @@ describe("runAdjudicationWithTimeout", () => {
 		);
 		expect(result).toEqual({
 			ok: true,
-			result: { verdict: "CONFIRMED", reason: "all-checks-passed", per_run: expect.any(Array) },
+			result: {
+				verdict: "CONFIRMED",
+				reason_code: "ALL_CHECKS_PASSED",
+				reason: "all-checks-passed",
+				per_run: expect.any(Array),
+			},
 		});
 	});
 });

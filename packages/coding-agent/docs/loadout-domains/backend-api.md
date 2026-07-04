@@ -83,7 +83,7 @@ HARD RULES: parameterized queries only; migrations are reversible; no silent cat
 - `typecheck-after-edit`
 - `npm-audit-summary`
 
-## Routing triggers (27)
+## Routing triggers (28)
 
 | kind | pattern | weight |
 |---|---|---|
@@ -91,11 +91,12 @@ HARD RULES: parameterized queries only; migrations are reversible; no silent cat
 | keyword | `api` | 4 |
 | keyword | `endpoint` | 4 |
 | keyword | `database` | 5 |
+| keyword | `query performance` | 5 |
 | keyword | `query` | 3 |
 | keyword | `migration` | 5 |
 | keyword | `schema` | 4 |
 | keyword | `server` | 3 |
-| keyword | `auth` | 3 |
+| keyword | `auth` | 4 |
 | keyword | `postgres` | 6 |
 | keyword | `supabase` | 6 |
 | keyword | `sql` | 5 |

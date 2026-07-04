@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git reset --hard*)",
+      "Bash(git checkout .)",
+      "Bash(git checkout . *)",
+      "Bash(git checkout -- .)",
+      "Bash(git checkout -- . *)",
+      "Bash(git restore .)",
+      "Bash(git restore -- .)",
+      "Bash(git clean*)",
+      "Bash(git stash*)",
+      "Bash(git add -A)",
+      "Bash(git add -A *)",
+      "Bash(git add --all*)",
+      "Bash(git add .)",
+      "Bash(git commit --no-verify*)",
+      "Bash(git commit * --no-verify*)",
+      "Bash(git commit -n)",
+      "Bash(git commit -n *)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)",
+      "Bash(pnpm*)",
+      "Bash(yarn*)",
+      "Read(.env)",
+      "Read(.env.*)"
+    ],
+    "ask": [
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "Bash(npm test*)",
+      "Bash(npm run build*)",
+      "Bash(npm run release*)"
+    ]
+  }
+}

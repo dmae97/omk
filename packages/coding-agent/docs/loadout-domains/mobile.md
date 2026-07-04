@@ -72,7 +72,7 @@ HARD RULES: no main-thread blocking; respect safe areas / insets / notches; life
 | keyword | `swift` | 6 |
 | keyword | `swiftui` | 7 |
 | keyword | `kotlin` | 6 |
-| keyword | `compose` | 5 |
+| regex | `\b(jetpack compose|compose multiplatform|android compose)\b` | 7 |
 | keyword | `kmp` | 6 |
 | keyword | `react native` | 6 |
 | keyword | `expo` | 5 |

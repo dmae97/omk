@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm" src="https://img.shields.io/npm/v/open-multi-agent-kit?style=flat-square" /></a>
-  <a href="https://github.com/dmae97/open-multi-agent-kit/releases/tag/v0.90.3"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.3-00d7ff?style=flat-square" /></a>
+  <a href="https://github.com/dmae97/open-multi-agent-kit/releases/tag/v0.90.4"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.4-00d7ff?style=flat-square" /></a>
 </p>
 
 > New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -45,17 +45,19 @@ The OMK//CONTROL startup surface is the default operator view. The header reads 
 
 The default dark TUI theme uses the `omk-control-grid-dark` Night City palette and keeps the control sidebar focused on route, evidence, loop, MCP, runtime, skills, and context budget state.
 
-## Release v0.90.3
+## Release v0.90.4
 
-This release removes the jailbreak subsystem that had shipped in the 0.90.x line and fixes a CI-only visual-QA test.
+This release ships the opt-in reasoning-router line through v4, OMK hub-aware `!omk` routing, safer vendored skill checks, and a cleaner OMK//CONTROL runtime status surface.
 
 | Area | What changed |
 |------|--------------|
-| Safety | Removed the cross-provider jailbreak/godmode payload toolkit (`omk jailbreak` command, `--jailbreak-*` flags, `jailbreak-extension`, `agents/jailbreak`, `utils/jailbreak`, `types/jailbreak`, and the `fuzzing`/`routing`/`encoding`/`multiturn`/`modules` attack modules). It is not a legitimate OMK feature. |
-| Safety | Retained defensive GOD Mode resistance in the system prompt and the context-file sanitization marker. |
-| Tests | The 96-column control-panel visual-QA test now runs its live-render assertion unconditionally and only compares the gitignored `.omo/` artifact when present, so CI checkouts pass. |
+| Reasoning | Added `/think auto-v2`, `/think auto-v3`, and `/think auto-v4` as opt-in router generations while keeping `/think auto` on the stable v1 classifier; v4 adds confidence metadata, bounded negation, compound-intent handling, Korean task-signal coverage, and privacy-safe learning/advisory hooks. |
+| OMK routing | Added `!omk` bang-launcher routing for OMK role hubs such as frontend, backend, loop, plan, security, workspace, and docs; `!omk` no longer falls through to bash. |
+| Skills | Vendors a reviewed `clone-website` skill and six Ponytail markdown skills with dependency checks while keeping unsafe/heavy external runtimes out of the integration path. |
+| Runtime status | OMK//CONTROL now reports stable MCP counts, excludes hub-only routing skills from the visible skill total, and shows the detected installed Headroom version. |
+| Pi+OMK | Shoutout to the Pi+OMK root-coordinator flow: DAG lanes, scoped grants, evidence, and verification stayed in the loop for this release. |
 
-GitHub-focused release notes live in [.github/RELEASE_NOTES_v0.90.3.md](.github/RELEASE_NOTES_v0.90.3.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](packages/coding-agent/CHANGELOG.md).
+GitHub-focused release notes live in [.github/RELEASE_NOTES_v0.90.4.md](.github/RELEASE_NOTES_v0.90.4.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](packages/coding-agent/CHANGELOG.md).
 
 ## Share your OSS coding agent sessions
 

@@ -62,7 +62,7 @@ HARD RULES: tests-only command mode (no arbitrary shell); every fix is re-verifi
 - `pre-shell-guard`
 - `protect-secrets`
 
-## Routing triggers (19)
+## Routing triggers (21)
 
 | kind | pattern | weight |
 |---|---|---|
@@ -70,6 +70,8 @@ HARD RULES: tests-only command mode (no arbitrary shell); every fix is re-verifi
 | keyword | `testing` | 5 |
 | keyword | `qa` | 6 |
 | keyword | `bug` | 4 |
+| keyword | `버그` | 4 |
+| keyword | `테스트` | 5 |
 | keyword | `regression` | 6 |
 | keyword | `e2e` | 7 |
 | keyword | `playwright` | 7 |
@@ -80,7 +82,7 @@ HARD RULES: tests-only command mode (no arbitrary shell); every fix is re-verifi
 | keyword | `fix test` | 5 |
 | keyword | `failing` | 4 |
 | keyword | `flaky` | 6 |
-| regex | `\b(unit test|integration test|snapshot|mock|fixture)\b` | 5 |
+| regex | `\b(unit tests?|integration tests?|snapshot|mock|fixture)\b` | 6 |
 | path | `test/` | 5 |
 | path | `tests/` | 5 |
 | path | `.test.` | 5 |

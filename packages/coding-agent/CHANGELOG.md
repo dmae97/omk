@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added per-task reasoning-effort routing: `/think auto` keeps the stable v1 local classifier, while `/think auto-v2` / `/think auto v2` select the calibrated v2 weighted router for the current session; manual `/think <level>` always takes precedence and levels are clamped to model capabilities.
+- Added the benchmark-backed v3 contextual reasoning-effort router: `/think auto-v3` / `/think auto v3` select v3 for the current session while `/think auto` remains v1 and `/think auto-v2` remains v2.
+- Added the confidence-bearing v4 reasoning-effort router: `/think auto-v4` / `/think auto v4` select v4 for the current session, adding per-turn confidence-band, margin, and fallback-reason metadata so a low-confidence or fallback-decided verdict can only raise, never lower, the resolved thinking level; `/think auto` remains v1, `/think auto-v2` remains v2, and `/think auto-v3` remains v3.
+- Added a gold-set evaluation governance harness for the reasoning-effort routers: fixed train/dev/holdout splits plus accuracy, macro-F1, severe-under-allocation, and class-flip/McNemar reporting scripts, which confirmed v4 classifies identically to v3 across the full gold set, including the held-out rows.
+- Added global opt-in v4 learning-bias wiring: `reasoningRouterLearning.enabled` lets `/think auto-v4` load one validated bias snapshot per session, apply a bounded local bias, and append privacy-safe feedback records without storing raw prompts, file paths, diffs, session identifiers, model/provider payloads, tool output, or hook output. Project-local settings cannot enable or redirect it. The Adaptorch advisory bridge remains default-off groundwork with no runtime transport or session call site.
+- Added a safety caveat to the `docs-writing` domain loadout: `slides-grab` is external, heavy, and runtime-dependent, so it must never be vendored, must never default to reusing a private local session as a credential, and must never have its mutable remote install instructions followed blindly. Part of the Goal 011/012 external-skill-integration review, which also vendors a pinned, provenance-stamped `clone-website` skill and six pinned Ponytail markdown skills (`ponytail`, `ponytail-review`, `ponytail-audit`, `ponytail-debt`, `ponytail-gain`, `ponytail-help`) while keeping `strix`'s executable pentesting runtime out of any integration.
+- Added `!omk` bang-launcher routing for OMK role hubs: exact aliases such as `frontend`, `backend`, `loop`, and `plan` select the matching OMK hub skill, free-form prompts are scored against the hub vocabulary, and `!omk` never falls through to bash.
+
+### Changed
+
+- Changed the OMK//CONTROL runtime status panel so the MCP badge counts only stable server entries, the skills total excludes OMK hub/routing-only skills, and the Headroom line shows the detected installed version while tolerating legacy output formats.
+
 ## [0.90.3] - 2026-07-02
 
 ### Removed
