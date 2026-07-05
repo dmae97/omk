@@ -324,7 +324,10 @@ describe("AgentSession auto-compaction queue resume", () => {
 		// threshold compaction still triggers at realistic test token counts.
 		session.agent.state.model = { ...model, contextWindow: 200_000 };
 
-		// A successful assistant message with high token usage (near context limit)
+		// A successful assistant message with token usage just over the compaction threshold.
+		// Compute this from the selected model so generated catalog context-window changes do not break the test.
+		const compactionSettings = settingsManager.getCompactionSettings();
+		const thresholdTokens = (model.contextWindow ?? 200_000) - compactionSettings.reserveTokens + 1;
 		const successfulAssistant: AssistantMessage = {
 			role: "assistant",
 			content: [{ type: "text", text: "large successful response" }],
@@ -332,11 +335,11 @@ describe("AgentSession auto-compaction queue resume", () => {
 			provider: model.provider,
 			model: model.id,
 			usage: {
-				input: 180_000,
+				input: thresholdTokens - 10_000,
 				output: 10_000,
 				cacheRead: 0,
 				cacheWrite: 0,
-				totalTokens: 190_000,
+				totalTokens: thresholdTokens,
 				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 			},
 			stopReason: "stop",
