@@ -3,11 +3,13 @@ import { join } from "node:path";
 
 // Hardens the Goal 012 external-skill vendoring decisions (Goal 013): the sanitized
 // `clone-website` skill and the six pure-markdown `ponytail*` skills must keep their
-// provenance/license/frontmatter shape and stay free of runtime files, Strix/slides-grab
-// integration must never be vendored under `.omk/skills`, and `scripts/check-pinned-deps.mjs`
-// must keep excluding only the narrow OMK scratch trees, never `.omk` in bulk (that would also
-// hide `.omk/skills` from dependency checks). This script only reads local files with node:fs;
-// it never executes, imports, or evaluates any vendored skill content or third-party code.
+// provenance/license/frontmatter shape and stay free of runtime files, the vendored
+// `taste-skill` pack (13 skills) and opt-in `caveman` skill must keep SOURCE pins and layout,
+// Strix/slides-grab integration must never be vendored under `.omk/skills`, and
+// `scripts/check-pinned-deps.mjs` must keep excluding only the narrow OMK scratch trees, never
+// `.omk` in bulk (that would also hide `.omk/skills` from dependency checks). This script only
+// reads local files with node:fs; it never executes, imports, or evaluates any vendored skill
+// content or third-party code.
 
 const skillsRoot = ".omk/skills";
 const ponytailSkillNames = [
@@ -18,6 +20,24 @@ const ponytailSkillNames = [
 	"ponytail-gain",
 	"ponytail-help",
 ];
+const tasteSkillRoot = join(skillsRoot, "taste-skill");
+const tasteSkillFolders = [
+	["brandkit", "brandkit"],
+	["brutalist-skill", "industrial-brutalist-ui"],
+	["gpt-tasteskill", "gpt-taste"],
+	["image-to-code-skill", "image-to-code"],
+	["imagegen-frontend-mobile", "imagegen-frontend-mobile"],
+	["imagegen-frontend-web", "imagegen-frontend-web"],
+	["minimalist-skill", "minimalist-ui"],
+	["output-skill", "full-output-enforcement"],
+	["redesign-skill", "redesign-existing-projects"],
+	["soft-skill", "high-end-visual-design"],
+	["stitch-skill", "stitch-design-taste"],
+	["taste-skill", "design-taste-frontend"],
+	["taste-skill-v1", "design-taste-frontend-v1"],
+];
+const tastePinnedCommit = "b17742737e796305d829b3ad39eda3add0d79060";
+const cavemanPinnedCommit = "0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0";
 const blockedNamePattern = /\bstrix\b/i;
 const blockedSlidesGrabPattern = /\bslides[-_]?grab\b/i;
 
@@ -89,6 +109,141 @@ function checkLicenseFile(directory, license, label) {
 		fail(`${label}: license file ${licensePath} is empty`);
 	}
 	return license;
+}
+
+function sourceMdPinnedCommit(sourcePath, label) {
+	if (!existsSync(sourcePath)) {
+		fail(`${label}: missing ${sourcePath}`);
+		return null;
+	}
+	const text = readFileSync(sourcePath, "utf8");
+	const patterns = [
+		/\*\*Pinned commit\*\*:\s*`([0-9a-f]{40})`/i,
+		/\*\*Pin \(commit hash\):\*\*\s*`([0-9a-f]{40})`/i,
+	];
+	for (const pattern of patterns) {
+		const match = pattern.exec(text);
+		if (match) return match[1].toLowerCase();
+	}
+	fail(
+		`${label}: SOURCE.md missing **Pinned commit**: \`<40-char hash>\` (or **Pin (commit hash):**)`,
+	);
+	return null;
+}
+
+function checkTasteSkillPack() {
+	const label = "taste-skill";
+	if (!existsSync(tasteSkillRoot)) {
+		fail(`${label}: missing ${tasteSkillRoot}`);
+		return;
+	}
+
+	const sourcePath = join(tasteSkillRoot, "SOURCE.md");
+	const pin = sourceMdPinnedCommit(sourcePath, label);
+	if (pin && pin !== tastePinnedCommit) {
+		fail(
+			`${label}: SOURCE.md pin ${pin} does not match check script constant ${tastePinnedCommit} (update tastePinnedCommit or SOURCE.md together)`,
+		);
+	}
+
+	const licensePath = join(tasteSkillRoot, "LICENSE");
+	if (!existsSync(licensePath)) {
+		fail(`${label}: missing ${licensePath}`);
+	} else if (!/\bMIT\b/i.test(readFileSync(licensePath, "utf8"))) {
+		fail(`${label}: LICENSE does not look like MIT`);
+	} else if (!/Leonxlnx/i.test(readFileSync(licensePath, "utf8"))) {
+		fail(`${label}: LICENSE missing expected copyright holder Leonxlnx`);
+	}
+
+	const skillsDir = join(tasteSkillRoot, "skills");
+	if (!existsSync(skillsDir)) {
+		fail(`${label}: missing ${skillsDir}`);
+		return;
+	}
+
+	const namesSeen = new Set();
+	for (const [folder, expectedName] of tasteSkillFolders) {
+		const skillPath = join(skillsDir, folder, "SKILL.md");
+		const subLabel = `${label} (${folder})`;
+		if (!existsSync(skillPath)) {
+			fail(`${subLabel}: missing ${skillPath}`);
+			continue;
+		}
+		const parsed = readSkillFrontmatter(skillPath);
+		if (!parsed) {
+			fail(`${subLabel}: no valid frontmatter`);
+			continue;
+		}
+		const name = frontmatterValue(parsed.raw, "name");
+		if (name !== expectedName) {
+			fail(`${subLabel}: name must be "${expectedName}", found ${JSON.stringify(name)}`);
+		}
+		if (!frontmatterHasDescription(parsed.raw)) {
+			fail(`${subLabel}: description missing or empty`);
+		}
+		if (name) namesSeen.add(name);
+	}
+
+	if (namesSeen.size !== tasteSkillFolders.length) {
+		fail(`${label}: expected ${tasteSkillFolders.length} distinct skill names, found ${namesSeen.size}`);
+	}
+
+	for (const entry of listEntries(tasteSkillRoot)) {
+		const entryPath = join(tasteSkillRoot, entry.name);
+		if (entry.isSymbolicLink()) {
+			fail(`${label}: unexpected symlink ${entryPath}`);
+		} else if (entry.isDirectory() && entry.name !== "skills") {
+			fail(`${label}: unexpected directory ${entryPath} (only skills/ allowed)`);
+		} else if (entry.isFile() && !["LICENSE", "SOURCE.md"].includes(entry.name)) {
+			fail(`${label}: unexpected file ${entryPath}`);
+		}
+	}
+}
+
+function checkCavemanSkill() {
+	const label = "caveman";
+	const directory = join(skillsRoot, "caveman");
+	if (!existsSync(directory)) {
+		fail(`${label}: missing ${directory}`);
+		return;
+	}
+
+	const skillPath = join(directory, "SKILL.md");
+	const sourcePath = join(directory, "SOURCE.md");
+	const pin = sourceMdPinnedCommit(sourcePath, label);
+	if (pin && pin !== cavemanPinnedCommit) {
+		fail(`${label}: SOURCE.md pin ${pin} does not match check script constant ${cavemanPinnedCommit}`);
+	}
+
+	const parsed = readSkillFrontmatter(skillPath);
+	if (!parsed) {
+		fail(`${label}: ${skillPath} has no valid frontmatter`);
+		return;
+	}
+	const name = frontmatterValue(parsed.raw, "name");
+	if (name !== "caveman") fail(`${label}: name must be "caveman", found ${JSON.stringify(name)}`);
+	if (!frontmatterHasDescription(parsed.raw)) fail(`${label}: description missing or empty`);
+
+	const disableInv = frontmatterValue(parsed.raw, "disable-model-invocation");
+	if (disableInv !== "true") {
+		fail(`${label}: disable-model-invocation must be true (opt-in output style)`);
+	}
+
+	const licensePath = join(directory, "LICENSE");
+	if (!existsSync(licensePath)) {
+		fail(`${label}: missing LICENSE`);
+	} else if (!/\bMIT\b/i.test(readFileSync(licensePath, "utf8"))) {
+		fail(`${label}: LICENSE does not look like MIT`);
+	}
+
+	assertOnlyFiles(directory, new Set(["SKILL.md", "LICENSE", "SOURCE.md"]), label);
+
+	if (!/disable-model-invocation:\s*true/.test(readFileSync(sourcePath, "utf8"))) {
+		fail(`${label}: SOURCE.md should document disable-model-invocation in OMK-specific deltas`);
+	}
+	if (!/\/compact/.test(readFileSync(skillPath, "utf8"))) {
+		fail(`${label}: SKILL.md should document /compact prohibition (OMK builtin collision)`);
+	}
 }
 
 function checkCloneWebsiteSkill() {
@@ -279,6 +434,8 @@ function checkPinnedDepsIgnoreScope() {
 
 checkCloneWebsiteSkill();
 checkPonytailSkills();
+checkTasteSkillPack();
+checkCavemanSkill();
 checkNoBlockedVendoredSkills();
 checkPinnedDepsIgnoreScope();
 
