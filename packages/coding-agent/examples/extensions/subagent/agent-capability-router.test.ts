@@ -10,9 +10,13 @@ import { describe, expect, it } from "vitest";
 import { auditCapabilities, classifyAgent, deriveCapabilities } from "./agent-capability-router.ts";
 import { buildCapabilityCatalog } from "./capabilities.ts";
 
-// Built once at module scope. agentDir is valid on this machine (local
-// verification assumption, not CI).
-const catalog = buildCapabilityCatalog({ agentDir: "/home/yu/.omk/agent" });
+// Built once at module scope from the live skill tree under the agent
+// directory. This is populated during local verification but empty in CI (the
+// agent skill catalog is not checked out on the runner), so the skill-catalog
+// -dependent assertions below are guarded with `skipIf(!hasSkillCatalog)`. The
+// MCP/hooks sets are a fixed OMK list and stay populated everywhere.
+const catalog = buildCapabilityCatalog({ agentDir: `${process.env.HOME ?? "/home/yu"}/.omk/agent` });
+const hasSkillCatalog = catalog.skills.size > 0;
 
 describe("classifyAgent", () => {
 	it("classifies by name token: seo-specialist → marketing-content", () => {
@@ -44,12 +48,15 @@ describe("classifyAgent", () => {
 });
 
 describe("deriveCapabilities", () => {
-	it("weights the name token: react-developer's first derived skill is react-patterns", () => {
-		const { skills } = deriveCapabilities("react-developer", "React frontend", catalog);
-		expect(skills[0]).toBe("react-patterns");
-	});
+	it.skipIf(!hasSkillCatalog)(
+		"weights the name token: react-developer's first derived skill is react-patterns",
+		() => {
+			const { skills } = deriveCapabilities("react-developer", "React frontend", catalog);
+			expect(skills[0]).toBe("react-patterns");
+		},
+	);
 
-	it("includes the literal domain skill for seo-specialist", () => {
+	it.skipIf(!hasSkillCatalog)("includes the literal domain skill for seo-specialist", () => {
 		const { skills } = deriveCapabilities("seo-specialist", "SEO", catalog);
 		expect(skills).toContain("seo");
 	});
@@ -59,7 +66,7 @@ describe("deriveCapabilities", () => {
 		expect(skills.length).toBe(0);
 	});
 
-	it("only emits skills that exist in the live catalog", () => {
+	it.skipIf(!hasSkillCatalog)("only emits skills that exist in the live catalog", () => {
 		const { skills } = deriveCapabilities("react-developer", "React frontend", catalog);
 		expect(skills.length).toBeGreaterThan(0);
 		for (const skill of skills) {
