@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm" src="https://img.shields.io/npm/v/open-multi-agent-kit?style=flat-square" /></a>
-  <a href="https://github.com/dmae97/open-multi-agent-kit/releases/tag/v0.90.4"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.4-00d7ff?style=flat-square" /></a>
+  <a href="https://github.com/dmae97/open-multi-agent-kit/releases/tag/v0.90.5"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.5-00d7ff?style=flat-square" /></a>
 </p>
 
 > New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -45,19 +45,19 @@ The OMK//CONTROL startup surface is the default operator view. The header reads 
 
 The default dark TUI theme uses the `omk-control-grid-dark` Night City palette and keeps the control sidebar focused on route, evidence, loop, MCP, runtime, skills, and context budget state.
 
-## Release v0.90.4
+## Release v0.90.5
 
-This release ships the opt-in reasoning-router line through v4, OMK hub-aware `!omk` routing, safer vendored skill checks, and a cleaner OMK//CONTROL runtime status surface.
+This release collapses automatic reasoning routing to a single `/think auto` backed by the v4 confidence-bearing router, improves v4 real-world routing accuracy, and removes the legacy v1/v2/v3 routers and unused compaction modules.
 
 | Area | What changed |
 |------|--------------|
-| Reasoning | Added `/think auto-v2`, `/think auto-v3`, and `/think auto-v4` as opt-in router generations while keeping `/think auto` on the stable v1 classifier; v4 adds confidence metadata, bounded negation, compound-intent handling, Korean task-signal coverage, and privacy-safe learning/advisory hooks. |
-| OMK routing | Added `!omk` bang-launcher routing for OMK role hubs such as frontend, backend, loop, plan, security, workspace, and docs; `!omk` no longer falls through to bash. |
-| Skills | Vendors a reviewed `clone-website` skill and six Ponytail markdown skills with dependency checks while keeping unsafe/heavy external runtimes out of the integration path. |
-| Runtime status | OMK//CONTROL now reports stable MCP counts, excludes hub-only routing skills from the visible skill total, and shows the detected installed Headroom version. |
+| Reasoning | Collapsed automatic reasoning-effort routing to a single `/think auto` backed by the v4 router; the `/think auto-v1/-v2/-v3/-v4` variants and the v1/v2/v3 routers are removed. Manual `/think <level>` still always takes precedence. |
+| Accuracy | Extended the v4 keyword families (review/refactor/plan/debug vocabulary, Korean plan phrasing, negation-aware review) so real-world, out-of-gold-set prompts route correctly; an out-of-vocabulary probe improves from 22/30 to 30/30 while the frozen gold-set holdout and full set stay at 100%. |
+| Internals | Consolidated the shared thinking-level resolver into `reasoning-router-resolver.ts` and removed the unused `compactor.ts` and legacy `token-optimizer.ts` modules, inlining compatibility telemetry in context-budget v2. |
+| Subagent example | Added a deterministic capability router to the subagent example extension plus read-only `derive`/`check` capability scripts. |
 | Pi+OMK | Shoutout to the Pi+OMK root-coordinator flow: DAG lanes, scoped grants, evidence, and verification stayed in the loop for this release. |
 
-GitHub-focused release notes live in [.github/RELEASE_NOTES_v0.90.4.md](.github/RELEASE_NOTES_v0.90.4.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](packages/coding-agent/CHANGELOG.md).
+GitHub-focused release notes live in [.github/RELEASE_NOTES_v0.90.5.md](.github/RELEASE_NOTES_v0.90.5.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](packages/coding-agent/CHANGELOG.md).
 
 ## Share your OSS coding agent sessions
 
