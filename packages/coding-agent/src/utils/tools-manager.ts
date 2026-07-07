@@ -17,16 +17,20 @@ function isOfflineModeEnabled(): boolean {
 	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
 }
 
+export type ManagedTool = "fd" | "rg" | "codexbar";
+
 interface ToolConfig {
-	name: string;
-	repo: string; // GitHub repo (e.g., "sharkdp/fd")
-	binaryName: string; // Name of the binary inside the archive
-	systemBinaryNames?: string[]; // Alternative system command names to try before downloading
-	tagPrefix: string; // Prefix for tags (e.g., "v" for v1.0.0, "" for 1.0.0)
-	getAssetName: (version: string, plat: string, architecture: string) => string | null;
+	readonly name: string;
+	readonly repo?: string; // GitHub repo (e.g., "sharkdp/fd") when auto-download is supported
+	readonly binaryName: string; // Name of the binary inside the archive
+	readonly systemBinaryNames?: readonly string[]; // Alternative system command names to try before downloading
+	readonly preferSystemBinary?: boolean;
+	readonly tagPrefix?: string; // Prefix for tags (e.g., "v" for v1.0.0, "" for 1.0.0)
+	readonly getAssetName: (version: string, plat: string, architecture: string) => string | null;
+	readonly downloadUnsupportedMessage?: string;
 }
 
-const TOOLS: Record<string, ToolConfig> = {
+const TOOLS: Record<ManagedTool, ToolConfig> = {
 	fd: {
 		name: "fd",
 		repo: "sharkdp/fd",
@@ -68,6 +72,14 @@ const TOOLS: Record<string, ToolConfig> = {
 			return null;
 		},
 	},
+	codexbar: {
+		name: "CodexBar",
+		binaryName: "codexbar",
+		systemBinaryNames: ["codexbar"],
+		preferSystemBinary: true,
+		getAssetName: () => null,
+		downloadUnsupportedMessage: "CodexBar auto-download is not configured; install codexbar on PATH.",
+	},
 };
 
 // Check if a command exists in PATH by trying to run it
@@ -82,25 +94,29 @@ function commandExists(cmd: string): boolean {
 }
 
 // Get the path to a tool (system-wide or in our tools dir)
-export function getToolPath(tool: "fd" | "rg"): string | null {
+export function getToolPath(tool: ManagedTool): string | null {
 	const config = TOOLS[tool];
-	if (!config) return null;
+	const systemBinaryNames = config.systemBinaryNames ?? [config.binaryName];
+	const getSystemPath = (): string | null => {
+		for (const systemBinaryName of systemBinaryNames) {
+			if (commandExists(systemBinaryName)) {
+				return systemBinaryName;
+			}
+		}
+		return null;
+	};
 
-	// Check our tools directory first
+	if (config.preferSystemBinary) {
+		const systemPath = getSystemPath();
+		if (systemPath) return systemPath;
+	}
+
 	const localPath = join(TOOLS_DIR, config.binaryName + (platform() === "win32" ? ".exe" : ""));
 	if (existsSync(localPath)) {
 		return localPath;
 	}
 
-	// Check system PATH - if found, just return the command name (it's in PATH)
-	const systemBinaryNames = config.systemBinaryNames ?? [config.binaryName];
-	for (const systemBinaryName of systemBinaryNames) {
-		if (commandExists(systemBinaryName)) {
-			return systemBinaryName;
-		}
-	}
-
-	return null;
+	return config.preferSystemBinary ? null : getSystemPath();
 }
 
 // Fetch latest release version from GitHub
@@ -238,9 +254,14 @@ function extractZipArchive(archivePath: string, extractDir: string, assetName: s
 }
 
 // Download and install a tool
-async function downloadTool(tool: "fd" | "rg"): Promise<string> {
+async function downloadTool(tool: ManagedTool): Promise<string> {
 	const config = TOOLS[tool];
-	if (!config) throw new Error(`Unknown tool: ${tool}`);
+	if (config.downloadUnsupportedMessage) {
+		throw new Error(config.downloadUnsupportedMessage);
+	}
+	if (!config.repo || config.tagPrefix === undefined) {
+		throw new Error(`${config.name} auto-download is not configured; install ${config.binaryName} on PATH.`);
+	}
 
 	const plat = platform();
 	const architecture = arch();
@@ -316,21 +337,20 @@ async function downloadTool(tool: "fd" | "rg"): Promise<string> {
 }
 
 // Termux package names for tools
-const TERMUX_PACKAGES: Record<string, string> = {
+const TERMUX_PACKAGES: Partial<Record<ManagedTool, string>> = {
 	fd: "fd",
 	rg: "ripgrep",
 };
 
 // Ensure a tool is available, downloading if necessary
-// Returns the path to the tool, or null if unavailable
-export async function ensureTool(tool: "fd" | "rg", silent: boolean = false): Promise<string | undefined> {
+// Returns the path to the tool, or undefined if unavailable
+export async function ensureTool(tool: ManagedTool, silent: boolean = false): Promise<string | undefined> {
 	const existingPath = getToolPath(tool);
 	if (existingPath) {
 		return existingPath;
 	}
 
 	const config = TOOLS[tool];
-	if (!config) return undefined;
 
 	if (isOfflineModeEnabled()) {
 		if (!silent) {
@@ -342,9 +362,24 @@ export async function ensureTool(tool: "fd" | "rg", silent: boolean = false): Pr
 	// On Android/Termux, Linux binaries don't work due to Bionic libc incompatibility.
 	// Users must install via pkg.
 	if (platform() === "android") {
-		const pkgName = TERMUX_PACKAGES[tool] ?? tool;
+		const pkgName = TERMUX_PACKAGES[tool];
 		if (!silent) {
-			console.log(chalk.yellow(`${config.name} not found. Install with: pkg install ${pkgName}`));
+			if (pkgName) {
+				console.log(chalk.yellow(`${config.name} not found. Install with: pkg install ${pkgName}`));
+			} else {
+				console.log(
+					chalk.yellow(
+						`${config.name} not found. No Termux package is configured; install ${config.binaryName} on PATH.`,
+					),
+				);
+			}
+		}
+		return undefined;
+	}
+
+	if (config.downloadUnsupportedMessage) {
+		if (!silent) {
+			console.log(chalk.yellow(`${config.name} not found. ${config.downloadUnsupportedMessage}`));
 		}
 		return undefined;
 	}

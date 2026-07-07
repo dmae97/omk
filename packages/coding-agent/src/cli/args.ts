@@ -228,6 +228,7 @@ ${chalk.bold("Commands:")}
   ${APP_NAME} update [source|self|omk]  Update OMK and installed extensions
   ${APP_NAME} list                      List installed extensions from settings
   ${APP_NAME} config                    Open TUI to enable/disable package resources
+  ${APP_NAME} quota                     Manage CodexBar quota connector and summaries
   ${APP_NAME} <command> --help          Show help for install/remove/uninstall/update/list
 
 ${chalk.bold("Options:")}
