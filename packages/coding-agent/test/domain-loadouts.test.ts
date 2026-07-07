@@ -141,3 +141,32 @@ describe("domain-loadouts curated inventory", () => {
 		}
 	});
 });
+
+describe("algorithm-integration-v2 frontend-ui DOMAIN_PROFILES gate", () => {
+	const frontendUiSkills = (): readonly string[] => getDomainProfile("frontend-ui").skills?.allow?.[0]?.names ?? [];
+
+	it("frontend-ui skills allow-list includes taste integration pack names", () => {
+		const skills = frontendUiSkills();
+		for (const name of [
+			"design-taste-frontend-v1",
+			"brandkit",
+			"imagegen-frontend-web",
+			"imagegen-frontend-mobile",
+		] as const) {
+			expect(skills, `missing integration skill: ${name}`).toContain(name);
+		}
+	});
+
+	it("frontend-ui still includes pre-existing design-taste-frontend and redesign-existing-projects", () => {
+		const skills = frontendUiSkills();
+		expect(skills).toContain("design-taste-frontend");
+		expect(skills).toContain("redesign-existing-projects");
+	});
+
+	it("caveman does not appear in any DOMAIN_PROFILES skills allow list (opt-in only)", () => {
+		for (const profile of Object.values(DOMAIN_PROFILES)) {
+			const skills = profile.skills?.allow?.[0]?.names ?? [];
+			expect(skills, `${profile.id} must not auto-load caveman`).not.toContain("caveman");
+		}
+	});
+});
