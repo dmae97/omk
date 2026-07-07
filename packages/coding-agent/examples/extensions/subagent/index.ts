@@ -20,14 +20,35 @@ import type { AgentToolResult } from "omk-agent-core";
 import type { Message } from "omk-ai";
 import { StringEnum } from "omk-ai";
 import { Container, Markdown, Spacer, Text } from "omk-tui";
-import { type ExtensionAPI, getMarkdownTheme, withFileMutationQueue } from "open-multi-agent-kit";
+import { type ExtensionAPI, getAgentDir, getMarkdownTheme, withFileMutationQueue } from "open-multi-agent-kit";
 import { Type } from "typebox";
+import { deriveCapabilities } from "./agent-capability-router.ts";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.ts";
+import {
+	type AgentCapabilities,
+	buildCapabilitiesPreamble,
+	buildCapabilityCatalog,
+	buildEnforcementArgs,
+	type CapabilityCatalog,
+	parseEmbeddedCapabilities,
+	validateCapabilities,
+} from "./capabilities.ts";
 
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
 const COLLAPSED_ITEM_COUNT = 10;
 const PER_TASK_OUTPUT_CAP = 50 * 1024;
+
+// Capability catalog is expensive to build (scans every SKILL.md on disk); memoize
+// once per dispatcher process.
+let cachedCapabilityCatalog: CapabilityCatalog | null = null;
+
+function getCapabilityCatalog(): CapabilityCatalog {
+	if (!cachedCapabilityCatalog) {
+		cachedCapabilityCatalog = buildCapabilityCatalog({ agentDir: getAgentDir() });
+	}
+	return cachedCapabilityCatalog;
+}
 
 function formatTokens(count: number): string {
 	if (count < 1000) return count.toString();
@@ -289,6 +310,43 @@ async function runSingleAgent(
 	if (agent.model) args.push("--model", agent.model);
 	if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
 
+	// Capability routing, three tiers: frontmatter is canonical; the embedded "Assigned
+	// capabilities" body section is the fallback for the ~233 broad-catalog agents; the
+	// deterministic capability router (name/description keyword classification against the
+	// live catalog) is the final fallback for agents with neither (e.g. the ua-* pipeline
+	// stages, or any new agent file dropped in without a capability declaration). Validate
+	// against the live catalog so unknown (e.g. hallucinated) names are pruned and surfaced.
+	const declaredCapabilities = agent.capabilities ?? parseEmbeddedCapabilities(agent.systemPrompt);
+	let isAutoDerived = false;
+	let effectiveCapabilities: AgentCapabilities | undefined = declaredCapabilities;
+	if (!effectiveCapabilities) {
+		const derived = deriveCapabilities(agent.name, agent.description, getCapabilityCatalog());
+		if (derived.skills.length > 0) {
+			effectiveCapabilities = derived;
+			isAutoDerived = true;
+		}
+	}
+	const validatedCapabilities = effectiveCapabilities
+		? validateCapabilities(effectiveCapabilities, getCapabilityCatalog())
+		: undefined;
+	if (validatedCapabilities) {
+		const unknowns = [
+			...validatedCapabilities.unknownSkills,
+			...validatedCapabilities.unknownMcp,
+			...validatedCapabilities.unknownHooks,
+		];
+		if (unknowns.length > 0) {
+			console.warn(`[subagent] agent "${agentName}" declares unknown capabilities: ${unknowns.join(", ")}`);
+		}
+	}
+	// Opt-in hard enforcement: restrict the subprocess to the declared skills only, via the
+	// existing --no-skills + --skill <path> flags (no core change). Off by default.
+	if (agent.enforceCapabilities && validatedCapabilities) {
+		for (const arg of buildEnforcementArgs(validatedCapabilities, getCapabilityCatalog())) {
+			args.push(arg);
+		}
+	}
+
 	let tmpPromptDir: string | null = null;
 	let tmpPromptPath: string | null = null;
 
@@ -314,8 +372,18 @@ async function runSingleAgent(
 	};
 
 	try {
-		if (agent.systemPrompt.trim()) {
-			const tmp = await writePromptToTempFile(agent.name, agent.systemPrompt);
+		let systemPromptForSpawn = agent.systemPrompt;
+		if (validatedCapabilities) {
+			const preamble = buildCapabilitiesPreamble(validatedCapabilities);
+			if (preamble) {
+				const prefixed = isAutoDerived
+					? `${preamble}\n(auto-derived: no declared capabilities found; classified from agent name/description by the deterministic capability router, not curated)`
+					: preamble;
+				systemPromptForSpawn = `${prefixed}\n\n${agent.systemPrompt}`;
+			}
+		}
+		if (systemPromptForSpawn.trim()) {
+			const tmp = await writePromptToTempFile(agent.name, systemPromptForSpawn);
 			tmpPromptDir = tmp.dir;
 			tmpPromptPath = tmp.filePath;
 			args.push("--append-system-prompt", tmpPromptPath);

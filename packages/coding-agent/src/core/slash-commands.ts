@@ -19,7 +19,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "settings", description: "Open settings menu" },
 	{
 		name: "think",
-		description: "Select thinking level (auto routes per task; auto-v1/auto-v2/auto-v3/auto-v4 select v1/v2/v3/v4)",
+		description: "Select thinking level (auto routes per task through v4)",
 	},
 	{ name: "model", description: "Select model (opens selector UI, then thinking selector)" },
 	{ name: "scoped-models", description: "Enable/disable models for Ctrl+P cycling" },

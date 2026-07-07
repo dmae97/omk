@@ -244,8 +244,7 @@ describe("goal 009: reasoning-router evaluation governance (Lane E)", () => {
 			expect(mcnemarExactTwoSided(1, 9)).toBeCloseTo(22 / 1024, 9);
 		});
 
-		it("mcnemarExactTwoSided reproduces the Goal 004 Lane I5 v1-vs-v2 evidence value (b=11, c=4)", () => {
-			// .omk/goals/004-reasoning-router-v2-impl/laneI5-eval.md recorded b=11, c=4, p=0.1185.
+		it("mcnemarExactTwoSided reproduces the archived discordant-pair evidence value (b=11, c=4)", () => {
 			expect(mcnemarExactTwoSided(11, 4)).toBeCloseTo(0.1185, 4);
 		});
 

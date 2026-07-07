@@ -1,14 +1,13 @@
 /**
  * Reasoning-router AdaptOrch advisory bridge (Goal 009 Lane B).
  *
- * A default-off, advisory-only primitive for a future opt-in reasoning-router
- * hint source. This module is intentionally NOT wired into agent-session.ts,
- * reasoning-router-v2.ts, or reasoning-router-v3.ts by this lane - it only
- * implements the bridge's payload/result schema, sanitize/validate helpers,
- * TTL cache, budget counter, circuit breaker, and timeout wrapper around a
- * caller-injected advisory function. A future lane decides how (or whether)
- * to fuse a returned hint into a resolved ThinkingLevel and to actually call
- * this module from agent-session.ts.
+ * A default-off, advisory-only primitive for a future reasoning-router hint
+ * source. This module is intentionally NOT wired into agent-session.ts; it only
+ * implements the bridge's payload/result schema, sanitize/validate helpers, TTL
+ * cache, budget counter, circuit breaker, and timeout wrapper around a
+ * caller-injected advisory function. A future lane decides how (or whether) to
+ * fuse a returned hint into a resolved ThinkingLevel and to actually call this
+ * module from agent-session.ts.
  *
  * Grounded in the read-first plan at
  * .omk/goals/008-reasoning-router-advanced-accuracy-plan/laneC-privacy-adaptorch.md
@@ -27,16 +26,10 @@
  *    `taskClass` and a `confidenceBand` - both closed enums - never a raw
  *    numeric confidence or a `ThinkingLevel` value. Fusing a hint into a
  *    resolved level is out of scope for this module.
- *  - No product source (agent-session.ts, reasoning-router-v2/v3.ts,
- *    reasoning-router-weights.ts) is imported here. `AdaptorchTaskClass` /
- *    `AdaptorchLaneType` intentionally mirror `TaskClassV2` /
- *    `ReasoningLaneTypeV2` from reasoning-router-v2.ts by value, not by
- *    import, so this lane's narrow write scope (this file, its regression
- *    test, and its evidence file only) cannot be affected by - or affect -
- *    any concurrently-running Wave 1 lane's edits to the router modules. A
- *    future wiring lane should keep these enums in sync (or replace the
- *    local copies with a shared import) once it deliberately connects this
- *    bridge to the router.
+ *  - No product source is imported here. `AdaptorchTaskClass` /
+ *    `AdaptorchLaneType` intentionally mirror the v4 task/lane unions by
+ *    value, not by import, so this bridge remains isolated until a future
+ *    wiring lane deliberately connects it to the router.
  *  - Every outbound/inbound field is a closed enum, a boolean, or a bounded
  *    integer, derived from local features only. There is structurally no
  *    field shaped to carry prompt text, a prompt hash, a file/working-
@@ -57,10 +50,10 @@
  * never depend on real wall-clock time or a real MCP call).
  */
 
-/** Closed set of task classes. Mirrors TaskClassV2 in reasoning-router-v2.ts by value (see file header). */
+/** Closed set of task classes. Mirrors the v4 task-class union by value (see file header). */
 export type AdaptorchTaskClass = "trivial" | "simple-edit" | "code-gen" | "debug" | "refactor" | "review" | "plan";
 
-/** Closed set of subagent lane types. Mirrors ReasoningLaneTypeV2 in reasoning-router-v2.ts by value. */
+/** Closed set of subagent lane types. Mirrors the v4 lane union by value. */
 export type AdaptorchLaneType = "planner" | "security" | "explorer" | "coder" | "reviewer" | "tester";
 
 /** Local top1-vs-runner-up score-margin bucket (plan 4.5 ConsultPayloadV1.marginBucket). */
@@ -69,7 +62,7 @@ export type AdaptorchMarginBucket = "tie" | "low" | "medium" | "high";
 /** Locally-derived confidence band for a returned hint. Never a raw network-supplied float (plan 4.3). */
 export type AdaptorchConfidenceBand = "low" | "medium" | "high";
 
-/** floor(log2(trimmedPromptLen+1)) clamped to [0,7] - same bucketing as reasoning-router-v2.ts's clampLenBucket. */
+/** floor(log2(trimmedPromptLen+1)) clamped to [0,7]. */
 export type AdaptorchLenBucket = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 /** Context-pressure band 0..3 - same bucketing as agent-session.ts's _computePressureBucket. */

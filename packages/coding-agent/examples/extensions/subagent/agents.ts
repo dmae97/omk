@@ -5,6 +5,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir, parseFrontmatter } from "open-multi-agent-kit";
+import { type AgentCapabilities, parseCapabilities } from "./capabilities.ts";
 
 export type AgentScope = "user" | "project" | "both";
 
@@ -13,6 +14,11 @@ export interface AgentConfig {
 	description: string;
 	tools?: string[];
 	model?: string;
+	/** Optional capabilities declared in frontmatter (canonical source). */
+	capabilities?: AgentCapabilities;
+	/** When true, the dispatcher restricts the spawned subprocess to the declared
+	 * skills via `--no-skills` + `--skill <path>`. Default off (guidance only). */
+	enforceCapabilities?: boolean;
 	systemPrompt: string;
 	source: "user" | "project";
 	filePath: string;
@@ -60,11 +66,19 @@ function loadAgentsFromDir(dir: string, source: "user" | "project"): AgentConfig
 			.map((t: string) => t.trim())
 			.filter(Boolean);
 
+		const capabilities = parseCapabilities(frontmatter);
+		const enforceCapabilities =
+			typeof frontmatter.enforceCapabilities === "string"
+				? frontmatter.enforceCapabilities.trim().toLowerCase() === "true"
+				: undefined;
+
 		agents.push({
 			name: frontmatter.name,
 			description: frontmatter.description,
 			tools: tools && tools.length > 0 ? tools : undefined,
 			model: frontmatter.model,
+			capabilities,
+			enforceCapabilities,
 			systemPrompt: body,
 			source,
 			filePath,

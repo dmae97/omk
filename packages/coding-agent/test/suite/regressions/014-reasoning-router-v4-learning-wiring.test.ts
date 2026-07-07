@@ -1,79 +1,8 @@
 /**
- * Goal 010 Lane T — regression tests for default-off and opt-in auto-v4
- * learning-bias wiring.
- *
- * ============================================================================
- * INVESTIGATION TIMELINE (why this file is a full real-behavior suite, not
- * an `it.todo`-deferred one)
- * ============================================================================
- * This lane's task explicitly allowed for production wiring not being ready
- * yet ("If production wiring not ready, write expected tests and note
- * deferred; otherwise run targeted 014"), so the real state was checked
- * before writing anything -- twice, mirroring Goal 009 Lane V2's own
- * documented precedent for this exact multi-session repo (see
- * `012-reasoning-router-learning-adaptorch-activation.test.ts`'s own header).
- *
- * 1. FIRST CHECK: a repo-wide grep for `compileBiasSnapshot`,
- *    `getBiasStepsForCell`, `appendRouterFeedbackRecord`, `RouterBiasSnapshot`,
- *    or any plausible settings-key name, outside the Wave 1 modules
- *    (`router-feedback-collector.ts`, `reasoning-router-bias.ts`) and their
- *    own 010 test, matched nothing. `_applyAutoThinkingLevelV4`
- *    (agent-session.ts) still called `resolveThinkingLevelV4WithUncertainty(
- *    verdict, availableLevels, undefined, 0, null)` -- bias/hint hardcoded --
- *    with a doc comment stating this was "pending a later settings-UX
- *    decision". `specs/008-reasoning-router-advanced-accuracy/tasks.md` T010
- *    was an unchecked `[ ]` item, and `RouterFeedbackVersion` had no `"v4"`
- *    member. `.omk/goals/010-reasoning-router-v4-learning-wiring/` held only
- *    an initialized `result.json` (`changedFiles: []`). Conclusion at this
- *    point: NOT ready.
- * 2. SECOND CHECK, made while reading further context for this file (per
- *    this repo's documented multi-session model): `.omk/goals/010-.../` had
- *    gained a `laneS-presecurity.md` (Goal 010's own pre-implementation
- *    security checklist -- review-only, PASS, no blockers), and
- *    `git status --porcelain` now showed `settings-manager.ts` freshly
- *    modified (untouched at check 1). Re-reading `settings-manager.ts` and
- *    `agent-session.ts` in full confirmed a complete, working implementation
- *    ("Goal 010 Lane I" per its own doc comments):
- *    - `settings-manager.ts`: a new `ReasoningRouterLearningSettings`
- *      (`enabled?`, `biasSnapshotPath?`, `feedbackLedgerPath?`) on `Settings`,
- *      plus `getReasoningRouterLearningEnabled/BiasSnapshotPath/
- *      FeedbackLedgerPath` getters that read ONLY `globalSettings` (never the
- *      merged/project-overridable view) -- a project-scope `.omk/settings.json`
- *      can never turn this on, matching Lane S's checklist item 2.1.
- *    - `agent-session.ts`'s `_applyAutoThinkingLevelV4` now reads
- *      `settingsManager.getReasoningRouterLearningEnabled()`; when true, it
- *      loads (once per session, "pinned") and strictly validates a compiled
- *      bias snapshot via the new `parseRouterBiasSnapshot`, computes `bias`
- *      via `getBiasStepsForCell`, and -- after resolving the level -- appends
- *      exactly one bounded, "accepted"-signal `RouterFeedbackRecord` (now
- *      legally tagged `routerVersion: "v4"`) per turn. `hint` stays
- *      permanently `null` (Adaptorch remains unwired, out of this lane's
- *      scope).
- *    - `reasoning-router-bias.ts` gained `isRouterBiasCell`/
- *      `isRouterBiasSnapshot`/`parseRouterBiasSnapshot`/
- *      `getDefaultRouterBiasSnapshotPath` -- a "never trust on-disk JSON,
- *      never throw, return null instead" loader satisfying Lane S's checklist
- *      item 2.4 exactly.
- *    - `router-feedback-collector.ts`'s `RouterFeedbackVersion` was widened to
- *      `"v1" | "v2" | "v3" | "v4"`.
- *    This is the signature of a concurrent Goal 010 implementation lane
- *    landing in this shared worktree while this lane was reading context --
- *    an expected occurrence per this repo's documented multi-session model,
- *    not an error (identical to the 012/Lane V2 precedent this file's header
- *    cites). Given wiring is now genuinely complete, this file writes real,
- *    passing tests against the actual implementation and verifies them for
- *    real (see this lane's evidence file for the exact commands), rather than
- *    the `it.todo`/deferred scaffolding the task's fallback clause would
- *    otherwise have required.
- *
- * All prompts below are synthetic test data (no real session text, paths,
- * tokens, or URLs). SPELLING_PROMPT/PLAN_PROMPT are copied verbatim from
- * 007's/012's own constants (already-verified v4 ground truth), so this
- * file's expectations cannot silently drift from that already-vetted
- * baseline. 010/012/013 are read-only grounding for this file and were not
- * modified. Every snapshot/ledger path used below is a fresh `mkdtempSync`
- * directory, cleaned up in `afterEach`; nothing here ever reads or writes a
- * real (non-temp) agent directory.
+ * Regression tests for default-off and opt-in `/think auto` v4 learning-bias
+ * wiring. All prompts are synthetic test data. Every snapshot/ledger path is a
+ * fresh temp directory cleaned up in `afterEach`; nothing here reads or writes a
+ * real agent directory.
  */
 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -97,9 +26,9 @@ import {
 import { InteractiveMode } from "../../../src/modes/interactive/interactive-mode.ts";
 import { createHarness, type Harness, type HarnessOptions } from "../harness.ts";
 
-/** Verbatim from 007/012 (already-verified v4 ground truth: taskClass "simple-edit", confidenceBand "high", resolves "low" at bias 0). */
+/** Already-verified v4 ground truth: taskClass "simple-edit", confidenceBand "high", resolves "low" at bias 0. */
 const SPELLING_PROMPT = "correct the spelling of 'recieve' to 'receive'";
-/** Verbatim from 007/012 (already-verified v4 ground truth: taskClass "plan", confidenceBand "high"). */
+/** Already-verified v4 ground truth: taskClass "plan", confidenceBand "high". */
 const PLAN_PROMPT = "plan the architecture roadmap for the storage layer";
 
 const FULL_LEVEL_SET: readonly ThinkingLevel[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
@@ -161,9 +90,8 @@ function buildSingleCellSnapshot(
 }
 
 // ============================================================================
-// Session-level harness (InteractiveMode private-method tunneling -- identical
-// idiom to 005/007/012; redefined locally per this repo's self-containment
-// convention for regression test files).
+// Session-level harness (InteractiveMode private-method tunneling; redefined
+// locally per this repo's self-containment convention for regression tests).
 // ============================================================================
 
 type SubmitEditor = { onSubmit?: (text: string) => Promise<void> | void };
@@ -174,7 +102,7 @@ type ThinkSubmitContext = {
 	readonly session: Harness["session"];
 	readonly footer: { readonly invalidate: () => void };
 	readonly handleThinkCommand: (level?: string) => void;
-	readonly enableAutoThinkingMode: (version: "v1" | "v2" | "v3" | "v4") => void;
+	readonly enableAutoThinkingMode: () => void;
 	readonly applyThinkingLevel: (level: ThinkingLevel) => void;
 	readonly showThinkingSelector: () => void;
 	readonly showError: (message: string) => void;
@@ -185,7 +113,7 @@ type ThinkSubmitContext = {
 type InteractiveModeThinkPrivate = {
 	setupEditorSubmitHandler(this: ThinkSubmitContext): void;
 	handleThinkCommand(this: ThinkSubmitContext, level?: string): void;
-	enableAutoThinkingMode(this: ThinkSubmitContext, version: "v1" | "v2" | "v3" | "v4"): void;
+	enableAutoThinkingMode(this: ThinkSubmitContext): void;
 	applyThinkingLevel(this: ThinkSubmitContext, level: ThinkingLevel): void;
 };
 
@@ -224,8 +152,8 @@ async function createThinkSubmitContext(
 		handleThinkCommand(level?: string) {
 			interactiveModePrototype.handleThinkCommand.call(context, level);
 		},
-		enableAutoThinkingMode(version: "v1" | "v2" | "v3" | "v4") {
-			interactiveModePrototype.enableAutoThinkingMode.call(context, version);
+		enableAutoThinkingMode() {
+			interactiveModePrototype.enableAutoThinkingMode.call(context);
 		},
 		applyThinkingLevel(level: ThinkingLevel) {
 			interactiveModePrototype.applyThinkingLevel.call(context, level);
@@ -256,20 +184,20 @@ async function promptAndReadLevel(harness: Harness, prompt: string): Promise<Thi
 // Tests
 // ============================================================================
 
-describe("goal 010 lane T: default settings — auto-v4 behavior and ledger/snapshot I/O unchanged", () => {
-	it('/think auto-v4 resolves the known simple-edit sentinel to "low" with no learning settings configured', async () => {
+describe("goal 010 lane T: default settings — auto behavior and ledger/snapshot I/O unchanged", () => {
+	it('/think auto resolves the known simple-edit sentinel to "low" with no learning settings configured', async () => {
 		const { harness, context } = await createThinkSubmitContext();
 
 		expect(harness.settingsManager.getReasoningRouterLearningEnabled()).toBe(false);
 
-		await submit(context, "/think auto-v4");
+		await submit(context, "/think auto");
 		expect(await promptAndReadLevel(harness, SPELLING_PROMPT)).toBe("low");
 		expect(context.showError).not.toHaveBeenCalled();
 	});
 
-	it("/think auto-v4 resolves the known plan sentinel exactly as the real classifier+resolver predict with no learning settings configured", async () => {
+	it("/think auto resolves the known plan sentinel exactly as the real classifier+resolver predict with no learning settings configured", async () => {
 		const { harness, context } = await createThinkSubmitContext();
-		await submit(context, "/think auto-v4");
+		await submit(context, "/think auto");
 
 		const availableLevels = harness.session.getAvailableThinkingLevels();
 		const verdict = classifyTaskV4({ prompt: PLAN_PROMPT });
@@ -290,7 +218,7 @@ describe("goal 010 lane T: default settings — auto-v4 behavior and ledger/snap
 		});
 		expect(harness.settingsManager.getReasoningRouterLearningEnabled()).toBe(false);
 
-		await submit(context, "/think auto-v4");
+		await submit(context, "/think auto");
 		await promptAndReadLevel(harness, SPELLING_PROMPT);
 		await promptAndReadLevel(harness, PLAN_PROMPT);
 
@@ -312,7 +240,7 @@ describe("goal 010 lane T: opt-in learning, no snapshot present — same resolut
 		expect(harness.settingsManager.getReasoningRouterLearningEnabled()).toBe(true);
 		expect(existsSync(biasSnapshotPath)).toBe(false);
 
-		await submit(context, "/think auto-v4");
+		await submit(context, "/think auto");
 		expect(await promptAndReadLevel(harness, SPELLING_PROMPT)).toBe("low");
 		expect(context.showError).not.toHaveBeenCalled();
 
@@ -348,14 +276,14 @@ describe("goal 010 lane T: opt-in learning, no snapshot present — same resolut
 		});
 	});
 
-	it("appends one ordered ledger line per auto-v4 turn", async () => {
+	it("appends one ordered ledger line per auto turn", async () => {
 		const dir = scratchDir();
 		const feedbackLedgerPath = join(dir, "ledger.jsonl");
 		const { harness, context } = await createThinkSubmitContext({
 			reasoningRouterLearning: { enabled: true, feedbackLedgerPath },
 		});
 
-		await submit(context, "/think auto-v4");
+		await submit(context, "/think auto");
 		await promptAndReadLevel(harness, SPELLING_PROMPT);
 		await promptAndReadLevel(harness, PLAN_PROMPT);
 
@@ -370,7 +298,7 @@ describe("goal 010 lane T: opt-in learning, no snapshot present — same resolut
 	});
 });
 
-describe("goal 010 lane T: opt-in learning with a valid bias snapshot — escalates/de-escalates auto-v4 resolution within bounds", () => {
+describe("goal 010 lane T: opt-in learning with a valid bias snapshot — escalates/de-escalates auto resolution within bounds", () => {
 	it('a unanimous up-vote snapshot escalates the simple-edit sentinel from "low" to "high" (+2 ladder rungs, the documented bias bound)', async () => {
 		expect(classifyTaskV4({ prompt: SPELLING_PROMPT }).confidenceBand).toBe("high");
 
@@ -383,7 +311,7 @@ describe("goal 010 lane T: opt-in learning with a valid bias snapshot — escala
 			reasoningRouterLearning: { enabled: true, biasSnapshotPath, feedbackLedgerPath },
 		});
 
-		await submit(context, "/think auto-v4");
+		await submit(context, "/think auto");
 		expect(await promptAndReadLevel(harness, SPELLING_PROMPT)).toBe("high");
 		expect(context.showError).not.toHaveBeenCalled();
 	});
@@ -398,7 +326,7 @@ describe("goal 010 lane T: opt-in learning with a valid bias snapshot — escala
 			reasoningRouterLearning: { enabled: true, biasSnapshotPath, feedbackLedgerPath },
 		});
 
-		await submit(context, "/think auto-v4");
+		await submit(context, "/think auto");
 		expect(await promptAndReadLevel(harness, SPELLING_PROMPT)).toBe("minimal");
 		expect(context.showError).not.toHaveBeenCalled();
 	});
@@ -413,7 +341,7 @@ describe("goal 010 lane T: opt-in learning with a valid bias snapshot — escala
 		const { harness, context } = await createThinkSubmitContext({
 			reasoningRouterLearning: { enabled: true, biasSnapshotPath, feedbackLedgerPath },
 		});
-		await submit(context, "/think auto-v4");
+		await submit(context, "/think auto");
 
 		const availableLevels = harness.session.getAvailableThinkingLevels();
 		const verdict = classifyTaskV4({ prompt: PLAN_PROMPT });
@@ -482,7 +410,7 @@ describe("goal 010 lane T: opt-in learning with an invalid or corrupted on-disk 
 				reasoningRouterLearning: { enabled: true, biasSnapshotPath, feedbackLedgerPath },
 			});
 
-			await submit(context, "/think auto-v4");
+			await submit(context, "/think auto");
 			expect(await promptAndReadLevel(harness, SPELLING_PROMPT)).toBe("low");
 			expect(context.showError).not.toHaveBeenCalled();
 
@@ -519,8 +447,8 @@ describe("goal 010 lane T: parseRouterBiasSnapshot rejects the same malformed sn
 	});
 });
 
-describe("goal 010 lane T: manual /think low after auto-v4 still wins, even against an actively non-zero bias", () => {
-	it('/think low exits auto-v4 and pins the level at "low" even though the active snapshot would otherwise escalate the same prompt to "high"', async () => {
+describe("goal 010 lane T: manual /think low after auto still wins, even against an actively non-zero bias", () => {
+	it('/think low exits auto and pins the level at "low" even though the active snapshot would otherwise escalate the same prompt to "high"', async () => {
 		const dir = scratchDir();
 		const biasSnapshotPath = join(dir, "snapshot.json");
 		const feedbackLedgerPath = join(dir, "ledger.jsonl");
@@ -530,7 +458,7 @@ describe("goal 010 lane T: manual /think low after auto-v4 still wins, even agai
 			reasoningRouterLearning: { enabled: true, biasSnapshotPath, feedbackLedgerPath },
 		});
 
-		await submit(context, "/think auto-v4");
+		await submit(context, "/think auto");
 		expect(await promptAndReadLevel(harness, SPELLING_PROMPT)).toBe("high"); // bias is genuinely active here
 
 		await submit(context, "/think low");

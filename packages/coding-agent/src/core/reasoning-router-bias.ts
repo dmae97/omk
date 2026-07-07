@@ -1,21 +1,12 @@
 /**
- * Reasoning-router bias compiler — Goal 009 Wave 1 Lane L (privacy-safe learning ledger).
+ * Reasoning-router bias compiler — privacy-safe learning ledger.
  *
- * Pure, deterministic compiler from a set of privacy-safe feedback records
- * (see router-feedback-collector.ts) to a bounded, per-cell reasoning-level
- * bias snapshot. No clock, randomness, network, or model calls: the same
- * input array always produces the same output (`JSON.stringify` byte-
- * identical), regardless of input record order. This module is a standalone,
- * pure utility — nothing here is wired into a router resolver or
- * agent-session.ts by this lane.
- *
- * Goal 010 Lane I addition: `isRouterBiasCell` / `isRouterBiasSnapshot` /
- * `parseRouterBiasSnapshot` / `getDefaultRouterBiasSnapshotPath` below let a
- * (now opt-in) caller safely load a snapshot this module previously only
- * wrote. `parseRouterBiasSnapshot` performs no filesystem access itself — it
- * only validates already-read text — so this module's zero-I/O determinism
- * guarantee for `compileBiasSnapshot`/`getBiasStepsForCell` is unchanged; the
- * actual disk read lives in agent-session.ts.
+ * Pure, deterministic compiler from v4 feedback records (see
+ * router-feedback-collector.ts) to a bounded, per-cell reasoning-level bias
+ * snapshot. No clock, randomness, network, or model calls: the same input array
+ * always produces the same output (`JSON.stringify` byte-identical), regardless
+ * of input record order. `parseRouterBiasSnapshot` performs no filesystem
+ * access itself; the actual disk read lives in agent-session.ts.
  */
 
 import { createHash } from "crypto";
@@ -36,7 +27,7 @@ import {
 /** Minimum non-neutral ("strong") record count per cell before any bias applies. */
 export const BIAS_STRONG_THRESHOLD = 5;
 
-/** Bias magnitude bound, matching the resolver's existing bias clamp (reasoning-router-v2.ts BIAS_MAX). */
+/** Bias magnitude bound, matching the resolver's bias clamp. */
 export const BIAS_MAX_STEPS = 2;
 
 /** Bounded per-cell bias, in ladder steps. Never outside [-2, 2]. */
@@ -73,12 +64,9 @@ export interface RouterBiasSnapshot {
 
 export interface CompileBiasSnapshotOptions {
 	/**
-	 * Restrict compilation to one router version — `compileBiasSnapshot` never
-	 * mixes records from different router versions into one snapshot. Records
-	 * tagged with any other `routerVersion` are excluded from this snapshot and
-	 * counted in `droppedCount`. Defaults to "v3" for API compatibility; the
-	 * offline CLI now defaults to "v4", matching the only auto-router wired to
-	 * consume a learning-bias snapshot at runtime.
+	 * Restrict compilation to one router version. The only supported runtime
+	 * router version is v4; records tagged with any other value are invalid and
+	 * counted in `droppedCount`.
 	 */
 	readonly routerVersion?: RouterFeedbackVersion;
 }
@@ -149,7 +137,7 @@ export function compileBiasSnapshot(
 	records: readonly unknown[],
 	options: CompileBiasSnapshotOptions = {},
 ): RouterBiasSnapshot {
-	const routerVersion = options.routerVersion ?? "v3";
+	const routerVersion = options.routerVersion ?? "v4";
 	const valid: RouterFeedbackRecord[] = [];
 	let droppedCount = 0;
 

@@ -40,7 +40,7 @@ import {
 
 function baseRecord(overrides: Partial<RouterFeedbackRecord> = {}): RouterFeedbackRecord {
 	return {
-		routerVersion: "v3",
+		routerVersion: "v4",
 		laneType: "none",
 		predictedClass: "code-gen",
 		resolvedLevel: "medium",
@@ -150,12 +150,9 @@ describe("goal 009 lane L: appendRouterFeedbackRecord default-off (no write)", (
 		expect(existsSync(ledgerPath)).toBe(false);
 	});
 
-	it("never creates a directory/file for an auto-v3-shaped session with learning left at its default", () => {
-		// Mirrors the product default: router-version selection alone never implies consent.
-		for (const record of [
-			baseRecord({ routerVersion: "v3" }),
-			baseRecord({ routerVersion: "v3", signal: "s1-override" }),
-		]) {
+	it("never creates a directory/file for an auto session with learning left at its default", () => {
+		// Mirrors the product default: auto selection alone never implies consent.
+		for (const record of [baseRecord(), baseRecord({ signal: "s1-override" })]) {
 			appendRouterFeedbackRecord(record, { enabled: false, ledgerPath });
 		}
 		expect(existsSync(join(tempDir, "nested"))).toBe(false);
@@ -262,7 +259,7 @@ describe("goal 009 lane L: compileBiasSnapshot schema drop-and-count", () => {
 		const entries: unknown[] = [
 			valid,
 			{ ...valid, prompt: "leak" },
-			{ ...valid, routerVersion: "v1" },
+			{ ...valid, routerVersion: "v3" },
 			null,
 			"not-an-object",
 			42,

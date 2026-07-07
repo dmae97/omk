@@ -34,8 +34,18 @@ import {
 	type QualityDiagnosticV2,
 	type SelectedRepresentationV2,
 	type TierBudgetPolicyV2,
+	type TokenOptimizerRuntimeStatus,
 } from "./context-budget-v2-types.ts";
-import { getTokenOptimizerRuntimeStatus } from "./token-optimizer.ts";
+
+// Inlined constant replacing the deleted legacy token-optimizer.ts module's
+// getTokenOptimizerRuntimeStatus(): a fixed, hardcoded compatibility status.
+const TOKEN_OPTIMIZER_RUNTIME_STATUS: TokenOptimizerRuntimeStatus = {
+	optimizerId: "legacy-token-optimizer",
+	status: "quarantined_compatibility",
+	active: false,
+	activeContextBudgetOptimizer: "context-budget-v2",
+	compatibilityOnly: true,
+};
 
 export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): PromptContextBudgetPlanV2 {
 	const modelId = input.modelId ?? "unknown";
@@ -249,7 +259,7 @@ function buildObservability(input: {
 		},
 		planHash: input.planHash,
 		cache: input.cacheTelemetry,
-		tokenOptimizer: getTokenOptimizerRuntimeStatus(),
+		tokenOptimizer: TOKEN_OPTIMIZER_RUNTIME_STATUS,
 	};
 }
 

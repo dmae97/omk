@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `reasoning-router-resolver.ts` as the shared thinking-level resolver core for the v4 reasoning router, centralizing `resolveThinkingLevelCore`, `TASK_CLASS_THINKING_LEVELS`, lane-step adjustment, bounded bias/hint fusion, confidence escalation, and available-level clamping.
+- Added deterministic capability routing to the subagent example extension, including catalog-backed capability parsing and validation, domain-profile derivation, assigned-capability preambles for bundled agents, optional skill enforcement, unit coverage, the read-only `scripts/derive-agent-capabilities.mjs` classify/audit CLI, and the `scripts/check-agent-capabilities.mjs` live-catalog guard.
+
+### Changed
+
+- Collapsed automatic reasoning-effort routing to a single `/think auto` backed by the v4 confidence-bearing router. The `/think auto-v1`, `/think auto-v2`, `/think auto-v3`, and `/think auto-v4` variants (plus their `auto vN` / `auto:vN` forms) are removed, and `/think auto` now routes via v4 instead of the former v1 classifier; those variants were opt-in experimental surface introduced in 0.90.4. Manual `/think <level>` still always takes precedence.
+- Changed context-budget v2 observability to inline the legacy token-optimizer compatibility status in the planner/types instead of importing the removed optimizer module; telemetry still reports `optimizer_id="legacy-token-optimizer"`, `status="quarantined_compatibility"`, and `active_context_budget_optimizer="context-budget-v2"`.
+
+### Fixed
+
+- Fixed v4 reasoning-router misclassification of real-world, out-of-gold-set phrasing by extending the keyword families with vocabulary the classifier previously had no signal for: review (`sanity-check`, `once-over`, `eyeball`), refactor (`tidy up`), plan (`map out`, `phases`, and Korean `계획 … 세워` with an intervening particle), debug (`track down`, `leak`), plus a narrow negation-aware review cue. An out-of-vocabulary adversarial probe improves from 22/30 to 30/30 while the frozen gold-set holdout and full set stay at 100%, guarded by the new `016-reasoning-router-v4-generalization` regression test.
+
+### Removed
+
+- Removed the v1, v2, and v3 reasoning-router modules (`reasoning-router.ts`, `reasoning-router-v2.ts`, `reasoning-router-v3.ts`, `reasoning-router-weights.ts`), their regression suites (`003`-`007`), and the v3 calibration script; only the v4 router remains, reachable via `/think auto`.
+- Removed the unused `compactor.ts` module.
+- Removed the legacy `token-optimizer.ts` runtime module and its dedicated test while retaining fixed compatibility telemetry in context-budget v2.
+
 ## [0.90.4] - 2026-07-04
 
 ### Added

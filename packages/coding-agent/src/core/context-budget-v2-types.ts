@@ -8,9 +8,18 @@ import type {
 	HeadroomQualityPolicyV2,
 } from "./context-budget-headroom.ts";
 import type { TokenCounterAdapter } from "./context-budget-token-counter.ts";
-import type { TokenOptimizerRuntimeStatus } from "./token-optimizer.ts";
 
 export const CONTEXT_BUDGET_POLICY_VERSION_V2 = "context-budget-v2";
+
+// Inlined from the deleted token-optimizer.ts (legacy quarantine-compatibility
+// status; legacy-token-optimizer itself no longer exists as a module).
+export interface TokenOptimizerRuntimeStatus {
+	readonly optimizerId: "legacy-token-optimizer";
+	readonly status: "quarantined_compatibility";
+	readonly active: false;
+	readonly activeContextBudgetOptimizer: "context-budget-v2";
+	readonly compatibilityOnly: true;
+}
 
 export interface TierBudgetPolicyV2 {
 	readonly floorPct: number;

@@ -1,8 +1,8 @@
 /**
  * Reasoning-router v4 adversarial accuracy suite.
  *
- * These cases cover false positives that the gold-set identity suite cannot
- * express because GOLD_SET is frozen for v1/v2/v3 comparability.
+ * These cases cover false positives that the frozen gold-set suite cannot
+ * express without relabeling existing benchmark rows.
  */
 
 import { describe, expect, it } from "vitest";

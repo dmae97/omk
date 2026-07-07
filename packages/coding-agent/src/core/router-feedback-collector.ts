@@ -1,12 +1,9 @@
 /**
- * Router feedback collector — Goal 009 Wave 1 Lane L (privacy-safe learning ledger).
+ * Router feedback collector — privacy-safe learning ledger for `/think auto`.
  *
- * Default-off, privacy-safe local ledger for a future reasoning-router learning
- * feature. This module is a pure, standalone utility: nothing here is wired
- * into agent-session.ts, settings-manager.ts, or any other product entry point
- * by this lane. A future, separately-reviewed wiring lane decides where
- * `enabled` comes from (a settings key) and when `appendRouterFeedbackRecord`
- * is actually called.
+ * Default-off, privacy-safe local ledger for the v4 reasoning-router learning
+ * path. This module is a pure utility; consent and wiring live in settings and
+ * agent-session.ts.
  *
  * ============================================================================
  * SCHEMA (exactly ten allowed keys — see `RouterFeedbackRecord`)
@@ -37,21 +34,21 @@ import {
 import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
 import { getAgentDir } from "../config.ts";
-import type { ReasoningLaneTypeV3, TaskClassV3 } from "./reasoning-router-v3.ts";
+import type { ReasoningLaneTypeV4, TaskClassV4 } from "./reasoning-router-v4.ts";
 
-/** Router versions eligible to tag a feedback record (mirrors agent-session.ts's ThinkingRouterVersion). */
-export type RouterFeedbackVersion = "v1" | "v2" | "v3" | "v4";
+/** Router version eligible to tag a feedback record. */
+export type RouterFeedbackVersion = "v4";
 
 /** Lane type at record time, or "none" for a non-subagent turn. */
-export type RouterFeedbackLaneType = ReasoningLaneTypeV3 | "none";
+export type RouterFeedbackLaneType = ReasoningLaneTypeV4 | "none";
 
-/** Router task class; reuses the v3 (== v2) closed task-class union — never a raw prompt. */
-export type RouterFeedbackTaskClass = TaskClassV3;
+/** Router task class; never a raw prompt. */
+export type RouterFeedbackTaskClass = TaskClassV4;
 
 /**
- * Reasoning ladder level, excluding "off": mirrors REASONING_LADDER_V2 in
- * reasoning-router-v2.ts. The router never *resolves* to "off"; turning
- * thinking off entirely is a distinct manual action outside this ledger.
+ * Reasoning ladder level, excluding "off". The router never *resolves* to
+ * "off"; turning thinking off entirely is a distinct manual action outside
+ * this ledger.
  */
 export type RouterFeedbackLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -81,7 +78,7 @@ export interface RouterFeedbackRecord {
 	readonly hadDiff: boolean;
 }
 
-export const ROUTER_FEEDBACK_VERSIONS: readonly RouterFeedbackVersion[] = ["v1", "v2", "v3", "v4"];
+export const ROUTER_FEEDBACK_VERSIONS: readonly RouterFeedbackVersion[] = ["v4"];
 export const ROUTER_FEEDBACK_LANE_TYPES: readonly RouterFeedbackLaneType[] = [
 	"planner",
 	"security",

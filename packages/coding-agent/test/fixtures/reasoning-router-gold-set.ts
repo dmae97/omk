@@ -1,12 +1,11 @@
 /**
- * Synthetic gold set for the Reasoning-Effort Router v2 (Goal 004, Req 3 / Lane I-goldset).
+ * Synthetic gold set for the Reasoning-Effort Router.
  *
- * Pure data fixture, self-contained: NO imports from src/. The TaskClass and
- * ThinkingLevel unions below are local aliases kept in sync with
- * `packages/coding-agent/src/core/reasoning-router.ts` (TaskClass) and the
- * `omk-agent-core` ThinkingLevel ladder on purpose, so this file can be consumed
- * by the eval harness (Lane I5) without pulling router internals into the
- * fixtures layer.
+ * Pure data fixture, self-contained: NO imports from src/. The task-class and
+ * ThinkingLevel unions below are local aliases kept in sync with the v4 router
+ * and the `omk-agent-core` ThinkingLevel ladder on purpose, so this file can be
+ * consumed by eval harnesses without pulling router internals into the fixtures
+ * layer.
  *
  * Ground-truth policy:
  * - `expectedClass` is the human-judged ideal task class.
@@ -20,16 +19,13 @@
  *   the full set.
  *
  * Every prompt is synthetic and written from scratch. No real session text,
- * user names, repo paths, tokens, or URLs. See
- * `.omk/goals/004-reasoning-router-v2-plan/laneD-evaluation.md` section 1 and
- * `specs/004-reasoning-router-v2/spec.md` Requirement 3.
+ * user names, repo paths, tokens, or URLs.
  *
  * Coverage by class (30 each): trivial, simple-edit, code-gen, debug, refactor,
  * review, plan. Edge cases included: empty/whitespace prompt, long prose
  * (>=2400 chars), raw diff markers (`diff --git` / `@@ ... @@`), code fences,
  * stack traces / tracebacks / panics, and multi-keyword precedence traps
- * (notably gold-0031 "fix the typo in the README title" -> simple-edit, the v1
- * regression case fixed by Req 1.3).
+ * (notably gold-0031 "fix the typo in the README title" -> simple-edit).
  */
 
 export const GOLD_SET_VERSION = 1;
@@ -68,7 +64,7 @@ export type GoldFeatureTag =
 	| "long-prose"
 	| "precedence-trap";
 
-/** Fixed iteration order over the class union (matches `TaskClass` in `src/core/reasoning-router.ts`). */
+/** Fixed iteration order over the class union. */
 export const GOLD_TASK_CLASSES: readonly GoldTaskClass[] = [
 	"trivial",
 	"simple-edit",

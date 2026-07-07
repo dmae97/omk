@@ -38,7 +38,7 @@ Type `/` in the editor to open command completion. Extensions can register custo
 |---------|-------------|
 | `/login`, `/logout` | Manage OAuth or API-key credentials |
 | `/model` | Switch models, then choose thinking level |
-| `/think` | Choose thinking level, or `auto`/`auto-v2`/`auto-v3`/`auto-v4` to route per task |
+| `/think` | Choose thinking level, or `auto` to route per task through v4 |
 | `/scoped-models` | Enable/disable models for Ctrl+P cycling |
 | `/settings` | Thinking level, theme, message delivery, transport |
 | `/resume` | Pick from previous sessions |
@@ -61,35 +61,34 @@ Type `/` in the editor to open command completion. Extensions can register custo
 
 `/think <level>` sets the thinking level manually. Manual levels always win: choosing a concrete level leaves auto routing, so no auto router runs.
 
-`/think auto` remains the historical v1 local classifier and rule table (no network calls). `/think auto-v2`, `/think auto v2`, or `/think auto:v2` enables the calibrated v2 weighted router. `/think auto-v3`, `/think auto v3`, or `/think auto:v3` enables the contextual v3 router. `/think auto-v4`, `/think auto v4`, or `/think auto:v4` enables the confidence-bearing v4 router. Use `/think auto-v1`, `/think auto v1`, or `/think auto:v1` to return explicitly to v1.
+`/think auto` enables the deterministic local v4 router (no network calls). Versioned auto commands are no longer accepted; choose `/think auto` for automatic routing or `/think <level>` for a manual override.
 
-The active auto routers classify each prompt into a task class (trivial, simple edit, code generation, debug, refactor, review, plan) and map it to a recommended level, from `minimal` for trivial prompts up to `xhigh` for planning work.
+The auto router classifies each prompt into a task class (trivial, simple edit, code generation, debug, refactor, review, plan) and maps it to a recommended level, from `minimal` for trivial prompts up to `xhigh` for planning work.
 
 The routing core is deterministic and local. It looks only at bounded turn signals such as:
 
 - prompt length
 - presence of code fences or diff markers
-- keyword families; v2 separates strong signals from ambiguous weak signals such as `fix`
-- leading intent, localized edit objects, diagnostic evidence, review scope, plan briefs, refactor cues, and implementation objects, when v3 or v4 is selected
-- bounded negation of those whole-prompt matches and short-range compound-intent detection across a leading conjunction, when v4 is selected
-- recent auto-router task history in the session, when v2 is selected
-- context pressure buckets, when v2 is selected
+- keyword families
+- leading intent, localized edit objects, diagnostic evidence, review scope, plan briefs, refactor cues, and implementation objects
+- bounded negation of whole-prompt matches and short-range compound-intent detection across a leading conjunction
+- recent auto-router task history in the session
+- context pressure buckets
 - the subagent lane type, when one is set
 
-v4 additionally reports a confidence band (`high`, `medium`, `low`), the score margin between the top two task classes, and a fallback reason on every turn, none of which carry prompt text. When confidence is low or no weighted signal decided the class, v4 raises the resolved level by one step above what the same task class would otherwise resolve to; confidence never lowers it. v4 is checked against a gold-set evaluation harness with fixed train/dev/holdout splits and accuracy, macro-F1, severe-under-allocation, and class-flip/McNemar checks, which confirmed v4 classifies identically to v3 across the full gold set, including the rows held out from tuning.
+v4 reports a confidence band (`high`, `medium`, `low`), the score margin between the top two task classes, and a fallback reason on every turn, none of which carry prompt text. When confidence is low or no weighted signal decided the class, v4 raises the resolved level by one step above what the same task class would otherwise resolve to; confidence never lowers it. v4 is checked against a gold-set evaluation harness with fixed train/dev/holdout splits and accuracy, macro-F1, severe-under-allocation, and class-flip/McNemar checks.
 
 Precedence:
 
 - Manual `/think <level>` always wins.
 - The router only resolves levels while `auto` mode is active.
 - Auto-resolved levels apply per turn only and never overwrite the persisted default thinking level in settings.
-- v1 remains the default auto router; v2, v3, and v4 must be selected explicitly for the current session.
 
 Resolved levels are clamped to the model's capabilities: models without `xhigh`/`max` are capped at their highest supported level, and models without reasoning support bypass the router entirely.
 
-The v4 learning path is available only through the global `reasoningRouterLearning` setting and is off by default. When `reasoningRouterLearning.enabled` is `true`, auto-v4 loads one validated bias snapshot for the session, applies a bounded `-2..2` ladder-step bias, and appends a privacy-safe feedback record containing only bounded enums, booleans, and buckets. Project-local settings cannot enable or redirect this feature, and the ledger never stores raw prompts, file paths, diffs, session identifiers, model/provider payloads, tool output, or hook output.
+The v4 learning path is available only through the global `reasoningRouterLearning` setting and is off by default. When `reasoningRouterLearning.enabled` is `true`, `/think auto` loads one validated bias snapshot for the session, applies a bounded `-2..2` ladder-step bias, and appends a privacy-safe feedback record containing only bounded enums, booleans, and buckets. Project-local settings cannot enable or redirect this feature, and the ledger never stores raw prompts, file paths, diffs, session identifiers, model/provider payloads, tool output, or hook output.
 
-The Adaptorch advisory bridge module still ships as default-off groundwork only. It has no settings key, command, transport, or session call site yet, so it does not affect `/think auto-v4` until a future transport and security review explicitly wire it.
+The Adaptorch advisory bridge module still ships as default-off groundwork only. It has no settings key, command, transport, or session call site yet, so it does not affect `/think auto` until a future transport and security review explicitly wire it.
 
 ## Message Queue
 

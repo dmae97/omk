@@ -60,12 +60,7 @@ import {
 	getShareViewerUrl,
 	VERSION,
 } from "../../config.ts";
-import {
-	type AgentSession,
-	type AgentSessionEvent,
-	parseSkillBlock,
-	type ThinkingRouterVersion,
-} from "../../core/agent-session.ts";
+import { type AgentSession, type AgentSessionEvent, parseSkillBlock } from "../../core/agent-session.ts";
 import { type AgentSessionRuntime, SessionImportFileNotFoundError } from "../../core/agent-session-runtime.ts";
 import { type BangInvocation, parseBangInvocation } from "../../core/bang-skill-invocation.ts";
 import type {
@@ -205,17 +200,12 @@ type CompactionQueuedMessage = {
 const DEAD_TERMINAL_ERROR_CODES = new Set(["EIO", "EPIPE", "ENOTCONN"]);
 
 /**
- * Pseudo-entries for the thinking selector/autocomplete representing auto mode.
- * "auto", "auto-v2", "auto-v3", and "auto-v4" are thinking MODES (per-task
- * routing), not ThinkingLevel values; the selector renders plain strings, so
- * they are injected as pseudo-level entries and intercepted before reaching
- * the session level API.
+ * Pseudo-entry for the thinking selector/autocomplete representing auto mode.
+ * "auto" is a thinking MODE (per-task routing), not a ThinkingLevel value; the
+ * selector renders plain strings, so it is injected as a pseudo-level entry and
+ * intercepted before reaching the session level API.
  */
 const AUTO_THINKING_ENTRY = "auto" as ThinkingLevel;
-const AUTO_V1_THINKING_ENTRY = "auto-v1";
-const AUTO_V2_THINKING_ENTRY = "auto-v2" as ThinkingLevel;
-const AUTO_V3_THINKING_ENTRY = "auto-v3" as ThinkingLevel;
-const AUTO_V4_THINKING_ENTRY = "auto-v4" as ThinkingLevel;
 
 function isDeadTerminalError(error: unknown): boolean {
 	if (!error || typeof error !== "object" || !("code" in error)) {
@@ -528,29 +518,13 @@ export class InteractiveMode {
 		if (thinkCommand) {
 			thinkCommand.getArgumentCompletions = (prefix: string): AutocompleteItem[] | null => {
 				const isAutoMode = this.session.thinkingMode === "auto";
-				const currentAutoVersion = this.session.thinkingRouterVersion;
-				const choices: string[] = [
-					AUTO_THINKING_ENTRY,
-					AUTO_V1_THINKING_ENTRY,
-					AUTO_V2_THINKING_ENTRY,
-					AUTO_V3_THINKING_ENTRY,
-					AUTO_V4_THINKING_ENTRY,
-					...this.session.getAvailableThinkingLevels(),
-				];
+				const choices: string[] = [AUTO_THINKING_ENTRY, ...this.session.getAvailableThinkingLevels()];
 				const filtered = fuzzyFilter(choices, prefix, (choice) => choice);
 				if (filtered.length === 0) return null;
 				return filtered.map((choice) => {
 					let description: string | undefined;
 					if (choice === AUTO_THINKING_ENTRY) {
-						description = `route level per task${isAutoMode ? ` (current: ${currentAutoVersion})` : ""}`;
-					} else if (choice === AUTO_V1_THINKING_ENTRY) {
-						description = `route level per task with v1 router${isAutoMode && currentAutoVersion === "v1" ? " (current)" : ""}`;
-					} else if (choice === AUTO_V2_THINKING_ENTRY) {
-						description = `route level per task with v2 router${isAutoMode && currentAutoVersion === "v2" ? " (current)" : ""}`;
-					} else if (choice === AUTO_V3_THINKING_ENTRY) {
-						description = `route level per task with v3 router${isAutoMode && currentAutoVersion === "v3" ? " (current)" : ""}`;
-					} else if (choice === AUTO_V4_THINKING_ENTRY) {
-						description = `route level per task with v4 router${isAutoMode && currentAutoVersion === "v4" ? " (current)" : ""}`;
+						description = `route level per task with v4${isAutoMode ? " (current)" : ""}`;
 					} else if (!isAutoMode && choice === this.session.thinkingLevel) {
 						description = "current";
 					}
@@ -4327,35 +4301,14 @@ export class InteractiveMode {
 		}
 
 		const normalizedLevel = level.replace(/\s+/g, " ");
-		switch (normalizedLevel) {
-			case AUTO_THINKING_ENTRY:
-			case "auto v1":
-			case AUTO_V1_THINKING_ENTRY:
-			case "auto:v1":
-				this.enableAutoThinkingMode("v1");
-				return;
-			case "auto v2":
-			case AUTO_V2_THINKING_ENTRY:
-			case "auto:v2":
-				this.enableAutoThinkingMode("v2");
-				return;
-			case "auto v3":
-			case AUTO_V3_THINKING_ENTRY:
-			case "auto:v3":
-				this.enableAutoThinkingMode("v3");
-				return;
-			case "auto v4":
-			case AUTO_V4_THINKING_ENTRY:
-			case "auto:v4":
-				this.enableAutoThinkingMode("v4");
-				return;
+		if (normalizedLevel === AUTO_THINKING_ENTRY) {
+			this.enableAutoThinkingMode();
+			return;
 		}
 
 		const availableLevels = this.session.getAvailableThinkingLevels();
 		if (!availableLevels.includes(normalizedLevel as ThinkingLevel)) {
-			this.showError(
-				`Thinking level "${level}" is not available. Available: auto, auto-v1, auto-v2, auto-v3, auto-v4, ${availableLevels.join(", ")}`,
-			);
+			this.showError(`Thinking level "${level}" is not available. Available: auto, ${availableLevels.join(", ")}`);
 			return;
 		}
 
@@ -4364,38 +4317,17 @@ export class InteractiveMode {
 
 	private applyThinkingSelection(level: ThinkingLevel): void {
 		if (level === AUTO_THINKING_ENTRY) {
-			this.enableAutoThinkingMode("v1");
-			return;
-		}
-		if (level === AUTO_V2_THINKING_ENTRY) {
-			this.enableAutoThinkingMode("v2");
-			return;
-		}
-		if (level === AUTO_V3_THINKING_ENTRY) {
-			this.enableAutoThinkingMode("v3");
-			return;
-		}
-		if (level === AUTO_V4_THINKING_ENTRY) {
-			this.enableAutoThinkingMode("v4");
+			this.enableAutoThinkingMode();
 			return;
 		}
 		this.applyThinkingLevel(level);
 	}
 
-	private enableAutoThinkingMode(version: ThinkingRouterVersion): void {
-		this.session.setThinkingRouterVersion(version);
+	private enableAutoThinkingMode(): void {
 		this.session.setThinkingMode("auto");
 		this.footer.invalidate();
 		this.updateEditorBorderColor();
-		const label =
-			version === "v1"
-				? AUTO_THINKING_ENTRY
-				: version === "v2"
-					? AUTO_V2_THINKING_ENTRY
-					: version === "v3"
-						? AUTO_V3_THINKING_ENTRY
-						: AUTO_V4_THINKING_ENTRY;
-		this.showStatus(`Thinking: ${label} (${version} router, level routed per task)`);
+		this.showStatus("Thinking: auto (v4 router, level routed per task)");
 	}
 
 	private applyThinkingLevel(level: ThinkingLevel): void {
@@ -4408,29 +4340,11 @@ export class InteractiveMode {
 	}
 
 	private getThinkingSelectorValue(): ThinkingLevel {
-		if (this.session.thinkingMode !== "auto") {
-			return this.session.thinkingLevel;
-		}
-		if (this.session.thinkingRouterVersion === "v2") {
-			return AUTO_V2_THINKING_ENTRY;
-		}
-		if (this.session.thinkingRouterVersion === "v3") {
-			return AUTO_V3_THINKING_ENTRY;
-		}
-		if (this.session.thinkingRouterVersion === "v4") {
-			return AUTO_V4_THINKING_ENTRY;
-		}
-		return AUTO_THINKING_ENTRY;
+		return this.session.thinkingMode === "auto" ? AUTO_THINKING_ENTRY : this.session.thinkingLevel;
 	}
 
 	private getThinkingSelectorLevels(): ThinkingLevel[] {
-		return [
-			AUTO_THINKING_ENTRY,
-			AUTO_V2_THINKING_ENTRY,
-			AUTO_V3_THINKING_ENTRY,
-			AUTO_V4_THINKING_ENTRY,
-			...this.session.getAvailableThinkingLevels(),
-		];
+		return [AUTO_THINKING_ENTRY, ...this.session.getAvailableThinkingLevels()];
 	}
 
 	private async handleModelCommand(searchTerm?: string): Promise<void> {
