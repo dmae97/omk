@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added a vendored **taste-skill** pack under `.omk/skills/taste-skill/` (MIT, pinned upstream commit in `SOURCE.md`) with thirteen Agent Skills (`design-taste-frontend`, `design-taste-frontend-v1`, `brandkit`, `imagegen-frontend-web`, `imagegen-frontend-mobile`, and the rest of the Leonxlnx/taste-skill bundle) for project-local design and image-direction workflows without pulling the pack into core runtime code.
+- Added an opt-in **caveman** output-style skill at `.omk/skills/caveman/` (MIT, pin `0d95a81`, `disable-model-invocation: true`) so brevity applies only on explicit `/caveman` or direct user request; it is excluded from every `DOMAIN_PROFILES` skills allow-list and does not alias the builtin `/compact` command.
+- Added a PATH-gated **CodexBar** quota CLI (`omk quota connect|disconnect|status|usage` for target `codexbar`) with `codexbar-connector.json` opt-in (`enabled`, `privacyAck`, `connectedAt` only — no credential-shaped keys), `tools-manager` `ManagedTool` support for `codexbar`, and adapter-side JSON redaction before printing usage/cost summaries.
+- Extended **`scripts/check-vendored-skills.mjs`** (repo root, invoked via `npm run check:vendored-skills`) to enforce taste-skill thirteen-skill layout, frontmatter names, `SOURCE.md` pin alignment, and caveman opt-in frontmatter/pin rules alongside existing `clone-website` and `ponytail*` vendoring checks; regression `external-pack-integration-acceptance.test.ts` asserts pin constants match `SOURCE.md`.
+- Added a governed real-world generalization gate for the v4 reasoning-effort router: a synthetic generalization corpus (420 rows, 60 per class, out-of-vocabulary phrasing distinct from the gold set, zero gold-prompt overlap) with a content-blind train/dev/holdout split (frozen 99-row holdout), a pure calibration helper (ECE/MCE/Brier + per-confidence-band error table + aggregate dev gap cards), and the `017-reasoning-router-v4-generalization-governance` test that prints aggregate-only full-set and frozen-holdout benchmarks and enforces the escalate-only invariant. Unlike the saturated gold set (100%), this corpus discriminates and gives an honest held-out measure of real-world routing accuracy.
+
+### Changed
+
+- Changed the **frontend-ui** `DOMAIN_PROFILES` skills allow-list to include vendored taste-skill names (`brandkit`, `imagegen-frontend-web`, `imagegen-frontend-mobile`) for curated activation when domain routing is on; **caveman** remains absent from all domain gates.
+- Changed the v4 reasoning-effort classifier to a table-driven intent lexeme/phrase-cluster model with negative controls and evidence-strength confidence, then evolved its feature model beyond literal keywords with a new pure `reasoning-router-v4-normalize` module (English light-stemming/lemmatization, Korean josa/eomi normalization, seed-to-cluster intent anchors, and a bounded intent-skeleton / temporal-deferral extractor) so it generalizes over real-world phrasing instead of enumerating vocabulary. On the frozen held-out generalization set this lifts micro from ~0.76 to ~0.92 (debug/refactor/plan reach 100% recall) with zero high-confidence errors on the holdout, while the frozen gold set stays at 100% (210/210 incl. 42-row holdout), the 30-case adversarial probe stays 30/30, and no new dependencies were added.
+
 ## [0.90.5] - 2026-07-07
 
 ### Added
