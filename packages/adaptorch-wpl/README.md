@@ -32,3 +32,5 @@ review that shaped the safety gates below) lives outside this package at
   (`AWAITING_APPROVAL`), unless the loop is explicitly launched in pre-approved-batch mode.
 - Loop-level budgets (`max_dispatch_attempts`, `max_loop_duration`, dispatch-call budget) are
   immutable for a loop instance's lifetime; raising them requires a new instance under the same review.
+
+Preview spec: [`../coding-agent/docs/adaptorch-preview.md`](../coding-agent/docs/adaptorch-preview.md)

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added B2C Correctness Wall orchestration APIs (`evaluateCorrectnessWall`, policy wall, deep-wall evidence gate, live/fixture OA transports, repair hints/budget, signed receipts) with unit coverage; advisory evidence-gated verdicts only (not formal correctness proof).
+
+
 ## [0.90.5] - 2026-07-07
 
 ## [0.90.4] - 2026-07-04
