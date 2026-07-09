@@ -1,17 +1,13 @@
 /**
- * Grok-4.5 harness bind: presets default to grok-4.5; compaction prefers 4.5;
- * Imagine ids stay blocked on grok-oauth-proxy completions.
+ * Grok-4.5 harness bind: compaction prefers 4.5; Imagine ids stay blocked on
+ * grok-oauth-proxy completions. (Project `.omk/presets.json` is gitignored and
+ * is not asserted here — CI clones have no local presets file.)
  */
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { Model } from "omk-ai";
 import { describe, expect, it } from "vitest";
 import { resolveCompactionModel } from "../../../src/core/compaction/model-policy.ts";
-import { assertTextChatModelForCompletion } from "../../../src/core/grok-harness.ts";
+import { assertTextChatModelForCompletion, isGrokOAuthProvider } from "../../../src/core/grok-harness.ts";
 import { GROK_OAUTH_PROVIDER } from "../../../src/core/grok-playbook.ts";
-
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../../../");
 
 function chat(id: string): Model<"openai-completions"> {
 	return {
@@ -29,15 +25,10 @@ function chat(id: string): Model<"openai-completions"> {
 }
 
 describe("024 grok-4.5 harness bind", () => {
-	it("project presets pin grok-oauth-proxy / grok-4.5", () => {
-		const presets = JSON.parse(readFileSync(join(repoRoot, ".omk/presets.json"), "utf-8")) as Record<
-			string,
-			{ provider: string; model: string }
-		>;
-		for (const name of ["grok-verified", "grok-adaptorch-prod"] as const) {
-			expect(presets[name]?.provider).toBe(GROK_OAUTH_PROVIDER);
-			expect(presets[name]?.model).toBe("grok-4.5");
-		}
+	it("identifies grok-oauth-proxy as the Grok OAuth provider id", () => {
+		expect(GROK_OAUTH_PROVIDER).toBe("grok-oauth-proxy");
+		expect(isGrokOAuthProvider(GROK_OAUTH_PROVIDER)).toBe(true);
+		expect(isGrokOAuthProvider("xai")).toBe(false);
 	});
 
 	it("blocks imagine models on grok-oauth-proxy and allows grok-4.5", () => {
