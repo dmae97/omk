@@ -289,6 +289,9 @@ export class ExtensionRunner {
 		this.runtime.setModel = actions.setModel;
 		this.runtime.getThinkingLevel = actions.getThinkingLevel;
 		this.runtime.setThinkingLevel = actions.setThinkingLevel;
+		// Optional MCP tool bridge for extensions (correctness-wall live OA, etc.).
+		// When undefined, ExtensionAPI.callMcpTool still exists but throws until a handler is bound.
+		this.runtime.callMcpTool = actions.callMcpTool;
 
 		// Context actions (required)
 		this.getModel = contextActions.getModel;

@@ -1217,6 +1217,15 @@ export interface ExtensionAPI {
 	/** Execute a shell command. */
 	exec(command: string, args: string[], options?: ExecOptions): Promise<ExecResult>;
 
+	/**
+	 * Call an MCP server tool by server name + tool name.
+	 * Present when the extension host binds a runtime handler (see ExtensionActions.callMcpTool).
+	 * When the method is missing, MCP tools are not reachable from extensions; callers must fall back.
+	 * Additive capability: extensions check `typeof omk.callMcpTool === "function"` before use.
+	 * Load-time factories may capture this method; the bound handler is resolved at call time via bindCore.
+	 */
+	callMcpTool?(server: string, name: string, args: Record<string, unknown>): Promise<unknown>;
+
 	/** Get the list of currently active tool names. */
 	getActiveTools(): string[];
 
@@ -1478,6 +1487,9 @@ export interface ExtensionRuntimeState {
  * Action implementations for OMK extension API methods.
  * Provided to runner.initialize(), copied into the shared runtime.
  */
+/** Invoke an MCP server tool from an extension (server name + tool name + args). */
+export type CallMcpToolHandler = (server: string, name: string, args: Record<string, unknown>) => Promise<unknown>;
+
 export interface ExtensionActions {
 	sendMessage: SendMessageHandler;
 	sendUserMessage: SendUserMessageHandler;
@@ -1493,6 +1505,11 @@ export interface ExtensionActions {
 	setModel: SetModelHandler;
 	getThinkingLevel: GetThinkingLevelHandler;
 	setThinkingLevel: SetThinkingLevelHandler;
+	/**
+	 * Optional MCP tool invocation bound at bindCore time.
+	 * When set, ExtensionAPI.callMcpTool is exposed and delegates here at call time.
+	 */
+	callMcpTool?: CallMcpToolHandler;
 }
 
 /**

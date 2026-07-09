@@ -164,6 +164,8 @@ export function createExtensionRuntime(): ExtensionRuntime {
 		setModel: () => Promise.reject(new Error("Extension runtime not initialized")),
 		getThinkingLevel: notInitialized,
 		setThinkingLevel: notInitialized,
+		// Optional; replaced by bindCore when the session provides a handler.
+		callMcpTool: undefined,
 		flagValues: new Map(),
 		pendingProviderRegistrations: [],
 		assertActive,
@@ -291,6 +293,19 @@ function createExtensionAPI(
 		exec(command: string, args: string[], options?: ExecOptions) {
 			runtime.assertActive();
 			return execCommand(command, args, options?.cwd ?? cwd, options);
+		},
+
+		// Always expose the method so load-time factories can capture it (typeof === "function").
+		// The bound handler is resolved at call time after bindCore; until then callers get a clear error.
+		async callMcpTool(server: string, name: string, args: Record<string, unknown>): Promise<unknown> {
+			runtime.assertActive();
+			const handler = runtime.callMcpTool;
+			if (typeof handler !== "function") {
+				throw new Error(
+					"Extension callMcpTool is not bound. The session must provide a callMcpTool handler via bindCore.",
+				);
+			}
+			return handler(server, name, args);
 		},
 
 		getActiveTools(): string[] {

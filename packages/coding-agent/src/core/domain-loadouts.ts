@@ -914,6 +914,63 @@ SEQUENCE:
 HARD RULES: tests-only command mode (no arbitrary shell); every fix is re-verified by a green run; coverage gaps are reported, not hidden; flaky tests are rooted, not retried blindly.`,
 	},
 
+	"grok-harness": {
+		schemaVersion: "omk.loadout.v1",
+		id: "grok-harness",
+		name: "grok-harness",
+		label: "Grok xAI Harness",
+		authority: "write-scoped",
+		tools: WRITE_TOOLS,
+		skills: gate("skill", [
+			"packages",
+			"headroom",
+			"programming",
+			"debugging",
+			"adaptorch-route",
+			"adaptorch-synthesize",
+			"understand-anything",
+		]),
+		mcp: gate("mcp", ["adaptorch", "fetch", "understand-anything", "playwright"]),
+		hooks: gate("hook", [
+			"pre-shell-guard",
+			"protect-secrets",
+			"typecheck-after-edit",
+			"stop-verify",
+			"session-context",
+		]),
+		commands: commands("scoped-shell"),
+		triggers: [
+			{ kind: "keyword", pattern: "grok", weight: 8 },
+			{ kind: "keyword", pattern: "xai", weight: 7 },
+			{ kind: "keyword", pattern: "grok-oauth", weight: 8 },
+			{ kind: "keyword", pattern: "grok oauth", weight: 8 },
+			{ kind: "keyword", pattern: "imagine", weight: 6 },
+			{ kind: "keyword", pattern: "composer", weight: 5 },
+			{ kind: "keyword", pattern: "adaptorch", weight: 7 },
+			{ kind: "keyword", pattern: "adaptorch-route", weight: 8 },
+			{ kind: "keyword", pattern: "adaptorch-synthesize", weight: 8 },
+			{ kind: "regex", pattern: "\\b(grok(?:[- ]oauth)?|xai|imagine|composer)\\b", weight: 7 },
+			{
+				kind: "regex",
+				pattern: "\\badapt\\s*orch\\b|\\badaptorch[- ]?(route|routing|synthes(?:is|ize))\\b",
+				weight: 8,
+			},
+		],
+		routingPrompt: `DOMAIN: Grok xAI Harness. You are operating in a Grok/xAI integration lane.
+Prioritize the Grok operational playbook, small capability loadouts, and evidence-bound provider/tool routing.
+
+SEQUENCE:
+1. Before implementing or routing Grok/xAI provider work, read and enforce ~/.omk/agent/grok.md. Treat it as the required Grok playbook for chat models vs Imagine tools, proxy health, tool-use/loop discipline, and Telegram parity unless higher-priority instructions conflict.
+2. Keep text chat flows and Imagine/media tool flows separate. Text work uses Grok chat/OAuth/provider surfaces; image/video/Imagine work routes through explicit Imagine tools only. Never conflate model ids with Imagine tool names.
+3. Capability discipline: load at most 2-3 skills for any lane. The allowed skill gate is packages, headroom, programming, debugging, adaptorch-route, adaptorch-synthesize, and understand-anything; choose the smallest subset and add headroom only under context pressure.
+4. Adaptorch is advisory only. Use adaptorch-route for routing/decomposition advice and adaptorch-synthesize for evidence synthesis, but do not treat Adaptorch as an automatic executor, source of truth, permission grant, or substitute for explicit tests.
+5. Use minimal MCP: adaptorch for advice/synthesis, fetch for bounded public retrieval, understand-anything for repo comprehension, and playwright only when browser or Imagine UI behavior needs real verification.
+6. Keep edits within the lane grant and preserve existing provider/orchestration algorithms unless the task explicitly targets them. Never route through legacy KIMICLI or deleted wrappers.
+7. Verification: run the narrowest relevant test/typecheck after edits. Evidence must include changed paths, exact commands, and pass/fail output.
+
+HARD RULES: grok.md is mandatory context for Grok/xAI harness work; text chat surfaces and Imagine tools are distinct; maximum 2-3 active skills; Adaptorch is advisory route/synthesis support only; never log OAuth tokens, cookies, or proxy credentials; protect-secrets applies.`,
+	},
+
 	"ai-agent-ops": {
 		schemaVersion: "omk.loadout.v1",
 		id: "ai-agent-ops",
@@ -968,6 +1025,11 @@ HARD RULES: tests-only command mode (no arbitrary shell); every fix is re-verifi
 			{ kind: "path", pattern: ".claude/agents", weight: 6 },
 			{ kind: "path", pattern: ".omk/", weight: 5 },
 			{ kind: "path", pattern: "SKILL.md", weight: 5 },
+			{ kind: "keyword", pattern: "correctness wall", weight: 8 },
+			{ kind: "keyword", pattern: "patch safety", weight: 8 },
+			{ kind: "regex", pattern: "\\bpatch[- ]safety\\b", weight: 7 },
+			{ kind: "path", pattern: "correctness-wall", weight: 7 },
+			{ kind: "path", pattern: "adaptorch-wpl", weight: 5 },
 		],
 		routingPrompt: `DOMAIN: AI Agent Engineering & Ops. You are operating in an agent-systems capability lane.
 Prioritize eval-driven design, correct context engineering, and safe autonomy.
@@ -980,7 +1042,9 @@ SEQUENCE:
 5. Evaluate: eval-harness + agent-eval + agent-self-evaluation — never ship an agent change without a measured eval delta. nanoclaw-repl for interactive iteration.
 6. Orchestration: harness (team-architecture factory) for multi-agent topology; dispatching-parallel-agents / subagent-driven-development for parallel lanes; ralphinho-rfc-pipeline for DAG + merge queue.
 
-HARD RULES: every agent/skill change has an eval; prompts are versioned and tested, not vibe-edited; MCP servers validate inputs; autonomy is bounded by explicit stop conditions + stop-verify hook.`,
+HARD RULES: every agent/skill change has an eval; prompts are versioned and tested, not vibe-edited; MCP servers validate inputs; autonomy is bounded by explicit stop conditions + stop-verify hook.
+
+PATCH SAFETY (B2C Correctness Wall): for pre-apply patch screening, load the correctness-wall extension explicitly (not in default preset). Read packages/coding-agent/docs/correctness-wall.md and examples/extensions/correctness-wall/README.md. Roll out shadow → soft → hard; never claim formal correctness proof.`,
 	},
 
 	general: {

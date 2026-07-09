@@ -29,6 +29,8 @@ SEQUENCE:
 6. Orchestration: harness (team-architecture factory) for multi-agent topology; dispatching-parallel-agents / subagent-driven-development for parallel lanes; ralphinho-rfc-pipeline for DAG + merge queue.
 
 HARD RULES: every agent/skill change has an eval; prompts are versioned and tested, not vibe-edited; MCP servers validate inputs; autonomy is bounded by explicit stop conditions + stop-verify hook.
+
+PATCH SAFETY (B2C Correctness Wall): for pre-apply patch screening, load the correctness-wall extension explicitly (not in default preset). Read packages/coding-agent/docs/correctness-wall.md and examples/extensions/correctness-wall/README.md. Roll out shadow → soft → hard; never claim formal correctness proof.
 ```
 
 ## Curated skills (23)
@@ -71,7 +73,7 @@ HARD RULES: every agent/skill change has an eval; prompts are versioned and test
 - `stop-verify`
 - `subagent-stop-audit`
 
-## Routing triggers (18)
+## Routing triggers (23)
 
 | kind | pattern | weight |
 |---|---|---|
@@ -93,3 +95,8 @@ HARD RULES: every agent/skill change has an eval; prompts are versioned and test
 | path | `.claude/agents` | 6 |
 | path | `.omk/` | 5 |
 | path | `SKILL.md` | 5 |
+| keyword | `correctness wall` | 8 |
+| keyword | `patch safety` | 8 |
+| regex | `\bpatch[- ]safety\b` | 7 |
+| path | `correctness-wall` | 7 |
+| path | `adaptorch-wpl` | 5 |
