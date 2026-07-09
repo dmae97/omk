@@ -25,6 +25,7 @@ Options:
   --out <dir>          Output directory. Defaults to a new directory under ${tmpdir()}
   --force              Remove --out first if it already exists
   --skip-check         Do not run npm run check before building
+  --skip-test          Do not run ./test.sh before building
   --skip-install       Only create tarballs; do not create isolated installs
   --skip-bun-install   Do not create the isolated Bun install
   --help               Show this help
@@ -32,7 +33,14 @@ Options:
 }
 
 function parseArgs() {
-	const options = { force: false, outDir: undefined, skipBunInstall: false, skipCheck: false, skipInstall: false };
+	const options = {
+		force: false,
+		outDir: undefined,
+		skipBunInstall: false,
+		skipCheck: false,
+		skipInstall: false,
+		skipTest: false,
+	};
 	const args = process.argv.slice(2);
 
 	for (let i = 0; i < args.length; i++) {
@@ -47,6 +55,10 @@ function parseArgs() {
 		}
 		if (arg === "--skip-check") {
 			options.skipCheck = true;
+			continue;
+		}
+		if (arg === "--skip-test") {
+			options.skipTest = true;
 			continue;
 		}
 		if (arg === "--skip-install") {
@@ -202,6 +214,10 @@ mkdirSync(tarballDirectory, { recursive: true });
 
 if (!options.skipCheck) {
 	run("npm", ["run", "check"], { cwd: repoRoot });
+}
+
+if (!options.skipTest) {
+	run("./test.sh", [], { cwd: repoRoot });
 }
 
 for (const pkg of packages) {
