@@ -4,6 +4,7 @@
 
 ### Added
 
+- Documented the pinned pi.dev package loadout, slash-command map, and skills.sh install flow in the root README, and added the `readmeasset/omkgirl.png` hero asset.
 - Added the experimental **B2C Correctness Wall** extension under `examples/extensions/correctness-wall/` with fixture/live OA transport wiring, soft/hard/shadow modes, and regressions `018`–`023`; wall evaluation is evidence-gated advisory (not formal correctness proof).
 - Added **Grok OAuth harness** integration: `grok-harness` domain profile, `grok-playbook` / `grok-harness-dispatch` auto-apply for `grok-oauth-proxy`, compaction model preference for `grok-4.5`, Imagine chat-model rejection on completion paths, and doctor-provider health probe defaults for the local proxy.
 - Added extension host `callMcpTool` bind path (`ExtensionActions.callMcpTool` + loader/runtime) so extensions can capture live MCP call capability at load time.
