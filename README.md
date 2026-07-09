@@ -2,6 +2,10 @@
   <img src="readmeasset/omk-control.webp" alt="OMK//CONTROL Night City Ops Console for routing agents, evidence gates, telemetry, MCP scope, and operator control" width="100%" />
 </p>
 
+<p align="center">
+  <img src="readmeasset/omkgirl.png" alt="OMK girl mascot — operator avatar for the OMK//CONTROL coding harness" width="420" />
+</p>
+
 <h1 align="center">OMK</h1>
 
 <p align="center">
@@ -44,6 +48,83 @@ To learn more about omk:
 The OMK//CONTROL startup surface is the default operator view. The header reads `omk v<package.version> · OMK//CONTROL`, using the published `open-multi-agent-kit` package version as the single source of truth.
 
 The default dark TUI theme uses the `omk-control-grid-dark` Night City palette and keeps the control sidebar focused on route, evidence, loop, MCP, runtime, skills, and context budget state.
+
+## Slash commands, packages, and skills (load them hard)
+
+OMK is most useful when packages and skills are installed up front, then invoked with `/` slash commands and bang skills (`!skill:name`, `!omk-loop`).
+
+Browse community packages at [pi.dev/packages](https://pi.dev/packages). Install into the user agent (`~/.omk/agent/settings.json`) with pinned versions for stability:
+
+```bash
+# Context + web + code intelligence
+omk install npm:@hypabolic/pi-hypa@0.1.9
+omk install npm:pi-web-access@0.13.0
+omk install npm:pi-lens@3.8.66
+omk install npm:pi-shazam@0.26.0
+omk install npm:@ff-labs/pi-fff@0.9.6
+omk install npm:@mrclrchtr/supi-context@2.2.1
+omk install npm:@mrclrchtr/supi-web@2.2.1
+
+# Plan / goal / task loops
+omk install npm:@mjasnikovs/pi-task@0.18.4
+omk install npm:@narumitw/pi-goal@0.11.0
+omk install npm:@narumitw/pi-plan-mode@0.11.0
+omk install npm:@plannotator/pi-extension@0.22.0
+
+# Operator UX + quality
+omk install npm:@ayulab/pi-rewind@0.4.4
+omk install npm:@juicesharp/rpiv-ask-user-question@1.20.0
+omk install npm:@juicesharp/rpiv-todo@1.20.0
+omk install npm:pi-simplify@0.2.2
+omk install npm:pi-powerline-footer@0.6.1
+
+# Optional: refresh git/npm package checkouts
+omk update --extensions
+omk list
+```
+
+After install, open a fresh `omk` session and hammer the slash surface:
+
+| Slash | Package | What it does |
+|-------|---------|--------------|
+| `/plan` | `@narumitw/pi-plan-mode` | Read-only plan collaboration mode |
+| `/goal` | `@narumitw/pi-goal` | Keep working a goal until marked complete |
+| `/task`, `/task-list`, `/task-resume` | `@mjasnikovs/pi-task` | Crash-safe task pipeline with verify gates |
+| `/plannotator`, `/plannotator-review` | `@plannotator/pi-extension` | Interactive plan / PR annotation review |
+| `/rewind`, `/checkpoint`, `/tree` | `@ayulab/pi-rewind` | Checkpoint navigation |
+| `/todos` | `@juicesharp/rpiv-todo` | Live todo overlay |
+| `/hypa` | `@hypabolic/pi-hypa` | Hypa context compression diagnostics |
+| `/simplify` | `pi-simplify` | Review recent edits for clarity |
+| `/supi-context` | `@mrclrchtr/supi-context` | Context usage report |
+| `/fff-health`, `/fff-rescan` | `@ff-labs/pi-fff` | Fuzzy file/content search health |
+| `/shazam-doctor` | `pi-shazam` | Structural codebase awareness doctor |
+| `/powerline` | `pi-powerline-footer` | Status bar controls |
+| `/think auto` | built-in | Automatic reasoning-effort routing (v4) |
+
+Skills ecosystem (in addition to OMK-native packs):
+
+```bash
+# Discover
+npx skills find "plan review"
+npx skills find "react performance"
+
+# Install globally (user-level), skip prompts
+npx skills add vercel-labs/agent-skills --skill vercel-optimize -g -y -a '*'
+npx skills add vercel-labs/agent-skills --skill vercel-react-view-transitions -g -y -a '*'
+npx skills add vercel-labs/agent-skills --skill writing-guidelines -g -y -a '*'
+
+# Enable / disable package resources in the TUI
+omk config
+```
+
+Inside OMK, prefer **minimum necessary skills per turn** (usually 1–3). Load heavy packs on demand with bang syntax, for example `!omk-loop`, `!skill:programming`, `!skill:debugging`. Do not bulk-load the entire catalog into every session — that burns context without improving routing.
+
+Hypa (optional, pairs with `@hypabolic/pi-hypa`):
+
+```bash
+hypa init --global --agent pi
+hypa doctor
+```
 
 ## Release v0.90.5
 
