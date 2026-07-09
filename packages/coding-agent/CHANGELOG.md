@@ -4,6 +4,10 @@
 
 ### Added
 
+- Added the experimental **B2C Correctness Wall** extension under `examples/extensions/correctness-wall/` with fixture/live OA transport wiring, soft/hard/shadow modes, and regressions `018`–`023`; wall evaluation is evidence-gated advisory (not formal correctness proof).
+- Added **Grok OAuth harness** integration: `grok-harness` domain profile, `grok-playbook` / `grok-harness-dispatch` auto-apply for `grok-oauth-proxy`, compaction model preference for `grok-4.5`, Imagine chat-model rejection on completion paths, and doctor-provider health probe defaults for the local proxy.
+- Added extension host `callMcpTool` bind path (`ExtensionActions.callMcpTool` + loader/runtime) so extensions can capture live MCP call capability at load time.
+
 - Added a vendored **taste-skill** pack under `.omk/skills/taste-skill/` (MIT, pinned upstream commit in `SOURCE.md`) with thirteen Agent Skills (`design-taste-frontend`, `design-taste-frontend-v1`, `brandkit`, `imagegen-frontend-web`, `imagegen-frontend-mobile`, and the rest of the Leonxlnx/taste-skill bundle) for project-local design and image-direction workflows without pulling the pack into core runtime code.
 - Added an opt-in **caveman** output-style skill at `.omk/skills/caveman/` (MIT, pin `0d95a81`, `disable-model-invocation: true`) so brevity applies only on explicit `/caveman` or direct user request; it is excluded from every `DOMAIN_PROFILES` skills allow-list and does not alias the builtin `/compact` command.
 - Added a PATH-gated **CodexBar** quota CLI (`omk quota connect|disconnect|status|usage` for target `codexbar`) with `codexbar-connector.json` opt-in (`enabled`, `privacyAck`, `connectedAt` only — no credential-shaped keys), `tools-manager` `ManagedTool` support for `codexbar`, and adapter-side JSON redaction before printing usage/cost summaries.
@@ -14,6 +18,10 @@
 
 - Changed the **frontend-ui** `DOMAIN_PROFILES` skills allow-list to include vendored taste-skill names (`brandkit`, `imagegen-frontend-web`, `imagegen-frontend-mobile`) for curated activation when domain routing is on; **caveman** remains absent from all domain gates.
 - Changed the v4 reasoning-effort classifier to a table-driven intent lexeme/phrase-cluster model with negative controls and evidence-strength confidence, then evolved its feature model beyond literal keywords with a new pure `reasoning-router-v4-normalize` module (English light-stemming/lemmatization, Korean josa/eomi normalization, seed-to-cluster intent anchors, and a bounded intent-skeleton / temporal-deferral extractor) so it generalizes over real-world phrasing instead of enumerating vocabulary. On the frozen held-out generalization set this lifts micro from ~0.76 to ~0.92 (debug/refactor/plan reach 100% recall) with zero high-confidence errors on the holdout, while the frozen gold set stays at 100% (210/210 incl. 42-row holdout), the 30-case adversarial probe stays 30/30, and no new dependencies were added.
+
+### Fixed
+
+- Fixed threshold auto-compaction `compaction_end.willRetry` to also signal when agent-level queues remain, so the TUI flush path stays aligned with session resume (`compactionEmitWillRetry`).
 
 ## [0.90.5] - 2026-07-07
 

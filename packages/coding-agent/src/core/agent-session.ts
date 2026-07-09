@@ -43,8 +43,10 @@ import {
 	estimateProjectedContextTokens,
 	generateBranchSummary,
 	prepareCompaction,
+	resolveCompactionModel,
 	shouldCompact,
 } from "./compaction/index.ts";
+import { compactionEmitWillRetry } from "./compaction/resume-policy.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.ts";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
@@ -80,6 +82,8 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
+import { assertTextChatModelForCompletion } from "./grok-harness.ts";
+import { grokPlaybookAppendForProvider } from "./grok-playbook.ts";
 import { assertLoadoutAccess, decideLoadoutAccess, type LoadoutAccessPolicy } from "./loadout-access-policy.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import type { ModelRegistry } from "./model-registry.ts";
@@ -1151,8 +1155,12 @@ export class AgentSession {
 
 		const loaderSystemPrompt = this._resourceLoader.getSystemPrompt();
 		const loaderAppendSystemPrompt = this._resourceLoader.getAppendSystemPrompt();
-		const appendSystemPrompt =
-			loaderAppendSystemPrompt.length > 0 ? loaderAppendSystemPrompt.join("\n\n") : undefined;
+		const grokAppend = grokPlaybookAppendForProvider(this.model?.provider);
+		const appendParts = [...loaderAppendSystemPrompt];
+		if (grokAppend) {
+			appendParts.push(grokAppend);
+		}
+		const appendSystemPrompt = appendParts.length > 0 ? appendParts.join("\n\n") : undefined;
 		const loadedSkills = this._resourceLoader.getSkills().skills;
 		const loadedContextFiles = this._resourceLoader.getAgentsFiles().agentsFiles;
 
@@ -1310,6 +1318,9 @@ export class AgentSession {
 			if (!this.model) {
 				throw new Error(formatNoModelSelectedMessage());
 			}
+
+			// Grok OAuth: refuse Imagine ids on the chat/completions path (tool-only).
+			assertTextChatModelForCompletion(this.model.id, this.model.provider);
 
 			if (!this._modelRegistry.hasConfiguredAuth(this.model)) {
 				const isOAuth = this._modelRegistry.isUsingOAuth(this.model);
@@ -1721,6 +1732,9 @@ export class AgentSession {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
+		// Grok OAuth: block selecting Imagine models as the session chat model.
+		assertTextChatModelForCompletion(model.id, model.provider);
+
 		const previousModel = this.model;
 		const thinkingLevel = this._getThinkingLevelForModelSwitch();
 		this.agent.state.model = model;
@@ -2098,7 +2112,8 @@ export class AgentSession {
 				throw new Error(formatNoModelSelectedMessage());
 			}
 
-			const { apiKey, headers } = await this._getCompactionRequestAuth(this.model);
+			const compactionModel = resolveCompactionModel(this.model, this._modelRegistry.getAvailable());
+			const { apiKey, headers } = await this._getCompactionRequestAuth(compactionModel);
 
 			const pathEntries = this.sessionManager.getBranch();
 			const settings = this.settingsManager.getCompactionSettings();
@@ -2150,7 +2165,7 @@ export class AgentSession {
 				// Generate compaction result
 				const result = await compact(
 					preparation,
-					this.model,
+					compactionModel,
 					apiKey,
 					headers,
 					customInstructions,
@@ -2371,24 +2386,29 @@ export class AgentSession {
 				return false;
 			}
 
+			const compactionModel = resolveCompactionModel(this.model, this._modelRegistry.getAvailable());
 			let apiKey: string | undefined;
 			let headers: Record<string, string> | undefined;
 			if (this.agent.streamFn === streamSimple) {
-				const authResult = await this._modelRegistry.getApiKeyAndHeaders(this.model);
+				const authResult = await this._modelRegistry.getApiKeyAndHeaders(compactionModel);
 				if (!authResult.ok || !authResult.apiKey) {
+					const providerLabel = compactionModel.provider;
 					this._emit({
 						type: "compaction_end",
 						reason,
 						result: undefined,
 						aborted: false,
 						willRetry: false,
+						errorMessage:
+							`Auto-compaction could not authenticate for "${providerLabel}" (${compactionModel.id}). ` +
+							`Check proxy/OAuth health and run '/login ${providerLabel}' if needed.`,
 					});
 					return false;
 				}
 				apiKey = authResult.apiKey;
 				headers = authResult.headers;
 			} else {
-				({ apiKey, headers } = await this._getCompactionRequestAuth(this.model));
+				({ apiKey, headers } = await this._getCompactionRequestAuth(compactionModel));
 			}
 
 			const pathEntries = this.sessionManager.getBranch();
@@ -2449,7 +2469,7 @@ export class AgentSession {
 				// Generate compaction result
 				const compactResult = await compact(
 					preparation,
-					this.model,
+					compactionModel,
 					apiKey,
 					headers,
 					undefined,
@@ -2498,7 +2518,8 @@ export class AgentSession {
 				tokensBefore,
 				details,
 			};
-			this._emit({ type: "compaction_end", reason, result, aborted: false, willRetry });
+			const emitWillRetry = compactionEmitWillRetry(willRetry, this.agent.hasQueuedMessages());
+			this._emit({ type: "compaction_end", reason, result, aborted: false, willRetry: emitWillRetry });
 
 			if (willRetry) {
 				const messages = this.agent.state.messages;
@@ -2715,6 +2736,10 @@ export class AgentSession {
 				},
 				getThinkingLevel: () => this.thinkingLevel,
 				setThinkingLevel: (level) => this.setThinkingLevel(level),
+				// Optional: no in-process MCP client manager yet. Leave unbound so
+				// ExtensionAPI.callMcpTool remains present (load-time capture) but throws
+				// until a session-level handler is provided. Tests / future MCP hub bind here.
+				callMcpTool: undefined,
 			},
 			{
 				getModel: () => this.model,

@@ -20,9 +20,9 @@ vi.mock("../src/core/compaction/index.js", () => ({
 		totalTokens?: number;
 	}) => usage.totalTokens ?? usage.input + usage.output + usage.cacheRead + usage.cacheWrite,
 	collectEntriesForBranchSummary: () => ({ entries: [], commonAncestorId: null }),
-	compact: async () => ({
+	compact: async (preparation: { firstKeptEntryId: string }) => ({
 		summary: "compacted",
-		firstKeptEntryId: "entry-1",
+		firstKeptEntryId: preparation.firstKeptEntryId,
 		tokensBefore: 100,
 		details: {},
 	}),
@@ -45,7 +45,21 @@ vi.mock("../src/core/compaction/index.js", () => ({
 		return { tokens: 0, usageTokens: 0, trailingTokens: 0, lastUsageIndex: null };
 	},
 	generateBranchSummary: async () => ({ summary: "", aborted: false, readFiles: [], modifiedFiles: [] }),
-	prepareCompaction: () => ({ dummy: true }),
+	resolveCompactionModel: <T>(model: T): T => model,
+	prepareCompaction: (entries: { id: string }[], settings: { enabled: boolean }) => {
+		if (!settings.enabled) return undefined;
+		const keep = entries[Math.min(2, entries.length - 1)];
+		if (!keep) return undefined;
+		return {
+			dummy: true,
+			firstKeptEntryId: keep.id,
+			tokensBefore: 1000,
+			messagesToSummarize: [],
+			turnPrefixMessages: [],
+			previousSummary: undefined,
+			fileOps: { read: new Set(), edited: new Set() },
+		};
+	},
 	shouldCompact: (
 		contextTokens: number,
 		contextWindow: number,
@@ -98,6 +112,30 @@ describe("AgentSession auto-compaction queue resume", () => {
 	});
 
 	it("should resume after threshold compaction when only agent-level queued messages exist", async () => {
+		// Seed a large in-memory session so prepareCompaction succeeds.
+		const model = session.model!;
+		for (let i = 0; i < 8; i++) {
+			sessionManager.appendMessage({ role: "user", content: `turn ${i} user`, timestamp: Date.now() + i });
+			sessionManager.appendMessage({
+				role: "assistant",
+				content: [{ type: "text", text: `turn ${i} assistant` }],
+				api: model.api,
+				provider: model.provider,
+				model: model.id,
+				usage: {
+					input: 20_000,
+					output: 2_000,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 22_000,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				stopReason: "stop",
+				timestamp: Date.now() + i,
+			});
+		}
+		session.agent.state.messages = sessionManager.buildSessionContext().messages;
+
 		session.agent.followUp({
 			role: "custom",
 			customType: "test",
@@ -111,15 +149,25 @@ describe("AgentSession auto-compaction queue resume", () => {
 
 		const continueSpy = vi.spyOn(session.agent, "continue").mockResolvedValue();
 
+		const emitSpy = vi.spyOn(
+			session as unknown as { _emit: (event: { type: string; willRetry?: boolean }) => void },
+			"_emit",
+		);
+
 		const runAutoCompaction = (
 			session as unknown as {
 				_runAutoCompaction: (reason: "overflow" | "threshold", willRetry: boolean) => Promise<boolean>;
 			}
 		)._runAutoCompaction.bind(session);
 
-		await expect(runAutoCompaction("threshold", false)).resolves.toBe(true);
-
+		const resolved = await runAutoCompaction("threshold", false);
+		expect(resolved).toBe(true);
 		expect(continueSpy).not.toHaveBeenCalled();
+
+		const compactionEnd = emitSpy.mock.calls
+			.map((call) => call[0])
+			.find((event) => event.type === "compaction_end") as { willRetry: boolean } | undefined;
+		expect(compactionEnd?.willRetry).toBe(true);
 	});
 
 	it("should not compact repeatedly after overflow recovery already attempted", async () => {

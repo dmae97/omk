@@ -35,6 +35,10 @@ Anthropic subscription auth is active for Claude Pro/Max accounts. Third-party h
 - Press Enter for github.com, or enter your GitHub Enterprise Server domain
 - If you get "model not supported", enable it in VS Code: Copilot Chat → model selector → select model → "Enable"
 
+### Grok harness presets
+
+For `grok-oauth-proxy` project presets, Composer routing, and Imagine tool guidance, see [Grok harness](grok-harness.md).
+
 ## API Keys
 
 ### Environment Variables or Auth File

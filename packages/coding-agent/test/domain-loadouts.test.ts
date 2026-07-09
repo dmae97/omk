@@ -91,6 +91,15 @@ describe("domain-loadouts registry", () => {
 		expect(getDomainProfile("frontend-ui").id).toBe("frontend-ui");
 	});
 
+	it("includes a valid grok-harness profile", () => {
+		const profile = getDomainProfile("grok-harness");
+		const validation = validateLoadoutProfile(profile);
+
+		expect(profile.id).toBe("grok-harness");
+		expect(profile.label).toBe("Grok xAI Harness");
+		expect(validation.valid, validation.errors.join("; ")).toBe(true);
+	});
+
 	it("domainLoadoutProfiles strips domain-only fields and keeps loadout fields", () => {
 		const loadouts = domainLoadoutProfiles();
 		for (const [id, loadout] of Object.entries(loadouts)) {

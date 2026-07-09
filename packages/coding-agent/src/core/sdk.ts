@@ -9,6 +9,7 @@ import { AuthStorage } from "./auth-storage.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { createDomainDispatchRuntimeSession, isDomainRoutingEnabled, tryDomainDispatch } from "./domain-dispatch.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
+import { tryGrokHarnessDispatch } from "./grok-harness-dispatch.ts";
 import type { LoadoutAccessPolicy } from "./loadout-access-policy.ts";
 import { convertToLlm } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
@@ -157,10 +158,39 @@ function createEffectiveLoadoutAccessPolicy(
 	resourceLoader: ResourceLoader,
 	cwd: string,
 	agentDir: string,
+	provider?: string,
 ): LoadoutAccessPolicy | undefined {
 	if (options.loadoutAccessPolicy) {
 		return options.loadoutAccessPolicy;
 	}
+
+	const session = createDomainDispatchRuntimeSession({
+		baseToolNames: getDomainDispatchBaseToolNames(options),
+		resourceLoader,
+		customTools: options.customTools,
+		allowedToolNames: getAllowedToolNamesForDomainDispatch(options),
+		excludedToolNames: options.excludeTools,
+	});
+
+	// Grok OAuth: apply grok-harness domain loadout without requiring OMK_DOMAIN_ROUTING=1.
+	if (provider) {
+		try {
+			const grokDispatch = tryGrokHarnessDispatch({
+				provider,
+				session,
+				resourceLoader,
+				cwd,
+				agentDir,
+				env: process.env,
+			});
+			if (grokDispatch.loadoutAccessPolicy) {
+				return grokDispatch.loadoutAccessPolicy;
+			}
+		} catch {
+			// Fall through to opt-in domain routing.
+		}
+	}
+
 	const domainRoutingPrompt = options.domainRoutingPrompt?.trim();
 	if (!domainRoutingPrompt || !isDomainRoutingEnabled(process.env)) {
 		return undefined;
@@ -170,13 +200,7 @@ function createEffectiveLoadoutAccessPolicy(
 		const dispatch = tryDomainDispatch({
 			role: "coder",
 			initialPrompt: domainRoutingPrompt,
-			session: createDomainDispatchRuntimeSession({
-				baseToolNames: getDomainDispatchBaseToolNames(options),
-				resourceLoader,
-				customTools: options.customTools,
-				allowedToolNames: getAllowedToolNamesForDomainDispatch(options),
-				excludedToolNames: options.excludeTools,
-			}),
+			session,
 			resourceLoader,
 			cwd,
 			agentDir,
@@ -243,11 +267,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		time("resourceLoader.reload");
 	}
 
-	// Compute effective loadout access policy from explicit option or opt-in domain routing hint.
-	// The policy is not wired into AgentSession in this lane; it is computed here so the option
-	// surface exists and downstream lanes can apply it without changing the public type again.
-	const effectiveLoadoutAccessPolicy = createEffectiveLoadoutAccessPolicy(options, resourceLoader, cwd, agentDir);
-
 	// Check if session has existing data to restore
 	const existingSession = sessionManager.buildSessionContext();
 	const hasExistingSession = existingSession.messages.length > 0;
@@ -284,6 +303,15 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			modelFallbackMessage += `. Using ${model.provider}/${model.id}`;
 		}
 	}
+
+	// Loadout policy after model resolution so Grok OAuth can auto-apply grok-harness.
+	const effectiveLoadoutAccessPolicy = createEffectiveLoadoutAccessPolicy(
+		options,
+		resourceLoader,
+		cwd,
+		agentDir,
+		model?.provider,
+	);
 
 	let thinkingLevel = options.thinkingLevel;
 

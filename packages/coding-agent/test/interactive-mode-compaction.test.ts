@@ -55,4 +55,34 @@ describe("InteractiveMode compaction events", () => {
 		);
 		expect(fakeThis.flushCompactionQueue).toHaveBeenCalledWith({ willRetry: false });
 	});
+
+	test("flushes queued follow-up and steering into the retry turn when willRetry is true", async () => {
+		const fakeThis = {
+			compactionQueuedMessages: [
+				{ text: "queued follow-up", mode: "followUp" },
+				{ text: "queued steer", mode: "steer" },
+			],
+			updatePendingMessagesDisplay: vi.fn(),
+			showError: vi.fn(),
+			isExtensionCommand: () => false,
+			session: {
+				clearQueue: vi.fn(),
+				prompt: vi.fn().mockResolvedValue(undefined),
+				followUp: vi.fn().mockResolvedValue(undefined),
+				steer: vi.fn().mockResolvedValue(undefined),
+			},
+		};
+
+		const flushCompactionQueue = Reflect.get(InteractiveMode.prototype, "flushCompactionQueue") as (
+			this: typeof fakeThis,
+			options?: { readonly willRetry?: boolean },
+		) => Promise<void>;
+
+		await flushCompactionQueue.call(fakeThis, { willRetry: true });
+
+		expect(fakeThis.compactionQueuedMessages).toEqual([]);
+		expect(fakeThis.session.followUp).toHaveBeenCalledWith("queued follow-up");
+		expect(fakeThis.session.steer).toHaveBeenCalledWith("queued steer");
+		expect(fakeThis.session.prompt).not.toHaveBeenCalled();
+	});
 });

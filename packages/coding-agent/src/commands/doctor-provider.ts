@@ -58,6 +58,18 @@ function resolveConfig(providerId: string): { config: ProviderConfig; source: st
 		};
 	}
 
+	// Built-in local Grok OAuth proxy defaults (no secrets; loopback only).
+	if (providerId === "grok-oauth-proxy") {
+		return {
+			config: {
+				baseUrl: "http://127.0.0.1:9996/v1",
+				api: "openai-completions",
+				apiKey: "dummy",
+			},
+			source: "built-in-grok-oauth-proxy-defaults",
+		};
+	}
+
 	return undefined;
 }
 
@@ -82,14 +94,16 @@ export async function diagnoseProvider(providerId: string): Promise<ProviderDoct
 		message: `Found provider config in ${resolved.source}`,
 	});
 
-	// 2. Base URL reachability
+	// 2. Base URL / health reachability
+	// OpenAI-compatible roots often 404 on GET /v1; prefer /health for local Grok proxy.
 	if (config.baseUrl) {
 		try {
-			const res = await fetch(config.baseUrl, { method: "GET" });
+			const probeUrl = providerId === "grok-oauth-proxy" ? new URL("/health", config.baseUrl).href : config.baseUrl;
+			const res = await fetch(probeUrl, { method: "GET" });
 			checks.push({
 				name: "base-url-reachable",
 				status: res.ok ? "ok" : "fail",
-				message: `HTTP ${res.status}`,
+				message: `${probeUrl} → HTTP ${res.status}`,
 			});
 		} catch (err) {
 			checks.push({
