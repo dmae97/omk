@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Changed the root README project demo link to Mario's Threads profile.
+
+### Fixed
+
+- Fixed npm trusted-publishing identity after the GitHub repository rename by aligning package metadata with `dmae97/omk`.
+
 ## [0.90.6] - 2026-07-09
 
 ### Added

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed npm trusted-publishing identity after the GitHub repository rename by aligning package metadata with `dmae97/omk`.
+
 ## [0.90.6] - 2026-07-09
 
 ## [0.90.5] - 2026-07-07

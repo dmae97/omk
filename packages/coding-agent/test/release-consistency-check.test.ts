@@ -32,6 +32,20 @@ describe("release consistency check", () => {
 		expect(() => runCheck(root)).not.toThrow();
 	});
 
+	it("rejects package repository metadata that does not match the canonical GitHub repository", () => {
+		const root = createFixture();
+		writeJson(join(root, "packages", "coding-agent", "package.json"), {
+			name: "open-multi-agent-kit",
+			version: "1.2.3",
+			repository: { url: "git+https://github.com/dmae97/open-multi-agent-kit.git" },
+		});
+
+		const result = spawnCheck(root);
+
+		expect(result.status).toBe(1);
+		expect(result.stderr + result.stdout).toContain("package_repository_url_mismatch");
+	});
+
 	it("rejects stale hardcoded control-panel version strings outside release artifacts", () => {
 		const root = createFixture();
 		writeFileSync(
@@ -104,6 +118,7 @@ describe("release consistency check", () => {
 			writeJson(join(root, "packages", "coding-agent", "package.json"), {
 				name: "open-multi-agent-kit",
 				version: "1.5.0",
+				repository: { url: "git+https://github.com/dmae97/omk.git" },
 			});
 
 			const devResult = spawnCheck(root);
@@ -162,6 +177,7 @@ function createFixture(): string {
 	writeJson(join(root, "packages", "coding-agent", "package.json"), {
 		name: "open-multi-agent-kit",
 		version: "1.2.3",
+		repository: { url: "git+https://github.com/dmae97/omk.git" },
 	});
 	writeFileSync(
 		join(root, "packages", "coding-agent", "CHANGELOG.md"),

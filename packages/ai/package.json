@@ -92,7 +92,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/dmae97/open-multi-agent-kit.git",
+		"url": "git+https://github.com/dmae97/omk.git",
 		"directory": "packages/ai"
 	},
 	"engines": {

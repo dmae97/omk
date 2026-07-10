@@ -19,7 +19,7 @@
 <p align="center">
   <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm" src="https://img.shields.io/npm/v/open-multi-agent-kit?style=flat-square" /></a>
-  <a href="https://github.com/dmae97/open-multi-agent-kit/releases/tag/v0.90.6"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.6-00d7ff?style=flat-square" /></a>
+  <a href="https://github.com/dmae97/omk/releases/tag/v0.90.6"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.6-00d7ff?style=flat-square" /></a>
 </p>
 
 > New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -36,7 +36,7 @@ This is the home of the omk agent harness project including our self extensible 
 
 To learn more about omk:
 
-* [Visit omk.dev](https://omk.dev), the project website with demos
+* [Project demos from Mario](https://www.threads.com/@been_yg?hl=ko)
 * [Read the documentation](https://omk.dev/docs/latest), but you can also ask the agent to explain itself
 
 ## OMK//CONTROL TUI

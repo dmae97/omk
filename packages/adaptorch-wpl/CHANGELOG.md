@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed package repository metadata after the GitHub repository rename by aligning it with `dmae97/omk`.
+
 ## [0.90.6] - 2026-07-09
 
 ### Added
