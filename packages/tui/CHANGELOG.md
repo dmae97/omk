@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- Bare first-token skill autocomplete: typing a skill name at the start of the message (without `!` or `/`) shows the skill launcher list and inserts `!skill:name` on select.
+- Mid-message `/` skill autocomplete: typing `/skill…` after whitespace lists skills (short names, not only `skill:`), and selecting rewrites the message to start with `!skill:name` so submit expands the skill. Leading `/` also matches short skill names (e.g. `/frontend` → `/skill:frontend`).
+
+### Fixed
+
+- Fixed vertical cursor movement to track display cells instead of UTF-16 offsets, so wrapped lines containing wide CJK (e.g. Korean) text no longer drift the cursor column on up/down navigation.
+- Fixed `wordWrapLine` to keep an indivisible wide grapheme whole when it exceeds the wrap width (e.g. a CJK character at width 1) instead of recursing until stack overflow.
+- Fixed npm trusted-publishing identity after the GitHub repository rename by aligning package metadata with `dmae97/omk`.
+
+## [0.90.6] - 2026-07-09
+
 ## [0.90.5] - 2026-07-07
 
 ## [0.90.4] - 2026-07-04

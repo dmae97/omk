@@ -120,6 +120,7 @@ const SECRET_FILE_STRICT_PATTERNS: readonly RegExp[] = [
 
 /** Benign sibling files that look secret-ish but never hold credentials. */
 const SECRET_FILE_ALLOW_PATTERNS: readonly RegExp[] = [/(^|\/)\.env\.(example|sample|template|dist|defaults?)$/i];
+const SEARCH_COMMANDS = new Set(["grep", "egrep", "fgrep", "rg"]);
 const HOME_VARIABLE_RM_TARGETS = new Set(["$home", "$" + "{home}", "$home/", "$" + "{home}/"]);
 
 function verdict(risk: CommandRisk, rule: string, reason: string): CommandVerdict {
@@ -594,6 +595,11 @@ function classifyWrappedCommand(command: string, depth: number): CommandVerdict 
 	return null;
 }
 
+function isSearchPatternArgument(tokens: readonly string[], index: number): boolean {
+	const executable = tokens[0]?.toLowerCase();
+	return SEARCH_COMMANDS.has(executable ?? "") && tokens[index - 1] === "--";
+}
+
 /** Flag commands that read, copy, or transmit a credential / secret file path. */
 function classifySecretAccess(command: string): CommandVerdict | null {
 	const { tokens } = stripCommandPrefixes(tokenizeShellSegment(command));
@@ -601,6 +607,7 @@ function classifySecretAccess(command: string): CommandVerdict | null {
 	for (let index = 1; index < tokens.length; index += 1) {
 		const token = tokens[index];
 		if (!token || token.startsWith("-")) continue;
+		if (isSearchPatternArgument(tokens, index)) continue;
 		if (/\s/.test(token)) continue;
 		if (SECRET_FILE_ALLOW_PATTERNS.some((pattern) => pattern.test(token))) continue;
 		if (SECRET_FILE_STRICT_PATTERNS.some((pattern) => pattern.test(token))) {
