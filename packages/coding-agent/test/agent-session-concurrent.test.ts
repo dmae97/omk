@@ -342,6 +342,9 @@ describe("AgentSession concurrent prompt guard", () => {
 			name: "dummy",
 			description: "Dummy tool",
 			label: "dummy",
+			// Batch parallelization is opt-in per tool; this test asserts the
+			// parallel path's event ordering, so mark the tool parallel explicitly.
+			executionMode: "parallel" as const,
 			parameters: Type.Object({ q: Type.String() }),
 			execute: async (_toolCallId: string, params: unknown) => {
 				const q =
