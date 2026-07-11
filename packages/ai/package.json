@@ -1,6 +1,6 @@
 {
 	"name": "omk-ai",
-	"version": "0.90.5",
+	"version": "0.90.6",
 	"description": "Unified LLM API with automatic model discovery and provider configuration",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -92,7 +92,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/dmae97/open-multi-agent-kit.git",
+		"url": "git+https://github.com/dmae97/omk.git",
 		"directory": "packages/ai"
 	},
 	"engines": {

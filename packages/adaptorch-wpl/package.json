@@ -1,6 +1,6 @@
 {
 	"name": "omk-adaptorch-wpl",
-	"version": "0.90.5",
+	"version": "0.90.6",
 	"private": true,
 	"description": "Experimental, design-stage AdaptOrch-native Work Packet Loop (WPL). Not wired into the coding-agent CLI yet.",
 	"type": "module",
@@ -31,7 +31,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/dmae97/open-multi-agent-kit.git",
+		"url": "git+https://github.com/dmae97/omk.git",
 		"directory": "packages/adaptorch-wpl"
 	},
 	"engines": {

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed package repository metadata after the GitHub repository rename by aligning it with `dmae97/omk`.
+
+## [0.90.6] - 2026-07-09
+
 ### Added
 
 - Added B2C Correctness Wall orchestration APIs (`evaluateCorrectnessWall`, policy wall, deep-wall evidence gate, live/fixture OA transports, repair hints/budget, signed receipts) with unit coverage; advisory evidence-gated verdicts only (not formal correctness proof).
