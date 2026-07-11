@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added an `ultra` thinking level above `max` (maximum reasoning with automatic task delegation). It is only exposed when a model explicitly maps it — currently GPT-5.6 Sol/Terra on the `openai-codex` provider — and gracefully clamps down (`ultra` → `max`/`xhigh`/`high`) everywhere else, including budget-based Claude models on Bedrock and Google thinking APIs.
+- Added the GPT-5.6 model family (released 2026-07-09): `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` for the `openai` and `azure-openai-responses` providers (1.05M context, 128k max output, reasoning efforts `none` through `max`), OpenRouter variants including `-pro`, Vercel AI Gateway variants, and `openai-codex` (ChatGPT OAuth) Sol/Terra/Luna entries with the 372k context window served by Codex. GPT-5.6 models expose the `max` thinking level above `xhigh` and map `off` to effort `none` on the OpenAI API.
+
+### Changed
+
+- Regenerated the built-in model catalog from models.dev and OpenRouter: OpenRouter now includes latest tool-capable entries such as `x-ai/grok-4.5`, `openai/gpt-5.5`, `deepseek/deepseek-v4-*`, and AionLabs Aion 2.0/3.0; OpenCode Zen gains `grok-4.5` and `hy3-free`; OpenCode Go remains the built-in `opencode-go` provider (13 tool-capable models including `kimi-k2.6`, `minimax-m3`, `qwen3.7-*`, DeepSeek V4, GLM 5.1/5.2) with shared `OPENCODE_API_KEY` auth.
+
 ### Fixed
 
 - Fixed npm trusted-publishing identity after the GitHub repository rename by aligning package metadata with `dmae97/omk`.

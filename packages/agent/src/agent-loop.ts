@@ -11,6 +11,7 @@ import {
 	type ToolResultMessage,
 	validateToolArguments,
 } from "omk-ai";
+import { shouldParallelizeToolBatch } from "./parallel-tool-batch.ts";
 import type {
 	AgentContext,
 	AgentEvent,
@@ -477,7 +478,21 @@ async function executeToolCalls(
 	const hasSequentialToolCall = toolCalls.some(
 		(tc) => currentContext.tools?.find((t) => t.name === tc.name)?.executionMode === "sequential",
 	);
-	if (config.toolExecution === "sequential" || hasSequentialToolCall) {
+	const toolPolicies = new Map<string, "sequential" | "parallel">();
+	for (const tool of currentContext.tools ?? []) {
+		if (tool.executionMode) {
+			toolPolicies.set(tool.name, tool.executionMode);
+		}
+	}
+	const batchParallelizable = shouldParallelizeToolBatch(
+		toolCalls.map((tc) => ({ name: tc.name, arguments: tc.arguments as Record<string, unknown> })),
+		{
+			cwd: config.cwd ?? process.cwd(),
+			toolPolicies,
+			allowUnknownParallel: (toolName) => toolPolicies.get(toolName) === "parallel",
+		},
+	);
+	if (config.toolExecution === "sequential" || hasSequentialToolCall || !batchParallelizable) {
 		return executeToolCallsSequential(currentContext, assistantMessage, toolCalls, config, signal, emit);
 	}
 	return executeToolCallsParallel(currentContext, assistantMessage, toolCalls, config, signal, emit);

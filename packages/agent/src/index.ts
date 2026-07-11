@@ -39,6 +39,14 @@ export * from "./harness/system-prompt.ts";
 export * from "./harness/types.ts";
 export * from "./harness/utils/shell-output.ts";
 export * from "./harness/utils/truncate.ts";
+// Parallel tool batch policy
+export {
+	NEVER_PARALLEL_TOOLS,
+	PARALLEL_SAFE_TOOLS,
+	PATH_SCOPED_TOOLS,
+	pathsOverlap,
+	shouldParallelizeToolBatch,
+} from "./parallel-tool-batch.ts";
 // Proxy utilities
 export * from "./proxy.ts";
 // Types

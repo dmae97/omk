@@ -39,7 +39,7 @@ SEQUENCE:
 HARD RULES: no inline styles when a token/utility exists; oklch tokens for color; mobile-first responsive; real content over placeholders; pixel-match the target first, customize later; no visual claim without bounded screenshot/diff evidence.
 ```
 
-## Curated skills (54)
+## Curated skills (58)
 
 - `frontend-design`
 - `frontend-ui-engineering`
@@ -58,7 +58,11 @@ HARD RULES: no inline styles when a token/utility exists; oklch tokens for color
 - `high-end-visual-design`
 - `minimalist-ui`
 - `design-taste-frontend`
+- `design-taste-frontend-v1`
 - `redesign-existing-projects`
+- `brandkit`
+- `imagegen-frontend-web`
+- `imagegen-frontend-mobile`
 - `web-design-guidelines`
 - `fixing-accessibility`
 - `contrast-checker`

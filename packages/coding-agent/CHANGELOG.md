@@ -2,12 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added the `ultra` thinking level (maximum reasoning with automatic task delegation, GPT-5.6 Sol/Terra via `openai-codex`) to the CLI `--thinking` flag, thinking selector, settings, theme colors, and router feedback levels; the reasoning router never auto-selects `ultra`, and models without it clamp down to their highest supported level.
+
 ### Changed
 
+- Refreshed built-in model metadata via `omk-ai` regeneration so OpenRouter latest tool-capable models and OpenCode Go (`opencode-go`) catalog entries stay current for `/model` and provider defaults.
 - Changed the root README project demo link to Mario's Threads profile.
 
 ### Fixed
 
+- Fixed `secret.read_path` command-safety false positives for search commands: the pattern argument immediately after `--` in `grep`/`egrep`/`fgrep`/`rg` is no longer treated as a secret file operand, while real secret-file operands (e.g. `rg -- needle .env`, `grep -f .env needle`) stay confirm-tier.
 - Fixed npm trusted-publishing identity after the GitHub repository rename by aligning package metadata with `dmae97/omk`.
 
 ## [0.90.6] - 2026-07-09

@@ -50,7 +50,7 @@ export type RouterFeedbackTaskClass = TaskClassV4;
  * "off"; turning thinking off entirely is a distinct manual action outside
  * this ledger.
  */
-export type RouterFeedbackLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export type RouterFeedbackLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 
 /** Feedback signal source. */
 export type RouterFeedbackSignal = "s1-override" | "s2-accept" | "s3-hook-outcome" | "s4-regression";
@@ -97,7 +97,15 @@ export const ROUTER_FEEDBACK_TASK_CLASSES: readonly RouterFeedbackTaskClass[] = 
 	"review",
 	"plan",
 ];
-const ROUTER_FEEDBACK_LEVELS: readonly RouterFeedbackLevel[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
+const ROUTER_FEEDBACK_LEVELS: readonly RouterFeedbackLevel[] = [
+	"minimal",
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+	"ultra",
+];
 const ROUTER_FEEDBACK_SIGNALS: readonly RouterFeedbackSignal[] = [
 	"s1-override",
 	"s2-accept",

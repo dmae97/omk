@@ -206,6 +206,116 @@ describe("CombinedAutocompleteProvider", () => {
 		});
 	});
 
+	describe("plain first-token skill completion", () => {
+		const provider = new CombinedAutocompleteProvider(
+			[
+				{ name: "skill:browser-feedback", description: "Review browser UI state" },
+				{ name: "skill:agentmemory", description: "Use saved memory" },
+				{ name: "skill:omk-skills", description: "Route through OMK role hubs" },
+				{ name: "model", description: "Select model" },
+			],
+			"/tmp",
+		);
+
+		it("lists skills for a bare first-token prefix", async () => {
+			const result = await getSuggestions(provider, ["bro"], 0, 3);
+
+			assert.notEqual(result, null);
+			assert.strictEqual(result?.prefix, "bro");
+			assert.strictEqual(result?.items[0]?.value, "!skill:browser-feedback ");
+		});
+
+		it("includes OMK hub shorthand for matching bare prefixes", async () => {
+			const result = await getSuggestions(provider, ["om"], 0, 2);
+
+			assert.notEqual(result, null);
+			assert.ok(result?.items.some((item) => item.value === "!omk "));
+		});
+
+		it("applies plain skill selection as bang skill launcher text", async () => {
+			const result = await getSuggestions(provider, ["agent"], 0, 5);
+
+			assert.notEqual(result, null);
+			if (!result) {
+				assert.fail("expected plain skill suggestions");
+			}
+			const item = result.items.find((entry) => entry.value === "!skill:agentmemory ");
+			if (!item) {
+				assert.fail("expected agentmemory suggestion");
+			}
+			const applied = provider.applyCompletion(["agent"], 0, 5, item, result.prefix);
+			assert.strictEqual(applied.lines[0], "!skill:agentmemory ");
+			assert.strictEqual(applied.cursorCol, "!skill:agentmemory ".length);
+		});
+
+		it("does not list skills mid-message", async () => {
+			const result = await getSuggestions(provider, ["hey bro"], 0, 7);
+
+			assert.strictEqual(result, null);
+		});
+
+		it("does not list skills on the second line", async () => {
+			const result = await getSuggestions(provider, ["hi", "bro"], 1, 3);
+
+			assert.strictEqual(result, null);
+		});
+	});
+
+	describe("slash skill completion", () => {
+		const provider = new CombinedAutocompleteProvider(
+			[
+				{ name: "skill:browser-feedback", description: "Review browser UI state" },
+				{ name: "skill:agentmemory", description: "Use saved memory" },
+				{ name: "skill:omk-skills", description: "Route through OMK role hubs" },
+				{ name: "model", description: "Select model" },
+			],
+			"/tmp",
+		);
+
+		it("lists short skill names for leading slash prefix", async () => {
+			const result = await getSuggestions(provider, ["/bro"], 0, 4);
+
+			assert.notEqual(result, null);
+			assert.strictEqual(result?.prefix, "/bro");
+			assert.ok(result?.items.some((item) => item.label === "browser-feedback"));
+			assert.ok(result?.items.some((item) => item.value === "skill:browser-feedback"));
+		});
+
+		it("applies leading slash skill as /skill:name", async () => {
+			const result = await getSuggestions(provider, ["/bro"], 0, 4);
+			assert.notEqual(result, null);
+			if (!result) assert.fail("expected slash skill suggestions");
+			const item = result.items.find((entry) => entry.value === "skill:browser-feedback");
+			if (!item) assert.fail("expected browser-feedback");
+			const applied = provider.applyCompletion(["/bro"], 0, 4, item, result.prefix);
+			assert.strictEqual(applied.lines[0], "/skill:browser-feedback ");
+		});
+
+		it("lists skills for mid-message slash token", async () => {
+			const result = await getSuggestions(provider, ["hey /bro"], 0, 8);
+
+			assert.notEqual(result, null);
+			assert.strictEqual(result?.prefix, "/bro");
+			assert.ok(result?.items.some((item) => item.value === "!skill:browser-feedback "));
+		});
+
+		it("rewrites mid-message slash skill pick to leading bang launcher", async () => {
+			const result = await getSuggestions(provider, ["hey /bro"], 0, 8);
+			assert.notEqual(result, null);
+			if (!result) assert.fail("expected mid-message slash skill suggestions");
+			const item = result.items.find((entry) => entry.value === "!skill:browser-feedback ");
+			if (!item) assert.fail("expected bang skill value");
+			const applied = provider.applyCompletion(["hey /bro"], 0, 8, item, result.prefix);
+			assert.strictEqual(applied.lines[0], "!skill:browser-feedback hey");
+		});
+
+		it("keeps non-skill slash commands available", async () => {
+			const result = await getSuggestions(provider, ["/mod"], 0, 4);
+			assert.notEqual(result, null);
+			assert.ok(result?.items.some((item) => item.value === "model" || item.label === "model"));
+		});
+	});
+
 	describe("fd @ file suggestions", { skip: !isFdInstalled }, () => {
 		let rootDir = "";
 		let baseDir = "";
@@ -721,7 +831,9 @@ describe("Editor bang launcher trigger gating", () => {
 
 	it("does not trigger bang autocomplete after a space mid-message", async () => {
 		const { editor, getCalls } = createRecordingEditor();
-		type(editor, "hey !");
+		// Seed a first-line prefix so we exercise mid-message "!" without first-token skill AC.
+		editor.setText("hey ");
+		editor.handleInput("!");
 		await settleAutocomplete();
 		assert.strictEqual(getCalls(), 0);
 		assert.strictEqual(editor.isShowingAutocomplete(), false);
@@ -743,6 +855,40 @@ describe("Editor bang launcher trigger gating", () => {
 		await settleAutocomplete();
 		assert.strictEqual(getCalls(), 0);
 		assert.strictEqual(editor.isShowingAutocomplete(), false);
+	});
+
+	it("triggers plain skill autocomplete for a first-token skill name", async () => {
+		const { editor, getCalls } = createRecordingEditor();
+		type(editor, "bro");
+		await flushAutocomplete();
+		assert.ok(getCalls() >= 1);
+		assert.strictEqual(editor.isShowingAutocomplete(), true);
+	});
+
+	it("does not trigger plain skill autocomplete mid-message", async () => {
+		const { editor, getCalls } = createRecordingEditor();
+		// Seed leading text so the typed token is not at the start of the message.
+		editor.setText("hey ");
+		type(editor, "bro");
+		await settleAutocomplete();
+		// Only "@"/"#" style tokens mid-message should fire; plain words must stay silent.
+		assert.strictEqual(getCalls(), 0);
+		assert.strictEqual(editor.isShowingAutocomplete(), false);
+	});
+
+	it("triggers mid-message slash skill autocomplete after whitespace", async () => {
+		const { editor, getCalls } = createRecordingEditor();
+		editor.setText("hey ");
+		editor.handleInput("/");
+		await flushAutocomplete();
+		assert.strictEqual(getCalls(), 1);
+		assert.strictEqual(editor.isShowingAutocomplete(), true);
+
+		editor.handleInput("b");
+		editor.handleInput("r");
+		await flushAutocomplete();
+		assert.strictEqual(editor.getText(), "hey /br");
+		assert.strictEqual(editor.isShowingAutocomplete(), true);
 	});
 
 	it("still triggers @ autocomplete mid-message", async () => {

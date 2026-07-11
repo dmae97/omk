@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import { classifyTaskV4, type TaskClassV4 } from "../../../src/core/reasoning-router-v4.ts";
+import { normalizeIntentTokensV4 } from "../../../src/core/reasoning-router-v4-normalize.ts";
 
 interface GeneralizationCase {
 	readonly prompt: string;
@@ -41,6 +42,18 @@ const GENERALIZATION_CASES: readonly GeneralizationCase[] = [
 		note: "track down leak",
 	},
 	{
+		prompt: "The numbers come out wrong after the migration.",
+		expectedClass: "debug",
+		note: "wrong numbers after migration",
+	},
+	{ prompt: "CI is red only on the mac runner.", expectedClass: "debug", note: "platform-only red CI" },
+	{
+		prompt: "Users report the export silently produces an empty file.",
+		expectedClass: "debug",
+		note: "silent empty export",
+	},
+	{ prompt: "어제는 됐는데 오늘은 합계가 안 맞아.", expectedClass: "debug", note: "KR totals off" },
+	{
 		prompt: "This module is a 900-line spaghetti mess; untangle it into cohesive units.",
 		expectedClass: "refactor",
 		note: "untangle",
@@ -54,6 +67,10 @@ const GENERALIZATION_CASES: readonly GeneralizationCase[] = [
 	{ prompt: "Give this PR a once-over before I merge.", expectedClass: "review", note: "once-over" },
 	{ prompt: "Sanity-check my auth flow for holes.", expectedClass: "review", note: "sanity-check" },
 	{ prompt: "Eyeball this diff and tell me if anything looks off.", expectedClass: "review", note: "eyeball" },
+	{ prompt: "Can you look over my approach before I commit?", expectedClass: "review", note: "look over approach" },
+	{ prompt: "Poke holes in this design before we build it.", expectedClass: "review", note: "poke holes" },
+	{ prompt: "Does this handle the concurrent case?", expectedClass: "review", note: "handles concurrent case" },
+	{ prompt: "이 접근 방식 괜찮은지 봐줘.", expectedClass: "review", note: "KR look over approach" },
 	{ prompt: "Draw up a roadmap for migrating us off REST to gRPC.", expectedClass: "plan", note: "draw up roadmap" },
 	{
 		prompt: "Let's think through the architecture for a multi-tenant billing system.",
@@ -94,9 +111,108 @@ describe("reasoning-router v4 real-world generalization", () => {
 		expect(classifyTaskV4({ prompt }).taskClass).toBe(expectedClass);
 	});
 
-	it("routes the high-confidence sanity-check probe to review instead of code-gen", () => {
+	it("routes code artifact requests through scored code-gen evidence instead of default fallback", () => {
+		const verdict = classifyTaskV4({ prompt: "I need a script that batch-renames files by regex." });
+		expect(verdict.taskClass).toBe("code-gen");
+		expect(verdict.fallbackReason).toBeNull();
+		expect(verdict.scores["code-gen"]).toBeGreaterThan(0);
+	});
+
+	it("treats leading review synonyms as review intent", () => {
+		const verdict = classifyTaskV4({ prompt: "Give this PR a once-over before I merge." });
+		expect(verdict.taskClass).toBe("review");
+		expect(verdict.fallbackReason).toBeNull();
+		expect(verdict.scores.review).toBeGreaterThan(verdict.scores["code-gen"]);
+	});
+
+	it("routes evaluative review-object phrasing to review instead of implementation nouns", () => {
 		const verdict = classifyTaskV4({ prompt: "Sanity-check my auth flow for holes." });
 		expect(verdict.taskClass).toBe("review");
 		expect(verdict.scores.review).toBeGreaterThan(verdict.scores["code-gen"]);
+		expect(verdict.confidenceBand).not.toBe("low");
+	});
+
+	it("suppresses first-person future clauses instead of scoring them as agent work", () => {
+		const verdict = classifyTaskV4({ prompt: "Review this endpoint, then I'll refactor it." });
+		expect(verdict.taskClass).toBe("review");
+		expect(verdict.secondClauseIntent).toBeNull();
+		expect(verdict.compoundIntent).toBe(false);
+		expect(verdict.scores.refactor).toBe(0);
+	});
+
+	it("keeps imperative second clauses agent-directed and compound", () => {
+		const verdict = classifyTaskV4({ prompt: "Review this endpoint, then refactor it." });
+		expect(verdict.secondClauseIntent).toBe("refactor");
+		expect(verdict.compoundIntent).toBe(true);
+		expect(verdict.scores.refactor).toBeGreaterThan(0);
+	});
+
+	it("routes Korean morphology variants through the bounded Korean cluster", () => {
+		const verdict = classifyTaskV4({ prompt: "다음 배포 계획 좀 짜줘" });
+		expect(verdict.taskClass).toBe("plan");
+		expect(verdict.fallbackReason).toBe("ko-short-task-signal");
+	});
+
+	it("routes real-world debug failure shapes through scored diagnostic evidence", () => {
+		const debugPrompts: readonly string[] = [
+			"The numbers come out wrong after the migration.",
+			"CI is red only on the mac runner.",
+			"Users report the export silently produces an empty file.",
+			"어제는 됐는데 오늘은 합계가 안 맞아.",
+		];
+
+		for (const prompt of debugPrompts) {
+			const verdict = classifyTaskV4({ prompt });
+			expect(verdict.taskClass).toBe("debug");
+			expect(verdict.fallbackReason).toBeNull();
+			expect(verdict.scores.debug).toBeGreaterThan(verdict.scores["code-gen"]);
+		}
+	});
+
+	it("routes real-world review assessment shapes above incidental implementation/debug nouns", () => {
+		const reviewPrompts: readonly string[] = [
+			"Can you look over my approach before I commit?",
+			"Poke holes in this design before we build it.",
+			"Does this handle the concurrent case?",
+			"Can this leak permissions between tenants?",
+			"이 접근 방식 괜찮은지 봐줘.",
+		];
+
+		for (const prompt of reviewPrompts) {
+			const verdict = classifyTaskV4({ prompt });
+			expect(verdict.taskClass).toBe("review");
+			expect(verdict.fallbackReason).toBeNull();
+			expect(verdict.scores.review).toBeGreaterThan(verdict.scores["code-gen"]);
+		}
+	});
+
+	it("normalizes English and Korean morphology into canonical intent stems", () => {
+		const english = normalizeIntentTokensV4("hangs hung hanging breaks broke broken");
+		expect(english).toContain("hang");
+		expect(english).toContain("break");
+
+		const korean = normalizeIntentTokensV4("고쳐줘 고칠거야 고쳐줘요");
+		expect(korean.filter((token) => token === "고치")).toHaveLength(1);
+	});
+
+	it("keeps a single normalized generalized match at medium confidence", () => {
+		const verdict = classifyTaskV4({ prompt: "Exports vanished after deploy." });
+		expect(verdict.taskClass).toBe("debug");
+		expect(verdict.fallbackReason).toBeNull();
+		expect(verdict.confidenceBand).toBe("medium");
+	});
+
+	it("routes temporal deferral skeletons to the current action", () => {
+		const debugVerdict = classifyTaskV4({ prompt: "Review can wait; find why the smoke check fails first." });
+		expect(debugVerdict.taskClass).toBe("debug");
+		expect(debugVerdict.suppressedFeatureIds).toContain("deferral:review");
+		expect(debugVerdict.scores.review).toBe(0);
+
+		const reviewVerdict = classifyTaskV4({
+			prompt: "Refactor later; evaluate whether the current boundary is safe first.",
+		});
+		expect(reviewVerdict.taskClass).toBe("review");
+		expect(reviewVerdict.suppressedFeatureIds).toContain("deferral:refactor");
+		expect(reviewVerdict.scores.refactor).toBe(0);
 	});
 });

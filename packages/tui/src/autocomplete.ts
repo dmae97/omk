@@ -278,6 +278,43 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		this.fdPath = fdPath;
 	}
 
+	/** Skill launcher items shared by `!name` and bare first-token skill autocomplete. */
+	private getSkillLauncherSuggestions(prefix: string): AutocompleteItem[] {
+		const skillItems = this.commands
+			.filter((cmd) => {
+				const name = "name" in cmd ? cmd.name : cmd.value;
+				return name.startsWith("skill:");
+			})
+			.map((cmd) => {
+				const name = "name" in cmd ? cmd.name : cmd.value;
+				const shortName = name.slice("skill:".length);
+				const desc = "description" in cmd && cmd.description ? cmd.description : "";
+				return {
+					name: shortName,
+					label: shortName,
+					value: `!skill:${shortName} `,
+					...(desc && { description: desc }),
+				};
+			});
+		const omkIndexAvailable = skillItems.some((item) => item.name === "omk-skills");
+		const bangItems = omkIndexAvailable
+			? [
+					{
+						name: "omk",
+						label: "omk",
+						value: "!omk ",
+						description: "Route through OMK role hubs (frontend, backend, loop, plan, security, etc.)",
+					},
+					...skillItems,
+				]
+			: skillItems;
+		return fuzzyFilter(bangItems, prefix, (item) => item.name).map((item) => ({
+			value: item.value,
+			label: item.label,
+			...(item.description && { description: item.description }),
+		}));
+	}
+
 	async getSuggestions(
 		lines: string[],
 		cursorLine: number,
@@ -309,20 +346,67 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 				if (options.force) return null;
 
 				const prefix = textBeforeCursor.slice(1);
-				const commandItems = this.commands.map((cmd) => {
-					const name = "name" in cmd ? cmd.name : cmd.value;
-					const hint = "argumentHint" in cmd && cmd.argumentHint ? cmd.argumentHint : undefined;
-					const desc = cmd.description ?? "";
-					const fullDesc = hint ? (desc ? `${hint} — ${desc}` : hint) : desc;
-					return {
-						name,
-						label: name,
-						description: fullDesc || undefined,
-					};
-				});
+				// Built-in/extension slash commands (exclude skill:* — listed as short names below).
+				const commandItems = this.commands
+					.filter((cmd) => {
+						const name = "name" in cmd ? cmd.name : cmd.value;
+						return !name.startsWith("skill:");
+					})
+					.map((cmd) => {
+						const name = "name" in cmd ? cmd.name : cmd.value;
+						const hint = "argumentHint" in cmd && cmd.argumentHint ? cmd.argumentHint : undefined;
+						const desc = cmd.description ?? "";
+						const fullDesc = hint ? (desc ? `${hint} — ${desc}` : hint) : desc;
+						return {
+							name,
+							label: name,
+							value: name,
+							description: fullDesc || undefined,
+						};
+					});
 
-				const filtered = fuzzyFilter(commandItems, prefix, (item) => item.name).map((item) => ({
-					value: item.name,
+				// Skills as short names so `/frontend` matches without typing `skill:` first.
+				// value stays `skill:name` so applyCompletion yields `/skill:name `.
+				const skillShortItems = this.commands
+					.filter((cmd) => {
+						const name = "name" in cmd ? cmd.name : cmd.value;
+						return name.startsWith("skill:");
+					})
+					.map((cmd) => {
+						const name = "name" in cmd ? cmd.name : cmd.value;
+						const shortName = name.slice("skill:".length);
+						const desc = "description" in cmd && cmd.description ? cmd.description : "";
+						return {
+							name: shortName,
+							label: shortName,
+							value: name,
+							description: desc || undefined,
+						};
+					});
+
+				// Keep full `skill:…` entries when the user types the explicit form.
+				const skillFullItems =
+					prefix.startsWith("skill") || prefix.includes(":")
+						? this.commands
+								.filter((cmd) => {
+									const name = "name" in cmd ? cmd.name : cmd.value;
+									return name.startsWith("skill:");
+								})
+								.map((cmd) => {
+									const name = "name" in cmd ? cmd.name : cmd.value;
+									const desc = "description" in cmd && cmd.description ? cmd.description : "";
+									return {
+										name,
+										label: name,
+										value: name,
+										description: desc || undefined,
+									};
+								})
+						: [];
+
+				const commandItemsMerged = [...commandItems, ...skillShortItems, ...skillFullItems];
+				const filtered = fuzzyFilter(commandItemsMerged, prefix, (item) => item.name).map((item) => ({
+					value: item.value,
 					label: item.label,
 					...(item.description && { description: item.description }),
 				}));
@@ -359,44 +443,46 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		if (bangTokenMatch && !textBeforeCursor.endsWith("!!")) {
 			const bangPrefix = bangTokenMatch[1] ?? "";
 			if (!bangPrefix.startsWith("!")) {
-				const skillItems = this.commands
-					.filter((cmd) => {
-						const name = "name" in cmd ? cmd.name : cmd.value;
-						return name.startsWith("skill:");
-					})
-					.map((cmd) => {
-						const name = "name" in cmd ? cmd.name : cmd.value;
-						const shortName = name.slice("skill:".length);
-						const desc = "description" in cmd && cmd.description ? cmd.description : "";
-						return {
-							name: shortName,
-							label: shortName,
-							value: `!skill:${shortName} `,
-							...(desc && { description: desc }),
-						};
-					});
-				const omkIndexAvailable = skillItems.some((item) => item.name === "omk-skills");
-				const bangItems = omkIndexAvailable
-					? [
-							{
-								name: "omk",
-								label: "omk",
-								value: "!omk ",
-								description: "Route through OMK role hubs (frontend, backend, loop, plan, security, etc.)",
-							},
-							...skillItems,
-						]
-					: skillItems;
-				const filtered = fuzzyFilter(bangItems, bangPrefix, (item) => item.name).map((item) => ({
-					value: item.value,
-					label: item.label,
-					...(item.description && { description: item.description }),
-				}));
+				const filtered = this.getSkillLauncherSuggestions(bangPrefix);
 				if (filtered.length === 0) return null;
 				return {
 					items: filtered,
 					prefix: `!${bangPrefix}`,
 				};
+			}
+		}
+
+		// Mid-message `/skill` token (word boundary). Absolute paths like `/home/…`
+		// still fall through to path completion because they contain extra `/`.
+		// Selecting a skill rewrites the message to start with `!skill:name` so submit works.
+		const midSlashSkillMatch = textBeforeCursor.match(/(?:^|[\s])\/([a-zA-Z0-9][a-zA-Z0-9:._-]*)$/);
+		if (midSlashSkillMatch && !textBeforeCursor.startsWith("/")) {
+			const skillPrefix = midSlashSkillMatch[1] ?? "";
+			// Strip optional `skill:` typed by the user when filtering short names.
+			const filterPrefix = skillPrefix.startsWith("skill:") ? skillPrefix.slice("skill:".length) : skillPrefix;
+			const filtered = this.getSkillLauncherSuggestions(filterPrefix);
+			if (filtered.length > 0) {
+				return {
+					items: filtered,
+					prefix: `/${skillPrefix}`,
+				};
+			}
+		}
+
+		// Bare skill name at the start of the first line (no leading ! or /).
+		// Selecting a match inserts !skill:name so submit still goes through the skill launcher.
+		// If no skill matches, fall through so path completion can still run (e.g. "my folder").
+		if (cursorLine === 0) {
+			const plainSkillMatch = textBeforeCursor.match(/^([a-zA-Z0-9][a-zA-Z0-9.\-_]*)$/);
+			if (plainSkillMatch) {
+				const plainPrefix = plainSkillMatch[1] ?? "";
+				const filtered = this.getSkillLauncherSuggestions(plainPrefix);
+				if (filtered.length > 0) {
+					return {
+						items: filtered,
+						prefix: plainPrefix,
+					};
+				}
 			}
 		}
 
@@ -466,7 +552,20 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 			};
 		}
 
-		if (item.value.startsWith("!skill:")) {
+		if (item.value.startsWith("!skill:") || item.value === "!omk ") {
+			// Mid-message `/prefix` skill pick: move invocation to message start so
+			// parseBangInvocation / skill expand can run (they require a leading ! or /skill:).
+			if (prefix.startsWith("/") && beforePrefix.trim() !== "") {
+				const rest = `${beforePrefix}${adjustedAfterCursor}`.replace(/\s+/g, " ").trim();
+				const newLine = rest ? `${item.value}${rest}` : item.value;
+				const newLines = [...lines];
+				newLines[cursorLine] = newLine;
+				return {
+					lines: newLines,
+					cursorLine,
+					cursorCol: newLine.length,
+				};
+			}
 			const newLine = `${beforePrefix}${item.value}${adjustedAfterCursor}`;
 			const newLines = [...lines];
 			newLines[cursorLine] = newLine;

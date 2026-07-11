@@ -463,6 +463,7 @@ describe("agentLoop with AgentMessage", () => {
 			label: "Echo",
 			description: "Echo tool",
 			parameters: toolSchema,
+			executionMode: "parallel",
 			async execute(_toolCallId, params) {
 				if (params.value === "first") {
 					await firstDone;

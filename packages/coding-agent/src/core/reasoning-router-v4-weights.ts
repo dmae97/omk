@@ -15,10 +15,10 @@
  * suppress a whole-prompt signal without crossing a clause boundary.
  *
  * `lowConfidenceThreshold` / `highConfidenceThreshold` bound the confidence
- * bands (`ClassifierVerdictV4.confidenceBand`) computed from
- * `margin / topScore` in reasoning-router-v4.ts. They are metadata-only: they
- * never change `taskClass`, only how `resolveThinkingLevelV4WithUncertainty`
- * treats an already-decided class.
+ * bands (`ClassifierVerdictV4.confidenceBand`) computed from score separation
+ * plus absolute evidence strength in reasoning-router-v4.ts. They are
+ * metadata-only: they never change `taskClass`, only how
+ * `resolveThinkingLevelV4WithUncertainty` treats an already-decided class.
  */
 
 /** Closed set of v4 task classes. */
@@ -64,8 +64,16 @@ export interface RouterWeightsV4 {
 	readonly refactorCue: number;
 	/** Bump to "code-gen" when an implementation-object noun is present. */
 	readonly implementationObject: number;
+	/** Bump to "code-gen" when a first-person request names a code artifact (for example, "I need a script"). */
+	readonly codeGenArtifactRequest: number;
+	/** Bump to "review" when a leading review request names an evaluative object such as holes/regressions/issues. */
+	readonly evaluativeReviewObject: number;
 	/** Per-class whole-prompt keyword-family bump; trivial has no family, 0. */
 	readonly keywordFamily: Readonly<Record<TaskClassV4, number>>;
+	/** Bump to a class when normalized seed->cluster anchors match (medium generalized evidence). */
+	readonly normalizedIntentCluster: number;
+	/** Bump to a class when the bounded intent-skeleton extractor matches (medium generalized evidence). */
+	readonly intentSkeleton: number;
 	/** Bump to "code-gen" for a bare "add" keyword, gated by !localEdit. */
 	readonly addKeyword: number;
 	/** Bump to the class matching `history[0]`, if supplied (v4-new; 0 under DEFAULT_WEIGHTS_V4, inert until calibrated). */
@@ -76,7 +84,7 @@ export interface RouterWeightsV4 {
 	readonly judgeVote: number;
 	/** Bounded look-back window (characters) for negation-cue gating, never crossing a .,;!? boundary. */
 	readonly negationWindowChars: number;
-	/** confidence <= this value bands as "low" (confidence is margin / topScore, in [0, 1]). */
+	/** confidence <= this value bands as "low" (confidence combines score separation and evidence strength). */
 	readonly lowConfidenceThreshold: number;
 	/** confidence >= this value bands as "high". */
 	readonly highConfidenceThreshold: number;
@@ -100,6 +108,8 @@ export const DEFAULT_WEIGHTS_V4: RouterWeightsV4 = {
 	operationalRunbook: 8,
 	refactorCue: 6,
 	implementationObject: 3,
+	codeGenArtifactRequest: 5,
+	evaluativeReviewObject: 3,
 	keywordFamily: {
 		trivial: 0,
 		"simple-edit": 4,
@@ -109,6 +119,8 @@ export const DEFAULT_WEIGHTS_V4: RouterWeightsV4 = {
 		review: 4,
 		plan: 4,
 	},
+	normalizedIntentCluster: 4,
+	intentSkeleton: 5,
 	addKeyword: 1,
 	multiTurnPrior: 0,
 	pressureBucket: 0,

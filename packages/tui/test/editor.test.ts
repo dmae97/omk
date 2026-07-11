@@ -1028,6 +1028,20 @@ describe("Editor component", () => {
 			assert.strictEqual(reconstructed, line);
 		});
 
+		it("keeps an indivisible wide grapheme whole when it exceeds the wrap width", () => {
+			assert.deepStrictEqual(wordWrapLine("가", 1), [{ text: "가", startIndex: 0, endIndex: 1 }]);
+			assert.deepStrictEqual(wordWrapLine("가나", 1), [
+				{ text: "가", startIndex: 0, endIndex: 1 },
+				{ text: "나", startIndex: 1, endIndex: 2 },
+			]);
+		});
+
+		it("does not crash when rendering wide CJK text at minimal width", () => {
+			const editor = new Editor(createTestTUI(2, 24), defaultEditorTheme);
+			editor.setText("가나");
+			assert.doesNotThrow(() => editor.render(2));
+		});
+
 		it("splits oversized atomic segment across multiple chunks", () => {
 			// Simulate a paste marker wider than maxWidth by passing pre-segmented data
 			const marker = "[paste #1 +20 lines]"; // 21 chars
@@ -3426,6 +3440,28 @@ describe("Editor component", () => {
 			// Moving up restores to preferred col 8
 			editor.handleInput("\x1b[A");
 			assert.deepStrictEqual(editor.getCursor(), { line: 1, col: 8 });
+		});
+
+		it("keeps the display column across wrapped lines with wide CJK characters", () => {
+			const editor = new Editor(createTestTUI(80, 24), defaultEditorTheme);
+			// One logical line wrapped at layoutWidth 20 into:
+			//   VL0: "가" + 17×"a" + "b" (19 chars, 20 display cells)
+			//   VL1: 18×"b"             (18 chars, 18 display cells)
+			editor.setText(`가${"a".repeat(17)}${"b".repeat(19)}`);
+			editor.render(21); // layoutWidth = 20
+
+			// Cursor on VL0 at display cell 10 (char col 9: "가" occupies 2 cells).
+			editor.handleInput("\x01"); // Ctrl+A
+			for (let i = 0; i < 9; i++) editor.handleInput("\x1b[C");
+			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 9 });
+
+			// Down keeps display cell 10 on VL1: char col = 19 (VL1 start) + 10.
+			editor.handleInput("\x1b[B");
+			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 29 });
+
+			// Up returns to display cell 10 on VL0 (char col 9).
+			editor.handleInput("\x1b[A");
+			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 9 });
 		});
 	});
 
