@@ -4,6 +4,23 @@
 
 ### Added
 
+- Added the `ultra` thinking level (maximum reasoning with automatic task delegation, GPT-5.6 Sol/Terra via `openai-codex`) to the CLI `--thinking` flag, thinking selector, settings, theme colors, and router feedback levels; the reasoning router never auto-selects `ultra`, and models without it clamp down to their highest supported level.
+
+### Changed
+
+- Refreshed built-in model metadata via `omk-ai` regeneration so OpenRouter latest tool-capable models and OpenCode Go (`opencode-go`) catalog entries stay current for `/model` and provider defaults.
+- Changed the root README project demo link to Mario's Threads profile.
+
+### Fixed
+
+- Fixed `secret.read_path` command-safety false positives for search commands: the pattern argument immediately after `--` in `grep`/`egrep`/`fgrep`/`rg` is no longer treated as a secret file operand, while real secret-file operands (e.g. `rg -- needle .env`, `grep -f .env needle`) stay confirm-tier.
+- Fixed npm trusted-publishing identity after the GitHub repository rename by aligning package metadata with `dmae97/omk`.
+
+## [0.90.6] - 2026-07-09
+
+### Added
+
+- Documented the pinned pi.dev package loadout, slash-command map, and skills.sh install flow in the root README, and added the `readmeasset/omkgirl.png` hero asset.
 - Added the experimental **B2C Correctness Wall** extension under `examples/extensions/correctness-wall/` with fixture/live OA transport wiring, soft/hard/shadow modes, and regressions `018`–`023`; wall evaluation is evidence-gated advisory (not formal correctness proof).
 - Added **Grok OAuth harness** integration: `grok-harness` domain profile, `grok-playbook` / `grok-harness-dispatch` auto-apply for `grok-oauth-proxy`, compaction model preference for `grok-4.5`, Imagine chat-model rejection on completion paths, and doctor-provider health probe defaults for the local proxy.
 - Added extension host `callMcpTool` bind path (`ExtensionActions.callMcpTool` + loader/runtime) so extensions can capture live MCP call capability at load time.

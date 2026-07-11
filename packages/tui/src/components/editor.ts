@@ -154,21 +154,26 @@ export function wordWrapLine(line: string, maxWidth: number, preSegmented?: Intl
 		}
 
 		if (gWidth > maxWidth) {
-			// Single atomic segment wider than maxWidth (e.g. paste marker
-			// in a narrow terminal). Re-wrap it at grapheme granularity.
-
-			// The segment remains logically atomic for cursor
-			// movement / editing — the split is purely visual for word-wrap layout.
-			const subChunks = wordWrapLine(grapheme, maxWidth);
-			for (let j = 0; j < subChunks.length - 1; j++) {
-				const sc = subChunks[j]!;
-				chunks.push({ text: sc.text, startIndex: charIndex + sc.startIndex, endIndex: charIndex + sc.endIndex });
+			// Multi-grapheme atomic segment wider than maxWidth (e.g. paste marker
+			// in a narrow terminal): re-wrap it at grapheme granularity. The segment
+			// remains logically atomic for cursor movement / editing — the split is
+			// purely visual for word-wrap layout.
+			const subSegments = [...graphemeSegmenter.segment(grapheme)];
+			if (subSegments.length > 1) {
+				const subChunks = wordWrapLine(grapheme, maxWidth, subSegments);
+				for (let j = 0; j < subChunks.length - 1; j++) {
+					const sc = subChunks[j]!;
+					chunks.push({ text: sc.text, startIndex: charIndex + sc.startIndex, endIndex: charIndex + sc.endIndex });
+				}
+				const last = subChunks[subChunks.length - 1]!;
+				chunkStart = charIndex + last.startIndex;
+				currentWidth = visibleWidth(last.text);
+				wrapOppIndex = -1;
+				continue;
 			}
-			const last = subChunks[subChunks.length - 1]!;
-			chunkStart = charIndex + last.startIndex;
-			currentWidth = visibleWidth(last.text);
-			wrapOppIndex = -1;
-			continue;
+			// An indivisible grapheme wider than maxWidth (e.g. a wide CJK cell at
+			// width 1) cannot be split further: keep it whole and let the next
+			// overflow check force-break around it instead of recursing forever.
 		}
 
 		// Advance.
@@ -1056,8 +1061,9 @@ export class Editor implements Component, Focusable {
 
 		// Check if we should trigger or update autocomplete
 		if (!this.autocompleteState) {
-			// Auto-trigger for "/" at the start of a line (slash commands)
-			if (char === "/" && this.isAtStartOfMessage()) {
+			// Auto-trigger for "/" at start of message (slash commands) or after whitespace
+			// mid-message (skill list). Absolute paths still fall through to path AC.
+			if (char === "/" && this.isSlashTokenTrigger()) {
 				this.tryTriggerAutocomplete();
 			} else if (char === "@" || char === "#") {
 				const currentLine = this.state.lines[this.state.cursorLine] || "";
@@ -1075,16 +1081,21 @@ export class Editor implements Component, Focusable {
 					this.tryTriggerAutocomplete();
 				}
 			}
-			// Also auto-trigger when typing letters in a slash command or symbol completion context
+			// Also auto-trigger when typing letters in a slash command, mid-message
+			// `/skill` token, bang launcher, bare first-token skill name, or @/# context
 			else if (/[a-zA-Z0-9.\-_]/.test(char)) {
 				const currentLine = this.state.lines[this.state.cursorLine] || "";
 				const textBeforeCursor = currentLine.slice(0, this.state.cursorCol);
 				// Check if we're in a slash command (with or without space for arguments)
 				if (this.isInSlashCommandContext(textBeforeCursor)) {
 					this.tryTriggerAutocomplete();
+				} else if (this.isMidMessageSlashSkillContext(textBeforeCursor)) {
+					this.tryTriggerAutocomplete();
 				} else if (textBeforeCursor.match(/(?:^|[\s])[@#][^\s]*$/)) {
 					this.tryTriggerAutocomplete();
 				} else if (this.isBangLauncherContext(textBeforeCursor)) {
+					this.tryTriggerAutocomplete();
+				} else if (this.isPlainSkillLauncherContext(textBeforeCursor)) {
 					this.tryTriggerAutocomplete();
 				}
 			}
@@ -1262,9 +1273,13 @@ export class Editor implements Component, Focusable {
 			// Slash command context
 			if (this.isInSlashCommandContext(textBeforeCursor)) {
 				this.tryTriggerAutocomplete();
+			} else if (this.isMidMessageSlashSkillContext(textBeforeCursor)) {
+				this.tryTriggerAutocomplete();
 			} else if (textBeforeCursor.match(/(?:^|[\s])[@#][^\s]*$/)) {
 				this.tryTriggerAutocomplete();
 			} else if (this.isBangLauncherContext(textBeforeCursor)) {
+				this.tryTriggerAutocomplete();
+			} else if (this.isPlainSkillLauncherContext(textBeforeCursor)) {
 				this.tryTriggerAutocomplete();
 			}
 		}
@@ -1278,6 +1293,47 @@ export class Editor implements Component, Focusable {
 		this.state.cursorCol = col;
 		this.preferredVisualCol = null;
 		this.snappedFromCursorCol = null;
+	}
+
+	/** Display-cell column of char offset `col` within the visual line starting at `startCol`. */
+	private displayColAt(lineText: string, startCol: number, col: number): number {
+		return visibleWidth(lineText.slice(startCol, col));
+	}
+
+	/** Char offset of the boundary at or before `displayCol` cells into `chunkText`. */
+	private offsetAtDisplayCol(chunkText: string, displayCol: number): number {
+		let cells = 0;
+		let offset = 0;
+		for (const seg of this.segment(chunkText, "grapheme")) {
+			const segWidth = visibleWidth(seg.segment);
+			if (cells + segWidth > displayCol) {
+				// Landing inside this segment. Multi-char atomic segments (e.g.
+				// paste markers) keep the char-level remainder so the snap logic
+				// can record the pre-snap column; indivisible wide graphemes
+				// floor to their start cell.
+				if (seg.segment.length > 1) {
+					offset += Math.min(seg.segment.length, Math.max(0, displayCol - cells));
+				}
+				break;
+			}
+			cells += segWidth;
+			offset += seg.segment.length;
+		}
+		return offset;
+	}
+
+	/** Max reachable display-cell column on a visual line segment. */
+	private maxDisplayColOf(chunkText: string, isLastSegment: boolean): number {
+		if (isLastSegment) return visibleWidth(chunkText);
+		// Non-final wrapped segments keep the cursor before the segment end:
+		// clamp to the start cell of the last grapheme.
+		let lastStart = 0;
+		let cells = 0;
+		for (const seg of this.segment(chunkText, "grapheme")) {
+			lastStart = cells;
+			cells += visibleWidth(seg.segment);
+		}
+		return Math.max(0, lastStart);
 	}
 
 	/**
@@ -1295,32 +1351,42 @@ export class Editor implements Component, Focusable {
 
 		// When the cursor was snapped to a segment start, resolve the pre-snap
 		// position against the VL it belongs to. This gives the correct visual
-		// column even after a resize reshuffles VLs.
+		// column even after a resize reshuffles VLs. Visual columns are display
+		// cells, so wide (e.g. CJK) graphemes keep the cursor on the same column.
+		const currentLineText = this.state.lines[currentVL.logicalLine] || "";
 		let currentVisualCol: number;
 		if (this.snappedFromCursorCol !== null) {
 			const vlIndex = this.findVisualLineAt(visualLines, currentVL.logicalLine, this.snappedFromCursorCol);
-			currentVisualCol = this.snappedFromCursorCol - visualLines[vlIndex].startCol;
+			currentVisualCol = this.displayColAt(
+				currentLineText,
+				visualLines[vlIndex].startCol,
+				this.snappedFromCursorCol,
+			);
 		} else {
-			currentVisualCol = this.state.cursorCol - currentVL.startCol;
+			currentVisualCol = this.displayColAt(currentLineText, currentVL.startCol, this.state.cursorCol);
 		}
 
-		// For non-last segments, clamp to length-1 to stay within the segment
+		// For non-last segments, clamp to the last grapheme's start cell to stay within the segment
 		const isLastSourceSegment =
 			currentVisualLine === visualLines.length - 1 ||
 			visualLines[currentVisualLine + 1]?.logicalLine !== currentVL.logicalLine;
-		const sourceMaxVisualCol = isLastSourceSegment ? currentVL.length : Math.max(0, currentVL.length - 1);
+		const sourceMaxVisualCol = this.maxDisplayColOf(
+			currentLineText.slice(currentVL.startCol, currentVL.startCol + currentVL.length),
+			isLastSourceSegment,
+		);
 
 		const isLastTargetSegment =
 			targetVisualLine === visualLines.length - 1 ||
 			visualLines[targetVisualLine + 1]?.logicalLine !== targetVL.logicalLine;
-		const targetMaxVisualCol = isLastTargetSegment ? targetVL.length : Math.max(0, targetVL.length - 1);
+		const logicalLine = this.state.lines[targetVL.logicalLine] || "";
+		const targetChunkText = logicalLine.slice(targetVL.startCol, targetVL.startCol + targetVL.length);
+		const targetMaxVisualCol = this.maxDisplayColOf(targetChunkText, isLastTargetSegment);
 
 		const moveToVisualCol = this.computeVerticalMoveColumn(currentVisualCol, sourceMaxVisualCol, targetMaxVisualCol);
 
 		// Set cursor position
 		this.state.cursorLine = targetVL.logicalLine;
-		const targetCol = targetVL.startCol + moveToVisualCol;
-		const logicalLine = this.state.lines[targetVL.logicalLine] || "";
+		const targetCol = targetVL.startCol + this.offsetAtDisplayCol(targetChunkText, moveToVisualCol);
 		this.state.cursorCol = Math.min(targetCol, logicalLine.length);
 
 		// Snap cursor to atomic segment boundary (e.g. paste markers)
@@ -1626,9 +1692,13 @@ export class Editor implements Component, Focusable {
 			// Slash command context
 			if (this.isInSlashCommandContext(textBeforeCursor)) {
 				this.tryTriggerAutocomplete();
+			} else if (this.isMidMessageSlashSkillContext(textBeforeCursor)) {
+				this.tryTriggerAutocomplete();
 			} else if (textBeforeCursor.match(/(?:^|[\s])[@#][^\s]*$/)) {
 				this.tryTriggerAutocomplete();
 			} else if (this.isBangLauncherContext(textBeforeCursor)) {
+				this.tryTriggerAutocomplete();
+			} else if (this.isPlainSkillLauncherContext(textBeforeCursor)) {
 				this.tryTriggerAutocomplete();
 			}
 		}
@@ -1730,7 +1800,7 @@ export class Editor implements Component, Focusable {
 					// At end of last line - can't move, but set preferredVisualCol for up/down navigation
 					const currentVL = visualLines[currentVisualLine];
 					if (currentVL) {
-						this.preferredVisualCol = this.state.cursorCol - currentVL.startCol;
+						this.preferredVisualCol = this.displayColAt(currentLine, currentVL.startCol, this.state.cursorCol);
 					}
 				}
 			} else {
@@ -1993,8 +2063,26 @@ export class Editor implements Component, Focusable {
 		return beforeCursor.trim() === "" || beforeCursor.trim() === "/";
 	}
 
+	// "/" typed at start of message OR as a new token after whitespace (skill list mid-message).
+	private isSlashTokenTrigger(): boolean {
+		if (!this.isSlashMenuAllowed()) return false;
+		if (this.isAtStartOfMessage()) return true;
+		const currentLine = this.state.lines[this.state.cursorLine] || "";
+		const beforeCursor = currentLine.slice(0, this.state.cursorCol);
+		// just typed "/" after whitespace
+		return /(?:^|[\s])\/$/.test(beforeCursor);
+	}
+
 	private isInSlashCommandContext(textBeforeCursor: string): boolean {
 		return this.isSlashMenuAllowed() && textBeforeCursor.trimStart().startsWith("/");
+	}
+
+	// Mid-message "/skill…" token (not an absolute path with extra slashes).
+	// Provider rewrites selection to leading !skill: so submit can expand the skill.
+	private isMidMessageSlashSkillContext(textBeforeCursor: string): boolean {
+		if (!this.isSlashMenuAllowed()) return false;
+		if (textBeforeCursor.trimStart().startsWith("/")) return false;
+		return /(?:^|[\s])\/[a-zA-Z0-9][a-zA-Z0-9:._-]*$/.test(textBeforeCursor);
 	}
 
 	// A "!" skill launcher is only actionable when it begins the whole message:
@@ -2005,6 +2093,12 @@ export class Editor implements Component, Focusable {
 	// to the provider and never offered as a skill launcher.
 	private isBangLauncherContext(textBeforeCursor: string): boolean {
 		return this.isSlashMenuAllowed() && /^!(?!!)[^\s]*$/.test(textBeforeCursor);
+	}
+
+	// Bare skill-name autocomplete at the start of the first line (no leading ! or /).
+	// Selection inserts !skill:name so submit still goes through parseBangInvocation.
+	private isPlainSkillLauncherContext(textBeforeCursor: string): boolean {
+		return this.isSlashMenuAllowed() && /^[a-zA-Z0-9][a-zA-Z0-9.\-_]*$/.test(textBeforeCursor);
 	}
 
 	// Autocomplete methods
