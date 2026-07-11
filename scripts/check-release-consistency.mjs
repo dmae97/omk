@@ -9,6 +9,7 @@ const strictTagPattern = /^v(\d+)\.(\d+)\.(\d+)$/;
 const releaseBadgePattern = /release-v(\d+\.\d+\.\d+)/;
 const releaseNotesLinkPattern = /RELEASE_NOTES_v(\d+\.\d+\.\d+)\.md/;
 const releaseNotesFilePattern = /^RELEASE_NOTES_v(\d+)\.(\d+)\.(\d+)\.md$/;
+const canonicalRepositoryUrl = "git+https://github.com/dmae97/omk.git";
 
 const args = parseArgs(process.argv.slice(2));
 const root = args.root;
@@ -16,6 +17,7 @@ const failures = [];
 const issues = [];
 
 const workspacePackages = readWorkspacePackages(root);
+validatePackageRepositoryMetadata(root, workspacePackages);
 const versionSet = new Set(workspacePackages.map((pkg) => pkg.version));
 if (versionSet.size !== 1) {
 	fail("package_versions_not_lockstep", {
@@ -117,8 +119,25 @@ function readWorkspacePackages(repoRoot) {
 		.filter((path) => existsSync(path))
 		.map((path) => {
 			const pkg = readJson(path);
-			return { path, name: pkg.name ?? basename(path), version: pkg.version ?? "0.0.0" };
+			return {
+				path,
+				name: pkg.name ?? basename(path),
+				version: pkg.version ?? "0.0.0",
+				repositoryUrl: pkg.repository?.url,
+			};
 		});
+}
+
+function validatePackageRepositoryMetadata(repoRoot, packages) {
+	for (const pkg of packages) {
+		if (pkg.repositoryUrl !== canonicalRepositoryUrl) {
+			fail("package_repository_url_mismatch", {
+				path: toRepoPath(repoRoot, pkg.path),
+				expected: canonicalRepositoryUrl,
+				actual: pkg.repositoryUrl ?? null,
+			});
+		}
+	}
 }
 
 function validateCodingAgentChangelog(repoRoot, packageVersion, releaseMode) {
