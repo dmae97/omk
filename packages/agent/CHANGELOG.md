@@ -1,10 +1,11 @@
 # Changelog
 
-## [Unreleased]
+## [0.90.7] - 2026-07-11
 
 ### Added
 
 - Added the `ultra` thinking level to the agent `ThinkingLevel` type; it is only served by models that explicitly map it (currently GPT-5.6 Sol/Terra via Codex) and clamps down elsewhere.
+- Added opt-in parallel tool batching to the agent loop: `shouldParallelizeToolBatch` parallelizes a tool-call batch only when every tool's execution policy allows it, and tools without a policy keep running sequentially.
 
 ### Fixed
 

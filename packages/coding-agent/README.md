@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm" src="https://img.shields.io/npm/v/open-multi-agent-kit?style=flat-square" /></a>
-  <a href="https://github.com/dmae97/open-multi-agent-kit/releases/tag/v0.90.6"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.6-00d7ff?style=flat-square" /></a>
+  <a href="https://github.com/dmae97/omk/releases/tag/v0.90.7"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.7-00d7ff?style=flat-square" /></a>
 </p>
 
 > New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](https://github.com/dmae97/open-multi-agent-kit/blob/v0.90.4/CONTRIBUTING.md).
@@ -32,19 +32,19 @@ The OMK//CONTROL startup surface is the default operator view. The header reads 
 
 The default dark TUI theme uses the `omk-control-grid-dark` Night City palette and keeps the control sidebar focused on route, evidence, loop, MCP, runtime, skills, and context budget state.
 
-## Release v0.90.6
+## Release v0.90.7
 
-This release documents the operator package/slash loadout (with the omkgirl hero asset), lands the experimental B2C Correctness Wall and Grok OAuth harness wiring, and continues the v4 reasoning-router generalization track.
+This release ships the `ultra` thinking level with the GPT-5.6 model family, opt-in parallel tool batching in the agent loop, TUI skill autocomplete plus Korean/CJK cursor fixes, and command-safety search-pattern false-positive fixes.
 
 | Area | What changed |
 |------|--------------|
-| Docs / loadout | Root README now documents pinned pi.dev package installs, slash-command map, and skills.sh install flow; added `readmeasset/omkgirl.png`. |
-| Correctness Wall | Experimental B2C Correctness Wall extension with soft/hard/shadow modes; evidence-gated advisory evaluation only. |
-| Grok harness | Grok OAuth domain profile, playbook auto-apply, `grok-4.5` compaction preference, Imagine chat-model rejection on completion paths. |
-| Extension host | `callMcpTool` bind path for extensions at load time. |
-| Reasoning router | Table-driven intent clusters + normalize module and governed held-out generalization gate. |
+| Thinking / models | New `ultra` thinking level (GPT-5.6 Sol/Terra via `openai-codex`) and the GPT-5.6 family across OpenAI, Azure, OpenRouter, AI Gateway, and Codex; regenerated model catalog. |
+| Agent loop | Opt-in parallel tool batching: policy-gated `shouldParallelizeToolBatch`, unknown tools stay sequential. |
+| TUI | Bare and mid-message skill autocomplete; vertical cursor movement tracks display cells so wrapped Korean/CJK lines keep the column; narrow-width wide-grapheme wrap guard. |
+| Command safety | `grep`/`rg` pattern arguments after `--` no longer trip `secret.read_path`; real secret-file operands stay gated. |
+| Release infra | npm trusted-publishing identity aligned with the `dmae97/omk` repository rename. |
 
-GitHub-focused release notes live in [RELEASE_NOTES_v0.90.6.md](https://github.com/dmae97/open-multi-agent-kit/blob/v0.90.6/.github/RELEASE_NOTES_v0.90.6.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](https://github.com/dmae97/open-multi-agent-kit/blob/v0.90.6/packages/coding-agent/CHANGELOG.md).
+GitHub-focused release notes live in [RELEASE_NOTES_v0.90.7.md](https://github.com/dmae97/omk/blob/v0.90.7/.github/RELEASE_NOTES_v0.90.7.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](https://github.com/dmae97/omk/blob/v0.90.7/packages/coding-agent/CHANGELOG.md).
 
 OMK is a minimal terminal coding harness. Adapt omk to your workflows, not the other way around, without having to fork and modify omk internals. Extend it with TypeScript [Extensions](#extensions), [Skills](#skills), [Prompt Templates](#prompt-templates), and [Themes](#themes). Put your extensions, skills, prompt templates, and themes in [OMK Packages](#omk-packages) and share them with others via npm or git.
 
