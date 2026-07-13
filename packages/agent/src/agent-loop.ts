@@ -11,7 +11,7 @@ import {
 	type ToolResultMessage,
 	validateToolArguments,
 } from "omk-ai";
-import { shouldParallelizeToolBatch } from "./parallel-tool-batch.ts";
+import { partitionToolBatchWaves } from "./parallel-tool-batch.ts";
 import type {
 	AgentContext,
 	AgentEvent,
@@ -484,7 +484,7 @@ async function executeToolCalls(
 			toolPolicies.set(tool.name, tool.executionMode);
 		}
 	}
-	const batchParallelizable = shouldParallelizeToolBatch(
+	const batchWaves = partitionToolBatchWaves(
 		toolCalls.map((tc) => ({ name: tc.name, arguments: tc.arguments as Record<string, unknown> })),
 		{
 			cwd: config.cwd ?? process.cwd(),
@@ -492,10 +492,52 @@ async function executeToolCalls(
 			allowUnknownParallel: (toolName) => toolPolicies.get(toolName) === "parallel",
 		},
 	);
-	if (config.toolExecution === "sequential" || hasSequentialToolCall || !batchParallelizable) {
+	if (
+		config.toolExecution === "sequential" ||
+		hasSequentialToolCall ||
+		batchWaves.every((wave) => wave.length === 1)
+	) {
 		return executeToolCallsSequential(currentContext, assistantMessage, toolCalls, config, signal, emit);
 	}
-	return executeToolCallsParallel(currentContext, assistantMessage, toolCalls, config, signal, emit);
+	if (batchWaves.length === 1) {
+		return executeToolCallsParallel(currentContext, assistantMessage, toolCalls, config, signal, emit);
+	}
+	return executeToolCallsInWaves(currentContext, assistantMessage, toolCalls, batchWaves, config, signal, emit);
+}
+
+/**
+ * Execute a partitioned tool-call batch wave by wave: waves run in source
+ * order, calls inside a multi-call wave run concurrently, and solo waves run
+ * sequentially. Waves are contiguous index runs, so the returned tool result
+ * messages keep the model's original tool-call order.
+ */
+async function executeToolCallsInWaves(
+	currentContext: AgentContext,
+	assistantMessage: AssistantMessage,
+	toolCalls: AgentToolCall[],
+	waves: number[][],
+	config: AgentLoopConfig,
+	signal: AbortSignal | undefined,
+	emit: AgentEventSink,
+): Promise<ExecutedToolCallBatch> {
+	const messages: ToolResultMessage[] = [];
+	const waveTerminates: boolean[] = [];
+	for (const wave of waves) {
+		const waveCalls = wave.map((index) => toolCalls[index]);
+		const executedWave =
+			waveCalls.length === 1
+				? await executeToolCallsSequential(currentContext, assistantMessage, waveCalls, config, signal, emit)
+				: await executeToolCallsParallel(currentContext, assistantMessage, waveCalls, config, signal, emit);
+		messages.push(...executedWave.messages);
+		waveTerminates.push(executedWave.terminate);
+		if (signal?.aborted) {
+			break;
+		}
+	}
+	return {
+		messages,
+		terminate: waveTerminates.length > 0 && waveTerminates.every(Boolean),
+	};
 }
 
 type ExecutedToolCallBatch = {

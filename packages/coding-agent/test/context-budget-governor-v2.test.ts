@@ -131,6 +131,48 @@ describe("context budget governor v2", () => {
 		);
 	});
 
+	it("falls back to a smaller representation instead of omitting at the tier ceiling", () => {
+		const plan = planWith(
+			[
+				makeItem({
+					id: "ev-tier-fallback",
+					tier: "evidence",
+					priority: "high",
+					text: "evidence too large in full form for the evidence tier",
+					tokenEstimate: 20,
+					representations: [
+						{
+							kind: "full",
+							text: "evidence too large in full form for the evidence tier",
+							estimatedTokens: 20,
+							fidelity: "exact",
+						},
+						{
+							kind: "summary",
+							text: "small summary",
+							estimatedTokens: 6,
+							fidelity: "lossy",
+						},
+					],
+				}),
+			],
+			{
+				maxTokens: 100,
+				safetyMarginTokens: 0,
+				tierPolicy: { evidence: { floorPct: 0, ceilingPct: 0.1 } },
+			},
+		);
+
+		// ceiling = 10 tokens: full (20) cannot fit, summary (6) can.
+		expect(plan.includedItemIds).toContain("ev-tier-fallback");
+		expect(
+			plan.selectedRepresentations.find((representation) => representation.itemId === "ev-tier-fallback")?.kind,
+		).toBe("summary");
+		expect(plan.diagnostics).not.toContainEqual(
+			expect.objectContaining({ itemId: "ev-tier-fallback", reason: "tier_ceiling_exceeded" }),
+		);
+	});
+
 	it("checks coverage against selected representation text, not omitted raw text", () => {
 		const plan = planWith(
 			[

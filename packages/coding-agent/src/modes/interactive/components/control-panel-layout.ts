@@ -277,7 +277,8 @@ function todoSidebarLines(state: TodoState | undefined, width: number): string[]
 
 function packageIntakeStatusLabel(summary: PiPackageIntakeSummary | undefined): string {
 	if (!summary) return "ports:pending";
-	const ready = summary.acceptedNative + summary.acceptedReference + summary.acceptedMeasurement;
+	const ready =
+		summary.acceptedNative + summary.acceptedReference + summary.acceptedMeasurement + summary.acceptedAdvisory;
 	const review = summary.deferred + summary.reject;
 	return `ports:${ready}/${summary.total} review:${review} block:${summary.hardForkBlocked}`;
 }

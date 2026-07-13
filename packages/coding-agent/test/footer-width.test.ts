@@ -66,6 +66,7 @@ function createFooterData(providerCount: number): ReadonlyFooterDataProvider {
 		acceptedNative: 2,
 		acceptedReference: 1,
 		acceptedMeasurement: 1,
+		acceptedAdvisory: 0,
 		deferred: 2,
 		reject: 0,
 		hardForkBlocked: 0,

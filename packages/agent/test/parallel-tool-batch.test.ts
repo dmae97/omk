@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	extractParallelScopePath,
 	isDestructiveBashCommand,
+	partitionToolBatchWaves,
 	pathsOverlap,
 	shouldParallelizeToolBatch,
 } from "../src/parallel-tool-batch.ts";
@@ -20,6 +21,94 @@ describe("pathsOverlap", () => {
 		expect(pathsOverlap("/a/b/c.ts", "/a/b/c.ts")).toBe(true);
 		expect(pathsOverlap("/a/b", "/a/b/c.ts")).toBe(true);
 		expect(pathsOverlap("/a/b/c.ts", "/a/x/c.ts")).toBe(false);
+	});
+
+	it("collapses . and .. segments before comparing", () => {
+		expect(pathsOverlap("/a/b/../c.ts", "/a/c.ts")).toBe(true);
+		expect(pathsOverlap("/a/./b.ts", "/a/b.ts")).toBe(true);
+		expect(pathsOverlap("/a/b/../../x.ts", "/x.ts")).toBe(true);
+		expect(pathsOverlap("/a/b/../c.ts", "/a/b/c.ts")).toBe(false);
+	});
+
+	it("fails closed when .. escapes the root", () => {
+		expect(pathsOverlap("/../etc/passwd", "/proj/a.ts")).toBe(true);
+	});
+
+	it("treats case-aliased segments as overlapping", () => {
+		expect(pathsOverlap("/a/B.ts", "/a/b.ts")).toBe(true);
+	});
+});
+
+describe("partitionToolBatchWaves", () => {
+	const cwd = "/proj";
+
+	it("keeps a fully safe batch in one wave", () => {
+		expect(
+			partitionToolBatchWaves(
+				[
+					{ name: "read", arguments: { path: "a.ts" } },
+					{ name: "read", arguments: { path: "b.ts" } },
+					{ name: "grep", arguments: { pattern: "x" } },
+				],
+				{ cwd },
+			),
+		).toEqual([[0, 1, 2]]);
+	});
+
+	it("splits at path conflicts but keeps later disjoint calls parallel", () => {
+		expect(
+			partitionToolBatchWaves(
+				[
+					{ name: "read", arguments: { path: "a.ts" } },
+					{ name: "read", arguments: { path: "b.ts" } },
+					{ name: "write", arguments: { path: "a.ts" } },
+					{ name: "read", arguments: { path: "c.ts" } },
+				],
+				{ cwd },
+			),
+		).toEqual([
+			[0, 1],
+			[2, 3],
+		]);
+	});
+
+	it("detects .. path aliases across a wave", () => {
+		expect(
+			partitionToolBatchWaves(
+				[
+					{ name: "write", arguments: { path: "src/temp/../config.ts" } },
+					{ name: "edit", arguments: { path: "src/config.ts" } },
+				],
+				{ cwd },
+			),
+		).toEqual([[0], [1]]);
+	});
+
+	it("gives bash its own wave without serializing neighbors against each other", () => {
+		expect(
+			partitionToolBatchWaves(
+				[
+					{ name: "read", arguments: { path: "a.ts" } },
+					{ name: "bash", arguments: { command: "ls" } },
+					{ name: "read", arguments: { path: "b.ts" } },
+					{ name: "grep", arguments: { pattern: "x" } },
+				],
+				{ cwd },
+			),
+		).toEqual([[0], [1], [2, 3]]);
+	});
+
+	it("fails closed to solo waves for unknown tools", () => {
+		expect(
+			partitionToolBatchWaves(
+				[
+					{ name: "grep", arguments: { pattern: "x" } },
+					{ name: "custom_tool", arguments: {} },
+					{ name: "find", arguments: { pattern: "*.ts" } },
+				],
+				{ cwd },
+			),
+		).toEqual([[0], [1], [2]]);
 	});
 });
 
@@ -68,6 +157,18 @@ describe("shouldParallelizeToolBatch", () => {
 				[
 					{ name: "write", arguments: { path: "src/x.ts" } },
 					{ name: "edit", arguments: { path: "src/x.ts" } },
+				],
+				{ cwd },
+			),
+		).toBe(false);
+	});
+
+	it("rejects write/edit when .. aliases the same file", () => {
+		expect(
+			shouldParallelizeToolBatch(
+				[
+					{ name: "write", arguments: { path: "src/temp/../config.ts" } },
+					{ name: "edit", arguments: { path: "src/config.ts" } },
 				],
 				{ cwd },
 			),

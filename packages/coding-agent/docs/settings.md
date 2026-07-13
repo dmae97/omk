@@ -1,6 +1,6 @@
 # Settings
 
-OMK uses JSON settings files with project settings overriding global settings.
+OMK uses JSON settings files with project settings overriding global settings, except settings explicitly marked global-only.
 
 | Location | Scope |
 |----------|-------|
@@ -85,6 +85,20 @@ Set `OMK_SKIP_VERSION_CHECK=1` to disable the OMK version update check. Use `--o
   }
 }
 ```
+
+### Context Budget
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `contextBudget.enabled` | boolean | `false` | Globally enable prompt resource budgeting and its in-memory, session-scoped plan/representation cache |
+
+```json
+{
+  "contextBudget": { "enabled": true }
+}
+```
+
+This setting is global-only: `.omk/settings.json` cannot enable or disable it. Use `OMK_CONTEXT_GOVERNOR=1` to force it on for one process or `OMK_CONTEXT_GOVERNOR=0` to force it off for a baseline run. The cache is never persisted or shared between sessions.
 
 ### Branch Summary
 
@@ -245,6 +259,7 @@ See [packages.md](packages.md) for package management details.
     "reserveTokens": 16384,
     "keepRecentTokens": 20000
   },
+  "contextBudget": { "enabled": true },
   "retry": {
     "enabled": true,
     "maxRetries": 3
@@ -259,7 +274,7 @@ See [packages.md](packages.md) for package management details.
 
 ## Project Overrides
 
-Project settings (`.omk/settings.json`) override global settings. Nested objects are merged:
+Project settings (`.omk/settings.json`) override global settings. Nested objects are merged. `contextBudget` is the exception: it is read from global settings only.
 
 ```json
 // ~/.omk/agent/settings.json (global)

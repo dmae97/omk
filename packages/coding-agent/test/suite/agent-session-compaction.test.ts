@@ -1,4 +1,10 @@
-import { type AssistantMessage, createAssistantMessageEventStream, fauxAssistantMessage, type Model } from "omk-ai";
+import {
+	type Api,
+	type AssistantMessage,
+	createAssistantMessageEventStream,
+	fauxAssistantMessage,
+	type Model,
+} from "omk-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHarness, type Harness } from "./harness.ts";
 
@@ -41,10 +47,11 @@ function createAssistant(
 	};
 }
 
-function useSummaryStreamFn(harness: Harness, summary: string): () => number {
+function useSummaryStreamFn(harness: Harness, summary: string, onModel?: (model: Model<Api>) => void): () => number {
 	let callCount = 0;
 	harness.session.agent.streamFn = (model) => {
 		callCount++;
+		onModel?.(model);
 		const stream = createAssistantMessageEventStream();
 		queueMicrotask(() => {
 			const message: AssistantMessage = {
@@ -142,6 +149,30 @@ describe("AgentSession compaction characterization", () => {
 
 		expect(result.summary).toBe("summary from custom stream");
 		expect(getStreamCallCount()).toBe(1);
+	});
+
+	it("uses the configured model for manual and automatic compaction", async () => {
+		for (const automatic of [false, true]) {
+			const harness = await createHarness({
+				models: [{ id: "faux-1" }, { id: "glm-compactor" }],
+				settings: { compaction: { model: "faux/glm-compactor" } },
+			});
+			harnesses.push(harness);
+			seedCompactableSession(harness);
+			const usedModels: string[] = [];
+			useSummaryStreamFn(harness, "summary from configured model", (model) => {
+				usedModels.push(`${model.provider}/${model.id}`);
+			});
+
+			if (automatic) {
+				const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
+				await sessionInternals._runAutoCompaction("threshold", false);
+			} else {
+				await harness.session.compact();
+			}
+
+			expect(usedModels).toEqual(["faux/glm-compactor"]);
+		}
 	});
 
 	it("auto-compacts with a custom streamFn when registry auth is absent", async () => {

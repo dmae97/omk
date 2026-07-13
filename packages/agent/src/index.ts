@@ -44,6 +44,7 @@ export {
 	NEVER_PARALLEL_TOOLS,
 	PARALLEL_SAFE_TOOLS,
 	PATH_SCOPED_TOOLS,
+	partitionToolBatchWaves,
 	pathsOverlap,
 	shouldParallelizeToolBatch,
 } from "./parallel-tool-batch.ts";

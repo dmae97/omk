@@ -36,6 +36,10 @@ By default, `reserveTokens` is 16384 tokens (configurable in `~/.omk/agent/setti
 
 You can also trigger manually with `/compact [instructions]`, where optional instructions focus the summary.
 
+### Model Selection
+
+By default, compaction uses the active session model. Set `compaction.model` to an authenticated canonical `provider/model` reference when summaries should use a different model. For example, `zai/glm-5.2` keeps an interactive Claude session while using GLM only for auto-compaction and `/compact`.
+
 ### How It Works
 
 1. **Find cut point**: Walk backwards from newest message, accumulating token estimates until `keepRecentTokens` (default 20k, configurable in `~/.omk/agent/settings.json` or `<project-dir>/.omk/settings.json`) is reached
@@ -379,6 +383,7 @@ Configure compaction in `~/.omk/agent/settings.json` or `<project-dir>/.omk/sett
 {
   "compaction": {
     "enabled": true,
+    "model": "zai/glm-5.2",
     "reserveTokens": 16384,
     "keepRecentTokens": 20000
   }
@@ -388,6 +393,7 @@ Configure compaction in `~/.omk/agent/settings.json` or `<project-dir>/.omk/sett
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `enabled` | `true` | Enable auto-compaction |
+| `model` | session model | Authenticated canonical `provider/model` used only for compaction |
 | `reserveTokens` | `16384` | Tokens to reserve for LLM response |
 | `keepRecentTokens` | `20000` | Recent tokens to keep (not summarized) |
 

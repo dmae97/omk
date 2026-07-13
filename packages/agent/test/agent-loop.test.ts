@@ -545,6 +545,109 @@ describe("agentLoop with AgentMessage", () => {
 		expect(turnToolResultIds).toEqual(["tool-1", "tool-2"]);
 	});
 
+	it("should run conflicting writes in later sequential waves while safe calls run concurrently", async () => {
+		const echoSchema = Type.Object({ value: Type.String() });
+		const writeSchema = Type.Object({ path: Type.String() });
+		const writeOrder: string[] = [];
+		let firstEchoResolved = false;
+		let echoOverlapObserved = false;
+		let releaseFirstEcho: (() => void) | undefined;
+		const firstEchoDone = new Promise<void>((resolve) => {
+			releaseFirstEcho = resolve;
+		});
+
+		const echoTool: AgentTool<typeof echoSchema, { value: string }> = {
+			name: "echo",
+			label: "Echo",
+			description: "Echo tool",
+			parameters: echoSchema,
+			executionMode: "parallel",
+			async execute(_toolCallId, params) {
+				if (params.value === "first") {
+					await firstEchoDone;
+					firstEchoResolved = true;
+				}
+				if (params.value === "second" && !firstEchoResolved) {
+					echoOverlapObserved = true;
+				}
+				return {
+					content: [{ type: "text", text: `echoed: ${params.value}` }],
+					details: { value: params.value },
+				};
+			},
+		};
+
+		const writeTool: AgentTool<typeof writeSchema, { path: string }> = {
+			name: "write",
+			label: "Write",
+			description: "Write tool",
+			parameters: writeSchema,
+			async execute(toolCallId, params) {
+				writeOrder.push(`${toolCallId}-start`);
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				writeOrder.push(`${toolCallId}-end`);
+				return {
+					content: [{ type: "text", text: `wrote: ${params.path}` }],
+					details: { path: params.path },
+				};
+			},
+		};
+
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [echoTool, writeTool],
+		};
+
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			toolExecution: "parallel",
+		};
+
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("mixed batch")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					const message = createAssistantMessage(
+						[
+							{ type: "toolCall", id: "tool-1", name: "echo", arguments: { value: "first" } },
+							{ type: "toolCall", id: "tool-2", name: "echo", arguments: { value: "second" } },
+							{ type: "toolCall", id: "tool-3", name: "write", arguments: { path: "x.ts" } },
+							{ type: "toolCall", id: "tool-4", name: "write", arguments: { path: "x.ts" } },
+						],
+						"toolUse",
+					);
+					mockStream.push({ type: "done", reason: "toolUse", message });
+					setTimeout(() => releaseFirstEcho?.(), 20);
+				} else {
+					const message = createAssistantMessage([{ type: "text", text: "done" }]);
+					mockStream.push({ type: "done", reason: "stop", message });
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		const toolResultIds = events.flatMap((event) => {
+			if (event.type !== "message_end" || event.message.role !== "toolResult") {
+				return [];
+			}
+			return [event.message.toolCallId];
+		});
+
+		// Wave 1: echoes + first write run concurrently; wave 2: the conflicting write runs alone after.
+		expect(echoOverlapObserved).toBe(true);
+		expect(writeOrder).toEqual(["tool-3-start", "tool-3-end", "tool-4-start", "tool-4-end"]);
+		expect(toolResultIds).toEqual(["tool-1", "tool-2", "tool-3", "tool-4"]);
+	});
+
 	it("should inject queued messages after all tool calls complete", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
 		const executed: string[] = [];

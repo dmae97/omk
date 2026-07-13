@@ -451,7 +451,29 @@ function pathHasScopePrefix(path: string, scope: string): boolean {
 }
 
 function normalizePath(path: string): string {
-	return path.trim().replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\.\//, "").replace(/\/$/, "");
+	const cleaned = path.trim().replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\.\//, "").replace(/\/$/, "");
+	if (!/(^|\/)\.\.?(\/|$)/.test(cleaned)) {
+		return cleaned;
+	}
+	// Collapse "." and ".." so "src/../package.json" cannot pass a "src" scope prefix check.
+	const isAbsolute = cleaned.startsWith("/");
+	const collapsed: string[] = [];
+	let escapes = 0;
+	for (const segment of cleaned.split("/")) {
+		if (segment.length === 0 || segment === ".") continue;
+		if (segment === "..") {
+			if (collapsed.length > 0) {
+				collapsed.pop();
+			} else if (!isAbsolute) {
+				// Keep root-escaping ".." so escaped paths never match any scope prefix.
+				escapes++;
+			}
+			continue;
+		}
+		collapsed.push(segment);
+	}
+	const joined = (isAbsolute ? "/" : "../".repeat(escapes)) + collapsed.join("/");
+	return joined === "/" ? joined : joined.replace(/\/$/, "");
 }
 
 function globToRegExp(glob: string): RegExp {

@@ -308,6 +308,11 @@ function createExtensionAPI(
 			return handler(server, name, args);
 		},
 
+		isMcpToolBound(): boolean {
+			runtime.assertActive();
+			return typeof runtime.callMcpTool === "function";
+		},
+
 		getActiveTools(): string[] {
 			runtime.assertActive();
 			return runtime.getActiveTools();

@@ -82,8 +82,95 @@ export function pathsOverlap(left: string, right: string): boolean {
 	return pathSegmentsOverlap(left, right);
 }
 
+type ToolCallKind = "solo" | "safe" | "path";
+
 /**
- * Return true when a tool-call batch is safe to run concurrently (Hermes-style policy, OMK tool names).
+ * Classify one tool call for wave scheduling. "solo" calls run alone in their
+ * own wave (fail closed): clarify-style tools, sequential-policy tools, bash
+ * (never parallel-safe with any other call), invalid argument shapes, and
+ * unknown tools without an explicit parallel grant.
+ */
+function classifyToolCall(toolCall: ParallelizableToolCall, options: ShouldParallelizeToolBatchOptions): ToolCallKind {
+	const name = toolCall.name;
+	if (NEVER_PARALLEL_TOOLS.has(name)) {
+		return "solo";
+	}
+	if (options.toolPolicies?.get(name) === "sequential") {
+		return "solo";
+	}
+	const functionArgs = toolCall.arguments;
+	if (!functionArgs || typeof functionArgs !== "object" || Array.isArray(functionArgs)) {
+		return "solo";
+	}
+	if (name === "bash") {
+		return "solo";
+	}
+	if (PATH_SCOPED_TOOLS.has(name)) {
+		return "path";
+	}
+	if (PARALLEL_SAFE_TOOLS.has(name)) {
+		return "safe";
+	}
+	if (options.toolPolicies?.get(name) === "parallel" || options.allowUnknownParallel?.(name)) {
+		return "safe";
+	}
+	return "solo";
+}
+
+/**
+ * Partition a tool-call batch into ordered, contiguous waves of original
+ * indices. Calls inside one wave may run concurrently; waves run one after
+ * another in source order, so cross-wave ordering always matches the model's
+ * emission order. Solo-classified calls become single-call waves, and a
+ * path-scoped call starts a new wave when its target overlaps a path already
+ * reserved in the current wave.
+ */
+export function partitionToolBatchWaves(
+	toolCalls: ParallelizableToolCall[],
+	options: ShouldParallelizeToolBatchOptions = {},
+): number[][] {
+	const waves: number[][] = [];
+	let wave: number[] = [];
+	let wavePaths: string[] = [];
+
+	const closeWave = (): void => {
+		if (wave.length > 0) {
+			waves.push(wave);
+			wave = [];
+			wavePaths = [];
+		}
+	};
+
+	for (let index = 0; index < toolCalls.length; index++) {
+		const toolCall = toolCalls[index];
+		const kind = classifyToolCall(toolCall, options);
+		if (kind === "solo") {
+			closeWave();
+			waves.push([index]);
+			continue;
+		}
+		if (kind === "path") {
+			const scopedPath = extractParallelScopePath(toolCall.name, toolCall.arguments, options.cwd);
+			if (scopedPath === null) {
+				closeWave();
+				waves.push([index]);
+				continue;
+			}
+			if (wavePaths.some((existing) => pathsOverlap(scopedPath, existing))) {
+				closeWave();
+			}
+			wavePaths.push(scopedPath);
+		}
+		wave.push(index);
+	}
+	closeWave();
+	return waves;
+}
+
+/**
+ * Return true when an entire tool-call batch is safe to run concurrently as a
+ * single wave (Hermes-style policy, OMK tool names). Wave-based execution in
+ * the agent loop uses partitionToolBatchWaves directly for partial parallelism.
  */
 export function shouldParallelizeToolBatch(
 	toolCalls: ParallelizableToolCall[],
@@ -92,73 +179,5 @@ export function shouldParallelizeToolBatch(
 	if (toolCalls.length <= 1) {
 		return false;
 	}
-
-	const cwd = options.cwd;
-	const toolPolicies = options.toolPolicies;
-	const allowUnknownParallel = options.allowUnknownParallel;
-
-	const toolNames = toolCalls.map((tc) => tc.name);
-	if (toolNames.some((name) => NEVER_PARALLEL_TOOLS.has(name))) {
-		return false;
-	}
-
-	for (const name of toolNames) {
-		if (toolPolicies?.get(name) === "sequential") {
-			return false;
-		}
-	}
-
-	const bashCount = toolNames.filter((name) => name === "bash").length;
-	if (bashCount >= 2) {
-		return false;
-	}
-
-	const reservedPaths: string[] = [];
-
-	for (const toolCall of toolCalls) {
-		const toolName = toolCall.name;
-		const functionArgs = toolCall.arguments;
-		if (!functionArgs || typeof functionArgs !== "object" || Array.isArray(functionArgs)) {
-			return false;
-		}
-
-		if (toolName === "bash") {
-			const command = functionArgs.command;
-			if (typeof command !== "string") {
-				return false;
-			}
-			if (isDestructiveBashCommand(command)) {
-				return false;
-			}
-			// bash is not parallel-safe with any other tool in the batch
-			if (toolCalls.length > 1) {
-				return false;
-			}
-			continue;
-		}
-
-		if (PATH_SCOPED_TOOLS.has(toolName)) {
-			const scopedPath = extractParallelScopePath(toolName, functionArgs, cwd);
-			if (scopedPath === null) {
-				return false;
-			}
-			if (reservedPaths.some((existing) => pathsOverlap(scopedPath, existing))) {
-				return false;
-			}
-			reservedPaths.push(scopedPath);
-			continue;
-		}
-
-		if (PARALLEL_SAFE_TOOLS.has(toolName)) {
-			continue;
-		}
-
-		if (toolPolicies?.get(toolName) === "parallel" || allowUnknownParallel?.(toolName)) {
-			continue;
-		}
-
-		return false;
-	}
-
-	return true;
+	return partitionToolBatchWaves(toolCalls, options).length === 1;
 }

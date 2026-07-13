@@ -6,6 +6,9 @@
  * Capability is provided automatically; live-transport USE is still gated by
  * OMK_WALL_OA_TRANSPORT=mcp (explicit operator opt-in).
  */
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { evaluateCorrectnessWall } from "../../../../adaptorch-wpl/src/index.ts";
 import {
@@ -15,13 +18,48 @@ import {
 	resolveOaClientForEvaluation,
 	setWallAdaptOrchCallTool,
 } from "../../../examples/extensions/correctness-wall/adjudication-fixture.ts";
+import correctnessWall from "../../../examples/extensions/correctness-wall/index.ts";
+import type { ExtensionAPI, ExtensionContext } from "../../../src/core/extensions/types.ts";
+
+type RecordedHandler = (event: unknown, ctx: unknown) => Promise<unknown> | unknown;
 
 function saveEnv(): Record<string, string | undefined> {
-	return { OMK_WALL_OA_TRANSPORT: process.env.OMK_WALL_OA_TRANSPORT };
+	return {
+		OMK_PATCH_SAFETY_WALL_MODE: process.env.OMK_PATCH_SAFETY_WALL_MODE,
+		OMK_WALL_OA_FIXTURE_PATH: process.env.OMK_WALL_OA_FIXTURE_PATH,
+		OMK_WALL_OA_TRANSPORT: process.env.OMK_WALL_OA_TRANSPORT,
+		OMK_WALL_RUN_IDS: process.env.OMK_WALL_RUN_IDS,
+		OMK_WALL_SCOPE: process.env.OMK_WALL_SCOPE,
+	};
 }
 function restoreEnv(saved: Record<string, string | undefined>): void {
-	if (saved.OMK_WALL_OA_TRANSPORT === undefined) delete process.env.OMK_WALL_OA_TRANSPORT;
-	else process.env.OMK_WALL_OA_TRANSPORT = saved.OMK_WALL_OA_TRANSPORT;
+	for (const [key, value] of Object.entries(saved)) {
+		if (value === undefined) delete process.env[key];
+		else process.env[key] = value;
+	}
+}
+
+function createHookApi(
+	callMcpTool?: NonNullable<ExtensionAPI["callMcpTool"]>,
+	mcpBound: boolean = callMcpTool !== undefined,
+): {
+	omk: ExtensionAPI;
+	handlers: Map<string, RecordedHandler[]>;
+} {
+	const handlers = new Map<string, RecordedHandler[]>();
+	const omk = {
+		...(callMcpTool === undefined ? {} : { callMcpTool }),
+		isMcpToolBound(): boolean {
+			return mcpBound;
+		},
+		on(event: string, handler: RecordedHandler): void {
+			const existing = handlers.get(event) ?? [];
+			existing.push(handler);
+			handlers.set(event, existing);
+		},
+		registerTool(): void {},
+	} as unknown as ExtensionAPI;
+	return { omk, handlers };
 }
 
 describe("buildLiveCallToolFromCapability", () => {
@@ -112,6 +150,82 @@ describe("autoWireLiveAdaptOrch (extension entry wiring)", () => {
 			expect(client).toBeUndefined();
 		} finally {
 			restoreEnv(saved);
+		}
+	});
+
+	it("falls back to preview when the live MCP facade is unbound", async () => {
+		const saved = saveEnv();
+		const cwd = mkdtempSync(join(tmpdir(), "omk-wall-022-"));
+		try {
+			delete process.env.OMK_WALL_OA_FIXTURE_PATH;
+			process.env.OMK_PATCH_SAFETY_WALL_MODE = "shadow";
+			process.env.OMK_WALL_OA_TRANSPORT = "mcp";
+			process.env.OMK_WALL_RUN_IDS = "run-022-no-host";
+			process.env.OMK_WALL_SCOPE = "packages/adaptorch-wpl/**";
+			const { omk, handlers } = createHookApi(async () => {
+				throw new Error(
+					"Extension callMcpTool is not bound. The session must provide a callMcpTool handler via bindCore.",
+				);
+			}, false);
+			correctnessWall(omk);
+			const handler = handlers.get("tool_call")?.[0];
+			expect(handler).toBeDefined();
+			await expect(
+				handler!(
+					{
+						type: "tool_call",
+						toolCallId: "tc-022-no-host",
+						toolName: "write",
+						input: { path: "packages/adaptorch-wpl/src/example.ts", content: "export {};" },
+					},
+					{ cwd, hasUI: false } as ExtensionContext,
+				),
+			).resolves.toBeUndefined();
+			const telemetry = JSON.parse(
+				readFileSync(join(cwd, ".omk", "wall-cache", "shadow-telemetry.ndjson"), "utf8").trim(),
+			) as { previewOnly: boolean; usedOaFixture: boolean };
+			expect(telemetry).toMatchObject({ previewOnly: true, usedOaFixture: false });
+		} finally {
+			restoreEnv(saved);
+			rmSync(cwd, { recursive: true, force: true });
+		}
+	});
+
+	it("uses live read-only OA adjudication for the edit/write hook without a fixture", async () => {
+		const saved = saveEnv();
+		const cwd = mkdtempSync(join(tmpdir(), "omk-wall-022-"));
+		const calls: string[] = [];
+		try {
+			delete process.env.OMK_WALL_OA_FIXTURE_PATH;
+			process.env.OMK_WALL_OA_TRANSPORT = "mcp";
+			process.env.OMK_WALL_RUN_IDS = "run-022-hook";
+			process.env.OMK_WALL_SCOPE = "packages/adaptorch-wpl/**";
+			const { omk, handlers } = createHookApi(async (_server, name, args) => {
+				calls.push(name);
+				const runId = (args as { run_id: string }).run_id;
+				if (name === "adaptorch_get_run") return { run_id: runId, status: "completed" };
+				if (name === "adaptorch_get_artifacts") return [{ path: "artifact.md", size_bytes: 1 }];
+				if (name === "adaptorch_get_traces") return [{ kind: "span", level: "info" }];
+				throw new Error(name);
+			});
+			correctnessWall(omk);
+			const handler = handlers.get("tool_call")?.[0];
+			expect(handler).toBeDefined();
+			await expect(
+				handler!(
+					{
+						type: "tool_call",
+						toolCallId: "tc-022",
+						toolName: "write",
+						input: { path: "packages/adaptorch-wpl/src/example.ts", content: "export {};" },
+					},
+					{ cwd, hasUI: false } as ExtensionContext,
+				),
+			).resolves.toBeUndefined();
+			expect(calls).toEqual(["adaptorch_get_run", "adaptorch_get_artifacts", "adaptorch_get_traces"]);
+		} finally {
+			restoreEnv(saved);
+			rmSync(cwd, { recursive: true, force: true });
 		}
 	});
 });

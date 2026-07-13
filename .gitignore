@@ -15,6 +15,7 @@ packages/*/dist-firefox/
 !.omk/.codegraph/.gitignore
 !.omk/extensions/
 !.omk/extensions/**
+.omk/extensions/**/node_modules/
 !.omk/git/
 !.omk/git/.gitignore
 !.omk/npm/

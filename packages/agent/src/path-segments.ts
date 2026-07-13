@@ -23,16 +23,44 @@ export function joinPathSegments(cwd: string, relative: string): string {
 	return `${base}/${rel}`;
 }
 
-/** True when two normalized paths may refer to the same file or subtree. */
+/**
+ * Collapse "." and ".." segments without touching the filesystem. Returns null
+ * when a ".." escapes above the root, so callers can fail closed.
+ */
+export function collapsePathSegments(segments: readonly string[]): string[] | null {
+	const collapsed: string[] = [];
+	for (const segment of segments) {
+		if (segment === ".") continue;
+		if (segment === "..") {
+			if (collapsed.length === 0) return null;
+			collapsed.pop();
+			continue;
+		}
+		collapsed.push(segment);
+	}
+	return collapsed;
+}
+
+/**
+ * True when two normalized paths may refer to the same file or subtree.
+ * Fail-closed: "."/".." are collapsed first, root-escaping paths always count
+ * as overlapping, and segments compare case-insensitively so case-aliasing
+ * filesystems never split one file into two "independent" paths. Symlinks and
+ * hardlinks are not resolved here (no fs access); overlap only forces
+ * sequential execution, so false positives are safe.
+ */
 export function pathSegmentsOverlap(left: string, right: string): boolean {
-	const leftParts = pathSegments(normalizePathSlashes(left));
-	const rightParts = pathSegments(normalizePathSlashes(right));
+	const leftParts = collapsePathSegments(pathSegments(normalizePathSlashes(left)));
+	const rightParts = collapsePathSegments(pathSegments(normalizePathSlashes(right)));
+	if (leftParts === null || rightParts === null) {
+		return true;
+	}
 	if (leftParts.length === 0 || rightParts.length === 0) {
 		return leftParts.length === rightParts.length && leftParts.length > 0;
 	}
 	const commonLen = Math.min(leftParts.length, rightParts.length);
 	for (let i = 0; i < commonLen; i++) {
-		if (leftParts[i] !== rightParts[i]) {
+		if (leftParts[i].toLowerCase() !== rightParts[i].toLowerCase()) {
 			return false;
 		}
 	}

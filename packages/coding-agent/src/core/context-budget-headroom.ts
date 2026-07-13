@@ -38,6 +38,13 @@ export function chooseHeadroomRepresentation(
 	const tierOver = budget.tierUsedTokens >= budget.tierCeilingTokens;
 	const globalTight = budget.remainingGlobalTokens < full;
 	const tight = tierOver || globalTight;
+	// A candidate must fit BOTH the global remainder and the tier remainder, so a
+	// smaller representation is chosen instead of over-selecting full text and
+	// having the caller drop the whole item at the tier ceiling.
+	const spendable = Math.min(
+		budget.remainingGlobalTokens,
+		Math.max(0, budget.tierCeilingTokens - budget.tierUsedTokens),
+	);
 
 	if (item.priority === "hard" || item.required) {
 		const fullCandidate = candidates.find((candidate) => candidate.kind === "full");
@@ -52,7 +59,7 @@ export function chooseHeadroomRepresentation(
 		if (isMoreExpensiveThanFull(candidate, full)) {
 			continue;
 		}
-		if (candidate.kind !== "omit" && candidate.estimatedTokens > budget.remainingGlobalTokens) {
+		if (candidate.kind !== "omit" && candidate.estimatedTokens > spendable) {
 			continue;
 		}
 		const score = representationPreference(candidate, item, policy, tight);

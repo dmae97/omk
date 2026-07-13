@@ -78,6 +78,7 @@ describe("023 extension callMcpTool bind (W4 Part 2 harness)", () => {
 		);
 		expect(captured).toBeDefined();
 		expect(typeof captured!.callMcpTool).toBe("function");
+		expect(captured!.isMcpToolBound()).toBe(false);
 	});
 
 	it("throws until bindCore provides a handler", async () => {
@@ -129,6 +130,7 @@ describe("023 extension callMcpTool bind (W4 Part 2 harness)", () => {
 			extensionContextActions,
 		);
 
+		expect(api!.isMcpToolBound()).toBe(true);
 		const result = await api!.callMcpTool!("adaptorch", "adaptorch_get_run", { run_id: "run-023" });
 		expect(calls).toEqual([{ server: "adaptorch", name: "adaptorch_get_run", args: { run_id: "run-023" } }]);
 		expect(result).toEqual({

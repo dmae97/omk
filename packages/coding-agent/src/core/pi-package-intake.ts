@@ -47,6 +47,7 @@ export interface PiPackageIntakeSummary {
 	readonly acceptedNative: number;
 	readonly acceptedReference: number;
 	readonly acceptedMeasurement: number;
+	readonly acceptedAdvisory: number;
 	readonly deferred: number;
 	readonly reject: number;
 	readonly hardForkBlocked: number;
@@ -125,6 +126,7 @@ export function summarizePiPackageIntake(results: readonly PiPackageIntakeResult
 	let acceptedNative = 0;
 	let acceptedReference = 0;
 	let acceptedMeasurement = 0;
+	let acceptedAdvisory = 0;
 	let deferred = 0;
 	let reject = 0;
 	let hardForkBlocked = 0;
@@ -149,6 +151,10 @@ export function summarizePiPackageIntake(results: readonly PiPackageIntakeResult
 		} else if (result.review.adoption === "measurement-gated") {
 			acceptedMeasurement += 1;
 			lane.accepted += 1;
+		} else if (result.review.adoption === "advisory-only" || result.review.adoption === "report-only") {
+			// Accepted read-only ports (advisor/quality lanes); connected, never mutating.
+			acceptedAdvisory += 1;
+			lane.accepted += 1;
 		} else if (result.review.adoption === "deferred") {
 			deferred += 1;
 			lane.deferred += 1;
@@ -163,6 +169,7 @@ export function summarizePiPackageIntake(results: readonly PiPackageIntakeResult
 		acceptedNative,
 		acceptedReference,
 		acceptedMeasurement,
+		acceptedAdvisory,
 		deferred,
 		reject,
 		hardForkBlocked,

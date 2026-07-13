@@ -1,0 +1,19 @@
+{
+	"name": "omk-extension-computeruse-stagehand",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"scripts": {
+		"check": "../../../node_modules/.bin/tsc --noEmit -p tsconfig.json",
+		"test": "node --test policy.test.ts runtime.test.mjs"
+	},
+	"dependencies": {
+		"@browserbasehq/stagehand": "3.6.0",
+		"zod": "4.2.0"
+	},
+	"omk": {
+		"extensions": [
+			"./index.ts"
+		]
+	}
+}

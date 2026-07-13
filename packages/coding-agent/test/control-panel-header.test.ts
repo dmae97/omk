@@ -93,6 +93,7 @@ describe("ControlPanelComponent", () => {
 				acceptedNative: 2,
 				acceptedReference: 1,
 				acceptedMeasurement: 1,
+				acceptedAdvisory: 0,
 				deferred: 1,
 				reject: 1,
 				hardForkBlocked: 1,

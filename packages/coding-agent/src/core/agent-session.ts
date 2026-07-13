@@ -16,7 +16,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import type { Agent, AgentEvent, AgentMessage, AgentState, AgentTool, ThinkingLevel } from "omk-agent-core";
-import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "omk-ai";
+import type { Api, AssistantMessage, ImageContent, Message, Model, TextContent } from "omk-ai";
 import {
 	clampThinkingLevel,
 	cleanupSessionResources,
@@ -47,6 +47,8 @@ import {
 	shouldCompact,
 } from "./compaction/index.ts";
 import { compactionEmitWillRetry } from "./compaction/resume-policy.ts";
+import { createMemoryContextBudgetCacheProviderV2 } from "./context-budget-v2-cache-provider.ts";
+import type { ContextBudgetCacheProviderV2 } from "./context-budget-v2-types.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.ts";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
@@ -87,6 +89,7 @@ import { grokPlaybookAppendForProvider } from "./grok-playbook.ts";
 import { assertLoadoutAccess, decideLoadoutAccess, type LoadoutAccessPolicy } from "./loadout-access-policy.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import type { ModelRegistry } from "./model-registry.ts";
+import { findExactModelReferenceMatch } from "./model-resolver.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import {
 	getBiasStepsForCell,
@@ -417,6 +420,8 @@ export class AgentSession {
 
 	// Model registry for API key resolution
 	private _modelRegistry: ModelRegistry;
+	/** Lazy, in-memory only; never shared across sessions or persisted. */
+	private _contextBudgetCacheProvider: ContextBudgetCacheProviderV2 | undefined;
 
 	// Tool registry for extension getTools/setTools
 	private _toolRegistry: Map<string, AgentTool> = new Map();
@@ -1063,7 +1068,11 @@ export class AgentSession {
 	}
 
 	private _getContextBudgetOptions(): BuildSystemPromptOptions["contextBudget"] | undefined {
-		if (process.env.OMK_CONTEXT_GOVERNOR !== "1") {
+		const contextGovernorOverride = process.env.OMK_CONTEXT_GOVERNOR;
+		if (contextGovernorOverride === "0") {
+			return undefined;
+		}
+		if (contextGovernorOverride !== "1" && !this.settingsManager.getContextBudgetEnabled()) {
 			return undefined;
 		}
 
@@ -1104,6 +1113,9 @@ export class AgentSession {
 				parsePositiveIntegerEnv("OMK_CONTEXT_GOVERNOR_RESPONSE_RESERVE_TOKENS") ?? LEGACY_RESPONSE_RESERVE_TOKENS;
 		}
 
+		const cacheProvider = this._contextBudgetCacheProvider ?? createMemoryContextBudgetCacheProviderV2("session");
+		this._contextBudgetCacheProvider = cacheProvider;
+
 		// Enforce floor
 		if (maxPromptTokens < MIN_PROMPT_TOKENS) {
 			maxPromptTokens = MIN_PROMPT_TOKENS;
@@ -1120,6 +1132,7 @@ export class AgentSession {
 			tokenizerMode: parseTokenizerModeEnv(process.env.OMK_CONTEXT_GOVERNOR_TOKENIZER),
 			activeSkillNames: parseCommaSeparatedEnv(process.env.OMK_CONTEXT_GOVERNOR_ACTIVE_SKILLS),
 			queryContext: this._extractCurrentQuery(),
+			cacheProvider,
 		};
 	}
 
@@ -2096,6 +2109,19 @@ export class AgentSession {
 	// Compaction
 	// =========================================================================
 
+	private _resolveCompactionModel(sessionModel: Model<Api>): Model<Api> {
+		const configuredModel = this.settingsManager.getCompactionModel();
+		const availableModels = this._modelRegistry.getAvailable();
+		if (configuredModel) {
+			const model = findExactModelReferenceMatch(configuredModel, availableModels);
+			if (!model) {
+				throw new Error(`Configured compaction model "${configuredModel}" is unavailable or unauthenticated.`);
+			}
+			return model;
+		}
+		return resolveCompactionModel(sessionModel, availableModels);
+	}
+
 	/**
 	 * Manually compact the session context.
 	 * Aborts current agent operation first.
@@ -2112,7 +2138,7 @@ export class AgentSession {
 				throw new Error(formatNoModelSelectedMessage());
 			}
 
-			const compactionModel = resolveCompactionModel(this.model, this._modelRegistry.getAvailable());
+			const compactionModel = this._resolveCompactionModel(this.model);
 			const { apiKey, headers } = await this._getCompactionRequestAuth(compactionModel);
 
 			const pathEntries = this.sessionManager.getBranch();
@@ -2386,7 +2412,7 @@ export class AgentSession {
 				return false;
 			}
 
-			const compactionModel = resolveCompactionModel(this.model, this._modelRegistry.getAvailable());
+			const compactionModel = this._resolveCompactionModel(this.model);
 			let apiKey: string | undefined;
 			let headers: Record<string, string> | undefined;
 			if (this.agent.streamFn === streamSimple) {

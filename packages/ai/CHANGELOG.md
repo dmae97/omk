@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added tool-free `openai-codex/gpt-5.6-moa`, a virtual GPT-5.6 model that runs bounded Sol and Terra advisers concurrently and streams a Sol synthesis as one response while reusing the existing Codex OAuth credential.
+
+### Fixed
+
+- Fixed GPT-5.6 Codex `max`/`ultra` requests returning HTTP 400 by mapping OMK's higher thinking tiers to the backend's highest accepted literal effort, `xhigh`.
+- Fixed Codex SSE cancellation after response headers so caller aborts and bounded virtual-model streams terminate the upstream response body, including when response observers reject.
+- Fixed Codex `response.failed` events dropping terminal usage before error propagation and normalized failed, cancelled, non-terminal, missing, or unknown completed statuses to error terminals, and rejected SSE EOF without a terminal event.
+- Fixed tool-free Codex requests still serializing tool-choice fields and non-retryable protocol/API failures being retried.
+- Fixed parent-session cleanup leaving role-isolated MoA WebSocket resources and fallback state alive.
+- Fixed tool-free MoA requests replaying historical tool calls/results as transport-level function items by flattening them into inert context.
+
 ## [0.90.7] - 2026-07-11
 
 ### Added

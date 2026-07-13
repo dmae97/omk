@@ -25,6 +25,12 @@ Use `/logout` to clear credentials. Tokens are stored in `~/.omk/agent/auth.json
 
 - Requires ChatGPT Plus or Pro subscription
 - Officially endorsed by OpenAI: [Codex for OSS](https://developers.openai.com/community/codex-for-oss)
+- `gpt-5.6-moa` is a tool-free virtual model that runs bounded GPT-5.6 Sol and Terra advisers concurrently, then streams a Sol synthesis. It performs three inference calls per turn, caps adviser/synthesis output independently, and is intended for analysis, review, and answer synthesis; use Sol or Terra directly when tools are required.
+- The Codex backend accepts `xhigh` as its highest literal reasoning effort. OMK's `max` and `ultra` tiers map to `xhigh`; `ultra` on the MoA model additionally represents the Sol/Terra delegation workflow.
+
+```bash
+omk --provider openai-codex --model gpt-5.6-moa --thinking ultra
+```
 
 ### Claude Pro/Max
 

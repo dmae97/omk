@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### New Features
+
+- **GPT-5.6 MoA virtual model** — `openai-codex/gpt-5.6-moa` combines bounded concurrent Sol and Terra analysis into one Sol-synthesized response. See [provider setup](docs/providers.md).
+- **Path-safe parallel tool-batch waves** — independent tool calls run in ordered waves while conflicts and unknown operations remain sequential. See [the agent runtime](../../agent/README.md).
+- **Context-budget v2 controls** — enable the global budget with `contextBudget.enabled` and select an authenticated compaction model with `compaction.model`. See [settings](docs/settings.md) and [compaction](docs/compaction.md).
+- **Evidence-gated Correctness Wall** — fixtureless live OA uses a bound MCP handler only and otherwise remains preview-only. See the [Correctness Wall example](examples/extensions/correctness-wall/README.md).
+- **Project-local computer use** — the Stagehand extension and `omk-computeruse` skill add bounded, approval-gated browser workflows. See [the extension](../../.omk/extensions/omk-computeruse-stagehand/README.md).
+
+### Added
+
+- Added the tool-free `openai-codex/gpt-5.6-moa` virtual model, which combines bounded, concurrent GPT-5.6 Sol and Terra analyses into one Sol-synthesized response for analysis and review tasks.
+- Added `partitionToolBatchWaves` to run ordered, contiguous safe tool-call waves instead of serializing an entire batch when one call conflicts or is unknown.
+- Added `compaction.model`, allowing auto-compaction and `/compact` to use an authenticated model such as `zai/glm-5.2` without changing the active session model.
+- Added the project-local Stagehand computer-use extension and `omk-computeruse` skill for bounded browser observation, approval-gated actions, and redacted extraction.
+
+### Changed
+
+- Added global-only `contextBudget.enabled` to activate context-budget v2 for every OMK session; `OMK_CONTEXT_GOVERNOR=1`/`0` remain per-process on/off overrides. Each enabled `AgentSession` reuses an in-memory plan and representation cache without disk or cross-session sharing.
+
+### Fixed
+
+- Fixed the CLI help omitting the accepted `max` and `ultra` thinking levels, and fixed GPT-5.6 Codex `ultra` requests failing with an invalid-enum HTTP 400.
+- Fixed loop write-scope validation to collapse `.`/`..` path segments, so traversal like `src/../package.json` can no longer slip past `allowedWriteScopes`, `deniedWriteScopes`, or changed-file checks.
+- Fixed the context-budget v2 representation chooser to respect the remaining tier budget: it now falls back to a smaller representation (e.g. summary) instead of over-selecting full text and dropping the whole item at the tier ceiling.
+- Hardened the guardrails evidence ledger: replay events now carry a `prevHash`/`eventHash` tamper-evident chain verified on load (edited, deleted, or reordered ledger lines fail closed), `TaskContractBuilder.fromJSON` validates the contract shape instead of blindly casting, `build()`/`getEvents()`/`getLedger()` return deep copies, and verification-report table cells escape pipes/newlines from untrusted claim or command text.
+- Fixed the footer `PKG` counter and control-panel `ports:` label dropping accepted advisory/report-only package ports from every bucket (`PKG 12/16 R0 B0` for 16 accepted candidates); the intake summary now counts them via `acceptedAdvisory`, so all accepted ports read as connected (`PKG 16/16`).
+- Fixed Correctness Wall edit/write hooks to use fixtureless live OA only with non-empty run IDs, explicit MCP transport, and a bound MCP handler; unbound handlers fall back to preview-only evaluation.
+
 ## [0.90.7] - 2026-07-11
 
 ### Added

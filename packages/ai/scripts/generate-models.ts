@@ -360,10 +360,16 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 	if (model.provider === "openai-codex" && supportsOpenAiXhigh(model.id)) {
 		mergeThinkingLevelMap(model, { minimal: "low" });
 	}
-	if (model.provider === "openai-codex" && (model.id === "gpt-5.6-sol" || model.id === "gpt-5.6-terra")) {
-		// Codex serves an ultra effort tier (maximum reasoning with automatic task delegation)
-		// on GPT-5.6 Sol/Terra only (openai/codex models-manager/models.json); Luna tops out at max.
-		mergeThinkingLevelMap(model, { ultra: "ultra" });
+	if (model.provider === "openai-codex" && model.id.startsWith("gpt-5.6")) {
+		// The Codex backend accepts xhigh as its highest literal enum. OMK's higher labels
+		// remain useful capability tiers but must serialize to the backend-valid value.
+		mergeThinkingLevelMap(model, { max: "xhigh" });
+	}
+	if (
+		model.provider === "openai-codex" &&
+		(model.id === "gpt-5.6-sol" || model.id === "gpt-5.6-terra" || model.id === "gpt-5.6-moa")
+	) {
+		mergeThinkingLevelMap(model, { ultra: "xhigh" });
 	}
 	if (model.provider === "openrouter" && model.id.startsWith("inception/mercury-2")) {
 		// Mercury 2 in instant mode (reasoning_effort: "none") disables tool calling.
@@ -2014,6 +2020,20 @@ async function generateModels() {
 			input: ["text", "image"],
 			cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 0 },
 			contextWindow: CODEX_GPT_56_CONTEXT,
+			maxTokens: CODEX_MAX_TOKENS,
+		},
+		{
+			id: "gpt-5.6-moa",
+			name: "GPT-5.6 MoA (Sol + Terra)",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: CODEX_BASE_URL,
+			reasoning: true,
+			input: ["text", "image"],
+			// Composite usage is calculated from the concrete Sol/Terra calls.
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			// Reserve room for the bounded adviser analyses added before synthesis.
+			contextWindow: 300000,
 			maxTokens: CODEX_MAX_TOKENS,
 		},
 		{

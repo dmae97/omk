@@ -50,7 +50,7 @@ description: "OMK DAG task list for the v0.90.6 release alignment"
 
 ## Phase 5: QA + runtime
 
-- [ ] T005 Full repo gate after all edits — **blocked (foreign file)**: repo-wide `biome check` fails on another session's untracked `pi-extensions/biome.json` (nested root config, pre-existing). All remaining gates were run individually and pass: scoped biome on owned files, `check:pinned-deps`, `check:vendored-skills`, `check:ts-imports`, `check:release-consistency` (`ok: true`, expected `release_tag_not_merged` warning on this stale branch), `check:shrinkwrap`, `tsgo --noEmit` (exit 0), `check:browser-smoke`. Re-run `npm run check` after the owning session resolves `pi-extensions/`
+- [x] T005 Full repo gate after all edits — completed 2026-07-11 after the root Biome hard-excluded the standalone `pi-extensions/` workspace. `npm --prefix pi-extensions run check` passed independently (44 files + `tsc --noEmit`), then root `npm run check` passed again after the MoA work (929 Biome files; pinned deps, vendored skills, TS imports, release consistency `ok: true` with issues `[]`, shrinkwrap, `tsgo --noEmit`, and browser smoke).
   > role: qa
   > deps: T002, T003, T004
   > files: none

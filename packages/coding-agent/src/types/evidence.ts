@@ -91,6 +91,10 @@ export interface ReplayEvent {
 	payload: unknown;
 	/** SHA-256 of the serialized payload for integrity. */
 	payloadHash: string;
+	/** eventHash of the previous event in the chain ("genesis" for the first event). */
+	prevHash: string;
+	/** SHA-256 over [seq, type, timestamp, goalId, laneId, payloadHash, prevHash]. */
+	eventHash: string;
 }
 
 export interface ReplayLedger {

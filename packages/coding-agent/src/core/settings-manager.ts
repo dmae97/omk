@@ -8,9 +8,15 @@ import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dis
 
 export interface CompactionSettings {
 	enabled?: boolean; // default: true
+	model?: string; // optional canonical provider/model ID used only for compaction
 	reserveTokens?: number; // default: 16384
 	keepRecentTokens?: number; // default: 20000
 	maxUsageRatio?: number; // default: 0.9
+}
+
+/** Global-only opt-in for prompt resource budgeting and its session-memory cache. */
+export interface ContextBudgetSettings {
+	enabled?: boolean; // default: false
 }
 
 export interface BranchSummarySettings {
@@ -103,6 +109,7 @@ export interface Settings {
 	followUpMode?: "all" | "one-at-a-time";
 	theme?: string;
 	compaction?: CompactionSettings;
+	contextBudget?: ContextBudgetSettings;
 	branchSummary?: BranchSummarySettings;
 	retry?: RetrySettings;
 	hideThinkingBlock?: boolean;
@@ -694,6 +701,24 @@ export class SettingsManager {
 
 	getCompactionEnabled(): boolean {
 		return this.settings.compaction?.enabled ?? true;
+	}
+
+	/** Global-only: project settings cannot expand prompt-resource access. */
+	getContextBudgetEnabled(): boolean {
+		return this.globalSettings.contextBudget?.enabled === true;
+	}
+
+	setContextBudgetEnabled(enabled: boolean): void {
+		if (!this.globalSettings.contextBudget) {
+			this.globalSettings.contextBudget = {};
+		}
+		this.globalSettings.contextBudget.enabled = enabled;
+		this.markModified("contextBudget", "enabled");
+		this.save();
+	}
+
+	getCompactionModel(): string | undefined {
+		return this.settings.compaction?.model;
 	}
 
 	setCompactionEnabled(enabled: boolean): void {

@@ -18,6 +18,16 @@ describe("pi package intake", () => {
 		expect(report.summary.acceptedNative).toBeGreaterThan(0);
 		expect(report.summary.acceptedReference).toBeGreaterThan(0);
 		expect(report.summary.acceptedMeasurement).toBeGreaterThan(0);
+		expect(report.summary.acceptedAdvisory).toBeGreaterThan(0);
+		expect(
+			report.summary.acceptedNative +
+				report.summary.acceptedReference +
+				report.summary.acceptedMeasurement +
+				report.summary.acceptedAdvisory +
+				report.summary.deferred +
+				report.summary.reject +
+				report.summary.hardForkBlocked,
+		).toBe(report.summary.total);
 		expect(report.summary.hardForkBlocked).toBe(0);
 		expect(report.summary.reject).toBe(0);
 		expect(report.results.every((result) => result.directPermanentPiAdoption === false)).toBe(true);

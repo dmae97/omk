@@ -1226,6 +1226,9 @@ export interface ExtensionAPI {
 	 */
 	callMcpTool?(server: string, name: string, args: Record<string, unknown>): Promise<unknown>;
 
+	/** Return whether a runtime MCP tool handler is currently bound. */
+	isMcpToolBound(): boolean;
+
 	/** Get the list of currently active tool names. */
 	getActiveTools(): string[];
 

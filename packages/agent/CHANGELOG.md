@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `partitionToolBatchWaves`: tool-call batches now split into ordered, contiguous waves instead of all-or-nothing parallelization, so one conflicting or unknown call no longer serializes every independent read in the batch. `shouldParallelizeToolBatch` is now a single-wave check over the same partition.
+
+### Fixed
+
+- Fixed parallel tool-batch path overlap checks to collapse `.`/`..` segments, compare segments case-insensitively, and fail closed (sequential) when a path escapes the root, so `write`/`edit` calls aliasing the same file via `..` are no longer run concurrently.
+
 ## [0.90.7] - 2026-07-11
 
 ### Added

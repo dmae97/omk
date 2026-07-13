@@ -109,6 +109,16 @@ describe("validateLoopWriteScope", () => {
 		expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain("write-scope-denied");
 	});
 
+	it("collapses .. so traversal cannot slip past allowed or denied scopes", () => {
+		const escaped = validateLoopWriteScope(definition, ["packages/coding-agent/src/core/../../../ai/src/index.ts"]);
+		expect(escaped.passed).toBe(false);
+		expect(escaped.diagnostics.map((diagnostic) => diagnostic.code)).toContain("write-scope-outside-allowed");
+
+		const deniedAlias = validateLoopWriteScope(definition, ["packages/coding-agent/src/core/x/../loop-budget.ts"]);
+		expect(deniedAlias.passed).toBe(false);
+		expect(deniedAlias.diagnostics.map((diagnostic) => diagnostic.code)).toContain("write-scope-denied");
+	});
+
 	it("blocks empty write scopes for L2/L3 loops", () => {
 		const result = validateLoopWriteScope(definition, []);
 
@@ -123,6 +133,16 @@ describe("evaluateLoopSafetyGates", () => {
 
 		expect(result).toMatchObject({ passed: true, action: "allow" });
 		expect(result.diagnostics).toEqual([]);
+	});
+
+	it("flags changed files that use .. to escape the write scope", () => {
+		const result = evaluateLoopSafetyGates(definition, state, item, {
+			...passingEvidence,
+			changedFiles: ["packages/coding-agent/src/core/../../../../package.json"],
+		});
+
+		expect(result.passed).toBe(false);
+		expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain("changed-file-outside-write-scope");
 	});
 
 	it("blocks isolated loops without worktree evidence", () => {

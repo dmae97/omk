@@ -17,6 +17,7 @@ import {
 	buildRegeneratePacket,
 	capRepairHints,
 	evaluateCorrectnessWall,
+	parseOaTransportModeFromEnv,
 	parseRepairBudget,
 	shouldOfferRepair,
 } from "../../../../adaptorch-wpl/src/index.ts";
@@ -103,6 +104,11 @@ function autoRegenerateEnabled(): boolean {
 function receiptSigningSecret(): string | undefined {
 	const v = process.env.OMK_WALL_RECEIPT_SIGNING_SECRET?.trim();
 	return v && v.length > 0 ? v : undefined;
+}
+
+function isUnboundMcpCall(value: unknown): boolean {
+	const message = value instanceof Error ? value.message : typeof value === "string" ? value : "";
+	return /callMcpTool is not bound/i.test(message);
 }
 
 function shortBlockReason(card: VerdictCard): string {
@@ -379,8 +385,10 @@ export default function (omk: ExtensionAPI) {
 		const approvedWriteScope = parseApprovedScope();
 		const runIds = parseRunIdsFromEnv();
 		const adjudicationFixturePath = resolveAdjudicationFixturePath(undefined);
-		const hookOaEnabled = runIds.length > 0 && adjudicationFixturePath !== undefined;
-		const previewOnly = !hookOaEnabled;
+		const hookOaEnabled =
+			runIds.length > 0 &&
+			(adjudicationFixturePath !== undefined || (parseOaTransportModeFromEnv() === "mcp" && omk.isMcpToolBound()));
+		let previewOnly = !hookOaEnabled;
 
 		const input = event.input as EditInput;
 		const preview =
@@ -413,19 +421,37 @@ export default function (omk: ExtensionAPI) {
 			return undefined;
 		}
 
-		const { verdictCard, receipt } = await evaluateDiff({
-			kind,
-			diffText: preview,
-			approvedWriteScope,
-			previewOnly,
-			runIds: hookOaEnabled ? runIds : undefined,
-			adjudicationFixturePath: hookOaEnabled ? adjudicationFixturePath : undefined,
-		});
+		const fixturelessLiveCall =
+			hookOaEnabled && adjudicationFixturePath === undefined && parseOaTransportModeFromEnv() === "mcp";
+		let evaluation: Awaited<ReturnType<typeof evaluateDiff>>;
+		try {
+			evaluation = await evaluateDiff({
+				kind,
+				diffText: preview,
+				approvedWriteScope,
+				previewOnly,
+				runIds: hookOaEnabled ? runIds : undefined,
+				adjudicationFixturePath: hookOaEnabled ? adjudicationFixturePath : undefined,
+			});
+		} catch (error) {
+			if (!fixturelessLiveCall || !isUnboundMcpCall(error)) throw error;
+			previewOnly = true;
+			evaluation = await evaluateDiff({ kind, diffText: preview, approvedWriteScope, previewOnly: true });
+		}
+		if (
+			fixturelessLiveCall &&
+			evaluation.receipt.adjudicationReasonCode === "RUN_FETCH_FAILED" &&
+			evaluation.verdictCard.blocked_reasons.some(isUnboundMcpCall)
+		) {
+			previewOnly = true;
+			evaluation = await evaluateDiff({ kind, diffText: preview, approvedWriteScope, previewOnly: true });
+		}
+		const { verdictCard, receipt } = evaluation;
 
 		await persistToolCallVerdict(ctx, mode, verdictCard, {
 			tool: event.toolName,
 			previewOnly,
-			usedOaFixture: hookOaEnabled,
+			usedOaFixture: adjudicationFixturePath !== undefined,
 			wall_version: receipt.wall_version,
 		});
 

@@ -104,7 +104,7 @@ Tool execution mode is configurable:
 - `parallel` (default): preflight tool calls sequentially, execute allowed tools concurrently, emit `tool_execution_end` as soon as each tool is finalized, then emit toolResult messages and `turn_end.toolResults` in assistant source order
 - `sequential`: execute tool calls one by one, matching the historical behavior
 
-In parallel mode, tool completion events follow tool completion order, but persisted toolResult messages still follow assistant source order.
+In parallel mode the batch is first partitioned into ordered waves (`partitionToolBatchWaves`): calls in the same wave run concurrently, and waves run one after another in source order. A fully safe batch is a single concurrent wave; bash, `clarify`, sequential-policy tools, unknown tools, and file tools with overlapping target paths become their own waves, so one conflicting call no longer serializes the independent rest of the batch. Tool completion events follow tool completion order, but persisted toolResult messages still follow assistant source order.
 
 The mode can be set globally via `toolExecution` in the agent config, or per-tool via `executionMode` on `AgentTool`. If any tool call in a batch targets a tool with `executionMode: "sequential"`, the entire batch executes sequentially regardless of the global setting.
 

@@ -1,4 +1,4 @@
-// allow: SIZE_OK - legacy evidence ledger; this change only keeps typed import/check compatibility.
+// allow: SIZE_OK - evidence ledger guardrails: tamper-evident replay chain + fail-closed parsing.
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -87,19 +87,51 @@ export class TaskContractBuilder {
 	}
 
 	build(): TaskContract {
-		return {
+		return structuredClone({
 			goalId: this.goalId,
 			completionClaim: this.completionClaim,
-			requiredEvidence: [...this.requiredEvidence],
+			requiredEvidence: this.requiredEvidence,
 			finalRisk: this.finalRisk,
 			verdict: this.verdict,
 			createdAt: this.createdAt,
 			updatedAt: this.updatedAt,
-		};
+		});
 	}
 
+	/** Parse and validate a serialized TaskContract. Fails closed on any shape violation. */
 	static fromJSON(json: string): TaskContract {
-		return JSON.parse(json) as TaskContract;
+		const raw: unknown = JSON.parse(json);
+		if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+			throw new Error("TaskContract JSON must be an object");
+		}
+		const { goalId, completionClaim, finalRisk, verdict, createdAt, updatedAt, requiredEvidence } = raw as Record<
+			string,
+			unknown
+		>;
+		if (
+			typeof goalId !== "string" ||
+			typeof completionClaim !== "string" ||
+			typeof finalRisk !== "string" ||
+			typeof createdAt !== "string" ||
+			typeof updatedAt !== "string"
+		) {
+			throw new Error("TaskContract JSON has missing or mistyped string fields");
+		}
+		if (verdict !== "pass" && verdict !== "fail" && verdict !== "conditional") {
+			throw new Error(`TaskContract verdict must be pass|fail|conditional, got ${String(verdict)}`);
+		}
+		if (!Array.isArray(requiredEvidence)) {
+			throw new Error("TaskContract requiredEvidence must be an array");
+		}
+		return {
+			goalId,
+			completionClaim,
+			finalRisk,
+			verdict,
+			createdAt,
+			updatedAt,
+			requiredEvidence: requiredEvidence.map((item, index) => parseEvidenceItem(item, index)),
+		};
 	}
 
 	static toJSON(contract: TaskContract): string {
@@ -107,9 +139,97 @@ export class TaskContractBuilder {
 	}
 }
 
+const EVIDENCE_STATUSES: ReadonlySet<string> = new Set(["pending", "gathering", "satisfied", "failed", "waived"]);
+
+function optionalStringField(value: unknown, field: string, index: number): string | undefined {
+	if (value !== undefined && typeof value !== "string") {
+		throw new Error(`TaskContract evidence[${index}].${field} must be a string when present`);
+	}
+	return value;
+}
+
+function parseEvidenceItem(raw: unknown, index: number): EvidenceItem {
+	if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+		throw new Error(`TaskContract evidence[${index}] must be an object`);
+	}
+	const item = raw as Record<string, unknown>;
+	const { claim, category, timestamp, status } = item;
+	if (typeof claim !== "string" || typeof category !== "string" || typeof timestamp !== "string") {
+		throw new Error(`TaskContract evidence[${index}] has missing or mistyped fields`);
+	}
+	if (typeof status !== "string" || !EVIDENCE_STATUSES.has(status)) {
+		throw new Error(`TaskContract evidence[${index}] has invalid status ${String(status)}`);
+	}
+	return {
+		claim,
+		category: category as EvidenceItem["category"],
+		timestamp,
+		status: status as EvidenceStatus,
+		artifactPath: optionalStringField(item.artifactPath, "artifactPath", index),
+		verificationCommand: optionalStringField(item.verificationCommand, "verificationCommand", index),
+		hash: optionalStringField(item.hash, "hash", index),
+		gapReason: optionalStringField(item.gapReason, "gapReason", index),
+	};
+}
+
 // ============================================================================
 // ReplayLedger
 // ============================================================================
+
+/** prevHash sentinel for the first event in a replay chain. */
+const GENESIS_HASH = "genesis";
+
+function computeEventHash(event: Omit<ReplayEvent, "eventHash">): string {
+	return sha256(
+		JSON.stringify([
+			event.seq,
+			event.type,
+			event.timestamp,
+			event.goalId,
+			event.laneId ?? null,
+			event.payloadHash,
+			event.prevHash,
+		]),
+	);
+}
+
+function parseReplayEventLine(line: string, lineNumber: number): ReplayEvent {
+	let raw: unknown;
+	try {
+		raw = JSON.parse(line);
+	} catch {
+		throw new Error(`Replay ledger corrupted at line ${lineNumber}: invalid JSON`);
+	}
+	if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+		throw new Error(`Replay ledger corrupted at line ${lineNumber}: event must be an object`);
+	}
+	const event = raw as Record<string, unknown>;
+	const { seq, type, timestamp, goalId, laneId, payloadHash, prevHash, eventHash } = event;
+	if (
+		typeof seq !== "number" ||
+		typeof type !== "string" ||
+		typeof timestamp !== "string" ||
+		typeof goalId !== "string" ||
+		typeof payloadHash !== "string" ||
+		typeof prevHash !== "string" ||
+		typeof eventHash !== "string" ||
+		(laneId !== undefined && typeof laneId !== "string") ||
+		!("payload" in event)
+	) {
+		throw new Error(`Replay ledger corrupted at line ${lineNumber}: event fields are missing or mistyped`);
+	}
+	return {
+		seq,
+		type: type as ReplayEvent["type"],
+		timestamp,
+		goalId,
+		laneId,
+		payload: event.payload,
+		payloadHash,
+		prevHash,
+		eventHash,
+	};
+}
 
 export class ReplayLedgerManager {
 	private ledger: ReplayLedger;
@@ -129,14 +249,17 @@ export class ReplayLedgerManager {
 		}
 	}
 
-	append(event: Omit<ReplayEvent, "seq" | "timestamp" | "payloadHash">): ReplayEvent {
+	append(event: Omit<ReplayEvent, "seq" | "timestamp" | "payloadHash" | "prevHash" | "eventHash">): ReplayEvent {
 		const payloadStr = JSON.stringify(event.payload);
-		const fullEvent: ReplayEvent = {
+		const previous = this.ledger.events[this.ledger.events.length - 1];
+		const chained: Omit<ReplayEvent, "eventHash"> = {
 			...event,
 			seq: this.nextSeq++,
 			timestamp: new Date().toISOString(),
 			payloadHash: sha256(payloadStr),
+			prevHash: previous ? previous.eventHash : GENESIS_HASH,
 		};
+		const fullEvent: ReplayEvent = { ...chained, eventHash: computeEventHash(chained) };
 		this.ledger.events.push(fullEvent);
 		return fullEvent;
 	}
@@ -152,24 +275,50 @@ export class ReplayLedgerManager {
 		this.ledger.lastPersistedSeq = last.seq;
 	}
 
+	/**
+	 * Load and verify the persisted ledger. Fails closed: any schema violation,
+	 * sequence gap, payload-hash mismatch, or broken event-hash chain throws, so
+	 * a tampered ledger (edited, deleted, inserted, or reordered lines) is never
+	 * loaded silently.
+	 */
 	load(): void {
 		if (!existsSync(this.ledger.ledgerPath)) return;
 		const content = readFileSync(this.ledger.ledgerPath, "utf-8");
-		const events = content
-			.split("\n")
-			.filter((line) => line.trim().length > 0)
-			.map((line) => JSON.parse(line) as ReplayEvent);
+		const lines = content.split("\n").filter((line) => line.trim().length > 0);
+		const events: ReplayEvent[] = [];
+		let prevHash = GENESIS_HASH;
+		for (let index = 0; index < lines.length; index++) {
+			const event = parseReplayEventLine(lines[index], index + 1);
+			if (event.seq !== index + 1) {
+				throw new Error(
+					`Replay ledger corrupted at line ${index + 1}: expected seq ${index + 1}, got ${event.seq}`,
+				);
+			}
+			if (event.prevHash !== prevHash) {
+				throw new Error(
+					`Replay ledger chain broken at line ${index + 1}: an event was inserted, deleted, or reordered`,
+				);
+			}
+			if (sha256(JSON.stringify(event.payload)) !== event.payloadHash) {
+				throw new Error(`Replay ledger payload tampered at line ${index + 1} (seq ${event.seq})`);
+			}
+			if (computeEventHash(event) !== event.eventHash) {
+				throw new Error(`Replay ledger event hash mismatch at line ${index + 1} (seq ${event.seq})`);
+			}
+			prevHash = event.eventHash;
+			events.push(event);
+		}
 		this.ledger.events = events;
 		this.ledger.lastPersistedSeq = events.length > 0 ? events[events.length - 1].seq : 0;
 		this.nextSeq = this.ledger.lastPersistedSeq + 1;
 	}
 
 	getEvents(): ReadonlyArray<ReplayEvent> {
-		return this.ledger.events;
+		return structuredClone(this.ledger.events);
 	}
 
 	getLedger(): Readonly<ReplayLedger> {
-		return { ...this.ledger };
+		return structuredClone(this.ledger);
 	}
 
 	replay<T>(handler: (event: ReplayEvent) => T | undefined): T[] {
@@ -327,6 +476,11 @@ export class FailClosedMergeGate {
 // Verify Reporter v2
 // ============================================================================
 
+/** Escape pipes/newlines so untrusted claim or command text cannot restructure the report table. */
+function escapeTableCell(value: string): string {
+	return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+}
+
 export interface VerifyReporterV2Options {
 	outputDir: string;
 	goalId: string;
@@ -347,9 +501,9 @@ export class VerifyReporterV2 {
 			"",
 			`| Field | Value |`,
 			`|-------|-------|`,
-			`| Claim | ${contract.completionClaim} |`,
+			`| Claim | ${escapeTableCell(contract.completionClaim)} |`,
 			`| Verdict | ${contract.verdict} |`,
-			`| Final Risk | ${contract.finalRisk} |`,
+			`| Final Risk | ${escapeTableCell(contract.finalRisk)} |`,
 			"",
 			"### Evidence",
 			"",
@@ -358,7 +512,9 @@ export class VerifyReporterV2 {
 		];
 
 		for (const ev of contract.requiredEvidence) {
-			lines.push(`| ${ev.claim} | ${ev.status} | ${ev.artifactPath ?? "—"} | ${ev.verificationCommand ?? "—"} |`);
+			lines.push(
+				`| ${escapeTableCell(ev.claim)} | ${ev.status} | ${escapeTableCell(ev.artifactPath ?? "—")} | ${escapeTableCell(ev.verificationCommand ?? "—")} |`,
+			);
 		}
 
 		lines.push(
@@ -367,7 +523,7 @@ export class VerifyReporterV2 {
 			"",
 			`| Gate | Status | Reason |`,
 			`|------|--------|--------|`,
-			`| ${mergeGate.gateId} | ${mergeGate.status} | ${mergeGate.reason} |`,
+			`| ${mergeGate.gateId} | ${mergeGate.status} | ${escapeTableCell(mergeGate.reason)} |`,
 			"",
 		);
 

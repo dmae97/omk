@@ -258,6 +258,26 @@ describe("SettingsManager", () => {
 		});
 	});
 
+	describe("contextBudget", () => {
+		it("uses and persists only the global setting", async () => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ contextBudget: { enabled: true } }));
+			writeFileSync(
+				join(projectDir, ".omk", "settings.json"),
+				JSON.stringify({ contextBudget: { enabled: false } }),
+			);
+
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getContextBudgetEnabled()).toBe(true);
+
+			manager.setContextBudgetEnabled(false);
+			await manager.flush();
+
+			expect(JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf-8"))).toMatchObject({
+				contextBudget: { enabled: false },
+			});
+		});
+	});
+
 	describe("httpIdleTimeoutMs", () => {
 		it("should default to 5 minutes", () => {
 			const manager = SettingsManager.create(projectDir, agentDir);

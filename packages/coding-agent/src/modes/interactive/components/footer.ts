@@ -39,7 +39,8 @@ function formatBytes(bytes: number): string {
 }
 
 function formatPackageIntake(summary: PiPackageIntakeSummary): string {
-	const ready = summary.acceptedNative + summary.acceptedReference + summary.acceptedMeasurement;
+	const ready =
+		summary.acceptedNative + summary.acceptedReference + summary.acceptedMeasurement + summary.acceptedAdvisory;
 	const review = summary.deferred + summary.reject;
 	return `PKG ${ready}/${summary.total} R${review} B${summary.hardForkBlocked}`;
 }

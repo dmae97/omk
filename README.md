@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="readmeasset/omk-control.webp" alt="OMK//CONTROL Night City Ops Console for routing agents, evidence gates, telemetry, MCP scope, and operator control" width="100%" />
+  <img src="readmeasset/omk-marketing-control.webp" alt="OMK//CONTROL provider-neutral skill routing, evidence gates, and parallel delivery lanes" width="100%" />
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 <p align="center">
   <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm" src="https://img.shields.io/npm/v/open-multi-agent-kit?style=flat-square" /></a>
-  <a href="https://github.com/dmae97/omk/releases/tag/v0.90.7"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.7-00d7ff?style=flat-square" /></a>
+  <a href="https://github.com/dmae97/omk/releases/tag/v0.90.8"><img alt="Release" src="https://img.shields.io/badge/release-v0.90.8-00d7ff?style=flat-square" /></a>
 </p>
 
 > New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -49,96 +49,71 @@ The OMK//CONTROL startup surface is the default operator view. The header reads 
 
 The default dark TUI theme uses the `omk-control-grid-dark` Night City palette and keeps the control sidebar focused on route, evidence, loop, MCP, runtime, skills, and context budget state.
 
-## Slash commands, packages, and skills (load them hard)
+## One control plane: deploy skills with OMK
 
-OMK is most useful when packages and skills are installed up front, then invoked with `/` slash commands and bang skills (`!skill:name`, `!omk-loop`).
+OMK is not another model shell. It is the control plane around the models you already use: provider routing, scoped tools and MCP, evidence gates, parallel execution, and an operator-visible terminal surface.
 
-Browse community packages at [pi.dev/packages](https://pi.dev/packages). Install into the user agent (`~/.omk/agent/settings.json`) with pinned versions for stability:
+**Official skill distribution uses OMK packages.** Build a package once, install it through `omk`, pin it, scope it to a project when needed, and enable or disable its resources from the same control plane. This README intentionally does not send users through a separate skills launcher.
 
 ```bash
-# Context + web + code intelligence
-omk install npm:@hypabolic/pi-hypa@0.1.9
-omk install npm:pi-web-access@0.13.0
-omk install npm:pi-lens@3.8.66
-omk install npm:pi-shazam@0.26.0
-omk install npm:@ff-labs/pi-fff@0.9.6
-omk install npm:@mrclrchtr/supi-context@2.2.1
-omk install npm:@mrclrchtr/supi-web@2.2.1
+# Global, pinned OMK package
+omk install npm:@your-org/omk-workflows@1.0.0
 
-# Plan / goal / task loops
-omk install npm:@mjasnikovs/pi-task@0.18.4
-omk install npm:@narumitw/pi-goal@0.11.0
-omk install npm:@narumitw/pi-plan-mode@0.11.0
-omk install npm:@plannotator/pi-extension@0.22.0
+# Project-local, pinned Git package
+omk install -l git:github.com/your-org/omk-workflows@v1.0.0
 
-# Operator UX + quality
-omk install npm:@ayulab/pi-rewind@0.4.4
-omk install npm:@juicesharp/rpiv-ask-user-question@1.20.0
-omk install npm:@juicesharp/rpiv-todo@1.20.0
-omk install npm:pi-simplify@0.2.2
-omk install npm:pi-powerline-footer@0.6.1
-
-# Optional: refresh git/npm package checkouts
-omk update --extensions
+# Inspect and control the installed resources
 omk list
-```
-
-After install, open a fresh `omk` session and hammer the slash surface:
-
-| Slash | Package | What it does |
-|-------|---------|--------------|
-| `/plan` | `@narumitw/pi-plan-mode` | Read-only plan collaboration mode |
-| `/goal` | `@narumitw/pi-goal` | Keep working a goal until marked complete |
-| `/task`, `/task-list`, `/task-resume` | `@mjasnikovs/pi-task` | Crash-safe task pipeline with verify gates |
-| `/plannotator`, `/plannotator-review` | `@plannotator/pi-extension` | Interactive plan / PR annotation review |
-| `/rewind`, `/checkpoint`, `/tree` | `@ayulab/pi-rewind` | Checkpoint navigation |
-| `/todos` | `@juicesharp/rpiv-todo` | Live todo overlay |
-| `/hypa` | `@hypabolic/pi-hypa` | Hypa context compression diagnostics |
-| `/simplify` | `pi-simplify` | Review recent edits for clarity |
-| `/supi-context` | `@mrclrchtr/supi-context` | Context usage report |
-| `/fff-health`, `/fff-rescan` | `@ff-labs/pi-fff` | Fuzzy file/content search health |
-| `/shazam-doctor` | `pi-shazam` | Structural codebase awareness doctor |
-| `/powerline` | `pi-powerline-footer` | Status bar controls |
-| `/think auto` | built-in | Automatic reasoning-effort routing (v4) |
-
-Skills ecosystem (in addition to OMK-native packs):
-
-```bash
-# Discover
-npx skills find "plan review"
-npx skills find "react performance"
-
-# Install globally (user-level), skip prompts
-npx skills add vercel-labs/agent-skills --skill vercel-optimize -g -y -a '*'
-npx skills add vercel-labs/agent-skills --skill vercel-react-view-transitions -g -y -a '*'
-npx skills add vercel-labs/agent-skills --skill writing-guidelines -g -y -a '*'
-
-# Enable / disable package resources in the TUI
 omk config
+omk update --extensions
 ```
 
-Inside OMK, prefer **minimum necessary skills per turn** (usually 1–3). Load heavy packs on demand with bang syntax, for example `!omk-loop`, `!skill:programming`, `!skill:debugging`. Do not bulk-load the entire catalog into every session — that burns context without improving routing.
+A skills-only package is an ordinary OMK package:
 
-Hypa (optional, pairs with `@hypabolic/pi-hypa`):
-
-```bash
-hypa init --global --agent pi
-hypa doctor
+```json
+{
+  "name": "@your-org/omk-workflows",
+  "keywords": ["omk-package"],
+  "omk": {
+    "skills": ["./skills"]
+  }
+}
 ```
 
-## Release v0.90.7
+### From objective to verified delivery
 
-This release ships the `ultra` thinking level with the GPT-5.6 model family, opt-in parallel tool batching in the agent loop, TUI skill autocomplete plus Korean/CJK cursor fixes, and command-safety search-pattern false-positive fixes.
+| Need | OMK route | Output |
+| --- | --- | --- |
+| Shape a capability | `!omk plan a bounded goal` | Constraints, owned paths, and acceptance predicates |
+| Run a bounded workflow | `!omk-loop <goal>` | Evidence-gated implementation, recovery, and a terminal status |
+| Route marketing work | `!skill:omk-marketing <objective>` | One primary marketing skill plus at most one prerequisite support skill |
+| Extend the harness | `omk install <pinned-package>` | Versioned extensions, skills, prompts, and themes under OMK control |
+
+Use the minimum necessary skills per turn—usually one to three. A skill is loaded when it earns its place in the task, not because it happens to be installed.
+
+### Why teams choose OMK
+
+- **Control, not lock-in.** Keep providers interchangeable while retaining one execution, evidence, and operator model.
+- **Evidence before completion.** A green-looking response is not a release signal; declared predicates and fresh verification are.
+- **Parallelism with boundaries.** Independent work can run concurrently while owned paths, side effects, and evidence remain explicit.
+- **Extensibility without a fork.** Ship skills, extensions, prompts, and themes as OMK packages instead of teaching every contributor a separate runtime.
+
+The proof standard is operational: evaluate OMK against your own task completion, verification coverage, setup time, and recovery behavior. We do not claim an unmeasured benchmark win over another harness.
+
+## Release v0.90.8
+
+This patch release adds the tool-free GPT-5.6 MoA model, ordered path-safe tool-batch waves, global context-budget controls, and evidence-gated computer-use integrations.
 
 | Area | What changed |
 |------|--------------|
-| Thinking / models | New `ultra` thinking level (GPT-5.6 Sol/Terra via `openai-codex`) and the GPT-5.6 family across OpenAI, Azure, OpenRouter, AI Gateway, and Codex; regenerated model catalog. |
-| Agent loop | Opt-in parallel tool batching: policy-gated `shouldParallelizeToolBatch`, unknown tools stay sequential. |
-| TUI | Bare and mid-message skill autocomplete; vertical cursor movement tracks display cells so wrapped Korean/CJK lines keep the column; narrow-width wide-grapheme wrap guard. |
-| Command safety | `grep`/`rg` pattern arguments after `--` no longer trip `secret.read_path`; real secret-file operands stay gated. |
-| Release infra | npm trusted-publishing identity aligned with the `dmae97/omk` repository rename. |
+| Models | Added `openai-codex/gpt-5.6-moa`: bounded concurrent Sol/Terra analysis with a single Sol synthesis, plus hardened Codex terminal and cancellation handling. |
+| Agent loop | Ordered `partitionToolBatchWaves` preserve safe parallel reads while path conflicts and unknown calls remain sequential. |
+| Context control | Added global `contextBudget.enabled` and `compaction.model`; planner cache selection stays within the remaining tier budget. |
+| Evidence / verification | Correctness Wall fixtureless live OA now requires a bound MCP handler and otherwise stays preview-only; the evidence ledger is tamper-evident. |
+| Computer use | Added a project-local Stagehand extension and `omk-computeruse` skill with explicit operator approval and redacted results. |
+| Release safety | Nested extension `node_modules` are excluded from release staging while extension source and lockfiles remain versioned. |
 
-GitHub-focused release notes live in [.github/RELEASE_NOTES_v0.90.7.md](.github/RELEASE_NOTES_v0.90.7.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](packages/coding-agent/CHANGELOG.md).
+GitHub-focused release notes live in [.github/RELEASE_NOTES_v0.90.8.md](.github/RELEASE_NOTES_v0.90.8.md). The GitHub release workflow also extracts the canonical release body from [packages/coding-agent/CHANGELOG.md](packages/coding-agent/CHANGELOG.md).
 
 ## Share your OSS coding agent sessions
 

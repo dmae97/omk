@@ -110,6 +110,19 @@ export function selectOptionalItem(planned: PlannedItemV2, state: OptionalSelect
 		state.qualityPolicy,
 	);
 	if (chosen.kind === "omit") {
+		const tierRemaining = Math.max(0, tierCeiling - state.tierUsed[planned.item.tier]);
+		const globalFit = cachedCandidates.filter(
+			(candidate) => candidate.kind !== "omit" && candidate.estimatedTokens <= remaining,
+		);
+		if (globalFit.length > 0 && globalFit.every((candidate) => candidate.estimatedTokens > tierRemaining)) {
+			state.diagnostics.push({
+				reason: "tier_ceiling_exceeded",
+				itemId: planned.item.id,
+				detail: `${planned.item.tier} item "${planned.item.id}" needs ${Math.min(
+					...globalFit.map((candidate) => candidate.estimatedTokens),
+				)} tokens with ${tierRemaining} tier tokens remaining`,
+			});
+		}
 		omitItem(planned, state);
 		return state.usedTokens;
 	}

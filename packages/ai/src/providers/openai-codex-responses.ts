@@ -40,6 +40,7 @@ import {
 } from "../utils/diagnostics.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord } from "../utils/headers.ts";
+import { GPT_56_MOA_MODEL_ID, streamOpenAICodexMoa } from "./openai-codex-moa.ts";
 import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
 import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.ts";
 import { buildBaseOptions } from "./simple-options.ts";
@@ -65,6 +66,12 @@ const CODEX_RESPONSE_STATUSES = new Set<CodexResponseStatus>([
 	"cancelled",
 	"queued",
 	"in_progress",
+]);
+const CODEX_TERMINAL_RESPONSE_STATUSES = new Set<CodexResponseStatus>([
+	"completed",
+	"incomplete",
+	"failed",
+	"cancelled",
 ]);
 
 // ============================================================================
@@ -157,11 +164,17 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 			reject(new Error("Request was aborted"));
 			return;
 		}
-		const timeout = setTimeout(resolve, ms);
-		signal?.addEventListener("abort", () => {
+		const cleanup = () => signal?.removeEventListener("abort", onAbort);
+		const timeout = setTimeout(() => {
+			cleanup();
+			resolve();
+		}, ms);
+		const onAbort = () => {
 			clearTimeout(timeout);
+			cleanup();
 			reject(new Error("Request was aborted"));
-		});
+		};
+		signal?.addEventListener("abort", onAbort, { once: true });
 	});
 }
 
@@ -196,6 +209,10 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 	context: Context,
 	options?: OpenAICodexResponsesOptions,
 ): AssistantMessageEventStream => {
+	if (model.provider === "openai-codex" && model.id === GPT_56_MOA_MODEL_ID) {
+		return streamOpenAICodexMoa({ model, context, options, streamConcrete: streamOpenAICodexResponses });
+	}
+
 	const stream = new AssistantMessageEventStream();
 
 	(async () => {
@@ -265,6 +282,9 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 						options,
 					);
 
+					if (output.stopReason === "error") {
+						throw new CodexApiError(output.errorMessage || "Codex response failed");
+					}
 					if (options?.signal?.aborted) {
 						throw new Error("Request was aborted");
 					}
@@ -300,6 +320,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 
 			// Fetch with retry logic for rate limits and transient errors
 			let response: Response | undefined;
+			let responseSignalCleanup: (() => void) | undefined;
 			let lastError: Error | undefined;
 			const maxRetries = options?.maxRetries ?? DEFAULT_MAX_RETRIES;
 
@@ -311,50 +332,62 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				try {
 					const headerTimeout = createSSEHeaderTimeout();
 					const combinedSignal = combineAbortSignals([options?.signal, headerTimeout.signal]);
+					let retainSignalForBody = false;
 					try {
-						response = await fetch(resolveCodexUrl(model.baseUrl), {
-							method: "POST",
-							headers: sseHeaders,
-							body: bodyJson,
-							signal: combinedSignal.signal,
+						try {
+							response = await fetch(resolveCodexUrl(model.baseUrl), {
+								method: "POST",
+								headers: sseHeaders,
+								body: bodyJson,
+								signal: combinedSignal.signal,
+							});
+							headerTimeout.clear();
+						} catch (error) {
+							const timeoutError = headerTimeout.error();
+							throw timeoutError && !options?.signal?.aborted ? timeoutError : error;
+						}
+						try {
+							await options?.onResponse?.(
+								{ status: response.status, headers: headersToRecord(response.headers) },
+								model,
+							);
+						} catch (cause) {
+							throw new CodexProtocolError(cause instanceof Error ? cause.message : String(cause), { cause });
+						}
+
+						if (response.ok) {
+							responseSignalCleanup = combinedSignal.cleanup;
+							retainSignalForBody = true;
+							break;
+						}
+
+						const errorText = await response.text();
+						if (attempt < maxRetries && isRetryableError(response.status, errorText)) {
+							const retryAfterDelayMs = getRetryAfterDelayMs(response.headers);
+							const delayMs =
+								retryAfterDelayMs === undefined
+									? BASE_DELAY_MS * 2 ** attempt
+									: response.status === 429
+										? capRetryDelayMs(retryAfterDelayMs, options)
+										: retryAfterDelayMs;
+
+							await sleep(delayMs, options?.signal);
+							continue;
+						}
+
+						const fakeResponse = new Response(errorText, {
+							status: response.status,
+							statusText: response.statusText,
 						});
-					} catch (error) {
-						const timeoutError = headerTimeout.error();
-						throw timeoutError && !options?.signal?.aborted ? timeoutError : error;
+						const info = await parseErrorResponse(fakeResponse);
+						throw new CodexApiError(info.friendlyMessage || info.message);
 					} finally {
-						combinedSignal.cleanup();
 						headerTimeout.clear();
+						if (!retainSignalForBody) {
+							await response?.body?.cancel().catch(() => {});
+						}
+						if (!retainSignalForBody) combinedSignal.cleanup();
 					}
-					await options?.onResponse?.(
-						{ status: response.status, headers: headersToRecord(response.headers) },
-						model,
-					);
-
-					if (response.ok) {
-						break;
-					}
-
-					const errorText = await response.text();
-					if (attempt < maxRetries && isRetryableError(response.status, errorText)) {
-						const retryAfterDelayMs = getRetryAfterDelayMs(response.headers);
-						const delayMs =
-							retryAfterDelayMs === undefined
-								? BASE_DELAY_MS * 2 ** attempt
-								: response.status === 429
-									? capRetryDelayMs(retryAfterDelayMs, options)
-									: retryAfterDelayMs;
-
-						await sleep(delayMs, options?.signal);
-						continue;
-					}
-
-					// Parse error for friendly message on final attempt or non-retryable error
-					const fakeResponse = new Response(errorText, {
-						status: response.status,
-						statusText: response.statusText,
-					});
-					const info = await parseErrorResponse(fakeResponse);
-					throw new Error(info.friendlyMessage || info.message);
 				} catch (error) {
 					if (error instanceof Error) {
 						if (error.name === "AbortError" || error.message === "Request was aborted") {
@@ -362,7 +395,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 						}
 					}
 					lastError = error instanceof Error ? error : new Error(String(error));
-					// Network errors are retryable
+					if (isCodexNonTransportError(error)) throw lastError;
 					if (attempt < maxRetries && !lastError.message.includes("usage limit")) {
 						const delayMs = BASE_DELAY_MS * 2 ** attempt;
 						await sleep(delayMs, options?.signal);
@@ -372,23 +405,29 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				}
 			}
 
-			if (!response?.ok) {
-				throw lastError ?? new Error("Failed after retries");
+			try {
+				if (!response?.ok) {
+					throw lastError ?? new Error("Failed after retries");
+				}
+				if (!response.body) {
+					throw new Error("No response body");
+				}
+
+				stream.push({ type: "start", partial: output });
+				await processStream(response, output, stream, model, options);
+
+				if (output.stopReason === "error") {
+					throw new CodexApiError(output.errorMessage || "Codex response failed");
+				}
+				if (options?.signal?.aborted) {
+					throw new Error("Request was aborted");
+				}
+
+				stream.push({ type: "done", reason: output.stopReason as "stop" | "length" | "toolUse", message: output });
+				stream.end();
+			} finally {
+				responseSignalCleanup?.();
 			}
-
-			if (!response.body) {
-				throw new Error("No response body");
-			}
-
-			stream.push({ type: "start", partial: output });
-			await processStream(response, output, stream, model, options);
-
-			if (options?.signal?.aborted) {
-				throw new Error("Request was aborted");
-			}
-
-			stream.push({ type: "done", reason: output.stopReason as "stop" | "length" | "toolUse", message: output });
-			stream.end();
 		} catch (error) {
 			for (const block of output.content) {
 				// partialJson is only a streaming scratch buffer; never persist it.
@@ -446,8 +485,6 @@ function buildRequestBody(
 		text: { verbosity: options?.textVerbosity || "low" },
 		include: ["reasoning.encrypted_content"],
 		prompt_cache_key: clampOpenAIPromptCacheKey(options?.sessionId),
-		tool_choice: "auto",
-		parallel_tool_calls: true,
 	};
 
 	if (options?.temperature !== undefined) {
@@ -460,6 +497,8 @@ function buildRequestBody(
 
 	if (context.tools && context.tools.length > 0) {
 		body.tools = convertResponsesTools(context.tools, { strict: null });
+		body.tool_choice = "auto";
+		body.parallel_tool_calls = true;
 	}
 
 	if (options?.reasoningEffort !== undefined) {
@@ -593,23 +632,39 @@ async function* mapCodexEvents(events: AsyncIterable<Record<string, unknown>>): 
 		}
 
 		if (type === "response.failed") {
-			const response = (event as { response?: { error?: { code?: string; message?: string } } }).response;
+			const response = (
+				event as {
+					response?: Record<string, unknown> & { error?: { code?: string; message?: string }; status?: unknown };
+				}
+			).response;
 			const code = response?.error?.code;
 			const message = response?.error?.message;
+			yield {
+				...event,
+				type: "response.completed",
+				response: response ? { ...response, status: normalizeCodexStatus(response.status) ?? "failed" } : response,
+			} as ResponseStreamEvent;
 			throw new CodexApiError(message || "Codex response failed", { code, payload: event });
 		}
 
 		if (type === "response.done" || type === "response.completed" || type === "response.incomplete") {
 			const response = (event as { response?: { status?: unknown } }).response;
-			const normalizedResponse = response
-				? { ...response, status: normalizeCodexStatus(response.status) }
-				: response;
-			yield { ...event, type: "response.completed", response: normalizedResponse } as ResponseStreamEvent;
+			const status = normalizeCodexStatus(response?.status);
+			if (!status || !CODEX_TERMINAL_RESPONSE_STATUSES.has(status)) {
+				yield {
+					...event,
+					type: "response.completed",
+					response: { ...(response ?? {}), status: "failed" },
+				} as ResponseStreamEvent;
+				throw new CodexProtocolError("Invalid Codex response status", { payload: event });
+			}
+			yield { ...event, type: "response.completed", response: { ...response, status } } as ResponseStreamEvent;
 			return;
 		}
 
 		yield event as unknown as ResponseStreamEvent;
 	}
+	throw new CodexProtocolError("Codex stream ended without a terminal event");
 }
 
 function normalizeCodexStatus(status: unknown): CodexResponseStatus | undefined {
@@ -756,10 +811,18 @@ export function getOpenAICodexWebSocketDebugStats(sessionId: string): OpenAICode
 	return stats ? { ...stats } : undefined;
 }
 
+function belongsToSessionFamily(candidate: string, sessionId: string): boolean {
+	return candidate === sessionId || candidate.startsWith(`${sessionId}:moa:`);
+}
+
 export function resetOpenAICodexWebSocketDebugStats(sessionId?: string): void {
 	if (sessionId) {
-		websocketDebugStats.delete(sessionId);
-		websocketSseFallbackSessions.delete(sessionId);
+		for (const key of websocketDebugStats.keys()) {
+			if (belongsToSessionFamily(key, sessionId)) websocketDebugStats.delete(key);
+		}
+		for (const key of websocketSseFallbackSessions) {
+			if (belongsToSessionFamily(key, sessionId)) websocketSseFallbackSessions.delete(key);
+		}
 		return;
 	}
 	websocketDebugStats.clear();
@@ -772,9 +835,11 @@ export function closeOpenAICodexWebSocketSessions(sessionId?: string): void {
 		closeWebSocketSilently(entry.socket, 1000, "debug_close");
 	};
 	if (sessionId) {
-		const entry = websocketSessionCache.get(sessionId);
-		if (entry) closeEntry(entry);
-		websocketSessionCache.delete(sessionId);
+		for (const [key, entry] of websocketSessionCache) {
+			if (!belongsToSessionFamily(key, sessionId)) continue;
+			closeEntry(entry);
+			websocketSessionCache.delete(key);
+		}
 		return;
 	}
 	for (const entry of websocketSessionCache.values()) {
@@ -784,6 +849,7 @@ export function closeOpenAICodexWebSocketSessions(sessionId?: string): void {
 }
 
 registerSessionResourceCleanup(closeOpenAICodexWebSocketSessions);
+registerSessionResourceCleanup(resetOpenAICodexWebSocketDebugStats);
 
 function isWebSocketSseFallbackActive(sessionId: string | undefined): boolean {
 	return sessionId ? websocketSseFallbackSessions.has(sessionId) : false;

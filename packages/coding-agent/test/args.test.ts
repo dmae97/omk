@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import { parseArgs } from "../src/cli/args.ts";
+import { describe, expect, test, vi } from "vitest";
+import { parseArgs, printHelp } from "../src/cli/args.ts";
 
 describe("parseArgs", () => {
 	describe("--version flag", () => {
@@ -30,6 +30,17 @@ describe("parseArgs", () => {
 		test("parses -h shorthand", () => {
 			const result = parseArgs(["-h"]);
 			expect(result.help).toBe(true);
+		});
+
+		test("lists every accepted thinking level", () => {
+			const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+			printHelp();
+
+			expect(log).toHaveBeenCalledWith(
+				expect.stringContaining("Set thinking level: off, minimal, low, medium, high, xhigh, max, ultra"),
+			);
+			log.mockRestore();
 		});
 	});
 
