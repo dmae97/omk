@@ -1,0 +1,72 @@
+{
+  "target": "https://isens-erp.vercel.app",
+  "duration_s": 174.9631233215332,
+  "total_requests": 19939,
+  "success": 19937,
+  "failures": 0,
+  "avg_rps": 113.96115719400885,
+  "proxies_used": 0,
+  "endpoints": {
+    "login": {
+      "count": 3020,
+      "ok": 3020,
+      "fail": 0,
+      "total_ms": 62420.2344417572
+    },
+    "home": {
+      "count": 4920,
+      "ok": 4920,
+      "fail": 0,
+      "total_ms": 102468.31798553467
+    },
+    "health": {
+      "count": 2037,
+      "ok": 2037,
+      "fail": 0,
+      "total_ms": 37267.04287528992
+    },
+    "api_v1": {
+      "count": 2038,
+      "ok": 2038,
+      "fail": 0,
+      "total_ms": 38268.1519985199
+    },
+    "api_auth": {
+      "count": 2050,
+      "ok": 2050,
+      "fail": 0,
+      "total_ms": 41935.67490577698
+    },
+    "api": {
+      "count": 2990,
+      "ok": 2990,
+      "fail": 0,
+      "total_ms": 58809.340476989746
+    },
+    "robots": {
+      "count": 362,
+      "ok": 362,
+      "fail": 0,
+      "total_ms": 7186.203241348267
+    },
+    "api_users": {
+      "count": 950,
+      "ok": 950,
+      "fail": 0,
+      "total_ms": 19066.044092178345
+    },
+    "asset_svg": {
+      "count": 997,
+      "ok": 997,
+      "fail": 0,
+      "total_ms": 18125.57554244995
+    },
+    "manifest": {
+      "count": 573,
+      "ok": 573,
+      "fail": 0,
+      "total_ms": 12673.941612243652
+    }
+  },
+  "timestamp": "2026-07-19T20:56:53"
+}

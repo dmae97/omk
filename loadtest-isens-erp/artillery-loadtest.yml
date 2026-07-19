@@ -1,0 +1,32 @@
+config:
+  target: "{{ $env.TARGET_URL || 'https://isens-erp.vercel.app' }}"
+  http:
+    timeout: 10
+  phases:
+    - duration: 60
+      arrivalRate: 10
+      name: "Warm up"
+    - duration: 180
+      arrivalRate: 50
+      name: "Ramp up"
+    - duration: 120
+      arrivalRate: 100
+      name: "Peak load"
+    - duration: 60
+      arrivalRate: 0
+      name: "Cool down"
+  plugins:
+    expect: {}
+  ensure:
+    thresholds:
+      - http.response_time.percentile.95: 2000
+      - http.error_rate: 0.10
+scenarios:
+  - name: "Homepage"
+    flow:
+      - get:
+          url: "/"
+          expect:
+            - statusCode: 200
+            - responseTime: 2000
+      - think: 2

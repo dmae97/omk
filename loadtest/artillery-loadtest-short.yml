@@ -1,0 +1,85 @@
+# Artillery load test (shortened to fit 5min tool timeout)
+config:
+  target: "https://isens-erp.vercel.app"
+  
+  phases:
+    - name: "warmup"
+      duration: 20
+      arrivalRate: 5
+      rampTo: 20
+    - name: "ramp"
+      duration: 45
+      arrivalRate: 20
+      rampTo: 80
+    - name: "sustain"
+      duration: 90
+      arrivalRate: 80
+    - name: "spike"
+      duration: 45
+      arrivalRate: 80
+      rampTo: 200
+    - name: "max"
+      duration: 60
+      arrivalRate: 200
+  
+  http:
+    timeout: 15
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      Accept-Language: "ko-KR,ko;q=0.9,en-US;q=0.8"
+      Accept-Encoding: "gzip, deflate, br"
+      Cache-Control: "no-cache"
+  
+  processor: "./artillery-processor.cjs"
+  
+  plugins:
+    ensure: {}
+    expect: {}
+    metrics-by-endpoint: {}
+
+scenarios:
+  - name: "browse_home"
+    weight: 30
+    flow:
+      - get:
+          url: "/"
+  
+  - name: "browse_login"
+    weight: 15
+    flow:
+      - get:
+          url: "/login"
+  
+  - name: "api_requests"
+    weight: 25
+    flow:
+      - get:
+          url: "/api"
+      - think: 0.5
+      - get:
+          url: "/api/v1"
+  
+  - name: "health_checks"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/health"
+  
+  - name: "assets"
+    weight: 10
+    flow:
+      - get:
+          url: "/favicon.svg"
+      - think: 0.3
+      - get:
+          url: "/manifest.webmanifest"
+  
+  - name: "auth_probe"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/auth"
+      - think: 0.5
+      - get:
+          url: "/api/users"

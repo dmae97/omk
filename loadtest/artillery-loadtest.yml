@@ -1,0 +1,127 @@
+# Artillery load test for isens-erp.vercel.app
+# Run: artillery run -o results/artillery-results.json artillery-loadtest.yml
+config:
+  target: "https://isens-erp.vercel.app"
+  
+  phases:
+    # Phase 1: Warm up
+    - name: "warmup"
+      duration: 30
+      arrivalRate: 5
+      rampTo: 20
+    
+    # Phase 2: Ramp load  
+    - name: "ramp"
+      duration: 60
+      arrivalRate: 20
+      rampTo: 80
+    
+    # Phase 3: Sustained load
+    - name: "sustain"
+      duration: 120
+      arrivalRate: 80
+    
+    # Phase 4: Spike
+    - name: "spike"
+      duration: 60
+      arrivalRate: 80
+      rampTo: 200
+    
+    # Phase 5: Max load
+    - name: "max"
+      duration: 60
+      arrivalRate: 200
+  
+  # HTTP settings
+  http:
+    timeout: 15
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      Accept-Language: "ko-KR,ko;q=0.9,en-US;q=0.8"
+      Accept-Encoding: "gzip, deflate, br"
+      Cache-Control: "no-cache"
+  
+  # Proxy configuration
+  processor: "./artillery-processor.cjs"
+  
+  # Plugin settings
+  plugins:
+    ensure: {}
+    expect: {}
+    metrics-by-endpoint: {}
+  
+  # Variables
+  variables:
+    endpoints:
+      - "/"
+      - "/login"
+      - "/api"
+      - "/api/v1"
+      - "/api/auth"
+      - "/api/users" 
+      - "/api/health"
+      - "/favicon.svg"
+      - "/robots.txt"
+      - "/manifest.webmanifest"
+
+# ── Scenarios ────────────────────────────────────────────────
+scenarios:
+  # Main page browsing
+  - name: "browse_home"
+    weight: 30
+    flow:
+      - get:
+          url: "/"
+          capture:
+            - json: "$.status"
+              as: "home_status"
+  
+  # Login page
+  - name: "browse_login"
+    weight: 15
+    flow:
+      - get:
+          url: "/login"
+  
+  # API endpoints
+  - name: "api_requests"
+    weight: 25
+    flow:
+      - get:
+          url: "/api"
+      - think: 0.5
+      - get:
+          url: "/api/v1"
+  
+  # Health checks
+  - name: "health_checks"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/health"
+  
+  # Asset loading
+  - name: "assets"
+    weight: 10
+    flow:
+      - get:
+          url: "/favicon.svg"
+      - think: 0.3
+      - get:
+          url: "/manifest.webmanifest"
+  
+  # Auth endpoints
+  - name: "auth_probe"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/auth"
+      - think: 0.5
+      - get:
+          url: "/api/users"
+
+# ── Reporting ────────────────────────────────────────────────
+summary:
+  report: true
+  output: results/artillery-summary.json
