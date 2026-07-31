@@ -2403,6 +2403,12 @@ export class AgentSession {
 				}
 			}
 
+			if (this._compactionAbortController !== undefined) {
+				throw new Error(
+					"Cannot submit a prompt while compaction is in progress. Wait for compaction to finish and retry.",
+				);
+			}
+
 			// Emit input event for extension interception (before skill/template expansion)
 			let currentImages = options?.images;
 			if (this._extensionRunner.hasHandlers("input")) {
