@@ -26,4 +26,14 @@ describe("reverse-skill canonical module (omk-agent-core public surface)", () =>
 		expect(decision.primary?.route.id).toBe("gitreverse");
 		expect(REVERSE_SKILL_ROUTES.some((route) => route.id === "gitreverse")).toBe(true);
 	});
+
+	it("exposes omk-reverse-skill compatibility routes on the public surface", () => {
+		const ids = REVERSE_SKILL_ROUTES.map((route) => route.id);
+		expect(ids).toEqual(
+			expect.arrayContaining(["api-spec-recover", "api-client-gen", "protocol-re", "ghidra-ida-re"]),
+		);
+		expect(
+			REVERSE_SKILL_ROUTES.filter((route) => route.skillHints.includes("omk-reverse-skill")).length,
+		).toBeGreaterThanOrEqual(4);
+	});
 });

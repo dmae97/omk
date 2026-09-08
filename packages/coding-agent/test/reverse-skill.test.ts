@@ -102,4 +102,56 @@ describe("reverse skill generation", () => {
 		expect(route?.risk).toBe("passive-analysis");
 		expect(route?.mcpHints).toEqual(expect.arrayContaining(["github", "filesystem"]));
 	});
+
+	it("routes mitmproxy/HAR OpenAPI recovery through omk-reverse-skill", () => {
+		const decision = routeReverseSkill({
+			query: "Convert this mitmproxy capture to an OpenAPI 3.0 specification with mitmproxy2swagger",
+		});
+		const route = REVERSE_SKILL_ROUTES.find((candidate) => candidate.id === "api-spec-recover");
+
+		expect(decision.unmatched).toBe(false);
+		expect(decision.primary?.route.id).toBe("api-spec-recover");
+		expect(route?.skillPath).toContain("omk-reverse-skill");
+		expect(route?.skillHints).toEqual(expect.arrayContaining(["omk-reverse-skill"]));
+	});
+
+	it("routes HAR-to-Python API client generation through omk-reverse-skill", () => {
+		const decision = routeReverseSkill({
+			query: "Capture HAR with Playwright and generate a Python API client from the recorded traffic",
+		});
+
+		expect(decision.unmatched).toBe(false);
+		expect(decision.primary?.route.id).toBe("api-client-gen");
+		expect(decision.primary?.route.skillPath).toContain("omk-reverse-skill");
+	});
+
+	it("routes pcap/protocol dissection through omk-reverse-skill", () => {
+		const decision = routeReverseSkill({
+			query: "Dissect this proprietary binary protocol from a pcap with tshark and scapy",
+		});
+
+		expect(decision.unmatched).toBe(false);
+		expect(decision.primary?.route.id).toBe("protocol-re");
+		expect(decision.primary?.route.skillPath).toContain("omk-reverse-skill");
+	});
+
+	it("keeps APK Frida work on apk-reverse but points at omk-reverse-skill", () => {
+		const decision = routeReverseSkill({
+			query: "Decompile this Android APK, inspect smali, and prepare a Frida hook for SSL pinning validation",
+		});
+
+		expect(decision.primary?.route.id).toBe("apk-reverse");
+		expect(decision.primary?.route.skillPath).toContain("omk-reverse-skill");
+		expect(decision.primary?.route.skillHints).toEqual(expect.arrayContaining(["omk-reverse-skill"]));
+	});
+
+	it("routes Ghidra headless / IDAPython work through omk-reverse-skill", () => {
+		const decision = routeReverseSkill({
+			query: "Run Ghidra analyzeHeadless on this ELF and export IDAPython-ready function signatures",
+		});
+
+		expect(decision.unmatched).toBe(false);
+		expect(decision.primary?.route.id).toBe("ghidra-ida-re");
+		expect(decision.primary?.route.skillPath).toContain("omk-reverse-skill");
+	});
 });
