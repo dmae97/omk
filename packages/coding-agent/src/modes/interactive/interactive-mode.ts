@@ -118,6 +118,7 @@ import { parseGitUrl } from "../../utils/git.ts";
 import { openBrowser } from "../../utils/open-browser.ts";
 import { getCwdRelativePath } from "../../utils/paths.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
+import { terminalMarkdownLinks } from "../../utils/terminal-links.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
 import { checkForNewOmkVersion, type LatestOmkRelease } from "../../utils/version-check.ts";
 import { ArminComponent } from "./components/armin.ts";
@@ -322,6 +323,47 @@ function hasDefaultModelProvider(providerId: string): providerId is keyof typeof
 const BEDROCK_PROVIDER_ID = "amazon-bedrock";
 
 const BUILT_IN_MODEL_PROVIDERS = new Set<string>(getProviders());
+
+/**
+ * Resolve a `/login <provider>` argument to a login option.
+ *
+ * Matches (in order): exact provider id (case-insensitive), display-name
+ * substring (case-insensitive), then unambiguous prefix match on id.
+ * Returns undefined when nothing matches, or when a display-name/prefix
+ * match is ambiguous.
+ */
+export function resolveLoginProviderArg(
+	arg: string,
+	options: ReadonlyArray<{ id: string; name: string; authType: "oauth" | "api_key" }>,
+): { id: string; name: string; authType: "oauth" | "api_key" } | undefined {
+	const query = arg.trim().toLowerCase();
+	if (!query) return undefined;
+	const exactMatches = options.filter((option) => option.id.toLowerCase() === query);
+	// Prefer the oauth (subscription) entry when a provider id appears in both
+	// lists (e.g. meta: "Muse Code (subscription)" oauth + Model API key).
+	if (exactMatches.length > 0) {
+		return exactMatches.find((option) => option.authType === "oauth") ?? exactMatches[0];
+	}
+	const byName = options.filter((option) => option.name.toLowerCase().includes(query));
+	if (byName.length === 1) return byName[0];
+	if (byName.length > 1) return undefined;
+	const byPrefix = options.filter((option) => option.id.toLowerCase().startsWith(query));
+	return byPrefix.length === 1 ? byPrefix[0] : undefined;
+}
+
+/**
+ * Display name for the API-key login row when the provider id is shared
+ * with an oauth entry. `resolvedName` is what
+ * `ModelRegistry.getProviderDisplayName()` returned (the oauth name wins
+ * there), while `BUILT_IN_PROVIDER_DISPLAY_NAMES` holds the API-key-side
+ * label (e.g. meta → "Meta Model API").
+ */
+export function getApiKeyLoginDisplayName(providerId: string, resolvedName: string): string {
+	const apiKeyName = BUILT_IN_PROVIDER_DISPLAY_NAMES[providerId];
+	if (apiKeyName && apiKeyName !== resolvedName) return apiKeyName;
+	if (resolvedName !== providerId) return `${resolvedName} (API key)`;
+	return providerId;
+}
 
 export function isApiKeyLoginProvider(
 	providerId: string,
@@ -635,6 +677,46 @@ export class InteractiveMode {
 						description,
 					};
 				});
+			};
+		}
+
+		const loginCommand = slashCommands.find((command) => command.name === "login");
+		if (loginCommand) {
+			loginCommand.argumentHint = "[provider]";
+			loginCommand.getArgumentCompletions = (prefix: string): AutocompleteItem[] | null => {
+				const options = this.getLoginProviderOptions();
+				// Dedupe ids that appear as both oauth and api_key (e.g.
+				// meta): keep the oauth (subscription) entry.
+				const byId = new Map<string, (typeof options)[number]>();
+				for (const option of options) {
+					const existing = byId.get(option.id);
+					if (!existing || (existing.authType !== "oauth" && option.authType === "oauth")) {
+						byId.set(option.id, option);
+					}
+				}
+				const unique = [...byId.values()];
+				const filtered = fuzzyFilter(unique, prefix.trimStart(), (option) => `${option.id} ${option.name}`);
+				if (filtered.length === 0) return null;
+				return filtered.map((option) => ({
+					value: option.id,
+					label: option.id,
+					description: option.name,
+				}));
+			};
+		}
+
+		const logoutCommand = slashCommands.find((command) => command.name === "logout");
+		if (logoutCommand) {
+			logoutCommand.argumentHint = "[provider]";
+			logoutCommand.getArgumentCompletions = (prefix: string): AutocompleteItem[] | null => {
+				const options = this.getLogoutProviderOptions();
+				const filtered = fuzzyFilter(options, prefix.trimStart(), (option) => `${option.id} ${option.name}`);
+				if (filtered.length === 0) return null;
+				return filtered.map((option) => ({
+					value: option.id,
+					label: option.id,
+					description: option.name,
+				}));
 			};
 		}
 
@@ -1193,6 +1275,7 @@ export class InteractiveMode {
 	private getMarkdownThemeWithSettings(): MarkdownTheme {
 		return {
 			...getMarkdownTheme(),
+			...terminalMarkdownLinks(this.sessionManager.getCwd()),
 			codeBlockIndent: this.settingsManager.getCodeBlockIndent(),
 		};
 	}
@@ -2833,7 +2916,7 @@ export class InteractiveMode {
 			}
 		};
 
-		// Handle clipboard image paste (triggered on Ctrl+V)
+		// Handle the configured clipboard image shortcut (Ctrl+V or Alt+V).
 		this.defaultEditor.onPasteImage = () => {
 			this.handleClipboardImagePaste();
 		};
@@ -2843,17 +2926,15 @@ export class InteractiveMode {
 		try {
 			const image = await readClipboardImage();
 			if (!image) {
+				this.showStatus(
+					"No image in clipboard. Copy a screenshot, then press Alt+V (or Ctrl+V if forwarded by your terminal).",
+				);
 				return;
 			}
-			let attachment: PromptImageAttachment;
-			try {
-				attachment = this.attachmentStore.put(new Uint8Array(image.bytes), "clipboard");
-			} catch (error) {
-				this.showWarning(error instanceof Error ? error.message : String(error));
-				return;
-			}
+			const attachment = this.attachmentStore.put(new Uint8Array(image.bytes), "clipboard");
 			this.draftAttachmentIds.push(attachment.id);
 			this.refreshAttachmentStrip();
+			this.showStatus("Image attached to the prompt. Submit when ready.");
 		} catch (error) {
 			this.showWarning(`Clipboard paste failed: ${error instanceof Error ? error.message : String(error)}`);
 		}
@@ -3058,13 +3139,23 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
-			if (text === "/login") {
-				this.showOAuthSelector("login");
+			if (text === "/login" || text.startsWith("/login ")) {
+				const providerArg = text.startsWith("/login ") ? text.slice("/login".length).trim() : undefined;
+				if (providerArg) {
+					await this.handleLoginProviderArg(providerArg);
+				} else {
+					this.showOAuthSelector("login");
+				}
 				this.editor.setText("");
 				return;
 			}
-			if (text === "/logout") {
-				this.showOAuthSelector("logout");
+			if (text === "/logout" || text.startsWith("/logout ")) {
+				const providerArg = text.startsWith("/logout ") ? text.slice("/logout".length).trim() : undefined;
+				if (providerArg) {
+					await this.handleLogoutProviderArg(providerArg);
+				} else {
+					this.showOAuthSelector("logout");
+				}
 				this.editor.setText("");
 				return;
 			}
@@ -5256,15 +5347,23 @@ export class InteractiveMode {
 			if (!isApiKeyLoginProvider(providerId, oauthProviderIds)) {
 				continue;
 			}
+			const displayName = this.session.modelRegistry.getProviderDisplayName(providerId);
 			options.push({
 				id: providerId,
-				name: this.session.modelRegistry.getProviderDisplayName(providerId),
+				// The shared "meta" id resolves its display name to the oauth
+				// entry, so label the API-key row distinctly.
+				name:
+					oauthProviderIds.has(providerId) && displayName !== providerId
+						? getApiKeyLoginDisplayName(providerId, displayName)
+						: displayName,
 				authType: "api_key",
 			});
 		}
 
 		const filteredOptions = authType ? options.filter((option) => option.authType === authType) : options;
-		return filteredOptions.sort((a, b) => a.name.localeCompare(b.name));
+		// Stable order: by name, then oauth before api_key so a shared id
+		// (e.g. meta) lists the subscription entry first.
+		return filteredOptions.sort((a, b) => a.name.localeCompare(b.name) || a.authType.localeCompare(b.authType));
 	}
 
 	private getLogoutProviderOptions(): AuthSelectorProvider[] {
@@ -5286,6 +5385,42 @@ export class InteractiveMode {
 		return options.sort((a, b) => a.name.localeCompare(b.name));
 	}
 
+	private async handleLogoutProviderArg(providerArg: string): Promise<void> {
+		const providerOptions = this.getLogoutProviderOptions();
+		const match = resolveLoginProviderArg(providerArg, providerOptions);
+		if (!match) {
+			const hint =
+				providerOptions.length > 0
+					? "Run /logout and pick from the list of stored credentials."
+					: "No stored credentials to remove.";
+			this.showWarning(`Unknown provider "${providerArg}". ${hint}`);
+			return;
+		}
+
+		await this.logoutProvider(match);
+	}
+
+	private async logoutProvider(providerOption: AuthSelectorProvider): Promise<void> {
+		try {
+			const oauthAccountCount = this.session.modelRegistry.authStorage.getOAuthAccountCount(providerOption.id);
+			this.session.modelRegistry.authStorage.logout(providerOption.id);
+			this.session.modelRegistry.refresh();
+			await this.updateAvailableProviderCount();
+			let message: string;
+			if (providerOption.authType === "oauth") {
+				message =
+					oauthAccountCount > 1
+						? `Logged out of ${providerOption.name}. Removed ${oauthAccountCount} subscription accounts.`
+						: `Logged out of ${providerOption.name}`;
+			} else {
+				message = `Removed stored API key for ${providerOption.name}. Environment variables and models.json config are unchanged.`;
+			}
+			this.showStatus(message);
+		} catch (error: unknown) {
+			this.showError(`Logout failed: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
 	private showLoginAuthTypeSelector(): void {
 		const subscriptionLabel = "Use a subscription";
 		const apiKeyLabel = "Use an API key";
@@ -5305,6 +5440,35 @@ export class InteractiveMode {
 			);
 			return { component: selector, focus: selector };
 		});
+	}
+
+	private async handleLoginProviderArg(providerArg: string): Promise<void> {
+		const providerOptions = this.getLoginProviderOptions();
+		const match = resolveLoginProviderArg(providerArg, providerOptions);
+		if (!match) {
+			this.showWarning(
+				`Unknown provider "${providerArg}". Run /login and pick from the list, or check /model for provider ids.`,
+			);
+			return;
+		}
+
+		await this.startLoginForProvider(match);
+	}
+
+	private async startLoginForProvider(providerOption: AuthSelectorProvider): Promise<void> {
+		if (providerOption.authType === "oauth") {
+			const authStorage = this.session.modelRegistry.authStorage;
+			const accounts = authStorage.listOAuthAccounts(providerOption.id);
+			if (accounts.length > 0) {
+				this.showOAuthAccountSelector(providerOption);
+			} else {
+				await this.showLoginDialog(providerOption.id, providerOption.name);
+			}
+		} else if (providerOption.id === BEDROCK_PROVIDER_ID) {
+			this.showBedrockSetupDialog(providerOption.id, providerOption.name);
+		} else {
+			await this.showApiKeyLoginDialog(providerOption.id, providerOption.name);
+		}
 	}
 
 	private showLoginProviderSelector(authType: "oauth" | "api_key"): void {
@@ -5329,18 +5493,7 @@ export class InteractiveMode {
 						return;
 					}
 
-					if (providerOption.authType === "oauth") {
-						const accounts = this.session.modelRegistry.authStorage.listOAuthAccounts(providerOption.id);
-						if (accounts.length > 0) {
-							this.showOAuthAccountSelector(providerOption);
-						} else {
-							await this.showLoginDialog(providerOption.id, providerOption.name);
-						}
-					} else if (providerOption.id === BEDROCK_PROVIDER_ID) {
-						this.showBedrockSetupDialog(providerOption.id, providerOption.name);
-					} else {
-						await this.showApiKeyLoginDialog(providerOption.id, providerOption.name);
-					}
+					await this.startLoginForProvider(providerOption);
 				},
 				() => {
 					done();
@@ -5419,26 +5572,7 @@ export class InteractiveMode {
 						return;
 					}
 
-					try {
-						const oauthAccountCount = this.session.modelRegistry.authStorage.getOAuthAccountCount(
-							providerOption.id,
-						);
-						this.session.modelRegistry.authStorage.logout(providerOption.id);
-						this.session.modelRegistry.refresh();
-						await this.updateAvailableProviderCount();
-						let message: string;
-						if (providerOption.authType === "oauth") {
-							message =
-								oauthAccountCount > 1
-									? `Logged out of ${providerOption.name}. Removed ${oauthAccountCount} subscription accounts.`
-									: `Logged out of ${providerOption.name}`;
-						} else {
-							message = `Removed stored API key for ${providerOption.name}. Environment variables and models.json config are unchanged.`;
-						}
-						this.showStatus(message);
-					} catch (error: unknown) {
-						this.showError(`Logout failed: ${error instanceof Error ? error.message : String(error)}`);
-					}
+					await this.logoutProvider(providerOption);
 				},
 				() => {
 					done();
