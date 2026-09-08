@@ -154,6 +154,10 @@ See [Compaction](https://github.com/dmae97/omk/blob/main/packages/coding-agent/d
 
 ### Context Files
 
+Run `omk init --global --dry-run` to preview portable user instructions, then
+`omk init --global` to create missing files without overwriting existing context or
+settings. See [User context setup](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/context-files.md).
+
 OMK discovers project instructions such as `AGENTS.md` from the current directory and parent directories. Use `--no-context-files` when a clean session must not load project context.
 
 ### Prompt Caching
@@ -217,6 +221,11 @@ tests said before and after. Its free Starter tier is self-hosted and runs on
 your own machine; a bring-your-own model key is required on every tier.
 
 **[Review AdaptOrch plans →](https://adaptorch.com/?utm_source=npm&utm_medium=readme&utm_campaign=omk#pricing)** · [claim boundary](https://adaptorch.com/claim-boundary?utm_source=npm&utm_medium=readme&utm_campaign=omk)
+
+For signup, plan comparison, or team/private-runner contact links without an API
+key or network request, run `omk doctor adaptorch --links` (add `--json` for
+structured output). See the [onboarding guide](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/adaptorch-onboarding.md).
+The command only prints links; it never creates an account, uploads code, or starts a run.
 
 AdaptOrch is a separate proprietary product and is not bundled with OMK. Its
 published claim boundary states that it does **not** prove semantic correctness

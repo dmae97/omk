@@ -135,6 +135,8 @@ fails, remove the material rather than widening the guard.
 
 This repository can carry a generated `openwiki/` evidence index. It is optional just-in-time context, not required startup reading, and it may be absent — a scheduled workflow regenerates it.
 
+With `contextBudget.enabled` and `contextBudget.openwiki` both set, a session offers the corpus to the prompt budget as low-priority `evidence` candidates ranked against each turn's query; the default is off, and admission mirrors `scripts/check-openwiki.mjs` (a stale corpus contributes titles only, an unreviewed interrupted one contributes nothing). This does not change the rule below: a page is a lead to verify against source, never a claim to repeat.
+
 - Treat source code and tests as authoritative. A brief's unknowns and review items are verification gaps, not automatic requirements.
 - Prefer the narrowest quiet validation that proves the changed behavior. Preserve complete failure output.
 - Do not treat an `interrupted` corpus as context unless `openwiki/.manual-review.json` binds a review to the current corpus digest; `scripts/check-openwiki.mjs` enforces this.

@@ -1,6 +1,6 @@
 # Public Skills
 
-OMK currently publishes **29 project-local skills** in this repository under [`.omk/skills`](.omk/skills). When OMK runs from a repository checkout, it discovers these skills automatically and loads them on demand.
+OMK currently publishes **30 project-local skills** in this repository under [`.omk/skills`](.omk/skills). When OMK runs from a repository checkout, it discovers these skills automatically and loads them on demand.
 
 These repository skills are **not bundled into the `open-multi-agent-kit` npm package**. The package publishes only the paths declared in [`packages/coding-agent/package.json`](packages/coding-agent/package.json). See the [skills documentation](packages/coding-agent/docs/skills.md) for discovery rules and packaging your own skills.
 
@@ -30,6 +30,7 @@ Invoke any available skill with `!skill:<name>` or `/skill:<name>`. `caveman` is
 | Skill | Purpose |
 | --- | --- |
 | [`gitreverse`](.omk/skills/gitreverse/SKILL.md) | Turn a public GitHub repository into one conversational rebuild-from-scratch prompt grounded in repo evidence. |
+| [`context7-mcp`](.omk/skills/context7-mcp/SKILL.md) | Fetch current library docs through the `context7` MCP preset with a three-call cap, an explicit unavailable block, and a TTL/ETag disk cache (`scripts/lib/doc-fetch-cache.sh`). |
 
 ## Ponytail
 
@@ -62,10 +63,10 @@ Invoke any available skill with `!skill:<name>` or `/skill:<name>`. `caveman` is
 
 ## Distribution and provenance
 
-- **Public repository:** all 29 skills above are tracked in Git.
+- **Public repository:** all 30 skills above are tracked in Git.
 - **Not listed:** `system-prompts-leaks` and `omk-godmod` are machine-local research corpora that `.gitignore` marks "never version or publish". They were advertised here while shipping in no commit, so every link was a 404 for anyone but their author.
 - **Repository checkout:** OMK discovers them as project-local skills.
 - **npm package:** none of these root-level `.omk/skills` files are currently included in `open-multi-agent-kit`.
-- **Vendored content:** [`taste-skill`](.omk/skills/taste-skill/SOURCE.md), [`caveman`](.omk/skills/caveman/SOURCE.md), [`ponytail`](.omk/skills/ponytail/SKILL.md), and [`clone-website`](.omk/skills/clone-website/LICENSE-THIRD-PARTY) retain their source and license notices.
+- **Vendored content:** [`taste-skill`](.omk/skills/taste-skill/SOURCE.md), [`caveman`](.omk/skills/caveman/SOURCE.md), [`ponytail`](.omk/skills/ponytail/SKILL.md), [`clone-website`](.omk/skills/clone-website/LICENSE-THIRD-PARTY), and [`context7-mcp`](.omk/skills/context7-mcp/LICENSE-THIRD-PARTY) retain their source and license notices.
 - **Derived, not vendored:** [`omk-higgsfield`](.omk/skills/omk-higgsfield/SOURCE.md) is original prose pinned to an upstream commit; it copies no upstream file.
 - **Excluded from this inventory:** machine-local skills, test fixtures, examples, scratch data, goal snapshots, and worktrees.
