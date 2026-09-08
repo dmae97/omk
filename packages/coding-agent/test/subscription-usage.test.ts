@@ -63,6 +63,7 @@ describe("subscription usage providers", () => {
 		expect(getSubscriptionUsageSource("zai-coding-cn")?.label).toBe("GLM");
 		expect(getSubscriptionUsageSource("grok-oauth-proxy")).toBeUndefined();
 		expect(getSubscriptionUsageSource("xai")?.label).toBe("GROK");
+		expect(getSubscriptionUsageSource("meta")?.label).toBe("META");
 		expect(getSubscriptionUsageSource("openai")).toBeUndefined();
 		expect(getSubscriptionUsageSource("moonshotai")).toBeUndefined();
 	});
@@ -82,12 +83,14 @@ describe("subscription usage providers", () => {
 		).toBe(true);
 		expect(supportsSubscriptionUsage(session("xai", { oauthProviders: ["xai"] }) as never)).toBe(true);
 		expect(supportsSubscriptionUsage(session("xai", { configuredProviders: ["xai"] }) as never)).toBe(false);
+		expect(supportsSubscriptionUsage(session("meta", { oauthProviders: ["meta"] }) as never)).toBe(true);
+		expect(supportsSubscriptionUsage(session("meta", { configuredProviders: ["meta"] }) as never)).toBe(false);
 		expect(supportsSubscriptionUsage(session("openai", { configuredProviders: ["openai"] }) as never)).toBe(false);
 	});
 
 	it("lists every configured quota group with the active provider first", () => {
 		const configured = session("anthropic", {
-			oauthProviders: ["openai-codex", "anthropic", "xai"],
+			oauthProviders: ["openai-codex", "anthropic", "xai", "meta"],
 			configuredProviders: ["kimi-coding", "zai", "modelstudio-maas"],
 		});
 		expect(getConfiguredSubscriptionUsageProviders(configured as never)).toEqual([
@@ -97,6 +100,7 @@ describe("subscription usage providers", () => {
 			"zai",
 			"modelstudio-maas",
 			"xai",
+			"meta",
 		]);
 	});
 

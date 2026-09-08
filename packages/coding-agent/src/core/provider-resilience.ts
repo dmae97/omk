@@ -20,7 +20,7 @@ export const NO_SAFETY_FAILOVER_MODEL_RE = /(?:claude-)?(?:fable|opus|sonnet)/i;
 /** Default failover chain when a sticky safety model refuses a turn. */
 export const DEFAULT_SAFETY_FAILOVER_CANDIDATES: readonly FailoverCandidate[] = [
 	{ provider: "kimi-coding", id: "k3" },
-	{ provider: "modelstudio-maas", id: "qwen3.8-max-preview" },
+	{ provider: "modelstudio-maas", id: "qwen3.8-max" },
 	{ provider: "xai", id: "grok-4.5" },
 	{ provider: "deepseek", id: "deepseek-v4-pro" },
 	{ provider: "deepseek", id: "deepseek-v4-flash" },
@@ -98,6 +98,18 @@ export function isClaudeCodeVersionTooOldMessage(text: string | undefined): bool
 	);
 }
 
+/**
+ * Codex HTTP 400 when a ChatGPT-account OAuth session asks for a model the
+ * account catalog does not serve (`gpt-6-astra` during the 2026-09-04 rollout).
+ * Permanent for this login: same-model retry, transcript sanitize, and /new
+ * session all re-send the same slug and get the same 400. Switch model or use
+ * an API-key route that has the model.
+ */
+export function isCodexChatgptAccountUnsupportedModelMessage(text: string | undefined): boolean {
+	if (!text) return false;
+	return /model is not supported when using Codex with a ChatGPT account/i.test(text);
+}
+
 /** Orphan tool results / Kimi-K3 protocol shape errors that heal after sanitize+retry. */
 export function isOrphanToolCallIdError(text: string | undefined): boolean {
 	if (!text) return false;
@@ -173,7 +185,11 @@ export function isTransientProviderErrorMessage(text: string | undefined): boole
 	// pattern below treats as transient, but a stale client version never heals
 	// by retrying.
 	if (isClaudeCodeVersionTooOldMessage(text)) return false;
-	return /overloaded|provider.?returned.?error|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|internal.?error|network.?error|connection.?error|connection.?refused|connection.?lost|websocket.?closed|websocket.?error|other side closed|fetch failed|upstream.?connect|reset before headers|socket hang up|ended without|stream ended before message_stop|http2 request did not get a response|timed? out|timeout|\bterminated\b|retry delay|content\/safety stop|stop_reason\s*=\s*(refusal|sensitive)|safety stop|tool_call_id\s+is\s+not\s+found|tool_call_id\s+not\s+found|invalid_request_error|json error injected into sse stream|injected into sse/i.test(
+	if (isCodexChatgptAccountUnsupportedModelMessage(text)) return false;
+	// `at capacity|high demand`: xAI serves overload as HTTP 429 whose body carries
+	// no status or limit token, so the message-level classifier misses it and the
+	// turn never auto-retries (observed 2026-09-03, xai/grok-4.6).
+	return /overloaded|at capacity|high demand|provider.?returned.?error|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|internal.?error|network.?error|connection.?error|connection.?refused|connection.?lost|websocket.?closed|websocket.?error|other side closed|fetch failed|upstream.?connect|reset before headers|socket hang up|ended without|stream ended before message_stop|http2 request did not get a response|timed? out|timeout|\bterminated\b|retry delay|content\/safety stop|stop_reason\s*=\s*(refusal|sensitive)|safety stop|tool_call_id\s+is\s+not\s+found|tool_call_id\s+not\s+found|invalid_request_error|json error injected into sse stream|injected into sse/i.test(
 		text,
 	);
 }
@@ -239,7 +255,7 @@ export function pickFailoverCandidate(
 export function stickySafetyBlockMessage(modelId: string, provider: string): string {
 	return (
 		`Blocked sticky safety model ${provider}/${modelId} (providerResilience.blockStickySafetyModels). ` +
-		`Use kimi-coding/k3, modelstudio-maas/qwen3.8-max-preview, grok-4.5, or deepseek; ` +
+		`Use kimi-coding/k3, modelstudio-maas/qwen3.8-max, grok-4.5, or deepseek; ` +
 		`or set providerResilience.blockStickySafetyModels=false.`
 	);
 }

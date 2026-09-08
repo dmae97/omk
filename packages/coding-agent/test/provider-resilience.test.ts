@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	DEFAULT_SAFETY_FAILOVER_CANDIDATES,
 	isClaudeCodeVersionTooOldMessage,
+	isCodexChatgptAccountUnsupportedModelMessage,
 	isContentSafetyStopMessage,
 	isNoSafetyFailoverModel,
 	isOrphanToolCallIdError,
@@ -52,6 +53,26 @@ describe("provider-resilience (root-level)", () => {
 		expect(isTransientProviderErrorMessage("JSON error injected into SSE stream")).toBe(true);
 		expect(isTransientProviderErrorMessage("payload injected into SSE stream")).toBe(true);
 		expect(isTransientProviderErrorMessage("Authentication failed")).toBe(false);
+	});
+
+	it("marks an xAI at-capacity 429 as transient so the turn auto-retries", () => {
+		// Regression: the body carries no status code and no limit token, so the
+		// pattern missed it and a recoverable overload ended the turn instead.
+		expect(
+			isTransientProviderErrorMessage(
+				"The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing: https://docs.x.ai/developers/advanced-api-usage/priority-processing",
+			),
+		).toBe(true);
+	});
+
+	it("treats a Codex ChatGPT-account unsupported-model 400 as permanent, not transient", () => {
+		const error = '{"detail":"The \'gpt-6-astra\' model is not supported when using Codex with a ChatGPT account."}';
+
+		expect(isCodexChatgptAccountUnsupportedModelMessage(error)).toBe(true);
+		expect(isCodexChatgptAccountUnsupportedModelMessage("tool_call_id is not found")).toBe(false);
+		expect(isCodexChatgptAccountUnsupportedModelMessage(undefined)).toBe(false);
+		// Same-model retry and /new session cannot grant ChatGPT-account entitlement.
+		expect(isTransientProviderErrorMessage(error)).toBe(false);
 	});
 
 	it("treats a stale Claude Code client version as permanent, not transient", () => {
@@ -179,7 +200,7 @@ describe("provider-resilience (root-level)", () => {
 		expect(r.autoFailoverOnSafetyStop).toBe(true);
 		expect(r.failoverCandidates.slice(0, 2)).toEqual([
 			{ provider: "kimi-coding", id: "k3" },
-			{ provider: "modelstudio-maas", id: "qwen3.8-max-preview" },
+			{ provider: "modelstudio-maas", id: "qwen3.8-max" },
 		]);
 	});
 
@@ -188,7 +209,7 @@ describe("provider-resilience (root-level)", () => {
 		expect(message).toMatch(/claude-fable-5/);
 		expect(message).toMatch(/blockStickySafetyModels/);
 		expect(message).toMatch(/kimi-coding\/k3/);
-		expect(message).toMatch(/modelstudio-maas\/qwen3\.8-max-preview/);
+		expect(message).toMatch(/modelstudio-maas\/qwen3\.8-max(?!-preview)/);
 	});
 });
 

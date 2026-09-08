@@ -100,6 +100,7 @@ const VISIBLE_USAGE_PROVIDERS = [
 	"modelstudio-maas",
 	"qwen-oauth",
 	"xai",
+	"meta",
 ] as const;
 const SOURCES: Readonly<Record<string, SubscriptionUsageSource>> = {
 	"openai-codex": source("CODEX", "codex", [{ provider: "openai-codex", oauthOnly: true }]),
@@ -133,6 +134,9 @@ const SOURCES: Readonly<Record<string, SubscriptionUsageSource>> = {
 		{ provider: "zhipu-coding-plan", oauthOnly: true },
 	]),
 	xai: source("GROK", "grok", [{ provider: "xai", oauthOnly: true }]),
+	// Muse Code exposes no public quota endpoint, so the rail shows
+	// the subscription entry without live usage windows (qwen-oauth precedent).
+	meta: source("META", "unavailable", [{ provider: "meta", oauthOnly: true }]),
 };
 
 function source(
