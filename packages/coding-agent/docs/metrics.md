@@ -142,8 +142,8 @@ turn fail.
 
 Runtime metrics tell you what a session cost, not whether the harness can solve
 tasks. For that, `scripts/tb-mini-suite.mjs` selects a deterministic,
-difficulty-balanced Terminal-Bench 2.1 subset so scores are comparable across
-runs:
+difficulty-stratified Terminal-Bench 2.1 subset. Score comparisons still require
+the controlled comparison contract above:
 
 ```bash
 node scripts/tb-mini-suite.mjs             # human-readable selection
@@ -151,9 +151,50 @@ node scripts/tb-mini-suite.mjs --json      # feed a runner
 node scripts/tb-mini-suite.mjs --seed 7    # a different fixed subset
 ```
 
-Selection is a pure function of (tasks directory, seed, size): the same inputs
-always produce the same task list, which is the whole point of using it as a
-regression gate. Selection alone is not a capability result. The scoring run
-itself requires Docker, `harbor`, and real model spend — it is deliberately not
-wired into `npm run check`. Any comparison produced from it must follow the
-controlled comparison contract above.
+With identical task metadata, seed, size, and collation, selection is repeatable.
+The default 15-task subset oversamples easy tasks and prioritizes shorter expert
+time estimates; it is a regression signal, not a population-representative score
+or an agent runtime bound. Selection alone is not a capability result. Scoring
+requires Docker, `harbor`, and model spend, and is not wired into `npm run check`.
+
+`--size` must be a positive safe integer no larger than the available task
+population. Missing difficulty quotas are filled from unselected tasks using the
+same ordering, so a valid request returns exactly that many distinct tasks.
+`--seed` accepts integers from `0` through `4294967295`. Invalid or missing option
+values and oversized requests exit with code `2`; absent, empty, or non-directory
+task paths exit with code `1`. The existing default subset remains unchanged.
+
+Run the offline CLI regression tests without downloading tasks or calling models:
+
+```bash
+node --test scripts/test/tb-mini-suite.test.mjs
+```
+
+See [the harness roadmap](../../../ROADMAP.md) for the dated OMK versus Terminus-2
+baseline, statistical limitations, implementation boundaries, and staged acceptance
+criteria. Planned runtime improvements are not measured benchmark gains.
+
+### Audit recorded TB 2.1 results
+
+The checkout-only `scripts/tb21-audit.mjs` audits explicitly selected Harbor jobs
+against a caller-pinned manifest digest. It rejects duplicate tasks/trials, missing
+results or costs, mismatched task checksums or configured model labels, and
+contradictory success records. It never starts a model, picks the latest job, joins
+requests by timestamp, or rewrites evidence. See [TB 2.1 offline audit](tb21-audit.md)
+for the schema, invocation, error codes, and limitations.
+
+A complete audit means recorded outcomes passed these checks, not that every
+provider request obeyed a single-model contract. Wire provenance, actual billing,
+repeated-trial analysis, and statistical superiority need separate evidence.
+
+### Explicit output-limit validation
+
+For callers that supply `AgentLoopConfig.modelContract`, both the contract's
+`maxOutputTokens` and an explicitly supplied request `maxTokens` must be positive
+safe integers. Invalid explicit values are refused before `provider_request` and
+before calling the provider stream function; they are not treated as absent.
+
+An omitted request limit still leaves provider defaults unchecked by this
+predicate. This change does not activate a contract in the CLI or impose an
+effective cap on compaction and other provider paths. Full run-wide enforcement
+remains a roadmap item.
