@@ -3,6 +3,7 @@ import {
 	AdaptOrchApiError,
 	type AdaptOrchFetch,
 	createAdaptOrchApiClientFromEnv,
+	getAdaptOrchLinks,
 } from "omk-adaptorch-wpl";
 
 /**
@@ -24,15 +25,8 @@ import {
  * its own errors; this command additionally never echoes the configured value.
  */
 
-const USAGE = "Usage: omk doctor adaptorch [--json]";
-
-/**
- * Where to obtain a key. This is the one moment in the CLI where the reader has
- * explicitly asked about AdaptOrch, so answering "which key, from where" here
- * is help rather than promotion. It carries its own attribution so this
- * touchpoint stays distinguishable from the README links.
- */
-const ADAPTORCH_SIGNUP_URL = "https://adaptorch.com/?utm_source=omk-cli&utm_medium=doctor&utm_campaign=omk#pricing";
+const USAGE =
+	"Usage: omk doctor adaptorch [--links] [--json]\n  --links  Show signup, plans, and contact links offline (no API key or network).";
 
 export interface AdaptOrchDoctorCliOverrides {
 	readonly env?: NodeJS.ProcessEnv;
@@ -62,7 +56,8 @@ function describe(report: AdaptOrchDoctorReport): string[] {
 		return [
 			"AdaptOrch: not configured",
 			"  Set ADAPTORCH_API_KEY to enable it. Optionally set ADAPTORCH_API_URL.",
-			`  Get a key: ${ADAPTORCH_SIGNUP_URL}`,
+			`  Create an account: ${getAdaptOrchLinks("doctor").signup}`,
+			"  Plans and contact (offline): omk doctor adaptorch --links",
 			"  AdaptOrch is a separate product; OMK does not require it.",
 		];
 	}
@@ -112,7 +107,12 @@ export async function runAdaptOrchDoctorCli(
 	const writeLine = overrides.writeLine ?? ((line: string) => console.log(line));
 
 	let json = false;
+	let links = false;
 	for (const arg of args.slice(2)) {
+		if (arg === "--links") {
+			links = true;
+			continue;
+		}
 		if (arg === "--json") {
 			json = true;
 			continue;
@@ -124,6 +124,29 @@ export async function runAdaptOrchDoctorCli(
 		writeLine(`Unknown option: ${arg}`);
 		writeLine(USAGE);
 		return { handled: true, exitCode: 2 };
+	}
+
+	if (links) {
+		const report = {
+			mode: "links",
+			networkAccess: false,
+			accountRequired: false,
+			links: getAdaptOrchLinks("doctor"),
+		};
+		if (json) writeLine(JSON.stringify(report, null, 2));
+		else {
+			for (const line of [
+				"AdaptOrch — optional service, not required by OMK or WPL",
+				`  Plans / local Starter: ${report.links.plans}`,
+				`  Sign up: ${report.links.signup}`,
+				`  Team / private-runner contact: ${report.links.contact}`,
+				`  Claim boundary: ${report.links.claimBoundary}`,
+				"  Next: configure ADAPTORCH_API_KEY, then run omk doctor adaptorch to check API connectivity.",
+				"  Offline links only: no account created, data sent, browser opened, or verification run submitted.",
+			])
+				writeLine(line);
+		}
+		return { handled: true, exitCode: 0 };
 	}
 
 	const env = overrides.env ?? process.env;

@@ -198,7 +198,8 @@ export function mapToB2C(input: MapToB2CInput): MapToB2COutput {
 		!input.policyFlags.includes(POLICY_FLAG.SECRET_SUSPECT) &&
 		(input.adjudication === undefined || input.adjudication.verdict === "CONFIRMED");
 
-	const shouldSubmit = userVerdict !== "BLOCKED" && !input.policyFlags.includes(POLICY_FLAG.NON_NEGOTIABLE_BLOCKING);
+	const shouldSubmit =
+		canApply && !input.previewOnly && input.runIds.length > 0 && input.adjudication?.verdict === "CONFIRMED";
 
 	const disclaimer = buildDisclaimer(input.previewOnly, limitsCode);
 

@@ -77,14 +77,15 @@ const DOCKER_PHASE_MESSAGE =
 
 function hasValidEvidence(e: unknown): e is DeepWallRunnerEvidence {
 	if (typeof e !== "object" || e === null) return false;
-	const v = e as DeepWallRunnerEvidence;
 	return (
-		typeof v.digest === "string" &&
-		v.digest.length > 0 &&
-		typeof v.command === "string" &&
-		v.command.length > 0 &&
-		typeof v.exitCode === "number" &&
-		Number.isFinite(v.exitCode)
+		"digest" in e &&
+		typeof e.digest === "string" &&
+		e.digest.trim().length > 0 &&
+		"command" in e &&
+		typeof e.command === "string" &&
+		e.command.trim().length > 0 &&
+		"exitCode" in e &&
+		e.exitCode === 0
 	);
 }
 

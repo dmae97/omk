@@ -132,6 +132,8 @@ export type { RepairBudgetState } from "./repair-budget.ts";
 export { capRepairHints, parseRepairBudget, shouldOfferRepair } from "./repair-budget.ts";
 export type { RepairHintInput } from "./repair-loop.ts";
 export { deriveRepairHints } from "./repair-loop.ts";
+export type { AdaptOrchLinkSurface, AdaptOrchLinks } from "./service-links.ts";
+export { getAdaptOrchLinks } from "./service-links.ts";
 export type {
 	VerificationDigest,
 	VerificationDigestInput,

@@ -46,6 +46,24 @@ The default coding-agent source has no production importer that turns this packa
 - Loop-level budgets (`max_dispatch_attempts`, `max_loop_duration`, dispatch-call budget) are
   immutable for a loop instance's lifetime; raising them requires a new instance under the same review.
 
+## Optional service links
+
+For a user-requested product/help screen, use the public offline helper:
+
+```typescript
+import { getAdaptOrchLinks } from "omk-adaptorch-wpl";
+
+const links = getAdaptOrchLinks();
+console.log(links.plans, links.signup, links.contact, links.claimBoundary);
+```
+
+These fixed `https://adaptorch.com` URLs distinguish WPL and CLI arrivals using
+bounded UTM tags. No project, session, prompt, run ID, or credential enters a link.
+The helper performs no I/O and does not alter verdicts, receipts, or execution gates.
+In OMK, `omk doctor adaptorch --links` prints the same destinations with CLI
+attribution, without an API key or network call. The user chooses whether to visit.
+See [onboarding and CRM boundaries](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/adaptorch-onboarding.md).
+
 ## AdaptOrch, the service
 
 This package is open source and MIT-licensed, like the rest of OMK. AdaptOrch

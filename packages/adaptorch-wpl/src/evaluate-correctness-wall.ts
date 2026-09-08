@@ -159,7 +159,7 @@ export async function evaluateCorrectnessWall(
 			...verdictCard,
 			limits: {
 				...verdictCard.limits,
-				requiresHumanReview: deep.status !== "completed",
+				requiresHumanReview: verdictCard.limits.requiresHumanReview || deep.status !== "completed",
 				code: limitsCode ?? verdictCard.limits.code,
 			},
 			blocked_reasons: [...new Set([...verdictCard.blocked_reasons, deep.message])],
@@ -167,6 +167,7 @@ export async function evaluateCorrectnessWall(
 		receipt = {
 			...receipt,
 			policyFlags,
+			shouldSubmit: receipt.shouldSubmit && deep.status === "completed",
 			deepWallStatus: deep.status,
 			deepWallEvidence: deep.evidence,
 		};
