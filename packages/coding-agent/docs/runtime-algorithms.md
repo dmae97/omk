@@ -111,6 +111,17 @@ Evidence:
 - `packages/coding-agent/test/context-budget-selection-policy-version.test.ts`
 - `packages/coding-agent/test/context-budget-cache-disk.test.ts`
 
+**Working tree:** non-queued native `xai` requests started through `AgentSession.prompt()` now derive a bounded automatic skill grant from live discovered descriptions after ordinary prompt-template expansion. The selector scores task text separately from camelCase-aware path-to-skill-name signals, excludes explicit-only skills, caps automatic matches at three, and adds `headroom` only under lexical or measured context pressure. `AgentSession.prompt()` merges the result with settings/SDK/bang selections only for that request. Queued steering/follow-up messages reuse the active run's system prompt and do not trigger another selection pass.
+
+Evidence:
+
+- `packages/coding-agent/src/core/active-skill-state.ts`
+- `packages/coding-agent/src/core/skill-selector.ts`
+- `packages/coding-agent/src/core/grok-harness.ts`
+- `packages/coding-agent/src/core/agent-session.ts`
+- `packages/coding-agent/test/grok-active-skills.test.ts`
+- `packages/coding-agent/test/skill-selector.property.test.ts`
+
 **Working tree:** context files now treat their global/local relevance baseline
 as a floor. Lexical overlap can raise that score but cannot demote standing
 instructions below the no-query baseline. Skills remain topic-scored because
@@ -254,6 +265,14 @@ Evidence:
 - `packages/protocol/test/protocol.test.ts`
 - `packages/coding-agent/src/core/advisory-judge.ts`
 - `packages/coding-agent/test/advisory-judge.test.ts`
+
+**Working tree (2026-09-05):** the first-party `createModelAdvisoryJudge()` adapter rejects non-normal
+or missing completion metadata. Custom judges still supply raw score JSON and own that metadata
+boundary. The chooser checks cancellation around asynchronous work, reports top-score ties as
+caller-rank decisions, and retains submitted/eligible/excluded counts with comparison availability.
+This adds no completion calls or retries, automatic AgentSession/TUI call, or semantic-verdict authority.
+Details: [Advisory selection integrity](advisory-selection.md); governing spec:
+`specs/021-advisory-selection-integrity/spec.md`.
 
 See [Run Protocol and Durable Goals](run-protocol.md),
 [Sessions](sessions.md), [Provider Resilience](provider-resilience.md), and

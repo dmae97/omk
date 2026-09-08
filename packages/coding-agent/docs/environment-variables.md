@@ -82,6 +82,8 @@ These variables are read by OMK itself. The four built-in harness flags below ar
 | `OMK_SKIP_VERSION_CHECK` | Disable the latest-version request |
 | `OMK_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
 | `OMK_SHARE_VIEWER_URL` | Override the base URL used by `/share` |
+| `PI_DISABLE_INPUT_REDACTION` | Stop masking credentials on the way to the model and the session. Persistence and report boundaries still mask |
+| `OMK_DISABLE_REDACTION` | Stop masking credentials **everywhere**, persistence included: pasted keys are written to session files, compaction summaries, package-doctor output and the session CLI listing in plaintext, and appear verbatim in anything shared from this machine. Only `1`/`true`/`yes`/`on` enable it; any other value keeps masking on |
 | `OMK_HARDWARE_CURSOR` | Set to `1` to show the hardware cursor; see [Terminal setup](terminal-setup.md) |
 | `OMK_CONTEXT_GOVERNOR` | Context Budget V2 process override: `1` forces it on and `0` forces it off; otherwise the global `contextBudget.enabled` setting applies |
 | `OMK_CONTEXT_GOVERNOR_CACHE` | Set to `memory` to keep representations, negative results, and plans in session memory instead of persisting representations per workspace |

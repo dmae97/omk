@@ -238,6 +238,37 @@ For Anthropic-compatible providers using `api: "anthropic-messages"`, set `compa
 > Use `mistral-conversations` for native Mistral models.
 > If you intentionally route Mistral-compatible/custom endpoints through `openai-completions`, set `compat` flags explicitly as needed.
 
+### ChatGPT Web through codex-chatgpt-web
+
+[codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web) runs a loopback Responses bridge (`http://127.0.0.1:17841/v1`) that drives a signed-in ChatGPT Web session from its own launcher. It was written for the Codex CLI, so it refuses a turn that lacks Codex's `client_metadata["x-codex-turn-metadata"]` (`thread_id`, `turn_id`) and the matching `turn_id` on the current user item. Set `compat.sendCodexTurnMetadata: true` on an `openai-responses` provider and OMK sends both: `thread_id` is the OMK session id and `turn_id` is derived from the latest user message, so tool rounds replay the same id and the next prompt starts a new browser turn.
+
+```json
+{
+  "providers": {
+    "codex-chatgpt-web": {
+      "baseUrl": "http://127.0.0.1:17841/v1",
+      "api": "openai-responses",
+      "apiKey": "codex-chatgpt-web",
+      "compat": { "sendCodexTurnMetadata": true },
+      "models": [
+        { "id": "chatgpt-web/high", "name": "ChatGPT Web — High", "reasoning": true, "input": ["text", "image"], "contextWindow": 80000, "maxTokens": 32768 },
+        { "id": "chatgpt-web/pro", "name": "ChatGPT Web — Pro", "reasoning": true, "input": ["text", "image"], "contextWindow": 95000, "maxTokens": 32768, "thinkingLevelMap": { "max": "max" } }
+      ]
+    }
+  }
+}
+```
+
+The bridge ignores the bearer value for `chatgpt-web/*` models (the browser session is the credential), so any placeholder key satisfies OMK's key check. Each `chatgpt-web/*` id pins one ChatGPT mode (`luna`, `think`, `light`, `medium`, `high`, `extra-high`, `pro`, plus `zero-risk` / `zero-risk-pro` for the launcher's manual mode); the bridge fixes the effort per id and ignores the request's `reasoning.effort`, and `pro`/`extra-high` fail explicitly unless the signed-in account exposes them. In the launcher's browser-only mode the model cannot call OMK tools; full mode routes tool calls back through the bridge's MCP connector.
+
+OMK's coding-agent supplies its resolved session cwd as a trusted `workspace-write` Codex environment when this compatibility flag is enabled. Direct `omk-ai` callers must pass an absolute `options.cwd` to enable Full harness tools; an absent or relative cwd deliberately carries no filesystem authority, so Full mode fails closed. Bridge 5.0.x binds that environment to the turn metadata (`sandbox`, `workspaces`) and the adjacent `<environment_context>` item; OMK emits exactly that pair, verified against launcher 5.0.4 in full mode with a tool round trip.
+
+**Keep the rows in step with the launcher.** The bridge's `/v1/models` document is the only account-aware source, and it publishes two numbers per row: `context_window` is the ceiling past which the bridge rejects a turn, and `auto_compact_token_limit` is the budget it expects a client to compact within (Codex's effective window, 85% of the ceiling). OMK's `contextWindow` drives OMK's own compaction policy (`compaction.maxUsageRatio`, default 0.9, plus output reserves), so the row carries the **budget**: `contextWindow: 80000` above is the launcher's Plus High budget under a 90,000 ceiling, `95000` the Pro budget (ceiling 111,193, or 112,193 for `chatgpt-web/pro`), and a Pro account with Bigger Context advertises 285,000 under 333,579 / 336,579. With the budget in place OMK compacts at about 90% of it, comfortably inside what the bridge accepts. `omk provider sync codex-chatgpt-web` reads the document and rewrites the provider's `chatgpt-web/*` rows (`name`, `contextWindow`, `reasoning`, `input`), preserving `maxTokens`, `cost`, `thinkingLevelMap`, other keys, other providers, and the file's indentation, and records where the numbers came from as `bridgeCatalog` on the provider (`bridgeVersion`, `clientVersion`, `syncedAt`, and each row's `contextCeilings`). `--dry-run` reports the drift without writing and `--json` emits one document; a launcher upgrade or a changed ceiling is recorded even when no row moves. The bridge forwards `/v1/models` to the Codex backend, so the command authenticates with OMK's `openai-codex` OAuth (`/login openai-codex`) and sends a `client_version` (`--client-version`, `OMK_CODEX_CLIENT_VERSION`, `codex --version`, then OMK's last verified version): the backend hides models from clients it considers too old. `omk provider doctor codex-chatgpt-web --level 1` reports the `models-endpoint` probe as failed for this bridge because it probes with the placeholder bearer; use `provider sync --dry-run` as the bridge health check instead.
+
+Effort is chosen by the slug, not by OMK's thinking level: `chatgpt-web/pro` runs every turn at ChatGPT's Pro effort (verified on launcher 5.0.4: the browser trace records the effort control switching to a distinct label for medium, high, and pro turns), so pick the `pro` row when you want the maximum. The response length is not capped by OMK either: the bridge accepts `max_output_tokens` but never applies it to a browser turn, so `maxTokens` only sizes OMK's own compaction-summary and context-governor budgets.
+
+When the launcher is not running, a turn on a bridge model fails with a message that names the launcher instead of the SDK's generic connection error.
+
 ### Auth Header
 
 If your provider expects `Authorization: Bearer <key>` but doesn't use a standard API, set `authHeader: true`:
@@ -720,6 +751,10 @@ interface ProviderModelConfig {
     requiresReasoningContentOnAssistantMessages?: boolean;
     thinkingFormat?: "openai" | "openrouter" | "deepseek" | "together" | "zai" | "qwen" | "qwen-chat-template";
     cacheControlFormat?: "anthropic";
+
+    // openai-responses
+    sendSessionIdHeader?: boolean;
+    sendCodexTurnMetadata?: boolean;
 
     // anthropic-messages
     supportsEagerToolInputStreaming?: boolean;

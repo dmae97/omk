@@ -21,7 +21,7 @@ Configure resilience in `~/.omk/agent/settings.json` or `.omk/settings.json`:
     "autoFailoverOnSafetyStop": true,
     "failoverCandidates": [
       { "provider": "kimi-coding", "id": "k3" },
-      { "provider": "modelstudio-maas", "id": "qwen3.8-max-preview" }
+      { "provider": "modelstudio-maas", "id": "qwen3.8-max" }
     ]
   }
 }
@@ -52,14 +52,16 @@ For a safety stop or recognized quota/billing error, OMK:
 
 A content/safety stop gets at most one automatic retry, including a retry that switches model, regardless of the larger transport retry budget. Other transient failures keep the configured retry policy and backoff. Plain authentication errors remain non-retryable and do not trigger failover.
 
-Recognized quota shapes include billing-cycle usage limits, `insufficient_quota`, exhausted balances, `GoUsageLimitError`, `FreeUsageLimitError`, and out-of-budget responses. These are classified as `provider.rate_limit`, even when a provider wraps them in HTTP 403.
+Recognized quota shapes include billing-cycle usage limits, `insufficient_quota`, exhausted balances, `GoUsageLimitError`, `FreeUsageLimitError`, and out-of-budget responses. These are classified as `provider.rate_limit`, even when a provider wraps them in HTTP 403. Provider-capacity bodies that omit a status or limit token are classified the same way: xAI `currently at capacity` / `high demand` (HTTP 429) and Anthropic `overloaded_error` / `Overloaded` (HTTP 529). Left unmatched they fall through to `provider.protocol` and advertise orphan-`tool_call_id` sanitize.
+
+Two HTTP 400s are permanent `configuration.invalid`, not retryable protocol faults: Anthropic `claude_code_version_too_old`, and Codex ChatGPT-account `The '<slug>' model is not supported when using Codex with a ChatGPT account.` Same-model retry, transcript sanitize, and `/new session` re-send the same client version or slug. Switch with `/model`, or for Codex use an API-key route that has the model.
 
 Gateway/upstream availability failures — "503 Upstream request failed", "Endpoint is unavailable", or a stream that ended without a finish reason — are classified as `provider.network`: transport problems that heal by retry or model switch, never by transcript sanitization.
 
 The default candidate order is:
 
 1. `kimi-coding/k3`
-2. `modelstudio-maas/qwen3.8-max-preview`
+2. `modelstudio-maas/qwen3.8-max`
 3. `xai/grok-4.5`
 4. `deepseek/deepseek-v4-pro`
 5. `deepseek/deepseek-v4-flash`

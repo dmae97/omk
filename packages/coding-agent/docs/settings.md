@@ -139,14 +139,30 @@ All numeric token reserves must be non-negative safe integers. Ratios must be fi
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `contextBudget.enabled` | boolean | `false` | Globally enable prompt resource budgeting; representation entries persist per workspace by default while plan entries stay in session memory |
+| `contextBudget.openwiki` | boolean | `false` | Offer the workspace's `openwiki/` pages as budget candidates, ranked against each turn's query. Requires `contextBudget.enabled` |
 
 ```json
 {
-  "contextBudget": { "enabled": true }
+  "contextBudget": { "enabled": true, "openwiki": true }
 }
 ```
 
 This setting is global-only: `.omk/settings.json` cannot enable or disable it. Use `OMK_CONTEXT_GOVERNOR=1` to force it on for one process or `OMK_CONTEXT_GOVERNOR=0` to force it off for a baseline run. When enabled, content-addressed representation and negative-result entries persist under `.omk/cache/context-budget-v2`; plan entries stay in session memory. Set `OMK_CONTEXT_GOVERNOR_CACHE=memory` to keep every entry in session memory or `OMK_CONTEXT_GOVERNOR_CACHE_DIR` to relocate the representation snapshot.
+
+#### Repository wiki retrieval
+
+`contextBudget.openwiki` lets a generated [`openwiki/`](https://github.com/dmae97/omk/blob/main/README.md#repository-understanding) corpus take part in prompt budgeting. The corpus is loaded once per session and never enters the prompt directly: each page becomes a low-priority `evidence` candidate that the governor ranks against the turn's query, so pages compete for leftover budget and can never displace instructions or skills.
+
+A corpus is admitted only on the same terms `scripts/check-openwiki.mjs` applies, because generated prose about a repository is exactly the kind of content that is expensive to be wrong about:
+
+| Generator state | Result |
+|---|---|
+| `complete`, generated at the current `HEAD` | Page titles, declared symbols, and bounded page text are all offered |
+| `complete`, but `HEAD` has moved | Titles and symbols only. Page text is withheld, and entries are marked stale |
+| `interrupted`, with `openwiki/.manual-review.json` bound to the exact corpus digest | Treated as complete |
+| `interrupted` without that review, unknown status, missing `gitHead`, or unreadable state | Refused; no page reaches the prompt |
+
+A corpus over 200 pages or 4 MiB is refused rather than truncated, so the runtime and the gate always agree on the digest of the same directory. Symlinked pages are skipped. Source code and tests stay authoritative over every page; the pages are leads to verify, not claims to repeat.
 
 ### Agent Tool Execution
 

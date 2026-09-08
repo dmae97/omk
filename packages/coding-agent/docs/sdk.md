@@ -261,7 +261,7 @@ interface PromptOptions {
 }
 ```
 
-`activeSkillNames` marks additional discovered skills active for this turn; `activeSkillSource` labels their provenance. They merge with global `defaultActiveSkills`, prioritize matching inventory entries, and do not expand authorization or inline full skill instructions.
+`activeSkillNames` marks additional discovered skills active for this turn; `activeSkillSource` labels their provenance. They merge with global `defaultActiveSkills`, prioritize matching inventory entries, and do not expand authorization or inline full skill instructions. When the active provider is native `xai` and `OMK_GROK_HARNESS` is enabled, each non-queued `AgentSession.prompt()` request also derives up to three request-scoped matches from the live skill inventory after ordinary prompt-template expansion. Explicit-only skills are excluded from automatic selection, while explicit SDK/settings/bang selections remain authoritative additions. Queued steering and follow-up messages reuse the active run's system prompt and therefore do not perform another automatic skill-selection pass.
 
 `preflightResult` is called once per `prompt()` invocation:
 
@@ -1248,8 +1248,29 @@ Ledger and receipt publication are fail-closed but not one filesystem transactio
 ### Freshness, ledger load, and store hardening
 
 - **Freshness** compares only the caller-selected artifact set (`WorkspaceScope.artifactPaths`). It issues no Git command and carries no Git fingerprint.
+- **Scope completeness**: a session scope is bounded on purpose, so a receipt captured from one proves its selected paths and nothing more. `resolveSessionWorkspaceScopeReport(cwd)` returns the scope together with what it could not bind, and `SessionBashRuntime.workspaceScopeReport()` exposes the same for the current session.
 - **Ledger**: `ReplayLedgerManager` verifies an existing ledger on construction (sequence order, prev-hash chain, payload hash, event hash) and **fails closed** on any violation.
 - **Store**: `EvidenceReceiptStore` uses an owner-only directory, symlink rejection, no-overwrite hard-link publication, and identity rechecks to detect observed path replacement. These checks assume same-UID path mutation is quiescent; they are **not** filesystem sandbox isolation.
+
+### Session scope completeness
+
+`resolveSessionWorkspaceScope()` drops dirty paths two ways: a hard cap (32 by default) that keeps one enormous working tree from stalling every receipt, and the normalized-path filter the receipt parser forces, which rejects names carrying a backslash, `..`, or an empty segment. Both drops are deliberate; reporting them is what stops a partial view from reading like a whole-workspace proof.
+
+`resolveSessionWorkspaceScopeReport(cwd, options?)` returns:
+
+| Field | Meaning |
+| --- | --- |
+| `scope` | Exactly what `resolveSessionWorkspaceScope()` returns |
+| `totalDirtyPathCount` | Unique dirty entries Git reported, before the cap and the filter |
+| `selectedPathCount` | Entries the scope binds (`scope.artifactPaths.length`) |
+| `excludedPathCount` | Unique dirty entries no receipt can bind |
+| `truncated` | True when the cap, not the filter, kept an eligible path out |
+| `completeness` | `complete`, `partial_truncated`, `partial_excluded`, or `unavailable` |
+| `excludedPathSetSha256` | Digest of the sorted excluded set; absent when nothing was excluded |
+
+`unavailable` is not `complete`: outside a worktree, or when Git cannot be read, nothing was enumerated, so the empty artifact set is an absence of evidence rather than evidence of a clean tree. Truncation outranks exclusion in `completeness` because an excluded path is named by the digest while a capped one is an unbounded unknown.
+
+The report is cached per `(cwd, maxPaths)` for one second, so a capped probe never serves a later full request a truncated answer.
 
 ### Protocol-first semantic evaluation
 
@@ -1286,9 +1307,11 @@ const decision = await chooseWithAdvisoryJudge({
 });
 ```
 
-The sidecar makes no call when zero or one candidate passes. For multiple passing candidates it sends only bounded, forced-redacted material through a tool-free request and requires a complete 0–4 score matrix. Invalid output or provider failure returns `status: "fallback"` with the deterministic first candidate and a sanitized reason. It never persists model prose. Re-run fresh deterministic gates after applying the selected result.
+The sidecar makes no call when zero or one candidate passes. For multiple passing candidates it sends only bounded, forced-redacted material through a tool-free request and requires a complete 0–4 score matrix. Invalid output or provider failure returns `status: "fallback"` with the deterministic first eligible candidate and a sanitized reason. It never persists model prose. Re-run fresh deterministic gates after applying the selected result.
 
-`createModelAdvisoryJudge()` resolves current auth through `ModelRegistry` for each explicit call, uses no cache retention, and performs no model retry. Tests can inject `AdvisoryJudgeCompletion`; production defaults to `completeSimple()`.
+**Working-tree update (2026-09-05):** the first-party model adapter accepts only explicit normal `stop` completions; parseable JSON from a truncated, aborted or otherwise incomplete response is rejected. Cancellation is checked before and after judge work, and around auth in the model adapter. Top-score ties keep the caller's rank-selected winner but report `reason: "judge-tied"` and `source: "deterministic"`, not a unique model preference. Optional `decision.diagnostics` records submitted/eligible/excluded counts, comparison availability and the accepted matrix's top tie/margin; absent comparison is never reported as score zero. See [Advisory selection integrity](advisory-selection.md) for the exact contract and limits.
+
+`createModelAdvisoryJudge()` resolves current auth through `ModelRegistry` for each non-aborted explicit call, uses no cache retention, and performs no model retry. Tests can inject `AdvisoryJudgeCompletion`; production defaults to `completeSimple()`. This remains an explicit SDK path, not an automatic AgentSession/TUI judge.
 
 ### Durable-goal seam checkpoints
 

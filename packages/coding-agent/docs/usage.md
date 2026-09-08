@@ -73,12 +73,34 @@ Use `/goal <objective>` to create or update the durable goal for the current wor
 | --- | --- | --- |
 | Identical-loop guard | Warns from the third consecutive identical tool call and blocks the sixth | `OMK_IDENTICAL_LOOP=0` |
 | Tool-pair repair | Removes unmatched tool-use and tool-result blocks from outbound context | `OMK_TOOL_PAIR_REPAIR=0` |
-| Model prompt presets | Adds model-specific execution guidance for supported Claude, Kimi, GLM, and Grok models | `OMK_PROMPT_PRESET=0` |
+| Model prompt presets | Adds model-specific execution guidance for GPT-6 Astra and supported Claude, Kimi, GLM, and Grok models | `OMK_PROMPT_PRESET=0` |
 | Goal controller | Registers `/goal` and continues active goals within their round limit | `OMK_GOAL_CONTROLLER=0` |
 
 These built-ins remain active with `--no-extensions`. A custom `ResourceLoader` owns its own extension set and does not receive them automatically.
 
 Claude models use a clean prompt context by default: OMK keeps tools, skills, and the Claude preset but omits discovered `AGENTS.md` and `CLAUDE.md` files. This avoids provider false positives caused by unrelated instruction text. Set `OMK_CLAUDE_CONTEXT_FILES=1` to restore those files for Claude.
+
+### GPT-6 Astra
+
+When the resolved model ID is exactly `gpt-6-astra`, the built-in preset appends
+`<model_preset id="gpt-6-astra">` at `before_agent_start`. Provider-qualified IDs
+such as `openai/gpt-6-astra` and `openrouter/openai/gpt-6-astra` match the same
+model. Similar names, dated variants, and other GPT models do not select this
+preset. Select the configured model through `/model`; the preset does not add
+model availability to an account.
+
+The Astra guidance encourages completing authorized work, asking only material
+clarifying questions, explaining any skill instruction that blocks progress,
+writing concise prose, delegating independent work when permitted, and using
+focused verification without unnecessary repeat runs. Explicit user requests
+outrank advisory skill guidance within higher-priority instructions and runtime
+permissions. Pending tool results must be accounted for before claiming completion.
+
+Each new request selects guidance from its current model and fresh base prompt;
+switching models does not carry the Astra preset into the next request.
+`OMK_PROMPT_PRESET=0` disables the existing model-preset built-in, including Astra.
+API parameters and transport capabilities remain controlled by the provider/runtime
+configuration.
 
 ## Automatic Thinking Level Routing
 

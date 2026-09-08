@@ -85,6 +85,10 @@ Additional built-in read-only tools (`grep`, `find`, `ls`) are available through
 
 ## Give omk project instructions
 
+For optional, portable user defaults, preview `omk init --global --dry-run`, then
+run `omk init --global`. Existing instructions and settings are preserved.
+See [User context setup](context-files.md) for migration, loading, and interoperability.
+
 OMK loads context files at startup. Add an `AGENTS.md` file to tell it how to work in a project:
 
 ```markdown

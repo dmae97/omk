@@ -94,6 +94,7 @@ omk
 | Fireworks | `FIREWORKS_API_KEY` | `fireworks` |
 | Together AI | `TOGETHER_API_KEY` | `together` |
 | Kimi For Coding | `KIMI_API_KEY` | `kimi-coding` |
+| Meta Model API | `META_API_KEY` (or `META_MODEL_API_KEY`, `MODEL_API_KEY`) | `meta` |
 | MiniMax | `MINIMAX_API_KEY` | `minimax` |
 | MiniMax (China) | `MINIMAX_CN_API_KEY` | `minimax-cn` |
 | Xiaomi MiMo | `XIAOMI_API_KEY` | `xiaomi` |
@@ -107,6 +108,34 @@ Reference for environment variables and `auth.json` keys: [`const envMap`](https
 #### NVIDIA NIM
 
 Set `NVIDIA_API_KEY` and select an NVIDIA model with `/model`. The built-in `nvidia/z-ai/glm-5.2` entry sends `reasoning_effort`, including the `max` level. Other NVIDIA models keep conservative compatibility defaults unless their model metadata explicitly enables reasoning effort.
+
+#### Meta Model API
+
+Meta's first-party [Muse Spark](https://dev.meta.ai/docs/overview) endpoint, served over the OpenAI
+Responses API at `https://api.meta.ai/v1`:
+
+```bash
+export META_API_KEY=...
+omk --provider meta --model muse-spark-1.3
+```
+
+Two auth paths:
+
+- **Subscription:** `/login` → Use a subscription → Muse Code. Device-code sign-in at
+  `auth.meta.com`, then a mint at `https://api.meta.ai/muse-code/key`. Honors `HTTP_PROXY` /
+  `HTTPS_PROXY`. The minted key is what inference uses.
+- **Pay-as-you-go:** `META_API_KEY` (then `META_MODEL_API_KEY`, then `MODEL_API_KEY`), or paste a
+  Model API key under `/login` → Use an API key → Meta Model API. Extra keys you create on the
+  dashboard are billed [per token](https://dev.meta.ai/docs/muse-code/subscriptions), even with an
+  active Muse Code subscription.
+
+Standard tier: `muse-spark-1.3`, `muse-spark-1.2`, `muse-spark-1.1`. Contributor tier:
+`muse-spark-1.3-contributor`, `muse-spark-1.2-contributor`. All carry a 1M-token context window.
+
+Thinking levels run `minimal` → `max`. Muse Spark's own effort ceiling is `xhigh`, which its docs
+call "maximum reasoning depth", so omk's `max` level maps onto `xhigh` rather than sending an enum
+the API would reject. Thinking cannot be switched off: Muse Spark rejects `reasoning_effort: "none"`
+with HTTP 400, so omk never sends it.
 
 #### Zyloo
 

@@ -4,6 +4,10 @@ Example code for open-multi-agent-kit SDK and extensions.
 
 ## Directories
 
+### [context/](context/)
+Portable `AGENTS.md`, `INTERNET.md`, and `CLAUDE.md` templates used by
+`omk init --global`. See [User context setup](../docs/context-files.md).
+
 ### [sdk/](sdk/)
 Programmatic usage via `createAgentSession()`. Shows how to customize models, prompts, tools, extensions, and session management.
 

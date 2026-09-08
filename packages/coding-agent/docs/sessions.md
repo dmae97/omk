@@ -34,7 +34,7 @@ For the JSONL file format and SessionManager API, see [Session Format](session-f
 
 Each provider attempt writes its own `run_started`/`run_finished` journal pair and emits `session_termination`. A retryable termination is attempt-level when `auto_retry_start` follows it; consumers should not treat that event alone as the end of the outer `prompt()` call.
 
-If a retry or failover succeeds, the later attempt emits `completed` and becomes `session.lastTermination`. If retry budget is exhausted, the last provider failure remains final. Quota and billing-cycle exhaustion are classified as `provider.rate_limit` and can switch through the configured provider-resilience chain before retrying. See [Provider Resilience](provider-resilience.md).
+If a retry or failover succeeds, the later attempt emits `completed` and becomes `session.lastTermination`. If retry budget is exhausted, the last provider failure remains final. Quota, billing-cycle exhaustion, and provider-capacity waits (`at capacity`, Anthropic `overloaded_error`) are classified as `provider.rate_limit` and can switch through the configured provider-resilience chain before retrying. A Codex ChatGPT-account unsupported-model 400 or Anthropic `claude_code_version_too_old` is `configuration.invalid`: `/new session` will not grant access; switch with `/model`. See [Provider Resilience](provider-resilience.md).
 
 ## Session Commands
 

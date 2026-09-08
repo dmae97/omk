@@ -93,6 +93,8 @@ OMK adds a compact active-skills marker containing names and, for explicit-only 
 
 This file is an explicit operator choice, so it may activate a skill whose frontmatter otherwise requires direct invocation. Active skills do not expand authorization and apply only when relevant. Keep the list focused because overlapping language or workflow instructions can conflict.
 
+When the native `xai` Grok harness is enabled, OMK may additionally mark up to three matching, non-explicit-only skills active for a non-queued top-level `prompt()` request. It scores the live discovered descriptions and does not persist those automatic selections into the next turn; operator and bang selections still merge normally.
+
 ## Skill Commands
 
 Skills register as `/skill:name` commands and interactive `!` launcher entries:

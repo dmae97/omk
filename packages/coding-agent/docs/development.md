@@ -56,10 +56,25 @@ Never use `__dirname` directly for package assets.
 ## Testing
 
 ```bash
-./test.sh                         # Run non-LLM tests (no API keys needed)
-npm test                          # Run all tests
-npm test -- test/specific.test.ts # Run specific test
+./test.sh                         # Run the non-LLM suite when a full run is intended
+# Narrow, offline regression from the repository root:
+LIVE_E2E=0 node node_modules/vitest/dist/cli.js --run packages/coding-agent/test/adaptorch-onboarding.test.ts
 ```
+
+The root `vitest.config.ts` delegates to each package's Vitest project. This
+preserves package-local setup files and source aliases; a root invocation must
+not silently test stale `dist` dependencies. The coding-agent project resolves
+`omk-adaptorch-wpl` to its source entrypoint during tests.
+
+Package-local targeted commands continue to work, for example from
+`packages/coding-agent`:
+
+```bash
+LIVE_E2E=0 node ../../node_modules/vitest/dist/cli.js --run test/adaptorch-onboarding.test.ts
+```
+
+Keep explicit file filters for routine work. A keyless regression pass is not a
+live-provider or release verification, and unfiltered suites may include e2e tests.
 
 ## Project Structure
 

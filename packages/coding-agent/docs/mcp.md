@@ -49,8 +49,9 @@ Servers are read from three files, later wins on a name collision:
 
 The `omk` CLI calls `attachMcpServers()` for every session it creates —
 interactive, `-p`, and RPC, including `/new`, `/resume`, and forks — so a
-configured server's tools reach the model without further setup. A server that
-fails to start is reported as a startup warning and the session continues.
+configured server's tools reach the model without further setup. An enabled
+server that fails to start is reported as a startup warning and the session
+continues. Intentionally disabled entries are skipped without a startup warning.
 `--help` and `--list-models` never spawn servers.
 
 SDK callers attach explicitly:
@@ -94,6 +95,25 @@ OMK_MCP_SMOKE_HANDSHAKE_MS=120000 node scripts/mcp-smoke.mjs   # override slow h
 
 The script prints server state, tool counts, and versions. It never prints env
 values.
+
+### Package and credential errors
+
+An npm `E404` happens before the MCP handshake: the configured npm package could
+not be resolved. A longer `startup_timeout_sec` does not fix a wrong package name.
+The server's configuration key is not necessarily its package name:
+
+- [Context7](https://github.com/upstash/context7): `npx -y @upstash/context7-mcp`,
+  not `npx -y context7-mcp`.
+- [Fetch](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch):
+  `uvx mcp-server-fetch`, not `npx -y @modelcontextprotocol/server-fetch`.
+
+Check all three configuration paths above: a project entry overrides a user entry
+with the same server name. Recreate the session after correcting a command.
+
+A `No API key` error is different: the executable started but lacks credentials.
+For Resend, supply `RESEND_API_KEY` securely to the server process, or explicitly
+set `disabled: true` if you do not need it. Do not paste keys into diagnostic
+output. Missing-key and other genuine startup failures remain warnings.
 
 ## Scope
 

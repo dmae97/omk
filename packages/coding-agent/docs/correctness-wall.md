@@ -25,6 +25,14 @@ Structured next steps on the verdict card: **Apply**, **Deep Check**, **Regenera
 
 **Can apply** vs **should submit** are separate gates on the verification receipt: mechanical apply safety is not the same as trusting downstream submission.
 
+`shouldSubmit` is fail-closed: it requires `canApply`, non-preview evaluation,
+non-empty run IDs, and `CONFIRMED` outcome adjudication. Missing evidence,
+verifier errors, corroborated failures, and previews never authorize submission.
+If a deep check was requested, it must also complete. Its evidence must carry
+non-blank digest and command values and exit code `0`; completion cannot clear
+an existing policy requirement for human review. Local apply policy is unchanged.
+These are evidence gates, not release, merge, or deployment authorization.
+
 ## Fast wall vs deep wall
 
 - **Fast wall (default):** Pure policy — diff paths, scope globs, secret-shaped lines, preview-only limits (`BATCH1_NO_DOCKER_RUNNER`). No Docker runner in batch 1.
