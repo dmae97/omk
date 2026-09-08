@@ -1,10 +1,12 @@
 import { getDomainProfile } from "./domain-loadouts.ts";
 import { GROK_OAUTH_PROVIDER } from "./grok-playbook.ts";
+import { capabilityGateNames } from "./loadout-safety.ts";
+import { MAX_SELECTED_SKILLS, type SkillCandidate, selectSkills } from "./skill-selector.ts";
 
 /** Domain loadout id applied automatically when Grok OAuth provider is active. */
 export const GROK_HARNESS_DOMAIN_ID = "grok-harness";
 
-export const GROK_HARNESS_AUTO_APPLY_ENV = "OMK_GROK_HARNESS";
+const GROK_HARNESS_AUTO_APPLY_ENV = "OMK_GROK_HARNESS";
 
 export const GROK_IMAGINE_MODEL_PREFIX = "grok-imagine-";
 
@@ -19,7 +21,7 @@ const SKILLS_BY_INTENT = {
 	media: ["image-prompt", "adaptorch-route"],
 } as const satisfies Record<GrokHarnessIntent, readonly string[]>;
 
-export class GrokImagineModelCompletionError extends Error {
+class GrokImagineModelCompletionError extends Error {
 	readonly name = "GrokImagineModelCompletionError";
 	readonly modelId: string;
 	readonly provider: string;
@@ -54,6 +56,49 @@ export function recommendedSkillTierForIntent(intent: GrokHarnessIntent): readon
 	return SKILLS_BY_INTENT[intent];
 }
 
+export interface GrokHarnessSkillCandidate extends SkillCandidate {
+	readonly disableModelInvocation?: boolean;
+}
+
+export interface GrokHarnessSkillSelectionOptions {
+	readonly paths?: readonly string[];
+	readonly contextPressure?: boolean;
+}
+
+const GROK_HARNESS_ALLOWED_SKILLS: ReadonlySet<string> = new Set(
+	capabilityGateNames(getDomainProfile(GROK_HARNESS_DOMAIN_ID).skills),
+);
+const HEADROOM_PRESSURE_RE = /headroom|oversized|context window|context pressure|token budget|\bcompress\b/i;
+
+/**
+ * Smallest grok-harness skill grant from the live inventory. The domain
+ * profile owns the allowlist; explicit-only skills are excluded. `headroom`
+ * requires lexical or measured pressure, and the result never exceeds
+ * {@link MAX_SELECTED_SKILLS} names.
+ */
+export function selectGrokHarnessSkills(
+	task: string,
+	inventory: readonly GrokHarnessSkillCandidate[],
+	options: GrokHarnessSkillSelectionOptions = {},
+): readonly string[] {
+	const pressure = options.contextPressure === true || HEADROOM_PRESSURE_RE.test(task);
+	const skills = inventory.filter((skill) => {
+		if (!GROK_HARNESS_ALLOWED_SKILLS.has(skill.name)) return false;
+		if (skill.disableModelInvocation) return false;
+		if (skill.name === "headroom" && !pressure) return false;
+		return true;
+	});
+	const selected = selectSkills({
+		task,
+		skills,
+		paths: options.paths,
+		max: MAX_SELECTED_SKILLS,
+	}).selected.map((skill) => skill.name);
+	const headroom = pressure ? skills.find((skill) => skill.name === "headroom") : undefined;
+	if (!headroom || selected.includes(headroom.name)) return selected;
+	return [...selected.slice(0, MAX_SELECTED_SKILLS - 1), headroom.name];
+}
+
 export function isGrokOAuthProvider(provider: string | undefined): boolean {
 	return provider === GROK_OAUTH_PROVIDER;
 }
@@ -70,11 +115,4 @@ export function grokHarnessAutoApplyEnabled(
 		return false;
 	}
 	return true;
-}
-
-/** Routing prompt from the grok-harness domain profile (system prompt append). */
-export function getGrokHarnessRoutingPromptAppend(): string | undefined {
-	const profile = getDomainProfile(GROK_HARNESS_DOMAIN_ID);
-	const text = profile.routingPrompt?.trim();
-	return text && text.length > 0 ? text : undefined;
 }

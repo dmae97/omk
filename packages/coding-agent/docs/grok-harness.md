@@ -68,6 +68,10 @@ Do not select `grok-imagine-image`, `grok-imagine-image-quality`, `grok-imagine-
 
 Use the normal OMK lane grant model: grant the smallest skill and MCP surface that matches the task, and keep media exceptions explicit.
 
+For each non-queued native `xai` request started through `AgentSession.prompt()`, OMK calls `selectGrokHarnessSkills()` against the live discovered skill descriptions after ordinary prompt-template expansion. It merges up to three matches with explicit/settings selections and rebuilds that turn's `<active_skills>` marker.
+
+The pure `selectSkills()` scorer uses the task plus independent camelCase-aware path-to-skill-name signals, weak 0.35 / strong 0.7 thresholds, deterministic input-order ties, and first-name-wins deduplication. Explicit-only skills are never auto-selected. `headroom` is added only for lexical pressure cues or the session's measured context-pressure bucket. A task with no signals yields an empty automatic grant rather than the full allowlist. Messages queued through `steer`, `followUp`, or `prompt(..., { streamingBehavior })` retain the active run's system prompt; they do not trigger a second skill-selection rebuild.
+
 | Task class | Skills | MCP |
 | --- | --- | --- |
 | Multi-package or repo-context work | `packages`; add `headroom` only under context pressure | none by default |

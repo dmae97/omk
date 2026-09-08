@@ -4,11 +4,17 @@
  */
 
 import { getAgentDir } from "../config.ts";
-import { GROK_HARNESS_DOMAIN_ID, grokHarnessAutoApplyEnabled, isGrokOAuthProvider } from "./grok-harness.ts";
+import {
+	GROK_HARNESS_DOMAIN_ID,
+	grokHarnessAutoApplyEnabled,
+	isGrokOAuthProvider,
+	selectGrokHarnessSkills,
+} from "./grok-harness.ts";
 import type { LoadoutAccessPolicy } from "./loadout-access-policy.ts";
-import { composeLoadout } from "./loadout-compose.ts";
+import { type ComposedLoadout, composeLoadout } from "./loadout-compose.ts";
 import { createLoadoutPolicyFromRuntimeState } from "./loadout-policy-bridge.ts";
 import { applyLoadoutToRuntime, type LoadoutRuntimeSession, type LoadoutRuntimeState } from "./loadout-runtime.ts";
+import { uniqueSorted } from "./loadout-safety.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 
 export interface GrokHarnessDispatchInput {
@@ -18,6 +24,10 @@ export interface GrokHarnessDispatchInput {
 	readonly cwd: string;
 	readonly agentDir?: string;
 	readonly env?: NodeJS.ProcessEnv | Readonly<Record<string, string | undefined>>;
+	/** When set, narrow the grok-harness skill grant to the documented 2–3 subset. */
+	readonly task?: string;
+	/** Optional path hints scored with the task text. */
+	readonly paths?: readonly string[];
 }
 
 export interface GrokHarnessDispatchResult {
@@ -34,7 +44,7 @@ export function tryGrokHarnessDispatch(input: GrokHarnessDispatchInput): GrokHar
 
 	const agentDir = input.agentDir ?? getAgentDir();
 	try {
-		const profile = composeLoadout("coder", GROK_HARNESS_DOMAIN_ID);
+		const profile = composeGrokHarnessProfile(input);
 		const state = applyLoadoutToRuntime(input.session, input.resourceLoader, input.cwd, agentDir, {
 			profile,
 			role: "coder",
@@ -52,11 +62,29 @@ export function tryGrokHarnessDispatch(input: GrokHarnessDispatchInput): GrokHar
 		});
 		return {
 			loadoutAccessPolicy: policy,
-			warnings: state.warnings,
+			warnings: uniqueSorted([
+				...state.warnings,
+				...(input.task?.trim() && state.activeSkills.length === 0 ? ["no grok-harness skill signals"] : []),
+			]),
 			runtimeState: state,
 		};
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		return { loadoutAccessPolicy: undefined, warnings: [message], runtimeState: undefined };
 	}
+}
+
+function composeGrokHarnessProfile(input: GrokHarnessDispatchInput): ComposedLoadout {
+	const profile = composeLoadout("coder", GROK_HARNESS_DOMAIN_ID);
+	const task = input.task?.trim();
+	if (!task) {
+		return { ...profile, skills: { allow: [{ kind: "skill", names: [] }] } };
+	}
+
+	const inventory = input.resourceLoader.getSkills().skills;
+	const selected = selectGrokHarnessSkills(task, inventory, { paths: input.paths });
+	return {
+		...profile,
+		skills: { allow: [{ kind: "skill", names: [...selected] }] },
+	};
 }

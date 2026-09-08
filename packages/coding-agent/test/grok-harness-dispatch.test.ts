@@ -44,12 +44,21 @@ const makeSession = (
 	};
 };
 
+const skillDescriptions: Readonly<Record<string, string>> = {
+	packages: "Multi-package repository context",
+	programming: "TypeScript Python Rust Go implementation",
+	debugging: "Runtime failures, hanging, crash, empty response",
+	"adaptorch-route": "AdaptOrch DAG topology routing",
+	"understand-anything": "Repository graph architecture comprehension",
+	headroom: "Compress oversized context window",
+};
+
 const makeResourceLoader = (): ResourceLoader => ({
 	getSkills: () => ({
 		skills: ["packages", "programming", "debugging", "adaptorch-route", "understand-anything", "headroom"].map(
 			(name) => ({
 				name,
-				description: "test skill",
+				description: skillDescriptions[name] ?? name,
 				filePath: `/skills/${name}/SKILL.md`,
 				baseDir: "/skills",
 				disableModelInvocation: false,
@@ -108,5 +117,51 @@ describe("tryGrokHarnessDispatch", () => {
 			expect.arrayContaining(["read", "bash", "edit", "write"]),
 		);
 		expect(result.runtimeState?.profileName).toMatch(/grok|coder/i);
+		expect(result.runtimeState?.activeSkills).toEqual([]);
+	});
+
+	it("narrows grok-harness skills to the documented 2-3 grant when a task is given", () => {
+		const result = tryGrokHarnessDispatch({
+			provider: GROK_OAUTH_PROVIDER,
+			session: makeSession(),
+			resourceLoader: makeResourceLoader(),
+			cwd: "/project",
+			agentDir: "/agent",
+			env: {},
+			task: "the agent is hanging and the response is empty",
+		});
+		expect(result.runtimeState?.activeSkills).toContain("debugging");
+		expect(result.runtimeState?.activeSkills.length).toBeGreaterThan(0);
+		expect(result.runtimeState?.activeSkills.length).toBeLessThanOrEqual(3);
+		expect(result.runtimeState?.activeSkills).not.toContain("headroom");
+	});
+
+	it("does not fall back to the full grok-harness allowlist when the task has no skill signals", () => {
+		const result = tryGrokHarnessDispatch({
+			provider: GROK_OAUTH_PROVIDER,
+			session: makeSession(),
+			resourceLoader: makeResourceLoader(),
+			cwd: "/project",
+			agentDir: "/agent",
+			env: {},
+			task: "hello there",
+		});
+		expect(result.runtimeState?.activeSkills ?? []).toEqual([]);
+		expect(result.warnings).toContain("no grok-harness skill signals");
+	});
+
+	it("uses path hints to grant a grok-harness skill the task text would miss", () => {
+		const result = tryGrokHarnessDispatch({
+			provider: GROK_OAUTH_PROVIDER,
+			session: makeSession(),
+			resourceLoader: makeResourceLoader(),
+			cwd: "/project",
+			agentDir: "/agent",
+			env: {},
+			task: "deploy the app",
+			paths: ["packages/foo/bar.ts"],
+		});
+		expect(result.runtimeState?.activeSkills).toContain("packages");
+		expect(result.runtimeState?.activeSkills.length).toBeLessThanOrEqual(3);
 	});
 });

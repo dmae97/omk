@@ -77,6 +77,7 @@ describe("OAuth provider registry", () => {
 		const ids = getOAuthProviders().map((p) => p.id);
 		expect(ids).toContain(QWEN_OAUTH_PROVIDER_ID);
 		expect(ids).toContain(XAI_OAUTH_PROVIDER_ID);
+		expect(ids).toContain("meta");
 		expect(ids).not.toContain("grok-oauth-proxy");
 
 		const qwen = getOAuthProviders().find((p) => p.id === QWEN_OAUTH_PROVIDER_ID);
