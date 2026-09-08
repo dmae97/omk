@@ -1,7 +1,8 @@
 import { Marked, type Token, Tokenizer, type Tokens } from "marked";
-import { getCapabilities, hyperlink, isImageLine } from "../terminal-image.ts";
+import { isImageLine } from "../terminal-image.ts";
 import type { Component } from "../tui.ts";
 import { applyBackgroundToLine, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
+import { type MarkdownLinkTheme, renderMarkdownCodeLink, renderMarkdownLink } from "./markdown-links.ts";
 
 const STRICT_STRIKETHROUGH_REGEX = /^(~~)(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))\1(?=[^~]|$)/;
 
@@ -50,10 +51,8 @@ export interface DefaultTextStyle {
  * Theme functions for markdown elements.
  * Each function takes text and returns styled text with ANSI codes.
  */
-export interface MarkdownTheme {
+export interface MarkdownTheme extends MarkdownLinkTheme {
 	heading: (text: string) => string;
-	link: (text: string) => string;
-	linkUrl: (text: string) => string;
 	code: (text: string) => string;
 	codeBlock: (text: string) => string;
 	codeBlockBorder: (text: string) => string;
@@ -64,7 +63,6 @@ export interface MarkdownTheme {
 	bold: (text: string) => string;
 	italic: (text: string) => string;
 	strikethrough: (text: string) => string;
-	underline: (text: string) => string;
 	highlightCode?: (code: string, lang?: string) => string[];
 	/** Prefix applied to each rendered code block line (default: "  ") */
 	codeBlockIndent?: string;
@@ -78,6 +76,7 @@ export interface MarkdownOptions {
 interface InlineStyleContext {
 	applyText: (text: string) => string;
 	stylePrefix: string;
+	insideLink?: boolean;
 }
 
 export class Markdown implements Component {
@@ -465,6 +464,7 @@ export class Markdown implements Component {
 		let result = "";
 		const resolvedStyleContext = styleContext ?? this.getDefaultInlineStyleContext();
 		const { applyText, stylePrefix } = resolvedStyleContext;
+		const codeLinkTheme = resolvedStyleContext.insideLink ? undefined : this.theme;
 		const applyTextWithNewlines = (text: string): string => {
 			const segments: string[] = text.split("\n");
 			return segments.map((segment: string) => applyText(segment)).join("\n");
@@ -499,28 +499,22 @@ export class Markdown implements Component {
 				}
 
 				case "codespan":
-					result += this.theme.code(token.text) + stylePrefix;
+					result += renderMarkdownCodeLink(this.theme.code(token.text), token.text, codeLinkTheme) + stylePrefix;
+					break;
+
+				case "image":
+					result += resolvedStyleContext.insideLink
+						? applyTextWithNewlines(token.text || token.href)
+						: renderMarkdownLink({ text: token.text, href: token.href }, token.text || token.href, this.theme) +
+							stylePrefix;
 					break;
 
 				case "link": {
-					const linkText = this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
-					const styledLink = this.theme.link(this.theme.underline(linkText));
-					if (getCapabilities().hyperlinks) {
-						// OSC 8: render as a clickable hyperlink. The URL is not printed inline,
-						// so we always show only the link text regardless of whether it matches href.
-						result += hyperlink(styledLink, token.href) + stylePrefix;
-					} else {
-						// Fallback: print URL in parentheses when text differs from href.
-						// Compare raw token.text (not styled) against href for the equality check.
-						// For mailto: links strip the prefix (autolinked emails use text="foo@bar.com"
-						// but href="mailto:foo@bar.com").
-						const hrefForComparison = token.href.startsWith("mailto:") ? token.href.slice(7) : token.href;
-						if (token.text === token.href || token.text === hrefForComparison) {
-							result += styledLink + stylePrefix;
-						} else {
-							result += styledLink + this.theme.linkUrl(` (${token.href})`) + stylePrefix;
-						}
-					}
+					const linkText = this.renderInlineTokens(token.tokens || [], {
+						...resolvedStyleContext,
+						insideLink: true,
+					});
+					result += renderMarkdownLink({ text: token.text, href: token.href }, linkText, this.theme) + stylePrefix;
 					break;
 				}
 

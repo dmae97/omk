@@ -1,10 +1,10 @@
 import type { SpawnSyncReturns } from "child_process";
-import { writeFileSync } from "fs";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
 	return {
 		spawnSync: vi.fn<(command: string, args: string[], options: unknown) => SpawnSyncReturns<Buffer>>(),
+		windowsClipboard: vi.fn(),
 		clipboard: {
 			hasImage: vi.fn<() => boolean>(),
 			getImageBinary: vi.fn<() => Promise<Uint8Array | null>>(),
@@ -23,6 +23,11 @@ vi.mock("../src/utils/clipboard-native.js", () => {
 		clipboard: mocks.clipboard,
 	};
 });
+
+vi.mock("../src/utils/windows-clipboard-image.ts", () => ({
+	readWindowsClipboardImage: mocks.windowsClipboard,
+	WindowsClipboardError: Error,
+}));
 
 function spawnOk(stdout: Buffer): SpawnSyncReturns<Buffer> {
 	return {
@@ -51,6 +56,7 @@ describe("readClipboardImage", () => {
 	beforeEach(() => {
 		vi.resetModules();
 		mocks.spawnSync.mockReset();
+		mocks.windowsClipboard.mockReset();
 		mocks.clipboard.hasImage.mockReset();
 		mocks.clipboard.getImageBinary.mockReset();
 	});
@@ -108,41 +114,19 @@ describe("readClipboardImage", () => {
 		expect(Array.from(result?.bytes ?? [])).toEqual([9, 8]);
 	});
 
-	test("WSL: passes PowerShell path directly instead of through a custom env var", async () => {
-		mocks.clipboard.hasImage.mockImplementation(() => {
-			throw new Error("clipboard.hasImage should not be called before PowerShell on WSL");
+	test("WSL: delegates directly to the Windows reader with the selected environment", async () => {
+		mocks.windowsClipboard.mockResolvedValue({
+			kind: "image",
+			bytes: new Uint8Array([4, 5, 6]),
+			mimeType: "image/png",
 		});
-
-		let tmpFile: string | undefined;
-		mocks.spawnSync.mockImplementation((command, args, options) => {
-			if (command === "wl-paste" || command === "xclip") {
-				return spawnOk(Buffer.alloc(0));
-			}
-
-			if (command === "wslpath") {
-				tmpFile = args[1];
-				return spawnOk(Buffer.from("C:\\Users\\O'Hare\\clip.png\n", "utf-8"));
-			}
-
-			if (command === "powershell.exe") {
-				const spawnOptions = options as { env?: NodeJS.ProcessEnv };
-				expect(spawnOptions.env?.PI_WSL_CLIPBOARD_IMAGE_PATH).toBeUndefined();
-				expect(args[2]).toContain("$path = 'C:\\Users\\O''Hare\\clip.png'");
-				if (!tmpFile) {
-					throw new Error("wslpath should be called before powershell.exe");
-				}
-				writeFileSync(tmpFile, Buffer.from([4, 5, 6]));
-				return spawnOk(Buffer.from("ok\n", "utf-8"));
-			}
-
-			throw new Error(`Unexpected spawnSync call: ${command} ${args.join(" ")}`);
-		});
-
+		const env = { WSL_DISTRO_NAME: "Ubuntu" };
 		const { readClipboardImage } = await import("../src/utils/clipboard-image.ts");
-		const result = await readClipboardImage({ platform: "linux", env: { WSL_DISTRO_NAME: "Ubuntu" } });
-		expect(result).not.toBeNull();
+		const result = await readClipboardImage({ platform: "linux", env });
 		expect(result?.mimeType).toBe("image/png");
 		expect(Array.from(result?.bytes ?? [])).toEqual([4, 5, 6]);
+		expect(mocks.windowsClipboard).toHaveBeenCalledWith(env);
+		expect(mocks.spawnSync).not.toHaveBeenCalled();
 	});
 
 	test("Non-Wayland: uses clipboard", async () => {

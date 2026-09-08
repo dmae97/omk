@@ -94,6 +94,26 @@ Add to `settings.json` (Ctrl+Shift+, or Settings → Open JSON file) to forward 
 
 If you already have an `actions` array, add the objects to it. If the old fullscreen behavior persists, fully close and reopen Windows Terminal.
 
+### Windows screenshots into a WSL prompt
+
+Capture with **Win+Shift+S**, return to OMK, and press **Alt+V**. The image is added
+to the prompt attachment strip; submit the prompt when ready. **Ctrl+V** also works
+when the terminal forwards that key to OMK. Windows Terminal normally handles Ctrl+V
+itself and pastes text, so an image-only clipboard may appear to do nothing.
+
+To deliberately forward Ctrl+V instead, add this action to Windows Terminal's
+existing settings (this changes Ctrl+V behavior for that terminal):
+
+```json
+{ "command": { "action": "sendInput", "input": "\u0016" }, "keys": "ctrl+v" }
+```
+
+Use the terminal's normal text-paste shortcut, commonly Ctrl+Shift+V, for clipboard
+text after this opt-in. OMK does not change terminal settings automatically.
+See [Windows setup](windows.md#windows-screenshot-paste) for clipboard prerequisites
+and error behavior. Inline image rendering is terminal-dependent; an attachment
+chip does not require the terminal to display image pixels.
+
 ## xfce4-terminal, terminator
 
 These terminals have limited escape sequence support. Modified Enter keys like `Ctrl+Enter` and `Shift+Enter` cannot be distinguished from plain `Enter`, preventing custom keybindings such as `submit: ["ctrl+enter"]` from working.
