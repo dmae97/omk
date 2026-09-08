@@ -19,14 +19,10 @@ import { mcpAttachDiagnostics } from "./cli/mcp-attach.ts";
 import { isExplicitExtensionDiagnostic, resolveCliPaths } from "./cli/resource-paths.ts";
 import { selectSession } from "./cli/session-picker.ts";
 import { handleCodexBarQuotaCommand } from "./codexbar-cli.ts";
-import { runAdaptOrchDoctorCli } from "./commands/adaptorch-doctor-cli.ts";
-import { runDoctorProviderCli } from "./commands/doctor-provider-cli.ts";
+import { runInitCli } from "./commands/init-cli.ts";
 import { runPackageDoctorCli } from "./commands/package-doctor-cli.ts";
-import { runResourceDoctorCli } from "./commands/resource-doctor-cli.ts";
-import { runRouterFeedbackCli } from "./commands/router-feedback-cli.ts";
-import { runSdkSessionCli } from "./commands/sdk-session-cli.ts";
-import { runSessionDoctorCli } from "./commands/session-doctor-cli.ts";
-import { runStatsCli } from "./commands/stats-cli.ts";
+import { runProviderSyncCli } from "./commands/provider-sync-cli.ts";
+import { runCommand } from "./commands/run-command.ts";
 import { ENV_SESSION_DIR, expandTildePath, getAgentDir, getPackageDir, VERSION } from "./config.ts";
 import { type CreateAgentSessionRuntimeFactory, createAgentSessionRuntime } from "./core/agent-session-runtime.ts";
 import {
@@ -565,6 +561,11 @@ export interface MainOptions {
 }
 
 export async function main(args: string[], options?: MainOptions) {
+	const initialization = runInitCli(args);
+	if (initialization.handled) {
+		process.exitCode = initialization.exitCode;
+		return;
+	}
 	resetTimings();
 	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env.OMK_OFFLINE);
 	if (offlineMode) {
@@ -594,24 +595,16 @@ export async function main(args: string[], options?: MainOptions) {
 		return;
 	}
 
-	// Subcommands that report their own outcome, tried in order. Each claims a
-	// distinct command prefix, so the first one that reports `handled` wins.
-	type CliOutcome = { readonly handled: boolean; readonly exitCode: number };
-	const outcomeCommands: ReadonlyArray<(argv: string[]) => CliOutcome | Promise<CliOutcome>> = [
-		runSessionDoctorCli,
-		runDoctorProviderCli,
-		runResourceDoctorCli,
-		runAdaptOrchDoctorCli,
-		runStatsCli,
-		runSdkSessionCli,
-		runRouterFeedbackCli,
-	];
-	for (const runCommand of outcomeCommands) {
-		const outcome = await runCommand(args);
-		if (outcome.handled) {
-			process.exitCode = outcome.exitCode;
-			return;
-		}
+	const providerSync = await runProviderSyncCli(args);
+	if (providerSync.handled) {
+		process.exitCode = providerSync.exitCode;
+		return;
+	}
+
+	const outcome = await runCommand(args);
+	if (outcome.handled) {
+		process.exitCode = outcome.exitCode;
+		return;
 	}
 
 	const parsed = parseArgs(args);
