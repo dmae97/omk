@@ -9,7 +9,14 @@ import {
 	CLOUDFLARE_AI_GATEWAY_OPENAI_BASE_URL,
 	CLOUDFLARE_WORKERS_AI_BASE_URL,
 } from "../src/providers/cloudflare.ts";
-import type { AnthropicMessagesCompat, Api, KnownProvider, Model, OpenAICompletionsCompat } from "../src/types.ts";
+import type {
+	AnthropicMessagesCompat,
+	Api,
+	KnownProvider,
+	Model,
+	OpenAICompletionsCompat,
+	OpenAIResponsesCompat,
+} from "../src/types.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -250,6 +257,66 @@ const ANT_LING_RING_THINKING_LEVEL_MAP = {
 	xhigh: "xhigh",
 } as const;
 
+/**
+ * Muse Spark accepts reasoning_effort minimal/low/medium/high/xhigh. `"none"` is rejected
+ * with HTTP 400, and there is no `"max"` literal upstream — xhigh *is* the documented
+ * "maximum reasoning depth". So `off` is marked unsupported (nothing may default to effort
+ * "none"), and OMK's `max` label serializes to xhigh, keeping `/thinking max` usable without
+ * sending an invalid enum. Same shape as the openai-codex gpt-5.6 pass below.
+ * https://dev.meta.ai/docs/reasoning
+ */
+const MUSE_SPARK_THINKING_LEVEL_MAP = {
+	off: null,
+	minimal: "minimal",
+	low: "low",
+	medium: "medium",
+	high: "high",
+	xhigh: "xhigh",
+	max: "xhigh",
+} as const;
+
+/** Matches every Muse Spark variant: bare, vendor-prefixed (`meta/…`), and tier-suffixed. */
+function isMuseSparkModel(id: string): boolean {
+	return /muse-spark/i.test(id);
+}
+
+/**
+ * Meta Model API — the first-party Muse Spark endpoint (OpenAI-compatible, Bearer auth).
+ * https://dev.meta.ai/docs/overview
+ */
+const META_BASE_URL = "https://api.meta.ai/v1";
+const META_CONTEXT_WINDOW = 1_048_576;
+const META_MAX_OUTPUT_TOKENS = 131_072;
+
+/**
+ * OpenAI-compatible, but not OpenAI: Meta documents prompt caching without OpenAI's 24h
+ * `prompt_cache_retention` control or the `session_id` cache-affinity header, so neither
+ * OpenAI-only extra is sent.
+ * https://dev.meta.ai/docs/prompt-caching
+ */
+const META_RESPONSES_COMPAT: OpenAIResponsesCompat = {
+	sendSessionIdHeader: false,
+	supportsLongCacheRetention: false,
+};
+
+/**
+ * Documented standard- and contributor-tier models that models.dev's `meta` provider has not
+ * picked up yet (it still stops at 1.2). Specs mirror the 1.2 tier each one supersedes — same
+ * 1M context and per-tier pricing — which is what other catalogs already report for 1.3.
+ */
+const META_BACKFILL_MODELS = [
+	{
+		id: "muse-spark-1.3",
+		name: "Muse Spark 1.3",
+		cost: { input: 1.25, output: 4.25, cacheRead: 0.15, cacheWrite: 0 },
+	},
+	{
+		id: "muse-spark-1.3-contributor",
+		name: "Muse Spark 1.3 Contributor",
+		cost: { input: 0.1, output: 0.2, cacheRead: 0.002, cacheWrite: 0 },
+	},
+] as const;
+
 const OPENAI_RESPONSES_NONE_REASONING_MODELS = new Set([
 	"gpt-5.1",
 	"gpt-5.2",
@@ -434,6 +501,19 @@ function applyModelMetadata(model: Model<Api>): void {
 				? { ...DEEPSEEK_V4_THINKING_LEVEL_MAP, xhigh: "xhigh" }
 				: DEEPSEEK_V4_THINKING_LEVEL_MAP,
 		);
+	}
+	// Applies across every gateway serving Muse Spark (meta, openrouter, opencode, …): the effort
+	// vocabulary belongs to the model, not the gateway, so the ceiling and the `none` rejection
+	// travel with the model id. Restricted to the OpenAI-shaped surfaces that actually transmit an
+	// effort string; vercel-ai-gateway fronts Muse Spark with anthropic-messages, whose budget path
+	// ignores thinkingLevelMap and collapses xhigh/max to high (clampReasoning), so mapping there
+	// would advertise tiers the transport cannot express.
+	if (
+		model.reasoning &&
+		isMuseSparkModel(model.id) &&
+		(model.api === "openai-responses" || model.api === "openai-completions")
+	) {
+		mergeThinkingLevelMap(model, MUSE_SPARK_THINKING_LEVEL_MAP);
 	}
 	if (isGoogleThinkingApi(model) && isGemini3ProModel(model.id)) {
 		mergeThinkingLevelMap(model, { off: null, minimal: null, low: "LOW", medium: null, high: "HIGH" });
@@ -1508,6 +1588,59 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					contextWindow: m.limit?.context || 4096,
 					maxTokens: m.limit?.output || 4096,
 					thinkingLevelMap: { ...KIMI_CODING_THINKING_LEVEL_MAP },
+				});
+			}
+		}
+
+		// Process Meta Model API models (Muse Spark)
+		// models.dev reports npm "@ai-sdk/openai" for this provider, which maps to the Responses
+		// API under the same convention as the OpenCode pass above. That surface is also what
+		// carries Muse Spark's cross-turn reasoning replay (encrypted_content / previous_response_id).
+		// https://dev.meta.ai/docs/overview
+		if (data.meta?.models) {
+			const metaModels = data.meta.models;
+
+			for (const [modelId, model] of Object.entries(metaModels)) {
+				const m = model as ModelsDevModel;
+				if (m.tool_call !== true) continue;
+
+				models.push({
+					id: modelId,
+					name: m.name || modelId,
+					api: "openai-responses",
+					provider: "meta",
+					baseUrl: META_BASE_URL,
+					compat: { ...META_RESPONSES_COMPAT },
+					reasoning: m.reasoning === true,
+					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					cost: {
+						input: m.cost?.input || 0,
+						output: m.cost?.output || 0,
+						cacheRead: m.cost?.cache_read || 0,
+						cacheWrite: m.cost?.cache_write || 0,
+					},
+					contextWindow: m.limit?.context || META_CONTEXT_WINDOW,
+					maxTokens: m.limit?.output || META_MAX_OUTPUT_TOKENS,
+				});
+			}
+
+			// Backfill only what upstream is still missing, so these rows drop out on their own
+			// once models.dev lists 1.3 under `meta`.
+			for (const backfill of META_BACKFILL_MODELS) {
+				if (metaModels[backfill.id]) continue;
+
+				models.push({
+					id: backfill.id,
+					name: backfill.name,
+					api: "openai-responses",
+					provider: "meta",
+					baseUrl: META_BASE_URL,
+					compat: { ...META_RESPONSES_COMPAT },
+					reasoning: true,
+					input: ["text", "image"],
+					cost: { ...backfill.cost },
+					contextWindow: META_CONTEXT_WINDOW,
+					maxTokens: META_MAX_OUTPUT_TOKENS,
 				});
 			}
 		}

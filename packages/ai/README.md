@@ -77,11 +77,14 @@ Unified LLM API with automatic model discovery, provider configuration, token an
 - **OpenCode Go**
 - **Fireworks** (uses Anthropic-compatible API)
 - **Kimi For Coding** (Moonshot AI, uses Anthropic-compatible API)
+- **Meta Model API** (Muse Spark over the OpenAI Responses API. `/login` → Muse Code runs the CLI device flow and mints the subscription key. `META_API_KEY` remains pay-as-you-go.)
 - **Xiaomi MiMo** (uses Anthropic-compatible API; defaults to API billing endpoint, with separate Token Plan providers for `cn`/`ams`/`sgp` regions)
 - **Zyloo** (OpenAI-compatible unified API gateway)
 - **Any OpenAI-compatible API**: Ollama, vLLM, LM Studio, etc.
 
 The generated NVIDIA NIM entry `z-ai/glm-5.2` explicitly enables `reasoning_effort`; its `max` thinking level is sent as `reasoning_effort: "max"`. Other NVIDIA models keep the provider's conservative compatibility defaults.
+
+Muse Spark models expose thinking levels `minimal` through `max` on every provider that serves them over an OpenAI-shaped API (`meta`, `openrouter`, `opencode`, `opencode-go`). The model's own effort ceiling is `xhigh`, so the `max` level is sent as `reasoning_effort: "xhigh"`; `off` is unsupported because Muse Spark rejects `"none"` with HTTP 400.
 
 ## Installation
 
@@ -1156,6 +1159,7 @@ In Node.js environments, you can set environment variables to avoid passing API 
 | MiniMax | `MINIMAX_API_KEY` |
 | OpenCode Zen / OpenCode Go | `OPENCODE_API_KEY` |
 | Kimi For Coding | `KIMI_API_KEY` |
+| Meta Model API | `META_API_KEY` (falls back to `META_MODEL_API_KEY`, then `MODEL_API_KEY`) |
 | Xiaomi MiMo (API billing) | `XIAOMI_API_KEY` |
 | Xiaomi MiMo Token Plan (China) | `XIAOMI_TOKEN_PLAN_CN_API_KEY` |
 | Xiaomi MiMo Token Plan (Amsterdam) | `XIAOMI_TOKEN_PLAN_AMS_API_KEY` |

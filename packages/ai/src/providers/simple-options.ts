@@ -9,6 +9,7 @@ export function buildBaseOptions(_model: Model<Api>, options?: SimpleStreamOptio
 		transport: options?.transport,
 		cacheRetention: options?.cacheRetention,
 		sessionId: options?.sessionId,
+		cwd: options?.cwd,
 		headers: options?.headers,
 		onPayload: options?.onPayload,
 		onResponse: options?.onResponse,

@@ -6,6 +6,9 @@ const originalGhToken = process.env.GH_TOKEN;
 const originalGitHubToken = process.env.GITHUB_TOKEN;
 const originalZaiCodingCnApiKey = process.env.ZAI_CODING_CN_API_KEY;
 const originalZylooApiKey = process.env.ZYLOO_API_KEY;
+const originalMetaApiKey = process.env.META_API_KEY;
+const originalMetaModelApiKey = process.env.META_MODEL_API_KEY;
+const originalModelApiKey = process.env.MODEL_API_KEY;
 
 afterEach(() => {
 	if (originalCopilotGitHubToken === undefined) {
@@ -36,6 +39,24 @@ afterEach(() => {
 		delete process.env.ZYLOO_API_KEY;
 	} else {
 		process.env.ZYLOO_API_KEY = originalZylooApiKey;
+	}
+
+	if (originalMetaApiKey === undefined) {
+		delete process.env.META_API_KEY;
+	} else {
+		process.env.META_API_KEY = originalMetaApiKey;
+	}
+
+	if (originalMetaModelApiKey === undefined) {
+		delete process.env.META_MODEL_API_KEY;
+	} else {
+		process.env.META_MODEL_API_KEY = originalMetaModelApiKey;
+	}
+
+	if (originalModelApiKey === undefined) {
+		delete process.env.MODEL_API_KEY;
+	} else {
+		process.env.MODEL_API_KEY = originalModelApiKey;
 	}
 });
 
@@ -70,5 +91,43 @@ describe("environment API keys", () => {
 
 		expect(findEnvKeys("zyloo")).toEqual(["ZYLOO_API_KEY"]);
 		expect(getEnvApiKey("zyloo")).toBe("zyloo-token");
+	});
+
+	// META_API_KEY is the name the Muse Code CLI onboarding sets, so a Muse Code user
+	// typically already has it exported and expects OMK to pick it up.
+	it("resolves Meta Model API credentials from META_API_KEY", () => {
+		delete process.env.META_MODEL_API_KEY;
+		delete process.env.MODEL_API_KEY;
+		process.env.META_API_KEY = "muse-code-token";
+
+		expect(findEnvKeys("meta")).toEqual(["META_API_KEY"]);
+		expect(getEnvApiKey("meta")).toBe("muse-code-token");
+	});
+
+	it("resolves Meta Model API credentials from META_MODEL_API_KEY", () => {
+		delete process.env.META_API_KEY;
+		delete process.env.MODEL_API_KEY;
+		process.env.META_MODEL_API_KEY = "meta-token";
+
+		expect(findEnvKeys("meta")).toEqual(["META_MODEL_API_KEY"]);
+		expect(getEnvApiKey("meta")).toBe("meta-token");
+	});
+
+	it("falls back to the generic MODEL_API_KEY that Meta's own docs use", () => {
+		delete process.env.META_API_KEY;
+		delete process.env.META_MODEL_API_KEY;
+		process.env.MODEL_API_KEY = "generic-token";
+
+		expect(findEnvKeys("meta")).toEqual(["MODEL_API_KEY"]);
+		expect(getEnvApiKey("meta")).toBe("generic-token");
+	});
+
+	it("prefers the Muse Code name when several Meta key names are set", () => {
+		process.env.META_API_KEY = "muse-code-token";
+		process.env.META_MODEL_API_KEY = "meta-token";
+		process.env.MODEL_API_KEY = "generic-token";
+
+		expect(findEnvKeys("meta")).toEqual(["META_API_KEY", "META_MODEL_API_KEY", "MODEL_API_KEY"]);
+		expect(getEnvApiKey("meta")).toBe("muse-code-token");
 	});
 });

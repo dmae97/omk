@@ -2,8 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- Muse Code subscription OAuth on the built-in `meta` provider. `/login` → Muse Code runs Meta's RFC 8628 device flow (`auth.meta.com`) and mints a Model API key at `https://api.meta.ai/muse-code/key`. Login and refresh honor `HTTP_PROXY` / `HTTPS_PROXY`. A pasted `META_API_KEY` is still pay-as-you-go.
+
+- `compat.sendCodexTurnMetadata` for `openai-responses` models. When set, the request carries Codex-native turn identity: `client_metadata["x-codex-turn-metadata"]` with `thread_id` from `options.sessionId` and a `turn_id` hashed from the latest user item, and that user item is stamped with the matching `internal_chat_message_metadata_passthrough.turn_id`. Tool rounds replay the same id; the next user message rotates it. Loopback bridges written for the Codex CLI ([codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web), which drives a signed-in ChatGPT Web session) reject a turn without it, so this is what lets a models.json provider on `http://127.0.0.1:17841/v1` serve `chatgpt-web/*` models to OMK. Default off; nothing changes for existing providers.
+- A refused connection on a `sendCodexTurnMetadata` model now reports `codex-chatgpt-web bridge at <baseUrl> refused the connection` and tells the user to start the Codex Web GPT launcher, instead of the SDK's generic `Connection error.`; the check walks the error's `cause` chain for `ECONNREFUSED`, so every other failure keeps its original message.
+
+- Meta Model API as a built-in provider (`meta`), serving Muse Spark from `https://api.meta.ai/v1` over the OpenAI Responses API — the surface that carries the model's cross-turn reasoning replay. Five models: `muse-spark-1.3`, `muse-spark-1.2`, `muse-spark-1.1` (standard tier) and `muse-spark-1.3-contributor`, `muse-spark-1.2-contributor` (contributor tier), each with a 1M-token context window. Auth reads `META_API_KEY` first — the name the Muse Code CLI provisions, so a Muse Code user usually has it exported already — then `META_MODEL_API_KEY` (models.dev's namespaced form), then `MODEL_API_KEY` (the Model API docs' own name, generic enough to collide with an unrelated service). Those env vars are pay-as-you-go. Muse Code subscription login is a separate OAuth path that mints the CLI-scoped key. models.dev's `meta` entry still stops at 1.2, so the 1.3 pair is backfilled from the documented catalog and drops out automatically once upstream lists it.
+
 ### Fixed
 
+- Muse Spark's top thinking tiers were invisible: no `thinkingLevelMap` meant `getSupportedThinkingLevels()` never exposed `xhigh` or `max` (top-tier levels only appear when a model maps them explicitly), so `/thinking max` silently clamped to `high` on every route. All 10 Muse Spark models served over an effort-carrying API — `meta`, `openrouter`, `opencode`, `opencode-go` — now map `xhigh` and `max`. Because the model's documented ceiling is effort `xhigh` ("maximum reasoning depth") and there is no `max` literal, OMK's `max` label serializes to `xhigh` rather than sending an enum the API would reject, the same shape already used for `openai-codex` GPT-5.6. The `vercel-ai-gateway` copies stay unmapped on purpose: they are fronted by `anthropic-messages` without `forceAdaptiveThinking`, so they take the token-budget path where `clampReasoning()` collapses `xhigh`/`max` back to `high` and a mapping would advertise tiers the transport cannot express.
+- A Muse Spark turn with thinking off sent `reasoning: {effort: "none"}`, which the model rejects with HTTP 400 — the OpenRouter and Responses paths both default to `"none"` unless a model marks `off` unsupported. `off` is now `null` for every Muse Spark route, so the reasoning field is omitted instead.
 - Claude Fable models were configured for budget-based thinking, which that family does not accept: `thinking: {type: "enabled", budget_tokens: N}` and any sampling parameter each return HTTP 400, so every reasoning turn on `claude-fable-5` / `claude-fable-5-1` failed before producing a token. Fable now carries `forceAdaptiveThinking` and `supportsTemperature: false` like the Opus 4.7/4.8 line, so requests send `thinking: {type: "adaptive"}` and drop temperature.
 - Claude Fable exposed no `thinkingLevelMap`, so its `xhigh` and `max` effort tiers were invisible to `getSupportedThinkingLevels()` and `/thinking max` silently clamped to `high` (top-tier levels are only exposed when a model maps them explicitly). All 18 Fable routes now map `xhigh` -> effort `xhigh` and `max` -> effort `max`, matching Opus 4.7/4.8.
 - Claude Fable rejected every **thinking-off** turn with `400 "thinking.type.disabled" is not supported for this model`, so `claude-fable-5` / `claude-fable-5-1` failed whenever reasoning was not requested — the common default path. Fable always thinks adaptively, so the `thinking` field is now omitted for that family instead of sending an explicit disable. The new `supportsDisabledThinking` compat flag scopes this to Fable only: Opus 4.6/4.8, Opus 5, and Sonnet 5 are adaptive too but still accept an explicit disable, and dropping it there would have billed users for thinking they had turned off.
@@ -1489,7 +1500,7 @@
 
 ## [0.22.1] - 2025-12-15
 
-_Dedicated to Peter's shoulder ([@steipete](https://twitter.com/steipete))_
+*Dedicated to Peter's shoulder ([@steipete](https://twitter.com/steipete))*
 
 ### Added
 

@@ -10,6 +10,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * but JSON Schema and OpenAI function tools require `required` to be an array when
  * present. Absence already means no required fields, so drop nullish `required`
  * keys while preserving valid arrays and other schema content.
+ *
+ * The root is additionally coerced to an object schema. Tool arguments are always
+ * a JSON object, but servers do send roots without one — an MCP server shipping
+ * `{ "$schema": "..." }` makes xAI answer
+ * `400 "tool parameter root must be an object type"`, a non-retryable error that
+ * ends the run. Only the root is coerced; nested schemas keep their own types.
  */
 export function normalizeToolParameters(parameters: Tool["parameters"]): Record<string, unknown> {
 	const normalize = (value: unknown): unknown => {
@@ -31,10 +37,18 @@ export function normalizeToolParameters(parameters: Tool["parameters"]): Record<
 	};
 
 	const normalized = normalize(parameters);
-	if (isRecord(normalized)) {
-		return normalized;
+	if (!isRecord(normalized)) {
+		return { type: "object", properties: {} };
 	}
-	return { type: "object", properties: {} };
+	// `normalized` is a fresh copy built above, so completing its root here never
+	// writes to the caller's schema object.
+	if (normalized.type !== "object") {
+		normalized.type = "object";
+	}
+	if (!isRecord(normalized.properties)) {
+		normalized.properties = {};
+	}
+	return normalized;
 }
 
 function canonicalJsonPart(value: unknown): string | undefined {

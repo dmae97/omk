@@ -17,6 +17,7 @@ import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord } from "../utils/headers.ts";
 import { retryProviderRequest } from "../utils/provider-retry.ts";
 import { isCloudflareProvider, resolveCloudflareBaseUrl } from "./cloudflare.ts";
+import { describeCodexBridgeConnectionError, withCodexTurnMetadata } from "./codex-turn-metadata.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import { resolveOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
 import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.ts";
@@ -42,17 +43,15 @@ function getCompat(model: Model<"openai-responses">): Required<OpenAIResponsesCo
 	return {
 		sendSessionIdHeader: model.compat?.sendSessionIdHeader ?? true,
 		supportsLongCacheRetention: model.compat?.supportsLongCacheRetention ?? true,
+		sendCodexTurnMetadata: model.compat?.sendCodexTurnMetadata ?? false,
 	};
 }
 
-function getPromptCacheRetention(
-	compat: Required<OpenAIResponsesCompat>,
-	cacheRetention: CacheRetention,
-): "24h" | undefined {
-	return cacheRetention === "long" && compat.supportsLongCacheRetention ? "24h" : undefined;
-}
-
-function formatOpenAIResponsesError(error: unknown): string {
+function formatOpenAIResponsesError(error: unknown, model: Model<"openai-responses">): string {
+	const bridgeHint = getCompat(model).sendCodexTurnMetadata
+		? describeCodexBridgeConnectionError(error, model.baseUrl)
+		: undefined;
+	if (bridgeHint) return bridgeHint;
 	if (error instanceof Error) {
 		const status = (error as Error & { status?: unknown }).status;
 		const statusCode = typeof status === "number" ? status : undefined;
@@ -157,7 +156,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses", OpenAIRes
 				delete (block as { partialJson?: string }).partialJson;
 			}
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
-			output.errorMessage = formatOpenAIResponsesError(error);
+			output.errorMessage = formatOpenAIResponsesError(error, model);
 			stream.push({ type: "error", reason: output.stopReason, error: output });
 			stream.end();
 		}
@@ -246,7 +245,9 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 			cacheRetention === "none"
 				? undefined
 				: resolveOpenAIPromptCacheKey(context, options?.sessionId, `${model.provider}/${model.id}`),
-		prompt_cache_retention: getPromptCacheRetention(compat, cacheRetention),
+		// Long retention is opt-in per provider: only ask for 24h when the caller
+		// requested it and the model declares it supports prompt_cache_retention.
+		prompt_cache_retention: cacheRetention === "long" && compat.supportsLongCacheRetention ? "24h" : undefined,
 		store: false,
 	};
 
@@ -283,7 +284,7 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 		}
 	}
 
-	return params;
+	return compat.sendCodexTurnMetadata ? withCodexTurnMetadata(params, options?.sessionId, options?.cwd) : params;
 }
 
 function getServiceTierCostMultiplier(

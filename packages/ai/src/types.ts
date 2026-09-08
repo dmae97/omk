@@ -31,6 +31,7 @@ export type KnownProvider =
 	| "openai-codex"
 	| "nvidia"
 	| "deepseek"
+	| "meta"
 	| "github-copilot"
 	| "xai"
 	| "groq"
@@ -118,6 +119,11 @@ export interface StreamOptions {
 	 * session-aware features. Ignored by providers that don't support it.
 	 */
 	sessionId?: string;
+	/**
+	 * Trusted working directory supplied by the agent runtime. Providers that bridge a local tool
+	 * harness may use it to bind filesystem authority; ordinary remote providers ignore it.
+	 */
+	cwd?: string;
 	/**
 	 * Optional callback for inspecting or replacing provider payloads before sending.
 	 * Return undefined to keep the payload unchanged.
@@ -450,6 +456,15 @@ export interface OpenAIResponsesCompat {
 	sendSessionIdHeader?: boolean;
 	/** Whether the provider supports `prompt_cache_retention: "24h"`. Default: true. */
 	supportsLongCacheRetention?: boolean;
+	/**
+	 * Whether to send Codex-native turn identity: `client_metadata["x-codex-turn-metadata"]` with
+	 * `thread_id` from `options.sessionId` and a `turn_id` derived from the latest user item, plus the
+	 * matching `internal_chat_message_metadata_passthrough.turn_id` on that item. When the trusted
+	 * runtime supplies `cwd`, this also binds an adjacent workspace environment envelope for Full
+	 * harness tool calls. Loopback bridges written for the Codex CLI refuse a turn without it.
+	 * Default: false.
+	 */
+	sendCodexTurnMetadata?: boolean;
 }
 
 /** Compatibility settings for Anthropic Messages-compatible APIs. */

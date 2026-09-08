@@ -16,6 +16,7 @@
  * - Google Antigravity (Gemini 3, Claude, GPT-OSS)
  * - OpenCode Zen / Go
  * - Devin (Cognition AI)
+ * - Muse Code (Meta Model API subscription)
  */
 
 // Anthropic
@@ -72,6 +73,14 @@ export {
 	loginKimiCode,
 	refreshKimiToken,
 } from "./kimi.ts";
+// Muse Code (Meta Model API subscription)
+export {
+	loginMeta,
+	META_OAUTH_PROVIDER_ID,
+	metaOAuthProvider,
+	mintMetaApiKey,
+	refreshMetaToken,
+} from "./meta.ts";
 // OpenAI Codex (ChatGPT OAuth)
 export {
 	loginOpenAICodex,
@@ -130,6 +139,7 @@ import { gitlabDuoOAuthProvider } from "./gitlab-duo.ts";
 import { googleAntigravityOAuthProvider } from "./google-antigravity.ts";
 import { googleGeminiCliOAuthProvider } from "./google-gemini-cli.ts";
 import { kimiCodeOAuthProvider } from "./kimi.ts";
+import { metaOAuthProvider } from "./meta.ts";
 import { openaiCodexOAuthProvider } from "./openai-codex.ts";
 import { opencodeGoOAuthProvider, opencodeZenOAuthProvider } from "./opencode.ts";
 import { perplexityOAuthProvider } from "./perplexity.ts";
@@ -147,6 +157,7 @@ const BUILT_IN_OAUTH_PROVIDERS: OAuthProviderInterface[] = [
 	googleAntigravityOAuthProvider,
 	googleGeminiCliOAuthProvider,
 	kimiCodeOAuthProvider,
+	metaOAuthProvider,
 	openaiCodexOAuthProvider,
 	opencodeGoOAuthProvider,
 	opencodeZenOAuthProvider,

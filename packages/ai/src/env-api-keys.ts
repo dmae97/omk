@@ -97,6 +97,16 @@ function getApiKeyEnvVars(provider: string): readonly string[] | undefined {
 		return ["ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"];
 	}
 
+	// Meta spells this key three ways. META_API_KEY is what the Muse Code CLI sets up and reads,
+	// so it is the one most likely to already be exported; META_MODEL_API_KEY is the namespaced
+	// form models.dev advertises; MODEL_API_KEY is the Model API docs' own name, generic enough to
+	// collide with an unrelated service, so it is tried last.
+	// These env vars are pay-as-you-go Model API keys. Muse Code subscription login is OAuth
+	// (`/login` → Muse Code) and stores the minted key in auth.json, not here.
+	if (provider === "meta") {
+		return ["META_API_KEY", "META_MODEL_API_KEY", "MODEL_API_KEY"];
+	}
+
 	const envMap: Record<string, string> = {
 		"ant-ling": "ANT_LING_API_KEY",
 		openai: "OPENAI_API_KEY",
