@@ -85,6 +85,16 @@ describe("providerFailureCause", () => {
 		});
 	});
 
+	it("classifies a Codex ChatGPT-account unsupported-model 400 as a configuration fault", () => {
+		// Left to the protocol default this reads as retryable and advertises the
+		// orphan tool_call_id sanitize path / /new session — wrong on both counts
+		// for a permanent entitlement rejection. Observed 2026-09-04:
+		// openai-codex/gpt-6-astra HTTP 400 detail string, same on --no-session.
+		const error = '{"detail":"The \'gpt-6-astra\' model is not supported when using Codex with a ChatGPT account."}';
+
+		expect(providerFailureCause(assistantError(error), 0)).toEqual({ area: "configuration", code: "invalid" });
+	});
+
 	it("classifies a stale Claude Code client version as a configuration fault", () => {
 		// Left to the protocol default this reads as retryable and advertises the
 		// orphan tool_call_id sanitize path — wrong on both counts for a permanent
@@ -101,6 +111,26 @@ describe("providerFailureCause", () => {
 			code: "timeout",
 		});
 		expect(providerFailureCause(assistantError("tool crashed"), 0)).toEqual({ area: "tool", code: "fatal" });
+	});
+
+	it("classifies an Anthropic overloaded_error as rate_limit, not the protocol default", () => {
+		// Regression: HTTP 529 `overloaded_error` carries no status or limit token in
+		// its body, so it reached the protocol fallback and told the operator to
+		// sanitize an orphan tool_call_id for what is a provider-capacity wait.
+		const error =
+			'{"type":"error","error":{"details":null,"type":"overloaded_error","message":"Overloaded"},"request_id":"req_011Cegiz6TKxunxdq98Xajw8"}';
+
+		expect(providerFailureCause(assistantError(error), 0)).toEqual({ area: "provider", code: "rate_limit" });
+	});
+
+	it("classifies an xAI at-capacity 429 as rate_limit, not the protocol default", () => {
+		// Regression: xAI serves overload as HTTP 429 whose body carries neither a
+		// status code nor a limit token, so it reached the protocol fallback and the
+		// turn advertised the orphan tool_call_id sanitize path instead of a wait.
+		const error =
+			"The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing: https://docs.x.ai/developers/advanced-api-usage/priority-processing";
+
+		expect(providerFailureCause(assistantError(error), 0)).toEqual({ area: "provider", code: "rate_limit" });
 	});
 
 	it("defaults to provider.protocol when nothing matches", () => {

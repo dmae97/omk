@@ -18,6 +18,7 @@
 import { type AssistantMessage, isContextOverflow } from "omk-ai";
 import {
 	isClaudeCodeVersionTooOldMessage,
+	isCodexChatgptAccountUnsupportedModelMessage,
 	isQuotaExhaustionMessage,
 	isUpstreamUnavailableMessage,
 } from "./provider-resilience.ts";
@@ -70,13 +71,22 @@ export function providerFailureCause(message: AssistantMessage, contextWindow: n
 	// A stale spoofed Claude Code version against a newer model's gate is a client
 	// configuration fault, not a transcript-shape one: it must not inherit the
 	// retryable protocol default at the bottom of this function.
-	if (isClaudeCodeVersionTooOldMessage(text)) {
+	if (isClaudeCodeVersionTooOldMessage(text) || isCodexChatgptAccountUnsupportedModelMessage(text)) {
 		return { area: "configuration", code: "invalid" };
 	}
 	// Quota/billing exhaustion is checked BEFORE the generic 401/403 auth
 	// patterns: "403 ... usage limit for this billing cycle" is transient per
 	// cycle and must fail over, not terminate the turn as an auth error.
-	if (isQuotaExhaustionMessage(text) || /rate.?limit|too many requests|429/i.test(text)) {
+	// Provider-capacity rejections are matched here too: they are transient waits,
+	// not transcript faults, but their bodies carry no status or limit token, so
+	// without these they reach the protocol fallback at the bottom and advertise
+	// the orphan tool_call_id sanitize path. Observed 2026-09-03:
+	// xai/grok-4.6 "currently at capacity" (HTTP 429) and
+	// anthropic/claude-opus-5 `overloaded_error` / "Overloaded" (HTTP 529).
+	if (
+		isQuotaExhaustionMessage(text) ||
+		/rate.?limit|too many requests|429|at capacity|high demand|overloaded/i.test(text)
+	) {
 		return { area: "provider", code: "rate_limit" };
 	}
 	if (/auth|unauthori[sz]ed|forbidden|invalid.?api.?key|no api key|401|403|\/login/i.test(text)) {

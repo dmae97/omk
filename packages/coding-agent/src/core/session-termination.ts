@@ -561,7 +561,7 @@ function nextActionFor(classification: Classification, input: ClassifySessionTer
 		case "transcript_invalid":
 			return `Run omk session doctor --session ${input.sessionId}; do not resume until integrity passes.`;
 		case "configuration":
-			return "Correct the provider, model, tool, or session configuration and retry.";
+			return "This model or client is not valid for the current login. Switch with /model or fix provider/client settings; /new session will not grant access.";
 		case "internal_error":
 			return `Inspect run ${input.runId} diagnostics and the run journal before retrying.`;
 	}

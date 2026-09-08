@@ -93,6 +93,28 @@ describe("classifySessionTermination", () => {
 		expect(termination.nextAction).not.toMatch(/barrier|stale transaction/i);
 	});
 
+	it("Given a configuration fault, When formatted, Then it tells the operator to switch model instead of /new session", () => {
+		const termination = classifySessionTermination({
+			sessionId: "session-1",
+			runId: "run-astra",
+			timestamp: NOW,
+			source: "observed",
+			message:
+				'{"detail":"The \'gpt-6-astra\' model is not supported when using Codex with a ChatGPT account."}',
+			cause: { area: "configuration", code: "invalid" },
+			sideEffects: "none",
+			provider: "openai-codex",
+			model: "gpt-6-astra",
+		});
+
+		expect(termination.kind).toBe("configuration");
+		expect(termination.retryable).toBe(false);
+		expect(termination.safeToAutoRetry).toBe(false);
+		expect(termination.nextAction).toMatch(/\/model/);
+		expect(termination.nextAction).toMatch(/will not grant access/i);
+		expect(termination.nextAction).not.toMatch(/orphan tool_call_id/i);
+	});
+
 	it("classifies compaction quota exhaustion as non-retryable with switch-model guidance", () => {
 		const termination = classify({ area: "compaction", code: "quota_exhausted" });
 
