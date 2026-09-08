@@ -80,6 +80,32 @@ describe("goal continuation", () => {
 });
 
 describe("prompt presets", () => {
+	it.each([
+		"gpt-6-astra",
+		"openai/gpt-6-astra",
+		"openai-codex/gpt-6-astra",
+		"openrouter/openai/gpt-6-astra",
+		"xai-proxy/gpt-6-astra",
+	])("selects the Astra preset for the exact model id in %s", (modelId) => {
+		expect(resolvePromptPreset(modelId)?.id).toBe("gpt-6-astra");
+	});
+
+	it.each([
+		undefined,
+		"",
+		"gpt-5.6",
+		"gpt-6",
+		"gpt-6-astra-mini",
+		"gpt-6-astra-pro",
+		"gpt-6-astra-2026-09-05",
+		"custom-gpt-6-astra",
+		"gpt-6-astra/gpt-5.6",
+		"openai/gpt-6-astra:high",
+		"openai/gpt-6-astra\n",
+	])("does not apply Astra guidance to nonmatching model %j", (modelId) => {
+		expect(resolvePromptPreset(modelId)?.id).not.toBe("gpt-6-astra");
+	});
+
 	it("maps current OMK models and ignores unrelated ids", () => {
 		expect(resolvePromptPreset("kimi-k2.5")?.id).toBe("kimi");
 		expect(resolvePromptPreset("kimi-k3")?.id).toBe("kimi-k3");

@@ -53,9 +53,15 @@ describe("manual compaction during an active tool call", () => {
 			});
 		}
 		session.agent.state.messages = sessionManager.buildSessionContext().messages;
+		// `keepRecentTokens: 1` forces the cut inside the in-flight turn, so
+		// compaction summarizes the turn prefix alongside the history and merges
+		// both into one summary. Before `findCutPoint` learned to fall back to the
+		// newest cut point, the tail here was un-cuttable and compaction kept the
+		// whole session — needing neither the split nor this third response.
 		harness.setResponses([
 			fauxAssistantMessage(fauxToolCall("wait", {}, { id: "compact-wait" }), { stopReason: "toolUse" }),
 			fauxAssistantMessage("compacted summary"),
+			fauxAssistantMessage("turn prefix summary"),
 		]);
 
 		const toolStarted = new Promise<void>((resolve) => {
@@ -71,7 +77,8 @@ describe("manual compaction during an active tool call", () => {
 		const result = await session.compact();
 		await prompt;
 
-		expect(result.summary).toBe("compacted summary");
+		expect(result.summary).toContain("compacted summary");
+		expect(result.summary).toContain("turn prefix summary");
 		const sessionFile = sessionManager.getSessionFile();
 		if (!sessionFile) throw new Error("expected persisted session file");
 		const report = inspectSessionIntegrity(readFileSync(sessionFile));

@@ -82,6 +82,14 @@ describe("harness loop built-ins", () => {
 		expect(s.extensionRunner.getRegisteredCommands().map((command) => command.name)).not.toContain("goal");
 	});
 
+	it("omits model prompt presets when OMK_PROMPT_PRESET=0", async () => {
+		process.env.OMK_PROMPT_PRESET = "0";
+		const { loader } = await newSession();
+		expect(loader.getExtensions().extensions.map((extension) => extension.path)).not.toContain(
+			"<builtin:prompt-preset>",
+		);
+	});
+
 	it("blocks the sixth identical bash call through the live runner", async () => {
 		const { session: s } = await newSession();
 		const event = {
@@ -147,6 +155,26 @@ describe("identical-loop built-in factory", () => {
 });
 
 describe("prompt-preset built-in factory", () => {
+	it("uses the current model per request without leaking Astra guidance after a switch", () => {
+		const harness = createFactoryHarness();
+		promptPreset(harness.omk);
+		const event = { type: "before_agent_start", prompt: "hi", systemPrompt: "BASE", systemPromptOptions: {} };
+		const ctx = { model: { provider: "openai", id: "gpt-6-astra" } };
+
+		const astra = harness.fire("before_agent_start", event, ctx);
+		expect(astra).toEqual([{ systemPrompt: expect.stringMatching(/^BASE\n\n<model_preset id="gpt-6-astra">\n/) }]);
+		expect(event.systemPrompt).toBe("BASE");
+
+		ctx.model.id = "gpt-5.6";
+		expect(harness.fire("before_agent_start", event, ctx)).toEqual([undefined]);
+		ctx.model = { provider: "xai", id: "grok-4.5" };
+		expect(harness.fire("before_agent_start", event, ctx)).toEqual([
+			{ systemPrompt: expect.stringMatching(/^BASE\n\n<model_preset id="grok">\n/) },
+		]);
+		ctx.model = { provider: "openai", id: "gpt-6-astra" };
+		expect(harness.fire("before_agent_start", event, ctx)).toEqual(astra);
+	});
+
 	it("appends model-specific preset blocks for Kimi and Claude", () => {
 		const harness = createFactoryHarness();
 		promptPreset(harness.omk);
