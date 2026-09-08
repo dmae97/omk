@@ -4,6 +4,7 @@ import { defineConfig } from "vitest/config";
 const aiSrcIndex = fileURLToPath(new URL("../ai/src/index.ts", import.meta.url));
 const aiSrcOAuth = fileURLToPath(new URL("../ai/src/oauth.ts", import.meta.url));
 const agentSrcIndex = fileURLToPath(new URL("../agent/src/index.ts", import.meta.url));
+const adaptorchWplSrcIndex = fileURLToPath(new URL("../adaptorch-wpl/src/index.ts", import.meta.url));
 
 export default defineConfig({
 	test: {
@@ -19,12 +20,14 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: [
+			{ find: /^omk-adaptorch-wpl$/, replacement: adaptorchWplSrcIndex },
 			{ find: /^@earendil-works\/omk-ai$/, replacement: aiSrcIndex },
 			{ find: /^@earendil-works\/omk-ai\/oauth$/, replacement: aiSrcOAuth },
 			// Legacy compatibility bridges for pre-OMK pi-agent-core imports.
 			{ find: /^@earendil-works\/pi-agent-core$/, replacement: agentSrcIndex },
 			{ find: /^@mariozechner\/omk-ai$/, replacement: aiSrcIndex },
 			{ find: /^@mariozechner\/omk-ai\/oauth$/, replacement: aiSrcOAuth },
+			{ find: /^omk-agent-core$/, replacement: agentSrcIndex },
 			{ find: /^@mariozechner\/pi-agent-core$/, replacement: agentSrcIndex },
 		],
 	},
