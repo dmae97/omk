@@ -3,8 +3,8 @@
  *
  * Two things make this small:
  * - `validateToolArguments` already accepts a plain JSON Schema, so an MCP
- *   `inputSchema` is passed straight through instead of being re-modelled in
- *   TypeBox.
+ *   `inputSchema` is passed through with only its root coerced instead of being
+ *   re-modelled in TypeBox.
  * - MCP content blocks are already text/image, which is exactly what the
  *   harness renders.
  *
@@ -24,6 +24,31 @@ export const MAX_TOOL_NAME_LENGTH = 64;
 
 /** Empty-object schema used when a server omits `inputSchema`. */
 const EMPTY_OBJECT_SCHEMA = { type: "object", properties: {} } as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Coerce a server-supplied schema root into the object shape providers require.
+ *
+ * Tool arguments always arrive as a JSON object, so a root typed as anything
+ * else is a server bug — `mcp-obsidian@1.0.0` answers `tools/list` with
+ * `{ "$schema": "http://json-schema.org/draft-07/schema#" }`, and xAI ends the
+ * whole run with `400 "tool parameter root must be an object type"`. Fixing it
+ * here, at the boundary, degrades one schema instead of the session, and covers
+ * every provider rather than only the ones that re-normalize tool payloads.
+ *
+ * Already-valid schemas are returned by identity: no per-tool copy, and TypeBox
+ * symbols and prototypes survive untouched.
+ */
+function toObjectRootSchema(schema: Record<string, unknown> | undefined): Record<string, unknown> {
+	if (!isRecord(schema)) return EMPTY_OBJECT_SCHEMA;
+	if (schema.type === "object" && isRecord(schema.properties)) return schema;
+	const root: Record<string, unknown> = { ...schema, type: "object" };
+	if (!isRecord(root.properties)) root.properties = {};
+	return root;
+}
 
 export interface McpToolDetails {
 	readonly server: string;
@@ -93,7 +118,7 @@ export function createMcpToolDefinition(
 	options: CreateMcpToolDefinitionOptions = {},
 ): ToolDefinition<TSchema, McpToolDetails> {
 	const exposedName = buildMcpToolName(serverName, tool.name);
-	const parameters = (tool.inputSchema ?? EMPTY_OBJECT_SCHEMA) as unknown as TSchema;
+	const parameters = toObjectRootSchema(tool.inputSchema) as unknown as TSchema;
 
 	return {
 		name: exposedName,

@@ -12,6 +12,7 @@
  *   FAKE_MCP_MODE=garbage       emit a non-JSON line before every response
  *   FAKE_MCP_MODE=no-tools      handshake succeeds, tools/list returns []
  *   FAKE_MCP_MODE=paged         tools/list returns two cursor-paginated pages
+ *   FAKE_MCP_MODE=broken-schema tools/list ships schemas with no object root
  */
 
 const mode = process.env.FAKE_MCP_MODE ?? "ok";
@@ -36,6 +37,17 @@ const TOOLS = [
 		description: "Always returns a tool-level error.",
 		inputSchema: { type: "object", properties: {} },
 	},
+];
+
+// What mcp-obsidian@1.0.0 actually sends: a dialect key and no object root.
+const BROKEN_TOOLS = [
+	{
+		name: "read_notes",
+		description: "Read notes.",
+		inputSchema: { $schema: "http://json-schema.org/draft-07/schema#" },
+	},
+	{ name: "no_schema", description: "Declares no inputSchema at all." },
+	TOOLS[0],
 ];
 
 function send(message) {
@@ -75,11 +87,24 @@ function handle(request) {
 			}
 			return;
 		}
+		if (mode === "broken-schema") {
+			send({ jsonrpc: "2.0", id, result: { tools: BROKEN_TOOLS } });
+			return;
+		}
 		send({ jsonrpc: "2.0", id, result: { tools: mode === "no-tools" ? [] : TOOLS } });
 		return;
 	}
 	if (method === "tools/call") {
 		if (mode === "hang") return;
+		if (mode === "broken-schema") {
+			// Echo the received arguments so a test can prove normalization kept them.
+			send({
+				jsonrpc: "2.0",
+				id,
+				result: { content: [{ type: "text", text: JSON.stringify(params?.arguments ?? {}) }] },
+			});
+			return;
+		}
 		const name = params?.name;
 		if (name === "fail") {
 			send({

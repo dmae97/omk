@@ -1,11 +1,10 @@
 import * as os from "node:os";
-import { pathToFileURL } from "node:url";
 import type { ImageContent, TextContent } from "omk-ai";
 import { getCapabilities, getImageDimensions, hyperlink, imageFallback } from "omk-tui";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../../utils/ansi.ts";
-import { resolvePath } from "../../utils/paths.ts";
 import { sanitizeBinaryOutput } from "../../utils/shell.ts";
+import { terminalFileUrl } from "../../utils/terminal-links.ts";
 
 export function shortenPath(path: unknown): string {
 	if (typeof path !== "string") return "";
@@ -18,8 +17,7 @@ export function shortenPath(path: unknown): string {
 
 export function linkPath(styledText: string, rawPath: string, cwd: string): string {
 	if (!getCapabilities().hyperlinks) return styledText;
-	const absolutePath = resolvePath(rawPath, cwd);
-	return hyperlink(styledText, pathToFileURL(absolutePath).href);
+	return hyperlink(styledText, terminalFileUrl(rawPath, cwd));
 }
 
 export function str(value: unknown): string | null {
