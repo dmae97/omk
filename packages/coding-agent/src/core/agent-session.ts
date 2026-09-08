@@ -39,6 +39,7 @@ import { stripFrontmatter } from "../utils/frontmatter.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { getShellConfig } from "../utils/shell.ts";
 import { sleep } from "../utils/sleep.ts";
+import { addActiveSkills, createActiveSkillState } from "./active-skill-state.ts";
 import { type AdaptorchBridge, type AdaptorchConsultPayload, createAdaptorchBridge } from "./adaptorch-bridge.ts";
 import {
 	applyCategoryTimeoutDefaults,
@@ -117,7 +118,12 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
-import { assertTextChatModelForCompletion } from "./grok-harness.ts";
+import {
+	assertTextChatModelForCompletion,
+	grokHarnessAutoApplyEnabled,
+	isGrokOAuthProvider,
+	selectGrokHarnessSkills,
+} from "./grok-harness.ts";
 import { grokPlaybookAppendForProvider } from "./grok-playbook.ts";
 import { captureHostResourceSnapshot, type HostResourceSnapshot } from "./host-resource-snapshot.ts";
 import { decideLoadoutAccess, type LoadoutAccessPolicy } from "./loadout-access-policy.ts";
@@ -450,18 +456,6 @@ export interface PromptOptions {
 	activeSkillSource?: string;
 	/** Internal hook used by RPC mode to observe prompt preflight acceptance or rejection. */
 	preflightResult?: (success: boolean) => void;
-}
-
-function mergePromptActiveSkillNames(first: readonly string[], second: readonly string[]): string[] {
-	const names: string[] = [];
-	const seen = new Set<string>();
-	for (const name of [...first, ...second]) {
-		if (!seen.has(name)) {
-			seen.add(name);
-			names.push(name);
-		}
-	}
-	return names;
 }
 
 /** Result from cycleModel() */
@@ -2329,13 +2323,11 @@ export class AgentSession {
 		const preflightResult = options?.preflightResult;
 		let currentText = redactSensitiveText(text);
 		const defaultActiveSkills = this._getDefaultActiveSkills();
-		let promptActiveSkillNames = mergePromptActiveSkillNames(defaultActiveSkills, options?.activeSkillNames ?? []);
-		let promptActiveSkillSource =
-			defaultActiveSkills.length > 0
-				? options?.activeSkillSource
-					? `settings+${options.activeSkillSource}`
-					: "settings"
-				: options?.activeSkillSource;
+		let promptSkills = createActiveSkillState(
+			defaultActiveSkills,
+			options?.activeSkillNames ?? [],
+			options?.activeSkillSource,
+		);
 		let isBangSkillInvocation = false;
 		if (expandPromptTemplates) {
 			const bangInvocation = parseBangInvocation(text, {
@@ -2346,12 +2338,7 @@ export class AgentSession {
 				currentText = bangInvocation.prompt
 					? `/skill:${bangInvocation.skillName} ${bangInvocation.prompt}`
 					: `/skill:${bangInvocation.skillName}`;
-				promptActiveSkillNames = mergePromptActiveSkillNames(
-					promptActiveSkillNames,
-					bangInvocation.activeSkillNames,
-				);
-				promptActiveSkillSource =
-					defaultActiveSkills.length > 0 ? `settings+${bangInvocation.source}` : bangInvocation.source;
+				promptSkills = addActiveSkills(promptSkills, bangInvocation.activeSkillNames, bangInvocation.source);
 			}
 		}
 		let messages: AgentMessage[] | undefined;
@@ -2474,11 +2461,19 @@ export class AgentSession {
 			}
 			this._pendingNextTurnMessages = [];
 
+			if (isGrokOAuthProvider(this.model?.provider) && grokHarnessAutoApplyEnabled(process.env)) {
+				const skillQuery = isBangSkillInvocation ? currentText : expandedText;
+				const grokSkills = selectGrokHarnessSkills(skillQuery, this._resourceLoader.getSkills().skills, {
+					contextPressure: this._computePressureBucket(messages) > 0,
+				});
+				promptSkills = addActiveSkills(promptSkills, grokSkills, "grok-harness");
+			}
+
 			const turnSystemPromptOptions = {
 				...this._baseSystemPromptOptions,
 				contextBudget: this._getContextBudgetOptions(expandedText),
-				activeSkillNames: promptActiveSkillNames,
-				activeSkillSource: promptActiveSkillSource,
+				activeSkillNames: promptSkills.names,
+				activeSkillSource: promptSkills.source,
 			};
 			const turnSystemPrompt = buildSystemPromptPlan(turnSystemPromptOptions);
 
@@ -3201,10 +3196,10 @@ export class AgentSession {
 	 * 1..<0.75, 2..<0.9, 3..>=0.9. The released default pressure coefficient
 	 * is 1 and participates only after the classifier has prompt evidence.
 	 */
-	private _computePressureBucket(): number {
+	private _computePressureBucket(pendingMessages: AgentMessage[] = []): number {
 		const contextWindow = this.model?.contextWindow ?? 0;
 		if (contextWindow <= 0) return 0;
-		const estimate = estimateProjectedContextTokens(this.agent.state.messages, []);
+		const estimate = estimateProjectedContextTokens(this.agent.state.messages, pendingMessages);
 		const pressure = estimate.tokens / contextWindow;
 		if (pressure >= 0.9) return 3;
 		if (pressure >= 0.75) return 2;

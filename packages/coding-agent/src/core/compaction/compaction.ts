@@ -426,10 +426,25 @@ export function findCutPoint(
 		// Check if we've exceeded the budget
 		if (accumulatedTokens >= keepRecentTokens) {
 			// Find the closest valid cut point at or after this entry
+			let matched = false;
 			for (let c = 0; c < cutPoints.length; c++) {
 				if (cutPoints[c] >= i) {
 					cutIndex = cutPoints[c];
+					matched = true;
 					break;
+				}
+			}
+			if (!matched) {
+				// The budget-breaking entry is not itself cuttable (e.g. a huge
+				// trailing tool result): fall back to its issuing assistant
+				// message so compaction still makes progress and the call
+				// stays with its result as one tail turn.
+				for (let j = i; j >= startIndex; j--) {
+					const candidate = entries[j];
+					if (candidate.type === "message" && candidate.message.role === "assistant") {
+						cutIndex = j;
+						break;
+					}
 				}
 			}
 			break;
