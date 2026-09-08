@@ -21,6 +21,7 @@ ${chalk.bold("Usage:")}
   ${APP_NAME} [options] [@files...] [messages...]
 
 ${chalk.bold("Commands:")}
+  ${APP_NAME} init --global [--dry-run] Create missing user context documents without overwriting settings
   ${APP_NAME} install <source> [-l]     Install extension source and add to settings
   ${APP_NAME} remove <source> [-l]      Remove extension source from settings
   ${APP_NAME} uninstall <source> [-l]   Alias for remove
@@ -158,6 +159,7 @@ ${chalk.bold("Environment Variables:")}
   MISTRAL_API_KEY                  - Mistral API key
   MINIMAX_API_KEY                  - MiniMax API key
   MOONSHOT_API_KEY                 - Moonshot AI API key
+  META_API_KEY                     - Meta Model API key (Muse Spark); META_MODEL_API_KEY/MODEL_API_KEY also read
   OPENCODE_API_KEY                 - OpenCode Zen/OpenCode Go API key
   KIMI_API_KEY                     - Kimi For Coding API key
   CLOUDFLARE_API_KEY               - Cloudflare API token (Workers AI and AI Gateway)

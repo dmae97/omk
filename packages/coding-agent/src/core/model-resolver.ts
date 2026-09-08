@@ -21,6 +21,7 @@ const builtInDefaultModelPerProvider = {
 	"openai-codex": "gpt-5.5",
 	nvidia: "nvidia/nemotron-3-super-120b-a12b",
 	deepseek: "deepseek-v4-pro",
+	meta: "muse-spark-1.3",
 	google: "gemini-3.1-pro-preview",
 	"google-vertex": "gemini-3.1-pro-preview",
 	"github-copilot": "gpt-5.4",
@@ -53,7 +54,7 @@ const builtInDefaultModelPerProvider = {
 
 /** Recommended defaults for providers supplied through models.json or extensions. */
 const customDefaultModelPerProvider = {
-	"modelstudio-maas": "qwen3.8-max-preview",
+	"modelstudio-maas": "qwen3.8-max",
 } as const satisfies Readonly<Record<string, string>>;
 
 /** Default model IDs for built-in and recommended custom providers. */

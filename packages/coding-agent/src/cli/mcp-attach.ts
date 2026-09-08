@@ -6,15 +6,17 @@ export interface McpAttachStatus {
 }
 
 /**
- * Startup diagnostics for `AgentSession.attachMcpServers()` results. A ready
- * server is silent; anything else becomes a warning so one broken server is
- * visible without taking the session down. Error text never carries env values.
+ * Startup diagnostics for `AgentSession.attachMcpServers()` results. Ready and
+ * intentionally disabled servers are silent; other states remain warnings so
+ * broken servers stay visible. Error text never carries env values.
  */
 export function mcpAttachDiagnostics(
 	statuses: readonly McpAttachStatus[],
 ): Array<{ type: "warning"; message: string }> {
 	return statuses.flatMap((status) => {
-		if (status.state === "ready") return [];
+		if (status.state === "ready" || (status.state === "failed" && status.error === "disabled by configuration")) {
+			return [];
+		}
 		const reason = status.error ? `: ${status.error}` : "";
 		return [{ type: "warning", message: `MCP server "${status.name}" ${status.state}${reason}` }];
 	});

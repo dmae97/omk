@@ -392,7 +392,7 @@ describe("default model selection", () => {
 
 	test("K3 and ModelStudio defaults track the recommended readiness models", () => {
 		expect(defaultModelPerProvider["kimi-coding"]).toBe("k3");
-		expect(defaultModelPerProvider["modelstudio-maas"]).toBe("qwen3.8-max-preview");
+		expect(defaultModelPerProvider["modelstudio-maas"]).toBe("qwen3.8-max");
 	});
 
 	test("findInitialModel accepts explicit provider custom model ids", async () => {
@@ -423,8 +423,8 @@ describe("default model selection", () => {
 		const qwenMax = {
 			...mockModels[0],
 			provider: "modelstudio-maas",
-			id: "qwen3.8-max-preview",
-			name: "Qwen 3.8 Max Preview",
+			id: "qwen3.8-max",
+			name: "Qwen 3.8 Max",
 			api: "openai-completions",
 			baseUrl: "https://modelstudio.example/v1",
 		} satisfies Model<"openai-completions">;
