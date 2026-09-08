@@ -31,7 +31,7 @@ var DefaultSpecs = []ModelSpec{
 	{
 		Name:               "qwen3.8-max",
 		Provider:           "modelstudio-maas",
-		ModelID:            "qwen3.8-max-preview",
+		ModelID:            "qwen3.8-max",
 		API:                "openai-completions",
 		RecommendedBaseURL: "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
 		ThinkingFormat:     "qwen",

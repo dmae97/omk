@@ -43,7 +43,7 @@ func TestProbeModelsStripsCredentialsAndDoesNotFollowRedirects(t *testing.T) {
 		},
 		"modelstudio-maas": {
 			BaseURL: server.URL + "/v1?token=do-not-send",
-			Models:  []Model{{ID: "qwen3.8-max-preview"}},
+			Models:  []Model{{ID: "qwen3.8-max"}},
 		},
 	}}
 

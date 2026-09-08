@@ -4,7 +4,7 @@ A small Go 1.22 binary for OMK initialization checks. The first migration seam
 covers model readiness for the failover pair:
 
 1. `kimi-coding/k3`
-2. `modelstudio-maas/qwen3.8-max-preview`
+2. `modelstudio-maas/qwen3.8-max`
 
 The JavaScript bootstrap remains the compatibility fallback while this binary is
 rolled out.

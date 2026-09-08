@@ -29,7 +29,7 @@ func TestCheckModelsAcceptsJSONCWithoutExecutingKeyCommands(t *testing.T) {
 				"baseUrl": "https://example.invalid/v1?token=never-print#fragment",
 				"apiKey": "!touch ` + marker + `",
 				"compat": {"thinkingFormat":"qwen"},
-				"models": [{"id":"qwen3.8-max-preview"}],
+				"models": [{"id":"qwen3.8-max"}],
 			},
 		},
 	}`
@@ -152,6 +152,6 @@ func mustParse(t *testing.T, input string) ModelsConfig {
 func validConfig(thinkingCompat string) string {
 	return `{"providers":{
 		"kimi-coding":{"api":"anthropic-messages","baseUrl":"https://api.kimi.com/coding","apiKey":"$KEY","models":[{"id":"k3","thinkingLevelMap":{"medium":"max","high":"max","xhigh":"max"}}]},
-		"modelstudio-maas":{"api":"openai-completions","baseUrl":"https://example.test/v1","apiKey":"$KEY","compat":{` + thinkingCompat + `},"models":[{"id":"qwen3.8-max-preview"}]}
+		"modelstudio-maas":{"api":"openai-completions","baseUrl":"https://example.test/v1","apiKey":"$KEY","compat":{` + thinkingCompat + `},"models":[{"id":"qwen3.8-max"}]}
 	}}`
 }
