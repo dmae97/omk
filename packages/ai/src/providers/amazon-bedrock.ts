@@ -47,6 +47,7 @@ import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { parseStreamingJson } from "../utils/json-parse.ts";
 import { createHttpProxyAgentsForTarget } from "../utils/node-http-proxy.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
+import { getModelMatchCandidates, mapThinkingLevelToEffort, supportsAdaptiveThinking } from "./bedrock-thinking.ts";
 import { adjustMaxTokensForThinking, buildBaseOptions, clampReasoning } from "./simple-options.ts";
 import { transformMessages } from "./transform-messages.ts";
 
@@ -506,53 +507,6 @@ function handleContentBlockStop(
 			delete (block as Block).partialJson;
 			stream.push({ type: "toolcall_end", contentIndex: index, toolCall: block, partial: output });
 			break;
-	}
-}
-
-/**
- * Check if the model supports adaptive thinking (Opus 4.6+, Sonnet 4.6).
- * Checks both model ID and model name to support application inference profiles
- * whose ARNs don't contain the model name.
- */
-function getModelMatchCandidates(modelId: string, modelName?: string): string[] {
-	const values = modelName ? [modelId, modelName] : [modelId];
-	return values.flatMap((value) => {
-		const lower = value.toLowerCase();
-		return [lower, lower.replace(/[\s_.:]+/g, "-")];
-	});
-}
-
-function supportsAdaptiveThinking(modelId: string, modelName?: string): boolean {
-	const candidates = getModelMatchCandidates(modelId, modelName);
-	return candidates.some(
-		(s) => s.includes("opus-4-6") || s.includes("opus-4-7") || s.includes("opus-4-8") || s.includes("sonnet-4-6"),
-	);
-}
-
-function supportsNativeXhighEffort(model: Model<"bedrock-converse-stream">): boolean {
-	const candidates = getModelMatchCandidates(model.id, model.name);
-	return candidates.some((s) => s.includes("opus-4-7") || s.includes("opus-4-8"));
-}
-
-function mapThinkingLevelToEffort(
-	model: Model<"bedrock-converse-stream">,
-	level: SimpleStreamOptions["reasoning"],
-): "low" | "medium" | "high" | "xhigh" | "max" {
-	if (level === "xhigh" && supportsNativeXhighEffort(model)) return "xhigh";
-
-	const mapped = level ? model.thinkingLevelMap?.[level] : undefined;
-	if (typeof mapped === "string") return mapped as "low" | "medium" | "high" | "xhigh" | "max";
-
-	switch (level) {
-		case "minimal":
-		case "low":
-			return "low";
-		case "medium":
-			return "medium";
-		case "high":
-			return "high";
-		default:
-			return "high";
 	}
 }
 

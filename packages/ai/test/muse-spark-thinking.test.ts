@@ -114,15 +114,19 @@ describe("Muse Spark thinking levels", () => {
 	});
 
 	describe("registry coverage", () => {
-		it("maps max on every Muse Spark model served over an effort-carrying API", () => {
+		it("keeps gateway and version-specific Muse Spark effort ceilings", () => {
 			const unmapped = museSparkModels()
 				.filter(({ model }) => EFFORT_CARRYING_APIS.has(model.api))
-				.filter(({ model }) => model.thinkingLevelMap?.max !== "xhigh")
+				.filter(({ provider, model }) => {
+					if (provider !== "openrouter") return model.thinkingLevelMap?.max !== "xhigh";
+					const expected = model.id.startsWith("meta/muse-spark-1.3") ? "max" : null;
+					return model.thinkingLevelMap?.max !== expected;
+				})
 				.map(({ provider, model }) => `${provider}/${model.id}`);
 			expect(unmapped).toEqual([]);
 		});
 
-		it("covers all five gateways that serve Muse Spark over an effort-carrying API", () => {
+		it("covers the gateways that serve Muse Spark over an effort-carrying API", () => {
 			const providers = new Set(
 				museSparkModels()
 					.filter(({ model }) => EFFORT_CARRYING_APIS.has(model.api))
@@ -162,10 +166,10 @@ describe("Muse Spark thinking levels", () => {
 			expect(payload.reasoning).toBeUndefined();
 		});
 
-		it("sends effort xhigh for the max level through OpenRouter", async () => {
+		it("sends the max effort explicitly declared by the OpenRouter route", async () => {
 			const model = getModels("openrouter").find((m) => m.id === "meta/muse-spark-1.3");
 			const payload = await capturePayload(model!, "max");
-			expect(payload.reasoning.effort).toBe("xhigh");
+			expect(payload.reasoning.effort).toBe("max");
 		});
 
 		it("omits the reasoning block entirely on OpenRouter when no level is requested", async () => {

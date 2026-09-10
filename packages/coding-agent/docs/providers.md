@@ -32,6 +32,41 @@ Alibaba Model Studio Token Plan is recognized as **QWEN TOKEN PLAN** and reads i
 
 With a stored native `xai` OAuth credential, OMK reads `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits` and shows the weekly SuperGrok pool from `config.creditUsagePercent` plus its reset from `config.currentPeriod.end`. `XAI_API_KEY` is a separate API-billing credential and does not authorize this subscription endpoint.
 
+### Model Studio DeepSeek V4
+
+Model Studio uses `enable_thinking`, including for DeepSeek. OMK's Chat Completions
+adapter recognizes official HTTPS DashScope and `*.maas.aliyuncs.com` hosts, defaults
+to `max_tokens` and the `system` role, and omits unsupported OpenAI store/long-cache
+fields. Legacy `thinkingFormat: "deepseek"` on these hosts is translated to the
+`enable_thinking` format. Native DeepSeek endpoints keep their native format.
+
+DeepSeek V4 sends the selected `reasoning_effort` when compatibility settings permit
+it. Without a model-specific mapping, `minimal` maps to the supported `low` value.
+An explicit `supportsReasoningEffort: false` still suppresses that field; remove
+that override or enable it for the model if you intend to send `high`, `xhigh`, or
+`max`. With thinking off, OMK sends `enable_thinking: false` rather than relying on
+the server default. See [custom model configuration](models.md#openai-compatibility).
+
+Keep the key paired with its purchased product and region. These are distinct
+billing paths, not interchangeable aliases:
+
+| Product | Example OpenAI-compatible base URL |
+| --- | --- |
+| Token Plan, Singapore | `https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1` |
+| Coding Plan, China | `https://coding.dashscope.aliyuncs.com/v1` |
+| Pay-as-you-go | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+
+Protocol detection never changes the URL, credentials, model ID, or subscription.
+For a comparison run, pin the exact Flash snapshot offered by that endpoint in
+both arms; `deepseek-v4-flash-0731` and an unversioned alias are not automatically
+the same experimental condition. Apply a [model contract](model-contract.md), and
+verify the installed adapter and final request before starting a benchmark.
+
+Sources: Alibaba's [DeepSeek API](https://www.alibabacloud.com/help/en/model-studio/deepseek-api)
+and [plan endpoint separation](https://www.alibabacloud.com/help/en/model-studio/token-plan-team-quickstart),
+consulted 2026-09-08. The local tests exercise serialization, not account availability,
+provider compliance, billing, or benchmark performance.
+
 ### OpenAI Codex
 
 - Requires ChatGPT Plus or Pro subscription
@@ -107,7 +142,10 @@ Reference for environment variables and `auth.json` keys: [`const envMap`](https
 
 #### NVIDIA NIM
 
-Set `NVIDIA_API_KEY` and select an NVIDIA model with `/model`. The built-in `nvidia/z-ai/glm-5.2` entry sends `reasoning_effort`, including the `max` level. Other NVIDIA models keep conservative compatibility defaults unless their model metadata explicitly enables reasoning effort.
+Set `NVIDIA_API_KEY` and select a currently listed NVIDIA model with `/model`.
+NIM entries are filtered against its live `/v1/models` list; historical GLM examples
+may no longer be listed. Thinking capabilities stay model-specific. See the
+[latest catalog audit](model-catalog-refresh.md) for source coverage and limits.
 
 #### Meta Model API
 

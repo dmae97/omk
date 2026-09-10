@@ -4,7 +4,7 @@ Add custom providers and models (Ollama, vLLM, LM Studio, proxies) via `~/.omk/a
 
 ## Table of Contents
 
-- [Built-in NVIDIA GLM-5.2](#built-in-nvidia-glm-52)
+- [Catalog availability](#catalog-availability)
 - [Minimal Example](#minimal-example)
 - [Full Example](#full-example)
 - [Supported APIs](#supported-apis)
@@ -16,9 +16,15 @@ Add custom providers and models (Ollama, vLLM, LM Studio, proxies) via `~/.omk/a
 - [Anthropic Messages Compatibility](#anthropic-messages-compatibility)
 - [OpenAI Compatibility](#openai-compatibility)
 
-## Built-in NVIDIA GLM-5.2
+## Catalog availability
 
-With `NVIDIA_API_KEY` configured, `nvidia/z-ai/glm-5.2` supports OMK thinking levels through NVIDIA NIM. Its generated metadata explicitly enables `reasoning_effort`, so `/think max` is sent as `reasoning_effort: "max"`. Other NVIDIA models do not inherit that capability automatically.
+The NVIDIA catalog is filtered against NIM's live model IDs and known compatibility
+limits. A historical GLM route is not evidence that NIM still lists it. Use the
+current model selector rather than copying a removed ID from older examples.
+
+The [2026-09-09 catalog refresh](model-catalog-refresh.md) records new models,
+provider-specific thinking ladders, and verification limits. Model discovery does
+not prove that an account can invoke that model.
 
 ## Minimal Example
 
@@ -420,7 +426,18 @@ For providers with partial OpenAI compatibility, use the `compat` field.
 | `openRouterRouting` | OpenRouter provider routing preferences. This object is sent as-is in the `provider` field of the [OpenRouter API request](https://openrouter.ai/docs/guides/routing/provider-selection). |
 | `vercelGatewayRouting` | Vercel AI Gateway routing config for provider selection (`only`, `order`) |
 
-`openrouter` uses `reasoning: { effort }`. `together` uses `reasoning: { enabled }` and also `reasoning_effort` when `supportsReasoningEffort` is enabled. `qwen` uses top-level `enable_thinking`. Use `qwen-chat-template` for local Qwen-compatible servers that require `chat_template_kwargs.enable_thinking`.
+`openrouter` uses `reasoning: { effort }` for enabled thinking and
+`reasoning: { enabled: false }` for its supported off toggle. Mandatory-thinking
+models do not offer off. Declared per-route efforts override model-family guesses.
+`together` uses `reasoning: { enabled }` and also `reasoning_effort` when `supportsReasoningEffort` is enabled. `qwen` uses top-level `enable_thinking`. Use `qwen-chat-template` for local Qwen-compatible servers that require `chat_template_kwargs.enable_thinking`.
+
+On official HTTPS Model Studio hosts, automatic defaults use `max_tokens`, the
+`system` role, and `enable_thinking`; OpenAI store and long-cache fields are omitted.
+The legacy `thinkingFormat: "deepseek"` override is translated to `qwen` on those
+hosts only. DeepSeek V4 also sends `reasoning_effort` when enabled; an explicit
+`supportsReasoningEffort: false` remains an opt-out. A custom proxy hostname needs
+explicit compatibility settings because its upstream protocol cannot be inferred.
+See [Model Studio endpoint and plan guidance](providers.md#model-studio-deepseek-v4).
 
 `cacheControlFormat: "anthropic"` is for OpenAI-compatible providers that expose Anthropic-style prompt caching through `cache_control` markers on text content and tool definitions.
 

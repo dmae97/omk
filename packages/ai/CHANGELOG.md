@@ -4,6 +4,8 @@
 
 ### Added
 
+- Refreshed the model catalog and route-specific thinking metadata, including DeepSeek V4.1 Flash on native DeepSeek, OpenCode Go, OpenRouter, and Vercel AI Gateway. All four routes expose off/low/high/max; native and Go requests preserve the output cap and send explicit thinking toggles. Native `deepseek-v4-flash` remains a V4.1 compatibility alias. Static native pricing uses the published peak rates, not time-dependent billing.
+
 - Muse Code subscription OAuth on the built-in `meta` provider. `/login` → Muse Code runs Meta's RFC 8628 device flow (`auth.meta.com`) and mints a Model API key at `https://api.meta.ai/muse-code/key`. Login and refresh honor `HTTP_PROXY` / `HTTPS_PROXY`. A pasted `META_API_KEY` is still pay-as-you-go.
 
 - `compat.sendCodexTurnMetadata` for `openai-responses` models. When set, the request carries Codex-native turn identity: `client_metadata["x-codex-turn-metadata"]` with `thread_id` from `options.sessionId` and a `turn_id` hashed from the latest user item, and that user item is stamped with the matching `internal_chat_message_metadata_passthrough.turn_id`. Tool rounds replay the same id; the next user message rotates it. Loopback bridges written for the Codex CLI ([codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web), which drives a signed-in ChatGPT Web session) reject a turn without it, so this is what lets a models.json provider on `http://127.0.0.1:17841/v1` serve `chatgpt-web/*` models to OMK. Default off; nothing changes for existing providers.

@@ -53,7 +53,7 @@ async function capturePayload(
 }
 
 describe("Bedrock thinking payload", () => {
-	it("uses adaptive thinking for Claude Opus 4.8 when reasoning is enabled", async () => {
+	it.each(["4-8", "5"])("uses adaptive thinking for Claude Opus %s when reasoning is enabled", async (version) => {
 		const baseModel = getModel("amazon-bedrock", "global.anthropic.claude-opus-4-6-v1");
 		const model: Model<"bedrock-converse-stream"> = {
 			...baseModel,
@@ -61,14 +61,18 @@ describe("Bedrock thinking payload", () => {
 			name: "Claude Opus 4.8 (Global)",
 		};
 
-		const payload = await capturePayload(model);
+		const payload = await capturePayload({
+			...model,
+			id: `global.anthropic.claude-opus-${version}-v1`,
+			name: `Claude Opus ${version}`,
+		});
 
 		expect(payload.additionalModelRequestFields?.thinking).toEqual({ type: "adaptive", display: "summarized" });
 		expect(payload.additionalModelRequestFields?.output_config).toEqual({ effort: "high" });
 		expect(payload.additionalModelRequestFields?.anthropic_beta).toBeUndefined();
 	});
 
-	it("maps xhigh reasoning to effort=xhigh for Claude Opus 4.8", async () => {
+	it.each(["4-8", "5"])("maps xhigh reasoning to effort=xhigh for Claude Opus %s", async (version) => {
 		const baseModel = getModel("amazon-bedrock", "global.anthropic.claude-opus-4-6-v1");
 		const model: Model<"bedrock-converse-stream"> = {
 			...baseModel,
@@ -76,7 +80,10 @@ describe("Bedrock thinking payload", () => {
 			name: "Claude Opus 4.8 (Global)",
 		};
 
-		const payload = await capturePayload(model, { reasoning: "xhigh" });
+		const payload = await capturePayload(
+			{ ...model, id: `global.anthropic.claude-opus-${version}-v1`, name: `Claude Opus ${version}` },
+			{ reasoning: "xhigh" },
+		);
 
 		expect(payload.additionalModelRequestFields?.thinking).toEqual({ type: "adaptive", display: "summarized" });
 		expect(payload.additionalModelRequestFields?.output_config).toEqual({ effort: "xhigh" });

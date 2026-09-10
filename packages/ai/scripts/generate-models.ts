@@ -17,6 +17,9 @@ import type {
 	OpenAICompletionsCompat,
 	OpenAIResponsesCompat,
 } from "../src/types.ts";
+import { DEEPSEEK_COMPLETIONS_COMPAT, deepSeekNativeModels } from "./catalog-deepseek.ts";
+import { catalogPricePerMillion } from "./catalog-pricing.ts";
+import { applyCurrentThinkingMetadata, openRouterThinkingMap } from "./catalog-thinking.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -207,6 +210,8 @@ const ZAI_TOOL_STREAM_UNSUPPORTED_MODELS = new Set(["glm-4.5", "glm-4.5-air", "g
  * Populated from the upstream catalog so per-model ceilings never need a hand-maintained list.
  */
 const UPSTREAM_XHIGH_EFFORT_IDS = new Set<string>();
+const OPENROUTER_THINKING_MAPS = new Map<string, NonNullable<Model<Api>["thinkingLevelMap"]>>();
+const VERTEX_CATALOG_MODELS = new Map<string, ModelsDevModel>();
 
 /** Strips provider prefixes (`x-ai/`, `xai/`) and `:batch`-style suffixes so ids match across catalogs. */
 function normalizeUpstreamModelId(id: string): string {
@@ -607,13 +612,15 @@ async function fetchNvidiaNimModelIds(): Promise<Map<string, string>> {
 async function fetchOpenRouterModels(): Promise<Model<any>[]> {
 	try {
 		console.log("Fetching models from OpenRouter API...");
-		const response = await fetch("https://openrouter.ai/api/v1/models");
+		const response = await fetch("https://openrouter.ai/api/v1/models", { signal: AbortSignal.timeout(30000) });
+		if (!response.ok) throw new Error(`OpenRouter catalog HTTP ${response.status}`);
 		const data = (await response.json()) as {
 			data?: Array<{
 				id: string;
 				name: string;
 				supported_parameters?: string[];
-				architecture?: { modality?: string };
+				architecture?: { modality?: string; input_modalities?: string[] };
+				reasoning?: unknown;
 				pricing?: {
 					prompt?: string;
 					completion?: string;
@@ -625,29 +632,30 @@ async function fetchOpenRouterModels(): Promise<Model<any>[]> {
 			}>;
 		};
 
+		if (!Array.isArray(data.data) || data.data.length === 0) throw new Error("OpenRouter returned an empty or invalid catalog");
 		const models: Model<any>[] = [];
 
-		for (const model of data.data ?? []) {
+		for (const model of data.data) {
 			// Only include models that support tools
 			if (!model.supported_parameters?.includes("tools")) continue;
 
 			// Parse provider from model ID
-			let provider: KnownProvider = "openrouter";
-			let modelKey = model.id;
-
-			modelKey = model.id; // Keep full ID for OpenRouter
+			const provider: KnownProvider = "openrouter";
+			const modelKey = model.id;
+			const thinkingMap = openRouterThinkingMap(model.reasoning);
+			if (thinkingMap) OPENROUTER_THINKING_MAPS.set(model.id, thinkingMap);
 
 			// Parse input modalities
 			const input: ("text" | "image")[] = ["text"];
-			if (model.architecture?.modality?.includes("image")) {
+			if ((model.architecture?.input_modalities ?? model.architecture?.modality?.split("->")[0].split("+") ?? []).includes("image")) {
 				input.push("image");
 			}
 
 			// Convert pricing from $/token to $/million tokens
-			const inputCost = parseFloat(model.pricing?.prompt || "0") * 1_000_000;
-			const outputCost = parseFloat(model.pricing?.completion || "0") * 1_000_000;
-			const cacheReadCost = parseFloat(model.pricing?.input_cache_read || "0") * 1_000_000;
-			const cacheWriteCost = parseFloat(model.pricing?.input_cache_write || "0") * 1_000_000;
+			const inputCost = catalogPricePerMillion(model.pricing?.prompt);
+			const outputCost = catalogPricePerMillion(model.pricing?.completion);
+			const cacheReadCost = catalogPricePerMillion(model.pricing?.input_cache_read);
+			const cacheWriteCost = catalogPricePerMillion(model.pricing?.input_cache_write);
 
 			const normalizedModel: Model<any> = {
 				id: modelKey,
@@ -655,7 +663,7 @@ async function fetchOpenRouterModels(): Promise<Model<any>[]> {
 				api: "openai-completions",
 				baseUrl: "https://openrouter.ai/api/v1",
 				provider,
-				reasoning: model.supported_parameters?.includes("reasoning") || false,
+				reasoning: model.supported_parameters.includes("reasoning") || model.supported_parameters.includes("reasoning_effort"),
 				input,
 				cost: {
 					input: inputCost,
@@ -887,6 +895,9 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 			}
 		}
 
+		for (const [id, model] of Object.entries(data["google-vertex"]?.models ?? {})) {
+			if (id.startsWith("gemini-") && model.tool_call) VERTEX_CATALOG_MODELS.set(id, model);
+		}
 		const models: Model<any>[] = [];
 		const nvidiaNimModelIds = data.nvidia?.models ? await fetchNvidiaNimModelIds() : new Map<string, string>();
 
@@ -1475,7 +1486,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 				// Claude 4.x models route to Anthropic Messages API
 				const isCopilotClaude4 = /^claude-(haiku|sonnet|opus)-4([.\-]|$)/.test(modelId);
 				// gpt-5 models require responses API, others use completions
-				const needsResponsesApi = modelId.startsWith("gpt-5") || modelId.startsWith("oswe");
+				const needsResponsesApi = modelId.startsWith("gpt-5") || modelId.startsWith("gpt-6") || modelId.startsWith("oswe");
 
 				const api: Api = isCopilotClaude4
 					? "anthropic-messages"
@@ -2092,49 +2103,8 @@ async function generateModels() {
 		});
 	}
 
-	const deepseekCompat: OpenAICompletionsCompat = {
-		requiresReasoningContentOnAssistantMessages: true,
-		thinkingFormat: "deepseek",
-	};
-	const deepseekV4Models: Model<"openai-completions">[] = [
-		{
-			id: "deepseek-v4-flash",
-			name: "DeepSeek V4 Flash",
-			api: "openai-completions",
-			baseUrl: "https://api.deepseek.com",
-			provider: "deepseek",
-			reasoning: true,
-			input: ["text"],
-			cost: {
-				input: 0.14,
-				output: 0.28,
-				cacheRead: 0.0028,
-				cacheWrite: 0,
-			},
-			contextWindow: 1000000,
-			maxTokens: 384000,
-			compat: deepseekCompat,
-		},
-		{
-			id: "deepseek-v4-pro",
-			name: "DeepSeek V4 Pro",
-			api: "openai-completions",
-			baseUrl: "https://api.deepseek.com",
-			provider: "deepseek",
-			reasoning: true,
-			input: ["text"],
-			cost: {
-				input: 0.435,
-				output: 0.87,
-				cacheRead: 0.003625,
-				cacheWrite: 0,
-			},
-			contextWindow: 1000000,
-			maxTokens: 384000,
-			compat: deepseekCompat,
-		},
-	];
-	allModels.push(...deepseekV4Models);
+	const deepseekCompat = DEEPSEEK_COMPLETIONS_COMPAT;
+	allModels.push(...deepSeekNativeModels());
 
 	const antLingCompat: OpenAICompletionsCompat = {
 		supportsStore: false,
@@ -2588,6 +2558,19 @@ async function generateModels() {
 			maxTokens: 8192,
 		},
 	];
+	// Admit only Gemini IDs actually listed for Vertex, not every AI Studio model.
+	for (const [id, candidate] of VERTEX_CATALOG_MODELS) {
+		if (!vertexModels.some((model) => model.id === id)) {
+			vertexModels.push({
+				id, name: candidate.name || id, api: "google-vertex", provider: "google-vertex", baseUrl: VERTEX_BASE_URL,
+				reasoning: candidate.reasoning === true,
+				input: candidate.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+				contextWindow: candidate.limit?.context ?? 4096, maxTokens: candidate.limit?.output ?? 4096,
+				cost: { input: candidate.cost?.input ?? 0, output: candidate.cost?.output ?? 0,
+					cacheRead: candidate.cost?.cache_read ?? 0, cacheWrite: candidate.cost?.cache_write ?? 0 },
+			});
+		}
+	}
 	allModels.push(...vertexModels);
 
 	const azureOpenAiModels: Model<Api>[] = allModels
@@ -2602,6 +2585,13 @@ async function generateModels() {
 
 	for (const model of allModels) {
 		applyModelMetadata(model);
+		applyCurrentThinkingMetadata(model);
+		const declaredThinking = model.provider === "openrouter" ? OPENROUTER_THINKING_MAPS.get(model.id) : undefined;
+		if (declaredThinking) mergeThinkingLevelMap(model, declaredThinking);
+		// Preserve the tool-use restriction even when the general catalog lists an off toggle.
+		if (model.provider === "openrouter" && model.id.startsWith("inception/mercury-2")) {
+			mergeThinkingLevelMap(model, { off: null });
+		}
 	}
 
 	// Group by provider and deduplicate by model ID
@@ -2693,4 +2683,7 @@ export const MODELS = {
 }
 
 // Run the generator
-generateModels().catch(console.error);
+generateModels().catch((error: unknown) => {
+	console.error(error);
+	process.exitCode = 1;
+});

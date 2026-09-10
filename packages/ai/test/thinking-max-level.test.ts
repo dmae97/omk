@@ -14,7 +14,6 @@ const GLM5_EFFORT_MODEL_IDS = [
 	// ["nvidia", "z-ai/glm-5.2"] removed: NVIDIA NIM delisted GLM models (verified 2026-08-21, /v1/models has no glm entries)
 	["opencode", "glm-5.2"],
 	["opencode-go", "glm-5.2"],
-	["openrouter", "z-ai/glm-5.2"],
 	["together", "zai-org/GLM-5.2"],
 	["vercel-ai-gateway", "zai/glm-5.2"],
 	["vercel-ai-gateway", "zai/glm-5.2-fast"],
@@ -28,6 +27,14 @@ const GLM5_EFFORT_MODEL_IDS = [
 ] as const;
 
 describe("max thinking level", () => {
+	it.each(["z-ai/glm-5.2", "z-ai/glm-5.2:batch"])("uses the OpenRouter-declared high/xhigh ladder for %s", (id) => {
+		const model = getModels("openrouter").find((candidate) => candidate.id === id);
+		if (!model) throw new Error("Missing GLM route");
+		expect(getSupportedThinkingLevels(model)).toEqual(["off", "high", "xhigh"]);
+		expect(model.thinkingLevelMap?.xhigh).toBe("xhigh");
+		expect(model.thinkingLevelMap?.max).toBeNull();
+	});
+
 	it.each(GLM5_EFFORT_MODEL_IDS)("exposes the max thinking level for GLM-5.2+ on %s (%s)", (provider, id) => {
 		const model = getModels(provider).find((candidate) => candidate.id === id);
 		expect(model).toBeDefined();
@@ -35,9 +42,10 @@ describe("max thinking level", () => {
 		expect(model!.thinkingLevelMap?.max).toBe("max");
 	});
 
-	it("covers every GLM-5.2+ model in the registry with a max mapping", () => {
+	it("covers GLM-5.2+ routes without an authoritative gateway override with a max mapping", () => {
 		const unmapped: string[] = [];
 		for (const [provider, models] of Object.entries(MODELS)) {
+			if (provider === "openrouter") continue;
 			for (const model of Object.values(models)) {
 				// Mirrors isGlm5ReasoningEffortModel() in scripts/generate-models.ts: GLM-5.2 and later.
 				const glmMinorVersion = /glm-?5[.-]?p?(\d+)/i.exec(model.id);
@@ -115,11 +123,11 @@ describe("max thinking level", () => {
 		expect(clampThinkingLevel(sonnet5!, "max")).toBe("high");
 	});
 
-	it("clamps an xhigh request up to max on models whose only top tier is max", () => {
+	it("preserves DeepSeek's legacy xhigh alias while exposing native max", () => {
 		const deepseek = getModel("deepseek", "deepseek-v4-pro");
 		expect(deepseek).toBeDefined();
-		// DeepSeek V4 exposes off/high/xhigh (xhigh -> effort max); "max" is not a separate level.
-		expect(getSupportedThinkingLevels(deepseek!)).not.toContain("max");
+		// The wire supports low/high/max; keep the existing xhigh -> max alias for compatibility.
+		expect(getSupportedThinkingLevels(deepseek!)).toContain("max");
 		expect(deepseek!.thinkingLevelMap?.xhigh).toBe("max");
 	});
 });

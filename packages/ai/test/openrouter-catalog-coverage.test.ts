@@ -7,6 +7,16 @@ import { getModels } from "../src/models.ts";
  * catalog so a stale or over-eager regeneration is caught without a live network call.
  */
 describe("OpenRouter catalog coverage", () => {
+	it.each(["openrouter/auto", "openrouter/auto-beta"])(
+		"does not turn unknown dynamic prices into negative costs for %s",
+		(id) => {
+			const model = getModels("openrouter").find((entry) => entry.id === id);
+			if (!model) throw new Error("Missing automatic route");
+			expect(model.cost.input).toBe(0);
+			expect(model.cost.output).toBe(0);
+		},
+	);
+
 	// Deliberately not pinned to a `stealth/*` id. OpenRouter's stealth slots are
 	// temporary previews that rotate, so naming one turns every catalog refresh
 	// into a test failure that says nothing about the generator. `stealth/ox-alpha`
@@ -28,7 +38,9 @@ describe("OpenRouter catalog coverage", () => {
 			"anthropic/claude-opus-5",
 			"google/gemini-3.7-flash",
 			"deepseek/deepseek-v4-pro-0813",
-			"qwen/qwen3.8-max",
+			"qwen/qwen3.8-max-0902",
+			"openai/gpt-6-astra",
+			"inception/mercury-2.5",
 			"x-ai/grok-4.6",
 			"z-ai/glm-5.3",
 		]) {
