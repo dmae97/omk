@@ -1,4 +1,3 @@
-import { isAbsolute } from "node:path";
 import type { ResponseInput, ResponseInputItem } from "openai/resources/responses/responses.js";
 import { shortHash } from "../utils/hash.ts";
 
@@ -47,7 +46,8 @@ function isUserMessageItem(item: ResponseInputItem): item is RoleItem {
 }
 
 function workspaceContext(cwd: string | undefined): CodexWorkspaceContext | undefined {
-	if (!cwd || !isAbsolute(cwd)) return undefined;
+	const windows = typeof process !== "undefined" && process.platform === "win32";
+	if (!cwd || !(cwd.startsWith("/") || (windows && /^(?:[a-z]:[\\/]|\\)/i.test(cwd)))) return undefined;
 	const escaped = cwd.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 	return {
 		cwd,
