@@ -1,8 +1,8 @@
-# OMK v0.98.4 — release candidate
+# OMK v0.98.4
 
-This candidate updates the provider catalog and hardens model-dispatch, metrics,
-sandbox configuration, and claim-repair boundaries. It retains the published
-v0.98.3 lineage. It has not been tagged or published.
+This patch updates the provider catalog and hardens model-dispatch, metrics,
+sandbox configuration, and claim-repair boundaries. The published v0.98.3
+lineage is preserved.
 
 ## Highlights
 
@@ -54,16 +54,16 @@ are excluded from the candidate.
 
 ## Verification and publication status
 
-See [the candidate audit](../packages/coding-agent/docs/release-audit-0.98.4.md) for
+See [the release audit](../packages/coding-agent/docs/release-audit-0.98.4.md) for
 actual check results, artifact inventory, and remaining gates. A local check or pack is
 not publication and is not a harness-performance claim.
 
-The internal research document has been deleted from the candidate tree. It still
-exists in unpublished local Git history, which must be handled before any branch/tag
-push. This candidate is therefore **not approved for public Git publication**.
-No history rewrite or force-push is part of this preparation.
+The internal research document was removed from unpublished local history before
+publication. The cleaned branch cannot reach its path or blob, its candidate tree
+matches the previously verified tree, and existing public commits and tags are unchanged.
+Private recovery material is kept outside the repository and is never pushed.
 
-After that boundary is resolved, the existing CI workflow must validate the exact tag,
+The existing CI workflow must validate the exact tag,
 build the six platform archives, publish all seven npm packages, and create the GitHub
 Release. Existing CI token authentication remains unchanged; OIDC/Sigstore provenance
 is not claimed.
