@@ -362,7 +362,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v0.98.3](.github/RELEASE_NOTES_v0.98.3.md)
+- [Release notes for v0.98.4](.github/RELEASE_NOTES_v0.98.4.md)
 
 ## Development
 
@@ -418,6 +418,38 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v0.98.4
+
+### New Features
+
+- DeepSeek V4.1 Flash on four existing providers with off/low/high/max thinking; see [catalog details](packages/coding-agent/docs/model-catalog-refresh.md).
+- Opt-in CLI/SDK model dispatch contracts; see [contract scope](packages/coding-agent/docs/model-contract.md).
+- Bounded claim-repair explanations and stronger metrics/policy boundaries; see [review evidence](packages/coding-agent/docs/review-bundle-followup.md).
+
+### Added
+
+- Added `--model-contract <file>` and SDK contract options, including first-party summaries through the shared provider stream. These are not universal billing or endpoint attestations.
+- Added Muse Code login/native Meta models, explicit provider synchronization and context-initialization workflows, active-skill state/selection, and improved MCP startup diagnostics.
+- Added offline TB subset selection and recorded-result audit utilities. They do not resume a benchmark or prove comparative harness gains.
+- Added optional AdaptOrch service links; displaying links does not create an account, upload source, or start a run.
+
+### Fixed
+
+- New metrics records use schema v2, explicit field projection and bounded error classes instead of raw error text. Valid v1 records remain readable; old files are not scrubbed automatically.
+- Empty, sparse or mutated gate lists cannot bypass merge validation. Sandbox overrides cannot silently weaken enforcement or expand the filesystem root without explicit trusted broadening.
+- Shared-DAG repair explanations retain shared repairs and local counterexamples, report bounded-search fallback as not-proven, and offer opt-in explicit witness groups. Neither explanations nor group labels authorize execution.
+- Model-contract denials are configuration failures. Text and JSON print modes return nonzero on final prompt failure rather than silently reporting success.
+- Improved compaction overflow guards, active-skill bookkeeping, provider resilience/usage handling, and login-provider resolution.
+- Reject non-finite tokenizer results, fall back for non-finite token estimates, and keep optional-context sorting a total order. Domain routing now treats repeated whitespace and line breaks consistently.
+- Preserve recognized environment references, placeholders and nearby type declarations during credential redaction without exempting literal credentials. Forced persistence/report redaction remains active regardless of input opt-out switches.
+- Improved clipboard-image handling on WSL and terminal file-link rendering, including safe link destinations and malformed MCP tool-schema handling.
+
+### Changed
+
+- Split type, schema and rendering responsibilities to restore module-size gates without raising their baselines. Browser smoke builds no longer require a Node path polyfill for Codex metadata.
+
+Release notes live in [RELEASE_NOTES_v0.98.4.md](.github/RELEASE_NOTES_v0.98.4.md).
+
 ## Release v0.98.3
 
 ### Added
@@ -448,12 +480,6 @@ Release notes live in [RELEASE_NOTES_v0.98.3.md](.github/RELEASE_NOTES_v0.98.3.m
 - Compaction now asks for an OAuth access token with at least ten minutes of remaining validity. Compaction resolves auth once and reuses it for a summarization that can stream for minutes with retries, so a token accepted seconds before expiry came back as a provider 401 mid-run. `AuthStorage.getApiKey()` accepts `minRemainingMs` and refreshes proactively, falling back to the still-valid token when that early refresh fails.
 
 Release notes live in [RELEASE_NOTES_v0.98.2.md](.github/RELEASE_NOTES_v0.98.2.md).
-
-## Release v0.98.1
-
-
-
-Release notes live in [RELEASE_NOTES_v0.98.1.md](.github/RELEASE_NOTES_v0.98.1.md).
 
 <!-- releases:end -->
 

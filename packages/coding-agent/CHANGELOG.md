@@ -2,11 +2,35 @@
 
 ## [Unreleased]
 
+## [0.98.4] - 2026-09-10
+
+### New Features
+
+- DeepSeek V4.1 Flash on four existing providers with off/low/high/max thinking; see [catalog details](docs/model-catalog-refresh.md).
+- Opt-in CLI/SDK model dispatch contracts; see [contract scope](docs/model-contract.md).
+- Bounded claim-repair explanations and stronger metrics/policy boundaries; see [review evidence](docs/review-bundle-followup.md).
+
 ### Added
 
-- DeepSeek V4.1 Flash is selectable on native DeepSeek, OpenCode Go, OpenRouter, and Vercel AI Gateway with off/low/high/max thinking. Refreshed the bundled catalog and corrected provider-specific thinking payloads without changing credentials or the active model. See `docs/model-catalog-refresh.md` for route IDs, pricing limits, and offline verification.
+- Added `--model-contract <file>` and SDK contract options, including first-party summaries through the shared provider stream. These are not universal billing or endpoint attestations.
+- Added Muse Code login/native Meta models, explicit provider synchronization and context-initialization workflows, active-skill state/selection, and improved MCP startup diagnostics.
+- Added offline TB subset selection and recorded-result audit utilities. They do not resume a benchmark or prove comparative harness gains.
+- Added optional AdaptOrch service links; displaying links does not create an account, upload source, or start a run.
 
-- Added opt-in `--model-contract <file>` and SDK `modelContract` options for immutable logical model/provider, reasoning, and output-limit checks. The CLI pins a bounded JSON policy across session replacement; SDK-stream summaries share the check. This is dispatch control, not final-wire or billing attestation. See `docs/model-contract.md`.
+### Fixed
+
+- New metrics records use schema v2, explicit field projection and bounded error classes instead of raw error text. Valid v1 records remain readable; old files are not scrubbed automatically.
+- Empty, sparse or mutated gate lists cannot bypass merge validation. Sandbox overrides cannot silently weaken enforcement or expand the filesystem root without explicit trusted broadening.
+- Shared-DAG repair explanations retain shared repairs and local counterexamples, report bounded-search fallback as not-proven, and offer opt-in explicit witness groups. Neither explanations nor group labels authorize execution.
+- Model-contract denials are configuration failures. Text and JSON print modes return nonzero on final prompt failure rather than silently reporting success.
+- Improved compaction overflow guards, active-skill bookkeeping, provider resilience/usage handling, and login-provider resolution.
+- Reject non-finite tokenizer results, fall back for non-finite token estimates, and keep optional-context sorting a total order. Domain routing now treats repeated whitespace and line breaks consistently.
+- Preserve recognized environment references, placeholders and nearby type declarations during credential redaction without exempting literal credentials. Forced persistence/report redaction remains active regardless of input opt-out switches.
+- Improved clipboard-image handling on WSL and terminal file-link rendering, including safe link destinations and malformed MCP tool-schema handling.
+
+### Changed
+
+- Split type, schema and rendering responsibilities to restore module-size gates without raising their baselines. Browser smoke builds no longer require a Node path polyfill for Codex metadata.
 
 ## [0.98.3] - 2026-09-06
 

@@ -2,13 +2,17 @@
 
 ## [Unreleased]
 
+## [0.98.4] - 2026-09-10
+
 ### Added
 
-- Added optional immutable `ModelContract` checks to core and `Agent` requests, with bounded omitted output limits and correlated `provider_request`, `provider_denied`, and `provider_request_end` events. Payload hooks become observation-only under a contract; these events describe stream dispatch, not physical HTTP attempts or task correctness.
+- Added opt-in immutable `ModelContract` checks and correlated stream-dispatch request/denial/end events. Policy covers logical model/provider, thinking and output limits; Chat Completions additionally validates the final model ID and output-limit field.
+- Expanded reverse-skill route metadata without automatically executing routed tools.
 
 ### Fixed
 
-- Automatic cross-provider vision routing no longer forwards the source provider's static API key or model/request headers. The destination resolver and provider credential path retain ownership of destination authentication.
+- Contracted text-only requests project tool-generated images into explicit uninspected-image notices without rewriting the transcript. User images retain their separate vision-routing requirements.
+- Cross-provider vision routing no longer forwards the source provider's static credentials or request/model headers.
 
 ## [0.98.3] - 2026-09-06
 

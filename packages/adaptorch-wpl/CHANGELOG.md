@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.98.4] - 2026-09-10
+
+### Added
+
+- Added side-effect-free service-link helpers for explicit onboarding surfaces.
+
+### Fixed
+
+- Submission now requires apply eligibility, a non-preview run, run IDs and confirmed adjudication. Deep-wall evidence requires nonempty digest/command and exit code zero; deep checks cannot clear a pre-existing human-review requirement.
+
 ## [0.98.3] - 2026-09-06
 
 ### Added

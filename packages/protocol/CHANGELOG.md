@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.98.4] - 2026-09-10
+
+### Added
+
+- Added bounded `explainBlockingCut()` metadata and opt-in `witnessIndependence: "explicit-groups"`. The compatibility default remains observation-ID grouping.
+
+### Fixed
+
+- Shared DAG branches can share a repair instead of choosing incompatible local minima. Composite-local obligations remain visible. A bounded-search greedy fallback explicitly does not claim minimum cardinality.
+
 ## [0.98.3] - 2026-09-06
 
 ### Added

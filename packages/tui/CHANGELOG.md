@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.98.4] - 2026-09-10
+
+### Added
+
+- Added host-controlled Markdown link/file-link resolution hooks, preserving plain-text fallback when links are unavailable and refusing control characters in hyperlink destinations.
+
 ## [0.98.3] - 2026-09-06
 
 ## [0.98.2] - 2026-09-02
