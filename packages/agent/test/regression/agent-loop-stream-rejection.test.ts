@@ -1,5 +1,5 @@
 import type { AssistantMessage, Message, Model, UserMessage } from "omk-ai";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { agentLoop, agentLoopContinue } from "../../src/agent-loop.ts";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, StreamFn } from "../../src/types.ts";
 
@@ -99,21 +99,23 @@ describe("agentLoop/agentLoopContinue stream termination on loop rejection", () 
 		}
 	});
 
-	it("agentLoop reports an aborted failure when the signal is already aborted", async () => {
+	it("agentLoop settles a pre-aborted request without resolving auth or starting a provider", async () => {
 		const context: AgentContext = {
 			systemPrompt: "You are helpful.",
 			messages: [],
 			tools: [],
 		};
+		const getApiKey = vi.fn(async () => "fixture-key");
 		const config: AgentLoopConfig = {
 			model: createModel(),
 			convertToLlm: identityConverter,
+			getApiKey,
 		};
-		const failingStreamFn: StreamFn = () => {
-			throw new Error("stream rejected after abort");
-		};
+		const failingStreamFn = vi.fn<StreamFn>(() => {
+			throw new Error("provider must not start after cancellation");
+		});
 		const controller = new AbortController();
-		controller.abort();
+		controller.abort(new Error("cancelled before dispatch"));
 
 		const stream = agentLoop([createUserMessage("Hello")], context, config, controller.signal, failingStreamFn);
 
@@ -125,7 +127,9 @@ describe("agentLoop/agentLoopContinue stream termination on loop rejection", () 
 		const messages = await stream.result();
 		const types = events.map((e) => e.type);
 		expect(types.slice(-4)).toEqual(["message_start", "message_end", "turn_end", "agent_end"]);
-		expectAssistantFailure(messages[messages.length - 1], "stream rejected after abort", "aborted");
+		expectAssistantFailure(messages[messages.length - 1], "cancelled before dispatch", "aborted");
+		expect(getApiKey).not.toHaveBeenCalled();
+		expect(failingStreamFn).not.toHaveBeenCalled();
 	});
 
 	it("agentLoop settles when convertToLlm rejects", async () => {

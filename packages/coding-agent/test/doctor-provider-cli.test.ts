@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -666,17 +667,17 @@ describe("provider doctor CLI", () => {
 		expect(lines.join("\n")).not.toContain(SENTINEL);
 	});
 
-	test("main.ts wires the doctor CLI before regular argument parsing", () => {
-		const mainSource = readFileSync(fileURLToPath(new URL("../src/main.ts", import.meta.url)), "utf-8");
-		expect(mainSource).toContain('from "./commands/doctor-provider-cli.ts"');
-		// The handler is dispatched from the outcome-command table rather than
-		// called inline, so locate its entry there; the invariant is unchanged.
-		const dispatchIndex = mainSource.indexOf("runDoctorProviderCli,");
-		const parseIndex = mainSource.indexOf("parseArgs(args)");
-		expect(dispatchIndex).toBeGreaterThan(-1);
-		expect(parseIndex).toBeGreaterThan(-1);
-		expect(dispatchIndex).toBeLessThan(parseIndex);
-		// The table itself must still run before parsing, not merely be declared.
-		expect(mainSource.indexOf("for (const runCommand of outcomeCommands)")).toBeLessThan(parseIndex);
+	test("dispatches doctor usage errors before creating an agent session", () => {
+		const cli = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
+		const result = spawnSync(process.execPath, [cli, "--doctor-provider"], {
+			cwd: agentDir,
+			env: { PATH: process.env.PATH, HOME: agentDir, OMK_CODING_AGENT_DIR: agentDir, OMK_OFFLINE: "1" },
+			encoding: "utf8",
+			timeout: 20_000,
+		});
+		expect(result.error).toBeUndefined();
+		expect(result.status).toBe(2);
+		expect(JSON.parse(result.stdout)).toMatchObject({ status: "fail", error: { code: "cli-usage" } });
+		expect(existsSync(join(agentDir, "sessions"))).toBe(false);
 	});
 });

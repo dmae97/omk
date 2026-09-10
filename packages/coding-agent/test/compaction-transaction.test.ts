@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import * as currentAgentCore from "../../agent/src/index.ts";
 import {
 	type CompactionBarrierResult,
 	type CompactionCommitDecision,
@@ -12,7 +11,7 @@ import {
 	redactCredentialShapedContent,
 } from "../src/core/compaction/transaction.ts";
 
-vi.mock("omk-agent-core", () => currentAgentCore);
+vi.mock("omk-agent-core", () => vi.importActual("../../agent/src/index.ts"));
 
 // ---------------------------------------------------------------------------
 // Helpers

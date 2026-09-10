@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import * as currentAgentCore from "../../agent/src/index.ts";
 import { inspectSessionIntegrity } from "../src/core/session-integrity.ts";
 import { createSessionRepairPlan } from "../src/core/session-repair-plan.ts";
 
-vi.mock("omk-agent-core", () => currentAgentCore);
+vi.mock("omk-agent-core", () => vi.importActual("../../agent/src/index.ts"));
 
 const encoder = new TextEncoder();
 const header = {

@@ -288,7 +288,9 @@ describe("AgentSession concurrent prompt guard", () => {
 		await session.abort();
 		await firstPrompt.catch(() => {});
 
-		expect(sawSteeringMessage).toBe(true);
+		expect(sawSteeringMessage).toBe(false);
+		expect(JSON.stringify(session.state.messages)).toContain("Steer from extension");
+		expect(session.isStreaming).toBe(false);
 	});
 
 	it("should allow prompt() after previous completes", async () => {

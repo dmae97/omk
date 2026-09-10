@@ -1,6 +1,5 @@
 /// <reference types="vite/client" />
 import { describe, expect, it, vi } from "vitest";
-import * as currentAgentCore from "../../agent/src/index.ts";
 import {
 	type CompactionBarrierResult,
 	createCompactionSourceIdentity,
@@ -30,7 +29,7 @@ import { inspectSessionIntegrity } from "../src/core/session-integrity.ts";
 import type { SessionPathAccessInput, SessionPathEvidence, SessionPathStat } from "../src/core/session-path-policy.ts";
 import { classifySessionTermination, type SessionTermination } from "../src/core/session-termination.ts";
 
-vi.mock("omk-agent-core", () => currentAgentCore);
+vi.mock("omk-agent-core", () => vi.importActual("../../agent/src/index.ts"));
 
 // -------------------------------------------------------------------------------------------------
 // Shared constants.

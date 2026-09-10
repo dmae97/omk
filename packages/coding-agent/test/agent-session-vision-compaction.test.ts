@@ -1,7 +1,7 @@
 /**
  * Unit tests for vision-route compaction behavior.
  *
- * When a text-only session model (e.g. deepseek-v4-flash) serves a turn whose
+ * When a synthetic text-only session model serves a turn whose
  * transcript carries image blocks, the agent loop auto-routes the request to
  * the vision model (openai-codex/gpt-5.6-luna, 1M window). Two failures used
  * to follow:
@@ -17,7 +17,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "omk-agent-core";
-import { getModel } from "omk-ai";
+import { getModel, type Model } from "omk-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AgentSession } from "../src/core/agent-session.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
@@ -33,8 +33,18 @@ describe("AgentSession vision-route compaction", () => {
 	let sessionManager: SessionManager;
 	let settingsManager: SettingsManager;
 
-	const deepseekModel = getModel("deepseek", "deepseek-v4-flash")!;
-	expect(deepseekModel.input).not.toContain("image"); // text-only session model
+	const deepseekModel: Model<"openai-completions"> = {
+		id: "text-only-fixture",
+		name: "Text-only fixture",
+		provider: "deepseek",
+		api: "openai-completions",
+		baseUrl: "https://example.invalid",
+		reasoning: false,
+		input: ["text"],
+		contextWindow: 1_000_000,
+		maxTokens: 384_000,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	};
 
 	function textMessage(text: string) {
 		return { type: "text" as const, text };
