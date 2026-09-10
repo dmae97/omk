@@ -35,6 +35,7 @@ import {
 	parseSha256Hex,
 	validateEvidenceReceipt,
 } from "./evidence-receipt.ts";
+import { combineMergeGateResults } from "./merge-gate-result.ts";
 import { ReplayLedgerStore, replayLedgerHeadsEqual } from "./replay-ledger-store.ts";
 import {
 	computeReplayPayloadHash,
@@ -132,7 +133,13 @@ export class TaskContractBuilder {
 
 	/** Parse and validate a serialized TaskContract. Fails closed on any shape violation. */
 	static fromJSON(json: string): TaskContract {
-		const raw: unknown = JSON.parse(json);
+		let raw: unknown;
+		try {
+			raw = JSON.parse(json);
+		} catch (error) {
+			if (error instanceof SyntaxError) throw new SyntaxError("Invalid TaskContract JSON");
+			throw error;
+		}
 		if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
 			throw new Error("TaskContract JSON must be an object");
 		}
@@ -694,43 +701,23 @@ export class EvidenceGate {
 // ============================================================================
 
 export class FailClosedMergeGate {
-	private gates: EvidenceGate[];
+	private readonly gates: readonly EvidenceGate[];
 
 	constructor(gates: EvidenceGate[] = [new EvidenceGate()]) {
-		this.gates = gates;
+		if (!Array.isArray(gates) || gates.length === 0) throw new TypeError("At least one evidence gate is required");
+		this.gates = Object.freeze(
+			Array.from(gates, (gate) => {
+				if (!(gate instanceof EvidenceGate)) throw new TypeError("Invalid evidence gate");
+				return gate;
+			}),
+		);
 	}
 
 	check(contract: TaskContract): MergeGateResult {
-		const results = this.gates.map((gate) => gate.check(contract));
-		const blocked = results.filter((r) => r.status === "blocked");
-		const conditional = results.filter((r) => r.status === "conditional");
-
-		if (blocked.length > 0) {
-			return {
-				gateId: "fail-closed-merge-gate",
-				status: "blocked",
-				reason: `Blocked by ${blocked.length} gate(s): ${blocked.map((b) => b.reason).join("; ")}`,
-				suggestion: "Resolve all blocking conditions before merge.",
-				evidenceChecked: contract.requiredEvidence,
-			};
-		}
-
-		if (conditional.length > 0) {
-			return {
-				gateId: "fail-closed-merge-gate",
-				status: "conditional",
-				reason: `Conditional pass: ${conditional.length} gate(s) have pending conditions.`,
-				suggestion: "Complete pending evidence or waive with explicit approval.",
-				evidenceChecked: contract.requiredEvidence,
-			};
-		}
-
-		return {
-			gateId: "fail-closed-merge-gate",
-			status: "open",
-			reason: "All merge gates passed. Evidence verified and contract verdict is acceptable.",
-			evidenceChecked: contract.requiredEvidence,
-		};
+		return combineMergeGateResults(
+			contract,
+			this.gates.map((gate) => gate.check(contract)),
+		);
 	}
 }
 

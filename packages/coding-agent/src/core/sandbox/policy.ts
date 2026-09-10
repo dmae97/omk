@@ -1,80 +1,21 @@
-import path from "node:path";
+import { isInsideSandboxPath as isInside, matchesSandboxPath as matchesPattern } from "./policy-paths.ts";
 
-export type SandboxMode = "off" | "audit" | "enforce";
-export type SandboxProfile = "readonly" | "workspace-write" | "dev-server" | "networked";
-export type NetworkMode = "none" | "loopback" | "domain-allowlist" | "all-explicit";
-export type PathAccessKind = "read" | "write";
-export type SandboxPlatform = "linux" | "macos" | "unsupported";
+export { mergeSandboxPolicy } from "./policy-merge.ts";
 
-export interface SandboxPolicy {
-	mode: SandboxMode;
-	profile: SandboxProfile;
-	filesystem: {
-		root: string;
-		readAllow: readonly string[];
-		readDeny: readonly string[];
-		writeAllow: readonly string[];
-		denyWrite: readonly string[];
-		tempWrite: readonly string[];
-		followSymlinks: false;
-	};
-	network: {
-		mode: NetworkMode;
-		allowedDomains: readonly string[];
-		deniedDomains: readonly string[];
-		allowUnixSockets: readonly string[];
-		allowBrowser: false;
-	};
-	process: {
-		allowExec: boolean;
-		allowShell: boolean;
-		allowPrivilege: false;
-	};
-}
+import type {
+	BashSpawnPreflightContext,
+	BashSpawnPreflightDecision,
+	NetworkAccessRequest,
+	PathAccessRequest,
+	ResolvedSandboxPath,
+	SandboxBackendStatus,
+	SandboxDecision,
+	SandboxFallbackDecision,
+	SandboxPathResolver,
+	SandboxPolicy,
+} from "./policy-types.ts";
 
-export interface ResolvedSandboxPath {
-	requestedPath: string;
-	exists: boolean;
-	realPath?: string;
-	nearestExistingParentRealPath?: string;
-	isSymlink?: boolean;
-	error?: string;
-}
-
-export type SandboxPathResolver = (requestPath: string) => ResolvedSandboxPath;
-
-export interface PathAccessRequest {
-	kind: PathAccessKind;
-	path: string;
-}
-
-export interface SandboxDecision {
-	allowed: boolean;
-	rule: string;
-	reason: string;
-}
-
-export interface NetworkAccessRequest {
-	host?: string;
-	url?: string;
-	unixSocketPath?: string;
-	browser?: boolean;
-	loopback?: boolean;
-}
-
-export interface SandboxBackendStatus {
-	platform: SandboxPlatform;
-	backendAvailable: boolean;
-	domainAllowlistAvailable?: boolean;
-	/** Human-readable probe detail when the backend cannot enforce the policy. */
-	unavailableReason?: string;
-}
-
-export interface SandboxFallbackDecision extends SandboxDecision {
-	allowShell: boolean;
-	allowExec: boolean;
-	allowReadOnlyTools: boolean;
-}
+export * from "./policy-types.ts";
 
 const SENSITIVE_PATH_PATTERN =
 	/(?:^|[/\\])(?:\.env(?:\..*)?|auth\.json|oauth\.json|\.netrc|\.npmrc|\.pgpass|credentials|id_rsa|id_dsa|id_ecdsa|id_ed25519|.*(?:secret|token|private[_-]?key|credential).*)$/i;
@@ -83,33 +24,8 @@ function decision(allowed: boolean, rule: string, reason: string): SandboxDecisi
 	return { allowed, rule, reason };
 }
 
-function normalize(value: string): string {
-	return path
-		.resolve(value)
-		.replace(/\\/g, "/")
-		.replace(/\/+$/g, (suffix) => (value === suffix ? "/" : ""));
-}
-
-function isInside(parent: string, child: string): boolean {
-	const normalizedParent = normalize(parent);
-	const normalizedChild = normalize(child);
-	return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}/`);
-}
-
 function isSensitivePath(value: string): boolean {
 	return SENSITIVE_PATH_PATTERN.test(value.replace(/\\/g, "/"));
-}
-
-function stripGlobSuffix(pattern: string): string {
-	if (pattern.endsWith("/**")) return pattern.slice(0, -3);
-	if (pattern.endsWith("/*")) return pattern.slice(0, -2);
-	return pattern;
-}
-
-function matchesPattern(pattern: string, candidate: string): boolean {
-	const normalizedPattern = normalize(stripGlobSuffix(pattern));
-	const normalizedCandidate = normalize(candidate);
-	return normalizedCandidate === normalizedPattern || normalizedCandidate.startsWith(`${normalizedPattern}/`);
 }
 
 function matchesAny(patterns: readonly string[], candidate: string): boolean {
@@ -255,95 +171,6 @@ export function decideSandboxFallback(policy: SandboxPolicy, backend: SandboxBac
 		allowExec: false,
 		allowReadOnlyTools: true,
 	};
-}
-
-export function mergeSandboxPolicy(
-	base: SandboxPolicy,
-	override: Partial<SandboxPolicy>,
-	options: { allowBroaden?: boolean } = {},
-): SandboxPolicy {
-	const allowBroaden = options.allowBroaden === true;
-	return {
-		mode: override.mode ?? base.mode,
-		profile: override.profile ?? base.profile,
-		filesystem: {
-			root: override.filesystem?.root ?? base.filesystem.root,
-			readAllow: allowBroaden
-				? (override.filesystem?.readAllow ?? base.filesystem.readAllow)
-				: intersectOrBase(base.filesystem.readAllow, override.filesystem?.readAllow),
-			readDeny: union(base.filesystem.readDeny, override.filesystem?.readDeny),
-			writeAllow: allowBroaden
-				? (override.filesystem?.writeAllow ?? base.filesystem.writeAllow)
-				: intersectOrBase(base.filesystem.writeAllow, override.filesystem?.writeAllow),
-			denyWrite: union(base.filesystem.denyWrite, override.filesystem?.denyWrite),
-			tempWrite: allowBroaden
-				? (override.filesystem?.tempWrite ?? base.filesystem.tempWrite)
-				: intersectOrBase(base.filesystem.tempWrite, override.filesystem?.tempWrite),
-			followSymlinks: false,
-		},
-		network: {
-			mode: allowBroaden
-				? (override.network?.mode ?? base.network.mode)
-				: narrowNetworkMode(base.network.mode, override.network?.mode),
-			allowedDomains: allowBroaden
-				? (override.network?.allowedDomains ?? base.network.allowedDomains)
-				: intersectOrBase(base.network.allowedDomains, override.network?.allowedDomains),
-			deniedDomains: union(base.network.deniedDomains, override.network?.deniedDomains),
-			allowUnixSockets: allowBroaden
-				? (override.network?.allowUnixSockets ?? base.network.allowUnixSockets)
-				: intersectOrBase(base.network.allowUnixSockets, override.network?.allowUnixSockets),
-			allowBrowser: false,
-		},
-		process: {
-			allowExec: allowBroaden
-				? (override.process?.allowExec ?? base.process.allowExec)
-				: base.process.allowExec && (override.process?.allowExec ?? true),
-			allowShell: allowBroaden
-				? (override.process?.allowShell ?? base.process.allowShell)
-				: base.process.allowShell && (override.process?.allowShell ?? true),
-			allowPrivilege: false,
-		},
-	};
-}
-
-function union(base: readonly string[], override: readonly string[] | undefined): string[] {
-	return [...new Set([...base, ...(override ?? [])])];
-}
-
-function intersectOrBase(base: readonly string[], override: readonly string[] | undefined): string[] {
-	if (override === undefined) return [...base];
-	const result: string[] = [];
-	for (const candidate of override) {
-		for (const entry of base) {
-			if (normalize(candidate) === normalize(entry)) {
-				result.push(candidate);
-				continue;
-			}
-			if (matchesPattern(entry, candidate)) {
-				result.push(candidate);
-				continue;
-			}
-			if (matchesPattern(candidate, entry)) {
-				result.push(entry);
-			}
-		}
-	}
-	return [...new Set(result)];
-}
-
-function narrowNetworkMode(base: NetworkMode, override: NetworkMode | undefined): NetworkMode {
-	if (override === undefined) return base;
-	const rank: Record<NetworkMode, number> = { none: 0, loopback: 1, "domain-allowlist": 2, "all-explicit": 3 };
-	return rank[override] <= rank[base] ? override : base;
-}
-
-export interface BashSpawnPreflightContext {
-	command: string;
-	cwd: string;
-}
-
-export interface BashSpawnPreflightDecision extends SandboxDecision {
-	allowShell: boolean;
 }
 
 /**

@@ -22,6 +22,18 @@ There are two general isolation options:
 1. run the whole `omk` process inside an isolated environment, or
 2. run `omk` on the host and route tool execution into an isolated environment.
 
+### Policy composition
+
+`mergeSandboxPolicy(base, override)` keeps the stronger enforcement mode and accepts
+only a root inside the base root. An override cannot silently turn `enforce` into
+`audit`/`off` or move the workspace elsewhere. Broader mode/root changes require the
+trusted caller's explicit `{ allowBroaden: true }`; the flag is not user authentication.
+These pure policy checks do not replace backend enforcement or isolate extension code.
+
+Evidence configuration also fails closed: `FailClosedMergeGate` rejects empty,
+sparse, or invalid gate lists and snapshots the supplied array. Later changes to
+that array cannot remove the checks. This does not authenticate arbitrary gate code.
+
 ## Choose a pattern
 
 | Pattern | What is isolated | Best for | Notes |
