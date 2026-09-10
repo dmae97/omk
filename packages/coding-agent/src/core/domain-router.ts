@@ -17,7 +17,7 @@ export function routeDomain(input: RouteInput): RouteResult {
 	const task = input.task ?? "";
 	const tags = input.tags ?? [];
 	const paths = input.paths ?? [];
-	const text = [...tags, task].join(" ").toLowerCase();
+	const text = [...tags, task].join(" ").replace(/\s+/gu, " ").trim().toLowerCase();
 	const scores = scoreDomains(COMPILED_DOMAIN_REGISTRY, text, paths);
 	return selectRoute(scores, DOMAIN_PROFILES, FALLBACK_DOMAIN_ID);
 }
