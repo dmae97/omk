@@ -99,11 +99,7 @@ describe("MCP tool list from a real server with broken schemas", () => {
 		// When: the manager lists the tool definitions it will register
 		const tools = await m.listToolDefinitions();
 		// Then: all three tools are usable, each with an object root
-		expect(tools.map((tool) => tool.name)).toEqual([
-			"obsidian__read_notes",
-			"obsidian__no_schema",
-			"obsidian__echo",
-		]);
+		expect(tools.map((tool) => tool.name)).toEqual(["obsidian__read_notes", "obsidian__no_schema", "obsidian__echo"]);
 		for (const tool of tools) {
 			const parameters = tool.parameters as unknown as Record<string, unknown>;
 			expect(parameters.type).toBe("object");

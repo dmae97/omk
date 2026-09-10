@@ -99,8 +99,7 @@ describe("classifySessionTermination", () => {
 			runId: "run-astra",
 			timestamp: NOW,
 			source: "observed",
-			message:
-				'{"detail":"The \'gpt-6-astra\' model is not supported when using Codex with a ChatGPT account."}',
+			message: '{"detail":"The \'gpt-6-astra\' model is not supported when using Codex with a ChatGPT account."}',
 			cause: { area: "configuration", code: "invalid" },
 			sideEffects: "none",
 			provider: "openai-codex",
