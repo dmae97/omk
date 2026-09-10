@@ -1,4 +1,9 @@
-export { isBlockingVerdict, minimalBlockingCut } from "./claims/claim-blocking-cut.ts";
+export {
+	explainBlockingCut,
+	isBlockingVerdict,
+	MAX_BLOCKING_CUT_CANDIDATES,
+	minimalBlockingCut,
+} from "./claims/claim-blocking-cut.ts";
 export { evaluateProofClosure } from "./claims/claim-closure.ts";
 export {
 	ClaimGraphError,
@@ -8,6 +13,7 @@ export {
 	validateClaimGraph,
 } from "./claims/claim-graph.ts";
 export {
+	type BlockingCutExplanation,
 	CLAIM_GRAPH_SCHEMA_VERSION,
 	CLAIM_VERDICT_PRECEDENCE,
 	type ClaimClosureEvaluation,
@@ -25,6 +31,7 @@ export {
 	type ProofClosureResult,
 	type VerificationVerdict,
 	type WaiverNode,
+	type WitnessIndependencePolicy,
 	type WorkspaceCompleteness,
 } from "./claims/claim-types.ts";
 export { reduceRuntimeDecision } from "./decision.ts";

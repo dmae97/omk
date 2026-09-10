@@ -91,7 +91,7 @@ export interface ObservationNode {
 	/** ISO-8601 instant after which the observation no longer qualifies. */
 	readonly validUntil?: string;
 	readonly invalidationKeys?: readonly string[];
-	/** Witnesses sharing a group count once; defaults to the observation id. */
+	/** Witnesses sharing a group count once. The explicit-groups policy requires this for multi-witness claims. */
 	readonly independenceGroup?: string;
 }
 
@@ -109,9 +109,13 @@ export interface ClaimGraph {
 	readonly claims: readonly ClaimNode[];
 }
 
+export type WitnessIndependencePolicy = "legacy-observation-id" | "explicit-groups";
+
 export interface ProofClosureInput {
 	readonly graph: ClaimGraph;
 	readonly observations: readonly ObservationNode[];
+	/** Compatibility default: legacy-observation-id. Strong profiles must opt into explicit-groups. */
+	readonly witnessIndependence?: WitnessIndependencePolicy;
 	readonly waivers: readonly WaiverNode[];
 	readonly sourceRoot: string;
 	readonly environmentDigest: string;
@@ -138,15 +142,31 @@ export interface ClaimClosureEvaluation {
 	/** Qualified observations that decided the verdict (violations, or counted witnesses). */
 	readonly observationIds: readonly string[];
 	readonly waiverId?: string;
+	/** Distinguish local obligations from a verdict derived only from children. */
+	readonly blockingOrigin?: "local" | "children";
+}
+
+export interface BlockingCutExplanation {
+	readonly claimIds: readonly string[];
+	readonly algorithm: "exact-antichain" | "greedy";
+	/** Minimum cardinality in this repair model only; fallback has no minimality guarantee. */
+	readonly optimality: "minimum" | "not-proven";
+	readonly truncated: boolean;
+	readonly exploredStates: number;
+	/** Selected composite-local obligations that child repairs alone cannot resolve. */
+	readonly localClaimIds: readonly string[];
 }
 
 export interface ProofClosureResult {
 	readonly verdict: VerificationVerdict;
+	readonly witnessIndependence?: WitnessIndependencePolicy;
 	readonly claimEvaluations: readonly ClaimClosureEvaluation[];
 	/** Required claims that are not closed, in evaluation order. */
 	readonly blockingClaimIds: readonly string[];
-	/** Smallest leaf set whose closure would unblock every blocking root; sorted. */
+	/** Compatibility projection; consult blockingCut for bounded-search optimality and local causes. */
 	readonly minimalBlockingCut: readonly string[];
+	/** Explanation only; never overrides the closure verdict or unresolved global effects. */
+	readonly blockingCut?: BlockingCutExplanation;
 	readonly unresolvedEffectIds: readonly string[];
 	readonly workspaceCompleteness: WorkspaceCompleteness;
 }

@@ -26,7 +26,7 @@
  * claim on a blocking path so the cause is explainable.
  */
 
-import { isBlockingVerdict, minimalBlockingCut } from "./claim-blocking-cut.ts";
+import { explainBlockingCut, isBlockingVerdict } from "./claim-blocking-cut.ts";
 import { ClaimGraphError, rootClaimIds, topologicalClaimOrder, validateClaimGraph } from "./claim-graph.ts";
 import {
 	CLAIM_VERDICT_PRECEDENCE,
@@ -40,6 +40,7 @@ import {
 	type ProofClosureResult,
 	type VerificationVerdict,
 	type WaiverNode,
+	type WitnessIndependencePolicy,
 } from "./claim-types.ts";
 
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -104,12 +105,26 @@ function ids(observations: readonly ObservationNode[]): readonly string[] {
 function evaluateLeaf(
 	claim: ClaimNode,
 	witnesses: Witnesses,
+	independence: WitnessIndependencePolicy,
 ): { verdict: ClaimVerdict; observationIds: readonly string[] } {
 	if (witnesses.violating.length > 0) return { verdict: "violated", observationIds: ids(witnesses.violating) };
 	const floor = OBSERVATION_TRUST_RANK[claim.trustFloor];
 	const trusted = witnesses.supporting.filter((observation) => OBSERVATION_TRUST_RANK[observation.source] >= floor);
-	const groups = new Set(trusted.map((observation) => observation.independenceGroup ?? observation.observationId));
-	if (groups.size >= (claim.requiredWitnesses ?? 1)) return { verdict: "satisfied", observationIds: ids(trusted) };
+	const requiredWitnesses = claim.requiredWitnesses ?? 1;
+	const attributable = trusted.filter(
+		(observation) =>
+			independence === "legacy-observation-id" ||
+			requiredWitnesses === 1 ||
+			Boolean(observation.independenceGroup?.trim()),
+	);
+	const groups = new Set(
+		attributable.map(
+			(observation) =>
+				observation.independenceGroup ??
+				(independence === "legacy-observation-id" ? observation.observationId : undefined),
+		),
+	);
+	if (groups.size >= requiredWitnesses) return { verdict: "satisfied", observationIds: ids(trusted) };
 	if (trusted.length > 0) return { verdict: "missing", observationIds: ids(trusted) };
 	if (witnesses.supporting.length > 0)
 		return { verdict: "insufficient_trust", observationIds: ids(witnesses.supporting) };
@@ -191,6 +206,11 @@ function globalVerdict(
 
 export function evaluateProofClosure(input: ProofClosureInput): ProofClosureResult {
 	const claims = validateClaimGraph(input.graph);
+	const witnessIndependence =
+		input.witnessIndependence === undefined ? "legacy-observation-id" : input.witnessIndependence;
+	if (witnessIndependence !== "legacy-observation-id" && witnessIndependence !== "explicit-groups") {
+		throw new ClaimGraphError("invalid_input", "Unknown witness independence policy");
+	}
 	requireTimestamp(input.now, "now");
 	const witnesses = indexWitnesses(input, claims);
 	const waivers = indexWaivers(input, claims);
@@ -200,7 +220,7 @@ export function evaluateProofClosure(input: ProofClosureInput): ProofClosureResu
 		const inputs = requiredInputs(claim, claims);
 		const local =
 			inputs.length === 0
-				? evaluateLeaf(claim, claimWitnesses)
+				? evaluateLeaf(claim, claimWitnesses, witnessIndependence)
 				: evaluateComposite(claim, inputs, claimWitnesses, evaluations);
 		let verdict = local.verdict;
 		if (verdict !== "violated" && claim.scopeSensitive === true && input.workspaceCompleteness !== "complete") {
@@ -218,6 +238,16 @@ export function evaluateProofClosure(input: ProofClosureInput): ProofClosureResu
 				reasonCode: reasonFor(verdict),
 				observationIds: Object.freeze([...local.observationIds]),
 				...(waived ? { waiverId: waiver.waiverId } : {}),
+				...(isBlockingVerdict(verdict)
+					? {
+							blockingOrigin:
+								inputs.length === 0 ||
+								claimWitnesses.violating.length > 0 ||
+								(claim.scopeSensitive === true && input.workspaceCompleteness !== "complete")
+									? ("local" as const)
+									: ("children" as const),
+						}
+					: {}),
 			}),
 		);
 	}
@@ -230,11 +260,14 @@ export function evaluateProofClosure(input: ProofClosureInput): ProofClosureResu
 		.filter((evaluation) => isBlockingVerdict(evaluation.verdict))
 		.map((evaluation) => evaluation.claimId);
 	const blockingClaimIds = blockingPathClaimIds(claims, evaluations, blockingRoots, graphOrder);
+	const blockingCut = explainBlockingCut(claims, evaluations, blockingRoots);
 	return Object.freeze({
 		verdict: globalVerdict(requiredRoots, input),
+		witnessIndependence,
 		claimEvaluations: Object.freeze(ordered),
 		blockingClaimIds: Object.freeze(blockingClaimIds),
-		minimalBlockingCut: Object.freeze([...minimalBlockingCut(claims, evaluations, blockingRoots)]),
+		minimalBlockingCut: blockingCut.claimIds,
+		blockingCut,
 		unresolvedEffectIds: Object.freeze([...input.unresolvedEffectIds].sort(compareCodeUnits)),
 		workspaceCompleteness: input.workspaceCompleteness,
 	});

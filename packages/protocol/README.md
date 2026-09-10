@@ -14,6 +14,35 @@ TaskSpec -> ExecutionAttempt -> Observation -> EvaluationResult -> RuntimeDecisi
 - Runtime parsers for every top-level record
 - `evaluateTask()` and `reduceRuntimeDecision()`
 
+## Claim closure and blocking explanations
+
+`evaluateProofClosure()` evaluates qualified witnesses on an all/any claim DAG.
+Set `witnessIndependence: "explicit-groups"` for a strict profile: multi-witness
+claims (`requiredWitnesses > 1`) then require explicit, nonempty `independenceGroup`
+values. Merely changing an observation ID does not create another independent
+witness in that profile. Single-witness claims keep their existing behavior.
+
+The compatibility default remains `legacy-observation-id`; the result reports the
+resolved policy. Existing callers must opt into the strict profile deliberately.
+Group identities still need binding to real evidence origins by a trusted caller;
+the reducer cannot authenticate an arbitrary caller-supplied label.
+
+`explainBlockingCut()` returns a bounded antichain repair explanation. Shared DAG
+branches can share one repair. Composite-local counterexamples and scope obligations
+are retained alongside child obligations rather than being hidden by them.
+
+- `blockingCut.optimality: "minimum"` means minimum cardinality in this snapshot's
+  repair model, not semantic correctness after a real change.
+- At the candidate/operation limit, `algorithm: "greedy"`, `truncated: true`, and
+  `optimality: "not-proven"` identify a fallback with no minimality guarantee.
+- The legacy `minimalBlockingCut` array remains as a compatibility projection.
+  Consumers needing optimality must read the explanation metadata. Older results
+  without that metadata do not establish a minimum.
+
+Repair explanations never close claims, reconcile effects, issue waivers, or authorize
+merges. Re-evaluate evidence after a change. Set operations depend on candidate and
+set sizes; the shared-DAG optimization is not a linear-time minimum-cut algorithm.
+
 The package does not execute tools, persist records, schedule work, choose providers, or infer topology. Retry and failover counts are derived from attempt records rather than stored counters.
 
 See [OMK Run Protocol v1](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/run-protocol.md) for evaluation rules, receipt bridging, migration status, and authority boundaries.
