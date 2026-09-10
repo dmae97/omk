@@ -119,24 +119,33 @@ Counts, durations, ids, and error *classes*:
 
 ```json
 {
-  "schemaVersion": "omk-turn-metrics-1",
+  "schemaVersion": "omk-turn-metrics-2",
   "sessionId": "…", "turnIndex": 12,
   "provider": "anthropic", "model": "claude-sonnet-4-5",
   "startedAtEpochMs": 1, "endedAtEpochMs": 2, "durationMs": 1,
   "usage": { "input": 100, "output": 20, "cacheRead": 900, "cacheWrite": 10, "costUsd": 0.0125 },
   "stopReason": "toolUse",
-  "toolCalls": [{ "name": "bash", "durationMs": 120, "ok": false, "error": "exit 1" }],
+  "toolCalls": [{ "name": "bash", "durationMs": 120, "ok": false, "errorClass": "unknown" }],
   "toolCallCount": 1, "toolFailureCount": 1
 }
 ```
 
-**Never recorded:** prompt text, tool arguments, tool output, file contents, or
-environment values. Tool error strings are whitespace-collapsed and truncated to
-200 characters — enough to tell failure modes apart, too short to carry a
-payload.
+New records project an explicit field allowlist. Prompt, argument, output, environment,
+and unknown nested fields are not copied into the record; caller-supplied `toJSON`
+properties are not retained. Raw tool errors are classified as `timeout`, `aborted`,
+`permission`, `not_found`, `invalid_input`, or `unknown` and then discarded.
+Length truncation alone was not redaction. Identifiers are still metadata, not anonymized
+identities: callers must not put secrets or task content in ID/name fields.
 
-Metrics are advisory. A failed write is counted and dropped; it can never make a
-turn fail.
+The reader validates required fields, finite nonnegative quantities, counters, and
+nested tool/usage/cache shapes before aggregation. Invalid records count as malformed.
+Valid v1 records remain readable, but existing files are **not rewritten or scrubbed**;
+review old files separately before sharing them.
+
+Metrics remain advisory. Invalid input, an oversized record, or a failed write is
+counted and dropped rather than failing the agent. Single records cannot exceed the
+configured file bound. Rotation is still best-effort and does not provide a transactional
+multi-writer size guarantee.
 
 ## Capability baseline
 

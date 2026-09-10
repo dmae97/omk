@@ -6,7 +6,6 @@ import { renderStatsReport, runStatsCli } from "../src/commands/stats-cli.ts";
 import { buildRuntimeProvenance } from "../src/core/runtime-provenance.ts";
 import {
 	buildTurnMetricRecord,
-	MAX_ERROR_CHARS,
 	summarizeTurnMetrics,
 	summarizeTurnMetricsFile,
 	TURN_METRICS_SCHEMA_VERSION,
@@ -81,7 +80,7 @@ describe("turn metric records", () => {
 		expect(record.runtimeProvenance).toBeUndefined();
 	});
 
-	it("keeps error text only on failures, collapsed and truncated", () => {
+	it("keeps only a bounded error class on failures", () => {
 		const record = buildTurnMetricRecord(
 			turn({
 				toolCalls: [
@@ -91,9 +90,8 @@ describe("turn metric records", () => {
 			}),
 		);
 		expect(record.toolCalls?.[0]).not.toHaveProperty("error");
-		const error = record.toolCalls?.[1].error ?? "";
-		expect(error.startsWith("line1 line2")).toBe(true);
-		expect(error.length).toBe(MAX_ERROR_CHARS + 1); // includes the ellipsis
+		expect(record.toolCalls?.[1]).not.toHaveProperty("error");
+		expect(record.toolCalls?.[1].errorClass).toBe("unknown");
 	});
 
 	it("records no prompt, argument, or output text", () => {

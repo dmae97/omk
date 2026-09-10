@@ -12,99 +12,23 @@
  * a failed write is dropped, never surfaced as a turn error.
  *
  * Privacy: records counts, durations, ids, and error *classes*. It never
- * records prompt text, tool arguments, tool output, or file contents. Tool
- * error strings are truncated and kept only to distinguish failure modes.
+ * records prompt text, tool arguments, tool output, or file contents. New
+ * records retain bounded error classes only; raw failure text is never serialized.
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import { parseRuntimeProvenance, type RuntimeProvenance } from "./runtime-provenance.ts";
+import {
+	buildTurnMetricRecord,
+	parseTurnMetricRecord,
+	type TurnMetricInput,
+	type TurnMetricRecord,
+	type TurnUsageMetric,
+} from "./turn-metrics-record.ts";
 
-export const TURN_METRICS_SCHEMA_VERSION = "omk-turn-metrics-1" as const;
+export * from "./turn-metrics-record.ts";
 /** Rotate once the active file passes this size. */
 export const DEFAULT_MAX_METRICS_BYTES = 8 * 1024 * 1024;
-/** Cap on a retained error string. Enough to classify, too short to carry a payload. */
-export const MAX_ERROR_CHARS = 200;
-
-export interface ToolCallMetric {
-	readonly name: string;
-	readonly durationMs: number;
-	readonly ok: boolean;
-	/** Truncated failure text, present only when `ok` is false. */
-	readonly error?: string;
-}
-
-export interface TurnUsageMetric {
-	readonly input: number;
-	readonly output: number;
-	readonly cacheRead: number;
-	readonly cacheWrite: number;
-	readonly costUsd: number;
-}
-
-export interface TurnMetricInput {
-	readonly sessionId: string;
-	readonly turnIndex: number;
-	readonly provider?: string;
-	readonly model?: string;
-	readonly startedAtEpochMs: number;
-	readonly endedAtEpochMs: number;
-	/** Time to the first streamed assistant chunk, when observed. */
-	readonly timeToFirstChunkMs?: number;
-	readonly usage?: TurnUsageMetric;
-	readonly stopReason?: string;
-	readonly toolCalls?: readonly ToolCallMetric[];
-	/** Whether compaction ran during this turn. */
-	readonly compacted?: boolean;
-	/** Provider failover attempts made during this turn. */
-	readonly failovers?: number;
-	/** Context-budget cache outcome for the turn's prompt build. */
-	readonly contextCache?: { readonly planHit: boolean; readonly hits: number; readonly misses: number };
-	/** Requested/selected/response model and thinking projection. Advisory metadata only. */
-	readonly runtimeProvenance?: RuntimeProvenance;
-}
-
-export interface TurnMetricRecord extends TurnMetricInput {
-	readonly schemaVersion: typeof TURN_METRICS_SCHEMA_VERSION;
-	readonly durationMs: number;
-	readonly toolCallCount: number;
-	readonly toolFailureCount: number;
-}
-
-function truncateError(value: string | undefined): string | undefined {
-	if (value === undefined) return undefined;
-	const collapsed = value.replace(/\s+/gu, " ").trim();
-	if (collapsed.length === 0) return undefined;
-	return collapsed.length > MAX_ERROR_CHARS ? `${collapsed.slice(0, MAX_ERROR_CHARS)}\u2026` : collapsed;
-}
-
-/**
- * Build the record written for one turn. Pure: no clock, no filesystem, so the
- * derived fields can be asserted directly.
- */
-export function buildTurnMetricRecord(input: TurnMetricInput): TurnMetricRecord {
-	const toolCalls = (input.toolCalls ?? []).map((call) => ({
-		name: call.name,
-		durationMs: Math.max(0, Math.round(call.durationMs)),
-		ok: call.ok,
-		...(call.ok ? {} : { error: truncateError(call.error) }),
-	}));
-	const runtimeProvenance =
-		input.runtimeProvenance === undefined ? undefined : parseRuntimeProvenance(input.runtimeProvenance);
-	// Spread the raw input minus its projection: a validated projection is re-added
-	// below, an invalid one is dropped rather than persisted.
-	const { runtimeProvenance: _rawProvenance, ...rest } = input;
-	return {
-		...rest,
-		schemaVersion: TURN_METRICS_SCHEMA_VERSION,
-		durationMs: Math.max(0, input.endedAtEpochMs - input.startedAtEpochMs),
-		toolCalls,
-		toolCallCount: toolCalls.length,
-		toolFailureCount: toolCalls.filter((call) => !call.ok).length,
-		...(runtimeProvenance === null || runtimeProvenance === undefined ? {} : { runtimeProvenance }),
-	};
-}
-
 export interface TurnMetricsSinkOptions {
 	readonly dir: string;
 	readonly maxBytes?: number;
@@ -150,9 +74,14 @@ export class TurnMetricsSink {
 			this.dropped++;
 			return false;
 		}
+		const bytes = Buffer.byteLength(line, "utf8");
+		if (bytes > this.maxBytes) {
+			this.dropped++;
+			return false;
+		}
 		try {
 			fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-			this.rotateIfNeeded(Buffer.byteLength(line, "utf8"));
+			this.rotateIfNeeded(bytes);
 			fs.appendFileSync(this.filePath, line, { encoding: "utf8", mode: 0o600 });
 			this.written++;
 			return true;
@@ -215,22 +144,6 @@ function percentile(sorted: readonly number[], fraction: number): number {
 	return sorted[index];
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function parseRecord(line: string): TurnMetricRecord | undefined {
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(line);
-	} catch {
-		return undefined;
-	}
-	if (!isRecord(parsed) || parsed.schemaVersion !== TURN_METRICS_SCHEMA_VERSION) return undefined;
-	if (typeof parsed.turnIndex !== "number" || typeof parsed.durationMs !== "number") return undefined;
-	return parsed as unknown as TurnMetricRecord;
-}
-
 /**
  * Aggregate JSONL lines into a summary. Malformed lines are counted rather than
  * discarded silently, so a truncated tail is visible instead of pretending the
@@ -242,7 +155,7 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 	for (const line of lines) {
 		const trimmed = line.trim();
 		if (trimmed.length === 0) continue;
-		const record = parseRecord(trimmed);
+		const record = parseTurnMetricRecord(trimmed);
 		if (record) records.push(record);
 		else malformedLines++;
 	}
@@ -277,9 +190,7 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 			planObservations++;
 			if (record.contextCache.planHit) planHits++;
 		}
-		// Re-validate provenance at read time: a tampered projection never counts.
-		const provenance =
-			record.runtimeProvenance === undefined ? undefined : parseRuntimeProvenance(record.runtimeProvenance);
+		const provenance = record.runtimeProvenance;
 		if (
 			provenance !== undefined &&
 			provenance !== null &&
