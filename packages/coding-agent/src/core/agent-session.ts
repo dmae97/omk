@@ -245,15 +245,11 @@ import { type RunResourceLease, RunResourceLeaseController } from "./run-resourc
 import { SessionBashRuntime } from "./session-bash-runtime.ts";
 import { type BashResourcePermitGrant, SessionBashService } from "./session-bash-service.ts";
 import { SessionCompactionService } from "./session-compaction-service.ts";
-import {
-	preflightFailureCause,
-	providerFailureCause,
-	runtimeFailureCause,
-	terminationMessage,
-} from "./session-failure-cause.ts";
+import { preflightFailureCause, runtimeFailureCause, terminationMessage } from "./session-failure-cause.ts";
 import type { BranchSummaryEntry, SessionManager } from "./session-manager.ts";
 import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.ts";
 import { acquireSessionOwnerLeaseSync, type SessionOwnerLease } from "./session-owner-lease.ts";
+import { classifyRunTermination } from "./session-run-termination.ts";
 import { assembleSessionSystemPrompt } from "./session-system-prompt.ts";
 import {
 	classifySessionTermination,
@@ -917,68 +913,6 @@ export class AgentSession {
 		this._appendReplayEvent(event, details);
 	}
 
-	private _classifyRunTermination(
-		runId: string,
-		event: Extract<AgentEvent, { type: "agent_end" }>,
-	): SessionTermination {
-		const timestamp = new Date().toISOString();
-		let assistant: AssistantMessage | undefined;
-		for (let index = event.messages.length - 1; index >= 0; index -= 1) {
-			const message = event.messages[index];
-			if (message?.role === "assistant") {
-				assistant = message;
-				break;
-			}
-		}
-		let cause: SessionTerminationCause;
-		let message: string;
-		let sideEffects: "none" | "possible" = this._sessionRiskLevel === "elevated" ? "possible" : "none";
-		let toolCallId: string | undefined;
-		let toolName: string | undefined;
-
-		if (this._activeRunToolTermination) {
-			cause = { area: "tool", code: "timeout" };
-			message = `Tool ${this._activeRunToolTermination.toolName} timed out.`;
-			toolCallId = this._activeRunToolTermination.toolCallId;
-			toolName = this._activeRunToolTermination.toolName;
-			sideEffects = this._activeRunToolTermination.executionStarted ? "possible" : sideEffects;
-		} else if (!assistant) {
-			cause = { area: "internal", code: "unclassified" };
-			message = "Agent run ended without an assistant result.";
-		} else if (assistant.stopReason === "aborted") {
-			cause = this._userAbortRequested ? { area: "user", code: "abort" } : { area: "provider", code: "abort" };
-			message = terminationMessage(
-				assistant.errorMessage,
-				this._userAbortRequested ? "The user aborted the run." : "The provider aborted the run.",
-			);
-		} else if (assistant.stopReason === "error") {
-			cause = providerFailureCause(assistant, this.model?.contextWindow ?? 0);
-			message = terminationMessage(assistant.errorMessage, "The provider request failed.");
-		} else {
-			cause = { area: "completed" };
-			message = "Run completed.";
-		}
-
-		let provider = this.model?.provider;
-		if (assistant?.provider) provider = assistant.provider;
-		let model = this.model?.id;
-		if (assistant?.model) model = assistant.model;
-
-		return classifySessionTermination({
-			sessionId: this.sessionId,
-			runId,
-			timestamp,
-			source: "observed",
-			message,
-			cause,
-			sideEffects,
-			...(provider ? { provider } : {}),
-			...(model ? { model } : {}),
-			...(toolCallId ? { toolCallId } : {}),
-			...(toolName ? { toolName } : {}),
-		});
-	}
-
 	private _publishTermination(termination: SessionTermination): void {
 		this._lastTermination = termination;
 		this._emit({ type: "session_termination", termination });
@@ -1051,9 +985,21 @@ export class AgentSession {
 			}
 			return;
 		}
+		if (event.type === "provider_denied" && event.deniedReason === "contract-violation") {
+			this._pendingRuntimeTerminationCause = { area: "configuration", code: "invalid" };
+		}
 		if (event.type !== "agent_end") return;
 		if (this._activeRunId === null) throw new Error("run journal received agent_end without run_started");
-		const termination = this._classifyRunTermination(this._activeRunId, event);
+		const termination = classifyRunTermination(event.messages, {
+			sessionId: this.sessionId,
+			runId: this._activeRunId,
+			timestamp: new Date().toISOString(),
+			model: this.model,
+			elevatedRisk: this._sessionRiskLevel === "elevated",
+			userAbortRequested: this._userAbortRequested,
+			pendingCause: this._pendingRuntimeTerminationCause,
+			toolTimeout: this._activeRunToolTermination,
+		});
 		try {
 			this._runJournalStore.finish({
 				termination,

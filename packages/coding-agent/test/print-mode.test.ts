@@ -1,7 +1,9 @@
-import type { AssistantMessage, ImageContent } from "omk-ai";
+import type { ImageContent } from "omk-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { classifySessionTermination, type SessionShutdownEvent } from "../src/index.ts";
+import type { PromptSettledEvent } from "../src/core/prompt-settlement.ts";
+import { classifySessionTermination } from "../src/index.ts";
 import { runPrintMode } from "../src/modes/print-mode.ts";
+import { createAssistantMessage, createRuntimeHost } from "./print-mode-fixtures.ts";
 
 const printIo = vi.hoisted(() => ({ output: [] as string[] }));
 
@@ -10,102 +12,89 @@ vi.mock("../src/core/output-guard.js", () => ({
 	writeRawStdout: (text: string) => printIo.output.push(text),
 }));
 
-type EmitEvent = SessionShutdownEvent;
-
-type FakeExtensionRunner = {
-	hasHandlers: (eventType: string) => boolean;
-	emit: ReturnType<typeof vi.fn<(event: EmitEvent) => Promise<void>>>;
-};
-
-type FakeSession = {
-	sessionManager: { getHeader: () => object | undefined };
-	agent: { waitForIdle: () => Promise<void> };
-	state: { messages: AssistantMessage[] };
-	extensionRunner: FakeExtensionRunner;
-	bindExtensions: ReturnType<typeof vi.fn>;
-	subscribe: ReturnType<typeof vi.fn>;
-	prompt: ReturnType<typeof vi.fn>;
-	reload: ReturnType<typeof vi.fn>;
-	lastTermination?: ReturnType<typeof classifySessionTermination>;
-	recordProcessSignal: ReturnType<typeof vi.fn>;
-};
-
-type FakeRuntimeHost = {
-	session: FakeSession;
-	newSession: ReturnType<typeof vi.fn>;
-	fork: ReturnType<typeof vi.fn>;
-	switchSession: ReturnType<typeof vi.fn>;
-	dispose: ReturnType<typeof vi.fn>;
-	setRebindSession: ReturnType<typeof vi.fn>;
-};
-
-function createAssistantMessage(options?: {
-	text?: string;
-	stopReason?: AssistantMessage["stopReason"];
-	errorMessage?: string;
-}): AssistantMessage {
-	return {
-		role: "assistant",
-		content: options?.text ? [{ type: "text", text: options.text }] : [],
-		api: "openai-responses",
-		provider: "openai",
-		model: "gpt-4o-mini",
-		usage: {
-			input: 0,
-			output: 0,
-			cacheRead: 0,
-			cacheWrite: 0,
-			totalTokens: 0,
-			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-		},
-		stopReason: options?.stopReason ?? "stop",
-		errorMessage: options?.errorMessage,
-		timestamp: Date.now(),
-	};
-}
-
-function createRuntimeHost(
-	assistantMessage: AssistantMessage,
-	lastTermination?: ReturnType<typeof classifySessionTermination>,
-): FakeRuntimeHost {
-	const extensionRunner: FakeExtensionRunner = {
-		hasHandlers: (eventType: string) => eventType === "session_shutdown",
-		emit: vi.fn(async () => {}),
-	};
-
-	const state = { messages: [assistantMessage] };
-
-	const session: FakeSession = {
-		sessionManager: { getHeader: () => undefined },
-		agent: { waitForIdle: async () => {} },
-		state,
-		extensionRunner,
-		bindExtensions: vi.fn(async () => {}),
-		subscribe: vi.fn(() => () => {}),
-		prompt: vi.fn(async () => {}),
-		reload: vi.fn(async () => {}),
-		lastTermination,
-		recordProcessSignal: vi.fn(),
-	};
-
-	return {
-		session,
-		newSession: vi.fn(async () => undefined),
-		fork: vi.fn(async () => ({ selectedText: "" })),
-		switchSession: vi.fn(async () => undefined),
-		dispose: vi.fn(async () => {
-			await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
-		}),
-		setRebindSession: vi.fn(),
-	};
-}
-
 afterEach(() => {
 	printIo.output = [];
 	vi.restoreAllMocks();
 });
 
 describe("runPrintMode", () => {
+	it.each(["text", "json"] as const)(
+		"waits for final settlement after a recovered attempt in %s mode",
+		async (mode) => {
+			const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "recovered" }));
+			const transient = classifySessionTermination({
+				sessionId: "fixture",
+				runId: "retry",
+				timestamp: "2026-09-09T00:00:00.000Z",
+				source: "observed",
+				message: "Temporary network failure.",
+				cause: { area: "provider", code: "network" },
+				sideEffects: "none",
+			});
+			runtimeHost.session.subscribe.mockImplementation(
+				(
+					listener: (
+						event: PromptSettledEvent | { type: "session_termination"; termination: typeof transient },
+					) => void,
+				) => {
+					runtimeHost.session.prompt.mockImplementationOnce(async () => {
+						listener({ type: "session_termination", termination: transient });
+						listener({ type: "prompt_settled", promptRunId: "fixture", outcome: "completed", durationMs: 1 });
+					});
+					return () => {};
+				},
+			);
+			vi.spyOn(console, "error").mockImplementation(() => {});
+			expect(
+				await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+					mode,
+					initialMessage: "fixture",
+				}),
+			).toBe(0);
+		},
+	);
+
+	it.each(["text", "json"] as const)(
+		"stops after a failed prompt instead of hiding it with later success in %s mode",
+		async (mode) => {
+			const runtimeHost = createRuntimeHost(
+				createAssistantMessage({ stopReason: "error", errorMessage: "fixture failure" }),
+			);
+			runtimeHost.session.prompt
+				.mockImplementationOnce(async () => {})
+				.mockImplementationOnce(async () => {
+					runtimeHost.session.state.messages = [createAssistantMessage({ text: "later success" })];
+				});
+			vi.spyOn(console, "error").mockImplementation(() => {});
+			const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+				mode,
+				initialMessage: "first",
+				messages: ["must not run"],
+			});
+			expect(exitCode).toBe(1);
+			expect(runtimeHost.session.prompt).toHaveBeenCalledTimes(1);
+		},
+	);
+
+	it.each(["text", "json"] as const)(
+		"honors failed settlement despite success-shaped assistant content in %s mode",
+		async (mode) => {
+			const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "partial result" }));
+			runtimeHost.session.subscribe.mockImplementation((listener: (event: PromptSettledEvent) => void) => {
+				runtimeHost.session.prompt.mockImplementationOnce(async () => {
+					listener({ type: "prompt_settled", promptRunId: "fixture", outcome: "failed", durationMs: 1 });
+				});
+				return () => {};
+			});
+			vi.spyOn(console, "error").mockImplementation(() => {});
+			const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+				mode,
+				initialMessage: "fixture",
+			});
+			expect(exitCode).toBe(1);
+		},
+	);
+
 	it("emits session_shutdown in text mode", async () => {
 		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
 		const { session } = runtimeHost;

@@ -75,6 +75,25 @@ Followed by events as they occur:
 {"type":"agent_end","messages":[...]}
 ```
 
+## Completion and exit status
+
+`agent_end` closes an attempt, not necessarily the whole prompt: retries and
+continuations may still run. Use `prompt_settled` for the final prompt outcome
+(`completed`, `failed`, or `aborted`). Neither event proves task correctness.
+
+Print mode returns exit code **1** for a final failed or aborted prompt in both
+text and JSON output. If several CLI prompts were supplied, it stops at the first
+failed prompt instead of hiding it with a later success. An internally recovered
+attempt followed by a completed prompt still exits successfully. No prompt is an
+argument error (exit code **2**).
+
+Keep `pipefail` when filtering events, or the filter can hide OMK's nonzero status:
+
+```bash
+set -o pipefail
+omk --mode json "List files" | jq -c 'select(.type == "prompt_settled")'
+```
+
 ## Example
 
 ```bash

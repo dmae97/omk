@@ -9,6 +9,7 @@
 import type { AssistantMessage, ImageContent } from "omk-ai";
 import type { AgentSessionRuntime } from "../core/agent-session-runtime.ts";
 import { flushRawStdout, writeRawStdout } from "../core/output-guard.ts";
+import type { PromptSettlementOutcome } from "../core/prompt-settlement.ts";
 import { formatSessionTermination, type SessionTermination } from "../core/session-termination.ts";
 import { killTrackedDetachedChildren } from "../utils/shell.ts";
 
@@ -38,6 +39,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 	let disposed = false;
 	let promptStarted = false;
 	let latestTermination: SessionTermination | undefined;
+	let latestOutcome: PromptSettlementOutcome | undefined;
 	let renderedTermination: SessionTermination | undefined;
 	const signalCleanupHandlers: Array<() => void> = [];
 
@@ -58,6 +60,21 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 			return;
 		}
 		console.error(fallback);
+	};
+
+	const promptFailed = (): boolean => {
+		const last = session.state.messages.at(-1);
+		const assistantFailed =
+			last?.role === "assistant" && (last.stopReason === "error" || last.stopReason === "aborted");
+		const failed =
+			latestOutcome !== undefined
+				? latestOutcome !== "completed"
+				: assistantFailed || (latestTermination !== undefined && latestTermination.kind !== "completed");
+		if (failed)
+			renderFailure(
+				assistantFailed ? last.errorMessage || `Request ${last.stopReason}` : "Prompt did not complete.",
+			);
+		return failed;
 	};
 
 	const disposeRuntime = async (): Promise<void> => {
@@ -96,6 +113,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		session = runtimeHost.session;
 		promptStarted = false;
 		latestTermination = undefined;
+		latestOutcome = undefined;
 		await session.bindExtensions({
 			mode: mode === "json" ? "json" : "print",
 			commandContextActions: {
@@ -128,6 +146,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 
 		unsubscribe?.();
 		unsubscribe = session.subscribe((event) => {
+			if (event.type === "prompt_settled") latestOutcome = event.outcome;
 			if (event.type === "session_termination") {
 				latestTermination = event.termination;
 				if (mode === "text") {
@@ -170,12 +189,18 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 
 		if (initialMessage) {
 			promptStarted = true;
+			latestTermination = undefined;
+			latestOutcome = undefined;
 			await session.prompt(initialMessage, { images: initialImages });
+			if (promptFailed()) return 1;
 		}
 
 		for (const message of messages) {
 			promptStarted = true;
+			latestTermination = undefined;
+			latestOutcome = undefined;
 			await session.prompt(message);
+			if (promptFailed()) return 1;
 		}
 
 		if (mode === "text") {

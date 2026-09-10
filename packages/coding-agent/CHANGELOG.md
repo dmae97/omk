@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added opt-in `--model-contract <file>` and SDK `modelContract` options for immutable logical model/provider, reasoning, and output-limit checks. The CLI pins a bounded JSON policy across session replacement; SDK-stream summaries share the check. This is dispatch control, not final-wire or billing attestation. See `docs/model-contract.md`.
 - The `omk` CLI now connects configured MCP servers. `AgentSession.attachMcpServers()` was complete and tested but had no caller outside the SDK, so a `~/.omk/mcp.json` or `.omk/mcp.json` written by a CLI user spawned nothing and the control-panel MCP rows only ever showed the config inventory. The single CLI session factory now attaches on every session it creates — interactive, `-p`, RPC, `/new`, `/resume`, and forks — while `--help` and `--list-models` still spawn nothing. A server that fails to start becomes a startup warning naming the server and the reason (never an env value); the session continues with the servers that did connect.
 
 ### Fixed

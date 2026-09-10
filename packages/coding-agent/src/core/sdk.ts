@@ -4,11 +4,12 @@ import {
 	Agent,
 	type AgentMessage,
 	inspectTranscriptIntegrity,
+	type ModelContract,
 	repairTranscriptIntegrity,
 	type ThinkingLevel,
 } from "omk-agent-core";
 import { createNodeResourceKeyResolver } from "omk-agent-core/node";
-import { clampThinkingLevel, type Message, type Model, streamSimple, type ToolResultMessage } from "omk-ai";
+import { clampThinkingLevel, type Message, type Model, type ToolResultMessage } from "omk-ai";
 import { getAgentDir } from "../config.ts";
 import { ReplayLedgerManager } from "../guardrails/evidence-system.ts";
 import { resolvePath } from "../utils/paths.ts";
@@ -24,10 +25,10 @@ import type { LoadoutAccessPolicy } from "./loadout-access-policy.ts";
 import { convertToLlm } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import { findInitialModel } from "./model-resolver.ts";
-import { mergeProviderAttributionHeaders } from "./provider-attribution.ts";
 import { recordClaudePassiveUsage, recordCodexPassiveUsage } from "./provider-usage.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 import { DefaultResourceLoader } from "./resource-loader.ts";
+import { createSdkProviderStream } from "./sdk-provider-stream.ts";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
 import { classifySessionTermination, SessionTerminationError } from "./session-termination.ts";
 import { SettingsManager } from "./settings-manager.ts";
@@ -61,6 +62,10 @@ export interface CreateAgentSessionOptions {
 
 	/** Model to use. Default: from settings, else first available */
 	model?: Model<any>;
+	/** Opt-in logical dispatch policy shared by the main loop and first-party summary stream. */
+	modelContract?: ModelContract;
+	/** Optional main-loop output limit; a contract supplies the default cap when omitted. */
+	maxTokens?: number;
 	/** Thinking level. Default: from settings, else 'medium' (clamped to model capabilities) */
 	thinkingLevel?: ThinkingLevel;
 	/** Models available for cycling (Ctrl+P in interactive mode) */
@@ -497,43 +502,20 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			tools: [],
 		},
 		convertToLlm: convertToLlmWithBlockImages,
-		streamFn: async (model, context, options) => {
-			const auth = await modelRegistry.getApiKeyAndHeaders(model);
-			if (!auth.ok) {
-				throw new Error(auth.error);
-			}
-			const providerRetrySettings = settingsManager.getProviderRetrySettings();
-			const httpIdleTimeoutMs = settingsManager.getHttpIdleTimeoutMs();
-			// SDKs treat timeout=0 as 0ms (immediate timeout), not "no timeout".
-			// Use max int32 to effectively disable the timeout.
-			const effectiveTimeoutMs = httpIdleTimeoutMs === 0 ? 2147483647 : httpIdleTimeoutMs;
-			const timeoutMs = options?.timeoutMs ?? providerRetrySettings.timeoutMs ?? effectiveTimeoutMs;
-			const websocketConnectTimeoutMs =
-				options?.websocketConnectTimeoutMs ?? settingsManager.getWebSocketConnectTimeoutMs();
-			return streamSimple(model, context, {
-				...options,
-				apiKey: auth.apiKey,
-				timeoutMs,
-				websocketConnectTimeoutMs,
-				maxRetries: options?.maxRetries ?? providerRetrySettings.maxRetries,
-				maxRetryDelayMs: options?.maxRetryDelayMs ?? providerRetrySettings.maxRetryDelayMs,
-				onRateLimit: async (snapshot, responseModel) => {
-					if (auth.apiKey && /^openai-codex(?:-|$)/.test(responseModel.provider)) {
-						recordCodexPassiveUsage(auth.apiKey, snapshot);
-					} else if (auth.apiKey && responseModel.provider === "anthropic") {
-						recordClaudePassiveUsage(auth.apiKey, snapshot);
-					}
-					await options?.onRateLimit?.(snapshot, responseModel);
-				},
-				headers: mergeProviderAttributionHeaders(
-					model,
-					settingsManager,
-					options?.sessionId,
-					auth.headers,
-					options?.headers,
-				),
-			});
-		},
+		modelContract: options.modelContract,
+		maxTokens: options.maxTokens,
+		streamFn: createSdkProviderStream({
+			modelRegistry,
+			settingsManager,
+			modelContract: options.modelContract,
+			onRateLimit: (apiKey, snapshot, responseModel) => {
+				if (apiKey && /^openai-codex(?:-|$)/.test(responseModel.provider)) {
+					recordCodexPassiveUsage(apiKey, snapshot);
+				} else if (apiKey && responseModel.provider === "anthropic") {
+					recordClaudePassiveUsage(apiKey, snapshot);
+				}
+			},
+		}),
 		onPayload: async (payload, _model) => {
 			const runner = extensionRunnerRef.current;
 			if (!runner?.hasHandlers("before_provider_request")) {

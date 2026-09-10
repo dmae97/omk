@@ -11,6 +11,7 @@ import type {
 	ToolResultMessage,
 } from "omk-ai";
 import type { Static, TSchema } from "typebox";
+import type { ModelContract, ProviderRequestEvent } from "./provider-request-types.ts";
 
 /**
  * Stream function used by the agent loop.
@@ -149,6 +150,8 @@ export interface PrepareNextTurnContext extends ShouldStopAfterTurnContext {}
 
 export interface AgentLoopConfig extends SimpleStreamOptions {
 	model: Model<any>;
+	/** Optional logical dispatch contract, pinned for the loop invocation. Not a wire attestation. */
+	modelContract?: ModelContract;
 
 	/**
 	 * Maximum provider turns allowed in one loop invocation.
@@ -700,6 +703,7 @@ export interface AgentContext {
  * subscriber promises are detached and cannot delay timeout/abort terminality.
  */
 export type AgentEvent =
+	| ProviderRequestEvent
 	// Agent lifecycle
 	| { type: "agent_start" }
 	| { type: "agent_end"; messages: AgentMessage[] }

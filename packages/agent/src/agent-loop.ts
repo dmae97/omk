@@ -10,12 +10,15 @@ import {
 	type Context,
 	EventStream,
 	type Model,
-	streamSimple,
 	type ToolResultMessage,
 	validateToolArguments,
 } from "omk-ai";
 import { bindToolIdentity } from "./builtin-tool-resource-claims.ts";
 import { partitionToolBatchWaves } from "./parallel-tool-batch.ts";
+import { pinProviderConfig, requestAssistantResponse } from "./provider-request.ts";
+
+export { getVisionRouteModel, isVisionRouteModel, VISION_ROUTE_MODEL } from "./vision-route.ts";
+
 import {
 	applyConcurrencyCap,
 	type DagSchedulePlan,
@@ -265,6 +268,7 @@ export async function runAgentLoop(
 	const newMessages: AgentMessage[] = [...prompts];
 	const currentContext: AgentContext = { ...context, messages: [...context.messages, ...prompts] };
 	const publish: AgentEventSink = (event) => emit(createImmutableSnapshot(event));
+	const pinnedConfig = await pinProviderConfig(config, publish);
 
 	await publish({ type: "agent_start" });
 	await publish({ type: "turn_start" });
@@ -273,7 +277,7 @@ export async function runAgentLoop(
 		await publish({ type: "message_end", message: prompt });
 	}
 
-	await runLoop(currentContext, newMessages, config, signal, publish, streamFn);
+	await runLoop(currentContext, newMessages, pinnedConfig, signal, publish, streamFn);
 	return newMessages;
 }
 
@@ -293,10 +297,11 @@ export async function runAgentLoopContinue(
 	const newMessages: AgentMessage[] = [];
 	const currentContext: AgentContext = { ...context };
 	const publish: AgentEventSink = (event) => emit(createImmutableSnapshot(event));
+	const pinnedConfig = await pinProviderConfig(config, publish);
 
 	await publish({ type: "agent_start" });
 	await publish({ type: "turn_start" });
-	await runLoop(currentContext, newMessages, config, signal, publish, streamFn);
+	await runLoop(currentContext, newMessages, pinnedConfig, signal, publish, streamFn);
 	return newMessages;
 }
 
@@ -597,60 +602,6 @@ async function runLoop(
 	await emit({ type: "agent_end", messages: newMessages });
 }
 
-/**
- * Stream an assistant response from the LLM.
- * This is where AgentMessage[] gets transformed to Message[] for the LLM.
- */
-/** True when a content part is an image block (internal {type:"image"} shape). */
-function isImageContentPart(part: unknown): boolean {
-	return typeof part === "object" && part !== null && (part as { type?: unknown }).type === "image";
-}
-
-/**
- * Vision-route model: the Codex OAuth model used to serve turns whose transcript
- * carries image blocks while the session model is text-only.
- *
- * `contextWindow`/`maxTokens` are NOT inherited from the session model — they
- * describe the OMK GPT-5.6 family contract (1M window), which callers rely on
- * for compaction thresholds and overflow detection.
- */
-export const VISION_ROUTE_MODEL = {
-	provider: "openai-codex",
-	id: "gpt-5.6-luna",
-	name: "GPT-5.6 Luna",
-	api: "openai-codex-responses",
-	baseUrl: "https://chatgpt.com/backend-api",
-	reasoning: true,
-	input: ["text", "image"] as const,
-	contextWindow: 1_000_000,
-	maxTokens: 128000,
-} as const;
-
-/** True when the given model is the auto-routed vision model. */
-export function isVisionRouteModel(model: { provider?: string; id?: string } | undefined | null): boolean {
-	return model?.provider === VISION_ROUTE_MODEL.provider && model?.id === VISION_ROUTE_MODEL.id;
-}
-
-/**
- * Build the vision-route model for a session model that cannot see images.
- * Preserves the session model's identity/headers so auth resolution keeps
- * working, but overrides provider/API/window with the Codex vision model.
- */
-export function getVisionRouteModel(model: Model<any>): Model<any> {
-	return {
-		...model,
-		provider: VISION_ROUTE_MODEL.provider,
-		id: VISION_ROUTE_MODEL.id,
-		name: VISION_ROUTE_MODEL.name,
-		api: VISION_ROUTE_MODEL.api,
-		baseUrl: VISION_ROUTE_MODEL.baseUrl,
-		reasoning: VISION_ROUTE_MODEL.reasoning,
-		input: [...VISION_ROUTE_MODEL.input],
-		contextWindow: VISION_ROUTE_MODEL.contextWindow,
-		maxTokens: VISION_ROUTE_MODEL.maxTokens,
-	};
-}
-
 async function streamAssistantResponse(
 	context: AgentContext,
 	config: AgentLoopConfig,
@@ -668,6 +619,10 @@ async function streamAssistantResponse(
 			"Append terminal tool results or repair the transcript before retrying.",
 	);
 
+	// Pin request-affecting data before asynchronous context/auth hooks can mutate caller state.
+	const requestConfig = config.modelContract
+		? { ...config, model: createImmutableSnapshot(config.model), headers: config.headers && { ...config.headers } }
+		: config;
 	// Apply context transform if configured (AgentMessage[] → AgentMessage[])
 	let messages = context.messages;
 	if (config.transformContext) {
@@ -690,31 +645,12 @@ async function streamAssistantResponse(
 		tools: context.tools,
 	};
 
-	const streamFunction = streamFn || streamSimple;
-
-	// Auto-route image-bearing turns to a vision-capable model (openai-codex/gpt-5.6-luna).
-	// DeepSeek and other text-only providers reject image_url parts with a 400
-	// ("unknown variant `image_url`, expected `text`"), so when the transcript
-	// carries image blocks and the configured model has no vision input, swap the
-	// whole request to the codex OAuth model for this turn only.
-	const llmHasImages = llmMessages.some(
-		(m) => Array.isArray(m.content) && m.content.some((p: unknown) => isImageContentPart(p)),
-	);
-	let routeModel = config.model;
-	if (llmHasImages && !(config.model.input ?? []).includes("image")) {
-		routeModel = getVisionRouteModel(config.model);
-	}
-
-	// Resolve API key (important for expiring tokens)
-	const resolvedApiKey = (config.getApiKey ? await config.getApiKey(routeModel.provider) : undefined) || config.apiKey;
-
-	const response = await streamFunction(routeModel, llmContext, {
-		...config,
-		apiKey: resolvedApiKey,
+	return requestAssistantResponse(llmContext, requestConfig, {
 		signal,
+		emit,
+		streamFn,
+		consume: (response) => consumeAssistantStream(response, context, emit),
 	});
-
-	return consumeAssistantStream(response, context, emit);
 }
 
 /** Commit the final assistant message to the transcript and emit its lifecycle. */

@@ -16,6 +16,7 @@ import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
 import { listModels } from "./cli/list-models.ts";
 import { mcpAttachDiagnostics } from "./cli/mcp-attach.ts";
+import { loadModelContractOrExit } from "./cli/model-contract.ts";
 import { isExplicitExtensionDiagnostic, resolveCliPaths } from "./cli/resource-paths.ts";
 import { selectSession } from "./cli/session-picker.ts";
 import { handleCodexBarQuotaCommand } from "./codexbar-cli.ts";
@@ -660,6 +661,11 @@ export async function main(args: string[], options?: MainOptions) {
 	validateForkFlags(parsed);
 	validateSessionIdFlags(parsed);
 
+	const modelContract =
+		parsed.modelContractFile && !parsed.help
+			? loadModelContractOrExit(resolvePath(parsed.modelContractFile))
+			: undefined;
+
 	// Run migrations (pass cwd for project-local migrations)
 	const { migratedAuthProviders: migratedProviders, deprecationWarnings } = runMigrations(process.cwd());
 	time("runMigrations");
@@ -783,6 +789,7 @@ export async function main(args: string[], options?: MainOptions) {
 			sessionManager,
 			sessionStartEvent,
 			model: sessionOptions.model,
+			modelContract,
 			thinkingLevel: sessionOptions.thinkingLevel,
 			scopedModels: sessionOptions.scopedModels,
 			modelPinned: sessionOptions.modelPinned,

@@ -4,11 +4,13 @@
 
 ### Added
 
+- Added optional immutable `ModelContract` checks to core and `Agent` requests, with bounded omitted output limits and correlated `provider_request`, `provider_denied`, and `provider_request_end` events. Payload hooks become observation-only under a contract; these events describe stream dispatch, not physical HTTP attempts or task correctness.
 - Added the operation lifecycle foundation modules: pure `operation-lifecycle-types` vocabulary, a side-effect-free `operation-lifecycle-reducer` transition table with classified violations, and `OperationLifecycleController` with operation/attempt leases, target-captured abort, exactly-once settlement, and a finalizer barrier.
 - Routed every public `AgentHarness` operation through `runOperation()` on the lifecycle controller: `settled` now fires exactly once per operation with `operationId`, `outcome`, and `attemptCount`, and new `operation_started`, `attempt_started`, and `attempt_finished` events correlate attempts to operations. The final session-write flush precedes outcome classification, so a flush failure after provider success rejects with a `session`-classified error and never records `completed`.
 
 ### Fixed
 
+- Automatic cross-provider vision routing no longer forwards the source provider's static API key or model/request headers. The destination resolver and provider credential path retain ownership of destination authentication.
 - Stopped `OperationLifecycleController.settle()` from wedging an operation after a rejected `settle_begin`: the controller marked the settlement as started before the reducer accepted it, so an operation whose settle was refused (for example with an attempt still open) could never settle later, and `lease.settled` plus every `waitForIdle()` waiter hung forever. The guard now engages only once the reducer has entered `settling`.
 - Kept the recorded outcome and the public rejection in agreement for a pre-classified final-flush failure: a coordinator `invalid_state` reentry rejection now settles with code `invalid_state` instead of being relabelled `session` while the promise rejected with `invalid_state`.
 - Tightened the reducer so `preparing -> recovering_overflow` is legal only when the most recently closed attempt ended with `overflow`. Entering recovery with no attempt, or after a completed/failed/aborted attempt, produced a dead-end stage from which no attempt could begin; it is now an `invalid_transition`.

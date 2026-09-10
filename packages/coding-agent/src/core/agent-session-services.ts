@@ -51,6 +51,8 @@ export interface CreateAgentSessionFromServicesOptions {
 	sessionManager: SessionManager;
 	sessionStartEvent?: SessionStartEvent;
 	model?: Model<any>;
+	modelContract?: CreateAgentSessionOptions["modelContract"];
+	maxTokens?: CreateAgentSessionOptions["maxTokens"];
 	thinkingLevel?: ThinkingLevel;
 	scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 	modelPinned?: boolean;
@@ -194,6 +196,8 @@ export async function createAgentSessionFromServices(
 		resourceLoader: options.services.resourceLoader,
 		sessionManager: options.sessionManager,
 		model: options.model,
+		modelContract: options.modelContract,
+		maxTokens: options.maxTokens,
 		thinkingLevel: options.thinkingLevel,
 		scopedModels: options.scopedModels,
 		tools: options.tools,

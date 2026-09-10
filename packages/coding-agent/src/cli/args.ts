@@ -10,6 +10,7 @@ export type Mode = "text" | "json" | "rpc";
 export interface Args {
 	provider?: string;
 	model?: string;
+	modelContractFile?: string;
 	apiKey?: string;
 	systemPrompt?: string;
 	appendSystemPrompt?: string[];
@@ -93,6 +94,16 @@ export function parseArgs(args: string[]): Args {
 			result.provider = args[++i];
 		} else if (arg === "--model" && i + 1 < args.length) {
 			result.model = args[++i];
+		} else if (arg === "--model-contract" || arg.startsWith("--model-contract=")) {
+			const value = arg === "--model-contract" ? args[i + 1] : arg.slice("--model-contract=".length);
+			if (result.modelContractFile !== undefined) {
+				result.diagnostics.push({ type: "error", message: "--model-contract may only be supplied once" });
+			} else if (!value || value.startsWith("-")) {
+				result.diagnostics.push({ type: "error", message: "--model-contract requires a JSON file path" });
+			} else {
+				result.modelContractFile = value;
+				if (arg === "--model-contract") i++;
+			}
 		} else if (arg === "--api-key" && i + 1 < args.length) {
 			result.apiKey = args[++i];
 		} else if (arg === "--system-prompt" && i + 1 < args.length) {

@@ -10,6 +10,8 @@ import {
 } from "omk-ai";
 import { planFailureTermination, runAgentLoop, runAgentLoopContinue } from "./agent-loop.ts";
 import { deliverToListeners } from "./listener-delivery.ts";
+import { PendingMessageQueue } from "./pending-message-queue.ts";
+import { type ModelContract, snapshotModelContract } from "./run-model-contract.ts";
 import { createImmutableSnapshot } from "./tool-execution-boundary.ts";
 import type {
 	AfterToolCallContext,
@@ -108,6 +110,9 @@ export interface AgentOptions {
 	transport?: Transport;
 	maxRetryDelayMs?: number;
 	maxTurns?: AgentLoopConfig["maxTurns"];
+	/** Optional immutable logical request policy for this Agent's runs. */
+	modelContract?: ModelContract;
+	maxTokens?: SimpleStreamOptions["maxTokens"];
 	toolExecution?: ToolExecutionMode;
 	toolTimeoutMs?: AgentLoopConfig["toolTimeoutMs"];
 	toolTimeouts?: AgentLoopConfig["toolTimeouts"];
@@ -117,42 +122,6 @@ export interface AgentOptions {
 	cwd?: AgentLoopConfig["cwd"];
 	resourceKeyResolver?: AgentLoopConfig["resourceKeyResolver"];
 	toolExecutionPolicy?: AgentLoopConfig["toolExecutionPolicy"];
-}
-
-class PendingMessageQueue {
-	private messages: AgentMessage[] = [];
-	public mode: QueueMode;
-
-	constructor(mode: QueueMode) {
-		this.mode = mode;
-	}
-
-	enqueue(message: AgentMessage): void {
-		this.messages.push(message);
-	}
-
-	hasItems(): boolean {
-		return this.messages.length > 0;
-	}
-
-	drain(): AgentMessage[] {
-		if (this.mode === "all") {
-			const drained = this.messages.slice();
-			this.messages = [];
-			return drained;
-		}
-
-		const first = this.messages[0];
-		if (!first) {
-			return [];
-		}
-		this.messages = this.messages.slice(1);
-		return [first];
-	}
-
-	clear(): void {
-		this.messages = [];
-	}
 }
 
 type ActiveRun = {
@@ -201,6 +170,9 @@ export class Agent {
 	public maxRetryDelayMs?: number;
 	/** Optional provider-turn budget for each prompt or continuation run. */
 	public maxTurns?: number;
+	/** Immutable opt-in policy; it is not a serialized provider request guarantee. */
+	public readonly modelContract?: ModelContract;
+	public maxTokens?: number;
 	/** Tool execution strategy for assistant messages that contain multiple tool calls. */
 	public toolExecution: ToolExecutionMode;
 	/** Default execution timeout for tools; provider request timeout remains separate. */
@@ -238,6 +210,9 @@ export class Agent {
 		this.transport = options.transport ?? "auto";
 		this.maxRetryDelayMs = options.maxRetryDelayMs;
 		this.maxTurns = options.maxTurns;
+		this.modelContract =
+			options.modelContract === undefined ? undefined : snapshotModelContract(options.modelContract);
+		this.maxTokens = options.maxTokens;
 		this.toolExecution = options.toolExecution ?? "parallel";
 		this.toolTimeoutMs = options.toolTimeoutMs;
 		this.toolTimeouts = options.toolTimeouts;
@@ -480,6 +455,8 @@ export class Agent {
 			thinkingBudgets: this.thinkingBudgets,
 			maxRetryDelayMs: this.maxRetryDelayMs,
 			maxTurns: this.maxTurns,
+			modelContract: this.modelContract,
+			maxTokens: this.maxTokens,
 			toolExecution: this.toolExecution,
 			toolTimeoutMs: this.toolTimeoutMs,
 			toolTimeouts: this.toolTimeouts,

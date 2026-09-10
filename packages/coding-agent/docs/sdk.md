@@ -147,6 +147,15 @@ interface AgentSession {
 
 Session replacement APIs such as new-session, resume, fork, and import live on `AgentSessionRuntime`, not on `AgentSession`.
 
+### Model dispatch policy
+
+Pass `modelContract` to `createAgentSession()` or `createAgentSessionFromServices()`
+to restrict logical model/provider, reasoning, and output-limit choices. The SDK
+stream also checks first-party summaries using `session.agent.streamFn`.
+The CLI equivalent is `--model-contract <file>`. This is opt-in dispatch control,
+not final-wire or billing attestation. See [Model dispatch contracts](model-contract.md)
+for the JSON shape, events, hook restrictions, and uncovered paths.
+
 ### AgentSession policy seams
 
 The package root exports focused policy helpers for custom runtimes and tests:

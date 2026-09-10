@@ -48,8 +48,11 @@ export {
 	pathsOverlap,
 	shouldParallelizeToolBatch,
 } from "./parallel-tool-batch.ts";
+export { type ProviderInputProjection, projectToolImagesForModel } from "./provider-input.ts";
+export { applyModelContract, type ProviderRequestEvent } from "./provider-request.ts";
 // Proxy utilities
 export * from "./proxy.ts";
+export * from "./run-model-contract.ts";
 // Deterministic resource-claim DAG scheduler (dag-v2)
 export {
 	applyConcurrencyCap,
