@@ -17,8 +17,16 @@ const QUOTED_SECRET_VALUE_PATTERN = new RegExp(
 	`(["']?\\b${SECRET_VALUE_NAME}["']?\\s*[:=]\\s*)(["'])([^"']*)\\2`,
 	"gi",
 );
+const PUBLIC_REFERENCE_SOURCE = [
+	String.raw`(?:process|import\.meta)\.env\.[a-z_]\w*`,
+	String.raw`os\.environ\[(?:"[a-z_]\w*"|'[a-z_]\w*')\]`,
+	String.raw`os\.getenv\((?:"[a-z_]\w*"|'[a-z_]\w*')\)`,
+	String.raw`\$\{[a-z_]\w*\}|\$[a-z_]\w*`,
+	"<your-(?:password|api-key|token|secret)(?:-here)?>",
+].join("|");
+const PUBLIC_REFERENCE_PATTERN = new RegExp(`^(?:${PUBLIC_REFERENCE_SOURCE})$`, "i");
 const UNQUOTED_SECRET_VALUE_PATTERN = new RegExp(
-	`(["']?\\b${SECRET_VALUE_NAME}["']?\\s*[:=]\\s*)([^\\s"',;}&]+)`,
+	`(["']?\\b${SECRET_VALUE_NAME}["']?\\s*[:=]\\s*)((?:${PUBLIC_REFERENCE_SOURCE})(?=$|[\\s,;}])|[^\\s"',;}&]+)`,
 	"gi",
 );
 const BEARER_TOKEN_PATTERN = /(\b(?:authorization|proxy-authorization)\s*:\s*Bearer\s+)([^\s"',;<>]+)/gi;
@@ -43,7 +51,19 @@ function applySensitiveTextRedaction(text: string): string {
 			QUOTED_SECRET_VALUE_PATTERN,
 			(_match, prefix: string, quote: string) => `${prefix}${quote}${REDACTED}${quote}`,
 		)
-		.replace(UNQUOTED_SECRET_VALUE_PATTERN, (_match, prefix: string) => `${prefix}${REDACTED}`)
+		.replace(
+			UNQUOTED_SECRET_VALUE_PATTERN,
+			(match, prefix: string, value: string, offset: number, source: string) => {
+				if (PUBLIC_REFERENCE_PATTERN.test(value) || /^(?:null|undefined)$/u.test(value)) return match;
+				const before = source.slice(Math.max(0, offset - 256), offset);
+				const typeDeclaration = /\b(?:interface\s+\w+[^{}]*|type\s+\w+\s*=|class\s+\w+[^{}]*)\s*\{[^{}]*$/u.test(
+					before,
+				);
+				if (typeDeclaration && /:\s*$/u.test(prefix) && /^(?:string|number|boolean|unknown|never)$/u.test(value))
+					return match;
+				return `${prefix}${REDACTED}`;
+			},
+		)
 		.replace(BEARER_TOKEN_PATTERN, (_match, prefix: string) => `${prefix}${REDACTED}`);
 
 	for (const pattern of KNOWN_CREDENTIAL_PATTERNS) {

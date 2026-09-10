@@ -18,11 +18,16 @@ const s = 'api_key: "${SECRET}"';
 console.log(JSON.stringify({ input: redactSensitiveText(s), forced: redactSensitiveTextForced(s) }));
 `;
 	const stdout = execFileSync(process.execPath, ["--input-type=module", "-e", probe], {
-		env: { ...process.env, PI_DISABLE_INPUT_REDACTION: "", OMK_DISABLE_REDACTION: "", ...env },
+		env: { ...process.env, PI_DISABLE_INPUT_REDACTION: undefined, OMK_DISABLE_REDACTION: undefined, ...env },
 		encoding: "utf8",
 		timeout: 60_000,
 	});
-	return JSON.parse(stdout.trim());
+	try {
+		return JSON.parse(stdout.trim());
+	} catch (error) {
+		if (error instanceof SyntaxError) throw new Error("Redaction fixture returned invalid JSON");
+		throw error;
+	}
 }
 
 describe("redaction disable switches", () => {
@@ -41,24 +46,34 @@ describe("redaction disable switches", () => {
 		expect(result.forced).not.toContain(SECRET);
 	});
 
-	it("OMK_DISABLE_REDACTION removes masking everywhere, disk included", () => {
+	it("OMK_DISABLE_REDACTION aliases only the input opt-out, never forced redaction", () => {
 		const result = redactUnder({ OMK_DISABLE_REDACTION: "1" });
 
 		expect(result.input).toContain(SECRET);
-		expect(result.forced).toContain(SECRET);
+		expect(result.forced).not.toContain(SECRET);
 	});
 
-	it("accepts the documented truthy spellings", () => {
+	it("accepts truthy spellings without weakening forced redaction", () => {
 		for (const value of ["1", "true", "yes", "on", "TRUE"]) {
-			expect(redactUnder({ OMK_DISABLE_REDACTION: value }).forced, value).toContain(SECRET);
+			const result = redactUnder({ OMK_DISABLE_REDACTION: value });
+			expect(result.input, value).toContain(SECRET);
+			expect(result.forced, value).not.toContain(SECRET);
 		}
+	});
+
+	it("keeps an explicit primary setting ahead of the alias", () => {
+		const result = redactUnder({ PI_DISABLE_INPUT_REDACTION: "0", OMK_DISABLE_REDACTION: "1" });
+		expect(result.input).not.toContain(SECRET);
+		expect(result.forced).not.toContain(SECRET);
 	});
 
 	it("treats anything else as off, so a typo keeps masking", () => {
 		// Failing closed matters more here than convenience: a misspelled value
 		// must not silently start writing credentials to disk.
 		for (const value of ["0", "false", "no", "off", "", "maybe", "2"]) {
-			expect(redactUnder({ OMK_DISABLE_REDACTION: value }).forced, value).not.toContain(SECRET);
+			const result = redactUnder({ OMK_DISABLE_REDACTION: value });
+			expect(result.input, value).not.toContain(SECRET);
+			expect(result.forced, value).not.toContain(SECRET);
 		}
 	});
 });

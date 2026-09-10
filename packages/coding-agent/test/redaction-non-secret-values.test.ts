@@ -86,6 +86,20 @@ describe("real credentials are still masked", () => {
 	});
 });
 
+describe("public-expression exceptions remain narrow", () => {
+	it.each([
+		"password: string",
+		"token: number",
+		"api_key: process.env.API_KEY-suffix",
+		"password: <your-password-here>suffix",
+		"access_token: null-secret",
+		'type T = { token: "literal-value" }',
+		'api_key: "process.env.API_KEY"',
+	])("still masks literal or malformed credential values: %s", (source) => {
+		expect(redactSensitiveTextForced(source)).toContain("[REDACTED]");
+	});
+});
+
 describe("forced redaction ignores the input opt-out", () => {
 	it("still masks at a persistence boundary", () => {
 		// `redactSensitiveTextForced` is what writes session files, compaction
