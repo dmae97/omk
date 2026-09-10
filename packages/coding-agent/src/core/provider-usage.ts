@@ -2,6 +2,25 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { CLAUDE_CODE_EXTERNAL_USER_AGENT, type ProviderRateLimitSnapshot, type ProviderRateLimitWindow } from "omk-ai";
 import type { AgentSession } from "./agent-session.ts";
+import type {
+	CodexUsageSnapshot,
+	CodexUsageWindow,
+	CredentialCandidate,
+	ObservedCodexWindow,
+	ParsedCodexWindow,
+	PassiveUsageEntry,
+	SubscriptionUsageSnapshot,
+	SubscriptionUsageSource,
+	SubscriptionUsageWindow,
+	UsageKind,
+} from "./provider-usage-types.ts";
+
+export type {
+	CodexUsageSnapshot,
+	SubscriptionUsageSnapshot,
+	SubscriptionUsageSource,
+	SubscriptionUsageWindow,
+} from "./provider-usage-types.ts";
 
 const FIVE_HOUR_SECONDS = 5 * 60 * 60;
 const SEVEN_DAY_SECONDS = 7 * 24 * 60 * 60;
@@ -49,38 +68,6 @@ const QWEN_CLI_ENV_KEYS = [
 	"SSL_CERT_FILE",
 	"SSL_CERT_DIR",
 ] as const;
-
-export type SubscriptionUsageWindow = {
-	readonly label: string;
-	readonly usedPercent: number;
-	readonly resetsAt?: number;
-};
-
-export type SubscriptionUsageSnapshot = {
-	readonly label: string;
-	readonly windows: readonly SubscriptionUsageWindow[];
-	readonly message?: string;
-};
-
-type CodexUsageWindow = { readonly usedPercent: number; readonly resetsAt?: number };
-export type CodexUsageSnapshot = {
-	readonly fiveHour?: CodexUsageWindow;
-	readonly sevenDay?: CodexUsageWindow;
-};
-
-type ParsedCodexWindow = CodexUsageWindow & { readonly windowSeconds?: number };
-type ObservedCodexWindow = { readonly window: ParsedCodexWindow; readonly observedAt: number };
-type PassiveUsageEntry = { readonly primary?: ObservedCodexWindow; readonly secondary?: ObservedCodexWindow };
-type UsageKind = "codex" | "claude" | "kimi" | "zai" | "grok" | "qwen-token-plan" | "unavailable";
-type CredentialCandidate = { readonly provider: string; readonly oauthOnly: boolean };
-
-export type SubscriptionUsageSource = {
-	readonly label: string;
-	readonly kind: UsageKind;
-	readonly credentials: readonly CredentialCandidate[];
-	readonly ttlMs: number;
-	readonly unavailableMessage?: string;
-};
 
 type UsageSession = Pick<AgentSession, "state" | "modelRegistry">;
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;

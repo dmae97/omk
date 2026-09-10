@@ -1,86 +1,31 @@
-export type ReverseSkillPlatform = "windows" | "linux" | "macos" | "kali" | "unknown";
+import type {
+	ReverseSkillRoute,
+	ReverseSkillRouteDecision,
+	ReverseSkillRouteInput,
+	ReverseSkillRouteScore,
+	ReverseSkillSourceFacts,
+	ReverseSkillSourceInput,
+	ReverseSkillSpecInput,
+} from "./reverse-skill-types.ts";
 
-export type ReverseSkillRisk = "passive-analysis" | "local-tooling" | "active-security" | "exploit-development";
+export type {
+	ReverseSkillPlatform,
+	ReverseSkillRisk,
+	ReverseSkillRoute,
+	ReverseSkillRouteDecision,
+	ReverseSkillRouteInput,
+	ReverseSkillRouteScore,
+	ReverseSkillSourceFacts,
+	ReverseSkillSourceInput,
+	ReverseSkillSpecInput,
+} from "./reverse-skill-types.ts";
 
-export interface ReverseSkillRoute {
-	id: string;
-	label: string;
-	skillPath: string;
-	targetPatterns: string[];
-	intentPatterns: string[];
-	toolPatterns: string[];
-	keywords: string[];
-	requiredTools: string[];
-	optionalTools: string[];
-	skillHints: string[];
-	mcpHints: string[];
-	hookHints: string[];
-	acceptance: string[];
-	firstActions: string[];
-	risk: ReverseSkillRisk;
-}
+import { normalizeReverseSkillName, normalizeReverseSkillText } from "./reverse-skill-text.ts";
+import { TOOL_ALIASES } from "./reverse-skill-tool-aliases.ts";
 
-export interface ReverseSkillRouteInput {
-	query: string;
-	targetType?: string;
-	intent?: string;
-	toolchain?: string;
-	platform?: ReverseSkillPlatform;
-	maxAlternatives?: number;
-}
+export { normalizeReverseSkillName, normalizeReverseSkillText } from "./reverse-skill-text.ts";
 
-export interface ReverseSkillRouteScore {
-	route: ReverseSkillRoute;
-	score: number;
-	confidence: number;
-	matched: {
-		target: string[];
-		intent: string[];
-		toolchain: string[];
-		keywords: string[];
-	};
-	missingDimensions: string[];
-}
-
-export interface ReverseSkillRouteDecision {
-	query: string;
-	platform: ReverseSkillPlatform;
-	normalizedQuery: string;
-	primary?: ReverseSkillRouteScore;
-	alternatives: ReverseSkillRouteScore[];
-	unmatched: boolean;
-	nextAction: string;
-}
-
-export interface ReverseSkillSpecInput {
-	name: string;
-	description?: string;
-	triggerSummary: string;
-	routeIds?: string[];
-	workflowSteps?: string[];
-	tools?: string[];
-	mcpServers?: string[];
-	hooks?: string[];
-	acceptance?: string[];
-	references?: string[];
-	safetyNotes?: string[];
-}
-
-export interface ReverseSkillSourceFacts {
-	headings: string[];
-	skillPaths: string[];
-	scriptPaths: string[];
-	tools: string[];
-	mcpServers: string[];
-	triggerTerms: string[];
-}
-
-export interface ReverseSkillSourceInput {
-	name?: string;
-	description?: string;
-	sourceText: string;
-	triggerSummary?: string;
-}
+export { getReverseSkillToolAliases } from "./reverse-skill-tool-aliases.ts";
 
 const ROUTE_SCORE_TARGET_WEIGHT = 4;
 const ROUTE_SCORE_INTENT_WEIGHT = 3;
@@ -565,65 +510,6 @@ export const REVERSE_SKILL_ROUTES: ReverseSkillRoute[] = [
 	},
 ];
 
-const TOOL_ALIASES: Record<string, string[]> = {
-	"anything-analyzer": ["anything-analyzer"],
-	adb: ["adb"],
-	analyzeheadless: ["analyzeHeadless"],
-	mitmproxy: ["mitmproxy", "mitmweb", "mitmdump"],
-	mitmproxy2swagger: ["mitmproxy2swagger"],
-	tshark: ["tshark"],
-	tcpdump: ["tcpdump"],
-	scapy: ["python3", "python"],
-	apktool: ["apktool"],
-	apksigner: ["apksigner"],
-	binwalk: ["binwalk"],
-	burpsuite: ["burpsuite"],
-	chrome: ["google-chrome", "chromium", "chrome"],
-	frida: ["frida", "frida-ps"],
-	gdb: ["gdb"],
-	gh: ["gh"],
-	git: ["git"],
-	ghidra: ["ghidraRun", "analyzeHeadless"],
-	gitleaks: ["gitleaks"],
-	graphviz: ["dot"],
-	idapro: ["ida", "idat", "idat64"],
-	"idalib-mcp": ["ida-pro-mcp", "idalib-mcp"],
-	jadx: ["jadx"],
-	jshookmcp: ["jshook", "npx"],
-	node: ["node"],
-	nuclei: ["nuclei"],
-	pandoc: ["pandoc"],
-	plantuml: ["plantuml"],
-	playwright: ["playwright", "npx"],
-	pwntools: ["python"],
-	python: ["python3", "python"],
-	radare2: ["radare2", "r2"],
-	rabin2: ["rabin2"],
-	radiff2: ["radiff2"],
-	rasm2: ["rasm2"],
-	semgrep: ["semgrep"],
-	syft: ["syft"],
-	trivy: ["trivy"],
-	zap: ["zap.sh", "zap-baseline.py"],
-	zipalign: ["zipalign"],
-	z3: ["z3"],
-};
-
-export function getReverseSkillToolAliases(tool: string): string[] {
-	return TOOL_ALIASES[tool] ?? [tool];
-}
-
-export function normalizeReverseSkillText(text: string | undefined): string {
-	return (text ?? "")
-		.normalize("NFKC")
-		.toLowerCase()
-		.replace(/[\u2018\u2019]/g, "'")
-		.replace(/[\u201c\u201d]/g, '"')
-		.replace(/[_./\\:-]+/g, " ")
-		.replace(/\s+/g, " ")
-		.trim();
-}
-
 function findPatternMatches(text: string, patterns: string[]): string[] {
 	const matches: string[] = [];
 	for (const pattern of patterns) {
@@ -778,16 +664,6 @@ export function planReverseSkillToolChecks(decision: ReverseSkillRouteDecision, 
 		tools.push(...score.route.requiredTools, ...score.route.optionalTools);
 	}
 	return unique(tools).slice(0, maxTools);
-}
-
-export function normalizeReverseSkillName(name: string): string {
-	const normalized = normalizeReverseSkillText(name)
-		.replace(/[^a-z0-9-]+/g, "-")
-		.replace(/-+/g, "-")
-		.replace(/^-|-$/g, "")
-		.slice(0, 64)
-		.replace(/-$/g, "");
-	return normalized || "reverse-skill";
 }
 
 function yamlString(value: string): string {

@@ -9,18 +9,30 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { spawn, spawnSync } from "child_process";
 import type { AgentMessage, ThinkingLevel } from "omk-agent-core";
-import {
-	type AssistantMessage,
-	getProviders,
-	type ImageContent,
-	type Message,
-	type Model,
-	type OAuthProviderId,
-	type OAuthSelectPrompt,
-} from "omk-ai";
+import type { AssistantMessage, ImageContent, Message, Model, OAuthProviderId, OAuthSelectPrompt } from "omk-ai";
 import { AttachmentStore } from "../../core/attachment-store.ts";
 import { describePromptImageAttachment, type PromptImageAttachment } from "../../core/prompt-attachment.ts";
 import { createAttachmentStrip } from "./components/attachment-strip.ts";
+
+export { formatResumeCommand } from "./interactive-resume-command.ts";
+
+import {
+	getApiKeyLoginDisplayName,
+	isApiKeyLoginProvider,
+	resolveLoginProviderArg,
+} from "./interactive-login-options.ts";
+import {
+	disposeComponent,
+	ExpandableText,
+	isExpandable,
+	normalizeToolExecutionResult,
+} from "./interactive-tool-result.ts";
+
+export {
+	getApiKeyLoginDisplayName,
+	isApiKeyLoginProvider,
+	resolveLoginProviderArg,
+} from "./interactive-login-options.ts";
 
 /** A user prompt ready for AgentSession: text plus optional image attachments. */
 export interface InteractivePromptPayload {
@@ -95,7 +107,6 @@ import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.t
 import { createCompactionSummaryMessage } from "../../core/messages.ts";
 import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScope } from "../../core/model-resolver.ts";
 import { DefaultPackageManager } from "../../core/package-manager.ts";
-import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "../../core/provider-display-names.ts";
 import { decideResourceAdmission } from "../../core/resource-admission.ts";
 import {
 	formatResourcePolicyLines,
@@ -176,90 +187,6 @@ import {
 	theme,
 } from "./theme/theme.ts";
 
-/** Interface for components that can be expanded/collapsed */
-interface Expandable {
-	setExpanded(expanded: boolean): void;
-}
-
-function isExpandable(obj: unknown): obj is Expandable {
-	return typeof obj === "object" && obj !== null && "setExpanded" in obj && typeof obj.setExpanded === "function";
-}
-
-function disposeComponent(component: unknown): void {
-	if (
-		typeof component === "object" &&
-		component !== null &&
-		"dispose" in component &&
-		typeof component.dispose === "function"
-	) {
-		component.dispose();
-	}
-}
-type ToolExecutionContent = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
-
-type ToolExecutionResult = {
-	content: ToolExecutionContent[];
-	details?: unknown;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isToolExecutionContent(value: unknown): value is ToolExecutionContent {
-	if (!isRecord(value)) return false;
-	if (value.type === "text") return typeof value.text === "string";
-	return value.type === "image" && typeof value.data === "string" && typeof value.mimeType === "string";
-}
-
-function isToolExecutionResult(value: unknown): value is ToolExecutionResult {
-	return isRecord(value) && Array.isArray(value.content) && value.content.every(isToolExecutionContent);
-}
-
-function normalizeToolExecutionResult(result: unknown, isError: boolean): ToolExecutionResult & { isError: boolean } {
-	try {
-		if (isToolExecutionResult(result)) {
-			return { content: result.content, details: result.details, isError };
-		}
-	} catch {
-		// Treat inaccessible or malformed extension payloads as invalid results.
-	}
-
-	return {
-		content: [{ type: "text", text: "Tool returned an invalid result." }],
-		isError: true,
-	};
-}
-
-class ExpandableText extends Text implements Expandable {
-	private readonly getCollapsedText: () => string;
-	private readonly getExpandedText: () => string;
-	private expanded: boolean;
-
-	constructor(
-		getCollapsedText: () => string,
-		getExpandedText: () => string,
-		expanded = false,
-		paddingX = 0,
-		paddingY = 0,
-	) {
-		super(expanded ? getExpandedText() : getCollapsedText(), paddingX, paddingY);
-		this.getCollapsedText = getCollapsedText;
-		this.getExpandedText = getExpandedText;
-		this.expanded = expanded;
-	}
-
-	setExpanded(expanded: boolean): void {
-		this.expanded = expanded;
-		this.setText(expanded ? this.getExpandedText() : this.getCollapsedText());
-	}
-
-	override invalidate(): void {
-		this.setText(this.expanded ? this.getExpandedText() : this.getCollapsedText());
-		super.invalidate();
-	}
-}
-
 type CompactionQueuedMessage = {
 	text: string;
 	mode: "steer" | "followUp";
@@ -294,90 +221,11 @@ function isUnknownModel(model: Model<any> | undefined): boolean {
 	return !!model && model.provider === "unknown" && model.id === "unknown" && model.api === "unknown";
 }
 
-function quoteIfNeeded(value: string): string {
-	if (value.length > 0 && !/[^a-zA-Z0-9_\-./~:@]/.test(value)) {
-		return value;
-	}
-	return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-export function formatResumeCommand(sessionManager: SessionManager): string | undefined {
-	if (!process.stdout.isTTY) return undefined;
-	if (!sessionManager.isPersisted()) return undefined;
-
-	const sessionFile = sessionManager.getSessionFile();
-	if (!sessionFile || !fs.existsSync(sessionFile)) return undefined;
-
-	const args = [APP_NAME];
-	if (!sessionManager.usesDefaultSessionDir()) {
-		args.push("--session-dir", quoteIfNeeded(sessionManager.getSessionDir()));
-	}
-	args.push("--session", sessionManager.getSessionId());
-	return args.join(" ");
-}
-
 function hasDefaultModelProvider(providerId: string): providerId is keyof typeof defaultModelPerProvider {
 	return providerId in defaultModelPerProvider;
 }
 
 const BEDROCK_PROVIDER_ID = "amazon-bedrock";
-
-const BUILT_IN_MODEL_PROVIDERS = new Set<string>(getProviders());
-
-/**
- * Resolve a `/login <provider>` argument to a login option.
- *
- * Matches (in order): exact provider id (case-insensitive), display-name
- * substring (case-insensitive), then unambiguous prefix match on id.
- * Returns undefined when nothing matches, or when a display-name/prefix
- * match is ambiguous.
- */
-export function resolveLoginProviderArg(
-	arg: string,
-	options: ReadonlyArray<{ id: string; name: string; authType: "oauth" | "api_key" }>,
-): { id: string; name: string; authType: "oauth" | "api_key" } | undefined {
-	const query = arg.trim().toLowerCase();
-	if (!query) return undefined;
-	const exactMatches = options.filter((option) => option.id.toLowerCase() === query);
-	// Prefer the oauth (subscription) entry when a provider id appears in both
-	// lists (e.g. meta: "Muse Code (subscription)" oauth + Model API key).
-	if (exactMatches.length > 0) {
-		return exactMatches.find((option) => option.authType === "oauth") ?? exactMatches[0];
-	}
-	const byName = options.filter((option) => option.name.toLowerCase().includes(query));
-	if (byName.length === 1) return byName[0];
-	if (byName.length > 1) return undefined;
-	const byPrefix = options.filter((option) => option.id.toLowerCase().startsWith(query));
-	return byPrefix.length === 1 ? byPrefix[0] : undefined;
-}
-
-/**
- * Display name for the API-key login row when the provider id is shared
- * with an oauth entry. `resolvedName` is what
- * `ModelRegistry.getProviderDisplayName()` returned (the oauth name wins
- * there), while `BUILT_IN_PROVIDER_DISPLAY_NAMES` holds the API-key-side
- * label (e.g. meta → "Meta Model API").
- */
-export function getApiKeyLoginDisplayName(providerId: string, resolvedName: string): string {
-	const apiKeyName = BUILT_IN_PROVIDER_DISPLAY_NAMES[providerId];
-	if (apiKeyName && apiKeyName !== resolvedName) return apiKeyName;
-	if (resolvedName !== providerId) return `${resolvedName} (API key)`;
-	return providerId;
-}
-
-export function isApiKeyLoginProvider(
-	providerId: string,
-	oauthProviderIds: ReadonlySet<string>,
-	builtInProviderIds: ReadonlySet<string> = BUILT_IN_MODEL_PROVIDERS,
-): boolean {
-	if (BUILT_IN_PROVIDER_DISPLAY_NAMES[providerId]) {
-		return true;
-	}
-	if (builtInProviderIds.has(providerId)) {
-		return false;
-	}
-	return !oauthProviderIds.has(providerId);
-}
 
 /**
  * Options for InteractiveMode initialization.
