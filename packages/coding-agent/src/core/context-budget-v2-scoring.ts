@@ -23,7 +23,8 @@ const PRIORITY_WEIGHT_V2: Record<ContextBudgetPriorityV2, number> = {
 	low: 15,
 };
 
-const RECENCY_HALF_LIFE_BY_TIER: Readonly<Record<ContextBudgetTierV2, number>> = {
+/** E-folding time in turns: at this age the factor is exp(-1), not one half. */
+const RECENCY_TIME_CONSTANT_BY_TIER: Readonly<Record<ContextBudgetTierV2, number>> = {
 	system: 999,
 	"active-goal": 12,
 	"current-files": 8,
@@ -134,8 +135,8 @@ function deriveRecency(item: ContextBudgetItemV2): number {
 		return clamp01(item.recency);
 	}
 	const age = item.ageTurns ?? 0;
-	const halfLife = RECENCY_HALF_LIFE_BY_TIER[item.tier] ?? 6;
-	return clamp01(Math.exp(-age / halfLife));
+	const timeConstant = RECENCY_TIME_CONSTANT_BY_TIER[item.tier] ?? 6;
+	return clamp01(Math.exp(-age / timeConstant));
 }
 
 function redundancyPenalty(tokens: number): number {
