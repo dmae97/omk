@@ -114,7 +114,7 @@ export function heuristicTokenCount(text: string): number {
 }
 
 export function fullTextTokens(item: ContextBudgetItemV2): number {
-	if (item.tokenEstimate !== undefined) {
+	if (item.tokenEstimate !== undefined && Number.isFinite(item.tokenEstimate)) {
 		return Math.max(0, Math.floor(item.tokenEstimate));
 	}
 	return heuristicTokenCount(item.text);

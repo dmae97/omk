@@ -97,16 +97,16 @@ export function compareOptionalForSelection(a: PlannedItemV2, b: PlannedItemV2):
 	if (bDensity !== aDensity) {
 		return bDensity - aDensity;
 	}
-	if (b.effectiveScore !== a.effectiveScore) {
-		return b.effectiveScore - a.effectiveScore;
-	}
+	const aScore = Number.isNaN(a.effectiveScore) ? Number.NEGATIVE_INFINITY : a.effectiveScore;
+	const bScore = Number.isNaN(b.effectiveScore) ? Number.NEGATIVE_INFINITY : b.effectiveScore;
+	if (bScore !== aScore) return bScore - aScore;
 	const priorityDelta = priorityRank(b.item.priority) - priorityRank(a.item.priority);
 	if (priorityDelta !== 0) {
 		return priorityDelta;
 	}
-	if (a.fullTokens !== b.fullTokens) {
-		return a.fullTokens - b.fullTokens;
-	}
+	const aTokens = Number.isNaN(a.fullTokens) ? Number.POSITIVE_INFINITY : a.fullTokens;
+	const bTokens = Number.isNaN(b.fullTokens) ? Number.POSITIVE_INFINITY : b.fullTokens;
+	if (aTokens !== bTokens) return aTokens - bTokens;
 	return a.item.id.localeCompare(b.item.id);
 }
 
@@ -153,5 +153,6 @@ function density(planned: PlannedItemV2): number {
 	if (!Number.isFinite(planned.effectiveScore) || planned.effectiveScore <= 0) {
 		return planned.effectiveScore > 0 ? planned.effectiveScore : 0;
 	}
-	return planned.effectiveScore / Math.max(planned.admissibleTokens, 1);
+	const value = planned.effectiveScore / Math.max(planned.admissibleTokens, 1);
+	return Number.isNaN(value) ? 0 : value;
 }

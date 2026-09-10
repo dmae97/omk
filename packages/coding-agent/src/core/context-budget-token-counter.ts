@@ -1,35 +1,16 @@
 import { createRequire } from "node:module";
 
-export type ContextBudgetTokenCountMethod = "exact" | "estimated";
-export type ContextBudgetTokenConfidence = "high" | "medium" | "low";
-export type ContextBudgetTokenizerMode = "auto" | "fallback" | "openai-js" | "openai-wasm";
+import type {
+	ContextBudgetTokenConfidence,
+	ContextBudgetTokenCountMethod,
+	ContextBudgetTokenizerMode,
+	OptionalModuleLoader,
+	TokenCounterAdapter,
+	TokenCounterRegistryOptions,
+	TokenCountResult,
+} from "./context-budget-token-counter-types.ts";
 
-export interface TokenCountResult {
-	readonly tokens: number;
-	readonly method: ContextBudgetTokenCountMethod;
-	readonly confidence: ContextBudgetTokenConfidence;
-	readonly adapterId: string;
-	readonly modelId: string;
-	readonly notes: readonly string[];
-}
-
-export interface TokenCounterAdapter {
-	readonly id: string;
-	readonly priority: number;
-	isAvailable(): boolean;
-	supports(modelId: string): boolean;
-	countText(input: string, modelId: string): TokenCountResult;
-}
-
-export interface OptionalModuleLoader {
-	resolve(specifier: string): string | undefined;
-	load(specifier: string): unknown;
-}
-
-export interface TokenCounterRegistryOptions {
-	readonly adapters?: readonly TokenCounterAdapter[];
-	readonly fallback?: TokenCounterAdapter;
-}
+export type * from "./context-budget-token-counter-types.ts";
 
 interface EncodeCapable {
 	encode(input: string): readonly unknown[];
@@ -290,6 +271,7 @@ function createTokenResult(
 	modelId: string,
 	notes: readonly string[],
 ): TokenCountResult {
+	if (!Number.isFinite(tokens)) throw new TypeError("Tokenizer returned a non-finite token count");
 	return {
 		tokens: Math.max(0, Math.ceil(tokens)),
 		method,
