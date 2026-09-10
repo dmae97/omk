@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.98.3] - 2026-09-06
+
+### Added
+
+- Added readonly VERA vocabulary guards and pure `projectProofClosure()`, `projectProofEvaluationFailure()` and `admitVeraOutcome()` projections. Candidate failure, environment uncertainty, missing evidence and open effects stay distinct. A projected `SHIP` is not release authorization; no remote service is called automatically.
+
+## [0.98.2] - 2026-09-02
+
 ## [0.98.1] - 2026-08-30
 
 ## [0.98.0] - 2026-08-28

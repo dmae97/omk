@@ -1,7 +1,9 @@
 # Advisory selection integrity — evidence
 
 Date: 2026-09-05. Baseline: `v0.98.1` / `60f520f0c103888ef27438ac5058bdfc78b3e409`.
-Source, tests and this record are worktree-only. This is the first bounded SDK integration
+Historical pre-release record: source and tests were worktree-only at this point.
+The [v0.98.3 release audit](../../packages/coding-agent/docs/release-audit-0.98.3.md)
+supersedes the release/gate status below; the original measurements are retained. This is the first bounded SDK integration
 slice, not automatic activation of a judge or a separate service in the default TUI.
 
 ## Confirmed mechanisms

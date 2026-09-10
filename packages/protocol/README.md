@@ -13,6 +13,13 @@ TaskSpec -> ExecutionAttempt -> Observation -> EvaluationResult -> RuntimeDecisi
 - `ClaimEvaluation`, `EvaluationResult`, `RuntimeDecision`, `WaiverRecord`
 - Runtime parsers for every top-level record
 - `evaluateTask()` and `reduceRuntimeDecision()`
+- Claim Closure Graph v1: `evaluateProofClosure()`, `validateClaimGraph()`,
+  `minimalBlockingCut()` and the readonly claim/observation/waiver vocabulary
+
+The claim-closure API is explicit. It checks supplied source/environment bindings,
+trust floors, witness groups, expiry, workspace completeness and unresolved-effect
+boundaries; those supplied facts remain caller trust boundaries. It does not attest a
+runner or automatically decide an ordinary chat turn.
 
 ## Claim closure and blocking explanations
 

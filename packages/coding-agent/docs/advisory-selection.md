@@ -1,11 +1,11 @@
 # Advisory selection integrity
 
-**Status: working-tree update, 2026-09-05.** This strengthens the existing explicit SDK
+**Introduced in v0.98.3.** This strengthens the existing explicit SDK
 `chooseWithAdvisoryJudge()` and `createModelAdvisoryJudge()` path. It does not add a default
 AgentSession/TUI judge, start subagents, or activate the separate AdaptOrch service.
 
 See [SDK usage](sdk.md#advisory-best-of-n-selection), [Run Protocol](run-protocol.md), and
-[spec 021](../../../specs/021-advisory-selection-integrity/spec.md).
+[spec 021](https://github.com/dmae97/omk/blob/v0.98.3/specs/021-advisory-selection-integrity/spec.md).
 
 ## Decision path
 
@@ -92,8 +92,8 @@ This is a local reliability/observability improvement, not measured general accu
 calibrated publish/abstain policy. MC/scalar answer extraction, automatic continuation and
 risk-bound enforcement are deliberately not inserted into the 0–4 rubric contract.
 
-The source patch reaches the local SDK after `npm run build` from the repository root.
-An already-running process is not hot-patched. Use a new SDK process to load the rebuilt
+Install `open-multi-agent-kit@0.98.3` or build from the matching source tag.
+An already-running process is not hot-patched. Use a new SDK process to load the updated
 package; no setting or automatic TUI policy is enabled by this change.
 
 ## Offline verification

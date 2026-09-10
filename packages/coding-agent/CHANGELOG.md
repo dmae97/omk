@@ -7,6 +7,24 @@
 - DeepSeek V4.1 Flash is selectable on native DeepSeek, OpenCode Go, OpenRouter, and Vercel AI Gateway with off/low/high/max thinking. Refreshed the bundled catalog and corrected provider-specific thinking payloads without changing credentials or the active model. See `docs/model-catalog-refresh.md` for route IDs, pricing limits, and offline verification.
 
 - Added opt-in `--model-contract <file>` and SDK `modelContract` options for immutable logical model/provider, reasoning, and output-limit checks. The CLI pins a bounded JSON policy across session replacement; SDK-stream summaries share the check. This is dispatch control, not final-wire or billing attestation. See `docs/model-contract.md`.
+
+## [0.98.3] - 2026-09-06
+
+### Added
+
+- Advisory-selection diagnostics now retain submitted/eligible/excluded counts, comparison availability, and top-score tie/margin data. Ties preserve caller rank while reporting `judge-tied` / `deterministic`; no correctness probability or default TUI judge is introduced.
+- Claim-closure-to-WPL/VERA projection is tested across the public protocol and integration packages. It classifies supplied evidence and never grants release authority.
+- A session workspace scope now reports what it could not bind. `resolveSessionWorkspaceScope()` drops dirty paths two ways — a 32-path cap and the normalized-path filter the receipt parser forces — and both were silent, so a receipt captured from a partial view of the working tree read exactly like one that saw all of it. The new `resolveSessionWorkspaceScopeReport(cwd, options?)` returns the same scope plus `totalDirtyPathCount`, `selectedPathCount`, `excludedPathCount`, `truncated`, a `completeness` of `complete` / `partial_truncated` / `partial_excluded` / `unavailable`, and an `excludedPathSetSha256` binding the dropped set. `SessionBashRuntime.workspaceScopeReport()` exposes it for the current session. `unavailable` is deliberately not `complete`: outside a worktree nothing was enumerated, so an empty artifact set is an absence of evidence rather than a clean tree. Dropping paths stays deliberate; hiding the drop was the defect. The scope cache is now keyed by `(cwd, maxPaths)` so a capped probe cannot serve a later full request its truncated answer.
+
+### Fixed
+
+- The first-party advisory model adapter now requires an explicit normal `stop`; complete score JSON from a truncated, aborted or missing completion state cannot override deterministic fallback. Cancellation before and after custom/model judge work prevents new calls and discards late advice, without additional completion calls or retries.
+- Release documentation now separates internal trace/effect primitives from public opt-in APIs and records the existing CI token-authentication path without claiming OIDC provenance. The published v0.98.2 history is retained as an ancestor rather than re-created.
+
+## [0.98.2] - 2026-09-02
+
+### Added
+
 - The `omk` CLI now connects configured MCP servers. `AgentSession.attachMcpServers()` was complete and tested but had no caller outside the SDK, so a `~/.omk/mcp.json` or `.omk/mcp.json` written by a CLI user spawned nothing and the control-panel MCP rows only ever showed the config inventory. The single CLI session factory now attaches on every session it creates — interactive, `-p`, RPC, `/new`, `/resume`, and forks — while `--help` and `--list-models` still spawn nothing. A server that fails to start becomes a startup warning naming the server and the reason (never an env value); the session continues with the servers that did connect.
 
 ### Fixed

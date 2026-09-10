@@ -69,9 +69,9 @@ Required, unwaived violations reduce to `fail`. Required, unwaived missing obser
 
 Candidate material, the task goal, and rubric descriptions are forced-redacted and bounded before the judge receives them. The model adapter uses a tool-free prompt, treats candidate text as untrusted data, disables retries and cache retention, and accepts only a complete matrix of known candidate and criterion IDs. A provider error, timeout, malformed JSON, unknown ID, or incomplete score matrix selects the existing deterministic first choice and reports a sanitized fallback reason.
 
-**Working-tree update (2026-09-05):** the model adapter requires a normal `stop` completion, not just valid JSON; non-normal or missing completion metadata and observed cancellation cannot supply judge scores. Top-score ties retain caller-rank selection but report `judge-tied` / `deterministic`. Optional decision diagnostics preserve the full candidate intake and distinguish unmeasured comparisons from scored ties. See [Advisory selection integrity](advisory-selection.md).
+Since v0.98.3, the first-party model adapter requires a normal `stop`, cancellation discards late advice, and top-score ties report their deterministic rank source. Diagnostic counts preserve intake and missingness; they are not independent verification. See [Advisory selection integrity](advisory-selection.md).
 
-The sidecar never creates an `Observation`, changes `EvaluationResult.semanticVerdict`, supplies independent-verifier evidence, waives a claim, or changes `RuntimeDecision`. Parsing a caller's evaluation verifies structure, not evidence authenticity. Run fresh tests, integrity checks, security gates, and evidence freshness checks after applying the selected candidate.
+The sidecar never creates an `Observation`, changes `EvaluationResult.semanticVerdict`, supplies independent-verifier evidence, waives a claim, or changes `RuntimeDecision`. Parsing the evaluation checks structure, not the truth of its evidence. Run fresh tests, integrity checks, security gates, and evidence freshness checks after applying the selected candidate.
 
 ## Waivers
 

@@ -4,9 +4,12 @@ description: "Completed-response gating and honest evidence attribution for the 
 
 # Advisory Selection Integrity
 
-**Specification ID:** `021-advisory-selection-integrity`  
-**Created:** 2026-09-05  
-**Status:** Implemented and scoped-reviewed in the working tree; whole-repository gates remain blocked; no release or automatic activation  
+**Specification ID:** `021-advisory-selection-integrity`
+
+**Created:** 2026-09-05
+
+**Status:** Implemented and scoped-reviewed; included in v0.98.3. No automatic activation.
+
 **Constitution:** [Project constitution](../constitution.md)
 
 ## Scope
