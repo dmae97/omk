@@ -19,6 +19,8 @@ TaskSpec -> ExecutionAttempt -> Observation -> EvaluationResult -> RuntimeDecisi
 - `RunResumeCommand`, `parseRunResumeCommand()` and `MAX_VERIFIED_RUN_GENERATIONS`:
   candidate/contract/revision/generation-bound intent for host-governed recovery.
   The runtime must still verify owner, clock, budget, process termination and evidence.
+- `RunWriterRestartCommand` / `parseRunWriterRestartCommand()` separately bind a local
+  writer restart to an immutable input checkpoint. They grant no remote replay authority.
 - `evaluateTask()` and `reduceRuntimeDecision()`
 - Claim Closure Graph v1: `evaluateProofClosure()`, `validateClaimGraph()`,
   `minimalBlockingCut()` and the readonly claim/observation/waiver vocabulary

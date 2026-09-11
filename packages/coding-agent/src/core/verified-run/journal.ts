@@ -41,7 +41,7 @@ export function readRunJournal(runPath: string): JournalSnapshot | null {
 		}
 		if (typeof raw !== "object" || raw === null || !("event" in raw)) throw new VerifiedRunError("integrity");
 		const event = parseRunEvent(raw.event);
-		if (event.kind === "resumed") generation += 1;
+		if (event.kind === "resumed" || event.kind === "writer_restarted") generation += 1;
 		const material = { version: 2 as const, seq: index + 1, generation, previous, event };
 		const record = Object.freeze({ ...material, hash: digestObject(material) });
 		if (canonicalJson(raw) !== canonicalJson(record)) throw new VerifiedRunError("integrity");

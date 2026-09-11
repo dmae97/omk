@@ -1,6 +1,6 @@
-import { MAX_VERIFIED_RUN_GENERATIONS } from "omk-protocol";
+import { reduceRecoveryEvent } from "./recovery-projection.ts";
 import type { RunEvent, RunProjection, WriterReduction } from "./run-types.ts";
-import { digestObject, VerifiedRunError } from "./storage.ts";
+import { VerifiedRunError } from "./storage.ts";
 import { reduceWriterEvent } from "./writer-projection.ts";
 
 /** Deterministic replay only. Recovery observations are supplied by the trusted host adapter. */
@@ -14,6 +14,7 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 		writerStarted: false,
 		producerStarted: false,
 		writerCommands: 0,
+		requestBaseline: 0,
 		requests: new Set(),
 		state: {
 			runId: first.contract.runId,
@@ -24,6 +25,7 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 			verification: "not_requested",
 			application: "not_requested",
 			candidateDigest: null,
+			inputDigest: null,
 			receiptDigest: null,
 			failure: null,
 			activeExecutionIds: [],
@@ -66,6 +68,16 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 				};
 				break;
 			}
+			case "input_checkpoint":
+				if (
+					state.revision !== 2 ||
+					!state.budget ||
+					state.inputDigest ||
+					event.digest !== first.contract.workspace.baseDigest
+				)
+					throw new VerifiedRunError("integrity");
+				context.state = { ...state, inputDigest: event.digest };
+				break;
 			case "writer_opened":
 			case "model_request":
 			case "writer_closed":
@@ -81,7 +93,7 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 						(scripted
 							? !state.writerOpen ||
 								context.writerCommands >= scripted.steps.length ||
-								state.modelRequests <= context.writerCommands
+								state.modelRequests - context.requestBaseline <= context.writerCommands
 							: context.writerStarted)
 					)
 						throw new VerifiedRunError("integrity");
@@ -167,46 +179,10 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 				};
 				break;
 			}
-			case "resumed": {
-				const command = event.command;
-				if (!state.budget || !state.candidateDigest || state.writerOpen || state.verificationDeadlineMs === null)
-					throw new VerifiedRunError("resume_unavailable");
-				if (state.generation >= MAX_VERIFIED_RUN_GENERATIONS) throw new VerifiedRunError("recovery_limit");
-				if (command.expectedRevision !== state.revision || command.expectedGeneration !== state.generation)
-					throw new VerifiedRunError("stale_revision");
-				if (
-					command.runId !== state.runId ||
-					command.contractDigest !== digestObject(first.contract) ||
-					command.candidateDigest !== state.candidateDigest ||
-					commands.has(command.commandId)
-				)
-					throw new VerifiedRunError("command_conflict");
-				if (
-					event.observedMs < (state.lastClockMs ?? state.budget.startedMs) ||
-					event.observedMs >= state.verificationDeadlineMs
-				)
-					throw new VerifiedRunError("deadline");
-				if (
-					event.reconciledExecutionIds.length !== state.activeExecutionIds.length ||
-					event.reconciledExecutionIds.some((id, index) => id !== state.activeExecutionIds[index]) ||
-					(state.activeExecutionIds.length && activeRole !== "verifier")
-				)
-					throw new VerifiedRunError("integrity");
-				commands.add(command.commandId);
-				checked.clear();
-				context.state = {
-					...state,
-					generation: state.generation + 1,
-					execution: "running",
-					settlement: "settled",
-					verification: "not_requested",
-					activeExecutionIds: [],
-					processes: [],
-					failure: null,
-					lastClockMs: event.observedMs,
-				};
+			case "resumed":
+			case "writer_restarted":
+				reduceRecoveryEvent(context, event, { commands, checked, activeRole });
 				break;
-			}
 			case "evaluated":
 				if (
 					!state.candidateDigest ||

@@ -1,10 +1,16 @@
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
-import { parseRunContract, parseRunResumeCommand, parseRunStartCommand, type RunContract } from "omk-protocol";
+import {
+	parseRunContract,
+	parseRunResumeCommand,
+	parseRunStartCommand,
+	parseRunWriterRestartCommand,
+	type RunContract,
+} from "omk-protocol";
 import { ensureDurableDirectorySync } from "../durable-file-io.ts";
 import { acquireSessionOwnerLeaseSync } from "../session-owner-lease.ts";
 import { commandEnvironmentDigest, probeVerifiedSandbox } from "./broker.ts";
-import { assertCandidateScope, captureCandidate, materializeCandidate, storeCandidate } from "./candidate.ts";
+import { captureCandidate, materializeCandidate, storeCandidate } from "./candidate.ts";
 import { preflightCheckReceipts } from "./check-receipt.ts";
 import { createRunIssuer, readRunEvidence, type VerifiedRunEvidence } from "./evidence.ts";
 import { journalPath, readRunJournal, VerifiedRunJournal } from "./journal.ts";
@@ -22,7 +28,9 @@ import {
 	VerifiedRunError,
 } from "./storage.ts";
 import { verifyCandidate } from "./verification-phase.ts";
+import { publishWriterCandidate } from "./writer-completion.ts";
 import { executeWriter } from "./writer-phase.ts";
+import { inspectWriterRecovery, restartIsolatedWriter, type WriterRecoveryInspection } from "./writer-recovery.ts";
 
 export interface VerifiedRunApproval {
 	/** Trusted host grant, not a JSON field in the model-authored contract or command. */
@@ -76,6 +84,13 @@ export class RunCoordinator {
 		return report;
 	}
 
+	inspectWriterRecovery(runId: string): WriterRecoveryInspection {
+		const report = inspectWriterRecovery(stateRunPath(this.stateRoot, runId));
+		if (report.state.runId !== runId) throw new VerifiedRunError("missing_run");
+		if (report.state.receiptDigest) this.evidence(runId);
+		return report;
+	}
+
 	evidence(runId: string): VerifiedRunEvidence {
 		const runPath = stateRunPath(this.stateRoot, runId);
 		const journal = readRunJournal(runPath);
@@ -104,6 +119,16 @@ export class RunCoordinator {
 		const command = parseRunResumeCommand(input);
 		if (approval.approvedContractDigest !== command.contractDigest) throw new VerifiedRunError("approval");
 		await resumeFrozenCandidate(stateRunPath(this.stateRoot, command.runId), command, approval.signal);
+		return this.inspect(command.runId);
+	}
+
+	async restartWriter(input: unknown, approval: VerifiedRunApproval): Promise<RunProjection> {
+		const command = parseRunWriterRestartCommand(input);
+		if (approval.approvedContractDigest !== command.contractDigest) throw new VerifiedRunError("approval");
+		await restartIsolatedWriter(stateRunPath(this.stateRoot, command.runId), command, {
+			...(approval.signal ? { signal: approval.signal } : {}),
+			...(this.runtime ? { runtime: this.runtime } : {}),
+		});
 		return this.inspect(command.runId);
 	}
 
@@ -151,6 +176,8 @@ export class RunCoordinator {
 			};
 			try {
 				createRunIssuer(runPath);
+				storeCandidate(base, runPath);
+				journal.append({ kind: "input_checkpoint", digest: base.digest });
 				const work = join(runPath, "writer");
 				materializeCandidate(base, work);
 				const workDeadline = began + contract.budget.workMs;
@@ -159,22 +186,7 @@ export class RunCoordinator {
 					deadline: workDeadline,
 					...(this.runtime ? { runtime: this.runtime } : {}),
 				});
-				const candidate = captureCandidate(work, contract.budget);
-				assertCandidateScope(base.manifest, candidate.manifest, contract.writablePaths);
-				storeCandidate(candidate, runPath);
-				const observed = readRunClock();
-				if (
-					observed.bootId !== budget.bootId ||
-					observed.nowMs > budget.workDeadlineMs ||
-					performance.now() >= workDeadline
-				)
-					throw new VerifiedRunError("deadline");
-				journal.append({
-					kind: "candidate",
-					digest: candidate.digest,
-					observedMs: observed.nowMs,
-					verificationDeadlineMs: Math.min(observed.nowMs + contract.budget.verifyMs, budget.verifyCapMs),
-				});
+				publishWriterCandidate(context, work, workDeadline);
 				await verifyCandidate(context);
 				return this.inspect(contract.runId);
 			} catch (error) {

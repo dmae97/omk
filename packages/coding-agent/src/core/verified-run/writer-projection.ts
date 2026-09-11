@@ -35,7 +35,7 @@ export function reduceWriterEvent(context: WriterReduction, event: WriterEvent):
 					(!context.writerFinished ||
 						state.failure ||
 						context.writerCommands !== scripted.steps.length ||
-						state.modelRequests < scripted.steps.length + 1))
+						state.modelRequests - context.requestBaseline < scripted.steps.length + 1))
 			)
 				throw new VerifiedRunError("integrity");
 			context.writerFinished = event.completed;

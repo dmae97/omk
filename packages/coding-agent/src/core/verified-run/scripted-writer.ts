@@ -14,6 +14,7 @@ export interface ScriptedWriterContext {
 	readonly runtime: VerifiedRunRuntime;
 	readonly workspace: string;
 	readonly deadline: number;
+	readonly requestLimit: number;
 	readonly signal?: AbortSignal;
 	readonly beforeRequest: () => void;
 	readonly executeStep: (index: number, signal?: AbortSignal) => Promise<OwnedRunResult>;
@@ -77,7 +78,7 @@ export async function executeScriptedWriter(
 		if (remaining <= 0) throw new VerifiedRunError("deadline");
 		await session.prompt(goal, {
 			expandPromptTemplates: false,
-			runBudget: { timeoutMs: remaining, maxRequests: writer.maxRequests, maxConcurrentRequests: 1 },
+			runBudget: { timeoutMs: remaining, maxRequests: context.requestLimit, maxConcurrentRequests: 1 },
 		});
 		if (failure) throw failure;
 		if (

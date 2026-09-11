@@ -1,14 +1,14 @@
 import { join } from "node:path";
 import { MAX_VERIFIED_RUN_GENERATIONS, type RunResumeCommand } from "omk-protocol";
-import { acquireSessionOwnerLeaseSync } from "../session-owner-lease.ts";
 import { commandEnvironmentDigest, probeVerifiedSandbox } from "./broker.ts";
 import { loadCandidate } from "./candidate.ts";
 import { preflightCheckReceipts } from "./check-receipt.ts";
-import { type JournalSnapshot, journalPath, readRunJournal, VerifiedRunJournal } from "./journal.ts";
+import type { JournalSnapshot } from "./journal.ts";
 import { probeNamespace } from "./namespace-identity.ts";
 import { readRunClock, remainingVerification } from "./recovery-clock.ts";
+import { requireRunJournal, withRecoveryLease } from "./recovery-command.ts";
 import type { RunProjection } from "./run-types.ts";
-import { digestObject, readRegularFile, VerifiedRunError } from "./storage.ts";
+import { readRegularFile, VerifiedRunError } from "./storage.ts";
 import { verifyCandidate } from "./verification-phase.ts";
 
 export interface RecoveryInspection {
@@ -28,12 +28,6 @@ export interface RecoveryInspection {
 	readonly remainingVerifyMs: number | null;
 	/** A ready inspection is advisory; exclusive ownership is acquired only by resume. */
 	readonly ownership: "lease_required";
-}
-
-function requireJournal(runPath: string): JournalSnapshot {
-	const journal = readRunJournal(runPath);
-	if (!journal) throw new VerifiedRunError("missing_run");
-	return journal;
 }
 
 function assertCandidateRecoverable(runPath: string, journal: JournalSnapshot): number {
@@ -73,7 +67,7 @@ function assertCandidateRecoverable(runPath: string, journal: JournalSnapshot): 
 }
 
 export function inspectRunRecovery(runPath: string): RecoveryInspection {
-	const journal = requireJournal(runPath);
+	const journal = requireRunJournal(runPath);
 	let readiness: RecoveryInspection["readiness"] = "ready";
 	let remainingVerifyMs: number | null = null;
 	try {
@@ -116,40 +110,13 @@ export function inspectRunRecovery(runPath: string): RecoveryInspection {
 	return Object.freeze({ state: journal.state, readiness, remainingVerifyMs, ownership: "lease_required" });
 }
 
-function commandDisposition(journal: JournalSnapshot, command: RunResumeCommand): "new" | "duplicate" {
-	const first = journal.records[0]?.event;
-	if (
-		first?.kind !== "created" ||
-		first.contract.runId !== command.runId ||
-		digestObject(first.contract) !== command.contractDigest
-	)
-		throw new VerifiedRunError("command_conflict");
-	if (first.command.commandId === command.commandId) throw new VerifiedRunError("command_conflict");
-	const previous = journal.records.find(
-		({ event }) => event.kind === "resumed" && event.command.commandId === command.commandId,
-	)?.event;
-	if (previous?.kind === "resumed") {
-		if (digestObject(previous.command) !== digestObject(command)) throw new VerifiedRunError("command_conflict");
-		return "duplicate";
-	}
-	if (command.expectedRevision !== journal.state.revision || command.expectedGeneration !== journal.state.generation)
-		throw new VerifiedRunError("stale_revision");
-	if (command.candidateDigest !== journal.state.candidateDigest) throw new VerifiedRunError("candidate_mismatch");
-	return "new";
-}
-
 export async function resumeFrozenCandidate(
 	runPath: string,
 	command: RunResumeCommand,
 	signal?: AbortSignal,
 ): Promise<RunProjection> {
 	if (signal?.aborted) throw new VerifiedRunError("cancelled");
-	const initial = requireJournal(runPath);
-	if (commandDisposition(initial, command) === "duplicate") return initial.state;
-	const owner = acquireSessionOwnerLeaseSync(journalPath(runPath));
-	try {
-		const snapshot = requireJournal(runPath);
-		if (commandDisposition(snapshot, command) === "duplicate") return snapshot.state;
+	return withRecoveryLease(runPath, command, async ({ snapshot, journal }) => {
 		assertCandidateRecoverable(runPath, snapshot);
 		const first = snapshot.records[0]?.event;
 		if (first?.kind !== "created") throw new VerifiedRunError("integrity");
@@ -157,21 +124,12 @@ export async function resumeFrozenCandidate(
 		probeVerifiedSandbox();
 		assertCandidateRecoverable(runPath, snapshot);
 		if (signal?.aborted) throw new VerifiedRunError("cancelled");
-		const journal = new VerifiedRunJournal(runPath, owner);
 		journal.append({
 			kind: "resumed",
 			command,
 			observedMs: readRunClock().nowMs,
 			reconciledExecutionIds: snapshot.state.activeExecutionIds,
 		});
-		try {
-			return await verifyCandidate({ runPath, journal, contract: first.contract, ...(signal ? { signal } : {}) });
-		} catch (error) {
-			if (error instanceof VerifiedRunError && !journal.state.receiptDigest)
-				return journal.append({ kind: "failed", code: error.code });
-			throw error;
-		}
-	} finally {
-		owner.release();
-	}
+		return verifyCandidate({ runPath, journal, contract: first.contract, ...(signal ? { signal } : {}) });
+	});
 }

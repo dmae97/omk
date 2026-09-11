@@ -1,4 +1,9 @@
-import { parseRunContract, parseRunResumeCommand, parseRunStartCommand } from "omk-protocol";
+import {
+	parseRunContract,
+	parseRunResumeCommand,
+	parseRunStartCommand,
+	parseRunWriterRestartCommand,
+} from "omk-protocol";
 import { parseNamespaceIdentity } from "./namespace-identity.ts";
 import { parseRecoveryBudget } from "./recovery-clock.ts";
 import type { RunEvent } from "./run-types.ts";
@@ -45,6 +50,8 @@ export function parseRunEvent(raw: unknown): RunEvent {
 				claimId: value.claimId === null ? null : text(value.claimId),
 			};
 		}
+		case "input_checkpoint":
+			return { kind: value.kind, digest: digest(value.digest) };
 		case "process_ready":
 			return {
 				kind: value.kind,
@@ -74,14 +81,17 @@ export function parseRunEvent(raw: unknown): RunEvent {
 					: { verificationDeadlineMs: integer(value.verificationDeadlineMs) }),
 			};
 		case "resumed":
+		case "writer_restarted": {
 			if (!Array.isArray(value.reconciledExecutionIds) || value.reconciledExecutionIds.length > 128)
 				throw new VerifiedRunError("integrity");
-			return {
-				kind: value.kind,
-				command: parseRunResumeCommand(value.command),
+			const fields = {
 				observedMs: integer(value.observedMs),
 				reconciledExecutionIds: Object.freeze(value.reconciledExecutionIds.map(text)),
 			};
+			return value.kind === "resumed"
+				? { ...fields, kind: value.kind, command: parseRunResumeCommand(value.command) }
+				: { ...fields, kind: value.kind, command: parseRunWriterRestartCommand(value.command) };
+		}
 		case "evaluated":
 			if (typeof value.verified !== "boolean") throw new VerifiedRunError("integrity");
 			return { kind: value.kind, receiptDigest: digest(value.receiptDigest), verified: value.verified };

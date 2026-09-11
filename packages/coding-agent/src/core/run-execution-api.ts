@@ -29,3 +29,4 @@ export type { VerifiedRunEvidence } from "./verified-run/evidence.ts";
 export type { RecoveryInspection } from "./verified-run/recovery.ts";
 export type { RecoveryBudget } from "./verified-run/recovery-clock.ts";
 export { VerifiedRunError } from "./verified-run/storage.ts";
+export type { WriterRecoveryInspection } from "./verified-run/writer-recovery.ts";

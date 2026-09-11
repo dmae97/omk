@@ -250,5 +250,63 @@ retry, benchmark, ROADMAP 변경은 제외했습니다. 전체 staged diff를 �
 - staged scope·whitespace 검사: 일치·오류 없음.
 
 이 첫 커밋은 계약부터 CLI/SDK·검증·고정 candidate 복구까지의 연결된 opt-in 기능입니다.
-writer 복구 고도화는 별도 구현·직접 테스트·문서 단위로 이어갑니다. push·PR·배포는 승인하지
-않았으며 수행하지 않습니다.
+이 단위는 `3a1a110ecb` (`feat(runtime): 검증 실행과 고정 candidate 복구 연결`)로 커밋했습니다.
+writer 복구 고도화는 아래 별도 구현·직접 테스트·문서 단위로 이어집니다. push·PR·배포는
+별도 승인 범위가 아니므로 수행하지 않습니다.
+
+## 4차: 불변 입력 기반 writer 재시작
+
+고도화 대상은 M2의 남은 writer 경계입니다. 부분 작업 디렉터리를 이어 쓰거나 변경된
+원본을 다시 읽는 대신, 최초 writer 전에 저장한 CAS 입력 checkpoint에서 새 시도를 만듭니다.
+이는 단계별 부분 retry나 Task DAG가 아니라 **승인된 로컬 writer 전체의 명시적 재시작**입니다.
+
+- SDK 메서드가 없어 6개가 실패한 RED에서 시작했습니다. 이후 `restartWriter`와
+  `inspectWriterRecovery`를 연결했습니다.
+- 실제 writer SIGKILL 후 CLI의 새 flag가 usage error로 실패하는 RED를 확인한 뒤
+  `restart-writer --execute`와 `inspect --writer-recovery`를 연결했습니다.
+- `input_checkpoint`가 없거나 손상되면 현재 workspace로 대체하지 않습니다.
+  원본·이전 부분 출력을 바꿔도 새 `writer-N`에는 저장된 원래 입력만 사용합니다.
+- 이전 `modelRequests`는 유지하고 새 시도에 남은 한도만 전달합니다. `requestBaseline`은
+  새 시도의 종료 turn 검증에만 사용하며 전체 사용량을 초기화하지 않습니다.
+- candidate 검증 재개와 writer 재시작이 같은 lease/CAS/command-id/generation 경계를 씁니다.
+  generation 상한, 원래 work deadline, 모르는 namespace와 live owner 거부도 유지합니다.
+- 기존 형식 fixture에서 새 `input_checkpoint` 사건을 제거하여 구형 원장 검사를 유지했습니다.
+  실제 runtime의 구형 입력 누락을 허용하도록 guard를 낮추지는 않았습니다.
+
+최종 명령은 3차의 테스트 집합에 다음을 추가한 것입니다.
+
+```bash
+(cd packages/protocol && node ../../node_modules/vitest/dist/cli.js --run \
+  test/run-contract.test.ts test/run-scripted-contract.test.ts \
+  test/run-resume.test.ts test/run-writer-restart.test.ts)
+# coding-agent의 기존 16개 파일에 아래 3개를 추가하여 --maxWorkers=2로 실행
+# test/verified-run-writer-restart.test.ts
+# test/verified-run-writer-crash.test.ts
+# test/verified-run-writer-progress.test.ts
+npm run check
+```
+
+| 검사 | 4차 결과 |
+| --- | --- |
+| protocol | 4개 파일, 62개 통과, exit 0 |
+| coding-agent·기존 회귀 | 19개 파일, 229개 통과, exit 0 |
+| `npm run check` | exit 0, 문서 링크 포함 전체 통과 |
+| 타입·import-cycle·module-size | 통과, baseline 변경 없음 |
+
+최종 291개는 이전 단계를 포함한 집합입니다. 실제 CLI 테스트는 SIGKILL, 읽기 전용 조회,
+`--execute` 누락 거부, 원본/부분 출력 변조, 요청 누적, 예산 보존을 확인했습니다. command-only
+경로는 모델 요청 없이 재시작합니다. 순수 reducer 테스트는 이전 요청이 새 시도의 종료 응답을
+대신할 수 없고 이전 request ID도 재사용할 수 없음을 검사합니다.
+
+이 단위의 변경 경로:
+
+- `packages/protocol/src/run-writer-restart.ts`, `src/index.ts`, `test/run-writer-restart.test.ts`, `README.md`
+- `packages/coding-agent/src/core/verified-run/{recovery-command,recovery-projection,writer-completion,writer-recovery}.ts`
+- 같은 디렉터리의 `coordinator.ts`, `event-parser.ts`, `journal.ts`, `projection.ts`, `recovery.ts`,
+  `recovery-clock.ts`, `run-types.ts`, `scripted-writer.ts`, `writer-phase.ts`, `writer-projection.ts`
+- `packages/coding-agent/src/core/run-execution-api.ts`, `src/commands/verified-run-cli.ts`
+- 위 writer 테스트 3개, `test/verified-run-v3.test.ts`, SDK·protocol·verified-run 문서
+
+제안 메시지: `feat(runtime): 불변 입력 checkpoint 기반 writer 복구`.
+input pin·process identity 기록 이전의 crash window, 원격/opaque 부작용, 실서비스 모델,
+M3 DAG와 M4 전체 제어 표면은 완료하지 않았습니다. S90 점수나 경쟁 성능을 측정하지 않았습니다.

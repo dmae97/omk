@@ -7,8 +7,8 @@
 
 **S90 전체 구현이나 M1–M4 완료를 의미하지 않습니다.** M1의 무과금 reference
 경로와 native EvidenceReceipt v3 연결에 이어, M2의 **고정 candidate 이후 복구**를
-지원합니다. writer 중단 복구, 실서비스 모델 adapter, Task DAG, TUI/RPC, 적용 승인은
-아직 없습니다.
+지원합니다. 불변 입력이 저장된 새 run은 중단된 writer도 명시적으로 재시작할 수 있습니다.
+실서비스 모델 adapter, Task DAG, TUI/RPC, 적용 승인은 아직 없습니다.
 
 ## 실행 경로
 
@@ -224,19 +224,52 @@ writer·AgentSession은 재실행하지 않습니다. 이전 model 요청 수, c
 identity를 함께 사용합니다. PID만 보고 다른 프로세스를 종료하지 않습니다. gate 대기 중
 취소되거나 기록에 실패하면 늦은 callback이 명령을 실행할 수 없습니다.
 
-**자동 복구하지 않는 경우:** candidate 고정 전 중단, 열린 writer, 알려진 terminal 실패,
+**`resume`으로 복구하지 않는 경우:** candidate 고정 전 중단, 열린 writer, 알려진 terminal 실패,
 namespace가 살아 있거나 상태를 알 수 없는 경우, `process_ready`가 없는 dispatch, 원장 손상,
 key/blob/환경 변경, budget 만료, reboot/clock 불명, 예전 clock 정보 없는 원장입니다.
 이때 기록과 미정산 ID를 보존합니다. 재개 가능성을 추측해 원장을 수리하거나 예산을 늘리지
-않습니다. 별도 reconciliation 또는 새로 승인한 run이 필요합니다. 모든 crash window와
-writer 단계까지 처리하는 M2 전체 구현은 아닙니다.
+않습니다. writer는 아래 별도 명령의 조건을 충족해야 하며, 그 외에는 reconciliation 또는
+새로 승인한 run이 필요합니다. 모든 crash window를 처리하는 M2 전체 구현은 아닙니다.
+
+## 불변 입력에서 writer 재시작
+
+새 `start`는 원본 입력의 blob·manifest를 저장하고 `input_checkpoint`를 append/fsync한
+뒤에만 writer나 모델 요청을 시작합니다. `inputDigest`는 승인한 `workspace.baseDigest`와
+같아야 합니다. 이미 진행 중인 예전 run에는 이 정보를 추측해서 덧붙이지 않습니다.
+
+```bash
+omk run inspect greeting-1 --writer-recovery --state-dir /private/operator-state/verified-runs
+omk run restart-writer greeting-1 --execute --approve CONTRACT_DIGEST \
+  --base INPUT_DIGEST --revision REVISION --generation GENERATION \
+  --command-id restart-1 --state-dir /private/operator-state/verified-runs
+```
+
+SDK는 `inspectWriterRecovery(runId)`와 `restartWriter(command, approval)`를 제공합니다.
+command는 `kind: "restart_writer"`, `baseDigest`, 기존 contract/ref/command ID 필드를
+사용합니다. `--recovery`와 `--writer-recovery`는 서로 다른 조회이며 같이 지정할 수 없습니다.
+
+이 작업은 **중단된 명령을 이어 실행하는 것이 아니라**, 승인된 writer 전체를 새
+`writer-N` 디렉터리에서 재실행합니다. 변경된 원본 프로젝트나 예전 부분 출력은 입력으로
+쓰지 않습니다. 이전 디렉터리·관측·receipt는 보존하며 새 결과를 다시 고정·검증합니다.
+
+- 현재 두 profile의 격리된 로컬 작업만 대상입니다. 원격/opaque 부작용의 재실행 보장이 아닙니다.
+- writer namespace의 종료를 확인하고 단일 owner lease와 새 generation을 획득합니다.
+- 원래 work/verify/cleanup 기한을 유지합니다. 기다린 시간과 이전 `modelRequests`는 환급하지 않습니다.
+- scripted writer는 남은 요청 수가 모든 step과 종료 응답에 충분해야 합니다. 새 시도의 완료 판정에
+  과거 요청을 끌어다 쓰지 않습니다. 같은 명령 ID의 재요청은 조회이며 추가 writer를 만들지 않습니다.
+- generation 상한 3은 `resume`과 `restart-writer`가 공유합니다.
+- input checkpoint 누락·손상, live/unknown namespace, stale ref, 부족한 시간/요청, 환경·key 변경,
+  알려진 terminal 실패는 거부합니다. candidate가 이미 고정됐다면 writer 재시작 대신 `resume`을 씁니다.
+
+`ready`는 필요한 조건을 관측했다는 뜻일 뿐이며 실제 lease 획득을 보장하지 않습니다.
+input pin 이전 또는 process identity 기록 이전의 crash window는 여전히 자동 복구하지 않습니다.
 
 ## 내구성·예산·복구 한계
 
 - 원장 `version: 2`는 기존 v1 transcript journal과 별도입니다. 순서·hash chain·상태
   전이를 검증하고 append/fsync 성공 후에만 메모리 상태를 갱신합니다. write 실패는
   해당 store를 폐쇄합니다. 읽기 중 torn tail·중간 손상을 자동 수리하지 않습니다.
-- generation은 명시적인 resume에서만 증가하며 기존 원장을 다시 쓰지 않습니다.
+- generation은 명시적인 `resume` 또는 `restart-writer`에서만 증가하며 기존 원장을 다시 쓰지 않습니다.
   기존 v1/v2 attestation과 clock 없는 원장은 읽을 수 있지만 복구용 clock·세대를 추측해
   채우지 않습니다. clock 없는 미완료 실행의 resume은 `legacy`로 차단합니다.
 - 작업 시간에는 preflight·원장·snapshot 시간이 포함됩니다. dispatch 의도 기록 뒤
@@ -274,7 +307,8 @@ writer 단계까지 처리하는 M2 전체 구현은 아닙니다.
 | M1의 AgentSession reference + v3 bridge | 실제 CLI/SDK 연결. 합성 model adapter만 지원 |
 | 실서비스 모델·완전한 toolchain image pin | 미구현 |
 | M2: 고정 candidate 이후 검증 재개 | 실제 SIGKILL→CLI resume 검사 통과. 원래 예산·세대 fencing 적용 |
-| M2: writer 중단·모든 crash window 복구 | 미구현. 불명 상태는 보존하고 자동 재실행 차단 |
+| M2: 불변 입력 기반 writer 재시작 | 실제 SIGKILL→CLI restart 검사 통과. 이전 요청 수·기한·부분 출력 보존 |
+| M2: 모든 crash window 복구 | 미완료. input/process pin 없는 상태는 자동 복구 차단 |
 | M3 Task DAG·부분 retry·adoption | 미구현 |
 | M4 TUI/RPC·MCP·GC·적용 승인/CAS | 미구현. CLI/SDK 조회·개별 artifact 회수 제공 |
 | S90 전체 G01–G20·성능/정상 회귀 하한 | 미측정. 부분 테스트로 점수를 부여하지 않음 |

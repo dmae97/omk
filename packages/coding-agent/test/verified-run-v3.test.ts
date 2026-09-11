@@ -128,7 +128,10 @@ describe("verified candidate native receipt bridge", () => {
 		publishObject(join(runPath, "attestations", `${digest}.json`), envelope);
 		let previous = "0".repeat(64);
 		const legacy = journal.records
-			.filter(({ event }) => event.kind !== "budget_anchored" && event.kind !== "process_ready")
+			.filter(
+				({ event }) =>
+					event.kind !== "budget_anchored" && event.kind !== "process_ready" && event.kind !== "input_checkpoint",
+			)
 			.map((record, index) => {
 				const event =
 					record.event.kind === "candidate"

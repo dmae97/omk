@@ -34,15 +34,18 @@ an offline AgentSession reference adapter. Unknown authority/provider fields are
 rejected; the host must separately authorize the exact contract digest.
 `RunResumeCommand` / `parseRunResumeCommand()` pin the contract, candidate and exact
 expected revision/generation. The host may acquire at most three generations under
-`MAX_VERIFIED_RUN_GENERATIONS`; this does not authorize replay of a writer.
+`MAX_VERIFIED_RUN_GENERATIONS`; a resume command does not authorize replay of a writer.
+The separate `RunWriterRestartCommand` / `parseRunWriterRestartCommand()` binds
+`baseDigest` to a durable input checkpoint for an explicit local writer restart.
+Both commands share command IDs and the generation cap; neither resets budgets.
 
 The coding-agent's `RunCoordinator` owns execution and its separate v2 journal.
 It binds native v3 receipt cores to the candidate through a supervisor attestation,
 then supplies authenticated checks to the existing claim-closure reducer.
 This does not replace the task/attempt/evaluation contracts or add execution to
 this package. See [Verified Run](verified-run.md) for the implemented CLI/SDK
-path, candidate-only crash recovery, and the remaining model/writer-recovery, DAG
-and control-surface work.
+path, candidate recovery and checkpoint-based local writer restart, plus the
+remaining live-model, DAG and control-surface work.
 
 ## Durable goal lifecycle
 

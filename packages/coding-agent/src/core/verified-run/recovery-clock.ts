@@ -70,13 +70,15 @@ export function parseRecoveryBudget(raw: unknown): RecoveryBudget {
 	});
 }
 
-export function remainingVerification(budget: RecoveryBudget, deadlineMs: number, clock = readRunClock()): number {
+export function remainingRunTime(budget: RecoveryBudget, deadlineMs: number, clock = readRunClock()): number {
 	if (clock.bootId !== budget.bootId) throw new VerifiedRunError("clock_changed");
 	if (clock.nowMs < budget.startedMs) throw new VerifiedRunError("clock_rollback");
 	if (!Number.isSafeInteger(deadlineMs) || deadlineMs <= budget.startedMs || deadlineMs > budget.verifyCapMs)
 		throw new VerifiedRunError("integrity");
 	return Math.max(0, deadlineMs - clock.nowMs);
 }
+
+export const remainingVerification = remainingRunTime;
 
 export function localVerificationDeadline(budget: RecoveryBudget, deadlineMs: number): number {
 	const remaining = remainingVerification(budget, deadlineMs);

@@ -1,4 +1,4 @@
-import type { RunContract, RunResumeCommand, RunStartCommand } from "omk-protocol";
+import type { RunContract, RunResumeCommand, RunStartCommand, RunWriterRestartCommand } from "omk-protocol";
 import type { NamespaceIdentity } from "./namespace-identity.ts";
 import type { RecoveryBudget } from "./recovery-clock.ts";
 
@@ -16,6 +16,7 @@ export type RunEvent =
 			readonly role: "writer" | "verifier";
 			readonly claimId: string | null;
 	  }
+	| { readonly kind: "input_checkpoint"; readonly digest: string }
 	| { readonly kind: "process_ready"; readonly executionId: string; readonly identity: NamespaceIdentity }
 	| { readonly kind: "writer_opened" }
 	| { readonly kind: "model_request"; readonly requestId: string }
@@ -33,6 +34,12 @@ export type RunEvent =
 			readonly observedMs: number;
 			readonly reconciledExecutionIds: readonly string[];
 	  }
+	| {
+			readonly kind: "writer_restarted";
+			readonly command: RunWriterRestartCommand;
+			readonly observedMs: number;
+			readonly reconciledExecutionIds: readonly string[];
+	  }
 	| { readonly kind: "evaluated"; readonly receiptDigest: string; readonly verified: boolean }
 	| { readonly kind: "failed"; readonly code: string };
 
@@ -45,6 +52,7 @@ export interface RunProjection {
 	readonly verification: "not_requested" | "verified" | "violated" | "inconclusive";
 	readonly application: "not_requested" | "candidate_ready";
 	readonly candidateDigest: string | null;
+	readonly inputDigest: string | null;
 	readonly receiptDigest: string | null;
 	readonly failure: string | null;
 	readonly activeExecutionIds: readonly string[];
@@ -65,5 +73,6 @@ export interface WriterReduction {
 	writerStarted: boolean;
 	producerStarted: boolean;
 	writerCommands: number;
+	requestBaseline: number;
 	readonly requests: Set<string>;
 }

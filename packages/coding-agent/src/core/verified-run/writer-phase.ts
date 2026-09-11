@@ -38,6 +38,8 @@ export async function executeWriter(
 			const runtime = options.runtime;
 			if (!runtime) throw new VerifiedRunError("writer_backend_missing");
 			const writer = contract.writer;
+			const requestLimit = writer.maxRequests - journal.state.modelRequests;
+			if (requestLimit <= 0) throw new VerifiedRunError("model_request_limit");
 			journal.append({ kind: "writer_opened" });
 			let completed = false;
 			try {
@@ -45,6 +47,7 @@ export async function executeWriter(
 					runtime,
 					workspace: options.workspace,
 					deadline: options.deadline,
+					requestLimit,
 					...(context.signal ? { signal: context.signal } : {}),
 					beforeRequest: () => {
 						if (performance.now() >= options.deadline) throw new VerifiedRunError("deadline");

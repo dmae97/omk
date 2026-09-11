@@ -171,7 +171,13 @@ approval)` acquires a new generation and rechecks the exact frozen candidate und
 the original boot-relative deadline. It never restarts the writer or model and
 refuses missing process identity, stale refs, unavailable clocks and expired budget.
 
-This does not enable live-model task generation, writer-phase recovery, a task DAG,
+`inspectWriterRecovery(runId)` and `restartWriter(command, approval)` separately
+restart an interrupted local writer from its durable input checkpoint. They preserve
+spent requests and the original work deadline, use a fresh private directory, and
+never continue from partial output or a changed original workspace. The two recovery
+actions share the generation cap and command-id fence.
+
+This does not enable live-model task generation, opaque remote replay, a task DAG,
 or host application. See [Verified Run](verified-run.md) for contracts and trust boundaries.
 
 ### Shared run budgets (SDK, opt-in)
