@@ -66,7 +66,12 @@ function createValidatedToolResultSnapshot(result: AgentToolResult<unknown>): Ag
 /** Build the immutable terminal committed when a tool timeout wins. */
 export function createTimeoutToolResult(toolName: string, timeoutMs: number): AgentToolResult<ToolDispositionEnvelope> {
 	return createImmutableSnapshot({
-		content: [{ type: "text", text: `Tool "${toolName}" timed out after ${timeoutMs}ms and was terminated.` }],
+		content: [
+			{
+				type: "text",
+				text: `Tool "${toolName}" timed out after ${timeoutMs}ms. Cancellation was requested; execution may still be running.`,
+			},
+		],
 		details: {
 			omk: createToolResultEnvelope({
 				synthetic: true,

@@ -12,6 +12,8 @@
  */
 import {
 	assertPreRedactedTerminationMessage,
+	classifySessionTermination,
+	parseSessionTerminationCauseCode,
 	SESSION_TERMINATION_KIND_VALUES,
 	SESSION_TERMINATION_SCHEMA_VERSION,
 	type SessionTermination,
@@ -483,206 +485,26 @@ function assertBoundedSessionTermination(
 }
 
 function assertTerminationCoherence(termination: SessionTermination): void {
-	const dot = termination.causeCode.indexOf(".");
-	const area = dot >= 0 ? termination.causeCode.slice(0, dot) : "";
-	const suffix = dot >= 0 ? termination.causeCode.slice(dot + 1) : "";
-
-	let expectedKind: string;
-	let expectedPhase: string;
-	let expectedRetryable: boolean;
-	let processSignalRequired = false;
-	let transcriptRequired = false;
-	let transcriptSuffix: string | null = null;
-
-	switch (area) {
-		case "session":
-			if (suffix === "completed") {
-				expectedKind = "completed";
-				expectedPhase = "completed";
-				expectedRetryable = false;
-			} else if (suffix === "user_abort") {
-				expectedKind = "user_abort";
-				expectedPhase = "control";
-				expectedRetryable = false;
-			} else {
-				throw new TypeError("termination causeCode is incoherent");
-			}
-			break;
-		case "provider":
-			switch (suffix) {
-				case "abort":
-					expectedKind = "provider_abort";
-					expectedPhase = "provider";
-					expectedRetryable = true;
-					break;
-				case "auth":
-					expectedKind = "provider_auth";
-					expectedPhase = "provider";
-					expectedRetryable = false;
-					break;
-				case "rate_limit":
-					expectedKind = "provider_rate_limit";
-					expectedPhase = "provider";
-					expectedRetryable = true;
-					break;
-				case "network":
-					expectedKind = "provider_network";
-					expectedPhase = "provider";
-					expectedRetryable = true;
-					break;
-				case "protocol":
-					expectedKind = "provider_protocol";
-					expectedPhase = "provider";
-					// Orphan tool_call_id / sticky transcript shape — retry after sanitize.
-					expectedRetryable = true;
-					break;
-				case "refusal":
-					expectedKind = "provider_refusal";
-					expectedPhase = "provider";
-					expectedRetryable = true;
-					break;
-				case "context_overflow":
-					expectedKind = "context_overflow";
-					expectedPhase = "provider";
-					expectedRetryable = true;
-					break;
-				default:
-					throw new TypeError("termination causeCode is incoherent");
-			}
-			break;
-		case "resource":
-			if (!["memory", "disk", "cpu", "heap", "probe_unavailable", "queue_overflow"].includes(suffix)) {
-				throw new TypeError("termination causeCode is incoherent");
-			}
-			// §15.4: resource causes are always retryable; queue overflow is the
-			// only tool-phase cause, the rest stop at preflight admission.
-			expectedKind = "resource_pressure";
-			expectedPhase = suffix === "queue_overflow" ? "tool" : "preflight";
-			expectedRetryable = true;
-			break;
-		case "tool":
-			if (suffix === "timeout") {
-				expectedKind = "tool_timeout";
-				expectedPhase = "tool";
-				expectedRetryable = true;
-			} else if (suffix === "fatal") {
-				expectedKind = "tool_fatal";
-				expectedPhase = "tool";
-				expectedRetryable = false;
-			} else {
-				throw new TypeError("termination causeCode is incoherent");
-			}
-			break;
-		case "compaction":
-			if (suffix === "aborted" || suffix === "failed" || suffix === "stale") {
-				expectedKind = "compaction";
-				expectedPhase = "compaction";
-				expectedRetryable = true;
-			} else {
-				throw new TypeError("termination causeCode is incoherent");
-			}
-			break;
-		case "persistence":
-			if (
-				suffix === "read_failed" ||
-				suffix === "append_failed" ||
-				suffix === "replace_failed" ||
-				suffix === "fsync_failed" ||
-				suffix === "lock_failed"
-			) {
-				expectedKind = "persistence";
-				expectedPhase = "persistence";
-				expectedRetryable = true;
-			} else {
-				throw new TypeError("termination causeCode is incoherent");
-			}
-			break;
-		case "process":
-			if (suffix === "signal") {
-				expectedKind = "process_signal";
-				expectedPhase = "process";
-				expectedRetryable = false;
-				processSignalRequired = true;
-			} else if (suffix === "crash") {
-				expectedKind = "process_crash";
-				expectedPhase = "resume";
-				expectedRetryable = true;
-			} else {
-				throw new TypeError("termination causeCode is incoherent");
-			}
-			break;
-		case "transcript":
-			if (SESSION_TRANSCRIPT_ISSUES.has(suffix)) {
-				expectedKind = "transcript_invalid";
-				expectedPhase = termination.source === "inferred_on_resume" ? "resume" : "preflight";
-				expectedRetryable = false;
-				transcriptRequired = true;
-				transcriptSuffix = suffix;
-			} else {
-				throw new TypeError("termination causeCode is incoherent");
-			}
-			break;
-		case "configuration":
-			if (suffix === "invalid") {
-				expectedKind = "configuration";
-				expectedPhase = "preflight";
-				expectedRetryable = false;
-			} else {
-				throw new TypeError("termination causeCode is incoherent");
-			}
-			break;
-		case "internal":
-			if (suffix === "unclassified") {
-				expectedKind = "internal_error";
-				expectedPhase = "preflight";
-				expectedRetryable = false;
-			} else {
-				throw new TypeError("termination causeCode is incoherent");
-			}
-			break;
-		default:
-			throw new TypeError("termination causeCode is incoherent");
+	let expected: SessionTermination;
+	try {
+		expected = classifySessionTermination({
+			sessionId: termination.sessionId,
+			runId: termination.runId,
+			timestamp: termination.timestamp,
+			source: termination.source,
+			message: termination.message,
+			cause: parseSessionTerminationCauseCode(termination.causeCode, termination.processSignal),
+			sideEffects: termination.sideEffects,
+		});
+	} catch (error) {
+		if (error instanceof TypeError) throw new TypeError("termination causeCode is incoherent", { cause: error });
+		throw error;
 	}
-
-	if (termination.kind !== expectedKind) {
-		throw new TypeError("termination kind is incoherent with causeCode");
-	}
-	if (termination.phase !== expectedPhase) {
-		throw new TypeError("termination phase is incoherent with causeCode");
-	}
-	if (termination.retryable !== expectedRetryable) {
-		throw new TypeError("termination retryable flag is incoherent with causeCode");
-	}
-	if (processSignalRequired) {
-		if (termination.processSignal === undefined) {
-			throw new TypeError("termination processSignal is required for signal causes");
-		}
-	} else if (termination.processSignal !== undefined) {
-		throw new TypeError("termination processSignal is only valid for signal causes");
-	}
-	if (transcriptRequired) {
-		if (termination.transcriptIssue === undefined) {
-			throw new TypeError("termination transcriptIssue is required for transcript causes");
-		} else if (termination.transcriptIssue !== transcriptSuffix) {
-			throw new TypeError("termination transcriptIssue must match the transcript cause");
-		}
-	} else if (termination.transcriptIssue !== undefined) {
-		throw new TypeError("termination transcriptIssue is only valid for transcript causes");
-	}
-
-	// Keep in lockstep with isSafeToAutoRetry() in session-termination.ts.
-	// provider_refusal: Fable/Claude false-positive safety stops may auto-retry once when sideEffects=none.
-	const expectedSafeToAutoRetry =
-		termination.retryable &&
-		termination.source === "observed" &&
-		termination.sideEffects === "none" &&
-		(termination.kind === "provider_rate_limit" ||
-			termination.kind === "provider_network" ||
-			termination.kind === "provider_refusal" ||
-			// §15.4 mapping: only cpu pressure is safe to auto-retry (with delay).
-			termination.causeCode === "resource.cpu");
-	if (termination.safeToAutoRetry !== expectedSafeToAutoRetry) {
-		throw new TypeError("termination safeToAutoRetry flag is incoherent");
+	// Reconstruct through the canonical classifier instead of maintaining a second
+	// cause matrix that can silently drift from newly added runtime outcomes.
+	for (const field of ["kind", "phase", "retryable", "safeToAutoRetry", "processSignal", "transcriptIssue"] as const) {
+		if (termination[field] !== expected[field])
+			throw new TypeError(`termination ${field} is incoherent with causeCode`);
 	}
 }
 
@@ -1054,6 +876,15 @@ function probeTermination(
 	sessionId: string,
 	event: RunJournalEvent,
 ): TerminationProbe {
+	// Preserve the specific recovery-source finding before canonical cause checks.
+	if (
+		event === "run_recovered" &&
+		typeof rawTermination === "object" &&
+		rawTermination !== null &&
+		Object.getOwnPropertyDescriptor(rawTermination, "source")?.value === "observed"
+	) {
+		return { kind: "source" };
+	}
 	let termination: SessionTermination;
 	try {
 		assertBoundedSessionTermination(rawTermination, runId, sessionId);

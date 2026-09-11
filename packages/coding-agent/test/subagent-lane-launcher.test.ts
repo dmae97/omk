@@ -72,7 +72,7 @@ function trackingLane(gauge: Gauge, delayMs = 10, failFor?: ReadonlySet<string>)
 }
 
 describe("computeEffectiveLaneWidth (§14.2)", () => {
-	it("takes the minimum of all five authorities with floor 1", () => {
+	it("takes the minimum of all five authorities and preserves legacy configured zero", () => {
 		expect(
 			computeEffectiveLaneWidth({
 				planWidth: 4,
@@ -149,7 +149,7 @@ describe("launchSubagentLanes (§14.4 acceptance)", () => {
 		expect(pool.snapshot()).toMatchObject({ activeWeight: 0, queuedCount: 0 });
 	});
 
-	it("propagates parent abort: unstarted lanes never launch and permit waits cancel (§14.3)", async () => {
+	it("defers unstarted lanes when the parent pool has no available permits", async () => {
 		const controller = new AbortController();
 		const pool = new WorkloadPermitPool({ capacity: 1 });
 		const blocker = await pool.acquire({
@@ -170,11 +170,11 @@ describe("launchSubagentLanes (§14.4 acceptance)", () => {
 				launched.push(context.laneId);
 			},
 		});
-		setTimeout(() => controller.abort(), 20);
 		const result = await resultPromise;
 		expect(launched).toHaveLength(0);
-		expect(result.outcomes.every((outcome) => outcome.status === "skipped-abort")).toBe(true);
-		// Queued lane permit waits were canceled; only the outer blocker holds weight.
+		expect(result.effectiveLaneWidth).toBe(0);
+		expect(result.outcomes.every((outcome) => outcome.status === "admission-deferred")).toBe(true);
+		// No lane started or queued; only the outer blocker holds weight.
 		expect(pool.snapshot()).toMatchObject({ activeWeight: 1, queuedCount: 0 });
 		blocker.release();
 		expect(pool.snapshot()).toMatchObject({ activeWeight: 0, queuedCount: 0 });

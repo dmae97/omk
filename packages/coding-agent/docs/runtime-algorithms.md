@@ -1,5 +1,31 @@
 # Runtime Algorithms and Direction
 
+## Working-tree shared run budgets
+
+The SDK `prompt(..., { runBudget })` path now shares a monotonic deadline and
+logical request/concurrency limits across the active prompt's main stream,
+retries, continuations, and first-party summaries using that stream. Exhaustion
+is a non-retryable `budget_exhausted` termination; snapshots keep outstanding
+streams until terminal metadata arrives. No request/time budget is imposed by
+default. Preflight is now owned even for unbounded prompts; unresolved streams
+block a later prompt instead of being discarded when their budget scope closes.
+See [Shared run budgets](sdk.md#shared-run-budgets-sdk-opt-in) for units, zero
+semantics, cancellation, and uncovered paths. This is not billing enforcement,
+a persisted budget, or a hard process-termination deadline.
+
+## Working-tree execution ownership (2026-09-10)
+
+The live session now retains registered tool-promise ownership after timeout or
+abort, defers prompt settlement/resource-lease release until actual termination,
+and rejects overlapping prompt admission. Shared permits capture request values,
+honor zero capacity, and wake FIFO followers after head cancellation/expiry.
+The internal lane launcher forwards cancellation and respects zero/heavy caps.
+Independent bash calls now own separate cancellation controllers, and one call's
+completion cannot hide another active call. Core teardown waits use a monotonic
+clock, preserving the existing grace interval across wall-clock changes.
+See [Prompt settlement](sdk.md#prompt-settlement) for tests, compatibility, and
+uncovered paths. These changes do not implement a durable verified-run product.
+
 ## v0.98.3 release delta (2026-09-06)
 
 The explicit advisory SDK requires normal first-party model completion, honors cancellation,

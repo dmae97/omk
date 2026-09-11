@@ -78,8 +78,6 @@ export class WorkloadPermitPool {
 	private readonly now: () => Date;
 	private activeWeight = 0;
 	private readonly queue: Waiter[] = [];
-	private readonly releasedPermitIds = new Set<string>();
-	private readonly activePermitIds = new Set<string>();
 	private doubleReleases = 0;
 
 	constructor(options?: WorkloadPermitPoolOptions) {
@@ -99,7 +97,8 @@ export class WorkloadPermitPool {
 	}
 
 	/** Acquire a permit. Strict FIFO; rejects with {@link WorkloadPermitError}. */
-	acquire(request: WorkloadPermitRequest): Promise<WorkloadPermit> {
+	acquire(input: WorkloadPermitRequest): Promise<WorkloadPermit> {
+		const request = { ...input };
 		if (request.weight > this.capacity) {
 			return Promise.reject(new WorkloadPermitError("over_capacity_weight", request.requestId));
 		}
@@ -140,22 +139,22 @@ export class WorkloadPermitPool {
 	}
 
 	private grant(request: WorkloadPermitRequest): WorkloadPermit {
-		this.activeWeight += request.weight;
+		const acquiredAt = this.now().toISOString();
 		const permitId = `permit-${randomUUID()}`;
-		this.activePermitIds.add(permitId);
+		this.activeWeight += request.weight;
+		let released = false;
 		const release = (): void => {
 			// §10.3 exactly-once: a late or repeated settlement must not return
 			// weight it no longer owns.
-			if (this.releasedPermitIds.has(permitId) || !this.activePermitIds.has(permitId)) {
+			if (released) {
 				this.doubleReleases += 1;
 				return;
 			}
-			this.activePermitIds.delete(permitId);
-			this.releasedPermitIds.add(permitId);
-			this.activeWeight = Math.max(0, this.activeWeight - request.weight);
+			released = true;
+			this.activeWeight -= request.weight;
 			this.grantWhilePossible();
 		};
-		return { permitId, requestId: request.requestId, acquiredAt: this.now().toISOString(), release };
+		return { permitId, requestId: request.requestId, acquiredAt, release };
 	}
 
 	/** Grant queued waiters strictly in FIFO order while the head fits (§10.4). */
@@ -187,6 +186,7 @@ export class WorkloadPermitPool {
 		this.queue.splice(index, 1);
 		this.settleCleanup(waiter);
 		waiter.reject(new WorkloadPermitError(code, waiter.request.requestId));
+		this.grantWhilePossible();
 	}
 
 	private settleCleanup(waiter: Waiter): void {
@@ -202,7 +202,7 @@ export class WorkloadPermitPool {
 }
 
 function sanitizeCapacity(value: number | undefined, fallback: number): number {
-	if (typeof value !== "number" || !Number.isFinite(value) || value < 1) {
+	if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
 		return fallback;
 	}
 	return Math.floor(value);

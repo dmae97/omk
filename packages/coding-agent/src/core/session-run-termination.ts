@@ -39,7 +39,11 @@ export function classifyRunTermination(
 	let toolCallId: string | undefined;
 	let toolName: string | undefined;
 
-	if (context.toolTimeout) {
+	if (context.pendingCause?.area === "budget") {
+		cause = context.pendingCause;
+		message = `Run budget exhausted: ${context.pendingCause.code}`;
+		sideEffects = "possible";
+	} else if (context.toolTimeout) {
 		cause = { area: "tool", code: "timeout" };
 		message = `Tool ${context.toolTimeout.toolName} timed out.`;
 		toolCallId = context.toolTimeout.toolCallId;
@@ -48,15 +52,16 @@ export function classifyRunTermination(
 	} else if (context.pendingCause?.area === "configuration") {
 		cause = context.pendingCause;
 		message = "Model dispatch was rejected by the configured model contract.";
+	} else if (context.userAbortRequested) {
+		cause = { area: "user", code: "abort" };
+		message = "The user aborted the run.";
+		if (messages.some((entry) => entry.role === "toolResult")) sideEffects = "possible";
 	} else if (!assistant) {
 		cause = { area: "internal", code: "unclassified" };
 		message = "Agent run ended without an assistant result.";
 	} else if (assistant.stopReason === "aborted") {
-		cause = context.userAbortRequested ? { area: "user", code: "abort" } : { area: "provider", code: "abort" };
-		message = terminationMessage(
-			assistant.errorMessage,
-			context.userAbortRequested ? "The user aborted the run." : "The provider aborted the run.",
-		);
+		cause = { area: "provider", code: "abort" };
+		message = terminationMessage(assistant.errorMessage, "The provider aborted the run.");
 	} else if (assistant.stopReason === "error") {
 		cause = providerFailureCause(assistant, context.model?.contextWindow ?? 0);
 		message = terminationMessage(assistant.errorMessage, "The provider request failed.");

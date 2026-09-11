@@ -239,6 +239,7 @@ import {
 	ROUTER_FEEDBACK_LEVELS,
 	type RouterFeedbackRecord,
 } from "./router-feedback-collector.ts";
+import { RunBudgetExceededError, type RunBudgetLimits, RunBudgetPolicyError } from "./run-budget-policy.ts";
 import type { RunJournalAuditDetails, RunJournalAuditEvent, RunJournalRecord } from "./run-journal.ts";
 import { type RunJournalQuarantineReport, RunJournalStore } from "./run-journal-store.ts";
 import { type RunResourceLease, RunResourceLeaseController } from "./run-resource-lease.ts";
@@ -249,6 +250,8 @@ import { preflightFailureCause, runtimeFailureCause, terminationMessage } from "
 import type { BranchSummaryEntry, SessionManager } from "./session-manager.ts";
 import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.ts";
 import { acquireSessionOwnerLeaseSync, type SessionOwnerLease } from "./session-owner-lease.ts";
+import { PromptExecutionBusyError, SessionPromptLifecycle } from "./session-prompt-lifecycle.ts";
+import { SessionRunBudget } from "./session-run-budget.ts";
 import { classifyRunTermination } from "./session-run-termination.ts";
 import { assembleSessionSystemPrompt } from "./session-system-prompt.ts";
 import {
@@ -440,6 +443,8 @@ interface ExecuteBashOptions {
 
 /** Options for AgentSession.prompt() */
 export interface PromptOptions {
+	/** Shared logical request/concurrency limits and a monotonic deadline for this prompt. */
+	runBudget?: RunBudgetLimits;
 	/** Whether to expand file-based prompt templates (default: true) */
 	expandPromptTemplates?: boolean;
 	/** Image attachments */
@@ -593,6 +598,11 @@ export class AgentSession {
 	// Event subscription state
 	private _unsubscribeAgent?: () => void;
 	private _eventListeners: AgentSessionEventListener[] = [];
+	private readonly _runBudget: SessionRunBudget;
+	private readonly _promptLifecycle = new SessionPromptLifecycle({
+		canSettle: () => !this.isStreaming && !this.agent.hasQueuedMessages(),
+		auditsLateSettlement: () => this.agent.toolExecutionPolicy?.lateSettlement !== "ignore",
+	});
 	private _messageEndReplacements = new WeakMap<Extract<AgentEvent, { type: "message_end" }>, AgentMessage>();
 
 	/** Tracks pending steering messages for UI display. Removed when delivered. */
@@ -703,6 +713,21 @@ export class AgentSession {
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
+		this._runBudget = new SessionRunBudget(this.agent, {
+			assertIdle: () => {
+				this._promptLifecycle.assertIdle();
+				if (this.isRetrying || this.isCompacting || this._branchSummaryAbortController)
+					throw new PromptExecutionBusyError();
+			},
+			stop: (error) => {
+				this._pendingRuntimeTerminationCause = { area: "budget", code: error.code };
+				this.agent.abort();
+				this.abortRetry();
+				this.abortCompaction();
+				this.abortBranchSummary();
+			},
+			reject: (error) => this._publishRuntimeFailure(error),
+		});
 		this.sessionManager = config.sessionManager;
 		this.settingsManager = config.settingsManager;
 		this._scopedModels = config.scopedModels ?? [];
@@ -1106,6 +1131,7 @@ export class AgentSession {
 		apiKey?: string;
 		headers?: Record<string, string>;
 	}> {
+		this._runBudget.assertAdmission();
 		const options = { minRemainingMs: COMPACTION_MIN_TOKEN_VALIDITY_MS };
 		if (isBuiltinStreamFn(this.agent.streamFn)) {
 			return this._getRequiredRequestAuth(model, options);
@@ -1287,6 +1313,7 @@ export class AgentSession {
 				}
 			}
 		}
+		if (event.type === "tool_execution_late_settlement") this._promptLifecycle.flush();
 	};
 
 	private _willRetryAfterAgentEnd(event: Extract<AgentEvent, { type: "agent_end" }>): boolean {
@@ -1553,6 +1580,8 @@ export class AgentSession {
 	 * Call this when completely done with the session.
 	 */
 	dispose(): void {
+		this._promptLifecycle.dispose();
+		this._runBudget.close();
 		try {
 			try {
 				this.abortRetry();
@@ -1695,7 +1724,7 @@ export class AgentSession {
 		for (const name of desiredToolNames) {
 			const tool = this._toolRegistry.get(name);
 			if (tool) {
-				tools.push(tool);
+				tools.push(this._promptLifecycle.wrapTool(tool));
 				validToolNames.push(name);
 			} else if (lockedToolNames?.includes(name)) {
 				throw new Error(`loadout locked tool unavailable: ${name}`);
@@ -1952,13 +1981,14 @@ export class AgentSession {
 		// One identity per top-level run (§16.2): internal retries and
 		// continuations inside this call share it, as does the resource lease.
 		const promptRunId = `prompt-run-${randomUUID()}`;
-		const startedAtEpochMs = Date.now();
+		const ownedRun = this._promptLifecycle.begin(promptRunId);
 		// Roadmap M2: the lease spans the whole run including internal retries
 		// and continuations, so they share one admission decision (§8.3).
 		const resourceLease = await this._beginResourceGovernedRun(promptRunId);
 		const resourceObservations = this._resourceObservationJournals.get(promptRunId) ?? null;
 		let outcome: promptSettlement.PromptSettlementOutcome = "completed";
 		try {
+			this._runBudget.assertActive();
 			await this.agent.prompt(messages);
 			while (await this._handlePostAgentRun()) {
 				await this.agent.continue();
@@ -1968,48 +1998,18 @@ export class AgentSession {
 			this._publishRuntimeFailure(error);
 			throw error;
 		} finally {
+			if (this._runBudget.failure && this._lastTermination?.kind !== "budget_exhausted")
+				this._publishRuntimeFailure(this._runBudget.failure);
 			outcome = promptSettlement.resolvePromptSettlementOutcome(outcome, this._lastTermination?.kind);
-			if (resourceLease !== null) {
-				// Generation-safe: a stale release after another run acquired the
-				// lease is a no-op instead of clobbering the newer cap (§8.1).
-				this._resourceLeaseController?.release(resourceLease);
-				resourceObservations?.record("resource_lease_released_v1", { promptRunId });
-			}
 			this._flushPendingBashMessages();
-			// §16.4 (M4): settle only after every in-run continuation drained.
-			this._emitPromptSettledIfReady({ promptRunId, startedAtEpochMs, outcome, resourceObservations });
-		}
-	}
-
-	/**
-	 * Emit `prompt_settled` when the §16.4 conditions hold. Called exactly
-	 * once per promptRunId (from `_runAgentPrompt`'s finally), so the same
-	 * run can never emit twice; late-queued messages block emission
-	 * conservatively — the continuation run settles under its own id.
-	 * Settlement is a UX signal only and must never affect the run (§16.1).
-	 */
-	private _emitPromptSettledIfReady(input: {
-		readonly promptRunId: string;
-		readonly startedAtEpochMs: number;
-		readonly outcome: promptSettlement.PromptSettlementOutcome;
-		readonly resourceObservations: ResourceObservationJournal | null;
-	}): void {
-		try {
-			let state = promptSettlement.createPromptSettlementState(input.promptRunId, input.startedAtEpochMs);
-			state = promptSettlement.reducePromptSettlement(state, { kind: "terminal", outcome: input.outcome });
-			if (this.isStreaming) {
-				state = promptSettlement.reducePromptSettlement(state, { kind: "tool", delta: 1 });
-			}
-			if (this.agent.hasQueuedMessages()) {
-				state = promptSettlement.reducePromptSettlement(state, { kind: "continuation", delta: 1 });
-			}
-			const settled = promptSettlement.settlePromptIfReady(state, Date.now());
-			if (settled.event !== null) {
-				input.resourceObservations?.record("prompt_settled_v1", settledObservationFacts(settled.event));
-				this._emit(settled.event);
-			}
-		} catch {
-			// Never let settlement bookkeeping break a run.
+			ownedRun.finish(outcome, (event) => {
+				if (resourceLease !== null) {
+					this._resourceLeaseController?.release(resourceLease);
+					resourceObservations?.record("resource_lease_released_v1", { promptRunId });
+				}
+				resourceObservations?.record("prompt_settled_v1", settledObservationFacts(event));
+				this._emit(event);
+			});
 		}
 	}
 
@@ -2022,7 +2022,7 @@ export class AgentSession {
 	 *   delayed. The pending probe is bounded (~cpuSampleMs) and never rejects.
 	 * - `adaptive`/`strict`: bounded blocking probe (default 300 ms deadline),
 	 *   then a generation-safe lease applies the effective tool cap for this
-	 *   run. The caller's `finally` releases it exactly once.
+	 *   run. Prompt settlement releases it after owned tool promises terminate.
 	 *
 	 * Never throws: any probe or policy failure leaves this run ungoverned
 	 * (§2.1: probe failure must not crash or block the prompt).
@@ -2225,6 +2225,7 @@ export class AgentSession {
 	}
 
 	private async _handlePostAgentRun(): Promise<boolean> {
+		this._runBudget.assertActive();
 		const msg = this._lastAssistantMessage;
 		this._lastAssistantMessage = undefined;
 		if (!msg) {
@@ -2264,7 +2265,16 @@ export class AgentSession {
 	 * @throws Error if streaming and no streamingBehavior specified
 	 * @throws Error if no model selected or no API key available (when not streaming)
 	 */
-	async prompt(text: string, options?: PromptOptions): Promise<void> {
+	prompt(text: string, options?: PromptOptions): Promise<void> {
+		if (options?.runBudget === undefined && (this.isStreaming || this.isRetrying)) return this._prompt(text, options);
+		return this._runBudget.execute(options?.runBudget, () => this._prompt(text, options), options?.preflightResult);
+	}
+
+	getRunBudgetSnapshot() {
+		return this._runBudget.snapshot();
+	}
+
+	private async _prompt(text: string, options?: PromptOptions): Promise<void> {
 		const expandPromptTemplates = options?.expandPromptTemplates ?? true;
 		const preflightResult = options?.preflightResult;
 		let currentText = redactSensitiveText(text);
@@ -2344,6 +2354,7 @@ export class AgentSession {
 				return;
 			}
 
+			this._promptLifecycle.assertIdle();
 			// Flush any pending bash messages before the new prompt
 			this._flushPendingBashMessages();
 
@@ -2460,10 +2471,16 @@ export class AgentSession {
 			this._recordPromptCachePlan(result?.systemPrompt ? "extension-override" : "turn-plan");
 
 			await this._checkProjectedCompaction(messages);
+			this._runBudget.assertActive();
 		} catch (error) {
 			preflightResult?.(false);
 			const rawMessage = error instanceof Error ? error.message : String(error);
-			const cause = preflightFailureCause(rawMessage, Boolean(this.model));
+			const cause: SessionTerminationCause =
+				error instanceof RunBudgetExceededError
+					? { area: "budget", code: error.code }
+					: error instanceof RunBudgetPolicyError
+						? { area: "configuration", code: "invalid" }
+						: preflightFailureCause(rawMessage, Boolean(this.model));
 			const timestamp = new Date().toISOString();
 			this._publishTermination(
 				classifySessionTermination({
@@ -2743,6 +2760,7 @@ export class AgentSession {
 		this._followUpMessages = [];
 		this.agent.clearAllQueues();
 		this._emitQueueUpdate();
+		this._promptLifecycle.flush();
 		return { steering, followUp };
 	}
 
@@ -4760,7 +4778,10 @@ export class AgentSession {
 		const failoverTo = await this._maybeFailoverFromSafetyStop(message);
 		const switchedVia = failoverTo ? `failover ${failoverTo}` : rotatedTo ? `route ${rotatedTo}` : undefined;
 		// Safety stops are usually immediate false positives — short delay after failover, full backoff otherwise.
-		const delayMs = computeRetryDelayMs(settings.baseDelayMs, attempt, switchedVia !== undefined);
+		const delayMs = Math.min(
+			computeRetryDelayMs(settings.baseDelayMs, attempt, switchedVia !== undefined),
+			this._runBudget.remainingMs ?? Infinity,
+		);
 		const errorMessage = switchedVia
 			? `${message.errorMessage || "content/safety stop"} → ${switchedVia}`
 			: message.errorMessage || "Unknown error";

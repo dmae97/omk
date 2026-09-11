@@ -70,6 +70,7 @@ export {
 	parseSkillBlock,
 	type SessionStats,
 } from "./core/agent-session.ts";
+export * from "./core/run-execution-api.ts";
 // Auth and model registry
 export {
 	type ApiKeyCredential,
@@ -405,14 +406,6 @@ export {
 	routeReverseSkill,
 } from "./core/reverse-skill.ts";
 export {
-	appendRunJournalRecordDurably,
-	type OpenRunJournalStoreOptions,
-	type RunJournalQuarantineReport,
-	RunJournalStore,
-	RunJournalStoreCorruptionError,
-	writeQuarantineBytesDurably,
-} from "./core/run-journal-store.ts";
-export {
 	type BashSandboxMode,
 	createWorkspaceSandboxPolicy,
 	resolveBashSandboxMode,
@@ -470,14 +463,6 @@ export {
 	type SessionQuarantineReport,
 	type ThinkingLevelChangeEntry,
 } from "./core/session-manager.ts";
-export {
-	classifySessionTermination,
-	formatSessionTermination,
-	type SessionTermination,
-	type SessionTerminationCause,
-	SessionTerminationError,
-	type SessionTerminationKind,
-} from "./core/session-termination.ts";
 export {
 	type AgentRuntimeSettings,
 	type CompactionSettings,

@@ -137,7 +137,10 @@ describe("AgentSession tool timeout / late-settlement audit (ALG004-A/B)", () =>
 		if (terminal?.role === "toolResult") {
 			expect(terminal.isError).toBe(true);
 			expect(terminal.content).toEqual([
-				{ type: "text", text: 'Tool "deploy_writer" timed out after 30ms and was terminated.' },
+				{
+					type: "text",
+					text: 'Tool "deploy_writer" timed out after 30ms. Cancellation was requested; execution may still be running.',
+				},
 			]);
 			expect(terminal.details).toMatchObject({
 				omk: { schema: "tool-result/v2", synthetic: true, disposition: "timeout", executionStarted: true },

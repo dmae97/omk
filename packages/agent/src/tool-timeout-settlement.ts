@@ -9,7 +9,7 @@ export async function hasUnsettledTimeout(finalizedCalls: readonly FinalizedTool
 		finalizedCalls.some(
 			(finalized) => finalized.envelope.disposition === "timeout" && finalized.isRealPromiseSettled?.() === false,
 		);
-	const deadline = Date.now() + DEFAULT_TOOL_TEARDOWN_GRACE_MS;
-	while (Date.now() < deadline && stillRunning()) await new Promise((resolve) => setTimeout(resolve, 5));
+	const deadline = performance.now() + DEFAULT_TOOL_TEARDOWN_GRACE_MS;
+	while (performance.now() < deadline && stillRunning()) await new Promise((resolve) => setTimeout(resolve, 5));
 	return stillRunning();
 }

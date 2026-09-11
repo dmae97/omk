@@ -67,7 +67,7 @@ function buildSandboxDeniedBashResult(reason: string): BashResult {
 }
 
 export class SessionBashService {
-	private abortController: AbortController | undefined;
+	private readonly abortControllers = new Set<AbortController>();
 	private pendingBashMessages: BashExecutionMessage[] = [];
 	private readonly deps: SessionBashServiceDeps;
 
@@ -119,20 +119,31 @@ export class SessionBashService {
 			}
 		}
 
-		this.abortController = new AbortController();
+		const abortController = new AbortController();
+		this.abortControllers.add(abortController);
 		let releaseResourcePermit: (() => void) | undefined;
 
 		try {
 			// Resource safety gate (§9.4: command safety above stays authoritative;
 			// pressure can only throttle or defer an already-allowed command).
 			if (this.deps.acquireResourcePermit) {
-				const grant = await this.deps.acquireResourcePermit(resolvedCommand, this.abortController.signal);
+				const grant = await this.deps.acquireResourcePermit(resolvedCommand, abortController.signal);
 				if (grant.blocked !== undefined) {
 					const blocked = buildBlockedBashResult(grant.blocked);
 					this.recordBashResult(command, blocked, options);
 					return blocked;
 				}
 				releaseResourcePermit = grant.release;
+			}
+			if (abortController.signal.aborted) {
+				const cancelled: BashResult = {
+					output: "Command aborted before execution.",
+					exitCode: undefined,
+					cancelled: true,
+					truncated: false,
+				};
+				this.recordBashResult(command, cancelled, options);
+				return cancelled;
 			}
 			try {
 				const operations =
@@ -153,14 +164,14 @@ export class SessionBashService {
 					cwd,
 					shellPath,
 					operations,
-					signal: this.abortController.signal,
+					signal: abortController.signal,
 					onChunk: onChunkWrapped,
 				});
 				const result: BashResult =
 					verified ??
 					(await executeBashWithOperations(resolvedCommand, cwd, operations, {
 						onChunk: onChunkWrapped,
-						signal: this.abortController.signal,
+						signal: abortController.signal,
 					}));
 
 				this.recordBashResult(command, result, options);
@@ -176,7 +187,7 @@ export class SessionBashService {
 		} finally {
 			// §10.3 exactly-once: the pool treats a repeated release as a no-op.
 			releaseResourcePermit?.();
-			this.abortController = undefined;
+			this.abortControllers.delete(abortController);
 		}
 	}
 
@@ -206,13 +217,13 @@ export class SessionBashService {
 		}
 	}
 
-	/** Cancel running bash command. */
+	/** Request cancellation for every command still owned by this session. */
 	abortBash(): void {
-		this.abortController?.abort();
+		for (const controller of this.abortControllers) controller.abort();
 	}
 
 	get isBashRunning(): boolean {
-		return this.abortController !== undefined;
+		return this.abortControllers.size > 0;
 	}
 
 	get hasPendingBashMessages(): boolean {

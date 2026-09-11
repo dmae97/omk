@@ -156,6 +156,164 @@ The CLI equivalent is `--model-contract <file>`. This is opt-in dispatch control
 not final-wire or billing attestation. See [Model dispatch contracts](model-contract.md)
 for the JSON shape, events, hook restrictions, and uncovered paths.
 
+### Shared run budgets (SDK, opt-in)
+
+Pass `runBudget` to `session.prompt()` to bound one prompt's logical model
+requests. The budget starts before prompt preflight and stays shared across
+provider retries, continuations, and first-party summaries using that session's
+`agent.streamFn` while the prompt is active.
+
+```typescript
+import { RunBudgetExceededError } from "open-multi-agent-kit";
+
+try {
+  await session.prompt("Implement the selected change and run its focused tests", {
+    runBudget: { timeoutMs: 120_000, maxRequests: 12, maxConcurrentRequests: 2 },
+  });
+} catch (error) {
+  if (!(error instanceof RunBudgetExceededError)) throw error;
+  console.log(error.code); // deadline, requests, concurrency, or closed
+}
+console.log(session.getRunBudgetSnapshot());
+```
+
+| Limit | Meaning |
+| --- | --- |
+| `timeoutMs` | One monotonic work deadline, including preflight and retry waiting; at most 2,147,483,647 ms. |
+| `maxRequests` | Total entries into the scoped stream-dispatch boundary. Failed requests also consume this allowance. |
+| `maxConcurrentRequests` | Outstanding logical streams. Returning a stream object does not release its reservation; terminal metadata does. |
+
+Limits must be non-negative safe integers. Zero denies the corresponding
+admission; omitted limits are unbounded. Supply at least one limit. Unknown
+fields, accessors, inherited fields, and malformed values raise
+`RunBudgetPolicyError`. The policy is copied before asynchronous work, so later
+caller mutation cannot enlarge it.
+
+Exhaustion latches, requests cancellation through the existing provider, tool,
+retry, compaction, and branch-summary paths, and rejects with
+`RunBudgetExceededError`. Termination records use `kind: "budget_exhausted"` and
+`causeCode: "budget.deadline"`, `"budget.requests"`, or `"budget.concurrency"`;
+these are not automatic-retry or model-failover instructions. A separate prompt
+cannot borrow or reset an active budget. Preflight ownership also applies when
+the first prompt has no budget, preventing a competing budgeted prompt from
+changing its stream or aborting it. Explicit steering/follow-up messages join the
+running prompt without receiving a new allowance; registered commands retain
+their existing streaming path.
+
+`getRunBudgetSnapshot()` returns the active or most recent budget's immutable
+limits, started-request count, outstanding-stream count, remaining time, closed
+state, and optional exhaustion reason. It returns `undefined` when no budget has
+been used. Missing terminal metadata retains an outstanding reservation; an
+abort request alone does not release it. Outstanding streams block admission of
+a new bounded or unbounded prompt even after the scope closes. Once terminal
+metadata arrives, that reservation drains and new work can proceed. The original
+stream and core credential resolver are restored unless another owner replaced
+them. Captured old wrappers reject further dispatch after closure.
+
+The core credential resolver and compaction-auth preflight now check admission
+before consulting credentials. This is a pre-check, not a reservation: logical
+request counts are still reserved at stream dispatch. Cancellation or expiry
+during credential lookup is checked again before continuing.
+
+**Limits of this slice:** request counts are not HTTP-attempt or billing counts.
+The wrapper requests `maxRetries: 0` to disable adapter retries, but cannot attest
+that every provider honors it. Independent context/auth hooks, remote work, detached
+children, direct `omk-ai` calls, and replacement of the stream wrapper remain
+outside that dispatch-count guarantee. In-process plugins are trusted. Deadline
+cancellation is cooperative: synchronous blocking code, an uncooperative hook,
+or a remote service can outlive the signal. This is not an OS kill/join boundary
+or a guaranteed wall-clock return time. There is no financial/output-token cap,
+verification/cleanup reserve, persisted budget recovery, CLI flag, or global
+setting in this slice. Restart does not reconstruct an in-flight budget.
+
+Regression tests: `test/run-budget.test.ts`, `test/run-budget-scope.test.ts`,
+`test/suite/agent-session-run-budget.test.ts`, and
+`test/suite/agent-session-admission.test.ts`.
+
+### Prompt settlement
+
+**Working-tree hardening:** a timeout/abort result is not proof that the tool stopped.
+
+| Signal | Meaning |
+| --- | --- |
+| `tool_execution_end` | A result was committed; a timeout/abort can win before the tool stops. |
+| `session_termination` | One agent-loop attempt ended; retries may follow. |
+| `prompt()` resolves | The outer loop returned. A timed-out or aborted tool may remain active. |
+| `prompt_settled` | The prompt producer closed, registered local tool promises ended, and streaming/queues no longer block settlement. |
+
+The session retains a per-prompt owner across retries and continuations. Tools
+selected through its registry receive unique runtime tokens, independent of
+model tool-call IDs. Actual promise completion removes only its own token;
+duplicate flushes and an earlier run's finish callback cannot settle another run.
+
+After timeout or cancellation, the session withholds `prompt_settled` and its
+resource-lease release while registered tool promises remain active. Another
+ordinary prompt is rejected before model dispatch. Clearing a leftover queue
+rechecks settlement, so a drained run can release its owner and accept new work.
+Default late-settlement handling triggers a fresh settlement check after the workspace-mutation audit.
+With explicit `lateSettlement: "ignore"`, actual completion triggers that check
+without inventing an audit. Durations and the core tool-timeout teardown window
+use a monotonic clock; wall-clock adjustments cannot extend or shorten that window.
+
+User cancellation during tool execution remains an abort even when the last
+assistant message says `toolUse`. Timeout text reports cancellation requested,
+not process termination confirmed. Late success never replaces the failed or
+aborted result. **`prompt_settled` is a UX signal, not semantic verification.**
+
+This safeguard is session-local. It does not persist ownership, join detached
+work, prove remote cancellation, or fence writers across replacement/disposal,
+restart, or workspace reuse. Direct `Agent` calls, replacing
+`session.agent.state.tools`, independent interactive bash, and plugin-created
+background work are not automatically enrolled. In-process plugins remain trusted.
+
+#### Independent bash commands
+
+`executeBash()` owns one cancellation controller per invocation, including permit
+waiting. Concurrent commands never share or overwrite that controller. Completion
+removes only its own entry, so `isBashRunning` remains true while another command
+is active. `abortBash()` signals every owned command and does not declare them
+terminated. Cancellation observed after permit admission prevents backend dispatch.
+
+These commands remain independent of prompt settlement and its model-request
+budget. Backend promises still own actual termination; detached processes and
+remote completion are not inferred from cancellation. Regression:
+`test/suite/agent-session-bash-ownership.test.ts`.
+
+#### Shared permits and internal lanes
+
+`WorkloadPermitPool` captures request identity, weight, and signal before waiting;
+caller mutation cannot alter a later release. Per-permit release latches replace
+the unbounded retired-ID set. Removing a cancelled/expired FIFO head immediately
+reconsiders the next request. Explicit pool `capacity: 0` denies grants and
+`maxQueue: 0` denies waiting; lowering capacity never revokes held permits.
+
+Internal `launchSubagentLanes()` preserves computed zero width as
+`admission-deferred`, observes run-specific heavy caps, defers marked heavy lanes
+under `defer-heavy`, and rechecks abort after acquiring a permit. It forwards the
+parent signal and awaits the callback before release. Parent cancellation reports
+`cancelled`; failures use a fixed diagnostic rather than arbitrary child error
+text. The existing configured lane setting `0 = unlimited` remains distinct from
+computed admission zero. `heavyLaneIds` is a trusted caller classification.
+This does not activate a live task DAG or a detached-process join adapter.
+
+Regression checks from the repository root:
+
+```bash
+LIVE_E2E=0 node node_modules/vitest/dist/cli.js --run \
+  packages/coding-agent/test/session-prompt-lifecycle.test.ts \
+  packages/coding-agent/test/suite/agent-session-owned-settlement.test.ts \
+  packages/coding-agent/test/suite/agent-session-child-settlement.test.ts \
+  packages/coding-agent/test/workload-permit-pool-admission.test.ts \
+  packages/coding-agent/test/subagent-lane-ownership.test.ts
+npm run check
+```
+
+The child test observes a local Node process closing before settlement and lease
+restoration. These are not paid-provider, crash-recovery, or coding-quality benchmarks.
+Shared logical request budgets are available through the opt-in SDK path above.
+Verification/cleanup reserves, protected candidate/verifier binding, effect recovery,
+and approval-bound application remain prerequisites for a durable verified run.
+
 ### AgentSession policy seams
 
 The package root exports focused policy helpers for custom runtimes and tests:

@@ -10,9 +10,10 @@ import type { SessionTerminationKind } from "./session-termination.ts";
  * M4 completion sound, notifications) must treat it as a UX signal, never a
  * correctness signal (§3 non-goals).
  *
- * The reducer is a pure function over immutable state (§16.5). Shard and child
- * counters are reserved in the contract, but no production signal call sites
- * wire them yet; any future live M5/M6 path must add those calls before use.
+ * This counter reducer remains a compatibility projection, not execution
+ * ownership authority. AgentSession uses SessionPromptLifecycle to retain actual
+ * tool-promise identities and seal the root producer before projecting an event.
+ * Detached children and shards still require an explicit ownership/join adapter.
  */
 
 export type PromptSettlementOutcome = "completed" | "failed" | "aborted";

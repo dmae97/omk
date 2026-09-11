@@ -236,6 +236,7 @@ describe("RunJournal writer", () => {
 			{ area: "tool", code: "timeout" },
 			{ area: "tool", code: "fatal" },
 			{ area: "compaction", code: "failed" },
+			{ area: "compaction", code: "quota_exhausted" },
 			{ area: "persistence", code: "append_failed" },
 			{ area: "process", code: "signal", signal: "SIGTERM" },
 			{ area: "process", code: "crash" },
@@ -244,6 +245,10 @@ describe("RunJournal writer", () => {
 			// §15.4 resource causes cover both phases: preflight (memory) and tool (queue_overflow).
 			{ area: "resource", code: "memory" },
 			{ area: "resource", code: "queue_overflow" },
+			{ area: "budget", code: "deadline" },
+			{ area: "budget", code: "requests" },
+			{ area: "budget", code: "concurrency" },
+			{ area: "budget", code: "closed" },
 		];
 		const producedKinds = new Set<string>();
 		for (const [index, cause] of causes.entries()) {

@@ -1849,7 +1849,12 @@ describe("agentLoop tool timeouts", () => {
 		expect(callIndex).toBe(2);
 		const result = toolResultById(messages, "tool-1");
 		expect(result.isError).toBe(true);
-		expect(result.content).toEqual([{ type: "text", text: 'Tool "hang" timed out after 20ms and was terminated.' }]);
+		expect(result.content).toEqual([
+			{
+				type: "text",
+				text: 'Tool "hang" timed out after 20ms. Cancellation was requested; execution may still be running.',
+			},
+		]);
 		expect(result.details).toEqual({
 			omk: {
 				schema: "tool-result/v2",
@@ -3016,7 +3021,12 @@ describe("agentLoop dag-v2 scheduler", () => {
 			{ role: "toolResult" }
 		>;
 		expect(result.isError).toBe(true);
-		expect(result.content).toEqual([{ type: "text", text: 'Tool "hang" timed out after 20ms and was terminated.' }]);
+		expect(result.content).toEqual([
+			{
+				type: "text",
+				text: 'Tool "hang" timed out after 20ms. Cancellation was requested; execution may still be running.',
+			},
+		]);
 		expect(result.details).toEqual({
 			omk: {
 				schema: "tool-result/v2",

@@ -27,7 +27,7 @@ export interface EffectiveLaneWidthInput {
 	readonly pathConflictFreeWidth: number;
 }
 
-/** §14.2: `min(plan, configured, admission, availableHeavyPermits, conflictFree)`, floor 1. */
+/** Zero authority defers execution; configured zero retains its legacy unlimited meaning. */
 export function computeEffectiveLaneWidth(input: EffectiveLaneWidthInput): number {
 	const configured =
 		input.configuredMaxParallelLanes !== undefined && input.configuredMaxParallelLanes > 0
@@ -37,23 +37,24 @@ export function computeEffectiveLaneWidth(input: EffectiveLaneWidthInput): numbe
 		input.planWidth,
 		configured,
 		input.admissionMaxParallelLanes,
-		Math.max(1, input.availableHeavyPermits),
+		input.availableHeavyPermits,
 		input.pathConflictFreeWidth,
 	);
-	return Math.max(1, Math.floor(width));
+	return Number.isFinite(width) ? Math.max(0, Math.floor(width)) : 0;
 }
 
 /** Read-only budget handed to every child (§14.1). Nothing here can raise a cap. */
 export interface SubagentLaneContext {
 	readonly laneId: string;
 	readonly promptRunId: string;
+	readonly signal?: AbortSignal;
 	readonly decision: ResourceAdmissionDecision;
 	readonly effectiveLaneWidth: number;
 }
 
 export interface LaneOutcome {
 	readonly laneId: string;
-	readonly status: "completed" | "failed" | "skipped-abort" | "permit-rejected";
+	readonly status: "completed" | "failed" | "cancelled" | "skipped-abort" | "permit-rejected" | "admission-deferred";
 	readonly diagnostic?: string;
 }
 
@@ -84,11 +85,14 @@ export interface LaunchSubagentLanesResult {
 export async function launchSubagentLanes(input: LaunchSubagentLanesInput): Promise<LaunchSubagentLanesResult> {
 	const poolSnapshot = input.permitPool.snapshot();
 	const effectiveLaneWidth = computeEffectiveLaneWidth({
-		planWidth: Math.max(1, input.plan.route.width),
+		planWidth: input.plan.route.width,
 		configuredMaxParallelLanes: input.configuredMaxParallelLanes,
 		admissionMaxParallelLanes: input.decision.maxParallelLanes,
-		availableHeavyPermits: Math.max(0, poolSnapshot.capacity - poolSnapshot.activeWeight),
-		pathConflictFreeWidth: Math.max(1, ...input.plan.batches.map((batch) => batch.laneIds.length)),
+		availableHeavyPermits: Math.min(
+			Math.max(0, poolSnapshot.capacity - poolSnapshot.activeWeight),
+			input.heavyLaneIds?.size ? input.decision.maxHeavyProcesses : Number.POSITIVE_INFINITY,
+		),
+		pathConflictFreeWidth: Math.max(0, ...input.plan.batches.map((batch) => batch.laneIds.length)),
 	});
 
 	const outcomes: LaneOutcome[] = [];
@@ -96,10 +100,9 @@ export async function launchSubagentLanes(input: LaunchSubagentLanesInput): Prom
 	let maxObservedConcurrency = 0;
 
 	for (const batch of input.plan.batches) {
-		if (input.signal?.aborted) {
-			// Parent abort: unstarted lanes are never launched (§14.3).
+		if (input.signal?.aborted || effectiveLaneWidth === 0) {
 			for (const laneId of batch.laneIds) {
-				outcomes.push({ laneId, status: "skipped-abort" });
+				outcomes.push({ laneId, status: input.signal?.aborted ? "skipped-abort" : "admission-deferred" });
 			}
 			continue;
 		}
@@ -145,6 +148,9 @@ async function runLane(
 ): Promise<LaneOutcome> {
 	let releasePermit: (() => void) | undefined;
 	if (input.heavyLaneIds?.has(laneId)) {
+		if (input.decision.action === "defer-heavy" || input.decision.maxHeavyProcesses === 0) {
+			return { laneId, status: "admission-deferred" };
+		}
 		try {
 			const permit = await input.permitPool.acquire({
 				requestId: `lane-${laneId}`,
@@ -164,18 +170,27 @@ async function runLane(
 			};
 		}
 	}
+	if (input.signal?.aborted) {
+		releasePermit?.();
+		return { laneId, status: "skipped-abort" };
+	}
 	gauge.enter();
 	try {
 		await input.launchLane({
 			laneId,
 			promptRunId: input.promptRunId,
+			signal: input.signal,
 			decision: input.decision,
 			effectiveLaneWidth,
 		});
-		return { laneId, status: "completed" };
-	} catch (error) {
-		// §14.3: a failing child must not leak its permit; release below.
-		return { laneId, status: "failed", diagnostic: String(error).slice(0, 200) };
+		return { laneId, status: input.signal?.aborted ? "cancelled" : "completed" };
+	} catch {
+		// Child error text is untrusted and may contain credentials.
+		return {
+			laneId,
+			status: input.signal?.aborted ? "cancelled" : "failed",
+			diagnostic: "lane.execution_failed",
+		};
 	} finally {
 		gauge.exit();
 		releasePermit?.();

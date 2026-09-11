@@ -1,146 +1,24 @@
-export const SESSION_TERMINATION_SCHEMA_VERSION = 1 as const;
-export const MAX_SESSION_TERMINATION_MESSAGE_LENGTH = 512;
+import { RUN_BUDGET_STOP_CODES } from "./run-budget-policy.ts";
+import {
+	type ClassifySessionTerminationInput,
+	type CompactionTerminationCauseCode,
+	MAX_SESSION_TERMINATION_MESSAGE_LENGTH,
+	type PersistenceTerminationCauseCode,
+	type ProviderTerminationCauseCode,
+	type ResourceTerminationCauseCode,
+	SESSION_TERMINATION_SCHEMA_VERSION,
+	type SessionProcessSignal,
+	type SessionTermination,
+	type SessionTerminationCause,
+	type SessionTerminationCauseCode,
+	type SessionTerminationKind,
+	type SessionTerminationPhase,
+	type SessionTerminationSource,
+	type ToolTerminationCauseCode,
+	type TranscriptTerminationCauseCode,
+} from "./session-termination-types.ts";
 
-/**
- * Canonical list of termination kinds. The run-journal validator derives its
- * runtime bounds from this tuple so a newly added kind can never crash
- * journaling with "termination kind is out of bounds" again.
- */
-export const SESSION_TERMINATION_KIND_VALUES = [
-	"completed",
-	"user_abort",
-	"provider_abort",
-	"provider_auth",
-	"provider_rate_limit",
-	"provider_network",
-	"provider_protocol",
-	"provider_refusal",
-	"context_overflow",
-	"transcript_invalid",
-	"tool_timeout",
-	"tool_fatal",
-	"compaction",
-	"persistence",
-	"process_signal",
-	"process_crash",
-	"configuration",
-	"internal_error",
-	"resource_pressure",
-] as const;
-
-export type SessionTerminationKind = (typeof SESSION_TERMINATION_KIND_VALUES)[number];
-
-export type SessionTerminationPhase =
-	| "completed"
-	| "control"
-	| "preflight"
-	| "provider"
-	| "tool"
-	| "compaction"
-	| "persistence"
-	| "process"
-	| "resume";
-
-export type SessionTerminationSource = "observed" | "inferred_on_resume";
-export type SessionSideEffects = "none" | "possible" | "confirmed";
-export type SessionProcessSignal = "SIGINT" | "SIGTERM" | "SIGHUP" | "SIGQUIT";
-
-export type ProviderTerminationCauseCode =
-	| "abort"
-	| "auth"
-	| "rate_limit"
-	| "network"
-	| "protocol"
-	| "refusal"
-	| "context_overflow";
-export type ToolTerminationCauseCode = "timeout" | "fatal";
-/** §15.4 resource-aware runtime roadmap: host-pressure termination causes. */
-export type ResourceTerminationCauseCode = "memory" | "disk" | "cpu" | "heap" | "probe_unavailable" | "queue_overflow";
-export type CompactionTerminationCauseCode = "aborted" | "failed" | "stale" | "quota_exhausted";
-export type PersistenceTerminationCauseCode =
-	| "read_failed"
-	| "append_failed"
-	| "replace_failed"
-	| "fsync_failed"
-	| "lock_failed";
-export type TranscriptTerminationCauseCode =
-	| "missing_result"
-	| "duplicate_result"
-	| "orphan_result"
-	| "duplicate_call_id"
-	| "interleaved_non_result"
-	| "invalid_jsonl"
-	| "invalid_tree"
-	| "unsupported_version"
-	| "trailing_fragment";
-export type SessionTerminationCauseCode =
-	| "session.completed"
-	| "session.user_abort"
-	| `provider.${ProviderTerminationCauseCode}`
-	| `tool.${ToolTerminationCauseCode}`
-	| `compaction.${CompactionTerminationCauseCode}`
-	| `persistence.${PersistenceTerminationCauseCode}`
-	| "process.signal"
-	| "process.crash"
-	| `transcript.${TranscriptTerminationCauseCode}`
-	| "configuration.invalid"
-	| "internal.unclassified"
-	| `resource.${ResourceTerminationCauseCode}`;
-
-export type SessionTerminationCause =
-	| { readonly area: "completed" }
-	| { readonly area: "user"; readonly code: "abort" }
-	| { readonly area: "provider"; readonly code: ProviderTerminationCauseCode }
-	| { readonly area: "tool"; readonly code: ToolTerminationCauseCode }
-	| { readonly area: "compaction"; readonly code: CompactionTerminationCauseCode }
-	| { readonly area: "persistence"; readonly code: PersistenceTerminationCauseCode }
-	| { readonly area: "process"; readonly code: "signal"; readonly signal: SessionProcessSignal }
-	| { readonly area: "process"; readonly code: "crash" }
-	| { readonly area: "transcript"; readonly code: TranscriptTerminationCauseCode }
-	| { readonly area: "configuration"; readonly code: "invalid" }
-	| { readonly area: "internal"; readonly code: "unclassified" }
-	| { readonly area: "resource"; readonly code: ResourceTerminationCauseCode };
-
-export interface ClassifySessionTerminationInput {
-	readonly sessionId: string;
-	readonly runId: string;
-	/** Deterministic caller-provided ISO-8601 timestamp. */
-	readonly timestamp: string;
-	readonly source: SessionTerminationSource;
-	/** Caller-supplied, pre-redacted diagnostic text. */
-	readonly message: string;
-	readonly cause: SessionTerminationCause;
-	readonly sideEffects: SessionSideEffects;
-	readonly retryAfterMs?: number;
-	readonly provider?: string;
-	readonly model?: string;
-	readonly toolCallId?: string;
-	readonly toolName?: string;
-}
-
-export interface SessionTermination {
-	readonly schemaVersion: typeof SESSION_TERMINATION_SCHEMA_VERSION;
-	readonly sessionId: string;
-	readonly runId: string;
-	readonly kind: SessionTerminationKind;
-	readonly phase: SessionTerminationPhase;
-	readonly source: SessionTerminationSource;
-	readonly message: string;
-	readonly causeCode: SessionTerminationCauseCode;
-	/** Stable operator guidance suitable for print, JSON, RPC, and TUI surfaces. */
-	readonly nextAction: string;
-	readonly retryable: boolean;
-	readonly safeToAutoRetry: boolean;
-	readonly sideEffects: SessionSideEffects;
-	readonly timestamp: string;
-	readonly retryAfterMs?: number;
-	readonly provider?: string;
-	readonly model?: string;
-	readonly toolCallId?: string;
-	readonly toolName?: string;
-	readonly processSignal?: SessionProcessSignal;
-	readonly transcriptIssue?: TranscriptTerminationCauseCode;
-}
+export * from "./session-termination-types.ts";
 
 export class SessionTerminationError extends Error {
 	readonly termination: SessionTermination;
@@ -293,6 +171,9 @@ function assertCause(cause: unknown): asserts cause is SessionTerminationCause {
 		case "internal":
 			valid = code === "unclassified" && hasOnlyKeys(cause, ["area", "code"]);
 			break;
+		case "budget":
+			valid = RUN_BUDGET_STOP_CODES.some((allowed) => allowed === code) && hasOnlyKeys(cause, ["area", "code"]);
+			break;
 		case "resource":
 			valid =
 				typeof code === "string" &&
@@ -301,6 +182,19 @@ function assertCause(cause: unknown): asserts cause is SessionTerminationCause {
 			break;
 	}
 	if (!valid) throw new TypeError("cause must be a bounded structured termination cause");
+}
+
+export function parseSessionTerminationCauseCode(code: string, signal?: SessionProcessSignal): SessionTerminationCause {
+	if (code === "session.completed") return { area: "completed" };
+	if (code === "session.user_abort") return { area: "user", code: "abort" };
+	const dot = code.indexOf(".");
+	const cause = {
+		area: code.slice(0, dot),
+		code: code.slice(dot + 1),
+		...(code === "process.signal" ? { signal } : {}),
+	};
+	assertCause(cause);
+	return cause;
 }
 
 function assertClassifierInput(input: unknown): asserts input is ClassifySessionTerminationInput {
@@ -486,6 +380,8 @@ function classifyCause(cause: SessionTerminationCause, source: SessionTerminatio
 				causeCode: "internal.unclassified",
 				retryable: false,
 			};
+		case "budget":
+			return { kind: "budget_exhausted", phase: "control", causeCode: `budget.${cause.code}`, retryable: false };
 		case "resource":
 			// §15.4: every resource cause is retryable; queue overflow surfaces at
 			// the tool boundary, everything else at preflight admission.
@@ -519,6 +415,8 @@ function nextActionFor(classification: Classification, input: ClassifySessionTer
 			return "No recovery action is required; continue with the next prompt.";
 		case "user_abort":
 			return "Review possible partial side effects, then retry only if intended.";
+		case "budget_exhausted":
+			return "Review partial work and remaining requests; start a new run only with an explicitly approved budget.";
 		case "resource_pressure":
 			return "Host resources are constrained; reduce load or wait for recovery, then retry.";
 		case "provider_abort":

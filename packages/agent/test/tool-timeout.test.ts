@@ -94,7 +94,10 @@ describe("runToolCallWithTimeout", () => {
 		expect(outcome.isError).toBe(true);
 		// Human-readable content, model-facing; the disposition envelope lives only in details.
 		expect(outcome.result.content).toEqual([
-			{ type: "text", text: 'Tool "echo" timed out after 20ms and was terminated.' },
+			{
+				type: "text",
+				text: 'Tool "echo" timed out after 20ms. Cancellation was requested; execution may still be running.',
+			},
 		]);
 		expect(outcome.result.details).toEqual(TIMEOUT_ENVELOPE_20MS);
 		// The committed terminal result is immutable.

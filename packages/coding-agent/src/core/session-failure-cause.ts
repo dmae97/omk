@@ -23,6 +23,7 @@ import {
 	isUpstreamUnavailableMessage,
 } from "./provider-resilience.ts";
 import { redactSensitiveText } from "./redaction.ts";
+import { RunBudgetExceededError, RunBudgetPolicyError } from "./run-budget-policy.ts";
 import { MAX_SESSION_TERMINATION_MESSAGE_LENGTH, type SessionTerminationCause } from "./session-termination.ts";
 
 /**
@@ -145,6 +146,8 @@ export function preflightFailureCause(message: string, hasModel: boolean): Sessi
 
 /** Classify a value thrown out of the session runtime itself. */
 export function runtimeFailureCause(error: unknown): SessionTerminationCause {
+	if (error instanceof RunBudgetExceededError) return { area: "budget", code: error.code };
+	if (error instanceof RunBudgetPolicyError) return { area: "configuration", code: "invalid" };
 	const code = typeof error === "object" && error !== null && "code" in error ? Reflect.get(error, "code") : undefined;
 	if (typeof code === "string" && PERSISTENCE_ERRNO_CODES.has(code)) {
 		return { area: "persistence", code: "append_failed" };
