@@ -76,6 +76,16 @@ LIVE_E2E=0 node ../../node_modules/vitest/dist/cli.js --run test/adaptorch-onboa
 Keep explicit file filters for routine work. A keyless regression pass is not a
 live-provider or release verification, and unfiltered suites may include e2e tests.
 
+## Commit checks
+
+The pre-commit hook validates the working tree without changing the selected
+index. It never auto-stages checker edits or unstaged hunks. If a checker changes
+the index, the hook fails and asks you to review the selection again; it does not
+restore or discard those changes. The checks still run against the working tree,
+not an isolated staged snapshot, so review partially staged changes separately.
+
+Hook regression: `node --test scripts/test/pre-commit-index.test.mjs`.
+
 ## Project Structure
 
 ```
