@@ -36,6 +36,19 @@ export {
 } from "./claims/claim-types.ts";
 export { reduceRuntimeDecision } from "./decision.ts";
 export { evaluateTask, ProtocolInvariantError } from "./evaluation.ts";
+export {
+	parseRunContract,
+	parseRunStartCommand,
+	type RunCheck,
+	type RunContract,
+	RunContractError,
+	type RunPhaseBudget,
+	type RunScriptedWriter,
+	type RunStartCommand,
+	VERIFIED_COMMAND_VERSION,
+	VERIFIED_RUN_VERSION,
+} from "./run-contract.ts";
+export { MAX_VERIFIED_RUN_GENERATIONS, parseRunResumeCommand, type RunResumeCommand } from "./run-resume.ts";
 export type {
 	AllCondition,
 	AnyCondition,

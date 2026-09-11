@@ -24,6 +24,26 @@ The first v1 slice is available under `packages/protocol` with schema version `o
 
 Every top-level record carries `schemaVersion`. Parsers reject unsupported versions, malformed timestamps, duplicate claim IDs, invalid JSON facts, and empty logical conditions.
 
+## Isolated command-run profile
+
+`RunContract` and `RunStartCommand` add strict, immutable parsers for the opt-in
+`linux-command-v1` and `linux-scripted-agent-v1` profiles. They pin the input digest,
+write scope, commands, stdout assertions and finite phase/snapshot limits. The
+scripted profile also pins 1–16 approved steps and a 1–32 logical request cap for
+an offline AgentSession reference adapter. Unknown authority/provider fields are
+rejected; the host must separately authorize the exact contract digest.
+`RunResumeCommand` / `parseRunResumeCommand()` pin the contract, candidate and exact
+expected revision/generation. The host may acquire at most three generations under
+`MAX_VERIFIED_RUN_GENERATIONS`; this does not authorize replay of a writer.
+
+The coding-agent's `RunCoordinator` owns execution and its separate v2 journal.
+It binds native v3 receipt cores to the candidate through a supervisor attestation,
+then supplies authenticated checks to the existing claim-closure reducer.
+This does not replace the task/attempt/evaluation contracts or add execution to
+this package. See [Verified Run](verified-run.md) for the implemented CLI/SDK
+path, candidate-only crash recovery, and the remaining model/writer-recovery, DAG
+and control-surface work.
+
 ## Durable goal lifecycle
 
 A durable goal is working-directory state, not a session-file field or a `TaskSpec`. `/goal <objective>` creates or edits `.omk/goals/current.json`; `/goal` without arguments shows its status and round count.

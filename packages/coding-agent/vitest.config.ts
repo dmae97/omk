@@ -4,6 +4,7 @@ import { defineConfig } from "vitest/config";
 const aiSrcIndex = fileURLToPath(new URL("../ai/src/index.ts", import.meta.url));
 const aiSrcOAuth = fileURLToPath(new URL("../ai/src/oauth.ts", import.meta.url));
 const agentSrcIndex = fileURLToPath(new URL("../agent/src/index.ts", import.meta.url));
+const protocolSrcIndex = fileURLToPath(new URL("../protocol/src/index.ts", import.meta.url));
 const adaptorchWplSrcIndex = fileURLToPath(new URL("../adaptorch-wpl/src/index.ts", import.meta.url));
 
 export default defineConfig({
@@ -20,6 +21,7 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: [
+			{ find: /^omk-protocol$/, replacement: protocolSrcIndex },
 			{ find: /^omk-adaptorch-wpl$/, replacement: adaptorchWplSrcIndex },
 			{ find: /^@earendil-works\/omk-ai$/, replacement: aiSrcIndex },
 			{ find: /^@earendil-works\/omk-ai\/oauth$/, replacement: aiSrcOAuth },

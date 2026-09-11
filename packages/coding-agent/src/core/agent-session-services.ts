@@ -3,13 +3,55 @@ import type { ThinkingLevel } from "omk-agent-core";
 import type { Model } from "omk-ai";
 import { getAgentDir } from "../config.ts";
 import { resolvePath } from "../utils/paths.ts";
+import { AgentSession } from "./agent-session.ts";
 import { AuthStorage } from "./auth-storage.ts";
 import type { SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import { DefaultResourceLoader, type DefaultResourceLoaderOptions, type ResourceLoader } from "./resource-loader.ts";
 import { type CreateAgentSessionOptions, type CreateAgentSessionResult, createAgentSession } from "./sdk.ts";
-import type { SessionManager } from "./session-manager.ts";
+import { SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
+import { RunCoordinator } from "./verified-run/coordinator.ts";
+import type { VerifiedRunSessionInput } from "./verified-run/session-port.ts";
+import { VerifiedRunError } from "./verified-run/storage.ts";
+
+/** Closed, in-memory session composition for the offline verified-run reference adapter. */
+export function createVerifiedRunAgentSession(input: VerifiedRunSessionInput): AgentSession {
+	const { agent, tool, workspace } = input;
+	const model = agent.state.model;
+	if (!model) throw new VerifiedRunError("writer_backend_missing");
+	const auth = AuthStorage.inMemory();
+	auth.setRuntimeApiKey(model.provider, "synthetic-local-only");
+	const settings = SettingsManager.inMemory({ retry: { enabled: false }, compaction: { enabled: false } });
+	const loader = new DefaultResourceLoader({
+		cwd: workspace,
+		agentDir: workspace,
+		settingsManager: settings,
+		noExtensions: true,
+		noSkills: true,
+		noPromptTemplates: true,
+		noThemes: true,
+		noContextFiles: true,
+	});
+	// No reload/discovery: arbitrary project or user code must not enter this host runtime.
+	return new AgentSession({
+		agent,
+		cwd: workspace,
+		sessionManager: SessionManager.inMemory(workspace),
+		settingsManager: settings,
+		resourceLoader: loader,
+		modelRegistry: ModelRegistry.inMemory(auth),
+		modelPinned: true,
+		baseToolsOverride: { [tool.name]: tool },
+		initialActiveToolNames: [tool.name],
+		allowedToolNames: [tool.name],
+	});
+}
+
+/** The high-level SDK assembly; the core Coordinator depends only on its host session port. */
+export function createRunCoordinator(stateRoot: string): RunCoordinator {
+	return new RunCoordinator(stateRoot, { createSession: createVerifiedRunAgentSession });
+}
 
 /**
  * Non-fatal issues collected while creating services or sessions.

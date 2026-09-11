@@ -156,6 +156,24 @@ The CLI equivalent is `--model-contract <file>`. This is opt-in dispatch control
 not final-wire or billing attestation. See [Model dispatch contracts](model-contract.md)
 for the JSON shape, events, hook restrictions, and uncovered paths.
 
+### Isolated command runs (SDK, opt-in)
+
+`planVerifiedRun()` and `createRunCoordinator()` provide two experimental profiles:
+`linux-command-v1` executes an approved command, while `linux-scripted-agent-v1`
+drives approved steps through the real `AgentSession` and the offline Faux adapter.
+Commands run in private sandboxes; native EvidenceReceipt v3 cores and a supervisor
+attestation bind the checked candidate before artifact retrieval.
+
+The high-level factory injects the closed session runtime through a host-only port;
+low-level `new RunCoordinator(root)` needs no session port for command execution or
+candidate-only recovery. `inspectRecovery(runId)` is read-only; `resume(command,
+approval)` acquires a new generation and rechecks the exact frozen candidate under
+the original boot-relative deadline. It never restarts the writer or model and
+refuses missing process identity, stale refs, unavailable clocks and expired budget.
+
+This does not enable live-model task generation, writer-phase recovery, a task DAG,
+or host application. See [Verified Run](verified-run.md) for contracts and trust boundaries.
+
 ### Shared run budgets (SDK, opt-in)
 
 Pass `runBudget` to `session.prompt()` to bound one prompt's logical model

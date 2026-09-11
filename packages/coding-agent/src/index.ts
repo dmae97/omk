@@ -438,6 +438,12 @@ export {
 	createWriteTool,
 	type PromptTemplate,
 } from "./core/sdk.ts";
+export { createRunCoordinator } from "./core/agent-session-services.ts";
+export type {
+	VerifiedRunRuntime,
+	VerifiedRunSession,
+	VerifiedRunSessionInput,
+} from "./core/verified-run/session-port.ts";
 export {
 	type BranchSummaryEntry,
 	buildSessionContext,

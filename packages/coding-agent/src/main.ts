@@ -22,7 +22,6 @@ import { selectSession } from "./cli/session-picker.ts";
 import { handleCodexBarQuotaCommand } from "./codexbar-cli.ts";
 import { runInitCli } from "./commands/init-cli.ts";
 import { runPackageDoctorCli } from "./commands/package-doctor-cli.ts";
-import { runProviderSyncCli } from "./commands/provider-sync-cli.ts";
 import { runCommand } from "./commands/run-command.ts";
 import { ENV_SESSION_DIR, expandTildePath, getAgentDir, getPackageDir, VERSION } from "./config.ts";
 import { type CreateAgentSessionRuntimeFactory, createAgentSessionRuntime } from "./core/agent-session-runtime.ts";
@@ -30,6 +29,7 @@ import {
 	type AgentSessionRuntimeDiagnostic,
 	createAgentSessionFromServices,
 	createAgentSessionServices,
+	createVerifiedRunAgentSession,
 } from "./core/agent-session-services.ts";
 import { formatNoModelsAvailableMessage } from "./core/auth-guidance.ts";
 import { AuthStorage } from "./core/auth-storage.ts";
@@ -596,13 +596,7 @@ export async function main(args: string[], options?: MainOptions) {
 		return;
 	}
 
-	const providerSync = await runProviderSyncCli(args);
-	if (providerSync.handled) {
-		process.exitCode = providerSync.exitCode;
-		return;
-	}
-
-	const outcome = await runCommand(args);
+	const outcome = await runCommand(args, { createSession: createVerifiedRunAgentSession });
 	if (outcome.handled) {
 		process.exitCode = outcome.exitCode;
 		return;

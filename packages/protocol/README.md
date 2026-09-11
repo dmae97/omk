@@ -12,6 +12,13 @@ TaskSpec -> ExecutionAttempt -> Observation -> EvaluationResult -> RuntimeDecisi
 - `TaskSpec`, `ExecutionAttempt`, `Observation`, `ClaimPredicate`
 - `ClaimEvaluation`, `EvaluationResult`, `RuntimeDecision`, `WaiverRecord`
 - Runtime parsers for every top-level record
+- Opt-in command/scripted-agent profiles: immutable `RunContract`, `RunScriptedWriter`,
+  `RunStartCommand`, `parseRunContract()` and `parseRunStartCommand()`
+  (`omk.verified-run.v1` and `omk.verified-command.v1`). The scripted profile bounds
+  approved steps and offline logical requests. Parsing never grants approval or executes work.
+- `RunResumeCommand`, `parseRunResumeCommand()` and `MAX_VERIFIED_RUN_GENERATIONS`:
+  candidate/contract/revision/generation-bound intent for host-governed recovery.
+  The runtime must still verify owner, clock, budget, process termination and evidence.
 - `evaluateTask()` and `reduceRuntimeDecision()`
 - Claim Closure Graph v1: `evaluateProofClosure()`, `validateClaimGraph()`,
   `minimalBlockingCut()` and the readonly claim/observation/waiver vocabulary
