@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
+import { executeDag } from "./dag-phase.ts";
 import { executeRunCommand, type OwnedRunCommand } from "./owned-execution.ts";
 import type { RunPhaseContext } from "./phase-context.ts";
 import { executeScriptedWriter } from "./scripted-writer.ts";
@@ -23,6 +24,8 @@ export async function executeWriter(
 		});
 	};
 	switch (contract.profile) {
+		case "linux-command-dag-v1":
+			return executeDag(context, options);
 		case "linux-command-v1": {
 			const writer = await execute({
 				role: "writer",

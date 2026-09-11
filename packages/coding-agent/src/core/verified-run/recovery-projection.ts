@@ -1,8 +1,9 @@
 import { MAX_VERIFIED_RUN_GENERATIONS } from "omk-protocol";
+import { retryTaskProjection } from "./dag-retry-projection.ts";
 import type { RunEvent, WriterReduction } from "./run-types.ts";
 import { digestObject, VerifiedRunError } from "./storage.ts";
 
-type RecoveryEvent = Extract<RunEvent, { kind: "resumed" | "writer_restarted" }>;
+type RecoveryEvent = Extract<RunEvent, { kind: "resumed" | "writer_restarted" | "tasks_retried" }>;
 
 /** Shared generation/command fence; only the writer variant resets attempt-local progress. */
 export function reduceRecoveryEvent(
@@ -32,6 +33,7 @@ export function reduceRecoveryEvent(
 	)
 		throw new VerifiedRunError("integrity");
 	let deadline: number;
+	let tasks = state.tasks;
 	switch (event.kind) {
 		case "resumed":
 			if (
@@ -45,7 +47,19 @@ export function reduceRecoveryEvent(
 				throw new VerifiedRunError("integrity");
 			deadline = state.verificationDeadlineMs;
 			break;
+		case "tasks_retried":
+			if (state.activeExecutionIds.length && progress.activeRole !== "writer")
+				throw new VerifiedRunError("integrity");
+			tasks = retryTaskProjection(context, event);
+			deadline = state.budget.workDeadlineMs;
+			context.writerStarted = false;
+			context.writerFinished = tasks.every((task) => task.status === "succeeded");
+			context.producerStarted = false;
+			context.writerCommands = 0;
+			context.requestBaseline = state.modelRequests;
+			break;
 		case "writer_restarted":
+			if (context.contract.profile === "linux-command-dag-v1") throw new VerifiedRunError("task_recovery_required");
 			if (
 				!state.inputDigest ||
 				state.candidateDigest ||
@@ -79,6 +93,7 @@ export function reduceRecoveryEvent(
 	context.state = {
 		...state,
 		generation: state.generation + 1,
+		tasks,
 		execution: "running",
 		settlement: "settled",
 		verification: "not_requested",

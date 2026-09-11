@@ -63,7 +63,22 @@ export interface SandboxOutcome {
 
 export function commandEnvironmentDigest(contract: RunContract, driver: "legacy" | "gated-v1" = "legacy"): string {
 	if (process.platform !== "linux" || !existsSync(BWRAP)) throw new VerifiedRunError("unsupported");
-	const writers = contract.profile === "linux-command-v1" ? [contract.writer] : contract.writer.steps;
+	let writers: readonly (readonly string[])[];
+	switch (contract.profile) {
+		case "linux-command-v1":
+			writers = [contract.writer];
+			break;
+		case "linux-scripted-agent-v1":
+			writers = contract.writer.steps;
+			break;
+		case "linux-command-dag-v1":
+			writers = contract.writer.tasks.flatMap((task) => task.attempts);
+			break;
+		default: {
+			const exhaustive: never = contract;
+			throw new VerifiedRunError(String(exhaustive));
+		}
+	}
 	const binaries = [
 		...new Set([
 			BWRAP,

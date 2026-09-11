@@ -158,9 +158,10 @@ for the JSON shape, events, hook restrictions, and uncovered paths.
 
 ### Isolated command runs (SDK, opt-in)
 
-`planVerifiedRun()` and `createRunCoordinator()` provide two experimental profiles:
-`linux-command-v1` executes an approved command, while `linux-scripted-agent-v1`
-drives approved steps through the real `AgentSession` and the offline Faux adapter.
+`planVerifiedRun()` and `createRunCoordinator()` provide three experimental profiles:
+`linux-command-v1` executes an approved command, `linux-scripted-agent-v1` drives
+approved steps through the real `AgentSession` and the offline Faux adapter, and
+`linux-command-dag-v1` executes a bounded command DAG serially.
 Commands run in private sandboxes; native EvidenceReceipt v3 cores and a supervisor
 attestation bind the checked candidate before artifact retrieval.
 
@@ -174,11 +175,21 @@ refuses missing process identity, stale refs, unavailable clocks and expired bud
 `inspectWriterRecovery(runId)` and `restartWriter(command, approval)` separately
 restart an interrupted local writer from its durable input checkpoint. They preserve
 spent requests and the original work deadline, use a fresh private directory, and
-never continue from partial output or a changed original workspace. The two recovery
-actions share the generation cap and command-id fence.
+never continue from partial output or a changed original workspace.
 
-This does not enable live-model task generation, opaque remote replay, a task DAG,
-or host application. See [Verified Run](verified-run.md) for contracts and trust boundaries.
+For the command DAG, `inspectTaskRecovery(runId)` returns read-only readiness and
+`retryTasks(command, approval)` acquires a new generation for selected failed or
+interrupted tasks. `RunTaskRetryCommand` pins `baseDigest` and `taskIds` alongside the
+contract/revision/generation fields; an empty selection only continues pending work.
+Successful checkpoints are revalidated against their complete ancestor inputs before
+adoption. Final integration verification always uses fresh native receipts. The
+profile supports at most 16 tasks and two preapproved commands per task; it does not
+synthesize a repair or accept overlapping task write scopes. `RunProjection.tasks`
+exposes task attempts and checkpoint digests; a blocked DAG returns `execution: "paused"`.
+All recovery actions share the generation cap, original budget and command-id fence.
+
+This does not enable live-model task generation, opaque remote replay, parallel
+frontier scheduling, plan amendment, or host application. See [Verified Run](verified-run.md) for contracts and trust boundaries.
 
 ### Shared run budgets (SDK, opt-in)
 

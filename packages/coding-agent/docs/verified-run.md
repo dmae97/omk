@@ -1,14 +1,15 @@
-# Verified Run: 명령형·오프라인 AgentSession 실행
+# Verified Run: 명령형·오프라인 AgentSession·정적 DAG
 
-두 opt-in profile을 제공합니다. `linux-command-v1`은 승인된 명령 하나를,
-`linux-scripted-agent-v1`은 실제 `AgentSession`과 내장 Faux adapter로 승인된 단계를
-실행합니다. 명령은 격리된 복사본에서 실행하고, 고정한 산출물을 외부 검사로 확인한
+세 opt-in profile을 제공합니다. `linux-command-v1`은 승인된 명령 하나를,
+`linux-scripted-agent-v1`은 실제 `AgentSession`과 내장 Faux adapter로 승인된 단계를,
+`linux-command-dag-v1`은 입력 의존성이 있는 명령 작업들을 직렬로 실행합니다. 명령은 격리된 복사본에서 실행하고, 고정한 산출물을 외부 검사로 확인한
 뒤 회수합니다. 일반 세션과 기존 bash receipt의 동작은 바꾸지 않습니다.
 
 **S90 전체 구현이나 M1–M4 완료를 의미하지 않습니다.** M1의 무과금 reference
 경로와 native EvidenceReceipt v3 연결에 이어, M2의 **고정 candidate 이후 복구**를
 지원합니다. 불변 입력이 저장된 새 run은 중단된 writer도 명시적으로 재시작할 수 있습니다.
-실서비스 모델 adapter, Task DAG, TUI/RPC, 적용 승인은 아직 없습니다.
+M3의 정적 DAG·부분 재시도 경로도 제공합니다. 병렬 frontier·계획 변경,
+실서비스 모델 adapter, TUI/RPC, 적용 승인은 아직 없습니다.
 
 ## 실행 경로
 
@@ -120,6 +121,76 @@ port를 주입하는 SDK host는 같은 신뢰 경계를 책임집니다.
 고정할 수 없습니다. 중복 요청·cap 초과·닫힌 producer 재개를 거부합니다. 명령 실패는
 마지막 모델 문구로 덮을 수 없습니다. `modelRequests`는 논리 요청 수이지 HTTP/과금 수가 아닙니다.
 
+## 정적 명령 DAG와 선택적 재시도
+
+`linux-command-dag-v1`은 1–16개 작업을 **한 번에 하나씩** 실행합니다. 계약의 `writer`는
+`kind: "command-dag"`와 `tasks`를 가집니다. 각 작업은 `id`, `dependsOn`, `writablePaths`,
+`attempts`를 명시합니다. `attempts`는 미리 승인한 명령 1–2개이며 자동 생성되는 수리 명령이
+아닙니다. 알려진 실패 후의 다음 시도는 명시적 `retry-tasks` 승인으로만 실행합니다.
+
+위 계약의 아래 필드를 교체하는 예시입니다. workspace·budget·apply 필드는 그대로 필요합니다.
+
+```json
+{
+  "runId": "dag-1",
+  "goal": "두 작업의 출력을 합치기",
+  "profile": "linux-command-dag-v1",
+  "writablePaths": ["left.txt", "right.txt", "joined.txt"],
+  "writer": {
+    "kind": "command-dag",
+    "tasks": [
+      {"id": "left", "dependsOn": [], "writablePaths": ["left.txt"],
+       "attempts": [["/bin/sh", "-c", "printf left > left.txt"]]},
+      {"id": "right", "dependsOn": [], "writablePaths": ["right.txt"],
+       "attempts": [["/bin/false"], ["/bin/sh", "-c", "printf right > right.txt"]]},
+      {"id": "join", "dependsOn": ["left", "right"], "writablePaths": ["joined.txt"],
+       "attempts": [["/bin/sh", "-c", "cat left.txt right.txt > joined.txt"]]}
+    ]
+  },
+  "checks": [{"claimId": "joined", "argv": ["/bin/cat", "joined.txt"], "stdout": "leftright"}]
+}
+```
+
+다시 `plan`하고 변경된 계약 digest를 승인한 후 `start`합니다. 이 예시의 첫 실행은
+`right`가 실패하므로 `execution: "paused"`, `candidateDigest: null`로 반환합니다.
+성공한 `left`는 보존하고 `join`은 실행하지 않습니다. 실패와 무관한 ready 작업은 진행합니다.
+
+```bash
+omk run inspect dag-1 --task-recovery --state-dir /private/operator-state/verified-runs
+omk run retry-tasks dag-1 --execute --tasks right --approve CONTRACT_DIGEST \
+  --base INPUT_DIGEST --revision REVISION --generation GENERATION --command-id retry-1 \
+  --state-dir /private/operator-state/verified-runs
+```
+
+- 그래프는 승인 후 불변입니다. 순환·미등록/중복 의존성·ID, 전역 허용 범위 밖의 쓰기 범위,
+  작업 간 겹치는 쓰기 범위는 parser가 거부합니다. 상위/하위 작업 사이의 겹침도 지원하지 않습니다.
+- 작업 입력은 최초 input checkpoint와 **모든 조상 작업의 승인 범위 내 출력**으로 합성합니다.
+  다른 형제의 새 출력이나 변경된 원본·이전 작업 디렉터리를 읽지 않습니다. 최초 입력 전체는
+  여전히 보이므로 이것이 원본 파일별 read allowlist라는 뜻은 아닙니다.
+- 각 작업의 실제 process close 후 입력·출력 digest를 기록합니다. 삭제·빈 디렉터리·file mode도
+  병합하며, 전역 쓰기 허용만으로 형제 작업의 범위를 수정할 수는 없습니다.
+- SDK의 `retryTasks(command, approval)`는 `kind: "retry_tasks"`, `baseDigest`, `taskIds`와
+  기존 contract/revision/generation/command ID 필드를 받습니다. 실패·중단 작업만 선택할 수 있고,
+  살아 있거나 identity가 없는 namespace는 재실행하지 않습니다. 성공 작업의 재실행 요청은 거부합니다.
+- `tasks_retried.adopted`는 보존하는 성공 checkpoint의 task/attempt/이전 generation/input/output을
+  명시합니다. 실제 입력·출력 blob, 전체 ancestor 입력, 계약·환경을 다시 확인한 뒤 새 세대로
+  수락합니다. checkpoint는 검증 receipt가 아니며, 최종 통합 candidate의 모든 검사는 새로 실행합니다.
+- 작업별 시도 수, run의 총 generation 상한 3, 최초 work/verify/cleanup 기한은 유지됩니다.
+  DAG 명령형 profile의 `modelRequests`는 0입니다. 실패·중단한 시도도 환급하지 않습니다.
+- `taskIds: []` 또는 CLI `--tasks -`는 중단 뒤 아직 pending인 작업만 계속하거나, 모든 작업이
+  고정된 뒤 통합 candidate를 만드는 경계에서 사용합니다. 실패한 작업을 생략해 완료시키는 명령이 아닙니다.
+- `inspectTaskRecovery()`는 읽기 전용으로 `readiness`, `reason`, `retryableTaskIds`, 잔여 시간을
+  보여줍니다. `ready`도 실행 승인이나 lease 획득이 아닙니다. 세 recovery 조회 flag는 동시에 쓸 수 없습니다.
+
+candidate가 이미 고정됐다면 `retry-tasks`가 아니라 기존 `resume`으로 동일 candidate만
+재검증합니다. 새 DAG를 `restart-writer`로 통째로 초기화하지 않습니다. terminal 취소·실패,
+깨진 checkpoint·원장·key, 예산 만료·reboot는 기존 fail-closed 경계를 유지합니다.
+일부 작업 명령의 실패(`paused`)와 run의 terminal 실패(`failed`)는 서로 다릅니다.
+
+이 단계는 command-only·직렬·artifact 의존성 경로입니다. eager 병렬 frontier,
+`after_verification` edge, 실서비스 모델, arbitrary repair, 계획 amendment/adoption은 지원하지 않습니다.
+동일한 계약의 성공 출력 재사용을 일반적인 계획 변경 후 재사용으로 해석하지 마십시오.
+
 ## CLI
 
 ```bash
@@ -170,8 +241,8 @@ const state = await coordinator.start(contract, {
 `inspect(runId)`, `evidence(runId)`, `artifact(runId, candidateDigest, path)`는 실행을
 재시작하지 않습니다. SDK 호출자는 신뢰하는 host이고 승인 채널 인증을 책임집니다.
 이 API를 worker나 불신 plugin에 직접 노출하지 마십시오. `createRunCoordinator()`는
-표준 session adapter를 주입합니다. 저수준 `new RunCoordinator(root)`는 명령형 실행만
-가능하며, adapter 없이 scripted profile을 실행하면 `writer_backend_missing`으로 실패합니다.
+표준 session adapter를 주입합니다. 저수준 `new RunCoordinator(root)`는 단일 명령·명령 DAG를 실행할 수 있으며,
+adapter 없이 scripted profile을 실행하면 `writer_backend_missing`으로 실패합니다.
 
 ## 고정 candidate 이후 복구
 
@@ -252,7 +323,7 @@ command는 `kind: "restart_writer"`, `baseDigest`, 기존 contract/ref/command I
 `writer-N` 디렉터리에서 재실행합니다. 변경된 원본 프로젝트나 예전 부분 출력은 입력으로
 쓰지 않습니다. 이전 디렉터리·관측·receipt는 보존하며 새 결과를 다시 고정·검증합니다.
 
-- 현재 두 profile의 격리된 로컬 작업만 대상입니다. 원격/opaque 부작용의 재실행 보장이 아닙니다.
+- 이 명령은 단일 명령·scripted profile의 격리된 로컬 작업만 대상입니다. 원격/opaque 부작용의 재실행 보장이 아닙니다.
 - writer namespace의 종료를 확인하고 단일 owner lease와 새 generation을 획득합니다.
 - 원래 work/verify/cleanup 기한을 유지합니다. 기다린 시간과 이전 `modelRequests`는 환급하지 않습니다.
 - scripted writer는 남은 요청 수가 모든 step과 종료 응답에 충분해야 합니다. 새 시도의 완료 판정에
@@ -269,7 +340,7 @@ input pin 이전 또는 process identity 기록 이전의 crash window는 여전
 - 원장 `version: 2`는 기존 v1 transcript journal과 별도입니다. 순서·hash chain·상태
   전이를 검증하고 append/fsync 성공 후에만 메모리 상태를 갱신합니다. write 실패는
   해당 store를 폐쇄합니다. 읽기 중 torn tail·중간 손상을 자동 수리하지 않습니다.
-- generation은 명시적인 `resume` 또는 `restart-writer`에서만 증가하며 기존 원장을 다시 쓰지 않습니다.
+- generation은 명시적인 `resume`, `restart-writer`, `retry-tasks`에서만 증가하며 기존 원장을 다시 쓰지 않습니다.
   기존 v1/v2 attestation과 clock 없는 원장은 읽을 수 있지만 복구용 clock·세대를 추측해
   채우지 않습니다. clock 없는 미완료 실행의 resume은 `legacy`로 차단합니다.
 - 작업 시간에는 preflight·원장·snapshot 시간이 포함됩니다. dispatch 의도 기록 뒤
@@ -309,7 +380,8 @@ input pin 이전 또는 process identity 기록 이전의 crash window는 여전
 | M2: 고정 candidate 이후 검증 재개 | 실제 SIGKILL→CLI resume 검사 통과. 원래 예산·세대 fencing 적용 |
 | M2: 불변 입력 기반 writer 재시작 | 실제 SIGKILL→CLI restart 검사 통과. 이전 요청 수·기한·부분 출력 보존 |
 | M2: 모든 crash window 복구 | 미완료. input/process pin 없는 상태는 자동 복구 차단 |
-| M3 Task DAG·부분 retry·adoption | 미구현 |
+| M3 정적 command DAG·선택 retry | CLI/SDK 연결. 성공 checkpoint 보존, 실제 SIGKILL·세대/시도/예산 경계 검사 |
+| M3 병렬 frontier·계획 amendment·변경 후 adoption | 미구현. 직렬·동일 계약 안의 출력 재사용만 제공 |
 | M4 TUI/RPC·MCP·GC·적용 승인/CAS | 미구현. CLI/SDK 조회·개별 artifact 회수 제공 |
 | S90 전체 G01–G20·성능/정상 회귀 하한 | 미측정. 부분 테스트로 점수를 부여하지 않음 |
 

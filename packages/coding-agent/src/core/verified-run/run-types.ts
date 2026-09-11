@@ -1,8 +1,16 @@
-import type { RunContract, RunResumeCommand, RunStartCommand, RunWriterRestartCommand } from "omk-protocol";
+import type {
+	RunContract,
+	RunResumeCommand,
+	RunStartCommand,
+	RunTaskRetryCommand,
+	RunWriterRestartCommand,
+} from "omk-protocol";
+import type { DagEvent, RunTaskCheckpoint, RunTaskProjection } from "./dag-types.ts";
 import type { NamespaceIdentity } from "./namespace-identity.ts";
 import type { RecoveryBudget } from "./recovery-clock.ts";
 
 export type RunEvent =
+	| DagEvent
 	| { readonly kind: "created"; readonly contract: RunContract; readonly command: RunStartCommand }
 	| {
 			readonly kind: "budget_anchored";
@@ -40,6 +48,13 @@ export type RunEvent =
 			readonly observedMs: number;
 			readonly reconciledExecutionIds: readonly string[];
 	  }
+	| {
+			readonly kind: "tasks_retried";
+			readonly command: RunTaskRetryCommand;
+			readonly observedMs: number;
+			readonly reconciledExecutionIds: readonly string[];
+			readonly adopted: readonly RunTaskCheckpoint[];
+	  }
 	| { readonly kind: "evaluated"; readonly receiptDigest: string; readonly verified: boolean }
 	| { readonly kind: "failed"; readonly code: string };
 
@@ -47,7 +62,7 @@ export interface RunProjection {
 	readonly runId: string;
 	readonly revision: number;
 	readonly generation: number;
-	readonly execution: "ready" | "running" | "succeeded" | "failed";
+	readonly execution: "ready" | "running" | "paused" | "succeeded" | "failed";
 	readonly settlement: "open" | "draining" | "settled" | "quarantined";
 	readonly verification: "not_requested" | "verified" | "violated" | "inconclusive";
 	readonly application: "not_requested" | "candidate_ready";
@@ -58,6 +73,7 @@ export interface RunProjection {
 	readonly activeExecutionIds: readonly string[];
 	readonly writerOpen: boolean;
 	readonly modelRequests: number;
+	readonly tasks: readonly RunTaskProjection[];
 	readonly budget: RecoveryBudget | null;
 	readonly environmentDigest: string | null;
 	readonly verificationDeadlineMs: number | null;

@@ -4,6 +4,7 @@ import {
 	parseRunContract,
 	parseRunResumeCommand,
 	parseRunStartCommand,
+	parseRunTaskRetryCommand,
 	parseRunWriterRestartCommand,
 	type RunContract,
 } from "omk-protocol";
@@ -12,6 +13,7 @@ import { acquireSessionOwnerLeaseSync } from "../session-owner-lease.ts";
 import { commandEnvironmentDigest, probeVerifiedSandbox } from "./broker.ts";
 import { captureCandidate, materializeCandidate, storeCandidate } from "./candidate.ts";
 import { preflightCheckReceipts } from "./check-receipt.ts";
+import { inspectTaskRecovery, retryDagTasks, type TaskRecoveryInspection } from "./dag-recovery.ts";
 import { createRunIssuer, readRunEvidence, type VerifiedRunEvidence } from "./evidence.ts";
 import { journalPath, readRunJournal, VerifiedRunJournal } from "./journal.ts";
 import type { RunPhaseContext } from "./phase-context.ts";
@@ -89,6 +91,20 @@ export class RunCoordinator {
 		if (report.state.runId !== runId) throw new VerifiedRunError("missing_run");
 		if (report.state.receiptDigest) this.evidence(runId);
 		return report;
+	}
+
+	inspectTaskRecovery(runId: string): TaskRecoveryInspection {
+		const report = inspectTaskRecovery(stateRunPath(this.stateRoot, runId));
+		if (report.state.runId !== runId) throw new VerifiedRunError("missing_run");
+		if (report.state.receiptDigest) this.evidence(runId);
+		return report;
+	}
+
+	async retryTasks(input: unknown, approval: VerifiedRunApproval): Promise<RunProjection> {
+		const command = parseRunTaskRetryCommand(input);
+		if (approval.approvedContractDigest !== command.contractDigest) throw new VerifiedRunError("approval");
+		await retryDagTasks(stateRunPath(this.stateRoot, command.runId), command, approval.signal);
+		return this.inspect(command.runId);
 	}
 
 	evidence(runId: string): VerifiedRunEvidence {
@@ -179,13 +195,14 @@ export class RunCoordinator {
 				storeCandidate(base, runPath);
 				journal.append({ kind: "input_checkpoint", digest: base.digest });
 				const work = join(runPath, "writer");
-				materializeCandidate(base, work);
+				if (contract.profile !== "linux-command-dag-v1") materializeCandidate(base, work);
 				const workDeadline = began + contract.budget.workMs;
 				await executeWriter(context, {
 					workspace: work,
 					deadline: workDeadline,
 					...(this.runtime ? { runtime: this.runtime } : {}),
 				});
+				if (journal.state.execution === "paused") return this.inspect(contract.runId);
 				publishWriterCandidate(context, work, workDeadline);
 				await verifyCandidate(context);
 				return this.inspect(contract.runId);

@@ -1,17 +1,17 @@
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
-import { MAX_VERIFIED_RUN_GENERATIONS, type RunWriterRestartCommand } from "omk-protocol";
-import { commandEnvironmentDigest, probeVerifiedSandbox } from "./broker.ts";
+import type { RunWriterRestartCommand } from "omk-protocol";
+import { probeVerifiedSandbox } from "./broker.ts";
 import { loadCandidate, materializeCandidate } from "./candidate.ts";
 import { preflightCheckReceipts } from "./check-receipt.ts";
 import type { JournalSnapshot } from "./journal.ts";
-import { probeNamespace } from "./namespace-identity.ts";
 import { readRunClock, remainingRunTime } from "./recovery-clock.ts";
 import { requireRunJournal, withRecoveryLease } from "./recovery-command.ts";
 import type { RunProjection } from "./run-types.ts";
 import type { VerifiedRunRuntime } from "./session-port.ts";
-import { readRegularFile, VerifiedRunError } from "./storage.ts";
+import { VerifiedRunError } from "./storage.ts";
 import { verifyCandidate } from "./verification-phase.ts";
+import { assertWorkRecoverable } from "./work-recovery.ts";
 import { publishWriterCandidate } from "./writer-completion.ts";
 import { executeWriter } from "./writer-phase.ts";
 
@@ -34,43 +34,14 @@ export interface WriterRecoveryInspection {
 }
 
 function assertWriterRecoverable(runPath: string, snapshot: JournalSnapshot): number {
-	const state = snapshot.state;
-	const first = snapshot.records[0]?.event;
-	if (state.execution === "failed" || state.receiptDigest) throw new VerifiedRunError("resume_terminal");
-	if (first?.kind !== "created" || !state.inputDigest || !state.budget || !state.environmentDigest)
-		throw new VerifiedRunError("input_checkpoint_missing");
-	if (state.candidateDigest || state.verificationDeadlineMs !== null) throw new VerifiedRunError("candidate_present");
-	if (state.generation >= MAX_VERIFIED_RUN_GENERATIONS) throw new VerifiedRunError("recovery_limit");
-	const clock = readRunClock();
-	const remaining = remainingRunTime(state.budget, state.budget.workDeadlineMs, clock);
-	if (clock.nowMs < (state.lastClockMs ?? state.budget.startedMs)) throw new VerifiedRunError("clock_rollback");
-	if (remaining <= 0) throw new VerifiedRunError("deadline");
+	const { contract, remainingMs } = assertWorkRecoverable(runPath, snapshot);
+	if (contract.profile === "linux-command-dag-v1") throw new VerifiedRunError("task_recovery_required");
 	if (
-		first.contract.profile === "linux-scripted-agent-v1" &&
-		first.contract.writer.maxRequests - state.modelRequests < first.contract.writer.steps.length + 1
+		contract.profile === "linux-scripted-agent-v1" &&
+		contract.writer.maxRequests - snapshot.state.modelRequests < contract.writer.steps.length + 1
 	)
 		throw new VerifiedRunError("model_request_limit");
-	for (const id of state.activeExecutionIds) {
-		const dispatch = snapshot.records.find(
-			(record) =>
-				record.generation === state.generation &&
-				record.event.kind === "dispatch" &&
-				record.event.executionId === id,
-		)?.event;
-		const identity = state.processes.find((item) => item.executionId === id)?.identity;
-		if (
-			dispatch?.kind !== "dispatch" ||
-			dispatch.role !== "writer" ||
-			!identity ||
-			probeNamespace(identity) !== "gone"
-		)
-			throw new VerifiedRunError("unsettled");
-	}
-	if (readRegularFile(join(runPath, "issuer.key"), 32).length !== 32) throw new VerifiedRunError("integrity");
-	loadCandidate(runPath, state.inputDigest, first.contract.budget);
-	if (commandEnvironmentDigest(first.contract, "gated-v1") !== state.environmentDigest)
-		throw new VerifiedRunError("integrity");
-	return remaining;
+	return remainingMs;
 }
 
 export function inspectWriterRecovery(runPath: string): WriterRecoveryInspection {

@@ -310,3 +310,108 @@ npm run check
 제안 메시지: `feat(runtime): 불변 입력 checkpoint 기반 writer 복구`.
 input pin·process identity 기록 이전의 crash window, 원격/opaque 부작용, 실서비스 모델,
 M3 DAG와 M4 전체 제어 표면은 완료하지 않았습니다. S90 점수나 경쟁 성능을 측정하지 않았습니다.
+
+## 5차: 정적 명령 DAG와 선택적 작업 재시도
+
+기준은 `e7ab1485ee`입니다. 이번 단위는 M3의 직렬 command DAG·동일 계약 내 출력 재사용입니다.
+기존 단일 Coordinator·v2 journal·bwrap broker·candidate CAS·native v3 검증 경로를 재사용했습니다.
+별도 실행 엔진이나 live provider 호출은 추가하지 않았습니다.
+
+### 적용한 스킬과 결정
+
+- `adaptorch-route` / `omk-plan`: 읽기 전용 분석의 순차형 권고를 적용했습니다. 작업 DAG는
+  5개 노드·4개 edge, width 1(approx), 구조 깊이 5였습니다. 실행 권한으로 해석하지 않았습니다.
+- `ponytail` / `programming`: 기존 parser와 자료구조를 사용했습니다. 새 의존성 없이
+  FIFO Kahn 순서·전체 ancestor closure·서로 겹치지 않는 작업 출력 범위로 한정했습니다.
+  기존 tool conflict DAG는 의미와 패키지 계층이 달라 재사용하지 않았습니다.
+- `tdd-workflow` / `property-based-testing`: 계약→SDK 실행→선택 retry→CLI의 RED/GREEN을
+  기록하고, 5개 노드에서 가능한 1,024개 순방향 DAG를 하나의 전수 property test로 검사했습니다.
+- `refactor`: 공통 work 복구 검사를 `work-recovery.ts`로 옮겨 writer와 task 복구가 같은
+  input·clock·namespace·key·environment 경계를 사용하도록 했습니다. 기존 M2 회귀를 함께 실행했습니다.
+- `lsp` / `security-review` / `review-work` / `code-review-and-quality`: 타입·입력·권한·실패 경계를
+  루트 에이전트가 직접 검토했습니다. 독립 multi-agent 심사나 보안 인증을 수행한 것은 아닙니다.
+- `omk-arxiv`는 pre-flight에서 중단했습니다. 이미 정해진 정적 DAG·세대 fencing을 연결하는
+  범위여서 새로운 알고리즘 문헌 조사나 성능 비교로 확장하지 않았습니다.
+
+### RED → GREEN
+
+| 단계 | 실제 RED | GREEN 근거 |
+| --- | --- | --- |
+| DAG 계약 | 정상 계약 2개가 `version/profile/apply`로 거부됨 | DAG 계약 17개 + 기존 protocol 회귀 통과 |
+| SDK DAG | 새 실행 2개가 `unsupported` terminal 상태로 반환됨 | 실제 두 writer·통합 산출물과 failed dependency 차단 통과 |
+| 선택 retry | 4개가 `retryTasks is not a function`으로 실패 | 성공 branch 1회 유지, 실패 branch 2차 실행, 새 verifier generation 확인 |
+| CLI | SIGKILL 뒤 `--task-recovery`가 usage/exit 2로 실패 | 실제 CLI inspect·승인 누락 거부·retry-tasks·복구 완료 통과 |
+
+### 최종 검증 명령
+
+```bash
+(cd packages/protocol && node ../../node_modules/vitest/dist/cli.js --run \
+  test/run-contract.test.ts test/run-scripted-contract.test.ts test/run-resume.test.ts \
+  test/run-writer-restart.test.ts test/run-dag-contract.test.ts \
+  test/run-dag-properties.test.ts test/run-task-retry.test.ts \
+  --coverage --coverage.provider=v8 --coverage.include=src/run-dag.ts \
+  --coverage.include=src/run-task-retry.ts --coverage.reporter=text --coverage.reporter=json-summary)
+
+(cd packages/coding-agent && node ../../node_modules/vitest/dist/cli.js --run --maxWorkers=2 \
+  test/verified-run.test.ts test/verified-run-cli.test.ts test/verified-run-candidate.test.ts \
+  test/verified-run-journal.test.ts test/verified-run-broker.test.ts test/verified-run-v3.test.ts \
+  test/verified-run-agent.test.ts test/verified-run-agent-events.test.ts test/verified-run-resume.test.ts \
+  test/verified-run-gate.test.ts test/verified-run-clock.test.ts test/verified-run-crash.test.ts \
+  test/verified-run-writer-restart.test.ts test/verified-run-writer-crash.test.ts \
+  test/verified-run-writer-progress.test.ts test/run-journal-store.test.ts test/run-journal.test.ts \
+  test/verified-executor.test.ts test/evidence-receipt.test.ts test/verified-run-dag*.test.ts \
+  --coverage --coverage.provider=v8 '--coverage.include=src/core/verified-run/dag-*.ts' \
+  --coverage.include=src/core/verified-run/work-recovery.ts \
+  --coverage.reporter=text --coverage.reporter=json-summary)
+
+node node_modules/@typescript/native-preview/bin/tsgo.js --noEmit
+npm run check
+```
+
+| 검사 | 최종 결과 |
+| --- | --- |
+| protocol | 7개 파일, 92개 통과, exit 0 |
+| coding-agent·기존 회귀 | 26개 파일, 261개 통과, exit 0 |
+| 합계 | 353개 통과. 이전 291개를 포함한 집합이며 property 조합 수를 테스트 수에 더하지 않음 |
+| 새 protocol 모듈 coverage | lines/statements 100%, branches 94.64%, functions 100% |
+| DAG·공통 work 복구 모듈 coverage | lines/statements 99.31%, branches 82.07%, functions 100% |
+| primary LSP | 변경 소스 21개 파일 모두 clean, 미확인 0 |
+| 타입·전체 `npm run check` | exit 0. import-cycle/module-size baseline을 바꾸지 않음 |
+
+Coverage는 명시한 신규/공통 복구 모듈 집합만의 수치이며 저장소 전체 coverage가 아닙니다.
+CLI는 별도 프로세스로 직접 실행했습니다. 이 테스트가 live model 품질이나 모든 OS의 동작을
+입증하지는 않습니다. 전체 검사에 남아 있는 기존 compaction info 11개와 OpenWiki corpus 부재
+경고는 이번 변경의 오류가 아니며, 이를 숨기거나 기존 다른 변경을 수정하지 않았습니다.
+
+### 보장별 확인과 자가 검토
+
+| 보장 | 근거 |
+| --- | --- |
+| 순환·미등록 의존성·task scope·시도 목록 제한 | `run-dag-contract.test.ts`, `run-task-retry.test.ts` |
+| 순서·노드 보존·정확한 transitive ancestor 집합 | `run-dag-properties.test.ts`의 전수 DAG/Floyd–Warshall 대조 |
+| 형제 출력 미노출, 삭제·빈 디렉터리·mode·입력 digest 보존 | `verified-run-dag-candidates.test.ts` |
+| 성공 작업 미재실행, 바뀐 원본/부분 출력 미사용 | `verified-run-dag-retry.test.ts` |
+| 실제 SIGKILL·읽기 전용 조회·명시적 실행 승인 | `verified-run-dag-cli.test.ts` |
+| unknown dispatch 차단, pending-only 재개, frozen candidate 재검증 | `verified-run-dag-recovery.test.ts` |
+| task attempt/generation 상한·reboot·fsync 실패 후 무실행 | `verified-run-dag-recovery.test.ts` |
+| 변경/누락 adoption·늦은 task/process 사건 거부 | `verified-run-dag-events.test.ts` |
+| 실제 writer 취소·후속 작업 무실행·기한/복구 조회 차단 | `verified-run-dag-cancellation.test.ts` |
+
+자가 검토 결과: 실행 checkpoint와 verification receipt를 구분하고, 새 세대의 통합 검사만으로
+최종 수락합니다. parser·순수 상태 전이·파일 합성·실행·복구를 분리했고 불신 JSON을 실행 승인으로
+승격하지 않았습니다. 새 source/test 모듈은 250 pure LOC 이하입니다. 기존 `projection.ts` 234,
+CLI 223 pure LOC는 경고 구간이므로 다음 확장 시 분할을 검토해야 합니다.
+
+### 커밋 체크포인트
+
+변경 범위는 `packages/protocol/src/{run-contract,run-dag,run-task-retry,index}.ts`와 직접 테스트,
+`packages/coding-agent/src/core/verified-run/`의 DAG·공통 복구 및 연결 reducer,
+`src/core/run-execution-api.ts`, `src/commands/verified-run-cli.ts`, DAG 테스트와 관련 문서입니다.
+
+제안 메시지: `feat(runtime): 정적 DAG와 선택적 작업 재시도 연결`.
+이번 단위의 stage·commit·push·PR은 수행하지 않았습니다. 기존 provider/retry/benchmark/ROADMAP
+변경은 제외·보존했습니다.
+
+미완료: 병렬 eager frontier, verification-conditioned edge, 겹치는 쓰기 범위, 계획 amendment와
+변경된 계약의 결과 adoption, 실서비스 모델, M2의 미기록 input/process crash window, M4 전체
+제어·적용 표면입니다. S90 점수·경쟁 우위·성능 개선량은 측정하거나 부여하지 않았습니다.

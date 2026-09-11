@@ -1,3 +1,4 @@
+import { parseRunDagWriter, type RunDagWriter } from "./run-dag.ts";
 import {
 	RunContractError,
 	runAbsolutePath,
@@ -34,6 +35,7 @@ export type RunContract = RunContractFields &
 	(
 		| { readonly profile: "linux-command-v1"; readonly writer: readonly string[] }
 		| { readonly profile: "linux-scripted-agent-v1"; readonly writer: RunScriptedWriter }
+		| { readonly profile: "linux-command-dag-v1"; readonly writer: RunDagWriter }
 	);
 export interface RunCheck {
 	readonly claimId: string;
@@ -113,6 +115,12 @@ export function parseRunContract(value: unknown): RunContract {
 	switch (input.profile) {
 		case "linux-command-v1":
 			return Object.freeze({ ...fields, profile: input.profile, writer: runArgv(input.writer) });
+		case "linux-command-dag-v1":
+			return Object.freeze({
+				...fields,
+				profile: input.profile,
+				writer: parseRunDagWriter(input.writer, writablePaths),
+			});
 		case "linux-scripted-agent-v1": {
 			const writer = runObject(input.writer, ["kind", "steps", "maxRequests"]);
 			if (writer.kind !== "scripted-agent") throw new RunContractError("writer.kind");

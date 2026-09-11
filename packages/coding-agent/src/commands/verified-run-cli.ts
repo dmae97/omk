@@ -8,15 +8,24 @@ import { digestBytes, readJson, VerifiedRunError } from "../core/verified-run/st
 const USAGE = `Usage: omk run plan --contract FILE [--json]
        omk run start --contract FILE --approve DIGEST --command-id ID [--state-dir DIR]
        omk run inspect|evidence ID [--state-dir DIR] [--json]
-       omk run inspect ID --recovery|--writer-recovery [--state-dir DIR]
+       omk run inspect ID --recovery|--writer-recovery|--task-recovery [--state-dir DIR]
+       omk run retry-tasks ID --execute --tasks ID[,ID...]|- --approve DIGEST --base DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
        omk run restart-writer ID --execute --approve DIGEST --base DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
        omk run resume ID --execute --approve DIGEST --candidate DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
        omk run artifact ID --candidate DIGEST --path PATH [--state-dir DIR]
-The opt-in command/scripted-agent profiles never apply changes to the original workspace.
-Resume rechecks a fixed candidate. Restart-writer explicitly restarts from a pinned input without renewing budgets. DAG, managed apply and TUI/RPC control are not implemented.`;
+The opt-in command, scripted-agent and serial command-DAG profiles never apply changes to the original workspace.
+Resume rechecks a fixed candidate. Writer/task recovery preserves input checkpoints and budgets. Parallel DAG, plan amendment, managed apply and TUI/RPC control are not implemented.`;
 
 interface Parsed {
-	readonly action: "plan" | "start" | "resume" | "restart-writer" | "inspect" | "evidence" | "artifact";
+	readonly action:
+		| "plan"
+		| "start"
+		| "resume"
+		| "restart-writer"
+		| "retry-tasks"
+		| "inspect"
+		| "evidence"
+		| "artifact";
 	readonly id: string | undefined;
 	readonly flags: ReadonlyMap<string, string>;
 }
@@ -28,6 +37,7 @@ function parse(args: readonly string[]): Parsed {
 		action !== "start" &&
 		action !== "resume" &&
 		action !== "restart-writer" &&
+		action !== "retry-tasks" &&
 		action !== "inspect" &&
 		action !== "evidence" &&
 		action !== "artifact"
@@ -41,11 +51,12 @@ function parse(args: readonly string[]): Parsed {
 			? ["--contract", "--json"]
 			: action === "start"
 				? ["--contract", "--approve", "--command-id", "--state-dir", "--json"]
-				: action === "resume" || action === "restart-writer"
+				: action === "resume" || action === "restart-writer" || action === "retry-tasks"
 					? [
 							"--execute",
 							"--approve",
 							action === "resume" ? "--candidate" : "--base",
+							...(action === "retry-tasks" ? ["--tasks"] : []),
 							"--revision",
 							"--generation",
 							"--command-id",
@@ -55,17 +66,20 @@ function parse(args: readonly string[]): Parsed {
 					: action === "artifact"
 						? ["--candidate", "--path", "--state-dir", "--json"]
 						: action === "inspect"
-							? ["--state-dir", "--json", "--recovery", "--writer-recovery"]
+							? ["--state-dir", "--json", "--recovery", "--writer-recovery", "--task-recovery"]
 							: ["--state-dir", "--json"];
 	const flags = new Map<string, string>();
 	for (let index = hasId ? 3 : 2; index < args.length; index++) {
 		const flag = args[index];
 		if (!allowed.includes(flag) || flags.has(flag)) throw new VerifiedRunError("usage");
-		const value = ["--json", "--execute", "--recovery", "--writer-recovery"].includes(flag) ? "true" : args[++index];
+		const value = ["--json", "--execute", "--recovery", "--writer-recovery", "--task-recovery"].includes(flag)
+			? "true"
+			: args[++index];
 		if (!value || value.startsWith("--")) throw new VerifiedRunError("usage");
 		flags.set(flag, value);
 	}
-	if (flags.has("--recovery") && flags.has("--writer-recovery")) throw new VerifiedRunError("usage");
+	if (["--recovery", "--writer-recovery", "--task-recovery"].filter((flag) => flags.has(flag)).length > 1)
+		throw new VerifiedRunError("usage");
 	return { action, id, flags };
 }
 
@@ -133,6 +147,7 @@ export async function runVerifiedRunCli(
 				break;
 			}
 			case "resume":
+			case "retry-tasks":
 			case "restart-writer": {
 				required(parsed, "--execute");
 				const approvedContractDigest = required(parsed, "--approve");
@@ -145,15 +160,25 @@ export async function runVerifiedRunCli(
 					contractDigest: approvedContractDigest,
 				};
 				const state = await withRunSignal((signal) =>
-					parsed.action === "resume"
-						? coordinator.resume(
-								{ ...request, kind: "resume", candidateDigest: required(parsed, "--candidate") },
+					parsed.action === "retry-tasks"
+						? coordinator.retryTasks(
+								{
+									...request,
+									kind: "retry_tasks",
+									baseDigest: required(parsed, "--base"),
+									taskIds: required(parsed, "--tasks") === "-" ? [] : required(parsed, "--tasks").split(","),
+								},
 								{ approvedContractDigest, signal },
 							)
-						: coordinator.restartWriter(
-								{ ...request, kind: "restart_writer", baseDigest: required(parsed, "--base") },
-								{ approvedContractDigest, signal },
-							),
+						: parsed.action === "resume"
+							? coordinator.resume(
+									{ ...request, kind: "resume", candidateDigest: required(parsed, "--candidate") },
+									{ approvedContractDigest, signal },
+								)
+							: coordinator.restartWriter(
+									{ ...request, kind: "restart_writer", baseDigest: required(parsed, "--base") },
+									{ approvedContractDigest, signal },
+								),
 				);
 				result = state;
 				exitCode = state.application === "candidate_ready" ? 0 : 1;
@@ -164,7 +189,9 @@ export async function runVerifiedRunCli(
 					? coordinator.inspectRecovery(parsed.id ?? "")
 					: parsed.flags.has("--writer-recovery")
 						? coordinator.inspectWriterRecovery(parsed.id ?? "")
-						: coordinator.inspect(parsed.id ?? "");
+						: parsed.flags.has("--task-recovery")
+							? coordinator.inspectTaskRecovery(parsed.id ?? "")
+							: coordinator.inspect(parsed.id ?? "");
 				break;
 			case "evidence":
 				result = coordinator.evidence(parsed.id ?? "");

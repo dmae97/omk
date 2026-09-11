@@ -21,6 +21,12 @@ TaskSpec -> ExecutionAttempt -> Observation -> EvaluationResult -> RuntimeDecisi
   The runtime must still verify owner, clock, budget, process termination and evidence.
 - `RunWriterRestartCommand` / `parseRunWriterRestartCommand()` separately bind a local
   writer restart to an immutable input checkpoint. They grant no remote replay authority.
+- Bounded `linux-command-dag-v1`: `RunDagWriter`, `RunDagTask`, `orderRunDag()`,
+  `runDagAncestors()`, `MAX_RUN_DAG_TASKS` and `MAX_RUN_TASK_ATTEMPTS`. Pure graph
+  ordering/closure does not schedule or authorize a process.
+- `RunTaskRetryCommand` / `parseRunTaskRetryCommand()` bind a failed/interrupted task
+  selection to the original input and exact revision/generation. Empty selections
+  request pending-only continuation, not permission to omit a failed dependency.
 - `evaluateTask()` and `reduceRuntimeDecision()`
 - Claim Closure Graph v1: `evaluateProofClosure()`, `validateClaimGraph()`,
   `minimalBlockingCut()` and the readonly claim/observation/waiver vocabulary

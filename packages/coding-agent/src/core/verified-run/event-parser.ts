@@ -2,8 +2,10 @@ import {
 	parseRunContract,
 	parseRunResumeCommand,
 	parseRunStartCommand,
+	parseRunTaskRetryCommand,
 	parseRunWriterRestartCommand,
 } from "omk-protocol";
+import type { RunTaskCheckpoint } from "./dag-types.ts";
 import { parseNamespaceIdentity } from "./namespace-identity.ts";
 import { parseRecoveryBudget } from "./recovery-clock.ts";
 import type { RunEvent } from "./run-types.ts";
@@ -21,6 +23,21 @@ function digest(value: unknown): string {
 function integer(value: unknown): number {
 	if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new VerifiedRunError("integrity");
 	return value;
+}
+
+function checkpoint(raw: unknown): RunTaskCheckpoint {
+	if (typeof raw !== "object" || raw === null) throw new VerifiedRunError("integrity");
+	const value: Record<string, unknown> = Object.fromEntries(Object.entries(raw));
+	if (value.status !== "succeeded" || value.failure !== null) throw new VerifiedRunError("integrity");
+	return Object.freeze({
+		taskId: text(value.taskId),
+		attempt: integer(value.attempt),
+		generation: integer(value.generation),
+		status: "succeeded",
+		inputDigest: digest(value.inputDigest),
+		outputDigest: digest(value.outputDigest),
+		failure: null,
+	});
 }
 
 export function parseRunEvent(raw: unknown): RunEvent {
@@ -58,6 +75,24 @@ export function parseRunEvent(raw: unknown): RunEvent {
 				executionId: text(value.executionId),
 				identity: parseNamespaceIdentity(value.identity),
 			};
+		case "task_started":
+			return {
+				kind: value.kind,
+				taskId: text(value.taskId),
+				attempt: integer(value.attempt),
+				inputDigest: digest(value.inputDigest),
+				observedMs: integer(value.observedMs),
+			};
+		case "task_finished":
+			return {
+				kind: value.kind,
+				taskId: text(value.taskId),
+				attempt: integer(value.attempt),
+				outputDigest: value.outputDigest === null ? null : digest(value.outputDigest),
+				failure: value.failure === null ? null : text(value.failure),
+				observedMs: integer(value.observedMs),
+			};
+		case "tasks_paused":
 		case "writer_opened":
 			return { kind: value.kind };
 		case "model_request":
@@ -81,6 +116,7 @@ export function parseRunEvent(raw: unknown): RunEvent {
 					: { verificationDeadlineMs: integer(value.verificationDeadlineMs) }),
 			};
 		case "resumed":
+		case "tasks_retried":
 		case "writer_restarted": {
 			if (!Array.isArray(value.reconciledExecutionIds) || value.reconciledExecutionIds.length > 128)
 				throw new VerifiedRunError("integrity");
@@ -88,9 +124,22 @@ export function parseRunEvent(raw: unknown): RunEvent {
 				observedMs: integer(value.observedMs),
 				reconciledExecutionIds: Object.freeze(value.reconciledExecutionIds.map(text)),
 			};
-			return value.kind === "resumed"
-				? { ...fields, kind: value.kind, command: parseRunResumeCommand(value.command) }
-				: { ...fields, kind: value.kind, command: parseRunWriterRestartCommand(value.command) };
+			switch (value.kind) {
+				case "resumed":
+					return { ...fields, kind: value.kind, command: parseRunResumeCommand(value.command) };
+				case "writer_restarted":
+					return { ...fields, kind: value.kind, command: parseRunWriterRestartCommand(value.command) };
+				case "tasks_retried":
+					if (!Array.isArray(value.adopted) || value.adopted.length > 16) throw new VerifiedRunError("integrity");
+					return {
+						...fields,
+						kind: value.kind,
+						command: parseRunTaskRetryCommand(value.command),
+						adopted: Object.freeze(value.adopted.map(checkpoint)),
+					};
+				default:
+					throw new VerifiedRunError("integrity");
+			}
 		}
 		case "evaluated":
 			if (typeof value.verified !== "boolean") throw new VerifiedRunError("integrity");

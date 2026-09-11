@@ -1,10 +1,10 @@
-import type { RunResumeCommand, RunWriterRestartCommand } from "omk-protocol";
+import type { RunResumeCommand, RunTaskRetryCommand, RunWriterRestartCommand } from "omk-protocol";
 import { acquireSessionOwnerLeaseSync } from "../session-owner-lease.ts";
 import { type JournalSnapshot, journalPath, readRunJournal, VerifiedRunJournal } from "./journal.ts";
 import type { RunProjection } from "./run-types.ts";
 import { digestObject, VerifiedRunError } from "./storage.ts";
 
-export type RecoveryCommand = RunResumeCommand | RunWriterRestartCommand;
+export type RecoveryCommand = RunResumeCommand | RunWriterRestartCommand | RunTaskRetryCommand;
 export function requireRunJournal(runPath: string): JournalSnapshot {
 	const journal = readRunJournal(runPath);
 	if (!journal) throw new VerifiedRunError("missing_run");
@@ -22,10 +22,10 @@ function commandDisposition(journal: JournalSnapshot, command: RecoveryCommand):
 	if (first.command.commandId === command.commandId) throw new VerifiedRunError("command_conflict");
 	const previous = journal.records.find(
 		({ event }) =>
-			(event.kind === "resumed" || event.kind === "writer_restarted") &&
+			(event.kind === "resumed" || event.kind === "writer_restarted" || event.kind === "tasks_retried") &&
 			event.command.commandId === command.commandId,
 	)?.event;
-	if (previous?.kind === "resumed" || previous?.kind === "writer_restarted") {
+	if (previous?.kind === "resumed" || previous?.kind === "writer_restarted" || previous?.kind === "tasks_retried") {
 		if (digestObject(previous.command) !== digestObject(command)) throw new VerifiedRunError("command_conflict");
 		return "duplicate";
 	}
@@ -36,6 +36,7 @@ function commandDisposition(journal: JournalSnapshot, command: RecoveryCommand):
 			if (command.candidateDigest !== journal.state.candidateDigest)
 				throw new VerifiedRunError("candidate_mismatch");
 			break;
+		case "retry_tasks":
 		case "restart_writer":
 			if (!journal.state.inputDigest) throw new VerifiedRunError("input_checkpoint_missing");
 			if (

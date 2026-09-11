@@ -48,7 +48,16 @@ export {
 	VERIFIED_COMMAND_VERSION,
 	VERIFIED_RUN_VERSION,
 } from "./run-contract.ts";
+export {
+	MAX_RUN_DAG_TASKS,
+	MAX_RUN_TASK_ATTEMPTS,
+	orderRunDag,
+	type RunDagTask,
+	type RunDagWriter,
+	runDagAncestors,
+} from "./run-dag.ts";
 export { MAX_VERIFIED_RUN_GENERATIONS, parseRunResumeCommand, type RunResumeCommand } from "./run-resume.ts";
+export { parseRunTaskRetryCommand, type RunTaskRetryCommand } from "./run-task-retry.ts";
 export { parseRunWriterRestartCommand, type RunWriterRestartCommand } from "./run-writer-restart.ts";
 export type {
 	AllCondition,

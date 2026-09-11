@@ -1,7 +1,9 @@
+import { reduceDagEvent } from "./dag-projection.ts";
+import type { RunTaskProjection } from "./dag-types.ts";
 import { reduceRecoveryEvent } from "./recovery-projection.ts";
 import type { RunEvent, RunProjection, WriterReduction } from "./run-types.ts";
 import { VerifiedRunError } from "./storage.ts";
-import { reduceWriterEvent } from "./writer-projection.ts";
+import { acceptWriterDispatch, reduceWriterEvent } from "./writer-projection.ts";
 
 /** Deterministic replay only. Recovery observations are supplied by the trusted host adapter. */
 export function projectRun(events: readonly RunEvent[]): RunProjection {
@@ -31,6 +33,20 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 			activeExecutionIds: [],
 			writerOpen: false,
 			modelRequests: 0,
+			tasks:
+				first.contract.profile === "linux-command-dag-v1"
+					? first.contract.writer.tasks.map(
+							(task): RunTaskProjection => ({
+								taskId: task.id,
+								attempt: 0,
+								generation: 1,
+								status: "pending",
+								inputDigest: null,
+								outputDigest: null,
+								failure: null,
+							}),
+						)
+					: [],
 			budget: null,
 			environmentDigest: null,
 			verificationDeadlineMs: null,
@@ -42,7 +58,6 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 	const checked = new Set<string>();
 	const commands = new Set([first.command.commandId]);
 	let activeRole: "writer" | "verifier" = "writer";
-	const scripted = first.contract.profile === "linux-scripted-agent-v1" ? first.contract.writer : undefined;
 	for (const event of events.slice(1)) {
 		const state = context.state;
 		if (state.execution === "failed" || state.receiptDigest) throw new VerifiedRunError("integrity");
@@ -78,6 +93,11 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 					throw new VerifiedRunError("integrity");
 				context.state = { ...state, inputDigest: event.digest };
 				break;
+			case "task_started":
+			case "task_finished":
+			case "tasks_paused":
+				reduceDagEvent(context, event);
+				break;
 			case "writer_opened":
 			case "model_request":
 			case "writer_closed":
@@ -87,18 +107,7 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 				if (state.failure || state.activeExecutionIds.length || dispatched.has(event.executionId))
 					throw new VerifiedRunError("integrity");
 				if (event.role === "writer") {
-					if (
-						event.claimId !== null ||
-						state.candidateDigest ||
-						(scripted
-							? !state.writerOpen ||
-								context.writerCommands >= scripted.steps.length ||
-								state.modelRequests - context.requestBaseline <= context.writerCommands
-							: context.writerStarted)
-					)
-						throw new VerifiedRunError("integrity");
-					context.writerStarted = true;
-					context.writerCommands += 1;
+					acceptWriterDispatch(context, event);
 				} else {
 					if (
 						!context.writerFinished ||
@@ -156,7 +165,8 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 					state.writerOpen ||
 					state.failure ||
 					state.activeExecutionIds.length ||
-					state.candidateDigest
+					state.candidateDigest ||
+					state.tasks.some((task) => task.status !== "succeeded" || task.generation !== state.generation)
 				)
 					throw new VerifiedRunError("integrity");
 				if (state.budget) {
@@ -180,6 +190,7 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 				break;
 			}
 			case "resumed":
+			case "tasks_retried":
 			case "writer_restarted":
 				reduceRecoveryEvent(context, event, { commands, checked, activeRole });
 				break;
@@ -220,5 +231,6 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 		...context.state,
 		activeExecutionIds: Object.freeze([...context.state.activeExecutionIds]),
 		processes: Object.freeze(context.state.processes.map((item) => Object.freeze(item))),
+		tasks: Object.freeze(context.state.tasks.map((task) => Object.freeze(task))),
 	});
 }

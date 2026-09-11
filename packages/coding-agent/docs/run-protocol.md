@@ -6,7 +6,7 @@ The OMK Run Protocol defines one versioned contract for task execution and evalu
 TaskSpec -> ExecutionAttempt -> Observation -> EvaluationResult -> RuntimeDecision
 ```
 
-`omk-protocol` owns these records and the pure reducers that connect them. Tool execution, persistence, scheduling, routing, and topology remain outside the package.
+`omk-protocol` owns these records and the pure reducers that connect them. Tool execution, persistence, runtime scheduling, routing, and topology selection remain outside the package.
 
 ## Implemented scope
 
@@ -37,7 +37,15 @@ expected revision/generation. The host may acquire at most three generations und
 `MAX_VERIFIED_RUN_GENERATIONS`; a resume command does not authorize replay of a writer.
 The separate `RunWriterRestartCommand` / `parseRunWriterRestartCommand()` binds
 `baseDigest` to a durable input checkpoint for an explicit local writer restart.
-Both commands share command IDs and the generation cap; neither resets budgets.
+Recovery commands share command IDs and the generation cap; none resets budgets.
+
+`linux-command-dag-v1` adds `RunDagWriter` / `RunDagTask` with 1–16 nodes, explicit
+artifact dependencies, disjoint write scopes and 1–2 preapproved command attempts per
+node. `orderRunDag()` provides deterministic FIFO topological order and
+`runDagAncestors()` includes the full transitive input closure. `RunTaskRetryCommand`
+/ `parseRunTaskRetryCommand()` pins a task selection to the original input and exact
+run revision/generation. These pure contracts never authorize dispatch or authenticate
+cached output; the Coordinator checks stored material and records adoption before reuse.
 
 The coding-agent's `RunCoordinator` owns execution and its separate v2 journal.
 It binds native v3 receipt cores to the candidate through a supervisor attestation,
@@ -45,7 +53,8 @@ then supplies authenticated checks to the existing claim-closure reducer.
 This does not replace the task/attempt/evaluation contracts or add execution to
 this package. See [Verified Run](verified-run.md) for the implemented CLI/SDK
 path, candidate recovery and checkpoint-based local writer restart, plus the
-remaining live-model, DAG and control-surface work.
+serial command DAG and selective retry, plus remaining live-model, parallel frontier,
+plan amendment and control-surface work.
 
 ## Durable goal lifecycle
 
