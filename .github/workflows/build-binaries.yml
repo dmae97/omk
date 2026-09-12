@@ -142,7 +142,8 @@ jobs:
             omk-windows-arm64.zip
 
   publish-npm:
-    runs-on: ubuntu-latest
+    # The runtime tests require unprivileged user/network namespaces.
+    runs-on: ubuntu-22.04
     needs: build
     environment: npm-publish
     permissions:

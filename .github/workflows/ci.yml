@@ -32,7 +32,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-check-test:
-    runs-on: ubuntu-latest
+    # Pin the supported sandbox host instead of disabling host security controls.
+    runs-on: ubuntu-22.04
     env:
       COREPACK_HOME: /tmp/omk-corepack
     steps:

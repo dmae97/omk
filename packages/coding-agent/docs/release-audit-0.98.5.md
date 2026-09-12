@@ -81,8 +81,10 @@ copying credentials. Neither fixture failure was treated as a product pass.
 The first v0.98.5 tag run built the binaries, but its test step could not find
 `/usr/bin/bwrap`. npm publication was not attempted and GitHub Release creation
 was skipped. The default-branch CI workflows now install `bubblewrap` and run an
-unprivileged namespace probe before the suite. They do not skip verified-run tests,
-disable host security controls or enable a sandbox fallback.
+unprivileged namespace probe before the suite. Ubuntu 24.04 subsequently refused
+loopback setup inside the namespace. The runtime-test jobs are pinned to Ubuntu
+22.04 LTS, with the same namespace and capability-drop checks. They do not skip
+verified-run tests, disable host security controls or enable a sandbox fallback.
 
 Recovery dispatches the official workflow from `main` with both `tag` and
 `source_ref` fixed to `v0.98.5`. The release tag and its source commit stay unchanged;

@@ -10,6 +10,7 @@ for (const [file, jobName] of [["ci.yml", "build-check-test"], ["build-binaries.
 		const source = readFileSync(join(root, ".github/workflows", file), "utf8");
 		const job = source.split(/\n(?=  [a-z][a-z0-9-]*:\n)/).find(block => block.startsWith(`  ${jobName}:\n`));
 		assert.ok(job, `${jobName} job must exist`);
+		assert.match(job, /^    runs-on: ubuntu-22\.04$/m, "use the pinned namespace-capable runner image");
 		const steps = job.split(/^      - name: /m).slice(1);
 		const install = steps.findIndex(step => step.startsWith("Install system dependencies\n"));
 		const probe = steps.findIndex(step => step.startsWith("Verify sandbox backend\n"));
