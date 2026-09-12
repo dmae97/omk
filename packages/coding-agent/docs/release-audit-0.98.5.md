@@ -76,6 +76,18 @@ An isolated HOME also hid the installed Rust toolchain: explicitly supplying its
 location restored the real cargo diagnostic check without changing the test or
 copying credentials. Neither fixture failure was treated as a product pass.
 
+## CI environment recovery
+
+The first v0.98.5 tag run built the binaries, but its test step could not find
+`/usr/bin/bwrap`. npm publication was not attempted and GitHub Release creation
+was skipped. The default-branch CI workflows now install `bubblewrap` and run an
+unprivileged namespace probe before the suite. They do not skip verified-run tests,
+disable host security controls or enable a sandbox fallback.
+
+Recovery dispatches the official workflow from `main` with both `tag` and
+`source_ref` fixed to `v0.98.5`. The release tag and its source commit stay unchanged;
+the existing source/tag equality checks remain mandatory.
+
 A source-file fingerprint is not an executed-build attestation. Linux observations
 do not establish behavior on every target platform. CI must validate the exact tag,
 build the six platform archives, run checks/tests, publish all seven npm packages
