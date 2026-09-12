@@ -54,7 +54,17 @@ export class SessionPromptLifecycle {
 
 	wrapTool(tool: AgentTool): AgentTool {
 		return {
-			...tool,
+			name: tool.name,
+			label: tool.label,
+			description: tool.description,
+			parameters: tool.parameters,
+			prepareArguments: tool.prepareArguments,
+			executionMode: tool.executionMode,
+			resourceClaims: tool.resourceClaims,
+			// A spread would evaluate and freeze the context-sensitive timeout too early.
+			get timeoutMs() {
+				return tool.timeoutMs;
+			},
 			execute: async (...args) => {
 				const owner = this.owner;
 				if (this.disposed || owner?.terminal !== undefined) throw new PromptExecutionBusyError();

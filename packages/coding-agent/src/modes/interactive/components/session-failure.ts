@@ -38,11 +38,12 @@ export function diagnosticDisplayText(text: string): string {
 
 export class SessionFailureComponent extends Container {
 	private readonly termination: SessionTermination;
-	private expanded = false;
+	private expanded: boolean;
 
-	constructor(termination: SessionTermination) {
+	constructor(termination: SessionTermination, expanded = false) {
 		super();
 		this.termination = termination;
+		this.expanded = expanded;
 		this.rebuild();
 	}
 

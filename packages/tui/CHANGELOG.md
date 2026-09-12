@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.98.5] - 2026-09-12
+
+### Changed
+
+- Lockstep version alignment with the OMK packages. The new diagnostics and failure cards live in `open-multi-agent-kit`, not this component package.
+
 ## [0.98.4] - 2026-09-10
 
 ### Added

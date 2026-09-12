@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.98.5] - 2026-09-12
+
+### Added
+
+- Added `/debug` runtime inspection, explicit metadata-only local reports with `/debug save`, and structured failure cards with expandable details. UI entry observations do not infer build revisions or authorize retries.
+- Added opt-in verified-run CLI/SDK paths with protected verification, immutable candidate recovery, input-checkpoint writer restart, and static DAG task retry. These paths retain approval, ownership and budget boundaries; they do not apply artifacts to the original workspace automatically.
+
+### Fixed
+
+- Strengthened execution ownership and shared-budget boundaries. Pre-commit checks preserve the selected index, including partially staged files, instead of expanding the commit.
+- Execution-ownership wrappers retain lazy, context-sensitive tool timeouts and stale-context rejection instead of fixing the timeout at registration.
+
 ## [0.98.4] - 2026-09-10
 
 ### New Features

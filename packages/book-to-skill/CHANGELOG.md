@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.98.5] - 2026-09-12
+
+### Changed
+
+- Aligned package metadata, compiler identity and the OMK development dependency to 0.98.5. Document compilation behavior is unchanged.
+
 ## [0.98.4] - 2026-09-10
 
 ### Changed

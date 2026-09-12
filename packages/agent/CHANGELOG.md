@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.98.5] - 2026-09-12
+
+### Fixed
+
+- Tool timeout text distinguishes cancellation requested from termination observed. The teardown grace period uses a monotonic clock rather than wall-clock time.
+
 ## [0.98.4] - 2026-09-10
 
 ### Added

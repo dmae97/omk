@@ -22,7 +22,7 @@ function fixture(run) {
 	fake("node", "exit 0");
 	fake("npm", "exit 0");
 	git("init", "--quiet");
-	const execute = () => spawnSync("sh", [hook], { cwd, env, encoding: "utf8" });
+	const execute = () => spawnSync("sh", ["-e", hook], { cwd, env, encoding: "utf8" });
 	try { run({ cwd, git, fake, execute }); }
 	finally { rmSync(cwd, { recursive: true, force: true }); }
 }
@@ -64,6 +64,16 @@ it("keeps index bytes unchanged when a required checker fails", () => fixture(({
 	const before = git("write-tree");
 	fake("npm", "exit 7");
 	assert.notEqual(execute().status, 0);
+	assert.equal(git("write-tree"), before);
+}));
+
+it("still rejects a git diff error under Husky errexit", () => fixture(({ cwd, git, fake, execute }) => {
+	writeFileSync(join(cwd, "change.txt"), "selected\n");
+	git("add", "--", "change.txt");
+	const before = git("write-tree");
+	fake("git", 'if [ "$1" = "diff" ]; then exit 2; fi\ncommand -p git "$@"');
+	const result = execute();
+	assert.equal(result.status, 2);
 	assert.equal(git("write-tree"), before);
 }));
 

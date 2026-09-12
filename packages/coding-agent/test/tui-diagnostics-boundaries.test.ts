@@ -70,6 +70,19 @@ describe("diagnostics boundary controls", () => {
 			expect(output).toContain("2026-09-12T00:00:00.000Z");
 		},
 	);
+	it.each([false, true])("honors the initial details state %s", (expanded) => {
+		const failure = classifySessionTermination({
+			sessionId: "s",
+			runId: "initial-state",
+			timestamp: "2026-09-12T00:00:00.000Z",
+			source: "observed",
+			cause: { area: "tool", code: "timeout" },
+			message: "Timed out",
+			sideEffects: "possible",
+		});
+		const card = new SessionFailureComponent(failure, expanded);
+		expect(text(card).includes("Run: initial-state")).toBe(expanded);
+	});
 	it("shows recorded effects on a user stop without inventing a retry", () => {
 		const stop = classifySessionTermination({
 			sessionId: "s",

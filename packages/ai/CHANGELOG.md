@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.98.5] - 2026-09-12
+
+### Changed
+
+- Lockstep version alignment with the OMK packages. Pending work remains under `[Unreleased]` and is not promoted by this version update.
+
 ## [0.98.4] - 2026-09-10
 
 ### Added

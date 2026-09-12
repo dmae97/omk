@@ -3567,10 +3567,8 @@ export class InteractiveMode {
 		this.lastRenderedTermination = termination;
 		// compaction_end owns the concise cancellation status; rendering this too duplicates it as a scary error.
 		if (termination.causeCode === "compaction.aborted") return;
-		const card = new SessionFailureComponent(termination);
-		card.setExpanded(this.toolOutputExpanded);
 		this.chatContainer.addChild(new Spacer(1));
-		this.chatContainer.addChild(card);
+		this.chatContainer.addChild(new SessionFailureComponent(termination, this.toolOutputExpanded));
 		this.ui.requestRender();
 	}
 

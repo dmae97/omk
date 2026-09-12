@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.98.5] - 2026-09-12
+
+### Added
+
+- Added immutable verified-run contracts and validated start, candidate-resume, writer-restart and task-retry commands, plus bounded static DAG types and ordering helpers. Protocol data does not execute or approve work by itself.
+
 ## [0.98.4] - 2026-09-10
 
 ### Added

@@ -362,7 +362,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v0.98.4](.github/RELEASE_NOTES_v0.98.4.md)
+- [Release notes for v0.98.5](.github/RELEASE_NOTES_v0.98.5.md)
 
 ## Development
 
@@ -418,6 +418,20 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v0.98.5
+
+### Added
+
+- Added `/debug` runtime inspection, explicit metadata-only local reports with `/debug save`, and structured failure cards with expandable details. UI entry observations do not infer build revisions or authorize retries.
+- Added opt-in verified-run CLI/SDK paths with protected verification, immutable candidate recovery, input-checkpoint writer restart, and static DAG task retry. These paths retain approval, ownership and budget boundaries; they do not apply artifacts to the original workspace automatically.
+
+### Fixed
+
+- Strengthened execution ownership and shared-budget boundaries. Pre-commit checks preserve the selected index, including partially staged files, instead of expanding the commit.
+- Execution-ownership wrappers retain lazy, context-sensitive tool timeouts and stale-context rejection instead of fixing the timeout at registration.
+
+Release notes live in [RELEASE_NOTES_v0.98.5.md](.github/RELEASE_NOTES_v0.98.5.md).
+
 ## Release v0.98.4
 
 ### New Features
@@ -464,22 +478,6 @@ Release notes live in [RELEASE_NOTES_v0.98.4.md](.github/RELEASE_NOTES_v0.98.4.m
 - Release documentation now separates internal trace/effect primitives from public opt-in APIs and records the existing CI token-authentication path without claiming OIDC provenance. The published v0.98.2 history is retained as an ancestor rather than re-created.
 
 Release notes live in [RELEASE_NOTES_v0.98.3.md](.github/RELEASE_NOTES_v0.98.3.md).
-
-## Release v0.98.2
-
-### Added
-
-- The `omk` CLI now connects configured MCP servers. `AgentSession.attachMcpServers()` was complete and tested but had no caller outside the SDK, so a `~/.omk/mcp.json` or `.omk/mcp.json` written by a CLI user spawned nothing and the control-panel MCP rows only ever showed the config inventory. The single CLI session factory now attaches on every session it creates — interactive, `-p`, RPC, `/new`, `/resume`, and forks — while `--help` and `--list-models` still spawn nothing. A server that fails to start becomes a startup warning naming the server and the reason (never an env value); the session continues with the servers that did connect.
-
-### Fixed
-
-- A dirty working-tree entry whose name the receipt parser rejects no longer kills every verified bash call in the session. `resolveSessionWorkspaceScope` handed the whole `git status` set to `captureWorkspaceFingerprint`, which throws on any path containing a backslash, `..`, or an empty segment; a mangled `\wsl.localhost\...` directory left in a repo root therefore failed each bash invocation with `workspace scope artifactPaths[N] must be a normalized root-relative path`, and subagent lanes lost their shell entirely. The scope builder now filters with the same `isNormalizedArtifactPath` predicate the parser enforces, which also subsumes the earlier one-off trailing-slash and nested-repository exclusions.
-- A credential-less install no longer tells the user to `Run /login unknown`. The placeholder model resolved when no provider is configured carries the literal provider `unknown`, and the `provider_auth` recovery hint interpolated it verbatim; the hint now omits an unknown provider and mentions the API-key environment variable path for headless `-p` runs where `/login` is not available.
-- Classified Anthropic's `claude_code_version_too_old` rejection (HTTP 400 carrying `invalid_request_error`) as a permanent configuration fault: it no longer enters the transient retry/failover loop, and the session failure cause reports `configuration`/`invalid` instead of the retryable protocol default. The usage and quota probes now read the spoofed Claude Code client version from omk-ai's single `CLAUDE_CODE_VERSION` constant, so every request presents the same user-agent as the messages API.
-- Compaction now recovers from an OAuth token the provider rejects as expired while the stored expiry still lies ahead. ChatGPT/Codex answers `401 token_expired` days before the JWT `exp`, and because `compaction.model` can differ from the session model (`openai-codex/gpt-5.6-sol` under an `xai/grok-4.6` session), every turn kept succeeding while every compaction failed with "Provided authentication token is expired" — and the transient-retry classifier rightly never replays a 401. `AuthStorage.refreshRejectedOAuthToken()` now force-refreshes the rejected credential under the storage lock (skipping the refresh when another omk process already rotated it), and manual and automatic compaction retry the summarization once with the new token. A failed refresh names `/login <provider>`. Compaction failures are now attributed to the compaction model instead of the session model.
-- Compaction now asks for an OAuth access token with at least ten minutes of remaining validity. Compaction resolves auth once and reuses it for a summarization that can stream for minutes with retries, so a token accepted seconds before expiry came back as a provider 401 mid-run. `AuthStorage.getApiKey()` accepts `minRemainingMs` and refreshes proactively, falling back to the still-valid token when that early refresh fails.
-
-Release notes live in [RELEASE_NOTES_v0.98.2.md](.github/RELEASE_NOTES_v0.98.2.md).
 
 <!-- releases:end -->
 

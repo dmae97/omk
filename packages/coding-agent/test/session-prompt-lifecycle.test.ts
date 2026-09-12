@@ -26,6 +26,32 @@ function tool(execute: () => Promise<void>): AgentTool {
 }
 
 describe("prompt execution ownership", () => {
+	it("keeps context-sensitive timeouts lazy and preserves tool metadata", () => {
+		let reads = 0;
+		let timeout = 100;
+		let stale = false;
+		const original: AgentTool = {
+			...tool(async () => {}),
+			executionMode: "parallel",
+			prepareArguments: () => ({}),
+			resourceClaims: () => [],
+			get timeoutMs() {
+				reads += 1;
+				if (stale) throw new Error("stale context");
+				return timeout;
+			},
+		};
+		const wrapped = new SessionPromptLifecycle().wrapTool(original);
+		expect(reads).toBe(0);
+		expect(wrapped.timeoutMs).toBe(100);
+		timeout = 0;
+		expect(wrapped.timeoutMs).toBe(0);
+		stale = true;
+		expect(() => wrapped.timeoutMs).toThrow("stale context");
+		expect(wrapped.prepareArguments).toBe(original.prepareArguments);
+		expect(wrapped.resourceClaims).toBe(original.resourceClaims);
+		expect(wrapped.executionMode).toBe("parallel");
+	});
 	it("keeps two executions distinct even when the model reuses the same toolCallId", async () => {
 		const lifecycle = new SessionPromptLifecycle();
 		const run = lifecycle.begin("first");

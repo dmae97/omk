@@ -16,8 +16,8 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-git diff --cached --quiet -- packages/ai packages/web-ui package.json package-lock.json
-BROWSER_DIFF_STATUS=$?
+BROWSER_DIFF_STATUS=0
+git diff --cached --quiet -- packages/ai packages/web-ui package.json package-lock.json || BROWSER_DIFF_STATUS=$?
 if [ "$BROWSER_DIFF_STATUS" -gt 1 ]; then
   exit "$BROWSER_DIFF_STATUS"
 fi
