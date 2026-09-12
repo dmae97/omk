@@ -69,14 +69,12 @@ import {
 	Text,
 	TruncatedText,
 	TUI,
-	visibleWidth,
 } from "omk-tui";
 import {
 	APP_NAME,
 	APP_TITLE,
 	getAgentDir,
 	getAuthPath,
-	getDebugLogPath,
 	getDocsPath,
 	getShareViewerUrl,
 	VERSION,
@@ -117,7 +115,7 @@ import {
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
 import { type SessionContext, SessionManager } from "../../core/session-manager.ts";
-import { formatSessionTermination, type SessionTermination } from "../../core/session-termination.ts";
+import type { SessionTermination } from "../../core/session-termination.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
@@ -157,6 +155,7 @@ import { ModelSelectorComponent } from "./components/model-selector.ts";
 import { OAuthAccountSelectorComponent } from "./components/oauth-account-selector.ts";
 import { type AuthSelectorProvider, OAuthSelectorComponent } from "./components/oauth-selector.ts";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.ts";
+import { SessionFailureComponent } from "./components/session-failure.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent, ThinkingSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
@@ -186,6 +185,10 @@ import {
 	type ThemeColor,
 	theme,
 } from "./theme/theme.ts";
+import { createTuiDiagnostics, createTuiDiagnosticsView, saveTuiDiagnostics } from "./tui-diagnostics.ts";
+import { captureTuiRuntime, inspectTuiRuntime } from "./tui-runtime-info.ts";
+
+const TUI_RUNTIME = captureTuiRuntime(import.meta.url);
 
 type CompactionQueuedMessage = {
 	text: string;
@@ -277,6 +280,7 @@ export class InteractiveMode {
 	// Stored so the same manager can be injected into custom editors, selectors, and extension UI.
 	private keybindings: KeybindingsManager;
 	private version: string;
+	private lastResourceReloadAt: string | undefined;
 	private isInitialized = false;
 	private onInputCallback?: (payload: InteractivePromptPayload) => void;
 	private pendingPromptPayloads: InteractivePromptPayload[] = [];
@@ -3023,8 +3027,8 @@ export class InteractiveMode {
 				await this.handleReloadCommand();
 				return;
 			}
-			if (text === "/debug") {
-				this.handleDebugCommand();
+			if (text === "/debug" || text.startsWith("/debug ")) {
+				this.handleDebugCommand(text.slice("/debug".length).trim());
 				this.editor.setText("");
 				return;
 			}
@@ -3550,11 +3554,24 @@ export class InteractiveMode {
 	}
 
 	private showSessionTermination(termination: SessionTermination): void {
-		if (termination.kind === "completed" || this.lastRenderedTermination === termination) return;
+		if (termination.kind === "completed") return;
+		const last = this.lastRenderedTermination;
+		if (
+			last?.sessionId === termination.sessionId &&
+			last.runId === termination.runId &&
+			last.timestamp === termination.timestamp &&
+			last.causeCode === termination.causeCode &&
+			last.source === termination.source
+		)
+			return;
 		this.lastRenderedTermination = termination;
 		// compaction_end owns the concise cancellation status; rendering this too duplicates it as a scary error.
 		if (termination.causeCode === "compaction.aborted") return;
-		this.showError(formatSessionTermination(termination));
+		const card = new SessionFailureComponent(termination);
+		card.setExpanded(this.toolOutputExpanded);
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(card);
+		this.ui.requestRender();
 	}
 
 	private showPromptError(error: unknown, previousTermination: SessionTermination | undefined): void {
@@ -5769,6 +5786,7 @@ export class InteractiveMode {
 			if (modelsJsonError) {
 				this.showError(`models.json error: ${modelsJsonError}`);
 			}
+			this.lastResourceReloadAt = new Date().toISOString();
 			this.showStatus("Reloaded keybindings, extensions, skills, prompts, themes");
 		} catch (error) {
 			dismissReloadBox(previousEditor as Component);
@@ -6312,36 +6330,32 @@ export class InteractiveMode {
 		}
 	}
 
-	private handleDebugCommand(): void {
-		const width = this.ui.terminal.columns;
-		const height = this.ui.terminal.rows;
-		const allLines = this.ui.render(width);
-
-		const debugLogPath = getDebugLogPath();
-		const debugData = [
-			`Debug output at ${new Date().toISOString()}`,
-			`Terminal: ${width}x${height}`,
-			`Total lines: ${allLines.length}`,
-			"",
-			"=== All rendered lines with visible widths ===",
-			...allLines.map((line, idx) => {
-				const vw = visibleWidth(line);
-				const escaped = JSON.stringify(line);
-				return `[${idx}] (w=${vw}) ${escaped}`;
-			}),
-			"",
-			"=== Agent messages (JSONL) ===",
-			...this.session.messages.map((msg) => JSON.stringify(msg)),
-			"",
-		].join("\n");
-
-		fs.mkdirSync(path.dirname(debugLogPath), { recursive: true });
-		fs.writeFileSync(debugLogPath, debugData);
-
+	private handleDebugCommand(args = ""): void {
+		if (args !== "" && args !== "save") {
+			this.showError("Usage: /debug [save]. Raw transcripts are not part of diagnostics.");
+			return;
+		}
+		const report = createTuiDiagnostics({
+			runtime: inspectTuiRuntime(TUI_RUNTIME),
+			columns: this.ui.terminal.columns,
+			rows: this.ui.terminal.rows,
+			isStreaming: this.session.isStreaming,
+			isCompacting: this.session.isCompacting,
+			messageCount: this.session.messages.length,
+			termination: this.session.lastTermination,
+			lastResourceReloadAt: this.lastResourceReloadAt,
+		});
 		this.chatContainer.addChild(new Spacer(1));
-		this.chatContainer.addChild(
-			new Text(`${theme.fg("accent", "✓ Debug log written")}\n${theme.fg("muted", debugLogPath)}`, 1, 1),
-		);
+		this.chatContainer.addChild(createTuiDiagnosticsView(report, TUI_RUNTIME));
+		if (args === "save") {
+			try {
+				this.showStatus(`Metadata-only diagnostics saved locally: ${saveTuiDiagnostics(report)}`);
+			} catch {
+				this.showError(
+					"Could not save diagnostics. Check temporary-directory permissions; no transcript was exported.",
+				);
+			}
+		}
 		this.ui.requestRender();
 	}
 

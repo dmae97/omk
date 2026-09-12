@@ -185,6 +185,9 @@ describe("InteractiveMode termination rendering", () => {
 		const fakeThis = {
 			lastRenderedTermination: undefined,
 			showError: vi.fn(),
+			chatContainer: new Container(),
+			ui: { requestRender: vi.fn() },
+			toolOutputExpanded: true,
 		};
 		const showSessionTermination = Reflect.get(InteractiveMode.prototype, "showSessionTermination") as (
 			this: typeof fakeThis,
@@ -193,8 +196,9 @@ describe("InteractiveMode termination rendering", () => {
 
 		showSessionTermination.call(fakeThis, termination);
 
-		expect(fakeThis.showError).toHaveBeenCalledWith(expect.stringContaining("message=The previous process crashed."));
-		expect(fakeThis.showError).toHaveBeenCalledWith(expect.stringContaining("kind=process_crash"));
+		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toContain("Cause: The previous process crashed.");
+		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toContain("Kind: process_crash");
+		expect(fakeThis.showError).not.toHaveBeenCalled();
 	});
 
 	test("keeps typed compaction cancellation telemetry without rendering a duplicate error", () => {
@@ -271,6 +275,9 @@ describe("InteractiveMode termination rendering", () => {
 			session: { lastTermination: current },
 			lastRenderedTermination: undefined,
 			showError: vi.fn(),
+			chatContainer: new Container(),
+			ui: { requestRender: vi.fn() },
+			toolOutputExpanded: true,
 			showSessionTermination(value: typeof current) {
 				const method = Reflect.get(InteractiveMode.prototype, "showSessionTermination") as (
 					this: typeof fakeThis,
@@ -287,10 +294,11 @@ describe("InteractiveMode termination rendering", () => {
 
 		showPromptError.call(fakeThis, new Error("generic failure"), stale);
 
-		expect(fakeThis.showError).toHaveBeenCalledTimes(1);
-		expect(fakeThis.showError).toHaveBeenCalledWith(expect.stringContaining("kind=internal_error"));
-		expect(fakeThis.showError).not.toHaveBeenCalledWith(expect.stringContaining("generic failure"));
-		expect(fakeThis.showError).not.toHaveBeenCalledWith(expect.stringContaining("run-stale"));
+		const rendered = normalizeRenderedOutput(fakeThis.chatContainer);
+		expect(rendered).toContain("Kind: internal_error");
+		expect(rendered).not.toContain("generic failure");
+		expect(rendered).not.toContain("run-stale");
+		expect(fakeThis.showError).not.toHaveBeenCalled();
 	});
 
 	test("Given a completed run, When its termination is rendered, Then interactive mode stays quiet", () => {

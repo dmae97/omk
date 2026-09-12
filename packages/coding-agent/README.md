@@ -92,6 +92,7 @@ Type `/` in the editor to open command completion.
 | `/new` | Start a new session |
 | `/session` | Show session path, messages, tokens, and cost |
 | `/resource [probe\|policy]` | Show resource pressure and effective concurrency for this run |
+| `/debug [save]` | Preview runtime diagnostics or explicitly save a metadata-only local report |
 | `/goal [objective]` | Show or set the durable goal; supports `checkpoint <json>`, `pause`, `resume`, evidence-gated `complete`, and `clear` |
 | `/tree` | Navigate the current session tree |
 | `/fork` | Create a new fork from a previous user message |

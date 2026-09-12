@@ -46,6 +46,7 @@ Type `/` in the editor to open command completion. Extensions can register custo
 | `/name <name>` | Set session display name |
 | `/session` | Show session file, ID, messages, tokens, and cost |
 | `/resource [probe\|policy]` | Show resource pressure and effective concurrency for this run |
+| `/debug [save]` | Preview runtime diagnostics; explicitly save a metadata-only local report |
 | `/goal [objective]` | Show or set the durable goal for the current working directory |
 | `/tree` | Jump to any point in the session and continue from there |
 | `/fork` | Create a new session from a previous user message |
@@ -60,6 +61,59 @@ Type `/` in the editor to open command completion. Extensions can register custo
 | `/changelog` | Display version history |
 | `/star` | Open the OMK GitHub repository |
 | `/quit` | Quit omk |
+
+### Diagnostics and failure details
+
+`/debug` previews runtime identity, terminal state and the latest typed outcome
+without saving or contacting a provider. The existing TUI debug shortcut opens
+the same preview instead of dumping the transcript.
+
+`/debug save` explicitly creates a new `omk-debug-*/diagnostics.json` under the OS
+temporary directory and prints its path. It does not upload or overwrite a report.
+POSIX directory/file permissions are `0700`/`0600`; Windows access follows the
+temporary directory's ACLs. Delete that directory when it is no longer needed.
+
+The version-1 JSON report contains approved metadata fields only. It excludes
+messages, prompts, images, tool output, rendered screen text, raw errors,
+configuration, environment values, credentials, local paths, session/run IDs and
+provider/model/tool names. Launch and UI module paths are visible locally, not
+saved. Metadata such as timestamps and message counts can still describe your
+workload; review a report before sharing it.
+
+There is no raw-transcript option in this command. Old `omk-debug.log` files are
+not deleted or rewritten and may contain private transcripts. Explicit raw ANSI
+capture via `OMK_TUI_WRITE_LOG` remains a separate, sensitive debugging facility;
+see [TUI components](tui.md#debug-logging).
+
+**Runtime identity:** The UI entry file's SHA-256 is observed at module initialization
+and compared with the same file during inspection. Missing, oversized, virtual or
+unreadable files are `unavailable`, not healthy. This is a single-file observation,
+not a fingerprint of all dependencies or proof of the exact executed bytes.
+An unchanged entry does not establish that a build includes current source changes.
+The package has no embedded build-to-commit binding, so build revision is reported
+as unavailable rather than inferred from checkout `HEAD`.
+
+`/reload` refreshes resources, not core JavaScript modules. Its last completion time
+is shown separately. Core changes need an authorized build where applicable and a
+restarted process. Source-mode QA does not update an installed launcher.
+
+**Failure cards:** Cause, impact and next action appear before technical fields.
+Ctrl+O (or the configured `app.tools.expand` binding) expands kind/phase/cause code,
+observation source, retry flags, run ID, timestamp and route. Credential-shaped
+values are masked even when input redaction is disabled; terminal controls are
+removed. These local details are not the saved report.
+
+Cards never retry, repair or approve effects. Retryability and automatic-retry
+safety stay separate; possible/confirmed side effects require inspection before
+repeating work. Duplicate delivery of the same termination is coalesced; separate
+failed attempts remain visible. Completed runs stay quiet, and compaction
+cancellation retains its concise status. Journal, print, JSON and RPC termination
+contracts are unchanged.
+
+Focused regression tests: `test/interactive-mode-diagnostics.test.ts` and
+`test/tui-diagnostics.test.ts` in `packages/coding-agent`. These cover the real
+command adapter, sensitive-field exclusion, private report creation, runtime file
+changes/unavailability, forced masking, narrow-terminal wrapping and theme changes.
 
 ### Durable Goals
 
