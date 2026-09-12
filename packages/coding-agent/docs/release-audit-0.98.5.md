@@ -85,6 +85,9 @@ unprivileged namespace probe before the suite. Ubuntu 24.04 subsequently refused
 loopback setup inside the namespace. The runtime-test jobs are pinned to Ubuntu
 22.04 LTS, with the same namespace and capability-drop checks. They do not skip
 verified-run tests, disable host security controls or enable a sandbox fallback.
+The older distribution `fd` lacked `--no-require-git`; CI installs the official
+fd 10.4.2 static archive with SHA-256 verification before extraction and probes
+that option before tests. File-search behavior and tests are not weakened.
 
 Recovery dispatches the official workflow from `main` with both `tag` and
 `source_ref` fixed to `v0.98.5`. The release tag and its source commit stay unchanged;
