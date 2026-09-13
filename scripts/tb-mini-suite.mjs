@@ -22,6 +22,10 @@ const DEFAULT_TASKS_DIR = join(ROOT, ".omk/runs/terminal-bench-2-1/terminal-benc
 /** Regression mix: deliberately oversamples easy tasks; not a population-weighted score. */
 const DIFFICULTY_MIX = { easy: 0.15, medium: 0.55, hard: 0.3 };
 
+/** @typedef {"easy" | "medium" | "hard"} DifficultyBand */
+/** @typedef {Readonly<{name: string, difficulty: string, category: string, expertMinutes: number | null}>} Task */
+
+/** @param {string[]} argv */
 function parseArgs(argv) {
 	const options = { tasksDir: DEFAULT_TASKS_DIR, size: 15, seed: 1, json: false };
 	for (let index = 0; index < argv.length; index++) {
@@ -52,13 +56,16 @@ function parseArgs(argv) {
 	return options;
 }
 
-/** Minimal TOML field reads. The task files use flat `key = value` lines, so a parser dependency is not warranted. */
+/** Limited flat TOML field extraction, not a general TOML parser.
+ * @param {string} text @param {string} key
+ */
 function readField(text, key) {
 	const match = text.match(new RegExp(`^${key}\\s*=\\s*(.+)$`, "mu"));
 	if (!match) return undefined;
 	return match[1].trim().replace(/^["']|["']$/gu, "");
 }
 
+/** @param {string} tasksDir @returns {Task[]} */
 function loadTasks(tasksDir) {
 	if (!existsSync(tasksDir) || !statSync(tasksDir).isDirectory()) {
 		console.error(`Tasks directory not found or not a directory: ${tasksDir}`);
@@ -72,12 +79,14 @@ function loadTasks(tasksDir) {
 		const tomlPath = join(taskDir, "task.toml");
 		if (!existsSync(tomlPath)) continue;
 		const text = readFileSync(tomlPath, "utf8");
-		const expertMinutes = Number(readField(text, "expert_time_estimate_min") ?? "0");
+		const rawEstimate = readField(text, "expert_time_estimate_min");
+		const parsedEstimate = rawEstimate === undefined || rawEstimate.trim() === "" ? null : Number(rawEstimate);
 		tasks.push({
 			name,
 			difficulty: readField(text, "difficulty") ?? "unknown",
 			category: readField(text, "category") ?? "unknown",
-			expertMinutes: Number.isFinite(expertMinutes) ? expertMinutes : 0,
+			expertMinutes:
+				parsedEstimate !== null && Number.isFinite(parsedEstimate) && parsedEstimate >= 0 ? parsedEstimate : null,
 		});
 	}
 	if (tasks.length === 0) {
@@ -87,7 +96,9 @@ function loadTasks(tasksDir) {
 	return tasks;
 }
 
-/** Deterministic 32-bit hash. Used as a stable tiebreaker so selection never depends on Math.random. */
+/** Deterministic 32-bit tie-breaker.
+ * @param {string} value @param {number} seed
+ */
 function hash(value, seed) {
 	let h = (2166136261 ^ seed) >>> 0;
 	for (let index = 0; index < value.length; index++) {
@@ -96,7 +107,9 @@ function hash(value, seed) {
 	return h;
 }
 
+/** @param {ReadonlyArray<Task>} tasks @param {number} size @param {number} seed */
 function selectMiniSuite(tasks, size, seed) {
+	/** @type {Map<string, Task[]>} */
 	const byDifficulty = new Map();
 	for (const task of tasks) {
 		const bucket = byDifficulty.get(task.difficulty) ?? [];
@@ -104,19 +117,30 @@ function selectMiniSuite(tasks, size, seed) {
 		byDifficulty.set(task.difficulty, bucket);
 	}
 
+	/** @type {Array<[DifficultyBand, number]>} */
 	const quotas = [];
 	let assigned = 0;
+	/** @type {DifficultyBand[]} */
 	const bands = ["easy", "medium", "hard"];
 	for (const band of bands) {
 		const quota = Math.max(1, Math.floor(size * DIFFICULTY_MIX[band]));
 		quotas.push([band, quota]);
 		assigned += quota;
 	}
-	// Rounding slack lands on medium, the band the suite is dominated by.
-	if (assigned < size) quotas[1][1] += size - assigned;
+	if (assigned > size) {
+		// A 1–2 task suite cannot represent all three bands. Keep the highest-weight bands, not the first names.
+		const rankedBands = bands.slice().sort((a, b) => DIFFICULTY_MIX[b] - DIFFICULTY_MIX[a]);
+		for (const quota of quotas) quota[1] = rankedBands.indexOf(quota[0]) < size ? 1 : 0;
+	} else if (assigned < size) {
+		// Preserve the established allocation for normal-size suites.
+		quotas[1][1] += size - assigned;
+	}
 
+	/** @param {Task} a @param {Task} b */
 	const compareCandidates = (a, b) => {
-		if (a.expertMinutes !== b.expertMinutes) return a.expertMinutes - b.expertMinutes;
+		const aMinutes = a.expertMinutes ?? Number.POSITIVE_INFINITY;
+		const bMinutes = b.expertMinutes ?? Number.POSITIVE_INFINITY;
+		if (aMinutes !== bMinutes) return aMinutes - bMinutes;
 		const ha = hash(a.name, seed);
 		const hb = hash(b.name, seed);
 		return ha === hb ? a.name.localeCompare(b.name) : ha - hb;
@@ -141,17 +165,26 @@ if (options.size > tasks.length) {
 	process.exit(2);
 }
 const selected = selectMiniSuite(tasks, options.size, options.seed);
-const totalExpertMinutes = selected.reduce((sum, task) => sum + task.expertMinutes, 0);
+const knownExpertMinutes = selected.reduce((sum, task) => sum + (task.expertMinutes ?? 0), 0);
+if (!Number.isFinite(knownExpertMinutes)) {
+	console.error("Known expert-time total is nonfinite; refusing selection");
+	process.exit(1);
+}
+const unknownExpertEstimates = selected.filter((task) => task.expertMinutes === null).length;
+const totalExpertMinutes = unknownExpertEstimates > 0 ? null : knownExpertMinutes;
 
 if (options.json) {
 	console.log(
 		JSON.stringify(
 			{
+				selectionVersion: 2,
 				tasksDir: options.tasksDir,
 				seed: options.seed,
 				size: options.size,
 				availableTasks: tasks.length,
 				totalExpertMinutes,
+				knownExpertMinutes,
+				unknownExpertEstimates,
 				tasks: selected,
 			},
 			null,
@@ -159,20 +192,21 @@ if (options.json) {
 		),
 	);
 } else {
-	const histogram = selected.reduce((acc, task) => {
-		acc[task.difficulty] = (acc[task.difficulty] ?? 0) + 1;
-		return acc;
-	}, {});
+	/** @type {Map<string, number>} */
+	const histogram = new Map();
+	for (const task of selected) histogram.set(task.difficulty, (histogram.get(task.difficulty) ?? 0) + 1);
 	console.log(`Terminal-Bench 2.1 mini-suite — seed ${options.seed}, ${selected.length}/${tasks.length} tasks`);
 	console.log(
-		`mix: ${Object.entries(histogram)
+		`mix: ${[...histogram]
 			.sort()
 			.map(([band, count]) => `${count} ${band}`)
-			.join(" / ")} · expert time ${totalExpertMinutes.toFixed(0)}min\n`,
+			.join(
+				" / ",
+			)} · known expert time ${knownExpertMinutes.toFixed(0)}min · ${unknownExpertEstimates} unknown estimates\n`,
 	);
 	for (const task of selected) {
 		console.log(
-			`  ${task.name.padEnd(38)} ${task.difficulty.padEnd(7)} ${String(task.expertMinutes).padStart(5)}min  ${task.category}`,
+			`  ${task.name.padEnd(38)} ${task.difficulty.padEnd(7)} ${(task.expertMinutes === null ? "?" : String(task.expertMinutes)).padStart(5)}min  ${task.category}`,
 		);
 	}
 	console.log(

@@ -160,7 +160,7 @@ node scripts/tb-mini-suite.mjs --json      # feed a runner
 node scripts/tb-mini-suite.mjs --seed 7    # a different fixed subset
 ```
 
-With identical task metadata, seed, size, and collation, selection is repeatable.
+With identical task metadata, selection version, seed, size, and collation, selection is repeatable.
 The default 15-task subset oversamples easy tasks and prioritizes shorter expert
 time estimates; it is a regression signal, not a population-representative score
 or an agent runtime bound. Selection alone is not a capability result. Scoring
@@ -171,12 +171,35 @@ population. Missing difficulty quotas are filled from unselected tasks using the
 same ordering, so a valid request returns exactly that many distinct tasks.
 `--seed` accepts integers from `0` through `4294967295`. Invalid or missing option
 values and oversized requests exit with code `2`; absent, empty, or non-directory
-task paths exit with code `1`. The existing default subset remains unchanged.
+task paths exit with code `1`.
+
+The JSON output now declares `selectionVersion: 2`. Missing, empty, nonfinite, or
+negative expert-time estimates are `null`, not zero. Within each difficulty band
+and in quota refill, known estimates sort before unknown estimates. A genuine zero
+or fractional estimate remains valid. Difficulty quotas still take precedence, so
+unknown-estimate tasks can be selected to fill a band.
+
+`knownExpertMinutes` sums known estimates; `unknownExpertEstimates` counts selected
+tasks with unknown estimates. `totalExpertMinutes` is `null` when any selected
+estimate is unknown. A nonfinite sum is refused with exit `1`, not serialized as
+an apparently missing total. Expert estimates are not agent timeout limits.
+
+For sizes 1–2, available slots go first to the highest-weight difficulty bands
+(medium, then hard), with normal refill if those bands are unavailable. Task names
+no longer decide which excess band quota is discarded. The normal-size quota rule
+is preserved. Human-readable counts use a `Map`, including for labels such as
+`__proto__` that overlap JavaScript object properties.
+
+This is a selection and output-contract change: default membership can change when
+metadata is incomplete, and the prior default JSON digest is historical only.
+Freeze new task manifests before comparison; do not combine version 1 and 2 runs
+as if their selection policy were identical. The limited flat TOML field reader
+is unchanged; this does not add general TOML syntax support.
 
 Run the offline CLI regression tests without downloading tasks or calling models:
 
 ```bash
-node --test scripts/test/tb-mini-suite.test.mjs
+node --test --test-concurrency=1 scripts/test/tb-mini-suite.test.mjs scripts/test/tb-mini-suite-ranking.test.mjs
 ```
 
 See [the harness roadmap](../../../ROADMAP.md) for the dated OMK versus Terminus-2
