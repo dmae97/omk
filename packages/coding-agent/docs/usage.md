@@ -34,6 +34,11 @@ See [Keybindings](keybindings.md) for all shortcuts and customization.
 
 Type `/` in the editor to open command completion. Extensions can register custom commands, skills are available as `/skill:name`, `!skill:name`, or `!name` for known skills, `!omk <role-or-request>` selects an OMK role hub such as frontend, backend, loop, or plan, and prompt templates expand via `/templatename`.
 
+OMK omits decorative `[OMX]` and `[OMO]` prefixes from completion descriptions,
+without adding another harness label. A marker-only description becomes `OMK resource`.
+The formatter preserves original skill metadata, invocation names and source scope;
+this display change enables no foreign tools or compatibility guarantees.
+
 | Command | Description |
 | --------- | ------------- |
 | `/login`, `/logout` | Manage OAuth or API-key credentials |

@@ -169,6 +169,7 @@ import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
+import { formatResourceDescription } from "./resource-description.ts";
 import {
 	getAvailableThemes,
 	getAvailableThemesWithPaths,
@@ -480,11 +481,7 @@ export class InteractiveMode {
 	}
 
 	private prefixAutocompleteDescription(description: string | undefined, sourceInfo?: SourceInfo): string | undefined {
-		const sourceTag = this.getAutocompleteSourceTag(sourceInfo);
-		if (!sourceTag) {
-			return description;
-		}
-		return description ? `[${sourceTag}] ${description}` : `[${sourceTag}]`;
+		return formatResourceDescription(description, this.getAutocompleteSourceTag(sourceInfo));
 	}
 
 	private getBuiltInCommandConflictDiagnostics(extensionRunner: ExtensionRunner): ResourceDiagnostic[] {
