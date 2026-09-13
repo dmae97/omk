@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.99.0] - 2026-09-13
+
 ### Breaking Changes
 
 - Checkout-only TB tooling now emits `selectionVersion: 2` and `omk-tb21-audit-report-2`. Selection totals can be `null` when estimates are unknown, and audits reject missing or invalid start/finish timestamps. The input manifest remains `omk-tb21-manifest-1`. Update report consumers and freeze new task selections before comparing runs; see [selection compatibility](docs/metrics.md#capability-baseline) and [audit rules](docs/tb21-audit.md).

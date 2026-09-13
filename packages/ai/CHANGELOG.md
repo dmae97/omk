@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.99.0] - 2026-09-13
+
 ### Added
 
 - Added the Node-only Devin CLI subscription adapter and SWE-2 model with account-catalog routing for medium/high/max reasoning, tools, and usage. Live account compatibility remains unverified; see the Devin setup guide.

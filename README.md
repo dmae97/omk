@@ -362,7 +362,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v0.98.5](.github/RELEASE_NOTES_v0.98.5.md)
+- [Release notes for v0.99.0](.github/RELEASE_NOTES_v0.99.0.md)
 
 ## Development
 
@@ -418,6 +418,32 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v0.99.0
+
+### Breaking Changes
+
+- Checkout-only TB tooling now emits `selectionVersion: 2` and `omk-tb21-audit-report-2`. Selection totals can be `null` when estimates are unknown, and audits reject missing or invalid start/finish timestamps. The input manifest remains `omk-tb21-manifest-1`. Update report consumers and freeze new task selections before comparing runs; see [selection compatibility](packages/coding-agent/docs/metrics.md#capability-baseline) and [audit rules](packages/coding-agent/docs/tb21-audit.md).
+
+### Added
+
+- Verified command DAGs accept an explicitly approved `writer.maxConcurrentTasks: 2` and release ready dependants without an unrelated-task barrier. Omission keeps serial execution and legacy contract digests. Task-bound execution IDs and draining preserve cancellation/recovery boundaries; final verification still uses one fixed candidate. See [Verified Run](packages/coding-agent/docs/verified-run.md).
+
+- Added the Devin SWE-2 harness: a `devin-harness` domain loadout auto-applied when the `devin` provider is active (`OMK_DEVIN_HARNESS=0` disables it, independently of `OMK_GROK_HARNESS`), per-turn `<active_skills source="devin-harness">` grants selected from the live inventory, an optional `~/.omk/agent/devin.md` operator overlay, and the canonical [Devin SWE-2 harness guide](packages/coding-agent/docs/devin-harness.md). `devin/swe-2` now carries a 1,000,000-token local context budget that selects the account catalog's 1M-context lane; a lane that declares a smaller window fails the request instead of shrinking the budget.
+- The status rail's USAGE section now covers `devin`: it calls `GetUserStatus` with the stored CLI session token (OAuth or `DEVIN_API_KEY`) and renders the plan's daily/weekly quota meters with reset times, or the plan name and credit balances when the account reports no quota windows.
+
+### Changed
+
+- Grok and Devin harness dispatch share `provider-harness-dispatch.ts` (loadout runtime injected, outside the `sdk.ts` import cycle) and `harness-skills.ts`; the `grok-harness` and `devin-harness` profiles live in `domain-loadouts-provider-harness.ts`. `tryGrokHarnessDispatch()` and `selectGrokHarnessSkills()` keep their public signatures and behavior.
+
+### Fixed
+
+- A background task result delivered with `triggerTurn` while the session was sleeping in retry backoff started a second top-level run: `sendCustomMessage` only checked `isStreaming`, not `isRetrying` (unlike `prompt()`). When the retry woke up, `agent.continue()` threw `Agent is already processing`, and the runtime-failure handler closed the run journal that the competing run still owned, so that run later died with `run journal received agent_end without run_started` and the session was wedged until a model switch. Custom messages now queue during retry backoff exactly as during streaming, and a run that never owned the journal (rejected with `Agent is already processing` while another run is live) no longer finishes or clears it.
+
+- Codex SSE response-header waits now respect `retry.provider.timeoutMs`, with the existing 10-second minimum, rather than aborting every large request at a fixed 10 seconds. This does not extend an outer run deadline.
+- Resource completion descriptions remove decorative leading `[OMX]`/`[OMO]` labels without changing source metadata, invocation names, or enabled tools; marker-only descriptions display `OMK resource`.
+
+Release notes live in [RELEASE_NOTES_v0.99.0.md](.github/RELEASE_NOTES_v0.99.0.md).
+
 ## Release v0.98.5
 
 ### Added
@@ -463,21 +489,6 @@ Release notes live in [RELEASE_NOTES_v0.98.5.md](.github/RELEASE_NOTES_v0.98.5.m
 - Split type, schema and rendering responsibilities to restore module-size gates without raising their baselines. Browser smoke builds no longer require a Node path polyfill for Codex metadata.
 
 Release notes live in [RELEASE_NOTES_v0.98.4.md](.github/RELEASE_NOTES_v0.98.4.md).
-
-## Release v0.98.3
-
-### Added
-
-- Advisory-selection diagnostics now retain submitted/eligible/excluded counts, comparison availability, and top-score tie/margin data. Ties preserve caller rank while reporting `judge-tied` / `deterministic`; no correctness probability or default TUI judge is introduced.
-- Claim-closure-to-WPL/VERA projection is tested across the public protocol and integration packages. It classifies supplied evidence and never grants release authority.
-- A session workspace scope now reports what it could not bind. `resolveSessionWorkspaceScope()` drops dirty paths two ways — a 32-path cap and the normalized-path filter the receipt parser forces — and both were silent, so a receipt captured from a partial view of the working tree read exactly like one that saw all of it. The new `resolveSessionWorkspaceScopeReport(cwd, options?)` returns the same scope plus `totalDirtyPathCount`, `selectedPathCount`, `excludedPathCount`, `truncated`, a `completeness` of `complete` / `partial_truncated` / `partial_excluded` / `unavailable`, and an `excludedPathSetSha256` binding the dropped set. `SessionBashRuntime.workspaceScopeReport()` exposes it for the current session. `unavailable` is deliberately not `complete`: outside a worktree nothing was enumerated, so an empty artifact set is an absence of evidence rather than a clean tree. Dropping paths stays deliberate; hiding the drop was the defect. The scope cache is now keyed by `(cwd, maxPaths)` so a capped probe cannot serve a later full request its truncated answer.
-
-### Fixed
-
-- The first-party advisory model adapter now requires an explicit normal `stop`; complete score JSON from a truncated, aborted or missing completion state cannot override deterministic fallback. Cancellation before and after custom/model judge work prevents new calls and discards late advice, without additional completion calls or retries.
-- Release documentation now separates internal trace/effect primitives from public opt-in APIs and records the existing CI token-authentication path without claiming OIDC provenance. The published v0.98.2 history is retained as an ancestor rather than re-created.
-
-Release notes live in [RELEASE_NOTES_v0.98.3.md](.github/RELEASE_NOTES_v0.98.3.md).
 
 <!-- releases:end -->
 
