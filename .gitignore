@@ -10,6 +10,9 @@ packages/*/dist-chrome/
 packages/*/dist-firefox/
 *.cpuprofile
 
+# Local browser captures and console logs (preserve locally; never ship).
+/.playwright-mcp/
+
 # Local orchestration artifacts
 # Per-workspace runtime state written when OMK runs inside a package directory
 packages/*/.omk/

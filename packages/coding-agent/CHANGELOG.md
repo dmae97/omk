@@ -2,7 +2,13 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Checkout-only TB tooling now emits `selectionVersion: 2` and `omk-tb21-audit-report-2`. Selection totals can be `null` when estimates are unknown, and audits reject missing or invalid start/finish timestamps. The input manifest remains `omk-tb21-manifest-1`. Update report consumers and freeze new task selections before comparing runs; see [selection compatibility](docs/metrics.md#capability-baseline) and [audit rules](docs/tb21-audit.md).
+
 ### Added
+
+- Verified command DAGs accept an explicitly approved `writer.maxConcurrentTasks: 2` and release ready dependants without an unrelated-task barrier. Omission keeps serial execution and legacy contract digests. Task-bound execution IDs and draining preserve cancellation/recovery boundaries; final verification still uses one fixed candidate. See [Verified Run](docs/verified-run.md).
 
 - Added the Devin SWE-2 harness: a `devin-harness` domain loadout auto-applied when the `devin` provider is active (`OMK_DEVIN_HARNESS=0` disables it, independently of `OMK_GROK_HARNESS`), per-turn `<active_skills source="devin-harness">` grants selected from the live inventory, an optional `~/.omk/agent/devin.md` operator overlay, and the canonical [Devin SWE-2 harness guide](docs/devin-harness.md). `devin/swe-2` now carries a 1,000,000-token local context budget that selects the account catalog's 1M-context lane; a lane that declares a smaller window fails the request instead of shrinking the budget.
 - The status rail's USAGE section now covers `devin`: it calls `GetUserStatus` with the stored CLI session token (OAuth or `DEVIN_API_KEY`) and renders the plan's daily/weekly quota meters with reset times, or the plan name and credit balances when the account reports no quota windows.
@@ -14,6 +20,9 @@
 ### Fixed
 
 - A background task result delivered with `triggerTurn` while the session was sleeping in retry backoff started a second top-level run: `sendCustomMessage` only checked `isStreaming`, not `isRetrying` (unlike `prompt()`). When the retry woke up, `agent.continue()` threw `Agent is already processing`, and the runtime-failure handler closed the run journal that the competing run still owned, so that run later died with `run journal received agent_end without run_started` and the session was wedged until a model switch. Custom messages now queue during retry backoff exactly as during streaming, and a run that never owned the journal (rejected with `Agent is already processing` while another run is live) no longer finishes or clears it.
+
+- Codex SSE response-header waits now respect `retry.provider.timeoutMs`, with the existing 10-second minimum, rather than aborting every large request at a fixed 10 seconds. This does not extend an outer run deadline.
+- Resource completion descriptions remove decorative leading `[OMX]`/`[OMO]` labels without changing source metadata, invocation names, or enabled tools; marker-only descriptions display `OMK resource`.
 
 ## [0.98.5] - 2026-09-12
 

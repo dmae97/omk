@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `RunDagWriter` accepts optional `maxConcurrentTasks: 1 | 2`. Omitted concurrency stays omitted in parsed contracts, preserving legacy serialization and digests. The field describes an approved bound; it does not authorize or execute tasks by itself.
+
 ## [0.98.5] - 2026-09-12
 
 ### Added

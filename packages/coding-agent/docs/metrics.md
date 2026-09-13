@@ -219,14 +219,32 @@ A complete audit means recorded outcomes passed these checks, not that every
 provider request obeyed a single-model contract. Wire provenance, actual billing,
 repeated-trial analysis, and statistical superiority need separate evidence.
 
-### Explicit output-limit validation
+### Output-limit validation: availability history
 
-For callers that supply `AgentLoopConfig.modelContract`, both the contract's
-`maxOutputTokens` and an explicitly supplied request `maxTokens` must be positive
-safe integers. Invalid explicit values are refused before `provider_request` and
-before calling the provider stream function; they are not treated as absent.
+**2026-09-13 source snapshot (`ca75f4e5cc`):** the logical contract, CLI/SDK
+wiring, and final Chat Completions model/output-limit checks are in the committed
+source. [Model dispatch contracts](model-contract.md) defines their coverage;
+[Verified Run](verified-run.md) describes the separate protected execution path.
+Neither is a universal provider billing cap or a new controlled benchmark result.
+See [the roadmap, section 16](../../../ROADMAP.md) for current local release-preparation checks.
 
-An omitted request limit still leaves provider defaults unchecked by this
-predicate. This change does not activate a contract in the CLI or impose an
-effective cap on compaction and other provider paths. Full run-wide enforcement
-remains a roadmap item.
+The following paragraphs describe the earlier checkout only. Its missing modules
+and failing collection are historical observations, not active release blockers.
+
+**2026-09-08 follow-up:** the current worktree restores the logical contract and
+connects it through the CLI/SDK, including SDK-stream summaries. See
+[Model dispatch contracts](model-contract.md) and ROADMAP §13 for fresh evidence
+and the remaining final-wire/accounting gaps. The warning below records the
+preceding checkout, not the current availability of the restored module.
+
+The previous worktree checkpoint tested positive-safe-integer validation of
+`modelContract.maxOutputTokens` and explicit request `maxTokens`. During the
+2026-09-08 re-verification, the checkout changed: `run-model-contract.ts` and the
+corresponding `AgentLoopConfig.modelContract` surface were absent. The remaining
+`model-contract-output-limit.test.ts` fails collection against that checkout.
+
+Do not treat the historical passing tests as proof that this guard is currently
+available. Restoring or porting the runtime contract requires an explicit source
+baseline decision and fresh send-boundary tests. No missing code was silently
+recreated and no failing test was deleted. Full run-wide enforcement, including
+omitted limits and compaction, remains unverified; see ROADMAP sections 11–12.

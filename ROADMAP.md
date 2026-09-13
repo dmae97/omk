@@ -1,14 +1,48 @@
 # OMK 하네스 고도화 로드맵
 
-벤치마크 관측 기준일: **2026-09-07**. 구현 기록 갱신: **2026-09-08**.
+## 0. 현재 작업 범위 — 2026-09-13
+
+검토 기준은 `ca75f4e5cc`와 남아 있던 TB 선택기·감사기 변경이다. 공개 패키지의 로컬
+버전은 모두 **0.98.5**이며, 버전 변경·실제 배포는 이번 준비 작업과 구분한다.
+
+| 항목 | 현재 상태와 근거 |
+| --- | --- |
+| TB mini-suite | `selectionVersion: 2`. 결측·비유한·음수 예상 시간은 null, 알려진 예상 시간 뒤에 정렬한다. 1~2개 선택은 난이도 가중치 순으로 배정한다. [선정 계약](packages/coding-agent/docs/metrics.md#capability-baseline) |
+| TB 결과 감사 | `omk-tb21-audit-report-2`. 시작·종료 시각과 나노초 순서를 확인하며 미완료 자료를 집계하지 않는다. 실제 프로세스 종료나 과금 정합성의 증명은 아니다. [감사 계약](packages/coding-agent/docs/tb21-audit.md) |
+| 모델 계약 | 과거 §12의 모듈 부재 기록은 현행 상태가 아니다. 논리적 요청 계약과 Chat Completions 전송 경계가 존재한다. 전체 provider의 출력·청구 상한 보장은 여전히 별도다. [현재 경계](packages/coding-agent/docs/model-contract.md) |
+| Verified Run | `decee7f157`에서 최대 2개 작업의 eager frontier를 커밋했다. 계획 변경·실모델 writer·적용 승인 등을 완료한 것으로 보지 않는다. [구현 상태](packages/coding-agent/docs/verified-run.md) |
+| 배포 준비 | 로컬 검사의 명령·결과, 패키징 범위와 남은 승인 사항은 이 문서 §16에서 관리한다. |
+
+하네스 영향 분류는 **preserve**다. 유지할 지표는 정확한 선택 개수와 중복 없음,
+고정 입력에서의 결정성, 결측 비용·미완료 trial의 무음 수락 0건, 원본 증거 쓰기 0건이다.
+모델 호출·Harbor 실행·데이터셋 다운로드 없이 합성 fixture로 검증한다. 테스트 수는
+해결률·속도·경쟁 우위의 근거가 아니다.
+
+**아래 §1~§15와 기존 서두는 2026-09-07~10의 관측·설계 이력이다.** 당시의 `현재`,
+`미커밋`, `BLOCKED`, 버전·검사 수치는 그 시점에만 해당한다. 지금의 배포 여부나
+전체 구현 상태로 읽지 않는다. 과거 실험 수치와 원본 기록은 재측정하거나 덮어쓰지 않았다.
+
+### 이전 서두 — 2026-09-07~10 기록
+
+기존 Pro 관측 기준일: **2026-09-07**. Flash 중단 실행 분석·구현 갱신: **2026-09-09**.
 대상: **Terminal-Bench 2.1의 OMK 대 Terminus-2 비교**와 이를 재현하는 실행 경로.
 
-현재 상태: R0 선택기 완료, R1 결과 감사·R2 상한 수치 검증 부분 구현.
-§9는 초기 체크포인트이며 **최신 구현·검사·남은 조건은 §11**에 기록한다.
+현재 상태: Flash 43/48시행을 분석해 모델 선택·입력 표현·종료 판정의 책임을 다시 나누고
+이미지 계약 충돌, 잘못된 종료 분류, JSON 실패 종료 상태를 수정했다. 전체 원장·공유 deadline·
+MCP 자원 입장 제어는 후속 설계다. **벤치마크 경계 재설계와 검사는 §15**에 기록한다.
+후속 [재현 번들 대응](packages/coding-agent/docs/review-bundle-followup.md)에서 metrics 개인정보,
+빈 gate·sandbox 정책, 공유 DAG 수리 설명과 선택형 증인 독립성 검사를 개선했다.
+§1~§15의 과거 계획·수치는 해당 모델·실행 조건에서의 기록으로 구분한다.
 
 **권고: 모델 계약과 측정 신뢰성을 먼저 고정하고, 요청 왕복·마감시간·검증 비용을 줄여. 다중 에이전트와 학습형 라우터 확대는 그다음이야.**
 
-이 문서는 현재 관측, 기존 작업 트리 구현, 이번 변경, 앞으로의 설계를 구분해. 제안된 단계 전체를 구현 완료하거나 성능 향상을 검증했다는 뜻이 아니야. 이번 작업에서 유료 모델 호출, benchmark(벤치마크) 재실행, 전체 빌드, Git 커밋·푸시·공개 제출은 하지 않았어.
+이 문서는 현재 관측, 기존 작업 트리 구현, 이번 변경, 앞으로의 설계를 구분해. 제안된 단계 전체를 구현 완료하거나 성능 향상을 검증했다는 뜻이 아니야. 2026-09-09 분석에서는 유료 모델 호출, 벤치마크 재실행, 전체 빌드, Git 커밋·푸시·공개 제출을 하지 않았어.
+
+**2026-09-10 후속:** 요청 범위를 재검증하고 9개 구현 커밋을 만들었으며 `npm run build`와
+`npm run check`가 통과했어. DeepSeek V4.1 Flash의 기존 공급자 4곳도 확인·반영했어.
+현재 배포 최신은 0.98.3이지만 로컬 이력이 분기돼 있어, 이력 통합·push 범위를 확인한 뒤
+0.98.4로 올려야 해. 버전 변경·배포·벤치마크는 아직 하지 않았고,
+[최신 재검증 기록](packages/coding-agent/docs/review-bundle-followup.md)을 기준으로 봐줘.
 
 ## 1. 범위와 증거 기준
 
@@ -493,7 +527,7 @@ PY
 
 공개 코드·사용 문서는 [`metrics.md`](packages/coding-agent/docs/metrics.md), [`compaction.md`](packages/coding-agent/docs/compaction.md), [`run-protocol.md`](packages/coding-agent/docs/run-protocol.md), [`agent-loop.ts`](packages/agent/src/agent-loop.ts), [`tb-mini-suite.mjs`](scripts/tb-mini-suite.mjs), [`tb-mini-suite.test.mjs`](scripts/test/tb-mini-suite.test.mjs)를 기준으로 읽어. 작업 트리 전용 파일의 상태는 §4와 구분해야 해.
 
-## 11. 구현 진행 기록 — 2026-09-08
+## 11. 이전 구현 체크포인트 — 2026-09-08
 
 이번 구현은 서브에이전트 없이 직렬로 진행했다. 시작 HEAD는
 `0466d05d41045cea53d482408e4dd7ca96d4b30a`이며 공유 작업 트리의 기존 변경은 보존했다.
@@ -579,7 +613,7 @@ $$
 실패했고, 수정 후 전부 통과했다. 기존 계약·agent loop·harness 검사까지 포함하면
 144개가 통과한다. 테스트에서는 provider 대신 좁은 stream 경계만 대체했다.
 
-### 11.4 현재 검사 결과
+### 11.4 해당 체크포인트의 검사 결과
 
 | 검사 | 실제 결과 | 범위·제한 |
 | --- | --- | --- |
@@ -636,6 +670,455 @@ npm run check
 회귀 조건 뒤에 진행한다. 유료 R8 실행은 task·모델·반복·예산 승인 전에는 시작하지 않는다.
 
 **현재 판정: 두 구현 단위의 좁은 검증은 통과, 저장소 통합 gate는 BLOCKED.**
+
+## 12. 알고리즘 재검증과 수정 — 2026-09-08 후속 검사
+
+### 12.1 당시 소스와 검증 범위
+
+검증 도중 HEAD가 `0466d05…`에서 `60f520f…` 등으로 변경됐다. 아래 통합 검사는
+`29624c3962d00cc8355191265e7827d9fdf0f3ad`에서 시작하고 같은 HEAD에서 종료했다.
+공유 작업 트리 전체가 이 SHA와 동일하다는 뜻은 아니다. 이 작업에서는 Git 쓰기를 하지 않았다.
+
+현재 디스크에 `packages/agent/src/run-model-contract.ts`, `deadline-policy.ts`,
+`stagnation-tracker.ts`, `dag-barrier-waste.ts`가 없음을 확인했다. 이전에 읽은 본문이나
+§11의 통과 결과를 현재 구현 증거로 재사용하지 않았다. 누락된 모듈을 임의 복원하거나
+남아 있는 회귀 테스트를 삭제하지 않고, 실제로 남아 있는 R0/R1 도구를 수정했다.
+
+따라서 현재 R2/R4/R7의 모듈 존재·동작은 **미확인 또는 부재** 상태이며, 해당 후속
+작업은 의도한 소스 기준과 복원/이식 범위를 먼저 확정해야 한다. 기존 24-task 성적을
+재채점하거나 새 벤치마크를 실행한 작업은 아니다.
+
+적용한 절차는 `adaptorch-route`의 순차 의존 권고, `omk-engineering`·`programming`의
+소스/타입 검사, `debugging`·`tdd-workflow`의 실패 재현, `property-based-testing`의
+불변식·변환 검사, `ponytail`의 최소 변경, `lsp`와 직접 사후 검토다. 외부 공급자·에이전트
+실행은 없었다. 연구·GUI·배포 등 이 변경과 무관한 스킬을 무작정 활성화하지 않았다.
+
+### 12.2 발견한 오류와 수정
+
+| 문제 | 실패 근거 | 적용한 수정 |
+| --- | --- | --- |
+| 결측 예상 시간의 선정 우선순위 왜곡 | 누락·빈 문자열·비유한 값이 0분, 음수가 더 짧은 작업으로 취급됨 | 유효한 0/소수는 보존하고 나머지는 null; 같은 난이도 후보군과 부족분 보충에서 알려진 시간 뒤로 정렬 |
+| 1~2개 선정의 이름순 편향 | 난이도별 최소 1개씩 뽑은 후 이름순 `slice`로 초과분을 버림 | 부족한 슬롯을 난이도 가중치 순(medium, hard)에 배정한 뒤 기존 부족분 보충 적용 |
+| 난이도 빈도 표의 prototype 충돌 | `__proto__`, `constructor`, `toString` 라벨의 빈도가 잘못 출력됨 | 일반 객체 누적 대신 `Map`으로 집계 |
+| 미완료 결과의 완료 판정 | 시작/종료시각이 누락·null·잘못된 값이어도 성공 요약 가능 | 시각 존재·명시적 타임존·달력 유효성·종료≥시작 검증 후에만 집계 |
+
+예상 시간 정렬 키는 유효한 수치에 한해서 다음과 같다. 이 우선순위보다 난이도 쿼터가
+먼저 적용되므로, 알려진 시간이 없는 task도 난이도 구성을 위해 선정될 수 있다.
+
+$$
+K(t)=\begin{cases}
+E_t,& E_t\text{ is finite and }E_t\ge0,\\
++\infty,& \text{otherwise}.
+\end{cases}
+$$
+
+선정된 task 중 unknown이 있으면 `totalExpertMinutes`는 null이다.
+`knownExpertMinutes`와 `unknownExpertEstimates`를 별도로 제공하며, 알려진 값의 합이
+비유한 값으로 넘치면 종료 1로 거부한다. unknown을 0으로 치환한 완전한 총량은 만들지 않는다.
+기존 제한적 TOML 필드 추출 방식은 유지했으며 일반 TOML 파서로 확장한 것은 아니다.
+
+시각 검증은 `Date.parse`로 정수 초·타임존을 처리하고 소수초는 BigInt 나노초로 별도
+보존한다. 밀리초 절삭 때문에 `…123457` 이후에 끝난 `…123456`을 같은 시각으로 보는
+문제를 예방한다. 유효하지 않은 달력 날짜의 자동 정규화도 허용하지 않는다.
+
+$$
+t_{\mathrm{ns}}=10^6t_{\mathrm{whole\ seconds,ms}}+
+\operatorname{integer}(\operatorname{rightPad}_9(f)),\qquad
+ t_{\mathrm{finish,ns}}\ge t_{\mathrm{start,ns}}.
+$$
+
+미종료는 `unfinished_trial`, 잘못되거나 역전된 시각은 `invalid_trial_time`으로 거부한다.
+이는 기록의 완결성 검사이지 실제 프로세스 종료·자식 정리·시계 신뢰성의 증명은 아니다.
+
+### 12.3 호환성 및 측정 경계
+
+- 선택기는 `selectionVersion: 2`를 출력한다. `expertMinutes`와 `totalExpertMinutes`가
+  null일 수 있다. 불완전 메타데이터 또는 1~2개 선정에서는 기존 task 구성이 달라질 수 있다.
+  §5의 기본 JSON 해시는 v1의 과거 검사 결과이며 새 출력에 적용되지 않는다.
+- 감사 출력은 `omk-tb21-audit-report-2`, 입력 manifest는 계속 `omk-tb21-manifest-1`이다.
+  `completionVerification: recorded-timestamps`를 표시한다. v1에서 통과한 시각 누락
+  자료는 v2에서 거부될 수 있으며, 현재 시각으로 값을 지어내 보정하지 않는다.
+- 정상 크기 선정의 난이도 쿼터, seed 검증, 고정 manifest 해시, 비용 결측 거부,
+  원본 자료 미수정, 실제 모델 전송 검증과의 구분은 보존했다.
+- 비교 실행 전에 새 선정 결과·버전·데이터셋을 다시 고정해야 한다. 버전 변경 전후 결과를
+  동일한 조건의 비교로 합치지 않는다.
+
+로컬 데이터셋의 **선정만** 실행한 결과는 다음과 같다. 전문가 예상 시간은 모델 실행
+시간·과금액이 아니며 해결률 또는 비용 개선을 입증하지 않는다.
+
+| 선택 크기 | 선택 개수 | 알려진 예상 시간(분) | unknown 개수 | 전체 예상 시간 |
+| --- | ---: | ---: | ---: | --- |
+| 15 | 15 | 275 | 0 | 275 |
+| 89 | 89 | 18190 | 1 | null |
+
+### 12.4 검증 결과와 남은 차단
+
+새 선정/시각 검사 31개 중 수정 전 29개가 실패했다(새 출력 계약 검사 포함).
+prototype 라벨 검사 3개도 별도로 실패를 확인했다. 수정 후 새 34개와 기존 68개,
+총 **102개 CLI 검사**가 통과했다. 입력값·작은 크기·seed 조합·반복 결정성, 타임존
+등가성, 소수초 순서, Unix epoch 이전 시각을 검증했고 스냅샷 문자열만 고정하지 않았다.
+
+| 검사 | 결과 | 범위 |
+| --- | --- | --- |
+| R0/R1 직렬 Node 검사 | 종료 0, 102/102 | 실제 CLI + 합성 임시 task/trial; 모델 호출 없음 |
+| JS strict typecheck | 종료 0 | 선택기·감사 CLI·입력/집계 모듈 4개, JSDoc 타입 포함 |
+| Biome 명시 검사 | 종료 0, 실제 5개 파일 | 임시 포함 설정 사용, 저장소 규칙 변경 없음 |
+| 주 언어 서버 오류 검사 | 5개 파일, 오류 0 | 변경 소스·테스트 범위 |
+| `npm run check:doc-links` | 종료 0 | 현재 체크아웃의 검사 결과이며 Git 게시 승인은 아님 |
+| 문서 구조 검사 | 3개 문서 파싱, 로컬 링크 11개·각주 5개 대응·표시 수식 20개 구조 확인 | LaTeX 화면 렌더링 미검증 |
+| 진단 캐시 `lens_diagnostics(mode=all)` | 문서 경고 7건 | 해당 로컬 대상과 각주 정의는 직접 확인; 경고 억제 설정은 추가하지 않음 |
+| R2 재검사 | 종료 1, 수집 실패·실행 테스트 0 | `../src/run-model-contract.ts` 부재 |
+| 전체 `tsgo --noEmit --pretty false` | 종료 2, 오류 4건 | R2 모듈·`modelContract`·`provider_request` 표면 부재 |
+| `npm run check` | 종료 1 | 기존 범위 밖 Biome 오류 3건에서 중단 |
+
+§11의 전체 타입 통과와 144개 런타임 검사 통과를 현재 결과로 해석하면 안 된다.
+현재 실패를 숨기려고 R2 테스트를 지우거나 무시하지 않았다. 전체 검사에서 멈춘 뒤의
+gate를 통과했다고 추정하지도 않았다.
+
+```bash
+node --test --test-concurrency=1 scripts/test/tb-mini-suite.test.mjs scripts/test/tb-mini-suite-ranking.test.mjs scripts/test/tb21-audit.test.mjs scripts/test/tb21-audit-inputs.test.mjs scripts/test/tb21-audit-completion.test.mjs
+node node_modules/typescript/bin/tsc --noEmit --allowJs --checkJs --strict --target ES2022 --module NodeNext --skipLibCheck --types node scripts/tb-mini-suite.mjs scripts/tb21-audit.mjs scripts/lib/tb21-input.mjs scripts/lib/tb21-audit.mjs
+(cd packages/agent && node ../../node_modules/vitest/dist/cli.js --run test/model-contract-output-limit.test.ts)
+node_modules/.bin/tsgo --noEmit --pretty false
+npm run check
+```
+
+### 12.5 커밋 체크포인트
+
+| 단위 | 변경 파일·문서 hunk | 제안 메시지 |
+| --- | --- | --- |
+| R0 선정 알고리즘 교정 | `scripts/tb-mini-suite.mjs`, `scripts/test/tb-mini-suite-ranking.test.mjs`, metrics/ROADMAP의 선정 v2 설명 | `fix: TB 선정의 결측 시간·소규모 쿼터·라벨 집계 오류 수정` |
+| R1 완료 판정 강화 | `scripts/lib/tb21-audit.mjs`, `scripts/test/tb21-audit-completion.test.mjs`, `scripts/test/fixtures/tb21-evidence.mjs`, tb21-audit/metrics/ROADMAP의 시각 검증 설명 | `fix: 미완료 TB trial 집계 거부와 소수초 순서 검증` |
+
+두 단위의 분리 검토를 제안하며 커밋·브랜치·푸시·PR은 각각 승인 전까지 수행하지 않는다.
+유료 벤치마크·AdaptOrch 실행·전체 빌드는 하지 않았다. 누락된 런타임 모듈의 복원/이식
+여부와 기준 브랜치가 확정되면 R2 검사를 다시 진행해야 한다.
+
+**판정: R0/R1 교정의 범위 내 검증은 통과. R2 및 저장소 통합 검증은 BLOCKED.**
+
+## 13. 실행 계약의 첫 적용 — 2026-09-08
+
+기준 HEAD는 `29624c3962d00cc8355191265e7827d9fdf0f3ad`다. 기존 미커밋 파일은
+보존했고, 이전에 남아 있던 `model-contract-output-limit.test.ts`의 검사를 삭제하거나
+완화하지 않았다. 현재 변경은 **A00/R2의 논리적 요청 계약과 A01/R3의 사건 연결 일부**다.
+로드맵 전체, 최종 wire 계약, 새로운 성능 개선이 완료됐다는 뜻은 아니다.
+
+### 13.1 구현한 동작
+
+- `run-model-contract.ts`: 공급자/모델 쌍, 논리적 인증 출처, 추론 허용·수준,
+  양의 safe integer 출력 상한을 검증하고 정책을 복사·동결한다.
+- core loop: 생략된 출력 한도는 계약·모델 한도의 작은 값으로 채운다. 금지된 요청은
+  인증 조회보다 먼저 거부하며, 생명주기·문맥·인증·다음 턴 콜백에서 계약이 바뀌지 않는다.
+- `provider-request.ts`: `requestId`로 요청·거부·종결 사건을 연결한다. 기록 경계는
+  `stream-dispatch`이며 응답 원문·키·헤더·원시 오류를 사건에 넣지 않는다.
+- 자동 이미지 라우팅: 공급자가 바뀌면 이전 공급자의 고정 API 키와 요청/모델 헤더를
+  재사용하지 않는다. 목적 공급자의 resolver가 반환한 키는 사용할 수 있다.
+- CLI `--model-contract <file>`: 최대 64 KiB의 UTF-8 JSON을 한 번 읽고 세션 교체에도
+  같은 정책을 사용한다. 누락·중복 인수, 잘못된 파일·JSON은 거부한다.
+- SDK: 일반 세션과 CLI 서비스 factory에 옵션을 전달한다. 같은 SDK stream을 사용하는
+  문맥·분기 요약도 검사한다. 계약 모드의 payload 훅은 불변 복사본을 관측할 수 있지만
+  내용을 바꾸는 경로는 차단한다. 일반 payload의 `undefined` 선택 필드는 허용한다.
+
+[계약 사용법과 정확한 적용 경계](packages/coding-agent/docs/model-contract.md)에 JSON·SDK
+예제와 호환성을 기록했다. 새 요청·계약·라우팅·큐·SDK 전송·CLI 파일 경계 모듈은
+각각 250줄 미만이다. 기존 Agent 큐와 SDK 전송 책임을 분리했으며 크기 baseline은 올리지 않았다.
+순환 의존 검사에서 새 타입/전송 모듈의 순환도 발견했다. 요청 타입을 독립 모듈로 옮기고
+SDK의 수동 사용량 관측 콜백을 주입해 제거했으며, import-cycle baseline을 넓히지 않았다.
+
+### 13.2 실제 검증
+
+| 검사 | 결과 | 범위 |
+| --- | --- | --- |
+| 기존 출력 상한 검사 최초 실행 | 종료 1, 모듈 부재로 수집 실패 | 이전 관측의 부재 확인 |
+| 새 요청 경계 검사 RED | 15개 중 14개 실패 | 금지 요청 전송, 한도 누락, 가변 정책, 키/헤더 문제 재현 |
+| SDK RED | 5개 실패 중 4개가 실제 전달·상한·요약 위반 | 훅 검사는 초기 동기/비동기 assertion 모양 문제와 구분 |
+| lifecycle·payload 추가 RED | 각각 2개 실패 | 시작 콜백 정책 변경/사건 누락, 선택 필드·모델 훅 문제 |
+| core·Agent·기존 harness 회귀 | 종료 0, 317/317 | 9개 파일, 공급자 없는 fixture |
+| SDK·CLI·요약 회귀 | 종료 0, 116/116 | 8개 파일, 실제 CLI subprocess 오류 경로 2개 포함 |
+| 새 계약/요청/라우팅 3모듈 V8 coverage | 문장·줄 96.42%, 분기 94.59%, 함수 92.85% | 전체 저장소 coverage가 아님 |
+| 전체 `tsgo --noEmit --pretty false` | 종료 0 | 현행 작업 트리의 타입 검사 |
+| `npm run check:import-cycles` | 종료 0 | 새 순환을 제거한 뒤 baseline 내 56개 모듈 확인 |
+| 주 LSP 검사 | 8개 대상 모두 clean | 초기 1개 시간 초과는 재검사로 확인 |
+| `lens_diagnostics(mode=all)` | 진단된 11개 파일의 오류 0 | 미진단 파일까지 전수 검사한 결과가 아님 |
+| `npm run check` | 종료 1 | 기존 범위 밖 Biome 오류 3건에서 중단 |
+| `npm run check:module-size` | 종료 1 | 기존 범위 밖 6개 모듈의 baseline 초과; 이번 Agent/main 증가분은 해소 |
+| `npm run check:doc-links` | 종료 1 | 새 계약 문서는 로컬에 있으나 아직 Git에 포함되지 않음 |
+| 독립 5방향 리뷰 | 미완료 | 초기·축소 재시도가 시간 초과; 부분 의견을 전체 PASS로 계산하지 않음 |
+
+검사 중 CLI 인수 테스트의 `it.each` 배열 전달 오류를 수정했다. 잘못된 입력으로 발생한
+초기 CLI 실패를 기능의 유효한 RED 증거로 합산하지 않았다. core와 SDK의 최종 합계는
+**433개**이며 같은 검사의 반복 실행을 추가로 세지 않는다.
+
+```bash
+cd packages/agent
+node ../../node_modules/vitest/dist/cli.js --run test/model-contract-output-limit.test.ts test/run-model-contract.test.ts test/provider-request-boundary.test.ts test/provider-request-lifecycle.test.ts test/provider-payload-policy.test.ts test/agent-model-contract.test.ts test/agent-loop.test.ts test/agent.test.ts test/harness/agent-harness.test.ts
+cd ../coding-agent
+node ../../node_modules/vitest/dist/cli.js --run test/sdk-model-contract.test.ts test/sdk-stream-options.test.ts test/model-contract-args.test.ts test/model-contract-file.test.ts test/model-contract-cli.test.ts test/args.test.ts test/compaction-summary-reasoning.test.ts test/agent-session-vision-compaction.test.ts
+cd ../..
+node_modules/.bin/tsgo --noEmit --pretty false
+npm run check
+npm run check:module-size
+npm run check:doc-links
+```
+
+Biome의 3개 차단 파일은 `packages/ai/src/utils/oauth/meta.ts`,
+`packages/coding-agent/test/mcp/tools.test.ts`, `packages/coding-agent/test/session-termination.test.ts`다.
+크기 차단은 기존 `harness/reverse-skill.ts`, AI `types.ts`, coding-agent의
+`compaction.ts`, `model-registry.ts`, `provider-usage.ts`, `interactive-mode.ts`다.
+이번 요청 경계의 검증을 통과시키려고 해당 파일이나 기준값을 바꾸지 않았다.
+
+### 13.3 미완료 계약과 다음 단위
+
+공급자별 직렬화는 별도다. 조사한 `adjustMaxTokensForThinking()`은 thinking 예산을
+추가할 수 있고 Codex request builder는 `maxTokens`를 전송하지 않는다. 따라서 이번
+상한은 **실제 전송·출력·청구의 보장값이 아니다**. 이 차이를 막는 최종 payload 검사와
+실제 요청 provenance를 다음 R2 단위에서 연결해야 한다.
+
+요약은 정책 검사에 연결됐지만 새 core 사건의 소비자는 아니다. 사건 영속화,
+run/attempt 상관 ID, HTTP 재시도·사용량·청구 대조는 R3에 남아 있다.
+별도 `AgentHarness` 계열, 직접 `omk-ai` 호출, 자문 judge, child process와 임의의
+extension 코드는 자동으로 같은 정책에 포함되지 않는다. 이 프로세스 내 코드의
+접근 권한을 계약 객체가 sandbox하는 것도 아니다.
+
+단계별 합성·회귀 검사는 끝냈지만 **통합 gate와 독립 리뷰는 BLOCKED**다.
+현재 실행 중인 CLI를 재빌드·재시작하거나 설치·배포하지 않았고, 새 벤치마크·유료 모델
+호출·Git 쓰기도 하지 않았다. 다음 순서는 최종 전송 계약과 R3 원장 완결성 확보이며,
+마감시간·학습형 라우팅·DAG 기본값 변경은 그 증거를 전제로 진행한다.
+
+## 14. Model Studio 전송 교정과 Chat Completions 계약 — 2026-09-08
+
+이번 단위는 벤치마크 전송 경계의 결함 두 가지를 수정했다. 기존 작업 트리의 R2 구현을
+기반으로 했으며 다른 세션의 변경, 인증, 모델 선택 설정, 과거 평가 자료는 수정하지 않았다.
+실행 중인 편집 모델과 다음 평가의 대상 모델을 혼동하지 않았고 외부 추론 요청도 하지 않았다.
+
+### 수정과 근거
+
+1. **공급자별 전송 형식:** Model Studio 공식 HTTPS 호스트를 OpenAI 기본값으로 처리해
+   `max_completion_tokens`, `developer`, OpenAI 전용 캐시 필드를 보내고 있었다.
+   DeepSeek의 native `thinking` 설정도 Model Studio가 문서화한 `enable_thinking`과 달랐다.
+   현재는 `max_tokens`, `system`, 명시적 thinking boolean을 기본으로 사용한다.
+   DeepSeek V4의 추론 수준도 호환 설정이 허용하면 전송하며 명시적인 effort opt-out은 보존한다.
+   URL 문자열 일부가 아닌 파싱된 HTTPS hostname으로 판별하고 주소나 키를 변경하지 않는다.
+2. **최종 payload 계약:** 논리적 검사 이후 다른 모델 ID 또는 잘못된 출력 상한이 만들어져도
+   관측 훅이 없으면 검사가 없었다. 현재 Chat Completions는 정확한 ID와 하나의 유효한 출력
+   상한을 HTTP 호출 전에 검사한다. 비허용 ID, 누락·모호·비정수·초과 한도는 거부한다.
+   사용자 훅은 기존처럼 불변 복사본만 관측하며, 훅이 없을 때에는 대화 전체를 복제하지 않는다.
+   core와 SDK가 중첩 적용돼도 관측용 복사를 반복하지 않는다.
+
+호환성 책임은 `packages/ai/src/providers/openai-completions-compat.ts`, payload 경계는
+`packages/agent/src/provider-payload-contract.ts`로 분리했다. 기존 대형 provider 파일은
+줄였으며 의존성·크기 baseline·검사 제외 규칙은 추가하지 않았다.
+
+### 검증 결과
+
+| 검사 | 실제 결과 |
+| --- | --- |
+| 수정 전 재현 | Model Studio 13개, payload 계약 17개 실패. 직접 검토 중 `minimal` 전송 오류 1개도 RED→GREEN으로 교정. assertion 모양 오류는 교정 후 별도 재실행 |
+| API 직렬화·기존 회귀 | 종료 0, 86/86 |
+| core 계약·루프·Agent·harness | 종료 0, 340/340 |
+| CLI·SDK·요약 | 종료 0, 118/118 |
+| 기존 R0/R1 합성 CLI 검사 | 종료 0, 102/102 |
+| 새 표적 검사 | 위 합계에 포함된 47개. 반복 실행을 중복 합산하지 않음 |
+| 변경 TypeScript 7파일 Biome, 전체 `tsgo --noEmit --pretty false` | 종료 0 |
+| `check:import-cycles`, `check:private-home`, `git diff --check` | 종료 0 |
+| 주 LSP | 검사한 소스·테스트 7파일 오류 0 |
+| `lens_diagnostics(mode=all)` | 최종 진단 대상 10파일 오류·경고 0. 앞선 링크 경고의 로컬 대상도 확인 |
+| `npm run check` | 종료 1, 기존 서식/import 오류 3건에서 중단 |
+| `check:module-size` | 종료 1, 기존 범위 밖 baseline 초과 6개 |
+| `check:doc-links` | 종료 1, 기존 미추적 `model-contract.md`를 참조하는 링크 3개 |
+
+API 검사는 실제 OpenAI SDK의 직렬화 이후 fetch를 대체한다. CLI 검사는 격리된 임시
+agent home과 loopback HTTP 서버로 소스 CLI→SDK→전송 경로를 실행해 모델 ID,
+`max_tokens: 512`, `enable_thinking: false`와 금지 모델의 전송 0건·종료 1을 확인했다.
+초기 CLI 검사의 timeout은 테스트 자식 stdin을 닫지 않은 문제였고 EOF 전달로 해결했다.
+이 timeout을 제품 결함이나 유효한 RED 검사로 계산하지 않았다.
+기존 API 캐시 검사도 외부 `OMK_CACHE_RETENTION`에 영향을 받아, 해당 변수만 제거한
+검사 명령으로 기준선과 수정 후 결과를 비교했다.
+
+통합 검사 차단 파일은 §13.2의 목록과 같다. 문서 링크 3개는 metrics/providers/sdk의
+`model-contract.md` 참조다. 승인 없이 기존 미추적 파일을 stage하거나 검사 기준을
+완화하지 않았다. 이 상태를 전체 저장소 PASS나 재측정 준비 완료라고 부르지 않는다.
+
+### 재측정 전에 남은 조건
+
+[공급자 안내](packages/coding-agent/docs/providers.md#model-studio-deepseek-v4)에 따라
+**Token Plan·Coding Plan·종량제의 키와 주소를 구분**해야 한다. 같은 모델 표시명만으로
+같은 과금 경로나 snapshot이라고 가정하지 않는다. 다음 비교의 provider, 정확한 Flash ID,
+추론 모드, 출력 인수, task 집합, 반복 수와 예산을 고정한 뒤 양쪽 adapter를 확인한다.
+
+이번 검사는 직렬화된 출력 인수에 대한 것이며 원격 추론 토큰·청구 상한·숨은 모델 라우팅을
+보장하지 않는다. 다른 API, 실제 설치 바이너리, Harbor adapter 주입, 요청 원장과
+성능 이득은 여전히 별도 검증 대상이다. 새 모델 호출·벤치마크·빌드·설치·Git 쓰기는 없었다.
+
+### 커밋 체크포인트
+
+- API 단위: `openai-completions.ts`, 새 compat 모듈, `modelstudio-completions.test.ts`,
+  providers/models 문서와 이 절의 해당 hunk.
+  제안: `fix: Model Studio DeepSeek 추론 모드와 출력 인수 교정`.
+- 계약 단위: `provider-request.ts`의 이번 hunk, 새 payload 모듈·직접 테스트,
+  `model-contract-wire-cli.test.ts`, 계약 문서와 이 절의 해당 hunk.
+  제안: `fix: Chat Completions 최종 모델과 출력 상한 검증`.
+  이 단위는 기존 미커밋 R2 구현에 의존하므로 그 변경의 승인·검토와 분리해 다뤄야 한다.
+
+두 단위 모두 직접 검토했다. 실패 시 전송 중단, 기존 공급자 회귀, 불변 관측,
+불필요한 복제·의존성 추가 여부를 확인했다. 독립 다중 에이전트 리뷰로 표현하지 않는다.
+
+## 15. Flash 실패 기반 경계 재설계 — 2026-09-09
+
+[새 아키텍처와 수용 기준](packages/coding-agent/docs/harness-boundaries.md)에 증거,
+책임별 구조, 구현 범위와 후속 단계 H1~H5를 정리했다. 현재 실행물·원본 결과는 변경하지
+않았고 사용자가 중단한 벤치마크도 재개하지 않았다. WSL 재시작·설정 변경도 이번 작업에서는 없다.
+
+### 이번에 구현한 세 경계
+
+1. 계약 모드에서 tool 이미지가 모델 선택을 바꾸지 않게 했다. text-only 요청에만 명시적
+   미관측 안내를 투영하고 원본 session/image, tool-call ID, text, 오류 상태는 보존한다.
+   사용자 첨부의 허용된 vision 경로와 비계약 모드의 기존 동작은 유지한다.
+2. run 종료 분류를 `session-run-termination.ts`로 분리했다. 관측된 core 계약 거부는
+   문자열 기반 provider-protocol 추측보다 먼저 non-retryable configuration으로 분류한다.
+3. text/JSON renderer와 최종 prompt 성공 여부를 분리했다. 실패 settlement는 exit1이며
+   후속 CLI 프롬프트를 중단한다. 내부 retry 후 성공은 그대로 성공이다.
+
+### 검사
+
+| 검사 | 실제 결과 |
+| --- | --- |
+| core 입력·계약·루프 | 종료 0, 134개 |
+| SDK·CLI·요약·실패 분류 | 종료 0, 60개 |
+| 기존 session termination runtime | 종료 0, 17개 |
+| 합계 | 211개, 14개 test 파일. 반복 실행은 합산하지 않음 |
+| 전체 `tsgo --noEmit --pretty false` | 종료 0 |
+| 주 LSP | 변경 소스·테스트 13개 오류0 |
+| 표적 Biome | 변경 범위 검사·서식 교정 통과 |
+| `check:import-cycles`, `git diff --check` | 종료 0 |
+| `npm run check` | 종료 1, 기존 범위 밖 서식/import 오류3개에서 중단 |
+| `check:module-size` | 종료 1, 기존 범위 밖 초과6개. 이번 AgentSession 증가분은 원인분류 분리로 해소 |
+| `check:doc-links` | 미추적 계약/설계 문서가 정식 변경에 포함되기 전에는 미통과 |
+
+좁은 검사와 자기 검토는 통과했지만 저장소 전체 통합 gate가 통과한 상태는 아니다.
+기존 차단 목록은 §14와 같고, 새 설계 문서의 링크도 커밋 포함 시 다시 검사해야 한다.
+새 runtime 모듈은 각각 34·78 pure LOC이며 테스트 fixture도 분리했다.
+새 의존성·검사 억제·모듈 크기 baseline 증가는 없다. 독립 다중 에이전트 리뷰를 수행한
+것처럼 표현하지 않으며, 이 구조가 새로운 해결률을 보장하지 않는다.
+
+### 커밋 체크포인트 — 아직 stage/commit하지 않음
+
+| 단위 | 이번 파일/hunk | 제안 메시지 |
+| --- | --- | --- |
+| 입력 표현 | agent `provider-input.ts`, `provider-request.ts`, `provider-request-types.ts`, `index.ts`, `provider-input.test.ts`; coding-agent `sdk-provider-stream.ts`, `sdk-model-contract.test.ts`의 이미지 검사; 계약/설계 문서 | `fix: 단일 모델 계약에서 도구 이미지의 입력 표현 분리` |
+| 종료 원인·CLI | coding-agent `session-run-termination.ts`, `agent-session.ts`의 해당 hunk, `print-mode.ts`, `print-mode.test.ts`, `print-mode-fixtures.ts`, `model-contract-wire-cli.test.ts`, SDK 분류 검사와 JSON 문서 | `fix: 계약 거부 원인과 CLI 최종 실패 상태 보존` |
+
+두 단위는 이전 미커밋 R2 구현 위에 놓인다. 승인 시 이번 hunk와 의존 변경을 구분해
+검토해야 하며, 전체 작업 트리를 한꺼번에 stage하지 않는다. 후속 H1~H5는 문서에 명시한
+증거·검사·비용 경계를 만족하는 작은 단위로 진행한다.
+
+## 16. 배포 준비 — 2026-09-13
+
+### 범위와 현재 판정
+
+`ca75f4e5cc` 이후 남은 TB 변경을 검토했다. 선택기·감사기의 구현과 직접 테스트는
+각각 독립 단위이며, 공유 문서의 해당 설명만 함께 묶는다. 이번에 추가한 런타임
+기능은 없다. 시각 문자열 뒤 개행을 거부하는 실제 CLI 경계 검사 4개를 추가했으며,
+기존 구현에서도 통과함을 확인했다. 이를 새로 수정한 결함의 RED로 세지 않는다.
+
+`.playwright-mcp/`의 로컬 캡처·로그는 삭제하지 않고 루트의 정확한 디렉터리만
+Git ignore에 추가했다. 인증·모델·MCP·스킬 활성 설정은 변경하지 않았다. 제공받은
+Mac 스킬 목록으로 Linux의 설치 상태를 단정하거나 누락 스킬을 설치하지 않았다.
+
+**판정: 아래 로컬 검사와 패키징 준비는 통과. 릴리스 실행은 승인 전 보류다.**
+관측 환경은 Linux, Node.js `v24.19.0`, npm `11.14.1`이다. Mac/Windows 실행 결과,
+실계정 Devin 호출, 전체 비-LLM 제품 테스트, 다중 플랫폼 바이너리 검증은 이번에
+수행하지 않았다. 기존 벤치마크를 재실행하지 않았고 새로운 성능 수치는 없다.
+
+### 재검증 근거
+
+| 검사 | 관측 결과 | 해석 범위 |
+| --- | --- | --- |
+| 새 TB 회귀 검사의 기준선 대조 | HEAD 소스를 임시 디렉터리에 복사해 실행: 종료 1, 38개 중 36개 실패 | 공유 소스·index는 되돌리지 않음. 구 구현의 잘못된 결과와 v2 계약 차이를 실제 CLI로 탐지 |
+| 현행 TB 검사 5파일 | 종료 0, 106/106 | 합성 task/trial만 사용. 원본 평가 자료·provider 호출 없음 |
+| JS strict typecheck | 종료 0 | 선택기·감사 CLI·입력·집계 모듈, `--allowJs --checkJs --strict` |
+| `.mjs` 명시적 Biome | 종료 0, 실제 4파일 | 임시 설정에서 포함 범위 지정. 잘못된 문법 대조 입력은 종료 1. 저장소 검사 설정은 유지 |
+| primary LSP | 4개 파일 clean, 미확인 0 | TB 구현 2개·회귀 테스트 2개 |
+| `npm run build` | 종료 0 | 7개 workspace 패키지를 저장소 순서대로 빌드. 모델 카탈로그 재생성 없음 |
+| `npm run check` | 종료 0, Node 검사 378/378 포함 | Biome·크기·순환·문서·릴리스 정합성·private-home·shrinkwrap·tsgo·browser-smoke 전체 체인. TB 검사와 중복되므로 합산하지 않음 |
+| 빌드된 CLI | `--version`, `--help`, `run --help` 각각 종료 0 | 자격증명 없는 임시 HOME에서 프롬프트 없이 실행. version은 0.98.5 |
+| 빌드된 공개 package import | 7개 모두 성공 | 공개 최상위 entrypoint의 로드만 검증. provider 추론 실행 아님 |
+| Gitleaks | 종료 0, 탐지 0건 | `v0.98.5` 이후 현재 diff와 새 TB 테스트에 기존 규칙·완전 redaction 적용. 전체 비공개 이력에 대한 보증 아님 |
+
+검사의 명령과 상세 로그는 로컬 증거 디렉터리에서 보관한다. 요약 수치는 이 작업의
+관측이며, 과거 §9~§15의 실패·통과 수치와 혼합하지 않는다. 소스 변경 뒤에는 해당
+검사를 다시 실행해야 한다. 현재 TUI 세션을 재시작하거나 새 설치본으로 검증했다고
+주장하지 않는다.
+
+### 패키지 내용 검사
+
+각 패키지 디렉터리에서 `npm pack --dry-run --ignore-scripts --json`을 실행했다.
+모두 종료 0이며 version은 0.98.5다. **이 명령은 tarball 배포나 설치 테스트가 아니다.**
+`main`·`types`·명시적인 `exports`·`bin` 대상이 파일 목록에 존재하고, `.omk`,
+`.git`, `.playwright-mcp`, 중첩 `node_modules`, 인증·키 파일이 들어가지 않는지 확인했다.
+
+| 패키지 | 포함 파일 수 |
+| --- | ---: |
+| `omk-ai` | 376 |
+| `omk-tui` | 123 |
+| `omk-protocol` | 63 |
+| `omk-agent-core` | 287 |
+| `omk-adaptorch-wpl` | 111 |
+| `open-multi-agent-kit` | 2231 |
+| `omk-book-to-skill` | 65 |
+
+Devin의 `DEVIN-NOTICE`와 분리된 `dist/providers/devin-connect-stream.js`,
+CLI의 `npm-shrinkwrap.json`과 `docs/verified-run-remaining-design.md`도 포함된다.
+이 목록 검사는 다음 릴리스의 설치·실행 보증을 대신하지 않는다.
+
+### 변경 로그와 버전 경계
+
+`.omk/prompts/cl.md`의 감사 절차로 `v0.98.5..HEAD`를 대조했다. CI 복구·문서 전용
+커밋은 제품 기능 공지에서 제외했고, 다음 누락을 `[Unreleased]`에만 보완했다.
+
+- coding-agent와 protocol: 최대 2개 작업의 opt-in eager frontier와 생략 시 digest 보존.
+- coding-agent: AI 패키지의 Codex SSE timeout 수정과 리소스 설명의 외부 하네스 태그 처리.
+- coding-agent: checkout-only TB 출력의 v2 전환·null 총량·필수 완료시각을 Breaking Changes로 명시.
+
+기존 배포 changelog 본문, 버전·lockfile·shrinkwrap·README 버전 링크는 수정하지 않았다.
+새 `### New Features` 홍보 요약은 별도 확인 전 작성하지 않았다.
+
+2026-09-13 읽기 전용 확인에서 [GitHub v0.98.5 Release](https://github.com/dmae97/omk/releases/tag/v0.98.5)는
+공개 상태였고 6개 플랫폼 자산을 갖고 있었다. 로컬 v0.98.5 태그는 main의 조상이다.
+각 공개 registry의 `https://registry.npmjs.org/<package>/latest`도 위 7개 전부 0.98.5를
+반환했다. 이는 이전 배포 상태 확인이지 이번 변경을 배포한 결과가 아니다.
+
+TB 출력 소비자에게는 호환성 변경이 있으므로, 헌법의 minor 규칙에 따라 **다음 버전
+후보는 0.99.0**으로 제안한다. checkout-only 인터페이스의 릴리스 범위를 확정하기 전
+자동으로 버전을 바꾸거나 0.98.5에 재게시하지 않는다.
+
+### 재현 명령과 승인 체크포인트
+
+```bash
+# 합성 입력만 사용하는 회귀 검사
+node --test --test-concurrency=1 scripts/test/tb-mini-suite.test.mjs scripts/test/tb-mini-suite-ranking.test.mjs scripts/test/tb21-audit.test.mjs scripts/test/tb21-audit-inputs.test.mjs scripts/test/tb21-audit-completion.test.mjs
+node node_modules/typescript/bin/tsc --noEmit --allowJs --checkJs --strict --target ES2022 --module NodeNext --skipLibCheck --types node scripts/tb-mini-suite.mjs scripts/tb21-audit.mjs scripts/lib/tb21-input.mjs scripts/lib/tb21-audit.mjs
+npm run build
+npm run check
+# 각 공개 workspace에서 별도로 실행 (게시·lifecycle 실행 없음)
+(cd packages/ai && npm pack --dry-run --ignore-scripts --json)
+```
+
+| 제안 커밋 단위 | 범위 | 제안 메시지 |
+| --- | --- | --- |
+| 선택 v2 | `scripts/tb-mini-suite.mjs`, `scripts/test/tb-mini-suite-ranking.test.mjs`, metrics의 선정 설명 | `fix(scripts): TB 선택의 결측 예상 시간과 소규모 할당 보정` |
+| 감사 v2 | `scripts/lib/tb21-audit.mjs`, `scripts/test/tb21-audit-completion.test.mjs`, 감사 문서와 metrics의 해당 hunk | `fix(scripts): TB 미완료 결과와 소수초 순서 검증` |
+| 배포 준비 문서 | ROADMAP 이력·현재 상태, metrics의 과거 상태 구분, changelog 2개, `.gitignore`의 캡처 경로 | `docs(release): 잔여 TB 변경과 로컬 배포 준비 기록` |
+
+이번 후속 요청에서는 stage·commit·push·branch·PR·tag·npm 게시·workflow dispatch를
+수행하지 않았다. 위 분할 및 커밋·푸시 범위를 승인받은 뒤 index 전체를 검사한다.
+배포 승인은 별도다. 버전을 바꾸면 7개 package와 lock/shrinkwrap·릴리스 노트·README를
+동기화하고 새 버전으로 빌드·검사·pack을 다시 실행해야 한다.
+
+실제 게시 경로는 기존 CI다. `release:*` 스크립트는 버전 변경뿐 아니라 commit·tag·push까지
+수행하므로 준비 단계에서 실행하지 않았다. 게시 실패는 원인을 고친 뒤 같은 태그의
+공식 workflow를 재실행하며, 동일 버전용 release 스크립트를 다시 실행하지 않는다.
+태그·GitHub Release·7개 npm latest가 일치하기 전에는 새 배포 완료라고 보고하지 않는다.
 
 [^S1]: Harbor, [Terminal-Bench 2.1 dataset](https://hub.harborframework.com/datasets/terminal-bench/terminal-bench-2-1/6). 데이터셋 식별과 89-task 구성. 확인일 2026-09-07.
 [^S2]: Harbor, [Terminus-2](https://www.harborframework.com/docs/agents/terminus-2). 기준 agent와 terminal 실행 구조. 현재 문서의 세부 동작을 설치된 Harbor 0.20.0의 구현과 동일하다고 가정하지 않음. 확인일 2026-09-07.
