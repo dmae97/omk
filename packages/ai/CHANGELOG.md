@@ -11,6 +11,7 @@
 ### Fixed
 
 - Fixed Devin login waiting for a callback before displaying the authorization URL; added state validation, cancellation, timeout cleanup, and explicit re-login for expired sessions.
+- `openai-codex` SSE requests aborted at a fixed 10s if response headers had not arrived, regardless of the caller's `timeoutMs`. A ~480K-token context with embedded screenshots (≈27MB, re-uploaded on every attempt because `store:false`) routinely needs longer than that before chatgpt.com starts streaming, so every attempt failed with `Codex SSE response headers timed out after 10000ms`, each retry re-uploaded the whole body, and a turn burned ~2.5 minutes without ever reaching the model. The header wait now honours the idle `timeoutMs` (what the WebSocket path already waits for its first event), floored at the original 10s stall guard when no timeout is configured.
 
 ## [0.98.5] - 2026-09-12
 

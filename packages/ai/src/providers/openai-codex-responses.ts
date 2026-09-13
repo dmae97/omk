@@ -198,18 +198,18 @@ function normalizeTimeoutMs(value: number | undefined): number | undefined {
 	return Math.floor(value);
 }
 
-function createSSEHeaderTimeout(): { signal: AbortSignal; clear: () => void; error: () => Error | undefined } {
+type SSEHeaderTimeout = { signal: AbortSignal; clear: () => void; error: () => Error | undefined };
+
+/** Header wait mirrors the WebSocket first-event wait: caller's idle timeoutMs, floored at the 10s stall guard. */
+function createSSEHeaderTimeout(idleTimeoutMs: number | undefined): SSEHeaderTimeout {
+	const timeoutMs = Math.max(DEFAULT_SSE_HEADER_TIMEOUT_MS, idleTimeoutMs ?? 0);
 	const controller = new AbortController();
 	let error: Error | undefined;
 	const timeout = setTimeout(() => {
-		error = new Error(`Codex SSE response headers timed out after ${DEFAULT_SSE_HEADER_TIMEOUT_MS}ms`);
+		error = new Error(`Codex SSE response headers timed out after ${timeoutMs}ms`);
 		controller.abort(error);
-	}, DEFAULT_SSE_HEADER_TIMEOUT_MS);
-	return {
-		signal: controller.signal,
-		clear: () => clearTimeout(timeout),
-		error: () => error,
-	};
+	}, timeoutMs);
+	return { signal: controller.signal, clear: () => clearTimeout(timeout), error: () => error };
 }
 
 // ============================================================================
@@ -342,7 +342,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				}
 
 				try {
-					const headerTimeout = createSSEHeaderTimeout();
+					const headerTimeout = createSSEHeaderTimeout(idleTimeoutMs);
 					const combinedSignal = combineAbortSignals([options?.signal, headerTimeout.signal]);
 					let retainSignalForBody = false;
 					try {

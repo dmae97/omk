@@ -397,6 +397,83 @@ describe("openai-codex streaming", () => {
 		expect(result.errorMessage).toBe("Codex SSE response headers timed out after 10000ms");
 	});
 
+	it("waits for SSE headers up to the configured idle timeoutMs instead of the 10s floor", async () => {
+		// Regression: a ~27MB / 480K-token context made chatgpt.com take >10s before
+		// sending response headers. Every attempt was aborted at the fixed 10s cliff
+		// ("Codex SSE response headers timed out after 10000ms") even though the
+		// caller had configured timeoutMs=120000, which the WebSocket path already
+		// honours for its first-event wait.
+		vi.useFakeTimers();
+		const token = mockToken();
+		const encoder = new TextEncoder();
+		let abortedReason: unknown;
+
+		const fetchMock = vi.fn((input: string | URL, init?: RequestInit) => {
+			const url = typeof input === "string" ? input : input.toString();
+			if (url !== "https://chatgpt.com/backend-api/codex/responses") {
+				throw new Error(`Unexpected URL: ${url}`);
+			}
+			const signal = init?.signal;
+			if (!signal) throw new Error("Expected SSE fetch to receive an abort signal");
+			return new Promise<Response>((resolve, reject) => {
+				signal.addEventListener(
+					"abort",
+					() => {
+						abortedReason = signal.reason;
+						reject(signal.reason instanceof Error ? signal.reason : new Error("SSE fetch aborted"));
+					},
+					{ once: true },
+				);
+				// Server sends headers 25s after the request started (slow prefill).
+				setTimeout(() => {
+					if (signal.aborted) return;
+					const body = new ReadableStream<Uint8Array>({
+						start(controller) {
+							controller.enqueue(encoder.encode(buildSSEPayload({ status: "completed" })));
+							controller.close();
+						},
+					});
+					resolve(new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } }));
+				}, 25_000);
+			});
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const model: Model<"openai-codex-responses"> = {
+			id: "gpt-6-astra",
+			name: "GPT-6 Astra",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "https://chatgpt.com/backend-api",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 1_050_000,
+			maxTokens: 128_000,
+		};
+		const context: Context = {
+			systemPrompt: "You are a helpful assistant.",
+			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+		};
+
+		const resultPromise = streamOpenAICodexResponses(model, context, {
+			apiKey: token,
+			transport: "sse",
+			timeoutMs: 120_000,
+		}).result();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(abortedReason, "headers must not be aborted at the 10s floor when timeoutMs is larger").toBeUndefined();
+
+		await vi.advanceTimersByTimeAsync(15_000);
+		const result = await resultPromise;
+		expect(result.errorMessage).toBeUndefined();
+		expect(result.stopReason).toBe("stop");
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
 	it("aborts SSE body reads after response headers arrive", async () => {
 		const token = mockToken();
 		const encoder = new TextEncoder();

@@ -272,7 +272,7 @@ Plays a short system sound only after the top-level prompt settles: retries, con
 | `retry.enabled` | boolean | `true` | Enable automatic agent-level retry on transient errors |
 | `retry.maxRetries` | number | `3` | Maximum agent-level retry attempts |
 | `retry.baseDelayMs` | number | `2000` | Base delay for agent-level exponential backoff (2s, 4s, 8s) |
-| `retry.provider.timeoutMs` | number | SDK default | Provider/SDK request timeout in milliseconds |
+| `retry.provider.timeoutMs` | number | SDK default | Provider/SDK request timeout in milliseconds. Also bounds how long the `openai-codex` SSE transport waits for response headers (floor 10s); large contexts need more than the floor |
 | `retry.provider.maxRetries` | number | `0` | Provider/SDK retry attempts |
 | `retry.provider.maxRetryDelayMs` | number | `60000` | Max server-requested delay before failing (60s) |
 
