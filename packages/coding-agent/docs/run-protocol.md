@@ -41,7 +41,8 @@ Recovery commands share command IDs and the generation cap; none resets budgets.
 
 `linux-command-dag-v1` adds `RunDagWriter` / `RunDagTask` with 1–16 nodes, explicit
 artifact dependencies, disjoint write scopes and 1–2 preapproved command attempts per
-node. `orderRunDag()` provides deterministic FIFO topological order and
+node. Optional `maxConcurrentTasks` accepts only 1 or 2; omission preserves legacy
+serialization and serial execution. `orderRunDag()` provides deterministic FIFO topological order and
 `runDagAncestors()` includes the full transitive input closure. `RunTaskRetryCommand`
 / `parseRunTaskRetryCommand()` pins a task selection to the original input and exact
 run revision/generation. These pure contracts never authorize dispatch or authenticate
@@ -53,8 +54,8 @@ then supplies authenticated checks to the existing claim-closure reducer.
 This does not replace the task/attempt/evaluation contracts or add execution to
 this package. See [Verified Run](verified-run.md) for the implemented CLI/SDK
 path, candidate recovery and checkpoint-based local writer restart, plus the
-serial command DAG and selective retry, plus remaining live-model, parallel frontier,
-plan amendment and control-surface work.
+bounded command DAG, eager frontier and selective retry, plus remaining live-model,
+verification-edge, plan amendment and control-surface work.
 
 ## Durable goal lifecycle
 

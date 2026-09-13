@@ -11,6 +11,7 @@ export interface OwnedRunCommand {
 	readonly workspace: string;
 	readonly deadline: number;
 	readonly claimId: string | null;
+	readonly taskId?: string;
 }
 export interface OwnedRunResult {
 	readonly executionId: string;
@@ -32,7 +33,13 @@ export async function executeRunCommand(
 	if (policy.signal?.aborted) throw new VerifiedRunError("cancelled");
 	const generation = journal.state.generation;
 	const executionId = randomUUID();
-	journal.append({ kind: "dispatch", executionId, role: request.role, claimId: request.claimId });
+	journal.append({
+		kind: "dispatch",
+		executionId,
+		role: request.role,
+		claimId: request.claimId,
+		...(request.taskId === undefined ? {} : { taskId: request.taskId }),
+	});
 	const timeoutMs = Math.floor(request.deadline - performance.now());
 	if (timeoutMs <= 0 || policy.signal?.aborted) {
 		const failure = policy.signal?.aborted ? "cancelled" : "deadline";

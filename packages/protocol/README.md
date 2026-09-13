@@ -23,7 +23,8 @@ TaskSpec -> ExecutionAttempt -> Observation -> EvaluationResult -> RuntimeDecisi
   writer restart to an immutable input checkpoint. They grant no remote replay authority.
 - Bounded `linux-command-dag-v1`: `RunDagWriter`, `RunDagTask`, `orderRunDag()`,
   `runDagAncestors()`, `MAX_RUN_DAG_TASKS` and `MAX_RUN_TASK_ATTEMPTS`. Pure graph
-  ordering/closure does not schedule or authorize a process.
+  ordering/closure does not schedule or authorize a process. `RunDagWriter` accepts
+  optional `maxConcurrentTasks: 1 | 2`; omitted fields stay omitted for legacy digest parity.
 - `RunTaskRetryCommand` / `parseRunTaskRetryCommand()` bind a failed/interrupted task
   selection to the original input and exact revision/generation. Empty selections
   request pending-only continuation, not permission to omit a failed dependency.

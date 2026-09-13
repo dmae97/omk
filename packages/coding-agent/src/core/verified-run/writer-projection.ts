@@ -1,11 +1,17 @@
 import type { RunEvent, WriterReduction } from "./run-types.ts";
 import { VerifiedRunError } from "./storage.ts";
+import { bindTaskExecution } from "./task-execution.ts";
 
 type WriterEvent = Extract<RunEvent, { kind: "writer_opened" | "model_request" | "writer_closed" }>;
 
 export function acceptWriterDispatch(context: WriterReduction, event: Extract<RunEvent, { kind: "dispatch" }>): void {
 	const { state, contract } = context;
-	if (event.claimId !== null || state.candidateDigest) throw new VerifiedRunError("integrity");
+	if (
+		event.claimId !== null ||
+		state.candidateDigest ||
+		(event.taskId !== undefined && contract.profile !== "linux-command-dag-v1")
+	)
+		throw new VerifiedRunError("integrity");
 	switch (contract.profile) {
 		case "linux-command-v1":
 			if (context.writerStarted) throw new VerifiedRunError("integrity");
@@ -19,12 +25,8 @@ export function acceptWriterDispatch(context: WriterReduction, event: Extract<Ru
 				throw new VerifiedRunError("integrity");
 			break;
 		case "linux-command-dag-v1":
-			if (
-				context.writerStarted ||
-				!state.tasks.some((task) => task.status === "running" && task.generation === state.generation)
-			)
-				throw new VerifiedRunError("task_not_ready");
-			break;
+			bindTaskExecution(context, event);
+			return;
 		default: {
 			const exhaustive: never = contract;
 			throw new VerifiedRunError(String(exhaustive));

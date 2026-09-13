@@ -20,6 +20,33 @@ function input() {
 }
 
 describe("bounded command DAG contract", () => {
+	it.each([1, 2])("accepts explicit maximum concurrent tasks %s", (maxConcurrentTasks) => {
+		const raw = input();
+		const parsed = parseRunContract({ ...raw, writer: { ...raw.writer, maxConcurrentTasks } });
+		expect(parsed).toMatchObject({ writer: { maxConcurrentTasks } });
+	});
+	it("does not insert a new concurrency field into legacy contracts", () => {
+		const parsed = parseRunContract(input());
+		expect(Object.getOwnPropertyDescriptor(parsed.writer, "maxConcurrentTasks")).toBeUndefined();
+		expect(parseRunContract(JSON.parse(JSON.stringify(parsed)))).toEqual(parsed);
+	});
+	it.each([0, -1, 3, Infinity, NaN, 1.5, undefined])(
+		"rejects invalid explicit concurrency %s",
+		(maxConcurrentTasks) => {
+			const raw = input();
+			expect(() => parseRunContract({ ...raw, writer: { ...raw.writer, maxConcurrentTasks } })).toThrow();
+		},
+	);
+	it("never invokes a concurrency getter", () => {
+		const raw = input();
+		const writer = {
+			...raw.writer,
+			get maxConcurrentTasks() {
+				throw new Error("getter executed");
+			},
+		};
+		expect(() => parseRunContract({ ...raw, writer })).toThrow(/Invalid/);
+	});
 	it("accepts forward dependency references and snapshots all nested task inputs", () => {
 		const raw = input();
 		const parsed = parseRunContract(raw);

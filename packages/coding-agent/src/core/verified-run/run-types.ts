@@ -23,6 +23,7 @@ export type RunEvent =
 			readonly executionId: string;
 			readonly role: "writer" | "verifier";
 			readonly claimId: string | null;
+			readonly taskId?: string;
 	  }
 	| { readonly kind: "input_checkpoint"; readonly digest: string }
 	| { readonly kind: "process_ready"; readonly executionId: string; readonly identity: NamespaceIdentity }

@@ -13,8 +13,8 @@ const USAGE = `Usage: omk run plan --contract FILE [--json]
        omk run restart-writer ID --execute --approve DIGEST --base DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
        omk run resume ID --execute --approve DIGEST --candidate DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
        omk run artifact ID --candidate DIGEST --path PATH [--state-dir DIR]
-The opt-in command, scripted-agent and serial command-DAG profiles never apply changes to the original workspace.
-Resume rechecks a fixed candidate. Writer/task recovery preserves input checkpoints and budgets. Parallel DAG, plan amendment, managed apply and TUI/RPC control are not implemented.`;
+The opt-in command, scripted-agent and bounded command-DAG profiles never apply changes to the original workspace.
+Resume rechecks a fixed candidate. Writer/task recovery preserves input checkpoints and budgets. Command-DAG concurrency defaults to 1 and supports an explicit cap of 2. Plan amendment, managed apply and TUI/RPC control are not implemented.`;
 
 interface Parsed {
 	readonly action:

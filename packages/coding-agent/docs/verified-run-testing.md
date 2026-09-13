@@ -415,3 +415,94 @@ CLI 223 pure LOC는 경고 구간이므로 다음 확장 시 분할을 검토해
 미완료: 병렬 eager frontier, verification-conditioned edge, 겹치는 쓰기 범위, 계획 amendment와
 변경된 계약의 결과 adoption, 실서비스 모델, M2의 미기록 input/process crash window, M4 전체
 제어·적용 표면입니다. S90 점수·경쟁 우위·성능 개선량은 측정하거나 부여하지 않았습니다.
+
+## 6차: 최대 2개 작업의 eager frontier
+
+5차 변경은 사용자 승인 뒤 `cabbb38389`로 커밋했습니다. 지정 40개 경로만 포함했고,
+추가 집중 검사 41개와 pre-commit 전체 검사를 통과했습니다. 푸시는 수행하지 않았습니다.
+이후의 시작 리소스 표시 수정과 frontier는 서로 다른 검토 단위로 유지했습니다.
+
+### 구현과 RED/GREEN
+
+- `writer.maxConcurrentTasks`의 1·2 입력은 RED에서 둘 다 거부됐습니다. optional 필드를
+  추가한 뒤 protocol 103개가 통과했습니다. 생략된 값은 덧붙이지 않아 예전 계약 digest와
+  기본 직렬 동작을 보존합니다. 0·3·비정수·명시적 undefined·getter는 거부합니다.
+- AST 검색으로 `activeExecutionIds[0]` 가정 2개를 찾았습니다. process reducer를 분리하고
+  task/attempt와 execution ID를 연결해 준비·종료 관측을 정확한 작업에 귀속시켰습니다.
+  성공 checkpoint에는 새 in-flight 필드를 넣지 않아 예전 adoption 형식을 유지합니다.
+- 실제 A/B namespace에 제어용 파일 gate를 둔 테스트는 직렬 실행에서 RED였습니다.
+  B가 시작해야 A가 끝나고, A의 후속 C가 끝나야 B가 끝나는 조건이므로 wave barrier도 통과할
+  수 없습니다. eager frontier 적용 뒤 최대 active ID가 2이고 C 시작이 B 종료보다 앞섰습니다.
+- 두 namespace가 준비된 뒤 취소하는 테스트도 RED에서 두 작업을 관측하지 못했습니다.
+  GREEN에서는 두 owned 작업을 회수한 후에만 settled로 반환합니다.
+- 치명적 오류의 첫 원인을 보존하고 모든 시작된 promise에 취소를 전달한 뒤 기다립니다.
+  공통 원장 기록 실패를 성공이나 부분 산출물로 덮지 않습니다.
+
+### 새 실패 주입
+
+| 보장 | 테스트 |
+| --- | --- |
+| 느린 독립 작업을 기다리지 않는 의존성 해제, 최대 2개 실제 namespace | `verified-run-dag-frontier.test.ts` |
+| 병렬 취소 뒤 모든 owned ID 정산 | `verified-run-dag-frontier.test.ts` |
+| 먼저 끝난 형제가 다른 작업의 실패를 지우지 않음, 실패 branch만 retry | `verified-run-dag-parallel-safety.test.ts` |
+| 두 번째 process-ready의 fsync 실패, 기록 가시성 true/false 모두에서 두 namespace 종료 | `verified-run-dag-parallel-safety.test.ts` |
+| task ID 없는 예전 직렬 원장·adoption 읽기, 무수정 보존 | `verified-run-dag-parallel-safety.test.ts` |
+| 병렬 계약의 모호한 task-less dispatch 차단 | `verified-run-dag-parallel-safety.test.ts` |
+| 두 writer가 실제 실행 중인 supervisor SIGKILL → CLI에서 두 작업만 새 시도로 복구 | `verified-run-dag-parallel-cli.test.ts` |
+
+### 최종 검사
+
+5차의 coding-agent base 19개 파일과 `test/verified-run-dag*.test.ts` 전체에 아래 UI 회귀를
+추가해 `--maxWorkers=2`로 실행했습니다. UI의 별도 RED/GREEN·tmux 대조는
+`startup-resource-labels-testing.md`에 기록했습니다.
+
+```text
+ test/interactive-mode-resource-description.test.ts
+ test/interactive-mode-startup-input.test.ts
+ test/cli-resource-paths.test.ts
+ test/resource-loader.test.ts
+```
+
+V8 coverage는 다음 파일들을 명시적으로 포함해 측정했습니다. 다른 모듈의 전체 coverage가 아닙니다.
+
+```text
+ src/core/verified-run/dag-phase.ts
+ src/core/verified-run/dag-projection.ts
+ src/core/verified-run/process-projection.ts
+ src/core/verified-run/task-execution.ts
+ src/core/verified-run/owned-execution.ts
+ src/core/verified-run/writer-projection.ts
+ src/core/verified-run/projection.ts
+ src/modes/interactive/resource-description.ts
+```
+
+protocol은 5차와 같은 7개 테스트 파일을 실행하고 `src/run-dag.ts`를 coverage 대상으로 삼았습니다.
+실제 사용한 공통 flag는 `--coverage --coverage.provider=v8 --coverage.reporter=text
+--coverage.reporter=json-summary`이며 각 대상은 `--coverage.include=경로`로 지정했습니다.
+
+| 검사 | 결과 |
+| --- | --- |
+| coding-agent | 33개 파일, 309개 통과, exit 0 |
+| protocol | 7개 파일, 103개 통과, exit 0 |
+| 전체 관련 회귀 합계 | 412개 통과. UI 기존 회귀를 포함하며 신규 테스트 개수를 뜻하지 않음 |
+| 지정 backend 실행/상태 모듈 | lines 96.86%, branches 85.17%, functions 100% |
+| 리소스 표시 formatter | lines 100%, branches 87.5%, functions 100% |
+| protocol DAG 모듈 | lines 100%, branches 94.54%, functions 100% |
+| `tsgo --noEmit`, `npm run check` | exit 0, baseline·의존성 변경 없음 |
+| primary LSP | 마지막 대상 12개 파일 모두 clean, 미확인 0 |
+| lens 전체 error 조회 | blocking error 없음 |
+
+자가 검토: shared writer 성공 플래그가 task별 실패를 덮지 않고, 단일 owner의 동기 원장 경계에서
+슬롯을 예약합니다. 오래된 callback, 추가 dispatch, 불완전한 회수는 완료 근거가 될 수 없습니다.
+최종 verifier는 모든 작업이 고정된 뒤 동일 candidate에서 실행합니다. 첫 실패가 나도 나머지
+promise를 버리지 않습니다. 기존 프로세스 상태를 책임별로 분리했고, 새로운 dependency나 별도
+모델/worker 엔진을 추가하지 않았습니다.
+
+frontier 제안 메시지: `feat(runtime): 최대 2개 작업의 eager frontier 연결`.
+UI 제안 메시지: `fix(tui): 외부 하네스 태그를 리소스 설명으로 구분`.
+이 두 후속 단위는 아직 commit/push하지 않았습니다. 설치된 dist의 빌드·재시작도 별도입니다.
+임시 TUI·home·capture 산출물은 정리하며 원래의 사용자 설정과 다른 미커밋 변경은 보존합니다.
+
+미검증/미구현: live model 품질, 경쟁 하네스 대비 승률·성능, verification-conditioned edge,
+계획 amendment와 변경 계약의 adoption, M4 전체 제어/적용, 완전한 OS 자원 한도입니다.
+이 테스트의 gate 순서를 실제 경쟁 성능 개선률이나 S90 점수로 환산하지 않았습니다.

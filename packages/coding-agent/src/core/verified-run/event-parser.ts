@@ -65,6 +65,7 @@ export function parseRunEvent(raw: unknown): RunEvent {
 				executionId: text(value.executionId),
 				role: value.role,
 				claimId: value.claimId === null ? null : text(value.claimId),
+				...(value.taskId === undefined ? {} : { taskId: text(value.taskId) }),
 			};
 		}
 		case "input_checkpoint":

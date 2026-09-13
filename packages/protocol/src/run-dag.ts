@@ -12,6 +12,7 @@ export interface RunDagTask {
 export interface RunDagWriter {
 	readonly kind: "command-dag";
 	readonly tasks: readonly RunDagTask[];
+	readonly maxConcurrentTasks?: 1 | 2;
 }
 
 /** Deterministic FIFO Kahn ordering. This orders artifacts, not tool resource-conflict claims. */
@@ -46,7 +47,11 @@ export function runDagAncestors(tasks: readonly RunDagTask[], taskId: string): r
 }
 
 export function parseRunDagWriter(value: unknown, writable: readonly string[]): RunDagWriter {
-	const raw = runObject(value, ["kind", "tasks"]);
+	const hasConcurrency =
+		typeof value === "object" &&
+		value !== null &&
+		Object.getOwnPropertyDescriptor(value, "maxConcurrentTasks") !== undefined;
+	const raw = runObject(value, hasConcurrency ? ["kind", "tasks", "maxConcurrentTasks"] : ["kind", "tasks"]);
 	if (raw.kind !== "command-dag") throw new RunContractError("writer.kind");
 	const tasks = runArray(
 		raw.tasks,
@@ -80,5 +85,10 @@ export function parseRunDagWriter(value: unknown, writable: readonly string[]): 
 		}
 	}
 	orderRunDag(tasks);
+	if (hasConcurrency) {
+		const maxConcurrentTasks = raw.maxConcurrentTasks;
+		if (maxConcurrentTasks !== 1 && maxConcurrentTasks !== 2) throw new RunContractError("maxConcurrentTasks");
+		return Object.freeze({ kind: "command-dag", tasks, maxConcurrentTasks });
+	}
 	return Object.freeze({ kind: "command-dag", tasks });
 }

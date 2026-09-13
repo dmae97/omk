@@ -24,12 +24,12 @@ export function reduceDagEvent(context: WriterReduction, event: DagEvent): void 
 		!state.budget ||
 		state.candidateDigest ||
 		state.writerOpen ||
-		state.activeExecutionIds.length ||
 		state.execution === "paused"
 	)
 		throw new VerifiedRunError("integrity");
 	if (event.kind === "tasks_paused") {
 		if (
+			state.activeExecutionIds.length ||
 			state.tasks.some((task) => task.status === "running") ||
 			!state.tasks.some((task) => task.status === "failed") ||
 			readyDagTasks(contract.writer, state).length
@@ -51,7 +51,8 @@ export function reduceDagEvent(context: WriterReduction, event: DagEvent): void 
 		case "task_started":
 			if (
 				task.status !== "pending" ||
-				state.tasks.some((task) => task.status === "running") ||
+				state.tasks.filter((task) => task.status === "running").length >=
+					(contract.writer.maxConcurrentTasks ?? 1) ||
 				event.attempt !== task.attempt + 1 ||
 				event.attempt > definition.attempts.length ||
 				!readyDagTasks(contract.writer, state).some((task) => task.id === event.taskId)
@@ -62,31 +63,37 @@ export function reduceDagEvent(context: WriterReduction, event: DagEvent): void 
 				generation: state.generation,
 				attempt: event.attempt,
 				status: "running",
+				execution: Object.freeze({ kind: "ready" }),
 				inputDigest: event.inputDigest,
 				outputDigest: null,
 				failure: null,
 			};
-			context.writerStarted = false;
-			context.writerFinished = false;
 			break;
-		case "task_finished":
+		case "task_finished": {
 			if (
 				task.status !== "running" ||
 				task.generation !== state.generation ||
 				task.attempt !== event.attempt ||
-				!context.writerStarted
+				task.execution.kind !== "exited"
 			)
 				throw new VerifiedRunError("integrity");
+			// Keep checkpoint shape stable: process state belongs only to an in-flight task.
+			const checkpoint = {
+				taskId: task.taskId,
+				generation: task.generation,
+				attempt: task.attempt,
+				inputDigest: task.inputDigest,
+			};
 			if (event.outputDigest !== null) {
-				if (event.failure !== null || state.failure || !context.writerFinished)
-					throw new VerifiedRunError("integrity");
-				next = { ...task, status: "succeeded", outputDigest: event.outputDigest };
+				if (event.failure !== null || task.execution.failure) throw new VerifiedRunError("integrity");
+				next = { ...checkpoint, status: "succeeded", outputDigest: event.outputDigest, failure: null };
 			} else {
-				if (!event.failure || (state.failure && event.failure !== state.failure))
+				if (!event.failure || (task.execution.failure && event.failure !== task.execution.failure))
 					throw new VerifiedRunError("integrity");
-				next = { ...task, status: "failed", failure: event.failure };
+				next = { ...checkpoint, status: "failed", outputDigest: null, failure: event.failure };
 			}
 			break;
+		}
 		default: {
 			const exhaustive: never = event;
 			throw new VerifiedRunError(String(exhaustive));
@@ -94,11 +101,14 @@ export function reduceDagEvent(context: WriterReduction, event: DagEvent): void 
 	}
 	const tasks = state.tasks.map((task) => (task.taskId === next.taskId ? next : task));
 	context.writerFinished = tasks.every((task) => task.status === "succeeded" && task.generation === state.generation);
+	let settlement: RunProjection["settlement"] = "settled";
+	if (tasks.some((task) => task.status === "running")) settlement = "open";
+	if (state.activeExecutionIds.length) settlement = "draining";
 	context.state = {
 		...state,
 		tasks,
 		execution: "running",
-		settlement: "settled",
+		settlement,
 		failure: null,
 		lastClockMs: event.observedMs,
 	};

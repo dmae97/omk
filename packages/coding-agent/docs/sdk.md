@@ -161,7 +161,8 @@ for the JSON shape, events, hook restrictions, and uncovered paths.
 `planVerifiedRun()` and `createRunCoordinator()` provide three experimental profiles:
 `linux-command-v1` executes an approved command, `linux-scripted-agent-v1` drives
 approved steps through the real `AgentSession` and the offline Faux adapter, and
-`linux-command-dag-v1` executes a bounded command DAG serially.
+`linux-command-dag-v1` executes a bounded command DAG, serially by default or with
+an explicitly approved `writer.maxConcurrentTasks: 2`.
 Commands run in private sandboxes; native EvidenceReceipt v3 cores and a supervisor
 attestation bind the checked candidate before artifact retrieval.
 
@@ -183,13 +184,16 @@ interrupted tasks. `RunTaskRetryCommand` pins `baseDigest` and `taskIds` alongsi
 contract/revision/generation fields; an empty selection only continues pending work.
 Successful checkpoints are revalidated against their complete ancestor inputs before
 adoption. Final integration verification always uses fresh native receipts. The
-profile supports at most 16 tasks and two preapproved commands per task; it does not
+profile supports at most 16 tasks, two preapproved commands per task and an optional
+concurrency cap of 1 or 2. Omitted concurrency preserves legacy contract bytes.
+The eager frontier starts a ready consumer without waiting for unrelated work;
+fatal failure or cancellation drains all started tasks before returning. It does not
 synthesize a repair or accept overlapping task write scopes. `RunProjection.tasks`
 exposes task attempts and checkpoint digests; a blocked DAG returns `execution: "paused"`.
 All recovery actions share the generation cap, original budget and command-id fence.
 
-This does not enable live-model task generation, opaque remote replay, parallel
-frontier scheduling, plan amendment, or host application. See [Verified Run](verified-run.md) for contracts and trust boundaries.
+This does not enable live-model task generation, opaque remote replay,
+verification-conditioned edges, plan amendment, or host application. See [Verified Run](verified-run.md) for contracts and trust boundaries.
 
 ### Shared run budgets (SDK, opt-in)
 

@@ -25,7 +25,7 @@ export {
 	type VerifiedRunPlan,
 } from "./verified-run/coordinator.ts";
 export type { TaskRecoveryInspection } from "./verified-run/dag-recovery.ts";
-export type { RunTaskCheckpoint, RunTaskProjection } from "./verified-run/dag-types.ts";
+export type { RunTaskCheckpoint, RunTaskExecution, RunTaskProjection } from "./verified-run/dag-types.ts";
 export type { RunProjection } from "./verified-run/events.ts";
 export type { VerifiedRunEvidence } from "./verified-run/evidence.ts";
 export type { RecoveryInspection } from "./verified-run/recovery.ts";

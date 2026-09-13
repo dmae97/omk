@@ -1,9 +1,10 @@
 import { reduceDagEvent } from "./dag-projection.ts";
 import type { RunTaskProjection } from "./dag-types.ts";
+import { type ProcessReduction, reduceProcessEvent } from "./process-projection.ts";
 import { reduceRecoveryEvent } from "./recovery-projection.ts";
 import type { RunEvent, RunProjection, WriterReduction } from "./run-types.ts";
 import { VerifiedRunError } from "./storage.ts";
-import { acceptWriterDispatch, reduceWriterEvent } from "./writer-projection.ts";
+import { reduceWriterEvent } from "./writer-projection.ts";
 
 /** Deterministic replay only. Recovery observations are supplied by the trusted host adapter. */
 export function projectRun(events: readonly RunEvent[]): RunProjection {
@@ -54,10 +55,8 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 			processes: [],
 		},
 	};
-	const dispatched = new Set<string>();
-	const checked = new Set<string>();
+	const progress: ProcessReduction = { dispatched: new Set(), checked: new Set(), activeRole: "writer" };
 	const commands = new Set([first.command.commandId]);
-	let activeRole: "writer" | "verifier" = "writer";
 	for (const event of events.slice(1)) {
 		const state = context.state;
 		if (state.execution === "failed" || state.receiptDigest) throw new VerifiedRunError("integrity");
@@ -103,61 +102,10 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 			case "writer_closed":
 				reduceWriterEvent(context, event);
 				break;
-			case "dispatch": {
-				if (state.failure || state.activeExecutionIds.length || dispatched.has(event.executionId))
-					throw new VerifiedRunError("integrity");
-				if (event.role === "writer") {
-					acceptWriterDispatch(context, event);
-				} else {
-					if (
-						!context.writerFinished ||
-						state.writerOpen ||
-						!state.candidateDigest ||
-						event.claimId === null ||
-						!first.contract.checks.some((check) => check.claimId === event.claimId) ||
-						checked.has(event.claimId)
-					)
-						throw new VerifiedRunError("integrity");
-					checked.add(event.claimId);
-				}
-				dispatched.add(event.executionId);
-				activeRole = event.role;
-				context.state = {
-					...state,
-					execution: "running",
-					settlement: "draining",
-					activeExecutionIds: [event.executionId],
-				};
-				break;
-			}
+			case "dispatch":
 			case "process_ready":
-				if (
-					!state.budget ||
-					state.activeExecutionIds[0] !== event.executionId ||
-					event.identity.bootId !== state.budget.bootId ||
-					state.processes.some((item) => item.executionId === event.executionId)
-				)
-					throw new VerifiedRunError("integrity");
-				context.state = {
-					...state,
-					processes: [...state.processes, { executionId: event.executionId, identity: event.identity }],
-				};
-				break;
 			case "exited":
-				if (
-					state.activeExecutionIds[0] !== event.executionId ||
-					(state.budget &&
-						event.failure === null &&
-						!state.processes.some((item) => item.executionId === event.executionId))
-				)
-					throw new VerifiedRunError("integrity");
-				if (activeRole === "writer") context.writerFinished = event.failure === null;
-				context.state = {
-					...state,
-					settlement: state.writerOpen ? "open" : "settled",
-					activeExecutionIds: [],
-					failure: event.failure,
-				};
+				reduceProcessEvent(context, event, progress);
 				break;
 			case "candidate": {
 				if (
@@ -192,14 +140,18 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 			case "resumed":
 			case "tasks_retried":
 			case "writer_restarted":
-				reduceRecoveryEvent(context, event, { commands, checked, activeRole });
+				reduceRecoveryEvent(context, event, {
+					commands,
+					checked: progress.checked,
+					activeRole: progress.activeRole,
+				});
 				break;
 			case "evaluated":
 				if (
 					!state.candidateDigest ||
 					state.writerOpen ||
 					state.activeExecutionIds.length ||
-					checked.size !== first.contract.checks.length ||
+					progress.checked.size !== first.contract.checks.length ||
 					(event.verified && state.failure)
 				)
 					throw new VerifiedRunError("integrity");

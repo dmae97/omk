@@ -39,7 +39,7 @@ async function executeTask(context: RunPhaseContext, task: RunDagTask, deadline:
 	});
 	const { result } = await executeRunCommand(
 		journal,
-		{ role: "writer", argv, workspace, deadline, claimId: null },
+		{ role: "writer", argv, workspace, deadline, claimId: null, taskId: task.id },
 		{ ...contract.budget, ...(context.signal ? { signal: context.signal } : {}) },
 	);
 	if (result.failure === "deadline" || result.failure === "cancelled") throw new VerifiedRunError(result.failure);
@@ -70,7 +70,11 @@ async function executeTask(context: RunPhaseContext, task: RunDagTask, deadline:
 	});
 }
 
-/** Deliberately one child at a time: all ownership and process fencing still use the existing broker. */
+type TaskCompletion =
+	| { readonly kind: "done"; readonly taskId: string }
+	| { readonly kind: "failed"; readonly taskId: string; readonly error: unknown };
+
+/** Bounded ready frontier; every started task is drained before this phase returns or throws. */
 export async function executeDag(
 	context: RunPhaseContext,
 	options: { readonly workspace: string; readonly deadline: number },
@@ -79,11 +83,47 @@ export async function executeDag(
 	if (contract.profile !== "linux-command-dag-v1") throw new VerifiedRunError("unsupported");
 	ensureDurableDirectorySync(join(runPath, "tasks"));
 	const order = orderRunDag(contract.writer.tasks);
-	for (;;) {
-		const ready = new Set(readyDagTasks(contract.writer, journal.state).map((task) => task.id));
-		const next = order.find((task) => ready.has(task.id));
-		if (!next) break;
-		await executeTask(context, next, options.deadline);
+	const limit = contract.writer.maxConcurrentTasks ?? 1;
+	const stop = new AbortController();
+	const signal = context.signal ? AbortSignal.any([context.signal, stop.signal]) : stop.signal;
+	const work = { ...context, signal };
+	const inFlight = new Map<string, Promise<TaskCompletion>>();
+	let firstFailure: { readonly error: unknown } | undefined;
+	try {
+		for (;;) {
+			if (firstFailure) throw firstFailure.error;
+			if (signal.aborted) throw new VerifiedRunError("cancelled");
+			const ready = new Set(readyDagTasks(contract.writer, journal.state).map((task) => task.id));
+			for (const task of order) {
+				if (inFlight.size >= limit) break;
+				if (!ready.has(task.id) || inFlight.has(task.id)) continue;
+				const completion = executeTask(work, task, options.deadline).then<TaskCompletion, TaskCompletion>(
+					() => ({ kind: "done", taskId: task.id }),
+					(error: unknown) => {
+						firstFailure ??= { error };
+						stop.abort();
+						return { kind: "failed", taskId: task.id, error };
+					},
+				);
+				inFlight.set(task.id, completion);
+			}
+			if (!inFlight.size) break;
+			const completed = await Promise.race(inFlight.values());
+			inFlight.delete(completed.taskId);
+			switch (completed.kind) {
+				case "failed":
+					throw completed.error;
+				case "done":
+					break;
+				default: {
+					const exhaustive: never = completed;
+					throw new VerifiedRunError(String(exhaustive));
+				}
+			}
+		}
+	} finally {
+		stop.abort();
+		await Promise.all(inFlight.values());
 	}
 	if (
 		journal.state.tasks.some((task) => task.status !== "succeeded" || task.generation !== journal.state.generation)

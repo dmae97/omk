@@ -2,14 +2,15 @@
 
 세 opt-in profile을 제공합니다. `linux-command-v1`은 승인된 명령 하나를,
 `linux-scripted-agent-v1`은 실제 `AgentSession`과 내장 Faux adapter로 승인된 단계를,
-`linux-command-dag-v1`은 입력 의존성이 있는 명령 작업들을 직렬로 실행합니다. 명령은 격리된 복사본에서 실행하고, 고정한 산출물을 외부 검사로 확인한
+`linux-command-dag-v1`은 입력 의존성이 있는 명령 작업들을 기본 직렬로 실행하며,
+명시적 설정으로 최대 2개 작업의 동시 실행을 지원합니다. 명령은 격리된 복사본에서 실행하고, 고정한 산출물을 외부 검사로 확인한
 뒤 회수합니다. 일반 세션과 기존 bash receipt의 동작은 바꾸지 않습니다.
 
 **S90 전체 구현이나 M1–M4 완료를 의미하지 않습니다.** M1의 무과금 reference
 경로와 native EvidenceReceipt v3 연결에 이어, M2의 **고정 candidate 이후 복구**를
 지원합니다. 불변 입력이 저장된 새 run은 중단된 writer도 명시적으로 재시작할 수 있습니다.
-M3의 정적 DAG·부분 재시도 경로도 제공합니다. 병렬 frontier·계획 변경,
-실서비스 모델 adapter, TUI/RPC, 적용 승인은 아직 없습니다.
+M3의 정적 DAG·부분 재시도와 최대 2개 작업의 eager frontier를 제공합니다.
+계획 변경, 실서비스 모델 adapter, TUI/RPC, 적용 승인은 아직 없습니다.
 
 ## 실행 경로
 
@@ -123,8 +124,9 @@ port를 주입하는 SDK host는 같은 신뢰 경계를 책임집니다.
 
 ## 정적 명령 DAG와 선택적 재시도
 
-`linux-command-dag-v1`은 1–16개 작업을 **한 번에 하나씩** 실행합니다. 계약의 `writer`는
-`kind: "command-dag"`와 `tasks`를 가집니다. 각 작업은 `id`, `dependsOn`, `writablePaths`,
+`linux-command-dag-v1`은 1–16개 작업을 실행합니다. 계약의 `writer`는
+`kind: "command-dag"`와 `tasks`를 가지며, `maxConcurrentTasks`는 생략·1 또는 2입니다.
+기본값은 직렬입니다. 생략된 필드를 parser가 덧붙이지 않아 기존 계약 digest를 보존합니다. 각 작업은 `id`, `dependsOn`, `writablePaths`,
 `attempts`를 명시합니다. `attempts`는 미리 승인한 명령 1–2개이며 자동 생성되는 수리 명령이
 아닙니다. 알려진 실패 후의 다음 시도는 명시적 `retry-tasks` 승인으로만 실행합니다.
 
@@ -187,9 +189,27 @@ candidate가 이미 고정됐다면 `retry-tasks`가 아니라 기존 `resume`�
 깨진 checkpoint·원장·key, 예산 만료·reboot는 기존 fail-closed 경계를 유지합니다.
 일부 작업 명령의 실패(`paused`)와 run의 terminal 실패(`failed`)는 서로 다릅니다.
 
-이 단계는 command-only·직렬·artifact 의존성 경로입니다. eager 병렬 frontier,
-`after_verification` edge, 실서비스 모델, arbitrary repair, 계획 amendment/adoption은 지원하지 않습니다.
-동일한 계약의 성공 출력 재사용을 일반적인 계획 변경 후 재사용으로 해석하지 마십시오.
+### 최대 2개 작업의 eager frontier
+
+`writer.maxConcurrentTasks: 2`를 계약에 넣고 바뀐 digest를 승인하면, 준비된 작업을 두 개까지
+시작합니다. `A → C`와 독립적인 B가 있으면 A의 출력 checkpoint가 고정되는 즉시 C를 시작할 수
+있습니다. B의 완료를 기다리는 wave barrier는 없습니다. 최종 통합 검증은 여전히 모든 작업을
+회수하고 하나의 candidate를 고정한 뒤에만 실행합니다.
+
+- `task_started`가 슬롯을 예약하고 `dispatch.taskId`가 현재 task/attempt와 실행 ID를 연결합니다.
+  병렬 계약의 task ID 없는 dispatch는 거부합니다. 예전 직렬 원장의 생략된 task ID는 실행 중인
+  작업이 하나일 때만 재구성하며, 기존 성공 checkpoint의 형태를 바꾸지 않습니다.
+- `process_ready`와 `exited`는 배열 첫 요소가 아니라 해당 실행 ID로 정산합니다. 먼저 끝난
+  형제의 성공이 다른 작업의 실패를 지우지 않습니다. 실행 중 작업의 `execution` 필드는
+  준비·실행·관측된 종료를 구분하며, `status: "succeeded"`는 출력 checkpoint 수락 뒤에만 부여합니다.
+- 치명적 오류·취소는 같은 실행에서 시작한 모든 작업에 전달하고, 시작된 promise를 모두 기다린
+  뒤 반환합니다. 종료를 확인하지 못한 ID나 내구성 기록에 실패한 상태를 성공으로 정산하지 않습니다.
+- 동시 실행 수는 task 단위입니다. task가 만드는 하위 PID·RAM·disk의 OS 한도는 아닙니다.
+  기존 work/verify/cleanup 기한과 task 시도·generation 상한은 공유하며 늘리지 않습니다.
+
+이 단계는 command-only·artifact 의존성 경로입니다. `after_verification` edge, 실서비스 모델,
+arbitrary repair, 계획 amendment/adoption은 지원하지 않습니다. 동일한 계약의 성공 출력 재사용을
+일반적인 계획 변경 후 재사용으로 해석하지 마십시오.
 
 ## CLI
 
@@ -381,7 +401,8 @@ input pin 이전 또는 process identity 기록 이전의 crash window는 여전
 | M2: 불변 입력 기반 writer 재시작 | 실제 SIGKILL→CLI restart 검사 통과. 이전 요청 수·기한·부분 출력 보존 |
 | M2: 모든 crash window 복구 | 미완료. input/process pin 없는 상태는 자동 복구 차단 |
 | M3 정적 command DAG·선택 retry | CLI/SDK 연결. 성공 checkpoint 보존, 실제 SIGKILL·세대/시도/예산 경계 검사 |
-| M3 병렬 frontier·계획 amendment·변경 후 adoption | 미구현. 직렬·동일 계약 안의 출력 재사용만 제공 |
+| M3 bounded eager frontier | 기본 1개, 명시적으로 최대 2개. 의존성 해제·다중 namespace 취소/기록 실패·실제 2-writer SIGKILL 복구 검사 |
+| M3 verification edge·계획 amendment·변경 후 adoption | 미구현. 동일 계약 안의 출력 재사용만 제공 |
 | M4 TUI/RPC·MCP·GC·적용 승인/CAS | 미구현. CLI/SDK 조회·개별 artifact 회수 제공 |
 | S90 전체 G01–G20·성능/정상 회귀 하한 | 미측정. 부분 테스트로 점수를 부여하지 않음 |
 

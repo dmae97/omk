@@ -3,11 +3,16 @@ interface TaskIdentity {
 	readonly attempt: number;
 	readonly generation: number;
 }
+export type RunTaskExecution =
+	| { readonly kind: "ready" }
+	| { readonly kind: "running"; readonly executionId: string }
+	| { readonly kind: "exited"; readonly executionId: string; readonly failure: string | null };
 export type RunTaskProjection = TaskIdentity &
 	(
 		| { readonly status: "pending"; readonly inputDigest: null; readonly outputDigest: null; readonly failure: null }
 		| {
 				readonly status: "running";
+				readonly execution: RunTaskExecution;
 				readonly inputDigest: string;
 				readonly outputDigest: null;
 				readonly failure: null;
