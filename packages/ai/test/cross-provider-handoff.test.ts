@@ -53,6 +53,7 @@ interface ProviderModelPair {
 }
 
 const PROVIDER_MODEL_PAIRS: ProviderModelPair[] = [
+	{ provider: "devin", model: "swe-2", label: "devin-swe-2" },
 	// Anthropic
 	{ provider: "anthropic", model: "claude-sonnet-4-5", label: "anthropic-claude-sonnet-4-5" },
 	// Google

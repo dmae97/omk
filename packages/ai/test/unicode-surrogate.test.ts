@@ -284,6 +284,15 @@ async function testUnpairedHighSurrogate<TApi extends Api>(llm: Model<TApi>, opt
 }
 
 describe("AI Providers Unicode Surrogate Pair Tests", () => {
+	describe.skipIf(!process.env.DEVIN_API_KEY)("Devin CLI Provider Unicode", () => {
+		const llm = getModel("devin", "swe-2");
+		it("should handle emoji in tool results", async () => {
+			await testEmojiInToolResults(llm);
+		});
+		it("should handle an unpaired surrogate", async () => {
+			await testUnpairedHighSurrogate(llm);
+		});
+	});
 	describe.skipIf(!process.env.GEMINI_API_KEY)("Google Provider Unicode Handling", () => {
 		const llm = getModel("google", "gemini-2.5-flash");
 

@@ -99,6 +99,15 @@ async function testAbortThenNewMessage<TApi extends Api>(llm: Model<TApi>, optio
 }
 
 describe("AI Providers Abort Tests", () => {
+	describe.skipIf(!process.env.DEVIN_API_KEY)("Devin CLI Provider Abort", () => {
+		const llm = getModel("devin", "swe-2");
+		it("should abort mid-stream", async () => {
+			await testAbortSignal(llm);
+		});
+		it("should handle immediate abort", async () => {
+			await testImmediateAbort(llm);
+		});
+	});
 	describe.skipIf(!process.env.GEMINI_API_KEY)("Google Provider Abort", () => {
 		const llm = getModel("google", "gemini-2.5-flash");
 

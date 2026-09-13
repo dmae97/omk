@@ -764,6 +764,22 @@ describe("Generate E2E Tests", () => {
 		});
 	});
 
+	describe.skipIf(!process.env.DEVIN_API_KEY)("Devin CLI Provider (SWE-2)", () => {
+		const llm = getModel("devin", "swe-2");
+		it("should complete basic text generation", async () => {
+			await basicTextGeneration(llm);
+		});
+		it("should stream", async () => {
+			await handleStreaming(llm);
+		});
+		it("should call tools", async () => {
+			await handleToolCall(llm);
+		});
+		it("should preserve max thinking across tool turns", async () => {
+			await multiTurn(llm, { reasoning: "max" });
+		});
+	});
+
 	describe.skipIf(!process.env.NVIDIA_API_KEY)("NVIDIA NIM Provider (Nemotron 3 Super via OpenAI Completions)", () => {
 		const llm = getModel("nvidia", "nvidia/nemotron-3-super-120b-a12b");
 

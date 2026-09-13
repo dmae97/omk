@@ -100,7 +100,8 @@ These variables are read by OMK itself. The four built-in harness flags below ar
 | `OMK_YOLO`, `OMK_COMMAND_SAFETY`, `OMK_DISABLE_COMMAND_SAFETY` | Disable the command-safety gate entirely (YOLO mode). `OMK_YOLO` and `OMK_DISABLE_COMMAND_SAFETY` accept `1`, `true`, `yes`, or `on`; `OMK_COMMAND_SAFETY` accepts `0`, `false`, `off`, `disable`, or `disabled`. Every verdict, including block-tier and privilege commands, is skipped in interactive and headless runs. Use only when a verified outer sandbox owns the boundary |
 | `OMK_COMMAND_SAFETY_ASSUME_YES` | `1` or `true` auto-accepts non-privilege confirm-tier commands in interactive **and headless** runs. Privilege confirmation and block-tier commands remain denied. Use only under a trusted outer sandbox when headless auto-accept is intended |
 | `OMK_GROK_HARNESS` | Default-on native `xai` provider dispatch to the `grok-harness` loadout. `0`, `false`, `off`, or `no` disables it |
-| `OMK_DOMAIN_ROUTING` | Set to `1` to enable general prompt-based domain routing. Native xAI harness dispatch does not require it |
+| `OMK_DEVIN_HARNESS` | Default-on `devin` provider dispatch to the `devin-harness` loadout. `0`, `false`, `off`, or `no` disables it; independent from `OMK_GROK_HARNESS` |
+| `OMK_DOMAIN_ROUTING` | Set to `1` to enable general prompt-based domain routing. Native xAI and Devin harness dispatch do not require it |
 | `VISUAL`, `EDITOR` | External editor fallback when `externalEditor` is unset |
 | `HTTP_PROXY`, `HTTPS_PROXY` | Proxy outbound HTTP requests |
 | `OMK_RESOURCE_GOVERNOR` | Resource-governor mode: `off`, `observe` (default), `adaptive`, or `strict`. Feeds `/resource [probe\|policy]` and `omk doctor resources [--json]`; see the resource governor section in [Settings](settings.md) |

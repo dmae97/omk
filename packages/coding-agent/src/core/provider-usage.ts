@@ -2,10 +2,13 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { CLAUDE_CODE_EXTERNAL_USER_AGENT, type ProviderRateLimitSnapshot, type ProviderRateLimitWindow } from "omk-ai";
 import type { AgentSession } from "./agent-session.ts";
+import { fetchDevinUsage } from "./provider-usage-devin.ts";
+import { clampPercent, usageText } from "./provider-usage-text.ts";
 import type {
 	CodexUsageSnapshot,
 	CodexUsageWindow,
 	CredentialCandidate,
+	FetchLike,
 	ObservedCodexWindow,
 	ParsedCodexWindow,
 	PassiveUsageEntry,
@@ -70,7 +73,6 @@ const QWEN_CLI_ENV_KEYS = [
 ] as const;
 
 type UsageSession = Pick<AgentSession, "state" | "modelRegistry">;
-type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 type FetchJsonResult = { readonly status: number; readonly payload?: unknown };
 
 const passiveCodexUsage = new Map<string, PassiveUsageEntry>();
@@ -88,6 +90,7 @@ const VISIBLE_USAGE_PROVIDERS = [
 	"qwen-oauth",
 	"xai",
 	"meta",
+	"devin",
 ] as const;
 const SOURCES: Readonly<Record<string, SubscriptionUsageSource>> = {
 	"openai-codex": source("CODEX", "codex", [{ provider: "openai-codex", oauthOnly: true }]),
@@ -124,6 +127,12 @@ const SOURCES: Readonly<Record<string, SubscriptionUsageSource>> = {
 	// Muse Code exposes no public quota endpoint, so the rail shows
 	// the subscription entry without live usage windows (qwen-oauth precedent).
 	meta: source("META", "unavailable", [{ provider: "meta", oauthOnly: true }]),
+	// Devin CLI subscription: GetUserStatus accepts the session token whether it
+	// came from /login devin (OAuth store) or an already-owned DEVIN_API_KEY.
+	devin: source("DEVIN", "devin", [
+		{ provider: "devin", oauthOnly: true },
+		{ provider: "devin", oauthOnly: false },
+	]),
 };
 
 function source(
@@ -220,6 +229,8 @@ export async function loadSubscriptionUsage(
 				return await fetchZaiUsage(usageSource.label, provider ?? model.provider, credential, fetchImpl);
 			case "grok":
 				return await fetchGrokUsage(usageSource.label, credential.apiKey, fetchImpl);
+			case "devin":
+				return await fetchDevinUsage(usageSource.label, credential.apiKey, fetchImpl);
 			default:
 				return { label: usageSource.label, windows: [], message: "usage unavailable" };
 		}
@@ -1041,10 +1052,7 @@ function withLabel(label: string, window: Omit<SubscriptionUsageWindow, "label">
 
 function shortLabel(value: unknown, index: number): string {
 	if (typeof value !== "string") return `LIMIT${index + 1}`;
-	const safe = value
-		.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f]/g, "")
-		.replace(/\s+/g, " ")
-		.trim();
+	const safe = usageText(value);
 	return safe ? safe.toUpperCase().slice(0, 8) : `LIMIT${index + 1}`;
 }
 
@@ -1052,10 +1060,6 @@ function finiteNumber(value: unknown): number | undefined {
 	const number =
 		typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN;
 	return Number.isFinite(number) ? number : undefined;
-}
-
-function clampPercent(value: number): number {
-	return Number(Math.max(0, Math.min(100, value)).toFixed(2));
 }
 
 function near(actual: number | undefined, expected: number): boolean {

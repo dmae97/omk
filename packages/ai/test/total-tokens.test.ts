@@ -99,6 +99,13 @@ function assertTotalTokensEqualsComponents(usage: Usage) {
 }
 
 describe("totalTokens field", () => {
+	describe.skipIf(!process.env.DEVIN_API_KEY)("Devin CLI Provider", () => {
+		it("should sum the reported usage components", async () => {
+			const { first, second } = await testTotalTokensWithCache(getModel("devin", "swe-2"));
+			assertTotalTokensEqualsComponents(first);
+			assertTotalTokensEqualsComponents(second);
+		});
+	});
 	// =========================================================================
 	// Anthropic
 	// =========================================================================

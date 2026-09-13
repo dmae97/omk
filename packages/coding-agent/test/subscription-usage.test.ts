@@ -18,6 +18,26 @@ import {
 	recordCodexPassiveUsage,
 	supportsSubscriptionUsage,
 } from "../src/core/provider-usage.ts";
+import { parseDevinUsageSnapshot } from "../src/core/provider-usage-devin.ts";
+
+/** Minimal protobuf field encoder for Devin GetUserStatus fixtures. */
+function pfield(no: number, value: string | number | boolean | Uint8Array): Buffer {
+	const varint = (n: number): Buffer => {
+		const bytes: number[] = [];
+		let remaining = BigInt(n);
+		do {
+			const byte = Number(remaining & 127n);
+			remaining >>= 7n;
+			bytes.push(remaining ? byte | 128 : byte);
+		} while (remaining);
+		return Buffer.from(bytes);
+	};
+	if (typeof value === "number" || typeof value === "boolean") {
+		return Buffer.concat([varint(no * 8), varint(Number(value))]);
+	}
+	const bytes = typeof value === "string" ? Buffer.from(value) : value;
+	return Buffer.concat([varint(no * 8 + 2), varint(bytes.length), bytes]);
+}
 
 function codexToken(accountId: string): string {
 	const payload = Buffer.from(
@@ -64,6 +84,7 @@ describe("subscription usage providers", () => {
 		expect(getSubscriptionUsageSource("grok-oauth-proxy")).toBeUndefined();
 		expect(getSubscriptionUsageSource("xai")?.label).toBe("GROK");
 		expect(getSubscriptionUsageSource("meta")?.label).toBe("META");
+		expect(getSubscriptionUsageSource("devin")?.label).toBe("DEVIN");
 		expect(getSubscriptionUsageSource("openai")).toBeUndefined();
 		expect(getSubscriptionUsageSource("moonshotai")).toBeUndefined();
 	});
@@ -85,6 +106,8 @@ describe("subscription usage providers", () => {
 		expect(supportsSubscriptionUsage(session("xai", { configuredProviders: ["xai"] }) as never)).toBe(false);
 		expect(supportsSubscriptionUsage(session("meta", { oauthProviders: ["meta"] }) as never)).toBe(true);
 		expect(supportsSubscriptionUsage(session("meta", { configuredProviders: ["meta"] }) as never)).toBe(false);
+		expect(supportsSubscriptionUsage(session("devin", { oauthProviders: ["devin"] }) as never)).toBe(true);
+		expect(supportsSubscriptionUsage(session("devin", { configuredProviders: ["devin"] }) as never)).toBe(true);
 		expect(supportsSubscriptionUsage(session("openai", { configuredProviders: ["openai"] }) as never)).toBe(false);
 	});
 
@@ -596,6 +619,75 @@ describe("subscription usage providers", () => {
 			}),
 		).toEqual([{ label: "7D", usedPercent: 0, resetsAt: Date.parse("2026-08-19T16:01:00+09:00") / 1000 }]);
 		expect(parseGrokUsageSnapshot({ remaining_balance: 20, spent_balance: 80, total_granted: 100 })).toBeUndefined();
+	});
+
+	it("maps Devin remaining-quota percents to used windows and keeps the plan name", () => {
+		expect(
+			parseDevinUsageSnapshot({
+				planName: "Devin Pro",
+				dailyQuotaRemainingPercent: 58,
+				weeklyQuotaRemainingPercent: 42,
+				dailyQuotaResetAt: 1_900_000_000,
+				weeklyQuotaResetAt: 1_900_500_000,
+			}),
+		).toEqual({
+			windows: [
+				{ label: "1D", usedPercent: 42, resetsAt: 1_900_000_000 },
+				{ label: "7D", usedPercent: 58, resetsAt: 1_900_500_000 },
+			],
+			message: "Devin Pro",
+		});
+		// A reset without a percent reads as exhausted; hidden quotas are skipped.
+		expect(
+			parseDevinUsageSnapshot({
+				hideDailyQuota: true,
+				dailyQuotaRemainingPercent: 90,
+				weeklyQuotaResetAt: 1_900_500_000,
+			}),
+		).toEqual({ windows: [{ label: "7D", usedPercent: 100, resetsAt: 1_900_500_000 }] });
+		// No quota windows: plan name and credit balances become the message.
+		expect(
+			parseDevinUsageSnapshot({ planName: "Devin Max", availablePromptCredits: 120, availableFlowCredits: 30 }),
+		).toEqual({ windows: [], message: "Devin Max · 120 prompt · 30 flow" });
+		expect(parseDevinUsageSnapshot({})).toEqual({ windows: [] });
+	});
+
+	it("loads Devin plan quota from GetUserStatus with the session token", async () => {
+		const requests: Array<{ url: string | URL | Request; init?: RequestInit }> = [];
+		const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+			requests.push({ url, init });
+			const planStatus = pfield(13, Buffer.concat([pfield(14, 60), pfield(15, 42), pfield(18, 1_900_500_000)]));
+			const userStatus = pfield(1, planStatus);
+			const planInfo = pfield(2, pfield(2, "Devin Pro"));
+			return new Response(Buffer.concat([userStatus, planInfo]), { status: 200 });
+		});
+		const result = await loadSubscriptionUsage(
+			session("devin", { oauthProviders: ["devin"], apiKeys: { devin: "devin-session-token$test" } }) as never,
+			fetchMock,
+		);
+
+		expect(requests[0]?.url).toBe(
+			"https://server.codeium.com/exa.seat_management_pb.SeatManagementService/GetUserStatus",
+		);
+		expect(new Headers(requests[0]?.init?.headers).get("content-type")).toBe("application/proto");
+		expect(result).toEqual({
+			label: "DEVIN",
+			windows: [
+				{ label: "1D", usedPercent: 40 },
+				{ label: "7D", usedPercent: 58, resetsAt: 1_900_500_000 },
+			],
+			message: "Devin Pro",
+		});
+		expect(JSON.stringify(result)).not.toContain("devin-session-token$test");
+	});
+
+	it("shows the Devin plan name when the account reports no quota windows", async () => {
+		const fetchMock = vi.fn(async () => new Response(pfield(2, pfield(2, "Devin Free")), { status: 200 }));
+		const result = await loadSubscriptionUsage(
+			session("devin", { configuredProviders: ["devin"], apiKeys: { devin: "devin-session-token$test" } }) as never,
+			fetchMock,
+		);
+		expect(result).toEqual({ label: "DEVIN", windows: [], message: "Devin Free" });
 	});
 
 	it("loads SuperGrok weekly usage from the Grok CLI billing proxy", async () => {

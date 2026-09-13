@@ -18,7 +18,18 @@ import {
 import { createLoadoutPolicyFromRuntimeState, validatePolicyIntegrity } from "./loadout-policy-bridge.ts";
 import { applyLoadoutToRuntime, type LoadoutRuntimeSession, type LoadoutRuntimeState } from "./loadout-runtime.ts";
 import type { LoadoutAuthority, LoadoutProfile, LoadoutRole } from "./loadouts.ts";
+import type { ProviderHarnessRuntime } from "./provider-harness-dispatch.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
+
+/** Real loadout runtime entry points for provider-harness dispatch (`tryProviderHarnessDispatch`). */
+export const LOADOUT_HARNESS_RUNTIME: ProviderHarnessRuntime<
+	LoadoutRuntimeSession,
+	ResourceLoader,
+	LoadoutRuntimeState
+> = {
+	applyLoadoutToRuntime,
+	createLoadoutPolicyFromRuntimeState,
+};
 
 export interface DomainDispatchInput {
 	readonly role: LoadoutRole;

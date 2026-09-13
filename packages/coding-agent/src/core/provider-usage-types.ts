@@ -19,7 +19,7 @@ export type CodexUsageSnapshot = {
 export type ParsedCodexWindow = CodexUsageWindow & { readonly windowSeconds?: number };
 export type ObservedCodexWindow = { readonly window: ParsedCodexWindow; readonly observedAt: number };
 export type PassiveUsageEntry = { readonly primary?: ObservedCodexWindow; readonly secondary?: ObservedCodexWindow };
-export type UsageKind = "codex" | "claude" | "kimi" | "zai" | "grok" | "qwen-token-plan" | "unavailable";
+export type UsageKind = "codex" | "claude" | "kimi" | "zai" | "grok" | "devin" | "qwen-token-plan" | "unavailable";
 export type CredentialCandidate = { readonly provider: string; readonly oauthOnly: boolean };
 
 export type SubscriptionUsageSource = {
@@ -29,3 +29,5 @@ export type SubscriptionUsageSource = {
 	readonly ttlMs: number;
 	readonly unavailableMessage?: string;
 };
+
+export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;

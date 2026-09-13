@@ -89,6 +89,12 @@ import {
 import { createMemoryContextBudgetCacheProviderV2 } from "./context-budget-v2-cache-provider.ts";
 import type { ContextBudgetCacheProviderV2 } from "./context-budget-v2-types.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
+import {
+	devinHarnessAutoApplyEnabled,
+	devinPlaybookAppendForProvider,
+	isDevinProvider,
+	selectDevinHarnessSkills,
+} from "./devin-harness.ts";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.ts";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
 import {
@@ -1961,7 +1967,8 @@ export class AgentSession {
 			toolPromptGuidelines: this._toolPromptGuidelines,
 			customPrompt: this._resourceLoader.getSystemPrompt(),
 			appendSystemPrompt: this._resourceLoader.getAppendSystemPrompt(),
-			providerAppend: grokPlaybookAppendForProvider(model?.provider),
+			providerAppend:
+				grokPlaybookAppendForProvider(model?.provider) ?? devinPlaybookAppendForProvider(model?.provider),
 			skills: this._resourceLoader.getSkills().skills,
 			activeSkillNames: defaultActiveSkills,
 			activeSkillSource: defaultActiveSkills.length > 0 ? "settings" : undefined,
@@ -2424,6 +2431,12 @@ export class AgentSession {
 					contextPressure: this._computePressureBucket(messages) > 0,
 				});
 				promptSkills = addActiveSkills(promptSkills, grokSkills, "grok-harness");
+			} else if (isDevinProvider(this.model?.provider) && devinHarnessAutoApplyEnabled(process.env)) {
+				const skillQuery = isBangSkillInvocation ? currentText : expandedText;
+				const devinSkills = selectDevinHarnessSkills(skillQuery, this._resourceLoader.getSkills().skills, {
+					contextPressure: this._computePressureBucket(messages) > 0,
+				});
+				promptSkills = addActiveSkills(promptSkills, devinSkills, "devin-harness");
 			}
 
 			const turnSystemPromptOptions = {

@@ -1,199 +1,158 @@
-/**
- * Devin OAuth flow (Cognition AI's software engineer).
- *
- * Uses PKCE + local callback server for authentication.
- * After login, provides access to Devin's API for autonomous software engineering.
- */
-import type { Server } from "node:http";
-import { oauthErrorHtml, oauthSuccessHtml } from "./oauth-page.ts";
+import { normalizeDevinToken } from "../../providers/devin-api.ts";
+import { proxyAwareFetch } from "../proxy-fetch.ts";
+import { type DevinCallback, startDevinCallback } from "./devin-callback.ts";
 import { generatePKCE } from "./pkce.ts";
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from "./types.ts";
 
-const DEVIN_WEBAPP_URL = "https://app.devin.ai";
-const DEVIN_API_URL = "https://api.devin.ai";
-const CALLBACK_PORT = 59653;
-const CALLBACK_PATH = "/callback";
-const TOKEN_PATH = "/auth/cli/token";
-const FALLBACK_EXPIRES_MS = 365 * 24 * 60 * 60 * 1000;
-
 export const DEVIN_OAUTH_PROVIDER_ID = "devin";
+const CALLBACK_PORT = 59653;
+const TOKEN_URL = "https://api.devin.ai/auth/cli/token";
+const WEB_URL = "https://app.devin.ai/auth/cli/continue";
+const TOKEN_PREFIX = "devin-session-token$";
 
-type NodeApis = {
-	createServer: typeof import("node:http").createServer;
-};
-
-let nodeApis: NodeApis | null = null;
-let nodeApisPromise: Promise<NodeApis> | null = null;
-
-async function getNodeApis(): Promise<NodeApis> {
-	if (nodeApis) return nodeApis;
-	if (!nodeApisPromise) {
-		if (typeof process === "undefined" || (!process.versions?.node && !process.versions?.bun)) {
-			throw new Error("Devin OAuth is only available in Node.js environments");
+function tokenExpiry(token: string): number {
+	const raw = token.startsWith(TOKEN_PREFIX) ? token.slice(TOKEN_PREFIX.length) : token;
+	const payload = raw.split(".")[1];
+	if (payload) {
+		try {
+			const decoded: unknown = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+			if (
+				decoded &&
+				typeof decoded === "object" &&
+				"exp" in decoded &&
+				typeof decoded.exp === "number" &&
+				Number.isFinite(decoded.exp)
+			) {
+				return decoded.exp * 1000 - 30_000;
+			}
+		} catch {
+			// Opaque session tokens have no JWT expiry; the server remains authoritative.
 		}
-		nodeApisPromise = import("node:http").then((httpModule) => ({
-			createServer: httpModule.createServer,
-		}));
 	}
-	nodeApis = await nodeApisPromise;
-	return nodeApis;
+	return Date.now() + 365 * 24 * 60 * 60 * 1000;
 }
 
-function getTokenExpiry(token: string): number {
+async function manualCode(
+	callbacks: OAuthLoginCallbacks,
+	redirectUri: string,
+	state: string,
+	signal: AbortSignal,
+): Promise<string> {
+	let cancel: () => void = () => {};
+	const aborted = new Promise<never>((_resolve, reject) => {
+		cancel = () => reject(new Error("Devin login cancelled or timed out"));
+	});
+	signal.addEventListener("abort", cancel, { once: true });
 	try {
-		const parts = token.split(".");
-		if (parts.length !== 3) return Date.now() + FALLBACK_EXPIRES_MS;
-		const payload = parts[1];
-		if (!payload) return Date.now() + FALLBACK_EXPIRES_MS;
-		const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
-		if (decoded && typeof decoded === "object" && typeof decoded.exp === "number") {
-			return decoded.exp * 1000 - 5 * 60 * 1000;
+		signal.throwIfAborted();
+		const input = await Promise.race([
+			callbacks.onPrompt({
+				message: "Paste the complete Devin callback URL from your browser:",
+				placeholder: redirectUri,
+			}),
+			aborted,
+		]);
+		let url: URL;
+		try {
+			url = new URL(input.trim());
+		} catch {
+			throw new Error("Invalid Devin callback URL");
 		}
-	} catch {
-		// Ignore parsing errors
-	}
-	return Date.now() + FALLBACK_EXPIRES_MS;
-}
-
-async function exchangeDevinCliToken(authorizationCode: string, codeVerifier: string): Promise<string> {
-	const response = await fetch(`${DEVIN_API_URL}${TOKEN_PATH}`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({
-			code: authorizationCode,
-			code_verifier: codeVerifier,
-		}),
-	});
-
-	if (!response.ok) {
-		const errorText = await response.text();
-		throw new Error(`Devin token exchange failed: ${response.status} ${errorText}`);
-	}
-
-	const data = (await response.json()) as { token?: string };
-	if (!data.token) {
-		throw new Error("Devin token exchange response missing token");
-	}
-	return data.token;
-}
-
-function startCallbackServer(): Promise<{
-	server: Server;
-	redirectUri: string;
-	waitForCode: () => Promise<{ code: string; state: string } | null>;
-	cancelWait: () => void;
-}> {
-	const hostname = "127.0.0.1";
-	const redirectUri = `http://${hostname}:${CALLBACK_PORT}${CALLBACK_PATH}`;
-
-	return getNodeApis().then(({ createServer }) => {
-		return new Promise((resolveServer) => {
-			let settled = false;
-
-			const server = createServer((req, res) => {
-				if (!req.url?.startsWith(CALLBACK_PATH)) {
-					res.writeHead(404).end();
-					return;
-				}
-				const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-				const code = url.searchParams.get("code");
-				const state = url.searchParams.get("state");
-				const error = url.searchParams.get("error");
-
-				if (error || !code) {
-					res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
-					res.end(oauthErrorHtml);
-					return;
-				}
-
-				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-				res.end(oauthSuccessHtml);
-
-				if (!settled) {
-					settled = true;
-					setImmediate(() => {
-						resolveServer({
-							server,
-							redirectUri,
-							waitForCode: () => Promise.resolve({ code, state: state || "" }),
-							cancelWait: () => {},
-						});
-					});
-				}
-			});
-
-			server.listen(CALLBACK_PORT, hostname, () => {
-				// Server ready
-			});
-
-			server.on("error", () => {
-				if (!settled) {
-					settled = true;
-					server.close();
-					server.listen(0, hostname, () => {
-						const addr = server.address();
-						const actualPort = typeof addr === "object" && addr ? addr.port : CALLBACK_PORT;
-						resolveServer({
-							server,
-							redirectUri: `http://${hostname}:${actualPort}${CALLBACK_PATH}`,
-							waitForCode: () => Promise.resolve(null),
-							cancelWait: () => {},
-						});
-					});
-				}
-			});
-		});
-	});
-}
-
-/** Log in to Devin using PKCE + callback server. */
-export async function loginDevin(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
-	const { verifier, challenge } = await generatePKCE();
-	const state = crypto.randomUUID();
-	const server = await startCallbackServer();
-
-	const params = new URLSearchParams({
-		redirect_uri: server.redirectUri,
-		state,
-		prompt: "select_account",
-		code_challenge: challenge,
-		code_challenge_method: "S256",
-	});
-
-	const authUrl = `${DEVIN_WEBAPP_URL}/auth/cli/continue?${params.toString()}`;
-
-	callbacks.onAuth({ url: authUrl, instructions: "Sign in to Devin in your browser." });
-	callbacks.onProgress?.("Waiting for browser authentication...");
-
-	let result: { code: string; state: string } | null;
-	try {
-		result = await server.waitForCode();
+		const expected = new URL(redirectUri);
+		if (
+			url.origin !== expected.origin ||
+			url.pathname !== expected.pathname ||
+			url.username ||
+			url.password ||
+			url.searchParams.get("state") !== state
+		) {
+			throw new Error("Devin OAuth callback or state mismatch");
+		}
+		const code = url.searchParams.get("code");
+		if (!code || url.searchParams.has("error")) throw new Error("Devin login was not approved");
+		return code;
 	} finally {
-		server.cancelWait();
-		server.server.close();
+		signal.removeEventListener("abort", cancel);
 	}
+}
 
-	if (!result) {
-		throw new Error("Login cancelled or timed out");
+/** The official CLI's PKCE session-token flow; no paid Devin REST API key is needed. */
+export async function loginDevin(
+	callbacks: OAuthLoginCallbacks,
+	options: { port?: number; timeoutMs?: number } = {},
+): Promise<OAuthCredentials> {
+	const controller = new AbortController();
+	const signal = callbacks.signal ? AbortSignal.any([callbacks.signal, controller.signal]) : controller.signal;
+	const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 300_000);
+	let callback: DevinCallback | undefined;
+	try {
+		signal.throwIfAborted();
+		const { verifier, challenge } = await generatePKCE();
+		const state = crypto.randomUUID();
+		const port = options.port ?? CALLBACK_PORT;
+		let redirectUri = `http://127.0.0.1:${port}/callback`;
+		try {
+			callback = await startDevinCallback(state, signal, port);
+			redirectUri = callback.redirectUri;
+		} catch (error) {
+			if (!(error instanceof Error) || !("code" in error) || error.code !== "EADDRINUSE") throw error;
+			callbacks.onProgress?.("Callback port is busy; use the complete callback URL for manual login.");
+		}
+		const params = new URLSearchParams({
+			redirect_uri: redirectUri,
+			state,
+			prompt: "select_account",
+			code_challenge: challenge,
+			code_challenge_method: "S256",
+		});
+		callbacks.onAuth({
+			url: `${WEB_URL}?${params}`,
+			instructions: "Sign in with your Devin CLI subscription account.",
+		});
+		callbacks.onProgress?.("Waiting for Devin browser authentication...");
+		const code = callback ? await callback.code : await manualCode(callbacks, redirectUri, state, signal);
+		signal.throwIfAborted();
+		if (!code) throw new Error("Devin login was not approved");
+		callbacks.onProgress?.("Exchanging the Devin authorization code...");
+		const response = await proxyAwareFetch(TOKEN_URL, {
+			method: "POST",
+			redirect: "error",
+			signal,
+			headers: { "Content-Type": "application/json", Accept: "application/json" },
+			body: JSON.stringify({ code, code_verifier: verifier }),
+		});
+		if (!response.ok) {
+			await response.body?.cancel();
+			throw new Error(`Devin token exchange failed (HTTP ${response.status})`);
+		}
+		let data: unknown;
+		try {
+			data = await response.json();
+		} catch {
+			throw new Error("Invalid Devin token exchange response");
+		}
+		if (!data || typeof data !== "object" || !("token" in data) || typeof data.token !== "string")
+			throw new Error("Devin token exchange response missing token");
+		const access = normalizeDevinToken(data.token);
+		const expires = tokenExpiry(access);
+		if (expires <= Date.now()) throw new Error("Devin returned an expired session token; sign in again");
+		return { access, refresh: access, expires };
+	} finally {
+		clearTimeout(timer);
+		await callback?.close();
 	}
-
-	callbacks.onProgress?.("Exchanging authorization code for token...");
-	const token = await exchangeDevinCliToken(result.code, verifier);
-
-	return {
-		access: token,
-		refresh: token,
-		expires: getTokenExpiry(token),
-		apiEndpoint: DEVIN_API_URL,
-		enterpriseUrl: DEVIN_WEBAPP_URL,
-	};
 }
 
 export const devinOAuthProvider: OAuthProviderInterface = {
 	id: DEVIN_OAUTH_PROVIDER_ID,
-	name: "Devin (Cognition AI)",
+	name: "Devin CLI (subscription)",
+	// This flow owns its callback wait; the generic UI must not start a second code prompt.
+	usesCallbackServer: false,
 	login: loginDevin,
-	// Devin tokens are long-lived; no refresh endpoint
-	refreshToken: (credentials: OAuthCredentials) => Promise.resolve(credentials),
-	getApiKey: (credentials: OAuthCredentials) => credentials.access,
+	async refreshToken(credentials) {
+		if (credentials.expires <= Date.now())
+			throw new Error("Devin session expired; run /login devin again (no refresh endpoint)");
+		return credentials;
+	},
+	getApiKey: (credentials) => normalizeDevinToken(credentials.access),
 };

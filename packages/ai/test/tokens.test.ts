@@ -64,6 +64,13 @@ async function testTokensOnAbort<TApi extends Api>(llm: Model<TApi>, options: St
 	) {
 		expect(msg.usage.input).toBe(0);
 		expect(msg.usage.output).toBe(0);
+	} else if (llm.provider === "devin") {
+		// Cascade may send usage only at completion; retain only counters actually observed.
+		expect(msg.usage.input).toBeGreaterThanOrEqual(0);
+		expect(msg.usage.output).toBeGreaterThanOrEqual(0);
+		expect(msg.usage.totalTokens).toBe(
+			msg.usage.input + msg.usage.output + msg.usage.cacheRead + msg.usage.cacheWrite,
+		);
 	} else if (llm.provider === "minimax") {
 		// MiniMax M2.7 does not report token usage for aborted requests.
 		expect(msg.usage.input).toBe(0);
@@ -85,6 +92,11 @@ async function testTokensOnAbort<TApi extends Api>(llm: Model<TApi>, options: St
 }
 
 describe("Token Statistics on Abort", () => {
+	describe.skipIf(!process.env.DEVIN_API_KEY)("Devin CLI Provider", () => {
+		it("should retain observed token counts on abort", async () => {
+			await testTokensOnAbort(getModel("devin", "swe-2"));
+		});
+	});
 	describe.skipIf(!process.env.GEMINI_API_KEY)("Google Provider", () => {
 		const llm = getModel("google", "gemini-2.5-flash");
 

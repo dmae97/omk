@@ -11,6 +11,7 @@ import type { ToolDefinition } from "./extensions/types.ts";
 import { type HookInventory, loadHookInventory } from "./hook-inventory.ts";
 import { sanitizeHookPolicy } from "./hooks/index.ts";
 import { createLoadoutAccessPolicy, type LoadoutAccessPolicy } from "./loadout-access-policy.ts";
+import { blockedLoadoutRuntime, type LoadoutRuntimeState, shadowedBuiltinTools } from "./loadout-runtime-state.ts";
 import {
 	type AppliedLoadout,
 	applyLoadoutProfile,
@@ -43,17 +44,7 @@ export interface LoadoutRuntimeSession {
 	_customTools: ToolDefinition[];
 }
 
-export interface LoadoutRuntimeState {
-	profileName: string;
-	authority: LoadoutAuthority;
-	activeTools: string[];
-	activeSkills: string[];
-	activeMcp: string[];
-	activeHooks: string[];
-	schedulerFields: SchedulerFields;
-	blockers: string[];
-	warnings: string[];
-}
+export type { LoadoutRuntimeState };
 
 export interface BuildLoadoutAccessPolicyOptions {
 	cwd: string;
@@ -201,22 +192,13 @@ export function applyLoadoutToRuntime(
 	request: ApplyLoadoutToRuntimeRequest,
 ): LoadoutRuntimeState {
 	const validation = validateLoadoutProfile(request.profile);
-	if (!validation.valid) {
-		return {
-			profileName: request.profile.name,
-			authority: request.profile.authority,
-			activeTools: [],
-			activeSkills: [],
-			activeMcp: [],
-			activeHooks: [],
-			schedulerFields: { readSet: [], writeSet: [], parallelizable: true },
-			blockers: validation.errors,
-			warnings: [],
-		};
-	}
+	if (!validation.valid) return blockedLoadoutRuntime(request.profile, validation.errors);
 
 	const hookInventory = loadHookInventory(agentDir);
 	const inventory = buildCapabilityInventory(session, resourceLoader, cwd, hookInventory);
+	const shadowed = shadowedBuiltinTools(session._baseToolDefinitions.keys(), inventory);
+	if (shadowed.length > 0)
+		return blockedLoadoutRuntime(request.profile, [`loadout extension tool shadows builtin: ${shadowed.join(", ")}`]);
 	const applied = applyLoadoutProfile(request.profile, inventory, { grantAuthority: request.grantAuthority });
 	if (applied.blockers.length > 0) {
 		return {

@@ -3,6 +3,7 @@
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { MODELS } from "../src/models.generated.ts";
 import {
 	CLOUDFLARE_AI_GATEWAY_ANTHROPIC_BASE_URL,
 	CLOUDFLARE_AI_GATEWAY_COMPAT_BASE_URL,
@@ -18,6 +19,7 @@ import type {
 	OpenAIResponsesCompat,
 } from "../src/types.ts";
 import { DEEPSEEK_COMPLETIONS_COMPAT, deepSeekNativeModels } from "./catalog-deepseek.ts";
+import { devinModels } from "./catalog-devin.ts";
 import { catalogPricePerMillion } from "./catalog-pricing.ts";
 import { applyCurrentThinkingMetadata, openRouterThinkingMap } from "./catalog-thinking.ts";
 
@@ -1750,6 +1752,11 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 }
 
 async function generateModels() {
+	if (process.argv.includes("--devin-only")) {
+		const preserved: Model<Api>[] = Object.values(MODELS).flatMap((models) => Object.values(models));
+		writeModelCatalog([...preserved.filter((model) => model.provider !== "devin"), ...devinModels()]);
+		return;
+	}
 	// Fetch models from both sources
 	// models.dev: Anthropic, Google, OpenAI, Groq, Cerebras
 	// OpenRouter: xAI and other providers (excluding Anthropic, Google, OpenAI)
@@ -2581,7 +2588,7 @@ async function generateModels() {
 			provider: "azure-openai-responses",
 			baseUrl: "",
 		}));
-	allModels.push(...azureOpenAiModels);
+	allModels.push(...azureOpenAiModels, ...devinModels());
 
 	for (const model of allModels) {
 		applyModelMetadata(model);
@@ -2594,6 +2601,10 @@ async function generateModels() {
 		}
 	}
 
+	writeModelCatalog(allModels);
+}
+
+function writeModelCatalog(allModels: Model<Api>[]) {
 	// Group by provider and deduplicate by model ID
 	const providers: Record<string, Record<string, Model<any>>> = {};
 	for (const model of allModels) {

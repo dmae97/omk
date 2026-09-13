@@ -145,6 +145,21 @@ async function testEmptyAssistantMessage<TApi extends Api>(llm: Model<TApi>, opt
 }
 
 describe("AI Providers Empty Message Tests", () => {
+	describe.skipIf(!process.env.DEVIN_API_KEY)("Devin CLI Provider Empty Messages", () => {
+		const llm = getModel("devin", "swe-2");
+		it("should handle empty content", async () => {
+			await testEmptyMessage(llm);
+		});
+		it("should handle an empty string", async () => {
+			await testEmptyStringMessage(llm);
+		});
+		it("should handle whitespace", async () => {
+			await testWhitespaceOnlyMessage(llm);
+		});
+		it("should handle empty assistant history", async () => {
+			await testEmptyAssistantMessage(llm);
+		});
+	});
 	describe.skipIf(!process.env.GEMINI_API_KEY)("Google Provider Empty Messages", () => {
 		const llm = getModel("google", "gemini-2.5-flash");
 

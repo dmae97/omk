@@ -467,7 +467,7 @@ interface PromptOptions {
 }
 ```
 
-`activeSkillNames` marks additional discovered skills active for this turn; `activeSkillSource` labels their provenance. They merge with global `defaultActiveSkills`, prioritize matching inventory entries, and do not expand authorization or inline full skill instructions. When the active provider is native `xai` and `OMK_GROK_HARNESS` is enabled, each non-queued `AgentSession.prompt()` request also derives up to three request-scoped matches from the live skill inventory after ordinary prompt-template expansion. Explicit-only skills are excluded from automatic selection, while explicit SDK/settings/bang selections remain authoritative additions. Queued steering and follow-up messages reuse the active run's system prompt and therefore do not perform another automatic skill-selection pass.
+`activeSkillNames` marks additional discovered skills active for this turn; `activeSkillSource` labels their provenance. They merge with global `defaultActiveSkills`, prioritize matching inventory entries, and do not expand authorization or inline full skill instructions. When the active provider is native `xai` and `OMK_GROK_HARNESS` is enabled, or `devin` and `OMK_DEVIN_HARNESS` is enabled, each non-queued `AgentSession.prompt()` request also derives up to three request-scoped matches from the live skill inventory after ordinary prompt-template expansion. Explicit-only skills are excluded from automatic selection, while explicit SDK/settings/bang selections remain authoritative additions. Queued steering and follow-up messages reuse the active run's system prompt and therefore do not perform another automatic skill-selection pass.
 
 `preflightResult` is called once per `prompt()` invocation:
 

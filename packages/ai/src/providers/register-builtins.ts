@@ -1,37 +1,16 @@
 import { clearApiProviders, registerApiProvider } from "../api-registry.ts";
-import type {
-	Api,
-	AssistantMessage,
-	AssistantMessageEvent,
-	Context,
-	Model,
-	SimpleStreamOptions,
-	StreamFunction,
-	StreamOptions,
-} from "../types.ts";
-import { AssistantMessageEventStream } from "../utils/event-stream.ts";
+import type { AssistantMessageEvent, Context, Model, SimpleStreamOptions, StreamFunction } from "../types.ts";
 import type { BedrockOptions } from "./amazon-bedrock.ts";
 import type { AnthropicOptions } from "./anthropic.ts";
 import type { AzureOpenAIResponsesOptions } from "./azure-openai-responses.ts";
+import type { DevinOptions } from "./devin.ts";
 import type { GoogleOptions } from "./google.ts";
 import type { GoogleVertexOptions } from "./google-vertex.ts";
+import { createLazySimpleStream, createLazyStream, type LazyProviderModule } from "./lazy-stream.ts";
 import type { MistralOptions } from "./mistral.ts";
 import type { OpenAICodexResponsesOptions } from "./openai-codex-responses.ts";
 import type { OpenAICompletionsOptions } from "./openai-completions.ts";
 import type { OpenAIResponsesOptions } from "./openai-responses.ts";
-
-interface LazyProviderModule<
-	TApi extends Api,
-	TOptions extends StreamOptions,
-	TSimpleOptions extends SimpleStreamOptions,
-> {
-	stream: (model: Model<TApi>, context: Context, options?: TOptions) => AsyncIterable<AssistantMessageEvent>;
-	streamSimple: (
-		model: Model<TApi>,
-		context: Context,
-		options?: TSimpleOptions,
-	) => AsyncIterable<AssistantMessageEvent>;
-}
 
 interface AnthropicProviderModule {
 	streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOptions>;
@@ -91,6 +70,18 @@ const importNodeOnlyProvider = (specifier: string): Promise<unknown> => {
 	return import(runtimeSpecifier);
 };
 
+let devinProviderModulePromise:
+	| Promise<LazyProviderModule<"devin-agent", DevinOptions, SimpleStreamOptions>>
+	| undefined;
+
+function loadDevinProviderModule(): Promise<LazyProviderModule<"devin-agent", DevinOptions, SimpleStreamOptions>> {
+	devinProviderModulePromise ||= importNodeOnlyProvider("./devin.ts").then((module) => {
+		const provider = module as typeof import("./devin.ts");
+		return { stream: provider.streamDevin, streamSimple: provider.streamSimpleDevin };
+	});
+	return devinProviderModulePromise;
+}
+
 let anthropicProviderModulePromise:
 	| Promise<LazyProviderModule<"anthropic-messages", AnthropicOptions, SimpleStreamOptions>>
 	| undefined;
@@ -126,80 +117,6 @@ export function setBedrockProviderModule(module: BedrockProviderModule): void {
 	bedrockProviderModuleOverride = {
 		stream: module.streamBedrock,
 		streamSimple: module.streamSimpleBedrock,
-	};
-}
-
-function forwardStream(target: AssistantMessageEventStream, source: AsyncIterable<AssistantMessageEvent>): void {
-	(async () => {
-		for await (const event of source) {
-			target.push(event);
-		}
-		target.end();
-	})();
-}
-
-function createLazyLoadErrorMessage<TApi extends Api>(model: Model<TApi>, error: unknown): AssistantMessage {
-	return {
-		role: "assistant",
-		content: [],
-		api: model.api,
-		provider: model.provider,
-		model: model.id,
-		usage: {
-			input: 0,
-			output: 0,
-			cacheRead: 0,
-			cacheWrite: 0,
-			totalTokens: 0,
-			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-		},
-		stopReason: "error",
-		errorMessage: error instanceof Error ? error.message : String(error),
-		timestamp: Date.now(),
-	};
-}
-
-function createLazyStream<TApi extends Api, TOptions extends StreamOptions, TSimpleOptions extends SimpleStreamOptions>(
-	loadModule: () => Promise<LazyProviderModule<TApi, TOptions, TSimpleOptions>>,
-): StreamFunction<TApi, TOptions> {
-	return (model, context, options) => {
-		const outer = new AssistantMessageEventStream();
-
-		loadModule()
-			.then((module) => {
-				const inner = module.stream(model, context, options);
-				forwardStream(outer, inner);
-			})
-			.catch((error) => {
-				const message = createLazyLoadErrorMessage(model, error);
-				outer.push({ type: "error", reason: "error", error: message });
-				outer.end(message);
-			});
-
-		return outer;
-	};
-}
-
-function createLazySimpleStream<
-	TApi extends Api,
-	TOptions extends StreamOptions,
-	TSimpleOptions extends SimpleStreamOptions,
->(loadModule: () => Promise<LazyProviderModule<TApi, TOptions, TSimpleOptions>>): StreamFunction<TApi, TSimpleOptions> {
-	return (model, context, options) => {
-		const outer = new AssistantMessageEventStream();
-
-		loadModule()
-			.then((module) => {
-				const inner = module.streamSimple(model, context, options);
-				forwardStream(outer, inner);
-			})
-			.catch((error) => {
-				const message = createLazyLoadErrorMessage(model, error);
-				outer.push({ type: "error", reason: "error", error: message });
-				outer.end(message);
-			});
-
-		return outer;
 	};
 }
 
@@ -323,6 +240,8 @@ function loadBedrockProviderModule(): Promise<
 	return bedrockProviderModulePromise;
 }
 
+export const streamDevin = createLazyStream(loadDevinProviderModule);
+export const streamSimpleDevin = createLazySimpleStream(loadDevinProviderModule);
 export const streamAnthropic = createLazyStream(loadAnthropicProviderModule);
 export const streamSimpleAnthropic = createLazySimpleStream(loadAnthropicProviderModule);
 export const streamAzureOpenAIResponses = createLazyStream(loadAzureOpenAIResponsesProviderModule);
@@ -343,6 +262,7 @@ const streamBedrockLazy = createLazyStream(loadBedrockProviderModule);
 const streamSimpleBedrockLazy = createLazySimpleStream(loadBedrockProviderModule);
 
 export function registerBuiltInApiProviders(): void {
+	registerApiProvider({ api: "devin-agent", stream: streamDevin, streamSimple: streamSimpleDevin });
 	registerApiProvider({
 		api: "anthropic-messages",
 		stream: streamAnthropic,

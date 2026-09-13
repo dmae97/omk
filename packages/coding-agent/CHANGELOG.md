@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added the Devin SWE-2 harness: a `devin-harness` domain loadout auto-applied when the `devin` provider is active (`OMK_DEVIN_HARNESS=0` disables it, independently of `OMK_GROK_HARNESS`), per-turn `<active_skills source="devin-harness">` grants selected from the live inventory, an optional `~/.omk/agent/devin.md` operator overlay, and the canonical [Devin SWE-2 harness guide](docs/devin-harness.md). `devin/swe-2` now carries a 1,000,000-token local context budget that selects the account catalog's 1M-context lane; a lane that declares a smaller window fails the request instead of shrinking the budget.
+- The status rail's USAGE section now covers `devin`: it calls `GetUserStatus` with the stored CLI session token (OAuth or `DEVIN_API_KEY`) and renders the plan's daily/weekly quota meters with reset times, or the plan name and credit balances when the account reports no quota windows.
+
+### Changed
+
+- Grok and Devin harness dispatch share `provider-harness-dispatch.ts` (loadout runtime injected, outside the `sdk.ts` import cycle) and `harness-skills.ts`; the `grok-harness` and `devin-harness` profiles live in `domain-loadouts-provider-harness.ts`. `tryGrokHarnessDispatch()` and `selectGrokHarnessSkills()` keep their public signatures and behavior.
+
 ## [0.98.5] - 2026-09-12
 
 ### Added

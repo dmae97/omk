@@ -19,6 +19,7 @@ Use `/login` in interactive mode, then select a provider:
 - Claude Pro/Max
 - GitHub Copilot
 - xAI Grok subscription OAuth
+- Devin CLI subscription (SWE-2)
 
 Run `/login` and choose a configured subscription provider to open its account picker. Select an existing account by its ChatGPT, Claude, or Google email when available, or choose **Add another account** to sign in with a new one. OMK keeps and refreshes each account independently, pins the provider to the account you select, and does not silently fail over to another subscription. `/model` remains dedicated to model selection.
 
@@ -67,6 +68,80 @@ and [plan endpoint separation](https://www.alibabacloud.com/help/en/model-studio
 consulted 2026-09-08. The local tests exercise serialization, not account availability,
 provider compliance, billing, or benchmark performance.
 
+### Devin CLI
+
+Run `/login devin`, select `devin/swe-2`, and use `/think medium`, `/think high`,
+or `/think max`. For a new session after login:
+
+```bash
+omk --provider devin --model swe-2 --thinking max
+```
+
+The default is `medium`. Thinking-off and other levels are unsupported. `max`
+is a reasoning level, not a requirement to buy the Devin Max subscription tier.
+Your account's model access and quota still apply. For presets, effort guidance,
+the 1M-token context budget, and the `devin-harness` loadout, see the
+[Devin SWE-2 harness](devin-harness.md).
+
+**Authentication.** OMK uses the CLI's PKCE flow at
+`app.devin.ai/auth/cli/continue` and `api.devin.ai/auth/cli/token`. Its callback
+binds only to `127.0.0.1:59653`, validates state, and closes after success,
+rejection, cancellation, or a five-minute deadline. If the port is occupied,
+paste the complete callback URL into OMK's local prompt. For remote sessions,
+forward this loopback port to the machine running OMK.
+
+Credentials use the existing protected `auth.json` storage and account picker.
+Expired sessions require `/login devin` again: no refresh endpoint is verified,
+and OMK does not renew the expiry locally. Use `/logout` to remove the stored
+OMK credential. Alternatively, `DEVIN_API_KEY` accepts an already-owned CLI
+session token, **not** a `cog_` REST API key. OMK does not install or invoke the
+Devin agent, read browser cookies, or import another application's credentials.
+
+**Transport and limits.** The Node-only `devin-agent` adapter uses Connect/protobuf
+at the fixed HTTPS origin `https://server.codeium.com`. It exchanges the session
+token for a user JWT and reads `GetCliModelConfigs` before each turn. The server's
+SWE-2 family metadata supplies the effort's exact wire UID; OMK never invents a
+`swe-2-max` ID or downgrades an unavailable route. Disabled, internal, ambiguous,
+and fast-lane entries are excluded. The family's separate 1M-context entries form
+a second lane that is selected only when the model's local `contextWindow` is
+1,000,000 or more (the bundled default); a smaller budget uses the standard lane.
+
+Text, thinking, tool calls/results, and reported usage enter the normal OMK
+agent loop. Image input and enterprise-origin overrides are unsupported.
+Requests reject redirects. Malformed, oversized, or unterminated streams fail;
+remote error bodies are not copied into diagnostics. SDK `onPayload` receives
+protobuf bytes without credential metadata.
+
+The bundled 1,000,000-token context budget and 16,384-token output cap are
+local defaults, **not published SWE-2 limits**. Output is further capped against
+the authenticated catalog. If the selected lane declares a smaller context window,
+the request fails and names the window; lower `contextWindow` through
+`modelOverrides` in [models.json](models.md#per-model-overrides) rather than
+expecting a silent downgrade. Zero catalog pricing means unpriced subscription
+usage, not free inference. Quota percentages are not inferred.
+
+**Account quota.** With a Devin credential configured, the status rail's USAGE
+section calls `SeatManagementService/GetUserStatus` (session-token metadata, no
+user JWT) and renders the plan's daily and weekly quota meters with reset times.
+Accounts whose plan reports no quota windows show the plan name and credit
+balances instead. The rail mirrors the CLI's `/usage` surface; it never sends
+the session token anywhere except `server.codeium.com`.
+
+**Verification.** Local tests exercise the public stream API, real loopback
+callbacks with mocked token exchange, model selection, and protocol fixtures.
+Live login, catalog compatibility, SWE-2 inference, and billing remain unverified
+without a Devin account. Unauthenticated catalog probes returned HTTP 400.
+Live tests require `DEVIN_API_KEY` and `LIVE_E2E=1` and consume subscription quota.
+
+Sources consulted 2026-09-12 and 2026-09-13: the [SWE-2 announcement](https://cognition.com/blog/swe-2)
+(2026-09-10; CLI availability and medium/high/max; no published context window), [CLI commands](https://docs.devin.ai/cli/reference/commands),
+and the [official manifest](https://static.devin.ai/cli/current/manifest.json)
+(observed identity `3000.10.21`). Protocol fields follow the third-party
+[oh-my-pi snapshot](https://github.com/can1357/oh-my-pi/blob/942383f768c5f2f6a620fcab57326c0f59df623a/packages/catalog/src/discovery/devin-proto.ts),
+not a stable public inference contract; attribution is in `packages/ai/DEVIN-NOTICE`.
+Regenerate only this logical model, preserving every other catalog entry, with
+`npm --prefix packages/ai run generate-models -- --devin-only`.
+
 ### OpenAI Codex
 
 - Requires ChatGPT Plus or Pro subscription
@@ -111,6 +186,7 @@ omk
 | Azure OpenAI Responses | `AZURE_OPENAI_API_KEY` | `azure-openai-responses` |
 | OpenAI | `OPENAI_API_KEY` | `openai` |
 | DeepSeek | `DEEPSEEK_API_KEY` | `deepseek` |
+| Devin CLI session token | `DEVIN_API_KEY` | `devin` |
 | NVIDIA NIM | `NVIDIA_API_KEY` | `nvidia` |
 | Google Gemini | `GEMINI_API_KEY` | `google` |
 | Mistral | `MISTRAL_API_KEY` | `mistral` |

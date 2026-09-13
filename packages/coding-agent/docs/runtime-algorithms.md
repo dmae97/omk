@@ -154,15 +154,18 @@ Evidence:
 - `packages/coding-agent/test/context-budget-selection-policy-version.test.ts`
 - `packages/coding-agent/test/context-budget-cache-disk.test.ts`
 
-**Working tree:** non-queued native `xai` requests started through `AgentSession.prompt()` now derive a bounded automatic skill grant from live discovered descriptions after ordinary prompt-template expansion. The selector scores task text separately from camelCase-aware path-to-skill-name signals, excludes explicit-only skills, caps automatic matches at three, and adds `headroom` only under lexical or measured context pressure. `AgentSession.prompt()` merges the result with settings/SDK/bang selections only for that request. Queued steering/follow-up messages reuse the active run's system prompt and do not trigger another selection pass.
+**Working tree:** non-queued native `xai` and `devin` requests started through `AgentSession.prompt()` now derive a bounded automatic skill grant from live discovered descriptions after ordinary prompt-template expansion. The selector scores task text separately from camelCase-aware path-to-skill-name signals, excludes explicit-only skills, caps automatic matches at three, and adds `headroom` only under lexical or measured context pressure. `AgentSession.prompt()` merges the result with settings/SDK/bang selections only for that request. Queued steering/follow-up messages reuse the active run's system prompt and do not trigger another selection pass.
 
 Evidence:
 
 - `packages/coding-agent/src/core/active-skill-state.ts`
 - `packages/coding-agent/src/core/skill-selector.ts`
+- `packages/coding-agent/src/core/harness-skills.ts`
 - `packages/coding-agent/src/core/grok-harness.ts`
+- `packages/coding-agent/src/core/devin-harness.ts`
 - `packages/coding-agent/src/core/agent-session.ts`
 - `packages/coding-agent/test/grok-active-skills.test.ts`
+- `packages/coding-agent/test/devin-active-skills.test.ts`
 - `packages/coding-agent/test/skill-selector.property.test.ts`
 
 **Working tree:** context files now treat their global/local relevance baseline

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added the Node-only Devin CLI subscription adapter and SWE-2 model with account-catalog routing for medium/high/max reasoning, tools, and usage. Live account compatibility remains unverified; see the Devin setup guide.
+- `devin/swe-2` now ships a 1,000,000-token local context budget. A budget at or above 1M asks the account catalog for the SWE-2 family's separate 1M-context lane (`1M Context` order 1); a catalog without that lane keeps the standard lane, and a lane that declares a smaller window fails the request with the `contextWindow` to lower instead of silently shrinking the budget. Fast-lane entries stay excluded. `resolveDevinRoute`/`getDevinRoute` accept `{ longContext }` and return `longContext` on the route.
+- Added `getDevinUserStatus`/`parseDevinUserStatus` for the `SeatManagementService/GetUserStatus` account call (session-token metadata, no user JWT) and `ProtoMessage.has()` for zero-value field presence, so consumers can read plan name, daily/weekly quota percents and resets, and credit balances.
+
+### Fixed
+
+- Fixed Devin login waiting for a callback before displaying the authorization URL; added state validation, cancellation, timeout cleanup, and explicit re-login for expired sessions.
+
 ## [0.98.5] - 2026-09-12
 
 ### Changed

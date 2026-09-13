@@ -21,7 +21,7 @@ OMK routes incoming tasks to a **domain capability profile** ("inherited documen
 
 Thresholds: `STRONG_THRESHOLD = 8`, `WEAK_THRESHOLD = 4`, `AMBIGUITY_MARGIN = 2`.
 
-## Domains (13 + 1 fallback)
+## Domains (14 + 1 fallback)
 
 - [`frontend-ui`](frontend-ui.md) — Frontend & UI
 - [`visual-qa`](visual-qa.md) — Visual QA & Website Cloning
@@ -35,6 +35,7 @@ Thresholds: `STRONG_THRESHOLD = 8`, `WEAK_THRESHOLD = 4`, `AMBIGUITY_MARGIN = 2`
 - [`docs-writing`](docs-writing.md) — Docs & Technical Writing
 - [`qa-testing`](qa-testing.md) — QA & Testing
 - [`grok-harness`](grok-harness.md) — Grok xAI Harness
+- [`devin-harness`](devin-harness.md) — Devin SWE-2 Harness
 - [`ai-agent-ops`](ai-agent-ops.md) — AI Agent Engineering & Ops
 - [`general`](general.md) — General (fallback)
 

@@ -39,6 +39,7 @@ For the full first-run flow, see [Quickstart](quickstart.md).
 - [Providers](providers.md) - subscription and API-key setup for built-in providers.
 - [Provider Resilience](provider-resilience.md) - retry, failover, quota, and safety-stop recovery.
 - [Native xAI Grok](grok-harness.md) - authentication, weekly SuperGrok usage, presets, and thinking tiers.
+- [Devin SWE-2](devin-harness.md) - presets, effort tiers, the 1M-token context budget and lane rule, and the `devin-harness` loadout.
 - [Containerization](containerization.md) - sandbox omk with OpenShell, Gondolin, or Docker.
 - [Settings](settings.md) - global and project settings.
 - [Environment Variables](environment-variables.md) - process configuration, harness opt-outs, and bash-tool session environment.

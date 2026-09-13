@@ -18,13 +18,20 @@ import { resolveAgentToolSettings } from "./agent-tool-settings.ts";
 import { formatNoModelsAvailableMessage } from "./auth-guidance.ts";
 import { AuthStorage } from "./auth-storage.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
-import { createDomainDispatchRuntimeSession, isDomainRoutingEnabled, tryDomainDispatch } from "./domain-dispatch.ts";
+import { DEVIN_HARNESS_SPEC } from "./devin-harness.ts";
+import {
+	createDomainDispatchRuntimeSession,
+	isDomainRoutingEnabled,
+	LOADOUT_HARNESS_RUNTIME,
+	tryDomainDispatch,
+} from "./domain-dispatch.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
-import { tryGrokHarnessDispatch } from "./grok-harness-dispatch.ts";
+import { GROK_HARNESS_SPEC } from "./grok-harness.ts";
 import type { LoadoutAccessPolicy } from "./loadout-access-policy.ts";
 import { convertToLlm } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import { findInitialModel } from "./model-resolver.ts";
+import { tryProviderHarnessDispatch } from "./provider-harness-dispatch.ts";
 import { recordClaudePassiveUsage, recordCodexPassiveUsage } from "./provider-usage.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 import { DefaultResourceLoader } from "./resource-loader.ts";
@@ -268,22 +275,25 @@ function createEffectiveLoadoutAccessPolicy(
 		excludedToolNames: options.excludeTools,
 	});
 
-	// Grok OAuth: apply grok-harness domain loadout without requiring OMK_DOMAIN_ROUTING=1.
+	// Provider harnesses (Grok OAuth → grok-harness, Devin → devin-harness) apply their
+	// domain loadout without requiring OMK_DOMAIN_ROUTING=1.
 	if (provider) {
-		try {
-			const grokDispatch = tryGrokHarnessDispatch({
-				provider,
-				session,
-				resourceLoader,
-				cwd,
-				agentDir,
-				env: process.env,
-			});
-			if (grokDispatch.loadoutAccessPolicy) {
-				return grokDispatch.loadoutAccessPolicy;
+		for (const spec of [GROK_HARNESS_SPEC, DEVIN_HARNESS_SPEC]) {
+			try {
+				const result = tryProviderHarnessDispatch(spec, LOADOUT_HARNESS_RUNTIME, {
+					provider,
+					session,
+					resourceLoader,
+					cwd,
+					agentDir,
+					env: process.env,
+				});
+				if (result.loadoutAccessPolicy) {
+					return result.loadoutAccessPolicy;
+				}
+			} catch {
+				// Fall through to opt-in domain routing.
 			}
-		} catch {
-			// Fall through to opt-in domain routing.
 		}
 	}
 
@@ -415,7 +425,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}
 	}
 
-	// Loadout policy after model resolution so Grok OAuth can auto-apply grok-harness.
+	// Loadout policy after model resolution so provider harnesses (grok-harness, devin-harness) can auto-apply.
 	const effectiveLoadoutAccessPolicy = createEffectiveLoadoutAccessPolicy(
 		options,
 		resourceLoader,

@@ -1,90 +1,22 @@
 /**
  * Apply the `grok-harness` domain loadout when the active provider is Grok OAuth.
- * Does not require `OMK_DOMAIN_ROUTING=1`.
+ * Does not require `OMK_DOMAIN_ROUTING=1`. Convenience wrapper over
+ * `tryProviderHarnessDispatch()` bound to the real loadout runtime.
  */
 
-import { getAgentDir } from "../config.ts";
+import { LOADOUT_HARNESS_RUNTIME } from "./domain-dispatch.ts";
+import { GROK_HARNESS_SPEC } from "./grok-harness.ts";
+import type { LoadoutRuntimeSession, LoadoutRuntimeState } from "./loadout-runtime.ts";
 import {
-	GROK_HARNESS_DOMAIN_ID,
-	grokHarnessAutoApplyEnabled,
-	isGrokOAuthProvider,
-	selectGrokHarnessSkills,
-} from "./grok-harness.ts";
-import type { LoadoutAccessPolicy } from "./loadout-access-policy.ts";
-import { type ComposedLoadout, composeLoadout } from "./loadout-compose.ts";
-import { createLoadoutPolicyFromRuntimeState } from "./loadout-policy-bridge.ts";
-import { applyLoadoutToRuntime, type LoadoutRuntimeSession, type LoadoutRuntimeState } from "./loadout-runtime.ts";
-import { uniqueSorted } from "./loadout-safety.ts";
+	type ProviderHarnessDispatchInput,
+	type ProviderHarnessDispatchResult,
+	tryProviderHarnessDispatch,
+} from "./provider-harness-dispatch.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 
-export interface GrokHarnessDispatchInput {
-	readonly provider: string | undefined;
-	readonly session: LoadoutRuntimeSession;
-	readonly resourceLoader: ResourceLoader;
-	readonly cwd: string;
-	readonly agentDir?: string;
-	readonly env?: NodeJS.ProcessEnv | Readonly<Record<string, string | undefined>>;
-	/** When set, narrow the grok-harness skill grant to the documented 2–3 subset. */
-	readonly task?: string;
-	/** Optional path hints scored with the task text. */
-	readonly paths?: readonly string[];
-}
-
-export interface GrokHarnessDispatchResult {
-	readonly loadoutAccessPolicy: LoadoutAccessPolicy | undefined;
-	readonly warnings: readonly string[];
-	readonly runtimeState: LoadoutRuntimeState | undefined;
-}
+export type GrokHarnessDispatchInput = ProviderHarnessDispatchInput<LoadoutRuntimeSession, ResourceLoader>;
+export type GrokHarnessDispatchResult = ProviderHarnessDispatchResult<LoadoutRuntimeState>;
 
 export function tryGrokHarnessDispatch(input: GrokHarnessDispatchInput): GrokHarnessDispatchResult {
-	const env = input.env ?? process.env;
-	if (!grokHarnessAutoApplyEnabled(env) || !isGrokOAuthProvider(input.provider)) {
-		return { loadoutAccessPolicy: undefined, warnings: [], runtimeState: undefined };
-	}
-
-	const agentDir = input.agentDir ?? getAgentDir();
-	try {
-		const profile = composeGrokHarnessProfile(input);
-		const state = applyLoadoutToRuntime(input.session, input.resourceLoader, input.cwd, agentDir, {
-			profile,
-			role: "coder",
-		});
-		if (state.blockers.length > 0) {
-			return {
-				loadoutAccessPolicy: undefined,
-				warnings: state.blockers,
-				runtimeState: state,
-			};
-		}
-		const policy = createLoadoutPolicyFromRuntimeState(state, {
-			cwd: input.cwd,
-			commands: profile.commands,
-		});
-		return {
-			loadoutAccessPolicy: policy,
-			warnings: uniqueSorted([
-				...state.warnings,
-				...(input.task?.trim() && state.activeSkills.length === 0 ? ["no grok-harness skill signals"] : []),
-			]),
-			runtimeState: state,
-		};
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		return { loadoutAccessPolicy: undefined, warnings: [message], runtimeState: undefined };
-	}
-}
-
-function composeGrokHarnessProfile(input: GrokHarnessDispatchInput): ComposedLoadout {
-	const profile = composeLoadout("coder", GROK_HARNESS_DOMAIN_ID);
-	const task = input.task?.trim();
-	if (!task) {
-		return { ...profile, skills: { allow: [{ kind: "skill", names: [] }] } };
-	}
-
-	const inventory = input.resourceLoader.getSkills().skills;
-	const selected = selectGrokHarnessSkills(task, inventory, { paths: input.paths });
-	return {
-		...profile,
-		skills: { allow: [{ kind: "skill", names: [...selected] }] },
-	};
+	return tryProviderHarnessDispatch(GROK_HARNESS_SPEC, LOADOUT_HARNESS_RUNTIME, input);
 }

@@ -4698,6 +4698,26 @@ export const MODELS = {
 			maxTokens: 384000,
 		} satisfies Model<"openai-completions">,
 	},
+	"devin": {
+		"swe-2": {
+			id: "swe-2",
+			name: "SWE-2 (Devin CLI)",
+			api: "devin-agent",
+			provider: "devin",
+			baseUrl: "https://server.codeium.com",
+			reasoning: true,
+			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":"high","xhigh":null,"max":"max","ultra":null},
+			input: ["text"],
+			cost: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+			},
+			contextWindow: 1000000,
+			maxTokens: 16384,
+		} satisfies Model<"devin-agent">,
+	},
 	"fireworks": {
 		"accounts/fireworks/models/deepseek-v4-flash-0731": {
 			id: "accounts/fireworks/models/deepseek-v4-flash-0731",

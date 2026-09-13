@@ -102,6 +102,22 @@ describe("domain-loadouts registry", () => {
 		expect(validation.valid, validation.errors.join("; ")).toBe(true);
 	});
 
+	it("includes a valid devin-harness profile", () => {
+		const profile = getDomainProfile("devin-harness");
+		const validation = validateLoadoutProfile(profile);
+
+		expect(profile.id).toBe("devin-harness");
+		expect(profile.label).toBe("Devin SWE-2 Harness");
+		expect(profile.routingPrompt).toContain("docs/devin-harness.md");
+		expect(profile.routingPrompt).toContain("optional local operator overlay");
+		expect(profile.routingPrompt).toContain("1,000,000-token");
+		expect(profile.skills?.allow?.[0]?.names).toEqual(
+			expect.arrayContaining(["programming", "debugging", "headroom", "tdd-workflow"]),
+		);
+		expect(profile.hooks?.allow?.[0]?.names).toContain("precompact-checkpoint");
+		expect(validation.valid, validation.errors.join("; ")).toBe(true);
+	});
+
 	it("domainLoadoutProfiles strips domain-only fields and keeps loadout fields", () => {
 		const loadouts = domainLoadoutProfiles();
 		for (const [id, loadout] of Object.entries(loadouts)) {

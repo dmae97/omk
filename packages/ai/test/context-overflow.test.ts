@@ -15,6 +15,8 @@ import type { ChildProcess } from "child_process";
 import { execSync, spawn } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getModel, getModels } from "../src/models.ts";
+import { encodeFrame } from "../src/providers/devin-connect.ts";
+import { readConnectFrames } from "../src/providers/devin-connect-stream.ts";
 import { complete } from "../src/stream.ts";
 import type { AssistantMessage, Context, Model, Usage } from "../src/types.ts";
 import { isContextOverflow } from "../src/utils/overflow.ts";
@@ -94,6 +96,20 @@ function logResult(result: OverflowResult) {
 // =============================================================================
 
 describe("Context overflow error handling", () => {
+	it("recognizes an explicit Devin context error without exposing the remote body", async () => {
+		const frame = encodeFrame(
+			Buffer.from(
+				JSON.stringify({
+					error: { code: "invalid_argument", message: "prompt is too long: fixture-private-text" },
+				}),
+			),
+			2,
+		);
+		const response = new Response(frame);
+		await expect(readConnectFrames(response, new AbortController().signal).next()).rejects.toThrow(
+			"Devin context_length_exceeded",
+		);
+	});
 	describe.skipIf(!process.env.ANTHROPIC_API_KEY)("Anthropic (API Key)", () => {
 		it("claude-haiku-4-5 - should detect overflow via isContextOverflow", async () => {
 			const model = getModel("anthropic", "claude-haiku-4-5");

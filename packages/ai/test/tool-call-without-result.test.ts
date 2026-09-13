@@ -92,6 +92,11 @@ async function testToolCallWithoutResult<TApi extends Api>(model: Model<TApi>, o
 }
 
 describe("Tool Call Without Result Tests", () => {
+	describe.skipIf(!process.env.DEVIN_API_KEY)("Devin CLI Provider", () => {
+		it("should repair orphaned tool calls", async () => {
+			await testToolCallWithoutResult(getModel("devin", "swe-2"));
+		});
+	});
 	// =========================================================================
 	// API Key-based providers
 	// =========================================================================

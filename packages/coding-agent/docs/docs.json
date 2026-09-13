@@ -28,6 +28,10 @@
           "path": "grok-harness.md"
         },
         {
+          "title": "Devin SWE-2",
+          "path": "devin-harness.md"
+        },
+        {
           "title": "Containerization",
           "path": "containerization.md"
         },

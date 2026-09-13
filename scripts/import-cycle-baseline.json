@@ -21,7 +21,6 @@
 		"packages/coding-agent/src/core/extensions/index.ts",
 		"packages/coding-agent/src/core/extensions/loader.ts",
 		"packages/coding-agent/src/core/extensions/types.ts",
-		"packages/coding-agent/src/core/grok-harness-dispatch.ts",
 		"packages/coding-agent/src/core/loadout-policy-bridge.ts",
 		"packages/coding-agent/src/core/loadout-runtime.ts",
 		"packages/coding-agent/src/core/provider-usage.ts",

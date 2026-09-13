@@ -51,11 +51,22 @@ Unified LLM API with automatic model discovery, provider configuration, token an
 
 ## Supported Providers
 
+Devin's `swe-2` supports `reasoning: "medium" | "high" | "max"` through both
+`completeSimple`/`streamSimple` and the direct Devin adapter. The authenticated
+CLI catalog supplies the wire model UID; `max` is never clamped to `high`. The
+bundled 1,000,000-token `contextWindow` selects the catalog's separate 1M-context
+lane when the account declares one; a lane that declares a smaller window fails the
+request instead of shrinking the budget. See
+[setup, protocol sources, and live-verification limits](../coding-agent/docs/providers.md#devin-cli)
+and the [SWE-2 harness](../coding-agent/docs/devin-harness.md).
+
+
 - **OpenAI**
 - **Ant Ling**
 - **Azure OpenAI (Responses)**
 - **OpenAI Codex** (ChatGPT Plus/Pro subscription, requires OAuth, see below)
 - **DeepSeek**
+- **Devin CLI** (subscription OAuth or `DEVIN_API_KEY` session token; Node-only `devin-agent` API)
 - **NVIDIA NIM**
 - **Anthropic**
 - **Google**
