@@ -6,8 +6,37 @@ import { AuditError, jobDirectory, parseManifest, readJson, record, text } from 
 /** @typedef {import('./tb21-input.mjs').Task} Task */
 /** @typedef {{ taskId: string, sha256: string, solved: boolean, exception: boolean, costUsd: number }} Trial */
 
+/** Preserve fractional ordering; Date.parse alone truncates Harbor's microseconds.
+ * @param {unknown} value @returns {bigint}
+ */
+function trialInstant(value) {
+	if (typeof value !== "string") throw new AuditError("invalid_trial_time");
+	const match = value.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/u);
+	if (!match) throw new AuditError("invalid_trial_time");
+	const whole = match[1];
+	const epochMs = Date.parse(`${whole}${match[3]}`);
+	const calendarMs = Date.parse(`${whole}Z`);
+	if (
+		!Number.isFinite(epochMs) ||
+		!Number.isFinite(calendarMs) ||
+		new Date(calendarMs).toISOString().slice(0, 19) !== whole
+	) {
+		throw new AuditError("invalid_trial_time");
+	}
+	return BigInt(epochMs) * 1_000_000n + BigInt((match[2] ?? "").padEnd(9, "0"));
+}
+
 /** @param {Record<string, unknown>} raw */
 function outcome(raw) {
+	if (
+		raw.started_at === null ||
+		raw.started_at === undefined ||
+		raw.finished_at === null ||
+		raw.finished_at === undefined
+	) {
+		throw new AuditError("unfinished_trial");
+	}
+	if (trialInstant(raw.finished_at) < trialInstant(raw.started_at)) throw new AuditError("invalid_trial_time");
 	if (raw.exception_info === undefined) throw new AuditError("invalid_exception");
 	const exception = raw.exception_info !== null;
 	if (exception) {
@@ -122,11 +151,12 @@ export function auditBenchmark(manifestPath, expectedSha256) {
 	}
 	paired.deltaPp = (100 * (paired.n10 - paired.n01)) / manifest.tasks.length;
 	return {
-		schemaVersion: "omk-tb21-audit-report-1",
+		schemaVersion: "omk-tb21-audit-report-2",
 		status: "complete",
 		runId: manifest.runId,
 		manifestSha256: file.sha256,
 		modelVerification: "configuration-only",
+		completionVerification: "recorded-timestamps",
 		costSource: "harbor-agent-result",
 		arms: { A: totals(A), B: totals(B) },
 		paired,

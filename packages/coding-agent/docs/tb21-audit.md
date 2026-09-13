@@ -3,6 +3,7 @@
 `scripts/tb21-audit.mjs`는 명시한 두 Harbor job의 **기록된 결과**를 검증한다.
 모델·Harbor를 실행하지 않으며 입력 파일이나 기존 요약을 수정하지 않는다.
 저장소 checkout과 Node.js 22.19 이상이 필요하다. 공개 npm CLI의 하위 명령은 아니다.
+현재 출력은 `omk-tb21-audit-report-2`, manifest 입력은 기존 `omk-tb21-manifest-1`이다.
 
 ## 사용
 
@@ -85,7 +86,7 @@ arm-b/
 job 바깥에 둔다. job 루트의 일반 파일(예: `config.json`, 전체 `result.json`)은
 개별 trial 집계에 사용하지 않는다. 최신 job 검색이나 시간창 기반 원장 귀속은 없다.
 
-각 task는 각 arm에 정확히 한 번 있어야 한다. v1은 재시도·다회 반복 집계를 지원하지
+각 task는 각 arm에 정확히 한 번 있어야 한다. 이 감사기는 재시도·다회 반복 집계를 지원하지
 않으므로 추가 attempt를 거부한다. 마지막 결과로 덮어쓰거나 가장 좋은 시행을 고르지 않는다.
 `trial_name`은 디렉터리 이름과 일치해야 하며 `id`는 두 arm 전체에서 유일해야 한다.
 Harbor가 절대 task 경로를 기록한 경우 마지막 경로 조각을 manifest ID와 비교하고,
@@ -95,6 +96,17 @@ Harbor가 절대 task 경로를 기록한 경우 마지막 경로 조각을 mani
 명시적인 `exception_info.exception_type`이 있을 때만 미해결로 집계한다.
 성공 보상 1과 예외가 함께 있으면 모순으로 거부한다. `exception_info` 필드 자체가
 없으면 예외 여부를 추측하지 않는다. timeout도 분모에 남는다.
+
+`started_at`과 `finished_at`은 필수다. 누락/null이면 `unfinished_trial`로 거부한다.
+두 값은 `YYYY-MM-DDTHH:mm:ss[.fraction]Z` 또는 명시적인 `±HH:mm` 오프셋을 가진
+시각이어야 한다. 소수초 1~9자리를 보존하며 밀리초로 잘라 순서를 비교하지 않는다.
+`finished_at < started_at`, 존재하지 않는 날짜, `24:00:00`, 타임존 없는 값은
+`invalid_trial_time`으로 거부한다. 시각 문자열 뒤의 개행도 허용하지 않는다.
+윤초 표기는 지원하지 않는다. 두 시각이 같으면 허용한다.
+
+종료시각이 없으면 보상 1이나 timeout 예외가 있어도 전체 요약을 거부한다. 그 trial을
+분모에서 빼거나 누락 시각에 현재 시간을 대입하지 않는다. v1에서 통과한 자료가 이
+추가 검증으로 거부될 수 있으므로 출력 버전을 2로 구분한다.
 
 `agent_result.cost_usd`는 0 이상의 유한한 숫자여야 한다. 누락·null은 **0이 아니라
 미확인**이며 요약을 거부한다. 합산 overflow도 거부한다. 해결 task가 0개이면
@@ -110,8 +122,10 @@ manifest는 최대 256 KiB, 개별 결과는 최대 8 MiB까지 읽는다. 파�
 manifest와 결과 파일의 해시가 포함된다. 원본 trial ID·task 절대 경로·kwargs·예외
 메시지는 내보내지 않는다. 출력의 run/task ID는 manifest에서 승인한 식별자를 사용한다.
 
-항상 `modelVerification: "configuration-only"`, `costSource: "harbor-agent-result"`를
-표시한다. 설정이 같다는 사실로 실제 모든 provider 전송이 같았다고 추론하지 않는다.
+항상 `modelVerification: "configuration-only"`, `costSource: "harbor-agent-result"`,
+`completionVerification: "recorded-timestamps"`를 표시한다. 기록된 시각의 유효성·순서만
+검사하며 실제 프로세스 종료, 시계 정확도, 자식 프로세스 정리까지 증명하지 않는다.
+설정이 같다는 사실로 실제 모든 provider 전송이 같았다고 추론하지 않는다.
 Gateway 원장으로만 비용을 알 수 있는 과거 trial은 비용을 지어내지 않고 `missing_cost`로
 거부한다. 신뢰할 수 있는 request ID별 원장 결합은 로드맵 R3의 후속 작업이다.
 
@@ -123,7 +137,7 @@ Gateway 원장으로만 비용을 알 수 있는 과거 trial은 비용을 지�
 저장소 루트에서 공급자·다운로드 없이 실행한다.
 
 ```bash
-node --test --test-concurrency=1 scripts/test/tb21-audit.test.mjs scripts/test/tb21-audit-inputs.test.mjs
+node --test --test-concurrency=1 scripts/test/tb21-audit.test.mjs scripts/test/tb21-audit-inputs.test.mjs scripts/test/tb21-audit-completion.test.mjs
 node node_modules/typescript/bin/tsc --noEmit --allowJs --checkJs --strict --target ES2022 --module NodeNext --skipLibCheck --types node scripts/tb21-audit.mjs scripts/lib/tb21-input.mjs scripts/lib/tb21-audit.mjs
 ```
 

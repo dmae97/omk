@@ -210,8 +210,8 @@ criteria. Planned runtime improvements are not measured benchmark gains.
 
 The checkout-only `scripts/tb21-audit.mjs` audits explicitly selected Harbor jobs
 against a caller-pinned manifest digest. It rejects duplicate tasks/trials, missing
-results or costs, mismatched task checksums or configured model labels, and
-contradictory success records. It never starts a model, picks the latest job, joins
+results or costs, mismatched task checksums or configured model labels,
+missing/invalid completion times, and contradictory success records. It never starts a model, picks the latest job, joins
 requests by timestamp, or rewrites evidence. See [TB 2.1 offline audit](tb21-audit.md)
 for the schema, invocation, error codes, and limitations.
 
