@@ -950,6 +950,11 @@ export class AgentSession {
 	}
 
 	private _publishRuntimeFailure(error: unknown): void {
+		// A caller rejected by "Agent is already processing" never owned a run: the
+		// open journal run belongs to the live run, and closing it here would make
+		// that run die later with "agent_end without run_started". Let the caller
+		// surface its own error and leave the live run's journal alone.
+		if (this.isStreaming) return;
 		const cause = this._pendingRuntimeTerminationCause ?? runtimeFailureCause(error);
 		const runId = this._activeRunId ?? `runtime-${randomUUID()}`;
 		const timestamp = new Date().toISOString();
@@ -2700,7 +2705,10 @@ export class AgentSession {
 		this._recordEvidenceReceiptInvalidation(message.customType);
 		if (options?.deliverAs === "nextTurn") {
 			this._pendingNextTurnMessages.push(appMessage);
-		} else if (this.isStreaming) {
+		} else if (this.isStreaming || this.isRetrying) {
+			// Retry backoff still owns the session (mirrors prompt()): starting a
+			// top-level run here races the pending agent.continue() and wedges the
+			// run journal, so queue for the retried run to drain instead.
 			if (options?.deliverAs === "followUp") {
 				this.agent.followUp(appMessage);
 			} else {

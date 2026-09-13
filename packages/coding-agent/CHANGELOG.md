@@ -11,6 +11,10 @@
 
 - Grok and Devin harness dispatch share `provider-harness-dispatch.ts` (loadout runtime injected, outside the `sdk.ts` import cycle) and `harness-skills.ts`; the `grok-harness` and `devin-harness` profiles live in `domain-loadouts-provider-harness.ts`. `tryGrokHarnessDispatch()` and `selectGrokHarnessSkills()` keep their public signatures and behavior.
 
+### Fixed
+
+- A background task result delivered with `triggerTurn` while the session was sleeping in retry backoff started a second top-level run: `sendCustomMessage` only checked `isStreaming`, not `isRetrying` (unlike `prompt()`). When the retry woke up, `agent.continue()` threw `Agent is already processing`, and the runtime-failure handler closed the run journal that the competing run still owned, so that run later died with `run journal received agent_end without run_started` and the session was wedged until a model switch. Custom messages now queue during retry backoff exactly as during streaming, and a run that never owned the journal (rejected with `Agent is already processing` while another run is live) no longer finishes or clears it.
+
 ## [0.98.5] - 2026-09-12
 
 ### Added

@@ -68,9 +68,15 @@ describe("AgentSession retry", () => {
 		}
 	});
 
-	function createSession(options?: { failCount?: number; maxRetries?: number; delayAssistantMessageEndMs?: number }) {
+	function createSession(options?: {
+		failCount?: number;
+		maxRetries?: number;
+		delayAssistantMessageEndMs?: number;
+		baseDelayMs?: number;
+	}) {
 		const failCount = options?.failCount ?? 1;
 		const maxRetries = options?.maxRetries ?? 3;
+		const baseDelayMs = options?.baseDelayMs ?? 1;
 		const delayAssistantMessageEndMs = options?.delayAssistantMessageEndMs ?? 0;
 		let callCount = 0;
 
@@ -104,7 +110,7 @@ describe("AgentSession retry", () => {
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = ModelRegistry.create(authStorage, tempDir);
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
-		settingsManager.applyOverrides({ retry: { enabled: true, maxRetries, baseDelayMs: 1 } });
+		settingsManager.applyOverrides({ retry: { enabled: true, maxRetries, baseDelayMs } });
 
 		session = new AgentSession({
 			agent,
@@ -159,6 +165,143 @@ describe("AgentSession retry", () => {
 		expect(events).toContain("start:2");
 		expect(events).toContain("end:success=false");
 		expect(created.session.isRetrying).toBe(false);
+	});
+
+	it("queues sendCustomMessage(triggerTurn) during retry backoff instead of starting a competing run", async () => {
+		// Regression: a subagent result delivered with triggerTurn while the session
+		// was sleeping in retry backoff (isStreaming=false, isRetrying=true) started a
+		// second top-level run. The retry then woke up, agent.continue() threw
+		// "Agent is already processing", and its runtime-failure handler closed the
+		// run journal owned by the competing run, which later died with
+		// "run journal received agent_end without run_started".
+		const backoffMs = 50;
+		let callCount = 0;
+		const streamFn = () => {
+			callCount++;
+			const call = callCount;
+			const stream = new MockAssistantStream();
+			const finish = () => {
+				if (call === 1) {
+					const msg = createAssistantMessage("", { stopReason: "error", errorMessage: "overloaded_error" });
+					stream.push({ type: "start", partial: msg });
+					stream.push({ type: "error", reason: "error", error: msg });
+					return;
+				}
+				const msg = createAssistantMessage(`Success ${call}`);
+				stream.push({ type: "start", partial: msg });
+				stream.push({ type: "done", reason: "stop", message: msg });
+			};
+			// The second provider call outlives the retry backoff, like a real LLM turn.
+			if (call === 2) setTimeout(finish, backoffMs * 3);
+			else queueMicrotask(finish);
+			return stream;
+		};
+
+		const model = getModel("anthropic", "claude-sonnet-4-5")!;
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: { model, systemPrompt: "Test", tools: [] },
+			streamFn,
+		});
+		const sessionManager = SessionManager.inMemory();
+		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
+		const modelRegistry = ModelRegistry.create(authStorage, tempDir);
+		authStorage.setRuntimeApiKey("anthropic", "test-key");
+		settingsManager.applyOverrides({ retry: { enabled: true, maxRetries: 3, baseDelayMs: backoffMs } });
+		session = new AgentSession({
+			agent,
+			sessionManager,
+			settingsManager,
+			cwd: tempDir,
+			modelRegistry,
+			resourceLoader: createTestResourceLoader(),
+		});
+
+		let customMessagePromise: Promise<void> | undefined;
+		session.subscribe((event) => {
+			if (event.type !== "auto_retry_start" || customMessagePromise) return;
+			setTimeout(() => {
+				expect(session.isRetrying).toBe(true);
+				customMessagePromise = session.sendCustomMessage(
+					{ customType: "task-result", content: "background task done", display: true, details: {} },
+					{ triggerTurn: true, deliverAs: "followUp" },
+				);
+			}, 0);
+		});
+
+		await session.prompt("Test");
+		expect(customMessagePromise).toBeDefined();
+		await customMessagePromise;
+
+		// initial failure + successful retry + one follow-up turn for the queued custom message
+		expect(callCount).toBe(3);
+		expect(
+			session.messages.some((message) => message.role === "custom" && message.customType === "task-result"),
+		).toBe(true);
+		expect(session.isRetrying).toBe(false);
+		expect(session.isStreaming).toBe(false);
+		const lastRun = session.runJournalRecords.at(-1);
+		expect(lastRun?.event).toBe("run_finished");
+		expect(lastRun?.event === "run_finished" ? lastRun.termination.kind : undefined).not.toBe("internal_error");
+	});
+
+	it("does not close the live run journal when a competing top-level run is rejected", async () => {
+		// Defense for the same wedge: a caller that reaches _runAgentPrompt while
+		// another run is active gets "Agent is already processing", but its runtime
+		// failure handler must not finish/null the journal run it never owned.
+		let releaseFirstCall: (() => void) | undefined;
+		const firstCallStarted = new Promise<void>((resolve) => {
+			releaseFirstCall = resolve;
+		});
+		let finishFirstCall: (() => void) | undefined;
+		const streamFn = () => {
+			const stream = new MockAssistantStream();
+			const msg = createAssistantMessage("Success");
+			stream.push({ type: "start", partial: msg });
+			finishFirstCall = () => stream.push({ type: "done", reason: "stop", message: msg });
+			releaseFirstCall?.();
+			return stream;
+		};
+
+		const model = getModel("anthropic", "claude-sonnet-4-5")!;
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: { model, systemPrompt: "Test", tools: [] },
+			streamFn,
+		});
+		const sessionManager = SessionManager.inMemory();
+		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
+		const modelRegistry = ModelRegistry.create(authStorage, tempDir);
+		authStorage.setRuntimeApiKey("anthropic", "test-key");
+		session = new AgentSession({
+			agent,
+			sessionManager,
+			settingsManager,
+			cwd: tempDir,
+			modelRegistry,
+			resourceLoader: createTestResourceLoader(),
+		});
+
+		const promptPromise = session.prompt("Test");
+		await firstCallStarted;
+		expect(session.isStreaming).toBe(true);
+
+		const competing = (session as unknown as { _runAgentPrompt(message: unknown): Promise<void> })._runAgentPrompt({
+			role: "user",
+			content: [{ type: "text", text: "late" }],
+			timestamp: Date.now(),
+		});
+		await expect(competing).rejects.toThrow(/already processing/);
+
+		finishFirstCall?.();
+		await promptPromise;
+
+		const lastRun = session.runJournalRecords.at(-1);
+		expect(lastRun?.event).toBe("run_finished");
+		expect(lastRun?.event === "run_finished" ? lastRun.termination.kind : undefined).toBe("completed");
+		expect(session.isStreaming).toBe(false);
 	});
 
 	it("prompt waits for retry completion even when assistant message_end handling is delayed", async () => {
