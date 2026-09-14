@@ -14,6 +14,7 @@
 
 import type { TSchema } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
+import { detectMcpDescriptorPromptInjection } from "../mcp-public-presets.ts";
 import { McpClient, type McpClientOptions } from "./client.ts";
 import { createMcpToolDefinition, type McpToolDetails } from "./tools.ts";
 
@@ -38,6 +39,8 @@ export interface McpServerStatus {
 	/** Failure reason when `state` is `failed`. Never contains configured env values. */
 	readonly error?: string;
 	readonly serverVersion?: string;
+	/** Tool names excluded because their descriptions carried prompt-injection payloads. */
+	readonly quarantinedTools?: readonly string[];
 }
 
 export interface McpManagerOptions {
@@ -54,6 +57,8 @@ interface ServerRuntime {
 	state: McpServerState;
 	client?: McpClient;
 	tools: ToolDefinition<TSchema, McpToolDetails>[];
+	/** Descriptor prompt-injection quarantines (namespaced tool names). */
+	quarantinedTools: string[];
 	error?: string;
 	connecting?: Promise<void>;
 }
@@ -66,7 +71,7 @@ export class McpManager {
 		this.options = options;
 		for (const config of options.servers) {
 			if (this.runtimes.has(config.name)) continue; // First definition wins; inventory already applies precedence.
-			this.runtimes.set(config.name, { config, state: "idle", tools: [] });
+			this.runtimes.set(config.name, { config, state: "idle", tools: [], quarantinedTools: [] });
 		}
 	}
 
@@ -83,6 +88,7 @@ export class McpManager {
 			toolCount: runtime.tools.length,
 			error: runtime.error,
 			serverVersion: runtime.client?.serverInfo.version,
+			...(runtime.quarantinedTools.length > 0 ? { quarantinedTools: runtime.quarantinedTools } : {}),
 		}));
 	}
 
@@ -118,6 +124,7 @@ export class McpManager {
 			toolCount: runtime.tools.length,
 			error: runtime.error,
 			serverVersion: runtime.client?.serverInfo.version,
+			...(runtime.quarantinedTools.length > 0 ? { quarantinedTools: runtime.quarantinedTools } : {}),
 		};
 	}
 
@@ -127,6 +134,7 @@ export class McpManager {
 			runtime.client?.close();
 			runtime.client = undefined;
 			runtime.tools = [];
+			runtime.quarantinedTools = [];
 			if (runtime.state === "ready" || runtime.state === "connecting") runtime.state = "idle";
 		}
 	}
@@ -163,6 +171,7 @@ export class McpManager {
 			runtime.client?.close();
 			runtime.client = undefined;
 			runtime.tools = [];
+			runtime.quarantinedTools = [];
 			runtime.state = "failed";
 			runtime.error = `health check failed: ${error instanceof Error ? error.message : String(error)}`;
 		}
@@ -203,11 +212,24 @@ export class McpManager {
 			await client.connect();
 			const schemas = await client.listTools();
 			runtime.client = client;
-			runtime.tools = schemas.map((schema) =>
+			// 서술자 주입 스크리닝: MCP 도구 설명은 신뢰할 수 없는 제3자 입력이다.
+			// admitPublicMcpServer와 동일 임계값(0.7)으로 차단 — 수입 시점에서 fail-closed.
+			const definitions = schemas.map((schema) =>
 				createMcpToolDefinition(runtime.config.name, client, schema, {
 					callTimeoutMs: this.options.callTimeoutMs,
 				}),
 			);
+			const admitted: typeof definitions = [];
+			const quarantined: string[] = [];
+			for (const definition of definitions) {
+				if (detectMcpDescriptorPromptInjection(definition.description ?? "").score > 0.7) {
+					quarantined.push(definition.name);
+				} else {
+					admitted.push(definition);
+				}
+			}
+			runtime.tools = admitted;
+			runtime.quarantinedTools = quarantined;
 			runtime.state = "ready";
 			runtime.error = undefined;
 		} catch (error) {
