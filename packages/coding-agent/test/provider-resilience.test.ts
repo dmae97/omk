@@ -55,6 +55,20 @@ describe("provider-resilience (root-level)", () => {
 		expect(isTransientProviderErrorMessage("Authentication failed")).toBe(false);
 	});
 
+	it("marks relay 'terminal chunk' stream cuts as transient (2026-09-14 commandcode/deepseek-v4.1-flash)", () => {
+		// Regression: 51 identical rounds succeeded, then one upstream cut ended the
+		// turn — the relay's own wording matched no transient pattern.
+		expect(isTransientProviderErrorMessage("Upstream stream ended before terminal chunk")).toBe(true);
+	});
+
+	it("treats 402 credit/balance exhaustion as quota so failover saves the turn", () => {
+		// Observed live 2026-09-14: OpenRouter 'Insufficient credits', DeepSeek 'Insufficient Balance'.
+		expect(
+			isQuotaExhaustionMessage("Insufficient credits. Add more using https://openrouter.ai/settings/credits"),
+		).toBe(true);
+		expect(isQuotaExhaustionMessage("Insufficient Balance")).toBe(true);
+	});
+
 	it("marks an xAI at-capacity 429 as transient so the turn auto-retries", () => {
 		// Regression: the body carries no status code and no limit token, so the
 		// pattern missed it and a recoverable overload ended the turn instead.

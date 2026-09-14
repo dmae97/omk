@@ -79,7 +79,7 @@ export function isContentSafetyStopMessage(text: string | undefined): boolean {
  */
 export function isQuotaExhaustionMessage(text: string | undefined): boolean {
 	if (!text) return false;
-	return /usage limit|GoUsageLimitError|FreeUsageLimitError|available balance|insufficient_quota|out of budget|quota exceeded|billing/i.test(
+	return /usage limit|GoUsageLimitError|FreeUsageLimitError|available balance|insufficient_quota|insufficient balance|insufficient credits|out of budget|quota exceeded|billing/i.test(
 		text,
 	);
 }
@@ -189,7 +189,7 @@ export function isTransientProviderErrorMessage(text: string | undefined): boole
 	// `at capacity|high demand`: xAI serves overload as HTTP 429 whose body carries
 	// no status or limit token, so the message-level classifier misses it and the
 	// turn never auto-retries (observed 2026-09-03, xai/grok-4.6).
-	return /overloaded|at capacity|high demand|provider.?returned.?error|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|internal.?error|network.?error|connection.?error|connection.?refused|connection.?lost|websocket.?closed|websocket.?error|other side closed|fetch failed|upstream.?connect|reset before headers|socket hang up|ended without|stream ended before message_stop|http2 request did not get a response|timed? out|timeout|\bterminated\b|retry delay|content\/safety stop|stop_reason\s*=\s*(refusal|sensitive)|safety stop|tool_call_id\s+is\s+not\s+found|tool_call_id\s+not\s+found|invalid_request_error|json error injected into sse stream|injected into sse/i.test(
+	return /overloaded|at capacity|high demand|provider.?returned.?error|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|internal.?error|network.?error|connection.?error|connection.?refused|connection.?lost|websocket.?closed|websocket.?error|other side closed|fetch failed|upstream.?connect|reset before headers|socket hang up|ended without|stream ended before message_stop|stream ended before terminal|http2 request did not get a response|timed? out|timeout|\bterminated\b|retry delay|content\/safety stop|stop_reason\s*=\s*(refusal|sensitive)|safety stop|tool_call_id\s+is\s+not\s+found|tool_call_id\s+not\s+found|invalid_request_error|json error injected into sse stream|injected into sse/i.test(
 		text,
 	);
 }
