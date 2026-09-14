@@ -8,22 +8,8 @@ import { createRequire } from "node:module";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti/static";
-import * as _bundledOmkAgentCore from "omk-agent-core";
-import * as _bundledOmkAgentCoreNode from "omk-agent-core/node";
-import * as _bundledOmkAi from "omk-ai";
-import * as _bundledOmkAiOauth from "omk-ai/oauth";
 import type { KeyId } from "omk-tui";
-import * as _bundledOmkTui from "omk-tui";
-// Static imports of packages that extensions may use.
-// These MUST be static so Bun bundles them into the compiled binary.
-// The virtualModules option then makes them available to extensions.
-import * as _bundledTypebox from "typebox";
-import * as _bundledTypeboxCompile from "typebox/compile";
-import * as _bundledTypeboxValue from "typebox/value";
 import { CONFIG_DIR_NAME, getAgentDir, isBunBinary } from "../../config.ts";
-// NOTE: This import works because loader.ts exports are NOT re-exported from index.ts,
-// avoiding a circular dependency. Extensions can import from open-multi-agent-kit.
-import * as _bundledOmkCodingAgent from "../../index.ts";
 import { resolvePath } from "../../utils/paths.ts";
 import { createEventBus, type EventBus } from "../event-bus.ts";
 import type { ExecOptions } from "../exec.ts";
@@ -31,6 +17,7 @@ import { execCommand } from "../exec.ts";
 import { readPackageManifest } from "../package-manifest.ts";
 import { LEGACY_PI_RUNTIME_ALIASES, type PiCompatibilityTarget } from "../pi-compat.ts";
 import { createSyntheticSourceInfo } from "../source-info.ts";
+import { buildVirtualModules } from "./bundled-virtual-modules.ts";
 import type {
 	Extension,
 	ExtensionAPI,
@@ -42,37 +29,6 @@ import type {
 	RegisteredCommand,
 	ToolDefinition,
 } from "./types.ts";
-
-const LEGACY_PI_VIRTUAL_TARGETS: Record<PiCompatibilityTarget, unknown> = {
-	"coding-agent": _bundledOmkCodingAgent,
-	"agent-core": _bundledOmkAgentCore,
-	"agent-core-node": _bundledOmkAgentCoreNode,
-	ai: _bundledOmkAi,
-	"ai-oauth": _bundledOmkAiOauth,
-	tui: _bundledOmkTui,
-};
-
-/** Modules available to extensions via virtualModules (for compiled Bun binary) */
-const VIRTUAL_MODULES: Record<string, unknown> = {
-	...Object.fromEntries(
-		Object.entries(LEGACY_PI_RUNTIME_ALIASES).map(([specifier, target]) => [
-			specifier,
-			LEGACY_PI_VIRTUAL_TARGETS[target],
-		]),
-	),
-	typebox: _bundledTypebox,
-	"typebox/compile": _bundledTypeboxCompile,
-	"typebox/value": _bundledTypeboxValue,
-	"@sinclair/typebox": _bundledTypebox,
-	"@sinclair/typebox/compile": _bundledTypeboxCompile,
-	"@sinclair/typebox/value": _bundledTypeboxValue,
-	"omk-agent-core": _bundledOmkAgentCore,
-	"omk-agent-core/node": _bundledOmkAgentCoreNode,
-	"omk-tui": _bundledOmkTui,
-	"omk-ai": _bundledOmkAi,
-	"omk-ai/oauth": _bundledOmkAiOauth,
-	"open-multi-agent-kit": _bundledOmkCodingAgent,
-};
 
 const require = createRequire(import.meta.url);
 
@@ -487,7 +443,7 @@ async function loadExtensionModule(extensionPath: string, binaryMode = isBunBina
 		// In Bun binary: use virtualModules for bundled packages (no filesystem resolution)
 		// Also disable tryNative so jiti handles ALL imports (not just the entry point)
 		// In Node.js/dev: use aliases to resolve to node_modules paths
-		...(binaryMode ? { virtualModules: VIRTUAL_MODULES, tryNative: false } : { alias: getAliases() }),
+		...(binaryMode ? { virtualModules: buildVirtualModules(), tryNative: false } : { alias: getAliases() }),
 	});
 
 	const module = await jiti.import(extensionPath, { default: true });

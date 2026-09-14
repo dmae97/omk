@@ -18,20 +18,14 @@ import { resolveAgentToolSettings } from "./agent-tool-settings.ts";
 import { formatNoModelsAvailableMessage } from "./auth-guidance.ts";
 import { AuthStorage } from "./auth-storage.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
-import { DEVIN_HARNESS_SPEC } from "./devin-harness.ts";
-import {
-	createDomainDispatchRuntimeSession,
-	isDomainRoutingEnabled,
-	LOADOUT_HARNESS_RUNTIME,
-	tryDomainDispatch,
-} from "./domain-dispatch.ts";
+import { tryDevinHarnessDispatch } from "./devin-harness-dispatch.ts";
+import { createDomainDispatchRuntimeSession, isDomainRoutingEnabled, tryDomainDispatch } from "./domain-dispatch.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
-import { GROK_HARNESS_SPEC } from "./grok-harness.ts";
+import { tryGrokHarnessDispatch } from "./grok-harness-dispatch.ts";
 import type { LoadoutAccessPolicy } from "./loadout-access-policy.ts";
 import { convertToLlm } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import { findInitialModel } from "./model-resolver.ts";
-import { tryProviderHarnessDispatch } from "./provider-harness-dispatch.ts";
 import { recordClaudePassiveUsage, recordCodexPassiveUsage } from "./provider-usage.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 import { DefaultResourceLoader } from "./resource-loader.ts";
@@ -278,9 +272,9 @@ function createEffectiveLoadoutAccessPolicy(
 	// Provider harnesses (Grok OAuth → grok-harness, Devin → devin-harness) apply their
 	// domain loadout without requiring OMK_DOMAIN_ROUTING=1.
 	if (provider) {
-		for (const spec of [GROK_HARNESS_SPEC, DEVIN_HARNESS_SPEC]) {
+		for (const dispatch of [tryGrokHarnessDispatch, tryDevinHarnessDispatch]) {
 			try {
-				const result = tryProviderHarnessDispatch(spec, LOADOUT_HARNESS_RUNTIME, {
+				const result = dispatch({
 					provider,
 					session,
 					resourceLoader,

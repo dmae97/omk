@@ -9,4 +9,5 @@ import { restoreSandboxEnv } from "./restore-sandbox-env.ts";
 restoreSandboxEnv();
 
 await import("./register-bedrock.ts");
+await import("./register-bundled-coding-agent.ts");
 await import("../cli.ts");
