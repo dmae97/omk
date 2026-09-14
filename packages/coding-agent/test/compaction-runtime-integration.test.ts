@@ -522,4 +522,29 @@ describe("compaction runtime transaction integration", () => {
 		expect(streamCalls()).toBe(callsAfterFirstCommit);
 		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(1);
 	});
+
+	it("blocks the overflow retry when the compacted context provably cannot fit (overflow-retry-guard 배선)", async () => {
+		// 작은 창 + 컴팩션이 잘라낼 수 없는 초대형 새 턴 → 어떤 재시도도 창을 못 맞춘다.
+		// 가드가 배선되지 않으면 무의미한 프로바이더 왕복이 발생한다.
+		const harness = await createHarness({
+			models: [{ id: "tiny-window", contextWindow: 4_000 }],
+			settings: { compaction: { keepRecentTokens: 1 } },
+		});
+		harnesses.push(harness);
+		seedClosedTranscript(harness);
+		harness.sessionManager.appendMessage({
+			role: "user",
+			content: "x".repeat(400_000),
+			timestamp: Date.now(),
+		});
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+		injectSummaryStream(harness);
+
+		const result = await (harness.session as unknown as AutoCompactionRuntime)._runAutoCompaction("overflow", true);
+
+		expect(result).toBe(false);
+		const end = harness.eventsOfType("compaction_end").at(-1);
+		expect(end?.willRetry).toBe(false);
+		expect(end?.errorMessage).toMatch(/retrying cannot help/);
+	});
 });

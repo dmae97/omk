@@ -69,6 +69,7 @@ import {
 	resolveCompactionModel,
 } from "./compaction/index.ts";
 import { summarizeWithOAuthRecovery } from "./compaction/oauth-recovery.ts";
+import { overflowRetryBlocked } from "./compaction/overflow-retry-guard.ts";
 import { compactionEmitWillRetry } from "./compaction/resume-policy.ts";
 import { isSessionModelOverflow, shouldSkipCompactionCheck } from "./compaction-gate.ts";
 import {
@@ -4010,16 +4011,25 @@ export class AgentSession {
 			// the compaction_end event (so the TUI flushes its queued messages
 			// correctly) and the return value below.
 			const resumeMessages = this.agent.state.messages;
-			let lastAssistantMsg: AssistantMessage | undefined;
-			for (let i = resumeMessages.length - 1; i >= 0; i--) {
-				const candidate = resumeMessages[i];
-				if (candidate.role === "assistant") {
-					lastAssistantMsg = candidate as AssistantMessage;
-					break;
-				}
-			}
+			const lastAssistantMsg = this._findLastAssistantMessage();
 			const endedCleanly = lastAssistantMsg?.stopReason === "stop";
 			const willResume = this.agent.hasQueuedMessages() || !endedCleanly;
+			// overflow-retry-guard 배선: 압축 후 재전송 컨텍스트가 창을 확실히 초과하면
+			// 재시도는 프로바이더 왕복만 소모한다 — 정확한 수치 진단과 함께 차단한다.
+			const overflowBlock = willRetry
+				? overflowRetryBlocked(resumeMessages, this.model?.contextWindow ?? 0)
+				: undefined;
+			if (overflowBlock !== undefined) {
+				this._emit({
+					type: "compaction_end",
+					reason,
+					result,
+					aborted: false,
+					willRetry: false,
+					errorMessage: overflowBlock,
+				});
+				return false;
+			}
 			const emitWillRetry = compactionEmitWillRetry(willRetry, willResume);
 			this._emit({ type: "compaction_end", reason, result, aborted: false, willRetry: emitWillRetry });
 
