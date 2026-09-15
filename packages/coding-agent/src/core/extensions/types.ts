@@ -331,6 +331,14 @@ export interface ExtensionContext {
 	compact(options?: CompactOptions): void;
 	/** Get the current effective system prompt. */
 	getSystemPrompt(): string;
+	/**
+	 * Spec 020 Req1 — canonical subagent lane authority bound to this session.
+	 * Route parallel/graph child launches through its dispatchLanes() so they
+	 * inherit the parent's admission decision, shared permit pool, and
+	 * settlement counters. Returns null when no session binds one (e.g. bare
+	 * extension-runner tests).
+	 */
+	getSubagentLaneAuthority(): import("../subagent-lane-contract.ts").SubagentLaneAuthority | null;
 }
 
 /**
@@ -1557,6 +1565,8 @@ export interface ExtensionContextActions {
 	compact: (options?: CompactOptions) => void;
 	getSystemPrompt: () => string;
 	getSystemPromptOptions?: () => BuildSystemPromptOptions;
+	/** Spec 020 — session-bound subagent lane authority for extension tool contexts. */
+	getSubagentLaneAuthority?: () => import("../subagent-lane-contract.ts").SubagentLaneAuthority | null;
 }
 
 /**

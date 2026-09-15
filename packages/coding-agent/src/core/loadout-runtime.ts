@@ -28,6 +28,7 @@ import {
 import { loadMcpInventory } from "./mcp-inventory.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 import type { SourceInfo } from "./source-info.ts";
+import type { LaneContextInheritanceMode, LaneSpawnReceipt } from "./subagent-lane-contract.ts";
 
 interface ExtensionRunnerLike {
 	getAllRegisteredTools(): Array<{ definition: { name: string }; sourceInfo: SourceInfo }>;
@@ -88,17 +89,9 @@ export interface SubagentLaneGrant {
 	scheduler: SchedulerFields;
 }
 
-export type LaneContextInheritanceMode = "none" | "receipt" | "last-turn" | "bounded" | "full";
+export type { LaneContextInheritanceMode, LaneSpawnReceipt };
 
 export type LaneEvidenceGate = "plan-reread" | "automated-verification" | "manual-qa" | "adversarial-qa" | "cleanup";
-
-export interface LaneSpawnReceipt {
-	whyParallel: string;
-	whyNotLocal: string;
-	independence: string;
-	expectedReceiptShape: string;
-	maxInlineTokens: number;
-}
 
 export function buildCapabilityInventory(
 	session: LoadoutRuntimeSession,

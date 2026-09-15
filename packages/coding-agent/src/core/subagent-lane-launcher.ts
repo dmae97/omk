@@ -1,4 +1,5 @@
 import type { ResourceAdmissionDecision } from "./resource-admission.ts";
+import type { LaneOutcome } from "./subagent-lane-contract.ts";
 import type { SubagentOrchestrationPlan } from "./subagent-orchestration.ts";
 import { WorkloadPermitError, type WorkloadPermitPool } from "./workload-permit-pool.ts";
 
@@ -52,11 +53,7 @@ export interface SubagentLaneContext {
 	readonly effectiveLaneWidth: number;
 }
 
-export interface LaneOutcome {
-	readonly laneId: string;
-	readonly status: "completed" | "failed" | "cancelled" | "skipped-abort" | "permit-rejected" | "admission-deferred";
-	readonly diagnostic?: string;
-}
+export type { LaneOutcome };
 
 export interface LaunchSubagentLanesInput {
 	readonly plan: SubagentOrchestrationPlan;

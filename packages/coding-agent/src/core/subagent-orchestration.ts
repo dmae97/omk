@@ -10,20 +10,12 @@ import {
 	BUILTIN_LOADOUTS,
 	type CapabilityInventory,
 	deriveSchedulerFields,
-	type LoadoutAuthority,
 	type LoadoutProfile,
 	type LoadoutRole,
 } from "./loadouts.ts";
+import type { SubagentLaneSpec, SubagentOrchestrationRole } from "./subagent-lane-contract.ts";
 
-export type SubagentOrchestrationRole =
-	| "planner"
-	| "architect"
-	| "executor"
-	| "critic"
-	| "visual-qa"
-	| "rhwp-doc"
-	| "security"
-	| "package-maintainer";
+export type { SubagentOrchestrationRole };
 
 export type SubagentSchedulerTopology = "serial" | "parallel" | "map-reduce" | "hybrid";
 
@@ -37,21 +29,7 @@ export interface SubagentRoleAssignment {
 	readonly writesProductFiles: boolean;
 }
 
-export interface SubagentLaneSpec {
-	readonly id: string;
-	readonly role: SubagentOrchestrationRole;
-	readonly task: string;
-	readonly dependsOn?: readonly string[];
-	readonly readScope?: readonly string[];
-	readonly writeScope?: readonly string[];
-	readonly acceptance?: readonly string[];
-	readonly evidenceOutput?: string;
-	readonly blockedPaths?: readonly string[];
-	readonly contextInheritance?: LaneContextInheritanceMode;
-	readonly grantAuthority?: LoadoutAuthority;
-	readonly loadoutName?: string;
-	readonly agentName?: string;
-}
+export type { SubagentLaneSpec };
 
 export interface SpawnGateDecision {
 	readonly outcome: "allowed" | "rejected";
