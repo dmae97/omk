@@ -21,6 +21,8 @@ export { getVisionRouteModel, isVisionRouteModel, VISION_ROUTE_MODEL } from "./v
 
 import {
 	applyConcurrencyCap,
+	assignDagDependencies,
+	conflictsWithUnsettledPredecessor,
 	type DagSchedulePlan,
 	type ScheduleDagLevelsOptions,
 	scheduleDagLevels,
@@ -36,7 +38,7 @@ import {
 	parseJsonValue,
 	stampToolResultEnvelope,
 } from "./tool-execution-boundary.ts";
-import type { ClaimableToolCall } from "./tool-resource-claims.ts";
+import { type ClaimableToolCall, resolveToolClaimsForCall, type ToolClaimResolution } from "./tool-resource-claims.ts";
 import { resolveToolTimeoutMs, runToolCallWithTimeout } from "./tool-timeout.ts";
 import { hasUnsettledTimeout } from "./tool-timeout-settlement.ts";
 import {
@@ -824,6 +826,19 @@ async function executeToolCallsInWaves(
 /** Bounded per-run memo for DAG schedules; plans are pure functions of the keyed inputs. */
 type DagScheduleCache = Map<string, DagSchedulePlan>;
 
+/**
+ * Shared scheduling state for one DAG batch: the last known claim resolution
+ * per source index, calls deferred because a post-hook claim change would
+ * execute them before an unsettled earlier-source conflict, and calls that
+ * have reached a terminal outcome. Mutated across candidate levels so the
+ * final-claims contract is enforced globally, not per level.
+ */
+interface DagBatchScheduleState {
+	readonly resolutions: Map<number, ToolClaimResolution>;
+	readonly deferred: Array<{ sourceIndex: number; preparation: PreparedToolCall }>;
+	readonly settled: Set<number>;
+}
+
 const DAG_SCHEDULE_CACHE_LIMIT = 64;
 
 /**
@@ -874,7 +889,7 @@ export async function scheduleDagLevelsMemo(
 	if (cached) {
 		cache.delete(key);
 		cache.set(key, cached);
-		return { levels: cached.levels.map((level) => level.slice()), planKey: cached.planKey };
+		return { levels: cached.levels.map((level) => level.slice()), planKey: cached.planKey, entries: cached.entries };
 	}
 	const scheduled = await awaitWithAbort(() => scheduleDagLevels(toolCalls, options), signal);
 	if (scheduled.kind === "aborted") {
@@ -886,7 +901,11 @@ export async function scheduleDagLevelsMemo(
 			cache.delete(oldest.value);
 		}
 	}
-	cache.set(key, { levels: scheduled.value.levels.map((level) => level.slice()), planKey: scheduled.value.planKey });
+	cache.set(key, {
+		levels: scheduled.value.levels.map((level) => level.slice()),
+		planKey: scheduled.value.planKey,
+		entries: scheduled.value.entries,
+	});
 	return scheduled.value;
 }
 
@@ -904,7 +923,12 @@ async function schedulePlannedDagLevels(
 	config: AgentLoopConfig,
 	signal: AbortSignal | undefined,
 	dagScheduleCache: DagScheduleCache,
-): Promise<number[][]> {
+): Promise<{
+	levels: number[][];
+	resolutions: Map<number, ToolClaimResolution>;
+	/** Conflicting predecessors per source index — the precedence graph the ready queue admits from. */
+	dependencies: Map<number, number[]>;
+}> {
 	const schedulableSourceIndices: number[] = [];
 	const claimableCalls: ClaimableToolCall[] = [];
 	const immediateSourceIndices: number[] = [];
@@ -930,17 +954,31 @@ async function schedulePlannedDagLevels(
 		dagScheduleCache,
 	);
 	if (scheduled === null) {
-		return [];
+		return { levels: [], resolutions: new Map(), dependencies: new Map() };
 	}
+	const resolutions = new Map<number, ToolClaimResolution>();
+	scheduled.entries.forEach((entry, position) => {
+		resolutions.set(schedulableSourceIndices[position], entry.resolution);
+	});
+	// Precedence graph in source-index space. Immediate plans carry no claims and
+	// therefore no predecessors; they already fail before any tool executes.
+	const dependencies = new Map<number, number[]>();
+	for (const sourceIndex of immediateSourceIndices) dependencies.set(sourceIndex, []);
+	assignDagDependencies(scheduled.entries).forEach((blockers, position) => {
+		dependencies.set(
+			schedulableSourceIndices[position],
+			blockers.map((blocker) => schedulableSourceIndices[blocker]),
+		);
+	});
 	const levels = scheduled.levels.map((level) => level.map((position) => schedulableSourceIndices[position]));
 	if (immediateSourceIndices.length === 0) {
-		return levels;
+		return { levels, resolutions, dependencies };
 	}
 	if (levels.length === 0) {
-		return [[...immediateSourceIndices]];
+		return { levels: [[...immediateSourceIndices]], resolutions, dependencies };
 	}
 	levels[0] = [...levels[0], ...immediateSourceIndices].sort((left, right) => left - right);
-	return levels;
+	return { levels, resolutions, dependencies };
 }
 
 /**
@@ -972,37 +1010,37 @@ async function executeToolCallsDagLevels(
 		if (mode && !toolPolicies.has(tool.name)) toolPolicies.set(tool.name, mode);
 	}
 
-	const levels = await schedulePlannedDagLevels(plans, toolPolicies, boundTools, config, signal, dagScheduleCache);
+	const schedule = await schedulePlannedDagLevels(plans, toolPolicies, boundTools, config, signal, dagScheduleCache);
+	const levels = schedule.levels;
+	const batchState: DagBatchScheduleState = {
+		resolutions: schedule.resolutions,
+		deferred: [],
+		settled: new Set(),
+	};
 
 	const finalizedByIndex: Array<FinalizedToolCallOutcome | undefined> = new Array(toolCalls.length).fill(undefined);
 	let skippedReason: string | undefined;
 	let stoppedByUnsettledTimeout = false;
 
-	for (const level of levels) {
-		if (signal?.aborted) break;
-		const executedLevel = await runDagLevelCalls(
-			currentContext,
-			assistantMessage,
-			level,
-			toolCalls,
-			plans,
-			toolPolicies,
-			config,
-			signal,
-			emit,
-			dagScheduleCache,
-		);
-		for (const outcome of executedLevel.outcomes) finalizedByIndex[outcome.sourceIndex] = outcome.finalized;
-		if (signal?.aborted) break;
-		if (executedLevel.stoppedByUnsettledTimeout) {
-			skippedReason = "Skipped because a preceding DAG tool timed out before its execution promise settled";
-			stoppedByUnsettledTimeout = true;
-			break;
-		}
-		if (shouldTerminateToolBatch(executedLevel.outcomes.map((outcome) => outcome.finalized))) {
-			skippedReason = "Skipped because the preceding DAG level requested termination";
-			break;
-		}
+	const frontier = await runDagFrontier(
+		currentContext,
+		assistantMessage,
+		levels.flat(),
+		schedule.dependencies,
+		toolCalls,
+		plans,
+		toolPolicies,
+		config,
+		signal,
+		emit,
+		batchState,
+	);
+	for (const outcome of frontier.outcomes) finalizedByIndex[outcome.sourceIndex] = outcome.finalized;
+	if (frontier.stoppedByUnsettledTimeout) {
+		skippedReason = "Skipped because a preceding DAG tool timed out before its execution promise settled";
+		stoppedByUnsettledTimeout = true;
+	} else if (frontier.terminated) {
+		skippedReason = "Skipped because the preceding DAG level requested termination";
 	}
 
 	const messages: ToolResultMessage[] = [];
@@ -1046,109 +1084,187 @@ async function executeToolCallsDagLevels(
 
 type DagLevelOutcome = { sourceIndex: number; finalized: FinalizedToolCallOutcome };
 
-/** Re-plan final claims for a runnable candidate level from exact post-hook arguments. */
-async function rescheduleRunnableLevels(
-	runnable: Array<{ sourceIndex: number; preparation: PreparedToolCall }>,
+// Re-resolve claims for a prepared call from its exact post-hook arguments.
+// Resolution failures fail closed as an immediate error rather than guessing
+// at a safe scope.
+async function resolveFinalResolution(
+	preparation: PreparedToolCall,
 	toolPolicies: ReadonlyMap<string, "sequential" | "parallel">,
 	config: AgentLoopConfig,
 	signal: AbortSignal | undefined,
-	dagScheduleCache: DagScheduleCache,
-): Promise<number[][] | null> {
-	const finalClaimableCalls = runnable.map(({ preparation }) => ({
-		id: preparation.toolCall.id,
-		name: preparation.toolCall.name,
-		arguments: preparation.args,
-	}));
-	const scheduled = await scheduleDagLevelsMemo(
-		finalClaimableCalls,
-		{
-			cwd: config.cwd ?? process.cwd(),
-			toolPolicies,
-			registeredTools: runnable.map(({ preparation }) => preparation.tool),
-			strictExtensionClaims: config.strictExtensionClaims,
-			maxConcurrency: config.maxToolConcurrency,
-			resourceKeyResolver: config.resourceKeyResolver,
-		},
-		signal,
-		dagScheduleCache,
-	);
-	return scheduled === null ? null : scheduled.levels;
+): Promise<ToolClaimResolution | ImmediateToolCallOutcome> {
+	if (signal?.aborted) return immediateOutcome("aborted", "Operation aborted");
+	try {
+		return await resolveToolClaimsForCall(
+			{ id: preparation.toolCall.id, name: preparation.toolCall.name, arguments: preparation.args },
+			{
+				cwd: config.cwd ?? process.cwd(),
+				toolPolicies,
+				registeredTools: [preparation.tool],
+				strictExtensionClaims: config.strictExtensionClaims,
+				resourceKeyResolver: config.resourceKeyResolver,
+			},
+		);
+	} catch (error) {
+		return immediateOutcome("failed", error instanceof Error ? error.message : String(error));
+	}
 }
 
-/** Authorize one candidate DAG level, re-plan final claims, and run its safe sublevels. */
-async function runDagLevelCalls(
+/** No call in the ready queue is pre-ordered against another, so drift checks see no exempt peers. */
+const NO_READY_PEERS: ReadonlySet<number> = new Set<number>();
+
+/**
+ * Execute a planned batch as a dependency ready queue.
+ *
+ * States are `pending -> ready -> running -> settled`. A call is admitted once
+ * every call it actually conflicts with has settled, rather than once its whole
+ * barrier level has, so one slow unrelated call no longer delays independent
+ * work queued behind it.
+ *
+ * Admission — authorize, re-resolve claims from exact post-hook arguments, and
+ * enforce the final-claims contract — runs one call at a time in source order.
+ * That keeps hook ordering and the conflict contract identical to the barrier
+ * executor and leaves the shared batch state free of concurrent mutation; only
+ * tool execution overlaps. Simultaneously-ready calls are admitted by source
+ * index, so admission order stays deterministic even though completion order
+ * is not.
+ *
+ * A call whose post-hook claims newly conflict with an earlier unsettled call
+ * yields its turn and is retried after the next settle, which preserves the
+ * source-order conflict contract without a separate drain pass.
+ */
+async function runDagFrontier(
 	currentContext: AgentContext,
 	assistantMessage: AssistantMessage,
-	levelIndices: readonly number[],
+	order: readonly number[],
+	dependencies: ReadonlyMap<number, number[]>,
 	toolCalls: AgentToolCall[],
 	plans: Array<PlannedToolCall | ImmediateToolCallOutcome>,
 	toolPolicies: ReadonlyMap<string, "sequential" | "parallel">,
 	config: AgentLoopConfig,
 	signal: AbortSignal | undefined,
 	emit: AgentEventSink,
-	dagScheduleCache: DagScheduleCache,
-): Promise<{ outcomes: DagLevelOutcome[]; stoppedByUnsettledTimeout: boolean }> {
+	state: DagBatchScheduleState,
+): Promise<{ outcomes: DagLevelOutcome[]; stoppedByUnsettledTimeout: boolean; terminated: boolean }> {
 	const outcomes: DagLevelOutcome[] = [];
-	const runnable: Array<{ sourceIndex: number; preparation: PreparedToolCall }> = [];
+	const pending = [...order].sort((left, right) => left - right);
+	const running = new Map<number, Promise<DagLevelOutcome>>();
+	// Mirrors applyConcurrencyCap: absent, non-finite, or non-positive is unbounded.
+	const cap =
+		typeof config.maxToolConcurrency === "number" &&
+		Number.isFinite(config.maxToolConcurrency) &&
+		config.maxToolConcurrency > 0
+			? Math.max(1, Math.floor(config.maxToolConcurrency))
+			: Number.POSITIVE_INFINITY;
+	let stoppedByUnsettledTimeout = false;
+	let terminated = false;
 
-	for (const sourceIndex of levelIndices) {
-		const toolCall = toolCalls[sourceIndex];
-		const plan = plans[sourceIndex];
-		const preparation =
-			plan.kind === "immediate"
-				? plan
-				: await authorizePlannedToolCall(currentContext, assistantMessage, plan, config, signal);
-		if (preparation.kind === "immediate") {
-			outcomes.push({
-				sourceIndex,
-				finalized: {
-					toolCall,
-					result: preparation.result,
-					isError: preparation.isError,
-					envelope: preparation.envelope,
-				},
-			});
-		} else {
-			runnable.push({ sourceIndex, preparation });
+	const settle = async (outcome: DagLevelOutcome): Promise<void> => {
+		outcomes.push(outcome);
+		state.settled.add(outcome.sourceIndex);
+		if (await hasUnsettledTimeout([outcome.finalized])) stoppedByUnsettledTimeout = true;
+	};
+
+	while (!signal?.aborted && !stoppedByUnsettledTimeout && !terminated) {
+		// Termination is a property of a settled group, not of one call:
+		// shouldTerminateToolBatch requires every member to terminate. Evaluating it
+		// only when nothing is in flight keeps the barrier executor's semantics,
+		// where a call sharing a level with a non-terminating peer did not end the
+		// batch. Judging a single outcome would terminate on the first terminating
+		// call and strand its concurrent peers.
+		if (running.size === 0 && shouldTerminateToolBatch(outcomes.map((outcome) => outcome.finalized))) {
+			terminated = true;
+			break;
 		}
-		if (signal?.aborted) return { outcomes, stoppedByUnsettledTimeout: false };
-	}
-
-	// Re-plan final claims from the exact post-hook arguments. Non-plain
-	// payloads stay in the schedule and fail closed into exclusive barriers
-	// inside claim resolution rather than degrading the level to sequential
-	// singletons.
-	const executionLevels = await rescheduleRunnableLevels(runnable, toolPolicies, config, signal, dagScheduleCache);
-	if (executionLevels === null) return { outcomes, stoppedByUnsettledTimeout: false };
-
-	for (const executionLevel of executionLevels) {
-		if (signal?.aborted) break;
-		for (const entryIndex of executionLevel) {
-			await emitToolExecutionStart(runnable[entryIndex].preparation, emit);
-		}
-		const finalizedLevel = await Promise.all(
-			executionLevel.map(async (entryIndex): Promise<DagLevelOutcome> => {
-				const entry = runnable[entryIndex];
-				const executed = await executePreparedToolCall(entry.preparation, config, signal, emit);
-				const finalized = await finalizeExecutedToolCall({
-					currentContext,
-					assistantMessage,
-					prepared: entry.preparation,
-					executed,
-					afterToolCall: config.afterToolCall,
-					signal,
+		let admitted = false;
+		for (let position = 0; position < pending.length && running.size < cap; ) {
+			if (signal?.aborted || stoppedByUnsettledTimeout) break;
+			const sourceIndex = pending[position];
+			if (!(dependencies.get(sourceIndex) ?? []).every((blocker) => state.settled.has(blocker))) {
+				position++;
+				continue;
+			}
+			const plan = plans[sourceIndex];
+			const preparation =
+				plan.kind === "immediate"
+					? plan
+					: await authorizePlannedToolCall(currentContext, assistantMessage, plan, config, signal);
+			if (preparation.kind === "immediate") {
+				pending.splice(position, 1);
+				admitted = true;
+				await settle({
+					sourceIndex,
+					finalized: {
+						toolCall: toolCalls[sourceIndex],
+						result: preparation.result,
+						isError: preparation.isError,
+						envelope: preparation.envelope,
+					},
 				});
-				await emitToolExecutionEnd(finalized, emit);
-				return { sourceIndex: entry.sourceIndex, finalized };
-			}),
-		);
-		outcomes.push(...finalizedLevel);
-		if (signal?.aborted) break;
-		if (await hasUnsettledTimeout(finalizedLevel.map(({ finalized }) => finalized))) {
-			return { outcomes, stoppedByUnsettledTimeout: true };
+				continue;
+			}
+			const resolved = await resolveFinalResolution(preparation, toolPolicies, config, signal);
+			if (resolved.kind === "immediate") {
+				pending.splice(position, 1);
+				admitted = true;
+				await settle({
+					sourceIndex,
+					finalized: {
+						toolCall: preparation.toolCall,
+						result: resolved.result,
+						isError: resolved.isError,
+						envelope: resolved.envelope,
+					},
+				});
+				continue;
+			}
+			state.resolutions.set(sourceIndex, resolved);
+			if (
+				conflictsWithUnsettledPredecessor(sourceIndex, resolved, NO_READY_PEERS, state.settled, state.resolutions)
+			) {
+				position++;
+				continue;
+			}
+			pending.splice(position, 1);
+			admitted = true;
+			await emitToolExecutionStart(preparation, emit);
+			running.set(
+				sourceIndex,
+				(async (): Promise<DagLevelOutcome> => {
+					const executed = await executePreparedToolCall(preparation, config, signal, emit);
+					const finalized = await finalizeExecutedToolCall({
+						currentContext,
+						assistantMessage,
+						prepared: preparation,
+						executed,
+						afterToolCall: config.afterToolCall,
+						signal,
+					});
+					await emitToolExecutionEnd(finalized, emit);
+					return { sourceIndex, finalized };
+				})(),
+			);
 		}
+		if (running.size === 0) {
+			// Nothing is in flight: either every call settled, or the remainder is
+			// blocked with nothing left that could unblock it.
+			if (!admitted) break;
+			continue;
+		}
+		const finished = await Promise.race([...running.values()]);
+		running.delete(finished.sourceIndex);
+		await settle(finished);
 	}
-	return { outcomes, stoppedByUnsettledTimeout: false };
+
+	// Join work already in flight: cancellation and termination stop admission,
+	// they do not abandon an execution this batch already owns.
+	while (running.size > 0) {
+		const finished = await Promise.race([...running.values()]);
+		running.delete(finished.sourceIndex);
+		outcomes.push(finished);
+		state.settled.add(finished.sourceIndex);
+	}
+	return { outcomes, stoppedByUnsettledTimeout, terminated };
 }
 
 type ExecutedToolCallBatch = {
