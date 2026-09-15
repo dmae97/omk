@@ -1,5 +1,5 @@
 import { Type } from "typebox";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getModel } from "../src/models.ts";
 import { streamOpenAICompletions } from "../src/providers/openai-completions.ts";
 import type { Model } from "../src/types.ts";
@@ -106,24 +106,44 @@ function getInstructionMessage(params: CapturedParams) {
 	return params.messages.find((message) => message.role === "system" || message.role === "developer");
 }
 
-function expectAnthropicCacheMarkers(params: CapturedParams): void {
+function expectAnthropicCacheMarkers(params: CapturedParams, expected: CacheControl = { type: "ephemeral" }): void {
 	const instructionMessage = getInstructionMessage(params);
 	expect(instructionMessage).toBeDefined();
-	expect(Array.isArray(instructionMessage?.content)).toBe(true);
-	expect((instructionMessage?.content as TextPart[])[0]?.cache_control).toEqual({ type: "ephemeral" });
+	const instructionContent = instructionMessage?.content;
+	// Narrow instead of casting: a cast would hide a string/undefined content
+	// behind a TextPart[] index and throw before the assertion could report it.
+	expect(Array.isArray(instructionContent)).toBe(true);
+	if (!Array.isArray(instructionContent)) return;
+	expect(instructionContent[0]?.cache_control).toEqual(expected);
 
 	expect(params.tools).toHaveLength(1);
-	expect(params.tools?.[0]?.cache_control).toEqual({ type: "ephemeral" });
+	expect(params.tools?.[0]?.cache_control).toEqual(expected);
 
 	const lastMessage = params.messages[params.messages.length - 1];
 	expect(lastMessage.role).toBe("user");
-	expect(Array.isArray(lastMessage.content)).toBe(true);
-	expect((lastMessage.content as TextPart[])[0]?.cache_control).toEqual({ type: "ephemeral" });
+	const lastContent = lastMessage.content;
+	expect(Array.isArray(lastContent)).toBe(true);
+	if (!Array.isArray(lastContent)) return;
+	expect(lastContent[0]?.cache_control).toEqual(expected);
 }
 
 describe("openai-completions cacheControlFormat", () => {
+	// Default retention resolves from OMK_CACHE_RETENTION, so an ambient value
+	// would otherwise decide whether these payloads carry a ttl and the suite
+	// would pass or fail based on the shell it was launched from.
+	const originalCacheRetention = process.env.OMK_CACHE_RETENTION;
+
 	beforeEach(() => {
 		mockState.lastParams = undefined;
+		delete process.env.OMK_CACHE_RETENTION;
+	});
+
+	afterEach(() => {
+		if (originalCacheRetention === undefined) {
+			delete process.env.OMK_CACHE_RETENTION;
+		} else {
+			process.env.OMK_CACHE_RETENTION = originalCacheRetention;
+		}
 	});
 
 	it("applies Anthropic-style cache markers when model compat enables them", async () => {
@@ -156,6 +176,19 @@ describe("openai-completions cacheControlFormat", () => {
 		const model = getModel("openrouter", "anthropic/claude-sonnet-4");
 		const params = await capturePayload(model);
 		expectAnthropicCacheMarkers(params);
+	});
+
+	it("adds a 1h ttl when cacheRetention is long", async () => {
+		const model = getModel("openrouter", "anthropic/claude-sonnet-4");
+		const params = await capturePayload(model, { cacheRetention: "long" });
+		expectAnthropicCacheMarkers(params, { type: "ephemeral", ttl: "1h" });
+	});
+
+	it("resolves the default retention from OMK_CACHE_RETENTION", async () => {
+		process.env.OMK_CACHE_RETENTION = "long";
+		const model = getModel("openrouter", "anthropic/claude-sonnet-4");
+		const params = await capturePayload(model);
+		expectAnthropicCacheMarkers(params, { type: "ephemeral", ttl: "1h" });
 	});
 
 	it("omits Anthropic-style cache markers when cacheRetention is none", async () => {
