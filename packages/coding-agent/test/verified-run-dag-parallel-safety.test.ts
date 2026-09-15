@@ -8,9 +8,10 @@ import { canonicalJson } from "../src/core/run-journal.ts";
 import * as broker from "../src/core/verified-run/broker.ts";
 import { projectRun } from "../src/core/verified-run/events.ts";
 import { journalPath, readRunJournal } from "../src/core/verified-run/journal.ts";
-import { type NamespaceIdentity, probeNamespace } from "../src/core/verified-run/namespace-identity.ts";
+import type { NamespaceIdentity } from "../src/core/verified-run/namespace-identity.ts";
 import { digestObject } from "../src/core/verified-run/storage.ts";
 import { dagFixture } from "./verified-run-dag-fixture.ts";
+import { waitForNamespaceGone } from "./verified-run-namespace-wait.ts";
 
 let root: string;
 beforeEach(() => {
@@ -85,7 +86,12 @@ describe("parallel DAG ownership and compatibility", () => {
 				f.coordinator.start(contract, { ...f.command, contractDigest }, { approvedContractDigest: contractDigest }),
 			).rejects.toThrow(/parallel fsync failure/);
 			expect(identities).toHaveLength(2);
-			expect(identities.map(probeNamespace)).toEqual(["gone", "gone"]);
+			// Bounded: PID namespace teardown is not synchronized with the rejected
+			// start, so probing at that instant races OS reaping.
+			expect(await Promise.all(identities.map((identity) => waitForNamespaceGone(identity)))).toEqual([
+				"gone",
+				"gone",
+			]);
 			const snapshot = readRunJournal(f.runPath);
 			expect(snapshot?.records.filter(({ event }) => event.kind === "dispatch")).toHaveLength(2);
 			expect(snapshot?.state.receiptDigest).toBeNull();

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeSandbox } from "../src/core/verified-run/broker.ts";
 import { type NamespaceIdentity, probeNamespace } from "../src/core/verified-run/namespace-identity.ts";
+import { waitForNamespaceGone } from "./verified-run-namespace-wait.ts";
 
 let workspace: string;
 beforeEach(() => {
@@ -61,7 +62,9 @@ describe("durable process gate", () => {
 		}
 		expect((await execution).failure).toBeNull();
 		expect(readFileSync(join(workspace, "output"), "utf8")).toBe("executed");
-		expect(probeNamespace(identity)).toBe("gone");
+		// Bounded: a resolved execution does not synchronize with PID namespace
+		// teardown, so probing at that instant intermittently observes "alive".
+		expect(await waitForNamespaceGone(identity)).toBe("gone");
 	});
 
 	it.each([false, true])("keeps receipt time ordered when wall-clock regression is %s", async (regress) => {

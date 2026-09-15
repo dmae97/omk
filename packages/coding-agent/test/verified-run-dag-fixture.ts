@@ -34,7 +34,13 @@ export function dagFixture(root: string, fail = false) {
 			],
 		},
 		checks: [{ claimId: "joined", argv: ["/bin/cat", "joined"], stdout: "originalORIGINAL" }],
-		budget: { workMs: 30000, verifyMs: 5000, cleanupMs: 1000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
+		// cleanupMs bounds how long the broker waits to confirm a SIGKILL'd sandbox
+		// child was reaped. Falling short fail-closes to `unsettled` -> `quarantined`,
+		// which is right in production but makes the cancel test — which asserts the
+		// drained/settled path — fail when vitest reaps many children at once. The
+		// timer is armed only on stop() and cleared on close, so a larger budget
+		// costs nothing on paths that settle normally. Kept in line with verifyMs.
+		budget: { workMs: 30000, verifyMs: 5000, cleanupMs: 5000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
 		apply: "artifact-only",
 	};
 	contract.workspace.baseDigest = planVerifiedRun(contract).baseDigest;
