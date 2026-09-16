@@ -1867,16 +1867,19 @@ export class AgentSession {
 	 * Extract the most recent user query text from conversation messages.
 	 * Returns undefined when no user message exists or content is empty.
 	 * Handles both string content and multimodal (array) content.
+	 *
+	 * The scan walks the whole transcript backwards and stops at the first user
+	 * message. A fixed tail window cannot work here: tool results are their own
+	 * messages, so a single turn that calls two tools already leaves
+	 * `[user, assistant, toolResult, toolResult]` and buries the task four deep.
+	 * Losing it mid-turn collapses every skill to the neutral relevance score and
+	 * degrades ranking to catalogue order, precisely while tools are running and
+	 * a matching skill matters most.
 	 */
 	private _extractCurrentQuery(): string | undefined {
 		const messages = this.messages;
-		if (messages.length === 0) {
-			return undefined;
-		}
-		// Scan recent messages (last 3) for the most recent user message
-		const recent = messages.slice(-3);
-		for (let i = recent.length - 1; i >= 0; i--) {
-			const msg = recent[i];
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const msg = messages[i];
 			if (!msg || !("role" in msg) || msg.role !== "user") {
 				continue;
 			}
