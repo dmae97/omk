@@ -148,7 +148,16 @@ export async function executeSandbox(request: SandboxExecution): Promise<Sandbox
 			if (finished || failure) return;
 			failure = reason;
 			child.kill("SIGKILL");
-			cleanup = setTimeout(() => reject(new VerifiedRunError("unsettled")), request.cleanupMs);
+			// When the gate already failed, surface its real cause rather than a
+			// generic unsettled — the close handler may still arrive first, and
+			// either path must report the same error.
+			cleanup = setTimeout(
+				() =>
+					reject(
+						gateFailed ? (gateError ?? new VerifiedRunError("unsettled")) : new VerifiedRunError("unsettled"),
+					),
+				request.cleanupMs,
+			);
 		};
 		const deadline = setTimeout(() => stop("deadline"), request.timeoutMs);
 		const abort = (): void => stop("cancelled");
