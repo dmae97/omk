@@ -30,7 +30,7 @@ import {
 	type RetryCallbacks,
 	resetApiProviders,
 } from "omk-ai";
-import { APP_NAME, VERSION } from "../config.ts";
+import { APP_NAME, getAgentDir, VERSION } from "../config.ts";
 import type { ReplayLedgerManager } from "../guardrails/evidence-system.ts";
 import type { VerifiedEvidenceExecutor } from "../guardrails/verified-executor.ts";
 import { theme } from "../modes/interactive/theme/theme.ts";
@@ -132,11 +132,14 @@ import {
 	selectGrokHarnessSkills,
 } from "./grok-harness.ts";
 import { grokPlaybookAppendForProvider } from "./grok-playbook.ts";
+import { loadHookInventory } from "./hook-inventory.ts";
 import { captureHostResourceSnapshot, type HostResourceSnapshot } from "./host-resource-snapshot.ts";
 import { decideLoadoutAccess, type LoadoutAccessPolicy } from "./loadout-access-policy.ts";
+import { buildCapabilityInventory } from "./loadout-runtime.ts";
 import { loadMcpServerConfigs } from "./mcp/config.ts";
 import { McpManager, type McpServerConfig, type McpServerStatus } from "./mcp/manager.ts";
 import { buildRuntimeProvenance } from "./runtime-provenance.ts";
+import { createSubagentLaneAuthority, type SubagentLaneAuthority } from "./subagent-lane-authority.ts";
 import { type ToolCallMetric, TurnMetricsSink } from "./turn-metrics.ts";
 
 /** Values that disable a session-level feature through its environment variable. */
@@ -229,7 +232,15 @@ import {
 } from "./reasoning-router-v4.ts";
 import { redactSensitiveText, redactSensitiveTextForced } from "./redaction.ts";
 import { getRepositoryRouterLearningPaths, type RepositoryRouterLearningPaths } from "./repository-learning-scope.ts";
-import { decideResourceAdmission, type ResourceAdmissionDecision } from "./resource-admission.ts";
+import {
+	createResourcePressureStabilizer,
+	decideResourceAdmission,
+	evaluateResourcePressure,
+	type ResourceAdmissionDecision,
+	type ResourcePressure,
+	type ResourcePressureStabilizer,
+	rederiveResourceAdmissionForPressure,
+} from "./resource-admission.ts";
 import { resolveResourceGovernorSettings } from "./resource-governor-settings.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import {
@@ -681,6 +692,10 @@ export class AgentSession {
 	private readonly _resourceObservationJournals = new Map<string, ResourceObservationJournal>();
 	private _latestResourcePromptRunId: string | null = null;
 	private _lastResourceAdmission: ResourceAdmissionDecision | null = null;
+	// Per-session pressure hysteresis (audit §16.1): escalation is immediate,
+	// recovery requires consecutive healthier probes so the applied cap does
+	// not flap around a threshold between prompts.
+	private _resourcePressureStabilizer: ResourcePressureStabilizer | undefined;
 	private _workloadPermitPool: WorkloadPermitPool | undefined;
 	private _pendingRuntimeTerminationCause: SessionTerminationCause | undefined;
 	private _activeRunToolTermination:
@@ -2074,8 +2089,13 @@ export class AgentSession {
 			}
 			const snapshot = await captureHostResourceSnapshot(probeOptions);
 			const decision = decideResourceAdmission({ snapshot, config: resolved.admission, configuredCaps });
+			const stabilized = this._stabilizeResourcePressure(snapshot, resolved);
+			const appliedDecision =
+				stabilized === decision.pressure
+					? decision
+					: rederiveResourceAdmissionForPressure(decision, resolved.admission.caps, configuredCaps, stabilized);
 			if (this._latestResourcePromptRunId === promptRunId) {
-				this._lastResourceAdmission = decision;
+				this._lastResourceAdmission = appliedDecision;
 			}
 			resourceObservations?.record("resource_snapshot_v1", snapshotObservationFacts(snapshot));
 			resourceObservations?.record("resource_admission_v1", admissionObservationFacts(decision));
@@ -2085,7 +2105,7 @@ export class AgentSession {
 					this.agent.maxToolConcurrency = cap;
 				},
 			});
-			const lease = this._resourceLeaseController.acquire({ promptRunId, decision });
+			const lease = this._resourceLeaseController.acquire({ promptRunId, decision: appliedDecision });
 			resourceObservations?.record("resource_lease_acquired_v1", {
 				decisionId: decision.decisionId,
 				appliedToolCap: decision.maxToolConcurrency,
@@ -2094,6 +2114,21 @@ export class AgentSession {
 		} catch {
 			return null;
 		}
+	}
+
+	/**
+	 * Feed one snapshot's raw pressure through the per-session stabilizer.
+	 * Created lazily so sessions that never probe carry no state; the first
+	 * observation installs its own level directly (no warmup lag).
+	 */
+	private _stabilizeResourcePressure(
+		snapshot: Parameters<typeof evaluateResourcePressure>[0],
+		resolved: ReturnType<typeof resolveResourceGovernorSettings>,
+	): ResourcePressure {
+		this._resourcePressureStabilizer ??= createResourcePressureStabilizer();
+		return this._resourcePressureStabilizer.observe(
+			evaluateResourcePressure(snapshot, resolved.admission.thresholds),
+		);
 	}
 
 	private _openResourceObservations(promptRunId: string): ResourceObservationJournal | null {
@@ -2132,6 +2167,31 @@ export class AgentSession {
 	/** §19.4 read-only SDK surface: the most recent resource admission decision, if any. */
 	getCurrentResourceAdmission(): ResourceAdmissionDecision | null {
 		return this._lastResourceAdmission;
+	}
+
+	/**
+	 * Spec 020 Req1 — canonical subagent lane authority bound to this session.
+	 * Rebuilt on each call so it tracks the live admission decision, shared
+	 * permit pool, and open prompt run. Extension tool contexts read it through
+	 * `ctx.getSubagentLaneAuthority()`.
+	 */
+	private _getSubagentLaneAuthority(): SubagentLaneAuthority {
+		const hookInventory = loadHookInventory(getAgentDir());
+		const sessionView = {
+			_baseToolDefinitions: this._baseToolDefinitions,
+			_extensionRunner: this._extensionRunner,
+			_customTools: this._customTools,
+		};
+		const inventory = buildCapabilityInventory(sessionView, this._resourceLoader, this._cwd, hookInventory);
+		return createSubagentLaneAuthority({
+			runId: this._activeRunId ?? `session-${this.sessionManager.getSessionId() ?? "unknown"}`,
+			promptRunId: this._promptLifecycle.activePromptRunId,
+			decision: this._lastResourceAdmission,
+			permitPool: this.workloadPermitPool,
+			inventory,
+			signal: this.agent?.signal,
+			noteDetachedChild: () => this._promptLifecycle.noteDetachedChild(),
+		});
 	}
 
 	/** §19.4 read-only SDK surface: capture a fresh host resource snapshot. */
@@ -4294,6 +4354,10 @@ export class AgentSession {
 				},
 				getSystemPrompt: () => this.systemPrompt,
 				getSystemPromptOptions: () => this._baseSystemPromptOptions,
+				// Spec 020 Req1 — session-bound lane authority for extension tool
+				// contexts (subagent spawn funnel). Rebuilt on demand so it always
+				// sees the live admission decision, permit pool, and prompt run.
+				getSubagentLaneAuthority: () => this._getSubagentLaneAuthority(),
 			},
 			{
 				registerProvider: (name, config) => {

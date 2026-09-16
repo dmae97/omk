@@ -1966,6 +1966,7 @@ export class InteractiveMode {
 				})();
 			},
 			getSystemPrompt: () => this.session.systemPrompt,
+			getSubagentLaneAuthority: () => null,
 		});
 
 		// Set up the extension shortcut handler on the default editor

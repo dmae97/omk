@@ -231,3 +231,94 @@ function effectiveCap(configured: number | undefined, admission: number): number
 	}
 	return Math.max(MIN_CAP, Math.min(Math.floor(configured), admitted));
 }
+
+/**
+ * Re-derive an admission decision's cap row for a stabilized pressure while
+ * keeping the decision's identity (id, digest, reasons, timestamp) — the
+ * applied policy is the smoothed one, but what it was decided against does
+ * not change. Pure apart from reading the cap table the caller supplies.
+ */
+export function rederiveResourceAdmissionForPressure(
+	decision: ResourceAdmissionDecision,
+	caps: ResourceAdmissionConfig["caps"],
+	configuredCaps: ConfiguredResourceCaps | undefined,
+	pressure: ResourcePressure,
+): ResourceAdmissionDecision {
+	const tier = caps[pressure];
+	return {
+		...decision,
+		pressure,
+		action: ACTION_BY_PRESSURE[pressure],
+		maxToolConcurrency: effectiveCap(configuredCaps?.maxToolConcurrency, tier.maxToolConcurrency),
+		maxParallelLanes: effectiveCap(configuredCaps?.maxParallelLanes, tier.maxParallelLanes),
+		maxHeavyProcesses: effectiveCap(configuredCaps?.maxHeavyProcesses, tier.maxHeavyProcesses),
+	};
+}
+
+export interface ResourcePressureStabilizerOptions {
+	/**
+	 * Consecutive de-escalating evaluations required before the stabilized
+	 * pressure may improve one step. Default 2: a single healthy reading at a
+	 * threshold boundary cannot flap the cap back up.
+	 */
+	readonly recoverProbes?: number;
+}
+
+export interface ResourcePressureStabilizer {
+	/** Current stabilized pressure. */
+	readonly pressure: ResourcePressure;
+	/**
+	 * Feed one raw evaluation and get the stabilized pressure. Escalation is
+	 * immediate (a critical memory/disk signal never waits for a streak);
+	 * de-escalation requires `recoverProbes` consecutive evaluations each
+	 * strictly better than the stabilized level, then improves one rank at a
+	 * time.
+	 */
+	observe(evaluation: ResourcePressureEvaluation): ResourcePressure;
+}
+
+/**
+ * Per-session pressure hysteresis (audit §16.1). The raw evaluator is
+ * stateless by contract — callers that apply its output on every probe would
+ * flap the effective cap around a threshold. This stabilizer is the explicit
+ * state: critical wins immediately, recovery is earned over consecutive
+ * healthier evaluations, and a missing/partial probe keeps the current level
+ * rather than silently relaxing it.
+ */
+export function createResourcePressureStabilizer(
+	options: ResourcePressureStabilizerOptions = {},
+): ResourcePressureStabilizer {
+	const recoverProbes = Math.max(1, Math.floor(options.recoverProbes ?? 2));
+	let stabilized: ResourcePressure = "normal";
+	let streak = 0;
+	let streakRank = PRESSURE_RANK.normal;
+
+	return {
+		get pressure() {
+			return stabilized;
+		},
+		observe(evaluation) {
+			const rank = PRESSURE_RANK[evaluation.pressure];
+			const stabilizedRank = PRESSURE_RANK[stabilized];
+			if (rank >= stabilizedRank) {
+				// Escalation (or same level) is immediate and resets the recovery
+				// streak — raw critical is never smoothed.
+				stabilized = RANK_TO_PRESSURE[rank] ?? "critical";
+				streak = 0;
+				streakRank = stabilizedRank;
+				return stabilized;
+			}
+			// De-escalation candidate: count consecutive evaluations strictly
+			// better than the stabilized level. Each rank recovers independently;
+			// a mid-level reading earns the streak but only drops one step.
+			streak = rank < streakRank ? 1 : streak + 1;
+			streakRank = rank;
+			if (streak >= recoverProbes) {
+				stabilized = RANK_TO_PRESSURE[stabilizedRank - 1] ?? "normal";
+				streak = 0;
+				streakRank = stabilizedRank - 1;
+			}
+			return stabilized;
+		},
+	};
+}

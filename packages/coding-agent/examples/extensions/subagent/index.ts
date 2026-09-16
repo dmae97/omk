@@ -602,6 +602,11 @@ const TaskItem = Type.Object({
 	agent: Type.String({ description: "Name of the agent to invoke" }),
 	task: Type.String({ description: "Task to delegate to the agent" }),
 	cwd: Type.Optional(Type.String({ description: "Working directory for the agent process" })),
+	writeScope: Type.Optional(
+		Type.Array(Type.String(), {
+			description: "Owned write paths for ownership-safe parallel scheduling (spec 020).",
+		}),
+	),
 });
 
 const ChainItem = Type.Object({
@@ -616,6 +621,11 @@ const GraphItem = Type.Object({
 	task: Type.String({ description: "Task; use {dependencies} to inject declared dependency outputs" }),
 	cwd: Type.Optional(Type.String({ description: "Working directory for the agent process" })),
 	dependsOn: Type.Optional(Type.Array(Type.String(), { description: "Task node ids that must complete first" })),
+	writeScope: Type.Optional(
+		Type.Array(Type.String(), {
+			description: "Owned write paths for ownership-safe parallel scheduling (spec 020).",
+		}),
+	),
 });
 
 const AgentScopeSchema = StringEnum(["user", "project", "both"] as const, {
@@ -832,13 +842,40 @@ export default function (omk: ExtensionAPI) {
 				const outputs = new Map<string, string>();
 				const completedNodeIds: string[] = [];
 				graphDetails = { waves: plan.waves, completedNodeIds };
-				for (const [waveIndex, wave] of plan.waves.entries()) {
-					const waveResults = await mapWithConcurrencyLimit<string, { id: string; result: SingleResult }>(
-						[...wave],
-						executionPolicy.concurrency,
-						async (id) => {
-							const task = plan.tasks.get(id);
-							if (!task) throw new GraphValidationError(`node '${id}' disappeared after validation`);
+
+				// Spec 020 Req1 — when the session binds a lane authority, the DAG
+				// routes through buildSubagentOrchestrationPlan → launchSubagentLanes.
+				// Batches run sequentially, so renderDependencyContext sees completed
+				// dependency outputs at launch time.
+				const laneAuthority = ctx.getSubagentLaneAuthority?.();
+				if (laneAuthority) {
+					const nodeById = new Map(plan.tasks);
+					const resultById = new Map<string, SingleResult>();
+					const lanes = params.graph.map((node) => ({
+						id: node.id,
+						role: "executor" as const,
+						task: node.task,
+						agentName: node.agent,
+						dependsOn: node.dependsOn ?? [],
+						...(node.writeScope ? { writeScope: node.writeScope } : {}),
+					}));
+					const dispatch = await laneAuthority.dispatchLanes({
+						lanes,
+						spawnPlan: {
+							whyParallel: `${params.graph.length} DAG tasks in graph mode`,
+							whyNotLocal: "isolated subagent context per node",
+							independence: "explicit dependsOn DAG",
+							expectedReceiptShape: "per-node SingleResult map",
+							maxInlineTokens: 8192,
+						},
+						configuredMaxParallelLanes: executionPolicy.unbounded ? undefined : executionPolicy.concurrency,
+						heavyLaneIds: laneAuthority.getCurrentResourceAdmission()
+							? new Set(lanes.map((lane) => lane.id))
+							: undefined,
+						signal,
+						launchLane: async ({ laneId }) => {
+							const task = nodeById.get(laneId);
+							if (!task) return;
 							const result = await runSingleAgent(
 								ctx.cwd,
 								agents,
@@ -852,32 +889,88 @@ export default function (omk: ExtensionAPI) {
 								executionPolicy.unbounded,
 								executionBudget,
 								profileStore,
-								plan.waves.length - waveIndex,
+								0,
 							);
-							return { id, result };
+							resultById.set(laneId, result);
+							if (!isFailedResult(result)) {
+								outputs.set(laneId, getResultOutput(result));
+								completedNodeIds.push(laneId);
+							}
 						},
-					);
-					for (const { id, result } of waveResults) {
-						results.push(result);
-						if (!isFailedResult(result)) {
-							outputs.set(id, getResultOutput(result));
-							completedNodeIds.push(id);
+					});
+					if (dispatch.blockers.length > 0) {
+						return {
+							content: [{ type: "text", text: `Lane dispatch blocked: ${dispatch.blockers.join("; ")}` }],
+							details: makeDetails("graph")([]),
+						};
+					}
+					for (const outcome of dispatch.outcomes) {
+						const task = nodeById.get(outcome.laneId);
+						const existing = resultById.get(outcome.laneId);
+						if (existing) {
+							results.push(existing);
+						} else if (task) {
+							results.push({
+								agent: task.agent,
+								agentSource: "unknown",
+								task: task.task,
+								exitCode: 1,
+								messages: [],
+								stderr: outcome.diagnostic ?? outcome.status,
+								stopReason: outcome.status,
+								usage: emptyUsage(),
+							});
 						}
 					}
 					graphDetails = { waves: plan.waves, completedNodeIds: [...completedNodeIds] };
-					const failed = waveResults.filter(({ result }) => isFailedResult(result));
-					if (failed.length > 0) {
-						const failedIds = failed.map(({ id }) => id).join(", ");
-						return {
-							content: [
-								{
-									type: "text",
-									text: `Graph stopped after wave ${waveIndex + 1}; failed nodes: ${failedIds}. Downstream nodes were not started.`,
-								},
-							],
-							details: makeDetails("graph")(results),
-							isError: true,
-						};
+				} else {
+					for (const [waveIndex, wave] of plan.waves.entries()) {
+						const waveResults = await mapWithConcurrencyLimit<string, { id: string; result: SingleResult }>(
+							[...wave],
+							executionPolicy.concurrency,
+							async (id) => {
+								const task = plan.tasks.get(id);
+								if (!task) throw new GraphValidationError(`node '${id}' disappeared after validation`);
+								const result = await runSingleAgent(
+									ctx.cwd,
+									agents,
+									task.agent,
+									renderDependencyContext(task, outputs),
+									task.cwd,
+									undefined,
+									signal,
+									undefined,
+									makeDetails("graph"),
+									executionPolicy.unbounded,
+									executionBudget,
+									profileStore,
+									plan.waves.length - waveIndex,
+								);
+								return { id, result };
+							},
+						);
+						for (const { id, result } of waveResults) {
+							results.push(result);
+							if (!isFailedResult(result)) {
+								outputs.set(id, getResultOutput(result));
+								completedNodeIds.push(id);
+							}
+						}
+						graphDetails = { waves: plan.waves, completedNodeIds: [...completedNodeIds] };
+						const failed = waveResults.filter(({ result }) => isFailedResult(result));
+						if (failed.length > 0) {
+							const failedIds = failed.map(({ id }) => id).join(", ");
+							return {
+								content: [
+									{
+										type: "text",
+										text: `Graph stopped after wave ${waveIndex + 1}; failed nodes: ${failedIds}. Downstream nodes were not started.`,
+									},
+								],
+								details: makeDetails("graph")(results),
+								isError: true,
+							};
+						}
 					}
 				}
 				const summaries = results.map((result, index) => {
@@ -936,10 +1029,100 @@ export default function (omk: ExtensionAPI) {
 					}
 				};
 
-				const results = await mapWithConcurrencyLimit(
-					params.tasks,
-					executionPolicy.concurrency,
-					async (t, index) => {
+				// Spec 020 Req1 — when the session binds a lane authority, parallel
+				// tasks route through buildSubagentOrchestrationPlan →
+				// launchSubagentLanes (parent admission + shared pool + settlement).
+				// Without one (bare/test contexts) keep the local concurrency path.
+				const laneAuthority = ctx.getSubagentLaneAuthority?.();
+				let results: SingleResult[];
+				if (laneAuthority) {
+					const laneIndexById = new Map<string, number>();
+					const lanes = params.tasks.map((t, index) => {
+						const id = `task-${index}`;
+						laneIndexById.set(id, index);
+						return {
+							id,
+							role: "executor" as const,
+							task: t.task,
+							agentName: t.agent,
+							...(t.writeScope ? { writeScope: t.writeScope } : {}),
+						};
+					});
+					const dispatch = await laneAuthority.dispatchLanes({
+						lanes,
+						spawnPlan: {
+							whyParallel: `${params.tasks.length} independent agent tasks requested in parallel mode`,
+							whyNotLocal: "isolated subagent context per task",
+							independence: "tasks declare no dependencies",
+							expectedReceiptShape: "per-task SingleResult array",
+							maxInlineTokens: 8192,
+						},
+						configuredMaxParallelLanes: executionPolicy.unbounded ? undefined : executionPolicy.concurrency,
+						// Child omk processes are heavy — they draw the shared permit
+						// only under a governed admission decision; observe/off keeps
+						// the legacy breadth (spec Req1.3 vs. observe-mode semantics).
+						heavyLaneIds: laneAuthority.getCurrentResourceAdmission()
+							? new Set(lanes.map((lane) => lane.id))
+							: undefined,
+						signal,
+						launchLane: async ({ laneId }) => {
+							const index = laneIndexById.get(laneId);
+							if (index === undefined) return;
+							const t = params.tasks?.[index];
+							if (!t) return;
+							const result = await runSingleAgent(
+								ctx.cwd,
+								agents,
+								t.agent,
+								t.task,
+								t.cwd,
+								undefined,
+								signal,
+								(partial) => {
+									if (partial.details?.results[0]) {
+										allResults[index] = partial.details.results[0];
+										emitParallelUpdate();
+									}
+								},
+								makeDetails("parallel"),
+								executionPolicy.unbounded,
+								executionBudget,
+								profileStore,
+								1,
+							);
+							allResults[index] = result;
+							emitParallelUpdate();
+						},
+					});
+					if (dispatch.blockers.length > 0) {
+						return {
+							content: [{ type: "text", text: `Lane dispatch blocked: ${dispatch.blockers.join("; ")}` }],
+							details: makeDetails("parallel")([]),
+						};
+					}
+					// Req2.4 — lanes that never launched still yield a typed outcome,
+					// never an empty-success. Convert non-launched outcomes to failed
+					// results so the summary is honest.
+					for (const outcome of dispatch.outcomes) {
+						if (outcome.status === "completed") continue;
+						const index = laneIndexById.get(outcome.laneId);
+						if (index === undefined) continue;
+						if (allResults[index].exitCode === -1) {
+							allResults[index] = {
+								agent: params.tasks[index].agent,
+								agentSource: "unknown",
+								task: params.tasks[index].task,
+								exitCode: 1,
+								messages: [],
+								stderr: outcome.diagnostic ?? outcome.status,
+								stopReason: outcome.status,
+								usage: emptyUsage(),
+							};
+						}
+					}
+					results = allResults;
+				} else {
+					results = await mapWithConcurrencyLimit(params.tasks, executionPolicy.concurrency, async (t, index) => {
 						const result = await runSingleAgent(
 							ctx.cwd,
 							agents,
@@ -964,8 +1147,8 @@ export default function (omk: ExtensionAPI) {
 						allResults[index] = result;
 						emitParallelUpdate();
 						return result;
-					},
-				);
+					});
+				}
 
 				const successCount = results.filter((r) => !isFailedResult(r)).length;
 				const summaries = results.map((r) => {

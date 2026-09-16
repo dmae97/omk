@@ -489,6 +489,15 @@ export {
 	type SkillFrontmatter,
 } from "./core/skills.ts";
 export { createSyntheticSourceInfo } from "./core/source-info.ts";
+export {
+	createSubagentLaneAuthority,
+	type SubagentLaneAuthority,
+	type SubagentLaneAuthorityDispatchInput,
+	type SubagentLaneAuthorityDispatchResult,
+	type SubagentLaneAuthorityHostBinding,
+} from "./core/subagent-lane-authority.ts";
+export type { SubagentLaneSpec } from "./core/subagent-orchestration.ts";
+export type { LaneOutcome } from "./core/subagent-lane-launcher.ts";
 // Tools
 export {
 	type BashOperations,

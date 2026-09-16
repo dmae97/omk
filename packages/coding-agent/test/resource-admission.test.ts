@@ -5,12 +5,14 @@ import {
 	type HostResourceSnapshot,
 } from "../src/core/host-resource-snapshot.ts";
 import {
+	createResourcePressureStabilizer,
 	DEFAULT_RESOURCE_ADMISSION_CAP_TABLE,
 	DEFAULT_RESOURCE_ADMISSION_CONFIG,
 	DEFAULT_RESOURCE_ADMISSION_THRESHOLDS,
 	decideResourceAdmission,
 	evaluateResourcePressure,
 	RESOURCE_ADMISSION_VERSION,
+	type ResourcePressureEvaluation,
 	resolveResourceAdmissionConfig,
 	resourcePressureRank,
 	toModelResourceBudgetHint,
@@ -394,5 +396,56 @@ describe("admission properties (§23.2, fixed seed 0x0fc52026)", () => {
 				}
 			}
 		}
+	});
+});
+
+describe("createResourcePressureStabilizer (audit §16.1: hysteresis)", () => {
+	const at = (pressure: ResourcePressureEvaluation["pressure"]): ResourcePressureEvaluation => ({
+		pressure,
+		reasons: [],
+	});
+
+	it("escalates immediately — a critical reading never waits for a streak", () => {
+		const stabilizer = createResourcePressureStabilizer();
+		expect(stabilizer.observe(at("critical"))).toBe("critical");
+		expect(stabilizer.pressure).toBe("critical");
+	});
+
+	it("does not flap back on a single healthy reading — recovery needs a streak", () => {
+		const stabilizer = createResourcePressureStabilizer({ recoverProbes: 2 });
+		stabilizer.observe(at("critical"));
+		expect(stabilizer.observe(at("normal"))).toBe("critical");
+		expect(stabilizer.observe(at("normal"))).toBe("constrained");
+	});
+
+	it("recovers one rank per streak, not straight to normal", () => {
+		const stabilizer = createResourcePressureStabilizer({ recoverProbes: 2 });
+		stabilizer.observe(at("critical"));
+		stabilizer.observe(at("normal"));
+		stabilizer.observe(at("normal"));
+		expect(stabilizer.pressure).toBe("constrained");
+		stabilizer.observe(at("normal"));
+		stabilizer.observe(at("normal"));
+		expect(stabilizer.pressure).toBe("normal");
+	});
+
+	it("a worse reading mid-recovery resets the streak", () => {
+		const stabilizer = createResourcePressureStabilizer({ recoverProbes: 2 });
+		stabilizer.observe(at("critical"));
+		stabilizer.observe(at("normal"));
+		stabilizer.observe(at("constrained")); // worse than 'normal' streak
+		expect(stabilizer.pressure).toBe("constrained");
+		stabilizer.observe(at("normal"));
+		expect(stabilizer.pressure).toBe("constrained");
+		stabilizer.observe(at("normal"));
+		expect(stabilizer.pressure).toBe("normal");
+	});
+
+	it("a same-level reading neither improves nor resets", () => {
+		const stabilizer = createResourcePressureStabilizer({ recoverProbes: 2 });
+		stabilizer.observe(at("constrained"));
+		stabilizer.observe(at("constrained"));
+		stabilizer.observe(at("constrained"));
+		expect(stabilizer.pressure).toBe("constrained");
 	});
 });

@@ -11,6 +11,9 @@ interface PromptOwner {
 	readonly promptRunId: string;
 	readonly startedAt: number;
 	readonly executions: Set<symbol>;
+	/** Spec 020 Req3 — detach된 자식/샤드의 live 카운터 (심볼 executions와 별도). */
+	detachedChildren: number;
+	detachedShards: number;
 	terminal?: { readonly outcome: PromptSettlementOutcome; readonly notify: (event: PromptSettledEvent) => void };
 }
 
@@ -37,11 +40,22 @@ export class SessionPromptLifecycle {
 		if (this.owner !== undefined || this.disposed) throw new PromptExecutionBusyError();
 	}
 
+	/** §16.2 — currently open prompt run id, if any. */
+	get activePromptRunId(): string | undefined {
+		return this.owner?.promptRunId;
+	}
+
 	begin(promptRunId: string): {
 		finish: (outcome: PromptSettlementOutcome, notify: (event: PromptSettledEvent) => void) => void;
 	} {
 		this.assertIdle();
-		const owner: PromptOwner = { promptRunId, startedAt: performance.now(), executions: new Set() };
+		const owner: PromptOwner = {
+			promptRunId,
+			startedAt: performance.now(),
+			executions: new Set(),
+			detachedChildren: 0,
+			detachedShards: 0,
+		};
 		this.owner = owner;
 		return {
 			finish: (outcome, notify) => {
@@ -86,7 +100,15 @@ export class SessionPromptLifecycle {
 	/** Called after the root producer drains, or after late-settlement event delivery. */
 	flush(): void {
 		const owner = this.owner;
-		if (!owner?.terminal || owner.executions.size > 0 || this.disposed || !this.canSettle()) return;
+		if (
+			!owner?.terminal ||
+			owner.executions.size > 0 ||
+			owner.detachedChildren > 0 ||
+			owner.detachedShards > 0 ||
+			this.disposed ||
+			!this.canSettle()
+		)
+			return;
 		const state = reducePromptSettlement(createPromptSettlementState(owner.promptRunId, owner.startedAt), {
 			kind: "terminal",
 			outcome: owner.terminal.outcome,
@@ -94,6 +116,34 @@ export class SessionPromptLifecycle {
 		const { event } = settlePromptIfReady(state, performance.now());
 		this.owner = undefined;
 		if (event !== null) owner.terminal.notify(event);
+	}
+
+	/** Spec 020 Req3.1 — child가 승인된 spawn 직전 +1. 반환된 release()를 정확히 한 번 호출. */
+	noteDetachedChild(): () => void {
+		const owner = this.owner;
+		if (!owner) return () => {};
+		owner.detachedChildren += 1;
+		let released = false;
+		return () => {
+			if (released) return;
+			released = true;
+			owner.detachedChildren = Math.max(0, owner.detachedChildren - 1);
+			this.flush();
+		};
+	}
+
+	/** Spec 020 Req3.1 — shard가 승인된 spawn 직전 +1. */
+	noteDetachedShard(): () => void {
+		const owner = this.owner;
+		if (!owner) return () => {};
+		owner.detachedShards += 1;
+		let released = false;
+		return () => {
+			if (released) return;
+			released = true;
+			owner.detachedShards = Math.max(0, owner.detachedShards - 1);
+			this.flush();
+		};
 	}
 
 	dispose(): void {
