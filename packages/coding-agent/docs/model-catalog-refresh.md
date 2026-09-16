@@ -3,6 +3,39 @@
 확인일: 2026-09-09. 생성기와 공급자 어댑터를 수정한 뒤 `npm run models:refresh`로
 두 카탈로그를 재생성했다. 생성 파일을 손으로 수정하지 않았다.
 
+## 2026-09-17 갱신: OpenRouter Union Alpha (stealth)
+
+`stealth/union-alpha` 추가 요청으로 `npm run models:refresh`를 종료0으로 재생성했다.
+생성 파일은 손대지 않았다. 전 소스가 응답했고 `--allow-partial`은 쓰지 않았다.
+
+| 항목 | 값 |
+| --- | --- |
+| 요청 ID | `stealth/union-alpha` (OpenRouter) |
+| context / maxTokens | 262,144 / 131,072 |
+| 입력 | text, image |
+| tool 지원 | `tools`, `tool_choice` |
+| 가격 | prompt/completion 모두 `0` |
+| **thinking** | **없음 — route가 `reasoning`을 선언하지 않음** |
+
+목록과 `/api/v1/models/stealth/union-alpha/endpoints` 모두
+`supported_parameters`가 `max_tokens, temperature, top_p, tools, tool_choice,
+response_format`이다. `reasoning`도 `include_reasoning`도 없다. 선언이 없으므로
+수준을 지어내지 않고 `reasoning: false`로 들어갔으며 `thinkingLevelMap`도 없다.
+이름이 frontier 계열을 연상시킨다는 이유로 effort를 이식하지 않는다.
+
+`created`는 2026-09-16으로 직전 갱신(09-09) 이후에 생긴 항목이다. 한 모델만
+집어넣는 경로가 없어 카탈로그 전체가 8일치 드리프트를 함께 반영한다.
+OpenRouter 371 → 376, 전체 추가 57 · 제거 28(고유 4)이다. 제거는
+`deepseek.r1-v1:0`과 mistral `devstral-small-2` · `mistral-medium` · `pixtral-12b`로,
+갱신 소스에서 더 이상 선정되지 않았다는 뜻이며 공급자의 폐기 공지나 모든 계정의
+사용 불가를 뜻하지 않는다.
+
+가격 `0`은 stealth 공개 기간의 목록 값이다. 무상 사용을 보장하지 않으며 stealth
+해제 시 달라질 수 있다. 실제 청구는 계정에서 따로 확인한다.
+
+표적 검사 `latest-model-thinking` · `catalog-thinking` · `latest-thinking-payload`
+51개가 통과했다. 공급자 추론은 호출하지 않았다.
+
 ## 2026-09-10 재검증: DeepSeek V4.1 Flash 제공 경로
 
 공식 문서·공개 API에서 확인한 기존 OMK 공급자 4곳을 반영했다.
