@@ -106,9 +106,16 @@ export {
 	type WorkingIndicatorOptions,
 } from "./extensions/index.ts";
 export {
+	classifyProviderError,
+	type ProviderErrorClassification,
+	type ProviderErrorInput,
+	type ProviderErrorKind,
+} from "./provider-error-classification.ts";
+export {
 	DEFAULT_PROVIDER_RESILIENCE,
 	DEFAULT_SAFETY_FAILOVER_CANDIDATES,
 	type FailoverCandidate,
+	hasStatusCodeLike,
 	isContentSafetyStopMessage,
 	isNoSafetyFailoverModel,
 	isOrphanToolCallIdError,

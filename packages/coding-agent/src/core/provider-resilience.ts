@@ -117,6 +117,30 @@ export function isOrphanToolCallIdError(text: string | undefined): boolean {
 }
 
 /**
+ * Status-code-context match: a bare `500` inside a message body ("saved 500
+ * records") is not a status code, so numeric matches require an adjacent
+ * transport word — either a code-context word before the digits ("HTTP 429",
+ * "error 503", "status 401") or a status-context word after them ("503
+ * Upstream request failed", "429 Too Many Requests", "500 Internal Server
+ * Error"). Structured `status`/`errorCode` fields on the caller's side still
+ * outrank this text heuristic entirely.
+ */
+export function hasStatusCodeLike(text: string, codes: readonly number[]): boolean {
+	const left = /(?:https?|status(?:\s*code)?|error(?:\s*code)?|code)\s*:?\s*(\d{3})\b/gi;
+	const right =
+		/\b(\d{3})\s+(?:too many|upstream|bad gateway|service unavailable|internal server|gateway|error|status|request failed|timed? ?out|unauthori[sz]ed|forbidden)/gi;
+	for (const re of [left, right]) {
+		re.lastIndex = 0;
+		for (;;) {
+			const match = re.exec(text);
+			if (match === null) break;
+			if (codes.includes(Number.parseInt(match[1], 10))) return true;
+		}
+	}
+	return false;
+}
+
+/**
  * Transient upstream availability failures: gateway 5xx passthroughs
  * ("503 Upstream request failed", "Endpoint is unavailable") and dropped
  * streams that never carried a finish reason ("Stream ended without
@@ -125,8 +149,10 @@ export function isOrphanToolCallIdError(text: string | undefined): boolean {
  */
 export function isUpstreamUnavailableMessage(text: string | undefined): boolean {
 	if (!text) return false;
-	return /upstream(?: request)? failed|upstream connect|endpoint (?:is )?unavailable|stream ended without finish_reason|\b50[0234]\b/i.test(
-		text,
+	return (
+		/upstream(?: request)? failed|upstream connect|endpoint (?:is )?unavailable|stream ended without finish_reason/i.test(
+			text,
+		) || hasStatusCodeLike(text, [500, 502, 503, 504])
 	);
 }
 
@@ -189,9 +215,16 @@ export function isTransientProviderErrorMessage(text: string | undefined): boole
 	// `at capacity|high demand`: xAI serves overload as HTTP 429 whose body carries
 	// no status or limit token, so the message-level classifier misses it and the
 	// turn never auto-retries (observed 2026-09-03, xai/grok-4.6).
-	return /overloaded|at capacity|high demand|provider.?returned.?error|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|internal.?error|network.?error|connection.?error|connection.?refused|connection.?lost|websocket.?closed|websocket.?error|other side closed|fetch failed|upstream.?connect|reset before headers|socket hang up|ended without|stream ended before message_stop|stream ended before terminal|http2 request did not get a response|timed? out|timeout|\bterminated\b|retry delay|content\/safety stop|stop_reason\s*=\s*(refusal|sensitive)|safety stop|tool_call_id\s+is\s+not\s+found|tool_call_id\s+not\s+found|invalid_request_error|json error injected into sse stream|injected into sse/i.test(
-		text,
-	);
+	if (
+		/overloaded|at capacity|high demand|provider.?returned.?error|rate.?limit|too many requests|service.?unavailable|server.?error|internal.?error|network.?error|connection.?error|connection.?refused|connection.?lost|websocket.?closed|websocket.?error|other side closed|fetch failed|upstream.?connect|reset before headers|socket hang up|ended without|stream ended before message_stop|stream ended before terminal|http2 request did not get a response|timed? out|timeout|\bterminated\b|retry delay|content\/safety stop|stop_reason\s*=\s*(refusal|sensitive)|safety stop|tool_call_id\s+is\s+not\s+found|tool_call_id\s+not\s+found|invalid_request_error|json error injected into sse stream|injected into sse/i.test(
+			text,
+		)
+	) {
+		return true;
+	}
+	// Status-looking numbers only count with adjacent transport context — a
+	// bare `500` in a message body ("saved 500 records") is not a status code.
+	return hasStatusCodeLike(text, [429, 500, 502, 503, 504]);
 }
 
 export function resolveFailoverCandidates(
