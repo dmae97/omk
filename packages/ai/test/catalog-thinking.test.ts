@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { catalogPricePerMillion } from "../scripts/catalog-pricing.ts";
-import { openRouterThinkingMap } from "../scripts/catalog-thinking.ts";
+import {
+	applyCurrentThinkingMetadata,
+	applyGpt6AstraUltraAlias,
+	openRouterThinkingMap,
+} from "../scripts/catalog-thinking.ts";
 import { getDisabledThinkingConfig } from "../src/providers/google-thinking-disable.ts";
+import type { Model } from "../src/types.ts";
 
 describe("catalog pricing and thinking metadata", () => {
 	it("preserves valid pricing and treats the dynamic-price sentinel as unpriced", () => {
@@ -63,5 +68,58 @@ describe("catalog pricing and thinking metadata", () => {
 		{ supported_efforts: ["unknown-tier"] },
 	])("rejects malformed or unrepresentable metadata %#", (metadata) => {
 		expect(() => openRouterThinkingMap(metadata)).toThrow(TypeError);
+	});
+
+	it("maps Astra ultra to the documented max effort, not an invented wire value", () => {
+		const model: Model<"openai-responses"> = {
+			id: "gpt-6-astra",
+			name: "GPT-6 Astra",
+			provider: "openai",
+			api: "openai-responses",
+			baseUrl: "https://api.openai.com/v1",
+			reasoning: true,
+			input: ["text", "image"],
+			contextWindow: 1050000,
+			maxTokens: 128000,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		};
+		applyCurrentThinkingMetadata(model);
+		expect(model.thinkingLevelMap).toMatchObject({
+			off: null,
+			minimal: null,
+			low: "low",
+			medium: "medium",
+			high: "high",
+			xhigh: "xhigh",
+			max: "max",
+			ultra: "max",
+		});
+	});
+
+	it("keeps the Astra ultra alias after OpenRouter hides the undeclared effort", () => {
+		const model: Model<"openai-completions"> = {
+			id: "openai/gpt-6-astra",
+			name: "OpenAI: GPT-6 Astra",
+			provider: "openrouter",
+			api: "openai-completions",
+			baseUrl: "https://openrouter.ai/api/v1",
+			reasoning: true,
+			thinkingLevelMap: {
+				off: null,
+				minimal: null,
+				low: "low",
+				medium: "medium",
+				high: "high",
+				xhigh: "xhigh",
+				max: "max",
+				ultra: null,
+			},
+			input: ["text", "image"],
+			contextWindow: 1050000,
+			maxTokens: 128000,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		};
+		applyGpt6AstraUltraAlias(model);
+		expect(model.thinkingLevelMap?.ultra).toBe("max");
 	});
 });

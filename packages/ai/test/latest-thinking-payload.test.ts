@@ -7,9 +7,11 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("new thinking wire compatibility", () => {
 	it.each([
-		["openai", "gpt-6-astra"],
-		["openrouter", "openai/gpt-6-astra"],
-	] as const)("sends max effort for Astra on %s", async (provider, id) => {
+		["openai", "gpt-6-astra", "max"],
+		["openai", "gpt-6-astra", "ultra"],
+		["openrouter", "openai/gpt-6-astra", "max"],
+		["openrouter", "openai/gpt-6-astra", "ultra"],
+	] as const)("sends max effort for Astra %s/%s %s", async (provider, id, reasoning) => {
 		const model = getModels(provider).find((entry) => entry.id === id);
 		if (!model) throw new Error("Missing Astra model");
 		let payload: unknown;
@@ -22,7 +24,7 @@ describe("new thinking wire compatibility", () => {
 			{ messages: [{ role: "user", content: "fixture", timestamp: 0 }] },
 			{
 				apiKey: "fixture-key",
-				reasoning: "max",
+				reasoning,
 				onPayload: (body) => {
 					payload = body;
 					throw new PayloadCaptured();

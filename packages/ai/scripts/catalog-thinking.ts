@@ -27,6 +27,17 @@ export function openRouterThinkingMap(value: unknown): ThinkingMap | undefined {
 	return result;
 }
 
+const GPT6_ASTRA_ID = /(^|\/)gpt-6-astra(?:-pro)?(?::batch)?$/;
+const GPT6_ASTRA_APIS = ["openai-responses", "azure-openai-responses", "openai-completions"] as const;
+
+/** OMK `ultra` is a selector alias for Astra's documented ceiling, `max`. */
+export function applyGpt6AstraUltraAlias(model: Model<Api>): void {
+	if (!model.reasoning) return;
+	if (!GPT6_ASTRA_ID.test(model.id)) return;
+	if (!(GPT6_ASTRA_APIS as readonly string[]).includes(model.api)) return;
+	model.thinkingLevelMap = { ...model.thinkingLevelMap, ultra: "max" };
+}
+
 /** New documented families not covered by the legacy generator's version checks. */
 export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 	if (!model.reasoning) return;
@@ -48,10 +59,7 @@ export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 	if (model.provider === "deepseek" && model.id.startsWith("deepseek-v4-")) {
 		model.thinkingLevelMap = { ...model.thinkingLevelMap, low: "low", max: "max" };
 	}
-	if (
-		/(^|\/)gpt-6-astra(?:-pro)?(?::batch)?$/.test(model.id) &&
-		["openai-responses", "azure-openai-responses", "openai-completions"].includes(model.api)
-	) {
+	if (GPT6_ASTRA_ID.test(model.id) && (GPT6_ASTRA_APIS as readonly string[]).includes(model.api)) {
 		model.thinkingLevelMap = {
 			off: null,
 			minimal: null,
@@ -60,6 +68,7 @@ export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 			high: "high",
 			xhigh: "xhigh",
 			max: "max",
+			ultra: "max",
 		};
 	}
 	if (/(?:^|[/.])claude-opus-5(?:[.@:-]|$)/.test(model.id)) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getModels, getSupportedThinkingLevels } from "../src/models.ts";
+import { clampThinkingLevel, getModels, getSupportedThinkingLevels } from "../src/models.ts";
 
 // Model-specific contracts checked against official catalogs/docs on 2026-09-09.
 describe("latest model thinking metadata", () => {
@@ -27,8 +27,10 @@ describe("latest model thinking metadata", () => {
 		const model = getModels(provider).find((entry) => entry.id === id);
 		expect(model).toBeDefined();
 		if (!model) throw new Error("Missing expected catalog model");
-		expect(getSupportedThinkingLevels(model)).toEqual(["low", "medium", "high", "xhigh", "max"]);
+		expect(getSupportedThinkingLevels(model)).toEqual(["low", "medium", "high", "xhigh", "max", "ultra"]);
+		expect(clampThinkingLevel(model, "ultra")).toBe("ultra");
 		expect(model.thinkingLevelMap?.max).toBe("max");
+		expect(model.thinkingLevelMap?.ultra).toBe("max");
 		if (provider !== "openrouter") expect(model.api).toMatch(/responses$/);
 	});
 

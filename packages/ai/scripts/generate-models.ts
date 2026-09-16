@@ -21,7 +21,7 @@ import type {
 import { DEEPSEEK_COMPLETIONS_COMPAT, deepSeekNativeModels } from "./catalog-deepseek.ts";
 import { devinModels } from "./catalog-devin.ts";
 import { catalogPricePerMillion } from "./catalog-pricing.ts";
-import { applyCurrentThinkingMetadata, openRouterThinkingMap } from "./catalog-thinking.ts";
+import { applyCurrentThinkingMetadata, applyGpt6AstraUltraAlias, openRouterThinkingMap } from "./catalog-thinking.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -2599,6 +2599,8 @@ async function generateModels() {
 		if (model.provider === "openrouter" && model.id.startsWith("inception/mercury-2")) {
 			mergeThinkingLevelMap(model, { off: null });
 		}
+		// OpenRouter's declared efforts do not include `ultra`; keep the OMK selector alias.
+		applyGpt6AstraUltraAlias(model);
 	}
 
 	writeModelCatalog(allModels);
