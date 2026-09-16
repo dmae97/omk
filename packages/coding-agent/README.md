@@ -62,7 +62,7 @@ OMK includes provider adapters for Anthropic, OpenAI Codex, Google, OpenCode, Ki
 - Devin CLI subscription login exposes `devin/swe-2` with `medium`, `high`, and `max` reasoning and a 1,000,000-token local context budget that selects the catalog's 1M-context lane. See [Devin setup and verification limits](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/providers.md#devin-cli) and the [Devin SWE-2 harness](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/devin-harness.md).
 - NVIDIA NIM's `z-ai/glm-5.2` entry transmits reasoning effort, including `/think max`.
 - Native `xai` accepts subscription OAuth from `/login` or `XAI_API_KEY` for API billing. Only OAuth exposes weekly SuperGrok usage/reset. See [Grok harness](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/grok-harness.md).
-- The optional status rail shows independent provider quota windows when an official API or passive response signal is available.
+- The optional status rail shows independent provider quota windows when an official API or passive response signal is available, including Command Code 5-hour, weekly, and monthly credit meters.
 - Missing quota values are shown as unavailable rather than estimated.
 
 OAuth credentials are stored locally in `~/.omk/agent/auth.json`. Multi-account providers keep accounts separate and send requests only through the explicitly selected account.

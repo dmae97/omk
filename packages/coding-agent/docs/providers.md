@@ -25,13 +25,15 @@ Run `/login` and choose a configured subscription provider to open its account p
 
 Use `/logout` to clear all stored accounts for a provider. Tokens are stored in `~/.omk/agent/auth.json` and auto-refresh when expired.
 
-When the status sidebar is pinned, its **USAGE** section lists every configured subscription provider, with the active provider first. OMK reads quota windows from fixed provider endpoints for Codex, Claude, Kimi Code, GLM/ZAI Coding Plan, and native xAI SuperGrok, caches the result, and displays each percentage and reset countdown separately. Claude also passively merges the official `anthropic-ratelimit-unified-*` response headers used by Claude Code. If Anthropic's usage endpoint is rate limited and no complete recent snapshot exists, OMK mirrors Claude Code's own startup quota check with one fixed-endpoint Haiku request capped at one output token, no more than once per OAuth credential per hour. This fallback consumes a small amount of Claude plan quota.
+When the status sidebar is pinned, its **USAGE** section lists every configured subscription provider, with the active provider first. OMK reads quota windows from fixed provider endpoints for Codex, Claude, Kimi Code, GLM/ZAI Coding Plan, native xAI SuperGrok, Devin CLI, and Command Code, caches the result, and displays each percentage and reset countdown separately. Claude also passively merges the official `anthropic-ratelimit-unified-*` response headers used by Claude Code. If Anthropic's usage endpoint is rate limited and no complete recent snapshot exists, OMK mirrors Claude Code's own startup quota check with one fixed-endpoint Haiku request capped at one output token, no more than once per OAuth credential per hour. This fallback consumes a small amount of Claude plan quota.
 
 Codex streaming passively merges `x-codex-primary-*`, `x-codex-secondary-*`, and `codex.rate_limits` signals through the non-blocking `StreamOptions.onRateLimit` observer. These signals supplement missing polling windows only when the Codex service returns them; OMK does not infer a missing 5-hour value from a 7-day value.
 
 Alibaba Model Studio Token Plan is recognized as **QWEN TOKEN PLAN** and reads its 7-day window through the official [QwenCloud management CLI](https://docs.qwencloud.com/api-reference/preparation/cli): when `qwencloud` is installed and logged in (`npm i -g @qwencloud/qwencloud-cli && qwencloud auth login`), OMK runs `qwencloud usage summary --format json` (override the binary with `QWENCLOUD_CLI`) and shows `token_plan.usedPct` plus the reset countdown. The CLI holds its own OAuth management credential; OMK never sends the plan's `sk-*` inference key anywhere for quota. Without the CLI the entry shows a `connect:` hint instead — the [console usage page](https://modelstudio.console.alibabacloud.com/ap-southeast-1?tab=plan#/efm/subscription/token-plan/personal) requires an Alibaba Cloud console session that OMK deliberately does not scrape, and OMK still never copies browser cookies or estimates quota from token counts. Qwen OAuth remains explicit `quota API unavailable`.
 
 With a stored native `xai` OAuth credential, OMK reads `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits` and shows the weekly SuperGrok pool from `config.creditUsagePercent` plus its reset from `config.currentPeriod.end`. `XAI_API_KEY` is a separate API-billing credential and does not authorize this subscription endpoint.
+
+With a configured `commandcode` API key (`models.json` or auth storage), OMK reads `GET https://api.commandcode.ai/alpha/whoami`, then `/alpha/billing/credits`, `/alpha/billing/subscriptions`, and `/alpha/usage/summary` on that same origin. The rail shows the 5-hour and weekly credit windows plus the monthly pool (`spent / remaining+spent`) and the plan name. OMK never sends the key anywhere except `api.commandcode.ai`, never reads browser cookies, and does not scrape Studio.
 
 ### Model Studio DeepSeek V4
 
@@ -151,6 +153,14 @@ Regenerate only this logical model, preserving every other catalog entry, with
 
 ```bash
 omk --provider openai-codex --model gpt-5.6-moa --thinking ultra
+```
+
+### GPT-6 Astra
+
+OpenAI-shaped Astra routes (`openai`, `azure-openai-responses`, `opencode`, `github-copilot`, OpenRouter) expose OMK `ultra` in the selector and send `reasoning.effort: "max"`. Official Astra effort values remain `low`, `medium`, `high`, `xhigh`, and `max`; there is no native `ultra` wire value. ChatGPT/Codex account catalogs may still reject `gpt-6-astra`.
+
+```bash
+omk --provider openai --model gpt-6-astra --thinking ultra
 ```
 
 ### Claude Pro/Max

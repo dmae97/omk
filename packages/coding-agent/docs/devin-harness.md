@@ -44,7 +44,7 @@ Guidance from the [SWE-2 announcement](https://cognition.com/blog/swe-2): `mediu
 
 ## Context budget: 1,000,000 tokens
 
-`devin/swe-2` ships with `contextWindow: 1000000` and `maxTokens: 16384`. These are local budgets that drive OMK's context budgeting and compaction, **not published SWE-2 limits**; Cognition has not published a context window for SWE-2. The budget also selects the catalog lane:
+`devin/swe-2` ships with `contextWindow: 1000000` and `maxTokens: 16384`. These are local budgets that drive OMK's context budgeting and compaction, **not published SWE-2 limits**; Cognition has not published a context window for SWE-2. Chat completion settings follow the captured native Devin CLI 3000.6.2 defaults (`maxNewlines` 400, empty stop list). `topP=0.95` is protobuf field 8; field 6 is `firstTemperature` and is omitted. This removes the old 200-newline cap and synthetic stops, but does not prove that every interrupted reply had that cause. The budget also selects the catalog lane:
 
 1. Before each turn OMK reads `GetCliModelConfigs`. SWE-2 family entries may carry a `1M Context` axis (order `1`) beside the effort axis. A local budget of 1,000,000 or more asks for that 1M-context lane; below it, the standard lane is used and 1M entries are ignored.
 2. A catalog with no 1M-context lane keeps the standard lane for the selected effort.
@@ -115,6 +115,35 @@ Relevant evidence hooks for SWE-2 lanes are `pre-shell-guard`, `protect-secrets`
 3. Use `/think medium`, `/think high`, or `/think max` to change effort mid-session; other levels are rejected.
 4. If a turn fails with an "unavailable or ambiguous" route or a smaller declared context window, treat it as a configuration signal: check `devin models list`, or lower `contextWindow` as shown above. Do not retry with a guessed wire UID.
 5. Keep credentials out of preset JSON, prompts, and logs: the session token, the exchanged user JWT, and `auth.json` contents are secrets under `protect-secrets`.
+
+## Troubleshooting `does not provide an export named`
+
+If Devin fails with `The requested module './devin-connect.js' does not provide an export named 'MAX_FRAME_BYTES'`, the loaded stream module is mixed with an older unary module. That is a client load error, not an orphan tool call or a remote protocol trailer.
+
+- Current OMK keeps the 16 MiB Connect frame cap inside `devin-connect-stream.ts`, so a stale `devin-connect.js` cannot fail that named import.
+- `/new` does not reload already-imported provider modules. Quit and restart OMK after a rebuild.
+- The failure banner should say to restart OMK, not to sanitize a sticky transcript.
+
+## Troubleshooting `invalid_argument`
+
+A Connect `invalid_argument` trailer is a provider/request failure, not evidence of
+an orphan tool call or a safety refusal. Keep any reported trace ID for support;
+OMK includes only a bounded hexadecimal trace ID, never the remote error body.
+
+- The SWE-2 adapter rejects zero, negative, and non-finite `temperature` values
+  before sending credentials. A controlled high-effort probe returned
+  `invalid_argument` at `temperature: 0`, while the default temperature completed
+  the same prompt. Omit the option to use the native default of `1`; OMK does not
+  silently replace an explicit zero.
+- Check model, effort, context budget, and request settings with `/debug`. Repair
+  tool history only when a tool/message mismatch is actually identified.
+- After updating or rebuilding the adapter, quit and restart the OMK process.
+  `/new` replaces conversation state; it does not reload an imported provider
+  module. This is an update-application step, not a guaranteed fix for every
+  provider error.
+- If a minimal tool-free request still fails at the default temperature, preserve
+  the trace ID and investigate provider compatibility or availability rather than
+  repeatedly sanitizing the same transcript.
 
 ## Local overlay
 

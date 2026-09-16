@@ -233,7 +233,7 @@ Current behavior:
 
 ### Thinking Level Map
 
-Use `thinkingLevelMap` on a model to describe model-specific thinking controls. `models.json` accepts `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`. Built-in metadata can also expose the `ultra` CLI tier, but the current `models.json` schema has no `ultra` key.
+Use `thinkingLevelMap` on a model to describe model-specific thinking controls. `models.json` accepts `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`. Built-in metadata can also expose the `ultra` CLI tier (GPT-6 Astra maps it to documented `max`; GPT-5.6 Sol/Terra/MoA on Codex map it to backend `xhigh`), but the current `models.json` schema has no `ultra` key.
 
 | Value | Meaning |
 | --- | --- |

@@ -146,7 +146,8 @@ When the resolved model ID is exactly `gpt-6-astra`, the built-in preset appends
 such as `openai/gpt-6-astra` and `openrouter/openai/gpt-6-astra` match the same
 model. Similar names, dated variants, and other GPT models do not select this
 preset. Select the configured model through `/model`; the preset does not add
-model availability to an account.
+model availability to an account. `--thinking ultra` is a selector alias for
+Astra's documented ceiling `max`; OMK does not send `reasoning.effort: "ultra"`.
 
 The Astra guidance encourages completing authorized work, asking only material
 clarifying questions, explaining any skill instruction that blocks progress,

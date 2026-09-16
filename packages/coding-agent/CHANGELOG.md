@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- `--thinking ultra` is now a first-class Astra selector level. GPT-6 Astra maps it to the documented `max` effort rather than clamping it away or sending an invented `ultra` wire value.
+- The status rail's USAGE section now covers `commandcode`: it calls Command Code's `/alpha` whoami, credits, subscription, and usage-summary endpoints with the stored API key and renders the 5-hour, weekly, and monthly credit meters with reset times, or the plan name when rolling windows are absent.
+
+### Fixed
+
+- Missing ESM named-export errors such as `does not provide an export named 'MAX_FRAME_BYTES'` classify as configuration, not as an orphan tool-call protocol fault. The Next action tells the operator to restart OMK; `/new` does not reload provider modules.
+- The status rail's Devin USAGE meters now match the CLI `/usage` surface: credit-billed plans no longer render proto-default 0% remaining as exhausted 1D/7D windows, and `GetUserStatus` unary gzip bodies decode.
+
 ## [0.99.0] - 2026-09-13
 
 ### Breaking Changes

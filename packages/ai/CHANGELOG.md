@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- GPT-6 Astra now exposes OMK `ultra` as a selector alias for the documented ceiling `reasoning.effort: "max"` on OpenAI-shaped routes (OpenAI/Azure/OpenCode/Copilot Responses and OpenRouter completions). The API still has no native `ultra` effort; `off`/`minimal` stay hidden.
+
+### Fixed
+
+- Devin Connect streaming no longer named-imports `MAX_FRAME_BYTES` from the unary module, so a mixed/stale `devin-connect.js` cannot fail with `does not provide an export named 'MAX_FRAME_BYTES'`.
+- Devin unary Connect bodies (`GetUserStatus` and the other CLI RPCs) decode gzip payloads the native CLI `/usage` call accepts, bounded by `MAX_FRAME_BYTES`.
+- Devin SWE-2 now rejects non-positive or non-finite temperature values before network calls instead of surfacing an opaque `invalid_argument`. Connect errors retain only bounded hexadecimal trace IDs; raw error messages and credentials stay out of diagnostics.
+
+- Devin SWE-2 completion settings follow native CLI 3000.6.2 (`maxNewlines` 400, no synthetic stop tokens, `temperature` 1 / `topP` 0.95 / `topK` 40). Encode `topP` in protobuf field 8, not field 6 (`firstTemperature`), and omit the latter. The old synthetic stop list could truncate legitimate output; local wire tests do not establish the cause of every interrupted reply.
+
 ## [0.99.0] - 2026-09-13
 
 ### Added

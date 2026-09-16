@@ -114,7 +114,7 @@ OpenRouter의 `reasoning.supported_efforts`로 표시할 수준을 만들고,
 
 | 모델·route | 이번 정합성 규칙 |
 | --- | --- |
-| GPT-6 Astra, OpenAI/Responses 및 OpenRouter | low·medium·high·xhigh·max. off/minimal 미노출 |
+| GPT-6 Astra, OpenAI/Responses 및 OpenRouter | low·medium·high·xhigh·max. OMK `ultra`는 공식 천장 `max`의 선택기 별칭이며 와이어에 `ultra`를 보내지 않음. off/minimal 미노출 |
 | Claude Opus 5, Anthropic Messages | adaptive thinking, low·medium·high·xhigh·max. off는 high 이하에서 가능 |
 | Claude Opus 5, Bedrock | legacy budget 대신 adaptive 및 xhigh 사용. application profile의 표시명 매칭 보존 |
 | Gemini 3.7/3.8 Flash, Google/Vertex | low·medium·high. minimal은 API 오류. SDK의 off 요청도 LOW로 처리하며 완전 비활성화로 주장하지 않음 |

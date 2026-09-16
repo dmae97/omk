@@ -1,5 +1,30 @@
 # Runtime Algorithms and Direction
 
+## Current feature status (audit §19.3)
+
+"Implemented", "wired", "enabled", "verified in CI", "released", and
+"measured benefit" are different gates. A pure function passing unit tests is
+not a live product path, and a live path is not a measured improvement. This
+table records each mechanism's actual gate at the pinned commit; the dated
+baseline below is history, not current truth.
+
+| Mechanism | Implemented | Wired into live path | Enabled by default | Verified in CI | Released | Measured benefit |
+| --- | --- | --- | --- | --- | --- | --- |
+| DAG claim scheduler (`tool-dag-scheduler`) | yes | `agent-loop` frontier executor | `toolScheduler: "dag-v2"` | unit + integration tests | v0.99.x line | not measured |
+| Ready-frontier admission (`runDagFrontier`) | yes | `agent-loop` | same | `tool-dag-ready-frontier`, `tool-dag-hook-replan` tests | working tree | not measured |
+| Dynamic-claim conflict check (`conflictsWithUnsettledClaim`) | yes | `agent-loop` | same | `tool-dag-dependencies` + hook tests | working tree | not measured |
+| ECRAF admission planner (`tool-dag-ecraf`) | yes | **no** — no call path wires it | n/a | unit tests only | unreleased | not measured |
+| Context Budget V2 | yes | system-prompt assembly | opt-in policy | planner/selection/cache tests | working tree | not measured |
+| Tier floor reservation | yes | context-budget-v2 planner | when V2 enabled | `context-budget-v2-tier-floor` tests | working tree | not measured |
+| Reasoning router v4 | yes | `/think auto` lane | opt-in | router tests | released | classification only, not success-probability calibration |
+| Workload permit pool | yes | resource admission | default | pool tests | released | not measured |
+| Provider retry/failover classification | yes | `provider-retry`, `session-failure-cause` | default | resilience/classification tests | released | not measured |
+| MCP descriptor injection screen | yes | `mcp/manager` import path | default | quarantine tests | released | pattern rule score, not calibrated risk |
+| verified-run coordinator + evidence | yes | verified-run paths | opt-in command | coordinator/evidence tests | working tree | scope-limited binding, not general correctness |
+
+Gates are reported per row so a green "implemented" never upgrades itself to
+"released" or "measured".
+
 ## Working-tree shared run budgets
 
 The SDK `prompt(..., { runBudget })` path now shares a monotonic deadline and
