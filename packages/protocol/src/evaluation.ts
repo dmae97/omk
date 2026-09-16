@@ -60,13 +60,26 @@ function evaluateCondition(
 	condition: ClaimCondition,
 	observations: readonly Observation[],
 	attemptId: string,
+	candidateHash?: string,
 ): ConditionResult {
 	if (condition.kind === "observation") {
-		const candidates = observations.filter(
-			(observation) =>
-				observation.kind === condition.observationKind &&
-				(condition.scope === "task" || observation.attemptId === attemptId),
-		);
+		const candidates = observations.filter((observation) => {
+			if (observation.kind !== condition.observationKind) return false;
+			if (condition.scope === "attempt" && observation.attemptId !== attemptId) return false;
+			// Candidate binding: when the attempt declares a candidate hash, an
+			// observation recorded for a different candidate cannot satisfy this
+			// attempt's condition — a stale pass is not evidence for this build.
+			if (candidateHash !== undefined) {
+				const observed = observation.facts.candidate;
+				if (typeof observed === "string" && observed !== candidateHash) return false;
+			}
+			// Explicit per-condition binding additionally requires the
+			// observation to name the same candidate outright.
+			if (condition.bindToCandidate === true) {
+				if (candidateHash === undefined || observation.facts.candidate !== candidateHash) return false;
+			}
+			return true;
+		});
 		if (candidates.length === 0) return { result: "inconclusive", observationIds: [] };
 		const matching = candidates.filter((observation) => matchesExpected(observation.facts, condition.facts));
 		return matching.length > 0
@@ -75,14 +88,16 @@ function evaluateCondition(
 	}
 
 	if (condition.kind === "not") {
-		const child = evaluateCondition(condition.condition, observations, attemptId);
+		const child = evaluateCondition(condition.condition, observations, attemptId, candidateHash);
 		return {
 			result: child.result === "satisfied" ? "violated" : child.result === "violated" ? "satisfied" : "inconclusive",
 			observationIds: child.observationIds,
 		};
 	}
 
-	const children = condition.conditions.map((child) => evaluateCondition(child, observations, attemptId));
+	const children = condition.conditions.map((child) =>
+		evaluateCondition(child, observations, attemptId, candidateHash),
+	);
 	if (condition.kind === "all") {
 		const result = children.some((child) => child.result === "violated")
 			? "violated"
@@ -158,7 +173,12 @@ export function evaluateTask(input: EvaluationInput): EvaluationResult {
 	const waivers = validateWaivers(input, input.waivers ?? []);
 	const claims = Object.freeze(
 		input.taskSpec.claims.map((claim): ClaimEvaluation => {
-			const evaluated = evaluateCondition(claim.condition, input.observations, input.attempt.attemptId);
+			const evaluated = evaluateCondition(
+				claim.condition,
+				input.observations,
+				input.attempt.attemptId,
+				input.attempt.candidateHash,
+			);
 			const waiver = evaluated.result === "satisfied" ? undefined : waivers.get(claim.claimId);
 			return Object.freeze({
 				claimId: claim.claimId,

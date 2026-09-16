@@ -17,6 +17,13 @@ export interface ObservationCondition {
 	readonly observationKind: string;
 	readonly scope: "attempt" | "task";
 	readonly facts: JsonObject;
+	/**
+	 * When `"candidate"`, the observation must additionally carry
+	 * `facts.candidate` equal to the evaluated attempt's `candidateHash` —
+	 * a pass observed for a different candidate can never satisfy the claim.
+	 * Requires the attempt to declare `candidateHash`.
+	 */
+	readonly bindToCandidate?: boolean;
 }
 
 export interface AllCondition {
@@ -76,6 +83,13 @@ export interface ExecutionAttempt {
 	readonly finishedAt: string;
 	readonly executor: AttemptExecutor;
 	readonly outcome: AttemptOutcome;
+	/**
+	 * Hash identifying the candidate (source tree / artifact) this attempt ran
+	 * against. When set, `scope: "task"` observations recorded for a different
+	 * candidate do not satisfy conditions of this attempt's evaluation —
+	 * evidence stays bound to the candidate it was produced for.
+	 */
+	readonly candidateHash?: string;
 }
 
 /** Immutable execution facts. Semantic pass/fail belongs only in ClaimEvaluation. */

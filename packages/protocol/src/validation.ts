@@ -83,6 +83,9 @@ function condition(value: unknown, path: string, depth = 0): asserts value is Cl
 				throw new ProtocolValidationError(`${path}.scope must be attempt or task`);
 			}
 			jsonObject(input.facts, `${path}.facts`);
+			if (input.bindToCandidate !== undefined && typeof input.bindToCandidate !== "boolean") {
+				throw new ProtocolValidationError(`${path}.bindToCandidate must be a boolean`);
+			}
 			return;
 		case "all":
 		case "any":
@@ -151,6 +154,7 @@ export function parseExecutionAttempt(value: unknown): ExecutionAttempt {
 	} else if (outcome.kind !== "completed") {
 		throw new ProtocolValidationError("attempt.outcome.kind is unsupported");
 	}
+	if (input.candidateHash !== undefined) string(input.candidateHash, "attempt.candidateHash");
 	return value as ExecutionAttempt;
 }
 
