@@ -33,6 +33,47 @@ const packages = [
 
 const dryRun = process.argv.includes("--dry-run");
 const provenance = resolveProvenance(process.argv);
+
+/**
+ * Candidate binding: the publish-eligible identity is (commit SHA, lockfile
+ * hash). A local publish must run from a clean worktree so the artifact being
+ * published is the candidate the tests ran against — not an edited tree with
+ * someone else's green CI. `OMK_PUBLISH_REF` may name the expected tag (e.g.
+ * `v0.99.0`); when set, HEAD must carry that tag so the release points at the
+ * verified candidate rather than a nearby commit.
+ */
+function assertPublishCandidate() {
+	if (dryRun) return;
+	const dirty = spawnSync(commandForPlatform("git"), ["status", "--porcelain"], {
+		encoding: "utf8",
+		stdio: ["inherit", "pipe", "pipe"],
+	});
+	if (dirty.status !== 0) {
+		throw new Error("git status failed; cannot bind the publish candidate");
+	}
+	if (dirty.stdout.trim().length > 0) {
+		throw new Error(
+			"Worktree is dirty. Publish requires a clean candidate so the published artifact matches the tested commit.",
+		);
+	}
+	const expectedRef = process.env.OMK_PUBLISH_REF;
+	if (expectedRef) {
+		const head = spawnSync(commandForPlatform("git"), ["rev-parse", "HEAD"], {
+			encoding: "utf8",
+			stdio: ["inherit", "pipe", "pipe"],
+		});
+		const tag = spawnSync(commandForPlatform("git"), ["rev-list", "-n", "1", expectedRef], {
+			encoding: "utf8",
+			stdio: ["inherit", "pipe", "pipe"],
+		});
+		if (head.status !== 0 || tag.status !== 0) {
+			throw new Error(`Could not resolve HEAD or ${expectedRef}; refusing to publish an unbound candidate`);
+		}
+		if (head.stdout.trim() !== tag.stdout.trim()) {
+			throw new Error(`HEAD (${head.stdout.trim().slice(0, 12)}) does not match ${expectedRef} (${tag.stdout.trim().slice(0, 12)}); refusing to publish`);
+		}
+	}
+}
 const unknownArgs = process.argv.slice(2).filter(
 	(arg) => arg !== "--dry-run" && arg !== "--no-provenance" && arg !== "--provenance",
 );
@@ -98,6 +139,7 @@ function isPublished(name, version) {
 
 // Main flow (only when invoked directly; importers get the exported helpers)
 if (isMain) {
+	assertPublishCandidate();
 	const packageVersions = new Map();
 	for (const pkg of packages) {
 		const packageJson = readPackageJson(pkg.directory);
