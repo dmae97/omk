@@ -3754,8 +3754,13 @@ export class AgentSession {
 	/**
 	 * Effective context window for the upcoming turn.
 	 * Image-bearing turns with a text-only session model are auto-routed to the
-	 * vision model (gpt-5.6-luna, 1M) — that window is the real limit. Text-only
-	 * turns keep the session model's (typically much larger) window.
+	 * vision model (gpt-5.6-luna, 1M), so the request has to fit both windows and
+	 * the binding limit is the smaller one. Session windows fall on both sides of
+	 * 1M: most catalogued models are smaller (median near 300K) and keep their own
+	 * window as the limit, while the larger-than-1M models are the ones the clamp
+	 * exists for — without it their threshold is computed against a window the
+	 * vision route will not honour, and the request overflows before compaction
+	 * fires. Text-only turns keep the session model's window untouched.
 	 */
 	private _effectiveTurnContextWindow(pendingMessages: AgentMessage[], sessionWindow: number): number {
 		// Vision routing keys off the full transcript, not just the pending turn:

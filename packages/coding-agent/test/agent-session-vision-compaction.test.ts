@@ -16,7 +16,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Agent } from "omk-agent-core";
+import { Agent, VISION_ROUTE_MODEL } from "omk-agent-core";
 import { getModel, type Model } from "omk-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AgentSession } from "../src/core/agent-session.ts";
@@ -51,6 +51,14 @@ describe("AgentSession vision-route compaction", () => {
 	}
 	function imageMessage() {
 		return { type: "image" as const, mimeType: "image/png" as const, data: "AAAA" };
+	}
+	/**
+	 * A complete UserMessage. The turn must carry `timestamp` to satisfy the
+	 * type; a bare `{ role, content }` literal only type-checked while it shared
+	 * a line with the `@ts-expect-error` covering the private-method call.
+	 */
+	function imageTurn() {
+		return { role: "user" as const, content: [imageMessage()], timestamp: Date.now() };
 	}
 
 	beforeEach(() => {
@@ -90,11 +98,31 @@ describe("AgentSession vision-route compaction", () => {
 		return session;
 	}
 
-	it("uses the vision-route window for image-bearing turns", async () => {
+	// A fixture window equal to VISION_ROUTE_MODEL.contextWindow makes every
+	// branch return the same number, so the assertions cannot tell the clamp from
+	// its absence. Each case below puts the session window on a known side of the
+	// vision route's and asserts the direction of the clamp, not only its value.
+	const ABOVE_VISION = 3_500_000; // catalogued session windows do reach this
+	const BELOW_VISION = 200_000; // the catalogue median sits nearer this end
+
+	it("clamps an image-bearing turn down to the vision-route window", async () => {
 		createSession();
 		// @ts-expect-error private method under test
-		const effective = session._effectiveTurnContextWindow([{ role: "user", content: [imageMessage()] }], 1_000_000);
-		expect(effective).toBe(1_000_000); // GPT-5.6 Luna uses the family-wide 1M window
+		const effective = session._effectiveTurnContextWindow([imageTurn()], ABOVE_VISION);
+		expect(effective).toBe(VISION_ROUTE_MODEL.contextWindow);
+		// Without the clamp the threshold is computed against the session window
+		// and the vision request overflows before compaction can fire.
+		expect(effective).toBeLessThan(ABOVE_VISION);
+	});
+
+	it("keeps a session window smaller than the vision route's", async () => {
+		createSession();
+		// @ts-expect-error private method under test
+		const effective = session._effectiveTurnContextWindow([imageTurn()], BELOW_VISION);
+		// Routing to a 1M model does not grant a 200K session more room; the
+		// binding limit stays the smaller of the two.
+		expect(effective).toBe(BELOW_VISION);
+		expect(effective).toBeLessThan(VISION_ROUTE_MODEL.contextWindow);
 	});
 
 	it("keeps the session-model window for text-only turns", async () => {
@@ -102,17 +130,20 @@ describe("AgentSession vision-route compaction", () => {
 		// @ts-expect-error private method under test
 		const effective = session._effectiveTurnContextWindow(
 			[{ role: "user", content: [textMessage("hi")], timestamp: Date.now() }],
-			1_000_000,
+			ABOVE_VISION,
 		);
-		expect(effective).toBe(1_000_000);
+		expect(effective).toBe(ABOVE_VISION);
+		expect(effective).toBeGreaterThan(VISION_ROUTE_MODEL.contextWindow);
 	});
 
 	it("keeps the session-model window when the model can see images itself", async () => {
 		createSession();
 		session.agent.state.model = getModel("anthropic", "claude-sonnet-5");
 		// @ts-expect-error private method under test
-		const effective = session._effectiveTurnContextWindow([{ role: "user", content: [imageMessage()] }], 1_000_000);
-		expect(effective).toBe(1_000_000);
+		const effective = session._effectiveTurnContextWindow([imageTurn()], ABOVE_VISION);
+		// No vision route is taken, so nothing clamps this turn.
+		expect(effective).toBe(ABOVE_VISION);
+		expect(effective).toBeGreaterThan(VISION_ROUTE_MODEL.contextWindow);
 	});
 
 	it("does not treat a vision-route overflow as a foreign-model overflow", async () => {
