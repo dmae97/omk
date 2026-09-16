@@ -182,7 +182,15 @@ export interface DevinUserStatus {
 }
 
 function devinNumber(message: ProtoMessage | undefined, no: number): number | undefined {
-	return message?.has(no) ? message.number(no) : undefined;
+	if (!message?.has(no)) return undefined;
+	try {
+		return message.number(no);
+	} catch {
+		// Some wire fields carry a uint64 max sentinel for "unlimited" (e.g.
+		// credit balances on quota plans). Those cannot be represented as a JS
+		// number; report the field as absent instead of failing the decode.
+		return undefined;
+	}
 }
 
 function devinText(message: ProtoMessage | undefined, no: number): string | undefined {
