@@ -20,9 +20,7 @@ describe("Devin GetUserStatus decode edge cases", () => {
 			Buffer.from([0x40, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01]),
 			field(16, 10_360_000), // overageBalanceMicros = $10.36
 		]);
-		const response = new ProtoMessage(
-			Buffer.concat([field(1, field(13, planStatus))]),
-		);
+		const response = new ProtoMessage(Buffer.concat([field(1, field(13, planStatus))]));
 		const status = parseDevinUserStatus(response);
 		expect(status.dailyQuotaRemainingPercent).toBe(100);
 		expect(status.weeklyQuotaRemainingPercent).toBe(100);

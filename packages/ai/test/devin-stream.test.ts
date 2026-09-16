@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -83,6 +84,12 @@ afterEach(() => {
 });
 
 describe("Devin SWE-2 via the public stream API", () => {
+	it("keeps the Connect frame cap local so a stale unary module cannot fail named import", () => {
+		const source = readFileSync(new URL("../src/providers/devin-connect-stream.ts", import.meta.url), "utf8");
+		expect(source).not.toMatch(/import\s*\{[^}]*\bMAX_FRAME_BYTES\b/);
+		expect(source).toMatch(/const MAX_FRAME_BYTES = 16 \* 1024 \* 1024/);
+	});
+
 	it("exposes exactly the documented reasoning ladder and a 1M-token local budget", () => {
 		const model = getModel("devin", "swe-2");
 		expect(getSupportedThinkingLevels(model)).toEqual(["medium", "high", "max"]);
@@ -283,6 +290,51 @@ describe("Devin SWE-2 via the public stream API", () => {
 		const result = await completeSimple(getModel("devin", "swe-2"), context, { apiKey: token });
 		expect(result.stopReason).toBe("error");
 		expect(result.errorMessage).toMatch(/incomplete tool arguments/);
+	});
+
+	it.each([0, -0.1, Number.NaN, Number.POSITIVE_INFINITY])(
+		"rejects unsupported temperature %s before sending credentials",
+		async (temperature) => {
+			const { mock } = mockApi([encodeFrame(field(3, "OK")), end()]);
+			const result = await completeSimple(getModel("devin", "swe-2"), context, {
+				apiKey: token,
+				temperature,
+			});
+			expect(result.stopReason).toBe("error");
+			expect(result.errorMessage).toMatch(/temperature.*greater than 0/i);
+			expect(mock).not.toHaveBeenCalled();
+		},
+	);
+
+	it.each([undefined, 0.2, 1])("preserves supported temperature %s", async (temperature) => {
+		const { requests } = mockApi([encodeFrame(field(3, "OK")), end()]);
+		const result = await completeSimple(getModel("devin", "swe-2"), context, { apiKey: token, temperature });
+		expect(result.stopReason).toBe("stop");
+		const wire = new ProtoMessage(Buffer.from(await requests.at(-1)!.arrayBuffer()).subarray(5));
+		expect(wire.messages(8)[0].number(5)).toBe(temperature ?? 1);
+	});
+
+	it.each([
+		["0123456789abcdef0123456789abcdef", " (trace ID: 0123456789abcdef0123456789abcdef)"],
+		["<script>alert(1)</script>", ""],
+		["a".repeat(80), ""],
+	])("retains only a bounded hex trace ID: %s", async (traceId, suffix) => {
+		const { mock } = mockApi([
+			encodeFrame(
+				Buffer.from(
+					JSON.stringify({
+						error: { code: "invalid_argument", message: `private ${token} (trace ID: ${traceId})` },
+					}),
+				),
+				2,
+			),
+		]);
+		const result = await completeSimple(getModel("devin", "swe-2"), context, { apiKey: token });
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toBe(`Devin stream error: invalid_argument${suffix}`);
+		expect(result.errorMessage).not.toContain(token);
+		expect(result.errorMessage).not.toContain("private");
+		expect(mock).toHaveBeenCalledTimes(3);
 	});
 
 	it("rejects unsupported reasoning before sending credentials", async () => {

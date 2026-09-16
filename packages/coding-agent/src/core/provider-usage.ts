@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { CLAUDE_CODE_EXTERNAL_USER_AGENT, type ProviderRateLimitSnapshot, type ProviderRateLimitWindow } from "omk-ai";
 import type { AgentSession } from "./agent-session.ts";
+import { fetchCommandCodeUsage } from "./provider-usage-commandcode.ts";
 import { fetchDevinUsage } from "./provider-usage-devin.ts";
 import { clampPercent, usageText } from "./provider-usage-text.ts";
 import type {
@@ -91,6 +92,7 @@ const VISIBLE_USAGE_PROVIDERS = [
 	"xai",
 	"meta",
 	"devin",
+	"commandcode",
 ] as const;
 const SOURCES: Readonly<Record<string, SubscriptionUsageSource>> = {
 	"openai-codex": source("CODEX", "codex", [{ provider: "openai-codex", oauthOnly: true }]),
@@ -133,6 +135,8 @@ const SOURCES: Readonly<Record<string, SubscriptionUsageSource>> = {
 		{ provider: "devin", oauthOnly: true },
 		{ provider: "devin", oauthOnly: false },
 	]),
+	// Command Code Provider API: billing + 5H/7D windows via /alpha with the stored API key.
+	commandcode: source("COMMAND CODE", "commandcode", [{ provider: "commandcode", oauthOnly: false }]),
 };
 
 function source(
@@ -231,6 +235,8 @@ export async function loadSubscriptionUsage(
 				return await fetchGrokUsage(usageSource.label, credential.apiKey, fetchImpl);
 			case "devin":
 				return await fetchDevinUsage(usageSource.label, credential.apiKey, fetchImpl);
+			case "commandcode":
+				return await fetchCommandCodeUsage(usageSource.label, credential.apiKey, fetchImpl);
 			default:
 				return { label: usageSource.label, windows: [], message: "usage unavailable" };
 		}

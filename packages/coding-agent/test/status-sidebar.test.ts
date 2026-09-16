@@ -76,7 +76,13 @@ const mockInventory: McpInventory = {
 function makeSession() {
 	return {
 		state: {
-			model: { id: "claude-test", reasoning: true, contextWindow: 200000, provider: "anthropic" },
+			model: {
+				id: "claude-test",
+				reasoning: true,
+				contextWindow: 200000,
+				provider: "anthropic",
+				baseUrl: undefined as string | undefined,
+			},
 			thinkingLevel: "high",
 		},
 		sessionManager: {
@@ -222,6 +228,88 @@ describe("StatusSidebarComponent (pinned opencode-style rail)", () => {
 		expect(text).toContain("█");
 		expect(text).toContain("░");
 		for (const line of lines) {
+			expect(visibleWidth(line)).toBeLessThanOrEqual(STATUS_SIDEBAR_WIDTH);
+		}
+	});
+
+	it("renders Devin 1D and 7D quota bars from the CLI GetUserStatus surface", async () => {
+		const session = makeSession();
+		session.state.model.provider = "devin";
+		session.state.model.id = "swe-2";
+		session.state.model.baseUrl = "https://server.codeium.com";
+		session.modelRegistry.getProviderAuthStatus = (provider) => ({
+			configured: provider === "devin",
+		});
+		const requestRender = vi.fn();
+		const sidebar = new StatusSidebarComponent(
+			() => session as never,
+			makeFooterData() as never,
+			() => true,
+			() => 32,
+			{
+				requestRender,
+				fetchSubscriptionUsage: async () => ({
+					label: "DEVIN",
+					windows: [
+						{ label: "1D", usedPercent: 42, resetsAt: Math.floor(Date.now() / 1000) + 3 * 60 * 60 },
+						{ label: "7D", usedPercent: 58 },
+					],
+					message: "Devin Pro",
+				}),
+			},
+		);
+
+		sidebar.render(STATUS_SIDEBAR_WIDTH);
+		await vi.waitFor(() => expect(requestRender).toHaveBeenCalled());
+		const plainLines = sidebar.render(STATUS_SIDEBAR_WIDTH).map(stripAnsi);
+		const text = plainLines.join("\n");
+		expect(text).toContain("USAGE");
+		expect(text).toContain("DEVIN");
+		expect(text).toContain("server.codeium.com");
+		expect(plainLines.some((line) => line.includes("1D") && line.includes("42%"))).toBe(true);
+		expect(plainLines.some((line) => line.includes("7D") && line.includes("58%"))).toBe(true);
+		for (const line of sidebar.render(STATUS_SIDEBAR_WIDTH)) {
+			expect(visibleWidth(line)).toBeLessThanOrEqual(STATUS_SIDEBAR_WIDTH);
+		}
+	});
+
+	it("renders Command Code 5H, 7D, and monthly quota bars on the status rail", async () => {
+		const session = makeSession();
+		session.state.model.provider = "commandcode";
+		session.state.model.baseUrl = "https://api.commandcode.ai/provider/v1";
+		session.modelRegistry.getProviderAuthStatus = (provider) => ({
+			configured: provider === "commandcode",
+		});
+		const requestRender = vi.fn();
+		const sidebar = new StatusSidebarComponent(
+			() => session as never,
+			makeFooterData() as never,
+			() => true,
+			() => 32,
+			{
+				requestRender,
+				fetchSubscriptionUsage: async () => ({
+					label: "COMMAND CODE",
+					windows: [
+						{ label: "5H", usedPercent: 50, resetsAt: Math.floor(Date.now() / 1000) + 2 * 60 * 60 },
+						{ label: "7D", usedPercent: 50 },
+						{ label: "MO", usedPercent: 18.33 },
+					],
+					message: "Pro",
+				}),
+			},
+		);
+
+		sidebar.render(STATUS_SIDEBAR_WIDTH);
+		await vi.waitFor(() => expect(requestRender).toHaveBeenCalled());
+		const plainLines = sidebar.render(STATUS_SIDEBAR_WIDTH).map(stripAnsi);
+		const text = plainLines.join("\n");
+		expect(text).toContain("USAGE");
+		expect(text).toContain("COMMAND CODE");
+		expect(plainLines.some((line) => line.includes("5H") && line.includes("50%"))).toBe(true);
+		expect(plainLines.some((line) => line.includes("7D") && line.includes("50%"))).toBe(true);
+		expect(plainLines.some((line) => line.includes("MO") && line.includes("18%"))).toBe(true);
+		for (const line of sidebar.render(STATUS_SIDEBAR_WIDTH)) {
 			expect(visibleWidth(line)).toBeLessThanOrEqual(STATUS_SIDEBAR_WIDTH);
 		}
 	});

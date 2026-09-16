@@ -64,6 +64,11 @@ export const streamDevin: StreamFunction<"devin-agent", DevinOptions> = (
 			const reasoning = options.reasoning ?? "medium";
 			if (!["medium", "high", "max"].includes(reasoning))
 				throw new Error(`Devin SWE-2 does not support ${reasoning} reasoning`);
+			if (options.temperature !== undefined && (!Number.isFinite(options.temperature) || options.temperature <= 0)) {
+				throw new Error(
+					"Devin SWE-2 requires a finite temperature greater than 0; omit temperature to use the native default (1)",
+				);
+			}
 			const token = normalizeDevinToken(options.apiKey ?? getEnvApiKey("devin") ?? "");
 			const jwt = await getDevinJwt(token, signal);
 			// The local budget selects the lane: 1,000,000+ asks for the catalog's 1M-context lane.

@@ -74,19 +74,16 @@ export function buildDevinRequest(
 	maxTokens: number,
 	options: StreamOptions,
 ): Buffer {
-	const temperature = options.temperature ?? 0.4;
+	// Native Devin CLI 3000.6.2 completion settings (oh-my-pi #10234 / mitmproxy).
+	// No synthetic stops; protobuf topP is field 8, while field 6 is firstTemperature.
+	const temperature = options.temperature ?? 1;
 	const configuration = Buffer.concat([
 		field(1, 1),
 		field(2, maxTokens),
-		field(3, 200),
+		field(3, 400),
 		doubleField(5, temperature),
-		doubleField(6, temperature),
-		field(7, 50),
-		doubleField(8, 1),
-		doubleField(11, 1),
-		...["<|user|>", "<|bot|>", "<|context_request|>", "<|endoftext|>", "<|end_of_turn|>"].map((stop) =>
-			field(9, stop),
-		),
+		field(7, 40),
+		doubleField(8, 0.95),
 	]);
 	return Buffer.concat([
 		field(2, context.systemPrompt ?? ""),

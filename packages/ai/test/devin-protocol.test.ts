@@ -1,9 +1,11 @@
 import { gzipSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
+import { getModel } from "../src/models.ts";
 import { getDevinUserStatus, parseDevinUserStatus, resolveDevinRoute } from "../src/providers/devin-api.ts";
 import { encodeFrame } from "../src/providers/devin-connect.ts";
 import { readConnectFrames } from "../src/providers/devin-connect-stream.ts";
 import { field, ProtoMessage } from "../src/providers/devin-protobuf.ts";
+import { buildDevinRequest } from "../src/providers/devin-request.ts";
 
 // Literal protobuf bytes independently encode text field 3="Hi" and usage fields 2=10, 3=20.
 const golden = Buffer.from("1a0248693a04100a1814", "hex");
@@ -172,6 +174,12 @@ describe("Devin protocol boundaries", () => {
 		expect(status.weeklyQuotaRemainingPercent).toBe(55);
 	});
 
+	it("decodes a gzip-encoded GetUserStatus body the way the CLI /usage call does", async () => {
+		const fetchMock = vi.fn(async () => new Response(gzipSync(field(1, field(13, field(15, 55)))), { status: 200 }));
+		const status = await getDevinUserStatus("devin-session-token$abc", new AbortController().signal, fetchMock);
+		expect(status.weeklyQuotaRemainingPercent).toBe(55);
+	});
+
 	it("does not admit missing, disabled, internal, or ambiguous SWE-2 routes", () => {
 		const family = field(
 			30,
@@ -186,5 +194,29 @@ describe("Devin protocol boundaries", () => {
 		]) {
 			expect(() => resolveDevinRoute(new ProtoMessage(input), "max")).toThrow(/unavailable or ambiguous/);
 		}
+	});
+
+	it.each([undefined, 0, 0.2])("encodes Devin sampling field numbers with temperature %s", (temperature) => {
+		const request = buildDevinRequest(
+			getModel("devin", "swe-2"),
+			{ messages: [{ role: "user", content: "hello", timestamp: 1 }] },
+			"fixture-uid",
+			"fixture-session",
+			16_384,
+			{ temperature },
+		);
+		const config = new ProtoMessage(request).messages(8)[0];
+		expect(config.number(1)).toBe(1);
+		expect(config.number(2)).toBe(16_384);
+		expect(config.number(3)).toBe(400);
+		expect(config.number(7)).toBe(40);
+		expect(config.number(5)).toBeCloseTo(temperature ?? 1);
+		// Independent upstream schema: topP=8; firstTemperature=6 (not 4).
+		// oh-my-pi 942383f, packages/catalog/src/discovery/devin-proto.ts.
+		expect(config.number(8)).toBeCloseTo(0.95);
+		expect(config.has(6)).toBe(false);
+		expect(config.has(9)).toBe(false);
+		expect(config.has(4)).toBe(false);
+		expect(config.has(11)).toBe(false);
 	});
 });

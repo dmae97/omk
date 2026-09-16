@@ -5,7 +5,8 @@
  */
 
 import { gunzipSync } from "node:zlib";
-import { MAX_FRAME_BYTES } from "./devin-connect.ts";
+
+const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 
 function checkTrailer(payload: Buffer): void {
 	let trailer: unknown;
@@ -35,7 +36,8 @@ function checkTrailer(payload: Buffer): void {
 		/context[_ ]length[_ ]exceeded|prompt is too long|too many tokens|exceeds the context window/i.test(message)
 	)
 		throw new Error("Devin context_length_exceeded");
-	throw new Error(`Devin stream error: ${code}`);
+	const traceId = /\btrace ID:\s*([a-f0-9]{16,64})(?=[)\s.,]|$)/i.exec(message)?.[1];
+	throw new Error(`Devin stream error: ${code}${traceId ? ` (trace ID: ${traceId})` : ""}`);
 }
 
 /** Connect requires an explicit final trailer; an HTTP EOF alone is not success. */

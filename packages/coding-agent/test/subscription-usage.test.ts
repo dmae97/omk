@@ -18,6 +18,7 @@ import {
 	recordCodexPassiveUsage,
 	supportsSubscriptionUsage,
 } from "../src/core/provider-usage.ts";
+import { parseCommandCodeUsageSnapshot } from "../src/core/provider-usage-commandcode.ts";
 import { parseDevinUsageSnapshot } from "../src/core/provider-usage-devin.ts";
 
 /** Minimal protobuf field encoder for Devin GetUserStatus fixtures. */
@@ -85,6 +86,7 @@ describe("subscription usage providers", () => {
 		expect(getSubscriptionUsageSource("xai")?.label).toBe("GROK");
 		expect(getSubscriptionUsageSource("meta")?.label).toBe("META");
 		expect(getSubscriptionUsageSource("devin")?.label).toBe("DEVIN");
+		expect(getSubscriptionUsageSource("commandcode")?.label).toBe("COMMAND CODE");
 		expect(getSubscriptionUsageSource("openai")).toBeUndefined();
 		expect(getSubscriptionUsageSource("moonshotai")).toBeUndefined();
 	});
@@ -108,6 +110,10 @@ describe("subscription usage providers", () => {
 		expect(supportsSubscriptionUsage(session("meta", { configuredProviders: ["meta"] }) as never)).toBe(false);
 		expect(supportsSubscriptionUsage(session("devin", { oauthProviders: ["devin"] }) as never)).toBe(true);
 		expect(supportsSubscriptionUsage(session("devin", { configuredProviders: ["devin"] }) as never)).toBe(true);
+		expect(supportsSubscriptionUsage(session("commandcode", { configuredProviders: ["commandcode"] }) as never)).toBe(
+			true,
+		);
+		expect(supportsSubscriptionUsage(session("commandcode") as never)).toBe(false);
 		expect(supportsSubscriptionUsage(session("openai", { configuredProviders: ["openai"] }) as never)).toBe(false);
 	});
 
@@ -125,6 +131,13 @@ describe("subscription usage providers", () => {
 			"xai",
 			"meta",
 		]);
+	});
+
+	it("lists Command Code first when it is the active configured provider", () => {
+		const configured = session("commandcode", {
+			configuredProviders: ["commandcode", "zai"],
+		});
+		expect(getConfiguredSubscriptionUsageProviders(configured as never)).toEqual(["commandcode", "zai"]);
 	});
 
 	it("merges passive Codex response limits into missing polled windows", async () => {
@@ -650,15 +663,41 @@ describe("subscription usage providers", () => {
 			parseDevinUsageSnapshot({ planName: "Devin Max", availablePromptCredits: 120, availableFlowCredits: 30 }),
 		).toEqual({ windows: [], message: "Devin Max · 120 prompt · 30 flow" });
 		expect(parseDevinUsageSnapshot({})).toEqual({ windows: [] });
+		// Credit-billed plans leave proto quota percents at 0; the CLI /usage surface
+		// only shows a percent window when it is dated or the plan is quota-billed.
+		expect(
+			parseDevinUsageSnapshot({
+				planName: "Devin Pro",
+				billingStrategy: 1,
+				dailyQuotaRemainingPercent: 0,
+				weeklyQuotaRemainingPercent: 0,
+				availablePromptCredits: 490,
+			}),
+		).toEqual({ windows: [], message: "Devin Pro · 490 prompt" });
+		expect(
+			parseDevinUsageSnapshot({
+				billingStrategy: 2,
+				dailyQuotaRemainingPercent: 40,
+				weeklyQuotaRemainingPercent: 75,
+			}),
+		).toEqual({
+			windows: [
+				{ label: "1D", usedPercent: 60 },
+				{ label: "7D", usedPercent: 25 },
+			],
+		});
 	});
 
 	it("loads Devin plan quota from GetUserStatus with the session token", async () => {
 		const requests: Array<{ url: string | URL | Request; init?: RequestInit }> = [];
 		const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
 			requests.push({ url, init });
-			const planStatus = pfield(13, Buffer.concat([pfield(14, 60), pfield(15, 42), pfield(18, 1_900_500_000)]));
+			const planStatus = pfield(
+				13,
+				Buffer.concat([pfield(14, 60), pfield(15, 42), pfield(17, 1_900_000_000), pfield(18, 1_900_500_000)]),
+			);
 			const userStatus = pfield(1, planStatus);
-			const planInfo = pfield(2, pfield(2, "Devin Pro"));
+			const planInfo = pfield(2, Buffer.concat([pfield(2, "Devin Pro"), pfield(35, 2)]));
 			return new Response(Buffer.concat([userStatus, planInfo]), { status: 200 });
 		});
 		const result = await loadSubscriptionUsage(
@@ -673,7 +712,7 @@ describe("subscription usage providers", () => {
 		expect(result).toEqual({
 			label: "DEVIN",
 			windows: [
-				{ label: "1D", usedPercent: 40 },
+				{ label: "1D", usedPercent: 40, resetsAt: 1_900_000_000 },
 				{ label: "7D", usedPercent: 58, resetsAt: 1_900_500_000 },
 			],
 			message: "Devin Pro",
@@ -723,6 +762,132 @@ describe("subscription usage providers", () => {
 			label: "GROK",
 			windows: [{ label: "7D", usedPercent: 27, resetsAt: Date.parse("2026-08-19T16:01:00+09:00") / 1000 }],
 		});
+	});
+
+	it("maps Command Code credits and rolling windows onto rail meters", () => {
+		expect(
+			parseCommandCodeUsageSnapshot({
+				credits: {
+					monthlyCredits: 40,
+					purchasedCredits: 10,
+					freeCredits: 5,
+				},
+				windowLimits: {
+					fiveHour: { used: 8, cap: 16, resetAt: 1_700_000_000_000 },
+					weekly: { used: 20, cap: 40, resetAt: null },
+				},
+				summary: { totalCost: 12.34, totalCount: 1500 },
+				subscription: { data: { planId: "individual-pro", currentPeriodEnd: "2026-02-01T00:00:00Z" } },
+			}),
+		).toEqual({
+			windows: [
+				{ label: "5H", usedPercent: 50, resetsAt: 1_700_000_000 },
+				{ label: "7D", usedPercent: 50 },
+				{ label: "MO", usedPercent: 18.32, resetsAt: Date.parse("2026-02-01T00:00:00Z") / 1000 },
+			],
+			message: "Pro",
+		});
+		expect(
+			parseCommandCodeUsageSnapshot({
+				credits: { monthlyCredits: 40, purchasedCredits: 0, freeCredits: 0 },
+				summary: { totalCost: 10, totalCount: 3 },
+				subscription: { data: { planId: "individual-go" } },
+			}),
+		).toEqual({ windows: [{ label: "MO", usedPercent: 20 }], message: "Go" });
+		expect(parseCommandCodeUsageSnapshot({ changed: "schema" })).toEqual({
+			windows: [],
+			message: "usage unavailable",
+		});
+	});
+
+	it("loads Command Code quota from the alpha billing endpoints with the API key", async () => {
+		const requests: Array<{ url: string | URL | Request; init?: RequestInit }> = [];
+		const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+			requests.push({ url, init });
+			const href = String(url);
+			if (href.includes("/alpha/whoami")) {
+				return new Response(
+					JSON.stringify({ user: { userName: "alice" }, org: { id: "org_1", login: "alice-inc" } }),
+					{
+						status: 200,
+						headers: { "content-type": "application/json" },
+					},
+				);
+			}
+			if (href.includes("/alpha/billing/credits")) {
+				return new Response(
+					JSON.stringify({
+						credits: { monthlyCredits: 40, purchasedCredits: 10, freeCredits: 5 },
+						windowLimits: {
+							fiveHour: { used: 8, cap: 16, resetAt: 1_700_000_000_000 },
+							weekly: { used: 20, cap: 40, resetAt: null },
+						},
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				);
+			}
+			if (href.includes("/alpha/billing/subscriptions")) {
+				return new Response(
+					JSON.stringify({
+						data: {
+							planId: "individual-pro",
+							status: "active",
+							currentPeriodEnd: "2026-02-01T00:00:00Z",
+						},
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				);
+			}
+			if (href.includes("/alpha/usage/summary")) {
+				return new Response(JSON.stringify({ totalCost: 12.34, totalCount: 1500 }), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				});
+			}
+			throw new Error(`Unexpected URL: ${href}`);
+		});
+		const result = await loadSubscriptionUsage(
+			session("commandcode", {
+				configuredProviders: ["commandcode"],
+				apiKeys: { commandcode: "cc_test_key" },
+			}) as never,
+			fetchMock,
+		);
+
+		const urls = requests.map((request) => String(request.url));
+		expect(urls.at(0)).toBe("https://api.commandcode.ai/alpha/whoami");
+		expect(urls.some((url) => url.startsWith("https://api.commandcode.ai/alpha/billing/credits"))).toBe(true);
+		expect(new Headers(requests[0]?.init?.headers).get("authorization")).toBe("Bearer cc_test_key");
+		expect(result).toEqual({
+			label: "COMMAND CODE",
+			windows: [
+				{ label: "5H", usedPercent: 50, resetsAt: 1_700_000_000 },
+				{ label: "7D", usedPercent: 50 },
+				{ label: "MO", usedPercent: 18.32, resetsAt: Date.parse("2026-02-01T00:00:00Z") / 1000 },
+			],
+			message: "Pro",
+		});
+		expect(JSON.stringify(result)).not.toContain("cc_test_key");
+	});
+
+	it("keeps Command Code quota requests on the fixed origin and rejects oversized bodies", async () => {
+		const urls: string[] = [];
+		const fetchMock = vi.fn(async (url: string | URL | Request) => {
+			urls.push(String(url));
+			return new Response("x", {
+				status: 200,
+				headers: { "content-length": String(1024 * 1024 + 1), "content-type": "application/json" },
+			});
+		});
+		const result = await loadSubscriptionUsage(
+			session("commandcode", {
+				configuredProviders: ["commandcode"],
+				apiKeys: { commandcode: "cc_test_key" },
+			}) as never,
+			fetchMock,
+		);
+		expect(urls.at(0)).toBe("https://api.commandcode.ai/alpha/whoami");
+		expect(result).toEqual({ label: "COMMAND CODE", windows: [], message: "usage unavailable" });
 	});
 });
 

@@ -8,11 +8,16 @@ import { type DevinUserStatus, getDevinUserStatus } from "omk-ai";
 import { clampPercent, usageText } from "./provider-usage-text.ts";
 import type { FetchLike, SubscriptionUsageSnapshot, SubscriptionUsageWindow } from "./provider-usage-types.ts";
 
+/** CLI `BillingStrategy.QUOTA` — undated remaining percents are still a quota window. */
+const DEVIN_BILLING_QUOTA = 2;
+
 /**
  * Map a decoded `GetUserStatus` payload to rail windows. The server reports
- * remaining percents; the rail renders used percents. A quota window is shown
- * when the plan does not hide it and the wire carried either the percent or
- * its reset time — a reset without a percent reads as exhausted.
+ * remaining percents; the rail renders used percents. Matches the CLI `/usage`
+ * surface: a percent window is shown when the plan does not hide it and the
+ * wire dated the reset, or when the plan is explicitly quota-billed. Credit-
+ * billed plans leave proto percents at 0; those are not exhausted windows.
+ * A dated reset without a percent still reads as exhausted.
  */
 export function parseDevinUsageSnapshot(
 	status: DevinUserStatus,
@@ -24,11 +29,15 @@ export function parseDevinUsageSnapshot(
 		remainingPercent: number | undefined,
 		resetsAt: number | undefined,
 	): SubscriptionUsageWindow | undefined => {
-		if (hidden === true || (remainingPercent === undefined && resetsAt === undefined)) return undefined;
+		if (hidden === true) return undefined;
+		const dated = resetsAt !== undefined && resetsAt > 0;
+		// CLI /usage: dated reset, or an explicit quota plan. Credit-billed proto zeros are not windows.
+		if (!dated && status.billingStrategy !== DEVIN_BILLING_QUOTA) return undefined;
+		if (!dated && remainingPercent === undefined) return undefined;
 		return {
 			label,
 			usedPercent: clampPercent(100 - (remainingPercent ?? 0)),
-			...(resetsAt === undefined ? {} : { resetsAt }),
+			...(dated ? { resetsAt } : {}),
 		};
 	};
 	const daily = quotaWindow("1D", status.hideDailyQuota, status.dailyQuotaRemainingPercent, status.dailyQuotaResetAt);
