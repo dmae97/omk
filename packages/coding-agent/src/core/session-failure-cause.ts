@@ -17,6 +17,7 @@
 
 import { type AssistantMessage, isContextOverflow } from "omk-ai";
 import {
+	hasStatusCodeLike,
 	isClaudeCodeVersionTooOldMessage,
 	isCodexChatgptAccountUnsupportedModelMessage,
 	isQuotaExhaustionMessage,
@@ -25,6 +26,10 @@ import {
 import { redactSensitiveText } from "./redaction.ts";
 import { RunBudgetExceededError, RunBudgetPolicyError } from "./run-budget-policy.ts";
 import { MAX_SESSION_TERMINATION_MESSAGE_LENGTH, type SessionTerminationCause } from "./session-termination.ts";
+
+function isMissingEsmNamedExportMessage(text: string): boolean {
+	return /does not provide an export named/i.test(text);
+}
 
 /**
  * Errno codes that mean a write could not be durably completed. Anything else
@@ -72,7 +77,11 @@ export function providerFailureCause(message: AssistantMessage, contextWindow: n
 	// A stale spoofed Claude Code version against a newer model's gate is a client
 	// configuration fault, not a transcript-shape one: it must not inherit the
 	// retryable protocol default at the bottom of this function.
-	if (isClaudeCodeVersionTooOldMessage(text) || isCodexChatgptAccountUnsupportedModelMessage(text)) {
+	if (
+		isClaudeCodeVersionTooOldMessage(text) ||
+		isCodexChatgptAccountUnsupportedModelMessage(text) ||
+		isMissingEsmNamedExportMessage(text)
+	) {
 		return { area: "configuration", code: "invalid" };
 	}
 	// Quota/billing exhaustion is checked BEFORE the generic 401/403 auth
@@ -86,11 +95,15 @@ export function providerFailureCause(message: AssistantMessage, contextWindow: n
 	// anthropic/claude-opus-5 `overloaded_error` / "Overloaded" (HTTP 529).
 	if (
 		isQuotaExhaustionMessage(text) ||
-		/rate.?limit|too many requests|429|at capacity|high demand|overloaded/i.test(text)
+		/rate.?limit|too many requests|at capacity|high demand|overloaded/i.test(text) ||
+		hasStatusCodeLike(text, [429])
 	) {
 		return { area: "provider", code: "rate_limit" };
 	}
-	if (/auth|unauthori[sz]ed|forbidden|invalid.?api.?key|no api key|401|403|\/login/i.test(text)) {
+	if (
+		/auth|unauthori[sz]ed|forbidden|invalid.?api.?key|no api key|\/login/i.test(text) ||
+		hasStatusCodeLike(text, [401, 403])
+	) {
 		return { area: "provider", code: "auth" };
 	}
 	// Gateway/upstream 5xx and dropped streams are transport failures, not
@@ -123,7 +136,7 @@ export function preflightFailureCause(message: string, hasModel: boolean): Sessi
 	if (isQuotaExhaustionMessage(message)) {
 		return { area: "provider", code: "rate_limit" };
 	}
-	if (/auth|api key|unauthori[sz]ed|forbidden|401|403|\/login/i.test(message)) {
+	if (/auth|api key|unauthori[sz]ed|forbidden|\/login/i.test(message) || hasStatusCodeLike(message, [401, 403])) {
 		return { area: "provider", code: "auth" };
 	}
 	if (isUpstreamUnavailableMessage(message)) {
@@ -153,6 +166,7 @@ export function runtimeFailureCause(error: unknown): SessionTerminationCause {
 		return { area: "persistence", code: "append_failed" };
 	}
 	const message = error instanceof Error ? error.message : String(error);
+	if (isMissingEsmNamedExportMessage(message)) return { area: "configuration", code: "invalid" };
 	if (/compaction.+stale|session changed during compaction/i.test(message)) {
 		return { area: "compaction", code: "stale" };
 	}

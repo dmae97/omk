@@ -430,7 +430,7 @@ function nextActionFor(classification: Classification, input: ClassifySessionTer
 		case "provider_network":
 			return "Check network and provider connectivity, then retry.";
 		case "provider_protocol":
-			return "Often an orphan tool_call_id / sticky transcript after a dropped error turn — auto-retry after sanitize, or /new session if it persists.";
+			return "Check request parameters and tool/message consistency in /debug before retrying. A new session does not reload provider code; restart OMK after an adapter update.";
 		case "provider_refusal":
 			return "Model declined this turn (content/safety stop). Usually a false positive on Fable/Claude — auto-retry once, or switch model (k3/qwen3.8-max/grok-4.5/deepseek) / rephrase as a pure coding task.";
 		case "context_overflow":
@@ -459,7 +459,9 @@ function nextActionFor(classification: Classification, input: ClassifySessionTer
 		case "transcript_invalid":
 			return `Run omk session doctor --session ${input.sessionId}; do not resume until integrity passes.`;
 		case "configuration":
-			return "This model or client is not valid for the current login. Switch with /model or fix provider/client settings; /new session will not grant access.";
+			return /does not provide an export named/i.test(input.message)
+				? "Provider code failed to load. Quit and restart OMK so the rebuilt adapter is imported; /new session does not reload modules."
+				: "This model or client is not valid for the current login. Switch with /model or fix provider/client settings; /new session will not grant access.";
 		case "internal_error":
 			return `Inspect run ${input.runId} diagnostics and the run journal before retrying.`;
 	}

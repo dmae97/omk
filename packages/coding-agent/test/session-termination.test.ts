@@ -114,6 +114,45 @@ describe("classifySessionTermination", () => {
 		expect(termination.nextAction).not.toMatch(/orphan tool_call_id/i);
 	});
 
+	it("tells the operator to restart OMK for a missing provider ESM export", () => {
+		const termination = classifySessionTermination({
+			sessionId: "session-1",
+			runId: "run-devin",
+			timestamp: NOW,
+			source: "observed",
+			message: "The requested module './devin-connect.js' does not provide an export named 'MAX_FRAME_BYTES'",
+			cause: { area: "configuration", code: "invalid" },
+			sideEffects: "none",
+			provider: "devin",
+			model: "swe-2",
+		});
+		expect(termination.kind).toBe("configuration");
+		expect(termination.safeToAutoRetry).toBe(false);
+		expect(termination.nextAction).toMatch(/restart OMK/i);
+		expect(termination.nextAction).not.toMatch(/often an orphan|auto-retry after sanitize/i);
+		expect(termination.nextAction).toMatch(/\/new session does not reload modules/i);
+	});
+
+	it("does not diagnose an opaque Devin protocol error as an orphan tool call", () => {
+		const termination = classifySessionTermination({
+			sessionId: "session-1",
+			runId: "run-devin",
+			timestamp: NOW,
+			source: "observed",
+			message: "Devin stream error: invalid_argument",
+			cause: { area: "provider", code: "protocol" },
+			sideEffects: "none",
+			provider: "devin",
+			model: "swe-2",
+		});
+		expect(termination.kind).toBe("provider_protocol");
+		expect(termination.safeToAutoRetry).toBe(false);
+		expect(termination.nextAction).toContain("/debug");
+		expect(termination.nextAction).toMatch(/request parameters/i);
+		expect(termination.nextAction).not.toMatch(/often an orphan|auto-retry after sanitize/i);
+		expect(termination.nextAction).toMatch(/restart OMK/i);
+	});
+
 	it("classifies compaction quota exhaustion as non-retryable with switch-model guidance", () => {
 		const termination = classify({ area: "compaction", code: "quota_exhausted" });
 

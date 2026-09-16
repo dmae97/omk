@@ -133,6 +133,17 @@ describe("providerFailureCause", () => {
 		expect(providerFailureCause(assistantError(error), 0)).toEqual({ area: "provider", code: "rate_limit" });
 	});
 
+	it("classifies a missing ESM named export as configuration, not protocol", () => {
+		expect(
+			providerFailureCause(
+				assistantError(
+					"The requested module './devin-connect.js' does not provide an export named 'MAX_FRAME_BYTES'",
+				),
+				0,
+			),
+		).toEqual({ area: "configuration", code: "invalid" });
+	});
+
 	it("defaults to provider.protocol when nothing matches", () => {
 		expect(providerFailureCause(assistantError("something entirely unexpected"), 0)).toEqual({
 			area: "provider",
@@ -211,6 +222,14 @@ describe("runtimeFailureCause", () => {
 			code: "stale",
 		});
 		expect(runtimeFailureCause(new Error("compaction blew up"))).toEqual({ area: "compaction", code: "failed" });
+	});
+
+	it("classifies a missing ESM named export as configuration, not internal", () => {
+		expect(
+			runtimeFailureCause(
+				new Error("The requested module './devin-connect.js' does not provide an export named 'MAX_FRAME_BYTES'"),
+			),
+		).toEqual({ area: "configuration", code: "invalid" });
 	});
 
 	it("stringifies non-Error throws before matching", () => {
