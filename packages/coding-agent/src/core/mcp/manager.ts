@@ -14,7 +14,7 @@
 
 import type { TSchema } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
-import { detectMcpDescriptorPromptInjection } from "../mcp-public-presets.ts";
+import { detectMcpDescriptorPromptInjection, MCP_QUARANTINE_PATTERN_SIGNAL_THRESHOLD } from "../mcp-public-presets.ts";
 import { McpClient, type McpClientOptions } from "./client.ts";
 import { createMcpToolDefinition, type McpToolDetails } from "./tools.ts";
 
@@ -61,6 +61,10 @@ interface ServerRuntime {
 	quarantinedTools: string[];
 	error?: string;
 	connecting?: Promise<void>;
+	/** Client owned by the in-flight connect attempt; not yet published. */
+	pendingClient?: McpClient;
+	/** Monotonic generation; a completed attempt may only publish when current. */
+	generation: number;
 }
 
 export class McpManager {
@@ -71,7 +75,7 @@ export class McpManager {
 		this.options = options;
 		for (const config of options.servers) {
 			if (this.runtimes.has(config.name)) continue; // First definition wins; inventory already applies precedence.
-			this.runtimes.set(config.name, { config, state: "idle", tools: [], quarantinedTools: [] });
+			this.runtimes.set(config.name, { config, state: "idle", tools: [], quarantinedTools: [], generation: 0 });
 		}
 	}
 
@@ -128,11 +132,21 @@ export class McpManager {
 		};
 	}
 
-	/** Terminate every connected server. Idempotent. */
+	/**
+	 * Terminate every connected or connecting server. Idempotent.
+	 *
+	 * Bumping the generation invalidates any in-flight connect before its late
+	 * completion can publish tools or flip the state back to `ready`, and the
+	 * attempt's not-yet-published client is closed alongside the live one so no
+	 * spawned process outlives the close.
+	 */
 	close(): void {
 		for (const runtime of this.runtimes.values()) {
+			runtime.generation += 1;
 			runtime.client?.close();
 			runtime.client = undefined;
+			runtime.pendingClient?.close();
+			runtime.pendingClient = undefined;
 			runtime.tools = [];
 			runtime.quarantinedTools = [];
 			if (runtime.state === "ready" || runtime.state === "connecting") runtime.state = "idle";
@@ -164,12 +178,17 @@ export class McpManager {
 	}
 
 	private async pingRuntime(runtime: ServerRuntime, timeoutMs?: number): Promise<void> {
+		// Pin the probed client: a close or reconnect during the ping must not let
+		// this failure path dispose the replacement client.
+		const client = runtime.client;
+		if (!client) return;
 		try {
-			await runtime.client?.ping(timeoutMs);
+			await client.ping(timeoutMs);
 		} catch (error) {
+			if (runtime.client !== client) return; // A newer owner already handled it.
 			// Isolation point: only this server transitions; the rest stay ready.
-			runtime.client?.close();
 			runtime.client = undefined;
+			client.close();
 			runtime.tools = [];
 			runtime.quarantinedTools = [];
 			runtime.state = "failed";
@@ -187,14 +206,18 @@ export class McpManager {
 		if (runtime.connecting) return runtime.connecting;
 
 		runtime.state = "connecting";
-		const attempt = this.connectRuntime(runtime).finally(() => {
-			runtime.connecting = undefined;
+		const generation = runtime.generation;
+		const attempt = this.connectRuntime(runtime, generation).finally(() => {
+			// Only this attempt may clear its own in-flight markers; a newer
+			// attempt's `connecting`/`pendingClient` belong to the newer generation.
+			if (runtime.connecting === attempt) runtime.connecting = undefined;
+			if (runtime.generation === generation) runtime.pendingClient = undefined;
 		});
 		runtime.connecting = attempt;
 		return attempt;
 	}
 
-	private async connectRuntime(runtime: ServerRuntime): Promise<void> {
+	private async connectRuntime(runtime: ServerRuntime, generation: number): Promise<void> {
 		const clientOptions: McpClientOptions = {
 			name: runtime.config.name,
 			clientInfo: this.options.clientInfo,
@@ -208,10 +231,24 @@ export class McpManager {
 			},
 		};
 		const client = this.options.createClient?.(clientOptions) ?? new McpClient(clientOptions);
+		// Register before the first await so close() can dispose a client whose
+		// connect() promise has not resolved yet.
+		runtime.pendingClient = client;
+		const isCurrent = () => runtime.generation === generation && runtime.pendingClient === client;
 		try {
 			await client.connect();
+			if (!isCurrent()) {
+				// close() or a newer attempt superseded this one mid-handshake.
+				client.close();
+				return;
+			}
 			const schemas = await client.listTools();
+			if (!isCurrent()) {
+				client.close();
+				return;
+			}
 			runtime.client = client;
+			runtime.pendingClient = undefined;
 			// 서술자 주입 스크리닝: MCP 도구 설명은 신뢰할 수 없는 제3자 입력이다.
 			// admitPublicMcpServer와 동일 임계값(0.7)으로 차단 — 수입 시점에서 fail-closed.
 			const definitions = schemas.map((schema) =>
@@ -222,7 +259,10 @@ export class McpManager {
 			const admitted: typeof definitions = [];
 			const quarantined: string[] = [];
 			for (const definition of definitions) {
-				if (detectMcpDescriptorPromptInjection(definition.description ?? "").score > 0.7) {
+				if (
+					detectMcpDescriptorPromptInjection(definition.description ?? "").patternSignal >
+					MCP_QUARANTINE_PATTERN_SIGNAL_THRESHOLD
+				) {
 					quarantined.push(definition.name);
 				} else {
 					admitted.push(definition);
@@ -233,8 +273,9 @@ export class McpManager {
 			runtime.state = "ready";
 			runtime.error = undefined;
 		} catch (error) {
-			// Isolation point: this server is out, every other server is unaffected.
 			client.close();
+			if (!isCurrent()) return; // The current generation owns the state now.
+			// Isolation point: this server is out, every other server is unaffected.
 			runtime.client = undefined;
 			runtime.tools = [];
 			runtime.state = "failed";

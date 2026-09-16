@@ -23,10 +23,23 @@ import { McpStdioTransport, type StdioTransportOptions } from "./stdio-transport
 
 /** Protocol revision this client implements. */
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
+/**
+ * Protocol revisions this client accepts from a server. The handshake fails
+ * closed on any other value instead of guessing at forward compatibility.
+ */
+export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = ["2024-11-05", MCP_PROTOCOL_VERSION];
 /** Default per-request deadline. */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 /** Default handshake deadline. Servers that install on first run need more room than a normal call. */
 export const DEFAULT_HANDSHAKE_TIMEOUT_MS = 60_000;
+/** Page ceiling for `tools/list` so a looping cursor cannot stall a session forever. */
+export const MAX_LIST_PAGES = 128;
+/** Tool ceiling across all `tools/list` pages for one server. */
+export const MAX_LIST_TOOLS = 4096;
+/** Overall `tools/list` deadline; per-request timeouts do not bound the total. */
+export const LIST_TOOLS_TIMEOUT_MS = 120_000;
+/** In-flight request ceiling per server. */
+export const MAX_PENDING_REQUESTS = 128;
 
 export interface McpToolSchema {
 	readonly name: string;
@@ -40,13 +53,10 @@ export interface McpTextBlock {
 	readonly text: string;
 }
 
-export interface McpImageBlock {
-	readonly type: "image";
-	readonly data: string;
-	readonly mimeType: string;
-}
-
-export type McpContentBlock = McpTextBlock | McpImageBlock | { readonly type: string; readonly [key: string]: unknown };
+export type McpContentBlock =
+	| McpTextBlock
+	| { readonly type: "image"; readonly data: string; readonly mimeType: string }
+	| { readonly type: string; readonly [key: string]: unknown };
 
 export interface McpToolCallResult {
 	readonly content: readonly McpContentBlock[];
@@ -90,6 +100,7 @@ export class McpClient {
 	private closed = false;
 	private exitReason: string | undefined;
 	private info: McpServerInfo = {};
+	private lastProtocolErrorReason: string | undefined;
 	private readonly options: McpClientOptions;
 
 	constructor(options: McpClientOptions) {
@@ -98,6 +109,9 @@ export class McpClient {
 		this.handshakeTimeoutMs = options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
 		this.transport = new McpStdioTransport(options.transport, {
 			onMessage: (message) => this.handleMessage(message),
+			onDecodeError: (reason) => {
+				this.lastProtocolErrorReason = reason;
+			},
 			onExit: ({ code, signal }) => this.handleExit(code, signal),
 		});
 	}
@@ -112,11 +126,6 @@ export class McpClient {
 
 	get ready(): boolean {
 		return this.initialized && !this.closed;
-	}
-
-	/** Why the server is unusable, when it is. */
-	get failure(): string | undefined {
-		return this.exitReason;
 	}
 
 	/**
@@ -138,15 +147,31 @@ export class McpClient {
 			},
 			this.handshakeTimeoutMs,
 		);
-		if (isRecord(result) && isRecord(result.serverInfo)) {
+		this.assertInitializeResult(result);
+		this.initialized = true;
+		this.transport.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+	}
+
+	// The handshake is a negotiation, not a formality: reject a response that
+	// does not carry a protocol version this client actually supports.
+	private assertInitializeResult(result: unknown): void {
+		if (!isRecord(result) || typeof result.protocolVersion !== "string") {
+			throw new Error(
+				`MCP server "${this.options.name}" returned an invalid initialize result (missing protocolVersion)`,
+			);
+		}
+		if (!SUPPORTED_PROTOCOL_VERSIONS.includes(result.protocolVersion)) {
+			throw new Error(
+				`MCP server "${this.options.name}" requested unsupported protocol version "${result.protocolVersion}"`,
+			);
+		}
+		if (isRecord(result.serverInfo)) {
 			const { name, version } = result.serverInfo;
 			this.info = {
 				name: typeof name === "string" ? name : undefined,
 				version: typeof version === "string" ? version : undefined,
 			};
 		}
-		this.initialized = true;
-		this.transport.send({ jsonrpc: "2.0", method: "notifications/initialized" });
 	}
 
 	/**
@@ -159,26 +184,54 @@ export class McpClient {
 		await this.request("ping", {}, timeoutMs);
 	}
 
-	/** List the server's tools. Requires a completed handshake. */
+	/**
+	 * List the server's tools. Requires a completed handshake.
+	 *
+	 * Pagination is bounded three ways — an overall deadline, a page count, and
+	 * a tool count — and a repeated cursor is a protocol error, so a misbehaving
+	 * server cannot keep the listing loop alive indefinitely. Duplicate tool
+	 * names in one listing are rejected instead of silently overwritten.
+	 */
 	async listTools(): Promise<McpToolSchema[]> {
 		this.assertReady();
 		const tools: McpToolSchema[] = [];
+		const seenNames = new Set<string>();
+		const seenCursors = new Set<string>();
+		const deadline = Date.now() + LIST_TOOLS_TIMEOUT_MS;
 		let cursor: string | undefined;
-		do {
-			const result = await this.request("tools/list", cursor ? { cursor } : {});
-			if (!isRecord(result) || !Array.isArray(result.tools)) return tools;
-			for (const raw of result.tools) {
+		const fail = (what: string): never => {
+			throw new Error(`MCP server "${this.options.name}" ${what}`);
+		};
+		for (let page = 0; page < MAX_LIST_PAGES; page++) {
+			const remainingMs = deadline - Date.now();
+			if (remainingMs <= 0) fail(`tools/list exceeded ${LIST_TOOLS_TIMEOUT_MS}ms`);
+			const result = await this.request(
+				"tools/list",
+				cursor ? { cursor } : {},
+				Math.min(remainingMs, this.requestTimeoutMs),
+			);
+			const record = isRecord(result) ? result : fail("returned an invalid tools/list result");
+			const rawTools = Array.isArray(record.tools) ? record.tools : fail("returned an invalid tools/list result");
+			for (const raw of rawTools) {
 				if (!isRecord(raw) || typeof raw.name !== "string" || raw.name.length === 0) continue;
+				if (seenNames.has(raw.name)) fail(`listed duplicate tool "${raw.name}"`);
+				seenNames.add(raw.name);
 				tools.push({
 					name: raw.name,
 					description: typeof raw.description === "string" ? raw.description : undefined,
 					title: typeof raw.title === "string" ? raw.title : undefined,
 					inputSchema: isRecord(raw.inputSchema) ? raw.inputSchema : undefined,
 				});
+				if (tools.length > MAX_LIST_TOOLS) fail(`exceeded ${MAX_LIST_TOOLS} tools`);
 			}
-			cursor = typeof result.nextCursor === "string" && result.nextCursor.length > 0 ? result.nextCursor : undefined;
-		} while (cursor);
-		return tools;
+			const next =
+				typeof record.nextCursor === "string" && record.nextCursor.length > 0 ? record.nextCursor : undefined;
+			if (!next) return tools;
+			if (seenCursors.has(next)) fail("repeated tools/list cursor");
+			seenCursors.add(next);
+			cursor = next;
+		}
+		return fail(`exceeded ${MAX_LIST_PAGES} tools/list pages`);
 	}
 
 	/**
@@ -189,7 +242,11 @@ export class McpClient {
 	async callTool(name: string, args: unknown, timeoutMs?: number): Promise<McpToolCallResult> {
 		this.assertReady();
 		const result = await this.request("tools/call", { name, arguments: args ?? {} }, timeoutMs);
-		if (!isRecord(result)) return { content: [], isError: false };
+		// A non-object result is a protocol violation, not an empty success —
+		// normalizing it would hide a broken server from the caller.
+		if (!isRecord(result)) {
+			throw new Error(`MCP server "${this.options.name}" returned an invalid tools/call result`);
+		}
 		const content = Array.isArray(result.content) ? (result.content as McpContentBlock[]) : [];
 		return {
 			content,
@@ -205,6 +262,11 @@ export class McpClient {
 		this.handleExit(null, null);
 	}
 
+	/** Why the server is unusable, when it is; includes the latest decode failure. */
+	get failure(): string | undefined {
+		return this.exitReason ?? this.lastProtocolErrorReason;
+	}
+
 	private assertReady(): void {
 		if (this.closed) throw new Error(this.exitReason ?? `MCP server "${this.options.name}" is closed`);
 		if (!this.initialized) throw new Error(`MCP server "${this.options.name}" is not initialized`);
@@ -213,6 +275,11 @@ export class McpClient {
 	private request(method: string, params: unknown, timeoutMs?: number): Promise<unknown> {
 		if (this.closed) {
 			return Promise.reject(new Error(this.exitReason ?? `MCP server "${this.options.name}" is closed`));
+		}
+		if (this.pending.size >= MAX_PENDING_REQUESTS) {
+			return Promise.reject(
+				new Error(`MCP server "${this.options.name}" has ${MAX_PENDING_REQUESTS} pending requests (${method})`),
+			);
 		}
 		const id = this.nextId++;
 		const effectiveTimeout = timeoutMs ?? this.requestTimeoutMs;
@@ -223,9 +290,7 @@ export class McpClient {
 			}, effectiveTimeout);
 			timer.unref?.();
 			this.pending.set(id, { resolve, reject, timer, method });
-
-			const sent = this.transport.send({ jsonrpc: "2.0", id, method, params });
-			if (!sent) {
+			if (!this.transport.send({ jsonrpc: "2.0", id, method, params })) {
 				this.pending.delete(id);
 				clearTimeout(timer);
 				reject(new Error(`MCP server "${this.options.name}" is not writable (${method})`));

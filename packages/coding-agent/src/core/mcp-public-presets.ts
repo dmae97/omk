@@ -1,4 +1,14 @@
 import { createHash } from "node:crypto";
+import {
+	detectMcpDescriptorPromptInjection,
+	MCP_QUARANTINE_PATTERN_SIGNAL_THRESHOLD,
+} from "./mcp-descriptor-injection.ts";
+
+export {
+	detectMcpDescriptorPromptInjection,
+	MCP_QUARANTINE_PATTERN_SIGNAL_THRESHOLD,
+	type McpDescriptorPromptInjectionSignal,
+} from "./mcp-descriptor-injection.ts";
 
 export type PublicMcpPresetKey =
 	| "context7"
@@ -729,7 +739,9 @@ export function admitPublicMcpServer(
 			reasons.push(`mutation_tool_denied:${tool.name}`);
 		}
 
-		if (detectMcpDescriptorPromptInjection(tool.description).score > 0.7) {
+		if (
+			detectMcpDescriptorPromptInjection(tool.description).patternSignal > MCP_QUARANTINE_PATTERN_SIGNAL_THRESHOLD
+		) {
 			reasons.push(`descriptor_prompt_injection:${tool.name}`);
 		}
 	}
@@ -737,22 +749,6 @@ export function admitPublicMcpServer(
 	return {
 		status: reasons.length === 0 ? "allow" : "quarantine",
 		reasons,
-	};
-}
-
-export function detectMcpDescriptorPromptInjection(description: string): { readonly score: number } {
-	const normalized = description.toLowerCase();
-	const suspiciousPatterns = [
-		/ignore\s+(?:all\s+)?previous\s+instructions/,
-		/disregard\s+(?:all\s+)?previous\s+instructions/,
-		/exfiltrat/,
-		/reveal\s+(?:the\s+)?(?:system\s+)?prompt/,
-		/send\s+(?:me\s+)?(?:all\s+)?secrets/,
-	];
-	const hits = suspiciousPatterns.filter((pattern) => pattern.test(normalized)).length;
-
-	return {
-		score: hits === 0 ? 0 : Math.min(1, 0.6 + hits * 0.25),
 	};
 }
 

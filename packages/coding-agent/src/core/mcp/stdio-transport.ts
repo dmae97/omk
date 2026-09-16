@@ -19,6 +19,8 @@ import { createLineDecoder, encodeMessage, type JsonRpcMessage } from "./protoco
 export const MAX_STDERR_TAIL_CHARS = 8192;
 /** Grace period between SIGTERM and SIGKILL on close. */
 export const DEFAULT_KILL_GRACE_MS = 2000;
+/** Framed bytes allowed to sit in the child's stdin buffer before sends refuse. */
+export const DEFAULT_MAX_PENDING_WRITE_BYTES = 16 * 1024 * 1024;
 
 export interface StdioTransportOptions {
 	readonly command: string;
@@ -29,6 +31,8 @@ export interface StdioTransportOptions {
 	readonly killGraceMs?: number;
 	/** Inherit the parent environment. Default `true`. */
 	readonly inheritEnv?: boolean;
+	/** Framed bytes allowed to sit unwritten before `send` refuses. */
+	readonly maxPendingWriteBytes?: number;
 }
 
 export interface StdioTransportHandlers {
@@ -46,6 +50,9 @@ export class McpStdioTransport {
 	private stderrTail = "";
 	private exited = false;
 	private killTimer: ReturnType<typeof setTimeout> | undefined;
+	/** Framed bytes written but not yet flushed to the child's stdin. */
+	private pendingWriteBytes = 0;
+	private waitingForDrain = false;
 	private readonly options: StdioTransportOptions;
 	private readonly handlers: StdioTransportHandlers;
 
@@ -102,12 +109,32 @@ export class McpStdioTransport {
 		child.on("exit", (code, signal) => this.settleExit(code, signal));
 	}
 
-	/** Write one message. Returns `false` when the server is no longer writable. */
+	/**
+	 * Write one message. Returns `false` when the server is no longer writable
+	 * or the outbound buffer is already saturated — the client treats that as
+	 * a send failure rather than queueing unbounded frames.
+	 */
 	send(message: JsonRpcMessage): boolean {
 		const child = this.child;
 		if (!child || this.exited || !child.stdin.writable) return false;
+		const frame = encodeMessage(message);
+		const frameBytes = Buffer.byteLength(frame, "utf8");
+		const cap = this.options.maxPendingWriteBytes ?? DEFAULT_MAX_PENDING_WRITE_BYTES;
+		if (this.pendingWriteBytes + frameBytes > cap) return false;
 		try {
-			child.stdin.write(encodeMessage(message));
+			const flushed = child.stdin.write(frame);
+			if (!flushed) {
+				// Kernel/user buffer is saturated: account the frame and release it
+				// on drain so the pending estimate tracks the real backlog.
+				this.pendingWriteBytes += frameBytes;
+				if (!this.waitingForDrain) {
+					this.waitingForDrain = true;
+					child.stdin.once("drain", () => {
+						this.waitingForDrain = false;
+						this.pendingWriteBytes = 0;
+					});
+				}
+			}
 			return true;
 		} catch {
 			return false;
@@ -143,6 +170,8 @@ export class McpStdioTransport {
 	private settleExit(code: number | null, signal: string | null): void {
 		if (this.exited) return;
 		this.exited = true;
+		this.pendingWriteBytes = 0;
+		this.waitingForDrain = false;
 		if (this.killTimer !== undefined) {
 			clearTimeout(this.killTimer);
 			this.killTimer = undefined;

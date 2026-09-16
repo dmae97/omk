@@ -49,7 +49,18 @@ export function isJsonRpcResponse(message: unknown): message is JsonRpcResponse 
 	if (!("id" in message)) return false;
 	const id = message.id;
 	if (typeof id !== "number" && typeof id !== "string") return false;
-	return "result" in message || "error" in message;
+	// JSON-RPC success and error are mutually exclusive; `error: null` is not a
+	// valid error object, and a present error must carry its required fields.
+	const hasResult = "result" in message;
+	const hasError = "error" in message;
+	if (hasResult === hasError) return false; // both present or both absent
+	if (hasError) {
+		const error = message.error;
+		if (!isRecord(error)) return false;
+		if (typeof error.code !== "number" || !Number.isFinite(error.code)) return false;
+		if (typeof error.message !== "string") return false;
+	}
+	return true;
 }
 
 export function isJsonRpcNotification(message: unknown): message is JsonRpcNotification {
@@ -84,45 +95,78 @@ export interface DecodedLine {
 /**
  * Incremental newline-delimited JSON decoder.
  *
- * Holds at most one partial line. A line longer than {@link MAX_MESSAGE_LINE_BYTES}
- * is dropped with an error rather than buffered, so a runaway server cannot
- * exhaust memory.
+ * The limit is enforced in UTF-8 bytes against the raw frame, before JSON
+ * parsing, so the same message is accepted or rejected regardless of how the
+ * transport splits it into chunks. A line that exceeds
+ * {@link MAX_MESSAGE_LINE_BYTES} is reported once, its bytes are discarded
+ * without being retained, and decoding resynchronizes at the next newline —
+ * a runaway server cannot exhaust memory by growing the retained buffer.
+ *
+ * `maxLineBytes` must be a positive finite integer; anything else is a
+ * configuration error, not a size to guess at.
  */
 export function createLineDecoder(maxLineBytes: number = MAX_MESSAGE_LINE_BYTES): {
 	push(chunk: string): DecodedLine[];
 	reset(): void;
 } {
+	if (!Number.isSafeInteger(maxLineBytes) || maxLineBytes <= 0) {
+		throw new RangeError(`maxLineBytes must be a positive finite integer, got ${maxLineBytes}`);
+	}
 	let buffer = "";
-	let overflowed = false;
+	/** UTF-8 byte length of `buffer` — the limit unit, not the JS string length. */
+	let bufferBytes = 0;
+	/** True while the remainder of an oversized line is being discarded. */
+	let discarding = false;
 
 	return {
 		push(chunk: string): DecodedLine[] {
 			const out: DecodedLine[] = [];
-			buffer += chunk;
+			let rest = chunk;
+
+			if (discarding) {
+				// Skip the tail of the rejected line without storing it.
+				const boundary = rest.indexOf("\n");
+				if (boundary === -1) {
+					return out;
+				}
+				discarding = false;
+				rest = rest.slice(boundary + 1);
+			}
+
+			buffer += rest;
+			bufferBytes += Buffer.byteLength(rest, "utf8");
 
 			let newlineIndex = buffer.indexOf("\n");
 			while (newlineIndex !== -1) {
-				const line = buffer.slice(0, newlineIndex).trim();
+				const line = buffer.slice(0, newlineIndex);
+				const lineBytes = Buffer.byteLength(line, "utf8");
 				buffer = buffer.slice(newlineIndex + 1);
-				if (overflowed) {
-					// The oversized line ends here; resume clean at the next boundary.
-					overflowed = false;
-				} else if (line.length > 0) {
-					out.push(decodeLine(line));
+				bufferBytes -= lineBytes + 1; // consumed line plus its newline
+				const trimmed = line.trim();
+				if (trimmed.length === 0) {
+					newlineIndex = buffer.indexOf("\n");
+					continue;
+				}
+				if (lineBytes > maxLineBytes) {
+					out.push({ error: `MCP frame exceeded ${maxLineBytes} bytes` });
+				} else {
+					out.push(decodeLine(trimmed));
 				}
 				newlineIndex = buffer.indexOf("\n");
 			}
 
-			if (!overflowed && buffer.length > maxLineBytes) {
+			if (bufferBytes > maxLineBytes) {
 				out.push({ error: `MCP frame exceeded ${maxLineBytes} bytes` });
-				overflowed = true;
 				buffer = "";
+				bufferBytes = 0;
+				discarding = true;
 			}
 			return out;
 		},
 		reset(): void {
 			buffer = "";
-			overflowed = false;
+			bufferBytes = 0;
+			discarding = false;
 		},
 	};
 }
