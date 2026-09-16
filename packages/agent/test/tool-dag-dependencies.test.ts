@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { assignDagDependencies, assignDagLevels, type ResolvedClaimEntry } from "../src/tool-dag-scheduler.ts";
+import {
+	assignDagDependencies,
+	assignDagLevels,
+	conflictsWithUnsettledClaim,
+	type ResolvedClaimEntry,
+} from "../src/tool-dag-scheduler.ts";
 import { resolutionsConflict, type ToolResourceAccess, type ToolResourceClaim } from "../src/tool-resource-claims.ts";
 
 /**
@@ -120,6 +125,46 @@ describe("assignDagDependencies", () => {
 				}
 			}
 		}
+	});
+});
+
+describe("conflictsWithUnsettledClaim", () => {
+	const writeX = { kind: "claims" as const, claims: [pathClaim("/proj/x", "write")] };
+	const readX = { kind: "claims" as const, claims: [pathClaim("/proj/x", "read")] };
+	const writeY = { kind: "claims" as const, claims: [pathClaim("/proj/y", "write")] };
+	const readY = { kind: "claims" as const, claims: [pathClaim("/proj/y", "read")] };
+
+	it("blocks a call that would run ahead of an unsettled conflicting predecessor", () => {
+		const resolutions = new Map([[0, writeX]]);
+		// Call 1 resolved to read x while call 0 is still unsettled.
+		expect(conflictsWithUnsettledClaim(1, readX, new Set(), new Set(), new Set(), resolutions)).toBe(true);
+	});
+
+	it("blocks a call that would overlap a conflicting later-source call already running", () => {
+		// The audit's counterexample: the hook retargeted this call onto a claim
+		// held by an in-flight later call. Source order cannot un-start it, so
+		// this call must defer.
+		const resolutions = new Map([[2, writeX]]);
+		expect(conflictsWithUnsettledClaim(1, readX, new Set(), new Set(), new Set([2]), resolutions)).toBe(true);
+	});
+
+	it("ignores a later-source pending call — source order still wins", () => {
+		const resolutions = new Map([[2, writeX]]);
+		expect(conflictsWithUnsettledClaim(1, readX, new Set(), new Set(), new Set(), resolutions)).toBe(false);
+	});
+
+	it("ignores settled calls, ready peers, and non-conflicting claims", () => {
+		const resolutions = new Map([
+			[0, writeX],
+			[2, writeY],
+			[3, readY],
+		]);
+		// 0 settled, 2 running but non-conflicting, 3 running but non-conflicting.
+		expect(conflictsWithUnsettledClaim(1, readX, new Set(), new Set([0]), new Set([2, 3]), resolutions)).toBe(false);
+		// Same inputs but 0 unsettled and conflicting → blocked.
+		expect(conflictsWithUnsettledClaim(1, readX, new Set(), new Set(), new Set([2, 3]), resolutions)).toBe(true);
+		// Earlier call inside the ready re-plan is excluded — sub-level packing orders it.
+		expect(conflictsWithUnsettledClaim(1, readX, new Set([0]), new Set(), new Set([2, 3]), resolutions)).toBe(false);
 	});
 
 	it("is never slower than the barrier schedule (randomized critical path)", () => {

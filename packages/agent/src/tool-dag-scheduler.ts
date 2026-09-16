@@ -55,6 +55,12 @@ export interface DagSchedulePlan {
 	 * execution timing/outcomes). Stable under claim reordering within a call.
 	 */
 	planKey: string;
+	/**
+	 * The resolved, canonicalized claim entries the plan was built from. Callers
+	 * that re-resolve claims after argument mutation (e.g. authorization hooks)
+	 * compare against these to detect scope drift. Read-only for consumers.
+	 */
+	entries: readonly ResolvedClaimEntry[];
 }
 
 /** One tool call's resolved claim data, canonicalized for stable planning. */
@@ -257,5 +263,42 @@ export async function scheduleDagLevels(
 	const entries = await resolveBatchClaims(toolCalls, options);
 	const baseLevels = assignDagLevels(entries);
 	const levels = applyConcurrencyCap(baseLevels, options.maxConcurrency);
-	return { levels, planKey: computePlanKey(entries) };
+	return { levels, planKey: computePlanKey(entries), entries };
+}
+
+/**
+ * True when executing `sourceIndex` now would overlap an unsettled call whose
+ * known claims conflict with `finalResolution`.
+ *
+ * Two distinct violations are covered:
+ * - Earlier-source unsettled calls: the initial plan already ordered that
+ *   pair, so only post-hook scope drift can create the situation; the caller
+ *   defers the call instead of silently reversing the conflict pair.
+ * - Later-source calls that are already running (present in `running`): a
+ *   hook that expands this call's scope onto their claims must defer — the
+ *   running call cannot be un-started. Later-source calls that are merely
+ *   pending keep source order: they may not overlap this call once it runs.
+ *
+ * Earlier-source calls inside `ready` (this same re-plan) are excluded — the
+ * sub-level packing orders them.
+ */
+export function conflictsWithUnsettledClaim(
+	sourceIndex: number,
+	finalResolution: ToolClaimResolution,
+	ready: ReadonlySet<number>,
+	settled: ReadonlySet<number>,
+	running: ReadonlySet<number>,
+	resolutions: ReadonlyMap<number, ToolClaimResolution>,
+): boolean {
+	for (const [otherIndex, resolution] of resolutions) {
+		if (otherIndex === sourceIndex || settled.has(otherIndex)) continue;
+		if (otherIndex < sourceIndex) {
+			if (ready.has(otherIndex)) continue;
+		} else if (!running.has(otherIndex)) {
+			// Later-source and not running: source order wins, no constraint.
+			continue;
+		}
+		if (resolutionsConflict(resolution, finalResolution)) return true;
+	}
+	return false;
 }

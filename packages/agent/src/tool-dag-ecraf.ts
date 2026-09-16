@@ -53,6 +53,73 @@ export interface EcrafAdmissionPlan {
 	readonly deferred: readonly number[];
 }
 
+/**
+ * Numeric contract for one admission pass (audit §5.3): every resource
+ * demand, running usage, and capacity is a finite non-negative number; the
+ * slot budget is a non-negative integer; epsilon is finite and positive;
+ * ranking weights are finite and non-negative; candidate source indices and
+ * ready sequences are unique, finite integers. Violating these invariants
+ * silently poisons the plan — NaN makes every capacity check pass, negative
+ * demand manufactures capacity, a fractional slot admits ⌈slots⌉ nodes, and
+ * duplicate source indices make the admit list ambiguous — so malformed input
+ * is rejected up front rather than coerced into "unbounded".
+ */
+function assertFiniteNonNegative(value: number, label: string): void {
+	if (!Number.isFinite(value) || value < 0) {
+		throw new RangeError(`${label} must be a finite non-negative number, got ${String(value)}`);
+	}
+}
+
+function assertInputContract(options: EcrafAdmissionsOptions): void {
+	const { candidates, runningUsage, capacities, slots, epsilon = 1e-6, resourceWeights = {} } = options;
+
+	if (!Number.isInteger(slots) || slots < 0) {
+		throw new RangeError(`slots must be a non-negative integer, got ${String(slots)}`);
+	}
+	if (!Number.isFinite(epsilon) || epsilon <= 0) {
+		throw new RangeError(`epsilon must be a finite positive number, got ${String(epsilon)}`);
+	}
+
+	const seenSourceIndices = new Set<number>();
+	const seenReadySeqs = new Set<number>();
+	for (const [position, node] of candidates.entries()) {
+		if (!Number.isInteger(node.sourceIndex) || node.sourceIndex < 0) {
+			throw new RangeError(
+				`candidates[${position}].sourceIndex must be a non-negative integer, got ${String(node.sourceIndex)}`,
+			);
+		}
+		if (seenSourceIndices.has(node.sourceIndex)) {
+			throw new RangeError(
+				`duplicate candidates[].sourceIndex ${node.sourceIndex} — admit results must be unique per node`,
+			);
+		}
+		seenSourceIndices.add(node.sourceIndex);
+		if (!Number.isInteger(node.readySeq) || node.readySeq < 0) {
+			throw new RangeError(
+				`candidates[${position}].readySeq must be a non-negative integer, got ${String(node.readySeq)}`,
+			);
+		}
+		if (seenReadySeqs.has(node.readySeq)) {
+			throw new RangeError(`duplicate candidates[].readySeq ${node.readySeq} — ready ordering must be unambiguous`);
+		}
+		seenReadySeqs.add(node.readySeq);
+		assertFiniteNonNegative(node.priority, `candidates[${position}].priority`);
+		for (const [name, demand] of Object.entries(node.resources)) {
+			assertFiniteNonNegative(demand, `candidates[${position}].resources.${name}`);
+		}
+	}
+
+	for (const [name, value] of Object.entries(runningUsage)) {
+		assertFiniteNonNegative(value, `runningUsage.${name}`);
+	}
+	for (const [name, value] of Object.entries(capacities)) {
+		assertFiniteNonNegative(value, `capacities.${name}`);
+	}
+	for (const [name, value] of Object.entries(resourceWeights)) {
+		assertFiniteNonNegative(value, `resourceWeights.${name}`);
+	}
+}
+
 function resourceCost(node: EcrafCandidate, weights: Readonly<Record<string, number>>): number {
 	let cost = 0;
 	for (const name of Object.keys(node.resources)) {
@@ -89,6 +156,7 @@ function reserve(node: EcrafCandidate, used: Map<string, number>): void {
  * readySeq, then sourceIndex); `deferred` preserves source order.
  */
 export function planEcrafAdmissions(options: EcrafAdmissionsOptions): EcrafAdmissionPlan {
+	assertInputContract(options);
 	const { candidates, runningUsage, capacities, slots, epsilon = 1e-6, resourceWeights = {}, conflicts } = options;
 
 	// Seed running usage so newly admitted nodes consume from the same budget.

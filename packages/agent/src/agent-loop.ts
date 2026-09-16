@@ -19,14 +19,8 @@ import { pinProviderConfig, requestAssistantResponse } from "./provider-request.
 
 export { getVisionRouteModel, isVisionRouteModel, VISION_ROUTE_MODEL } from "./vision-route.ts";
 
-import {
-	applyConcurrencyCap,
-	assignDagDependencies,
-	conflictsWithUnsettledPredecessor,
-	type DagSchedulePlan,
-	type ScheduleDagLevelsOptions,
-	scheduleDagLevels,
-} from "./tool-dag-scheduler.ts";
+import { type DagScheduleCache, scheduleDagLevelsMemo as scheduleDagLevelsMemoFromModule } from "./tool-dag-memo.ts";
+import { applyConcurrencyCap, assignDagDependencies, conflictsWithUnsettledClaim } from "./tool-dag-scheduler.ts";
 import {
 	awaitWithAbort,
 	createErrorToolResult,
@@ -823,9 +817,6 @@ async function executeToolCallsInWaves(
 	return { messages, terminate: terminated, stopRun };
 }
 
-/** Bounded per-run memo for DAG schedules; plans are pure functions of the keyed inputs. */
-type DagScheduleCache = Map<string, DagSchedulePlan>;
-
 /**
  * Shared scheduling state for one DAG batch: the last known claim resolution
  * per source index, calls deferred because a post-hook claim change would
@@ -835,78 +826,14 @@ type DagScheduleCache = Map<string, DagSchedulePlan>;
  */
 interface DagBatchScheduleState {
 	readonly resolutions: Map<number, ToolClaimResolution>;
-	readonly deferred: Array<{ sourceIndex: number; preparation: PreparedToolCall }>;
+	/**
+	 * Calls deferred because their post-hook claims conflict with an unsettled
+	 * or running call. Caching the prepared call plus its final claims means a
+	 * later scan retries admission without re-running authorization side
+	 * effects (interactive approvals, audit writes, token mints, arg rewrites).
+	 */
+	readonly deferred: Map<number, { preparation: PreparedToolCall; resolution: ToolClaimResolution }>;
 	readonly settled: Set<number>;
-}
-
-const DAG_SCHEDULE_CACHE_LIMIT = 64;
-
-/**
- * Canonical key covering every input claim resolution depends on. A custom
- * `resourceKeyResolver` function cannot be fingerprinted, so callers skip the
- * memo entirely when one is configured. Within a run, tool definitions (and
- * their `resourceClaims` closures) are stable, so name/mode/claims-presence
- * fingerprints are sufficient.
- */
-function dagScheduleCacheKey(toolCalls: readonly ClaimableToolCall[], options: ScheduleDagLevelsOptions): string {
-	const policies = [...(options.toolPolicies?.entries() ?? [])].sort(([left], [right]) =>
-		left < right ? -1 : left > right ? 1 : 0,
-	);
-	const registered = (options.registeredTools ?? []).map((tool) => [
-		tool.name,
-		tool.executionMode ?? "",
-		typeof tool.resourceClaims === "function" ? "1" : "0",
-	]);
-	return JSON.stringify([
-		toolCalls.map((call) => [call.name, call.arguments ?? null]),
-		options.cwd,
-		options.strictExtensionClaims === true,
-		options.maxConcurrency ?? null,
-		policies,
-		registered,
-	]);
-}
-
-/**
- * Schedule with a per-run memo. Identical batches (provider retries, stubborn
- * re-emissions) re-resolve path identities and custom claims; the plan is a
- * pure function of the canonical inputs, so replaying it is safe. Returns
- * `null` when the underlying schedule was aborted. Cached levels are handed
- * out as copies because callers append to and reorder them.
- */
-export async function scheduleDagLevelsMemo(
-	toolCalls: readonly ClaimableToolCall[],
-	options: ScheduleDagLevelsOptions,
-	signal: AbortSignal | undefined,
-	cache: DagScheduleCache,
-): Promise<DagSchedulePlan | null> {
-	if (options.resourceKeyResolver) {
-		const scheduled = await awaitWithAbort(() => scheduleDagLevels(toolCalls, options), signal);
-		return scheduled.kind === "aborted" ? null : scheduled.value;
-	}
-	const key = dagScheduleCacheKey(toolCalls, options);
-	const cached = cache.get(key);
-	if (cached) {
-		cache.delete(key);
-		cache.set(key, cached);
-		return { levels: cached.levels.map((level) => level.slice()), planKey: cached.planKey, entries: cached.entries };
-	}
-	const scheduled = await awaitWithAbort(() => scheduleDagLevels(toolCalls, options), signal);
-	if (scheduled.kind === "aborted") {
-		return null;
-	}
-	if (cache.size >= DAG_SCHEDULE_CACHE_LIMIT) {
-		const oldest = cache.keys().next();
-		if (!oldest.done) {
-			cache.delete(oldest.value);
-		}
-	}
-	cache.set(key, {
-		levels: scheduled.value.levels.map((level) => level.slice()),
-		planKey: scheduled.value.planKey,
-		entries: scheduled.value.entries,
-	});
-	return scheduled.value;
 }
 
 /**
@@ -940,7 +867,7 @@ async function schedulePlannedDagLevels(
 			immediateSourceIndices.push(sourceIndex);
 		}
 	});
-	const scheduled = await scheduleDagLevelsMemo(
+	const scheduled = await scheduleDagLevelsMemoFromModule(
 		claimableCalls,
 		{
 			cwd: config.cwd ?? process.cwd(),
@@ -1014,7 +941,7 @@ async function executeToolCallsDagLevels(
 	const levels = schedule.levels;
 	const batchState: DagBatchScheduleState = {
 		resolutions: schedule.resolutions,
-		deferred: [],
+		deferred: new Map(),
 		settled: new Set(),
 	};
 
@@ -1159,110 +1086,178 @@ async function runDagFrontier(
 	let stoppedByUnsettledTimeout = false;
 	let terminated = false;
 
+	// Readiness bookkeeping: each pending call tracks how many of its
+	// predecessors are still unsettled, and each settle decrements only its
+	// successors — the per-settle cost is proportional to the out-degree of the
+	// finished call, not to a full rescan of every pending dependency list.
+	const remainingPredecessors = new Map<number, number>();
+	const successors = new Map<number, number[]>();
+	for (const sourceIndex of pending) {
+		const blockers = dependencies.get(sourceIndex) ?? [];
+		remainingPredecessors.set(sourceIndex, blockers.filter((blocker) => !state.settled.has(blocker)).length);
+		for (const blocker of blockers) {
+			const followers = successors.get(blocker);
+			if (followers) followers.push(sourceIndex);
+			else successors.set(blocker, [sourceIndex]);
+		}
+	}
+
 	const settle = async (outcome: DagLevelOutcome): Promise<void> => {
 		outcomes.push(outcome);
 		state.settled.add(outcome.sourceIndex);
+		for (const follower of successors.get(outcome.sourceIndex) ?? []) {
+			const remaining = (remainingPredecessors.get(follower) ?? 0) - 1;
+			remainingPredecessors.set(follower, Math.max(0, remaining));
+		}
 		if (await hasUnsettledTimeout([outcome.finalized])) stoppedByUnsettledTimeout = true;
 	};
 
-	while (!signal?.aborted && !stoppedByUnsettledTimeout && !terminated) {
-		// Termination is a property of a settled group, not of one call:
-		// shouldTerminateToolBatch requires every member to terminate. Evaluating it
-		// only when nothing is in flight keeps the barrier executor's semantics,
-		// where a call sharing a level with a non-terminating peer did not end the
-		// batch. Judging a single outcome would terminate on the first terminating
-		// call and strand its concurrent peers.
-		if (running.size === 0 && shouldTerminateToolBatch(outcomes.map((outcome) => outcome.finalized))) {
-			terminated = true;
-			break;
-		}
-		let admitted = false;
-		for (let position = 0; position < pending.length && running.size < cap; ) {
-			if (signal?.aborted || stoppedByUnsettledTimeout) break;
-			const sourceIndex = pending[position];
-			if (!(dependencies.get(sourceIndex) ?? []).every((blocker) => state.settled.has(blocker))) {
-				position++;
-				continue;
+	try {
+		while (!signal?.aborted && !stoppedByUnsettledTimeout && !terminated) {
+			// Termination is a property of a settled group, not of one call:
+			// shouldTerminateToolBatch requires every member to terminate. Evaluating it
+			// only when nothing is in flight keeps the barrier executor's semantics,
+			// where a call sharing a level with a non-terminating peer did not end the
+			// batch. Judging a single outcome would terminate on the first terminating
+			// call and strand its concurrent peers.
+			if (running.size === 0 && shouldTerminateToolBatch(outcomes.map((outcome) => outcome.finalized))) {
+				terminated = true;
+				break;
 			}
-			const plan = plans[sourceIndex];
-			const preparation =
-				plan.kind === "immediate"
-					? plan
-					: await authorizePlannedToolCall(currentContext, assistantMessage, plan, config, signal);
-			if (preparation.kind === "immediate") {
+			let admitted = false;
+			for (let position = 0; position < pending.length && running.size < cap; ) {
+				if (signal?.aborted || stoppedByUnsettledTimeout) break;
+				const sourceIndex = pending[position];
+				if ((remainingPredecessors.get(sourceIndex) ?? 0) > 0) {
+					position++;
+					continue;
+				}
+				const cached = state.deferred.get(sourceIndex);
+				let preparation: PreparedToolCall;
+				let resolved: ToolClaimResolution;
+				if (cached) {
+					preparation = cached.preparation;
+					resolved = cached.resolution;
+				} else {
+					const plan = plans[sourceIndex];
+					const preparedOutcome =
+						plan.kind === "immediate"
+							? plan
+							: await authorizePlannedToolCall(currentContext, assistantMessage, plan, config, signal);
+					if (preparedOutcome.kind === "immediate") {
+						pending.splice(position, 1);
+						admitted = true;
+						await settle({
+							sourceIndex,
+							finalized: {
+								toolCall: toolCalls[sourceIndex],
+								result: preparedOutcome.result,
+								isError: preparedOutcome.isError,
+								envelope: preparedOutcome.envelope,
+							},
+						});
+						continue;
+					}
+					preparation = preparedOutcome;
+					const resolution = await resolveFinalResolution(preparation, toolPolicies, config, signal);
+					if (resolution.kind === "immediate") {
+						pending.splice(position, 1);
+						admitted = true;
+						await settle({
+							sourceIndex,
+							finalized: {
+								toolCall: preparation.toolCall,
+								result: resolution.result,
+								isError: resolution.isError,
+								envelope: resolution.envelope,
+							},
+						});
+						continue;
+					}
+					resolved = resolution;
+				}
+				state.resolutions.set(sourceIndex, resolved);
+				if (
+					conflictsWithUnsettledClaim(
+						sourceIndex,
+						resolved,
+						NO_READY_PEERS,
+						state.settled,
+						new Set(running.keys()),
+						state.resolutions,
+					)
+				) {
+					// Defer without losing the prepared call: a later scan retries
+					// admission from this cache instead of re-invoking authorization.
+					if (!cached) state.deferred.set(sourceIndex, { preparation, resolution: resolved });
+					position++;
+					continue;
+				}
+				state.deferred.delete(sourceIndex);
 				pending.splice(position, 1);
 				admitted = true;
-				await settle({
+				await emitToolExecutionStart(preparation, emit);
+				running.set(
 					sourceIndex,
-					finalized: {
-						toolCall: toolCalls[sourceIndex],
-						result: preparation.result,
-						isError: preparation.isError,
-						envelope: preparation.envelope,
-					},
-				});
+					(async (): Promise<DagLevelOutcome> => {
+						const executed = await executePreparedToolCall(preparation, config, signal, emit);
+						const finalized = await finalizeExecutedToolCall({
+							currentContext,
+							assistantMessage,
+							prepared: preparation,
+							executed,
+							afterToolCall: config.afterToolCall,
+							signal,
+						});
+						await emitToolExecutionEnd(finalized, emit);
+						return { sourceIndex, finalized };
+					})(),
+				);
+			}
+			if (running.size === 0) {
+				// Nothing is in flight: either every call settled, or the remainder is
+				// blocked with nothing left that could unblock it. A pending call that
+				// can never become ready still gets an explicit terminal outcome rather
+				// than vanishing from the batch.
+				if (!admitted) {
+					for (const sourceIndex of pending.splice(0)) {
+						await settle({
+							sourceIndex,
+							finalized: {
+								toolCall: toolCalls[sourceIndex],
+								result: createErrorToolResult(
+									"DAG dependency deadlock: call could not become ready and nothing is running to unblock it",
+								),
+								isError: true,
+								envelope: createToolResultEnvelope({
+									disposition: "failed",
+									synthetic: true,
+									executionStarted: false,
+									reason: "DAG dependency deadlock",
+								}),
+							},
+						});
+					}
+					break;
+				}
 				continue;
 			}
-			const resolved = await resolveFinalResolution(preparation, toolPolicies, config, signal);
-			if (resolved.kind === "immediate") {
-				pending.splice(position, 1);
-				admitted = true;
-				await settle({
-					sourceIndex,
-					finalized: {
-						toolCall: preparation.toolCall,
-						result: resolved.result,
-						isError: resolved.isError,
-						envelope: resolved.envelope,
-					},
-				});
-				continue;
-			}
-			state.resolutions.set(sourceIndex, resolved);
-			if (
-				conflictsWithUnsettledPredecessor(sourceIndex, resolved, NO_READY_PEERS, state.settled, state.resolutions)
-			) {
-				position++;
-				continue;
-			}
-			pending.splice(position, 1);
-			admitted = true;
-			await emitToolExecutionStart(preparation, emit);
-			running.set(
-				sourceIndex,
-				(async (): Promise<DagLevelOutcome> => {
-					const executed = await executePreparedToolCall(preparation, config, signal, emit);
-					const finalized = await finalizeExecutedToolCall({
-						currentContext,
-						assistantMessage,
-						prepared: preparation,
-						executed,
-						afterToolCall: config.afterToolCall,
-						signal,
-					});
-					await emitToolExecutionEnd(finalized, emit);
-					return { sourceIndex, finalized };
-				})(),
-			);
+			const finished = await Promise.race([...running.values()]);
+			running.delete(finished.sourceIndex);
+			await settle(finished);
 		}
-		if (running.size === 0) {
-			// Nothing is in flight: either every call settled, or the remainder is
-			// blocked with nothing left that could unblock it.
-			if (!admitted) break;
-			continue;
+	} finally {
+		// Join work already in flight: cancellation, termination, and propagation
+		// of preparation/event errors all preserve ownership of started
+		// executions rather than abandoning them mid-flight.
+		while (running.size > 0) {
+			const entries = [...running.entries()];
+			const drained = await Promise.allSettled(entries.map(([, task]) => task));
+			for (const [index, drainedResult] of drained.entries()) {
+				running.delete(entries[index][0]);
+				if (drainedResult.status === "fulfilled") await settle(drainedResult.value);
+			}
 		}
-		const finished = await Promise.race([...running.values()]);
-		running.delete(finished.sourceIndex);
-		await settle(finished);
-	}
-
-	// Join work already in flight: cancellation and termination stop admission,
-	// they do not abandon an execution this batch already owns.
-	while (running.size > 0) {
-		const finished = await Promise.race([...running.values()]);
-		running.delete(finished.sourceIndex);
-		outcomes.push(finished);
-		state.settled.add(finished.sourceIndex);
 	}
 	return { outcomes, stoppedByUnsettledTimeout, terminated };
 }
