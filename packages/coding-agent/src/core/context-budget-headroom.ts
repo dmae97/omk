@@ -28,6 +28,41 @@ const TIGHT_CACHE_HIT_BONUS = 20;
 const MATERIALIZED_CACHE_HIT_BONUS = 8;
 const TIGHT_MATERIALIZED_CACHE_HIT_BONUS = 35;
 
+/**
+ * Budget-independent admissibility for one representation candidate — the
+ * same gate {@link chooseHeadroomRepresentation} applies via its per-kind
+ * rejections. Ranking and selection must share this set, otherwise a cheap
+ * representation the chooser could never pick distorts the density
+ * denominator (an item ranked on a 1-token pointer it can only use as a
+ * 80-token full text is admitted ahead of genuinely denser items).
+ *
+ * Budget feasibility (`estimatedTokens <= spendable`) is deliberately NOT
+ * here: it is a ranking-time property, not an admissibility property.
+ */
+export function isRepresentationEligible(
+	candidate: ContextRepresentationCandidateV2,
+	item: ContextBudgetItemV2,
+	policy: HeadroomQualityPolicyV2 = DEFAULT_HEADROOM_QUALITY_POLICY,
+): boolean {
+	if (candidate.kind === "omit") return policy.allowOmit;
+	// A non-full representation that does not actually save tokens is never a
+	// real choice; counting it as admissible only flatters the cost model.
+	if (candidate.kind !== "full" && candidate.estimatedTokens >= fullTextTokens(item)) return false;
+	const retrievable = item.sourceRef?.retrievable === true;
+	switch (candidate.kind) {
+		case "full":
+			return true;
+		case "pointer":
+			return policy.preferPointerForRetrievable && retrievable;
+		case "headroom-compressed":
+			return retrievable;
+		case "summary":
+			return true;
+		default:
+			return false;
+	}
+}
+
 export function chooseHeadroomRepresentation(
 	item: ContextBudgetItemV2,
 	budget: RepresentationBudgetContext,
@@ -56,6 +91,9 @@ export function chooseHeadroomRepresentation(
 	let best: ContextRepresentationCandidateV2 | undefined;
 	let bestScore = Number.NEGATIVE_INFINITY;
 	for (const candidate of candidates) {
+		if (!isRepresentationEligible(candidate, item, policy)) {
+			continue;
+		}
 		if (isMoreExpensiveThanFull(candidate, full)) {
 			continue;
 		}

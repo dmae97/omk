@@ -38,7 +38,14 @@ export interface TokenOptimizerRuntimeStatus {
 }
 
 export interface TierBudgetPolicyV2 {
+	/**
+	 * Guaranteed share of the available budget the floor-reservation pass
+	 * spends on this tier's own items before leftovers compete globally.
+	 * A real reservation — not merely a lower bound on the ceiling — so a
+	 * higher-scored item in another tier cannot starve this tier's minimum.
+	 */
 	readonly floorPct: number;
+	/** Hard cap on this tier's share; selection above it is omitted. */
 	readonly ceilingPct: number;
 }
 
@@ -120,6 +127,8 @@ export type QualityDiagnosticReasonV2 =
 	| "hard_pin_over_capacity"
 	| "coverage_gap"
 	| "tier_ceiling_exceeded"
+	| "tier_floor_over_budget"
+	| "invalid_input"
 	| "invalid_budget";
 
 export interface QualityDiagnosticV2 {

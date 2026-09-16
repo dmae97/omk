@@ -34,56 +34,21 @@ export function allocateTiers(
 	demand: Map<ContextBudgetTierV2, RawTierDemand>,
 ): Map<ContextBudgetTierV2, RawTierAllocation> {
 	const out = new Map<ContextBudgetTierV2, RawTierAllocation>();
-	const floors = {} as Record<ContextBudgetTierV2, number>;
-	const ceilings = {} as Record<ContextBudgetTierV2, number>;
-	const wants = {} as Record<ContextBudgetTierV2, number>;
 
 	for (const tier of ALL_TIERS_V2) {
 		const floor = Math.max(0, Math.floor(policy[tier].floorPct * available));
 		const ceiling = Math.max(floor, Math.floor(policy[tier].ceilingPct * available));
 		const entry = demand.get(tier) ?? { demand: 0, hard: 0 };
 		const want = Math.max(entry.demand, entry.hard);
-		floors[tier] = floor;
-		ceilings[tier] = ceiling;
-		wants[tier] = want;
-		out.set(tier, { floor, ceiling, allocated: Math.min(want, Math.max(ceiling, entry.hard)) });
-	}
-
-	let totalAllocated = 0;
-	for (const tier of ALL_TIERS_V2) {
-		totalAllocated += out.get(tier)?.allocated ?? 0;
-	}
-	let residual = available - totalAllocated;
-	if (residual <= 0) {
-		return out;
-	}
-
-	const shortfalls = collectShortfalls(out, wants);
-	const totalGap = shortfalls.reduce((sum, shortfall) => sum + shortfall.gap, 0);
-	if (totalGap <= 0) {
-		return out;
-	}
-	for (const { tier, gap } of shortfalls) {
-		const share = Math.min(gap, Math.floor((residual * gap) / totalGap));
-		if (share <= 0) continue;
-		const entry = out.get(tier);
-		if (!entry) continue;
-		out.set(tier, { ...entry, allocated: entry.allocated + share });
-		residual -= share;
+		// `allocated` is the tier's guaranteed claim — what the floor pass is
+		// entitled to spend on this tier's own items before global competition:
+		// its hard demand (always admitted) or, beyond that, its demand capped
+		// at the floor. The previous residual-redistribution loop could never
+		// move this number on normal input (min(want, max(ceiling, hard)) makes
+		// want-allocated or ceiling-allocated zero), so it is removed rather
+		// than kept as dead code. Leftover budget competes globally in the
+		// ceiling-bounded selection pass instead.
+		out.set(tier, { floor, ceiling, allocated: Math.min(want, Math.max(floor, entry.hard)) });
 	}
 	return out;
-}
-
-function collectShortfalls(
-	allocations: ReadonlyMap<ContextBudgetTierV2, RawTierAllocation>,
-	wants: Record<ContextBudgetTierV2, number>,
-): { tier: ContextBudgetTierV2; gap: number }[] {
-	const shortfalls: { tier: ContextBudgetTierV2; gap: number }[] = [];
-	for (const tier of ALL_TIERS_V2) {
-		const entry = allocations.get(tier);
-		if (!entry) continue;
-		const gap = Math.min(Math.max(0, wants[tier] - entry.allocated), Math.max(0, entry.ceiling - entry.allocated));
-		if (gap > 0) shortfalls.push({ tier, gap });
-	}
-	return shortfalls;
 }

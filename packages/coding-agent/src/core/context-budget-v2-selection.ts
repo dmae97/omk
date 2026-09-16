@@ -5,9 +5,7 @@ import {
 	type ContextSourceRefV2,
 	chooseHeadroomRepresentation,
 	deriveRepresentationCandidates,
-	fullTextTokens,
 } from "./context-budget-headroom.ts";
-import { createFallbackTokenCounter, type TokenCounterAdapter } from "./context-budget-token-counter.ts";
 import {
 	applyRepresentationCacheV2,
 	type ContextBudgetSelectionCacheV2,
@@ -15,8 +13,7 @@ import {
 } from "./context-budget-v2-cache.ts";
 import { recordContextBudgetRepresentationCacheHitV2 } from "./context-budget-v2-cache-telemetry.ts";
 import { computeCoverageGap } from "./context-budget-v2-coverage.ts";
-import { contentHashOf } from "./context-budget-v2-plan-hash.ts";
-import { applyRedundancyPenalties, type PlannedItemV2, scoreContextBudgetItemV2 } from "./context-budget-v2-scoring.ts";
+import { applyRedundancyPenalties, type PlannedItemV2 } from "./context-budget-v2-scoring.ts";
 import {
 	ALL_TIERS_V2,
 	type QualityDiagnosticV2,
@@ -35,49 +32,21 @@ export interface OptionalSelectionState {
 	readonly selection: Map<string, SelectedRepresentationV2>;
 	readonly tierUsed: Record<ContextBudgetTierV2, number>;
 	readonly usedTokens: number;
-}
-
-/**
- * Cheapest non-omit representation cost for an item, i.e. what admitting it
- * actually costs when the budget is tight. Falls back to full text when no
- * cheaper representation exists.
- */
-function minAdmissibleTokens(candidates: readonly ContextRepresentationCandidateV2[], fullTokens: number): number {
-	let min = Number.POSITIVE_INFINITY;
-	for (const candidate of candidates) {
-		if (candidate.kind === "omit") continue;
-		if (candidate.estimatedTokens < min) min = candidate.estimatedTokens;
-	}
-	return Math.max(1, Number.isFinite(min) ? min : fullTokens);
-}
-
-export function createPlannedItems(
-	items: readonly ContextBudgetItemV2[],
-	tokenCounter: TokenCounterAdapter | undefined,
-	modelId: string,
-	qualityPolicy?: Parameters<typeof deriveRepresentationCandidates>[1],
-): PlannedItemV2[] {
-	const counter = tokenCounter ?? createFallbackTokenCounter();
-	return items.map((item) => {
-		const overrideTokenEstimate = item.tokenEstimate ?? counter.countText(item.text, modelId).tokens;
-		const itemWithTokens =
-			item.tokenEstimate === undefined ? { ...item, tokenEstimate: overrideTokenEstimate } : item;
-		const fullTokens = fullTextTokens(itemWithTokens);
-		const isHard = item.priority === "hard" || item.required === true;
-		const baseScore = isHard ? Number.POSITIVE_INFINITY : scoreContextBudgetItemV2(itemWithTokens, fullTokens);
-		const candidates =
-			itemWithTokens.representations ?? deriveRepresentationCandidates(itemWithTokens, qualityPolicy);
-		return {
-			item: itemWithTokens,
-			fullTokens,
-			admissibleTokens: minAdmissibleTokens(candidates, fullTokens),
-			contentHash: contentHashOf(item.text),
-			baseScore,
-			redundancyPenalty: 0,
-			effectiveScore: baseScore,
-			isHard,
-		};
-	});
+	/**
+	 * Floor-reservation pass state. When set and the item belongs to this
+	 * tier, the call admits it only while the tier's floor has headroom; an
+	 * item that cannot fit inside the remaining floor is left unselected
+	 * (never omitted) for the later global pass to reconsider under the
+	 * tier's ceiling.
+	 */
+	readonly floorReservation?: { readonly tier: ContextBudgetTierV2; readonly floorTokens: number };
+	/**
+	 * Cache-resolved candidates per item, shared across the floor and global
+	 * passes so one item does not double-count provider reads (negative hits,
+	 * stale rejects, misses) or repeat materialization work when it is
+	 * reconsidered.
+	 */
+	readonly resolvedCandidates?: Map<string, readonly ContextRepresentationCandidateV2[]>;
 }
 
 export function applyPlannerRedundancyPenalties(plannedItems: PlannedItemV2[]): void {
@@ -108,17 +77,35 @@ export function selectHardItem(
 }
 
 export function selectOptionalItem(planned: PlannedItemV2, state: OptionalSelectionState): number {
-	if (state.usedTokens >= state.available) {
-		omitItem(planned, state);
+	const floorPass =
+		state.floorReservation !== undefined && planned.item.tier === state.floorReservation.tier
+			? state.floorReservation
+			: undefined;
+	if (floorPass !== undefined && state.tierUsed[planned.item.tier] >= floorPass.floorTokens) {
+		// This tier's guaranteed claim is already spent; leave the item for the
+		// global pass rather than consuming another tier's budget.
 		return state.usedTokens;
 	}
-	const tierCeiling = state.allocation.get(planned.item.tier)?.ceiling ?? state.available;
+	if (state.usedTokens >= state.available) {
+		if (floorPass === undefined) omitItem(planned, state);
+		return state.usedTokens;
+	}
+	// During the floor pass the binding cap is the tier's remaining floor;
+	// afterwards the tier's ceiling (or the global remainder) applies.
+	const tierCeiling =
+		floorPass !== undefined
+			? floorPass.floorTokens
+			: (state.allocation.get(planned.item.tier)?.ceiling ?? state.available);
 	const remaining = Math.max(0, state.available - state.usedTokens);
 	const candidates = planned.item.representations ?? deriveRepresentationCandidates(planned.item, state.qualityPolicy);
 	const materializedEnabled = planned.item.representations === undefined;
-	const cachedCandidates = state.cache
-		? applyRepresentationCacheV2({ planned, candidates, cache: state.cache, materializedEnabled })
-		: candidates;
+	let cachedCandidates = state.resolvedCandidates?.get(planned.item.id);
+	if (cachedCandidates === undefined) {
+		cachedCandidates = state.cache
+			? applyRepresentationCacheV2({ planned, candidates, cache: state.cache, materializedEnabled })
+			: candidates;
+		state.resolvedCandidates?.set(planned.item.id, cachedCandidates);
+	}
 	const chosen = chooseHeadroomRepresentation(
 		{ ...planned.item, representations: cachedCandidates },
 		{
@@ -129,6 +116,11 @@ export function selectOptionalItem(planned: PlannedItemV2, state: OptionalSelect
 		state.qualityPolicy,
 	);
 	if (chosen.kind === "omit") {
+		if (floorPass !== undefined) {
+			// No admissible representation fits inside the remaining floor; the
+			// global pass may still admit it against the tier's ceiling.
+			return state.usedTokens;
+		}
 		const tierRemaining = Math.max(0, tierCeiling - state.tierUsed[planned.item.tier]);
 		const globalFit = cachedCandidates.filter(
 			(candidate) => candidate.kind !== "omit" && candidate.estimatedTokens <= remaining,
@@ -146,6 +138,9 @@ export function selectOptionalItem(planned: PlannedItemV2, state: OptionalSelect
 		return state.usedTokens;
 	}
 	if (state.tierUsed[planned.item.tier] + chosen.estimatedTokens > tierCeiling) {
+		if (floorPass !== undefined) {
+			return state.usedTokens;
+		}
 		state.diagnostics.push({
 			reason: "tier_ceiling_exceeded",
 			itemId: planned.item.id,
@@ -155,7 +150,7 @@ export function selectOptionalItem(planned: PlannedItemV2, state: OptionalSelect
 		return state.usedTokens;
 	}
 	if (state.usedTokens + chosen.estimatedTokens > state.available) {
-		omitItem(planned, state);
+		if (floorPass === undefined) omitItem(planned, state);
 		return state.usedTokens;
 	}
 	if (state.cache) {
@@ -236,17 +231,7 @@ export function buildTierAllocations(
 }
 
 export function createTierUsage(): Record<ContextBudgetTierV2, number> {
-	return {
-		system: 0,
-		"active-goal": 0,
-		"current-files": 0,
-		tools: 0,
-		skills: 0,
-		mcp: 0,
-		history: 0,
-		evidence: 0,
-		scratch: 0,
-	};
+	return Object.fromEntries(ALL_TIERS_V2.map((tier) => [tier, 0])) as Record<ContextBudgetTierV2, number>;
 }
 
 function toSelected(itemId: string, candidate: ContextRepresentationCandidateV2): SelectedRepresentationV2 {

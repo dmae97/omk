@@ -1,6 +1,7 @@
 import {
 	type ContextBudgetItemV2,
 	type ContextBudgetTierV2,
+	type ContextRepresentationCandidateV2,
 	type ContextSourceRefV2,
 	DEFAULT_HEADROOM_QUALITY_POLICY,
 } from "./context-budget-headroom.ts";
@@ -12,12 +13,14 @@ import {
 	readValidPlanCacheV2,
 	writePlanCacheV2,
 } from "./context-budget-v2-cache.ts";
+import { validateBudgetItems } from "./context-budget-v2-input-validation.ts";
+import { buildObservability } from "./context-budget-v2-observability.ts";
 import { computePlanHash } from "./context-budget-v2-plan-hash.ts";
+import { createPlannedItems } from "./context-budget-v2-planned-items.ts";
 import { compareOptionalForSelection } from "./context-budget-v2-scoring.ts";
 import {
 	applyPlannerRedundancyPenalties,
 	buildTierAllocations,
-	createPlannedItems,
 	createTierUsage,
 	emitCoverageDiagnostics,
 	emitOmissionDiagnostics,
@@ -26,24 +29,15 @@ import {
 } from "./context-budget-v2-selection.ts";
 import { allocateTiers, computeTierDemand } from "./context-budget-v2-tiers.ts";
 import {
+	ALL_TIERS_V2,
 	CONTEXT_BUDGET_POLICY_VERSION_V2,
 	DEFAULT_TIER_POLICY_V2,
 	type PromptContextBudgetInputV2,
-	type PromptContextBudgetObservabilityV2,
 	type PromptContextBudgetPlanV2,
 	type QualityDiagnosticV2,
 	type SelectedRepresentationV2,
 	type TierBudgetPolicyV2,
-	type TokenOptimizerRuntimeStatus,
 } from "./context-budget-v2-types.ts";
-
-const TOKEN_OPTIMIZER_RUNTIME_STATUS: TokenOptimizerRuntimeStatus = {
-	optimizerId: "legacy-token-optimizer",
-	status: "quarantined_compatibility",
-	active: false,
-	activeContextBudgetOptimizer: "context-budget-v2",
-	compatibilityOnly: true,
-};
 
 export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): PromptContextBudgetPlanV2 {
 	const modelId = input.modelId ?? "unknown";
@@ -69,7 +63,12 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 		...DEFAULT_TIER_POLICY_V2,
 		...(input.tierPolicy ?? {}),
 	};
-	const basePlanned = createPlannedItems(input.items, input.tokenCounter, modelId, qualityPolicy);
+	const basePlanned = createPlannedItems(
+		validateBudgetItems(input.items, diagnostics),
+		input.tokenCounter,
+		modelId,
+		qualityPolicy,
+	);
 	applyPlannerRedundancyPenalties(basePlanned);
 	const rawTokens = basePlanned.reduce((sum, planned) => sum + planned.fullTokens, 0);
 
@@ -135,7 +134,53 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 	}
 
 	const optionalPlanned = basePlanned.filter((planned) => !planned.isHard).sort(compareOptionalForSelection);
+
+	// Floor-reservation pass: each tier spends its guaranteed claim (the
+	// `allocated` field — hard demand, else demand capped at the floor) on its
+	// own optional items before anything competes globally. A tier's floor is
+	// therefore a real reservation, not a lower bound on its ceiling. Items
+	// that cannot fit inside the remaining floor stay unselected for the
+	// global pass; when the summed floors exceed the budget the reservation is
+	// best-effort in tier order and the plan reports it explicitly.
+	// One cache-resolution per item, shared by both passes so an item that is
+	// deferred out of the floor and reconsidered globally does not double
+	// count provider reads or redo materialization work.
+	const resolvedCandidates = new Map<string, readonly ContextRepresentationCandidateV2[]>();
+	let totalFloor = 0;
+	for (const tier of ALL_TIERS_V2) {
+		totalFloor += allocation.get(tier)?.floor ?? 0;
+	}
+	if (totalFloor > available) {
+		diagnostics.push({
+			reason: "tier_floor_over_budget",
+			detail: `tier floor guarantees total ${totalFloor} tokens against ${available} available; floors degrade to tier-order best effort`,
+		});
+	}
+	for (const tier of ALL_TIERS_V2) {
+		const floor = allocation.get(tier)?.floor ?? 0;
+		if (floor <= 0 || tierUsed[tier] >= floor) continue;
+		for (const planned of optionalPlanned) {
+			if (planned.item.tier !== tier || selection.has(planned.item.id)) continue;
+			usedTokens = selectOptionalItem(planned, {
+				allocation,
+				available,
+				cache,
+				diagnostics,
+				omitted,
+				qualityPolicy,
+				retrievalFallbacks,
+				selection,
+				tierUsed,
+				usedTokens,
+				floorReservation: { tier, floorTokens: floor },
+				resolvedCandidates,
+			});
+			if (tierUsed[tier] >= floor || usedTokens >= available) break;
+		}
+	}
+
 	for (const planned of optionalPlanned) {
+		if (selection.has(planned.item.id)) continue;
 		usedTokens = selectOptionalItem(planned, {
 			allocation,
 			available,
@@ -143,6 +188,7 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 			diagnostics,
 			omitted,
 			qualityPolicy,
+			resolvedCandidates,
 			retrievalFallbacks,
 			selection,
 			tierUsed,
@@ -230,48 +276,4 @@ function normalizeBudgetTokens(field: string, value: number, diagnostics: Qualit
 		return 0;
 	}
 	return Math.floor(value);
-}
-
-function buildObservability(input: {
-	readonly available: number;
-	readonly diagnostics: readonly QualityDiagnosticV2[];
-	readonly omittedItemIds: readonly string[];
-	readonly omittedTokens: number;
-	readonly planHash: string;
-	readonly rawTokens: number;
-	readonly retrievalFallbacks: readonly ContextSourceRefV2[];
-	readonly selection: ReadonlyMap<string, SelectedRepresentationV2>;
-	readonly usedTokens: number;
-	readonly cacheTelemetry: PromptContextBudgetObservabilityV2["cache"];
-}): PromptContextBudgetObservabilityV2 {
-	const selected = [...input.selection.values()];
-	return {
-		counts: {
-			selected: selected.length,
-			omitted: input.omittedItemIds.length,
-			pointer: selected.filter((representation) => representation.kind === "pointer").length,
-			compressed: selected.filter((representation) => representation.kind === "headroom-compressed").length,
-			full: selected.filter((representation) => representation.kind === "full").length,
-			retrievalFallback: countUniqueRetrievalFallbacks(input.retrievalFallbacks),
-		},
-		diagnosticReasons: [...new Set(input.diagnostics.map((diagnostic) => diagnostic.reason))].sort(),
-		tokens: {
-			available: input.available,
-			used: input.usedTokens,
-			raw: input.rawTokens,
-			omitted: input.omittedTokens,
-			tokenSavings: Math.max(0, input.rawTokens - input.usedTokens),
-		},
-		planHash: input.planHash,
-		cache: input.cacheTelemetry,
-		tokenOptimizer: TOKEN_OPTIMIZER_RUNTIME_STATUS,
-	};
-}
-
-function countUniqueRetrievalFallbacks(retrievalFallbacks: readonly ContextSourceRefV2[]): number {
-	return new Set(
-		retrievalFallbacks.map((ref) =>
-			[ref.uri, ref.contentHash, ref.symbol ?? "", ref.range?.startLine ?? "", ref.range?.endLine ?? ""].join("\0"),
-		),
-	).size;
 }

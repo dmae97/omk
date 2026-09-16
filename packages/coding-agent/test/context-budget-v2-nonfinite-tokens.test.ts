@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { fullTextTokens } from "../src/core/context-budget-headroom-types.ts";
 import { createOpenAiJsTokenCounter, createTokenCounterRegistry } from "../src/core/context-budget-token-counter.ts";
+import { createPlannedItems } from "../src/core/context-budget-v2-planned-items.ts";
 import { compareOptionalForSelection, type PlannedItemV2 } from "../src/core/context-budget-v2-scoring.ts";
-import { createPlannedItems } from "../src/core/context-budget-v2-selection.ts";
 
 /**
  * A non-finite token count used to travel all the way from an optional
