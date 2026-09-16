@@ -9,6 +9,7 @@ import type { ResourceDiagnostic } from "./diagnostics.ts";
 export type { ResourceCollision, ResourceDiagnostic } from "./diagnostics.ts";
 
 import { canonicalizePath, isLocalPath, resolvePath } from "../utils/paths.ts";
+import { loadSkillsWithBundled } from "./bundled-skills.ts";
 import { createEventBus, type EventBus } from "./event-bus.ts";
 import commandSafetyGate from "./extensions/builtin/command-safety-gate.ts";
 import goalController from "./extensions/builtin/goal-controller.ts";
@@ -23,7 +24,6 @@ import type { PromptTemplate } from "./prompt-templates.ts";
 import { loadPromptTemplates } from "./prompt-templates.ts";
 import { SettingsManager } from "./settings-manager.ts";
 import type { Skill } from "./skills.ts";
-import { loadSkills } from "./skills.ts";
 import { createSourceInfo, type SourceInfo } from "./source-info.ts";
 
 /** Values that turn a built-in extension off via its environment variable. */
@@ -665,7 +665,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		if (this.noSkills && skillPaths.length === 0) {
 			skillsResult = { skills: [], diagnostics: [] };
 		} else {
-			skillsResult = loadSkills({
+			skillsResult = loadSkillsWithBundled(this.noSkills, {
 				cwd: this.cwd,
 				agentDir: this.agentDir,
 				skillPaths,
