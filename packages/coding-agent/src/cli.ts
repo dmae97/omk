@@ -5,7 +5,9 @@
  *
  * Test with: npx tsx src/cli-new.ts [args...]
  */
-import { APP_NAME } from "./config.ts";
+import { homedir } from "node:os";
+import { runNeoCli } from "./commands/neo-cli.ts";
+import { APP_NAME, getPackageDir } from "./config.ts";
 import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
 import { main } from "./main.ts";
 
@@ -17,4 +19,11 @@ process.emitWarning = (() => {}) as typeof process.emitWarning;
 // Runtime settings are applied once SettingsManager has loaded global/project settings.
 configureHttpDispatcher();
 
-main(process.argv.slice(2));
+if (process.argv[2] === "neo") {
+	process.exitCode = runNeoCli(process.argv.slice(3), {
+		packageDir: getPackageDir(), cwd: process.cwd(), home: homedir(),
+		output: (text) => process.stdout.write(`${text}\n`),
+	});
+} else {
+	main(process.argv.slice(2));
+}
