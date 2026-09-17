@@ -5,29 +5,35 @@ import { streamSimple } from "../src/stream.ts";
 class PayloadCaptured extends Error {}
 afterEach(() => vi.unstubAllGlobals());
 
-const providers = ["deepseek", "opencode-go"] as const;
+const routes = [
+	{ provider: "deepseek", modelId: "deepseek-flash" },
+	{ provider: "opencode-go", modelId: "deepseek-v4.1-flash" },
+] as const;
 
 describe("DeepSeek V4.1 Flash native model routes", () => {
-	it.each(providers)("registers the canonical multimodal model and exact effort ladder on %s", (provider) => {
-		const model = getModels(provider).find((entry) => entry.id === "deepseek-flash");
-		expect(model).toBeDefined();
-		if (!model) throw new Error("Missing canonical DeepSeek Flash route");
-		expect(model).toMatchObject({
-			name: "DeepSeek V4.1 Flash",
-			api: "openai-completions",
-			input: ["text", "image"],
-			contextWindow: 1000000,
-			maxTokens: 384000,
-			compat: { thinkingFormat: "deepseek", requiresReasoningContentOnAssistantMessages: true },
-		});
-		expect(getSupportedThinkingLevels(model)).toEqual(["off", "low", "high", "max"]);
-	});
+	it.each(routes)(
+		"registers the canonical multimodal model and exact effort ladder on $provider",
+		({ provider, modelId }) => {
+			const model = getModels(provider).find((entry) => entry.id === modelId);
+			expect(model).toBeDefined();
+			if (!model) throw new Error("Missing canonical DeepSeek Flash route");
+			expect(model).toMatchObject({
+				name: "DeepSeek V4.1 Flash",
+				api: "openai-completions",
+				input: ["text", "image"],
+				contextWindow: 1000000,
+				maxTokens: 384000,
+				compat: { thinkingFormat: "deepseek", requiresReasoningContentOnAssistantMessages: true },
+			});
+			expect(getSupportedThinkingLevels(model)).toEqual(["off", "low", "high", "max"]);
+		},
+	);
 
-	for (const provider of providers) {
+	for (const { provider, modelId } of routes) {
 		it.each(["low", "high", "max", undefined] as const)(
 			`sends %s through ${provider} without a network call`,
 			async (reasoning) => {
-				const model = getModels(provider).find((entry) => entry.id === "deepseek-flash");
+				const model = getModels(provider).find((entry) => entry.id === modelId);
 				if (!model) throw new Error("Missing canonical DeepSeek Flash route");
 				let payload: unknown;
 				const fetch = vi.fn(() => {
@@ -49,7 +55,7 @@ describe("DeepSeek V4.1 Flash native model routes", () => {
 				).result();
 				expect(fetch).not.toHaveBeenCalled();
 				expect(payload).toMatchObject({
-					model: "deepseek-flash",
+					model: modelId,
 					max_tokens: 4096,
 					thinking: { type: reasoning ? "enabled" : "disabled" },
 				});

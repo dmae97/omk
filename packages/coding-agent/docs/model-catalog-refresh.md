@@ -3,6 +3,23 @@
 확인일: 2026-09-09. 생성기와 공급자 어댑터를 수정한 뒤 `npm run models:refresh`로
 두 카탈로그를 재생성했다. 생성 파일을 손으로 수정하지 않았다.
 
+## 2026-09-17 후속: OpenCode Go DeepSeek V4.1 ID 변경
+
+[OpenCode Go 공식 endpoint 목록](https://opencode.ai/docs/go/)의 현재 ID는
+`deepseek-v4.1-flash`다. 직접 DeepSeek의 `deepseek-flash`와 구분한다.
+9월 17일 카탈로그 갱신은 새 ID를 반영했지만, 생성기의 V4.1 메타데이터 보정은
+이전 ID만 인식해 `low/max`와 `max_tokens` 설정이 누락됐다.
+
+생성기 조건에 Go의 새 ID를 추가하고 기존 Go ID의 보정도 유지했다. 회귀 테스트는
+공급자별 실제 요청 ID를 사용하며 `off/low/high/max`, 이미지 입력, 출력 상한,
+전송 직전 `thinking`과 `reasoning_effort` 검사를 그대로 유지한다.
+ID만 교체한 상태에서도 5개 실패가 재현됐으며 메타데이터 수정 후 통과했다.
+
+`node packages/ai/scripts/generate-models.ts`로 생성한 결과 중 해당 Go 모델의
+메타데이터 변경만 포함했다. 실시간 목록에서 함께 발생한 다른 모델의 추가/삭제,
+가격/상한 변경은 이번 수정에 포함하지 않았다. 생성 파일 값을 수작업으로 만들지 않았다.
+공급자 추론이나 계정별 사용 가능 여부는 검증하지 않았다. 아래 9월 10일 표는 당시 기록이다.
+
 ## 2026-09-17 갱신: OpenRouter Union Alpha (stealth)
 
 `stealth/union-alpha` 추가 요청으로 `npm run models:refresh`를 종료0으로 재생성했다.

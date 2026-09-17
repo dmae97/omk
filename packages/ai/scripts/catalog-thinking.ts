@@ -47,8 +47,9 @@ export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 		model.compat = { ...model.compat, forceAdaptiveThinking: true };
 	}
 	if (
-		(model.provider === "deepseek" || model.provider === "opencode-go") &&
-		model.id === "deepseek-flash" && model.api === "openai-completions"
+		((model.provider === "deepseek" && model.id === "deepseek-flash") ||
+			(model.provider === "opencode-go" && (model.id === "deepseek-flash" || model.id === "deepseek-v4.1-flash"))) &&
+		model.api === "openai-completions"
 	) {
 		model.thinkingLevelMap = { minimal: null, low: "low", medium: null, high: "high", xhigh: null, max: "max" };
 		model.compat = {
