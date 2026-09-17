@@ -25,6 +25,25 @@ baseline below is history, not current truth.
 Gates are reported per row so a green "implemented" never upgrades itself to
 "released" or "measured".
 
+## ECRAF arithmetic boundary (2026-09-17)
+
+The internal `planEcrafAdmissions()` planner rejects non-finite derived density
+denominators, scores, and reserved usage with `RangeError`, even when each input
+number is finite. Scores are computed once per candidate before sorting or
+calling the conflict predicate; singleton and zero-slot batches receive the same
+validation. A bounded resource overflow still defers the candidate and allows
+later feasible candidates. An unbounded resource has no capacity limit, but its
+usage must remain representable as a finite number. Failed passes return no
+partial admission plan and do not mutate caller input.
+
+Regression coverage is in
+`packages/agent/test/tool-dag-ecraf-arithmetic.test.ts`; existing numeric and
+property tests remain in `packages/agent/test/tool-dag-ecraf.test.ts`.
+This is local pure-planner validation, not live frontier wiring, CI confirmation,
+a release, or evidence of latency/quality improvement. Resource normalization,
+slot-aware ranking, fairness, and equal-budget runtime comparisons remain separate
+work.
+
 ## Working-tree shared run budgets
 
 The SDK `prompt(..., { runBudget })` path now shares a monotonic deadline and

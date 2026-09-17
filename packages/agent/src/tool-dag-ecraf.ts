@@ -130,7 +130,11 @@ function resourceCost(node: EcrafCandidate, weights: Readonly<Record<string, num
 }
 
 function density(node: EcrafCandidate, weights: Readonly<Record<string, number>>, epsilon: number): number {
-	return node.priority / (epsilon + resourceCost(node, weights));
+	const denominator = epsilon + resourceCost(node, weights);
+	assertFiniteNonNegative(denominator, `candidate ${node.sourceIndex} density denominator`);
+	const score = node.priority / denominator;
+	assertFiniteNonNegative(score, `candidate ${node.sourceIndex} density`);
+	return score;
 }
 
 function fits(node: EcrafCandidate, used: Map<string, number>, capacities: Readonly<Record<string, number>>): boolean {
@@ -146,7 +150,9 @@ function fits(node: EcrafCandidate, used: Map<string, number>, capacities: Reado
 
 function reserve(node: EcrafCandidate, used: Map<string, number>): void {
 	for (const name of Object.keys(node.resources)) {
-		used.set(name, (used.get(name) ?? 0) + (node.resources[name] ?? 0));
+		const total = (used.get(name) ?? 0) + (node.resources[name] ?? 0);
+		assertFiniteNonNegative(total, `candidate ${node.sourceIndex} reserved usage.${name}`);
+		used.set(name, total);
 	}
 }
 
@@ -162,18 +168,18 @@ export function planEcrafAdmissions(options: EcrafAdmissionsOptions): EcrafAdmis
 	// Seed running usage so newly admitted nodes consume from the same budget.
 	const used = new Map<string, number>(Object.entries(runningUsage));
 
-	const sorted = [...candidates].sort(
-		(a, b) =>
-			density(b, resourceWeights, epsilon) - density(a, resourceWeights, epsilon) ||
-			a.readySeq - b.readySeq ||
-			a.sourceIndex - b.sourceIndex,
-	);
+	// Score every candidate once, including singleton and zero-slot batches.
+	const sorted = candidates
+		.map((node) => ({ node, score: density(node, resourceWeights, epsilon) }))
+		.sort(
+			(a, b) => b.score - a.score || a.node.readySeq - b.node.readySeq || a.node.sourceIndex - b.node.sourceIndex,
+		);
 
 	const admit: number[] = [];
 	const deferred: number[] = [];
 	const admittedNodes: EcrafCandidate[] = [];
 
-	for (const node of sorted) {
+	for (const { node } of sorted) {
 		if (admit.length >= slots) {
 			deferred.push(node.sourceIndex);
 			continue;
