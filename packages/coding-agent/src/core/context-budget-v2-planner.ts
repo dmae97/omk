@@ -57,7 +57,6 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 		diagnostics,
 	);
 	const available = Math.max(0, maxTokens - responseReserve - safetyMargin);
-	const canUsePlanCache = !diagnostics.some((diagnostic) => diagnostic.reason === "invalid_budget");
 
 	const tierPolicy: Readonly<Record<ContextBudgetTierV2, TierBudgetPolicyV2>> = {
 		...DEFAULT_TIER_POLICY_V2,
@@ -69,6 +68,8 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 		modelId,
 		qualityPolicy,
 	);
+	// Sanitized items can share a key with valid input, but their diagnostics cannot.
+	const canUsePlanCache = diagnostics.length === 0;
 	applyPlannerRedundancyPenalties(basePlanned);
 	const rawTokens = basePlanned.reduce((sum, planned) => sum + planned.fullTokens, 0);
 
