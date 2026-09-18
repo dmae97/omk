@@ -79,7 +79,7 @@ export function isContentSafetyStopMessage(text: string | undefined): boolean {
  */
 export function isQuotaExhaustionMessage(text: string | undefined): boolean {
 	if (!text) return false;
-	return /usage limit|GoUsageLimitError|FreeUsageLimitError|available balance|insufficient_quota|insufficient balance|insufficient credits|out of budget|quota exceeded|billing/i.test(
+	return /usage limit|GoUsageLimitError|FreeUsageLimitError|available balance|insufficient_quota|insufficient balance|insufficient credits|out of budget|quota exceeded|quota\s+(?:has been\s+|was\s+|is\s+)?exhaust|billing/i.test(
 		text,
 	);
 }

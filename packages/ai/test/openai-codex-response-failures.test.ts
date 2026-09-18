@@ -334,4 +334,33 @@ describe("OpenAI Codex response failures", () => {
 		expect(result.errorMessage).toContain("context_length_exceeded");
 		expect(result.errorMessage).not.toContain('"type"');
 	});
+
+	it("treats a 429 quota-exhausted body as terminal instead of validating the retry delay", async () => {
+		// Live failure (2026-09-18): a token-plan weekly quota 429 carried a
+		// ~5-day retry-after. The body did not match the terminal quota list, so
+		// the delay validator threw "Server requested 455677s retry delay (max:
+		// 60s)" and the quota error surfaced as a generic retry failure.
+		let requests = 0;
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				requests++;
+				return new Response(
+					JSON.stringify({ error: { message: "Your token-plan 1-week quota has been exhausted." } }),
+					{ status: 429, headers: { "retry-after": "455677" } },
+				);
+			}),
+		);
+
+		const result = await streamOpenAICodexResponses(model, context, {
+			apiKey: mockToken(),
+			maxRetries: 3,
+			transport: "sse",
+		}).result();
+
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toMatch(/usage limit|quota/i);
+		expect(result.errorMessage).not.toContain("retry delay");
+		expect(requests).toBe(1);
+	});
 });

@@ -21,6 +21,8 @@ const NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN = buildProviderErrorPattern([
 	"insufficient balance",
 	"out of budget",
 	"quota exceeded",
+	// Codex token-plan wording: "Your token-plan 1-week quota has been exhausted".
+	"quota\\s+(?:has been\\s+|was\\s+|is\\s+)?exhaust",
 	"billing",
 ]);
 

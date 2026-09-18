@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { retryProviderRequest } from "../src/utils/provider-retry.ts";
+import { isRetryableAssistantError } from "../src/utils/retry.ts";
 
 function providerError(status: number | undefined, headers?: Headers): Error & { status?: number; headers?: Headers } {
 	const error = new Error(`HTTP ${status ?? "network"}`) as Error & { status?: number; headers?: Headers };
@@ -80,5 +81,24 @@ describe("retryProviderRequest", () => {
 			/Server requested 120s retry delay/,
 		);
 		expect(request).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("isRetryableAssistantError", () => {
+	it("does not retry quota exhaustion text, even wrapped in a retry-delay error", () => {
+		expect(
+			isRetryableAssistantError({
+				stopReason: "error",
+				errorMessage:
+					"Server requested 455677s retry delay (max: 60s). 429 Your token-plan 1-week quota has been exhausted.",
+			} as never),
+		).toBe(false);
+		expect(
+			isRetryableAssistantError({
+				stopReason: "error",
+				errorMessage: "Your weekly quota has been exhausted",
+			} as never),
+		).toBe(false);
+		expect(isRetryableAssistantError({ stopReason: "error", errorMessage: "quota exhausted" } as never)).toBe(false);
 	});
 });

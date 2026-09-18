@@ -236,6 +236,16 @@ describe("isQuotaExhaustionMessage", () => {
 		).toBe(true);
 	});
 
+	it("matches codex token-plan weekly quota exhaustion text", () => {
+		expect(
+			isQuotaExhaustionMessage(
+				"Server requested 455677s retry delay (max: 60s). 429 Your token-plan 1-week quota has been exhausted.",
+			),
+		).toBe(true);
+		expect(isQuotaExhaustionMessage("Your weekly quota has been exhausted")).toBe(true);
+		expect(isQuotaExhaustionMessage("quota exhausted")).toBe(true);
+	});
+
 	it("matches generic quota/balance shapes", () => {
 		expect(isQuotaExhaustionMessage("insufficient_quota")).toBe(true);
 		expect(isQuotaExhaustionMessage("Your available balance is 0")).toBe(true);

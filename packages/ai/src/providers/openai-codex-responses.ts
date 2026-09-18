@@ -116,7 +116,7 @@ interface RequestBody {
 // ============================================================================
 
 function isTerminalRateLimitError(errorText: string): boolean {
-	return /GoUsageLimitError|FreeUsageLimitError|Monthly usage limit reached|available balance|insufficient_quota|out of budget|quota exceeded|billing/i.test(
+	return /GoUsageLimitError|FreeUsageLimitError|Monthly usage limit reached|available balance|insufficient_quota|out of budget|quota exceeded|quota\s+(?:has been\s+|was\s+|is\s+)?exhaust|billing/i.test(
 		errorText,
 	);
 }
