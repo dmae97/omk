@@ -265,3 +265,49 @@ describe("planEcrafAdmissions (ECRAF deterministic greedy)", () => {
 function byIndexOf(input: { candidates: readonly EcrafCandidate[] }, index: number): EcrafCandidate {
 	return input.candidates[index];
 }
+
+describe("ECRAF unit-invariance (audit §13.3/§21.1)", () => {
+	const A = { memory: 2, cpuWeight: 1 };
+	const B = { memory: 1, cpuWeight: 4 };
+
+	function order(units: "gib" | "bytes") {
+		const scale = units === "gib" ? 1 : 1024 ** 3;
+		return planEcrafAdmissions({
+			candidates: [
+				candidate(0, 1, { memory: A.memory * scale, cpuWeight: A.cpuWeight }),
+				candidate(1, 1, { memory: B.memory * scale, cpuWeight: B.cpuWeight }),
+			],
+			runningUsage: {},
+			capacities: {},
+			slots: 1,
+		}).admit[0];
+	}
+
+	it("raw unnormalized sum flips ranking when memory units change (known defect)", () => {
+		// GiB numbers: A=3 < B=5 so A (sourceIndex 0) has higher density. In raw
+		// bytes the memory term dominates and B (sourceIndex 1) wins instead.
+		expect(order("gib")).toBe(0);
+		expect(order("bytes")).toBe(1);
+	});
+
+	it("normalized demands keep the ranking stable across unit changes", () => {
+		// memory scale 4 GiB, cpu scale 8 (spec §13.3): A=0.625 beats B=0.75 in both units.
+		const scales = { memory: 4, cpuWeight: 8 };
+		const ordered = (units: "gib" | "bytes") => {
+			const scale = units === "gib" ? 1 : 1024 ** 3;
+			return planEcrafAdmissions({
+				candidates: [
+					candidate(0, 1, { memory: A.memory * scale, cpuWeight: A.cpuWeight }),
+					candidate(1, 1, { memory: B.memory * scale, cpuWeight: B.cpuWeight }),
+				],
+				runningUsage: {},
+				capacities: {},
+				slots: 2,
+				referenceScales: { memory: scales.memory * scale, cpuWeight: scales.cpuWeight },
+				slotCost: 0.001,
+			}).admit;
+		};
+		expect(ordered("gib")).toEqual([0, 1]);
+		expect(ordered("bytes")).toEqual([0, 1]);
+	});
+});
