@@ -140,7 +140,11 @@ describe("Muse Spark thinking levels", () => {
 			// forceAdaptiveThinking and so takes the token-budget path. That path runs the level
 			// through clampReasoning(), collapsing xhigh/max to high — mapping there would
 			// advertise tiers the transport cannot express.
-			const budgetPath = museSparkModels().filter(({ model }) => !EFFORT_CARRYING_APIS.has(model.api));
+			// cursor-agent lanes pin their declared effort per wire id, so they are
+			// excluded here the same way the effort-carrying APIs are.
+			const budgetPath = museSparkModels().filter(
+				({ model }) => !EFFORT_CARRYING_APIS.has(model.api) && model.api !== "cursor-agent",
+			);
 			expect(budgetPath.length).toBeGreaterThan(0);
 			for (const { provider, model } of budgetPath) {
 				expect(model.api, `${provider}/${model.id}`).toBe("anthropic-messages");

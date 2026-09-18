@@ -66,7 +66,9 @@ describe("max thinking level", () => {
 	it("covers GLM-5.2+ routes without an authoritative gateway override with a max mapping", () => {
 		const unmapped: string[] = [];
 		for (const [provider, models] of Object.entries(MODELS)) {
-			if (provider === "openrouter") continue;
+			// devin/cursor flat entries pin their declared effort lane per wire
+			// id — a `glm-5.2-high` lane legitimately maps only `high`, not `max`.
+			if (provider === "openrouter" || provider === "cursor" || provider === "devin") continue;
 			for (const model of Object.values(models)) {
 				// Mirrors isGlm5ReasoningEffortModel() in scripts/generate-models.ts: GLM-5.2 and later.
 				const glmMinorVersion = /glm-?5[.-]?p?(\d+)/i.exec(model.id);
