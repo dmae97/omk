@@ -114,9 +114,10 @@ describe("ModelRegistry", () => {
 			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
 			const anthropicModels = getModelsForProvider(registry, "anthropic");
 
-			// All models should have the new baseUrl
+			// The anthropic adapter appends /v1/messages itself, so a versioned
+			// baseUrl is stored normalized (version suffix stripped).
 			for (const model of anthropicModels) {
-				expect(model.baseUrl).toBe("https://my-proxy.example.com/v1");
+				expect(model.baseUrl).toBe("https://my-proxy.example.com");
 			}
 		});
 
@@ -191,7 +192,7 @@ describe("ModelRegistry", () => {
 			// Anthropic: multiple built-in models with new baseUrl
 			const anthropicModels = getModelsForProvider(registry, "anthropic");
 			expect(anthropicModels.length).toBeGreaterThan(1);
-			expect(anthropicModels[0].baseUrl).toBe("https://anthropic-proxy.example.com/v1");
+			expect(anthropicModels[0].baseUrl).toBe("https://anthropic-proxy.example.com");
 
 			// Google: built-ins plus custom model
 			const googleModels = getModelsForProvider(registry, "google");
@@ -205,7 +206,7 @@ describe("ModelRegistry", () => {
 			});
 			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
 
-			expect(getModelsForProvider(registry, "anthropic")[0].baseUrl).toBe("https://first-proxy.example.com/v1");
+			expect(getModelsForProvider(registry, "anthropic")[0].baseUrl).toBe("https://first-proxy.example.com");
 
 			// Update and refresh
 			writeRawModelsJson({
@@ -213,7 +214,7 @@ describe("ModelRegistry", () => {
 			});
 			registry.refresh();
 
-			expect(getModelsForProvider(registry, "anthropic")[0].baseUrl).toBe("https://second-proxy.example.com/v1");
+			expect(getModelsForProvider(registry, "anthropic")[0].baseUrl).toBe("https://second-proxy.example.com");
 		});
 	});
 
@@ -311,7 +312,7 @@ describe("ModelRegistry", () => {
 			const anthropicModels = getModelsForProvider(registry, "anthropic");
 
 			for (const model of anthropicModels) {
-				expect(model.baseUrl).toBe("https://merged-proxy.example.com/v1");
+				expect(model.baseUrl).toBe("https://merged-proxy.example.com");
 			}
 		});
 
