@@ -1,3 +1,5 @@
+import type { StrictEvidenceReport, StrictEvidenceSnapshot } from "./strict-evidence-types.ts";
+
 export const PROTOCOL_VERSION = "omk.run.v1" as const;
 
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
@@ -135,6 +137,7 @@ export interface ClaimEvaluation {
 }
 
 export interface EvaluationResult {
+	readonly strictEvidence?: StrictEvidenceReport;
 	readonly schemaVersion: ProtocolVersion;
 	readonly evaluationId: string;
 	readonly taskId: string;
@@ -145,6 +148,8 @@ export interface EvaluationResult {
 }
 
 export interface EvaluationInput {
+	/** Host-admitted snapshot only; omitted preserves historical exists semantics and wire shape. */
+	readonly strictEvidence?: StrictEvidenceSnapshot;
 	readonly evaluationId: string;
 	readonly evaluatedAt: string;
 	readonly taskSpec: TaskSpec;

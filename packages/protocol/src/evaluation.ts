@@ -1,3 +1,4 @@
+import { evaluateStrictEvidence } from "./strict-evidence.ts";
 import {
 	type ClaimCondition,
 	type ClaimEvaluation,
@@ -171,11 +172,19 @@ export function evaluateTask(input: EvaluationInput): EvaluationResult {
 		}
 	}
 	const waivers = validateWaivers(input, input.waivers ?? []);
+	const strict =
+		input.strictEvidence === undefined
+			? undefined
+			: evaluateStrictEvidence(input.strictEvidence, input.observations, input.attempt);
+	const observations =
+		strict === undefined
+			? input.observations
+			: input.observations.filter((observation) => strict.observationIds.includes(observation.observationId));
 	const claims = Object.freeze(
 		input.taskSpec.claims.map((claim): ClaimEvaluation => {
 			const evaluated = evaluateCondition(
 				claim.condition,
-				input.observations,
+				observations,
 				input.attempt.attemptId,
 				input.attempt.candidateHash,
 			);
@@ -190,6 +199,12 @@ export function evaluateTask(input: EvaluationInput): EvaluationResult {
 			});
 		}),
 	);
+	const semanticVerdict =
+		strict && strict.status !== "passed"
+			? strict.status === "violated"
+				? "fail"
+				: "inconclusive"
+			: reduceVerdict(claims);
 	return parseEvaluationResult(
 		Object.freeze({
 			schemaVersion: PROTOCOL_VERSION,
@@ -198,7 +213,20 @@ export function evaluateTask(input: EvaluationInput): EvaluationResult {
 			attemptId: input.attempt.attemptId,
 			evaluatedAt: input.evaluatedAt,
 			claims,
-			semanticVerdict: reduceVerdict(claims),
+			semanticVerdict,
+			...(strict
+				? {
+						strictEvidence: Object.freeze({
+							...strict,
+							acceptance:
+								semanticVerdict !== "pass"
+									? ("denied" as const)
+									: claims.some((claim) => claim.waiverId !== undefined)
+										? ("accepted_with_waiver" as const)
+										: ("passed_by_checks" as const),
+						}),
+					}
+				: {}),
 		}),
 	);
 }

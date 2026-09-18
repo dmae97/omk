@@ -60,6 +60,13 @@ export { MAX_VERIFIED_RUN_GENERATIONS, parseRunResumeCommand, type RunResumeComm
 export { parseRunTaskRetryCommand, type RunTaskRetryCommand } from "./run-task-retry.ts";
 export { parseRunWriterRestartCommand, type RunWriterRestartCommand } from "./run-writer-restart.ts";
 export type {
+	StrictEvidenceBinding,
+	StrictEvidenceCompletion,
+	StrictEvidenceReport,
+	StrictEvidenceSnapshot,
+} from "./strict-evidence-types.ts";
+export { parseStrictEvidenceBinding, parseStrictEvidenceSnapshot } from "./strict-evidence-validation.ts";
+export type {
 	AllCondition,
 	AnyCondition,
 	AttemptExecutor,
