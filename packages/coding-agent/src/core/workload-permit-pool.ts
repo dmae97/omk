@@ -39,7 +39,12 @@ export interface WorkloadPermitPoolSnapshot {
 	readonly queuedCount: number;
 }
 
-export type WorkloadPermitErrorCode = "queue_overflow" | "timeout" | "aborted" | "over_capacity_weight";
+export type WorkloadPermitErrorCode =
+	| "queue_overflow"
+	| "timeout"
+	| "aborted"
+	| "over_capacity_weight"
+	| "invalid_weight";
 
 export class WorkloadPermitError extends Error {
 	readonly code: WorkloadPermitErrorCode;
@@ -99,6 +104,9 @@ export class WorkloadPermitPool {
 	/** Acquire a permit. Strict FIFO; rejects with {@link WorkloadPermitError}. */
 	acquire(input: WorkloadPermitRequest): Promise<WorkloadPermit> {
 		const request = { ...input };
+		if (request.weight !== 1 && request.weight !== 2) {
+			return Promise.reject(new WorkloadPermitError("invalid_weight", request.requestId));
+		}
 		if (request.weight > this.capacity) {
 			return Promise.reject(new WorkloadPermitError("over_capacity_weight", request.requestId));
 		}

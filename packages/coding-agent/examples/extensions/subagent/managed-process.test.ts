@@ -18,6 +18,30 @@ async function processExists(pid: number): Promise<boolean> {
 }
 
 describe("managed subagent process lifecycle", () => {
+	it.skipIf(process.platform === "win32").each(["SIGTERM", "SIGKILL"] as const)(
+		"does not report %s termination as success",
+		async (signal) => {
+			const result = await runManagedProcess({
+				command: process.execPath,
+				args: ["-e", `process.kill(process.pid, ${JSON.stringify(signal)})`],
+				cwd: process.cwd(),
+				cutoffMs: 5_000,
+			});
+			expect(result.signal).toBe(signal);
+			expect(result.exitCode).not.toBe(0);
+		},
+	);
+
+	it("preserves an explicit nonzero exit", async () => {
+		const result = await runManagedProcess({
+			command: process.execPath,
+			args: ["-e", "process.exit(7)"],
+			cwd: process.cwd(),
+			cutoffMs: 5_000,
+		});
+		expect(result.exitCode).toBe(7);
+		expect(result.signal).toBeNull();
+	});
 	it("escalates a cutoff from SIGTERM to SIGKILL and reaps the process tree", async () => {
 		let stdout = "";
 		const result = await runManagedProcess({

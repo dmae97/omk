@@ -40,15 +40,40 @@ export interface SubagentLaneAuthorityHostBinding {
  * the authority injects plan admission, the shared pool, and per-lane
  * settlement counters, and never lets the caller widen the parent's caps.
  */
+/**
+ * Unresolved child settlements keyed by the shared permit pool. AgentSession
+ * recreates the authority per dispatch over the same pool, so per-instance
+ * state alone would let a fresh instance forget an owned, unsettled child.
+ */
+const pendingSettlementsByPool = new WeakMap<object, Set<Promise<void>>>();
+
+function unsettledSettlements(pool: object): Set<Promise<void>> {
+	let set = pendingSettlementsByPool.get(pool);
+	if (set === undefined) {
+		set = new Set();
+		pendingSettlementsByPool.set(pool, set);
+	}
+	return set;
+}
+
 export function createSubagentLaneAuthority(binding: SubagentLaneAuthorityHostBinding): SubagentLaneAuthority {
 	const { runId, promptRunId, decision, permitPool, inventory, signal, spawnThreshold, noteDetachedChild } = binding;
-
+	const pendingSettlements = unsettledSettlements(permitPool);
 	return {
 		permitPool,
 		activePromptRunId: promptRunId,
 		getCurrentResourceAdmission: () => decision,
 		noteDetachedChild,
 		dispatchLanes: async (input) => {
+			if (pendingSettlements.size > 0) {
+				return {
+					outcomes: [],
+					effectiveLaneWidth: 0,
+					maxObservedConcurrency: 0,
+					blockers: ["ownership.unsettled"],
+					warnings: [],
+				};
+			}
 			const plan = buildSubagentOrchestrationPlan({
 				runId,
 				lanes: input.lanes,
@@ -89,17 +114,32 @@ export function createSubagentLaneAuthority(binding: SubagentLaneAuthorityHostBi
 				decision: resolvedDecision,
 				permitPool,
 				configuredMaxParallelLanes: input.configuredMaxParallelLanes,
-				signal: input.signal ?? signal,
+				signal: signal && input.signal ? AbortSignal.any([signal, input.signal]) : (signal ?? input.signal),
 				heavyLaneIds: input.heavyLaneIds,
 				permitWaitTimeoutMs: input.permitWaitTimeoutMs,
 				launchLane: async (context) => {
 					// Spec 020 Req3.1/3.2 — child counter +1 immediately before the
 					// admitted launch, -1 exactly once in terminal cleanup.
 					const release = noteDetachedChild();
+					let awaitingSettlement = false;
 					try {
-						await input.launchLane(context);
+						const result = await input.launchLane(context);
+						if (result?.status === "unsettled" && result.settlement) {
+							awaitingSettlement = true;
+							pendingSettlements.add(result.settlement);
+							void result.settlement.then(
+								() => {
+									pendingSettlements.delete(result.settlement);
+									release();
+								},
+								() => {
+									// Rejection does not confirm child termination; retain ownership.
+								},
+							);
+						}
+						return result;
 					} finally {
-						release();
+						if (!awaitingSettlement) release();
 					}
 				},
 			});

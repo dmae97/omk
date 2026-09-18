@@ -13,6 +13,7 @@
  * Uses JSON mode to capture structured output from subagents.
  */
 
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -42,8 +43,10 @@ import {
 	resolveSubagentExecutionPolicy,
 } from "./deadline-budget.ts";
 import { DeadlineProfileStore } from "./deadline-profile-store.ts";
+import { blockedResult, dependencyDigests, failedResult as isFailedResult, laneResult } from "./graph-result.ts";
 import { runManagedProcess } from "./managed-process.ts";
 import { emptyUsage, type SingleResult, type SubagentAttemptResult } from "./subagent-runtime-types.ts";
+import { createSubagentStream } from "./subagent-stream.ts";
 import {
 	type GraphTask,
 	GraphValidationError,
@@ -233,10 +236,6 @@ function getFinalOutput(messages: Message[]): string {
 	return "";
 }
 
-function isFailedResult(result: SingleResult): boolean {
-	return result.exitCode !== 0 || result.stopReason === "error" || result.stopReason === "aborted";
-}
-
 function getResultOutput(result: SingleResult): string {
 	const partialOutput = result.output || getFinalOutput(result.messages);
 	if (isFailedResult(result)) {
@@ -385,6 +384,7 @@ async function runSingleAgentAttempt(
 	let tmpPromptPath: string | null = null;
 
 	const currentResult: SingleResult = {
+		attemptId: randomUUID(),
 		agent: agentName,
 		agentSource: agent.source,
 		task: logicalTask,
@@ -419,38 +419,7 @@ async function runSingleAgentAttempt(
 		}
 
 		args.push(`Task: ${task}`);
-		let buffer = "";
-		const processLine = (line: string) => {
-			const event = parseSubagentEvent(line);
-			if (event === undefined) return;
-			if (event.type === "message_end" && event.message !== undefined) {
-				const msg = event.message;
-				currentResult.messages.push(msg);
-				if (msg.role === "assistant") {
-					currentResult.usage.turns += 1;
-					const usage = msg.usage;
-					if (usage) {
-						currentResult.usage.input += usage.input || 0;
-						currentResult.usage.output += usage.output || 0;
-						currentResult.usage.cacheRead += usage.cacheRead || 0;
-						currentResult.usage.cacheWrite += usage.cacheWrite || 0;
-						currentResult.usage.cost += usage.cost?.total || 0;
-						currentResult.usage.contextTokens = Math.max(
-							currentResult.usage.contextTokens,
-							usage.totalTokens || 0,
-						);
-					}
-					if (!currentResult.model && msg.model) currentResult.model = msg.model;
-					if (msg.stopReason) currentResult.stopReason = msg.stopReason;
-					if (msg.errorMessage) currentResult.errorMessage = msg.errorMessage;
-				}
-				emitUpdate();
-			}
-			if (event.type === "tool_result_end" && event.message !== undefined) {
-				currentResult.messages.push(event.message);
-				emitUpdate();
-			}
-		};
+		const stream = createSubagentStream(currentResult, emitUpdate);
 		const invocation = getOmkInvocation(args);
 		const processResult = await runManagedProcess({
 			command: invocation.command,
@@ -458,17 +427,11 @@ async function runSingleAgentAttempt(
 			cwd: cwd ?? defaultCwd,
 			cutoffMs,
 			signal,
-			onStdout: (chunk) => {
-				buffer += chunk;
-				const lines = buffer.split("\n");
-				buffer = lines.pop() || "";
-				for (const line of lines) processLine(line);
-			},
-			onStderr: (chunk) => {
-				currentResult.stderr += chunk;
-			},
+			onStdout: stream.stdout,
+			onStderr: stream.stderr,
 		});
-		if (buffer.trim()) processLine(buffer);
+		currentResult.process = processResult;
+		const streamFailure = stream.finish(processResult.reason === "completed" && processResult.exitCode === 0);
 		currentResult.exitCode = processResult.exitCode;
 		currentResult.output = getFinalOutput(currentResult.messages);
 		if (processResult.reason === "cutoff") {
@@ -483,6 +446,17 @@ async function runSingleAgentAttempt(
 			currentResult.exitCode = 1;
 			currentResult.stopReason = "error";
 			currentResult.errorMessage = processResult.errorMessage ?? "Unable to spawn subagent";
+		}
+		if (processResult.reason === "signal" || processResult.reason === "callback-error" || streamFailure) {
+			currentResult.exitCode ||= 1;
+			currentResult.stopReason = "error";
+			currentResult.errorMessage =
+				streamFailure ?? processResult.errorMessage ?? `Subagent terminated by ${processResult.signal}`;
+		}
+		if (!processResult.terminationObserved) {
+			currentResult.exitCode ||= 1;
+			currentResult.stopReason = "unsettled";
+			currentResult.errorMessage = `${currentResult.errorMessage ?? "Subagent termination unconfirmed"} (unsettled)`;
 		}
 		return { result: currentResult, process: processResult };
 	} finally {
@@ -499,30 +473,6 @@ async function runSingleAgentAttempt(
 				/* ignore */
 			}
 	}
-}
-
-interface SubagentJsonEvent {
-	readonly type: string;
-	readonly message?: Message;
-}
-
-function parseSubagentEvent(line: string): SubagentJsonEvent | undefined {
-	if (line.trim() === "") return undefined;
-	let value: unknown;
-	try {
-		value = JSON.parse(line);
-	} catch {
-		return undefined;
-	}
-	if (!isRecord(value) || typeof value.type !== "string") return undefined;
-	const message = value.message;
-	if (message === undefined) return { type: value.type };
-	if (!isRecord(message) || typeof message.role !== "string" || !Array.isArray(message.content)) return undefined;
-	return { type: value.type, message: message as unknown as Message };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function runSingleAgent(
@@ -840,6 +790,7 @@ export default function (omk: ExtensionAPI) {
 
 				const results: SingleResult[] = [];
 				const outputs = new Map<string, string>();
+				const resultById = new Map<string, SingleResult>();
 				const completedNodeIds: string[] = [];
 				graphDetails = { waves: plan.waves, completedNodeIds };
 
@@ -850,7 +801,6 @@ export default function (omk: ExtensionAPI) {
 				const laneAuthority = ctx.getSubagentLaneAuthority?.();
 				if (laneAuthority) {
 					const nodeById = new Map(plan.tasks);
-					const resultById = new Map<string, SingleResult>();
 					const lanes = params.graph.map((node) => ({
 						id: node.id,
 						role: "executor" as const,
@@ -873,9 +823,13 @@ export default function (omk: ExtensionAPI) {
 							? new Set(lanes.map((lane) => lane.id))
 							: undefined,
 						signal,
-						launchLane: async ({ laneId }) => {
+						launchLane: async ({ laneId, signal: laneSignal }) => {
 							const task = nodeById.get(laneId);
-							if (!task) return;
+							if (!task) return { status: "failed" as const };
+							if ((task.dependsOn ?? []).some((id) => !outputs.has(id))) {
+								resultById.set(laneId, blockedResult(task));
+								return { status: "failed" as const };
+							}
 							const result = await runSingleAgent(
 								ctx.cwd,
 								agents,
@@ -883,7 +837,7 @@ export default function (omk: ExtensionAPI) {
 								renderDependencyContext(task, outputs),
 								task.cwd,
 								undefined,
-								signal,
+								laneSignal,
 								undefined,
 								makeDetails("graph"),
 								executionPolicy.unbounded,
@@ -891,35 +845,30 @@ export default function (omk: ExtensionAPI) {
 								profileStore,
 								0,
 							);
+							result.nodeId = laneId;
+							result.dependencyDigests = dependencyDigests(task, outputs);
 							resultById.set(laneId, result);
 							if (!isFailedResult(result)) {
 								outputs.set(laneId, getResultOutput(result));
 								completedNodeIds.push(laneId);
 							}
+							return laneResult(result);
 						},
 					});
-					if (dispatch.blockers.length > 0) {
-						return {
-							content: [{ type: "text", text: `Lane dispatch blocked: ${dispatch.blockers.join("; ")}` }],
-							details: makeDetails("graph")([]),
-						};
-					}
-					for (const outcome of dispatch.outcomes) {
-						const task = nodeById.get(outcome.laneId);
-						const existing = resultById.get(outcome.laneId);
-						if (existing) {
-							results.push(existing);
-						} else if (task) {
-							results.push({
-								agent: task.agent,
-								agentSource: "unknown",
-								task: task.task,
-								exitCode: 1,
-								messages: [],
-								stderr: outcome.diagnostic ?? outcome.status,
-								stopReason: outcome.status,
-								usage: emptyUsage(),
-							});
+					const outcomes = new Map(dispatch.outcomes.map((outcome) => [outcome.laneId, outcome]));
+					for (const [id, task] of plan.tasks) {
+						if (!resultById.has(id)) {
+							const outcome = outcomes.get(id);
+							resultById.set(
+								id,
+								blockedResult(
+									task,
+									dispatch.blockers.join("; ") ||
+										outcome?.diagnostic ||
+										outcome?.status ||
+										"blocked-dependency",
+								),
+							);
 						}
 					}
 					graphDetails = { waves: plan.waves, completedNodeIds: [...completedNodeIds] };
@@ -931,6 +880,8 @@ export default function (omk: ExtensionAPI) {
 							async (id) => {
 								const task = plan.tasks.get(id);
 								if (!task) throw new GraphValidationError(`node '${id}' disappeared after validation`);
+								if ((task.dependsOn ?? []).some((dependency) => !outputs.has(dependency)))
+									return { id, result: blockedResult(task) };
 								const result = await runSingleAgent(
 									ctx.cwd,
 									agents,
@@ -950,7 +901,10 @@ export default function (omk: ExtensionAPI) {
 							},
 						);
 						for (const { id, result } of waveResults) {
-							results.push(result);
+							result.nodeId = id;
+							const task = plan.tasks.get(id);
+							if (task) result.dependencyDigests = dependencyDigests(task, outputs);
+							resultById.set(id, result);
 							if (!isFailedResult(result)) {
 								outputs.set(id, getResultOutput(result));
 								completedNodeIds.push(id);
@@ -958,33 +912,29 @@ export default function (omk: ExtensionAPI) {
 						}
 						graphDetails = { waves: plan.waves, completedNodeIds: [...completedNodeIds] };
 						const failed = waveResults.filter(({ result }) => isFailedResult(result));
-						if (failed.length > 0) {
-							const failedIds = failed.map(({ id }) => id).join(", ");
-							return {
-								content: [
-									{
-										type: "text",
-										text: `Graph stopped after wave ${waveIndex + 1}; failed nodes: ${failedIds}. Downstream nodes were not started.`,
-									},
-								],
-								details: makeDetails("graph")(results),
-								isError: true,
-							};
-						}
+						if (failed.length > 0) break;
 					}
 				}
-				const summaries = results.map((result, index) => {
-					const id = completedNodeIds[index] ?? `node-${index + 1}`;
-					return `### [${id}] completed\n\n${truncateParallelOutput(getResultOutput(result))}`;
+				for (const [id, task] of plan.tasks) results.push(resultById.get(id) ?? blockedResult(task));
+				graphDetails = {
+					waves: plan.waves,
+					completedNodeIds: results
+						.filter((result) => !isFailedResult(result))
+						.flatMap((result) => (result.nodeId ? [result.nodeId] : [])),
+				};
+				const summaries = results.map((result) => {
+					const status = isFailedResult(result) ? (result.stopReason ?? "failed") : "completed";
+					return `### [${result.nodeId}] ${status}\n\n${truncateParallelOutput(getResultOutput(result))}`;
 				});
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Graph: ${results.length}/${params.graph.length} completed in ${plan.waves.length} waves\n\n${summaries.join("\n\n---\n\n")}`,
+							text: `Graph: ${graphDetails.completedNodeIds.length}/${params.graph.length} completed in ${plan.waves.length} waves\n\n${summaries.join("\n\n---\n\n")}`,
 						},
 					],
 					details: makeDetails("graph")(results),
+					isError: results.some(isFailedResult),
 				};
 			}
 
@@ -1065,7 +1015,7 @@ export default function (omk: ExtensionAPI) {
 							? new Set(lanes.map((lane) => lane.id))
 							: undefined,
 						signal,
-						launchLane: async ({ laneId }) => {
+						launchLane: async ({ laneId, signal: laneSignal }) => {
 							const index = laneIndexById.get(laneId);
 							if (index === undefined) return;
 							const t = params.tasks?.[index];
@@ -1077,7 +1027,7 @@ export default function (omk: ExtensionAPI) {
 								t.task,
 								t.cwd,
 								undefined,
-								signal,
+								laneSignal,
 								(partial) => {
 									if (partial.details?.results[0]) {
 										allResults[index] = partial.details.results[0];
@@ -1092,6 +1042,7 @@ export default function (omk: ExtensionAPI) {
 							);
 							allResults[index] = result;
 							emitParallelUpdate();
+							return laneResult(result);
 						},
 					});
 					if (dispatch.blockers.length > 0) {
@@ -1166,6 +1117,7 @@ export default function (omk: ExtensionAPI) {
 						},
 					],
 					details: makeDetails("parallel")(results),
+					isError: results.some(isFailedResult),
 				};
 			}
 
@@ -1367,8 +1319,8 @@ export default function (omk: ExtensionAPI) {
 				const failed = details.results.some(isFailedResult);
 				const icon = failed ? theme.fg("error", "✗") : theme.fg("success", "✓");
 				let text = `${icon} ${theme.fg("toolTitle", theme.bold("graph "))}${theme.fg("accent", `${completed}/${total} nodes · ${waves} waves`)}`;
-				for (const [index, result] of details.results.entries()) {
-					const id = details.graph?.completedNodeIds[index] ?? result.agent;
+				for (const result of details.results) {
+					const id = result.nodeId ?? result.agent;
 					const resultIcon = isFailedResult(result) ? theme.fg("error", "✗") : theme.fg("success", "✓");
 					text += `\n${theme.fg("muted", "─── ")}${theme.fg("accent", id)} ${resultIcon}`;
 					if (expanded) text += `\n${theme.fg("toolOutput", getResultOutput(result))}`;

@@ -28,6 +28,7 @@ import {
 	remainingExecutionMs,
 } from "./deadline-budget.ts";
 import type { DeadlineProfileStore } from "./deadline-profile-store.ts";
+import type { ManagedProcessResult } from "./managed-process.ts";
 import type {
 	DeadlineAttemptMetadata,
 	DeadlineOutcome,
@@ -99,6 +100,7 @@ export async function runAdaptiveAgent(options: RunAdaptiveAgentOptions): Promis
 	let duplicateResumeBlocked = false;
 	let lastCheckpoint: Awaited<ReturnType<typeof readCheckpoint>> | undefined;
 	let terminalOutcome: DeadlineOutcome = "budget-exhausted";
+	let unsettledProcess: ManagedProcessResult | undefined;
 	const checkpointPrefix = options.checkpointPrefix ?? path.join(os.tmpdir(), "omk-subagent-checkpoint-");
 	const workspace = await createCheckpointWorkspace(checkpointPrefix);
 
@@ -183,7 +185,11 @@ export async function runAdaptiveAgent(options: RunAdaptiveAgentOptions): Promis
 					processReason: attempt.process.reason,
 					cleanup: attempt.process.cleanup,
 				});
-
+				if (attempt.process.terminationObserved === false) {
+					unsettledProcess = attempt.result.process;
+					terminalOutcome = "failed";
+					break outer;
+				}
 				if (outcome === "completed") {
 					completedShardIds.push(shard.id);
 					terminalOutcome = "completed";
@@ -228,6 +234,13 @@ export async function runAdaptiveAgent(options: RunAdaptiveAgentOptions): Promis
 		attempts,
 		...(lastCheckpoint === undefined ? {} : { checkpoint: lastCheckpoint }),
 	};
+	if (unsettledProcess) {
+		aggregate.exitCode = 1;
+		aggregate.stopReason = "unsettled";
+		aggregate.errorMessage = "Subagent termination unconfirmed (unsettled)";
+		aggregate.process = unsettledProcess;
+		return aggregate;
+	}
 	return aggregate;
 }
 

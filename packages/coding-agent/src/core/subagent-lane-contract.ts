@@ -32,9 +32,23 @@ export type SubagentOrchestrationRole =
 /** How much of the parent context a child lane inherits. */
 export type LaneContextInheritanceMode = "none" | "receipt" | "last-turn" | "bounded" | "full";
 
+/** A resolved callback is not necessarily a successful or settled execution. */
+export type SubagentLaneExecutionResult =
+	| void
+	| { readonly status: "failed" }
+	| { readonly status: "unsettled"; readonly settlement: Promise<void> };
+
 export interface LaneOutcome {
 	readonly laneId: string;
-	readonly status: "completed" | "failed" | "cancelled" | "skipped-abort" | "permit-rejected" | "admission-deferred";
+	readonly status:
+		| "completed"
+		| "failed"
+		| "cancelled"
+		| "skipped-abort"
+		| "permit-rejected"
+		| "admission-deferred"
+		| "blocked-dependency"
+		| "unsettled";
 	readonly diagnostic?: string;
 }
 
@@ -89,7 +103,7 @@ export interface SubagentLaneAuthorityDispatchInput {
 		readonly signal?: AbortSignal;
 		readonly decision: ResourceAdmissionDecision;
 		readonly effectiveLaneWidth: number;
-	}) => Promise<void>;
+	}) => Promise<SubagentLaneExecutionResult>;
 	readonly signal?: AbortSignal;
 	readonly permitWaitTimeoutMs?: number;
 }

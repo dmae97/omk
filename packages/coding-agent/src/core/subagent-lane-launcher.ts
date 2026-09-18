@@ -1,5 +1,5 @@
 import type { ResourceAdmissionDecision } from "./resource-admission.ts";
-import type { LaneOutcome } from "./subagent-lane-contract.ts";
+import type { LaneOutcome, SubagentLaneExecutionResult } from "./subagent-lane-contract.ts";
 import type { SubagentOrchestrationPlan } from "./subagent-orchestration.ts";
 import { WorkloadPermitError, type WorkloadPermitPool } from "./workload-permit-pool.ts";
 
@@ -65,7 +65,7 @@ export interface LaunchSubagentLanesInput {
 	/** Lane ids that run heavy work and must hold a shared permit (§14.3). */
 	readonly heavyLaneIds?: ReadonlySet<string>;
 	/** The actual child launcher (process spawn, SDK session, or test double). */
-	readonly launchLane: (context: SubagentLaneContext) => Promise<void>;
+	readonly launchLane: (context: SubagentLaneContext) => Promise<SubagentLaneExecutionResult>;
 	readonly permitWaitTimeoutMs?: number;
 }
 
@@ -76,19 +76,42 @@ export interface LaunchSubagentLanesResult {
 }
 
 /**
+ * Heavy admission gate for the effective lane width. Omitted `heavyLaneIds`
+ * preserves the legacy contract: remaining pool capacity gates the whole width.
+ * An explicitly declared set narrows the gate to heavy work only (spec F06): a
+ * light-only declaration or a mixed plan must not let the heavy pool stall light
+ * lanes; mixed plans defer heavy lanes individually at permit acquisition.
+ */
+function computeHeavyAdmissionGate(
+	poolSnapshot: { readonly capacity: number; readonly activeWeight: number },
+	heavyLaneIds: ReadonlySet<string> | undefined,
+	plan: SubagentOrchestrationPlan,
+	maxHeavyProcesses: number,
+): number {
+	if (heavyLaneIds === undefined) return Math.max(0, poolSnapshot.capacity - poolSnapshot.activeWeight);
+	if (heavyLaneIds.size === 0) return Number.POSITIVE_INFINITY;
+	const allHeavy = plan.batches.every((batch) => batch.laneIds.every((id) => heavyLaneIds.has(id)));
+	if (!allHeavy) return Number.POSITIVE_INFINITY;
+	return Math.min(Math.max(0, poolSnapshot.capacity - poolSnapshot.activeWeight), maxHeavyProcesses);
+}
+
+/**
  * Execute a plan's batches with the §14.2 width as launcher authority.
  * Never throws for lane failures; the caller reads per-lane outcomes.
  */
 export async function launchSubagentLanes(input: LaunchSubagentLanesInput): Promise<LaunchSubagentLanesResult> {
 	const poolSnapshot = input.permitPool.snapshot();
+	const heavyAdmission = computeHeavyAdmissionGate(
+		poolSnapshot,
+		input.heavyLaneIds,
+		input.plan,
+		input.decision.maxHeavyProcesses,
+	);
 	const effectiveLaneWidth = computeEffectiveLaneWidth({
 		planWidth: input.plan.route.width,
 		configuredMaxParallelLanes: input.configuredMaxParallelLanes,
 		admissionMaxParallelLanes: input.decision.maxParallelLanes,
-		availableHeavyPermits: Math.min(
-			Math.max(0, poolSnapshot.capacity - poolSnapshot.activeWeight),
-			input.heavyLaneIds?.size ? input.decision.maxHeavyProcesses : Number.POSITIVE_INFINITY,
-		),
+		availableHeavyPermits: heavyAdmission,
 		pathConflictFreeWidth: Math.max(0, ...input.plan.batches.map((batch) => batch.laneIds.length)),
 	});
 
@@ -97,9 +120,17 @@ export async function launchSubagentLanes(input: LaunchSubagentLanesInput): Prom
 	let maxObservedConcurrency = 0;
 
 	for (const batch of input.plan.batches) {
-		if (input.signal?.aborted || effectiveLaneWidth === 0) {
+		const blocked = outcomes.some((outcome) => outcome.status !== "completed");
+		if (input.signal?.aborted || effectiveLaneWidth === 0 || blocked) {
 			for (const laneId of batch.laneIds) {
-				outcomes.push({ laneId, status: input.signal?.aborted ? "skipped-abort" : "admission-deferred" });
+				outcomes.push({
+					laneId,
+					status: input.signal?.aborted
+						? "skipped-abort"
+						: effectiveLaneWidth === 0
+							? "admission-deferred"
+							: "blocked-dependency",
+				});
 			}
 			continue;
 		}
@@ -111,12 +142,13 @@ export async function launchSubagentLanes(input: LaunchSubagentLanesInput): Prom
 			while (cursor < batch.laneIds.length) {
 				const laneId = batch.laneIds[cursor];
 				cursor += 1;
-				if (input.signal?.aborted) {
-					outcomes.push({ laneId, status: "skipped-abort" });
+				if (input.signal?.aborted || outcomes.some((outcome) => outcome.status === "unsettled")) {
+					outcomes.push({ laneId, status: input.signal?.aborted ? "skipped-abort" : "blocked-dependency" });
 					continue;
 				}
 				outcomes.push(
 					await runLane(input, laneId, effectiveLaneWidth, {
+						blocked: () => outcomes.some((outcome) => outcome.status === "unsettled"),
 						enter: () => {
 							active += 1;
 							maxObservedConcurrency = Math.max(maxObservedConcurrency, active);
@@ -141,11 +173,16 @@ async function runLane(
 	input: LaunchSubagentLanesInput,
 	laneId: string,
 	effectiveLaneWidth: number,
-	gauge: { readonly enter: () => void; readonly exit: () => void },
+	gauge: { readonly enter: () => void; readonly exit: () => void; readonly blocked: () => boolean },
 ): Promise<LaneOutcome> {
 	let releasePermit: (() => void) | undefined;
+	let retained = false;
 	if (input.heavyLaneIds?.has(laneId)) {
-		if (input.decision.action === "defer-heavy" || input.decision.maxHeavyProcesses === 0) {
+		if (
+			input.decision.action === "defer-heavy" ||
+			input.permitPool.snapshot().capacity === 0 ||
+			input.permitPool.snapshot().activeWeight >= input.decision.maxHeavyProcesses
+		) {
 			return { laneId, status: "admission-deferred" };
 		}
 		try {
@@ -167,20 +204,32 @@ async function runLane(
 			};
 		}
 	}
-	if (input.signal?.aborted) {
+	if (input.signal?.aborted || gauge.blocked()) {
 		releasePermit?.();
-		return { laneId, status: "skipped-abort" };
+		return { laneId, status: input.signal?.aborted ? "skipped-abort" : "blocked-dependency" };
 	}
 	gauge.enter();
 	try {
-		await input.launchLane({
+		const result = await input.launchLane({
 			laneId,
 			promptRunId: input.promptRunId,
 			signal: input.signal,
 			decision: input.decision,
 			effectiveLaneWidth,
 		});
-		return { laneId, status: input.signal?.aborted ? "cancelled" : "completed" };
+		if (result?.status === "unsettled") {
+			retained = true;
+			// A rejected settlement cannot prove termination; retain the reservation.
+			void result.settlement.then(
+				() => {
+					gauge.exit();
+					releasePermit?.();
+				},
+				() => {},
+			);
+			return { laneId, status: "unsettled" };
+		}
+		return { laneId, status: input.signal?.aborted ? "cancelled" : (result?.status ?? "completed") };
 	} catch {
 		// Child error text is untrusted and may contain credentials.
 		return {
@@ -189,7 +238,9 @@ async function runLane(
 			diagnostic: "lane.execution_failed",
 		};
 	} finally {
-		gauge.exit();
-		releasePermit?.();
+		if (!retained) {
+			gauge.exit();
+			releasePermit?.();
+		}
 	}
 }

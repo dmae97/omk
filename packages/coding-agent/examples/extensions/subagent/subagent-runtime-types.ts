@@ -1,6 +1,6 @@
 import type { Message } from "omk-ai";
 import type { AgentCheckpoint } from "./checkpoint-runtime.ts";
-import type { ManagedProcessCleanup, ManagedProcessReason } from "./managed-process.ts";
+import type { ManagedProcessCleanup, ManagedProcessReason, ManagedProcessResult } from "./managed-process.ts";
 
 export interface UsageStats {
 	input: number;
@@ -47,6 +47,20 @@ export interface AgentDeadlineMetadata {
 }
 
 export interface SingleResult {
+	nodeId?: string;
+	attemptId?: string;
+	dependencyDigests?: Readonly<Record<string, string>>;
+	process?: ManagedProcessResult;
+	stream?: {
+		stdoutBytes: number;
+		stderrBytes: number;
+		events: number;
+		messages: number;
+		stdoutDigest: string;
+		stderrDigest: string;
+		usageUnknown: boolean;
+		failure?: string;
+	};
 	agent: string;
 	agentSource: "user" | "project" | "unknown";
 	task: string;
@@ -68,6 +82,8 @@ export interface SubagentAttemptResult {
 		readonly reason: ManagedProcessReason;
 		readonly elapsedMs: number;
 		readonly cleanup: ManagedProcessCleanup;
+		readonly terminationObserved?: boolean;
+		readonly settlement?: Promise<void>;
 	};
 }
 

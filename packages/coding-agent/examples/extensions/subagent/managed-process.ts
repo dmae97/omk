@@ -6,11 +6,12 @@ import {
 	spawn,
 } from "node:child_process";
 import type { Readable } from "node:stream";
+import { processGroupState, signalProcessTree } from "./managed-process-tree.ts";
 
 type ManagedChild = ChildProcessByStdio<null, Readable, Readable>;
 type ManagedSpawnOptions = SpawnOptionsWithStdioTuple<StdioNull, StdioPipe, StdioPipe>;
 
-export type ManagedProcessReason = "completed" | "cutoff" | "aborted" | "spawn-error";
+export type ManagedProcessReason = "completed" | "cutoff" | "aborted" | "spawn-error" | "signal" | "callback-error";
 
 export interface ManagedProcessCleanup {
 	readonly termSent: boolean;
@@ -25,6 +26,10 @@ export interface ManagedProcessResult {
 	readonly reason: ManagedProcessReason;
 	readonly elapsedMs: number;
 	readonly cleanup: ManagedProcessCleanup;
+	/** Snapshot at response time. False means the owner must retain its reservation. */
+	readonly terminationObserved: boolean;
+	/** Resolves only on confirmed termination or confirmed failure to start, never on a timeout. */
+	readonly settlement: Promise<void>;
 	readonly errorMessage?: string;
 }
 
@@ -41,17 +46,13 @@ export interface RunManagedProcessOptions {
 	readonly spawnProcess?: (command: string, args: readonly string[], options: ManagedSpawnOptions) => ManagedChild;
 }
 
-const DEFAULT_TERMINATION_GRACE_MS = 1_500;
-const DEFAULT_FORCE_SETTLE_MS = 2_000;
-
 export async function runManagedProcess(options: RunManagedProcessOptions): Promise<ManagedProcessResult> {
-	const startedAtMs = Date.now();
+	const startedAtMs = performance.now();
 	const processGroup = process.platform !== "win32";
 	if (options.signal?.aborted) return withoutChild("aborted", startedAtMs, processGroup);
-	const spawnProcess = options.spawnProcess ?? defaultSpawn;
 	let child: ManagedChild;
 	try {
-		child = spawnProcess(options.command, options.args, {
+		child = (options.spawnProcess ?? defaultSpawn)(options.command, options.args, {
 			cwd: options.cwd,
 			shell: false,
 			stdio: ["ignore", "pipe", "pipe"],
@@ -67,99 +68,114 @@ export async function runManagedProcess(options: RunManagedProcessOptions): Prom
 		);
 	}
 	const pid = child.pid ?? -1;
+	let confirmSettlement: () => void = () => {};
+	const settlement = new Promise<void>((resolve) => {
+		confirmSettlement = resolve;
+	});
 
 	return await new Promise<ManagedProcessResult>((resolve) => {
-		let settled = false;
+		let responded = false;
+		let terminated = false;
+		let closeObserved = false;
+		let exitCode: number | null = null;
+		let processSignal: NodeJS.Signals | null = null;
 		let reason: ManagedProcessReason = "completed";
 		let errorMessage: string | undefined;
 		let termSent = false;
 		let killSent = false;
 		let cutoffTimer: NodeJS.Timeout | undefined;
 		let escalationTimer: NodeJS.Timeout | undefined;
-		let forceSettleTimer: NodeJS.Timeout | undefined;
+		let responseTimer: NodeJS.Timeout | undefined;
+		let observationTimer: NodeJS.Timeout | undefined;
 
-		const cleanup = (): void => {
-			if (cutoffTimer !== undefined) clearTimeout(cutoffTimer);
-			if (escalationTimer !== undefined) clearTimeout(escalationTimer);
-			if (forceSettleTimer !== undefined) clearTimeout(forceSettleTimer);
+		const respond = (): void => {
+			if (responded) return;
+			responded = true;
+			if (cutoffTimer) clearTimeout(cutoffTimer);
+			if (responseTimer) clearTimeout(responseTimer);
 			options.signal?.removeEventListener("abort", onAbort);
-		};
-
-		const settle = (exitCode: number | null, processSignal: NodeJS.Signals | null): void => {
-			if (settled) return;
-			settled = true;
-			cleanup();
 			child.stdout.destroy();
 			child.stderr.destroy();
 			resolve({
 				pid,
-				exitCode: normalizeExitCode(exitCode, reason),
+				exitCode: normalizeExitCode(exitCode, reason, processSignal, terminated),
 				signal: processSignal,
 				reason,
-				elapsedMs: Date.now() - startedAtMs,
+				elapsedMs: performance.now() - startedAtMs,
 				cleanup: { termSent, killSent, processGroup },
+				terminationObserved: terminated,
+				settlement,
 				...(errorMessage === undefined ? {} : { errorMessage }),
 			});
 		};
-
-		const requestTermination = (nextReason: "cutoff" | "aborted"): void => {
-			if (settled || reason !== "completed") return;
-			reason = nextReason;
+		const confirm = (): void => {
+			if (terminated) return;
+			terminated = true;
+			if (escalationTimer) clearTimeout(escalationTimer);
+			if (observationTimer) clearTimeout(observationTimer);
+			confirmSettlement();
+			respond();
+		};
+		const observe = (): void => {
+			if (terminated || !closeObserved) return;
+			if (processGroupState(pid) === "gone") {
+				confirm();
+				return;
+			}
+			// After the cleanup deadline only observe: never send late signals to a reused PID.
+			observationTimer = setTimeout(observe, 25);
+			observationTimer.unref();
+		};
+		const startCleanup = (): void => {
+			if (terminated || termSent) return;
 			termSent = true;
 			signalProcessTree(child, "SIGTERM", processGroup);
-			const graceMs = Math.max(0, options.terminationGraceMs ?? DEFAULT_TERMINATION_GRACE_MS);
+			const graceMs = Math.max(0, options.terminationGraceMs ?? 1_500);
 			escalationTimer = setTimeout(() => {
-				if (settled) return;
+				if (terminated) return;
 				killSent = true;
 				signalProcessTree(child, "SIGKILL", processGroup);
 			}, graceMs);
-			forceSettleTimer = setTimeout(
-				() => settle(null, null),
-				graceMs + Math.max(1, options.forceSettleMs ?? DEFAULT_FORCE_SETTLE_MS),
-			);
+			responseTimer = setTimeout(respond, graceMs + Math.max(1, options.forceSettleMs ?? 2_000));
 		};
-
+		const requestTermination = (nextReason: ManagedProcessReason): void => {
+			if (responded || terminated) return;
+			if (reason === "completed") reason = nextReason;
+			startCleanup();
+		};
 		function onAbort(): void {
 			requestTermination("aborted");
 		}
-
+		const deliver = (callback: ((chunk: string) => void) | undefined, chunk: string): void => {
+			if (responded || reason === "callback-error") return;
+			try {
+				callback?.(chunk);
+			} catch {
+				errorMessage = "process.output_callback_failed";
+				requestTermination("callback-error");
+			}
+		};
 		child.stdout.setEncoding("utf8");
 		child.stderr.setEncoding("utf8");
-		child.stdout.on("data", (chunk: string) => options.onStdout?.(chunk));
-		child.stderr.on("data", (chunk: string) => options.onStderr?.(chunk));
-		child.once("error", (error: Error) => {
-			if (reason === "completed") reason = "spawn-error";
+		child.stdout.on("data", (chunk: string) => deliver(options.onStdout, chunk));
+		child.stderr.on("data", (chunk: string) => deliver(options.onStderr, chunk));
+		child.on("error", (error: Error) => {
+			if (terminated) return;
 			errorMessage = error.message;
-			settle(1, null);
+			if (pid < 1) {
+				reason = "spawn-error";
+				confirm();
+			} else requestTermination("spawn-error");
 		});
-		child.once("close", (code: number | null, processSignal: NodeJS.Signals | null) => {
-			if ((reason === "cutoff" || reason === "aborted") && termSent && !killSent) {
-				killSent = true;
-				signalProcessTree(child, "SIGKILL", processGroup);
-				settle(code, processSignal);
-				return;
-			}
-			if (reason === "completed" && processGroupExists(pid)) {
-				if (cutoffTimer !== undefined) clearTimeout(cutoffTimer);
-				options.signal?.removeEventListener("abort", onAbort);
-				termSent = true;
-				signalProcessTree(child, "SIGTERM", processGroup);
-				const graceMs = Math.max(0, options.terminationGraceMs ?? DEFAULT_TERMINATION_GRACE_MS);
-				escalationTimer = setTimeout(() => {
-					if (processGroupExists(pid)) {
-						killSent = true;
-						signalProcessTree(child, "SIGKILL", processGroup);
-					}
-					settle(code, processSignal);
-				}, graceMs);
-				return;
-			}
-			settle(code, processSignal);
+		child.once("close", (code: number | null, signal: NodeJS.Signals | null) => {
+			closeObserved = true;
+			exitCode = code;
+			processSignal = signal;
+			if (reason === "completed" && signal !== null) reason = "signal";
+			if (processGroupState(pid) !== "gone" && !responded) startCleanup();
+			observe();
 		});
-
-		if (options.cutoffMs > 0) {
-			cutoffTimer = setTimeout(() => requestTermination("cutoff"), options.cutoffMs);
-		}
+		if (options.cutoffMs > 0) cutoffTimer = setTimeout(() => requestTermination("cutoff"), options.cutoffMs);
 		if (options.signal?.aborted) onAbort();
 		else options.signal?.addEventListener("abort", onAbort, { once: true });
 	});
@@ -176,8 +192,10 @@ function withoutChild(
 		exitCode: reason === "aborted" ? 130 : 1,
 		signal: null,
 		reason,
-		elapsedMs: Date.now() - startedAtMs,
+		elapsedMs: performance.now() - startedAtMs,
 		cleanup: { termSent: false, killSent: false, processGroup },
+		terminationObserved: true,
+		settlement: Promise.resolve(),
 		...(errorMessage === undefined ? {} : { errorMessage }),
 	};
 }
@@ -186,51 +204,14 @@ function defaultSpawn(command: string, args: readonly string[], options: Managed
 	return spawn(command, [...args], options);
 }
 
-function processGroupExists(pid: number): boolean {
-	if (process.platform === "win32" || pid < 1) return false;
-	try {
-		process.kill(-pid, 0);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-function signalProcessTree(child: ManagedChild, signal: "SIGTERM" | "SIGKILL", processGroup: boolean): void {
-	const pid = child.pid;
-	if (pid === undefined) return;
-	if (process.platform === "win32") {
-		if (signal === "SIGKILL") {
-			try {
-				spawn("taskkill", ["/F", "/T", "/PID", String(pid)], {
-					detached: true,
-					stdio: "ignore",
-					windowsHide: true,
-				}).unref();
-				return;
-			} catch {
-				child.kill(signal);
-				return;
-			}
-		}
-		child.kill(signal);
-		return;
-	}
-	try {
-		process.kill(processGroup ? -pid : pid, signal);
-	} catch {
-		try {
-			child.kill(signal);
-		} catch {
-			return;
-		}
-	}
-}
-
-function normalizeExitCode(exitCode: number | null, reason: ManagedProcessReason): number {
-	if (exitCode !== null) return exitCode;
-	if (reason === "completed") return 0;
+function normalizeExitCode(
+	exitCode: number | null,
+	reason: ManagedProcessReason,
+	signal: NodeJS.Signals | null,
+	terminated: boolean,
+): number {
 	if (reason === "cutoff") return 124;
 	if (reason === "aborted") return 130;
-	return 1;
+	if (!terminated || signal !== null || reason !== "completed") return exitCode || 1;
+	return exitCode ?? 1;
 }
