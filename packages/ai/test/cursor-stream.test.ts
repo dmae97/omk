@@ -156,6 +156,14 @@ describe("Cursor wire model resolution", () => {
 		expect(resolveCursorWireModel("gpt-5.2-low-fast").modelId).toBe("gpt-5.2-fast");
 	});
 
+	it("maps the extra-high display suffix to the xhigh wire tier", () => {
+		const { modelId, parameters } = resolveCursorWireModel("gpt-5.5-extra-high");
+		expect(modelId).toBe("gpt-5.5");
+		const param = new ProtoMessage(parameters[0]);
+		expect(param.string(1)).toBe("reasoning");
+		expect(param.string(2)).toBe("xhigh");
+	});
+
 	it("drops the reasoning parameter for the none tier", () => {
 		expect(resolveCursorWireModel("gpt-5.5-none")).toEqual({ modelId: "gpt-5.5", parameters: [] });
 	});

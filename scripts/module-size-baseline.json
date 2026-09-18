@@ -13,7 +13,7 @@
 	"packages/agent/src/proxy.ts": 297,
 	"packages/ai/src/providers/amazon-bedrock.ts": 767,
 	"packages/ai/src/providers/anthropic.ts": 1111,
-	"packages/ai/src/providers/cursor.ts": 696,
+	"packages/ai/src/providers/cursor.ts": 697,
 	"packages/ai/src/providers/faux.ts": 451,
 	"packages/ai/src/providers/google-vertex.ts": 498,
 	"packages/ai/src/providers/google.ts": 438,

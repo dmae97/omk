@@ -109,7 +109,8 @@ function normalizeCursorArgs(value: unknown, seen = new Set<object>()): unknown 
 // ---------------------------------------------------------------------------
 
 const OPENAI_WIRE_PREFIX = /^(gpt-|composer|o\d)/i;
-const EFFORT_SUFFIXES = ["minimal", "low", "medium", "high", "xhigh", "max", "none"] as const;
+// Longest match first: `extra-high` must precede `high`, `xhigh` before `high`.
+const EFFORT_SUFFIXES = ["extra-high", "minimal", "xhigh", "medium", "high", "low", "max", "none"] as const;
 type CursorEffort = (typeof EFFORT_SUFFIXES)[number];
 
 function splitEffortSuffix(id: string): { base: string; effort?: CursorEffort; fast: boolean } {
@@ -142,9 +143,11 @@ export function resolveCursorWireModel(modelId: string): { modelId: string; para
 	const { base, effort, fast } = splitEffortSuffix(modelId);
 	if (effort !== undefined && isOpenAiFamily(base)) {
 		if (effort === "none") return { modelId: fast ? `${base}-fast` : base, parameters: [] };
+		// `extra-high` is the display suffix for the `xhigh` wire tier.
+		const wireEffort = effort === "extra-high" ? "xhigh" : effort;
 		return {
 			modelId: fast ? `${base}-fast` : base,
-			parameters: [Buffer.concat([field(1, "reasoning"), field(2, effort)])],
+			parameters: [Buffer.concat([field(1, "reasoning"), field(2, wireEffort)])],
 		};
 	}
 	if (modelId === "composer-2.5") {

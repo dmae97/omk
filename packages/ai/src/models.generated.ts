@@ -4801,8 +4801,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -4837,8 +4836,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -4873,8 +4871,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -4909,8 +4906,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -4945,8 +4941,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":null,"max":"max","ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -4981,8 +4976,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5017,8 +5011,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5035,8 +5028,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5053,8 +5045,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":null,"max":"max","ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5071,8 +5062,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5179,8 +5169,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":"xhigh","max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5197,8 +5186,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5215,8 +5203,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5233,8 +5220,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":null,"max":"max","ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5251,8 +5237,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5359,8 +5344,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":"xhigh","max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5377,8 +5361,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5395,8 +5378,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5413,8 +5395,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5431,8 +5412,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5449,8 +5429,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":null,"max":"max","ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5467,8 +5446,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":null,"max":"max","ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5485,8 +5463,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5503,8 +5480,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5701,8 +5677,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":"xhigh","max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5719,8 +5694,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":"xhigh","max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5737,8 +5711,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5755,8 +5728,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5773,8 +5745,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5791,8 +5762,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5809,8 +5779,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":null,"max":"max","ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5827,8 +5796,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":null,"max":"max","ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5845,8 +5813,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -5863,8 +5830,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6061,8 +6027,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":"xhigh","max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6079,8 +6044,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":"xhigh","max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6097,8 +6061,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6115,8 +6078,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6133,8 +6095,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6151,8 +6112,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6169,8 +6129,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6187,8 +6146,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6385,8 +6343,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6403,8 +6360,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6421,8 +6377,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":null,"max":"max","ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6439,8 +6394,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6547,8 +6501,7 @@ export const MODELS = {
 			api: "cursor-agent",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
-			reasoning: true,
-			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":"xhigh","max":null,"ultra":null},
+			reasoning: false,
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6566,7 +6519,7 @@ export const MODELS = {
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: false,
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6583,7 +6536,7 @@ export const MODELS = {
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: false,
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6601,7 +6554,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6619,7 +6572,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6637,7 +6590,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6655,7 +6608,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6673,7 +6626,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6691,7 +6644,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6709,7 +6662,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6727,7 +6680,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6745,7 +6698,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6763,7 +6716,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6781,7 +6734,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6799,7 +6752,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6817,7 +6770,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":"xhigh","max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -6835,7 +6788,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":"xhigh","max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -7104,7 +7057,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -7122,7 +7075,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":null,"max":"max","ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -8623,7 +8576,7 @@ export const MODELS = {
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: false,
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -8641,7 +8594,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -8659,7 +8612,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -8677,7 +8630,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":null,"max":"max","ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -8695,7 +8648,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -8713,7 +8666,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":"low","medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -8731,7 +8684,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":null,"max":"max","ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -8749,7 +8702,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":"medium","high":null,"xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -8767,7 +8720,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":"minimal","low":null,"medium":null,"high":null,"xhigh":null,"max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
@@ -8785,7 +8738,7 @@ export const MODELS = {
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: true,
 			thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":"xhigh","max":null,"ultra":null},
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 0,
 				output: 0,
