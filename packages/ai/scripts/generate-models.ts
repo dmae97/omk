@@ -19,6 +19,7 @@ import type {
 	OpenAIResponsesCompat,
 } from "../src/types.ts";
 import { DEEPSEEK_COMPLETIONS_COMPAT, deepSeekNativeModels } from "./catalog-deepseek.ts";
+import { cursorModels } from "./catalog-cursor.ts";
 import { devinModels } from "./catalog-devin.ts";
 import { catalogPricePerMillion } from "./catalog-pricing.ts";
 import { applyCurrentThinkingMetadata, applyGpt6AstraUltraAlias, openRouterThinkingMap } from "./catalog-thinking.ts";
@@ -1757,6 +1758,11 @@ async function generateModels() {
 		writeModelCatalog([...preserved.filter((model) => model.provider !== "devin"), ...devinModels()]);
 		return;
 	}
+	if (process.argv.includes("--cursor-only")) {
+		const preserved: Model<Api>[] = Object.values(MODELS).flatMap((models) => Object.values(models));
+		writeModelCatalog([...preserved.filter((model) => model.provider !== "cursor"), ...cursorModels()]);
+		return;
+	}
 	// Fetch models from both sources
 	// models.dev: Anthropic, Google, OpenAI, Groq, Cerebras
 	// OpenRouter: xAI and other providers (excluding Anthropic, Google, OpenAI)
@@ -2588,7 +2594,7 @@ async function generateModels() {
 			provider: "azure-openai-responses",
 			baseUrl: "",
 		}));
-	allModels.push(...azureOpenAiModels, ...devinModels());
+	allModels.push(...azureOpenAiModels, ...devinModels(), ...cursorModels());
 
 	for (const model of allModels) {
 		applyModelMetadata(model);

@@ -3,6 +3,7 @@ import type { AssistantMessageEvent, Context, Model, SimpleStreamOptions, Stream
 import type { BedrockOptions } from "./amazon-bedrock.ts";
 import type { AnthropicOptions } from "./anthropic.ts";
 import type { AzureOpenAIResponsesOptions } from "./azure-openai-responses.ts";
+import type { CursorOptions } from "./cursor.ts";
 import type { DevinOptions } from "./devin.ts";
 import type { GoogleOptions } from "./google.ts";
 import type { GoogleVertexOptions } from "./google-vertex.ts";
@@ -80,6 +81,18 @@ function loadDevinProviderModule(): Promise<LazyProviderModule<"devin-agent", De
 		return { stream: provider.streamDevin, streamSimple: provider.streamSimpleDevin };
 	});
 	return devinProviderModulePromise;
+}
+
+let cursorProviderModulePromise:
+	| Promise<LazyProviderModule<"cursor-agent", CursorOptions, SimpleStreamOptions>>
+	| undefined;
+
+function loadCursorProviderModule(): Promise<LazyProviderModule<"cursor-agent", CursorOptions, SimpleStreamOptions>> {
+	cursorProviderModulePromise ||= importNodeOnlyProvider("./cursor.ts").then((module) => {
+		const provider = module as typeof import("./cursor.ts");
+		return { stream: provider.streamCursor, streamSimple: provider.streamSimpleCursor };
+	});
+	return cursorProviderModulePromise;
 }
 
 let anthropicProviderModulePromise:
@@ -242,6 +255,8 @@ function loadBedrockProviderModule(): Promise<
 
 export const streamDevin = createLazyStream(loadDevinProviderModule);
 export const streamSimpleDevin = createLazySimpleStream(loadDevinProviderModule);
+export const streamCursor = createLazyStream(loadCursorProviderModule);
+export const streamSimpleCursor = createLazySimpleStream(loadCursorProviderModule);
 export const streamAnthropic = createLazyStream(loadAnthropicProviderModule);
 export const streamSimpleAnthropic = createLazySimpleStream(loadAnthropicProviderModule);
 export const streamAzureOpenAIResponses = createLazyStream(loadAzureOpenAIResponsesProviderModule);
@@ -263,6 +278,7 @@ const streamSimpleBedrockLazy = createLazySimpleStream(loadBedrockProviderModule
 
 export function registerBuiltInApiProviders(): void {
 	registerApiProvider({ api: "devin-agent", stream: streamDevin, streamSimple: streamSimpleDevin });
+	registerApiProvider({ api: "cursor-agent", stream: streamCursor, streamSimple: streamSimpleCursor });
 	registerApiProvider({
 		api: "anthropic-messages",
 		stream: streamAnthropic,
