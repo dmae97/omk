@@ -33,7 +33,14 @@ import {
 } from "./core/agent-session-services.ts";
 import { formatNoModelsAvailableMessage } from "./core/auth-guidance.ts";
 import { AuthStorage } from "./core/auth-storage.ts";
+import { collectSettingsDiagnostics, reportDiagnostics } from "./core/cli-diagnostics.ts";
 import { exportFromFile } from "./core/export-html/index.ts";
+
+function isTruthyEnvFlag(value: string | undefined): boolean {
+	if (!value) return false;
+	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
+}
+
 import type { ExtensionFactory } from "./core/extensions/types.ts";
 import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
 import { KeybindingsManager } from "./core/keybindings.ts";
@@ -51,6 +58,7 @@ import { assertValidSessionId, SessionManager } from "./core/session-manager.ts"
 import { SettingsManager } from "./core/settings-manager.ts";
 import { printTimings, resetTimings, time } from "./core/timings.ts";
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
+import { runAcpMode } from "./modes/acp/acp-mode.ts";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.ts";
 import { ExtensionSelectorComponent } from "./modes/interactive/components/extension-selector.ts";
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
@@ -106,29 +114,6 @@ async function readPipedStdin(): Promise<string | undefined> {
 		process.stdin.on("error", onEnd);
 		process.stdin.resume();
 	});
-}
-
-function collectSettingsDiagnostics(
-	settingsManager: SettingsManager,
-	context: string,
-): AgentSessionRuntimeDiagnostic[] {
-	return settingsManager.drainErrors().map(({ scope, error }) => ({
-		type: "warning",
-		message: `(${context}, ${scope} settings) ${error.message}`,
-	}));
-}
-
-function reportDiagnostics(diagnostics: readonly AgentSessionRuntimeDiagnostic[]): void {
-	for (const diagnostic of diagnostics) {
-		const color = diagnostic.type === "error" ? chalk.red : diagnostic.type === "warning" ? chalk.yellow : chalk.dim;
-		const prefix = diagnostic.type === "error" ? "Error: " : diagnostic.type === "warning" ? "Warning: " : "";
-		console.error(color(`${prefix}${diagnostic.message}`));
-	}
-}
-
-function isTruthyEnvFlag(value: string | undefined): boolean {
-	if (!value) return false;
-	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
 }
 
 type AppMode = "interactive" | "print" | "json" | "rpc";
@@ -199,7 +184,7 @@ function resolveAppMode(parsed: Args, stdinIsTTY: boolean, stdoutIsTTY: boolean 
 	return "interactive";
 }
 
-function toPrintOutputMode(appMode: AppMode): Exclude<Mode, "rpc"> {
+function toPrintOutputMode(appMode: AppMode): Exclude<Mode, "rpc" | "acp"> {
 	return appMode === "json" ? "json" : "text";
 }
 
@@ -613,6 +598,10 @@ export async function main(args: string[], options?: MainOptions) {
 		}
 	}
 	time("parseArgs");
+	if (parsed.mode === "acp" && !parsed.help && !parsed.version) {
+		await runAcpMode(parsed);
+		return;
+	}
 	let appMode = resolveAppMode(parsed, !!process.stdin.isTTY, !!process.stdout.isTTY);
 	// Bare interactive launch: try to reclaim the controlling TTY when a host
 	// detached stdio. Launcher may already have re-exec'd under `script`.

@@ -1,6 +1,6 @@
 ---
 name: omk-computeruse
-description: Route and operate OMK computer-use tasks across native desktop apps, WSL-to-Windows experiments, deterministic browser tools, Stagehand core, and Browserbase MCP without introducing a second orchestrator. Use when an OMK task must inspect or control macOS, Windows, Linux, Chrome, VS Code, Explorer, native GUI applications, browser sessions, screenshots, mouse/keyboard input, or structured web extraction.
+description: Route OMK computer-use and Neo tasks by verified tool and model capabilities, without a second orchestrator. Use for native desktop apps, WSL-to-Windows experiments, browser sessions, site previews, screenshots, mouse/keyboard input, structured web extraction, or questions about Neo skills and MCP setup availability.
 ---
 
 # OMK Computer Use
@@ -19,11 +19,18 @@ Keep OMK as the root planner. Treat Cua Driver, Stagehand, Playwright, Chrome De
 2. Read [routing.md](references/routing.md), then load only the selected runtime reference:
    - [cua-driver.md](references/cua-driver.md)
    - [stagehand.md](references/stagehand.md)
-3. Run `node scripts/check-runtime.mjs --json` for a secret-free local inventory. This does not prove GUI access or MCP connectivity.
+3. From this skill directory, run `node scripts/check-runtime.mjs --json` for a secret-free local inventory. This does not prove GUI access or MCP connectivity. Discover the live tool roster before selecting a runtime.
 4. Run the selected runtime's read-only health check before acting. Do not install, configure MCP, grant permissions, or restart a process without explicit approval.
 5. Define an OMK lane grant with the target app/session, allowed actions, forbidden side effects, and evidence predicate.
 6. Execute the smallest observe → act → observe/verify cycle. Prefer deterministic selectors or accessibility elements over coordinates.
-7. Close temporary sessions and report verified, inferred, and assumed claims separately.
+7. Close only temporary sessions owned by this task and report verified, inferred, and assumed claims separately.
+
+## Capability and Neo boundaries
+
+- Working tool calls and text input are enough for DOM/accessibility observations. Screenshot interpretation additionally requires declared image input support and an image payload accepted by the provider. A filename is not pixel evidence.
+- Stop with a capability diagnostic if the model cannot reliably supply required tool arguments. Do not silently switch providers or send user data to a different model.
+- Skill instructions are not executable drivers, runtime permission enforcement, or evidence of model success rates. Native desktop access requires a connected driver on the actual target host; WSL alone does not provide Windows GUI access.
+- For Neo availability, bundle loading, or MCP setup, read [neo.md](references/neo.md). Check the installed version and source before recommending candidate-only commands. A skill update does not install or activate MCP servers.
 
 ## Hard rules
 
@@ -32,7 +39,9 @@ Keep OMK as the root planner. Treat Cua Driver, Stagehand, Playwright, Chrome De
 - Discover the live MCP tool roster. Do not invent tool names from the logical contracts in this skill.
 - Do not expose credentials in arguments, screenshots, logs, reports, or durable files.
 - Do not use a UI tool for an operation that OMK can perform more safely through a deterministic local API or file edit.
-- Do not claim success from a click. Re-observe the resulting state and verify the requested predicate.
+- Define the expected postcondition before a mutating action. Do not claim success from a click; re-observe and verify that postcondition.
+- Refresh accessibility/element references after navigation or rerendering. On timeout, inspect state before retrying: a submission may already have succeeded. Allow at most two repair attempts for the same failed action, then report the blocker. Never blindly repeat a non-idempotent action.
+- Stop on unexpected origins, ambiguous targets, lost session ownership, security challenges, or unverified side effects. Ask for user intervention rather than bypassing CAPTCHA or weakening a sandbox.
 - Do not let Stagehand `agent.execute` or another agent loop re-plan an entire OMK goal. Use it only for a bounded browser subtask after simpler routes fail.
 - Do not assume `cua-driver` exposes arbitrary shell execution. Use OMK's governed shell for local commands; use a separately approved remote-command transport when the target host differs.
 - Keep one writer per app/session. Parallel lanes may inspect independent sessions, but they must not share a mutable desktop or browser session.

@@ -5,7 +5,7 @@
 
 import type { ThinkingLevel } from "omk-agent-core";
 
-export type Mode = "text" | "json" | "rpc";
+export type Mode = "text" | "json" | "rpc" | "acp";
 
 export interface Args {
 	provider?: string;
@@ -83,7 +83,7 @@ export function parseArgs(args: string[]): Args {
 			result.version = true;
 		} else if (arg === "--mode" && i + 1 < args.length) {
 			const mode = args[++i];
-			if (mode === "text" || mode === "json" || mode === "rpc") {
+			if (mode === "text" || mode === "json" || mode === "rpc" || mode === "acp") {
 				result.mode = mode;
 			}
 		} else if (arg === "--continue" || arg === "-c") {
