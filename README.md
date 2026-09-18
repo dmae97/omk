@@ -362,7 +362,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v0.99.0](.github/RELEASE_NOTES_v0.99.0.md)
+- [Release notes for v1.0.0](.github/RELEASE_NOTES_v1.0.0.md)
 
 ## Development
 
@@ -418,6 +418,32 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v1.0.0
+
+### Added
+
+- Bundled Neo skills: six public skills ship in `resources/neo/skills` and load when no user, project, or explicit skill supplies a name (`OMK_BUNDLED_SKILLS=0` or `--no-skills` to disable), plus an `omk neo` subcommand and an ACP conversation-only mode (`--mode acp`).
+- Subagent lane execution settlement: lane results model settled/failed/unsettled, a shared permit pool tracks unsettled children across dispatch instances, heavy-lane admission narrows the width gate, and permit weights validate explicitly.
+- In-memory run usage ledger (`run-usage-ledger`, `run-usage-operation`): reserves capped budgets per attempt, records transports and cumulative usage idempotently, binds settlement to the attempt admitted at entry (caller input mutation cannot redirect it), and retains reservations for unknown usage — accounting only, not a hard financial limit.
+- `terminal-browser` extension example: ports the Claude Code plugin to OMK, rendering a real browser in a kitty-graphics overlay via the bridge HTTP API; `/browser` command and open/close tools.
+- Strict-evidence approval adapter in `guardrails/` binding protocol-level evidence reports to host approval decisions.
+
+### Fixed
+
+- Empty streamed completions (success-shaped stop with zero usable output) classify as dead streams: they no longer reset the retry budget, pin the UI in a retrying state, or rotate to a live route in the same model family (ox-alpha/union-alpha rotation). Anthropic-messages base URLs carrying a version suffix are normalized so `/v1/messages` never doubles.
+
+### Added (previous cycle work)
+
+- `--thinking ultra` is now a first-class Astra selector level. GPT-6 Astra maps it to the documented `max` effort rather than clamping it away or sending an invented `ultra` wire value.
+- The status rail's USAGE section now covers `commandcode`: it calls Command Code's `/alpha` whoami, credits, subscription, and usage-summary endpoints with the stored API key and renders the 5-hour, weekly, and monthly credit meters with reset times, or the plan name when rolling windows are absent.
+
+### Fixed
+
+- Missing ESM named-export errors such as `does not provide an export named 'MAX_FRAME_BYTES'` classify as configuration, not as an orphan tool-call protocol fault. The Next action tells the operator to restart OMK; `/new` does not reload provider modules.
+- The status rail's Devin USAGE meters now match the CLI `/usage` surface: credit-billed plans no longer render proto-default 0% remaining as exhausted 1D/7D windows, and `GetUserStatus` unary gzip bodies decode.
+
+Release notes live in [RELEASE_NOTES_v1.0.0.md](.github/RELEASE_NOTES_v1.0.0.md).
+
 ## Release v0.99.0
 
 ### Breaking Changes
@@ -457,38 +483,6 @@ Release notes live in [RELEASE_NOTES_v0.99.0.md](.github/RELEASE_NOTES_v0.99.0.m
 - Execution-ownership wrappers retain lazy, context-sensitive tool timeouts and stale-context rejection instead of fixing the timeout at registration.
 
 Release notes live in [RELEASE_NOTES_v0.98.5.md](.github/RELEASE_NOTES_v0.98.5.md).
-
-## Release v0.98.4
-
-### New Features
-
-- DeepSeek V4.1 Flash on four existing providers with off/low/high/max thinking; see [catalog details](packages/coding-agent/docs/model-catalog-refresh.md).
-- Opt-in CLI/SDK model dispatch contracts; see [contract scope](packages/coding-agent/docs/model-contract.md).
-- Bounded claim-repair explanations and stronger metrics/policy boundaries; see [review evidence](packages/coding-agent/docs/review-bundle-followup.md).
-
-### Added
-
-- Added `--model-contract <file>` and SDK contract options, including first-party summaries through the shared provider stream. These are not universal billing or endpoint attestations.
-- Added Muse Code login/native Meta models, explicit provider synchronization and context-initialization workflows, active-skill state/selection, and improved MCP startup diagnostics.
-- Added offline TB subset selection and recorded-result audit utilities. They do not resume a benchmark or prove comparative harness gains.
-- Added optional AdaptOrch service links; displaying links does not create an account, upload source, or start a run.
-
-### Fixed
-
-- New metrics records use schema v2, explicit field projection and bounded error classes instead of raw error text. Valid v1 records remain readable; old files are not scrubbed automatically.
-- Empty, sparse or mutated gate lists cannot bypass merge validation. Sandbox overrides cannot silently weaken enforcement or expand the filesystem root without explicit trusted broadening.
-- Shared-DAG repair explanations retain shared repairs and local counterexamples, report bounded-search fallback as not-proven, and offer opt-in explicit witness groups. Neither explanations nor group labels authorize execution.
-- Model-contract denials are configuration failures. Text and JSON print modes return nonzero on final prompt failure rather than silently reporting success.
-- Improved compaction overflow guards, active-skill bookkeeping, provider resilience/usage handling, and login-provider resolution.
-- Reject non-finite tokenizer results, fall back for non-finite token estimates, and keep optional-context sorting a total order. Domain routing now treats repeated whitespace and line breaks consistently.
-- Preserve recognized environment references, placeholders and nearby type declarations during credential redaction without exempting literal credentials. Forced persistence/report redaction remains active regardless of input opt-out switches.
-- Improved clipboard-image handling on WSL and terminal file-link rendering, including safe link destinations and malformed MCP tool-schema handling.
-
-### Changed
-
-- Split type, schema and rendering responsibilities to restore module-size gates without raising their baselines. Browser smoke builds no longer require a Node path polyfill for Codex metadata.
-
-Release notes live in [RELEASE_NOTES_v0.98.4.md](.github/RELEASE_NOTES_v0.98.4.md).
 
 <!-- releases:end -->
 
