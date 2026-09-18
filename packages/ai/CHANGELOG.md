@@ -4,6 +4,16 @@
 
 ### Added
 
+- Cursor provider (`cursor-agent` API) with lazy registration, a dedicated catalog generator (`--cursor-only`), Connect/gRPC transport, and `OMK_DEBUG_CURSOR` stream instrumentation. Devin now lists each wire UID observed in `GetCliModelConfigs` as its own catalog lane; `swe-2` keeps its logical medium/high/max contract while other lanes route by UID.
+- Top-tier thinking levels (`xhigh`/`max`/`ultra`) are hidden on anthropic-messages, bedrock-converse-stream, and Google models whose wire payload collapses them onto `high`, so the picker no longer advertises effort that never ships.
+
+### Fixed
+
+- Codex token-plan weekly quota exhaustion (`Your token-plan ... quota has been exhausted`) now classifies as terminal quota, not a retryable rate limit: a ~5-day `retry-after` no longer surfaces as a retry-delay failure, and compaction quota failover can engage. Anthropic stream-end errors use vendor-neutral wording.
+- Catalog refreshed from live sources: `union-alpha` (opencode, opencode-go, openrouter/stealth) and other retired entries removed; cursor and new OpenRouter/models.dev models added.
+
+### Added (previous cycle work)
+
 - GPT-6 Astra now exposes OMK `ultra` as a selector alias for the documented ceiling `reasoning.effort: "max"` on OpenAI-shaped routes (OpenAI/Azure/OpenCode/Copilot Responses and OpenRouter completions). The API still has no native `ultra` effort; `off`/`minimal` stay hidden.
 
 ### Fixed

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Strict-evidence contract: `StrictEvidenceBinding`, `StrictEvidenceSnapshot`, `StrictEvidenceReport`, and `StrictEvidenceCompletion` wire types with parsers, plus `evaluateStrictEvidence` wired into evaluation so an admitted snapshot can gate results. A snapshot is evidence, not approval or execution by itself.
+
 ## [0.99.0] - 2026-09-13
 
 ### Added

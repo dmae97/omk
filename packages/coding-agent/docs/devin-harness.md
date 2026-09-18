@@ -1,6 +1,6 @@
 # Devin SWE-2 harness
 
-This page is the canonical operator guide for the built-in `devin` provider and its only logical model, `swe-2`. Use `/login devin` for the Devin CLI subscription PKCE flow or `DEVIN_API_KEY` for an already-owned CLI session token. A user-local `~/.omk/agent/devin.md` may add operator notes, but it is not the portable product contract.
+This page is the canonical operator guide for the built-in `devin` provider, centered on the logical `swe-2` model. Use `/login devin` for the Devin CLI subscription PKCE flow or `DEVIN_API_KEY` for an already-owned CLI session token. A user-local `~/.omk/agent/devin.md` may add operator notes, but it is not the portable product contract.
 
 Authentication, transport, and verification limits are owned by [Providers](providers.md#devin-cli); this page covers how OMK drives SWE-2 as a harness.
 
@@ -49,7 +49,7 @@ Guidance from the [SWE-2 announcement](https://cognition.com/blog/swe-2): `mediu
 1. Before each turn OMK reads `GetCliModelConfigs`. SWE-2 family entries may carry a `1M Context` axis (order `1`) beside the effort axis. A local budget of 1,000,000 or more asks for that 1M-context lane; below it, the standard lane is used and 1M entries are ignored.
 2. A catalog with no 1M-context lane keeps the standard lane for the selected effort.
 3. If the chosen lane declares a context window smaller than the local budget, the request fails with `... declares a N-token context window; lower the models.json contextWindow before retrying`. OMK never shrinks the budget silently, never invents a wire UID, and never downgrades to another effort.
-4. Fast-lane (`Fast Mode`) entries are always excluded. Output is capped against the authenticated catalog's declared maximum.
+4. Fast-lane (`Fast Mode`) entries are excluded from effort routing and are reachable only through their own UID models (ids ending in `-fast` or `-priority`). Output is capped against the authenticated catalog's declared maximum.
 
 To lower the budget (for example if your account only serves the standard lane at 262,144 tokens), override the built-in model in `~/.omk/agent/models.json`:
 
@@ -87,7 +87,7 @@ General prompt-based domain routing is separate and opt-in through `OMK_DOMAIN_R
 
 ## Model selection
 
-The `devin` catalog contains only the logical `swe-2` model; the server's SWE-2 family metadata supplies each effort's wire UID at request time. Use `/model` or `omk --list-models devin` for the current list. Image input is unsupported; provide text.
+The `devin` catalog leads with the logical `swe-2` model; the server's SWE-2 family metadata supplies each effort's wire UID at request time. Every other lane the account catalog advertises is its own logical model whose id is the wire UID — for example `devin/claude-opus-5-high`, `devin/gpt-5-6-sol-xhigh`, `devin/gemini-3-8-flash-medium`, `devin/kimi-k3-max`, `devin/glm-5-3-high`, `devin/grok-4-6-xhigh`, `devin/deepseek-v4-pro-max`, `devin/swe-1-7`, or `devin/inkling-max`. Flat models pin their declared effort lane, so `/think` levels are fixed per model and `No Thinking`/`None` lanes report `reasoning: false`. Availability is account- and plan-dependent: a lane absent from your catalog fails loudly instead of being remapped. Use `/model` or `omk --list-models devin` for the current list. Image input is unsupported; provide text.
 
 ## Skill and MCP matrix summary
 

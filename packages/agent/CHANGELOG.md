@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- ECRAF tool-DAG normalization rules with dedicated normalization tests, tightening arithmetic and reservation boundaries.
+
 ## [0.99.0] - 2026-09-13
 
 ## [0.98.5] - 2026-09-12

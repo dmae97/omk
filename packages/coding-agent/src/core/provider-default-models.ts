@@ -40,6 +40,7 @@ const builtInDefaultModelPerProvider = {
 	"xiaomi-token-plan-ams": "mimo-v2.5-pro",
 	"xiaomi-token-plan-sgp": "mimo-v2.5-pro",
 	zyloo: "claude-opus-4-7",
+	cursor: "default",
 } satisfies Record<KnownProvider, string>;
 
 /** Recommended defaults for providers supplied through models.json or extensions. */

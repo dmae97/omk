@@ -85,6 +85,19 @@ Your account's model access and quota still apply. For presets, effort guidance,
 the 1M-token context budget, and the `devin-harness` loadout, see the
 [Devin SWE-2 harness](devin-harness.md).
 
+The `devin` catalog also carries every other lane `GetCliModelConfigs`
+advertises — each wire UID is its own logical model (`claude-opus-5-high`,
+`gpt-5-6-sol-xhigh`, `gemini-3-8-flash-medium`, `kimi-k3-max`, `glm-5-3-high`,
+`grok-4-6-xhigh`, `deepseek-v4-pro-max`, `swe-1-7`, `inkling-max`, …). Flat
+models pin their declared effort lane, so `/think` is fixed per model; entries
+whose lane is a no-thinking variant report `reasoning: false`. Availability is
+account- and plan-dependent: a lane absent from your catalog fails loudly
+instead of being remapped. Image input is still text-only at the adapter.
+
+```bash
+omk --provider devin --model claude-opus-5-high
+```
+
 **Authentication.** OMK uses the CLI's PKCE flow at
 `app.devin.ai/auth/cli/continue` and `api.devin.ai/auth/cli/token`. Its callback
 binds only to `127.0.0.1:59653`, validates state, and closes after success,
@@ -101,10 +114,12 @@ Devin agent, read browser cookies, or import another application's credentials.
 
 **Transport and limits.** The Node-only `devin-agent` adapter uses Connect/protobuf
 at the fixed HTTPS origin `https://server.codeium.com`. It exchanges the session
-token for a user JWT and reads `GetCliModelConfigs` before each turn. The server's
-SWE-2 family metadata supplies the effort's exact wire UID; OMK never invents a
-`swe-2-max` ID or downgrades an unavailable route. Disabled, internal, ambiguous,
-and fast-lane entries are excluded. The family's separate 1M-context entries form
+token for a user JWT and reads `GetCliModelConfigs` before each turn. The logical
+`swe-2` model resolves its effort through the server's SWE-2 family metadata;
+every other catalog model resolves by its own wire UID. OMK never invents a
+`swe-2-max` ID or downgrades an unavailable route. Disabled, internal, and
+ambiguous entries are excluded; fast-lane entries match only when their own UID
+is selected. The family's separate 1M-context entries form
 a second lane that is selected only when the model's local `contextWindow` is
 1,000,000 or more (the bundled default); a smaller budget uses the standard lane.
 
@@ -141,8 +156,48 @@ and the [official manifest](https://static.devin.ai/cli/current/manifest.json)
 (observed identity `3000.10.21`). Protocol fields follow the third-party
 [oh-my-pi snapshot](https://github.com/can1357/oh-my-pi/blob/942383f768c5f2f6a620fcab57326c0f59df623a/packages/catalog/src/discovery/devin-proto.ts),
 not a stable public inference contract; attribution is in `packages/ai/DEVIN-NOTICE`.
-Regenerate only this logical model, preserving every other catalog entry, with
+Regenerate only the Devin models, preserving every other catalog entry, with
 `npm --prefix packages/ai run generate-models -- --devin-only`.
+
+### Cursor
+
+Run `/login cursor` (PKCE + polling against `cursor.com`/`api2.cursor.sh`), then
+select a `cursor/*` model. `cursor/default` is the Auto router; sibling slugs
+carry their effort and lane (`-low|medium|high|xhigh|max`, `-thinking-*`,
+`-fast`) in the id, mirroring the CLI's flat list. `CURSOR_API_KEY` accepts an
+already-owned access token instead of the OAuth flow.
+
+```bash
+omk --provider cursor --model default
+```
+
+**Transport and limits.** The Node-only `cursor-agent` adapter runs the
+`agent.v1.AgentService/Run` bidirectional RPC over HTTP/2 at `api2.cursor.sh`
+with Connect-framed protobuf. Each `stream()` call is one `Run`:
+`userMessageAction` for a fresh user turn or `resumeAction` otherwise; history
+is replayed through `conversationState.rootPromptMessagesJson` — SHA256-keyed
+JSON message blobs the server fetches back via the kv channel — and system
+prompts ride `requestContext.rules` in the exec handshake. For OpenAI-family
+sibling slugs the adapter splits the effort into a `reasoning` request
+parameter because the Run endpoint rejects sibling `model_id`s; other ids pass
+through whole. `tokenDelta` frames accumulate output usage; plan-specific
+model availability is enforced server-side (free plans serve Auto only).
+
+Text, thinking, and reported usage enter the normal OMK agent loop; images
+attach through `selectedContext.selectedImages`. Server exec frames that ask
+the client to run tools are answered with the protocol's `throw` failure
+channel — OMK tools are deliberately not advertised inside the provider, so a
+cursor model reports the capability gap instead of bypassing tool governance.
+Wiring exec frames through governed OMK tools is a coding-agent bridge
+feature, not provider scope. Hosted search/fetch permission queries are
+approved; interactive ones are rejected.
+
+The bundled catalog was captured from `GetUsableModels` (2026-09-18; 223
+entries). Regenerate only the Cursor section with
+`npm --prefix packages/ai run generate-models -- --cursor-only`. Protocol
+fields follow the same third-party snapshot attribution as the Devin adapter.
+Live login, plan gating, and quota behavior remain account-dependent; the
+adapter is covered by loopback HTTP/2 protocol tests.
 
 ### OpenAI Codex
 
@@ -197,6 +252,7 @@ omk
 | OpenAI | `OPENAI_API_KEY` | `openai` |
 | DeepSeek | `DEEPSEEK_API_KEY` | `deepseek` |
 | Devin CLI session token | `DEVIN_API_KEY` | `devin` |
+| Cursor subscription | `CURSOR_API_KEY` | `cursor` |
 | NVIDIA NIM | `NVIDIA_API_KEY` | `nvidia` |
 | Google Gemini | `GEMINI_API_KEY` | `google` |
 | Mistral | `MISTRAL_API_KEY` | `mistral` |

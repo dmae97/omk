@@ -9,6 +9,7 @@ export type { AssistantMessageEventStream } from "./utils/event-stream.ts";
 
 export type KnownApi =
 	| "devin-agent"
+	| "cursor-agent"
 	| "openai-completions"
 	| "mistral-conversations"
 	| "openai-responses"
@@ -37,6 +38,7 @@ export type KnownProvider =
 	| "nvidia"
 	| "deepseek"
 	| "devin"
+	| "cursor"
 	| "meta"
 	| "github-copilot"
 	| "xai"

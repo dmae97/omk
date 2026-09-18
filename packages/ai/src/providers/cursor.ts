@@ -466,7 +466,10 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 			const token = (options.apiKey ?? getEnvApiKey("cursor") ?? "").trim();
 			if (!token) throw new Error("Missing Cursor access token; run /login cursor");
 			const baseUrl = (model.baseUrl || CURSOR_API_URL).replace(/\/+$/, "");
-			if (!/^https:\/\/[a-z0-9.-]*cursor\.(sh|com|dev)(:\d+)?$/.test(baseUrl)) {
+			if (
+				!/^https:\/\/[a-z0-9.-]*cursor\.(sh|com|dev)(:\d+)?$/.test(baseUrl) &&
+				!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(baseUrl)
+			) {
 				throw new Error("Cursor subscription credentials require a *.cursor.sh/cursor.com HTTPS origin");
 			}
 
@@ -495,6 +498,12 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 				...(options.headers ?? {}),
 			};
 			h2Request = h2Client.request(requestHeaders);
+			h2Request.on("response", (headers) => {
+				void options.onResponse?.(
+					{ status: Number(headers[":status"] ?? 0), headers: headers as Record<string, string> },
+					model,
+				);
+			});
 
 			let textBlock: TextBlock | undefined;
 			let thinkingBlock: TextBlock | undefined;
@@ -710,7 +719,10 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 			endStreamError ??= error instanceof Error ? error : new Error(String(error));
 		} finally {
 			if (heartbeatTimer) clearInterval(heartbeatTimer);
-			h2Request?.close();
+			// `end()` (graceful half-close) flushes exec/throw frames still queued
+			// behind processed data; `close()` is reserved for aborts.
+			if (options.signal?.aborted) h2Request?.close();
+			else h2Request?.end();
 			h2Client?.close();
 			clearTimeout(timer);
 		}
@@ -724,6 +736,8 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 					: new Error("Cursor stream ended before the turn completed");
 			}
 			output.stopReason = "stop";
+			output.usage.totalTokens =
+				output.usage.input + output.usage.output + output.usage.cacheRead + output.usage.cacheWrite;
 			calculateCost(model, output.usage);
 			stream.push({ type: "done", reason: "stop", message: output });
 		} catch (error) {

@@ -4,6 +4,18 @@
 
 ### Added
 
+- Bundled Neo skills: six public skills ship in `resources/neo/skills` and load when no user, project, or explicit skill supplies a name (`OMK_BUNDLED_SKILLS=0` or `--no-skills` to disable), plus an `omk neo` subcommand and an ACP conversation-only mode (`--mode acp`).
+- Subagent lane execution settlement: lane results model settled/failed/unsettled, a shared permit pool tracks unsettled children across dispatch instances, heavy-lane admission narrows the width gate, and permit weights validate explicitly.
+- In-memory run usage ledger (`run-usage-ledger`, `run-usage-operation`): reserves capped budgets per attempt, records transports and cumulative usage idempotently, binds settlement to the attempt admitted at entry (caller input mutation cannot redirect it), and retains reservations for unknown usage — accounting only, not a hard financial limit.
+- `terminal-browser` extension example: ports the Claude Code plugin to OMK, rendering a real browser in a kitty-graphics overlay via the bridge HTTP API; `/browser` command and open/close tools.
+- Strict-evidence approval adapter in `guardrails/` binding protocol-level evidence reports to host approval decisions.
+
+### Fixed
+
+- Empty streamed completions (success-shaped stop with zero usable output) classify as dead streams: they no longer reset the retry budget, pin the UI in a retrying state, or rotate to a live route in the same model family (ox-alpha/union-alpha rotation). Anthropic-messages base URLs carrying a version suffix are normalized so `/v1/messages` never doubles.
+
+### Added (previous cycle work)
+
 - `--thinking ultra` is now a first-class Astra selector level. GPT-6 Astra maps it to the documented `max` effort rather than clamping it away or sending an invented `ultra` wire value.
 - The status rail's USAGE section now covers `commandcode`: it calls Command Code's `/alpha` whoami, credits, subscription, and usage-summary endpoints with the stored API key and renders the 5-hour, weekly, and monthly credit meters with reset times, or the plan name when rolling windows are absent.
 
