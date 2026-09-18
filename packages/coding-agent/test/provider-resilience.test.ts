@@ -303,3 +303,32 @@ describe("model route families (ox-alpha rotation)", () => {
 		expect(sameModelRouteCandidates(kimiRoute, available)).toEqual([]);
 	});
 });
+
+describe("model route families (union-alpha rotation)", () => {
+	const opencodeGoRoute = {
+		provider: "opencode-go",
+		id: "union-alpha",
+		name: "OpenCodeGo — Union Alpha (xhigh cap)",
+	};
+	const openrouterRoute = { provider: "openrouter", id: "stealth/union-alpha", name: "Union Alpha" };
+	const oxRoute = { provider: "opencode-go", id: "ox-alpha-free", name: "Ox Alpha Free (Unlimited)" };
+
+	it("groups union-alpha alias routes by id or display name", () => {
+		expect(modelRouteFamily(opencodeGoRoute)).toBe("union-alpha");
+		expect(modelRouteFamily(openrouterRoute)).toBe("union-alpha");
+		// The two providers carry different ids/transport but one family.
+		expect(modelRouteFamily({ provider: "opencode", id: "union-alpha", name: "Union Alpha" })).toBe("union-alpha");
+		// ox-alpha and union-alpha are distinct families — no cross-rotation.
+		expect(modelRouteFamily(oxRoute)).toBe("ox-alpha");
+		// Boundary required: "reunion-alpha" must not match.
+		expect(modelRouteFamily({ provider: "p", id: "reunion-alpha" })).toBeUndefined();
+	});
+
+	it("rotates a failed opencode-go union-alpha to the openrouter route", () => {
+		const available = [opencodeGoRoute, openrouterRoute, oxRoute];
+		expect(sameModelRouteCandidates(opencodeGoRoute, available)).toEqual([openrouterRoute]);
+		expect(sameModelRouteCandidates(openrouterRoute, available)).toEqual([opencodeGoRoute]);
+		// ox-alpha never appears as a union-alpha target.
+		expect(sameModelRouteCandidates(oxRoute, available)).toEqual([]);
+	});
+});

@@ -150,6 +150,21 @@ export type ResolvedRequestAuth =
 
 const RETIRED_GROK_OAUTH_PROXY = "grok-oauth-proxy";
 
+/**
+ * The anthropic-messages adapter appends `/v1/messages` to baseUrl via plain
+ * string concatenation (`new URL(baseURL + path)`). A baseUrl that already
+ * ends in a version path (e.g. `.../zen/v1`, `.../inference/v1`) therefore
+ * produces a doubled `/v1/v1/messages` request that upstreams answer with a
+ * website 404 page. The correct Anthropic Messages endpoint always ends in
+ * `/v1/messages`, so the fix is to strip the version suffix silently at
+ * resolve time. No console warning — many catalog routes share one host, so
+ * a per-route warning only floods startup without giving the user an action.
+ */
+function normalizeAnthropicBaseUrl(api: string, baseUrl: string): string {
+	if (api !== "anthropic-messages") return baseUrl;
+	return baseUrl.replace(/\/v\d+\/?$/i, "");
+}
+
 function warnRetiredGrokOAuthProxy(): void {
 	warnDeprecation(
 		`models.json provider "${RETIRED_GROK_OAUTH_PROXY}" is retired. Use native "${GROK_OAUTH_PROVIDER}" OAuth or XAI_API_KEY.`,
@@ -372,7 +387,10 @@ export class ModelRegistry {
 					model = applyModelOverride(model, modelOverride);
 				}
 
-				return model;
+				// The anthropic adapter string-appends /v1/messages; strip a version
+				// suffix baked into any resolved baseUrl so the path never doubles.
+				const normalizedBaseUrl = normalizeAnthropicBaseUrl(model.api, model.baseUrl);
+				return normalizedBaseUrl === model.baseUrl ? model : { ...model, baseUrl: normalizedBaseUrl };
 			});
 		});
 	}
@@ -578,8 +596,12 @@ export class ModelRegistry {
 				const api = modelDef.api ?? providerConfig.api ?? builtInDefaults?.api;
 				if (!api) continue;
 
-				const baseUrl = modelDef.baseUrl ?? providerConfig.baseUrl ?? builtInDefaults?.baseUrl;
-				if (!baseUrl) continue;
+				const rawBaseUrl = modelDef.baseUrl ?? providerConfig.baseUrl ?? builtInDefaults?.baseUrl;
+				if (!rawBaseUrl) continue;
+
+				// Same doubling guard for custom models.json entries — the anthropic
+				// adapter appends /v1/messages, so a versioned baseUrl would 404.
+				const baseUrl = normalizeAnthropicBaseUrl(api, rawBaseUrl);
 
 				const compat = mergeCompat(providerConfig.compat, modelDef.compat);
 				this.storeModelHeaders(providerName, modelDef.id, modelDef.headers);

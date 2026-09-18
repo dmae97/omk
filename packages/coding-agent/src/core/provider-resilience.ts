@@ -165,6 +165,10 @@ export function isUpstreamUnavailableMessage(text: string | undefined): boolean 
  */
 const MODEL_ROUTE_FAMILIES: readonly { readonly pattern: RegExp; readonly family: string }[] = [
 	{ pattern: /(?:^|[-_/])ox[-_ ]?alpha(?:[-_/\s(]|$)/i, family: "ox-alpha" },
+	// union-alpha is served by opencode-go/union-alpha (anthropic-messages) and
+	// openrouter/stealth/union-alpha (openai-completions); both map to one family
+	// so an upstream-unavailable 503/empty stream rotates to the live route.
+	{ pattern: /(?:^|[-_/])union[-_ ]?alpha(?:[-_/\s(]|$)/i, family: "union-alpha" },
 ];
 
 /** Family key for a model route, or undefined when it has no known alias group. */

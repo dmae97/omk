@@ -70,11 +70,13 @@ describe("AgentSession retry", () => {
 
 	function createSession(options?: {
 		failCount?: number;
+		emptyStopCount?: number;
 		maxRetries?: number;
 		delayAssistantMessageEndMs?: number;
 		baseDelayMs?: number;
 	}) {
 		const failCount = options?.failCount ?? 1;
+		const emptyStopCount = options?.emptyStopCount ?? 0;
 		const maxRetries = options?.maxRetries ?? 3;
 		const baseDelayMs = options?.baseDelayMs ?? 1;
 		const delayAssistantMessageEndMs = options?.delayAssistantMessageEndMs ?? 0;
@@ -88,7 +90,12 @@ describe("AgentSession retry", () => {
 				callCount++;
 				const stream = new MockAssistantStream();
 				queueMicrotask(() => {
-					if (callCount <= failCount) {
+					if (callCount <= emptyStopCount) {
+						// Success-shaped dead stream: stop=stop, zero usable output.
+						const msg = createAssistantMessage("");
+						stream.push({ type: "start", partial: msg });
+						stream.push({ type: "done", reason: "stop", message: msg });
+					} else if (callCount <= failCount) {
 						const msg = createAssistantMessage("", {
 							stopReason: "error",
 							errorMessage: "overloaded_error",
@@ -165,6 +172,39 @@ describe("AgentSession retry", () => {
 		expect(events).toContain("start:2");
 		expect(events).toContain("end:success=false");
 		expect(created.session.isRetrying).toBe(false);
+	});
+
+	it("exhausts max retries on repeated empty streamed completions instead of looping forever", async () => {
+		// Regression: the success-reset treated stop=stop empty completions as
+		// successful answers and zeroed the retry budget every cycle, so a
+		// provider that only ever returned empty completions (union-alpha relay)
+		// pinned the UI in "Working" with infinite auto-retry.
+		const created = createSession({ emptyStopCount: 99, maxRetries: 2 });
+		const events: string[] = [];
+		created.session.subscribe((event) => {
+			if (event.type === "auto_retry_start") events.push(`start:${event.attempt}`);
+			if (event.type === "auto_retry_end") events.push(`end:success=${event.success}`);
+		});
+
+		await created.session.prompt("Test");
+
+		expect(created.getCallCount()).toBe(3);
+		expect(events).toEqual(["start:1", "start:2", "end:success=false"]);
+		expect(created.session.isRetrying).toBe(false);
+	});
+
+	it("recovers when an empty streamed completion is followed by a real answer", async () => {
+		const created = createSession({ emptyStopCount: 1 });
+		const events: string[] = [];
+		created.session.subscribe((event) => {
+			if (event.type === "auto_retry_start") events.push(`start:${event.attempt}`);
+			if (event.type === "auto_retry_end") events.push(`end:success=${event.success}`);
+		});
+
+		await created.session.prompt("Test");
+
+		expect(created.getCallCount()).toBe(2);
+		expect(events).toEqual(["start:1", "end:success=true"]);
 	});
 
 	it("queues sendCustomMessage(triggerTurn) during retry backoff instead of starting a competing run", async () => {

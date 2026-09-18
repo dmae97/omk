@@ -216,6 +216,7 @@ import {
 import {
 	computeRetryDelayMs,
 	failoverModelKey,
+	isEmptyStreamedCompletion,
 	isFailoverTriggerError,
 	isRetryableAssistantError,
 	nextRetryAttempt,
@@ -1328,8 +1329,15 @@ export class AgentSession {
 				}
 
 				// Reset retry counter immediately on successful assistant response
-				// This prevents accumulation across multiple LLM calls within a turn
-				if (assistantMsg.stopReason !== "error" && this._retryAttempt > 0) {
+				// This prevents accumulation across multiple LLM calls within a turn.
+				// An empty streamed completion wears a success shape (stop=stop, zero
+				// usable output) but is a dead stream — counting it as success reset
+				// the budget every cycle and retried forever (union-alpha relay loop).
+				if (
+					assistantMsg.stopReason !== "error" &&
+					!isEmptyStreamedCompletion(assistantMsg) &&
+					this._retryAttempt > 0
+				) {
 					this._emit({
 						type: "auto_retry_end",
 						success: true,
@@ -2312,12 +2320,15 @@ export class AgentSession {
 			return true;
 		}
 
-		if (msg.stopReason === "error" && this._retryAttempt > 0) {
+		// The retry budget is exhausted without a real answer. This covers the
+		// empty-streamed-completion path whose success-shaped stopReason
+		// otherwise left the UI pinned in the retrying state forever.
+		if (this._retryAttempt > 0) {
 			this._emit({
 				type: "auto_retry_end",
 				success: false,
 				attempt: this._retryAttempt,
-				finalError: msg.errorMessage,
+				finalError: msg.errorMessage ?? "The provider returned an empty response.",
 			});
 			this._retryAttempt = 0;
 			this._refusedModels.clear();
@@ -4870,12 +4881,16 @@ export class AgentSession {
 		if (attempt === undefined) return false;
 		this._retryAttempt = attempt;
 
-		// Upstream-unavailable (gateway 5xx / dropped stream): rotate to another
-		// authenticated route of the SAME model family so the retry lands on a
-		// live endpoint instead of hammering the dead one.
-		const rotatedTo = isUpstreamUnavailableMessage(message.errorMessage)
-			? await this._maybeRotateModelRoutes()
-			: undefined;
+		// Upstream-unavailable (gateway 5xx / dropped stream / dead relay stream):
+		// rotate to another authenticated route of the SAME model family so the
+		// retry lands on a live endpoint instead of hammering the dead one. An
+		// empty streamed completion is the same dead-stream signature wearing a
+		// success stopReason, so it rotates too — otherwise the retry re-hits the
+		// route that just returned nothing.
+		const rotatedTo =
+			isUpstreamUnavailableMessage(message.errorMessage) || isEmptyStreamedCompletion(message)
+				? await this._maybeRotateModelRoutes()
+				: undefined;
 
 		// Content/safety stop (Fable/Opus/Sonnet): switch model BEFORE delay so retry is not same-model refusal.
 		const failoverTo = await this._maybeFailoverFromSafetyStop(message);
