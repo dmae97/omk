@@ -47,6 +47,7 @@ const CONNECT_END_STREAM_FLAG = 0b00000010;
 const HEARTBEAT_INTERVAL_MS = 5_000;
 const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 const REJECTED_SUFFIX = "not implemented by this client";
+const CURSOR_DEBUG = process.env.OMK_DEBUG_CURSOR === "1";
 
 // ---------------------------------------------------------------------------
 // Protobuf wire helpers (field numbers from the Cursor agent.v1 schema)
@@ -570,6 +571,10 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 			});
 
 			function dispatchServerMessage(message: ProtoMessage): void {
+				if (CURSOR_DEBUG) {
+					const cases = [1, 2, 3, 4, 5, 7].filter((n) => message.has(n));
+					console.error(`[cursor] server cases=${cases.join(",")}`);
+				}
 				if (message.has(1)) {
 					for (const update of message.messages(1)) handleInteractionUpdate(update);
 					return;
@@ -582,7 +587,13 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 					for (const kv of message.messages(4)) {
 						const id = kv.number(1);
 						for (const getBlob of kv.messages(2)) {
-							write(kvBlobResult(id, readBlob(built.blobStore, getBlob.bytes(1) ?? new Uint8Array(0))));
+							const blobIdBytes = getBlob.bytes(1) ?? new Uint8Array(0);
+							const data = readBlob(built.blobStore, blobIdBytes);
+							if (CURSOR_DEBUG)
+								console.error(
+									`[cursor] kv getBlob id=${id} blob=${Buffer.from(blobIdBytes).toString("hex").slice(0, 16)} found=${!!data}`,
+								);
+							write(kvBlobResult(id, data));
 						}
 					}
 					return;
@@ -600,6 +611,10 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 			}
 
 			function handleInteractionUpdate(update: ProtoMessage): void {
+				if (CURSOR_DEBUG) {
+					const cases = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17].filter((n) => update.has(n));
+					console.error(`[cursor] update cases=${cases.join(",")}`);
+				}
 				for (const delta of update.messages(1)) {
 					endThinking();
 					const text = delta.string(1);
@@ -637,6 +652,7 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 			function handleExecMessage(exec: ProtoMessage): void {
 				const id = exec.number(1);
 				const execId = exec.string(15);
+				if (CURSOR_DEBUG) console.error(`[cursor] exec id=${id} execId=${execId} case=${execCaseName(exec)}`);
 				if (exec.has(10)) {
 					// requestContextArgs — the exec handshake carrying rules/tools.
 					const result = field(1, field(1, requestContext));

@@ -8,6 +8,7 @@ export const BUILT_IN_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
 	"cloudflare-workers-ai": "Cloudflare Workers AI",
 	deepseek: "DeepSeek",
 	devin: "Devin CLI session token",
+	cursor: "Cursor subscription",
 	fireworks: "Fireworks",
 	google: "Google Gemini",
 	"google-vertex": "Google Vertex AI",

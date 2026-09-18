@@ -79,6 +79,8 @@ export interface DevinRouteOptions {
 	 * is used when the catalog has no 1M lane; the caller then compares the declared window.
 	 */
 	longContext?: boolean;
+	/** Resolve by wire UID instead of family+effort (flat catalog models). */
+	uid?: string;
 }
 
 /**
@@ -136,6 +138,33 @@ export function resolveDevinRoute(
 	return matches[0];
 }
 
+/**
+ * Resolve a model whose `model.id` is itself a wire UID (every non-SWE-2 catalog
+ * lane is catalogued that way). Disabled and internal/router entries still fail;
+ * fast lanes match because the caller selected that lane explicitly.
+ */
+export function resolveDevinRouteByUid(catalog: ProtoMessage, uid: string): DevinRoute {
+	const matches: DevinRoute[] = [];
+	for (const config of catalog.messages(1)) {
+		if (config.number(4)) continue;
+		const info = config.messages(23)[0];
+		if (info?.number(2) || info?.number(25) || [4, 6].includes(info?.number(22) ?? 0)) continue;
+		const configUid = config.string(22);
+		if (configUid !== uid) continue;
+		matches.push({
+			uid: configUid,
+			contextWindow: config.number(18) || info?.number(4) || 0,
+			maxTokens: info?.number(13) || 0,
+			longContext: false,
+		});
+	}
+	if (matches.length !== 1)
+		throw new Error(
+			`Devin model ${uid} unavailable or ambiguous in this account's model catalog; check devin models list`,
+		);
+	return matches[0];
+}
+
 export async function getDevinRoute(
 	token: string,
 	effort: ModelThinkingLevel,
@@ -148,7 +177,7 @@ export async function getDevinRoute(
 		field(1, metadata),
 		signal,
 	);
-	return resolveDevinRoute(catalog, effort, options);
+	return options.uid ? resolveDevinRouteByUid(catalog, options.uid) : resolveDevinRoute(catalog, effort, options);
 }
 
 const DEVIN_USER_STATUS_PATH = "/exa.seat_management_pb.SeatManagementService/GetUserStatus";

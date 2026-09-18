@@ -60,24 +60,28 @@ export const streamDevin: StreamFunction<"devin-agent", DevinOptions> = (
 		try {
 			signal.throwIfAborted();
 			assertDevinOrigin(model.baseUrl);
-			if (model.id !== "swe-2") throw new Error("The Devin adapter currently supports SWE-2 only");
+			// The logical `swe-2` model routes by family + effort; every other catalog
+			// entry carries its wire UID as the model id and routes by that UID, so its
+			// declared effort lane is fixed and `options.reasoning` is ignored.
+			const logicalSwe2 = model.id === "swe-2";
 			const reasoning = options.reasoning ?? "medium";
-			if (!["medium", "high", "max"].includes(reasoning))
+			if (logicalSwe2 && !["medium", "high", "max"].includes(reasoning))
 				throw new Error(`Devin SWE-2 does not support ${reasoning} reasoning`);
 			if (options.temperature !== undefined && (!Number.isFinite(options.temperature) || options.temperature <= 0)) {
 				throw new Error(
-					"Devin SWE-2 requires a finite temperature greater than 0; omit temperature to use the native default (1)",
+					`Devin ${model.id} requires a finite temperature greater than 0; omit temperature to use the native default (1)`,
 				);
 			}
 			const token = normalizeDevinToken(options.apiKey ?? getEnvApiKey("devin") ?? "");
 			const jwt = await getDevinJwt(token, signal);
 			// The local budget selects the lane: 1,000,000+ asks for the catalog's 1M-context lane.
 			const route = await getDevinRoute(token, reasoning, signal, {
-				longContext: model.contextWindow >= DEVIN_LONG_CONTEXT_TOKENS,
+				longContext: logicalSwe2 && model.contextWindow >= DEVIN_LONG_CONTEXT_TOKENS,
+				...(logicalSwe2 ? {} : { uid: model.id }),
 			});
 			if (route.contextWindow > 0 && route.contextWindow < model.contextWindow) {
 				throw new Error(
-					`Devin SWE-2 ${route.longContext ? "1M-context lane" : "standard lane"} declares a ${route.contextWindow}-token context window; lower the models.json contextWindow before retrying`,
+					`Devin ${logicalSwe2 ? "SWE-2" : model.id} ${route.longContext ? "1M-context lane" : "standard lane"} declares a ${route.contextWindow}-token context window; lower the models.json contextWindow before retrying`,
 				);
 			}
 			const maxTokens = Math.min(

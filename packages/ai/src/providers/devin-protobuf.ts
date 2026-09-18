@@ -85,6 +85,17 @@ export class ProtoMessage {
 		return new TextDecoder("utf-8", { fatal: true }).decode(value);
 	}
 
+	/** Raw bytes for a length-delimited field; undefined when absent or not bytes. */
+	bytes(no: number): Uint8Array | undefined {
+		const value = this.fields.get(no)?.at(-1);
+		return value instanceof Uint8Array ? value : undefined;
+	}
+
+	/** All raw bytes values for a repeated length-delimited field. */
+	bytesList(no: number): Uint8Array[] {
+		return (this.fields.get(no) ?? []).filter((value): value is Uint8Array => value instanceof Uint8Array);
+	}
+
 	number(no: number): number {
 		const value = this.fields.get(no)?.at(-1);
 		if (value === undefined) return 0;

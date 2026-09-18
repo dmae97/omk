@@ -1,7 +1,12 @@
 import { gzipSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
 import { getModel } from "../src/models.ts";
-import { getDevinUserStatus, parseDevinUserStatus, resolveDevinRoute } from "../src/providers/devin-api.ts";
+import {
+	getDevinUserStatus,
+	parseDevinUserStatus,
+	resolveDevinRoute,
+	resolveDevinRouteByUid,
+} from "../src/providers/devin-api.ts";
 import { encodeFrame } from "../src/providers/devin-connect.ts";
 import { readConnectFrames } from "../src/providers/devin-connect-stream.ts";
 import { field, ProtoMessage } from "../src/providers/devin-protobuf.ts";
@@ -96,6 +101,36 @@ describe("Devin protocol boundaries", () => {
 		expect(() =>
 			resolveDevinRoute(new ProtoMessage(Buffer.concat([longContext, longContext])), "max", { longContext: true }),
 		).toThrow(/max \(1M context\) unavailable or ambiguous/);
+	});
+
+	it("resolves flat catalog models by wire UID", () => {
+		const config = (uid: string, window: number, maxOut: number, familyName: string, disabled = false) =>
+			field(
+				1,
+				Buffer.concat([
+					field(1, uid),
+					field(22, uid),
+					field(18, window),
+					field(23, field(13, maxOut)),
+					field(30, Buffer.concat([field(1, familyName)])),
+					...(disabled ? [field(4, true)] : []),
+				]),
+			);
+		const catalog = new ProtoMessage(
+			Buffer.concat([
+				config("gpt-5-6-sol-high", 1_000_000, 128_000, "GPT-5.6 Sol"),
+				config("claude-opus-5-high", 1_000_000, 128_000, "Claude Opus 5"),
+				config("retired-model", 200_000, 64_000, "Retired", true),
+			]),
+		);
+		expect(resolveDevinRouteByUid(catalog, "gpt-5-6-sol-high")).toEqual({
+			uid: "gpt-5-6-sol-high",
+			contextWindow: 1_000_000,
+			maxTokens: 128_000,
+			longContext: false,
+		});
+		expect(() => resolveDevinRouteByUid(catalog, "retired-model")).toThrow(/unavailable or ambiguous/);
+		expect(() => resolveDevinRouteByUid(catalog, "not-in-catalog")).toThrow(/unavailable or ambiguous/);
 	});
 
 	it("decodes GetUserStatus plan and quota fields, preserving zero values", () => {
