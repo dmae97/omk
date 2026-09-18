@@ -1,4 +1,5 @@
 import { MODELS } from "./models.generated.ts";
+import { supportsAdaptiveThinking } from "./providers/bedrock-thinking.ts";
 import { applyGrokThinking } from "./providers/grok-thinking.ts";
 import type { Api, KnownProvider, Model, ModelThinkingLevel, Usage } from "./types.ts";
 
@@ -61,14 +62,48 @@ const EXTENDED_THINKING_LEVELS: ModelThinkingLevel[] = [
 	"ultra",
 ];
 
+/**
+ * Whether this model's reasoning transport silently collapses every top-tier
+ * level (xhigh/max/ultra) onto the "high" wire value. When true, offering
+ * those levels would show a label that changes nothing — they must be hidden.
+ *
+ * Only apis whose own adapters perform the collapse are listed; effort-
+ * forwarding apis pass the mapped value verbatim, so the level is real there.
+ */
+function collapsesTopTierThinkingLevels<TApi extends Api>(model: Model<TApi>): boolean {
+	if (model.api === "anthropic-messages") {
+		const compat = model.compat as { forceAdaptiveThinking?: boolean } | undefined;
+		return compat?.forceAdaptiveThinking !== true;
+	}
+	if (model.api === "bedrock-converse-stream") {
+		const id = model.id.toLowerCase();
+		const name = model.name?.toLowerCase() ?? "";
+		const isClaude =
+			id.includes("anthropic.claude") ||
+			id.includes("anthropic/claude") ||
+			name.includes("anthropic.claude") ||
+			name.includes("anthropic/claude") ||
+			name.includes("claude");
+		return isClaude && !supportsAdaptiveThinking(model.id, model.name);
+	}
+	return model.api === "google-generative-ai" || model.api === "google-vertex";
+}
+
 export function getSupportedThinkingLevels<TApi extends Api>(model: Model<TApi>): ModelThinkingLevel[] {
 	if (!model.reasoning) return ["off"];
+
+	const collapsesTopTier = collapsesTopTierThinkingLevels(model);
 
 	return EXTENDED_THINKING_LEVELS.filter((level) => {
 		const mapped = model.thinkingLevelMap?.[level];
 		if (mapped === null) return false;
 		// xhigh, max, and ultra are top-tier levels only exposed when a model explicitly maps them.
-		if (level === "xhigh" || level === "max" || level === "ultra") return mapped !== undefined;
+		if (level === "xhigh" || level === "max" || level === "ultra") {
+			// Hide levels whose wire payload is identical to "high" (budget-path
+			// collapse) — the picker must not promise effort that never ships.
+			if (collapsesTopTier) return false;
+			return mapped !== undefined;
+		}
 		return true;
 	});
 }

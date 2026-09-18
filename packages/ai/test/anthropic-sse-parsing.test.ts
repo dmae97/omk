@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { getModel } from "../src/models.ts";
 import { streamAnthropic } from "../src/providers/anthropic.ts";
 import type { Context, ToolCall } from "../src/types.ts";
+import { isRetryableAssistantError } from "../src/utils/retry.ts";
 
 function createSseResponse(
 	events: Array<{ event: string; data: string }>,
@@ -264,6 +265,26 @@ describe("Anthropic raw SSE parsing", () => {
 		expect(result.errorMessage).toBeUndefined();
 		expect(result.content).toEqual([{ type: "text", text: "Hello" }]);
 	});
+
+	it.each([1, 2, minimalAnthropicEvents.length - 1])(
+		"keeps a stream missing %i terminal events retryable without vendor branding",
+		async (missing) => {
+			const model = getModel("anthropic", "claude-haiku-4-5");
+			const context: Context = {
+				messages: [{ role: "user", content: "benign coding question", timestamp: Date.now() }],
+			};
+			// Include message_start followed immediately by EOF, with no content.
+			const response = createSseResponse(minimalAnthropicEvents.slice(0, -missing));
+			const stream = streamAnthropic(model, context, {
+				client: createFakeAnthropicClient(response),
+			});
+			const result = await stream.result();
+
+			expect(result.stopReason).toBe("error");
+			expect(result.errorMessage).toBe("Response incomplete: stream ended before message_stop");
+			expect(isRetryableAssistantError(result)).toBe(true);
+		},
+	);
 
 	it("v10.3-Ω: empty refusal still surfaces as error (triggers failover)", async () => {
 		const model = getModel("anthropic", "claude-haiku-4-5");

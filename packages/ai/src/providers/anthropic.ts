@@ -493,7 +493,8 @@ async function* iterateAnthropicEvents(
 	}
 
 	if (sawMessageStart && !sawMessageEnd) {
-		throw new Error("Anthropic stream ended before message_stop");
+		// Keep the existing retry classifier match without attributing a model maker.
+		throw new Error("Response incomplete: stream ended before message_stop");
 	}
 }
 
