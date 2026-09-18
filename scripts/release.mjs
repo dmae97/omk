@@ -202,9 +202,10 @@ function bumpOrSetVersion(target) {
 		process.exit(1);
 	}
 
-	if (isMajorBump(target, currentVersion)) {
+	if (isMajorBump(target, currentVersion) && process.env.OMK_ALLOW_MAJOR_RELEASE !== "1") {
 		console.error(
-			`Error: ${target} is a major bump from ${currentVersion}; major releases are not allowed (specs/constitution.md).`,
+			`Error: ${target} is a major bump from ${currentVersion}; major releases are not allowed (specs/constitution.md). ` +
+				"For a declared milestone release, re-run with OMK_ALLOW_MAJOR_RELEASE=1.",
 		);
 		process.exit(1);
 	}

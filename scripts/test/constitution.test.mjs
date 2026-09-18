@@ -78,6 +78,16 @@ describe("constitution: no major releases", () => {
 			);
 		}
 	});
+
+	it("major bumps stay blocked unless the milestone opt-in is set", () => {
+		// The milestone carve-out lives in the constitution; release.mjs enforces it
+		// through an explicit operator env gate so routine bumps cannot cross the
+		// boundary silently. The guard sits after the clean-tree and release-notes
+		// checks, so asserting the env gate in source is the stable contract.
+		assert.match(constitution, /Declared milestone exception/);
+		assert.match(releaseSource, /OMK_ALLOW_MAJOR_RELEASE/);
+		assert.match(releaseSource, /isMajorBump\(target, currentVersion\) && process\.env\.OMK_ALLOW_MAJOR_RELEASE !== "1"/);
+	});
 });
 
 describe("constitution: releases run on the release branch", () => {

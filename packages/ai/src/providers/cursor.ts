@@ -65,12 +65,16 @@ function blobId(data: Uint8Array): Uint8Array {
 	return new Uint8Array(createHash("sha256").update(data).digest());
 }
 
-/** JSON message blob for `rootPromptMessagesJson` (Vercel-AI-SDK-shaped). */
-function jsonBlob(store: Map<string, Uint8Array>, value: unknown): Uint8Array {
-	const data = new TextEncoder().encode(JSON.stringify(value));
+/** Raw blob for pre-encoded payload bytes (system prompt JSON strings). */
+function rawBlob(store: Map<string, Uint8Array>, data: Uint8Array): Uint8Array {
 	const id = blobId(data);
 	store.set(Buffer.from(id).toString("hex"), data);
 	return id;
+}
+
+/** JSON message blob for `rootPromptMessagesJson` (Vercel-AI-SDK-shaped). */
+function jsonBlob(store: Map<string, Uint8Array>, value: unknown): Uint8Array {
+	return rawBlob(store, new TextEncoder().encode(JSON.stringify(value)));
 }
 
 function readBlob(store: Map<string, Uint8Array>, id: Uint8Array): Uint8Array | undefined {
@@ -326,7 +330,7 @@ function buildRunRequest(
 ): CursorTransportRequest {
 	const blobStore = new Map<string, Uint8Array>();
 	const systemPromptIds = systemPromptJsons(context.systemPrompt).map((json) =>
-		jsonBlob(blobStore, new TextEncoder().encode(json)),
+		rawBlob(blobStore, new TextEncoder().encode(json)),
 	);
 	const activeIndex = context.messages.length - 1;
 	const active = context.messages[activeIndex];
@@ -398,6 +402,10 @@ function execThrow(id: number, _execId: string, error: string): Buffer[] {
 function kvBlobResult(id: number, blobData: Uint8Array | undefined): Buffer {
 	const kv = Buffer.concat([field(1, id), field(2, blobData ? field(1, blobData) : new Uint8Array(0))]);
 	return frameConnectMessage(field(3, kv));
+}
+
+function kvSetBlobResult(id: number): Buffer {
+	return frameConnectMessage(field(3, Buffer.concat([field(1, id), field(3, new Uint8Array(0))])));
 }
 
 function interactionResponse(id: number, fieldNo: number, payload: Buffer): Buffer {
@@ -594,6 +602,15 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 									`[cursor] kv getBlob id=${id} blob=${Buffer.from(blobIdBytes).toString("hex").slice(0, 16)} found=${!!data}`,
 								);
 							write(kvBlobResult(id, data));
+						}
+						for (const setBlob of kv.messages(3)) {
+							const blobIdBytes = setBlob.bytes(1);
+							const blobData = setBlob.bytes(2);
+							if (blobIdBytes && blobData) {
+								built.blobStore.set(Buffer.from(blobIdBytes).toString("hex"), blobData);
+							}
+							write(kvSetBlobResult(id));
+							if (CURSOR_DEBUG) console.error(`[cursor] kv setBlob id=${id}`);
 						}
 					}
 					return;

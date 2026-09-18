@@ -46,6 +46,12 @@ Model selection and thinking-level selection are coupled for interactive use. `/
 
 All workspace packages share one lockstep version; `patch` covers fixes and additions, `minor` covers breaking changes, and there are no major releases. The OMK `0.90.x` line is OMK-native: upstream `badlogic/pi-mono` tags are not release targets and version parity with upstream is not a goal.
 
+Declared milestone exception: a release may cross the major boundary only when the
+owner declares a milestone version. The release script requires the explicit operator
+opt-in `OMK_ALLOW_MAJOR_RELEASE=1`, and the declaration is recorded in the version's
+release notes. This does not reopen routine major bumps; `patch` and `minor` remain
+the only bump types.
+
 A release is complete only when three surfaces agree: the `vX.Y.Z` tag reachable from `main`, the GitHub Release, and npm `latest` for all seven public lockstep packages: `open-multi-agent-kit`, `omk-ai`, `omk-agent-core`, `omk-tui`, `omk-protocol`, `omk-adaptorch-wpl`, and `omk-book-to-skill`. The `omk-adaptorch-wpl` npm package is an open-source OMK runtime component; it is distinct from the proprietary AdaptOrch.com service. Never bump versions past a release tag whose commits are not merged into `main`.
 
 npm publishing runs in CI (`build-binaries.yml`, `publish-npm` job, environment `npm-publish`). That job currently uses the environment's granular `NPM_TOKEN` through `NODE_AUTH_TOKEN`; OIDC trusted publishing is not currently enabled, and these releases must not claim OIDC/Sigstore provenance. Switching to trusted publishing requires registration and verification for all seven packages before changing the job's authentication. Local publishing is not the release path. The publish helper is idempotent: after a failed publish, fix the cause and rerun the tag workflow; never rerun the release script for the same version. Released changelog sections are immutable; new work goes under `[Unreleased]`, and a `/cl` audit precedes every release. Release-facing docs (README badges/links, `.github/RELEASE_NOTES_vX.Y.Z.md`) update in the same cycle as the version bump, guarded by `scripts/check-release-consistency.mjs`.
