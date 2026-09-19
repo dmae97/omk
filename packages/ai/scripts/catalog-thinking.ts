@@ -46,8 +46,11 @@ export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 		// Messages effort is separate from a token budget; do not collapse max through clampReasoning().
 		model.compat = { ...model.compat, forceAdaptiveThinking: true };
 	}
+	// OpenCode Zen and Go front the same chat/completions gateway for V4.1 Flash
+	// (https://opencode.ai/docs/zen/, https://opencode.ai/docs/go/), so both carry the native contract.
 	if (
 		((model.provider === "deepseek" && model.id === "deepseek-flash") ||
+			(model.provider === "opencode" && model.id === "deepseek-v4.1-flash") ||
 			(model.provider === "opencode-go" && (model.id === "deepseek-flash" || model.id === "deepseek-v4.1-flash"))) &&
 		model.api === "openai-completions"
 	) {

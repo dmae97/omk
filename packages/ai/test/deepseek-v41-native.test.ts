@@ -5,8 +5,12 @@ import { streamSimple } from "../src/stream.ts";
 class PayloadCaptured extends Error {}
 afterEach(() => vi.unstubAllGlobals());
 
+// OpenCode Zen and Go front the same chat/completions gateway for this model
+// (https://opencode.ai/docs/zen/ and https://opencode.ai/docs/go/), so both carry
+// the native V4.1 contract: thinking toggle, low/high/max effort, max_tokens cap.
 const routes = [
 	{ provider: "deepseek", modelId: "deepseek-flash" },
+	{ provider: "opencode", modelId: "deepseek-v4.1-flash" },
 	{ provider: "opencode-go", modelId: "deepseek-v4.1-flash" },
 ] as const;
 
