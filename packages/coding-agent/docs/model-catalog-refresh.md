@@ -3,6 +3,65 @@
 확인일: 2026-09-09. 생성기와 공급자 어댑터를 수정한 뒤 `npm run models:refresh`로
 두 카탈로그를 재생성했다. 생성 파일을 손으로 수정하지 않았다.
 
+## 2026-09-19 갱신: 라이브 재생성과 생성기 결함 3건 교정
+
+`npm run models:refresh`를 종료0으로 재생성했다(전 소스 응답, `--allow-partial` 미사용,
+키 없는 Zyloo는 정적 6개 유지). 결과는 **39 providers, 1,795→1,799 모델**, 추가 4·제거 0·
+변경 22(가격 20, OpenRouter 선언 thinking 2), 이미지 카탈로그 54개 변화 없음.
+
+첫 재생성에서는 제거 4·변경 220이 나왔고, 그중 상류 변화가 아닌 항목이 셋이었다.
+각각 실패하는 검사를 먼저 쓰고(11개 RED) 생성기를 고친 뒤 다시 생성했다.
+
+| 결함 | 원인 | 조치 |
+| --- | --- | --- |
+| `kimi-coding` 공급자 4개 전부 소실 | models.dev가 `kimi-for-coding` 키를 `kimi-code-plan-global`(api.kimi.ai)·`kimi-code-plan-cn`(api.kimi.com)으로 분리. 생성기는 옛 키만 읽어 조용히 빈 결과 | 세 키를 순서대로 조회. OMK endpoint(`api.kimi.com/coding`)·헤더·thinking 맵은 그대로. `kimi-coding-catalog.test.ts` |
+| cursor 143·devin 55개 고정-노력 레인에 `xhigh/max` 추가 | 직전 커밋은 `--cursor-only`로 가족 단위 pass를 우회했지만 전체 재생성은 `applyModelMetadata`(Fable→xhigh/max, Opus 5→전체 사다리 등)를 정적 레인에도 적용 | devin/cursor 항목을 pass 이후에 붙여 fast path와 동일하게 유지. `fixed-effort-lanes.test.ts`가 정적 카탈로그와 생성 결과의 동일성을 검사 |
+| OpenCode Zen `deepseek-v4.1-flash`가 구형 V4 맵(`high`, `xhigh→max`)만 받음 | V4.1 계약 보정 조건이 `opencode-go`만 인식 | [Zen 문서](https://opencode.ai/docs/zen/)가 같은 `chat/completions` gateway를 명시하므로 `opencode`도 `off/low/high/max`·`max_tokens`·`supportsReasoningEffort` 적용. `deepseek-v41-native.test.ts` route에 추가 |
+
+두 번째 결함은 cursor/devin 항목이 정적 카탈로그와 다르게 저장될 때 즉시 실패하므로,
+앞으로 fast path와 전체 재생성이 갈라지면 검사에서 드러난다.
+
+### 추가된 항목
+
+| 공급자 | 요청 ID | thinking | 가격(1M) | 근거 |
+| --- | --- | --- | --- | --- |
+| `opencode` | `deepseek-v4.1-flash` | `off/low/high/max`, `thinking.type`+`reasoning_effort`, `max_tokens` | $0.30/$1.20, cache $0.006 | Zen 문서 endpoint·가격표 |
+| `opencode` | `qwen3.8-flash` | Messages 예산 경로(기존 Zen Qwen과 동일) | $0.15/$0.47, cache read $0.016·write $0.20 | Zen 문서 |
+| `openrouter` | `z-ai/glm-5.3-flashx` | mandatory, `low/high/max` (route 선언) | $0.37/$1.25, cache $0.075 | OpenRouter `created` 09-18 |
+| `openrouter` | `prism-ml/ternary-bonsai-2-27b` | optional off, `medium/xhigh` (route 선언) | $0.075/$0.50 | OpenRouter `created` 09-18 |
+
+### 상류 변경(가격·선언)
+
+- OpenCode Zen·Vercel의 `gpt-5.6-sol`은 "50% Off" 표시가 끝나 $4/$20(cache $0.40/$5)로 복귀. Vercel `gpt-5.6-sol-fast`는 $8/$40.
+- OpenRouter DeepSeek 계열 인하: `deepseek-v4.1-flash` $0.15/$0.60, `deepseek-v4-pro` $0.54/$1.09, `-latest` 별칭 3개 동반 조정.
+  목록 값이며 DeepSeek 직접 API의 시간대별 가격과 다르다.
+- OpenRouter `moonshotai/kimi-k3`·`~moonshotai/kimi-latest` $1.70/$8.50, `z-ai/glm-5.3` $0.91/$2.86, `meta/muse-glimmer-30b` $0.35/$1.50, Nemotron 3 Ultra·3.5 Lightning 출력 상한 상향.
+- `upstage/solar-pro-3`(`off/minimal~high`)·`solar-pro4`(`off/minimal~max`)가 route 선언을 얻어 thinking 맵이 생겼다.
+
+### 조사했으나 넣지 않은 항목
+
+- **Amazon Bedrock Kimi K3** (09-18 GA). [모델 카드](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
+  기준 ID `global.moonshotai.kimi-k3`(Global $3/$15, cache read $0.30·write $3.75) ·
+  `us.moonshotai.kimi-k3`(US $3.30/$16.50), in-region 없음, 1M context, 이미지 입력, Converse·도구·스트리밍 지원.
+  같은 카드가 "Converse는 이전 턴의 reasoning content가 포함되면 `InternalServerException`"을 명시하는데,
+  OMK `amazon-bedrock`은 non-Claude 모델의 thinking을 `reasoningContent`로 그대로 replay한다(`convertMessages`).
+  카탈로그만 넣으면 두 번째 턴부터 실패하는 경로를 광고하므로, 공급자에서 이전 턴 reasoning을 제거하는
+  수정과 유료 실검증을 묶은 후속 단위로 미룬다. models.dev bedrock 목록에도 아직 없다.
+- **Qwen3.8-Omni-Flash** (Alibaba, 09-18): OpenRouter·Vercel·models.dev의 tool 지원 목록에 없다. Model Studio 직접 경로는 OMK 내장 공급자가 아니다.
+- **Gemini 3.8 Live / Live Extended Thinking** (09-15~16): 오디오 네이티브 경로로 코딩 카탈로그 소스에 없다.
+- **GPT-6 Astra Law** (`gpt-6-astra-law`): OpenAI가 "coming soon"으로만 공지, API 미제공.
+- **Union Alpha**: `stealth/union-alpha`는 09-18 갱신에서 이미 빠졌고, 정식 `unbiased/pareto`($2.50/$7.50, cache $0.25, thinking 미선언)가 HEAD에 있다. 이번 갱신에서 변화 없음.
+
+### 검증과 한계
+
+표적 vitest 13파일 **149개 통과**(신규 `fixed-effort-lanes`·`kimi-coding-catalog`, 확장한
+`deepseek-v41-native` 포함), 전체 `tsgo --noEmit`, 변경 파일 Biome, module-size·import-cycles
+ baseline, `git diff --check` 모두 종료0. 공급자 추론, 전체 `npm run check`, build/install,
+commit/push는 실행하지 않았다. 계정별 사용 가능 여부와 실제 청구액은 검증 범위 밖이다.
+
+변경 단위: `packages/ai/scripts/{generate-models,catalog-thinking}.ts`, 생성 카탈로그, 검사 3파일, 본 문서.
+제안 메시지: `fix(ai): 모델 카탈로그 09-19 갱신과 생성기 결함 교정 (kimi-coding 소실·고정 레인 확장·Zen V4.1 계약)`.
+
 ## 2026-09-17 후속: OpenCode Go DeepSeek V4.1 ID 변경
 
 [OpenCode Go 공식 endpoint 목록](https://opencode.ai/docs/go/)의 현재 ID는
