@@ -111,6 +111,9 @@ const KIMI_STATIC_HEADERS = {
 	"User-Agent": "KimiCLI/1.5",
 } as const;
 
+/** models.dev keys that carry the Kimi For Coding plan catalog, newest naming first. */
+const KIMI_CODING_MODELS_DEV_KEYS = ["kimi-code-plan-global", "kimi-code-plan-cn", "kimi-for-coding"] as const;
+
 const KIMI_CODING_THINKING_LEVEL_MAP = {
 	off: null,
 	minimal: null,
@@ -1566,9 +1569,14 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 			}
 		}
 
-		// Process Kimi For Coding models
-		if (data["kimi-for-coding"]?.models) {
-			const kimiModels = data["kimi-for-coding"].models as Record<string, ModelsDevModel>;
+		// Process Kimi For Coding models.
+		// models.dev split its `kimi-for-coding` key into `kimi-code-plan-global` (api.kimi.ai) and
+		// `kimi-code-plan-cn` (api.kimi.com) on 2026-09-19; both publish the same model list. The OMK
+		// provider keeps its own endpoint and headers, so only the metadata source key changes here.
+		// Reading a single key silently dropped the whole provider when that key was renamed.
+		const kimiCodingSource = KIMI_CODING_MODELS_DEV_KEYS.map((key) => data[key]?.models).find(Boolean);
+		if (kimiCodingSource) {
+			const kimiModels = kimiCodingSource as Record<string, ModelsDevModel>;
 			const hasCanonicalModel = Object.prototype.hasOwnProperty.call(kimiModels, "kimi-for-coding");
 
 			const kimiAliases = new Set(["k2p5", "k2p6"]);
