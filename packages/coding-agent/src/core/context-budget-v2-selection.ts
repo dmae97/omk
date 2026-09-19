@@ -239,7 +239,7 @@ export function createTierUsage(): Record<ContextBudgetTierV2, number> {
 	return Object.fromEntries(ALL_TIERS_V2.map((tier) => [tier, 0])) as Record<ContextBudgetTierV2, number>;
 }
 
-function toSelected(itemId: string, candidate: ContextRepresentationCandidateV2): SelectedRepresentationV2 {
+export function toSelected(itemId: string, candidate: ContextRepresentationCandidateV2): SelectedRepresentationV2 {
 	return {
 		itemId,
 		kind: candidate.kind,

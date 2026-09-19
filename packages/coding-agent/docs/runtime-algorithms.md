@@ -206,9 +206,13 @@ The planner:
 4. scores optional items for relevance, recency, evidence, redundancy,
    priority, and full-text token cost;
 5. sorts optional items by
-   `density -> effectiveScore -> priorityRank -> fullTokens -> id`; and
+   `density -> effectiveScore -> priorityRank -> fullTokens -> id`;
 6. selects a full, summary, headroom-compressed, pointer, or omitted
-   representation that fits.
+   representation that fits (floor pass per tier, then the global pass); and
+7. re-offers each floor-admitted item its costlier representations against
+   the leftover budget and promotes only when the selection policy prefers
+   the costlier form and it fits both the tier ceiling and the global remainder
+   (`context-budget-v2-global-pass.ts`; never demotes, never touches hard items).
 
 Density divides effective score by the cheapest non-omit representation
 (`admissibleTokens`), not by full-text size. This avoids penalizing an item that
@@ -216,7 +220,7 @@ can be represented by a small evidence pointer. Stable item IDs and explicit
 selection policy `sel-3` make tie-breaking and plan-cache invalidation
 deterministic.
 
-### Representation cost accounting (2026-09-19 audit F01)
+### Representation cost accounting (2026-09-19 audit F01/F03)
 
 Every derived representation is priced by counting the string it materializes
 with the planner's own token counter, the same counter that priced the full
@@ -233,7 +237,8 @@ Known limitation (audit F04, not addressed): items are ranked by their cheapest
 admissible representation but may be admitted at full text, so a high-priority
 item priced at 10 can consume 100 and displace two 45-token items whose sum the
 policy's own preference scores would rate higher. Fixing this means choosing
-`(item, representation)` pairs jointly.
+`(item, representation)` pairs jointly; the promotion pass above only spends
+budget the current policy leaves unused and does not change admission order.
 
 The quality-policy field `preferFullForHighPriority` is deprecated: nothing
 reads it, and flipping it changes no candidate or choice
@@ -243,6 +248,7 @@ prefers full text for high-priority items.
 Evidence:
 
 - `packages/coding-agent/test/context-budget-representation-accounting.test.ts`
+- `packages/coding-agent/test/context-budget-representation-promotion.test.ts`
 - `packages/coding-agent/test/context-budget-quality-policy-semantics.test.ts`
 
 When enabled, representation and negative-result entries persist under

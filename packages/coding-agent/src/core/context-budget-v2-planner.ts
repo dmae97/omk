@@ -13,6 +13,7 @@ import {
 	readValidPlanCacheV2,
 	writePlanCacheV2,
 } from "./context-budget-v2-cache.ts";
+import { runGlobalSelectionPass } from "./context-budget-v2-global-pass.ts";
 import { validateBudgetItems } from "./context-budget-v2-input-validation.ts";
 import { buildObservability } from "./context-budget-v2-observability.ts";
 import { computePlanHash } from "./context-budget-v2-plan-hash.ts";
@@ -180,22 +181,21 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 		}
 	}
 
-	for (const planned of optionalPlanned) {
-		if (selection.has(planned.item.id)) continue;
-		usedTokens = selectOptionalItem(planned, {
-			allocation,
-			available,
-			cache,
-			diagnostics,
-			omitted,
-			qualityPolicy,
-			resolvedCandidates,
-			retrievalFallbacks,
-			selection,
-			tierUsed,
-			usedTokens,
-		});
-	}
+	// Global pass under tier ceilings, then promotion of floor-admitted items
+	// with whatever the global pass left unused (audit F03).
+	usedTokens = runGlobalSelectionPass(optionalPlanned, {
+		allocation,
+		available,
+		cache,
+		diagnostics,
+		omitted,
+		qualityPolicy,
+		resolvedCandidates,
+		retrievalFallbacks,
+		selection,
+		tierUsed,
+		usedTokens,
+	});
 
 	const omittedHighPriority = omitted.some((item) => item.priority === "high" || item.required === true);
 	emitOmissionDiagnostics(omitted, diagnostics, retrievalFallbacks);
