@@ -1014,24 +1014,33 @@ type DagLevelOutcome = { sourceIndex: number; finalized: FinalizedToolCallOutcom
 // Re-resolve claims for a prepared call from its exact post-hook arguments.
 // Resolution failures fail closed as an immediate error rather than guessing
 // at a safe scope.
+//
+// The wait is bound to the run's abort signal exactly like the initial
+// scheduling pass (tool-dag-memo): an extension `resourceClaims()` that never
+// settles must not pin a cancelled run. Abandoning the wait does not stop the
+// callback — a plain Promise cannot be killed — but the aborted outcome settles
+// this call before any late value could admit it, and the frontier loop exits
+// on the same signal, so a late fulfilment or rejection lands in a finished
+// batch and admits nothing.
 async function resolveFinalResolution(
 	preparation: PreparedToolCall,
 	toolPolicies: ReadonlyMap<string, "sequential" | "parallel">,
 	config: AgentLoopConfig,
 	signal: AbortSignal | undefined,
 ): Promise<ToolClaimResolution | ImmediateToolCallOutcome> {
-	if (signal?.aborted) return immediateOutcome("aborted", "Operation aborted");
+	// awaitWithAbort short-circuits an already-aborted signal before invoking the callback.
+	const call = { id: preparation.toolCall.id, name: preparation.toolCall.name, arguments: preparation.args };
+	const options = {
+		cwd: config.cwd ?? process.cwd(),
+		toolPolicies,
+		registeredTools: [preparation.tool],
+		strictExtensionClaims: config.strictExtensionClaims,
+		resourceKeyResolver: config.resourceKeyResolver,
+	};
 	try {
-		return await resolveToolClaimsForCall(
-			{ id: preparation.toolCall.id, name: preparation.toolCall.name, arguments: preparation.args },
-			{
-				cwd: config.cwd ?? process.cwd(),
-				toolPolicies,
-				registeredTools: [preparation.tool],
-				strictExtensionClaims: config.strictExtensionClaims,
-				resourceKeyResolver: config.resourceKeyResolver,
-			},
-		);
+		const bounded = await awaitWithAbort(() => resolveToolClaimsForCall(call, options), signal);
+		if (bounded.kind === "aborted" || signal?.aborted) return immediateOutcome("aborted", "Operation aborted");
+		return bounded.value;
 	} catch (error) {
 		return immediateOutcome("failed", error instanceof Error ? error.message : String(error));
 	}

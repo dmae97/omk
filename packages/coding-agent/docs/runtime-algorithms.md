@@ -44,6 +44,23 @@ a release, or evidence of latency/quality improvement. Resource normalization,
 slot-aware ranking, fairness, and equal-budget runtime comparisons remain separate
 work.
 
+## Final claim resolution is abort-bound (2026-09-19 audit F02)
+
+The dag-v2 frontier re-resolves each prepared call's resource claims from its
+exact post-hook arguments before admission. That wait was a bare `await`; the
+initial scheduling pass in `tool-dag-memo` was already raced against the run's
+abort signal, so an extension `resourceClaims()` that never settled on the
+second call pinned a cancelled run until the callback returned on its own.
+`resolveFinalResolution` now uses the same `awaitWithAbort` boundary. The
+callback itself is not killed — a plain Promise cannot be — but the aborted
+outcome settles the call, the frontier loop exits on the same signal, and a late
+fulfilment or rejection lands in a finished batch and admits nothing. In-flight
+peers keep the existing abort contract (`aborted`, `executionStarted: true`),
+and the authorization hook still runs once. Coverage:
+`packages/agent/test/tool-dag-final-claims-abort.test.ts`. This is the wait
+boundary only; isolating a non-cooperative extension needs a killable execution
+boundary, which this change does not add.
+
 ## Working-tree shared run budgets
 
 The SDK `prompt(..., { runBudget })` path now shares a monotonic deadline and
