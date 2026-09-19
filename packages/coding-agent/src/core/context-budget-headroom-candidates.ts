@@ -12,14 +12,34 @@ import {
 const SUMMARY_HEAD_CHARS = 160;
 const HEADROOM_HEAD_CHARS = 120;
 
+/** Prices one materialized representation string; must be the counter that produced the item's full-text cost. */
+export type RepresentationTokenCounter = (text: string) => number;
+
+/**
+ * Derive the representations the selector may choose for one item.
+ *
+ * Every non-full candidate is priced by counting the string it actually
+ * materializes with `countTokens` — the same counter that priced the full
+ * text — so the cost the selector checks against the budget is the cost of
+ * the text that would be sent. A compression ratio is never a cost: a summary
+ * that returns its source unchanged saves nothing, and a representation whose
+ * materialized text is not cheaper than the full text is not offered at all.
+ * Pass the counter that produced `item.tokenEstimate`; mixing an exact
+ * tokenizer for the full text with the heuristic for its alternatives makes
+ * the candidates incomparable.
+ */
 export function deriveRepresentationCandidates(
 	item: ContextBudgetItemV2,
 	policy: HeadroomQualityPolicyV2 = DEFAULT_HEADROOM_QUALITY_POLICY,
+	countTokens: RepresentationTokenCounter = heuristicTokenCount,
 ): readonly ContextRepresentationCandidateV2[] {
 	const full = fullTextTokens(item);
 	const sourceRef = item.sourceRef;
 	const retrievable = sourceRef?.retrievable === true;
 	const candidates: ContextRepresentationCandidateV2[] = [];
+	const offerIfCheaper = (candidate: ContextRepresentationCandidateV2): void => {
+		if (candidate.text !== item.text && candidate.estimatedTokens < full) candidates.push(candidate);
+	};
 
 	candidates.push({
 		kind: "full",
@@ -31,33 +51,34 @@ export function deriveRepresentationCandidates(
 
 	if (retrievable && sourceRef) {
 		const pointerText = formatPointer(sourceRef);
-		candidates.push({
+		offerIfCheaper({
 			kind: "pointer",
 			text: pointerText,
-			estimatedTokens: heuristicTokenCount(pointerText),
+			estimatedTokens: countTokens(pointerText),
 			fidelity: "bounded",
 			sourceRef,
 		});
 	}
 
-	const summaryTokens = Math.ceil(full * 0.15) + 8;
-	if (isSummaryEligible(item, full, policy) && summaryTokens < full) {
-		candidates.push({
+	if (isSummaryEligible(item, full, policy)) {
+		const summaryText = summarizeText(item.text);
+		offerIfCheaper({
 			kind: "summary",
-			text: summarizeText(item.text),
-			estimatedTokens: summaryTokens,
+			text: summaryText,
+			estimatedTokens: countTokens(summaryText),
 			fidelity: "lossy",
 			summaryHash: fnv1aHex(item.text),
 		});
 	}
 
-	const headroomText = formatHeadroom(item.text, sourceRef);
-	const headroomTokens = Math.max(Math.ceil(full * 0.35) + 16, heuristicTokenCount(headroomText));
-	if (full > policy.headroomThresholdTokens && retrievable && headroomTokens < full) {
-		candidates.push({
+	if (full > policy.headroomThresholdTokens && retrievable) {
+		const headroomText = formatHeadroom(item.text, sourceRef);
+		// The shadow compressor's reversible payload is larger than the visible
+		// head, so its price keeps a floor above the counted head text.
+		offerIfCheaper({
 			kind: "headroom-compressed",
 			text: headroomText,
-			estimatedTokens: headroomTokens,
+			estimatedTokens: Math.max(Math.ceil(full * 0.35) + 16, countTokens(headroomText)),
 			fidelity: "reversible",
 			sourceRef,
 			compressorId: "headroom-shadow",

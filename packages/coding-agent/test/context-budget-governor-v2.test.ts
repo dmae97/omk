@@ -83,7 +83,10 @@ describe("context budget governor v2", () => {
 			{
 				maxTokens: 100,
 				safetyMarginTokens: 0,
-				tierPolicy: { evidence: { floorPct: 0, ceilingPct: 0.2 } },
+				// The pointer is priced by the planner's own counter (22 tokens for this
+				// uri/hash), not chars/4; the ceiling must admit that real cost while
+				// still excluding pointer + low-small (36).
+				tierPolicy: { evidence: { floorPct: 0, ceilingPct: 0.25 } },
 			},
 		);
 

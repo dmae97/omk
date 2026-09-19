@@ -25,8 +25,11 @@ export const CONTEXT_BUDGET_POLICY_VERSION_V2 = "context-budget-v2";
  *
  * `sel-2`: density-ordered selection over the cheapest admissible representation
  * (previously priority-class-ordered over full-text tokens).
+ * `sel-3`: derived representations are priced by counting their materialized
+ * text with the planner's counter; the summary ratio is no longer a cost, so
+ * plans cached under `sel-2` carry under-priced summaries and must not be served.
  */
-export const CONTEXT_BUDGET_SELECTION_POLICY_V2 = "sel-2";
+export const CONTEXT_BUDGET_SELECTION_POLICY_V2 = "sel-3";
 
 /** Fixed compatibility telemetry for the removed legacy token optimizer. */
 export interface TokenOptimizerRuntimeStatus {

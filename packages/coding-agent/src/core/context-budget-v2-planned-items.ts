@@ -39,19 +39,24 @@ export function createPlannedItems(
 	qualityPolicy?: Parameters<typeof deriveRepresentationCandidates>[1],
 ): PlannedItemV2[] {
 	const counter = tokenCounter ?? createFallbackTokenCounter();
+	// One counter prices the full text and every derived representation, so
+	// the selector compares like with like (audit F01: a ratio-priced summary
+	// was admitted into a budget its materialized text could not fit).
+	const countTokens = (text: string): number => counter.countText(text, modelId).tokens;
 	return items.map((item) => {
-		const overrideTokenEstimate = item.tokenEstimate ?? counter.countText(item.text, modelId).tokens;
+		const overrideTokenEstimate = item.tokenEstimate ?? countTokens(item.text);
 		const itemWithTokens =
 			item.tokenEstimate === undefined ? { ...item, tokenEstimate: overrideTokenEstimate } : item;
 		const fullTokens = fullTextTokens(itemWithTokens);
 		const isHard = item.priority === "hard" || item.required === true;
 		const baseScore = isHard ? Number.POSITIVE_INFINITY : scoreContextBudgetItemV2(itemWithTokens, fullTokens);
 		const candidates =
-			itemWithTokens.representations ?? deriveRepresentationCandidates(itemWithTokens, qualityPolicy);
+			itemWithTokens.representations ?? deriveRepresentationCandidates(itemWithTokens, qualityPolicy, countTokens);
 		return {
 			item: itemWithTokens,
 			fullTokens,
 			admissibleTokens: minAdmissibleTokens(candidates, itemWithTokens, qualityPolicy, fullTokens),
+			candidates,
 			contentHash: contentHashOf(item.text),
 			baseScore,
 			redundancyPenalty: 0,

@@ -97,7 +97,12 @@ export function selectOptionalItem(planned: PlannedItemV2, state: OptionalSelect
 			? floorPass.floorTokens
 			: (state.allocation.get(planned.item.tier)?.ceiling ?? state.available);
 	const remaining = Math.max(0, state.available - state.usedTokens);
-	const candidates = planned.item.representations ?? deriveRepresentationCandidates(planned.item, state.qualityPolicy);
+	// Prefer the planner-priced candidates: re-deriving here with the default
+	// heuristic would price the chosen text differently from the ranking cost.
+	const candidates =
+		planned.candidates ??
+		planned.item.representations ??
+		deriveRepresentationCandidates(planned.item, state.qualityPolicy);
 	const materializedEnabled = planned.item.representations === undefined;
 	let cachedCandidates = state.resolvedCandidates?.get(planned.item.id);
 	if (cachedCandidates === undefined) {

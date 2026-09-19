@@ -1,4 +1,9 @@
-import type { ContextBudgetItemV2, ContextBudgetPriorityV2, ContextBudgetTierV2 } from "./context-budget-headroom.ts";
+import type {
+	ContextBudgetItemV2,
+	ContextBudgetPriorityV2,
+	ContextBudgetTierV2,
+	ContextRepresentationCandidateV2,
+} from "./context-budget-headroom.ts";
 
 export interface PlannedItemV2 {
 	readonly item: ContextBudgetItemV2;
@@ -9,6 +14,12 @@ export interface PlannedItemV2 {
 	 * cheaper pointer/summary/headroom representation.
 	 */
 	readonly admissibleTokens: number;
+	/**
+	 * Representations priced with the planner's token counter. Selection must
+	 * choose from these rather than re-deriving with a different estimator, or
+	 * the cost an item was ranked on and the cost it pays can diverge.
+	 */
+	readonly candidates?: readonly ContextRepresentationCandidateV2[];
 	readonly contentHash: string;
 	readonly baseScore: number;
 	redundancyPenalty: number;

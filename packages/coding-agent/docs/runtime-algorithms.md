@@ -181,8 +181,31 @@ The planner:
 Density divides effective score by the cheapest non-omit representation
 (`admissibleTokens`), not by full-text size. This avoids penalizing an item that
 can be represented by a small evidence pointer. Stable item IDs and explicit
-selection policy `sel-2` make tie-breaking and plan-cache invalidation
+selection policy `sel-3` make tie-breaking and plan-cache invalidation
 deterministic.
+
+### Representation cost accounting (2026-09-19 audit F01)
+
+Every derived representation is priced by counting the string it materializes
+with the planner's own token counter, the same counter that priced the full
+text. The former `ceil(0.15 * full) + 8` summary price was a compression target,
+not a cost: a 100-character "summary" identical to its source was recorded at
+12 tokens against the source's 25 and admitted into a 12-token budget. A
+representation whose text equals the source, or whose counted cost is not below
+the full text, is no longer offered. `createPlannedItems` stores the priced
+candidates on each planned item so ranking and selection read one cost; the
+selection policy token moved from `sel-2` to `sel-3` so plans and
+representation entries cached under the old prices are not served.
+
+Known limitation (audit F04, not addressed): items are ranked by their cheapest
+admissible representation but may be admitted at full text, so a high-priority
+item priced at 10 can consume 100 and displace two 45-token items whose sum the
+policy's own preference scores would rate higher. Fixing this means choosing
+`(item, representation)` pairs jointly.
+
+Evidence:
+
+- `packages/coding-agent/test/context-budget-representation-accounting.test.ts`
 
 When enabled, representation and negative-result entries persist under
 `.omk/cache/context-budget-v2`; plan entries remain session-memory-only.
