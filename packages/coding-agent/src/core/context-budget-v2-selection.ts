@@ -22,7 +22,8 @@ import {
 } from "./context-budget-v2-types.ts";
 
 export interface OptionalSelectionState {
-	readonly allocation: ReadonlyMap<ContextBudgetTierV2, { readonly ceiling: number }>;
+	/** Per-tier caps; `floor` is the tier's reservation, which the exchange pass must not raid. */
+	readonly allocation: ReadonlyMap<ContextBudgetTierV2, { readonly ceiling: number; readonly floor?: number }>;
 	readonly available: number;
 	readonly cache?: ContextBudgetSelectionCacheV2;
 	readonly diagnostics: QualityDiagnosticV2[];

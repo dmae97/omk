@@ -100,7 +100,7 @@ export function chooseHeadroomRepresentation(
 		if (candidate.kind !== "omit" && candidate.estimatedTokens > spendable) {
 			continue;
 		}
-		const score = representationPreference(candidate, item, policy, tight);
+		const score = scoreRepresentationPreferenceV2(candidate, item, policy, tight);
 		if (
 			score > bestScore ||
 			(score === bestScore && best !== undefined && compareCandidatesForChoice(candidate, best) < 0)
@@ -126,11 +126,20 @@ function isMoreExpensiveThanFull(candidate: ContextRepresentationCandidateV2, fu
 	return candidate.kind !== "full" && candidate.kind !== "omit" && candidate.estimatedTokens >= fullTokens;
 }
 
-function representationPreference(
+/**
+ * The selector's own preference score for one representation — the closest
+ * thing this policy has to a utility function, and the quantity the planner's
+ * exchange passes compare when they promote or step an item down. Exported so
+ * an oracle can score a plan with the same rule the planner used instead of
+ * restating the formula. `tight` is the congestion flag
+ * {@link chooseHeadroomRepresentation} derives from the budget context; pass
+ * `false` for a congestion-free reference score.
+ */
+export function scoreRepresentationPreferenceV2(
 	candidate: ContextRepresentationCandidateV2,
 	item: ContextBudgetItemV2,
-	policy: HeadroomQualityPolicyV2,
-	tight: boolean,
+	policy: HeadroomQualityPolicyV2 = DEFAULT_HEADROOM_QUALITY_POLICY,
+	tight = false,
 ): number {
 	const priority = PRIORITY_WEIGHT[item.priority];
 	const cost = candidate.estimatedTokens;

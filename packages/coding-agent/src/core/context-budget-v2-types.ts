@@ -28,6 +28,8 @@ export const CONTEXT_BUDGET_POLICY_VERSION_V2 = "context-budget-v2";
  * `sel-3`: derived representations are priced by counting their materialized
  * text with the planner's counter; the summary ratio is no longer a cost, so
  * plans cached under `sel-2` carry under-priced summaries and must not be served.
+ * The same token covers the exchange and promotion passes added alongside it,
+ * which change the selected set for identical inputs.
  */
 export const CONTEXT_BUDGET_SELECTION_POLICY_V2 = "sel-3";
 

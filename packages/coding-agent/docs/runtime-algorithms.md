@@ -208,11 +208,16 @@ The planner:
 5. sorts optional items by
    `density -> effectiveScore -> priorityRank -> fullTokens -> id`;
 6. selects a full, summary, headroom-compressed, pointer, or omitted
-   representation that fits (floor pass per tier, then the global pass); and
-7. re-offers each floor-admitted item its costlier representations against
-   the leftover budget and promotes only when the selection policy prefers
-   the costlier form and it fits both the tier ceiling and the global remainder
-   (`context-budget-v2-global-pass.ts`; never demotes, never touches hard items).
+   representation that fits (floor pass per tier, then the global pass);
+7. lets each still-omitted item buy its cheapest admissible form by stepping
+   selected items down to theirs, applied all-or-nothing; and
+8. re-offers each remaining item its costlier representations against the
+   leftover budget and promotes only when the selection policy prefers the
+   costlier form and it fits both the tier ceiling and the global remainder
+   (`context-budget-v2-global-pass.ts`; never touches hard items).
+
+Breadth is settled before quality: step 7 runs before step 8, so an exchange
+that admits another item cannot be undone by a promotion.
 
 Density divides effective score by the cheapest non-omit representation
 (`admissibleTokens`), not by full-text size. This avoids penalizing an item that
@@ -233,12 +238,28 @@ candidates on each planned item so ranking and selection read one cost; the
 selection policy token moved from `sel-2` to `sel-3` so plans and
 representation entries cached under the old prices are not served.
 
-Known limitation (audit F04, not addressed): items are ranked by their cheapest
-admissible representation but may be admitted at full text, so a high-priority
-item priced at 10 can consume 100 and displace two 45-token items whose sum the
-policy's own preference scores would rate higher. Fixing this means choosing
-`(item, representation)` pairs jointly; the promotion pass above only spends
-budget the current policy leaves unused and does not change admission order.
+### Representation exchange (2026-09-19 audit F04)
+
+Items are ranked by their cheapest admissible representation but admitted at
+whatever the selector prefers, so a high-priority item priced at 10 for ordering
+could consume 100 and displace two 45-token items. On the audit's counterexample
+that scored 121 against 169.5 for `A-pointer + B-full + C-full` at the same 100
+tokens, measured with the selector's own preference score.
+
+The repair is bounded. After the global pass, each still-omitted item in rank
+order may pay for its admission by stepping already-selected items down to their
+cheapest admissible representation. Donors yield in order of the preference the
+policy loses per token freed, the whole exchange is applied or none of it is,
+and a donor is skipped when stepping it down would drop its tier below the floor
+it is currently honouring. An item admitted this way leaves the omitted list, so
+it is never reported as both included and omitted.
+
+This is not joint `(item, representation)` optimization: donor choice is greedy
+and admission order is unchanged, so the planner can still trail a brute-force
+oracle on instances the bounded repair cannot reach. It does reach the oracle on
+the audit counterexample, and a 200-instance randomized property check holds
+feasibility (global and tier caps), disjoint included/omitted sets, and
+maximality: no omitted item still fits at its cheapest admissible form.
 
 The quality-policy field `preferFullForHighPriority` is deprecated: nothing
 reads it, and flipping it changes no candidate or choice
@@ -248,6 +269,7 @@ prefers full text for high-priority items.
 Evidence:
 
 - `packages/coding-agent/test/context-budget-representation-accounting.test.ts`
+- `packages/coding-agent/test/context-budget-representation-exchange.test.ts`
 - `packages/coding-agent/test/context-budget-representation-promotion.test.ts`
 - `packages/coding-agent/test/context-budget-quality-policy-semantics.test.ts`
 
