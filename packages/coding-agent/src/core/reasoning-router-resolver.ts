@@ -45,6 +45,17 @@ function clampToLadderIndex(index: number): number {
 }
 
 /**
+ * Ladder steps are integers. A non-finite step is neutralized to 0 and a
+ * fraction is truncated toward zero, so a corrupted `bias` or escalation
+ * keeps the class's own level instead of walking the lookup off the integer
+ * rungs (a `3.5` target matches no rung and used to fall to the lowest
+ * available level; `NaN` did the same, `±Infinity` saturated the clamp).
+ */
+function normalizeLadderSteps(steps: number): number {
+	return Number.isFinite(steps) ? Math.trunc(steps) : 0;
+}
+
+/**
  * Clamp a target ladder index to capability: the highest level in
  * `availableLevels` that is <= the target; if no available level is at/below
  * the target, return the lowest available reasoning level. Never invents a
@@ -71,6 +82,13 @@ export function clampToAvailable(targetIndex: number, availableLevels: readonly 
  * -> optional hint fusion (bounded ±BIAS_MAX steps toward hint.level, only
  * when hint.confidence >= HINT_CONFIDENCE_THRESHOLD) -> non-negative
  * escalationSteps bump -> clamp to availableLevels.
+ *
+ * `bias` and `escalationSteps` are normalized to finite integers first (see
+ * {@link normalizeLadderSteps}); callers that need to reject invalid numbers
+ * must validate before calling, as the session's bias-snapshot validator does.
+ * The escalation term is monotone at a fixed bias and hint only: it is not a
+ * floor at the class base level, because a negative bias applied earlier can
+ * outweigh it.
  */
 export function resolveThinkingLevelCore(
 	taskClass: ReasoningTaskClass,
@@ -82,7 +100,7 @@ export function resolveThinkingLevelCore(
 ): ThinkingLevel {
 	const baseIndex = REASONING_LADDER.indexOf(TASK_CLASS_THINKING_LEVELS[taskClass]);
 	const laneStep = laneType ? (LANE_STEP[laneType] ?? 0) : 0;
-	const biasClamped = Math.max(-BIAS_MAX, Math.min(BIAS_MAX, bias));
+	const biasClamped = Math.max(-BIAS_MAX, Math.min(BIAS_MAX, normalizeLadderSteps(bias)));
 	let targetIndex = clampToLadderIndex(baseIndex + laneStep + biasClamped);
 
 	if (hint !== null && hint.confidence >= HINT_CONFIDENCE_THRESHOLD) {
@@ -94,8 +112,9 @@ export function resolveThinkingLevelCore(
 		}
 	}
 
-	if (escalationSteps > 0) {
-		targetIndex = clampToLadderIndex(targetIndex + escalationSteps);
+	const escalation = normalizeLadderSteps(escalationSteps);
+	if (escalation > 0) {
+		targetIndex = clampToLadderIndex(targetIndex + escalation);
 	}
 
 	return clampToAvailable(targetIndex, availableLevels);

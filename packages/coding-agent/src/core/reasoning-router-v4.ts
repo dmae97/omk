@@ -1221,11 +1221,14 @@ export function resolveThinkingLevelV4ForAuto(
  * `verdict.confidenceBand === "low"` or `verdict.fallbackReason !== null`) ->
  * clamp to `availableLevels`.
  *
- * The confidence-escalation term is strictly `>= 0`: low confidence can only
- * hold the base+lane+bias+hint target or push it one step higher, never lower
- * it. This guarantees a low-confidence verdict never resolves BELOW what
- * `resolveThinkingLevelV4ForAuto` would give the same class (with bias=0,
- * hint=null) — text alone cannot talk the resolver down.
+ * The confidence-escalation term is strictly `>= 0`: at a fixed bias and
+ * hint, a low-confidence verdict resolves at or above the same verdict at
+ * high confidence — text alone cannot talk the resolver down. That is the
+ * whole guarantee. It is not a floor at the class base level: a negative
+ * learning bias is applied before the +1 escalation, so `debug` with
+ * `bias=-2` still resolves to `medium`, below the `high` that
+ * `resolveThinkingLevelV4ForAuto` returns. A policy that must never drop
+ * below the base level needs an explicit safety floor, not this term.
  */
 export function resolveThinkingLevelV4WithUncertainty(
 	verdict: ClassifierVerdictV4,

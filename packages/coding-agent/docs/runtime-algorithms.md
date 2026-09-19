@@ -61,6 +61,21 @@ and the authorization hook still runs once. Coverage:
 boundary only; isolating a non-cooperative extension needs a killable execution
 boundary, which this change does not add.
 
+## Reasoning router resolver contract (2026-09-19 audit F05/F06)
+
+The low-confidence escalation in `resolveThinkingLevelV4WithUncertainty` is
+monotone at a fixed bias and hint only; it is not a floor at the class base
+level, because a negative learning bias is applied before the +1 step (`debug`
+with `bias=-2` still resolves to `medium`). The docstring previously claimed the
+stronger floor. A policy that must never drop below the base level needs an
+explicit safety floor, which is a cost decision not taken here. The shared
+resolver also normalizes `bias` and `escalationSteps` to finite integers
+(non-finite → 0, fractions truncated toward zero) so a corrupted value keeps the
+class's own level instead of walking the ladder lookup off its rungs to the
+lowest available level; the session's bias-snapshot validator already rejects
+such values before they reach the resolver. Coverage:
+`packages/coding-agent/test/reasoning-router-resolver-contract.test.ts`.
+
 ## Working-tree shared run budgets
 
 The SDK `prompt(..., { runBudget })` path now shares a monotonic deadline and
