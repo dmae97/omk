@@ -17,7 +17,7 @@ import { runGlobalSelectionPass } from "./context-budget-v2-global-pass.ts";
 import { validateBudgetItems } from "./context-budget-v2-input-validation.ts";
 import { buildObservability } from "./context-budget-v2-observability.ts";
 import { computePlanHash } from "./context-budget-v2-plan-hash.ts";
-import { createPlannedItems } from "./context-budget-v2-planned-items.ts";
+import { createPlannedItems, resolveEffectiveTokenizerIdV2 } from "./context-budget-v2-planned-items.ts";
 import { compareOptionalForSelection } from "./context-budget-v2-scoring.ts";
 import {
 	applyPlannerRedundancyPenalties,
@@ -87,7 +87,7 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 		queryIntentHash: input.queryIntentHash,
 		redactionPolicyHash: input.redactionPolicyHash,
 		safetyProfileHash: input.safetyProfileHash,
-		tokenizerId: input.tokenizerId,
+		tokenizerId: input.tokenizerId ?? resolveEffectiveTokenizerIdV2(input.tokenCounter, modelId),
 	});
 	const planCacheKey = buildContextBudgetPlanCacheKeyV2({
 		availableTokens: available,

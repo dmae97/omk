@@ -10,7 +10,12 @@ import {
 	contentHashOf,
 	createMemoryContextBudgetCacheProviderV2,
 } from "../src/core/context-budget-governor-v2.ts";
+import { resolveEffectiveTokenizerIdV2 } from "../src/core/context-budget-v2-planned-items.ts";
 import { makeContextBudgetItem as makeItem, planContextBudgetWith as planWith } from "./context-budget-test-helpers.ts";
+
+// The planner keys cache entries by the adapter that actually prices the text,
+// so a fixture key must be built from that same identity rather than a literal.
+const TOKENIZER_ID = resolveEffectiveTokenizerIdV2(undefined, "gpt-cache-test");
 
 type CacheProvider = ReturnType<typeof createMemoryContextBudgetCacheProviderV2>;
 type CachedSummary = {
@@ -57,7 +62,7 @@ function materializedKeyFor(
 			safetyProfileHash: "default",
 			sourceHash,
 			targetTokenBucket: 100,
-			tokenizerId: "heuristic-v1",
+			tokenizerId: TOKENIZER_ID,
 		}),
 	};
 }
@@ -91,7 +96,7 @@ function writeMaterializedSummary(
 			sourceHash: overrides.sourceHash ?? sourceHash,
 			summaryHash: candidate.summaryHash,
 			text: candidate.text,
-			tokenizerId: "heuristic-v1",
+			tokenizerId: TOKENIZER_ID,
 			verification: {
 				poisonScore: overrides.poisonScore ?? 0,
 				queryCoverage: overrides.queryCoverage ?? 1,

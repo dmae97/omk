@@ -8,7 +8,12 @@ import {
 	contentHashOf,
 	createMemoryContextBudgetCacheProviderV2,
 } from "../src/core/context-budget-governor-v2.ts";
+import { resolveEffectiveTokenizerIdV2 } from "../src/core/context-budget-v2-planned-items.ts";
 import { makeContextBudgetItem as makeItem, planContextBudgetWith as planWith } from "./context-budget-test-helpers.ts";
+
+// The planner keys cache entries by the adapter that actually prices the text,
+// so a fixture key must be built from that same identity rather than a literal.
+const TOKENIZER_ID = resolveEffectiveTokenizerIdV2(undefined, "gpt-cache-test");
 
 describe("context budget v2 exact cache", () => {
 	it("records plan and representation cache hits on active context-budget planning", () => {
@@ -128,7 +133,7 @@ describe("context budget v2 exact cache", () => {
 			representationKind: "summary",
 			safetyProfileHash: "default",
 			sourceHash: contentHashOf(item.text),
-			tokenizerId: "heuristic-v1",
+			tokenizerId: TOKENIZER_ID,
 		});
 		cacheProvider.writeRepresentation({
 			key: summaryKey,
@@ -142,7 +147,7 @@ describe("context budget v2 exact cache", () => {
 				representationFingerprint: computeContextBudgetRepresentationFingerprintV2(freshSummary),
 				sourceHash: contentHashOf(item.text),
 				text: "STALE SUMMARY",
-				tokenizerId: "heuristic-v1",
+				tokenizerId: TOKENIZER_ID,
 			},
 		});
 		const stalePlan = planWith([item], {

@@ -256,6 +256,21 @@ When enabled, representation and negative-result entries persist under
 `OMK_CONTEXT_GOVERNOR_CACHE=memory` keeps every cache entry in session memory,
 and `OMK_CONTEXT_GOVERNOR_CACHE_DIR` relocates the representation snapshot.
 
+Cache keys are bound to the counter that produced the prices. Two of the three
+layers bind it implicitly — a plan key hashes each planned item's token counts,
+and an exact representation key hashes a fingerprint containing
+`estimatedTokens` — but the materialized (semantic) key is bucketed at 100
+tokens and carries the tokenizer as a field, and no caller passed one, so every
+counter shared the static `heuristic-v1` key space and the entry's
+`tokenizer_mismatch` check compared that constant against itself. Since F01 made
+every representation price counter-dependent, that let one estimator's price be
+admitted in another estimator's run. The planner now resolves the key's
+tokenizer from the counter's own `adapterId`
+(`resolveEffectiveTokenizerIdV2`, probing a non-empty string because
+`countText("")` short-circuits to the fallback estimator); an explicit
+`tokenizerId` input still wins. Coverage:
+`packages/coding-agent/test/context-budget-cache-tokenizer-binding.test.ts`.
+
 Evidence:
 
 - `packages/coding-agent/src/core/context-budget-v2-planner.ts`
