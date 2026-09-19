@@ -2602,7 +2602,7 @@ async function generateModels() {
 			provider: "azure-openai-responses",
 			baseUrl: "",
 		}));
-	allModels.push(...azureOpenAiModels, ...devinModels(), ...cursorModels());
+	allModels.push(...azureOpenAiModels);
 
 	for (const model of allModels) {
 		applyModelMetadata(model);
@@ -2616,6 +2616,12 @@ async function generateModels() {
 		// OpenRouter's declared efforts do not include `ultra`; keep the OMK selector alias.
 		applyGpt6AstraUltraAlias(model);
 	}
+
+	// Devin and Cursor publish one wire id per effort tier; their static catalogs already pin the
+	// exact tier each id carries. Append them after the family-wide passes so a rule such as
+	// "Fable exposes xhigh/max" cannot widen a `claude-fable-5-1-high` lane. The --devin-only and
+	// --cursor-only fast paths already bypass those passes; a full run must match them.
+	allModels.push(...devinModels(), ...cursorModels());
 
 	writeModelCatalog(allModels);
 }
