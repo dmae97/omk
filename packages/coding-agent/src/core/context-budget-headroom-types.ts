@@ -63,7 +63,13 @@ export interface ContextBudgetItemV2 {
 }
 
 export interface HeadroomQualityPolicyV2 {
-	readonly preferFullForHighPriority: boolean;
+	/**
+	 * @deprecated Never read by the candidate generator or the selector; the
+	 * priority weight already prefers full text for high-priority items. Kept
+	 * optional so existing configs still type-check. Flipping it changes no
+	 * decision (see context-budget-quality-policy-semantics.test.ts).
+	 */
+	readonly preferFullForHighPriority?: boolean;
 	readonly preferPointerForRetrievable: boolean;
 	readonly summaryMaxAgeTurns: number;
 	readonly headroomThresholdTokens: number;
@@ -71,7 +77,6 @@ export interface HeadroomQualityPolicyV2 {
 }
 
 export const DEFAULT_HEADROOM_QUALITY_POLICY: HeadroomQualityPolicyV2 = {
-	preferFullForHighPriority: true,
 	preferPointerForRetrievable: true,
 	summaryMaxAgeTurns: 4,
 	headroomThresholdTokens: 400,

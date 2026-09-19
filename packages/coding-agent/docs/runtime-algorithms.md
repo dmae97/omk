@@ -235,9 +235,15 @@ item priced at 10 can consume 100 and displace two 45-token items whose sum the
 policy's own preference scores would rate higher. Fixing this means choosing
 `(item, representation)` pairs jointly.
 
+The quality-policy field `preferFullForHighPriority` is deprecated: nothing
+reads it, and flipping it changes no candidate or choice
+(`context-budget-quality-policy-semantics.test.ts`). The priority weight already
+prefers full text for high-priority items.
+
 Evidence:
 
 - `packages/coding-agent/test/context-budget-representation-accounting.test.ts`
+- `packages/coding-agent/test/context-budget-quality-policy-semantics.test.ts`
 
 When enabled, representation and negative-result entries persist under
 `.omk/cache/context-budget-v2`; plan entries remain session-memory-only.
