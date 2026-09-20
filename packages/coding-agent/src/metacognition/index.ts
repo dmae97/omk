@@ -8,6 +8,7 @@
  */
 
 export * from "./calibration.ts";
+export * from "./calibration-selective.ts";
 export * from "./checkpoint.ts";
 export * from "./context7.ts";
 export * from "./decision.ts";
