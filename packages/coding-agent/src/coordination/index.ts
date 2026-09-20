@@ -11,4 +11,5 @@ export * from "./broker.ts";
 export * from "./integration.ts";
 export * from "./operation.ts";
 export * from "./resource.ts";
+export * from "./session.ts";
 export * from "./types.ts";
