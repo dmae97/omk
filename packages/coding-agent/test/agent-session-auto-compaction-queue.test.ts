@@ -26,6 +26,11 @@ vi.mock("../src/core/compaction/index.js", () => ({
 		tokensBefore: 100,
 		details: {},
 	}),
+	// Queue-resume behaviour is orthogonal to the summarization ladder, so this
+	// stub runs the primary model only. The ladder's own quota fallbacks are
+	// covered by compaction-deterministic-emergency.test.ts.
+	summarizeWithFallback: async (input: { primaryModel: unknown; summarize: (model: unknown) => Promise<unknown> }) =>
+		input.summarize(input.primaryModel),
 	estimateContextTokens: (
 		messages: Array<{
 			role: string;

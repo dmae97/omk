@@ -12,6 +12,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { repairTranscriptIntegrity } from "omk-agent-core";
 import type { Api, Message, Model, ToolResultMessage } from "omk-ai";
 import { sanitizeBinaryOutput } from "../utils/shell.ts";
+import {
+	type CompactionControlState,
+	controlStateDigest,
+	controlStateProvenance,
+	validateControlState,
+} from "./compaction/control-state.ts";
 import type { CompactionResult } from "./compaction/index.ts";
 import {
 	type CompactionBarrierResult,
@@ -37,6 +43,13 @@ export interface CapturedCompactionState {
 	readonly branchEntries: readonly SessionEntry[];
 	readonly revision: CompactionTransaction["baseRevision"];
 	readonly source: CompactionSourceIdentity;
+	/**
+	 * Digest of the host control-state snapshot captured under the same commit
+	 * lock as `source`. `null` when no control authority is attached. A change
+	 * between capture and commit discards the summary like a source mismatch.
+	 */
+	readonly controlStateDigest: string | null;
+	readonly controlState: CompactionControlState | null;
 }
 
 export interface BegunCompaction {
@@ -54,6 +67,13 @@ export interface SessionCompactionServiceDeps {
 	readonly pendingToolCallIds: () => ReadonlySet<string>;
 	readonly getUserMessageText: (message: Message) => string;
 	readonly cwd: string;
+	/**
+	 * Optional host control authority. Called inside the compaction commit lock
+	 * so the snapshot is bound to the same captured source as the summary. Must
+	 * be deterministic for unchanged state — a changed snapshot discards the
+	 * in-flight summary at commit. Return `null` only when no authority exists.
+	 */
+	readonly controlState?: () => CompactionControlState | null;
 	readonly invalidateContextBudget: () => void;
 	/** Refresh agent messages from the session manager after tail repair/commit. */
 	readonly refreshAgentMessages: () => void;
@@ -120,7 +140,15 @@ export class SessionCompactionService {
 			activeLeafId: report.activeLeafId,
 			messageCount: report.activeMessages.length,
 		});
-		return { report, branchEntries, revision, source };
+		const controlState = validateControlState(this.deps.controlState?.() ?? null);
+		return {
+			report,
+			branchEntries,
+			revision,
+			source,
+			controlStateDigest: controlStateDigest(controlState),
+			controlState,
+		};
 	}
 
 	barrierError(barrier: CompactionBarrierResult): Error {
@@ -246,18 +274,19 @@ export class SessionCompactionService {
 			capture.branchEntries
 				.filter((entry) => entry.type === "custom" && entry.customType === customType)
 				.map((entry) => entry.id);
+		const control = controlStateProvenance(capture.controlState);
 		return {
 			latestIntent,
-			openTasks: [],
+			openTasks: control.openTasks,
 			laneIds: customEntryIds("lane"),
 			acceptancePredicateIds: customEntryIds("acceptance_predicate"),
 			evidenceReceiptIds: customEntryIds("evidence_receipt"),
-			blockerReasons: [],
+			blockerReasons: control.blockerReasons,
 			repairEventIds: [
 				...customEntryIds("transcript_repaired"),
 				...customEntryIds("compaction_transcript_repaired"),
 			],
-			branch: null,
+			branch: control.branch,
 			worktree: this.deps.cwd,
 			modelHistory,
 			nextAction: redactCredentialShapedContent(latestIntent.slice(0, 4096)) || "Continue the current session",
@@ -299,6 +328,9 @@ export class SessionCompactionService {
 				case "fail_closed":
 					throw this.barrierError(barrier);
 				case "commit": {
+					if (current.controlStateDigest !== begun.capture.controlStateDigest) {
+						throw new Error("Control state changed during compaction; generated summary was discarded");
+					}
 					const envelope = createCompactionEnvelope({
 						transaction: begun.transaction,
 						decision,

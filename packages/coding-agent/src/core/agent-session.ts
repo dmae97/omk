@@ -67,6 +67,7 @@ import {
 	generateBranchSummary,
 	prepareCompaction,
 	resolveCompactionModel,
+	summarizeWithFallback,
 } from "./compaction/index.ts";
 import { summarizeWithOAuthRecovery } from "./compaction/oauth-recovery.ts";
 import { overflowRetryBlocked } from "./compaction/overflow-retry-guard.ts";
@@ -283,6 +284,7 @@ import type { SettingsManager } from "./settings-manager.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPromptPlan } from "./system-prompt.ts";
+import { todoControlState } from "./todo-runtime-state.ts";
 import { type BashOperations, type BashSandboxPreflight, createLocalBashOperations } from "./tools/bash.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
@@ -807,6 +809,10 @@ export class AgentSession {
 			pendingToolCallIds: () => this.agent.state.pendingToolCalls,
 			getUserMessageText: (message) => this._getUserMessageText(message),
 			cwd: this._cwd,
+			// Host control authority for preserved provenance: the TODO ledger is
+			// the only production producer today; the service binds its snapshot to
+			// the compaction commit boundary and discards stale summaries.
+			controlState: todoControlState,
 			invalidateContextBudget: () => this._invalidateContextBudgetCache({ type: "transcriptRepair" }),
 			refreshAgentMessages: () => {
 				this.agent.state.messages = this.sessionManager.buildSessionContext().messages;
@@ -4045,13 +4051,30 @@ export class AgentSession {
 				tokensBefore = extensionCompaction.tokensBefore;
 				details = extensionCompaction.details;
 			} else {
-				const compactResult = await this._summarizeCompaction({
+				// Summarization can fail in a way no retry fixes (quota). The ladder
+				// tries the live session model, then a deterministic trim, because a
+				// failed compaction over the context window strands the whole run.
+				const signal = this._autoCompactionAbortController.signal;
+				const primaryModel = compactionModel;
+				const compactResult = await summarizeWithFallback({
 					preparation,
-					model: compactionModel,
-					apiKey,
-					headers,
-					signal: this._autoCompactionAbortController.signal,
-					reason,
+					primaryModel,
+					sessionModel: this.model,
+					isAborted: () => signal.aborted,
+					summarize: async (model) => {
+						const auth =
+							model.provider === primaryModel.provider && model.id === primaryModel.id
+								? { apiKey, headers }
+								: await this._getCompactionRequestAuth(model);
+						return this._summarizeCompaction({
+							preparation,
+							model,
+							apiKey: auth.apiKey,
+							headers: auth.headers,
+							signal,
+							reason,
+						});
+					},
 				});
 				summary = compactResult.summary;
 				firstKeptEntryId = compactResult.firstKeptEntryId;

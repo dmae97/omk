@@ -4,6 +4,8 @@
 
 export * from "./branch-summarization.ts";
 export * from "./compaction.ts";
+export * from "./control-state.ts";
+export * from "./fallback.ts";
 export * from "./hysteresis.ts";
 export * from "./knowledge-triage.ts";
 export * from "./model-policy.ts";
