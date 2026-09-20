@@ -114,6 +114,7 @@ function getApiKeyEnvVars(provider: string): readonly string[] | undefined {
 		nvidia: "NVIDIA_API_KEY",
 		deepseek: "DEEPSEEK_API_KEY",
 		devin: "DEVIN_API_KEY",
+		workbuddy: "WORKBUDDY_API_KEY",
 		cursor: "CURSOR_API_KEY",
 		google: "GEMINI_API_KEY",
 		"google-vertex": "GOOGLE_CLOUD_API_KEY",

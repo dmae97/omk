@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- WorkBuddy (Tencent CodeBuddy) provider: 27 plan lanes over `https://www.workbuddy.ai/v2`, `WORKBUDDY_API_KEY`, stream-only requests, `max_tokens` output caps, and a `requiresSystemMessageFirst` compat flag because the endpoint rejects a leading user message (`400 11128`). Only provider-declared (or, for gateway-only lanes, vendor-declared) reasoning efforts are selectable, and every mapped value was probed live.
+
 ## [1.0.0] - 2026-09-18
 
 ### Added

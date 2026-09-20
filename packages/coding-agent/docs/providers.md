@@ -271,6 +271,7 @@ omk
 | Fireworks | `FIREWORKS_API_KEY` | `fireworks` |
 | Together AI | `TOGETHER_API_KEY` | `together` |
 | Kimi For Coding | `KIMI_API_KEY` | `kimi-coding` |
+| WorkBuddy (CodeBuddy) | `WORKBUDDY_API_KEY` | `workbuddy` |
 | Meta Model API | `META_API_KEY` (or `META_MODEL_API_KEY`, `MODEL_API_KEY`) | `meta` |
 | MiniMax | `MINIMAX_API_KEY` | `minimax` |
 | MiniMax (China) | `MINIMAX_CN_API_KEY` | `minimax-cn` |
@@ -281,6 +282,58 @@ omk
 | Zyloo | `ZYLOO_API_KEY` | `zyloo` |
 
 Reference for environment variables and `auth.json` keys: [`const envMap`](https://github.com/dmae97/omk/blob/main/packages/ai/src/env-api-keys.ts) in [`packages/ai/src/env-api-keys.ts`](https://github.com/dmae97/omk/blob/main/packages/ai/src/env-api-keys.ts).
+
+#### WorkBuddy (Tencent CodeBuddy)
+
+The cloud inference behind Tencent's CodeBuddy / WorkBuddy agents. Plan keys start
+with `ck_` and are issued by the CodeBuddy login flow:
+
+```bash
+export WORKBUDDY_API_KEY=ck_...
+omk --provider workbuddy --model glm-5.3
+```
+
+Endpoint and limits, verified against the live service on 2026-09-19:
+
+- Chat requests go to `https://www.workbuddy.ai/v2/chat/completions` and must
+  stream; a non-streaming request is rejected. The same key is accepted by
+  `www.codebuddy.ai`, not by the `*.cn` hosts.
+- The first message must be a `system` message. OMK sends the system prompt in
+  that position and prepends an empty one when a session has no system prompt.
+- `max_tokens` carries the output cap; `max_completion_tokens` is ignored
+  upstream.
+- Images are sent as data URIs, which is the only form the endpoint accepts.
+- Thinking levels expose only the effort values the provider declares for that
+  model (`glm-5.3`: low/high/max, `glm-5.2`: high/xhigh, `gpt-5.6-*`:
+  low/medium/high/xhigh, …). The endpoint accepts `reasoning_effort`, but its
+  effect on reasoning volume is not verified, and no `off` value is offered
+  because none was verified. Thinking can therefore not be disabled per request.
+- Model entitlement is per plan: the built-in catalog lists the 27 lanes verified
+  for one account, including eight the CLI's bundled product JSON never declares
+  (`claude-opus-5`, `claude-opus-4.6`, `claude-sonnet-4.6`,
+  `deepseek-v4.1-flash`, `gemini-3.8-flash`, `gpt-6-astra`, `grok-4.6`,
+  `hy4-preview`) which a cross-sweep of this repository's own model ids found.
+  `glm-5.0` answered `429` while its siblings answered `200`, so it is not
+  listed; the CLI's role aliases (`fast-model`, `balanced-model`,
+  `primary-model`, `deep-model`) resolve server-side to targets this catalog
+  cannot declare and are not listed either.
+- Billing is metered in the provider's own credit unit, which OMK reports as
+  zero cost rather than inventing a USD rate. Measured per-call charges on one
+  account (small prompts): `claude-opus-5` 0.26, `claude-opus-4.6` 0.20,
+  `claude-sonnet-4.6` 0.12, `grok-4.6` 0.06–0.08, `gpt-5.6-sol` 0.04,
+  `gemini-3.8-flash` 0.02–0.06, `glm-5.3` 0.01, and 0 credits on `hy3`,
+  `deepseek-v3-0324`, `deepseek-v4.1-flash`, `glm-5.2`, `kimi-k2.5/k2.6` and
+  `minimax-m3`. A charge scales with tokens, so these are magnitudes, not
+  tariffs.
+- Plan allowances (provider documentation, 2026-09-19): Free 100 credits/month,
+  Pro $10/month or $96/year for 2,000 credits/month, plus a limited-time
+  activity bonus of 30 credits/day on Free and 50/day on Pro. Credits are issued
+  monthly, do not carry over, and new accounts get 250 credits valid for 14 days;
+  Pro has a 7-day trial of 500 credits. Check the provider console for the
+  account's own balance: at the measured rates, the Free plan's 100 credits is
+  roughly 380 calls at `claude-opus-5` size, ~830 at `claude-sonnet-4.6`, and
+  1,600-5,000 at `gemini-3.8-flash`, while the 0-credit lanes above did not draw
+  on the allowance at all in these probes.
 
 #### NVIDIA NIM
 

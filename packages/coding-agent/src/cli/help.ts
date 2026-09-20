@@ -164,6 +164,7 @@ ${chalk.bold("Environment Variables:")}
   META_API_KEY                     - Meta Model API key (Muse Spark); META_MODEL_API_KEY/MODEL_API_KEY also read
   OPENCODE_API_KEY                 - OpenCode Zen/OpenCode Go API key
   KIMI_API_KEY                     - Kimi For Coding API key
+  WORKBUDDY_API_KEY                - WorkBuddy (Tencent CodeBuddy) plan key
   CLOUDFLARE_API_KEY               - Cloudflare API token (Workers AI and AI Gateway)
   CLOUDFLARE_ACCOUNT_ID            - Cloudflare account id (required for both)
   CLOUDFLARE_GATEWAY_ID            - Cloudflare AI Gateway slug (required for AI Gateway)

@@ -38,6 +38,7 @@ export type KnownProvider =
 	| "nvidia"
 	| "deepseek"
 	| "devin"
+	| "workbuddy"
 	| "cursor"
 	| "meta"
 	| "github-copilot"
@@ -427,6 +428,14 @@ export interface OpenAICompletionsCompat {
 	requiresToolResultName?: boolean;
 	/** Whether a user message after tool results requires an assistant message in between. Default: auto-detected from URL. */
 	requiresAssistantAfterToolResult?: boolean;
+	/**
+	 * Whether the first message in the request must carry `role: "system"`.
+	 * Set for providers that reject a leading user message (WorkBuddy answers
+	 * `400 11128 "first message is not system prompt"`); an empty system message
+	 * is then prepended when the caller has no system prompt.
+	 * Default: false.
+	 */
+	requiresSystemMessageFirst?: boolean;
 	/** Whether thinking blocks must be converted to text blocks with <thinking> delimiters. Default: auto-detected from URL. */
 	requiresThinkingAsText?: boolean;
 	/** Whether all replayed assistant messages must include an empty reasoning_content field when reasoning is enabled. Default: auto-detected from URL. */

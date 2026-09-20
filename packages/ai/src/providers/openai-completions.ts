@@ -784,10 +784,13 @@ export function convertMessages(
 
 	const transformedMessages = transformMessages(context.messages, model, (id) => normalizeToolCallId(id));
 
-	if (context.systemPrompt) {
-		const useDeveloperRole = model.reasoning && compat.supportsDeveloperRole;
-		const role = useDeveloperRole ? "developer" : "system";
-		params.push({ role: role, content: sanitizeSurrogates(context.systemPrompt) });
+	// WorkBuddy rejects a leading user message (`400 11128 "first message is not
+	// system prompt"`) but accepts an empty system message, so a caller with no
+	// system prompt still opens the channel instead of being rejected upstream.
+	const systemPrompt = context.systemPrompt || (compat.requiresSystemMessageFirst ? "" : undefined);
+	if (systemPrompt !== undefined) {
+		const role = model.reasoning && compat.supportsDeveloperRole ? "developer" : "system";
+		params.push({ role, content: sanitizeSurrogates(systemPrompt) });
 	}
 
 	let lastRole: string | null = null;

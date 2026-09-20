@@ -68,7 +68,13 @@ describe("max thinking level", () => {
 		for (const [provider, models] of Object.entries(MODELS)) {
 			// devin/cursor flat entries pin their declared effort lane per wire
 			// id — a `glm-5.2-high` lane legitimately maps only `high`, not `max`.
-			if (provider === "openrouter" || provider === "cursor" || provider === "devin") continue;
+			// workbuddy lanes carry the vendor product catalog's declared ladder
+			// (glm-5.2: high/xhigh), authoritative for that gateway the same way an
+			// OpenRouter route declaration is; OMK's `max` label resolves onto that
+			// declared ceiling, but it serializes to `xhigh`, not to a `max` literal
+			// the lane never declared.
+			if (provider === "openrouter" || provider === "cursor" || provider === "devin" || provider === "workbuddy")
+				continue;
 			for (const model of Object.values(models)) {
 				// Mirrors isGlm5ReasoningEffortModel() in scripts/generate-models.ts: GLM-5.2 and later.
 				const glmMinorVersion = /glm-?5[.-]?p?(\d+)/i.exec(model.id);

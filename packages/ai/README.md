@@ -88,6 +88,7 @@ and the [SWE-2 harness](../coding-agent/docs/devin-harness.md).
 - **OpenCode Go**
 - **Fireworks** (uses Anthropic-compatible API)
 - **Kimi For Coding** (Moonshot AI, uses Anthropic-compatible API)
+- **WorkBuddy** (Tencent CodeBuddy cloud; OpenAI Chat Completions, streaming-only)
 - **Meta Model API** (Muse Spark over the OpenAI Responses API. `/login` → Muse Code runs the CLI device flow and mints the subscription key. `META_API_KEY` remains pay-as-you-go.)
 - **Xiaomi MiMo** (uses Anthropic-compatible API; defaults to API billing endpoint, with separate Token Plan providers for `cn`/`ams`/`sgp` regions)
 - **Zyloo** (OpenAI-compatible unified API gateway)
@@ -1170,6 +1171,7 @@ In Node.js environments, you can set environment variables to avoid passing API 
 | MiniMax | `MINIMAX_API_KEY` |
 | OpenCode Zen / OpenCode Go | `OPENCODE_API_KEY` |
 | Kimi For Coding | `KIMI_API_KEY` |
+| WorkBuddy (CodeBuddy) | `WORKBUDDY_API_KEY` |
 | Meta Model API | `META_API_KEY` (falls back to `META_MODEL_API_KEY`, then `MODEL_API_KEY`) |
 | Xiaomi MiMo (API billing) | `XIAOMI_API_KEY` |
 | Xiaomi MiMo Token Plan (China) | `XIAOMI_TOKEN_PLAN_CN_API_KEY` |

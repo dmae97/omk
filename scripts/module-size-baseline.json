@@ -23,7 +23,7 @@
 	"packages/ai/src/providers/openai-responses-shared.ts": 499,
 	"packages/ai/src/providers/openai-responses.ts": 271,
 	"packages/ai/src/providers/register-builtins.ts": 305,
-	"packages/ai/src/types.ts": 324,
+	"packages/ai/src/types.ts": 326,
 	"packages/ai/src/utils/oauth/anthropic.ts": 399,
 	"packages/ai/src/utils/oauth/github-copilot.ts": 284,
 	"packages/ai/src/utils/oauth/openai-codex.ts": 532,

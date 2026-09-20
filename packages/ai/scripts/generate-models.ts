@@ -21,6 +21,7 @@ import type {
 import { DEEPSEEK_COMPLETIONS_COMPAT, deepSeekNativeModels } from "./catalog-deepseek.ts";
 import { cursorModels } from "./catalog-cursor.ts";
 import { devinModels } from "./catalog-devin.ts";
+import { workbuddyModels } from "./catalog-workbuddy.ts";
 import { catalogPricePerMillion } from "./catalog-pricing.ts";
 import { applyCurrentThinkingMetadata, applyGpt6AstraUltraAlias, openRouterThinkingMap } from "./catalog-thinking.ts";
 
@@ -1761,6 +1762,13 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 }
 
 async function generateModels() {
+	// Static-catalog fast paths: regenerate one provider's entries from its
+	// recorded source without re-fetching every upstream catalog.
+	if (process.argv.includes("--workbuddy-only")) {
+		const preserved: Model<Api>[] = Object.values(MODELS).flatMap((models) => Object.values(models));
+		writeModelCatalog([...preserved.filter((model) => model.provider !== "workbuddy"), ...workbuddyModels()]);
+		return;
+	}
 	if (process.argv.includes("--devin-only")) {
 		const preserved: Model<Api>[] = Object.values(MODELS).flatMap((models) => Object.values(models));
 		writeModelCatalog([...preserved.filter((model) => model.provider !== "devin"), ...devinModels()]);
@@ -2621,7 +2629,7 @@ async function generateModels() {
 	// exact tier each id carries. Append them after the family-wide passes so a rule such as
 	// "Fable exposes xhigh/max" cannot widen a `claude-fable-5-1-high` lane. The --devin-only and
 	// --cursor-only fast paths already bypass those passes; a full run must match them.
-	allModels.push(...devinModels(), ...cursorModels());
+	allModels.push(...devinModels(), ...cursorModels(), ...workbuddyModels());
 
 	writeModelCatalog(allModels);
 }
