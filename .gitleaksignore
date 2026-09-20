@@ -4,6 +4,8 @@
 0569d1379dc4487398410a8b9623f01d4446f30e:packages/ai/test/openai-codex-responses-lite.test.ts:generic-api-key:1212
 0569d1379dc4487398410a8b9623f01d4446f30e:packages/ai/test/transform-messages-redact-sensitive.test.ts:generic-api-key:160
 0690c8d91a8efb02e3c160e645f3e703949e914b:packages/coding-agent/test/tools/web-search-startpage.test.ts:generic-api-key:28
+0c0d9e550473a9d8c7aedb4380500b744b371e89:packages/coding-agent/test/compaction-deterministic-emergency.test.ts:generic-api-key:128
+0c0d9e550473a9d8c7aedb4380500b744b371e89:packages/coding-agent/test/session-compaction-control-state.test.ts:generic-api-key:130
 0fe6361528903703319cdb978796df7e6441e847:packages/ai/src/utils/oauth/google-antigravity.ts:generic-api-key:12
 14c0392265360a90c69a1641ff8604f102bad865:test/secret-scanner.test.mjs:jwt:59
 1a7efa14cee181b1868784749ab1bb2bc321ae8c:packages/coding-agent/test/agent-session-retry-cap.test.ts:generic-api-key:233
