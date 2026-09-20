@@ -94,7 +94,7 @@
 	"packages/coding-agent/src/guardrails/evidence-receipt.ts": 437,
 	"packages/coding-agent/src/guardrails/evidence-system.ts": 684,
 	"packages/coding-agent/src/guardrails/workspace-fingerprint.ts": 700,
-	"packages/coding-agent/src/index.ts": 706,
+	"packages/coding-agent/src/index.ts": 707,
 	"packages/coding-agent/src/main.ts": 747,
 	"packages/coding-agent/src/migrations.ts": 347,
 	"packages/coding-agent/src/modes/interactive/components/armin.ts": 301,

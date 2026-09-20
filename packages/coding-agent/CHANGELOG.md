@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Parallel-session coordination kernel (`coordination/`): an admission broker that keeps a possibly-live effect's resource claims held until a trusted supervisor confirms termination — expiry, cancellation and authority restart are authorization events, not termination proofs — plus prefix-based claim conflict algebra, a publisher that admits a candidate only when its read versions, parent revision and receipt binding all still match, generation-tagged session lifecycle that discards a late init from a superseded generation and retains the handle when close fails, an operation lifecycle whose dispatch consumes a recorded observation rather than a re-interpreted instruction and re-evaluates the permit at the dispatch boundary, and conservative change-invalidation and frontier admission helpers.
+- Metacognition evidence primitives: finite-sample Clopper–Pearson risk bounds for automation gating (a point estimate never widens scope; zero trials is absent evidence, not zero risk), probability calibration with temperature scaling, Brier/log-loss/ECE reported with bin occupancy, a selective-execution gate that reports coverage beside risk and leaves risk undefined when nothing was admitted, observation validity that separates time decay from the change indicator and lets explicit age and generation bounds override the decay score, state packing that returns `incomplete-state` instead of silently dropping required evidence, cost- and latency-aware route selection with safety as a hard filter outside the utility, and three-valued verification where `unknown` is never negated into `true` and evidence level is labelled by the strongest witness actually held.
+
 ## [1.0.0] - 2026-09-18
 
 ### Added
