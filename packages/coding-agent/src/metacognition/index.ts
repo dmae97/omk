@@ -16,6 +16,7 @@ export * from "./evaluation.ts";
 export * from "./knowledge.ts";
 export * from "./knowledge-action.ts";
 export * from "./obligations.ts";
+export * from "./observation-validity.ts";
 export * from "./observe.ts";
 export * from "./policy.ts";
 export * from "./predictions.ts";
