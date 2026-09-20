@@ -489,6 +489,7 @@ export {
 	type SkillFrontmatter,
 } from "./core/skills.ts";
 export { createSyntheticSourceInfo } from "./core/source-info.ts";
+export * from "./metacognition/index.ts";
 export {
 	createSubagentLaneAuthority,
 	type SubagentLaneAuthority,
