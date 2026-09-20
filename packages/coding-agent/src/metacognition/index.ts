@@ -27,4 +27,5 @@ export * from "./runtime-bridge.ts";
 export * from "./skills.ts";
 export * from "./state.ts";
 export * from "./validation.ts";
+export * from "./verification.ts";
 export * from "./verifier.ts";
