@@ -19,6 +19,7 @@ export * from "./observe.ts";
 export * from "./policy.ts";
 export * from "./predictions.ts";
 export * from "./retrieval.ts";
+export * from "./risk.ts";
 export * from "./runtime-bridge.ts";
 export * from "./skills.ts";
 export * from "./state.ts";
