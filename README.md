@@ -366,7 +366,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.0.0](.github/RELEASE_NOTES_v1.0.0.md)
+- [Release notes for v1.2.0](.github/RELEASE_NOTES_v1.2.0.md)
 
 ## Development
 
@@ -422,6 +422,15 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v1.2.0
+
+### Added
+
+- Parallel-session coordination kernel (`coordination/`): an admission broker that keeps a possibly-live effect's resource claims held until a trusted supervisor confirms termination — expiry, cancellation and authority restart are authorization events, not termination proofs — plus prefix-based claim conflict algebra, a publisher that admits a candidate only when its read versions, parent revision and receipt binding all still match, generation-tagged session lifecycle that discards a late init from a superseded generation and retains the handle when close fails, an operation lifecycle whose dispatch consumes a recorded observation rather than a re-interpreted instruction and re-evaluates the permit at the dispatch boundary, and conservative change-invalidation and frontier admission helpers.
+- Metacognition evidence primitives: finite-sample Clopper–Pearson risk bounds for automation gating (a point estimate never widens scope; zero trials is absent evidence, not zero risk), probability calibration with temperature scaling, Brier/log-loss/ECE reported with bin occupancy, a selective-execution gate that reports coverage beside risk and leaves risk undefined when nothing was admitted, observation validity that separates time decay from the change indicator and lets explicit age and generation bounds override the decay score, state packing that returns `incomplete-state` instead of silently dropping required evidence, cost- and latency-aware route selection with safety as a hard filter outside the utility, and three-valued verification where `unknown` is never negated into `true` and evidence level is labelled by the strongest witness actually held.
+
+Release notes live in [RELEASE_NOTES_v1.2.0.md](.github/RELEASE_NOTES_v1.2.0.md).
+
 ## Release v1.0.0
 
 ### Added
@@ -473,20 +482,6 @@ Release notes live in [RELEASE_NOTES_v1.0.0.md](.github/RELEASE_NOTES_v1.0.0.md)
 - Resource completion descriptions remove decorative leading `[OMX]`/`[OMO]` labels without changing source metadata, invocation names, or enabled tools; marker-only descriptions display `OMK resource`.
 
 Release notes live in [RELEASE_NOTES_v0.99.0.md](.github/RELEASE_NOTES_v0.99.0.md).
-
-## Release v0.98.5
-
-### Added
-
-- Added `/debug` runtime inspection, explicit metadata-only local reports with `/debug save`, and structured failure cards with expandable details. UI entry observations do not infer build revisions or authorize retries.
-- Added opt-in verified-run CLI/SDK paths with protected verification, immutable candidate recovery, input-checkpoint writer restart, and static DAG task retry. These paths retain approval, ownership and budget boundaries; they do not apply artifacts to the original workspace automatically.
-
-### Fixed
-
-- Strengthened execution ownership and shared-budget boundaries. Pre-commit checks preserve the selected index, including partially staged files, instead of expanding the commit.
-- Execution-ownership wrappers retain lazy, context-sensitive tool timeouts and stale-context rejection instead of fixing the timeout at registration.
-
-Release notes live in [RELEASE_NOTES_v0.98.5.md](.github/RELEASE_NOTES_v0.98.5.md).
 
 <!-- releases:end -->
 
