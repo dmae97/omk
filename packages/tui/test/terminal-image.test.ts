@@ -3,10 +3,10 @@
  */
 
 import assert from "node:assert";
-import { describe, it } from "node:test";
-import { Image } from "../src/components/image.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { describe, it } from "node:test";
+import { Image } from "../src/components/image.ts";
 import {
 	deleteAllKittyImages,
 	deleteKittyImage,
@@ -441,7 +441,11 @@ describe("Kitty image cursor movement", () => {
 	it("truncates long image fallback lines to render width", () => {
 		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
 		try {
-			const longPath = join(homedir(), "images", "generated-image-with-a-very-long-absolute-path".repeat(4) + ".png");
+			const longPath = join(
+				homedir(),
+				"images",
+				`${"generated-image-with-a-very-long-absolute-path".repeat(4)}.png`,
+			);
 			const width = 40;
 			const image = new Image(
 				"AAAA",
@@ -482,7 +486,10 @@ describe("imageFallback", () => {
 			const abs = join(homedir(), ".pi", "agent", "shot.png");
 			const result = imageFallback("image/png", { widthPx: 10, heightPx: 10 }, abs);
 			assert.ok(result.includes("\x1b]8;;file://"), "expected OSC 8 file link");
-			assert.ok(result.includes(abs.replaceAll("\\", "/")) || result.includes(abs), "file URL should target absolute path");
+			assert.ok(
+				result.includes(abs.replaceAll("\\", "/")) || result.includes(abs),
+				"file URL should target absolute path",
+			);
 			// Visible text must use ~/... not the expanded home path.
 			const visible = result.replace(/\x1b\]8;;.*?\x1b\\/g, "");
 			assert.strictEqual(visible, "[Image: ~/.pi/agent/shot.png [image/png] 10x10]");

@@ -356,22 +356,11 @@ function findValidCutPoints(entries: SessionTreeEntry[], startIndex: number, end
 					case "assistant":
 						cutPoints.push(i);
 						break;
-					case "toolResult":
 					default:
 						break;
 				}
 				break;
 			}
-			case "thinking_level_change":
-			case "model_change":
-			case "active_tools_change":
-			case "compaction":
-			case "branch_summary":
-			case "custom":
-			case "custom_message":
-			case "label":
-			case "session_info":
-			case "leaf":
 			default:
 				break;
 		}

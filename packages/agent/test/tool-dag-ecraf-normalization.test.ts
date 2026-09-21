@@ -1,6 +1,10 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type EcrafAdmissionsOptions, planEcrafAdmissions } from "../src/tool-dag-ecraf.ts";
+import {
+	challengeEcrafLocalExchange,
+	type EcrafAdmissionsOptions,
+	planEcrafAdmissions,
+} from "../src/tool-dag-ecraf.ts";
 
 function node(sourceIndex: number, resources: Record<string, number>, priority = 1) {
 	return { sourceIndex, readySeq: sourceIndex, resources, priority };
@@ -18,6 +22,22 @@ function normalized(overrides: Partial<EcrafAdmissionsOptions> = {}): EcrafAdmis
 }
 
 describe("ECRAF normalized-v2", () => {
+	it("reports the synthetic density gap without changing the greedy plan (F13)", () => {
+		const input = normalized({
+			candidates: [node(0, { cpu: 6 }, 11), node(1, { cpu: 5 }, 9), node(2, { cpu: 5 }, 9)],
+			capacities: { cpu: 10 },
+			slots: 2,
+			slotCost: 1,
+			referenceScales: { cpu: 10 },
+		});
+		expect(planEcrafAdmissions(input).admit).toEqual([0]);
+		const exchange = challengeEcrafLocalExchange(input);
+		expect(exchange.baseline).toEqual([0]);
+		expect(exchange.baselinePriority).toBe(11);
+		expect(exchange.challengerPriority).toBe(18);
+		expect(exchange.challenger).toEqual([1, 2]);
+	});
+
 	it("retains deterministic readySeq ordering and zero-slot partitioning", () => {
 		const input = normalized({
 			candidates: [
