@@ -12,7 +12,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { sequence } from "../src/coordination/types.ts";
 import type { AuthorityGrantRecord } from "../src/core/verified-run/authority-events.ts";
+import { runAuthorityProbe } from "../src/core/verified-run/authority-runtime.ts";
 import { AuthorityStore, authorityStorePath } from "../src/core/verified-run/authority-store.ts";
 
 let root: string;
@@ -157,6 +159,36 @@ describe("authority restart quarantine", () => {
 		expect(first.confirmTerminated(granted.token)).toBe(true);
 		expect(first.acquire(input("cmd-other", 100)).status).toBe("granted");
 		first.release();
+	});
+
+	it("does not treat a git-ref grant without a process witness as terminated (F07)", () => {
+		const grant = {
+			token: {
+				authorityEpoch: sequence("1"),
+				grantSequence: sequence("1"),
+				sessionId: "s1",
+				sessionIncarnation: sequence("1"),
+				authorizationDeadline: 1,
+			},
+			commandId: "publish-1",
+			intentDigest: DIGEST,
+			claims: [
+				{
+					namespace: "git-ref" as const,
+					instanceId: "verified-run",
+					canonicalKey: "omk-accepted-ref/abc",
+					access: "write" as const,
+					generation: sequence("0"),
+				},
+			],
+			weight: 1,
+			state: "starting",
+			effectLive: true,
+			dispatchId: "publish-1",
+			actualClaims: null,
+			identity: null,
+		} satisfies AuthorityGrantRecord;
+		expect(runAuthorityProbe(grant)).toBe("unknown");
 	});
 
 	it("survives a full epoch cycle on durable state — incarnation counters never regress (S2)", async () => {

@@ -81,6 +81,8 @@ function publishDisposition(journal: JournalSnapshot, command: RunPublishCommand
 export interface PublishOptions {
 	/** Fault-injection seam invoked once a CAS succeeds and before the result is appended. */
 	readonly afterCas?: () => void;
+	/** Checked again after authority admission and immediately before CAS. */
+	readonly signal?: AbortSignal;
 	/**
 	 * The caller's open authority session (coordinator path). When absent, the
 	 * publish opens, reconciles and registers its own — the outbox runs
@@ -219,6 +221,7 @@ function executePublish(
 	if (admission.status !== "granted") throw new VerifiedRunError("authority_blocked");
 	const token: GrantToken = admission.token;
 	try {
+		if (options.signal?.aborted) throw new VerifiedRunError("cancelled");
 		if (pending.status !== "pending" && !authority.store.effectStarted(token, refClaims, undefined, now))
 			throw new VerifiedRunError("authority");
 		if (resumed) {
@@ -262,6 +265,7 @@ function executePublish(
 			});
 			return journal.state;
 		}
+		if (options.signal?.aborted) throw new VerifiedRunError("cancelled");
 		try {
 			casRef(repoRoot, OMK_ACCEPTED_REF, candidateOid, command.parentOid);
 		} catch (error) {

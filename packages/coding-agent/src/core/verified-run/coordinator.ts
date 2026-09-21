@@ -162,7 +162,11 @@ export class RunCoordinator {
 		if (approval.approvedContractDigest !== command.contractDigest) throw new VerifiedRunError("approval");
 		if (approval.signal?.aborted) throw new VerifiedRunError("cancelled");
 		return this.withAuthority(command.runId, (runPath, authority) =>
-			publishVerifiedRun(runPath, command, { ...options, authority }),
+			publishVerifiedRun(runPath, command, {
+				...options,
+				authority,
+				...(approval.signal ? { signal: approval.signal } : {}),
+			}),
 		);
 	}
 

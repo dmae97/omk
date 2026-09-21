@@ -27,17 +27,17 @@ import { type AuthorityStatus, deriveAuthorityStatus } from "./run-status.ts";
 
 /**
  * Reconcile probe for the verified-run boundary. A recorded
- * `NamespaceIdentity` is probed against the real execution boundary; a
- * git-ref-only effect (publish CAS) is provably over because its writer's
- * lease is gone and the outbox reconciles the ref itself; a grant with
- * neither stays `"unknown"` — fail closed (WP03 §8 gap 2, kept verbatim).
+ * `NamespaceIdentity` is probed against the real execution boundary. A
+ * missing identity is not a termination witness: a lost writer lease does
+ * not prove a Git child or hook has exited, and the ref outbox is not that
+ * proof either. Those grants stay `"unknown"` until a supervisor witness
+ * settles them (F07).
  */
 export function runAuthorityProbe(grant: AuthorityGrantRecord): ReturnType<AuthorityProbe> {
-	if (grant.identity) {
-		const result = probeNamespace(grant.identity);
-		return result === "gone" ? "terminated" : result === "alive" ? "alive" : "unknown";
-	}
-	if (grant.claims.every((claim) => claim.namespace === "git-ref")) return "terminated";
+	if (!grant.identity) return "unknown";
+	const result = probeNamespace(grant.identity);
+	if (result === "gone") return "terminated";
+	if (result === "alive") return "alive";
 	return "unknown";
 }
 
