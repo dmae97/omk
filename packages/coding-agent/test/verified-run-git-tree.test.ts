@@ -1,17 +1,20 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { captureCandidate } from "../src/core/verified-run/candidate.ts";
-import { sealCandidateCommit } from "../src/core/verified-run/git-plumbing.ts";
+import { casRef, sealCandidateCommit } from "../src/core/verified-run/git-plumbing.ts";
 import { VerifiedRunError } from "../src/core/verified-run/storage.ts";
 
 const limits = { workMs: 1000, verifyMs: 1000, cleanupMs: 1000, maxFiles: 100, maxBytes: 65536, maxOutputBytes: 4096 };
 const roots: string[] = [];
 
-function git(root: string, args: string[]): string {
-	return execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
+function git(root: string, args: string[], options: { input?: string } = {}): string {
+	return execFileSync("git", ["-C", root, ...args], {
+		encoding: "utf8",
+		input: options.input,
+	}).trim();
 }
 
 function repo(): string {
@@ -74,6 +77,39 @@ describe("verified-run git tree identity", () => {
 		const line = git(root, ["ls-tree", commit]);
 		expect(line.startsWith("100755 blob ")).toBe(true);
 		expect(line.endsWith("\trun")).toBe(true);
+	});
+
+	it("does not run an inherited reference-transaction hook (F06)", () => {
+		const root = repo();
+		const outside = mkdtempSync(join(tmpdir(), "omk-git-hooks-"));
+		roots.push(outside);
+		writeFileSync(join(root, "plain.txt"), "plain", { mode: 0o644 });
+		chmodSync(join(root, "plain.txt"), 0o644);
+		const hooks = join(outside, "attacker-hooks");
+		const marker = join(outside, "hook-events.txt");
+		mkdirSync(hooks);
+		writeFileSync(join(hooks, "reference-transaction"), '#!/bin/sh\nprintf "%s\\n" "$1" >> "$AUDIT_HOOK_MARKER"\n');
+		chmodSync(join(hooks, "reference-transaction"), 0o700);
+		git(root, ["config", "core.hooksPath", hooks]);
+		const blob = git(root, ["hash-object", "-w", "plain.txt"]);
+		const tree = git(root, ["mktree"], { input: `100644 blob ${blob}\tplain.txt\n` });
+		const commit = git(root, ["commit-tree", tree, "-m", "hook probe"]);
+		execFileSync("git", ["-C", root, "update-ref", "refs/probe/hook", commit, "0".repeat(40)], {
+			env: { ...process.env, AUDIT_HOOK_MARKER: marker },
+		});
+		expect(readFileSync(marker, "utf8")).toContain("prepared");
+		writeFileSync(marker, "");
+		const previous = process.env.AUDIT_HOOK_MARKER;
+		process.env.AUDIT_HOOK_MARKER = marker;
+		try {
+			const sealed = seal(root);
+			casRef(root, "refs/omk/accepted", sealed, "0".repeat(40));
+		} finally {
+			if (previous === undefined) delete process.env.AUDIT_HOOK_MARKER;
+			else process.env.AUDIT_HOOK_MARKER = previous;
+		}
+		expect(readFileSync(marker, "utf8")).toBe("");
+		expect(git(root, ["rev-parse", "refs/omk/accepted"])).toHaveLength(40);
 	});
 
 	it("does not move the accepted ref when sealing fails", () => {

@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { mkdirSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { CandidateManifest } from "./candidate.ts";
 import { VerifiedRunError } from "./storage.ts";
 
@@ -18,24 +20,28 @@ const SEAL_ENV = {
 	GIT_COMMITTER_EMAIL: "omk-verified-run@localhost",
 	GIT_COMMITTER_DATE: "2000-01-01T00:00:00Z",
 } as const;
-/** Inherited variables that could redirect git away from the trusted root; always stripped. */
-const UNSAFE_GIT_ENV_VARS = [
-	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
-	"GIT_CEILING_DIRECTORIES",
-	"GIT_COMMON_DIR",
-	"GIT_DIFF_OPTS",
-	"GIT_DIR",
-	"GIT_EXTERNAL_DIFF",
-	"GIT_INDEX_FILE",
-	"GIT_NAMESPACE",
-	"GIT_OBJECT_DIRECTORY",
-	"GIT_PREFIX",
-	"GIT_WORK_TREE",
-] as const;
+/** Empty directory used only to stop inherited `reference-transaction` hooks. */
+let trustedHooksPath: string | undefined;
+
+function trustedEmptyHooks(): string {
+	if (!trustedHooksPath) {
+		trustedHooksPath = join(tmpdir(), "omk-verified-run-empty-hooks");
+		mkdirSync(trustedHooksPath, { recursive: true });
+	}
+	return trustedHooksPath;
+}
 
 function gitEnv(write: boolean): NodeJS.ProcessEnv {
-	const env: NodeJS.ProcessEnv = { ...process.env };
-	for (const name of UNSAFE_GIT_ENV_VARS) delete env[name];
+	const env: NodeJS.ProcessEnv = {};
+	for (const [name, value] of Object.entries(process.env)) {
+		if (value === undefined) continue;
+		if (name.startsWith("GIT_") || /^GIT_CONFIG_(KEY|VALUE)_\d+$/.test(name)) continue;
+		env[name] = value;
+	}
+	// Sealing and local ref CAS do not need inherited config, credentials, or hooks.
+	env.GIT_CONFIG_NOSYSTEM = "1";
+	env.GIT_CONFIG_GLOBAL = "/dev/null";
+	env.GIT_CONFIG_COUNT = "0";
 	// Read-only commands may skip optional locks; ref writes must never bypass the lock that makes CAS atomic.
 	if (!write) env.GIT_OPTIONAL_LOCKS = "0";
 	env.LC_ALL = "C";
@@ -47,7 +53,8 @@ function runGit(
 	args: readonly string[],
 	options: { write?: boolean; input?: Buffer; allowedExitCodes?: readonly number[] } = {},
 ): { status: number; stdout: Buffer } {
-	const result = spawnSync("git", ["-C", root, ...args], {
+	const isolated = ["-c", `core.hooksPath=${trustedEmptyHooks()}`, "-c", "core.fsmonitor=", "-C", root, ...args];
+	const result = spawnSync("git", isolated, {
 		env: { ...gitEnv(options.write === true), ...SEAL_ENV },
 		maxBuffer: MAX_GIT_OUTPUT_BYTES,
 		timeout: GIT_TIMEOUT_MS,
