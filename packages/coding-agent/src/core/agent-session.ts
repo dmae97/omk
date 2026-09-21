@@ -1594,12 +1594,25 @@ export class AgentSession {
 		};
 	}
 
-	/** Disconnect from agent events during disposal. */
+	/**
+	 * Temporarily disconnect from agent events.
+	 * User listeners are preserved and will receive events again after resubscribe().
+	 * Used internally during operations that need to pause event processing.
+	 */
 	private _disconnectFromAgent(): void {
 		if (this._unsubscribeAgent) {
 			this._unsubscribeAgent();
 			this._unsubscribeAgent = undefined;
 		}
+	}
+
+	/**
+	 * Reconnect to agent events after _disconnectFromAgent().
+	 * Preserves all existing listeners.
+	 */
+	private _reconnectToAgent(): void {
+		if (this._unsubscribeAgent) return; // Already connected
+		this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
 	}
 
 	/**
@@ -3580,6 +3593,7 @@ export class AgentSession {
 	 */
 	async compact(customInstructions?: string): Promise<CompactionResult> {
 		await this.abort();
+		this._disconnectFromAgent();
 		this._compactionAbortController = new AbortController();
 		this._emit({ type: "compaction_start", reason: "manual" });
 		let committedCompaction = false;
@@ -3729,6 +3743,7 @@ export class AgentSession {
 			throw error;
 		} finally {
 			this._compactionAbortController = undefined;
+			this._reconnectToAgent();
 		}
 	}
 
