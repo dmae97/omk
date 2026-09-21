@@ -1,5 +1,17 @@
+import { builtinModules } from "node:module";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+
+// Worktree workaround: vite-node externalizes bare node builtins to a broken
+// root-relative path under symlinked node_modules — force node: specifiers.
+const bareBuiltinAliases = builtinModules
+	.filter((name) => !name.startsWith("_") && !name.includes("/"))
+	.map((name) => ({ find: new RegExp(`^${name}$`), replacement: `node:${name}` }))
+	.concat(
+		builtinModules
+			.filter((name) => name.includes("/"))
+			.map((name) => ({ find: new RegExp(`^${name.replace(/\//g, "\\/")}$`), replacement: `node:${name}` })),
+	);
 
 const aiSrcIndex = fileURLToPath(new URL("../ai/src/index.ts", import.meta.url));
 const aiSrcOAuth = fileURLToPath(new URL("../ai/src/oauth.ts", import.meta.url));
@@ -21,6 +33,7 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: [
+			...bareBuiltinAliases,
 			{ find: /^omk-protocol$/, replacement: protocolSrcIndex },
 			{ find: /^omk-adaptorch-wpl$/, replacement: adaptorchWplSrcIndex },
 			{ find: /^@earendil-works\/omk-ai$/, replacement: aiSrcIndex },
