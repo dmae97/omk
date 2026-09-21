@@ -222,7 +222,12 @@ function executePublish(
 	const token: GrantToken = admission.token;
 	try {
 		if (options.signal?.aborted) throw new VerifiedRunError("cancelled");
-		if (pending.status !== "pending" && !authority.store.effectStarted(token, refClaims, undefined, now))
+		const stored = authority.store.state.grants.get(token.grantSequence);
+		// Resume without a stored grant is the crash-before-admission outbox.
+		// A stored reservation still has to pass the start gate.
+		if (stored?.state === "reserved" && !authority.store.effectStarted(token, refClaims, undefined, now))
+			throw new VerifiedRunError("authority");
+		if (!stored && pending.status !== "pending" && !authority.store.effectStarted(token, refClaims, undefined, now))
 			throw new VerifiedRunError("authority");
 		if (resumed) {
 			if (state.publicationCandidateOid !== candidateOid) throw new VerifiedRunError("invalid_binding");

@@ -50,6 +50,14 @@ describe("candidate material identity", () => {
 		expect(snapshot.manifest.files.map((file) => file.size)).toEqual([3, 0]);
 	});
 
+	it("refuses known secret paths before reading them into a candidate (F09)", () => {
+		writeFileSync(join(root, ".env"), "TOKEN=hidden");
+		expect(() => captureCandidate(root, limits)).toThrow(/secret_path/);
+		rmSync(join(root, ".env"));
+		writeFileSync(join(root, "deploy.pem"), "not-a-real-key");
+		expect(() => captureCandidate(root, limits)).toThrow(/secret_path/);
+	});
+
 	it("refuses hardlinks and symlinks rather than sharing writable bytes", () => {
 		writeFileSync(join(root, "original"), "same");
 		linkSync(join(root, "original"), join(root, "hardlink"));

@@ -77,6 +77,38 @@ export function issueRunEvidence(
 	return { digest, verified: receipt.verified };
 }
 
+export interface EvidenceRead {
+	readonly authenticity: "valid" | "invalid" | "unverifiable";
+	readonly currentEnvironmentEligibility: "matching" | "different" | "unsupported" | "unknown";
+	readonly evidence: VerifiedRunEvidence | null;
+}
+
+/** Historical authenticity is separate from whether this machine can rerun the receipt. */
+export function classifyEvidenceRead(
+	runPath: string,
+	journal: JournalSnapshot,
+	currentEnvironment: string,
+): EvidenceRead {
+	const stored = journal.state.environmentDigest;
+	try {
+		const evidence = readRunEvidence(runPath, journal, stored ?? currentEnvironment);
+		let currentEnvironmentEligibility: EvidenceRead["currentEnvironmentEligibility"] = "unknown";
+		if (stored === currentEnvironment) currentEnvironmentEligibility = "matching";
+		else if (stored) currentEnvironmentEligibility = "different";
+		return {
+			authenticity: evidence.verified ? "valid" : "invalid",
+			currentEnvironmentEligibility,
+			evidence,
+		};
+	} catch (error) {
+		if (!(error instanceof VerifiedRunError)) throw error;
+		if (error.code === "integrity" || error.code === "evidence_missing") {
+			return { authenticity: "unverifiable", currentEnvironmentEligibility: "unknown", evidence: null };
+		}
+		throw error;
+	}
+}
+
 export function readRunEvidence(runPath: string, journal: JournalSnapshot, environment: string): VerifiedRunEvidence {
 	const first = journal.records[0]?.event;
 	const { candidateDigest, receiptDigest } = journal.state;
