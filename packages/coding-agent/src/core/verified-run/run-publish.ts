@@ -1,6 +1,8 @@
 import { realpathSync } from "node:fs";
 import type { RunContract, RunPublishCommand } from "omk-protocol";
+import type { GrantToken } from "../../coordination/types.ts";
 import { acquireSessionOwnerLeaseSync } from "../session-owner-lease.ts";
+import { openRunAuthority, type RunAuthority } from "./authority-runtime.ts";
 import { commandEnvironmentDigest } from "./broker.ts";
 import { loadCandidate } from "./candidate.ts";
 import { readRunEvidence } from "./evidence.ts";
@@ -79,6 +81,12 @@ function publishDisposition(journal: JournalSnapshot, command: RunPublishCommand
 export interface PublishOptions {
 	/** Fault-injection seam invoked once a CAS succeeds and before the result is appended. */
 	readonly afterCas?: () => void;
+	/**
+	 * The caller's open authority session (coordinator path). When absent, the
+	 * publish opens, reconciles and registers its own — the outbox runs
+	 * through the same durable authority boundary either way.
+	 */
+	readonly authority?: RunAuthority;
 }
 
 /**
@@ -95,13 +103,22 @@ export function publishVerifiedRun(
 	const initial = requireRunJournal(runPath);
 	if (publishDisposition(initial, command) === "completed") return initial.state;
 	const owner = acquireSessionOwnerLeaseSync(journalPath(runPath));
+	let opened: RunAuthority | null = null;
 	try {
 		const snapshot = requireRunJournal(runPath);
 		if (publishDisposition(snapshot, command) === "completed") return snapshot.state;
+		// Open (or reuse) the reconciled authority boundary before any new work:
+		// the restart reconcile ran when the store opened.
+		if (!options.authority) opened = openRunAuthority(runPath);
+		const authority = options.authority ?? (opened as RunAuthority);
 		const journal = new VerifiedRunJournal(runPath, owner);
-		return executePublish(runPath, snapshot, journal, command, options);
+		return executePublish(runPath, snapshot, journal, command, options, authority);
 	} finally {
-		owner.release();
+		try {
+			opened?.store.release();
+		} finally {
+			owner.release();
+		}
 	}
 }
 
@@ -111,6 +128,7 @@ function executePublish(
 	journal: VerifiedRunJournal,
 	command: RunPublishCommand,
 	options: PublishOptions,
+	authority: RunAuthority,
 ): RunProjection {
 	const first = snapshot.records[0]?.event;
 	if (first?.kind !== "created") throw new VerifiedRunError("missing_run");
@@ -158,74 +176,119 @@ function executePublish(
 		receiptDigest: state.receiptDigest,
 	});
 	const resumed = state.publication === "intent" && state.publicationCommandId === command.commandId;
-	if (resumed) {
-		if (state.publicationCandidateOid !== candidateOid) throw new VerifiedRunError("invalid_binding");
-	} else {
-		journal.append({
-			kind: "publish_intent",
-			commandId: command.commandId,
-			candidateDigest: state.candidateDigest,
-			candidateOid,
-			parentOid: command.parentOid,
-			targetRef: OMK_ACCEPTED_REF,
-			receiptDigest: state.receiptDigest,
-			policyDigest: command.policyDigest,
-			generation: state.generation,
-		});
-	}
-	const observed = resolveRef(repoRoot, OMK_ACCEPTED_REF);
-	const matchesParent = observed === null ? command.parentOid === zero : observed === command.parentOid;
-	if (observed === candidateOid) {
-		// CAS already happened for this intent; only the durable result was lost.
-		if (!objectExists(repoRoot, candidateOid)) {
-			journal.append({ kind: "publish_failed", commandId: command.commandId, code: "reconciliation-required" });
+	// The ref interaction runs as an authority effect: a fresh commandId mints
+	// a git-ref grant (a replayed one reuses the pending grant — commandIds
+	// are unique across grants), effect-started binds it, and termination is
+	// observed exactly once when the region exits. A crash in between leaves
+	// a quarantined grant the next writer's reconcile settles.
+	const refClaims = [
+		{
+			namespace: "git-ref",
+			instanceId: "verified-run",
+			canonicalKey: `omk-accepted-ref/${digestObject(repoRoot).slice(0, 16)}`,
+			access: "write",
+			generation: String(state.generation),
+		},
+	];
+	const pending = authority.store.lookup(command.commandId, Date.now());
+	const admission =
+		pending.status === "pending"
+			? { status: "granted" as const, token: pending.token }
+			: authority.store.acquire({
+					sessionId: authority.sessionId,
+					incarnation: authority.incarnation,
+					commandId: command.commandId,
+					intentDigest: digestObject({
+						candidateDigest: command.candidateDigest,
+						parentOid: command.parentOid,
+						receiptDigest: command.receiptDigest,
+						policyDigest: command.policyDigest,
+						targetRef: OMK_ACCEPTED_REF,
+					}),
+					claims: refClaims,
+					now: Date.now(),
+					ttl: 60000,
+				});
+	if (admission.status !== "granted") throw new VerifiedRunError("authority_blocked");
+	const token: GrantToken = admission.token;
+	try {
+		if (pending.status !== "pending" && !authority.store.effectStarted(token, refClaims))
+			throw new VerifiedRunError("authority");
+		if (resumed) {
+			if (state.publicationCandidateOid !== candidateOid) throw new VerifiedRunError("invalid_binding");
 		} else {
 			journal.append({
-				kind: "published",
+				kind: "publish_intent",
 				commandId: command.commandId,
+				candidateDigest: state.candidateDigest,
 				candidateOid,
-				previousOid: command.parentOid,
+				parentOid: command.parentOid,
+				targetRef: OMK_ACCEPTED_REF,
+				receiptDigest: state.receiptDigest,
+				policyDigest: command.policyDigest,
+				generation: state.generation,
 			});
 		}
-		return journal.state;
-	}
-	if (!matchesParent) {
-		// A third OID means another publisher won or the ref was moved by hand;
-		// a fresh command is stale, a resuming one needs manual reconciliation.
-		journal.append({
-			kind: "publish_failed",
-			commandId: command.commandId,
-			code: resumed ? "reconciliation-required" : "stale-parent",
-		});
-		return journal.state;
-	}
-	try {
-		casRef(repoRoot, OMK_ACCEPTED_REF, candidateOid, command.parentOid);
-	} catch (error) {
-		if (!(error instanceof GitRefCasError)) throw error;
-		const after = resolveRef(repoRoot, OMK_ACCEPTED_REF);
-		if (after === candidateOid && objectExists(repoRoot, candidateOid)) {
-			journal.append({
-				kind: "published",
-				commandId: command.commandId,
-				candidateOid,
-				previousOid: command.parentOid,
-			});
-		} else {
+		const observed = resolveRef(repoRoot, OMK_ACCEPTED_REF);
+		const matchesParent = observed === null ? command.parentOid === zero : observed === command.parentOid;
+		if (observed === candidateOid) {
+			// CAS already happened for this intent; only the durable result was lost.
+			if (!objectExists(repoRoot, candidateOid)) {
+				journal.append({ kind: "publish_failed", commandId: command.commandId, code: "reconciliation-required" });
+			} else {
+				journal.append({
+					kind: "published",
+					commandId: command.commandId,
+					candidateOid,
+					previousOid: command.parentOid,
+				});
+			}
+			return journal.state;
+		}
+		if (!matchesParent) {
+			// A third OID means another publisher won or the ref was moved by hand;
+			// a fresh command is stale, a resuming one needs manual reconciliation.
 			journal.append({
 				kind: "publish_failed",
 				commandId: command.commandId,
-				code: after === observed ? "ref-rejected" : resumed ? "reconciliation-required" : "stale-parent",
+				code: resumed ? "reconciliation-required" : "stale-parent",
 			});
+			return journal.state;
 		}
+		try {
+			casRef(repoRoot, OMK_ACCEPTED_REF, candidateOid, command.parentOid);
+		} catch (error) {
+			if (!(error instanceof GitRefCasError)) throw error;
+			const after = resolveRef(repoRoot, OMK_ACCEPTED_REF);
+			if (after === candidateOid && objectExists(repoRoot, candidateOid)) {
+				journal.append({
+					kind: "published",
+					commandId: command.commandId,
+					candidateOid,
+					previousOid: command.parentOid,
+				});
+			} else {
+				journal.append({
+					kind: "publish_failed",
+					commandId: command.commandId,
+					code: after === observed ? "ref-rejected" : resumed ? "reconciliation-required" : "stale-parent",
+				});
+			}
+			return journal.state;
+		}
+		options.afterCas?.();
+		journal.append({
+			kind: "published",
+			commandId: command.commandId,
+			candidateOid,
+			previousOid: command.parentOid,
+		});
 		return journal.state;
+	} finally {
+		// The ref region is over: whether the CAS landed, was refused, or threw,
+		// this effect is provably finished — witness its termination. A false
+		// return means the grant was already settled (idempotent); a commit
+		// failure propagates rather than settling in memory only.
+		authority.store.confirmTerminated(token);
 	}
-	options.afterCas?.();
-	journal.append({
-		kind: "published",
-		commandId: command.commandId,
-		candidateOid,
-		previousOid: command.parentOid,
-	});
-	return journal.state;
 }

@@ -40,7 +40,7 @@ async function executeTask(context: RunPhaseContext, task: RunDagTask, deadline:
 	const { result } = await executeRunCommand(
 		journal,
 		{ role: "writer", argv, workspace, deadline, claimId: null, taskId: task.id },
-		{ ...contract.budget, ...(context.signal ? { signal: context.signal } : {}) },
+		{ ...contract.budget, authority: context.authority, ...(context.signal ? { signal: context.signal } : {}) },
 	);
 	if (result.failure === "deadline" || result.failure === "cancelled") throw new VerifiedRunError(result.failure);
 	let outputDigest: string | null = null;

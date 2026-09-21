@@ -25,6 +25,15 @@ export type {
 	AuthoritySnapshotState,
 } from "./verified-run/authority-events.ts";
 export {
+	type OpenRunAuthorityStoreOptions,
+	openRunAuthority,
+	openRunAuthorityStore,
+	RUN_AUTHORITY_CAPACITY,
+	type RunAuthority,
+	RunAuthorityPool,
+	runAuthorityProbe,
+} from "./verified-run/authority-runtime.ts";
+export {
 	type AuthorityAcquireInput,
 	type AuthorityAcquireResult,
 	type AuthorityJournalInspection,

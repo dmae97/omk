@@ -20,6 +20,7 @@ export async function executeWriter(
 		const signals = [context.signal, toolSignal].filter((signal): signal is AbortSignal => signal !== undefined);
 		return executeRunCommand(journal, request, {
 			...contract.budget,
+			authority: context.authority,
 			...(signals.length ? { signal: AbortSignal.any(signals) } : {}),
 		});
 	};

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import type { RunWriterRestartCommand } from "omk-protocol";
+import type { RunAuthority } from "./authority-runtime.ts";
 import { probeVerifiedSandbox } from "./broker.ts";
 import { loadCandidate, materializeCandidate } from "./candidate.ts";
 import { preflightCheckReceipts } from "./check-receipt.ts";
@@ -92,7 +93,7 @@ export function inspectWriterRecovery(runPath: string): WriterRecoveryInspection
 export async function restartIsolatedWriter(
 	runPath: string,
 	command: RunWriterRestartCommand,
-	options: { readonly runtime?: VerifiedRunRuntime; readonly signal?: AbortSignal },
+	options: { readonly runtime?: VerifiedRunRuntime; readonly signal?: AbortSignal; readonly authority: RunAuthority },
 ): Promise<RunProjection> {
 	if (options.signal?.aborted) throw new VerifiedRunError("cancelled");
 	return withRecoveryLease(runPath, command, async ({ snapshot, journal }) => {
@@ -121,6 +122,7 @@ export async function restartIsolatedWriter(
 			runPath,
 			contract: first.contract,
 			journal,
+			authority: options.authority,
 			...(options.signal ? { signal: options.signal } : {}),
 		};
 		await executeWriter(context, { workspace, deadline, ...(options.runtime ? { runtime: options.runtime } : {}) });

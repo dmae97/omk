@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { type RunTaskRetryCommand, runDagAncestors } from "omk-protocol";
+import type { RunAuthority } from "./authority-runtime.ts";
 import { probeVerifiedSandbox } from "./broker.ts";
 import { assertCandidateScope, loadCandidate } from "./candidate.ts";
 import { preflightCheckReceipts } from "./check-receipt.ts";
@@ -85,16 +86,16 @@ export function inspectTaskRecovery(runPath: string): TaskRecoveryInspection {
 export async function retryDagTasks(
 	runPath: string,
 	command: RunTaskRetryCommand,
-	signal?: AbortSignal,
+	options: { readonly signal?: AbortSignal; readonly authority: RunAuthority },
 ): Promise<RunProjection> {
-	if (signal?.aborted) throw new VerifiedRunError("cancelled");
+	if (options.signal?.aborted) throw new VerifiedRunError("cancelled");
 	return withRecoveryLease(runPath, command, async ({ snapshot, journal }) => {
 		const { contract } = assertDagRecoverable(runPath, snapshot);
 		assertTaskSelection(contract, snapshot.state, command.taskIds);
 		preflightCheckReceipts(contract);
 		probeVerifiedSandbox();
 		assertDagRecoverable(runPath, snapshot);
-		if (signal?.aborted) throw new VerifiedRunError("cancelled");
+		if (options.signal?.aborted) throw new VerifiedRunError("cancelled");
 		journal.append({
 			kind: "tasks_retried",
 			command,
@@ -106,7 +107,13 @@ export async function retryDagTasks(
 		if (!budget) throw new VerifiedRunError("integrity");
 		const deadline = performance.now() + remainingRunTime(budget, budget.workDeadlineMs);
 		const workspace = join(runPath, `writer-${journal.state.generation}`);
-		const context = { runPath, contract, journal, ...(signal ? { signal } : {}) };
+		const context = {
+			runPath,
+			contract,
+			journal,
+			authority: options.authority,
+			...(options.signal ? { signal: options.signal } : {}),
+		};
 		await executeDag(context, { workspace, deadline });
 		if (journal.state.execution === "paused") return journal.state;
 		publishWriterCandidate(context, workspace, deadline);
