@@ -20,13 +20,7 @@ import {
 	type ResourceClaimInput,
 	sameClaimSet,
 } from "../../coordination/resource.ts";
-import {
-	type GrantToken,
-	type ResourceClaim,
-	SETTLED_EFFECT_STATES,
-	type Sequence,
-	sequence,
-} from "../../coordination/types.ts";
+import { type GrantToken, SETTLED_EFFECT_STATES, type Sequence, sequence } from "../../coordination/types.ts";
 import { atomicRewriteFileSync } from "../atomic-session-file.ts";
 import {
 	acquireDurableFileLockSync,
@@ -49,6 +43,7 @@ import {
 	projectAuthority,
 	snapshotFromProjection,
 } from "./authority-events.ts";
+import { assertSameCommandMeaning, authorizationStillOpen, expiryEvents, sameGrantToken } from "./authority-meaning.ts";
 import type { NamespaceIdentity } from "./namespace-identity.ts";
 import { probeNamespace } from "./namespace-identity.ts";
 import { readRunClock } from "./recovery-clock.ts";
@@ -389,7 +384,13 @@ function loadCommitted(context: StoreContext, repair: boolean): CommittedView {
 		return empty;
 	}
 	if (!fileExists) throw new AuthorityStoreError("corrupt");
-	let head = parseHead(JSON.parse(readFileSync(context.headPath, "utf8")));
+	let head: AuthorityHead;
+	try {
+		head = parseHead(JSON.parse(readFileSync(context.headPath, "utf8")));
+	} catch (error) {
+		if (error instanceof AuthorityStoreError || error instanceof VerifiedRunError) throw error;
+		throw new AuthorityStoreError("corrupt");
+	}
 	const fd = openSync(context.path, fsConstants.O_RDWR | (fsConstants.O_NOFOLLOW ?? 0));
 	try {
 		const before = fstatSync(fd);
@@ -481,36 +482,6 @@ function nextSequenceValue(value: Sequence): Sequence {
 function assertNonNegativeInteger(value: number, label: string): void {
 	if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
 		throw new TypeError(`${label} must be a nonnegative safe integer`);
-}
-
-function assertSameCommandMeaning(
-	grant: AuthorityGrantRecord,
-	request: {
-		intentDigest: string;
-		sessionId: string;
-		incarnation: Sequence;
-		claims: readonly ResourceClaim[];
-		weight: number;
-	},
-): void {
-	if (
-		grant.intentDigest !== request.intentDigest ||
-		grant.token.sessionId !== request.sessionId ||
-		grant.token.sessionIncarnation !== request.incarnation ||
-		!sameClaimSet([...grant.claims], [...request.claims]) ||
-		grant.weight !== request.weight
-	)
-		throw new AuthorityStoreError("command_conflict");
-}
-
-function sameToken(left: GrantToken, right: GrantToken): boolean {
-	return (
-		left.authorityEpoch === right.authorityEpoch &&
-		left.grantSequence === right.grantSequence &&
-		left.sessionId === right.sessionId &&
-		left.sessionIncarnation === right.sessionIncarnation &&
-		left.authorizationDeadline === right.authorizationDeadline
-	);
 }
 
 /** The durable single-writer authority boundary. */
@@ -770,8 +741,6 @@ export class AuthorityStore {
 		if (tombstone) {
 			const grant = this.state.grants.get(tombstone.grantSequence);
 			if (!grant) throw new AuthorityStoreError("corrupt");
-			// A completed commandId is not a free alias: the stored meaning is
-			// checked before any result is reused, including after retention expiry.
 			assertSameCommandMeaning(grant, {
 				intentDigest: input.intentDigest,
 				sessionId: input.sessionId,
@@ -798,18 +767,7 @@ export class AuthorityStore {
 		const epoch = this.state.epoch;
 		if (epoch === null) throw new AuthorityStoreError("corrupt");
 
-		const expired: AuthorityEvent[] = [];
-		for (const grant of this.state.grants.values()) {
-			if (SETTLED_EFFECT_STATES.has(grant.state) || grant.state === "quarantined") continue;
-			if (input.now >= grant.token.authorizationDeadline) {
-				expired.push({
-					kind: "authorization-expired",
-					grantSequence: grant.token.grantSequence,
-					authorityEpoch: epoch,
-					outcome: grant.effectLive ? "quarantined" : "cancelled",
-				});
-			}
-		}
+		const expired = expiryEvents(this.state, input.now, epoch);
 		const settledState = expired.length ? applyAuthorityEvents(this.state, expired) : this.state;
 		const active = [...settledState.grants.values()].filter((grant) => !SETTLED_EFFECT_STATES.has(grant.state));
 		const used = active.reduce((sum, grant) => sum + grant.weight, 0);
@@ -841,7 +799,7 @@ export class AuthorityStore {
 
 	private resolveToken(token: GrantToken, authoritative: boolean): AuthorityGrantRecord | undefined {
 		const grant = this.state.grants.get(token.grantSequence);
-		if (!grant || !sameToken(grant.token, token)) return undefined;
+		if (!grant || !sameGrantToken(grant.token, token)) return undefined;
 		if (authoritative) {
 			if (
 				token.authorityEpoch !== this.state.epoch ||
@@ -864,14 +822,9 @@ export class AuthorityStore {
 		if (!grant || grant.state !== "reserved") return false;
 		const epoch = this.state.epoch;
 		if (epoch === null) return false;
-		if (now !== undefined) {
-			assertNonNegativeInteger(now, "now");
-			if (now >= grant.token.authorizationDeadline) {
-				// Expiry forbids a new start. It is not a termination witness, so a
-				// possibly-live effect stays quarantined and keeps its claims.
-				this.expire(now);
-				return false;
-			}
+		if (!authorizationStillOpen(now, grant.token.authorizationDeadline)) {
+			this.expire(now as number);
+			return false;
 		}
 		this.commit([
 			{ kind: "dispatch-intent", grantSequence: grant.token.grantSequence, authorityEpoch: epoch, dispatchId },
@@ -888,12 +841,9 @@ export class AuthorityStore {
 	): boolean {
 		const grant = this.resolveToken(token, true);
 		if (!grant || (grant.state !== "reserved" && grant.state !== "starting")) return false;
-		if (now !== undefined) {
-			assertNonNegativeInteger(now, "now");
-			if (now >= grant.token.authorizationDeadline) {
-				this.expire(now);
-				return false;
-			}
+		if (!authorizationStillOpen(now, grant.token.authorizationDeadline)) {
+			this.expire(now as number);
+			return false;
 		}
 		if (!Array.isArray(actualClaims)) throw new TypeError("actualClaims must be an array");
 		const claims = Object.freeze(actualClaims.map((entry) => canonicalClaim(entry)));
