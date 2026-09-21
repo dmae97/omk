@@ -16,10 +16,6 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
-		},
-		"./hooks": {
-			"types": "./dist/core/hooks/index.d.ts",
-			"import": "./dist/core/hooks/index.js"
 		}
 	},
 	"files": [
@@ -75,9 +71,7 @@
 	},
 	"devDependencies": {
 		"@types/cross-spawn": "6.0.6",
-		"@types/diff": "7.0.2",
 		"@types/hosted-git-info": "3.0.5",
-		"@types/ms": "2.1.0",
 		"@types/node": "24.12.4",
 		"@types/proper-lockfile": "4.1.4",
 		"fast-check": "4.9.0",

@@ -247,6 +247,11 @@ jobs:
           git diff --exit-code -- . \
             ':(exclude)packages/ai/src/models.generated.ts'
 
+      - name: Upgrade npm for trusted publishing
+        run: |
+          npm install -g npm@11.16.0 --ignore-scripts
+          npm --version
+
       - name: Publish npm packages
         env:
           # Must be a granular access token with "bypass 2FA" enabled: the

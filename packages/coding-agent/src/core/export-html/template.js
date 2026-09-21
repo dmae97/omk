@@ -1826,6 +1826,20 @@
         return element.isContentEditable || Boolean(element.closest?.('[contenteditable="true"]'));
       };
 
+      const attachHeaderHandlers = () => {
+        document.querySelector('[data-action="toggle-thinking"]')?.addEventListener('click', toggleThinking);
+        document.querySelector('[data-action="toggle-tools"]')?.addEventListener('click', toggleToolOutputs);
+      };
+
+      const isEditableTarget = (element) => {
+        if (!element) return false;
+        const tagName = element.tagName;
+        if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || tagName === 'BUTTON') {
+          return true;
+        }
+        return element.isContentEditable || Boolean(element.closest?.('[contenteditable="true"]'));
+      };
+
       // Keyboard shortcuts
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {

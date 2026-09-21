@@ -1580,12 +1580,12 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 			const kimiModels = kimiCodingSource as Record<string, ModelsDevModel>;
 			const hasCanonicalModel = Object.prototype.hasOwnProperty.call(kimiModels, "kimi-for-coding");
 
-			const kimiAliases = new Set(["k2p5", "k2p6"]);
+			const kimiAliases = new Set(["k2p5", "k2p6", "k2p7"]);
 
 			for (const [modelId, model] of Object.entries(kimiModels)) {
 				const m = model as ModelsDevModel;
 				if (m.tool_call !== true) continue;
-				// models.dev may expose versioned aliases (e.g. k2p5/k2p6).
+				// models.dev may expose versioned aliases (e.g. k2p5/k2p6/k2p7).
 				// Normalize aliases to the canonical model id and drop duplicates when canonical exists.
 				if (kimiAliases.has(modelId) && hasCanonicalModel) continue;
 
@@ -1817,6 +1817,12 @@ async function generateModels() {
 				candidate.id === "claude-sonnet-4-6" ||
 				candidate.id === "claude-opus-4.6" ||
 				candidate.id === "claude-sonnet-4.6")
+		) {
+			candidate.contextWindow = 1000000;
+		}
+		if (
+			candidate.provider === "google-antigravity" &&
+			(candidate.id === "claude-opus-4-6-thinking" || candidate.id === "claude-sonnet-4-6")
 		) {
 			candidate.contextWindow = 1000000;
 		}

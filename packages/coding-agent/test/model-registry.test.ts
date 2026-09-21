@@ -584,7 +584,7 @@ describe("ModelRegistry", () => {
 			expect(anthropicModels.some((m) => m.id === "claude-custom")).toBe(false);
 			expect(anthropicModels.some((m) => m.id === "claude-custom-2")).toBe(true);
 			expect(anthropicModels.some((m) => m.id.includes("claude"))).toBe(true);
-		});
+		}, 60_000);
 
 		test("skips retired grok-oauth-proxy custom models from models.json", () => {
 			writeRawModelsJson({

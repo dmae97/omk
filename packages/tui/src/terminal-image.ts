@@ -1,4 +1,7 @@
 import { execSync } from "node:child_process";
+import { homedir } from "node:os";
+import { isAbsolute } from "node:path";
+import { pathToFileURL } from "node:url";
 
 export type ImageProtocol = "kitty" | "iterm2" | null;
 
@@ -100,11 +103,7 @@ export function detectCapabilities(tmuxForwardsHyperlink: () => boolean = probeT
 		return { images: null, trueColor: true, hyperlinks: true };
 	}
 
-	if (termProgram === "vscode") {
-		return { images: null, trueColor: true, hyperlinks: true };
-	}
-
-	if (termProgram === "alacritty") {
+	if (termProgram === "alacritty" || termProgram === "vscode" || termProgram === "zed") {
 		return { images: null, trueColor: true, hyperlinks: true };
 	}
 
@@ -229,7 +228,10 @@ export function encodeITerm2(
 		inline?: boolean;
 	} = {},
 ): string {
-	const params: string[] = [`inline=${options.inline !== false ? 1 : 0}`];
+	const params: string[] = [
+		`inline=${options.inline !== false ? 1 : 0}`,
+		`size=${Buffer.byteLength(base64Data, "base64")}`,
+	];
 
 	if (options.width !== undefined) params.push(`width=${options.width}`);
 	if (options.height !== undefined) params.push(`height=${options.height}`);
@@ -474,9 +476,35 @@ export function hyperlink(text: string, url: string): string {
 	return `\x1b]8;;${url}\x1b\\${text}\x1b]8;;\x1b\\`;
 }
 
+/** Shorten home-prefixed absolute paths to ~/... for compact display. */
+function shortenImagePath(filename: string): string {
+	const home = homedir();
+	if (
+		home &&
+		(filename === home ||
+			filename.startsWith(`${home}/`) ||
+			filename.startsWith(home + "\\"))
+	) {
+		return `~${filename.slice(home.length)}`;
+	}
+	return filename;
+}
+
+/**
+ * Text fallback when the terminal cannot render inline images.
+ * Absolute paths are shown shortened (~/...) and, when OSC 8 hyperlinks are
+ * available, linked to file:// so the full path remains openable.
+ */
 export function imageFallback(mimeType: string, dimensions?: ImageDimensions, filename?: string): string {
 	const parts: string[] = [];
-	if (filename) parts.push(filename);
+	if (filename) {
+		const display = shortenImagePath(filename);
+		if (getCapabilities().hyperlinks && isAbsolute(filename)) {
+			parts.push(hyperlink(display, pathToFileURL(filename).href));
+		} else {
+			parts.push(display);
+		}
+	}
 	parts.push(`[${mimeType}]`);
 	if (dimensions) parts.push(`${dimensions.widthPx}x${dimensions.heightPx}`);
 	return `[Image: ${parts.join(" ")}]`;

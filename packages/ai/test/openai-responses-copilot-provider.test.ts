@@ -236,6 +236,8 @@ describe("openai-responses provider defaults", () => {
 		["gpt-5.5", "flex", 0.5],
 	] as const)("applies %s %s service-tier cost multiplier", async (modelId, serviceTier, multiplier) => {
 		const model = getModel("openai", modelId);
+		const tokenCount = 100_000;
+		const tokenScale = tokenCount / 1_000_000;
 		const sse = `${[
 			`data: ${JSON.stringify({
 				type: "response.completed",
@@ -243,9 +245,9 @@ describe("openai-responses provider defaults", () => {
 					status: "completed",
 					service_tier: serviceTier,
 					usage: {
-						input_tokens: 1000000,
-						output_tokens: 1000000,
-						total_tokens: 2000000,
+						input_tokens: tokenCount,
+						output_tokens: tokenCount,
+						total_tokens: tokenCount * 2,
 						input_tokens_details: { cached_tokens: 0 },
 					},
 				},
@@ -270,8 +272,8 @@ describe("openai-responses provider defaults", () => {
 
 		const result = await stream.result();
 
-		expect(result.usage.cost.input).toBe(model.cost.input * multiplier);
-		expect(result.usage.cost.output).toBe(model.cost.output * multiplier);
-		expect(result.usage.cost.total).toBe((model.cost.input + model.cost.output) * multiplier);
+		expect(result.usage.cost.input).toBe(model.cost.input * multiplier * tokenScale);
+		expect(result.usage.cost.output).toBe(model.cost.output * multiplier * tokenScale);
+		expect(result.usage.cost.total).toBe((model.cost.input + model.cost.output) * multiplier * tokenScale);
 	});
 });
