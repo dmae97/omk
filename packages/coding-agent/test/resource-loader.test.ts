@@ -378,10 +378,12 @@ Content`,
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload();
 
-			expect(loader.getAgentsFiles().agentsFiles).toContainEqual({
-				path: join(cwd, "CLAUDE.md"),
-				content: "Fallback instructions",
-			});
+			expect(loader.getAgentsFiles().agentsFiles).toContainEqual(
+				expect.objectContaining({
+					path: join(cwd, "CLAUDE.md"),
+					content: "Fallback instructions",
+				}),
+			);
 			expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining(join(cwd, "AGENTS.md")));
 			consoleError.mockRestore();
 		});
