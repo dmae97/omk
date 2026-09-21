@@ -95,8 +95,33 @@ By default, compaction uses the active session model. Set `compaction.model` to 
 
 Every compaction and branch-summary LLM call flows through one choke point (`completeSummarization`):
 
-- **Retries**: transient stream drops (`terminated`, socket close, 5xx, DNS/transport errors) follow the configured `retry` settings (`enabled`, `maxRetries`, `baseDelayMs`) with exponential backoff instead of failing the whole operation on the first attempt. Quota/billing exhaustion on the summarization model triggers one pass through the resilience failover chain ([provider-resilience.md](provider-resilience.md)); only when every candidate is also quota-blocked does the run fail with a non-retryable `compaction.quota_exhausted` termination cause whose guidance suggests `/model`, setting `compaction.model`, or waiting for reset. Aborts are never retried. Retry progress is emitted as `summarization_retry_scheduled` / `summarization_retry_attempt_start` / `summarization_retry_finished` session events (surfaced in the TUI and RPC stream).
+- **Retries**: transient stream drops (`terminated`, socket close, 5xx, DNS/transport errors) follow the configured `retry` settings (`enabled`, `maxRetries`, `baseDelayMs`) with exponential backoff. Aborts are never retried. Retry progress is emitted as `summarization_retry_scheduled` / `summarization_retry_attempt_start` / `summarization_retry_finished` session events (surfaced in the TUI and RPC stream).
 - **Isolation**: each summarization request runs with prompt caching disabled (`cacheRetention: "none"`) and a fresh routing `sessionId`, so summaries never write unusable provider cache entries or inherit interactive session affinity.
+
+### Compaction Failover and Rescue
+
+For compaction, primary-model quota/billing exhaustion triggers one pass through
+the configured [resilience candidates](provider-resilience.md). Cross-provider
+candidates must resolve their own credentials; missing or failed auth resolution
+skips a candidate without forwarding the primary key or headers. Same-provider
+candidates can inherit primary credentials when no resolver is supplied.
+Terminal candidate failures, including quota and entitlement/auth denial, advance
+the chain. Other candidate errors retain the candidate identity. Cancellation is
+checked again after credential resolution, before another summarization starts.
+
+Manual and threshold compaction rescue a quota-exhausted attempt using the live
+session model when it differs from the configured compaction model. If that
+rescue also fails, they use a deterministic trim. A non-quota failure of the
+initial attempt still propagates instead of silently degrading the summary.
+Overflow recovery uses the rescue ladder for any summarization failure because
+another over-limit request would otherwise strand the session. Aborts stop the
+ladder in every mode. Branch summarization does not use this rescue ladder.
+
+The deterministic path preserves structured rules, file operations, a bounded
+prior summary and the recent cut-point window, but discards older turns without
+semantic summarization. Its `Deterministic emergency compaction` heading and
+`details.deterministicEmergency` flag distinguish it from a model summary.
+This fallback still must pass the normal compaction transaction checks.
 
 ### How It Works
 

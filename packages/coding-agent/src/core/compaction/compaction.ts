@@ -10,6 +10,7 @@ import { uuidv7 } from "omk-agent-core";
 import type { AssistantMessage, Context, Model, SimpleStreamOptions, Usage } from "omk-ai";
 import { completeSimple, type RetryCallbacks, type RetryPolicy, retryAssistantCall } from "omk-ai";
 import type { CompactionSettings } from "./compaction-headroom.ts";
+import { type CompactFailoverOptions, withCompactionModelFailover } from "./model-failover.ts";
 
 export {
 	type CompactionHeadroomLimit,
@@ -20,9 +21,9 @@ export {
 	getCompactionHeadroomThreshold,
 	shouldCompact,
 } from "./compaction-headroom.ts";
+export type { CompactFailoverOptions } from "./model-failover.ts";
 
 import { convertToLlm } from "../messages.ts";
-import { isQuotaExhaustionMessage } from "../provider-resilience.ts";
 import { buildSessionContext, type CompactionEntry, type SessionEntry } from "../session-manager.ts";
 import {
 	applyCompactionKnowledgeTriage,
@@ -735,8 +736,10 @@ Be concise. Focus on what's needed to understand the kept suffix.`;
  *
  * When {@link failoverModels} is provided and the primary model fails with a
  * quota/billing exhaustion error (same-model retry is useless until reset),
- * the whole summarization is retried once with each candidate in order. Only
- * quota-class errors are absorbed; any other failure surfaces immediately.
+ * the whole summarization is retried once with each eligible candidate in order.
+ * Candidates use their own credentials; unresolved cross-provider auth is skipped.
+ * Terminal candidate failures advance the chain. Other failures surface with
+ * the candidate identity instead of being attributed to the primary model.
  *
  * @param preparation - Pre-calculated preparation from prepareCompaction()
  * @param customInstructions - Optional custom focus for the summary
@@ -753,48 +756,28 @@ export async function compact(
 	retry?: RetryPolicy,
 	callbacks?: RetryCallbacks,
 	failoverModels?: readonly Model<any>[],
+	options?: CompactFailoverOptions,
 ): Promise<CompactionResult> {
-	try {
-		return await compactWithModel(
-			preparation,
-			model,
-			apiKey,
-			headers,
-			customInstructions,
-			signal,
-			thinkingLevel,
-			streamFn,
-			retry,
-			callbacks,
-		);
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		if (!isQuotaExhaustionMessage(message) || !failoverModels || failoverModels.length === 0) throw error;
-		for (const candidate of failoverModels) {
-			if (candidate.provider === model.provider && candidate.id === model.id) continue;
-			if (signal?.aborted) throw error;
-			try {
-				return await compactWithModel(
-					preparation,
-					candidate,
-					apiKey,
-					headers,
-					customInstructions,
-					signal,
-					thinkingLevel,
-					streamFn,
-					retry,
-					callbacks,
-				);
-			} catch (candidateError) {
-				const candidateMessage = candidateError instanceof Error ? candidateError.message : String(candidateError);
-				if (!isQuotaExhaustionMessage(candidateMessage)) throw candidateError;
-				// Candidate is also quota-blocked — try the next one.
-			}
-		}
-		// Every candidate is quota-blocked too: surface the primary failure.
-		throw error;
-	}
+	return withCompactionModelFailover({
+		model,
+		auth: { apiKey, headers },
+		signal,
+		candidates: failoverModels,
+		options,
+		run: (candidate, auth) =>
+			compactWithModel(
+				preparation,
+				candidate,
+				auth.apiKey,
+				auth.headers,
+				customInstructions,
+				signal,
+				thinkingLevel,
+				streamFn,
+				retry,
+				callbacks,
+			),
+	});
 }
 
 /** Single-model compaction attempt (no failover). Implementation of {@link compact}. */

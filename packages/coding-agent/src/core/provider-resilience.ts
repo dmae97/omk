@@ -85,6 +85,22 @@ export function isQuotaExhaustionMessage(text: string | undefined): boolean {
 }
 
 /**
+ * Terminal per-candidate failures inside a failover chain: the candidate
+ * provider can never serve this request — quota/billing exhaustion, auth or
+ * entitlement denial (401/403, permission_error, authentication_error), or a
+ * permanent 4xx (unsupported model, invalid request). Absorbing them lets the
+ * chain reach the next candidate; a transient 5xx still aborts so the same
+ * model can retry instead of silently hopping providers mid-recovery.
+ */
+export function isTerminalProviderErrorMessage(text: string | undefined): boolean {
+	if (!text) return false;
+	if (isQuotaExhaustionMessage(text)) return true;
+	return /permission_error|authentication_error|unsupported_model|model_not_supported|invalid_api_key|unauthori[sz]ed|forbidden|does not have access|\b4(?:01|03|02|04|22)\b/i.test(
+		text,
+	);
+}
+
+/**
  * Anthropic rejecting the spoofed Claude Code client version because the target
  * model is gated on a newer one (`claude_code_version_too_old`, HTTP 400).
  * Permanent for this build: every retry and every failover re-sends the same

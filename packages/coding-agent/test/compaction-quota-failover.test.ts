@@ -40,10 +40,15 @@ function assistantText(text: string): AssistantMessage {
  * Fake StreamFn keyed by `${provider}/${id}` so a test can decide which model
  * fails and which succeeds.
  */
-function makeStreamFn(outcomes: Record<string, AssistantMessage>, calls: string[] = []): StreamFn {
-	const fn = (async (model: Model<any>) => {
+function makeStreamFn(
+	outcomes: Record<string, AssistantMessage>,
+	calls: string[] = [],
+	apiKeys: Record<string, string | undefined> = {},
+): StreamFn {
+	const fn = (async (model: Model<any>, _context: unknown, options?: { apiKey?: string }) => {
 		const key = `${model.provider}/${model.id}`;
 		calls.push(key);
+		apiKeys[key] = options?.apiKey;
 		const outcome = outcomes[key] ?? assistantText(`summary from ${key}`);
 		return {
 			result: async () => outcome,
@@ -95,6 +100,7 @@ describe("compact quota-exhaustion failover", () => {
 			undefined,
 			undefined,
 			[candidate],
+			{ resolveCandidateAuth: async () => ({ apiKey: "candidate-key" }) },
 		);
 
 		expect(result.summary).toContain("rescued summary");
@@ -120,6 +126,7 @@ describe("compact quota-exhaustion failover", () => {
 			undefined,
 			undefined,
 			[duplicate, realCandidate],
+			{ resolveCandidateAuth: async () => ({ apiKey: "candidate-key" }) },
 		);
 
 		expect(result.summary).toContain("deepseek/deepseek-v4-flash");
@@ -145,6 +152,7 @@ describe("compact quota-exhaustion failover", () => {
 				undefined,
 				undefined,
 				[candidate],
+				{ resolveCandidateAuth: async () => ({ apiKey: "candidate-key" }) },
 			),
 		).rejects.toThrow(/Summarization failed/);
 		expect(calls).toEqual(["openrouter/stealth/ox-alpha"]);
@@ -176,6 +184,7 @@ describe("compact quota-exhaustion failover", () => {
 				undefined,
 				undefined,
 				candidates,
+				{ resolveCandidateAuth: async () => ({ apiKey: "candidate-key" }) },
 			),
 		).rejects.toThrow(/The usage limit has been reached/);
 		expect(calls).toEqual(["openrouter/stealth/ox-alpha", "kimi-coding/k3", "deepseek/deepseek-v4-flash"]);
@@ -199,5 +208,174 @@ describe("compact quota-exhaustion failover", () => {
 
 		expect(result.summary).toContain("anthropic/claude-sonnet");
 		expect(calls).toEqual(["anthropic/claude-sonnet"]);
+	});
+
+	it("never replays the primary key against a cross-provider candidate", async () => {
+		// Regression for the 2026-09-20 incident: the Codex OAuth bearer was sent
+		// to api.kimi.com, which answered an entitlement 403 that surfaced under
+		// the primary model's label. Candidates must get their own credentials.
+		const primary = makeModel("openai-codex", "gpt-5.6-sol");
+		const candidate = makeModel("kimi-coding", "k3");
+		const calls: string[] = [];
+		const apiKeys: Record<string, string | undefined> = {};
+		const streamFn = makeStreamFn(
+			{
+				"openai-codex/gpt-5.6-sol": assistantError(QUOTA_ERROR),
+				"kimi-coding/k3": assistantText("rescued summary"),
+			},
+			calls,
+			apiKeys,
+		);
+
+		const result = await compact(
+			makePreparation(),
+			primary,
+			"codex-oauth-token",
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			streamFn,
+			undefined,
+			undefined,
+			[candidate],
+			{ resolveCandidateAuth: async () => ({ apiKey: "kimi-key" }) },
+		);
+
+		expect(result.summary).toContain("rescued summary");
+		expect(apiKeys["openai-codex/gpt-5.6-sol"]).toBe("codex-oauth-token");
+		expect(apiKeys["kimi-coding/k3"]).toBe("kimi-key");
+	});
+
+	it("skips a cross-provider candidate with no resolvable auth instead of leaking the primary key", async () => {
+		const primary = makeModel("openai-codex", "gpt-5.6-sol");
+		const noAuth = makeModel("kimi-coding", "k3");
+		const rescued = makeModel("deepseek", "deepseek-v4-flash");
+		const calls: string[] = [];
+		const apiKeys: Record<string, string | undefined> = {};
+		const streamFn = makeStreamFn(
+			{
+				"openai-codex/gpt-5.6-sol": assistantError(QUOTA_ERROR),
+				"deepseek/deepseek-v4-flash": assistantText("rescued summary"),
+			},
+			calls,
+			apiKeys,
+		);
+
+		const result = await compact(
+			makePreparation(),
+			primary,
+			"codex-oauth-token",
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			streamFn,
+			undefined,
+			undefined,
+			[noAuth, rescued],
+			{
+				resolveCandidateAuth: async (candidate) =>
+					candidate.provider === "deepseek" ? { apiKey: "deepseek-key" } : {},
+			},
+		);
+
+		expect(result.summary).toContain("rescued summary");
+		// kimi-coding was never called — its key was not resolvable.
+		expect(calls).toEqual(["openai-codex/gpt-5.6-sol", "deepseek/deepseek-v4-flash"]);
+		expect(apiKeys["kimi-coding/k3"]).toBeUndefined();
+	});
+
+	it("absorbs a candidate's terminal 403 and continues to the next candidate", async () => {
+		// The observed incident shape: codex quota-dead -> k3 entitlement 403 ->
+		// deepseek serves. A terminally-dead candidate must not abort the chain.
+		const primary = makeModel("openai-codex", "gpt-5.6-sol");
+		const dead = makeModel("kimi-coding", "k3");
+		const rescued = makeModel("deepseek", "deepseek-v4-flash");
+		const calls: string[] = [];
+		const streamFn = makeStreamFn(
+			{
+				"openai-codex/gpt-5.6-sol": assistantError(QUOTA_ERROR),
+				"kimi-coding/k3": assistantError(
+					'403 {"error":{"type":"permission_error","message":"subscription does not have access"}}',
+				),
+				"deepseek/deepseek-v4-flash": assistantText("rescued summary"),
+			},
+			calls,
+		);
+
+		const result = await compact(
+			makePreparation(),
+			primary,
+			"codex-oauth-token",
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			streamFn,
+			undefined,
+			undefined,
+			[dead, rescued],
+			{ resolveCandidateAuth: async (candidate) => ({ apiKey: `${candidate.provider}-key` }) },
+		);
+
+		expect(result.summary).toContain("rescued summary");
+		expect(calls).toEqual(["openai-codex/gpt-5.6-sol", "kimi-coding/k3", "deepseek/deepseek-v4-flash"]);
+	});
+
+	it("does not dispatch a candidate when cancellation arrives during auth resolution", async () => {
+		const primary = makeModel("openai-codex", "gpt-5.6-sol");
+		const candidate = makeModel("kimi-coding", "k3");
+		const controller = new AbortController();
+		const calls: string[] = [];
+		const streamFn = makeStreamFn({ "openai-codex/gpt-5.6-sol": assistantError(QUOTA_ERROR) }, calls);
+		await expect(
+			compact(
+				makePreparation(),
+				primary,
+				"primary-fixture",
+				undefined,
+				undefined,
+				controller.signal,
+				undefined,
+				streamFn,
+				undefined,
+				undefined,
+				[candidate],
+				{
+					resolveCandidateAuth: async () => {
+						controller.abort();
+						return { apiKey: "candidate-fixture" };
+					},
+				},
+			),
+		).rejects.toThrow(/The usage limit has been reached/);
+		expect(calls).toEqual(["openai-codex/gpt-5.6-sol"]);
+	});
+
+	it("attributes a candidate's transient failure to the candidate, not the primary", async () => {
+		const primary = makeModel("openai-codex", "gpt-5.6-sol");
+		const candidate = makeModel("kimi-coding", "k3");
+		const streamFn = makeStreamFn({
+			"openai-codex/gpt-5.6-sol": assistantError(QUOTA_ERROR),
+			"kimi-coding/k3": assistantError("provider returned error 503 service unavailable"),
+		});
+
+		await expect(
+			compact(
+				makePreparation(),
+				primary,
+				"codex-oauth-token",
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				streamFn,
+				undefined,
+				undefined,
+				[candidate],
+				{ resolveCandidateAuth: async () => ({ apiKey: "kimi-key" }) },
+			),
+		).rejects.toThrow(/Failover candidate kimi-coding\/k3 failed:.*503/);
 	});
 });

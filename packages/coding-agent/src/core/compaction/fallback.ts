@@ -124,12 +124,22 @@ export interface SummarizationFallbackInput {
 	/** The model the session is actually running, when known. */
 	readonly sessionModel: Model<any> | undefined;
 	/**
-	 * Summarize on one model, resolving that model's own credentials. The
-	 * generic failover list reuses the failed model's key across candidates, so
-	 * a cross-provider rescue must resolve auth per call instead.
+	 * Summarize on one model, resolving that model's own credentials. A
+	 * cross-provider rescue must not inherit the failed model's key or headers.
 	 */
 	readonly summarize: (model: Model<any>) => Promise<CompactionResult>;
 	readonly isAborted: () => boolean;
+	/**
+	 * Rescue on every summarization failure, not only quota exhaustion.
+	 * Overflow recovery is the session's last chance before the provider
+	 * 400 strands it, so a non-quota failure (e.g. a failover candidate's
+	 * entitlement 403 surfaced mid-chain) must also reach the trim — a
+	 * persistent per-provider permission failure will not heal on retry.
+	 * Manual/threshold compaction keeps the quota-only gate: a transient
+	 * primary failure there must propagate as an error, not silently
+	 * degrade the summary.
+	 */
+	readonly alwaysRescue?: boolean;
 }
 
 function sameModel(a: Model<any>, b: Model<any>): boolean {
@@ -137,8 +147,9 @@ function sameModel(a: Model<any>, b: Model<any>): boolean {
 }
 
 /**
- * Run the summarization ladder. Aborts and non-quota failures propagate
- * unchanged — a transient 503 must retry its model, not silently degrade.
+ * Run the summarization ladder. Aborts and (without `alwaysRescue`)
+ * non-quota failures propagate unchanged — a transient 503 must retry its
+ * model, not silently degrade.
  */
 export async function summarizeWithFallback(input: SummarizationFallbackInput): Promise<CompactionResult> {
 	try {
@@ -146,7 +157,7 @@ export async function summarizeWithFallback(input: SummarizationFallbackInput): 
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		if (input.isAborted()) throw error;
-		if (!isQuotaExhaustionMessage(message)) throw error;
+		if (!input.alwaysRescue && !isQuotaExhaustionMessage(message)) throw error;
 
 		const session = input.sessionModel;
 		if (session !== undefined && !sameModel(session, input.primaryModel)) {

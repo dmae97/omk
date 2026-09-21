@@ -57,7 +57,6 @@ import {
 	stepCompactionHysteresis,
 } from "./compaction/hysteresis.ts";
 import {
-	type CompactionPreparation,
 	type CompactionResult,
 	calculateContextTokens,
 	collectEntriesForBranchSummary,
@@ -67,11 +66,11 @@ import {
 	generateBranchSummary,
 	prepareCompaction,
 	resolveCompactionModel,
-	summarizeWithFallback,
 } from "./compaction/index.ts";
 import { summarizeWithOAuthRecovery } from "./compaction/oauth-recovery.ts";
 import { overflowRetryBlocked } from "./compaction/overflow-retry-guard.ts";
 import { compactionEmitWillRetry } from "./compaction/resume-policy.ts";
+import { type CompactionSummaryInput, summarizeSessionCompaction } from "./compaction/session-summary.ts";
 import { isSessionModelOverflow, shouldSkipCompactionCheck } from "./compaction-gate.ts";
 import {
 	estimateToolResultReserve,
@@ -3547,15 +3546,7 @@ export class AgentSession {
 	 * (ChatGPT `401 token_expired`), the credential is force-refreshed once and
 	 * the summarization retried; the retry classifier rightly never replays a 401.
 	 */
-	private _summarizeCompaction(input: {
-		preparation: CompactionPreparation;
-		model: Model<Api>;
-		apiKey: string | undefined;
-		headers: Record<string, string> | undefined;
-		customInstructions?: string;
-		signal: AbortSignal;
-		reason: "manual" | "overflow" | "threshold";
-	}): Promise<CompactionResult> {
+	private _summarizeCompaction(input: CompactionSummaryInput): Promise<CompactionResult> {
 		const { model } = input;
 		return summarizeWithOAuthRecovery({
 			apiKey: input.apiKey,
@@ -3574,6 +3565,11 @@ export class AgentSession {
 					this.settingsManager.getRetrySettings(),
 					this._summarizationRetryCallbacks({ source: "compaction", reason: input.reason }),
 					this._compactionFailoverModels(model),
+					{
+						// The primary's key belongs to its provider; each cross-provider
+						// candidate resolves its own credential or is skipped.
+						resolveCandidateAuth: (candidate) => this._getCompactionRequestAuth(candidate),
+					},
 				),
 		});
 	}
@@ -3661,7 +3657,10 @@ export class AgentSession {
 				tokensBefore = extensionCompaction.tokensBefore;
 				details = extensionCompaction.details;
 			} else {
-				const result = await this._summarizeCompaction({
+				// Same resilience ladder as auto-compaction: a quota-dead pinned
+				// compaction.model rescues onto the live session model, then a
+				// deterministic trim, instead of leaving /compact hard-failed.
+				const result = await summarizeSessionCompaction({
 					preparation,
 					model: compactionModel,
 					apiKey,
@@ -3669,6 +3668,9 @@ export class AgentSession {
 					customInstructions,
 					signal: this._compactionAbortController.signal,
 					reason: "manual",
+					sessionModel: this.model,
+					resolveAuth: (model) => this._getCompactionRequestAuth(model),
+					summarize: (input) => this._summarizeCompaction(input),
 				});
 				summary = result.summary;
 				firstKeptEntryId = result.firstKeptEntryId;
@@ -4054,27 +4056,16 @@ export class AgentSession {
 				// Summarization can fail in a way no retry fixes (quota). The ladder
 				// tries the live session model, then a deterministic trim, because a
 				// failed compaction over the context window strands the whole run.
-				const signal = this._autoCompactionAbortController.signal;
-				const primaryModel = compactionModel;
-				const compactResult = await summarizeWithFallback({
+				const compactResult = await summarizeSessionCompaction({
 					preparation,
-					primaryModel,
+					model: compactionModel,
+					apiKey,
+					headers,
+					signal: this._autoCompactionAbortController.signal,
+					reason,
 					sessionModel: this.model,
-					isAborted: () => signal.aborted,
-					summarize: async (model) => {
-						const auth =
-							model.provider === primaryModel.provider && model.id === primaryModel.id
-								? { apiKey, headers }
-								: await this._getCompactionRequestAuth(model);
-						return this._summarizeCompaction({
-							preparation,
-							model,
-							apiKey: auth.apiKey,
-							headers: auth.headers,
-							signal,
-							reason,
-						});
-					},
+					resolveAuth: (model) => this._getCompactionRequestAuth(model),
+					summarize: (input) => this._summarizeCompaction(input),
 				});
 				summary = compactResult.summary;
 				firstKeptEntryId = compactResult.firstKeptEntryId;
