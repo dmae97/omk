@@ -1,5 +1,5 @@
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
+import type { AgentTool } from "omk-agent-core";
+import { fauxAssistantMessage, fauxToolCall } from "omk-ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { createHarness, type Harness } from "../harness.ts";
@@ -41,7 +41,7 @@ describe("issue #7253: manual compaction during an active response", () => {
 				(pi) => {
 					pi.on("session_before_compact", async (event) => ({
 						compaction: {
-							summary: `${event.reason} summary`,
+							summary: "manual summary",
 							firstKeptEntryId: event.preparation.firstKeptEntryId,
 							tokensBefore: event.preparation.tokensBefore,
 							details: {},

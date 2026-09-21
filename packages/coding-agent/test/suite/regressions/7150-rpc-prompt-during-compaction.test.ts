@@ -1,4 +1,4 @@
-import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage } from "omk-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import { createHarness, getMessageText, getUserTexts, type Harness } from "../harness.ts";
 
@@ -86,6 +86,6 @@ describe("issue #7150: RPC prompt during manual compaction", () => {
 		expect(getUserTexts(harness)).not.toContain("PROBE-7150");
 		expect(persistedUserTexts).not.toContain("PROBE-7150");
 		expect(harness.eventsOfType("agent_start")).toHaveLength(0);
-		expect(harness.eventsOfType("agent_settled")).toHaveLength(0);
+		expect(harness.eventsOfType("agent_end")).toHaveLength(0);
 	});
 });

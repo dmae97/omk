@@ -1,5 +1,5 @@
-import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
+import type { AgentTool, AgentToolResult } from "omk-agent-core";
+import { fauxAssistantMessage, fauxToolCall } from "omk-ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -43,8 +43,9 @@ describe("regression #8724: in-memory fork during an active tool turn", () => {
 		const services: AgentSessionServices = {
 			cwd: harness.tempDir,
 			agentDir: harness.tempDir,
-			modelRuntime: harness.session.modelRuntime,
+			authStorage: harness.authStorage,
 			settingsManager: harness.settingsManager,
+			modelRegistry: harness.session.modelRegistry,
 			resourceLoader: harness.session.resourceLoader,
 			diagnostics: [],
 		};

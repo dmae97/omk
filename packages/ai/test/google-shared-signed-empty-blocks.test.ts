@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { convertMessages } from "../src/api/google-shared.ts";
+import { convertMessages } from "../src/providers/google-shared.ts";
 import type { AssistantMessage, Context, Model } from "../src/types.ts";
 
 // Gemini can attach `thoughtSignature` to a response part whose visible text is empty (e.g. a

@@ -75,6 +75,7 @@ vi.mock("../src/core/compaction/index.js", () => ({
 describe("AgentSession auto-compaction queue resume", () => {
 	let session: AgentSession;
 	let sessionManager: SessionManager;
+	let settingsManager: SettingsManager;
 	let tempDir: string;
 
 	beforeEach(() => {
@@ -92,7 +93,7 @@ describe("AgentSession auto-compaction queue resume", () => {
 		});
 
 		sessionManager = SessionManager.inMemory();
-		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		settingsManager = SettingsManager.create(tempDir, tempDir);
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 		const modelRegistry = ModelRegistry.create(authStorage, tempDir);
