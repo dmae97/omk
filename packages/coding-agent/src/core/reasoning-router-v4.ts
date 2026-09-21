@@ -1060,9 +1060,12 @@ export interface ClassifierVerdictV4 {
 	readonly runnerUp: TaskClassV4 | null;
 	/** `scores[argmaxClass] - scores[runnerUp]` (pre-cascade); 0 or negative-margin-free by construction (weights are non-negative). */
 	readonly margin: number;
-	/** Normalized confidence in [0, 1], combining `margin / topScore` with absolute evidence strength. */
+	/**
+	 * Match-band score in [0, 1]. This is pattern-match strength, not an
+	 * estimated probability that the routed task will succeed (F14).
+	 */
 	readonly confidence: number;
-	/** Confidence bucketed by `weights.lowConfidenceThreshold` / `highConfidenceThreshold`. */
+	/** Match band from `weights.lowConfidenceThreshold` / `highConfidenceThreshold`. Not a success rate. */
 	readonly confidenceBand: ConfidenceBandV4;
 	/** True when the argmax class won only via precedence-order tie-break over an exact score tie with the runner-up. */
 	readonly tieBreak: boolean;

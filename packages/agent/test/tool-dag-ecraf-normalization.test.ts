@@ -1,10 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import {
-	challengeEcrafLocalExchange,
-	type EcrafAdmissionsOptions,
-	planEcrafAdmissions,
-} from "../src/tool-dag-ecraf.ts";
+import { type EcrafAdmissionsOptions, planEcrafAdmissions } from "../src/tool-dag-ecraf.ts";
+import { challengeEcrafLocalExchange } from "../src/tool-dag-ecraf-exchange.ts";
 
 function node(sourceIndex: number, resources: Record<string, number>, priority = 1) {
 	return { sourceIndex, readySeq: sourceIndex, resources, priority };

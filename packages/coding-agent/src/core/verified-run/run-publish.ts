@@ -3,9 +3,7 @@ import type { RunContract, RunPublishCommand } from "omk-protocol";
 import type { GrantToken } from "../../coordination/types.ts";
 import { acquireSessionOwnerLeaseSync } from "../session-owner-lease.ts";
 import { openRunAuthority, type RunAuthority } from "./authority-runtime.ts";
-import { commandEnvironmentDigest } from "./broker.ts";
 import { loadCandidate } from "./candidate.ts";
-import { readRunEvidence } from "./evidence.ts";
 import {
 	assertGitWorkspaceRoot,
 	casRef,
@@ -18,10 +16,11 @@ import {
 	zeroOid,
 } from "./git-plumbing.ts";
 import { type JournalSnapshot, journalPath, VerifiedRunJournal } from "./journal.ts";
+import { assertPublishable } from "./publish-preflight.ts";
+import { assertPublishEffectStart } from "./publish-start.ts";
 import { requireRunJournal } from "./recovery-command.ts";
 import type { RunEvent, RunProjection } from "./run-types.ts";
 import { digestObject, VerifiedRunError } from "./storage.ts";
-
 export { OMK_ACCEPTED_REF };
 
 /** Policy fields the publish gate pins; the command must carry this digest so a policy change fails loudly. */
@@ -91,12 +90,6 @@ export interface PublishOptions {
 	readonly authority?: RunAuthority;
 }
 
-/**
- * Durable publish intent -> resolve -> single old-OID CAS -> result record.
- * The intent row is the outbox record: a replay finds the ref already at the
- * candidate OID and only appends the missing `published` result, so a CAS is
- * structurally never executed twice for one intent.
- */
 export function publishVerifiedRun(
 	runPath: string,
 	command: RunPublishCommand,
@@ -109,8 +102,6 @@ export function publishVerifiedRun(
 	try {
 		const snapshot = requireRunJournal(runPath);
 		if (publishDisposition(snapshot, command) === "completed") return snapshot.state;
-		// Open (or reuse) the reconciled authority boundary before any new work:
-		// the restart reconcile ran when the store opened.
 		if (!options.authority) opened = openRunAuthority(runPath);
 		const authority = options.authority ?? (opened as RunAuthority);
 		const journal = new VerifiedRunJournal(runPath, owner);
@@ -132,41 +123,11 @@ function executePublish(
 	options: PublishOptions,
 	authority: RunAuthority,
 ): RunProjection {
-	const first = snapshot.records[0]?.event;
-	if (first?.kind !== "created") throw new VerifiedRunError("missing_run");
-	const contract = first.contract;
-	const state = snapshot.state;
-	if (
-		state.verification !== "verified" ||
-		state.application !== "candidate_ready" ||
-		state.settlement !== "settled" ||
-		!state.receiptDigest ||
-		!state.candidateDigest ||
-		state.activeExecutionIds.length !== 0 ||
-		state.writerOpen
-	)
-		throw new VerifiedRunError("unverified");
-	if (
-		command.candidateDigest !== state.candidateDigest ||
-		command.receiptDigest !== state.receiptDigest ||
-		command.policyDigest !== publishPolicyDigest(contract)
-	)
-		throw new VerifiedRunError("invalid_binding");
-	// The gate never trusts command-carried receipt fields: reload the envelope and
-	// re-verify HMAC, dispatch binding and proof closure before any Git write.
-	const evidence = readRunEvidence(runPath, snapshot, commandEnvironmentDigest(contract, "gated-v1"));
-	if (
-		!evidence.verified ||
-		evidence.candidateDigest !== state.candidateDigest ||
-		evidence.receiptDigest !== state.receiptDigest
-	)
-		throw new VerifiedRunError("invalid_binding");
+	const { contract, state } = assertPublishable(snapshot, command, runPath);
 	const repoRoot = realpathSync(contract.workspace.root);
 	assertGitWorkspaceRoot(repoRoot);
 	const zero = zeroOid(repoObjectFormat(repoRoot));
 	if (command.parentOid.length !== zero.length) throw new VerifiedRunError("invalid_binding");
-	// Sealing reads only the stored, digest-verified blobs; a mutated workspace or
-	// blob store fails integrity here instead of publishing different bytes.
 	const candidate = loadCandidate(runPath, state.candidateDigest, contract.budget);
 	const candidateOid = sealCandidateCommit(repoRoot, {
 		manifest: candidate.manifest,
@@ -178,11 +139,6 @@ function executePublish(
 		receiptDigest: state.receiptDigest,
 	});
 	const resumed = state.publication === "intent" && state.publicationCommandId === command.commandId;
-	// The ref interaction runs as an authority effect: a fresh commandId mints
-	// a git-ref grant (a replayed one reuses the pending grant — commandIds
-	// are unique across grants), effect-started binds it, and termination is
-	// observed exactly once when the region exits. A crash in between leaves
-	// a quarantined grant the next writer's reconcile settles.
 	const refClaims = [
 		{
 			namespace: "git-ref",
@@ -194,8 +150,6 @@ function executePublish(
 	];
 	const now = Date.now();
 	const pending = authority.store.lookup(command.commandId, now);
-	// A stored grant is not itself permission to start. An expired reservation
-	// must not skip admission; a grant that already started keeps its binding.
 	if (pending.status === "pending" && pending.token.authorizationDeadline <= now) {
 		const stored = authority.store.state.grants.get(pending.token.grantSequence);
 		if (!stored || stored.state === "reserved") throw new VerifiedRunError("authority");
@@ -222,13 +176,7 @@ function executePublish(
 	const token: GrantToken = admission.token;
 	try {
 		if (options.signal?.aborted) throw new VerifiedRunError("cancelled");
-		const stored = authority.store.state.grants.get(token.grantSequence);
-		// Resume without a stored grant is the crash-before-admission outbox.
-		// A stored reservation still has to pass the start gate.
-		if (stored?.state === "reserved" && !authority.store.effectStarted(token, refClaims, undefined, now))
-			throw new VerifiedRunError("authority");
-		if (!stored && pending.status !== "pending" && !authority.store.effectStarted(token, refClaims, undefined, now))
-			throw new VerifiedRunError("authority");
+		assertPublishEffectStart(authority.store, token, refClaims, pending.status === "pending", now);
 		if (resumed) {
 			if (state.publicationCandidateOid !== candidateOid) throw new VerifiedRunError("invalid_binding");
 		} else {
@@ -247,7 +195,6 @@ function executePublish(
 		const observed = resolveRef(repoRoot, OMK_ACCEPTED_REF);
 		const matchesParent = observed === null ? command.parentOid === zero : observed === command.parentOid;
 		if (observed === candidateOid) {
-			// CAS already happened for this intent; only the durable result was lost.
 			if (!objectExists(repoRoot, candidateOid)) {
 				journal.append({ kind: "publish_failed", commandId: command.commandId, code: "reconciliation-required" });
 			} else {
@@ -261,8 +208,6 @@ function executePublish(
 			return journal.state;
 		}
 		if (!matchesParent) {
-			// A third OID means another publisher won or the ref was moved by hand;
-			// a fresh command is stale, a resuming one needs manual reconciliation.
 			journal.append({
 				kind: "publish_failed",
 				commandId: command.commandId,
@@ -301,10 +246,6 @@ function executePublish(
 		});
 		return journal.state;
 	} finally {
-		// The ref region is over: whether the CAS landed, was refused, or threw,
-		// this effect is provably finished — witness its termination. A false
-		// return means the grant was already settled (idempotent); a commit
-		// failure propagates rather than settling in memory only.
 		authority.store.confirmTerminated(token);
 	}
 }
