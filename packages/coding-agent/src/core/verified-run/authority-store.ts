@@ -20,7 +20,13 @@ import {
 	type ResourceClaimInput,
 	sameClaimSet,
 } from "../../coordination/resource.ts";
-import { type GrantToken, SETTLED_EFFECT_STATES, type Sequence, sequence } from "../../coordination/types.ts";
+import {
+	type GrantToken,
+	type ResourceClaim,
+	SETTLED_EFFECT_STATES,
+	type Sequence,
+	sequence,
+} from "../../coordination/types.ts";
 import { atomicRewriteFileSync } from "../atomic-session-file.ts";
 import {
 	acquireDurableFileLockSync,
@@ -477,6 +483,26 @@ function assertNonNegativeInteger(value: number, label: string): void {
 		throw new TypeError(`${label} must be a nonnegative safe integer`);
 }
 
+function assertSameCommandMeaning(
+	grant: AuthorityGrantRecord,
+	request: {
+		intentDigest: string;
+		sessionId: string;
+		incarnation: Sequence;
+		claims: readonly ResourceClaim[];
+		weight: number;
+	},
+): void {
+	if (
+		grant.intentDigest !== request.intentDigest ||
+		grant.token.sessionId !== request.sessionId ||
+		grant.token.sessionIncarnation !== request.incarnation ||
+		!sameClaimSet([...grant.claims], [...request.claims]) ||
+		grant.weight !== request.weight
+	)
+		throw new AuthorityStoreError("command_conflict");
+}
+
 function sameToken(left: GrantToken, right: GrantToken): boolean {
 	return (
 		left.authorityEpoch === right.authorityEpoch &&
@@ -744,19 +770,27 @@ export class AuthorityStore {
 		if (tombstone) {
 			const grant = this.state.grants.get(tombstone.grantSequence);
 			if (!grant) throw new AuthorityStoreError("corrupt");
+			// A completed commandId is not a free alias: the stored meaning is
+			// checked before any result is reused, including after retention expiry.
+			assertSameCommandMeaning(grant, {
+				intentDigest: input.intentDigest,
+				sessionId: input.sessionId,
+				incarnation,
+				claims,
+				weight,
+			});
 			if (tombstone.expiresAtMs <= input.now) return { status: "result-expired" };
 			return { status: "result", resultDigest: tombstone.resultDigest, token: grant.token };
 		}
 		for (const grant of this.state.grants.values()) {
 			if (grant.commandId !== input.commandId) continue;
-			if (
-				grant.intentDigest !== input.intentDigest ||
-				grant.token.sessionId !== input.sessionId ||
-				grant.token.sessionIncarnation !== incarnation ||
-				!sameClaimSet([...grant.claims], [...claims]) ||
-				grant.weight !== weight
-			)
-				throw new AuthorityStoreError("command_conflict");
+			assertSameCommandMeaning(grant, {
+				intentDigest: input.intentDigest,
+				sessionId: input.sessionId,
+				incarnation,
+				claims,
+				weight,
+			});
 			return { status: "granted", token: grant.token, duplicate: true };
 		}
 
@@ -824,12 +858,21 @@ export class AuthorityStore {
 	 * witnessed cannot be assumed un-run; on restart it quarantines like any
 	 * other possibly-live effect (I01/I02).
 	 */
-	dispatchIntent(token: GrantToken, dispatchId: string): boolean {
+	dispatchIntent(token: GrantToken, dispatchId: string, now?: number): boolean {
 		if (!/^[A-Za-z0-9_-]{1,128}$/.test(dispatchId)) throw new TypeError("dispatchId is invalid");
 		const grant = this.resolveToken(token, true);
 		if (!grant || grant.state !== "reserved") return false;
 		const epoch = this.state.epoch;
 		if (epoch === null) return false;
+		if (now !== undefined) {
+			assertNonNegativeInteger(now, "now");
+			if (now >= grant.token.authorizationDeadline) {
+				// Expiry forbids a new start. It is not a termination witness, so a
+				// possibly-live effect stays quarantined and keeps its claims.
+				this.expire(now);
+				return false;
+			}
+		}
 		this.commit([
 			{ kind: "dispatch-intent", grantSequence: grant.token.grantSequence, authorityEpoch: epoch, dispatchId },
 		]);
@@ -841,9 +884,17 @@ export class AuthorityStore {
 		token: GrantToken,
 		actualClaims: readonly ResourceClaimInput[],
 		identity?: NamespaceIdentity,
+		now?: number,
 	): boolean {
 		const grant = this.resolveToken(token, true);
 		if (!grant || (grant.state !== "reserved" && grant.state !== "starting")) return false;
+		if (now !== undefined) {
+			assertNonNegativeInteger(now, "now");
+			if (now >= grant.token.authorizationDeadline) {
+				this.expire(now);
+				return false;
+			}
+		}
 		if (!Array.isArray(actualClaims)) throw new TypeError("actualClaims must be an array");
 		const claims = Object.freeze(actualClaims.map((entry) => canonicalClaim(entry)));
 		if (!sameClaimSet([...claims], [...grant.claims])) return false;

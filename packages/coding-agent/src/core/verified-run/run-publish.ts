@@ -190,7 +190,14 @@ function executePublish(
 			generation: String(state.generation),
 		},
 	];
-	const pending = authority.store.lookup(command.commandId, Date.now());
+	const now = Date.now();
+	const pending = authority.store.lookup(command.commandId, now);
+	// A stored grant is not itself permission to start. An expired reservation
+	// must not skip admission; a grant that already started keeps its binding.
+	if (pending.status === "pending" && pending.token.authorizationDeadline <= now) {
+		const stored = authority.store.state.grants.get(pending.token.grantSequence);
+		if (!stored || stored.state === "reserved") throw new VerifiedRunError("authority");
+	}
 	const admission =
 		pending.status === "pending"
 			? { status: "granted" as const, token: pending.token }
@@ -206,13 +213,13 @@ function executePublish(
 						targetRef: OMK_ACCEPTED_REF,
 					}),
 					claims: refClaims,
-					now: Date.now(),
+					now,
 					ttl: 60000,
 				});
 	if (admission.status !== "granted") throw new VerifiedRunError("authority_blocked");
 	const token: GrantToken = admission.token;
 	try {
-		if (pending.status !== "pending" && !authority.store.effectStarted(token, refClaims))
+		if (pending.status !== "pending" && !authority.store.effectStarted(token, refClaims, undefined, now))
 			throw new VerifiedRunError("authority");
 		if (resumed) {
 			if (state.publicationCandidateOid !== candidateOid) throw new VerifiedRunError("invalid_binding");

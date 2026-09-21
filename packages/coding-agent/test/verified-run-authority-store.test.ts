@@ -131,6 +131,43 @@ describe("authority store commit boundary", () => {
 		store.release();
 	});
 
+	it("rejects a completed commandId whose stored meaning differs (F03)", async () => {
+		const store = await openReconciled();
+		store.register("s1");
+		const granted = store.acquire(input("cmd-done", 100));
+		if (granted.status !== "granted") throw new Error("expected granted");
+		expect(store.confirmTerminated(granted.token)).toBe(true);
+		store.retainResult("cmd-done", "d".repeat(64), 200, 60_000);
+
+		expect(() => store.acquire(input("cmd-done", 300, { intentDigest: "c".repeat(64) }))).toThrow(/command_conflict/);
+		expect(() => store.acquire(input("cmd-done", 300, { claims: [claim("src/y")] }))).toThrow(/command_conflict/);
+		expect(() => store.acquire(input("cmd-done", 300, { weight: 2 }))).toThrow(/command_conflict/);
+		// Same meaning still replays; expiry of that meaning is not a fresh admission.
+		expect(store.acquire(input("cmd-done", 300)).status).toBe("result");
+		expect(store.acquire(input("cmd-done", 200 + 60_001)).status).toBe("result-expired");
+		expect(() => store.acquire(input("cmd-done", 200 + 60_001, { intentDigest: "c".repeat(64) }))).toThrow(
+			/command_conflict/,
+		);
+		store.release();
+	});
+
+	it("refuses a new effect after the authorization deadline without releasing a live claim (F04)", async () => {
+		const store = await openReconciled();
+		store.register("s1");
+		const granted = store.acquire(input("cmd-ttl", 100, { ttl: 50 }));
+		if (granted.status !== "granted") throw new Error("expected granted");
+		const token = granted.token;
+		expect(store.dispatchIntent(token, "dispatch-ttl", 149)).toBe(true);
+		expect(store.dispatchIntent(token, "dispatch-late", 150)).toBe(false);
+		expect(store.effectStarted(token, [claim("src/x")], undefined, 150)).toBe(false);
+		// Deadline is not a termination witness: the possibly-live claim stays owned.
+		const owned = [...store.state.grants.values()].find((grant) => grant.commandId === "cmd-ttl");
+		expect(owned?.state).toBe("quarantined");
+		expect(owned?.effectLive).toBe(true);
+		expect(store.confirmTerminated(token)).toBe(true);
+		store.release();
+	});
+
 	it("quarantines an uncommitted suffix when the head never published (I12/I17)", async () => {
 		let crashOnAppend = false;
 		const store = AuthorityStore.open(storePath, {

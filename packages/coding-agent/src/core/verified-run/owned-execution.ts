@@ -118,7 +118,7 @@ export async function executeRunCommand(
 	// The intent commits before the adapter is invoked: from this record on,
 	// the effect may be live and a crash must quarantine it, never assume
 	// it did not run.
-	if (!authority.store.dispatchIntent(token, executionId)) throw new VerifiedRunError("authority");
+	if (!authority.store.dispatchIntent(token, executionId, Date.now())) throw new VerifiedRunError("authority");
 	let result: SandboxOutcome;
 	try {
 		result = await executeSandbox({
@@ -132,7 +132,8 @@ export async function executeRunCommand(
 			onReady: (identity: NamespaceIdentity) => {
 				if (journal.state.generation !== generation) throw new VerifiedRunError("stale_generation");
 				journal.append({ kind: "process_ready", executionId, identity });
-				if (!authority.store.effectStarted(token, claims, identity)) throw new VerifiedRunError("authority");
+				if (!authority.store.effectStarted(token, claims, identity, Date.now()))
+					throw new VerifiedRunError("authority");
 			},
 		});
 	} catch (error) {

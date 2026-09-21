@@ -109,6 +109,13 @@ function treeSortKey(name: string, directory: boolean): Buffer {
 	return Buffer.from(directory ? `${name}/` : name, "utf8");
 }
 
+/** Git trees only distinguish non-executable `100644` from executable `100755`. */
+function gitFileMode(mode: number): "100644" | "100755" {
+	const executable = (mode & 0o111) !== 0;
+	if (executable ? mode !== 0o755 : mode !== 0o644) throw new VerifiedRunError("mode_unrepresentable");
+	return executable ? "100755" : "100644";
+}
+
 /** Rebuild the manifest's exact directory hierarchy with `git mktree`; only regular files exist in candidates. */
 function buildTree(root: string, manifest: CandidateManifest, contents: ReadonlyMap<string, Buffer>): string {
 	const blobOids = new Map<string, string>();
@@ -156,7 +163,7 @@ function mintTree(
 		if (!oid) throw new VerifiedRunError("integrity");
 		lines.push({
 			key: treeSortKey(name, false),
-			line: `${file.mode & 0o111 ? "100755" : "100644"} blob ${oid}\t${name}`,
+			line: `${gitFileMode(file.mode)} blob ${oid}\t${name}`,
 		});
 	}
 	for (const directory of entries.dirs) {
@@ -167,9 +174,9 @@ function mintTree(
 	}
 	lines.sort((left, right) => Buffer.compare(left.key, right.key));
 	return oidOf(
-		runGit(root, ["mktree"], {
+		runGit(root, ["mktree", "-z"], {
 			write: true,
-			input: Buffer.from(lines.map((entry) => `${entry.line}\n`).join(""), "utf8"),
+			input: Buffer.from(lines.map((entry) => `${entry.line}\0`).join(""), "utf8"),
 		}).stdout,
 	);
 }
