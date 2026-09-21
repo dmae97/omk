@@ -57,7 +57,32 @@ export type RunEvent =
 			readonly adopted: readonly RunTaskCheckpoint[];
 	  }
 	| { readonly kind: "evaluated"; readonly receiptDigest: string; readonly verified: boolean }
-	| { readonly kind: "failed"; readonly code: string };
+	| { readonly kind: "failed"; readonly code: string }
+	| {
+			readonly kind: "publish_intent";
+			readonly commandId: string;
+			readonly candidateDigest: string;
+			readonly candidateOid: string;
+			readonly parentOid: string;
+			readonly targetRef: string;
+			readonly receiptDigest: string;
+			readonly policyDigest: string;
+			readonly generation: number;
+	  }
+	| {
+			readonly kind: "published";
+			readonly commandId: string;
+			readonly candidateOid: string;
+			readonly previousOid: string;
+	  }
+	| { readonly kind: "publish_failed"; readonly commandId: string; readonly code: string };
+
+/** The latest recovery command that opened a new generation, durable journal truth. */
+export interface RunRecoveryMarker {
+	readonly kind: "resumed" | "writer_restarted" | "tasks_retried";
+	readonly commandId: string;
+	readonly generation: number;
+}
 
 export interface RunProjection {
 	readonly runId: string;
@@ -67,10 +92,16 @@ export interface RunProjection {
 	readonly settlement: "open" | "draining" | "settled" | "quarantined";
 	readonly verification: "not_requested" | "verified" | "violated" | "inconclusive";
 	readonly application: "not_requested" | "candidate_ready";
+	readonly publication: "none" | "intent" | "accepted" | "failed" | "reconciliation_required";
+	readonly publicationCandidateOid: string | null;
+	readonly publicationRef: string | null;
+	readonly publicationCommandId: string | null;
+	readonly publicationFailure: string | null;
 	readonly candidateDigest: string | null;
 	readonly inputDigest: string | null;
 	readonly receiptDigest: string | null;
 	readonly failure: string | null;
+	readonly lastRecovery: RunRecoveryMarker | null;
 	readonly activeExecutionIds: readonly string[];
 	readonly writerOpen: boolean;
 	readonly modelRequests: number;

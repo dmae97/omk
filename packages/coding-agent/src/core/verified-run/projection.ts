@@ -27,10 +27,16 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 			settlement: "open",
 			verification: "not_requested",
 			application: "not_requested",
+			publication: "none",
+			publicationCandidateOid: null,
+			publicationRef: null,
+			publicationCommandId: null,
+			publicationFailure: null,
 			candidateDigest: null,
 			inputDigest: null,
 			receiptDigest: null,
 			failure: null,
+			lastRecovery: null,
 			activeExecutionIds: [],
 			writerOpen: false,
 			modelRequests: 0,
@@ -59,7 +65,14 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 	const commands = new Set([first.command.commandId]);
 	for (const event of events.slice(1)) {
 		const state = context.state;
-		if (state.execution === "failed" || state.receiptDigest) throw new VerifiedRunError("integrity");
+		if (state.execution === "failed") throw new VerifiedRunError("integrity");
+		if (
+			state.receiptDigest &&
+			event.kind !== "publish_intent" &&
+			event.kind !== "published" &&
+			event.kind !== "publish_failed"
+		)
+			throw new VerifiedRunError("integrity");
 		switch (event.kind) {
 			case "created":
 				throw new VerifiedRunError("integrity");
@@ -172,6 +185,48 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 					settlement: state.activeExecutionIds.length || state.writerOpen ? "quarantined" : "settled",
 				};
 				break;
+			case "publish_intent":
+				if (
+					state.verification !== "verified" ||
+					state.application !== "candidate_ready" ||
+					state.settlement !== "settled" ||
+					!state.receiptDigest ||
+					state.receiptDigest !== event.receiptDigest ||
+					state.candidateDigest !== event.candidateDigest ||
+					state.generation !== event.generation ||
+					event.targetRef !== "refs/omk/accepted" ||
+					state.publication === "intent" ||
+					state.publication === "accepted"
+				)
+					throw new VerifiedRunError("integrity");
+				context.state = {
+					...state,
+					publication: "intent",
+					publicationCandidateOid: event.candidateOid,
+					publicationRef: event.targetRef,
+					publicationCommandId: event.commandId,
+					publicationFailure: null,
+				};
+				break;
+			case "published":
+				if (
+					state.publication !== "intent" ||
+					state.publicationCommandId !== event.commandId ||
+					state.publicationCandidateOid !== event.candidateOid
+				)
+					throw new VerifiedRunError("integrity");
+				context.state = { ...state, publication: "accepted", publicationCommandId: null };
+				break;
+			case "publish_failed":
+				if (state.publication !== "intent" || state.publicationCommandId !== event.commandId)
+					throw new VerifiedRunError("integrity");
+				context.state = {
+					...state,
+					publication: event.code === "reconciliation-required" ? "reconciliation_required" : "failed",
+					publicationCommandId: null,
+					publicationFailure: event.code,
+				};
+				break;
 			default: {
 				const exhaustive: never = event;
 				throw new VerifiedRunError(String(exhaustive));
@@ -181,6 +236,7 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 	}
 	return Object.freeze({
 		...context.state,
+		lastRecovery: context.state.lastRecovery ? Object.freeze(context.state.lastRecovery) : null,
 		activeExecutionIds: Object.freeze([...context.state.activeExecutionIds]),
 		processes: Object.freeze(context.state.processes.map((item) => Object.freeze(item))),
 		tasks: Object.freeze(context.state.tasks.map((task) => Object.freeze(task))),

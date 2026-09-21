@@ -19,7 +19,11 @@ describe("verified run owned process boundary", () => {
 		const closed = once(foreign, "close");
 		try {
 			await once(foreign, "spawn");
-			const result = await executeSandbox({ ...request(), argv: ["/bin/sh", "-c", "printf started; sleep 30"] });
+			const result = await executeSandbox({
+				...request(),
+				argv: ["/bin/sh", "-c", "printf started; sleep 30"],
+				onReady: () => {},
+			});
 			expect(result.stdout.toString()).toBe("started");
 			expect(result.failure).toBe("deadline");
 			expect(foreign.exitCode).toBeNull();
@@ -34,6 +38,7 @@ describe("verified run owned process boundary", () => {
 		const result = await executeSandbox({
 			...request(),
 			argv: ["/bin/sh", "-c", "sleep 30 >/dev/null 2>&1 & printf finished"],
+			onReady: () => {},
 		});
 		expect(result.stdout.toString()).toBe("finished");
 		expect(result.failure).toBeNull();
@@ -41,8 +46,12 @@ describe("verified run owned process boundary", () => {
 	});
 
 	it("refuses an already cancelled request without starting a child", async () => {
-		await expect(executeSandbox({ ...request(), argv: ["/bin/true"], signal: AbortSignal.abort() })).rejects.toThrow(
-			/cancelled/,
-		);
+		await expect(
+			executeSandbox({ ...request(), argv: ["/bin/true"], signal: AbortSignal.abort(), onReady: () => {} }),
+		).rejects.toThrow(/cancelled/);
+	});
+
+	it("refuses dispatch without an identity gate instead of degrading to best effort", async () => {
+		await expect(executeSandbox({ ...request(), argv: ["/bin/true"] })).rejects.toThrow(/unsupported_boundary/);
 	});
 });

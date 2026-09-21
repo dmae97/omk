@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { MAX_VERIFIED_RUN_GENERATIONS, type RunResumeCommand } from "omk-protocol";
+import type { RunAuthority } from "./authority-runtime.ts";
 import { commandEnvironmentDigest, probeVerifiedSandbox } from "./broker.ts";
 import { loadCandidate } from "./candidate.ts";
 import { preflightCheckReceipts } from "./check-receipt.ts";
@@ -113,9 +114,9 @@ export function inspectRunRecovery(runPath: string): RecoveryInspection {
 export async function resumeFrozenCandidate(
 	runPath: string,
 	command: RunResumeCommand,
-	signal?: AbortSignal,
+	options: { readonly signal?: AbortSignal; readonly authority: RunAuthority },
 ): Promise<RunProjection> {
-	if (signal?.aborted) throw new VerifiedRunError("cancelled");
+	if (options.signal?.aborted) throw new VerifiedRunError("cancelled");
 	return withRecoveryLease(runPath, command, async ({ snapshot, journal }) => {
 		assertCandidateRecoverable(runPath, snapshot);
 		const first = snapshot.records[0]?.event;
@@ -123,13 +124,19 @@ export async function resumeFrozenCandidate(
 		preflightCheckReceipts(first.contract);
 		probeVerifiedSandbox();
 		assertCandidateRecoverable(runPath, snapshot);
-		if (signal?.aborted) throw new VerifiedRunError("cancelled");
+		if (options.signal?.aborted) throw new VerifiedRunError("cancelled");
 		journal.append({
 			kind: "resumed",
 			command,
 			observedMs: readRunClock().nowMs,
 			reconciledExecutionIds: snapshot.state.activeExecutionIds,
 		});
-		return verifyCandidate({ runPath, journal, contract: first.contract, ...(signal ? { signal } : {}) });
+		return verifyCandidate({
+			runPath,
+			journal,
+			contract: first.contract,
+			authority: options.authority,
+			...(options.signal ? { signal: options.signal } : {}),
+		});
 	});
 }

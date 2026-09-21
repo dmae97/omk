@@ -6,40 +6,13 @@ import type { RunContract } from "omk-protocol";
 import type { NamespaceIdentity } from "./namespace-identity.ts";
 import { identityFromSandboxInfo, PROCESS_GATE_ARGV } from "./process-gate.ts";
 import { digestBytes, digestObject, VerifiedRunError } from "./storage.ts";
-
-const BWRAP = "/usr/bin/bwrap";
-const SYSTEM_ARGS = [
-	"--unshare-all",
-	"--die-with-parent",
-	"--new-session",
-	"--cap-drop",
-	"ALL",
-	"--clearenv",
-	"--ro-bind",
-	"/usr",
-	"/usr",
-	"--symlink",
-	"usr/bin",
-	"/bin",
-	"--symlink",
-	"usr/lib",
-	"/lib",
-	"--symlink",
-	"usr/lib64",
-	"/lib64",
-	"--proc",
-	"/proc",
-	"--dev",
-	"/dev",
-	"--tmpfs",
-	"/tmp",
-	"--setenv",
-	"PATH",
-	"/usr/bin:/bin",
-	"--setenv",
-	"LANG",
-	"C.UTF-8",
-] as const;
+import {
+	awaitBoundaryDrained,
+	escalateTermination,
+	loadSupervisorBackend,
+	SUPERVISOR_BINARY,
+	SUPERVISOR_SYSTEM_ARGS,
+} from "./supervisor-adapter.ts";
 
 export interface SandboxExecution {
 	readonly workspace: string;
@@ -62,7 +35,7 @@ export interface SandboxOutcome {
 }
 
 export function commandEnvironmentDigest(contract: RunContract, driver: "legacy" | "gated-v1" = "legacy"): string {
-	if (process.platform !== "linux" || !existsSync(BWRAP)) throw new VerifiedRunError("unsupported");
+	if (process.platform !== "linux" || !existsSync(SUPERVISOR_BINARY)) throw new VerifiedRunError("unsupported");
 	let writers: readonly (readonly string[])[];
 	switch (contract.profile) {
 		case "linux-command-v1":
@@ -81,7 +54,7 @@ export function commandEnvironmentDigest(contract: RunContract, driver: "legacy"
 	}
 	const binaries = [
 		...new Set([
-			BWRAP,
+			SUPERVISOR_BINARY,
 			...writers.map((argv) => argv[0]),
 			...contract.checks.map((check) => check.argv[0]),
 			...(driver === "gated-v1" ? [PROCESS_GATE_ARGV[0]] : []),
@@ -99,15 +72,15 @@ export function commandEnvironmentDigest(contract: RunContract, driver: "legacy"
 		platform: process.platform,
 		architecture: process.arch,
 		kernel: release(),
-		sandbox: SYSTEM_ARGS,
+		sandbox: SUPERVISOR_SYSTEM_ARGS,
 		...(driver === "gated-v1" ? { gate: PROCESS_GATE_ARGV, infoFd: 3 } : {}),
 		binaries: materials,
 	});
 }
 
 export function probeVerifiedSandbox(): void {
-	if (process.platform !== "linux" || !existsSync(BWRAP)) throw new VerifiedRunError("unsupported");
-	const probe = spawnSync(BWRAP, [...SYSTEM_ARGS, "--", "/bin/true"], {
+	if (process.platform !== "linux" || !existsSync(SUPERVISOR_BINARY)) throw new VerifiedRunError("unsupported");
+	const probe = spawnSync(SUPERVISOR_BINARY, [...SUPERVISOR_SYSTEM_ARGS, "--", "/bin/true"], {
 		env: {},
 		timeout: 3000,
 		maxBuffer: 4096,
@@ -116,26 +89,37 @@ export function probeVerifiedSandbox(): void {
 	if (probe.error || probe.status !== 0) throw new VerifiedRunError("unsupported");
 }
 
-/** The only process dispatch port; close means the PID namespace and its inherited pipes have drained. */
+/**
+ * The only process dispatch port. Resolution requires two witnesses: the
+ * child's `close` (namespace init exited, inherited pipes drained) followed
+ * by an empty-member scan of the recorded PID namespace. A platform without
+ * the supervised namespace backend is refused, never degraded to best effort.
+ */
 export async function executeSandbox(request: SandboxExecution): Promise<SandboxOutcome> {
 	if (request.signal?.aborted) throw new VerifiedRunError("cancelled");
 	if (request.timeoutMs <= 0) throw new VerifiedRunError("deadline");
+	// Dispatch is only defined inside a supervised namespace boundary whose
+	// identity is committed before candidate code runs; there is no ungated lane.
+	if (!request.onReady) throw new VerifiedRunError("unsupported_boundary");
+	const backend = loadSupervisorBackend();
 	const started = performance.now();
 	const startedAt = new Date().toISOString();
 	const argv = [
-		...SYSTEM_ARGS,
+		...backend.args,
 		request.writable ? "--bind" : "--ro-bind",
 		request.workspace,
 		"/workspace",
 		"--chdir",
 		"/workspace",
-		...(request.onReady ? ["--info-fd", "3", "--", ...PROCESS_GATE_ARGV] : ["--"]),
+		"--info-fd",
+		"3",
+		"--",
+		...PROCESS_GATE_ARGV,
 		...request.argv,
 	];
 	return new Promise((resolve, reject) => {
-		const child = request.onReady
-			? spawn(BWRAP, argv, { env: {}, stdio: ["pipe", "pipe", "pipe", "pipe"] })
-			: spawn(BWRAP, argv, { env: {}, stdio: ["ignore", "pipe", "pipe"] });
+		const child = spawn(backend.binary, argv, { env: {}, stdio: ["pipe", "pipe", "pipe", "pipe"] });
+		let identity: NamespaceIdentity | undefined;
 		let gateFailed = false;
 		let gateError: unknown;
 		const stdout: Buffer[] = [];
@@ -147,7 +131,7 @@ export async function executeSandbox(request: SandboxExecution): Promise<Sandbox
 		const stop = (reason: string): void => {
 			if (finished || failure) return;
 			failure = reason;
-			child.kill("SIGKILL");
+			escalateTermination(child);
 			// When the gate already failed, surface its real cause rather than a
 			// generic unsettled — the close handler may still arrive first, and
 			// either path must report the same error.
@@ -174,33 +158,32 @@ export async function executeSandbox(request: SandboxExecution): Promise<Sandbox
 		};
 		child.stdout?.on("data", (chunk: Buffer) => collect(stdout, chunk));
 		child.stderr?.on("data", (chunk: Buffer) => collect(stderr, chunk));
-		if (request.onReady) {
-			const info = child.stdio[3];
-			let metadata = "";
-			if (!info || !child.stdin) {
-				gateFailed = true;
-				gateError = new VerifiedRunError("process_identity");
-				stop("process_identity");
-			} else {
-				child.stdin.on("error", () => stop("execution_failed"));
-				info.on("data", (chunk: Buffer) => {
-					metadata += chunk.toString("utf8");
-					if (metadata.length > 4096) stop("process_identity");
-				});
-				info.once("end", async () => {
-					if (finished || failure) return;
-					try {
-						await request.onReady?.(identityFromSandboxInfo(metadata));
-						if (performance.now() - started >= request.timeoutMs || request.signal?.aborted)
-							stop(request.signal?.aborted ? "cancelled" : "deadline");
-						if (!finished && !failure) child.stdin?.end("go\n");
-					} catch (error) {
-						gateFailed = true;
-						gateError = error;
-						stop("process_identity");
-					}
-				});
-			}
+		const info = child.stdio[3];
+		let metadata = "";
+		if (!info || !child.stdin) {
+			gateFailed = true;
+			gateError = new VerifiedRunError("process_identity");
+			stop("process_identity");
+		} else {
+			child.stdin.on("error", () => stop("execution_failed"));
+			info.on("data", (chunk: Buffer) => {
+				metadata += chunk.toString("utf8");
+				if (metadata.length > 4096) stop("process_identity");
+			});
+			info.once("end", async () => {
+				if (finished || failure) return;
+				try {
+					identity = identityFromSandboxInfo(metadata);
+					await request.onReady?.(identity);
+					if (performance.now() - started >= request.timeoutMs || request.signal?.aborted)
+						stop(request.signal?.aborted ? "cancelled" : "deadline");
+					if (!finished && !failure) child.stdin?.end("go\n");
+				} catch (error) {
+					gateFailed = true;
+					gateError = error;
+					stop("process_identity");
+				}
+			});
 		}
 		child.once("error", () => {
 			failure = "execution_failed";
@@ -210,21 +193,45 @@ export async function executeSandbox(request: SandboxExecution): Promise<Sandbox
 			clearTimeout(deadline);
 			clearTimeout(cleanup);
 			request.signal?.removeEventListener("abort", abort);
-			if (gateFailed) {
-				reject(gateError);
+			// `close` proves only the direct child exited and pipes drained. The
+			// termination witness is the recorded namespace reporting no members;
+			// until it does, this execution cannot settle and claims stay held.
+			const settle = (drained: "drained" | "populated" | "unknown"): void => {
+				if (gateFailed) {
+					reject(gateError);
+					return;
+				}
+				if (drained === "populated") {
+					reject(new VerifiedRunError("descendant_escape"));
+					return;
+				}
+				if (drained === "unknown") {
+					reject(new VerifiedRunError("termination_unverified"));
+					return;
+				}
+				const durationMs = Math.max(0, Math.round(performance.now() - started));
+				resolve({
+					stdout: Buffer.concat(stdout),
+					stderr: Buffer.concat(stderr),
+					exitCode,
+					failure: failure ?? (exitCode === 0 ? null : "execution_failed"),
+					startedAt,
+					// Project the finish instant from the start's wall reference and monotonic elapsed time.
+					finishedAt: new Date(Date.parse(startedAt) + durationMs).toISOString(),
+					durationMs,
+				});
+			};
+			if (!identity) {
+				// The gate never reported an identity: either the spawn itself failed
+				// or no supervised namespace was recorded. Nothing provably ran, so
+				// there is nothing to drain — settle on the child outcome alone.
+				settle("drained");
 				return;
 			}
-			const durationMs = Math.max(0, Math.round(performance.now() - started));
-			resolve({
-				stdout: Buffer.concat(stdout),
-				stderr: Buffer.concat(stderr),
-				exitCode,
-				failure: failure ?? (exitCode === 0 ? null : "execution_failed"),
-				startedAt,
-				// Project the finish instant from the start's wall reference and monotonic elapsed time.
-				finishedAt: new Date(Date.parse(startedAt) + durationMs).toISOString(),
-				durationMs,
-			});
+			awaitBoundaryDrained(identity, request.cleanupMs).then(
+				(drained) => settle(drained),
+				() => settle("unknown"),
+			);
 		});
 	});
 }

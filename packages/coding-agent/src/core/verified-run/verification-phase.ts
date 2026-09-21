@@ -27,7 +27,7 @@ export async function verifyCandidate(context: RunPhaseContext): Promise<RunProj
 		const { executionId, result, timeoutMs } = await executeRunCommand(
 			journal,
 			{ role: "verifier", argv: check.argv, workspace: fixed, deadline, claimId: check.claimId },
-			{ ...contract.budget, ...(context.signal ? { signal: context.signal } : {}) },
+			{ ...contract.budget, authority: context.authority, ...(context.signal ? { signal: context.signal } : {}) },
 		);
 		checks.push({
 			claimId: check.claimId,
