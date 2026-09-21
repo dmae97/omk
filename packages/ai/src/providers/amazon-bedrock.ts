@@ -138,12 +138,6 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream", BedrockOpt
 			config.endpoint = model.baseUrl;
 		}
 
-		// Pass custom endpoint when the model has a non-default baseUrl.
-		// This enables VPC endpoints, proxy setups, and custom routing.
-		if (model.baseUrl) {
-			config.endpoint = model.baseUrl;
-		}
-
 		// Resolve bearer token for Bedrock API key auth.
 		const bearerToken = options.bearerToken || process.env.AWS_BEARER_TOKEN_BEDROCK || undefined;
 		const useBearerToken = bearerToken !== undefined && process.env.AWS_BEDROCK_SKIP_AUTH !== "1";
