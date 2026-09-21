@@ -7,7 +7,7 @@ import type { SessionOwnerLease } from "../session-owner-lease.ts";
 import { parseRunEvent, projectRun, type RunEvent, type RunProjection } from "./events.ts";
 import { digestBytes, digestObject, readRegularFile, VerifiedRunError } from "./storage.ts";
 
-interface RecordV2 {
+export interface RunJournalRecord {
 	readonly version: 2;
 	readonly seq: number;
 	readonly generation: number;
@@ -16,7 +16,7 @@ interface RecordV2 {
 	readonly hash: string;
 }
 export interface JournalSnapshot {
-	readonly records: readonly RecordV2[];
+	readonly records: readonly RunJournalRecord[];
 	readonly state: RunProjection;
 	readonly bytesDigest: string;
 }
@@ -29,7 +29,7 @@ export function readRunJournal(runPath: string): JournalSnapshot | null {
 	const bytes = readRegularFile(path, 8388608);
 	if (!bytes.length || bytes.at(-1) !== 10) throw new VerifiedRunError("journal_truncated");
 	const lines = new TextDecoder("utf-8", { fatal: true }).decode(bytes).slice(0, -1).split("\n");
-	const records: RecordV2[] = [];
+	const records: RunJournalRecord[] = [];
 	let previous = "0".repeat(64);
 	let generation = 1;
 	for (const [index, line] of lines.entries()) {
@@ -92,7 +92,7 @@ export class VerifiedRunJournal {
 				previous: records.at(-1)?.hash ?? "0".repeat(64),
 				event,
 			};
-			const record: RecordV2 = { ...material, hash: digestObject(material) };
+			const record: RunJournalRecord = { ...material, hash: digestObject(material) };
 			try {
 				this.persist(path, Buffer.from(`${canonicalJson(record)}\n`));
 				const next = readRunJournal(this.runPath);

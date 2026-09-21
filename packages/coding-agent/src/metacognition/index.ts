@@ -7,6 +7,7 @@
  * and learned scores never relax a required approval or check.
  */
 
+export * from "./bridge-result.ts";
 export * from "./calibration.ts";
 export * from "./calibration-selective.ts";
 export * from "./checkpoint.ts";

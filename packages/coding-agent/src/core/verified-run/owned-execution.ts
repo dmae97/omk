@@ -19,7 +19,12 @@ export interface OwnedRunResult {
 	readonly timeoutMs: number;
 }
 
-/** The mandatory durable intent boundary is shared by command and AgentSession writers. */
+/**
+ * Mandatory durable dispatch intent, shared by command and AgentSession
+ * writers. There is no ungated execution lane: a journal without an anchored
+ * budget cannot commit a process identity, so the supervisor boundary would
+ * be unprovable and must refuse dispatch.
+ */
 export async function executeRunCommand(
 	journal: VerifiedRunJournal,
 	request: OwnedRunCommand,
@@ -31,6 +36,10 @@ export async function executeRunCommand(
 ): Promise<OwnedRunResult> {
 	if (Math.floor(request.deadline - performance.now()) <= 0) throw new VerifiedRunError("deadline");
 	if (policy.signal?.aborted) throw new VerifiedRunError("cancelled");
+	// The supervisor boundary only exists once a budget (and therefore the
+	// gated driver) is anchored. Dispatching without it would run code whose
+	// termination cannot be witnessed — refuse rather than degrade.
+	if (!journal.state.budget) throw new VerifiedRunError("unsupported_boundary");
 	const generation = journal.state.generation;
 	const executionId = randomUUID();
 	journal.append({
@@ -54,14 +63,10 @@ export async function executeRunCommand(
 		cleanupMs: policy.cleanupMs,
 		maxOutputBytes: policy.maxOutputBytes,
 		...(policy.signal ? { signal: policy.signal } : {}),
-		...(journal.state.budget
-			? {
-					onReady: (identity: NamespaceIdentity) => {
-						if (journal.state.generation !== generation) throw new VerifiedRunError("stale_generation");
-						journal.append({ kind: "process_ready", executionId, identity });
-					},
-				}
-			: {}),
+		onReady: (identity: NamespaceIdentity) => {
+			if (journal.state.generation !== generation) throw new VerifiedRunError("stale_generation");
+			journal.append({ kind: "process_ready", executionId, identity });
+		},
 	});
 	if (journal.state.generation !== generation) throw new VerifiedRunError("stale_generation");
 	journal.append({ kind: "exited", executionId, failure: request.role === "writer" ? result.failure : null });

@@ -2,17 +2,23 @@
  * Runtime bridge tests: ClaimNode/ObservationNode projection into kernel
  * inputs, checkpoint wiring, and the honesty boundary — model narrative and
  * inadmissible sources never close a required obligation.
+ *
+ * WP05: the bridge returns mapped|partial|rejected; these tests use fully
+ * provenanced host observations so the happy paths stay `mapped`.
  */
 
-import type { ClaimNode, ObservationNode } from "omk-protocol";
+import type { ClaimNode } from "omk-protocol";
 import { describe, expect, it } from "vitest";
 import {
+	type BridgeObservation,
 	checkpoint,
 	inspectKnowledge,
+	mapClaim,
+	mapObservation,
+	type ObservationMapContext,
 	type RuntimeBridgeInput,
+	type RuntimeBridgeOutput,
 	sourceIdentities,
-	toKernelClaim,
-	toKernelObservation,
 	toMetaState,
 } from "../src/metacognition/index.ts";
 
@@ -26,13 +32,19 @@ const claim = (over: Partial<ClaimNode> = {}): ClaimNode => ({
 	invalidationKeys: ["ordering-check"],
 	...over,
 });
-const obs = (over: Partial<ObservationNode> = {}): ObservationNode => ({
+const obs = (over: Partial<BridgeObservation> = {}): BridgeObservation => ({
 	observationId: "o1",
 	claimIds: ["c1"],
 	polarity: "supports",
 	source: "deterministic_validator",
 	sourceRoot: "src",
 	environmentDigest: "env-1",
+	receiptId: "r1",
+	checkId: "ordering-check",
+	sequence: 1,
+	observedAtMs: 900,
+	validUntil: "1970-01-01T00:00:01.500Z",
+	binding: "cand-1@env-1",
 	...over,
 });
 const bridgeInput = (over: Partial<RuntimeBridgeInput> = {}): RuntimeBridgeInput => ({
@@ -69,38 +81,73 @@ const bridgeInput = (over: Partial<RuntimeBridgeInput> = {}): RuntimeBridgeInput
 	...over,
 });
 
+const mapCtx = (
+	floors: ReadonlyMap<string, ClaimNode["trustFloor"]> = new Map([["c1", "deterministic_validator"]]),
+): ObservationMapContext => {
+	const m = mapClaim(claim(), "after-change", "cand-1@env-1");
+	if (m.status === "rejected") throw new Error("claim fixture rejected");
+	return {
+		binding: "cand-1@env-1",
+		nowMs: 1000,
+		claimById: new Map([["c1", m.claim]]),
+		claimFloors: floors,
+		sources: sourceIdentities(),
+	};
+};
+
+const bridged = (input: RuntimeBridgeInput): RuntimeBridgeOutput => {
+	const out = toMetaState(input);
+	if (out.status === "rejected") throw new Error(`bridge rejected: ${out.reason}`);
+	return out.value;
+};
+
 describe("runtime bridge", () => {
 	it("projects a leaf claim into a kernel claim bound to the scope fingerprint", () => {
-		const k = toKernelClaim(claim(), "after-change", "cand-1@env-1");
-		expect(k.id).toBe("c1");
-		expect(k.required).toBe(true);
-		expect(k.requiredCheckIds).toEqual(["ordering-check"]);
+		const m = mapClaim(claim(), "after-change", "cand-1@env-1");
+		expect(m.status).toBe("mapped");
+		if (m.status === "rejected") return;
+		expect(m.claim.id).toBe("c1");
+		expect(m.claim.required).toBe(true);
+		expect(m.claim.requiredCheckIds).toEqual(["ordering-check"]);
 	});
 	it("projects a receipt-backed witness into a check observation", () => {
-		const o = toKernelObservation(obs({ receiptId: "r1" }), "cand-1@env-1", 1000);
+		const r = mapObservation(obs(), mapCtx());
+		expect(r.status).toBe("mapped");
+		if (r.status !== "mapped") return;
+		const o = r.observations[0]!;
 		expect(o.kind).toBe("check");
 		if (o.kind === "check") expect(o.verdict).toBe("pass");
 	});
 	it("model narrative becomes a decision observation, never runner truth", () => {
-		const o = toKernelObservation(obs({ source: "model_narrative" }), "cand-1@env-1", 1000);
-		expect(o.kind).toBe("decision");
+		const r = mapObservation(
+			obs({ receiptId: undefined, checkId: undefined, sequence: undefined, source: "model_narrative" }),
+			mapCtx(new Map([["c1", "model_narrative"]])),
+		);
+		expect(r.status).toBe("mapped");
+		if (r.status !== "mapped") return;
+		expect(r.observations[0]!.kind).toBe("decision");
 	});
-	it("compound claims are excluded from kernel claims", () => {
-		const { claims } = toMetaState(
+	it("compound claims are excluded from kernel claims and declared unmapped", () => {
+		const out = toMetaState(
 			bridgeInput({
 				claims: [claim(), claim({ claimId: "parent", satisfaction: { rule: "all", inputs: ["c1"] } })],
 			}),
 		);
-		expect(claims.map((c) => c.id)).toEqual(["c1"]);
+		expect(out.status).toBe("partial");
+		if (out.status !== "partial") return;
+		expect(out.value.claims.map((c) => c.id)).toEqual(["c1"]);
+		expect(out.loss.unmappedClaims).toContain("claim:parent");
 	});
 	it("a passing host check closes the required predicate", () => {
-		const { claims, observations } = toMetaState(bridgeInput({ observations: [obs({ receiptId: "r1" })] }));
+		const out = toMetaState(bridgeInput({ observations: [obs()] }));
+		expect(out.status).toBe("mapped");
+		if (out.status !== "mapped") return;
 		const report = inspectKnowledge({
 			stage: "after-change",
 			requiresAssessment: true,
 			nowMs: 1000,
-			claims,
-			observations,
+			claims: out.value.claims,
+			observations: out.value.observations,
 			sources: sourceIdentities(),
 			trustedRunnerIds: ["deterministic_validator"],
 			decisionActorIds: ["owner"],
@@ -108,17 +155,23 @@ describe("runtime bridge", () => {
 		expect(report.state).toBe("supported");
 	});
 	it("a model narrative alone cannot close the same predicate", () => {
-		const { claims, observations } = toMetaState(
+		const out = toMetaState(
 			bridgeInput({
-				observations: [obs({ source: "model_narrative" })],
+				observations: [
+					obs({ source: "model_narrative", receiptId: undefined, checkId: undefined, sequence: undefined }),
+				],
 			}),
 		);
+		// The witness is below the claim's trust floor: the bridge declares the
+		// loss and emits nothing for it.
+		expect(out.status).toBe("partial");
+		if (out.status !== "partial") return;
 		const report = inspectKnowledge({
 			stage: "after-change",
 			requiresAssessment: true,
 			nowMs: 1000,
-			claims,
-			observations,
+			claims: out.value.claims,
+			observations: out.value.observations,
 			sources: sourceIdentities(),
 			trustedRunnerIds: ["deterministic_validator"],
 			decisionActorIds: ["owner"],
@@ -126,7 +179,7 @@ describe("runtime bridge", () => {
 		expect(report.state).toBe("gaps");
 	});
 	it("checkpoint on a bridged state returns an action and honest finish", () => {
-		const { state } = toMetaState(bridgeInput());
+		const { state } = bridged(bridgeInput());
 		const result = checkpoint({
 			state,
 			nowMs: 1000,
@@ -142,7 +195,7 @@ describe("runtime bridge", () => {
 		expect(["continue", "inconclusive", "verified-completion"]).toContain(result.finish.kind);
 	});
 	it("interrupt reason forces the safety branch", () => {
-		const { state } = toMetaState(bridgeInput({ interruptionReason: "cancelled" }));
+		const { state } = bridged(bridgeInput({ interruptionReason: "cancelled" }));
 		const result = checkpoint({
 			state,
 			nowMs: 1000,

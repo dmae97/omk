@@ -2,6 +2,7 @@ import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import {
 	parseRunContract,
+	parseRunPublishCommand,
 	parseRunResumeCommand,
 	parseRunStartCommand,
 	parseRunTaskRetryCommand,
@@ -10,15 +11,18 @@ import {
 } from "omk-protocol";
 import { ensureDurableDirectorySync } from "../durable-file-io.ts";
 import { acquireSessionOwnerLeaseSync } from "../session-owner-lease.ts";
+import { type AuthorityJournalInspection, AuthorityStore, authorityStorePath } from "./authority-store.ts";
 import { commandEnvironmentDigest, probeVerifiedSandbox } from "./broker.ts";
 import { captureCandidate, materializeCandidate, storeCandidate } from "./candidate.ts";
 import { preflightCheckReceipts } from "./check-receipt.ts";
 import { inspectTaskRecovery, retryDagTasks, type TaskRecoveryInspection } from "./dag-recovery.ts";
 import { createRunIssuer, readRunEvidence, type VerifiedRunEvidence } from "./evidence.ts";
-import { journalPath, readRunJournal, VerifiedRunJournal } from "./journal.ts";
+import { journalPath, type RunJournalRecord, readRunJournal, VerifiedRunJournal } from "./journal.ts";
 import type { RunPhaseContext } from "./phase-context.ts";
 import { inspectRunRecovery, type RecoveryInspection, resumeFrozenCandidate } from "./recovery.ts";
 import { anchorRunBudget, readRunClock } from "./recovery-clock.ts";
+import { type PublishOptions, publishVerifiedRun } from "./run-publish.ts";
+import { type AuthorityStatus, deriveAuthorityStatus, deriveRunStatus, type RunStatus } from "./run-status.ts";
 import type { RunProjection } from "./run-types.ts";
 import type { VerifiedRunRuntime } from "./session-port.ts";
 import {
@@ -49,6 +53,13 @@ export interface VerifiedRunPlan {
 	readonly executionRequested: false;
 }
 
+/** Read-only view of the durable authority store under this coordinator's state root. */
+export interface AuthorityStoreView {
+	readonly path: string;
+	readonly status: AuthorityStatus;
+	readonly records: AuthorityJournalInspection["records"];
+}
+
 export function planVerifiedRun(input: unknown): VerifiedRunPlan {
 	const contract = parseRunContract(input);
 	const snapshot = captureCandidate(contract.workspace.root, contract.budget);
@@ -77,6 +88,42 @@ export class RunCoordinator {
 		if (!journal || journal.state.runId !== runId) throw new VerifiedRunError("missing_run");
 		if (journal.state.receiptDigest) this.evidence(runId);
 		return journal.state;
+	}
+
+	/**
+	 * Derived lifecycle/recovery status of a run — same journal truth as
+	 * `inspect`, projected into the machine-readable `RunStatus` view
+	 * (lifecycle token, completion ladder, unresolved concerns, recovery
+	 * command hints). Never reports a recovered/quarantined run as clean.
+	 */
+	status(runId: string): RunStatus {
+		return deriveRunStatus(this.inspect(runId));
+	}
+
+	/** The run's hashed journal records — the event stream the projection replays. */
+	events(runId: string): readonly RunJournalRecord[] {
+		const journal = readRunJournal(stateRunPath(this.stateRoot, runId));
+		if (!journal || journal.state.runId !== runId) throw new VerifiedRunError("missing_run");
+		if (journal.state.receiptDigest) this.evidence(runId);
+		return journal.records;
+	}
+
+	/**
+	 * The durable authority store under this state root: which grant holds
+	 * which claims, why it is quarantined, and whether termination was
+	 * witnessed. Read-only; a missing store reads as an empty projection.
+	 */
+	inspectAuthority(): AuthorityStoreView {
+		const path = authorityStorePath(this.stateRoot);
+		const inspection = AuthorityStore.inspectJournal(path);
+		return Object.freeze({
+			path,
+			status: deriveAuthorityStatus(
+				inspection.state,
+				inspection.records.map((record) => record.event),
+			),
+			records: inspection.records,
+		});
 	}
 
 	inspectRecovery(runId: string): RecoveryInspection {
@@ -129,6 +176,13 @@ export class RunCoordinator {
 		const bytes = readRegularFile(join(stateRunPath(this.stateRoot, runId), "blobs", file.digest), file.size);
 		if (digestBytes(bytes) !== file.digest || bytes.length !== file.size) throw new VerifiedRunError("integrity");
 		return bytes;
+	}
+
+	async publish(input: unknown, approval: VerifiedRunApproval, options: PublishOptions = {}): Promise<RunProjection> {
+		const command = parseRunPublishCommand(input);
+		if (approval.approvedContractDigest !== command.contractDigest) throw new VerifiedRunError("approval");
+		if (approval.signal?.aborted) throw new VerifiedRunError("cancelled");
+		return publishVerifiedRun(stateRunPath(this.stateRoot, command.runId), command, options);
 	}
 
 	async resume(input: unknown, approval: VerifiedRunApproval): Promise<RunProjection> {

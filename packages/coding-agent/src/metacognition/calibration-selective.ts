@@ -92,7 +92,12 @@ export function temperatureScale(
 		"temperature must be positive",
 	);
 	ensure(typeof epsilon === "number" && epsilon > 0 && epsilon < 1, "epsilon must be in (0,1)");
-	const raised = probabilities.map((p) => Math.max(p, epsilon) ** (1 / temperature));
+	// Subtract before dividing. Even the smallest positive T keeps a maximum at
+	// exp(0) = 1; other terms may safely underflow to zero, never all terms.
+	const logs = probabilities.map((p) => Math.log(Math.max(p, epsilon)));
+	let maximum = Number.NEGATIVE_INFINITY;
+	for (const value of logs) maximum = Math.max(maximum, value);
+	const raised = logs.map((value) => Math.exp((value - maximum) / temperature));
 	const total = raised.reduce((sum, value) => sum + value, 0);
 	ensure(total > 0 && Number.isFinite(total), "temperature scaling produced a degenerate distribution");
 	return raised.map((value) => value / total);
@@ -122,10 +127,11 @@ export function negativeLogLoss(
 ): number {
 	assertBinaryPaired(forecasts, outcomes);
 	ensure(typeof clip === "number" && clip > 0 && clip < 0.5, "clip must be in (0,0.5)");
+	ensure(1 - clip < 1, "clip is too small to represent at the upper boundary");
 	let total = 0;
 	for (const [i, raw] of forecasts.entries()) {
 		const q = Math.min(1 - clip, Math.max(clip, raw));
-		total -= outcomes[i] === 1 ? Math.log(q) : Math.log(1 - q);
+		total -= outcomes[i] === 1 ? Math.log(q) : Math.log1p(-q);
 	}
 	return total / forecasts.length;
 }

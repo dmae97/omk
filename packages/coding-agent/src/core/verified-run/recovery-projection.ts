@@ -101,6 +101,11 @@ export function reduceRecoveryEvent(
 		activeExecutionIds: [],
 		processes: [],
 		failure: null,
+		lastRecovery: {
+			kind: event.kind,
+			commandId: command.commandId,
+			generation: state.generation + 1,
+		},
 		lastClockMs: event.observedMs,
 	};
 }

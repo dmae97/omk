@@ -2,16 +2,19 @@ import { join } from "node:path";
 import { parseRunContract, RunContractError, VERIFIED_COMMAND_VERSION } from "omk-protocol";
 import { getAgentDir } from "../config.ts";
 import { planVerifiedRun, RunCoordinator } from "../core/verified-run/coordinator.ts";
+import { publishPolicyDigest } from "../core/verified-run/run-publish.ts";
 import type { VerifiedRunRuntime } from "../core/verified-run/session-port.ts";
 import { digestBytes, readJson, VerifiedRunError } from "../core/verified-run/storage.ts";
 
 const USAGE = `Usage: omk run plan --contract FILE [--json]
        omk run start --contract FILE --approve DIGEST --command-id ID [--state-dir DIR]
-       omk run inspect|evidence ID [--state-dir DIR] [--json]
+       omk run inspect|evidence|status|events ID [--state-dir DIR] [--json]
+       omk run authority [--state-dir DIR] [--json]
        omk run inspect ID --recovery|--writer-recovery|--task-recovery [--state-dir DIR]
        omk run retry-tasks ID --execute --tasks ID[,ID...]|- --approve DIGEST --base DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
        omk run restart-writer ID --execute --approve DIGEST --base DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
        omk run resume ID --execute --approve DIGEST --candidate DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
+       omk run publish ID --execute --contract FILE --approve DIGEST --candidate DIGEST --parent OID --receipt DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
        omk run artifact ID --candidate DIGEST --path PATH [--state-dir DIR]
 The opt-in command, scripted-agent and bounded command-DAG profiles never apply changes to the original workspace.
 Resume rechecks a fixed candidate. Writer/task recovery preserves input checkpoints and budgets. Command-DAG concurrency defaults to 1 and supports an explicit cap of 2. Plan amendment, managed apply and TUI/RPC control are not implemented.`;
@@ -23,7 +26,11 @@ interface Parsed {
 		| "resume"
 		| "restart-writer"
 		| "retry-tasks"
+		| "publish"
 		| "inspect"
+		| "status"
+		| "events"
+		| "authority"
 		| "evidence"
 		| "artifact";
 	readonly id: string | undefined;
@@ -38,12 +45,16 @@ function parse(args: readonly string[]): Parsed {
 		action !== "resume" &&
 		action !== "restart-writer" &&
 		action !== "retry-tasks" &&
+		action !== "publish" &&
 		action !== "inspect" &&
+		action !== "status" &&
+		action !== "events" &&
+		action !== "authority" &&
 		action !== "evidence" &&
 		action !== "artifact"
 	)
 		throw new VerifiedRunError("usage");
-	const hasId = action !== "plan" && action !== "start";
+	const hasId = action !== "plan" && action !== "start" && action !== "authority";
 	const id = hasId ? args[2] : undefined;
 	if (hasId && (!id || id.startsWith("--"))) throw new VerifiedRunError("usage");
 	const allowed =
@@ -63,11 +74,25 @@ function parse(args: readonly string[]): Parsed {
 							"--state-dir",
 							"--json",
 						]
-					: action === "artifact"
-						? ["--candidate", "--path", "--state-dir", "--json"]
-						: action === "inspect"
-							? ["--state-dir", "--json", "--recovery", "--writer-recovery", "--task-recovery"]
-							: ["--state-dir", "--json"];
+					: action === "publish"
+						? [
+								"--execute",
+								"--contract",
+								"--approve",
+								"--candidate",
+								"--parent",
+								"--receipt",
+								"--revision",
+								"--generation",
+								"--command-id",
+								"--state-dir",
+								"--json",
+							]
+						: action === "artifact"
+							? ["--candidate", "--path", "--state-dir", "--json"]
+							: action === "inspect"
+								? ["--state-dir", "--json", "--recovery", "--writer-recovery", "--task-recovery"]
+								: ["--state-dir", "--json"];
 	const flags = new Map<string, string>();
 	for (let index = hasId ? 3 : 2; index < args.length; index++) {
 		const flag = args[index];
@@ -184,6 +209,30 @@ export async function runVerifiedRunCli(
 				exitCode = state.application === "candidate_ready" ? 0 : 1;
 				break;
 			}
+			case "publish": {
+				required(parsed, "--execute");
+				const approvedContractDigest = required(parsed, "--approve");
+				const contract = parseRunContract(readJson(required(parsed, "--contract")));
+				const state = await coordinator.publish(
+					{
+						schemaVersion: VERIFIED_COMMAND_VERSION,
+						kind: "publish",
+						runId: parsed.id ?? "",
+						commandId: required(parsed, "--command-id"),
+						expectedRevision: Number(required(parsed, "--revision")),
+						expectedGeneration: Number(required(parsed, "--generation")),
+						contractDigest: approvedContractDigest,
+						candidateDigest: required(parsed, "--candidate"),
+						parentOid: required(parsed, "--parent"),
+						receiptDigest: required(parsed, "--receipt"),
+						policyDigest: publishPolicyDigest(contract),
+					},
+					{ approvedContractDigest },
+				);
+				result = state;
+				exitCode = state.publication === "accepted" ? 0 : 1;
+				break;
+			}
 			case "inspect":
 				result = parsed.flags.has("--recovery")
 					? coordinator.inspectRecovery(parsed.id ?? "")
@@ -192,6 +241,20 @@ export async function runVerifiedRunCli(
 						: parsed.flags.has("--task-recovery")
 							? coordinator.inspectTaskRecovery(parsed.id ?? "")
 							: coordinator.inspect(parsed.id ?? "");
+				break;
+			case "status": {
+				const status = coordinator.status(parsed.id ?? "");
+				result = status;
+				// Same truth the start/publish exit codes encode: a recovered,
+				// quarantined or unverified run is never a clean exit 0.
+				exitCode = status.cleanSuccess ? 0 : 1;
+				break;
+			}
+			case "events":
+				result = coordinator.events(parsed.id ?? "");
+				break;
+			case "authority":
+				result = coordinator.inspectAuthority();
 				break;
 			case "evidence":
 				result = coordinator.evidence(parsed.id ?? "");

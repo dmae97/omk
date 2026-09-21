@@ -24,6 +24,12 @@ function integer(value: unknown): number {
 	if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new VerifiedRunError("integrity");
 	return value;
 }
+function oid(value: unknown, zeroAllowed: boolean): string {
+	if (typeof value !== "string" || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value))
+		throw new VerifiedRunError("integrity");
+	if (!zeroAllowed && /^0+$/.test(value)) throw new VerifiedRunError("integrity");
+	return value;
+}
 
 function checkpoint(raw: unknown): RunTaskCheckpoint {
 	if (typeof raw !== "object" || raw === null) throw new VerifiedRunError("integrity");
@@ -145,6 +151,31 @@ export function parseRunEvent(raw: unknown): RunEvent {
 		case "evaluated":
 			if (typeof value.verified !== "boolean") throw new VerifiedRunError("integrity");
 			return { kind: value.kind, receiptDigest: digest(value.receiptDigest), verified: value.verified };
+		case "publish_intent": {
+			const candidateOid = oid(value.candidateOid, false);
+			const parentOid = oid(value.parentOid, true);
+			if (value.targetRef !== "refs/omk/accepted" || parentOid.length !== candidateOid.length)
+				throw new VerifiedRunError("integrity");
+			return {
+				kind: value.kind,
+				commandId: text(value.commandId),
+				candidateDigest: digest(value.candidateDigest),
+				candidateOid,
+				parentOid,
+				targetRef: value.targetRef,
+				receiptDigest: digest(value.receiptDigest),
+				policyDigest: digest(value.policyDigest),
+				generation: integer(value.generation),
+			};
+		}
+		case "published": {
+			const candidateOid = oid(value.candidateOid, false);
+			const previousOid = oid(value.previousOid, true);
+			if (previousOid.length !== candidateOid.length) throw new VerifiedRunError("integrity");
+			return { kind: value.kind, commandId: text(value.commandId), candidateOid, previousOid };
+		}
+		case "publish_failed":
+			return { kind: value.kind, commandId: text(value.commandId), code: text(value.code) };
 		case "failed":
 			return { kind: value.kind, code: text(value.code) };
 		default:

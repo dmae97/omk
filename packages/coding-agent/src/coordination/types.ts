@@ -24,7 +24,7 @@ export function sequence(value: unknown): Sequence {
 }
 
 export function nextSequence(value: Sequence): Sequence {
-	return String(BigInt(value) + 1n) as Sequence;
+	return sequence(String(BigInt(sequence(value)) + 1n));
 }
 
 /**

@@ -16,6 +16,7 @@
  */
 
 import type { Sequence } from "./types.ts";
+import { sequence } from "./types.ts";
 
 export type OperationState =
 	| "created"
@@ -87,6 +88,16 @@ export interface PermitInput {
  * exhausted" would send the operator looking for the wrong problem.
  */
 export function evaluatePermit(input: PermitInput): PermitDecision {
+	for (const value of [input.cancelled, input.policyAllowed, input.observationValid, input.budgetAvailable]) {
+		if (typeof value !== "boolean") throw new TypeError("permit flags must be booleans");
+	}
+	for (const value of [input.intentDigest, input.approvalDigest, input.policyVersion, input.approvalPolicyVersion]) {
+		if (typeof value !== "string" || value.length === 0 || value.length > 4096) {
+			throw new TypeError("permit binding must be a bounded non-empty string");
+		}
+	}
+	sequence(input.leaseGeneration);
+	sequence(input.currentLeaseGeneration);
 	if (input.cancelled) return { allowed: false, reason: "cancelled" };
 	if (!input.policyAllowed) return { allowed: false, reason: "policy-denied" };
 	if (input.approvalDigest !== input.intentDigest || input.approvalPolicyVersion !== input.policyVersion) {
@@ -104,6 +115,7 @@ export class OperationLifecycle {
 	private readonly states: OperationState[] = ["created"];
 	private observations: readonly ObservationBinding[] = [];
 	private selected: ObservationBinding | undefined;
+	private authorizedPermit: Readonly<PermitInput> | undefined;
 	private hasDispatched = false;
 	private cancelRequested = false;
 
@@ -146,7 +158,23 @@ export class OperationLifecycle {
 	observe(candidates: readonly ObservationBinding[]): void {
 		this.assertOpen();
 		if (candidates.length === 0) throw new TypeError("observation must yield at least one candidate");
-		this.observations = [...candidates];
+		if (this.current !== "created" && this.current !== "observed") {
+			throw new Error("observe requires a created or observed operation");
+		}
+		const snapshots = candidates.map((candidate) => {
+			for (const value of [candidate.observationId, candidate.actionId, candidate.targetId]) {
+				if (typeof value !== "string" || value.length === 0 || value.length > 4096) {
+					throw new TypeError("observation binding must be a bounded non-empty string");
+				}
+			}
+			return Object.freeze({
+				observationId: candidate.observationId,
+				actionId: candidate.actionId,
+				targetId: candidate.targetId,
+				documentGeneration: sequence(candidate.documentGeneration),
+			});
+		});
+		this.observations = Object.freeze(snapshots);
 		this.enter("observed");
 	}
 
@@ -155,6 +183,9 @@ export class OperationLifecycle {
 		this.assertOpen();
 		if (this.observations.length === 0) {
 			throw new Error("cannot propose before observe: the candidate set is unbound");
+		}
+		if (this.current !== "observed" && this.current !== "proposed") {
+			throw new Error("propose requires an observed or proposed operation");
 		}
 		const match = this.observations.find(
 			(o) =>
@@ -176,6 +207,7 @@ export class OperationLifecycle {
 			this.applyPreDispatchDenial(decision.reason);
 			return decision;
 		}
+		this.authorizedPermit = Object.freeze({ ...permit });
 		this.enter("authorized");
 		return decision;
 	}
@@ -196,6 +228,19 @@ export class OperationLifecycle {
 			this.applyPreDispatchDenial(decision.reason);
 			return decision;
 		}
+		const approved = this.authorizedPermit;
+		if (
+			approved === undefined ||
+			approved.intentDigest !== permit.intentDigest ||
+			approved.approvalDigest !== permit.approvalDigest ||
+			approved.policyVersion !== permit.policyVersion ||
+			approved.approvalPolicyVersion !== permit.approvalPolicyVersion
+		) {
+			return { allowed: false, reason: "approval-mismatch" };
+		}
+		if (approved.leaseGeneration !== permit.leaseGeneration) {
+			return { allowed: false, reason: "stale-lease" };
+		}
 		this.hasDispatched = true;
 		this.enter("dispatched");
 		return decision;
@@ -211,14 +256,20 @@ export class OperationLifecycle {
 	/** Driver-reported outcome. Only valid once the command actually left. */
 	settle(outcome: SettledOutcome): void {
 		if (!this.hasDispatched) throw new Error("settle requires a dispatched operation");
-		if (this.current === "verified" || this.current === "inspection-required") {
-			throw new Error("outcome already verified");
+		if (outcome !== "applied" && outcome !== "failed-confirmed" && outcome !== "outcome-unknown") {
+			throw new TypeError("invalid settled outcome");
+		}
+		// Exact duplicate reports are idempotent. A final result cannot be revised.
+		if (this.current === outcome) return;
+		if (this.current !== "dispatched" && this.current !== "outcome-unknown") {
+			throw new Error("settle requires an unresolved dispatched outcome");
 		}
 		this.enter(outcome);
 	}
 
 	/** Explicit postcondition check. A driver's return value is not this. */
 	verify(postconditionMet: boolean): void {
+		if (typeof postconditionMet !== "boolean") throw new TypeError("postcondition must be a boolean");
 		if (this.current !== "applied") throw new Error("verify requires an applied outcome");
 		this.enter(postconditionMet ? "verified" : "inspection-required");
 	}

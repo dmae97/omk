@@ -56,6 +56,7 @@ export {
 	type RunDagWriter,
 	runDagAncestors,
 } from "./run-dag.ts";
+export { parseRunPublishCommand, type RunPublishCommand, runOid } from "./run-publish.ts";
 export { MAX_VERIFIED_RUN_GENERATIONS, parseRunResumeCommand, type RunResumeCommand } from "./run-resume.ts";
 export { parseRunTaskRetryCommand, type RunTaskRetryCommand } from "./run-task-retry.ts";
 export { parseRunWriterRestartCommand, type RunWriterRestartCommand } from "./run-writer-restart.ts";
