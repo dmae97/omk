@@ -43,8 +43,13 @@ export function canonicalClaim(input: ResourceClaimInput): ResourceClaim {
 	if (!CLAIM_ACCESS.has(input.access)) {
 		throw new TypeError(`unsupported claim access: ${String(input.access)}`);
 	}
-	if (typeof input.instanceId !== "string" || input.instanceId.length === 0) {
-		throw new TypeError("claim instanceId must be a non-empty string");
+	if (
+		typeof input.instanceId !== "string" ||
+		input.instanceId.length === 0 ||
+		input.instanceId.length > MAX_KEY_LENGTH ||
+		input.instanceId.includes("\u0000")
+	) {
+		throw new TypeError("claim instanceId must be a bounded non-empty string without NUL");
 	}
 	assertCanonicalKey(input.canonicalKey);
 	return Object.freeze({
@@ -61,6 +66,9 @@ function assertCanonicalKey(key: unknown): asserts key is string {
 		throw new TypeError("claim canonicalKey must be a bounded non-empty string");
 	}
 	if (key.startsWith("/")) throw new TypeError("claim canonicalKey must be relative");
+	if (key.includes("\u0000") || key.includes("\\")) {
+		throw new TypeError("claim canonicalKey must use slash components without NUL");
+	}
 	for (const part of key.split("/")) {
 		if (part === "" || part === "." || part === "..") {
 			throw new TypeError(`claim canonicalKey is not canonical: ${key}`);
@@ -85,10 +93,10 @@ export function claimSetsConflict(a: readonly ResourceClaim[], b: readonly Resou
 
 /** Stable key for exact-set comparison when binding a start to its reservation. */
 export function claimKey(claim: ResourceClaim): string {
-	return `${claim.namespace}\u0000${claim.instanceId}\u0000${claim.canonicalKey}\u0000${claim.access}`;
+	return JSON.stringify([claim.namespace, claim.instanceId, claim.canonicalKey, claim.access, claim.generation]);
 }
 
-/** Exact set equality by identity+access; a post-hook that widened scope fails this. */
+/** Exact set equality by identity+access+generation; a post-hook that widened scope fails this. */
 export function sameClaimSet(a: readonly ResourceClaim[], b: readonly ResourceClaim[]): boolean {
 	if (a.length !== b.length) return false;
 	const byCodeUnit = (x: string, y: string): number => {

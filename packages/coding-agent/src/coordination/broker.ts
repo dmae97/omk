@@ -12,7 +12,7 @@
  * no persistence — those belong to the supervisor this broker reports to.
  */
 
-import { claimSetsConflict, sameClaimSet } from "./resource.ts";
+import { canonicalClaim, claimSetsConflict, sameClaimSet } from "./resource.ts";
 import type { EffectState, GrantToken, ResourceClaim, Sequence } from "./types.ts";
 import { nextSequence, SETTLED_EFFECT_STATES, sequence } from "./types.ts";
 
@@ -90,20 +90,23 @@ export class AdmissionBroker {
 		if (!Number.isSafeInteger(input.ttl) || input.ttl <= 0) {
 			throw new TypeError("ttl must be a positive safe integer");
 		}
+		const authorizationDeadline = input.now + input.ttl;
+		if (!Number.isSafeInteger(authorizationDeadline)) throw new RangeError("authorization deadline overflow");
 		const incarnation = sequence(input.incarnation);
 		if (this.incarnations.get(input.sessionId) !== incarnation) {
 			throw new TypeError("stale session incarnation");
 		}
-		if (input.claims.length === 0) {
+		if (!Array.isArray(input.claims) || input.claims.length === 0) {
 			throw new TypeError("an unknown scope must not be admitted as an empty scope");
 		}
+		// Take owned, validated snapshots before any state mutation.
+		const claims = Array.from(input.claims, (claim) => canonicalClaim(claim));
 
 		// Settle lapsed authorizations first; this never evicts a live effect.
 		this.expire(input.now);
 		const active = this.activeGrants();
 		const used = active.reduce((sum, g) => sum + g.weight, 0);
-		if (weight + used > this.capacity) return null;
-		const claims = [...input.claims];
+		if (weight > this.capacity - used) return null;
 		if (active.some((g) => claimSetsConflict(claims, g.claims))) return null;
 
 		this.grantCounter = nextSequence(this.grantCounter);
@@ -112,7 +115,7 @@ export class AdmissionBroker {
 			grantSequence: this.grantCounter,
 			sessionId: input.sessionId,
 			sessionIncarnation: incarnation,
-			authorizationDeadline: input.now + input.ttl,
+			authorizationDeadline,
 		});
 		this.grants.set(token.grantSequence, {
 			token,
@@ -151,7 +154,9 @@ export class AdmissionBroker {
 		const grant = this.authoritative(input.token);
 		if (grant === undefined || grant.state !== "reserved") return false;
 		if (input.now >= grant.token.authorizationDeadline) return false;
-		if (!sameClaimSet(input.actualClaims, grant.claims)) return false;
+		if (!Array.isArray(input.actualClaims)) throw new TypeError("actualClaims must be an array");
+		const actualClaims = Array.from(input.actualClaims, (claim) => canonicalClaim(claim));
+		if (!sameClaimSet(actualClaims, grant.claims)) return false;
 		grant.state = "running";
 		grant.effectLive = true;
 		return true;

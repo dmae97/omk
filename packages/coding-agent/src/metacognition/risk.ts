@@ -34,8 +34,8 @@ function logGamma(x: number): number {
 
 /** Continued-fraction expansion for the incomplete beta (Lentz's method). */
 function betaContinuedFraction(a: number, b: number, x: number): number {
-	const maxIterations = 300;
-	const epsilon = 3e-16;
+	const maxIterations = 1000;
+	const epsilon = 1e-14;
 	const tiny = 1e-300;
 	const qab = a + b;
 	const qap = a + 1;
@@ -62,31 +62,38 @@ function betaContinuedFraction(a: number, b: number, x: number): number {
 		d = 1 / d;
 		const delta = d * c;
 		h *= delta;
-		if (Math.abs(delta - 1) < epsilon) break;
+		if (Math.abs(delta - 1) < epsilon && Number.isFinite(h)) return h;
 	}
-	return h;
+	throw new RangeError("incomplete beta failed to converge");
 }
 
 /** Regularized incomplete beta I_x(a,b). */
 export function regularizedIncompleteBeta(a: number, b: number, x: number): number {
+	ensure(Number.isFinite(a) && a > 0 && Number.isFinite(b) && b > 0 && Number.isFinite(a + b), "invalid beta shapes");
+	ensure(Number.isFinite(x) && x >= 0 && x <= 1, "beta x must be in [0,1]");
 	if (x <= 0) return 0;
 	if (x >= 1) return 1;
 	const front = Math.exp(logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log1p(-x));
-	return x < (a + 1) / (a + b + 2)
-		? (front * betaContinuedFraction(a, b, x)) / a
-		: 1 - (front * betaContinuedFraction(b, a, 1 - x)) / b;
+	const result =
+		x < (a + 1) / (a + b + 2)
+			? (front * betaContinuedFraction(a, b, x)) / a
+			: 1 - (front * betaContinuedFraction(b, a, 1 - x)) / b;
+	if (!Number.isFinite(result) || result < 0 || result > 1) throw new RangeError("invalid incomplete beta result");
+	return result;
 }
 
-/** Inverse of {@link regularizedIncompleteBeta} by bisection; I_x is monotone in x. */
-function betaQuantile(p: number, a: number, b: number): number {
+/** Invert the survival probability directly; never round 1-alpha to one. */
+function betaUpperQuantile(alpha: number, a: number, b: number): number {
 	let low = 0;
 	let high = 1;
-	for (let i = 0; i < 200 && high - low > 1e-15; i += 1) {
-		const mid = (low + high) / 2;
-		if (regularizedIncompleteBeta(a, b, mid) < p) low = mid;
+	for (let i = 0; i < 200; i += 1) {
+		const mid = low + (high - low) / 2;
+		if (mid === low || mid === high) break;
+		if (regularizedIncompleteBeta(b, a, 1 - mid) > alpha) low = mid;
 		else high = mid;
 	}
-	return (low + high) / 2;
+	// Upper endpoint of the numerical bracket, not an interval-arithmetic proof.
+	return high;
 }
 
 function assertAlpha(alpha: number): void {
@@ -110,7 +117,8 @@ export function clopperPearsonUpperBound(failures: number, trials: number, alpha
 	);
 	assertAlpha(alpha);
 	if (failures === trials) return 1;
-	return betaQuantile(1 - alpha, failures + 1, trials - failures);
+	if (failures === 0) return zeroFailureUpperBound(trials, alpha);
+	return betaUpperQuantile(alpha, failures + 1, trials - failures);
 }
 
 /** Closed form of {@link clopperPearsonUpperBound} when no trial failed. */
@@ -149,7 +157,11 @@ export function bonferroniAlpha(alpha: number, thresholds: number, groups: numbe
 	assertAlpha(alpha);
 	ensure(Number.isSafeInteger(thresholds) && thresholds > 0, "thresholds must be a positive integer");
 	ensure(Number.isSafeInteger(groups) && groups > 0, "groups must be a positive integer");
-	return alpha / (thresholds * groups);
+	const comparisons = thresholds * groups;
+	ensure(Number.isSafeInteger(comparisons), "comparison count overflow");
+	const adjusted = alpha / comparisons;
+	ensure(adjusted > 0 && Number.isFinite(adjusted), "adjusted alpha underflow");
+	return adjusted;
 }
 
 /**
