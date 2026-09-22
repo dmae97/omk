@@ -1,6 +1,16 @@
 import type { Api, Model, ThinkingLevelMap } from "../types.ts";
 
 const GROK_THINKING_LEVELS = {
+	"grok-4.7": {
+		off: null,
+		minimal: null,
+		low: "low",
+		medium: "medium",
+		high: "high",
+		xhigh: "xhigh",
+		max: "xhigh",
+		ultra: "xhigh",
+	},
 	"grok-4.6": {
 		off: null,
 		minimal: null,

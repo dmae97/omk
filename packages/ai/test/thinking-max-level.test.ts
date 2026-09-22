@@ -35,7 +35,8 @@ const GLM5_BUDGET_PATH_MODEL_IDS = [
 ] as const;
 
 describe("max thinking level", () => {
-	it.each(["z-ai/glm-5.2", "z-ai/glm-5.2:batch"])("uses the OpenRouter-declared high/xhigh ladder for %s", (id) => {
+	// `z-ai/glm-5.2:batch` was delisted upstream (OpenRouter live list, 2026-09-23).
+	it.each(["z-ai/glm-5.2"])("uses the OpenRouter-declared high/xhigh ladder for %s", (id) => {
 		const model = getModels("openrouter").find((candidate) => candidate.id === id);
 		if (!model) throw new Error("Missing GLM route");
 		expect(getSupportedThinkingLevels(model)).toEqual(["off", "high", "xhigh"]);
@@ -104,12 +105,15 @@ describe("max thinking level", () => {
 	// grok-4.6 would silently clamp `/thinking xhigh` down to high.
 	it.each([
 		["xai", "grok-4.6"],
+		["xai", "grok-4.7"],
 		["openrouter", "x-ai/grok-4.6"],
+		["openrouter", "x-ai/grok-4.7"],
 		["github-copilot", "grok-4.6"],
 		["opencode", "grok-4.6"],
-	] as const)("exposes the xhigh thinking level for grok-4.6 on %s (%s)", (provider, id) => {
+	] as const)("exposes the xhigh thinking level for %s (%s)", (provider, id) => {
 		const model = getModels(provider).find((candidate) => candidate.id === id);
-		expect(model).toBeDefined();
+		expect(model, `${provider}/${id}`).toBeDefined();
+		expect(model!.contextWindow).toBe(500_000);
 		expect(getSupportedThinkingLevels(model!)).toContain("xhigh");
 		expect(model!.thinkingLevelMap?.xhigh).toBe("xhigh");
 		expect(clampThinkingLevel(model!, "xhigh")).toBe("xhigh");

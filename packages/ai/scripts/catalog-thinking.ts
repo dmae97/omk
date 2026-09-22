@@ -27,7 +27,12 @@ export function openRouterThinkingMap(value: unknown): ThinkingMap | undefined {
 	return result;
 }
 
-const GPT6_ASTRA_ID = /(^|\/)gpt-6-astra(?:-pro)?(?::batch)?$/;
+const GPT6_ASTRA_ID = /(?:^|\/)gpt-6-astra(?:-pro)?(?::batch)?$/;
+const GPT6_SOL_ID = /(?:^|\/)gpt-6-sol(?:-pro)?(?::batch)?$/;
+// GPT-6 Sol/Luna outside OpenRouter: models.dev declares effort none~max for
+// `openai`, `azure`, and `opencode` Responses routes (checked 2026-09-23).
+const GPT6_SOL_LUNA_ID = /^gpt-6-(?:sol|luna)(?:-pro)?$/;
+const OPUS_55_ID = /(?:^|[./])claude-opus-5-5(?:[^\d]|$)|(?:^|[./])claude-opus-5\.5(?:[^\d]|$)/;
 const GPT6_ASTRA_APIS = ["openai-responses", "azure-openai-responses", "openai-completions"] as const;
 
 /** OMK `ultra` is a selector alias for Astra's documented ceiling, `max`. */
@@ -75,9 +80,58 @@ export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 			ultra: "max",
 		};
 	}
-	if (/(?:^|[/.])claude-opus-5(?:[.@:-]|$)/.test(model.id)) {
+	if (
+		model.provider === "openrouter" &&
+		GPT6_SOL_ID.test(model.id) &&
+		(GPT6_ASTRA_APIS as readonly string[]).includes(model.api)
+	) {
+		// OpenRouter declares none through max. Vercel's live route stops at high,
+		// so this ladder stays route-scoped.
+		model.thinkingLevelMap = {
+			off: "none",
+			minimal: null,
+			low: "low",
+			medium: "medium",
+			high: "high",
+			xhigh: "xhigh",
+			max: "max",
+		};
+	}
+	if (
+		model.provider !== "openrouter" &&
+		GPT6_SOL_LUNA_ID.test(model.id) &&
+		(model.api === "openai-responses" || model.api === "azure-openai-responses")
+	) {
+		// models.dev declares none/low/medium/high/xhigh/max on the openai, azure,
+		// and opencode Responses routes for GPT-6 Sol and Luna (2026-09-23). Vercel
+		// fronts them with anthropic-messages (budget path) and openai-codex has its
+		// own xhigh ceiling, so both stay out of this rule.
+		model.thinkingLevelMap = {
+			off: "none",
+			minimal: null,
+			low: "low",
+			medium: "medium",
+			high: "high",
+			xhigh: "xhigh",
+			max: "max",
+		};
+	}
+	if (/(?:^|[/.])claude-opus-5(?:[.@:-]|$)/.test(model.id) && !OPUS_55_ID.test(model.id)) {
 		model.thinkingLevelMap = {
 			off: undefined,
+			minimal: null,
+			low: "low",
+			medium: "medium",
+			high: "high",
+			xhigh: "xhigh",
+			max: "max",
+		};
+		if (model.api === "anthropic-messages") model.compat = { ...model.compat, forceAdaptiveThinking: true };
+	}
+	if (OPUS_55_ID.test(model.id)) {
+		// https://platform.claude.com/docs/en/models/opus-5-5/overview: thinking cannot be disabled.
+		model.thinkingLevelMap = {
+			off: null,
 			minimal: null,
 			low: "low",
 			medium: "medium",

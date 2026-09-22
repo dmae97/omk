@@ -1,7 +1,66 @@
 # 모델 목록·thinking 갱신 기록
 
-확인일: 2026-09-09. 생성기와 공급자 어댑터를 수정한 뒤 `npm run models:refresh`로
+확인일: 2026-09-22. 생성기와 공급자 어댑터를 수정한 뒤 `npm run models:refresh`로
 두 카탈로그를 재생성했다. 생성 파일을 손으로 수정하지 않았다.
+
+## 2026-09-22 갱신: Grok 4.7·MiMo v2.6과 reasoning/context 대조
+
+`npm run models:refresh`를 종료 0으로 재생성했다. 전 소스가 응답했고 `--allow-partial`은 쓰지 않았다.
+키 없는 Zyloo는 정적 6개를 유지했다. 이미지 카탈로그는 변화 없다.
+
+| 항목 | 값 |
+| --- | --- |
+| 공급자 / 모델 | 40 / 1,826 → 1,847 |
+| 추가 | 32 |
+| 제거 | 11 |
+| context 또는 maxTokens 변경 | 15 |
+| thinking 맵 변경(기존 id) | 0 |
+
+### 공식 원천과 대조
+
+AdaptOrch `TopologyRouter`는 이 검증 DAG을 `hybrid`로 권고했다(width 2 exact, critical depth 4,
+coupling density 0.66). 이는 실행 순서가 아니라 권고이다. 실제 검증은 공개 문서·공개 카탈로그 숫자와
+생성 결과의 대조이며, 공급자 추론 호출은 하지 않았다.
+
+| 모델 | 문서 context | 문서 effort | 카탈로그 |
+| --- | --- | --- | --- |
+| `grok-4.7` | 500,000 | `low/medium/high/xhigh`, 기본 `high`, 끄기 불가 | `xai` context 500,000, maxTokens 500,000. 네이티브는 `applyGrokThinking`이 `xhigh`까지 노출하고 `max/ultra`는 `xhigh` 별칭 |
+| `grok-4.6` | 500,000 | 같은 사다리 | 변경 없음 |
+| `grok-4.5` | 500,000 | `low/medium/high` (`xhigh` 없음) | `xhigh` 미노출 유지. 새 floor가 4.20 스냅샷에는 적용되지 않음 |
+| MiMo v2.6 Pro/Flash | OpenRouter context 1,048,576, max completion 131,072 | route가 effort 목록을 선언하지 않음 | 선언 없는 사다리를 지어내지 않음. `reasoning: true`, map 없음 |
+| GPT-5.6 계열 | OpenAI 문서 1.05M | `none/low/medium/high/xhigh/max` | 기존 생성기가 1,000,000으로 고정. 라이브 90개 모두 1,000,000 |
+
+근거: [Grok 4.7](https://docs.x.ai/developers/models/grok-4.7),
+[xAI reasoning](https://docs.x.ai/developers/model-capabilities/text/reasoning),
+[OpenRouter models](https://openrouter.ai/api/v1/models),
+[models.dev](https://models.dev/api.json).
+
+### 생성기 보정
+
+models.dev가 `grok-4.7`의 `reasoning_options`에 `xhigh`를 선언한다. 카탈로그 지연 시
+`/thinking xhigh`가 `high`로 좁히지 않도록, xAI 문서의 "4.6 이후" 규칙을
+`isDocumentedGrokXhighModel`로 두었다. `grok-4.20-*` 날짜 스냅샷은 이 사다리가 아니다.
+
+### 추가·제거
+
+추가는 `xai`·`openrouter`·`vercel-ai-gateway`·`github-copilot`·`opencode-go`의 `grok-4.7`,
+Xiaomi 직접·토큰 플랜 3곳·OpenRouter·Vercel·OpenCode Go의 MiMo v2.6 Flash/Pro(와 Pro UltraSpeed),
+OpenRouter `nex-agi/nex-n2.5-pro`·`mistralai/mistral-small-3.1-24b-instruct`,
+Vercel `mixedbread/toast-1`·`quiverai/arrow-2`·`arrow-2-telos`, Hugging Face `tencent/Hy4-preview`다.
+
+제거는 갱신 소스에서 더 이상 선정되지 않은 항목이다. NVIDIA `deepseek-v4-flash-0731`,
+OpenCode `mimo-v2.5-free`, OpenRouter `anthropic/claude-opus-4`와 batch 별칭 7개,
+`kwaipilot/kat-coder-pro-v2`가 해당한다. 공급자 폐기 공지나 모든 계정의 사용 불가는 아니다.
+
+OpenRouter가 선언한 context·출력 상한 변경 15건은 목록 값을 그대로 반영했다.
+예를 들면 `anthropic/claude-sonnet-4` context는 1,000,000에서 200,000으로, Aion 2.0/3.0 context는
+131,072에서 1,048,576으로 바뀌었다. 이 숫자는 route 선언이지 공급자 원문 보증은 아니다.
+
+### 검증과 한계
+
+표적 vitest 12파일 151개 통과. `generate-models.ts` LSP diagnostics 없음.
+공급자 추론, 전체 `npm run check`, build/install, commit/push는 실행하지 않았다.
+계정별 사용 가능 여부와 실제 청구액은 검증 범위 밖이다.
 
 ## 2026-09-19 갱신: 라이브 재생성과 생성기 결함 3건 교정
 
@@ -340,3 +399,59 @@ OpenAI 변형 목록이다. V2.6 계약이 아니다.
 `packages/ai/test/mimo-v26-catalog.test.ts` 46개 통과(종료 0). 21개 항목이 존재하고
 `xhigh`/`max`/`ultra`를 노출하지 않는지, Xiaomi 4곳은 `thinkingFormat: "deepseek"` 토글인지
 고정한다. 공급자 추론, `npm run check`, build/install, commit은 하지 않았다.
+
+## 2026-09-23 갱신: Claude Opus 5.5와 GPT-6 Sol
+
+AdaptOrch `TopologyRouter`는 증거, 생성, 검사를 `sequential`로 권고했다(width 1, critical depth 3).
+실행 순서가 아니라 권고이다. `npm run generate-models`는 전 소스가 응답해 종료 0으로 끝났다.
+공급자 추론은 하지 않았다.
+
+| 모델 | 공식 원천 | 카탈로그 |
+| Claude Opus 5.5 | `claude-opus-5-5`, context 1,000,000, output 128,000, effort `low/medium/high/xhigh/max`, thinking 끄기 불가 | `anthropic`, Bedrock 6개 지역 식별자, OpenRouter `anthropic/claude-opus-5.5`, Vercel `anthropic/claude-opus-5.5` |
+| GPT-6 Sol | OpenAI 모델 색인에 없음. OpenRouter는 `none`부터 `max`, Vercel 라이브는 `high`까지 | OpenRouter `openai/gpt-6-sol`, `openai/gpt-6-sol-pro`와 batch. Vercel `openai/gpt-6-sol`. `openai` 공급자에는 넣지 않음 |
+
+Vertex의 `claude-opus-5-5@default`는 OMK `google-vertex`가 쓰는 Gemini API가 아니므로 넣지 않았다.
+기존 문서는 Opus 4.7/4.8과 Fable만 `xhigh`와 `max`를 갖는다고 적었지만, Opus 5.5 공식 문서가 같은 사다리를 선언한다.
+
+검사: `packages/ai/test/opus55-gpt6sol-catalog.test.ts` 15개, `catalog-thinking.test.ts` 23개,
+`mimo-v26-catalog.test.ts` 46개 통과. `catalog-thinking.ts`와 `bedrock-thinking.ts` 주 LSP는 오류 없다.
+`npm run check`, build/install, commit은 하지 않았다.
+
+근거: [Opus 5.5](https://platform.claude.com/docs/en/models/opus-5-5/overview),
+[models.dev](https://models.dev/api.json), [OpenRouter models](https://openrouter.ai/api/v1/models),
+[Vercel AI Gateway models](https://ai-gateway.vercel.sh/v1/models).
+
+### 2026-09-23 후속 검증: 라이브 대조, 상류 드리프트, stale 검사 정리
+
+AdaptOrch `TopologyRouter`는 증거/검사/보고 3노드를 `parallel`로 권고했다
+(추가 비용 없음, 권고일 뿐 실행 순서 아님). 재생성으로 `npm run generate-models`
+종료 0, 1,876개 route.
+
+- **라이브 대조 일치**: OpenRouter(`openai/gpt-6-sol` 4종, effort `none`~`max`), Vercel
+  (`openai/gpt-6-sol`은 `none/low/medium/high`만 선언 — `anthropic-messages` 예산 경로라
+  thinkingLevelMap 생략이 일치), Anthropic 문서(1M context, 128K output, adaptive
+  thinking 상시, effort 5단계) 모두 카탈로그 값과 일치했다.
+- **상류 드리프트 반영**: 이전 단락의 "OpenAI 모델 색인에 없음"은 stale해졌다.
+  models.dev가 `openai`/`azure`/`opencode`의 Responses route에 `gpt-6-sol`과
+  `gpt-6-luna`를 새로 올렸고 네 소스 모두 effort `none`~`max`를 선언한다.
+  `catalog-thinking.ts`에 `GPT6_SOL_LUNA_ID` 규칙을 추가해 해당 route에
+  `off:"none"`/`minimal:null`/`low`~`max` 맵을 입혔다(Vercel은 anthropic-messages
+  예산 경로, openai-codex는 별도 천장이라 제외). OpenCode의 `claude-opus-5-5`와
+  OpenRouter의 `qwen/qwen3.8-omni-flash`(effort 미선언, 일반 Qwen 규칙 적용)도
+  상류 신규 등재로 들어왔다.
+- **stale 검사 정리**: `thinking-max-level.test.ts`가 기대하던 `z-ai/glm-5.2:batch`는
+  OpenRouter 라이브 목록에서 제거됐고(현재 `z-ai/glm-5.2`, `z-ai/glm-5.2:free`만 존재),
+  재생성 카탈로그는 정확하므로 검사 대상에서 빼고 주석을 남겼다.
+- **정규식 대칭 보정**: `OPUS_55_ID`의 점 철자(`claude-opus-5.5`) 대안부가 `^|/`만
+  허용하던 것을 `^|[./]`로 맞췄다. 오늘 카탈로그에는 해당 형태가 없어 동작 변화는 없다.
+- **회귀 가드 추가**: `opus55-gpt6sol-catalog.test.ts`에 `claude-opus-5` 본체가 여전히
+  `off`를 노출하는지, `openai`/`azure`/`opencode`의 `gpt-6-sol`이 선언 사다리를 노출하는지,
+  `gpt-6-sol-fast`를 지어내지 않는지 검사를 추가했다(20개로 확장).
+- **기존 한계 기록**: `bedrock-thinking.ts`의 `opus-(?:4-[678]|5(?:-5)?)(?:-|$)`는
+  `opus-5-6` 같은 미래 ID도 매치한다(기존 `5` 분기와 동일한 관용, 이번 변경의 회귀 아님).
+  `grok-thinking.ts` 정적 테이블은 정확-일치 키만 지원해 `grok-4.8+` 변형이 들어오면
+  `isDocumentedGrokXhighModel` floor가 xhigh 맵은 입혀도 런타임 compat은 미적용이다.
+
+재검증: 표적 vitest 14파일 204개 중 203 통과·1 skip(유료 Bedrock E2E). 변경 파일 Biome,
+`tsgo --noEmit`, `git diff --check` 종료 0. 공급자 추론, `npm run check`, build/install,
+commit은 하지 않았다. 계정별 사용 가능 여부와 실제 청구액은 검증 범위 밖이다.

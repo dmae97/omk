@@ -227,6 +227,19 @@ function normalizeUpstreamModelId(id: string): string {
 	return (suffix === -1 ? lastSegment : lastSegment.slice(0, suffix)).toLowerCase();
 }
 
+/**
+ * xAI docs: `xhigh` exists on `grok-4.6` and later, not on `grok-4.5`.
+ * https://docs.x.ai/developers/model-capabilities/text/reasoning
+ * Dated snapshots (`grok-4.20-0309`) are not that ladder.
+ */
+function isDocumentedGrokXhighModel(id: string): boolean {
+	const normalized = normalizeUpstreamModelId(id);
+	if (!/^grok-4\.(\d+)(?:-|$)/.test(normalized)) return false;
+	if (/^grok-4\.20(?:-|$)/.test(normalized)) return false;
+	const minor = Number(/^grok-4\.(\d+)/.exec(normalized)?.[1]);
+	return Number.isInteger(minor) && minor >= 6;
+}
+
 /** GLM-5.2+ accepts reasoning_effort values up to max (none/minimal/low/medium/high/xhigh/max). */
 const GLM5_REASONING_EFFORT_THINKING_LEVEL_MAP = {
 	off: null,
@@ -440,11 +453,14 @@ function applyModelMetadata(model: Model<Api>): void {
 	if (isGlm5ReasoningEffortModel(model.id)) {
 		mergeThinkingLevelMap(model, GLM5_REASONING_EFFORT_THINKING_LEVEL_MAP);
 	}
-	// xAI ships an xhigh effort tier on some Grok models (4.6, 4.20 multi-agent) but not others
-	// (4.5, 4.3). Top tiers are only exposed when explicitly mapped, so drive this from the
-	// upstream reasoning_options instead of a family-wide regex that would over-apply xhigh.
-	// Scoped to Grok deliberately: applying it catalog-wide is a separate, higher-blast-radius change.
-	if (model.reasoning && /grok/i.test(model.id) && UPSTREAM_XHIGH_EFFORT_IDS.has(normalizeUpstreamModelId(model.id))) {
+	// xAI documents xhigh on grok-4.6 and later, not on 4.5/4.3. Top tiers stay hidden unless
+	// explicitly mapped. models.dev reasoning_options are preferred; the documented floor covers a
+	// catalog lag so grok-4.7 does not silently clamp /thinking xhigh down to high.
+	if (
+		model.reasoning &&
+		/grok/i.test(model.id) &&
+		(UPSTREAM_XHIGH_EFFORT_IDS.has(normalizeUpstreamModelId(model.id)) || isDocumentedGrokXhighModel(model.id))
+	) {
 		mergeThinkingLevelMap(model, { xhigh: "xhigh" });
 	}
 	if (

@@ -42,6 +42,8 @@ describe("OpenRouter catalog coverage", () => {
 			"openai/gpt-6-astra",
 			"inception/mercury-2.5",
 			"x-ai/grok-4.6",
+			"x-ai/grok-4.7",
+			"xiaomi/mimo-v2.6-pro",
 			"z-ai/glm-5.3",
 		]) {
 			expect(ids).toContain(id);

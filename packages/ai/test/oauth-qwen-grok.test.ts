@@ -39,7 +39,7 @@ function fakeModel(provider: string, id: string): Model<Api> {
 	} satisfies Model<"openai-completions">;
 }
 
-function getGrokModel(id: "grok-4.6" | "grok-4.5" | "grok-4.3"): Model<"openai-completions"> {
+function getGrokModel(id: "grok-4.7" | "grok-4.6" | "grok-4.5" | "grok-4.3"): Model<"openai-completions"> {
 	return getModel("xai", id);
 }
 
@@ -186,12 +186,20 @@ describe("Qwen OAuth provider", () => {
 
 describe("native xAI Grok OAuth provider", () => {
 	it("applies model-specific thinking levels on native xAI Grok models", () => {
-		const grok46 = getGrokModel("grok-4.6");
-		expect(grok46.provider).toBe(XAI_OAUTH_PROVIDER_ID);
-		expect(grok46.baseUrl).toBe("https://api.x.ai/v1");
-		expect(grok46.contextWindow).toBe(500_000);
-		expect(grok46.compat).toMatchObject({ supportsReasoningEffort: true });
-		expect(getSupportedThinkingLevels(grok46)).toEqual(["low", "medium", "high", "xhigh", "max", "ultra"]);
+		const grok47 = getGrokModel("grok-4.7");
+		expect(grok47.provider).toBe(XAI_OAUTH_PROVIDER_ID);
+		expect(grok47.baseUrl).toBe("https://api.x.ai/v1");
+		expect(grok47.contextWindow).toBe(500_000);
+		expect(grok47.compat).toMatchObject({ supportsReasoningEffort: true });
+		expect(getSupportedThinkingLevels(grok47)).toEqual(["low", "medium", "high", "xhigh", "max", "ultra"]);
+		expect(getSupportedThinkingLevels(getGrokModel("grok-4.6"))).toEqual([
+			"low",
+			"medium",
+			"high",
+			"xhigh",
+			"max",
+			"ultra",
+		]);
 		expect(getSupportedThinkingLevels(getGrokModel("grok-4.5"))).toEqual(["low", "medium", "high", "max", "ultra"]);
 		expect(getSupportedThinkingLevels(getGrokModel("grok-4.3"))).toEqual([
 			"off",
@@ -204,6 +212,7 @@ describe("native xAI Grok OAuth provider", () => {
 	});
 
 	it.each([
+		["grok-4.7", "max", "xhigh"],
 		["grok-4.6", "max", "xhigh"],
 		["grok-4.5", "max", "high"],
 	] as const)("maps %s %s thinking to xAI reasoning_effort=%s", async (id, requested, expected) => {

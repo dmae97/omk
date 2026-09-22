@@ -13,7 +13,7 @@ export function getModelMatchCandidates(modelId: string, modelName?: string): st
 
 export function supportsAdaptiveThinking(modelId: string, modelName?: string): boolean {
 	return getModelMatchCandidates(modelId, modelName).some(
-		(value) => /opus-(?:4-[678]|5)(?:-|$)/.test(value) || value.includes("sonnet-4-6"),
+		(value) => /opus-(?:4-[678]|5(?:-5)?)(?:-|$)/.test(value) || value.includes("sonnet-4-6"),
 	);
 }
 
@@ -23,7 +23,7 @@ export function mapThinkingLevelToEffort(
 ): Effort {
 	if (
 		level === "xhigh" &&
-		getModelMatchCandidates(model.id, model.name).some((value) => /opus-(?:4-[78]|5)(?:-|$)/.test(value))
+		getModelMatchCandidates(model.id, model.name).some((value) => /opus-(?:4-[78]|5(?:-5)?)(?:-|$)/.test(value))
 	)
 		return "xhigh";
 	const mapped = level ? model.thinkingLevelMap?.[level] : undefined;

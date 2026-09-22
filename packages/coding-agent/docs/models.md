@@ -22,7 +22,7 @@ The NVIDIA catalog is filtered against NIM's live model IDs and known compatibil
 limits. A historical GLM route is not evidence that NIM still lists it. Use the
 current model selector rather than copying a removed ID from older examples.
 
-The [2026-09-09 catalog refresh](model-catalog-refresh.md) records new models,
+The [2026-09-22 catalog refresh](model-catalog-refresh.md) records new models,
 provider-specific thinking ladders, and verification limits. Model discovery does
 not prove that an account can invoke that model.
 
