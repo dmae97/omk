@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Component, Container, Text } from "omk-tui";
+import { type Component, Container, type Terminal, type TerminalOutputStats, Text } from "omk-tui";
 import type { SessionTermination } from "../../core/session-termination-types.ts";
 import { DynamicBorder } from "./components/dynamic-border.ts";
 import { diagnosticDisplayText } from "./components/session-failure.ts";
@@ -17,7 +17,7 @@ export interface TuiDiagnostics {
 	readonly privacy: "metadata-only";
 	readonly generatedAt: string;
 	readonly runtime: Omit<TuiRuntimeInfo, "entryPath" | "modulePath">;
-	readonly terminal: { readonly columns: number; readonly rows: number };
+	readonly terminal: { readonly columns: number; readonly rows: number; readonly output?: TerminalOutputStats };
 	readonly session: {
 		readonly streaming: boolean;
 		readonly compacting: boolean;
@@ -27,19 +27,52 @@ export interface TuiDiagnostics {
 	readonly termination: DiagnosticTermination | null;
 }
 
+function projectOutputStats(value: TerminalOutputStats | undefined): TerminalOutputStats | undefined {
+	const fields = [
+		"writeCalls",
+		"submittedBytes",
+		"writeFalseCount",
+		"drainCount",
+		"errorCount",
+		"peakWritableLength",
+		"writableLength",
+	] as const;
+	if (
+		!value ||
+		typeof value.backpressured !== "boolean" ||
+		fields.some((key) => !Number.isFinite(value[key]) || value[key] < 0)
+	)
+		return undefined;
+	return {
+		writeCalls: value.writeCalls,
+		submittedBytes: value.submittedBytes,
+		writeFalseCount: value.writeFalseCount,
+		drainCount: value.drainCount,
+		errorCount: value.errorCount,
+		peakWritableLength: value.peakWritableLength,
+		writableLength: value.writableLength,
+		backpressured: value.backpressured,
+	};
+}
+
 /** Project each approved field; never serialize a session, message, model, config or arbitrary error. */
-export function createTuiDiagnostics(input: {
-	readonly runtime: TuiRuntimeInfo;
-	readonly columns: number;
-	readonly rows: number;
-	readonly isStreaming: boolean;
-	readonly isCompacting: boolean;
-	readonly messageCount: number;
-	readonly lastResourceReloadAt: string | undefined;
-	readonly termination: SessionTermination | undefined;
-}): TuiDiagnostics {
+export function createTuiDiagnostics(
+	input: {
+		readonly runtime: TuiRuntimeInfo;
+		readonly isStreaming: boolean;
+		readonly isCompacting: boolean;
+		readonly messageCount: number;
+		readonly lastResourceReloadAt: string | undefined;
+		readonly termination: SessionTermination | undefined;
+	} & (
+		| { readonly terminal: Pick<Terminal, "columns" | "rows" | "getOutputStats"> }
+		| { readonly columns: number; readonly rows: number }
+	),
+): TuiDiagnostics {
 	const r = input.runtime;
 	const t = input.termination;
+	const terminal = "terminal" in input ? input.terminal : input;
+	const output = projectOutputStats("terminal" in input ? input.terminal.getOutputStats?.() : undefined);
 	return {
 		schemaVersion: 1,
 		privacy: "metadata-only",
@@ -56,7 +89,7 @@ export function createTuiDiagnostics(input: {
 			currentModuleSha256: r.currentModuleSha256,
 			buildRevision: r.buildRevision,
 		},
-		terminal: { columns: input.columns, rows: input.rows },
+		terminal: { columns: terminal.columns, rows: terminal.rows, ...(output ? { output } : {}) },
 		session: {
 			streaming: input.isStreaming,
 			compacting: input.isCompacting,
@@ -101,6 +134,7 @@ export function createTuiDiagnosticsView(report: TuiDiagnostics, locations: TuiR
 			view.addChild(new Text(theme.fg("accent", theme.bold("OMK diagnostics")), 1, 0));
 			const r = report.runtime;
 			const t = report.termination;
+			const output = report.terminal.output;
 			const moduleStatus =
 				r.moduleState === "changed"
 					? "changed since initialization — restart to load code"
@@ -121,6 +155,12 @@ export function createTuiDiagnosticsView(report: TuiDiagnostics, locations: TuiR
 				...(t
 					? [
 							`Effects: ${t.sideEffects} · Retryable: ${t.retryable ? "yes" : "no"} · Automatic retry: ${t.safeToAutoRetry ? "yes" : "no"}`,
+						]
+					: []),
+				...(output
+					? [
+							`Output: ${output.submittedBytes} bytes offered / ${output.writeCalls} writes / ${output.writeFalseCount} backpressure / ${output.drainCount} drains`,
+							`Output queue: ${output.writableLength} bytes, peak ${output.peakWritableLength}; errors ${output.errorCount}`,
 						]
 					: []),
 				`Launch path (local only): ${locations.entryPath ?? "unavailable"}`,

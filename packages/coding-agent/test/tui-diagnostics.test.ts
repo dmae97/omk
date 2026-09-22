@@ -90,6 +90,34 @@ describe("runtime identity observations", () => {
 });
 
 describe("metadata-only diagnostics", () => {
+	it("projects numeric terminal output observations without payloads or extra fields", () => {
+		const { runtime } = fixture();
+		const stats = {
+			writeCalls: 2,
+			submittedBytes: 100,
+			writeFalseCount: 1,
+			drainCount: 0,
+			errorCount: 0,
+			peakWritableLength: 100,
+			writableLength: 100,
+			backpressured: true,
+		};
+		const input = {
+			runtime: inspectTuiRuntime(runtime),
+			terminal: { columns: 80, rows: 24, getOutputStats: () => ({ ...stats, raw: "PRIVATE_OUTPUT_CANARY" }) },
+			isStreaming: false,
+			isCompacting: false,
+			messageCount: 0,
+			termination: undefined,
+			lastResourceReloadAt: undefined,
+		};
+		const data = createTuiDiagnostics(input);
+		expect(data.terminal).toEqual({ columns: 80, rows: 24, output: stats });
+		expect(JSON.stringify(data)).not.toContain("PRIVATE_OUTPUT_CANARY");
+		expect(createTuiDiagnosticsView(data, runtime).render(100).join("\n")).toContain("100 bytes");
+		stats.submittedBytes = Number.NaN;
+		expect(createTuiDiagnostics(input).terminal.output).toBeUndefined();
+	});
 	it("omits free text, local paths, routing names, run/session ids and unknown fields", () => {
 		const { runtime, root } = fixture();
 		const data = report(runtime);

@@ -622,6 +622,19 @@ interface Terminal {
 - `ProcessTerminal` - Uses `process.stdin/stdout`
 - `VirtualTerminal` - For testing (uses `@xterm/headless`)
 
+### Output observations
+
+`ProcessTerminal.getOutputStats()` reports `writeCalls`, `submittedBytes`,
+`writeFalseCount`, `drainCount`, `errorCount`, `peakWritableLength`,
+`writableLength`, and `backpressured`. The optional `Terminal.getOutputStats`
+method preserves compatibility with custom terminals. The snapshot contains no
+raw output. Bytes are offered bytes, not proof that a terminal displayed them.
+
+The observer covers paint and control sequences, does not retry `write(false)`,
+and leaves normal stream errors visible. It does not implement flow control or
+bound Node's output queue. `ProcessTerminal` optionally accepts a Writable for
+controlled output tests; stdin and terminal dimensions still belong to the process.
+
 ## Utilities
 
 ```typescript
@@ -765,6 +778,7 @@ See `test/chat-simple.ts` for a complete chat interface example with:
 - Spacers between messages
 
 Run it:
+
 ```bash
 npx tsx test/chat-simple.ts
 ```

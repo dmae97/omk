@@ -452,6 +452,21 @@ interface MyTheme {
 }
 ```
 
+## Output observations
+
+`ProcessTerminal.getOutputStats()` returns numeric counters for write calls,
+UTF-8 bytes offered, `write(false)`, drain/error events, and current/peak writable
+buffer length. `/debug` displays them and `/debug save` includes only these
+allowlisted fields. No prompt, image, ANSI frame, or error message is retained in
+the counters. Terminals without this optional API omit the observations.
+
+Every ProcessTerminal paint, cursor, title, progress, protocol and restoration
+write goes through the observer. A false return is counted, never retried: the
+Writable has already accepted the data. Error monitoring does not consume normal
+error handling; listeners are detached on stop. This is instrumentation, not a
+backpressure scheduler or an output-memory bound. Intermediate paint coalescing
+and bounded shutdown flushing remain separate work.
+
 ## Debug logging
 
 Set `OMK_TUI_WRITE_LOG` to capture the raw ANSI stream written to stdout.
@@ -487,6 +502,32 @@ class CachedComponent {
 ```
 
 Call `invalidate()` when state changes, then `handle.requestRender()` to trigger re-render.
+
+### Assistant streaming blocks
+
+`AssistantMessageComponent` reuses text/thinking components at unchanged content
+indices. It updates a block only when its displayed text changes, preserving the
+real Markdown render cache for stable blocks even when the message is mutated in
+place. Removed blocks are released; thinking visibility changes replace the affected
+representation. Width changes reflow Markdown, and explicit invalidation rebuilds
+views for theme changes, including pre-styled hidden-thinking labels.
+
+This does not coalesce model events, truncate history, or incrementally parse an
+actively changing Markdown block. Error/abort text, spacing, and OSC 133 markers
+retain their existing behavior.
+
+### Tool image conversion ownership
+
+Kitty-only non-PNG conversions are shared by source digest and MIME type, not
+image position. Repeated results and reordered images reuse active work; late
+results cannot replace a newer source. Hidden images defer new conversion work,
+PNG is passed through, and original tool/session image data is never deleted.
+
+Conversion failure leaves a visible fallback and is retried on an explicit result
+update, not on every render. Clearing chat history or stopping interactive mode
+disposes its image projections and prevents late repaints. The converter has no
+cancellation API: in-flight work remains owned until its promise settles.
+Only derived images referenced by the current result are cached.
 
 ## Invalidation and Theme Changes
 
