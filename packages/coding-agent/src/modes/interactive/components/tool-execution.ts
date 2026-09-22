@@ -1,9 +1,9 @@
-import { Box, type Component, Container, getCapabilities, Image, Spacer, Text, type TUI } from "omk-tui";
+import { Box, type Component, Container, Spacer, Text, type TUI } from "omk-tui";
 import type { ToolDefinition, ToolRenderContext } from "../../../core/extensions/types.ts";
 import { createAllToolDefinitions, type ToolName } from "../../../core/tools/index.ts";
 import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.ts";
-import { convertToPng } from "../../../utils/image-convert.ts";
 import { theme } from "../theme/theme.ts";
+import { ToolExecutionImages } from "./tool-execution-images.ts";
 
 export interface ToolExecutionOptions {
 	showImages?: boolean;
@@ -17,8 +17,8 @@ export class ToolExecutionComponent extends Container {
 	private callRendererComponent?: Component;
 	private resultRendererComponent?: Component;
 	private rendererState: any = {};
-	private imageComponents: Image[] = [];
-	private imageSpacers: Spacer[] = [];
+	private readonly images: ToolExecutionImages;
+	private disposed = false;
 	private toolName: string;
 	private toolCallId: string;
 	private args: any;
@@ -37,7 +37,6 @@ export class ToolExecutionComponent extends Container {
 		isError: boolean;
 		details?: any;
 	};
-	private convertedImages: Map<number, { data: string; mimeType: string }> = new Map();
 	private hideComponent = false;
 
 	constructor(
@@ -59,6 +58,14 @@ export class ToolExecutionComponent extends Container {
 		this.imageWidthCells = options.imageWidthCells ?? 60;
 		this.ui = ui;
 		this.cwd = cwd;
+		this.images = new ToolExecutionImages(
+			() => {
+				this.updateDisplay();
+				this.ui.requestRender();
+			},
+			this.showImages,
+			this.imageWidthCells,
+		);
 
 		this.addChild(new Spacer(1));
 
@@ -74,6 +81,7 @@ export class ToolExecutionComponent extends Container {
 		} else {
 			this.addChild(this.contentText);
 		}
+		this.addChild(this.images);
 
 		this.updateDisplay();
 	}
@@ -169,33 +177,16 @@ export class ToolExecutionComponent extends Container {
 		},
 		isPartial = false,
 	): void {
+		if (this.disposed) return;
 		this.result = result;
 		this.isPartial = isPartial;
+		this.images.setResult(result.content);
 		this.updateDisplay();
-		this.maybeConvertImagesForKitty();
 	}
 
-	private maybeConvertImagesForKitty(): void {
-		const caps = getCapabilities();
-		if (caps.images !== "kitty") return;
-		if (!this.result) return;
-
-		const imageBlocks = this.result.content.filter((c) => c.type === "image");
-		for (let i = 0; i < imageBlocks.length; i++) {
-			const img = imageBlocks[i];
-			if (!img.data || !img.mimeType) continue;
-			if (img.mimeType === "image/png") continue;
-			if (this.convertedImages.has(i)) continue;
-
-			const index = i;
-			convertToPng(img.data, img.mimeType).then((converted) => {
-				if (converted) {
-					this.convertedImages.set(index, converted);
-					this.updateDisplay();
-					this.ui.requestRender();
-				}
-			});
-		}
+	dispose(): void {
+		this.disposed = true;
+		this.images.dispose();
 	}
 
 	setExpanded(expanded: boolean): void {
@@ -219,13 +210,13 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	override render(width: number): string[] {
-		if (this.hideComponent) {
+		if (this.disposed || this.hideComponent) {
 			return [];
 		}
 
 		if (this.hasRendererDefinition() && this.getRenderShell() === "self") {
 			const contentLines = this.selfRenderContainer.render(width);
-			if (contentLines.length === 0 && this.imageComponents.length === 0) {
+			if (contentLines.length === 0 && this.images.children.length === 0) {
 				return [];
 			}
 
@@ -234,16 +225,7 @@ export class ToolExecutionComponent extends Container {
 				lines.push("");
 				lines.push(...contentLines);
 			}
-			for (let i = 0; i < this.imageComponents.length; i++) {
-				const spacer = this.imageSpacers[i];
-				if (spacer) {
-					lines.push(...spacer.render(width));
-				}
-				const imageComponent = this.imageComponents[i];
-				if (imageComponent) {
-					lines.push(...imageComponent.render(width));
-				}
-			}
+			lines.push(...this.images.render(width));
 			return lines;
 		}
 
@@ -251,6 +233,7 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private updateDisplay(): void {
+		if (this.disposed) return;
 		const bgFn = this.isPartial
 			? (text: string) => theme.bg("toolPendingBg", text)
 			: this.result?.isError
@@ -318,42 +301,9 @@ export class ToolExecutionComponent extends Container {
 			hasContent = true;
 		}
 
-		for (const img of this.imageComponents) {
-			this.removeChild(img);
-		}
-		this.imageComponents = [];
-		for (const spacer of this.imageSpacers) {
-			this.removeChild(spacer);
-		}
-		this.imageSpacers = [];
+		this.images.setDisplay(this.showImages, this.imageWidthCells);
 
-		if (this.result) {
-			const imageBlocks = this.result.content.filter((c) => c.type === "image");
-			const caps = getCapabilities();
-			for (let i = 0; i < imageBlocks.length; i++) {
-				const img = imageBlocks[i];
-				if (caps.images && this.showImages && img.data && img.mimeType) {
-					const converted = this.convertedImages.get(i);
-					const imageData = converted?.data ?? img.data;
-					const imageMimeType = converted?.mimeType ?? img.mimeType;
-					if (caps.images === "kitty" && imageMimeType !== "image/png") continue;
-
-					const spacer = new Spacer(1);
-					this.addChild(spacer);
-					this.imageSpacers.push(spacer);
-					const imageComponent = new Image(
-						imageData,
-						imageMimeType,
-						{ fallbackColor: (s: string) => theme.fg("toolOutput", s) },
-						{ maxWidthCells: this.imageWidthCells },
-					);
-					this.imageComponents.push(imageComponent);
-					this.addChild(imageComponent);
-				}
-			}
-		}
-
-		if (this.hasRendererDefinition() && !hasContent && this.imageComponents.length === 0) {
+		if (this.hasRendererDefinition() && !hasContent && this.images.children.length === 0) {
 			this.hideComponent = true;
 		}
 	}
