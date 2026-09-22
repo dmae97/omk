@@ -3,6 +3,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { release } from "node:os";
 import { performance } from "node:perf_hooks";
 import type { RunContract } from "omk-protocol";
+import { ownedGitMounts } from "./git-sandbox-layout.ts";
 import type { NamespaceIdentity } from "./namespace-identity.ts";
 import { identityFromSandboxInfo, PROCESS_GATE_ARGV } from "./process-gate.ts";
 import { digestBytes, digestObject, VerifiedRunError } from "./storage.ts";
@@ -23,6 +24,8 @@ export interface SandboxExecution {
 	readonly maxOutputBytes: number;
 	readonly signal?: AbortSignal;
 	readonly onReady?: (identity: NamespaceIdentity) => void | Promise<void>;
+	/** Trusted built-in publisher only: readonly worktree, writable .git, readonly current Node executable. */
+	readonly gitPublication?: true;
 }
 export interface SandboxOutcome {
 	readonly stdout: Buffer;
@@ -102,6 +105,7 @@ export async function executeSandbox(request: SandboxExecution): Promise<Sandbox
 	// identity is committed before candidate code runs; there is no ungated lane.
 	if (!request.onReady) throw new VerifiedRunError("unsupported_boundary");
 	const backend = loadSupervisorBackend();
+	if (request.gitPublication && request.writable) throw new VerifiedRunError("unsupported_boundary");
 	const started = performance.now();
 	const startedAt = new Date().toISOString();
 	const argv = [
@@ -109,6 +113,7 @@ export async function executeSandbox(request: SandboxExecution): Promise<Sandbox
 		request.writable ? "--bind" : "--ro-bind",
 		request.workspace,
 		"/workspace",
+		...(request.gitPublication ? ownedGitMounts(request.workspace) : []),
 		"--chdir",
 		"/workspace",
 		"--info-fd",

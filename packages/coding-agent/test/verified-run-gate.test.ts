@@ -54,7 +54,7 @@ describe("durable process gate", () => {
 			expect(existsSync(join(workspace, "output"))).toBe(false);
 			expect(probeNamespace(identity)).toBe("alive");
 			const reused = { ...identity, startTicks: `${identity.startTicks}0` };
-			expect(probeNamespace(reused)).toBe("gone");
+			expect(probeNamespace(reused)).toBe("unknown");
 			expect(probeNamespace(identity)).toBe("alive");
 		} finally {
 			gate.resolve();

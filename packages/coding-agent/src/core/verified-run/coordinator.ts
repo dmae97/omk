@@ -27,8 +27,10 @@ import type { RunPhaseContext } from "./phase-context.ts";
 import { inspectRunRecovery, type RecoveryInspection, resumeFrozenCandidate } from "./recovery.ts";
 import { anchorRunBudget, readRunClock } from "./recovery-clock.ts";
 import type { VerifiedRunApproval } from "./run-plan.ts";
-import { type PublishOptions, publishVerifiedRun } from "./run-publish.ts";
+import type { PublishOptions } from "./run-publish.ts";
+import { publishVerifiedRunOwned } from "./run-publish-owned.ts";
 import { deriveRunStatus, type RunStatus } from "./run-status.ts";
+import { withOwnedGitStatus } from "./run-status-owned.ts";
 import type { RunProjection } from "./run-types.ts";
 import type { VerifiedRunRuntime } from "./session-port.ts";
 import {
@@ -84,7 +86,7 @@ export class RunCoordinator {
 	 * command hints). Never reports a recovered/quarantined run as clean.
 	 */
 	status(runId: string): RunStatus {
-		return deriveRunStatus(this.inspect(runId));
+		return withOwnedGitStatus(deriveRunStatus(this.inspect(runId)), this.inspectAuthority().status);
 	}
 
 	/** The run's hashed journal records — the event stream the projection replays. */
@@ -163,7 +165,7 @@ export class RunCoordinator {
 		if (approval.approvedContractDigest !== command.contractDigest) throw new VerifiedRunError("approval");
 		if (approval.signal?.aborted) throw new VerifiedRunError("cancelled");
 		return this.withAuthority(command.runId, (runPath, authority) =>
-			publishVerifiedRun(runPath, command, {
+			publishVerifiedRunOwned(runPath, command, {
 				...options,
 				authority,
 				...(approval.signal ? { signal: approval.signal } : {}),

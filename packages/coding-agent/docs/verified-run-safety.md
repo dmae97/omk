@@ -22,9 +22,19 @@ Git 호출은 무작위 private hooks 디렉터리를 만들고 owner, 0700 mode
 
 `RunCoordinator.publish`와 CLI publish는 같은 취소 신호를 사용합니다. Git 객체 생성 전과 CAS 전에 신호와 권한을 다시 확인합니다. CAS 성공 뒤의 취소는 ref를 되돌리지 않습니다.
 
-`PublishOptions.timeoutMs`는 정상 Git 작업 전체가 공유하는 monotonic 예산이며 기본값은 60초입니다. 각 child는 남은 예산과 30초 중 작은 timeout을 사용합니다. CAS 거절 뒤 결과를 재확인하는 읽기에는 별도의 최대 5초 정리 예산을 사용하며, 그 예산으로 쓰기를 재시작하지 않습니다. 동일 blob digest는 한 번만 기록합니다.
+공개 SDK/CLI의 `PublishOptions.timeoutMs`는 1~60,000ms이며 기본값은 60초입니다. host와 worker는 동일한 Linux monotonic deadline을 사용합니다. worker의 각 Git child는 남은 예산과 30초 중 작은 timeout을 사용합니다. 같은 blob digest는 한 번만 기록합니다.
 
-Git 실행은 아직 동기식입니다. 진행 중인 child 동안 Node의 signal handler 처리가 지연될 수 있으므로 즉각적인 비동기 취소를 약속하지 않습니다. timeout에는 direct child를 SIGKILL하지만, crash 이후 모든 Git 자손의 종료를 입증하는 영속 supervisor identity는 아직 없습니다. 결과가 불명확하면 권한을 quarantine합니다.
+### Owned Git publisher
+
+`RunCoordinator.publish`와 CLI publish는 `owned-git-v1`을 사용합니다. 검증용 namespace 감독자를 재사용하며 worktree는 read-only, 실제 `.git` 디렉터리만 writable로 mount합니다. 현재 Node 실행 파일과 고정된 worker 모듈 집합을 사용하고, 사용자 extension이나 모델이 지정한 모듈은 로드하지 않습니다. 모듈과 실행 파일 digest는 실행 의미에 결합합니다.
+
+순서는 durable dispatch intent → namespace identity 기록 → 후보 sealing → publish intent 기록 → fresh authority 확인 → candidate-OID에 결합된 CAS gate → ref 관측 → child close와 namespace drain → 권한 정산입니다. PID 숫자만으로 종료를 인정하지 않습니다. PID birth 또는 boot identity가 다르면 `unknown`이며, 실제 namespace가 비었을 때만 종료를 확인합니다.
+
+CAS 결과와 process 종료는 별도 사실입니다. ref가 이미 candidate라면 다시 CAS하지 않고 metadata만 복구할 수 있습니다. Git grant가 아직 남아 있으면 status는 `pending_effects`, `cleanSuccess: false`, `terminal: false`를 표시합니다. 취소가 CAS 이후 도착하면 이미 반영된 ref를 되돌리지 않습니다. callback 실패에도 child를 abort하고 종료를 관측하며, 증명이 부족하면 grant와 private staging을 보존합니다.
+
+초기 지원 대상은 Linux+bwrap+Node의 source/npm 실행이며 `.git`이 실제 디렉터리인 저장소입니다. linked worktree의 외부 git directory, Bun/standalone bundle의 worker 파일 미제공, namespace 사용 불가에는 명시적으로 실패합니다. 동기 helper `publishVerifiedRun`은 내부 호환 경로로 남지만 SDK/CLI가 그 경로로 자동 후퇴하지 않습니다.
+
+벽시계 역행은 `clock_anomaly`로 차단합니다. 이 오류를 없애려고 journal을 지우거나 시계 검사를 끄지 마십시오. workspace/fsync 같은 host 동기 I/O 전체를 OS 수준에서 시간 제한한다는 보장은 하지 않습니다.
 
 ## 증거 조회
 

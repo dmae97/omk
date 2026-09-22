@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
+import { canonicalJson } from "../canonical-json.ts";
 import { writeExclusiveFileDurablySync } from "../durable-file-io.ts";
-import { canonicalJson } from "../run-journal.ts";
 
 export class VerifiedRunError extends Error {
 	readonly code: string;

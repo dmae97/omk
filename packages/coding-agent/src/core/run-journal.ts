@@ -10,6 +10,8 @@
  * {@link RunJournal} and when raw bytes are inspected by
  * {@link inspectRunJournal}. There is no opaque mode that skips hashing.
  */
+
+import { canonicalJson } from "./canonical-json.ts";
 import {
 	assertPreRedactedTerminationMessage,
 	classifySessionTermination,
@@ -18,6 +20,8 @@ import {
 	SESSION_TERMINATION_SCHEMA_VERSION,
 	type SessionTermination,
 } from "./session-termination.ts";
+
+export { canonicalJson } from "./canonical-json.ts";
 
 export const RUN_JOURNAL_SCHEMA_VERSION = 1 as const;
 /** Sixty-four zero bits; the `prevHash` of the first record in every chain. */
@@ -372,23 +376,6 @@ function deepFreeze<T>(value: T): T {
 	if (typeof value !== "object" || value === null || Object.isFrozen(value)) return value;
 	for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
 	return Object.freeze(value);
-}
-
-/** Recursively key-sorted JSON serialization. Deterministic across runtimes and key insertion order. */
-export function canonicalJson(value: unknown): string {
-	if (value === null) return "null";
-	if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-	if (typeof value === "object") {
-		const object = value as Record<string, unknown>;
-		const parts: string[] = [];
-		for (const key of Object.keys(object).sort()) {
-			const child = object[key];
-			if (child === undefined) continue;
-			parts.push(`${JSON.stringify(key)}:${canonicalJson(child)}`);
-		}
-		return `{${parts.join(",")}}`;
-	}
-	return JSON.stringify(value);
 }
 
 /** Defensively drop a stray `hash` key so the material never includes it, regardless of caller. */

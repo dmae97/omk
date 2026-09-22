@@ -70,7 +70,7 @@ export function probeNamespace(identity: NamespaceIdentity): "alive" | "gone" | 
 	}
 	try {
 		const current = processStat(identity.pid);
-		if (current.startTicks !== identity.startTicks) return "gone";
+		if (current.startTicks !== identity.startTicks) return "unknown";
 		// Linux finishes PID namespace teardown before its init becomes a zombie.
 		if (current.state === "Z" || current.state === "X") return "gone";
 		return readlinkSync(`/proc/${identity.pid}/ns/pid`) === identity.namespace ? "alive" : "unknown";

@@ -22,10 +22,13 @@ export class GitOperationBudget {
 		this.signal = options.signal;
 	}
 	remaining(): number {
+		return Math.min(COMMAND_TIMEOUT_MS, this.remainingWorkMs());
+	}
+	remainingWorkMs(): number {
 		if (this.signal?.aborted) throw new VerifiedRunError("cancelled");
 		const remaining = this.deadline - this.clock();
 		if (!(remaining > 0)) throw new VerifiedRunError("deadline");
-		return Math.max(1, Math.ceil(Math.min(COMMAND_TIMEOUT_MS, remaining)));
+		return Math.max(1, Math.ceil(remaining));
 	}
 	record(command: string): void {
 		this.counts.set(command, (this.counts.get(command) ?? 0) + 1);

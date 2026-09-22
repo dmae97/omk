@@ -8,8 +8,8 @@ import {
 	type AuthorityStoreHooks,
 	authorityStorePath,
 } from "./authority-store.ts";
-import { probeNamespace } from "./namespace-identity.ts";
 import { type AuthorityStatus, deriveAuthorityStatus } from "./run-status.ts";
+import { probeOwnedNamespace } from "./supervisor-adapter.ts";
 
 /**
  * Runtime bridge between the verified-run execution path and the durable
@@ -35,10 +35,7 @@ import { type AuthorityStatus, deriveAuthorityStatus } from "./run-status.ts";
  */
 export function runAuthorityProbe(grant: AuthorityGrantRecord): ReturnType<AuthorityProbe> {
 	if (!grant.identity) return "unknown";
-	const result = probeNamespace(grant.identity);
-	if (result === "gone") return "terminated";
-	if (result === "alive") return "alive";
-	return "unknown";
+	return probeOwnedNamespace(grant.identity);
 }
 
 /** Total admissible weight of concurrently unsettled grants for one state root. */

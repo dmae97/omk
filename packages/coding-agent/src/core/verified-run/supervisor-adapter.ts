@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readlinkSync, statSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
-import type { NamespaceIdentity } from "./namespace-identity.ts";
+import { type NamespaceIdentity, probeNamespace } from "./namespace-identity.ts";
 import { VerifiedRunError } from "./storage.ts";
 
 /**
@@ -122,13 +122,18 @@ export function namespaceMemberPids(identity: Pick<NamespaceIdentity, "namespace
 	return members;
 }
 
-/**
- * Wait for the supervised namespace to depopulate, bounded by `budgetMs`.
- * "drained" is the termination witness; "populated" means a descendant is
- * still alive inside the boundary; "unknown" means the boundary could not be
- * enumerated at all. Callers must not release claims on either non-drained
- * result.
- */
+/** An absent exact process plus an empty namespace is a termination witness; PID reuse is not. */
+export function probeOwnedNamespace(identity: NamespaceIdentity): "terminated" | "alive" | "unknown" {
+	const status = probeNamespace(identity);
+	if (status !== "gone") return status;
+	try {
+		return namespaceMemberPids(identity).length === 0 ? "terminated" : "alive";
+	} catch {
+		return "unknown";
+	}
+}
+
+/** Wait for namespace emptiness within budgetMs; populated/unknown never release claims. */
 export async function awaitBoundaryDrained(
 	identity: Pick<NamespaceIdentity, "namespace">,
 	budgetMs: number,

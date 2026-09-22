@@ -33,7 +33,10 @@ function terminalFor(journal: JournalSnapshot, commandId: string): boolean {
 		({ event }) => (event.kind === "published" || event.kind === "publish_failed") && event.commandId === commandId,
 	);
 }
-function publishDisposition(journal: JournalSnapshot, command: RunPublishCommand): "completed" | "resume" | "new" {
+export function publishDisposition(
+	journal: JournalSnapshot,
+	command: RunPublishCommand,
+): "completed" | "resume" | "new" {
 	const first = journal.records[0]?.event;
 	if (
 		first?.kind !== "created" ||
@@ -96,7 +99,11 @@ export function publishVerifiedRun(
 	}
 }
 
-function recordPublished(journal: VerifiedRunJournal, command: RunPublishCommand, candidateOid: string): RunProjection {
+export function recordPublished(
+	journal: VerifiedRunJournal,
+	command: RunPublishCommand,
+	candidateOid: string,
+): RunProjection {
 	return journal.append({
 		kind: "published",
 		commandId: command.commandId,

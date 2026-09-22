@@ -55,9 +55,9 @@ import { assertSameCommandMeaning, authorizationStillOpen, expiryEvents, sameGra
 export type { AuthorityRecord } from "./authority-journal.ts";
 
 import type { NamespaceIdentity } from "./namespace-identity.ts";
-import { probeNamespace } from "./namespace-identity.ts";
 import { readRunClock } from "./recovery-clock.ts";
 import { VerifiedRunError } from "./storage.ts";
+import { probeOwnedNamespace } from "./supervisor-adapter.ts";
 
 /**
  * Durable authority store (WP03): the single-writer boundary for supervisor
@@ -395,8 +395,7 @@ function healGarbageCollect(
 
 function defaultProbe(grant: AuthorityGrantRecord): "terminated" | "alive" | "unknown" {
 	if (!grant.identity) return "unknown";
-	const result = probeNamespace(grant.identity);
-	return result === "gone" ? "terminated" : result === "alive" ? "alive" : "unknown";
+	return probeOwnedNamespace(grant.identity);
 }
 
 function nextSequenceValue(value: Sequence): Sequence {
@@ -733,6 +732,7 @@ export class AuthorityStore {
 		const grant = this.state.grants.get(token.grantSequence);
 		if (!grant || !sameGrantToken(grant.token, token)) return undefined;
 		if (authoritative) {
+			if (this.released) return undefined;
 			if (
 				token.authorityEpoch !== this.state.epoch ||
 				this.state.incarnations.get(token.sessionId) !== token.sessionIncarnation ||
@@ -796,6 +796,8 @@ export class AuthorityStore {
 
 	/** Revalidate a running effect before its next irreversible boundary, without starting it again. */
 	effectAuthorized(token: GrantToken, actualClaims: readonly ResourceClaimInput[]): boolean {
+		if (this.released) return false;
+		this.commit([]);
 		const now = this.now();
 		const grant = this.resolveToken(token, true);
 		if (!grant || grant.state !== "running") return false;
