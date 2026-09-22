@@ -1,4 +1,12 @@
 import type { OpenRouterRouting, VercelGatewayRouting } from "./gateway-routing-types.ts";
+import type { ProviderRateLimitSnapshot, ProviderResponse } from "./provider-response-types.ts";
+
+export type {
+	ProviderRateLimitSnapshot,
+	ProviderRateLimitWindow,
+	ProviderResponse,
+} from "./provider-response-types.ts";
+
 import type { AssistantMessageDiagnostic } from "./utils/diagnostics.ts";
 
 export type { OpenRouterRouting, VercelGatewayRouting } from "./gateway-routing-types.ts";
@@ -89,23 +97,6 @@ export interface ThinkingBudgets {
 export type CacheRetention = "none" | "short" | "long";
 
 export type Transport = "sse" | "websocket" | "websocket-cached" | "auto";
-
-export interface ProviderResponse {
-	status: number;
-	headers: Record<string, string>;
-}
-
-export interface ProviderRateLimitWindow {
-	usedPercent: number;
-	windowSeconds?: number;
-	resetsAt?: number;
-}
-
-export interface ProviderRateLimitSnapshot {
-	limitId?: string;
-	primary?: ProviderRateLimitWindow;
-	secondary?: ProviderRateLimitWindow;
-}
 
 export interface StreamOptions {
 	temperature?: number;

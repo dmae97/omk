@@ -18,7 +18,6 @@ import type {
 	Model,
 	ProviderRateLimitSnapshot,
 	SimpleStreamOptions,
-	StopReason,
 	StreamFunction,
 	StreamOptions,
 	TextContent,
@@ -37,6 +36,7 @@ import { sanitizeOversizedImages } from "./anthropic-image-guard.ts";
 import { resolveCloudflareBaseUrl } from "./cloudflare.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import { resolveSystemPromptCacheBoundary } from "./prompt-cache.ts";
+import { anthropicStopReason as mapStopReason } from "./provider-stop-reasons.ts";
 import { adjustMaxTokensForThinking, buildBaseOptions } from "./simple-options.ts";
 import { stableTools } from "./tool-schema.ts";
 import { transformMessages } from "./transform-messages.ts";
@@ -1316,28 +1316,4 @@ function convertTools(
 			...(cacheControl && index === stable.length - 1 ? { cache_control: cacheControl } : {}),
 		};
 	});
-}
-
-function mapStopReason(reason: Anthropic.Messages.StopReason | string): StopReason {
-	switch (reason) {
-		case "end_turn":
-			return "stop";
-		case "max_tokens":
-			return "length";
-		case "tool_use":
-			return "toolUse";
-		case "refusal":
-			return "error";
-		case "sticky": // Fallback 라우팅 후 대화 고정 (claude-code 2.1.177 RE, 2026-08-02)
-			return "stop";
-		case "pause_turn": // Stop is good enough -> resubmit
-			return "stop";
-		case "stop_sequence":
-			return "stop"; // We don't supply stop sequences, so this should never happen
-		case "sensitive": // Content flagged by safety filters (not yet in SDK types)
-			return "error";
-		default:
-			// Handle unknown stop reasons gracefully (API may add new values)
-			throw new Error(`Unhandled stop reason: ${reason}`);
-	}
 }

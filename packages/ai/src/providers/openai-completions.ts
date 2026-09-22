@@ -19,7 +19,6 @@ import type {
 	Message,
 	Model,
 	SimpleStreamOptions,
-	StopReason,
 	StreamFunction,
 	StreamOptions,
 	TextContent,
@@ -38,6 +37,7 @@ import { isCloudflareProvider, resolveCloudflareBaseUrl } from "./cloudflare.ts"
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import { getCompat, isModelStudioModel, type ResolvedOpenAICompletionsCompat } from "./openai-completions-compat.ts";
 import { resolveOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
+import { openAICompletionStopReason as mapStopReason } from "./provider-stop-reasons.ts";
 import { buildBaseOptions } from "./simple-options.ts";
 import { stableTools } from "./tool-schema.ts";
 import { transformMessages } from "./transform-messages.ts";
@@ -1082,30 +1082,4 @@ function parseChunkUsage(
 	};
 	calculateCost(model, usage);
 	return usage;
-}
-
-function mapStopReason(reason: ChatCompletionChunk.Choice["finish_reason"] | string): {
-	stopReason: StopReason;
-	errorMessage?: string;
-} {
-	if (reason === null) return { stopReason: "stop" };
-	switch (reason) {
-		case "stop":
-		case "end":
-			return { stopReason: "stop" };
-		case "length":
-			return { stopReason: "length" };
-		case "function_call":
-		case "tool_calls":
-			return { stopReason: "toolUse" };
-		case "content_filter":
-			return { stopReason: "error", errorMessage: "Provider finish_reason: content_filter" };
-		case "network_error":
-			return { stopReason: "error", errorMessage: "Provider finish_reason: network_error" };
-		default:
-			return {
-				stopReason: "error",
-				errorMessage: `Provider finish_reason: ${reason}`,
-			};
-	}
 }

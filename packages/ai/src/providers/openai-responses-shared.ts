@@ -1,4 +1,3 @@
-import type OpenAI from "openai";
 import type {
 	Tool as OpenAITool,
 	ResponseCreateParamsStreaming,
@@ -19,7 +18,6 @@ import type {
 	Context,
 	ImageContent,
 	Model,
-	StopReason,
 	TextContent,
 	TextSignatureV1,
 	ThinkingContent,
@@ -31,6 +29,7 @@ import type { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { shortHash } from "../utils/hash.ts";
 import { parseStreamingJson } from "../utils/json-parse.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
+import { openAIResponseStopReason as mapStopReason } from "./provider-stop-reasons.ts";
 import { stableTools } from "./tool-schema.ts";
 import { transformMessages } from "./transform-messages.ts";
 
@@ -173,8 +172,12 @@ export function convertResponsesMessages<TApi extends Api>(
 				if (block.type === "thinking") {
 					if (block.thinking.trim().length === 0) continue;
 					if (block.thinkingSignature) {
-						const reasoningItem = JSON.parse(block.thinkingSignature) as ResponseReasoningItem;
-						output.push(reasoningItem);
+						try {
+							const reasoningItem = JSON.parse(block.thinkingSignature) as ResponseReasoningItem;
+							output.push(reasoningItem);
+						} catch (cause) {
+							throw new Error("Invalid OpenAI reasoning signature", { cause });
+						}
 					}
 				} else if (block.type === "text") {
 					const textBlock = block as TextContent;
@@ -531,27 +534,6 @@ export async function processResponsesStream<TApi extends Api>(
 					? `incomplete: ${details.reason}`
 					: "Unknown error (no error details in response)";
 			throw new Error(msg);
-		}
-	}
-}
-
-function mapStopReason(status: OpenAI.Responses.ResponseStatus | undefined): StopReason {
-	if (!status) return "stop";
-	switch (status) {
-		case "completed":
-			return "stop";
-		case "incomplete":
-			return "length";
-		case "failed":
-		case "cancelled":
-			return "error";
-		// These two are wonky ...
-		case "in_progress":
-		case "queued":
-			return "stop";
-		default: {
-			const _exhaustive: never = status;
-			throw new Error(`Unhandled stop reason: ${_exhaustive}`);
 		}
 	}
 }
