@@ -20,7 +20,7 @@ published package. Current source and tests override that record:
 
 - `src/types.ts` — Work Packet, Dispatch Record, state enums (as string literal unions), on-disk schema types
 - `src/state-machine.ts` — the packet lifecycle state machine and transition guards
-- `src/adaptorch-client.ts` — thin typed wrapper around AdaptOrch's 10 MCP tools
+- `src/adaptorch-client.ts` — thin typed wrapper around AdaptOrch's 11 MCP tools
 - `src/adjudicator.ts` + `src/adjudicator-registry.ts` — the Outcome Adjudicator and its per-`kind` registry
 - `src/loop.ts` — adjudication timeout, verdict projection, and next-transition helpers; not an end-to-end dispatcher
 - `src/b2c-mapper.ts` — B2C (Bridge-to-Code) mapping for patch-apply safety

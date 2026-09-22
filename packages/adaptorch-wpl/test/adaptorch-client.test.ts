@@ -57,12 +57,37 @@ describe("AdaptOrchClient.usage", () => {
 });
 
 describe("AdaptOrchClient.routeTopology", () => {
+	it("forwards the DAG at the tool's top-level arguments", async () => {
+		let forwarded: { name: string; args: Record<string, unknown> } | undefined;
+		const transport: AdaptOrchTransport = {
+			callTool: async (name, args) => {
+				forwarded = { name, args };
+				return { topology: "sequential", reason: "width is 1" };
+			},
+		};
+		const dag = {
+			subtasks: [{ id: "fix", description: "Align the route call" }],
+			dependencies: [],
+		};
+
+		const result = await new AdaptOrchClient(transport).routeTopology(dag);
+
+		expect(forwarded).toEqual({
+			name: "adaptorch_route_topology",
+			args: dag,
+		});
+		expect(forwarded?.args).not.toHaveProperty("payload_shape");
+		expect(result.classification).toBe("sequential");
+	});
+
 	it("reads the current topology response field", async () => {
 		const transport: AdaptOrchTransport = {
 			callTool: async () => ({ topology: "hybrid", reason: "mixed dependencies" }),
 		};
 
-		const result = await new AdaptOrchClient(transport).routeTopology({ subtasks: [] });
+		const result = await new AdaptOrchClient(transport).routeTopology({
+			subtasks: [{ id: "review", description: "Review the mixed graph" }],
+		});
 
 		expect(result.classification).toBe("hybrid");
 	});

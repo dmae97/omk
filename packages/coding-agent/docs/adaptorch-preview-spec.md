@@ -15,7 +15,7 @@
 | `task_text` | string | user / lane kickoff | Primary routing signal; may be truncated for headroom. |
 | `path_hints` | string[] | cwd, owned paths, globs | Optional; used for domain triggers and write-scope checks. |
 | `upstream_tags` | string[] | goal id, lane role, preset | e.g. `grok-adaptorch-prod`, `omk-planner`. |
-| `payload_shape` | object | planner / DAG artifact | Non-empty `subtasks` array plus optional `dependencies`; descriptions are bounded and sanitized, with no secrets or session ids. |
+| `route_payload` | object | planner / DAG artifact | Non-empty `subtasks` array plus optional `dependencies`, passed as the tool's top-level arguments. Descriptions are bounded and sanitized, with no secrets or session ids. |
 | `provider_profile` | enum | session | `xai` \| `default` \| other registered provider. |
 | `adaptorch_transport` | optional | MCP grant | If absent, preview runs **local-only** (OMK compose + deterministic fallbacks). |
 | `lane_grants[]` | object[] | root coordinator | Each: scope, authority, skills, MCP, acceptance, evidence path. |
@@ -44,12 +44,12 @@
 
 **Purpose:** Classify execution topology **without** submitting `adaptorch_run`.
 
-**Precondition:** `adaptorch_transport` granted **and** `payload_shape` is sanitized.
+**Precondition:** `adaptorch_transport` granted **and** `route_payload` is sanitized.
 
 **Steps:**
 
 1. Call `adaptorch_capabilities` once per preview session (cache TTL).
-2. Call `adaptorch_route_topology` with `payload_shape` as the tool's top-level argument object.
+2. Call `adaptorch_route_topology` with `route_payload`'s `subtasks` and optional `dependencies` as the tool's top-level arguments. Do not wrap them in `payload_shape`; the engine schema sets `additionalProperties: false` and requires `subtasks`.
 3. Read `raw.topology` and validate it against `adaptorch_capabilities.topologies`.
 4. If transport is missing or the value is outside that advertised set, set `topology = null` and record a bounded `skipped_reason`.
 
@@ -122,8 +122,8 @@
 function PreviewOrchestrate(inputs):
   assert inputs.task_text is non-empty
   A <- StageA_SignalIntake(inputs.task_text, inputs.path_hints, inputs.upstream_tags)
-  if inputs.adaptorch_transport is granted and inputs.payload_shape is sanitized:
-    B <- StageB_TopologyPreview(inputs.adaptorch_transport, inputs.payload_shape)
+  if inputs.adaptorch_transport is granted and inputs.route_payload is sanitized:
+    B <- StageB_TopologyPreview(inputs.adaptorch_transport, inputs.route_payload)
   else:
     B <- { topology: null, skipped_reason: transport_or_shape }
   C <- StageC_ComposeLanes(A, B, inputs.lane_grants, inputs.budget_caps)
@@ -138,11 +138,11 @@ function PreviewOrchestrate(inputs):
 ## Algorithm 2 — TopologyClassifyPreview
 
 ```
-function TopologyClassifyPreview(transport, payload_shape):
+function TopologyClassifyPreview(transport, route_payload):
   caps <- transport.call("adaptorch_capabilities", {})
   if caps indicates unsupported connector:
     return { topology: null, skipped_reason: capabilities }
-  raw <- transport.call("adaptorch_route_topology", payload_shape)
+  raw <- transport.call("adaptorch_route_topology", route_payload)
   topology <- extract_enum(raw.topology, caps.topologies)
   if topology is missing:
     return { topology: null, skipped_reason: unparseable }

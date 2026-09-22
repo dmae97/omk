@@ -284,7 +284,7 @@ export function sanitizeAdvisoryResult(candidate: unknown): AdaptorchAdvisoryRes
 
 /**
  * Read-only/local AdaptOrch MCP tool names this bridge may ever reference,
- * grounded in the real 10-tool surface documented in
+ * grounded in the eleven-tool surface documented in
  * packages/adaptorch-wpl/src/adaptorch-client.ts (cross-checked there
  * against the AdaptOrch server's own docs) and narrowed to the two tools the
  * read-first plan puts in scope for a reasoning-effort hint (plan 4.2): the

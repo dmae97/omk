@@ -9,9 +9,9 @@
  * Tool surface, names, and read/write classification are derived from the
  * server's own inventory: `diagnostics.py::EXPECTED_CORE_TOOLS` and
  * `_FULL_ONLY_TOOLS`, cross-checked against `hardening.py::REMOTE_TOOL_NAMES`
- * and the `output_schema.py` projector table. The surface is tiered: nine core
- * tools every deployment exposes, plus two that exist only in a full or local
- * deployment. No "benchmark" or "verification" tools exist in it.
+ * and the `output_schema.py` projector table. The engine declares eleven
+ * tools. A hardened remote profile exposes nine; trace and topology reads
+ * stay full or local. No "benchmark" or "verification" tools exist in it.
  */
 
 import { isTopologyClassification, type TopologyClassification } from "./types.ts";
@@ -59,9 +59,9 @@ export interface AdaptOrchUsage {
 /**
  * Abstract transport for invoking AdaptOrch MCP tools by name.
  *
- * See doc section "The real, current 10-tool MCP surface (grouped)". No
- * concrete implementation ships with this package yet; a caller must
- * provide one (e.g. wrapping an MCP SDK client's `callTool`).
+ * The engine declares eleven tools. No concrete transport ships with this
+ * package yet; a caller must provide one (e.g. wrapping an MCP SDK client's
+ * `callTool`).
  */
 export interface AdaptOrchTransport {
 	callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
@@ -169,13 +169,11 @@ export interface AdaptOrchRouteTopologyResult {
 }
 
 /**
- * Typed wrapper around the 10 real AdaptOrch MCP tools.
+ * Typed wrapper around the eleven AdaptOrch MCP tools the engine declares.
  *
- * See doc section "The real, current 10-tool MCP surface (grouped)" for
- * the full tool list, purposes, and read/write classification. This
- * class only translates method calls into `transport.callTool` calls
- * with the exact tool names the doc lists; it does not implement a
- * transport itself.
+ * This class only translates method calls into `transport.callTool` calls
+ * with those tool names. It does not implement a transport, and it does not
+ * decide whether a remote profile hides the two full-only tools.
  */
 export class AdaptOrchClient {
 	private readonly transport: AdaptOrchTransport;
@@ -232,9 +230,13 @@ export class AdaptOrchClient {
 		return (await this.transport.callTool("adaptorch_get_traces", { run_id: runId })) as AdaptOrchTraceSpan[];
 	}
 
-	/** Route a DAG locally and fail closed if the MCP response drifts from the current topology contract. */
-	async routeTopology(payloadShape: unknown): Promise<AdaptOrchRouteTopologyResult> {
-		const raw = await this.transport.callTool("adaptorch_route_topology", { payload_shape: payloadShape });
+	/**
+	 * Route a DAG locally and fail closed if the MCP response drifts from the
+	 * current topology contract. The engine schema takes `subtasks` and optional
+	 * `dependencies` at the top level; wrapping them rejects the call.
+	 */
+	async routeTopology(payload: Record<string, unknown>): Promise<AdaptOrchRouteTopologyResult> {
+		const raw = await this.transport.callTool("adaptorch_route_topology", payload);
 		const topology = isRecord(raw) ? raw.topology : undefined;
 		if (!isTopologyClassification(topology)) {
 			throw new Error("AdaptOrch route response has invalid topology");
