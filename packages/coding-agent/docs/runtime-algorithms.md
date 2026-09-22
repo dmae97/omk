@@ -215,16 +215,19 @@ and places conflicting calls in later levels. Before a level executes, OMK autho
 re-plans with post-hook arguments so a hook cannot silently invalidate the
 original claim plan.
 
-The live executor uses level barriers. `assignDagDependencies()` computes a
-finer predecessor graph, but no live executor consumes it. Each candidate level
-is authorized and then re-planned from post-hook arguments.
+The live executor uses a ready frontier, not level barriers.
+`assignDagDependencies()` computes the predecessor graph and the loop feeds it
+to `runDagFrontier()`, which admits a node as soon as its predecessors settle
+and a resident slot frees up. Each candidate is still authorized and
+re-planned from post-hook arguments before execution.
 
 Evidence:
 
 - `packages/agent/src/tool-dag-scheduler.ts`: `assignDagLevels`,
   `assignDagDependencies`, `scheduleDagLevels`
 - `packages/agent/src/agent-loop.ts`: `executeToolCallsDagLevels`,
-  `runDagLevelCalls`
+  `runDagFrontier` (predecessor-settle ready queue; the former
+  `runDagLevelCalls` level barrier was replaced)
 - `packages/agent/test/tool-dag-scheduler*.test.ts`
 - `packages/agent/test/tool-dag-dependencies.test.ts`
 

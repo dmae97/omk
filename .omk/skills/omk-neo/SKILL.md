@@ -5,7 +5,7 @@ description: Entry point for Neo computer-use work in this checkout. Route brows
 
 # Neo router
 
-Start here for Neo tasks. This skill routes; it does not itself drive browsers, write sites, or configure servers. This checkout integrates and builds the Neo bundle locally on 2026-09-17, but it is an uncommitted working-tree state, not a published release. Verify installed behavior before recommending commands to others.
+Start here for Neo tasks. This skill routes; it does not itself drive browsers, write sites, or configure servers. The six public Neo skills shipped in coding-agent 1.2.0 under `resources/neo/skills`. This checkout may still differ from the published package, so verify `omk neo list` before recommending commands to others.
 
 ## Route by target
 
