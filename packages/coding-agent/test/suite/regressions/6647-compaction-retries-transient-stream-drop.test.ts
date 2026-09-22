@@ -126,7 +126,12 @@ describe("#6647 compaction retries transient summarization failures", () => {
 			};
 			const getCallCount = useScriptedStreamFn(harness, [error]);
 
-			await expect(harness.session.compact()).rejects.toThrow(errorMessage);
+			const result = await harness.session.compact();
+			expect(result.details).toMatchObject({
+				deterministicEmergency: true,
+				deterministicReason: expect.stringContaining(errorMessage),
+			});
+			expect(result.summary).toContain("Deterministic emergency compaction");
 			expect(getCallCount()).toBe(1);
 			expect(harness.eventsOfType("summarization_retry_scheduled")).toHaveLength(0);
 		},
