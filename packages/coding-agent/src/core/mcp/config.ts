@@ -45,6 +45,21 @@ function toStringRecord(value: unknown): Record<string, string> | undefined {
 	return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/**
+ * Expand `~` and `${VAR}`/`$VAR` in a config string so mcp.json stays portable
+ * across machines and home directories. Unknown variables are left untouched
+ * (the spawn will fail loudly rather than silently hitting a wrong path).
+ */
+function expandConfigPath(value: string): string {
+	if (value === "~" || value.startsWith("~/")) {
+		value = path.join(os.homedir(), value.slice(2));
+	}
+	return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (match, braced, bare) => {
+		const key = braced ?? bare;
+		return process.env[key] ?? match;
+	});
+}
+
 function toServerConfig(name: string, raw: unknown): McpServerConfig | undefined {
 	if (!isRecord(raw)) return undefined;
 	const command = raw.command;
@@ -54,10 +69,10 @@ function toServerConfig(name: string, raw: unknown): McpServerConfig | undefined
 	const startupTimeoutSec = typeof raw.startup_timeout_sec === "number" ? raw.startup_timeout_sec : undefined;
 	return {
 		name,
-		command,
-		args,
+		command: expandConfigPath(command),
+		args: args?.map(expandConfigPath),
 		env: toStringRecord(raw.env),
-		cwd: typeof raw.cwd === "string" ? raw.cwd : undefined,
+		cwd: typeof raw.cwd === "string" ? expandConfigPath(raw.cwd) : undefined,
 		disabled: raw.disabled === true || raw.enabled === false,
 		handshakeTimeoutMs: startupTimeoutSec !== undefined ? Math.max(1, startupTimeoutSec) * 1000 : undefined,
 	};
