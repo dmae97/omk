@@ -1,5 +1,6 @@
 import type { FileSystem, JsonlSessionMetadata, LeafEntry, SessionStorage, SessionTreeEntry } from "../types.ts";
 import { SessionError, toError } from "../types.ts";
+import { buildLabelsById, updateLabelCache } from "./jsonl-labels.ts";
 import { getFileSystemResultOrThrow } from "./repo-utils.ts";
 import { uuidv7 } from "./uuid.ts";
 
@@ -13,24 +14,6 @@ interface SessionHeader {
 	timestamp: string;
 	cwd: string;
 	parentSession?: string;
-}
-
-function updateLabelCache(labelsById: Map<string, string>, entry: SessionTreeEntry): void {
-	if (entry.type !== "label") return;
-	const label = entry.label?.trim();
-	if (label) {
-		labelsById.set(entry.targetId, label);
-	} else {
-		labelsById.delete(entry.targetId);
-	}
-}
-
-function buildLabelsById(entries: SessionTreeEntry[]): Map<string, string> {
-	const labelsById = new Map<string, string>();
-	for (const entry of entries) {
-		updateLabelCache(labelsById, entry);
-	}
-	return labelsById;
 }
 
 function generateEntryId(byId: { has(id: string): boolean }): string {
