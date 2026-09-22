@@ -35,6 +35,7 @@ import { formatNoModelsAvailableMessage } from "./core/auth-guidance.ts";
 import { AuthStorage } from "./core/auth-storage.ts";
 import { collectSettingsDiagnostics, reportDiagnostics } from "./core/cli-diagnostics.ts";
 import { exportFromFile } from "./core/export-html/index.ts";
+import { createSessionMetadataLoaders } from "./modes/interactive/components/session-selector-loaders.ts";
 
 function isTruthyEnvFlag(value: string | undefined): boolean {
 	if (!value) return false;
@@ -382,10 +383,7 @@ async function createSessionManager(
 	if (parsed.resume) {
 		initTheme(settingsManager.getTheme(), true);
 		try {
-			const selectedPath = await selectSession(
-				(onProgress) => SessionManager.list(cwd, sessionDir, onProgress),
-				(onProgress) => SessionManager.listAll(sessionDir, onProgress),
-			);
+			const selectedPath = await selectSession(...createSessionMetadataLoaders(cwd, sessionDir));
 			if (!selectedPath) {
 				console.log(chalk.dim("No session selected"));
 				process.exit(0);

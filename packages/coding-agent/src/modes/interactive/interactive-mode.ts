@@ -13,6 +13,8 @@ import type { AssistantMessage, ImageContent, Message, Model, OAuthProviderId, O
 import { AttachmentStore } from "../../core/attachment-store.ts";
 import { describePromptImageAttachment, type PromptImageAttachment } from "../../core/prompt-attachment.ts";
 import { createAttachmentStrip } from "./components/attachment-strip.ts";
+import { ChatContainer } from "./components/chat-container.ts";
+import { createSessionMetadataLoaders } from "./components/session-selector-loaders.ts";
 
 export { formatResumeCommand } from "./interactive-resume-command.ts";
 
@@ -265,7 +267,7 @@ export function buildWorkingLoaderMessage(base: string, reasoning: boolean, leve
 export class InteractiveMode {
 	private runtimeHost: AgentSessionRuntime;
 	private ui: TUI;
-	private chatContainer: Container;
+	private chatContainer = new ChatContainer();
 	private pendingMessagesContainer: Container;
 	private statusContainer: Container;
 	private defaultEditor: CustomEditor;
@@ -424,7 +426,6 @@ export class InteractiveMode {
 		this.ui = new TUI(new ProcessTerminal(), this.settingsManager.getShowHardwareCursor());
 		this.ui.setClearOnShrink(this.settingsManager.getClearOnShrink());
 		this.headerContainer = new Container();
-		this.chatContainer = new Container();
 		this.pendingMessagesContainer = new Container();
 		this.statusContainer = new Container();
 		this.widgetContainerAbove = new Container();
@@ -5117,12 +5118,11 @@ export class InteractiveMode {
 	private showSessionSelector(): void {
 		this.showSelector((done) => {
 			const selector = new SessionSelectorComponent(
-				(onProgress) =>
-					SessionManager.list(this.sessionManager.getCwd(), this.sessionManager.getSessionDir(), onProgress),
-				(onProgress) =>
-					this.sessionManager.usesDefaultSessionDir()
-						? SessionManager.listAll(onProgress)
-						: SessionManager.listAll(this.sessionManager.getSessionDir(), onProgress),
+				...createSessionMetadataLoaders(
+					this.sessionManager.getCwd(),
+					this.sessionManager.getSessionDir(),
+					this.sessionManager.usesDefaultSessionDir(),
+				),
 				async (sessionPath) => {
 					done();
 					await this.handleResumeSession(sessionPath);
@@ -6333,8 +6333,7 @@ export class InteractiveMode {
 		}
 		const report = createTuiDiagnostics({
 			runtime: inspectTuiRuntime(TUI_RUNTIME),
-			columns: this.ui.terminal.columns,
-			rows: this.ui.terminal.rows,
+			terminal: this.ui.terminal,
 			isStreaming: this.session.isStreaming,
 			isCompacting: this.session.isCompacting,
 			messageCount: this.session.messages.length,
@@ -6508,8 +6507,7 @@ export class InteractiveMode {
 			}
 		}
 
-		disposeComponent(this.builtInHeader);
-		disposeComponent(this.customHeader);
+		for (const component of [this.chatContainer, this.builtInHeader, this.customHeader]) disposeComponent(component);
 		this.footer.dispose();
 		this.footerDataProvider.dispose();
 		if (this.metricsTimer) {

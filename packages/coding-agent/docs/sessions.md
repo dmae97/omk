@@ -69,6 +69,25 @@ In the picker you can:
 
 When available, omk uses the `trash` CLI for deletion instead of permanently removing files.
 
+### Listing and full-history search
+
+The `/resume` and `--resume` pickers keep metadata (name, first message, dates,
+count and ancestry), not every session's concatenated message text. Typing a
+query reads full user/assistant text from the original JSONL files, at most two
+files at a time. Fuzzy tokens, quoted phrases, regex, ordering, named filters and
+all-project scope remain available. Search covers all stored message branches,
+not only visible rows or the current branch.
+
+A loading state is shown until search settles. Changing the query or scope
+cancels obsolete work; replacement work waits for its reads to settle, and old
+results cannot overwrite the current query. Missing/unreadable or replaced
+session identities are reported rather than treated as fully searched. Each
+query rereads the source, so appended text is searchable without a stale sidecar.
+
+This does not change JSONL durability, resume, copying, export, or branch storage.
+No disk index is introduced. A search still temporarily materializes up to two
+full text projections; one very large entry or first message can still be large.
+
 ## Naming Sessions
 
 Use `/name <name>` to set a human-readable session name:

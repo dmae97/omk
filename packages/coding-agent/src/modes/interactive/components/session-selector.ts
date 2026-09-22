@@ -14,12 +14,18 @@ import {
 	visibleWidth,
 } from "omk-tui";
 import { KeybindingsManager } from "../../../core/keybindings.ts";
-import type { SessionInfo, SessionListProgress } from "../../../core/session-manager.ts";
-import { canonicalizePath as _canonicalizePath } from "../../../utils/paths.ts";
+import type { SessionListEntry as SessionInfo, SessionListProgress } from "../../../core/session-manager.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, keyText } from "./keybinding-hints.ts";
-import { filterAndSortSessions, hasSessionName, type NameFilter, type SortMode } from "./session-selector-search.ts";
+import { SessionSearchController } from "./session-selector-async-search.ts";
+import { hasSessionName, type NameFilter, type SortMode } from "./session-selector-search.ts";
+import {
+	buildSessionTree,
+	canonicalizePath,
+	type FlatSessionNode,
+	flattenSessionTree,
+} from "./session-selector-tree.ts";
 
 type SessionScope = "current" | "all";
 
@@ -46,11 +52,6 @@ function formatSessionDate(date: Date): string {
 	if (diffDays < 30) return `${Math.floor(diffDays / 7)}w`;
 	if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo`;
 	return `${Math.floor(diffDays / 365)}y`;
-}
-
-function canonicalizePath(path: string | undefined): string | undefined {
-	if (!path) return path;
-	return _canonicalizePath(path);
 }
 
 class SessionSelectorHeader implements Component {
@@ -186,83 +187,6 @@ class SessionSelectorHeader implements Component {
 	}
 }
 
-/** A session tree node for hierarchical display */
-interface SessionTreeNode {
-	session: SessionInfo;
-	children: SessionTreeNode[];
-}
-
-/** Flattened node for display with tree structure info */
-interface FlatSessionNode {
-	session: SessionInfo;
-	depth: number;
-	isLast: boolean;
-	/** For each ancestor level, whether there are more siblings after it */
-	ancestorContinues: boolean[];
-}
-
-/**
- * Build a tree structure from sessions based on parentSessionPath.
- * Returns root nodes sorted by modified date (descending).
- */
-function buildSessionTree(sessions: SessionInfo[]): SessionTreeNode[] {
-	const byPath = new Map<string, SessionTreeNode>();
-
-	for (const session of sessions) {
-		const sessionPath = canonicalizePath(session.path) ?? session.path;
-		byPath.set(sessionPath, { session, children: [] });
-	}
-
-	const roots: SessionTreeNode[] = [];
-
-	for (const session of sessions) {
-		const sessionPath = canonicalizePath(session.path) ?? session.path;
-		const node = byPath.get(sessionPath)!;
-		const parentPath = canonicalizePath(session.parentSessionPath);
-
-		if (parentPath && byPath.has(parentPath)) {
-			byPath.get(parentPath)!.children.push(node);
-		} else {
-			roots.push(node);
-		}
-	}
-
-	// Sort children and roots by modified date (descending)
-	const sortNodes = (nodes: SessionTreeNode[]): void => {
-		nodes.sort((a, b) => b.session.modified.getTime() - a.session.modified.getTime());
-		for (const node of nodes) {
-			sortNodes(node.children);
-		}
-	};
-	sortNodes(roots);
-
-	return roots;
-}
-
-/**
- * Flatten tree into display list with tree structure metadata.
- */
-function flattenSessionTree(roots: SessionTreeNode[]): FlatSessionNode[] {
-	const result: FlatSessionNode[] = [];
-
-	const walk = (node: SessionTreeNode, depth: number, ancestorContinues: boolean[], isLast: boolean): void => {
-		result.push({ session: node.session, depth, isLast, ancestorContinues });
-
-		for (let i = 0; i < node.children.length; i++) {
-			const childIsLast = i === node.children.length - 1;
-			// Only show continuation line for non-root ancestors
-			const continues = depth > 0 ? !isLast : false;
-			walk(node.children[i]!, depth + 1, [...ancestorContinues, continues], childIsLast);
-		}
-	};
-
-	for (let i = 0; i < roots.length; i++) {
-		walk(roots[i]!, 0, [], i === roots.length - 1);
-	}
-
-	return result;
-}
-
 /**
  * Custom session list component with multi-line items and search
  */
@@ -272,6 +196,12 @@ class SessionList implements Component, Focusable {
 		return selected?.session.path;
 	}
 	private allSessions: SessionInfo[] = [];
+	private readonly search = new SessionSearchController();
+	public onSearchUpdate?: () => void;
+
+	dispose(): void {
+		this.search.dispose();
+	}
 	private filteredSessions: FlatSessionNode[] = [];
 	private selectedIndex: number = 0;
 	private searchInput: Input;
@@ -355,21 +285,16 @@ class SessionList implements Component, Focusable {
 		const nameFiltered =
 			this.nameFilter === "all" ? this.allSessions : this.allSessions.filter((session) => hasSessionName(session));
 
-		if (this.sortMode === "threaded" && !trimmed) {
-			// Threaded mode without search: show tree structure
-			const roots = buildSessionTree(nameFiltered);
-			this.filteredSessions = flattenSessionTree(roots);
-		} else {
-			// Other modes or with search: flat list
-			const filtered = filterAndSortSessions(nameFiltered, query, this.sortMode, "all");
-			this.filteredSessions = filtered.map((session) => ({
-				session,
-				depth: 0,
-				isLast: true,
-				ancestorContinues: [],
-			}));
-		}
-		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredSessions.length - 1));
+		if (trimmed && nameFiltered.some((session) => session.allMessagesText === undefined)) this.filteredSessions = [];
+		this.search.update(nameFiltered, query, this.sortMode, ({ sessions, unreadable }) => {
+			this.filteredSessions =
+				this.sortMode === "threaded" && !trimmed
+					? flattenSessionTree(buildSessionTree(sessions))
+					: sessions.map((session) => ({ session, depth: 0, isLast: true, ancestorContinues: [] }));
+			this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredSessions.length - 1));
+			if (unreadable) this.onError?.(`Could not search ${unreadable} session file(s); refresh or check access.`);
+			this.onSearchUpdate?.();
+		});
 	}
 
 	private setConfirmingDeletePath(path: string | null): void {
@@ -403,6 +328,8 @@ class SessionList implements Component, Focusable {
 		// Render search input
 		lines.push(...this.searchInput.render(width));
 		lines.push(""); // Blank line after search
+		if (this.search.searching)
+			return [...lines, theme.fg("muted", truncateToWidth("  Searching all session messages...", width, "…"))];
 
 		if (this.filteredSessions.length === 0) {
 			let emptyMessage: string;
@@ -683,6 +610,13 @@ export class SessionSelectorComponent extends Container implements Focusable {
 		this.sessionList.handleInput(data);
 	}
 
+	private disposed = false;
+	dispose(): void {
+		this.disposed = true;
+		this.header.setStatusMessage(null);
+		this.sessionList.dispose();
+	}
+
 	private canRename = true;
 	private sessionList: SessionList;
 	private header: SessionSelectorHeader;
@@ -769,6 +703,7 @@ export class SessionSelectorComponent extends Container implements Focusable {
 			currentSessionFilePath,
 		);
 
+		this.sessionList.onSearchUpdate = this.requestRender;
 		this.buildBaseLayout(this.sessionList);
 
 		this.renameInput.onSubmit = (value) => {
@@ -776,7 +711,7 @@ export class SessionSelectorComponent extends Container implements Focusable {
 		};
 
 		// Ensure header status timeouts are cleared when leaving the selector
-		const clearStatusMessage = () => this.header.setStatusMessage(null);
+		const clearStatusMessage = () => this.dispose();
 		this.sessionList.onSelect = (sessionPath) => {
 			clearStatusMessage();
 			onSelect(sessionPath);
@@ -923,7 +858,7 @@ export class SessionSelectorComponent extends Container implements Focusable {
 		this.requestRender();
 
 		const onProgress = (loaded: number, total: number) => {
-			if (scope !== this.scope) return;
+			if (this.disposed || scope !== this.scope) return;
 			if (seq !== undefined && seq !== this.allLoadSeq) return;
 			this.header.setProgress(loaded, total);
 			this.requestRender();
@@ -933,6 +868,7 @@ export class SessionSelectorComponent extends Container implements Focusable {
 			const sessions = await (scope === "current"
 				? this.currentSessionsLoader(onProgress)
 				: this.allSessionsLoader(onProgress));
+			if (this.disposed) return;
 
 			if (scope === "current") {
 				this.currentSessions = sessions;
@@ -953,6 +889,7 @@ export class SessionSelectorComponent extends Container implements Focusable {
 				this.onCancel();
 			}
 		} catch (err) {
+			if (this.disposed) return;
 			if (scope === "current") {
 				this.currentLoading = false;
 			} else {
@@ -993,6 +930,7 @@ export class SessionSelectorComponent extends Container implements Focusable {
 	}
 
 	private toggleScope(): void {
+		this.sessionList.setSessions([], this.scope === "current");
 		if (this.scope === "current") {
 			this.scope = "all";
 			this.header.setScope(this.scope);

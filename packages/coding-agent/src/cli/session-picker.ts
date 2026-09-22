@@ -4,10 +4,10 @@
 
 import { ProcessTerminal, setKeybindings, TUI } from "omk-tui";
 import { KeybindingsManager } from "../core/keybindings.ts";
-import type { SessionInfo, SessionListProgress } from "../core/session-manager.ts";
+import type { SessionListEntry, SessionListProgress } from "../core/session-manager.ts";
 import { SessionSelectorComponent } from "../modes/interactive/components/session-selector.ts";
 
-type SessionsLoader = (onProgress?: SessionListProgress) => Promise<SessionInfo[]>;
+type SessionsLoader = (onProgress?: SessionListProgress) => Promise<SessionListEntry[]>;
 
 /** Show TUI session selector and return selected session path or null if cancelled */
 export async function selectSession(

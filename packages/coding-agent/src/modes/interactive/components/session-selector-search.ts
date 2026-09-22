@@ -27,7 +27,7 @@ function getSessionSearchText(session: SessionInfo): string {
 	return `${session.id} ${session.name ?? ""} ${session.allMessagesText} ${session.cwd}`;
 }
 
-export function hasSessionName(session: SessionInfo): boolean {
+export function hasSessionName(session: Pick<SessionInfo, "name">): boolean {
 	return Boolean(session.name?.trim());
 }
 

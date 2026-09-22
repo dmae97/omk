@@ -1,10 +1,9 @@
 import { createHash, randomUUID } from "crypto";
-import { closeSync, createReadStream, existsSync, openSync, readdirSync, readSync, renameSync, statSync } from "fs";
-import { readdir, stat } from "fs/promises";
+import { closeSync, existsSync, openSync, readdirSync, readSync, renameSync, statSync } from "fs";
+import { readdir } from "fs/promises";
 import { type AgentMessage, uuidv7 } from "omk-agent-core";
 import type { ImageContent, Message, TextContent } from "omk-ai";
 import { join, resolve } from "path";
-import { createInterface } from "readline";
 import { StringDecoder } from "string_decoder";
 import { getAgentDir as getDefaultAgentDir, getSessionsDir } from "../config.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
@@ -34,38 +33,32 @@ import {
 	sessionDurableHeadFromFile,
 	sessionDurableHeadFromSnapshot,
 } from "./session-file-persistence.ts";
+import {
+	readSessionInfo,
+	type SessionEntryBase,
+	type SessionHeader,
+	type SessionInfo,
+	type SessionInfoEntry,
+	type SessionListEntry,
+	type SessionMessageEntry,
+	type SessionMetadata,
+} from "./session-listing.ts";
 import { assertSessionOwnerRecoveryAllowedUnlockedSync, type SessionOwnerLease } from "./session-owner-lease.ts";
 
 export { SessionManagerStaleWriteError };
+export type { SessionListEntry, SessionMetadata } from "./session-listing.ts";
 export type { SessionQuarantineReport };
 
 export const CURRENT_SESSION_VERSION = 3;
 
-export interface SessionHeader {
-	type: "session";
-	version?: number; // v1 sessions don't have this
-	id: string;
-	timestamp: string;
-	cwd: string;
-	parentSession?: string;
-}
+export type { SessionHeader } from "./session-listing.ts";
 
 export interface NewSessionOptions {
 	id?: string;
 	parentSession?: string;
 }
 
-export interface SessionEntryBase {
-	type: string;
-	id: string;
-	parentId: string | null;
-	timestamp: string;
-}
-
-export interface SessionMessageEntry extends SessionEntryBase {
-	type: "message";
-	message: AgentMessage;
-}
+export type { SessionEntryBase, SessionMessageEntry } from "./session-listing.ts";
 
 export interface ThinkingLevelChangeEntry extends SessionEntryBase {
 	type: "thinking_level_change";
@@ -126,10 +119,7 @@ export interface LabelEntry extends SessionEntryBase {
 }
 
 /** Session metadata entry (e.g., user-defined display name). */
-export interface SessionInfoEntry extends SessionEntryBase {
-	type: "session_info";
-	name?: string;
-}
+export type { SessionInfoEntry } from "./session-listing.ts";
 
 /**
  * Custom message entry for extensions to inject messages into LLM context.
@@ -182,21 +172,7 @@ export interface SessionContext {
 	model: { provider: string; modelId: string } | null;
 }
 
-export interface SessionInfo {
-	path: string;
-	id: string;
-	/** Working directory where the session was started. Empty string for old sessions. */
-	cwd: string;
-	/** User-defined display name from session_info entries. */
-	name?: string;
-	/** Path to the parent session (if this session was forked). */
-	parentSessionPath?: string;
-	created: Date;
-	modified: Date;
-	messageCount: number;
-	firstMessage: string;
-	allMessagesText: string;
-}
+export type { SessionInfo } from "./session-listing.ts";
 
 export type ReadonlySessionManager = Pick<
 	SessionManager,
@@ -605,115 +581,6 @@ export function findMostRecentSession(sessionDir: string, cwd?: string): string 
 	}
 }
 
-function isMessageWithContent(message: AgentMessage): message is Message {
-	return typeof (message as Message).role === "string" && "content" in message;
-}
-
-function extractTextContent(message: Message): string {
-	const content = message.content;
-	if (typeof content === "string") {
-		return content;
-	}
-	return content
-		.filter((block): block is TextContent => block.type === "text")
-		.map((block) => block.text)
-		.join(" ");
-}
-
-function getMessageActivityTime(entry: SessionMessageEntry): number | undefined {
-	const message = entry.message;
-	if (!isMessageWithContent(message)) return undefined;
-	if (message.role !== "user" && message.role !== "assistant") return undefined;
-
-	const msgTimestamp = (message as { timestamp?: number }).timestamp;
-	if (typeof msgTimestamp === "number") {
-		return msgTimestamp;
-	}
-
-	const t = new Date(entry.timestamp).getTime();
-	return Number.isNaN(t) ? undefined : t;
-}
-
-async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
-	try {
-		const stats = await stat(filePath);
-		let header: SessionHeader | null = null;
-		let messageCount = 0;
-		let firstMessage = "";
-		const allMessages: string[] = [];
-		let name: string | undefined;
-		let lastActivityTime: number | undefined;
-
-		const rl = createInterface({
-			input: createReadStream(filePath, { encoding: "utf8" }),
-			crlfDelay: Infinity,
-		});
-
-		for await (const line of rl) {
-			const entry = parseSessionEntryLine(line);
-			if (!entry) continue;
-
-			if (!header) {
-				if (entry.type !== "session") return null;
-				header = entry;
-				continue;
-			}
-
-			// Extract session name (use latest, including explicit clears)
-			if (entry.type === "session_info") {
-				name = entry.name?.trim() || undefined;
-			}
-
-			if (entry.type !== "message") continue;
-			messageCount++;
-
-			const activityTime = getMessageActivityTime(entry);
-			if (typeof activityTime === "number") {
-				lastActivityTime = Math.max(lastActivityTime ?? 0, activityTime);
-			}
-
-			const message = entry.message;
-			if (!isMessageWithContent(message)) continue;
-			if (message.role !== "user" && message.role !== "assistant") continue;
-
-			const textContent = extractTextContent(message);
-			if (!textContent) continue;
-
-			allMessages.push(textContent);
-			if (!firstMessage && message.role === "user") {
-				firstMessage = textContent;
-			}
-		}
-
-		if (!header) return null;
-
-		const cwd = typeof header.cwd === "string" ? header.cwd : "";
-		const parentSessionPath = header.parentSession;
-		const headerTime = typeof header.timestamp === "string" ? new Date(header.timestamp).getTime() : NaN;
-		const modified =
-			typeof lastActivityTime === "number" && lastActivityTime > 0
-				? new Date(lastActivityTime)
-				: !Number.isNaN(headerTime)
-					? new Date(headerTime)
-					: stats.mtime;
-
-		return {
-			path: filePath,
-			id: header.id,
-			cwd,
-			name,
-			parentSessionPath,
-			created: new Date(header.timestamp),
-			modified,
-			messageCount,
-			firstMessage: firstMessage || "(no messages)",
-			allMessagesText: allMessages.join(" "),
-		};
-	} catch {
-		return null;
-	}
-}
-
 export type SessionListProgress = (loaded: number, total: number) => void;
 
 const MAX_CONCURRENT_SESSION_INFO_LOADS = 10;
@@ -721,8 +588,9 @@ const MAX_CONCURRENT_SESSION_INFO_LOADS = 10;
 async function buildSessionInfosWithConcurrency(
 	files: string[],
 	onLoaded: () => void,
-): Promise<(SessionInfo | null)[]> {
-	const results: (SessionInfo | null)[] = new Array(files.length).fill(null);
+	metadataOnly = false,
+): Promise<(SessionListEntry | null)[]> {
+	const results: (SessionListEntry | null)[] = new Array(files.length).fill(null);
 	const inFlight = new Set<Promise<void>>();
 	let nextIndex = 0;
 
@@ -732,7 +600,7 @@ async function buildSessionInfosWithConcurrency(
 		if (!file) return;
 
 		let task: Promise<void>;
-		task = buildSessionInfo(file)
+		task = (metadataOnly ? readSessionInfo(file, { metadataOnly: true }) : readSessionInfo(file))
 			.then((info) => {
 				results[index] = info;
 			})
@@ -763,8 +631,9 @@ async function listSessionsFromDir(
 	onProgress?: SessionListProgress,
 	progressOffset = 0,
 	progressTotal?: number,
-): Promise<SessionInfo[]> {
-	const sessions: SessionInfo[] = [];
+	metadataOnly = false,
+): Promise<SessionListEntry[]> {
+	const sessions: SessionListEntry[] = [];
 	if (!existsSync(dir)) {
 		return sessions;
 	}
@@ -775,10 +644,14 @@ async function listSessionsFromDir(
 		const total = progressTotal ?? files.length;
 
 		let loaded = 0;
-		const results = await buildSessionInfosWithConcurrency(files, () => {
-			loaded++;
-			onProgress?.(progressOffset + loaded, total);
-		});
+		const results = await buildSessionInfosWithConcurrency(
+			files,
+			() => {
+				loaded++;
+				onProgress?.(progressOffset + loaded, total);
+			},
+			metadataOnly,
+		);
 		for (const info of results) {
 			if (info) {
 				sessions.push(info);
@@ -1664,11 +1537,23 @@ export class SessionManager {
 	 * @param sessionDir Optional session directory. If omitted, uses default (~/.omk/agent/sessions/<encoded-cwd>/).
 	 * @param onProgress Optional callback for progress updates (loaded, total)
 	 */
-	static async list(cwd: string, sessionDir?: string, onProgress?: SessionListProgress): Promise<SessionInfo[]> {
+	static async list(cwd: string, sessionDir?: string, onProgress?: SessionListProgress): Promise<SessionInfo[]>;
+	static async list(
+		cwd: string,
+		sessionDir: string | undefined,
+		onProgress: SessionListProgress | undefined,
+		options: { metadataOnly: true },
+	): Promise<SessionMetadata[]>;
+	static async list(
+		cwd: string,
+		sessionDir?: string,
+		onProgress?: SessionListProgress,
+		options: { metadataOnly?: boolean } = {},
+	): Promise<SessionListEntry[]> {
 		const dir = sessionDir ? normalizePath(sessionDir) : getDefaultSessionDir(cwd);
 		const filterCwd = sessionDir !== undefined && dir !== getDefaultSessionDirPath(cwd);
 		const resolvedCwd = resolvePath(cwd);
-		const sessions = (await listSessionsFromDir(dir, onProgress)).filter(
+		const sessions = (await listSessionsFromDir(dir, onProgress, 0, undefined, options.metadataOnly)).filter(
 			(session) => !filterCwd || sessionCwdMatches(session.cwd, resolvedCwd),
 		);
 		sessions.sort((a, b) => b.modified.getTime() - a.modified.getTime());
@@ -1716,14 +1601,20 @@ export class SessionManager {
 	static async listAll(onProgress?: SessionListProgress): Promise<SessionInfo[]>;
 	static async listAll(sessionDir?: string, onProgress?: SessionListProgress): Promise<SessionInfo[]>;
 	static async listAll(
+		sessionDirOrOnProgress: string | SessionListProgress | undefined,
+		onProgress: SessionListProgress | undefined,
+		options: { metadataOnly: true },
+	): Promise<SessionMetadata[]>;
+	static async listAll(
 		sessionDirOrOnProgress?: string | SessionListProgress,
 		onProgress?: SessionListProgress,
-	): Promise<SessionInfo[]> {
+		options: { metadataOnly?: boolean } = {},
+	): Promise<SessionListEntry[]> {
 		const customSessionDir =
 			typeof sessionDirOrOnProgress === "string" ? normalizePath(sessionDirOrOnProgress) : undefined;
 		const progress = typeof sessionDirOrOnProgress === "function" ? sessionDirOrOnProgress : onProgress;
 		if (customSessionDir) {
-			const sessions = await listSessionsFromDir(customSessionDir, progress);
+			const sessions = await listSessionsFromDir(customSessionDir, progress, 0, undefined, options.metadataOnly);
 			sessions.sort((a, b) => b.modified.getTime() - a.modified.getTime());
 			return sessions;
 		}
@@ -1752,13 +1643,17 @@ export class SessionManager {
 
 			// Process all files with progress tracking
 			let loaded = 0;
-			const sessions: SessionInfo[] = [];
+			const sessions: SessionListEntry[] = [];
 			const allFiles = dirFiles.flat();
 
-			const results = await buildSessionInfosWithConcurrency(allFiles, () => {
-				loaded++;
-				progress?.(loaded, totalFiles);
-			});
+			const results = await buildSessionInfosWithConcurrency(
+				allFiles,
+				() => {
+					loaded++;
+					progress?.(loaded, totalFiles);
+				},
+				options.metadataOnly,
+			);
 
 			for (const info of results) {
 				if (info) {

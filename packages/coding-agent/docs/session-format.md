@@ -372,6 +372,14 @@ Key methods for working with sessions programmatically.
 ### Static Listing Methods
 - `SessionManager.list(cwd, sessionDir?, onProgress?)` - List sessions for a directory
 - `SessionManager.listAll(onProgress?)` - List all sessions across all projects
+- `SessionManager.list(cwd, sessionDir, onProgress, { metadataOnly: true })` - Return metadata without `allMessagesText`
+- `SessionManager.listAll(sessionDir, onProgress, { metadataOnly: true })` - Metadata-only listing; pass `undefined` for global scope
+
+Existing calls retain `SessionInfo[]` and its full `allMessagesText`. The opt-in
+metadata calls return the same metadata fields without that property; absence
+means not loaded, not empty history. The TUI uses this opt-in and performs bounded
+full-text reads on search. There is no disk format or sidecar migration, and no
+change to append, complete-entry parsing, branch resolution, or export.
 
 ### Instance Methods - Session Management
 - `newSession(options?)` - Start a new session (options: `{ parentSession?: string }`)
