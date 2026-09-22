@@ -112,60 +112,79 @@ export function createLineDecoder(maxLineBytes: number = MAX_MESSAGE_LINE_BYTES)
 	if (!Number.isSafeInteger(maxLineBytes) || maxLineBytes <= 0) {
 		throw new RangeError(`maxLineBytes must be a positive finite integer, got ${maxLineBytes}`);
 	}
-	let buffer = "";
-	/** UTF-8 byte length of `buffer` — the limit unit, not the JS string length. */
-	let bufferBytes = 0;
-	/** True while the remainder of an oversized line is being discarded. */
+	// Batch small fragments so one-character delivery cannot retain millions of
+	// array slots. Only newly arrived text is scanned; each line is joined once.
+	const blockChars = 4096;
+	let blocks: string[] = [];
+	let small: string[] = [];
+	let smallChars = 0;
+	let lineBytes = 0;
+	let lastCodeUnit = -1;
 	let discarding = false;
+	const clearLine = (): void => {
+		blocks = [];
+		small = [];
+		smallChars = 0;
+		lineBytes = 0;
+		lastCodeUnit = -1;
+	};
+	const compact = (): void => {
+		if (small.length > 0) blocks.push(small.join(""));
+		small = [];
+		smallChars = 0;
+	};
+	const append = (part: string): void => {
+		if (part.length === 0) return;
+		if (part.length >= blockChars) {
+			compact();
+			blocks.push(part);
+		} else {
+			small.push(part);
+			smallChars += part.length;
+			if (smallChars >= blockChars) compact();
+		}
+	};
 
 	return {
 		push(chunk: string): DecodedLine[] {
 			const out: DecodedLine[] = [];
-			let rest = chunk;
-
-			if (discarding) {
-				// Skip the tail of the rejected line without storing it.
-				const boundary = rest.indexOf("\n");
-				if (boundary === -1) {
-					return out;
+			let offset = 0;
+			while (offset < chunk.length) {
+				const newline = chunk.indexOf("\n", offset);
+				const end = newline < 0 ? chunk.length : newline;
+				if (!discarding) {
+					const part = chunk.slice(offset, end);
+					let addedBytes = Buffer.byteLength(part, "utf8");
+					// String callers may split a surrogate pair even though the stdio
+					// transport already decodes UTF-8 before delivering chunks.
+					const first = part.charCodeAt(0);
+					if (lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff && first >= 0xdc00 && first <= 0xdfff) {
+						addedBytes -= 2;
+					}
+					lineBytes += addedBytes;
+					if (lineBytes > maxLineBytes) {
+						out.push({ error: `MCP frame exceeded ${maxLineBytes} bytes` });
+						clearLine();
+						discarding = true;
+					} else {
+						append(part);
+						if (part.length > 0) lastCodeUnit = part.charCodeAt(part.length - 1);
+					}
 				}
+				if (newline < 0) break;
+				if (!discarding) {
+					compact();
+					const line = blocks.join("").trim();
+					if (line.length > 0) out.push(decodeLine(line));
+				}
+				clearLine();
 				discarding = false;
-				rest = rest.slice(boundary + 1);
-			}
-
-			buffer += rest;
-			bufferBytes += Buffer.byteLength(rest, "utf8");
-
-			let newlineIndex = buffer.indexOf("\n");
-			while (newlineIndex !== -1) {
-				const line = buffer.slice(0, newlineIndex);
-				const lineBytes = Buffer.byteLength(line, "utf8");
-				buffer = buffer.slice(newlineIndex + 1);
-				bufferBytes -= lineBytes + 1; // consumed line plus its newline
-				const trimmed = line.trim();
-				if (trimmed.length === 0) {
-					newlineIndex = buffer.indexOf("\n");
-					continue;
-				}
-				if (lineBytes > maxLineBytes) {
-					out.push({ error: `MCP frame exceeded ${maxLineBytes} bytes` });
-				} else {
-					out.push(decodeLine(trimmed));
-				}
-				newlineIndex = buffer.indexOf("\n");
-			}
-
-			if (bufferBytes > maxLineBytes) {
-				out.push({ error: `MCP frame exceeded ${maxLineBytes} bytes` });
-				buffer = "";
-				bufferBytes = 0;
-				discarding = true;
+				offset = newline + 1;
 			}
 			return out;
 		},
 		reset(): void {
-			buffer = "";
-			bufferBytes = 0;
+			clearLine();
 			discarding = false;
 		},
 	};

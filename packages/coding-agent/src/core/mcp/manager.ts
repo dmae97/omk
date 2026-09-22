@@ -1,78 +1,25 @@
-/**
- * Lazy, crash-isolated MCP server manager.
- *
- * Design constraints that shaped this:
- * - A workspace can configure 25 servers. Spawning them all at startup would
- *   trade a 0.6s cold start for a multi-second one, so connection is lazy and
- *   only happens when tools are actually requested.
- * - One broken server must never take a session down. Every connect and every
- *   listing is isolated; a failure is recorded as server status and the other
- *   servers still contribute tools.
- * - Connect work is deduplicated: concurrent `listToolDefinitions()` calls
- *   share one in-flight connect per server.
- */
-
+/** Lazy MCP connections with bounded startup, per-server failure isolation and generation ownership. */
 import type { TSchema } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
-import { detectMcpDescriptorPromptInjection, MCP_QUARANTINE_PATTERN_SIGNAL_THRESHOLD } from "../mcp-public-presets.ts";
-import { McpClient, type McpClientOptions } from "./client.ts";
-import { createMcpToolDefinition, type McpToolDetails } from "./tools.ts";
+import { McpConnectionQueue } from "./connection-queue.ts";
+import {
+	connectMcpRuntime,
+	type McpManagerOptions,
+	type McpServerStatus,
+	type ServerRuntime,
+} from "./manager-runtime.ts";
+import type { McpToolDetails } from "./tools.ts";
 
-export type McpServerState = "idle" | "connecting" | "ready" | "failed";
-
-export interface McpServerConfig {
-	readonly name: string;
-	readonly command: string;
-	readonly args?: readonly string[];
-	readonly env?: Readonly<Record<string, string>>;
-	readonly cwd?: string;
-	/** Skip this server without removing it from configuration. */
-	readonly disabled?: boolean;
-	readonly requestTimeoutMs?: number;
-	readonly handshakeTimeoutMs?: number;
-}
-
-export interface McpServerStatus {
-	readonly name: string;
-	readonly state: McpServerState;
-	readonly toolCount: number;
-	/** Failure reason when `state` is `failed`. Never contains configured env values. */
-	readonly error?: string;
-	readonly serverVersion?: string;
-	/** Tool names excluded because their descriptions carried prompt-injection payloads. */
-	readonly quarantinedTools?: readonly string[];
-}
-
-export interface McpManagerOptions {
-	readonly servers: readonly McpServerConfig[];
-	readonly cwd?: string;
-	readonly clientInfo?: { readonly name: string; readonly version: string };
-	readonly callTimeoutMs?: number;
-	/** Injected for tests so the manager can be exercised without spawning processes. */
-	readonly createClient?: (options: McpClientOptions) => McpClient;
-}
-
-interface ServerRuntime {
-	readonly config: McpServerConfig;
-	state: McpServerState;
-	client?: McpClient;
-	tools: ToolDefinition<TSchema, McpToolDetails>[];
-	/** Descriptor prompt-injection quarantines (namespaced tool names). */
-	quarantinedTools: string[];
-	error?: string;
-	connecting?: Promise<void>;
-	/** Client owned by the in-flight connect attempt; not yet published. */
-	pendingClient?: McpClient;
-	/** Monotonic generation; a completed attempt may only publish when current. */
-	generation: number;
-}
+export type { McpManagerOptions, McpServerConfig, McpServerState, McpServerStatus } from "./manager-runtime.ts";
 
 export class McpManager {
 	private readonly runtimes = new Map<string, ServerRuntime>();
 	private readonly options: McpManagerOptions;
+	private readonly connections: McpConnectionQueue;
 
 	constructor(options: McpManagerOptions) {
 		this.options = options;
+		this.connections = new McpConnectionQueue(options.connectionConcurrency ?? 4);
 		for (const config of options.servers) {
 			if (this.runtimes.has(config.name)) continue; // First definition wins; inventory already applies precedence.
 			this.runtimes.set(config.name, { config, state: "idle", tools: [], quarantinedTools: [], generation: 0 });
@@ -96,18 +43,14 @@ export class McpManager {
 		}));
 	}
 
-	/**
-	 * Connect every enabled server that has not been attempted yet, then return
-	 * the union of their tools. Servers are connected concurrently and failures
-	 * are isolated, so a partial result is the normal outcome, not an error.
-	 */
+	/** Wait for every enabled attempt, then return the full admitted catalog in configuration order. */
 	async listToolDefinitions(): Promise<ToolDefinition<TSchema, McpToolDetails>[]> {
 		await Promise.all([...this.runtimes.values()].map((runtime) => this.ensureConnected(runtime)));
 		const tools: ToolDefinition<TSchema, McpToolDetails>[] = [];
 		const seen = new Set<string>();
 		for (const runtime of this.runtimes.values()) {
 			for (const tool of runtime.tools) {
-				if (seen.has(tool.name)) continue; // Namespacing makes this rare; keep it deterministic anyway.
+				if (seen.has(tool.name)) continue;
 				seen.add(tool.name);
 				tools.push(tool);
 			}
@@ -115,12 +58,10 @@ export class McpManager {
 		return tools;
 	}
 
-	/** Connect a single server by name. Returns its status either way. */
+	/** Connect a single server by name using the same capacity and single-flight as listing. */
 	async connect(name: string): Promise<McpServerStatus> {
 		const runtime = this.runtimes.get(name);
-		if (!runtime) {
-			return { name, state: "failed", toolCount: 0, error: `Unknown MCP server "${name}"` };
-		}
+		if (!runtime) return { name, state: "failed", toolCount: 0, error: `Unknown MCP server "${name}"` };
 		await this.ensureConnected(runtime);
 		return {
 			name,
@@ -133,12 +74,9 @@ export class McpManager {
 	}
 
 	/**
-	 * Terminate every connected or connecting server. Idempotent.
-	 *
-	 * Bumping the generation invalidates any in-flight connect before its late
-	 * completion can publish tools or flip the state back to `ready`, and the
-	 * attempt's not-yet-published client is closed alongside the live one so no
-	 * spawned process outlives the close.
+	 * Invalidate queued/active generations before closing their clients. Slots for
+	 * started work remain occupied until settlement, not merely until close is requested.
+	 * The manager can be explicitly connected again after close.
 	 */
 	close(): void {
 		for (const runtime of this.runtimes.values()) {
@@ -149,18 +87,15 @@ export class McpManager {
 			runtime.pendingClient = undefined;
 			runtime.tools = [];
 			runtime.quarantinedTools = [];
-			if (runtime.state === "ready" || runtime.state === "connecting") runtime.state = "idle";
+			if (runtime.state === "ready" || runtime.state === "connecting" || runtime.state === "queued")
+				runtime.state = "idle";
 		}
+		this.connections.cancelQueued();
 	}
 
 	/**
-	 * Verify that `ready` servers are actually alive with a protocol ping. A
-	 * failed ping closes the client and marks the server `failed`, so a
-	 * silently killed process stops masquerading as connected. Servers already
-	 * `failed` are re-attempted only when `reconnectFailed` is set — callers
-	 * should gate that behind a slow cadence so a permanently broken server is
-	 * not respawned every probe. Idle servers stay idle: connection is lazy by
-	 * design, and a status probe must not spawn processes.
+	 * Ping ready servers; idle/queued servers are not spawned by a probe. Failed
+	 * servers retry only on explicit recovery, using the same startup queue.
 	 */
 	async checkHealth(options?: { pingTimeoutMs?: number; reconnectFailed?: boolean }): Promise<McpServerStatus[]> {
 		const work: Promise<void>[] = [];
@@ -178,15 +113,12 @@ export class McpManager {
 	}
 
 	private async pingRuntime(runtime: ServerRuntime, timeoutMs?: number): Promise<void> {
-		// Pin the probed client: a close or reconnect during the ping must not let
-		// this failure path dispose the replacement client.
 		const client = runtime.client;
 		if (!client) return;
 		try {
 			await client.ping(timeoutMs);
 		} catch (error) {
 			if (runtime.client !== client) return; // A newer owner already handled it.
-			// Isolation point: only this server transitions; the rest stay ready.
 			runtime.client = undefined;
 			client.close();
 			runtime.tools = [];
@@ -203,83 +135,28 @@ export class McpManager {
 			return Promise.resolve();
 		}
 		if (runtime.state === "ready" || runtime.state === "failed") return Promise.resolve();
-		if (runtime.connecting) return runtime.connecting;
+		if (runtime.connecting) {
+			if (runtime.connectingGeneration === runtime.generation) return runtime.connecting;
+			return runtime.connecting.then(() => this.ensureConnected(runtime));
+		}
 
-		runtime.state = "connecting";
+		runtime.state = "queued";
 		const generation = runtime.generation;
-		const attempt = this.connectRuntime(runtime, generation).finally(() => {
-			// Only this attempt may clear its own in-flight markers; a newer
-			// attempt's `connecting`/`pendingClient` belong to the newer generation.
-			if (runtime.connecting === attempt) runtime.connecting = undefined;
-			if (runtime.generation === generation) runtime.pendingClient = undefined;
-		});
+		runtime.connectingGeneration = generation;
+		const attempt = this.connections
+			.run(async () => {
+				if (runtime.generation !== generation) return;
+				runtime.state = "connecting";
+				await connectMcpRuntime(runtime, generation, this.options);
+			})
+			.finally(() => {
+				if (runtime.connecting === attempt) {
+					runtime.connecting = undefined;
+					runtime.connectingGeneration = undefined;
+				}
+				if (runtime.generation === generation) runtime.pendingClient = undefined;
+			});
 		runtime.connecting = attempt;
 		return attempt;
-	}
-
-	private async connectRuntime(runtime: ServerRuntime, generation: number): Promise<void> {
-		const clientOptions: McpClientOptions = {
-			name: runtime.config.name,
-			clientInfo: this.options.clientInfo,
-			requestTimeoutMs: runtime.config.requestTimeoutMs,
-			handshakeTimeoutMs: runtime.config.handshakeTimeoutMs,
-			transport: {
-				command: runtime.config.command,
-				args: runtime.config.args,
-				env: runtime.config.env,
-				cwd: runtime.config.cwd ?? this.options.cwd,
-			},
-		};
-		const client = this.options.createClient?.(clientOptions) ?? new McpClient(clientOptions);
-		// Register before the first await so close() can dispose a client whose
-		// connect() promise has not resolved yet.
-		runtime.pendingClient = client;
-		const isCurrent = () => runtime.generation === generation && runtime.pendingClient === client;
-		try {
-			await client.connect();
-			if (!isCurrent()) {
-				// close() or a newer attempt superseded this one mid-handshake.
-				client.close();
-				return;
-			}
-			const schemas = await client.listTools();
-			if (!isCurrent()) {
-				client.close();
-				return;
-			}
-			runtime.client = client;
-			runtime.pendingClient = undefined;
-			// 서술자 주입 스크리닝: MCP 도구 설명은 신뢰할 수 없는 제3자 입력이다.
-			// admitPublicMcpServer와 동일 임계값(0.7)으로 차단 — 수입 시점에서 fail-closed.
-			const definitions = schemas.map((schema) =>
-				createMcpToolDefinition(runtime.config.name, client, schema, {
-					callTimeoutMs: this.options.callTimeoutMs,
-				}),
-			);
-			const admitted: typeof definitions = [];
-			const quarantined: string[] = [];
-			for (const definition of definitions) {
-				if (
-					detectMcpDescriptorPromptInjection(definition.description ?? "").patternSignal >
-					MCP_QUARANTINE_PATTERN_SIGNAL_THRESHOLD
-				) {
-					quarantined.push(definition.name);
-				} else {
-					admitted.push(definition);
-				}
-			}
-			runtime.tools = admitted;
-			runtime.quarantinedTools = quarantined;
-			runtime.state = "ready";
-			runtime.error = undefined;
-		} catch (error) {
-			client.close();
-			if (!isCurrent()) return; // The current generation owns the state now.
-			// Isolation point: this server is out, every other server is unaffected.
-			runtime.client = undefined;
-			runtime.tools = [];
-			runtime.state = "failed";
-			runtime.error = error instanceof Error ? error.message : String(error);
-		}
 	}
 }

@@ -72,6 +72,22 @@ session.getToolDefinition("playwright__navigate");
   duplicating them.
 - `session.dispose()` terminates every server it started.
 
+### Bounded startup
+
+Each manager admits up to four connect/handshake/catalog attempts at once by
+default. Low-level SDK callers can set a positive integer `connectionConcurrency`
+in `McpManagerOptions`. This is a startup limit, not a server or tool limit: a
+listing still waits for every enabled attempt and returns the full admitted
+catalog in configuration order. Waiting servers report `queued`; they have not
+been spawned yet. Direct connects and explicit health recovery share the queue.
+
+Closing a manager cancels queued starts and invalidates active generations. An
+active attempt keeps its slot until settlement, and late handshake/list results
+cannot publish tools. Explicit post-close connects wait for the previous attempt
+to settle before reconnecting. No idle-server shutdown or descriptor reduction is
+introduced. Four is a conservative default, not a measured optimum: staging can
+increase full-catalog readiness time while reducing simultaneous startup work.
+
 ### Failure behavior
 
 Failures are isolated by design, because one broken server must not cost a
@@ -84,6 +100,12 @@ session:
 | Server dies mid-session | In-flight requests reject; later calls to its tools return a tool-level error instead of throwing. |
 | Tool returns an MCP error | Surfaces as a normal tool result with `isError: true`, so the model sees the server's own message. |
 | Server emits a non-JSON line | The line is dropped and decoding resynchronizes at the next newline. |
+| Server emits a frame larger than 16 MiB | One framing error is reported; the remainder is discarded until the next newline. |
+
+The frame limit counts raw UTF-8 bytes, including whitespace and CR in CRLF,
+independently of chunk boundaries. The decoder scans only new chunks and batches
+small fragments without truncating valid messages or reducing tool catalogs.
+This bounds retained frame data, not the memory of parsed JSON or the whole process.
 
 ## Checking your configuration
 
