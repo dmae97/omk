@@ -2,6 +2,9 @@
 export * from "./agent.ts";
 // Loop functions
 export * from "./agent-loop.ts";
+// Read-only atomic commit planning; candidates are not execution authorization.
+export { planAtomicCommits } from "./commit-planner.ts";
+export type { ChangeAtom, ChangeRelation, CommitGroup, CommitPlan, CommitPlannerInput } from "./commit-types.ts";
 export * from "./harness/abort-delivery.ts";
 export * from "./harness/agent-harness.ts";
 export {

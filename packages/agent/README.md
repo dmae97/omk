@@ -594,6 +594,14 @@ for await (const event of agentLoopContinue(context, config)) {
 
 These low-level streams are observational. They preserve event order, but they do not wait for your async event handling to settle before later producer phases continue. If you need message processing to act as a barrier before tool preflight, use the `Agent` class instead of raw `agentLoop()` or `agentLoopContinue()`.
 
+## Atomic Commit Planning
+
+`planAtomicCommits(hostObserved)` produces deterministic, read-only commit groups from trusted host observations. It preserves hard dependencies, blocks foreign or ambiguous file ownership, and requires review for cross-intent closures. Its `candidate` status only identifies a snapshot-validation candidate, never permission to commit.
+
+The function is exported with `ChangeAtom`, `ChangeRelation`, `CommitPlannerInput`, `CommitGroup`, and `CommitPlan`. It performs no Git or filesystem operations and does not authenticate the supplied receipt references. Edit-receipt adapters, automatic commits and commit CLI commands are not wired.
+
+See [Atomic commit planning](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/atomic-commit-planning.md) for the input contract, safety limits and tests.
+
 ## License
 
 MIT
