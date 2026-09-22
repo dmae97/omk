@@ -1,7 +1,5 @@
 import { execSync } from "node:child_process";
-import { isAbsolute } from "node:path";
-import { pathToFileURL } from "node:url";
-import { shortenImagePath } from "./image-path.ts";
+import { formatImageFallback } from "./image-fallback.ts";
 
 export type ImageProtocol = "kitty" | "iterm2" | null;
 
@@ -482,16 +480,5 @@ export function hyperlink(text: string, url: string): string {
  * available, linked to file:// so the full path remains openable.
  */
 export function imageFallback(mimeType: string, dimensions?: ImageDimensions, filename?: string): string {
-	const parts: string[] = [];
-	if (filename) {
-		const display = shortenImagePath(filename);
-		if (getCapabilities().hyperlinks && isAbsolute(filename)) {
-			parts.push(hyperlink(display, pathToFileURL(filename).href));
-		} else {
-			parts.push(display);
-		}
-	}
-	parts.push(`[${mimeType}]`);
-	if (dimensions) parts.push(`${dimensions.widthPx}x${dimensions.heightPx}`);
-	return `[Image: ${parts.join(" ")}]`;
+	return formatImageFallback(mimeType, dimensions, filename, Boolean(filename) && getCapabilities().hyperlinks);
 }

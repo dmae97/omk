@@ -4,15 +4,9 @@ import { decodePrintableKey, matchesKey } from "../keys.ts";
 import { KillRing } from "../kill-ring.ts";
 import { type Component, CURSOR_MARKER, type Focusable, type TUI } from "../tui.ts";
 import { UndoStack } from "../undo-stack.ts";
-import {
-	getGraphemeSegmenter,
-	getWordSegmenter,
-	isWhitespaceChar,
-	sliceByColumn,
-	truncateToWidth,
-	visibleWidth,
-} from "../utils.ts";
+import { getGraphemeSegmenter, getWordSegmenter, isWhitespaceChar, truncateToWidth, visibleWidth } from "../utils.ts";
 import { findWordBackward, findWordForward } from "../word-navigation.ts";
+import { createScrollBorder } from "./editor-scroll-border.ts";
 import { SelectList, type SelectListLayoutOptions, type SelectListTheme } from "./select-list.ts";
 
 const graphemeSegmenter = getGraphemeSegmenter();
@@ -233,27 +227,6 @@ const SLASH_COMMAND_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
 };
 
 const ATTACHMENT_AUTOCOMPLETE_DEBOUNCE_MS = 20;
-
-/**
- * Build one scroll-indicator border line, bounded to `width`.
- *
- * Both the `↑` and `↓` borders are the same class of string, so they share one
- * bound: a border wider than the terminal wraps, the editor then occupies one
- * more row than the renderer counted, and the differential renderer's viewport
- * math drifts for every later frame. When the indicator fits, the border is
- * padded to exactly `width`; when it does not, it is sliced and ellipsized so
- * the hidden-line count still reads as far as the width allows.
- */
-function createScrollBorder(direction: "↑" | "↓", hiddenLineCount: number, width: number): string {
-	const availableWidth = Math.max(0, width);
-	const indicator = `─── ${direction} ${hiddenLineCount} more `;
-	const remaining = availableWidth - visibleWidth(indicator);
-	if (remaining >= 0) return indicator + "─".repeat(remaining);
-
-	const ellipsis = "...".slice(0, availableWidth);
-	const indicatorWidth = availableWidth - visibleWidth(ellipsis);
-	return sliceByColumn(indicator, 0, indicatorWidth, true) + ellipsis;
-}
 
 export class Editor implements Component, Focusable {
 	private state: EditorState = {
