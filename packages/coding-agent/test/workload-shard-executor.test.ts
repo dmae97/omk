@@ -1,7 +1,7 @@
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ResourceAdmissionDecision } from "../src/core/resource-admission.ts";
 import { WorkloadPermitPool } from "../src/core/workload-permit-pool.ts";
 import {
@@ -61,6 +61,66 @@ function passingRunner(log?: Map<string, number>): ShardRunner {
 }
 
 describe("executeWorkloadShardPlan", () => {
+	it("never raises a zero heavy-process cap to one", async () => {
+		const { store } = newStore();
+		const runner = vi.fn(passingRunner());
+		const evidence = await executeWorkloadShardPlan({ plan: plan(["a"]), store, runner, decision: decision(0) });
+		expect(runner).not.toHaveBeenCalled();
+		expect(evidence).toMatchObject({ verdict: "blocked", effectiveConcurrency: 0 });
+	});
+
+	it("returns an acquired permit if recording the first running state throws", async () => {
+		const { store } = newStore();
+		const pool = new WorkloadPermitPool({ capacity: 1 });
+		const runner = vi.fn(passingRunner());
+		vi.spyOn(store, "appendTransition").mockImplementation(() => {
+			throw new Error("ledger unavailable");
+		});
+		await expect(
+			executeWorkloadShardPlan({ plan: plan(["a"]), store, runner, permitPool: pool, decision: decision(1) }),
+		).rejects.toThrow(/ledger unavailable/);
+		expect(runner).not.toHaveBeenCalled();
+		expect(pool.snapshot()).toMatchObject({ activeWeight: 0, queuedCount: 0 });
+	});
+
+	it("aborts and joins its sibling before returning a persistence failure", async () => {
+		const { store } = newStore();
+		const pool = new WorkloadPermitPool({ capacity: 2 });
+		const append = store.appendTransition.bind(store);
+		vi.spyOn(store, "appendTransition").mockImplementation((record) => {
+			if (record.shardId === "a" && record.state !== "running") throw new Error("result append failed");
+			return append(record);
+		});
+		let began: (() => void) | undefined;
+		const siblingBegan = new Promise<void>((resolve) => {
+			began = resolve;
+		});
+		let joined = false;
+		const runner: ShardRunner = async ({ shard, signal }) => {
+			if (shard.shardId === "a") {
+				await siblingBegan;
+				return { exitCode: 0 };
+			}
+			began?.();
+			await new Promise<void>((resolve) => {
+				signal?.addEventListener(
+					"abort",
+					() => {
+						joined = true;
+						resolve();
+					},
+					{ once: true },
+				);
+			});
+			return { exitCode: 1 };
+		};
+		await expect(
+			executeWorkloadShardPlan({ plan: plan(["a", "b"]), store, runner, permitPool: pool, decision: decision(2) }),
+		).rejects.toThrow(/result append failed/);
+		expect(joined).toBe(true);
+		expect(pool.snapshot()).toMatchObject({ activeWeight: 0, queuedCount: 0 });
+	});
+
 	it("runs all shards within the admission-recomputed width and aggregates passed evidence", async () => {
 		const { store } = newStore();
 		let active = 0;
@@ -164,9 +224,10 @@ describe("executeWorkloadShardPlan", () => {
 			decision: decision(2),
 			now: NOW,
 		});
-		expect(evidence.verdict).toBe("passed");
-		expect(invocations.get("a")).toBe(1);
-		expect(evidence.shards.find((shard) => shard.shardId === "a")?.attempt).toBe(2);
+		expect(evidence.verdict).toBe("blocked");
+		expect(evidence.reasonCodes).toContain("recovery.termination_unproven");
+		expect(invocations.size).toBe(0);
+		expect(evidence.shards.find((shard) => shard.shardId === "a")?.attempt).toBe(1);
 	});
 
 	it("fails closed and quarantines on journal corruption", async () => {

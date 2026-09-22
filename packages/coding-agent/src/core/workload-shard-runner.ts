@@ -36,14 +36,29 @@ export async function runOneShard(
 			return;
 		}
 	}
-	const startedAt = now().toISOString();
-	applyTransition(input, projections, shardId, "running", { now, startedAt });
+	let invoked = false;
+	let terminated = false;
 	try {
-		const result = await input.runner({
-			shard,
-			attempt: projections.get(shardId)?.attempt ?? 1,
-			signal: input.signal,
-		});
+		if (input.signal?.aborted) return;
+		const startedAt = now().toISOString();
+		applyTransition(input, projections, shardId, "running", { now, startedAt });
+		let result: Awaited<ReturnType<typeof input.runner>>;
+		try {
+			invoked = true;
+			result = await input.runner({ shard, attempt: projections.get(shardId)?.attempt ?? 1, signal: input.signal });
+			terminated = true;
+		} catch (error) {
+			try {
+				applyTransition(input, projections, shardId, "interrupted", {
+					now,
+					startedAt,
+					reasonCode: "runner.termination_unproven",
+				});
+			} catch (persistenceError) {
+				throw new AggregateError([error, persistenceError], "Shard failure could not be recorded");
+			}
+			throw error;
+		}
 		const state = terminalStateFor(input.signal, result.exitCode);
 		applyTransition(input, projections, shardId, state, {
 			now,
@@ -51,16 +66,9 @@ export async function runOneShard(
 			evidenceRefs: [`exit-code:${result.exitCode}`, ...(result.evidenceRefs ?? [])],
 			reasonCode: terminalReasonFor(state, result.exitCode),
 		});
-	} catch (error) {
-		const state: WorkloadShardState = input.signal?.aborted ? "aborted" : "failed";
-		applyTransition(input, projections, shardId, state, {
-			now,
-			startedAt,
-			reasonCode: state === "aborted" ? "run.aborted" : "runner.error",
-			evidenceRefs: [`error:${String(error).slice(0, 120)}`],
-		});
 	} finally {
-		releasePermit?.();
+		// A thrown runner is not a process termination witness. Keep its permit owned.
+		if (!invoked || terminated) releasePermit?.();
 	}
 }
 

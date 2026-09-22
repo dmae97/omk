@@ -1,4 +1,5 @@
 import type { ExecuteWorkloadShardPlanInput, ShardRunContext, ShardRunner } from "./workload-shard-execution-types.ts";
+import { runShardFrontier } from "./workload-shard-frontier.ts";
 import {
 	planShardResume,
 	reduceShardRecords,
@@ -6,7 +7,7 @@ import {
 	type WorkloadShardProjection,
 	type WorkloadShardState,
 } from "./workload-shard-plan.ts";
-import { applyTransition, runOneShard, shardById } from "./workload-shard-runner.ts";
+import { applyTransition } from "./workload-shard-runner.ts";
 import { WorkloadShardJournalError, type WorkloadShardStore } from "./workload-shard-store.ts";
 
 // The contract lives in `workload-shard-execution-types.ts` so the runner can
@@ -18,8 +19,8 @@ export type { ExecuteWorkloadShardPlanInput, ShardRunContext, ShardRunner };
  *
  * Drives a validated `WorkloadShardPlan` through the journalled §13.4 state
  * machine: passed shards are terminal and never re-run (§13.5 step 3),
- * crash-orphaned `running` shards are recovered through `pending` re-arm
- * records, concurrency is recomputed from the CURRENT admission decision
+ * crash-orphaned `running` shards require a trusted termination witness before
+ * re-arm; concurrency is recomputed from the CURRENT admission decision
  * (§13.5 step 6) plus the shared permit pool, and completion produces an
  * aggregate evidence receipt (§13.6) — an observation input for
  * `evaluateTask()`, never a task verdict by itself.
@@ -84,10 +85,18 @@ export async function executeWorkloadShardPlan(
 	const projections = new Map<string, WorkloadShardProjection>(
 		journal.projections ?? reduceShardRecords(input.plan, []),
 	);
-	const effectiveConcurrency = Math.max(1, Math.min(input.plan.maxConcurrency, input.decision.maxHeavyProcesses));
+	const cap = input.decision.maxHeavyProcesses;
+	if (!Number.isSafeInteger(cap) || cap < 0) return blockedEvidence(input, now, ["resource.invalid_capacity"]);
+	const effectiveConcurrency = Math.min(input.plan.maxConcurrency, cap);
+	if (effectiveConcurrency === 0) return aggregate(input, projections, 0, now, ["resource.capacity_zero"]);
 
 	// §13.5 steps 2-4: re-arm recoverable shards through explicit pending records.
 	const resume = planShardResume(input.plan, projections);
+	for (const id of resume.interrupted) {
+		const shard = projections.get(id);
+		if (!shard || (await input.observeTermination?.(shard)) !== "terminated")
+			return aggregate(input, projections, effectiveConcurrency, now, ["recovery.termination_unproven"]);
+	}
 	const rearm = [
 		...resume.interrupted,
 		...(input.retryFailed ? resume.retryable : []),
@@ -102,43 +111,7 @@ export async function executeWorkloadShardPlan(
 		applyTransition(input, projections, shardId, "pending", { reasonCode: "recovery.rearm", now });
 	}
 
-	// Dependency-wave scheduler: launch ready shards up to the recomputed width.
-	const remaining = new Set(
-		input.plan.shards.map((shard) => shard.shardId).filter((id) => projections.get(id)?.state !== "passed"),
-	);
-	let active = 0;
-	let wake: (() => void) | undefined;
-	const waitTurn = () =>
-		new Promise<void>((resolve) => {
-			wake = resolve;
-		});
-	const running = new Map<string, Promise<void>>();
-
-	while (remaining.size > 0 && !input.signal?.aborted) {
-		const ready = [...remaining].filter((id) => {
-			const projection = projections.get(id);
-			if (projection?.state !== "pending") return false;
-			const spec = shardById(input.plan, id);
-			return spec.dependencyIds.every((dep) => projections.get(dep)?.state === "passed");
-		});
-		const launchable = ready.slice(0, Math.max(0, effectiveConcurrency - active));
-		if (launchable.length === 0) {
-			if (running.size === 0) break; // deadlock = blocked dependents; aggregate reports them
-			await Promise.race([...running.values(), waitTurn()]);
-			continue;
-		}
-		for (const shardId of launchable) {
-			remaining.delete(shardId);
-			active += 1;
-			const task = runOneShard(input, projections, shardId, now).finally(() => {
-				active -= 1;
-				running.delete(shardId);
-				wake?.();
-			});
-			running.set(shardId, task);
-		}
-	}
-	await Promise.all(running.values());
+	await runShardFrontier(input, projections, effectiveConcurrency, now);
 
 	return aggregate(input, projections, effectiveConcurrency, now, input.signal?.aborted ? ["run.aborted"] : []);
 }
@@ -228,6 +201,8 @@ function aggregateVerdict(
 	extraReasons: readonly string[],
 ): WorkloadShardAggregateEvidence["verdict"] {
 	if (counts.passed === shardCount) return "passed";
+	if (extraReasons.some((reason) => reason.startsWith("resource.") || reason.startsWith("recovery.")))
+		return "blocked";
 	if (counts.aborted > 0 || extraReasons.includes("run.aborted")) return "aborted";
 	return "failed";
 }

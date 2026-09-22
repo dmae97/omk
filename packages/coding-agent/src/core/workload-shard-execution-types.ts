@@ -13,7 +13,7 @@
 
 import type { ResourceAdmissionDecision } from "./resource-admission.ts";
 import type { WorkloadPermitPool } from "./workload-permit-pool.ts";
-import type { WorkloadShardPlan, WorkloadShardSpec } from "./workload-shard-plan.ts";
+import type { WorkloadShardPlan, WorkloadShardProjection, WorkloadShardSpec } from "./workload-shard-plan.ts";
 import type { WorkloadShardStore } from "./workload-shard-store.ts";
 
 export interface ShardRunContext {
@@ -22,6 +22,7 @@ export interface ShardRunContext {
 	readonly signal?: AbortSignal;
 }
 
+/** Resolves only after its owned execution boundary terminates; rejection is unproven. */
 export type ShardRunner = (
 	context: ShardRunContext,
 ) => Promise<{ readonly exitCode: number; readonly evidenceRefs?: readonly string[] }>;
@@ -37,6 +38,10 @@ export interface ExecuteWorkloadShardPlanInput {
 	readonly retryFailed?: boolean;
 	/** §13.4: aborted -> pending needs an explicit resume; this call is that act. Default true. */
 	readonly resumeAborted?: boolean;
+	/** Trusted recovery witness for this exact shard attempt. Missing or unknown never rearms. */
+	readonly observeTermination?: (
+		shard: WorkloadShardProjection,
+	) => "terminated" | "unknown" | Promise<"terminated" | "unknown">;
 	readonly permitWaitTimeoutMs?: number;
 	readonly now?: () => Date;
 }
