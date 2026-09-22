@@ -99,12 +99,12 @@ describe("skills catalog cache", () => {
 	it("does not write the catalog under test runners unless opted in", () => {
 		const options = { cwd: root, agentDir, skillPaths: [] as string[], includeDefaults: true };
 		loadSkills(options);
-		expect(existsSync(join(agentDir, "cache", "skill-catalog-v1.json"))).toBe(false);
+		expect(existsSync(join(agentDir, "cache", "skill-catalog-v2.json"))).toBe(false);
 	});
 
 	it("corrupt cache file degrades to a clean miss", () => {
 		mkdirSync(join(agentDir, "cache"), { recursive: true });
-		writeFileSync(join(agentDir, "cache", "skill-catalog-v1.json"), "{not json");
+		writeFileSync(join(agentDir, "cache", "skill-catalog-v2.json"), "{not json");
 		expect(readSkillCatalog(agentDir)).toEqual({});
 		expect(() => writeSkillCatalog(agentDir, {})).not.toThrow();
 	});
@@ -113,7 +113,7 @@ describe("skills catalog cache", () => {
 		const cacheDir = join(agentDir, "cache");
 		mkdirSync(cacheDir, { recursive: true });
 		writeFileSync(
-			join(cacheDir, "skill-catalog-v1.json"),
+			join(cacheDir, "skill-catalog-v2.json"),
 			JSON.stringify({ [resolve(join(agentDir, "skills"))]: {} }),
 		);
 		let scans = 0;

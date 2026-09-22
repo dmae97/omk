@@ -77,6 +77,25 @@ For project-level Claude Code skills, add to `.omk/settings.json`:
 
 This is progressive disclosure: only descriptions are always in context, full instructions load on-demand.
 
+### Catalog cache
+
+Startup caches skill metadata in `cache/skill-catalog-v2.json` under the agent
+directory. Unchanged, complete fingerprints allow reuse; `.gitignore`, `.ignore`,
+and `.fdignore` changes invalidate discovery just like skill file edits. A depth
+or entry limit, unreadable path, or symlink cycle makes the fingerprint incomplete,
+so OMK uses the original scanner rather than a partial cached inventory. Results
+are stored only when fingerprints agree before and after a scan.
+
+Writers use exclusive, owner-only temporary files and atomic rename. Concurrent
+writers may replace each other's cache snapshots (causing misses), but do not share
+or remove each other's temporary files. The 64-entry limit bounds cached roots,
+not the number of skills. Cache hits return cloned metadata; corrupt entries and
+legacy v1 files are misses. Legacy files are not deleted or migrated in place.
+
+This is metadata-based invalidation, not an atomic filesystem snapshot, and does
+not change scanner precedence, trust rules, or skill availability. Cold scans pay
+for a second fingerprint walk; incomplete trees cannot use the cache fast path.
+
 ### Default active skills
 
 Set `defaultActiveSkills` in global settings to mark selected discovered skills active in every prompt without repeating `!skill:` invocations:
