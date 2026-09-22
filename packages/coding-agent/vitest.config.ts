@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+const tuiSrcIndex = fileURLToPath(new URL("../tui/src/index.ts", import.meta.url));
 const aiSrcIndex = fileURLToPath(new URL("../ai/src/index.ts", import.meta.url));
 const aiSrcOAuth = fileURLToPath(new URL("../ai/src/oauth.ts", import.meta.url));
 const agentSrcIndex = fileURLToPath(new URL("../agent/src/index.ts", import.meta.url));
@@ -21,6 +22,7 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: [
+			{ find: /^omk-tui$/, replacement: tuiSrcIndex },
 			{ find: /^omk-protocol$/, replacement: protocolSrcIndex },
 			{ find: /^omk-adaptorch-wpl$/, replacement: adaptorchWplSrcIndex },
 			{ find: /^@earendil-works\/omk-ai$/, replacement: aiSrcIndex },
