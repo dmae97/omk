@@ -2,6 +2,13 @@ import type { AssistantMessage } from "omk-ai";
 import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "omk-tui";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 
+type ContentViewKind = "text" | "thinking" | "hidden-thinking";
+interface ContentView {
+	kind: ContentViewKind;
+	text: string;
+	component: Markdown | Text;
+}
+
 const OSC133_ZONE_START = "\x1b]133;A\x07";
 const OSC133_ZONE_END = "\x1b]133;B\x07";
 const OSC133_ZONE_FINAL = "\x1b]133;C\x07";
@@ -16,6 +23,7 @@ export class AssistantMessageComponent extends Container {
 	private hiddenThinkingLabel: string;
 	private lastMessage?: AssistantMessage;
 	private hasToolCalls = false;
+	private readonly contentViews = new Map<number, ContentView>();
 
 	constructor(
 		message?: AssistantMessage,
@@ -40,6 +48,8 @@ export class AssistantMessageComponent extends Container {
 
 	override invalidate(): void {
 		super.invalidate();
+		// Theme changes also invalidate pre-styled labels and Markdown style prefixes.
+		this.contentViews.clear();
 		if (this.lastMessage) {
 			this.updateContent(this.lastMessage);
 		}
@@ -70,6 +80,33 @@ export class AssistantMessageComponent extends Container {
 		return lines;
 	}
 
+	private contentView(index: number, kind: ContentViewKind, text: string): Markdown | Text {
+		const previous = this.contentViews.get(index);
+		if (previous?.kind === kind) {
+			if (previous.text !== text) {
+				previous.component.setText(
+					kind === "hidden-thinking" ? theme.italic(theme.fg("thinkingText", text)) : text,
+				);
+				previous.text = text;
+			}
+			return previous.component;
+		}
+		const component =
+			kind === "hidden-thinking"
+				? new Text(theme.italic(theme.fg("thinkingText", text)), 1, 0)
+				: new Markdown(
+						text,
+						1,
+						0,
+						this.markdownTheme,
+						kind === "thinking"
+							? { color: (value: string) => theme.fg("thinkingText", value), italic: true }
+							: undefined,
+					);
+		this.contentViews.set(index, { kind, text, component });
+		return component;
+	}
+
 	updateContent(message: AssistantMessage): void {
 		this.lastMessage = message;
 
@@ -84,41 +121,38 @@ export class AssistantMessageComponent extends Container {
 			this.contentContainer.addChild(new Spacer(1));
 		}
 
-		// Render content in order
+		const usedViews = new Set<number>();
+		const visibleAfter = new Array<boolean>(message.content.length);
+		let laterVisible = false;
+		for (let i = message.content.length - 1; i >= 0; i--) {
+			visibleAfter[i] = laterVisible;
+			const part = message.content[i];
+			laterVisible ||=
+				(part.type === "text" && part.text.trim().length > 0) ||
+				(part.type === "thinking" && part.thinking.trim().length > 0);
+		}
+
+		// Keep unchanged block render caches without relying on message identity.
 		for (let i = 0; i < message.content.length; i++) {
 			const content = message.content[i];
 			if (content.type === "text" && content.text.trim()) {
-				// Assistant text messages with no background - trim the text
-				// Set paddingY=0 to avoid extra spacing before tool executions
-				this.contentContainer.addChild(new Markdown(content.text.trim(), 1, 0, this.markdownTheme));
+				usedViews.add(i);
+				this.contentContainer.addChild(this.contentView(i, "text", content.text.trim()));
 			} else if (content.type === "thinking" && content.thinking.trim()) {
-				// Add spacing only when another visible assistant content block follows.
-				// This avoids a superfluous blank line before separately-rendered tool execution blocks.
-				const hasVisibleContentAfter = message.content
-					.slice(i + 1)
-					.some((c) => (c.type === "text" && c.text.trim()) || (c.type === "thinking" && c.thinking.trim()));
-
-				if (this.hideThinkingBlock) {
-					// Show static thinking label when hidden
-					this.contentContainer.addChild(
-						new Text(theme.italic(theme.fg("thinkingText", this.hiddenThinkingLabel)), 1, 0),
-					);
-					if (hasVisibleContentAfter) {
-						this.contentContainer.addChild(new Spacer(1));
-					}
-				} else {
-					// Thinking traces in thinkingText color, italic
-					this.contentContainer.addChild(
-						new Markdown(content.thinking.trim(), 1, 0, this.markdownTheme, {
-							color: (text: string) => theme.fg("thinkingText", text),
-							italic: true,
-						}),
-					);
-					if (hasVisibleContentAfter) {
-						this.contentContainer.addChild(new Spacer(1));
-					}
-				}
+				usedViews.add(i);
+				this.contentContainer.addChild(
+					this.contentView(
+						i,
+						this.hideThinkingBlock ? "hidden-thinking" : "thinking",
+						this.hideThinkingBlock ? this.hiddenThinkingLabel : content.thinking.trim(),
+					),
+				);
+				// Tool execution blocks are rendered separately and need no trailing spacer.
+				if (visibleAfter[i]) this.contentContainer.addChild(new Spacer(1));
 			}
+		}
+		for (const index of this.contentViews.keys()) {
+			if (!usedViews.has(index)) this.contentViews.delete(index);
 		}
 
 		// Check if aborted - show after partial content
