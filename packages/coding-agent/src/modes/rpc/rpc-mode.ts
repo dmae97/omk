@@ -25,10 +25,10 @@ import {
 	waitForRawStdoutBackpressure,
 	writeRawStdout,
 } from "../../core/output-guard.ts";
-import { formatSessionTermination, type SessionTermination } from "../../core/session-termination.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { type Theme, theme } from "../interactive/theme/theme.ts";
 import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.ts";
+import { error, success } from "./rpc-response.ts";
 import type {
 	RpcCommand,
 	RpcExtensionUIRequest,
@@ -59,33 +59,6 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 	const output = (obj: RpcResponse | RpcExtensionUIRequest | object) => {
 		writeRawStdout(serializeJsonLine(obj));
-	};
-
-	const success = <T extends RpcCommand["type"]>(
-		id: string | undefined,
-		command: T,
-		data?: object | null,
-	): RpcResponse => {
-		if (data === undefined) {
-			return { id, type: "response", command, success: true } as RpcResponse;
-		}
-		return { id, type: "response", command, success: true, data } as RpcResponse;
-	};
-
-	const error = (
-		id: string | undefined,
-		command: string,
-		message: string,
-		termination?: SessionTermination,
-	): RpcResponse => {
-		return {
-			id,
-			type: "response",
-			command,
-			success: false,
-			error: termination ? formatSessionTermination(termination) : message,
-			...(termination ? { termination } : {}),
-		};
 	};
 
 	// Pending extension UI requests waiting for response

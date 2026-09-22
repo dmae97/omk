@@ -19,6 +19,7 @@ import todoChecklist from "./extensions/builtin/todo-checklist.ts";
 import toolPairRepair from "./extensions/builtin/tool-pair-repair.ts";
 import { createExtensionRuntime, loadExtensionFromFactory, loadExtensions } from "./extensions/loader.ts";
 import type { Extension, ExtensionFactory, ExtensionRuntime, LoadExtensionsResult } from "./extensions/types.ts";
+import { isLegacyAutoSkillResource } from "./legacy-resource-policy.ts";
 import { DefaultPackageManager, type PathMetadata } from "./package-manager.ts";
 import type { PromptTemplate } from "./prompt-templates.ts";
 import { loadPromptTemplates } from "./prompt-templates.ts";
@@ -50,18 +51,6 @@ export interface ResourceLoader {
 	getAppendSystemPrompt(): string[];
 	extendResources(paths: ResourceExtensionPaths): void;
 	reload(): Promise<void>;
-}
-
-function hasLegacyPathSegment(path: string): boolean {
-	return path.split(/[\\/]+/).some((segment) => segment.includes(".legacy."));
-}
-
-function isLegacyAutoSkillResource(resource: { path: string; metadata: PathMetadata }): boolean {
-	return (
-		resource.metadata.source === "auto" &&
-		resource.metadata.origin === "top-level" &&
-		hasLegacyPathSegment(resource.path)
-	);
 }
 
 function resolvePromptInput(input: string | undefined, description: string): string | undefined {

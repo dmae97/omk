@@ -77,6 +77,8 @@ import type {
 	WriteToolInput,
 } from "../tools/index.ts";
 
+import type { SessionInfoChangedEvent, SessionStartEvent } from "./session-lifecycle-types.ts";
+
 export type { ExecOptions, ExecResult } from "../exec.ts";
 export type { BuildSystemPromptOptions } from "../system-prompt.ts";
 export type { AgentToolResult, AgentToolUpdateCallback, ToolExecutionMode };
@@ -537,21 +539,7 @@ export interface ResourcesDiscoverResult {
 // Session Events
 // ============================================================================
 
-/** Fired when a session is started, loaded, or reloaded */
-export interface SessionStartEvent {
-	type: "session_start";
-	/** Why this session start happened. */
-	reason: "startup" | "reload" | "new" | "resume" | "fork";
-	/** Previously active session file. Present for "new", "resume", and "fork". */
-	previousSessionFile?: string;
-}
-
-/** Fired when the current session metadata changes. */
-export interface SessionInfoChangedEvent {
-	type: "session_info_changed";
-	/** Current normalized session name. Undefined when the name is cleared. */
-	name: string | undefined;
-}
+export type { SessionInfoChangedEvent, SessionStartEvent } from "./session-lifecycle-types.ts";
 
 /** Fired before switching to another session (can be cancelled) */
 export interface SessionBeforeSwitchEvent {
