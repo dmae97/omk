@@ -196,6 +196,14 @@ export function assignDagLevels(entries: readonly ResolvedClaimEntry[]): number[
  * `level(i) >= level(j) + 1`, and depth follows by induction.
  */
 export function assignDagDependencies(entries: readonly ResolvedClaimEntry[]): number[][] {
+	// No edge can exist when every claim is read-only; avoid scanning every pair.
+	if (
+		entries.every(
+			({ resolution }) =>
+				resolution.kind === "claims" && resolution.claims.every((claim) => claim.access === "read"),
+		)
+	)
+		return entries.map(() => []);
 	const dependencies: number[][] = [];
 	for (let index = 0; index < entries.length; index++) {
 		const blockers: number[] = [];

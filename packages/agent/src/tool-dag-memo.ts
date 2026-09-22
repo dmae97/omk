@@ -45,7 +45,7 @@ function dagScheduleCacheKey(toolCalls: readonly ClaimableToolCall[], options: S
  * Schedule with a per-run memo. Identical batches (provider retries, stubborn
  * re-emissions) re-resolve path identities and custom claims; the plan is a
  * pure function of the canonical inputs, so replaying it is safe. Returns
- * `null` when the underlying schedule was aborted. Cached levels are handed
+ * `null` on cancellation, including cache hits before key serialization. Cached levels are handed
  * out as copies because callers append to and reorder them.
  */
 export async function scheduleDagLevelsMemo(
@@ -54,6 +54,7 @@ export async function scheduleDagLevelsMemo(
 	signal: AbortSignal | undefined,
 	cache: DagScheduleCache,
 ): Promise<DagSchedulePlan | null> {
+	if (signal?.aborted) return null;
 	// Skip the memo whenever resolution can depend on state the key cannot
 	// fingerprint: a custom resourceKeyResolver, or any tool whose resourceClaims
 	// is a function closure — its return value may change between identical

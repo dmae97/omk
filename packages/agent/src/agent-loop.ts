@@ -19,8 +19,9 @@ import { pinProviderConfig, requestAssistantResponse } from "./provider-request.
 
 export { getVisionRouteModel, isVisionRouteModel, VISION_ROUTE_MODEL } from "./vision-route.ts";
 
+import { type DeferredCall, deferredStillConflicts } from "./tool-dag-deferred.ts";
 import { type DagScheduleCache, scheduleDagLevelsMemo as scheduleDagLevelsMemoFromModule } from "./tool-dag-memo.ts";
-import { applyConcurrencyCap, assignDagDependencies, conflictsWithUnsettledClaim } from "./tool-dag-scheduler.ts";
+import { applyConcurrencyCap, assignDagDependencies } from "./tool-dag-scheduler.ts";
 import {
 	awaitWithAbort,
 	createErrorToolResult,
@@ -828,11 +829,12 @@ interface DagBatchScheduleState {
 	readonly resolutions: Map<number, ToolClaimResolution>;
 	/**
 	 * Calls deferred because their post-hook claims conflict with an unsettled
-	 * or running call. Caching the prepared call plus its final claims means a
-	 * later scan retries admission without re-running authorization side
-	 * effects (interactive approvals, audit writes, token mints, arg rewrites).
+	 * or running call. The stored resolution is only used to prove that conflict
+	 * — reusing it there skips an extension callback that cannot change the
+	 * conservative answer — while admission always re-resolves, because dynamic
+	 * resource identities may change across the wait.
 	 */
-	readonly deferred: Map<number, { preparation: PreparedToolCall; resolution: ToolClaimResolution }>;
+	readonly deferred: Map<number, DeferredCall<PreparedToolCall>>;
 	readonly settled: Set<number>;
 }
 
@@ -1046,9 +1048,6 @@ async function resolveFinalResolution(
 	}
 }
 
-/** No call in the ready queue is pre-ordered against another, so drift checks see no exempt peers. */
-const NO_READY_PEERS: ReadonlySet<number> = new Set<number>();
-
 /**
  * Execute a planned batch as a dependency ready queue.
  *
@@ -1141,12 +1140,19 @@ async function runDagFrontier(
 					position++;
 					continue;
 				}
+				const runningSet = new Set(running.keys());
 				const cached = state.deferred.get(sourceIndex);
 				let preparation: PreparedToolCall;
-				let resolved: ToolClaimResolution;
 				if (cached) {
+					// A stale conflict answer only delays this call; admission below
+					// re-resolves, so no tool executes from a cached scope.
+					if (
+						deferredStillConflicts(sourceIndex, cached.resolution, state.settled, runningSet, state.resolutions)
+					) {
+						position++;
+						continue;
+					}
 					preparation = cached.preparation;
-					resolved = cached.resolution;
 				} else {
 					const plan = plans[sourceIndex];
 					const preparedOutcome =
@@ -1168,37 +1174,28 @@ async function runDagFrontier(
 						continue;
 					}
 					preparation = preparedOutcome;
-					const resolution = await resolveFinalResolution(preparation, toolPolicies, config, signal);
-					if (resolution.kind === "immediate") {
-						pending.splice(position, 1);
-						admitted = true;
-						await settle({
-							sourceIndex,
-							finalized: {
-								toolCall: preparation.toolCall,
-								result: resolution.result,
-								isError: resolution.isError,
-								envelope: resolution.envelope,
-							},
-						});
-						continue;
-					}
-					resolved = resolution;
+				}
+				const resolved = await resolveFinalResolution(preparation, toolPolicies, config, signal);
+				if (resolved.kind === "immediate") {
+					state.deferred.delete(sourceIndex);
+					pending.splice(position, 1);
+					admitted = true;
+					await settle({
+						sourceIndex,
+						finalized: {
+							toolCall: preparation.toolCall,
+							result: resolved.result,
+							isError: resolved.isError,
+							envelope: resolved.envelope,
+						},
+					});
+					continue;
 				}
 				state.resolutions.set(sourceIndex, resolved);
-				if (
-					conflictsWithUnsettledClaim(
-						sourceIndex,
-						resolved,
-						NO_READY_PEERS,
-						state.settled,
-						new Set(running.keys()),
-						state.resolutions,
-					)
-				) {
+				if (deferredStillConflicts(sourceIndex, resolved, state.settled, runningSet, state.resolutions)) {
 					// Defer without losing the prepared call: a later scan retries
 					// admission from this cache instead of re-invoking authorization.
-					if (!cached) state.deferred.set(sourceIndex, { preparation, resolution: resolved });
+					state.deferred.set(sourceIndex, { preparation, resolution: resolved });
 					position++;
 					continue;
 				}

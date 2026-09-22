@@ -21,6 +21,9 @@ baseline below is history, not current truth.
 | Provider retry/failover classification | yes | `provider-retry`, `session-failure-cause` | default | resilience/classification tests | released | not measured |
 | MCP descriptor injection screen | yes | `mcp/manager` import path | default | quarantine tests | released | pattern rule score, not calibrated risk |
 | verified-run coordinator + evidence | yes | verified-run paths | opt-in command | coordinator/evidence tests | working tree | scope-limited binding, not general correctness |
+| Atomic commit planner (`planAtomicCommits`) | yes | public agent API only; no live commit caller | explicit function call | local planner/API/property tests, not a CI receipt | working tree | not measured |
+
+Named tests are evidence locations, not a claim that this exact working tree passed remote CI. Source call paths and fresh local results must be checked before promoting a gate.
 
 Gates are reported per row so a green "implemented" never upgrades itself to
 "released" or "measured".
@@ -60,6 +63,45 @@ and the authorization hook still runs once. Coverage:
 `packages/agent/test/tool-dag-final-claims-abort.test.ts`. This is the wait
 boundary only; isolating a non-cooperative extension needs a killable execution
 boundary, which this change does not add.
+
+## Deferred claim freshness and cancelled memo requests (2026-09-22)
+
+The live path is `agentLoop` → `schedulePlannedDagLevels` → `runDagFrontier`.
+A deferred call retains its prepared arguments and one-time authorization, and
+admission always re-resolves its claims: a cached resolution that survived the
+wait could execute a stale scope (A holds X, B defers on X, C starts on Z, and
+after A settles B runs on Z using the cached X claim). Re-resolution preserves
+conflict exclusion against both earlier pending calls and later running calls,
+and stays abort-bound, so a late claim result cannot admit an aborted call.
+
+The cached resolution is still reused for one thing — proving the deferral.
+A deferral decision is only "wait", so a stale conflict answer executes nothing,
+while re-invoking an extension `resourceClaims()` callback on every scan of the
+wait paid real I/O for the same answer. The resolver-budget regression shows a
+deferred call blocked behind a slow peer invoking the callback 5 times when the
+answer was re-resolved per scan, and 3 times with the split: the scheduling
+resolution, one conflict-proving resolution, and the fresh resolution required
+before admission. Claim callbacks may still run again after a wait, so they must
+not be used as authorization side effects.
+
+The per-run schedule memo checks cancellation before inspecting arguments or
+serializing its key, including warm-cache requests. An already-aborted request
+returns no plan and does not promote cache recency.
+
+`assignDagDependencies` also returns an empty-edge graph directly when every
+resolution is read-only (including empty claims). In the 128-entry regression,
+resolved-entry visits fell from 16,256 to 128 with the same dependency graph.
+Mixed writes and exclusive barriers still use the existing conflict scan. This
+is an operation-count result for that fixture, not measured end-to-end latency,
+model quality, CI certification or a release claim.
+
+Coverage: `tool-dag-deferred-refresh.test.ts`,
+`tool-dag-deferred-resolver-budget.test.ts`,
+`tool-dag-memo-cancellation.test.ts`, and
+`tool-dag-readonly-dependencies.test.ts` in `packages/agent/test/`.
+The separate `planAtomicCommits` export remains a pure public API,
+not a live automatic commit coordinator. ECRAF and automatic shards
+are not activated by these changes.
 
 ## Reasoning router resolver contract (2026-09-19 audit F05/F06)
 
