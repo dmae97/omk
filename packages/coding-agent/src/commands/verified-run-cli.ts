@@ -5,6 +5,7 @@ import { planVerifiedRun, RunCoordinator } from "../core/verified-run/coordinato
 import { publishPolicyDigest } from "../core/verified-run/run-publish.ts";
 import type { VerifiedRunRuntime } from "../core/verified-run/session-port.ts";
 import { digestBytes, readJson, VerifiedRunError } from "../core/verified-run/storage.ts";
+import { withRunSignal } from "./verified-run-signal.ts";
 
 const USAGE = `Usage: omk run plan --contract FILE [--json]
        omk run start --contract FILE --approve DIGEST --command-id ID [--state-dir DIR]
@@ -114,19 +115,6 @@ function required(parsed: Parsed, name: string): string {
 	return value;
 }
 
-async function withRunSignal<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
-	const controller = new AbortController();
-	const cancel = (): void => controller.abort();
-	process.once("SIGINT", cancel);
-	process.once("SIGTERM", cancel);
-	try {
-		return await run(controller.signal);
-	} finally {
-		process.off("SIGINT", cancel);
-		process.off("SIGTERM", cancel);
-	}
-}
-
 export async function runVerifiedRunCli(
 	args: string[],
 	runtime?: VerifiedRunRuntime,
@@ -213,21 +201,23 @@ export async function runVerifiedRunCli(
 				required(parsed, "--execute");
 				const approvedContractDigest = required(parsed, "--approve");
 				const contract = parseRunContract(readJson(required(parsed, "--contract")));
-				const state = await coordinator.publish(
-					{
-						schemaVersion: VERIFIED_COMMAND_VERSION,
-						kind: "publish",
-						runId: parsed.id ?? "",
-						commandId: required(parsed, "--command-id"),
-						expectedRevision: Number(required(parsed, "--revision")),
-						expectedGeneration: Number(required(parsed, "--generation")),
-						contractDigest: approvedContractDigest,
-						candidateDigest: required(parsed, "--candidate"),
-						parentOid: required(parsed, "--parent"),
-						receiptDigest: required(parsed, "--receipt"),
-						policyDigest: publishPolicyDigest(contract),
-					},
-					{ approvedContractDigest },
+				const state = await withRunSignal((signal) =>
+					coordinator.publish(
+						{
+							schemaVersion: VERIFIED_COMMAND_VERSION,
+							kind: "publish",
+							runId: parsed.id ?? "",
+							commandId: required(parsed, "--command-id"),
+							expectedRevision: Number(required(parsed, "--revision")),
+							expectedGeneration: Number(required(parsed, "--generation")),
+							contractDigest: approvedContractDigest,
+							candidateDigest: required(parsed, "--candidate"),
+							parentOid: required(parsed, "--parent"),
+							receiptDigest: required(parsed, "--receipt"),
+							policyDigest: publishPolicyDigest(contract),
+						},
+						{ approvedContractDigest, signal },
+					),
 				);
 				result = state;
 				exitCode = state.publication === "accepted" ? 0 : 1;
@@ -256,9 +246,12 @@ export async function runVerifiedRunCli(
 			case "authority":
 				result = coordinator.inspectAuthority();
 				break;
-			case "evidence":
-				result = coordinator.evidence(parsed.id ?? "");
+			case "evidence": {
+				const projection = coordinator.evidenceRead(parsed.id ?? "");
+				result = { ...projection.evidence, ...projection };
+				exitCode = projection.authenticity === "valid" && projection.verification === "passed" ? 0 : 1;
 				break;
+			}
 			case "artifact": {
 				const candidate = required(parsed, "--candidate");
 				const path = required(parsed, "--path");

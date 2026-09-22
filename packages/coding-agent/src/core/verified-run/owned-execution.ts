@@ -99,50 +99,59 @@ export async function executeRunCommand(
 		throw new VerifiedRunError("authority_blocked");
 	}
 	const token: GrantToken = admission.token;
-	journal.append({
-		kind: "dispatch",
-		executionId,
-		role: request.role,
-		claimId: request.claimId,
-		...(request.taskId === undefined ? {} : { taskId: request.taskId }),
-	});
-	if (timeoutMs <= 0 || policy.signal?.aborted) {
-		const failure = policy.signal?.aborted ? "cancelled" : "deadline";
-		// Provably pre-spawn: the intent never reached the adapter, so the grant
-		// settles immediately instead of wedging as an unwitnessed live effect.
-		authority.store.cancel(token);
-		authority.store.confirmTerminated(token);
-		journal.append({ kind: "exited", executionId, failure });
-		throw new VerifiedRunError(failure);
-	}
-	// The intent commits before the adapter is invoked: from this record on,
-	// the effect may be live and a crash must quarantine it, never assume
-	// it did not run.
-	if (!authority.store.dispatchIntent(token, executionId, Date.now())) throw new VerifiedRunError("authority");
+	let supervisorInvoked = false;
+	let readyObserved = false;
 	let result: SandboxOutcome;
 	try {
+		journal.append({
+			kind: "dispatch",
+			executionId,
+			role: request.role,
+			claimId: request.claimId,
+			...(request.taskId === undefined ? {} : { taskId: request.taskId }),
+		});
+		if (timeoutMs <= 0 || policy.signal?.aborted) {
+			const failure = policy.signal?.aborted ? "cancelled" : "deadline";
+			// Provably pre-spawn: the intent never reached the adapter, so the grant
+			// settles immediately instead of wedging as an unwitnessed live effect.
+			authority.store.cancel(token);
+			authority.store.confirmTerminated(token);
+			journal.append({ kind: "exited", executionId, failure });
+			throw new VerifiedRunError(failure);
+		}
+		// The intent commits before the adapter is invoked: from this record on,
+		// the effect may be live and a crash must quarantine it, never assume
+		// it did not run.
+		if (!authority.store.dispatchIntent(token, executionId)) throw new VerifiedRunError("authority");
+		supervisorInvoked = true;
 		result = await executeSandbox({
 			workspace: request.workspace,
 			argv: request.argv,
 			writable: request.role === "writer",
-			timeoutMs,
+			timeoutMs: Math.floor(request.deadline - performance.now()),
 			cleanupMs: policy.cleanupMs,
 			maxOutputBytes: policy.maxOutputBytes,
 			...(policy.signal ? { signal: policy.signal } : {}),
 			onReady: (identity: NamespaceIdentity) => {
+				readyObserved = true;
 				if (journal.state.generation !== generation) throw new VerifiedRunError("stale_generation");
 				journal.append({ kind: "process_ready", executionId, identity });
-				if (!authority.store.effectStarted(token, claims, identity, Date.now()))
-					throw new VerifiedRunError("authority");
+				if (!authority.store.effectStarted(token, claims, identity)) throw new VerifiedRunError("authority");
 			},
 		});
 	} catch (error) {
 		// Only pre-spawn rejections prove nothing ran; everything else may have
 		// a live or dying effect, which stays owned until a witness or a later
 		// reconcile settles it.
-		if (error instanceof VerifiedRunError && NEVER_SPAWNED.has(error.code)) {
+		try {
 			authority.store.cancel(token);
-			authority.store.confirmTerminated(token);
+			if (
+				!supervisorInvoked ||
+				(!readyObserved && error instanceof VerifiedRunError && NEVER_SPAWNED.has(error.code))
+			)
+				authority.store.confirmTerminated(token);
+		} catch (cleanupError) {
+			throw new AggregateError([error, cleanupError], "Execution ownership cleanup failed");
 		}
 		throw error;
 	}

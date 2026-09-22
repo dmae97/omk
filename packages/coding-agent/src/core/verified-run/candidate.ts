@@ -1,6 +1,7 @@
 import { chmodSync, lstatSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { RunPhaseBudget } from "omk-protocol";
+import { assertPublishablePath, safeCandidatePath } from "./candidate-policy.ts";
 import {
 	assertDirectory,
 	digestBytes,
@@ -29,36 +30,6 @@ export interface CandidateSnapshot {
 	readonly contents: ReadonlyMap<string, Buffer>;
 }
 
-function safePath(path: string): void {
-	if (
-		!path ||
-		/[\\\u0000-\u001f\u007f]/.test(path) ||
-		path.split("/").some((part) => ["", ".", "..", ".git", ".omk"].includes(part))
-	) {
-		throw new VerifiedRunError("file_type");
-	}
-}
-
-/** Names that must not enter a verified candidate. This is a deny list, not a secret scan. */
-const SECRET_FILE_NAMES = new Set([
-	".env",
-	".env.local",
-	".env.production",
-	".env.development",
-	".npmrc",
-	".netrc",
-	".pypirc",
-	"credentials.json",
-	"id_rsa",
-	"id_ed25519",
-]);
-
-function assertPublishablePath(path: string): void {
-	const name = path.slice(path.lastIndexOf("/") + 1);
-	if (SECRET_FILE_NAMES.has(name) || name.endsWith(".pem") || name.endsWith(".key"))
-		throw new VerifiedRunError("secret_path");
-}
-
 /** Entire regular-file tree, including dot/untracked files; .git/.omk metadata is excluded by this profile. */
 export function captureCandidate(root: string, limits: RunPhaseBudget): CandidateSnapshot {
 	assertDirectory(root);
@@ -73,7 +44,7 @@ export function captureCandidate(root: string, limits: RunPhaseBudget): Candidat
 		for (const name of names) {
 			if (!prefix && (name === ".git" || name === ".omk")) continue;
 			const path = prefix ? `${prefix}/${name}` : name;
-			safePath(path);
+			safeCandidatePath(path);
 			assertPublishablePath(path);
 			if (files.length + directories.length >= limits.maxFiles) throw new VerifiedRunError("storage_limit");
 			const absolute = join(root, path);
@@ -157,7 +128,7 @@ export function loadCandidate(runPath: string, digest: string, limits: RunPhaseB
 	let total = 0;
 	for (const directory of raw.directories) {
 		if (typeof directory !== "string") throw new VerifiedRunError("integrity");
-		safePath(directory);
+		safeCandidatePath(directory);
 		if (paths.has(directory)) throw new VerifiedRunError("integrity");
 		paths.add(directory);
 		directories.push(directory);
@@ -184,7 +155,7 @@ export function loadCandidate(runPath: string, digest: string, limits: RunPhaseB
 			file.size < 0
 		)
 			throw new VerifiedRunError("integrity");
-		safePath(file.path);
+		safeCandidatePath(file.path);
 		if (paths.has(file.path)) throw new VerifiedRunError("integrity");
 		paths.add(file.path);
 		total += file.size;

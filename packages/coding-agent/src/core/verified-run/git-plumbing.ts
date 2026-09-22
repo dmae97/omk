@@ -1,72 +1,13 @@
-import { spawnSync } from "node:child_process";
-import { mkdirSync, realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { realpathSync } from "node:fs";
 import type { CandidateManifest } from "./candidate.ts";
-import { VerifiedRunError } from "./storage.ts";
+import { preflightGitCandidate } from "./git-candidate-preflight.ts";
+import { GitOperationBudget, runGit } from "./git-execution.ts";
+import { digestObject, VerifiedRunError } from "./storage.ts";
 
 /** The single authoritative publication point; moved only by one old-OID CAS. */
 export const OMK_ACCEPTED_REF = "refs/omk/accepted";
 /** Full SHA-1 or SHA-256 git object names. */
 const GIT_OID_HEX = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-const MAX_GIT_OUTPUT_BYTES = 16 * 1024 * 1024;
-const GIT_TIMEOUT_MS = 30_000;
-/** Fixed identity and timestamps keep the sealed commit OID a pure function of tree+parent+message. */
-const SEAL_ENV = {
-	GIT_AUTHOR_NAME: "OMK verified-run",
-	GIT_AUTHOR_EMAIL: "omk-verified-run@localhost",
-	GIT_AUTHOR_DATE: "2000-01-01T00:00:00Z",
-	GIT_COMMITTER_NAME: "OMK verified-run",
-	GIT_COMMITTER_EMAIL: "omk-verified-run@localhost",
-	GIT_COMMITTER_DATE: "2000-01-01T00:00:00Z",
-} as const;
-/** Empty directory used only to stop inherited `reference-transaction` hooks. */
-let trustedHooksPath: string | undefined;
-
-function trustedEmptyHooks(): string {
-	if (!trustedHooksPath) {
-		trustedHooksPath = join(tmpdir(), "omk-verified-run-empty-hooks");
-		mkdirSync(trustedHooksPath, { recursive: true });
-	}
-	return trustedHooksPath;
-}
-
-function gitEnv(write: boolean): NodeJS.ProcessEnv {
-	const env: NodeJS.ProcessEnv = {};
-	for (const [name, value] of Object.entries(process.env)) {
-		if (value === undefined) continue;
-		if (name.startsWith("GIT_") || /^GIT_CONFIG_(KEY|VALUE)_\d+$/.test(name)) continue;
-		env[name] = value;
-	}
-	// Sealing and local ref CAS do not need inherited config, credentials, or hooks.
-	env.GIT_CONFIG_NOSYSTEM = "1";
-	env.GIT_CONFIG_GLOBAL = "/dev/null";
-	env.GIT_CONFIG_COUNT = "0";
-	// Read-only commands may skip optional locks; ref writes must never bypass the lock that makes CAS atomic.
-	if (!write) env.GIT_OPTIONAL_LOCKS = "0";
-	env.LC_ALL = "C";
-	return env;
-}
-
-function runGit(
-	root: string,
-	args: readonly string[],
-	options: { write?: boolean; input?: Buffer; allowedExitCodes?: readonly number[] } = {},
-): { status: number; stdout: Buffer } {
-	const isolated = ["-c", `core.hooksPath=${trustedEmptyHooks()}`, "-c", "core.fsmonitor=", "-C", root, ...args];
-	const result = spawnSync("git", isolated, {
-		env: { ...gitEnv(options.write === true), ...SEAL_ENV },
-		maxBuffer: MAX_GIT_OUTPUT_BYTES,
-		timeout: GIT_TIMEOUT_MS,
-		stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
-		input: options.input,
-		windowsHide: true,
-	});
-	if (result.error !== undefined) throw new VerifiedRunError("unsupported");
-	const allowed = options.allowedExitCodes ?? [0];
-	if (result.status === null || !allowed.includes(result.status)) throw new VerifiedRunError("git_plumbing");
-	return { status: result.status, stdout: result.stdout };
-}
 
 function oidOf(stdout: Buffer): string {
 	const oid = stdout.toString("utf8").trim();
@@ -78,20 +19,20 @@ function oidOf(stdout: Buffer): string {
  * Fail closed unless `root` is exactly the git work-tree top level. Publishing is
  * defined for a repository root only; subdirectory workspaces stay unsupported.
  */
-export function assertGitWorkspaceRoot(root: string): void {
+export function assertGitWorkspaceRoot(root: string, budget?: GitOperationBudget): void {
 	let toplevel = "";
 	try {
-		toplevel = runGit(root, ["rev-parse", "--show-toplevel"]).stdout.toString("utf8").replace(/\n$/, "");
+		toplevel = runGit(root, ["rev-parse", "--show-toplevel"], { budget }).stdout.toString("utf8").replace(/\n$/, "");
 	} catch (error) {
-		if (error instanceof VerifiedRunError) throw new VerifiedRunError("unsupported");
+		if (error instanceof VerifiedRunError && error.code === "git_plumbing") throw new VerifiedRunError("unsupported");
 		throw error;
 	}
 	if (!toplevel || realpathSync(toplevel) !== realpathSync(root)) throw new VerifiedRunError("unsupported");
 }
 
 /** `sha1` or `sha256`; determines the zero OID length used for unborn-ref CAS. */
-export function repoObjectFormat(root: string): "sha1" | "sha256" {
-	const format = runGit(root, ["rev-parse", "--show-object-format"]).stdout.toString("utf8").trim();
+export function repoObjectFormat(root: string, budget?: GitOperationBudget): "sha1" | "sha256" {
+	const format = runGit(root, ["rev-parse", "--show-object-format"], { budget }).stdout.toString("utf8").trim();
 	if (format !== "sha1" && format !== "sha256") throw new VerifiedRunError("git_plumbing");
 	return format;
 }
@@ -101,15 +42,16 @@ export function zeroOid(format: "sha1" | "sha256"): string {
 }
 
 /** Current commit OID of `ref`, or null when the ref does not resolve. */
-export function resolveRef(root: string, ref: string): string | null {
+export function resolveRef(root: string, ref: string, budget?: GitOperationBudget): string | null {
 	const result = runGit(root, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], {
 		allowedExitCodes: [0, 1],
+		budget,
 	});
 	return result.status === 0 ? oidOf(result.stdout) : null;
 }
 
-export function objectExists(root: string, oid: string): boolean {
-	return runGit(root, ["cat-file", "-e", `${oid}^{commit}`], { allowedExitCodes: [0, 1] }).status === 0;
+export function objectExists(root: string, oid: string, budget?: GitOperationBudget): boolean {
+	return runGit(root, ["cat-file", "-e", `${oid}^{commit}`], { allowedExitCodes: [0, 1], budget }).status === 0;
 }
 
 function treeSortKey(name: string, directory: boolean): Buffer {
@@ -124,14 +66,20 @@ function gitFileMode(mode: number): "100644" | "100755" {
 }
 
 /** Rebuild the manifest's exact directory hierarchy with `git mktree`; only regular files exist in candidates. */
-function buildTree(root: string, manifest: CandidateManifest, contents: ReadonlyMap<string, Buffer>): string {
+function buildTree(
+	root: string,
+	manifest: CandidateManifest,
+	contents: ReadonlyMap<string, Buffer>,
+	budget: GitOperationBudget,
+): string {
 	const blobOids = new Map<string, string>();
 	for (const file of manifest.files) {
+		if (blobOids.has(file.digest)) continue;
 		const bytes = contents.get(file.digest);
 		if (!bytes || bytes.length !== file.size) throw new VerifiedRunError("integrity");
 		blobOids.set(
 			file.digest,
-			oidOf(runGit(root, ["hash-object", "-w", "--stdin"], { write: true, input: bytes }).stdout),
+			oidOf(runGit(root, ["hash-object", "-w", "--stdin"], { write: true, input: bytes, budget }).stdout),
 		);
 	}
 	const children = new Map<string, { files: CandidateManifest["files"][number][]; dirs: string[] }>();
@@ -150,11 +98,20 @@ function buildTree(root: string, manifest: CandidateManifest, contents: Readonly
 	for (const directory of ordered) {
 		const entries = children.get(directory);
 		if (!entries) throw new VerifiedRunError("integrity");
-		treeOids.set(directory, mintTree(root, entries, treeOids, blobOids));
+		treeOids.set(directory, mintTree(root, entries, treeOids, blobOids, budget));
 	}
 	const top = children.get("");
 	if (!top) throw new VerifiedRunError("integrity");
-	return mintTree(root, top, treeOids, blobOids);
+	const tree = mintTree(root, top, treeOids, blobOids, budget);
+	const expected = [
+		...manifest.files.map((file) => `${gitFileMode(file.mode)} blob ${blobOids.get(file.digest)}\t${file.path}`),
+		...manifest.directories.map((path) => `040000 tree ${treeOids.get(path)}\t${path}`),
+	].sort();
+	const output = runGit(root, ["ls-tree", "-r", "-t", "-z", tree], { budget }).stdout.toString("utf8");
+	const observed = output.split("\0").filter(Boolean).sort();
+	if (expected.length !== observed.length || expected.some((entry, i) => entry !== observed[i]))
+		throw new VerifiedRunError("integrity");
+	return tree;
 }
 
 function mintTree(
@@ -162,6 +119,7 @@ function mintTree(
 	entries: { files: CandidateManifest["files"][number][]; dirs: string[] },
 	treeOids: ReadonlyMap<string, string>,
 	blobOids: ReadonlyMap<string, string>,
+	budget: GitOperationBudget,
 ): string {
 	const lines: { key: Buffer; line: string }[] = [];
 	for (const file of entries.files) {
@@ -182,6 +140,7 @@ function mintTree(
 	lines.sort((left, right) => Buffer.compare(left.key, right.key));
 	return oidOf(
 		runGit(root, ["mktree", "-z"], {
+			budget,
 			write: true,
 			input: Buffer.from(lines.map((entry) => `${entry.line}\0`).join(""), "utf8"),
 		}).stdout,
@@ -203,15 +162,22 @@ export interface SealCandidateInput {
  * parent and binding fields always produce the same OID, so a replayed publish
  * never creates a second object identity for the same candidate.
  */
-export function sealCandidateCommit(root: string, input: SealCandidateInput): string {
-	const tree = buildTree(root, input.manifest, input.contents);
+export function sealCandidateCommit(
+	root: string,
+	input: SealCandidateInput,
+	budget = new GitOperationBudget(),
+): string {
+	budget.remaining();
+	preflightGitCandidate(input.manifest, input.contents);
+	if (digestObject(input.manifest) !== input.candidateDigest) throw new VerifiedRunError("integrity");
+	const tree = buildTree(root, input.manifest, input.contents, budget);
 	const args = ["commit-tree", tree];
 	if (input.parentOid !== input.zeroOid) args.push("-p", input.parentOid);
 	args.push(
 		"-m",
 		`omk: verified candidate\n\nrun: ${input.runId}\ncandidate: ${input.candidateDigest}\nreceipt: ${input.receiptDigest}\n`,
 	);
-	return oidOf(runGit(root, args, { write: true }).stdout);
+	return oidOf(runGit(root, args, { write: true, budget }).stdout);
 }
 
 export class GitRefCasError extends Error {
@@ -224,11 +190,18 @@ export class GitRefCasError extends Error {
 }
 
 /** One old-OID compare-and-swap on a single ref. Throws GitRefCasError on any rejection; callers re-resolve to classify. */
-export function casRef(root: string, ref: string, newOid: string, expectedOldOid: string): void {
+export function casRef(
+	root: string,
+	ref: string,
+	newOid: string,
+	expectedOldOid: string,
+	budget = new GitOperationBudget(),
+): void {
+	budget.remaining();
 	try {
-		runGit(root, ["update-ref", ref, newOid, expectedOldOid], { write: true });
+		runGit(root, ["update-ref", ref, newOid, expectedOldOid], { write: true, budget });
 	} catch (error) {
-		if (error instanceof VerifiedRunError) throw new GitRefCasError(ref);
+		if (error instanceof VerifiedRunError && error.code === "git_plumbing") throw new GitRefCasError(ref);
 		throw error;
 	}
 }

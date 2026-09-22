@@ -11,7 +11,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sequence } from "../src/coordination/types.ts";
 import type { AuthorityGrantRecord } from "../src/core/verified-run/authority-events.ts";
 import { runAuthorityProbe } from "../src/core/verified-run/authority-runtime.ts";
@@ -20,10 +20,12 @@ import { AuthorityStore, authorityStorePath } from "../src/core/verified-run/aut
 let root: string;
 let storePath: string;
 beforeEach(async () => {
+	vi.spyOn(Date, "now").mockReturnValue(100);
 	root = await mkdtemp(join(tmpdir(), "omk-authority-restart-"));
 	storePath = authorityStorePath(root);
 });
 afterEach(async () => {
+	vi.restoreAllMocks();
 	await rm(root, { recursive: true, force: true });
 });
 

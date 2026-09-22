@@ -1,10 +1,19 @@
 import type { RunContract, RunPublishCommand } from "omk-protocol";
 import { commandEnvironmentDigest } from "./broker.ts";
 import { readRunEvidence } from "./evidence.ts";
+import { OMK_ACCEPTED_REF } from "./git-plumbing.ts";
 import type { JournalSnapshot } from "./journal.ts";
-import { publishPolicyDigest } from "./run-publish.ts";
 import type { RunProjection } from "./run-types.ts";
-import { VerifiedRunError } from "./storage.ts";
+import { digestObject, VerifiedRunError } from "./storage.ts";
+
+export function publishPolicyDigest(contract: RunContract): string {
+	return digestObject({
+		apply: contract.apply,
+		profile: contract.profile,
+		targetRef: OMK_ACCEPTED_REF,
+		writablePaths: contract.writablePaths,
+	});
+}
 
 export function assertPublishable(
 	snapshot: JournalSnapshot,

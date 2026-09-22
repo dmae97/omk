@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { parseRunContract, type RunContract, VERIFIED_COMMAND_VERSION } from "omk-protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runVerifiedRunCli } from "../src/commands/verified-run-cli.ts";
 import { planVerifiedRun, RunCoordinator } from "../src/core/run-execution-api.ts";
+import * as broker from "../src/core/verified-run/broker.ts";
+import { classifyEvidenceRead } from "../src/core/verified-run/evidence.ts";
+import { readRunJournal, VerifiedRunJournal } from "../src/core/verified-run/journal.ts";
+import { VerifiedRunError } from "../src/core/verified-run/storage.ts";
 
 let root: string;
 let workspace: string;
@@ -133,6 +138,86 @@ describe("verified-run command profile", () => {
 		expect(state).toMatchObject({ verification: "violated", application: "not_requested" });
 	});
 
+	it("separates an authentic failed check from a different current environment", async () => {
+		const { contract, plan, command } = prepared({
+			checks: [{ claimId: "greeting", argv: ["/bin/cat", "result.txt"], stdout: "not hello" }],
+		});
+		const coordinator = new RunCoordinator(stateRoot);
+		await coordinator.start(contract, command, { approvedContractDigest: plan.contractDigest });
+		const path = join(stateRoot, contract.runId);
+		const journal = readRunJournal(path);
+		if (!journal) throw new Error("missing fixture journal");
+		expect(classifyEvidenceRead(path, journal, "f".repeat(64))).toMatchObject({
+			authenticity: "valid",
+			verification: "failed",
+			currentEnvironmentEligibility: "different",
+			evidence: { verified: false },
+		});
+	});
+
+	it("reads historical evidence without requiring the current execution backend", async () => {
+		const { contract, plan, command } = prepared();
+		const coordinator = new RunCoordinator(stateRoot);
+		await coordinator.start(contract, command, { approvedContractDigest: plan.contractDigest });
+		const probe = vi.spyOn(broker, "commandEnvironmentDigest").mockImplementation(() => {
+			throw new VerifiedRunError("unsupported");
+		});
+		try {
+			expect(coordinator.evidence(contract.runId).verified).toBe(true);
+			expect(coordinator.evidenceRead(contract.runId)).toMatchObject({
+				authenticity: "valid",
+				verification: "passed",
+				currentEnvironmentEligibility: "unsupported",
+			});
+		} finally {
+			probe.mockRestore();
+		}
+	});
+
+	it.each(["missing-key", "forged"] as const)("classifies %s without a false verified receipt", async (fault) => {
+		const { contract, plan, command } = prepared();
+		const coordinator = new RunCoordinator(stateRoot);
+		const state = await coordinator.start(contract, command, { approvedContractDigest: plan.contractDigest });
+		const path = join(stateRoot, contract.runId);
+		const journal = readRunJournal(path);
+		if (!journal) throw new Error("missing fixture journal");
+		if (fault === "missing-key") rmSync(join(path, "issuer.key"));
+		else writeFileSync(join(path, "attestations", `${state.receiptDigest}.json`), '{"forged":true}');
+		expect(classifyEvidenceRead(path, journal, "f".repeat(64))).toMatchObject({
+			authenticity: fault === "missing-key" ? "unverifiable" : "invalid",
+			evidence: null,
+		});
+	});
+
+	it("reports the same evidence axes at the real CLI and SDK read ports without writing", async () => {
+		const { contract, plan, command } = prepared();
+		const coordinator = new RunCoordinator(stateRoot);
+		await coordinator.start(contract, command, { approvedContractDigest: plan.contractDigest });
+		const journal = readRunJournal(join(stateRoot, contract.runId));
+		const expected = coordinator.evidenceRead(contract.runId);
+		const output: string[] = [];
+		const capture = vi.spyOn(process.stdout, "write").mockImplementation((data) => {
+			output.push(String(data));
+			return true;
+		});
+		try {
+			const result = await runVerifiedRunCli([
+				"run",
+				"evidence",
+				contract.runId,
+				"--state-dir",
+				stateRoot,
+				"--json",
+			]);
+			expect(result.exitCode).toBe(0);
+			const parsed: unknown = JSON.parse(output.join(""));
+			expect(parsed).toMatchObject(expected);
+			expect(readRunJournal(join(stateRoot, contract.runId))?.bytesDigest).toBe(journal?.bytesDigest);
+		} finally {
+			capture.mockRestore();
+		}
+	});
+
 	it("keeps the verifier candidate read-only", async () => {
 		const { contract, plan, command } = prepared({
 			checks: [{ claimId: "immutable", argv: ["/bin/sh", "-c", "printf forged > result.txt"], stdout: "" }],
@@ -176,6 +261,48 @@ describe("verified-run command profile", () => {
 			approvedContractDigest: plan.contractDigest,
 		});
 		expect(state).toMatchObject({ execution: "failed", settlement: "settled", failure: "deadline" });
+	});
+
+	it("settles a never-started reservation if the dispatch journal append fails", async () => {
+		const { contract, plan, command } = prepared();
+		const coordinator = new RunCoordinator(stateRoot);
+		const append = VerifiedRunJournal.prototype.append;
+		const fault = vi.spyOn(VerifiedRunJournal.prototype, "append").mockImplementation(function (
+			this: VerifiedRunJournal,
+			event,
+		) {
+			if (event.kind === "dispatch") throw new Error("dispatch append failed");
+			return append.call(this, event);
+		});
+		try {
+			await expect(
+				coordinator.start(contract, command, { approvedContractDigest: plan.contractDigest }),
+			).rejects.toThrow(/dispatch append failed/);
+			expect(coordinator.inspectAuthority().status.blockingGrants).toEqual([]);
+		} finally {
+			fault.mockRestore();
+		}
+	});
+
+	it("does not misclassify an onReady cancellation error as never spawned", async () => {
+		const { contract, plan, command } = prepared();
+		const coordinator = new RunCoordinator(stateRoot);
+		const append = VerifiedRunJournal.prototype.append;
+		const fault = vi.spyOn(VerifiedRunJournal.prototype, "append").mockImplementation(function (
+			this: VerifiedRunJournal,
+			event,
+		) {
+			if (event.kind === "process_ready") throw new VerifiedRunError("cancelled");
+			return append.call(this, event);
+		});
+		try {
+			await coordinator.start(contract, command, { approvedContractDigest: plan.contractDigest });
+			expect(coordinator.inspectAuthority().status.blockingGrants).toEqual([
+				expect.objectContaining({ state: "quarantined", effectLive: true }),
+			]);
+		} finally {
+			fault.mockRestore();
+		}
 	});
 
 	it("rechecks the work deadline after committing dispatch intent", async () => {

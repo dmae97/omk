@@ -434,7 +434,11 @@ describe("authority status surface", () => {
 	];
 
 	function openStore() {
-		const store = AuthorityStore.open(authorityStorePath(stateRoot), { capacity: 4, probe: () => "unknown" });
+		const store = AuthorityStore.open(authorityStorePath(stateRoot), {
+			capacity: 4,
+			probe: () => "unknown",
+			clock: () => 0,
+		});
 		store.reconcile();
 		return store;
 	}

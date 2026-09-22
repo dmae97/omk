@@ -1,9 +1,9 @@
 import { realpathSync } from "node:fs";
-import type { RunContract, RunPublishCommand } from "omk-protocol";
-import type { GrantToken } from "../../coordination/types.ts";
+import type { RunPublishCommand } from "omk-protocol";
 import { acquireSessionOwnerLeaseSync } from "../session-owner-lease.ts";
 import { openRunAuthority, type RunAuthority } from "./authority-runtime.ts";
 import { loadCandidate } from "./candidate.ts";
+import { GitOperationBudget } from "./git-execution.ts";
 import {
 	assertGitWorkspaceRoot,
 	casRef,
@@ -22,34 +22,17 @@ import { requireRunJournal } from "./recovery-command.ts";
 import type { RunEvent, RunProjection } from "./run-types.ts";
 import { digestObject, VerifiedRunError } from "./storage.ts";
 export { OMK_ACCEPTED_REF };
-
-/** Policy fields the publish gate pins; the command must carry this digest so a policy change fails loudly. */
-export function publishPolicyDigest(contract: RunContract): string {
-	return digestObject({
-		apply: contract.apply,
-		profile: contract.profile,
-		targetRef: OMK_ACCEPTED_REF,
-		writablePaths: contract.writablePaths,
-	});
-}
+export { publishPolicyDigest } from "./publish-preflight.ts";
 
 type PublishIntent = Extract<RunEvent, { kind: "publish_intent" }>;
-
 function openPublishIntents(journal: JournalSnapshot): readonly PublishIntent[] {
 	return journal.records.flatMap(({ event }) => (event.kind === "publish_intent" ? [event] : []));
 }
-
 function terminalFor(journal: JournalSnapshot, commandId: string): boolean {
 	return journal.records.some(
 		({ event }) => (event.kind === "published" || event.kind === "publish_failed") && event.commandId === commandId,
 	);
 }
-
-/**
- * Same commandId + same recorded payload resumes the outbox entry; same commandId
- * + different payload is a collision. A fresh commandId must name the current
- * revision/generation exactly.
- */
 function publishDisposition(journal: JournalSnapshot, command: RunPublishCommand): "completed" | "resume" | "new" {
 	const first = journal.records[0]?.event;
 	if (
@@ -78,15 +61,11 @@ function publishDisposition(journal: JournalSnapshot, command: RunPublishCommand
 }
 
 export interface PublishOptions {
-	/** Fault-injection seam invoked once a CAS succeeds and before the result is appended. */
+	/** Fault injection after a successful CAS, before the result record. */
 	readonly afterCas?: () => void;
-	/** Checked again after authority admission and immediately before CAS. */
 	readonly signal?: AbortSignal;
-	/**
-	 * The caller's open authority session (coordinator path). When absent, the
-	 * publish opens, reconciles and registers its own — the outbox runs
-	 * through the same durable authority boundary either way.
-	 */
+	/** One monotonic deadline shared by all Git writes, never replenished per file. */
+	readonly timeoutMs?: number;
 	readonly authority?: RunAuthority;
 }
 
@@ -97,13 +76,15 @@ export function publishVerifiedRun(
 ): RunProjection {
 	const initial = requireRunJournal(runPath);
 	if (publishDisposition(initial, command) === "completed") return initial.state;
+	if (options.signal?.aborted) throw new VerifiedRunError("cancelled");
 	const owner = acquireSessionOwnerLeaseSync(journalPath(runPath));
 	let opened: RunAuthority | null = null;
 	try {
 		const snapshot = requireRunJournal(runPath);
 		if (publishDisposition(snapshot, command) === "completed") return snapshot.state;
 		if (!options.authority) opened = openRunAuthority(runPath);
-		const authority = options.authority ?? (opened as RunAuthority);
+		const authority = options.authority ?? opened;
+		if (!authority) throw new VerifiedRunError("authority");
 		const journal = new VerifiedRunJournal(runPath, owner);
 		return executePublish(runPath, snapshot, journal, command, options, authority);
 	} finally {
@@ -115,6 +96,15 @@ export function publishVerifiedRun(
 	}
 }
 
+function recordPublished(journal: VerifiedRunJournal, command: RunPublishCommand, candidateOid: string): RunProjection {
+	return journal.append({
+		kind: "published",
+		commandId: command.commandId,
+		candidateOid,
+		previousOid: command.parentOid,
+	});
+}
+
 function executePublish(
 	runPath: string,
 	snapshot: JournalSnapshot,
@@ -123,22 +113,29 @@ function executePublish(
 	options: PublishOptions,
 	authority: RunAuthority,
 ): RunProjection {
+	const budget = new GitOperationBudget({ signal: options.signal, timeoutMs: options.timeoutMs ?? 60_000 });
+	budget.remaining();
 	const { contract, state } = assertPublishable(snapshot, command, runPath);
 	const repoRoot = realpathSync(contract.workspace.root);
-	assertGitWorkspaceRoot(repoRoot);
-	const zero = zeroOid(repoObjectFormat(repoRoot));
+	assertGitWorkspaceRoot(repoRoot, budget);
+	const zero = zeroOid(repoObjectFormat(repoRoot, budget));
 	if (command.parentOid.length !== zero.length) throw new VerifiedRunError("invalid_binding");
-	const candidate = loadCandidate(runPath, state.candidateDigest, contract.budget);
-	const candidateOid = sealCandidateCommit(repoRoot, {
-		manifest: candidate.manifest,
-		contents: candidate.contents,
-		parentOid: command.parentOid,
-		zeroOid: zero,
-		runId: contract.runId,
-		candidateDigest: state.candidateDigest,
-		receiptDigest: state.receiptDigest,
-	});
 	const resumed = state.publication === "intent" && state.publicationCommandId === command.commandId;
+	// Recovery observes the existing ref; it does not restart a terminal/unknown effect.
+	if (resumed) {
+		const sealed = state.publicationCandidateOid;
+		if (!sealed) throw new VerifiedRunError("invalid_binding");
+		const observed = resolveRef(repoRoot, OMK_ACCEPTED_REF, budget);
+		if (observed === sealed && objectExists(repoRoot, sealed, budget))
+			return recordPublished(journal, command, sealed);
+		if ((observed ?? zero) !== command.parentOid)
+			return journal.append({
+				kind: "publish_failed",
+				commandId: command.commandId,
+				code: "reconciliation-required",
+			});
+	}
+	budget.remaining();
 	const refClaims = [
 		{
 			namespace: "git-ref",
@@ -148,35 +145,42 @@ function executePublish(
 			generation: String(state.generation),
 		},
 	];
-	const now = Date.now();
-	const pending = authority.store.lookup(command.commandId, now);
-	if (pending.status === "pending" && pending.token.authorizationDeadline <= now) {
-		const stored = authority.store.state.grants.get(pending.token.grantSequence);
-		if (!stored || stored.state === "reserved") throw new VerifiedRunError("authority");
-	}
-	const admission =
-		pending.status === "pending"
-			? { status: "granted" as const, token: pending.token }
-			: authority.store.acquire({
-					sessionId: authority.sessionId,
-					incarnation: authority.incarnation,
-					commandId: command.commandId,
-					intentDigest: digestObject({
-						candidateDigest: command.candidateDigest,
-						parentOid: command.parentOid,
-						receiptDigest: command.receiptDigest,
-						policyDigest: command.policyDigest,
-						targetRef: OMK_ACCEPTED_REF,
-					}),
-					claims: refClaims,
-					now,
-					ttl: 60000,
-				});
+	const admission = authority.store.acquire({
+		sessionId: authority.sessionId,
+		incarnation: authority.incarnation,
+		commandId: command.commandId,
+		intentDigest: digestObject({
+			candidateDigest: command.candidateDigest,
+			parentOid: command.parentOid,
+			receiptDigest: command.receiptDigest,
+			policyDigest: command.policyDigest,
+			targetRef: OMK_ACCEPTED_REF,
+		}),
+		claims: refClaims,
+		now: Date.now(),
+		ttl: 60_000,
+	});
 	if (admission.status !== "granted") throw new VerifiedRunError("authority_blocked");
-	const token: GrantToken = admission.token;
+	const token = admission.token;
+	// Failure here must not settle somebody else's running/quarantined grant.
+	assertPublishEffectStart(authority.store, token, refClaims, admission.duplicate);
+	let uncertain = false;
 	try {
-		if (options.signal?.aborted) throw new VerifiedRunError("cancelled");
-		assertPublishEffectStart(authority.store, token, refClaims, pending.status === "pending", now);
+		budget.remaining();
+		const candidate = loadCandidate(runPath, state.candidateDigest, contract.budget);
+		const candidateOid = sealCandidateCommit(
+			repoRoot,
+			{
+				manifest: candidate.manifest,
+				contents: candidate.contents,
+				parentOid: command.parentOid,
+				zeroOid: zero,
+				runId: contract.runId,
+				candidateDigest: state.candidateDigest,
+				receiptDigest: state.receiptDigest,
+			},
+			budget,
+		);
 		if (resumed) {
 			if (state.publicationCandidateOid !== candidateOid) throw new VerifiedRunError("invalid_binding");
 		} else {
@@ -192,60 +196,39 @@ function executePublish(
 				generation: state.generation,
 			});
 		}
-		const observed = resolveRef(repoRoot, OMK_ACCEPTED_REF);
-		const matchesParent = observed === null ? command.parentOid === zero : observed === command.parentOid;
-		if (observed === candidateOid) {
-			if (!objectExists(repoRoot, candidateOid)) {
-				journal.append({ kind: "publish_failed", commandId: command.commandId, code: "reconciliation-required" });
-			} else {
-				journal.append({
-					kind: "published",
-					commandId: command.commandId,
-					candidateOid,
-					previousOid: command.parentOid,
-				});
-			}
-			return journal.state;
-		}
-		if (!matchesParent) {
-			journal.append({
+		const observed = resolveRef(repoRoot, OMK_ACCEPTED_REF, budget);
+		if (observed === candidateOid && objectExists(repoRoot, candidateOid, budget))
+			return recordPublished(journal, command, candidateOid);
+		if ((observed ?? zero) !== command.parentOid)
+			return journal.append({
 				kind: "publish_failed",
 				commandId: command.commandId,
 				code: resumed ? "reconciliation-required" : "stale-parent",
 			});
-			return journal.state;
-		}
-		if (options.signal?.aborted) throw new VerifiedRunError("cancelled");
+		budget.remaining();
+		if (!authority.store.effectAuthorized(token, refClaims)) throw new VerifiedRunError("authority");
 		try {
-			casRef(repoRoot, OMK_ACCEPTED_REF, candidateOid, command.parentOid);
+			casRef(repoRoot, OMK_ACCEPTED_REF, candidateOid, command.parentOid, budget);
 		} catch (error) {
 			if (!(error instanceof GitRefCasError)) throw error;
-			const after = resolveRef(repoRoot, OMK_ACCEPTED_REF);
-			if (after === candidateOid && objectExists(repoRoot, candidateOid)) {
-				journal.append({
-					kind: "published",
-					commandId: command.commandId,
-					candidateOid,
-					previousOid: command.parentOid,
-				});
-			} else {
-				journal.append({
-					kind: "publish_failed",
-					commandId: command.commandId,
-					code: after === observed ? "ref-rejected" : resumed ? "reconciliation-required" : "stale-parent",
-				});
-			}
-			return journal.state;
+			const recoveryBudget = new GitOperationBudget({ timeoutMs: 5_000 });
+			const after = resolveRef(repoRoot, OMK_ACCEPTED_REF, recoveryBudget);
+			if (after === candidateOid && objectExists(repoRoot, candidateOid, recoveryBudget))
+				return recordPublished(journal, command, candidateOid);
+			return journal.append({
+				kind: "publish_failed",
+				commandId: command.commandId,
+				code: after === observed ? "ref-rejected" : resumed ? "reconciliation-required" : "stale-parent",
+			});
 		}
+		// Once CAS succeeded, cancellation must not undo the committed publication.
 		options.afterCas?.();
-		journal.append({
-			kind: "published",
-			commandId: command.commandId,
-			candidateOid,
-			previousOid: command.parentOid,
-		});
-		return journal.state;
+		return recordPublished(journal, command, candidateOid);
+	} catch (error) {
+		uncertain = error instanceof VerifiedRunError && error.code === "git_outcome_unknown";
+		throw error;
 	} finally {
-		authority.store.confirmTerminated(token);
+		if (uncertain) authority.store.cancel(token);
+		else authority.store.confirmTerminated(token);
 	}
 }

@@ -54,7 +54,7 @@ describe("AgentSession runtime termination production", () => {
 			authStorage,
 			model: faux.getModel(),
 			sessionManager: SessionManager.create(cwd, sessionDir),
-			settingsManager: SettingsManager.inMemory({ retry: { enabled: false } }),
+			settingsManager: SettingsManager.inMemory({ retry: { enabled: false }, compaction: { enabled: false } }),
 		});
 		return result.session;
 	}

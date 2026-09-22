@@ -1,7 +1,7 @@
 import { sameClaimSet } from "../../coordination/resource.ts";
 import { type GrantToken, type ResourceClaim, SETTLED_EFFECT_STATES, type Sequence } from "../../coordination/types.ts";
+import { AuthorityStoreError } from "./authority-errors.ts";
 import type { AuthorityEvent, AuthorityGrantRecord, AuthorityProjection } from "./authority-events.ts";
-import { AuthorityStoreError } from "./authority-store.ts";
 
 export function assertSameCommandMeaning(
 	grant: AuthorityGrantRecord,
@@ -48,8 +48,7 @@ export function expiryEvents(state: AuthorityProjection, now: number, epoch: Seq
 	return expired;
 }
 
-export function authorizationStillOpen(now: number | undefined, deadline: number): boolean {
-	if (now === undefined) return true;
+export function authorizationStillOpen(now: number, deadline: number): boolean {
 	if (typeof now !== "number" || !Number.isSafeInteger(now) || now < 0)
 		throw new TypeError("now must be a nonnegative safe integer");
 	return now < deadline;

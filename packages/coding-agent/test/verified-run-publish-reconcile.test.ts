@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseRunContract, parseRunPublishCommand, type RunContract, type RunPublishCommand } from "omk-protocol";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { planVerifiedRun, RunCoordinator } from "../src/core/run-execution-api.ts";
+import { openRunAuthority } from "../src/core/verified-run/authority-runtime.ts";
 import { readRunJournal } from "../src/core/verified-run/journal.ts";
 import { OMK_ACCEPTED_REF, publishPolicyDigest, publishVerifiedRun } from "../src/core/verified-run/run-publish.ts";
 import { digestObject } from "../src/core/verified-run/storage.ts";
@@ -98,6 +99,41 @@ function publishCommand(
 const ZERO40 = "0".repeat(40);
 
 describe("publish outbox reconciliation", () => {
+	it("rejects cancellation before sealing and leaves the object database unchanged", async () => {
+		const { contract, coordinator } = await startRun("pre-seal-cancel");
+		const command = publishCommand(coordinator, contract, "publish", ZERO40);
+		const before = readdirSync(join(workspace, ".git", "objects"), { recursive: true }).sort();
+		expect(() =>
+			publishVerifiedRun(join(stateRoot, contract.runId), command, { signal: AbortSignal.abort() }),
+		).toThrow(/cancelled/);
+		expect(readdirSync(join(workspace, ".git", "objects"), { recursive: true }).sort()).toEqual(before);
+	});
+
+	it("does not treat a same-ID pending grant with different meaning as admission", async () => {
+		const { contract, coordinator } = await startRun("pending-conflict");
+		const command = publishCommand(coordinator, contract, "publish", ZERO40);
+		const runPath = join(stateRoot, contract.runId);
+		const authority = openRunAuthority(runPath);
+		try {
+			authority.store.acquire({
+				sessionId: authority.sessionId,
+				incarnation: authority.incarnation,
+				commandId: command.commandId,
+				intentDigest: "0".repeat(64),
+				claims: [
+					{ namespace: "git-ref", instanceId: "other", canonicalKey: "other", access: "write", generation: "0" },
+				],
+				now: Date.now(),
+				ttl: 60_000,
+			});
+			const before = readdirSync(join(workspace, ".git", "objects"), { recursive: true }).sort();
+			expect(() => publishVerifiedRun(runPath, command, { authority })).toThrow(/command_conflict/);
+			expect(readdirSync(join(workspace, ".git", "objects"), { recursive: true }).sort()).toEqual(before);
+		} finally {
+			authority.store.release();
+		}
+	});
+
 	it("reconciles a crash after a successful CAS without re-publishing", async () => {
 		const { contract, coordinator } = await startRun("crash-1");
 		const runPath = join(stateRoot, contract.runId);

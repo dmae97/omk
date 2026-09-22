@@ -30,6 +30,7 @@ export interface VerifiedRunEvidence {
 	readonly checks: readonly CheckObservation[];
 	readonly receiptFormat: "v3" | "legacy";
 	readonly receipts: readonly EvidenceReceipt[];
+	readonly environmentDigest: string;
 }
 
 export function createRunIssuer(runPath: string): void {
@@ -79,6 +80,7 @@ export function issueRunEvidence(
 
 export interface EvidenceRead {
 	readonly authenticity: "valid" | "invalid" | "unverifiable";
+	readonly verification: "passed" | "failed" | "incomplete";
 	readonly currentEnvironmentEligibility: "matching" | "different" | "unsupported" | "unknown";
 	readonly evidence: VerifiedRunEvidence | null;
 }
@@ -87,29 +89,47 @@ export interface EvidenceRead {
 export function classifyEvidenceRead(
 	runPath: string,
 	journal: JournalSnapshot,
-	currentEnvironment: string,
+	currentEnvironment?: string | { readonly status: "unsupported" | "unknown" },
 ): EvidenceRead {
-	const stored = journal.state.environmentDigest;
 	try {
-		const evidence = readRunEvidence(runPath, journal, stored ?? currentEnvironment);
-		let currentEnvironmentEligibility: EvidenceRead["currentEnvironmentEligibility"] = "unknown";
-		if (stored === currentEnvironment) currentEnvironmentEligibility = "matching";
-		else if (stored) currentEnvironmentEligibility = "different";
+		const evidence = readRunEvidence(runPath, journal);
+		const currentEnvironmentEligibility =
+			typeof currentEnvironment === "string"
+				? evidence.environmentDigest === currentEnvironment
+					? "matching"
+					: "different"
+				: (currentEnvironment?.status ?? "unknown");
 		return {
-			authenticity: evidence.verified ? "valid" : "invalid",
+			authenticity: "valid",
+			verification: evidence.verified
+				? "passed"
+				: evidence.checks.some((check) => check.exitCode === null)
+					? "incomplete"
+					: "failed",
 			currentEnvironmentEligibility,
 			evidence,
 		};
 	} catch (error) {
-		if (!(error instanceof VerifiedRunError)) throw error;
-		if (error.code === "integrity" || error.code === "evidence_missing") {
-			return { authenticity: "unverifiable", currentEnvironmentEligibility: "unknown", evidence: null };
+		if (error instanceof VerifiedRunError) {
+			return {
+				authenticity: error.code === "evidence_missing" ? "unverifiable" : "invalid",
+				verification: "incomplete",
+				currentEnvironmentEligibility: "unknown",
+				evidence: null,
+			};
 		}
+		if (error instanceof Error && "code" in error && ["ENOENT", "EACCES", "EIO"].includes(String(error.code)))
+			return {
+				authenticity: "unverifiable",
+				verification: "incomplete",
+				currentEnvironmentEligibility: "unknown",
+				evidence: null,
+			};
 		throw error;
 	}
 }
 
-export function readRunEvidence(runPath: string, journal: JournalSnapshot, environment: string): VerifiedRunEvidence {
+export function readRunEvidence(runPath: string, journal: JournalSnapshot, environment?: string): VerifiedRunEvidence {
 	const first = journal.records[0]?.event;
 	const { candidateDigest, receiptDigest } = journal.state;
 	if (first?.kind !== "created" || !candidateDigest || !receiptDigest) throw new VerifiedRunError("evidence_missing");
@@ -134,6 +154,17 @@ export function readRunEvidence(runPath: string, journal: JournalSnapshot, envir
 		(receipt.version !== 1 && receipt.version !== 2 && receipt.version !== 3)
 	)
 		throw new VerifiedRunError("integrity");
+	if (
+		!("environmentDigest" in receipt) ||
+		typeof receipt.environmentDigest !== "string" ||
+		!/^[a-f0-9]{64}$/.test(receipt.environmentDigest)
+	)
+		throw new VerifiedRunError("integrity");
+	const storedEnvironment = receipt.environmentDigest;
+	if (journal.state.environmentDigest !== null && journal.state.environmentDigest !== storedEnvironment)
+		throw new VerifiedRunError("integrity");
+	if (environment !== undefined && environment !== storedEnvironment)
+		throw new VerifiedRunError("environment_mismatch");
 	const checks = parseCheckObservations(receipt.checks, receipt.version !== 1);
 	const contract = first.contract;
 	const dispatches = journal.records.flatMap(({ event, generation }) =>
@@ -149,14 +180,14 @@ export function readRunEvidence(runPath: string, journal: JournalSnapshot, envir
 		)
 	)
 		throw new VerifiedRunError("integrity");
-	const verified = closesRunClaims(contract, { candidate: candidateDigest, environment, checks });
+	const verified = closesRunClaims(contract, { candidate: candidateDigest, environment: storedEnvironment, checks });
 	const expected: Attestation = {
 		version: receipt.version,
 		runId: contract.runId,
 		generation: journal.state.generation,
 		contractDigest: digestObject(contract),
 		candidateDigest,
-		environmentDigest: environment,
+		environmentDigest: storedEnvironment,
 		verifierDigest: digestObject(contract.checks),
 		checks,
 		verified,
@@ -176,5 +207,6 @@ export function readRunEvidence(runPath: string, journal: JournalSnapshot, envir
 		checks,
 		receiptFormat: receipt.version !== 1 ? "v3" : "legacy",
 		receipts,
+		environmentDigest: storedEnvironment,
 	});
 }

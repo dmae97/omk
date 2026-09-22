@@ -21,6 +21,8 @@ function repo(): string {
 	const root = mkdtempSync(join(tmpdir(), "omk-git-tree-"));
 	roots.push(root);
 	git(root, ["init", "-q"]);
+	git(root, ["config", "--local", "user.name", "fixture"]);
+	git(root, ["config", "--local", "user.email", "fixture@localhost"]);
 	return root;
 }
 

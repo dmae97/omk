@@ -27,27 +27,37 @@ import {
 	acquireDurableFileMutationLockSync,
 	type DurableFileLock,
 	DurableFileLockBusyError,
-	type DurableFileLockObservation,
 	inspectDurableFileLockSync,
 } from "../durable-file-identity.ts";
 import { fsyncDirectorySync, writeExclusiveFileDurablySync } from "../durable-file-io.ts";
 import { canonicalJson } from "../run-journal.ts";
+import { createAuthorityClock } from "./authority-clock.ts";
+import { AuthorityLeaseHeldError, AuthorityStoreError } from "./authority-errors.ts";
 import {
 	type AuthorityEvent,
 	type AuthorityGrantRecord,
 	type AuthorityProjection,
-	type AuthoritySnapshotState,
 	applyAuthorityEvents,
 	authorityPendingReconcile,
 	parseAuthorityEvent,
-	projectAuthority,
 	snapshotFromProjection,
 } from "./authority-events.ts";
+import {
+	type AuthorityRecord,
+	GENESIS_PREVIOUS,
+	materializeRecord,
+	type ParsedAuthority,
+	parseCommitted,
+	recordLine,
+} from "./authority-journal.ts";
 import { assertSameCommandMeaning, authorizationStillOpen, expiryEvents, sameGrantToken } from "./authority-meaning.ts";
+
+export type { AuthorityRecord } from "./authority-journal.ts";
+
 import type { NamespaceIdentity } from "./namespace-identity.ts";
 import { probeNamespace } from "./namespace-identity.ts";
 import { readRunClock } from "./recovery-clock.ts";
-import { digestObject, VerifiedRunError } from "./storage.ts";
+import { VerifiedRunError } from "./storage.ts";
 
 /**
  * Durable authority store (WP03): the single-writer boundary for supervisor
@@ -70,36 +80,11 @@ import { digestObject, VerifiedRunError } from "./storage.ts";
  * the next open adopts that epoch instead of advancing again.
  */
 
-export class AuthorityStoreError extends Error {
-	readonly code: string;
-	constructor(code: string) {
-		super(`authority-store: ${code}`);
-		this.name = "AuthorityStoreError";
-		this.code = code;
-	}
-}
-
-export class AuthorityLeaseHeldError extends Error {
-	readonly observation: DurableFileLockObservation;
-	constructor(observation: DurableFileLockObservation) {
-		super("Authority store has a live or indeterminate owner; automatic recovery is refused");
-		this.name = "AuthorityLeaseHeldError";
-		this.observation = observation;
-	}
-}
+export { AuthorityLeaseHeldError, AuthorityStoreError } from "./authority-errors.ts";
 
 const AUTHORITY_SCOPE = "authority";
-const GENESIS_PREVIOUS = "0".repeat(64);
 
 export const authorityStorePath = (root: string): string => join(root, "authority.events.jsonl");
-
-export interface AuthorityRecord {
-	readonly version: 1;
-	readonly seq: number;
-	readonly previous: string;
-	readonly event: AuthorityEvent;
-	readonly hash: string;
-}
 
 export interface AuthorityHead {
 	readonly fileIdentity: { readonly dev: string; readonly ino: string } | null;
@@ -114,15 +99,6 @@ const EMPTY_AUTHORITY_HEAD: AuthorityHead = Object.freeze({
 	lastSeq: 0,
 	lastHash: GENESIS_PREVIOUS,
 });
-
-interface ParsedAuthority {
-	/** Chain tip: snapshot record or last event record; genesis values for an empty store. */
-	readonly lastSeq: number;
-	readonly lastHash: string;
-	readonly records: readonly AuthorityRecord[];
-	readonly events: readonly AuthorityEvent[];
-	readonly state: AuthorityProjection;
-}
 
 interface CommittedView {
 	readonly head: AuthorityHead;
@@ -190,15 +166,6 @@ function sameFileIdentity(left: AuthorityHead["fileIdentity"], right: AuthorityH
 	return left === null ? right === null : right !== null && left.dev === right.dev && left.ino === right.ino;
 }
 
-function materializeRecord(seq: number, previous: string, event: AuthorityEvent): AuthorityRecord {
-	const material = { version: 1 as const, seq, previous, event };
-	return Object.freeze({ ...material, hash: digestObject(material) });
-}
-
-function recordLine(record: AuthorityRecord): string {
-	return `${canonicalJson(record)}\n`;
-}
-
 function writeAll(fd: number, bytes: Uint8Array): void {
 	let offset = 0;
 	while (offset < bytes.byteLength) offset += writeSync(fd, bytes, offset, bytes.byteLength - offset);
@@ -212,66 +179,6 @@ function appendDurably(path: string, bytes: Uint8Array): void {
 	} finally {
 		closeSync(fd);
 	}
-}
-
-/**
- * Parse committed bytes into records + projection. Throws `corrupt` on any
- * malformed line, hash-chain break, seq gap, misplaced snapshot, or reducer
- * violation — committed bytes are only trusted to be complete after the head
- * check, not before it.
- */
-function parseCommitted(bytes: Buffer): ParsedAuthority {
-	if (!bytes.length) {
-		return {
-			lastSeq: 0,
-			lastHash: GENESIS_PREVIOUS,
-			records: Object.freeze([]),
-			events: Object.freeze([]),
-			state: projectAuthority([]),
-		};
-	}
-	if (bytes.at(-1) !== 10) throw new AuthorityStoreError("corrupt");
-	const lines = new TextDecoder("utf-8", { fatal: true }).decode(bytes).slice(0, -1).split("\n");
-	let seed: AuthoritySnapshotState | undefined;
-	let previous = GENESIS_PREVIOUS;
-	let expectedSeq = 1;
-	let lastSeq = 0;
-	let lastHash = GENESIS_PREVIOUS;
-	const events: AuthorityEvent[] = [];
-	const records: AuthorityRecord[] = [];
-	for (const [index, line] of lines.entries()) {
-		let raw: unknown;
-		try {
-			raw = JSON.parse(line);
-		} catch {
-			throw new AuthorityStoreError("corrupt");
-		}
-		if (typeof raw !== "object" || raw === null || !("event" in raw)) throw new AuthorityStoreError("corrupt");
-		const event = parseAuthorityEvent((raw as { event: unknown }).event);
-		const record =
-			event.kind === "authority-snapshot"
-				? materializeRecord(event.archivedThroughSequence + 1, event.continuesHash, event)
-				: materializeRecord(expectedSeq, previous, event);
-		if (canonicalJson(raw) !== canonicalJson(record)) throw new AuthorityStoreError("corrupt");
-		if (event.kind === "authority-snapshot") {
-			if (index !== 0) throw new AuthorityStoreError("corrupt");
-			seed = event.state;
-		} else {
-			events.push(event);
-		}
-		records.push(record);
-		previous = record.hash;
-		lastSeq = record.seq;
-		lastHash = record.hash;
-		expectedSeq = record.seq + 1;
-	}
-	return {
-		lastSeq,
-		lastHash,
-		records: Object.freeze(records),
-		events: Object.freeze(events),
-		state: projectAuthority(events, seed),
-	};
 }
 
 export interface AuthorityStoreHooks {
@@ -292,6 +199,10 @@ export interface OpenAuthorityStoreOptions {
 	readonly capacity: number;
 	readonly hooks?: AuthorityStoreHooks;
 	readonly probe?: AuthorityProbe;
+	/** Trusted host clock; never supplied by a serialized command. */
+	readonly clock?: () => number;
+	/** Disable only the parsing cache; disk integrity and durability checks always run. */
+	readonly incrementalReplay?: boolean;
 }
 
 export interface AuthorityAcquireInput {
@@ -362,7 +273,7 @@ function quarantineSuffix(context: StoreContext, bytes: Buffer): void {
  * tampered and opens refuse. Without `repair` the suffix is left untouched
  * and simply not part of committed state.
  */
-function loadCommitted(context: StoreContext, repair: boolean): CommittedView {
+function loadCommitted(context: StoreContext, repair: boolean, cached?: CommittedView): CommittedView {
 	const fileExists = existsSync(context.path);
 	const headExists = existsSync(context.headPath);
 	const empty: CommittedView = {
@@ -396,7 +307,13 @@ function loadCommitted(context: StoreContext, repair: boolean): CommittedView {
 		const before = fstatSync(fd);
 		const bytes = readFileSync(fd);
 		const after = fstatSync(fd);
-		if (!before.isFile() || !after.isFile() || before.size !== after.size || after.size !== bytes.byteLength)
+		if (
+			!before.isFile() ||
+			!after.isFile() ||
+			before.size !== after.size ||
+			before.ctimeMs !== after.ctimeMs ||
+			after.size !== bytes.byteLength
+		)
 			throw new AuthorityStoreError("tampered");
 		const actual = fileIdentityOf(after);
 		if (!sameFileIdentity(head.fileIdentity, actual)) {
@@ -404,7 +321,14 @@ function loadCommitted(context: StoreContext, repair: boolean): CommittedView {
 		}
 		if (head.size > after.size) throw new AuthorityStoreError("tampered");
 		const committed = Buffer.from(bytes.subarray(0, head.size));
-		const parsed = parseCommitted(committed);
+		const prefix =
+			cached &&
+			sameFileIdentity(cached.head.fileIdentity, actual) &&
+			head.size >= cached.head.size &&
+			head.lastSeq >= cached.head.lastSeq
+				? cached.parsed
+				: undefined;
+		const parsed = parseCommitted(committed, prefix);
 		if (parsed.lastSeq !== head.lastSeq || parsed.lastHash !== head.lastHash)
 			throw new AuthorityStoreError("tampered");
 		if (head.size < after.size && repair) {
@@ -492,6 +416,8 @@ export class AuthorityStore {
 	private readonly lease: DurableFileLock;
 	private accepted: CommittedView;
 	private released = false;
+	private readonly now: () => number;
+	private readonly incrementalReplay: boolean;
 
 	private constructor(
 		context: StoreContext,
@@ -504,6 +430,8 @@ export class AuthorityStore {
 		this.accepted = accepted;
 		this.capacity = options.capacity;
 		this.probe = options.probe ?? defaultProbe;
+		this.now = createAuthorityClock(options.clock);
+		this.incrementalReplay = options.incrementalReplay !== false;
 	}
 
 	/**
@@ -602,7 +530,11 @@ export class AuthorityStore {
 	}
 
 	get state(): AuthorityProjection {
-		return this.accepted.parsed.state;
+		return structuredClone(this.accepted.parsed.state);
+	}
+
+	get lastReplay(): ParsedAuthority["replay"] {
+		return this.accepted.parsed.replay;
 	}
 
 	get pendingReconcile(): boolean {
@@ -629,7 +561,7 @@ export class AuthorityStore {
 		if (this.released) throw new AuthorityStoreError("stale_owner");
 		const mutation = acquireDurableFileMutationLockSync(this.context.path);
 		try {
-			const current = loadCommitted(this.context, true);
+			const current = loadCommitted(this.context, true, this.incrementalReplay ? this.accepted : undefined);
 			if (!authorityHeadsEqual(current.head, this.accepted.head)) throw new AuthorityStoreError("stale_head");
 			if (events.length === 0) {
 				this.accepted = current;
@@ -674,7 +606,7 @@ export class AuthorityStore {
 			}
 			this.context.hooks.afterLedgerFsync?.();
 			publishHead(this.context, head);
-			const verified = loadCommitted(this.context, false);
+			const verified = loadCommitted(this.context, false, this.incrementalReplay ? current : undefined);
 			if (verified.parsed.lastSeq !== head.lastSeq || verified.parsed.lastHash !== head.lastHash)
 				throw new AuthorityStoreError("corrupt");
 			this.accepted = verified;
@@ -731,7 +663,7 @@ export class AuthorityStore {
 		if (!/^[a-f0-9]{64}$/.test(input.intentDigest)) throw new TypeError("intentDigest must be a sha256 hex digest");
 		if (!Array.isArray(input.claims) || input.claims.length === 0)
 			throw new TypeError("an unknown scope must not be admitted as an empty scope");
-		const claims = Object.freeze(input.claims.map((claim) => canonicalClaim(claim)));
+		const claims = Object.freeze(Array.from(input.claims, (claim) => canonicalClaim(claim)));
 
 		// Idempotency (I08): replayed commands return their recorded disposition
 		// without re-executing. A live tombstone returns the result; an expired
@@ -816,14 +748,14 @@ export class AuthorityStore {
 	 * witnessed cannot be assumed un-run; on restart it quarantines like any
 	 * other possibly-live effect (I01/I02).
 	 */
-	dispatchIntent(token: GrantToken, dispatchId: string, now?: number): boolean {
+	dispatchIntent(token: GrantToken, dispatchId: string, now = this.now()): boolean {
 		if (!/^[A-Za-z0-9_-]{1,128}$/.test(dispatchId)) throw new TypeError("dispatchId is invalid");
 		const grant = this.resolveToken(token, true);
 		if (!grant || grant.state !== "reserved") return false;
 		const epoch = this.state.epoch;
 		if (epoch === null) return false;
 		if (!authorizationStillOpen(now, grant.token.authorizationDeadline)) {
-			this.expire(now as number);
+			this.expire(now);
 			return false;
 		}
 		this.commit([
@@ -837,16 +769,16 @@ export class AuthorityStore {
 		token: GrantToken,
 		actualClaims: readonly ResourceClaimInput[],
 		identity?: NamespaceIdentity,
-		now?: number,
+		now = this.now(),
 	): boolean {
 		const grant = this.resolveToken(token, true);
 		if (!grant || (grant.state !== "reserved" && grant.state !== "starting")) return false;
 		if (!authorizationStillOpen(now, grant.token.authorizationDeadline)) {
-			this.expire(now as number);
+			this.expire(now);
 			return false;
 		}
 		if (!Array.isArray(actualClaims)) throw new TypeError("actualClaims must be an array");
-		const claims = Object.freeze(actualClaims.map((entry) => canonicalClaim(entry)));
+		const claims = Object.freeze(Array.from(actualClaims, (entry) => canonicalClaim(entry)));
 		if (!sameClaimSet([...claims], [...grant.claims])) return false;
 		const epoch = this.state.epoch;
 		if (epoch === null) return false;
@@ -860,6 +792,21 @@ export class AuthorityStore {
 			},
 		]);
 		return true;
+	}
+
+	/** Revalidate a running effect before its next irreversible boundary, without starting it again. */
+	effectAuthorized(token: GrantToken, actualClaims: readonly ResourceClaimInput[]): boolean {
+		const now = this.now();
+		const grant = this.resolveToken(token, true);
+		if (!grant || grant.state !== "running") return false;
+		if (!authorizationStillOpen(now, token.authorizationDeadline)) {
+			this.expire(now);
+			return false;
+		}
+		return sameClaimSet(
+			Array.from(actualClaims, (claim) => canonicalClaim(claim)),
+			grant.claims,
+		);
 	}
 
 	/** Requested cancellation is not observed termination; live effects quarantine. */
@@ -884,18 +831,7 @@ export class AuthorityStore {
 		assertNonNegativeInteger(now, "now");
 		const epoch = this.state.epoch;
 		if (epoch === null) return;
-		const events: AuthorityEvent[] = [];
-		for (const grant of this.state.grants.values()) {
-			if (SETTLED_EFFECT_STATES.has(grant.state) || grant.state === "quarantined") continue;
-			if (now >= grant.token.authorizationDeadline) {
-				events.push({
-					kind: "authorization-expired",
-					grantSequence: grant.token.grantSequence,
-					authorityEpoch: epoch,
-					outcome: grant.effectLive ? "quarantined" : "cancelled",
-				});
-			}
-		}
+		const events = expiryEvents(this.state, now, epoch);
 		if (events.length) this.commit(events);
 	}
 

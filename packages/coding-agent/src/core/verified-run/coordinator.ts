@@ -20,7 +20,8 @@ import { commandEnvironmentDigest, probeVerifiedSandbox } from "./broker.ts";
 import { captureCandidate, materializeCandidate, storeCandidate } from "./candidate.ts";
 import { preflightCheckReceipts } from "./check-receipt.ts";
 import { inspectTaskRecovery, retryDagTasks, type TaskRecoveryInspection } from "./dag-recovery.ts";
-import { createRunIssuer, readRunEvidence, type VerifiedRunEvidence } from "./evidence.ts";
+import { createRunIssuer, type EvidenceRead, readRunEvidence, type VerifiedRunEvidence } from "./evidence.ts";
+import { readEvidenceProjection } from "./evidence-read-projection.ts";
 import { journalPath, type RunJournalRecord, readRunJournal, VerifiedRunJournal } from "./journal.ts";
 import type { RunPhaseContext } from "./phase-context.ts";
 import { inspectRunRecovery, type RecoveryInspection, resumeFrozenCandidate } from "./recovery.ts";
@@ -139,11 +140,11 @@ export class RunCoordinator {
 		const first = journal?.records[0]?.event;
 		if (!journal || first?.kind !== "created" || first.contract.runId !== runId)
 			throw new VerifiedRunError("missing_run");
-		return readRunEvidence(
-			runPath,
-			journal,
-			commandEnvironmentDigest(first.contract, journal.state.budget ? "gated-v1" : "legacy"),
-		);
+		return readRunEvidence(runPath, journal);
+	}
+
+	evidenceRead(runId: string): EvidenceRead {
+		return readEvidenceProjection(stateRunPath(this.stateRoot, runId));
 	}
 
 	artifact(runId: string, candidateDigest: string, path: string): Buffer {

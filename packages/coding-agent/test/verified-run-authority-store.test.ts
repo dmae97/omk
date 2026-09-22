@@ -14,7 +14,7 @@ import { mkdtemp, readFile, rm, truncate } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	AuthorityLeaseHeldError,
 	AuthorityStore,
@@ -25,10 +25,12 @@ import {
 let root: string;
 let storePath: string;
 beforeEach(async () => {
+	vi.spyOn(Date, "now").mockReturnValue(100);
 	root = await mkdtemp(join(tmpdir(), "omk-authority-store-"));
 	storePath = authorityStorePath(root);
 });
 afterEach(async () => {
+	vi.restoreAllMocks();
 	await rm(root, { recursive: true, force: true });
 });
 
