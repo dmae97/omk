@@ -297,3 +297,46 @@ npm run check
 [Gemini thinking](https://ai.google.dev/gemini-api/docs/generate-content/thinking),
 [DeepSeek thinking](https://api-docs.deepseek.com/guides/thinking_mode),
 [Model Studio DeepSeek](https://www.alibabacloud.com/help/en/model-studio/deepseek-api).
+
+## 2026-09-23 대조: MiMo V2.6 커버리지와 xhigh
+
+카탈로그를 다시 생성하지 않았다. 2026-09-22 갱신이 넣은 V2.6 항목을 라이브 소스와
+대조하고, 빠지면 실패하는 검사를 추가했다. 공급자 추론 호출은 하지 않았다.
+
+### 커버리지
+
+`mimo-v2.6-pro`와 `mimo-v2.6-flash`를 올리는 현재 OMK 공급자는 모두 이미 갖고 있다.
+
+| 공급자 | 상류 | 카탈로그 |
+| `xiaomi`, 토큰 플랜 cn/ams/sgp | models.dev `xiaomi`가 Flash/Pro/Pro UltraSpeed | 네 곳 모두 세 모델. 토큰 플랜은 `xiaomi` 목록을 미러 |
+| `openrouter` | 라이브 `/api/v1/models`의 `xiaomi/mimo-v2.6-*` 3개 | 그대로 |
+| `vercel-ai-gateway` | 라이브 `ai-gateway.vercel.sh/v1/models` 3개 | 그대로 |
+| `opencode-go` | Flash/Pro. UltraSpeed 없음 | Flash/Pro |
+| `opencode` | Zen은 `mimo-v2.6-flash-free`만, context 200,000 | 그대로. 유료 Pro/Flash는 Zen 목록에 없음 |
+| `huggingface` | 라우터는 V2.5/V2.5-Pro만 | V2.6 없음이 맞음 |
+
+OMK에 없는 게이트웨이(nano-gpt, Kilo, CrossModel, EmpirioLabs, LLM Gateway, DevPass)는
+이번 범위가 아니다.
+
+### xhigh는 없다
+
+MiMo V2.6은 xhigh를 지원하지 않는다. 상류가 선언하지 않은 사다리를 만들지 않았다.
+
+- Xiaomi Chat Completions는 `thinking.type`의 `enabled`/`disabled`만 받는다.
+  [openai-api](https://mimo.mi.com/docs/en-US/api/chat/openai-api), 2026-09-22 갱신.
+- Responses 호환 `reasoning.effort`는 `none`/`low`/`medium`/`high`다. `none`만 끄고
+  나머지는 동작이 같다. 문서 원문: "The reasoning intensity is not differentiated at this stage."
+  [responses](https://mimo.mi.com/docs/en-US/api/chat/responses)
+- models.dev의 `xiaomi`, 토큰 플랜 3곳, `openrouter`는 `reasoning_options: [{type: "toggle"}]`다.
+  OpenRouter 라이브도 `supported_reasoning_parameters: null`이다.
+- 라이브 Vercel 게이트웨이는 `xiaomi/mimo-v2.6-*`에 `none`/`minimal`/`low`/`medium`/`high`만
+  선언한다. models.dev `vercel` 항목의 `xhigh`/`max`는 이 조회와 맞지 않아 따르지 않았다.
+
+xhigh가 보이는 곳은 V2.5 라우트(Hugging Face, 일부 애그리게이터)이거나 MiMo Code 문서의
+OpenAI 변형 목록이다. V2.6 계약이 아니다.
+
+### 검증
+
+`packages/ai/test/mimo-v26-catalog.test.ts` 46개 통과(종료 0). 21개 항목이 존재하고
+`xhigh`/`max`/`ultra`를 노출하지 않는지, Xiaomi 4곳은 `thinkingFormat: "deepseek"` 토글인지
+고정한다. 공급자 추론, `npm run check`, build/install, commit은 하지 않았다.
