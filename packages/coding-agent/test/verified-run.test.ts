@@ -266,6 +266,24 @@ describe("verified-run command profile", () => {
 		expect(state).toMatchObject({ execution: "failed", settlement: "settled", failure: "deadline" });
 	});
 
+	it("settles instead of quarantining when a post-dispatch deadline rejection never spawned", async () => {
+		// Slow-runner race: the deadline is still positive when dispatch is journaled,
+		// but the spawn-side second evaluation crosses zero before the supervisor is
+		// invoked. That rejection provably ran nothing, so the run must journal the
+		// exit and settle — an open executionId here quarantined forever on CI.
+		const { contract, plan, command } = prepared();
+		const sandbox = vi.spyOn(broker, "executeSandbox").mockRejectedValue(new VerifiedRunError("deadline"));
+		try {
+			const state = await new RunCoordinator(stateRoot).start(contract, command, {
+				approvedContractDigest: plan.contractDigest,
+			});
+			expect(state).toMatchObject({ execution: "failed", settlement: "settled", failure: "deadline" });
+			expect(state.activeExecutionIds).toEqual([]);
+		} finally {
+			sandbox.mockRestore();
+		}
+	});
+
 	it("settles a never-started reservation if the dispatch journal append fails", async () => {
 		const { contract, plan, command } = prepared();
 		const coordinator = new RunCoordinator(stateRoot);

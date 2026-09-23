@@ -148,8 +148,20 @@ export async function executeRunCommand(
 			if (
 				!supervisorInvoked ||
 				(!readyObserved && error instanceof VerifiedRunError && NEVER_SPAWNED.has(error.code))
-			)
+			) {
 				authority.store.confirmTerminated(token);
+				// The intent provably never reached a process: journal the exit the same
+				// way the pre-spawn timeout branch does, or the run quarantines forever
+				// on an open executionId — the slow-runner flake where the second
+				// deadline evaluation crosses zero between dispatch and spawn.
+				if (journal.state.activeExecutionIds.includes(executionId)) {
+					journal.append({
+						kind: "exited",
+						executionId,
+						failure: error instanceof VerifiedRunError ? error.code : "execution_failed",
+					});
+				}
+			}
 		} catch (cleanupError) {
 			throw new AggregateError([error, cleanupError], "Execution ownership cleanup failed");
 		}
