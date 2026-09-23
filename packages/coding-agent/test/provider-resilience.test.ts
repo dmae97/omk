@@ -253,6 +253,10 @@ describe("isQuotaExhaustionMessage", () => {
 		expect(isQuotaExhaustionMessage("GoUsageLimitError")).toBe(true);
 	});
 
+	it("matches the sanitized Devin resource_exhausted quota string", () => {
+		expect(isQuotaExhaustionMessage("Devin quota exceeded")).toBe(true);
+	});
+
 	it("does not match plain auth or transient rate-limit errors", () => {
 		expect(isQuotaExhaustionMessage("403 forbidden")).toBe(false);
 		expect(isQuotaExhaustionMessage("invalid api key")).toBe(false);

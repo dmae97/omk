@@ -29,7 +29,9 @@ function checkTrailer(payload: Buffer): void {
 	const message =
 		typeof error === "object" && "message" in error && typeof error.message === "string" ? error.message : "";
 	// Classify evidence without returning a remote body that may echo secrets or prompts.
-	if (code === "resource_exhausted") throw new Error("Devin quota or rate limit exceeded");
+	// Quota wording, not "rate limit": the latter is retried in place and skips
+	// failover and compaction trim. The trailer body is not echoed.
+	if (code === "resource_exhausted") throw new Error("Devin quota exceeded");
 	if (code === "unauthenticated") throw new Error("Devin authentication failed; run /login devin");
 	if (
 		code === "invalid_argument" &&

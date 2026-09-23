@@ -117,4 +117,14 @@ describe("isContextOverflow", () => {
 		const message = createLengthStopMessage(100, 0, 0);
 		expect(isContextOverflow(message, 200000)).toBe(false);
 	});
+
+	it("does not treat Anthropic's output-cap rejection as context overflow", () => {
+		// Observed 2026-09-23 on claude-haiku-4-5: max_tokens 200000 was rejected
+		// before generation. This is an output ceiling, not a full context window.
+		const message = createLengthStopMessage(20, 0, 0);
+		message.stopReason = "error";
+		message.errorMessage =
+			'400 {"type":"error","error":{"type":"invalid_request_error","message":"max_tokens: 200000 > 64000, which is the maximum allowed number of output tokens for claude-haiku-4-5-20251001"}}';
+		expect(isContextOverflow(message, 200000)).toBe(false);
+	});
 });

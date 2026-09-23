@@ -106,6 +106,17 @@ describe("summarizeWithFallback", () => {
 		).rejects.toThrow(/503/);
 	});
 
+	it("trims when Devin resource_exhausted is reported as quota", async () => {
+		const r = await summarizeWithFallback({
+			preparation: makePreparation(),
+			primaryModel: makeModel("devin", "swe-2"),
+			sessionModel: makeModel("devin", "swe-2"),
+			isAborted: () => false,
+			summarize: failingSummarize("Devin quota exceeded"),
+		});
+		expect(isDeterministic(r)).toBe(true);
+	});
+
 	it("keeps quota-rescue working without alwaysRescue", async () => {
 		const r = await summarizeWithFallback({
 			preparation: makePreparation(),

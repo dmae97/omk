@@ -7,6 +7,8 @@ import { encodeFrame } from "../src/providers/devin-connect.ts";
 import { field, ProtoMessage } from "../src/providers/devin-protobuf.ts";
 import { completeSimple, streamSimple } from "../src/stream.ts";
 import type { AssistantMessageEvent, Context } from "../src/types.ts";
+import { isContextOverflow } from "../src/utils/overflow.ts";
+import { isRetryableAssistantError } from "../src/utils/retry.ts";
 
 const token = "devin-session-token$fixture-only";
 const context: Context = {
@@ -236,6 +238,24 @@ describe("Devin SWE-2 via the public stream API", () => {
 		const result = await completeSimple(model, context, { apiKey: token });
 		expect(result.errorMessage).toMatch(/origin/i);
 		expect(mock).not.toHaveBeenCalled();
+	});
+
+	it("classifies resource_exhausted as quota, not a retryable rate limit", async () => {
+		mockApi([encodeFrame(Buffer.from('{"error":{"code":"resource_exhausted","message":"quota exceeded"}}'), 2)]);
+		const result = await completeSimple(getModel("devin", "swe-2"), context, { apiKey: token });
+		expect(result.errorMessage).toBe("Devin quota exceeded");
+		expect(result.errorMessage).not.toMatch(/rate limit/i);
+		expect(isRetryableAssistantError(result)).toBe(false);
+		expect(isContextOverflow(result, 262000)).toBe(false);
+	});
+
+	it("does not treat a body-less invalid_argument as context overflow", async () => {
+		mockApi([
+			encodeFrame(Buffer.from('{"error":{"code":"invalid_argument","message":"temperature must be positive"}}'), 2),
+		]);
+		const result = await completeSimple(getModel("devin", "swe-2"), context, { apiKey: token });
+		expect(result.errorMessage).toBe("Devin stream error: invalid_argument");
+		expect(isContextOverflow(result, 262000)).toBe(false);
 	});
 
 	it.each([
