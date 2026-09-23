@@ -6,6 +6,7 @@ import { type Api, findEnvKeys, getModels, getProviders, type KnownProvider, typ
 import { getAgentDir as getConfiguredAgentDir } from "../config.ts";
 import { isConfigValueConfigured, resolveConfigValueOrThrow } from "../core/resolve-config-value.ts";
 import { stripJsonComments } from "../utils/json.ts";
+import { isKnownApi } from "./provider-known-apis.ts";
 
 export type ProviderOrigin = "native" | "custom-openai-compatible" | "local-proxy" | "unknown";
 export type ProviderDoctorLevel = 0 | 1 | 2;
@@ -215,17 +216,6 @@ interface ProbeOutcome {
 }
 
 const DEFAULT_TIMEOUT_MS = 5_000;
-const KNOWN_APIS = new Set<string>([
-	"openai-completions",
-	"mistral-conversations",
-	"openai-responses",
-	"azure-openai-responses",
-	"openai-codex-responses",
-	"anthropic-messages",
-	"bedrock-converse-stream",
-	"google-generative-ai",
-	"google-vertex",
-]);
 const OPENAI_COMPATIBLE_APIS = new Set<string>(["openai-completions", "openai-responses"]);
 const ABORTED = Symbol("provider-doctor-aborted");
 
@@ -994,10 +984,7 @@ function staticChecks(target: ResolvedProviderTarget): {
 		const next: ProbeFailure = { category: "config", code: "api-missing", message: "Provider API type is missing" };
 		checks.push({ name: "api", status: "fail", ...next });
 		recordFailure(next);
-	} else if (
-		!KNOWN_APIS.has(api) ||
-		(target.origin === "custom-openai-compatible" && !OPENAI_COMPATIBLE_APIS.has(api))
-	) {
+	} else if (!isKnownApi(api) || (target.origin === "custom-openai-compatible" && !OPENAI_COMPATIBLE_APIS.has(api))) {
 		const next: ProbeFailure = {
 			category: "config",
 			code: "api-unsupported",

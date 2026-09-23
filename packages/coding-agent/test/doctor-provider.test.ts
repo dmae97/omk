@@ -595,6 +595,21 @@ describe("provider doctor", () => {
 			expect(requests.every((request) => request.method === "GET")).toBe(true);
 		});
 
+		test("accepts the API types the engine registers (devin-agent, cursor-agent)", async () => {
+			// Regression: both were missing from the doctor's hand-written API list, so every run
+			// against a supported provider failed with "Provider API type is unsupported".
+			for (const api of ["devin-agent", "cursor-agent"] as const) {
+				const result = await diagnoseResolvedProvider(
+					resolvedTarget({
+						origin: "native",
+						endpoint: { baseUrl: "https://native.example.test/v1", api, modelIds: ["test-model"] },
+					}),
+					{ level: 0 },
+				);
+				expect(result.checks.find((check) => check.name === "api")?.status).toBe("ok");
+			}
+		});
+
 		test("fails the relation check before probing when the probe model is foreign", async () => {
 			let calls = 0;
 			const transport: ProviderDoctorTransport = {
