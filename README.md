@@ -366,7 +366,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.2.0](.github/RELEASE_NOTES_v1.2.0.md)
+- [Release notes for v1.2.1](.github/RELEASE_NOTES_v1.2.1.md)
 
 ## Development
 
@@ -422,6 +422,45 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v1.2.1
+
+### New Features
+
+- **Verified run authority wiring**: the authority store now runs on the real dispatch path (WP00–WP06) — durable admission leases, an exit proof that Git publication binds to, secret-path refusal, and a separate publish-start gate. See [Verified Run](packages/coding-agent/docs/verified-run.md).
+- **Metadata-first session listing with separate search**: the session picker lists from metadata first and runs search as its own pass, so large session directories render immediately. See [Sessions](packages/coding-agent/docs/sessions.md).
+- **Portable `mcp.json` paths**: `~/` and `$VAR` expand in server paths, so one config works across machines. See [MCP](packages/coding-agent/docs/mcp.md).
+- **New model catalog**: Claude Opus 5.5 and GPT-6 Sol/Luna, with per-route thinking-level contracts so the selector only offers effort the route actually sends. See [Models](packages/coding-agent/docs/models.md).
+
+### Added
+
+- Atomic commit planner public API in `omk-agent-core`. See [Atomic commit planning](packages/coding-agent/docs/atomic-commit-planning.md).
+- Terminal output observation (`TerminalOutput`) exposed to interactive diagnostics. See [TUI](packages/coding-agent/docs/tui.md).
+
+### Changed
+
+- The MCP manager is split into a connection queue and a runtime, with a startup concurrency cap so many servers connect without unbounded fan-out. See [MCP](packages/coding-agent/docs/mcp.md).
+- Assistant message rendering caches content views, cutting render cost on long transcripts.
+- A cached skill catalog is reused only when its fingerprint is complete; otherwise it reloads. See [Skills](packages/coding-agent/docs/skills.md).
+- SDK auxiliary modules and hooks public paths are reorganized (`package-resource-patterns`, `approval-api`, session-lifecycle types), and redundant development dependencies are removed.
+
+### Fixed
+
+- Verified-run publication boundaries: Git publication records ownership and binds the exit proof, refuses secret paths, treats a git-ref authority as authorization rather than a termination proof, blocks inherited hooks and config injection in the publishing Git, and preserves publish-path and authority-reuse semantics.
+- Shard settlement returns permits and waits for sibling task termination.
+- Compaction: prompts are rejected during manual compaction, pre-prompt compaction no longer continues, and replacement-model auth and cancellation handling are strengthened.
+- Coordination primitives and probability boundaries are tightened, with the metacognition contract updated. See [Metacognition](packages/coding-agent/docs/metacognition.md).
+- Resource loading excludes directories (#7106), and an imported session is never overwritten (#8985).
+- The active turn settles before an in-memory fork (#8937).
+- Linux downloads the statically linked musl builds of `fd` and `ripgrep` (#9070), and image scanning walks past non-EXIF APP1 segments (#8616).
+- RPC bash no longer bypasses `user_bash` (#7214).
+- Read errors are not highlighted (#6731) and `stripAnsi` matches `strip-ansi`.
+- Fetch overrides are preserved, the stale hooks export and the DynamicBorder theme crash are fixed, and dependencies reinstall when `git clean` fails (#7570).
+- Share viewer shortcuts use browser-safe keys (#3374), and device-code login no longer opens a browser.
+- Session name changes are emitted to extensions.
+- Test environment: `Date.now` is monotonic so host wall-clock rollbacks cannot surface as `clock_anomaly` failures, and the model-registry fixture references live OpenRouter model ids with a catalog guard test.
+
+Release notes live in [RELEASE_NOTES_v1.2.1.md](.github/RELEASE_NOTES_v1.2.1.md).
+
 ## Release v1.2.0
 
 ### Added
@@ -456,32 +495,6 @@ Release notes live in [RELEASE_NOTES_v1.2.0.md](.github/RELEASE_NOTES_v1.2.0.md)
 - The status rail's Devin USAGE meters now match the CLI `/usage` surface: credit-billed plans no longer render proto-default 0% remaining as exhausted 1D/7D windows, and `GetUserStatus` unary gzip bodies decode.
 
 Release notes live in [RELEASE_NOTES_v1.0.0.md](.github/RELEASE_NOTES_v1.0.0.md).
-
-## Release v0.99.0
-
-### Breaking Changes
-
-- Checkout-only TB tooling now emits `selectionVersion: 2` and `omk-tb21-audit-report-2`. Selection totals can be `null` when estimates are unknown, and audits reject missing or invalid start/finish timestamps. The input manifest remains `omk-tb21-manifest-1`. Update report consumers and freeze new task selections before comparing runs; see [selection compatibility](packages/coding-agent/docs/metrics.md#capability-baseline) and [audit rules](packages/coding-agent/docs/tb21-audit.md).
-
-### Added
-
-- Verified command DAGs accept an explicitly approved `writer.maxConcurrentTasks: 2` and release ready dependants without an unrelated-task barrier. Omission keeps serial execution and legacy contract digests. Task-bound execution IDs and draining preserve cancellation/recovery boundaries; final verification still uses one fixed candidate. See [Verified Run](packages/coding-agent/docs/verified-run.md).
-
-- Added the Devin SWE-2 harness: a `devin-harness` domain loadout auto-applied when the `devin` provider is active (`OMK_DEVIN_HARNESS=0` disables it, independently of `OMK_GROK_HARNESS`), per-turn `<active_skills source="devin-harness">` grants selected from the live inventory, an optional `~/.omk/agent/devin.md` operator overlay, and the canonical [Devin SWE-2 harness guide](packages/coding-agent/docs/devin-harness.md). `devin/swe-2` now carries a 1,000,000-token local context budget that selects the account catalog's 1M-context lane; a lane that declares a smaller window fails the request instead of shrinking the budget.
-- The status rail's USAGE section now covers `devin`: it calls `GetUserStatus` with the stored CLI session token (OAuth or `DEVIN_API_KEY`) and renders the plan's daily/weekly quota meters with reset times, or the plan name and credit balances when the account reports no quota windows.
-
-### Changed
-
-- Grok and Devin harness dispatch share `provider-harness-dispatch.ts` (loadout runtime injected, outside the `sdk.ts` import cycle) and `harness-skills.ts`; the `grok-harness` and `devin-harness` profiles live in `domain-loadouts-provider-harness.ts`. `tryGrokHarnessDispatch()` and `selectGrokHarnessSkills()` keep their public signatures and behavior.
-
-### Fixed
-
-- A background task result delivered with `triggerTurn` while the session was sleeping in retry backoff started a second top-level run: `sendCustomMessage` only checked `isStreaming`, not `isRetrying` (unlike `prompt()`). When the retry woke up, `agent.continue()` threw `Agent is already processing`, and the runtime-failure handler closed the run journal that the competing run still owned, so that run later died with `run journal received agent_end without run_started` and the session was wedged until a model switch. Custom messages now queue during retry backoff exactly as during streaming, and a run that never owned the journal (rejected with `Agent is already processing` while another run is live) no longer finishes or clears it.
-
-- Codex SSE response-header waits now respect `retry.provider.timeoutMs`, with the existing 10-second minimum, rather than aborting every large request at a fixed 10 seconds. This does not extend an outer run deadline.
-- Resource completion descriptions remove decorative leading `[OMX]`/`[OMO]` labels without changing source metadata, invocation names, or enabled tools; marker-only descriptions display `OMK resource`.
-
-Release notes live in [RELEASE_NOTES_v0.99.0.md](.github/RELEASE_NOTES_v0.99.0.md).
 
 <!-- releases:end -->
 
