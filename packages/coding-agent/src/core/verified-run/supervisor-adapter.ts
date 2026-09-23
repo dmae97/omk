@@ -146,6 +146,12 @@ export function probeOwnedNamespace(identity: NamespaceIdentity): "terminated" |
  * termination witness: the kernel SIGKILLs every remaining task in the PID
  * namespace when its init exits, so a drained namespace needs no process-table
  * enumeration. `populated`/`unknown` never release claims.
+ *
+ * `unknown` is not terminal here: teardown has a transient window where the
+ * init's stat is readable but its ns link read is denied or the identity
+ * probe is inconclusive, and that window resolves to `gone` once the kernel
+ * finishes teardown. Only a probe that is still inconclusive at the deadline
+ * stays `unknown`; a still-alive init is `populated`.
  */
 export async function awaitBoundaryDrained(
 	identity: NamespaceIdentity,
@@ -155,8 +161,7 @@ export async function awaitBoundaryDrained(
 	for (;;) {
 		const status = probeNamespace(identity);
 		if (status === "gone") return "drained";
-		if (status === "unknown") return "unknown";
-		if (performance.now() >= deadline) return "populated";
+		if (performance.now() >= deadline) return status === "alive" ? "populated" : "unknown";
 		await delay(Math.min(10, Math.max(1, deadline - performance.now())));
 	}
 }
