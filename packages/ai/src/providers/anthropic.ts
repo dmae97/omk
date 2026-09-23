@@ -834,8 +834,18 @@ export const streamSimpleAnthropic: StreamFunction<"anthropic-messages", SimpleS
 	// For older models: use budget-based thinking.
 	if (model.compat?.forceAdaptiveThinking === true) {
 		const effort = mapThinkingLevelToEffort(model, options.reasoning);
+		// Adaptive thinking counts against max_tokens like a budget does, so an explicit cap
+		// sizes only the answer and gets the same thinking headroom as the budget path below.
+		// Without it a capped call (a compaction summary) can end with thinking and no text.
+		const { maxTokens } = adjustMaxTokensForThinking(
+			base.maxTokens,
+			model.maxTokens,
+			options.reasoning,
+			options.thinkingBudgets,
+		);
 		return streamAnthropic(model, context, {
 			...base,
+			maxTokens,
 			thinkingEnabled: true,
 			effort,
 		} satisfies AnthropicOptions);

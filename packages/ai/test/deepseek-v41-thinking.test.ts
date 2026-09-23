@@ -81,7 +81,8 @@ describe("DeepSeek V4.1 Flash thinking", () => {
 		expect(fetch).not.toHaveBeenCalled();
 		expect(payload).toMatchObject({
 			model: id,
-			max_tokens: 4096,
+			// The 4096 answer cap plus the thinking headroom every capped thinking request gets.
+			max_tokens: 4096 + 16_384,
 			thinking: { type: "adaptive" },
 			output_config: { effort: "max" },
 		});

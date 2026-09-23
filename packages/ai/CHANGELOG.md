@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Devin `resource_exhausted` is reported as `Devin quota exceeded`. The previous `quota or rate limit` wording was retried as a rate limit and never reached quota failover or compaction trim.
+- Anthropic adaptive-thinking requests that carry an explicit `max_tokens` cap now get the same thinking headroom as budget-based thinking, so a capped call (a compaction summary) can no longer end with thinking and no text.
+- A `length` stop with only thinking output is treated as a summarization failure instead of an empty summary.
+
 ## [1.2.3] - 2026-09-23
 
 ### Fixed
