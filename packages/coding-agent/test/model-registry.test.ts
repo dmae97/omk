@@ -631,6 +631,15 @@ describe("ModelRegistry", () => {
 	});
 
 	describe("modelOverrides (per-model customization)", () => {
+		test("openrouter fixture model IDs resolve against the built-in catalog", () => {
+			// Guard: this suite hardcodes these IDs below, so a catalog refresh that
+			// retires one must fail here instead of silently weakening assertions.
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
+			const ids = new Set(getModelsForProvider(registry, "openrouter").map((m) => m.id));
+			expect(ids.has("anthropic/claude-sonnet-4")).toBe(true);
+			expect(ids.has("anthropic/claude-opus-4.1")).toBe(true);
+		});
+
 		test("model override applies to a single built-in model", () => {
 			writeRawModelsJson({
 				openrouter: {
@@ -649,7 +658,7 @@ describe("ModelRegistry", () => {
 			expect(sonnet?.name).toBe("Custom Sonnet Name");
 
 			// Other models should be unchanged
-			const opus = models.find((m) => m.id === "anthropic/claude-opus-4");
+			const opus = models.find((m) => m.id === "anthropic/claude-opus-4.1");
 			expect(opus?.name).not.toBe("Custom Sonnet Name");
 		});
 
@@ -703,7 +712,7 @@ describe("ModelRegistry", () => {
 						"anthropic/claude-sonnet-4": {
 							compat: { openRouterRouting: { only: ["amazon-bedrock"] } },
 						},
-						"anthropic/claude-opus-4": {
+						"anthropic/claude-opus-4.1": {
 							compat: { openRouterRouting: { only: ["anthropic"] } },
 						},
 					},
@@ -714,7 +723,7 @@ describe("ModelRegistry", () => {
 			const models = getModelsForProvider(registry, "openrouter");
 
 			const sonnet = models.find((m) => m.id === "anthropic/claude-sonnet-4");
-			const opus = models.find((m) => m.id === "anthropic/claude-opus-4");
+			const opus = models.find((m) => m.id === "anthropic/claude-opus-4.1");
 
 			const sonnetCompat = sonnet?.compat as OpenAICompletionsCompat | undefined;
 			const opusCompat = opus?.compat as OpenAICompletionsCompat | undefined;
@@ -743,7 +752,7 @@ describe("ModelRegistry", () => {
 			expect(sonnet?.name).toBe("Proxied Sonnet");
 
 			// Other models should have the baseUrl but not the name override
-			const opus = models.find((m) => m.id === "anthropic/claude-opus-4");
+			const opus = models.find((m) => m.id === "anthropic/claude-opus-4.1");
 			expect(opus?.baseUrl).toBe("https://my-proxy.example.com/v1");
 			expect(opus?.name).not.toBe("Proxied Sonnet");
 		});
