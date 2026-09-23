@@ -27,7 +27,7 @@ beforeEach(() => {
 		writablePaths: ["greeting.txt"],
 		writer: ["/bin/sh", "-c", "printf hello > greeting.txt"],
 		checks: [{ claimId: "greeting", argv: ["/bin/cat", "greeting.txt"], stdout: "hello" }],
-		budget: { workMs: 3000, verifyMs: 3000, cleanupMs: 1000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
+		budget: { workMs: 3000, verifyMs: 3000, cleanupMs: 15000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
 		apply: "artifact-only",
 	};
 	contract.workspace.baseDigest = planVerifiedRun(contract).baseDigest;

@@ -13,7 +13,7 @@ function prefix(): RunEvent[] {
 		writablePaths: ["output"],
 		writer: { kind: "scripted-agent", steps: [["/bin/true"]], maxRequests: 2 },
 		checks: [{ claimId: "result", argv: ["/bin/true"], stdout: "" }],
-		budget: { workMs: 1000, verifyMs: 1000, cleanupMs: 1000, maxOutputBytes: 1024, maxFiles: 10, maxBytes: 1024 },
+		budget: { workMs: 1000, verifyMs: 1000, cleanupMs: 15000, maxOutputBytes: 1024, maxFiles: 10, maxBytes: 1024 },
 		apply: "artifact-only",
 	});
 	const command = parseRunStartCommand({

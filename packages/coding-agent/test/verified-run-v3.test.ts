@@ -32,7 +32,7 @@ async function run(stdout = "hello") {
 		writablePaths: ["result.txt"],
 		writer: ["/bin/cp", "input.txt", "result.txt"],
 		checks: [{ claimId: "answer", argv: ["/bin/cat", "result.txt"], stdout }],
-		budget: { workMs: 5000, verifyMs: 5000, cleanupMs: 1000, maxOutputBytes: 65536, maxFiles: 100, maxBytes: 65536 },
+		budget: { workMs: 5000, verifyMs: 5000, cleanupMs: 15000, maxOutputBytes: 65536, maxFiles: 100, maxBytes: 65536 },
 		apply: "artifact-only",
 	};
 	contract.workspace.baseDigest = planVerifiedRun(contract).baseDigest;

@@ -20,7 +20,7 @@ const creation = (): RunEvent => {
 		writablePaths: ["answer"],
 		writer: ["/bin/true"],
 		checks: [{ claimId: "answer", argv: ["/bin/true"], stdout: "" }],
-		budget: { workMs: 1000, verifyMs: 1000, cleanupMs: 1000, maxOutputBytes: 1024, maxFiles: 10, maxBytes: 1024 },
+		budget: { workMs: 1000, verifyMs: 1000, cleanupMs: 15000, maxOutputBytes: 1024, maxFiles: 10, maxBytes: 1024 },
 		apply: "artifact-only",
 	});
 	const command = parseRunStartCommand({

@@ -40,7 +40,7 @@ function fixture(options: { writerCrash?: boolean; verifyMs?: number } = {}) {
 		budget: {
 			workMs: 15000,
 			verifyMs: options.verifyMs ?? 30000,
-			cleanupMs: 1000,
+			cleanupMs: 15000,
 			maxOutputBytes: 4096,
 			maxFiles: 100,
 			maxBytes: 65536,

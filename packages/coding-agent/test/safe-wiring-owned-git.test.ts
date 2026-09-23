@@ -57,7 +57,7 @@ async function fixture() {
 		writablePaths: ["result"],
 		writer: ["/bin/cp", "input", "result"],
 		checks: [{ claimId: "copy", argv: ["/bin/cat", "result"], stdout: "hello" }],
-		budget: { workMs: 5000, verifyMs: 15000, cleanupMs: 2000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
+		budget: { workMs: 5000, verifyMs: 15000, cleanupMs: 15000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
 		apply: "artifact-only",
 	};
 	raw.workspace.baseDigest = planVerifiedRun(raw).baseDigest;
@@ -171,7 +171,7 @@ describe("owned Git publication public path", () => {
 				"if printf forbidden > input 2>/dev/null; then exit 91; fi; printf allowed > .git/mount-probe",
 			],
 			timeoutMs: 5000,
-			cleanupMs: 2000,
+			cleanupMs: 15000,
 			maxOutputBytes: 4096,
 			onReady: () => {},
 		});
@@ -188,7 +188,7 @@ describe("owned Git publication public path", () => {
 				gitPublication: true,
 				argv: ["/bin/true"],
 				timeoutMs: 1000,
-				cleanupMs: 1000,
+				cleanupMs: 15000,
 				maxOutputBytes: 4096,
 				onReady: () => {},
 			}),

@@ -7,7 +7,7 @@ import { captureCandidate } from "../src/core/verified-run/candidate.ts";
 import { casRef, sealCandidateCommit } from "../src/core/verified-run/git-plumbing.ts";
 import { VerifiedRunError } from "../src/core/verified-run/storage.ts";
 
-const limits = { workMs: 1000, verifyMs: 1000, cleanupMs: 1000, maxFiles: 100, maxBytes: 65536, maxOutputBytes: 4096 };
+const limits = { workMs: 1000, verifyMs: 1000, cleanupMs: 15000, maxFiles: 100, maxBytes: 65536, maxOutputBytes: 4096 };
 const roots: string[] = [];
 
 function git(root: string, args: string[], options: { input?: string } = {}): string {

@@ -15,7 +15,7 @@ function restarted(): RunEvent[] {
 		writablePaths: ["output"],
 		writer: { kind: "scripted-agent", steps: [["/bin/true"]], maxRequests: 5 },
 		checks: [{ claimId: "check", argv: ["/bin/true"], stdout: "" }],
-		budget: { workMs: 5000, verifyMs: 5000, cleanupMs: 1000, maxOutputBytes: 1024, maxFiles: 10, maxBytes: 1024 },
+		budget: { workMs: 5000, verifyMs: 5000, cleanupMs: 15000, maxOutputBytes: 1024, maxFiles: 10, maxBytes: 1024 },
 		apply: "artifact-only",
 	});
 	const command = parseRunStartCommand({

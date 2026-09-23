@@ -11,7 +11,7 @@ beforeEach(() => {
 	workspace = mkdtempSync(join(tmpdir(), "broker-"));
 });
 afterEach(() => rmSync(workspace, { recursive: true, force: true }));
-const request = () => ({ workspace, writable: true, timeoutMs: 1500, cleanupMs: 1000, maxOutputBytes: 4096 });
+const request = () => ({ workspace, writable: true, timeoutMs: 1500, cleanupMs: 15000, maxOutputBytes: 4096 });
 
 describe("verified run owned process boundary", () => {
 	it("joins a real timed-out namespace without cancelling a foreign process", async () => {

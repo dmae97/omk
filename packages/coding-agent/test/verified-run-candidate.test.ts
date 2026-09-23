@@ -6,7 +6,7 @@ import { assertCandidateScope, captureCandidate } from "../src/core/verified-run
 import { assertStateOutsideWorkspace } from "../src/core/verified-run/storage.ts";
 
 let root: string;
-const limits = { workMs: 1000, verifyMs: 1000, cleanupMs: 1000, maxFiles: 100, maxBytes: 65536, maxOutputBytes: 4096 };
+const limits = { workMs: 1000, verifyMs: 1000, cleanupMs: 15000, maxFiles: 100, maxBytes: 65536, maxOutputBytes: 4096 };
 beforeEach(() => {
 	root = mkdtempSync(join(tmpdir(), "candidate-"));
 });

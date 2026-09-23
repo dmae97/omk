@@ -33,7 +33,10 @@ function rawContract() {
 		writablePaths: ["result.txt"],
 		writer: ["/bin/sh", "-c", "printf hello > result.txt"],
 		checks: [{ claimId: "greeting", argv: ["/bin/cat", "result.txt"], stdout: "hello" }],
-		budget: { workMs: 3000, verifyMs: 3000, cleanupMs: 1000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
+		// Generous settle budget: ubuntu-22.04 CI runners can take >1s between the
+		// killed child's `close` and the namespace teardown probe going `gone`.
+		// Normal paths settle as soon as the drain completes.
+		budget: { workMs: 3000, verifyMs: 3000, cleanupMs: 15000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
 		apply: "artifact-only",
 	};
 }

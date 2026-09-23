@@ -46,7 +46,7 @@ async function startRun(runId: string) {
 		budget: {
 			workMs: 5000,
 			verifyMs: 15000,
-			cleanupMs: 1000,
+			cleanupMs: 15000,
 			maxOutputBytes: 4096,
 			maxFiles: 100,
 			maxBytes: 65536,

@@ -18,7 +18,7 @@ const request = () => ({
 	workspace,
 	writable: true,
 	timeoutMs: 5000,
-	cleanupMs: 1000,
+	cleanupMs: 15000,
 	maxOutputBytes: 4096,
 	argv: ["/bin/sh", "-c", "printf executed > output"],
 });

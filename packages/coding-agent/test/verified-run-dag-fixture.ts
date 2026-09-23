@@ -40,7 +40,7 @@ export function dagFixture(root: string, fail = false) {
 		// drained/settled path — fail when vitest reaps many children at once. The
 		// timer is armed only on stop() and cleared on close, so a larger budget
 		// costs nothing on paths that settle normally. Kept in line with verifyMs.
-		budget: { workMs: 30000, verifyMs: 5000, cleanupMs: 5000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
+		budget: { workMs: 30000, verifyMs: 5000, cleanupMs: 15000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
 		apply: "artifact-only",
 	};
 	contract.workspace.baseDigest = planVerifiedRun(contract).baseDigest;

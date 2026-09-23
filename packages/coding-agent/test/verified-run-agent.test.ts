@@ -39,7 +39,7 @@ function prepare(options: { runId?: string; maxRequests?: number; steps?: string
 			maxRequests: options.maxRequests ?? 3,
 		},
 		checks: [{ claimId: "answer", argv: ["/bin/cat", "result.txt"], stdout: "hello" }],
-		budget: { workMs: 10000, verifyMs: 5000, cleanupMs: 1000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
+		budget: { workMs: 10000, verifyMs: 5000, cleanupMs: 15000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
 		apply: "artifact-only",
 	};
 	contract.workspace.baseDigest = planVerifiedRun(contract).baseDigest;

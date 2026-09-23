@@ -43,7 +43,7 @@ it("never settles somebody else's quarantined grant when dispatch is refused", a
 				runtime: { files: [], extension: "ts", digest: "a".repeat(64) },
 				budget: new GitOperationBudget(),
 				deadlineNs: (process.hrtime.bigint() + 1_000_000_000n).toString(),
-				cleanupMs: 1000,
+				cleanupMs: 15000,
 				input: {
 					manifest,
 					contents: new Map(),
