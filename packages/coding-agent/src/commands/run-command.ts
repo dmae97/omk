@@ -1,6 +1,7 @@
 import type { VerifiedRunRuntime } from "../core/verified-run/session-port.ts";
 import { runAdaptOrchDoctorCli } from "./adaptorch-doctor-cli.ts";
 import { runDoctorProviderCli } from "./doctor-provider-cli.ts";
+import { runProviderAdoptCli } from "./provider-adopt-cli.ts";
 import { runProviderSyncCli } from "./provider-sync-cli.ts";
 import { runResourceDoctorCli } from "./resource-doctor-cli.ts";
 import { runRouterFeedbackCli } from "./router-feedback-cli.ts";
@@ -23,6 +24,8 @@ const COMMANDS: ReadonlyArray<(args: string[]) => CliOutcome | Promise<CliOutcom
 
 /** Each handler owns a distinct prefix; preserve the first handled outcome. */
 export async function runCommand(args: string[], runtime?: VerifiedRunRuntime): Promise<CliOutcome> {
+	const providerAdopt = await runProviderAdoptCli(args);
+	if (providerAdopt.handled) return providerAdopt;
 	const providerSync = await runProviderSyncCli(args);
 	if (providerSync.handled) return providerSync;
 	const verifiedRun = await runVerifiedRunCli(args, runtime);

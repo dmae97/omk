@@ -1149,6 +1149,15 @@ export class AgentSession {
 			return { apiKey: result.apiKey, headers: result.headers };
 		}
 
+		// A credential store that could not be read is not the same as an unauthenticated provider:
+		// say so instead of advising /login, which cannot clear a read failure.
+		if (this._modelRegistry.hasCredentialStoreError()) {
+			throw new Error(
+				`The credential store for "${model.provider}" could not be read` +
+					` (another OMK session may be refreshing credentials). Retry in a moment.`,
+			);
+		}
+
 		const isOAuth = this._modelRegistry.isUsingOAuth(model);
 		if (isOAuth) {
 			throw new Error(

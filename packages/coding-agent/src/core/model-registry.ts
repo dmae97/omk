@@ -715,10 +715,14 @@ export class ModelRegistry {
 				includeFallback: false,
 				minRemainingMs: options?.minRemainingMs,
 			});
+			// A models.json provider key must not stand in for a stored credential whose store could not
+			// be read: that substitution sent a stale environment token to the provider, and the 401
+			// ("OAuth access token is invalid") survived re-running /login.
+			const providerApiKey = this.authStorage.hasLoadError() ? undefined : providerConfig?.apiKey;
 			const apiKey =
 				apiKeyFromAuthStorage ??
-				(providerConfig?.apiKey
-					? resolveConfigValueOrThrow(providerConfig.apiKey, `API key for provider "${model.provider}"`)
+				(providerApiKey
+					? resolveConfigValueOrThrow(providerApiKey, `API key for provider "${model.provider}"`)
 					: undefined);
 
 			const providerHeaders = resolveHeadersOrThrow(providerConfig?.headers, `provider "${model.provider}"`);
@@ -813,6 +817,14 @@ export class ModelRegistry {
 	/** Check if a provider is using OAuth credentials (subscription). */
 	isUsingOAuthProvider(provider: string): boolean {
 		return this.authStorage.get(provider)?.type === "oauth";
+	}
+
+	/**
+	 * True when the credential store could not be read (for example, another session holds the lock).
+	 * Callers must not treat this like a provider without credentials.
+	 */
+	hasCredentialStoreError(): boolean {
+		return this.authStorage.hasLoadError();
 	}
 
 	/** Check if a model is using OAuth credentials (subscription). */

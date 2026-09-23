@@ -19,8 +19,16 @@ import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from "omk-ai/oaut
 import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
 import { getAgentDir } from "../config.ts";
-import { stripAnsi } from "../utils/ansi.ts";
 import { normalizePath } from "../utils/paths.ts";
+import {
+	findMatchingOAuthAccount,
+	findOAuthAccountMatch,
+	getOAuthAccountDisplayLabel,
+	mergeImportedCredential,
+	type OAuthAccountImport,
+	type OAuthAccountSummary,
+	previewOAuthAccountImport,
+} from "./oauth-account-import.ts";
 import { resolveConfigValue } from "./resolve-config-value.ts";
 
 const RETIRED_GROK_OAUTH_PROXY = "grok-oauth-proxy";
@@ -46,31 +54,11 @@ export type OAuthCredential = {
 	nextAccount?: number;
 } & OAuthCredentials;
 
-export interface OAuthAccountSummary {
-	index: number;
-	label: string;
-	selected: boolean;
-}
+export type { OAuthAccountImport, OAuthAccountSummary } from "./oauth-account-import.ts";
 
 export type AuthCredential = ApiKeyCredential | OAuthCredential;
 
 export type AuthStorageData = Record<string, AuthCredential>;
-
-const OAUTH_ACCOUNT_ID_FIELDS = ["accountId", "email", "userId", "username"] as const;
-const OAUTH_ACCOUNT_LABEL_FIELDS = ["email", "username"] as const;
-const OAUTH_ACCOUNT_LABEL_MAX_LENGTH = 96;
-const UNSAFE_ACCOUNT_LABEL_PATTERN =
-	/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g;
-
-function sanitizeOAuthAccountLabel(value: string): string | undefined {
-	const sanitized = stripAnsi(value)
-		.replace(/[\t\r\n]+/g, " ")
-		.replace(UNSAFE_ACCOUNT_LABEL_PATTERN, "")
-		.replace(/\s+/g, " ")
-		.trim()
-		.slice(0, OAUTH_ACCOUNT_LABEL_MAX_LENGTH);
-	return sanitized || undefined;
-}
 
 function stripOAuthStorageMetadata(credential: OAuthCredential): OAuthCredentials {
 	const {
@@ -116,65 +104,6 @@ function createOAuthCredential(accounts: OAuthCredentials[], activeAccount = 0):
 		accounts,
 		activeAccount: selectedIndex,
 	};
-}
-
-function getOAuthAccountIdentity(credentials: OAuthCredentials): string | undefined {
-	const accountId = credentials.accountId;
-	const orgId = credentials.orgId;
-	if (typeof accountId === "string" && accountId.trim() && typeof orgId === "string" && orgId.trim()) {
-		return `accountId:${accountId.trim().toLowerCase()}:orgId:${orgId.trim().toLowerCase()}`;
-	}
-	for (const field of OAUTH_ACCOUNT_ID_FIELDS) {
-		const value = credentials[field];
-		if (typeof value === "string" && value.trim()) {
-			return `${field}:${value.trim().toLowerCase()}`;
-		}
-	}
-	return undefined;
-}
-
-function getOAuthAccountDisplayLabel(providerId: string, credentials: OAuthCredentials): string | undefined {
-	for (const field of OAUTH_ACCOUNT_LABEL_FIELDS) {
-		const value = credentials[field];
-		if (typeof value === "string" && value.trim()) {
-			const label = sanitizeOAuthAccountLabel(value);
-			if (!label) continue;
-			const orgName =
-				typeof credentials.orgName === "string" ? sanitizeOAuthAccountLabel(credentials.orgName) : undefined;
-			return sanitizeOAuthAccountLabel(orgName ? `${label} (${orgName})` : label);
-		}
-	}
-	try {
-		const label = getOAuthProvider(providerId)?.getAccountLabel?.(credentials);
-		return typeof label === "string" ? sanitizeOAuthAccountLabel(label) : undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-function findMatchingOAuthAccount(accounts: OAuthCredentials[], credentials: OAuthCredentials): number {
-	const identity = getOAuthAccountIdentity(credentials);
-	if (identity) {
-		const exactMatch = accounts.findIndex((account) => getOAuthAccountIdentity(account) === identity);
-		if (exactMatch >= 0) return exactMatch;
-	}
-
-	// Let newly enriched credentials update older entries that predate email/org metadata.
-	for (const field of OAUTH_ACCOUNT_ID_FIELDS) {
-		const value = credentials[field];
-		if (typeof value !== "string" || !value.trim()) continue;
-		const normalizedValue = value.trim().toLowerCase();
-		const orgId = typeof credentials.orgId === "string" ? credentials.orgId.trim().toLowerCase() : "";
-		const compatibleMatch = accounts.findIndex((account) => {
-			const existingValue = account[field];
-			if (typeof existingValue !== "string" || existingValue.trim().toLowerCase() !== normalizedValue) return false;
-			const existingOrgId = typeof account.orgId === "string" ? account.orgId.trim().toLowerCase() : "";
-			return !orgId || !existingOrgId || orgId === existingOrgId;
-		});
-		if (compatibleMatch >= 0) return compatibleMatch;
-	}
-
-	return accounts.findIndex((account) => account.refresh === credentials.refresh);
 }
 
 export type AuthStatus = {
@@ -527,7 +456,9 @@ export class AuthStorage {
 		return this.listOAuthAccounts(provider).find((account) => account.selected)?.label;
 	}
 
-	/** Explicitly select and persist the OAuth account used by this provider. */
+	/**
+	 * Explicitly select and persist the OAuth account used by this provider.
+	 */
 	selectOAuthAccount(provider: string, accountIndex: number): void {
 		this.storage.withLock((current) => {
 			const currentData = this.parseStorageData(current);
@@ -546,6 +477,78 @@ export class AuthStorage {
 			this.data = merged;
 			this.loadError = null;
 			return { result: undefined, next: JSON.stringify(merged, null, 2) };
+		});
+	}
+
+	/** Match, merge and write inside the storage lock (`omk provider adopt`). The active selection never moves. */
+	addOAuthAccount(provider: string, credentials: OAuthCredentials): OAuthAccountImport {
+		if (this.loadError) {
+			return { action: "blocked", reason: "the credential store could not be read" };
+		}
+
+		try {
+			return this.storage.withLock<OAuthAccountImport>((current) => {
+				const currentData = this.parseStorageData(current);
+				const existing = currentData[provider];
+				const accounts = existing?.type === "oauth" ? [...getOAuthAccounts(existing)] : [];
+				const activeIndex =
+					existing?.type === "oauth" ? getSelectedOAuthAccountIndex(existing, accounts.length) : 0;
+				const matchIndex = findOAuthAccountMatch(accounts, credentials);
+
+				if (matchIndex >= 0) {
+					const current_ = accounts[matchIndex];
+					if (current_ && typeof current_.expires === "number" && current_.expires > Date.now()) {
+						this.data = currentData;
+						return {
+							result: {
+								action: "unchanged",
+								accountIndex: matchIndex,
+								reason: "the stored account is still valid",
+							},
+						};
+					}
+					accounts[matchIndex] = mergeImportedCredential(current_, credentials);
+					const merged: AuthStorageData = {
+						...currentData,
+						[provider]: createOAuthCredential(accounts, accounts.length === 1 ? 0 : activeIndex),
+					};
+					this.data = merged;
+					this.loadError = null;
+					return {
+						result: { action: "updated", accountIndex: matchIndex },
+						next: JSON.stringify(merged, null, 2),
+					};
+				}
+
+				accounts.push(credentials);
+				const merged: AuthStorageData = {
+					...currentData,
+					[provider]: createOAuthCredential(accounts, accounts.length === 1 ? 0 : activeIndex),
+				};
+				this.data = merged;
+				this.loadError = null;
+				return {
+					result: { action: "imported", accountIndex: accounts.length - 1 },
+					next: JSON.stringify(merged, null, 2),
+				};
+			});
+		} catch (error) {
+			this.recordError(error);
+			return {
+				action: "blocked",
+				reason: `the credential store could not be written: ${error instanceof Error ? error.message : error}`,
+			};
+		}
+	}
+
+	/** Predict what `addOAuthAccount` would do, without writing. */
+	previewOAuthAccountImport(provider: string, credentials: OAuthCredentials): OAuthAccountImport {
+		const existing = this.data[provider];
+		return previewOAuthAccountImport({
+			loadError: this.loadError !== null,
+			existing,
+			accounts: existing?.type === "oauth" ? getOAuthAccounts(existing) : [],
+			credentials,
 		});
 	}
 
@@ -600,6 +603,14 @@ export class AuthStorage {
 		const drained = [...this.errors];
 		this.errors = [];
 		return drained;
+	}
+
+	/**
+	 * True when the credential store could not be read (for example, lock contention with another
+	 * session). Callers must not substitute a different credential source while this is set.
+	 */
+	hasLoadError(): boolean {
+		return this.loadError !== null;
 	}
 
 	/**
@@ -671,9 +682,7 @@ export class AuthStorage {
 		rejectedApiKey?: string,
 	): Promise<{ apiKey: string; newCredentials: OAuthCredentials } | null> {
 		const provider = getOAuthProvider(providerId);
-		if (!provider) {
-			return null;
-		}
+		if (!provider) return null;
 
 		return this.storage.withLockAsync(async (current) => {
 			const currentData = this.parseStorageData(current);
@@ -783,6 +792,13 @@ export class AuthStorage {
 			return runtimeKey;
 		}
 
+		// Lock contention with another session leaves the credential map unread (reload() records the
+		// failure and keeps the previous data). Retry the read here so one transient failure at startup
+		// does not decide how this process authenticates for its whole lifetime.
+		if (this.loadError) {
+			this.reload();
+		}
+
 		const cred = this.data[providerId];
 
 		if (cred?.type === "api_key") {
@@ -801,6 +817,15 @@ export class AuthStorage {
 				this.reload();
 				return undefined;
 			}
+		}
+
+		// A store that could not be read is not the same as a provider with no credential. Substituting
+		// an environment key here replaced a stored OAuth credential with a stale OAuth token from
+		// ANTHROPIC_API_KEY, and the provider answered 401 "OAuth access token is invalid" — an error
+		// /login could never clear, because the stored credential was never used.
+		if (this.loadError) {
+			this.recordError(this.loadError);
+			return undefined;
 		}
 
 		// Fall back to environment variable

@@ -1699,6 +1699,29 @@ describe("ModelRegistry", () => {
 					expect(auth.error).toContain('Failed to resolve API key for provider "custom-provider"');
 				}
 			});
+
+			test("an unreadable credential store suppresses the models.json key and reports the error", async () => {
+				// Write corrupt JSON, then lock the store: the load error must not be treated as
+				// "no credential" — that substitution is what leaked a stale environment token
+				// to the provider and produced the 401 that /login could never clear.
+				writeFileSync(join(tempDir, "auth.json"), "not json{");
+				writeRawModelsJson({
+					"custom-provider": providerWithApiKey("literal_api_key_value"),
+				});
+
+				const brokenStorage = AuthStorage.create(join(tempDir, "auth.json"));
+				expect(brokenStorage.hasLoadError()).toBe(true);
+
+				const registry = ModelRegistry.create(brokenStorage, modelsJsonPath);
+				expect(registry.hasCredentialStoreError()).toBe(true);
+
+				const model = registry.find("custom-provider", "test-model");
+				expect(model).toBeDefined();
+				const auth = await registry.getApiKeyAndHeaders(model!);
+				// The models.json literal key must not stand in for the unreadable stored credential:
+				// apiKey stays undefined instead of resolving "literal_api_key_value".
+				if (auth.ok) expect(auth.apiKey).toBeUndefined();
+			});
 		});
 	});
 });

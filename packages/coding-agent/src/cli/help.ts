@@ -32,6 +32,8 @@ ${chalk.bold("Commands:")}
   ${APP_NAME} quota                     Manage CodexBar quota connector and summaries
   ${APP_NAME} provider doctor <id>      Diagnose a provider as sanitized JSON (--probe-model adds an
                                  opt-in Level-2 generative probe that may incur provider costs)
+  ${APP_NAME} provider adopt [<id>]     Copy an existing Codex CLI / Claude Code CLI login into OMK's
+                                 store (--from <source>, --dry-run, --status, --json)
   ${APP_NAME} session doctor            Inspect or safely repair one session (--session, --repair, --dry-run)
   ${APP_NAME} doctor resources [--json] [--report] Inspect current pressure or aggregate local observations
   ${APP_NAME} doctor adaptorch [--json]  Verify ADAPTORCH_API_KEY reaches the AdaptOrch API (0 ok, 1 unset, 2 failed)

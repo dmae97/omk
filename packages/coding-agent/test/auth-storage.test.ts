@@ -864,6 +864,46 @@ describe("AuthStorage", () => {
 		});
 	});
 
+	describe("oauth resolution failure never substitutes another credential", () => {
+		// A stored OAuth credential that fails to resolve (lock contention, an unknown provider,
+		// or a failed refresh) must not be papered over with an environment key. A stale
+		// ANTHROPIC_API_KEY OAuth token then reached the provider as a 401
+		// ("OAuth access token is invalid") that re-running /login could never clear.
+		test("returns undefined instead of the environment key when the store cannot be read", async () => {
+			const originalApiKey = process.env.ANTHROPIC_API_KEY;
+			const originalOAuthToken = process.env.ANTHROPIC_OAUTH_TOKEN;
+			process.env.ANTHROPIC_API_KEY = "sk-ant-oat01-stale-environment-token";
+			delete process.env.ANTHROPIC_OAUTH_TOKEN;
+			try {
+				writeAuthJson({
+					anthropic: {
+						type: "oauth",
+						refresh: "refresh-token",
+						access: "valid-stored-access-token",
+						expires: Date.now() + 3_600_000,
+					},
+				});
+
+				// Another OMK session holds the auth store lock while this process starts, so the
+				// constructor's read fails and the credential map stays empty.
+				const release = await lockfile.lock(authJsonPath, { retries: 0, stale: 60_000 });
+				try {
+					authStorage = AuthStorage.create(authJsonPath);
+					const apiKey = await authStorage.getApiKey("anthropic");
+					expect(apiKey).toBeUndefined();
+					expect(authStorage.drainErrors().length).toBeGreaterThan(0);
+				} finally {
+					await release();
+				}
+			} finally {
+				if (originalApiKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+				else process.env.ANTHROPIC_API_KEY = originalApiKey;
+				if (originalOAuthToken === undefined) delete process.env.ANTHROPIC_OAUTH_TOKEN;
+				else process.env.ANTHROPIC_OAUTH_TOKEN = originalOAuthToken;
+			}
+		});
+	});
+
 	describe("persistence semantics", () => {
 		test("set preserves unrelated external edits", () => {
 			writeAuthJson({
