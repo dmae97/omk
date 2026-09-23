@@ -113,7 +113,10 @@ export function namespaceMemberPids(identity: Pick<NamespaceIdentity, "namespace
 			// cannot run: counting it as a member confuses teardown with
 			// survival.
 			const stat = readFileSync(`/proc/${entry}/stat`, "utf8");
-			const state = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/)[0];
+			const state = stat
+				.slice(stat.lastIndexOf(")") + 2)
+				.trim()
+				.split(/\s+/)[0];
 			if (state !== "Z" && state !== "X") members.push(Number(entry));
 		} catch (error) {
 			if (!(error instanceof Error && "code" in error)) continue;
