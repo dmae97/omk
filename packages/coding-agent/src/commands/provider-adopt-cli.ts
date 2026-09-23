@@ -9,7 +9,6 @@
  * is unreadable; 2 = usage error. No output contains token material.
  */
 
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { APP_NAME, getAgentDir } from "../config.ts";
 import { AuthStorage } from "../core/auth-storage.ts";
