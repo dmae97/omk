@@ -718,12 +718,7 @@ export class ModelRegistry {
 			// A models.json provider key must not stand in for a stored credential whose store could not
 			// be read: that substitution sent a stale environment token to the provider, and the 401
 			// ("OAuth access token is invalid") survived re-running /login.
-			const providerApiKey = this.authStorage.hasLoadError() ? undefined : providerConfig?.apiKey;
-			const apiKey =
-				apiKeyFromAuthStorage ??
-				(providerApiKey
-					? resolveConfigValueOrThrow(providerApiKey, `API key for provider "${model.provider}"`)
-					: undefined);
+			const apiKey = apiKeyFromAuthStorage ?? this.resolveModelsJsonApiKey(model.provider, providerConfig);
 
 			const providerHeaders = resolveHeadersOrThrow(providerConfig?.headers, `provider "${model.provider}"`);
 			const modelHeaders = resolveHeadersOrThrow(
@@ -762,27 +757,20 @@ export class ModelRegistry {
 	 */
 	getProviderAuthStatus(provider: string): AuthStatus {
 		const authStatus = this.authStorage.getAuthStatus(provider);
-		if (authStatus.source) {
-			return authStatus;
-		}
+		if (authStatus.source) return authStatus;
 
 		const providerApiKey = this.providerRequestConfigs.get(provider)?.apiKey;
-		if (!providerApiKey) {
-			return authStatus;
-		}
+		if (!providerApiKey) return authStatus;
 
 		if (isCommandConfigValue(providerApiKey)) {
 			return { configured: true, source: "models_json_command" };
 		}
 
 		const envVarNames = getConfigValueEnvVarNames(providerApiKey);
-		if (envVarNames.length > 0) {
-			return isConfigValueConfigured(providerApiKey)
-				? { configured: true, source: "environment", label: envVarNames.join(", ") }
-				: { configured: false };
-		}
-
-		return { configured: true, source: "models_json_key" };
+		if (envVarNames.length === 0) return { configured: true, source: "models_json_key" };
+		return isConfigValueConfigured(providerApiKey)
+			? { configured: true, source: "environment", label: envVarNames.join(", ") }
+			: { configured: false };
 	}
 
 	/**
@@ -825,6 +813,19 @@ export class ModelRegistry {
 	 */
 	hasCredentialStoreError(): boolean {
 		return this.authStorage.hasLoadError();
+	}
+
+	/**
+	 * A models.json provider key must not stand in for a stored credential whose store could not
+	 * be read: that substitution sent a stale environment token to the provider, and the 401
+	 * ("OAuth access token is invalid") survived re-running /login.
+	 */
+	private resolveModelsJsonApiKey(
+		provider: string,
+		providerConfig: ProviderRequestConfig | undefined,
+	): string | undefined {
+		if (this.authStorage.hasLoadError() || !providerConfig?.apiKey) return undefined;
+		return resolveConfigValueOrThrow(providerConfig.apiKey, `API key for provider "${provider}"`);
 	}
 
 	/** Check if a model is using OAuth credentials (subscription). */

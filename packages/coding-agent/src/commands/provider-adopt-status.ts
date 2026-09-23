@@ -6,6 +6,7 @@
  * adoption write path.
  */
 import { readFileSync } from "node:fs";
+import type { OAuthCredentials } from "omk-ai";
 import type { AuthStorage } from "../core/auth-storage.ts";
 
 export type AccountHealth = {
@@ -21,7 +22,7 @@ export function describeAccounts(storage: AuthStorage, providerId: string, now: 
 	const credential = storage.get(providerId);
 	if (credential?.type !== "oauth") return [];
 	const labels = storage.listOAuthAccounts(providerId);
-	const accounts =
+	const accounts: OAuthCredentials[] =
 		Array.isArray(credential.accounts) && credential.accounts.length > 0 ? credential.accounts : [credential];
 	const selectedIndex = typeof credential.activeAccount === "number" ? credential.activeAccount : 0;
 	return accounts.map((account, index) => {

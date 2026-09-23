@@ -29,6 +29,12 @@ import {
 	type OAuthAccountSummary,
 	previewOAuthAccountImport,
 } from "./oauth-account-import.ts";
+import {
+	createOAuthCredential,
+	getOAuthAccounts,
+	getSelectedOAuthAccountIndex,
+	type OAuthCredential,
+} from "./oauth-credential.ts";
 import { resolveConfigValue } from "./resolve-config-value.ts";
 
 const RETIRED_GROK_OAUTH_PROXY = "grok-oauth-proxy";
@@ -44,67 +50,12 @@ export type ApiKeyCredential = {
 	key: string;
 };
 
-export type OAuthCredential = {
-	type: "oauth";
-	/** Complete account list when more than one subscription account is configured. */
-	accounts?: OAuthCredentials[];
-	/** Index of the account explicitly selected for this provider. */
-	activeAccount?: number;
-	/** Legacy cursor accepted when migrating older auth.json files. */
-	nextAccount?: number;
-} & OAuthCredentials;
-
 export type { OAuthAccountImport, OAuthAccountSummary } from "./oauth-account-import.ts";
+export type { OAuthCredential } from "./oauth-credential.ts";
 
 export type AuthCredential = ApiKeyCredential | OAuthCredential;
 
 export type AuthStorageData = Record<string, AuthCredential>;
-
-function stripOAuthStorageMetadata(credential: OAuthCredential): OAuthCredentials {
-	const {
-		type: _type,
-		accounts: _accounts,
-		activeAccount: _activeAccount,
-		nextAccount: _nextAccount,
-		...credentials
-	} = credential;
-	return credentials;
-}
-
-function getOAuthAccounts(credential: OAuthCredential): OAuthCredentials[] {
-	if (Array.isArray(credential.accounts) && credential.accounts.length > 0) {
-		return credential.accounts;
-	}
-	return [stripOAuthStorageMetadata(credential)];
-}
-
-function normalizeOAuthAccountIndex(index: unknown, accountCount: number): number {
-	if (accountCount <= 0 || typeof index !== "number" || !Number.isInteger(index)) {
-		return 0;
-	}
-	return ((index % accountCount) + accountCount) % accountCount;
-}
-
-function getSelectedOAuthAccountIndex(credential: OAuthCredential, accountCount: number): number {
-	return normalizeOAuthAccountIndex(credential.activeAccount ?? credential.nextAccount, accountCount);
-}
-
-function createOAuthCredential(accounts: OAuthCredentials[], activeAccount = 0): OAuthCredential {
-	const selectedIndex = normalizeOAuthAccountIndex(activeAccount, accounts.length);
-	const selected = accounts[selectedIndex];
-	if (!selected) {
-		throw new Error("OAuth credential must contain at least one account");
-	}
-	if (accounts.length === 1) {
-		return { ...selected, type: "oauth" };
-	}
-	return {
-		...selected,
-		type: "oauth",
-		accounts,
-		activeAccount: selectedIndex,
-	};
-}
 
 export type AuthStatus = {
 	configured: boolean;
