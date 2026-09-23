@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-09-23
+
+### Changed
+
+- Lockstep version alignment with the OMK packages. This cycle's changes live in `open-multi-agent-kit`.
+
 ## [1.2.3] - 2026-09-23
 
 ### Changed

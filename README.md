@@ -366,7 +366,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.2.3](.github/RELEASE_NOTES_v1.2.3.md)
+- [Release notes for v1.2.4](.github/RELEASE_NOTES_v1.2.4.md)
 
 ## Development
 
@@ -422,6 +422,22 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v1.2.4
+
+### New Features
+
+- `omk provider adopt [<id>] [--from <source>] [--dry-run] [--json] [--status]` copies an existing Codex CLI or Claude Code CLI login into OMK's credential store, so a subscription does not have to be signed in twice. Sources are read-only, `--from` narrows to the provider's own mapping, and no token material reaches output.
+
+### Fixed
+
+- A credential store that cannot be read is no longer treated as "no credential": request auth refuses to substitute stale environment or models.json keys, `agent-session` reports the store error instead of advising `/login`, and a transient lock contention is retried instead of deciding authentication for the whole process lifetime.
+- `omk provider doctor` accepts engine-registered API types (`devin-agent`, `cursor-agent`) instead of rejecting them as unsupported.
+- Compaction commits survive append-only extension state written while the summary is generated; only provably inert `custom` tails are rebased, and a `length` stop that produced no summary text fails instead of committing an empty summary. The compaction source-entry bound is 65,536.
+- `addOAuthAccount` merges imported accounts inside the storage lock (no lost update across concurrent sessions) and never overwrites a usable stored refresh token with an absent one.
+- A post-dispatch rejection that provably never spawned (a deadline crossing between the dispatch journal and the supervisor call) now journals the exit and settles the run instead of leaving the execution id open forever.
+
+Release notes live in [RELEASE_NOTES_v1.2.4.md](.github/RELEASE_NOTES_v1.2.4.md).
+
 ## Release v1.2.3
 
 ### Fixed
@@ -440,45 +456,6 @@ Release notes live in [RELEASE_NOTES_v1.2.3.md](.github/RELEASE_NOTES_v1.2.3.md)
 - A compaction window may hold up to 65,536 entries (was 4,096), so a session dominated by extension state entries can compact instead of failing with `source.entryIds must be a bounded array`. An older binary cannot open a session whose compaction envelope lists more than 4,096 entries.
 
 Release notes live in [RELEASE_NOTES_v1.2.2.md](.github/RELEASE_NOTES_v1.2.2.md).
-
-## Release v1.2.1
-
-### New Features
-
-- **Verified run authority wiring**: the authority store now runs on the real dispatch path (WP00–WP06) — durable admission leases, an exit proof that Git publication binds to, secret-path refusal, and a separate publish-start gate. See [Verified Run](packages/coding-agent/docs/verified-run.md).
-- **Metadata-first session listing with separate search**: the session picker lists from metadata first and runs search as its own pass, so large session directories render immediately. See [Sessions](packages/coding-agent/docs/sessions.md).
-- **Portable `mcp.json` paths**: `~/` and `$VAR` expand in server paths, so one config works across machines. See [MCP](packages/coding-agent/docs/mcp.md).
-- **New model catalog**: Claude Opus 5.5 and GPT-6 Sol/Luna, with per-route thinking-level contracts so the selector only offers effort the route actually sends. See [Models](packages/coding-agent/docs/models.md).
-
-### Added
-
-- Atomic commit planner public API in `omk-agent-core`. See [Atomic commit planning](packages/coding-agent/docs/atomic-commit-planning.md).
-- Terminal output observation (`TerminalOutput`) exposed to interactive diagnostics. See [TUI](packages/coding-agent/docs/tui.md).
-
-### Changed
-
-- The MCP manager is split into a connection queue and a runtime, with a startup concurrency cap so many servers connect without unbounded fan-out. See [MCP](packages/coding-agent/docs/mcp.md).
-- Assistant message rendering caches content views, cutting render cost on long transcripts.
-- A cached skill catalog is reused only when its fingerprint is complete; otherwise it reloads. See [Skills](packages/coding-agent/docs/skills.md).
-- SDK auxiliary modules and hooks public paths are reorganized (`package-resource-patterns`, `approval-api`, session-lifecycle types), and redundant development dependencies are removed.
-
-### Fixed
-
-- Verified-run publication boundaries: Git publication records ownership and binds the exit proof, refuses secret paths, treats a git-ref authority as authorization rather than a termination proof, blocks inherited hooks and config injection in the publishing Git, and preserves publish-path and authority-reuse semantics.
-- Shard settlement returns permits and waits for sibling task termination.
-- Compaction: prompts are rejected during manual compaction, pre-prompt compaction no longer continues, and replacement-model auth and cancellation handling are strengthened.
-- Coordination primitives and probability boundaries are tightened, with the metacognition contract updated. See [Metacognition](packages/coding-agent/docs/metacognition.md).
-- Resource loading excludes directories (#7106), and an imported session is never overwritten (#8985).
-- The active turn settles before an in-memory fork (#8937).
-- Linux downloads the statically linked musl builds of `fd` and `ripgrep` (#9070), and image scanning walks past non-EXIF APP1 segments (#8616).
-- RPC bash no longer bypasses `user_bash` (#7214).
-- Read errors are not highlighted (#6731) and `stripAnsi` matches `strip-ansi`.
-- Fetch overrides are preserved, the stale hooks export and the DynamicBorder theme crash are fixed, and dependencies reinstall when `git clean` fails (#7570).
-- Share viewer shortcuts use browser-safe keys (#3374), and device-code login no longer opens a browser.
-- Session name changes are emitted to extensions.
-- Test environment: `Date.now` is monotonic so host wall-clock rollbacks cannot surface as `clock_anomaly` failures, and the model-registry fixture references live OpenRouter model ids with a catalog guard test.
-
-Release notes live in [RELEASE_NOTES_v1.2.1.md](.github/RELEASE_NOTES_v1.2.1.md).
 
 <!-- releases:end -->
 

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-09-23
+
 ### Fixed
 
 - Devin `resource_exhausted` is reported as `Devin quota exceeded`. The previous `quota or rate limit` wording was retried as a rate limit and never reached quota failover or compaction trim.
