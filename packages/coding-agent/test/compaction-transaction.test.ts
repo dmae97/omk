@@ -352,21 +352,22 @@ describe("createCompactionSourceIdentity", () => {
 		).toThrow(/unique/);
 	});
 
-	it("rejects large arrays", () => {
-		const ids = Array.from({ length: 5000 }, (_) => validId());
-		const first = ids[0]!;
-		const last = ids.at(-1)!;
-		expect(() =>
-			createCompactionSourceIdentity({
+	it("accepts windows up to the source-entry bound and rejects larger ones", () => {
+		const identity = (length: number) => {
+			const ids = Array.from({ length }, (_, index) => `entry_${index}`);
+			const last = ids.at(-1)!;
+			return createCompactionSourceIdentity({
 				sessionId: validSessionId(),
 				entryIds: ids,
-				firstEntryId: first,
+				firstEntryId: ids[0]!,
 				lastEntryId: last,
 				sourceSha256: validSha256(),
 				activeLeafId: last,
 				messageCount: 1,
-			}),
-		).toThrow(TypeError);
+			});
+		};
+		expect(identity(65_536).entryIds).toHaveLength(65_536);
+		expect(() => identity(65_537)).toThrow(/source\.entryIds must be a bounded array/);
 	});
 });
 

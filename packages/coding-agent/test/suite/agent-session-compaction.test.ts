@@ -3,6 +3,7 @@ import {
 	type AssistantMessage,
 	createAssistantMessageEventStream,
 	fauxAssistantMessage,
+	fauxToolCall,
 	type Model,
 } from "omk-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -174,6 +175,98 @@ describe("AgentSession compaction characterization", () => {
 
 			expect(usedModels).toEqual(["faux/glm-compactor"]);
 		}
+	});
+
+	it("fails instead of committing an empty summary when thinking exhausts the output cap", async () => {
+		// A real claude-opus-5-5 summary at effort "max" stopped for length after 6553
+		// output tokens of thinking and no text; committing it silently loses the context.
+		const harness = await createHarness({
+			withConfiguredAuth: false,
+			// Summarize everything before the last reply, as in a large real session.
+			settings: { compaction: { enabled: true, reserveTokens: 8192, keepRecentTokens: 1 } },
+		});
+		harnesses.push(harness);
+		// A file read makes compaction append a file list, so an empty model summary still
+		// yields non-empty text that would commit silently.
+		const now = Date.now();
+		harness.sessionManager.appendMessage({ role: "user", content: "read the config", timestamp: now - 3000 });
+		harness.sessionManager.appendMessage({
+			...createAssistant(harness, { stopReason: "toolUse", totalTokens: 100, timestamp: now - 2500 }),
+			content: [fauxToolCall("read", { path: "config.json" }, { id: "call-read" })],
+		});
+		harness.sessionManager.appendMessage({
+			role: "toolResult",
+			toolCallId: "call-read",
+			toolName: "read",
+			content: [{ type: "text", text: "{}" }],
+			isError: false,
+			timestamp: now - 2400,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 120, timestamp: now - 2000 }),
+		);
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+		harness.session.agent.streamFn = (model) => {
+			const stream = createAssistantMessageEventStream();
+			queueMicrotask(() => {
+				const message: AssistantMessage = {
+					...fauxAssistantMessage(""),
+					content: [{ type: "thinking", thinking: "planning the summary" }],
+					api: model.api,
+					provider: model.provider,
+					model: model.id,
+					usage: createUsage(6553),
+					stopReason: "length",
+				};
+				stream.push({ type: "done", reason: "length", message });
+			});
+			return stream;
+		};
+
+		await expect(harness.session.compact()).rejects.toThrow(/output limit before writing a summary/);
+		expect(harness.sessionManager.getEntries().some((entry) => entry.type === "compaction")).toBe(false);
+	});
+
+	// pi-landstrip persists background-task snapshots through appendEntry while the
+	// summary streams; that used to discard every compaction with revision_mismatch.
+	function appendTaskSnapshotDuringSummary(harness: Harness): () => string | undefined {
+		let lastId: string | undefined;
+		useSummaryStreamFn(harness, "summary despite extension state writes", () => {
+			lastId = harness.sessionManager.appendCustomEntry("landstrip.task", { id: "task-1", state: "running" });
+		});
+		return () => lastId;
+	}
+
+	it("manually compacts while an extension appends state during summarization", async () => {
+		const harness = await createHarness({ withConfiguredAuth: false });
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		const lastStateEntryId = appendTaskSnapshotDuringSummary(harness);
+
+		const result = await harness.session.compact();
+
+		expect(result.summary).toBe("summary despite extension state writes");
+		const compaction = harness.sessionManager.getEntries().find((entry) => entry.type === "compaction");
+		expect(compaction?.parentId).toBe(lastStateEntryId());
+		expect(harness.sessionManager.buildSessionContext().messages[0]?.role).toBe("compactionSummary");
+	});
+
+	it("auto-compacts while an extension appends state during summarization", async () => {
+		const harness = await createHarness({ withConfiguredAuth: false });
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		const lastStateEntryId = appendTaskSnapshotDuringSummary(harness);
+		const compactionErrors: string[] = [];
+		harness.session.subscribe((event) => {
+			if (event.type === "compaction_end" && event.errorMessage) compactionErrors.push(event.errorMessage);
+		});
+		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
+
+		await sessionInternals._runAutoCompaction("threshold", false);
+
+		expect(compactionErrors).toEqual([]);
+		const compaction = harness.sessionManager.getEntries().find((entry) => entry.type === "compaction");
+		expect(compaction?.parentId).toBe(lastStateEntryId());
 	});
 
 	it("auto-compacts with a custom streamFn when registry auth is absent", async () => {

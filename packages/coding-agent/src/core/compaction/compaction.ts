@@ -588,16 +588,7 @@ export async function generateSummary(
 		callbacks,
 	);
 
-	if (response.stopReason === "error") {
-		throw new Error(`Summarization failed: ${response.errorMessage || "Unknown error"}`);
-	}
-
-	const textContent = response.content
-		.filter((c): c is { type: "text"; text: string } => c.type === "text")
-		.map((c) => c.text)
-		.join("\n");
-
-	return textContent;
+	return summaryTextOrThrow(response, "Summarization failed");
 }
 
 // ============================================================================
@@ -926,12 +917,22 @@ async function generateTurnPrefixSummary(
 		callbacks,
 	);
 
-	if (response.stopReason === "error") {
-		throw new Error(`Turn prefix summarization failed: ${response.errorMessage || "Unknown error"}`);
-	}
+	return summaryTextOrThrow(response, "Turn prefix summarization failed");
+}
 
-	return response.content
+/** Summary text of a response. A length stop that wrote no text is a failure, not an empty summary. */
+function summaryTextOrThrow(response: AssistantMessage, failure: string): string {
+	if (response.stopReason === "error") {
+		throw new Error(`${failure}: ${response.errorMessage || "Unknown error"}`);
+	}
+	const text = response.content
 		.filter((c): c is { type: "text"; text: string } => c.type === "text")
 		.map((c) => c.text)
 		.join("\n");
+	if (response.stopReason === "length" && text.trim().length === 0) {
+		// Thinking can spend the whole cap; appending file lists to nothing would commit
+		// a "summary" that silently drops the conversation.
+		throw new Error(`${failure}: the model reached its output limit before writing a summary`);
+	}
+	return text;
 }

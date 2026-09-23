@@ -11,29 +11,21 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { repairTranscriptIntegrity } from "omk-agent-core";
 import type { Api, Message, Model, ToolResultMessage } from "omk-ai";
-import { sanitizeBinaryOutput } from "../utils/shell.ts";
-import {
-	type CompactionControlState,
-	controlStateDigest,
-	controlStateProvenance,
-	validateControlState,
-} from "./compaction/control-state.ts";
+import { type CompactionControlState, controlStateDigest, validateControlState } from "./compaction/control-state.ts";
 import type { CompactionResult } from "./compaction/index.ts";
+import { decideCommitOverInertTail } from "./compaction/inert-tail.ts";
+import { buildPreservedProvenance, PROVENANCE_CUSTOM_TYPES } from "./compaction/provenance.ts";
 import {
 	type CompactionBarrierResult,
 	type CompactionEnvelope,
-	type CompactionPreservedProvenanceInput,
 	type CompactionSourceIdentity,
 	type CompactionTransaction,
 	createCompactionEnvelope,
 	createCompactionSourceIdentity,
 	createCompactionTransaction,
-	decideCompactionCommit,
 	evaluateCompactionBarrier,
-	redactCredentialShapedContent,
 	validateCompactionEnvelope,
 } from "./compaction/transaction.ts";
-import { redactSensitiveTextForced } from "./redaction.ts";
 import type { SessionIntegrityReport } from "./session-integrity.ts";
 import { inspectSessionIntegrity } from "./session-integrity.ts";
 import type { CompactionEntry, SessionEntry, SessionManager } from "./session-manager.ts";
@@ -89,21 +81,24 @@ export class SessionCompactionService {
 	}
 
 	captureState(): CapturedCompactionState {
-		return this.deps.sessionManager.withCompactionCommitLock(() => this.captureStateLocked());
+		return this.deps.sessionManager.withCompactionCommitLock(() => this.captureStateLocked(this.readSessionBytes()));
 	}
 
-	private captureStateLocked(): CapturedCompactionState {
+	private readSessionBytes(): Uint8Array {
 		const { sessionManager } = this.deps;
 		const sessionFile = sessionManager.getSessionFile();
-		const bytes =
-			sessionFile && existsSync(sessionFile)
-				? new Uint8Array(readFileSync(sessionFile))
-				: new TextEncoder().encode(
-						`${[sessionManager.getHeader(), ...sessionManager.getEntries()]
-							.filter((entry) => entry !== null)
-							.map((entry) => JSON.stringify(entry))
-							.join("\n")}\n`,
-					);
+		return sessionFile && existsSync(sessionFile)
+			? new Uint8Array(readFileSync(sessionFile))
+			: new TextEncoder().encode(
+					`${[sessionManager.getHeader(), ...sessionManager.getEntries()]
+						.filter((entry) => entry !== null)
+						.map((entry) => JSON.stringify(entry))
+						.join("\n")}\n`,
+				);
+	}
+
+	private captureStateLocked(bytes: Uint8Array): CapturedCompactionState {
+		const { sessionManager } = this.deps;
 		const report = inspectSessionIntegrity(bytes, { activeLeafId: sessionManager.getLeafId() });
 		const branchEntries = report.activeBranch;
 		let latestCompactionIndex = -1;
@@ -198,7 +193,7 @@ export class SessionCompactionService {
 			repairedToolCallIds.add(toolResult.toolCallId);
 			sessionManager.appendMessage(toolResult);
 		}
-		sessionManager.appendCustomEntry("compaction_transcript_repaired", {
+		sessionManager.appendCustomEntry(PROVENANCE_CUSTOM_TYPES.compactionTranscriptRepaired, {
 			insertedToolCallIds: [...repairedToolCallIds],
 			reason: "emergency_compaction",
 		});
@@ -238,59 +233,12 @@ export class SessionCompactionService {
 			source: capture.source,
 			createdAt: new Date().toISOString(),
 			model: { provider: compactionModel.provider, id: compactionModel.id },
-			preserved: this.captureProvenance(capture),
+			preserved: buildPreservedProvenance(capture, this.deps.getUserMessageText, this.deps.cwd),
 		});
 		if (this.priorCommittedSourceDigests().includes(transaction.source.sourceSha256)) {
 			throw new Error("This exact compaction source was already compacted");
 		}
 		return { capture, transaction };
-	}
-
-	captureProvenance(capture: CapturedCompactionState): CompactionPreservedProvenanceInput {
-		let latestIntent = "Continue the current session";
-		for (let index = capture.report.activeMessages.length - 1; index >= 0; index -= 1) {
-			const message = capture.report.activeMessages[index];
-			if (message?.role !== "user") continue;
-			const candidate = redactCredentialShapedContent(
-				sanitizeBinaryOutput(redactSensitiveTextForced(this.deps.getUserMessageText(message)).trim())
-					.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "")
-					.slice(0, 16_384),
-			);
-			if (candidate.length > 0) latestIntent = candidate;
-			break;
-		}
-		const modelHistory = capture.branchEntries
-			.flatMap((entry) => {
-				if (entry.type === "model_change") {
-					return [{ entryId: entry.id, provider: entry.provider, modelId: entry.modelId }];
-				}
-				if (entry.type === "message" && entry.message.role === "assistant") {
-					return [{ entryId: entry.id, provider: entry.message.provider, modelId: entry.message.model }];
-				}
-				return [];
-			})
-			.slice(-256);
-		const customEntryIds = (customType: string): string[] =>
-			capture.branchEntries
-				.filter((entry) => entry.type === "custom" && entry.customType === customType)
-				.map((entry) => entry.id);
-		const control = controlStateProvenance(capture.controlState);
-		return {
-			latestIntent,
-			openTasks: control.openTasks,
-			laneIds: customEntryIds("lane"),
-			acceptancePredicateIds: customEntryIds("acceptance_predicate"),
-			evidenceReceiptIds: customEntryIds("evidence_receipt"),
-			blockerReasons: control.blockerReasons,
-			repairEventIds: [
-				...customEntryIds("transcript_repaired"),
-				...customEntryIds("compaction_transcript_repaired"),
-			],
-			branch: control.branch,
-			worktree: this.deps.cwd,
-			modelHistory,
-			nextAction: redactCredentialShapedContent(latestIntent.slice(0, 4096)) || "Continue the current session",
-		};
 	}
 
 	detailsWithEnvelope(details: unknown, envelope: CompactionEnvelope): unknown {
@@ -308,14 +256,19 @@ export class SessionCompactionService {
 			throw new Error("Compaction first-kept entry is outside the captured source");
 		}
 		const committed = this.deps.sessionManager.withCompactionCommitLock(() => {
-			const current = this.captureState();
+			const bytes = this.readSessionBytes();
+			const current = this.captureStateLocked(bytes);
 			const barrier = this.evaluateBarrier(current, false);
-			const decision = decideCompactionCommit({
+			const { transaction, decision } = decideCommitOverInertTail({
 				transaction: begun.transaction,
 				currentRevision: current.revision,
 				currentSource: current.source,
+				currentBytes: bytes,
 				barrier,
 				priorCommittedSourceDigests: this.priorCommittedSourceDigests(),
+				// Extension state written during summarization must not livelock compaction,
+				// but an extension-provided summary may read that state: never rebase it.
+				rebaseAllowed: !fromExtension,
 			});
 			switch (decision.decision) {
 				case "duplicate":
@@ -332,7 +285,7 @@ export class SessionCompactionService {
 						throw new Error("Control state changed during compaction; generated summary was discarded");
 					}
 					const envelope = createCompactionEnvelope({
-						transaction: begun.transaction,
+						transaction,
 						decision,
 						summary: result.summary,
 						summarySha256: createHash("sha256").update(result.summary, "utf8").digest("hex"),

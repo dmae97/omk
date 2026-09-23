@@ -132,6 +132,8 @@ This fallback still must pass the normal compaction transaction checks.
 5. **Sanitize and append**: Deterministically redact sensitive values, then save the `CompactionEntry` with its summary, preserved-rule details, and `firstKeptEntryId`. Exact `[REDACTED]` assignment placeholders are valid; appended data and unredacted credential-shaped literals remain rejected.
 6. **Reload**: Session reloads, using summary + messages from `firstKeptEntryId` onwards.
 
+The summary is committed only if the session still matches what was summarized. Extension state appended with `appendEntry` while the built-in summary is generated does not count as a change, because the summarizer never reads it; the compaction entry is then appended after those entries. A summary returned by a `session_before_compact` handler gets no such allowance, since the extension may have read its own state. A new message, model change, provenance entry, rewritten file or branch move does count: the summary is discarded with `Session changed during compaction (revision_mismatch)`. This check is the same for every model.
+
 ```
 Before compaction:
 

@@ -1380,7 +1380,7 @@ See [send-user-message.ts](../examples/extensions/send-user-message.ts) for a co
 
 ### omk.appendEntry(customType, data?)
 
-Persist extension state (does NOT participate in LLM context).
+Persist extension state (does NOT participate in LLM context). Appending while a compaction is summarizing does not discard that compaction; see [Compaction](compaction.md#how-it-works).
 
 ```typescript
 omk.appendEntry("my-state", { count: 42 });

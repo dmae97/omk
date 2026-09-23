@@ -12,7 +12,10 @@ export const COMPACTION_ENVELOPE_SCHEMA_VERSION = 2 as const;
 
 const MAX_METADATA_LENGTH = 256;
 const MAX_FILE_IDENTITY_LENGTH = 32;
-const MAX_SOURCE_ENTRIES = 4096;
+// Token thresholds never bound the entry count: extension state entries (custom)
+// cost no tokens, and one background-task extension put 3,196 of them into a
+// 4,388-entry window. ~11 bytes per id keeps even a full window well under 1 MB.
+const MAX_SOURCE_ENTRIES = 65_536;
 const MAX_PROVENANCE_IDS = 1024;
 const MAX_LATEST_INTENT_LENGTH = 16_384;
 const MAX_SUMMARY_LENGTH = 262_144;
