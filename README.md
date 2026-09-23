@@ -366,7 +366,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.2.1](.github/RELEASE_NOTES_v1.2.1.md)
+- [Release notes for v1.2.2](.github/RELEASE_NOTES_v1.2.2.md)
 
 ## Development
 
@@ -422,6 +422,17 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v1.2.2
+
+### Fixed
+
+- Verified-run termination witness: the supervisor drain now witnesses PID-namespace init death instead of enumerating the host process table, and inconclusive probes retry until the cleanup deadline instead of settling terminal `unknown` early. Host-dependent false positives (zombie tasks keeping their ns link, unreadable same-uid tasks) no longer quarantine every sandboxed dispatch — this was the ubuntu-22.04 CI failure that blocked v1.2.1 publishing.
+- Test infrastructure: `./test.sh` runs the suite against an isolated agent directory (`OMK_CODING_AGENT_DIR` on a throwaway dir) instead of moving the live credential store aside for the whole run. Concurrent sessions no longer read an empty store, fall back to stale environment credentials, or have a freshly written store clobbered by the restore. The test environment preserves `OMK_CODING_AGENT_DIR` while scrubbing other `OMK_*` values so the isolation reaches spawned CLI processes.
+- Compaction no longer livelocks while an extension writes session state. A summary is now committed over `custom` entries appended while it was generated (for example pi-landstrip background-task snapshots every few seconds) when the file only grew by such entries; a message, model change, provenance entry, rewrite or branch move still discards it with `revision_mismatch`.
+- A compaction window may hold up to 65,536 entries (was 4,096), so a session dominated by extension state entries can compact instead of failing with `source.entryIds must be a bounded array`. An older binary cannot open a session whose compaction envelope lists more than 4,096 entries.
+
+Release notes live in [RELEASE_NOTES_v1.2.2.md](.github/RELEASE_NOTES_v1.2.2.md).
+
 ## Release v1.2.1
 
 ### New Features
@@ -469,32 +480,6 @@ Release notes live in [RELEASE_NOTES_v1.2.1.md](.github/RELEASE_NOTES_v1.2.1.md)
 - Metacognition evidence primitives: finite-sample Clopper–Pearson risk bounds for automation gating (a point estimate never widens scope; zero trials is absent evidence, not zero risk), probability calibration with temperature scaling, Brier/log-loss/ECE reported with bin occupancy, a selective-execution gate that reports coverage beside risk and leaves risk undefined when nothing was admitted, observation validity that separates time decay from the change indicator and lets explicit age and generation bounds override the decay score, state packing that returns `incomplete-state` instead of silently dropping required evidence, cost- and latency-aware route selection with safety as a hard filter outside the utility, and three-valued verification where `unknown` is never negated into `true` and evidence level is labelled by the strongest witness actually held.
 
 Release notes live in [RELEASE_NOTES_v1.2.0.md](.github/RELEASE_NOTES_v1.2.0.md).
-
-## Release v1.0.0
-
-### Added
-
-- Bundled Neo skills: six public skills ship in `resources/neo/skills` and load when no user, project, or explicit skill supplies a name (`OMK_BUNDLED_SKILLS=0` or `--no-skills` to disable), plus an `omk neo` subcommand and an ACP conversation-only mode (`--mode acp`).
-- Subagent lane execution settlement: lane results model settled/failed/unsettled, a shared permit pool tracks unsettled children across dispatch instances, heavy-lane admission narrows the width gate, and permit weights validate explicitly.
-- In-memory run usage ledger (`run-usage-ledger`, `run-usage-operation`): reserves capped budgets per attempt, records transports and cumulative usage idempotently, binds settlement to the attempt admitted at entry (caller input mutation cannot redirect it), and retains reservations for unknown usage — accounting only, not a hard financial limit.
-- `terminal-browser` extension example: ports the Claude Code plugin to OMK, rendering a real browser in a kitty-graphics overlay via the bridge HTTP API; `/browser` command and open/close tools.
-- Strict-evidence approval adapter in `guardrails/` binding protocol-level evidence reports to host approval decisions.
-
-### Fixed
-
-- Empty streamed completions (success-shaped stop with zero usable output) classify as dead streams: they no longer reset the retry budget, pin the UI in a retrying state, or rotate to a live route in the same model family (ox-alpha/union-alpha rotation). Anthropic-messages base URLs carrying a version suffix are normalized so `/v1/messages` never doubles.
-
-### Added (previous cycle work)
-
-- `--thinking ultra` is now a first-class Astra selector level. GPT-6 Astra maps it to the documented `max` effort rather than clamping it away or sending an invented `ultra` wire value.
-- The status rail's USAGE section now covers `commandcode`: it calls Command Code's `/alpha` whoami, credits, subscription, and usage-summary endpoints with the stored API key and renders the 5-hour, weekly, and monthly credit meters with reset times, or the plan name when rolling windows are absent.
-
-### Fixed
-
-- Missing ESM named-export errors such as `does not provide an export named 'MAX_FRAME_BYTES'` classify as configuration, not as an orphan tool-call protocol fault. The Next action tells the operator to restart OMK; `/new` does not reload provider modules.
-- The status rail's Devin USAGE meters now match the CLI `/usage` surface: credit-billed plans no longer render proto-default 0% remaining as exhausted 1D/7D windows, and `GetUserStatus` unary gzip bodies decode.
-
-Release notes live in [RELEASE_NOTES_v1.0.0.md](.github/RELEASE_NOTES_v1.0.0.md).
 
 <!-- releases:end -->
 

@@ -1,6 +1,13 @@
 # Changelog
 
-## [Unreleased]
+## [1.2.2] - 2026-09-23
+
+### Fixed
+
+- Verified-run termination witness: the supervisor drain now witnesses PID-namespace init death instead of enumerating the host process table, and inconclusive probes retry until the cleanup deadline instead of settling terminal `unknown` early. Host-dependent false positives (zombie tasks keeping their ns link, unreadable same-uid tasks) no longer quarantine every sandboxed dispatch — this was the ubuntu-22.04 CI failure that blocked v1.2.1 publishing.
+- Test infrastructure: `./test.sh` runs the suite against an isolated agent directory (`OMK_CODING_AGENT_DIR` on a throwaway dir) instead of moving the live credential store aside for the whole run. Concurrent sessions no longer read an empty store, fall back to stale environment credentials, or have a freshly written store clobbered by the restore. The test environment preserves `OMK_CODING_AGENT_DIR` while scrubbing other `OMK_*` values so the isolation reaches spawned CLI processes.
+- Compaction no longer livelocks while an extension writes session state. A summary is now committed over `custom` entries appended while it was generated (for example pi-landstrip background-task snapshots every few seconds) when the file only grew by such entries; a message, model change, provenance entry, rewrite or branch move still discards it with `revision_mismatch`.
+- A compaction window may hold up to 65,536 entries (was 4,096), so a session dominated by extension state entries can compact instead of failing with `source.entryIds must be a bounded array`. An older binary cannot open a session whose compaction envelope lists more than 4,096 entries.
 
 ## [1.2.1] - 2026-09-23
 
