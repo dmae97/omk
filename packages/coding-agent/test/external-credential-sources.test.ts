@@ -20,7 +20,9 @@ function codexDocument(access: string, refresh: string, accountId = "acct-1"): s
 }
 
 function claudeDocument(access: string, refresh: string, expiresAt: number): string {
-	return JSON.stringify({ claudeAiOauth: { accessToken: access, refreshToken: refresh, expiresAt, subscriptionType: "max" } });
+	return JSON.stringify({
+		claudeAiOauth: { accessToken: access, refreshToken: refresh, expiresAt, subscriptionType: "max" },
+	});
 }
 
 function enoent(): Error {
@@ -92,7 +94,10 @@ describe("external credential sources", () => {
 
 		it("refuses an access token without an exp claim", () => {
 			const access = jwt({ sub: "no-exp" });
-			const result = readExternalCredential("codex-cli", { readFile: () => codexDocument(access, "r"), now: () => NOW });
+			const result = readExternalCredential("codex-cli", {
+				readFile: () => codexDocument(access, "r"),
+				now: () => NOW,
+			});
 			expect(result.status).toBe("unusable");
 			if (result.status === "unusable") expect(result.reason).toContain("exp claim");
 		});

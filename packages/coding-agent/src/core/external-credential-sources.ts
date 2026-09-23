@@ -84,9 +84,16 @@ export function readExternalCredential(
 		text = readFile(path);
 	} catch (error) {
 		const code =
-			typeof error === "object" && error !== null && "code" in error ? String((error as { code?: unknown }).code) : "";
+			typeof error === "object" && error !== null && "code" in error
+				? String((error as { code?: unknown }).code)
+				: "";
 		if (code === "ENOENT") {
-			return { status: "missing", source, path, reason: `no credential file at ${path}; sign in with the CLI first` };
+			return {
+				status: "missing",
+				source,
+				path,
+				reason: `no credential file at ${path}; sign in with the CLI first`,
+			};
 		}
 		const message = error instanceof Error ? error.message : String(error);
 		return { status: "unusable", source, path, reason: `could not read ${path}: ${message}` };
