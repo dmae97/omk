@@ -40,7 +40,11 @@ const request = () => ({
 	workspace: root,
 	writable: true,
 	timeoutMs: 8000,
-	cleanupMs: 3000,
+	// Generous settle budget: on a loaded CI runner (azure 22.04 was observed)
+	// the killed child's `close` event can arrive several seconds after the
+	// SIGKILL, and stop()'s unsettled timer shares this budget. Normal paths
+	// still settle as soon as the drain completes.
+	cleanupMs: 15000,
 	maxOutputBytes: 4096,
 });
 
