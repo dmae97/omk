@@ -3,10 +3,11 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "omk-agent-core";
 import { getModel } from "omk-ai";
+import { getAgentDir } from "../src/config.ts";
 import { AgentSession } from "../src/core/agent-session.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { createEventBus } from "../src/core/event-bus.ts";
@@ -25,10 +26,12 @@ import { createCodingTools } from "../src/index.ts";
 export const API_KEY = process.env.ANTHROPIC_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY;
 
 // ============================================================================
-// OAuth API key resolution from ~/.omk/agent/auth.json
+// OAuth API key resolution from the active agent dir
 // ============================================================================
 
-const AUTH_PATH = join(homedir(), ".omk", "agent", "auth.json");
+// Resolved through getAgentDir() so a run that isolates the agent dir (test.sh
+// exports OMK_CODING_AGENT_DIR) never reads or writes the live store.
+const AUTH_PATH = join(getAgentDir(), "auth.json");
 
 type AuthStorageData = Record<string, unknown>;
 
@@ -50,18 +53,18 @@ export async function resolveApiKey(provider: string): Promise<string | undefine
 }
 
 /**
- * Check if a provider has credentials in ~/.omk/agent/auth.json
+ * Check if a provider has credentials in the active agent dir's auth.json
  */
 export function hasAuthForProvider(provider: string): boolean {
 	const storage = loadAuthStorage();
 	return provider in storage;
 }
 
-/** Path to the real OMK agent config directory */
-export const OMK_AGENT_DIR = join(homedir(), ".omk", "agent");
+/** Path to the agent config directory the suite is running against */
+export const OMK_AGENT_DIR = getAgentDir();
 
 /**
- * Get an AuthStorage instance backed by ~/.omk/agent/auth.json
+ * Get an AuthStorage instance backed by the active agent dir's auth.json
  * Use this for tests that need real OAuth credentials.
  */
 export function getRealAuthStorage(): AuthStorage {

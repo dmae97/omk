@@ -1,23 +1,21 @@
 #!/usr/bin/env bash
 set -e
 
-AUTH_FILE="$HOME/.omk/agent/auth.json"
-AUTH_BACKUP="$HOME/.omk/agent/auth.json.bak"
-
-# Restore auth.json on exit (success or failure)
-cleanup() {
-    if [[ -f "$AUTH_BACKUP" ]]; then
-        mv "$AUTH_BACKUP" "$AUTH_FILE"
-        echo "Restored auth.json"
-    fi
+# Run the suite against an isolated agent directory instead of hiding the live
+# credential store. Moving ~/.omk/agent/auth.json aside for the whole run made
+# every concurrent session read a missing (or empty) store, which can fall back
+# to a stale environment credential, and the restore clobbered whatever another
+# session had written in the meantime. test/setup-env.ts keeps
+# OMK_CODING_AGENT_DIR while scrubbing every other OMK_* variable, so the
+# isolation also reaches the CLI processes the tests spawn.
+ISOLATED_AGENT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/omk-test-agent.XXXXXX")"
+export OMK_CODING_AGENT_DIR="$ISOLATED_AGENT_DIR"
+cleanup_isolated_agent_dir() {
+	rm -rf "$ISOLATED_AGENT_DIR"
 }
-trap cleanup EXIT
+trap cleanup_isolated_agent_dir EXIT
 
-# Move auth.json out of the way
-if [[ -f "$AUTH_FILE" ]]; then
-    mv "$AUTH_FILE" "$AUTH_BACKUP"
-    echo "Moved auth.json to backup"
-fi
+echo "Isolated agent dir: $ISOLATED_AGENT_DIR"
 
 # Skip local LLM tests (ollama, lmstudio)
 export OMK_NO_LOCAL_LLM=1

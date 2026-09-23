@@ -18,8 +18,14 @@
  * test's clock non-decreasing; tests that mock `Date.now` themselves
  * (vi.spyOn / fake timers) replace this wrapper, so their semantics are
  * unchanged.
+ *
+ * Agent dir: `OMK_CODING_AGENT_DIR` (ENV_AGENT_DIR in src/config.ts) survives
+ * the scrub on purpose. test.sh points it at a throwaway directory, so the
+ * suite resolves the agent dir away from the live ~/.omk/agent; scrubbing the
+ * variable here would send every spawned child back to the live store.
  */
 const LIVE = process.env.LIVE_E2E === "1";
+const PRESERVED_ENV_KEYS = new Set(["OMK_CODING_AGENT_DIR"]);
 
 /** Wrap a millisecond clock so its output never decreases. */
 export function createMonotonicNow(source: () => number): () => number {
@@ -39,6 +45,9 @@ const PROVIDER_PREFIX =
 	/^(ANTHROPIC_|OPENAI_|GROK_|XAI_|DEEPSEEK_|GEMINI_|GOOGLE_API_KEY|MISTRAL_|GROQ_|CEREBRAS_|OPENROUTER_|AWS_|GH_TOKEN|GITHUB_TOKEN|GITLAB_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN)/;
 
 for (const key of Object.keys(process.env)) {
+	if (PRESERVED_ENV_KEYS.has(key)) {
+		continue;
+	}
 	if (key.startsWith("OMK_")) {
 		delete process.env[key];
 		continue;
