@@ -6,6 +6,7 @@ import { planVerifiedRun } from "../src/core/run-execution-api.ts";
 import { executeSandbox } from "../src/core/verified-run/broker.ts";
 import { readRunJournal } from "../src/core/verified-run/journal.ts";
 import type { NamespaceIdentity } from "../src/core/verified-run/namespace-identity.ts";
+import * as identityModule from "../src/core/verified-run/namespace-identity.ts";
 import * as supervisor from "../src/core/verified-run/supervisor-adapter.ts";
 import { dagFixture } from "./verified-run-dag-fixture.ts";
 import { waitForNamespaceGone } from "./verified-run-namespace-wait.ts";
@@ -202,10 +203,9 @@ describe("owned process supervisor cancellation proof", () => {
 		const outcome = await execution;
 		expect(outcome.failure).toBe("cancelled");
 		expect(outcome.exitCode).toBeNull();
-		// The detached `setsid` descendant could not outlive the namespace: the
+		// Init death terminates every remaining task in the namespace: the
 		// member set is empty, and init teardown completes on the kernel side.
 		expect(await supervisor.awaitBoundaryDrained(identity, 5000)).toBe("drained");
-		expect(supervisor.namespaceMemberPids(identity)).toEqual([]);
 		expect(await waitForNamespaceGone(identity)).toBe("gone");
 	});
 
@@ -229,7 +229,7 @@ describe("owned process supervisor cancellation proof", () => {
 			// a dead or fabricated direct child cannot mask the surviving members.
 			const members = await waitForMembers({ namespace: identity.namespace }, 2);
 			expect(members).toContain(identity.pid);
-			expect(await supervisor.awaitBoundaryDrained({ namespace: identity.namespace }, 0)).toBe("populated");
+			expect(await supervisor.awaitBoundaryDrained(identity, 0)).toBe("populated");
 		} finally {
 			controller.abort();
 			const outcome = await execution;
@@ -243,6 +243,27 @@ describe("owned process supervisor cancellation proof", () => {
 		await expect(executeSandbox({ ...request(), argv: ["/bin/true"], onReady: () => {} })).rejects.toThrow(
 			/descendant_escape/,
 		);
+	});
+
+	it("takes the termination witness from namespace init death, not the host process table", async () => {
+		// ubuntu-22.04 CI (kernel 6.8.0-1064-azure) poisoned the /proc member
+		// scan: zombies keep their ns link until reaped and foreign same-uid
+		// tasks read as unreadable, so namespaceMemberPids never reported an
+		// empty set and every drain settled descendant_escape. The witness
+		// must be init death alone.
+		const identity: NamespaceIdentity = {
+			pid: 4242,
+			startTicks: "123",
+			namespace: "pid:[4026531836]",
+			bootId: "01234567-89ab-cdef-0123-456789abcdef",
+		};
+		const probe = vi.spyOn(identityModule, "probeNamespace");
+		probe.mockReturnValue("gone");
+		expect(await supervisor.awaitBoundaryDrained(identity, 100)).toBe("drained");
+		probe.mockReturnValue("unknown");
+		expect(await supervisor.awaitBoundaryDrained(identity, 100)).toBe("unknown");
+		probe.mockReturnValueOnce("alive").mockReturnValueOnce("alive").mockReturnValue("gone");
+		expect(await supervisor.awaitBoundaryDrained(identity, 1000)).toBe("drained");
 	});
 
 	it("keeps claims quarantined when termination cannot be proven", async () => {

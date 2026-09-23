@@ -146,6 +146,7 @@ describe("parallel DAG ownership and compatibility", () => {
 		await f.coordinator.start(contract, { ...f.command, contractDigest }, { approvedContractDigest: contractDigest });
 		const records = readRunJournal(f.runPath)?.records ?? [];
 		const end = records.findIndex(({ event }) => event.kind === "task_started");
+		if (end < 0) throw new Error("fixture: run produced no task_started event");
 		const events = records.slice(0, end + 1).map(({ event }) => event);
 		expect(() =>
 			projectRun([...events, { kind: "dispatch", executionId: "ambiguous", role: "writer", claimId: null }]),

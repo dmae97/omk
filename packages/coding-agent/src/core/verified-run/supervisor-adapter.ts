@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readlinkSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, readlinkSync, statSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 import { type NamespaceIdentity, probeNamespace } from "./namespace-identity.ts";
@@ -20,11 +20,15 @@ import { VerifiedRunError } from "./storage.ts";
  *   namespace init, and the kernel then SIGKILLs every remaining task in that
  *   namespace — including non-cooperative workers and detached (`setsid`)
  *   descendants. Signal delivery is never treated as termination.
- * - termination witness: `namespaceMemberPids` enumerates the tasks still
- *   inside the recorded namespace via /proc, and `awaitBoundaryDrained` waits
- *   for the set to become empty. Only an empty namespace is a termination
- *   witness — a `close` event, a resolved promise, or a dead direct child
- *   with surviving descendants is not.
+ * - termination witness: `probeNamespace` detects the recorded namespace
+ *   init's death and `awaitBoundaryDrained` waits for it. When a PID
+ *   namespace's init exits, the kernel SIGKILLs every remaining task in that
+ *   namespace, so init death is the exact termination witness — a `close`
+ *   event, a resolved promise, or a dead direct child with surviving
+ *   descendants is not. `namespaceMemberPids` remains as a diagnostic
+ *   enumeration only: host process-table scans are environment-dependent
+ *   (zombies keep their ns link until reaped; foreign same-uid tasks can be
+ *   unreadable) and have poisoned drains on kernels where either occurs.
  */
 export const SUPERVISOR_BINARY = "/usr/bin/bwrap";
 
@@ -104,7 +108,13 @@ export function namespaceMemberPids(identity: Pick<NamespaceIdentity, "namespace
 	for (const entry of readdirSync("/proc")) {
 		if (!/^\d+$/.test(entry)) continue;
 		try {
-			if (readlinkSync(`/proc/${entry}/ns/pid`) === identity.namespace) members.push(Number(entry));
+			if (readlinkSync(`/proc/${entry}/ns/pid`) !== identity.namespace) continue;
+			// A zombie still carries the namespace link until reaped, but it
+			// cannot run: counting it as a member confuses teardown with
+			// survival.
+			const stat = readFileSync(`/proc/${entry}/stat`, "utf8");
+			const state = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/)[0];
+			if (state !== "Z" && state !== "X") members.push(Number(entry));
 		} catch (error) {
 			if (!(error instanceof Error && "code" in error)) continue;
 			if (error.code === "ENOENT" || error.code === "ESRCH") continue;
@@ -122,31 +132,27 @@ export function namespaceMemberPids(identity: Pick<NamespaceIdentity, "namespace
 	return members;
 }
 
-/** An absent exact process plus an empty namespace is a termination witness; PID reuse is not. */
+/** Init death terminates the whole namespace; a zombie init already proves teardown finished. */
 export function probeOwnedNamespace(identity: NamespaceIdentity): "terminated" | "alive" | "unknown" {
 	const status = probeNamespace(identity);
-	if (status !== "gone") return status;
-	try {
-		return namespaceMemberPids(identity).length === 0 ? "terminated" : "alive";
-	} catch {
-		return "unknown";
-	}
+	return status === "gone" ? "terminated" : status;
 }
 
-/** Wait for namespace emptiness within budgetMs; populated/unknown never release claims. */
+/**
+ * Wait for the namespace init's death within budgetMs. Init death is the
+ * termination witness: the kernel SIGKILLs every remaining task in the PID
+ * namespace when its init exits, so a drained namespace needs no process-table
+ * enumeration. `populated`/`unknown` never release claims.
+ */
 export async function awaitBoundaryDrained(
-	identity: Pick<NamespaceIdentity, "namespace">,
+	identity: NamespaceIdentity,
 	budgetMs: number,
 ): Promise<"drained" | "populated" | "unknown"> {
 	const deadline = performance.now() + Math.max(0, budgetMs);
 	for (;;) {
-		let remaining: number;
-		try {
-			remaining = namespaceMemberPids(identity).length;
-		} catch {
-			return "unknown";
-		}
-		if (remaining === 0) return "drained";
+		const status = probeNamespace(identity);
+		if (status === "gone") return "drained";
+		if (status === "unknown") return "unknown";
 		if (performance.now() >= deadline) return "populated";
 		await delay(Math.min(10, Math.max(1, deadline - performance.now())));
 	}

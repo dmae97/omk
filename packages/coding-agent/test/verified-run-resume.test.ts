@@ -58,6 +58,7 @@ async function frozen() {
 	const journal = readRunJournal(runPath);
 	if (!journal) throw new Error("missing fixture journal");
 	const end = journal.records.findIndex((record) => record.event.kind === "candidate");
+	if (end < 0) throw new Error("fixture: run produced no candidate event");
 	writeFileSync(
 		journalPath(runPath),
 		`${journal.records
@@ -193,6 +194,7 @@ describe("frozen candidate recovery", () => {
 			const journal = readRunJournal(runPath);
 			if (!journal) throw new Error("missing fixture");
 			const end = journal.records.map(({ event }) => event.kind === "resumed").lastIndexOf(true);
+			if (end < 0) throw new Error("fixture: run produced no resumed event");
 			writeFileSync(
 				journalPath(runPath),
 				`${journal.records

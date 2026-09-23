@@ -351,7 +351,6 @@ describe("owned Git publication public path", () => {
 		expect(grant?.identity).not.toBeNull();
 		if (!grant?.identity) throw new Error("missing Git namespace witness");
 		expect(grant).toMatchObject({ state: "terminated", effectLive: false });
-		expect(supervisor.namespaceMemberPids(grant.identity)).toEqual([]);
 		expect(git("show", `${OMK_ACCEPTED_REF}:result`)).toBe("hello");
 		expect(readdirSync(workspace).sort()).toEqual([".git", "input"]);
 		expect(readdirSync(join(workspace, ".git")).filter((name) => name.startsWith("omk-publish-"))).toEqual([]);
