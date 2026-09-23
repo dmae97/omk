@@ -12,7 +12,7 @@
  *
  * Refresh with: `npm view @anthropic-ai/claude-code version`.
  */
-export const CLAUDE_CODE_VERSION = "2.1.258";
+export const CLAUDE_CODE_VERSION = "2.1.280";
 
 /** Messages / usage API identity. */
 export const CLAUDE_CODE_CLI_USER_AGENT = `claude-cli/${CLAUDE_CODE_VERSION}`;

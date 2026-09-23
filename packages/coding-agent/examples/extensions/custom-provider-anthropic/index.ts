@@ -378,7 +378,7 @@ function streamCustomAnthropic(
 					// Anthropic gates newer models on this version (400
 					// claude_code_version_too_old). Canonical value: CLAUDE_CODE_VERSION
 					// in omk-ai (packages/ai/src/utils/claude-code-identity.ts).
-					"user-agent": "claude-cli/2.1.258 (external, cli)",
+					"user-agent": "claude-cli/2.1.280 (external, cli)",
 					"x-app": "cli",
 				};
 			} else {
