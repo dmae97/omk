@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const originalHome = process.env.HOME;
 const originalLiveE2e = process.env.LIVE_E2E;
+const originalAgentDir = process.env.OMK_CODING_AGENT_DIR;
 let home: string;
 
 async function loadResolver() {
@@ -18,6 +19,10 @@ describe("OAuth test helper hermeticity", () => {
 		process.env.HOME = home;
 		delete process.env.LIVE_E2E;
 		const authDir = join(home, ".omk", "agent");
+		// The helper resolves OMK_CODING_AGENT_DIR before $HOME, so an exported
+		// real value (e.g. a user's shell profile) would leak the live store
+		// into this test — pin it to the fake store.
+		process.env.OMK_CODING_AGENT_DIR = authDir;
 		mkdirSync(authDir, { recursive: true });
 		writeFileSync(
 			join(authDir, "auth.json"),
@@ -32,6 +37,8 @@ describe("OAuth test helper hermeticity", () => {
 		else process.env.HOME = originalHome;
 		if (originalLiveE2e === undefined) delete process.env.LIVE_E2E;
 		else process.env.LIVE_E2E = originalLiveE2e;
+		if (originalAgentDir === undefined) delete process.env.OMK_CODING_AGENT_DIR;
+		else process.env.OMK_CODING_AGENT_DIR = originalAgentDir;
 	});
 
 	it("does not read the real auth store during default unit tests", async () => {

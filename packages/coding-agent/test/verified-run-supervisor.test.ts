@@ -262,6 +262,10 @@ describe("owned process supervisor cancellation proof", () => {
 		expect(await supervisor.awaitBoundaryDrained(identity, 100)).toBe("drained");
 		probe.mockReturnValue("unknown");
 		expect(await supervisor.awaitBoundaryDrained(identity, 100)).toBe("unknown");
+		// A transient unknown during teardown resolves once teardown finishes:
+		// it retries until the deadline instead of settling terminal early.
+		probe.mockReturnValueOnce("unknown").mockReturnValue("gone");
+		expect(await supervisor.awaitBoundaryDrained(identity, 1000)).toBe("drained");
 		probe.mockReturnValueOnce("alive").mockReturnValueOnce("alive").mockReturnValue("gone");
 		expect(await supervisor.awaitBoundaryDrained(identity, 1000)).toBe("drained");
 	});

@@ -82,7 +82,7 @@ function parseAgent(text, out) {
 
 function main() {
   const argv = process.argv.slice(2);
-  let agentDir = process.env.OMK_AGENT_DIR || path.join(os.homedir(), ".omk", "agent", "agents");
+  let agentDir = process.env.OMK_CODING_AGENT_DIR || process.env.OMK_AGENT_DIR || path.join(os.homedir(), ".omk", "agent", "agents");
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--agent-dir" && i + 1 < argv.length) agentDir = argv[++i];
   }

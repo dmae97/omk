@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Verified-run namespace probe: a startTicks mismatch reports the recorded namespace init as gone (a reused PID slot proves teardown), so reclaimed boundaries drain instead of quarantining indefinitely.
+
 ## [1.2.2] - 2026-09-23
 
 ### Fixed

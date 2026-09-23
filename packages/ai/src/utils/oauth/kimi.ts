@@ -61,7 +61,10 @@ function getDeviceModel(): string {
 }
 
 function getDeviceIdPath(): string {
-	const agentDir = process.env.OMK_AGENT_DIR || path.join(os.homedir(), ".omk", "agent");
+	// OMK_AGENT_DIR was a dead name nothing set; the canonical override is
+	// OMK_CODING_AGENT_DIR (kept literal — omk-ai has no coding-agent dep).
+	const agentDir =
+		process.env.OMK_CODING_AGENT_DIR || process.env.OMK_AGENT_DIR || path.join(os.homedir(), ".omk", "agent");
 	return path.join(agentDir, DEVICE_ID_FILENAME);
 }
 

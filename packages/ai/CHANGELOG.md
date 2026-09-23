@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- OAuth device-id resolution honors `OMK_CODING_AGENT_DIR` (the `OMK_AGENT_DIR` name it read was never set), so a custom agent directory applies to the Kimi device-id file. The live-E2E helper resolves the same env var before falling back to the home directory.
+
 ## [1.2.2] - 2026-09-23
 
 ### Changed

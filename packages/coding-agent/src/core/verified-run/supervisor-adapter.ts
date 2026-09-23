@@ -152,6 +152,10 @@ export function probeOwnedNamespace(identity: NamespaceIdentity): "terminated" |
  * probe is inconclusive, and that window resolves to `gone` once the kernel
  * finishes teardown. Only a probe that is still inconclusive at the deadline
  * stays `unknown`; a still-alive init is `populated`.
+ *
+ * `drained` means the kernel has provably killed every member; a task frozen
+ * in uninterruptible kernel sleep can linger in /proc briefly afterwards —
+ * that is kernel bookkeeping, not a live boundary.
  */
 export async function awaitBoundaryDrained(
 	identity: NamespaceIdentity,

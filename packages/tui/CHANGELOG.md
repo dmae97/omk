@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Debug and crash logs write under `OMK_CODING_AGENT_DIR` when set instead of always `~/.omk/agent`.
+
 ## [1.2.2] - 2026-09-23
 
 ### Changed

@@ -11,7 +11,7 @@ import { dirname, join } from "path";
 import { getOAuthApiKey } from "../src/utils/oauth/index.ts";
 import type { OAuthCredentials, OAuthProvider } from "../src/utils/oauth/types.ts";
 
-const AUTH_PATH = join(homedir(), ".omk", "agent", "auth.json");
+const AUTH_PATH = join(process.env.OMK_CODING_AGENT_DIR ?? join(homedir(), ".omk", "agent"), "auth.json");
 
 type ApiKeyCredential = {
 	type: "api_key";
