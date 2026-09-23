@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `RunPublishCommand` with `parseRunPublishCommand` and `runOid`: the wire contract for a verified-run publication command, plus a full-object-name validator that treats an all-zero value as an unborn ref.
+
 ## [1.2.0] - 2026-09-20
 
 ## [1.0.0] - 2026-09-18

@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- Claude Opus 5.5 and GPT-6 Sol/Luna join the generated catalog. Each route declares which thinking levels its wire payload really carries, so a selector whose effort would be collapsed silently is rejected at plan time instead of clamped after the fact.
+
+### Changed
+
+- Claude Code CLI identity refreshed to `2.1.280` — the value Anthropic gates newer models on — including the `custom-provider-anthropic` example, which carries the same canonical string. Refresh with `npm view @anthropic-ai/claude-code version`.
+
+### Fixed
+
+- Google history keeps signed empty text/thinking blocks, so a signature-bearing empty part replays instead of failing the request (#7362).
+- Switching the model mid-session no longer emits a `tool_call_id` protocol error (#6854).
+- Anthropic one-hour cache writes are priced at 2x input, matching the published cache-write rate (#5738).
+- Empty OpenAI Responses thinking blocks are omitted on replay, and the Antigravity context override block is restored.
+- Kimi K2.7 normalizes to the canonical coding model id.
+
 ## [1.2.0] - 2026-09-20
 
 ### Added

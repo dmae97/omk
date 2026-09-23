@@ -2,6 +2,41 @@
 
 ## [Unreleased]
 
+### New Features
+
+- **Verified run authority wiring**: the authority store now runs on the real dispatch path (WP00–WP06) — durable admission leases, an exit proof that Git publication binds to, secret-path refusal, and a separate publish-start gate. See [Verified Run](docs/verified-run.md).
+- **Metadata-first session listing with separate search**: the session picker lists from metadata first and runs search as its own pass, so large session directories render immediately. See [Sessions](docs/sessions.md).
+- **Portable `mcp.json` paths**: `~/` and `$VAR` expand in server paths, so one config works across machines. See [MCP](docs/mcp.md).
+- **New model catalog**: Claude Opus 5.5 and GPT-6 Sol/Luna, with per-route thinking-level contracts so the selector only offers effort the route actually sends. See [Models](docs/models.md).
+
+### Added
+
+- Atomic commit planner public API in `omk-agent-core`. See [Atomic commit planning](docs/atomic-commit-planning.md).
+- Terminal output observation (`TerminalOutput`) exposed to interactive diagnostics. See [TUI](docs/tui.md).
+
+### Changed
+
+- The MCP manager is split into a connection queue and a runtime, with a startup concurrency cap so many servers connect without unbounded fan-out. See [MCP](docs/mcp.md).
+- Assistant message rendering caches content views, cutting render cost on long transcripts.
+- A cached skill catalog is reused only when its fingerprint is complete; otherwise it reloads. See [Skills](docs/skills.md).
+- SDK auxiliary modules and hooks public paths are reorganized (`package-resource-patterns`, `approval-api`, session-lifecycle types), and redundant development dependencies are removed.
+
+### Fixed
+
+- Verified-run publication boundaries: Git publication records ownership and binds the exit proof, refuses secret paths, treats a git-ref authority as authorization rather than a termination proof, blocks inherited hooks and config injection in the publishing Git, and preserves publish-path and authority-reuse semantics.
+- Shard settlement returns permits and waits for sibling task termination.
+- Compaction: prompts are rejected during manual compaction, pre-prompt compaction no longer continues, and replacement-model auth and cancellation handling are strengthened.
+- Coordination primitives and probability boundaries are tightened, with the metacognition contract updated. See [Metacognition](docs/metacognition.md).
+- Resource loading excludes directories (#7106), and an imported session is never overwritten (#8985).
+- The active turn settles before an in-memory fork (#8937).
+- Linux downloads the statically linked musl builds of `fd` and `ripgrep` (#9070), and image scanning walks past non-EXIF APP1 segments (#8616).
+- RPC bash no longer bypasses `user_bash` (#7214).
+- Read errors are not highlighted (#6731) and `stripAnsi` matches `strip-ansi`.
+- Fetch overrides are preserved, the stale hooks export and the DynamicBorder theme crash are fixed, and dependencies reinstall when `git clean` fails (#7570).
+- Share viewer shortcuts use browser-safe keys (#3374), and device-code login no longer opens a browser.
+- Session name changes are emitted to extensions.
+- Test environment: `Date.now` is monotonic so host wall-clock rollbacks cannot surface as `clock_anomaly` failures, and the model-registry fixture references live OpenRouter model ids with a catalog guard test.
+
 ## [1.2.0] - 2026-09-20
 
 ### Added

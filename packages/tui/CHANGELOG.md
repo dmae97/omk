@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- `TerminalOutput` separates output observation from the terminal implementation: writes, resizes and capability queries are observed through one object, and interactive diagnostics consume the same observation.
+
+### Fixed
+
+- Zed terminal capabilities are detected (#8828).
+- Autocomplete orders nested results (#8669) and re-queries the picker when the cursor moves; the hardware cursor marker is kept during slash-command autocomplete.
+- Truncated OSC 8 links are closed (#7657).
+- The iTerm image payload size is emitted for the xterm.js image addon (#7612), and image fallback paths are shortened with clamped widths (#7262).
+- The inverted cursor is cleared on exit so no dual cursor appears (#6790).
+- CRLF and CR line endings are handled (#6764) and tabs are normalized in terminal output (#6697).
+- Legacy alt-prefixed symbols parse (#6523) and legacy terminals get shift+letter shortcut support.
+- Streaming code fence rendering is stabilized (#5846), and loose lists separate list items with blank lines.
+- Auxiliary modules (ANSI codes, key characters, image fallback, markdown tokenizer, autocomplete path prefix) are split out of the large modules, preserving the exit frame.
+
 ## [1.2.0] - 2026-09-20
 
 ## [1.0.0] - 2026-09-18

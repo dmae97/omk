@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- Atomic commit planner public API (`commit-planner`, `commit-graph`, `commit-input`, `commit-conflicts`): plans a multi-file commit against the versions it read, refuses a plan whose inputs moved, and validates its boundaries. See the agent README.
+
+### Changed
+
+- Deferred tool-DAG claims no longer re-invoke the claim resolver while a dispatch waits on it, and the wait/decision split is documented in `runtime-algorithms`.
+
+### Fixed
+
+- Reset is rejected while runs are active (#7717), and session names normalize before they are stored.
+- ECRAF normalization accepts offline exchange candidates, with the exchange module separated from the DAG module.
+
 ## [1.2.0] - 2026-09-20
 
 ## [1.0.0] - 2026-09-18

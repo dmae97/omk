@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `routeTopology` reads the DAG from the tool's top-level `subtasks`/`dependencies` arguments, so an MCP caller that passes them at the top level is honored instead of failing to see a DAG.
+
 ## [1.2.0] - 2026-09-20
 
 ## [1.0.0] - 2026-09-18
