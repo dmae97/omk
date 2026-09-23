@@ -366,7 +366,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.2.2](.github/RELEASE_NOTES_v1.2.2.md)
+- [Release notes for v1.2.3](.github/RELEASE_NOTES_v1.2.3.md)
 
 ## Development
 
@@ -422,6 +422,14 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v1.2.3
+
+### Fixed
+
+- Verified-run suite hardening: tests use a 15s cleanup budget so slow namespace teardown on ubuntu-22.04 runners drains before settling, matching the witness contract without weakening fail-closed outcomes (no product-code change).
+
+Release notes live in [RELEASE_NOTES_v1.2.3.md](.github/RELEASE_NOTES_v1.2.3.md).
+
 ## Release v1.2.2
 
 ### Fixed
@@ -471,15 +479,6 @@ Release notes live in [RELEASE_NOTES_v1.2.2.md](.github/RELEASE_NOTES_v1.2.2.md)
 - Test environment: `Date.now` is monotonic so host wall-clock rollbacks cannot surface as `clock_anomaly` failures, and the model-registry fixture references live OpenRouter model ids with a catalog guard test.
 
 Release notes live in [RELEASE_NOTES_v1.2.1.md](.github/RELEASE_NOTES_v1.2.1.md).
-
-## Release v1.2.0
-
-### Added
-
-- Parallel-session coordination kernel (`coordination/`): an admission broker that keeps a possibly-live effect's resource claims held until a trusted supervisor confirms termination — expiry, cancellation and authority restart are authorization events, not termination proofs — plus prefix-based claim conflict algebra, a publisher that admits a candidate only when its read versions, parent revision and receipt binding all still match, generation-tagged session lifecycle that discards a late init from a superseded generation and retains the handle when close fails, an operation lifecycle whose dispatch consumes a recorded observation rather than a re-interpreted instruction and re-evaluates the permit at the dispatch boundary, and conservative change-invalidation and frontier admission helpers.
-- Metacognition evidence primitives: finite-sample Clopper–Pearson risk bounds for automation gating (a point estimate never widens scope; zero trials is absent evidence, not zero risk), probability calibration with temperature scaling, Brier/log-loss/ECE reported with bin occupancy, a selective-execution gate that reports coverage beside risk and leaves risk undefined when nothing was admitted, observation validity that separates time decay from the change indicator and lets explicit age and generation bounds override the decay score, state packing that returns `incomplete-state` instead of silently dropping required evidence, cost- and latency-aware route selection with safety as a hard filter outside the utility, and three-valued verification where `unknown` is never negated into `true` and evidence level is labelled by the strongest witness actually held.
-
-Release notes live in [RELEASE_NOTES_v1.2.0.md](.github/RELEASE_NOTES_v1.2.0.md).
 
 <!-- releases:end -->
 

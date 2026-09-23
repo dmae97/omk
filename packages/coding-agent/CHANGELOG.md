@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-09-23
+
+### Fixed
+
+- Verified-run suite hardening: tests use a 15s cleanup budget so slow namespace teardown on ubuntu-22.04 runners drains before settling, matching the witness contract without weakening fail-closed outcomes (no product-code change).
+
 ## [1.2.2] - 2026-09-23
 
 ### Fixed
