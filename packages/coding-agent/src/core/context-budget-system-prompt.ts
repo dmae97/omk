@@ -62,6 +62,12 @@ export function renderSystemPromptBudgetedResources(
 		tokenCounter,
 		cacheProvider: input.options.cacheProvider,
 	});
+	// Required resources cannot be dropped; do not hand an impossible plan to a provider.
+	if (plan.usedTokens > plan.availableTokens) {
+		throw new RangeError(
+			`context_budget.hard_pin_over_capacity (required=${plan.usedTokens}, available=${plan.availableTokens})`,
+		);
+	}
 	if (items.length === 0 && !plan.emergency && plan.observability.diagnosticReasons.length === 0) {
 		return { text: renderEmptyBudgetNote(plan), plan };
 	}

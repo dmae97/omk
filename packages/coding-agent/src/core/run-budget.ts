@@ -26,8 +26,9 @@ export class RunBudget {
 	private closed = false;
 	private exhausted: RunBudgetExceededError | undefined;
 
-	constructor(limits: RunBudgetLimits, onExhausted: (error: RunBudgetExceededError) => void) {
-		this.limits = snapshotRunBudgetLimits(limits);
+	constructor(limits: RunBudgetLimits | undefined, onExhausted: (error: RunBudgetExceededError) => void) {
+		// Undefined owns an unbounded scope; an explicitly empty policy is still invalid.
+		this.limits = limits === undefined ? Object.freeze({}) : snapshotRunBudgetLimits(limits);
 		this.onExhausted = onExhausted;
 		this.deadline = this.limits.timeoutMs === undefined ? undefined : performance.now() + this.limits.timeoutMs;
 		if (this.deadline !== undefined) this.armDeadline();

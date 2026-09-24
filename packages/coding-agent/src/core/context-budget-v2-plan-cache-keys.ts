@@ -1,4 +1,5 @@
 import type { HeadroomQualityPolicyV2 } from "./context-budget-headroom.ts";
+import { compareContextIds } from "./context-budget-order.ts";
 import { sha256Canonical } from "./context-budget-v2-cache-hash.ts";
 import {
 	type ContextBudgetCacheKeyBaseV2,
@@ -76,14 +77,14 @@ export function buildContextBudgetPlanCacheKeyV2(input: {
 						fingerprint: computeContextBudgetRepresentationFingerprintV2(candidate),
 						kind: candidate.kind,
 					}))
-					.sort((a, b) => a.kind.localeCompare(b.kind) || a.fingerprint.localeCompare(b.fingerprint)),
+					.sort((a, b) => compareContextIds(a.kind, b.kind) || compareContextIds(a.fingerprint, b.fingerprint)),
 				required: planned.item.required === true,
 				sourceRef: fingerprintSourceRef(planned.item.sourceRef),
 				sourceHash: planned.contentHash,
 				tier: planned.item.tier,
 				tokenEstimate: planned.item.tokenEstimate ?? null,
 			}))
-			.sort((a, b) => a.id.localeCompare(b.id)),
+			.sort((a, b) => compareContextIds(a.id, b.id)),
 		maxTokens: input.maxTokens,
 		invalidationSnapshotHash: input.keyBase.invalidationSnapshotHash ?? "none",
 		modelId: input.keyBase.modelId,

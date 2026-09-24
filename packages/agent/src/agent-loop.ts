@@ -20,7 +20,8 @@ import { pinProviderConfig, requestAssistantResponse } from "./provider-request.
 export { getVisionRouteModel, isVisionRouteModel, VISION_ROUTE_MODEL } from "./vision-route.ts";
 
 import { type DeferredCall, deferredStillConflicts } from "./tool-dag-deferred.ts";
-import { type DagScheduleCache, scheduleDagLevelsMemo as scheduleDagLevelsMemoFromModule } from "./tool-dag-memo.ts";
+import { type DagFrontierScheduleCache, resolveDagFrontierMemo } from "./tool-dag-memo.ts";
+import { finishDagTasks, type OwnedTaskResult, startDagTask } from "./tool-dag-owned-task.ts";
 import { applyConcurrencyCap, assignDagDependencies } from "./tool-dag-scheduler.ts";
 import {
 	awaitWithAbort,
@@ -34,6 +35,7 @@ import {
 	stampToolResultEnvelope,
 } from "./tool-execution-boundary.ts";
 import { type ClaimableToolCall, resolveToolClaimsForCall, type ToolClaimResolution } from "./tool-resource-claims.ts";
+import { indexFinalizedToolCalls } from "./tool-terminal-index.ts";
 import { resolveToolTimeoutMs, runToolCallWithTimeout } from "./tool-timeout.ts";
 import { hasUnsettledTimeout } from "./tool-timeout-settlement.ts";
 import {
@@ -428,7 +430,7 @@ async function runToolBatchForTurn(
 	signal: AbortSignal | undefined,
 	emit: AgentEventSink,
 	newMessages: AgentMessage[],
-	dagScheduleCache: DagScheduleCache,
+	dagScheduleCache: DagFrontierScheduleCache,
 ): Promise<ToolBatchTurnOutcome> {
 	const executedToolBatch = await executeToolCalls(currentContext, message, config, signal, emit, dagScheduleCache);
 	const toolResults = [...executedToolBatch.messages];
@@ -488,7 +490,7 @@ async function runLoop(
 	let firstTurn = true;
 	let turnsStarted = 0;
 	const maxTurns = validateMaxTurns(initialConfig.maxTurns);
-	const dagScheduleCache: DagScheduleCache = new Map();
+	const dagScheduleCache: DagFrontierScheduleCache = new Map();
 	// Check for steering messages at start (user may have typed while waiting)
 	let pendingMessages = await drainMessageQueue(config.getSteeringMessages);
 
@@ -725,7 +727,7 @@ async function executeToolCalls(
 	config: AgentLoopConfig,
 	signal: AbortSignal | undefined,
 	emit: AgentEventSink,
-	dagScheduleCache: DagScheduleCache,
+	dagScheduleCache: DagFrontierScheduleCache,
 ): Promise<ExecutedToolCallBatch> {
 	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
 	// dag-v2 is the safe default; waves-v1 remains an explicit rollback path.
@@ -822,8 +824,8 @@ async function executeToolCallsInWaves(
  * Shared scheduling state for one DAG batch: the last known claim resolution
  * per source index, calls deferred because a post-hook claim change would
  * execute them before an unsettled earlier-source conflict, and calls that
- * have reached a terminal outcome. Mutated across candidate levels so the
- * final-claims contract is enforced globally, not per level.
+ * have reached a terminal outcome. Shared across the ready frontier so the
+ * final-claims contract is enforced for the whole batch.
  */
 interface DagBatchScheduleState {
 	readonly resolutions: Map<number, ToolClaimResolution>;
@@ -839,21 +841,19 @@ interface DagBatchScheduleState {
 }
 
 /**
- * Schedule planned calls into candidate DAG levels. Immediate plans fail
- * before any tool executes, so they carry no claims and fold into the first
- * level instead of degrading the whole batch to sequential singleton levels.
- * Unresolvable argument payloads stay in the schedule and fail closed into
- * exclusive barriers inside claim resolution.
+ * Resolve planned calls for the dependency ready frontier. Immediate outcomes
+ * carry no claims; unresolvable arguments become exclusive claim barriers.
+ * Barrier levels are a public compatibility schedule, not an admission input.
  */
-async function schedulePlannedDagLevels(
+async function schedulePlannedDagFrontier(
 	plans: Array<PlannedToolCall | ImmediateToolCallOutcome>,
 	toolPolicies: ReadonlyMap<string, "sequential" | "parallel">,
 	boundTools: AgentTool<any>[],
 	config: AgentLoopConfig,
 	signal: AbortSignal | undefined,
-	dagScheduleCache: DagScheduleCache,
+	dagScheduleCache: DagFrontierScheduleCache,
 ): Promise<{
-	levels: number[][];
+	order: number[];
 	resolutions: Map<number, ToolClaimResolution>;
 	/** Conflicting predecessors per source index — the precedence graph the ready queue admits from. */
 	dependencies: Map<number, number[]>;
@@ -869,7 +869,7 @@ async function schedulePlannedDagLevels(
 			immediateSourceIndices.push(sourceIndex);
 		}
 	});
-	const scheduled = await scheduleDagLevelsMemoFromModule(
+	const scheduled = await resolveDagFrontierMemo(
 		claimableCalls,
 		{
 			cwd: config.cwd ?? process.cwd(),
@@ -883,44 +883,32 @@ async function schedulePlannedDagLevels(
 		dagScheduleCache,
 	);
 	if (scheduled === null) {
-		return { levels: [], resolutions: new Map(), dependencies: new Map() };
+		return { order: [], resolutions: new Map(), dependencies: new Map() };
 	}
 	const resolutions = new Map<number, ToolClaimResolution>();
-	scheduled.entries.forEach((entry, position) => {
+	scheduled.forEach((entry, position) => {
 		resolutions.set(schedulableSourceIndices[position], entry.resolution);
 	});
 	// Precedence graph in source-index space. Immediate plans carry no claims and
 	// therefore no predecessors; they already fail before any tool executes.
 	const dependencies = new Map<number, number[]>();
 	for (const sourceIndex of immediateSourceIndices) dependencies.set(sourceIndex, []);
-	assignDagDependencies(scheduled.entries).forEach((blockers, position) => {
+	assignDagDependencies(scheduled).forEach((blockers, position) => {
 		dependencies.set(
 			schedulableSourceIndices[position],
 			blockers.map((blocker) => schedulableSourceIndices[blocker]),
 		);
 	});
-	const levels = scheduled.levels.map((level) => level.map((position) => schedulableSourceIndices[position]));
-	if (immediateSourceIndices.length === 0) {
-		return { levels, resolutions, dependencies };
-	}
-	if (levels.length === 0) {
-		return { levels: [[...immediateSourceIndices]], resolutions, dependencies };
-	}
-	levels[0] = [...levels[0], ...immediateSourceIndices].sort((left, right) => left - right);
-	return { levels, resolutions, dependencies };
+	return { order: plans.map((_, sourceIndex) => sourceIndex), resolutions, dependencies };
 }
 
 /**
  * Execute a tool-call batch using the dag-v2 scheduler.
  *
- * Schedule every planned call through the DAG: immediate plans fail before
- * any tool executes, so they carry no claims and fold into the first level
- * instead of degrading the whole batch to sequential singleton levels.
- * Unresolvable argument payloads stay in the schedule and fail closed into
- * exclusive barriers inside claim resolution. Each candidate level authorizes
- * calls, re-resolves claims from exact final args, and emits lifecycle starts
- * only when a final safe sublevel begins. Results remain globally buffered
- * and are emitted in source order.
+ * Planned calls resolve claims in source order, while immediate failures carry
+ * no claims. The dependency frontier authorizes ready calls in source order,
+ * re-resolves claims from exact post-hook arguments, and starts only safe work.
+ * Results remain globally buffered and are emitted in source order.
  */
 async function executeToolCallsDagLevels(
 	currentContext: AgentContext,
@@ -929,7 +917,7 @@ async function executeToolCallsDagLevels(
 	config: AgentLoopConfig,
 	signal: AbortSignal | undefined,
 	emit: AgentEventSink,
-	dagScheduleCache: DagScheduleCache,
+	dagScheduleCache: DagFrontierScheduleCache,
 ): Promise<ExecutedToolCallBatch> {
 	const plans = toolCalls.map((toolCall) => planToolCall(currentContext, toolCall));
 	const boundTools = plans.flatMap((plan) => (plan.kind === "planned" ? [plan.tool] : []));
@@ -939,8 +927,7 @@ async function executeToolCallsDagLevels(
 		if (mode && !toolPolicies.has(tool.name)) toolPolicies.set(tool.name, mode);
 	}
 
-	const schedule = await schedulePlannedDagLevels(plans, toolPolicies, boundTools, config, signal, dagScheduleCache);
-	const levels = schedule.levels;
+	const schedule = await schedulePlannedDagFrontier(plans, toolPolicies, boundTools, config, signal, dagScheduleCache);
 	const batchState: DagBatchScheduleState = {
 		resolutions: schedule.resolutions,
 		deferred: new Map(),
@@ -954,7 +941,7 @@ async function executeToolCallsDagLevels(
 	const frontier = await runDagFrontier(
 		currentContext,
 		assistantMessage,
-		levels.flat(),
+		schedule.order,
 		schedule.dependencies,
 		toolCalls,
 		plans,
@@ -993,6 +980,7 @@ async function executeToolCallsDagLevels(
 			);
 		}
 	}
+	const finalizedById = indexFinalizedToolCalls(finalizedCalls);
 	// Close the full source-ordered batch before result notification; calls not
 	// reached by a candidate level receive no execution lifecycle.
 	for (const message of messages) {
@@ -1000,7 +988,7 @@ async function executeToolCallsDagLevels(
 		try {
 			await emitToolResultMessage(message, emit);
 		} finally {
-			finalizedCalls.find(({ toolCall }) => toolCall.id === message.toolCallId)?.commitTerminal?.();
+			finalizedById.get(message.toolCallId)?.commitTerminal?.();
 		}
 	}
 
@@ -1083,7 +1071,8 @@ async function runDagFrontier(
 ): Promise<{ outcomes: DagLevelOutcome[]; stoppedByUnsettledTimeout: boolean; terminated: boolean }> {
 	const outcomes: DagLevelOutcome[] = [];
 	const pending = [...order].sort((left, right) => left - right);
-	const running = new Map<number, Promise<DagLevelOutcome>>();
+	const running = new Map<number, Promise<OwnedTaskResult<DagLevelOutcome>>>();
+	const taskErrors: unknown[] = [];
 	// Mirrors applyConcurrencyCap: absent, non-finite, or non-positive is unbounded.
 	const cap =
 		typeof config.maxToolConcurrency === "number" &&
@@ -1205,7 +1194,7 @@ async function runDagFrontier(
 				await emitToolExecutionStart(preparation, emit);
 				running.set(
 					sourceIndex,
-					(async (): Promise<DagLevelOutcome> => {
+					startDagTask(sourceIndex, async (): Promise<DagLevelOutcome> => {
 						const executed = await executePreparedToolCall(preparation, config, signal, emit);
 						const finalized = await finalizeExecutedToolCall({
 							currentContext,
@@ -1217,7 +1206,7 @@ async function runDagFrontier(
 						});
 						await emitToolExecutionEnd(finalized, emit);
 						return { sourceIndex, finalized };
-					})(),
+					}),
 				);
 			}
 			if (running.size === 0) {
@@ -1250,20 +1239,13 @@ async function runDagFrontier(
 			}
 			const finished = await Promise.race([...running.values()]);
 			running.delete(finished.sourceIndex);
-			await settle(finished);
+			if (finished.status === "rejected") throw finished.reason;
+			await settle(finished.value);
 		}
+	} catch (error) {
+		taskErrors.push(error);
 	} finally {
-		// Join work already in flight: cancellation, termination, and propagation
-		// of preparation/event errors all preserve ownership of started
-		// executions rather than abandoning them mid-flight.
-		while (running.size > 0) {
-			const entries = [...running.entries()];
-			const drained = await Promise.allSettled(entries.map(([, task]) => task));
-			for (const [index, drainedResult] of drained.entries()) {
-				running.delete(entries[index][0]);
-				if (drainedResult.status === "fulfilled") await settle(drainedResult.value);
-			}
-		}
+		await finishDagTasks(running, settle, taskErrors);
 	}
 	return { outcomes, stoppedByUnsettledTimeout, terminated };
 }

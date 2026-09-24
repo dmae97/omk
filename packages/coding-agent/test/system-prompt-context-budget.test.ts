@@ -95,6 +95,33 @@ describe("buildSystemPrompt context budget", () => {
 		expect(prompt).toContain("<reason>invalid_budget</reason>");
 	});
 
+	it("refuses an infeasible hard parent context rather than sending an oversized prompt", () => {
+		const options = {
+			selectedTools: ["read"],
+			toolSnippets: { read: "Read files" },
+			contextFiles: [{ path: "/repo/AGENTS.md", content: "PRIVATE_HARD_CONTEXT", isGlobal: true }],
+			skills: [],
+			cwd: "/repo",
+			contextBudget: { maxPromptTokens: 1, includeFullContextFiles: false },
+		};
+		let failure: unknown;
+		try {
+			buildSystemPrompt(options);
+		} catch (error) {
+			failure = error;
+		}
+		expect(failure).toBeInstanceOf(RangeError);
+		if (failure instanceof Error) {
+			expect(failure.message).toMatch(/context_budget\.hard_pin_over_capacity \(required=\d+, available=\d+\)/u);
+			expect(failure.message).not.toContain("PRIVATE_HARD_CONTEXT");
+		}
+		const admitted = buildSystemPrompt({
+			...options,
+			contextBudget: { maxPromptTokens: 6000, includeFullContextFiles: false },
+		});
+		expect(admitted).toContain('<context_file_pointer scope="parent"');
+	});
+
 	it("keeps full observability when resource items exist but none fit", () => {
 		const prompt = buildSystemPrompt({
 			selectedTools: ["read"],

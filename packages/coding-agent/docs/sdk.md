@@ -195,12 +195,13 @@ All recovery actions share the generation cap, original budget and command-id fe
 This does not enable live-model task generation, opaque remote replay,
 verification-conditioned edges, plan amendment, or host application. See [Verified Run](verified-run.md) for contracts and trust boundaries.
 
-### Shared run budgets (SDK, opt-in)
+### Shared run budgets (SDK limits opt-in, stream ownership always active)
 
-Pass `runBudget` to `session.prompt()` to bound one prompt's logical model
-requests. The budget starts before prompt preflight and stays shared across
-provider retries, continuations, and first-party summaries using that session's
-`agent.streamFn` while the prompt is active.
+Every prompt now owns its logical model streams until terminal metadata, even
+without `runBudget`. Pass `runBudget` to `session.prompt()` to additionally bound
+one prompt's logical model requests. The scope starts before prompt preflight and
+stays shared across provider retries, continuations, and first-party summaries
+using that session's `agent.streamFn` while the prompt is active.
 
 ```typescript
 import { RunBudgetExceededError } from "open-multi-agent-kit";
@@ -239,11 +240,12 @@ changing its stream or aborting it. Explicit steering/follow-up messages join th
 running prompt without receiving a new allowance; registered commands retain
 their existing streaming path.
 
-`getRunBudgetSnapshot()` returns the active or most recent budget's immutable
+`getRunBudgetSnapshot()` returns the active or most recent scope's immutable
 limits, started-request count, outstanding-stream count, remaining time, closed
-state, and optional exhaustion reason. It returns `undefined` when no budget has
-been used. Missing terminal metadata retains an outstanding reservation; an
-abort request alone does not release it. Outstanding streams block admission of
+state, and optional exhaustion reason. It returns `undefined` only before any
+prompt scope has opened. A default scope reports empty limits; missing terminal
+metadata retains an outstanding reservation. An abort request alone does not
+release it. Outstanding streams block admission of
 a new bounded or unbounded prompt even after the scope closes. Once terminal
 metadata arrives, that reservation drains and new work can proceed. The original
 stream and core credential resolver are restored unless another owner replaced
@@ -255,9 +257,10 @@ request counts are still reserved at stream dispatch. Cancellation or expiry
 during credential lookup is checked again before continuing.
 
 **Limits of this slice:** request counts are not HTTP-attempt or billing counts.
-The wrapper requests `maxRetries: 0` to disable adapter retries, but cannot attest
-that every provider honors it. Independent context/auth hooks, remote work, detached
-children, direct `omk-ai` calls, and replacement of the stream wrapper remain
+With explicit limits, the wrapper requests `maxRetries: 0` to disable adapter
+retries, but cannot attest that every provider honors it. An unbounded prompt
+keeps the existing adapter retry policy. Independent context/auth hooks, remote
+work, detached children, direct `omk-ai` calls, and replacement of the stream wrapper remain
 outside that dispatch-count guarantee. In-process plugins are trusted. Deadline
 cancellation is cooperative: synchronous blocking code, an uncooperative hook,
 or a remote service can outlive the signal. This is not an OS kill/join boundary

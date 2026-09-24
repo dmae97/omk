@@ -2,6 +2,7 @@ import type { TSchema } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
 import { detectMcpDescriptorPromptInjection, MCP_QUARANTINE_PATTERN_SIGNAL_THRESHOLD } from "../mcp-public-presets.ts";
 import { McpClient, type McpClientOptions } from "./client.ts";
+import { mcpPublicDiagnostic } from "./public-diagnostic.ts";
 import { createMcpToolDefinition, type McpToolDetails } from "./tools.ts";
 
 export type McpServerState = "idle" | "queued" | "connecting" | "ready" | "failed";
@@ -12,6 +13,8 @@ export interface McpServerConfig {
 	readonly args?: readonly string[];
 	readonly env?: Readonly<Record<string, string>>;
 	readonly cwd?: string;
+	/** Explicit environment inheritance policy. Omitted preserves the transport default. */
+	readonly inheritEnv?: boolean;
 	/** Skip this server without removing it from configuration. */
 	readonly disabled?: boolean;
 	readonly requestTimeoutMs?: number;
@@ -72,6 +75,7 @@ export async function connectMcpRuntime(
 				command: runtime.config.command,
 				args: runtime.config.args,
 				env: runtime.config.env,
+				inheritEnv: runtime.config.inheritEnv,
 				cwd: runtime.config.cwd ?? options.cwd,
 			},
 		};
@@ -118,6 +122,6 @@ export async function connectMcpRuntime(
 		runtime.tools = [];
 		runtime.quarantinedTools = [];
 		runtime.state = "failed";
-		runtime.error = error instanceof Error ? error.message : String(error);
+		runtime.error = mcpPublicDiagnostic(error, "connect");
 	}
 }

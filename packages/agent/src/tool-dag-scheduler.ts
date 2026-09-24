@@ -24,6 +24,8 @@
  * This module uses no platform APIs (no `process`, fs, `node:path`, or timers).
  */
 
+import { buildIndexedDagDependencies } from "./tool-dag-index.ts";
+
 import {
 	type ClaimableToolCall,
 	canonicalizeClaims,
@@ -196,25 +198,8 @@ export function assignDagLevels(entries: readonly ResolvedClaimEntry[]): number[
  * `level(i) >= level(j) + 1`, and depth follows by induction.
  */
 export function assignDagDependencies(entries: readonly ResolvedClaimEntry[]): number[][] {
-	// No edge can exist when every claim is read-only; avoid scanning every pair.
-	if (
-		entries.every(
-			({ resolution }) =>
-				resolution.kind === "claims" && resolution.claims.every((claim) => claim.access === "read"),
-		)
-	)
-		return entries.map(() => []);
-	const dependencies: number[][] = [];
-	for (let index = 0; index < entries.length; index++) {
-		const blockers: number[] = [];
-		for (let earlier = 0; earlier < index; earlier++) {
-			if (resolutionsConflict(entries[earlier].resolution, entries[index].resolution)) {
-				blockers.push(earlier);
-			}
-		}
-		dependencies.push(blockers);
-	}
-	return dependencies;
+	return buildIndexedDagDependencies(entries, (left, right) => resolutionsConflict(left.resolution, right.resolution))
+		.dependencies;
 }
 
 /**

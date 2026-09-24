@@ -75,6 +75,22 @@ describe("retryProviderRequest", () => {
 		});
 	});
 
+	it("does not dispatch when the signal was already aborted", async () => {
+		const controller = new AbortController();
+		controller.abort();
+		const request = vi.fn().mockResolvedValue("unexpected");
+		await expect(retryProviderRequest(request, { signal: controller.signal })).rejects.toMatchObject({
+			name: "AbortError",
+		});
+		expect(request).not.toHaveBeenCalled();
+	});
+
+	it("rejects an invalid retry count before the first dispatch", async () => {
+		const request = vi.fn().mockResolvedValue("unexpected");
+		await expect(retryProviderRequest(request, { maxRetries: Number.NaN })).rejects.toBeInstanceOf(RangeError);
+		expect(request).not.toHaveBeenCalled();
+	});
+
 	it("fails immediately when the server-requested delay exceeds the cap", async () => {
 		const request = vi.fn().mockRejectedValue(providerError(429, new Headers({ "retry-after": "120" })));
 		await expect(retryProviderRequest(request, { maxRetries: 3, maxRetryDelayMs: 1_000 })).rejects.toThrow(

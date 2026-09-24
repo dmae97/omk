@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { compareContextIds } from "./context-budget-order.ts";
 import type { PlannedItemV2 } from "./context-budget-v2-scoring.ts";
 import type { SelectedRepresentationV2, TierBudgetAllocationV2 } from "./context-budget-v2-types.ts";
 
@@ -25,7 +26,7 @@ export function computePlanHash(input: {
 				tokens: selected?.estimatedTokens ?? 0,
 			};
 		})
-		.sort((a, b) => a.id.localeCompare(b.id));
+		.sort((a, b) => compareContextIds(a.id, b.id));
 	const tiersCanonical = [...input.allocations]
 		.map((allocation) => [
 			allocation.tier,
@@ -35,8 +36,8 @@ export function computePlanHash(input: {
 			allocation.usedTokens,
 			allocation.hardTokens,
 		])
-		.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-	const omittedCanonical = [...input.omittedItemIds].sort();
+		.sort((a, b) => compareContextIds(String(a[0]), String(b[0])));
+	const omittedCanonical = [...input.omittedItemIds].sort(compareContextIds);
 	const canonical = {
 		policyVersion: input.policyVersion,
 		promptHash: input.promptHash ?? null,

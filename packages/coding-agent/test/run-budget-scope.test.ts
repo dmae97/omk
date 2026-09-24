@@ -32,6 +32,28 @@ describe("run scope admission", () => {
 		},
 	);
 
+	it("owns a default unbounded stream until terminal metadata rather than allowing a second prompt", async () => {
+		const faux = registerFauxProvider();
+		const stream = createAssistantMessageEventStream();
+		const agent = new Agent({ streamFn: () => stream });
+		const runtime = new SessionRunBudget(agent, lifecycle());
+		const next = vi.fn(async () => {});
+		try {
+			await runtime.execute(undefined, async () => {
+				await agent.streamFn(faux.getModel(), { messages: [] });
+			});
+			expect(runtime.snapshot()).toMatchObject({ closed: true, activeRequests: 1 });
+			await expect(runtime.execute(undefined, next)).rejects.toThrow(/already processing/i);
+			expect(next).not.toHaveBeenCalled();
+		} finally {
+			stream.end(fauxAssistantMessage("terminal"));
+			await stream.result();
+			faux.unregister();
+		}
+		await runtime.execute(undefined, next);
+		expect(next).toHaveBeenCalledTimes(1);
+	});
+
 	it("keeps an outstanding stream owned after scope closure until real terminal metadata arrives", async () => {
 		const faux = registerFauxProvider();
 		const stream = createAssistantMessageEventStream();

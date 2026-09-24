@@ -66,7 +66,7 @@ boundary, which this change does not add.
 
 ## Deferred claim freshness and cancelled memo requests (2026-09-22)
 
-The live path is `agentLoop` → `schedulePlannedDagLevels` → `runDagFrontier`.
+The live path is `agentLoop` → `schedulePlannedDagFrontier` → `runDagFrontier`.
 A deferred call retains its prepared arguments and one-time authorization, and
 admission always re-resolves its claims: a cached resolution that survived the
 wait could execute a stale scope (A holds X, B defers on X, C starts on Z, and
@@ -91,9 +91,10 @@ returns no plan and does not promote cache recency.
 `assignDagDependencies` also returns an empty-edge graph directly when every
 resolution is read-only (including empty claims). In the 128-entry regression,
 resolved-entry visits fell from 16,256 to 128 with the same dependency graph.
-Mixed writes and exclusive barriers still use the existing conflict scan. This
-is an operation-count result for that fixture, not measured end-to-end latency,
-model quality, CI certification or a release claim.
+That was the Phase 1 read-aware scan; the Phase 2 candidate index below now
+supersedes its live caller for mixed batches while retaining the same final
+conflict predicate. This is an operation-count result for the Phase 1 fixture,
+not measured end-to-end latency, model quality, CI certification or a release claim.
 
 Coverage: `tool-dag-deferred-refresh.test.ts`,
 `tool-dag-deferred-resolver-budget.test.ts`,
@@ -102,6 +103,39 @@ Coverage: `tool-dag-deferred-refresh.test.ts`,
 The separate `planAtomicCommits` export remains a pure public API,
 not a live automatic commit coordinator. ECRAF and automatic shards
 are not activated by these changes.
+
+## Indexed dependency candidates (2026-09-24 working tree)
+
+`assignDagDependencies` now asks `buildIndexedDagDependencies()` for possible
+predecessors, then applies the existing `resolutionsConflict` predicate to every
+candidate. A POSIX path trie, inode map and kind/key map narrow comparisons;
+ambiguous paths use broad buckets. On index membership exhaustion it discards
+the partial graph and recomputes from the original pairwise oracle. The all-read
+fast path and source-directed edges remain. The earlier read-aware helper stays
+in the working tree, but the indexed caller replaces it. Seeded in-repository
+parity tests use the real claim predicate. The ZIP's 4,096 independent-writer
+fixture reported 8,386,560 to 0 predicate calls; this is not whole-loop p95 or
+proof of speed on a dense graph. ECRAF remains outside the live frontier.
+
+## Frontier-only claim memo (2026-09-25 working tree)
+
+The live ready frontier previously computed compatibility barrier levels and an
+indexed dependency graph for the same resolved claims, then flattened the
+levels before sorting pending work back into source order. It now memoizes
+claim entries in a separate 64-entry cache and builds only the dependency
+graph. The public `scheduleDagLevels()` and `scheduleDagLevelsMemo()` still
+produce identical compatibility levels with their own cache. Both paths
+preserve early cancellation, dynamic-claim cache bypass and nested claim
+isolation; the live frontier still re-resolves final post-hook claims and owns
+all started work. A synthetic independent-path run on this host confirmed
+fewer schedule-function CPU milliseconds; that is not an end-to-end latency,
+provider-quality or release claim. Source-ordered result cleanup also uses a
+single finalized-call ID map instead of rescanning the outcome array for each
+tool result. The transcript gate already rejects duplicate IDs, and the map
+retains source-order message emission and one `commitTerminal` callback per
+result. Coverage: `tool-dag-frontier-memo.test.ts`,
+`tool-dag-hook-replan.test.ts`, `tool-terminal-index.test.ts` and
+`tool-dag-ready-frontier.test.ts`.
 
 ## Reasoning router resolver contract (2026-09-19 audit F05/F06)
 
@@ -125,9 +159,9 @@ logical request/concurrency limits across the active prompt's main stream,
 retries, continuations, and first-party summaries using that stream. Exhaustion
 is a non-retryable `budget_exhausted` termination; snapshots keep outstanding
 streams until terminal metadata arrives. No request/time budget is imposed by
-default. Preflight is now owned even for unbounded prompts; unresolved streams
-block a later prompt instead of being discarded when their budget scope closes.
-See [Shared run budgets](sdk.md#shared-run-budgets-sdk-opt-in) for units, zero
+default. Even unbounded prompts now own their stream reservations until terminal
+metadata; unresolved streams block a later prompt after their scope closes.
+See [Shared run budgets](sdk.md#shared-run-budgets-sdk-limits-opt-in-stream-ownership-always-active) for units, zero
 semantics, cancellation, and uncovered paths. This is not billing enforcement,
 a persisted budget, or a hard process-termination deadline.
 
@@ -264,11 +298,20 @@ The planner:
 Breadth is settled before quality: step 7 runs before step 8, so an exchange
 that admits another item cannot be undone by a promotion.
 
+When V2 is enabled, system-prompt assembly now refuses a resource plan whose
+required hard items exceed the tokens available to resources, before sending
+the prompt to a provider. It raises `context_budget.hard_pin_over_capacity`
+with counts, not source text. Optional items that do not fit still produce the
+existing omission diagnostics. This is a hard-resource admission guard, not a
+proof that provider-side total prompt tokens, including the base prompt and
+metadata, fit the model's actual context window.
+
 Density divides effective score by the cheapest non-omit representation
 (`admissibleTokens`), not by full-text size. This avoids penalizing an item that
-can be represented by a small evidence pointer. Stable item IDs and explicit
-selection policy `sel-3` make tie-breaking and plan-cache invalidation
-deterministic.
+can be represented by a small evidence pointer. Stable item IDs and selection
+policy `sel-4-codeunit` keep ranking, exchange, selected-item output, and
+cache/plan hashes independent of host locale. The policy token invalidates older
+locale-dependent plan-cache entries without renaming the public optimizer.
 
 ### Representation cost accounting (2026-09-19 audit F01/F03)
 
@@ -337,6 +380,18 @@ tokenizer from the counter's own `adapterId`
 `countText("")` short-circuits to the fallback estimator); an explicit
 `tokenizerId` input still wins. Coverage:
 `packages/coding-agent/test/context-budget-cache-tokenizer-binding.test.ts`.
+
+The 2026-09-24 working-tree tokenizer boundary also recognizes camelCase and
+snake_case model factories, releases factory-created encoders after counting,
+and treats generic or fallback encodings as estimates rather than proof of the
+model's exact token count. The registry rejects non-finite or unsafe plugin
+counts, avoids copying plugin exception text into fallback notes, and uses
+code-unit ordering for equal-priority adapter IDs. Its ID is
+`token-counter-registry-shape-v2`, so default tokenizer-bound cache keys rotate;
+a caller that pins `tokenizerId` must rotate its own namespace. A fake module
+covers the documented WASM API shape, not actual WASM heap usage or provider
+billing tokens. Coverage: `context-budget-token-counter.test.ts` and
+`omk-phase2-runtime-contracts.test.ts`.
 
 Evidence:
 

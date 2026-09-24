@@ -16,6 +16,8 @@
  * the caller launches.
  */
 
+import { ownResourceNumber } from "./tool-dag-own-number.ts";
+
 export interface EcrafCandidate {
 	/** Source order of the call within the batch — the stable tiebreak. */
 	readonly sourceIndex: number;
@@ -153,7 +155,11 @@ function assertInputContract(options: EcrafAdmissionsOptions): void {
 		}
 		for (const [position, node] of candidates.entries()) {
 			for (const [name, demand] of Object.entries(node.resources)) {
-				if (demand > 0 && capacities[name] !== 0 && referenceScales[name] === undefined) {
+				if (
+					demand > 0 &&
+					ownResourceNumber(capacities, name) !== 0 &&
+					ownResourceNumber(referenceScales, name) === undefined
+				) {
 					throw new RangeError(
 						`referenceScales.${name} is required for a nonzero ${name} demand (candidates[${position}])`,
 					);
@@ -166,8 +172,8 @@ function assertInputContract(options: EcrafAdmissionsOptions): void {
 function resourceCost(node: EcrafCandidate, weights: Readonly<Record<string, number>>): number {
 	let cost = 0;
 	for (const name of Object.keys(node.resources)) {
-		const weight = weights[name] ?? 1;
-		cost += weight * (node.resources[name] ?? 0);
+		const weight = ownResourceNumber(weights, name) ?? 1;
+		cost += weight * (ownResourceNumber(node.resources, name) ?? 0);
 	}
 	return cost;
 }
@@ -186,7 +192,11 @@ function density(
 			? resourceCost(node, weights)
 			: [...Object.entries(node.resources)].reduce(
 					(cost, [name, demand]) =>
-						demand === 0 ? cost : cost + (weights[name] ?? 1) * (demand / referenceScales[name]),
+						demand === 0
+							? cost
+							: cost +
+								(ownResourceNumber(weights, name) ?? 1) *
+									(demand / (ownResourceNumber(referenceScales, name) ?? Number.NaN)),
 					0,
 				);
 	const denominator = referenceScales === undefined ? epsilon + raw : epsilon + slotCost + raw;
@@ -203,9 +213,9 @@ function fits(
 	normalized: boolean,
 ): boolean {
 	for (const name of Object.keys(node.resources)) {
-		const capacity = capacities[name];
+		const capacity = ownResourceNumber(capacities, name);
 		if (capacity === undefined) continue; // unbounded resource
-		const needed = node.resources[name] ?? 0;
+		const needed = ownResourceNumber(node.resources, name) ?? 0;
 		if (normalized && capacity === 0 && needed === 0) continue;
 		const running = used.get(name) ?? 0;
 		if (running + needed > capacity) return false;
@@ -215,7 +225,7 @@ function fits(
 
 function reserve(node: EcrafCandidate, used: Map<string, number>): void {
 	for (const name of Object.keys(node.resources)) {
-		const total = (used.get(name) ?? 0) + (node.resources[name] ?? 0);
+		const total = (used.get(name) ?? 0) + (ownResourceNumber(node.resources, name) ?? 0);
 		assertFiniteNonNegative(total, `candidate ${node.sourceIndex} reserved usage.${name}`);
 		used.set(name, total);
 	}
@@ -264,7 +274,9 @@ export function planEcrafAdmissions(options: EcrafAdmissionsOptions): EcrafAdmis
 	const infeasible = new Set(
 		version === "normalized-v2"
 			? candidates.filter((node) =>
-					Object.entries(node.resources).some(([name, demand]) => capacities[name] === 0 && demand > 0),
+					Object.entries(node.resources).some(
+						([name, demand]) => ownResourceNumber(capacities, name) === 0 && demand > 0,
+					),
 				)
 			: [],
 	);

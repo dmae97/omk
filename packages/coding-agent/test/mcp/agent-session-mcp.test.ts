@@ -86,6 +86,24 @@ describe("AgentSession MCP integration", () => {
 		expect(names).toContain("bash");
 	});
 
+	it("exposes only a bounded version core from a server-controlled handshake", async () => {
+		const s = await newSession();
+		const status = await s.attachMcpServers({
+			servers: [
+				{
+					name: "demo",
+					command: process.execPath,
+					args: [FAKE_SERVER],
+					env: { FAKE_MCP_MODE: "ok", FAKE_MCP_VERSION: "v1.2.3+fixture-secret" },
+					inheritEnv: false,
+				},
+			],
+		});
+		expect(status).toMatchObject([{ name: "demo", state: "ready", serverVersion: "1.2.3" }]);
+		expect(s.mcpServerStatus()[0].serverVersion).toBe("1.2.3");
+		expect(JSON.stringify(status)).not.toContain("fixture-secret");
+	});
+
 	it("executes a registered MCP tool through the session registry", async () => {
 		writeMcpConfig({ demo: stdioServer("ok") });
 		const s = await newSession();

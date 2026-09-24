@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-
+import { compareContextIds } from "./context-budget-order.ts";
 import type {
 	ContextBudgetTokenConfidence,
 	ContextBudgetTokenCountMethod,
@@ -9,21 +9,9 @@ import type {
 	TokenCounterRegistryOptions,
 	TokenCountResult,
 } from "./context-budget-token-counter-types.ts";
+import { countFromTokenizerPackages, validateTokenCountResult } from "./tokenizer-module-adapter.ts";
 
 export type * from "./context-budget-token-counter-types.ts";
-
-interface EncodeCapable {
-	encode(input: string): readonly unknown[];
-}
-
-interface JsTiktokenModule {
-	encodingForModel?: (modelId: string) => EncodeCapable;
-	getEncoding?: (encoding: string) => EncodeCapable;
-}
-
-interface GenericEncodeModule {
-	encode?: (input: string) => readonly unknown[];
-}
 
 const requireModule = createRequire(import.meta.url);
 
@@ -134,16 +122,7 @@ export function createOpenAiJsTokenCounter(
 			return isOpenAiStyleModel(modelId);
 		},
 		countText(input, modelId) {
-			for (const specifier of packageNames) {
-				if (loader.resolve(specifier) === undefined) {
-					continue;
-				}
-				const result = countWithOptionalTokenizerModule(loader.load(specifier), specifier, input, modelId);
-				if (result !== undefined) {
-					return result;
-				}
-			}
-			throw new Error("no supported OpenAI JS tokenizer module shape found");
+			return countFromTokenizerPackages(loader, packageNames, input, modelId, selectOpenAiEncoding(modelId));
 		},
 	};
 }
@@ -162,16 +141,7 @@ export function createOpenAiWasmTokenCounter(
 			return isOpenAiStyleModel(modelId);
 		},
 		countText(input, modelId) {
-			for (const specifier of packageNames) {
-				if (loader.resolve(specifier) === undefined) {
-					continue;
-				}
-				const result = countWithOptionalTokenizerModule(loader.load(specifier), specifier, input, modelId);
-				if (result !== undefined) {
-					return result;
-				}
-			}
-			throw new Error("no supported OpenAI WASM tokenizer module shape found");
+			return countFromTokenizerPackages(loader, packageNames, input, modelId, selectOpenAiEncoding(modelId));
 		},
 	};
 }
@@ -194,73 +164,33 @@ export function createTokenCounterForMode(
 
 export function createTokenCounterRegistry(options: TokenCounterRegistryOptions = {}): TokenCounterAdapter {
 	const fallback = options.fallback ?? createFallbackTokenCounter();
-	const adapters = [...(options.adapters ?? [])].sort((a, b) => b.priority - a.priority || a.id.localeCompare(b.id));
+	const adapters = [...(options.adapters ?? [])].sort(
+		(a, b) => b.priority - a.priority || compareContextIds(a.id, b.id),
+	);
 	return {
-		id: "token-counter-registry",
+		id: "token-counter-registry-shape-v2",
 		priority: 100,
 		isAvailable: () => true,
 		supports: () => true,
 		countText(input, modelId) {
 			const notes: string[] = [];
 			for (const adapter of adapters) {
-				if (!adapter.supports(modelId)) {
-					continue;
-				}
 				try {
+					if (!adapter.supports(modelId)) continue;
 					if (!adapter.isAvailable()) {
 						notes.push(`${adapter.id}:unavailable`);
 						continue;
 					}
-					return adapter.countText(input, modelId);
-				} catch (error) {
-					const message = error instanceof Error ? error.message : "unknown adapter failure";
-					notes.push(`${adapter.id}:failed:${message}`);
+					return validateTokenCountResult(adapter.countText(input, modelId), modelId);
+				} catch {
+					// Plugin errors can contain credentials; keep only the stable adapter identifier.
+					notes.push(`${adapter.id}:failed`);
 				}
 			}
-			const result = fallback.countText(input, modelId);
+			const result = validateTokenCountResult(fallback.countText(input, modelId), modelId);
 			return { ...result, notes: [...notes, ...result.notes] };
 		},
 	};
-}
-
-function countWithOptionalTokenizerModule(
-	moduleValue: unknown,
-	specifier: string,
-	input: string,
-	modelId: string,
-): TokenCountResult | undefined {
-	const moduleObject = unwrapDefaultModule(moduleValue);
-	const jsTiktoken = moduleObject as JsTiktokenModule;
-	if (typeof jsTiktoken.encodingForModel === "function") {
-		const encoding = jsTiktoken.encodingForModel(modelId);
-		return countWithEncoding(encoding, specifier, input, modelId, "model-encoding");
-	}
-	if (typeof jsTiktoken.getEncoding === "function") {
-		const encoding = jsTiktoken.getEncoding(selectOpenAiEncoding(modelId));
-		return countWithEncoding(encoding, specifier, input, modelId, "fallback-encoding");
-	}
-	const generic = moduleObject as GenericEncodeModule;
-	if (typeof generic.encode === "function") {
-		return createTokenResult(generic.encode(input).length, "exact", "medium", specifier, modelId, ["generic-encode"]);
-	}
-	return undefined;
-}
-
-function countWithEncoding(
-	encoding: EncodeCapable,
-	adapterId: string,
-	input: string,
-	modelId: string,
-	note: string,
-): TokenCountResult {
-	return createTokenResult(encoding.encode(input).length, "exact", "high", adapterId, modelId, [note]);
-}
-
-function unwrapDefaultModule(moduleValue: unknown): unknown {
-	if (moduleValue && typeof moduleValue === "object" && "default" in moduleValue) {
-		return (moduleValue as { readonly default: unknown }).default;
-	}
-	return moduleValue;
 }
 
 function createTokenResult(

@@ -50,8 +50,9 @@ export class McpStdioTransport {
 	private stderrTail = "";
 	private exited = false;
 	private killTimer: ReturnType<typeof setTimeout> | undefined;
-	/** Framed bytes written but not yet flushed to the child's stdin. */
+	/** Conservative estimate of frames retained after a backpressured write. */
 	private pendingWriteBytes = 0;
+	private readonly maxPendingWriteBytes: number;
 	private waitingForDrain = false;
 	private readonly options: StdioTransportOptions;
 	private readonly handlers: StdioTransportHandlers;
@@ -60,6 +61,9 @@ export class McpStdioTransport {
 		this.options = options;
 		this.handlers = handlers;
 		this.killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
+		const cap = options.maxPendingWriteBytes ?? DEFAULT_MAX_PENDING_WRITE_BYTES;
+		if (!Number.isSafeInteger(cap) || cap < 0) throw new RangeError("mcp.invalid_pending_write_cap");
+		this.maxPendingWriteBytes = cap;
 	}
 
 	/** Bounded tail of the server's stderr. Empty when the server has been quiet. */
@@ -119,8 +123,12 @@ export class McpStdioTransport {
 		if (!child || this.exited || !child.stdin.writable) return false;
 		const frame = encodeMessage(message);
 		const frameBytes = Buffer.byteLength(frame, "utf8");
-		const cap = this.options.maxPendingWriteBytes ?? DEFAULT_MAX_PENDING_WRITE_BYTES;
-		if (this.pendingWriteBytes + frameBytes > cap) return false;
+		// write() may return true while bytes remain queued; the old counter only
+		// covered false returns. Both signals describe the same queue, so use the
+		// larger observation rather than summing and double-counting frames.
+		const queued = child.stdin.writableLength;
+		if (!Number.isSafeInteger(queued) || queued < 0) return false;
+		if (Math.max(this.pendingWriteBytes, queued) > this.maxPendingWriteBytes - frameBytes) return false;
 		try {
 			const flushed = child.stdin.write(frame);
 			if (!flushed) {

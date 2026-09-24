@@ -8,7 +8,7 @@ import { McpManager } from "../../src/core/mcp/manager.ts";
  * fake-server.mjs.
  */
 
-type FakeBehavior = { pingError?: Error; connectError?: Error };
+type FakeBehavior = { pingError?: Error; connectError?: Error; serverVersion?: string };
 
 function fakeClient(behavior: FakeBehavior): McpClient {
 	return {
@@ -21,7 +21,7 @@ function fakeClient(behavior: FakeBehavior): McpClient {
 			if (behavior.pingError) throw behavior.pingError;
 		},
 		close: () => {},
-		serverInfo: { name: "fake", version: "1.0.0" },
+		serverInfo: { name: "fake", version: behavior.serverVersion ?? "1.0.0" },
 	} as unknown as McpClient;
 }
 
@@ -44,6 +44,48 @@ function makeManager(
 }
 
 describe("McpManager.checkHealth", () => {
+	it("does not publish untrusted version suffixes or free-form server metadata", async () => {
+		const { manager } = makeManager({ alpha: { serverVersion: "v1.2.3+fixture-secret" } });
+		try {
+			expect((await manager.connect("alpha")).serverVersion).toBe("1.2.3");
+			expect(manager.status()[0].serverVersion).toBe("1.2.3");
+		} finally {
+			manager.close();
+		}
+		const malformed = makeManager({ alpha: { serverVersion: "fixture-secret" } }).manager;
+		try {
+			expect((await malformed.connect("alpha")).serverVersion).toBeUndefined();
+		} finally {
+			malformed.close();
+		}
+	});
+
+	it("keeps status usable when a custom client's serverInfo getter throws", async () => {
+		const manager = new McpManager({
+			servers: [{ name: "alpha", command: "fake" }],
+			createClient: () =>
+				({
+					...fakeClient({}),
+					get serverInfo() {
+						throw new Error("fixture-secret");
+					},
+				}) as unknown as McpClient,
+		});
+		try {
+			await expect(manager.connect("alpha")).resolves.toMatchObject({ state: "ready", serverVersion: undefined });
+			expect(manager.status()[0].serverVersion).toBeUndefined();
+		} finally {
+			manager.close();
+		}
+	});
+	it("does not publish a server-supplied secret in connect or health errors", async () => {
+		const connect = makeManager({ broken: { connectError: new Error("fixture-secret") } }).manager;
+		await connect.connect("broken");
+		expect(connect.status()[0].error).not.toContain("fixture-secret");
+		const health = makeManager({ broken: { pingError: new Error("fixture-secret") } }).manager;
+		await health.connect("broken");
+		expect((await health.checkHealth())[0].error).not.toContain("fixture-secret");
+	});
 	it("keeps a ready server ready when the ping succeeds", async () => {
 		const { manager } = makeManager({ alpha: {} });
 		await manager.connect("alpha");
@@ -59,7 +101,7 @@ describe("McpManager.checkHealth", () => {
 		const alpha = status.find((s) => s.name === "alpha");
 		const beta = status.find((s) => s.name === "beta");
 		expect(alpha?.state).toBe("failed");
-		expect(alpha?.error).toContain("health check failed: process exited");
+		expect(alpha?.error).toBe("mcp.health_failed (Error)");
 		expect(alpha?.toolCount).toBe(0);
 		expect(beta?.state).toBe("ready");
 	});
@@ -77,7 +119,7 @@ describe("McpManager.checkHealth", () => {
 		expect(created).toEqual(["alpha"]);
 		const status = await manager.checkHealth();
 		expect(status[0].state).toBe("failed");
-		expect(status[0].error).toBe("spawn blew up");
+		expect(status[0].error).toBe("mcp.connect_failed (Error)");
 		expect(created).toEqual(["alpha"]); // no re-attempt
 	});
 

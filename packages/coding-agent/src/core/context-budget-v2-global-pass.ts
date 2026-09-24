@@ -5,6 +5,7 @@ import {
 	isRepresentationEligible,
 	scoreRepresentationPreferenceV2,
 } from "./context-budget-headroom.ts";
+import { compareContextIds } from "./context-budget-order.ts";
 import { writeRepresentationCacheV2 } from "./context-budget-v2-cache.ts";
 import type { PlannedItemV2 } from "./context-budget-v2-scoring.ts";
 import { type OptionalSelectionState, selectOptionalItem, toSelected } from "./context-budget-v2-selection.ts";
@@ -120,7 +121,7 @@ function planExchange(
 			scoreRepresentationPreferenceV2(cheap, donor.item, state.qualityPolicy, false);
 		donors.push({ donor, current, cheap, freed, lossPerToken: loss / freed });
 	}
-	donors.sort((a, b) => a.lossPerToken - b.lossPerToken || a.donor.item.id.localeCompare(b.donor.item.id));
+	donors.sort((a, b) => a.lossPerToken - b.lossPerToken || compareContextIds(a.donor.item.id, b.donor.item.id));
 
 	const swaps: Array<PlannedExchange["swaps"][number]> = [];
 	let freed = 0;

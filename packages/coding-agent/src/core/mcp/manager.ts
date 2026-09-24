@@ -8,6 +8,7 @@ import {
 	type McpServerStatus,
 	type ServerRuntime,
 } from "./manager-runtime.ts";
+import { mcpPublicDiagnostic, publicMcpServerVersion } from "./public-diagnostic.ts";
 import type { McpToolDetails } from "./tools.ts";
 
 export type { McpManagerOptions, McpServerConfig, McpServerState, McpServerStatus } from "./manager-runtime.ts";
@@ -38,7 +39,7 @@ export class McpManager {
 			state: runtime.state,
 			toolCount: runtime.tools.length,
 			error: runtime.error,
-			serverVersion: runtime.client?.serverInfo.version,
+			serverVersion: publicMcpServerVersion(runtime.client),
 			...(runtime.quarantinedTools.length > 0 ? { quarantinedTools: runtime.quarantinedTools } : {}),
 		}));
 	}
@@ -68,7 +69,7 @@ export class McpManager {
 			state: runtime.state,
 			toolCount: runtime.tools.length,
 			error: runtime.error,
-			serverVersion: runtime.client?.serverInfo.version,
+			serverVersion: publicMcpServerVersion(runtime.client),
 			...(runtime.quarantinedTools.length > 0 ? { quarantinedTools: runtime.quarantinedTools } : {}),
 		};
 	}
@@ -124,7 +125,7 @@ export class McpManager {
 			runtime.tools = [];
 			runtime.quarantinedTools = [];
 			runtime.state = "failed";
-			runtime.error = `health check failed: ${error instanceof Error ? error.message : String(error)}`;
+			runtime.error = mcpPublicDiagnostic(error, "health");
 		}
 	}
 

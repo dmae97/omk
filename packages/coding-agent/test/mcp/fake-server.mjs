@@ -64,7 +64,7 @@ function handle(request) {
 			result: {
 				protocolVersion: "2025-06-18",
 				capabilities: { tools: {} },
-				serverInfo: { name: "fake-mcp", version: "9.9.9" },
+				serverInfo: { name: "fake-mcp", version: process.env.FAKE_MCP_VERSION ?? "9.9.9" },
 			},
 		});
 		return;

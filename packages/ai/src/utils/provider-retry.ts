@@ -1,4 +1,8 @@
-const DEFAULT_MAX_RETRY_DELAY_MS = 60_000;
+import { computeProviderRetryDelay, validateProviderRetryOptions } from "./provider-retry-delay.ts";
+import {
+	sleepProviderRetry as abortableSleep,
+	createProviderAbortError as createAbortError,
+} from "./provider-retry-sleep.ts";
 
 interface ProviderRetryOptions {
 	maxRetries?: number;
@@ -34,64 +38,15 @@ function isRetryableProviderError(error: ProviderError): boolean {
 	);
 }
 
-function validateServerRetryDelayMs(
-	delayMs: number,
-	maxRetryDelayMs: number | undefined,
-	providerErrorMessage: string,
-): number {
-	const maxDelayMs = maxRetryDelayMs ?? DEFAULT_MAX_RETRY_DELAY_MS;
-	if (maxDelayMs > 0 && delayMs > maxDelayMs) {
-		throw new Error(
-			`Server requested ${Math.ceil(delayMs / 1000)}s retry delay (max: ${Math.ceil(maxDelayMs / 1000)}s). ${providerErrorMessage}`,
-		);
-	}
-	return delayMs;
-}
-
 function getRetryDelayMs(error: ProviderError, retryIndex: number, maxRetryDelayMs: number | undefined): number {
-	const retryAfterMs = error.headers?.get("retry-after-ms");
-	if (retryAfterMs) {
-		const value = Number.parseFloat(retryAfterMs);
-		if (!Number.isNaN(value)) return validateServerRetryDelayMs(value, maxRetryDelayMs, error.message);
-	}
-
-	const retryAfter = error.headers?.get("retry-after");
-	if (retryAfter) {
-		const seconds = Number.parseFloat(retryAfter);
-		const delayMs = Number.isNaN(seconds) ? Date.parse(retryAfter) - Date.now() : seconds * 1000;
-		return validateServerRetryDelayMs(delayMs, maxRetryDelayMs, error.message);
-	}
-
-	const exponentialDelay = Math.min(0.5 * 2 ** retryIndex, 8) * 1000;
-	return exponentialDelay * (1 - Math.random() * 0.25);
-}
-
-function createAbortError(): Error {
-	const error = new Error("Request aborted");
-	error.name = "AbortError";
-	return error;
-}
-
-function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
-	return new Promise((resolve, reject) => {
-		if (signal?.aborted) {
-			reject(createAbortError());
-			return;
-		}
-
-		const onAbort = () => {
-			clearTimeout(timeout);
-			reject(createAbortError());
-		};
-		const timeout = setTimeout(
-			() => {
-				signal?.removeEventListener("abort", onAbort);
-				resolve();
-			},
-			Math.max(0, ms),
-		);
-		signal?.addEventListener("abort", onAbort, { once: true });
-	});
+	return computeProviderRetryDelay(
+		error.headers,
+		retryIndex,
+		maxRetryDelayMs,
+		error.message,
+		Date.now(),
+		Math.random(),
+	);
 }
 
 /**
@@ -107,9 +62,11 @@ export async function retryProviderRequest<T>(
 	options: ProviderRetryOptions = {},
 ): Promise<T> {
 	const maxRetries = options.maxRetries ?? 0;
+	validateProviderRetryOptions(maxRetries, options.maxRetryDelayMs);
 	let retriesRemaining = maxRetries;
 
 	for (;;) {
+		if (options.signal?.aborted) throw createAbortError();
 		try {
 			// Each retry is a fresh SDK request, so X-Stainless-Retry-Count remains zero.
 			return await request();

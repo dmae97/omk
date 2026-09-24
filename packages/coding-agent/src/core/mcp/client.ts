@@ -12,6 +12,8 @@
  * - Calling before a completed handshake throws instead of guessing.
  */
 
+import { validateMcpTimeoutMs } from "./deadline-policy.ts";
+import { parseMcpInitializeResult } from "./initialize-contract.ts";
 import {
 	formatJsonRpcError,
 	isJsonRpcResponse,
@@ -19,6 +21,7 @@ import {
 	type JsonRpcMessage,
 	type JsonRpcResponse,
 } from "./protocol.ts";
+import { validateMcpCallResult } from "./result-contract.ts";
 import { McpStdioTransport, type StdioTransportOptions } from "./stdio-transport.ts";
 
 /** Protocol revision this client implements. */
@@ -84,6 +87,7 @@ interface PendingRequest {
 	readonly reject: (error: Error) => void;
 	readonly timer: ReturnType<typeof setTimeout>;
 	readonly method: string;
+	readonly deadline: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -105,8 +109,8 @@ export class McpClient {
 
 	constructor(options: McpClientOptions) {
 		this.options = options;
-		this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-		this.handshakeTimeoutMs = options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
+		this.requestTimeoutMs = validateMcpTimeoutMs(options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+		this.handshakeTimeoutMs = validateMcpTimeoutMs(options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS);
 		this.transport = new McpStdioTransport(options.transport, {
 			onMessage: (message) => this.handleMessage(message),
 			onDecodeError: (reason) => {
@@ -147,31 +151,11 @@ export class McpClient {
 			},
 			this.handshakeTimeoutMs,
 		);
-		this.assertInitializeResult(result);
+		this.info = parseMcpInitializeResult(result, this.options.name, SUPPORTED_PROTOCOL_VERSIONS);
+		if (!this.transport.send({ jsonrpc: "2.0", method: "notifications/initialized" })) {
+			throw new Error("mcp.initialized_notification_not_sent");
+		}
 		this.initialized = true;
-		this.transport.send({ jsonrpc: "2.0", method: "notifications/initialized" });
-	}
-
-	// The handshake is a negotiation, not a formality: reject a response that
-	// does not carry a protocol version this client actually supports.
-	private assertInitializeResult(result: unknown): void {
-		if (!isRecord(result) || typeof result.protocolVersion !== "string") {
-			throw new Error(
-				`MCP server "${this.options.name}" returned an invalid initialize result (missing protocolVersion)`,
-			);
-		}
-		if (!SUPPORTED_PROTOCOL_VERSIONS.includes(result.protocolVersion)) {
-			throw new Error(
-				`MCP server "${this.options.name}" requested unsupported protocol version "${result.protocolVersion}"`,
-			);
-		}
-		if (isRecord(result.serverInfo)) {
-			const { name, version } = result.serverInfo;
-			this.info = {
-				name: typeof name === "string" ? name : undefined,
-				version: typeof version === "string" ? version : undefined,
-			};
-		}
 	}
 
 	/**
@@ -197,19 +181,20 @@ export class McpClient {
 		const tools: McpToolSchema[] = [];
 		const seenNames = new Set<string>();
 		const seenCursors = new Set<string>();
-		const deadline = Date.now() + LIST_TOOLS_TIMEOUT_MS;
+		const deadline = performance.now() + LIST_TOOLS_TIMEOUT_MS;
 		let cursor: string | undefined;
 		const fail = (what: string): never => {
 			throw new Error(`MCP server "${this.options.name}" ${what}`);
 		};
 		for (let page = 0; page < MAX_LIST_PAGES; page++) {
-			const remainingMs = deadline - Date.now();
+			const remainingMs = deadline - performance.now();
 			if (remainingMs <= 0) fail(`tools/list exceeded ${LIST_TOOLS_TIMEOUT_MS}ms`);
 			const result = await this.request(
 				"tools/list",
 				cursor ? { cursor } : {},
-				Math.min(remainingMs, this.requestTimeoutMs),
+				Math.min(Math.ceil(remainingMs), this.requestTimeoutMs),
 			);
+			if (performance.now() >= deadline) fail(`tools/list exceeded ${LIST_TOOLS_TIMEOUT_MS}ms`);
 			const record = isRecord(result) ? result : fail("returned an invalid tools/list result");
 			const rawTools = Array.isArray(record.tools) ? record.tools : fail("returned an invalid tools/list result");
 			for (const raw of rawTools) {
@@ -242,17 +227,7 @@ export class McpClient {
 	async callTool(name: string, args: unknown, timeoutMs?: number): Promise<McpToolCallResult> {
 		this.assertReady();
 		const result = await this.request("tools/call", { name, arguments: args ?? {} }, timeoutMs);
-		// A non-object result is a protocol violation, not an empty success —
-		// normalizing it would hide a broken server from the caller.
-		if (!isRecord(result)) {
-			throw new Error(`MCP server "${this.options.name}" returned an invalid tools/call result`);
-		}
-		const content = Array.isArray(result.content) ? (result.content as McpContentBlock[]) : [];
-		return {
-			content,
-			isError: result.isError === true,
-			structuredContent: result.structuredContent,
-		};
+		return validateMcpCallResult(result);
 	}
 
 	/** Terminate the server and reject anything still in flight. */
@@ -282,18 +257,25 @@ export class McpClient {
 			);
 		}
 		const id = this.nextId++;
-		const effectiveTimeout = timeoutMs ?? this.requestTimeoutMs;
+		const effectiveTimeout = validateMcpTimeoutMs(timeoutMs ?? this.requestTimeoutMs);
+		const deadline = performance.now() + effectiveTimeout;
 		return new Promise<unknown>((resolve, reject) => {
 			const timer = setTimeout(() => {
 				this.pending.delete(id);
 				reject(new Error(`MCP server "${this.options.name}" timed out after ${effectiveTimeout}ms on ${method}`));
 			}, effectiveTimeout);
 			timer.unref?.();
-			this.pending.set(id, { resolve, reject, timer, method });
-			if (!this.transport.send({ jsonrpc: "2.0", id, method, params })) {
+			this.pending.set(id, { resolve, reject, timer, method, deadline });
+			try {
+				if (effectiveTimeout === 0) throw new Error("mcp.request_deadline_exhausted");
+				if (!this.transport.send({ jsonrpc: "2.0", id, method, params })) {
+					throw new Error(`MCP server "${this.options.name}" is not writable (${method})`);
+				}
+			} catch {
+				// Serialization can throw before the transport's write try/catch.
 				this.pending.delete(id);
 				clearTimeout(timer);
-				reject(new Error(`MCP server "${this.options.name}" is not writable (${method})`));
+				reject(new Error("mcp.request_not_sent"));
 			}
 		});
 	}
@@ -305,6 +287,10 @@ export class McpClient {
 		if (!pending) return;
 		this.pending.delete(response.id);
 		clearTimeout(pending.timer);
+		if (performance.now() >= pending.deadline) {
+			pending.reject(new Error(`MCP response arrived after deadline (${pending.method})`));
+			return;
+		}
 		if (response.error) {
 			pending.reject(new Error(`MCP server "${this.options.name}": ${formatJsonRpcError(response.error)}`));
 			return;

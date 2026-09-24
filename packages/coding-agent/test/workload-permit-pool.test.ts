@@ -106,6 +106,24 @@ describe("WorkloadPermitPool — §10.3 rules", () => {
 		active.release();
 	});
 
+	it("does not grant a waiter whose deadline passed before the timer ran", async () => {
+		const pool = new WorkloadPermitPool({ capacity: 1 });
+		const holder = await pool.acquire(request());
+		const waiting = pool.acquire(request({ timeoutMs: 1 })).then(
+			(permit) => {
+				permit.release();
+				return "granted";
+			},
+			(error: WorkloadPermitError) => error.code,
+		);
+		const start = performance.now();
+		while (performance.now() - start < 12) {
+			/* Timer callback cannot run during this turn. */
+		}
+		holder.release();
+		expect(await waiting).toBe("timeout");
+	});
+
 	it("treats double release as a diagnosable no-op (§10.3 exactly-once)", async () => {
 		const pool = new WorkloadPermitPool({ capacity: 2 });
 		const permit = await pool.acquire(request());

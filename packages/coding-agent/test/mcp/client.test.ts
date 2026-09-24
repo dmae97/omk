@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { McpClient } from "../../src/core/mcp/client.ts";
 import { McpManager } from "../../src/core/mcp/manager.ts";
 import { buildMcpToolName, mapMcpContent, sanitizeToolNameSegment } from "../../src/core/mcp/tools.ts";
@@ -32,6 +32,10 @@ afterEach(() => {
 });
 
 describe("MCP client against a real stdio server", () => {
+	it("rejects invalid request and handshake timeouts at construction", () => {
+		expect(() => client("ok", { requestTimeoutMs: Number.NaN })).toThrow(RangeError);
+		expect(() => client("ok", { requestTimeoutMs: 0.5 })).toThrow(RangeError);
+	});
 	it("completes the handshake and reports server identity", async () => {
 		const c = client("ok");
 		await c.connect();
@@ -58,6 +62,59 @@ describe("MCP client against a real stdio server", () => {
 		const c = client("ok");
 		await c.connect();
 		await expect(c.ping(2000)).resolves.toBeUndefined();
+	});
+
+	it("does not send a zero-deadline request", async () => {
+		const c = client("ok");
+		await c.connect();
+		const transport = (c as unknown as { transport: { send: (message: unknown) => boolean } }).transport;
+		const send = vi.spyOn(transport, "send");
+		await expect(c.ping(0)).rejects.toThrow("mcp.request_not_sent");
+		expect(send).not.toHaveBeenCalled();
+		send.mockRestore();
+	});
+
+	it("rejects a response beyond the monotonic deadline before the timer callback", async () => {
+		const c = client("ok");
+		await c.connect();
+		const runtime = c as unknown as {
+			transport: { send: (message: { id?: string | number }) => boolean };
+			handleMessage: (message: { jsonrpc: "2.0"; id: string | number; result: unknown }) => void;
+		};
+		const originalSend = runtime.transport.send;
+		const originalClock = Object.getOwnPropertyDescriptor(performance, "now");
+		let now = 100;
+		try {
+			Object.defineProperty(performance, "now", { configurable: true, value: () => now });
+			runtime.transport.send = (message) => {
+				if (message.id === undefined) return false;
+				now = 120;
+				runtime.handleMessage({ jsonrpc: "2.0", id: message.id, result: {} });
+				return true;
+			};
+			await expect(c.ping(10)).rejects.toThrow(/after deadline/u);
+		} finally {
+			runtime.transport.send = originalSend;
+			if (originalClock) Object.defineProperty(performance, "now", originalClock);
+			else Reflect.deleteProperty(performance, "now");
+		}
+	});
+
+	it("does not publish ready when the initialized notification is refused", async () => {
+		const c = client("ok");
+		const runtime = c as unknown as {
+			transport: { start: () => void; send: (message: { id?: string | number; method?: string }) => boolean };
+			handleMessage: (message: { jsonrpc: "2.0"; id: string | number; result: unknown }) => void;
+		};
+		runtime.transport.start = () => {};
+		runtime.transport.send = (message) => {
+			if (message.method === "notifications/initialized") return false;
+			if (message.id === undefined) return false;
+			runtime.handleMessage({ jsonrpc: "2.0", id: message.id, result: { protocolVersion: "2025-06-18" } });
+			return true;
+		};
+		await expect(c.connect()).rejects.toThrow("mcp.initialized_notification_not_sent");
+		expect(c.ready).toBe(false);
 	});
 
 	it("times out a ping the server never answers", async () => {

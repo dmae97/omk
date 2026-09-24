@@ -152,10 +152,35 @@ describe("MCP bounded connection startup", () => {
 		});
 		expect(await manager.listToolDefinitions()).toEqual([]);
 		expect(manager.status()).toEqual([
-			expect.objectContaining({ name: "broken", state: "failed", error: "factory failed" }),
+			expect.objectContaining({ name: "broken", state: "failed", error: "mcp.connect_failed (Error)" }),
 			expect.objectContaining({ name: "disabled", state: "failed", error: "disabled by configuration" }),
 		]);
 	});
+
+	it.each([undefined, false, true])(
+		"forwards the optional inheritEnv=%s policy to the transport",
+		async (inheritEnv) => {
+			let received: McpClientOptions["transport"] | undefined;
+			const manager = new McpManager({
+				servers: [{ name: "fixture", command: "fake", ...(inheritEnv === undefined ? {} : { inheritEnv }) }],
+				createClient(options) {
+					received = options.transport;
+					return {
+						connect: async () => {},
+						listTools: async () => [],
+						close: () => {},
+						serverInfo: {},
+					} as unknown as McpClient;
+				},
+			});
+			try {
+				await manager.connect("fixture");
+				expect(received?.inheritEnv).toBe(inheritEnv);
+			} finally {
+				manager.close();
+			}
+		},
+	);
 
 	it.each([0, -1, 1.5, NaN, Infinity])("rejects invalid concurrency %s", (connectionConcurrency) => {
 		expect(() => new McpManager({ servers: [], connectionConcurrency })).toThrow(RangeError);

@@ -64,20 +64,23 @@ export class SessionRunBudget {
 			if (limits !== undefined) {
 				if (this.agent.state.isStreaming) throw new PromptExecutionBusyError();
 				this.lifecycle.assertIdle();
-				const scopedBudget = new RunBudget(limits, this.lifecycle.stop);
-				budget = scopedBudget;
-				this.current = scopedBudget;
-				wrapped = wrapBudgetStream(source, scopedBudget);
+			}
+			// Ownership applies to every scope; only limit enforcement is opt-in.
+			const scopedBudget = new RunBudget(limits, this.lifecycle.stop);
+			budget = scopedBudget;
+			this.current = scopedBudget;
+			wrapped = wrapBudgetStream(source, scopedBudget);
+			if (sourceAuth !== undefined) {
 				wrappedAuth = async (provider) => {
 					scopedBudget.assertAdmission();
-					const key = await sourceAuth?.(provider);
+					const key = await sourceAuth(provider);
 					scopedBudget.assertActive();
 					return key;
 				};
-				this.agent.streamFn = wrapped;
 				this.agent.getApiKey = wrappedAuth;
-				scopedBudget.assertAdmission();
 			}
+			this.agent.streamFn = wrapped;
+			scopedBudget.assertAdmission();
 			entered = true;
 			await operation();
 			budget?.assertActive();
@@ -106,21 +109,24 @@ export function wrapBudgetStream(source: StreamFn, budget: RunBudget): StreamFn 
 		options?.signal?.throwIfAborted();
 		const release = budget.admit();
 		const remainingMs = budget.remainingMs;
+		let returnedStream = false;
 		try {
 			const stream = await source(model, context, {
 				...options,
 				signal: options?.signal ? AbortSignal.any([options.signal, budget.signal]) : budget.signal,
-				maxRetries: 0,
+				...(Object.keys(budget.limits).length > 0 ? { maxRetries: 0 } : {}),
 				...(remainingMs === undefined
 					? {}
 					: { timeoutMs: Math.min(options?.timeoutMs ?? remainingMs, remainingMs) }),
 			});
+			returnedStream = true;
 			// A returned stream is not yet a completed request. Missing terminal metadata
 			// retains the reservation; abort alone never refunds it.
 			void stream.result().then(release, release);
 			return stream;
 		} catch (error) {
-			release();
+			// A broken result() contract leaves termination unknown, not refunded.
+			if (!returnedStream) release();
 			throw error;
 		}
 	};
