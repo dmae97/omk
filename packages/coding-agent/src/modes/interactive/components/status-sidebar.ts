@@ -17,7 +17,9 @@ import {
 
 export { parseCodexUsageSnapshot };
 
-import { stripAnsi } from "../../../utils/ansi.ts";
+import { singleLineDisplayText } from "../../../utils/display-text.ts";
+import { readControlPlaneSignals } from "../control-plane-signals.ts";
+import { buildControlPlaneViewModel } from "../control-plane-view-model.ts";
 import { type ThemeColor, theme } from "../theme/theme.ts";
 import { boxBottom, boxTextLine, boxTop, sidebarRule } from "./control-panel-box.ts";
 import { classifyMcpStability } from "./control-panel-runtime-status.ts";
@@ -29,10 +31,10 @@ import {
 	formatTokens,
 } from "./footer.ts";
 import { keyText } from "./keybinding-hints.ts";
+import { sidebarAuthorityRows, sidebarContextRows, sidebarFailureRows } from "./status-sidebar-authority.ts";
 
 export const STATUS_SIDEBAR_WIDTH = 34;
 export const STATUS_SIDEBAR_MAX_WIDTH = 48;
-export const STATUS_SIDEBAR_MIN_WIDTH = 96;
 /** Blank columns between the main content and the pinned rail (part of the reserved gutter). */
 export const STATUS_SIDEBAR_GUTTER_GAP = 1;
 
@@ -47,14 +49,16 @@ export function statusSidebarWidth(termWidth: number): number {
 
 /**
  * Responsive MCP roster rows: taller terminals list more servers before the
- * "+N more" collapse. ~24 rows of the rail are fixed chrome (header, model,
- * context, tokens, system), the rest is available to the roster.
+ * "+N more" collapse. With every optional row shown except USAGE, EXT and the
+ * failure rows, 26 rail rows are not roster entries (frame, up/act, run/vrfy,
+ * cwd/git/sess, the MODEL, CONTEXT and TOKENS blocks, MCP rule, "+N more", the
+ * SYSTEM block, unpin hint). The roster gets the rest, so that rail fits a
+ * terminal of 30+ rows; callers pass USAGE and failure rows as reserved rows.
  */
 export function mcpMaxRows(termRows: number): number {
-	return Math.max(4, Math.min(18, termRows - 24));
+	return Math.max(4, Math.min(18, termRows - 26));
 }
 
-const METER_CELLS = 12;
 const METER_MAX_CELLS = 24;
 /** Rolling window of CPU samples feeding the activity sparkline (wide rails show more history). */
 const SPARK_WINDOW = 44;
@@ -143,38 +147,51 @@ export class StatusSidebarComponent implements Component {
 		const state = session.state;
 		this.refreshMcpHealth(session);
 		this.refreshSubscriptionUsage(session);
+		// Read once per frame: the same view model the control rail projects, so no status is computed here.
+		const vm = buildControlPlaneViewModel(
+			readControlPlaneSignals(session, this.footerData, state.model?.contextWindow ?? 0),
+		);
 		const lines: string[] = [boxTop(width, "STATUS RAIL")];
 
 		// --- Live header: session uptime + CPU activity sparkline ---
 		lines.push(
-			boxTextLine(width, `${theme.fg("muted", "up   ")}${theme.fg("accent", formatUptime(process.uptime()))}`),
+			boxTextLine(width, `${theme.fg("muted", "up   ")}${theme.fg("text", formatUptime(process.uptime()))}`),
 		);
 		lines.push(boxTextLine(width, this.sparkline(width)));
 
+		// --- Authority: RUN, VERIFY, and failure essentials (pinning hides the control-pane overlay) ---
+		const failureRows = sidebarFailureRows(width, vm.run.failure);
+		lines.push(...sidebarAuthorityRows(width, vm), ...failureRows);
+
 		// --- Location ---
-		const cwd = formatCwdForFooter(session.sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
+		// Session, file-system and model text is reduced to one printable line before it reaches the terminal.
+		const cwd = singleLineDisplayText(
+			formatCwdForFooter(session.sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE),
+		);
 		lines.push(boxTextLine(width, `${theme.fg("muted", "cwd  ")}${theme.fg("text", cwd)}`));
-		const branch = this.footerData.getGitBranch();
+		const branch = singleLineDisplayText(this.footerData.getGitBranch() ?? "");
 		if (branch) {
-			lines.push(boxTextLine(width, `${theme.fg("muted", "git  ")}${theme.fg("accent", branch)}`));
+			lines.push(boxTextLine(width, `${theme.fg("muted", "git  ")}${theme.fg("text", branch)}`));
 		}
-		const sessionName = session.sessionManager.getSessionName();
+		const sessionName = singleLineDisplayText(session.sessionManager.getSessionName() ?? "");
 		if (sessionName) {
 			lines.push(boxTextLine(width, `${theme.fg("muted", "sess ")}${theme.fg("text", sessionName)}`));
 		}
 
 		// --- Model ---
 		lines.push(sidebarRule(width, "MODEL"));
-		lines.push(
-			boxTextLine(width, `${theme.fg("muted", "id   ")}${theme.fg("accent", state.model?.id ?? "no-model")}`),
-		);
-		const endpointHost = formatEndpointForFooter(state.model?.baseUrl);
+		const modelId = singleLineDisplayText(state.model?.id ?? "no-model");
+		lines.push(boxTextLine(width, `${theme.fg("muted", "id   ")}${theme.fg("text", modelId)}`));
+		const endpointHost = singleLineDisplayText(formatEndpointForFooter(state.model?.baseUrl) ?? "");
 		if (endpointHost) {
 			lines.push(boxTextLine(width, `${theme.fg("muted", "endp ")}${theme.fg("dim", endpointHost)}`));
 		}
 		if (state.model?.reasoning) {
 			lines.push(
-				boxTextLine(width, `${theme.fg("muted", "think ")}${theme.fg("mdCode", state.thinkingLevel || "off")}`),
+				boxTextLine(
+					width,
+					`${theme.fg("muted", "think ")}${theme.fg("mdCode", singleLineDisplayText(state.thinkingLevel || "off"))}`,
+				),
 			);
 		}
 
@@ -184,18 +201,7 @@ export class StatusSidebarComponent implements Component {
 
 		// --- Context ---
 		lines.push(sidebarRule(width, "CONTEXT"));
-		const contextUsage = session.getContextUsage();
-		const contextWindow = contextUsage?.contextWindow ?? state.model?.contextWindow ?? 0;
-		const percent = contextUsage?.percent ?? null;
-		const auto = this.getAutoCompactEnabled() ? " (auto)" : "";
-		const percentLabel =
-			percent === null
-				? `?/${formatTokens(contextWindow)}${auto}`
-				: `${percent.toFixed(1)}%/${formatTokens(contextWindow)}${auto}`;
-		const percentColor: ThemeColor =
-			percent !== null && percent > 90 ? "error" : percent !== null && percent > 70 ? "warning" : "success";
-		lines.push(boxTextLine(width, `${theme.fg("muted", "ctx  ")}${theme.fg(percentColor, percentLabel)}`));
-		lines.push(boxTextLine(width, meter(percent, width)));
+		lines.push(...sidebarContextRows(width, vm.context, this.getAutoCompactEnabled()));
 
 		// --- Tokens (cumulative across all session entries, mirrors the footer) ---
 		let totalInput = 0;
@@ -216,7 +222,7 @@ export class StatusSidebarComponent implements Component {
 		lines.push(
 			boxTextLine(
 				width,
-				`${theme.fg("success", `↑${formatTokens(totalInput)}`)} ${theme.fg("accent", `↓${formatTokens(totalOutput)}`)}`,
+				`${theme.fg("text", `↑${formatTokens(totalInput)}`)} ${theme.fg("text", `↓${formatTokens(totalOutput)}`)}`,
 			),
 		);
 		lines.push(
@@ -236,14 +242,15 @@ export class StatusSidebarComponent implements Component {
 		}
 
 		// --- MCP roster (live connectivity + opencode-style stability dots) ---
-		lines.push(...this.mcpSection(width, session, usageLines.length));
+		// Conditional rows (USAGE, failure essentials) take their height from the roster, not the terminal.
+		lines.push(...this.mcpSection(width, session, usageLines.length + failureRows.length));
 
 		// --- System ---
 		lines.push(sidebarRule(width, "SYSTEM"));
 		const cpu = this.footerData.getCpuPercent();
 		const mem = this.footerData.getMemoryRssBytes();
 		const sysParts: string[] = [];
-		if (cpu !== null) sysParts.push(`cpu ${cpu.toFixed(0)}%`);
+		if (cpu !== null) sysParts.push(`cpu ${Math.floor(cpu)}%`);
 		if (mem !== null) sysParts.push(`mem ${formatBytes(mem)}`);
 		if (sysParts.length > 0) {
 			lines.push(boxTextLine(width, theme.fg("muted", sysParts.join(" "))));
@@ -325,7 +332,7 @@ export class StatusSidebarComponent implements Component {
 
 	private subscriptionUsageSection(width: number): string[] {
 		if (this.subscriptionUsageProviders.length === 0) return [];
-		const lines = [railRule(width, "USAGE", theme.fg("accent", String(this.subscriptionUsageProviders.length)))];
+		const lines = [railRule(width, "USAGE", theme.fg("muted", String(this.subscriptionUsageProviders.length)))];
 		for (const provider of this.subscriptionUsageProviders) {
 			const source = getSubscriptionUsageSource(provider);
 			const snapshot = this.subscriptionUsage.get(provider);
@@ -333,21 +340,21 @@ export class StatusSidebarComponent implements Component {
 			if (!label) continue;
 			const activeEndpoint =
 				provider === this.getSession().state.model?.provider
-					? formatEndpointForFooter(this.getSession().state.model?.baseUrl)
+					? singleLineDisplayText(formatEndpointForFooter(this.getSession().state.model?.baseUrl) ?? "")
 					: undefined;
 			if (!snapshot) {
 				if (this.subscriptionUsageInFlight.has(provider)) {
-					lines.push(boxTextLine(width, `${theme.fg("accent", label)} ${theme.fg("dim", "loading…")}`));
+					lines.push(boxTextLine(width, `${theme.fg("text", label)} ${theme.fg("dim", "loading…")}`));
 				}
 				continue;
 			}
 			if (snapshot.windows.length === 0) {
-				lines.push(boxTextLine(width, theme.fg("accent", label)));
+				lines.push(boxTextLine(width, theme.fg("text", label)));
 				if (activeEndpoint) lines.push(boxTextLine(width, theme.fg("dim", activeEndpoint)));
 				lines.push(boxTextLine(width, theme.fg("dim", snapshot.message ?? "usage unavailable")));
 				continue;
 			}
-			lines.push(boxTextLine(width, theme.fg("accent", label)));
+			lines.push(boxTextLine(width, theme.fg("text", label)));
 			if (activeEndpoint) lines.push(boxTextLine(width, theme.fg("dim", activeEndpoint)));
 			for (const window of snapshot.windows) {
 				lines.push(boxTextLine(width, usageMeter(window.label, window, width)));
@@ -468,13 +475,13 @@ export class StatusSidebarComponent implements Component {
 		const window = this.cpuHistory.slice(-cells);
 		const bars = window.map((sample) => SPARK_CHARS[Math.min(7, Math.floor(sample / 12.6))]).join("");
 		const pad = "▁".repeat(Math.max(0, cells - window.length));
-		return `${label}${theme.fg("borderMuted", pad)}${theme.fg("accent", bars)}`;
+		return `${label}${theme.fg("borderMuted", pad)}${theme.fg("muted", bars)}`;
 	}
 }
 
 /** Section rule with a right-aligned counter, e.g. `│─ MCP ─────── 22/24 │`. */
 function railRule(width: number, label: string, right: string): string {
-	const left = `${theme.fg("borderMuted", "─")}${theme.fg("accent", ` ${label} `)}`;
+	const left = `${theme.fg("borderMuted", "─")}${theme.fg("muted", ` ${label} `)}`;
 	const rightText = ` ${right} `;
 	const fill = Math.max(0, width - 2 - visibleWidth(left) - visibleWidth(rightText));
 	const line = `${theme.fg("borderMuted", "│")}${left}${theme.fg("borderMuted", "─".repeat(fill))}${rightText}${theme.fg("borderMuted", "│")}`;
@@ -484,11 +491,7 @@ function railRule(width: number, label: string, right: string): string {
 /** One MCP server row: live-state badge + name + right-aligned detail, truncated to the rail width. */
 function mcpRow(entry: McpServerEntry, width: number, live?: McpServerStatus): string {
 	const badge = live ? liveMcpBadge(live) : configMcpBadge(entry);
-	const safeName = stripAnsi(entry.name)
-		.replace(/[\t\r\n]+/g, " ")
-		.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f]/g, "")
-		.replace(/\s+/g, " ")
-		.trim();
+	const safeName = singleLineDisplayText(entry.name);
 	const detail = live ? liveMcpDetail(live) : "";
 	// frame (4) + dot + space (2); detail is right-aligned with one gap column.
 	const detailText = detail ? ` ${detail}` : "";
@@ -550,7 +553,8 @@ function formatUptime(seconds: number): string {
 
 function usageMeter(label: string, window: SubscriptionUsageWindow, width: number): string {
 	const percent = Math.max(0, Math.min(100, window.usedPercent));
-	const percentText = `${Math.round(percent)}%`;
+	// Floored, so the figure never reads a colour threshold (75%/90%) before `usageColor` does.
+	const percentText = `${Math.floor(percent)}%`;
 	const labelText = `${label}  `;
 	const innerWidth = Math.max(0, width - 4);
 	const cells = Math.max(4, Math.min(METER_MAX_CELLS, innerWidth - labelText.length - percentText.length - 1));
@@ -590,16 +594,4 @@ function formatReset(resetsAt: number): string {
 	const days = Math.floor(totalHours / 24);
 	const hours = totalHours % 24;
 	return `${days}d${hours > 0 ? `${hours}h` : ""}`;
-}
-
-function meter(percent: number | null, width: number): string {
-	// Fill the rail: frame (4) + space + up to "100%" (4) stay reserved.
-	const cells = Math.max(METER_CELLS, Math.min(METER_MAX_CELLS, width - 9));
-	if (percent === null) {
-		return `${theme.fg("borderMuted", "░".repeat(cells))} ${theme.fg("muted", "??%")}`;
-	}
-	const clamped = Math.max(0, Math.min(100, percent));
-	const filled = Math.round((clamped / 100) * cells);
-	const color: ThemeColor = clamped >= 85 ? "warning" : clamped >= 65 ? "mdCode" : "success";
-	return `${theme.fg(color, "█".repeat(filled))}${theme.fg("borderMuted", "░".repeat(cells - filled))} ${theme.fg(color, `${Math.round(clamped)}%`)}`;
 }

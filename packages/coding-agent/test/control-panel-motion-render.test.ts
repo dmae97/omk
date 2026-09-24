@@ -4,9 +4,12 @@ import {
 	type ControlPanelContent,
 	type ControlPanelMotionOptions,
 } from "../src/modes/interactive/components/control-panel.ts";
+import { OMK_WORDMARK } from "../src/modes/interactive/components/control-panel-brand.ts";
+import { renderControlPanelLayout } from "../src/modes/interactive/components/control-panel-layout.ts";
+import { INTRO_MS, TICK_MS } from "../src/modes/interactive/components/control-panel-motion.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 
-initTheme("dark");
+initTheme("omk-paper-dark");
 
 function makeContent(): ControlPanelContent {
 	return {
@@ -24,16 +27,8 @@ function makeMotionOptions(clock: { value: number }): ControlPanelMotionOptions 
 		requestRender: vi.fn(),
 		isTTY: () => true,
 		isReducedMotion: () => false,
-		isIdleDriftEnabled: () => false,
 		isHeaderVisibleHint: () => true,
 		now: () => clock.value,
-	};
-}
-
-function makeIdleMotionOptions(clock: { value: number }): ControlPanelMotionOptions {
-	return {
-		...makeMotionOptions(clock),
-		isIdleDriftEnabled: () => true,
 	};
 }
 
@@ -43,7 +38,7 @@ function stripAnsi(value: string): string {
 	return value.replace(ESC_RE, "");
 }
 
-describe("ControlPanelComponent motion render bridge", () => {
+describe("ControlPanelComponent ink-in render bridge", () => {
 	const originalNoColor = process.env.NO_COLOR;
 	const originalForceColor = process.env.FORCE_COLOR;
 	const originalReducedMotion = process.env.OMK_REDUCED_MOTION;
@@ -65,32 +60,42 @@ describe("ControlPanelComponent motion render bridge", () => {
 		else process.env.OMK_REDUCED_MOTION = originalReducedMotion;
 	});
 
-	test("render uses deterministic intro frames while motion is active", () => {
+	for (const width of [96, 160]) {
+		test(`at ${width} columns the ink-in changes colour only, then settles on the final frame`, () => {
+			const clock = { value: 0 };
+			const panel = new ControlPanelComponent(makeContent(), makeMotionOptions(clock));
+			panel.setExpanded(true);
+			const finalFrame = renderControlPanelLayout(makeContent(), true, width);
+
+			const firstFrame = panel.render(width);
+			expect(firstFrame.join("\n")).not.toBe(finalFrame.join("\n"));
+			// Same text, same geometry: the reveal only recolours.
+			expect(firstFrame.map(stripAnsi)).toEqual(finalFrame.map(stripAnsi));
+			expect(stripAnsi(firstFrame.join("\n"))).toContain(OMK_WORDMARK[0]!.trimEnd());
+
+			clock.value = INTRO_MS;
+			vi.advanceTimersByTime(TICK_MS);
+			expect(panel.render(width)).toEqual(finalFrame);
+			panel.dispose();
+		});
+	}
+
+	test("there is no idle phase: once settled, later frames are identical and no timer remains", () => {
 		const clock = { value: 0 };
-		const panel = new ControlPanelComponent(makeContent(), makeMotionOptions(clock));
-		panel.setExpanded(true);
-		const plain = stripAnsi(panel.render(96).join("\n"));
-
-		expect(plain).not.toContain("____   __  __");
-		expect(plain).toContain("SYSTEM MAP");
-		panel.dispose();
-	});
-
-	test("idle drift keeps the expanded banner animated after the intro reveal", () => {
-		const clock = { value: 0 };
-		const panel = new ControlPanelComponent(makeContent(), makeIdleMotionOptions(clock));
+		const options = makeMotionOptions(clock);
+		const panel = new ControlPanelComponent(makeContent(), options);
 		panel.setExpanded(true);
 
-		clock.value = 950;
-		vi.advanceTimersByTime(100);
-		const firstFrame = panel.render(96).join("\n");
+		clock.value = INTRO_MS + 10;
+		vi.advanceTimersByTime(TICK_MS);
+		const settled = panel.render(160).join("\n");
+		const rendersAfterSettle = vi.mocked(options.requestRender).mock.calls.length;
 
-		clock.value = 1400;
-		vi.advanceTimersByTime(100);
-		const secondFrame = panel.render(96).join("\n");
-
-		expect(firstFrame).not.toBe(secondFrame);
-		expect(stripAnsi(secondFrame)).toContain("SYSTEM MAP");
+		clock.value = INTRO_MS + 5000;
+		vi.advanceTimersByTime(5000);
+		expect(panel.render(160).join("\n")).toBe(settled);
+		expect(vi.mocked(options.requestRender).mock.calls.length).toBe(rendersAfterSettle);
+		expect(vi.getTimerCount()).toBe(0);
 		panel.dispose();
 	});
 });

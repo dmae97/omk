@@ -2,13 +2,29 @@ import { resetCapabilitiesCache, setCapabilities } from "omk-tui";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	detectTerminalBackground,
+	getDefaultTheme,
 	getThemeByName,
 	getThemeForRgbColor,
 	parseOsc11BackgroundColor,
 } from "../src/modes/interactive/theme/theme.ts";
 
+const originalColorFgBg = process.env.COLORFGBG;
+
 afterEach(() => {
 	resetCapabilitiesCache();
+	if (originalColorFgBg === undefined) delete process.env.COLORFGBG;
+	else process.env.COLORFGBG = originalColorFgBg;
+});
+
+describe("getDefaultTheme", () => {
+	it("defaults to the paper pair that matches the detected terminal background", () => {
+		process.env.COLORFGBG = "0;15";
+		expect(getDefaultTheme()).toBe("omk-paper-light");
+		process.env.COLORFGBG = "15;0";
+		expect(getDefaultTheme()).toBe("omk-paper-dark");
+		delete process.env.COLORFGBG;
+		expect(getDefaultTheme()).toBe("omk-paper-dark");
+	});
 });
 
 describe("detectTerminalBackground", () => {

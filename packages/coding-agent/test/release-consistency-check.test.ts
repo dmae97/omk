@@ -2,9 +2,11 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const checkScript = join(process.cwd(), "..", "..", "scripts", "check-release-consistency.mjs");
+// Resolved from this file, not the working directory, so the suite runs from any cwd.
+const checkScript = fileURLToPath(new URL("../../../scripts/check-release-consistency.mjs", import.meta.url));
 
 interface ReleaseConsistencyIssue {
 	id: string;
@@ -55,6 +57,19 @@ describe("release consistency check", () => {
 		expect(result.status).toBe(1);
 		expect(result.stderr).toContain("Unable to parse JSON file");
 		expect(result.stderr).not.toContain("SyntaxError:");
+	});
+
+	it("rejects an opening without the OMK brand plate", () => {
+		const root = createFixture();
+		writeFileSync(
+			join(root, "packages", "coding-agent", "src", "modes", "interactive", "components", "control-panel-brand.ts"),
+			'export const OMK_BRAND_PLATE = "CYBERPUNK OPS CORE";\n',
+		);
+
+		const result = spawnCheck(root);
+
+		expect(result.status).toBe(1);
+		expect(result.stderr + result.stdout).toContain("missing_control_panel_brand_plate");
 	});
 
 	it("rejects stale hardcoded control-panel version strings outside release artifacts", () => {
@@ -223,7 +238,11 @@ function createFixture(): string {
 	writeFileSync(
 		join(root, "packages", "coding-agent", "src", "modes", "interactive", "components", "control-panel-layout.ts"),
 		"export function hero(content: { version: string }) {\n\treturn `omk v$" +
-			'{content.version} · OMK//CONTROL`;\n}\n\nexport const sidebarMarker = "NIGHT-CITY-MATRIX-V3";\n',
+			"{content.version} · OMK//CONTROL`;\n}\n",
+	);
+	writeFileSync(
+		join(root, "packages", "coding-agent", "src", "modes", "interactive", "components", "control-panel-brand.ts"),
+		'export const OMK_BRAND_PLATE = "FIG. 01 · THE CONTROL LOOP";\n',
 	);
 	writeJson(
 		join(root, "packages", "coding-agent", "src", "modes", "interactive", "theme", "omk-control-grid-dark.json"),

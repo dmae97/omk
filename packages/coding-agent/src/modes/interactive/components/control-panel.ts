@@ -1,19 +1,10 @@
 import type { Component } from "omk-tui";
-import { theme } from "../theme/theme.ts";
-import { composeStaticBanner, MIN_BANNER_WIDTH } from "./control-panel-gradient.ts";
 import {
-	composeIdleBanner,
-	composeIntroBanner,
-	IDLE_MS,
-	INTRO_MS,
-	shouldAnimate,
-} from "./control-panel-gradient-motion.ts";
-import {
-	CONTROL_PANEL_ASCII_ART,
 	type ControlPanelContent,
 	renderControlPanelLayout,
 	renderControlPanelRightPane,
 } from "./control-panel-layout.ts";
+import { INTRO_MS, revealAt, shouldAnimateIntro, TICK_MS } from "./control-panel-motion.ts";
 
 export type { ControlPanelContent, ControlPanelStatusSnapshot } from "./control-panel-layout.ts";
 
@@ -21,20 +12,17 @@ export interface ControlPanelMotionOptions {
 	requestRender: () => void;
 	isTTY: () => boolean;
 	isReducedMotion: () => boolean;
-	isIdleDriftEnabled: () => boolean;
 	isHeaderVisibleHint: () => boolean;
 	getRenderWidth?: () => number;
 	now?: () => number;
 }
 
-type BannerMotionPhase = "intro" | "idle" | "static";
-
 export class ControlPanelComponent implements Component {
 	private expanded = false;
 	private readonly content: ControlPanelContent;
 	private readonly motionOptions: ControlPanelMotionOptions | undefined;
-	private motionPhase: BannerMotionPhase = "static";
-	private motionStartMs = 0;
+	/** Start of the running ink-in; undefined when the panel is static. */
+	private introStartMs: number | undefined;
 	private motionTimerId: ReturnType<typeof setInterval> | undefined;
 	private lastRenderWidth = 0;
 
@@ -47,9 +35,9 @@ export class ControlPanelComponent implements Component {
 		const wasExpanded = this.expanded;
 		this.expanded = expanded;
 		if (!wasExpanded && expanded) {
-			this.startMotion();
+			this.startIntro();
 		} else if (wasExpanded && !expanded) {
-			this.stopMotionToStatic();
+			this.stopMotion();
 		}
 	}
 
@@ -60,10 +48,10 @@ export class ControlPanelComponent implements Component {
 			clearInterval(this.motionTimerId);
 			this.motionTimerId = undefined;
 		}
-		this.motionPhase = "static";
-		this.motionStartMs = 0;
+		this.introStartMs = undefined;
 	}
 
+	/** Ends the ink-in early and repaints the final frame. */
 	stopMotion(): void {
 		const hadTimer = this.motionTimerId !== undefined;
 		this.dispose();
@@ -74,107 +62,58 @@ export class ControlPanelComponent implements Component {
 
 	render(width: number): string[] {
 		this.lastRenderWidth = width;
-		const lines = renderControlPanelLayout(
-			this.content,
-			this.expanded,
-			width,
-			this.currentBannerFrame(),
-			this.currentSparkleMs(),
-		);
-		return this.shouldRenderPlainBanner() ? lines.map(stripAnsi) : lines;
+		const lines = renderControlPanelLayout(this.content, this.expanded, width, this.currentReveal());
+		return this.shouldRenderPlain() ? lines.map(stripAnsi) : lines;
 	}
 
-	private currentSparkleMs(): number {
+	private now(): number {
+		return (this.motionOptions?.now ?? Date.now)();
+	}
+
+	private currentReveal(): number {
+		return this.introStartMs === undefined ? 1 : revealAt(this.now() - this.introStartMs);
+	}
+
+	private startIntro(): void {
 		const opts = this.motionOptions;
-		if (!opts || this.motionPhase === "static") return 0;
-		return Math.max(0, (opts.now ?? Date.now)() - this.motionStartMs);
-	}
-
-	private currentMotionWidth(): number {
-		const width = this.motionOptions?.getRenderWidth?.() ?? this.lastRenderWidth;
-		return width > 0 ? width : MIN_BANNER_WIDTH;
-	}
-
-	private startMotion(): void {
-		const opts = this.motionOptions;
-		if (!opts || this.motionTimerId !== undefined || !this.canAnimate("intro")) return;
-
-		this.motionPhase = "intro";
-		this.motionStartMs = (opts.now ?? Date.now)();
-		this.motionTimerId = setInterval(() => this.tick(), 100);
-		if (this.motionTimerId && typeof this.motionTimerId === "object" && "unref" in this.motionTimerId) {
+		if (!opts || this.motionTimerId !== undefined || !this.canAnimate()) return;
+		this.introStartMs = this.now();
+		this.motionTimerId = setInterval(() => this.tick(), TICK_MS);
+		if (typeof this.motionTimerId === "object" && "unref" in this.motionTimerId) {
 			this.motionTimerId.unref();
 		}
 		opts.requestRender();
 	}
 
-	private currentBannerFrame(): string[] | undefined {
-		const opts = this.motionOptions;
-		if (!opts) return undefined;
-		const mode = theme.getColorMode();
-		const noColor = this.shouldRenderPlainBanner();
-		if (this.motionPhase === "static") {
-			return this.expanded ? composeStaticBanner(CONTROL_PANEL_ASCII_ART, mode, noColor) : undefined;
+	private tick(): void {
+		const done = this.introStartMs === undefined || this.now() - this.introStartMs >= INTRO_MS;
+		if (done || !this.canAnimate()) {
+			this.stopMotion();
+			return;
 		}
-		const elapsedMs = Math.max(0, (opts.now ?? Date.now)() - this.motionStartMs);
-		if (this.motionPhase === "idle") {
-			return composeIdleBanner(CONTROL_PANEL_ASCII_ART, mode, noColor, elapsedMs);
-		}
-		return composeIntroBanner(CONTROL_PANEL_ASCII_ART, mode, noColor, elapsedMs);
+		this.motionOptions?.requestRender();
 	}
 
-	private shouldRenderPlainBanner(): boolean {
-		const opts = this.motionOptions;
+	private shouldRenderPlain(): boolean {
 		if (process.env.NO_COLOR !== undefined) return true;
+		const opts = this.motionOptions;
 		if (!opts) return false;
 		return !opts.isTTY() && process.env.FORCE_COLOR === undefined;
 	}
 
-	private tick(): void {
-		const opts = this.motionOptions;
-		if (!opts || !this.canAnimate(this.motionPhase === "idle" ? "idle" : "intro")) {
-			this.stopMotionToStatic();
-			return;
-		}
-
-		const now = (opts.now ?? Date.now)();
-		if (this.motionPhase === "intro" && now - this.motionStartMs >= INTRO_MS) {
-			if (!opts.isIdleDriftEnabled()) {
-				this.stopMotionToStatic();
-				return;
-			}
-			this.motionPhase = "idle";
-			this.motionStartMs = now;
-		}
-		if (this.motionPhase === "idle" && now - this.motionStartMs >= IDLE_MS) {
-			this.stopMotionToStatic();
-			return;
-		}
-		opts.requestRender();
-	}
-
-	private stopMotionToStatic(): void {
-		const hadTimer = this.motionTimerId !== undefined;
-		this.dispose();
-		if (hadTimer) {
-			this.motionOptions?.requestRender();
-		}
-	}
-
-	private canAnimate(phase: "intro" | "idle"): boolean {
+	private canAnimate(): boolean {
 		const opts = this.motionOptions;
 		if (!opts) return false;
-		return shouldAnimate({
-			phase,
+		const width = opts.getRenderWidth?.() ?? this.lastRenderWidth;
+		return shouldAnimateIntro({
 			isTTY: opts.isTTY(),
-			noColor: this.shouldRenderPlainBanner(),
-			colorMode: theme.getColorMode(),
+			forceColor: process.env.FORCE_COLOR !== undefined,
+			noColor: this.shouldRenderPlain(),
 			expanded: this.expanded,
-			width: this.currentMotionWidth(),
+			// Before the first render the width is unknown; assume the deck width so the intro can start.
+			width: width > 0 ? width : Number.POSITIVE_INFINITY,
 			reducedMotion: opts.isReducedMotion() || process.env.OMK_REDUCED_MOTION !== undefined,
-			busy: false,
-			headerVisibleHint: opts.isHeaderVisibleHint(),
-			idleDriftEnabled: opts.isIdleDriftEnabled(),
+			headerVisible: opts.isHeaderVisibleHint(),
 		});
 	}
 }

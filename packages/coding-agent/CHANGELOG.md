@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+### Added
+
+- Built-in themes `omk-paper-dark` and `omk-paper-light` (aliases `paper`, `paper-dark`, `paper-light`, `omk-paper`) in the README hero's palette: ink text, secondary and tertiary ink, one vermillion accent, and subdued info, teal, green and ochre for links, code and syntax. Every text role measures 4.5:1 or more and every boundary 3:1 or more against the paper surfaces and common terminal backgrounds, `#1e1e1e` included; three dark values are one step lighter than the web palette to get there. Both carry HTML-export paper surfaces.
+
+### Changed
+
+- The control rail (the startup deck column and the control-pane overlay in expanded view, `Ctrl+O`) now shows RUN, VERIFY, CONTEXT and RESOURCES, then TODO and SESSION. RUN has the turn state; VERIFY has one `verdict` row; CONTEXT has `model`, `think`, `ctx`, `meter` and `opt` (formerly `headroom`); RESOURCES has the governor mode (`gov`) and configured MCP/skill counts (`ext`, formerly `res`).
+- The control-pane overlay is anchored to the viewport and adds the live rows: RUN `queue` (queued message count), RESOURCES `cpu` (host CPU, the value the resource governor admits on; `busy` at or above its busy threshold) and `rss` (OMK process RSS), and, when a turn ends without completing, a failure card from the session termination record: cause, phase, side effects, retry policy (`auto`, `manual` or `none`) and next action. The startup deck column omits them: the startup header scrolls into terminal scrollback, where any later change re-emits up to four screens, so it keeps a fixed height and shows only turn-stable values.
+- The pinned status sidebar shows `run` and `vrfy` rows, plus the cause, retry policy, side effects and next action of a turn that ended without completing. Its MCP roster lists up to terminal rows − 26 servers (was − 24), so these rows take their height from the roster instead of pushing the bottom border and unpin hint off screen.
+- Status values pair a glyph with text: `✓` ok, `●` active, `!` blocked, `▲` degraded, `?` unknown, `~` stale, `◐` inconclusive. A value without a source shows as unknown (`?`), never as healthy.
+- The startup opening uses the paper/ink/vermillion design language of the README hero: a `FIG. 01 · THE CONTROL LOOP` plate, OMK's control-loop mark beside a serif half-block `OMK` wordmark, the tracked `OPEN MULTI-AGENT KIT` subtitle, an accent rule, the hero's lede (`Scope the work. Route the right agents. Verify every release.`), the `SCOPE → ROUTE → VERIFY → REPLAY` flow and a `MODEL … · THEME … · ANSI …` row. RUN, VERIFY and CTX appear only in the rail beside it. Below 120 columns the opening is a closed plate with `OMK · OPEN MULTI-AGENT KIT`, the lede, the status line `OMK vX · VERIFY … · MODEL … · ANSI ON|OFF` and the key hints (was `WELCOME TO OMK` and `OMK vX | VERIFY … | MODEL … | ANSI:…`); the expanded view adds the wordmark block and `THEME` once. The panel lines under the deck are left-aligned.
+- VERIFY reads `? unverified` in interactive sessions. No evidence workflow is attached to the interactive session, so a settled prompt or a completed turn does not change it.
+- Context pressure in the control rail, the pinned sidebar and the footer uses one threshold pair: elevated (warning color) from 70%, critical (error color) from 90%. Previously the rail and sidebar meters changed color at 65% and 85%, the sidebar `ctx` figure and the footer's context figure above 70% and 90%, and the rail `ctx` row was green at any usage.
+- Percentages in the control rail and the pinned sidebar, and the footer's context figure, are floored at display precision: 69.96% shows 69.9%, not 70.0%, so a figure never reaches a color band before its color changes.
+- Rail visibility comes from one layout classifier: XS below 80 columns, SM 80–119, MD 120–159, LG 160 and wider. Rails render only at MD or LG. The startup deck needs 120 columns (was 113), and the control-pane overlay needs 120 columns and 16 rows (was 112 and 12). These numbers may change after visual QA in native terminals.
+- The pinned status sidebar (`pinStatusSidebar`, `Ctrl+Q`) now needs at least 120 columns (was 96) and 16 rows; on smaller terminals the bottom status bar stays, and pinning with `Ctrl+Q` shows `Status sidebar pinned; it shows at 120+ columns and 16+ rows.`
+- When no theme is set, omk uses the new paper pair: `omk-paper-dark` on dark terminals, `omk-paper-light` on light ones (was `omk-control-panel` / `omk-control-light`). An explicit `theme` setting is unchanged; `omk-control-grid-dark` and the other built-in themes stay selectable.
+- The accent now marks only the Verify stage, the active tab and live signals. Frame titles, section labels, the rail identity, git branch, uptime, model id, token counts, usage labels, the activity sparkline, the theme name and the startup resource list's group labels use ink or secondary ink instead. Control-panel and status-sidebar frames use square hairline corners, and the single-column layouts use captioned plate rules (`┌─ LABEL ─┐`, `├─ LABEL ─┤`, `└─┘`).
+- Opening the expanded view (`Ctrl+O`) inks the wordmark in once: 420 ms, ease-out, from a faint pencil underdrawing to ink, with the Verify accent last. It changes colour only, never the layout, and is skipped for reduced motion, `NO_COLOR`, non-TTY output and narrow widths.
+
+### Fixed
+
+- The startup panel no longer shows fixed status values as live state. The control rail, the hero strip and the narrow status line printed `ready`, `active`, `tracking`, `linked`, `pinned` and `DAG:omk-parallel-orchestrator` with no runtime source, most of them in the success color. Status rows now come from one `ControlPlaneViewModel` built from the live session by one adapter, `readControlPlaneSignals`; the pinned status sidebar builds the same view model through the same adapter.
+- Status rows in the control rail and the pinned sidebar, and the startup header's MODEL and THEME values, print session, run-journal, model, theme and file-system text (model id, theme name, cwd, git branch, session name, endpoint host, MCP server names, TODO labels, failure text) as one printable line: escape sequences, control characters and bidi marks are removed and line breaks become spaces. In 1.2.4 the rail's model, cwd, git and TODO rows and the pinned sidebar's cwd, git, session and model rows printed such text as-is; sidebar MCP names were already cleaned.
+
+### Removed
+
+- From the control rail: the STATUS and CONTROL sections, the `omk` and `sidebar` rows, the `pulse` sparkline (seeded from a hash of the status snapshot, not measured), the `MATRIX RAIN // NEON GRID ONLINE` line and the `pkg` package-intake row. Package intake still appears in the footer and in the pinned sidebar's SYSTEM section. The `CYBERPUNK OPS CORE` and `NIGHT-CITY-MATRIX-V3` lines are gone from both the rail and the hero.
+- The startup banner's hue gradient, scramble reveal, idle colour drift and sparkle starfield. `OMK_CONTROL_IDLE_DRIFT` no longer has an effect: the opening never loops.
+
 ## [1.2.4] - 2026-09-23
 
 ### New Features
