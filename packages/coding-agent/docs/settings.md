@@ -68,7 +68,7 @@ Global-only, default-off lifecycle for a future v4 advisory source. The timeout,
 
 | Setting | Type | Default | Description |
 | --------- | ------ | --------- | ------------- |
-| `theme` | string | `"dark"` | Theme name (`"dark"`, `"light"`, or custom) |
+| `theme` | string | detected | Theme name (built-in such as `"omk-paper-dark"`, `"omk-paper-light"`, `"dark"`, `"light"`, or custom). Unset: `omk-paper-dark` on dark terminals, `omk-paper-light` on light ones |
 | `quietStartup` | boolean | `false` | Hide startup header |
 | `collapseChangelog` | boolean | `true` | Show condensed changelog after updates (set `false` for the full "What's New" block) |
 | `footerSystemMetrics` | boolean | `false` | Show system-wide CPU/MEM usage in the footer stats line |
@@ -78,7 +78,7 @@ Global-only, default-off lifecycle for a future v4 advisory source. The timeout,
 | `editorPaddingX` | number | `0` | Horizontal padding for input editor (0-3) |
 | `autocompleteMaxVisible` | number | `5` | Max visible items in autocomplete dropdown (3-20) |
 | `showHardwareCursor` | boolean | `false` | Show the terminal cursor while TUI positions it for IME support |
-| `pinStatusSidebar` | boolean | `false` | Pin the bottom status bar as a responsive right rail (opencode-style): width scales with the terminal (~26%, 34–48 cols), the MCP roster grows on taller terminals, and the content column shrinks to match so the prompt is never covered. Toggle anytime with `Ctrl+Q`. Also enabled by `OMK_PIN_STATUS_SIDEBAR=1` |
+| `pinStatusSidebar` | boolean | `false` | Pin the bottom status bar as a responsive right rail (opencode-style): width scales with the terminal (~26%, 34–48 cols), the MCP roster grows on taller terminals, and the content column shrinks to match so the prompt is never covered. The rail shows only when the terminal has at least 120 columns and 16 rows; otherwise the bottom status bar is used. Toggle anytime with `Ctrl+Q`; pinning on a smaller terminal shows a status line with those minimums. Also enabled by `OMK_PIN_STATUS_SIDEBAR=1` |
 
 ### Telemetry and update checks
 

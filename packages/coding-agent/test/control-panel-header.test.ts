@@ -53,10 +53,27 @@ describe("ControlPanelComponent", () => {
 		const lines = panel.render(48);
 		const plain = stripAnsi(lines.join("\n"));
 
-		expect(plain).toContain("WELCOME TO OMK");
-		expect(plain).toContain("CORE:UNKNOWN");
+		expect(plain).toContain("OMK · OPEN MULTI-AGENT KIT");
+		expect(plain).not.toContain("WELCOME TO OMK");
+		expect(plain).toContain("VERIFY ? UNVERIFIED");
+		expect(plain).not.toMatch(/\bRUN\b|\bCTX\b/);
+		expect(plain).not.toContain("CORE:");
 		expect(plain).toContain("Ctrl+C interrupt");
 		expect(lines.every((line) => visibleWidth(line) <= 48)).toBe(true);
+	});
+
+	test("compact status line carries VERIFY, the model and the ANSI state below md", () => {
+		const panel = createPanel(() => ({
+			modelProvider: "openrouter",
+			modelId: "omk-test-model",
+			contextPercent: 42.5,
+			ansiColorState: "on",
+		}));
+		const plain = stripAnsi(panel.render(90).join("\n"));
+
+		// The model keeps its case; live RUN state and context usage are not header values.
+		expect(plain).toContain("OMK v0.80.5 · VERIFY ? UNVERIFIED · MODEL openrouter/omk-test-model · ANSI ON");
+		expect(plain).not.toMatch(/\bRUN\b|\bCTX\b/);
 	});
 
 	test("renders the wide OMK control deck with a pinned sidebar", () => {
@@ -65,14 +82,16 @@ describe("ControlPanelComponent", () => {
 		const plain = stripAnsi(lines.join("\n"));
 
 		expect(plain).toContain("OMK://CONTROL");
-		expect(plain).toContain("CYBERPUNK OPS CORE");
-		expect(plain).toContain("MATRIX RAIN");
-		expect(plain).toContain("NIGHT-CITY-MATRIX-V3");
-		expect(plain).toContain("SESSION");
-		expect(plain).toContain("MODEL / CTX");
-		expect(plain).toContain("RUNTIME / MCP / SKILLS");
-		expect(plain).toContain("CONTROL");
-		expect(plain).toContain("OMK://CONTROL READ");
+		expect(plain).toContain("FIG. 01 · THE CONTROL LOOP");
+		expect(plain).not.toMatch(/CYBERPUNK|NIGHT-CITY/);
+		for (const section of ["RUN", "VERIFY", "CONTEXT", "RESOURCES", "TODO", "SESSION"]) {
+			expect(plain).toContain(`─ ${section} ─`);
+		}
+		expect(plain).not.toContain("MATRIX RAIN");
+		expect(plain).not.toContain("MODEL / CTX");
+		expect(plain).not.toContain("RUNTIME / MCP / SKILLS");
+		expect(plain).not.toContain("OMK://CONTROL READ");
+		expect(plain).toContain("SCOPE → ROUTE → VERIFY → REPLAY");
 		expect(lines.every((line) => visibleWidth(line) <= 160)).toBe(true);
 	});
 
@@ -88,45 +107,27 @@ describe("ControlPanelComponent", () => {
 			mcpCount: 12,
 			cwdLabel: "~/open_multi-agent_kit",
 			gitBranch: "main",
-			packageIntake: {
-				total: 6,
-				acceptedNative: 2,
-				acceptedReference: 1,
-				acceptedMeasurement: 1,
-				acceptedAdvisory: 0,
-				deferred: 1,
-				reject: 1,
-				hardForkBlocked: 1,
-				topLanes: [
-					{ lane: "browser", label: "browser", total: 1, accepted: 1, deferred: 0, reject: 0, hardForkBlocked: 0 },
-					{ lane: "footer", label: "footer", total: 1, accepted: 1, deferred: 0, reject: 0, hardForkBlocked: 0 },
-					{ lane: "lens", label: "lens", total: 1, accepted: 1, deferred: 0, reject: 0, hardForkBlocked: 0 },
-					{ lane: "mcp", label: "MCP", total: 1, accepted: 1, deferred: 0, reject: 0, hardForkBlocked: 0 },
-					{
-						lane: "subagent",
-						label: "subagent",
-						total: 1,
-						accepted: 0,
-						deferred: 1,
-						reject: 0,
-						hardForkBlocked: 0,
-					},
-					{ lane: "todo", label: "todo", total: 1, accepted: 0, deferred: 0, reject: 1, hardForkBlocked: 1 },
-				],
-			},
+			ansiColorState: "on",
 		}));
 		const plain = stripAnsi(panel.render(160).join("\n"));
 
 		expect(plain).toContain("model: openrouter/omk-test-model");
 		expect(plain).toContain("think: high");
-		expect(plain).toContain("ctx: 42.5%/128k");
+		expect(plain).toContain("ctx: ✓ normal 42.5%/128k");
 		expect(plain).toContain("meter:");
-		expect(plain).toContain("pulse:");
-		expect(plain).toContain("headroom: headroom:0.29.0");
+		expect(plain).toContain("opt: headroom:0.29.0");
 		expect(plain).toContain("cwd: ~/open_multi-agent_kit");
 		expect(plain).toContain("git: main");
-		expect(plain).toContain("res: MCP:12 skills:96");
-		expect(plain).toContain("pkg: ports:4/6 review:2 block:1");
+		expect(plain).toContain("ext: MCP:12 skills:96");
+		expect(plain).toContain("MODEL omk-test-model:high");
+		// The hero strip names the terminal setup; the rail beside it owns RUN/VERIFY/CTX.
+		expect(plain).toContain("MODEL omk-test-model:high  ·  THEME NEON-CONTROL  ·  ANSI ON");
+		expect(plain).not.toMatch(/\bCTX\b|RUN \?|VERIFY \?/);
+		// Context usage is sourced; RUN has no source in this snapshot and must not look healthy.
+		expect(plain).toContain("state: ? unknown");
+		expect(plain).not.toContain("pulse:");
+		expect(plain).not.toContain("pkg:");
+		expect(plain).not.toContain("res:");
 		expect(plain).not.toContain("deepseek/deepseek-v4-pro");
 		expect(plain).not.toContain("ctx: 0.0%/1.0M");
 	});
@@ -152,10 +153,19 @@ describe("ControlPanelComponent", () => {
 		const lines = panel.render(96);
 		const plain = stripAnsi(lines.join("\n"));
 
-		expect(plain).toContain("WELCOME TO OMK");
+		expect(plain).toContain("OMK · OPEN MULTI-AGENT KIT");
+		expect(plain).not.toContain("WELCOME TO OMK");
 		expect(plain).toContain("████");
-		expect(plain).toContain("PANEL unknown");
+		expect(plain).toContain("MODEL no-model");
+		expect(plain).toContain("VERIFY ? UNVERIFIED");
 		expect(plain).toContain("THEME NEON-CONTROL");
+		expect(plain).toContain("ANSI ?");
+		// One surface, each signal once: the status line owns VERIFY/MODEL/ANSI, the metadata only THEME.
+		for (const signal of ["VERIFY", "MODEL", "ANSI", "THEME"]) {
+			expect(plain.match(new RegExp(`\\b${signal}\\b`, "g")) ?? [], signal).toHaveLength(1);
+		}
+		expect(plain).not.toMatch(/\bRUN\b|\bCTX\b/);
+		expect(plain).not.toContain("PANEL");
 		expect(plain).toContain("SYSTEM MAP");
 		expect(plain).toContain("! to run bash");
 		expect(lines.every((line) => visibleWidth(line) <= 96)).toBe(true);
@@ -229,6 +239,8 @@ test("96-column expanded fallback keeps coherent border framing on every row", (
 	const dividerPairs = new Map([
 		["+", "+"],
 		["╭", "╮"],
+		["┌", "┐"],
+		["└", "┘"],
 		["├", "┤"],
 		["╰", "╯"],
 	]);
@@ -297,6 +309,12 @@ test("empty status snapshot rejects unconditional healthy control claims", () =>
 		/route:\s*armed/i,
 		/verify:\s*evidence gated/i,
 		/evidence gated/i,
+		/evidence:\s*tracking/i,
+		/sidebar:\s*pinned/i,
+		/STARTUP:LINKED/i,
+		/LINK:READY/i,
+		/state:\s*✓/,
+		/verdict:\s*✓/,
 	];
 
 	const violations = unconditionalHealthyClaims
@@ -309,15 +327,13 @@ test("empty status snapshot rejects unconditional healthy control claims", () =>
 		"empty snapshot must render data-status cues and no unconditional healthy claims",
 	).toEqual({ renderedStatusCue: true, violations: [] });
 });
-test("112-column overlay boundary keeps rail hidden until 113 columns", () => {
-	const at111 = stripAnsi(createPanel().render(111).join("\n"));
-	const at112 = stripAnsi(createPanel().render(112).join("\n"));
-	const at113 = stripAnsi(createPanel().render(113).join("\n"));
+test("rail boundary keeps the deck rail hidden below the md layout class (120 columns)", () => {
+	const at119 = stripAnsi(createPanel().render(119).join("\n"));
+	const at120 = stripAnsi(createPanel().render(120).join("\n"));
 
-	expect(at111).not.toContain("1:CONTROL");
-	expect(at112).not.toContain("1:CONTROL");
-	expect(at112).not.toContain("OMK://CONTROL");
-	expect(at113).toContain("1:CONTROL");
+	expect(at119).not.toContain("1:CONTROL");
+	expect(at119).not.toContain("OMK://CONTROL");
+	expect(at120).toContain("1:CONTROL");
 });
 
 test("long onboarding does not repeat right rail labels after first panel", () => {
@@ -336,7 +352,7 @@ test("long onboarding does not repeat right rail labels after first panel", () =
 	const railLines = plain
 		.split("\n")
 		.filter((line) => !line.includes("omk v") && !line.includes("OMK://CONTROL READ"));
-	for (const railText of ["1:CONTROL", "OMK://CONTROL", "CYBERPUNK OPS CORE"]) {
+	for (const railText of ["1:CONTROL", "OMK://CONTROL", "FIG. 01 · THE CONTROL LOOP", "verdict:"]) {
 		const count = railLines.filter((line) => line.includes(railText)).length;
 		expect(count, `${railText} rail repetition count`).toBeLessThanOrEqual(1);
 	}

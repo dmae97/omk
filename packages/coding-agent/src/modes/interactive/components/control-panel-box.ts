@@ -1,4 +1,5 @@
 import { truncateToWidth, visibleWidth } from "omk-tui";
+import { singleLineDisplayText } from "../../../utils/display-text.ts";
 import { type ThemeColor, theme } from "../theme/theme.ts";
 
 export function composeColumns(
@@ -22,14 +23,14 @@ export function composeColumns(
  *
  * Editorial treatment: the label sits flush left behind a single hairline tick
  * and the rule runs out to the right edge, instead of a centered bold caption.
- * Frames stay hairline so the accent colour is reserved for live values.
+ * Labels are secondary ink like a figure caption; the accent is reserved for signals.
  */
 export function sidebarRule(width: number, label: string, borderColor: ThemeColor = "borderMuted"): string {
 	const bodyWidth = Math.max(0, width - 2);
 	const labelText = ` ${label} `;
 	const fill = Math.max(0, bodyWidth - visibleWidth(labelText) - 1);
 	return clipLine(
-		`${theme.fg(borderColor, "\u2502")}${theme.fg("borderMuted", "\u2500")}${theme.fg("accent", labelText)}${theme.fg("borderMuted", "\u2500".repeat(fill))}${theme.fg(borderColor, "\u2502")}`,
+		`${theme.fg(borderColor, "\u2502")}${theme.fg("borderMuted", "\u2500")}${theme.fg("muted", labelText)}${theme.fg("borderMuted", "\u2500".repeat(fill))}${theme.fg(borderColor, "\u2502")}`,
 		width,
 	);
 }
@@ -41,8 +42,8 @@ export const RAIL_LABEL_COLUMN = 8;
  * Right-aligned `label:` gutter cell.
  *
  * Labels are right-aligned so every value starts on the same column while the
- * rendered text keeps exactly one space after the colon (`route: active`),
- * which downstream reference-fidelity assertions depend on.
+ * rendered text keeps exactly one space after the colon (`git: main`,
+ * `state: ● running`), which the header and rail row assertions depend on.
  */
 export function labelCell(label: string, column: number = RAIL_LABEL_COLUMN): string {
 	const text = `${label}:`;
@@ -50,17 +51,78 @@ export function labelCell(label: string, column: number = RAIL_LABEL_COLUMN): st
 	return `${" ".repeat(pad)}${theme.fg("muted", text)}`;
 }
 
+/**
+ * `label: value` rail row that keeps the meaningful part of an over-long value:
+ * `start` keeps the head (tail becomes `…`), `end` keeps the tail, `middle` keeps both ends.
+ * The optional colour paints the fitted value only, so the label gutter stays muted.
+ * The value is reduced to one printable line first: rows carry session, journal and file-system text.
+ */
+export function semanticBoxTextLine(
+	width: number,
+	label: string,
+	value: string,
+	preserve: "start" | "middle" | "end",
+	column?: number,
+	color?: ThemeColor,
+): string {
+	const text = singleLineDisplayText(value);
+	// Alignment is a courtesy, not a cost: if the gutter indent would truncate the
+	// value, this row drops back to a flush label so the data survives intact.
+	const aligned = `${labelCell(label, column)} `;
+	const flush = `${labelCell(label, label.length)} `;
+	const alignedRoom = Math.max(0, width - 4 - visibleWidth(aligned));
+	const prefix = visibleWidth(text) <= alignedRoom ? aligned : flush;
+	const fitted = semanticTruncate(text, Math.max(0, width - 4 - visibleWidth(prefix)), preserve);
+	return boxTextLine(width, `${prefix}${color ? theme.fg(color, fitted) : fitted}`);
+}
+
+function semanticTruncate(value: string, maxWidth: number, preserve: "start" | "middle" | "end"): string {
+	if (visibleWidth(value) <= maxWidth) return value;
+	if (maxWidth <= 0) return "";
+	if (preserve === "start") return truncateToWidth(value, maxWidth, "…");
+	const ellipsis = "…";
+	const targetWidth = maxWidth - visibleWidth(ellipsis);
+	if (targetWidth <= 0) return truncateToWidth(ellipsis, maxWidth, "");
+	if (preserve === "middle") {
+		const headWidth = Math.max(1, Math.floor(targetWidth / 2));
+		const tailWidth = Math.max(1, targetWidth - headWidth);
+		return `${takeStart(value, headWidth)}${ellipsis}${takeEnd(value, tailWidth)}`;
+	}
+	return `${ellipsis}${takeEnd(value, targetWidth)}`;
+}
+
+function takeStart(value: string, maxWidth: number): string {
+	let prefix = "";
+	for (const char of Array.from(value)) {
+		if (visibleWidth(prefix + char) > maxWidth) break;
+		prefix += char;
+	}
+	return prefix;
+}
+
+function takeEnd(value: string, maxWidth: number): string {
+	let suffix = "";
+	for (const char of Array.from(value).reverse()) {
+		if (visibleWidth(char + suffix) > maxWidth) break;
+		suffix = char + suffix;
+	}
+	return suffix;
+}
+
+/**
+ * Square-cornered frame like a printed plate: the title is a caption in secondary ink, not the accent.
+ */
 export function boxTop(width: number, label: string, borderColor: ThemeColor = "borderMuted"): string {
 	const text = ` ${label} `;
 	const fillWidth = Math.max(0, width - visibleWidth("+") - visibleWidth(text) - visibleWidth("+"));
 	return clipLine(
-		`${theme.fg(borderColor, "\u256d")}${theme.bold(theme.fg("accent", text))}${theme.fg(borderColor, "\u2500".repeat(fillWidth))}${theme.fg(borderColor, "\u256e")}`,
+		`${theme.fg(borderColor, "\u250c")}${theme.fg("muted", text)}${theme.fg(borderColor, "\u2500".repeat(fillWidth))}${theme.fg(borderColor, "\u2510")}`,
 		width,
 	);
 }
 
 export function boxBottom(width: number, borderColor: ThemeColor = "borderMuted"): string {
-	return clipLine(theme.fg(borderColor, `\u2570${"\u2500".repeat(Math.max(0, width - 2))}\u256f`), width);
+	return clipLine(theme.fg(borderColor, `\u2514${"\u2500".repeat(Math.max(0, width - 2))}\u2518`), width);
 }
 
 export function boxBlankLine(width: number): string {
@@ -128,10 +190,22 @@ export function centerText(width: number, text: string): string {
 	return `${" ".repeat(Math.floor(remaining / 2))}${fitted}${" ".repeat(Math.ceil(remaining / 2))}`;
 }
 
-export function divider(width: number, label: string, color: ThemeColor): string {
-	const fillWidth = Math.max(0, width - visibleWidth("+-- ") - visibleWidth(label) - visibleWidth(" +"));
+/**
+ * Captioned plate rule for the single-column layouts: `┌─ LABEL ──┐` opens the frame, `├─ LABEL ──┤`
+ * separates sections and `└──────┘` closes it (an empty label draws a plain rule).
+ */
+export function divider(
+	width: number,
+	label: string,
+	color: ThemeColor,
+	edge: "top" | "middle" | "bottom" = "middle",
+): string {
+	const [left, right] =
+		edge === "top" ? ["\u250c", "\u2510"] : edge === "bottom" ? ["\u2514", "\u2518"] : ["\u251c", "\u2524"];
+	const caption = label ? ` ${label} ` : "";
+	const fillWidth = Math.max(0, width - 3 - visibleWidth(caption));
 	return clipLine(
-		`${theme.fg("border", "+-- ")}${theme.bold(theme.fg(color, label))}${theme.fg("border", ` ${"-".repeat(fillWidth)}+`)}`,
+		`${theme.fg("borderMuted", `${left}\u2500`)}${caption ? theme.fg(color, caption) : ""}${theme.fg("borderMuted", `${"\u2500".repeat(fillWidth)}${right}`)}`,
 		width,
 	);
 }

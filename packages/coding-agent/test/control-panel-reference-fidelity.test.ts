@@ -13,6 +13,18 @@ function stripAnsi(value: string): string {
 	return value.replace(ESC_RE, "");
 }
 
+/** Decorative or hardcoded-status copy the status rail must never render. */
+const RAIL_FORBIDDEN_TEXT = [
+	"CYBERPUNK OPS CORE",
+	"MATRIX RAIN",
+	"NEON GRID ONLINE",
+	"NIGHT-CITY-MATRIX-V3",
+	"pulse:",
+	"sidebar: pinned",
+	"route: active",
+	"pkg:",
+];
+
 function makePanel(): ControlPanelComponent {
 	const statusSnapshot = (): ControlPanelStatusSnapshot => ({
 		modelProvider: "deepseek",
@@ -23,15 +35,7 @@ function makePanel(): ControlPanelComponent {
 		headroomStatus: "headroom:0.29.0",
 		skillCount: 96,
 		mcpCount: 12,
-		runtimeState: "ready",
-		routeState: "active",
-		evidenceState: "tracking",
-		controlState: "ready",
-		dagOrchestrationState: "DAG:omk-parallel-orchestrator",
 		ansiColorState: "on",
-		startupState: "linked",
-		linkState: "ready",
-		sidebarState: "pinned",
 		cwdLabel: "~/open_multi-agent_kit",
 		gitBranch: "main",
 	});
@@ -75,16 +79,32 @@ describe("ControlPanelComponent reference fidelity", () => {
 		expect(plain).toContain("omk v0.78.0 · OMK://CONTROL");
 		expect(plain).toContain("████");
 		expect(plain).toContain("OMK://CONTROL");
-		expect(plain).toContain("CYBERPUNK OPS CORE");
-		expect(plain).toContain("MATRIX RAIN");
-		expect(plain).toContain("NEON GRID ONLINE");
-		expect(plain).toContain("NIGHT-CITY-MATRIX-V3");
-		expect(plain).toContain("sidebar: pinned");
+		// The figure plate is the opening's caption: exactly once, in the hero, never a rail row.
+		expect(plain.split("FIG. 01 · THE CONTROL LOOP")).toHaveLength(2);
+		expect(plain).toContain("MIT · PROVIDER-NEUTRAL");
+		expect(plain).toContain("Scope the work. Route the right agents.");
+		expect(plain).toContain("Verify every release.");
+		for (const forbidden of [
+			"CYBERPUNK OPS CORE",
+			"NIGHT-CITY-MATRIX-V3",
+			"MATRIX RAIN",
+			"NEON GRID ONLINE",
+			"pulse:",
+			"sidebar: pinned",
+			"route: active",
+			"pkg:",
+		]) {
+			expect(plain).not.toContain(forbidden);
+		}
+		for (const section of ["RUN", "VERIFY", "CONTEXT", "RESOURCES"]) expect(plain).toContain(`─ ${section} ─`);
 		expect(plain).toContain("meter:");
-		expect(plain).toContain("pulse:");
-		expect(plain).toContain("OMK://CONTROL READ route/verify/loop/control");
-		expect(plain).toContain("route: active");
-		expect(plain).toContain("control");
+		expect(plain).toContain("SCOPE → ROUTE → VERIFY → REPLAY");
+		expect(plain).not.toContain("OMK://CONTROL READ");
+		expect(plain).toContain("MODEL deepseek-v4-pro:max");
+		// Hero meta row: model and terminal setup only; RUN/VERIFY/CTX are rail rows beside it.
+		expect(plain).toContain("MODEL deepseek-v4-pro:max  ·  THEME CONTROL-GRID-DARK  ·  ANSI ON");
+		expect(plain).toContain("state: ? unknown");
+		expect(plain).not.toContain("RUN ? unknown");
 		expect(plain).toContain("[Context]");
 		expect(plain).toContain("1 loaded · omk-control-grid-dark");
 
@@ -113,28 +133,24 @@ describe("ControlPanelComponent reference fidelity", () => {
 				headroomStatus: "headroom:0.29.0",
 				skillCount: 96,
 				mcpCount: 12,
-				runtimeState: "ready",
-				routeState: "active",
-				evidenceState: "tracking",
-				controlState: "ready",
-				dagOrchestrationState: "DAG:omk-parallel-orchestrator",
 				ansiColorState: "on",
-				startupState: "linked",
-				linkState: "ready",
-				sidebarState: "pinned",
 				cwdLabel: "~/open_multi-agent_kit",
 				gitBranch: "main",
 			}),
 		});
 
 		const lines = pane.render(38).map(stripAnsi);
-		expect(lines.join("\n")).toContain("OMK://CONTROL");
-		expect(lines.join("\n")).toContain("CYBERPUNK OPS CORE");
-		expect(lines.join("\n")).toContain("MATRIX RAIN");
-		expect(lines.join("\n")).toContain("NIGHT-CITY-MATRIX-V3");
-		expect(lines.join("\n")).toContain("meter:");
-		expect(lines.join("\n")).toContain("pulse:");
-		expect(lines.join("\n")).toContain("sidebar: pinned");
+		const plain = lines.join("\n");
+		expect(plain).toContain("OMK://CONTROL");
+		for (const section of ["RUN", "VERIFY", "CONTEXT", "RESOURCES", "TODO", "SESSION"]) {
+			expect(plain).toContain(`─ ${section} ─`);
+		}
+		expect(plain).toContain("meter:");
+		expect(plain).toContain("verdict: ? unverified");
+		// The overlay is viewport-anchored, so it keeps the live resource rows.
+		expect(plain).toContain("cpu: ? unknown");
+		expect(plain).toContain("rss: ?");
+		for (const forbidden of RAIL_FORBIDDEN_TEXT) expect(plain).not.toContain(forbidden);
 		expect(lines.every((line) => visibleWidth(line) === 38)).toBe(true);
 	});
 });
@@ -150,15 +166,7 @@ test("CJK emoji combining visibleWidth fixture keeps every row within 38 display
 		headroomStatus: `headroom-${fixture}`,
 		skillCount: 96,
 		mcpCount: 12,
-		runtimeState: "ready",
-		routeState: "active",
-		evidenceState: "tracking",
-		controlState: "ready",
-		dagOrchestrationState: "DAG:omk-parallel-orchestrator",
 		ansiColorState: "on",
-		startupState: "linked",
-		linkState: "ready",
-		sidebarState: "pinned",
 		cwdLabel: `~/작업/${fixture}/a-very-long-current-working-directory-that-must-fit`,
 		gitBranch: `feature/${fixture}`,
 		todoState: {

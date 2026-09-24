@@ -15,6 +15,7 @@ import { getCustomThemesDir, getThemesDir } from "../../../config.ts";
 import type { SourceInfo } from "../../../core/source-info.ts";
 import { closeWatcher, watchWithErrorHandler } from "../../../utils/fs-watch.ts";
 import { highlight, supportsLanguage } from "../../../utils/syntax-highlight.ts";
+import { THEME_NAME_ALIASES } from "./theme-aliases.ts";
 
 // ============================================================================
 // Types & Schema
@@ -447,41 +448,6 @@ export class Theme {
 // ============================================================================
 
 let BUILTIN_THEMES: Record<string, ThemeJson> | undefined;
-const THEME_NAME_ALIASES: Record<string, string> = {
-	rust: "rust-forge",
-	cargo: "rust-forge",
-	oxide: "rust-forge",
-	oxidized: "rust-forge",
-	"oxidized-forge": "rust-forge",
-	forge: "rust-forge",
-	"rust-native": "rust-forge",
-	"rust-forge-control": "rust-forge",
-	"omk-rust-forge": "rust-forge",
-	control: "omk-control-grid-dark",
-	aurora: "omk-aurora-dark",
-	"aurora-dark": "omk-aurora-dark",
-	"omk-aurora": "omk-aurora-dark",
-	"aurora-light": "omk-aurora-light",
-	"omk-aurora-light": "omk-aurora-light",
-	"night-city": "omk-control-grid-dark",
-	"night-city-ops": "omk-control-grid-dark",
-	"neon-grid": "omk-control-grid-dark",
-	cyberpunk: "omk-control-grid-dark",
-	"omk-control-dark": "omk-control-grid-dark",
-	"omk-control-ansi": "omk-control-panel",
-	"control-panel": "omk-control-panel",
-	g0dm0d3: "omk-control-panel",
-	"neon-control": "omk-neon-control",
-	"control-neon": "omk-neon-control",
-	"omk-control-neon": "omk-neon-control",
-	"startup-control": "omk-neon-control",
-	catppuccin: "catppuccin-mocha",
-	mocha: "catppuccin-mocha",
-	"tokyo-night": "tokyo-night-storm",
-	tokyo: "tokyo-night-storm",
-	kanagawa: "kanagawa-dragon",
-	gruvbox: "gruvbox-dark",
-};
 
 export function resolveThemeName(name: string): string {
 	return THEME_NAME_ALIASES[name] ?? name;
@@ -812,7 +778,7 @@ export function detectTerminalBackground(options: TerminalThemeDetectionOptions 
 }
 
 export function getDefaultTheme(): string {
-	return detectTerminalBackground().theme === "light" ? "omk-control-light" : "omk-control-panel";
+	return detectTerminalBackground().theme === "light" ? "omk-paper-light" : "omk-paper-dark";
 }
 
 // ============================================================================
