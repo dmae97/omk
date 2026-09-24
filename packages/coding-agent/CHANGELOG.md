@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Width-invariant property tests in `packages/tui` for `visibleWidth`, `truncateToWidth` and `wrapTextWithAnsi`, with `fast-check` 4.9.0 pinned as a devDependency there. Two known defects are recorded as `todo` tests: `truncateToWidth` can return text wider than `maxWidth` when an SGR code splits an emoji + VS16 grapheme, and `visibleWidth` counts a leading zero-width joiner as width.
+
 ## [1.2.4] - 2026-09-23
 
 ### New Features
