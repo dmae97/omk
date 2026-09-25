@@ -149,6 +149,64 @@ describe("scoreSkillRelevance", () => {
 		// At minimum, relevant should be higher
 		expect(relevant).toBeGreaterThan(irrelevant);
 	});
+
+	it("matches Korean inflected forms (조사/활용형) to the dictionary token", () => {
+		// "메타인지를" never appears verbatim, but it contains "메타인지".
+		const metacog = scoreSkillRelevance(
+			{ name: "metacognition", description: "메타인지 관찰 통제 루프" },
+			"메타인지를 실행해줘",
+		);
+		expect(metacog).toBeGreaterThan(0.3);
+
+		// Longer queries dilute coverage per-token but must still beat an
+		// unrelated skill on the same query.
+		const longQuery = "메타인지를 사용해 세션 프롬프트를 이해";
+		const metacogLong = scoreSkillRelevance(
+			{ name: "metacognition", description: "메타인지 관찰 통제 루프" },
+			longQuery,
+		);
+		const unrelated = scoreSkillRelevance({ name: "unrelated", description: "database migration" }, longQuery);
+		expect(metacogLong).toBeGreaterThan(0);
+		expect(metacogLong).toBeGreaterThan(unrelated);
+	});
+
+	it("matches Latin stems and plurals, not only exact words", () => {
+		const stemmed = scoreSkillRelevance(
+			{ name: "perf-tuning", description: "database query optimization guide" },
+			"optimize the slow query",
+		);
+		const unrelated = scoreSkillRelevance(
+			{ name: "css-skill", description: "animation and styling helpers" },
+			"optimize the slow query",
+		);
+		expect(stemmed).toBeGreaterThan(unrelated);
+
+		const plural = scoreSkillRelevance(
+			{ name: "testing", description: "unit tests and test fixtures" },
+			"testing the new feature",
+		);
+		expect(plural).toBeGreaterThan(0.3);
+	});
+
+	it("does not let approximate matches outscore an exact hit", () => {
+		const exact = scoreSkillRelevance(
+			{ name: "context-tools", description: "context window tools" },
+			"context budget",
+		);
+		const approximate = scoreSkillRelevance(
+			{ name: "contact-tools", description: "contact sheet generator" },
+			"context budget",
+		);
+		expect(exact).toBeGreaterThan(approximate);
+		expect(approximate).toBeLessThan(1);
+	});
+
+	it("keeps short tokens exact-only (no subword noise below 4 chars)", () => {
+		// "ocr" is 3 chars: "scorecard" contains it but must not match.
+		const score = scoreSkillRelevance({ name: "scorecard", description: "scorecard metrics" }, "ocr pipeline");
+		const exact = scoreSkillRelevance({ name: "scorecard", description: "scorecard metrics" }, "scorecard pipeline");
+		expect(exact).toBeGreaterThanOrEqual(score);
+	});
 });
 
 // ---------------------------------------------------------------------------

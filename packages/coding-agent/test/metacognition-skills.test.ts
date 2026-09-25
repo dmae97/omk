@@ -134,6 +134,30 @@ describe("skill planning", () => {
 		expect(result.algorithm).toBe("greedy-with-singleton");
 		expect(result.selected).toEqual(["s29"]);
 	});
+	it("greedy eviction-refill escapes a dense but wrong first pick", () => {
+		// "combo" wins the greedy race on marginal density but covers x instead
+		// of b; refilling after evicting it must reach full coverage via sa+sb.
+		const catalog = [
+			...Array.from({ length: 30 }, (_, i) => skill(`pad${i}`, ["unused"])),
+			skill("combo", ["a", "x"], { tokenCost: 13 }),
+			skill("sa", ["a"], { tokenCost: 9 }),
+			skill("sb", ["b"], { tokenCost: 9 }),
+		];
+		const result = planSkills(input(catalog, { needs: needs("a", "b"), maxSkills: 4, tokenBudget: 30 }));
+		expect(result.algorithm).toBe("greedy-with-singleton");
+		expect(result.selected).toEqual(["sa", "sb"]);
+		expect(result.state).toBe("covered");
+	});
+	it("greedy prune drops selected skills that add no coverage", () => {
+		const catalog = [
+			...Array.from({ length: 30 }, (_, i) => skill(`pad${i}`, ["unused"])),
+			skill("dead", []),
+			skill("useful", ["ui"]),
+		];
+		const result = planSkills(input(catalog));
+		expect(result.algorithm).toBe("greedy-with-singleton");
+		expect(result.selected).toEqual(["useful"]);
+	});
 	// Independent small-set enumerator: no calls into the implementation's helpers.
 	function oracle(
 		catalog: readonly SkillDescriptor[],
