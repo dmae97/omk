@@ -21,6 +21,8 @@ function fakeClient(behavior: FakeBehavior): McpClient {
 			if (behavior.pingError) throw behavior.pingError;
 		},
 		close: () => {},
+		// The manager now waits for an observed transport close before retiring a generation.
+		waitForTransportClose: async () => {},
 		serverInfo: { name: "fake", version: behavior.serverVersion ?? "1.0.0" },
 	} as unknown as McpClient;
 }
