@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { Agent, StreamFn } from "omk-agent-core";
 import { RunBudget, type RunBudgetSnapshot } from "./run-budget.ts";
 import { RunBudgetExceededError, type RunBudgetLimits, RunBudgetPolicyError } from "./run-budget-policy.ts";
@@ -18,6 +19,19 @@ export class SessionRunBudget {
 	private executing = false;
 	private disposed = false;
 	private cancelledBudget: RunBudget | undefined;
+	private executionCompletion: Promise<void> | undefined;
+	private readonly executionContext = new AsyncLocalStorage<RunBudget>();
+
+	async abortAndJoin(activeRun: boolean, abort: () => Promise<void>): Promise<void> {
+		if (this.current && this.executionContext.getStore() === this.current) {
+			if (activeRun) throw new Error("Cannot compact from the session's own active agent operation");
+			this.current.assertActive();
+			return;
+		}
+		const completion = this.executionCompletion;
+		await abort();
+		await completion;
+	}
 
 	cancelPreflight(): boolean {
 		if (!this.current || !this.executing) return false;
@@ -60,6 +74,7 @@ export class SessionRunBudget {
 		preflightResult?: (accepted: boolean) => void,
 	): Promise<void> {
 		let ownsScope = false;
+		let finishExecution: (() => void) | undefined;
 		let entered = false;
 		let budget: RunBudget | undefined;
 		const source = this.agent.streamFn;
@@ -72,6 +87,9 @@ export class SessionRunBudget {
 			}
 			this.executing = true;
 			ownsScope = true;
+			this.executionCompletion = new Promise<void>((resolve) => {
+				finishExecution = resolve;
+			});
 			if (limits !== undefined) {
 				if (this.agent.state.isStreaming) throw new PromptExecutionBusyError();
 				this.lifecycle.assertIdle();
@@ -93,7 +111,7 @@ export class SessionRunBudget {
 			this.agent.streamFn = wrapped;
 			scopedBudget.assertAdmission();
 			entered = true;
-			await operation();
+			await this.executionContext.run(scopedBudget, operation);
 			budget?.assertActive();
 		} catch (error) {
 			if (!entered) {
@@ -112,7 +130,11 @@ export class SessionRunBudget {
 			}
 			if (wrapped !== undefined && this.agent.streamFn === wrapped) this.agent.streamFn = source;
 			if (wrappedAuth !== undefined && this.agent.getApiKey === wrappedAuth) this.agent.getApiKey = sourceAuth;
-			if (ownsScope) this.executing = false;
+			if (ownsScope) {
+				this.executing = false;
+				this.executionCompletion = undefined;
+				finishExecution?.();
+			}
 		}
 	}
 }

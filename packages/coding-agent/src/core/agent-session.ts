@@ -3648,9 +3648,7 @@ export class AgentSession {
 	}
 
 	private async _compact(customInstructions?: string): Promise<CompactionResult> {
-		await this.abort();
-		this._disconnectFromAgent();
-		this._compactionAbortController = new AbortController();
+		this._compactionAbortController = this._shutdown.beginCompaction(this._compactionAbortController);
 		this._emit({ type: "compaction_start", reason: "manual" });
 		let committedCompaction = false;
 		// Hoisted so a failure is attributed to the model that actually summarized,
@@ -3658,6 +3656,8 @@ export class AgentSession {
 		let compactionModel: Model<Api> | undefined;
 
 		try {
+			await this._runBudget.abortAndJoin(this.isStreaming || this.isRetrying, () => this.abort());
+			this._disconnectFromAgent();
 			if (!this.model) {
 				throw new Error(formatNoModelSelectedMessage());
 			}

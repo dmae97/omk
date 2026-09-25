@@ -75,7 +75,9 @@ If the reserved budget exceeds the context window, the reserve boundary is ignor
 | `rearmRatio` | `0.75 × maxUsageRatio` | Ratio below which a triggered compaction can rearm |
 | `emergencyRatio` | `0.98` | Emergency compaction ratio |
 
-You can also trigger manually with `/compact [instructions]`, where optional instructions focus the summary. If a run is active, manual compaction waits for abort-driven terminal events, including tool results, to persist before capturing the transcript.
+You can also trigger manually with `/compact [instructions]`, where optional instructions focus the summary. If an external prompt is active or in preflight, manual compaction requests cancellation and waits for that prompt's producer to restore its stream/auth budget wrappers before starting its own summary. The wait is bound to that producer, not a later prompt. Waiting for the inner agent alone is insufficient: its outer prompt can still own a wrapper that is about to close. Compaction reserves admission before yielding so a new prompt or competing compaction cannot enter that handoff.
+
+A compaction invoked inside the current prompt's preflight shares that budget rather than cancelling itself. Reentrant compaction from the same prompt's actively running agent/tool is rejected instead of waiting on itself. Abort-driven terminal events, including tool results, persist before the transcript is captured.
 
 ### Overflow Recovery
 
@@ -97,6 +99,7 @@ Every compaction and branch-summary LLM call flows through one choke point (`com
 
 - **Retries**: transient stream drops (`terminated`, socket close, 5xx, DNS/transport errors) follow the configured `retry` settings (`enabled`, `maxRetries`, `baseDelayMs`) with exponential backoff. Aborts are never retried. Retry progress is emitted as `summarization_retry_scheduled` / `summarization_retry_attempt_start` / `summarization_retry_finished` session events (surfaced in the TUI and RPC stream).
 - **Isolation**: each summarization request runs with prompt caching disabled (`cacheRetention: "none"`) and a fresh routing `sessionId`, so summaries never write unusable provider cache entries or inherit interactive session affinity.
+- **Completion validation**: an aborted completion stays an `AbortError`, even if it contains partial text. Empty/whitespace-only summaries and unexpected stop reasons cannot be published as compaction entries. The existing nonempty `length`-stop behavior remains unchanged; it is not a claim that the summary preserved all information.
 
 ### Compaction Failover and Rescue
 

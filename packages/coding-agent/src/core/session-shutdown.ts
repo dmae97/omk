@@ -23,6 +23,12 @@ export class SessionShutdown {
 		if (this.closing) throw new Error("Session is closing or closed");
 	}
 
+	beginCompaction(current: AbortController | undefined): AbortController {
+		this.assertOpen();
+		if (current) throw new Error("Compaction is already in progress");
+		return new AbortController();
+	}
+
 	async run<T>(operation: () => Promise<T>): Promise<T> {
 		this.assertOpen();
 		let release: () => void = () => {};

@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Manual compaction waits for an aborted prompt's budget wrapper to finish cleanup before starting summaries. Preflight-local compaction shares its current budget, and self-waiting active-agent calls refuse. Aborted, empty or nonterminal model output is no longer accepted as a durable summary.
 - `AgentSession.close()` and runtime disposal retain the session owner lease until registered work and native MCP transport closure settle. Legacy busy disposal starts the same close rather than releasing ownership early.
 - An abort during prompt preflight closes that request's admission before it can dispatch a model. In-flight MCP reattachment joins the retiring manager before publishing replacements.
 

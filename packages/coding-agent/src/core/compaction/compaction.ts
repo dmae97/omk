@@ -11,6 +11,7 @@ import type { AssistantMessage, Context, Model, SimpleStreamOptions, Usage } fro
 import { completeSimple, type RetryCallbacks, type RetryPolicy, retryAssistantCall } from "omk-ai";
 import type { CompactionSettings } from "./compaction-headroom.ts";
 import { type CompactFailoverOptions, withCompactionModelFailover } from "./model-failover.ts";
+import { summaryTextOrThrow } from "./summary-response.ts";
 
 export {
 	type CompactionHeadroomLimit,
@@ -918,21 +919,4 @@ async function generateTurnPrefixSummary(
 	);
 
 	return summaryTextOrThrow(response, "Turn prefix summarization failed");
-}
-
-/** Summary text of a response. A length stop that wrote no text is a failure, not an empty summary. */
-function summaryTextOrThrow(response: AssistantMessage, failure: string): string {
-	if (response.stopReason === "error") {
-		throw new Error(`${failure}: ${response.errorMessage || "Unknown error"}`);
-	}
-	const text = response.content
-		.filter((c): c is { type: "text"; text: string } => c.type === "text")
-		.map((c) => c.text)
-		.join("\n");
-	if (response.stopReason === "length" && text.trim().length === 0) {
-		// Thinking can spend the whole cap; appending file lists to nothing would commit
-		// a "summary" that silently drops the conversation.
-		throw new Error(`${failure}: the model reached its output limit before writing a summary`);
-	}
-	return text;
 }
