@@ -15,6 +15,7 @@ baseline below is history, not current truth.
 | Dynamic-claim conflict check (`conflictsWithUnsettledClaim`) | yes | `agent-loop` | same | `tool-dag-dependencies` + hook tests | working tree | not measured |
 | ECRAF admission planner (`tool-dag-ecraf`) | yes | **no** — no call path wires it | n/a | unit tests only | unreleased | not measured |
 | Context Budget V2 | yes | system-prompt assembly | opt-in policy | planner/selection/cache tests | working tree | not measured |
+| Final context-input admission | yes | `AgentSession.prompt()` pre-dispatch | default when model window is known | admission, compaction, property tests | working tree | not measured |
 | Tier floor reservation | yes | context-budget-v2 planner | when V2 enabled | `context-budget-v2-tier-floor` tests | working tree | not measured |
 | Reasoning router v4 | yes | `/think auto` lane | opt-in | router tests | released | classification only, not success-probability calibration |
 | Workload permit pool | yes | resource admission | default | pool tests | released | not measured |
@@ -136,6 +137,92 @@ retains source-order message emission and one `commitTerminal` callback per
 result. Coverage: `tool-dag-frontier-memo.test.ts`,
 `tool-dag-hook-replan.test.ts`, `tool-terminal-index.test.ts` and
 `tool-dag-ready-frontier.test.ts`.
+
+## Reachability-preserving frontier reduction (2026-09-25 working tree)
+
+The live frontier now applies `reduceDagDependencies()` after the authoritative
+conflict graph is built. The public `assignDagDependencies()` contract still
+returns every conflicting edge, but the ready queue consumes the DAG's unique
+transitive reduction. Reverse-topological bitset closures preserve every
+source-to-descendant reachability path while removing redundant successor
+bookkeeping. Inputs must be canonical: unique ascending predecessors strictly
+earlier than their target.
+
+On the real 512-writer same-path conflict graph, 130,816 conflict edges reduce
+to a 511-edge chain. The local median for the reducer alone was 33.21 ms over
+five runs; graph construction, frontier scans, I/O and provider latency are not
+included. This is a structural result, not an end-to-end speedup. Coverage:
+`tool-dag-reduction.test.ts` checks a complete DAG, a diamond, malformed input,
+idempotence, 2,000 seeded random DAGs and the real 512-writer graph.
+
+Research basis, at abstract level:
+
+- Ioannidis, Ramakrishnan and Winger, *Transitive closure algorithms based on
+  graph traversal* (1993), <https://doi.org/10.1145/155271.155273>, supports
+  reverse-topological descendant-set construction and marking redundant arcs.
+- Kwok and Ahmad, *Static scheduling algorithms for allocating directed task
+  graphs to multiprocessors* (1999),
+  <https://doi.org/10.1145/344588.344618>, establishes directed task graphs
+  and the heuristic boundary; it does not validate this conflict predicate.
+- Adam, Chandy and Dickson, *A comparison of list schedules for parallel
+  processing systems* (1974), <https://doi.org/10.1145/361604.361619>, is
+  supporting precedence-schedule evidence, not a proof of OMK latency.
+
+Prompt compression, learned routing/cascades and verifier loops were not wired
+from their abstracts alone. LLMLingua
+(<https://doi.org/10.18653/v1/2023.emnlp-main.825>), RouteLLM
+(<https://arxiv.org/abs/2406.18665>), FrugalGPT
+(<https://arxiv.org/abs/2305.05176>), CRITIC
+(<https://arxiv.org/abs/2305.11738>) and CP-Router
+(<https://doi.org/10.1609/aaai.v40i39.40589>) each require task-quality,
+preference, cost or external-feedback evidence not present in the current
+harness. ArXiv API/search retrieval was unavailable to this run, OpenAlex
+provided the source records, one of eight isolated paper reads completed and
+seven timed out. This section is a bounded design record, not a systematic
+review or a claim that the selected reducer is state of the art.
+
+## Final context-input admission (2026-09-25 working tree)
+
+System-prompt budgeting protects the base prompt, context files and skills, but
+it does not independently account for the complete provider request. A first
+turn has no prior provider usage, and `before_agent_start` may replace the
+bounded system prompt after the planner runs. The live `AgentSession.prompt()`
+path now performs a final local admission check after projected compaction and
+before `preflightResult(true)` or `Agent.prompt()`.
+
+`computeHardPromptInputLimit()` caps the soft planner's 4,000-token floor at the
+physical model window after response reserve and safety margin.
+`estimateContextInputTokens()` counts the current system prompt, messages after
+the same `convertToLlm()` transformation used by the agent, and serialized tool
+schemas through the configured tokenizer. The estimate is the maximum of local
+counting, the existing chars/image heuristic, and provider-reported projected
+usage. Base64 image bytes are replaced by an explicit image marker, so huge
+image data is not tokenized as English text. `PromptInputCapacityError` reports
+counts only, contains no prompt content, maps to
+`provider.context_overflow`, and records `sideEffects: none` before provider
+dispatch.
+
+Coverage is in `context-input-admission.test.ts` and
+`agent-session-input-admission.test.ts`: the soft-floor cap, exact boundary,
+2,000 seeded limit shapes, CJK text, image payload bounding, provider-usage
+lower bounds, circular-argument rejection, oversized first turns, extension
+system-prompt growth, and an ordinary admitted request. The pre-prompt
+compaction regression now uses a feasible 4,000-token fixture and proves
+compaction occurs without an automatic `continue()` call.
+
+Research basis is bounded to fetched abstracts and implementation borrowing, not
+a systematic review. *Characterizing Prompt Compression Methods for Long Context
+Inference* (arXiv:2407.08892) motivates keeping compression quality separate
+from a final capacity check. *Prompt Compression for Large Language Models: A
+Survey* (arXiv:2410.12388) supports an explicit post-compression budget stage.
+MemGPT (arXiv:2310.08560) supports bounded context tiers and interrupts but does
+not supply token accounting. LLMLingua-2 (arXiv:2403.12968) is not wired
+because learned compression needs calibration and quality evidence absent here.
+
+This gate is a conservative local admission layer, not an exact proof for every
+provider chat template or image tokenizer. Unknown model windows are not
+enforced, fallback token counts remain estimates, and the change makes no
+end-to-end latency, cost, quality, release-readiness or live-provider claim.
 
 ## Reasoning router resolver contract (2026-09-19 audit F05/F06)
 
