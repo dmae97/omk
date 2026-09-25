@@ -8,6 +8,7 @@ import {
 } from "omk-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CompactionEnvelope } from "../../src/core/compaction/transaction.ts";
+import { PromptInputCapacityError } from "../../src/core/prompt-budget.ts";
 import { createHarness, type Harness } from "./harness.ts";
 
 type SessionWithCompactionInternals = {
@@ -525,7 +526,7 @@ describe("AgentSession compaction characterization", () => {
 		expect(runAutoCompactionSpy).toHaveBeenCalledWith("threshold", false);
 	});
 
-	it("compacts before provider request when pending prompt crosses 90% usage", async () => {
+	it("compacts before provider request and rejects retained context above hard input capacity", async () => {
 		const harness = await createHarness({
 			settings: { compaction: { enabled: true, reserveTokens: 1000, keepRecentTokens: 1 } },
 			models: [{ id: "faux-1", contextWindow: 200_000 }],
@@ -559,11 +560,12 @@ describe("AgentSession compaction characterization", () => {
 
 		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
 
-		await harness.session.prompt("x".repeat(80));
+		await expect(harness.session.prompt("x".repeat(80))).rejects.toBeInstanceOf(PromptInputCapacityError);
 
 		const compactionEntries = harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction");
 		expect(compactionEntries).toHaveLength(1);
 		expect(compactionEntries[0]).toMatchObject({ summary: "projected compacted" });
+		expect(harness.faux.state.callCount).toBe(0);
 	});
 
 	it("does not trigger threshold compaction below the threshold or when disabled", async () => {

@@ -23,10 +23,12 @@ describe("pre-prompt compaction regression", () => {
 		}
 	});
 
-	it("compacts length-stop overflow before a new prompt without continuing from an assistant message", async () => {
+	it("compacts a length-stop turn before a new prompt without continuing from an assistant message", async () => {
 		const harness = await createHarness({
-			models: [{ id: "faux-1", contextWindow: 100, maxTokens: 100 }],
-			settings: { compaction: { enabled: true, keepRecentTokens: 1, reserveTokens: 0 } },
+			models: [{ id: "faux-1", contextWindow: 4_000, maxTokens: 100 }],
+			settings: {
+				compaction: { enabled: true, keepRecentTokens: 1, reserveTokens: 0, maxUsageRatio: 0.8 },
+			},
 			extensionFactories: [
 				(pi) => {
 					pi.on("session_before_compact", async (event) => ({
@@ -54,7 +56,7 @@ describe("pre-prompt compaction regression", () => {
 			api: model.api,
 			provider: model.provider,
 			model: model.id,
-			usage: createUsage(100),
+			usage: createUsage(3_400),
 		};
 		harness.sessionManager.appendMessage(lengthStopAssistant);
 		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
@@ -65,7 +67,7 @@ describe("pre-prompt compaction regression", () => {
 
 		expect(continueSpy).not.toHaveBeenCalled();
 		expect(harness.eventsOfType("compaction_end").at(-1)).toMatchObject({
-			reason: "overflow",
+			reason: "threshold",
 			aborted: false,
 			willRetry: true,
 		});

@@ -6,7 +6,7 @@
  */
 
 import type { AgentMessage } from "omk-agent-core";
-import type { ImageContent, Message, TextContent } from "omk-ai";
+import type { ImageContent, Message, TextContent, ThinkingContent, ToolCall } from "omk-ai";
 
 export const COMPACTION_SUMMARY_PREFIX = `The conversation history before this point was compacted into the following summary:
 
@@ -15,6 +15,8 @@ export const COMPACTION_SUMMARY_PREFIX = `The conversation history before this p
 
 export const COMPACTION_SUMMARY_SUFFIX = `
 </summary>`;
+
+const CONTEXT_ADMISSION_IMAGE_TOKENS = 1_200;
 
 export const BRANCH_SUMMARY_PREFIX = `The following is a summary of a branch that this conversation came back from:
 
@@ -185,11 +187,77 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
 				case "assistant":
 				case "toolResult":
 					return m;
-				default:
-					// biome-ignore lint/correctness/noSwitchDeclarations: fine
-					const _exhaustiveCheck: never = m;
+				default: {
+					const exhaustive: never = m;
+					void exhaustive;
 					return undefined;
+				}
 			}
 		})
 		.filter((m) => m !== undefined);
+}
+
+/** Canonical provider-facing text for local input-capacity accounting. */
+export function canonicalizeMessagesForContextAdmission(messages: readonly Message[]): {
+	readonly text: string;
+	readonly imageCount: number;
+} {
+	let imageCount = 0;
+	const markImage = (): void => {
+		imageCount += 1;
+	};
+	const canonical = messages.map((message) => {
+		switch (message.role) {
+			case "user":
+				return { role: message.role, content: canonicalContent(message.content, markImage) };
+			case "assistant":
+				return {
+					role: message.role,
+					content: message.content.map((part) =>
+						part.type === "text"
+							? { type: part.type, text: part.text }
+							: part.type === "thinking"
+								? { type: part.type, thinking: part.thinking }
+								: canonicalToolCall(part),
+					),
+				};
+			case "toolResult":
+				return {
+					role: message.role,
+					toolCallId: message.toolCallId,
+					toolName: message.toolName,
+					isError: message.isError,
+					content: canonicalContent(message.content, markImage),
+				};
+			default:
+				throw new TypeError("Unsupported provider message role");
+		}
+	});
+	return { text: stringifyProviderMessages(canonical), imageCount };
+}
+
+function stringifyProviderMessages(value: unknown): string {
+	try {
+		return JSON.stringify(value);
+	} catch {
+		throw new TypeError("Provider messages are not JSON-serializable");
+	}
+}
+
+function canonicalContent(
+	content: string | readonly (TextContent | ImageContent)[],
+	markImage: () => void,
+): string | readonly unknown[] {
+	if (typeof content === "string") return content;
+	return content.map((part) => {
+		if (part.type === "text") return { type: part.type, text: part.text };
+		markImage();
+		return { type: part.type, mimeType: part.mimeType, estimatedTokens: CONTEXT_ADMISSION_IMAGE_TOKENS };
+	});
+}
+
+function canonicalToolCall(toolCall: ToolCall | ThinkingContent): Record<string, unknown> {
+	return toolCall.type === "thinking"
+		? { type: toolCall.type, thinking: toolCall.thinking }
+		: { type: toolCall.type, id: toolCall.id, name: toolCall.name, arguments: toolCall.arguments };
 }

@@ -8,7 +8,7 @@
  * after an important change, after a check failure, after verification, after
  * a source conflict, or when strategy repetition is detected.
  */
-import type { CalibrationStore } from "./calibration.ts";
+import { type CalibrationStore, createCalibrationStore } from "./calibration.ts";
 import type { KnowledgeReport } from "./knowledge.ts";
 import type { Obligation } from "./obligations.ts";
 import type { Prediction } from "./predictions.ts";
@@ -85,6 +85,90 @@ export interface MetaState {
 		newValidChecks: number;
 	}[];
 	readonly checkpointCount: number;
+}
+
+export interface MetaBudgetInput {
+	readonly remainingMs: number;
+	readonly remainingRequests: number;
+	readonly remainingTokens: number;
+	readonly remainingConcurrent: number;
+}
+
+export interface MetaRunBudgetProjection {
+	readonly limits: { readonly maxRequests?: number; readonly maxConcurrentRequests?: number };
+	readonly requestsStarted: number;
+	readonly activeRequests: number;
+	readonly remainingMs?: number;
+}
+
+export function metaBudgetFromRunBudget(snapshot?: MetaRunBudgetProjection): MetaBudgetInput {
+	const remaining = (limit: number | undefined, used: number): number =>
+		limit === undefined ? Number.MAX_SAFE_INTEGER : Math.max(0, limit - used);
+	return {
+		remainingMs: snapshot?.remainingMs ?? Number.MAX_SAFE_INTEGER,
+		remainingRequests: remaining(snapshot?.limits.maxRequests, snapshot?.requestsStarted ?? 0),
+		remainingTokens: Number.MAX_SAFE_INTEGER,
+		remainingConcurrent: remaining(snapshot?.limits.maxConcurrentRequests, snapshot?.activeRequests ?? 0),
+	};
+}
+
+export interface InitialMetaStateInput {
+	readonly taskId: string;
+	readonly stageId: string;
+	readonly targetArtifact: string;
+	readonly goalScope: string;
+	readonly candidateHash: string;
+	readonly environmentHash: string;
+	readonly changeScope?: readonly string[];
+	readonly budget: MetaBudgetInput;
+	readonly authorizedActions: readonly string[];
+}
+
+export function createInitialMetaState(input: InitialMetaStateInput): MetaState {
+	const state: MetaState = {
+		goal: {
+			taskId: input.taskId,
+			stageId: input.stageId,
+			targetArtifact: input.targetArtifact,
+			goalScope: input.goalScope,
+		},
+		facts: {
+			candidateHash: input.candidateHash,
+			environmentHash: input.environmentHash,
+			changeScope: [...(input.changeScope ?? [])],
+			analyzerCoverage: "unknown",
+		},
+		obligations: [],
+		evidence: { report: null, adoptedSourceIds: [] },
+		predictions: [],
+		hypotheses: { open: [], discriminatorCandidates: [], modelMismatch: false },
+		calibration: createCalibrationStore({
+			minSamples: 10,
+			priorAlpha: 1,
+			priorBeta: 1,
+			referenceMean: 0.2,
+			slack: 0.1,
+			threshold: 2,
+		}),
+		verifier: { evaluations: [], runnerHealth: "unverified" },
+		budget: { ...input.budget },
+		policy: {
+			policyVersion: "runtime-v1",
+			authorizedActions: [...input.authorizedActions],
+			requiredApprovals: [],
+			interruptionReason: null,
+		},
+		hostSequence: 0,
+		progressHistory: [],
+		checkpointCount: 0,
+	};
+	validateMetaState(state);
+	return state;
+}
+
+export function refreshMetaBudget(state: MetaState, budget: MetaBudgetInput): MetaState {
+	for (const [key, value] of Object.entries(budget)) integer(value, key, Number.MAX_SAFE_INTEGER);
+	return { ...state, budget: { ...budget } };
 }
 
 export function validateMetaState(state: MetaState): void {

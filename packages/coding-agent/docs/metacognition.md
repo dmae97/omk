@@ -30,6 +30,28 @@ host-owned structured state, never as model self-report.
 | `policy.ts` | F / §9, §14 | Feasibility gating + priority-table action selection |
 | `checkpoint.ts` | §9.4 | One ordered checkpoint evaluation (`checkpoint`) |
 
+## Runtime integration (2026-09-25)
+
+`AgentSession` now creates a host-owned `MetaState` through
+`createMetaRuntime()` and observes it at both the prompt preflight boundary and
+prompt settlement. `metacognitionState` exposes a content-free state snapshot
+and `lastMetacognitionDiagnostic` exposes the latest bounded checkpoint.
+Run-budget values are projected into the state without copying prompt text,
+tool output, credentials, or provider responses.
+
+The `AgentSession` module-size increase is limited to the controller field,
+one read-only getter, and two lifecycle calls; policy and state transitions stay
+inside `src/metacognition/`.
+
+This first integration is observation-mode. A checkpoint may recommend
+`inspect_local`, `stop_inconclusive`, or another action, but it does not
+rewrite the prompt, authorize a tool, change termination, or grant completion.
+The default verifier health remains `unverified` until an independent verifier
+is wired. Direct runtime coverage is in
+`test/suite/metacognition-runtime.test.ts`; the existing kernel suites remain
+the source of truth for obligations, predictions, calibration, and policy
+arithmetic.
+
 ## Invariants enforced
 
 - Required approvals and required checks are hard constraints, not optimization

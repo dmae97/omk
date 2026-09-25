@@ -42,7 +42,7 @@ export interface ActionConstraints {
 	readonly inScopeKinds: readonly MetaActionKind[];
 }
 
-const ALL_KINDS: readonly MetaActionKind[] = [
+export const META_ACTION_KINDS: readonly MetaActionKind[] = Object.freeze([
 	"inspect_local",
 	"retrieve_reference",
 	"run_discriminating_probe",
@@ -56,11 +56,19 @@ const ALL_KINDS: readonly MetaActionKind[] = [
 	"stop_inconclusive",
 	"settle_safety",
 	"form_obligations",
-];
+]);
+
+export const DEFAULT_ACTION_CONSTRAINTS: ActionConstraints = Object.freeze({
+	authorizedActions: META_ACTION_KINDS,
+	prerequisites: Object.freeze({}),
+	actionCostsMs: Object.freeze({}),
+	actionCostsRequests: Object.freeze({}),
+	inScopeKinds: META_ACTION_KINDS,
+});
 
 /** §9.2: Authorized ∧ Prerequisites ∧ BudgetFits ∧ ScopeBound. */
 export function feasibleActions(state: MetaState, constraints: ActionConstraints): MetaActionKind[] {
-	return ALL_KINDS.filter((kind) => {
+	return META_ACTION_KINDS.filter((kind) => {
 		if (!constraints.authorizedActions.includes(kind)) return false;
 		if (!constraints.inScopeKinds.includes(kind)) return false;
 		for (const prereq of constraints.prerequisites[kind] ?? []) {

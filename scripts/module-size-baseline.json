@@ -35,7 +35,7 @@
 	"packages/coding-agent/src/config.ts": 445,
 	"packages/coding-agent/src/core/adaptorch-bridge.ts": 374,
 	"packages/coding-agent/src/core/agent-session-runtime.ts": 337,
-	"packages/coding-agent/src/core/agent-session.ts": 4203,
+	"packages/coding-agent/src/core/agent-session.ts": 4215,
 	"packages/coding-agent/src/core/auth-storage.ts": 582,
 	"packages/coding-agent/src/core/automation/index.ts": 937,
 	"packages/coding-agent/src/core/command-safety-parser.ts": 754,

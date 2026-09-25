@@ -33,6 +33,11 @@ import {
 import { APP_NAME, getAgentDir, VERSION } from "../config.ts";
 import type { ReplayLedgerManager } from "../guardrails/evidence-system.ts";
 import type { VerifiedEvidenceExecutor } from "../guardrails/verified-executor.ts";
+import {
+	createAgentSessionMetaRuntime,
+	type MetaRuntimeController,
+	type MetaRuntimeView,
+} from "../metacognition/index.ts";
 import { theme } from "../modes/interactive/theme/theme.ts";
 import type { ReplayEventType } from "../types/evidence.ts";
 import { stripFrontmatter } from "../utils/frontmatter.ts";
@@ -77,6 +82,7 @@ import {
 	type ToolResultClass,
 	type ToolResultReserveRequest,
 } from "./context-budget-reserved-tokens.ts";
+import { createTokenCounterForMode } from "./context-budget-token-counter.ts";
 import {
 	createDiskContextBudgetCacheProviderV2,
 	DiskContextBudgetCacheProviderV2,
@@ -197,7 +203,14 @@ import type { CustomMessage } from "./messages.ts";
 import { selectContextFilesForModel } from "./model-prompt-policy.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { findExactModelReferenceMatch } from "./model-resolver.ts";
-import { computePromptTokenBudget } from "./prompt-budget.ts";
+import {
+	assertContextInputWithinModelWindow,
+	computePromptTokenBudget,
+	parseCommaSeparatedEnv,
+	parsePositiveFloatEnv,
+	parsePositiveIntegerEnv,
+	parseTokenizerModeEnv,
+} from "./prompt-budget.ts";
 import { classifyPromptCacheTransition } from "./prompt-cache.ts";
 import * as promptSettlement from "./prompt-settlement.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
@@ -704,6 +717,7 @@ export class AgentSession {
 		| { toolCallId: string; toolName: string; timeoutMs?: number; executionStarted: boolean }
 		| undefined;
 	private _lastTermination: SessionTermination | undefined;
+	private readonly _metaRuntime: MetaRuntimeController;
 	private _userAbortRequested = false;
 	private readonly _replayLedger: ReplayLedgerManager | undefined;
 	private readonly _replayGoalId: string | undefined;
@@ -760,6 +774,11 @@ export class AgentSession {
 		this._customTools = config.customTools ?? [];
 		this._cwd = config.cwd;
 		this._modelRegistry = config.modelRegistry;
+		this._metaRuntime = createAgentSessionMetaRuntime({
+			taskId: this.sessionManager.getSessionId(),
+			candidateHash: this._contextCacheModelId(this.agent.state.model),
+			environmentHash: `runtime-${process.versions.node}`,
+		});
 		const initialModelId = this._contextCacheModelId(this.agent.state.model);
 		this._contextCacheInvalidationSnapshot = createContextCacheInvalidationSnapshot({
 			forkId: this.sessionManager.getSessionId(),
@@ -888,6 +907,10 @@ export class AgentSession {
 	/** Most recently observed or inferred termination for this session. */
 	get lastTermination(): SessionTermination | undefined {
 		return this._lastTermination;
+	}
+
+	get metacognition(): MetaRuntimeView {
+		return { state: this._metaRuntime.state, lastDiagnostic: this._metaRuntime.lastDiagnostic };
 	}
 
 	/** Exact trailing journal fragment quarantine performed during startup, if any. */
@@ -1946,12 +1969,15 @@ export class AgentSession {
 		const cacheProvider = this._contextBudgetCacheProvider ?? this._createContextBudgetCacheProvider();
 		cacheProvider.setInvalidationSnapshot?.(this._contextCacheInvalidationSnapshot);
 		this._contextBudgetCacheProvider = cacheProvider;
+		const tokenizerMode = parseTokenizerModeEnv(process.env.OMK_CONTEXT_GOVERNOR_TOKENIZER);
+		const tokenCounter = createTokenCounterForMode(tokenizerMode ?? "fallback");
 
 		return {
 			maxPromptTokens,
 			responseReserveTokens,
 			modelId: model?.id ?? "unknown",
-			tokenizerMode: parseTokenizerModeEnv(process.env.OMK_CONTEXT_GOVERNOR_TOKENIZER),
+			tokenizerMode,
+			tokenCounter,
 			activeSkillNames: parseCommaSeparatedEnv(process.env.OMK_CONTEXT_GOVERNOR_ACTIVE_SKILLS),
 			queryContext,
 			cacheProvider,
@@ -2042,6 +2068,7 @@ export class AgentSession {
 		let outcome: promptSettlement.PromptSettlementOutcome = "completed";
 		try {
 			this._runBudget.assertActive();
+			this._metaRuntime.observeRunBudget(this._runBudget.snapshot());
 			await this.agent.prompt(messages);
 			while (await this._handlePostAgentRun()) {
 				await this.agent.continue();
@@ -2055,6 +2082,7 @@ export class AgentSession {
 				this._publishRuntimeFailure(this._runBudget.failure);
 			outcome = promptSettlement.resolvePromptSettlementOutcome(outcome, this._lastTermination?.kind);
 			this._flushPendingBashMessages();
+			this._metaRuntime.observeRunBudget(this._runBudget.snapshot());
 			ownedRun.finish(outcome, (event) => {
 				if (resourceLease !== null) {
 					this._resourceLeaseController?.release(resourceLease);
@@ -2539,6 +2567,9 @@ export class AgentSession {
 				activeSkillNames: promptSkills.names,
 				activeSkillSource: promptSkills.source,
 			};
+			const admissionTokenCounter =
+				turnSystemPromptOptions.contextBudget?.tokenCounter ??
+				createTokenCounterForMode(turnSystemPromptOptions.contextBudget?.tokenizerMode ?? "fallback");
 			const turnSystemPrompt = buildSystemPromptPlan(turnSystemPromptOptions);
 
 			// Emit before_agent_start extension event
@@ -2579,6 +2610,30 @@ export class AgentSession {
 
 			await this._checkProjectedCompaction(messages);
 			this._runBudget.assertActive();
+			const model = this.model;
+			const sessionWindow = model?.contextWindow ?? 0;
+			if (model && Number.isSafeInteger(sessionWindow) && sessionWindow > 0) {
+				const contextWindow = this._effectiveTurnContextWindow(messages, sessionWindow);
+				const configured = computePromptTokenBudget({
+					contextWindow,
+					modelMaxTokens: model.maxTokens,
+					envMaxPromptTokens: parsePositiveIntegerEnv("OMK_CONTEXT_GOVERNOR_MAX_PROMPT_TOKENS"),
+					envResponseReserveTokens: parsePositiveIntegerEnv("OMK_CONTEXT_GOVERNOR_RESPONSE_RESERVE_TOKENS"),
+					envPromptRatio: parsePositiveFloatEnv("OMK_CONTEXT_GOVERNOR_PROMPT_RATIO"),
+					envResponseRatio: parsePositiveFloatEnv("OMK_CONTEXT_GOVERNOR_RESPONSE_RATIO"),
+				});
+				assertContextInputWithinModelWindow({
+					contextWindow,
+					configuredMaxPromptTokens: configured.maxPromptTokens,
+					modelMaxTokens: model.maxTokens,
+					systemPrompt: this.agent.state.systemPrompt,
+					messages: [...this.agent.state.messages, ...messages],
+					tools: this.agent.state.tools,
+					modelId: model.id,
+					tokenCounter: admissionTokenCounter,
+					projectedUsageTokens: estimateProjectedContextTokens(this.agent.state.messages, messages).tokens,
+				});
+			}
 		} catch (error) {
 			preflightResult?.(false);
 			const rawMessage = error instanceof Error ? error.message : String(error);
@@ -5519,50 +5574,4 @@ export class AgentSession {
 	get extensionRunner(): ExtensionRunner {
 		return this._extensionRunner;
 	}
-}
-
-function parsePositiveIntegerEnv(name: string): number | undefined {
-	const raw = process.env[name];
-	if (raw === undefined || raw.trim() === "") {
-		return undefined;
-	}
-	const value = Number.parseInt(raw, 10);
-	return Number.isFinite(value) && value > 0 ? value : undefined;
-}
-
-function parsePositiveFloatEnv(name: string): number | undefined {
-	const raw = process.env[name];
-	if (raw === undefined || raw.trim() === "") {
-		return undefined;
-	}
-	const value = Number.parseFloat(raw);
-	return Number.isFinite(value) && value > 0 ? value : undefined;
-}
-
-function parseTokenizerModeEnv(
-	value: string | undefined,
-): NonNullable<BuildSystemPromptOptions["contextBudget"]>["tokenizerMode"] {
-	switch (value) {
-		case "fallback":
-		case "openai-js":
-		case "openai-wasm":
-		case "auto":
-			return value;
-		default:
-			return "fallback";
-	}
-}
-
-function parseCommaSeparatedEnv(value: string | undefined): string[] {
-	if (value === undefined || value.trim() === "") {
-		return [];
-	}
-	return Array.from(
-		new Set(
-			value
-				.split(",")
-				.map((item) => item.trim())
-				.filter((item) => item.length > 0),
-		),
-	);
 }
