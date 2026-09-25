@@ -24,12 +24,12 @@ export function composeColumns(
  * and the rule runs out to the right edge, instead of a centered bold caption.
  * Frames stay hairline so the accent colour is reserved for live values.
  */
-export function sidebarRule(width: number, label: string, borderColor: ThemeColor = "borderMuted"): string {
+export function sidebarRule(width: number, label: string, borderColor: ThemeColor = "border"): string {
 	const bodyWidth = Math.max(0, width - 2);
 	const labelText = ` ${label} `;
 	const fill = Math.max(0, bodyWidth - visibleWidth(labelText) - 1);
 	return clipLine(
-		`${theme.fg(borderColor, "\u2502")}${theme.fg("borderMuted", "\u2500")}${theme.fg("accent", labelText)}${theme.fg("borderMuted", "\u2500".repeat(fill))}${theme.fg(borderColor, "\u2502")}`,
+		`${theme.fg(borderColor, "\u2502")}${theme.fg(borderColor, "\u2500")}${theme.fg("accent", labelText)}${theme.fg(borderColor, "\u2500".repeat(fill))}${theme.fg(borderColor, "\u2502")}`,
 		width,
 	);
 }
@@ -50,7 +50,7 @@ export function labelCell(label: string, column: number = RAIL_LABEL_COLUMN): st
 	return `${" ".repeat(pad)}${theme.fg("muted", text)}`;
 }
 
-export function boxTop(width: number, label: string, borderColor: ThemeColor = "borderMuted"): string {
+export function boxTop(width: number, label: string, borderColor: ThemeColor = "border"): string {
 	const text = ` ${label} `;
 	const fillWidth = Math.max(0, width - visibleWidth("+") - visibleWidth(text) - visibleWidth("+"));
 	return clipLine(
@@ -59,7 +59,7 @@ export function boxTop(width: number, label: string, borderColor: ThemeColor = "
 	);
 }
 
-export function boxBottom(width: number, borderColor: ThemeColor = "borderMuted"): string {
+export function boxBottom(width: number, borderColor: ThemeColor = "border"): string {
 	return clipLine(theme.fg(borderColor, `\u2570${"\u2500".repeat(Math.max(0, width - 2))}\u256f`), width);
 }
 
@@ -81,7 +81,7 @@ export function boxCenteredLine(width: number, text: string, color?: ThemeColor)
 export function boxTextLine(width: number, text: string, color?: ThemeColor): string {
 	const body = color ? theme.fg(color, text) : text;
 	return clipLine(
-		`${theme.fg("borderMuted", "\u2502 ")}${fitLine(body, Math.max(0, width - 4))}${theme.fg("borderMuted", " \u2502")}`,
+		`${theme.fg("border", "\u2502 ")}${fitLine(body, Math.max(0, width - 4))}${theme.fg("border", " \u2502")}`,
 		width,
 	);
 }
@@ -139,7 +139,7 @@ export function divider(width: number, label: string, color: ThemeColor): string
 export function textLine(width: number, text: string, color?: ThemeColor): string {
 	const body = color ? theme.fg(color, text) : text;
 	return clipLine(
-		`${theme.fg("borderMuted", "\u2502 ")}${fitLine(body, Math.max(0, width - 4))}${theme.fg("borderMuted", " \u2502")}`,
+		`${theme.fg("border", "\u2502 ")}${fitLine(body, Math.max(0, width - 4))}${theme.fg("border", " \u2502")}`,
 		width,
 	);
 }
