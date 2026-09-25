@@ -1,4 +1,24 @@
 // Structural shapes on purpose: importing the core types here would put cli/ in an import cycle.
+export async function attachSessionTransports(
+	session: {
+		attachMcpServers(): Promise<McpAttachStatus[]>;
+		startControl(): Promise<void>;
+		close(): Promise<void>;
+	},
+	controlEnabled = process.env.OMK_SESSION_CONTROL === "1",
+): Promise<Array<{ type: "warning"; message: string }>> {
+	const diagnostics = mcpAttachDiagnostics(await session.attachMcpServers());
+	if (controlEnabled) {
+		try {
+			await session.startControl();
+		} catch (error) {
+			await session.close();
+			throw error;
+		}
+	}
+	return diagnostics;
+}
+
 export interface McpAttachStatus {
 	readonly name: string;
 	readonly state: string;

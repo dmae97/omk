@@ -155,7 +155,7 @@ export class AgentSessionRuntime {
 			targetSessionFile,
 		});
 		this.beforeSessionInvalidate?.();
-		this.session.dispose();
+		await this.session.close();
 	}
 
 	private apply(result: CreateAgentSessionRuntimeResult): void {
@@ -375,12 +375,7 @@ export class AgentSessionRuntime {
 	}
 
 	async dispose(): Promise<void> {
-		await emitSessionShutdownEvent(this.session.extensionRunner, {
-			type: "session_shutdown",
-			reason: "quit",
-		});
-		this.beforeSessionInvalidate?.();
-		this.session.dispose();
+		await this.teardownCurrent("quit");
 	}
 }
 

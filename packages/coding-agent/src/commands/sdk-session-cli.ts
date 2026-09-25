@@ -3,6 +3,7 @@
  */
 import { resolve } from "node:path";
 import { redactSensitiveTextForced } from "../core/redaction.ts";
+import { requestSessionControl } from "../core/session-control-client.ts";
 import {
 	type SessionEntry,
 	type SessionInfo,
@@ -10,13 +11,7 @@ import {
 	type SessionMessageEntry,
 } from "../core/session-manager.ts";
 
-const USAGE = [
-	"Usage:",
-	"  omk sdk session status [id] [--cwd <path>] [--session-dir <path>] [--json]",
-	"  omk sdk session tail [id] [--cwd <path>] [--session-dir <path>] [--limit <n>]",
-	"  omk sdk session inspect [id] [--cwd <path>] [--session-dir <path>]",
-	"  omk sdk session send <id> <message> [--cwd <path>] [--session-dir <path>]",
-].join("\n");
+import { parseSdkSessionArgs as parseArgs, SDK_SESSION_USAGE as USAGE } from "./sdk-session-args.ts";
 
 export interface SdkSessionCliOverrides {
 	readonly cwd?: string;
@@ -36,80 +31,6 @@ export interface SessionHandle {
 	readonly getCwd: () => string;
 	readonly getEntries: () => readonly SessionEntry[];
 	readonly appendMessage: (message: { role: "user"; content: string; timestamp: number }) => string;
-}
-
-type ParsedArgs =
-	| { kind: "absent" }
-	| { kind: "help" }
-	| { kind: "error"; message: string }
-	| {
-			kind: "run";
-			action: "status" | "tail" | "inspect" | "send";
-			id?: string;
-			cwd?: string;
-			sessionDir?: string;
-			limit: number;
-			json: boolean;
-			text?: string;
-	  };
-
-function parseArgs(args: readonly string[]): ParsedArgs {
-	if (args[0] !== "sdk" || args[1] !== "session") return { kind: "absent" };
-	const rest = args.slice(2);
-	if (rest.length === 0 || rest[0] === "--help" || rest[0] === "-h") return { kind: "help" };
-	const action = rest[0];
-	if (action !== "status" && action !== "tail" && action !== "inspect" && action !== "send") {
-		return { kind: "error", message: `unknown action: ${action}` };
-	}
-	let id: string | undefined;
-	let cwd: string | undefined;
-	let sessionDir: string | undefined;
-	let limit = 20;
-	let json = false;
-	const sendParts: string[] = [];
-	for (let index = 1; index < rest.length; index += 1) {
-		const arg = rest[index];
-		if (arg === "--help" || arg === "-h") return { kind: "help" };
-		if (arg === "--json") {
-			json = true;
-			continue;
-		}
-		if (arg === "--cwd") {
-			const value = rest[++index];
-			if (value === undefined) return { kind: "error", message: "--cwd requires a path" };
-			cwd = value;
-			continue;
-		}
-		if (arg === "--session-dir") {
-			const value = rest[++index];
-			if (value === undefined) return { kind: "error", message: "--session-dir requires a path" };
-			sessionDir = value;
-			continue;
-		}
-		if (arg === "--limit") {
-			const value = rest[++index];
-			const parsed = Number(value);
-			if (value === undefined || !Number.isSafeInteger(parsed) || parsed < 1) {
-				return { kind: "error", message: "--limit requires a positive integer" };
-			}
-			limit = parsed;
-			continue;
-		}
-		if (arg.startsWith("-")) return { kind: "error", message: `unknown argument: ${arg}` };
-		if (id === undefined) {
-			id = arg;
-			continue;
-		}
-		if (action === "send") sendParts.push(arg);
-		else return { kind: "error", message: `unexpected argument: ${arg}` };
-	}
-	if (action === "send") {
-		if (id === undefined) return { kind: "error", message: "send requires a session id" };
-		const text = sendParts.join(" ").trim();
-		if (text.length === 0) return { kind: "error", message: "send requires message text" };
-		return { kind: "run", action, id, cwd, sessionDir, limit, json, text };
-	}
-	return { kind: "run", action, id, cwd, sessionDir, limit, json };
 }
 
 function summarizeSession(session: SessionInfo) {
@@ -212,6 +133,30 @@ export async function runSdkSessionCli(
 		return { handled: true, exitCode: 1 };
 	}
 	const target = resolution.target;
+	if (parsed.live) {
+		if (target.id !== parsed.id) {
+			writeLine(JSON.stringify({ status: "refused", error: "live control requires an exact session id" }));
+			return { handled: true, exitCode: 1 };
+		}
+		try {
+			const result = await requestSessionControl(
+				target.path,
+				target.id,
+				parsed.action === "send" ? parsed.delivery : parsed.action === "abort" ? "abort" : "status",
+				parsed.text,
+			);
+			writeLine(JSON.stringify(result));
+			return { handled: true, exitCode: result.status === "refused" ? 1 : 0 };
+		} catch {
+			writeLine(
+				JSON.stringify({
+					status: "refused",
+					error: "live endpoint unavailable or outcome unknown; no transcript append or automatic retry",
+				}),
+			);
+			return { handled: true, exitCode: 1 };
+		}
+	}
 	if (parsed.action === "send" && target.id !== parsed.id) {
 		writeLine(JSON.stringify({ status: "refused", error: `send requires an exact session id: ${parsed.id}` }));
 		return { handled: true, exitCode: 1 };

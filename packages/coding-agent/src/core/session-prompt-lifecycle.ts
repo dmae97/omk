@@ -28,6 +28,16 @@ export class PromptExecutionBusyError extends Error {
 export class SessionPromptLifecycle {
 	private owner: PromptOwner | undefined;
 	private disposed = false;
+	private readonly idleWaiters = new Set<() => void>();
+
+	get active(): boolean {
+		return this.owner !== undefined;
+	}
+
+	waitForIdle(): Promise<void> {
+		if (!this.owner) return Promise.resolve();
+		return new Promise<void>((resolve) => this.idleWaiters.add(resolve));
+	}
 	private readonly canSettle: () => boolean;
 	private readonly auditsLateSettlement: () => boolean;
 
@@ -115,7 +125,12 @@ export class SessionPromptLifecycle {
 		});
 		const { event } = settlePromptIfReady(state, performance.now());
 		this.owner = undefined;
-		if (event !== null) owner.terminal.notify(event);
+		try {
+			if (event !== null) owner.terminal.notify(event);
+		} finally {
+			for (const resolve of this.idleWaiters) resolve();
+			this.idleWaiters.clear();
+		}
 	}
 
 	/** Spec 020 Req3.1 — child가 승인된 spawn 직전 +1. 반환된 release()를 정확히 한 번 호출. */

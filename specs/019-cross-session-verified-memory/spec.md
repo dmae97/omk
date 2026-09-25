@@ -6,7 +6,7 @@ description: "Spec-first, evidence-linked, workspace-local memory with fail-clos
 
 **Specification ID**: `019-cross-session-verified-memory`
 **Created**: 2026-08-27
-**Status**: Proposed and implementation-blocked pending admission/evaluation fixtures
+**Status**: Full automatic memory remains proposed and promotion-blocked. The bounded, explicit source-quote slice is specified in [the implementation amendment](source-quote-amendment.md), with local admission and runtime fixtures. It does not satisfy the live/default-promotion gates below.
 **Constitution**: [specs/constitution.md](../constitution.md)
 **Input**: Remaining v0.99 memory advancement from the current OMK algorithm roadmap
 **OMK Preset**: `omk`

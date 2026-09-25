@@ -27,6 +27,20 @@ omk sdk session send <id> "<message>" [--cwd <path>] [--session-dir <path>]
 
 `status` without an ID lists sessions for the selected working directory. `tail` and `inspect` without an ID select the most recently modified session; `tail` defaults to 20 entries. `send` requires an exact ID, appends a user-message entry only when the session has no active owner, and does not wake or execute an agent. `status` is human-readable unless `--json` is passed; the other actions emit JSON. Exit codes are `0` for success, `1` when no target exists or the session is active, and `2` for invalid usage.
 
+### Opt-in live control and project memory
+
+The transcript-only commands above are unchanged. Enroll an owned persisted POSIX
+session with `await session.startControl()` (CLI: `OMK_SESSION_CONTROL=1`), then use
+`sdk session send <id> "text" --live`, `status <id> --live`, or `abort <id> --live`.
+Live failures never fall back to transcript writes. See [Local live session
+control](sessions.md#local-live-session-control) for permissions, limits and cancellation semantics.
+
+`await session.rememberSource({ path, startLine, endLine, ttlMs? })` pins a bounded
+source quote. `await session.forgetMemory(id)` revokes it. Recall is separately
+opt-in with `OMK_VERIFIED_MEMORY=1` and Context Budget V2. It is transient tool-result
+data, not system/skill authority or automatic fact extraction. Inspect
+`session.memoryStatus`; see [Project source-quote memory](sessions.md#project-source-quote-memory).
+
 ## Quick Start
 
 ```typescript
@@ -138,7 +152,9 @@ interface AgentSession {
   // Abort current operation
   abort(): Promise<void>;
 
-  // Cleanup
+  // Cleanup: asynchronous join preserves ownership until registered work settles
+  close(): Promise<void>;
+  // Compatibility: starts close when busy; use close() to observe completion/errors
   dispose(): void;
 }
 ```
@@ -302,9 +318,12 @@ assistant message says `toolUse`. Timeout text reports cancellation requested,
 not process termination confirmed. Late success never replaces the failed or
 aborted result. **`prompt_settled` is a UX signal, not semantic verification.**
 
-This safeguard is session-local. It does not persist ownership, join detached
-work, prove remote cancellation, or fence writers across replacement/disposal,
-restart, or workspace reuse. Direct `Agent` calls, replacing
+This safeguard is session-local. Normal runtime replacement/disposal now awaits
+`close()`, which joins registered producers, tool/lane ownership, logical streams
+and native MCP closure before releasing the session lease. It does not join
+unregistered detached work, prove remote cancellation, or fence writers across
+crashes, restart or workspace reuse. Reentrant close from an owned operation is
+refused rather than self-deadlocking; see [Local live session control](sessions.md#local-live-session-control). Direct `Agent` calls, replacing
 `session.agent.state.tools`, independent interactive bash, and plugin-created
 background work are not automatically enrolled. In-process plugins remain trusted.
 

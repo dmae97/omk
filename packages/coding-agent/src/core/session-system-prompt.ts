@@ -2,6 +2,25 @@ import type { ContextFile } from "./context-file.ts";
 import type { Skill } from "./skills.ts";
 import { type BuildSystemPromptOptions, type BuiltSystemPrompt, buildSystemPromptPlan } from "./system-prompt.ts";
 
+export function normalizePromptSnippet(text: string | undefined): string | undefined {
+	if (!text) return undefined;
+	const oneLine = text
+		.replace(/[\r\n]+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+	return oneLine.length > 0 ? oneLine : undefined;
+}
+
+export function normalizePromptGuidelines(guidelines: string[] | undefined): string[] {
+	if (!guidelines || guidelines.length === 0) return [];
+	const unique = new Set<string>();
+	for (const guideline of guidelines) {
+		const normalized = guideline.trim();
+		if (normalized.length > 0) unique.add(normalized);
+	}
+	return Array.from(unique);
+}
+
 export interface SessionSystemPromptInput {
 	readonly cwd: string;
 	readonly toolNames: readonly string[];

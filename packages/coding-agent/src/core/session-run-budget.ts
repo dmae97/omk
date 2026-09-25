@@ -17,6 +17,14 @@ export class SessionRunBudget {
 	private previous: RunBudget | undefined;
 	private executing = false;
 	private disposed = false;
+	private cancelledBudget: RunBudget | undefined;
+
+	cancelPreflight(): boolean {
+		if (!this.current || !this.executing) return false;
+		this.cancelledBudget = this.current;
+		this.current.close();
+		return true;
+	}
 
 	constructor(agent: Agent, lifecycle: RunBudgetLifecycle) {
 		this.agent = agent;
@@ -37,6 +45,9 @@ export class SessionRunBudget {
 	}
 	assertAdmission(): void {
 		this.current?.assertAdmission();
+	}
+	waitForIdle(): Promise<void> {
+		return (this.current ?? this.previous)?.waitForIdle() ?? Promise.resolve();
 	}
 	close(): void {
 		this.disposed = true;
@@ -90,6 +101,8 @@ export class SessionRunBudget {
 				if (error instanceof RunBudgetExceededError || error instanceof RunBudgetPolicyError)
 					this.lifecycle.reject(error);
 			}
+			if (budget && this.cancelledBudget === budget)
+				throw new DOMException("Prompt aborted before execution", "AbortError");
 			throw budget?.failure ?? error;
 		} finally {
 			if (budget) {
