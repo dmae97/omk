@@ -22,6 +22,7 @@ export { getVisionRouteModel, isVisionRouteModel, VISION_ROUTE_MODEL } from "./v
 import { type DeferredCall, deferredStillConflicts } from "./tool-dag-deferred.ts";
 import { type DagFrontierScheduleCache, resolveDagFrontierMemo } from "./tool-dag-memo.ts";
 import { finishDagTasks, type OwnedTaskResult, startDagTask } from "./tool-dag-owned-task.ts";
+import { reduceDagDependencies } from "./tool-dag-reduce.ts";
 import { applyConcurrencyCap, assignDagDependencies } from "./tool-dag-scheduler.ts";
 import {
 	awaitWithAbort,
@@ -893,7 +894,11 @@ async function schedulePlannedDagFrontier(
 	// therefore no predecessors; they already fail before any tool executes.
 	const dependencies = new Map<number, number[]>();
 	for (const sourceIndex of immediateSourceIndices) dependencies.set(sourceIndex, []);
-	assignDagDependencies(scheduled).forEach((blockers, position) => {
+	// The public dependency graph retains every conflict edge. The live frontier
+	// only needs ordering reachability, so discard transitive synchronization
+	// without changing which conflicts must settle before a call can start.
+	const frontierDependencies = reduceDagDependencies(assignDagDependencies(scheduled));
+	frontierDependencies.forEach((blockers, position) => {
 		dependencies.set(
 			schedulableSourceIndices[position],
 			blockers.map((blocker) => schedulableSourceIndices[blocker]),
