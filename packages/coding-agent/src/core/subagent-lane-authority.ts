@@ -1,3 +1,5 @@
+import { tryAcquireLaneDispatch } from "./lane-dispatch-ownership.ts";
+import { snapshotLaneDecision } from "./lane-input-snapshot.ts";
 import type { CapabilityInventory } from "./loadouts.ts";
 import { RESOURCE_ADMISSION_VERSION, type ResourceAdmissionDecision } from "./resource-admission.ts";
 import type { SubagentLaneAuthority } from "./subagent-lane-contract.ts";
@@ -57,7 +59,17 @@ function unsettledSettlements(pool: object): Set<Promise<void>> {
 }
 
 export function createSubagentLaneAuthority(binding: SubagentLaneAuthorityHostBinding): SubagentLaneAuthority {
-	const { runId, promptRunId, decision, permitPool, inventory, signal, spawnThreshold, noteDetachedChild } = binding;
+	const {
+		runId,
+		promptRunId,
+		decision: hostDecision,
+		permitPool,
+		inventory,
+		signal,
+		spawnThreshold,
+		noteDetachedChild,
+	} = binding;
+	const decision = hostDecision === null ? null : snapshotLaneDecision(hostDecision);
 	const pendingSettlements = unsettledSettlements(permitPool);
 	return {
 		permitPool,
@@ -74,82 +86,100 @@ export function createSubagentLaneAuthority(binding: SubagentLaneAuthorityHostBi
 					warnings: [],
 				};
 			}
-			const plan = buildSubagentOrchestrationPlan({
-				runId,
-				lanes: input.lanes,
-				inventory,
-				spawnPlan: input.spawnPlan,
-				spawnThreshold,
-				maxParallelLanes: input.configuredMaxParallelLanes,
-			});
-			if (plan.blockers.length > 0) {
+			const releaseDispatch = tryAcquireLaneDispatch(permitPool);
+			if (!releaseDispatch) {
 				return {
 					outcomes: [],
 					effectiveLaneWidth: 0,
 					maxObservedConcurrency: 0,
+					blockers: ["ownership.dispatch_active"],
+					warnings: [],
+				};
+			}
+			try {
+				const launchLane = input.launchLane.bind(input);
+				const plan = buildSubagentOrchestrationPlan({
+					runId,
+					lanes: input.lanes,
+					inventory,
+					spawnPlan: input.spawnPlan,
+					spawnThreshold,
+					maxParallelLanes: input.configuredMaxParallelLanes === 0 ? undefined : input.configuredMaxParallelLanes,
+				});
+				if (plan.blockers.length > 0) {
+					return {
+						outcomes: [],
+						effectiveLaneWidth: 0,
+						maxObservedConcurrency: 0,
+						blockers: plan.blockers,
+						warnings: plan.warnings,
+					};
+				}
+				// §14.1: the caller's admission decision, if present, is authoritative.
+				// Without one the launcher sees an unbounded parent (observe mode).
+				const resolvedDecision =
+					decision ??
+					({
+						schemaVersion: RESOURCE_ADMISSION_VERSION,
+						decisionId: `admission-${runId}`,
+						snapshotDigest: "none",
+						pressure: "normal",
+						action: "allow",
+						maxToolConcurrency: Number.POSITIVE_INFINITY,
+						maxParallelLanes: Number.POSITIVE_INFINITY,
+						maxHeavyProcesses: Number.POSITIVE_INFINITY,
+						reasons: [],
+						decidedAt: new Date(0).toISOString(),
+					} satisfies ResourceAdmissionDecision);
+
+				const result = await launchSubagentLanes({
+					plan,
+					promptRunId: promptRunId ?? runId,
+					decision: resolvedDecision,
+					permitPool,
+					configuredMaxParallelLanes: input.configuredMaxParallelLanes,
+					signal: signal && input.signal ? AbortSignal.any([signal, input.signal]) : (signal ?? input.signal),
+					heavyLaneIds: input.heavyLaneIds,
+					permitWaitTimeoutMs: input.permitWaitTimeoutMs,
+					launchLane: async (context) => {
+						// Spec 020 Req3.1/3.2 — child counter +1 immediately before the
+						// admitted launch, -1 exactly once in terminal cleanup.
+						const release = noteDetachedChild();
+						let awaitingSettlement = false;
+						try {
+							const result = await launchLane(context);
+							if (result?.status === "unsettled") {
+								// Both owners must retain the same observation, not a caller-mutated field.
+								const settlement = result.settlement;
+								awaitingSettlement = true;
+								pendingSettlements.add(settlement);
+								void settlement.then(
+									() => {
+										pendingSettlements.delete(settlement);
+										release();
+									},
+									() => {
+										// Rejection does not confirm child termination; retain ownership.
+									},
+								);
+								return { status: "unsettled", settlement };
+							}
+							return result;
+						} finally {
+							if (!awaitingSettlement) release();
+						}
+					},
+				});
+				return {
+					outcomes: result.outcomes,
+					effectiveLaneWidth: result.effectiveLaneWidth,
+					maxObservedConcurrency: result.maxObservedConcurrency,
 					blockers: plan.blockers,
 					warnings: plan.warnings,
 				};
+			} finally {
+				releaseDispatch();
 			}
-			// §14.1: the caller's admission decision, if present, is authoritative.
-			// Without one the launcher sees an unbounded parent (observe mode).
-			const resolvedDecision =
-				decision ??
-				({
-					schemaVersion: RESOURCE_ADMISSION_VERSION,
-					decisionId: `admission-${runId}`,
-					snapshotDigest: "none",
-					pressure: "normal",
-					action: "allow",
-					maxToolConcurrency: Number.POSITIVE_INFINITY,
-					maxParallelLanes: Number.POSITIVE_INFINITY,
-					maxHeavyProcesses: Number.POSITIVE_INFINITY,
-					reasons: [],
-					decidedAt: new Date(0).toISOString(),
-				} satisfies ResourceAdmissionDecision);
-
-			const result = await launchSubagentLanes({
-				plan,
-				promptRunId: promptRunId ?? runId,
-				decision: resolvedDecision,
-				permitPool,
-				configuredMaxParallelLanes: input.configuredMaxParallelLanes,
-				signal: signal && input.signal ? AbortSignal.any([signal, input.signal]) : (signal ?? input.signal),
-				heavyLaneIds: input.heavyLaneIds,
-				permitWaitTimeoutMs: input.permitWaitTimeoutMs,
-				launchLane: async (context) => {
-					// Spec 020 Req3.1/3.2 — child counter +1 immediately before the
-					// admitted launch, -1 exactly once in terminal cleanup.
-					const release = noteDetachedChild();
-					let awaitingSettlement = false;
-					try {
-						const result = await input.launchLane(context);
-						if (result?.status === "unsettled" && result.settlement) {
-							awaitingSettlement = true;
-							pendingSettlements.add(result.settlement);
-							void result.settlement.then(
-								() => {
-									pendingSettlements.delete(result.settlement);
-									release();
-								},
-								() => {
-									// Rejection does not confirm child termination; retain ownership.
-								},
-							);
-						}
-						return result;
-					} finally {
-						if (!awaitingSettlement) release();
-					}
-				},
-			});
-			return {
-				outcomes: result.outcomes,
-				effectiveLaneWidth: result.effectiveLaneWidth,
-				maxObservedConcurrency: result.maxObservedConcurrency,
-				blockers: plan.blockers,
-				warnings: plan.warnings,
-			};
 		},
 	};
 }

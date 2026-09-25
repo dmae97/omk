@@ -21,6 +21,12 @@ export class RunBudget {
 	private readonly deadline: number | undefined;
 	private readonly onExhausted: (error: RunBudgetExceededError) => void;
 	private readonly active = new Set<symbol>();
+	private readonly idleWaiters = new Set<() => void>();
+
+	waitForIdle(): Promise<void> {
+		if (this.active.size === 0) return Promise.resolve();
+		return new Promise<void>((resolve) => this.idleWaiters.add(resolve));
+	}
 	private timer: ReturnType<typeof setTimeout> | undefined;
 	private issued = 0;
 	private closed = false;
@@ -63,6 +69,10 @@ export class RunBudget {
 		this.active.add(request);
 		return () => {
 			this.active.delete(request);
+			if (this.active.size === 0) {
+				for (const resolve of this.idleWaiters) resolve();
+				this.idleWaiters.clear();
+			}
 		};
 	}
 

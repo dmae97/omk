@@ -30,6 +30,7 @@ function makeFixture() {
 		close: () => {
 			closeCalls += 1;
 		},
+		waitForTransportClose: async () => {},
 		serverInfo: { name: "fake", version: "1.0.0" },
 	} as unknown as McpClient;
 	const manager = new McpManager({
@@ -75,6 +76,7 @@ describe("McpManager close during an in-flight connect", () => {
 			listTools: async () => [{ name: "old" }],
 			ping: () => oldPing.promise,
 			close: () => {},
+			waitForTransportClose: async () => {},
 			serverInfo: { version: "1.0.0" },
 		} as unknown as McpClient;
 		const newClient = {
@@ -82,6 +84,7 @@ describe("McpManager close during an in-flight connect", () => {
 			listTools: async () => [{ name: "new" }],
 			ping: async () => {},
 			close: () => {},
+			waitForTransportClose: async () => {},
 			serverInfo: { version: "2.0.0" },
 		} as unknown as McpClient;
 		const manager = new McpManager({
@@ -118,6 +121,7 @@ describe("McpManager close during an in-flight connect", () => {
 					callTool: async () => ({ content: [], isError: false }),
 					ping: async () => {},
 					close: () => {},
+					waitForTransportClose: async () => {},
 					serverInfo: { name: "fake", version: "1.0.0" },
 				}) as unknown as McpClient,
 		});

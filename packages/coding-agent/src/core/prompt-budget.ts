@@ -2,6 +2,7 @@ import type { AgentMessage, AgentTool } from "omk-agent-core";
 import { estimateTokens } from "./compaction/compaction.ts";
 import type { ContextBudgetTokenizerMode, TokenCounterAdapter } from "./context-budget-token-counter.ts";
 import { canonicalizeMessagesForContextAdmission, convertToLlm } from "./messages.ts";
+import { serializePromptToolSchemas } from "./prompt-tool-projection.ts";
 
 const RESPONSE_RESERVE_RATIO = 0.2;
 const MAX_RESPONSE_RESERVE_RATIO = 0.25;
@@ -72,14 +73,18 @@ export interface ContextInputModelAdmissionResult {
 export function parsePositiveIntegerEnv(name: string): number | undefined {
 	const raw = process.env[name];
 	if (raw === undefined || raw.trim() === "") return undefined;
-	const value = Number.parseInt(raw, 10);
-	return Number.isFinite(value) && value > 0 ? value : undefined;
+	const text = raw.trim();
+	if (!/^\d+$/.test(text)) return undefined;
+	const value = Number(text);
+	return Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
 export function parsePositiveFloatEnv(name: string): number | undefined {
 	const raw = process.env[name];
 	if (raw === undefined || raw.trim() === "") return undefined;
-	const value = Number.parseFloat(raw);
+	const text = raw.trim();
+	if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(text)) return undefined;
+	const value = Number(text);
 	return Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
@@ -201,7 +206,7 @@ export function estimateContextInputTokens(input: ContextInputEstimateInput): Co
 	const systemPromptTokens = countText(input.tokenCounter, input.systemPrompt, input.modelId);
 	const heuristicMessageTokens = messages.reduce((sum, message) => sum + estimateTokens(message as AgentMessage), 0);
 	const messageTokens = Math.max(countText(input.tokenCounter, canonical.text, input.modelId), heuristicMessageTokens);
-	const toolTokens = countText(input.tokenCounter, stringify(input.tools, "tool definitions"), input.modelId);
+	const toolTokens = countText(input.tokenCounter, serializePromptToolSchemas(input.tools), input.modelId);
 	const localTokens = addTokens(
 		addTokens(systemPromptTokens, messageTokens, "system+message"),
 		toolTokens,
@@ -246,14 +251,6 @@ function countText(counter: TokenCounterAdapter, input: string, modelId: string)
 	const result = counter.countText(input, modelId);
 	assertNonNegativeSafeInteger(result.tokens, `tokenCounter(${counter.id}).tokens`);
 	return result.tokens;
-}
-
-function stringify(value: unknown, label: string): string {
-	try {
-		return JSON.stringify(value) ?? "";
-	} catch {
-		throw new TypeError(`${label} are not JSON-serializable`);
-	}
 }
 
 function addTokens(left: number, right: number, label: string): number {

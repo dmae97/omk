@@ -26,9 +26,115 @@ omk sdk session inspect [id]
 omk sdk session send <id> "message"
 ```
 
-`send` requires an exact session ID and appends only when the session has no active owner; it does not connect to a running process or execute the message. See [SDK](sdk.md#inspect-persisted-sessions-from-the-cli) for full flags and exit codes.
+Without `--live`, `send` requires an exact session ID and appends only when the session has no active owner; it does not execute the message. An explicitly enrolled owner (`OMK_SESSION_CONTROL=1`) also supports `send <id> "text" --live`, `status <id> --live` and `abort <id> --live` over private local IPC. Live failures never fall back to appending. See [Local live session control](#local-live-session-control) and [SDK](sdk.md#inspect-persisted-sessions-from-the-cli).
+
+Opt-in [project source-quote memory](#project-source-quote-memory) can carry explicitly pinned evidence across sessions in the same workspace. Recall revalidates the source on every model request and does not persist its tool-data projection in the transcript.
 
 For the JSONL file format and SessionManager API, see [Session Format](session-format.md).
+
+## Local live session control
+
+Experimental, opt-in POSIX control of an already-running persisted session. Start
+its owner with `OMK_SESSION_CONTROL=1 omk`, or call `await session.startControl()`
+from the SDK. No configuration file is changed. An ephemeral session cannot enroll.
+Once a message has persisted, use the exact session ID:
+
+```bash
+omk sdk session status <id> --live
+omk sdk session send <id> "Continue the selected task" --live
+omk sdk session send <id> "Use the smaller change" --live --steer
+omk sdk session send <id> "Then run the focused test" --live --follow-up
+omk sdk session abort <id> --live
+```
+
+`--cwd` and `--session-dir` retain their lookup meanings. Prefixes and paths are
+not live IDs. A failed live request never falls back to a transcript write or an
+automatic retry. An unknown outcome must be inspected before retrying.
+`accepted` means preflight accepted or cancellation requested, not task completion.
+`lastOutcome` describes the prompt producer, not verification or physical exit.
+Steering/follow-up requires a running prompt and shares its budget. Live text does
+not expand slash commands or prompt templates.
+
+Abort signals the prompt (including preflight), bash, compaction and branch summary.
+It is not termination evidence and does not forcibly exit the owner process.
+
+The native socket lives in a fresh `0700` directory with mode `0600`. An owner-only
+descriptor next to the transcript binds canonical path, exact ID, socket and fresh
+enrollment token. The server checks its current identity and owner lease before
+dispatch. The client checks descriptor/socket type, permissions and UID. Tokens
+never appear in CLI output. Stale descriptors are not automatically reclaimed.
+Cleanup removes only a descriptor matching its own token and socket.
+
+Limits: one frame per connection, 32 KiB UTF-8 frame, 16,384 UTF-16 text units,
+8 connections, 10-second request timeout, 1024 distinct mutation IDs per enrollment.
+Duplicate mutation IDs and exhaustion refuse. This is an in-memory replay fence,
+not durable exactly-once delivery. Same-UID directory attacks, remote peers and
+Windows ACLs are outside this slice. Existing tool/admission policies still apply.
+
+`await session.close()` seals work admission and joins registered producers,
+tool/lane settlement, logical streams and native MCP closure before releasing its
+owner lease. Normal runtime replacement and interactive/print/RPC disposal use it.
+Legacy `dispose()` stays synchronous when idle and starts close when busy; prefer
+`close()` to observe cleanup errors. Unknown/uncooperative work can keep close
+pending. Reentrant close from that session's own operation is refused rather than
+self-deadlocking. Hosts must schedule replacement/close outside such an operation.
+Direct low-level Agent/SessionManager calls, unregistered detached work, plugin
+background work, remote effects and crash recovery remain separate boundaries.
+
+## Project source-quote memory
+
+Experimental, explicitly pinned source quotes, not automatic fact extraction or
+semantic truth verification. The host reads the quote itself; a caller's statement
+or successful command exit cannot substitute for source evidence.
+
+```typescript
+const admission = await session.rememberSource({
+  path: "docs/architecture.md", startLine: 12, endLine: 16,
+  ttlMs: 7 * 24 * 60 * 60 * 1000,
+});
+// accept + recordId, or abstain/escalate + a fixed reason
+console.log(session.memoryStatus); // counts/state, never quote text
+if (admission.verdict === "accept") await session.forgetMemory(admission.recordId);
+```
+
+Recall requires `OMK_VERIFIED_MEMORY=1` and Context Budget V2 (global
+`contextBudget.enabled` or `OMK_CONTEXT_GOVERNOR=1`). Both remain opt-in; no setting
+or environment file is changed. Each provider request, including tool continuations,
+rechecks source digest/span, workspace identity, expiry and revocation. The V2
+planner admits only exact quotes or omission under a 2048-token evidence cap, with
+512 estimated wrapper tokens reserved and complete final-input accounting.
+
+The provider receives a host-originated closed `omk_project_memory` tool-call/result
+pair, labelled `omk-host`. JSON quote data is not system, user-instruction or skill
+text. It is transient: not appended to the transcript or compacted, no memory-plan
+disk cache and no extra model call. This structural contract does not establish
+semantic resistance to every injection or live-provider compatibility.
+
+Storage is `.omk/verified-memory/`, with owner-only POSIX files, exclusive immutable
+publication and mutation locks. Records carry opaque IDs/workspace digests, relative
+source references and a host-created protocol Observation. Hashes correlate bytes;
+they do not authenticate a malicious same-UID writer or prove the quote true.
+The local wall clock is trusted for TTL.
+
+Limits: 32 retained records (including revoked/expired), 256 KiB source, 2 KiB quote,
+16 inclusive source lines, 16 KiB record, 7-day default and 30-day maximum TTL.
+Traversal, hidden/internal paths, symlinks, hardlinks, credential filenames and
+binary input refuse. Forced credential-shape and existing injection-pattern checks
+scan the complete source before quote selection. They are best-effort, conservative
+rules, not DLP or calibrated probabilities.
+
+Changed/deleted sources, expiry and revocation omit evidence. `forgetMemory()` adds
+an idempotent tombstone; it does not erase historical bytes. Re-pin explicitly to
+record new evidence. The workspace owner can delete the memory directory to erase
+retained records/reset capacity. No global-memory fallback or sync is performed.
+`memoryStatus` reports disabled, empty, ready, unavailable or budget-omitted with
+bounded counts/projection estimates. An invalid store contributes no evidence;
+the ordinary task can continue without this optional context.
+
+Automatic extraction, procedural advice, cross-workspace memory, learned ranking,
+Windows support and default promotion remain outside this slice. Promotion requires
+independently labeled admission data and same-model, same-budget task success,
+recall, latency and token-cost measurements. Local Faux fixtures are not such gains.
 
 ## Retries and Termination Events
 

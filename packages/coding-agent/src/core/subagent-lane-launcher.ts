@@ -1,7 +1,10 @@
-import type { ResourceAdmissionDecision } from "./resource-admission.ts";
-import type { LaneOutcome, SubagentLaneExecutionResult } from "./subagent-lane-contract.ts";
+import { assertLaneCap, snapshotLaneLaunchInput } from "./lane-input-snapshot.ts";
+import type { LaneOutcome } from "./subagent-lane-contract.ts";
+import type { LaunchSubagentLanesInput } from "./subagent-lane-input.ts";
 import type { SubagentOrchestrationPlan } from "./subagent-orchestration.ts";
-import { WorkloadPermitError, type WorkloadPermitPool } from "./workload-permit-pool.ts";
+import { WorkloadPermitError } from "./workload-permit-pool.ts";
+
+export type { LaunchSubagentLanesInput, SubagentLaneContext } from "./subagent-lane-input.ts";
 
 /**
  * Subagent lane launch authority (OMK v0.97.x roadmap §14, M6/PR10).
@@ -30,6 +33,12 @@ export interface EffectiveLaneWidthInput {
 
 /** Zero authority defers execution; configured zero retains its legacy unlimited meaning. */
 export function computeEffectiveLaneWidth(input: EffectiveLaneWidthInput): number {
+	assertLaneCap(input.planWidth, "planWidth", false);
+	assertLaneCap(input.admissionMaxParallelLanes, "admissionMaxParallelLanes");
+	assertLaneCap(input.availableHeavyPermits, "availableHeavyPermits");
+	assertLaneCap(input.pathConflictFreeWidth, "pathConflictFreeWidth", false);
+	if (input.configuredMaxParallelLanes !== undefined)
+		assertLaneCap(input.configuredMaxParallelLanes, "configuredMaxParallelLanes");
 	const configured =
 		input.configuredMaxParallelLanes !== undefined && input.configuredMaxParallelLanes > 0
 			? input.configuredMaxParallelLanes
@@ -44,30 +53,7 @@ export function computeEffectiveLaneWidth(input: EffectiveLaneWidthInput): numbe
 	return Number.isFinite(width) ? Math.max(0, Math.floor(width)) : 0;
 }
 
-/** Read-only budget handed to every child (§14.1). Nothing here can raise a cap. */
-export interface SubagentLaneContext {
-	readonly laneId: string;
-	readonly promptRunId: string;
-	readonly signal?: AbortSignal;
-	readonly decision: ResourceAdmissionDecision;
-	readonly effectiveLaneWidth: number;
-}
-
 export type { LaneOutcome };
-
-export interface LaunchSubagentLanesInput {
-	readonly plan: SubagentOrchestrationPlan;
-	readonly promptRunId: string;
-	readonly decision: ResourceAdmissionDecision;
-	readonly permitPool: WorkloadPermitPool;
-	readonly configuredMaxParallelLanes?: number;
-	readonly signal?: AbortSignal;
-	/** Lane ids that run heavy work and must hold a shared permit (§14.3). */
-	readonly heavyLaneIds?: ReadonlySet<string>;
-	/** The actual child launcher (process spawn, SDK session, or test double). */
-	readonly launchLane: (context: SubagentLaneContext) => Promise<SubagentLaneExecutionResult>;
-	readonly permitWaitTimeoutMs?: number;
-}
 
 export interface LaunchSubagentLanesResult {
 	readonly outcomes: readonly LaneOutcome[];
@@ -99,7 +85,8 @@ function computeHeavyAdmissionGate(
  * Execute a plan's batches with the §14.2 width as launcher authority.
  * Never throws for lane failures; the caller reads per-lane outcomes.
  */
-export async function launchSubagentLanes(input: LaunchSubagentLanesInput): Promise<LaunchSubagentLanesResult> {
+export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Promise<LaunchSubagentLanesResult> {
+	const input = snapshotLaneLaunchInput(request);
 	const poolSnapshot = input.permitPool.snapshot();
 	const heavyAdmission = computeHeavyAdmissionGate(
 		poolSnapshot,
@@ -112,10 +99,13 @@ export async function launchSubagentLanes(input: LaunchSubagentLanesInput): Prom
 		configuredMaxParallelLanes: input.configuredMaxParallelLanes,
 		admissionMaxParallelLanes: input.decision.maxParallelLanes,
 		availableHeavyPermits: heavyAdmission,
-		pathConflictFreeWidth: Math.max(0, ...input.plan.batches.map((batch) => batch.laneIds.length)),
+		pathConflictFreeWidth: input.plan.batches.reduce((width, batch) => Math.max(width, batch.laneIds.length), 0),
 	});
 
 	const outcomes: LaneOutcome[] = [];
+	const sourceOrder = new Map<string, number>();
+	for (const batch of input.plan.batches) for (const id of batch.laneIds) sourceOrder.set(id, sourceOrder.size);
+	let hasUnsettled = false;
 	let active = 0;
 	let maxObservedConcurrency = 0;
 
@@ -142,13 +132,16 @@ export async function launchSubagentLanes(input: LaunchSubagentLanesInput): Prom
 			while (cursor < batch.laneIds.length) {
 				const laneId = batch.laneIds[cursor];
 				cursor += 1;
-				if (input.signal?.aborted || outcomes.some((outcome) => outcome.status === "unsettled")) {
+				if (input.signal?.aborted || hasUnsettled) {
 					outcomes.push({ laneId, status: input.signal?.aborted ? "skipped-abort" : "blocked-dependency" });
 					continue;
 				}
 				outcomes.push(
 					await runLane(input, laneId, effectiveLaneWidth, {
-						blocked: () => outcomes.some((outcome) => outcome.status === "unsettled"),
+						blocked: () => hasUnsettled,
+						markUnsettled: () => {
+							hasUnsettled = true;
+						},
 						enter: () => {
 							active += 1;
 							maxObservedConcurrency = Math.max(maxObservedConcurrency, active);
@@ -166,14 +159,23 @@ export async function launchSubagentLanes(input: LaunchSubagentLanesInput): Prom
 		}
 		await Promise.all(runners);
 	}
-	return { outcomes, effectiveLaneWidth, maxObservedConcurrency };
+	return {
+		outcomes: outcomes.sort((a, b) => sourceOrder.get(a.laneId)! - sourceOrder.get(b.laneId)!),
+		effectiveLaneWidth,
+		maxObservedConcurrency,
+	};
 }
 
 async function runLane(
 	input: LaunchSubagentLanesInput,
 	laneId: string,
 	effectiveLaneWidth: number,
-	gauge: { readonly enter: () => void; readonly exit: () => void; readonly blocked: () => boolean },
+	gauge: {
+		readonly enter: () => void;
+		readonly exit: () => void;
+		readonly blocked: () => boolean;
+		readonly markUnsettled: () => void;
+	},
 ): Promise<LaneOutcome> {
 	let releasePermit: (() => void) | undefined;
 	let retained = false;
@@ -210,15 +212,18 @@ async function runLane(
 	}
 	gauge.enter();
 	try {
-		const result = await input.launchLane({
-			laneId,
-			promptRunId: input.promptRunId,
-			signal: input.signal,
-			decision: input.decision,
-			effectiveLaneWidth,
-		});
+		const result = await input.launchLane(
+			Object.freeze({
+				laneId,
+				promptRunId: input.promptRunId,
+				signal: input.signal,
+				decision: input.decision,
+				effectiveLaneWidth,
+			}),
+		);
 		if (result?.status === "unsettled") {
 			retained = true;
+			gauge.markUnsettled();
 			// A rejected settlement cannot prove termination; retain the reservation.
 			void result.settlement.then(
 				() => {

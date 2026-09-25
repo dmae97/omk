@@ -58,8 +58,8 @@ beforeEach(() => {
 	process.env.USERPROFILE = fakeHome;
 });
 
-afterEach(() => {
-	session?.dispose();
+afterEach(async () => {
+	await session?.close();
 	session = undefined;
 	if (realHome === undefined) delete process.env.HOME;
 	else process.env.HOME = realHome;
@@ -160,13 +160,14 @@ describe("AgentSession MCP integration", () => {
 		expect(bash?.sourceInfo).toMatchObject({ source: "builtin" });
 	});
 
-	it("stops MCP servers when the session is disposed", async () => {
+	it("joins MCP server retirement after legacy disposal", async () => {
 		writeMcpConfig({ demo: stdioServer("ok") });
 		const s = await newSession();
 		await s.attachMcpServers();
 		expect(s.mcpServerStatus()[0]).toMatchObject({ state: "ready" });
 
 		s.dispose();
+		await s.close();
 		session = undefined;
 		expect(s.mcpServerStatus()).toEqual([]);
 	});

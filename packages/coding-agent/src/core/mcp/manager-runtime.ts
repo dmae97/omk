@@ -4,6 +4,7 @@ import { detectMcpDescriptorPromptInjection, MCP_QUARANTINE_PATTERN_SIGNAL_THRES
 import { McpClient, type McpClientOptions } from "./client.ts";
 import { mcpPublicDiagnostic } from "./public-diagnostic.ts";
 import { createMcpToolDefinition, type McpToolDetails } from "./tools.ts";
+import { retireMcpClient } from "./transport-retirement.ts";
 
 export type McpServerState = "idle" | "queued" | "connecting" | "ready" | "failed";
 
@@ -25,6 +26,8 @@ export interface McpServerStatus {
 	readonly name: string;
 	readonly state: McpServerState;
 	readonly toolCount: number;
+	/** True while an earlier native transport still owns its process/stdio close. */
+	readonly retiring?: boolean;
 	/** Failure reason when `state` is `failed`. Never contains configured env values. */
 	readonly error?: string;
 	readonly serverVersion?: string;
@@ -55,6 +58,8 @@ export interface ServerRuntime {
 	/** Client owned by the in-flight attempt, not yet published. */
 	pendingClient?: McpClient;
 	generation: number;
+	/** A replaced/failed direct process still owns its stdio lifetime. */
+	retiring?: Promise<void>;
 }
 
 /** Isolates one attempt, including construction errors, under its generation owner. */
@@ -84,12 +89,12 @@ export async function connectMcpRuntime(
 		runtime.pendingClient = client;
 		await client.connect();
 		if (!isCurrent()) {
-			client.close();
+			await retireMcpClient(runtime, client);
 			return;
 		}
 		const schemas = await client.listTools();
 		if (!isCurrent()) {
-			client.close();
+			await retireMcpClient(runtime, client);
 			return;
 		}
 		const definitions = schemas.map((schema) =>
@@ -116,7 +121,7 @@ export async function connectMcpRuntime(
 		runtime.state = "ready";
 		runtime.error = undefined;
 	} catch (error) {
-		client?.close();
+		if (client) await retireMcpClient(runtime, client);
 		if (!isCurrent()) return;
 		runtime.client = undefined;
 		runtime.tools = [];

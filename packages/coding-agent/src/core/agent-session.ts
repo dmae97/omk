@@ -203,14 +203,6 @@ import type { CustomMessage } from "./messages.ts";
 import { selectContextFilesForModel } from "./model-prompt-policy.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { findExactModelReferenceMatch } from "./model-resolver.ts";
-import {
-	assertContextInputWithinModelWindow,
-	computePromptTokenBudget,
-	parseCommaSeparatedEnv,
-	parsePositiveFloatEnv,
-	parsePositiveIntegerEnv,
-	parseTokenizerModeEnv,
-} from "./prompt-budget.ts";
 import { classifyPromptCacheTransition } from "./prompt-cache.ts";
 import * as promptSettlement from "./prompt-settlement.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
@@ -271,21 +263,30 @@ import {
 	ROUTER_FEEDBACK_LEVELS,
 	type RouterFeedbackRecord,
 } from "./router-feedback-collector.ts";
-import { RunBudgetExceededError, type RunBudgetLimits, RunBudgetPolicyError } from "./run-budget-policy.ts";
+import type { RunBudgetLimits } from "./run-budget-policy.ts";
 import type { RunJournalAuditDetails, RunJournalAuditEvent, RunJournalRecord } from "./run-journal.ts";
 import { type RunJournalQuarantineReport, RunJournalStore } from "./run-journal-store.ts";
 import { type RunResourceLease, RunResourceLeaseController } from "./run-resource-lease.ts";
 import { SessionBashRuntime } from "./session-bash-runtime.ts";
 import { type BashResourcePermitGrant, SessionBashService } from "./session-bash-service.ts";
 import { SessionCompactionService } from "./session-compaction-service.ts";
-import { preflightFailureCause, runtimeFailureCause, terminationMessage } from "./session-failure-cause.ts";
+import { type SessionControlServer, startSessionControl } from "./session-control-server.ts";
+import { runtimeFailureCause, terminationMessage } from "./session-failure-cause.ts";
+import {
+	assertSessionInputCapacity,
+	promptPreflightTermination,
+	sessionContextBudgetOptions,
+	transcriptHasImages,
+} from "./session-input-admission.ts";
 import type { BranchSummaryEntry, SessionManager } from "./session-manager.ts";
 import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.ts";
+import { SessionMemory } from "./session-memory.ts";
 import { acquireSessionOwnerLeaseSync, type SessionOwnerLease } from "./session-owner-lease.ts";
 import { PromptExecutionBusyError, SessionPromptLifecycle } from "./session-prompt-lifecycle.ts";
 import { SessionRunBudget } from "./session-run-budget.ts";
 import { classifyRunTermination } from "./session-run-termination.ts";
-import { assembleSessionSystemPrompt } from "./session-system-prompt.ts";
+import { SessionShutdown } from "./session-shutdown.ts";
+import * as promptAssembly from "./session-system-prompt.ts";
 import {
 	classifySessionTermination,
 	type SessionProcessSignal,
@@ -632,6 +633,9 @@ export class AgentSession {
 	private _unsubscribeAgent?: () => void;
 	private _eventListeners: AgentSessionEventListener[] = [];
 	private readonly _runBudget: SessionRunBudget;
+	private readonly _shutdown = new SessionShutdown();
+	private readonly _memory: SessionMemory;
+	private _control: Promise<SessionControlServer> | undefined;
 	private readonly _promptLifecycle = new SessionPromptLifecycle({
 		canSettle: () => !this.isStreaming && !this.agent.hasQueuedMessages(),
 		auditsLateSettlement: () => this.agent.toolExecutionPolicy?.lateSettlement !== "ignore",
@@ -676,6 +680,7 @@ export class AgentSession {
 	private _customTools: ToolDefinition[];
 	private _baseToolDefinitions: Map<string, ToolDefinition> = new Map();
 	private _mcpManager: McpManager | undefined;
+	private _mcpAttaching = false;
 	private _mcpToolNames: Set<string> = new Set();
 	private _turnMetricsSink: TurnMetricsSink | undefined;
 	private _turnMetricsState: TurnMetricsState | undefined;
@@ -874,6 +879,12 @@ export class AgentSession {
 				activeToolNames: this._initialActiveToolNames,
 				includeAllExtensionTools: true,
 			});
+			this._memory = new SessionMemory(
+				this.agent,
+				this._cwd,
+				() => this._getContextBudgetOptions(),
+				(messages, window) => this._effectiveTurnContextWindow(messages, window),
+			);
 		} catch (error) {
 			const ownedLease = this._ownedSessionOwnerLease;
 			if (ownedLease) {
@@ -1651,7 +1662,53 @@ export class AgentSession {
 	 * Remove all listeners and disconnect from agent.
 	 * Call this when completely done with the session.
 	 */
+	get memoryStatus() {
+		return this._memory.status;
+	}
+
+	rememberSource(input: unknown) {
+		return this._shutdown.run(async () => this._memory.remember(input));
+	}
+
+	forgetMemory(id: string): Promise<void> {
+		return this._shutdown.run(async () => this._memory.forget(id));
+	}
+
+	startControl(): Promise<void> {
+		return this._shutdown.run(async () => {
+			this._control ??= startSessionControl(this);
+			try {
+				await this._control;
+			} catch (error) {
+				this._control = undefined;
+				throw error;
+			}
+		});
+	}
+
+	close(): Promise<void> {
+		return this._shutdown.closeSession(
+			this,
+			{ budget: this._runBudget, lifecycle: this._promptLifecycle, mcp: this._mcpManager, control: this._control },
+			() => this._disposeNow(),
+		);
+	}
+
 	dispose(): void {
+		if (
+			this._shutdown.active ||
+			this._promptLifecycle.active ||
+			this._mcpManager ||
+			this._control ||
+			(this._runBudget.snapshot()?.activeRequests ?? 0) > 0
+		) {
+			// Legacy callers cannot await: retain ownership on an unsuccessful close.
+			void this.close().catch(() => {});
+		} else this._shutdown.disposeIdle(() => this._disposeNow());
+	}
+
+	private _disposeNow(): void {
+		this._memory.close();
 		this._promptLifecycle.dispose();
 		this._runBudget.close();
 		try {
@@ -1884,30 +1941,6 @@ export class AgentSession {
 		return this._resourceLoader.getPrompts().prompts;
 	}
 
-	private _normalizePromptSnippet(text: string | undefined): string | undefined {
-		if (!text) return undefined;
-		const oneLine = text
-			.replace(/[\r\n]+/g, " ")
-			.replace(/\s+/g, " ")
-			.trim();
-		return oneLine.length > 0 ? oneLine : undefined;
-	}
-
-	private _normalizePromptGuidelines(guidelines: string[] | undefined): string[] {
-		if (!guidelines || guidelines.length === 0) {
-			return [];
-		}
-
-		const unique = new Set<string>();
-		for (const guideline of guidelines) {
-			const normalized = guideline.trim();
-			if (normalized.length > 0) {
-				unique.add(normalized);
-			}
-		}
-		return Array.from(unique);
-	}
-
 	/**
 	 * Extract the most recent user query text from conversation messages.
 	 * Returns undefined when no user message exists or content is empty.
@@ -1946,42 +1979,17 @@ export class AgentSession {
 		queryContext = this._extractCurrentQuery(),
 		model: Model<any> | undefined = this.model,
 	): BuildSystemPromptOptions["contextBudget"] | undefined {
-		const contextGovernorOverride = process.env.OMK_CONTEXT_GOVERNOR;
-		if (contextGovernorOverride === "0") {
-			return undefined;
-		}
-		if (contextGovernorOverride !== "1" && !this.settingsManager.getContextBudgetEnabled()) {
-			return undefined;
-		}
-
-		const contextWindow = model?.contextWindow ?? 0;
-		const budget = computePromptTokenBudget({
-			contextWindow,
-			modelMaxTokens: model?.maxTokens,
-			envMaxPromptTokens: parsePositiveIntegerEnv("OMK_CONTEXT_GOVERNOR_MAX_PROMPT_TOKENS"),
-			envResponseReserveTokens: parsePositiveIntegerEnv("OMK_CONTEXT_GOVERNOR_RESPONSE_RESERVE_TOKENS"),
-			envPromptRatio: parsePositiveFloatEnv("OMK_CONTEXT_GOVERNOR_PROMPT_RATIO"),
-			envResponseRatio: parsePositiveFloatEnv("OMK_CONTEXT_GOVERNOR_RESPONSE_RATIO"),
-		});
-		const maxPromptTokens = budget.maxPromptTokens;
-		const responseReserveTokens = budget.responseReserveTokens;
-
-		const cacheProvider = this._contextBudgetCacheProvider ?? this._createContextBudgetCacheProvider();
-		cacheProvider.setInvalidationSnapshot?.(this._contextCacheInvalidationSnapshot);
-		this._contextBudgetCacheProvider = cacheProvider;
-		const tokenizerMode = parseTokenizerModeEnv(process.env.OMK_CONTEXT_GOVERNOR_TOKENIZER);
-		const tokenCounter = createTokenCounterForMode(tokenizerMode ?? "fallback");
-
-		return {
-			maxPromptTokens,
-			responseReserveTokens,
-			modelId: model?.id ?? "unknown",
-			tokenizerMode,
-			tokenCounter,
-			activeSkillNames: parseCommaSeparatedEnv(process.env.OMK_CONTEXT_GOVERNOR_ACTIVE_SKILLS),
+		return sessionContextBudgetOptions(
+			model,
 			queryContext,
-			cacheProvider,
-		};
+			() => this.settingsManager.getContextBudgetEnabled(),
+			() => {
+				const cache = this._contextBudgetCacheProvider ?? this._createContextBudgetCacheProvider();
+				cache.setInvalidationSnapshot?.(this._contextCacheInvalidationSnapshot);
+				this._contextBudgetCacheProvider = cache;
+				return cache;
+			},
+		);
 	}
 
 	/**
@@ -2031,7 +2039,7 @@ export class AgentSession {
 
 	private _rebuildSystemPrompt(toolNames: string[], model: Model<any> | undefined = this.model): string {
 		const defaultActiveSkills = this._getDefaultActiveSkills();
-		const assembled = assembleSessionSystemPrompt({
+		const assembled = promptAssembly.assembleSessionSystemPrompt({
 			cwd: this._cwd,
 			toolNames,
 			hasTool: (name) => this._toolRegistry.has(name),
@@ -2063,11 +2071,13 @@ export class AgentSession {
 		const ownedRun = this._promptLifecycle.begin(promptRunId);
 		// Roadmap M2: the lease spans the whole run including internal retries
 		// and continuations, so they share one admission decision (§8.3).
-		const resourceLease = await this._beginResourceGovernedRun(promptRunId);
-		const resourceObservations = this._resourceObservationJournals.get(promptRunId) ?? null;
+		let resourceLease: Awaited<ReturnType<AgentSession["_beginResourceGovernedRun"]>> = null;
+		let resourceObservations: ResourceObservationJournal | null = null;
 		let outcome: promptSettlement.PromptSettlementOutcome = "completed";
 		try {
 			this._runBudget.assertActive();
+			resourceLease = await this._beginResourceGovernedRun(promptRunId);
+			resourceObservations = this._resourceObservationJournals.get(promptRunId) ?? null;
 			this._metaRuntime.observeRunBudget(this._runBudget.snapshot());
 			await this.agent.prompt(messages);
 			while (await this._handlePostAgentRun()) {
@@ -2395,8 +2405,15 @@ export class AgentSession {
 	 * @throws Error if no model selected or no API key available (when not streaming)
 	 */
 	prompt(text: string, options?: PromptOptions): Promise<void> {
-		if (options?.runBudget === undefined && (this.isStreaming || this.isRetrying)) return this._prompt(text, options);
-		return this._runBudget.execute(options?.runBudget, () => this._prompt(text, options), options?.preflightResult);
+		return this._shutdown.run(() => {
+			if (options?.runBudget === undefined && (this.isStreaming || this.isRetrying))
+				return this._prompt(text, options);
+			return this._runBudget.execute(
+				options?.runBudget,
+				() => this._prompt(text, options),
+				options?.preflightResult,
+			);
+		});
 	}
 
 	getRunBudgetSnapshot() {
@@ -2610,52 +2627,20 @@ export class AgentSession {
 
 			await this._checkProjectedCompaction(messages);
 			this._runBudget.assertActive();
-			const model = this.model;
-			const sessionWindow = model?.contextWindow ?? 0;
-			if (model && Number.isSafeInteger(sessionWindow) && sessionWindow > 0) {
-				const contextWindow = this._effectiveTurnContextWindow(messages, sessionWindow);
-				const configured = computePromptTokenBudget({
-					contextWindow,
-					modelMaxTokens: model.maxTokens,
-					envMaxPromptTokens: parsePositiveIntegerEnv("OMK_CONTEXT_GOVERNOR_MAX_PROMPT_TOKENS"),
-					envResponseReserveTokens: parsePositiveIntegerEnv("OMK_CONTEXT_GOVERNOR_RESPONSE_RESERVE_TOKENS"),
-					envPromptRatio: parsePositiveFloatEnv("OMK_CONTEXT_GOVERNOR_PROMPT_RATIO"),
-					envResponseRatio: parsePositiveFloatEnv("OMK_CONTEXT_GOVERNOR_RESPONSE_RATIO"),
-				});
-				assertContextInputWithinModelWindow({
-					contextWindow,
-					configuredMaxPromptTokens: configured.maxPromptTokens,
-					modelMaxTokens: model.maxTokens,
-					systemPrompt: this.agent.state.systemPrompt,
-					messages: [...this.agent.state.messages, ...messages],
-					tools: this.agent.state.tools,
-					modelId: model.id,
-					tokenCounter: admissionTokenCounter,
-					projectedUsageTokens: estimateProjectedContextTokens(this.agent.state.messages, messages).tokens,
-				});
-			}
+			const pending = messages;
+			assertSessionInputCapacity({
+				model: this.model,
+				state: this.agent.state,
+				pending,
+				effectiveWindow: (window) => this._effectiveTurnContextWindow(pending, window),
+				counter: admissionTokenCounter,
+			});
 		} catch (error) {
 			preflightResult?.(false);
-			const rawMessage = error instanceof Error ? error.message : String(error);
-			const cause: SessionTerminationCause =
-				error instanceof RunBudgetExceededError
-					? { area: "budget", code: error.code }
-					: error instanceof RunBudgetPolicyError
-						? { area: "configuration", code: "invalid" }
-						: preflightFailureCause(rawMessage, Boolean(this.model));
-			const timestamp = new Date().toISOString();
 			this._publishTermination(
-				classifySessionTermination({
-					sessionId: this.sessionId,
-					runId: `preflight-${randomUUID()}`,
-					timestamp,
-					source: "observed",
-					message: terminationMessage(rawMessage, "Prompt preflight failed."),
-					cause,
-					sideEffects: "none",
-					...(this.model ? { provider: this.model.provider, model: this.model.id } : {}),
-				}),
+				promptPreflightTermination(error, this.sessionId, this.model, this._userAbortRequested),
 			);
+			this._userAbortRequested = false;
 			throw error;
 		}
 
@@ -2736,6 +2721,7 @@ export class AgentSession {
 	 * @throws Error if text is an extension command
 	 */
 	async steer(text: string, images?: ImageContent[]): Promise<void> {
+		this._shutdown.assertOpen();
 		const sanitizedText = redactSensitiveText(text);
 
 		// Check for extension commands (cannot be queued)
@@ -2758,6 +2744,7 @@ export class AgentSession {
 	 * @throws Error if text is an extension command
 	 */
 	async followUp(text: string, images?: ImageContent[]): Promise<void> {
+		this._shutdown.assertOpen();
 		const sanitizedText = redactSensitiveText(text);
 
 		// Check for extension commands (cannot be queued)
@@ -2838,6 +2825,7 @@ export class AgentSession {
 		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
 		options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
 	): Promise<void> {
+		this._shutdown.assertOpen();
 		const appMessage = {
 			role: "custom" as const,
 			customType: message.customType,
@@ -2859,7 +2847,7 @@ export class AgentSession {
 				this.agent.steer(appMessage);
 			}
 		} else if (options?.triggerTurn) {
-			await this._runAgentPrompt(appMessage);
+			await this._shutdown.run(() => this._runAgentPrompt(appMessage));
 		} else {
 			this.agent.state.messages.push(appMessage);
 			this.sessionManager.appendCustomMessageEntry(
@@ -2952,7 +2940,7 @@ export class AgentSession {
 	 * Abort current operation and wait for agent to become idle.
 	 */
 	async abort(): Promise<void> {
-		this._userAbortRequested = this.isStreaming || this.isRetrying;
+		this._userAbortRequested = this.isStreaming || this.isRetrying || this._runBudget.cancelPreflight();
 		this.abortRetry();
 		this.agent.abort();
 		await this.agent.waitForIdle();
@@ -3655,10 +3643,12 @@ export class AgentSession {
 	 * Aborts current agent operation first.
 	 * @param customInstructions Optional instructions for the compaction summary
 	 */
-	async compact(customInstructions?: string): Promise<CompactionResult> {
-		await this.abort();
-		this._disconnectFromAgent();
-		this._compactionAbortController = new AbortController();
+	compact(customInstructions?: string): Promise<CompactionResult> {
+		return this._shutdown.run(() => this._compact(customInstructions));
+	}
+
+	private async _compact(customInstructions?: string): Promise<CompactionResult> {
+		this._compactionAbortController = this._shutdown.beginCompaction(this._compactionAbortController);
 		this._emit({ type: "compaction_start", reason: "manual" });
 		let committedCompaction = false;
 		// Hoisted so a failure is attributed to the model that actually summarized,
@@ -3666,6 +3656,8 @@ export class AgentSession {
 		let compactionModel: Model<Api> | undefined;
 
 		try {
+			await this._runBudget.abortAndJoin(this.isStreaming || this.isRetrying, () => this.abort());
+			this._disconnectFromAgent();
 			if (!this.model) {
 				throw new Error(formatNoModelSelectedMessage());
 			}
@@ -3826,17 +3818,6 @@ export class AgentSession {
 		this._branchSummaryAbortController?.abort();
 	}
 
-	/** True when the transcript carries image content that forces a vision-route turn. */
-	private _transcriptHasImages(messages: AgentMessage[]): boolean {
-		return messages.some((m) => {
-			const content = (m as { content?: unknown }).content;
-			if (!Array.isArray(content)) return false;
-			return content.some((part: unknown) => {
-				return typeof part === "object" && part !== null && (part as { type?: string }).type === "image";
-			});
-		});
-	}
-
 	/**
 	 * Effective context window for the upcoming turn.
 	 * Image-bearing turns with a text-only session model are auto-routed to the
@@ -3851,8 +3832,7 @@ export class AgentSession {
 	private _effectiveTurnContextWindow(pendingMessages: AgentMessage[], sessionWindow: number): number {
 		// Vision routing keys off the full transcript, not just the pending turn:
 		// images retained in history keep every subsequent request on the vision model.
-		const hasImages =
-			this._transcriptHasImages(this.agent.state.messages) || this._transcriptHasImages(pendingMessages);
+		const hasImages = transcriptHasImages(this.agent.state.messages) || transcriptHasImages(pendingMessages);
 		const model = this.model;
 		if (!hasImages || !model || (model.input ?? []).includes("image")) {
 			return sessionWindow;
@@ -4480,12 +4460,26 @@ export class AgentSession {
 	 * Returns per-server status so a caller can surface failures; an empty
 	 * configuration returns an empty array without spawning anything.
 	 */
-	async attachMcpServers(options?: {
+	attachMcpServers(options?: {
+		servers?: readonly McpServerConfig[];
+		callTimeoutMs?: number;
+	}): Promise<McpServerStatus[]> {
+		if (this._mcpAttaching) return Promise.reject(new Error("MCP attachment already in progress"));
+		this._mcpAttaching = true;
+		return this._shutdown
+			.run(() => this._attachMcpServers(options))
+			.finally(() => {
+				this._mcpAttaching = false;
+			});
+	}
+
+	private async _attachMcpServers(options?: {
 		servers?: readonly McpServerConfig[];
 		callTimeoutMs?: number;
 	}): Promise<McpServerStatus[]> {
 		const servers = options?.servers ?? loadMcpServerConfigs(this._cwd);
-		this._mcpManager?.close();
+		await this._mcpManager?.closeAndWait();
+		this._shutdown.assertOpen();
 		this._mcpManager = undefined;
 		this._customTools = this._customTools.filter((definition) => !this._mcpToolNames.has(definition.name));
 		this._mcpToolNames = new Set();
@@ -4502,6 +4496,7 @@ export class AgentSession {
 		});
 		this._mcpManager = manager;
 		const definitions = await manager.listToolDefinitions();
+		this._shutdown.assertOpen();
 		// A builtin always wins a name collision; MCP must never shadow `bash`.
 		const usable = definitions.filter((definition) => !this._baseToolDefinitions.has(definition.name));
 		this._mcpToolNames = new Set(usable.map((definition) => definition.name));
@@ -4521,7 +4516,7 @@ export class AgentSession {
 	 * handshake result. Resolves to [] when no manager is attached.
 	 */
 	mcpCheckHealth(options?: { pingTimeoutMs?: number; reconnectFailed?: boolean }): Promise<McpServerStatus[]> {
-		return this._mcpManager?.checkHealth(options) ?? Promise.resolve([]);
+		return this._shutdown.run(() => this._mcpManager?.checkHealth(options) ?? Promise.resolve([]));
 	}
 
 	private _refreshToolRegistry(options?: { activeToolNames?: string[]; includeAllExtensionTools?: boolean }): void {
@@ -4573,13 +4568,13 @@ export class AgentSession {
 		this._toolDefinitions = definitionRegistry;
 		this._toolPromptSnippets = new Map(
 			Array.from(definitionRegistry.values()).flatMap(({ definition }) => {
-				const snippet = this._normalizePromptSnippet(definition.promptSnippet);
+				const snippet = promptAssembly.normalizePromptSnippet(definition.promptSnippet);
 				return snippet ? [[definition.name, snippet] as const] : [];
 			}),
 		);
 		this._toolPromptGuidelines = new Map(
 			Array.from(definitionRegistry.values()).flatMap(({ definition }) => {
-				const guidelines = this._normalizePromptGuidelines(definition.promptGuidelines);
+				const guidelines = promptAssembly.normalizePromptGuidelines(definition.promptGuidelines);
 				return guidelines.length > 0 ? [[definition.name, guidelines] as const] : [];
 			}),
 		);
@@ -4754,7 +4749,11 @@ export class AgentSession {
 		});
 	}
 
-	async reload(): Promise<void> {
+	reload(): Promise<void> {
+		return this._shutdown.run(() => this._reload());
+	}
+
+	private async _reload(): Promise<void> {
 		const previousFlagValues = this._extensionRunner.getFlagValues();
 		await emitSessionShutdownEvent(this._extensionRunner, { type: "session_shutdown", reason: "reload" });
 		await this.settingsManager.reload();
@@ -5062,7 +5061,7 @@ export class AgentSession {
 		onChunk?: (chunk: string) => void,
 		options?: ExecuteBashOptions,
 	): Promise<BashResult> {
-		return this._bashService.executeBash(command, onChunk, options);
+		return this._shutdown.run(() => this._bashService.executeBash(command, onChunk, options));
 	}
 
 	/**
@@ -5127,7 +5126,11 @@ export class AgentSession {
 	 * @param options.label Label to attach to the branch summary entry
 	 * @returns Result with editorText (if user message) and cancelled status
 	 */
-	async navigateTree(
+	navigateTree(targetId: string, options?: Parameters<AgentSession["_navigateTree"]>[1]) {
+		return this._shutdown.run(() => this._navigateTree(targetId, options));
+	}
+
+	private async _navigateTree(
 		targetId: string,
 		options: { summarize?: boolean; customInstructions?: string; replaceInstructions?: boolean; label?: string } = {},
 	): Promise<{ editorText?: string; cancelled: boolean; aborted?: boolean; summaryEntry?: BranchSummaryEntry }> {

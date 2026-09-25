@@ -13,6 +13,7 @@
 
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import spawn from "cross-spawn";
+import { validateMcpTimeoutMs } from "./deadline-policy.ts";
 import { createLineDecoder, encodeMessage, type JsonRpcMessage } from "./protocol.ts";
 
 /** How much stderr tail to keep per server for error reporting. */
@@ -49,6 +50,10 @@ export class McpStdioTransport {
 	private readonly killGraceMs: number;
 	private stderrTail = "";
 	private exited = false;
+	private directExitObserved = false;
+	private closing = false;
+	private readonly closedPromise: Promise<void>;
+	private resolveClosed: (() => void) | undefined;
 	private killTimer: ReturnType<typeof setTimeout> | undefined;
 	/** Conservative estimate of frames retained after a backpressured write. */
 	private pendingWriteBytes = 0;
@@ -60,7 +65,10 @@ export class McpStdioTransport {
 	constructor(options: StdioTransportOptions, handlers: StdioTransportHandlers) {
 		this.options = options;
 		this.handlers = handlers;
-		this.killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
+		this.killGraceMs = validateMcpTimeoutMs(options.killGraceMs ?? DEFAULT_KILL_GRACE_MS);
+		this.closedPromise = new Promise<void>((resolve) => {
+			this.resolveClosed = resolve;
+		});
 		const cap = options.maxPendingWriteBytes ?? DEFAULT_MAX_PENDING_WRITE_BYTES;
 		if (!Number.isSafeInteger(cap) || cap < 0) throw new RangeError("mcp.invalid_pending_write_cap");
 		this.maxPendingWriteBytes = cap;
@@ -72,7 +80,12 @@ export class McpStdioTransport {
 	}
 
 	get running(): boolean {
-		return this.child !== undefined && !this.exited;
+		return this.child !== undefined && !this.directExitObserved && !this.exited;
+	}
+
+	/** Resolves after direct-process stdio closure, never just after kill() or error. */
+	waitForClose(): Promise<void> {
+		return this.closedPromise;
 	}
 
 	/**
@@ -81,7 +94,7 @@ export class McpStdioTransport {
 	 * one failure path instead of two.
 	 */
 	start(): void {
-		if (this.child) throw new Error("MCP stdio transport already started");
+		if (this.child || this.closing || this.exited) throw new Error("MCP stdio transport already started or closed");
 		const env = this.options.inheritEnv === false ? { ...this.options.env } : { ...process.env, ...this.options.env };
 		const child = spawn(this.options.command, [...(this.options.args ?? [])], {
 			cwd: this.options.cwd,
@@ -108,9 +121,15 @@ export class McpStdioTransport {
 		child.stdin.on("error", () => {});
 		child.on("error", (error: Error) => {
 			this.stderrTail = `${this.stderrTail}${error.message}\n`.slice(-MAX_STDERR_TAIL_CHARS);
-			this.settleExit(null, null);
+			// `error` can mean a failed kill, not termination. `close` owns finality.
 		});
-		child.on("exit", (code, signal) => this.settleExit(code, signal));
+		child.on("exit", () => {
+			this.directExitObserved = true;
+			if (this.killTimer !== undefined) clearTimeout(this.killTimer);
+			this.killTimer = undefined;
+		});
+		// stdout may deliver a valid final response AFTER `exit`, but before `close`.
+		child.on("close", (code, signal) => this.settleExit(code, signal));
 	}
 
 	/**
@@ -120,7 +139,7 @@ export class McpStdioTransport {
 	 */
 	send(message: JsonRpcMessage): boolean {
 		const child = this.child;
-		if (!child || this.exited || !child.stdin.writable) return false;
+		if (!child || this.closing || this.directExitObserved || this.exited || !child.stdin.writable) return false;
 		const frame = encodeMessage(message);
 		const frameBytes = Buffer.byteLength(frame, "utf8");
 		// write() may return true while bytes remain queued; the old counter only
@@ -151,8 +170,14 @@ export class McpStdioTransport {
 
 	/** Terminate the server: SIGTERM, then SIGKILL after the grace period. */
 	close(): void {
+		if (this.closing) return;
+		this.closing = true;
 		const child = this.child;
-		if (!child || this.exited) return;
+		if (!child) {
+			this.resolveClosed?.();
+			return;
+		}
+		if (this.exited || this.directExitObserved) return;
 		try {
 			child.stdin.end();
 		} catch {
@@ -163,9 +188,10 @@ export class McpStdioTransport {
 		} catch {
 			// Already gone.
 		}
-		if (this.killTimer !== undefined) return;
+		if (this.exited || this.directExitObserved || this.killTimer !== undefined) return;
 		this.killTimer = setTimeout(() => {
 			this.killTimer = undefined;
+			if (this.exited || this.directExitObserved) return;
 			try {
 				child.kill("SIGKILL");
 			} catch {
@@ -185,6 +211,7 @@ export class McpStdioTransport {
 			this.killTimer = undefined;
 		}
 		this.decoder.reset();
+		this.resolveClosed?.();
 		this.handlers.onExit({ code, signal });
 	}
 }

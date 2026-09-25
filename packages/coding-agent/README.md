@@ -144,7 +144,7 @@ omk sdk session inspect [id]
 omk sdk session send <id> "message"
 ```
 
-These commands inspect or append to stored transcripts. `send` does not wake or execute an agent.
+Without `--live`, these commands inspect or append to stored transcripts; `send` does not execute an agent. The experimental source-runtime [live control](docs/sessions.md#local-live-session-control) path explicitly enrolls an owner and delivers through private local IPC. Experimental [source-quote memory](docs/sessions.md#project-source-quote-memory) separately connects bounded evidence to the per-request context budget; both features are opt-in.
 
 ### Context Compaction
 

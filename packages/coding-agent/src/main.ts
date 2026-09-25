@@ -15,7 +15,7 @@ import { type Args, type Mode, parseArgs, printHelp } from "./cli/args.ts";
 import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
 import { listModels } from "./cli/list-models.ts";
-import { mcpAttachDiagnostics } from "./cli/mcp-attach.ts";
+import { attachSessionTransports } from "./cli/mcp-attach.ts";
 import { loadModelContractOrExit } from "./cli/model-contract.ts";
 import { isExplicitExtensionDiagnostic, resolveCliPaths } from "./cli/resource-paths.ts";
 import { selectSession } from "./cli/session-picker.ts";
@@ -787,7 +787,7 @@ export async function main(args: string[], options?: MainOptions) {
 		// mode and on every session switch. No configuration returns at once; a server
 		// that fails to start is a warning, never fatal. Help/list-models never spawn.
 		if (!parsed.help && parsed.listModels === undefined) {
-			diagnostics.push(...mcpAttachDiagnostics(await created.session.attachMcpServers()));
+			diagnostics.push(...(await attachSessionTransports(created.session)));
 		}
 
 		return {

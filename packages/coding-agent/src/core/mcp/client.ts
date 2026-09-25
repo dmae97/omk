@@ -237,6 +237,11 @@ export class McpClient {
 		this.handleExit(null, null);
 	}
 
+	/** Physical direct-process/stdio settlement is separate from logical request rejection. */
+	waitForTransportClose(): Promise<void> {
+		return this.transport.waitForClose();
+	}
+
 	/** Why the server is unusable, when it is; includes the latest decode failure. */
 	get failure(): string | undefined {
 		return this.exitReason ?? this.lastProtocolErrorReason;

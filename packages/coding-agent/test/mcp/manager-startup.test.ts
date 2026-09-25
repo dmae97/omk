@@ -31,6 +31,7 @@ function fixture(names: string[], connectionConcurrency?: number) {
 				return [{ name: "echo", description: `${options.name} tool`, inputSchema: { type: "object" } }];
 			},
 			close: attempt.close,
+			waitForTransportClose: async () => {},
 			ping: async () => {},
 			serverInfo: { name: "fixture", version: "1" },
 		} as unknown as McpClient;
@@ -169,6 +170,7 @@ describe("MCP bounded connection startup", () => {
 						connect: async () => {},
 						listTools: async () => [],
 						close: () => {},
+						waitForTransportClose: async () => {},
 						serverInfo: {},
 					} as unknown as McpClient;
 				},
