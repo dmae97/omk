@@ -5,6 +5,7 @@ import {
 	isQuotaExhaustionMessage,
 	isTransientProviderErrorMessage,
 } from "./provider-resilience.ts";
+import { requestAdmissionFailure } from "./request-admission-policy.ts";
 
 /**
  * Pure retry/failover decisions for agent-turn provider errors.
@@ -31,6 +32,7 @@ export function isEmptyStreamedCompletion(message: AssistantMessage): boolean {
 }
 
 export function isRetryableAssistantError(message: AssistantMessage, contextWindow: number): boolean {
+	if (requestAdmissionFailure(message.errorMessage)) return false;
 	// An empty streamed completion is a dead stream, not an answer — retry it
 	// regardless of its success-shaped stopReason (bounded by maxRetries).
 	if (isEmptyStreamedCompletion(message)) return true;
@@ -71,6 +73,7 @@ export function computeRetryDelayMs(baseDelayMs: number, attempt: number, failov
  * current model cannot finish this turn.
  */
 export function isFailoverTriggerError(errorMessage: string | undefined): boolean {
+	if (requestAdmissionFailure(errorMessage)) return false;
 	return isContentSafetyStopMessage(errorMessage) || isQuotaExhaustionMessage(errorMessage);
 }
 

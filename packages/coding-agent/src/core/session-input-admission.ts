@@ -7,7 +7,9 @@ import { createTokenCounterForMode, type TokenCounterAdapter } from "./context-b
 import type { ContextBudgetCacheProviderV2 } from "./context-budget-v2-types.ts";
 import {
 	assertContextInputWithinModelWindow,
+	computeHardPromptInputLimit,
 	computePromptTokenBudget,
+	PromptInputCapacityError,
 	parseCommaSeparatedEnv,
 	parsePositiveFloatEnv,
 	parsePositiveIntegerEnv,
@@ -59,17 +61,94 @@ export function sessionContextBudgetOptions(
 	};
 }
 
-export function assertSessionInputCapacity(input: {
+/** Keeps the emergency ratio strictly below the refusal line it must beat. */
+const EMERGENCY_ADMISSION_MARGIN = 0.95;
+
+/**
+ * Highest input ratio the local admission gate still admits for this window:
+ * the hard prompt-input limit over the window, after the response reserve and
+ * safety margin `assertSessionInputCapacity` applies. Any threshold that has to
+ * act before the refusal must sit below this ratio.
+ */
+function admissionCapacityRatio(model: Model<Api> | undefined, contextWindow: number): number | undefined {
+	if (!model || !Number.isFinite(contextWindow) || contextWindow <= 0) return undefined;
+	const budget = computePromptTokenBudget({
+		contextWindow,
+		modelMaxTokens: model.maxTokens,
+		envMaxPromptTokens: parsePositiveIntegerEnv("OMK_CONTEXT_GOVERNOR_MAX_PROMPT_TOKENS"),
+		envResponseReserveTokens: parsePositiveIntegerEnv("OMK_CONTEXT_GOVERNOR_RESPONSE_RESERVE_TOKENS"),
+		envPromptRatio: parsePositiveFloatEnv("OMK_CONTEXT_GOVERNOR_PROMPT_RATIO"),
+		envResponseRatio: parsePositiveFloatEnv("OMK_CONTEXT_GOVERNOR_RESPONSE_RATIO"),
+	});
+	const limit = computeHardPromptInputLimit({
+		contextWindow,
+		configuredMaxPromptTokens: budget.maxPromptTokens,
+		modelMaxTokens: model.maxTokens,
+	});
+	return Math.min(1, limit.maxInputTokens / limit.contextWindow);
+}
+
+/**
+ * Emergency ratio for the compaction hysteresis.
+ *
+ * The emergency branch is the only one that compacts a *disarmed* hysteresis,
+ * and the admission gate refuses every turn above the capacity ratio — so the
+ * 0.98 default sat above the refusal line and could never fire: a disarmed
+ * session pinned at "context limit reached" had no automatic way out. Clamp it
+ * just under capacity, preserving the emergency ≥ trigger invariant.
+ */
+export function emergencyCompactionRatio(
+	triggerRatio: number,
+	configuredEmergencyRatio: number | undefined,
+	model: Model<Api> | undefined,
+	contextWindow: number,
+): number {
+	const configured = configuredEmergencyRatio ?? 0.98;
+	const capacity = admissionCapacityRatio(model, contextWindow);
+	// No known capacity to stay under: keep the configured value as before.
+	if (capacity === undefined) return Math.max(triggerRatio, configured);
+	return Math.max(triggerRatio, Math.min(configured, capacity * EMERGENCY_ADMISSION_MARGIN));
+}
+
+export interface SessionInputCapacityInput {
 	readonly model: Model<Api> | undefined;
 	readonly state: Pick<AgentState, "systemPrompt" | "messages" | "tools">;
 	readonly pending: AgentMessage[];
-	readonly effectiveWindow: (window: number) => number;
+	/** The pending list is passed back so a caller need not capture it in a narrowing const. */
+	readonly effectiveWindow: (window: number, pending: AgentMessage[]) => number;
 	readonly counter: TokenCounterAdapter;
-}): void {
+}
+
+/**
+ * Admission gate with one overflow recovery.
+ *
+ * The gate refuses a turn before any provider call, and the compaction decision
+ * reads a different estimator than the gate — so a session can sit in the
+ * refusal band with no automatic way out: prompts keep failing while the
+ * decision path sees room. When the input is over capacity, run the caller's
+ * recovery once (bounded by the caller) and re-check; an input that is still
+ * over keeps the refusal, now with the post-recovery numbers.
+ */
+export async function admitSessionInputOrRecover(
+	input: SessionInputCapacityInput & { readonly recover: () => Promise<boolean> | boolean },
+): Promise<void> {
+	let refusal: PromptInputCapacityError;
+	try {
+		assertSessionInputCapacity(input);
+		return;
+	} catch (error) {
+		if (!(error instanceof PromptInputCapacityError)) throw error;
+		refusal = error;
+	}
+	if (!(await input.recover())) throw refusal;
+	assertSessionInputCapacity(input);
+}
+
+export function assertSessionInputCapacity(input: SessionInputCapacityInput): void {
 	const { model, state, pending } = input;
 	const sessionWindow = model?.contextWindow ?? 0;
 	if (!model || !Number.isSafeInteger(sessionWindow) || sessionWindow <= 0) return;
-	const contextWindow = input.effectiveWindow(sessionWindow);
+	const contextWindow = input.effectiveWindow(sessionWindow, input.pending);
 	const configured = computePromptTokenBudget({
 		contextWindow,
 		modelMaxTokens: model.maxTokens,

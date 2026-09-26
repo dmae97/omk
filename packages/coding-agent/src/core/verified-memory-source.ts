@@ -38,16 +38,8 @@ export function validateMemoryPath(path: string): string[] {
 }
 
 /** Bounded read with no symlink traversal. Same-UID concurrent directory mutation is not sandboxed. */
-export function readMemorySource(root: string, path: string, startLine: number, endLine: number) {
+export function readMemorySourceSnapshot(root: string, path: string) {
 	const parts = validateMemoryPath(path);
-	if (
-		!Number.isSafeInteger(startLine) ||
-		!Number.isSafeInteger(endLine) ||
-		startLine < 1 ||
-		endLine < startLine ||
-		endLine - startLine >= 16
-	)
-		throw new Error("memory source range refused");
 	let target = root;
 	for (const [index, part] of parts.entries()) {
 		target = join(target, part);
@@ -83,13 +75,69 @@ export function readMemorySource(root: string, path: string, startLine: number, 
 		if (text.includes("\0")) throw new Error("memory source binary refused");
 		if (redactSensitiveTextForced(text) !== text || detectMcpDescriptorPromptInjection(text).patternHits > 0)
 			throw new Error("memory source requires review");
-		const lines = text.split("\n");
-		if (endLine > lines.length) throw new Error("memory source range refused");
-		const quote = lines.slice(startLine - 1, endLine).join("\n");
-		if (!quote.trim() || Buffer.byteLength(quote) > MAX_MEMORY_QUOTE_BYTES)
-			throw new Error("memory quote size refused");
-		return { quote, contentHash: sha256Memory(bytes.subarray(0, length)) };
+		const lines = Object.freeze(text.split("\n"));
+		const assertCurrent = (): void => {
+			const stat = lstatSync(target, { bigint: true });
+			if (
+				!stat.isFile() ||
+				stat.nlink !== 1n ||
+				stat.dev !== after.dev ||
+				stat.ino !== after.ino ||
+				stat.ctimeNs !== after.ctimeNs ||
+				stat.mtimeNs !== after.mtimeNs ||
+				stat.size !== after.size
+			)
+				throw new Error("memory source changed during recall");
+		};
+		return Object.freeze({ lines, contentHash: sha256Memory(bytes.subarray(0, length)), assertCurrent });
 	} finally {
 		closeSync(fd);
 	}
+}
+
+function validateMemoryRange(startLine: number, endLine: number): void {
+	if (
+		!Number.isSafeInteger(startLine) ||
+		!Number.isSafeInteger(endLine) ||
+		startLine < 1 ||
+		endLine < startLine ||
+		endLine - startLine >= 16
+	)
+		throw new Error("memory source range refused");
+}
+
+export type MemorySourceSnapshot = ReturnType<typeof readMemorySourceSnapshot>;
+function quoteFromSnapshot(source: MemorySourceSnapshot, startLine: number, endLine: number) {
+	validateMemoryRange(startLine, endLine);
+	source.assertCurrent();
+	if (endLine > source.lines.length) throw new Error("memory source range refused");
+	const quote = source.lines.slice(startLine - 1, endLine).join("\n");
+	if (!quote.trim() || Buffer.byteLength(quote) > MAX_MEMORY_QUOTE_BYTES) throw new Error("memory quote size refused");
+	return { quote, contentHash: source.contentHash };
+}
+export function readMemorySource(root: string, path: string, startLine: number, endLine: number) {
+	validateMemoryRange(startLine, endLine);
+	return quoteFromSnapshot(readMemorySourceSnapshot(root, path), startLine, endLine);
+}
+
+/** At most eight source snapshots; never retain this reader across retrieve() calls. */
+export function createMemorySourceBatch(
+	root: string,
+): (path: string, startLine: number, endLine: number) => ReturnType<typeof readMemorySource> {
+	const cache = new Map<string, MemorySourceSnapshot | null>();
+	return (path, startLine, endLine) => {
+		validateMemoryRange(startLine, endLine);
+		let source = cache.get(path);
+		if (source === null) throw new Error("memory source unavailable in recall");
+		if (source === undefined) {
+			try {
+				source = readMemorySourceSnapshot(root, path);
+			} catch (error) {
+				if (cache.size < 8) cache.set(path, null);
+				throw error;
+			}
+			if (cache.size < 8) cache.set(path, source);
+		}
+		return quoteFromSnapshot(source, startLine, endLine);
+	};
 }

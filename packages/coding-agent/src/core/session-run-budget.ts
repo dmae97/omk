@@ -1,5 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Agent, StreamFn } from "omk-agent-core";
+import { wrapBudgetStream } from "./budget-stream.ts";
+import { requestAdmissionPolicyFromEnv } from "./request-admission-policy.ts";
+import {
+	createRequestAdmissionGuard,
+	type RequestAdmissionGuard,
+	type RequestAdmissionSnapshot,
+} from "./request-context-admission.ts";
 import { RunBudget, type RunBudgetSnapshot } from "./run-budget.ts";
 import { RunBudgetExceededError, type RunBudgetLimits, RunBudgetPolicyError } from "./run-budget-policy.ts";
 import { PromptExecutionBusyError } from "./session-prompt-lifecycle.ts";
@@ -18,6 +25,7 @@ export class SessionRunBudget {
 	private previous: RunBudget | undefined;
 	private executing = false;
 	private disposed = false;
+	private admission: RequestAdmissionGuard | undefined;
 	private cancelledBudget: RunBudget | undefined;
 	private executionCompletion: Promise<void> | undefined;
 	private readonly executionContext = new AsyncLocalStorage<RunBudget>();
@@ -51,8 +59,11 @@ export class SessionRunBudget {
 	get remainingMs(): number | undefined {
 		return this.current?.remainingMs;
 	}
-	snapshot(): RunBudgetSnapshot | undefined {
-		return (this.current ?? this.previous)?.snapshot();
+	snapshot(): (RunBudgetSnapshot & { readonly requestAdmission?: RequestAdmissionSnapshot }) | undefined {
+		const budget = (this.current ?? this.previous)?.snapshot();
+		return budget === undefined
+			? undefined
+			: Object.freeze({ ...budget, ...(this.admission ? { requestAdmission: this.admission.snapshot() } : {}) });
 	}
 	assertActive(): void {
 		this.current?.assertActive();
@@ -98,7 +109,9 @@ export class SessionRunBudget {
 			const scopedBudget = new RunBudget(limits, this.lifecycle.stop);
 			budget = scopedBudget;
 			this.current = scopedBudget;
-			wrapped = wrapBudgetStream(source, scopedBudget);
+			this.admission = undefined;
+			this.admission = createRequestAdmissionGuard(requestAdmissionPolicyFromEnv());
+			wrapped = wrapBudgetStream(source, scopedBudget, this.admission);
 			if (sourceAuth !== undefined) {
 				wrappedAuth = async (provider) => {
 					scopedBudget.assertAdmission();
@@ -139,36 +152,4 @@ export class SessionRunBudget {
 	}
 }
 
-export function wrapBudgetStream(source: StreamFn, budget: RunBudget): StreamFn {
-	const wrapped: StreamFn = async (model, context, options) => {
-		options?.signal?.throwIfAborted();
-		const release = budget.admit();
-		const remainingMs = budget.remainingMs;
-		let returnedStream = false;
-		try {
-			const stream = await source(model, context, {
-				...options,
-				signal: options?.signal ? AbortSignal.any([options.signal, budget.signal]) : budget.signal,
-				...(Object.keys(budget.limits).length > 0 ? { maxRetries: 0 } : {}),
-				...(remainingMs === undefined
-					? {}
-					: { timeoutMs: Math.min(options?.timeoutMs ?? remainingMs, remainingMs) }),
-			});
-			returnedStream = true;
-			// A returned stream is not yet a completed request. Missing terminal metadata
-			// retains the reservation; abort alone never refunds it.
-			void stream.result().then(release, release);
-			return stream;
-		} catch (error) {
-			// A broken result() contract leaves termination unknown, not refunded.
-			if (!returnedStream) release();
-			throw error;
-		}
-	};
-	// Preserve source-owned identity brands used by mandatory credential checks.
-	for (const key of Object.getOwnPropertySymbols(source)) {
-		const descriptor = Object.getOwnPropertyDescriptor(source, key);
-		if (descriptor) Object.defineProperty(wrapped, key, descriptor);
-	}
-	return wrapped;
-}
+export { wrapBudgetStream } from "./budget-stream.ts";

@@ -273,7 +273,8 @@ import { SessionCompactionService } from "./session-compaction-service.ts";
 import { type SessionControlServer, startSessionControl } from "./session-control-server.ts";
 import { runtimeFailureCause, terminationMessage } from "./session-failure-cause.ts";
 import {
-	assertSessionInputCapacity,
+	admitSessionInputOrRecover,
+	emergencyCompactionRatio,
 	promptPreflightTermination,
 	sessionContextBudgetOptions,
 	transcriptHasImages,
@@ -2627,13 +2628,13 @@ export class AgentSession {
 
 			await this._checkProjectedCompaction(messages);
 			this._runBudget.assertActive();
-			const pending = messages;
-			assertSessionInputCapacity({
+			await admitSessionInputOrRecover({
 				model: this.model,
 				state: this.agent.state,
-				pending,
-				effectiveWindow: (window) => this._effectiveTurnContextWindow(pending, window),
+				pending: messages,
+				effectiveWindow: (window, pending) => this._effectiveTurnContextWindow(pending, window),
 				counter: admissionTokenCounter,
+				recover: () => this._runAutoCompaction("overflow", false),
 			});
 		} catch (error) {
 			preflightResult?.(false);
@@ -3522,9 +3523,8 @@ export class AgentSession {
 			1,
 			Math.max(1 / Math.floor(contextWindow), threshold.triggerTokens / contextWindow),
 		);
-		const configuredRearm = settings.rearmRatio ?? triggerRatio * 0.75;
-		const rearmRatio = Math.min(configuredRearm, triggerRatio * 0.999);
-		const emergencyRatio = Math.max(triggerRatio, settings.emergencyRatio ?? 0.98);
+		const rearmRatio = Math.min(settings.rearmRatio ?? triggerRatio * 0.75, triggerRatio * 0.999);
+		const emergencyRatio = emergencyCompactionRatio(triggerRatio, settings.emergencyRatio, this.model, contextWindow);
 		return createCompactionHysteresisConfig({ rearmRatio, triggerRatio, emergencyRatio });
 	}
 

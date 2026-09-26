@@ -1,3 +1,4 @@
+import { requestAdmissionFailure } from "./request-admission-policy.ts";
 /**
  * Failure-text to `SessionTerminationCause` classification.
  *
@@ -62,6 +63,8 @@ export function terminationMessage(value: string | undefined, fallback: string):
 /** Classify a failed provider turn from the assistant message it produced. */
 export function providerFailureCause(message: AssistantMessage, contextWindow: number): SessionTerminationCause {
 	const text = message.errorMessage ?? "";
+	const admission = requestAdmissionFailure(text);
+	if (admission) return admission;
 	if (isContextOverflow(message, contextWindow)) {
 		return { area: "provider", code: "context_overflow" };
 	}
@@ -130,6 +133,8 @@ export function providerFailureCause(message: AssistantMessage, contextWindow: n
  * `hasModel` is false when no model is selected for the session.
  */
 export function preflightFailureCause(message: string, hasModel: boolean): SessionTerminationCause {
+	const admission = requestAdmissionFailure(message);
+	if (admission) return admission;
 	if (!hasModel || /no model|model selected|model is required/i.test(message)) {
 		return { area: "configuration", code: "invalid" };
 	}
@@ -166,6 +171,8 @@ export function runtimeFailureCause(error: unknown): SessionTerminationCause {
 		return { area: "persistence", code: "append_failed" };
 	}
 	const message = error instanceof Error ? error.message : String(error);
+	const admission = requestAdmissionFailure(message);
+	if (admission) return admission;
 	if (isMissingEsmNamedExportMessage(message)) return { area: "configuration", code: "invalid" };
 	if (/compaction.+stale|session changed during compaction/i.test(message)) {
 		return { area: "compaction", code: "stale" };
