@@ -9,6 +9,7 @@ import {
 	assertContextInputWithinModelWindow,
 	computeHardPromptInputLimit,
 	computePromptTokenBudget,
+	PromptInputCapacityError,
 	parseCommaSeparatedEnv,
 	parsePositiveFloatEnv,
 	parsePositiveIntegerEnv,
@@ -109,17 +110,45 @@ export function emergencyCompactionRatio(
 	return Math.max(triggerRatio, Math.min(configured, capacity * EMERGENCY_ADMISSION_MARGIN));
 }
 
-export function assertSessionInputCapacity(input: {
+export interface SessionInputCapacityInput {
 	readonly model: Model<Api> | undefined;
 	readonly state: Pick<AgentState, "systemPrompt" | "messages" | "tools">;
 	readonly pending: AgentMessage[];
-	readonly effectiveWindow: (window: number) => number;
+	/** The pending list is passed back so a caller need not capture it in a narrowing const. */
+	readonly effectiveWindow: (window: number, pending: AgentMessage[]) => number;
 	readonly counter: TokenCounterAdapter;
-}): void {
+}
+
+/**
+ * Admission gate with one overflow recovery.
+ *
+ * The gate refuses a turn before any provider call, and the compaction decision
+ * reads a different estimator than the gate — so a session can sit in the
+ * refusal band with no automatic way out: prompts keep failing while the
+ * decision path sees room. When the input is over capacity, run the caller's
+ * recovery once (bounded by the caller) and re-check; an input that is still
+ * over keeps the refusal, now with the post-recovery numbers.
+ */
+export async function admitSessionInputOrRecover(
+	input: SessionInputCapacityInput & { readonly recover: () => Promise<boolean> | boolean },
+): Promise<void> {
+	let refusal: PromptInputCapacityError;
+	try {
+		assertSessionInputCapacity(input);
+		return;
+	} catch (error) {
+		if (!(error instanceof PromptInputCapacityError)) throw error;
+		refusal = error;
+	}
+	if (!(await input.recover())) throw refusal;
+	assertSessionInputCapacity(input);
+}
+
+export function assertSessionInputCapacity(input: SessionInputCapacityInput): void {
 	const { model, state, pending } = input;
 	const sessionWindow = model?.contextWindow ?? 0;
 	if (!model || !Number.isSafeInteger(sessionWindow) || sessionWindow <= 0) return;
-	const contextWindow = input.effectiveWindow(sessionWindow);
+	const contextWindow = input.effectiveWindow(sessionWindow, input.pending);
 	const configured = computePromptTokenBudget({
 		contextWindow,
 		modelMaxTokens: model.maxTokens,
