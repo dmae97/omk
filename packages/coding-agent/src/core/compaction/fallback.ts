@@ -18,6 +18,7 @@
 import type { Model } from "omk-ai";
 import { isQuotaExhaustionMessage } from "../provider-resilience.ts";
 import { redactSensitiveTextForced } from "../redaction.ts";
+import { requestAdmissionFailure } from "../request-admission-policy.ts";
 import type { CompactionDetails, CompactionPreparation, CompactionResult } from "./compaction.ts";
 import { applyCompactionKnowledgeTriage } from "./knowledge-triage.ts";
 import { redactCredentialShapedContent } from "./transaction.ts";
@@ -147,9 +148,32 @@ function sameModel(a: Model<any>, b: Model<any>): boolean {
 }
 
 /**
- * Run the summarization ladder. Aborts and (without `alwaysRescue`)
- * non-quota failures propagate unchanged — a transient 503 must retry its
- * model, not silently degrade.
+ * Failures the ladder may degrade past even without `alwaysRescue`.
+ *
+ * Quota exhaustion is the classic rescue case. A context-overflow refusal is the
+ * other one that cannot heal on retry: the transcript is already over the
+ * window, so replaying the same request fails the same way forever. Without
+ * this class, threshold and manual compaction — the only paths that can shrink
+ * the transcript — hard-fail exactly when the session is stuck over the limit.
+ * Transient transport failures are deliberately absent: a 503 must retry its
+ * model, not silently degrade the summary.
+ */
+function isRescueableSummarizationFailure(message: string): boolean {
+	if (isQuotaExhaustionMessage(message)) return true;
+	if (requestAdmissionFailure(message)?.code === "context_overflow") return true;
+	if (/prompt is too long|input is too long|maximum context/i.test(message)) return true;
+	// A context-dimension word *and* an overflow verb: "model has no context
+	// window" (a configuration refusal) must not silently degrade a summary.
+	return (
+		/context[_ .-]?(?:length|window|size|limit)|too many tokens/i.test(message) &&
+		/exceed|overflow|too (?:long|large|many)|maximum|over (?:the )?(?:limit|window)/i.test(message)
+	);
+}
+
+/**
+ * Run the summarization ladder. Aborts and (without `alwaysRescue`) failures
+ * outside the quota/overflow classes propagate unchanged — a transient 503 must
+ * retry its model, not silently degrade.
  */
 export async function summarizeWithFallback(input: SummarizationFallbackInput): Promise<CompactionResult> {
 	try {
@@ -157,7 +181,7 @@ export async function summarizeWithFallback(input: SummarizationFallbackInput): 
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		if (input.isAborted()) throw error;
-		if (!input.alwaysRescue && !isQuotaExhaustionMessage(message)) throw error;
+		if (!input.alwaysRescue && !isRescueableSummarizationFailure(message)) throw error;
 
 		const session = input.sessionModel;
 		if (session !== undefined && !sameModel(session, input.primaryModel)) {
