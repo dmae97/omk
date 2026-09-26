@@ -92,8 +92,18 @@ export class SessionMemory {
 			const { records, omitted } = this.getStore().retrieve();
 			this.currentStatus = { state: "empty", eligible: records.length, omitted };
 			if (records.length === 0) return messages;
-			const budgetTokens = Math.max(0, Math.min(2048, limit.maxInputTokens - before.totalTokens - 512));
-			const projection = memoryContextPair(records, budgetTokens, options.queryContext ?? "", counter, model.id);
+			const mode = process.env.OMK_MEMORY_SELECTION ?? "legacy";
+			if (mode !== "legacy" && mode !== "v2") throw new RangeError("memory.invalid_selection_mode");
+			const budgetTokens = Math.max(
+				0,
+				Math.min(2048, limit.maxInputTokens - before.totalTokens - (mode === "legacy" ? 512 : 0)),
+			);
+			const projection = memoryContextPair(records, budgetTokens, options.queryContext ?? "", counter, model.id, {
+				mode,
+				fits: (candidate) =>
+					estimateContextInputTokens({ ...input, messages: [...messages, ...candidate] }).totalTokens <=
+					limit.maxInputTokens,
+			});
 			const pair = projection.messages;
 			const enriched = [...messages, ...pair];
 			// Price the host tool-pair envelope too; optional evidence never evicts the real prompt.

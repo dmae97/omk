@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { lstatSync } from "node:fs";
 import { createConnection } from "node:net";
 import { dirname } from "node:path";
+import { controlDeadline } from "./control-deadline.ts";
 import { readControlEndpoint } from "./session-control-endpoint.ts";
 import {
 	isRecord,
@@ -11,11 +12,17 @@ import {
 	type SessionControlResponse,
 } from "./session-control-protocol.ts";
 
+export interface SessionControlRequestOptions {
+	/** Exact prompt generation an abort targets. Omit to use the bounded outstanding-prompt rule. */
+	readonly generation?: number;
+}
+
 export async function requestSessionControl(
 	sessionPath: string,
 	sessionId: string,
 	action: SessionControlAction,
 	text?: string,
+	options: SessionControlRequestOptions = {},
 ): Promise<SessionControlResponse> {
 	const endpoint = readControlEndpoint(sessionPath);
 	if (endpoint.sessionId !== sessionId) throw new Error("live session identity mismatch");
@@ -38,6 +45,7 @@ export async function requestSessionControl(
 		token: endpoint.token,
 		action,
 		...(text === undefined ? {} : { text }),
+		...(options.generation === undefined ? {} : { generation: options.generation }),
 	});
 	const payload = `${JSON.stringify(request)}\n`;
 	if (Buffer.byteLength(payload) > MAX_CONTROL_BYTES) throw new Error("live request exceeds size limit");
@@ -48,17 +56,24 @@ export async function requestSessionControl(
 		const finish = (response?: SessionControlResponse) => {
 			if (done) return;
 			done = true;
-			clearTimeout(timer);
+			deadline.cancel();
 			socket.destroy();
 			if (response) resolve(response);
 			else reject(new Error("live endpoint unavailable or outcome unknown; do not automatically retry"));
 		};
-		const timer = setTimeout(() => finish(), 10_000);
+		const deadline = controlDeadline(10_000, () => finish());
 		socket.setEncoding("utf8");
-		socket.once("connect", () => socket.write(payload));
+		socket.once("connect", () => {
+			if (deadline.expired()) finish();
+			else socket.write(payload);
+		});
 		socket.once("error", () => finish());
 		socket.once("close", () => finish());
 		socket.on("data", (chunk: string) => {
+			if (done || deadline.expired()) {
+				finish();
+				return;
+			}
 			buffer += chunk;
 			if (Buffer.byteLength(buffer) > MAX_CONTROL_BYTES) {
 				finish();
@@ -74,6 +89,11 @@ export async function requestSessionControl(
 					value.sessionId !== sessionId ||
 					(value.status !== "accepted" && value.status !== "ok" && value.status !== "refused")
 				) {
+					finish();
+					return;
+				}
+				// Recheck after parsing; an expired reply is an unknown outcome, not permission to retry.
+				if (deadline.expired()) {
 					finish();
 					return;
 				}
@@ -96,6 +116,11 @@ export async function requestSessionControl(
 									value.state.lastOutcome === "failed" ||
 									value.state.lastOutcome === "abort_failed"
 										? { lastOutcome: value.state.lastOutcome }
+										: {}),
+									...(typeof value.state.generation === "number" &&
+									Number.isSafeInteger(value.state.generation) &&
+									value.state.generation >= 0
+										? { generation: value.state.generation }
 										: {}),
 								},
 							}
