@@ -449,7 +449,15 @@ describe("compaction runtime transaction integration", () => {
 			emergency: false,
 		});
 		runtime._recordCompactionCommitForHysteresis();
-		expect(runtime._runtimeCompactionDecision(700, 1000, settings).compact).toBe(false);
+		// Disarmed and below the trigger: still waits.
+		expect(runtime._runtimeCompactionDecision(500, 1000, settings).compact).toBe(false);
+		// The emergency branch is clamped below the admission capacity (0.70 of this
+		// 1000-token window), so a ratio the gate would refuse compacts even while
+		// the hysteresis is disarmed.
+		expect(runtime._runtimeCompactionDecision(700, 1000, settings)).toEqual({
+			compact: true,
+			emergency: true,
+		});
 		expect(runtime._runtimeCompactionDecision(950, 1000, settings)).toEqual({
 			compact: true,
 			emergency: true,
