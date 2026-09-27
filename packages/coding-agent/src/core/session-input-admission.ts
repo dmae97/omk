@@ -113,6 +113,14 @@ export class CompactedPromptInputCapacityError extends PromptInputCapacityError 
 	}
 }
 
+/** Rejection by input compaction cannot shrink: the system prompt, tool schemas and latest input alone. */
+export class PromptFixedOverheadError extends PromptInputCapacityError {
+	constructor(rejection: PromptInputCapacityError) {
+		super(rejection.estimatedTokens, rejection.maxInputTokens);
+		this.name = "PromptFixedOverheadError";
+	}
+}
+
 function sessionInputLimit(
 	input: SessionInputCapacityInput,
 ): { readonly model: Model<Api>; readonly maxInputTokens: number } | undefined {
@@ -166,8 +174,9 @@ function withFixedOverhead(
 	fixed: ContextInputTokenEstimate | undefined,
 ): PromptInputCapacityError {
 	if (!fixed) return error;
-	const historyTokens = Math.max(0, error.maxInputTokens - fixed.totalTokens);
-	error.message += ` Compaction cannot shrink the system prompt (${fixed.systemPromptTokens} tokens), tool schemas (${fixed.toolTokens}) or latest input (${fixed.messageTokens}); ${historyTokens} tokens remain for history.`;
+	const spare = error.maxInputTokens - fixed.totalTokens;
+	const room = spare >= 0 ? `${spare} tokens remain for history` : `they alone exceed the limit by ${-spare} tokens`;
+	error.message += ` Compaction cannot shrink the system prompt (${fixed.systemPromptTokens} tokens), tool schemas (${fixed.toolTokens}) or latest input (${fixed.messageTokens}); ${room}.`;
 	return error;
 }
 
@@ -183,9 +192,12 @@ export async function admitSessionInput(
 	const rejection = capacityRejection(before);
 	if (!rejection) return;
 	const fixed = fixedInputEstimate(before);
-	if (!compact || (fixed !== undefined && fixed.totalTokens > rejection.maxInputTokens)) {
-		throw withFixedOverhead(rejection, fixed);
+	if (fixed !== undefined && fixed.totalTokens > rejection.maxInputTokens) {
+		// Prompt and tools alone overflowing is a configuration fault; an oversized latest input is not.
+		const configured = fixed.systemPromptTokens + fixed.toolTokens > rejection.maxInputTokens;
+		throw withFixedOverhead(configured ? new PromptFixedOverheadError(rejection) : rejection, fixed);
 	}
+	if (!compact) throw withFixedOverhead(rejection, fixed);
 	await compact();
 	const after = buildInput();
 	const retry = capacityRejection(after);
@@ -206,9 +218,11 @@ export function promptPreflightTermination(
 			? { area: "user", code: "abort" }
 			: error instanceof RunBudgetExceededError
 				? { area: "budget", code: error.code }
-				: error instanceof RunBudgetPolicyError
+				: error instanceof RunBudgetPolicyError || error instanceof PromptFixedOverheadError
 					? { area: "configuration", code: "invalid" }
-					: preflightFailureCause(rawMessage, Boolean(model));
+					: error instanceof CompactedPromptInputCapacityError
+						? { area: "compaction", code: "failed" }
+						: preflightFailureCause(rawMessage, Boolean(model));
 	return classifySessionTermination({
 		sessionId,
 		runId: `preflight-${randomUUID()}`,

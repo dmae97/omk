@@ -22,6 +22,7 @@ import type {
 	AgentLoopTurnUpdate,
 	AgentMessage,
 	AgentState,
+	AgentTool,
 	BeforeToolCallContext,
 	BeforeToolCallResult,
 	QueueMode,
@@ -107,6 +108,11 @@ export class Agent {
 	public prepareNextTurn?: (
 		signal?: AbortSignal,
 	) => Promise<AgentLoopTurnUpdate | undefined> | AgentLoopTurnUpdate | undefined;
+	/**
+	 * Selects the tools a run sends to the provider, e.g. to fit the model's input window.
+	 * `pending` holds prompt messages not yet in `state.messages`; active tools are never mutated.
+	 */
+	public prepareTools?: (tools: AgentTool[], pending: readonly AgentMessage[]) => AgentTool[];
 	private activeRun?: ActiveRun;
 	/** Session identifier forwarded to providers for cache-aware backends. */
 	public sessionId?: string;
@@ -342,9 +348,7 @@ export class Agent {
 		input: string | AgentMessage | AgentMessage[],
 		images?: ImageContent[],
 	): AgentMessage[] {
-		if (Array.isArray(input)) {
-			return input;
-		}
+		if (Array.isArray(input)) return input;
 
 		if (typeof input !== "string") {
 			return [input];
@@ -364,7 +368,7 @@ export class Agent {
 		await this.runWithLifecycle(async (signal) => {
 			await runAgentLoop(
 				messages,
-				this.createContextSnapshot(),
+				this.createContextSnapshot(messages),
 				this.createLoopConfig(options),
 				(event) => this.processEvents(event),
 				signal,
@@ -385,13 +389,13 @@ export class Agent {
 		});
 	}
 
-	private createContextSnapshot(): AgentContext {
+	private createContextSnapshot(pending: readonly AgentMessage[] = []): AgentContext {
 		return {
 			systemPrompt: this._state.systemPrompt,
 			systemPromptCacheBoundary: this._state.systemPromptCacheBoundary,
 			systemPromptCacheBoundaryBypass: this._state.systemPromptCacheBoundaryBypass,
 			messages: this._state.messages.slice(),
-			tools: this._state.tools.slice(),
+			tools: (this.prepareTools?.(this._state.tools.slice(), pending) ?? this._state.tools).slice(),
 		};
 	}
 

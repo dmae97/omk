@@ -273,7 +273,6 @@ import { SessionCompactionService } from "./session-compaction-service.ts";
 import { type SessionControlServer, startSessionControl } from "./session-control-server.ts";
 import { runtimeFailureCause, terminationMessage } from "./session-failure-cause.ts";
 import {
-	admitSessionInput,
 	promptPreflightTermination,
 	sessionContextBudgetOptions,
 	sessionInputTokenLimit,
@@ -294,11 +293,13 @@ import {
 	type SessionTermination,
 	type SessionTerminationCause,
 } from "./session-termination.ts";
+import { SessionTurnAdmission } from "./session-turn-admission.ts";
 import type { SettingsManager } from "./settings-manager.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPromptPlan } from "./system-prompt.ts";
 import { todoControlState } from "./todo-runtime-state.ts";
+import { mcpToolGroup } from "./tool-schema-budget.ts";
 import { type BashOperations, type BashSandboxPreflight, createLocalBashOperations } from "./tools/bash.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
@@ -636,6 +637,7 @@ export class AgentSession {
 	private readonly _runBudget: SessionRunBudget;
 	private readonly _shutdown = new SessionShutdown();
 	private readonly _memory: SessionMemory;
+	private readonly _turnAdmission: SessionTurnAdmission;
 	private _control: Promise<SessionControlServer> | undefined;
 	private readonly _promptLifecycle = new SessionPromptLifecycle({
 		canSettle: () => !this.isStreaming && !this.agent.hasQueuedMessages(),
@@ -887,6 +889,22 @@ export class AgentSession {
 				(messages, window) => this._effectiveTurnContextWindow(messages, window),
 				() => getLatestCompactionEntry(this.sessionManager.getBranch())?.timestamp,
 			);
+			// One tool selection serves admission and the admitted run: MCP servers the model's input
+			// budget cannot carry are withheld per request, never removed from the active tool set.
+			this._turnAdmission = new SessionTurnAdmission({
+				model: () => this.model,
+				state: () => this.agent.state,
+				contextWindow: (pending, window) => this._effectiveTurnContextWindow([...pending], window),
+				compactionSettings: () => this.settingsManager.getCompactionSettings(),
+				latestCompactionTimestamp: () => getLatestCompactionEntry(this.sessionManager.getBranch())?.timestamp,
+				toolGroup: (name) => (this._mcpToolNames.has(name) ? mcpToolGroup(name) : undefined),
+				compact: async () => {
+					await this._runThresholdCompaction(true);
+					this._runBudget.assertActive();
+				},
+				notify: (message) => this._extensionRunner.getUIContext().notify(message, "warning"),
+			});
+			this.agent.prepareTools = (tools, pending) => this._turnAdmission.fitTools(tools, pending);
 		} catch (error) {
 			const ownedLease = this._ownedSessionOwnerLease;
 			if (ownedLease) {
@@ -2629,24 +2647,8 @@ export class AgentSession {
 
 			await this._checkProjectedCompaction(messages);
 			this._runBudget.assertActive();
-			const pending = messages;
-			// Over the hard ceiling: compact retained history once and re-check before rejecting the turn.
-			await admitSessionInput(
-				() => ({
-					model: this.model,
-					state: this.agent.state,
-					pending,
-					effectiveWindow: (window) => this._effectiveTurnContextWindow(pending, window),
-					counter: admissionTokenCounter,
-					latestCompactionTimestamp: getLatestCompactionEntry(this.sessionManager.getBranch())?.timestamp,
-				}),
-				this.settingsManager.getCompactionSettings().enabled
-					? async () => {
-							await this._runThresholdCompaction(true);
-							this._runBudget.assertActive();
-						}
-					: undefined,
-			);
+			// Over the hard ceiling: fit tools, compact retained history once, then re-check before rejecting.
+			await this._turnAdmission.admit(messages, admissionTokenCounter);
 		} catch (error) {
 			preflightResult?.(false);
 			this._publishTermination(

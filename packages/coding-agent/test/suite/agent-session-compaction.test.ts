@@ -737,10 +737,12 @@ describe("AgentSession compaction characterization", () => {
 		await expect(prompted).rejects.toBeInstanceOf(PromptInputCapacityError);
 		await expect(prompted).rejects.toThrow(/after automatic compaction/);
 		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(1);
+		// The provider was never called: this is compaction falling short, not a provider overflow.
 		expect(harness.session.lastTermination).toMatchObject({
-			causeCode: "provider.context_overflow",
+			causeCode: "compaction.failed",
 			sideEffects: "confirmed",
 		});
+		expect(harness.session.lastTermination?.nextAction).toContain("Shorten the latest input");
 		expect(harness.faux.state.callCount).toBe(0);
 	});
 

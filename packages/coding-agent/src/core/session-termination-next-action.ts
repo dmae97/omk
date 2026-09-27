@@ -15,11 +15,16 @@ function compactionNextAction(causeCode: SessionTerminationCauseCode, message: s
 		case "compaction.quota_exhausted":
 			return "The summarization model's quota is exhausted — retrying cannot help yet. Switch model (/model), set compaction.model in settings, or wait for the quota reset, then retry /compact. OMK already tried the failover chain automatically.";
 		default:
-			return "Resolve the reported compaction error, then retry /compact.";
+			return /after automatic compaction/i.test(message)
+				? "Automatic compaction could not bring the input under the model limit. Shorten the latest input or switch to a larger-context model."
+				: "Resolve the reported compaction error, then retry /compact.";
 	}
 }
 
 function configurationNextAction(message: string): string {
+	if (/compaction cannot shrink/i.test(message)) {
+		return "The system prompt, tool schemas and latest input alone overflow this model's input window, so compaction cannot help. Switch to a larger-context model with /model, or disable unused MCP servers.";
+	}
 	return /does not provide an export named/i.test(message)
 		? "Provider code failed to load. Quit and restart OMK so the rebuilt adapter is imported; /new session does not reload modules."
 		: "This model or client is not valid for the current login. Switch with /model or fix provider/client settings; /new session will not grant access.";
