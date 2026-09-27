@@ -167,7 +167,7 @@ export function runtimeFailureCause(error: unknown): SessionTerminationCause {
 	}
 	const message = error instanceof Error ? error.message : String(error);
 	if (isMissingEsmNamedExportMessage(message)) return { area: "configuration", code: "invalid" };
-	if (/compaction.+stale|session changed during compaction/i.test(message)) {
+	if (/compaction.+stale|session changed during compaction|already compacted/i.test(message)) {
 		return { area: "compaction", code: "stale" };
 	}
 	if (/compaction/i.test(message)) return { area: "compaction", code: "failed" };

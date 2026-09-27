@@ -10,7 +10,9 @@ import {
 	compact,
 	DEFAULT_COMPACTION_SETTINGS,
 	estimateContextTokens,
+	estimateNextTurnContextTokens,
 	estimateProjectedContextTokens,
+	estimateTokens,
 	extractCompactionRuleSources,
 	findCutPoint,
 	getCompactionHeadroomThreshold,
@@ -281,6 +283,42 @@ describe("shouldCompact", () => {
 		expect(getCompactionHeadroomThreshold(Number.POSITIVE_INFINITY, settings)).toBeUndefined();
 	});
 
+	it("drops the finished turn's visible reasoning from a new turn's projection", () => {
+		// Providers drop a finished turn's reasoning when the next user turn starts, yet the last usage
+		// still counts it (earlier reasoning in its input, its own reasoning in its output).
+		const reasoning = { type: "thinking" as const, thinking: "t".repeat(40_000) };
+		const question = createUserMessage("question");
+		const first = createAssistantMessage("calling tool", createMockUsage(1000, 10_400));
+		const last = createAssistantMessage("answer", createMockUsage(11_400, 10_400));
+		first.content.unshift(reasoning);
+		last.content.unshift(reasoning);
+		const pending = createUserMessage("x".repeat(80));
+		const strip = (message: AssistantMessage): AssistantMessage => ({
+			...message,
+			content: message.content.filter((block) => block.type !== "thinking"),
+		});
+		const dropped = (message: AssistantMessage) => estimateTokens(message) - estimateTokens(strip(message));
+		const usageWithoutReasoning = 21_800 - dropped(first) - dropped(last);
+
+		expect(estimateProjectedContextTokens([question, first, last], [pending]).tokens).toBe(21_800 + 20);
+		expect(estimateNextTurnContextTokens([question, first, last], [pending])).toEqual({
+			tokens: usageWithoutReasoning + estimateTokens(pending),
+			usageTokens: usageWithoutReasoning,
+			trailingTokens: estimateTokens(pending),
+			lastUsageIndex: 2,
+		});
+		// Without reasoning the reported usage is exact, and mid-turn nothing is dropped yet.
+		expect(estimateNextTurnContextTokens([question, strip(first), strip(last)], [pending])).toBeUndefined();
+		expect(estimateNextTurnContextTokens([question, first, last], [])).toBeUndefined();
+		// Stale pre-compaction usage falls back to the transcript estimate, still without the dropped reasoning.
+		const staleAt = new Date(last.timestamp).toISOString();
+		expect(estimateNextTurnContextTokens([question, first, last], [pending], staleAt)).toMatchObject({
+			tokens: [question, strip(first), strip(last), pending].reduce((sum, m) => sum + estimateTokens(m), 0),
+			usageTokens: 0,
+			lastUsageIndex: null,
+		});
+	});
+
 	it("should estimate projected context with pending messages", () => {
 		const assistant = createAssistantMessage("prior", createMockUsage(100, 50));
 		const pending = createUserMessage("x".repeat(80));
@@ -290,6 +328,14 @@ describe("shouldCompact", () => {
 			usageTokens: 150,
 			trailingTokens: 20,
 			lastUsageIndex: 0,
+		});
+		expect(
+			estimateProjectedContextTokens([assistant], [pending], new Date(assistant.timestamp + 1).toISOString()),
+		).toMatchObject({
+			tokens: estimateTokens(assistant) + estimateTokens(pending),
+			usageTokens: 0,
+			trailingTokens: estimateTokens(assistant) + estimateTokens(pending),
+			lastUsageIndex: null,
 		});
 	});
 });
@@ -490,6 +536,35 @@ describe("prepareCompaction with previous compaction", () => {
 
 		expect(contextAfterText).toContain("user msg 2 - kept by compaction1");
 		expect(contextAfterText).toContain("user msg 3 - kept by compaction1");
+	});
+
+	it("re-cuts the retained tail of a trailing compaction only when a smaller keep budget makes progress", () => {
+		const u1 = createMessageEntry(createUserMessage("user msg 1 (summarized by compaction1)"));
+		const a1 = createMessageEntry(createAssistantMessage("assistant msg 1"));
+		const u2 = createMessageEntry(createUserMessage("user msg 2 - kept by compaction1 ".repeat(12)));
+		const a2 = createMessageEntry(createAssistantMessage("assistant msg 2 ".repeat(12)));
+		const u3 = createMessageEntry(createUserMessage("user msg 3 - kept by compaction1 ".repeat(12)));
+		const a3 = createMessageEntry(createAssistantMessage("assistant msg 3 ".repeat(12)));
+		const compaction1 = createCompactionEntry("First summary", u2.id);
+		const pathEntries = [u1, a1, u2, a2, u3, a3, compaction1];
+
+		// The original keep budget reproduces the original cut: there is nothing new to summarize.
+		expect(prepareCompaction(pathEntries, { ...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: 100_000 })).toBe(
+			undefined,
+		);
+
+		const preparation = prepareCompaction(pathEntries, { ...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: 100 });
+		expect(preparation).toBeDefined();
+		expect(preparation!.previousSummary).toBe("First summary");
+		expect(preparation!.firstKeptEntryId).toBe(u3.id);
+		expect(extractText(preparation!.messagesToSummarize)).toContain("user msg 2 - kept by compaction1");
+
+		const compaction2 = createCompactionEntry("Second summary", preparation!.firstKeptEntryId);
+		const contextText = extractText(buildSessionContext([...pathEntries, compaction2]).messages);
+		expect(contextText).toContain("Second summary");
+		expect(contextText).toContain("user msg 3 - kept by compaction1");
+		expect(contextText).not.toContain("user msg 2 - kept by compaction1");
+		expect(contextText).not.toContain("First summary");
 	});
 
 	it("should re-summarize previously kept messages when the recent window moves past them", () => {

@@ -435,6 +435,9 @@ describe("compaction runtime transaction integration", () => {
 					emergencyRatio: 0.95,
 				},
 			},
+			// The model's own output reserve matches the configured one, so the admission ceiling (800)
+			// minus the incoming tool/image reserves and the window reserve boundary both put the trigger at 600.
+			models: [{ id: "reserve-window", contextWindow: 1000, maxTokens: 100 }],
 		});
 		harnesses.push(harness);
 		const runtime = harness.session as unknown as AutoCompactionRuntime;

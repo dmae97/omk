@@ -54,10 +54,9 @@ import {
 import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth-guidance.ts";
 import { parseBangInvocation } from "./bang-skill-invocation.ts";
 import type { BashResult } from "./bash-executor.ts";
-import { type CompactionSettings, getCompactionHeadroomThreshold } from "./compaction/compaction.ts";
+import { type CompactionSettings, compactionHysteresisConfigFor } from "./compaction/compaction-headroom.ts";
 import {
 	type CompactionHysteresisState,
-	createCompactionHysteresisConfig,
 	createCompactionHysteresisState,
 	stepCompactionHysteresis,
 } from "./compaction/hysteresis.ts";
@@ -67,6 +66,7 @@ import {
 	collectEntriesForBranchSummary,
 	compact,
 	estimateContextTokens,
+	estimateNextTurnContextTokens,
 	estimateProjectedContextTokens,
 	generateBranchSummary,
 	prepareCompaction,
@@ -273,9 +273,10 @@ import { SessionCompactionService } from "./session-compaction-service.ts";
 import { type SessionControlServer, startSessionControl } from "./session-control-server.ts";
 import { runtimeFailureCause, terminationMessage } from "./session-failure-cause.ts";
 import {
-	assertSessionInputCapacity,
+	admitSessionInput,
 	promptPreflightTermination,
 	sessionContextBudgetOptions,
+	sessionInputTokenLimit,
 	transcriptHasImages,
 } from "./session-input-admission.ts";
 import type { BranchSummaryEntry, SessionManager } from "./session-manager.ts";
@@ -884,6 +885,7 @@ export class AgentSession {
 				this._cwd,
 				() => this._getContextBudgetOptions(),
 				(messages, window) => this._effectiveTurnContextWindow(messages, window),
+				() => getLatestCompactionEntry(this.sessionManager.getBranch())?.timestamp,
 			);
 		} catch (error) {
 			const ownedLease = this._ownedSessionOwnerLease;
@@ -2628,13 +2630,23 @@ export class AgentSession {
 			await this._checkProjectedCompaction(messages);
 			this._runBudget.assertActive();
 			const pending = messages;
-			assertSessionInputCapacity({
-				model: this.model,
-				state: this.agent.state,
-				pending,
-				effectiveWindow: (window) => this._effectiveTurnContextWindow(pending, window),
-				counter: admissionTokenCounter,
-			});
+			// Over the hard ceiling: compact retained history once and re-check before rejecting the turn.
+			await admitSessionInput(
+				() => ({
+					model: this.model,
+					state: this.agent.state,
+					pending,
+					effectiveWindow: (window) => this._effectiveTurnContextWindow(pending, window),
+					counter: admissionTokenCounter,
+					latestCompactionTimestamp: getLatestCompactionEntry(this.sessionManager.getBranch())?.timestamp,
+				}),
+				this.settingsManager.getCompactionSettings().enabled
+					? async () => {
+							await this._runThresholdCompaction(true);
+							this._runBudget.assertActive();
+						}
+					: undefined,
+			);
 		} catch (error) {
 			preflightResult?.(false);
 			this._publishTermination(
@@ -3316,7 +3328,11 @@ export class AgentSession {
 	private _computePressureBucket(pendingMessages: AgentMessage[] = []): number {
 		const contextWindow = this.model?.contextWindow ?? 0;
 		if (contextWindow <= 0) return 0;
-		const estimate = estimateProjectedContextTokens(this.agent.state.messages, pendingMessages);
+		const estimate = estimateProjectedContextTokens(
+			this.agent.state.messages,
+			pendingMessages,
+			getLatestCompactionEntry(this.sessionManager.getBranch())?.timestamp,
+		);
 		const pressure = estimate.tokens / contextWindow;
 		if (pressure >= 0.9) return 3;
 		if (pressure >= 0.75) return 2;
@@ -3513,19 +3529,10 @@ export class AgentSession {
 	}
 
 	private _compactionHysteresisConfig(contextWindow: number, settings: CompactionSettings) {
-		const threshold = getCompactionHeadroomThreshold(contextWindow, {
-			...settings,
-			reservedToolResultTokens: this._pendingToolResultReserve(settings),
-		});
-		if (!threshold) return undefined;
-		const triggerRatio = Math.min(
-			1,
-			Math.max(1 / Math.floor(contextWindow), threshold.triggerTokens / contextWindow),
-		);
-		const configuredRearm = settings.rearmRatio ?? triggerRatio * 0.75;
-		const rearmRatio = Math.min(configuredRearm, triggerRatio * 0.999);
-		const emergencyRatio = Math.max(triggerRatio, settings.emergencyRatio ?? 0.98);
-		return createCompactionHysteresisConfig({ rearmRatio, triggerRatio, emergencyRatio });
+		const reservedToolResultTokens = this._pendingToolResultReserve(settings);
+		// Admission rejects above this ceiling, so threshold compaction has to trigger beneath it.
+		const ceiling = sessionInputTokenLimit(this.model, contextWindow);
+		return compactionHysteresisConfigFor(contextWindow, { ...settings, reservedToolResultTokens }, ceiling);
 	}
 
 	private _runtimeCompactionDecision(
@@ -3669,9 +3676,11 @@ export class AgentSession {
 			const begun = this._beginCompactionTransaction(compactionModel, false);
 			const pathEntries = [...begun.capture.branchEntries];
 
-			const preparation = prepareCompaction(pathEntries, settings);
+			// A repeated /compact can still shrink the retained tail with the emergency keep budget.
+			const preparation =
+				prepareCompaction(pathEntries, settings) ??
+				prepareCompaction(pathEntries, { ...settings, keepRecentTokens: OVERFLOW_RECOVERY_EMERGENCY_TOKENS });
 			if (!preparation) {
-				// Check why we can't compact
 				const lastEntry = pathEntries[pathEntries.length - 1];
 				if (lastEntry?.type === "compaction") {
 					throw new Error("Already compacted");
@@ -3854,19 +3863,12 @@ export class AgentSession {
 		const contextWindow = this._effectiveTurnContextWindow(pendingMessages, sessionWindow);
 		if (contextWindow <= 0) return false;
 
-		const messages = [...this.agent.state.messages, ...pendingMessages];
-		const estimate = estimateProjectedContextTokens(this.agent.state.messages, pendingMessages);
-		const compactionEntry = getLatestCompactionEntry(this.sessionManager.getBranch());
-		if (estimate.lastUsageIndex !== null && compactionEntry) {
-			const usageMsg = messages[estimate.lastUsageIndex];
-			if (
-				usageMsg.role === "assistant" &&
-				(usageMsg as AssistantMessage).timestamp <= new Date(compactionEntry.timestamp).getTime()
-			) {
-				return false;
-			}
-		}
-
+		// Usage recorded at or before the latest compaction is ignored, so stale pre-compaction
+		// usage can neither retrigger compaction nor hide a genuinely oversized projected turn.
+		const compactedAt = getLatestCompactionEntry(this.sessionManager.getBranch())?.timestamp;
+		const estimate =
+			estimateNextTurnContextTokens(this.agent.state.messages, pendingMessages, compactedAt) ??
+			estimateProjectedContextTokens(this.agent.state.messages, pendingMessages, compactedAt);
 		const decision = this._runtimeCompactionDecision(estimate.tokens, contextWindow, settings);
 		if (decision.compact) {
 			return this._runThresholdCompaction(decision.emergency);
@@ -3992,10 +3994,11 @@ export class AgentSession {
 		emergency = reason === "overflow" || this._thresholdCompactionEmergency,
 	): Promise<boolean> {
 		const configuredSettings = this.settingsManager.getCompactionSettings();
-		const settings =
-			reason === "overflow"
-				? this._overflowCompactionSettings(configuredSettings, this._overflowRecoveryAttempts)
-				: configuredSettings;
+		// Emergency threshold compaction (including admission recovery) uses the tight overflow ladder.
+		const settings = this._overflowCompactionSettings(
+			configuredSettings,
+			reason === "overflow" ? this._overflowRecoveryAttempts : emergency ? MAX_OVERFLOW_RECOVERY_ATTEMPTS : 0,
+		);
 
 		this._emit({ type: "compaction_start", reason });
 		this._autoCompactionAbortController = new AbortController();

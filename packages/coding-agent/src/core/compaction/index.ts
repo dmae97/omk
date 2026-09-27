@@ -9,6 +9,7 @@ export * from "./fallback.ts";
 export * from "./hysteresis.ts";
 export * from "./knowledge-triage.ts";
 export * from "./model-policy.ts";
+export * from "./reasoning-drop.ts";
 export * from "./resume-policy.ts";
 export * from "./transaction.ts";
 export * from "./utils.ts";

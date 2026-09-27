@@ -1,13 +1,17 @@
 import { randomUUID } from "node:crypto";
 import type { AgentMessage, AgentState } from "omk-agent-core";
 import type { Api, Model } from "omk-ai";
-import { estimateProjectedContextTokens } from "./compaction/index.ts";
+import { estimateNextTurnContextTokens, estimateProjectedContextTokens } from "./compaction/index.ts";
 import type { SystemPromptContextBudgetOptions } from "./context-budget-system-prompt.ts";
 import { createTokenCounterForMode, type TokenCounterAdapter } from "./context-budget-token-counter.ts";
 import type { ContextBudgetCacheProviderV2 } from "./context-budget-v2-types.ts";
 import {
-	assertContextInputWithinModelWindow,
+	assertContextInputWithinCapacity,
+	type ContextInputTokenEstimate,
+	computeHardPromptInputLimit,
 	computePromptTokenBudget,
+	estimateContextInputTokens,
+	PromptInputCapacityError,
 	parseCommaSeparatedEnv,
 	parsePositiveFloatEnv,
 	parsePositiveIntegerEnv,
@@ -59,17 +63,23 @@ export function sessionContextBudgetOptions(
 	};
 }
 
-export function assertSessionInputCapacity(input: {
-	readonly model: Model<Api> | undefined;
-	readonly state: Pick<AgentState, "systemPrompt" | "messages" | "tools">;
-	readonly pending: AgentMessage[];
-	readonly effectiveWindow: (window: number) => number;
-	readonly counter: TokenCounterAdapter;
-}): void {
-	const { model, state, pending } = input;
-	const sessionWindow = model?.contextWindow ?? 0;
-	if (!model || !Number.isSafeInteger(sessionWindow) || sessionWindow <= 0) return;
-	const contextWindow = input.effectiveWindow(sessionWindow);
+function projectedUsageAfterCompaction(
+	messages: AgentMessage[],
+	pending: AgentMessage[],
+	latestCompactionTimestamp?: string,
+): number {
+	return (
+		estimateNextTurnContextTokens(messages, pending, latestCompactionTimestamp) ??
+		estimateProjectedContextTokens(messages, pending, latestCompactionTimestamp)
+	).tokens;
+}
+
+/** Hard input ceiling that prompt admission enforces; threshold compaction must fire below it. */
+export function sessionInputTokenLimit(
+	model: Pick<Model<Api>, "maxTokens"> | undefined,
+	contextWindow: number,
+): number | undefined {
+	if (!model || !Number.isSafeInteger(contextWindow) || contextWindow <= 0) return undefined;
 	const configured = computePromptTokenBudget({
 		contextWindow,
 		modelMaxTokens: model.maxTokens,
@@ -78,17 +88,110 @@ export function assertSessionInputCapacity(input: {
 		envPromptRatio: parsePositiveFloatEnv("OMK_CONTEXT_GOVERNOR_PROMPT_RATIO"),
 		envResponseRatio: parsePositiveFloatEnv("OMK_CONTEXT_GOVERNOR_RESPONSE_RATIO"),
 	});
-	assertContextInputWithinModelWindow({
+	return computeHardPromptInputLimit({
 		contextWindow,
 		configuredMaxPromptTokens: configured.maxPromptTokens,
 		modelMaxTokens: model.maxTokens,
+	}).maxInputTokens;
+}
+
+export interface SessionInputCapacityInput {
+	readonly model: Model<Api> | undefined;
+	readonly state: Pick<AgentState, "systemPrompt" | "messages" | "tools">;
+	readonly pending: AgentMessage[];
+	readonly effectiveWindow: (window: number) => number;
+	readonly counter: TokenCounterAdapter;
+	readonly latestCompactionTimestamp?: string;
+}
+
+/** Capacity rejection raised after an automatic compaction already rewrote the retained history. */
+export class CompactedPromptInputCapacityError extends PromptInputCapacityError {
+	constructor(rejection: PromptInputCapacityError) {
+		super(rejection.estimatedTokens, rejection.maxInputTokens);
+		this.name = "CompactedPromptInputCapacityError";
+		this.message = `Prompt input still exceeds the safe model context window after automatic compaction (estimated=${rejection.estimatedTokens}, limit=${rejection.maxInputTokens}).`;
+	}
+}
+
+function sessionInputLimit(
+	input: SessionInputCapacityInput,
+): { readonly model: Model<Api>; readonly maxInputTokens: number } | undefined {
+	const sessionWindow = input.model?.contextWindow ?? 0;
+	if (!input.model || !Number.isSafeInteger(sessionWindow) || sessionWindow <= 0) return undefined;
+	const maxInputTokens = sessionInputTokenLimit(input.model, input.effectiveWindow(sessionWindow));
+	return maxInputTokens === undefined ? undefined : { model: input.model, maxInputTokens };
+}
+
+export function assertSessionInputCapacity(input: SessionInputCapacityInput): void {
+	const limit = sessionInputLimit(input);
+	if (!limit) return;
+	const { state, pending } = input;
+	assertContextInputWithinCapacity({
+		maxInputTokens: limit.maxInputTokens,
 		systemPrompt: state.systemPrompt,
 		messages: [...state.messages, ...pending],
 		tools: state.tools,
-		modelId: model.id,
+		modelId: limit.model.id,
 		tokenCounter: input.counter,
-		projectedUsageTokens: estimateProjectedContextTokens(state.messages, pending).tokens,
+		projectedUsageTokens: projectedUsageAfterCompaction(state.messages, pending, input.latestCompactionTimestamp),
 	});
+}
+
+function capacityRejection(input: SessionInputCapacityInput): PromptInputCapacityError | undefined {
+	try {
+		assertSessionInputCapacity(input);
+		return undefined;
+	} catch (error) {
+		if (error instanceof PromptInputCapacityError) return error;
+		throw error;
+	}
+}
+
+/** Input compaction cannot shrink: it only rewrites history, never the system prompt, tools or pending turn. */
+function fixedInputEstimate(input: SessionInputCapacityInput): ContextInputTokenEstimate | undefined {
+	const limit = sessionInputLimit(input);
+	if (!limit) return undefined;
+	return estimateContextInputTokens({
+		systemPrompt: input.state.systemPrompt,
+		messages: input.pending,
+		tools: input.state.tools,
+		modelId: limit.model.id,
+		tokenCounter: input.counter,
+	});
+}
+
+/** Names the overhead compaction cannot shrink, so a rejection says what actually fills the window. */
+function withFixedOverhead(
+	error: PromptInputCapacityError,
+	fixed: ContextInputTokenEstimate | undefined,
+): PromptInputCapacityError {
+	if (!fixed) return error;
+	const historyTokens = Math.max(0, error.maxInputTokens - fixed.totalTokens);
+	error.message += ` Compaction cannot shrink the system prompt (${fixed.systemPromptTokens} tokens), tool schemas (${fixed.toolTokens}) or latest input (${fixed.messageTokens}); ${historyTokens} tokens remain for history.`;
+	return error;
+}
+
+/**
+ * Hard input admission with one bounded recovery: when retained history overflows the ceiling,
+ * compact once and re-check before rejecting. `compact` is absent when auto-compaction is off.
+ */
+export async function admitSessionInput(
+	buildInput: () => SessionInputCapacityInput,
+	compact: (() => Promise<void>) | undefined,
+): Promise<void> {
+	const before = buildInput();
+	const rejection = capacityRejection(before);
+	if (!rejection) return;
+	const fixed = fixedInputEstimate(before);
+	if (!compact || (fixed !== undefined && fixed.totalTokens > rejection.maxInputTokens)) {
+		throw withFixedOverhead(rejection, fixed);
+	}
+	await compact();
+	const after = buildInput();
+	const retry = capacityRejection(after);
+	if (!retry) return;
+	const compacted = after.latestCompactionTimestamp !== before.latestCompactionTimestamp;
+	throw withFixedOverhead(compacted ? new CompactedPromptInputCapacityError(retry) : retry, fixedInputEstimate(after));
 }
 
 export function promptPreflightTermination(
@@ -113,7 +216,7 @@ export function promptPreflightTermination(
 		source: "observed",
 		message: terminationMessage(rawMessage, "Prompt preflight failed."),
 		cause,
-		sideEffects: "none",
+		sideEffects: error instanceof CompactedPromptInputCapacityError ? "confirmed" : "none",
 		...(model ? { provider: model.provider, model: model.id } : {}),
 	});
 }
