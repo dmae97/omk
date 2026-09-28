@@ -351,6 +351,40 @@ memo. The budget bounds retained strings, not process RSS.
 Coverage: `tool-dag-memo-bytes.test.ts` and the existing memo tests in
 `packages/agent/test/`.
 
+## OMK_MATH 924820e audit status (2026-09-28)
+
+The math bundle `OMK_MATH_924820e` audits commit 924820e. The 19 source blobs it
+records match that commit; its documentation source records none. Since then,
+3f4954a0dd changed `tool-schema-budget.ts` and `session-turn-admission.ts`, and
+this change edits `tool-dag-memo.ts` and `provider-retry.ts`; the other cited
+code sources and `package.json` are unchanged. Its twelve algorithm
+modules are proposals backed by synthetic checks, with no runtime measurement.
+Status in this tree:
+
+- Implemented: A01 and A02 by the tool-schema fit reuse and recount above (the
+  fit key is a SHA-256 of the canonical encoding, not a byte comparison), A09 by
+  the memo byte budget, and the timer-limit part of A11 in both retry loops,
+  including `retryAssistantCall`, which the bundle does not cite. A02's dependency
+  closure, protected groups and switching-cost utility are not wired, because no
+  calibrated utility exists.
+- Recomputed exactly, without a mismatch: the A02 schema witness through the
+  real serializer, 7,381 exhaustive and 2,000 random key-epoch graphs (A06),
+  the closure word count for 20,000 sizes (A14), 3,000 capped retry delays
+  (A11) and 1,000 density rescalings (A12). A13's time-uniform radius and
+  adjusted p-values equal AdaptOrch's `hoeffding_radius` at
+  `alpha / (J n (n + 1))` in 9,000 and 8,000 cases. Evaluated in floating point,
+  A03's rank index `ceil((n + 1)(1 - alpha))` differs from the exact value in 324
+  of 4,000 cases, so a calibrated admission must compute it in integers.
+- Not implemented: A03 (no calibration pairs, and only admitted requests would
+  supply them), A04 (no semantic-equivalence check for compaction candidates),
+  A05 (no additive cost bound on the context planner), A06 (a key gate must
+  first exclude path prefixes, aliases and exclusive claims), A07 (needs a
+  trace-parity harness first), A08 (no purity certificates), A10 (conflicts
+  with the permit pool's strict FIFO rule), the rest of A11 (jitter and a lower
+  ceiling change timing), A12 live wiring (`challengeEcrafLocalExchange` already
+  finds the bundle's 10 to 16 packing offline) and A13 (no paired runtime
+  runs).
+
 ## Reasoning router resolver contract (2026-09-19 audit F05/F06)
 
 The low-confidence escalation in `resolveThinkingLevelV4WithUncertainty` is
