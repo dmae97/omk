@@ -6,6 +6,10 @@
 
 - `Agent.prepareTools(tools, pending)` selects the tools a run sends to the provider, for example to fit a model's input window. It runs when a prompt or continuation snapshots its context, receives the prompt messages not yet in `state.messages`, and never changes `state.tools`.
 
+### Fixed
+
+- The per-run tool-call schedule memo is bounded by bytes as well as by its 64 entries. Its keys carry whole call arguments, so 64 batches that each wrote 256 KiB kept 16 MiB of key text. Each memo now keeps at most 4 MiB of accounted text (two bytes per UTF-16 code unit of key and JSON value, plus 128 per entry), evicting the least recently used batch, and schedules a batch whose entry would exceed 512 KiB, which one 256 KiB write already does, without retaining it.
+
 ## [1.2.4] - 2026-09-23
 
 ### Changed

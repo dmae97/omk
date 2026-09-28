@@ -328,6 +328,20 @@ arithmetic), `sleep.test.ts`, `retry-backoff-limit.test.ts` in
 compaction case runs `retryAssistantCall` from `packages/ai`'s build output, so it
 needs a current build, which CI makes before its tests.
 
+## DAG claim memo byte budget (2026-09-28 working tree)
+
+The per-run frontier and barrier-level schedule memos were bounded only by 64
+entries. Their keys serialize every call's arguments, file contents included, so
+64 batches that each wrote 256 KiB retained 16,782,198 key characters. Each
+cache now also keeps at most 4 MiB of accounted text (two bytes per UTF-16 code
+unit of key and JSON value, plus 128 per entry), evicting the least recently
+used batch, and schedules a batch whose entry would exceed 512 KiB without
+retaining it; a batch whose key alone exceeds that skips the lookup too. Hits
+still return isolated copies, and batches with dynamic claims still bypass the
+memo. The budget bounds retained strings, not process RSS.
+Coverage: `tool-dag-memo-bytes.test.ts` and the existing memo tests in
+`packages/agent/test/`.
+
 ## Reasoning router resolver contract (2026-09-19 audit F05/F06)
 
 The low-confidence escalation in `resolveThinkingLevelV4WithUncertainty` is
