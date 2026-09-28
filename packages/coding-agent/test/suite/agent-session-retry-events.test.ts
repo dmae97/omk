@@ -212,6 +212,48 @@ describe("AgentSession retry and event characterization", () => {
 		expect(harness.faux.state.callCount).toBe(1);
 	});
 
+	it("doubles the announced backoff once per attempt", async () => {
+		const harness = await createHarness({ settings: { retry: { enabled: true, maxRetries: 3, baseDelayMs: 1 } } });
+		harnesses.push(harness);
+		const overloaded = () => fauxAssistantMessage("", { stopReason: "error", errorMessage: "overloaded_error" });
+		harness.setResponses([overloaded(), overloaded(), overloaded(), fauxAssistantMessage("recovered")]);
+
+		await harness.session.prompt("test");
+
+		expect(harness.eventsOfType("auto_retry_start").map((event) => event.delayMs)).toEqual([1, 2, 4]);
+		expect(harness.faux.state.callCount).toBe(4);
+	});
+
+	// A Node timer fires a delay above 2^31 - 1 ms after 1 ms, which retried such a backoff at once.
+	it("keeps waiting when the backoff is longer than one timer can hold", async () => {
+		const harness = await createHarness({
+			settings: { retry: { enabled: true, maxRetries: 1, baseDelayMs: 3_000_000_000 } },
+		});
+		harnesses.push(harness);
+		harness.setResponses([
+			fauxAssistantMessage("", { stopReason: "error", errorMessage: "overloaded_error" }),
+			fauxAssistantMessage("retried before the backoff elapsed"),
+		]);
+		const sawRetryStart = new Promise<void>((resolve) => {
+			const unsubscribe = harness.session.subscribe((event) => {
+				if (event.type === "auto_retry_start") {
+					unsubscribe();
+					resolve();
+				}
+			});
+		});
+
+		const promptPromise = harness.session.prompt("test");
+		await sawRetryStart;
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(harness.faux.state.callCount).toBe(1);
+		expect(harness.eventsOfType("auto_retry_start").map((event) => event.delayMs)).toEqual([2_147_483_647]);
+		harness.session.abortRetry();
+		await promptPromise;
+		expect(harness.faux.state.callCount).toBe(1);
+	});
+
 	it("waits for the full loop when retry recovery produces tool calls", async () => {
 		const toolRuns: string[] = [];
 		const echoTool: AgentTool = {

@@ -283,6 +283,51 @@ and `context-budget-cache-disk.test.ts`. The providers expose
 `getMemoryUsageSnapshot()` for instrumentation; nothing in the runtime reads it
 yet.
 
+## Retry backoff at the timer limit (2026-09-28 working tree)
+
+Two retry loops read `retry.baseDelayMs`: the agent-turn retry
+(`computeRetryDelayMs`) and the compaction and branch-summary retry
+(`retryAssistantCall` in `omk-ai`). Both doubled the base once per attempt with
+no ceiling, and Node fires a timer longer than 2,147,483,647 ms after 1 ms. A
+base of 3,000,000,000 ms therefore retried after about 1 ms. The default 2 s base
+reaches the limit only at attempt 22, after about 48.5 days of earlier waits and
+with `retry.maxRetries` raised from its default 3. Both loops now compute the
+same-model backoff as `min(2^31 - 1, base * 2^(attempt - 1))`: for a base that
+converts to a non-negative number, every result below the cap, including
+out-of-contract attempts, matches the old arithmetic, and the backoff never
+decreases as attempts grow. The agent-turn loop still waits
+at most a run budget's `remainingMs`, and 400 ms after a failover. The base
+converts as the old arithmetic did; `+Infinity` (JSON's `1e400`) takes the cap,
+and a base that converts to NaN or a negative number uses the documented 2 s. A
+retry count that converts to NaN now means no retries in both loops:
+`attempt > maxRetries` and `attempt >= maxAttempts` are never true for NaN, so
+those retries did not stop.
+
+`retryAssistantCall` keeps one timer, which the cap makes safe, and now removes
+its abort listener when the backoff ends; an abort during the backoff still
+returns an aborted message. The provider layer's `sleepProviderRetry` was not
+reused: it re-arms from `performance.now()`, which never advances under fake
+timers that leave the clock alone. The coding-agent `sleep` re-arms in
+timer-sized chunks, waits one tick for a negative or NaN delay without Node's
+warning, and removes its abort listener. The agent-turn retry never reaches
+that re-arm: its delay is capped, and a run budget's `remainingMs` is at most
+2,147,483,647 ms. The rule is implemented once per package, because coding-agent
+tests resolve `omk-ai` to its build output and a new cross-package export would
+fail them until the next build.
+
+The ceiling is the timer limit, not a retry policy. A lower default, such as the
+provider layer's 60 s cap on server-requested delays, would change every
+configuration with six or more retries at the default 2 s base. It would also need
+a new setting name, because `retry.maxDelayMs` is the legacy key migrated to
+`retry.provider.maxRetryDelayMs`. There is still no jitter. Coverage:
+`provider-retry.test.ts` (fast-check against an exact `BigInt` oracle and the old
+arithmetic), `sleep.test.ts`, `retry-backoff-limit.test.ts` in
+`packages/ai/test/`, and the public-path cases in
+`suite/agent-session-retry-events.test.ts` and
+`suite/regressions/6647-compaction-retries-transient-stream-drop.test.ts`. The
+compaction case runs `retryAssistantCall` from `packages/ai`'s build output, so it
+needs a current build, which CI makes before its tests.
+
 ## Reasoning router resolver contract (2026-09-19 audit F05/F06)
 
 The low-confidence escalation in `resolveThinkingLevelV4WithUncertainty` is

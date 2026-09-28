@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `retryAssistantCall` no longer retries at once when `baseDelayMs * 2^(attempt - 1)` exceeds 2,147,483,647 ms, the longest delay a Node timer holds; Node fires a longer timer after 1 ms. The delay now stops at that limit, the backoff sleep removes its abort listener when it ends, and an abort during it still returns an aborted message. A base that converts to NaN or a negative number, an omitted one included, uses 2 s, and `+Infinity` takes the limit. A `maxRetries` that converts to NaN no longer retries without end.
+
 ## [1.2.4] - 2026-09-23
 
 ### Fixed
