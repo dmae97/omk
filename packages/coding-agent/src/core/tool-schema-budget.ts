@@ -1,14 +1,11 @@
 import type { AgentTool } from "omk-agent-core";
 import { type CompactionSettings, getCompactionHeadroomThreshold } from "./compaction/compaction-headroom.ts";
 import { MCP_TOOL_NAME_SEPARATOR } from "./mcp/tools.ts";
+import { exactToolFit, type WithheldGroup } from "./performance-upgrade/exact-tool-fit.ts";
 import { serializePromptToolSchemas } from "./prompt-tool-projection.ts";
 
 /** A tool group (one MCP server) left out of provider requests because its schemas overflow the budget. */
-export interface WithheldToolGroup {
-	readonly group: string;
-	readonly toolCount: number;
-	readonly tokens: number;
-}
+export type WithheldToolGroup = WithheldGroup;
 
 export interface ToolSchemaFit {
 	readonly tools: AgentTool[];
@@ -43,33 +40,19 @@ export function withoutGroups(
 
 /**
  * Withhold whole groups, largest schema first, until the remaining schemas fit the budget.
- * A server's tools leave together because they depend on each other. Ungrouped tools are
- * always sent, so an impossible budget still returns them.
+ * A server's tools leave together because they depend on each other. The remaining request
+ * projection is recounted after each withheld group, because a tokenizer does not price groups
+ * additively. Ungrouped tools are always sent, so an impossible budget still returns them and
+ * admission's input ceiling, not this fit, decides whether the turn is rejected.
  */
 export function fitToolSchemas(input: ToolSchemaFitInput): ToolSchemaFit {
-	const cost = (tools: readonly AgentTool[]): number => input.countTokens(serializePromptToolSchemas(tools));
-	let remaining = cost(input.tools);
-	if (remaining <= input.budgetTokens) return { tools: [...input.tools], withheld: [] };
-	const members = new Map<string, AgentTool[]>();
-	for (const tool of input.tools) {
-		const group = input.groupOf(tool.name);
-		if (group === undefined) continue;
-		const list = members.get(group);
-		if (list) list.push(tool);
-		else members.set(group, [tool]);
-	}
-	const ranked = [...members]
-		.map(([group, tools]) => ({ group, toolCount: tools.length, tokens: cost(tools) }))
-		.sort((left, right) => right.tokens - left.tokens || (left.group < right.group ? -1 : 1));
-	const withheld: WithheldToolGroup[] = [];
-	for (const group of ranked) {
-		if (remaining <= input.budgetTokens) break;
-		withheld.push(group);
-		// Array serialization is additive up to separators, so one pass prices every group.
-		remaining -= group.tokens;
-	}
-	const dropped = new Set(withheld.map((group) => group.group));
-	return { tools: withoutGroups(input.tools, input.groupOf, dropped), withheld };
+	const fit = exactToolFit({
+		tools: input.tools,
+		groupOf: input.groupOf,
+		budgetTokens: input.budgetTokens,
+		count: (tools) => input.countTokens(serializePromptToolSchemas(tools)),
+	});
+	return { tools: fit.tools, withheld: fit.withheld };
 }
 
 export interface ToolSchemaBudgetInput {

@@ -56,6 +56,27 @@ describe("fitToolSchemas", () => {
 		expect(fit.withheld.map((group) => group.group)).toEqual(["big", "mid", "small"]);
 	});
 
+	it("recounts the remaining projection when group costs are not additive", () => {
+		// C(S) = 10 + 5|S|: the request wrapper is priced once, so group costs overlap it.
+		const perRequest = (text: string): number => 10 + 5 * (JSON.parse(text) as unknown[]).length;
+		const tools = [tool("read", 10), tool("a__1", 10), tool("a__2", 10), tool("b__1", 10), tool("b__2", 10)];
+
+		const fit = fitToolSchemas({ tools, groupOf, budgetTokens: 20, countTokens: perRequest });
+
+		expect(names(fit.tools)).toEqual(["read"]);
+		expect(fit.withheld.map((group) => group.group)).toEqual(["a", "b"]);
+		expect(perRequest(serializePromptToolSchemas(fit.tools))).toBeLessThanOrEqual(20);
+	});
+
+	it("keeps duplicate tool names in place instead of failing the request", () => {
+		const duplicated = [tool("read", 10), tool("read", 10), tool("big__x", 4000)];
+
+		const fit = fitToolSchemas({ tools: duplicated, groupOf, budgetTokens: cost(duplicated) - 10, countTokens });
+
+		expect(names(fit.tools)).toEqual(["read", "read"]);
+		expect(fit.withheld.map((group) => group.group)).toEqual(["big"]);
+	});
+
 	it("breaks equal-cost ties by group name so the selection is stable across turns", () => {
 		const tied = [tool("beta__x", 1000), tool("alpha__x", 1000), tool("read", 100)];
 
@@ -96,7 +117,8 @@ describe("fitToolSchemas", () => {
 				const group = groupOf(entry.name);
 				return group === undefined || withheldGroups.has(group);
 			});
-			if (!everyGroupWithheld) expect(cost(fit.tools)).toBeLessThanOrEqual(budgetTokens + fit.withheld.length);
+			// The fitted projection is recounted, so it fits exactly unless only ungrouped tools remain.
+			if (!everyGroupWithheld) expect(cost(fit.tools)).toBeLessThanOrEqual(budgetTokens);
 			const last = fit.withheld.at(-1);
 			if (last) {
 				// Minimal in greedy order: without the last withheld group the catalog still overflowed.
@@ -104,7 +126,7 @@ describe("fitToolSchemas", () => {
 					const group = groupOf(entry.name);
 					return group === undefined || group === last.group || !withheldGroups.has(group);
 				});
-				expect(cost(lessWithheld)).toBeGreaterThan(budgetTokens - fit.withheld.length);
+				expect(cost(lessWithheld)).toBeGreaterThan(budgetTokens);
 			}
 		}
 	});

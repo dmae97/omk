@@ -224,6 +224,40 @@ provider chat template or image tokenizer. Unknown model windows are not
 enforced, fallback token counts remain estimates, and the change makes no
 end-to-end latency, cost, quality, release-readiness or live-provider claim.
 
+## Tool-schema fit reuse and recount (2026-09-28 working tree)
+
+`fitToolSchemas` withholds whole MCP servers until the request's tool schemas
+fit the budget. It previously subtracted each withheld server's standalone cost
+from the total, but the request wrapper and tokenizer merges make group costs
+non-additive, so it could stop with the remaining schemas still over budget.
+`exactToolFit` now withholds the shortest ranked prefix of servers whose
+recounted projection fits: standalone costs less the empty request's cost only
+estimate the prefix, recounts correct it, and one more recount confirms that one
+server fewer overflows. Ungrouped tools are never withheld; an impossible budget
+returns them and the input ceiling decides the rejection.
+
+`SessionTurnAdmission` reuses a fit only while a SHA-256 key over the provider,
+model id (kept apart: a joined `provider/id` is ambiguous), window, ceiling,
+compaction settings, full system prompt, serialized schemas, tool-to-server
+mapping, counter id and admitted-counter epoch is unchanged. The previous key
+used the prompt's length and the tool names, so a same-length prompt, a schema
+that grew under the same tool name, a changed server mapping or a new counter
+reporting the same id (every registry mix reports one id) kept a stale
+selection; a stale selection could reject a turn as
+`configuration.invalid` although withholding a server would have admitted it.
+Each admitted counter refits once per turn. A synthetic probe (fallback
+counter, 60 KB system prompt, three runs) measured the cost: with 220 tools
+(about 400 KB of schemas) that fit, about 1 ms per cached call and 11–15 ms
+more per turn than before; with 420 tools (about 800 KB) of which 20 of 40
+servers are withheld, 82–92 ms per turn against 14–16 ms before, and 263–284 ms
+with one recount per withheld server. These are costs, not speedups.
+
+Coverage: `tool-schema-budget.test.ts`, `session-turn-admission.test.ts`,
+`exact-tool-fit.test.ts` and the public-path case in
+`agent-session-input-admission.test.ts`. `exactToolFit` also accepts
+host-trusted `pinnedGroups` and `utilityOfGroup`; nothing in the runtime passes
+them yet.
+
 ## Reasoning router resolver contract (2026-09-19 audit F05/F06)
 
 The low-confidence escalation in `resolveThinkingLevelV4WithUncertainty` is

@@ -95,6 +95,38 @@ describe("AgentSession context input admission", () => {
 		expect(notify).toHaveBeenCalledWith(expect.stringContaining("withhold bulky (2 tools"), "warning");
 	});
 
+	it("refits on the next prompt when a server's schemas grow under the same tool names", async () => {
+		harness = await createHarness({
+			models: [{ id: "swe-sized", contextWindow: 262_000, maxTokens: 16_384 }],
+			settings: {
+				compaction: { enabled: true, reserveTokens: 8_192, keepRecentTokens: 10_000, maxUsageRatio: 0.7 },
+				resourceGovernor: { mode: "off" },
+			},
+		});
+		const bulky = (descriptionChars: number) => ({
+			name: "bulky",
+			command: process.execPath,
+			args: [FAKE_MCP_SERVER],
+			env: { FAKE_MCP_MODE: "ok", FAKE_MCP_DESCRIPTION_CHARS: String(descriptionChars) },
+			inheritEnv: false,
+		});
+		const sent: string[][] = [];
+		const record = (context: { tools?: readonly { name: string }[] }) => {
+			sent.push((context.tools ?? []).map((tool) => tool.name).filter((name) => name.includes("__")));
+			return fauxAssistantMessage("ok");
+		};
+		harness.setResponses([record, record]);
+
+		await harness.session.attachMcpServers({ servers: [bulky(0)] });
+		await expect(harness.session.prompt("first")).resolves.toBeUndefined();
+		await harness.session.attachMcpServers({ servers: [bulky(300_000)] });
+		await expect(harness.session.prompt("second")).resolves.toBeUndefined();
+
+		expect(sent[0]?.sort()).toEqual(["bulky__echo", "bulky__fail"]);
+		expect(sent[1]).toEqual([]);
+		expect(harness.session.getActiveToolNames()).toEqual(expect.arrayContaining(["bulky__echo", "bulky__fail"]));
+	});
+
 	it("still admits a request that fits", async () => {
 		harness = await createHarness({
 			models: [{ id: "roomy-window", contextWindow: 32_000, maxTokens: 2_000 }],
