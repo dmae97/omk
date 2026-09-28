@@ -53,6 +53,20 @@ describe("exactToolFit", () => {
 		expect(valued.withheld.map((group) => group.group)).toEqual(["a"]);
 	});
 
+	it("ranks by trusted utility density before the group name", () => {
+		// Equal standalone costs: only the utility can withhold b ahead of a.
+		const fit = exactToolFit({
+			tools: catalog,
+			groupOf,
+			budgetTokens: 30,
+			count: perRequest,
+			utilityOfGroup: (group) => (group === "a" ? 9 : 1),
+		});
+
+		expect(fit.withheld.map((group) => group.group)).toEqual(["b"]);
+		expect(names(fit.tools)).toEqual(["read", "a__1", "a__2"]);
+	});
+
 	it("withholds the shortest sufficient prefix with a bounded number of recounts", () => {
 		const groups = Array.from({ length: 20 }, (_, index) => ({ name: `g${String(index).padStart(2, "0")}__tool` }));
 		const tools: Named[] = [{ name: "read" }, ...groups];

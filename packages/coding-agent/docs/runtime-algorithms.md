@@ -256,7 +256,16 @@ Coverage: `tool-schema-budget.test.ts`, `session-turn-admission.test.ts`,
 `exact-tool-fit.test.ts` and the public-path case in
 `agent-session-input-admission.test.ts`. `exactToolFit` also accepts
 host-trusted `pinnedGroups` and `utilityOfGroup`; nothing in the runtime passes
-them yet.
+them yet. `exact-tool-fit.property.test.ts` checks, for 1,000 seeded fast-check
+cases each, that with any counter, monotone or not, the fit ends within
+2|G|+3 counts for G unpinned servers, reports a recounted cost, withholds a
+ranked prefix, reports overflow only after withholding every unpinned server, and
+that one server fewer overflows. Monotone counters (additive, a serialized
+`ceil(length / 4)` and a superadditive one that makes the recount correct the
+estimate downward) also get the shortest fitting prefix. A non-monotone counter
+can report overflow although a shorter prefix fits. The runtime fallback
+estimator is not monotone either (its code-like multiplier depends on the whole
+projection's character mix), so only the general invariants apply to it.
 
 ## Bounded context-budget cache stores (2026-09-28 working tree)
 
