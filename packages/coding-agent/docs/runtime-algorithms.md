@@ -258,6 +258,31 @@ Coverage: `tool-schema-budget.test.ts`, `session-turn-admission.test.ts`,
 host-trusted `pinnedGroups` and `utilityOfGroup`; nothing in the runtime passes
 them yet.
 
+## Bounded context-budget cache stores (2026-09-28 working tree)
+
+The Context Budget V2 memory and disk providers bound each in-process store by
+entry count and by accounted bytes (`2 × key + 2 × JSON + 128` UTF-16 code
+units per entry) and keep entries as immutable JSON: reads return a fresh copy,
+and a value that is not plain JSON data (an accessor, a `toJSON`, a proxy, a
+cycle, a class instance including an `Array` subclass, a non-finite number or a
+sparse array) is a miss. Encoding reads each data property once and runs no
+caller code, so the stored text is what was validated. Defaults are 8 MiB
+representations, 2 MiB plans and 256 KiB negatives in the session provider and
+16 MiB, 4 MiB and 512 KiB resident in the disk provider, whose 32 MiB snapshot
+cap is separate. One plan may fill its store; one representation is capped at
+2 MiB and one negative entry at 16 KiB. These caps bound retained cache
+strings, not process RSS. An oversized snapshot shrinks iteratively: the oldest
+half of the persisted representations goes first, and negatives shrink only once
+none remain, so an overflow of negative entries alone converges. Entries the
+snapshot cannot hold (credential-shaped or over `maxEntryTextLength`) stay in
+memory. Limits that are not safe integers (`NaN`, `Infinity`, fractions) throw
+`RangeError`.
+
+Coverage: `bounded-json-lru.test.ts`, `context-budget-v2-cache-provider.test.ts`
+and `context-budget-cache-disk.test.ts`. The providers expose
+`getMemoryUsageSnapshot()` for instrumentation; nothing in the runtime reads it
+yet.
+
 ## Reasoning router resolver contract (2026-09-19 audit F05/F06)
 
 The low-confidence escalation in `resolveThinkingLevelV4WithUncertainty` is

@@ -15,6 +15,7 @@
 - Manual compaction waits for an aborted prompt's budget wrapper to finish cleanup before starting summaries. Preflight-local compaction shares its current budget, and self-waiting active-agent calls refuse. Aborted, empty or nonterminal model output is no longer accepted as a durable summary.
 - `AgentSession.close()` and runtime disposal retain the session owner lease until registered work and native MCP transport closure settle. Legacy busy disposal starts the same close rather than releasing ownership early.
 - An abort during prompt preflight closes that request's admission before it can dispatch a model. In-flight MCP reattachment joins the retiring manager before publishing replacements.
+- The Context Budget V2 caches are bounded by size and no longer share objects with their callers. Each in-memory store kept up to 256 entries (2,048 in the disk provider) of any size, and kept the objects it was given, so a caller that changed an entry after writing or reading it also changed the cached copy. Stores now have byte budgets (8 MiB of representations, 2 MiB of plans and 256 KiB of negative entries in the session provider; 16 MiB, 4 MiB and 512 KiB resident in the disk provider) and keep immutable JSON copies; a value that is not plain JSON data is not cached. A disk snapshot over its 32 MiB cap with negative entries alone failed every later flush; it now shrinks until it fits. Cache limits that are not safe integers throw `RangeError`.
 
 ## [1.2.4] - 2026-09-23
 

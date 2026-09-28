@@ -11,25 +11,49 @@ import type {
 	ContextBudgetRepresentationCacheEntryV2,
 	ContextBudgetRepresentationCacheReadV2,
 } from "./context-budget-v2-types.ts";
+import { BoundedJsonLru, type CacheStats } from "./performance-upgrade/bounded-json-lru.ts";
 
 const DEFAULT_MAX_ENTRIES_PER_CACHE = 256;
+const MIB = 1024 * 1024;
 
-function readLru<T>(store: Map<string, T>, key: string): T | undefined {
-	const entry = store.get(key);
-	if (entry === undefined) return undefined;
-	store.delete(key);
-	store.set(key, entry);
-	return entry;
+/** Accounted-byte caps per store; see `BoundedJsonLru` for what the accounting covers. */
+export interface ContextBudgetCacheMemoryLimitsV2 {
+	readonly representationBytes?: number;
+	readonly planBytes?: number;
+	readonly negativeBytes?: number;
 }
 
-function writeLru<T>(store: Map<string, T>, key: string, entry: T, maxEntries: number): void {
-	store.delete(key);
-	store.set(key, entry);
-	while (store.size > maxEntries) {
-		const oldestKey = store.keys().next().value;
-		if (oldestKey === undefined) return;
-		store.delete(oldestKey);
-	}
+export type ContextBudgetCacheMemoryUsageV2 = Readonly<Record<"representations" | "negatives" | "plans", CacheStats>>;
+
+/** The three bounded in-memory stores every provider keeps. */
+export interface ContextBudgetCacheStoresV2 {
+	readonly representations: BoundedJsonLru<ContextBudgetRepresentationCacheEntryV2>;
+	readonly negatives: BoundedJsonLru<ContextBudgetNegativeCacheEntryV2>;
+	readonly plans: BoundedJsonLru<ContextBudgetPlanCacheEntryV2>;
+}
+
+/**
+ * Stores capped by entry count and accounted bytes. A plan carries every selected representation's
+ * text, so one plan may use its whole store; representation and negative entries have fixed caps.
+ */
+export function createContextBudgetCacheStoresV2(
+	maxEntries: number,
+	bytes: Required<ContextBudgetCacheMemoryLimitsV2>,
+): ContextBudgetCacheStoresV2 {
+	return {
+		representations: new BoundedJsonLru({ maxEntries, maxBytes: bytes.representationBytes, maxEntryBytes: 2 * MIB }),
+		negatives: new BoundedJsonLru({ maxEntries, maxBytes: bytes.negativeBytes, maxEntryBytes: 16 * 1024 }),
+		plans: new BoundedJsonLru({ maxEntries, maxBytes: bytes.planBytes, maxEntryBytes: bytes.planBytes }),
+	};
+}
+
+/** Content-free counters per store, for instrumentation. */
+export function contextBudgetCacheMemoryUsageV2(stores: ContextBudgetCacheStoresV2): ContextBudgetCacheMemoryUsageV2 {
+	return {
+		representations: stores.representations.stats(),
+		negatives: stores.negatives.stats(),
+		plans: stores.plans.stats(),
+	};
 }
 
 export function createMemoryContextBudgetCacheProviderV2(
@@ -38,17 +62,30 @@ export function createMemoryContextBudgetCacheProviderV2(
 	return new MemoryContextBudgetCacheProviderV2(layer);
 }
 
+/**
+ * In-process cache bounded by entry count and by accounted bytes per store. Entries are held as
+ * immutable JSON, so callers always receive a copy and cannot corrupt a later read.
+ */
 export class MemoryContextBudgetCacheProviderV2 implements ContextBudgetCacheProviderV2 {
-	private readonly representations = new Map<string, ContextBudgetRepresentationCacheEntryV2>();
-	private readonly negatives = new Map<string, ContextBudgetNegativeCacheEntryV2>();
-	private readonly plans = new Map<string, ContextBudgetPlanCacheEntryV2>();
+	private readonly stores: ContextBudgetCacheStoresV2;
 	private readonly layer: ContextBudgetCacheLayerV2;
-	private readonly maxEntries: number;
 	private invalidationSnapshot: ContextCacheInvalidationSnapshot | undefined;
 
-	constructor(layer: ContextBudgetCacheLayerV2, maxEntries = DEFAULT_MAX_ENTRIES_PER_CACHE) {
+	constructor(
+		layer: ContextBudgetCacheLayerV2,
+		maxEntries = DEFAULT_MAX_ENTRIES_PER_CACHE,
+		limits: ContextBudgetCacheMemoryLimitsV2 = {},
+	) {
 		this.layer = layer;
-		this.maxEntries = maxEntries;
+		this.stores = createContextBudgetCacheStoresV2(maxEntries, {
+			representationBytes: limits.representationBytes ?? 8 * MIB,
+			planBytes: limits.planBytes ?? 2 * MIB,
+			negativeBytes: limits.negativeBytes ?? MIB / 4,
+		});
+	}
+
+	getMemoryUsageSnapshot(): ContextBudgetCacheMemoryUsageV2 {
+		return contextBudgetCacheMemoryUsageV2(this.stores);
 	}
 
 	getInvalidationSnapshot(): ContextCacheInvalidationSnapshot | undefined {
@@ -71,45 +108,40 @@ export class MemoryContextBudgetCacheProviderV2 implements ContextBudgetCachePro
 	}
 
 	readRepresentation(key: string): ContextBudgetRepresentationCacheReadV2 | undefined {
-		const entry = readLru(this.representations, key);
+		const entry = this.stores.representations.get(key);
 		return entry ? { entry, layer: this.layer } : undefined;
 	}
 
 	writeRepresentation(input: { readonly key: string; readonly entry: ContextBudgetRepresentationCacheEntryV2 }): void {
-		writeLru(this.representations, input.key, input.entry, this.maxEntries);
+		this.stores.representations.set(input.key, input.entry);
 	}
 
 	deleteRepresentation(key: string): void {
-		this.representations.delete(key);
+		this.stores.representations.delete(key);
 	}
 
 	readNegativeRepresentation(key: string): ContextBudgetNegativeCacheEntryV2 | undefined {
-		return readLru(this.negatives, key);
+		return this.stores.negatives.get(key);
 	}
 
 	writeNegativeRepresentation(input: { readonly key: string; readonly reason: string }): void {
-		writeLru(
-			this.negatives,
-			input.key,
-			{ reason: input.reason, createdAtEpochMs: Date.now(), layer: this.layer },
-			this.maxEntries,
-		);
+		this.stores.negatives.set(input.key, { reason: input.reason, createdAtEpochMs: Date.now(), layer: this.layer });
 	}
 
 	deleteNegativeRepresentation(key: string): void {
-		this.negatives.delete(key);
+		this.stores.negatives.delete(key);
 	}
 
 	readPlan(key: string): ContextBudgetPlanCacheReadV2 | undefined {
-		const entry = readLru(this.plans, key);
+		const entry = this.stores.plans.get(key);
 		return entry ? { entry, layer: this.layer } : undefined;
 	}
 
 	writePlan(input: { readonly key: string; readonly entry: ContextBudgetPlanCacheEntryV2 }): void {
-		writeLru(this.plans, input.key, input.entry, this.maxEntries);
+		this.stores.plans.set(input.key, input.entry);
 	}
 
 	deletePlan(key: string): void {
-		this.plans.delete(key);
+		this.stores.plans.delete(key);
 	}
 }
