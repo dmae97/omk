@@ -23,6 +23,7 @@ baseline below is history, not current truth.
 | MCP descriptor injection screen | yes | `mcp/manager` import path | default | quarantine tests | released | pattern rule score, not calibrated risk |
 | verified-run coordinator + evidence | yes | verified-run paths | opt-in command | coordinator/evidence tests | working tree | scope-limited binding, not general correctness |
 | Atomic commit planner (`planAtomicCommits`) | yes | public agent API only; no live commit caller | explicit function call | local planner/API/property tests, not a CI receipt | working tree | not measured |
+| B12 measurement core (`evaluatePromotion`, `attributePhases`, `costPerVerifiedCompletion`) | yes | **no** — no caller; offline evaluation only | n/a | unit and property tests, local oracle cross-check | working tree | n/a (measurement instrument) |
 
 Named tests are evidence locations, not a claim that this exact working tree passed remote CI. Source call paths and fresh local results must be checked before promoting a gate.
 
@@ -384,6 +385,145 @@ Status in this tree:
   ceiling change timing), A12 live wiring (`challengeEcrafLocalExchange` already
   finds the bundle's 10 to 16 packing offline) and A13 (no paired runtime
   runs).
+
+## OMK_MATH f46a8f6 audit status and B12 measurement core (2026-09-29 working tree)
+
+The bundle `OMK_MATH_f46a8f6` audits commit f46a8f6 and is now at r2, which adds
+explanations. Its twelve modules B01–B12 are proposals backed by synthetic
+checks; the bundle implements none of them and orders B12 before B01, B03 and
+B07 (`B12 ≺ {B01, B03, B07}`). All 16 source blobs r2 records match that
+commit, so the bundle's rebind rule asks for no module re-audit. In this
+working tree only S1 (this file, edited here) and S14 (`package-lock.json`,
+another task's edit) differ; the other 14 match. Against the first edition the
+B02–B06 and B11 formulas are unchanged and those of B01, B07–B10 and B12
+changed: B12 adds the length measure μ([a, b)) = b − a and the cost per
+verified completion C_verified.
+The first pass recomputed, without a mismatch, B04's reduction on all 1,100
+source-ordered DAGs up to five nodes and 2,000 random ones (own seed, not the
+bundle's generator), the closure word count for 20,001 sizes, B02's certified
+binary search over the 119 monotone vectors among its 3,279 prefix cost vectors,
+and the B02, B04, B06 and B10 fixtures; the r2 pass did not repeat that. Rerun
+here, the bundle's `verify_math.py` matches its shipped `VALIDATION.json` (15
+check groups, no mismatch), and its `verify_microtasks.mjs` on Node v24.19.0
+(the repository requires >= 22.19.0) gives FIFO order [B, A] but `Promise.race`
+winner A. That refutes only the naive swap and does not show any other
+replacement equivalent, so B06 stays on hold.
+
+This change implements B12's arithmetic as pure functions in
+`core/performance-upgrade/`. Nothing calls them yet and no default changes:
+
+- `parseMeasurementSpan` reads one JSONL trace line into the eight B12 trace
+  fields and drops every other field. Ids and count names must be short tokens,
+  which keeps prompt text out of them; a token-shaped secret such as an API key
+  would still fit, so trace writers must not put secrets in ids.
+- `attributePhases` splits a turn window over twelve phases so the phase times
+  add up to the turn exactly (ticks are safe integers). The bundle takes
+  breakpoints from span endpoints outside the window too; spans at [95, 130)
+  and [140, 210) over the window [100, 200) then sum to 115 ticks for a
+  100-tick turn, so endpoints are clipped to the window first. Where spans
+  overlap, the deepest one gets the time, then the one ending last. The bundle
+  leaves that rule open.
+- `anytime-bounds.ts` holds the time-uniform Hoeffding interval and one-sided
+  p-value at alpha / (J n (n + 1)), the zero-failure bound and the DKW quantile
+  band. `compensatedSum` is factored out of `compensatedMean`, behavior unchanged.
+- `evaluatePromotion` scores paired baseline/candidate blocks and returns
+  `promote`, `harm` or `noDecision`. The bundle does not define its
+  `harmEstablished`; here it means an upper bound below zero for latency, or
+  below the negative margin for success or false completion.
+- `costPerVerifiedCompletion` (`verified-cost.ts`) computes r2's C_verified: the
+  `compensatedSum` of all attempt costs of all blocks, unverified blocks and
+  failed or retried attempts included, over the number of independently verified
+  blocks, or +Infinity (not NaN) when none is. Verification does not prove a
+  block correct. It throws `MeasurementInputError` on non-string or duplicate
+  ids, non-boolean flags, attempt lists that are not arrays or report a length
+  that is not a count, negative or non-finite costs, verified blocks without
+  attempts and an overflowing total (the compensated sum yields NaN or
+  ±Infinity there). It reads each attempt list's length once and each index once
+  and calls none of its methods, so a getter, a proxy or an own `slice` cannot
+  change a validated value.
+
+The bounds hold only for i.i.d. blocks and they are wide: at alpha = 1/20 and
+J = 8 the radius is 0.917 at n = 30 and 0.198 at n = 1,000, so even a
+noise-free gain of 10% of the cap needs about 4,500 paired blocks before its
+lower bound clears zero. There are no paired runtime runs yet, so this change
+claims no speedup and B01–B11 stay unimplemented.
+Acceptance for any of them later: paired blocks whose cap, minimum gain and
+margins were fixed before the runs, a passing semantic gate, and
+`evaluatePromotion` returning `promote`. Until then the module stays off.
+
+Apart from C_verified, the r2 corrections change no code here. B08's
+internal-ticket node key and B10's reserve for mandatory verification and saving
+alter policy and data structures, so both are recorded as on hold.
+`WorkloadPermitPool.setCapacity` and its test already pin B09's shrink rule:
+running permits are never revoked and a new grant needs active + weight ≤
+capacity. B01 and B07 gain scope conditions only.
+
+Cost, re-measured twice on 2026-09-29 on a loaded development machine (load
+average 13 to 16; not a benchmark, and runs differ by up to 2x):
+`attributePhases` takes about 20 to 30 ms for 10,000 spans shaped like a real
+turn (median of 7), but it is O(|V|^2) when most spans are open at once, about
+8.5 s for 10,000 fully nested spans (one run). `evaluatePromotion` takes about
+95 to 135 ms for 100,000 blocks (median of 7). Evaluate at checkpoints rather
+than after every block: any checkpoint schedule
+keeps the bounds' anytime validity under their i.i.d. assumption, while
+re-evaluating after each of N blocks costs O(N^2 log N) in total.
+
+Coverage: 184 tests pass locally, up from 133: `measurement-trace.test.ts` 35,
+`phase-attribution.test.ts` 26, `phase-attribution.property.test.ts` 2 (1,000
+fast-check cases against a tick-by-tick oracle), `anytime-bounds.test.ts` 40,
+`promotion-gate.test.ts` 34 and `verified-cost.test.ts` 47. A first local
+cross-check, made in the first implementation pass with a script that was not
+kept, against AdaptOrch's research kernel (`hoeffding_radius`,
+`hoeffding_interval`, `standardized_effect`) plus stdlib reference formulas,
+judged by its `expected_answer_numeric` verifier at a relative and absolute
+tolerance of 1e-12, matched 9,495 of 9,495 values and all 136 undefined results
+over 830 seeded cases. Identical block differences, which the random cases
+never produced, gave d_z near 1e16 instead of undefined. A self-review caught
+it; the fix has a regression test, and 150 such cases run in the second
+cross-check below. Review then found that ranking overlaps by clipped ends let
+the window change who owns an overlap, and that a string, `null` or a getter
+could pass validation and still change the result; overlaps are now ranked by
+real ends, inputs are type-checked and each object field is read once. Arrays
+are still read in place
+in the bounds and in `attributePhases`, so an array with element getters or an
+own `map` can change a value after validation (a getter made `anytimeMeanBound`
+validate 0.5 and sum 1e9); only `verified-cost.ts` snapshots its arrays. Parsed
+JSONL is plain data and cannot do this. In that pass each of 45 hand-written
+mutations of the first four modules, including its documented limits, failed at
+least one test; that count was not re-run. In the r2 pass all
+19 hand-written mutations of `verified-cost.ts` fail at least one test.
+
+A second, larger run (harness outside the repository) compared 152,906 values in
+11 main report rows (radius and zero-failure bound up to n = 1e6, mean intervals
+and p-values up to n = 199, quantile bands up to n = 300): no mismatch, 907
+boundary ties set aside and 833 ⊥ or ∞ results agree. A strict verifier (abs_tol
+0) accepts all 102,020 values it covers and carries the claim: after a relative
+1e-9 perturbation,
+`NumericToleranceVerifier` at abs_tol 1e-12 still passes 5,114 of 108,831 values
+(all of magnitude ≤ 1e-3), the strict one 0 of 102,020. All 12 hand-made TS
+mutations fail at least one verifier. When |d_z| ≥ 1e7, TS and the oracle both
+drift about 1e-7 relative (error ≈ ε·|d_z|), a conditioning limit not
+attributed to either side and kept out of the 11 rows. Fingerprints of the final
+code, 6a79e013441c25c2 (cases), eb0210a2075700e1 (ts_out) and c079741c1c5941f4
+(report), reproduced in a second run; the last two cover the sha256 of the five
+TS files, so any edit to them changes both. The oracles come from AdaptOrch
+d0eb6ed9b plus other tasks' uncommitted edits to `evidence_stopping_index` and a
+failure classifier, which leave the oracle and verifier functions unchanged.
+AdaptOrch was only a local numeric reference, not a product capability claim.
+The reference formulas belong to the same family as the code's: only the
+Hoeffding radius, the mean interval and d_z come from AdaptOrch, and the rest
+are exact restatements of the bundle's formulas. The run therefore shows that
+the code matches those formulas on seeded cases, not that the formulas are
+right, and it leaves input validation (three overflow cases aside) and the
+`attributePhases` partition to the unit tests. None of this is a CI result, a
+correctness proof or a coverage guarantee under i.i.d. blocks.
+
+Remote CI fails for reasons outside this work. Its last run before this change,
+36414383318 on f46a8f6922, fails 9 tests in the Test step; all 9 also fail on a
+clean f46a8f6922 snapshot (four of them, the session-replacement regressions,
+through source aliases because the snapshot had no build output), and 8
+consecutive runs have failed. The B12 files were not in that CI tree. Whether a
+code defect or a stale test expectation causes it is undecided.
 
 ## Reasoning router resolver contract (2026-09-19 audit F05/F06)
 
