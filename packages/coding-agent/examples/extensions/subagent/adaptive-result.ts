@@ -49,6 +49,8 @@ export function mergeResult(target: SingleResult, source: SingleResult): void {
 export function mergeForUpdate(base: SingleResult, partial: SingleResult): SingleResult {
 	const merged: SingleResult = { ...base, messages: [...base.messages], usage: { ...base.usage } };
 	mergeResult(merged, partial);
+	merged.attemptId = partial.attemptId;
+	merged.progress = partial.progress;
 	return merged;
 }
 

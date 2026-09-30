@@ -28,6 +28,49 @@ function authority(signal?: AbortSignal) {
 const node = (id: string, task: string, dependsOn: string[] = []) => ({ id, task, dependsOn, agent: "fixture" });
 
 describe.each([false, true])("graph authority=%s", (governed) => {
+	it("preserves attempt-bound preview through the non-Ultra adaptive result merger", async () => {
+		const updates: ResultDetails[] = [];
+		const result = await env.execute(
+			{ graph: [node("A", "progress")] },
+			governed ? authority() : undefined,
+			(partial) => {
+				updates.push(partial.details as ResultDetails);
+			},
+			"high",
+		);
+		expect(result.isError).not.toBe(true);
+		const early = updates.find((update) => update.results[0]?.progress?.text === "early preview");
+		expect(early?.results[0]).toMatchObject({
+			nodeId: "A",
+			exitCode: -1,
+			messages: [],
+			attemptId: expect.any(String),
+		});
+		const final = (result.details as ResultDetails).results[0];
+		expect(final.progress).toBeUndefined();
+		expect(final.deadline?.outcome).toBe("completed");
+	});
+	it("forwards node-bound partial progress without marking it completed", async () => {
+		const updates: ResultDetails[] = [];
+		const result = await env.execute(
+			{ graph: [node("A", "progress"), node("B", "dependent {dependencies}", ["A"])] },
+			governed ? authority() : undefined,
+			(partial) => {
+				updates.push(partial.details as ResultDetails);
+			},
+		);
+		expect(result.isError).not.toBe(true);
+		const early = updates.find((update) => update.results.some((r) => r.progress?.text === "early preview"));
+		expect(early).toBeDefined();
+		expect(early?.results[0]).toMatchObject({ nodeId: "A", exitCode: -1, messages: [] });
+		expect(early?.graph?.completedNodeIds).toEqual([]);
+		const final = result.details as ResultDetails;
+		expect(final.graph?.completedNodeIds).toEqual(["A", "B"]);
+		expect(final.results.every((r) => r.progress === undefined)).toBe(true);
+		expect(final.results[1].output).toContain("### A\nTask: progress");
+		expect(final.results[1].output).not.toContain("early preview");
+	});
+
 	it.each(["exit7", "signal", "empty"])("blocks dependents on %s without reporting completion", async (task) => {
 		const result = await env.execute(
 			{ graph: [node("A", task), node("B", "downstream {dependencies}", ["A"])] },

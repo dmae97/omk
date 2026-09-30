@@ -49,6 +49,8 @@ export interface AgentDeadlineMetadata {
 export interface SingleResult {
 	nodeId?: string;
 	attemptId?: string;
+	/** Bounded display projection only, never a completed message or checkpoint. */
+	progress?: { readonly text: string; readonly sequence: number };
 	dependencyDigests?: Readonly<Record<string, string>>;
 	process?: ManagedProcessResult;
 	stream?: {

@@ -85,21 +85,25 @@ When running interactively, the tool prompts for confirmation before running pro
 ## Usage
 
 ### Single agent
+
 ```
 Use scout to find all authentication code
 ```
 
 ### Parallel execution
+
 ```
 Run 2 scouts in parallel: one to find models, one to find providers
 ```
 
 ### Chained workflow
+
 ```
 Use a chain: first have scout find the read tool, then have planner suggest improvements
 ```
 
 ### Workflow prompts
+
 ```
 /implement add Redis caching to the session store
 /scout-and-plan refactor auth to support OAuth
@@ -125,6 +129,18 @@ Optional execution controls:
 | `maxResumeAttempts` | `1` | Retries only the active unfinished shard; accepted range is 0-2 and ignored by unbounded Ultra execution |
 
 ## Output Display
+
+Graph mode forwards progress in both the session-governed and legacy paths,
+including non-Ultra adaptive attempts. The first text delta is shown immediately;
+later deltas are coalesced on arrival at a 100 ms interval, without a timer queue.
+The latest node preview retains at most 4,096 UTF-16 code units. Completed
+messages still update immediately. Previews are not receipts, checkpoint text,
+dependency outputs, or completed nodes. Abort suppresses later display callbacks;
+final results still require the existing stream and process-settlement checks.
+Partial rendering preserves supplied sibling rows and tool-call summaries,
+with separate running/completed/failed icons. It shows up to five recent blocks
+per row and caps each text block at 4,096 code units; full receipts are unchanged.
+See [Lifecycle and progress hardening](../../../docs/runtime-algorithms.md#cd-lifecycle-and-progress-hardening-2026-09-30).
 
 **Collapsed view** (default):
 - Status icon (✓/✗/⏳) and agent name

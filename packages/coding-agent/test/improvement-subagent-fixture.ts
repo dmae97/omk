@@ -40,6 +40,7 @@ else if(task.includes('total-limit')) { for(let i=0;i<100;i++) emit({type:'unkno
 else if(task.includes('bad-usage')) emit({type:'message_end',message:{...message,usage:{input:-1}}});
 else if(task.includes('duplicate-terminal')) { emit({type:'message_end',message}); emit({type:'prompt_settled',outcome:'completed'}); emit({type:'prompt_settled',outcome:'completed'}); }
 else if(task.includes('empty')) { emit({type:'agent_start'}); }
+else if(task.includes('progress')) { emit({type:'message_update',assistantMessageEvent:{type:'text_delta',delta:'early preview'}}); emit({type:'message_end',message}); }
 else if(task.includes('unicode')) { const data=Buffer.from(JSON.stringify({type:'message_end',message})+'\\n'); for(const byte of data) {process.stdout.write(Buffer.from([byte])); await new Promise(r=>setImmediate(r));} }
 else { if(task.includes('slow')) await new Promise(r=>setTimeout(r,70)); emit({type:'message_end',message}); }
 `,
@@ -57,13 +58,18 @@ else { if(task.includes('slow')) await new Promise(r=>setTimeout(r,70)); emit({t
 	return {
 		tool: registered,
 		cwd,
-		async execute(params: Record<string, unknown>, authority?: SubagentLaneAuthority, onUpdate?: () => void) {
+		async execute(
+			params: Record<string, unknown>,
+			authority?: SubagentLaneAuthority,
+			onUpdate?: Parameters<ToolDefinition["execute"]>[3],
+			thinkingLevel: "ultra" | "high" = "ultra",
+		) {
 			return (await registered.execute(
 				"fixture-call",
 				{ agentScope: "project", confirmProjectAgents: false, ...params },
 				new AbortController().signal,
 				onUpdate,
-				{ cwd, hasUI: false, thinkingLevel: "ultra", getSubagentLaneAuthority: () => authority } as Parameters<
+				{ cwd, hasUI: false, thinkingLevel, getSubagentLaneAuthority: () => authority } as Parameters<
 					ToolDefinition["execute"]
 				>[4],
 			)) as Awaited<ReturnType<ToolDefinition["execute"]>> & { isError?: boolean };

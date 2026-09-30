@@ -1094,7 +1094,69 @@ retain their original scope. Membership uses a `WeakSet` and owner epochs a
 and cleanup checks the current epoch and join. Missing or rejected transport
 observations still withhold ownership; they are not release evidence.
 
-Coverage: `session-shutdown-faults.test.ts`, `session-command-shutdown.test.ts`,
-`session-prompt-lifecycle.test.ts`, `mcp/transport-retirement-coalescing.test.ts`,
-`run-budget-scope.test.ts` and the public session replacement/shutdown regressions.
-These are local ownership and error-boundary checks, not release approval.
+**D07:** the extension example's governed and legacy graph callers now forward
+`onUpdate`. Adaptive and Ultra paths retain attempt/node identity in previews.
+Validated text deltas go to a separate, 4,096-UTF-16-code-unit display tail.
+The first delta notifies immediately; subsequent deltas coalesce on arrival
+with a 100 ms minimum interval, without a timer or notification queue.
+Completed messages still notify immediately. Partial snapshots report
+`exitCode: -1` and render as progress, never as completion. Abort suppresses
+later display callbacks and finish closes the parser. Previews do not enter
+messages, usage, checkpoint text, dependency output or completed-node evidence.
+The partial graph view shows the currently updated node; final source ordering,
+stream limits and process-settlement checks remain unchanged. A follow-up
+renderer regression exposed that the initial partial view hid sibling rows and
+tool calls. The shared partial renderer now preserves each supplied sibling's
+running/completed/failed state and tool-call summary, showing at most five recent
+blocks with each text block capped at 4,096 code units. Four render-only tests in
+`subagent-progress-render.test.ts` cover this without starting an agent.
+
+The stream's line-limit check now accumulates incoming UTF-8 bytes rather than
+rescanning the growing line per fragment. Input strings come from the managed
+process's UTF-8 decoder; newline and finish clear the accumulated state.
+
+Synthetic operation counts on identical inputs, not end-to-end speedups:
+
+| Input and metric | Before | After |
+| --- | ---: | ---: |
+| 1,000 retirements of one client: allocated Promises (`async_hooks`) | 4,998 | 3 |
+| Same input: distinct returned joins | 1,000 | 1 |
+| Same input: physical close calls | 1 | 1 |
+| 8,221-character JSONL in single-character chunks: characters scanned by byte-length checks | 33,804,751 | 16,441 |
+
+The stream digest and event count were identical. This establishes reduced
+allocation/retention and scanning for these fixtures, not a long-running RSS
+bound or a provider-latency improvement.
+
+Scope decisions for the remaining proposals:
+
+- C01/C05/C07: preserve admission, generation and physical-evidence contracts;
+  exercise reentrancy, reconnect and ownership regressions.
+- C02/C06: no separate bounded observer facade without evidence of abandoned
+  observer accumulation and a real consumer. Existing close semantics remain.
+- C08/C09: retain failed/unresolved cases in evaluation; no live paired shutdown
+  or weighted critical-path benchmark was run.
+- D01/D02/D06/D09: inspect the actual caller and existing ownership boundaries;
+  no new telemetry system, warm process pool, duplicate execution or scheduler.
+- D03: retain the launch-time width contract. No wider dispatch without runtime
+  benefit evidence and a current-authority revalidation design.
+- D04/D05: preserve failure barriers, write conflicts and FIFO fairness.
+- D08: preserve current deadlines, cleanup reserves and unsettled-child ownership;
+  do not silently reinterpret zero or unify different clock contracts.
+- D10: operation counts are not product promotion or quality evidence.
+
+Coverage: `session-shutdown-faults.test.ts`, `session-prompt-lifecycle.test.ts`,
+`suite/session-shutdown-wiring.test.ts`,
+`mcp/transport-retirement-coalescing.test.ts`,
+`subagent-stream-progress.test.ts`, `improvement-subagent-stream.test.ts` and
+`improvement-subagent-graph.test.ts`, plus existing MCP, lane, permit and actual
+child/bash-settlement tests in `packages/coding-agent/test/`. Local AdaptOrch
+`CommandVerifier` executes the same offline regression command with caching
+disabled and an exit-7 negative control. No model calls, synthesis, delegation
+or external uploads are involved; verification is not a correctness proof.
+
+For `pi-web-access` 0.33.0, `"toolActivation": "eager"` in the configuration
+file that extension actually reads preserves eager web tools without its
+Pi-0.86 compatibility warning. Do not spoof host APIs or suppress all warnings.
+The extension uses its own `PI_CODING_AGENT_DIR`/XDG/Pi-default path rules;
+configuration and source changes require a module reload or session restart.
