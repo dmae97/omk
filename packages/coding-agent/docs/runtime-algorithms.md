@@ -1160,3 +1160,109 @@ file that extension actually reads preserves eager web tools without its
 Pi-0.86 compatibility warning. Do not spoof host APIs or suppress all warnings.
 The extension uses its own `PI_CODING_AGENT_DIR`/XDG/Pi-default path rules;
 configuration and source changes require a module reload or session restart.
+
+## Memory and wait-lifecycle hardening (2026-09-30, bundle `bac246c`)
+
+An external audit bundle pinned to `bac246c` proposed fixes for retained
+listeners, unbounded diagnostics and quadratic copies. Four of its target files
+had changed since (`c4e20ff`, `8f12f90`), so the fixes were re-applied to this
+tree rather than patched in. Each change below has a regression that failed on
+the previous source. In this section `n` is the number of drained messages,
+`d` the depth of a session branch and `N` the number of accepted journal records.
+
+- **Agent queues:** `PendingMessageQueue` drained one message with `slice(1)`,
+  copying n(n−1)/2 references for a burst. A head cursor releases each drained
+  slot and compacts only when at least 1,024 slots and half the array are dead.
+  FIFO order, mode switches and `all` draining are unchanged; a producer that
+  outpaces the consumer still grows the live queue.
+- **Branch traversal:** `SessionManager.getBranch()` used `unshift` per ancestor,
+  moving d(d−1)/2 references. It now pushes and reverses once. Root-to-leaf order,
+  entry identity, the selected fork and the defensive copy are unchanged.
+- **Run journal:** `RunJournal` no longer copies its full record array on every
+  append; `records` materialises a frozen snapshot on read and reuses it until
+  the next append. Earlier snapshots keep their prefix. A memory-only
+  `RunJournalStore` appends to its accepted journal directly, which is safe
+  because every append validates and hashes before it mutates and each commit
+  is a single append. Persistent stores keep the isolated replay candidate, the
+  durable-head check before and after the write, and the locks, so their append
+  stays O(N) per record; disk verification was not weakened.
+- **Completion API:** `complete()` and `completeSimple()` expose only the final
+  message, so they now consume stream events as they arrive instead of leaving
+  every delta queued until the result. Direct `stream.result()` callers can
+  still iterate events afterwards.
+- **Cursor provider:** the request closed only on the caller's signal, so the
+  internal `timeoutMs` deadline never ended a silent HTTP/2 peer, and every
+  request left one listener on a reused caller signal. The close handler now
+  listens on the combined signal and is removed when the request settles. The
+  deadline reports `stopReason: "error"` with `Cursor timed out after <ms>ms`;
+  a caller abort still reports `stopReason: "aborted"` with `errorMessage:
+  "aborted"`. An abort during the payload hook is checked before connecting.
+- **RPC client:** see [TypeScript client resource lifecycle](rpc.md#typescript-client-resource-lifecycle).
+  Waiters are owned and released on failure, closure or `stop()`; event dispatch
+  snapshots listeners, so an unsubscribing waiter no longer hides `agent_end`
+  from the next listener; stderr keeps an 8,192-code-unit tail; `prompt()`
+  reports a refused prompt instead of leaving `promptAndWait()` to time out.
+- **Session events:** `AgentSession` dispatches to a listener snapshot. A
+  listener that unsubscribes no longer skips the next one, and a listener added
+  during dispatch starts with the next event.
+- **Subagent example:** bounded execution returned the aggregate without the
+  final attempt's `attemptId`, process settlement or stream receipt. The merge
+  now carries them while usage and output stay cumulative. The README install
+  list gained `managed-process-tree.ts`, `subagent-stream.ts` and
+  `graph-result.ts`, which `index.ts` imports. The byte-accounting part of the
+  bundle had already landed in `8f12f90`; its regression test is kept.
+
+The previous source cost
+
+$$
+C_q(n) = \frac{n(n-1)}{2}, \qquad C_b(d) = \frac{d(d-1)}{2}, \qquad H(N) = \sum_{k=1}^{N} k = \frac{N(N+1)}{2},
+$$
+
+where $n \ge 0$ is the number of messages drained one at a time, $d \ge 0$ the
+branch depth in entries and $N \ge 0$ the number of memory-only journal appends;
+$C_q$ and $C_b$ count array references copied or moved (unitless counts) and $H$
+counts hash-function calls. Each drain copied the remaining queue, each ancestor
+was inserted at the front, and each commit replayed the accepted prefix before
+hashing its record.
+After the change $C_q(n) \le n$ (a compaction copies at most the slots drained
+since the previous one), $C_b(d) = 0$ with one $O(d)$ reverse, and $H(N) = N$.
+
+Baseline: the same fixtures on the source before this change (`16df133`); each
+row changes one algorithm and holds its input fixed.
+
+| Input and metric | Before | After |
+| --- | ---: | ---: |
+| 4,096 individual queue drains: references copied by `slice` | 8,386,560 | 3,072 |
+| Branch of depth 2,048: references moved by `unshift` | 2,096,128 | 0 |
+| 128 memory-only journal audits: hash calls | 8,256 | 128 |
+| `complete()` over 25 events: events consumed before the result | 0 | 25 |
+
+These are counts from synthetic fixtures, not end-to-end latency or RSS
+measurements. The persistent journal path was not shown to be faster.
+
+Assumption: every `RunJournalStore` commit performs exactly one append. A commit
+that appended twice could leave a memory-only store holding the first record
+after the second failed; such a change must restore an isolated candidate for
+memory-only stores as well.
+
+Not adopted from the bundle: Vitest/tsconfig aliases that resolve `omk-ai`,
+`omk-agent-core/node` and `open-multi-agent-kit` to source. They change module
+resolution for more than two hundred test and example files and need their own
+full-suite run; builds before tests remain the supported order. The bundle's
+DAG completion diagnostic and its P0–P3 follow-ups (live phase spans, journal
+segments, TUI frame batching, shared usage aggregation, an `EventStream` deque,
+skill-scan caching) are proposals with adoption conditions, not changes here.
+
+Test isolation note: `test.sh` isolates the agent directory but not `HOME`, and
+the resource loader also reads `$HOME/.agents/skills`. On a machine with a large
+user skill set, session tests that build a real system prompt can fail
+admission (`PromptFixedOverheadError`) for reasons unrelated to the code under
+test. Running those tests with an isolated `HOME` removes the dependency.
+
+Coverage: `pending-message-queue.test.ts` (agent),
+`complete-drain.test.ts` and `cursor-stream.test.ts` (ai),
+`session-manager/branch-linear.test.ts`, `run-journal-performance.test.ts`,
+`rpc-client-resource-lifecycle.test.ts`,
+`agent-session-event-unsubscribe.test.ts`,
+`subagent-adaptive-receipts.test.ts` and
+`subagent-stream-performance.test.ts` (coding-agent).
