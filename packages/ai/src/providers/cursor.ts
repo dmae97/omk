@@ -38,6 +38,7 @@ import type {
 	ToolResultMessage,
 } from "../types.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
+import { frameConnectMessage } from "./cursor-connect.ts";
 import { field, ProtoMessage } from "./devin-protobuf.ts";
 
 export const CURSOR_API_URL = "https://api2.cursor.sh";
@@ -52,14 +53,6 @@ const CURSOR_DEBUG = process.env.OMK_DEBUG_CURSOR === "1";
 // ---------------------------------------------------------------------------
 // Protobuf wire helpers (field numbers from the Cursor agent.v1 schema)
 // ---------------------------------------------------------------------------
-
-function frameConnectMessage(data: Uint8Array, flags = 0): Buffer {
-	const frame = Buffer.alloc(5 + data.length);
-	frame[0] = flags;
-	frame.writeUInt32BE(data.length, 1);
-	frame.set(data, 5);
-	return frame;
-}
 
 function blobId(data: Uint8Array): Uint8Array {
 	return new Uint8Array(createHash("sha256").update(data).digest());
@@ -454,12 +447,19 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 	(async () => {
 		const controller = new AbortController();
 		const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
-		const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 600_000);
+		const timeoutMs = options.timeoutMs ?? 600_000;
+		const timer = setTimeout(() => controller.abort(), timeoutMs);
 		let h2Client: http2.ClientHttp2Session | undefined;
 		let h2Request: http2.ClientHttp2Stream | undefined;
 		let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
 		let sawTurnEnded = false;
 		let endStreamError: Error | undefined;
+		// Close on the combined signal so the internal deadline also ends a silent peer.
+		// The deadline is a request error; a caller abort keeps the aborted result.
+		const onAbort = () => {
+			if (controller.signal.aborted) endStreamError ??= new Error(`Cursor timed out after ${timeoutMs}ms`);
+			h2Request?.close();
+		};
 		const write = (frame: Buffer | undefined) => {
 			if (frame && h2Request && !h2Request.closed && !h2Request.destroyed) h2Request.write(frame);
 		};
@@ -482,6 +482,7 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 			const payload = request === undefined ? built.bytes : request;
 			if (!(payload instanceof Uint8Array) || new ProtoMessage(payload).messages(1).length !== 1)
 				throw new Error("Cursor payload hook must return protobuf bytes for a single runRequest");
+			signal.throwIfAborted();
 
 			h2Client = http2.connect(baseUrl);
 			h2Client.on("error", (error) => {
@@ -532,10 +533,6 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 				() => write(frameConnectMessage(field(7, new Uint8Array(0)))),
 				HEARTBEAT_INTERVAL_MS,
 			);
-			if (options.signal) {
-				options.signal.addEventListener("abort", () => h2Request?.close(), { once: true });
-			}
-
 			await new Promise<void>((resolve) => {
 				let pending: Buffer = Buffer.alloc(0);
 				h2Request!.on("data", (chunk: Buffer) => {
@@ -588,6 +585,8 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 					resolve();
 				});
 				h2Request!.on("close", resolve);
+				signal.addEventListener("abort", onAbort, { once: true });
+				if (signal.aborted) onAbort();
 			});
 
 			function dispatchServerMessage(message: ProtoMessage): void {
@@ -721,10 +720,11 @@ export const streamCursor: StreamFunction<"cursor-agent", CursorOptions> = (
 		} catch (error) {
 			endStreamError ??= error instanceof Error ? error : new Error(String(error));
 		} finally {
+			signal.removeEventListener("abort", onAbort);
 			if (heartbeatTimer) clearInterval(heartbeatTimer);
 			// `end()` (graceful half-close) flushes exec/throw frames still queued
-			// behind processed data; `close()` is reserved for aborts.
-			if (options.signal?.aborted) h2Request?.close();
+			// behind processed data; `close()` is reserved for aborts and the deadline.
+			if (signal.aborted) h2Request?.close();
 			else h2Request?.end();
 			h2Client?.close();
 			clearTimeout(timer);
