@@ -204,15 +204,17 @@ adapter is covered by loopback HTTP/2 protocol tests.
 - Requires ChatGPT Plus or Pro subscription
 - Officially endorsed by OpenAI: [Codex for OSS](https://developers.openai.com/community/codex-for-oss)
 - `gpt-5.6-moa` runs bounded, tool-free GPT-5.6 Sol and Terra advisers concurrently, then streams a Sol synthesis with the active tools and tool history. Synthesis tool calls enter the normal agent loop; each follow-up model turn repeats the three-call workflow. Adviser and synthesis output remain independently capped.
-- The Codex backend accepts `xhigh` as its highest literal reasoning effort. OMK's `max` and `ultra` tiers map to `xhigh`; `ultra` on the MoA model additionally represents the Sol/Terra delegation workflow.
+- On GPT-5.6 models OMK sends `xhigh` for its `max` and `ultra` tiers; `ultra` on the MoA model additionally represents the Sol/Terra delegation workflow.
+- GPT-6.1 Sol (`gpt-6.1-sol`, the Codex default since 2026-09-29), GPT-6 Astra, GPT-6 Sol and GPT-6 Luna follow the Codex client's bundled catalog: efforts `low` through `max` with no `off` or `minimal` (thinking stays on), an 872,000-token window and 128,000 output tokens. `ultra` appears on 6.1 Sol, Astra and 6 Sol and sends the effort the Codex client sends for it: `xhigh` on 6.1 Sol and Astra, `max` on 6 Sol. In the Codex app `ultra` also delegates to subagents automatically; in OMK it only selects that effort.
 
 ```bash
 omk --provider openai-codex --model gpt-5.6-moa --thinking ultra
+omk --provider openai-codex --model gpt-6.1-sol --thinking ultra
 ```
 
 ### GPT-6 Astra
 
-OpenAI-shaped Astra routes (`openai`, `azure-openai-responses`, `opencode`, `github-copilot`, OpenRouter) expose OMK `ultra` in the selector and send `reasoning.effort: "max"`. Official Astra effort values remain `low`, `medium`, `high`, `xhigh`, and `max`; there is no native `ultra` wire value. ChatGPT/Codex account catalogs may still reject `gpt-6-astra`.
+OpenAI-shaped Astra routes (`openai`, `azure-openai-responses`, `opencode`, `github-copilot`, OpenRouter) expose OMK `ultra` in the selector and send `reasoning.effort: "max"`. Official Astra effort values remain `low`, `medium`, `high`, `xhigh`, and `max`; there is no native `ultra` wire value. The `openai-codex` route follows Codex instead (see above); a ChatGPT account whose catalog does not serve `gpt-6-astra` still answers HTTP 400.
 
 ```bash
 omk --provider openai --model gpt-6-astra --thinking ultra

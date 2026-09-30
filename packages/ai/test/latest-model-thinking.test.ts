@@ -62,13 +62,12 @@ describe("latest model thinking metadata", () => {
 		expect(model.thinkingLevelMap?.xhigh).toBe("xhigh");
 	});
 
-	it.each(["nex-agi/nex-n2.5-mini:free", "nex-agi/nex-n2.5-pro:free"])(
-		"exposes only declared Nex efforts for %s",
-		(id) => {
-			const model = getModels("openrouter").find((entry) => entry.id === id);
-			expect(model).toBeDefined();
-			if (!model) throw new Error("Missing Nex model");
-			expect(getSupportedThinkingLevels(model)).toEqual(["off", "medium", "high"]);
-		},
-	);
+	// The `:free` variants were delisted (OpenRouter live list, 2026-09-30). The paid Pro route
+	// declares the same none/medium/high ladder; paid Mini lacks tool support, so it is not generated.
+	it.each(["nex-agi/nex-n2.5-pro"])("exposes only declared Nex efforts for %s", (id) => {
+		const model = getModels("openrouter").find((entry) => entry.id === id);
+		expect(model).toBeDefined();
+		if (!model) throw new Error("Missing Nex model");
+		expect(getSupportedThinkingLevels(model)).toEqual(["off", "medium", "high"]);
+	});
 });

@@ -31,7 +31,9 @@ const MIMO_V26_PRO_AND_FLASH = [
 	["xiaomi-token-plan-sgp", "mimo-v2.6-flash", 1_048_576],
 	["xiaomi-token-plan-sgp", "mimo-v2.6-pro", 1_048_576],
 	["openrouter", "xiaomi/mimo-v2.6-flash", 1_048_576],
-	["openrouter", "xiaomi/mimo-v2.6-pro", 1_048_576],
+	// OpenRouter's model-level context_length moved to 1,050,000 on 2026-09-30 (its top provider
+	// still reports 1,048,576); the generator reads the model-level value.
+	["openrouter", "xiaomi/mimo-v2.6-pro", 1_050_000],
 	["vercel-ai-gateway", "xiaomi/mimo-v2.6-flash", 1_048_576],
 	["vercel-ai-gateway", "xiaomi/mimo-v2.6-pro", 1_048_576],
 	["opencode-go", "mimo-v2.6-flash", 1_048_576],

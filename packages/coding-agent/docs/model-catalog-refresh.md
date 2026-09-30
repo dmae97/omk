@@ -1,7 +1,112 @@
 # 모델 목록·thinking 갱신 기록
 
-확인일: 2026-09-22. 생성기와 공급자 어댑터를 수정한 뒤 `npm run models:refresh`로
+확인일: 2026-09-30. 생성기와 공급자 어댑터를 수정한 뒤 `npm run models:refresh`로
 두 카탈로그를 재생성했다. 생성 파일을 손으로 수정하지 않았다.
+
+## 2026-09-30 갱신: GPT-6.1 Sol·Codex GPT-6 계열
+
+`npm run models:refresh`를 종료 0으로 재생성했다. 전 소스가 응답했고 `--allow-partial`은 쓰지 않았다.
+키 없는 Zyloo는 정적 6개를 유지했다. AdaptOrch `TopologyRouter`는 증거→RED→생성기→재생성→감사→검증·문서
+9노드를 `hierarchical`로 권고했다(coupling density 0.65, width 2, critical depth 7). 실행 순서가 아니라
+권고이며, 서브에이전트 없이 한 세션에서 순서대로 진행했다. 공급자 추론은 호출하지 않았다.
+
+| 항목 | 값 |
+| --- | --- |
+| 공급자 / route | 40 / 1,876 → 1,905 (재생성 1,912 중 Sonnet 5.5 7개 보류) |
+| 추가 / 제거 | 56 / 27 |
+| 가격 / context / maxTokens 변경 | 61 / 38 / 37 |
+| thinking 맵 변경(기존 id) | 2 (`~anthropic/claude-sonnet-latest`, `~openai/gpt-sol-latest` 별칭이 새 모델을 가리키며 OpenRouter 선언이 mandatory로 바뀜) |
+| 이미지 카탈로그 | 54 → 57 |
+
+재생성은 Claude Sonnet 5.5의 6개 공급자 7개 route(`anthropic`, Bedrock global, Copilot, OpenCode, OpenRouter와 batch,
+Vercel)도 냈다. 이 route의 thinking 맵과 compat은 작업 트리에 있던 별도 작업의 미커밋 `SONNET_55_ID` 규칙
+(`catalog-thinking.ts`)에서 나왔다. 그 작업의 공급자 수정이 없으면 `reasoning` 없는 Anthropic Messages 요청이
+`thinking.type.disabled`를 보내는데, 그 작업은 Sonnet 5.5가 이를 HTTP 400으로 거부한다고 문서를 인용한다.
+그래서 이 7개 route는 커밋에서 빼고 Sonnet 5.5 요청 지원과 함께 반영하도록 남겼다. 커밋한 카탈로그는
+이 7개를 뺀 재생성 결과와 순서까지 같다.
+
+### GPT-6.1 Sol 공식 계약
+
+[OpenAI 모델 문서](https://developers.openai.com/api/docs/models/gpt-6.1-sol): `gpt-6.1-sol`, 2026-09-29 출시,
+context 1,050,000(입력 922,000), 출력 128,000, effort `low/medium/high/xhigh/max`(기본 `medium`).
+**`none`과 `minimal`은 지원하지 않는다.** 가격(1M) $2 / $10, cache read $0.10, cache write $2.50.
+models.dev의 `openai`·`azure`·`opencode`·`github-copilot`도 같은 사다리를, OpenRouter는 `mandatory: true`로
+같은 5단계를 선언한다. GPT-6 Sol(6.0)은 `none`을 지원하므로 기존 `GPT6_SOL_LUNA_ID` 규칙을 넓히지 않고
+`catalog-thinking.ts`에 `GPT61_SOL_ID` 규칙을 따로 두었다.
+
+| route | 카탈로그 |
+| --- | --- |
+| `openai`, `azure-openai-responses`, `opencode`, `github-copilot` | Responses, `off:null`·`minimal:null`·`low`~`max`. context 1,050,000 |
+| OpenRouter `openai/gpt-6.1-sol`, `-pro`, 각 `:batch` | 선언 그대로 `low`~`max`, off 없음 |
+| Vercel `openai/gpt-6.1-sol`, `-fast` | anthropic-messages 예산 경로라 맵 생략(상위 tier 숨김). GPT-6 Sol과 같은 처리 |
+
+### Codex(ChatGPT) GPT-6 계열과 `ultra`
+
+원천은 Codex 클라이언트 번들 카탈로그다([`codex-rs/models-manager/models.json`](https://github.com/openai/codex/blob/b1e72963c3/codex-rs/models-manager/models.json),
+커밋 `b1e72963c3` "Add GPT-6.1 Sol as the default catalog model", 2026-09-29). OMK `openai-codex`에는 그동안
+GPT-5.x만 있었고, 이번에 네 모델을 넣었다.
+
+| Codex 모델 | Codex effort | `multi_agent_reasoning_effort` | OMK `ultra` 와이어 |
+| --- | --- | --- | --- |
+| `gpt-6.1-sol` (priority 1, 기본) | low~max, ultra | `xhigh` | `xhigh` |
+| `gpt-6-astra` | low~max, ultra | `xhigh` | `xhigh` |
+| `gpt-6-sol` | low~max, ultra | 없음 | `max` |
+| `gpt-6-luna` | low~max | 없음 | ultra 미노출 |
+
+Codex는 `ultra`를 와이어로 보내지 않는다. `reasoning_effort_in_request`가 `multi_agent_reasoning_effort`를,
+그것이 없거나 지원 목록 밖이면 목록의 최상위 비-ultra 수준을 보낸다([`client_tests.rs`](https://github.com/openai/codex/blob/8c3612fb63/codex-rs/core/src/client_tests.rs)의
+`reasoning_effort_for_requests_*`). OMK 맵은 이 값을 그대로 보낸다. Codex 앱의 `ultra`는 "Maximum reasoning
+with automatic task delegation", 즉 서브에이전트 자동 위임까지 켜지만 OMK 공급자는 위임을 시작하지 않는다.
+
+context는 872,000으로 두었다. Codex의 기본 `context_window`는 272,000이고 사용자 설정은
+`max_context_window`(872,000)로 clamp된다(`model_info.rs`). 272,000 초과분은 OpenAI 장문 가격 구간이다.
+`off`는 노출하지 않는다. Codex 어댑터는 off에서 `reasoning`을 생략하므로 백엔드 기본값(`gpt-6.1-sol`은 `low`)이
+적용되어 실제로 꺼지지 않는다. 가격은 OpenAI 공개 가격(cache write 포함)이다. ChatGPT 구독 사용량과는 별개다.
+
+### 상류 제거와 stale fixture 정리
+
+제거 27건은 갱신 소스에서 더 이상 선정되지 않은 항목이다. Fireworks는 Kimi K2.6·GLM-5.2·DeepSeek V4 구형 id를,
+Together는 Kimi K2.6·K2.7 Code를 목록에서 뺐다. models.dev가 OpenCode Go의 `kimi-k2.6`·`qwen3.6-plus`·
+`qwen3.7-max`에 `status: "deprecated"`를 붙여 생성기의 기존 deprecated 제외 규칙이 적용됐다. OpenCode Go
+`/v1/models`와 문서는 K2.6을 아직 서빙하므로 이는 폐기 확정이 아니라 카탈로그 선정 제외다.
+
+이 id를 고정한 검사 13건과 실키 검사 fixture 10곳을 현재 항목으로 옮겼다. 요청 형태를 검사하던
+OpenCode Go K2.6 payload 검사 4건은 마지막 생성 항목과 같은 로컬 fixture로 대체했다. MiMo V2.6 Pro는
+OpenRouter 모델 수준 `context_length`가 1,050,000으로 바뀌었다(top provider는 1,048,576).
+
+기본 모델: Fireworks·Together·OpenCode Go 기본값이 사라진 K2.6을 가리켜 resolver가 첫 항목으로 조용히
+대체될 상태였다. Fireworks·Together는 같은 전송 계약의 Kimi K3로, OpenCode Go는 `deepseek-v4.1-flash`로
+옮겼다. OpenCode Go의 K3는 models.dev가 effort `max`만 선언하고 K2.7 Code는 선언이 없어, OMK 기본 계약
+(`reasoning_effort` 문자열 전송)이 맞는지 검증되지 않았다. K2.6은 문자열 effort를 거부해 전용 규칙이 있었다.
+
+### 넣지 않은 항목
+
+- **Amazon Bedrock Kimi K3** (`global.`/`us.moonshotai.kimi-k3`): models.dev가 새로 올렸지만 제외했다.
+  [AWS 모델 카드](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)가
+  2026-09-30에도 "Converse는 이전 턴 reasoning content가 포함되면 `InternalServerException`"을 명시하고,
+  OMK Bedrock 어댑터는 non-Claude reasoning을 replay한다. 09-19 판단을 생성기 규칙과 검사로 고정했다.
+- **Bedrock GPT-6.1 Sol**: Codex 소스에 `openai.gpt-6.1-sol` 상수가 있지만 models.dev bedrock 목록에 없다.
+
+### 보정하지 않은 관찰
+
+- `openai`의 `gpt-daybreak-blue-latest`·`gpt-daybreak-red-latest`(Codex에서는 숨김 모델)는 models.dev가
+  effort `none~max`를 선언하지만 해당 규칙이 없어 일반 사다리(`off`~`high`)로 생성된다. `minimal`은 선언 밖이다.
+- Codex 카탈로그는 GPT-5.6 Sol/Terra/Luna에도 `max`를 두지만 OMK는 GPT-5.6의 `max`·`ultra`를 `xhigh`로 보낸다.
+  보수적 하향일 뿐 오류 경로는 아니며, 실계정 확인 없이 바꾸지 않았다. GPT-5.4는 09-24에 Codex 번들
+  카탈로그에서 빠졌지만 OMK 항목은 유지했다.
+- Codex 기본 모델은 `gpt-5.5` 그대로다. Codex 자체 기본값은 `gpt-6.1-sol`로 바뀌었다.
+- `openrouter-images.test.ts`의 abort 검사 실패는 갱신 전 이미지 카탈로그로도 재현되어 이번 변경과 무관하다.
+
+### 검증과 한계
+
+신규 `gpt61-sol-catalog.test.ts` 31개(29개 RED 확인 후 GREEN), Bedrock Kimi K3 보류 검사(RED 후 GREEN),
+기본 모델 검사(RED 후 GREEN). `packages/ai` 전체 vitest 925 통과·817 skip·1 실패(위 무관 항목),
+coding-agent `model-resolver` 34개 통과. 전체 `tsgo --noEmit` 종료 0, 변경 파일 Biome 21개와 주 LSP 6파일
+진단 없음, `git diff --check` 통과. 이상은 Sonnet 5.5 작업이 함께 있던 작업 트리에서 실행했다.
+커밋 트리만 꺼낸 별도 worktree에서 전체 `npm run check`와 `packages/ai` vitest를 다시 돌렸다. 공급자 추론과
+install은 하지 않았다.
+coding-agent 검사는 빌드된 `omk-ai` dist를 읽으므로 새 카탈로그 반영은 빌드 후에 확인된다.
+계정별 사용 가능 여부와 실제 청구액은 검증 범위 밖이다.
 
 ## 2026-09-22 갱신: Grok 4.7·MiMo v2.6과 reasoning/context 대조
 

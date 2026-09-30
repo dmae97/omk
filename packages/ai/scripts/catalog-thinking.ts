@@ -43,6 +43,11 @@ export function applyGpt6AstraUltraAlias(model: Model<Api>): void {
 	model.thinkingLevelMap = { ...model.thinkingLevelMap, ultra: "max" };
 }
 
+// GPT-6.1 Sol drops `none` and `minimal` (https://developers.openai.com/api/docs/models/gpt-6.1-sol);
+// models.dev declares low~max on the openai, azure, opencode, and github-copilot Responses routes
+// (checked 2026-09-30). OpenRouter carries its own mandatory declaration.
+const GPT61_SOL_ID = /^gpt-6\.1-sol(?:-pro)?$/;
+
 /** New documented families not covered by the legacy generator's version checks. */
 export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 	if (!model.reasoning) return;
@@ -108,6 +113,23 @@ export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 		// own xhigh ceiling, so both stay out of this rule.
 		model.thinkingLevelMap = {
 			off: "none",
+			minimal: null,
+			low: "low",
+			medium: "medium",
+			high: "high",
+			xhigh: "xhigh",
+			max: "max",
+		};
+	}
+	if (
+		model.provider !== "openrouter" &&
+		GPT61_SOL_ID.test(model.id) &&
+		(model.api === "openai-responses" || model.api === "azure-openai-responses")
+	) {
+		// Unlike GPT-6 Sol there is no `none`: thinking stays on. The Codex route carries its
+		// own ladder, including `ultra`, in generate-models.ts.
+		model.thinkingLevelMap = {
+			off: null,
 			minimal: null,
 			low: "low",
 			medium: "medium",
