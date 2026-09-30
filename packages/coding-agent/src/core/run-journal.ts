@@ -676,11 +676,15 @@ export class RunJournal {
 		this.prevHash = record.hash;
 		this.nextSeq += 1;
 		this.lastSessionRevision = input.sessionRevision;
-		this.refreshRecordsSnapshot();
 		return record;
 	}
 
 	get records(): readonly RunJournalRecord[] {
+		// Append/replay need no public array copy. Materialize only when requested;
+		// earlier frozen snapshots retain their original prefix after later appends.
+		if (this.recordsSnapshot.length !== this.mutableRecords.length) {
+			this.recordsSnapshot = Object.freeze([...this.mutableRecords]);
+		}
 		return this.recordsSnapshot;
 	}
 
@@ -695,10 +699,6 @@ export class RunJournal {
 
 	toBytes(): Uint8Array {
 		return TEXT_ENCODER.encode(this.serialize());
-	}
-
-	private refreshRecordsSnapshot(): void {
-		this.recordsSnapshot = Object.freeze([...this.mutableRecords]) as readonly RunJournalRecord[];
 	}
 
 	private appendStarted(input: RunJournalStartInput): RunJournalStartedRecord {
@@ -733,7 +733,6 @@ export class RunJournal {
 		this.prevHash = record.hash;
 		this.nextSeq += 1;
 		this.lastSessionRevision = input.sessionRevision;
-		this.refreshRecordsSnapshot();
 		return record;
 	}
 
@@ -776,7 +775,6 @@ export class RunJournal {
 		this.prevHash = record.hash;
 		this.nextSeq += 1;
 		this.lastSessionRevision = input.sessionRevision;
-		this.refreshRecordsSnapshot();
 		return record;
 	}
 
