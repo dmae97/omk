@@ -125,11 +125,13 @@ export class SessionPromptLifecycle {
 		});
 		const { event } = settlePromptIfReady(state, performance.now());
 		this.owner = undefined;
+		const waiters = [...this.idleWaiters];
+		this.idleWaiters.clear();
 		try {
 			if (event !== null) owner.terminal.notify(event);
 		} finally {
-			for (const resolve of this.idleWaiters) resolve();
-			this.idleWaiters.clear();
+			// A terminal callback may already have registered the next owner's waiters.
+			for (const resolve of waiters) resolve();
 		}
 	}
 

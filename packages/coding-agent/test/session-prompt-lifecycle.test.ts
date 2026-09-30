@@ -138,6 +138,25 @@ describe("prompt execution ownership", () => {
 		expect(() => lifecycle.begin("after-dispose")).toThrow(PromptExecutionBusyError);
 	});
 
+	it("does not settle a new owner's waiters registered by the terminal callback", async () => {
+		const lifecycle = new SessionPromptLifecycle();
+		const first = lifecycle.begin("first");
+		const firstIdle = lifecycle.waitForIdle();
+		let next: ReturnType<SessionPromptLifecycle["begin"]> | undefined;
+		let nextSettled = false;
+		first.finish("completed", () => {
+			next = lifecycle.begin("next");
+			void lifecycle.waitForIdle().then(() => {
+				nextSettled = true;
+			});
+		});
+		await firstIdle;
+		expect(nextSettled).toBe(false);
+		next?.finish("completed", () => {});
+		await Promise.resolve();
+		expect(nextSettled).toBe(true);
+	});
+
 	it("settles after real termination when late audit is explicitly disabled", async () => {
 		const lifecycle = new SessionPromptLifecycle({ auditsLateSettlement: () => false });
 		const run = lifecycle.begin("run");

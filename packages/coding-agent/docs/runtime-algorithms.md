@@ -1058,3 +1058,43 @@ gates. Apply them in order:
 
 A green focused test proves only its declared behavior. Release readiness still
 requires the repository's full release gates.
+
+## C/D lifecycle and progress hardening (2026-09-30)
+
+The C/D feedback bundles audit `f46a8f6`. Their pinned lifecycle, permit,
+launcher and stream sources still matched this working tree before these
+changes. The bundles are proposals, not patches or runtime performance evidence.
+
+**C03:** `AgentSession.close()` still closes admission synchronously and shares
+one close Promise. `SessionShutdown.closeSession()` now attempts every
+independent stop callback even if another throws, joins registered producers,
+and observes all independent agent/lifecycle/budget/MCP/control joins before
+reporting failure. Only successful joins authorize final cleanup. A successful
+drain does not erase an earlier stop error: one error is returned unchanged,
+multiple errors are retained in `AggregateError`. Control-server close is
+requested once, not retried to erase its first rejection. An unconfirmed
+physical termination can still leave close pending; no timeout declares success.
+
+CI recovery also separates registered command control frames from prompt/tool
+producers. A command-initiated replacement seals its own control frames before
+joining other owned work, avoiding a self-join. An ordinary externally stopped
+command is still joined, and a command nested under an active prompt/tool cannot
+use the exception to release that ancestor. Its closed-budget acknowledgement
+never forgives real budget exhaustion. The public new/fork/switch regressions,
+`session-command-shutdown.test.ts` and `run-budget-scope.test.ts` cover this.
+
+`SessionPromptLifecycle.flush()` detaches the current owner's idle waiters
+before notifying completion. A callback that starts the next prompt and
+registers another waiter cannot have that waiter released by the old completion.
+
+**C04:** `retireMcpClient()` coalesces duplicate client requests within an owner's
+unfinished epoch. Only a distinct client adds a join; earlier returned Promises
+retain their original scope. Membership uses a `WeakSet` and owner epochs a
+`WeakMap`. Both identities are published before calling reentrant client code,
+and cleanup checks the current epoch and join. Missing or rejected transport
+observations still withhold ownership; they are not release evidence.
+
+Coverage: `session-shutdown-faults.test.ts`, `session-command-shutdown.test.ts`,
+`session-prompt-lifecycle.test.ts`, `mcp/transport-retirement-coalescing.test.ts`,
+`run-budget-scope.test.ts` and the public session replacement/shutdown regressions.
+These are local ownership and error-boundary checks, not release approval.

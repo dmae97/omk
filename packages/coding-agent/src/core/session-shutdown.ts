@@ -5,9 +5,22 @@ import type { SessionControlServer } from "./session-control-server.ts";
 import type { SessionPromptLifecycle } from "./session-prompt-lifecycle.ts";
 import type { SessionRunBudget } from "./session-run-budget.ts";
 
+function throwShutdownErrors(errors: unknown[]): void {
+	if (errors.length === 1) throw errors[0];
+	if (errors.length > 1) throw new AggregateError(errors, "Session shutdown failed");
+}
+
+interface ShutdownProducer {
+	active: boolean;
+	command: boolean;
+	closedByCommand: boolean;
+	parent?: ShutdownProducer;
+	finish(): void;
+}
+
 /** Tracks public producers separately from their tools and logical model streams. */
 export class SessionShutdown {
-	private readonly context = new AsyncLocalStorage<{ active: boolean }>();
+	private readonly context = new AsyncLocalStorage<ShutdownProducer>();
 	private readonly producers = new Set<Promise<void>>();
 	private closing = false;
 	private completion: Promise<void> | undefined;
@@ -36,26 +49,71 @@ export class SessionShutdown {
 			release = resolve;
 		});
 		this.producers.add(done);
-		const owner = { active: true };
+		const owner: ShutdownProducer = {
+			active: true,
+			command: false,
+			closedByCommand: false,
+			parent: this.context.getStore(),
+			finish: () => {
+				owner.active = false;
+				owner.parent = undefined;
+				this.producers.delete(done);
+				release();
+			},
+		};
 		try {
 			return await this.context.run(owner, operation);
 		} finally {
-			owner.active = false;
-			this.producers.delete(done);
-			release();
+			owner.finish();
+		}
+	}
+
+	get closedByCommand(): boolean {
+		return this.context.getStore()?.closedByCommand ?? false;
+	}
+
+	async runCommand<T>(operation: () => Promise<T>): Promise<T> {
+		const owner = this.context.getStore();
+		if (!owner?.active) throw new Error("Extension command requires an active session operation");
+		const previousCommand = owner.command;
+		owner.command = true;
+		try {
+			return await operation();
+		} finally {
+			owner.command = previousCommand;
 		}
 	}
 
 	close(stop: () => void, drain: () => Promise<void>, finalize: () => void): Promise<void> {
-		if (this.context.getStore()?.active)
-			return Promise.reject(new Error("Cannot close a session from its own active operation"));
+		const commands: ShutdownProducer[] = [];
+		for (let owner = this.context.getStore(); owner; owner = owner.parent) {
+			if (!owner.active) continue;
+			if (!owner.command) return Promise.reject(new Error("Cannot close a session from its own active operation"));
+			commands.push(owner);
+		}
+		// A replacement seals its initiating control frame, not unrelated producers or tool ownership.
+		for (const owner of commands) {
+			owner.closedByCommand = true;
+			owner.finish();
+		}
 		if (this.completion) return this.completion;
 		this.closing = true;
 		this.completion = Promise.resolve().then(async () => {
-			stop();
+			const errors: unknown[] = [];
+			try {
+				stop();
+			} catch (error) {
+				errors.push(error);
+			}
 			await Promise.all([...this.producers]);
-			await drain();
-			finalize();
+			try {
+				await drain();
+				// Only successful joins authorize final resource/lease release.
+				finalize();
+			} catch (error) {
+				errors.push(error);
+			}
+			throwShutdownErrors(errors);
 		});
 		return this.completion;
 	}
@@ -77,27 +135,45 @@ export class SessionShutdown {
 		},
 		finalize: () => void,
 	): Promise<void> {
+		let controlClose: Promise<void> | undefined;
 		return this.close(
 			() => {
-				owned.budget.close();
-				source.abortRetry();
-				source.abortCompaction();
-				source.abortBranchSummary();
-				source.abortBash();
-				source.agent.abort();
-				source.clearQueue();
-				owned.mcp?.close();
-				void owned.control?.then((control) => control.close()).catch(() => {});
+				const errors: unknown[] = [];
+				for (const stop of [
+					() => owned.budget.close(),
+					() => source.abortRetry(),
+					() => source.abortCompaction(),
+					() => source.abortBranchSummary(),
+					() => source.abortBash(),
+					() => source.agent.abort(),
+					() => source.clearQueue(),
+					() => owned.mcp?.close(),
+				]) {
+					try {
+						stop();
+					} catch (error) {
+						errors.push(error);
+					}
+				}
+				controlClose = owned.control?.then((control) => control.close());
+				// Observe early rejection now; report the same outcome after every join.
+				void controlClose?.catch(() => {});
+				throwShutdownErrors(errors);
 			},
 			async () => {
-				await source.agent.waitForIdle();
-				source.clearQueue();
-				await Promise.all([
-					owned.lifecycle.waitForIdle(),
-					owned.budget.waitForIdle(),
-					owned.mcp?.closeAndWait(),
-					owned.control?.then((control) => control.close()),
-				]);
+				const joins = await Promise.allSettled(
+					[
+						async () => {
+							await source.agent.waitForIdle();
+							source.clearQueue();
+						},
+						() => owned.lifecycle.waitForIdle(),
+						() => owned.budget.waitForIdle(),
+						() => owned.mcp?.closeAndWait(),
+						() => controlClose,
+					].map((join) => Promise.resolve().then(join)),
+				);
+				throwShutdownErrors(joins.flatMap((join) => (join.status === "rejected" ? [join.reason] : [])));
 			},
 			finalize,
 		);

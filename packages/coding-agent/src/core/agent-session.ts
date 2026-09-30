@@ -271,6 +271,7 @@ import { SessionBashRuntime } from "./session-bash-runtime.ts";
 import { type BashResourcePermitGrant, SessionBashService } from "./session-bash-service.ts";
 import { SessionCompactionService } from "./session-compaction-service.ts";
 import { type SessionControlServer, startSessionControl } from "./session-control-server.ts";
+import { tryExecuteSessionCommand } from "./session-extension-command.ts";
 import { runtimeFailureCause, terminationMessage } from "./session-failure-cause.ts";
 import {
 	promptPreflightTermination,
@@ -2432,6 +2433,7 @@ export class AgentSession {
 				options?.runBudget,
 				() => this._prompt(text, options),
 				options?.preflightResult,
+				() => this._shutdown.closedByCommand,
 			);
 		});
 	}
@@ -2469,7 +2471,7 @@ export class AgentSession {
 			// Handle extension commands first (execute immediately, even during streaming)
 			// Extension commands manage their own LLM interaction via omk.sendMessage()
 			if (expandPromptTemplates && !isBangSkillInvocation && currentText.startsWith("/")) {
-				const handled = await this._tryExecuteExtensionCommand(currentText);
+				const handled = await tryExecuteSessionCommand(currentText, this._extensionRunner, this._shutdown);
 				if (handled) {
 					// Extension command executed, no prompt to send
 					preflightResult?.(true);
@@ -2664,35 +2666,6 @@ export class AgentSession {
 
 		preflightResult?.(true);
 		await this._runAgentPrompt(messages);
-	}
-
-	/**
-	 * Try to execute an extension command. Returns true if command was found and executed.
-	 */
-	private async _tryExecuteExtensionCommand(text: string): Promise<boolean> {
-		// Parse command name and args
-		const spaceIndex = text.indexOf(" ");
-		const commandName = spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex);
-		const args = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1);
-
-		const command = this._extensionRunner.getCommand(commandName);
-		if (!command) return false;
-
-		// Get command context from extension runner (includes session control methods)
-		const ctx = this._extensionRunner.createCommandContext();
-
-		try {
-			await command.handler(args, ctx);
-			return true;
-		} catch (err) {
-			// Emit error via extension runner
-			this._extensionRunner.emitError({
-				extensionPath: `command:${commandName}`,
-				event: "command",
-				error: err instanceof Error ? err.message : String(err),
-			});
-			return true;
-		}
 	}
 
 	/**

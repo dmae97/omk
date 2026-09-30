@@ -1,10 +1,32 @@
 import { fauxAssistantMessage } from "omk-ai";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { inspectSessionOwnerLeaseSync } from "../../src/core/session-owner-lease.ts";
 import { phase3Gate } from "../fixtures/phase3-gate.ts";
 import { createHarness } from "./harness.ts";
 
 describe("session shutdown ownership", () => {
+	it("reports an abort-hook fault only after draining and releasing the idle transcript lease", async () => {
+		const h = await createHarness({ persistSession: true });
+		const path = h.session.sessionFile;
+		if (!path) throw new Error("missing persisted session");
+		const fault = new Error("retry abort fault");
+		const abort = vi.spyOn(h.session, "abortRetry").mockImplementationOnce(() => {
+			throw fault;
+		});
+		const bash = vi.spyOn(h.session, "abortBash");
+		try {
+			const close = h.session.close();
+			expect(h.session.close()).toBe(close);
+			await expect(close).rejects.toBe(fault);
+			expect(bash).toHaveBeenCalled();
+			expect(inspectSessionOwnerLeaseSync(path).status).toBe("absent");
+			await expect(h.session.prompt("must not reopen")).rejects.toThrow();
+		} finally {
+			abort.mockRestore();
+			bash.mockRestore();
+			h.cleanup();
+		}
+	});
 	it("retains the transcript lease until independent bash actually settles", async () => {
 		const h = await createHarness({ persistSession: true });
 		const started = phase3Gate<void>();
