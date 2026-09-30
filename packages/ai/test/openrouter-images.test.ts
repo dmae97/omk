@@ -5,6 +5,7 @@ import type { ImagesContext, ImagesModel } from "../src/types.ts";
 const mockState = vi.hoisted(() => ({
 	lastParams: undefined as unknown,
 	lastRequestOptions: undefined as unknown,
+	onCreate: undefined as (() => void) | undefined,
 }));
 
 vi.mock("openai", () => {
@@ -14,6 +15,7 @@ vi.mock("openai", () => {
 				create: (params: unknown, requestOptions?: unknown) => {
 					mockState.lastParams = params;
 					mockState.lastRequestOptions = requestOptions;
+					mockState.onCreate?.();
 					const signal = (requestOptions as { signal?: AbortSignal } | undefined)?.signal;
 					if (signal?.aborted) {
 						const error = new Error("Request aborted");
@@ -62,6 +64,7 @@ describe("openrouter images", () => {
 	beforeEach(() => {
 		mockState.lastParams = undefined;
 		mockState.lastRequestOptions = undefined;
+		mockState.onCreate = undefined;
 	});
 
 	it("returns text plus images in final output", async () => {
@@ -96,7 +99,7 @@ describe("openrouter images", () => {
 		expect(params.messages?.[0]?.content?.[0]).toMatchObject({ type: "text", text: "Generate a dog" });
 	});
 
-	it("passes through abort signal and returns aborted result", async () => {
+	it.each(["before-dispatch", "in-flight"] as const)("honors abort %s", async (phase) => {
 		const model: ImagesModel<"openrouter-images"> = {
 			id: "black-forest-labs/flux.2-pro",
 			name: "FLUX.2 Pro",
@@ -111,12 +114,18 @@ describe("openrouter images", () => {
 			input: [{ type: "text", text: "Generate a dog" }],
 		};
 		const controller = new AbortController();
-		controller.abort();
+		if (phase === "before-dispatch") controller.abort();
+		else mockState.onCreate = () => controller.abort();
 
 		const output = await generateImages(model, context, { apiKey: "test", signal: controller.signal });
 		expect(output.stopReason).toBe("aborted");
 		expect(output.errorMessage).toBe("Request aborted");
-		expect(mockState.lastRequestOptions).toMatchObject({ signal: controller.signal });
+		if (phase === "before-dispatch") {
+			expect(mockState.lastParams).toBeUndefined();
+			expect(mockState.lastRequestOptions).toBeUndefined();
+		} else {
+			expect(mockState.lastRequestOptions).toMatchObject({ signal: controller.signal });
+		}
 	});
 
 	it("generateImages resolves the final assistant images result", async () => {

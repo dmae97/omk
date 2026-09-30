@@ -136,7 +136,12 @@ describe("authority callback result ownership", () => {
 			lanes: [{ id: "a", role: "executor", task: "a", agentName: "test-agent" }],
 			launchLane: async () => result,
 		});
-		expect(received).toBe(result);
+		expect(received).not.toBe(result);
+		expect(received).toEqual({ status: "unsettled", settlement });
+		// A caller mutation cannot swap the observation held by either owner.
+		result.settlement = Promise.resolve();
+		await result.settlement;
+		expect(received).toEqual({ status: "unsettled", settlement });
 		expect(release).not.toHaveBeenCalled();
 		if (terminal === "resolve") resolveSettlement();
 		else rejectSettlement(new Error("termination remains unconfirmed"));
