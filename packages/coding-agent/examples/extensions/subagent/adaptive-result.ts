@@ -44,12 +44,15 @@ export function mergeResult(target: SingleResult, source: SingleResult): void {
 	target.stopReason = source.stopReason;
 	target.errorMessage = source.errorMessage;
 	target.model = source.model ?? target.model;
+	// Usage/output are cumulative; execution and stream receipts belong to the latest attempt.
+	target.attemptId = source.attemptId;
+	target.process = source.process;
+	target.stream = source.stream;
 }
 
 export function mergeForUpdate(base: SingleResult, partial: SingleResult): SingleResult {
 	const merged: SingleResult = { ...base, messages: [...base.messages], usage: { ...base.usage } };
 	mergeResult(merged, partial);
-	merged.attemptId = partial.attemptId;
 	merged.progress = partial.progress;
 	return merged;
 }
