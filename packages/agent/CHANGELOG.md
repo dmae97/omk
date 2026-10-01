@@ -6,8 +6,14 @@
 
 - `Agent.prepareTools(tools, pending)` selects the tools a run sends to the provider, for example to fit a model's input window. It runs when a prompt or continuation snapshots its context, receives the prompt messages not yet in `state.messages`, and never changes `state.tools`.
 
+### Changed
+
+- The live tool frontier releases ready calls along the conflict DAG's transitive reduction. `assignDagDependencies()` still returns every conflict edge. On a 512-writer same-path graph the ready queue tracks a 511-edge chain instead of 130,816 edges. The reduction keeps a triangular ancestor matrix of at most 16 MiB and switches to exact iterative traversal for larger graphs.
+
 ### Fixed
 
+- A DAG task's rejection is observed when the task is created, and leaving the frontier joins every started task and keeps both execution and settlement failures, so several failures surface as one `AggregateError`. Memo inserts and hits detach nested claim arrays and objects, and dependency construction skips only read/read pairs.
+- Taking queued steering or follow-up messages one at a time no longer copies the rest of the queue on every take. Draining 4,096 messages made 8,386,560 element copies and now makes 3,072.
 - The per-run tool-call schedule memo is bounded by bytes as well as by its 64 entries. Its keys carry whole call arguments, so 64 batches that each wrote 256 KiB kept 16 MiB of key text. Each memo now keeps at most 4 MiB of accounted text (two bytes per UTF-16 code unit of key and JSON value, plus 128 per entry), evicting the least recently used batch, and schedules a batch whose entry would exceed 512 KiB, which one 256 KiB write already does, without retaining it.
 
 ## [1.2.4] - 2026-09-23

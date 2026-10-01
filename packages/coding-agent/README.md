@@ -94,7 +94,7 @@ Type `/` in the editor to open command completion.
 | `/session` | Show session path, messages, tokens, and cost |
 | `/resource [probe\|policy]` | Show resource pressure and effective concurrency for this run |
 | `/debug [save]` | Preview runtime diagnostics or explicitly save a metadata-only local report |
-| `/goal [objective]` | Show or set the durable goal; supports `checkpoint <json>`, `pause`, `resume`, evidence-gated `complete`, and `clear` |
+| `/goal [objective]` | Show or set the durable goal; `verify <command>` approves an acceptance check that must pass before `complete`; supports `checkpoint <json>`, `pause`, `resume`, and `clear` |
 | `/tree` | Navigate the current session tree |
 | `/fork` | Create a new fork from a previous user message |
 | `/clone` | Duplicate the current session at the current position |
@@ -113,7 +113,7 @@ Type `/` in the editor to open command completion.
 
 ### Default Harness Safeguards
 
-OMK warns from the third repeated identical tool call and blocks the sixth. It also repairs unmatched tool pairs before provider requests and adds guidance for supported Kimi, GLM, and Grok models. `OMK_IDENTICAL_LOOP`, `OMK_TOOL_PAIR_REPAIR`, and `OMK_PROMPT_PRESET` opt out; `OMK_GOAL_CONTROLLER` controls `/goal` and continuation.
+OMK warns from the third repeated identical tool call and blocks the sixth. It also repairs unmatched tool pairs before provider requests and adds guidance for supported Kimi, GLM, and Grok models. `OMK_IDENTICAL_LOOP`, `OMK_TOOL_PAIR_REPAIR`, and `OMK_PROMPT_PRESET` opt out; `OMK_GOAL_CONTROLLER` controls `/goal` and continuation. An active goal continues after each settled turn; with an approved acceptance check it completes when the check passes on the current workspace. See [acceptance checks](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/run-protocol.md#acceptance-checks).
 
 See [Usage](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/usage.md) and [Keybindings](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/keybindings.md) for the complete interactive reference.
 

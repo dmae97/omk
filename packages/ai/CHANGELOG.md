@@ -14,6 +14,9 @@
 
 ### Fixed
 
+- `complete()` and `completeSimple()` consume their stream's events as they arrive. Before, every intermediate event stayed queued until the call returned, so a long completion kept all of its deltas in memory. The returned message is unchanged.
+- A Cursor request that reaches its deadline is now closed: the HTTP/2 request ends and its listeners are removed. Before, the deadline error was reported while the request kept running. A caller's own abort still ends the stream as `aborted`; only the internal deadline reports `Cursor timed out`. A peer that never closes the stream after the turn ends now meets the deadline instead of holding the request open.
+- Provider retries reject non-finite option values before dispatch, stop before dispatch when the signal is already aborted, parse server retry-delay metadata defensively, and sleep in timer-safe chunks measured with a monotonic clock. The default server-delay cap and the meaning of `0` (no cap) are unchanged.
 - `retryAssistantCall` no longer retries at once when `baseDelayMs * 2^(attempt - 1)` exceeds 2,147,483,647 ms, the longest delay a Node timer holds; Node fires a longer timer after 1 ms. The delay now stops at that limit, the backoff sleep removes its abort listener when it ends, and an abort during it still returns an aborted message. A base that converts to NaN or a negative number, an omitted one included, uses 2 s, and `+Infinity` takes the limit. A `maxRetries` that converts to NaN no longer retries without end.
 
 ## [1.2.4] - 2026-09-23
