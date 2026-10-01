@@ -8,7 +8,8 @@
  *   Linux bubblewrap) and fails closed when no backend is available.
  */
 import { tmpdir } from "node:os";
-import type { SandboxMode, SandboxPolicy } from "./policy.ts";
+import type { BashSandboxPreflight } from "../tools/bash.ts";
+import type { SandboxBackendStatus, SandboxMode, SandboxPolicy } from "./policy.ts";
 
 export type BashSandboxMode = SandboxMode;
 
@@ -56,4 +57,22 @@ export function createWorkspaceSandboxPolicy(root: string, mode: Exclude<Sandbox
 			allowPrivilege: false,
 		},
 	};
+}
+
+/**
+ * The preflight every default local shell spawn under `root` uses; `undefined`
+ * when the mode is `off`. `enforce` keeps the detected backend, so a missing
+ * one fails closed; `audit` reports none, so the spawn stays unwrapped.
+ */
+export function createDefaultBashSandboxPreflight(
+	root: string,
+	mode: SandboxMode,
+	detected: SandboxBackendStatus,
+): (BashSandboxPreflight & { readonly backend: SandboxBackendStatus }) | undefined {
+	if (mode === "off") return undefined;
+	const backend: SandboxBackendStatus =
+		mode === "enforce"
+			? detected
+			: { platform: detected.platform, backendAvailable: false, domainAllowlistAvailable: false };
+	return { policy: createWorkspaceSandboxPolicy(root, mode), backend };
 }

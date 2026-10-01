@@ -940,9 +940,17 @@ fingerprints, attempt journals, durable goals, seam checkpoints, session doctor,
 and bounded provider retry/failover. Digests detect mismatch; they do not prove
 runner honesty, OS isolation, freshness, or trusted authorship by themselves.
 
+A durable goal with an approved acceptance check completes only on a receipt from
+that check. The receipt must have passed in the current goal generation, and the
+workspace digest captured right after the check must still match. The approval and
+the trusted receipts stay in the OMK process; see
+[acceptance checks](run-protocol.md#acceptance-checks).
+
 Evidence:
 
 - `packages/protocol/src/evaluation.ts`: `evaluateTask`
+- `packages/coding-agent/src/core/goal-acceptance.ts`: `GoalAcceptance`
+- `packages/coding-agent/test/suite/goal-acceptance-loop.test.ts`
 - `packages/protocol/src/decision.ts`: `reduceRuntimeDecision`
 - `packages/protocol/test/protocol.test.ts`
 - `packages/coding-agent/src/core/advisory-judge.ts`

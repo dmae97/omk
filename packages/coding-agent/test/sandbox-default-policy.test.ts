@@ -2,7 +2,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createWorkspaceSandboxPolicy, resolveBashSandboxMode } from "../src/core/sandbox/default-policy.ts";
+import {
+	createDefaultBashSandboxPreflight,
+	createWorkspaceSandboxPolicy,
+	resolveBashSandboxMode,
+} from "../src/core/sandbox/default-policy.ts";
 import type { SandboxBackendStatus } from "../src/core/sandbox/policy.ts";
 import { buildSandboxedSpawnRequest } from "../src/core/sandbox/spawn.ts";
 import { type BashSandboxPreflight, createLocalBashOperations } from "../src/core/tools/bash.ts";
@@ -31,6 +35,29 @@ describe("resolveBashSandboxMode", () => {
 	it("activates enforce on 1/enforce", () => {
 		expect(resolveBashSandboxMode({ OMK_BASH_SANDBOX: "1" })).toBe("enforce");
 		expect(resolveBashSandboxMode({ OMK_BASH_SANDBOX: "enforce" })).toBe("enforce");
+	});
+});
+
+describe("createDefaultBashSandboxPreflight", () => {
+	it("returns no preflight when the mode is off", () => {
+		expect(createDefaultBashSandboxPreflight("/work", "off", linuxBackend)).toBeUndefined();
+	});
+
+	it("enforces the network-disabled workspace policy with the detected backend", () => {
+		const preflight = createDefaultBashSandboxPreflight("/work", "enforce", linuxBackend);
+		expect(preflight?.policy).toEqual(createWorkspaceSandboxPolicy("/work", "enforce"));
+		expect(preflight?.policy.network.mode).toBe("none");
+		expect(preflight?.backend).toBe(linuxBackend);
+	});
+
+	it("keeps audit spawns unwrapped by reporting the backend unavailable", () => {
+		const preflight = createDefaultBashSandboxPreflight("/work", "audit", macosBackend);
+		expect(preflight?.policy.mode).toBe("audit");
+		expect(preflight?.backend).toEqual({
+			platform: "macos",
+			backendAvailable: false,
+			domainAllowlistAvailable: false,
+		});
 	});
 });
 
