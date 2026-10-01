@@ -107,6 +107,19 @@ export function createDurableGoal(input: {
 	};
 }
 
+/**
+ * A transition time the reducer accepts for any command on `goal`, including a
+ * generation advance: the wall clock, but never before the journal's own last
+ * timestamps or `floor`. A wall clock that steps back (observed on WSL2 when the
+ * hypervisor resyncs) then keeps the journal ordered instead of failing the
+ * transition.
+ */
+export function nextDurableGoalTimestamp(goal: DurableGoalSnapshot, floor?: string, wallClockMs = Date.now()): string {
+	const bounds = [wallClockMs, Date.parse(goal.updatedAt), Date.parse(goal.generationStartedAt) + 1];
+	if (floor !== undefined) bounds.push(Date.parse(floor));
+	return new Date(Math.max(...bounds)).toISOString();
+}
+
 export function computeDurableGoalGeneration(goal: DurableGoalSnapshot): string {
 	return createHash("sha256")
 		.update(

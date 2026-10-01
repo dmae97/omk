@@ -1,6 +1,11 @@
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { createDurableGoal, DurableGoalError, type DurableGoalSnapshot } from "../../durable-goal.ts";
+import {
+	createDurableGoal,
+	DurableGoalError,
+	type DurableGoalSnapshot,
+	nextDurableGoalTimestamp,
+} from "../../durable-goal.ts";
 import { formatDurableGoalCheckpoint, parseDurableGoalCheckpointCommand } from "../../durable-goal-checkpoint.ts";
 import { DurableGoalStore } from "../../durable-goal-store.ts";
 import { decideGoalContinuation } from "../../goal-continuation.ts";
@@ -36,6 +41,16 @@ function continuationSeam(goal: DurableGoalSnapshot, trustedDigests: ReadonlySet
 
 export default function goalController(omk: ExtensionAPI): void {
 	const trustedCheckpointDigests = new Set<string>();
+
+	function continueGoal(advanced: DurableGoalSnapshot): void {
+		const seam = continuationSeam(advanced, trustedCheckpointDigests);
+		// The run that just settled still owns the session, so queue behind it.
+		omk.sendUserMessage(
+			`Continue the active goal (${advanced.completedRounds}/${advanced.maxRounds}): ${advanced.objective}${seam}`,
+			{ deliverAs: "followUp" },
+		);
+	}
+
 	omk.registerCommand("goal", {
 		description: "Show, set, checkpoint, pause, resume, complete, or clear the durable session goal",
 		handler: async (args, ctx) => {
@@ -50,7 +65,10 @@ export default function goalController(omk: ExtensionAPI): void {
 				const existing = await store.current();
 				if (text === "pause" || text === "resume" || text === "complete" || text === "clear") {
 					if (!existing) throw new DurableGoalError("store-missing", "durable goal does not exist");
-					const next = await store.transition({ kind: text, ref: existing.ref }, new Date().toISOString());
+					const next = await store.transition(
+						{ kind: text, ref: existing.ref },
+						nextDurableGoalTimestamp(existing),
+					);
 					if (text === "clear") trustedCheckpointDigests.clear();
 					ctx.ui.notify(renderGoal(next), "info");
 					return;
@@ -64,7 +82,7 @@ export default function goalController(omk: ExtensionAPI): void {
 							'usage: /goal checkpoint {"core":[],"verified":[],"open":[],"next":"..."}',
 						);
 					}
-					const now = new Date().toISOString();
+					const now = nextDurableGoalTimestamp(existing);
 					const next = await store.transition(
 						{
 							kind: "record-checkpoint",
@@ -87,7 +105,7 @@ export default function goalController(omk: ExtensionAPI): void {
 				if (existing && existing.status !== "cleared" && existing.status !== "completed") {
 					const next = await store.transition(
 						{ kind: "edit", ref: existing.ref, objective: text },
-						new Date().toISOString(),
+						nextDurableGoalTimestamp(existing),
 					);
 					ctx.ui.notify(renderGoal(next), "info");
 					return;
@@ -104,7 +122,8 @@ export default function goalController(omk: ExtensionAPI): void {
 		},
 	});
 
-	omk.on("agent_end", async (_event, ctx) => {
+	// `agent_settled` is the end no retry follows; `agent_end` also fires for attempts about to be retried.
+	omk.on("agent_settled", async (_event, ctx) => {
 		const store = new DurableGoalStore(goalPath(ctx.cwd));
 		let current: DurableGoalSnapshot | null;
 		try {
@@ -123,10 +142,16 @@ export default function goalController(omk: ExtensionAPI): void {
 			hasQueuedMessages: ctx.hasPendingMessages(),
 		});
 		if (decision.reason === "queued" || !decision.continue) return;
-		const advanced = await store.transition({ kind: "advance-round", ref: current.ref }, new Date().toISOString());
-		const seam = continuationSeam(advanced, trustedCheckpointDigests);
-		omk.sendUserMessage(
-			`Continue the active goal (${advanced.completedRounds}/${advanced.maxRounds}): ${advanced.objective}${seam}`,
-		);
+		try {
+			const advanced = await store.transition(
+				{ kind: "advance-round", ref: current.ref },
+				nextDurableGoalTimestamp(current),
+			);
+			continueGoal(advanced);
+		} catch (error) {
+			// A command can change the goal while the turn settles; report it rather than fail the turn.
+			if (!(error instanceof DurableGoalError)) throw error;
+			ctx.ui.notify(error.message, "error");
+		}
 	});
 }

@@ -7,6 +7,7 @@ import {
 	createDurableGoal,
 	DurableGoalError,
 	freshDurableGoalEvidence,
+	nextDurableGoalTimestamp,
 } from "../src/core/durable-goal.ts";
 import { applyDurableGoalCommand } from "../src/core/durable-goal-reducer.ts";
 import { DurableGoalStore } from "../src/core/durable-goal-store.ts";
@@ -19,6 +20,24 @@ const DIGEST = "a".repeat(64);
 function goal() {
 	return createDurableGoal({ id: "goal-1", objective: "Ship durable goals", maxRounds: 3, now: T0 });
 }
+
+describe("nextDurableGoalTimestamp", () => {
+	it("uses the wall clock while it is ahead of the journal", () => {
+		expect(nextDurableGoalTimestamp(goal(), undefined, Date.parse(T1))).toBe(T1);
+	});
+
+	it("never moves behind the journal or the requested floor, and always advances a generation", () => {
+		const created = goal();
+		const behind = Date.parse("2000-01-01T00:00:00.000Z");
+		const next = nextDurableGoalTimestamp(created, undefined, behind);
+
+		expect(next).toBe("2026-08-18T00:00:00.001Z");
+		expect(() => applyDurableGoalCommand(created, { kind: "advance-round", ref: created.ref }, next)).not.toThrow();
+		expect(nextDurableGoalTimestamp(created, T2, behind)).toBe(T2);
+		const paused = applyDurableGoalCommand(created, { kind: "pause", ref: created.ref }, T2);
+		expect(nextDurableGoalTimestamp(paused, undefined, behind)).toBe(T2);
+	});
+});
 
 describe("durable goal lifecycle", () => {
 	it("uses revision references as compare-and-set guards", () => {

@@ -133,7 +133,7 @@ Use `/goal <objective>` to create or update the durable goal for the current wor
 | Identical-loop guard | Warns from the third consecutive identical tool call and blocks the sixth | `OMK_IDENTICAL_LOOP=0` |
 | Tool-pair repair | Removes unmatched tool-use and tool-result blocks from outbound context | `OMK_TOOL_PAIR_REPAIR=0` |
 | Model prompt presets | Adds model-specific execution guidance for GPT-6 Astra and supported Claude, Kimi, GLM, and Grok models | `OMK_PROMPT_PRESET=0` |
-| Goal controller | Registers `/goal` and continues active goals within their round limit | `OMK_GOAL_CONTROLLER=0` |
+| Goal controller | Registers `/goal` and continues active goals within their round limit after each settled turn | `OMK_GOAL_CONTROLLER=0` |
 
 These built-ins remain active with `--no-extensions`. A custom `ResourceLoader` owns its own extension set and does not receive them automatically.
 

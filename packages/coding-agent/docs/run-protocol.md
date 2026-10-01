@@ -61,11 +61,13 @@ verification-edge, plan amendment and control-surface work.
 
 A durable goal is working-directory state, not a session-file field or a `TaskSpec`. `/goal <objective>` creates or edits `.omk/goals/current.json`; `/goal` without arguments shows its status and round count.
 
-Goals created by `/goal` use an eight-round cap. The controller queues another turn only while the goal is active, no message is pending, and the cap has not been reached. Reaching the cap stops automatic continuation; the controller does not infer or mark completion.
+Goals created by `/goal` use an eight-round cap. After a turn settles, the controller queues the next round as a follow-up while the goal is active, no message is pending, and the cap has not been reached. A turn settles when no automatic retry follows it, so an attempt that is about to be retried does not use up a round. Reaching the cap stops automatic continuation. The controller does not infer or mark completion.
+
+Through 1.2.4 the controller advanced the round at every attempt's `agent_end` and sent the next turn while that run still owned the session. The session rejected the message (`Agent is already processing`), so the round was spent and the goal never continued.
 
 For programmatic lifecycle control, import `createDurableGoal`, `parseDurableGoalSnapshot`, `applyDurableGoalCommand`, and `DurableGoalStore` from `open-multi-agent-kit`. The reducer supports edit, pause, resume, block, round advancement, evidence attachment, completion, and clear transitions.
 
-Every mutation consumes the current revisioned `GoalRef`; stale revisions are rejected. Editing the objective or round limit, or advancing a round, starts a new semantic generation and invalidates earlier completion evidence. Completion requires lowercase SHA-256 evidence captured during the current generation.
+Every mutation consumes the current revisioned `GoalRef`; stale revisions are rejected. Editing the objective or round limit, or advancing a round, starts a new semantic generation and invalidates earlier completion evidence. Completion requires lowercase SHA-256 evidence captured during the current generation. The built-in controller dates each transition no earlier than the journal's last timestamp, so a wall clock that steps back does not fail it.
 
 ### Seam checkpoints
 
