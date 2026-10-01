@@ -67,7 +67,7 @@ Through 1.2.4 the controller advanced the round at every attempt's `agent_end` a
 
 For programmatic lifecycle control, import `createDurableGoal`, `parseDurableGoalSnapshot`, `applyDurableGoalCommand`, and `DurableGoalStore` from `open-multi-agent-kit`. The reducer supports edit, pause, resume, block, round advancement, evidence attachment, completion, and clear transitions.
 
-Every mutation consumes the current revisioned `GoalRef`; stale revisions are rejected. Editing the objective or round limit, or advancing a round, starts a new semantic generation and invalidates earlier completion evidence. Completion requires lowercase SHA-256 evidence captured during the current generation. The built-in controller dates each transition no earlier than the journal's last timestamp, so a wall clock that steps back does not fail it.
+Every mutation consumes the current revisioned `GoalRef`; stale revisions are rejected. Editing the objective or round limit, or advancing a round, starts a new semantic generation and invalidates earlier completion evidence. Completion requires lowercase SHA-256 evidence captured during the current generation. The built-in controller dates each transition no earlier than the journal's last timestamp, so a wall clock that steps back does not fail it. Programmatic callers get the same rule from `nextDurableGoalTimestamp(goal)`: pass its result as the `now` argument of `applyDurableGoalCommand()` or `DurableGoalStore.transition()`. A raw `new Date().toISOString()` fails with `goal timestamps must be monotonic` once the clock has stepped back.
 
 ### Acceptance checks
 

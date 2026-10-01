@@ -1689,7 +1689,7 @@ computeReservedTokenBudget, estimateToolResultReserve, ReservedTokenBudgetError
 
 // Advisory selection and durable goals
 chooseWithAdvisoryJudge, createModelAdvisoryJudge, AdvisoryJudgeInputError, AdvisoryJudgeModelError
-createDurableGoal, applyDurableGoalCommand, parseDurableGoalSnapshot, DurableGoalStore
+createDurableGoal, applyDurableGoalCommand, parseDurableGoalSnapshot, DurableGoalStore, nextDurableGoalTimestamp
 createDurableGoalCheckpoint, parseDurableGoalCheckpoint, formatDurableGoalCheckpoint
 
 // Run journal and session termination

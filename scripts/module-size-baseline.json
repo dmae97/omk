@@ -98,7 +98,7 @@
 	"packages/coding-agent/src/guardrails/evidence-receipt.ts": 437,
 	"packages/coding-agent/src/guardrails/evidence-system.ts": 684,
 	"packages/coding-agent/src/guardrails/workspace-fingerprint.ts": 700,
-	"packages/coding-agent/src/index.ts": 676,
+	"packages/coding-agent/src/index.ts": 677,
 	"packages/coding-agent/src/main.ts": 745,
 	"packages/coding-agent/src/metacognition/runtime-bridge.ts": 436,
 	"packages/coding-agent/src/migrations.ts": 347,

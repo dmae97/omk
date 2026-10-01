@@ -19,7 +19,8 @@ v1.2.4 이후 기본 대화형 흐름과 verified run을 제품 경로에 연결
   못했습니다. 라운드는 소모되지만 세션이 `Agent is already processing`으로
   메시지를 거부했습니다. 이제 턴이 완전히 끝난 뒤(재시도가 없을 때) follow-up으로
   이어 갑니다. 재시도될 시도는 라운드를 쓰지 않습니다. wall clock이 뒤로 가도
-  목표 전이가 실패하지 않습니다.
+  목표 전이가 실패하지 않습니다. SDK로 목표를 직접 전이할 때는 새로 export한
+  `nextDurableGoalTimestamp()`를 `now`로 넘기면 같은 규칙이 적용됩니다.
 - **`omk run cancel`, `omk run gc`**: 다른 셸에서 실행 중인 verified run을 요청
   파일로 취소합니다. PID signal은 쓰지 않습니다. 복구할 수 없는 run의 파생 작업
   공간만 정리하고, 원장·영수증·attestation은 남깁니다. `--execute`가 없으면
