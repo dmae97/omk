@@ -11,8 +11,18 @@ class ClockAnomalyError extends AuthorityStoreError {
 	}
 }
 
-/** Host-owned wall clock for durable authorizations; rollback never extends a grant. */
-export function createAuthorityClock(source: () => number = Date.now): () => number {
+/**
+ * Wall time at creation, advanced only by the monotonic clock. A host wall-clock step back (WSL2
+ * resync, NTP step) cannot move it backwards, and monotonic drift only ends a grant earlier.
+ */
+function monotonicWallClock(): () => number {
+	const origin = Date.now();
+	const base = performance.now();
+	return () => Math.floor(origin + (performance.now() - base));
+}
+
+/** Host-owned clock for durable authorizations; rollback never extends a grant. */
+export function createAuthorityClock(source: () => number = monotonicWallClock()): () => number {
 	let last = source();
 	if (!Number.isSafeInteger(last) || last < 0) throw new ClockAnomalyError(last, last);
 	return () => {

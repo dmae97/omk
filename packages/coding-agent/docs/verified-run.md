@@ -385,6 +385,10 @@ input pin 이전 또는 process identity 기록 이전의 crash window는 여전
   시각을 투영합니다. 별도로 다시 읽은 wall clock이 뒤로 가도 시간 순서가 뒤집히지 않습니다.
   재개 권한·예산 판정은 이 wall 표시가 아니라 저장된 boot-relative 기한을 사용합니다.
   기존 v3 schema와 일반 bash receipt는 바꾸지 않습니다.
+- 권한 저장소(authority store)의 기본 시계는 저장소를 열 때의 wall time에 고정하고 단조
+  시계로만 전진합니다. WSL2 재동기화나 NTP step으로 호스트 wall clock이 뒤로 가도 실행 중
+  `clock_anomaly`로 중단하지 않습니다. 단조 시계가 빠르게 흐르면 grant가 더 일찍 끝날
+  뿐이고 늘어나지 않습니다. 명시적으로 주입한 시계가 뒤로 가면 여전히 거부합니다.
 - issuer key는 worker 밖 `0600` 파일입니다. 재조회는 저장된 key와 MAC을 검사합니다.
   key를 잃으면 과거 receipt를 다시 서명하지 않습니다. candidate/toolchain/receipt/blob
   변조는 수락 조회를 막습니다. 환경 hash는 kernel·sandbox argv·직접 executable을
