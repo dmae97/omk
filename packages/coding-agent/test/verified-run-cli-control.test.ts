@@ -136,4 +136,15 @@ describe("omk run cancel and gc from the public CLI", () => {
 		expect(missing.status).toBe(1);
 		expect(missing.stderr).toContain("missing_run");
 	}, 120000);
+
+	it("names the kind and code of an unexpected failure, never its message", () => {
+		const notDirectory = join(root, "state-file");
+		writeFileSync(notDirectory, "not a directory");
+
+		const failed = cli(["run", "gc", "--state-dir", notDirectory]);
+
+		expect(failed.status).toBe(1);
+		expect(failed.stderr).toBe("verified-run: operation_failed (Error ENOTDIR)\n");
+		expect(failed.stderr).not.toContain(root);
+	}, 120000);
 });

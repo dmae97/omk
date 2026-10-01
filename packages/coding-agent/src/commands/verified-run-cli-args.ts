@@ -107,3 +107,18 @@ export function waitMs(parsed: Parsed): number {
 }
 
 export const retention = (parsed: Parsed): number => parseRetention(parsed.flags.get("--older-than") ?? "7d");
+
+const FAILURE_TOKEN = /^[A-Za-z0-9_.-]{1,40}$/;
+
+/**
+ * `operation_failed` for an error the verified-run contract does not name: its
+ * kind and code say where to look, while the message, which can carry absolute
+ * paths or contract text, stays out of the output.
+ */
+export function operationFailure(error: unknown): string {
+	const kind = error instanceof Error && FAILURE_TOKEN.test(error.name) ? error.name : "unknown";
+	const code =
+		typeof error === "object" && error !== null && "code" in error ? (error as { code: unknown }).code : undefined;
+	const suffix = typeof code === "string" && FAILURE_TOKEN.test(code) ? ` ${code}` : "";
+	return `verified-run: operation_failed (${kind}${suffix})`;
+}

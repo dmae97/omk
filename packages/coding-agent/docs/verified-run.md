@@ -240,7 +240,8 @@ OID에서 `refs/omk/accepted`로 compare-and-swap합니다. 작업 트리·브�
 적용하지 않습니다(`apply`는 미구현).
 
 종료 코드: 정상 조회·candidate_ready는 `0`, 실패·미수락·무결성 오류는 `1`, 잘못된
-명령·계약은 `2`입니다. 실행 중 SIGINT/SIGTERM이나 다른 셸의 `run cancel`은 해당 자식에
+명령·계약은 `2`입니다. 계약에 없는 오류는 `verified-run: operation_failed (Error ENOTDIR)`처럼
+오류 종류와 code만 출력합니다. 메시지는 절대 경로나 계약 문구를 담을 수 있어 내보내지 않습니다. 실행 중 SIGINT/SIGTERM이나 다른 셸의 `run cancel`은 해당 자식에
 취소를 전달하고 run을 재개 가능한 `paused`로 남깁니다(아래 "취소와 원격 취소").
 `run resume`는 아래의 제한된 복구만 지원합니다. `run apply`는 아직 지원하지 않습니다.
 소스 체크아웃에서는 root에서 `node --import tsx packages/coding-agent/src/cli.ts run ...`로

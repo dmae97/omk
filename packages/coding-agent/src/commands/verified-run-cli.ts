@@ -7,7 +7,7 @@ import { collectVerifiedRuns } from "../core/verified-run/run-gc.ts";
 import { publishPolicyDigest } from "../core/verified-run/run-publish.ts";
 import type { VerifiedRunRuntime } from "../core/verified-run/session-port.ts";
 import { digestBytes, readJson, stateRunPath, VerifiedRunError } from "../core/verified-run/storage.ts";
-import { parse, required, retention, USAGE, waitMs } from "./verified-run-cli-args.ts";
+import { operationFailure, parse, required, retention, USAGE, waitMs } from "./verified-run-cli-args.ts";
 import { withRunSignal } from "./verified-run-signal.ts";
 
 export async function runVerifiedRunCli(
@@ -188,7 +188,7 @@ export async function runVerifiedRunCli(
 		const message =
 			error instanceof VerifiedRunError || error instanceof RunContractError
 				? error.message
-				: "verified-run: operation_failed";
+				: operationFailure(error);
 		process.stderr.write(`${message}\n${usage ? `${USAGE}\n` : ""}`);
 		return { handled: true, exitCode: usage ? 2 : 1 };
 	}
