@@ -47,6 +47,17 @@ export {
 	type OpenAuthorityStoreOptions,
 } from "./verified-run/authority-store.ts";
 export {
+	CANCEL_REQUEST_FILE,
+	cancelVerifiedRun,
+	discardStaleRunCancelRequest,
+	type RunCancelOutcome,
+	type RunCancelRequest,
+	readRunCancelRequest,
+	requestRunCancel,
+	watchRunCancelRequest,
+	withdrawRunCancelRequest,
+} from "./verified-run/cancel-request.ts";
+export {
 	type AuthorityStoreView,
 	planVerifiedRun,
 	RunCoordinator,
@@ -60,6 +71,13 @@ export type { VerifiedRunEvidence } from "./verified-run/evidence.ts";
 export type { RunJournalRecord } from "./verified-run/journal.ts";
 export type { RecoveryInspection } from "./verified-run/recovery.ts";
 export type { RecoveryBudget } from "./verified-run/recovery-clock.ts";
+export {
+	collectVerifiedRuns,
+	parseRetention,
+	type RunGcEntry,
+	type RunGcOptions,
+	type RunGcReport,
+} from "./verified-run/run-gc.ts";
 export { OMK_ACCEPTED_REF, type PublishOptions, publishPolicyDigest } from "./verified-run/run-publish.ts";
 export {
 	type AuthorityGrantCause,
