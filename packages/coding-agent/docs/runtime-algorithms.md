@@ -872,7 +872,7 @@ produces bounded admission caps.
 | `/resource` and `omk doctor resources` | Released / opt-in | Inspect current policy and probe state |
 | `omk doctor resources --report` | Working tree | Aggregate bounded local admission evidence; never promotes mode |
 | Per-run tool cap and governed heavy-process permits | Released / opt-in | Enforced in `adaptive` or `strict` mode |
-| `launchSubagentLanes()` | Released / internal | No live child-dispatch consumer |
+| `launchSubagentLanes()` | Released / internal | Reached through the extension lane authority (`ctx.getSubagentLaneAuthority()`); consumed by the example subagent extension, not by a built-in tool |
 | Journaled Vitest/Jest/workspace/Go shard executor | Released / internal | No `autoShard` setting or session-command consumer |
 
 `observe` remains the default. Admission caps never raise configured caps.
@@ -1253,11 +1253,12 @@ DAG completion diagnostic and its P0–P3 follow-ups (live phase spans, journal
 segments, TUI frame batching, shared usage aggregation, an `EventStream` deque,
 skill-scan caching) are proposals with adoption conditions, not changes here.
 
-Test isolation note: `test.sh` isolates the agent directory but not `HOME`, and
-the resource loader also reads `$HOME/.agents/skills`. On a machine with a large
-user skill set, session tests that build a real system prompt can fail
-admission (`PromptFixedOverheadError`) for reasons unrelated to the code under
-test. Running those tests with an isolated `HOME` removes the dependency.
+Test isolation note: the resource loader also reads `$HOME/.agents/skills`. On a
+machine with a large user skill set, session tests that build a real system prompt
+failed admission (`PromptFixedOverheadError`) for reasons unrelated to the code
+under test. `test.sh` now isolates `HOME` next to the agent directory and keeps
+`RUSTUP_HOME`, `CARGO_HOME`, `COREPACK_HOME` and the npm cache at their original
+locations. CI runs `npm test` directly and is unaffected.
 
 Coverage: `pending-message-queue.test.ts` (agent),
 `complete-drain.test.ts` and `cursor-stream.test.ts` (ai),
@@ -1266,3 +1267,43 @@ Coverage: `pending-message-queue.test.ts` (agent),
 `agent-session-event-unsubscribe.test.ts`,
 `subagent-adaptive-receipts.test.ts` and
 `subagent-stream-performance.test.ts` (coding-agent).
+
+## Verified-run cancellation, remote cancel, artifact GC and authority clock (2026-09-30)
+
+Closes three gaps recorded in the 09-27 and 09-30 harness comparisons: operator
+cancellation of `omk run` was terminal, there was no remote cancel, and verified-run
+artifacts had no GC. It also fixes the cause of the load-sensitive verified-run CLI
+failures reported there.
+
+| Change | Before | After |
+| --- | --- | --- |
+| Operator cancel (SIGINT, SIGTERM, `omk run cancel`) | terminal `failed: cancelled` | `interrupted` event; `paused` with `failure: cancelled`, resumable by `restart-writer`, `resume` or `retry-tasks` |
+| Cancelled verification check | signed as a failed check, run concluded `violated` | not a check result; the run pauses and `resume` re-verifies the same candidate |
+| Witnessed-cancelled DAG attempt | stayed `running`, consumed the attempt | released (`failed: cancelled`, attempt not spent); the same approved command can run again |
+| `status` recovery hints for terminal runs | advertised `restart_writer`/`retry_tasks` that recovery refuses | only for started, non-terminal runs (`running`, `paused`) |
+| Remote cancel | none | durable `cancel-request.json`, consumed by the owning CLI within 250 ms |
+| Artifact GC | none | `omk run gc` removes derived workspaces of unrecoverable, settled, owner-free runs; evidence kept |
+| Authority store default clock | `Date.now`; a wall-clock step back threw `clock_anomaly` mid-run (`operation_failed`) | wall time at open, advanced by the monotonic clock |
+
+Recovery keeps every existing boundary: recorded namespaces must be proven gone,
+the anchored budget is not refunded, and the generation cap is unchanged. Failures
+other than cancellation remain terminal.
+
+Measured on this WSL2 host under load average 13–18, with concurrent `omk run
+start` CLI processes and a 3-second work budget. In 20-run stress tests of the
+development tree, 3 runs ended with `operation_failed` (`authority-store:
+clock_anomaly`, wall clock 1.2–1.7 s backwards) before the clock change and none
+after it. In a 30-run A/B under the same load, the base commit had 26 successes,
+3 `operation_failed` and 1 typed budget outcome `deadline`; the changed tree had
+30 successes. The verified-run CLI test now uses a 20-second budget because its
+cases do not test deadlines.
+
+Not changed: orphan blobs are not collected, a run without a live owner cannot be
+cancelled (there is nothing to stop), cancellation during the pre-lease part of
+`start` (candidate capture, sandbox probe) reports `not_running`, and TUI/RPC
+control of verified runs is still not implemented.
+
+Coverage: `verified-run-cancel-resume.test.ts`, `verified-run-remote-cancel.test.ts`,
+`verified-run-cli-control.test.ts`, `verified-run-gc.test.ts`,
+`verified-run-authority-clock.test.ts`, and the updated status, DAG cancellation,
+DAG frontier, supervisor and authority-boundary tests.

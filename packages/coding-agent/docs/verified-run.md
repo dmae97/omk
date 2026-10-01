@@ -234,8 +234,10 @@ omk run gc --older-than 7d --state-dir /private/operator-state/verified-runs
 state를 작성하지 않습니다.
 
 출력은 JSON입니다. `artifact`는 manifest에 있는 정확한 상대 경로만 받아 base64로
-반환합니다. 다른 candidate·절대 경로·traversal을 허용하지 않습니다. 기존 파일에
-적용하거나 Git ref를 갱신하는 명령은 없습니다.
+반환합니다. 다른 candidate·절대 경로·traversal을 허용하지 않습니다. Git ref를 바꾸는
+명령은 `publish` 하나입니다. 검증된 candidate를 결정적 commit으로 봉인하고, 지정한 parent
+OID에서 `refs/omk/accepted`로 compare-and-swap합니다. 작업 트리·브랜치·원래 파일에는
+적용하지 않습니다(`apply`는 미구현).
 
 종료 코드: 정상 조회·candidate_ready는 `0`, 실패·미수락·무결성 오류는 `1`, 잘못된
 명령·계약은 `2`입니다. 실행 중 SIGINT/SIGTERM이나 다른 셸의 `run cancel`은 해당 자식에
@@ -467,7 +469,8 @@ owner lease를 잡고 검사합니다. 다음을 모두 만족하는 run만 정�
 | M3 verification edge·계획 amendment·변경 후 adoption | 미구현. 동일 계약 안의 출력 재사용만 제공 |
 | 재개 가능한 취소·원격 취소 | CLI/SDK 연결. writer·검증·DAG 단계별 재개 검사, 교차 프로세스 CLI 취소 검사 |
 | artifact GC | 파생 작업 공간만. 증거 보존·symlink 비추적·소유자·예산 조건 검사. orphan blob 미정리 |
-| M4 TUI/RPC·MCP·적용 승인/CAS | 미구현. CLI/SDK 조회·개별 artifact 회수 제공 |
+| 게시 CAS | `publish`가 `refs/omk/accepted`를 CAS로 갱신. 작업 트리 적용(`apply`)은 미구현 |
+| M4 TUI/RPC·MCP | 미구현. CLI/SDK 조회·개별 artifact 회수 제공 |
 | S90 전체 G01–G20·성능/정상 회귀 하한 | 미측정. 부분 테스트로 점수를 부여하지 않음 |
 
 직접 검증 기록과 제한은 [TDD 증거](verified-run-testing.md)에 있습니다.
