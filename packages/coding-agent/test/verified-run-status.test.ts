@@ -334,18 +334,19 @@ describe("run status surface", () => {
 		}
 		controller.abort();
 		const state = await started;
-		expect(state).toMatchObject({ execution: "failed", failure: "cancelled", settlement: "settled" });
+		expect(state).toMatchObject({ execution: "paused", failure: "cancelled", settlement: "settled" });
 		const status = coordinator.status(contract.runId);
-		// Cancellation was witnessed (exited appended) — terminated, not
-		// quarantined, and never a success.
+		// Cancellation was witnessed (exited appended) — settled, not
+		// quarantined, never a success, and resumable rather than terminal.
 		expect(status).toMatchObject({
 			lifecycle: "cancelled",
 			cause: "cancelled",
 			cleanSuccess: false,
-			terminal: true,
+			terminal: false,
 			settlement: "settled",
 			pendingEffects: 0,
 		});
+		expect(status.recoveryCommands.map((item) => item.command)).toEqual(["restart_writer"]);
 		const exited = coordinator.events(contract.runId).find((record) => record.event.kind === "exited");
 		expect(exited?.event).toMatchObject({ kind: "exited", failure: "cancelled" });
 	});

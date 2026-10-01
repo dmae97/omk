@@ -144,12 +144,19 @@ describe("bounded eager DAG frontier", () => {
 			expect(observationError).toBeUndefined();
 			expect(observedTwo).toBe(true);
 			expect(state).toMatchObject({
-				execution: "failed",
+				execution: "paused",
 				failure: "cancelled",
 				settlement: "settled",
 				activeExecutionIds: [],
 				candidateDigest: null,
 			});
+			// Both witnessed-cancelled attempts are released, not spent.
+			for (const taskId of ["left", "right"])
+				expect(state.tasks.find((task) => task.taskId === taskId)).toMatchObject({
+					status: "failed",
+					failure: "cancelled",
+					attempt: 0,
+				});
 			expect(state.tasks.find((task) => task.taskId === "join")?.status).toBe("pending");
 		} finally {
 			clearTimeout(watchdog);

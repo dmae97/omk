@@ -134,7 +134,7 @@ export function deriveRunStatus(state: RunProjection): RunStatus {
 		if (state.lastRecovery && state.lastRecovery.generation === state.generation) lifecycle = "resuming";
 		else if (state.candidateDigest && !state.receiptDigest) lifecycle = "verifying";
 		else lifecycle = "running";
-	} else if (state.execution === "paused") lifecycle = "blocked";
+	} else if (state.execution === "paused") lifecycle = state.failure === "cancelled" ? "cancelled" : "blocked";
 	else if (state.execution === "failed") lifecycle = state.failure === "cancelled" ? "cancelled" : "failed";
 	else if (state.verification === "verified") lifecycle = state.publication === "accepted" ? "published" : "accepted";
 	else lifecycle = "violated";
@@ -175,15 +175,11 @@ function recoveryCommands(state: RunProjection): RunRecoveryCommand[] {
 	const commands: RunRecoveryCommand[] = [];
 	if (state.generation >= MAX_VERIFIED_RUN_GENERATIONS) return commands;
 	const base = { runId: state.runId, revision: state.revision, generation: state.generation } as const;
+	// Work recovery needs a started, non-terminal run: crashed (`running`) or interrupted (`paused`).
+	const recoverable = state.execution === "running" || state.execution === "paused";
 	// A frozen candidate can be re-verified under a new generation (resume gate
 	// mirrors `assertCandidateRecoverable`: candidate, no receipt, not failed).
-	if (
-		state.candidateDigest &&
-		!state.receiptDigest &&
-		!state.writerOpen &&
-		state.execution !== "failed" &&
-		state.execution !== "ready"
-	) {
+	if (state.candidateDigest && !state.receiptDigest && !state.writerOpen && recoverable) {
 		commands.push({
 			...base,
 			command: "resume",
@@ -193,7 +189,7 @@ function recoveryCommands(state: RunProjection): RunRecoveryCommand[] {
 	}
 	// DAG tasks can be retried from the input checkpoint (retry gate mirrors
 	// `commandDisposition`: input checkpoint present, tasks exist).
-	if (state.inputDigest && state.tasks.length > 0) {
+	if (state.inputDigest && state.tasks.length > 0 && recoverable) {
 		const failed = state.tasks
 			.filter((task) => task.status === "failed" || (task.status === "pending" && task.attempt > 0))
 			.map((task) => task.taskId);
@@ -208,7 +204,7 @@ function recoveryCommands(state: RunProjection): RunRecoveryCommand[] {
 	}
 	// A writer that never produced a candidate restarts from the input
 	// checkpoint (non-DAG profiles only; DAG recovery is retry_tasks).
-	if (state.inputDigest && !state.candidateDigest && state.tasks.length === 0 && state.execution !== "ready") {
+	if (state.inputDigest && !state.candidateDigest && state.tasks.length === 0 && recoverable) {
 		commands.push({
 			...base,
 			command: "restart_writer",

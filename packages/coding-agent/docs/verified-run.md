@@ -234,7 +234,8 @@ state를 작성하지 않습니다.
 적용하거나 Git ref를 갱신하는 명령은 없습니다.
 
 종료 코드: 정상 조회·candidate_ready는 `0`, 실패·미수락·무결성 오류는 `1`, 잘못된
-명령·계약은 `2`입니다. 실행 중 SIGINT/SIGTERM은 해당 자식에 취소를 전달합니다.
+명령·계약은 `2`입니다. 실행 중 SIGINT/SIGTERM은 해당 자식에 취소를 전달하고 run을
+재개 가능한 `paused`로 남깁니다(아래 "취소").
 `run resume`는 아래의 제한된 복구만 지원합니다. `run cancel` 원격 제어와 `run apply`는
 아직 지원하지 않습니다.
 소스 체크아웃에서는 root에서 `node --import tsx packages/coding-agent/src/cli.ts run ...`로
@@ -355,6 +356,26 @@ command는 `kind: "restart_writer"`, `baseDigest`, 기존 contract/ref/command I
 `ready`는 필요한 조건을 관측했다는 뜻일 뿐이며 실제 lease 획득을 보장하지 않습니다.
 input pin 이전 또는 process identity 기록 이전의 crash window는 여전히 자동 복구하지 않습니다.
 
+## 취소
+
+운영자 취소는 판정이 아닙니다. 취소된 run은 terminal `failed`가 아니라
+`execution: "paused"`, `failure: "cancelled"`로 남고 원장에 `interrupted` event를 씁니다.
+`status`의 lifecycle은 `cancelled`, `terminal`은 `false`입니다.
+
+| 취소 시점 | 재개 명령 | 조건 |
+| --- | --- | --- |
+| writer 실행 중(command·scripted-agent) | `restart-writer` | 불변 입력에서 새 작업 공간으로 다시 실행 |
+| 검증 중(고정 candidate 있음) | `resume` | 같은 candidate를 새 generation에서 다시 검증 |
+| 명령 DAG task 실행 중 | `retry-tasks` | 종료가 확인된(`exited`·`cancelled`) 시도는 소진하지 않고 되돌림 |
+
+- 재개는 기존 복구 경계를 그대로 따릅니다. 기록된 namespace가 모두 종료됐다고 probe로
+  확인되지 않으면 `unsettled`로 거부합니다. 원래 기한은 멈추지 않고 환급하지 않습니다.
+  generation 상한도 같습니다.
+- 검증 중 취소된 검사는 검사 실패로 서명하지 않습니다. 취소는 candidate의 정오에 대해
+  아무것도 말하지 않기 때문입니다.
+- 취소 외의 실패(`deadline`, writer 실패, 무결성 오류)는 계속 terminal입니다. `status`는
+  terminal run에 복구 명령을 제안하지 않습니다.
+
 ## 내구성·예산·복구 한계
 
 - 원장 `version: 2`는 기존 v1 transcript journal과 별도입니다. 순서·hash chain·상태
@@ -407,6 +428,7 @@ input pin 이전 또는 process identity 기록 이전의 crash window는 여전
 | M3 정적 command DAG·선택 retry | CLI/SDK 연결. 성공 checkpoint 보존, 실제 SIGKILL·세대/시도/예산 경계 검사 |
 | M3 bounded eager frontier | 기본 1개, 명시적으로 최대 2개. 의존성 해제·다중 namespace 취소/기록 실패·실제 2-writer SIGKILL 복구 검사 |
 | M3 verification edge·계획 amendment·변경 후 adoption | 미구현. 동일 계약 안의 출력 재사용만 제공 |
+| 재개 가능한 취소 | CLI/SDK 연결. writer·검증·DAG 단계별 재개 검사 |
 | M4 TUI/RPC·MCP·GC·적용 승인/CAS | 미구현. CLI/SDK 조회·개별 artifact 회수 제공 |
 | S90 전체 G01–G20·성능/정상 회귀 하한 | 미측정. 부분 테스트로 점수를 부여하지 않음 |
 

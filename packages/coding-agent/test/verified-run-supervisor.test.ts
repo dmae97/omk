@@ -123,8 +123,9 @@ describe("owned process supervisor cancellation proof", () => {
 				{ approvedContractDigest: contractDigest, signal: controller.signal },
 			);
 			expect(observed).toBe(true);
+			// Operator cancellation pauses the run; recovery stays gated on witnessed termination.
 			expect(state).toMatchObject({
-				execution: "failed",
+				execution: "paused",
 				failure: "cancelled",
 				activeExecutionIds: [],
 				settlement: "settled",
