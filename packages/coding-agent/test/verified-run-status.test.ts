@@ -60,7 +60,17 @@ function contractFor(runId: string, writer: readonly string[], stdout = "hello")
 		writablePaths: ["result.txt"],
 		writer,
 		checks: [{ claimId: "answer", argv: ["/bin/cat", "result.txt"], stdout }],
-		budget: { workMs: 30000, verifyMs: 15000, cleanupMs: 5000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
+		// A cancelled sandbox child must be confirmed reaped within cleanupMs, or the run
+		// fail-closes to quarantined. CI runners reaping many children at once need more
+		// than 5 s; the dag fixture uses the same 15 s.
+		budget: {
+			workMs: 30000,
+			verifyMs: 15000,
+			cleanupMs: 15000,
+			maxOutputBytes: 4096,
+			maxFiles: 100,
+			maxBytes: 65536,
+		},
 		apply: "artifact-only" as const,
 	};
 	contract.workspace.baseDigest = planVerifiedRun(contract).baseDigest;

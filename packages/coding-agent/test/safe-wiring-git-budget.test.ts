@@ -51,12 +51,16 @@ describe("bounded Git publication", () => {
 		).toHaveLength(100);
 	});
 	it("shares one deadline instead of replenishing it per child", () => {
+		// The remaining budget is also each child's real spawn timeout, so a tiny budget
+		// races git startup on a slow runner. Give the first child room on the fake clock,
+		// then spend the whole budget when it is recorded.
+		const timeoutMs = 60_000;
 		let now = 0;
-		const budget = new GitOperationBudget({ timeoutMs: 50, clock: () => now });
+		const budget = new GitOperationBudget({ timeoutMs, clock: () => now });
 		const record = budget.record.bind(budget);
 		vi.spyOn(budget, "record").mockImplementation((command) => {
 			record(command);
-			now = 50;
+			now = timeoutMs;
 		});
 		expect(() => seal(budget)).toThrow(/deadline/);
 		expect(budget.commandCounts).toEqual({ "hash-object": 1 });
