@@ -104,10 +104,12 @@ export function tryProviderHarnessDispatch<
 		if (state.blockers.length > 0) {
 			return { loadoutAccessPolicy: undefined, warnings: state.blockers, runtimeState: state };
 		}
-		const policy = runtime.createLoadoutPolicyFromRuntimeState(state, {
-			cwd: input.cwd,
-			commands: profile.commands,
-		});
+		const policy = grantSessionWorkspace(
+			runtime.createLoadoutPolicyFromRuntimeState(state, {
+				cwd: input.cwd,
+				commands: profile.commands,
+			}),
+		);
 		return {
 			loadoutAccessPolicy: policy,
 			warnings: uniqueSorted([
@@ -120,6 +122,31 @@ export function tryProviderHarnessDispatch<
 		const message = error instanceof Error ? error.message : String(error);
 		return { loadoutAccessPolicy: undefined, warnings: [message], runtimeState: undefined };
 	}
+}
+
+/** Matches every command; `**` compiles to `.*` in the loadout command glob. */
+const SESSION_COMMAND_PATTERN = "**";
+
+/**
+ * A provider harness applies to the top-level session, which has no lane grant,
+ * so the runtime state carries empty read/write sets and a scoped shell with no
+ * allow patterns. Used as-is, that policy denies every read, write, edit, and
+ * bash call (only ls/find survive), which made Grok/Devin sessions unusable in
+ * headless `-p` mode. The harness is meant to shape skills, MCP, hooks, and the
+ * tool list, not to be stricter than running without it, so the session gets
+ * its workspace (cwd) as read/write root and any command not matching the
+ * profile's block patterns. Blocked paths (.env, secrets, keys, .git) still
+ * apply. Lane grants with explicit sets are left untouched.
+ */
+function grantSessionWorkspace(policy: LoadoutAccessPolicy): LoadoutAccessPolicy {
+	const scopeless = policy.readRoots.length === 0 && policy.writeRoots.length === 0;
+	const shellLocked = policy.commands.mode !== "none" && (policy.commands.allowPatterns?.length ?? 0) === 0;
+	return {
+		...policy,
+		readRoots: scopeless ? [policy.cwd] : policy.readRoots,
+		writeRoots: scopeless ? [policy.cwd] : policy.writeRoots,
+		commands: shellLocked ? { ...policy.commands, allowPatterns: [SESSION_COMMAND_PATTERN] } : policy.commands,
+	};
 }
 
 function composeProviderHarnessProfile(

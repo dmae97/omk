@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ToolDefinition } from "../src/core/extensions/types.ts";
 import { tryGrokHarnessDispatch } from "../src/core/grok-harness-dispatch.ts";
 import { GROK_OAUTH_PROVIDER } from "../src/core/grok-playbook.ts";
+import { decideLoadoutAccess } from "../src/core/loadout-access-policy.ts";
 import type { LoadoutRuntimeSession } from "../src/core/loadout-runtime.ts";
 import type { ResourceLoader } from "../src/core/resource-loader.ts";
 import type { SourceInfo } from "../src/core/source-info.ts";
@@ -118,6 +119,27 @@ describe("tryGrokHarnessDispatch", () => {
 		);
 		expect(result.runtimeState?.profileName).toMatch(/grok|coder/i);
 		expect(result.runtimeState?.activeSkills).toEqual([]);
+	});
+
+	it("lets a headless session read, write, edit, and run commands inside its workspace", () => {
+		const policy = tryGrokHarnessDispatch({
+			provider: GROK_OAUTH_PROVIDER,
+			session: makeSession(),
+			resourceLoader: makeResourceLoader(),
+			cwd: "/project",
+			agentDir: "/agent",
+			env: {},
+		}).loadoutAccessPolicy;
+		if (!policy) throw new Error("expected a grok-harness policy");
+		const allowed = (request: Parameters<typeof decideLoadoutAccess>[1]) =>
+			decideLoadoutAccess(policy, request).allowed;
+		expect(allowed({ operation: "read", toolName: "read", path: "src/index.ts" })).toBe(true);
+		expect(allowed({ operation: "write", toolName: "write", path: "src/new.ts" })).toBe(true);
+		expect(allowed({ operation: "write", toolName: "edit", path: "/project/src/index.ts" })).toBe(true);
+		expect(allowed({ operation: "execute", toolName: "bash", command: "npm test && git status" })).toBe(true);
+		// The harness still keeps its guard rails.
+		expect(allowed({ operation: "write", toolName: "write", path: "/etc/passwd" })).toBe(false);
+		expect(allowed({ operation: "read", toolName: "read", path: ".env" })).toBe(false);
 	});
 
 	it("narrows grok-harness skills to the documented 2-3 grant when a task is given", () => {
