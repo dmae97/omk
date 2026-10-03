@@ -201,12 +201,18 @@ function readProjectFile(configPath: string): Buffer | undefined {
 	}
 }
 
-/** Inspect whether `<cwd>/.omk/mcp.json` may be loaded. Never spawns anything. */
-export function projectMcpTrustStatus(cwd: string = process.cwd(), home: string = os.homedir()): ProjectMcpTrustStatus {
+interface ProjectInspection {
+	readonly status: ProjectMcpTrustStatus;
+	/** Parsed content of exactly the bytes that were hashed (avoids a re-read race). */
+	readonly parsed: unknown;
+}
+
+function inspectProject(cwd: string, home: string): ProjectInspection {
 	const projectKey = canonicalDir(cwd);
 	const configPath = path.join(projectKey, ".omk", "mcp.json");
 	const bytes = readProjectFile(configPath);
-	if (bytes === undefined) return { state: "absent", configPath, projectKey, serverNames: [] };
+	if (bytes === undefined)
+		return { status: { state: "absent", configPath, projectKey, serverNames: [] }, parsed: undefined };
 	const sha256 = createHash("sha256").update(bytes).digest("hex");
 	let parsed: unknown;
 	try {
@@ -215,16 +221,20 @@ export function projectMcpTrustStatus(cwd: string = process.cwd(), home: string 
 		parsed = undefined;
 	}
 	const serverNames = Object.keys(extractServers(parsed)).sort();
-	// The user's own home config is never subject to project trust.
-	if (canonicalDir(path.join(home)) === projectKey) {
-		return { state: "trusted", configPath, projectKey, sha256, serverNames };
+	let state: ProjectMcpTrustState;
+	if (canonicalDir(home) === projectKey || process.env[TRUST_PROJECT_MCP_ENV] === "1") {
+		// The user's own home config is never subject to project trust.
+		state = "trusted";
+	} else {
+		const entry = readTrustStore(home).projects[projectKey];
+		state = !entry ? "untrusted" : entry.sha256 === sha256 ? "trusted" : "changed";
 	}
-	if (process.env[TRUST_PROJECT_MCP_ENV] === "1") {
-		return { state: "trusted", configPath, projectKey, sha256, serverNames };
-	}
-	const entry = readTrustStore(home).projects[projectKey];
-	const state: ProjectMcpTrustState = !entry ? "untrusted" : entry.sha256 === sha256 ? "trusted" : "changed";
-	return { state, configPath, projectKey, sha256, serverNames };
+	return { status: { state, configPath, projectKey, sha256, serverNames }, parsed };
+}
+
+/** Inspect whether `<cwd>/.omk/mcp.json` may be loaded. Never spawns anything. */
+export function projectMcpTrustStatus(cwd: string = process.cwd(), home: string = os.homedir()): ProjectMcpTrustStatus {
+	return inspectProject(cwd, home).status;
 }
 
 /**
@@ -286,17 +296,19 @@ export function loadMcpServerConfigsWithReport(
 	cwd: string = process.cwd(),
 	home: string = os.homedir(),
 ): McpConfigLoadReport {
-	const project = projectMcpTrustStatus(cwd, home);
+	const inspection = inspectProject(cwd, home);
+	const project = inspection.status;
 	const [kimiPath, homePath, projectPath] = mcpConfigPaths(cwd, home);
-	const sources: Array<[string, McpConfigSource]> = [
-		[kimiPath, "user"],
-		[homePath, "user"],
+	const sources: Array<[unknown, McpConfigSource]> = [
+		[readJson(kimiPath), "user"],
+		[readJson(homePath), "user"],
 	];
 	const projectIsHome = path.resolve(projectPath) === path.resolve(homePath);
-	if (!projectIsHome && project.state === "trusted") sources.push([projectPath, "project"]);
+	// Load the very bytes that were hashed for the trust decision, never a re-read.
+	if (!projectIsHome && project.state === "trusted") sources.push([inspection.parsed, "project"]);
 	const merged = new Map<string, McpServerConfig>();
-	for (const [filePath, source] of sources) {
-		const servers = extractServers(readJson(filePath));
+	for (const [content, source] of sources) {
+		const servers = extractServers(content);
 		for (const name of Object.keys(servers).sort()) {
 			const config = toServerConfig(name, servers[name], source);
 			if (config) merged.set(name, config);
