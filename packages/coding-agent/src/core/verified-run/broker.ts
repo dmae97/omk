@@ -15,6 +15,34 @@ import {
 	SUPERVISOR_SYSTEM_ARGS,
 } from "./supervisor-adapter.ts";
 
+/**
+ * Process groups of sandboxes this process launched and has not yet seen close.
+ * Detached spawning takes bwrap out of the owner's terminal foreground group,
+ * so a terminal SIGINT no longer reaches it directly. Owner death is already
+ * covered by bwrap's --die-with-parent, and the CLI turns SIGINT/SIGTERM into a
+ * witnessed cancel; this exit hook additionally SIGKILLs any group still live
+ * when the owner exits (including the pre-arm init window), without installing
+ * signal handlers that would change the owner's default signal behavior.
+ */
+const liveSandboxGroups = new Set<number>();
+let exitHookInstalled = false;
+function trackSandboxGroup(pid: number | undefined): void {
+	if (pid === undefined) return;
+	liveSandboxGroups.add(pid);
+	if (exitHookInstalled) return;
+	exitHookInstalled = true;
+	process.once("exit", () => {
+		for (const group of liveSandboxGroups) {
+			try {
+				process.kill(-group, "SIGKILL");
+			} catch {
+				// Group already gone.
+			}
+		}
+		liveSandboxGroups.clear();
+	});
+}
+
 export interface SandboxExecution {
 	readonly workspace: string;
 	readonly argv: readonly string[];
@@ -126,6 +154,7 @@ export async function executeSandbox(request: SandboxExecution): Promise<Sandbox
 		// Own process group: until bwrap's namespace init arms --die-with-parent it
 		// is reachable only through the group, so escalation must signal the group.
 		const child = spawn(backend.binary, argv, { env: {}, detached: true, stdio: ["pipe", "pipe", "pipe", "pipe"] });
+		trackSandboxGroup(child.pid);
 		let identity: NamespaceIdentity | undefined;
 		let gateFailed = false;
 		let gateError: unknown;
@@ -197,6 +226,7 @@ export async function executeSandbox(request: SandboxExecution): Promise<Sandbox
 		});
 		child.once("close", (exitCode) => {
 			finished = true;
+			if (child.pid !== undefined) liveSandboxGroups.delete(child.pid);
 			clearTimeout(deadline);
 			clearTimeout(cleanup);
 			request.signal?.removeEventListener("abort", abort);
