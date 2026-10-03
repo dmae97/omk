@@ -2267,6 +2267,7 @@ export class AgentSession {
 			_customTools: this._customTools,
 		};
 		const inventory = buildCapabilityInventory(sessionView, this._resourceLoader, this._cwd, hookInventory);
+		this._syncWorkloadPermitCapacity();
 		return createSubagentLaneAuthority({
 			runId: this._activeRunId ?? `session-${this.sessionManager.getSessionId() ?? "unknown"}`,
 			promptRunId: this._promptLifecycle.activePromptRunId,
@@ -2299,8 +2300,31 @@ export class AgentSession {
 	 * child launcher wiring lands in M6.
 	 */
 	get workloadPermitPool(): WorkloadPermitPool {
-		this._workloadPermitPool ??= new WorkloadPermitPool();
+		this._workloadPermitPool ??= new WorkloadPermitPool({ capacity: this._targetWorkloadPermitCapacity() });
 		return this._workloadPermitPool;
+	}
+
+	/**
+	 * Heavy-process budget the shared pool should hold: the live admission
+	 * decision when one exists, otherwise the configured normal-tier cap
+	 * (`resourceGovernor.normalMaxHeavyProcesses`), so observe mode and the
+	 * first prompt honor settings instead of the pool's built-in default of 2.
+	 */
+	private _targetWorkloadPermitCapacity(): number | undefined {
+		const fromDecision = this._lastResourceAdmission?.maxHeavyProcesses;
+		if (fromDecision !== undefined && Number.isFinite(fromDecision) && fromDecision > 0) return fromDecision;
+		try {
+			const resolved = resolveResourceGovernorSettings(this.settingsManager.getResourceGovernorSettings());
+			const configured = resolved.admission.caps.normal.maxHeavyProcesses;
+			return Number.isFinite(configured) && configured > 0 ? configured : undefined;
+		} catch {
+			return undefined;
+		}
+	}
+
+	private _syncWorkloadPermitCapacity(): void {
+		const capacity = this._targetWorkloadPermitCapacity();
+		if (capacity !== undefined) this.workloadPermitPool.setCapacity(capacity);
 	}
 
 	/**

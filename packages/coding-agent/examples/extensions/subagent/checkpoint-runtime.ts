@@ -99,9 +99,9 @@ export function buildCheckpointTask(options: BuildCheckpointTaskOptions): string
 		prior !== undefined && prior.remaining.length > 0
 			? [
 					"Only unresolved checkpoint units:",
-					...prior.remaining.map((unit, index) => `${index + 1}. ${boundedTail(unit, 512)}`),
+					...prior.remaining.map((unit, index) => `${index + 1}. ${boundedHeadTail(unit, 512)}`),
 				].join("\n")
-			: boundedTail(options.shardTask, 3_500);
+			: boundedHeadTail(options.shardTask, 3_500);
 	const priorSection = prior
 		? [
 				"Resume checkpoint:",
@@ -123,7 +123,7 @@ export function buildCheckpointTask(options: BuildCheckpointTaskOptions): string
 		...priorSection,
 		"",
 		"Original logical task (context only):",
-		boundedTail(options.originalTask, 2_500),
+		boundedHeadTail(options.originalTask, 2_500),
 		"",
 		"Current shard:",
 		currentTask,
@@ -148,6 +148,21 @@ export function checkpointMadeProgress(before: AgentCheckpoint | undefined, afte
 export function boundedTail(value: string, maxChars: number): string {
 	if (value.length <= maxChars) return value;
 	return `[...${value.length - maxChars} earlier chars omitted...]\n${value.slice(-maxChars)}`;
+}
+
+/**
+ * Bound a task brief without dropping its opening. Goals, constraints, and
+ * scope usually lead a brief, and completion criteria often close it, so the
+ * head and tail are kept and the middle is elided with an explicit marker.
+ * Use {@link boundedTail} only for streamed evidence, where recency matters.
+ */
+export function boundedHeadTail(value: string, maxChars: number, headShare = 0.6): string {
+	if (value.length <= maxChars) return value;
+	const headChars = Math.max(0, Math.floor(maxChars * headShare));
+	const tailChars = Math.max(0, maxChars - headChars);
+	const omitted = value.length - headChars - tailChars;
+	const tail = tailChars > 0 ? value.slice(-tailChars) : "";
+	return `${value.slice(0, headChars)}\n[...${omitted} middle chars omitted; brief truncated...]\n${tail}`;
 }
 
 export function createEmptyCheckpoint(): AgentCheckpoint {
