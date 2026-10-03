@@ -123,7 +123,9 @@ export async function executeSandbox(request: SandboxExecution): Promise<Sandbox
 		...request.argv,
 	];
 	return new Promise((resolve, reject) => {
-		const child = spawn(backend.binary, argv, { env: {}, stdio: ["pipe", "pipe", "pipe", "pipe"] });
+		// Own process group: until bwrap's namespace init arms --die-with-parent it
+		// is reachable only through the group, so escalation must signal the group.
+		const child = spawn(backend.binary, argv, { env: {}, detached: true, stdio: ["pipe", "pipe", "pipe", "pipe"] });
 		let identity: NamespaceIdentity | undefined;
 		let gateFailed = false;
 		let gateError: unknown;
