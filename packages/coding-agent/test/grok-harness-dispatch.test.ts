@@ -3,7 +3,7 @@
  * tryGrokHarnessDispatch applies the grok-harness domain loadout without OMK_DOMAIN_ROUTING=1.
  */
 import { describe, expect, it, vi } from "vitest";
-import type { ToolDefinition } from "../src/core/extensions/types.ts";
+import type { RegisteredTool, ToolDefinition } from "../src/core/extensions/types.ts";
 import { tryGrokHarnessDispatch } from "../src/core/grok-harness-dispatch.ts";
 import { GROK_OAUTH_PROVIDER } from "../src/core/grok-playbook.ts";
 import { decideLoadoutAccess } from "../src/core/loadout-access-policy.ts";
@@ -35,12 +35,16 @@ const sourceInfo = (name: string): SourceInfo => ({
 
 const makeSession = (
 	baseTools: readonly string[] = ["read", "grep", "find", "ls", "edit", "write", "bash"],
+	extensionTools: readonly string[] = [],
 ): LoadoutRuntimeSession => {
 	const base = new Map<string, ToolDefinition>();
 	for (const name of baseTools) base.set(name, { name } as unknown as ToolDefinition);
+	const registered = extensionTools.map(
+		(name) => ({ definition: { name }, sourceInfo: sourceInfo(name) }) as unknown as RegisteredTool,
+	);
 	return {
 		_baseToolDefinitions: base,
-		_extensionRunner: { getAllRegisteredTools: () => [] },
+		_extensionRunner: { getAllRegisteredTools: () => registered },
 		_customTools: [],
 	};
 };
@@ -140,6 +144,32 @@ describe("tryGrokHarnessDispatch", () => {
 		// The harness still keeps its guard rails.
 		expect(allowed({ operation: "write", toolName: "write", path: "/etc/passwd" })).toBe(false);
 		expect(allowed({ operation: "read", toolName: "read", path: ".env" })).toBe(false);
+	});
+
+	it("keeps the subagent tool for the top-level session so multi mode works", () => {
+		const result = tryGrokHarnessDispatch({
+			provider: GROK_OAUTH_PROVIDER,
+			session: makeSession(undefined, ["subagent"]),
+			resourceLoader: makeResourceLoader(),
+			cwd: "/project",
+			agentDir: "/agent",
+			env: {},
+		});
+		expect(result.loadoutAccessPolicy?.activeTools).toContain("subagent");
+		expect(result.warnings.join("\n")).not.toMatch(/subagent/);
+	});
+
+	it("does not warn about subagent when the extension is not loaded", () => {
+		const result = tryGrokHarnessDispatch({
+			provider: GROK_OAUTH_PROVIDER,
+			session: makeSession(),
+			resourceLoader: makeResourceLoader(),
+			cwd: "/project",
+			agentDir: "/agent",
+			env: {},
+		});
+		expect(result.loadoutAccessPolicy?.activeTools).not.toContain("subagent");
+		expect(result.warnings.join("\n")).not.toMatch(/subagent/);
 	});
 
 	it("narrows grok-harness skills to the documented 2-3 grant when a task is given", () => {

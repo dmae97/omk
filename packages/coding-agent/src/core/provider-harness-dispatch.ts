@@ -113,7 +113,7 @@ export function tryProviderHarnessDispatch<
 		return {
 			loadoutAccessPolicy: policy,
 			warnings: uniqueSorted([
-				...state.warnings,
+				...state.warnings.filter((warning) => !SESSION_TOOL_MISSING_WARNINGS.has(warning)),
 				...(input.task?.trim() && state.activeSkills.length === 0 ? [`no ${spec.domainId} skill signals`] : []),
 			]),
 			runtimeState: state,
@@ -153,7 +153,7 @@ function composeProviderHarnessProfile(
 	spec: ProviderHarnessSpec,
 	input: ProviderHarnessDispatchInput<unknown, ProviderHarnessSkillSource>,
 ): ComposedLoadout {
-	const profile = composeLoadout("coder", spec.domainId);
+	const profile = withSessionTools(composeLoadout("coder", spec.domainId));
 	const task = input.task?.trim();
 	if (!task) {
 		return { ...profile, skills: { allow: [{ kind: "skill", names: [] }] } };
@@ -165,4 +165,23 @@ function composeProviderHarnessProfile(
 		...profile,
 		skills: { allow: [{ kind: "skill", names: [...selected] }] },
 	};
+}
+
+/**
+ * Tools the top-level harness session keeps even though the shared `coder` role
+ * and the harness domain profile allow only the seven builtins. The composed
+ * gate is an intersection, so extension tools such as `subagent` were dropped and
+ * Grok/Devin sessions could never fan out. They are added here, not to the
+ * `coder` role, because lanes also use that role and must not spawn subagents.
+ * If the extension is not loaded the tool is simply absent (no warning).
+ */
+const SESSION_ONLY_TOOLS = ["subagent"] as const;
+const SESSION_TOOL_MISSING_WARNINGS: ReadonlySet<string> = new Set(
+	SESSION_ONLY_TOOLS.map((tool) => `optional tool not available: ${tool}`),
+);
+
+function withSessionTools(profile: ComposedLoadout): ComposedLoadout {
+	const allow = profile.tools.allow;
+	if (!allow) return profile;
+	return { ...profile, tools: { ...profile.tools, allow: uniqueSorted([...allow, ...SESSION_ONLY_TOOLS]) } };
 }
