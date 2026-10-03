@@ -17,7 +17,7 @@ Delegate tasks to specialized subagents with isolated context windows.
 - **Checkpoint resume**: A cutoff resumes only the unfinished shard with bounded prior evidence
 - **Cutoff learning**: Completion/cutoff history is persisted per provider and model under the agent state directory
 - **Bounded cost**: At most 3 semantic shards and 1 resume across the whole logical task by default
-- **Attempt receipts**: Bounded execution preserves the final attempt identity, process settlement, and stream digest/limits; usage and output remain cumulative across attempts
+- **Attempt receipts**: Bounded execution preserves the final attempt identity, process termination receipt, and stream digest/limits (tool-result details stay plain data; the live settlement Promise is kept internally); usage and output remain cumulative across attempts
 - **Ultra execution**: Removes task-count, concurrency, internal deadline, and outer tool-timeout caps; Ctrl+C cancellation still propagates
 
 ## Structure

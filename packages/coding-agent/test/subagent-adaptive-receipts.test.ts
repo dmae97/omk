@@ -9,7 +9,7 @@ it.each(["unicode", "truncated"])("preserves the final attempt receipt in bounde
 		expect(Boolean(result.isError), single.errorMessage).toBe(task === "truncated");
 		expect(single.attemptId).toMatch(/^[0-9a-f-]{36}$/);
 		expect(single.process?.terminationObserved).toBe(true);
-		await expect(single.process?.settlement).resolves.toBeUndefined();
+		expect(single.process).not.toHaveProperty("settlement");
 		expect(single.stream?.stdoutBytes).toBeGreaterThan(0);
 		expect(single.stream?.stdoutDigest).toMatch(/^[0-9a-f]{64}$/);
 		if (task === "truncated") expect(single.stream?.failure).toBe("subagent.stream.invalid_json");
