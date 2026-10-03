@@ -43,6 +43,7 @@
 
 ### Breaking Changes
 
+- In an agent session, the `write` and `edit` tools no longer write outside the session working directory. A path that resolves elsewhere after `..` and symlinks fails with `Write blocked:` or `Edit blocked:`. Add directories to `fileTools.writeRoots` in global settings, or set `fileTools.allowWriteOutsideWorkspace: true` to restore the old behaviour. Project settings cannot change either value. `bash` is unchanged. See [file tool write boundary](docs/settings.md#file-tool-write-boundary).
 - Cancelling a live verified run (`SIGINT`, `SIGTERM` or the new `omk run cancel`) no longer ends it `failed`. The run stays `paused` with `failure: cancelled`, and its journal records a new `interrupted` event. Resume the phase that was cut off with `restart-writer`, `resume` or `retry-tasks`; a DAG attempt whose process was confirmed stopped is released instead of spent. A verification check cut off by the cancellation is no longer signed into the receipt as a failed check. OMK 1.2.4 and earlier cannot read a journal that contains `interrupted`, and a status consumer that treated cancellation as terminal must handle `paused`. See [cancellation](docs/verified-run.md#취소와-원격-취소).
 
 ### Added

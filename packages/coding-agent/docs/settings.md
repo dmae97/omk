@@ -196,6 +196,25 @@ Built-in defaults are 30 seconds for `read`, `grep`, `find`, and `ls`; 60 second
 
 The DAG preserves source-order result artifacts. `bash`, unknown tools, and extension tools without explicit resource claims remain exclusive. Tool timeout is logical cancellation: OMK closes the tool call and signals cancellation, but arbitrary JavaScript or external side effects may continue if the tool ignores that signal.
 
+### File Tool Write Boundary
+
+| Setting | Type | Default | Description |
+| --------- | ------ | --------- | ------------- |
+| `fileTools.writeRoots` | string[] | `[]` | Extra directories the `write` and `edit` tools may write into, besides the session working directory. Absolute paths or `~`; a relative path resolves against the session working directory |
+| `fileTools.allowWriteOutsideWorkspace` | boolean | `false` | Turn the boundary off and let `write` and `edit` write anywhere the user can |
+
+In an agent session, `write` and `edit` refuse a path that resolves outside the session working directory and `fileTools.writeRoots`. The check runs on the real path: `..` segments are collapsed and symlinks are followed, including a dangling symlink, so a link committed inside a repository cannot redirect a write to a file elsewhere on disk. A refused call fails with `Write blocked:` or `Edit blocked:` and names the resolved path.
+
+Both settings are read from global settings only. A project's `.omk/settings.json` cannot widen where tools may write. `bash` is not covered by this boundary; use the bash sandbox for that. SDK callers that build tools with `createWriteTool()` or `createEditTool()` directly opt in by passing `workspaceRoots`.
+
+```json
+{
+  "fileTools": {
+    "writeRoots": ["~/notes"]
+  }
+}
+```
+
 ### Resource Governor
 
 The governor probes host capacity (memory, workspace disk, V8 heap, system CPU) and evaluates a resource admission decision, surfaced through `/resource [probe|policy]` in the TUI and `omk doctor resources [--json]` headless. `omk doctor resources --report [--json]` aggregates bounded, identifier-free admission counts from local run journals without probing the current host. Only reason-qualified records count toward the 30-record floor; legacy/malformed reason coverage remains diagnostic. The floor is only a sample signal, always requires human review, and never promotes the mode. In `observe` mode (default) it records decisions without changing behavior; in `adaptive`/`strict` modes each top-level prompt runs a bounded preflight probe and throttles the effective tool concurrency for that run (never above `agent.maxToolConcurrency`), restoring it when the run settles. Heavy-process caps are enforced at the governed bash boundary; the internal subagent-lane launcher is not wired into live child dispatch. Absent settings keep prior behavior unchanged.

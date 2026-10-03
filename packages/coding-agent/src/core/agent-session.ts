@@ -146,6 +146,7 @@ import { loadMcpServerConfigs } from "./mcp/config.ts";
 import { McpManager, type McpServerConfig, type McpServerStatus } from "./mcp/manager.ts";
 import { buildRuntimeProvenance } from "./runtime-provenance.ts";
 import { createSubagentLaneAuthority, type SubagentLaneAuthority } from "./subagent-lane-authority.ts";
+import { resolveWorkspaceWriteRoots } from "./tools/workspace-write-guard.ts";
 import { type ToolCallMetric, TurnMetricsSink } from "./turn-metrics.ts";
 
 /** Values that disable a session-level feature through its environment variable. */
@@ -4644,12 +4645,18 @@ export class AgentSession {
 					canReadPath: (path: string) => loadoutAccessGuard({ operation: "read", toolName: "read", path }).allowed,
 				}
 			: {};
-		const loadoutWriteOptions = loadoutAccessGuard
-			? {
-					canWritePath: (path: string) =>
-						loadoutAccessGuard({ operation: "write", toolName: "write", path }).allowed,
-				}
-			: {};
+		// write/edit stay inside cwd plus global fileTools.writeRoots; project settings cannot widen it.
+		const workspaceRoots = resolveWorkspaceWriteRoots(this.settingsManager.getGlobalSettings().fileTools, this._cwd);
+		const workspaceWriteOptions = workspaceRoots ? { workspaceRoots } : {};
+		const loadoutWriteOptions = {
+			...workspaceWriteOptions,
+			...(loadoutAccessGuard
+				? {
+						canWritePath: (path: string) =>
+							loadoutAccessGuard({ operation: "write", toolName: "write", path }).allowed,
+					}
+				: {}),
+		};
 		const baseToolDefinitions = (() => {
 			if (this._baseToolsOverride) {
 				return Object.fromEntries(
