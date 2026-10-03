@@ -52,6 +52,7 @@ import {
 	truncateParallelOutput,
 } from "./graph-result.ts";
 import { runManagedProcess } from "./managed-process.ts";
+import { canSpawnSubagents, childSubagentEnv } from "./nesting.ts";
 import { emptyUsage, type SingleResult, type SubagentAttemptResult } from "./subagent-runtime-types.ts";
 import { createSubagentStream } from "./subagent-stream.ts";
 import {
@@ -425,6 +426,7 @@ async function runSingleAgentAttempt(
 			command: invocation.command,
 			args: invocation.args,
 			cwd: cwd ?? defaultCwd,
+			env: childSubagentEnv(process.env),
 			cutoffMs,
 			signal,
 			onStdout: stream.stdout,
@@ -614,6 +616,8 @@ const SubagentParams = Type.Object({
 });
 
 export default function (omk: ExtensionAPI) {
+	// A child at the nesting limit gets no subagent tool, so lanes cannot spawn lanes.
+	if (!canSpawnSubagents(process.env)) return;
 	omk.registerTool({
 		name: "subagent",
 		label: "Subagent",
