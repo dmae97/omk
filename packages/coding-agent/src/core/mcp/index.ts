@@ -18,7 +18,22 @@ export {
 	type McpToolCallResult,
 	type McpToolSchema,
 } from "./client.ts";
-export { loadMcpServerConfigs, mcpConfigPaths } from "./config.ts";
+export {
+	loadMcpServerConfigs,
+	loadMcpServerConfigsWithReport,
+	type McpConfigLoadReport,
+	type McpConfigSource,
+	mcpConfigPaths,
+	mcpTrustStorePath,
+	PROJECT_MCP_ENV_ALLOWLIST,
+	type ProjectMcpTrustState,
+	type ProjectMcpTrustStatus,
+	projectMcpEnv,
+	projectMcpTrustStatus,
+	revokeProjectMcpTrust,
+	TRUST_PROJECT_MCP_ENV,
+	trustProjectMcpConfig,
+} from "./config.ts";
 export {
 	McpManager,
 	type McpManagerOptions,

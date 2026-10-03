@@ -142,7 +142,7 @@ import { loadHookInventory } from "./hook-inventory.ts";
 import { captureHostResourceSnapshot, type HostResourceSnapshot } from "./host-resource-snapshot.ts";
 import { decideLoadoutAccess, type LoadoutAccessPolicy } from "./loadout-access-policy.ts";
 import { buildCapabilityInventory } from "./loadout-runtime.ts";
-import { loadMcpServerConfigs } from "./mcp/config.ts";
+import { loadMcpServerConfigsWithReport, type McpConfigLoadReport } from "./mcp/config.ts";
 import { McpManager, type McpServerConfig, type McpServerStatus } from "./mcp/manager.ts";
 import { buildRuntimeProvenance } from "./runtime-provenance.ts";
 import { createSubagentLaneAuthority, type SubagentLaneAuthority } from "./subagent-lane-authority.ts";
@@ -685,6 +685,7 @@ export class AgentSession {
 	private _baseToolDefinitions: Map<string, ToolDefinition> = new Map();
 	private _mcpManager: McpManager | undefined;
 	private _mcpAttaching = false;
+	private _mcpLoadReport: McpConfigLoadReport | undefined;
 	private _mcpToolNames: Set<string> = new Set();
 	private _turnMetricsSink: TurnMetricsSink | undefined;
 	private _turnMetricsState: TurnMetricsState | undefined;
@@ -4455,7 +4456,12 @@ export class AgentSession {
 		servers?: readonly McpServerConfig[];
 		callTimeoutMs?: number;
 	}): Promise<McpServerStatus[]> {
-		const servers = options?.servers ?? loadMcpServerConfigs(this._cwd);
+		let servers = options?.servers;
+		if (!servers) {
+			const report = loadMcpServerConfigsWithReport(this._cwd);
+			this._mcpLoadReport = report;
+			servers = report.servers;
+		}
 		await this._mcpManager?.closeAndWait();
 		this._shutdown.assertOpen();
 		this._mcpManager = undefined;
@@ -4481,6 +4487,17 @@ export class AgentSession {
 		this._customTools = [...this._customTools, ...(usable as ToolDefinition[])];
 		this._refreshToolRegistry();
 		return manager.status();
+	}
+
+	/**
+	 * Project MCP servers withheld at the last attach because `<cwd>/.omk/mcp.json`
+	 * is not trusted (or changed since it was trusted). UI can show this so the
+	 * user knows why a repo's servers did not start. Undefined before attach or
+	 * when servers were passed explicitly.
+	 */
+	mcpProjectTrustReport(): Pick<McpConfigLoadReport, "project" | "skippedProjectServers"> | undefined {
+		const report = this._mcpLoadReport;
+		return report ? { project: report.project, skippedProjectServers: report.skippedProjectServers } : undefined;
 	}
 
 	/** Status of MCP servers attached to this session. Empty when none were attached. */
