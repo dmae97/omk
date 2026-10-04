@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-label="OMK — Open Multi-Agent Kit. Scope the work. Route the right agents. Verify every release.">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-label="OMK — Open Multi-Agent Kit. Make done pass a check.">
   <title>OMK — Open Multi-Agent Kit</title>
   <rect width="1200" height="420" fill="#EDE6D6"/>
 
@@ -43,8 +43,8 @@
 
   <line x1="362" y1="232" x2="700" y2="232" stroke="#B8261F" stroke-width="2"/>
 
-  <text x="362" y="272" font-family="Georgia,'Times New Roman',serif" font-size="27" fill="#141414">Scope the work. Route the right agents.</text>
-  <text x="362" y="308" font-family="Georgia,'Times New Roman',serif" font-size="27" fill="#141414"><tspan fill="#B8261F">Verify</tspan> every release.</text>
+  <text x="362" y="272" font-family="Georgia,'Times New Roman',serif" font-size="32" fill="#141414">Make “done” <tspan fill="#B8261F">pass a check.</tspan></text>
+  <text x="362" y="308" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="18" fill="#141414">/goal verify node --test check.test.mjs</text>
 
   <g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" letter-spacing="1.8" fill="#141414" opacity="0.66">
     <text x="362" y="352">SCOPE</text>

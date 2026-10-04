@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,7 +22,7 @@ interface Harness {
 const roots: string[] = [];
 
 function gitRepo(): string {
-	const root = mkdtempSync(join(tmpdir(), "omk-goal-accept-"));
+	const root = realpathSync(mkdtempSync(join(tmpdir(), "omk-goal-accept-")));
 	roots.push(root);
 	const git = (...args: string[]) => execFileSync("git", args, { cwd: root, stdio: "ignore" });
 	git("init", "-q");

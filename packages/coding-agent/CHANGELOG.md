@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-04
+
 ### New Features
 
 - **Evidence-gated durable goals**: `/goal verify <command>` approves an acceptance check that runs in the default bash sandbox after each settled turn. The goal completes only when the check passes on the current workspace, and the check's output never reaches the model. See [acceptance checks](docs/run-protocol.md#acceptance-checks).
@@ -32,9 +34,11 @@
 
 ### Fixed
 
+- On macOS, replay-ledger process identity probes force the C locale for BSD `ps`, so Korean and other non-English parent locales no longer make a live process appear unavailable. The acceptance-check regression fixtures use canonical physical temporary repository paths on macOS, preserving workspace-mismatch rejection across `/var` and `/private/var` aliases.
+- Updated dependency security pins: `brace-expansion` 5.0.12 and `undici` 8.10.2, plus `undici` 6.28.1 for the optional Gondolin example. That example still depends on `node-forge` 1.4.0, whose RSA signature-verification advisory has no patched npm release as of 2026-10-04; the repository production audit continues to report it.
 - The durable goal loop continues again. Through 1.2.4 the goal controller advanced the round at every attempt's `agent_end` and sent the next turn while that run still owned the session; the session rejected it with `Agent is already processing`, so the round was spent and the goal never continued. The controller now acts once a turn settles, when no automatic retry follows it, and queues the next round as a follow-up. An attempt that is about to be retried no longer uses up a round.
 - Durable goal transitions no longer fail with `goal timestamps must be monotonic` or `goal generation timestamp must advance` when the wall clock steps back, as WSL2 does when its hypervisor resyncs time. The controller dates each transition no earlier than the journal's last timestamp.
-- A verified run no longer stops with `operation_failed` when the wall clock steps back under load. The authority store's default clock is the wall time at open plus monotonic elapsed time; a clock injected by the caller that moves backward is still refused. In 30 concurrent `omk run start` runs on a loaded WSL2 host, 3 failed this way before the change and none after.
+- A verified run no longer stops with `operation_failed` when the wall clock steps back under load. The authority store's default clock is the wall time at open plus monotonic elapsed time; a clock injected by the caller that moves backward is still refused.
 - A scripted-agent writer cancelled between model requests is recorded as cancelled, not as `writer_incomplete`, and `omk run status` suggests recovery only for runs that are running or paused.
 - An MCP server that exits during startup is marked `failed` with a classified public error while every other server still contributes its tools. A malformed tool result rejects with `mcp.invalid_tool_result` instead of counting as success. Request and handshake timeouts accept only safe integers from 0 through 2,147,483,647 ms, and `0` refuses to send. `manager.status()` omits free-form server-reported versions.
 - MCP transport retirement waits for the physical process or stdio close, not the kill request: a failed startup keeps its queue slot and a same-server reconnect waits for the old transport to close. A subagent dispatch holds a process-local lease on its workload pool, so a concurrent dispatch receives `ownership.dispatch_active`. Numeric environment values with trailing characters are rejected instead of parsed as a prefix, and prompt-size estimation projects each tool's name, description and parameters instead of serializing the tool object.

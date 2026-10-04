@@ -53,6 +53,23 @@ describe.runIf(process.platform === "darwin")("Darwin process identity reader", 
 		expect(inspectProcessIdentity(-1)).toEqual({ state: "unavailable" });
 		expect(inspectProcessIdentity(Number.NaN)).toEqual({ state: "unavailable" });
 	});
+
+	it("identifies a live process under a Korean parent locale", () => {
+		const saved = { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL, LC_TIME: process.env.LC_TIME };
+		process.env.LANG = "ko_KR.UTF-8";
+		process.env.LC_ALL = "ko_KR.UTF-8";
+		process.env.LC_TIME = "ko_KR.UTF-8";
+		try {
+			const identity = inspectProcessIdentity(process.pid);
+			expect(identity.state).toBe("present");
+			if (identity.state === "present") expect(identity.startToken).toMatch(/^darwin:\d+$/);
+		} finally {
+			for (const [key, value] of Object.entries(saved)) {
+				if (value === undefined) delete process.env[key];
+				else process.env[key] = value;
+			}
+		}
+	});
 });
 
 describe.runIf(process.platform === "darwin")("ReplayLedgerMutationGate on Darwin", () => {

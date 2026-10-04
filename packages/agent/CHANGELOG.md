@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-04
+
 ### Added
 
 - `Agent.prepareTools(tools, pending)` selects the tools a run sends to the provider, for example to fit a model's input window. It runs when a prompt or continuation snapshots its context, receives the prompt messages not yet in `state.messages`, and never changes `state.tools`.
