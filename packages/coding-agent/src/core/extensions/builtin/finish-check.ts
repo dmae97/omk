@@ -46,13 +46,22 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 		systemPrompt: `${event.systemPrompt}\n\n${finishDisciplinePrompt(budgetMs)}`,
 	}));
 
-	omk.on("tool_execution_end", (event) => {
-		if (isWorkspaceMutatingTool(event.toolName)) mutated = true;
+	const maybeWarnSaveNow = () => {
 		const fraction = elapsedFraction();
 		if (!warnedSaveNow && fraction !== undefined && fraction >= FINISH_CHECK_SAVE_NOW_FRACTION) {
 			warnedSaveNow = true;
 			omk.sendUserMessage(FINISH_CHECK_SAVE_NOW_MESSAGE, { deliverAs: "steer" });
 		}
+	};
+
+	omk.on("tool_execution_end", (event) => {
+		if (isWorkspaceMutatingTool(event.toolName)) mutated = true;
+		maybeWarnSaveNow();
+	});
+
+	// Long reasoning can pass 75% without any tool finishing; check when each assistant message ends too.
+	omk.on("message_end", (event) => {
+		if (event.message.role === "assistant") maybeWarnSaveNow();
 	});
 
 	omk.on("agent_settled", (event, ctx) => {

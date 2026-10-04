@@ -70,6 +70,7 @@ export const FINISH_CHECK_MESSAGE = [
 	"2. Edge cases: write and run small tests for the edge cases each requirement implies (empty or missing values, boundaries, combinations, type preservation). Fix what fails.",
 	"3. Scope: review what you changed (for example `git status`, `git diff` and `git reflog` where a repository exists). Undo destructive changes the task did not ask for, such as rewritten history, deleted branches or removed data. Keep system changes the task needs.",
 	"4. Deliverables and environment: confirm every required output exists at the exact path in the expected format, and that required services, accounts and ports are configured and running.",
+	"Change files only when a check fails, and keep every saved output valid after each step, so stopping at any moment still leaves a working result.",
 	"If everything already holds, reply briefly with what you verified. Do not start new optional work.",
 ].join("\n");
 

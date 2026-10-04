@@ -67,6 +67,10 @@ describe("finish-check policy", () => {
 		expect(finishDisciplinePrompt(undefined)).not.toContain("wall-clock budget");
 	});
 
+	it("tells the verification turn to keep saved outputs valid", () => {
+		expect(FINISH_CHECK_MESSAGE).toContain("Change files only when a check fails");
+	});
+
 	it("is registered as a built-in harness extension behind OMK_FINISH_CHECK", () => {
 		expect(HARNESS_FACTORIES.map((entry) => entry.envVar)).toContain("OMK_FINISH_CHECK");
 	});
@@ -164,7 +168,30 @@ describe("finish-check extension in a headless session", () => {
 		]);
 		await harness.session.prompt("long task");
 		expect(steeredUsers).toContain(FINISH_CHECK_SAVE_NOW_MESSAGE);
+		expect(steeredUsers.filter((text) => text === FINISH_CHECK_SAVE_NOW_MESSAGE)).toHaveLength(1);
 		// Past 90% of the budget there is no time for the extra verification turn.
+		expect(harness.faux.state.callCount).toBe(2);
+	});
+
+	it("steers at 75% after a long answer even when no tool runs", async () => {
+		let clock = 0;
+		let secondTurnUsers: string[] = [];
+		const harness = await createHarness({
+			extensionFactories: [(omk) => finishCheck(omk, { env: { OMK_TIME_BUDGET_SEC: "100" }, now: () => clock })],
+		});
+		harnesses.push(harness);
+		harness.setResponses([
+			() => {
+				clock = 80_000;
+				return fauxAssistantMessage("long reasoning, no tools yet");
+			},
+			(context) => {
+				secondTurnUsers = userTexts(context);
+				return fauxAssistantMessage("saved");
+			},
+		]);
+		await harness.session.prompt("long task");
+		expect(secondTurnUsers.at(-1)).toBe(FINISH_CHECK_SAVE_NOW_MESSAGE);
 		expect(harness.faux.state.callCount).toBe(2);
 	});
 });
