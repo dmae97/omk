@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AgentTool } from "omk-agent-core";
 import { type Context, fauxAssistantMessage, fauxToolCall } from "omk-ai";
 import { Type } from "typebox";
@@ -15,7 +18,25 @@ import {
 	resolveTimeBudgetMs,
 	shouldRunFinishCheck,
 } from "../src/core/finish-check.ts";
+import {
+	DEFAULT_SNAPSHOT_TIMEOUT_MS,
+	requestPreCheckSnapshot,
+	resolveSnapshotHandshake,
+} from "../src/core/finish-check-snapshot.ts";
 import { createHarness, type Harness } from "./suite/harness.ts";
+
+function writeToolFor(runs: string[]): AgentTool {
+	return {
+		name: "write",
+		label: "Write",
+		description: "Write a file",
+		parameters: Type.Object({ path: Type.String() }),
+		execute: async (_toolCallId, params) => {
+			runs.push(String((params as { path: string }).path));
+			return { content: [{ type: "text", text: "ok" }], details: {} };
+		},
+	};
+}
 
 const base = {
 	mode: "headless" as const,
@@ -222,5 +243,85 @@ describe("finish-check extension in a headless session", () => {
 		expect(wrapUpSeenAt).toBe(FINISH_CHECK_MAX_TOOL_CALLS);
 		expect(runs).toHaveLength(1 + FINISH_CHECK_MAX_TOOL_CALLS);
 		expect(harness.session.isStreaming).toBe(false);
+	});
+});
+
+describe("finish-check pre-check snapshot handshake", () => {
+	const harnesses: Harness[] = [];
+	const dirs: string[] = [];
+	afterEach(() => {
+		while (harnesses.length > 0) harnesses.pop()?.cleanup();
+		while (dirs.length > 0) rmSync(dirs.pop() as string, { recursive: true, force: true });
+	});
+
+	function tempDir(): string {
+		const dir = mkdtempSync(join(tmpdir(), "omk-finish-snap-"));
+		dirs.push(dir);
+		return dir;
+	}
+
+	it("is off unless OMK_FINISH_CHECK_SNAPSHOT_DIR is set", () => {
+		expect(resolveSnapshotHandshake({})).toBeUndefined();
+		expect(resolveSnapshotHandshake({ OMK_FINISH_CHECK_SNAPSHOT_DIR: "/x" })).toEqual({
+			dir: "/x",
+			timeoutMs: DEFAULT_SNAPSHOT_TIMEOUT_MS,
+		});
+		expect(
+			resolveSnapshotHandshake({ OMK_FINISH_CHECK_SNAPSHOT_DIR: "/x", OMK_FINISH_CHECK_SNAPSHOT_TIMEOUT_SEC: "5" }),
+		).toEqual({ dir: "/x", timeoutMs: 5000 });
+	});
+
+	it("gives up after the timeout and records the outcome", async () => {
+		const dir = tempDir();
+		let clock = 0;
+		const result = await requestPreCheckSnapshot({ dir, timeoutMs: 1000 }, 1, {
+			now: () => clock,
+			sleep: async (ms) => {
+				clock += ms;
+			},
+		});
+		expect(result.status).toBe("timeout");
+		expect(result.waitedMs).toBe(1000);
+		expect(existsSync(join(dir, "pre-check-1.request"))).toBe(true);
+		expect(JSON.parse(readFileSync(join(dir, "pre-check-1.result"), "utf8")).status).toBe("timeout");
+	});
+
+	it("waits for the harness before the verification turn and excludes the wait from the budget", async () => {
+		const dir = tempDir();
+		const runs: string[] = [];
+		let clock = 0;
+		let requestSeenBeforeCheck = false;
+		const harness = await createHarness({
+			tools: [writeToolFor(runs)],
+			extensionFactories: [
+				(omk) =>
+					finishCheck(omk, {
+						env: { OMK_FINISH_CHECK_SNAPSHOT_DIR: dir, OMK_TIME_BUDGET_SEC: "100" },
+						now: () => clock,
+						sleep: async (ms) => {
+							clock += ms;
+							// The harness snapshots the container, then acknowledges after 50s.
+							if (clock >= 50_000) writeFileSync(join(dir, "pre-check-1.done"), "");
+						},
+					}),
+			],
+		});
+		harnesses.push(harness);
+		harness.setResponses([
+			() => {
+				clock = 40_000;
+				return fauxAssistantMessage([fauxToolCall("write", { path: "out.txt" })], { stopReason: "toolUse" });
+			},
+			fauxAssistantMessage("done"),
+			() => {
+				requestSeenBeforeCheck = existsSync(join(dir, "pre-check-1.done"));
+				return fauxAssistantMessage("verified");
+			},
+		]);
+		await harness.session.prompt("write out.txt");
+		expect(requestSeenBeforeCheck).toBe(true);
+		expect(harness.faux.state.callCount).toBe(3);
+		// 90s on the clock, but 50s of it was the snapshot wait, so the run is at 40% and no save-now steer fired.
+		expect(JSON.parse(readFileSync(join(dir, "pre-check-1.result"), "utf8")).status).toBe("done");
 	});
 });

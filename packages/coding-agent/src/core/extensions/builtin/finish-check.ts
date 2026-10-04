@@ -10,11 +10,13 @@ import {
 	resolveTimeBudgetMs,
 	shouldRunFinishCheck,
 } from "../../finish-check.ts";
+import { requestPreCheckSnapshot, resolveSnapshotHandshake } from "../../finish-check-snapshot.ts";
 import type { ExtensionAPI } from "../types.ts";
 
 export interface FinishCheckOptions {
 	readonly env?: NodeJS.ProcessEnv;
 	readonly now?: () => number;
+	readonly sleep?: (ms: number) => Promise<void>;
 }
 
 /**
@@ -28,7 +30,10 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 	const mode = resolveFinishCheckMode(env.OMK_FINISH_CHECK);
 	if (mode === "off") return;
 	const budgetMs = resolveTimeBudgetMs(env.OMK_TIME_BUDGET_SEC);
-	const startedAt = now();
+	const snapshot = resolveSnapshotHandshake(env);
+	// Time spent waiting for a harness snapshot is not part of the run's budget.
+	let startedAt = now();
+	let snapshotSequence = 0;
 	const elapsedFraction = () => (budgetMs === undefined ? undefined : (now() - startedAt) / budgetMs);
 
 	let mutated = false;
@@ -77,7 +82,7 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 		if (event.message.role === "assistant") maybeWarnSaveNow();
 	});
 
-	omk.on("agent_settled", (event, ctx) => {
+	omk.on("agent_settled", async (event, ctx) => {
 		const last = event.messages.at(-1);
 		const aborted = last?.role === "assistant" && (last.stopReason === "aborted" || last.stopReason === "error");
 		const run = shouldRunFinishCheck({
@@ -91,6 +96,11 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 		});
 		if (!run) return;
 		checked = true;
+		if (snapshot) {
+			snapshotSequence += 1;
+			const result = await requestPreCheckSnapshot(snapshot, snapshotSequence, { now, sleep: options.sleep });
+			startedAt += result.waitedMs;
+		}
 		omk.sendUserMessage(FINISH_CHECK_MESSAGE, { deliverAs: "followUp" });
 	});
 }
