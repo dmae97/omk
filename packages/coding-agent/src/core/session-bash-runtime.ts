@@ -17,7 +17,7 @@ import { stripAnsi } from "../utils/ansi.ts";
 import { getShellConfig, sanitizeBinaryOutput } from "../utils/shell.ts";
 import type { BashResult } from "./bash-executor.ts";
 import { detectSandboxBackend } from "./sandbox/backend.ts";
-import { createWorkspaceSandboxPolicy, resolveBashSandboxMode } from "./sandbox/default-policy.ts";
+import { createDefaultBashSandboxPreflight, resolveBashSandboxMode } from "./sandbox/default-policy.ts";
 import type { SandboxBackendStatus, SandboxMode } from "./sandbox/policy.ts";
 import type { BashOperations, BashSandboxPreflight } from "./tools/bash.ts";
 import { executeVerifiedBash } from "./verified-bash-adapter.ts";
@@ -107,17 +107,20 @@ export class SessionBashRuntime {
 			return undefined;
 		}
 		this.detectedBackend ??= detectSandboxBackend();
-		const detected = this.detectedBackend;
-		const backend: SandboxBackendStatus =
-			mode === "enforce"
-				? detected
-				: { platform: detected.platform, backendAvailable: false, domainAllowlistAvailable: false };
 		// Root must cover the actual execution cwd (session manager), not just the
 		// session workspace: in-memory or RPC sessions can legitimately differ.
-		const policy = createWorkspaceSandboxPolicy(this.options.getExecutionCwd() || this.options.cwd, mode);
+		const preflight = createDefaultBashSandboxPreflight(
+			this.options.getExecutionCwd() || this.options.cwd,
+			mode,
+			this.detectedBackend,
+		);
+		if (!preflight) {
+			this.defaultSandboxPreflight = null;
+			return undefined;
+		}
+		const { backend } = preflight;
 		this.defaultSandboxPreflight = {
-			policy,
-			backend,
+			...preflight,
 			onSpawnDecision: (decision) => {
 				if (decision.rule === "sandbox.off") return;
 				this.options.appendReplayEvent("sandbox_audit", {

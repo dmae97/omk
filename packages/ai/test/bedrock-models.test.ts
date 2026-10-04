@@ -30,6 +30,12 @@ describe("Amazon Bedrock Models", () => {
 		console.log(`Found ${models.length} Bedrock models`);
 	});
 
+	it("withholds Kimi K3 while Converse replays earlier-turn reasoning to it", () => {
+		// AWS's Kimi K3 model card: Converse fails with InternalServerException when reasoning
+		// content from earlier turns is included. convertMessages replays it for non-Claude models.
+		expect(models.filter((model) => model.id.includes("moonshotai.kimi-k3")).map((model) => model.id)).toEqual([]);
+	});
+
 	if (hasBedrockCredentials() && process.env.BEDROCK_EXTENSIVE_MODEL_TEST) {
 		for (const model of models) {
 			it(`should make a simple request with ${model.id}`, { timeout: 10_000 }, async () => {

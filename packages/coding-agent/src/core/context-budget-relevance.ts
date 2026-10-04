@@ -9,6 +9,8 @@
  * descriptions whose large union would dilute the score.
  */
 
+import { fuzzyTokenWeight } from "./context-budget-token-similarity.ts";
+
 // ---------------------------------------------------------------------------
 // Stop words — English + common Korean particles
 // ---------------------------------------------------------------------------
@@ -213,26 +215,33 @@ export function tokenizeForRelevance(text: string): readonly string[] {
 /**
  * Compute coverage: fraction of query tokens found in the item token set.
  * Optional per-token weights boost high-value matches (name, path).
+ *
+ * Matching is subword-aware, not exact-only. User queries inflect — Korean
+ * tokens keep their 조사 endings ("배선들을"), and Latin tokens drift by stem
+ * or plural ("optimize" vs "optimization") — so a query token that never
+ * appears verbatim still scores when a token contains it, it contains a token
+ * (stem containment), or the two share enough character bigrams. The matched
+ * weight is scaled by that similarity, so a partial lexical hit can never
+ * outscore an exact one.
  */
 function computeCoverage(
 	queryTokens: readonly string[],
 	itemTokenSet: ReadonlySet<string>,
 	itemTokenWeights?: ReadonlyMap<string, number>,
 ): number {
-	if (queryTokens.length === 0) {
-		return 0;
-	}
-
 	let matchWeight = 0;
 	for (const qt of queryTokens) {
-		if (itemTokenSet.has(qt)) {
-			matchWeight += itemTokenWeights?.get(qt) ?? 1;
-		}
+		matchWeight += itemTokenSet.has(qt)
+			? (itemTokenWeights?.get(qt) ?? 1)
+			: fuzzyTokenWeight(qt, itemTokenSet, itemTokenWeights);
 	}
 
-	// Normalize: each query token contributes at most 1 to the numerator
-	return Math.min(1, matchWeight / queryTokens.length);
+	// Empty query → 0; otherwise each token contributes ≤1 to the numerator.
+	return queryTokens.length === 0 ? 0 : Math.min(1, matchWeight / queryTokens.length);
 }
+
+// The subword similarity helpers live in ./context-budget-token-similarity.ts
+// so this module stays under the 250-pure-LOC ceiling.
 
 /**
  * Build a token set with optional high-weight tokens.

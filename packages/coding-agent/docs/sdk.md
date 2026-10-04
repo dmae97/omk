@@ -27,6 +27,20 @@ omk sdk session send <id> "<message>" [--cwd <path>] [--session-dir <path>]
 
 `status` without an ID lists sessions for the selected working directory. `tail` and `inspect` without an ID select the most recently modified session; `tail` defaults to 20 entries. `send` requires an exact ID, appends a user-message entry only when the session has no active owner, and does not wake or execute an agent. `status` is human-readable unless `--json` is passed; the other actions emit JSON. Exit codes are `0` for success, `1` when no target exists or the session is active, and `2` for invalid usage.
 
+### Opt-in live control and project memory
+
+The transcript-only commands above are unchanged. Enroll an owned persisted POSIX
+session with `await session.startControl()` (CLI: `OMK_SESSION_CONTROL=1`), then use
+`sdk session send <id> "text" --live`, `status <id> --live`, or `abort <id> --live`.
+Live failures never fall back to transcript writes. See [Local live session
+control](sessions.md#local-live-session-control) for permissions, limits and cancellation semantics.
+
+`await session.rememberSource({ path, startLine, endLine, ttlMs? })` pins a bounded
+source quote. `await session.forgetMemory(id)` revokes it. Recall is separately
+opt-in with `OMK_VERIFIED_MEMORY=1` and Context Budget V2. It is transient tool-result
+data, not system/skill authority or automatic fact extraction. Inspect
+`session.memoryStatus`; see [Project source-quote memory](sessions.md#project-source-quote-memory).
+
 ## Quick Start
 
 ```typescript
@@ -138,7 +152,9 @@ interface AgentSession {
   // Abort current operation
   abort(): Promise<void>;
 
-  // Cleanup
+  // Cleanup: asynchronous join preserves ownership until registered work settles
+  close(): Promise<void>;
+  // Compatibility: starts close when busy; use close() to observe completion/errors
   dispose(): void;
 }
 ```
@@ -195,12 +211,13 @@ All recovery actions share the generation cap, original budget and command-id fe
 This does not enable live-model task generation, opaque remote replay,
 verification-conditioned edges, plan amendment, or host application. See [Verified Run](verified-run.md) for contracts and trust boundaries.
 
-### Shared run budgets (SDK, opt-in)
+### Shared run budgets (SDK limits opt-in, stream ownership always active)
 
-Pass `runBudget` to `session.prompt()` to bound one prompt's logical model
-requests. The budget starts before prompt preflight and stays shared across
-provider retries, continuations, and first-party summaries using that session's
-`agent.streamFn` while the prompt is active.
+Every prompt now owns its logical model streams until terminal metadata, even
+without `runBudget`. Pass `runBudget` to `session.prompt()` to additionally bound
+one prompt's logical model requests. The scope starts before prompt preflight and
+stays shared across provider retries, continuations, and first-party summaries
+using that session's `agent.streamFn` while the prompt is active.
 
 ```typescript
 import { RunBudgetExceededError } from "open-multi-agent-kit";
@@ -239,11 +256,12 @@ changing its stream or aborting it. Explicit steering/follow-up messages join th
 running prompt without receiving a new allowance; registered commands retain
 their existing streaming path.
 
-`getRunBudgetSnapshot()` returns the active or most recent budget's immutable
+`getRunBudgetSnapshot()` returns the active or most recent scope's immutable
 limits, started-request count, outstanding-stream count, remaining time, closed
-state, and optional exhaustion reason. It returns `undefined` when no budget has
-been used. Missing terminal metadata retains an outstanding reservation; an
-abort request alone does not release it. Outstanding streams block admission of
+state, and optional exhaustion reason. It returns `undefined` only before any
+prompt scope has opened. A default scope reports empty limits; missing terminal
+metadata retains an outstanding reservation. An abort request alone does not
+release it. Outstanding streams block admission of
 a new bounded or unbounded prompt even after the scope closes. Once terminal
 metadata arrives, that reservation drains and new work can proceed. The original
 stream and core credential resolver are restored unless another owner replaced
@@ -255,9 +273,10 @@ request counts are still reserved at stream dispatch. Cancellation or expiry
 during credential lookup is checked again before continuing.
 
 **Limits of this slice:** request counts are not HTTP-attempt or billing counts.
-The wrapper requests `maxRetries: 0` to disable adapter retries, but cannot attest
-that every provider honors it. Independent context/auth hooks, remote work, detached
-children, direct `omk-ai` calls, and replacement of the stream wrapper remain
+With explicit limits, the wrapper requests `maxRetries: 0` to disable adapter
+retries, but cannot attest that every provider honors it. An unbounded prompt
+keeps the existing adapter retry policy. Independent context/auth hooks, remote
+work, detached children, direct `omk-ai` calls, and replacement of the stream wrapper remain
 outside that dispatch-count guarantee. In-process plugins are trusted. Deadline
 cancellation is cooperative: synchronous blocking code, an uncooperative hook,
 or a remote service can outlive the signal. This is not an OS kill/join boundary
@@ -299,9 +318,20 @@ assistant message says `toolUse`. Timeout text reports cancellation requested,
 not process termination confirmed. Late success never replaces the failed or
 aborted result. **`prompt_settled` is a UX signal, not semantic verification.**
 
-This safeguard is session-local. It does not persist ownership, join detached
-work, prove remote cancellation, or fence writers across replacement/disposal,
-restart, or workspace reuse. Direct `Agent` calls, replacing
+This safeguard is session-local. Normal runtime replacement/disposal now awaits
+`close()`, which joins registered producers, tool/lane ownership, logical streams
+and native MCP closure before releasing the session lease. Independent stop
+requests and joins are still attempted after a shutdown error; final cleanup
+requires successful joins, and the original error (or an `AggregateError` for
+multiple failures) is retained. See [Lifecycle and progress hardening](runtime-algorithms.md#cd-lifecycle-and-progress-hardening-2026-09-30).
+It does not join unregistered detached work, prove remote cancellation, or fence writers across
+crashes, restart or workspace reuse. Reentrant close from a prompt/tool producer
+is refused rather than self-deadlocking. A registered extension command may
+replace its session: it seals only its initiating command control frames before
+joining other producers and resources. Use `withSession` for the new context;
+an outgoing model prompt cancelled by replacement can reject with budget code
+`closed`. Real budget exhaustion is not forgiven by a command handoff. See
+[Local live session control](sessions.md#local-live-session-control). Direct `Agent` calls, replacing
 `session.agent.state.tools`, independent interactive bash, and plugin-created
 background work are not automatically enrolled. In-process plugins remain trusted.
 
@@ -1659,7 +1689,7 @@ computeReservedTokenBudget, estimateToolResultReserve, ReservedTokenBudgetError
 
 // Advisory selection and durable goals
 chooseWithAdvisoryJudge, createModelAdvisoryJudge, AdvisoryJudgeInputError, AdvisoryJudgeModelError
-createDurableGoal, applyDurableGoalCommand, parseDurableGoalSnapshot, DurableGoalStore
+createDurableGoal, applyDurableGoalCommand, parseDurableGoalSnapshot, DurableGoalStore, nextDurableGoalTimestamp
 createDurableGoalCheckpoint, parseDurableGoalCheckpoint, formatDurableGoalCheckpoint
 
 // Run journal and session termination

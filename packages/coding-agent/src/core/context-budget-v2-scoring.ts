@@ -4,6 +4,9 @@ import type {
 	ContextBudgetTierV2,
 	ContextRepresentationCandidateV2,
 } from "./context-budget-headroom.ts";
+import { compareContextIds } from "./context-budget-order.ts";
+
+export { compareContextIds };
 
 export interface PlannedItemV2 {
 	readonly item: ContextBudgetItemV2;
@@ -81,7 +84,7 @@ export function applyRedundancyPenalties(items: readonly PlannedItemV2[]): Map<s
 			if (b.baseScore !== a.baseScore) {
 				return b.baseScore - a.baseScore;
 			}
-			return a.item.id.localeCompare(b.item.id);
+			return compareContextIds(a.item.id, b.item.id);
 		});
 		for (let index = 1; index < group.length; index++) {
 			const duplicate = group[index];
@@ -118,7 +121,7 @@ export function compareOptionalForSelection(a: PlannedItemV2, b: PlannedItemV2):
 	const aTokens = Number.isNaN(a.fullTokens) ? Number.POSITIVE_INFINITY : a.fullTokens;
 	const bTokens = Number.isNaN(b.fullTokens) ? Number.POSITIVE_INFINITY : b.fullTokens;
 	if (aTokens !== bTokens) return aTokens - bTokens;
-	return a.item.id.localeCompare(b.item.id);
+	return compareContextIds(a.item.id, b.item.id);
 }
 
 function priorityRank(priority: ContextBudgetPriorityV2): number {

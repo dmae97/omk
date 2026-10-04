@@ -51,4 +51,17 @@ describe("scheduleDagLevelsMemo dynamic-claim bypass", () => {
 		expect(second).not.toBeNull();
 		expect(second!.levels).toEqual([[0, 1]]);
 	});
+
+	it("does not let a returned nested claim corrupt the cached schedule", async () => {
+		const cache = new Map();
+		const calls = [{ name: "write", arguments: { path: "/audit/file", content: "x" } }];
+		const options = { cwd: "/audit" };
+		const first = await scheduleDagLevelsMemo(calls, options, undefined, cache);
+		if (!first || first.entries[0].resolution.kind !== "claims") throw new Error("Expected path claims");
+		const original = first.entries[0].resolution.claims[0].key;
+		(first.entries[0].resolution.claims[0] as { key: string }).key = "/poisoned";
+		const second = await scheduleDagLevelsMemo(calls, options, undefined, cache);
+		if (!second || second.entries[0].resolution.kind !== "claims") throw new Error("Expected path claims");
+		expect(second.entries[0].resolution.claims[0].key).toBe(original);
+	});
 });

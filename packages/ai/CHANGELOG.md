@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-04
+
+### Added
+
+- GPT-6.1 Sol (`gpt-6.1-sol`, released 2026-09-29) joins the catalog on the `openai`, `azure-openai-responses`, `opencode` and `github-copilot` Responses routes, OpenRouter (`openai/gpt-6.1-sol`, `-pro` and their `:batch` variants) and Vercel AI Gateway. The model has no `none` or `minimal` effort, so the Responses routes offer `low` through `max` with no `off`; OpenRouter's own mandatory declaration gives the same ladder.
+- The `openai-codex` (ChatGPT) provider lists GPT-6.1 Sol, GPT-6 Astra, GPT-6 Sol and GPT-6 Luna as the Codex client's bundled catalog defines them: `low` through `max` with no `off` or `minimal`, an 872,000-token window (Codex's `max_context_window`), 128,000 output tokens and OpenAI's list prices. `ultra` appears where Codex offers it (6.1 Sol, Astra, 6 Sol) and sends the effort Codex sends for it: `xhigh` on 6.1 Sol and Astra, `max` on 6 Sol. OMK does not start Codex's automatic subagent delegation. GPT-6 Luna stops at `max`.
+
+### Changed
+
+- Model catalog refreshed from live sources on 2026-09-30: 1,876 to 1,905 routes, 56 added, 27 removed, 104 price, limit or thinking updates. The removals are upstream: Fireworks and Together dropped Kimi K2.6 and Fireworks GLM-5.2, models.dev marked OpenCode Go's Kimi K2.6, Qwen 3.6 Plus and Qwen 3.7 Max deprecated, and OpenRouter delisted the Nex N2.5 `:free` variants. Tests that pinned those ids now use a surviving successor or a local fixture.
+- Amazon Bedrock Kimi K3 (`global.` and `us.moonshotai.kimi-k3`) stays out of the catalog although models.dev now lists it. AWS documents that Converse fails with `InternalServerException` once earlier-turn reasoning is included, and the Bedrock provider replays that reasoning for non-Claude models.
+
+### Fixed
+
+- `complete()` and `completeSimple()` consume their stream's events as they arrive. Before, every intermediate event stayed queued until the call returned, so a long completion kept all of its deltas in memory. The returned message is unchanged.
+- A Cursor request that reaches its deadline is now closed: the HTTP/2 request ends and its listeners are removed. Before, the deadline error was reported while the request kept running. A caller's own abort still ends the stream as `aborted`; only the internal deadline reports `Cursor timed out`. A peer that never closes the stream after the turn ends now meets the deadline instead of holding the request open.
+- Provider retries reject non-finite option values before dispatch, stop before dispatch when the signal is already aborted, parse server retry-delay metadata defensively, and sleep in timer-safe chunks measured with a monotonic clock. The default server-delay cap and the meaning of `0` (no cap) are unchanged.
+- `retryAssistantCall` no longer retries at once when `baseDelayMs * 2^(attempt - 1)` exceeds 2,147,483,647 ms, the longest delay a Node timer holds; Node fires a longer timer after 1 ms. The delay now stops at that limit, the backoff sleep removes its abort listener when it ends, and an abort during it still returns an aborted message. A base that converts to NaN or a negative number, an omitted one included, uses 2 s, and `+Infinity` takes the limit. A `maxRetries` that converts to NaN no longer retries without end.
+
 ## [1.2.4] - 2026-09-23
 
 ### Fixed

@@ -195,7 +195,10 @@ describe("launchSubagentLanes (§14.4 acceptance)", () => {
 		});
 		expect(seen).toHaveLength(3);
 		for (const context of seen) {
-			expect(context.decision).toBe(parentDecision);
+			// Phase 3 hands children a frozen snapshot of the parent decision, not the caller's object
+			// (see docs/phase3-runtime-boundaries.md); identity is intentionally not preserved.
+			expect(context.decision).toStrictEqual(parentDecision);
+			expect(Object.isFrozen(context.decision)).toBe(true);
 			expect(context.effectiveLaneWidth).toBe(2);
 			expect(context.promptRunId).toBe("run-1");
 		}

@@ -174,7 +174,11 @@ export function isCommandSafetyDisabled(
 	return d === "1" || d === "true" || d === "yes" || d === "on";
 }
 
-function getAssumeYesConfirmPolicies(): Pick<CommandGateOptions, "interactiveConfirmPolicy" | "headlessConfirmPolicy"> {
+/** Confirm-tier policies under the operator's assume-yes setting, for every caller of the shared gate. */
+export function getAssumeYesConfirmPolicies(): Pick<
+	CommandGateOptions,
+	"interactiveConfirmPolicy" | "headlessConfirmPolicy"
+> {
 	if (!isCommandSafetyAssumeYesEnabled()) {
 		return { interactiveConfirmPolicy: "ask", headlessConfirmPolicy: "deny" };
 	}

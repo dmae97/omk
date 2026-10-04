@@ -21,13 +21,20 @@ export class RunBudget {
 	private readonly deadline: number | undefined;
 	private readonly onExhausted: (error: RunBudgetExceededError) => void;
 	private readonly active = new Set<symbol>();
+	private readonly idleWaiters = new Set<() => void>();
+
+	waitForIdle(): Promise<void> {
+		if (this.active.size === 0) return Promise.resolve();
+		return new Promise<void>((resolve) => this.idleWaiters.add(resolve));
+	}
 	private timer: ReturnType<typeof setTimeout> | undefined;
 	private issued = 0;
 	private closed = false;
 	private exhausted: RunBudgetExceededError | undefined;
 
-	constructor(limits: RunBudgetLimits, onExhausted: (error: RunBudgetExceededError) => void) {
-		this.limits = snapshotRunBudgetLimits(limits);
+	constructor(limits: RunBudgetLimits | undefined, onExhausted: (error: RunBudgetExceededError) => void) {
+		// Undefined owns an unbounded scope; an explicitly empty policy is still invalid.
+		this.limits = limits === undefined ? Object.freeze({}) : snapshotRunBudgetLimits(limits);
 		this.onExhausted = onExhausted;
 		this.deadline = this.limits.timeoutMs === undefined ? undefined : performance.now() + this.limits.timeoutMs;
 		if (this.deadline !== undefined) this.armDeadline();
@@ -62,6 +69,10 @@ export class RunBudget {
 		this.active.add(request);
 		return () => {
 			this.active.delete(request);
+			if (this.active.size === 0) {
+				for (const resolve of this.idleWaiters) resolve();
+				this.idleWaiters.clear();
+			}
 		};
 	}
 

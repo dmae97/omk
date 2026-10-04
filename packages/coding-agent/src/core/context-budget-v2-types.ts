@@ -30,8 +30,10 @@ export const CONTEXT_BUDGET_POLICY_VERSION_V2 = "context-budget-v2";
  * plans cached under `sel-2` carry under-priced summaries and must not be served.
  * The same token covers the exchange and promotion passes added alongside it,
  * which change the selected set for identical inputs.
+ * `sel-4-codeunit`: ID ties in ranking, redundancy, exchange, returned plans,
+ * and cache/plan hashes use locale-independent UTF-16 code-unit ordering.
  */
-export const CONTEXT_BUDGET_SELECTION_POLICY_V2 = "sel-3";
+export const CONTEXT_BUDGET_SELECTION_POLICY_V2 = "sel-4-codeunit";
 
 /** Fixed compatibility telemetry for the removed legacy token optimizer. */
 export interface TokenOptimizerRuntimeStatus {

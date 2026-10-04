@@ -12,6 +12,10 @@ npm install -g --ignore-scripts open-multi-agent-kit
 
 `--ignore-scripts` disables dependency lifecycle scripts during install. OMK does not require install scripts for normal npm installs.
 
+OMK 1.3.0 fixes replay-lock startup on macOS when the parent environment uses
+a non-English locale. If an older installation fails with a process-start
+identity error, update OMK and restart it.
+
 ### Uninstall
 
 Use the package manager that installed omk. npm installs are removed with npm:

@@ -8,7 +8,9 @@ import {
 	type McpServerStatus,
 	type ServerRuntime,
 } from "./manager-runtime.ts";
+import { mcpPublicDiagnostic, publicMcpServerVersion } from "./public-diagnostic.ts";
 import type { McpToolDetails } from "./tools.ts";
+import { retireMcpClient } from "./transport-retirement.ts";
 
 export type { McpManagerOptions, McpServerConfig, McpServerState, McpServerStatus } from "./manager-runtime.ts";
 
@@ -37,8 +39,9 @@ export class McpManager {
 			name: runtime.config.name,
 			state: runtime.state,
 			toolCount: runtime.tools.length,
+			...(runtime.retiring === undefined ? {} : { retiring: true }),
 			error: runtime.error,
-			serverVersion: runtime.client?.serverInfo.version,
+			serverVersion: publicMcpServerVersion(runtime.client),
 			...(runtime.quarantinedTools.length > 0 ? { quarantinedTools: runtime.quarantinedTools } : {}),
 		}));
 	}
@@ -67,8 +70,9 @@ export class McpManager {
 			name,
 			state: runtime.state,
 			toolCount: runtime.tools.length,
+			...(runtime.retiring === undefined ? {} : { retiring: true }),
 			error: runtime.error,
-			serverVersion: runtime.client?.serverInfo.version,
+			serverVersion: publicMcpServerVersion(runtime.client),
 			...(runtime.quarantinedTools.length > 0 ? { quarantinedTools: runtime.quarantinedTools } : {}),
 		};
 	}
@@ -81,9 +85,9 @@ export class McpManager {
 	close(): void {
 		for (const runtime of this.runtimes.values()) {
 			runtime.generation += 1;
-			runtime.client?.close();
+			if (runtime.client) void retireMcpClient(runtime, runtime.client);
 			runtime.client = undefined;
-			runtime.pendingClient?.close();
+			if (runtime.pendingClient) void retireMcpClient(runtime, runtime.pendingClient);
 			runtime.pendingClient = undefined;
 			runtime.tools = [];
 			runtime.quarantinedTools = [];
@@ -91,6 +95,16 @@ export class McpManager {
 				runtime.state = "idle";
 		}
 		this.connections.cancelQueued();
+	}
+
+	/** Explicitly join native process/stdio closure; remote effects are outside this proof. */
+	async closeAndWait(): Promise<void> {
+		this.close();
+		await Promise.all(
+			[...this.runtimes.values()].flatMap((runtime) =>
+				[runtime.connecting, runtime.retiring].filter((task): task is Promise<void> => task !== undefined),
+			),
+		);
 	}
 
 	/**
@@ -120,11 +134,11 @@ export class McpManager {
 		} catch (error) {
 			if (runtime.client !== client) return; // A newer owner already handled it.
 			runtime.client = undefined;
-			client.close();
+			void retireMcpClient(runtime, client);
 			runtime.tools = [];
 			runtime.quarantinedTools = [];
 			runtime.state = "failed";
-			runtime.error = `health check failed: ${error instanceof Error ? error.message : String(error)}`;
+			runtime.error = mcpPublicDiagnostic(error, "health");
 		}
 	}
 
@@ -137,7 +151,17 @@ export class McpManager {
 		if (runtime.state === "ready" || runtime.state === "failed") return Promise.resolve();
 		if (runtime.connecting) {
 			if (runtime.connectingGeneration === runtime.generation) return runtime.connecting;
-			return runtime.connecting.then(() => this.ensureConnected(runtime));
+			const generation = runtime.generation;
+			return runtime.connecting.then(() =>
+				runtime.generation === generation ? this.ensureConnected(runtime) : undefined,
+			);
+		}
+
+		if (runtime.retiring) {
+			const generation = runtime.generation;
+			return runtime.retiring.then(() =>
+				runtime.generation === generation ? this.ensureConnected(runtime) : undefined,
+			);
 		}
 
 		runtime.state = "queued";

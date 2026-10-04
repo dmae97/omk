@@ -178,6 +178,7 @@ export {
 	type DurableGoalSnapshot,
 	type DurableGoalStatus,
 	freshDurableGoalEvidence,
+	nextDurableGoalTimestamp,
 } from "./core/durable-goal.ts";
 export {
 	createDurableGoalCheckpoint,

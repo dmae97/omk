@@ -29,6 +29,8 @@ export async function verifyCandidate(context: RunPhaseContext): Promise<RunProj
 			{ role: "verifier", argv: check.argv, workspace: fixed, deadline, claimId: check.claimId },
 			{ ...contract.budget, authority: context.authority, ...(context.signal ? { signal: context.signal } : {}) },
 		);
+		// An operator cancellation says nothing about the candidate: never sign it as a failed check.
+		if (result.failure === "cancelled") throw new VerifiedRunError("cancelled");
 		checks.push({
 			claimId: check.claimId,
 			executionId,

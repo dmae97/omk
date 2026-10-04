@@ -9,9 +9,18 @@
  */
 import { type CheckpointResult, checkpoint } from "./checkpoint.ts";
 import type { ActionConstraints, MetaAction } from "./policy.ts";
+import { DEFAULT_ACTION_CONSTRAINTS } from "./policy.ts";
 import { mismatchSummary } from "./predictions.ts";
 import type { MetaState } from "./state.ts";
-import { stateFingerprint } from "./state.ts";
+import {
+	createInitialMetaState,
+	type InitialMetaStateInput,
+	type MetaBudgetInput,
+	type MetaRunBudgetProjection,
+	metaBudgetFromRunBudget,
+	refreshMetaBudget,
+	stateFingerprint,
+} from "./state.ts";
 import { integer } from "./validation.ts";
 
 export interface MetaDiagnostic {
@@ -74,6 +83,63 @@ export function toDiagnostic(state: MetaState, result: CheckpointResult): MetaDi
 		calibrationDemoted: demoted,
 		checkpointCount: result.state.checkpointCount,
 	};
+}
+
+export interface MetaRuntimeObservation {
+	readonly state: MetaState;
+	readonly diagnostic?: MetaDiagnostic;
+	readonly failed: boolean;
+}
+
+export interface MetaRuntimeView {
+	readonly state: MetaState;
+	readonly lastDiagnostic: MetaDiagnostic | undefined;
+}
+
+export interface MetaRuntimeController extends MetaRuntimeView {
+	observe(budget: MetaBudgetInput, nowMs?: number): MetaRuntimeObservation;
+	observeRunBudget(snapshot?: MetaRunBudgetProjection, nowMs?: number): MetaRuntimeObservation;
+}
+
+export function createMetaRuntime(input: InitialMetaStateInput): MetaRuntimeController {
+	let state = createInitialMetaState(input);
+	let lastDiagnostic: MetaDiagnostic | undefined;
+	const observe = (budget: MetaBudgetInput, nowMs = Date.now()): MetaRuntimeObservation => {
+		try {
+			state = refreshMetaBudget(state, budget);
+			const result = checkpoint({ state, nowMs, constraints: DEFAULT_ACTION_CONSTRAINTS });
+			state = result.state;
+			lastDiagnostic = toDiagnostic(state, result);
+			return { state, diagnostic: lastDiagnostic, failed: false };
+		} catch {
+			return { state, diagnostic: lastDiagnostic, failed: true };
+		}
+	};
+	return {
+		get state() {
+			return state;
+		},
+		get lastDiagnostic() {
+			return lastDiagnostic;
+		},
+		observe,
+		observeRunBudget: (snapshot, nowMs) => observe(metaBudgetFromRunBudget(snapshot), nowMs),
+	};
+}
+
+export function createAgentSessionMetaRuntime(input: {
+	readonly taskId: string;
+	readonly candidateHash: string;
+	readonly environmentHash: string;
+}): MetaRuntimeController {
+	return createMetaRuntime({
+		...input,
+		stageId: "agent-session",
+		targetArtifact: "agent-session",
+		goalScope: "runtime-observation",
+		authorizedActions: DEFAULT_ACTION_CONSTRAINTS.authorizedActions,
+		budget: metaBudgetFromRunBudget(),
+	});
 }
 
 /**

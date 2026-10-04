@@ -79,6 +79,8 @@ describe("manual compaction during an active tool call", () => {
 
 		expect(result.summary).toContain("compacted summary");
 		expect(result.summary).toContain("turn prefix summary");
+		expect(harness.faux.state.callCount).toBe(3);
+		expect(harness.getPendingResponseCount()).toBe(0);
 		const sessionFile = sessionManager.getSessionFile();
 		if (!sessionFile) throw new Error("expected persisted session file");
 		const report = inspectSessionIntegrity(readFileSync(sessionFile));

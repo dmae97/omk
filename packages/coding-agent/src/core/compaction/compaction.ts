@@ -11,6 +11,7 @@ import type { AssistantMessage, Context, Model, SimpleStreamOptions, Usage } fro
 import { completeSimple, type RetryCallbacks, type RetryPolicy, retryAssistantCall } from "omk-ai";
 import type { CompactionSettings } from "./compaction-headroom.ts";
 import { type CompactFailoverOptions, withCompactionModelFailover } from "./model-failover.ts";
+import { summaryTextOrThrow } from "./summary-response.ts";
 
 export {
 	type CompactionHeadroomLimit,
@@ -118,9 +119,19 @@ export interface ContextUsageEstimate {
 	lastUsageIndex: number | null;
 }
 
-function getLastAssistantUsageInfo(messages: AgentMessage[]): { usage: Usage; index: number } | undefined {
+function getLastAssistantUsageInfo(
+	messages: AgentMessage[],
+	ignoreUsageAtOrBeforeMs?: number,
+): { usage: Usage; index: number } | undefined {
 	for (let i = messages.length - 1; i >= 0; i--) {
-		const usage = getAssistantUsage(messages[i]);
+		const message = messages[i];
+		// Usage reported at or before the latest compaction priced history that no longer exists.
+		const stale =
+			ignoreUsageAtOrBeforeMs !== undefined &&
+			message.role === "assistant" &&
+			(message as AssistantMessage).timestamp <= ignoreUsageAtOrBeforeMs;
+		if (stale) continue;
+		const usage = getAssistantUsage(message);
 		if (usage) return { usage, index: i };
 	}
 	return undefined;
@@ -130,8 +141,11 @@ function getLastAssistantUsageInfo(messages: AgentMessage[]): { usage: Usage; in
  * Estimate context tokens from messages, using the last assistant usage when available.
  * If there are messages after the last usage, estimate their tokens with estimateTokens.
  */
-export function estimateContextTokens(messages: AgentMessage[]): ContextUsageEstimate {
-	const usageInfo = getLastAssistantUsageInfo(messages);
+export function estimateContextTokens(
+	messages: AgentMessage[],
+	ignoreUsageAtOrBeforeMs?: number,
+): ContextUsageEstimate {
+	const usageInfo = getLastAssistantUsageInfo(messages, ignoreUsageAtOrBeforeMs);
 
 	if (!usageInfo) {
 		let estimated = 0;
@@ -164,8 +178,10 @@ export function estimateContextTokens(messages: AgentMessage[]): ContextUsageEst
 export function estimateProjectedContextTokens(
 	messages: AgentMessage[],
 	pendingMessages: AgentMessage[],
+	ignoreUsageAtOrBefore?: string,
 ): ContextUsageEstimate {
-	return estimateContextTokens([...messages, ...pendingMessages]);
+	const boundary = ignoreUsageAtOrBefore ? Date.parse(ignoreUsageAtOrBefore) : Number.NaN;
+	return estimateContextTokens([...messages, ...pendingMessages], Number.isFinite(boundary) ? boundary : undefined);
 }
 
 // ============================================================================
@@ -621,10 +637,6 @@ export function prepareCompaction(
 	pathEntries: SessionEntry[],
 	settings: CompactionSettings,
 ): CompactionPreparation | undefined {
-	if (pathEntries.length > 0 && pathEntries[pathEntries.length - 1].type === "compaction") {
-		return undefined;
-	}
-
 	let prevCompactionIndex = -1;
 	for (let i = pathEntries.length - 1; i >= 0; i--) {
 		if (pathEntries[i].type === "compaction") {
@@ -651,9 +663,7 @@ export function prepareCompaction(
 
 	// Get UUID of first kept entry
 	const firstKeptEntry = pathEntries[cutPoint.firstKeptEntryIndex];
-	if (!firstKeptEntry?.id) {
-		return undefined; // Session needs migration
-	}
+	if (!firstKeptEntry?.id) return undefined; // Session needs migration
 	const firstKeptEntryId = firstKeptEntry.id;
 
 	const historyEnd = cutPoint.isSplitTurn ? cutPoint.turnStartIndex : cutPoint.firstKeptEntryIndex;
@@ -673,6 +683,10 @@ export function prepareCompaction(
 			if (msg) turnPrefixMessages.push(msg);
 		}
 	}
+	// A trailing compaction can still retain too much history; re-cutting its kept tail is
+	// worthwhile only when a tighter keep budget moves the cut past what it already kept.
+	if (pathEntries.at(-1)?.type === "compaction" && messagesToSummarize.length + turnPrefixMessages.length === 0)
+		return undefined;
 
 	// Extract file operations from messages and previous compaction
 	const fileOps = extractCompactionFileOperations(messagesToSummarize, pathEntries, prevCompactionIndex);
@@ -918,21 +932,4 @@ async function generateTurnPrefixSummary(
 	);
 
 	return summaryTextOrThrow(response, "Turn prefix summarization failed");
-}
-
-/** Summary text of a response. A length stop that wrote no text is a failure, not an empty summary. */
-function summaryTextOrThrow(response: AssistantMessage, failure: string): string {
-	if (response.stopReason === "error") {
-		throw new Error(`${failure}: ${response.errorMessage || "Unknown error"}`);
-	}
-	const text = response.content
-		.filter((c): c is { type: "text"; text: string } => c.type === "text")
-		.map((c) => c.text)
-		.join("\n");
-	if (response.stopReason === "length" && text.trim().length === 0) {
-		// Thinking can spend the whole cap; appending file lists to nothing would commit
-		// a "summary" that silently drops the conversation.
-		throw new Error(`${failure}: the model reached its output limit before writing a summary`);
-	}
-	return text;
 }

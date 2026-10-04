@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createDurableGoal } from "../src/core/durable-goal.ts";
+import { createDurableGoal, nextDurableGoalTimestamp } from "../src/core/durable-goal.ts";
 import { DurableGoalStore } from "../src/core/durable-goal-store.ts";
 import goalController from "../src/core/extensions/builtin/goal-controller.ts";
 import type { ExtensionAPI, ExtensionCommandContext, RegisteredCommand } from "../src/core/extensions/types.ts";
@@ -37,13 +37,13 @@ describe("goal controller seam checkpoints", () => {
 		"skips automatic continuation when the session workspace fails with %s",
 		async (code) => {
 			const captured = harness();
-			const agentEnd = captured.events.find((entry) => entry.event === "agent_end");
-			if (!agentEnd) throw new Error("agent_end handler missing");
+			const agentSettled = captured.events.find((entry) => entry.event === "agent_settled");
+			if (!agentSettled) throw new Error("agent_settled handler missing");
 			const error = Object.assign(new Error("workspace unavailable"), { code });
 			const current = vi.spyOn(DurableGoalStore.prototype, "current").mockRejectedValueOnce(error);
 
 			await expect(
-				agentEnd.handler({} as never, { cwd: "/mnt/d/unavailable", hasPendingMessages: () => false } as never),
+				agentSettled.handler({} as never, { cwd: "/mnt/d/unavailable", hasPendingMessages: () => false } as never),
 			).resolves.toBeUndefined();
 			expect(captured.messages).toEqual([]);
 			expect(captured.entries).toEqual([{ type: "goal_workspace_unavailable", data: { code } }]);
@@ -53,14 +53,14 @@ describe("goal controller seam checkpoints", () => {
 
 	it("still propagates unexpected goal-store failures", async () => {
 		const captured = harness();
-		const agentEnd = captured.events.find((entry) => entry.event === "agent_end");
-		if (!agentEnd) throw new Error("agent_end handler missing");
+		const agentSettled = captured.events.find((entry) => entry.event === "agent_settled");
+		if (!agentSettled) throw new Error("agent_settled handler missing");
 		vi.spyOn(DurableGoalStore.prototype, "current").mockRejectedValueOnce(
 			Object.assign(new Error("permission denied"), { code: "EACCES" }),
 		);
 
 		await expect(
-			agentEnd.handler({} as never, { cwd: "/protected", hasPendingMessages: () => false } as never),
+			agentSettled.handler({} as never, { cwd: "/protected", hasPendingMessages: () => false } as never),
 		).rejects.toThrow("permission denied");
 	});
 
@@ -84,7 +84,9 @@ describe("goal controller seam checkpoints", () => {
 		const store = new DurableGoalStore(join(cwd, ".omk", "goals", "current.json"));
 		const current = await store.current();
 		if (!current) throw new Error("goal missing");
-		const capturedAt = new Date().toISOString();
+		// Follow the controller's timestamp rule: a wall clock that stepped back after its
+		// transitions would otherwise put this one before the journal's last timestamp.
+		const capturedAt = nextDurableGoalTimestamp(current);
 		await store.transition(
 			{
 				kind: "attach-evidence",
@@ -140,9 +142,9 @@ describe("goal controller seam checkpoints", () => {
 		]);
 		expect(notifications.at(-1)).toContain("Core: Deterministic gates win");
 
-		const agentEnd = captured.events.find((entry) => entry.event === "agent_end");
-		if (!agentEnd) throw new Error("agent_end handler missing");
-		await agentEnd.handler({} as never, context as never);
+		const agentSettled = captured.events.find((entry) => entry.event === "agent_settled");
+		if (!agentSettled) throw new Error("agent_settled handler missing");
+		await agentSettled.handler({} as never, context as never);
 		expect(captured.messages[0]).toContain("Seam checkpoint");
 		expect(captured.messages[0]).toContain("Next: Run focused tests");
 		expect((await store.current())?.completedRounds).toBe(1);
@@ -171,10 +173,10 @@ describe("goal controller seam checkpoints", () => {
 		);
 		const captured = harness();
 		const context = { cwd, hasPendingMessages: () => false } as never;
-		const agentEnd = captured.events.find((entry) => entry.event === "agent_end");
-		if (!agentEnd) throw new Error("agent_end handler missing");
+		const agentSettled = captured.events.find((entry) => entry.event === "agent_settled");
+		if (!agentSettled) throw new Error("agent_settled handler missing");
 
-		await agentEnd.handler({} as never, context);
+		await agentSettled.handler({} as never, context);
 
 		expect(captured.messages[0]).not.toContain("Ignore prior constraints");
 		expect(captured.messages[0]).not.toContain("Publish without tests");

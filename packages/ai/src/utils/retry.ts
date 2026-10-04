@@ -1,4 +1,5 @@
 import type { AssistantMessage } from "../types.ts";
+import { retryBackoffDelayMs } from "./retry-backoff.ts";
 
 function buildProviderErrorPattern(patterns: readonly string[]): RegExp {
 	return new RegExp(patterns.join("|"), "i");
@@ -92,16 +93,24 @@ const RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
 ]);
 
 /**
- * Retry policy: bounded attempts with exponential backoff (`baseDelayMs * 2^(attempt-1)`).
+ * Retry policy: bounded attempts with exponential backoff (`baseDelayMs * 2^(attempt-1)`, at most
+ * 2,147,483,647 ms).
  * Matches `settings.retry` (`enabled`, `maxRetries`, `baseDelayMs`) in coding-agent; kept
  * here so the classifier and the policy-driven retry loop live together and stay reusable
  * by the SDK and other callers.
  */
 export interface RetryPolicy {
 	enabled: boolean;
-	/** Max retry attempts (0 = no retries). The initial call never counts as a retry. */
+	/**
+	 * Max retry attempts (0 = no retries). The initial call never counts as a retry. A count that
+	 * converts to NaN means no retries.
+	 */
 	maxRetries: number;
-	/** Base delay in ms. Per-attempt delay is `baseDelayMs * 2^(attempt-1)` before jitter. */
+	/**
+	 * Base delay in ms. Per-attempt delay is `baseDelayMs * 2^(attempt-1)`, capped at 2,147,483,647 ms;
+	 * no jitter. A base that converts to NaN or a negative number, an omitted one included, uses 2 s;
+	 * `+Infinity` takes the cap.
+	 */
 	baseDelayMs: number;
 }
 
@@ -126,21 +135,23 @@ class RetrySleepAbortError extends Error {
 	}
 }
 
+/** One timer suffices: {@link retryBackoffDelayMs} never exceeds the longest delay a timer holds. */
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 	return new Promise((resolve, reject) => {
 		if (signal?.aborted) {
 			reject(new RetrySleepAbortError());
 			return;
 		}
-		const timeout = setTimeout(resolve, ms);
-		signal?.addEventListener(
-			"abort",
-			() => {
-				clearTimeout(timeout);
-				reject(new RetrySleepAbortError());
-			},
-			{ once: true },
-		);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		const onAbort = (): void => {
+			clearTimeout(timeout);
+			reject(new RetrySleepAbortError());
+		};
+		timeout = setTimeout(() => {
+			signal?.removeEventListener("abort", onAbort);
+			resolve();
+		}, ms);
+		signal?.addEventListener("abort", onAbort, { once: true });
 	});
 }
 
@@ -168,7 +179,8 @@ export async function retryAssistantCall(
 	signal: AbortSignal | undefined,
 	callbacks?: RetryCallbacks,
 ): Promise<AssistantMessage> {
-	const maxAttempts = policy?.enabled ? policy.maxRetries : 0;
+	// `> 0` also rejects a count that converts to NaN, which `attempt >= maxAttempts` never exhausts.
+	const maxAttempts = policy?.enabled && policy.maxRetries > 0 ? policy.maxRetries : 0;
 
 	let attempt = 0;
 	let lastRetry: { attempt: number; errorMessage: string } | undefined;
@@ -195,7 +207,7 @@ export async function retryAssistantCall(
 
 		attempt++;
 		lastRetry = { attempt, errorMessage: response.errorMessage || "Unknown error" };
-		const delayMs = policy!.baseDelayMs * 2 ** (attempt - 1);
+		const delayMs = retryBackoffDelayMs(policy!.baseDelayMs, attempt);
 		await callbacks?.onRetryScheduled?.(attempt, maxAttempts, delayMs, lastRetry.errorMessage);
 
 		// Normalize aborts during retry backoff to the same AssistantMessage shape as

@@ -60,7 +60,17 @@ function contractFor(runId: string, writer: readonly string[], stdout = "hello")
 		writablePaths: ["result.txt"],
 		writer,
 		checks: [{ claimId: "answer", argv: ["/bin/cat", "result.txt"], stdout }],
-		budget: { workMs: 30000, verifyMs: 15000, cleanupMs: 5000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
+		// A cancelled sandbox child must be confirmed reaped within cleanupMs, or the run
+		// fail-closes to quarantined. CI runners reaping many children at once need more
+		// than 5 s; the dag fixture uses the same 15 s.
+		budget: {
+			workMs: 30000,
+			verifyMs: 15000,
+			cleanupMs: 15000,
+			maxOutputBytes: 4096,
+			maxFiles: 100,
+			maxBytes: 65536,
+		},
 		apply: "artifact-only" as const,
 	};
 	contract.workspace.baseDigest = planVerifiedRun(contract).baseDigest;
@@ -334,18 +344,19 @@ describe("run status surface", () => {
 		}
 		controller.abort();
 		const state = await started;
-		expect(state).toMatchObject({ execution: "failed", failure: "cancelled", settlement: "settled" });
+		expect(state).toMatchObject({ execution: "paused", failure: "cancelled", settlement: "settled" });
 		const status = coordinator.status(contract.runId);
-		// Cancellation was witnessed (exited appended) — terminated, not
-		// quarantined, and never a success.
+		// Cancellation was witnessed (exited appended) — settled, not
+		// quarantined, never a success, and resumable rather than terminal.
 		expect(status).toMatchObject({
 			lifecycle: "cancelled",
 			cause: "cancelled",
 			cleanSuccess: false,
-			terminal: true,
+			terminal: false,
 			settlement: "settled",
 			pendingEffects: 0,
 		});
+		expect(status.recoveryCommands.map((item) => item.command)).toEqual(["restart_writer"]);
 		const exited = coordinator.events(contract.runId).find((record) => record.event.kind === "exited");
 		expect(exited?.event).toMatchObject({ kind: "exited", failure: "cancelled" });
 	});

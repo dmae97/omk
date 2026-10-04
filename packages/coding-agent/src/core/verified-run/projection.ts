@@ -1,5 +1,6 @@
 import { reduceDagEvent } from "./dag-projection.ts";
 import type { RunTaskProjection } from "./dag-types.ts";
+import { reduceInterruptedEvent } from "./interruption.ts";
 import { type ProcessReduction, reduceProcessEvent } from "./process-projection.ts";
 import { reduceRecoveryEvent } from "./recovery-projection.ts";
 import type { RunEvent, RunProjection, WriterReduction } from "./run-types.ts";
@@ -184,6 +185,9 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 					verification: "inconclusive",
 					settlement: state.activeExecutionIds.length || state.writerOpen ? "quarantined" : "settled",
 				};
+				break;
+			case "interrupted":
+				reduceInterruptedEvent(context);
 				break;
 			case "publish_intent":
 				if (

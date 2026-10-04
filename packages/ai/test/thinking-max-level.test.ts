@@ -28,8 +28,9 @@ const GLM5_EFFORT_MODEL_IDS = [
 ] as const;
 
 const GLM5_BUDGET_PATH_MODEL_IDS = [
-	["fireworks", "accounts/fireworks/models/glm-5p2"],
-	["fireworks", "accounts/fireworks/routers/glm-5p2-fast"],
+	// Fireworks replaced its GLM-5.2 ids with GLM-5.3 (models.dev fireworks-ai, 2026-09-30).
+	["fireworks", "accounts/fireworks/models/glm-5p3"],
+	["fireworks", "accounts/fireworks/routers/glm-5p3-fast"],
 	["vercel-ai-gateway", "zai/glm-5.2"],
 	["vercel-ai-gateway", "zai/glm-5.2-fast"],
 ] as const;

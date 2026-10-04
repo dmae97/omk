@@ -222,6 +222,10 @@ omk run inspect greeting-1 --state-dir /private/operator-state/verified-runs --j
 omk run evidence greeting-1 --state-dir /private/operator-state/verified-runs
 omk run artifact greeting-1 --candidate CANDIDATE_DIGEST --path greeting.txt \
   --state-dir /private/operator-state/verified-runs
+# 다른 셸에서: 실행 중인 run을 멈추고 재개 가능한 상태로 둡니다.
+omk run cancel greeting-1 --state-dir /private/operator-state/verified-runs
+# 복구할 수 없는 run의 파생 작업 공간만 정리합니다. --execute가 없으면 보고만 합니다.
+omk run gc --older-than 7d --state-dir /private/operator-state/verified-runs
 ```
 
 기본 state 경로는 agent directory 아래 `verified-runs/`입니다. state와 workspace가
@@ -230,13 +234,16 @@ omk run artifact greeting-1 --candidate CANDIDATE_DIGEST --path greeting.txt \
 state를 작성하지 않습니다.
 
 출력은 JSON입니다. `artifact`는 manifest에 있는 정확한 상대 경로만 받아 base64로
-반환합니다. 다른 candidate·절대 경로·traversal을 허용하지 않습니다. 기존 파일에
-적용하거나 Git ref를 갱신하는 명령은 없습니다.
+반환합니다. 다른 candidate·절대 경로·traversal을 허용하지 않습니다. Git ref를 바꾸는
+명령은 `publish` 하나입니다. 검증된 candidate를 결정적 commit으로 봉인하고, 지정한 parent
+OID에서 `refs/omk/accepted`로 compare-and-swap합니다. 작업 트리·브랜치·원래 파일에는
+적용하지 않습니다(`apply`는 미구현).
 
 종료 코드: 정상 조회·candidate_ready는 `0`, 실패·미수락·무결성 오류는 `1`, 잘못된
-명령·계약은 `2`입니다. 실행 중 SIGINT/SIGTERM은 해당 자식에 취소를 전달합니다.
-`run resume`는 아래의 제한된 복구만 지원합니다. `run cancel` 원격 제어와 `run apply`는
-아직 지원하지 않습니다.
+명령·계약은 `2`입니다. 계약에 없는 오류는 `verified-run: operation_failed (Error ENOTDIR)`처럼
+오류 종류와 code만 출력합니다. 메시지는 절대 경로나 계약 문구를 담을 수 있어 내보내지 않습니다. 실행 중 SIGINT/SIGTERM이나 다른 셸의 `run cancel`은 해당 자식에
+취소를 전달하고 run을 재개 가능한 `paused`로 남깁니다(아래 "취소와 원격 취소").
+`run resume`는 아래의 제한된 복구만 지원합니다. `run apply`는 아직 지원하지 않습니다.
 소스 체크아웃에서는 root에서 `node --import tsx packages/coding-agent/src/cli.ts run ...`로
 동일 경로를 사용할 수 있습니다. 이 변경만으로 설치된 TUI가 갱신되지는 않습니다.
 
@@ -355,6 +362,60 @@ command는 `kind: "restart_writer"`, `baseDigest`, 기존 contract/ref/command I
 `ready`는 필요한 조건을 관측했다는 뜻일 뿐이며 실제 lease 획득을 보장하지 않습니다.
 input pin 이전 또는 process identity 기록 이전의 crash window는 여전히 자동 복구하지 않습니다.
 
+## 취소와 원격 취소
+
+운영자 취소는 판정이 아닙니다. 취소된 run은 terminal `failed`가 아니라
+`execution: "paused"`, `failure: "cancelled"`로 남고 원장에 `interrupted` event를 씁니다.
+`status`의 lifecycle은 `cancelled`, `terminal`은 `false`입니다.
+
+| 취소 시점 | 재개 명령 | 조건 |
+| --- | --- | --- |
+| writer 실행 중(command·scripted-agent) | `restart-writer` | 불변 입력에서 새 작업 공간으로 다시 실행 |
+| 검증 중(고정 candidate 있음) | `resume` | 같은 candidate를 새 generation에서 다시 검증 |
+| 명령 DAG task 실행 중 | `retry-tasks` | 종료가 확인된(`exited`·`cancelled`) 시도는 소진하지 않고 되돌림 |
+
+- 재개는 기존 복구 경계를 그대로 따릅니다. 기록된 namespace가 모두 종료됐다고 probe로
+  확인되지 않으면 `unsettled`로 거부합니다. 원래 기한은 멈추지 않고 환급하지 않습니다.
+  generation 상한도 같습니다.
+- 검증 중 취소된 검사는 검사 실패로 서명하지 않습니다. 취소는 candidate의 정오에 대해
+  아무것도 말하지 않기 때문입니다.
+- 취소 외의 실패(`deadline`, writer 실패, 무결성 오류)는 계속 terminal입니다. `status`는
+  terminal run에 복구 명령을 제안하지 않습니다.
+
+`omk run cancel ID [--wait-ms N]`은 run 디렉터리에 durable 요청 파일
+(`cancel-request.json`)을 씁니다. run을 소유한 CLI 프로세스가 250ms마다 확인해 요청을
+지우고 SIGINT와 같은 경로로 취소합니다. PID로 signal을 보내지 않습니다. 결과는 JSON의
+`outcome`입니다.
+
+| outcome | 의미 | 종료 코드 |
+| --- | --- | --- |
+| `not_running` | 살아 있는 소유자가 없어 요청을 쓰지 않음 | 0 |
+| `observed` | 소유자가 요청을 소비하고 run을 놓음 | 0 |
+| `not_observed` | 소유자가 먼저 끝나 요청을 회수함 | 0 |
+| `pending` | 대기 시간(기본 10초, 최대 600초) 뒤에도 소유 중이며 요청은 남음 | 1 |
+
+새 작업은 시작할 때 살아 있는 소유자가 없는 run의 남은 요청을 지우므로, 오래된 요청이
+관계없는 작업을 취소하지 않습니다. SDK 호출자는 `watchRunCancelRequest()`로 같은 요청을
+자신의 `AbortSignal`에 연결할 수 있습니다.
+
+## artifact GC
+
+`omk run gc [--older-than DURATION] [--execute]`는 state root 바로 아래의 run을 하나씩
+owner lease를 잡고 검사합니다. 다음을 모두 만족하는 run만 정리합니다.
+
+- 살아 있거나 판정할 수 없는 소유자가 없음(`owner_live`, `owner_unknown`이면 유지)
+- 실행 중인 namespace·열린 writer가 없고 settlement가 `settled`
+- publish intent나 reconciliation이 남아 있지 않음
+- 더 이상 복구할 수 없음: `succeeded`·`failed`이거나, `paused`여도 budget 상한이 지났거나
+  boot가 바뀜
+- 원장 파일의 마지막 수정이 `--older-than`(기본 `7d`, 단위 `ms`·`s`·`m`·`h`·`d`)보다 오래됨
+
+지우는 것은 파생 작업 공간(`writer`, `writer-N`, `candidate`, `candidate-N`, `tasks`)뿐입니다.
+원장, issuer key, candidate manifest, blob, receipt, attestation은 남기므로 `evidence`,
+`artifact`, `status`, `publish`는 그대로 동작합니다. symlink는 따라가지 않습니다.
+`--execute`가 없으면 지울 경로와 바이트만 보고합니다. content-addressed blob의 orphan은
+정리하지 않습니다.
+
 ## 내구성·예산·복구 한계
 
 - 원장 `version: 2`는 기존 v1 transcript journal과 별도입니다. 순서·hash chain·상태
@@ -372,7 +433,7 @@ input pin 이전 또는 process identity 기록 이전의 crash window는 여전
   snapshot 수락 한도이며 실행 중 disk·RAM·PID의 OS 강제 한도가 아닙니다. cgroup,
   실 provider의 HTTP attempt/과금 집계, run 간 전역 budget은 미구현입니다.
 - manifest·blob·native v3 receipt·attestation을 먼저 내구성 있게 보존하고 마지막에 수락
-  event를 씁니다. orphan artifact가 남을 수 있으며 GC는 없습니다. 새 attestation v3는 각
+  event를 씁니다. orphan blob이 남을 수 있습니다. `omk run gc`는 파생 작업 공간만 지웁니다. 새 attestation v3는 각
   native receipt의 core digest와 현재 generation/run/candidate/contract/검사/환경을 묶습니다. 두 번째
   authoritative replay ledger는 만들지 않습니다.
 - `evidence()`는 `receiptFormat: "v3"`와 검증된 `receipts`를 반환합니다. native core의
@@ -385,6 +446,10 @@ input pin 이전 또는 process identity 기록 이전의 crash window는 여전
   시각을 투영합니다. 별도로 다시 읽은 wall clock이 뒤로 가도 시간 순서가 뒤집히지 않습니다.
   재개 권한·예산 판정은 이 wall 표시가 아니라 저장된 boot-relative 기한을 사용합니다.
   기존 v3 schema와 일반 bash receipt는 바꾸지 않습니다.
+- 권한 저장소(authority store)의 기본 시계는 저장소를 열 때의 wall time에 고정하고 단조
+  시계로만 전진합니다. WSL2 재동기화나 NTP step으로 호스트 wall clock이 뒤로 가도 실행 중
+  `clock_anomaly`로 중단하지 않습니다. 단조 시계가 빠르게 흐르면 grant가 더 일찍 끝날
+  뿐이고 늘어나지 않습니다. 명시적으로 주입한 시계가 뒤로 가면 여전히 거부합니다.
 - issuer key는 worker 밖 `0600` 파일입니다. 재조회는 저장된 key와 MAC을 검사합니다.
   key를 잃으면 과거 receipt를 다시 서명하지 않습니다. candidate/toolchain/receipt/blob
   변조는 수락 조회를 막습니다. 환경 hash는 kernel·sandbox argv·직접 executable을
@@ -403,7 +468,10 @@ input pin 이전 또는 process identity 기록 이전의 crash window는 여전
 | M3 정적 command DAG·선택 retry | CLI/SDK 연결. 성공 checkpoint 보존, 실제 SIGKILL·세대/시도/예산 경계 검사 |
 | M3 bounded eager frontier | 기본 1개, 명시적으로 최대 2개. 의존성 해제·다중 namespace 취소/기록 실패·실제 2-writer SIGKILL 복구 검사 |
 | M3 verification edge·계획 amendment·변경 후 adoption | 미구현. 동일 계약 안의 출력 재사용만 제공 |
-| M4 TUI/RPC·MCP·GC·적용 승인/CAS | 미구현. CLI/SDK 조회·개별 artifact 회수 제공 |
+| 재개 가능한 취소·원격 취소 | CLI/SDK 연결. writer·검증·DAG 단계별 재개 검사, 교차 프로세스 CLI 취소 검사 |
+| artifact GC | 파생 작업 공간만. 증거 보존·symlink 비추적·소유자·예산 조건 검사. orphan blob 미정리 |
+| 게시 CAS | `publish`가 `refs/omk/accepted`를 CAS로 갱신. 작업 트리 적용(`apply`)은 미구현 |
+| M4 TUI/RPC·MCP | 미구현. CLI/SDK 조회·개별 artifact 회수 제공 |
 | S90 전체 G01–G20·성능/정상 회귀 하한 | 미측정. 부분 테스트로 점수를 부여하지 않음 |
 
 직접 검증 기록과 제한은 [TDD 증거](verified-run-testing.md)에 있습니다.

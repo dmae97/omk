@@ -13,6 +13,7 @@
  *   FAKE_MCP_MODE=no-tools      handshake succeeds, tools/list returns []
  *   FAKE_MCP_MODE=paged         tools/list returns two cursor-paginated pages
  *   FAKE_MCP_MODE=broken-schema tools/list ships schemas with no object root
+ *   FAKE_MCP_DESCRIPTION_CHARS=N pad every tool description by N characters
  */
 
 const mode = process.env.FAKE_MCP_MODE ?? "ok";
@@ -38,6 +39,8 @@ const TOOLS = [
 		inputSchema: { type: "object", properties: {} },
 	},
 ];
+const descriptionPadding = "x".repeat(Number(process.env.FAKE_MCP_DESCRIPTION_CHARS ?? 0));
+for (const tool of TOOLS) tool.description += descriptionPadding;
 
 // What mcp-obsidian@1.0.0 actually sends: a dialect key and no object root.
 const BROKEN_TOOLS = [
@@ -64,7 +67,7 @@ function handle(request) {
 			result: {
 				protocolVersion: "2025-06-18",
 				capabilities: { tools: {} },
-				serverInfo: { name: "fake-mcp", version: "9.9.9" },
+				serverInfo: { name: "fake-mcp", version: process.env.FAKE_MCP_VERSION ?? "9.9.9" },
 			},
 		});
 		return;

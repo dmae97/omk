@@ -1,5 +1,6 @@
 import type { AssistantMessage } from "omk-ai";
 import { isContextOverflow } from "omk-ai";
+import { MAX_TIMER_DELAY_MS } from "../utils/sleep.ts";
 import {
 	isContentSafetyStopMessage,
 	isQuotaExhaustionMessage,
@@ -46,7 +47,8 @@ export function isRetryableAssistantError(message: AssistantMessage, contextWind
  * stays unchanged when undefined is returned.
  */
 export function retryBudgetForAssistantError(message: AssistantMessage, configuredMaxRetries: number): number {
-	if (configuredMaxRetries <= 0) return 0;
+	// `!(x > 0)` also catches a count that converts to NaN, which `attempt > maxRetries` never exhausts.
+	if (!(configuredMaxRetries > 0)) return 0;
 	return isContentSafetyStopMessage(message.errorMessage) ? Math.min(1, configuredMaxRetries) : configuredMaxRetries;
 }
 
@@ -60,9 +62,23 @@ export function nextRetryAttempt(input: {
 	return attempt > input.maxRetries ? undefined : attempt;
 }
 
-/** Same-model retry backs off exponentially; a failed-over retry starts fast. */
+const DEFAULT_RETRY_BASE_DELAY_MS = 2000;
+
+/**
+ * Same-model retry backs off exponentially; a failed-over retry starts fast. The delay stops at
+ * the timer limit, because a Node timer fires a longer delay after 1 ms and a late attempt then
+ * retried at once. The base converts as the old arithmetic did; `+Infinity` takes the cap, and a
+ * base that converts to NaN or a negative number uses the 2 s default; a NaN attempt yields the
+ * cap. `omk-ai`'s `retryAssistantCall` applies the same rule to summarization retries.
+ */
 export function computeRetryDelayMs(baseDelayMs: number, attempt: number, failoverOccurred: boolean): number {
-	return failoverOccurred ? Math.min(400, baseDelayMs) : baseDelayMs * 2 ** (attempt - 1);
+	const requested = Number(baseDelayMs);
+	// `>= 0` is false for NaN; +Infinity passes and takes the cap.
+	const base = requested >= 0 ? Math.min(requested, MAX_TIMER_DELAY_MS) : DEFAULT_RETRY_BASE_DELAY_MS;
+	if (failoverOccurred) return Math.min(400, base);
+	if (base === 0) return 0;
+	const delay = base * 2 ** (attempt - 1);
+	return delay <= MAX_TIMER_DELAY_MS ? delay : MAX_TIMER_DELAY_MS;
 }
 
 /**

@@ -36,6 +36,16 @@ This matters for clients:
 
 In particular, Node `readline` is not protocol-compliant for RPC mode because it also splits on `U+2028` and `U+2029`, which are valid inside JSON strings.
 
+## TypeScript client resource lifecycle
+
+`RpcClient.getStderr()` keeps only the latest 8,192 UTF-16 code units for the current child process; `start()` clears the previous process's diagnostic tail. Error messages use the same bounded tail. Raw child stderr still forwards to the parent's stderr.
+
+`waitForIdle()` and `collectEvents()` reject and release their temporary subscriptions on child failure, process closure, or `stop()`. Successful collection ends at `agent_end`. `promptAndWait()` propagates rejected prompt acceptance and cancels its collector immediately. Normal process exit drains the final stdout events before rejecting unfinished waiters. Drain ends when stdio closes or 100 milliseconds after direct child exit, whichever comes first; descendants retaining inherited pipes cannot keep RPC waiters alive indefinitely.
+
+`collectEvents()` deliberately returns the complete event history and can consume memory proportional to event volume, including repeated streaming snapshots. Use `onEvent()` and retain only the state your UI needs for long-running or high-volume sessions. The default event deadline is 60 seconds; it bounds waiting time, not event bytes.
+
+`stop()` rejects in-flight RPC requests immediately, sends `SIGTERM` to a running child, escalates to `SIGKILL` after one second if needed, and waits for direct child exit. An already exited child returns without an additional one-second delay. Direct exit is not proof that detached descendants have terminated. If signalling returns false while the child still appears live, or signalling throws, `stop()` rejects with `RpcTerminationUncertainError` (`code: rpc.termination_uncertain`) and retains ownership of the child. It does not report clean completion; retry cleanup or inspect the process before replacing it.
+
 ## Commands
 
 ### Prompting

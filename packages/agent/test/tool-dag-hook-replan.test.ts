@@ -336,11 +336,13 @@ describe("DAG hook claim retargeting (T-DAG-H01)", () => {
 			return response;
 		});
 
-		// Inject the event-sink failure synchronously, before any event can
-		// arrive: every tool_execution_end emit now throws into the loop.
+		// Fail only write-a's end event. A second sink error from write-b would
+		// correctly surface as AggregateError instead of the first error's text.
 		const originalPush = stream.push.bind(stream);
 		stream.push = (event) => {
-			if (event.type === "tool_execution_end") throw new Error("sink exploded");
+			if (event.type === "tool_execution_end" && event.toolCallId === "write-a") {
+				throw new Error("sink exploded");
+			}
 			return originalPush(event);
 		};
 

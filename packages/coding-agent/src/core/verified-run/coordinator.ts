@@ -22,6 +22,7 @@ import { preflightCheckReceipts } from "./check-receipt.ts";
 import { inspectTaskRecovery, retryDagTasks, type TaskRecoveryInspection } from "./dag-recovery.ts";
 import { createRunIssuer, type EvidenceRead, readRunEvidence, type VerifiedRunEvidence } from "./evidence.ts";
 import { readEvidenceProjection } from "./evidence-read-projection.ts";
+import { stopEvent } from "./interruption.ts";
 import { journalPath, type RunJournalRecord, readRunJournal, VerifiedRunJournal } from "./journal.ts";
 import type { RunPhaseContext } from "./phase-context.ts";
 import { inspectRunRecovery, type RecoveryInspection, resumeFrozenCandidate } from "./recovery.ts";
@@ -260,7 +261,7 @@ export class RunCoordinator {
 					return this.inspect(contract.runId);
 				} catch (error) {
 					if (error instanceof VerifiedRunError && !journal.state.receiptDigest)
-						return journal.append({ kind: "failed", code: error.code });
+						return journal.append(stopEvent(journal.state, error.code));
 					throw error;
 				}
 			} finally {

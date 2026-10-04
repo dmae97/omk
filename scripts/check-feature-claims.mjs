@@ -117,6 +117,46 @@ export const CLAIMS = [
 		],
 	},
 	{
+		// The README promises that an approved check gates completion, so the
+		// evidence names the gate, the receipt-bound runner and the live wiring.
+		claim: "durable goal acceptance checks",
+		readmeMarker: /\/goal verify/,
+		docs: "packages/coding-agent/docs/run-protocol.md",
+		evidence: [
+			{
+				file: "packages/coding-agent/src/core/goal-acceptance.ts",
+				symbols: ["class GoalAcceptance", "acceptanceGap"],
+			},
+			{
+				file: "packages/coding-agent/src/core/goal-verification.ts",
+				symbols: ["class GoalVerifier", "captureGoalWorkspace", "checkReceiptWithStrictGate"],
+			},
+			{
+				file: "packages/coding-agent/src/core/extensions/builtin/goal-controller.ts",
+				symbols: ["GoalAcceptanceFlow", "agent_settled"],
+			},
+		],
+	},
+	{
+		claim: "verified runs",
+		readmeMarker: /Verified runs \(`omk run`\)/,
+		docs: "packages/coding-agent/docs/verified-run.md",
+		evidence: [
+			{
+				file: "packages/coding-agent/src/commands/verified-run-cli.ts",
+				symbols: ["runVerifiedRunCli", "cancelVerifiedRun", "collectVerifiedRuns"],
+			},
+			{
+				file: "packages/coding-agent/src/core/verified-run/cancel-request.ts",
+				symbols: ["watchRunCancelRequest"],
+			},
+			{
+				file: "packages/coding-agent/src/core/verified-run/run-gc.ts",
+				symbols: ["collectVerifiedRuns"],
+			},
+		],
+	},
+	{
 		claim: "extensions",
 		readmeMarker: /\bextensions\b/i,
 		docs: "packages/coding-agent/docs/extensions.md",

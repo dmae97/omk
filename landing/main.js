@@ -1,12 +1,15 @@
 const CMDS = {
-  npm: `npm install -g open-multi-agent-kit@0.95.1 --ignore-scripts
+  npm: `npm install -g open-multi-agent-kit --ignore-scripts
 omk --version
+cd your-project
 omk`,
-  pnpm: `pnpm add -g open-multi-agent-kit@0.95.1
+  pnpm: `pnpm add -g open-multi-agent-kit
 omk --version
+cd your-project
 omk`,
-  bun: `bun add -g open-multi-agent-kit@0.95.1
+  bun: `bun add -g open-multi-agent-kit
 omk --version
+cd your-project
 omk`,
 };
 

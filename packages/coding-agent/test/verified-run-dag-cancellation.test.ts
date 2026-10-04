@@ -16,7 +16,7 @@ afterEach(() => {
 	rmSync(root, { recursive: true, force: true });
 });
 
-it("cancels an actual writer and never starts its successors or exposes recovery as ready", async () => {
+it("cancels an actual writer, never starts its successors, and releases the interrupted attempt", async () => {
 	const f = dagFixture(root);
 	mkdirSync(f.stateRoot);
 	f.contract.writer.tasks[0].attempts[0] = ["/bin/sh", "-c", "cp input left; sleep 30"];
@@ -38,15 +38,16 @@ it("cancels an actual writer and never starts its successors or exposes recovery
 		);
 		expect(observed).toBe(true);
 		expect(state).toMatchObject({
-			execution: "failed",
+			execution: "paused",
 			failure: "cancelled",
 			activeExecutionIds: [],
 			candidateDigest: null,
 		});
 		expect(readRunJournal(f.runPath)?.records.filter(({ event }) => event.kind === "task_started")).toHaveLength(1);
+		// Recovery is ready only through an explicit retry of the released attempt.
 		expect(f.coordinator.inspectTaskRecovery("dag")).toMatchObject({
-			readiness: "blocked",
-			reason: "resume_terminal",
+			readiness: "ready",
+			retryableTaskIds: ["left"],
 		});
 	} finally {
 		clearTimeout(timer);

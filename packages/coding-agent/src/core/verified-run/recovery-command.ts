@@ -1,5 +1,6 @@
 import type { RunResumeCommand, RunTaskRetryCommand, RunWriterRestartCommand } from "omk-protocol";
 import { acquireSessionOwnerLeaseSync } from "../session-owner-lease.ts";
+import { stopEvent } from "./interruption.ts";
 import { type JournalSnapshot, journalPath, readRunJournal, VerifiedRunJournal } from "./journal.ts";
 import type { RunProjection } from "./run-types.ts";
 import { digestObject, VerifiedRunError } from "./storage.ts";
@@ -77,7 +78,7 @@ export async function withRecoveryLease(
 				journal.state.generation > snapshot.state.generation &&
 				!journal.state.receiptDigest
 			)
-				return journal.append({ kind: "failed", code: error.code });
+				return journal.append(stopEvent(journal.state, error.code));
 			throw error;
 		}
 	} finally {

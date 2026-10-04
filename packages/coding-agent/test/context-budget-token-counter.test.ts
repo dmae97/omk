@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	createOpenAiJsTokenCounter,
+	createOpenAiWasmTokenCounter,
 	createTokenCounterRegistry,
 	estimateTextTokens,
 	type OptionalModuleLoader,
@@ -107,6 +108,77 @@ describe("context budget token counter", () => {
 
 		const registry = createTokenCounterRegistry({ adapters: [winning, failing] });
 		expect(registry.countText("abc", "gpt-4o")).toMatchObject({ tokens: 3, adapterId: "winning" });
+	});
+
+	it("uses a snake_case model encoder and releases its owned WASM instance", () => {
+		let freed = 0;
+		const loader: OptionalModuleLoader = {
+			resolve: (name) => (name === "tiktoken" ? "/virtual/tiktoken" : undefined),
+			load: () => ({
+				encoding_for_model: () => ({
+					encode: () => new Uint32Array([1, 2]),
+					free: () => {
+						freed++;
+					},
+				}),
+			}),
+		};
+		expect(createOpenAiWasmTokenCounter(loader).countText("fixture", "gpt-4o").tokens).toBe(2);
+		expect(freed).toBe(1);
+	});
+
+	it("rejects a non-finite plugin count instead of poisoning a budget", () => {
+		const invalid: TokenCounterAdapter = {
+			id: "invalid",
+			priority: 50,
+			isAvailable: () => true,
+			supports: () => true,
+			countText: (_text, modelId) => ({
+				tokens: Number.NaN,
+				method: "exact",
+				confidence: "high",
+				adapterId: "invalid",
+				modelId,
+				notes: [],
+			}),
+		};
+		const actual = createTokenCounterRegistry({ adapters: [invalid] }).countText("text", "gpt-4o");
+		expect(actual.adapterId).toBe("fallback-estimator");
+		expect(Number.isSafeInteger(actual.tokens)).toBe(true);
+	});
+
+	it("does not expose plugin exception text in fallback diagnostics", () => {
+		const failed: TokenCounterAdapter = {
+			id: "failed",
+			priority: 10,
+			isAvailable: () => true,
+			supports: () => true,
+			countText: () => {
+				throw new Error("fixture-secret-from-plugin");
+			},
+		};
+		const result = createTokenCounterRegistry({ adapters: [failed] }).countText("text", "gpt-4o");
+		expect(result.adapterId).toBe("fallback-estimator");
+		expect(result.notes.join(" ")).not.toContain("fixture-secret-from-plugin");
+	});
+
+	it("uses code-unit order for equal-priority adapter identifiers", () => {
+		const counter = (id: string): TokenCounterAdapter => ({
+			id,
+			priority: 10,
+			isAvailable: () => true,
+			supports: () => true,
+			countText: (_text, modelId) => ({
+				tokens: 2,
+				method: "exact",
+				confidence: "high",
+				adapterId: id,
+				modelId,
+				notes: [],
+			}),
+		});
+		const actual = createTokenCounterRegistry({ adapters: [counter("ä"), counter("z")] }).countText("text", "gpt-4o");
+		expect(actual.adapterId).toBe("z");
 	});
 
 	it("probes js-tiktoken style modules through an optional loader", () => {

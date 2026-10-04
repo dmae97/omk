@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createPermitDeadline, type PermitDeadline } from "./permit-deadline.ts";
 import type { WorkloadClass } from "./workload-classifier.ts";
 
 /**
@@ -62,7 +63,7 @@ interface Waiter {
 	readonly request: WorkloadPermitRequest;
 	readonly resolve: (permit: WorkloadPermit) => void;
 	readonly reject: (error: WorkloadPermitError) => void;
-	timer: ReturnType<typeof setTimeout> | null;
+	deadline: PermitDeadline | null;
 	abortListener: (() => void) | null;
 }
 
@@ -75,12 +76,15 @@ export type WorkloadPermitPoolOptions = {
 	maxQueue?: number;
 	/** Injectable clock for deterministic tests. */
 	now?: () => Date;
+	/** Monotonic queue clock; wall-clock timestamps never control expiry. */
+	monotonicNow?: () => number;
 };
 
 export class WorkloadPermitPool {
 	private capacity: number;
 	private readonly maxQueue: number;
 	private readonly now: () => Date;
+	private readonly monotonicNow: () => number;
 	private activeWeight = 0;
 	private readonly queue: Waiter[] = [];
 	private doubleReleases = 0;
@@ -89,6 +93,7 @@ export class WorkloadPermitPool {
 		this.capacity = sanitizeCapacity(options?.capacity, 2);
 		this.maxQueue = sanitizeCapacity(options?.maxQueue, DEFAULT_PERMIT_QUEUE_CAP);
 		this.now = options?.now ?? (() => new Date());
+		this.monotonicNow = options?.monotonicNow ?? (() => performance.now());
 	}
 
 	/**
@@ -120,11 +125,13 @@ export class WorkloadPermitPool {
 			return Promise.reject(new WorkloadPermitError("queue_overflow", request.requestId));
 		}
 		return new Promise<WorkloadPermit>((resolve, reject) => {
-			const waiter: Waiter = { request, resolve, reject, timer: null, abortListener: null };
+			const waiter: Waiter = { request, resolve, reject, deadline: null, abortListener: null };
 			if (typeof request.timeoutMs === "number" && Number.isFinite(request.timeoutMs) && request.timeoutMs > 0) {
-				waiter.timer = setTimeout(() => {
-					this.evict(waiter, "timeout");
-				}, request.timeoutMs);
+				waiter.deadline = createPermitDeadline(
+					request.timeoutMs,
+					() => this.evict(waiter, "timeout"),
+					this.monotonicNow,
+				);
 			}
 			if (request.signal) {
 				const signal = request.signal;
@@ -169,6 +176,15 @@ export class WorkloadPermitPool {
 	private grantWhilePossible(): void {
 		while (this.queue.length > 0) {
 			const head = this.queue[0];
+			// A due timer may not have run yet. Admission itself must enforce expiry.
+			if (head.request.signal?.aborted || head.deadline?.expired()) {
+				this.queue.shift();
+				this.settleCleanup(head);
+				head.reject(
+					new WorkloadPermitError(head.request.signal?.aborted ? "aborted" : "timeout", head.request.requestId),
+				);
+				continue;
+			}
 			if (head.request.weight > this.capacity) {
 				// Capacity shrank below the head's weight: reject rather than
 				// starving everyone behind it forever.
@@ -198,9 +214,9 @@ export class WorkloadPermitPool {
 	}
 
 	private settleCleanup(waiter: Waiter): void {
-		if (waiter.timer !== null) {
-			clearTimeout(waiter.timer);
-			waiter.timer = null;
+		if (waiter.deadline !== null) {
+			waiter.deadline.cancel();
+			waiter.deadline = null;
 		}
 		if (waiter.abortListener !== null) {
 			waiter.request.signal?.removeEventListener("abort", waiter.abortListener);

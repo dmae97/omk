@@ -13,6 +13,36 @@ function deferred() {
 const lifecycle = () => ({ assertIdle: () => {}, stop: vi.fn(), reject: vi.fn() });
 
 describe("run scope admission", () => {
+	it("does not forgive real exhaustion when a command completion guard accepts closure", async () => {
+		const faux = registerFauxProvider();
+		const agent = new Agent({
+			streamFn: () => {
+				const stream = createAssistantMessageEventStream();
+				stream.end(fauxAssistantMessage("fixture"));
+				return stream;
+			},
+		});
+		const runtime = new SessionRunBudget(agent, lifecycle());
+		try {
+			await expect(
+				runtime.execute(
+					{ maxRequests: 1 },
+					async () => {
+						await (await agent.streamFn(faux.getModel(), { messages: [] })).result();
+						await expect(agent.streamFn(faux.getModel(), { messages: [] })).rejects.toMatchObject({
+							code: "requests",
+						});
+						runtime.close();
+					},
+					undefined,
+					() => true,
+				),
+			).rejects.toMatchObject({ code: "requests" });
+			expect(runtime.snapshot()).toMatchObject({ activeRequests: 0, closed: true, exhaustedBy: "requests" });
+		} finally {
+			faux.unregister();
+		}
+	});
 	it.each([undefined, { maxRequests: 1 }])(
 		"rejects a competing %j prompt during unbounded preflight",
 		async (limits) => {
@@ -31,6 +61,28 @@ describe("run scope admission", () => {
 			expect(competing).toHaveBeenCalledTimes(1);
 		},
 	);
+
+	it("owns a default unbounded stream until terminal metadata rather than allowing a second prompt", async () => {
+		const faux = registerFauxProvider();
+		const stream = createAssistantMessageEventStream();
+		const agent = new Agent({ streamFn: () => stream });
+		const runtime = new SessionRunBudget(agent, lifecycle());
+		const next = vi.fn(async () => {});
+		try {
+			await runtime.execute(undefined, async () => {
+				await agent.streamFn(faux.getModel(), { messages: [] });
+			});
+			expect(runtime.snapshot()).toMatchObject({ closed: true, activeRequests: 1 });
+			await expect(runtime.execute(undefined, next)).rejects.toThrow(/already processing/i);
+			expect(next).not.toHaveBeenCalled();
+		} finally {
+			stream.end(fauxAssistantMessage("terminal"));
+			await stream.result();
+			faux.unregister();
+		}
+		await runtime.execute(undefined, next);
+		expect(next).toHaveBeenCalledTimes(1);
+	});
 
 	it("keeps an outstanding stream owned after scope closure until real terminal metadata arrives", async () => {
 		const faux = registerFauxProvider();

@@ -25,12 +25,12 @@ export function composeColumns(
  * and the rule runs out to the right edge, instead of a centered bold caption.
  * Labels are secondary ink like a figure caption; the accent is reserved for signals.
  */
-export function sidebarRule(width: number, label: string, borderColor: ThemeColor = "borderMuted"): string {
+export function sidebarRule(width: number, label: string, borderColor: ThemeColor = "border"): string {
 	const bodyWidth = Math.max(0, width - 2);
 	const labelText = ` ${label} `;
 	const fill = Math.max(0, bodyWidth - visibleWidth(labelText) - 1);
 	return clipLine(
-		`${theme.fg(borderColor, "\u2502")}${theme.fg("borderMuted", "\u2500")}${theme.fg("muted", labelText)}${theme.fg("borderMuted", "\u2500".repeat(fill))}${theme.fg(borderColor, "\u2502")}`,
+		`${theme.fg(borderColor, "\u2502")}${theme.fg(borderColor, "\u2500")}${theme.fg("muted", labelText)}${theme.fg(borderColor, "\u2500".repeat(fill))}${theme.fg(borderColor, "\u2502")}`,
 		width,
 	);
 }
@@ -112,7 +112,7 @@ function takeEnd(value: string, maxWidth: number): string {
 /**
  * Square-cornered frame like a printed plate: the title is a caption in secondary ink, not the accent.
  */
-export function boxTop(width: number, label: string, borderColor: ThemeColor = "borderMuted"): string {
+export function boxTop(width: number, label: string, borderColor: ThemeColor = "border"): string {
 	const text = ` ${label} `;
 	const fillWidth = Math.max(0, width - visibleWidth("+") - visibleWidth(text) - visibleWidth("+"));
 	return clipLine(
@@ -121,7 +121,7 @@ export function boxTop(width: number, label: string, borderColor: ThemeColor = "
 	);
 }
 
-export function boxBottom(width: number, borderColor: ThemeColor = "borderMuted"): string {
+export function boxBottom(width: number, borderColor: ThemeColor = "border"): string {
 	return clipLine(theme.fg(borderColor, `\u2514${"\u2500".repeat(Math.max(0, width - 2))}\u2518`), width);
 }
 
@@ -143,7 +143,7 @@ export function boxCenteredLine(width: number, text: string, color?: ThemeColor)
 export function boxTextLine(width: number, text: string, color?: ThemeColor): string {
 	const body = color ? theme.fg(color, text) : text;
 	return clipLine(
-		`${theme.fg("borderMuted", "\u2502 ")}${fitLine(body, Math.max(0, width - 4))}${theme.fg("borderMuted", " \u2502")}`,
+		`${theme.fg("border", "\u2502 ")}${fitLine(body, Math.max(0, width - 4))}${theme.fg("border", " \u2502")}`,
 		width,
 	);
 }
@@ -205,7 +205,7 @@ export function divider(
 	const caption = label ? ` ${label} ` : "";
 	const fillWidth = Math.max(0, width - 3 - visibleWidth(caption));
 	return clipLine(
-		`${theme.fg("borderMuted", `${left}\u2500`)}${caption ? theme.fg(color, caption) : ""}${theme.fg("borderMuted", `${"\u2500".repeat(fillWidth)}${right}`)}`,
+		`${theme.fg("border", `${left}\u2500`)}${caption ? theme.fg(color, caption) : ""}${theme.fg("border", `${"\u2500".repeat(fillWidth)}${right}`)}`,
 		width,
 	);
 }
@@ -213,7 +213,7 @@ export function divider(
 export function textLine(width: number, text: string, color?: ThemeColor): string {
 	const body = color ? theme.fg(color, text) : text;
 	return clipLine(
-		`${theme.fg("borderMuted", "\u2502 ")}${fitLine(body, Math.max(0, width - 4))}${theme.fg("borderMuted", " \u2502")}`,
+		`${theme.fg("border", "\u2502 ")}${fitLine(body, Math.max(0, width - 4))}${theme.fg("border", " \u2502")}`,
 		width,
 	);
 }

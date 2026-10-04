@@ -58,6 +58,7 @@ export type RunEvent =
 	  }
 	| { readonly kind: "evaluated"; readonly receiptDigest: string; readonly verified: boolean }
 	| { readonly kind: "failed"; readonly code: string }
+	| { readonly kind: "interrupted"; readonly cause: "cancelled" }
 	| {
 			readonly kind: "publish_intent";
 			readonly commandId: string;

@@ -43,7 +43,14 @@ import {
 	resolveSubagentExecutionPolicy,
 } from "./deadline-budget.ts";
 import { DeadlineProfileStore } from "./deadline-profile-store.ts";
-import { blockedResult, dependencyDigests, failedResult as isFailedResult, laneResult } from "./graph-result.ts";
+import {
+	blockedResult,
+	dependencyDigests,
+	formatPartialResults,
+	failedResult as isFailedResult,
+	laneResult,
+	truncateParallelOutput,
+} from "./graph-result.ts";
 import { runManagedProcess } from "./managed-process.ts";
 import { emptyUsage, type SingleResult, type SubagentAttemptResult } from "./subagent-runtime-types.ts";
 import { createSubagentStream } from "./subagent-stream.ts";
@@ -56,7 +63,6 @@ import {
 } from "./workflow-graph.ts";
 
 const COLLAPSED_ITEM_COUNT = 10;
-const PER_TASK_OUTPUT_CAP = 50 * 1024;
 const DEFAULT_EXECUTION_BUDGET_MS = 840_000;
 const MAX_EXECUTION_BUDGET_MS = 840_000;
 const EXECUTION_CLEANUP_RESERVE_MS = 15_000;
@@ -248,17 +254,6 @@ function getResultOutput(result: SingleResult): string {
 	return partialOutput || "(no output)";
 }
 
-function truncateParallelOutput(output: string): string {
-	const byteLength = Buffer.byteLength(output, "utf8");
-	if (byteLength <= PER_TASK_OUTPUT_CAP) return output;
-
-	let truncated = output.slice(0, PER_TASK_OUTPUT_CAP);
-	while (Buffer.byteLength(truncated, "utf8") > PER_TASK_OUTPUT_CAP) {
-		truncated = truncated.slice(0, -1);
-	}
-	return `${truncated}\n\n[Output truncated: ${byteLength - Buffer.byteLength(truncated, "utf8")} bytes omitted. Full output preserved in tool details.]`;
-}
-
 type DisplayItem = { type: "text"; text: string } | { type: "toolCall"; name: string; args: Record<string, any> };
 
 function getDisplayItems(messages: Message[]): DisplayItem[] {
@@ -397,7 +392,12 @@ async function runSingleAgentAttempt(
 	};
 
 	const emitUpdate = () => {
-		onUpdate?.({ ...currentResult, messages: [...currentResult.messages], usage: { ...currentResult.usage } });
+		onUpdate?.({
+			...currentResult,
+			exitCode: -1,
+			messages: [...currentResult.messages],
+			usage: { ...currentResult.usage },
+		});
 	};
 
 	try {
@@ -419,7 +419,7 @@ async function runSingleAgentAttempt(
 		}
 
 		args.push(`Task: ${task}`);
-		const stream = createSubagentStream(currentResult, emitUpdate);
+		const stream = createSubagentStream(currentResult, onUpdate ? emitUpdate : undefined, signal);
 		const invocation = getOmkInvocation(args);
 		const processResult = await runManagedProcess({
 			command: invocation.command,
@@ -507,7 +507,7 @@ async function runSingleAgent(
 	const reportUpdate: ResultUpdateCallback | undefined = onUpdate
 		? (partial) =>
 				onUpdate({
-					content: [{ type: "text", text: getResultOutput(partial) || "(running...)" }],
+					content: [{ type: "text", text: partial.progress?.text || getResultOutput(partial) || "(running...)" }],
 					details: makeDetails([partial]),
 				})
 		: undefined;
@@ -663,7 +663,9 @@ export default function (omk: ExtensionAPI) {
 					projectAgentsDir: discovery.projectAgentsDir,
 					results,
 					executionBudget: summarizeExecutionBudget(executionBudget, results, executionPolicy.unbounded),
-					...(mode === "graph" && graphDetails ? { graph: graphDetails } : {}),
+					...(mode === "graph" && graphDetails
+						? { graph: { ...graphDetails, completedNodeIds: [...graphDetails.completedNodeIds] } }
+						: {}),
 				});
 
 			if (modeCount !== 1) {
@@ -838,8 +840,8 @@ export default function (omk: ExtensionAPI) {
 								task.cwd,
 								undefined,
 								laneSignal,
-								undefined,
-								makeDetails("graph"),
+								onUpdate,
+								(results) => makeDetails("graph")(results.map((result) => ({ ...result, nodeId: laneId }))),
 								executionPolicy.unbounded,
 								executionBudget,
 								profileStore,
@@ -890,8 +892,8 @@ export default function (omk: ExtensionAPI) {
 									task.cwd,
 									undefined,
 									signal,
-									undefined,
-									makeDetails("graph"),
+									onUpdate,
+									(results) => makeDetails("graph")(results.map((result) => ({ ...result, nodeId: id }))),
 									executionPolicy.unbounded,
 									executionBudget,
 									profileStore,
@@ -1215,13 +1217,20 @@ export default function (omk: ExtensionAPI) {
 			return new Text(text, 0, 0);
 		},
 
-		renderResult(result, { expanded }, theme, _context) {
+		renderResult(result, { expanded, isPartial }, theme, _context) {
 			const details = result.details as SubagentDetails | undefined;
 			if (!details || details.results.length === 0) {
 				const text = result.content[0];
 				return new Text(text?.type === "text" ? text.text : "(no output)", 0, 0);
 			}
 
+			if (isPartial) {
+				return new Text(
+					formatPartialResults(details.results, (name, args) => formatToolCall(name, args, theme.fg.bind(theme))),
+					0,
+					0,
+				);
+			}
 			const mdTheme = getMarkdownTheme();
 
 			const renderDisplayItems = (items: DisplayItem[], limit?: number) => {

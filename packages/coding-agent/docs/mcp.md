@@ -88,6 +88,29 @@ to settle before reconnecting. No idle-server shutdown or descriptor reduction i
 introduced. Four is a conservative default, not a measured optimum: staging can
 increase full-catalog readiness time while reducing simultaneous startup work.
 
+### Tool schema budget
+
+Every request carries the schema of every active tool, so a large catalog can
+outgrow a small context window. In one measured project, 328 tools from 21 MCP
+servers plus the built-in tools were estimated at 237,218 tokens, more than the
+219,416-token input ceiling of a model configured with a 262,000-token window.
+
+When the system prompt and tool schemas would leave a fully compacted session
+(the kept tail plus the summary reserve) above the compaction trigger, requests
+to that model withhold whole MCP servers, largest schema first, until it fits.
+
+- The active tool set does not change: `getActiveToolNames()`, extensions and
+  the tool list still show withheld tools; only the provider request omits them.
+- A warning names the withheld servers once. Switching to a model with room
+  restores them, with a second notice.
+- Built-in and extension tools are never withheld. If they and the system prompt
+  alone exceed the input ceiling, the prompt is rejected as
+  `configuration.invalid`: compaction cannot shrink them, so switch to a
+  larger-context model or disable servers.
+
+To keep a particular server on a small model, disable larger servers you do not
+need for that project.
+
 ### Failure behavior
 
 Failures are isolated by design, because one broken server must not cost a
@@ -95,17 +118,31 @@ session:
 
 | Failure | Result |
 | --- | --- |
-| Server exits during startup | That server is `failed` with its stderr tail; every other server still contributes tools. |
+| Server exits during startup | That server is `failed` with a classified public error; every other server still contributes tools. The low-level client retains a stderr tail for local diagnostics, not for the manager status. |
 | Handshake exceeds `startup_timeout_sec` | Same — reported as a timeout, session unaffected. |
 | Server dies mid-session | In-flight requests reject; later calls to its tools return a tool-level error instead of throwing. |
 | Tool returns an MCP error | Surfaces as a normal tool result with `isError: true`, so the model sees the server's own message. |
+| Tool returns a malformed result | Rejects with `mcp.invalid_tool_result` rather than treating missing content or invalid `isError` as success. Unknown explicitly typed content blocks remain allowed. |
 | Server emits a non-JSON line | The line is dropped and decoding resynchronizes at the next newline. |
 | Server emits a frame larger than 16 MiB | One framing error is reported; the remainder is discarded until the next newline. |
+
+Low-level SDK callers can set `McpServerConfig.inheritEnv` to `false` to avoid
+inheriting the parent environment. Omitting it preserves the transport default;
+this option is not yet wired into the `mcp.json` parser. Client request and
+handshake timeouts accept only safe integers from 0 through 2,147,483,647 ms;
+zero refuses to send a request. A timeout ends local waiting, not remote effects.
 
 The frame limit counts raw UTF-8 bytes, including whitespace and CR in CRLF,
 independently of chunk boundaries. The decoder scans only new chunks and batches
 small fragments without truncating valid messages or reducing tool catalogs.
 This bounds retained frame data, not the memory of parsed JSON or the whole process.
+
+The outbound `McpStdioTransport` checks bytes already observed in Node's stdin
+writable queue before accepting another framed request. Low-level SDK callers
+may set a non-negative safe-integer `maxPendingWriteBytes` (default 16 MiB;
+zero refuses all frames); invalid values fail before server startup. The
+check does not bound kernel pipe bytes or server memory, and a successful
+local write does not prove that the server handled the request.
 
 ## Checking your configuration
 
@@ -115,8 +152,11 @@ node scripts/mcp-smoke.mjs github playwright     # only these
 OMK_MCP_SMOKE_HANDSHAKE_MS=120000 node scripts/mcp-smoke.mjs   # override slow handshakes
 ```
 
-The script prints server state, tool counts, and versions. It never prints env
-values.
+The script prints server state, tool counts, and bounded numeric version cores
+when available. The manager status omits free-form server-reported versions and
+strips prerelease/build suffixes before exposure. The low-level client's
+`serverInfo` remains raw; this format check is not general secret redaction.
+The script never prints configured env values.
 
 ### Package and credential errors
 

@@ -61,11 +61,35 @@ verification-edge, plan amendment and control-surface work.
 
 A durable goal is working-directory state, not a session-file field or a `TaskSpec`. `/goal <objective>` creates or edits `.omk/goals/current.json`; `/goal` without arguments shows its status and round count.
 
-Goals created by `/goal` use an eight-round cap. The controller queues another turn only while the goal is active, no message is pending, and the cap has not been reached. Reaching the cap stops automatic continuation; the controller does not infer or mark completion.
+Goals created by `/goal` use an eight-round cap. After a turn settles, the controller queues the next round as a follow-up while the goal is active, no message is pending, and the cap has not been reached. A turn settles when no automatic retry follows it, so an attempt that is about to be retried does not use up a round. Reaching the cap stops automatic continuation. Without an acceptance check the controller does not infer or mark completion.
+
+Through 1.2.4 the controller advanced the round at every attempt's `agent_end` and sent the next turn while that run still owned the session. The session rejected the message (`Agent is already processing`), so the round was spent and the goal never continued.
 
 For programmatic lifecycle control, import `createDurableGoal`, `parseDurableGoalSnapshot`, `applyDurableGoalCommand`, and `DurableGoalStore` from `open-multi-agent-kit`. The reducer supports edit, pause, resume, block, round advancement, evidence attachment, completion, and clear transitions.
 
-Every mutation consumes the current revisioned `GoalRef`; stale revisions are rejected. Editing the objective or round limit, or advancing a round, starts a new semantic generation and invalidates earlier completion evidence. Completion requires lowercase SHA-256 evidence captured during the current generation.
+Every mutation consumes the current revisioned `GoalRef`; stale revisions are rejected. Editing the objective or round limit, or advancing a round, starts a new semantic generation and invalidates earlier completion evidence. Completion requires lowercase SHA-256 evidence captured during the current generation. The built-in controller dates each transition no earlier than the journal's last timestamp, so a wall clock that steps back does not fail it. Programmatic callers get the same rule from `nextDurableGoalTimestamp(goal)`: pass its result as the `now` argument of `applyDurableGoalCommand()` or `DurableGoalStore.transition()`. A raw `new Date().toISOString()` fails with `goal timestamps must be monotonic` once the clock has stepped back.
+
+### Acceptance checks
+
+`/goal verify <command>` approves one command as the goal's acceptance check and runs it now. The goal then completes only on evidence from that check:
+
+| Step | Behavior |
+| --- | --- |
+| Approval | Command safety runs first; a blocked or declined command is not approved. A command that cannot run at all (see limits) is not approved either. |
+| Execution | Receipt-bound local bash under the default bash sandbox (`OMK_BASH_SANDBOX`), with the built-in bash timeout of 5 minutes. Receipts and their replay ledger go to `.omk/goals/evidence/<goal key>/`. |
+| Pass | Exit code 0 and an open strict evidence gate. The receipt is attached as goal evidence, and the workspace state right after the check is recorded. |
+| After each settled turn | The approved check runs again. A pass completes the goal. A failure queues the next round with the command and its exit code; the output goes to the operator, never to the model. At the round limit, or when the check cannot run, the goal is blocked with the reason. Esc during the check stops it without continuing. |
+| `/goal complete` | Requires a receipt from this session that passed in the current generation and still matches the workspace. |
+| `/goal` | Shows the approved check and whether a passing receipt still matches the workspace. |
+
+The workspace state is the manifest digest of HEAD, the git dirty set and the dirty files' contents, without `.omk/goals`. A tracked edit, a new untracked file or a HEAD move after the check makes the evidence stale, and `/goal complete` asks for `/goal verify` again. Each check writes a `goal_verification` session entry with the receipt ID, digest, status and exit code.
+
+Limits:
+
+- The approval and the trusted receipts live in the OMK process. The agent can write the workspace, the goal journal and the receipt files, so nothing read back from them approves a command. After a restart, approve the check again with `/goal verify <command>`. Until then `/goal complete` uses the reducer rule above.
+- The receipt path accepts static command lines only. Variable expansion and command substitution (`$HOME`, `$(...)`) fail closed; put them in a script and verify `sh ./check.sh`.
+- Outside a git work tree the workspace state binds nothing (`unavailable`), so a later edit cannot make the evidence stale. More than 512 dirty paths are bound partially (`partial_truncated`).
+- The check proves what the command checks. A weak command completes a goal early.
 
 ### Seam checkpoints
 

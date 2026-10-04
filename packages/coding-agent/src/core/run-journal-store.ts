@@ -166,8 +166,7 @@ export class RunJournalStore {
 	private readonly now: () => string;
 	private readonly persistRecord: (path: string, line: string) => void;
 	private readonly ownerLease: SessionOwnerLease | undefined;
-	private acceptedRecords: readonly RunJournalRecord[];
-	private acceptedOpenRunId: string | null;
+	private acceptedJournal: RunJournal;
 	private acceptedDurableHead: RunJournalDurableHead;
 	private journalLockDepth = 0;
 	readonly quarantineReport: RunJournalQuarantineReport | null;
@@ -175,7 +174,6 @@ export class RunJournalStore {
 	private constructor(
 		options: OpenRunJournalStoreOptions,
 		records: readonly RunJournalRecord[],
-		openRunId: string | null,
 		quarantineReport: RunJournalQuarantineReport | null,
 		durableHead: RunJournalDurableHead,
 	) {
@@ -185,8 +183,7 @@ export class RunJournalStore {
 		this.now = options.now ?? (() => new Date().toISOString());
 		this.persistRecord = options.persistRecord ?? appendRunJournalRecordDurably;
 		this.ownerLease = options.ownerLease;
-		this.acceptedRecords = Object.freeze([...records]);
-		this.acceptedOpenRunId = openRunId;
+		this.acceptedJournal = replayRecords(records, options.sessionId, this.hashFn);
 		this.acceptedDurableHead = durableHead;
 		this.quarantineReport = quarantineReport;
 	}
@@ -194,7 +191,7 @@ export class RunJournalStore {
 	static open(options: OpenRunJournalStoreOptions): RunJournalStore {
 		const hashFn = options.hashFn ?? RunJournalStore.sha256;
 		if (!options.journalPath) {
-			return new RunJournalStore(options, [], null, null, {
+			return new RunJournalStore(options, [], null, {
 				size: 0,
 				lastSeq: 0,
 				lastHash: null,
@@ -244,13 +241,7 @@ export class RunJournalStore {
 				}
 			}
 
-			const store = new RunJournalStore(
-				options,
-				records,
-				openRunId,
-				quarantineReport,
-				readDurableHead(journalPath, hashFn),
-			);
+			const store = new RunJournalStore(options, records, quarantineReport, readDurableHead(journalPath, hashFn));
 			store.journalLockDepth = 1;
 			try {
 				if (openRunId !== null) {
@@ -281,11 +272,11 @@ export class RunJournalStore {
 	}
 
 	get records(): readonly RunJournalRecord[] {
-		return this.acceptedRecords;
+		return this.acceptedJournal.records;
 	}
 
 	get openRunId(): string | null {
-		return this.acceptedOpenRunId;
+		return this.acceptedJournal.openRunId;
 	}
 
 	start(input: RunJournalStartInput): RunJournalStartedRecord {
@@ -334,7 +325,12 @@ export class RunJournalStore {
 				if (!sameDurableHead(current, this.acceptedDurableHead)) throw new RunJournalStoreStaleWriteError();
 			}
 
-			const candidate = replayRecords(this.acceptedRecords, this.sessionId, this.hashFn);
+			// Persistent writes still use an isolated candidate so any uncertain write
+			// leaves accepted state unchanged. Memory-only appends have no I/O failure
+			// window and RunJournal validates/seals before advancing its state.
+			const candidate = this.journalPath
+				? replayRecords(this.acceptedJournal.records, this.sessionId, this.hashFn)
+				: this.acceptedJournal;
 			const record = append(candidate);
 			let nextDurableHead = this.acceptedDurableHead;
 			if (this.journalPath) {
@@ -357,8 +353,7 @@ export class RunJournalStore {
 				}
 			}
 
-			this.acceptedRecords = Object.freeze([...candidate.records]);
-			this.acceptedOpenRunId = candidate.openRunId;
+			this.acceptedJournal = candidate;
 			this.acceptedDurableHead = nextDurableHead;
 			return record;
 		});

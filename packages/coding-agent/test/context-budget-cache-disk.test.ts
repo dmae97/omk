@@ -253,6 +253,91 @@ describe("disk context-budget cache provider", () => {
 		expect(provider.readRepresentation("k1")).toBeDefined();
 	});
 
+	it("shrinks a negative-only snapshot instead of failing every later flush", () => {
+		const provider = createDiskContextBudgetCacheProviderV2({
+			dir,
+			flushDebounceMs: 0,
+			maxBytes: 1024,
+			now: () => 1,
+		});
+		for (let index = 0; index < 40; index++) {
+			provider.writeNegativeRepresentation({ key: `n${index}`, reason: `reason-${"r".repeat(40)}-${index}` });
+		}
+
+		expect(fs.statSync(snapshotFile()).size).toBeLessThanOrEqual(1024);
+		const raw = JSON.parse(fs.readFileSync(snapshotFile(), "utf8"));
+		expect(raw.negatives.at(-1)?.[0]).toBe("n39");
+		const reloaded = createDiskContextBudgetCacheProviderV2({ dir, maxBytes: 1024 });
+		expect(reloaded.readNegativeRepresentation("n39")?.reason).toMatch(/-39$/u);
+		expect(reloaded.readNegativeRepresentation("n0")).toBeUndefined();
+	});
+
+	it("drops the oldest persisted representations before any negative entry", () => {
+		const provider = createDiskContextBudgetCacheProviderV2({ dir, flushDebounceMs: 0, maxBytes: 4096 });
+		const credential = `AKIA${"1234567890ABCDEF"}`;
+		provider.writeRepresentation({ key: "memory-only", entry: entry({ text: `api_key = "${credential}"` }) });
+		provider.writeNegativeRepresentation({ key: "negative", reason: "too-large" });
+		for (let index = 0; index < 8; index++) {
+			provider.writeRepresentation({ key: `k${index}`, entry: entry({ text: "x".repeat(900) }) });
+		}
+
+		expect(fs.statSync(snapshotFile()).size).toBeLessThanOrEqual(4096);
+		// The shrink evicts the dropped entries from memory as well, never the entries it cannot persist.
+		expect(provider.readRepresentation("k0")).toBeUndefined();
+		expect(provider.readRepresentation("memory-only")?.entry.text).toContain(credential);
+		const persisted = JSON.parse(fs.readFileSync(snapshotFile(), "utf8"));
+		const keys = persisted.representations.map((pair: [string, unknown]) => pair[0]);
+		expect(keys).not.toContain("memory-only");
+		expect(keys).toEqual([...keys].sort());
+		const reloaded = createDiskContextBudgetCacheProviderV2({ dir, maxBytes: 4096 });
+		expect(reloaded.readNegativeRepresentation("negative")?.reason).toBe("too-large");
+		expect(reloaded.readRepresentation("k7")).toBeDefined();
+		expect(reloaded.readRepresentation("k0")).toBeUndefined();
+	});
+
+	it("bounds resident representations independently of the snapshot cap", () => {
+		const provider = createDiskContextBudgetCacheProviderV2({
+			dir,
+			flushDebounceMs: 0,
+			representationMemoryBytes: 64 * 1024,
+		});
+		for (let index = 0; index < 10; index++) {
+			provider.writeRepresentation({ key: `k${index}`, entry: entry({ text: "x".repeat(8_000) }) });
+		}
+
+		expect(provider.size).toBeLessThan(10);
+		expect(provider.readRepresentation("k9")).toBeDefined();
+		expect(provider.getMemoryUsageSnapshot().representations.accountedBytes).toBeLessThanOrEqual(64 * 1024);
+	});
+
+	it("never invokes an accessor of an entry it rejects", () => {
+		const provider = createDiskContextBudgetCacheProviderV2({ dir, flushDebounceMs: 0 });
+		let getterCalls = 0;
+		const withAccessor = { ...entry() };
+		Object.defineProperty(withAccessor, "text", {
+			enumerable: true,
+			get: () => {
+				getterCalls++;
+				return "computed";
+			},
+		});
+		provider.writeRepresentation({ key: "accessor", entry: withAccessor });
+
+		expect(getterCalls).toBe(0);
+		expect(provider.readRepresentation("accessor")).toBeUndefined();
+		expect(provider.getMemoryUsageSnapshot().representations.rejected).toBe(1);
+	});
+
+	it("rejects limits that are not safe integers instead of silently disabling a cap", () => {
+		expect(() => createDiskContextBudgetCacheProviderV2({ dir, maxBytes: Number.NaN })).toThrow(RangeError);
+		expect(() => createDiskContextBudgetCacheProviderV2({ dir, maxEntries: Number.POSITIVE_INFINITY })).toThrow(
+			RangeError,
+		);
+		expect(() => createDiskContextBudgetCacheProviderV2({ dir, flushDebounceMs: 0.5 })).toThrow(RangeError);
+		// Negative limits keep their existing clamp to the documented floors.
+		expect(createDiskContextBudgetCacheProviderV2({ dir, maxEntries: -1 }).size).toBe(0);
+	});
+
 	it("deleting an entry is persisted", () => {
 		const first = createDiskContextBudgetCacheProviderV2({ dir, flushDebounceMs: 0 });
 		first.writeRepresentation({ key: "k1", entry: entry() });

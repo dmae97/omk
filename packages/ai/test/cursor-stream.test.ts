@@ -1,3 +1,4 @@
+import { getEventListeners } from "node:events";
 import http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
@@ -35,6 +36,7 @@ interface ServerBehavior {
 	onExecRequestContext?: boolean;
 	onGetBlob?: (blobData: Uint8Array | undefined) => void;
 	onRunRequest?: (request: ProtoMessage) => void;
+	keepOpen?: boolean;
 }
 
 function startServer(
@@ -76,7 +78,7 @@ function startServer(
 						behavior.respond?.(send);
 						// Server half-close: the client keeps writing exec/kv answers on the
 						// same stream, but this is what makes its `end` handler fire.
-						stream.end();
+						if (!behavior.keepOpen) stream.end();
 						continue;
 					}
 					if (message.has(2)) {
@@ -185,6 +187,76 @@ describe("Cursor wire model resolution", () => {
 });
 
 describe("Cursor stream", () => {
+	it("closes a silent HTTP/2 peer when the configured timeout expires", async () => {
+		const controller = new AbortController();
+		const server = await startServer({ keepOpen: true });
+		const model = { ...getModel("cursor", "default"), baseUrl: server.url };
+		const stream = streamCursor(model, context, {
+			apiKey: "fixture-token",
+			signal: controller.signal,
+			timeoutMs: 50,
+		});
+		let watchdog: ReturnType<typeof setTimeout> | undefined;
+		try {
+			const result = await Promise.race([
+				stream.result(),
+				new Promise<undefined>((resolve) => {
+					watchdog = setTimeout(() => resolve(undefined), 350);
+				}),
+			]);
+			expect(result, "timeout must settle the provider, without a caller abort").toBeDefined();
+			expect(result?.stopReason).toBe("error");
+			expect(result?.errorMessage).toContain("timed out after 50ms");
+		} finally {
+			clearTimeout(watchdog);
+			controller.abort();
+			await stream.result();
+			await server.close();
+		}
+	});
+
+	it("releases caller abort listeners after a completed request", async () => {
+		const controller = new AbortController();
+		const server = await startServer({
+			respond: (send) => {
+				send(turnEnded());
+				send(Buffer.from("{}"), 2);
+			},
+		});
+		const model = { ...getModel("cursor", "default"), baseUrl: server.url };
+		try {
+			const result = await streamCursor(model, context, {
+				apiKey: "fixture-token",
+				signal: controller.signal,
+			}).result();
+			expect(result.stopReason).toBe("stop");
+			expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
+		} finally {
+			await server.close();
+		}
+	});
+
+	it("keeps a caller abort distinct from the deadline and releases its listener", async () => {
+		const controller = new AbortController();
+		let requested!: () => void;
+		const runRequested = new Promise<void>((resolve) => {
+			requested = resolve;
+		});
+		const server = await startServer({ keepOpen: true, onRunRequest: () => requested() });
+		const model = { ...getModel("cursor", "default"), baseUrl: server.url };
+		try {
+			const stream = streamCursor(model, context, { apiKey: "fixture-token", signal: controller.signal });
+			await runRequested;
+			controller.abort();
+			const result = await stream.result();
+			expect(result.stopReason).toBe("aborted");
+			expect(result.errorMessage).toBe("aborted");
+			expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
+		} finally {
+			await server.close();
+		}
+	});
+
 	it("streams text, thinking, and usage to a done result", async () => {
 		const server = await startServer({
 			respond: (send) => {

@@ -18,7 +18,7 @@ import { validateBudgetItems } from "./context-budget-v2-input-validation.ts";
 import { buildObservability } from "./context-budget-v2-observability.ts";
 import { computePlanHash } from "./context-budget-v2-plan-hash.ts";
 import { createPlannedItems, resolveEffectiveTokenizerIdV2 } from "./context-budget-v2-planned-items.ts";
-import { compareOptionalForSelection } from "./context-budget-v2-scoring.ts";
+import { compareContextIds, compareOptionalForSelection } from "./context-budget-v2-scoring.ts";
 import {
 	applyPlannerRedundancyPenalties,
 	buildTierAllocations,
@@ -247,11 +247,11 @@ export function planPromptContextBudgetV2(input: PromptContextBudgetInputV2): Pr
 		emergency: usedTokens > available || diagnostics.some((diagnostic) => diagnostic.reason === "invalid_budget"),
 		omittedHighPriority,
 		tierAllocations,
-		selectedRepresentations: [...selection.values()].sort((a, b) => a.itemId.localeCompare(b.itemId)),
+		selectedRepresentations: [...selection.values()].sort((a, b) => compareContextIds(a.itemId, b.itemId)),
 		includedItemIds: basePlanned
 			.map((planned) => planned.item.id)
 			.filter((id) => selection.has(id))
-			.sort(),
+			.sort(compareContextIds),
 		omittedItemIds,
 		diagnostics,
 		retrievalFallbacks,

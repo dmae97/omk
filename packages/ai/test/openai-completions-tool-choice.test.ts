@@ -64,6 +64,28 @@ vi.mock("openai", () => {
 	return { default: FakeOpenAI };
 });
 
+/**
+ * The last generated OpenCode Go Kimi K2.6 entry. models.dev marked it deprecated on 2026-09-30, so
+ * the catalog no longer lists it, but https://opencode.ai/zen/go/v1/models still serves it and a
+ * models.json override can select it. These tests cover the provider's request shaping for it.
+ */
+function openCodeGoKimiK26(): Model<"openai-completions"> {
+	return {
+		id: "kimi-k2.6",
+		name: "Kimi K2.6",
+		api: "openai-completions",
+		provider: "opencode-go",
+		baseUrl: "https://opencode.ai/zen/go/v1",
+		compat: { thinkingFormat: "deepseek", supportsReasoningEffort: false },
+		reasoning: true,
+		thinkingLevelMap: { minimal: null, low: null, medium: null },
+		input: ["text", "image"],
+		cost: { input: 0.95, output: 4, cacheRead: 0.16, cacheWrite: 0 },
+		contextWindow: 262144,
+		maxTokens: 65536,
+	};
+}
+
 describe("openai-completions tool_choice", () => {
 	beforeEach(() => {
 		mockState.lastParams = undefined;
@@ -986,7 +1008,7 @@ describe("openai-completions tool_choice", () => {
 			},
 		];
 
-		const { compat: _compat, ...baseModel } = getModel("opencode-go", "kimi-k2.6")!;
+		const { compat: _compat, ...baseModel } = openCodeGoKimiK26();
 		const model = { ...baseModel, api: "openai-completions" } as const;
 		const response = await streamSimple(
 			model,
@@ -1033,7 +1055,7 @@ describe("openai-completions tool_choice", () => {
 	});
 
 	it("replays OpenCode Go reasoning thinking blocks as reasoning_content", () => {
-		const { compat: _compat, ...baseModel } = getModel("opencode-go", "kimi-k2.6")!;
+		const { compat: _compat, ...baseModel } = openCodeGoKimiK26();
 		const model = { ...baseModel, api: "openai-completions" } as Model<"openai-completions">;
 		const messages = convertMessages(
 			model,
@@ -1088,7 +1110,7 @@ describe("openai-completions tool_choice", () => {
 	});
 
 	it("sends thinking disabled for OpenCode Go Kimi K2.6 when thinking is off", async () => {
-		const model = getModel("opencode-go", "kimi-k2.6")!;
+		const model = openCodeGoKimiK26();
 		let payload: unknown;
 
 		await streamSimple(
@@ -1110,7 +1132,7 @@ describe("openai-completions tool_choice", () => {
 	});
 
 	it("sends thinking enabled for OpenCode Go Kimi K2.6 when thinking is enabled", async () => {
-		const model = getModel("opencode-go", "kimi-k2.6")!;
+		const model = openCodeGoKimiK26();
 		let payload: unknown;
 
 		await streamSimple(

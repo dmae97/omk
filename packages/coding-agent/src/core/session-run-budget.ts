@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { Agent, StreamFn } from "omk-agent-core";
 import { RunBudget, type RunBudgetSnapshot } from "./run-budget.ts";
 import { RunBudgetExceededError, type RunBudgetLimits, RunBudgetPolicyError } from "./run-budget-policy.ts";
@@ -17,6 +18,27 @@ export class SessionRunBudget {
 	private previous: RunBudget | undefined;
 	private executing = false;
 	private disposed = false;
+	private cancelledBudget: RunBudget | undefined;
+	private executionCompletion: Promise<void> | undefined;
+	private readonly executionContext = new AsyncLocalStorage<RunBudget>();
+
+	async abortAndJoin(activeRun: boolean, abort: () => Promise<void>): Promise<void> {
+		if (this.current && this.executionContext.getStore() === this.current) {
+			if (activeRun) throw new Error("Cannot compact from the session's own active agent operation");
+			this.current.assertActive();
+			return;
+		}
+		const completion = this.executionCompletion;
+		await abort();
+		await completion;
+	}
+
+	cancelPreflight(): boolean {
+		if (!this.current || !this.executing) return false;
+		this.cancelledBudget = this.current;
+		this.current.close();
+		return true;
+	}
 
 	constructor(agent: Agent, lifecycle: RunBudgetLifecycle) {
 		this.agent = agent;
@@ -38,6 +60,9 @@ export class SessionRunBudget {
 	assertAdmission(): void {
 		this.current?.assertAdmission();
 	}
+	waitForIdle(): Promise<void> {
+		return (this.current ?? this.previous)?.waitForIdle() ?? Promise.resolve();
+	}
 	close(): void {
 		this.disposed = true;
 		this.current?.close();
@@ -47,8 +72,10 @@ export class SessionRunBudget {
 		limits: RunBudgetLimits | undefined,
 		operation: () => Promise<void>,
 		preflightResult?: (accepted: boolean) => void,
+		closedByCommand?: () => boolean,
 	): Promise<void> {
 		let ownsScope = false;
+		let finishExecution: (() => void) | undefined;
 		let entered = false;
 		let budget: RunBudget | undefined;
 		const source = this.agent.streamFn;
@@ -61,32 +88,41 @@ export class SessionRunBudget {
 			}
 			this.executing = true;
 			ownsScope = true;
+			this.executionCompletion = new Promise<void>((resolve) => {
+				finishExecution = resolve;
+			});
 			if (limits !== undefined) {
 				if (this.agent.state.isStreaming) throw new PromptExecutionBusyError();
 				this.lifecycle.assertIdle();
-				const scopedBudget = new RunBudget(limits, this.lifecycle.stop);
-				budget = scopedBudget;
-				this.current = scopedBudget;
-				wrapped = wrapBudgetStream(source, scopedBudget);
+			}
+			// Ownership applies to every scope; only limit enforcement is opt-in.
+			const scopedBudget = new RunBudget(limits, this.lifecycle.stop);
+			budget = scopedBudget;
+			this.current = scopedBudget;
+			wrapped = wrapBudgetStream(source, scopedBudget);
+			if (sourceAuth !== undefined) {
 				wrappedAuth = async (provider) => {
 					scopedBudget.assertAdmission();
-					const key = await sourceAuth?.(provider);
+					const key = await sourceAuth(provider);
 					scopedBudget.assertActive();
 					return key;
 				};
-				this.agent.streamFn = wrapped;
 				this.agent.getApiKey = wrappedAuth;
-				scopedBudget.assertAdmission();
 			}
+			this.agent.streamFn = wrapped;
+			scopedBudget.assertAdmission();
 			entered = true;
-			await operation();
-			budget?.assertActive();
+			await this.executionContext.run(scopedBudget, operation);
+			// A registered command may have completed by replacing its session. Real exhaustion still fails.
+			if (budget?.failure || !closedByCommand?.()) budget?.assertActive();
 		} catch (error) {
 			if (!entered) {
 				preflightResult?.(false);
 				if (error instanceof RunBudgetExceededError || error instanceof RunBudgetPolicyError)
 					this.lifecycle.reject(error);
 			}
+			if (budget && this.cancelledBudget === budget)
+				throw new DOMException("Prompt aborted before execution", "AbortError");
 			throw budget?.failure ?? error;
 		} finally {
 			if (budget) {
@@ -96,7 +132,11 @@ export class SessionRunBudget {
 			}
 			if (wrapped !== undefined && this.agent.streamFn === wrapped) this.agent.streamFn = source;
 			if (wrappedAuth !== undefined && this.agent.getApiKey === wrappedAuth) this.agent.getApiKey = sourceAuth;
-			if (ownsScope) this.executing = false;
+			if (ownsScope) {
+				this.executing = false;
+				this.executionCompletion = undefined;
+				finishExecution?.();
+			}
 		}
 	}
 }
@@ -106,21 +146,24 @@ export function wrapBudgetStream(source: StreamFn, budget: RunBudget): StreamFn 
 		options?.signal?.throwIfAborted();
 		const release = budget.admit();
 		const remainingMs = budget.remainingMs;
+		let returnedStream = false;
 		try {
 			const stream = await source(model, context, {
 				...options,
 				signal: options?.signal ? AbortSignal.any([options.signal, budget.signal]) : budget.signal,
-				maxRetries: 0,
+				...(Object.keys(budget.limits).length > 0 ? { maxRetries: 0 } : {}),
 				...(remainingMs === undefined
 					? {}
 					: { timeoutMs: Math.min(options?.timeoutMs ?? remainingMs, remainingMs) }),
 			});
+			returnedStream = true;
 			// A returned stream is not yet a completed request. Missing terminal metadata
 			// retains the reservation; abort alone never refunds it.
 			void stream.result().then(release, release);
 			return stream;
 		} catch (error) {
-			release();
+			// A broken result() contract leaves termination unknown, not refunded.
+			if (!returnedStream) release();
 			throw error;
 		}
 	};

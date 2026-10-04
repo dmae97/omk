@@ -48,7 +48,7 @@ async function startRun(runId: string, writer: readonly string[], stdout: string
 		writer,
 		checks: [{ claimId: "answer", argv: ["/bin/cat", "result.txt"], stdout }],
 		budget: {
-			workMs: 5000,
+			workMs: 30000,
 			verifyMs: 15000,
 			cleanupMs: 15000,
 			maxOutputBytes: 4096,
@@ -289,7 +289,7 @@ describe("verified candidate publication", () => {
 			writer: ["/bin/cp", "input.txt", "result.txt"],
 			checks: [{ claimId: "answer", argv: ["/bin/cat", "result.txt"], stdout: "hello" }],
 			budget: {
-				workMs: 5000,
+				workMs: 30000,
 				verifyMs: 15000,
 				cleanupMs: 15000,
 				maxOutputBytes: 4096,

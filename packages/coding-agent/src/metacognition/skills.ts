@@ -2,8 +2,11 @@
  * Capability-coverage skill planning under host-approved constraints.
  *
  * Ported from docs/OMK_skill_knowledge_control_2026-09-19.zip
- * (src/skills.ts). Exact search for small sets, bounded greedy for large sets.
+ * (src/skills.ts). Exact search for small sets (suffix-union pruned DFS);
+ * bounded greedy for large sets, followed by singleton dominance,
+ * eviction-refill, and a dominance prune so a wrong first pick is not final.
  */
+import { runExactSearch, runGreedySearch, type SearchValue, type SkillSearchSpace } from "./skill-search-space.ts";
 import { arrayBound, ensure, integer, lexical, text, unique } from "./validation.ts";
 
 export interface CapabilityNeed {
@@ -46,13 +49,6 @@ export interface SkillPlan {
 	readonly algorithm: "exact-small" | "greedy-with-singleton";
 	readonly state: "covered" | "capability-gap" | "explicit-blocked";
 }
-interface Value {
-	required: number;
-	optional: number;
-	cost: number;
-	ids: string[];
-}
-
 export function planSkills(input: SkillPlanInput): SkillPlan {
 	text(input.phase, "phase", 128);
 	integer(input.tokenBudget, "tokenBudget", 10_000_000);
@@ -75,6 +71,13 @@ export function planSkills(input: SkillPlanInput): SkillPlan {
 		ensure(typeof need.required === "boolean", "required must be boolean");
 	}
 	const byId = new Map(input.catalog.map((skill) => [skill.id, skill]));
+	// Ids only ever flow from byId keys, so a miss is a kernel invariant
+	// violation, not a user input problem — ensure() reports it as such.
+	const skillOf = (id: string): SkillDescriptor => {
+		const found = byId.get(id);
+		ensure(found !== undefined, `unknown skill id: ${id}`);
+		return found;
+	};
 	const rejected = new Map<string, string>();
 	for (const skill of input.catalog) {
 		text(skill.contentHash, "contentHash");
@@ -142,11 +145,11 @@ export function planSkills(input: SkillPlanInput): SkillPlan {
 		}
 		return cost <= input.tokenBudget;
 	};
-	const value = (ids: ReadonlySet<string>): Value => {
+	const value = (ids: ReadonlySet<string>): SearchValue => {
 		const coverage = new Set<string>();
 		let cost = 0;
 		for (const id of ids) {
-			const skill = byId.get(id)!;
+			const skill = skillOf(id);
 			cost += skill.tokenCost;
 			for (const capability of skill.capabilities) coverage.add(capability);
 		}
@@ -160,16 +163,6 @@ export function planSkills(input: SkillPlanInput): SkillPlan {
 		}
 		return { required, optional, cost, ids: [...ids].sort(lexical) };
 	};
-	const better = (left: Value, right: Value): boolean =>
-		left.required !== right.required
-			? left.required > right.required
-			: left.optional !== right.optional
-				? left.optional > right.optional
-				: left.cost !== right.cost
-					? left.cost < right.cost
-					: left.ids.length !== right.ids.length
-						? left.ids.length < right.ids.length
-						: lexical(left.ids.join("\0"), right.ids.join("\0")) < 0;
 	let base = new Set<string>();
 	const blockedExplicit: string[] = [];
 	for (const id of [...input.explicitSkills].sort(lexical)) {
@@ -184,64 +177,25 @@ export function planSkills(input: SkillPlanInput): SkillPlan {
 	const candidates = [...closures.entries()].filter(([id]) => !base.has(id));
 	const algorithm = candidates.length <= 12 ? "exact-small" : "greedy-with-singleton";
 	if (blockedExplicit.length === 0) {
-		if (algorithm === "exact-small") {
-			const visit = (position: number, current: Set<string>): void => {
-				if (!feasible(current)) return;
-				if (better(value(current), value(best))) best = current;
-				const candidate = candidates[position];
-				if (!candidate) return;
-				visit(position + 1, current);
-				visit(position + 1, new Set([...current, ...candidate[1]]));
-			};
-			visit(0, base);
-		} else {
-			let current = base;
-			while (true) {
-				const previous = value(current);
-				let winner: Set<string> | undefined;
-				let rank: readonly [number, number, string] = [-1, -1, ""];
-				for (const [id, set] of candidates) {
-					if (current.has(id)) continue;
-					const joined = new Set([...current, ...set]);
-					if (!feasible(joined)) continue;
-					const after = value(joined);
-					const requiredGain = after.required - previous.required;
-					const optionalGain = after.optional - previous.optional;
-					if (requiredGain <= 0 && optionalGain <= 0) continue;
-					const cost = Math.max(1, after.cost - previous.cost);
-					const proposal = [requiredGain / cost, optionalGain / cost, id] as const;
-					if (
-						!winner ||
-						proposal[0] > rank[0] ||
-						(proposal[0] === rank[0] &&
-							(proposal[1] > rank[1] || (proposal[1] === rank[1] && lexical(proposal[2], rank[2]) < 0)))
-					) {
-						winner = joined;
-						rank = proposal;
-					}
-				}
-				if (!winner) break;
-				current = winner;
-			}
-			best = current;
-			for (const [, set] of candidates) {
-				const joined = new Set([...base, ...set]);
-				if (feasible(joined) && better(value(joined), value(best))) best = joined;
-			}
-		}
+		const space: SkillSearchSpace = {
+			base,
+			candidates,
+			closures,
+			feasible,
+			needs: input.needs,
+			skillOf,
+			value,
+		};
+		best = algorithm === "exact-small" ? runExactSearch(space, new Set(base)) : runGreedySearch(space);
 	}
-	const allCovered = new Set([...best].flatMap((id) => byId.get(id)!.capabilities));
+	const allCovered = new Set([...best].flatMap((id) => skillOf(id).capabilities));
 	const uncoveredRequired = input.needs
-		.filter((n) => n.required && !allCovered.has(n.capability))
-		.map((n) => n.capability)
+		.flatMap((n) => (n.required && !allCovered.has(n.capability) ? [n.capability] : []))
 		.sort(lexical);
 	return {
 		selected: [...best].sort(lexical),
 		tokenCost: value(best).cost,
-		covered: input.needs
-			.filter((n) => allCovered.has(n.capability))
-			.map((n) => n.capability)
-			.sort(lexical),
+		covered: input.needs.flatMap((n) => (allCovered.has(n.capability) ? [n.capability] : [])).sort(lexical),
 		uncoveredRequired,
 		blockedExplicit: blockedExplicit.sort(lexical),
 		rejected: Object.fromEntries([...rejected].sort(([a], [b]) => lexical(a, b))),
