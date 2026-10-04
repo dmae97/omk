@@ -6,7 +6,7 @@
     <title>OMK — Open Multi-Agent Kit</title>
     <meta
       name="description"
-      content="Provider-neutral coding agent and multi-agent control plane. Scope work into parallel lanes, verify with evidence, replay every run."
+      content="Open-source terminal coding agent. Switch providers in one session, resume your work, and finish goals against checks you approve."
     />
     <meta name="theme-color" content="#0b0d10" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -43,23 +43,22 @@
 
     <main id="main">
       <section class="hero shell" id="top">
-        <p class="eyebrow">open-multi-agent-kit · v0.95.1</p>
+        <p class="eyebrow">open-multi-agent-kit · v1.3.0 · MIT</p>
         <h1>
-          Software engineering<br />
-          <em>with receipts.</em>
+          Make “done”<br />
+          <em>pass a check.</em>
         </h1>
         <p class="lede">
-          OMK is a provider-neutral coding agent and multi-agent control plane.
-          Turn a goal into bounded DAG lanes, block “done” without fresh
-          evidence, and keep every run replayable — for Codex, Claude Code,
-          OpenCode, and local models.
+          OMK is an open-source terminal coding agent. Switch providers in one
+          session, resume later, and use <code>/goal verify</code> to finish a
+          goal only when your approved check passes on the current workspace.
         </p>
         <div class="hero__cta">
-          <a class="btn btn--solid btn--lg" href="#install">Get started</a>
+          <a class="btn btn--solid btn--lg" href="https://github.com/dmae97/omk#quick-start">Try OMK on GitHub</a>
           <a
             class="btn btn--ghost btn--lg"
-            href="https://www.npmjs.com/package/open-multi-agent-kit"
-            >npm package</a
+            href="https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/goal-demo.md"
+            >Run the demo</a
           >
         </div>
         <p class="hero__meta">
@@ -67,74 +66,75 @@
           <span class="dot" aria-hidden="true"></span>
           <span>MIT</span>
           <span class="dot" aria-hidden="true"></span>
-          <span>npm install -g open-multi-agent-kit</span>
+          <span>Single agent by default</span>
         </p>
 
-        <div class="stage" aria-label="OMK product preview">
+        <div class="stage" aria-label="Illustrative goal workflow, not a live run or benchmark">
           <div class="stage__chrome">
             <div class="stage__dots" aria-hidden="true">
               <i></i><i></i><i></i>
             </div>
-            <div class="stage__title">omk · CONTROL</div>
-            <div class="stage__pill">evidence gate · PASS</div>
+            <div class="stage__title">illustrative workflow · not a live run</div>
+            <div class="stage__pill">/goal verify</div>
           </div>
           <div class="stage__body">
             <aside class="rail">
-              <p class="rail__label">STATUS</p>
+              <p class="rail__label">WORKFLOW</p>
               <ul>
-                <li><span class="ok"></span> lanes 4/4</li>
-                <li><span class="ok"></span> predicates 12</li>
-                <li><span class="warn"></span> context 61%</li>
-                <li><span class="ok"></span> mcp healthy</li>
+                <li><span class="ok"></span> one agent by default</li>
+                <li><span class="ok"></span> approved check</li>
+                <li><span class="warn"></span> up to 8 rounds</li>
+                <li><span class="ok"></span> fresh receipt</li>
               </ul>
-              <p class="rail__label">PROVIDERS</p>
+              <p class="rail__label">PROVIDER OPTIONS</p>
               <ul class="rail__muted">
-                <li>codex · active</li>
-                <li>claude · standby</li>
-                <li>local · ready</li>
+                <li>subscription login</li>
+                <li>API keys</li>
+                <li>local models</li>
               </ul>
             </aside>
             <div class="workspace">
               <div class="prompt">
                 <span class="prompt__k">goal</span>
-                <p>Ship harness-graph health gate with CI and scorecard.</p>
+                <p>Fix the failing parser regression, then pass its test.</p>
               </div>
               <div class="lanes">
                 <article class="lane">
                   <header>
-                    <span>L1 · graph</span><b class="tag tag--green">done</b>
+                    <span>01 · set a goal</span><b class="tag tag--blue">goal</b>
                   </header>
-                  <code>build-harness-graph.mjs</code>
-                  <p>1421 nodes · 2065 edges</p>
+                  <code>/goal &lt;objective&gt;</code>
+                  <p>Name the behavior and its acceptance check.</p>
                 </article>
                 <article class="lane">
                   <header>
-                    <span>L2 · analyze</span><b class="tag tag--green">done</b>
+                    <span>02 · approve a check</span><b class="tag tag--amber">verify</b>
                   </header>
-                  <code>graph_analyze.py</code>
-                  <p>bipartite SPOF · communities</p>
+                  <code>/goal verify npm test</code>
+                  <p>Use a command that checks the requested behavior.</p>
                 </article>
                 <article class="lane">
                   <header>
-                    <span>L3 · gate</span><b class="tag tag--amber">verify</b>
+                    <span>03 · keep working</span><b class="tag tag--blue">continue</b>
                   </header>
-                  <code>health_gate.py --json</code>
-                  <p>waiting fresh evidence</p>
+                  <code>check fails → next round</code>
+                  <p>Continue within the goal’s round limit.</p>
                 </article>
                 <article class="lane">
                   <header>
-                    <span>L4 · docs</span><b class="tag tag--blue">run</b>
+                    <span>04 · finish on evidence</span><b class="tag tag--green">receipt</b>
                   </header>
-                  <code>SCORECARD.md</code>
-                  <p>96/100 · write receipt</p>
+                  <code>check passes → complete</code>
+                  <p>An open goal needs evidence matching its workspace.</p>
                 </article>
               </div>
               <div class="term">
-                <div class="term__bar">terminal · lane L3</div>
-                <pre><span class="c-dim">$</span> python3 .omk/harness-graph/health_gate.py --json
-<span class="c-ok">{</span> "status": "PASS", "dead_skills": 0, "dead_hooks": 0
-<span class="c-dim">$</span> npm run check
-<span class="c-ok">✓</span> release surface OK · shrinkwrap OK · tsgo clean</pre>
+                <div class="term__bar">example commands · your project supplies the test</div>
+                <pre><span class="c-dim">omk&gt;</span> /goal Fix the failing parser regression
+<span class="c-dim">omk&gt;</span> /goal verify npm test
+<span class="c-dim">#</span> Approve a check that proves your goal.
+<span class="c-dim">#</span> A failing check continues work within the round limit.
+<span class="c-dim">#</span> A passing check and fresh receipt allow completion.</pre>
               </div>
             </div>
           </div>
@@ -143,11 +143,11 @@
 
       <section class="strip">
         <div class="shell strip__inner">
-          <p>Routes across models without rewriting the control plane.</p>
+          <p>Choose your provider. Keep the same conversation.</p>
           <ul>
             <li>Codex</li>
-            <li>Claude Code</li>
-            <li>OpenCode</li>
+            <li>Claude</li>
+            <li>API providers</li>
             <li>Kimi · GLM · local</li>
           </ul>
         </div>
@@ -156,50 +156,55 @@
       <section class="section shell" id="product">
         <div class="section__head">
           <p class="eyebrow">Product</p>
-          <h2>Built like a coding product,<br />not a chat wrapper.</h2>
+          <h2>Start with one agent.<br />Build your own workflow.</h2>
           <p class="section__lede">
-            The same shape as a modern agent IDE home: clear job-to-be-done, a
-            live workspace, and short paths from install to first verified run.
+            Read files, edit code, run commands, and save sessions. Add
+            subagents, MCP tools, or verification workflows when you need them.
           </p>
         </div>
         <div class="bento">
           <article class="card card--wide">
-            <p class="card__kicker">Parallel lanes</p>
-            <h3>Own paths. No stomping.</h3>
+            <p class="card__kicker">Optional subagent workflows</p>
+            <h3>Configure a team when the task needs one.</h3>
             <p>
-              Goals become a DAG. Each lane gets resource claims and write
-              ownership so agents stop overwriting each other mid-flight.
+              Subagents require an extension and agent definitions. Scoped
+              lane primitives support configured workflows; installing OMK
+              does not turn every prompt into parallel work. The animation is
+              an illustrative overview of an optional workflow.
             </p>
             <img
               src="./assets/demos/03-parallel-lanes.gif"
-              alt="OMK parallel lanes demo"
+              alt="Illustrative overview of an optional OMK parallel lane workflow"
               loading="lazy"
               width="960"
               height="540"
             />
           </article>
           <article class="card">
-            <p class="card__kicker">Evidence gate</p>
-            <h3>Green means measured.</h3>
+            <p class="card__kicker">Goal acceptance checks</p>
+            <h3>You define what “done” checks.</h3>
             <p>
-              Acceptance predicates block completion until commands leave fresh
-              receipts. Chat claims stay labeled unverified.
+              Approve an acceptance command with <code>/goal verify</code>.
+              A goal completes on a passing check and fresh evidence. The
+              result covers that command’s checks, not every possible bug.
             </p>
           </article>
           <article class="card">
             <p class="card__kicker">Provider-neutral</p>
-            <h3>Swap models, keep control.</h3>
+            <h3>Switch models. Keep your session.</h3>
             <p>
-              Codex today, Claude tomorrow, local for air-gap. The evidence
-              model does not change with the vendor.
+              Use <code>/model</code> to switch between configured providers.
+              Subscription logins, API keys, and local models share one CLI
+              session. Availability depends on your provider setup.
             </p>
           </article>
           <article class="card card--wide">
             <p class="card__kicker">Session recovery</p>
-            <h3>Crash mid-run? Replay.</h3>
+            <h3>Pause now. Pick up later.</h3>
             <p>
-              Durable session state and repair keep long orchestration jobs
-              recoverable instead of restarting from zero.
+              Sessions save automatically. Return with <code>omk -c</code> or
+              <code>/resume</code>. The animation illustrates session recovery;
+              after restarting, approve a goal’s acceptance check again.
             </p>
             <img
               src="./assets/demos/09-session-doctor.gif"
@@ -216,46 +221,48 @@
         <div class="shell">
           <div class="section__head">
             <p class="eyebrow">How it works</p>
-            <h2>Scope. Verify. Replay.</h2>
+            <h2>Choose. Work. Check. Resume.</h2>
           </div>
           <ol class="steps">
             <li>
               <span class="steps__n">01</span>
               <div>
-                <h3>State the goal</h3>
+                <h3>Choose a model</h3>
                 <p>
-                  OMK decomposes work into a bounded DAG with owned paths and
-                  stop predicates.
+                  Start OMK in your repository. Use <code>/login</code> for a
+                  supported provider, then <code>/model</code> to choose a model.
                 </p>
               </div>
             </li>
             <li>
               <span class="steps__n">02</span>
               <div>
-                <h3>Run parallel lanes</h3>
+                <h3>Try a first task</h3>
                 <p>
-                  Skills, hooks, and MCP tools route per lane. One writer per
-                  mutable surface.
+                  Ask for a read-only repository summary first. A fresh install
+                  starts one agent; subagents and MCP tools require setup.
                 </p>
               </div>
             </li>
             <li>
               <span class="steps__n">03</span>
               <div>
-                <h3>Gate on evidence</h3>
+                <h3>Give a goal an acceptance check</h3>
                 <p>
-                  Completion waits on fresh command output, tests, and health
-                  checks — not vibes.
+                  Set <code>/goal &lt;objective&gt;</code>, then approve a command
+                  with <code>/goal verify &lt;command&gt;</code>. A failing
+                  check continues work, up to the eight-round limit.
                 </p>
               </div>
             </li>
             <li>
               <span class="steps__n">04</span>
               <div>
-                <h3>Keep the receipt</h3>
+                <h3>Review the result and return later</h3>
                 <p>
-                  Replayable artifacts stay available for review, recovery, and
-                  release notes.
+                  Inspect the diff and check output. An open goal’s passing
+                  evidence becomes stale after a workspace edit. Saved
+                  sessions let you return with <code>omk -c</code>.
                 </p>
               </div>
             </li>
@@ -267,26 +274,25 @@
         <div class="split">
           <div>
             <p class="eyebrow">OMK//CONTROL</p>
-            <h2>A control plane for multi-agent work.</h2>
+            <h2>Your work, in one terminal.</h2>
             <p class="section__lede">
-              Interactive coding agent CLI underneath. Orchestration, skill
-              routing, MCP health, and harness-graph inventory on top — one
-              operator surface.
+              See the selected model, tools, and session status. Extra signals
+              depend on the integrations you configure. This image is an
+              archived interface example, not a live run or proof of results.
             </p>
             <ul class="ticks">
               <li>
-                Skill hubs (including marketing/SEO via
-                <code>omk-marketing</code>)
+                Switch configured models with <code>/model</code>
               </li>
-              <li>Harness graph: agents × skills × hooks × MCP</li>
-              <li>Fail-closed health gate and CI workflow</li>
-              <li>Context budget and session doctor</li>
+              <li>Continue saved sessions with <code>omk -c</code></li>
+              <li>Approve goal acceptance checks explicitly</li>
+              <li>Configure extensions, skills, and MCP tools as needed</li>
             </ul>
           </div>
           <figure class="shot">
             <img
               src="./assets/omk_tui.jpg"
-              alt="OMK TUI control plane screenshot"
+              alt="Archived OMK terminal interface example; configured signals vary"
               width="960"
               height="640"
             />
@@ -298,10 +304,14 @@
         <div class="shell install">
           <div>
             <p class="eyebrow">Install</p>
-            <h2>One global binary.</h2>
+            <h2>Try it in your repository.</h2>
             <p class="section__lede">
-              Same path as a Codex-style product page: install, boot, first
-              goal.
+              Requires Node.js 22.19 or newer. Install, enter your project, and
+              run <code>/login</code> then <code>/model</code>. Built-in local
+              bash requires <code>sandbox-exec</code> on macOS or
+              <code>bwrap</code> and unprivileged user namespaces on Linux.
+              See the <a href="https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/quickstart.md">quickstart</a>
+              and <a href="https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/containerization.md">platform requirements</a>.
             </p>
           </div>
           <div class="install__panel">
@@ -319,8 +329,9 @@
             <pre
               id="install-cmd"
               class="install__cmd"
-            ><code>npm install -g open-multi-agent-kit@0.95.1 --ignore-scripts
+            ><code>npm install -g open-multi-agent-kit --ignore-scripts
 omk --version
+cd your-project
 omk</code></pre>
             <button class="btn btn--ghost" type="button" id="copy-install">
               Copy
@@ -338,25 +349,32 @@ omk</code></pre>
           <details open>
             <summary>Is OMK a coding agent or an orchestrator?</summary>
             <p>
-              Both. <code>open-multi-agent-kit</code> is an interactive
-              coding-agent CLI. OMK//CONTROL adds multi-agent DAG lanes,
-              skill/MCP routing, and evidence gates.
+              <code>open-multi-agent-kit</code> is a standalone terminal
+              coding-agent CLI. It starts with one agent. Subagents require
+              configured extensions, and protocol verification requires an
+              explicit workflow. OMK is not a plugin for Claude Code or OpenCode.
             </p>
           </details>
           <details>
             <summary>Which models are supported?</summary>
             <p>
-              Provider-neutral via <code>omk-ai</code>: Codex, Claude, OpenCode,
-              Kimi, GLM/ZAI, local providers, and more. Swap models without
-              changing the control model.
+              Supported subscriptions, API-key providers, and local models
+              are documented in the
+              <a href="https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/providers.md">provider guide</a>.
+              Use <code>/model</code> to switch between configured models
+              without starting a new session.
             </p>
           </details>
           <details>
             <summary>How is completion verified?</summary>
             <p>
-              Acceptance predicates plus fresh command evidence. Unverified runs
-              stay labeled
-              <code>UNVERIFIED</code>. Green chat is not a release signal.
+              Ordinary prompts settle after their tool loop; they do not
+              certify correctness. With <code>/goal verify &lt;command&gt;</code>,
+              a goal completes only when the approved check passes and its
+              evidence still matches the workspace. A weak check can complete
+              a goal early. See the
+              <a href="https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/run-protocol.md#acceptance-checks">acceptance-check contract</a>
+              and <a href="https://github.com/dmae97/omk#evidence-and-limits">evidence and limits</a>.
             </p>
           </details>
           <details>
@@ -373,8 +391,8 @@ omk</code></pre>
               >
               ·
               <a
-                href="https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v0.95.1.md"
-                >v0.95.1 notes</a
+                href="https://github.com/dmae97/omk/releases/latest"
+                >latest release</a
               >
             </p>
           </details>
@@ -390,7 +408,7 @@ omk</code></pre>
         </div>
         <p>Open Multi-Agent Kit · MIT · evidence over claims</p>
         <div class="foot__links">
-          <a href="https://github.com/dmae97/omk">GitHub</a>
+          <a href="https://github.com/dmae97/omk">Star OMK if it helps</a>
           <a href="https://www.npmjs.com/package/open-multi-agent-kit">npm</a>
           <a href="https://github.com/dmae97/omk/blob/main/LICENSE">License</a>
         </div>

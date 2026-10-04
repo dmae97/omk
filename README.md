@@ -1,7 +1,7 @@
 <p align="center">
   <img
     src="readmeasset/omk-hero.svg"
-    alt="OMK, Open Multi-Agent Kit. Scope the work. Route the right agents. Verify every release. The mark shows a four-stage control loop with three routed lanes."
+    alt="OMK, Open Multi-Agent Kit. Make done pass a check. The mark shows a four-stage control loop with three routed lanes."
     width="100%"
   />
 </p>
@@ -10,11 +10,11 @@
 
 <p align="center">
   <strong>Open Multi-Agent Kit</strong><br />
-  Scope the work. Route the right agents. Verify every release.
+  Make “done” pass a check.
 </p>
 
 <p align="center">
-  A terminal coding agent that lets you switch models without starting a new session.
+  A terminal coding agent with model switching and explicit, test-backed goals.
 </p>
 
 <p align="center">
@@ -36,6 +36,20 @@
 ---
 
 ## Why OMK
+
+An AI saying “done” is not an acceptance check. With `/goal verify`, you choose
+the command that checks your goal. OMK runs it after each settled turn and
+completes the goal only when it passes on the current workspace. A later edit
+makes that evidence stale. The result is only as strong as the check you choose.
+
+```text
+/goal Fix the failing test without changing its assertions.
+/goal verify node --test check.test.mjs
+```
+
+Use a test that exists in your project, or follow the
+[small, reproducible goal demo](packages/coding-agent/docs/goal-demo.md).
+This is an explicit workflow; ordinary prompts do not enable the gate.
 
 Choose a model, work on your repository, then switch models with `/model` when
 another one suits the next step. The conversation stays in the same session.
@@ -73,6 +87,11 @@ Read the project configuration to support your answer. Do not edit files.
 After the reply, use `/model` to choose another configured model and ask it to
 review the answer. You stay in the same session. This is manual model switching,
 not parallel agents or an independent correctness check.
+
+Ready to see a test-backed goal? Try the [goal demo](packages/coding-agent/docs/goal-demo.md),
+then share your result or a reproducible failure in a
+[GitHub issue](https://github.com/dmae97/omk/issues). If this workflow is useful,
+[star OMK](https://github.com/dmae97/omk) to help other developers find it.
 
 For a bug fix, name the failing behavior and ask for a regression test, the
 smallest fix, and the check commands with their exit codes. Review the diff and
@@ -369,7 +388,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.2.4](.github/RELEASE_NOTES_v1.2.4.md)
+- [Release notes for v1.3.0](.github/RELEASE_NOTES_v1.3.0.md)
 
 ## Development
 
@@ -425,6 +444,64 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v1.3.0
+
+### New Features
+
+- **Evidence-gated durable goals**: `/goal verify <command>` approves an acceptance check that runs in the default bash sandbox after each settled turn. The goal completes only when the check passes on the current workspace, and the check's output never reaches the model. See [acceptance checks](packages/coding-agent/docs/run-protocol.md#acceptance-checks).
+- **Resumable cancellation, remote cancel and cleanup for verified runs**: a cancelled `omk run` pauses instead of failing and resumes with `restart-writer`, `resume` or `retry-tasks`. `omk run cancel` stops a run from another shell, and `omk run gc` prunes derived workspaces while keeping the evidence. See [cancellation](packages/coding-agent/docs/verified-run.md#취소와-원격-취소) and [artifact GC](packages/coding-agent/docs/verified-run.md#artifact-gc).
+- **MCP startup isolation**: an MCP server that exits during startup is marked `failed` with a classified error, and every other server still contributes its tools. See [failure behavior](packages/coding-agent/docs/mcp.md#failure-behavior).
+
+### Breaking Changes
+
+- Cancelling a live verified run (`SIGINT`, `SIGTERM` or the new `omk run cancel`) no longer ends it `failed`. The run stays `paused` with `failure: cancelled`, and its journal records a new `interrupted` event. Resume the phase that was cut off with `restart-writer`, `resume` or `retry-tasks`; a DAG attempt whose process was confirmed stopped is released instead of spent. A verification check cut off by the cancellation is no longer signed into the receipt as a failed check. OMK 1.2.4 and earlier cannot read a journal that contains `interrupted`, and a status consumer that treated cancellation as terminal must handle `paused`. See [cancellation](packages/coding-agent/docs/verified-run.md#취소와-원격-취소).
+
+### Added
+
+- Experimental POSIX local session control: explicitly enroll with `OMK_SESSION_CONTROL=1` or `session.startControl()`, then use `sdk session ... --live`. Exact session IDs and private per-enrollment endpoints are required; live failures never become transcript writes.
+- Experimental workspace source-quote memory: explicit SDK admission, source-bound Observations, expiry/revocation and per-request freshness checks. Recall requires `OMK_VERIFIED_MEMORY=1` plus Context Budget V2 and uses transient tool-result data, not instruction text. No automatic extraction or quality-improvement claim.
+- `/goal verify <command>` approves an acceptance check for the durable goal and runs it through receipt-bound local bash under the default bash sandbox. A passing check is attached as goal evidence. After each settled turn the check runs again: a pass completes the goal, and a failure starts the next round with the command and its exit code, never its output. `/goal complete` then requires a passing receipt from this session that still matches the workspace; a tracked edit, new file or HEAD move after the check makes it stale. Approvals stay in the OMK process, so approve the check again after a restart. See [acceptance checks](packages/coding-agent/docs/run-protocol.md#acceptance-checks).
+- `nextDurableGoalTimestamp(goal)` is exported for SDK callers of `applyDurableGoalCommand()` and `DurableGoalStore.transition()`. It returns the wall clock, raised to no earlier than the goal's last update and later than the start of its generation, which is the time the reducer accepts after the clock steps back (seen on WSL2). See [durable goal lifecycle](packages/coding-agent/docs/run-protocol.md#durable-goal-lifecycle).
+- `omk run cancel ID [--wait-ms N]` cancels a verified run owned by another process. It writes a request file that the owner checks every 250 ms and never signals a PID. `watchRunCancelRequest()` connects the same request to an SDK caller's `AbortSignal`, and `cancelVerifiedRun()` is the SDK form of the command.
+- `omk run gc [--older-than DURATION] [--execute]` prunes the derived workspaces (`writer*`, `candidate*`, `tasks`) of verified runs that can no longer be recovered, holding each run's owner lease while it checks. It keeps journals, keys, manifests, blobs, receipts and attestations, never follows symlinks, and only reports without `--execute`. SDK: `collectVerifiedRuns()`.
+- Before dispatching a prompt, `AgentSession` checks the complete request against the model window less the output reserve and safety margin (`computeHardPromptInputLimit()`). `estimateContextInputTokens()` counts the system prompt, the messages after `convertToLlm()` and the tool schemas, and takes the largest of the configured tokenizer count, the character heuristic and projected provider usage.
+- `session.metacognition` exposes a content-free `state` snapshot and the latest bounded `lastDiagnostic`, observed at prompt preflight and settlement. It is observation-only: it never rewrites a prompt, authorizes a tool, changes termination or grants completion.
+- MCP SDK options: `McpServerConfig.inheritEnv: false` keeps the parent environment out of a stdio server, `maxPendingWriteBytes` (default 16 MiB) bounds bytes queued on the server's stdin, and `await manager.closeAndWait()` joins physical transport close. `manager.status()` marks a server whose close is pending with `retiring: true`. `inheritEnv` is not read from `mcp.json` yet.
+
+### Changed
+
+- Skill relevance ranking on the live prompt-to-skill path matches Korean inflections and Latin word stems through containment and bigram-Dice token matching. The exported `planSkills()` prunes its exact search and adds dominance and eviction-refill passes to its greedy search.
+- Context Budget V2 orders ranking, redundancy, exchange, selected output and cache and plan hashes by UTF-16 code-unit ID order. The selection cache policy is `sel-4-codeunit`, so entries cached under the earlier policy are not reused; the public optimizer identifier is unchanged.
+- `omk run` reports an error outside the verified-run contract as `verified-run: operation_failed (<kind> <code>)`, for example `(Error ENOTDIR)`, instead of a bare `operation_failed`. The message itself stays out of the output because it can carry absolute paths or contract text.
+
+### Fixed
+
+- On macOS, replay-ledger process identity probes force the C locale for BSD `ps`, so Korean and other non-English parent locales no longer make a live process appear unavailable. The acceptance-check regression fixtures use canonical physical temporary repository paths on macOS, preserving workspace-mismatch rejection across `/var` and `/private/var` aliases.
+- Updated dependency security pins: `brace-expansion` 5.0.12 and `undici` 8.10.2, plus `undici` 6.28.1 for the optional Gondolin example. That example still depends on `node-forge` 1.4.0, whose RSA signature-verification advisory has no patched npm release as of 2026-10-04; the repository production audit continues to report it.
+- The durable goal loop continues again. Through 1.2.4 the goal controller advanced the round at every attempt's `agent_end` and sent the next turn while that run still owned the session; the session rejected it with `Agent is already processing`, so the round was spent and the goal never continued. The controller now acts once a turn settles, when no automatic retry follows it, and queues the next round as a follow-up. An attempt that is about to be retried no longer uses up a round.
+- Durable goal transitions no longer fail with `goal timestamps must be monotonic` or `goal generation timestamp must advance` when the wall clock steps back, as WSL2 does when its hypervisor resyncs time. The controller dates each transition no earlier than the journal's last timestamp.
+- A verified run no longer stops with `operation_failed` when the wall clock steps back under load. The authority store's default clock is the wall time at open plus monotonic elapsed time; a clock injected by the caller that moves backward is still refused.
+- A scripted-agent writer cancelled between model requests is recorded as cancelled, not as `writer_incomplete`, and `omk run status` suggests recovery only for runs that are running or paused.
+- An MCP server that exits during startup is marked `failed` with a classified public error while every other server still contributes its tools. A malformed tool result rejects with `mcp.invalid_tool_result` instead of counting as success. Request and handshake timeouts accept only safe integers from 0 through 2,147,483,647 ms, and `0` refuses to send. `manager.status()` omits free-form server-reported versions.
+- MCP transport retirement waits for the physical process or stdio close, not the kill request: a failed startup keeps its queue slot and a same-server reconnect waits for the old transport to close. A subagent dispatch holds a process-local lease on its workload pool, so a concurrent dispatch receives `ownership.dispatch_active`. Numeric environment values with trailing characters are rejected instead of parsed as a prefix, and prompt-size estimation projects each tool's name, description and parameters instead of serializing the tool object.
+- A workload permit waiter's expiry is checked when a permit is granted, not only by its timer.
+- Session shutdown observes each independent close request and every join before it releases resources, and does not return a resource whose release it could not confirm. The same MCP transport is no longer retired twice, and a previous owner's waiters are not released by the new owner. A registered command that replaces the session ends only its control frame; exhausting the run budget still fails the run.
+- `RpcClient` keeps only the last 8,192 characters of the current child's stderr and clears them on `start()`. `waitForIdle()` and `collectEvents()` reject when the child fails, exits or is stopped, and one waiter unsubscribing no longer makes another miss `agent_end`. `stop()` rejects pending requests at once, returns without the one-second delay when the child already exited, and rejects with `RpcTerminationUncertainError` while keeping ownership when termination cannot be confirmed. `prompt()` propagates a server rejection, so `promptAndWait()` no longer waits for its 60-second timeout.
+- `SessionManager.getBranch()` no longer shifts the path array for every ancestor (2,096,128 element moves at depth 2,048, now none). The run journal builds its frozen record copy only when `records` is read, and the memory-only journal store no longer replays every earlier record on each append (8,256 hashes for 128 appends, now 128). An `AgentSession` listener that unsubscribes while an event is dispatched no longer makes the next listener miss it.
+- The bundled `omk-ai` and `omk-agent-core` fixes apply: `complete()` and `completeSimple()` no longer queue every stream event until they return, a Cursor request that reaches its deadline is closed instead of left running, provider retries reject invalid options and stop early on an aborted signal, and taking queued messages one at a time no longer copies the rest of the queue.
+- The subagent example's graph and adaptive paths keep partial output apart from completion evidence, keep sibling-task and tool-call rows, and bound previews, update frequency and parser lifetime. A bounded run's result keeps the final attempt's `attemptId`, process settlement and stream receipts instead of the first attempt's, and the README install list includes `managed-process-tree.ts`, `subagent-stream.ts` and `graph-result.ts`, without which the extension did not load.
+- A session whose context grew past the prompt input ceiling no longer stops with `Context limit reached` until a manual `/compact`. Threshold compaction fired at 90% of the context window, but prompt admission rejects above the window minus the model's output reserve and a 10% safety margin, which is lower for 1,862 of 1,876 catalogued models: `opencode-go/deepseek-v4.1-flash` rejected at 516,000 input tokens while compaction waited for 900,000. Compaction now triggers at `compaction.maxUsageRatio` of that ceiling, less pending tool-result and image reserves (464,400 for that model). A prompt still over the ceiling gets one automatic compaction and a re-check before it is rejected; that rejection reports the committed compaction as a side effect.
+- A compacted session no longer stays at `Context limit reached` while `/compact` answers `Already compacted`. Admission kept counting the provider usage reported before the compaction: one `anthropic/claude-opus-5-5` session was rejected at 808,236 estimated tokens against a 772,000-token ceiling after its history had shrunk to about 13,500. Usage recorded at or before the latest compaction no longer counts, and a repeated `/compact` re-cuts the tail the previous compaction kept, using the 4,096-token emergency keep budget. The visible reasoning of turns a later user message closed, which providers drop, no longer counts toward the next turn's estimate.
+- A model whose input window cannot hold every MCP tool schema no longer rejects every prompt. `devin/swe-2`, configured with a 262,000-token window, rejected even a 45-token first message because its tool schemas (328 MCP tools plus the built-ins) were estimated at 237,218 tokens, over its 219,416-token input ceiling. Requests to such a model now withhold whole MCP servers, largest schema first, until a fully compacted session fits under the compaction trigger. Withholding stops only once a recount of the remaining schemas fits. The selection is fitted again for every turn, and within a turn whenever the model, the system prompt, a tool schema or the tool-to-server mapping changes, so an MCP server that reconnects with larger schemas under the same tool names is withheld from the next request. The active tool set is unchanged, a warning names the withheld servers, and they return on a model with room. A prompt rejected because the system prompt and tool schemas alone overflow is reported as `configuration.invalid`, and input still too large after automatic compaction as `compaction.failed`, instead of `provider.context_overflow`.
+- Manual compaction waits for an aborted prompt's budget wrapper to finish cleanup before starting summaries. Preflight-local compaction shares its current budget, and self-waiting active-agent calls refuse. Aborted, empty or nonterminal model output is no longer accepted as a durable summary.
+- `AgentSession.close()` and runtime disposal retain the session owner lease until registered work and native MCP transport closure settle. Legacy busy disposal starts the same close rather than releasing ownership early.
+- An abort during prompt preflight closes that request's admission before it can dispatch a model. In-flight MCP reattachment joins the retiring manager before publishing replacements.
+- The Context Budget V2 caches are bounded by size and no longer share objects with their callers. Each in-memory store kept up to 256 entries (2,048 in the disk provider) of any size, and kept the objects it was given, so a caller that changed an entry after writing or reading it also changed the cached copy. Stores now have byte budgets (8 MiB of representations, 2 MiB of plans and 256 KiB of negative entries in the session provider; 16 MiB, 4 MiB and 512 KiB resident in the disk provider) and keep immutable JSON copies; a value that is not plain JSON data is not cached. A disk snapshot over its 32 MiB cap with negative entries alone failed every later flush; it now shrinks until it fits. Cache limits that are not safe integers throw `RangeError`.
+- Automatic retries no longer retry at once when a backoff grows past the longest delay a Node timer holds (2,147,483,647 ms). The agent-turn retry and the compaction and branch-summary retries doubled `retry.baseDelayMs` without limit, and Node fires a longer timer after 1 ms, so a base of 3,000,000,000 ms retried after about 1 ms. Delays now stop at that limit, and the exported `computeRetryDelayMs` returns at most 2,147,483,647; below it, every result for a base that converts to a non-negative number is unchanged. A base that converts to NaN or a negative number uses the 2 s default, `+Infinity` takes the limit, and a `retry.maxRetries` that converts to NaN now means no retries; before, neither retry ran out.
+- Fireworks, Together and OpenCode Go no longer default to a Kimi K2.6 id that the 2026-09-30 catalog refresh dropped; model resolution fell back to the provider's first catalog entry. Fireworks and Together default to Kimi K3 (`accounts/fireworks/models/kimi-k3`, `moonshotai/Kimi-K3`), which keeps their transport contract. OpenCode Go defaults to `deepseek-v4.1-flash`: OMK has not verified the request contract of its Kimi K3 or K2.7 Code, and models.dev marks its K2.6 deprecated.
+
+Release notes live in [RELEASE_NOTES_v1.3.0.md](.github/RELEASE_NOTES_v1.3.0.md).
+
 ## Release v1.2.4
 
 ### New Features
@@ -448,17 +525,6 @@ Release notes live in [RELEASE_NOTES_v1.2.4.md](.github/RELEASE_NOTES_v1.2.4.md)
 - Verified-run suite hardening: tests use a 15s cleanup budget so slow namespace teardown on ubuntu-22.04 runners drains before settling, matching the witness contract without weakening fail-closed outcomes (no product-code change).
 
 Release notes live in [RELEASE_NOTES_v1.2.3.md](.github/RELEASE_NOTES_v1.2.3.md).
-
-## Release v1.2.2
-
-### Fixed
-
-- Verified-run termination witness: the supervisor drain now witnesses PID-namespace init death instead of enumerating the host process table, and inconclusive probes retry until the cleanup deadline instead of settling terminal `unknown` early. Host-dependent false positives (zombie tasks keeping their ns link, unreadable same-uid tasks) no longer quarantine every sandboxed dispatch — this was the ubuntu-22.04 CI failure that blocked v1.2.1 publishing.
-- Test infrastructure: `./test.sh` runs the suite against an isolated agent directory (`OMK_CODING_AGENT_DIR` on a throwaway dir) instead of moving the live credential store aside for the whole run. Concurrent sessions no longer read an empty store, fall back to stale environment credentials, or have a freshly written store clobbered by the restore. The test environment preserves `OMK_CODING_AGENT_DIR` while scrubbing other `OMK_*` values so the isolation reaches spawned CLI processes.
-- Compaction no longer livelocks while an extension writes session state. A summary is now committed over `custom` entries appended while it was generated (for example pi-landstrip background-task snapshots every few seconds) when the file only grew by such entries; a message, model change, provenance entry, rewrite or branch move still discards it with `revision_mismatch`.
-- A compaction window may hold up to 65,536 entries (was 4,096), so a session dominated by extension state entries can compact instead of failing with `source.entryIds must be a bounded array`. An older binary cannot open a session whose compaction envelope lists more than 4,096 entries.
-
-Release notes live in [RELEASE_NOTES_v1.2.2.md](.github/RELEASE_NOTES_v1.2.2.md).
 
 <!-- releases:end -->
 

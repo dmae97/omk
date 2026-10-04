@@ -1,56 +1,111 @@
 # OMK v1.3.0
 
-v1.2.4 이후 기본 대화형 흐름과 verified run을 제품 경로에 연결한 마이너
-릴리스입니다. lockstep을 유지해 공개 workspace 7개를 모두 1.3.0으로 맞춥니다.
+## Give your coding agent a check it has to pass
 
-헌법에 따라 수정과 추가는 패치, 호환성을 깨는 변경은 마이너로 올립니다. 이번
-범위에는 verified run 취소의 상태 계약 변경이 있어 마이너입니다. 아래
-"호환성"을 먼저 확인하십시오.
+OMK 1.3.0 connects durable goals to an acceptance command you approve. It also
+repairs the interactive goal loop and makes cancelled verified runs resumable.
+All seven public workspace packages move together to 1.3.0.
 
-## 주요 변경
+This is a minor release under OMK's version policy: cancellation changes the
+verified-run state and journal contract. Read the compatibility notes below
+before upgrading integrations that consume run status or journals.
 
-- **증거로 끝나는 `/goal`**: `/goal verify <command>`로 목표의 인수 검사를
-  승인합니다. 검사는 기본 bash sandbox 안에서 영수증과 함께 실행됩니다. 턴이
-  끝날 때마다 다시 실행되고, 통과하면 목표가 완료됩니다. 실패하면 명령과 종료
-  코드만 붙여 다음 라운드를 시작합니다. 검사 출력은 모델에 보내지 않습니다.
-  `/goal complete`는 이 세션의 통과 영수증이 현재 작업 공간과 일치할 때만
-  완료합니다. 검사 뒤 파일을 고치거나 새 파일을 만들면 증거가 무효가 됩니다.
-- **목표 루프 복구**: 1.2.4까지는 대화형 `/goal` 루프가 다음 턴을 보내지
-  못했습니다. 라운드는 소모되지만 세션이 `Agent is already processing`으로
-  메시지를 거부했습니다. 이제 턴이 완전히 끝난 뒤(재시도가 없을 때) follow-up으로
-  이어 갑니다. 재시도될 시도는 라운드를 쓰지 않습니다. wall clock이 뒤로 가도
-  목표 전이가 실패하지 않습니다. SDK로 목표를 직접 전이할 때는 새로 export한
-  `nextDurableGoalTimestamp()`를 `now`로 넘기면 같은 규칙이 적용됩니다.
-- **`omk run cancel`, `omk run gc`**: 다른 셸에서 실행 중인 verified run을 요청
-  파일로 취소합니다. PID signal은 쓰지 않습니다. 복구할 수 없는 run의 파생 작업
-  공간만 정리하고, 원장·영수증·attestation은 남깁니다. `--execute`가 없으면
-  보고만 합니다.
-- **재개 가능한 취소**: 실행 중 취소한 verified run은 `paused`로 남습니다.
-  `restart-writer`, `resume`, `retry-tasks`로 이어 갈 수 있습니다. 검증 중 취소된
-  검사를 실패 검사로 서명하던 결함도 고쳤습니다.
-- **부하 중 verified run 중단 제거**: 권한 저장소가 뒤로 가는 wall clock을
-  `operation_failed`로 처리하던 문제를 단조 시계로 해결했습니다. 부하가 걸린
-  WSL2에서 동시 실행 30회를 돌렸을 때 이 실패가 3회에서 0회로 줄었습니다.
-  계약 밖 오류는 이제 `operation_failed (Error ENOTDIR)`처럼 종류와 code를
-  함께 보여 줍니다.
-- **MCP와 세션 수명**: 시작 중 종료한 MCP 서버만 `failed`로 격리합니다. 잘못된
-  도구 결과는 `mcp.invalid_tool_result`로 거부합니다. transport 재연결은 물리적
-  종료를 기다립니다. 요청을 보내기 전에 전체 입력을 모델 창과 대조합니다.
-  `RpcClient`의 대기자·stderr·종료 수명도 정리했습니다.
+## What's new
 
-## 호환성
+- **Goals that finish on a passing check.** Start a goal with `/goal <objective>`,
+  then approve its acceptance command with `/goal verify <command>`. After each
+  settled turn, OMK runs that command through its default local bash sandbox. A
+  pass completes the goal on the checked workspace. A failure starts the next
+  round with the command and exit code; the command's output stays out of the
+  model context. `/goal complete` requires a passing receipt from this session
+  that still matches the workspace. Editing files or moving HEAD makes that
+  receipt stale. See [acceptance checks](../packages/coding-agent/docs/run-protocol.md#acceptance-checks).
+- **A repaired interactive goal loop.** Through 1.2.4, the controller tried to
+  send the next turn before the session released the preceding one. The round
+  was spent while the session rejected the message with `Agent is already
+  processing`. OMK now queues the continuation after the turn settles; an
+  attempt awaiting an automatic retry does not consume a round. Goal
+  transitions also tolerate a wall clock that steps backward. SDK callers can
+  use the newly exported `nextDurableGoalTimestamp()` for the same timestamp
+  rule.
+- **Cancel now, resume later.** A cancelled `omk run` stays `paused`, so you can
+  recover with `restart-writer`, `resume`, or `retry-tasks`. `omk run cancel`
+  requests cancellation from another shell without signaling a PID. A check
+  interrupted during verification is no longer signed as a failed check. See
+  [cancellation](../packages/coding-agent/docs/verified-run.md#취소와-원격-취소).
+- **Preview cleanup before deleting workspaces.** `omk run gc` reports eligible
+  derived workspaces by default. Add `--execute` to prune workspaces belonging
+  to runs that can no longer be recovered. Journals, receipts, and attestations
+  remain. See [artifact GC](../packages/coding-agent/docs/verified-run.md#artifact-gc).
+- **More reliable execution and MCP shutdown.** The verified-run authority
+  store uses monotonic elapsed time instead of failing when the wall clock
+  moves backward. Errors outside the run contract include a bounded error kind
+  and code. An MCP server that exits during startup is isolated while other
+  servers keep their tools; malformed tool results are rejected. Transport
+  reconnection waits for physical shutdown, and RPC waiters settle when their
+  child process fails or exits.
+- **Context admission and recovery.** Requests are checked against the model's
+  input ceiling before dispatch. Automatic compaction uses that ceiling, stale
+  provider usage no longer blocks a compacted session, and oversized MCP server
+  schemas can be temporarily withheld to fit the selected model. Warnings name
+  withheld servers, which return on a model with room. See the
+  [changelog](../packages/coding-agent/CHANGELOG.md) for detailed contracts and
+  additional runtime fixes.
+- **Dependency security patches.** The release pins `brace-expansion` to
+  5.0.12, the CLI's `undici` to 8.10.2, and Gondolin's nested `undici` to 6.28.1.
+  These are compatible patches for the current dependency lines.
+- **macOS process locks under non-English locales.** Replay-ledger identity
+  probes use the C locale for BSD `ps`, so Korean or other localized date names
+  no longer make a live process appear unavailable. Acceptance-check test
+  repositories also use canonical physical temporary paths on macOS, keeping
+  workspace-mismatch checks intact across `/var` and `/private/var` aliases.
 
-- 실행 중 취소된 verified run의 상태가 `failed`에서
-  `paused`(`failure: cancelled`)로 바뀝니다. 원장에는 새 event `interrupted`가
-  기록되며, 1.2.4 이하는 이 원장을 읽지 못합니다. 취소를 terminal로 다루던 상태
-  소비자는 `paused`를 처리해야 합니다.
-- 승인된 인수 검사가 있는 목표의 `/goal complete`는 이 세션에서 통과한 영수증을
-  요구합니다. 승인이 없으면 기존 규칙(현재 generation의 증거)을 따릅니다.
-- Context Budget V2의 선택 캐시 정책이 `sel-4-codeunit`으로 바뀌어 이전 정책의
-  캐시 항목은 재사용하지 않습니다.
+## Compatibility and platform support
 
-## 업그레이드
+- A live verified run interrupted by `SIGINT`, `SIGTERM`, or `omk run cancel`
+  now becomes `paused` with `failure: cancelled`, rather than terminal
+  `failed`. Its journal records a new `interrupted` event. OMK 1.2.4 and earlier
+  cannot read that journal. Status consumers must handle `paused`.
+- When a goal has an approved acceptance command, `/goal complete` requires its
+  current passing receipt. Without an approved command, the existing rule for
+  evidence in the current generation still applies. Acceptance approvals live
+  in the OMK process; approve the command again after restarting.
+- Context Budget V2 uses the `sel-4-codeunit` selection-cache policy. Entries
+  written under the previous policy are not reused.
+- Built-in local bash requires `sandbox-exec` on macOS or `bwrap` with
+  unprivileged user namespaces on Linux. It blocks network access by default
+  and refuses execution when the sandbox backend is unavailable. The
+  `omk run` verified-run workflow requires Linux and usable user, PID, and
+  network namespaces. See [containerization](../packages/coding-agent/docs/containerization.md)
+  and [verified-run prerequisites](../packages/coding-agent/docs/verified-run.md).
 
-npm 최신 버전이 1.3.0입니다. 기존 설치는 통상의 업데이트 경로를 따릅니다.
-바이너리는 이 릴리스의 Assets에서 받을 수 있습니다. 실행 중인 OMK는 새 버전을
-설치한 뒤 다시 시작해야 반영됩니다.
+## Known dependency limitation in the optional Gondolin example
+
+The optional Gondolin extension depends on `node-forge` 1.4.0. As of
+October 4, 2026, its upstream RSA signature-verification advisory has no patched
+npm release. It is not an installed dependency of the main CLI. The production
+audit scoped to `open-multi-agent-kit` reports zero vulnerabilities; the
+repository-wide audit still reports Gondolin and `node-forge`. OMK does not
+claim a clean audit for every example. See
+[GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv) and the
+[upstream fix](https://github.com/digitalbazaar/forge/pull/1152).
+
+## Upgrade after publication
+
+Once the 1.3.0 npm packages are published:
+
+```bash
+npm install -g open-multi-agent-kit@1.3.0 --ignore-scripts
+omk --version
+```
+
+Restart any running OMK process after installing. Binary archives will be
+available in the GitHub Release assets. A release is complete only when the
+`v1.3.0` tag is reachable from `main`, its GitHub Release exists, and npm
+`latest` points to 1.3.0 for all seven public packages.
+
+Try an acceptance check on a repository with a focused local test command. If
+the workflow is useful, [star OMK](https://github.com/dmae97/omk) and share the
+task, command, platform, and result in an
+[issue](https://github.com/dmae97/omk/issues). Reproducible reports help other
+developers decide whether OMK fits their work.

@@ -181,6 +181,8 @@ function inspectDarwinProcessIdentity(pid: number): ReplayLedgerProcessIdentity 
 		encoding: "utf8",
 		timeout: DARWIN_PS_TIMEOUT_MS,
 		maxBuffer: DARWIN_PS_MAX_OUTPUT_BYTES,
+		// BSD ps localizes lstart; the parser requires stable English date names.
+		env: { ...process.env, LC_ALL: "C", LANG: "C" },
 	});
 	if (result.error) return { state: "unavailable" };
 	// BSD ps exits 1 when no process matches the pid; other non-zero is fail-closed.

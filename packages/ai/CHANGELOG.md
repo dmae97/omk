@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-04
+
 ### Added
 
 - GPT-6.1 Sol (`gpt-6.1-sol`, released 2026-09-29) joins the catalog on the `openai`, `azure-openai-responses`, `opencode` and `github-copilot` Responses routes, OpenRouter (`openai/gpt-6.1-sol`, `-pro` and their `:batch` variants) and Vercel AI Gateway. The model has no `none` or `minimal` effort, so the Responses routes offer `low` through `max` with no `off`; OpenRouter's own mandatory declaration gives the same ladder.
