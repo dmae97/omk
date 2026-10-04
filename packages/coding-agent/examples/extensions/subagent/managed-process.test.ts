@@ -32,6 +32,25 @@ describe("managed subagent process lifecycle", () => {
 		},
 	);
 
+	it("passes an explicit environment to the child", async () => {
+		let stdout = "";
+		const result = await runManagedProcess({
+			command: process.execPath,
+			args: [
+				"-e",
+				"process.stdout.write(process.env.OMK_FINISH_CHECK + '|' + (process.env.OMK_TIME_BUDGET_SEC ?? 'unset'))",
+			],
+			cwd: process.cwd(),
+			env: { PATH: process.env.PATH, OMK_FINISH_CHECK: "0" },
+			cutoffMs: 5_000,
+			onStdout: (chunk) => {
+				stdout += chunk;
+			},
+		});
+		expect(result.exitCode).toBe(0);
+		expect(stdout).toBe("0|unset");
+	});
+
 	it("preserves an explicit nonzero exit", async () => {
 		const result = await runManagedProcess({
 			command: process.execPath,
