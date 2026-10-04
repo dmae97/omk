@@ -4,6 +4,7 @@ import type { AssistantMessage, Model } from "../types.ts";
 export interface OpenAICompletionsRawUsage {
 	prompt_tokens?: number;
 	completion_tokens?: number;
+	total_tokens?: number;
 	prompt_cache_hit_tokens?: number;
 	prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
 	completion_tokens_details?: { reasoning_tokens?: number };
@@ -19,6 +20,23 @@ function isXaiModel(model: Model<"openai-completions">): boolean {
 
 function count(value: unknown): number {
 	return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/**
+ * Reasoning tokens xAI reported outside `completion_tokens`. OpenAI counts them
+ * inside it; xAI's documented responses do not. Rather than trust one rule for
+ * every model, use `total_tokens` when present: only the part of the reasoning
+ * count that `total_tokens` shows beyond prompt + completion is added, so a
+ * model that nests reasoning inside `completion_tokens` is never double-counted.
+ */
+function separateReasoningTokens(
+	rawUsage: OpenAICompletionsRawUsage,
+	promptTokens: number,
+	completionTokens: number,
+): number {
+	const reasoning = count(rawUsage.completion_tokens_details?.reasoning_tokens);
+	if (typeof rawUsage.total_tokens !== "number") return reasoning;
+	return Math.min(reasoning, Math.max(0, count(rawUsage.total_tokens) - promptTokens - completionTokens));
 }
 
 /**
@@ -49,9 +67,9 @@ export function parseChunkUsage(
 	// https://github.com/antirez/ds4/pull/29
 	const input = Math.max(0, promptTokens - cacheReadTokens - cacheWriteTokens);
 	const xai = isXaiModel(model);
-	// OpenAI completion_tokens already includes reasoning_tokens; xAI's does not.
-	const reasoningTokens = xai ? count(rawUsage.completion_tokens_details?.reasoning_tokens) : 0;
-	const outputTokens = count(rawUsage.completion_tokens) + reasoningTokens;
+	const completionTokens = count(rawUsage.completion_tokens);
+	const reasoningTokens = xai ? separateReasoningTokens(rawUsage, promptTokens, completionTokens) : 0;
+	const outputTokens = completionTokens + reasoningTokens;
 	const usage: AssistantMessage["usage"] = {
 		input,
 		output: outputTokens,

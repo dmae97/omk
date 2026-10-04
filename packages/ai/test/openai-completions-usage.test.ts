@@ -21,6 +21,7 @@ function model(provider: string, baseUrl: string): Model<"openai-completions"> {
 const xaiUsage = {
 	prompt_tokens: 26,
 	completion_tokens: 168,
+	total_tokens: 498,
 	completion_tokens_details: { reasoning_tokens: 304 },
 };
 
@@ -59,11 +60,29 @@ describe("parseChunkUsage", () => {
 
 	it("keeps cache-read accounting for xAI", () => {
 		const usage = parseChunkUsage(
-			{ ...xaiUsage, prompt_tokens: 1_000, prompt_tokens_details: { cached_tokens: 800 } },
+			{ ...xaiUsage, prompt_tokens: 1_000, total_tokens: 1_472, prompt_tokens_details: { cached_tokens: 800 } },
 			model("xai", "https://api.x.ai/v1"),
 		);
 		expect(usage.input).toBe(200);
 		expect(usage.cacheRead).toBe(800);
+		expect(usage.output).toBe(472);
+	});
+
+	it("does not double-count when an xAI model nests reasoning inside completion_tokens", () => {
+		const nested = {
+			prompt_tokens: 26,
+			completion_tokens: 472,
+			total_tokens: 498,
+			completion_tokens_details: { reasoning_tokens: 304 },
+		};
+		const usage = parseChunkUsage(nested, model("xai", "https://api.x.ai/v1"));
+		expect(usage.output).toBe(472);
+		expect(usage.totalTokens).toBe(498);
+	});
+
+	it("adds xAI reasoning when total_tokens is absent, per the documented xAI split", () => {
+		const { total_tokens: _omit, ...noTotal } = xaiUsage;
+		const usage = parseChunkUsage(noTotal, model("xai", "https://api.x.ai/v1"));
 		expect(usage.output).toBe(472);
 	});
 });
