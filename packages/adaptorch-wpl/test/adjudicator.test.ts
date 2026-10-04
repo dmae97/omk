@@ -43,7 +43,7 @@ function makePacket(overrides: Partial<WorkPacket> = {}): WorkPacket {
 const registry = createVerifierRegistry([]); // everything falls back to DEFAULT
 
 describe("adjudicate — single run_id", () => {
-	it("produces CONFIRMED for a clean success with substantive artifacts and no error spans", async () => {
+	it("keeps structural success unverified without scoped execution proof", async () => {
 		const client = new AdaptOrchClient(
 			makeFakeTransport({
 				"run-1": {
@@ -58,7 +58,8 @@ describe("adjudicate — single run_id", () => {
 			client,
 			registry,
 		);
-		expect(result.verdict).toBe("CONFIRMED");
+		expect(result.verdict).toBe("INDETERMINATE");
+		expect(result.reason_code).toBe("VERIFICATION_UNAVAILABLE");
 		expect(result.per_run).toHaveLength(1);
 	});
 
@@ -179,7 +180,7 @@ describe("adjudicate — single run_id", () => {
 });
 
 describe("adjudicate — fanout_n aggregation (worst wins)", () => {
-	it("is CONFIRMED only when every run_id is individually CONFIRMED", async () => {
+	it("keeps every structurally successful fanout run unverified", async () => {
 		const client = new AdaptOrchClient(
 			makeFakeTransport({
 				"run-a": {
@@ -199,11 +200,12 @@ describe("adjudicate — fanout_n aggregation (worst wins)", () => {
 			client,
 			registry,
 		);
-		expect(result.verdict).toBe("CONFIRMED");
+		expect(result.verdict).toBe("INDETERMINATE");
+		expect(result.reason_code).toBe("VERIFICATION_UNAVAILABLE");
 		expect(result.per_run).toHaveLength(2);
 	});
 
-	it("takes the worst verdict when run_ids disagree (CONTRADICTED beats CONFIRMED)", async () => {
+	it("takes the worst verdict when run_ids disagree (CONTRADICTED beats INDETERMINATE)", async () => {
 		const client = new AdaptOrchClient(
 			makeFakeTransport({
 				"run-good": {
@@ -310,9 +312,9 @@ describe("runAdjudicationWithTimeout", () => {
 		expect(result).toEqual({
 			ok: true,
 			result: {
-				verdict: "CONFIRMED",
-				reason_code: "ALL_CHECKS_PASSED",
-				reason: "all-checks-passed",
+				verdict: "INDETERMINATE",
+				reason_code: "VERIFICATION_UNAVAILABLE",
+				reason: "structural-checks-passed-but-scoped-execution-verification-unavailable",
 				per_run: expect.any(Array),
 			},
 		});

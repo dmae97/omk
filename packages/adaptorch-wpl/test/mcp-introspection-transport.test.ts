@@ -28,8 +28,10 @@ describe("createMcpIntrospectionClient", () => {
 			runIds: ["run-mcp-1"],
 			client,
 		});
-		expect(verdictCard.verdict).toBe("PASS");
-		expect(receipt.adjudicationVerdict).toBe("CONFIRMED");
+		expect(verdictCard.verdict).toBe("INCONCLUSIVE");
+		expect(receipt.adjudicationVerdict).toBe("INDETERMINATE");
+		expect(receipt.canApply).toBe(false);
+		expect(receipt.shouldSubmit).toBe(false);
 	});
 
 	it("unavailable mode maps transport failure to INCONCLUSIVE OA verdict", async () => {

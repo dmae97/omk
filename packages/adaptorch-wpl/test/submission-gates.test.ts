@@ -20,7 +20,7 @@ const confirmed: AdjudicationResult = {
 };
 const diffText = "--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1 +1 @@\n-old\n+new";
 
-function confirmedClient() {
+function structuralClient() {
 	return createInMemoryAdaptOrchClient({
 		"run-local": {
 			run: { run_id: "run-local", status: "completed" },
@@ -92,17 +92,18 @@ describe("Correctness Wall submission integration", () => {
 		expect(receipt.shouldSubmit).toBe(false);
 	});
 
-	it("submits when real in-memory adjudication confirms the change", async () => {
+	it("withholds submission when in-memory adjudication only establishes structural evidence", async () => {
 		const { receipt } = await evaluateCorrectnessWall({
 			kind: "code-edit",
 			diffText,
 			approvedWriteScope: ["src/**"],
 			runIds: ["run-local"],
 			previewOnly: false,
-			client: confirmedClient(),
+			client: structuralClient(),
 		});
-		expect(receipt.adjudicationVerdict).toBe("CONFIRMED");
-		expect(receipt.shouldSubmit).toBe(true);
+		expect(receipt.adjudicationVerdict).toBe("INDETERMINATE");
+		expect(receipt.canApply).toBe(false);
+		expect(receipt.shouldSubmit).toBe(false);
 	});
 
 	it("withholds submission when an explicitly requested deep check is unavailable", async () => {
@@ -111,7 +112,7 @@ describe("Correctness Wall submission integration", () => {
 			diffText,
 			runIds: ["run-local"],
 			previewOnly: false,
-			client: confirmedClient(),
+			client: structuralClient(),
 			deepWall: true,
 		});
 		expect(receipt.deepWallStatus).toBe("unavailable");

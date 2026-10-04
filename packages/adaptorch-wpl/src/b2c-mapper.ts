@@ -48,6 +48,18 @@ function riskFromUserVerdict(verdict: UserVerdict, flags: PolicyFlag[]): UserRis
 }
 
 const REASON_CODE_USER: Record<AdjudicationReasonCode, { passed?: string; blocked?: string }> = {
+	SEMANTIC_BLOCKED: { blocked: "AdaptOrch blocked this run; inspect the retained policy or capability reason." },
+	RESULT_DEGRADED: { blocked: "AdaptOrch reported degraded result quality." },
+	RESULT_FAILED: { blocked: "AdaptOrch reported a failed synthesis result." },
+	SEMANTIC_INCONCLUSIVE: { blocked: "AdaptOrch did not reach a conclusive semantic outcome." },
+	CORROBORATION_INSUFFICIENT: { blocked: "Independent cross-candidate evidence was insufficient." },
+	EVALUATION_INCOMPLETE: { blocked: "Evaluation or score validity is incomplete." },
+	VERIFICATION_REPORTED_FAILURE: { blocked: "The reported verifier did not pass; its cause needs review." },
+	SEMANTIC_STATUS_UNRECOGNIZED: { blocked: "AdaptOrch semantic status could not be interpreted." },
+	EVIDENCE_MALFORMED: { blocked: "Artifact or trace evidence was malformed." },
+	VERIFICATION_UNAVAILABLE: {
+		blocked: "Scoped execution verification is unavailable; structural checks cannot confirm success.",
+	},
 	SCOPE_VIOLATION: { blocked: "Write scope violation detected by outcome adjudication." },
 	SCHEMA_DRIFT: { blocked: "Output schema does not match the expected contract." },
 	CONTENT_CHECK_FAILED: { blocked: "Content verification failed for one or more artifacts." },
@@ -175,11 +187,25 @@ export function mapToB2C(input: MapToB2CInput): MapToB2COutput {
 	}
 
 	if (input.adjudication !== undefined) {
-		const fromOa = verdictFromOa(input.adjudication.verdict);
+		const semanticBlocked =
+			input.adjudication.reason_code === "SEMANTIC_BLOCKED" ||
+			input.adjudication.per_run.some((run) => run.reason_code === "SEMANTIC_BLOCKED");
+		const fromOa = semanticBlocked ? "BLOCKED" : verdictFromOa(input.adjudication.verdict);
 		userVerdict = worstUserVerdict(userVerdict, fromOa);
+		const hasUnverifiedRun = input.adjudication.per_run.some(
+			(run) => run.verdict === "INDETERMINATE" || run.verdict === "VERIFIER-ERROR",
+		);
+		if (hasUnverifiedRun) {
+			userVerdict = worstUserVerdict(userVerdict, "INCONCLUSIVE");
+		}
 		const strings = userStringsForReasonCode(input.adjudication.reason_code);
-		passed_checks.push(...strings.passed);
+		if (input.adjudication.verdict === "CONFIRMED" && !hasUnverifiedRun && !semanticBlocked) {
+			passed_checks.push(...strings.passed);
+		}
 		blocked_reasons.push(...strings.blocked);
+		if (semanticBlocked && input.adjudication.reason_code !== "SEMANTIC_BLOCKED") {
+			blocked_reasons.push(...userStringsForReasonCode("SEMANTIC_BLOCKED").blocked);
+		}
 	} else if (userVerdict === "PASS" && input.diffPaths.length > 0) {
 		passed_checks.push("Changed paths are within approved write scope (fast wall).");
 	}

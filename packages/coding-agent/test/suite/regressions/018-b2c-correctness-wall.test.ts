@@ -114,7 +114,7 @@ describe("018-b2c-correctness-wall", () => {
 		expect(passish.verdictCard.next_actions.some((a) => a === "Apply" || a === "Deep Check")).toBe(true);
 	});
 
-	it("OA path with AdaptOrchClient yields PASS and records runIds when evidence confirms", async () => {
+	it("OA path records runIds but does not confirm structural evidence", async () => {
 		const runIds = ["run-b2c-018"];
 		const client = new AdaptOrchClient(
 			makeFakeTransport({
@@ -135,8 +135,10 @@ describe("018-b2c-correctness-wall", () => {
 			client,
 		});
 
-		expect(verdictCard.verdict).toBe("PASS");
+		expect(verdictCard.verdict).toBe("INCONCLUSIVE");
 		expect(receipt.runIds).toEqual(runIds);
-		expect(receipt.adjudicationVerdict).toBe("CONFIRMED");
+		expect(receipt.adjudicationVerdict).toBe("INDETERMINATE");
+		expect(receipt.canApply).toBe(false);
+		expect(receipt.shouldSubmit).toBe(false);
 	});
 });

@@ -3,7 +3,7 @@ import { evaluateCorrectnessWall } from "../src/evaluate-correctness-wall.ts";
 import { createLiveAdaptOrchClient } from "../src/live-adaptorch-transport.ts";
 
 describe("createLiveAdaptOrchClient", () => {
-	it("adjudicates CONFIRMED when callTool returns terminal run payloads", async () => {
+	it("does not confirm terminal run payloads without execution proof", async () => {
 		const client = createLiveAdaptOrchClient(async (name, args) => {
 			const runId = args.run_id as string;
 			if (name === "adaptorch_get_run") return { run_id: runId, status: "completed" };
@@ -25,8 +25,10 @@ describe("createLiveAdaptOrchClient", () => {
 			runIds: ["run-live-1"],
 			client,
 		});
-		expect(verdictCard.verdict).toBe("PASS");
-		expect(receipt.adjudicationVerdict).toBe("CONFIRMED");
+		expect(verdictCard.verdict).toBe("INCONCLUSIVE");
+		expect(receipt.adjudicationVerdict).toBe("INDETERMINATE");
+		expect(receipt.canApply).toBe(false);
+		expect(receipt.shouldSubmit).toBe(false);
 	});
 
 	it("maps transport failure to INCONCLUSIVE / VERIFIER-ERROR", async () => {

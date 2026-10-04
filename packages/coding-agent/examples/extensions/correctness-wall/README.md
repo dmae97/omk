@@ -78,7 +78,7 @@ Returns JSON text: `{ verdictCard, receipt }`, and `repairHints` when `verdictCa
 
 The **`receipt`** includes standard `VerificationReceipt` fields from adaptorch-wpl plus **`wall_version`** (from the fixture or default).
 
-Example receipt fragment:
+Example receipt fragment for the structural-only synthetic fixture above. It does not establish scoped execution proof, even though its run says `completed`:
 
 ```json
 {
@@ -88,7 +88,10 @@ Example receipt fragment:
   "runIds": ["run-oa-1"],
   "previewOnly": false,
   "wall_version": "1",
-  "adjudicationVerdict": "CONFIRMED",
+  "adjudicationVerdict": "INDETERMINATE",
+  "adjudicationReasonCode": "VERIFICATION_UNAVAILABLE",
+  "canApply": false,
+  "shouldSubmit": false,
   "policyFlags": []
 }
 ```

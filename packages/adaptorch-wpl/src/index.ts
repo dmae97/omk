@@ -132,6 +132,29 @@ export type { RepairBudgetState } from "./repair-budget.ts";
 export { capRepairHints, parseRepairBudget, shouldOfferRepair } from "./repair-budget.ts";
 export type { RepairHintInput } from "./repair-loop.ts";
 export { deriveRepairHints } from "./repair-loop.ts";
+export type { ReviewAssessment } from "./review-assessment.ts";
+export type {
+	BuiltReviewRequest,
+	ReviewEvidenceInput,
+	ReviewEvidenceManifest,
+	ReviewSpecItem,
+	ReviewTestEvidence,
+} from "./review-evidence.ts";
+export { buildReviewRequest } from "./review-evidence.ts";
+export type { ReviewPollOptions, ReviewPollResult } from "./review-poll.ts";
+export { pollReviewRun } from "./review-poll.ts";
+export type {
+	AuthorizedReviewTestExecutor,
+	ExecutedBoundaryTest,
+	PreparedBoundaryTest,
+	ReviewRevalidationPlan,
+	ReviewRevalidationResult,
+} from "./review-revalidation.ts";
+export { createReviewRevalidationPlan, runReviewRevalidation } from "./review-revalidation.ts";
+export type { ReviewAttempt, ReviewRecord, ReviewStore } from "./review-store.ts";
+export { FileReviewStore } from "./review-store.ts";
+export type { MissingReviewInput, ReviewSubmissionResult, ReviewWorkflowOptions } from "./review-workflow.ts";
+export { ReviewWorkflow } from "./review-workflow.ts";
 export type { AdaptOrchLinkSurface, AdaptOrchLinks } from "./service-links.ts";
 export { getAdaptOrchLinks } from "./service-links.ts";
 export type {

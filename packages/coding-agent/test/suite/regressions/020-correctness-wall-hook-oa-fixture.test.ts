@@ -21,7 +21,7 @@ function makeTransport(): AdaptOrchTransport {
 }
 
 describe("hook-equivalent OA evaluation", () => {
-	it("previewOnly false with fixture client matches CONFIRMED PASS", async () => {
+	it("previewOnly false with structural fixture remains unverified", async () => {
 		const client = new AdaptOrchClient(makeTransport());
 		const diff = [
 			"--- a/packages/adaptorch-wpl/src/hook.ts",
@@ -37,8 +37,10 @@ describe("hook-equivalent OA evaluation", () => {
 			runIds: ["run-hook-020"],
 			client,
 		});
-		expect(verdictCard.verdict).toBe("PASS");
-		expect(receipt.adjudicationVerdict).toBe("CONFIRMED");
+		expect(verdictCard.verdict).toBe("INCONCLUSIVE");
+		expect(receipt.adjudicationVerdict).toBe("INDETERMINATE");
+		expect(receipt.canApply).toBe(false);
+		expect(receipt.shouldSubmit).toBe(false);
 		expect(receipt.policyFlags).not.toContain("EVIDENCE_DAG_INCOMPLETE");
 	});
 });

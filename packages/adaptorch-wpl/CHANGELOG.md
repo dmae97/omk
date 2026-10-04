@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Snapshot validated dispatch/kind/run identities before registry callbacks or awaited reads, reject sparse run lists, and fail closed on empty or malformed introspection aggregation. A caller mutation can no longer erase all outcomes and manufacture `CONFIRMED`.
+- Normalize success/unknown reason codes from failed structural hooks to a failure code; B2C emits passed-check wording only for a coherent confirmed result.
+
+- Stop converting successful AdaptOrch lifecycle status and structural artifact/trace presence into `CONFIRMED`. The current introspection contract cannot establish authenticated, scope-bound execution evidence; structurally clean runs now remain `INDETERMINATE` with `VERIFICATION_UNAVAILABLE`, including runs whose registered content/trace hooks return `ok: true`.
+- Respect separate result quality, correctness-wall, evaluation, score-validity, and explicit corroboration signals. A server `BLOCKED` remains an unverified policy/capability refusal, projects to B2C `BLOCKED`, and closes apply/submit gates without claiming the candidate is contradicted. Other degraded or inconclusive outcomes remain unverified.
+- Preserve unverified or explicitly blocked per-run outcomes across record aggregation: a failure or contradiction in another run cannot silently enable an automatic retry, and a block survives unknown/nonterminal lifecycle status.
+- Reject malformed artifact/trace collection envelopes and honor artifact `size_bytes` instead of treating arbitrary values or zero-byte metadata as substantive evidence.
+
+### Compatibility
+
+- This intentionally changes the former default-success adjudication behavior. The five-state verdict vocabulary and structural check hooks remain available, but this introspection adjudicator no longer emits `CONFIRMED`; callers must not treat server/model `PASS`, agreement, or a verifier summary as authenticated execution proof. Existing independent proof projections and explicit projection APIs are unchanged.
+
 ## [1.2.4] - 2026-09-23
 
 ### Changed

@@ -3,6 +3,10 @@
  * turns AdaptOrch's own terminal-status report into a corroborated 5-state verdict, using
  * only `getRun`/`getArtifacts`/`getTraces` introspection.
  *
+ * These introspection shapes lack authenticated, scope-bound execution proof. Passing
+ * structural hooks or a server/model PASS therefore remains INDETERMINATE. This
+ * implementation does not produce CONFIRMED until a positive proof contract exists.
+ *
  * Out of scope for this file (not covered by the input contract available here): the
  * scope check and freshness check from Part 2 section 2.3, and the retry-count threshold
  * from section 2.3, since none of `AdjudicationRequest`, `VerifierRegistryEntry`, or the
@@ -13,6 +17,14 @@
  */
 
 import type { AdaptOrchClient } from "./adaptorch-client.ts";
+import { aggregateRunVerdicts } from "./adjudicator-aggregate.ts";
+import {
+	asList,
+	countActionSpans,
+	countErrorSpans,
+	failedCheckReasonCode,
+	hasSubstance,
+} from "./adjudicator-evidence.ts";
 import type {
 	AdjudicationReasonCode,
 	CheckResult,
@@ -20,6 +32,7 @@ import type {
 	VerifierRegistryEntry,
 } from "./adjudicator-registry.ts";
 import { reduceReasonCodes } from "./adjudicator-registry.ts";
+import { interpretRunSemantics } from "./adjudicator-semantics.ts";
 
 /** Raw payload shape returned by `AdaptOrchClient.getRun`, inferred rather than duplicated. */
 type RunPayload = Awaited<ReturnType<AdaptOrchClient["getRun"]>>;
@@ -98,6 +111,8 @@ const NON_TERMINAL_STATUSES = new Set([
 	"dispatched",
 	"starting",
 	"initializing",
+	"cancelling",
+	"canceling",
 ]);
 const SUCCESS_STATUSES = new Set(["completed", "success", "succeeded", "done", "ok", "finished"]);
 const FAILURE_STATUSES = new Set([
@@ -115,7 +130,7 @@ const FAILURE_STATUSES = new Set([
 type RunStatusBranch = "non-terminal" | "success" | "failure" | "unparseable";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null;
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readStringField(value: unknown, keys: string[]): string | undefined {
@@ -135,76 +150,11 @@ function readStringField(value: unknown, keys: string[]): string | undefined {
 function interpretRunStatus(run: unknown): RunStatusBranch {
 	const status = readStringField(run, ["status", "state"]);
 	if (status === undefined) return "unparseable";
-	const normalized = status.toLowerCase();
+	const normalized = status.trim().toLowerCase();
 	if (NON_TERMINAL_STATUSES.has(normalized)) return "non-terminal";
 	if (SUCCESS_STATUSES.has(normalized)) return "success";
 	if (FAILURE_STATUSES.has(normalized)) return "failure";
 	return "unparseable";
-}
-
-/**
- * Coerces an unknown `getArtifacts`/`getTraces` payload into a flat list without assuming
- * a specific shape (the concrete return type belongs to the concurrently-authored
- * `adaptorch-client.ts`). Falls back to common pagination-style container keys, then to
- * treating a single non-null value as a one-item list.
- */
-function asList(value: unknown): unknown[] {
-	if (value === null || value === undefined) return [];
-	if (Array.isArray(value)) return value;
-	if (isRecord(value)) {
-		for (const key of ["items", "artifacts", "traces", "spans", "entries", "data", "results"]) {
-			const field = value[key];
-			if (Array.isArray(field)) return field;
-		}
-	}
-	return [value];
-}
-
-/** True unless the item is a recognizably empty/whitespace-only value (Part 2 section 2.3). */
-function hasSubstance(item: unknown): boolean {
-	if (typeof item === "string") return item.trim().length > 0;
-	if (isRecord(item)) {
-		const size = item.size ?? item.byteLength ?? item.length;
-		if (typeof size === "number") return size > 0;
-		const text = readStringField(item, ["content", "text", "body"]);
-		if (text !== undefined) return text.trim().length > 0;
-	}
-	return true;
-}
-
-/** Heuristic ERROR-severity span scan (Part 2 section 2.3), tolerant of unknown span shapes. */
-function countErrorSpans(traces: unknown[]): number {
-	let count = 0;
-	for (const span of traces) {
-		if (!isRecord(span)) continue;
-		const level = readStringField(span, ["level", "severity", "status"]);
-		if (level !== undefined && level.toLowerCase() === "error") {
-			count += 1;
-			continue;
-		}
-		if (span.error === true || span.isError === true) count += 1;
-	}
-	return count;
-}
-
-/**
- * Heuristic count of "action" spans for the `expected_min_actions` check (Part 2 sections
- * 2.3/4). Recognizes a handful of common marker fields; if none of the spans carry any of
- * them, falls back to the total span count so the check degrades to a coarse presence
- * signal instead of always failing.
- */
-function countActionSpans(traces: unknown[]): number {
-	let recognized = 0;
-	let matched = 0;
-	for (const span of traces) {
-		if (!isRecord(span)) continue;
-		const marker = readStringField(span, ["action", "tool_call", "toolCall", "kind", "type"]);
-		if (marker !== undefined) {
-			recognized += 1;
-			if (/action|tool|write|edit|call/i.test(marker)) matched += 1;
-		}
-	}
-	return recognized > 0 ? matched : traces.length;
 }
 
 function describeError(error: unknown): string {
@@ -227,6 +177,11 @@ async function adjudicateRun(
 		const run = await client.getRun(runId);
 		evidence.run = run;
 
+		const semantic = interpretRunSemantics(run);
+		// A policy/capability refusal must survive incomplete or unknown lifecycle data.
+		if (semantic?.reason_code === "SEMANTIC_BLOCKED") {
+			return { run_id: runId, verdict: "INDETERMINATE", ...semantic, evidence };
+		}
 		const branch = interpretRunStatus(run);
 		if (branch === "unparseable") {
 			return {
@@ -247,6 +202,10 @@ async function adjudicateRun(
 			};
 		}
 
+		if (semantic !== undefined) {
+			return { run_id: runId, verdict: "INDETERMINATE", ...semantic, evidence };
+		}
+
 		const artifacts = await client.getArtifacts(runId);
 		evidence.artifacts = artifacts;
 		const traces = await client.getTraces(runId);
@@ -254,6 +213,15 @@ async function adjudicateRun(
 
 		const artifactsList = asList(artifacts);
 		const tracesList = asList(traces);
+		if (artifactsList === undefined || tracesList === undefined) {
+			return {
+				run_id: runId,
+				verdict: "VERIFIER-ERROR",
+				reason_code: "EVIDENCE_MALFORMED",
+				reason: "artifact-or-trace-collection-malformed",
+				evidence,
+			};
+		}
 		const artifactsEmpty = artifactsList.length === 0;
 		const tracesEmpty = tracesList.length === 0;
 		const isSuccess = branch === "success";
@@ -302,7 +270,7 @@ async function adjudicateRun(
 				const result: CheckResult = entry.content_check(artifact);
 				if (!result.ok) {
 					problems.push({
-						code: result.code ?? "CONTENT_CHECK_FAILED",
+						code: failedCheckReasonCode(result.code, "CONTENT_CHECK_FAILED"),
 						message: `content-check-failed${result.reason ? `: ${result.reason}` : ""}`,
 					});
 				}
@@ -312,7 +280,7 @@ async function adjudicateRun(
 			const result: CheckResult = entry.trace_check(traces);
 			if (!result.ok) {
 				problems.push({
-					code: result.code ?? "TRACE_CHECK_FAILED",
+					code: failedCheckReasonCode(result.code, "TRACE_CHECK_FAILED"),
 					message: `trace-check-failed${result.reason ? `: ${result.reason}` : ""}`,
 				});
 			}
@@ -342,9 +310,9 @@ async function adjudicateRun(
 		}
 		return {
 			run_id: runId,
-			verdict: "CONFIRMED",
-			reason_code: "ALL_CHECKS_PASSED",
-			reason: "all-checks-passed",
+			verdict: "INDETERMINATE",
+			reason_code: "VERIFICATION_UNAVAILABLE",
+			reason: "structural-checks-passed-but-scoped-execution-verification-unavailable",
 			evidence,
 		};
 	} catch (error) {
@@ -358,32 +326,6 @@ async function adjudicateRun(
 	}
 }
 
-/** Worst-wins record-level reduction over per-`run_id` verdicts (Part 2 section 2.5). */
-function reduceVerdicts(perRun: PerRunVerdict[]): VerdictState {
-	const priority: VerdictState[] = [
-		"VERIFIER-ERROR",
-		"CONTRADICTED",
-		"CORROBORATED-FAILURE",
-		"INDETERMINATE",
-		"CONFIRMED",
-	];
-	for (const state of priority) {
-		if (perRun.some((r) => r.verdict === state)) return state;
-	}
-	return "CONFIRMED";
-}
-
-function buildRecordReason(verdict: VerdictState, perRun: PerRunVerdict[]): string {
-	if (perRun.length === 1) return perRun[0].reason;
-	const contributing = perRun.filter((r) => r.verdict === verdict).map((r) => `${r.run_id}: ${r.reason}`);
-	return `${verdict} via ${contributing.join("; ")}`;
-}
-
-/** Worst-wins record-level reason code, reduced over the runs sharing the record verdict. */
-function buildRecordReasonCode(verdict: VerdictState, perRun: PerRunVerdict[]): AdjudicationReasonCode {
-	return reduceReasonCodes(perRun.filter((r) => r.verdict === verdict).map((r) => r.reason_code));
-}
-
 /**
  * Adjudicates an `AdjudicationRequest` end to end (Part 2 sections 2.1-2.5, 3, 5).
  *
@@ -394,25 +336,40 @@ function buildRecordReasonCode(verdict: VerdictState, perRun: PerRunVerdict[]): 
  * 3. Reduces the per-`run_id` verdicts to one record-level verdict, worst-wins (section
  *    2.5), and never discards the per-`run_id` detail (section 5).
  * 4. Invokes `build_augmented_payload`, if defined, when the record-level verdict is not
- *    CONFIRMED (section 4).
+ *    CONFIRMED and no run is explicitly BLOCKED. Other builder failures retain the
+ *    legacy thrown-error contract (handled by runAdjudicationWithTimeout).
  */
 export async function adjudicate(
 	request: AdjudicationRequest,
 	client: AdaptOrchClient,
 	registry: { get(kind: string): VerifierRegistryEntry },
 ): Promise<AdjudicationResult> {
-	if (!request.kind || request.run_ids.length === 0) {
+	// Capture identities before registry/user callbacks or any awaited transport can
+	// mutate the caller's object. Array.from materializes sparse holes as undefined.
+	const dispatchRecordId = request?.dispatch_record_id;
+	const kind = request?.kind;
+	const requestedRunIds = request?.run_ids;
+	const runIds = Array.isArray(requestedRunIds) ? Array.from(requestedRunIds) : undefined;
+	if (
+		typeof dispatchRecordId !== "string" ||
+		dispatchRecordId.trim().length === 0 ||
+		typeof kind !== "string" ||
+		kind.trim().length === 0 ||
+		runIds === undefined ||
+		runIds.length === 0 ||
+		runIds.some((runId) => typeof runId !== "string" || runId.trim().length === 0)
+	) {
 		return {
 			verdict: "VERIFIER-ERROR",
 			reason_code: "MALFORMED_REQUEST",
-			reason: !request.kind ? "malformed-request-missing-kind" : "malformed-request-empty-run-ids",
+			reason: "malformed-request-identity-or-run-ids",
 			per_run: [],
 		};
 	}
 
-	const entry = registry.get(request.kind);
+	const entry = registry.get(kind);
 	const outcomes: RunOutcome[] = [];
-	for (const runId of request.run_ids) {
+	for (const runId of runIds) {
 		outcomes.push(await adjudicateRun(runId, entry, client));
 	}
 
@@ -424,15 +381,13 @@ export async function adjudicate(
 		evidence_refs: outcome.evidence,
 	}));
 
-	const verdict = reduceVerdicts(perRun);
-	const result: AdjudicationResult = {
-		verdict,
-		reason_code: buildRecordReasonCode(verdict, perRun),
-		reason: buildRecordReason(verdict, perRun),
-		per_run: perRun,
-	};
+	const result: AdjudicationResult = { ...aggregateRunVerdicts(perRun), per_run: perRun };
+	const verdict = result.verdict;
 
-	if (entry.build_augmented_payload && verdict !== "CONFIRMED") {
+	// A policy/capability refusal is not a retry path. Do not let an optional
+	// corrective hook throw away that decision or perform unnecessary side effects.
+	const semanticBlocked = perRun.some((run) => run.reason_code === "SEMANTIC_BLOCKED");
+	if (entry.build_augmented_payload && verdict !== "CONFIRMED" && !semanticBlocked) {
 		const artifactsByRun = outcomes.map((outcome) => ({
 			run_id: outcome.run_id,
 			artifacts: outcome.evidence.artifacts,

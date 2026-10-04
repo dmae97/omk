@@ -7,7 +7,7 @@
 
 /**
  * The five-state verdict model for a single `run_id` (Part 2 section 2.4). This is the
- * canonical, ground-truth output of the adjudication layer (Part 2 section 0).
+ * adjudication vocabulary (Part 2 section 0), not an unrestricted correctness claim.
  */
 export type VerdictState = "CONFIRMED" | "CONTRADICTED" | "CORROBORATED-FAILURE" | "INDETERMINATE" | "VERIFIER-ERROR";
 
@@ -24,6 +24,22 @@ export type VerdictState = "CONFIRMED" | "CONTRADICTED" | "CORROBORATED-FAILURE"
 export const ADJUDICATION_REASON_CODES = [
 	/** A safety boundary was crossed (e.g. writes outside the lane's scope). Never auto-retried. */
 	"SCOPE_VIOLATION",
+	/** Server policy/capability refusal; not evidence of a false claim. */
+	"SEMANTIC_BLOCKED",
+	/** Result quality was explicitly degraded or failed despite terminal transport. */
+	"RESULT_DEGRADED",
+	"RESULT_FAILED",
+	/** Wall or corroboration signals prohibit a verified outcome. */
+	"SEMANTIC_INCONCLUSIVE",
+	"CORROBORATION_INSUFFICIENT",
+	"EVALUATION_INCOMPLETE",
+	"VERIFICATION_REPORTED_FAILURE",
+	/** A known semantic field carried an unknown/malformed value. */
+	"SEMANTIC_STATUS_UNRECOGNIZED",
+	/** Artifact/trace response was not a recognized collection. */
+	"EVIDENCE_MALFORMED",
+	/** Structural evidence is not authenticated, scope-bound execution proof. */
+	"VERIFICATION_UNAVAILABLE",
 	/** Output shape/schema does not match the packet's contract (explicit hook classification). */
 	"SCHEMA_DRIFT",
 	/** A registered `content_check` hook rejected an artifact (default code for failed content checks). */
@@ -88,8 +104,9 @@ export interface CheckResult {
 
 /**
  * A single per-kind verifier registry entry (Part 2 section 4). Every field beyond `kind`
- * is optional; absence means the corresponding check/behavior is skipped or defaulted, as
- * described in section 4.
+ * is optional; absence means the corresponding check/behavior is skipped or defaulted.
+ * Hooks can report contradictions but their `ok: true` is not execution proof and
+ * cannot promote a run to CONFIRMED.
  */
 export interface VerifierRegistryEntry {
 	kind: string;
@@ -112,7 +129,9 @@ export interface VerifierRegistryEntry {
 	trace_check?: (traces: unknown) => CheckResult;
 	/**
 	 * Optional corrective payload builder, invoked only when the record-level verdict is
-	 * not CONFIRMED (section 4). Absent means no augmented payload is produced for this
+	 * not CONFIRMED and no run is explicitly BLOCKED. Blocked policy/capability refusals
+	 * never invoke this hook. Other thrown builder errors propagate to the caller.
+	 * Absent means no augmented payload is produced for this
 	 * kind - callers resubmit the unmodified original payload.
 	 */
 	build_augmented_payload?: (verdict: VerdictState, artifacts: unknown, traces: unknown) => unknown;
@@ -120,8 +139,8 @@ export interface VerifierRegistryEntry {
 
 /**
  * The conservative, structural-only fallback verifier used for any `kind` without a
- * registered entry (Part 2 section 4). It can never reach CONFIRMED through a laxer path
- * than a registered kind would, and intentionally defines no `content_check`,
+ * registered entry (Part 2 section 4). It never reaches CONFIRMED and intentionally
+ * defines no `content_check`,
  * `trace_check`, or `build_augmented_payload`.
  */
 export const DEFAULT_VERIFIER: VerifierRegistryEntry = {

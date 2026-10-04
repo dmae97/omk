@@ -14,6 +14,7 @@
  * stay full or local. No "benchmark" or "verification" tools exist in it.
  */
 
+import { decodeAdaptOrchToolResult } from "./adaptorch-tool-result.ts";
 import { isTopologyClassification, type TopologyClassification } from "./types.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -187,17 +188,27 @@ export class AdaptOrchClient {
 	 * optionally blocking until the run reaches a terminal status.
 	 */
 	async run(payload: AdaptOrchRunPayload): Promise<AdaptOrchRunResult> {
-		// The transport result shape is not schema-validated here; callers
-		// relying on strict correctness should validate at the transport
-		// boundary.
-		return (await this.transport.callTool("adaptorch_run", { ...payload })) as AdaptOrchRunResult;
+		// Preserve the public camelCase API, but send the server's actual schema.
+		// Decoding the MCP envelope does not certify the run or its content.
+		const raw = await this.transport.callTool("adaptorch_run", {
+			payload: payload.taskPayload,
+			...(payload.connector === undefined ? {} : { connector_name: payload.connector }),
+			...(payload.synthesisMode === undefined ? {} : { synthesis_mode: payload.synthesisMode }),
+			...(payload.budgetPolicy === undefined ? {} : { budget_policy: payload.budgetPolicy }),
+			...(payload.waitForTerminal === undefined ? {} : { wait_for_terminal: payload.waitForTerminal }),
+			...(payload.timeoutSeconds === undefined ? {} : { timeout_seconds: payload.timeoutSeconds }),
+			...(payload.pollIntervalSeconds === undefined ? {} : { poll_interval_seconds: payload.pollIntervalSeconds }),
+		});
+		return decodeAdaptOrchToolResult(raw) as AdaptOrchRunResult;
 	}
 
 	/**
 	 * `adaptorch_get_run` (read). Fetch a run summary by `run_id`.
 	 */
 	async getRun(runId: string): Promise<AdaptOrchRunSummary> {
-		return (await this.transport.callTool("adaptorch_get_run", { run_id: runId })) as AdaptOrchRunSummary;
+		return decodeAdaptOrchToolResult(
+			await this.transport.callTool("adaptorch_get_run", { run_id: runId }),
+		) as AdaptOrchRunSummary;
 	}
 
 	/**
@@ -219,7 +230,9 @@ export class AdaptOrchClient {
 	 * `adaptorch_get_artifacts` (read). Fetch artifact metadata for a run.
 	 */
 	async getArtifacts(runId: string): Promise<AdaptOrchArtifact[]> {
-		return (await this.transport.callTool("adaptorch_get_artifacts", { run_id: runId })) as AdaptOrchArtifact[];
+		return decodeAdaptOrchToolResult(
+			await this.transport.callTool("adaptorch_get_artifacts", { run_id: runId }),
+		) as AdaptOrchArtifact[];
 	}
 
 	/**
@@ -227,7 +240,9 @@ export class AdaptOrchClient {
 	 * `run_id`.
 	 */
 	async getTraces(runId: string): Promise<AdaptOrchTraceSpan[]> {
-		return (await this.transport.callTool("adaptorch_get_traces", { run_id: runId })) as AdaptOrchTraceSpan[];
+		return decodeAdaptOrchToolResult(
+			await this.transport.callTool("adaptorch_get_traces", { run_id: runId }),
+		) as AdaptOrchTraceSpan[];
 	}
 
 	/**

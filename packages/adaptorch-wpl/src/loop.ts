@@ -60,6 +60,16 @@ type ContradictedDispositionClass = "escalate" | "reroute_on_recurrence" | "retr
 const CONTRADICTED_DISPOSITION_CLASS: Record<AdjudicationReasonCode, ContradictedDispositionClass> = {
 	// Part 3 §1: a scope violation is a safety signal that must never silently auto-retry.
 	SCOPE_VIOLATION: "escalate",
+	SEMANTIC_BLOCKED: "escalate",
+	RESULT_DEGRADED: "escalate",
+	RESULT_FAILED: "escalate",
+	SEMANTIC_INCONCLUSIVE: "escalate",
+	CORROBORATION_INSUFFICIENT: "escalate",
+	EVALUATION_INCOMPLETE: "escalate",
+	VERIFICATION_REPORTED_FAILURE: "escalate",
+	SEMANTIC_STATUS_UNRECOGNIZED: "escalate",
+	EVIDENCE_MALFORMED: "escalate",
+	VERIFICATION_UNAVAILABLE: "escalate",
 	// Part 3 §1: recurring schema/shape drift means the topology/plan template itself may be
 	// structurally wrong for the payload - reroute instead of retrying the same topology.
 	SCHEMA_DRIFT: "reroute_on_recurrence",
@@ -110,6 +120,8 @@ export interface VerdictDisposition {
  * | `INDETERMINATE` | - | `DECLINED` | `escalate` |
  * | `VERIFIER-ERROR` | - | `DECLINED` | `escalate` |
  *
+ * An unverified or verifier-error per-run outcome always escalates before this table,
+ * even when a different run supplies a higher-severity record verdict.
  * Branching is driven exclusively by the structured `reason_code`
  * ({@link CONTRADICTED_DISPOSITION_CLASS}); the free-text `reason` is never inspected, so
  * incidental wording in a check's human-readable explanation (e.g. "scoped variable")
@@ -137,6 +149,18 @@ export async function projectVerdictToDisposition(
 	result: AdjudicationResult,
 	packet: WorkPacket,
 ): Promise<VerdictDisposition> {
+	// Record severity cannot discard an unverified/blocked sibling and auto-retry it.
+	if (
+		result.reason_code === "SEMANTIC_BLOCKED" ||
+		result.per_run.some(
+			(run) =>
+				run.reason_code === "SEMANTIC_BLOCKED" ||
+				run.verdict === "INDETERMINATE" ||
+				run.verdict === "VERIFIER-ERROR",
+		)
+	) {
+		return { targetState: "DECLINED", nextActionKind: "escalate" };
+	}
 	switch (result.verdict) {
 		case "CONFIRMED":
 			return { targetState: "CONFIRMED", nextActionKind: "none" };

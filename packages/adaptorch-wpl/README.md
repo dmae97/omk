@@ -37,6 +37,38 @@ The default coding-agent source has no production importer that turns this packa
 - `packages/coding-agent/examples/extensions/correctness-wall/` — explicit opt-in extension that imports the package.
 - `packages/coding-agent/docs/adaptorch-preview.md` — planning blueprint and claim boundary.
 
+## Adjudication evidence boundary
+
+`status` describes the run lifecycle; `result_status` describes synthesis quality.
+Neither one is proof that a requested review or its tests actually ran. The current
+`adjudicate()` implementation is fail-closed: structural checks can reject evidence,
+but passing them leaves the run `INDETERMINATE` / `VERIFICATION_UNAVAILABLE`.
+This also applies to registered `content_check` / `trace_check` hooks returning
+`ok: true`; no positive execution-proof contract is wired into this API yet.
+
+- `correctness_wall.verdict: BLOCKED` retains the original run payload and becomes
+  `INDETERMINATE` / `SEMANTIC_BLOCKED`, B2C `BLOCKED`, with apply/submit disabled.
+  A capability or policy refusal is not evidence that a candidate claim is false.
+  Optional payload-augmentation hooks are not invoked for a record containing a
+  block; no automatic retry is eligible. Builder errors on other outcomes retain
+  the existing thrown-error contract.
+- `result_status: DEGRADED` or `FAILED`, wall `INCONCLUSIVE` / `ADVISORY`, incomplete
+  evaluation/score validity, and explicit `cross_candidate_evidence: false` stay unverified.
+- A model's `FINAL:PASS`, two agreeing candidates, wall `PASS`, numeric consistency,
+  and `diagnostics.verification.selected.passed` are not authenticated execution proof.
+  No new numeric agreement threshold is inferred.
+- Missing, unknown, malformed, or inaccessible evidence never confirms a run.
+  Raw fetched layers remain in `per_run[].evidence_refs` for inspection. Request identities
+  and a dense run list are captured before callbacks or reads; empty or malformed
+  introspection aggregation is a verifier error, never success. Failed hooks cannot
+  attach `ALL_CHECKS_PASSED` or an unknown code to a negative outcome.
+
+This is an intentional change from the former default-success behavior. The five
+verdict states and independent proof-projection APIs remain unchanged. No retry,
+provider call, paid-plan change, wall-mode change, or command execution is triggered
+by adjudication. An evidence-enriched retry must be owned and authorized by a caller,
+with new evidence and a persisted one-attempt bound.
+
 ## Safety notes (do not remove without updating the design docs)
 
 - `ESCALATED` packets never resume automatically; only an explicit external unblock signal moves them on.

@@ -30,7 +30,9 @@ describe("createInMemoryAdaptOrchClient", () => {
 			client,
 		});
 
-		expect(receipt.adjudicationVerdict).toBe("CONFIRMED");
+		expect(receipt.adjudicationVerdict).toBe("INDETERMINATE");
+		expect(receipt.canApply).toBe(false);
+		expect(receipt.shouldSubmit).toBe(false);
 		expect(receipt.wallVersion).toBe(CORRECTNESS_WALL_VERSION);
 		expect(receipt.verificationDigest?.wallVersion).toBe(CORRECTNESS_WALL_VERSION);
 		expect(receipt.verificationDigest?.compositeHash).toMatch(/^[a-f0-9]{64}$/);

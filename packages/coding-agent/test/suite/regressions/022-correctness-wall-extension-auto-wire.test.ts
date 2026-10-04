@@ -119,7 +119,7 @@ describe("autoWireLiveAdaptOrch (extension entry wiring)", () => {
 				runIds: ["run-022"],
 				client,
 			});
-			expect(verdictCard.verdict).toBe("PASS");
+			expect(verdictCard.verdict).toBe("INCONCLUSIVE");
 		} finally {
 			restoreEnv(saved);
 		}

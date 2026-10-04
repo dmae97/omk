@@ -19,7 +19,7 @@ It does **not** prove that code is correct, complete, or safe for production.
 | **PASS** | Fast wall (and optional OA) found no blocking issues. |
 | **ADVISORY** | Proceed with caution; preview limits or weak discrimination may apply. |
 | **INCONCLUSIVE** | Not enough evidence (empty diff, missing fixture, verifier error). |
-| **BLOCKED** | Scope, secret heuristic, or OA contradiction. `hard` blocks it; `soft` blocks unless overridden; `shadow` records it and proceeds. |
+| **BLOCKED** | Scope, secret heuristic, OA contradiction, or explicit AdaptOrch policy/capability refusal. `hard` blocks it; `soft` blocks unless overridden; `shadow` records it and proceeds. |
 
 Structured next steps on the verdict card: **Apply**, **Deep Check**, **Regenerate** (see `packages/adaptorch-wpl` B2C mapper).
 
@@ -32,6 +32,27 @@ If a deep check was requested, it must also complete. Its evidence must carry
 non-blank digest and command values and exit code `0`; completion cannot clear
 an existing policy requirement for human review. Local apply policy is unchanged.
 These are evidence gates, not release, merge, or deployment authorization.
+
+## AdaptOrch outcome interpretation
+
+Transport/lifecycle success is separate from result quality and verification. OA reads
+`result_status`, `correctness_wall`, evaluation/score validity, and explicit corroboration
+signals in the run summary. A server `BLOCKED` is an unverified refusal (OA
+`INDETERMINATE` / `SEMANTIC_BLOCKED`), while its B2C card is `BLOCKED`; the retained
+per-run evidence contains the original reason. Degraded and inconclusive runs stay
+unverified. These results do not authorize `canApply` or `shouldSubmit`.
+
+The current introspection contract has no authenticated, scope-bound execution proof.
+Consequently even structurally clean runs, positive registered content/trace checks,
+model `FINAL:PASS`, wall `PASS`, a selected verifier summary, and unanimous candidates
+remain `INDETERMINATE` / `VERIFICATION_UNAVAILABLE`. The adjudicator currently has no
+positive `CONFIRMED` path. This intentionally replaces its former structural-success
+behavior; independent proof-closure projection is a separate API.
+
+The extension's existing shadow/soft/hard rollout policy is unchanged. In particular,
+soft mode can permit an `INCONCLUSIVE` edit for operator review without turning it into
+verified evidence or granting downstream submission. Choose a mode explicitly for the
+session; do not infer a policy override from an advisory review response.
 
 ## Fast wall vs deep wall
 

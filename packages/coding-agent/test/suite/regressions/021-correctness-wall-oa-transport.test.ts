@@ -58,7 +58,7 @@ describe("resolveOaClientForEvaluation transport", () => {
 				runIds: ["run-021"],
 				client,
 			});
-			expect(verdictCard.verdict).toBe("PASS");
+			expect(verdictCard.verdict).toBe("INCONCLUSIVE");
 		} finally {
 			restoreEnv(saved);
 		}

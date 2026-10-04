@@ -28,7 +28,7 @@ const inScopeDiff = [
 ].join("\n");
 
 describe("evaluateCorrectnessWall — OA integration", () => {
-	it("invokes OA with runIds and previewOnly false; CONFIRMED yields PASS and strips EVIDENCE_DAG_INCOMPLETE", async () => {
+	it("invokes OA with runIds and previewOnly false; structural success remains unverified", async () => {
 		const client = new AdaptOrchClient(
 			makeFakeTransport({
 				"run-oa-1": {
@@ -49,8 +49,10 @@ describe("evaluateCorrectnessWall — OA integration", () => {
 			client,
 		});
 
-		expect(["PASS", "ADVISORY"]).toContain(verdictCard.verdict);
-		expect(receipt.adjudicationVerdict).toBe("CONFIRMED");
+		expect(verdictCard.verdict).toBe("INCONCLUSIVE");
+		expect(receipt.adjudicationVerdict).toBe("INDETERMINATE");
+		expect(receipt.canApply).toBe(false);
+		expect(receipt.shouldSubmit).toBe(false);
 		expect(receipt.policyFlags).not.toContain(POLICY_FLAG.EVIDENCE_DAG_INCOMPLETE);
 		expect(receipt.previewOnly).toBe(false);
 		expect(receipt.runIds).toEqual(["run-oa-1"]);
