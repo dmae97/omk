@@ -255,7 +255,9 @@ export class McpClient {
 
 	/** Drop a pending request and best-effort tell the server; false when it already settled. */
 	private cancelPending(id: number, reason: string): boolean {
-		return cancelPendingRequest(this.pending, id, reason, (notice) => this.closed || this.transport.send(notice));
+		// MCP forbids cancelling `initialize`; a timed-out handshake is cleaned up without a notice.
+		const silent = this.closed || this.pending.get(id)?.method === "initialize";
+		return cancelPendingRequest(this.pending, id, reason, (notice) => silent || this.transport.send(notice));
 	}
 
 	private request(method: string, params: unknown, timeoutMs?: number, signal?: AbortSignal): Promise<unknown> {

@@ -63,6 +63,21 @@ describe("MCP client against a real stdio server", () => {
 		).toBe(true);
 	});
 
+	it("does not send notifications/cancelled for a timed-out initialize", async () => {
+		const c = new McpClient({
+			name: "fake-silent-init",
+			handshakeTimeoutMs: 150,
+			transport: { command: process.execPath, args: [SERVER], env: { FAKE_MCP_MODE: "silent-init" } },
+		});
+		open.push(c);
+		const transport = (c as unknown as { transport: { send(message: unknown): boolean } }).transport;
+		const send = vi.spyOn(transport, "send");
+		await expect(c.connect()).rejects.toThrow(/timed out/u);
+		const methods = send.mock.calls.map(([message]) => (message as { method?: string }).method);
+		expect(methods).toContain("initialize");
+		expect(methods).not.toContain("notifications/cancelled");
+	});
+
 	it("completes the handshake and reports server identity", async () => {
 		const c = client("ok");
 		await c.connect();
