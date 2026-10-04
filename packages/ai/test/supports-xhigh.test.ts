@@ -56,11 +56,8 @@ describe("getSupportedThinkingLevels", () => {
 		expect(getSupportedThinkingLevels(model!)).toEqual(["off", "high", "xhigh"]);
 	});
 
-	it("includes only high plus off for OpenCode Go Kimi K2.6", () => {
-		const model = getModel("opencode-go", "kimi-k2.6");
-		expect(model).toBeDefined();
-		expect(getSupportedThinkingLevels(model!)).toEqual(["off", "high"]);
-	});
+	// OpenCode Go Kimi K2.6 left the catalog when models.dev marked it deprecated (2026-09-30).
+	// openai-completions-tool-choice.test.ts keeps its request contract under a local fixture.
 
 	it("includes only high for OpenCode Grok Build", () => {
 		const model = getModel("opencode", "grok-build-0.1");

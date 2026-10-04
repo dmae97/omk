@@ -942,6 +942,13 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					continue;
 				}
 
+				if (/(?:^|\.)moonshotai\.kimi-k3$/.test(id)) {
+					// AWS's Kimi K3 model card: Converse fails with InternalServerException once reasoning
+					// from earlier turns is included, and convertMessages replays it for non-Claude models.
+					// Admit the model together with a provider fix that drops that replay.
+					continue;
+				}
+
 				models.push({
 					id,
 					name: m.name || id,
@@ -2242,6 +2249,22 @@ async function generateModels() {
 	// OMK exposes one family-wide context contract for every GPT-5.6 route.
 	const CODEX_GPT_56_CONTEXT = 1_000_000;
 	const CODEX_MAX_TOKENS = 128000;
+	// GPT-6 family per the Codex bundled catalog (openai/codex b1e72963c3,
+	// codex-rs/models-manager/models.json, 2026-09-29). The client clamps a configured window to
+	// max_context_window (872,000); its default window is 272,000. Efforts run low..max, no none or
+	// minimal. Codex never sends `ultra`: it substitutes multi_agent_reasoning_effort (xhigh on
+	// 6.1 Sol and Astra) or, when unset, the highest listed non-ultra effort (max on gpt-6-sol).
+	// OMK does not start Codex's automatic subagent delegation, so `ultra` only selects that effort.
+	const CODEX_GPT_6_CONTEXT = 872_000;
+	const CODEX_GPT_6_LADDER = {
+		off: null,
+		minimal: null,
+		low: "low",
+		medium: "medium",
+		high: "high",
+		xhigh: "xhigh",
+		max: "max",
+	} as const;
 	const codexModels: Model<"openai-codex-responses">[] = [
 		{
 			id: "gpt-5.3-codex-spark",
@@ -2339,6 +2362,58 @@ async function generateModels() {
 			input: ["text", "image"],
 			cost: { input: 1, output: 6, cacheRead: 0.1, cacheWrite: 0 },
 			contextWindow: CODEX_GPT_56_CONTEXT,
+			maxTokens: CODEX_MAX_TOKENS,
+		},
+		{
+			id: "gpt-6.1-sol",
+			name: "GPT-6.1 Sol",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: CODEX_BASE_URL,
+			reasoning: true,
+			thinkingLevelMap: { ...CODEX_GPT_6_LADDER, ultra: "xhigh" },
+			input: ["text", "image"],
+			cost: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 },
+			contextWindow: CODEX_GPT_6_CONTEXT,
+			maxTokens: CODEX_MAX_TOKENS,
+		},
+		{
+			id: "gpt-6-astra",
+			name: "GPT-6 Astra",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: CODEX_BASE_URL,
+			reasoning: true,
+			thinkingLevelMap: { ...CODEX_GPT_6_LADDER, ultra: "xhigh" },
+			input: ["text", "image"],
+			cost: { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 },
+			contextWindow: CODEX_GPT_6_CONTEXT,
+			maxTokens: CODEX_MAX_TOKENS,
+		},
+		{
+			id: "gpt-6-sol",
+			name: "GPT-6 Sol",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: CODEX_BASE_URL,
+			reasoning: true,
+			thinkingLevelMap: { ...CODEX_GPT_6_LADDER, ultra: "max" },
+			input: ["text", "image"],
+			cost: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
+			contextWindow: CODEX_GPT_6_CONTEXT,
+			maxTokens: CODEX_MAX_TOKENS,
+		},
+		{
+			id: "gpt-6-luna",
+			name: "GPT-6 Luna",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: CODEX_BASE_URL,
+			reasoning: true,
+			thinkingLevelMap: { ...CODEX_GPT_6_LADDER },
+			input: ["text", "image"],
+			cost: { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 },
+			contextWindow: CODEX_GPT_6_CONTEXT,
 			maxTokens: CODEX_MAX_TOKENS,
 		},
 	];

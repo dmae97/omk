@@ -23,6 +23,7 @@ baseline below is history, not current truth.
 | MCP descriptor injection screen | yes | `mcp/manager` import path | default | quarantine tests | released | pattern rule score, not calibrated risk |
 | verified-run coordinator + evidence | yes | verified-run paths | opt-in command | coordinator/evidence tests | working tree | scope-limited binding, not general correctness |
 | Atomic commit planner (`planAtomicCommits`) | yes | public agent API only; no live commit caller | explicit function call | local planner/API/property tests, not a CI receipt | working tree | not measured |
+| B12 measurement core (`evaluatePromotion`, `attributePhases`, `costPerVerifiedCompletion`) | yes | **no** — no caller; offline evaluation only | n/a | unit and property tests, local oracle cross-check | working tree | n/a (measurement instrument) |
 
 Named tests are evidence locations, not a claim that this exact working tree passed remote CI. Source call paths and fresh local results must be checked before promoting a gate.
 
@@ -223,6 +224,306 @@ This gate is a conservative local admission layer, not an exact proof for every
 provider chat template or image tokenizer. Unknown model windows are not
 enforced, fallback token counts remain estimates, and the change makes no
 end-to-end latency, cost, quality, release-readiness or live-provider claim.
+
+## Tool-schema fit reuse and recount (2026-09-28 working tree)
+
+`fitToolSchemas` withholds whole MCP servers until the request's tool schemas
+fit the budget. It previously subtracted each withheld server's standalone cost
+from the total, but the request wrapper and tokenizer merges make group costs
+non-additive, so it could stop with the remaining schemas still over budget.
+`exactToolFit` now withholds the shortest ranked prefix of servers whose
+recounted projection fits: standalone costs less the empty request's cost only
+estimate the prefix, recounts correct it, and one more recount confirms that one
+server fewer overflows. Ungrouped tools are never withheld; an impossible budget
+returns them and the input ceiling decides the rejection.
+
+`SessionTurnAdmission` reuses a fit only while a SHA-256 key over the provider,
+model id (kept apart: a joined `provider/id` is ambiguous), window, ceiling,
+compaction settings, full system prompt, serialized schemas, tool-to-server
+mapping, counter id and admitted-counter epoch is unchanged. The previous key
+used the prompt's length and the tool names, so a same-length prompt, a schema
+that grew under the same tool name, a changed server mapping or a new counter
+reporting the same id (every registry mix reports one id) kept a stale
+selection; a stale selection could reject a turn as
+`configuration.invalid` although withholding a server would have admitted it.
+Each admitted counter refits once per turn. A synthetic probe (fallback
+counter, 60 KB system prompt, three runs) measured the cost: with 220 tools
+(about 400 KB of schemas) that fit, about 1 ms per cached call and 11–15 ms
+more per turn than before; with 420 tools (about 800 KB) of which 20 of 40
+servers are withheld, 82–92 ms per turn against 14–16 ms before, and 263–284 ms
+with one recount per withheld server. These are costs, not speedups.
+
+Coverage: `tool-schema-budget.test.ts`, `session-turn-admission.test.ts`,
+`exact-tool-fit.test.ts` and the public-path case in
+`agent-session-input-admission.test.ts`. `exactToolFit` also accepts
+host-trusted `pinnedGroups` and `utilityOfGroup`; nothing in the runtime passes
+them yet. `exact-tool-fit.property.test.ts` checks, for 1,000 seeded fast-check
+cases each, that with any counter, monotone or not, the fit ends within
+2|G|+3 counts for G unpinned servers, reports a recounted cost, withholds a
+ranked prefix, reports overflow only after withholding every unpinned server, and
+that one server fewer overflows. Monotone counters (additive, a serialized
+`ceil(length / 4)` and a superadditive one that makes the recount correct the
+estimate downward) also get the shortest fitting prefix. A non-monotone counter
+can report overflow although a shorter prefix fits. The runtime fallback
+estimator is not monotone either (its code-like multiplier depends on the whole
+projection's character mix), so only the general invariants apply to it.
+
+## Bounded context-budget cache stores (2026-09-28 working tree)
+
+The Context Budget V2 memory and disk providers bound each in-process store by
+entry count and by accounted bytes (`2 × key + 2 × JSON + 128` UTF-16 code
+units per entry) and keep entries as immutable JSON: reads return a fresh copy,
+and a value that is not plain JSON data (an accessor, a `toJSON`, a proxy, a
+cycle, a class instance including an `Array` subclass, a non-finite number or a
+sparse array) is a miss. Encoding reads each data property once and runs no
+caller code, so the stored text is what was validated. Defaults are 8 MiB
+representations, 2 MiB plans and 256 KiB negatives in the session provider and
+16 MiB, 4 MiB and 512 KiB resident in the disk provider, whose 32 MiB snapshot
+cap is separate. One plan may fill its store; one representation is capped at
+2 MiB and one negative entry at 16 KiB. These caps bound retained cache
+strings, not process RSS. An oversized snapshot shrinks iteratively: the oldest
+half of the persisted representations goes first, and negatives shrink only once
+none remain, so an overflow of negative entries alone converges. Entries the
+snapshot cannot hold (credential-shaped or over `maxEntryTextLength`) stay in
+memory. Limits that are not safe integers (`NaN`, `Infinity`, fractions) throw
+`RangeError`.
+
+Coverage: `bounded-json-lru.test.ts`, `context-budget-v2-cache-provider.test.ts`
+and `context-budget-cache-disk.test.ts`. The providers expose
+`getMemoryUsageSnapshot()` for instrumentation; nothing in the runtime reads it
+yet.
+
+## Retry backoff at the timer limit (2026-09-28 working tree)
+
+Two retry loops read `retry.baseDelayMs`: the agent-turn retry
+(`computeRetryDelayMs`) and the compaction and branch-summary retry
+(`retryAssistantCall` in `omk-ai`). Both doubled the base once per attempt with
+no ceiling, and Node fires a timer longer than 2,147,483,647 ms after 1 ms. A
+base of 3,000,000,000 ms therefore retried after about 1 ms. The default 2 s base
+reaches the limit only at attempt 22, after about 48.5 days of earlier waits and
+with `retry.maxRetries` raised from its default 3. Both loops now compute the
+same-model backoff as `min(2^31 - 1, base * 2^(attempt - 1))`: for a base that
+converts to a non-negative number, every result below the cap, including
+out-of-contract attempts, matches the old arithmetic, and the backoff never
+decreases as attempts grow. The agent-turn loop still waits
+at most a run budget's `remainingMs`, and 400 ms after a failover. The base
+converts as the old arithmetic did; `+Infinity` (JSON's `1e400`) takes the cap,
+and a base that converts to NaN or a negative number uses the documented 2 s. A
+retry count that converts to NaN now means no retries in both loops:
+`attempt > maxRetries` and `attempt >= maxAttempts` are never true for NaN, so
+those retries did not stop.
+
+`retryAssistantCall` keeps one timer, which the cap makes safe, and now removes
+its abort listener when the backoff ends; an abort during the backoff still
+returns an aborted message. The provider layer's `sleepProviderRetry` was not
+reused: it re-arms from `performance.now()`, which never advances under fake
+timers that leave the clock alone. The coding-agent `sleep` re-arms in
+timer-sized chunks, waits one tick for a negative or NaN delay without Node's
+warning, and removes its abort listener. The agent-turn retry never reaches
+that re-arm: its delay is capped, and a run budget's `remainingMs` is at most
+2,147,483,647 ms. The rule is implemented once per package, because coding-agent
+tests resolve `omk-ai` to its build output and a new cross-package export would
+fail them until the next build.
+
+The ceiling is the timer limit, not a retry policy. A lower default, such as the
+provider layer's 60 s cap on server-requested delays, would change every
+configuration with six or more retries at the default 2 s base. It would also need
+a new setting name, because `retry.maxDelayMs` is the legacy key migrated to
+`retry.provider.maxRetryDelayMs`. There is still no jitter. Coverage:
+`provider-retry.test.ts` (fast-check against an exact `BigInt` oracle and the old
+arithmetic), `sleep.test.ts`, `retry-backoff-limit.test.ts` in
+`packages/ai/test/`, and the public-path cases in
+`suite/agent-session-retry-events.test.ts` and
+`suite/regressions/6647-compaction-retries-transient-stream-drop.test.ts`. The
+compaction case runs `retryAssistantCall` from `packages/ai`'s build output, so it
+needs a current build, which CI makes before its tests.
+
+## DAG claim memo byte budget (2026-09-28 working tree)
+
+The per-run frontier and barrier-level schedule memos were bounded only by 64
+entries. Their keys serialize every call's arguments, file contents included, so
+64 batches that each wrote 256 KiB retained 16,782,198 key characters. Each
+cache now also keeps at most 4 MiB of accounted text (two bytes per UTF-16 code
+unit of key and JSON value, plus 128 per entry), evicting the least recently
+used batch, and schedules a batch whose entry would exceed 512 KiB without
+retaining it; a batch whose key alone exceeds that skips the lookup too. Hits
+still return isolated copies, and batches with dynamic claims still bypass the
+memo. The budget bounds retained strings, not process RSS.
+Coverage: `tool-dag-memo-bytes.test.ts` and the existing memo tests in
+`packages/agent/test/`.
+
+## OMK_MATH 924820e audit status (2026-09-28)
+
+The math bundle `OMK_MATH_924820e` audits commit 924820e. The 19 source blobs it
+records match that commit; its documentation source records none. Since then,
+3f4954a0dd changed `tool-schema-budget.ts` and `session-turn-admission.ts`, and
+this change edits `tool-dag-memo.ts` and `provider-retry.ts`; the other cited
+code sources and `package.json` are unchanged. Its twelve algorithm
+modules are proposals backed by synthetic checks, with no runtime measurement.
+Status in this tree:
+
+- Implemented: A01 and A02 by the tool-schema fit reuse and recount above (the
+  fit key is a SHA-256 of the canonical encoding, not a byte comparison), A09 by
+  the memo byte budget, and the timer-limit part of A11 in both retry loops,
+  including `retryAssistantCall`, which the bundle does not cite. A02's dependency
+  closure, protected groups and switching-cost utility are not wired, because no
+  calibrated utility exists.
+- Recomputed exactly, without a mismatch: the A02 schema witness through the
+  real serializer, 7,381 exhaustive and 2,000 random key-epoch graphs (A06),
+  the closure word count for 20,000 sizes (A14), 3,000 capped retry delays
+  (A11) and 1,000 density rescalings (A12). A13's time-uniform radius and
+  adjusted p-values equal AdaptOrch's `hoeffding_radius` at
+  `alpha / (J n (n + 1))` in 9,000 and 8,000 cases. Evaluated in floating point,
+  A03's rank index `ceil((n + 1)(1 - alpha))` differs from the exact value in 324
+  of 4,000 cases, so a calibrated admission must compute it in integers.
+- Not implemented: A03 (no calibration pairs, and only admitted requests would
+  supply them), A04 (no semantic-equivalence check for compaction candidates),
+  A05 (no additive cost bound on the context planner), A06 (a key gate must
+  first exclude path prefixes, aliases and exclusive claims), A07 (needs a
+  trace-parity harness first), A08 (no purity certificates), A10 (conflicts
+  with the permit pool's strict FIFO rule), the rest of A11 (jitter and a lower
+  ceiling change timing), A12 live wiring (`challengeEcrafLocalExchange` already
+  finds the bundle's 10 to 16 packing offline) and A13 (no paired runtime
+  runs).
+
+## OMK_MATH f46a8f6 audit status and B12 measurement core (2026-09-29 working tree)
+
+The bundle `OMK_MATH_f46a8f6` audits commit f46a8f6 and is now at r2, which adds
+explanations. Its twelve modules B01–B12 are proposals backed by synthetic
+checks; the bundle implements none of them and orders B12 before B01, B03 and
+B07 (`B12 ≺ {B01, B03, B07}`). All 16 source blobs r2 records match that
+commit, so the bundle's rebind rule asks for no module re-audit. In this
+working tree only S1 (this file, edited here) and S14 (`package-lock.json`,
+another task's edit) differ; the other 14 match. Against the first edition the
+B02–B06 and B11 formulas are unchanged and those of B01, B07–B10 and B12
+changed: B12 adds the length measure μ([a, b)) = b − a and the cost per
+verified completion C_verified.
+The first pass recomputed, without a mismatch, B04's reduction on all 1,100
+source-ordered DAGs up to five nodes and 2,000 random ones (own seed, not the
+bundle's generator), the closure word count for 20,001 sizes, B02's certified
+binary search over the 119 monotone vectors among its 3,279 prefix cost vectors,
+and the B02, B04, B06 and B10 fixtures; the r2 pass did not repeat that. Rerun
+here, the bundle's `verify_math.py` matches its shipped `VALIDATION.json` (15
+check groups, no mismatch), and its `verify_microtasks.mjs` on Node v24.19.0
+(the repository requires >= 22.19.0) gives FIFO order [B, A] but `Promise.race`
+winner A. That refutes only the naive swap and does not show any other
+replacement equivalent, so B06 stays on hold.
+
+This change implements B12's arithmetic as pure functions in
+`core/performance-upgrade/`. Nothing calls them yet and no default changes:
+
+- `parseMeasurementSpan` reads one JSONL trace line into the eight B12 trace
+  fields and drops every other field. Ids and count names must be short tokens,
+  which keeps prompt text out of them; a token-shaped secret such as an API key
+  would still fit, so trace writers must not put secrets in ids.
+- `attributePhases` splits a turn window over twelve phases so the phase times
+  add up to the turn exactly (ticks are safe integers). The bundle takes
+  breakpoints from span endpoints outside the window too; spans at [95, 130)
+  and [140, 210) over the window [100, 200) then sum to 115 ticks for a
+  100-tick turn, so endpoints are clipped to the window first. Where spans
+  overlap, the deepest one gets the time, then the one ending last. The bundle
+  leaves that rule open.
+- `anytime-bounds.ts` holds the time-uniform Hoeffding interval and one-sided
+  p-value at alpha / (J n (n + 1)), the zero-failure bound and the DKW quantile
+  band. `compensatedSum` is factored out of `compensatedMean`, behavior unchanged.
+- `evaluatePromotion` scores paired baseline/candidate blocks and returns
+  `promote`, `harm` or `noDecision`. The bundle does not define its
+  `harmEstablished`; here it means an upper bound below zero for latency, or
+  below the negative margin for success or false completion.
+- `costPerVerifiedCompletion` (`verified-cost.ts`) computes r2's C_verified: the
+  `compensatedSum` of all attempt costs of all blocks, unverified blocks and
+  failed or retried attempts included, over the number of independently verified
+  blocks, or +Infinity (not NaN) when none is. Verification does not prove a
+  block correct. It throws `MeasurementInputError` on non-string or duplicate
+  ids, non-boolean flags, attempt lists that are not arrays or report a length
+  that is not a count, negative or non-finite costs, verified blocks without
+  attempts and an overflowing total (the compensated sum yields NaN or
+  ±Infinity there). It reads each attempt list's length once and each index once
+  and calls none of its methods, so a getter, a proxy or an own `slice` cannot
+  change a validated value.
+
+The bounds hold only for i.i.d. blocks and they are wide: at alpha = 1/20 and
+J = 8 the radius is 0.917 at n = 30 and 0.198 at n = 1,000, so even a
+noise-free gain of 10% of the cap needs about 4,500 paired blocks before its
+lower bound clears zero. There are no paired runtime runs yet, so this change
+claims no speedup and B01–B11 stay unimplemented.
+Acceptance for any of them later: paired blocks whose cap, minimum gain and
+margins were fixed before the runs, a passing semantic gate, and
+`evaluatePromotion` returning `promote`. Until then the module stays off.
+
+Apart from C_verified, the r2 corrections change no code here. B08's
+internal-ticket node key and B10's reserve for mandatory verification and saving
+alter policy and data structures, so both are recorded as on hold.
+`WorkloadPermitPool.setCapacity` and its test already pin B09's shrink rule:
+running permits are never revoked and a new grant needs active + weight ≤
+capacity. B01 and B07 gain scope conditions only.
+
+Cost, re-measured twice on 2026-09-29 on a loaded development machine (load
+average 13 to 16; not a benchmark, and runs differ by up to 2x):
+`attributePhases` takes about 20 to 30 ms for 10,000 spans shaped like a real
+turn (median of 7), but it is O(|V|^2) when most spans are open at once, about
+8.5 s for 10,000 fully nested spans (one run). `evaluatePromotion` takes about
+95 to 135 ms for 100,000 blocks (median of 7). Evaluate at checkpoints rather
+than after every block: any checkpoint schedule
+keeps the bounds' anytime validity under their i.i.d. assumption, while
+re-evaluating after each of N blocks costs O(N^2 log N) in total.
+
+Coverage: 184 tests pass locally, up from 133: `measurement-trace.test.ts` 35,
+`phase-attribution.test.ts` 26, `phase-attribution.property.test.ts` 2 (1,000
+fast-check cases against a tick-by-tick oracle), `anytime-bounds.test.ts` 40,
+`promotion-gate.test.ts` 34 and `verified-cost.test.ts` 47. A first local
+cross-check, made in the first implementation pass with a script that was not
+kept, against AdaptOrch's research kernel (`hoeffding_radius`,
+`hoeffding_interval`, `standardized_effect`) plus stdlib reference formulas,
+judged by its `expected_answer_numeric` verifier at a relative and absolute
+tolerance of 1e-12, matched 9,495 of 9,495 values and all 136 undefined results
+over 830 seeded cases. Identical block differences, which the random cases
+never produced, gave d_z near 1e16 instead of undefined. A self-review caught
+it; the fix has a regression test, and 150 such cases run in the second
+cross-check below. Review then found that ranking overlaps by clipped ends let
+the window change who owns an overlap, and that a string, `null` or a getter
+could pass validation and still change the result; overlaps are now ranked by
+real ends, inputs are type-checked and each object field is read once. Arrays
+are still read in place
+in the bounds and in `attributePhases`, so an array with element getters or an
+own `map` can change a value after validation (a getter made `anytimeMeanBound`
+validate 0.5 and sum 1e9); only `verified-cost.ts` snapshots its arrays. Parsed
+JSONL is plain data and cannot do this. In that pass each of 45 hand-written
+mutations of the first four modules, including its documented limits, failed at
+least one test; that count was not re-run. In the r2 pass all
+19 hand-written mutations of `verified-cost.ts` fail at least one test.
+
+A second, larger run (harness outside the repository) compared 152,906 values in
+11 main report rows (radius and zero-failure bound up to n = 1e6, mean intervals
+and p-values up to n = 199, quantile bands up to n = 300): no mismatch, 907
+boundary ties set aside and 833 ⊥ or ∞ results agree. A strict verifier (abs_tol
+0) accepts all 102,020 values it covers and carries the claim: after a relative
+1e-9 perturbation,
+`NumericToleranceVerifier` at abs_tol 1e-12 still passes 5,114 of 108,831 values
+(all of magnitude ≤ 1e-3), the strict one 0 of 102,020. All 12 hand-made TS
+mutations fail at least one verifier. When |d_z| ≥ 1e7, TS and the oracle both
+drift about 1e-7 relative (error ≈ ε·|d_z|), a conditioning limit not
+attributed to either side and kept out of the 11 rows. Fingerprints of the final
+code, 6a79e013441c25c2 (cases), eb0210a2075700e1 (ts_out) and c079741c1c5941f4
+(report), reproduced in a second run; the last two cover the sha256 of the five
+TS files, so any edit to them changes both. The oracles come from AdaptOrch
+d0eb6ed9b plus other tasks' uncommitted edits to `evidence_stopping_index` and a
+failure classifier, which leave the oracle and verifier functions unchanged.
+AdaptOrch was only a local numeric reference, not a product capability claim.
+The reference formulas belong to the same family as the code's: only the
+Hoeffding radius, the mean interval and d_z come from AdaptOrch, and the rest
+are exact restatements of the bundle's formulas. The run therefore shows that
+the code matches those formulas on seeded cases, not that the formulas are
+right, and it leaves input validation (three overflow cases aside) and the
+`attributePhases` partition to the unit tests. None of this is a CI result, a
+correctness proof or a coverage guarantee under i.i.d. blocks.
+
+Remote CI fails for reasons outside this work. Its last run before this change,
+36414383318 on f46a8f6922, fails 9 tests in the Test step; all 9 also fail on a
+clean f46a8f6922 snapshot (four of them, the session-replacement regressions,
+through source aliases because the snapshot had no build output), and 8
+consecutive runs have failed. The B12 files were not in that CI tree. Whether a
+code defect or a stale test expectation causes it is undecided.
 
 ## Reasoning router resolver contract (2026-09-19 audit F05/F06)
 
@@ -571,7 +872,7 @@ produces bounded admission caps.
 | `/resource` and `omk doctor resources` | Released / opt-in | Inspect current policy and probe state |
 | `omk doctor resources --report` | Working tree | Aggregate bounded local admission evidence; never promotes mode |
 | Per-run tool cap and governed heavy-process permits | Released / opt-in | Enforced in `adaptive` or `strict` mode |
-| `launchSubagentLanes()` | Released / internal | No live child-dispatch consumer |
+| `launchSubagentLanes()` | Released / internal | Reached through the extension lane authority (`ctx.getSubagentLaneAuthority()`); consumed by the example subagent extension, not by a built-in tool |
 | Journaled Vitest/Jest/workspace/Go shard executor | Released / internal | No `autoShard` setting or session-command consumer |
 
 `observe` remains the default. Admission caps never raise configured caps.
@@ -639,9 +940,17 @@ fingerprints, attempt journals, durable goals, seam checkpoints, session doctor,
 and bounded provider retry/failover. Digests detect mismatch; they do not prove
 runner honesty, OS isolation, freshness, or trusted authorship by themselves.
 
+A durable goal with an approved acceptance check completes only on a receipt from
+that check. The receipt must have passed in the current goal generation, and the
+workspace digest captured right after the check must still match. The approval and
+the trusted receipts stay in the OMK process; see
+[acceptance checks](run-protocol.md#acceptance-checks).
+
 Evidence:
 
 - `packages/protocol/src/evaluation.ts`: `evaluateTask`
+- `packages/coding-agent/src/core/goal-acceptance.ts`: `GoalAcceptance`
+- `packages/coding-agent/test/suite/goal-acceptance-loop.test.ts`
 - `packages/protocol/src/decision.ts`: `reduceRuntimeDecision`
 - `packages/protocol/test/protocol.test.ts`
 - `packages/coding-agent/src/core/advisory-judge.ts`
@@ -757,3 +1066,252 @@ gates. Apply them in order:
 
 A green focused test proves only its declared behavior. Release readiness still
 requires the repository's full release gates.
+
+## C/D lifecycle and progress hardening (2026-09-30)
+
+The C/D feedback bundles audit `f46a8f6`. Their pinned lifecycle, permit,
+launcher and stream sources still matched this working tree before these
+changes. The bundles are proposals, not patches or runtime performance evidence.
+
+**C03:** `AgentSession.close()` still closes admission synchronously and shares
+one close Promise. `SessionShutdown.closeSession()` now attempts every
+independent stop callback even if another throws, joins registered producers,
+and observes all independent agent/lifecycle/budget/MCP/control joins before
+reporting failure. Only successful joins authorize final cleanup. A successful
+drain does not erase an earlier stop error: one error is returned unchanged,
+multiple errors are retained in `AggregateError`. Control-server close is
+requested once, not retried to erase its first rejection. An unconfirmed
+physical termination can still leave close pending; no timeout declares success.
+
+CI recovery also separates registered command control frames from prompt/tool
+producers. A command-initiated replacement seals its own control frames before
+joining other owned work, avoiding a self-join. An ordinary externally stopped
+command is still joined, and a command nested under an active prompt/tool cannot
+use the exception to release that ancestor. Its closed-budget acknowledgement
+never forgives real budget exhaustion. The public new/fork/switch regressions,
+`session-command-shutdown.test.ts` and `run-budget-scope.test.ts` cover this.
+
+`SessionPromptLifecycle.flush()` detaches the current owner's idle waiters
+before notifying completion. A callback that starts the next prompt and
+registers another waiter cannot have that waiter released by the old completion.
+
+**C04:** `retireMcpClient()` coalesces duplicate client requests within an owner's
+unfinished epoch. Only a distinct client adds a join; earlier returned Promises
+retain their original scope. Membership uses a `WeakSet` and owner epochs a
+`WeakMap`. Both identities are published before calling reentrant client code,
+and cleanup checks the current epoch and join. Missing or rejected transport
+observations still withhold ownership; they are not release evidence.
+
+**D07:** the extension example's governed and legacy graph callers now forward
+`onUpdate`. Adaptive and Ultra paths retain attempt/node identity in previews.
+Validated text deltas go to a separate, 4,096-UTF-16-code-unit display tail.
+The first delta notifies immediately; subsequent deltas coalesce on arrival
+with a 100 ms minimum interval, without a timer or notification queue.
+Completed messages still notify immediately. Partial snapshots report
+`exitCode: -1` and render as progress, never as completion. Abort suppresses
+later display callbacks and finish closes the parser. Previews do not enter
+messages, usage, checkpoint text, dependency output or completed-node evidence.
+The partial graph view shows the currently updated node; final source ordering,
+stream limits and process-settlement checks remain unchanged. A follow-up
+renderer regression exposed that the initial partial view hid sibling rows and
+tool calls. The shared partial renderer now preserves each supplied sibling's
+running/completed/failed state and tool-call summary, showing at most five recent
+blocks with each text block capped at 4,096 code units. Four render-only tests in
+`subagent-progress-render.test.ts` cover this without starting an agent.
+
+The stream's line-limit check now accumulates incoming UTF-8 bytes rather than
+rescanning the growing line per fragment. Input strings come from the managed
+process's UTF-8 decoder; newline and finish clear the accumulated state.
+
+Synthetic operation counts on identical inputs, not end-to-end speedups:
+
+| Input and metric | Before | After |
+| --- | ---: | ---: |
+| 1,000 retirements of one client: allocated Promises (`async_hooks`) | 4,998 | 3 |
+| Same input: distinct returned joins | 1,000 | 1 |
+| Same input: physical close calls | 1 | 1 |
+| 8,221-character JSONL in single-character chunks: characters scanned by byte-length checks | 33,804,751 | 16,441 |
+
+The stream digest and event count were identical. This establishes reduced
+allocation/retention and scanning for these fixtures, not a long-running RSS
+bound or a provider-latency improvement.
+
+Scope decisions for the remaining proposals:
+
+- C01/C05/C07: preserve admission, generation and physical-evidence contracts;
+  exercise reentrancy, reconnect and ownership regressions.
+- C02/C06: no separate bounded observer facade without evidence of abandoned
+  observer accumulation and a real consumer. Existing close semantics remain.
+- C08/C09: retain failed/unresolved cases in evaluation; no live paired shutdown
+  or weighted critical-path benchmark was run.
+- D01/D02/D06/D09: inspect the actual caller and existing ownership boundaries;
+  no new telemetry system, warm process pool, duplicate execution or scheduler.
+- D03: retain the launch-time width contract. No wider dispatch without runtime
+  benefit evidence and a current-authority revalidation design.
+- D04/D05: preserve failure barriers, write conflicts and FIFO fairness.
+- D08: preserve current deadlines, cleanup reserves and unsettled-child ownership;
+  do not silently reinterpret zero or unify different clock contracts.
+- D10: operation counts are not product promotion or quality evidence.
+
+Coverage: `session-shutdown-faults.test.ts`, `session-prompt-lifecycle.test.ts`,
+`suite/session-shutdown-wiring.test.ts`,
+`mcp/transport-retirement-coalescing.test.ts`,
+`subagent-stream-progress.test.ts`, `improvement-subagent-stream.test.ts` and
+`improvement-subagent-graph.test.ts`, plus existing MCP, lane, permit and actual
+child/bash-settlement tests in `packages/coding-agent/test/`. Local AdaptOrch
+`CommandVerifier` executes the same offline regression command with caching
+disabled and an exit-7 negative control. No model calls, synthesis, delegation
+or external uploads are involved; verification is not a correctness proof.
+
+For `pi-web-access` 0.33.0, `"toolActivation": "eager"` in the configuration
+file that extension actually reads preserves eager web tools without its
+Pi-0.86 compatibility warning. Do not spoof host APIs or suppress all warnings.
+The extension uses its own `PI_CODING_AGENT_DIR`/XDG/Pi-default path rules;
+configuration and source changes require a module reload or session restart.
+
+## Memory and wait-lifecycle hardening (2026-09-30, bundle `bac246c`)
+
+An external audit bundle pinned to `bac246c` proposed fixes for retained
+listeners, unbounded diagnostics and quadratic copies. Four of its target files
+had changed since (`c4e20ff`, `8f12f90`), so the fixes were re-applied to this
+tree rather than patched in. Each change below has a regression that failed on
+the previous source. In this section `n` is the number of drained messages,
+`d` the depth of a session branch and `N` the number of accepted journal records.
+
+- **Agent queues:** `PendingMessageQueue` drained one message with `slice(1)`,
+  copying n(n−1)/2 references for a burst. A head cursor releases each drained
+  slot and compacts only when at least 1,024 slots and half the array are dead.
+  FIFO order, mode switches and `all` draining are unchanged; a producer that
+  outpaces the consumer still grows the live queue.
+- **Branch traversal:** `SessionManager.getBranch()` used `unshift` per ancestor,
+  moving d(d−1)/2 references. It now pushes and reverses once. Root-to-leaf order,
+  entry identity, the selected fork and the defensive copy are unchanged.
+- **Run journal:** `RunJournal` no longer copies its full record array on every
+  append; `records` materialises a frozen snapshot on read and reuses it until
+  the next append. Earlier snapshots keep their prefix. A memory-only
+  `RunJournalStore` appends to its accepted journal directly, which is safe
+  because every append validates and hashes before it mutates and each commit
+  is a single append. Persistent stores keep the isolated replay candidate, the
+  durable-head check before and after the write, and the locks, so their append
+  stays O(N) per record; disk verification was not weakened.
+- **Completion API:** `complete()` and `completeSimple()` expose only the final
+  message, so they now consume stream events as they arrive instead of leaving
+  every delta queued until the result. Direct `stream.result()` callers can
+  still iterate events afterwards.
+- **Cursor provider:** the request closed only on the caller's signal, so the
+  internal `timeoutMs` deadline never ended a silent HTTP/2 peer, and every
+  request left one listener on a reused caller signal. The close handler now
+  listens on the combined signal and is removed when the request settles. The
+  deadline reports `stopReason: "error"` with `Cursor timed out after <ms>ms`;
+  a caller abort still reports `stopReason: "aborted"` with `errorMessage:
+  "aborted"`. An abort during the payload hook is checked before connecting.
+- **RPC client:** see [TypeScript client resource lifecycle](rpc.md#typescript-client-resource-lifecycle).
+  Waiters are owned and released on failure, closure or `stop()`; event dispatch
+  snapshots listeners, so an unsubscribing waiter no longer hides `agent_end`
+  from the next listener; stderr keeps an 8,192-code-unit tail; `prompt()`
+  reports a refused prompt instead of leaving `promptAndWait()` to time out.
+- **Session events:** `AgentSession` dispatches to a listener snapshot. A
+  listener that unsubscribes no longer skips the next one, and a listener added
+  during dispatch starts with the next event.
+- **Subagent example:** bounded execution returned the aggregate without the
+  final attempt's `attemptId`, process settlement or stream receipt. The merge
+  now carries them while usage and output stay cumulative. The README install
+  list gained `managed-process-tree.ts`, `subagent-stream.ts` and
+  `graph-result.ts`, which `index.ts` imports. The byte-accounting part of the
+  bundle had already landed in `8f12f90`; its regression test is kept.
+
+The previous source cost
+
+$$
+C_q(n) = \frac{n(n-1)}{2}, \qquad C_b(d) = \frac{d(d-1)}{2}, \qquad H(N) = \sum_{k=1}^{N} k = \frac{N(N+1)}{2},
+$$
+
+where $n \ge 0$ is the number of messages drained one at a time, $d \ge 0$ the
+branch depth in entries and $N \ge 0$ the number of memory-only journal appends;
+$C_q$ and $C_b$ count array references copied or moved (unitless counts) and $H$
+counts hash-function calls. Each drain copied the remaining queue, each ancestor
+was inserted at the front, and each commit replayed the accepted prefix before
+hashing its record.
+After the change $C_q(n) \le n$ (a compaction copies at most the slots drained
+since the previous one), $C_b(d) = 0$ with one $O(d)$ reverse, and $H(N) = N$.
+
+Baseline: the same fixtures on the source before this change (`16df133`); each
+row changes one algorithm and holds its input fixed.
+
+| Input and metric | Before | After |
+| --- | ---: | ---: |
+| 4,096 individual queue drains: references copied by `slice` | 8,386,560 | 3,072 |
+| Branch of depth 2,048: references moved by `unshift` | 2,096,128 | 0 |
+| 128 memory-only journal audits: hash calls | 8,256 | 128 |
+| `complete()` over 25 events: events consumed before the result | 0 | 25 |
+
+These are counts from synthetic fixtures, not end-to-end latency or RSS
+measurements. The persistent journal path was not shown to be faster.
+
+Assumption: every `RunJournalStore` commit performs exactly one append. A commit
+that appended twice could leave a memory-only store holding the first record
+after the second failed; such a change must restore an isolated candidate for
+memory-only stores as well.
+
+Not adopted from the bundle: Vitest/tsconfig aliases that resolve `omk-ai`,
+`omk-agent-core/node` and `open-multi-agent-kit` to source. They change module
+resolution for more than two hundred test and example files and need their own
+full-suite run; builds before tests remain the supported order. The bundle's
+DAG completion diagnostic and its P0–P3 follow-ups (live phase spans, journal
+segments, TUI frame batching, shared usage aggregation, an `EventStream` deque,
+skill-scan caching) are proposals with adoption conditions, not changes here.
+
+Test isolation note: the resource loader also reads `$HOME/.agents/skills`. On a
+machine with a large user skill set, session tests that build a real system prompt
+failed admission (`PromptFixedOverheadError`) for reasons unrelated to the code
+under test. `test.sh` now isolates `HOME` next to the agent directory and keeps
+`RUSTUP_HOME`, `CARGO_HOME`, `COREPACK_HOME` and the npm cache at their original
+locations. CI runs `npm test` directly and is unaffected.
+
+Coverage: `pending-message-queue.test.ts` (agent),
+`complete-drain.test.ts` and `cursor-stream.test.ts` (ai),
+`session-manager/branch-linear.test.ts`, `run-journal-performance.test.ts`,
+`rpc-client-resource-lifecycle.test.ts`,
+`agent-session-event-unsubscribe.test.ts`,
+`subagent-adaptive-receipts.test.ts` and
+`subagent-stream-performance.test.ts` (coding-agent).
+
+## Verified-run cancellation, remote cancel, artifact GC and authority clock (2026-09-30)
+
+Closes three gaps recorded in the 09-27 and 09-30 harness comparisons: operator
+cancellation of `omk run` was terminal, there was no remote cancel, and verified-run
+artifacts had no GC. It also fixes the cause of the load-sensitive verified-run CLI
+failures reported there.
+
+| Change | Before | After |
+| --- | --- | --- |
+| Operator cancel (SIGINT, SIGTERM, `omk run cancel`) | terminal `failed: cancelled` | `interrupted` event; `paused` with `failure: cancelled`, resumable by `restart-writer`, `resume` or `retry-tasks` |
+| Cancelled verification check | signed as a failed check, run concluded `violated` | not a check result; the run pauses and `resume` re-verifies the same candidate |
+| Witnessed-cancelled DAG attempt | stayed `running`, consumed the attempt | released (`failed: cancelled`, attempt not spent); the same approved command can run again |
+| `status` recovery hints for terminal runs | advertised `restart_writer`/`retry_tasks` that recovery refuses | only for started, non-terminal runs (`running`, `paused`) |
+| Remote cancel | none | durable `cancel-request.json`, consumed by the owning CLI within 250 ms |
+| Artifact GC | none | `omk run gc` removes derived workspaces of unrecoverable, settled, owner-free runs; evidence kept |
+| Authority store default clock | `Date.now`; a wall-clock step back threw `clock_anomaly` mid-run (`operation_failed`) | wall time at open, advanced by the monotonic clock |
+
+Recovery keeps every existing boundary: recorded namespaces must be proven gone,
+the anchored budget is not refunded, and the generation cap is unchanged. Failures
+other than cancellation remain terminal.
+
+Measured on this WSL2 host under load average 13–18, with concurrent `omk run
+start` CLI processes and a 3-second work budget. In 20-run stress tests of the
+development tree, 3 runs ended with `operation_failed` (`authority-store:
+clock_anomaly`, wall clock 1.2–1.7 s backwards) before the clock change and none
+after it. In a 30-run A/B under the same load, the base commit had 26 successes,
+3 `operation_failed` and 1 typed budget outcome `deadline`; the changed tree had
+30 successes. The verified-run CLI test now uses a 20-second budget because its
+cases do not test deadlines.
+
+Not changed: orphan blobs are not collected, a run without a live owner cannot be
+cancelled (there is nothing to stop), cancellation during the pre-lease part of
+`start` (candidate capture, sandbox probe) reports `not_running`, and TUI/RPC
+control of verified runs is still not implemented.
+
+Coverage: `verified-run-cancel-resume.test.ts`, `verified-run-remote-cancel.test.ts`,
+`verified-run-cli-control.test.ts`, `verified-run-gc.test.ts`,
+`verified-run-authority-clock.test.ts`, and the updated status, DAG cancellation,
+DAG frontier, supervisor and authority-boundary tests.

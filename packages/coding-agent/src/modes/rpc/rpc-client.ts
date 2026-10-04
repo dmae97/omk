@@ -11,6 +11,8 @@ import type { SessionStats } from "../../core/agent-session.ts";
 import type { BashResult } from "../../core/bash-executor.ts";
 import type { CompactionResult } from "../../core/compaction/index.ts";
 import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.ts";
+import { RpcEventWaiters } from "./rpc-event-waiters.ts";
+import { RpcProcessLifecycle } from "./rpc-process-lifecycle.ts";
 import type { RpcCommand, RpcResponse, RpcSessionState, RpcSlashCommand } from "./rpc-types.ts";
 
 // ============================================================================
@@ -47,14 +49,22 @@ export interface ModelInfo {
 
 export type RpcEventListener = (event: AgentEvent) => void;
 
+/** Diagnostic history retained per RPC process, in UTF-16 code units. */
+export const MAX_RPC_STDERR_TAIL_CHARS = 8192;
+
 // ============================================================================
 // RPC Client
 // ============================================================================
 
 export class RpcClient {
 	private process: ChildProcess | null = null;
+	private processLifecycle: RpcProcessLifecycle | null = null;
 	private stopReadingStdout: (() => void) | null = null;
 	private eventListeners: RpcEventListener[] = [];
+	private readonly eventWaiters = new RpcEventWaiters(
+		(listener) => this.onEvent(listener),
+		() => this.stderr,
+	);
 	private pendingRequests: Map<string, { resolve: (response: RpcResponse) => void; reject: (error: Error) => void }> =
 		new Map();
 	private requestId = 0;
@@ -74,7 +84,9 @@ export class RpcClient {
 			throw new Error("Client already started");
 		}
 
+		this.processLifecycle?.cancelDrain();
 		this.exitError = null;
+		this.stderr = "";
 
 		const cliPath = this.options.cliPath ?? "dist/cli.js";
 		const args = ["--mode", "rpc"];
@@ -98,28 +110,31 @@ export class RpcClient {
 
 		// Collect stderr for debugging
 		childProcess.stderr?.on("data", (data) => {
-			this.stderr += data.toString();
+			if (this.process !== childProcess) return;
+			this.stderr = `${this.stderr}${data.toString()}`.slice(-MAX_RPC_STDERR_TAIL_CHARS);
 			process.stderr.write(data);
 		});
 
-		childProcess.once("exit", (code, signal) => {
+		this.processLifecycle = new RpcProcessLifecycle(childProcess, (code, signal) => {
 			if (this.process !== childProcess) return;
-			const error = this.createProcessExitError(code, signal);
+			const error = this.exitError ?? this.createProcessExitError(code, signal);
 			this.exitError = error;
-			this.rejectPendingRequests(error);
+			this.rejectPendingOperations(error);
+			this.stopReadingStdout?.();
+			this.stopReadingStdout = null;
 		});
 		childProcess.once("error", (error) => {
 			if (this.process !== childProcess) return;
 			const processError = new Error(`Agent process error: ${error.message}. Stderr: ${this.stderr}`);
 			this.exitError = processError;
-			this.rejectPendingRequests(processError);
+			this.rejectPendingOperations(processError);
 		});
 		childProcess.stdin?.on("error", (error) => {
 			if (this.process !== childProcess) return;
 			const stdinError =
 				this.exitError ?? new Error(`Agent process stdin error: ${error.message}. Stderr: ${this.stderr}`);
 			this.exitError = stdinError;
-			this.rejectPendingRequests(stdinError);
+			this.rejectPendingOperations(stdinError);
 		});
 
 		// Set up strict JSONL reader for stdout.
@@ -141,27 +156,24 @@ export class RpcClient {
 	 * Stop the RPC agent process.
 	 */
 	async stop(): Promise<void> {
-		if (!this.process) return;
-
+		const childProcess = this.process;
+		if (!childProcess) return;
+		const error = this.exitError ?? new Error("RPC client stopped");
+		this.exitError = error;
+		this.rejectPendingOperations(error);
 		this.stopReadingStdout?.();
 		this.stopReadingStdout = null;
-		this.process.kill("SIGTERM");
 
-		// Wait for process to exit
-		await new Promise<void>((resolve) => {
-			const timeout = setTimeout(() => {
-				this.process?.kill("SIGKILL");
-				resolve();
-			}, 1000);
-
-			this.process?.on("exit", () => {
-				clearTimeout(timeout);
-				resolve();
-			});
-		});
-
-		this.process = null;
-		this.pendingRequests.clear();
+		try {
+			await this.processLifecycle?.stop();
+		} catch (error: unknown) {
+			this.exitError = error instanceof Error ? error : new Error(String(error));
+			throw error;
+		}
+		if (this.process === childProcess) {
+			this.process = null;
+			this.processLifecycle = null;
+		}
 	}
 
 	/**
@@ -194,7 +206,7 @@ export class RpcClient {
 	 * Use waitForIdle() to wait for completion.
 	 */
 	async prompt(message: string, images?: ImageContent[]): Promise<void> {
-		await this.send({ type: "prompt", message, images });
+		this.getData(await this.send({ type: "prompt", message, images }));
 	}
 
 	/**
@@ -428,51 +440,27 @@ export class RpcClient {
 	 * Resolves when agent_end event is received.
 	 */
 	waitForIdle(timeout = 60000): Promise<void> {
-		return new Promise((resolve, reject) => {
-			const timer = setTimeout(() => {
-				unsubscribe();
-				reject(new Error(`Timeout waiting for agent to become idle. Stderr: ${this.stderr}`));
-			}, timeout);
-
-			const unsubscribe = this.onEvent((event) => {
-				if (event.type === "agent_end") {
-					clearTimeout(timer);
-					unsubscribe();
-					resolve();
-				}
-			});
-		});
+		if (this.exitError) return Promise.reject(this.exitError);
+		return this.eventWaiters.create(timeout, false).promise.then(() => {});
 	}
 
-	/**
-	 * Collect events until agent becomes idle.
-	 */
+	/** Collect the complete event history until agent_end; use onEvent for bounded streaming. */
 	collectEvents(timeout = 60000): Promise<AgentEvent[]> {
-		return new Promise((resolve, reject) => {
-			const events: AgentEvent[] = [];
-			const timer = setTimeout(() => {
-				unsubscribe();
-				reject(new Error(`Timeout collecting events. Stderr: ${this.stderr}`));
-			}, timeout);
-
-			const unsubscribe = this.onEvent((event) => {
-				events.push(event);
-				if (event.type === "agent_end") {
-					clearTimeout(timer);
-					unsubscribe();
-					resolve(events);
-				}
-			});
-		});
+		if (this.exitError) return Promise.reject(this.exitError);
+		return this.eventWaiters.create(timeout, true).promise;
 	}
 
-	/**
-	 * Send prompt and wait for completion, returning all events.
-	 */
+	/** Send prompt and wait for completion, returning all events. */
 	async promptAndWait(message: string, images?: ImageContent[], timeout = 60000): Promise<AgentEvent[]> {
-		const eventsPromise = this.collectEvents(timeout);
-		await this.prompt(message, images);
-		return eventsPromise;
+		if (this.exitError) throw this.exitError;
+		const waiter = this.eventWaiters.create(timeout, true);
+		try {
+			await this.prompt(message, images);
+		} catch (error: unknown) {
+			waiter.cancel(error instanceof Error ? error : new Error(String(error)));
+			throw error;
+		}
+		return waiter.promise;
 	}
 
 	// =========================================================================
@@ -492,7 +480,7 @@ export class RpcClient {
 			}
 
 			// Otherwise it's an event
-			for (const listener of this.eventListeners) {
+			for (const listener of [...this.eventListeners]) {
 				listener(data as AgentEvent);
 			}
 		} catch {
@@ -504,7 +492,8 @@ export class RpcClient {
 		return new Error(`Agent process exited (code=${code} signal=${signal}). Stderr: ${this.stderr}`);
 	}
 
-	private rejectPendingRequests(error: Error): void {
+	private rejectPendingOperations(error: Error): void {
+		this.eventWaiters.fail(error);
 		for (const pending of this.pendingRequests.values()) {
 			pending.reject(error);
 		}

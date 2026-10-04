@@ -1,6 +1,11 @@
 import type { AgentMessage, AgentTool } from "omk-agent-core";
+import { getModels, getProviders } from "omk-ai";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
+import {
+	compactionHysteresisConfigFor,
+	DEFAULT_COMPACTION_SETTINGS,
+} from "../src/core/compaction/compaction-headroom.ts";
 import {
 	createFallbackTokenCounter,
 	type TokenCounterAdapter,
@@ -12,6 +17,66 @@ import {
 	estimateContextInputTokens,
 	PromptInputCapacityError,
 } from "../src/core/prompt-budget.ts";
+import { sessionInputTokenLimit } from "../src/core/session-input-admission.ts";
+
+describe("session input token limit", () => {
+	it("reproduces the admission ceiling reported for opencode-go/deepseek-v4.1-flash", () => {
+		// 1,000,000 window - 384,000 output reserve - 100,000 safety margin.
+		expect(sessionInputTokenLimit({ maxTokens: 384_000 }, 1_000_000)).toBe(516_000);
+	});
+
+	it("has no limit without a model or a usable window", () => {
+		expect(sessionInputTokenLimit(undefined, 1_000_000)).toBeUndefined();
+		expect(sessionInputTokenLimit({ maxTokens: 1_000 }, 0)).toBeUndefined();
+	});
+
+	it("keeps the compaction trigger below the admission ceiling for every catalogued model", () => {
+		// Before the fix 1,862 of 1,876 models let the hard gate reject input that
+		// threshold compaction had not reached yet, so the session stayed blocked.
+		const blocked: string[] = [];
+		for (const provider of getProviders()) {
+			for (const model of getModels(provider)) {
+				const ceiling = sessionInputTokenLimit(model, model.contextWindow);
+				const config = compactionHysteresisConfigFor(model.contextWindow, DEFAULT_COMPACTION_SETTINGS, ceiling);
+				if (ceiling !== undefined && config && config.triggerRatio * model.contextWindow > ceiling) {
+					blocked.push(`${provider}/${model.id}`);
+				}
+			}
+		}
+		expect(blocked).toEqual([]);
+	});
+
+	it("fires emergency compaction no later than the admission ceiling for every catalogued model", () => {
+		// A disarmed hysteresis only compacts at the emergency ratio; above the ceiling admission rejects first.
+		const late: string[] = [];
+		for (const provider of getProviders()) {
+			for (const model of getModels(provider)) {
+				const ceiling = sessionInputTokenLimit(model, model.contextWindow);
+				const config = compactionHysteresisConfigFor(model.contextWindow, DEFAULT_COMPACTION_SETTINGS, ceiling);
+				if (ceiling !== undefined && config && config.emergencyRatio > ceiling / model.contextWindow) {
+					late.push(`${provider}/${model.id}`);
+				}
+			}
+		}
+		expect(late).toEqual([]);
+	});
+
+	it("keeps the devin/swe-2 262k override emergency threshold under its reported 219,416 ceiling", () => {
+		// 262,000 window - 16,384 output reserve - 26,200 safety margin.
+		const ceiling = sessionInputTokenLimit({ maxTokens: 16_384 }, 262_000);
+		expect(ceiling).toBe(219_416);
+		const settings = {
+			...DEFAULT_COMPACTION_SETTINGS,
+			reserveTokens: 8192,
+			keepRecentTokens: 10_000,
+			maxUsageRatio: 0.7,
+		};
+		const config = compactionHysteresisConfigFor(262_000, settings, ceiling);
+		expect(config).toBeDefined();
+		expect(config!.emergencyRatio).toBeLessThanOrEqual(219_416 / 262_000);
+		expect(config!.triggerRatio).toBeLessThanOrEqual(config!.emergencyRatio);
+	});
+});
 
 function fixedCounter(input: string): TokenCountResult {
 	return {
@@ -49,6 +114,43 @@ const echoTool = {
 } as AgentTool;
 
 describe("context input admission", () => {
+	it("counts reasoning only for the turn in progress, not for turns a later user message closed", () => {
+		const answered = {
+			role: "assistant",
+			content: [
+				{ type: "thinking", thinking: "r".repeat(40_000) },
+				{ type: "text", text: "done" },
+			],
+			api: "anthropic-messages",
+			provider: "anthropic",
+			model: "test-model",
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop",
+			timestamp: 2,
+		} as AgentMessage;
+		const plain = { ...answered, content: [{ type: "text", text: "done" }] } as AgentMessage;
+		const tokens = (messages: AgentMessage[]) =>
+			estimateContextInputTokens({
+				systemPrompt: "",
+				messages,
+				tools: [],
+				modelId: "test-model",
+				tokenCounter: fixedTokenCounter,
+			}).messageTokens;
+
+		expect(tokens([userMessage("q"), answered, userMessage("next")])).toBe(
+			tokens([userMessage("q"), plain, userMessage("next")]),
+		);
+		expect(tokens([userMessage("q"), answered])).toBeGreaterThan(tokens([userMessage("q"), plain]) + 30_000);
+	});
+
 	it("caps the legacy prompt floor at the physical model limit", () => {
 		expect(
 			computeHardPromptInputLimit({

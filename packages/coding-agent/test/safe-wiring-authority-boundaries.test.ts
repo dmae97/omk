@@ -13,7 +13,9 @@ const claims = [
 beforeEach(() => {
 	vi.spyOn(Date, "now").mockReturnValue(100);
 	root = mkdtempSync(join(tmpdir(), "authority-boundaries-"));
-	store = AuthorityStore.open(authorityStorePath(root), { capacity: 2 });
+	// Drive the store's trusted clock through Date.now so these boundaries can step it; the
+	// production default is monotonic and never observes a wall-clock step.
+	store = AuthorityStore.open(authorityStorePath(root), { capacity: 2, clock: () => Date.now() });
 	store.reconcile();
 	store.register("s");
 });

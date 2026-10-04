@@ -30,6 +30,7 @@
 3d8fcd612a1d2995afdc6182f84588efce4f1808:packages/ai/test/node-proxy-agent.test.ts:private-key:10
 3eacec0b9b833ebdad12b642f660567214b2f17d:packages/ai/test/xai-oauth-effort-strip.test.ts:generic-api-key:28
 407587aa0b8b1c91ee11c2d18ec777bd7a1e1af0:packages/coding-agent/test/aside-evidence.test.ts:generic-api-key:21
+43ee36f8a86d2cec847c1ec054e766c8f95bb8ee:packages/coding-agent/test/goal-verification.test.ts:generic-api-key:157
 52c6c7729d038035b49c4bf42671086dec3b6126:packages/coding-agent/src/cli/claude-trace-cli.ts:private-key:50
 5399752d9d365f3cdb7405fb9b9e13abeafe208e:packages/coding-agent/test/tools/browser-cmux-socket.test.ts:generic-api-key:153
 5399752d9d365f3cdb7405fb9b9e13abeafe208e:packages/coding-agent/test/tools/browser-cmux-socket.test.ts:generic-api-key:196

@@ -27,7 +27,15 @@ beforeEach(() => {
 		writablePaths: ["greeting.txt"],
 		writer: ["/bin/sh", "-c", "printf hello > greeting.txt"],
 		checks: [{ claimId: "greeting", argv: ["/bin/cat", "greeting.txt"], stdout: "hello" }],
-		budget: { workMs: 3000, verifyMs: 3000, cleanupMs: 15000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
+		// Generous: a spawned CLI pays tsx startup under a loaded test host; these cases do not test deadlines.
+		budget: {
+			workMs: 20000,
+			verifyMs: 20000,
+			cleanupMs: 15000,
+			maxOutputBytes: 4096,
+			maxFiles: 100,
+			maxBytes: 65536,
+		},
 		apply: "artifact-only",
 	};
 	contract.workspace.baseDigest = planVerifiedRun(contract).baseDigest;

@@ -33,9 +33,10 @@ host-owned structured state, never as model self-report.
 ## Runtime integration (2026-09-25)
 
 `AgentSession` now creates a host-owned `MetaState` through
-`createMetaRuntime()` and observes it at both the prompt preflight boundary and
-prompt settlement. `metacognitionState` exposes a content-free state snapshot
-and `lastMetacognitionDiagnostic` exposes the latest bounded checkpoint.
+`createAgentSessionMetaRuntime()` and observes it at both the prompt preflight
+boundary and prompt settlement. `session.metacognition.state` exposes a
+content-free state snapshot and `session.metacognition.lastDiagnostic` exposes
+the latest bounded checkpoint.
 Run-budget values are projected into the state without copying prompt text,
 tool output, credentials, or provider responses.
 

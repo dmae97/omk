@@ -22,7 +22,7 @@ The NVIDIA catalog is filtered against NIM's live model IDs and known compatibil
 limits. A historical GLM route is not evidence that NIM still lists it. Use the
 current model selector rather than copying a removed ID from older examples.
 
-The [2026-09-22 catalog refresh](model-catalog-refresh.md) records new models,
+The [2026-09-30 catalog refresh](model-catalog-refresh.md) records new models,
 provider-specific thinking ladders, and verification limits. Model discovery does
 not prove that an account can invoke that model.
 
@@ -233,7 +233,7 @@ Current behavior:
 
 ### Thinking Level Map
 
-Use `thinkingLevelMap` on a model to describe model-specific thinking controls. `models.json` accepts `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`. Built-in metadata can also expose the `ultra` CLI tier (GPT-6 Astra maps it to documented `max`; GPT-5.6 Sol/Terra/MoA on Codex map it to backend `xhigh`), but the current `models.json` schema has no `ultra` key.
+Use `thinkingLevelMap` on a model to describe model-specific thinking controls. `models.json` accepts `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`. Built-in metadata can also expose the `ultra` CLI tier (GPT-6 Astra maps it to documented `max`; GPT-5.6 Sol/Terra/MoA on Codex map it to backend `xhigh`; on Codex, GPT-6.1 Sol and GPT-6 Astra send `xhigh` and GPT-6 Sol sends `max`, the efforts the Codex client sends for `ultra`), but the current `models.json` schema has no `ultra` key.
 
 | Value | Meaning |
 | --- | --- |

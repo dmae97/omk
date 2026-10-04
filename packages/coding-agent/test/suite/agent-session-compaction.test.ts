@@ -9,12 +9,27 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CompactionEnvelope } from "../../src/core/compaction/transaction.ts";
 import { PromptInputCapacityError } from "../../src/core/prompt-budget.ts";
+import type { ExtensionFactory } from "../../src/index.ts";
 import { createHarness, type Harness } from "./harness.ts";
 
 type SessionWithCompactionInternals = {
 	_checkCompaction: (assistantMessage: AssistantMessage, skipAbortedCheck?: boolean) => Promise<boolean>;
+	_checkProjectedCompaction: (...args: unknown[]) => Promise<boolean>;
 	_runAutoCompaction: (reason: "overflow" | "threshold", willRetry: boolean) => Promise<boolean>;
 };
+
+function extensionSummary(summary: string): ExtensionFactory {
+	return (pi) => {
+		pi.on("session_before_compact", async (event) => ({
+			compaction: {
+				summary,
+				firstKeptEntryId: event.preparation.firstKeptEntryId,
+				tokensBefore: event.preparation.tokensBefore,
+				details: {},
+			},
+		}));
+	};
+}
 
 function createUsage(totalTokens: number) {
 	return {
@@ -84,6 +99,28 @@ function seedCompactableSession(harness: Harness): void {
 			totalTokens: 100,
 			timestamp: now - 500,
 		}),
+	);
+	harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+}
+
+/** ~150k tokens of retained history: above the 130k ceiling of a 200k window with a 50k output reserve. */
+function seedAdmissionOverflowHistory(harness: Harness): void {
+	const now = Date.now();
+	harness.sessionManager.appendMessage({
+		role: "user",
+		content: [{ type: "text", text: "x".repeat(600_000) }],
+		timestamp: now - 4000,
+	});
+	harness.sessionManager.appendMessage(
+		createAssistant(harness, { stopReason: "stop", totalTokens: 150_000, timestamp: now - 3000 }),
+	);
+	harness.sessionManager.appendMessage({
+		role: "user",
+		content: [{ type: "text", text: "small follow-up" }],
+		timestamp: now - 2000,
+	});
+	harness.sessionManager.appendMessage(
+		createAssistant(harness, { stopReason: "stop", totalTokens: 150_010, timestamp: now - 1000 }),
 	);
 	harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
 }
@@ -506,42 +543,53 @@ describe("AgentSession compaction characterization", () => {
 		expect(runAutoCompactionSpy).not.toHaveBeenCalled();
 	});
 
-	it("triggers threshold compaction at 90% when reserve boundary is later", async () => {
+	it("triggers threshold compaction at 90% of the admission ceiling when the reserve boundary is later", async () => {
+		// 200k window, 20k output reserve, 10% safety -> admission ceiling 160k -> trigger 144k.
 		const harness = await createHarness({
 			settings: { compaction: { enabled: true, reserveTokens: 1000 } },
-			models: [{ id: "faux-1", contextWindow: 200_000 }],
+			models: [{ id: "faux-1", contextWindow: 200_000, maxTokens: 20_000 }],
 		});
 		harnesses.push(harness);
 		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
 		const runAutoCompactionSpy = vi.spyOn(sessionInternals, "_runAutoCompaction").mockResolvedValue(false);
 
 		await sessionInternals._checkCompaction(
-			createAssistant(harness, { stopReason: "stop", totalTokens: 179_999, timestamp: Date.now() }),
+			createAssistant(harness, { stopReason: "stop", totalTokens: 143_999, timestamp: Date.now() }),
 		);
 		expect(runAutoCompactionSpy).not.toHaveBeenCalled();
 
 		await sessionInternals._checkCompaction(
-			createAssistant(harness, { stopReason: "stop", totalTokens: 180_000, timestamp: Date.now() + 1 }),
+			createAssistant(harness, { stopReason: "stop", totalTokens: 144_000, timestamp: Date.now() + 1 }),
 		);
 		expect(runAutoCompactionSpy).toHaveBeenCalledWith("threshold", false);
 	});
 
-	it("compacts before provider request and rejects retained context above hard input capacity", async () => {
+	it("fires threshold compaction before the admission ceiling on large-output models", async () => {
+		// opencode-go/deepseek-v4.1-flash shape: the admission ceiling is 516k, far below 90% of the window.
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true } },
+			models: [{ id: "big-output", contextWindow: 1_000_000, maxTokens: 384_000 }],
+		});
+		harnesses.push(harness);
+		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
+		const runAutoCompactionSpy = vi.spyOn(sessionInternals, "_runAutoCompaction").mockResolvedValue(false);
+
+		await sessionInternals._checkCompaction(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 400_000, timestamp: Date.now() }),
+		);
+		expect(runAutoCompactionSpy).not.toHaveBeenCalled();
+
+		await sessionInternals._checkCompaction(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 470_000, timestamp: Date.now() + 1 }),
+		);
+		expect(runAutoCompactionSpy).toHaveBeenCalledWith("threshold", false);
+	});
+
+	it("compacts before provider request and admits the compacted context", async () => {
 		const harness = await createHarness({
 			settings: { compaction: { enabled: true, reserveTokens: 1000, keepRecentTokens: 1 } },
 			models: [{ id: "faux-1", contextWindow: 200_000 }],
-			extensionFactories: [
-				(pi) => {
-					pi.on("session_before_compact", async (event) => ({
-						compaction: {
-							summary: "projected compacted",
-							firstKeptEntryId: event.preparation.firstKeptEntryId,
-							tokensBefore: event.preparation.tokensBefore,
-							details: {},
-						},
-					}));
-				},
-			],
+			extensionFactories: [extensionSummary("projected compacted")],
 		});
 		harnesses.push(harness);
 		const nearLimitAssistant = createAssistant(harness, {
@@ -560,11 +608,275 @@ describe("AgentSession compaction characterization", () => {
 
 		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
 
-		await expect(harness.session.prompt("x".repeat(80))).rejects.toBeInstanceOf(PromptInputCapacityError);
+		// Pre-compaction usage must not keep blocking the prompt once the history is compacted.
+		await expect(harness.session.prompt("x".repeat(80))).resolves.toBeUndefined();
 
 		const compactionEntries = harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction");
 		expect(compactionEntries).toHaveLength(1);
 		expect(compactionEntries[0]).toMatchObject({ summary: "projected compacted" });
+		expect(harness.faux.state.callCount).toBe(1);
+	});
+
+	it("recovers from an admission overflow by compacting and sending the prompt", async () => {
+		// 200k window, 50k output reserve -> admission ceiling 130k. The history holds ~150k tokens.
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, keepRecentTokens: 1 } },
+			models: [{ id: "admission-window", contextWindow: 200_000, maxTokens: 50_000 }],
+			extensionFactories: [extensionSummary("admission compacted")],
+		});
+		harnesses.push(harness);
+		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
+		// Isolate the admission path: neither pre-prompt compaction check may be what saves the turn.
+		vi.spyOn(sessionInternals, "_checkCompaction").mockResolvedValue(false);
+		vi.spyOn(sessionInternals, "_checkProjectedCompaction").mockResolvedValue(false);
+		seedAdmissionOverflowHistory(harness);
+		harness.setResponses([fauxAssistantMessage("answered after admission compaction")]);
+
+		await expect(harness.session.prompt("continue")).resolves.toBeUndefined();
+
+		const compactionEntries = harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction");
+		expect(compactionEntries).toHaveLength(1);
+		expect(compactionEntries[0]).toMatchObject({ summary: "admission compacted" });
+		expect(harness.faux.state.callCount).toBe(1);
+	});
+
+	it("still rejects when the pending input alone exceeds hard input capacity", async () => {
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, keepRecentTokens: 1 } },
+			models: [{ id: "admission-window", contextWindow: 200_000, maxTokens: 50_000 }],
+			extensionFactories: [extensionSummary("cannot help")],
+		});
+		harnesses.push(harness);
+		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
+		vi.spyOn(sessionInternals, "_checkProjectedCompaction").mockResolvedValue(false);
+		seedCompactableSession(harness);
+		harness.setResponses([]);
+
+		const prompted = harness.session.prompt("y".repeat(800_000));
+		await expect(prompted).rejects.toBeInstanceOf(PromptInputCapacityError);
+		// The rejection names the overhead compaction cannot shrink, so the cause is actionable.
+		await expect(prompted).rejects.toThrow(
+			/cannot shrink the system prompt \(\d+ tokens\), tool schemas \(\d+\) or latest input \(\d+\)/,
+		);
+
+		// Compaction cannot shrink the pending turn, so history is left intact and nothing is sent.
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
+		expect(harness.faux.state.callCount).toBe(0);
+	});
+
+	it("admits the reported opencode-go/deepseek-v4.1-flash overflow through prompt() by compacting first", async () => {
+		// Reported: estimated=627823 > limit=516000 while threshold compaction still waited for 900k.
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, keepRecentTokens: 1 } },
+			models: [{ id: "deepseek-v4.1-flash", contextWindow: 1_000_000, maxTokens: 384_000 }],
+			extensionFactories: [extensionSummary("deepseek compacted")],
+		});
+		harnesses.push(harness);
+		// A long earlier turn, then a small latest turn that compaction keeps verbatim.
+		const now = Date.now();
+		harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "x".repeat(2_400_000) }],
+			timestamp: now - 4000,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 600_000, timestamp: now - 3000 }),
+		);
+		harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "small follow-up" }],
+			timestamp: now - 2000,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 627_823, timestamp: now - 1000 }),
+		);
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+		harness.setResponses([fauxAssistantMessage("answered after compaction")]);
+
+		await expect(harness.session.prompt("continue")).resolves.toBeUndefined();
+
+		const compactionEntries = harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction");
+		expect(compactionEntries).toHaveLength(1);
+		expect(compactionEntries[0]).toMatchObject({ summary: "deepseek compacted" });
+		expect(harness.faux.state.callCount).toBe(1);
+	});
+
+	it("reports the committed compaction when admission still fails after compacting", async () => {
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, keepRecentTokens: 1 } },
+			models: [{ id: "admission-window", contextWindow: 200_000, maxTokens: 50_000 }],
+			extensionFactories: [extensionSummary("earlier turn summarized")],
+		});
+		harnesses.push(harness);
+		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
+		vi.spyOn(sessionInternals, "_checkCompaction").mockResolvedValue(false);
+		vi.spyOn(sessionInternals, "_checkProjectedCompaction").mockResolvedValue(false);
+		// The ~150k-token latest turn is kept verbatim: compaction commits but cannot get under 130k.
+		const now = Date.now();
+		harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "earlier question" }],
+			timestamp: now - 4000,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 1_000, timestamp: now - 3000 }),
+		);
+		harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "x".repeat(600_000) }],
+			timestamp: now - 2000,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 150_010, timestamp: now - 1000 }),
+		);
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+		harness.setResponses([]);
+
+		const prompted = harness.session.prompt("continue");
+
+		await expect(prompted).rejects.toBeInstanceOf(PromptInputCapacityError);
+		await expect(prompted).rejects.toThrow(/after automatic compaction/);
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(1);
+		// The provider was never called: this is compaction falling short, not a provider overflow.
+		expect(harness.session.lastTermination).toMatchObject({
+			causeCode: "compaction.failed",
+			sideEffects: "confirmed",
+		});
+		expect(harness.session.lastTermination?.nextAction).toContain("Shorten the latest input");
+		expect(harness.faux.state.callCount).toBe(0);
+	});
+
+	it("re-compacts the retained tail when the latest entry is already a compaction and admission still overflows", async () => {
+		// Reported devin/swe-2 wedge: a committed compaction kept history that still overflows the
+		// ceiling, and admission recovery refused to compact again, so every prompt was rejected.
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, keepRecentTokens: 100_000 } },
+			models: [{ id: "admission-window", contextWindow: 200_000, maxTokens: 50_000 }],
+			extensionFactories: [extensionSummary("retained tail recompacted")],
+		});
+		harnesses.push(harness);
+		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
+		vi.spyOn(sessionInternals, "_checkCompaction").mockResolvedValue(false);
+		vi.spyOn(sessionInternals, "_checkProjectedCompaction").mockResolvedValue(false);
+		const now = Date.now();
+		const keptTurnId = harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "x".repeat(600_000) }],
+			timestamp: now - 5000,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 150_000, timestamp: now - 4000 }),
+		);
+		const recentTurnId = harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "y".repeat(40_000) }],
+			timestamp: now - 3000,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 160_000, timestamp: now - 2000 }),
+		);
+		harness.sessionManager.appendCompaction("earlier summary", keptTurnId, 160_000);
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+		harness.setResponses([fauxAssistantMessage("answered after re-compaction")]);
+
+		await expect(harness.session.prompt("continue")).resolves.toBeUndefined();
+
+		const compactionEntries = harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction");
+		expect(compactionEntries).toHaveLength(2);
+		expect(compactionEntries[1]).toMatchObject({
+			summary: "retained tail recompacted",
+			firstKeptEntryId: recentTurnId,
+		});
+		expect(harness.faux.state.callCount).toBe(1);
+	});
+
+	it("admits a new turn whose finished turn's reasoning inflated the reported usage past the ceiling", async () => {
+		// Usage reported during the finished turn counts reasoning the provider drops at the next
+		// user message, so admission must not reject (or compact) on it.
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, keepRecentTokens: 1 } },
+			models: [{ id: "admission-window", contextWindow: 200_000, maxTokens: 50_000 }],
+			extensionFactories: [extensionSummary("must not run")],
+		});
+		harnesses.push(harness);
+		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
+		vi.spyOn(sessionInternals, "_checkCompaction").mockResolvedValue(false);
+		vi.spyOn(sessionInternals, "_checkProjectedCompaction").mockResolvedValue(false);
+		const now = Date.now();
+		const withReasoning = (usage: { input: number; output: number }, timestamp: number): AssistantMessage => {
+			const message = createAssistant(harness, { stopReason: "stop", timestamp });
+			message.content = [{ type: "thinking", thinking: "r".repeat(200_000) }, ...message.content];
+			message.usage = { ...createUsage(usage.input + usage.output), ...usage };
+			return message;
+		};
+		harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "question" }],
+			timestamp: now - 3000,
+		});
+		harness.sessionManager.appendMessage(withReasoning({ input: 20_000, output: 60_000 }, now - 2000));
+		harness.sessionManager.appendMessage(withReasoning({ input: 80_000, output: 60_000 }, now - 1000));
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+		harness.setResponses([fauxAssistantMessage("answered without compaction")]);
+
+		await expect(harness.session.prompt("continue")).resolves.toBeUndefined();
+
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
+		expect(harness.faux.state.callCount).toBe(1);
+	});
+
+	it("re-cuts the retained tail when /compact is repeated right after a compaction", async () => {
+		// Reported: /compact after an automatic compaction answered "Already compacted" although the
+		// kept tail could still shrink, so an over-limit session had no manual way forward.
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, keepRecentTokens: 100_000 } },
+			extensionFactories: [extensionSummary("manual tail recompacted")],
+		});
+		harnesses.push(harness);
+		const now = Date.now();
+		const keptTurnId = harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "x".repeat(600_000) }],
+			timestamp: now - 5000,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 150_000, timestamp: now - 4000 }),
+		);
+		const recentTurnId = harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "y".repeat(40_000) }],
+			timestamp: now - 3000,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 160_000, timestamp: now - 2000 }),
+		);
+		harness.sessionManager.appendCompaction("earlier summary", keptTurnId, 160_000);
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+
+		await expect(harness.session.compact()).resolves.toMatchObject({
+			summary: "manual tail recompacted",
+			firstKeptEntryId: recentTurnId,
+		});
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(2);
+	});
+
+	it("does not compact on admission failure when auto-compaction is disabled", async () => {
+		const harness = await createHarness({
+			settings: { compaction: { enabled: false, keepRecentTokens: 1 } },
+			models: [{ id: "admission-window", contextWindow: 200_000, maxTokens: 50_000 }],
+			extensionFactories: [extensionSummary("must not run")],
+		});
+		harnesses.push(harness);
+		seedAdmissionOverflowHistory(harness);
+		harness.setResponses([]);
+
+		await expect(harness.session.prompt("continue")).rejects.toBeInstanceOf(PromptInputCapacityError);
+
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
+		expect(harness.session.lastTermination).toMatchObject({
+			causeCode: "provider.context_overflow",
+			sideEffects: "none",
+		});
 		expect(harness.faux.state.callCount).toBe(0);
 	});
 

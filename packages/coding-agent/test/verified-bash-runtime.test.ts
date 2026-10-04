@@ -3,7 +3,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { isVerifiedBashEnabled, resolveSessionWorkspaceScope } from "../src/core/verified-bash-runtime.ts";
+import {
+	isVerifiedBashEnabled,
+	resolveSessionWorkspaceScope,
+	resolveSessionWorkspaceScopeReport,
+} from "../src/core/verified-bash-runtime.ts";
 import { captureWorkspaceFingerprint } from "../src/guardrails/workspace-fingerprint.ts";
 
 describe("isVerifiedBashEnabled", () => {
@@ -91,6 +95,22 @@ describe("resolveSessionWorkspaceScope", () => {
 		expect(scope.artifactPaths).toEqual(["untracked.txt"]);
 		expect(() => captureWorkspaceFingerprint(scope)).not.toThrow();
 		expect(captureWorkspaceFingerprint(scope).kind).toBe("git");
+	});
+
+	it("reads the one-second scope cache unless a fresh scope is requested", () => {
+		execFileSync("git", ["init", "-q"], { cwd: root });
+		execFileSync("git", ["config", "user.email", "scope@test.invalid"], { cwd: root });
+		execFileSync("git", ["config", "user.name", "scope"], { cwd: root });
+		writeFileSync(join(root, "tracked.txt"), "v1\n");
+		execFileSync("git", ["add", "."], { cwd: root });
+		execFileSync("git", ["commit", "-qm", "init"], { cwd: root });
+
+		expect(resolveSessionWorkspaceScopeReport(root, { maxPaths: 7 }).scope.artifactPaths).toEqual([]);
+		writeFileSync(join(root, "late.txt"), "new\n");
+		expect(resolveSessionWorkspaceScopeReport(root, { maxPaths: 7 }).scope.artifactPaths).toEqual([]);
+		expect(resolveSessionWorkspaceScopeReport(root, { maxPaths: 7, fresh: true }).scope.artifactPaths).toEqual([
+			"late.txt",
+		]);
 	});
 
 	it("skips untracked nested repositories (trailing-slash survivors)", () => {

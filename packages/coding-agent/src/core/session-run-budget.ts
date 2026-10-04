@@ -83,6 +83,7 @@ export class SessionRunBudget {
 		limits: RunBudgetLimits | undefined,
 		operation: () => Promise<void>,
 		preflightResult?: (accepted: boolean) => void,
+		closedByCommand?: () => boolean,
 	): Promise<void> {
 		let ownsScope = false;
 		let finishExecution: (() => void) | undefined;
@@ -125,7 +126,8 @@ export class SessionRunBudget {
 			scopedBudget.assertAdmission();
 			entered = true;
 			await this.executionContext.run(scopedBudget, operation);
-			budget?.assertActive();
+			// A registered command may have completed by replacing its session. Real exhaustion still fails.
+			if (budget?.failure || !closedByCommand?.()) budget?.assertActive();
 		} catch (error) {
 			if (!entered) {
 				preflightResult?.(false);

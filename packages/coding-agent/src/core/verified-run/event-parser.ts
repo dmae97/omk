@@ -178,6 +178,9 @@ export function parseRunEvent(raw: unknown): RunEvent {
 			return { kind: value.kind, commandId: text(value.commandId), code: text(value.code) };
 		case "failed":
 			return { kind: value.kind, code: text(value.code) };
+		case "interrupted":
+			if (value.cause !== "cancelled") throw new VerifiedRunError("integrity");
+			return { kind: value.kind, cause: value.cause };
 		default:
 			throw new VerifiedRunError("integrity");
 	}

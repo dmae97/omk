@@ -78,9 +78,10 @@ describe("regression #8724: in-memory fork during an active tool turn", () => {
 		expect(firstUserEntryId).toBeDefined();
 
 		const outgoingPrompt = runtime.session.prompt("start blocking tool");
+		const closedPrompt = expect(outgoingPrompt).rejects.toMatchObject({ code: "closed" });
 		await toolStarted;
 		const forkResult = await runtime.fork(firstUserEntryId!);
-		await outgoingPrompt;
+		await closedPrompt;
 		await runtime.session.bindExtensions({});
 
 		expect(forkResult).toEqual({ cancelled: false, selectedText: "first prompt" });

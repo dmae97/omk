@@ -435,6 +435,9 @@ describe("compaction runtime transaction integration", () => {
 					emergencyRatio: 0.95,
 				},
 			},
+			// The model's own output reserve matches the configured one, so the admission ceiling (800)
+			// minus the incoming tool/image reserves and the window reserve boundary both put the trigger at 600.
+			models: [{ id: "reserve-window", contextWindow: 1000, maxTokens: 100 }],
 		});
 		harnesses.push(harness);
 		const runtime = harness.session as unknown as AutoCompactionRuntime;
@@ -449,15 +452,7 @@ describe("compaction runtime transaction integration", () => {
 			emergency: false,
 		});
 		runtime._recordCompactionCommitForHysteresis();
-		// Disarmed and below the trigger: still waits.
-		expect(runtime._runtimeCompactionDecision(500, 1000, settings).compact).toBe(false);
-		// The emergency branch is clamped below the admission capacity (0.70 of this
-		// 1000-token window), so a ratio the gate would refuse compacts even while
-		// the hysteresis is disarmed.
-		expect(runtime._runtimeCompactionDecision(700, 1000, settings)).toEqual({
-			compact: true,
-			emergency: true,
-		});
+		expect(runtime._runtimeCompactionDecision(700, 1000, settings).compact).toBe(false);
 		expect(runtime._runtimeCompactionDecision(950, 1000, settings)).toEqual({
 			compact: true,
 			emergency: true,

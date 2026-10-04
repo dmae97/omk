@@ -139,7 +139,7 @@ import { BorderedLoader } from "./components/bordered-loader.ts";
 import { BranchSummaryMessageComponent } from "./components/branch-summary-message.ts";
 import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.ts";
 import { ControlPanelComponent, ControlPanelRightPaneComponent } from "./components/control-panel.ts";
-import { CONTROL_PANEL_OVERLAY_MIN_WIDTH, CONTROL_PANEL_SIDEBAR_WIDTH } from "./components/control-panel-layout.ts";
+import { CONTROL_PANEL_SIDEBAR_WIDTH } from "./components/control-panel-layout.ts";
 import { createControlPanelStatusSnapshot } from "./components/control-panel-runtime-status.ts";
 import { CountdownTimer } from "./components/countdown-timer.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
@@ -161,16 +161,12 @@ import { SessionFailureComponent } from "./components/session-failure.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent, ThinkingSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
-import {
-	STATUS_SIDEBAR_GUTTER_GAP,
-	STATUS_SIDEBAR_MIN_WIDTH,
-	StatusSidebarComponent,
-	statusSidebarWidth,
-} from "./components/status-sidebar.ts";
+import { STATUS_SIDEBAR_GUTTER_GAP, StatusSidebarComponent, statusSidebarWidth } from "./components/status-sidebar.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
+import { pinnedRailNotice, railFits } from "./layout-class.ts";
 import { formatResourceDescription } from "./resource-description.ts";
 import {
 	getAvailableThemes,
@@ -808,7 +804,6 @@ export class InteractiveMode {
 				requestRender: () => this.ui.requestRender(),
 				isTTY: () => process.stdout.isTTY === true,
 				isReducedMotion: () => process.env.OMK_REDUCED_MOTION === "1" || process.env.OMK_REDUCE_MOTION === "1",
-				isIdleDriftEnabled: () => process.env.OMK_CONTROL_IDLE_DRIFT !== "0",
 				isHeaderVisibleHint: () => this.customHeader === undefined,
 				getRenderWidth: () => this.ui.contentWidth,
 			});
@@ -823,8 +818,7 @@ export class InteractiveMode {
 					this.customHeader === undefined &&
 					this.toolOutputExpanded &&
 					!this.statusSidebarPinned &&
-					termWidth >= CONTROL_PANEL_OVERLAY_MIN_WIDTH &&
-					termHeight >= 12,
+					railFits(termWidth, termHeight),
 			});
 
 			// Setup UI layout
@@ -1402,7 +1396,7 @@ export class InteractiveMode {
 		const lines: string[] = [];
 
 		for (const group of groups) {
-			lines.push(`  ${theme.fg("accent", group.scope)}`);
+			lines.push(`  ${theme.fg("muted", group.scope)}`);
 
 			const sortedPaths = [...group.paths].sort((a, b) => a.path.localeCompare(b.path));
 			for (const item of sortedPaths) {
@@ -2194,7 +2188,7 @@ export class InteractiveMode {
 
 	/** The pinned rail is only shown (and its gutter reserved) when the terminal is large enough. */
 	private isStatusSidebarVisible(termWidth: number, termHeight: number): boolean {
-		return this.statusSidebarPinned && termWidth >= STATUS_SIDEBAR_MIN_WIDTH && termHeight >= 16;
+		return this.statusSidebarPinned && railFits(termWidth, termHeight);
 	}
 
 	/**
@@ -2204,6 +2198,11 @@ export class InteractiveMode {
 		this.statusSidebarPinned = !this.statusSidebarPinned;
 		// The footer slot and the right gutter both key off isStatusSidebarVisible,
 		// so flipping the flag is enough — no child add/remove bookkeeping.
+		// Pinning on a terminal too small for the rail would otherwise change nothing visible.
+		if (this.statusSidebarPinned) {
+			const notice = pinnedRailNotice(this.ui.terminal.columns, this.ui.terminal.rows);
+			if (notice) this.showStatus(notice);
+		}
 		this.ui.requestRender();
 	}
 

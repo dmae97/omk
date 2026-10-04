@@ -1,5 +1,6 @@
 import type { AgentMessage, AgentTool } from "omk-agent-core";
 import { estimateTokens } from "./compaction/compaction.ts";
+import { dropClosedTurnReasoning } from "./compaction/reasoning-drop.ts";
 import type { ContextBudgetTokenizerMode, TokenCounterAdapter } from "./context-budget-token-counter.ts";
 import { canonicalizeMessagesForContextAdmission, convertToLlm } from "./messages.ts";
 import { serializePromptToolSchemas } from "./prompt-tool-projection.ts";
@@ -201,7 +202,7 @@ export function computeHardPromptInputLimit(input: HardPromptInputLimitInput): H
 export function estimateContextInputTokens(input: ContextInputEstimateInput): ContextInputTokenEstimate {
 	if (input.projectedUsageTokens !== undefined)
 		assertNonNegativeSafeInteger(input.projectedUsageTokens, "projectedUsageTokens");
-	const messages = convertToLlm([...input.messages]);
+	const messages = dropClosedTurnReasoning(convertToLlm([...input.messages]));
 	const canonical = canonicalizeMessagesForContextAdmission(messages);
 	const systemPromptTokens = countText(input.tokenCounter, input.systemPrompt, input.modelId);
 	const heuristicMessageTokens = messages.reduce((sum, message) => sum + estimateTokens(message as AgentMessage), 0);

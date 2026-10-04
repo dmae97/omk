@@ -19,8 +19,12 @@ function nonnegative(value: unknown): value is number {
 }
 
 /** Bounds are per process attempt, including ignored events and incomplete lines. */
-export function createSubagentStream(result: SingleResult, onMessage: () => void) {
+export function createSubagentStream(result: SingleResult, onMessage?: () => void, signal?: AbortSignal) {
 	let pending = "";
+	let pendingBytes = 0;
+	let finished = false;
+	let preview = "";
+	let lastProgressAt = Number.NEGATIVE_INFINITY;
 	let terminal = false;
 	let assistantSeen = false;
 	const stdoutHash = createHash("sha256");
@@ -44,7 +48,24 @@ export function createSubagentStream(result: SingleResult, onMessage: () => void
 		if (event.type === "prompt_settled") {
 			if (terminal) fail("subagent.stream.duplicate_terminal");
 			terminal = true;
+			delete result.progress;
 			if (event.outcome !== "completed") fail("subagent.stream.prompt_not_completed");
+			return;
+		}
+		if (event.type === "message_update") {
+			if (terminal) fail("subagent.stream.message_after_terminal");
+			const update = event.assistantMessageEvent;
+			if (!record(update)) return fail("subagent.stream.invalid_delta");
+			if (update.type !== "text_delta") return;
+			if (typeof update.delta !== "string") return fail("subagent.stream.invalid_delta");
+			if (!onMessage || signal?.aborted || update.delta.length === 0) return;
+			preview = (preview + update.delta).slice(-4096);
+			result.progress = { text: preview, sequence: stats.events };
+			const now = performance.now();
+			if (now - lastProgressAt >= 100) {
+				lastProgressAt = now;
+				onMessage();
+			}
 			return;
 		}
 		if (event.type !== "message_end" && event.type !== "tool_result_end") return;
@@ -108,10 +129,14 @@ export function createSubagentStream(result: SingleResult, onMessage: () => void
 			if (msg.stopReason) result.stopReason = msg.stopReason;
 			if (msg.errorMessage) result.errorMessage = msg.errorMessage;
 		}
-		onMessage();
+		preview = "";
+		delete result.progress;
+		lastProgressAt = Number.NEGATIVE_INFINITY;
+		if (!signal?.aborted) onMessage?.();
 	};
 	return {
 		stdout(chunk: string) {
+			if (finished) throw new Error("subagent.stream.closed");
 			if (failure) throw new Error(failure);
 			stats.stdoutBytes += Buffer.byteLength(chunk, "utf8");
 			stdoutHash.update(chunk);
@@ -120,20 +145,19 @@ export function createSubagentStream(result: SingleResult, onMessage: () => void
 			while (start < chunk.length) {
 				const newline = chunk.indexOf("\n", start);
 				const fragment = chunk.slice(start, newline < 0 ? undefined : newline);
-				if (
-					Buffer.byteLength(pending, "utf8") + Buffer.byteLength(fragment, "utf8") >
-					SUBAGENT_OUTPUT_LIMITS.lineBytes
-				)
-					fail("subagent.output.line_limit");
+				pendingBytes += Buffer.byteLength(fragment, "utf8");
+				if (pendingBytes > SUBAGENT_OUTPUT_LIMITS.lineBytes) fail("subagent.output.line_limit");
 				pending += fragment;
 				if (newline < 0) break;
 				const line = pending;
 				pending = "";
+				pendingBytes = 0;
 				processLine(line);
 				start = newline + 1;
 			}
 		},
 		stderr(chunk: string) {
+			if (finished) throw new Error("subagent.stream.closed");
 			if (failure) throw new Error(failure);
 			stats.stderrBytes += Buffer.byteLength(chunk, "utf8");
 			stderrHash.update(chunk);
@@ -141,13 +165,18 @@ export function createSubagentStream(result: SingleResult, onMessage: () => void
 			result.stderr += chunk;
 		},
 		finish(requireReceipt: boolean) {
+			if (finished) return failure;
 			try {
 				if (!failure && pending.trim()) processLine(pending);
 				if (!failure && requireReceipt && !assistantSeen) fail("subagent.stream.missing_terminal_message");
 			} catch {
 				failure ??= "subagent.stream.callback_error";
 			} finally {
+				finished = true;
 				pending = "";
+				pendingBytes = 0;
+				preview = "";
+				delete result.progress;
 				result.stream = {
 					...stats,
 					stdoutDigest: stdoutHash.digest("hex"),

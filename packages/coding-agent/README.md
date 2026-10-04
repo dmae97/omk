@@ -47,7 +47,7 @@ OMK stores user configuration under `~/.omk/agent/` and project configuration un
 Install `omk-book-to-skill` to compile documents into reusable skills without adding Python extractors to OMK core:
 
 ```bash
-omk install npm:omk-book-to-skill@1.2.4
+omk install npm:omk-book-to-skill@1.3.0
 ```
 
 It provides compile, update, and verification commands plus a local SHA-256 provenance manifest. See [Book to Skill](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/book-to-skill.md).
@@ -94,7 +94,7 @@ Type `/` in the editor to open command completion.
 | `/session` | Show session path, messages, tokens, and cost |
 | `/resource [probe\|policy]` | Show resource pressure and effective concurrency for this run |
 | `/debug [save]` | Preview runtime diagnostics or explicitly save a metadata-only local report |
-| `/goal [objective]` | Show or set the durable goal; supports `checkpoint <json>`, `pause`, `resume`, evidence-gated `complete`, and `clear` |
+| `/goal [objective]` | Show or set the durable goal; `verify <command>` approves an acceptance check that must pass before `complete`; supports `checkpoint <json>`, `pause`, `resume`, and `clear` |
 | `/tree` | Navigate the current session tree |
 | `/fork` | Create a new fork from a previous user message |
 | `/clone` | Duplicate the current session at the current position |
@@ -113,7 +113,7 @@ Type `/` in the editor to open command completion.
 
 ### Default Harness Safeguards
 
-OMK warns from the third repeated identical tool call and blocks the sixth. It also repairs unmatched tool pairs before provider requests and adds guidance for supported Kimi, GLM, and Grok models. `OMK_IDENTICAL_LOOP`, `OMK_TOOL_PAIR_REPAIR`, and `OMK_PROMPT_PRESET` opt out; `OMK_GOAL_CONTROLLER` controls `/goal` and continuation.
+OMK warns from the third repeated identical tool call and blocks the sixth. It also repairs unmatched tool pairs before provider requests and adds guidance for supported Kimi, GLM, and Grok models. `OMK_IDENTICAL_LOOP`, `OMK_TOOL_PAIR_REPAIR`, and `OMK_PROMPT_PRESET` opt out; `OMK_GOAL_CONTROLLER` controls `/goal` and continuation. An active goal continues after each settled turn; with an approved acceptance check it completes when the check passes on the current workspace. See [acceptance checks](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/run-protocol.md#acceptance-checks).
 
 See [Usage](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/usage.md) and [Keybindings](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/keybindings.md) for the complete interactive reference.
 
@@ -258,7 +258,7 @@ npm test
 
 See [Development](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/development.md) and [CONTRIBUTING.md](https://github.com/dmae97/omk/blob/main/CONTRIBUTING.md).
 
-Release notes: [v1.2.4](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v1.2.4.md).
+Release notes: [v1.3.0](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v1.3.0.md).
 
 ## License
 

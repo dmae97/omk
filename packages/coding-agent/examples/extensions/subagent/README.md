@@ -17,6 +17,7 @@ Delegate tasks to specialized subagents with isolated context windows.
 - **Checkpoint resume**: A cutoff resumes only the unfinished shard with bounded prior evidence
 - **Cutoff learning**: Completion/cutoff history is persisted per provider and model under the agent state directory
 - **Bounded cost**: At most 3 semantic shards and 1 resume across the whole logical task by default
+- **Attempt receipts**: Bounded execution preserves the final attempt identity, process settlement, and stream digest/limits; usage and output remain cumulative across attempts
 - **Ultra execution**: Removes task-count, concurrency, internal deadline, and outer tool-timeout caps; Ctrl+C cancellation still propagates
 
 ## Structure
@@ -26,12 +27,20 @@ subagent/
 ├── README.md            # This file
 ├── index.ts                    # The extension entry point
 ├── adaptive-agent-runtime.ts   # Shard/checkpoint/resume coordinator
+├── adaptive-result.ts          # Attempt merge: cumulative usage/output, latest-attempt receipts
 ├── checkpoint-runtime.ts       # Bounded checkpoint protocol
 ├── deadline-budget.ts          # Token + wall-clock planning and cutoff learning
 ├── deadline-profile-store.ts   # Persistent provider/model profiles
 ├── managed-process.ts          # Process-tree termination and cleanup
+├── managed-process-tree.ts     # Process-group observation and signalling
+├── subagent-stream.ts          # Bounded JSONL output parser and stream receipt
 ├── subagent-runtime-types.ts   # Typed result/deadline metadata
+├── graph-result.ts             # Graph-mode result helpers and display projection
+├── workflow-graph.ts           # Task-graph planning and validation
 ├── agents.ts                   # Agent discovery logic
+├── agent-capability-router.ts  # Deterministic agent → capability routing
+├── capabilities.ts             # Agent skill/MCP/hook declaration validation
+├── domain-profiles.ts          # Domain profiles for the capability router
 ├── agents/              # Sample agent definitions
 │   ├── scout.md         # Fast recon, returns compressed context
 │   ├── planner.md       # Creates implementation plans
@@ -53,7 +62,8 @@ mkdir -p ~/.omk/agent/extensions/subagent
 src="$(pwd)/packages/coding-agent/examples/extensions/subagent"
 for f in index.ts agents.ts agent-capability-router.ts capabilities.ts domain-profiles.ts \
   adaptive-agent-runtime.ts adaptive-result.ts checkpoint-runtime.ts deadline-budget.ts \
-  deadline-profile-store.ts managed-process.ts subagent-runtime-types.ts workflow-graph.ts; do
+  deadline-profile-store.ts managed-process.ts managed-process-tree.ts subagent-runtime-types.ts \
+  subagent-stream.ts graph-result.ts workflow-graph.ts; do
   ln -sf "$src/$f" ~/.omk/agent/extensions/subagent/$f
 done
 
@@ -85,21 +95,25 @@ When running interactively, the tool prompts for confirmation before running pro
 ## Usage
 
 ### Single agent
+
 ```
 Use scout to find all authentication code
 ```
 
 ### Parallel execution
+
 ```
 Run 2 scouts in parallel: one to find models, one to find providers
 ```
 
 ### Chained workflow
+
 ```
 Use a chain: first have scout find the read tool, then have planner suggest improvements
 ```
 
 ### Workflow prompts
+
 ```
 /implement add Redis caching to the session store
 /scout-and-plan refactor auth to support OAuth
@@ -125,6 +139,18 @@ Optional execution controls:
 | `maxResumeAttempts` | `1` | Retries only the active unfinished shard; accepted range is 0-2 and ignored by unbounded Ultra execution |
 
 ## Output Display
+
+Graph mode forwards progress in both the session-governed and legacy paths,
+including non-Ultra adaptive attempts. The first text delta is shown immediately;
+later deltas are coalesced on arrival at a 100 ms interval, without a timer queue.
+The latest node preview retains at most 4,096 UTF-16 code units. Completed
+messages still update immediately. Previews are not receipts, checkpoint text,
+dependency outputs, or completed nodes. Abort suppresses later display callbacks;
+final results still require the existing stream and process-settlement checks.
+Partial rendering preserves supplied sibling rows and tool-call summaries,
+with separate running/completed/failed icons. It shows up to five recent blocks
+per row and caps each text block at 4,096 code units; full receipts are unchanged.
+See [Lifecycle and progress hardening](../../../docs/runtime-algorithms.md#cd-lifecycle-and-progress-hardening-2026-09-30).
 
 **Collapsed view** (default):
 - Status icon (✓/✗/⏳) and agent name

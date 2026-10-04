@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fullTextTokens } from "../src/core/context-budget-headroom-types.ts";
 import { createOpenAiJsTokenCounter, createTokenCounterRegistry } from "../src/core/context-budget-token-counter.ts";
 import { createPlannedItems } from "../src/core/context-budget-v2-planned-items.ts";
@@ -30,25 +30,30 @@ function planned(overrides: Partial<PlannedItemV2> & { id: string }): PlannedIte
 
 describe("non-finite token counts cannot corrupt selection", () => {
 	describe("token counter boundary", () => {
-		// A tokenizer module whose encode() returns a shape with no numeric length.
+		const encode = vi.fn(() => ({ length: Number.NaN }));
 		const brokenLoader = {
 			resolve: (specifier: string) => (specifier === "gpt-tokenizer" ? specifier : undefined),
-			load: () => ({ encode: () => ({}) }),
+			load: () => ({ encode }),
 		};
 
 		it("rejects a non-finite count instead of returning it", () => {
-			const counter = createOpenAiJsTokenCounter(brokenLoader as never);
-			expect(() => counter.countText("hello", "gpt-4o")).toThrow(/non-finite token count/);
+			encode.mockClear();
+			const counter = createOpenAiJsTokenCounter(brokenLoader);
+			expect(counter.isAvailable()).toBe(true);
+			expect(() => counter.countText("hello", "gpt-4o")).toThrow("tokenizer.no_supported_module");
+			expect(encode).toHaveBeenCalledWith("hello");
 		});
 
 		it("degrades to the heuristic estimator and records why", () => {
-			const registry = createTokenCounterRegistry({ adapters: [createOpenAiJsTokenCounter(brokenLoader as never)] });
+			const adapter = createOpenAiJsTokenCounter(brokenLoader);
+			const registry = createTokenCounterRegistry({ adapters: [adapter] });
 			const result = registry.countText("hello world", "gpt-4o");
 
 			expect(Number.isFinite(result.tokens)).toBe(true);
 			expect(result.tokens).toBeGreaterThan(0);
-			// The failure has to stay visible; a silent fallback is how this got shipped.
-			expect(result.notes.some((note) => note.includes("failed") && note.includes("non-finite"))).toBe(true);
+			// The adapter identity survives, but arbitrary plugin error text must not leak.
+			expect(result.notes).toContain(`${adapter.id}:failed`);
+			expect(result.method).toBe("estimated");
 		});
 
 		it("still uses a healthy tokenizer normally", () => {

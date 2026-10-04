@@ -76,14 +76,16 @@ export function resolveSessionWorkspaceScope(cwd: string, options?: { maxPaths?:
  *
  * Cached per `(cwd, maxPaths)` for {@link SCOPE_TTL_MS}: keying the cap in too
  * keeps a capped probe from serving a later full request a truncated answer.
+ * `fresh` skips the cached read, for a caller comparing the scope against state
+ * captured moments earlier.
  */
 export function resolveSessionWorkspaceScopeReport(
 	cwd: string,
-	options?: { maxPaths?: number },
+	options?: { readonly maxPaths?: number; readonly fresh?: boolean },
 ): SessionWorkspaceScopeReport {
 	const maxPaths = options?.maxPaths ?? SCOPE_MAX_PATHS;
 	const key = `${maxPaths}\0${cwd}`;
-	const cached = scopeCache.get(key);
+	const cached = options?.fresh ? undefined : scopeCache.get(key);
 	if (cached && Date.now() - cached.at < SCOPE_TTL_MS) return cached.report;
 	const report = computeSessionWorkspaceScope(cwd, maxPaths);
 	if (scopeCache.size >= SCOPE_CACHE_MAX) {

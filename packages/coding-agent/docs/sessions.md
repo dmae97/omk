@@ -157,7 +157,7 @@ If a retry or failover succeeds, the later attempt emits `completed` and becomes
 | `/new` | Start a new session |
 | `/name <name>` | Set the current session display name |
 | `/session` | Show session info |
-| `/goal [objective]` | Show or set the durable goal; `checkpoint <json>` records Goal/Core/Verified/Open/Next continuity |
+| `/goal [objective]` | Show or set the durable goal; `verify <command>` approves and runs an acceptance check, `complete` requires its passing receipt, `checkpoint <json>` records Goal/Core/Verified/Open/Next continuity |
 | `/tree` | Navigate the current session tree |
 | `/fork` | Create a new session from a previous user message |
 | `/clone` | Duplicate the current active branch into a new session |
@@ -165,7 +165,7 @@ If a retry or failover succeeds, the later attempt emits `completed` and becomes
 | `/export [file]` | Export session to HTML |
 | `/share` | Upload as private GitHub gist with shareable HTML link |
 
-`/goal` state lives under the working directory, not in one session file. Seam checkpoints are digest-correlated revisions in the same goal journal; session entries contain only their goal ID, revision, and digest. The unkeyed digest is not workspace authentication, so checkpoint prose loaded on resume is not promoted to user authority. See [Run Protocol](run-protocol.md#durable-goal-lifecycle).
+`/goal` state lives under the working directory, not in one session file. Seam checkpoints are digest-correlated revisions in the same goal journal; session entries contain only their goal ID, revision, and digest. The unkeyed digest is not workspace authentication, so checkpoint prose loaded on resume is not promoted to user authority. An acceptance check approved with `/goal verify` also stays in the OMK process; approve it again after a restart. See [Run Protocol](run-protocol.md#durable-goal-lifecycle) and [acceptance checks](run-protocol.md#acceptance-checks).
 
 ## Resuming and Deleting Sessions
 

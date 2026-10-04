@@ -175,6 +175,45 @@ describe("#6647 compaction retries transient summarization failures", () => {
 		expect(ends[0]).toMatchObject({ type: "summarization_retry_finished" });
 	});
 
+	// Summarization retries back off with `retry.baseDelayMs` too. A Node timer fires a delay above
+	// 2^31 - 1 ms after 1 ms, so such a backoff retried the summary at once.
+	it("keeps waiting when a summarization backoff is longer than one timer can hold", async () => {
+		const harness = await createHarness({ withConfiguredAuth: false });
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		harness.settingsManager.applyOverrides({ retry: { enabled: true, maxRetries: 1, baseDelayMs: 3_000_000_000 } });
+
+		const error: AssistantMessage = {
+			...fauxAssistantMessage("", { stopReason: "error", errorMessage: "terminated" }),
+			usage: createUsage(10),
+		};
+		const success: AssistantMessage = {
+			...fauxAssistantMessage("summary after the backoff"),
+			usage: createUsage(10),
+		};
+		const getCallCount = useScriptedStreamFn(harness, [error, success]);
+		const scheduled = new Promise<void>((resolve) => {
+			const unsubscribe = harness.session.subscribe((event) => {
+				if (event.type === "summarization_retry_scheduled") {
+					unsubscribe();
+					resolve();
+				}
+			});
+		});
+
+		const compactPromise = harness.session.compact();
+		await scheduled;
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(getCallCount()).toBe(1);
+		expect(harness.eventsOfType("summarization_retry_scheduled").map((event) => event.delayMs)).toEqual([
+			2_147_483_647,
+		]);
+		harness.session.abortCompaction();
+		await expect(compactPromise).rejects.toThrow();
+		expect(getCallCount()).toBe(1);
+	});
+
 	it("aborts an in-flight retry backoff via abortCompaction", async () => {
 		const harness = await createHarness({ withConfiguredAuth: false });
 		harnesses.push(harness);

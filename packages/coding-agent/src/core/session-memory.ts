@@ -27,6 +27,7 @@ export class SessionMemory {
 	private readonly cwd: string;
 	private readonly options: () => SystemPromptContextBudgetOptions | undefined;
 	private readonly effectiveWindow: (messages: AgentMessage[], window: number) => number;
+	private readonly latestCompactionTimestamp: () => string | undefined;
 	private readonly original: Agent["transformContext"];
 	private readonly wrapped: NonNullable<Agent["transformContext"]>;
 	private currentStatus: SessionMemoryStatus = { state: "disabled", eligible: 0, omitted: 0 };
@@ -36,8 +37,10 @@ export class SessionMemory {
 		cwd: string,
 		options: () => SystemPromptContextBudgetOptions | undefined,
 		effectiveWindow: (messages: AgentMessage[], window: number) => number,
+		latestCompactionTimestamp: () => string | undefined = () => undefined,
 	) {
 		this.effectiveWindow = effectiveWindow;
+		this.latestCompactionTimestamp = latestCompactionTimestamp;
 		this.agent = agent;
 		this.cwd = cwd;
 		this.options = options;
@@ -85,7 +88,7 @@ export class SessionMemory {
 			tools: this.agent.state.tools,
 			modelId: model.id,
 			tokenCounter: counter,
-			projectedUsageTokens: estimateProjectedContextTokens(messages, []).tokens,
+			projectedUsageTokens: estimateProjectedContextTokens(messages, [], this.latestCompactionTimestamp()).tokens,
 		};
 		const before = assertContextInputWithinCapacity({ ...input, maxInputTokens: limit.maxInputTokens });
 		try {

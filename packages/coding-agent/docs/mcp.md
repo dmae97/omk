@@ -88,6 +88,29 @@ to settle before reconnecting. No idle-server shutdown or descriptor reduction i
 introduced. Four is a conservative default, not a measured optimum: staging can
 increase full-catalog readiness time while reducing simultaneous startup work.
 
+### Tool schema budget
+
+Every request carries the schema of every active tool, so a large catalog can
+outgrow a small context window. In one measured project, 328 tools from 21 MCP
+servers plus the built-in tools were estimated at 237,218 tokens, more than the
+219,416-token input ceiling of a model configured with a 262,000-token window.
+
+When the system prompt and tool schemas would leave a fully compacted session
+(the kept tail plus the summary reserve) above the compaction trigger, requests
+to that model withhold whole MCP servers, largest schema first, until it fits.
+
+- The active tool set does not change: `getActiveToolNames()`, extensions and
+  the tool list still show withheld tools; only the provider request omits them.
+- A warning names the withheld servers once. Switching to a model with room
+  restores them, with a second notice.
+- Built-in and extension tools are never withheld. If they and the system prompt
+  alone exceed the input ceiling, the prompt is rejected as
+  `configuration.invalid`: compaction cannot shrink them, so switch to a
+  larger-context model or disable servers.
+
+To keep a particular server on a small model, disable larger servers you do not
+need for that project.
+
 ### Failure behavior
 
 Failures are isolated by design, because one broken server must not cost a

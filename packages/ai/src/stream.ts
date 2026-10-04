@@ -52,6 +52,9 @@ export async function complete<TApi extends Api>(
 	options?: ProviderStreamOptions,
 ): Promise<AssistantMessage> {
 	const s = stream(model, context, options);
+	// This API exposes only the final message; consume deltas as they arrive.
+	for await (const _event of s) {
+	}
 	return s.result();
 }
 
@@ -96,5 +99,8 @@ export async function completeSimple<TApi extends Api>(
 	options?: SimpleStreamOptions,
 ): Promise<AssistantMessage> {
 	const s = streamSimple(model, context, options);
+	// Keep completion-only callers from retaining the full event backlog.
+	for await (const _event of s) {
+	}
 	return s.result();
 }

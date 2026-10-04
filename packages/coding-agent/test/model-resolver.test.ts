@@ -1,4 +1,4 @@
-import type { Model } from "omk-ai";
+import { getModels, type Model } from "omk-ai";
 import { describe, expect, test } from "vitest";
 import {
 	defaultModelPerProvider,
@@ -388,6 +388,18 @@ describe("default model selection", () => {
 
 	test("ai-gateway default tracks current model", () => {
 		expect(defaultModelPerProvider["vercel-ai-gateway"]).toBe("zai/glm-5.1");
+	});
+
+	test("Kimi K2.6 defaults move to models the catalog still lists", () => {
+		// Fireworks and Together dropped Kimi K2.6 and models.dev marked OpenCode Go's deprecated
+		// (2026-09-30). OpenCode Go's Kimi K3/K2.7 Code request contract is unverified in OMK, while
+		// its DeepSeek V4.1 Flash contract is pinned by deepseek-v41-native.test.ts.
+		expect(defaultModelPerProvider.fireworks).toBe("accounts/fireworks/models/kimi-k3");
+		expect(defaultModelPerProvider.together).toBe("moonshotai/Kimi-K3");
+		expect(defaultModelPerProvider["opencode-go"]).toBe("deepseek-v4.1-flash");
+		for (const provider of ["fireworks", "together", "opencode-go"] as const) {
+			expect(getModels(provider).map((model) => model.id)).toContain(defaultModelPerProvider[provider]);
+		}
 	});
 
 	test("K3 and ModelStudio defaults track the recommended readiness models", () => {

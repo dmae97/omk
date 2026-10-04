@@ -320,10 +320,18 @@ aborted result. **`prompt_settled` is a UX signal, not semantic verification.**
 
 This safeguard is session-local. Normal runtime replacement/disposal now awaits
 `close()`, which joins registered producers, tool/lane ownership, logical streams
-and native MCP closure before releasing the session lease. It does not join
-unregistered detached work, prove remote cancellation, or fence writers across
-crashes, restart or workspace reuse. Reentrant close from an owned operation is
-refused rather than self-deadlocking; see [Local live session control](sessions.md#local-live-session-control). Direct `Agent` calls, replacing
+and native MCP closure before releasing the session lease. Independent stop
+requests and joins are still attempted after a shutdown error; final cleanup
+requires successful joins, and the original error (or an `AggregateError` for
+multiple failures) is retained. See [Lifecycle and progress hardening](runtime-algorithms.md#cd-lifecycle-and-progress-hardening-2026-09-30).
+It does not join unregistered detached work, prove remote cancellation, or fence writers across
+crashes, restart or workspace reuse. Reentrant close from a prompt/tool producer
+is refused rather than self-deadlocking. A registered extension command may
+replace its session: it seals only its initiating command control frames before
+joining other producers and resources. Use `withSession` for the new context;
+an outgoing model prompt cancelled by replacement can reject with budget code
+`closed`. Real budget exhaustion is not forgiven by a command handoff. See
+[Local live session control](sessions.md#local-live-session-control). Direct `Agent` calls, replacing
 `session.agent.state.tools`, independent interactive bash, and plugin-created
 background work are not automatically enrolled. In-process plugins remain trusted.
 
@@ -1681,7 +1689,7 @@ computeReservedTokenBudget, estimateToolResultReserve, ReservedTokenBudgetError
 
 // Advisory selection and durable goals
 chooseWithAdvisoryJudge, createModelAdvisoryJudge, AdvisoryJudgeInputError, AdvisoryJudgeModelError
-createDurableGoal, applyDurableGoalCommand, parseDurableGoalSnapshot, DurableGoalStore
+createDurableGoal, applyDurableGoalCommand, parseDurableGoalSnapshot, DurableGoalStore, nextDurableGoalTimestamp
 createDurableGoalCheckpoint, parseDurableGoalCheckpoint, formatDurableGoalCheckpoint
 
 // Run journal and session termination

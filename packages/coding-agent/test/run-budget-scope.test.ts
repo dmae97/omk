@@ -13,6 +13,36 @@ function deferred() {
 const lifecycle = () => ({ assertIdle: () => {}, stop: vi.fn(), reject: vi.fn() });
 
 describe("run scope admission", () => {
+	it("does not forgive real exhaustion when a command completion guard accepts closure", async () => {
+		const faux = registerFauxProvider();
+		const agent = new Agent({
+			streamFn: () => {
+				const stream = createAssistantMessageEventStream();
+				stream.end(fauxAssistantMessage("fixture"));
+				return stream;
+			},
+		});
+		const runtime = new SessionRunBudget(agent, lifecycle());
+		try {
+			await expect(
+				runtime.execute(
+					{ maxRequests: 1 },
+					async () => {
+						await (await agent.streamFn(faux.getModel(), { messages: [] })).result();
+						await expect(agent.streamFn(faux.getModel(), { messages: [] })).rejects.toMatchObject({
+							code: "requests",
+						});
+						runtime.close();
+					},
+					undefined,
+					() => true,
+				),
+			).rejects.toMatchObject({ code: "requests" });
+			expect(runtime.snapshot()).toMatchObject({ activeRequests: 0, closed: true, exhaustedBy: "requests" });
+		} finally {
+			faux.unregister();
+		}
+	});
 	it.each([undefined, { maxRequests: 1 }])(
 		"rejects a competing %j prompt during unbounded preflight",
 		async (limits) => {

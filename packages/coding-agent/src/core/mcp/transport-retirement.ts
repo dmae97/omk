@@ -7,7 +7,12 @@ interface RetirementOwner {
 	retiring?: Promise<void>;
 	error?: string;
 }
+interface RetirementEpoch {
+	readonly clients: WeakSet<object>;
+	joined?: Promise<void>;
+}
 const retired = new WeakMap<object, Promise<void>>();
+const epochs = new WeakMap<RetirementOwner, RetirementEpoch>();
 
 /**
  * Preserve an unresolved physical close across generation changes. A rejected
@@ -16,13 +21,33 @@ const retired = new WeakMap<object, Promise<void>>();
  * close before any spawn). Injected clients must implement the same contract.
  */
 export function retireMcpClient(owner: RetirementOwner, client: RetiringClient): Promise<void> {
+	let epoch = epochs.get(owner);
+	if (!epoch || epoch.joined !== owner.retiring) {
+		epoch = { clients: new WeakSet(), joined: owner.retiring };
+		epochs.set(owner, epoch);
+	}
+	if (epoch.joined && epoch.clients.has(client)) return epoch.joined;
+
 	let pending = retired.get(client);
+	let confirm: (() => void) | undefined;
 	if (pending === undefined) {
-		let confirm: () => void = () => {};
 		pending = new Promise<void>((resolve) => {
 			confirm = resolve;
 		});
 		retired.set(client, pending);
+	}
+	const joined = epoch.joined === undefined ? pending : Promise.all([epoch.joined, pending]).then(() => {});
+	epoch.clients.add(client);
+	epoch.joined = joined;
+	owner.retiring = joined;
+	void joined.then(() => {
+		if (epochs.get(owner) === epoch && epoch.joined === joined && owner.retiring === joined) {
+			owner.retiring = undefined;
+			epochs.delete(owner);
+		}
+	});
+	// Publish both identities before client code can reenter retirement.
+	if (confirm) {
 		try {
 			void client.waitForTransportClose().then(confirm, () => {
 				owner.error = "mcp.transport_retirement_unconfirmed";
@@ -37,10 +62,5 @@ export function retireMcpClient(owner: RetirementOwner, client: RetiringClient):
 			owner.error = "mcp.transport_retirement_unconfirmed";
 		}
 	}
-	const joined = owner.retiring === undefined ? pending : Promise.all([owner.retiring, pending]).then(() => {});
-	owner.retiring = joined;
-	void joined.then(() => {
-		if (owner.retiring === joined) owner.retiring = undefined;
-	});
 	return joined;
 }

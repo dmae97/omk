@@ -27,6 +27,12 @@ import {
 	type ContextCacheInvalidationSnapshot,
 	createContextCacheInvalidationSnapshot,
 } from "./context-budget-v2-cache-invalidation.ts";
+import {
+	type ContextBudgetCacheMemoryUsageV2,
+	type ContextBudgetCacheStoresV2,
+	contextBudgetCacheMemoryUsageV2,
+	createContextBudgetCacheStoresV2,
+} from "./context-budget-v2-cache-provider.ts";
 import type {
 	ContextBudgetCacheLayerV2,
 	ContextBudgetCacheProviderV2,
@@ -36,6 +42,7 @@ import type {
 	ContextBudgetRepresentationCacheEntryV2,
 	ContextBudgetRepresentationCacheReadV2,
 } from "./context-budget-v2-types.ts";
+import type { BoundedJsonLru } from "./performance-upgrade/bounded-json-lru.ts";
 
 export const CONTEXT_BUDGET_DISK_CACHE_SCHEMA_VERSION = "context-budget-v2-diskcache-1" as const;
 
@@ -63,6 +70,10 @@ export interface DiskContextBudgetCacheOptionsV2 {
 	readonly flushDebounceMs?: number;
 	/** Injectable clock, for tests. */
 	readonly now?: () => number;
+	/** Accounted-byte caps of the in-memory stores, independent of the snapshot's `maxBytes`. */
+	readonly representationMemoryBytes?: number;
+	readonly planMemoryBytes?: number;
+	readonly negativeMemoryBytes?: number;
 }
 
 interface DiskSnapshotFileV2 {
@@ -121,22 +132,14 @@ function isPersistableNegative(value: unknown): value is ContextBudgetNegativeCa
 	return isRecord(value) && typeof value.reason === "string" && !containsCredentialShapeInValue(value);
 }
 
-function readLru<T>(store: Map<string, T>, key: string): T | undefined {
-	const entry = store.get(key);
-	if (entry === undefined) return undefined;
-	store.delete(key);
-	store.set(key, entry);
-	return entry;
+/** Resident entries a snapshot may hold: a key without credential shape and a persistable value. */
+function persistedEntries<T>(store: BoundedJsonLru<T>, persistable: (entry: T) => boolean): [string, T][] {
+	return store.entries().filter(([key, entry]) => !containsCredentialShape(key) && persistable(entry));
 }
 
-function writeLru<T>(store: Map<string, T>, key: string, entry: T, maxEntries: number): void {
-	store.delete(key);
-	store.set(key, entry);
-	while (store.size > maxEntries) {
-		const oldestKey = store.keys().next().value;
-		if (oldestKey === undefined) return;
-		store.delete(oldestKey);
-	}
+/** Drop the least recently used half of a persisted list from the list and its store. */
+function evictOldestHalf<T>(persisted: (readonly [string, T])[], store: BoundedJsonLru<T>): void {
+	for (const [key] of persisted.splice(0, Math.ceil(persisted.length / 2))) store.delete(key);
 }
 
 /**
@@ -151,10 +154,11 @@ export function createDiskContextBudgetCacheProviderV2(
 }
 
 export class DiskContextBudgetCacheProviderV2 implements ContextBudgetCacheProviderV2 {
-	private readonly representations = new Map<string, ContextBudgetRepresentationCacheEntryV2>();
-	private readonly negatives = new Map<string, ContextBudgetNegativeCacheEntryV2>();
-	/** Plans stay in memory: their keys are session-scoped, so persisting them stores only misses. */
-	private readonly plans = new Map<string, ContextBudgetPlanCacheEntryV2>();
+	/**
+	 * Resident stores. Only representations and negatives are persisted: plan keys are
+	 * session-scoped, so persisting plans would store only misses.
+	 */
+	private readonly stores: ContextBudgetCacheStoresV2;
 	private readonly layer: ContextBudgetCacheLayerV2;
 	private readonly maxEntries: number;
 	private readonly maxBytes: number;
@@ -173,6 +177,14 @@ export class DiskContextBudgetCacheProviderV2 implements ContextBudgetCacheProvi
 		this.maxBytes = Math.max(1024, options.maxBytes ?? DEFAULT_DISK_CACHE_MAX_BYTES);
 		this.maxEntryTextLength = Math.max(1, options.maxEntryTextLength ?? DEFAULT_DISK_CACHE_MAX_ENTRY_TEXT_LENGTH);
 		this.flushDebounceMs = Math.max(0, options.flushDebounceMs ?? DEFAULT_DISK_CACHE_FLUSH_DEBOUNCE_MS);
+		for (const limit of [this.maxEntries, this.maxBytes, this.maxEntryTextLength, this.flushDebounceMs]) {
+			if (!Number.isSafeInteger(limit)) throw new RangeError("disk cache limits must be safe integers");
+		}
+		this.stores = createContextBudgetCacheStoresV2(this.maxEntries, {
+			representationBytes: options.representationMemoryBytes ?? 16 * 1024 * 1024,
+			planBytes: options.planMemoryBytes ?? 4 * 1024 * 1024,
+			negativeBytes: options.negativeMemoryBytes ?? 512 * 1024,
+		});
 		this.now = options.now ?? Date.now;
 		this.snapshotPath = path.join(options.dir, "representations.json");
 		this.load();
@@ -190,7 +202,7 @@ export class DiskContextBudgetCacheProviderV2 implements ContextBudgetCacheProvi
 
 	/** Number of representation entries currently held. */
 	get size(): number {
-		return this.representations.size;
+		return this.stores.representations.size;
 	}
 
 	private load(): void {
@@ -235,7 +247,7 @@ export class DiskContextBudgetCacheProviderV2 implements ContextBudgetCacheProvi
 			const [key, entry] = pair as [unknown, unknown];
 			if (typeof key !== "string" || key.length === 0) continue;
 			if (!isPersistableRepresentation(entry, this.maxEntryTextLength)) continue;
-			writeLru(this.representations, key, entry, this.maxEntries);
+			this.stores.representations.set(key, entry);
 		}
 
 		const negatives = Array.isArray(parsed.negatives) ? parsed.negatives : [];
@@ -244,7 +256,7 @@ export class DiskContextBudgetCacheProviderV2 implements ContextBudgetCacheProvi
 			const [key, entry] = pair as [unknown, unknown];
 			if (typeof key !== "string" || key.length === 0) continue;
 			if (!isPersistableNegative(entry)) continue;
-			writeLru(this.negatives, key, entry, this.maxEntries);
+			this.stores.negatives.set(key, entry);
 		}
 	}
 
@@ -273,31 +285,28 @@ export class DiskContextBudgetCacheProviderV2 implements ContextBudgetCacheProvi
 			this.flushTimer = undefined;
 		}
 		if (!this.dirty) return false;
-		const snapshot: DiskSnapshotFileV2 = {
-			schemaVersion: CONTEXT_BUDGET_DISK_CACHE_SCHEMA_VERSION,
-			representations: [...this.representations.entries()]
-				.filter(
-					([key, entry]) =>
-						!containsCredentialShape(key) && isPersistableRepresentation(entry, this.maxEntryTextLength),
-				)
-				.map(([key, entry]) => [key, entry] as const),
-			negatives: [...this.negatives.entries()]
-				.filter(([key, entry]) => !containsCredentialShape(key) && isPersistableNegative(entry))
-				.map(([key, entry]) => [key, entry] as const),
-		};
+		const representations = persistedEntries(this.stores.representations, (entry) =>
+			isPersistableRepresentation(entry, this.maxEntryTextLength),
+		);
+		const negatives = persistedEntries(this.stores.negatives, isPersistableNegative);
 		let serialized: string;
-		try {
-			serialized = JSON.stringify(snapshot);
-		} catch {
-			return false;
-		}
-		if (Buffer.byteLength(serialized, "utf8") > this.maxBytes) {
-			// Drop the oldest half and retry once rather than growing forever.
-			const keys = [...this.representations.keys()];
-			if (keys.length === 0) return false;
-			const dropCount = Math.max(1, Math.ceil(keys.length / 2));
-			for (const key of keys.slice(0, dropCount)) this.representations.delete(key);
-			return this.flush();
+		for (;;) {
+			const snapshot: DiskSnapshotFileV2 = {
+				schemaVersion: CONTEXT_BUDGET_DISK_CACHE_SCHEMA_VERSION,
+				representations,
+				negatives,
+			};
+			try {
+				serialized = JSON.stringify(snapshot);
+			} catch {
+				return false;
+			}
+			if (Buffer.byteLength(serialized, "utf8") <= this.maxBytes) break;
+			// Shrink iteratively: oldest persisted representations first, then negatives, so an
+			// overflow of negative entries alone still converges instead of failing every flush.
+			if (representations.length > 0) evictOldestHalf(representations, this.stores.representations);
+			else if (negatives.length > 0) evictOldestHalf(negatives, this.stores.negatives);
+			else return false;
 		}
 		const tempPath = `${this.snapshotPath}.${process.pid}.tmp`;
 		try {
@@ -321,6 +330,11 @@ export class DiskContextBudgetCacheProviderV2 implements ContextBudgetCacheProvi
 		this.flush();
 	}
 
+	/** Content-free counters of the in-memory stores, for instrumentation. */
+	getMemoryUsageSnapshot(): ContextBudgetCacheMemoryUsageV2 {
+		return contextBudgetCacheMemoryUsageV2(this.stores);
+	}
+
 	getInvalidationSnapshot(): ContextCacheInvalidationSnapshot | undefined {
 		return this.invalidationSnapshot;
 	}
@@ -341,52 +355,46 @@ export class DiskContextBudgetCacheProviderV2 implements ContextBudgetCacheProvi
 	}
 
 	readRepresentation(key: string): ContextBudgetRepresentationCacheReadV2 | undefined {
-		const entry = readLru(this.representations, key);
+		const entry = this.stores.representations.get(key);
 		return entry ? { entry, layer: this.layer } : undefined;
 	}
 
 	writeRepresentation(input: { readonly key: string; readonly entry: ContextBudgetRepresentationCacheEntryV2 }): void {
-		writeLru(this.representations, input.key, input.entry, this.maxEntries);
-		if (
-			(!containsCredentialShape(input.key) && isPersistableRepresentation(input.entry, this.maxEntryTextLength)) ||
-			fs.existsSync(this.snapshotPath)
-		) {
-			this.markDirty();
-		}
+		// Only an accepted entry is plain data, so only then can it be inspected without running caller code.
+		const persistable =
+			this.stores.representations.set(input.key, input.entry) &&
+			!containsCredentialShape(input.key) &&
+			isPersistableRepresentation(input.entry, this.maxEntryTextLength);
+		if (persistable || fs.existsSync(this.snapshotPath)) this.markDirty();
 	}
 
 	deleteRepresentation(key: string): void {
-		if (this.representations.delete(key)) this.markDirty();
+		if (this.stores.representations.delete(key)) this.markDirty();
 	}
 
 	readNegativeRepresentation(key: string): ContextBudgetNegativeCacheEntryV2 | undefined {
-		return readLru(this.negatives, key);
+		return this.stores.negatives.get(key);
 	}
 
 	writeNegativeRepresentation(input: { readonly key: string; readonly reason: string }): void {
-		writeLru(
-			this.negatives,
-			input.key,
-			{ reason: input.reason, createdAtEpochMs: this.now(), layer: this.layer },
-			this.maxEntries,
-		);
+		this.stores.negatives.set(input.key, { reason: input.reason, createdAtEpochMs: this.now(), layer: this.layer });
 		this.markDirty();
 	}
 
 	deleteNegativeRepresentation(key: string): void {
-		if (this.negatives.delete(key)) this.markDirty();
+		if (this.stores.negatives.delete(key)) this.markDirty();
 	}
 
 	readPlan(key: string): ContextBudgetPlanCacheReadV2 | undefined {
-		const entry = readLru(this.plans, key);
+		const entry = this.stores.plans.get(key);
 		return entry ? { entry, layer: "session" } : undefined;
 	}
 
 	writePlan(input: { readonly key: string; readonly entry: ContextBudgetPlanCacheEntryV2 }): void {
-		writeLru(this.plans, input.key, input.entry, this.maxEntries);
+		this.stores.plans.set(input.key, input.entry);
 	}
 
 	deletePlan(key: string): void {
-		this.plans.delete(key);
+		this.stores.plans.delete(key);
 	}
 }

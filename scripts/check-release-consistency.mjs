@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 
 const semverPattern = String.raw`(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?`;
 const controlPanelVersionPattern = new RegExp(String.raw`omk v(${semverPattern})\s*·\s*OMK(?::)?//CONTROL`, "g");
@@ -206,8 +206,10 @@ function validateControlPanelVersionSource(repoRoot) {
 	if (!/omk v\$\{content\.version\}\s*·\s*OMK(?::)?\/\/CONTROL/.test(text)) {
 		fail("control_panel_title_not_content_version_backed", { path: toRepoPath(repoRoot, layoutPath) });
 	}
-	if (!text.includes("NIGHT-CITY-MATRIX-V3")) {
-		fail("missing_night_city_matrix_marker", { path: toRepoPath(repoRoot, layoutPath) });
+	// The brand plate identifies the shipped OMK opening (the README hero's figure caption).
+	const brandPath = join(dirname(layoutPath), "control-panel-brand.ts");
+	if (!existsSync(brandPath) || !readFileSync(brandPath, "utf8").includes("FIG. 01 · THE CONTROL LOOP")) {
+		fail("missing_control_panel_brand_plate", { path: toRepoPath(repoRoot, brandPath) });
 	}
 }
 

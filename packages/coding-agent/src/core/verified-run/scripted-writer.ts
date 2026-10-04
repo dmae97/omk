@@ -81,6 +81,8 @@ export async function executeScriptedWriter(
 			runBudget: { timeoutMs: remaining, maxRequests: context.requestLimit, maxConcurrentRequests: 1 },
 		});
 		if (failure) throw failure;
+		// An operator abort ends the prompt early; it is a cancellation, not an incomplete writer.
+		if (context.signal?.aborted) throw new VerifiedRunError("cancelled");
 		if (
 			completedSteps !== writer.steps.length ||
 			session.lastTermination?.kind !== "completed" ||

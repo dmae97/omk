@@ -17,6 +17,19 @@ trap cleanup_isolated_agent_dir EXIT
 
 echo "Isolated agent dir: $ISOLATED_AGENT_DIR"
 
+# Isolate HOME as well: the resource loader also reads user-level directories such as
+# ~/.agents/skills, and a machine with many personal skills pushed test-session prompts past
+# model limits. Toolchains that locate themselves through HOME keep their original homes so
+# cargo still finds its default toolchain and corepack does not download npm again.
+if [ -n "${HOME:-}" ]; then
+	export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
+	export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+	export COREPACK_HOME="${COREPACK_HOME:-$HOME/.cache/node/corepack}"
+	export npm_config_cache="${npm_config_cache:-$HOME/.npm}"
+fi
+export HOME="$ISOLATED_AGENT_DIR/home"
+mkdir -p "$HOME"
+
 # Skip local LLM tests (ollama, lmstudio)
 export OMK_NO_LOCAL_LLM=1
 
