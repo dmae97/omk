@@ -1,5 +1,6 @@
 import type { OpenRouterRouting, VercelGatewayRouting } from "./gateway-routing-types.ts";
 import type { ProviderRateLimitSnapshot, ProviderResponse } from "./provider-response-types.ts";
+import type { UsageCost } from "./usage-types.ts";
 
 export type {
 	ProviderRateLimitSnapshot,
@@ -10,6 +11,7 @@ export type {
 import type { AssistantMessageDiagnostic } from "./utils/diagnostics.ts";
 
 export type { OpenRouterRouting, VercelGatewayRouting } from "./gateway-routing-types.ts";
+export type { UsageCost } from "./usage-types.ts";
 
 import type { AssistantMessageEventStream } from "./utils/event-stream.ts";
 
@@ -294,13 +296,7 @@ export interface Usage {
 	/** Subset of `cacheWrite` written with 1h retention. Only Anthropic reports this split. */
 	cacheWrite1h?: number;
 	totalTokens: number;
-	cost: {
-		input: number;
-		output: number;
-		cacheRead: number;
-		cacheWrite: number;
-		total: number;
-	};
+	cost: UsageCost;
 }
 
 export type StopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
