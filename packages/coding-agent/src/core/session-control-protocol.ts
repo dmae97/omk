@@ -10,6 +10,8 @@ export interface SessionControlRequest {
 	readonly requestId: string;
 	readonly action: SessionControlAction;
 	readonly text?: string;
+	/** Exact prompt generation an abort targets. Absent means the bounded legacy rule. */
+	readonly generation?: number;
 }
 
 export interface SessionControlResponse {
@@ -17,7 +19,12 @@ export interface SessionControlResponse {
 	readonly sessionId: string;
 	readonly status: "ok" | "accepted" | "refused";
 	readonly error?: string;
-	readonly state?: { readonly streaming: boolean; readonly queued: number; readonly lastOutcome?: string };
+	readonly state?: {
+		readonly streaming: boolean;
+		readonly queued: number;
+		readonly lastOutcome?: string;
+		readonly generation?: number;
+	};
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -27,10 +34,12 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function parseControlRequest(value: unknown): SessionControlRequest {
 	if (
 		!isRecord(value) ||
-		Object.keys(value).some((key) => !["version", "sessionId", "token", "requestId", "action", "text"].includes(key))
+		Object.keys(value).some(
+			(key) => !["version", "sessionId", "token", "requestId", "action", "text", "generation"].includes(key),
+		)
 	)
 		throw new Error("invalid control request");
-	const { version, sessionId, token, requestId, action, text } = value;
+	const { version, sessionId, token, requestId, action, text, generation } = value;
 	if (
 		version !== SESSION_CONTROL_VERSION ||
 		typeof sessionId !== "string" ||
@@ -48,5 +57,17 @@ export function parseControlRequest(value: unknown): SessionControlRequest {
 		if (typeof text !== "string" || text.trim().length === 0 || text.length > MAX_CONTROL_TEXT)
 			throw new Error("invalid control text");
 	} else if (text !== undefined) throw new Error("unexpected control text");
-	return { version, sessionId, token, requestId, action, ...(typeof text === "string" ? { text } : {}) };
+	if (generation !== undefined) {
+		if (action !== "abort" || typeof generation !== "number" || !Number.isSafeInteger(generation) || generation < 0)
+			throw new Error("invalid control generation");
+	}
+	return {
+		version,
+		sessionId,
+		token,
+		requestId,
+		action,
+		...(typeof text === "string" ? { text } : {}),
+		...(typeof generation === "number" ? { generation } : {}),
+	};
 }

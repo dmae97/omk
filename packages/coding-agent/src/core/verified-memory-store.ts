@@ -24,7 +24,7 @@ import {
 	prepareMemoryRecord,
 	type VerifiedMemoryRecord,
 } from "./verified-memory-record.ts";
-import { MEMORY_ID, memoryWorkspace, readMemorySource } from "./verified-memory-source.ts";
+import { createMemorySourceBatch, MEMORY_ID, memoryWorkspace } from "./verified-memory-source.ts";
 
 const MAX_RECORD_BYTES = 16 * 1024;
 export const MAX_MEMORY_RECORDS = 32;
@@ -184,6 +184,7 @@ export class VerifiedMemoryStore {
 		const directory = this.directory(false);
 		if (!directory) return { records: [], omitted: 0 };
 		const records: VerifiedMemoryRecord[] = [];
+		const readSource = createMemorySourceBatch(this.workspace.root);
 		let omitted = 0;
 		for (const filename of this.records(directory)) {
 			const record = parseMemoryRecord(readPrivateRecord(join(directory, filename)));
@@ -198,12 +199,17 @@ export class VerifiedMemoryStore {
 				continue;
 			}
 			try {
-				const source = readMemorySource(this.workspace.root, record.path, record.startLine, record.endLine);
+				const source = readSource(record.path, record.startLine, record.endLine);
 				if (source.contentHash !== record.contentHash || source.quote !== record.quote) {
 					omitted++;
 					continue;
 				}
 			} catch {
+				omitted++;
+				continue;
+			}
+			// Disk reading may span revocation or expiry. Recheck before publishing the quote.
+			if (record.expiresAt <= Date.now() || hasTombstone(join(directory, `${record.id}.revoked.json`))) {
 				omitted++;
 				continue;
 			}
