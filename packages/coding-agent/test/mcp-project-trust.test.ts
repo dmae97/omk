@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
 	loadMcpServerConfigs,
 	loadMcpServerConfigsWithReport,
+	MCP_TOOL_TIMEOUT_ENV,
 	mcpTrustStorePath,
 	PROJECT_MCP_ENV_ALLOWLIST,
 	projectMcpEnv,
@@ -152,5 +153,39 @@ describe("project MCP trust gate", () => {
 	it("projectMcpEnv lets declared keys override the allowlist", () => {
 		const env = projectMcpEnv({ PATH: "/only" }, { PATH: "/usr/bin", GITHUB_TOKEN: "t", HOME: "/h" });
 		expect(env).toEqual({ PATH: "/only", HOME: "/h" });
+	});
+});
+
+describe("MCP tool timeout config", () => {
+	it("maps tool_timeout_sec to the per-request deadline", () => {
+		const home = tmp("omk-timeout-home-");
+		const cwd = tmp("omk-timeout-cwd-");
+		writeHome(home, {
+			slow: { command: "tool", tool_timeout_sec: 180 },
+			fast: { command: "tool" },
+			bad: { command: "tool", tool_timeout_sec: -5 },
+			huge: { command: "tool", tool_timeout_sec: 10 ** 9 },
+		});
+		const byName = Object.fromEntries(loadMcpServerConfigs(cwd, home).map((s) => [s.name, s]));
+		expect(byName.slow.requestTimeoutMs).toBe(180_000);
+		expect(byName.fast.requestTimeoutMs).toBeUndefined();
+		expect(byName.bad.requestTimeoutMs).toBeUndefined();
+		expect(byName.huge.requestTimeoutMs).toBe(24 * 60 * 60 * 1000);
+	});
+
+	it("uses OMK_MCP_TOOL_TIMEOUT_SEC as the default and lets the server override it", () => {
+		const home = tmp("omk-timeout-home-");
+		const cwd = tmp("omk-timeout-cwd-");
+		const previous = process.env[MCP_TOOL_TIMEOUT_ENV];
+		process.env[MCP_TOOL_TIMEOUT_ENV] = "120";
+		try {
+			writeHome(home, { a: { command: "tool" }, b: { command: "tool", tool_timeout_sec: 5 } });
+			const byName = Object.fromEntries(loadMcpServerConfigs(cwd, home).map((s) => [s.name, s]));
+			expect(byName.a.requestTimeoutMs).toBe(120_000);
+			expect(byName.b.requestTimeoutMs).toBe(5_000);
+		} finally {
+			if (previous === undefined) delete process.env[MCP_TOOL_TIMEOUT_ENV];
+			else process.env[MCP_TOOL_TIMEOUT_ENV] = previous;
+		}
 	});
 });

@@ -118,6 +118,7 @@ function toServerConfig(name: string, raw: unknown, source: McpConfigSource = "u
 	if (typeof command !== "string" || command.length === 0) return undefined;
 	const args = Array.isArray(raw.args) ? raw.args.filter((arg): arg is string => typeof arg === "string") : undefined;
 	const startupTimeoutSec = typeof raw.startup_timeout_sec === "number" ? raw.startup_timeout_sec : undefined;
+	const toolTimeoutMs = secondsToTimeoutMs(raw.tool_timeout_sec) ?? defaultToolTimeoutMs();
 	const isProject = source === "project";
 	const expandEnv = !isProject;
 	const declaredEnv = toStringRecord(raw.env);
@@ -130,7 +131,24 @@ function toServerConfig(name: string, raw: unknown, source: McpConfigSource = "u
 		cwd: typeof raw.cwd === "string" ? expandConfigPath(raw.cwd, expandEnv) : undefined,
 		disabled: raw.disabled === true || raw.enabled === false,
 		handshakeTimeoutMs: startupTimeoutSec !== undefined ? Math.max(1, startupTimeoutSec) * 1000 : undefined,
+		...(toolTimeoutMs !== undefined ? { requestTimeoutMs: toolTimeoutMs } : {}),
 	};
+}
+
+/** Global fallback for servers without `tool_timeout_sec`; read from the user's own environment. */
+export const MCP_TOOL_TIMEOUT_ENV = "OMK_MCP_TOOL_TIMEOUT_SEC";
+
+/** Upper bound for a configured per-request deadline (24h); larger values are clamped. */
+const MAX_CONFIGURED_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+
+function secondsToTimeoutMs(value: unknown): number | undefined {
+	const seconds = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
+	if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0) return undefined;
+	return Math.min(MAX_CONFIGURED_TIMEOUT_MS, Math.max(1000, Math.round(seconds * 1000)));
+}
+
+function defaultToolTimeoutMs(): number | undefined {
+	return secondsToTimeoutMs(process.env[MCP_TOOL_TIMEOUT_ENV]);
 }
 
 // ---------------------------------------------------------------------------

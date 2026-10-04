@@ -62,10 +62,11 @@ project servers that were skipped at the last attach.
 | Field | Meaning |
 | --- | --- |
 | `command`, `args` | Executable to spawn. **Required** — entries with only a `url` are skipped, since stdio is the supported transport. |
-| `env` | Extra environment for the child. Merged over the parent environment. Values are runtime-only and are never rendered or logged. |
+| `env` | Extra environment for the child. For user configs it is merged over the parent environment; for project configs it is merged over the small allowlist only. Values are runtime-only and are never rendered or logged. |
 | `cwd` | Working directory. Defaults to the session's cwd. |
 | `disabled` / `enabled: false` | Skip without deleting the entry. |
 | `startup_timeout_sec` | Handshake deadline. Raise it for `npx -y …@latest` servers whose first run downloads a package. |
+| `tool_timeout_sec` | Deadline for each request to this server, including tool calls (default 30, clamped to 1 s–24 h). Raise it for servers whose tools queue or run long. `OMK_MCP_TOOL_TIMEOUT_SEC` sets the default for servers that omit it. |
 
 ## Using it
 
