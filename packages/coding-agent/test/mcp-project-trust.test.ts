@@ -14,6 +14,7 @@ import {
 	TRUST_PROJECT_MCP_ENV,
 	trustProjectMcpConfig,
 } from "../src/core/mcp/config.ts";
+import { mcpOuterToolTimeoutMs } from "../src/core/mcp/manager-runtime.ts";
 
 function tmp(prefix: string): string {
 	return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -187,5 +188,13 @@ describe("MCP tool timeout config", () => {
 			if (previous === undefined) delete process.env[MCP_TOOL_TIMEOUT_ENV];
 			else process.env[MCP_TOOL_TIMEOUT_ENV] = previous;
 		}
+	});
+});
+
+describe("MCP outer tool timeout", () => {
+	it("pins the tool-runner timer just above a configured MCP deadline", () => {
+		expect(mcpOuterToolTimeoutMs(300_000)).toBe(305_000);
+		expect(mcpOuterToolTimeoutMs(undefined)).toBeUndefined();
+		expect(mcpOuterToolTimeoutMs(0)).toBeUndefined();
 	});
 });
