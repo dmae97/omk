@@ -1,7 +1,9 @@
 import {
+	FINISH_CHECK_MAX_TOOL_CALLS,
 	FINISH_CHECK_MESSAGE,
 	FINISH_CHECK_SAVE_NOW_FRACTION,
 	FINISH_CHECK_SAVE_NOW_MESSAGE,
+	FINISH_CHECK_WRAP_UP_MESSAGE,
 	finishDisciplinePrompt,
 	isWorkspaceMutatingTool,
 	resolveFinishCheckMode,
@@ -32,12 +34,16 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 	let mutated = false;
 	let checked = false;
 	let warnedSaveNow = false;
+	let checkToolCalls = 0;
+	let wrappedUp = false;
 
 	omk.on("input", (event) => {
 		// Our own follow-up arrives as extension input; only a new user task resets the check.
 		if (event.source !== "extension") {
 			mutated = false;
 			checked = false;
+			checkToolCalls = 0;
+			wrappedUp = false;
 		}
 		return undefined;
 	});
@@ -57,6 +63,13 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 	omk.on("tool_execution_end", (event) => {
 		if (isWorkspaceMutatingTool(event.toolName)) mutated = true;
 		maybeWarnSaveNow();
+		if (checked && !wrappedUp) {
+			checkToolCalls += 1;
+			if (checkToolCalls >= FINISH_CHECK_MAX_TOOL_CALLS) {
+				wrappedUp = true;
+				omk.sendUserMessage(FINISH_CHECK_WRAP_UP_MESSAGE, { deliverAs: "steer" });
+			}
+		}
 	});
 
 	// Long reasoning can pass 75% without any tool finishing; check when each assistant message ends too.

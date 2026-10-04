@@ -5,8 +5,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import finishCheck from "../src/core/extensions/builtin/finish-check.ts";
 import { HARNESS_FACTORIES } from "../src/core/extensions/builtin/harness-factories.ts";
 import {
+	FINISH_CHECK_MAX_TOOL_CALLS,
 	FINISH_CHECK_MESSAGE,
 	FINISH_CHECK_SAVE_NOW_MESSAGE,
+	FINISH_CHECK_WRAP_UP_MESSAGE,
 	finishDisciplinePrompt,
 	isWorkspaceMutatingTool,
 	resolveFinishCheckMode,
@@ -68,7 +70,9 @@ describe("finish-check policy", () => {
 	});
 
 	it("tells the verification turn to keep saved outputs valid", () => {
-		expect(FINISH_CHECK_MESSAGE).toContain("Change files only when a check fails");
+		expect(FINISH_CHECK_MESSAGE).toContain("Change a file only when a check actually fails");
+		expect(FINISH_CHECK_MESSAGE).toContain("Do not search other directories");
+		expect(FINISH_CHECK_MESSAGE).toContain(`at most ${FINISH_CHECK_MAX_TOOL_CALLS} tool calls`);
 	});
 
 	it("is registered as a built-in harness extension behind OMK_FINISH_CHECK", () => {
@@ -193,5 +197,30 @@ describe("finish-check extension in a headless session", () => {
 		await harness.session.prompt("long task");
 		expect(secondTurnUsers.at(-1)).toBe(FINISH_CHECK_SAVE_NOW_MESSAGE);
 		expect(harness.faux.state.callCount).toBe(2);
+	});
+
+	it("tells a long verification turn to wrap up after the tool-call cap", async () => {
+		const runs: string[] = [];
+		let wrapUpSeenAt = -1;
+		const harness = await createHarness({
+			tools: [writeTool(runs)],
+			extensionFactories: [(omk) => finishCheck(omk, { env: {} })],
+		});
+		harnesses.push(harness);
+		const checkCalls = Array.from({ length: FINISH_CHECK_MAX_TOOL_CALLS + 2 }, (_, index) => (context: Context) => {
+			if (wrapUpSeenAt < 0 && userTexts(context).includes(FINISH_CHECK_WRAP_UP_MESSAGE)) wrapUpSeenAt = index;
+			return wrapUpSeenAt >= 0
+				? fauxAssistantMessage("verified")
+				: fauxAssistantMessage([fauxToolCall("write", { path: `check-${index}` })], { stopReason: "toolUse" });
+		});
+		harness.setResponses([
+			fauxAssistantMessage([fauxToolCall("write", { path: "out.txt" })], { stopReason: "toolUse" }),
+			fauxAssistantMessage("done"),
+			...checkCalls,
+		]);
+		await harness.session.prompt("write out.txt");
+		expect(wrapUpSeenAt).toBe(FINISH_CHECK_MAX_TOOL_CALLS);
+		expect(runs).toHaveLength(1 + FINISH_CHECK_MAX_TOOL_CALLS);
+		expect(harness.session.isStreaming).toBe(false);
 	});
 });

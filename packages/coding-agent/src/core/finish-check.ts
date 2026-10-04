@@ -21,6 +21,8 @@ const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
 
 /** Fraction of the time budget after which the run is told to save its outputs now. */
 export const FINISH_CHECK_SAVE_NOW_FRACTION = 0.75;
+/** Tool calls the verification turn may use before it is told to wrap up. */
+export const FINISH_CHECK_MAX_TOOL_CALLS = 6;
 /** Past this fraction there is no time for an extra verification turn. */
 export const FINISH_CHECK_SKIP_FRACTION = 0.9;
 
@@ -65,14 +67,16 @@ export function finishDisciplinePrompt(timeBudgetMs: number | undefined): string
 }
 
 export const FINISH_CHECK_MESSAGE = [
-	"Finish check (automatic, runs once). Before you stop, verify the work against the original task:",
-	"1. Requirements: list each explicit requirement and check it against the actual files and output as they are now. Fix anything missing.",
-	"2. Edge cases: write and run small tests for the edge cases each requirement implies (empty or missing values, boundaries, combinations, type preservation). Fix what fails.",
-	"3. Scope: review what you changed (for example `git status`, `git diff` and `git reflog` where a repository exists). Undo destructive changes the task did not ask for, such as rewritten history, deleted branches or removed data. Keep system changes the task needs.",
-	"4. Deliverables and environment: confirm every required output exists at the exact path in the expected format, and that required services, accounts and ports are configured and running.",
-	"Change files only when a check fails, and keep every saved output valid after each step, so stopping at any moment still leaves a working result.",
-	"If everything already holds, reply briefly with what you verified. Do not start new optional work.",
+	"Finish check (automatic, runs once, keep it short). Check only the deliverables and requirements the task names, at the paths the task gives or in your working directory. Do not search other directories for specs, tests or answers.",
+	"1. Requirements: check each explicit requirement against the current files and output.",
+	"2. Edge cases: run a few quick checks for the edge cases those requirements imply.",
+	"3. Scope: where a repository exists, look at `git status`, `git diff` and `git reflog`, and undo destructive changes the task did not ask for, such as rewritten history, deleted branches or removed data. Keep system changes the task needs.",
+	"4. Deliverables and environment: confirm every required output exists at its exact path in the expected format, and that required services, accounts and ports are running.",
+	`Change a file only when a check actually fails. Do not rewrite, restyle or "improve" anything that already passes, and keep every saved output valid after each step. Use at most ${FINISH_CHECK_MAX_TOOL_CALLS} tool calls, then reply briefly with what you verified.`,
 ].join("\n");
+
+export const FINISH_CHECK_WRAP_UP_MESSAGE =
+	"Finish check limit reached. Stop checking now, leave the saved outputs as they are, and reply with a one-line summary of what you verified.";
 
 export const FINISH_CHECK_SAVE_NOW_MESSAGE =
 	"Time check: about 75% of this run's time budget is used. Make sure every required output is saved at its exact path now, with your best working result so far. Finish the current step, then stop optimizing unless there is clearly time left.";
