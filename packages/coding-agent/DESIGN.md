@@ -16,8 +16,8 @@ Colour comes only from theme tokens. The default themes are the paper pair; othe
 | Secondary ink (labels, captions) | `muted` | `#b3ad9d` | `#4d4d4d` |
 | Tertiary ink (plates, hints) | `dim` | `#8f8a82` | `#6a675f` |
 | Accent (Verify stage, active tab, running state) | `accent` | `#f0503f` | `#b8261f` |
-| Hairline frames | `borderMuted` | `#43413d` | `#bdb8ab` |
-| Component boundaries | `border` | `#6f6c65` | `#857f76` |
+| Inner rules, meter troughs | `borderMuted` | `#43413d` | `#bdb8ab` |
+| Outer frames, section rules | `border` | `#6f6c65` | `#857f76` |
 | Status | `success` / `warning` / `error` | `#41996a` / `#ce791f` / `#ea6154` | `#285f42` / `#7e4a13` / `#a2211b` |
 
 - Palette source: AdaptOrch `frontend/src/index.css`. Three dark values are one step lighter than the web tokens (accent `#e84131`, tertiary `#87827a`, emphatic line) so text keeps 4.5:1 and boundaries 3:1 on common terminal backgrounds such as `#1e1e1e`; `test/theme-paper.test.ts` measures every role.

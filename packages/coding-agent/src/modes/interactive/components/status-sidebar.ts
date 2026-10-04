@@ -481,10 +481,10 @@ export class StatusSidebarComponent implements Component {
 
 /** Section rule with a right-aligned counter, e.g. `│─ MCP ─────── 22/24 │`. */
 function railRule(width: number, label: string, right: string): string {
-	const left = `${theme.fg("borderMuted", "─")}${theme.fg("muted", ` ${label} `)}`;
+	const left = `${theme.fg("border", "─")}${theme.fg("muted", ` ${label} `)}`;
 	const rightText = ` ${right} `;
 	const fill = Math.max(0, width - 2 - visibleWidth(left) - visibleWidth(rightText));
-	const line = `${theme.fg("borderMuted", "│")}${left}${theme.fg("borderMuted", "─".repeat(fill))}${rightText}${theme.fg("borderMuted", "│")}`;
+	const line = `${theme.fg("border", "│")}${left}${theme.fg("border", "─".repeat(fill))}${rightText}${theme.fg("border", "│")}`;
 	return visibleWidth(line) <= width ? line : truncateToWidth(line, width, "");
 }
 

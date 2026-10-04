@@ -110,7 +110,7 @@ function takeEnd(value: string, maxWidth: number): string {
 }
 
 /**
- * Square-cornered frame like a printed plate: the title is a caption in secondary ink, not the accent.
+ * Square-cornered frame like a printed plate in strong ink; the title is a caption in secondary ink, not the accent.
  */
 export function boxTop(width: number, label: string, borderColor: ThemeColor = "border"): string {
 	const text = ` ${label} `;
