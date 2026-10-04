@@ -1,0 +1,170 @@
+import type { AgentTool } from "omk-agent-core";
+import { type Context, fauxAssistantMessage, fauxToolCall } from "omk-ai";
+import { Type } from "typebox";
+import { afterEach, describe, expect, it } from "vitest";
+import finishCheck from "../src/core/extensions/builtin/finish-check.ts";
+import { HARNESS_FACTORIES } from "../src/core/extensions/builtin/harness-factories.ts";
+import {
+	FINISH_CHECK_MESSAGE,
+	FINISH_CHECK_SAVE_NOW_MESSAGE,
+	finishDisciplinePrompt,
+	isWorkspaceMutatingTool,
+	resolveFinishCheckMode,
+	resolveTimeBudgetMs,
+	shouldRunFinishCheck,
+} from "../src/core/finish-check.ts";
+import { createHarness, type Harness } from "./suite/harness.ts";
+
+const base = {
+	mode: "headless" as const,
+	hasUI: false,
+	alreadyChecked: false,
+	mutatedWorkspace: true,
+	hasPendingMessages: false,
+	aborted: false,
+	elapsedFraction: undefined,
+};
+
+describe("finish-check policy", () => {
+	it("parses OMK_FINISH_CHECK and OMK_TIME_BUDGET_SEC", () => {
+		expect(resolveFinishCheckMode(undefined)).toBe("headless");
+		expect(resolveFinishCheckMode("0")).toBe("off");
+		expect(resolveFinishCheckMode("always")).toBe("always");
+		expect(resolveFinishCheckMode("1")).toBe("always");
+		expect(resolveTimeBudgetMs("900")).toBe(900_000);
+		expect(resolveTimeBudgetMs("-1")).toBeUndefined();
+		expect(resolveTimeBudgetMs("soon")).toBeUndefined();
+	});
+
+	it("treats only observing tools as read-only", () => {
+		expect(isWorkspaceMutatingTool("read")).toBe(false);
+		expect(isWorkspaceMutatingTool("update_todo")).toBe(false);
+		expect(isWorkspaceMutatingTool("bash")).toBe(true);
+		expect(isWorkspaceMutatingTool("write")).toBe(true);
+	});
+
+	it("runs once, only after a headless run that changed the workspace", () => {
+		expect(shouldRunFinishCheck(base)).toBe(true);
+		expect(shouldRunFinishCheck({ ...base, hasUI: true })).toBe(false);
+		expect(shouldRunFinishCheck({ ...base, mode: "always", hasUI: true })).toBe(true);
+		expect(shouldRunFinishCheck({ ...base, mode: "off" })).toBe(false);
+		expect(shouldRunFinishCheck({ ...base, alreadyChecked: true })).toBe(false);
+		expect(shouldRunFinishCheck({ ...base, mutatedWorkspace: false })).toBe(false);
+		expect(shouldRunFinishCheck({ ...base, hasPendingMessages: true })).toBe(false);
+		expect(shouldRunFinishCheck({ ...base, aborted: true })).toBe(false);
+		expect(shouldRunFinishCheck({ ...base, elapsedFraction: 0.5 })).toBe(true);
+		expect(shouldRunFinishCheck({ ...base, elapsedFraction: 0.95 })).toBe(false);
+	});
+
+	it("names scope, early save, edge cases and environment in the prompt block", () => {
+		const block = finishDisciplinePrompt(600_000);
+		expect(block).toContain("rewrite or squash git history");
+		expect(block).toContain("restarting services) are in scope");
+		expect(block).toContain("Save a working result early");
+		expect(block).toContain("edge cases");
+		expect(block).toContain("accounts and passwords");
+		expect(block).toContain("about 600 seconds");
+		expect(finishDisciplinePrompt(undefined)).not.toContain("wall-clock budget");
+	});
+
+	it("is registered as a built-in harness extension behind OMK_FINISH_CHECK", () => {
+		expect(HARNESS_FACTORIES.map((entry) => entry.envVar)).toContain("OMK_FINISH_CHECK");
+	});
+});
+
+describe("finish-check extension in a headless session", () => {
+	const harnesses: Harness[] = [];
+	afterEach(() => {
+		while (harnesses.length > 0) harnesses.pop()?.cleanup();
+	});
+
+	function writeTool(runs: string[]): AgentTool {
+		return {
+			name: "write",
+			label: "Write",
+			description: "Write a file",
+			parameters: Type.Object({ path: Type.String() }),
+			execute: async (_toolCallId, params) => {
+				runs.push(String((params as { path: string }).path));
+				return { content: [{ type: "text", text: "ok" }], details: {} };
+			},
+		};
+	}
+
+	function userTexts(context: Context): string[] {
+		return context.messages
+			.filter((message) => message.role === "user")
+			.map((message) =>
+				typeof message.content === "string"
+					? message.content
+					: message.content.map((part) => (part.type === "text" ? part.text : "")).join(""),
+			);
+	}
+
+	it("adds one verification turn before prompt() resolves, then stops", async () => {
+		const runs: string[] = [];
+		let systemPrompt = "";
+		let verifyTurnUsers: string[] = [];
+		const harness = await createHarness({
+			tools: [writeTool(runs)],
+			extensionFactories: [(omk) => finishCheck(omk, { env: {} })],
+		});
+		harnesses.push(harness);
+		harness.setResponses([
+			(context) => {
+				systemPrompt = context.systemPrompt ?? "";
+				return fauxAssistantMessage([fauxToolCall("write", { path: "out.txt" })], { stopReason: "toolUse" });
+			},
+			fauxAssistantMessage("done"),
+			(context) => {
+				verifyTurnUsers = userTexts(context);
+				return fauxAssistantMessage("verified: out.txt exists");
+			},
+		]);
+
+		await harness.session.prompt("write out.txt");
+
+		expect(runs).toEqual(["out.txt"]);
+		expect(systemPrompt).toContain("<finish_discipline>");
+		expect(harness.faux.state.callCount).toBe(3);
+		expect(verifyTurnUsers.at(-1)).toBe(FINISH_CHECK_MESSAGE);
+		expect(harness.session.isStreaming).toBe(false);
+	});
+
+	it("skips the verification turn when nothing changed", async () => {
+		const harness = await createHarness({ extensionFactories: [(omk) => finishCheck(omk, { env: {} })] });
+		harnesses.push(harness);
+		harness.setResponses([fauxAssistantMessage("just an answer")]);
+		await harness.session.prompt("what is 2+2?");
+		expect(harness.faux.state.callCount).toBe(1);
+	});
+
+	it("steers the run to save outputs once 75% of the time budget is used", async () => {
+		const runs: string[] = [];
+		let clock = 0;
+		let steeredUsers: string[] = [];
+		const harness = await createHarness({
+			tools: [writeTool(runs)],
+			extensionFactories: [
+				(omk) => finishCheck(omk, { env: { OMK_TIME_BUDGET_SEC: "100", OMK_FINISH_CHECK: "0" }, now: () => clock }),
+				(omk) => finishCheck(omk, { env: { OMK_TIME_BUDGET_SEC: "100" }, now: () => clock }),
+			],
+		});
+		harnesses.push(harness);
+		harness.setResponses([
+			() => {
+				clock = 80_000;
+				return fauxAssistantMessage([fauxToolCall("write", { path: "a" })], { stopReason: "toolUse" });
+			},
+			(context) => {
+				steeredUsers = userTexts(context);
+				clock = 95_000;
+				return fauxAssistantMessage("saved");
+			},
+		]);
+		await harness.session.prompt("long task");
+		expect(steeredUsers).toContain(FINISH_CHECK_SAVE_NOW_MESSAGE);
+		// Past 90% of the budget there is no time for the extra verification turn.
+		expect(harness.faux.state.callCount).toBe(2);
+	});
+});
