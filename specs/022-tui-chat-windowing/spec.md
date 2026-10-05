@@ -11,6 +11,16 @@ description: "Off-screen chat transcript windowing so TUI frame time and retaine
 **Input**: Tech-lead perf goal — in long interactive sessions, render time and TUI memory must not grow linearly with transcript length; implement off-screen windowing / virtualization for ChatContainer / message components.
 **OMK Preset**: `omk`
 
+## CLI Harness Target Impact
+
+**Classification**: advance
+
+| Dimension | Baseline | Acceptance target | Regression floor | Verification command | Evidence artifact |
+| --- | --- | --- | --- | --- | --- |
+| Keypress / frame latency | `main` @ `8baa7435f`: headless FakeTerminal 120×40 sync `doRender` ~1.6 / ~8.1 / ~52.7 ms mean at 5k / 25k / 100k transcript lines | Mean `doRender` ≤ 2.0 / 3.0 / 5.0 ms at 5k / 25k / 100k; 100k must not be ~4× the 25k figure (AC1) | Must stay below those ceilings on the same harness; no return to O(N) full-buffer reset+diff as the dominant term | `nice -n 19 node --experimental-strip-types` headless harness documented in AC1 (or PR body); `node --test packages/tui/test/windowed-container.test.ts packages/tui/test/line-reset-memo.test.ts` | PR #79 body before/after table; `packages/tui/test/windowed-container.test.ts` |
+| Frozen render-cache retention | Every message keeps `cachedLines` / Box `cache.lines` for the full history | After freeze, frozen children’s render-cache char sum is **0** (AC2) | Frozen cache chars must remain 0 after freeze on the AC2 walk | same `node --test` windowed-container cache-release case | `releases render caches on frozen children` |
+| Render equivalence | Full `Container` render is the oracle | Windowed ≡ full across resize, invalidate, live mutate, unsettled late-complete, generation bump, message-object swap, randomized late old-child mutation (AC3 / AC5) | `0` mismatches on those cases | `node --test packages/tui/test/windowed-container.test.ts` | that test file |
+
 ## Measurement findings (before design)
 
 Headless harness on this box (`nice -n 19`, Node 22, FakeTerminal 120×40, sync `doRender`, chat of alternating `Box(Text)` / `Text` plus a live editor `Text` changed every frame):
@@ -73,9 +83,18 @@ Steady-state cost may grow with the live window and changed tail, not with N.
 3. Resize to a different width; both must match again (windowed must thaw / re-layout).
 4. Call `invalidate()` (theme path); both must match.
 5. Mutate a live-tail child (simulate tool expand/collapse or streaming `setText` append); both must match.
-6. If feasible, a randomized property: random ASCII bodies, widths in `{40,80,120}`, freeze budgets, and append/invalidate/resize sequences — windowed output equals full output every step.
+6. Randomized property: random ASCII bodies, widths in `{40,80,120}`, freeze budgets, append/invalidate/resize, **and late mutation / message-object swap of early (likely frozen) children** — windowed output equals full output every step.
 
 **Pass**: Zero mismatches on the scripted cases; randomized case reports 0 mismatches for the chosen trial count.
+
+### AC5 — Unsettled children stay live; frozen changes thaw
+
+**Method** (package tests with duck-typed stand-ins; coding-agent wiring of `isRenderSettled` is a follow-up via spec 026):
+
+1. A child with `isRenderSettled() === false` must not enter the frozen prefix even when the live budget is exceeded; after it `complete()`s / settles, the next `render` must show the new content and match a full `Container`.
+2. A settled child that was frozen, then bumps `getRenderGeneration()` (setText / expand / **message object replacement**), must thaw/recompute so the next `render` matches full and includes the new content. Windowing must not rely on message object identity alone.
+
+**Pass**: Dedicated cases in `windowed-container.test.ts` for pending→complete, generation bump, and message-object swap; randomized suite includes late old-child mutation and swap.
 
 ### AC4 — Gates
 
@@ -98,9 +117,10 @@ From repo root, with `PATH` including Node 22 and `nice -n 19`:
 
 ## Design (chosen)
 
-1. **`WindowedContainer`** (`packages/tui`): extends `Container`; keeps `frozenLines` + `frozenChildCount`; `setLiveLineBudget(n)`; on `render(width)`, if width changed or invalidated → thaw; render only children from `frozenChildCount`; while live lines exceed the budget, peel leading live children into `frozenLines` and duck-type-release their render caches; return `frozenLines.concat(live)`.
+1. **`WindowedContainer`** (`packages/tui`): extends `Container`; keeps `frozenLines` + `frozenChildCount` + per-frozen `getRenderGeneration` snapshots; `setLiveLineBudget(n)`; on `render(width)`, thaw if width changed, `invalidate()`, a frozen child is unsettled, or a frozen child’s generation moved; render only children from `frozenChildCount`; while live lines exceed the budget, peel leading **settled** children into `frozenLines` and duck-type-release their render caches — **stop at the first unsettled child** (`isRenderSettled?(): boolean`; missing hook ⇒ settled); return `frozenLines.concat(live)`.
 2. **`ChatContainer`**: extend `WindowedContainer` instead of `Container`; keep dispose/clear; default live budget (~3×40 or `setLiveLineBudget` from tests).
 3. **`LineResetMemo`**: extract applyLineResets + kitty id scan to `line-reset-memo.ts`; reuse prior out/ids when `raw[i] === previous raw[i]` so frozen prefix refs stay reference-equal through reset and diff. Overlaps open PR #56’s memo file by intent; Box half of #56 stays out (non-goal).
+4. **Settle semantics (single source of truth)**: packages/tui only defines the duck-typed hooks. Whether an assistant/tool message is settled is **not** reimplemented in coding-agent ad hoc — a shared predicate from spec `026-message-settled` (Staff) will back `isRenderSettled` / generation bumps on `AssistantMessageComponent` / `ToolExecutionComponent` in a **follow-up** once that PR lands. Generation must bump on content mutate **and** on agent-loop message-object replacement (`updateContent` / `setMessage` style), not only on in-place field mutation.
 
 ## Files to be touched
 
@@ -110,7 +130,7 @@ From repo root, with `PATH` including Node 22 and `nice -n 19`:
 | `packages/tui/src/windowed-container.ts` | New: frozen-prefix windowing |
 | `packages/tui/src/line-reset-memo.ts` | New: LineResetMemo + SEGMENT_RESET / extractKittyImageIds move |
 | `packages/tui/src/tui.ts` | Wire LineResetMemo; remove inlined reset/id helpers (pure LOC must not grow past baseline) |
-| `packages/tui/src/index.ts` | Export `WindowedContainer` |
+| `packages/tui/src/index.ts` | Export `WindowedContainer`, `releaseRenderCache`, `isRenderSettled` |
 | `packages/tui/test/windowed-container.test.ts` | Equivalence + freeze/cache-release tests (incl. randomized if feasible) |
 | `packages/tui/test/line-reset-memo.test.ts` | Memo reuse / identity tests |
 | `packages/coding-agent/src/modes/interactive/components/chat-container.ts` | Extend `WindowedContainer` |
@@ -123,4 +143,6 @@ Do **not** touch: `interactive-mode.ts` (baseline), `box.ts` / `markdown.ts` reu
 ## Risks / merge notes
 
 - PR #56 also adds `line-reset-memo.ts` and rewires `tui.ts`. This spec’s memo should stay API-compatible (`apply`, `kittyImageIds`, `SEGMENT_RESET`, `extractKittyImageIds`) so a later merge keeps one implementation.
-- Expanding a tool that was already frozen remains a non-goal for scrollback repair (terminal scrollback already baked the old view); live-window expand/collapse is covered by AC3.
+- **#65 MarkdownStreamCache**: `releaseRenderCache` already prefers an explicit `releaseRenderCache()` method and also clears a duck-typed `streamCache` field if present. When #65 merges, Markdown should implement `releaseRenderCache()` (or keep `streamCache` as an own field) so freeze drops the stream cache in one place — do not teach WindowedContainer about Markdown internals beyond that.
+- **Follow-up (not in this PR’s coding-agent wiring)**: wire `isRenderSettled` / `getRenderGeneration` on assistant + tool components **only** by importing Staff’s shared settled predicate (spec 026). Until then, plain children remain freeze-eligible (hook absent ⇒ settled); TUI tests cover the hooks with stand-ins.
+- Live-window expand/collapse and frozen generation bumps / message swaps are covered by AC3/AC5. Terminal scrollback rows already emitted for a prior view are not rewritten (existing TUI scrollback policy).
