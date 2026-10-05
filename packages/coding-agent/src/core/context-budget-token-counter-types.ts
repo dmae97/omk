@@ -17,6 +17,8 @@ export interface TokenCounterAdapter {
 	isAvailable(): boolean;
 	supports(modelId: string): boolean;
 	countText(input: string, modelId: string): TokenCountResult;
+	/** Optional: the result of `countText(parts.join(""), modelId)` without building the joined text. */
+	countTextParts?(parts: readonly string[], modelId: string): TokenCountResult;
 }
 
 export interface OptionalModuleLoader {
