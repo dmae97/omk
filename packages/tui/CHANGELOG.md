@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `visibleWidth` skips grapheme segmentation for text that is printable ASCII, Hangul syllables or CJK unified ideographs once escape sequences are stripped, and the width cache grows from 512 to 8192 entries (strings over 4096 characters are not cached). Width logic moved from `utils.ts` to `visible-width.ts`; `utils.ts` still exports `visibleWidth`.
+
 ## [1.3.0] - 2026-10-04
 
 ### Changed

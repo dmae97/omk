@@ -1,8 +1,10 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import fc from "fast-check";
+import { extractAnsiCode } from "../src/ansi-codes.ts";
 import { CURSOR_MARKER } from "../src/tui.ts";
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "../src/utils.ts";
+import { graphemeWidth } from "../src/visible-width.ts";
 
 // Property tests for the width contract the renderer enforces: TUI.render throws when
 // visibleWidth(line) > terminal width, so truncateToWidth/wrapTextWithAnsi must stay within it.
@@ -65,6 +67,58 @@ const wrapText = fc.string({
 		{ arbitrary: sgr, weight: 1 },
 	),
 	maxLength: 160,
+	size: "medium",
+});
+
+/** The pre-fast-path algorithm, kept verbatim as the oracle: expand tabs, strip escapes one
+ * character at a time, then sum grapheme widths. */
+function segmentedWidth(text: string): number {
+	const clean = text.replace(/\t/g, "   ");
+	let stripped = "";
+	for (let i = 0; i < clean.length; ) {
+		const ansi = extractAnsiCode(clean, i);
+		if (ansi) {
+			i += ansi.length;
+		} else {
+			stripped += clean[i++];
+		}
+	}
+	let width = 0;
+	for (const { segment } of graphemes.segment(stripped)) width += graphemeWidth(segment);
+	return width;
+}
+
+/** OSC 8 hyperlinks (both terminators), CURSOR_MARKER, a lone ESC that starts no sequence, and tabs. */
+const nonSgrEscape = fc.constantFrom(
+	"\x1b]8;;https://example.com\x07",
+	"\x1b]8;;\x07",
+	"\x1b]8;id=1;https://x.test\x1b\\",
+	"\x1b]8;;\x1b\\",
+	CURSOR_MARKER,
+	"\x1b",
+	"\t",
+);
+
+/** Styled ASCII: what most rendered lines are (markdown, tool output, borders). */
+const styledAscii = fc.string({
+	unit: fc.oneof({ arbitrary: codePoint(0x20, 0x7e), weight: 8 }, { arbitrary: sgr, weight: 2 }, nonSgrEscape),
+	maxLength: 160,
+	size: "medium",
+});
+
+/** Styled text mixing ASCII with Hangul, CJK, emoji and fullwidth forms, escapes anywhere. */
+const styledMixed = fc.string({
+	unit: fc.oneof(
+		{ arbitrary: codePoint(0x20, 0x7e), weight: 4 },
+		{ arbitrary: codePoint(0xac00, 0xd7a3), weight: 2 },
+		{ arbitrary: codePoint(0x4e00, 0x9fff), weight: 1 },
+		{ arbitrary: codePoint(0xff01, 0xff60), weight: 1 },
+		{ arbitrary: grapheme, weight: 1 },
+		{ arbitrary: clusterSensitive, weight: 1 },
+		{ arbitrary: sgr, weight: 2 },
+		nonSgrEscape,
+	),
+	maxLength: 120,
 	size: "medium",
 });
 
@@ -224,6 +278,41 @@ describe("width invariants (property-based)", () => {
 					[`\x1b[4m${"a".repeat(30)} b\x1b[24m`, 7],
 				],
 			},
+		);
+	});
+
+	it("W7: visibleWidth fast paths and cache agree with grapheme segmentation", () => {
+		const agree = (text: string) => {
+			const expected = segmentedWidth(text);
+			assert.strictEqual(visibleWidth(text), expected, `first call: ${JSON.stringify(text)}`);
+			assert.strictEqual(visibleWidth(text), expected, `cached call: ${JSON.stringify(text)}`);
+		};
+		fc.assert(fc.property(styledAscii, agree), {
+			numRuns: NUM_RUNS * 4,
+			examples: [["\x1b[31mhello\x1b[0m"], ["a\tb"], ["\x1b"], ["\x1b[31"], [`x${CURSOR_MARKER}y`]],
+		});
+		fc.assert(fc.property(styledMixed, agree), {
+			numRuns: NUM_RUNS * 4,
+			examples: [
+				["\x1b[1m안녕하세요\x1b[22m 세계"],
+				["測漢字\x1b[0m🙂"],
+				["\uff21\uff22"],
+				["\x1b[31m\u2764\ufe0f"],
+			],
+		});
+		fc.assert(fc.property(fc.oneof(freeText, styledText, clusterSplittingText), agree), { numRuns: NUM_RUNS * 2 });
+	});
+
+	it("W8: widths stay correct across a scan larger than the width cache", () => {
+		// A long transcript re-measures thousands of distinct lines per pass; results must not
+		// depend on what the cache evicted in between.
+		const lines = Array.from({ length: 10_000 }, (_, i) => `\x1b[36m${i} 한글 줄 ${"가".repeat(i % 7)}\x1b[39m`);
+		const first = lines.map((line) => visibleWidth(line));
+		const second = lines.map((line) => visibleWidth(line));
+		assert.deepStrictEqual(second, first);
+		assert.deepStrictEqual(
+			first,
+			lines.map((line) => segmentedWidth(line)),
 		);
 	});
 });
