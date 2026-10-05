@@ -9,6 +9,7 @@ import identicalLoop from "../src/core/extensions/builtin/identical-loop.ts";
 import promptPreset from "../src/core/extensions/builtin/prompt-preset.ts";
 import toolPairRepair from "../src/core/extensions/builtin/tool-pair-repair.ts";
 import type { ExtensionAPI, ExtensionContext } from "../src/core/extensions/types.ts";
+import { setProgressStallSteerSuppressed } from "../src/core/progress-stall-steer-gate.ts";
 import { DefaultResourceLoader } from "../src/core/resource-loader.ts";
 import { createAgentSession } from "../src/core/sdk.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
@@ -151,6 +152,83 @@ describe("identical-loop built-in factory", () => {
 		expect(harness.fire("tool_call", call)[0]).toMatchObject({ block: true });
 		harness.fire("input", { type: "input", text: "stop", source: "interactive" });
 		expect(harness.fire("tool_call", call)).toEqual([undefined]);
+	});
+
+	it("steers on near-duplicate bash without progress and respects the finish-check gate", () => {
+		setProgressStallSteerSuppressed(false);
+		const harness = createFactoryHarness();
+		identicalLoop(harness.omk, { remainingBudgetFraction: () => 0.5 });
+		for (let index = 0; index < 14; index += 1) {
+			const call = {
+				type: "tool_call",
+				toolCallId: `n-${index}`,
+				toolName: "bash",
+				input: { command: `python3 -c "import re, json; print(${index}); json.load(open('/app/re.json'))"` },
+			};
+			expect(harness.fire("tool_call", call)[0]).toBeUndefined();
+			harness.fire("tool_result", {
+				type: "tool_result",
+				toolCallId: `n-${index}`,
+				toolName: "bash",
+				input: call.input,
+				content: [{ type: "text", text: "ok" }],
+				isError: false,
+				details: undefined,
+			});
+		}
+		expect(
+			harness.messages.some((message) => (message as { customType?: string }).customType === "progress-stall"),
+		).toBe(true);
+
+		harness.messages.length = 0;
+		setProgressStallSteerSuppressed(true);
+		for (let index = 0; index < 14; index += 1) {
+			const call = {
+				type: "tool_call",
+				toolCallId: `s-${index}`,
+				toolName: "bash",
+				input: { command: `python3 -c "import re, json; print(${index + 20}); json.load(open('/app/re.json'))"` },
+			};
+			harness.fire("tool_call", call);
+			harness.fire("tool_result", {
+				type: "tool_result",
+				toolCallId: `s-${index}`,
+				toolName: "bash",
+				input: call.input,
+				content: [{ type: "text", text: "ok" }],
+				isError: false,
+				details: undefined,
+			});
+		}
+		expect(harness.messages).toHaveLength(0);
+		setProgressStallSteerSuppressed(false);
+	});
+
+	it("uses the low-budget steer text when remainingBudgetFraction is under 20%", () => {
+		const harness = createFactoryHarness();
+		identicalLoop(harness.omk, { remainingBudgetFraction: () => 0.1 });
+		for (let index = 0; index < 14; index += 1) {
+			const call = {
+				type: "tool_call",
+				toolCallId: `b-${index}`,
+				toolName: "bash",
+				input: { command: `python3 -c "import re, json; print(${index}); json.load(open('/app/re.json'))"` },
+			};
+			harness.fire("tool_call", call);
+			harness.fire("tool_result", {
+				type: "tool_result",
+				toolCallId: `b-${index}`,
+				toolName: "bash",
+				input: call.input,
+				content: [{ type: "text", text: "ok" }],
+				isError: false,
+				details: undefined,
+			});
+		}
+		const stall = harness.messages.find(
+			(message) => (message as { customType?: string }).customType === "progress-stall",
+		) as { content?: string } | undefined;
+		expect(stall?.content).toMatch(/Save best state, run verification/);
 	});
 });
 
