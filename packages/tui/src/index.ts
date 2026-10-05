@@ -106,3 +106,4 @@ export {
 } from "./tui.ts";
 // Utilities
 export { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "./utils.ts";
+export { releaseRenderCache, WindowedContainer } from "./windowed-container.ts";

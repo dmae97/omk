@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Chat-scale TUI sessions no longer re-normalize and re-diff every transcript row each frame: `LineResetMemo` reuses prior reset output (and Kitty ids) when a row's raw text is unchanged, so the differential renderer stays on reference equality for the stable prefix. `applyLineResets` / kitty-id helpers moved to `line-reset-memo.ts` (shrinks `tui.ts`).
+- New `WindowedContainer` freezes leading children into a line buffer once the live tail exceeds a configurable line budget, stops re-rendering them, and duck-type-releases their `cachedLines` / Box caches. Width changes and `invalidate()` thaw. `releaseRenderCache` is exported for tests.
+
 ## [1.3.0] - 2026-10-04
 
 ### Changed
