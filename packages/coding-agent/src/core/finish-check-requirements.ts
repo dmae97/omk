@@ -39,14 +39,19 @@ function splitSentences(prompt: string): string[] {
 	return sentences;
 }
 
+// A relative file name such as `image.c` or `out/result.json`, counted only when the sentence asks to produce it.
+const RELATIVE_FILE =
+	/(?:^|[\s`'"(])(?:\.\/)?(?:[\w.@+-]+\/)*[\w@+-]+\.(?:json|csv|txt|py|md|bin|pt|so|c|js|ts|sh|toml|ya?ml|out|log|scm|png|ppm|html)\b/;
+const PRODUCE_WORDS = /\b(?:save[sd]?|write|writes|written|create|output|produce|place|store)\b/i;
 const OUTPUT_WORDS = /\b(?:save[sd]?|write|writes|written|create|output|produce|place|store|exists?|configure)\b/i;
 
-/** 1 = bounds a number, 2 = names a path it asks for, 3 = names a path; undefined = not a requirement. */
+/** 1 = bounds a number, 2 = names a path or file it asks for, 3 = names a path; undefined = not a requirement. */
 function requirementTier(sentence: string): 1 | 2 | 3 | undefined {
 	if (BOUND_WORDS.test(sentence) && NUMBER.test(sentence)) return 1;
 	if (COMPARATOR.test(sentence)) return 1;
 	if (UNIT_NUMBER.test(sentence) && REQUIRED.test(sentence)) return 1;
-	if (!ABSOLUTE_PATH.test(sentence)) return undefined;
+	if (!ABSOLUTE_PATH.test(sentence))
+		return RELATIVE_FILE.test(sentence) && PRODUCE_WORDS.test(sentence) ? 2 : undefined;
 	return REQUIRED.test(sentence) || OUTPUT_WORDS.test(sentence) ? 2 : 3;
 }
 

@@ -37,6 +37,13 @@ describe("finish-check requirement extraction", () => {
 		expect(extractRequirements("Your warrior must win 33% of battles against snake.red.")).toHaveLength(1);
 	});
 
+	it("keeps relative files only when the sentence asks to produce them", () => {
+		expect(extractRequirements("Write a c program image.c that renders the scene.")).toEqual([
+			"Write a c program image.c that renders the scene.",
+		]);
+		expect(extractRequirements("The helper lives in utils.py.")).toEqual([]);
+	});
+
 	it("ignores plain goals, relative paths and code samples", () => {
 		const prompt = [
 			"Fix the failing build.",
