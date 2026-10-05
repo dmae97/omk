@@ -537,6 +537,12 @@ Body that should also stay out of diagnostics`,
 			);
 		});
 
+		it("does not split at country abbreviations like U.S.", () => {
+			expect(compactSkillDescription("Lists U.S. compliance requirements for APIs. Extra detail.")).toBe(
+				"Lists U.S. compliance requirements for APIs.",
+			);
+		});
+
 		it("stays within maxChars below the minimum lead share", () => {
 			const lead = "Analyzes large repositories and summarizes their architecture in detail.";
 			const trigger = "Use when onboarding onto an unfamiliar codebase or planning a refactor.";

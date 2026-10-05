@@ -65,6 +65,8 @@ const ABBREVIATIONS = new Set([
 	"dr.",
 	"st.",
 	"jr.",
+	"u.s.",
+	"u.k.",
 ]);
 /** 스킬 설명에서 언제 쓰는지 알려 주는 문장. 매칭의 핵심 단서라 첫 문장보다 우선한다. */
 const TRIGGER_SENTENCE = /^(use|invoke|apply|run|call)\b|^(when|before|after)\b/i;
