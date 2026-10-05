@@ -92,14 +92,14 @@ export class Markdown implements Component {
 	}
 
 	setText(text: string): void {
+		if (text === this.text) return;
 		this.text = text;
 		this.invalidate();
 	}
 
 	invalidate(): void {
-		this.cachedText = undefined;
+		this.cachedText = this.cachedLines = undefined;
 		this.cachedWidth = undefined;
-		this.cachedLines = undefined;
 	}
 
 	render(width: number): string[] {

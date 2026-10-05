@@ -5,7 +5,6 @@ import { getMarkdownTheme, theme } from "../theme/theme.ts";
 type ContentViewKind = "text" | "thinking" | "hidden-thinking";
 interface ContentView {
 	kind: ContentViewKind;
-	text: string;
 	component: Markdown | Text;
 }
 
@@ -82,20 +81,17 @@ export class AssistantMessageComponent extends Container {
 
 	private contentView(index: number, kind: ContentViewKind, text: string): Markdown | Text {
 		const previous = this.contentViews.get(index);
+		const display = kind === "hidden-thinking" ? theme.italic(theme.fg("thinkingText", text)) : text;
 		if (previous?.kind === kind) {
-			if (previous.text !== text) {
-				previous.component.setText(
-					kind === "hidden-thinking" ? theme.italic(theme.fg("thinkingText", text)) : text,
-				);
-				previous.text = text;
-			}
+			// Markdown/Text.setText no-ops when unchanged, so streaming can call this freely.
+			previous.component.setText(display);
 			return previous.component;
 		}
 		const component =
 			kind === "hidden-thinking"
-				? new Text(theme.italic(theme.fg("thinkingText", text)), 1, 0)
+				? new Text(display, 1, 0)
 				: new Markdown(
-						text,
+						display,
 						1,
 						0,
 						this.markdownTheme,
@@ -103,7 +99,7 @@ export class AssistantMessageComponent extends Container {
 							? { color: (value: string) => theme.fg("thinkingText", value), italic: true }
 							: undefined,
 					);
-		this.contentViews.set(index, { kind, text, component });
+		this.contentViews.set(index, { kind, component });
 		return component;
 	}
 

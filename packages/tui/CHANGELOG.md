@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `Markdown.setText` / `Text.setText` no-op when the string is unchanged, so streaming updates can refresh message views without discarding wrap caches.
+
 ## [1.3.0] - 2026-10-04
 
 ### Changed
