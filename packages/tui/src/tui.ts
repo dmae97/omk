@@ -121,14 +121,10 @@ export type SizeValue = number | `${number}%`;
 
 /** Parse a SizeValue into absolute value given a reference size */
 function parseSizeValue(value: SizeValue | undefined, referenceSize: number): number | undefined {
-	if (value === undefined) return undefined;
-	if (typeof value === "number") return value;
+	if (value === undefined || typeof value === "number") return value;
 	// Parse percentage string like "50%"
 	const match = value.match(/^(\d+(?:\.\d+)?)%$/);
-	if (match) {
-		return Math.floor((referenceSize * parseFloat(match[1])) / 100);
-	}
-	return undefined;
+	return match ? Math.floor((referenceSize * parseFloat(match[1])) / 100) : undefined;
 }
 
 function isTermuxSession(): boolean {
@@ -315,6 +311,11 @@ export class TUI extends Container {
 
 	get fullRedraws(): number {
 		return this.fullRedrawCount;
+	}
+
+	/** First buffer row inside the viewport as of the last render (0 while the whole frame fits). */
+	get viewportTop(): number {
+		return this.previousViewportTop;
 	}
 
 	getShowHardwareCursor(): boolean {

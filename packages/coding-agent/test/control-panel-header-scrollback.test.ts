@@ -2,7 +2,10 @@ import { type Component, Container, Text, TUI } from "omk-tui";
 import { beforeAll, describe, expect, test } from "vitest";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
 import type { TodoState } from "../src/core/todo-state.ts";
-import { ControlPanelComponent } from "../src/modes/interactive/components/control-panel.ts";
+import {
+	ControlPanelComponent,
+	type ControlPanelMotionOptions,
+} from "../src/modes/interactive/components/control-panel.ts";
 import {
 	type ControlPanelContent,
 	type ControlPanelStatusSnapshot,
@@ -98,6 +101,17 @@ function countCopies(rows: readonly string[]): Map<string, number> {
 	return copies;
 }
 
+/** Motion options as interactive mode wires them, with the viewport signal from the TUI. */
+function viewportOptions(tui: TUI): ControlPanelMotionOptions {
+	return {
+		requestRender: () => tui.requestRender(),
+		isTTY: () => true,
+		isReducedMotion: () => true,
+		isHeaderVisibleHint: () => true,
+		isInViewport: () => tui.viewportTop === 0,
+	};
+}
+
 async function flush(tui: TUI, terminal: VirtualTerminal): Promise<void> {
 	tui.requestRender();
 	await Promise.resolve();
@@ -110,16 +124,24 @@ const VERIFIED: EvidenceSignal = { verification: "verified", receiptPresent: tru
  * Drives a header + transcript through turns that flip every header-related value (RUN state,
  * ctx %, todo list, VERIFY verdict) after the header has scrolled into scrollback.
  */
+interface TurnHarness {
+	state: LiveState;
+	tui: TUI;
+	terminal: VirtualTerminal;
+	chat: Container;
+}
+
 async function runTurns(
-	makeHeader: (content: ControlPanelContent) => Component,
+	makeHeader: (content: ControlPanelContent, tui: TUI) => Component,
 	betweenTurns?: (state: LiveState, turn: number) => void,
+	afterTurns?: (harness: TurnHarness) => Promise<void>,
 ) {
 	const state = initialState();
 	const calls = { count: 0 };
 	const terminal = new VirtualTerminal(WIDTH, HEIGHT);
 	const tui = new TUI(terminal);
 	const chat = new Container();
-	tui.addChild(makeHeader(panelContent(state, calls)));
+	tui.addChild(makeHeader(panelContent(state, calls), tui));
 	tui.addChild(chat);
 	let line = 0;
 	const addTurnOutput = () => {
@@ -154,7 +176,9 @@ async function runTurns(
 		maxCopies: Math.max(0, ...countCopies(transcriptRows).values()),
 		snapshotCallsAfterStart: calls.count - callsBefore,
 		totalLines: line,
+		scrollbackText: terminal.getScrollBuffer().join("\n"),
 	};
+	await afterTurns?.({ state, tui, terminal, chat });
 	tui.stop();
 	return result;
 }
@@ -298,18 +322,81 @@ describe("startup header in scrollback", () => {
 		expect(header.render(WIDTH)).toEqual(freshRender(content));
 	});
 
-	test("a /model between turns repaints the scrolled-off header once, then turns stay redraw-free", async () => {
+	test("a /model while the header is in scrollback keeps its lines: no full redraw, no duplicate rows", async () => {
+		let header: ControlPanelComponent | undefined;
 		const result = await runTurns(
-			(content) => new ControlPanelComponent(content),
+			(content, tui) => {
+				header = new ControlPanelComponent(content, viewportOptions(tui));
+				return header;
+			},
 			(state, turn) => {
 				if (turn === 4) state.modelId = "omk-next-model";
 			},
 		);
-		// The model rows sit in scrollback, so showing the new model needs one repaint from the
-		// header down (one extra copy of the transcript so far); the other turns add nothing.
-		expect(result.extraFullRedraws).toBe(1);
-		expect(result.maxCopies).toBeLessThanOrEqual(2);
+		expect(result.extraFullRedraws).toBe(0);
+		expect(result.duplicateRows).toBe(0);
 		expect(result.uniqueRows).toBe(result.totalLines);
+		// The stale header was never repainted; the refresh waits until it is visible again.
+		expect(result.scrollbackText).not.toContain("omk-next-model");
+		expect(header?.headerSnapshotStale).toBe(true);
+	});
+
+	test("a deferred model refresh shows the new model once the header is visible again", async () => {
+		let header: ControlPanelComponent | undefined;
+		await runTurns(
+			(content, tui) => {
+				header = new ControlPanelComponent(content, viewportOptions(tui));
+				return header;
+			},
+			(state, turn) => {
+				if (turn === 4) state.modelId = "omk-next-model";
+			},
+			async ({ tui, terminal, chat }) => {
+				expect(terminal.getViewport().join("\n")).not.toContain("omk-next-model");
+				// The transcript shrinks (same session) so the whole frame fits on screen again.
+				chat.clear();
+				chat.addChild(new Text("short transcript", 0, 0));
+				await flush(tui, terminal);
+				await flush(tui, terminal);
+				expect(tui.viewportTop).toBe(0);
+				expect(header?.headerSnapshotStale).toBe(false);
+				expect(terminal.getViewport().join("\n")).toContain("omk-next-model");
+			},
+		);
+	});
+
+	test("/new after a deferred model refresh shows the current model right away", async () => {
+		await runTurns(
+			(content, tui) => new ControlPanelComponent(content, viewportOptions(tui)),
+			(state, turn) => {
+				if (turn === 4) state.modelId = "omk-next-model";
+			},
+			async ({ state, tui, terminal, chat }) => {
+				state.sessionId = "session-new";
+				chat.clear();
+				await flush(tui, terminal);
+				expect(terminal.getViewport().join("\n")).toContain("omk-next-model");
+			},
+		);
+	});
+
+	test("a /model while the header is on screen refreshes it on the next render", async () => {
+		const state = initialState();
+		const terminal = new VirtualTerminal(WIDTH, HEIGHT);
+		const tui = new TUI(terminal);
+		const header = new ControlPanelComponent(panelContent(state, { count: 0 }), viewportOptions(tui));
+		tui.addChild(header);
+		tui.start();
+		await flush(tui, terminal);
+		state.signals = { ...state.signals, isStreaming: true };
+		await flush(tui, terminal);
+		state.signals = { ...state.signals, isStreaming: false };
+		state.modelId = "omk-next-model";
+		await flush(tui, terminal);
+		expect(tui.viewportTop).toBe(0);
+		expect(header.headerSnapshotStale).toBe(false);
+		expect(terminal.getViewport().join("\n")).toContain("omk-next-model");
+		tui.stop();
 	});
 
 	test("/new or /resume (transcript cleared, new session key) does not duplicate the old transcript", async () => {

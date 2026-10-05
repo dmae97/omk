@@ -805,6 +805,7 @@ export class InteractiveMode {
 				isReducedMotion: () => process.env.OMK_REDUCED_MOTION === "1" || process.env.OMK_REDUCE_MOTION === "1",
 				isHeaderVisibleHint: () => this.customHeader === undefined,
 				getRenderWidth: () => this.ui.contentWidth,
+				isInViewport: () => this.ui.viewportTop === 0,
 			});
 			controlPanel.setExpanded(this.getStartupExpansionState());
 			this.builtInHeader = controlPanel;

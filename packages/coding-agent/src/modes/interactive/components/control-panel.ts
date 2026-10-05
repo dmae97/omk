@@ -17,6 +17,12 @@ export interface ControlPanelMotionOptions {
 	isHeaderVisibleHint: () => boolean;
 	getRenderWidth?: () => number;
 	now?: () => number;
+	/**
+	 * Whether the header rows were inside the viewport on the last frame (default: true). A header
+	 * that has scrolled into scrollback defers model refreshes: repainting a row above the viewport
+	 * forces a full redraw that re-emits the transcript.
+	 */
+	isInViewport?: () => boolean;
 }
 
 /** RUN labels that mean a turn (or compaction) is in progress. */
@@ -35,9 +41,12 @@ function isTurnInProgress(snapshot: ControlPanelStatusSnapshot): boolean {
  * ctx/meter and TODO keep the values they had before the first prompt. The status sidebar and
  * the control-pane overlay show the live values.
  *
- * The frozen snapshot is re-captured when the content's `headerKey` changes: a new model or
- * thinking level (/model, model cycling) re-reads the snapshot, and a new session (/new, /resume,
- * /fork) goes back to the live header until that session's first turn starts.
+ * The frozen snapshot is re-captured when the content's `headerKey` changes. A new session
+ * (/new, /resume, /fork, which clear the transcript) goes back to the live header until that
+ * session's first turn starts. A new model or thinking level (/model, model cycling) re-reads the
+ * snapshot while the header is on screen; once it has scrolled into scrollback the header keeps its
+ * lines and marks the snapshot stale until it is visible again (the footer and the status sidebar
+ * already show the new model).
  */
 export class ControlPanelComponent implements Component {
 	private expanded = false;
@@ -51,6 +60,7 @@ export class ControlPanelComponent implements Component {
 	private frozenContent: ControlPanelContent | undefined;
 	private renderCache: { key: string; lines: string[] } | undefined;
 	private lastHeaderKey: ControlPanelHeaderKey | undefined;
+	private staleModel = false;
 
 	constructor(content: ControlPanelContent, motionOptions?: ControlPanelMotionOptions) {
 		this.content = content;
@@ -110,6 +120,7 @@ export class ControlPanelComponent implements Component {
 	 * the current snapshot, or only its model rows while a turn is running.
 	 */
 	refreshHeaderSnapshot(options: { newSession?: boolean } = {}): void {
+		this.staleModel = false;
 		this.renderCache = undefined;
 		this.preTurnSnapshot = undefined;
 		const frozen = this.frozenContent?.statusSnapshot?.();
@@ -124,14 +135,26 @@ export class ControlPanelComponent implements Component {
 		this.frozenContent = { ...this.content, statusSnapshot: () => snapshot };
 	}
 
+	/** True while a model/thinking change waits for the scrolled-off header to be visible again. */
+	get headerSnapshotStale(): boolean {
+		return this.staleModel;
+	}
+
 	/** Refreshes the header when its model/thinking or session key changes since the last render. */
 	private syncHeaderKey(): void {
 		const key = this.content.headerKey?.();
 		const last = this.lastHeaderKey;
 		this.lastHeaderKey = key;
-		if (key === undefined || last === undefined) return;
-		if (key.session !== last.session) this.refreshHeaderSnapshot({ newSession: true });
-		else if (key.model !== last.model) this.refreshHeaderSnapshot();
+		if (key !== undefined && last !== undefined) {
+			if (key.session !== last.session) {
+				this.refreshHeaderSnapshot({ newSession: true });
+				return;
+			}
+			if (key.model !== last.model) this.staleModel = true;
+		}
+		if (!this.staleModel) return;
+		const inViewport = this.motionOptions?.isInViewport?.() ?? true;
+		if (this.frozenContent === undefined || inViewport) this.refreshHeaderSnapshot();
 	}
 
 	/** Content with the header's status snapshot: live before the first turn, frozen after. */
