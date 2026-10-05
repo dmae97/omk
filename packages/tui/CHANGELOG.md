@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `SelectList` caches the primary column width until the filter or item set changes, so opening `/` with many skills no longer rescans every label on each render frame.
+
 ## [1.3.0] - 2026-10-04
 
 ### Changed
