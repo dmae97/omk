@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
 import { FooterComponent } from "../src/modes/interactive/components/footer.ts";
@@ -53,5 +53,40 @@ describe("FooterComponent system metrics flag", () => {
 		expect(footer.isShowingSystemMetrics()).toBe(true);
 		footer.setShowSystemMetrics(false);
 		expect(footer.isShowingSystemMetrics()).toBe(false);
+	});
+
+	describe("metrics refresh timer", () => {
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it("only ticks while metrics are shown and stops on toggle or dispose", () => {
+			vi.useFakeTimers();
+			const footer = new FooterComponent(createSession(), createFooterData());
+			let ticks = 0;
+			footer.setMetricsTickHandler(() => {
+				ticks++;
+			});
+			vi.advanceTimersByTime(6000);
+			expect(ticks).toBe(0);
+			expect(vi.getTimerCount()).toBe(0);
+
+			footer.setShowSystemMetrics(true);
+			vi.advanceTimersByTime(6000);
+			expect(ticks).toBe(3);
+
+			footer.setShowSystemMetrics(false);
+			expect(vi.getTimerCount()).toBe(0);
+			vi.advanceTimersByTime(6000);
+			expect(ticks).toBe(3);
+
+			footer.setShowSystemMetrics(true);
+			footer.setShowSystemMetrics(true);
+			expect(vi.getTimerCount()).toBe(1);
+			footer.dispose();
+			expect(vi.getTimerCount()).toBe(0);
+			vi.advanceTimersByTime(6000);
+			expect(ticks).toBe(3);
+		});
 	});
 });
