@@ -25,6 +25,7 @@
 
 ### Fixed
 
+- Processes that import `AgentSession`, every `omk -p` worker included, no longer load jiti and its bundled Babel (about 1.5 MB of CommonJS) at startup. The extension loader imports `jiti/static` when it loads its first extension file, so a run without extension files never loads it. Importing `core/agent-session.js` alone now takes about 15 MB less RSS and 8 MB less heap after GC.
 - The startup panel no longer shows fixed status values as live state. The control rail, the hero strip and the narrow status line printed `ready`, `active`, `tracking`, `linked`, `pinned` and `DAG:omk-parallel-orchestrator` with no runtime source, most of them in the success color. Status rows now come from one `ControlPlaneViewModel` built from the live session by one adapter, `readControlPlaneSignals`; the pinned status sidebar builds the same view model through the same adapter.
 - Status rows in the control rail and the pinned sidebar, and the startup header's MODEL and THEME values, print session, run-journal, model, theme and file-system text (model id, theme name, cwd, git branch, session name, endpoint host, MCP server names, TODO labels, failure text) as one printable line: escape sequences, control characters and bidi marks are removed and line breaks become spaces. In 1.2.4 the rail's model, cwd, git and TODO rows and the pinned sidebar's cwd, git, session and model rows printed such text as-is; sidebar MCP names were already cleaned.
 
