@@ -5,7 +5,7 @@ import lockfile from "proper-lockfile";
 import { CONFIG_DIR_NAME, getAgentDir } from "../config.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
 import type { NotificationSettings } from "./completion-sound.ts";
-import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dispatcher.ts";
+import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-idle-timeout.ts";
 import type { ResourceGovernorSettings } from "./resource-governor-settings.ts";
 
 const MAX_DEFAULT_ACTIVE_SKILLS = 64;
