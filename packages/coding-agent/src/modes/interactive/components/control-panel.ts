@@ -1,13 +1,14 @@
 import type { Component } from "omk-tui";
 import {
 	type ControlPanelContent,
+	type ControlPanelHeaderKey,
 	type ControlPanelStatusSnapshot,
 	renderControlPanelLayout,
 	renderControlPanelRightPane,
 } from "./control-panel-layout.ts";
 import { INTRO_MS, revealAt, shouldAnimateIntro, TICK_MS } from "./control-panel-motion.ts";
 
-export type { ControlPanelContent, ControlPanelStatusSnapshot } from "./control-panel-layout.ts";
+export type { ControlPanelContent, ControlPanelHeaderKey, ControlPanelStatusSnapshot } from "./control-panel-layout.ts";
 
 export interface ControlPanelMotionOptions {
 	requestRender: () => void;
@@ -33,6 +34,10 @@ function isTurnInProgress(snapshot: ControlPanelStatusSnapshot): boolean {
  * starts, then freezes on the last pre-turn snapshot and stops rebuilding it: RUN, VERIFY,
  * ctx/meter and TODO keep the values they had before the first prompt. The status sidebar and
  * the control-pane overlay show the live values.
+ *
+ * The frozen snapshot is re-captured when the content's `headerKey` changes: a new model or
+ * thinking level (/model, model cycling) re-reads the snapshot, and a new session (/new, /resume,
+ * /fork) goes back to the live header until that session's first turn starts.
  */
 export class ControlPanelComponent implements Component {
 	private expanded = false;
@@ -45,6 +50,7 @@ export class ControlPanelComponent implements Component {
 	private preTurnSnapshot: ControlPanelStatusSnapshot | undefined;
 	private frozenContent: ControlPanelContent | undefined;
 	private renderCache: { key: string; lines: string[] } | undefined;
+	private lastHeaderKey: ControlPanelHeaderKey | undefined;
 
 	constructor(content: ControlPanelContent, motionOptions?: ControlPanelMotionOptions) {
 		this.content = content;
@@ -86,6 +92,7 @@ export class ControlPanelComponent implements Component {
 		this.lastRenderWidth = width;
 		const reveal = this.currentReveal();
 		const plain = this.shouldRenderPlain();
+		this.syncHeaderKey();
 		const content = this.headerContent();
 		// Once frozen the header's inputs only change with width, expansion, the intro reveal or a
 		// theme change (invalidate), so reuse the rendered lines instead of re-laying out every frame.
@@ -95,6 +102,36 @@ export class ControlPanelComponent implements Component {
 		const lines = plain ? layout.map(stripAnsi) : layout;
 		this.renderCache = content === this.frozenContent ? { key, lines } : undefined;
 		return lines;
+	}
+
+	/**
+	 * Re-captures the header's status snapshot. With `newSession` (/new, /resume) the header goes
+	 * back to live until the session's first turn starts; otherwise (/model) a frozen header takes
+	 * the current snapshot, or only its model rows while a turn is running.
+	 */
+	refreshHeaderSnapshot(options: { newSession?: boolean } = {}): void {
+		this.renderCache = undefined;
+		this.preTurnSnapshot = undefined;
+		const frozen = this.frozenContent?.statusSnapshot?.();
+		const read = this.content.statusSnapshot;
+		if (options.newSession || frozen === undefined || read === undefined) {
+			this.frozenContent = undefined;
+			return;
+		}
+		const live = read();
+		const { modelProvider, modelId, thinkingLevel } = live;
+		const snapshot = isTurnInProgress(live) ? { ...frozen, modelProvider, modelId, thinkingLevel } : live;
+		this.frozenContent = { ...this.content, statusSnapshot: () => snapshot };
+	}
+
+	/** Refreshes the header when its model/thinking or session key changes since the last render. */
+	private syncHeaderKey(): void {
+		const key = this.content.headerKey?.();
+		const last = this.lastHeaderKey;
+		this.lastHeaderKey = key;
+		if (key === undefined || last === undefined) return;
+		if (key.session !== last.session) this.refreshHeaderSnapshot({ newSession: true });
+		else if (key.model !== last.model) this.refreshHeaderSnapshot();
 	}
 
 	/** Content with the header's status snapshot: live before the first turn, frozen after. */

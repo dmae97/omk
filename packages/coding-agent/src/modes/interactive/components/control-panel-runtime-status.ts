@@ -8,7 +8,7 @@ import type { SessionManager } from "../../../core/session-manager.ts";
 import { getCurrentTodoState } from "../../../core/todo-runtime-state.ts";
 import { readControlPlaneSignals } from "../control-plane-signals.ts";
 import { buildControlPlaneViewModel } from "../control-plane-view-model.ts";
-import type { ControlPanelStatusSnapshot } from "./control-panel-layout.ts";
+import type { ControlPanelContent, ControlPanelHeaderKey, ControlPanelStatusSnapshot } from "./control-panel-layout.ts";
 import { formatCwdForFooter } from "./footer.ts";
 
 const OMK_HUB_SKILL_NAMES = new Set([
@@ -160,5 +160,32 @@ export function createControlPanelStatusSnapshot(
 		ansiColorState,
 		// Authority state is read from the live session each render, never asserted here.
 		controlPlane: buildControlPlaneViewModel(signals),
+	};
+}
+
+/**
+ * Identity of what the frozen startup header shows: model and thinking level, and the session.
+ * Auto thinking resolves a level per turn, so it keys as "auto" and does not refresh the header.
+ */
+export function controlPanelHeaderKey(session: AgentSession): ControlPanelHeaderKey {
+	const model = session.state.model;
+	const thinking = session.thinkingMode === "auto" ? "auto" : (session.state.thinkingLevel ?? "off");
+	return {
+		model: `${model?.provider ?? ""}/${model?.id ?? ""}/${thinking}`,
+		session: session.sessionManager.getSessionId(),
+	};
+}
+
+/** The control panel's status readers for the current session (which /new and /resume replace). */
+export function controlPanelStatusReaders(
+	getSession: () => AgentSession,
+	footerData?: ReadonlyFooterDataProvider,
+): Pick<ControlPanelContent, "statusSnapshot" | "headerKey"> {
+	return {
+		statusSnapshot: () => {
+			const session = getSession();
+			return createControlPanelStatusSnapshot(session, session.sessionManager, footerData);
+		},
+		headerKey: () => controlPanelHeaderKey(getSession()),
 	};
 }

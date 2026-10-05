@@ -140,7 +140,7 @@ import { BranchSummaryMessageComponent } from "./components/branch-summary-messa
 import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.ts";
 import { ControlPanelComponent, ControlPanelRightPaneComponent } from "./components/control-panel.ts";
 import { CONTROL_PANEL_SIDEBAR_WIDTH } from "./components/control-panel-layout.ts";
-import { createControlPanelStatusSnapshot } from "./components/control-panel-runtime-status.ts";
+import { controlPanelStatusReaders } from "./components/control-panel-runtime-status.ts";
 import { CountdownTimer } from "./components/countdown-timer.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
 import { CustomMessageComponent } from "./components/custom-message.ts";
@@ -797,8 +797,7 @@ export class InteractiveMode {
 				compactOnboarding: () =>
 					`Press ${keyText("app.tools.expand")} to show full startup help and loaded resources.`,
 				onboarding: () => `OMK can explain its own features and look up its docs. Ask it how to use or extend OMK.`,
-				statusSnapshot: () =>
-					createControlPanelStatusSnapshot(this.session, this.sessionManager, this.footerDataProvider),
+				...controlPanelStatusReaders(() => this.session, this.footerDataProvider),
 			};
 			const controlPanel = new ControlPanelComponent(controlPanelContent, {
 				requestRender: () => this.ui.requestRender(),

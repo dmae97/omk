@@ -22,6 +22,8 @@ const TURNS = 8;
 interface LiveState {
 	signals: ControlPlaneSignals;
 	todoState: TodoState | undefined;
+	modelId: string;
+	sessionId: string;
 }
 
 function initialState(): LiveState {
@@ -35,6 +37,25 @@ function initialState(): LiveState {
 			pendingMessageCount: 0,
 		},
 		todoState: undefined,
+		modelId: "omk-test-model",
+		sessionId: "session-1",
+	};
+}
+
+function snapshotOf(state: LiveState): ControlPanelStatusSnapshot {
+	return {
+		modelProvider: "openrouter",
+		modelId: state.modelId,
+		thinkingLevel: "high",
+		mcpCount: 2,
+		skillCount: 5,
+		cwdLabel: "~/omk",
+		gitBranch: "main",
+		ansiColorState: "on",
+		contextPercent: state.signals.contextPercent,
+		contextWindowTokens: state.signals.contextWindowTokens,
+		todoState: state.todoState,
+		controlPlane: buildControlPlaneViewModel(state.signals),
 	};
 }
 
@@ -48,22 +69,15 @@ function panelContent(state: LiveState, calls: { count: number }): ControlPanelC
 		onboarding: () => "[Context]\n 1 loaded · AGENTS.md",
 		statusSnapshot: (): ControlPanelStatusSnapshot => {
 			calls.count++;
-			return {
-				modelProvider: "openrouter",
-				modelId: "omk-test-model",
-				thinkingLevel: "high",
-				mcpCount: 2,
-				skillCount: 5,
-				cwdLabel: "~/omk",
-				gitBranch: "main",
-				ansiColorState: "on",
-				contextPercent: state.signals.contextPercent,
-				contextWindowTokens: state.signals.contextWindowTokens,
-				todoState: state.todoState,
-				controlPlane: buildControlPlaneViewModel(state.signals),
-			};
+			return snapshotOf(state);
 		},
+		headerKey: () => ({ model: `openrouter/${state.modelId}/high`, session: state.sessionId }),
 	};
+}
+
+/** What a new header renders for `content` (same plain/colour mode as the header under test). */
+function freshRender(content: ControlPanelContent): string[] {
+	return new ControlPanelComponent({ ...content, headerKey: undefined }).render(WIDTH);
 }
 
 /** The previous header behaviour: lays out the live snapshot on every render. */
@@ -78,6 +92,12 @@ class LiveHeader implements Component {
 	}
 }
 
+function countCopies(rows: readonly string[]): Map<string, number> {
+	const copies = new Map<string, number>();
+	for (const row of rows) copies.set(row, (copies.get(row) ?? 0) + 1);
+	return copies;
+}
+
 async function flush(tui: TUI, terminal: VirtualTerminal): Promise<void> {
 	tui.requestRender();
 	await Promise.resolve();
@@ -90,7 +110,10 @@ const VERIFIED: EvidenceSignal = { verification: "verified", receiptPresent: tru
  * Drives a header + transcript through turns that flip every header-related value (RUN state,
  * ctx %, todo list, VERIFY verdict) after the header has scrolled into scrollback.
  */
-async function runTurns(makeHeader: (content: ControlPanelContent) => Component) {
+async function runTurns(
+	makeHeader: (content: ControlPanelContent) => Component,
+	betweenTurns?: (state: LiveState, turn: number) => void,
+) {
 	const state = initialState();
 	const calls = { count: 0 };
 	const terminal = new VirtualTerminal(WIDTH, HEIGHT);
@@ -109,6 +132,7 @@ async function runTurns(makeHeader: (content: ControlPanelContent) => Component)
 	const callsBefore = calls.count;
 
 	for (let turn = 0; turn < TURNS; turn++) {
+		betweenTurns?.(state, turn);
 		state.signals = { ...state.signals, isStreaming: true, contextPercent: 10 + turn * 9 };
 		state.todoState = { items: [{ id: "1", label: `step ${turn}`, status: "active" }], updatedAt: turn };
 		await flush(tui, terminal);
@@ -127,6 +151,7 @@ async function runTurns(makeHeader: (content: ControlPanelContent) => Component)
 		extraFullRedraws: tui.fullRedraws - redrawsBefore,
 		duplicateRows: transcriptRows.length - new Set(transcriptRows).size,
 		uniqueRows: new Set(transcriptRows).size,
+		maxCopies: Math.max(0, ...countCopies(transcriptRows).values()),
 		snapshotCallsAfterStart: calls.count - callsBefore,
 		totalLines: line,
 	};
@@ -181,5 +206,138 @@ describe("startup header in scrollback", () => {
 		expect(header.render(120)).not.toEqual(narrow);
 		header.invalidate();
 		expect(header.render(120)).not.toBe(narrow);
+	});
+
+	test("after /model the frozen header shows the new model and the current idle snapshot", () => {
+		const state = initialState();
+		const calls = { count: 0 };
+		const header = new ControlPanelComponent(panelContent(state, calls));
+		header.render(WIDTH);
+		state.signals = { ...state.signals, isStreaming: true, contextPercent: 40 };
+		const frozen = header.render(WIDTH);
+		state.signals = { ...state.signals, isStreaming: false };
+		state.todoState = { items: [{ id: "1", label: "step", status: "done" }], updatedAt: 1 };
+		expect(header.render(WIDTH)).toBe(frozen);
+		expect(frozen.join("\n")).not.toContain("omk-next-model");
+
+		state.modelId = "omk-next-model";
+		const refreshed = header.render(WIDTH);
+		expect(refreshed.join("\n")).toContain("omk-next-model");
+		expect(refreshed).toEqual(freshRender(panelContent(state, { count: 0 })));
+		// Frozen again on the re-captured snapshot: later turns do not change it.
+		const callsAfterRefresh = calls.count;
+		state.signals = { ...state.signals, isStreaming: true, contextPercent: 90 };
+		expect(header.render(WIDTH)).toBe(refreshed);
+		expect(calls.count).toBe(callsAfterRefresh);
+	});
+
+	test("a model change during a turn updates only the model rows of the frozen header", () => {
+		const state = initialState();
+		const header = new ControlPanelComponent(panelContent(state, { count: 0 }));
+		header.render(WIDTH);
+		const preTurn = snapshotOf(state);
+		state.signals = { ...state.signals, isStreaming: true, contextPercent: 70 };
+		header.render(WIDTH);
+		state.modelId = "omk-next-model";
+		const expected = freshRender({
+			...panelContent(state, { count: 0 }),
+			statusSnapshot: () => ({ ...preTurn, modelId: "omk-next-model" }),
+		});
+		expect(header.render(WIDTH)).toEqual(expected);
+	});
+
+	test("after /new or /resume the header is live again until the new session's first turn", () => {
+		const state = initialState();
+		const calls = { count: 0 };
+		const header = new ControlPanelComponent(panelContent(state, calls));
+		header.render(WIDTH);
+		state.signals = { ...state.signals, isStreaming: true, contextPercent: 55 };
+		const frozen = header.render(WIDTH);
+		state.signals = { ...state.signals, isStreaming: false };
+
+		// /resume: another session with its own ctx, TODO and model.
+		state.sessionId = "session-2";
+		state.modelId = "omk-resumed-model";
+		state.signals = { ...state.signals, contextPercent: 61 };
+		state.todoState = { items: [{ id: "1", label: "resumed step", status: "active" }], updatedAt: 2 };
+		const resumed = header.render(WIDTH);
+		expect(resumed).not.toEqual(frozen);
+		expect(resumed).toEqual(freshRender(panelContent(state, { count: 0 })));
+		expect(resumed.join("\n")).toContain("omk-resumed-model");
+
+		// Live before the first turn of the new session...
+		state.signals = { ...state.signals, contextPercent: 62 };
+		const beforeTurn = header.render(WIDTH);
+		expect(beforeTurn).toEqual(freshRender(panelContent(state, { count: 0 })));
+		// ...then frozen on its last pre-turn snapshot once the turn starts.
+		state.signals = { ...state.signals, isStreaming: true, contextPercent: 95 };
+		expect(header.render(WIDTH)).toEqual(beforeTurn);
+		state.signals = { ...state.signals, isStreaming: false };
+		const callsWhenFrozen = calls.count;
+		expect(header.render(WIDTH)).toEqual(beforeTurn);
+		expect(calls.count).toBe(callsWhenFrozen);
+
+		// /new: a fresh session resets the same way.
+		state.sessionId = "session-3";
+		state.todoState = undefined;
+		state.signals = { ...state.signals, contextPercent: 0 };
+		expect(header.render(WIDTH)).toEqual(freshRender(panelContent(state, { count: 0 })));
+	});
+
+	test("refreshHeaderSnapshot() re-captures a frozen header explicitly", () => {
+		const state = initialState();
+		const content = { ...panelContent(state, { count: 0 }), headerKey: undefined };
+		const header = new ControlPanelComponent(content);
+		header.render(WIDTH);
+		state.signals = { ...state.signals, isStreaming: true };
+		const frozen = header.render(WIDTH);
+		state.signals = { ...state.signals, isStreaming: false, contextPercent: 33 };
+		state.modelId = "omk-next-model";
+		expect(header.render(WIDTH)).toBe(frozen);
+		header.refreshHeaderSnapshot();
+		expect(header.render(WIDTH)).toEqual(freshRender(content));
+	});
+
+	test("a /model between turns repaints the scrolled-off header once, then turns stay redraw-free", async () => {
+		const result = await runTurns(
+			(content) => new ControlPanelComponent(content),
+			(state, turn) => {
+				if (turn === 4) state.modelId = "omk-next-model";
+			},
+		);
+		// The model rows sit in scrollback, so showing the new model needs one repaint from the
+		// header down (one extra copy of the transcript so far); the other turns add nothing.
+		expect(result.extraFullRedraws).toBe(1);
+		expect(result.maxCopies).toBeLessThanOrEqual(2);
+		expect(result.uniqueRows).toBe(result.totalLines);
+	});
+
+	test("/new or /resume (transcript cleared, new session key) does not duplicate the old transcript", async () => {
+		const state = initialState();
+		const terminal = new VirtualTerminal(WIDTH, HEIGHT);
+		const tui = new TUI(terminal);
+		const chat = new Container();
+		tui.addChild(new ControlPanelComponent(panelContent(state, { count: 0 })));
+		tui.addChild(chat);
+		for (let i = 0; i < 90; i++) chat.addChild(new Text(`old line ${String(i).padStart(5, "0")}`, 0, 0));
+		tui.start();
+		await flush(tui, terminal);
+		state.signals = { ...state.signals, isStreaming: true };
+		await flush(tui, terminal);
+		state.signals = { ...state.signals, isStreaming: false, contextPercent: 41 };
+		await flush(tui, terminal);
+
+		state.sessionId = "session-2";
+		state.modelId = "omk-resumed-model";
+		chat.clear();
+		for (let i = 0; i < 5; i++) chat.addChild(new Text(`resumed line ${i}`, 0, 0));
+		await flush(tui, terminal);
+		const oldRows = terminal
+			.getScrollBuffer()
+			.map((row) => row.trim())
+			.filter((row) => row.startsWith("old line"));
+		expect(Math.max(...countCopies(oldRows).values())).toBe(1);
+		expect(terminal.getViewport().join("\n")).toContain("omk-resumed-model");
+		tui.stop();
 	});
 });

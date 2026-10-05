@@ -37,6 +37,18 @@ export interface ControlPanelContent {
 	compactOnboarding: () => string;
 	onboarding: () => string;
 	statusSnapshot?: () => ControlPanelStatusSnapshot;
+	/**
+	 * Cheap per-render identity of the header's model/thinking and session. The startup header
+	 * re-captures its frozen snapshot when it changes (/model, /new, /resume); see ControlPanelComponent.
+	 */
+	headerKey?: () => ControlPanelHeaderKey;
+}
+
+export interface ControlPanelHeaderKey {
+	/** Provider, model id and (manual) thinking level. */
+	readonly model: string;
+	/** Session id: a change means a new, resumed or forked session. */
+	readonly session: string;
 }
 
 export interface ControlPanelStatusSnapshot {
