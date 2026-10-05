@@ -4,7 +4,6 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import {
-	type AnthropicMessagesCompat,
 	type Api,
 	type AssistantMessageEventStream,
 	type Context,
@@ -13,8 +12,6 @@ import {
 	type KnownProvider,
 	type Model,
 	type OAuthProviderInterface,
-	type OpenAICompletionsCompat,
-	type OpenAIResponsesCompat,
 	registerApiProvider,
 	resetApiProviders,
 	type SimpleStreamOptions,
@@ -28,6 +25,14 @@ import { stripJsonComments } from "../utils/json.ts";
 import { normalizePath } from "../utils/paths.ts";
 import type { AuthStatus, AuthStorage } from "./auth-storage.ts";
 import { GROK_OAUTH_PROVIDER } from "./grok-playbook.ts";
+import {
+	applyOAuthModelModifiers,
+	loadBuiltInModels,
+	mergeCompat,
+	mergeCustomModels,
+	normalizeAnthropicBaseUrl,
+	type ProviderOverride,
+} from "./model-registry-builtins.ts";
 import { type ModelOverride, type ModelsConfig, validateModelsConfig } from "./model-registry-schema.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "./provider-display-names.ts";
 import {
@@ -55,11 +60,6 @@ function formatValidationPath(error: TLocalizedValidationError): string {
 }
 
 /** Provider override config (baseUrl, compat) without request auth/headers */
-interface ProviderOverride {
-	baseUrl?: string;
-	compat?: Model<Api>["compat"];
-}
-
 interface ProviderRequestConfig {
 	apiKey?: string;
 	headers?: Record<string, string>;
@@ -160,11 +160,6 @@ const RETIRED_GROK_OAUTH_PROXY = "grok-oauth-proxy";
  * resolve time. No console warning — many catalog routes share one host, so
  * a per-route warning only floods startup without giving the user an action.
  */
-function normalizeAnthropicBaseUrl(api: string, baseUrl: string): string {
-	if (api !== "anthropic-messages") return baseUrl;
-	return baseUrl.replace(/\/v\d+\/?$/i, "");
-}
-
 function warnRetiredGrokOAuthProxy(): void {
 	warnDeprecation(
 		`models.json provider "${RETIRED_GROK_OAUTH_PROXY}" is retired. Use native "${GROK_OAUTH_PROVIDER}" OAuth or XAI_API_KEY.`,
@@ -183,70 +178,6 @@ interface CustomModelsResult {
 
 function emptyCustomModelsResult(error?: string): CustomModelsResult {
 	return { models: [], overrides: new Map(), modelOverrides: new Map(), error };
-}
-
-function mergeCompat(
-	baseCompat: Model<Api>["compat"],
-	overrideCompat: ModelOverride["compat"],
-): Model<Api>["compat"] | undefined {
-	if (!overrideCompat) return baseCompat;
-
-	const base = baseCompat as OpenAICompletionsCompat | OpenAIResponsesCompat | AnthropicMessagesCompat | undefined;
-	const override = overrideCompat as OpenAICompletionsCompat | OpenAIResponsesCompat | AnthropicMessagesCompat;
-	const merged = { ...base, ...override } as OpenAICompletionsCompat | OpenAIResponsesCompat | AnthropicMessagesCompat;
-
-	const baseCompletions = base as OpenAICompletionsCompat | undefined;
-	const overrideCompletions = override as OpenAICompletionsCompat;
-	const mergedCompletions = merged as OpenAICompletionsCompat;
-
-	if (baseCompletions?.openRouterRouting || overrideCompletions.openRouterRouting) {
-		mergedCompletions.openRouterRouting = {
-			...baseCompletions?.openRouterRouting,
-			...overrideCompletions.openRouterRouting,
-		};
-	}
-
-	if (baseCompletions?.vercelGatewayRouting || overrideCompletions.vercelGatewayRouting) {
-		mergedCompletions.vercelGatewayRouting = {
-			...baseCompletions?.vercelGatewayRouting,
-			...overrideCompletions.vercelGatewayRouting,
-		};
-	}
-
-	return merged as Model<Api>["compat"];
-}
-
-/**
- * Deep merge a model override into a model.
- * Handles nested objects (cost, compat) by merging rather than replacing.
- */
-function applyModelOverride(model: Model<Api>, override: ModelOverride): Model<Api> {
-	const result = { ...model };
-
-	// Simple field overrides
-	if (override.name !== undefined) result.name = override.name;
-	if (override.reasoning !== undefined) result.reasoning = override.reasoning;
-	if (override.thinkingLevelMap !== undefined) {
-		result.thinkingLevelMap = { ...model.thinkingLevelMap, ...override.thinkingLevelMap };
-	}
-	if (override.input !== undefined) result.input = override.input as ("text" | "image")[];
-	if (override.contextWindow !== undefined) result.contextWindow = override.contextWindow;
-	if (override.maxTokens !== undefined) result.maxTokens = override.maxTokens;
-
-	// Merge cost (partial override)
-	if (override.cost) {
-		result.cost = {
-			input: override.cost.input ?? model.cost.input,
-			output: override.cost.output ?? model.cost.output,
-			cacheRead: override.cost.cacheRead ?? model.cost.cacheRead,
-			cacheWrite: override.cost.cacheWrite ?? model.cost.cacheWrite,
-		};
-	}
-
-	// Deep merge compat
-	result.compat = mergeCompat(model.compat, override.compat);
-
-	return result;
 }
 
 /** Clear the config value command cache. Exported for testing. */
@@ -284,6 +215,10 @@ function removedModelIds(previousContent: string, currentContent: string): strin
 
 export class ModelRegistry {
 	private models: Model<Api>[] = [];
+	private customModels: Model<Api>[] = [];
+	private providerOverrides = new Map<string, ProviderOverride>();
+	private perModelOverrides = new Map<string, Map<string, ModelOverride>>();
+	private builtInsLoaded = false;
 	private providerRequestConfigs: Map<string, ProviderRequestConfig> = new Map();
 	private modelRequestHeaders: Map<string, Record<string, string>> = new Map();
 	private registeredProviders: Map<string, ProviderConfigInput> = new Map();
@@ -312,6 +247,10 @@ export class ModelRegistry {
 		this.providerRequestConfigs.clear();
 		this.modelRequestHeaders.clear();
 		this.loadError = undefined;
+		this.builtInsLoaded = false;
+		this.customModels = [];
+		this.providerOverrides = new Map();
+		this.perModelOverrides = new Map();
 
 		// Ensure dynamic API/OAuth registrations are rebuilt from current provider state.
 		resetApiProviders();
@@ -332,7 +271,7 @@ export class ModelRegistry {
 	}
 
 	private loadModels(): void {
-		// Load custom models and overrides from models.json
+		// Custom models.json first; built-ins wait for ensureBuiltIns() (025 worker RSS).
 		const {
 			models: customModels,
 			overrides,
@@ -342,73 +281,37 @@ export class ModelRegistry {
 
 		if (error) {
 			this.loadError = error;
-			// Keep built-in models even if custom models failed to load
+			// Keep partial custom models; built-ins still on demand
 		}
 
-		const builtInModels = this.loadBuiltInModels(overrides, modelOverrides);
-		let combined = this.mergeCustomModels(builtInModels, customModels);
+		this.customModels = customModels;
+		this.providerOverrides = overrides;
+		this.perModelOverrides = modelOverrides;
+		this.builtInsLoaded = false;
+		this.models = applyOAuthModelModifiers(this.authStorage, [...customModels]);
+	}
 
-		// Let OAuth providers modify their models (e.g., update baseUrl)
-		for (const oauthProvider of this.authStorage.getOAuthProviders()) {
-			const credentials = this.authStorage.getOAuthCredentials(oauthProvider.id);
-			if (credentials && oauthProvider.modifyModels) {
-				combined = oauthProvider.modifyModels(combined, credentials);
-			}
+	/** Load models.generated once; re-apply dynamic providers afterward. */
+	ensureBuiltIns(): void {
+		if (this.builtInsLoaded) {
+			return;
 		}
+		const builtInModels = loadBuiltInModels(this.providerOverrides, this.perModelOverrides);
+		const combined = mergeCustomModels(builtInModels, this.customModels);
+		this.models = applyOAuthModelModifiers(this.authStorage, combined);
+		this.builtInsLoaded = true;
+		// Keep extension providers after rebuilding from the catalog.
+		for (const [providerName, config] of this.registeredProviders.entries()) {
+			this.applyProviderConfig(providerName, config);
+		}
+	}
 
-		this.models = combined;
+	/** Whether models.generated has been merged in. */
+	areBuiltInsLoaded(): boolean {
+		return this.builtInsLoaded;
 	}
 
 	/** Load built-in models and apply provider/model overrides */
-	private loadBuiltInModels(
-		overrides: Map<string, ProviderOverride>,
-		modelOverrides: Map<string, Map<string, ModelOverride>>,
-	): Model<Api>[] {
-		return getProviders().flatMap((provider) => {
-			const models = getModels(provider as KnownProvider) as Model<Api>[];
-			const providerOverride = overrides.get(provider);
-			const perModelOverrides = modelOverrides.get(provider);
-
-			return models.map((m) => {
-				let model = m;
-
-				// Apply provider-level baseUrl/headers/compat override
-				if (providerOverride) {
-					model = {
-						...model,
-						baseUrl: providerOverride.baseUrl ?? model.baseUrl,
-						compat: mergeCompat(model.compat, providerOverride.compat),
-					};
-				}
-
-				// Apply per-model override
-				const modelOverride = perModelOverrides?.get(m.id);
-				if (modelOverride) {
-					model = applyModelOverride(model, modelOverride);
-				}
-
-				// The anthropic adapter string-appends /v1/messages; strip a version
-				// suffix baked into any resolved baseUrl so the path never doubles.
-				const normalizedBaseUrl = normalizeAnthropicBaseUrl(model.api, model.baseUrl);
-				return normalizedBaseUrl === model.baseUrl ? model : { ...model, baseUrl: normalizedBaseUrl };
-			});
-		});
-	}
-
-	/** Merge custom models into built-in list by provider+id (custom wins on conflicts). */
-	private mergeCustomModels(builtInModels: Model<Api>[], customModels: Model<Api>[]): Model<Api>[] {
-		const merged = [...builtInModels];
-		for (const customModel of customModels) {
-			const existingIndex = merged.findIndex((m) => m.provider === customModel.provider && m.id === customModel.id);
-			if (existingIndex >= 0) {
-				merged[existingIndex] = customModel;
-			} else {
-				merged.push(customModel);
-			}
-		}
-		return merged;
-	}
-
 	private loadCustomModels(modelsJsonPath: string): CustomModelsResult {
 		if (!existsSync(modelsJsonPath)) {
 			return emptyCustomModelsResult();
@@ -628,11 +531,14 @@ export class ModelRegistry {
 		return models;
 	}
 
-	/**
-	 * Get all models (built-in + custom).
-	 * If models.json had errors, returns only built-in models.
-	 */
+	/** Custom/registered models without forcing models.generated. */
+	getLoaded(): Model<Api>[] {
+		return this.models;
+	}
+
+	/** Built-in + custom; loads the catalog on first call. */
 	getAll(): Model<Api>[] {
+		this.ensureBuiltIns();
 		return this.models;
 	}
 
@@ -641,13 +547,17 @@ export class ModelRegistry {
 	 * This is a fast check that doesn't refresh OAuth tokens.
 	 */
 	getAvailable(): Model<Api>[] {
+		this.ensureBuiltIns();
 		return this.models.filter((m) => this.hasConfiguredAuth(m));
 	}
 
-	/**
-	 * Find a model by provider and ID.
-	 */
+	/** Prefer loaded custom models; load built-ins only on miss. */
 	find(provider: string, modelId: string): Model<Api> | undefined {
+		const loaded = this.models.find((m) => m.provider === provider && m.id === modelId);
+		if (loaded || this.builtInsLoaded) {
+			return loaded;
+		}
+		this.ensureBuiltIns();
 		return this.models.find((m) => m.provider === provider && m.id === modelId);
 	}
 

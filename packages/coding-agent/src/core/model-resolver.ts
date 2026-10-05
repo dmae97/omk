@@ -11,8 +11,10 @@ import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { defaultModelPerProvider } from "./provider-default-models.ts";
 import { DEFAULT_SAFETY_FAILOVER_CANDIDATES, isStickySafetyModel } from "./provider-resilience.ts";
+import { type ResolveCliModelResult, resolveLoadedCliModel } from "./resolve-cli-model-loaded.ts";
 
 export { defaultModelPerProvider } from "./provider-default-models.ts";
+export type { ResolveCliModelResult } from "./resolve-cli-model-loaded.ts";
 
 const defaultModelLookup: Readonly<Record<string, string>> = defaultModelPerProvider;
 
@@ -282,28 +284,7 @@ export async function resolveModelScope(patterns: string[], modelRegistry: Model
 	return scopedModels;
 }
 
-export interface ResolveCliModelResult {
-	model: Model<Api> | undefined;
-	thinkingLevel?: ThinkingLevel;
-	warning: string | undefined;
-	/**
-	 * Error message suitable for CLI display.
-	 * When set, model will be undefined.
-	 */
-	error: string | undefined;
-}
-
-/**
- * Resolve a single model from CLI flags.
- *
- * Supports:
- * - --provider <provider> --model <pattern>
- * - --model <provider>/<pattern>
- * - Fuzzy matching (same rules as model scoping: exact id, then partial id/name)
- *
- * Note: This does not apply the thinking level by itself, but it may *parse* and
- * return a thinking level from "<pattern>:<thinking>" so the caller can apply it.
- */
+/** Resolve CLI --provider/--model (may parse optional :thinking suffix). */
 export function resolveCliModel(options: {
 	cliProvider?: string;
 	cliModel?: string;
@@ -313,6 +294,11 @@ export function resolveCliModel(options: {
 
 	if (!cliModel) {
 		return { model: undefined, warning: undefined, error: undefined };
+	}
+
+	const loadedHit = resolveLoadedCliModel(modelRegistry, cliProvider, cliModel);
+	if (loadedHit) {
+		return loadedHit;
 	}
 
 	// Important: use *all* models here, not just models with pre-configured auth.

@@ -1,45 +1,80 @@
-import { MODELS } from "./models.generated.ts";
+import { createRequire } from "node:module";
 import { supportsAdaptiveThinking } from "./providers/bedrock-thinking.ts";
 import { applyGrokThinking } from "./providers/grok-thinking.ts";
 import type { Api, KnownProvider, Model, ModelThinkingLevel, Usage } from "./types.ts";
 
-const modelRegistry: Map<string, Map<string, Model<Api>>> = new Map();
-
-// Initialize registry from MODELS on module load
-for (const [provider, models] of Object.entries(MODELS)) {
-	const providerModels = new Map<string, Model<Api>>();
-	for (const [id, model] of Object.entries(models)) {
-		const generated = model as Model<Api>;
-		const registered = generated.id.toLowerCase().includes("gpt-5.6")
-			? { ...generated, contextWindow: 1_000_000 }
-			: generated;
-		providerModels.set(id, provider === "xai" ? applyGrokThinking(registered) : registered);
-	}
-	modelRegistry.set(provider, providerModels);
-}
+/** Type-only catalog shape; does not evaluate models.generated at runtime. */
+type ModelsCatalog = typeof import("./models.generated.ts").MODELS;
 
 type ModelApi<
 	TProvider extends KnownProvider,
-	TModelId extends keyof (typeof MODELS)[TProvider],
-> = (typeof MODELS)[TProvider][TModelId] extends { api: infer TApi } ? (TApi extends Api ? TApi : never) : never;
+	TModelId extends keyof ModelsCatalog[TProvider],
+> = ModelsCatalog[TProvider][TModelId] extends { api: infer TApi } ? (TApi extends Api ? TApi : never) : never;
 
-export function getModel<TProvider extends KnownProvider, TModelId extends keyof (typeof MODELS)[TProvider]>(
+const requireCatalog = createRequire(import.meta.url);
+
+let modelRegistry: Map<string, Map<string, Model<Api>>> | undefined;
+
+/**
+ * Load and memoize the built-in catalog. Callers that only need helpers
+ * (modelsAreEqual, clampThinkingLevel, calculateCost) never touch this.
+ * Specifiers stay relative so Bun compile and Node both resolve the sibling file.
+ */
+function ensureModelRegistry(): Map<string, Map<string, Model<Api>>> {
+	if (modelRegistry) {
+		return modelRegistry;
+	}
+
+	let MODELS: ModelsCatalog;
+	try {
+		MODELS = (requireCatalog("./models.generated.ts") as { MODELS: ModelsCatalog }).MODELS;
+	} catch {
+		MODELS = (requireCatalog("./models.generated.js") as { MODELS: ModelsCatalog }).MODELS;
+	}
+
+	const registry: Map<string, Map<string, Model<Api>>> = new Map();
+	for (const [provider, models] of Object.entries(MODELS)) {
+		const providerModels = new Map<string, Model<Api>>();
+		for (const [id, model] of Object.entries(models)) {
+			const generated = model as Model<Api>;
+			const registered = generated.id.toLowerCase().includes("gpt-5.6")
+				? { ...generated, contextWindow: 1_000_000 }
+				: generated;
+			providerModels.set(id, provider === "xai" ? applyGrokThinking(registered) : registered);
+		}
+		registry.set(provider, providerModels);
+	}
+	modelRegistry = registry;
+	return registry;
+}
+
+/** Test/probe helper: true after the built-in catalog has been evaluated. */
+export function isBuiltInModelsCatalogLoaded(): boolean {
+	return modelRegistry !== undefined;
+}
+
+/** Test helper: drop the memoized catalog so the next ensure pays again. */
+export function resetBuiltInModelsCatalogForTest(): void {
+	modelRegistry = undefined;
+}
+
+export function getModel<TProvider extends KnownProvider, TModelId extends keyof ModelsCatalog[TProvider]>(
 	provider: TProvider,
 	modelId: TModelId,
 ): Model<ModelApi<TProvider, TModelId>> {
-	const providerModels = modelRegistry.get(provider);
+	const providerModels = ensureModelRegistry().get(provider);
 	return providerModels?.get(modelId as string) as Model<ModelApi<TProvider, TModelId>>;
 }
 
 export function getProviders(): KnownProvider[] {
-	return Array.from(modelRegistry.keys()) as KnownProvider[];
+	return Array.from(ensureModelRegistry().keys()) as KnownProvider[];
 }
 
 export function getModels<TProvider extends KnownProvider>(
 	provider: TProvider,
-): Model<ModelApi<TProvider, keyof (typeof MODELS)[TProvider]>>[] {
-	const models = modelRegistry.get(provider);
-	return models ? (Array.from(models.values()) as Model<ModelApi<TProvider, keyof (typeof MODELS)[TProvider]>>[]) : [];
+): Model<ModelApi<TProvider, keyof ModelsCatalog[TProvider]>>[] {
+	const models = ensureModelRegistry().get(provider);
+	return models ? (Array.from(models.values()) as Model<ModelApi<TProvider, keyof ModelsCatalog[TProvider]>>[]) : [];
 }
 
 export function calculateCost<TApi extends Api>(model: Model<TApi>, usage: Usage): Usage["cost"] {
