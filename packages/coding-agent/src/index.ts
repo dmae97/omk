@@ -201,6 +201,23 @@ export {
 	type LoopRecord,
 } from "./core/identical-loop.ts";
 export {
+	bindActiveRemainingBudget,
+	createRemainingBudgetFromEnv,
+	ensureActiveRemainingBudget,
+	getActiveRemainingBudget,
+	REMAINING_BUDGET_HARD_KILL_FRACTION,
+	REMAINING_BUDGET_SAVE_RESERVE_FRACTION,
+	RemainingBudget,
+	resolveTimeBudgetMs,
+	type BashTimeoutPolicy,
+	type ClampBashTimeoutResult,
+} from "./core/remaining-budget.ts";
+export {
+	createEnvRemainingBudgetFraction,
+	remainingFractionFromBudget,
+	type RemainingBudgetFraction,
+} from "./core/remaining-budget-fraction.ts";
+export {
 	type PromptPreset,
 	type PromptPresetId,
 	PROMPT_PRESET_IDS,

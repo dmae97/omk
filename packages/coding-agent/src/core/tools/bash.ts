@@ -20,6 +20,7 @@ import { classifyShellCommand } from "../command-safety.ts";
 import { isCommandSafetyDisabled } from "../extensions/builtin/command-safety-gate.ts";
 import type { ExtensionContext, ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
 import { assertLoadoutAccess, type LoadoutAccessGuard } from "../loadout-access-policy.ts";
+import { bashBudgetTimeoutMessage, ensureActiveRemainingBudget, type RemainingBudget } from "../remaining-budget.ts";
 import { detectSandboxBackend } from "../sandbox/backend.ts";
 import type { SandboxBackendStatus, SandboxPathResolver, SandboxPolicy } from "../sandbox/policy.ts";
 import { buildSandboxedSpawnRequest, type SandboxedSpawnRequest } from "../sandbox/spawn.ts";
@@ -247,6 +248,8 @@ export interface BashToolOptions {
 	loadoutAccessGuard?: LoadoutAccessGuard;
 	/** Hook to adjust command, cwd, or env before execution */
 	spawnHook?: BashSpawnHook;
+	/** Shared wall-clock budget; when set (or OMK_TIME_BUDGET_SEC is bound), clamps bash timeouts. */
+	remainingBudget?: RemainingBudget;
 }
 
 const BASH_PREVIEW_LINES = 5;
@@ -486,13 +489,20 @@ export function createBashToolDefinition(
 
 			const appendStatus = (text: string, status: string) => `${text ? `${text}\n\n` : ""}${status}`;
 
+			const defaultTimeoutSec = DEFAULT_BUILTIN_TOOL_TIMEOUTS.bash / 1000;
+			const requestedTimeoutSec =
+				timeout !== undefined && Number.isFinite(timeout) && timeout > 0 ? timeout : defaultTimeoutSec;
+			const budget = options?.remainingBudget ?? ensureActiveRemainingBudget();
+			const clamp = budget ? budget.clampBashTimeoutSec(requestedTimeoutSec) : undefined;
+			const effectiveTimeout = clamp?.timeoutSec ?? requestedTimeoutSec;
+
 			try {
 				let exitCode: number | null;
 				try {
 					const result = await ops.exec(spawnContext.command, spawnContext.cwd, {
 						onData: handleData,
 						signal,
-						timeout,
+						timeout: effectiveTimeout,
 						env: spawnContext.env,
 					});
 					exitCode = result.exitCode;
@@ -503,8 +513,10 @@ export function createBashToolDefinition(
 						throw new Error(appendStatus(text, "Command aborted"));
 					}
 					if (err instanceof Error && err.message.startsWith("timeout:")) {
-						const [, timeoutSecs] = err.message.split(":");
-						throw new Error(appendStatus(text, `Command timed out after ${timeoutSecs} seconds`));
+						const status = clamp
+							? bashBudgetTimeoutMessage(clamp)
+							: `Command timed out after ${effectiveTimeout} seconds`;
+						throw new Error(appendStatus(text, status));
 					}
 					throw err;
 				}
