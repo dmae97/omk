@@ -22,16 +22,33 @@ describe("syntax highlighter lazy import", () => {
 
 	it("does not load highlight.js until highlighting is requested", async () => {
 		const { highlightCode, initTheme } = await import("../src/modes/interactive/theme/theme.ts");
-		const { loadSyntaxHighlighter, supportsLanguage } = await import("../src/utils/syntax-highlight.ts");
+		const { loadSyntaxHighlighter, onSyntaxHighlighterReady, supportsLanguage } = await import(
+			"../src/utils/syntax-highlight.ts"
+		);
 		initTheme("dark");
 		expect(loads.hljs).toBe(0);
+		const { onThemedOutputStale } = await import("../src/modes/interactive/startup-deps.ts");
+		const ready = vi.fn();
+		const unsubscribed = vi.fn();
+		// Interactive mode registers its theme-change refresh (ui.invalidate + requestRender) here.
+		onThemedOutputStale(ready);
+		onSyntaxHighlighterReady(unsubscribed)();
 
 		// Before the highlighter settles, code renders as plain code-block text instead of throwing.
 		expect(highlightCode("const value = 1", "typescript")).toEqual(["\x1b[38;2;181;189;104mconst value = 1\x1b[39m"]);
 
+		expect(ready).not.toHaveBeenCalled();
+
 		await loadSyntaxHighlighter();
 		await loadSyntaxHighlighter();
 		expect(loads.hljs).toBe(1);
+		// Plain output rendered before the load may be cached, so owners refresh exactly once.
+		expect(ready).toHaveBeenCalledTimes(1);
+		expect(unsubscribed).not.toHaveBeenCalled();
+		const late = vi.fn();
+		onSyntaxHighlighterReady(late);
+		await loadSyntaxHighlighter();
+		expect(late).not.toHaveBeenCalled();
 		expect(supportsLanguage("typescript")).toBe(true);
 		expect(highlightCode("const value = 1", "typescript")[0]).toContain("\x1b[38;2;86;156;214mconst\x1b[39m");
 	});

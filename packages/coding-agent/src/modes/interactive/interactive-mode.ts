@@ -15,7 +15,7 @@ import { describePromptImageAttachment, type PromptImageAttachment } from "../..
 import { createAttachmentStrip } from "./components/attachment-strip.ts";
 import { ChatContainer } from "./components/chat-container.ts";
 import { createSessionMetadataLoaders } from "./components/session-selector-loaders.ts";
-import { ensureInteractiveStartupDeps } from "./startup-deps.ts";
+import { ensureInteractiveStartupDeps, onThemedOutputStale } from "./startup-deps.ts";
 
 export { formatResumeCommand } from "./interactive-resume-command.ts";
 
@@ -175,7 +175,6 @@ import {
 	getMarkdownTheme,
 	getThemeByName,
 	initTheme,
-	onThemeChange,
 	setRegisteredThemes,
 	setTheme,
 	setThemeInstance,
@@ -884,8 +883,8 @@ export class InteractiveMode {
 		// Render initial messages AFTER showing loaded resources
 		this.renderInitialMessages();
 
-		// Set up theme file watcher
-		onThemeChange(() => {
+		// Theme change or a late highlight.js load: drop cached themed output and re-render
+		onThemedOutputStale(() => {
 			this.ui.invalidate();
 			this.updateEditorBorderColor();
 			this.ui.requestRender();
