@@ -1,6 +1,7 @@
 import { Container, Loader, type TUI } from "omk-tui";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import type { AgentSessionEvent } from "../src/core/agent-session.ts";
+import { BashExecutionComponent } from "../src/modes/interactive/components/bash-execution.ts";
 import { ChatContainer } from "../src/modes/interactive/components/chat-container.ts";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
@@ -128,5 +129,35 @@ describe("detached timers", () => {
 		expect(vi.getTimerCount()).toBe(0);
 		vi.advanceTimersByTime(2_000);
 		expect(ui.requestRender).not.toHaveBeenCalled();
+	});
+
+	test("clearing the chat stops the spinner of a running ! command", () => {
+		const ui = fakeUi();
+		const chat = new ChatContainer();
+		const bash = new BashExecutionComponent("sleep 60", ui as unknown as TUI);
+		chat.addChild(bash);
+		bash.appendOutput("partial output\n");
+		expect(vi.getTimerCount()).toBe(1);
+		vi.advanceTimersByTime(500);
+		expect(ui.requestRender).toHaveBeenCalled();
+
+		chat.clear();
+		ui.requestRender.mockClear();
+		expect(vi.getTimerCount()).toBe(0);
+		vi.advanceTimersByTime(5_000);
+		expect(ui.requestRender).not.toHaveBeenCalled();
+
+		// The command finishing later (or Ctrl+C) still completes the detached row without restarting it.
+		bash.setComplete(130, true);
+		expect(vi.getTimerCount()).toBe(0);
+		expect(bash.getOutput()).toBe("partial output\n");
+	});
+
+	test("a ! command that completes normally still stops its spinner in setComplete", () => {
+		const ui = fakeUi();
+		const bash = new BashExecutionComponent("true", ui as unknown as TUI);
+		expect(vi.getTimerCount()).toBe(1);
+		bash.setComplete(0, false);
+		expect(vi.getTimerCount()).toBe(0);
 	});
 });

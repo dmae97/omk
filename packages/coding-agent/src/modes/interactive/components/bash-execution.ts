@@ -65,6 +65,14 @@ export class BashExecutionComponent extends Container {
 	}
 
 	/**
+	 * Stops the spinner when the row leaves the screen (chat cleared) while the command still runs;
+	 * otherwise the detached loader keeps requesting renders until setComplete().
+	 */
+	dispose(): void {
+		this.loader.stop();
+	}
+
+	/**
 	 * Set whether the output is expanded (shows full output) or collapsed (preview only).
 	 */
 	setExpanded(expanded: boolean): void {
