@@ -18,6 +18,7 @@ import { readPackageManifest } from "../package-manifest.ts";
 import { LEGACY_PI_RUNTIME_ALIASES, type PiCompatibilityTarget } from "../pi-compat.ts";
 import { createSyntheticSourceInfo } from "../source-info.ts";
 import { buildVirtualModules } from "./bundled-virtual-modules.ts";
+import { markContextHandlerNonMutating } from "./context-handler-options.ts";
 import type {
 	Extension,
 	ExtensionAPI,
@@ -261,11 +262,10 @@ function createExtensionAPI(
 ): ExtensionAPI {
 	const api = {
 		// Registration methods - write to extension
-		on(event: string, handler: HandlerFn): void {
+		on(event: string, handler: HandlerFn, options?: { mutatesMessages?: boolean }): void {
 			runtime.assertActive();
-			const list = extension.handlers.get(event) ?? [];
-			list.push(handler);
-			extension.handlers.set(event, list);
+			if (event === "context" && options?.mutatesMessages === false) markContextHandlerNonMutating(handler);
+			(extension.handlers.get(event) ?? extension.handlers.set(event, []).get(event)!).push(handler);
 		},
 
 		registerTool(tool: ToolDefinition): void {
