@@ -15,7 +15,12 @@ describe("normalizeLanePath", () => {
 		for (const path of ["/etc/passwd", "C:\\repo\\x", "c:/repo", "..", "../x", "src/../../x", "\\\\server\\share"]) {
 			expect(normalizeLanePath(path).escapes, path).toBe(true);
 		}
+		for (const path of ["file:/tmp/x", "file:///etc/passwd", "https://example.com/a", "~/notes", "~"]) {
+			expect(normalizeLanePath(path).escapes, path).toBe(true);
+		}
 		expect(normalizeLanePath("src/..").escapes).toBe(false);
+		expect(normalizeLanePath("src/a:b.ts").escapes).toBe(false);
+		expect(normalizeLanePath("~backup/x").escapes).toBe(false);
 		expect(normalizeLanePath("C:\\Repo").path).toBe("c:/Repo");
 	});
 });
@@ -27,6 +32,8 @@ describe("lanePathsIntersect", () => {
 		expect(lanePathsIntersect("src\\core", "src/core/x.ts")).toBe(true);
 		expect(lanePathsIntersect("src", "srcx/a.ts")).toBe(false);
 		expect(lanePathsIntersect("docs/a.md", "docs/b.md")).toBe(false);
+		expect(lanePathsIntersect("Docs/plan.md", "docs/PLAN.md")).toBe(true);
+		expect(lanePathsIntersect("Docs/**", "docs/plan.md")).toBe(true);
 	});
 
 	it("treats a glob as reaching everything below its literal prefix", () => {
@@ -42,6 +49,7 @@ describe("lanePathsIntersect", () => {
 		expect(lanePathsIntersect(".", "src/a.ts")).toBe(true);
 		expect(lanePathsIntersect("../outside", "src/a.ts")).toBe(true);
 		expect(lanePathsIntersect("/abs", "src/a.ts")).toBe(true);
+		expect(lanePathsIntersect("file:/tmp/x", "src/a.ts")).toBe(true);
 	});
 });
 

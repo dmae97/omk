@@ -455,6 +455,7 @@ describe("subagent lane path scopes", () => {
 			lanes: [
 				{ id: "w", role: "executor", task: "edit", writeScope: ["../other-repo/src"] },
 				{ id: "r", role: "critic", task: "read", readScope: ["/etc"], evidenceOutput: "C:\\out.md" },
+				{ id: "u", role: "critic", task: "read", blockedPaths: ["file:/tmp/x"] },
 			],
 			inventory,
 			spawnPlan: spawnReceipt,
@@ -465,6 +466,7 @@ describe("subagent lane path scopes", () => {
 				"lane w writeScope escapes the repository: ../other-repo/src",
 				"lane r readScope escapes the repository: /etc",
 				"lane r evidenceOutput escapes the repository: C:\\out.md",
+				"lane u blockedPaths escapes the repository: file:/tmp/x",
 			]),
 		);
 	});

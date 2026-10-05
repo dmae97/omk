@@ -16,6 +16,8 @@ import { posix } from "node:path";
 
 const GLOB_CHARS = /[*?[\]{}!]/;
 const DRIVE_PREFIX = /^[a-zA-Z]:/;
+/** `file:`, `https://`, and other URI schemes (two or more letters, so `C:` stays a drive). */
+const URI_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]+:/;
 
 export interface NormalizedLanePath {
 	/** Repository-relative POSIX path; `""` is the repository root. */
@@ -26,6 +28,7 @@ export interface NormalizedLanePath {
 
 export function normalizeLanePath(raw: string): NormalizedLanePath {
 	const slashed = raw.trim().replace(/\\/g, "/");
+	if (URI_SCHEME.test(slashed) || slashed === "~" || slashed.startsWith("~/")) return { path: slashed, escapes: true };
 	if (slashed.startsWith("/") || DRIVE_PREFIX.test(slashed)) {
 		return { path: slashed.replace(DRIVE_PREFIX, (drive) => drive.toLowerCase()), escapes: true };
 	}
@@ -41,13 +44,18 @@ function literalPrefix(path: string): readonly string[] {
 	return firstGlob === -1 ? segments : segments.slice(0, firstGlob);
 }
 
+/** Case-insensitive, because a case-insensitive filesystem maps `Docs` and `docs` to one directory. */
 function isSegmentPrefix(shorter: readonly string[], longer: readonly string[]): boolean {
-	return shorter.length <= longer.length && shorter.every((segment, index) => segment === longer[index]);
+	return (
+		shorter.length <= longer.length &&
+		shorter.every((segment, index) => segment.toLowerCase() === longer[index].toLowerCase())
+	);
 }
 
 /**
  * Conservative overlap test for two lane scopes. Escaping paths are treated as
- * overlapping everything so an invalid scope can never widen parallelism.
+ * overlapping everything so an invalid scope can never widen parallelism, and
+ * segments compare case-insensitively so `Docs/a.md` and `docs/a.md` overlap.
  */
 export function lanePathsIntersect(left: string, right: string): boolean {
 	const a = normalizeLanePath(left);
