@@ -10,7 +10,10 @@ import identicalLoop from "../src/core/extensions/builtin/identical-loop.ts";
 import promptPreset from "../src/core/extensions/builtin/prompt-preset.ts";
 import toolPairRepair from "../src/core/extensions/builtin/tool-pair-repair.ts";
 import type { ExtensionAPI, ExtensionContext } from "../src/core/extensions/types.ts";
-import { setProgressStallSteerSuppressed } from "../src/core/progress-stall-steer-gate.ts";
+import {
+	isProgressStallSteerSuppressed,
+	setProgressStallSteerSuppressed,
+} from "../src/core/progress-stall-steer-gate.ts";
 import { DefaultResourceLoader } from "../src/core/resource-loader.ts";
 import { createAgentSession } from "../src/core/sdk.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
@@ -205,6 +208,14 @@ describe("identical-loop built-in factory", () => {
 		}
 		expect(harness.messages).toHaveLength(0);
 		setProgressStallSteerSuppressed(false);
+	});
+
+	it("clears a stale process-wide suppression on session_start", () => {
+		const harness = createFactoryHarness();
+		identicalLoop(harness.omk);
+		setProgressStallSteerSuppressed(true);
+		harness.fire("session_start", { type: "session_start" });
+		expect(isProgressStallSteerSuppressed()).toBe(false);
 	});
 
 	it("uses the low-budget steer text when remainingBudgetFraction is under 20%", () => {

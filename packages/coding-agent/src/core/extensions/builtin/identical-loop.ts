@@ -7,7 +7,7 @@ import {
 	type StallRecord,
 	trimStallRecords,
 } from "../../progress-stall.ts";
-import { isProgressStallSteerSuppressed } from "../../progress-stall-steer-gate.ts";
+import { isProgressStallSteerSuppressed, setProgressStallSteerSuppressed } from "../../progress-stall-steer-gate.ts";
 import { createEnvRemainingBudgetFraction, type RemainingBudgetFraction } from "../../remaining-budget-fraction.ts";
 import type { ExtensionAPI } from "../types.ts";
 
@@ -41,6 +41,8 @@ export default function identicalLoop(omk: ExtensionAPI, options: IdenticalLoopO
 		records.length = 0;
 		pendingById.clear();
 		finishCheckActive = false;
+		// A stale process-wide switch from an earlier session must not silence this one.
+		setProgressStallSteerSuppressed(false);
 		callsSinceSteer = PROGRESS_STALL_STEER_EVERY;
 	});
 	omk.on("input", (event) => {
