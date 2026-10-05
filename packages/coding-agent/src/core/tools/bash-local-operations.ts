@@ -12,7 +12,7 @@ import {
 import { detectSandboxBackend } from "../sandbox/backend.ts";
 import type { SandboxBackendStatus, SandboxPathResolver, SandboxPolicy } from "../sandbox/policy.ts";
 import { buildSandboxedSpawnRequest, type SandboxedSpawnRequest } from "../sandbox/spawn.ts";
-import type { BashOperations } from "./bash.ts";
+import type { BashOperations } from "./bash-operations.ts";
 
 /**
  * Create bash operations using OMK's built-in local shell execution backend.

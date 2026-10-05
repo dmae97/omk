@@ -15,6 +15,12 @@ import {
 	ensureActiveRemainingBudget,
 	resolveBashTimeoutForBudget,
 } from "../remaining-budget.ts";
+import {
+	type BashSandboxPreflight,
+	createLocalBashOperations,
+	type LocalBashOperationsOptions,
+} from "./bash-local-operations.ts";
+import type { BashOperations } from "./bash-operations.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
 import { getTextOutput, invalidArgText, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -35,36 +41,7 @@ export interface BashToolDetails {
 	fullOutputPath?: string;
 }
 
-/**
- * Pluggable operations for the bash tool.
- * Override these to delegate command execution to remote systems (for example SSH).
- */
-export interface BashOperations {
-	/**
-	 * Execute a command and stream output.
-	 * @param command The command to execute
-	 * @param cwd Working directory
-	 * @param options Execution options
-	 * @returns Promise resolving to exit code (null if killed)
-	 */
-	exec: (
-		command: string,
-		cwd: string,
-		options: {
-			onData: (data: Buffer) => void;
-			signal?: AbortSignal;
-			timeout?: number;
-			env?: NodeJS.ProcessEnv;
-		},
-	) => Promise<{ exitCode: number | null }>;
-}
-
-import {
-	type BashSandboxPreflight,
-	createLocalBashOperations,
-	type LocalBashOperationsOptions,
-} from "./bash-local-operations.ts";
-
+export type { BashOperations };
 export { type BashSandboxPreflight, createLocalBashOperations, type LocalBashOperationsOptions };
 
 export interface BashSpawnContext {
