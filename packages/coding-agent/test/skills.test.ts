@@ -5,7 +5,11 @@ import { join, resolve } from "path";
 import { describe, expect, it } from "vitest";
 import type { ResourceDiagnostic } from "../src/core/diagnostics.ts";
 import { loadSkills, loadSkillsFromDir, type Skill } from "../src/core/skills.ts";
-import { formatSkillsForPrompt } from "../src/core/skills-prompt.ts";
+import {
+	compactSkillDescription,
+	formatSkillsForPrompt,
+	SKILL_PROMPT_COMPACT_THRESHOLD,
+} from "../src/core/skills-prompt.ts";
 import { createSyntheticSourceInfo } from "../src/core/source-info.ts";
 
 const fixturesDir = resolve(__dirname, "fixtures/skills");
@@ -449,6 +453,50 @@ Body that should also stay out of diagnostics`,
 
 			const result = formatSkillsForPrompt(skills);
 			expect(result).toBe("");
+		});
+	});
+
+	describe("compact skill prompt", () => {
+		const longDescription =
+			"Guides stable API and interface design. Use when designing APIs, module boundaries, or any public interface that other code depends on.";
+		const manySkills = (count: number): Skill[] =>
+			Array.from({ length: count }, (_, i) =>
+				createTestSkill({
+					name: `skill-${i}`,
+					description: longDescription,
+					filePath: `/path/skill-${i}/SKILL.md`,
+					baseDir: `/path/skill-${i}`,
+				}),
+			);
+
+		it("keeps full descriptions at or below the threshold", () => {
+			const result = formatSkillsForPrompt(manySkills(SKILL_PROMPT_COMPACT_THRESHOLD));
+			expect(result).toContain(`<description>${longDescription}</description>`);
+			expect(result).not.toContain("Descriptions below are shortened");
+		});
+
+		it("shortens descriptions to the first sentence above the threshold and keeps absolute locations", () => {
+			const count = SKILL_PROMPT_COMPACT_THRESHOLD + 1;
+			const result = formatSkillsForPrompt(manySkills(count));
+			expect(result).toContain("Descriptions below are shortened");
+			expect(result).toContain("<description>Guides stable API and interface design.</description>");
+			expect(result).not.toContain("module boundaries");
+			expect(result).toContain(`<location>/path/skill-${count - 1}/SKILL.md</location>`);
+			expect(result.length).toBeLessThan(
+				formatSkillsForPrompt(manySkills(SKILL_PROMPT_COMPACT_THRESHOLD)).length * 1.2,
+			);
+		});
+
+		it("caps a long first sentence at a word boundary", () => {
+			const sentence = `${"word ".repeat(60).trim()}.`;
+			const compacted = compactSkillDescription(sentence, 40);
+			expect(compacted.length).toBeLessThanOrEqual(40);
+			expect(compacted.endsWith("…")).toBe(true);
+			expect(compacted).not.toMatch(/ …$/);
+		});
+
+		it("does not treat a version dot as a sentence end", () => {
+			expect(compactSkillDescription("Supports v1.2 configs. Extra detail.")).toBe("Supports v1.2 configs.");
 		});
 	});
 
