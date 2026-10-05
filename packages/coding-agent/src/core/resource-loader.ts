@@ -20,9 +20,10 @@ import toolPairRepair from "./extensions/builtin/tool-pair-repair.ts";
 import { createExtensionRuntime, loadExtensionFromFactory, loadExtensions } from "./extensions/loader.ts";
 import type { Extension, ExtensionFactory, ExtensionRuntime, LoadExtensionsResult } from "./extensions/types.ts";
 import { isLegacyAutoSkillResource } from "./legacy-resource-policy.ts";
-import { DefaultPackageManager, type PathMetadata } from "./package-manager.ts";
+import type { DefaultPackageManager, PathMetadata } from "./package-manager.ts";
 import type { PromptTemplate } from "./prompt-templates.ts";
 import { loadPromptTemplates } from "./prompt-templates.ts";
+import { resolveResourcePackagePaths } from "./resource-loader-package-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
 import type { Skill } from "./skills.ts";
 import { createSourceInfo, type SourceInfo } from "./source-info.ts";
@@ -218,7 +219,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private agentDir: string;
 	private settingsManager: SettingsManager;
 	private eventBus: EventBus;
-	private packageManager: DefaultPackageManager;
+	private packageManager: DefaultPackageManager | undefined;
 	private additionalExtensionPaths: string[];
 	private additionalSkillPaths: string[];
 	private additionalPromptTemplatePaths: string[];
@@ -275,11 +276,6 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.agentDir = resolvePath(options.agentDir);
 		this.settingsManager = options.settingsManager ?? SettingsManager.create(this.cwd, this.agentDir);
 		this.eventBus = options.eventBus ?? createEventBus();
-		this.packageManager = new DefaultPackageManager({
-			cwd: this.cwd,
-			agentDir: this.agentDir,
-			settingsManager: this.settingsManager,
-		});
 		this.additionalExtensionPaths = options.additionalExtensionPaths ?? [];
 		this.additionalSkillPaths = options.additionalSkillPaths ?? [];
 		this.additionalPromptTemplatePaths = options.additionalPromptTemplatePaths ?? [];
@@ -392,10 +388,13 @@ export class DefaultResourceLoader implements ResourceLoader {
 
 	async reload(): Promise<void> {
 		await this.settingsManager.reload();
-		const resolvedPaths = await this.packageManager.resolve();
-		const cliExtensionPaths = await this.packageManager.resolveExtensionSources(this.additionalExtensionPaths, {
-			temporary: true,
-		});
+		const pkg = await resolveResourcePackagePaths(
+			this.packageManager,
+			{ cwd: this.cwd, agentDir: this.agentDir, settingsManager: this.settingsManager },
+			this.additionalExtensionPaths,
+		);
+		this.packageManager = pkg.packageManager;
+		const { resolvedPaths, cliExtensionPaths } = pkg;
 		const metadataByPath = new Map<string, PathMetadata>();
 		this.resourceMetadataByPath = metadataByPath;
 
