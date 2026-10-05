@@ -2,13 +2,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import chalk from "chalk";
-import {
-	type EditorTheme,
-	getCapabilities,
-	type MarkdownTheme,
-	type SelectListTheme,
-	type SettingsListTheme,
-} from "omk-tui";
+import type { EditorTheme, MarkdownTheme, SelectListTheme, SettingsListTheme } from "omk-tui";
 import { type Static, Type } from "typebox";
 import { Compile } from "typebox/compile";
 import { getCustomThemesDir, getThemesDir } from "../../../config.ts";
@@ -618,7 +612,8 @@ function loadThemeJson(name: string): ThemeJson {
 }
 
 function createTheme(themeJson: ThemeJson, mode?: ColorMode, sourcePath?: string): Theme {
-	const colorMode = mode ?? (getCapabilities().trueColor ? "truecolor" : "256color");
+	const colorTerm = process.env.COLORTERM?.toLowerCase() ?? "";
+	const colorMode = mode ?? (colorTerm === "truecolor" || colorTerm === "24bit" ? "truecolor" : "256color");
 	const resolvedColors = resolveThemeColors(themeJson.colors, themeJson.vars);
 	const fgColors: Record<ThemeColor, string | number> = {} as Record<ThemeColor, string | number>;
 	const bgColors: Record<ThemeBg, string | number> = {} as Record<ThemeBg, string | number>;
