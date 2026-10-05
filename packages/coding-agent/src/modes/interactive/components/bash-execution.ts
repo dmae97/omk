@@ -11,6 +11,7 @@ import {
 } from "../../../core/tools/truncate.ts";
 import { stripAnsi } from "../../../utils/ansi.ts";
 import { theme } from "../theme/theme.ts";
+import { RollingTextTail } from "./bash-output-tail.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, keyText } from "./keybinding-hints.ts";
 import { truncateToVisualLines } from "./visual-truncate.ts";
@@ -20,7 +21,10 @@ const PREVIEW_LINES = 20;
 
 export class BashExecutionComponent extends Container {
 	private command: string;
-	private outputLines: string[] = [];
+	/** Every cleaned chunk, joined only by getOutput(). */
+	private outputChunks: string[] = [];
+	/** Bounded tail the display is computed from (see RollingTextTail). */
+	private outputTail = new RollingTextTail(DEFAULT_MAX_BYTES * 2);
 	private status: "running" | "complete" | "cancelled" | "error" = "running";
 	private exitCode: number | undefined = undefined;
 	private loader: Loader;
@@ -82,15 +86,8 @@ export class BashExecutionComponent extends Container {
 		// Note: binary data is already sanitized in tui-renderer.ts executeBashCommand
 		const clean = stripAnsi(chunk).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
-		// Append to output lines
-		const newLines = clean.split("\n");
-		if (this.outputLines.length > 0 && newLines.length > 0) {
-			// Append first chunk to last line (incomplete line continuation)
-			this.outputLines[this.outputLines.length - 1] += newLines[0];
-			this.outputLines.push(...newLines.slice(1));
-		} else {
-			this.outputLines.push(...newLines);
-		}
+		this.outputChunks.push(clean);
+		this.outputTail.append(clean);
 
 		this.updateDisplay();
 	}
@@ -117,9 +114,9 @@ export class BashExecutionComponent extends Container {
 	}
 
 	private updateDisplay(): void {
-		// Apply truncation for LLM context limits (same limits as bash tool)
-		const fullOutput = this.outputLines.join("\n");
-		const contextTruncation = truncateTail(fullOutput, {
+		// Apply truncation for LLM context limits (same limits as bash tool). The bounded tail gives
+		// the same result content and truncated flag as the full output (see RollingTextTail).
+		const contextTruncation = truncateTail(this.outputTail.text, {
 			maxLines: DEFAULT_MAX_LINES,
 			maxBytes: DEFAULT_MAX_BYTES,
 		});
@@ -206,7 +203,7 @@ export class BashExecutionComponent extends Container {
 	 * Get the raw output for creating BashExecutionMessage.
 	 */
 	getOutput(): string {
-		return this.outputLines.join("\n");
+		return this.outputChunks.join("");
 	}
 
 	/**
