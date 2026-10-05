@@ -1,3 +1,4 @@
+import { findEscapingLanePaths, lanePathsIntersect, normalizeLanePath } from "./lane-path-scope.ts";
 import {
 	buildSubagentLaneGrant,
 	type LaneContextInheritanceMode,
@@ -315,6 +316,17 @@ function prepareLane(
 	if ((spec.writeScope?.length ?? 0) > 0 && !assignment.writesProductFiles) {
 		blockers.push(`lane ${spec.id} role ${spec.role} cannot write product files`);
 	}
+	if (assignment.writesProductFiles && (spec.writeScope?.length ?? 0) === 0) {
+		warnings.push(`lane ${spec.id} may write product files but declares no writeScope; overlap is unchecked`);
+	}
+	const scopes = { readScope: spec.readScope, writeScope: spec.writeScope, blockedPaths: spec.blockedPaths };
+	for (const [field, paths] of Object.entries(scopes)) {
+		for (const path of findEscapingLanePaths(paths))
+			blockers.push(`lane ${spec.id} ${field} escapes the repository: ${path}`);
+	}
+	for (const path of findEscapingLanePaths(spec.evidenceOutput === undefined ? [] : [spec.evidenceOutput])) {
+		blockers.push(`lane ${spec.id} evidenceOutput escapes the repository: ${path}`);
+	}
 	const dependsOn = uniqueSorted(spec.dependsOn ?? []);
 
 	const profile = resolveLoadoutProfile(spec, assignment, blockers);
@@ -404,7 +416,7 @@ function isReceiptConsumerRole(role: SubagentOrchestrationRole): boolean {
 }
 
 function isReceiptPath(path: string): boolean {
-	const normalized = normalizePath(path);
+	const normalized = normalizeLanePath(path).path;
 	return normalized === ".omk/runs" || normalized.startsWith(".omk/runs/") || normalized.includes("/.omk/runs/");
 }
 
@@ -481,20 +493,10 @@ function lanesConflict(left: PreparedLane, right: PreparedLane): boolean {
 function pathsConflict(writers: readonly string[], candidates: readonly string[]): boolean {
 	for (const writer of writers) {
 		for (const candidate of candidates) {
-			if (pathIntersects(writer, candidate)) return true;
+			if (lanePathsIntersect(writer, candidate)) return true;
 		}
 	}
 	return false;
-}
-
-function pathIntersects(left: string, right: string): boolean {
-	const normalizedLeft = normalizePath(left);
-	const normalizedRight = normalizePath(right);
-	return (
-		normalizedLeft === normalizedRight ||
-		normalizedLeft.startsWith(`${normalizedRight}/`) ||
-		normalizedRight.startsWith(`${normalizedLeft}/`)
-	);
 }
 
 function buildRouteFeatures(
@@ -542,10 +544,6 @@ function isMapReduceShape(lanes: readonly PreparedLane[], batches: readonly Suba
 	const finalLane = lanes.find((lane) => lane.spec.id === finalBatch.laneIds[0]);
 	if (!finalLane) return false;
 	return firstBatch.laneIds.every((laneId) => finalLane.dependsOn.includes(laneId));
-}
-
-function normalizePath(path: string): string {
-	return path.replace(/\\/g, "/").replace(/\/+$/g, "");
 }
 
 function round(value: number): number {
