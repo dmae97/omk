@@ -1,6 +1,4 @@
 import {
-	FINISH_CHECK_MAX_TOOL_CALLS,
-	FINISH_CHECK_MESSAGE,
 	FINISH_CHECK_SAVE_NOW_FRACTION,
 	FINISH_CHECK_SAVE_NOW_MESSAGE,
 	FINISH_CHECK_WRAP_UP_MESSAGE,
@@ -10,6 +8,12 @@ import {
 	resolveTimeBudgetMs,
 	shouldRunFinishCheck,
 } from "../../finish-check.ts";
+import {
+	buildFinishCheckMessage,
+	extractRequirements,
+	finishCheckToolCap,
+	parseFinishCheckLedger,
+} from "../../finish-check-requirements.ts";
 import { requestPreCheckSnapshot, resolveSnapshotHandshake } from "../../finish-check-snapshot.ts";
 import type { ExtensionAPI } from "../types.ts";
 
@@ -17,6 +21,20 @@ export interface FinishCheckOptions {
 	readonly env?: NodeJS.ProcessEnv;
 	readonly now?: () => number;
 	readonly sleep?: (ms: number) => Promise<void>;
+}
+
+/** Event-bus channel for the verification turn: `{ active: true }` when it starts, `{ active: false, ledger }` when it ends. */
+export const FINISH_CHECK_EVENT = "finish_check";
+/** Session entry type holding the measured checklist results of a finish check. */
+export const FINISH_CHECK_LEDGER_ENTRY = "finish_check_ledger";
+
+function assistantText(message: unknown): string {
+	const content = (message as { role?: string; content?: unknown } | undefined)?.content;
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	return content
+		.map((part: { type?: string; text?: string }) => (part?.type === "text" ? (part.text ?? "") : ""))
+		.join("\n");
 }
 
 /**
@@ -41,6 +59,8 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 	let warnedSaveNow = false;
 	let checkToolCalls = 0;
 	let wrappedUp = false;
+	let checkActive = false;
+	let requirements: string[] = [];
 
 	omk.on("input", (event) => {
 		// Our own follow-up arrives as extension input; only a new user task resets the check.
@@ -49,6 +69,7 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 			checked = false;
 			checkToolCalls = 0;
 			wrappedUp = false;
+			requirements = extractRequirements(event.text);
 		}
 		return undefined;
 	});
@@ -70,7 +91,7 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 		maybeWarnSaveNow();
 		if (checked && !wrappedUp) {
 			checkToolCalls += 1;
-			if (checkToolCalls >= FINISH_CHECK_MAX_TOOL_CALLS) {
+			if (checkToolCalls >= finishCheckToolCap(requirements.length)) {
 				wrappedUp = true;
 				omk.sendUserMessage(FINISH_CHECK_WRAP_UP_MESSAGE, { deliverAs: "steer" });
 			}
@@ -84,6 +105,13 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 
 	omk.on("agent_settled", async (event, ctx) => {
 		const last = event.messages.at(-1);
+		if (checkActive) {
+			checkActive = false;
+			const ledger = requirements.length > 0 ? parseFinishCheckLedger(assistantText(last), requirements) : [];
+			if (ledger.length > 0) omk.appendEntry(FINISH_CHECK_LEDGER_ENTRY, { items: ledger });
+			omk.events.emit(FINISH_CHECK_EVENT, { active: false, ledger });
+			return;
+		}
 		const aborted = last?.role === "assistant" && (last.stopReason === "aborted" || last.stopReason === "error");
 		const run = shouldRunFinishCheck({
 			mode,
@@ -101,6 +129,8 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 			const result = await requestPreCheckSnapshot(snapshot, snapshotSequence, { now, sleep: options.sleep });
 			startedAt += result.waitedMs;
 		}
-		omk.sendUserMessage(FINISH_CHECK_MESSAGE, { deliverAs: "followUp" });
+		checkActive = true;
+		omk.events.emit(FINISH_CHECK_EVENT, { active: true, requirements: [...requirements] });
+		omk.sendUserMessage(buildFinishCheckMessage(requirements), { deliverAs: "followUp" });
 	});
 }
