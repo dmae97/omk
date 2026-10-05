@@ -9,6 +9,8 @@
 
 ### Changed
 
+- Interactive `/` and `!` autocomplete precomputes slash/skill rows once per provider rebuild, so keystrokes with large skill catalogs avoid re-mapping the command list.
+
 - The control rail (the startup deck column and the control-pane overlay in expanded view, `Ctrl+O`) now shows RUN, VERIFY, CONTEXT and RESOURCES, then TODO and SESSION. RUN has the turn state; VERIFY has one `verdict` row; CONTEXT has `model`, `think`, `ctx`, `meter` and `opt` (formerly `headroom`); RESOURCES has the governor mode (`gov`) and configured MCP/skill counts (`ext`, formerly `res`).
 - The control-pane overlay is anchored to the viewport and adds the live rows: RUN `queue` (queued message count), RESOURCES `cpu` (host CPU, the value the resource governor admits on; `busy` at or above its busy threshold) and `rss` (OMK process RSS), and, when a turn ends without completing, a failure card from the session termination record: cause, phase, side effects, retry policy (`auto`, `manual` or `none`) and next action. The startup deck column omits them: the startup header scrolls into terminal scrollback, where any later change re-emits up to four screens, so it keeps a fixed height and shows only turn-stable values.
 - The pinned status sidebar shows `run` and `vrfy` rows, plus the cause, retry policy, side effects and next action of a turn that ended without completing. Its MCP roster lists up to terminal rows − 26 servers (was − 24), so these rows take their height from the roster instead of pushing the bottom border and unpin hint off screen.
@@ -24,6 +26,8 @@
 - Opening the expanded view (`Ctrl+O`) inks the wordmark in once: 420 ms, ease-out, from a faint pencil underdrawing to ink, with the Verify accent last. It changes colour only, never the layout, and is skipped for reduced motion, `NO_COLOR`, non-TTY output and narrow widths.
 
 ### Fixed
+
+- The interactive footer metrics timer no longer requests a full TUI re-render every 2 seconds when system CPU/MEM metrics are disabled (the default). `footer.invalidate()` was already a no-op, so those ticks only burned render cost proportional to chat history length.
 
 - The startup panel no longer shows fixed status values as live state. The control rail, the hero strip and the narrow status line printed `ready`, `active`, `tracking`, `linked`, `pinned` and `DAG:omk-parallel-orchestrator` with no runtime source, most of them in the success color. Status rows now come from one `ControlPlaneViewModel` built from the live session by one adapter, `readControlPlaneSignals`; the pinned status sidebar builds the same view model through the same adapter.
 - Status rows in the control rail and the pinned sidebar, and the startup header's MODEL and THEME values, print session, run-journal, model, theme and file-system text (model id, theme name, cwd, git branch, session name, endpoint host, MCP server names, TODO labels, failure text) as one printable line: escape sequences, control characters and bidi marks are removed and line breaks become spaces. In 1.2.4 the rail's model, cwd, git and TODO rows and the pinned sidebar's cwd, git, session and model rows printed such text as-is; sidebar MCP names were already cleaned.

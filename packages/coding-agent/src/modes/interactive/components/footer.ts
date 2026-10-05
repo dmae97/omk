@@ -113,6 +113,11 @@ export class FooterComponent implements Component {
 		this.showSystemMetrics = enabled;
 	}
 
+	/** True when the footer is configured to show live CPU/MEM metrics. */
+	isShowingSystemMetrics(): boolean {
+		return this.showSystemMetrics;
+	}
+
 	/**
 	 * Build a compact system-wide CPU/memory metrics segment for the footer.
 	 * Degrades gracefully to shorter forms (or is omitted entirely) when the

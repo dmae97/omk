@@ -898,10 +898,9 @@ export class InteractiveMode {
 			this.ui.requestRender();
 		});
 
-		// Periodically refresh footer metrics (CPU / memory).
+		// Refresh footer CPU/MEM only when enabled (avoid full-tree renders every 2s when off).
 		this.metricsTimer = setInterval(() => {
-			this.footer.invalidate();
-			this.ui.requestRender();
+			if (this.footer.isShowingSystemMetrics()) this.ui.requestRender();
 		}, 2000);
 		this.metricsTimer.unref();
 
