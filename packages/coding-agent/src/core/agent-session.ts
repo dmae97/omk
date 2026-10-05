@@ -247,7 +247,7 @@ import {
 	type ResourcePressureStabilizer,
 	rederiveResourceAdmissionForPressure,
 } from "./resource-admission.ts";
-import { resolveResourceGovernorSettings } from "./resource-governor-settings.ts";
+import { heavyProcessCapacity, resolveResourceGovernorSettings } from "./resource-governor-settings.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import {
 	admissionObservationFacts,
@@ -2304,22 +2304,8 @@ export class AgentSession {
 		return this._workloadPermitPool;
 	}
 
-	/**
-	 * Heavy-process budget the shared pool should hold: the live admission
-	 * decision when one exists, otherwise the configured normal-tier cap
-	 * (`resourceGovernor.normalMaxHeavyProcesses`), so observe mode and the
-	 * first prompt honor settings instead of the pool's built-in default of 2.
-	 */
 	private _targetWorkloadPermitCapacity(): number | undefined {
-		const fromDecision = this._lastResourceAdmission?.maxHeavyProcesses;
-		if (fromDecision !== undefined && Number.isFinite(fromDecision) && fromDecision > 0) return fromDecision;
-		try {
-			const resolved = resolveResourceGovernorSettings(this.settingsManager.getResourceGovernorSettings());
-			const configured = resolved.admission.caps.normal.maxHeavyProcesses;
-			return Number.isFinite(configured) && configured > 0 ? configured : undefined;
-		} catch {
-			return undefined;
-		}
+		return heavyProcessCapacity(this._lastResourceAdmission, this.settingsManager.getResourceGovernorSettings());
 	}
 
 	private _syncWorkloadPermitCapacity(): void {
