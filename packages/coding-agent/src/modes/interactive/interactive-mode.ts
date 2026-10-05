@@ -25,6 +25,7 @@ import {
 } from "./interactive-login-options.ts";
 import {
 	disposeComponent,
+	disposePendingTools,
 	ExpandableText,
 	isExpandable,
 	normalizeToolExecutionResult,
@@ -1792,11 +1793,7 @@ export class InteractiveMode {
 			commandContextActions: {
 				waitForIdle: () => this.session.agent.waitForIdle(),
 				newSession: async (options) => {
-					if (this.loadingAnimation) {
-						this.loadingAnimation.stop();
-						this.loadingAnimation = undefined;
-					}
-					this.statusContainer.clear();
+					this.stopWorkingLoader();
 					try {
 						const result = await this.runtimeHost.newSession(options);
 						if (!result.cancelled) {
@@ -3161,7 +3158,7 @@ export class InteractiveMode {
 				break;
 			case "agent_start":
 				this.workingStartedAt = Date.now();
-				this.pendingTools.clear();
+				disposePendingTools(this.pendingTools);
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
 				}
@@ -3363,7 +3360,8 @@ export class InteractiveMode {
 					this.streamingComponent = undefined;
 					this.streamingMessage = undefined;
 				}
-				this.pendingTools.clear();
+				// Tools still pending when the turn ends never get tool_execution_end: stop their live timers.
+				disposePendingTools(this.pendingTools);
 
 				await this.checkShutdownRequested();
 
@@ -3379,7 +3377,8 @@ export class InteractiveMode {
 				this.defaultEditor.onEscape = () => {
 					this.session.abortCompaction();
 				};
-				this.statusContainer.clear();
+				// Stop (not just detach) the working loader: a detached Loader keeps ticking renders.
+				this.stopWorkingLoader();
 				const cancelHint = `(${keyText("app.interrupt")} to cancel)`;
 				const label =
 					event.reason === "manual"
@@ -5155,11 +5154,7 @@ export class InteractiveMode {
 		sessionPath: string,
 		options?: Parameters<ExtensionCommandContext["switchSession"]>[1],
 	): Promise<{ cancelled: boolean }> {
-		if (this.loadingAnimation) {
-			this.loadingAnimation.stop();
-			this.loadingAnimation = undefined;
-		}
-		this.statusContainer.clear();
+		this.stopWorkingLoader();
 		try {
 			const result = await this.runtimeHost.switchSession(sessionPath, {
 				withSession: options?.withSession,
