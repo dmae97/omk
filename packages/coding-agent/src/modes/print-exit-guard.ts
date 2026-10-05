@@ -25,13 +25,17 @@ export interface PrintExitGuardDeps {
 	exit?: (code: number) => void;
 }
 
-/** Grace period in ms; `0` disables the guard. Invalid values fall back to the default. */
+/**
+ * Grace period in whole ms; only an exact `0` disables the guard. Anything else
+ * that is not a non-negative integer (`-1`, `0.9`, `soon`) falls back to the
+ * default so a typo never silently turns the guard off.
+ */
 export function resolvePrintExitGraceMs(env: Readonly<Record<string, string | undefined>>): number {
 	const raw = env[PRINT_EXIT_GRACE_ENV]?.trim();
 	if (!raw) return DEFAULT_PRINT_EXIT_GRACE_MS;
 	const value = Number(raw);
-	if (!Number.isFinite(value) || value < 0) return DEFAULT_PRINT_EXIT_GRACE_MS;
-	return Math.floor(value);
+	if (!Number.isSafeInteger(value) || value < 0) return DEFAULT_PRINT_EXIT_GRACE_MS;
+	return value;
 }
 
 /** Counts active resources by kind, e.g. `TCPSocketWrap x1, ProcessWrap x1`. */

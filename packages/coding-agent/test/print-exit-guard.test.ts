@@ -60,6 +60,10 @@ describe("print exit guard", () => {
 		expect(resolvePrintExitGraceMs({ OMK_PRINT_EXIT_GRACE_MS: "-1" })).toBe(DEFAULT_PRINT_EXIT_GRACE_MS);
 		expect(resolvePrintExitGraceMs({ OMK_PRINT_EXIT_GRACE_MS: "soon" })).toBe(DEFAULT_PRINT_EXIT_GRACE_MS);
 		expect(resolvePrintExitGraceMs({})).toBe(DEFAULT_PRINT_EXIT_GRACE_MS);
+		expect(resolvePrintExitGraceMs({ OMK_PRINT_EXIT_GRACE_MS: "0.9" })).toBe(DEFAULT_PRINT_EXIT_GRACE_MS);
+		expect(resolvePrintExitGraceMs({ OMK_PRINT_EXIT_GRACE_MS: "1500.5" })).toBe(DEFAULT_PRINT_EXIT_GRACE_MS);
+		expect(resolvePrintExitGraceMs({ OMK_PRINT_EXIT_GRACE_MS: "1" })).toBe(1);
+		expect(resolvePrintExitGraceMs({ OMK_PRINT_EXIT_GRACE_MS: " 0 " })).toBe(0);
 	});
 
 	it("summarizes an empty resource list", () => {
