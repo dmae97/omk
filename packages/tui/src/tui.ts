@@ -7,32 +7,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { performance } from "node:perf_hooks";
 import { isKeyRelease, matchesKey } from "./keys.ts";
+import { extractKittyImageIds, LineResetMemo, SEGMENT_RESET } from "./line-reset-memo.ts";
 import type { Terminal } from "./terminal.ts";
 import { finishTerminalFrame } from "./terminal-final-frame.ts";
 import { deleteKittyImage, getCapabilities, isImageLine, setCellDimensions } from "./terminal-image.ts";
-import { extractSegments, normalizeTerminalOutput, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils.ts";
-
-const KITTY_SEQUENCE_PREFIX = "\x1b_G";
-
-function extractKittyImageIds(line: string): number[] {
-	const sequenceStart = line.indexOf(KITTY_SEQUENCE_PREFIX);
-	if (sequenceStart === -1) return [];
-
-	const paramsStart = sequenceStart + KITTY_SEQUENCE_PREFIX.length;
-	const paramsEnd = line.indexOf(";", paramsStart);
-	if (paramsEnd === -1) return [];
-
-	const params = line.slice(paramsStart, paramsEnd);
-	for (const param of params.split(",")) {
-		const [key, value] = param.split("=", 2);
-		if (key !== "i" || value === undefined) continue;
-		const id = Number(value);
-		if (Number.isInteger(id) && id > 0 && id <= 0xffffffff) {
-			return [id];
-		}
-	}
-	return [];
-}
+import { extractSegments, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils.ts";
 
 /**
  * Component interface - all components must implement this
@@ -271,6 +250,7 @@ export class TUI extends Container {
 	public terminal: Terminal;
 	private previousLines: string[] = [];
 	private previousKittyImageIds = new Set<number>();
+	private readonly lineResets = new LineResetMemo();
 	private previousWidth = 0;
 	private previousHeight = 0;
 	private focusedComponent: Component | null = null;
@@ -1040,29 +1020,6 @@ export class TUI extends Container {
 		return result;
 	}
 
-	private static readonly SEGMENT_RESET = "\x1b[0m\x1b]8;;\x07";
-
-	private applyLineResets(lines: string[]): string[] {
-		const reset = TUI.SEGMENT_RESET;
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			if (!isImageLine(line)) {
-				lines[i] = normalizeTerminalOutput(line) + reset;
-			}
-		}
-		return lines;
-	}
-
-	private collectKittyImageIds(lines: string[]): Set<number> {
-		const ids = new Set<number>();
-		for (const line of lines) {
-			for (const id of extractKittyImageIds(line)) {
-				ids.add(id);
-			}
-		}
-		return ids;
-	}
-
 	private deleteKittyImages(ids: Iterable<number>): string {
 		let buffer = "";
 		for (const id of ids) {
@@ -1121,7 +1078,7 @@ export class TUI extends Container {
 		const afterPad = Math.max(0, afterTarget - base.afterWidth);
 
 		// Compose result
-		const r = TUI.SEGMENT_RESET;
+		const r = SEGMENT_RESET;
 		const result =
 			base.before +
 			" ".repeat(beforePad) +
@@ -1203,7 +1160,7 @@ export class TUI extends Container {
 		// Extract cursor position before applying line resets (marker must be found first)
 		const cursorPos = this.extractCursorPosition(newLines, height);
 
-		newLines = this.applyLineResets(newLines);
+		newLines = this.lineResets.apply(newLines);
 
 		// Helper to optionally clear the visible viewport and render all new lines
 		const fullRender = (clear: boolean, fromRow?: number): void => {
@@ -1267,7 +1224,7 @@ export class TUI extends Container {
 			this.previousViewportTop = Math.max(0, bufferLength - height);
 			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousLines = newLines;
-			this.previousKittyImageIds = this.collectKittyImageIds(newLines);
+			this.previousKittyImageIds = this.lineResets.kittyImageIds;
 			this.previousWidth = width;
 			this.previousHeight = height;
 		};
@@ -1398,7 +1355,7 @@ export class TUI extends Container {
 			}
 			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousLines = newLines;
-			this.previousKittyImageIds = this.collectKittyImageIds(newLines);
+			this.previousKittyImageIds = this.lineResets.kittyImageIds;
 			this.previousWidth = width;
 			this.previousHeight = height;
 			this.previousViewportTop = prevViewportTop;
@@ -1550,7 +1507,7 @@ export class TUI extends Container {
 		this.positionHardwareCursor(cursorPos, newLines.length);
 
 		this.previousLines = newLines;
-		this.previousKittyImageIds = this.collectKittyImageIds(newLines);
+		this.previousKittyImageIds = this.lineResets.kittyImageIds;
 		this.previousWidth = width;
 		this.previousHeight = height;
 	}
