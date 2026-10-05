@@ -355,9 +355,15 @@ export function createBashToolDefinition(
 						throw new Error(appendStatus(text, "Command aborted"));
 					}
 					if (err instanceof Error && err.message.startsWith("timeout:")) {
-						const status = clamp
-							? bashBudgetTimeoutMessage(clamp)
-							: `Command timed out after ${effectiveTimeoutSec} seconds`;
+						// Prefer the executor's reported seconds (timeout:N) so mocks and
+						// local spawn agree; decorate only when the budget actually clamped.
+						const [, timeoutSecsRaw] = err.message.split(":");
+						const timedOutSec = Number(timeoutSecsRaw);
+						const secs = Number.isFinite(timedOutSec) && timedOutSec > 0 ? timedOutSec : effectiveTimeoutSec;
+						const status =
+							clamp?.clamped === true
+								? bashBudgetTimeoutMessage({ ...clamp, timeoutSec: secs })
+								: `Command timed out after ${secs} seconds`;
 						throw new Error(appendStatus(text, status));
 					}
 					throw err;
