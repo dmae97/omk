@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Interactive `ChatContainer` extends `WindowedContainer` so long transcripts freeze off-screen messages into a prefix buffer and drop their TUI render caches; steady-state frame cost tracks the live window instead of full history.
+
 ### Added
 
 - Width-invariant property tests in `packages/tui` for `visibleWidth`, `truncateToWidth` and `wrapTextWithAnsi`, with `fast-check` 4.9.0 pinned as a devDependency there. Two known defects are recorded as `todo` tests: `truncateToWidth` can return text wider than `maxWidth` when an SGR code splits an emoji + VS16 grapheme, and `visibleWidth` counts a leading zero-width joiner as width.
