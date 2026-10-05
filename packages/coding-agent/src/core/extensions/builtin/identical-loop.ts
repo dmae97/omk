@@ -31,10 +31,16 @@ export default function identicalLoop(omk: ExtensionAPI, options: IdenticalLoopO
 	const pendingById = new Map<string, StallRecord>();
 	let callsSinceSteer = PROGRESS_STALL_STEER_EVERY;
 	const remainingBudgetFraction = options.remainingBudgetFraction ?? createEnvRemainingBudgetFraction();
+	// Finish-check announces its verification turn on the bus; similar measurement commands are expected there.
+	let finishCheckActive = false;
+	omk.events.on("finish_check", (data) => {
+		finishCheckActive = (data as { active?: unknown } | undefined)?.active === true;
+	});
 
 	omk.on("session_start", () => {
 		records.length = 0;
 		pendingById.clear();
+		finishCheckActive = false;
 		callsSinceSteer = PROGRESS_STALL_STEER_EVERY;
 	});
 	omk.on("input", (event) => {
@@ -59,6 +65,11 @@ export default function identicalLoop(omk: ExtensionAPI, options: IdenticalLoopO
 		records.push(record);
 		pendingById.set(event.toolCallId, record);
 		trimStallRecords(records, PROGRESS_STALL_WINDOW);
+		// Calls whose result never arrives (aborts) must not accumulate.
+		for (const id of pendingById.keys()) {
+			if (pendingById.size <= PROGRESS_STALL_WINDOW) break;
+			pendingById.delete(id);
+		}
 		callsSinceSteer += 1;
 
 		const detection = detectProgressStall(records);
@@ -82,7 +93,7 @@ export default function identicalLoop(omk: ExtensionAPI, options: IdenticalLoopO
 
 		// Near-duplicate / no-progress: steer only (never block). Exact stop stays active above.
 		if (detection.kind !== "steer") return undefined;
-		if (isProgressStallSteerSuppressed()) return undefined;
+		if (finishCheckActive || isProgressStallSteerSuppressed()) return undefined;
 		if (callsSinceSteer < PROGRESS_STALL_STEER_EVERY) return undefined;
 		callsSinceSteer = 0;
 
