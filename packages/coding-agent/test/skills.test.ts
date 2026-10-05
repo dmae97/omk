@@ -458,7 +458,7 @@ Body that should also stay out of diagnostics`,
 
 	describe("compact skill prompt", () => {
 		const longDescription =
-			"Guides stable API and interface design. Use when designing APIs, module boundaries, or any public interface that other code depends on.";
+			"Guides stable API and interface design. Use when designing APIs, module boundaries, or any public interface that other code depends on. Covers versioning, error shapes, and deprecation in detail.";
 		const manySkills = (count: number): Skill[] =>
 			Array.from({ length: count }, (_, i) =>
 				createTestSkill({
@@ -479,9 +479,11 @@ Body that should also stay out of diagnostics`,
 			const count = SKILL_PROMPT_COMPACT_THRESHOLD + 1;
 			const result = formatSkillsForPrompt(manySkills(count));
 			expect(result).toContain("Descriptions below are shortened");
-			expect(result).toContain("<description>Guides stable API and interface design.</description>");
-			expect(result).not.toContain("module boundaries");
+			expect(result).toContain(
+				"<description>Guides stable API and interface design. Use when designing APIs, module boundaries, or any public interface that other code depends on.</description>",
+			);
 			expect(result).toContain(`<location>/path/skill-${count - 1}/SKILL.md</location>`);
+			expect(result).not.toContain("deprecation");
 			expect(result.length).toBeLessThan(
 				formatSkillsForPrompt(manySkills(SKILL_PROMPT_COMPACT_THRESHOLD)).length * 1.2,
 			);
@@ -497,6 +499,36 @@ Body that should also stay out of diagnostics`,
 
 		it("does not treat a version dot as a sentence end", () => {
 			expect(compactSkillDescription("Supports v1.2 configs. Extra detail.")).toBe("Supports v1.2 configs.");
+		});
+
+		it("does not split on abbreviations such as e.g.", () => {
+			expect(compactSkillDescription("Formats data, e.g. CSV or JSON, for reports. Extra detail.")).toBe(
+				"Formats data, e.g. CSV or JSON, for reports.",
+			);
+		});
+
+		it("keeps the first trigger sentence even when it is not second", () => {
+			const description = "Conducts multi-axis code review. Covers style and tests. Use before merging any change.";
+			expect(compactSkillDescription(description)).toBe(
+				"Conducts multi-axis code review. Use before merging any change.",
+			);
+		});
+
+		it("shortens the lead sentence first to keep the trigger sentence within the cap", () => {
+			const description = `${"Long lead words ".repeat(12).trim()}. Use when the task needs this skill.`;
+			const compacted = compactSkillDescription(description, 120);
+			expect(compacted.length).toBeLessThanOrEqual(120);
+			expect(compacted.endsWith("Use when the task needs this skill.")).toBe(true);
+			expect(compacted).toContain("… Use when");
+		});
+
+		it("keeps a minimum lead and truncates a very long trigger sentence instead", () => {
+			const lead = "Builds a weighted decision matrix to compare options against criteria with transparent scoring.";
+			const trigger = `Use this skill when the user needs to choose between ${"many options, ".repeat(20).trim()}`;
+			const compacted = compactSkillDescription(`${lead} ${trigger}`);
+			expect(compacted.length).toBeLessThanOrEqual(200);
+			expect(compacted).toContain("Use this skill when the user needs to choose");
+			expect(compacted.startsWith("Builds a weighted decision matrix")).toBe(true);
 		});
 	});
 
