@@ -50,7 +50,22 @@ export const SKILL_PROMPT_COMPACT_THRESHOLD = 24;
 const COMPACT_DESCRIPTION_MAX_CHARS = 200;
 
 /** 문장 끝으로 보지 않을 약어(소문자 비교). `e.g.`에서 설명이 잘려 단서가 빠지는 걸 막는다. */
-const ABBREVIATIONS = new Set(["e.g.", "i.e.", "etc.", "vs.", "cf.", "approx.", "incl.", "no."]);
+const ABBREVIATIONS = new Set([
+	"e.g.",
+	"i.e.",
+	"etc.",
+	"vs.",
+	"cf.",
+	"approx.",
+	"incl.",
+	"no.",
+	"mr.",
+	"mrs.",
+	"ms.",
+	"dr.",
+	"st.",
+	"jr.",
+]);
 /** 스킬 설명에서 언제 쓰는지 알려 주는 문장. 매칭의 핵심 단서라 첫 문장보다 우선한다. */
 const TRIGGER_SENTENCE = /^(use|invoke|apply|run|call)\b|^(when|before|after)\b/i;
 const MIN_LEAD_CHARS = 72;
@@ -100,9 +115,15 @@ export function compactSkillDescription(description: string, maxChars = COMPACT_
 		return combined;
 	}
 	// 첫 문장에는 최소 몫만 보장하고 나머지를 트리거 문장에 준다.
-	const leadCap = Math.min(lead.length, Math.max(MIN_LEAD_CHARS, maxChars - trigger.length - 1));
+	// maxChars가 작으면 최소 몫도 절반까지만 줘서 합친 길이가 상한을 넘지 않게 한다.
+	const minLead = Math.min(MIN_LEAD_CHARS, Math.floor(maxChars / 2));
+	const leadCap = Math.min(lead.length, Math.max(minLead, maxChars - trigger.length - 1));
 	const leadPart = truncateAtWord(lead, leadCap);
-	return `${leadPart} ${truncateAtWord(trigger, maxChars - leadPart.length - 1)}`;
+	const triggerBudget = maxChars - leadPart.length - 1;
+	if (triggerBudget < 2) {
+		return truncateAtWord(lead, maxChars);
+	}
+	return `${leadPart} ${truncateAtWord(trigger, triggerBudget)}`;
 }
 
 function escapeXml(str: string): string {

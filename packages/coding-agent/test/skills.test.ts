@@ -530,6 +530,20 @@ Body that should also stay out of diagnostics`,
 			expect(compacted).toContain("Use this skill when the user needs to choose");
 			expect(compacted.startsWith("Builds a weighted decision matrix")).toBe(true);
 		});
+
+		it("does not split at honorifics like Mr.", () => {
+			expect(compactSkillDescription("Drafts letters to Mr. Kim for review. Extra detail.")).toBe(
+				"Drafts letters to Mr. Kim for review.",
+			);
+		});
+
+		it("stays within maxChars below the minimum lead share", () => {
+			const lead = "Analyzes large repositories and summarizes their architecture in detail.";
+			const trigger = "Use when onboarding onto an unfamiliar codebase or planning a refactor.";
+			for (const maxChars of [10, 30, 50, 71]) {
+				expect(compactSkillDescription(`${lead} ${trigger}`, maxChars).length).toBeLessThanOrEqual(maxChars);
+			}
+		});
 	});
 
 	describe("loadSkills with options", () => {
