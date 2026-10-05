@@ -162,3 +162,20 @@ export function bashBudgetTimeoutMessage(result: ClampBashTimeoutResult): string
 	}
 	return `Command timed out after ${result.timeoutSec} seconds (${result.remainingSec}s left on the run budget; narrow the work or continue in the background).`;
 }
+
+/** Resolve the seconds bash should wait, honoring an optional RemainingBudget clamp. */
+export function resolveBashTimeoutForBudget(
+	requestedTimeoutSec: number | undefined,
+	defaultTimeoutSec: number,
+	budget: RemainingBudget | undefined,
+): { readonly effectiveTimeoutSec: number; readonly clamp: ClampBashTimeoutResult | undefined } {
+	const requested =
+		requestedTimeoutSec !== undefined && Number.isFinite(requestedTimeoutSec) && requestedTimeoutSec > 0
+			? requestedTimeoutSec
+			: defaultTimeoutSec;
+	if (!budget) {
+		return { effectiveTimeoutSec: requested, clamp: undefined };
+	}
+	const clamp = budget.clampBashTimeoutSec(requested);
+	return { effectiveTimeoutSec: clamp.timeoutSec, clamp };
+}

@@ -25,10 +25,13 @@ export function createEnvRemainingBudgetFraction(options?: {
 	readonly now?: () => number;
 	readonly startedAt?: number;
 }): RemainingBudgetFraction {
-	const active = getActiveRemainingBudget();
-	if (active && options?.env === undefined && options?.startedAt === undefined) {
-		return () => active.remainingFraction();
-	}
-	const budget = createRemainingBudgetFromEnv(options);
-	return remainingFractionFromBudget(budget);
+	const explicitClock = options?.env !== undefined || options?.startedAt !== undefined;
+	const fallback = remainingFractionFromBudget(createRemainingBudgetFromEnv(options));
+	if (explicitClock) return fallback;
+	// Look up the shared clock on every call so whoever binds it later (finish-check, bash) still wins
+	// and creation order never splits one run into two clocks.
+	return () => {
+		const active = getActiveRemainingBudget();
+		return active ? active.remainingFraction() : fallback();
+	};
 }

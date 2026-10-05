@@ -90,6 +90,16 @@ describe("active RemainingBudget binding", () => {
 		expect(remaining()).toBeCloseTo(0.5);
 	});
 
+	it("follows an active clock bound after the fraction helper is created", () => {
+		let now = 0;
+		const remaining = createEnvRemainingBudgetFraction();
+		expect(remaining()).toBeUndefined();
+		bindActiveRemainingBudget(new RemainingBudget({ budgetMs: 100_000, now: () => now, startedAt: 0 }));
+		expect(remaining()).toBeCloseTo(1);
+		now = 75_000;
+		expect(remaining()).toBeCloseTo(0.25);
+	});
+
 	it("createEnvRemainingBudgetFraction can still take an explicit env clock", () => {
 		let now = 1_000;
 		const remaining = createEnvRemainingBudgetFraction({
