@@ -56,7 +56,7 @@ it as untrusted:
 Trust programmatically with `trustProjectMcpConfig(cwd)` (pass the reviewed
 `sha256` to refuse content that changed after review) and undo with
 `revokeProjectMcpTrust(cwd)`. For CI, `OMK_TRUST_PROJECT_MCP=1` trusts the
-project file for that process. `AgentSession.mcpProjectTrustReport()` lists the
+project file for that process. `AgentSession.mcpProjectTrustReport?.skippedProjectServers` lists the
 project servers that were skipped at the last attach.
 
 | Field | Meaning |
