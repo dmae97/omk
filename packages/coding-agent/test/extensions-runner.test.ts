@@ -508,6 +508,37 @@ describe("ExtensionRunner", () => {
 		});
 	});
 
+	describe("emitContext cloning", () => {
+		it("returns a shallow copy without structuredClone when no context handlers exist", async () => {
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const messages = [{ role: "user" as const, content: "keep", timestamp: 1 }];
+			const out = await runner.emitContext(messages as never);
+			expect(out).toEqual(messages);
+			expect(out).not.toBe(messages);
+			expect(out[0]).toBe(messages[0]);
+		});
+
+		it("deep-clones so a context handler cannot mutate the caller's messages", async () => {
+			const extCode = `
+				export default function(pi) {
+					pi.on("context", async (event) => {
+						const message = event.messages[0];
+						if (message && "content" in message) message.content = "mutated";
+						return { messages: event.messages };
+					});
+				}
+			`;
+			fs.writeFileSync(path.join(extensionsDir, "mutator.ts"), extCode);
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const messages = [{ role: "user" as const, content: "keep", timestamp: 1 }];
+			const out = await runner.emitContext(messages as never);
+			expect(messages[0].content).toBe("keep");
+			expect((out[0] as { content: string }).content).toBe("mutated");
+		});
+	});
+
 	describe("message renderers", () => {
 		it("gets message renderer by type", async () => {
 			const extCode = `
