@@ -31,6 +31,11 @@ export function onSyntaxHighlighterReady(listener: () => void): () => void {
 	};
 }
 
+/** Test-only: how many late-load listeners are still registered. */
+export function __readyListenerCountForTest(): number {
+	return readyListeners.size;
+}
+
 function notifyReady(): void {
 	const listeners = [...readyListeners];
 	readyListeners.clear();

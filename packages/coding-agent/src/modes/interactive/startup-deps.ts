@@ -24,8 +24,13 @@ export async function ensureInteractiveStartupDeps(): Promise<string | undefined
  * Markdown cachedLines and its stream cache) and re-renders. It runs on every theme
  * change and once more when a highlight.js load lands after code was already
  * rendered plain, e.g. a startup load failure retried by a later highlight() call.
+ * @returns Unsubscribe that clears both registrations (theme only if still ours).
  */
-export function onThemedOutputStale(refresh: () => void): void {
-	onThemeChange(refresh);
-	onSyntaxHighlighterReady(refresh);
+export function onThemedOutputStale(refresh: () => void): () => void {
+	const unsubscribeTheme = onThemeChange(refresh);
+	const unsubscribeReady = onSyntaxHighlighterReady(refresh);
+	return () => {
+		unsubscribeTheme();
+		unsubscribeReady();
+	};
 }

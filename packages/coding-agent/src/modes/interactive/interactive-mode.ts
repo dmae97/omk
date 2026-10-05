@@ -328,6 +328,8 @@ export class InteractiveMode {
 
 	// Agent subscription unsubscribe function
 	private unsubscribe?: () => void;
+	/** Clears onThemedOutputStale (theme + highlight.js ready) registrations. */
+	private unsubscribeThemedOutputStale?: () => void;
 	private signalCleanupHandlers: Array<() => void> = [];
 
 	private isBashMode = false;
@@ -884,7 +886,7 @@ export class InteractiveMode {
 		this.renderInitialMessages();
 
 		// Theme change or a late highlight.js load: drop cached themed output and re-render
-		onThemedOutputStale(() => {
+		this.unsubscribeThemedOutputStale = onThemedOutputStale(() => {
 			this.ui.invalidate();
 			this.updateEditorBorderColor();
 			this.ui.requestRender();
@@ -6506,6 +6508,7 @@ export class InteractiveMode {
 		for (const component of [this.chatContainer, this.builtInHeader, this.customHeader]) disposeComponent(component);
 		this.footer.dispose();
 		this.footerDataProvider.dispose();
+		this.unsubscribeThemedOutputStale?.();
 		if (this.metricsTimer) {
 			clearInterval(this.metricsTimer);
 			this.metricsTimer = null;
