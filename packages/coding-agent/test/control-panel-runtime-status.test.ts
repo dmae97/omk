@@ -1,5 +1,9 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+	cachedMcpInventory,
 	classifyMcpStability,
 	countRoutableNonHubSkills,
 	countStableMcpServers,
@@ -72,5 +76,26 @@ describe("control panel runtime status helpers", () => {
 				{ name: "headroom" },
 			]),
 		).toBe(2);
+	});
+});
+
+describe("cachedMcpInventory", () => {
+	it("reuses the inventory for the same cwd within the TTL and re-reads after it or for another cwd", () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "omk-mcp-cache-"));
+		const a = path.join(root, "a");
+		const b = path.join(root, "b");
+		fs.mkdirSync(path.join(a, ".omk"), { recursive: true });
+		fs.mkdirSync(b);
+		try {
+			const first = cachedMcpInventory(a, 1_000);
+			fs.writeFileSync(path.join(a, ".omk", "mcp.json"), JSON.stringify({ mcpServers: { x: { command: "x" } } }));
+			expect(cachedMcpInventory(a, 5_999)).toBe(first);
+			const refreshed = cachedMcpInventory(a, 6_000);
+			expect(refreshed).not.toBe(first);
+			expect(refreshed.entries.length).toBe(first.entries.length + 1);
+			expect(cachedMcpInventory(b, 6_001)).not.toBe(refreshed);
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
 	});
 });

@@ -1,6 +1,7 @@
 import type { Component } from "omk-tui";
 import {
 	type ControlPanelContent,
+	type ControlPanelStatusSnapshot,
 	renderControlPanelLayout,
 	renderControlPanelRightPane,
 } from "./control-panel-layout.ts";
@@ -17,6 +18,22 @@ export interface ControlPanelMotionOptions {
 	now?: () => number;
 }
 
+/** RUN labels that mean a turn (or compaction) is in progress. */
+const TURN_LABELS: ReadonlySet<string> = new Set(["running", "compacting", "retrying"]);
+
+function isTurnInProgress(snapshot: ControlPanelStatusSnapshot): boolean {
+	const label = snapshot.controlPlane?.run.label;
+	return label !== undefined && TURN_LABELS.has(label);
+}
+
+/**
+ * The startup header. It sits at the top of the transcript and scrolls into immutable terminal
+ * scrollback, where any change to its rows forces a full repaint and re-emits the transcript
+ * into scrollback. So the header reads the live status snapshot only until the first turn
+ * starts, then freezes on the last pre-turn snapshot and stops rebuilding it: RUN, VERIFY,
+ * ctx/meter and TODO keep the values they had before the first prompt. The status sidebar and
+ * the control-pane overlay show the live values.
+ */
 export class ControlPanelComponent implements Component {
 	private expanded = false;
 	private readonly content: ControlPanelContent;
@@ -25,6 +42,9 @@ export class ControlPanelComponent implements Component {
 	private introStartMs: number | undefined;
 	private motionTimerId: ReturnType<typeof setInterval> | undefined;
 	private lastRenderWidth = 0;
+	private preTurnSnapshot: ControlPanelStatusSnapshot | undefined;
+	private frozenContent: ControlPanelContent | undefined;
+	private renderCache: { key: string; lines: string[] } | undefined;
 
 	constructor(content: ControlPanelContent, motionOptions?: ControlPanelMotionOptions) {
 		this.content = content;
@@ -41,7 +61,9 @@ export class ControlPanelComponent implements Component {
 		}
 	}
 
-	invalidate(): void {}
+	invalidate(): void {
+		this.renderCache = undefined;
+	}
 
 	dispose(): void {
 		if (this.motionTimerId !== undefined) {
@@ -62,8 +84,33 @@ export class ControlPanelComponent implements Component {
 
 	render(width: number): string[] {
 		this.lastRenderWidth = width;
-		const lines = renderControlPanelLayout(this.content, this.expanded, width, this.currentReveal());
-		return this.shouldRenderPlain() ? lines.map(stripAnsi) : lines;
+		const reveal = this.currentReveal();
+		const plain = this.shouldRenderPlain();
+		const content = this.headerContent();
+		// Once frozen the header's inputs only change with width, expansion, the intro reveal or a
+		// theme change (invalidate), so reuse the rendered lines instead of re-laying out every frame.
+		const key = `${width}|${this.expanded}|${reveal}|${plain}`;
+		if (content === this.frozenContent && this.renderCache?.key === key) return this.renderCache.lines;
+		const layout = renderControlPanelLayout(content, this.expanded, width, reveal);
+		const lines = plain ? layout.map(stripAnsi) : layout;
+		this.renderCache = content === this.frozenContent ? { key, lines } : undefined;
+		return lines;
+	}
+
+	/** Content with the header's status snapshot: live before the first turn, frozen after. */
+	private headerContent(): ControlPanelContent {
+		if (this.frozenContent !== undefined) return this.frozenContent;
+		const read = this.content.statusSnapshot;
+		if (read === undefined) return this.content;
+		const snapshot = read();
+		if (!isTurnInProgress(snapshot)) {
+			this.preTurnSnapshot = snapshot;
+			return { ...this.content, statusSnapshot: () => snapshot };
+		}
+		const frozen = this.preTurnSnapshot ?? snapshot;
+		this.preTurnSnapshot = undefined;
+		this.frozenContent = { ...this.content, statusSnapshot: () => frozen };
+		return this.frozenContent;
 	}
 
 	private now(): number {
