@@ -15,6 +15,7 @@ import { describePromptImageAttachment, type PromptImageAttachment } from "../..
 import { createAttachmentStrip } from "./components/attachment-strip.ts";
 import { ChatContainer } from "./components/chat-container.ts";
 import { createSessionMetadataLoaders } from "./components/session-selector-loaders.ts";
+import { ensureInteractiveStartupDeps } from "./startup-deps.ts";
 
 export { formatResumeCommand } from "./interactive-resume-command.ts";
 
@@ -130,7 +131,6 @@ import { openBrowser } from "../../utils/open-browser.ts";
 import { getCwdRelativePath } from "../../utils/paths.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { terminalMarkdownLinks } from "../../utils/terminal-links.ts";
-import { ensureTool } from "../../utils/tools-manager.ts";
 import { checkForNewOmkVersion, type LatestOmkRelease } from "../../utils/version-check.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
@@ -728,10 +728,8 @@ export class InteractiveMode {
 		// Load changelog (only show new entries, skip for resumed sessions)
 		this.changelogMarkdown = this.getChangelogForDisplay();
 
-		// Ensure fd and rg are available (downloads if missing, adds to PATH via getBinDir)
-		// Both are needed: fd for autocomplete, rg for grep tool and bash commands
-		const [fdPath] = await Promise.all([ensureTool("fd"), ensureTool("rg")]);
-		this.fdPath = fdPath;
+		// Ensure fd and rg are available and warm the lazy syntax highlighter before the first render
+		this.fdPath = await ensureInteractiveStartupDeps();
 
 		if (this.session.scopedModels.length > 0 && (this.options.verbose || !this.settingsManager.getQuietStartup())) {
 			const modelList = this.session.scopedModels
