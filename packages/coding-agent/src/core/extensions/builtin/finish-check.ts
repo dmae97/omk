@@ -5,7 +5,6 @@ import {
 	finishDisciplinePrompt,
 	isWorkspaceMutatingTool,
 	resolveFinishCheckMode,
-	resolveTimeBudgetMs,
 	shouldRunFinishCheck,
 } from "../../finish-check.ts";
 import {
@@ -15,6 +14,7 @@ import {
 	parseFinishCheckLedger,
 } from "../../finish-check-requirements.ts";
 import { requestPreCheckSnapshot, resolveSnapshotHandshake } from "../../finish-check-snapshot.ts";
+import { createRemainingBudgetFromEnv, ensureActiveRemainingBudget } from "../../remaining-budget.ts";
 import type { ExtensionAPI } from "../types.ts";
 
 export interface FinishCheckOptions {
@@ -47,12 +47,14 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 	const now = options.now ?? Date.now;
 	const mode = resolveFinishCheckMode(env.OMK_FINISH_CHECK);
 	if (mode === "off") return;
-	const budgetMs = resolveTimeBudgetMs(env.OMK_TIME_BUDGET_SEC);
+	// One clock for the whole run: bash timeouts, the 75%/90% thresholds and the stall detector all read it.
+	// Tests inject env and get a private clock so nothing leaks between them.
+	const budget =
+		options.env === undefined ? ensureActiveRemainingBudget({ now }) : createRemainingBudgetFromEnv({ env, now });
+	const budgetMs = budget?.budgetMs;
 	const snapshot = resolveSnapshotHandshake(env);
-	// Time spent waiting for a harness snapshot is not part of the run's budget.
-	let startedAt = now();
 	let snapshotSequence = 0;
-	const elapsedFraction = () => (budgetMs === undefined ? undefined : (now() - startedAt) / budgetMs);
+	const elapsedFraction = () => budget?.elapsedFraction();
 
 	let mutated = false;
 	let checked = false;
@@ -127,7 +129,8 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 		if (snapshot) {
 			snapshotSequence += 1;
 			const result = await requestPreCheckSnapshot(snapshot, snapshotSequence, { now, sleep: options.sleep });
-			startedAt += result.waitedMs;
+			// Time spent waiting for a harness snapshot is not part of the run's budget.
+			budget?.addExcludedWaitMs(result.waitedMs);
 		}
 		checkActive = true;
 		omk.events.emit(FINISH_CHECK_EVENT, { active: true, requirements: [...requirements] });
