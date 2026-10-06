@@ -54,6 +54,7 @@ Stack on #77. Make `main` **lazy-load** `interactive-mode`, and move tool `rende
 1. `main.ts` has no static `from "omk-tui"` and no static `InteractiveMode` import.
 2. `runPrintMode` stays statically reachable; `runRpcMode` / interactive / package-manager / list-models / export-html / session-picker load only when needed.
 3. Print/json skips unnecessary `initTheme` when headless output does not need TUI chrome.
+   - *Note (PR #83 review)*: "skip" means **defer**, not "never". The no-UI extension context still exposes `ctx.ui.theme`, so the `theme` proxy initializes the theme lazily on first access (with the configured theme name recorded by `setLazyThemeName()` in print/json). An extension that reads `ctx.ui.theme` in `-p` (e.g. `examples/extensions/sandbox`) must keep working; if no extension touches it, no theme loads.
 
 ---
 
@@ -85,6 +86,10 @@ Stack on #77. Make `main` **lazy-load** `interactive-mode`, and move tool `rende
 
 **Verify**: Same A1 module list.
 
+**Acceptance**:
+1. *Note (PR #83 review)*: dropping the `getCapabilities` import must not change the color mode. `theme.ts` picks truecolor exactly as omk-tui `getCapabilities().trueColor` does (COLORTERM, plus WezTerm / iTerm / VS Code / Windows Terminal / kitty / Ghostty / Alacritty / Zed / JetBrains, and tmux/screen rules), and it follows `setCapabilities()` overrides. `utils/terminal-truecolor.ts` mirrors the rule without importing omk-tui, and `test/terminal-truecolor-parity.test.ts` checks it against `detectCapabilities()`.
+2. *Note (PR #83 review)*: builtin `update_todo` only imports its TUI widget when `ctx.hasUI`, so headless workers that use todos stay free of omk-tui.
+
 ## 3. 안 하는 것 (Out of Scope)
 
 - `models.generated` / ModelRegistry catalog redesign
@@ -111,6 +116,7 @@ Stack on #77. Make `main` **lazy-load** `interactive-mode`, and move tool `rende
 - `packages/coding-agent/src/core/export-html/**` / `agent-session` export path — attach renderers only when exporting
 - `packages/coding-agent/test/tool-execution*.ts` (+ related) — keep green
 - `packages/coding-agent/test/terminal-file-links.test.ts` — import path update if needed
+- Review follow-up (PR #83): `utils/terminal-truecolor.ts`, `packages/tui/src/terminal-image.ts` (capabilities cache on `globalThis`), `core/extensions/builtin/todo-checklist.ts`, `cli/package-commands.ts`, `package-manager-cli.ts`, plus tests `terminal-truecolor-parity`, `print-mode-extension-theme`, `todo-checklist-headless-import`, `package-commands`
 
 ## Verification Commands
 
