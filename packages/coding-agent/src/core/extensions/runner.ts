@@ -883,14 +883,14 @@ export class ExtensionRunner {
 	}
 
 	async emitContext(messages: AgentMessage[]): Promise<AgentMessage[]> {
+		// Handlers get a private deep copy they may mutate. With none registered nobody
+		// can mutate it, so skip cloning the whole history on every provider request.
+		if (!this.hasHandlers("context")) return [...messages];
 		const ctx = this.createContext();
 		let currentMessages = structuredClone(messages);
 
 		for (const ext of this.extensions) {
-			const handlers = ext.handlers.get("context");
-			if (!handlers || handlers.length === 0) continue;
-
-			for (const handler of handlers) {
+			for (const handler of ext.handlers.get("context") ?? []) {
 				try {
 					const event: ContextEvent = { type: "context", messages: currentMessages };
 					const handlerResult = await handler(event, ctx);
