@@ -47,15 +47,17 @@ from both sides (88 tasks). See [Audit](#audit) for both corrections.
 | Hard tasks (30) | 64.4% | 62.2% | +2.2 pp [−8.9, +13.3] |
 | Easy tasks (3) | 77.8% | 66.7% | +11.1 pp (sample too small) |
 | Per-task outcome (88 tasks) | OMK ahead on 22 | mini ahead on 14 | 52 ties |
-| Cost | $155.04 / 267 trials = **$0.581 per trial** | $202.65 / 267 trials = **$0.759 per trial** | OMK about 23% cheaper |
-| Median wall time per trial | **482 s** | **376 s** | OMK slower |
+| Cost (all 267 trials) | $155.04 / 267 trials = **$0.581 per trial** | $202.65 / 267 trials = **$0.759 per trial** | OMK about 23% cheaper |
+| Median wall time per trial (all 267 trials) | **482 s** | **376 s** | OMK slower |
 
 Per-difficulty rows use the primary correction. Every reported 95% interval
 includes zero; the sensitivity row's lower bound is exactly 0.0. None of these
 differences is statistically significant.
 
-Cost is the provider-reported cost (`cost_in_usd_ticks`) summed over all 267
-trials per harness. It excludes 42 calls that code run inside one mini-swe-agent
+Cost and median wall time cover all 267 graded trials per harness (89 tasks,
+including `prove-plus-comm` and `pytorch-model-recovery`); a retried trial counts
+once, by its graded attempt. Cost is the provider-reported cost
+(`cost_in_usd_ticks`). It excludes 42 calls that code run inside one mini-swe-agent
 task made to other models through the request relay (see audit item 2).
 
 ## Audit

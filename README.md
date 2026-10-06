@@ -173,7 +173,7 @@ reasoning effort `xhigh` for both, run 2026-10-05 to 2026-10-06 KST. OMK was a
 merged, not the published npm package. mini-swe-agent was version 2.4.6, run
 through Harbor.
 
-| Harness | Success rate (88 tasks × 3 trials) | Cost per trial | Median wall time per trial |
+| Harness | Success rate (88 tasks × 3 trials) | Cost per trial (all 267 trials) | Median wall time per trial (all 267 trials) |
 | --- | --- | --- | --- |
 | OMK | 75.8% (200/264) | $0.581 | 482 s |
 | mini-swe-agent 2.4.6 | 71.6% (189/264) | $0.759 | 376 s |

@@ -7,7 +7,7 @@ description: "Docs: publish the Terminal-Bench 2.1 comparison (OMK vs mini-swe-a
 **Specification ID**: `029-readme-tb21-benchmark`
 **Feature Branch**: `docs/readme-r8-benchmark`
 **Created**: 2026-10-06
-**Status**: Draft
+**Status**: Accepted
 **Constitution**: [specs/constitution.md](../constitution.md)
 **Input**: A paired Terminal-Bench 2.1 run of OMK against mini-swe-agent finished on 2026-10-06 KST (89 tasks × 3 trials per harness, same model `grok-4.7` at reasoning effort `xhigh`). The README still says "No comparative benchmark result is published here yet." The owner's collaborator asked for the result to be published in the README with its caveats.
 **OMK Preset**: `omk`
