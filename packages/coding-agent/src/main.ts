@@ -808,13 +808,15 @@ export async function main(args: string[], options?: MainOptions) {
 		stdinContent,
 	);
 	time("prepareInitialMessage");
-	// Print/json skip theme init: headless output never renders TUI chrome, and
-	// keeping theme (and historically omk-tui via it) off the -p cold path matters
-	// for worker RSS. Interactive and RPC still initialize when they need it.
+	// Print/json defer theme loading: headless output renders no TUI chrome, so the
+	// theme only loads if an extension reads ctx.ui.theme (the proxy initializes it
+	// lazily with the configured theme). Interactive and RPC initialize eagerly.
+	const { initTheme, setLazyThemeName } = await import("./modes/interactive/theme/theme.ts");
 	if (appMode === "interactive" || appMode === "rpc") {
-		const { initTheme } = await import("./modes/interactive/theme/theme.ts");
 		initTheme(settingsManager.getTheme(), appMode === "interactive");
 		time("initTheme");
+	} else {
+		setLazyThemeName(settingsManager.getTheme());
 	}
 
 	// Show deprecation warnings in interactive mode

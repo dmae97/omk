@@ -783,13 +783,26 @@ export function getDefaultTheme(): string {
 // Use globalThis to share theme across module loaders (tsx + jiti in dev mode)
 const THEME_KEY = Symbol.for("open-multi-agent-kit:theme");
 
+// Theme name for lazy initialization, set by modes that skip eager initTheme().
+const LAZY_THEME_NAME_KEY = Symbol.for("open-multi-agent-kit:theme-lazy-name");
+
+/**
+ * Record the theme to load if `theme` is read before initTheme() runs.
+ * Print/json mode skips eager initTheme(), but extensions still read
+ * `ctx.ui.theme` there (status lines, the sandbox example) and expect a theme.
+ */
+export function setLazyThemeName(themeName: string | undefined): void {
+	(globalThis as Record<symbol, string | undefined>)[LAZY_THEME_NAME_KEY] = themeName;
+}
+
 // Export theme as a getter that reads from globalThis
 // This ensures all module instances (tsx, jiti) see the same theme
 export const theme: Theme = new Proxy({} as Theme, {
 	get(_target, prop) {
-		const t = (globalThis as Record<symbol, Theme>)[THEME_KEY];
-		if (!t) throw new Error("Theme not initialized. Call initTheme() first.");
-		return (t as unknown as Record<string | symbol, unknown>)[prop];
+		const store = globalThis as Record<symbol, unknown>;
+		// First access without initTheme(): initialize lazily, without a file watcher.
+		if (!store[THEME_KEY]) initTheme(store[LAZY_THEME_NAME_KEY] as string | undefined);
+		return (store[THEME_KEY] as Record<string | symbol, unknown>)[prop];
 	},
 });
 
