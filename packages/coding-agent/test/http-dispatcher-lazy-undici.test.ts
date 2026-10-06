@@ -15,11 +15,22 @@ describe("http-dispatcher undici loading", () => {
 		expect(loads.undici).toBe(0);
 	});
 
-	it("loads undici when configureHttpDispatcher runs", async () => {
-		const { configureHttpDispatcher } = await import("../src/core/http-dispatcher.ts");
-		// Importing the module evaluates the static undici import.
-		expect(loads.undici).toBe(1);
-		configureHttpDispatcher(0);
-		expect(loads.undici).toBe(1);
+	it("does not load undici when only the fetch hook is installed", async () => {
+		const { installHttpDispatcherFetchHook } = await import("../src/core/http-dispatcher-install.ts");
+		installHttpDispatcherFetchHook();
+		expect(loads.undici).toBe(0);
+	});
+
+	it("loads undici on the first fetch through the hook", async () => {
+		const before = loads.undici;
+		const { installHttpDispatcherFetchHook } = await import("../src/core/http-dispatcher-install.ts");
+		installHttpDispatcherFetchHook();
+		expect(loads.undici).toBe(before);
+
+		// data: URLs never hit the network but still go through global fetch,
+		// which is enough to trigger the lazy install.
+		const response = await fetch("data:text/plain,ok");
+		expect(response.ok).toBe(true);
+		expect(loads.undici).toBe(before + 1);
 	});
 });
