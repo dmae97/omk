@@ -25,6 +25,7 @@
 - Opening the expanded view (`Ctrl+O`) inks the wordmark in once: 420 ms, ease-out, from a faint pencil underdrawing to ink, with the Verify accent last. It changes colour only, never the layout, and is skipped for reduced motion, `NO_COLOR`, non-TTY output and narrow widths.
 
 ### Fixed
+- `omk -p` now arms an unref'd exit guard after print mode finishes: when a stray handle keeps the event loop alive past 2s (override with `OMK_PRINT_EXIT_GRACE_MS`, `0` disables), it writes the held resource kinds to stderr and exits with the run's code. Normal runs are unchanged because the timer is unref'd.
 
 - Session-input and request-context admission no longer allocate one temporary string per transcript character when estimating tokens. `estimateTextTokens` walks UTF-16 code units with `charCodeAt` and an inlined Unicode whitespace table instead of `for...of` plus `/\s/u`, so long headless sessions keep the same token counts while cutting per-turn garbage that was pushing RSS up with history length.
 - `boundedAdmissionJson` returns a flat concatenated string (`joinWrapped`) instead of wrapping `parts.join(",")` in a template literal, so the token counter does not flatten a second full-transcript copy of the admission projection on every provider request.
