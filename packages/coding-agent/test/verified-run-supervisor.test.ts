@@ -1,6 +1,7 @@
-import { mkdirSync, mkdtempSync, rmSync, watch } from "node:fs";
+import { spawn } from "node:child_process";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, watch } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { planVerifiedRun } from "../src/core/run-execution-api.ts";
 import { executeSandbox } from "../src/core/verified-run/broker.ts";
@@ -294,6 +295,62 @@ describe("owned process supervisor cancellation proof", () => {
 		vi.spyOn(supervisor, "awaitBoundaryDrained").mockResolvedValue("unknown");
 		await expect(executeSandbox({ ...request(), argv: ["/bin/true"], onReady: () => {} })).rejects.toThrow(
 			/termination_unverified/,
+		);
+	});
+
+	describe("terminal signals to the owner of a detached sandbox", () => {
+		const repo = resolve(import.meta.dirname, "../../..");
+		const fixture = "packages/coding-agent/test/fixtures/verified-run-signal-owner.ts";
+		const holders = (marker: string): number[] =>
+			readdirSync("/proc")
+				.filter((entry) => /^\d+$/.test(entry))
+				.filter((pid) => {
+					try {
+						return readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").includes(marker);
+					} catch {
+						return false;
+					}
+				})
+				.map(Number);
+		const cases = [
+			["default", "SIGINT"],
+			["default", "SIGTERM"],
+			["default", "SIGHUP"],
+			["cancel", "SIGINT"],
+			["cancel", "SIGTERM"],
+		] as const;
+		it.each(cases)(
+			"owner mode %s: %s leaves no sandbox process behind",
+			async (mode, signal) => {
+				const marker = `61.${process.pid}${Math.floor(Math.random() * 1e6)}`;
+				const owner = spawn(process.execPath, ["--import", "tsx", fixture, root, mode, marker], {
+					cwd: repo,
+					stdio: ["ignore", "pipe", "inherit"],
+				});
+				let out = "";
+				const identity = await new Promise<NamespaceIdentity>((resolveReady, rejectReady) => {
+					owner.stdout.on("data", (chunk: Buffer) => {
+						out += chunk.toString("utf8");
+						const line = out.split("\n").find((candidate) => candidate.startsWith("READY "));
+						if (line) resolveReady(JSON.parse(line.slice("READY ".length)) as NamespaceIdentity);
+					});
+					owner.once("exit", () => rejectReady(new Error(`owner exited before ready: ${out}`)));
+				});
+				const deadline = performance.now() + 10000;
+				while (holders(marker).length < 2 && performance.now() < deadline)
+					await new Promise((tick) => setTimeout(tick, 20));
+				expect(holders(marker).length).toBeGreaterThanOrEqual(2);
+				const exited = new Promise<void>((done) => owner.once("exit", () => done()));
+				owner.kill(signal);
+				await exited;
+				if (mode === "cancel") expect(out).toContain("OUTCOME cancelled");
+				expect(await waitForNamespaceGone(identity)).toBe("gone");
+				const gone = performance.now() + 5000;
+				while (holders(marker).length > 0 && performance.now() < gone)
+					await new Promise((tick) => setTimeout(tick, 20));
+				expect(holders(marker)).toEqual([]);
+			},
+			30000,
 		);
 	});
 });

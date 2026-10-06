@@ -4,6 +4,7 @@ import { dropClosedTurnReasoning } from "./compaction/reasoning-drop.ts";
 import type { ContextBudgetTokenizerMode, TokenCounterAdapter } from "./context-budget-token-counter.ts";
 import { canonicalizeMessagesForContextAdmission, convertToLlm } from "./messages.ts";
 import { serializePromptToolSchemas } from "./prompt-tool-projection.ts";
+import { countTextParts } from "./text-token-estimate.ts";
 
 const RESPONSE_RESERVE_RATIO = 0.2;
 const MAX_RESPONSE_RESERVE_RATIO = 0.25;
@@ -206,7 +207,10 @@ export function estimateContextInputTokens(input: ContextInputEstimateInput): Co
 	const canonical = canonicalizeMessagesForContextAdmission(messages);
 	const systemPromptTokens = countText(input.tokenCounter, input.systemPrompt, input.modelId);
 	const heuristicMessageTokens = messages.reduce((sum, message) => sum + estimateTokens(message as AgentMessage), 0);
-	const messageTokens = Math.max(countText(input.tokenCounter, canonical.text, input.modelId), heuristicMessageTokens);
+	const messageTokens = Math.max(
+		countParts(input.tokenCounter, canonical.textParts, input.modelId),
+		heuristicMessageTokens,
+	);
 	const toolTokens = countText(input.tokenCounter, serializePromptToolSchemas(input.tools), input.modelId);
 	const localTokens = addTokens(
 		addTokens(systemPromptTokens, messageTokens, "system+message"),
@@ -250,6 +254,12 @@ export function assertContextInputWithinModelWindow(
 
 function countText(counter: TokenCounterAdapter, input: string, modelId: string): number {
 	const result = counter.countText(input, modelId);
+	assertNonNegativeSafeInteger(result.tokens, `tokenCounter(${counter.id}).tokens`);
+	return result.tokens;
+}
+
+function countParts(counter: TokenCounterAdapter, parts: readonly string[], modelId: string): number {
+	const result = countTextParts(counter, parts, modelId);
 	assertNonNegativeSafeInteger(result.tokens, `tokenCounter(${counter.id}).tokens`);
 	return result.tokens;
 }

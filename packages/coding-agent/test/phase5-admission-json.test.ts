@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boundedAdmissionJson } from "../src/core/request-admission-json.ts";
+import { boundedAdmissionJson, boundedAdmissionJsonParts } from "../src/core/request-admission-json.ts";
 
 describe("bounded provider admission JSON", () => {
 	it("prices escaping and preserves ordinary JSON", () => {
@@ -32,5 +32,19 @@ describe("bounded provider admission JSON", () => {
 			},
 		});
 		expect(() => boundedAdmissionJson(accessor, { remaining: 1000, nodes: 0 })).toThrow("admission.json_accessor");
+	});
+
+	it("splits top-level arrays into pieces that join to the same JSON", () => {
+		const input = [
+			{ role: "user", content: "a" },
+			{ role: "assistant", content: [{ type: "text", text: "x".repeat(40) }] },
+		];
+		const expected = JSON.stringify(input);
+		const budget = { remaining: expected.length, nodes: 0 };
+		const parts = boundedAdmissionJsonParts(input, budget);
+		expect(parts.join("")).toBe(expected);
+		expect(budget.remaining).toBe(0);
+		expect(parts.length).toBe(1 + input.length * 2); // "[", e0, ",", e1, "]"
+		expect(() => boundedAdmissionJsonParts(input, { remaining: expected.length - 1, nodes: 0 })).toThrow();
 	});
 });

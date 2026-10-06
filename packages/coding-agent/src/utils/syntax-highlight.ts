@@ -1,5 +1,74 @@
-import hljs from "highlight.js/lib/index.js";
 import { decodeHtmlEntityAt } from "./html.ts";
+
+type HighlightJs = typeof import("highlight.js/lib/index.js")["default"];
+
+// The full highlight.js bundle (~190 language modules, ~7 MB RSS) is loaded on
+// first use instead of at import time. theme.ts imports this module, and theme
+// sits on the headless `omk -p` / rpc import graph via tool renderers, so a
+// static import made every worker pay for highlighting it never renders.
+// Interactive mode awaits loadSyntaxHighlighter() during init; until it settles
+// the sync helpers below fall back to unhighlighted text, and
+// onSyntaxHighlighterReady() lets render-cache owners refresh once it lands.
+// The specifier stays a string literal so Bun still bundles it into compiled
+// binaries.
+let hljs: HighlightJs | undefined;
+let hljsLoad: Promise<void> | undefined;
+const readyListeners = new Set<() => void>();
+
+/**
+ * Run `listener` once when highlight.js finishes loading. Output rendered before
+ * then is plain text and may sit in render caches (Markdown cachedLines, the
+ * streaming block cache) or come from sync callers that cannot await the load,
+ * so owners register the same refresh they run on a theme change. Nothing fires
+ * if the highlighter is already loaded: everything since was highlighted.
+ * @returns Unsubscribe function.
+ */
+export function onSyntaxHighlighterReady(listener: () => void): () => void {
+	if (hljs) return () => {};
+	readyListeners.add(listener);
+	return () => {
+		readyListeners.delete(listener);
+	};
+}
+
+/** Test-only: how many late-load listeners are still registered. */
+export function __readyListenerCountForTest(): number {
+	return readyListeners.size;
+}
+
+function notifyReady(): void {
+	const listeners = [...readyListeners];
+	readyListeners.clear();
+	for (const listener of listeners) {
+		try {
+			listener();
+		} catch {
+			// A failed render refresh must not turn a successful load into a rejection.
+		}
+	}
+}
+
+export function loadSyntaxHighlighter(): Promise<void> {
+	if (hljs) return Promise.resolve();
+	hljsLoad ??= import("highlight.js/lib/index.js").then(
+		(mod) => {
+			hljs = mod.default;
+			notifyReady();
+		},
+		(error: unknown) => {
+			hljsLoad = undefined;
+			throw error;
+		},
+	);
+	return hljsLoad;
+}
+
+function getLoadedHighlighter(): HighlightJs | undefined {
+	if (!hljs) {
+		loadSyntaxHighlighter().catch(() => {});
+	}
+	return hljs;
+}
 
 export type HighlightFormatter = (text: string) => string;
 export type HighlightTheme = Partial<Record<string, HighlightFormatter>>;
@@ -132,15 +201,19 @@ export function renderHighlightedHtml(html: string, theme: HighlightTheme = {}):
 }
 
 export function highlight(code: string, options: HighlightOptions = {}): string {
+	const highlighter = getLoadedHighlighter();
+	if (!highlighter) {
+		return options.theme?.default ? options.theme.default(code) : code;
+	}
 	const html = options.language
-		? hljs.highlight(code, {
+		? highlighter.highlight(code, {
 				language: options.language,
 				ignoreIllegals: options.ignoreIllegals,
 			}).value
-		: hljs.highlightAuto(code, options.languageSubset).value;
+		: highlighter.highlightAuto(code, options.languageSubset).value;
 	return renderHighlightedHtml(html, options.theme);
 }
 
 export function supportsLanguage(name: string): boolean {
-	return hljs.getLanguage(name) !== undefined;
+	return getLoadedHighlighter()?.getLanguage(name) !== undefined;
 }
