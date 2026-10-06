@@ -1,36 +1,25 @@
-import { createRequire } from "node:module";
+import { loadModelsCatalog, type ModelsCatalog } from "./models-catalog.ts";
 import { supportsAdaptiveThinking } from "./providers/bedrock-thinking.ts";
 import { applyGrokThinking } from "./providers/grok-thinking.ts";
 import type { Api, KnownProvider, Model, ModelThinkingLevel, Usage } from "./types.ts";
-
-/** Type-only catalog shape; does not evaluate models.generated at runtime. */
-type ModelsCatalog = typeof import("./models.generated.ts").MODELS;
 
 type ModelApi<
 	TProvider extends KnownProvider,
 	TModelId extends keyof ModelsCatalog[TProvider],
 > = ModelsCatalog[TProvider][TModelId] extends { api: infer TApi } ? (TApi extends Api ? TApi : never) : never;
 
-const requireCatalog = createRequire(import.meta.url);
-
 let modelRegistry: Map<string, Map<string, Model<Api>>> | undefined;
 
 /**
  * Load and memoize the built-in catalog. Callers that only need helpers
  * (modelsAreEqual, clampThinkingLevel, calculateCost) never touch this.
- * Specifiers stay relative so Bun compile and Node both resolve the sibling file.
  */
 function ensureModelRegistry(): Map<string, Map<string, Model<Api>>> {
 	if (modelRegistry) {
 		return modelRegistry;
 	}
 
-	let MODELS: ModelsCatalog;
-	try {
-		MODELS = (requireCatalog("./models.generated.ts") as { MODELS: ModelsCatalog }).MODELS;
-	} catch {
-		MODELS = (requireCatalog("./models.generated.js") as { MODELS: ModelsCatalog }).MODELS;
-	}
+	const MODELS = loadModelsCatalog();
 
 	const registry: Map<string, Map<string, Model<Api>>> = new Map();
 	for (const [provider, models] of Object.entries(MODELS)) {

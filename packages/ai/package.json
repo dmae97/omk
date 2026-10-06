@@ -5,6 +5,10 @@
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
+	"browser": {
+		"./dist/models-catalog.js": "./dist/models-catalog.browser.js",
+		"./src/models-catalog.ts": "./src/models-catalog.browser.ts"
+	},
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
