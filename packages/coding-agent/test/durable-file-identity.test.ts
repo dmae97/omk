@@ -257,6 +257,30 @@ describe("durable file mutation identity", () => {
 		expect(fsyncCalls.count).toBeGreaterThanOrEqual(before + 2);
 	});
 
+	it.skipIf(isWindows)("is not blocked by an ownerless lock left by a process killed mid-acquisition", () => {
+		const target = join(root, "journal.jsonl");
+		writeFileSync(target, "");
+		const identity = resolveDurableFileIdentity(target);
+		const lockRoot = getDurableFileLockRoot();
+		const leftovers = identity.lockKeys.map((key) => join(lockRoot, `mutation-${key}.lock`));
+		// The old protocol created the lock directory before writing owner.json, so a
+		// SIGKILL between the two left an empty directory no caller could reclaim.
+		for (const path of leftovers) mkdirSync(path, { mode: 0o700 });
+		// A kill after staging but before publishing leaves only a staging directory.
+		const staged = `${leftovers[0]}.stage-killed`;
+		mkdirSync(staged, { mode: 0o700 });
+		writeExclusiveFileDurablySync(join(staged, "owner.json"), Buffer.from("{}"));
+		try {
+			const lock = acquireDurableFileMutationLockSync(target, { timeoutMs: 0 });
+			for (const path of leftovers) expect(existsSync(join(path, "owner.json"))).toBe(true);
+			lock.release();
+			expect(() => acquireDurableFileMutationLockSync(target, { timeoutMs: 0 }).release()).not.toThrow();
+		} finally {
+			rmSync(staged, { recursive: true, force: true });
+			for (const path of leftovers) rmSync(path, { recursive: true, force: true });
+		}
+	});
+
 	it.skipIf(isWindows)("does not follow a symlink planted at the final lock target", () => {
 		const target = join(root, "future.jsonl");
 		const trap = join(root, "trap");

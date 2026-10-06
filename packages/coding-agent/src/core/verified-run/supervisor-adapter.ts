@@ -15,8 +15,9 @@ import { VerifiedRunError } from "./storage.ts";
  *   process the host can see. A platform without that backend has no way to
  *   prove termination, so callers must refuse with `unsupported_boundary`
  *   instead of degrading to best-effort signaling.
- * - cancel: `escalateTermination` sends SIGKILL to the supervised direct
- *   child (the bwrap supervisor). `--die-with-parent` propagates death to the
+ * - cancel: `escalateTermination` sends SIGKILL to the supervised process
+ *   group led by the bwrap supervisor, which also reaches a namespace init
+ *   still in setup. `--die-with-parent` propagates death to the
  *   namespace init, and the kernel then SIGKILLs every remaining task in that
  *   namespace — including non-cooperative workers and detached (`setsid`)
  *   descendants. Signal delivery is never treated as termination.
@@ -65,7 +66,10 @@ export const SUPERVISOR_SYSTEM_ARGS = [
 	"C.UTF-8",
 ] as const;
 
-export type SupervisorChild = { readonly kill: (signal: NodeJS.Signals) => boolean };
+export type SupervisorChild = {
+	readonly pid?: number;
+	readonly kill: (signal: NodeJS.Signals) => boolean;
+};
 
 /**
  * The only termination guarantee this package honors: a private PID namespace
@@ -78,11 +82,29 @@ export function loadSupervisorBackend(): { readonly binary: string; readonly arg
 }
 
 /**
- * SIGKILL escalation to the supervised direct child. `--die-with-parent` makes
- * the kernel kill the whole PID namespace once this supervisor dies, so no
- * per-descendant signaling (which PID reuse would make unsafe) is needed.
+ * SIGKILL escalation to the supervised process group. Once bwrap's namespace
+ * init has armed `--die-with-parent`, killing the direct child makes the kernel
+ * kill the whole PID namespace, so no per-descendant signaling (which PID reuse
+ * would make unsafe) is needed.
+ *
+ * Before that point the init is still blocked in setup, waiting on an eventfd
+ * that only the direct child would ever signal. Killing only the direct child
+ * then orphans the init forever: it never reports an identity, never runs the
+ * gate, and keeps the inherited stdio open, so `close` never fires and the
+ * execution is quarantined as unsettled. The broker spawns the supervisor as a
+ * process-group leader and the init stays in that group until `--new-session`
+ * calls setsid right before exec, which happens after `--die-with-parent` is
+ * armed. Signaling the group therefore covers both windows.
  */
 export function escalateTermination(child: SupervisorChild): void {
+	if (child.pid !== undefined && child.pid > 0) {
+		try {
+			process.kill(-child.pid, "SIGKILL");
+			return;
+		} catch {
+			// The group is already gone (or was never created); fall back to the direct child.
+		}
+	}
 	child.kill("SIGKILL");
 }
 

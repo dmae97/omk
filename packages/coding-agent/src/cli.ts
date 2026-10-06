@@ -8,16 +8,16 @@
 import { homedir } from "node:os";
 import { runNeoCli } from "./commands/neo-cli.ts";
 import { APP_NAME, getPackageDir } from "./config.ts";
-import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
+import { installHttpDispatcherFetchHook } from "./core/http-dispatcher-install.ts";
 import { main } from "./main.ts";
 
 process.title = APP_NAME;
 process.env.OMK_CODING_AGENT = "true";
 process.emitWarning = (() => {}) as typeof process.emitWarning;
 
-// Configure undici's global dispatcher before provider SDKs issue requests.
-// Runtime settings are applied once SettingsManager has loaded global/project settings.
-configureHttpDispatcher();
+// Install a fetch hook that configures undici's global dispatcher on the first
+// network request. Runtime timeout is scheduled once SettingsManager loads.
+installHttpDispatcherFetchHook();
 
 if (process.argv[2] === "neo") {
 	process.exitCode = runNeoCli(process.argv.slice(3), {
