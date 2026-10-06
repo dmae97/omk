@@ -86,6 +86,8 @@ describe("parseArgs", () => {
 			["a bullet", "- foo"],
 			["long-flag-shaped prose", "--not-a-flag text"],
 			["a multi-line bullet list", "- step one\n- step two"],
+			["a tab-separated bullet", "-\tfoo"],
+			["prose opening with a known long flag", "--model x"],
 			["one-word front matter", "---draft"],
 		])("takes %s after -p as the prompt", (_label, prompt) => {
 			for (const flag of ["-p", "--print"]) {
@@ -133,6 +135,14 @@ describe("parseArgs", () => {
 			const result = parseArgs(["-p", "--", "--verbose"]);
 			expect(result.verbose).toBeUndefined();
 			expect(result.messages).toEqual(["--verbose"]);
+		});
+
+		test("keeps a leading --name=value token as a flag; -- passes it as text", () => {
+			const prose = "--retries=3 is wrong, fix";
+			expect(parseArgs(["-p", prose]).messages).toEqual([]);
+			const forced = parseArgs(["-p", "--", prose]);
+			expect(forced.messages).toEqual([prose]);
+			expect(forced.unknownFlags.size).toBe(0);
 		});
 
 		test("lets -- force a one-word dash prompt after -p", () => {

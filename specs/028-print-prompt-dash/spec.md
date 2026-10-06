@@ -7,7 +7,7 @@ description: "Fix: `-p`/`--print` rejects an inline prompt that starts with a da
 **Specification ID**: `028-print-prompt-dash`
 **Feature Branch**: `fix/print-prompt-dash`
 **Created**: 2026-10-06
-**Status**: Draft
+**Status**: Accepted
 **Constitution**: [specs/constitution.md](../constitution.md)
 **Input**: In a benchmark run, `omk -p "- do something..."` (an instruction that opens with a Markdown bullet) exited immediately with `Error: Unknown option: - do something...` and exit code 1. The model never ran.
 **OMK Preset**: `omk`
@@ -43,7 +43,7 @@ The token after `-p`/`--print` is its prompt unless it is an option. The rule:
 | a long-option token `--name=value` whose value contains whitespace (known or extension flag) | flag (unchanged) |
 | any other dash-led token containing whitespace or a newline (`- foo`, `--not-a-flag text`, multi-line `- a\n- b`) | prompt (**new**) |
 
-To pass a one-word dash prompt or a prompt that is exactly a flag, use the existing end-of-options terminator: `omk -p -- -foo`, `omk -p -- "--verbose"`. (Rule narrowed per Tech Lead review on #84: only whitespace-containing tokens change, so typo errors are kept.)
+To pass a one-word dash prompt or a prompt that is exactly a flag, use the existing end-of-options terminator: `omk -p -- -foo`, `omk -p -- "--verbose"`. A prompt that opens with a `--name=value` token (`"--retries=3 is wrong, fix"`) is still a flag; `omk -p -- "--retries=3 is wrong, fix"` passes it as text. Documented in `packages/coding-agent/docs/usage.md` (Modes). (Rule narrowed per Tech Lead review on #84: only whitespace-containing tokens change, so typo errors are kept.)
 
 ## Agent-Oriented Requirements
 

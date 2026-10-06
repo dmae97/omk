@@ -375,6 +375,13 @@ In print mode, omk also reads piped stdin and merges it into the initial prompt:
 cat README.md | omk -p "Summarize this text"
 ```
 
+An inline prompt after `-p` may start with a dash when it contains a space or newline, such as `omk -p "- fix the failing test"`. A one-word dash token (`-foo`) or a prompt that starts with a `--name=value` token (`"--retries=3 is wrong"`) is still read as an option. Put `--` before such a prompt to pass it as text:
+
+```bash
+omk -p -- -foo
+omk -p -- "--retries=3 is wrong, fix it"
+```
+
 ### Model Options
 
 | Option | Description |
