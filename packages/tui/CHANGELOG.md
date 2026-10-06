@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `TUI.viewportTop`: the first buffer row inside the viewport as of the last render (0 while the whole frame fits), so components can tell whether their rows have scrolled into scrollback.
+
 ## [1.3.0] - 2026-10-04
 
 ### Changed

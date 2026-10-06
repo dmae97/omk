@@ -1,6 +1,13 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { describe, expect, it } from "vitest";
+import type { AgentSession } from "../src/core/agent-session.ts";
 import {
+	cachedMcpInventory,
 	classifyMcpStability,
+	controlPanelHeaderKey,
+	controlPanelStatusReaders,
 	countRoutableNonHubSkills,
 	countStableMcpServers,
 	parseHeadroomVersionOutput,
@@ -72,5 +79,57 @@ describe("control panel runtime status helpers", () => {
 				{ name: "headroom" },
 			]),
 		).toBe(2);
+	});
+});
+
+describe("cachedMcpInventory", () => {
+	it("reuses the inventory for the same cwd within the TTL and re-reads after it or for another cwd", () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "omk-mcp-cache-"));
+		const a = path.join(root, "a");
+		const b = path.join(root, "b");
+		fs.mkdirSync(path.join(a, ".omk"), { recursive: true });
+		fs.mkdirSync(b);
+		try {
+			const first = cachedMcpInventory(a, 1_000);
+			fs.writeFileSync(path.join(a, ".omk", "mcp.json"), JSON.stringify({ mcpServers: { x: { command: "x" } } }));
+			expect(cachedMcpInventory(a, 5_999)).toBe(first);
+			const refreshed = cachedMcpInventory(a, 6_000);
+			expect(refreshed).not.toBe(first);
+			expect(refreshed.entries.length).toBe(first.entries.length + 1);
+			expect(cachedMcpInventory(b, 6_001)).not.toBe(refreshed);
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it("keys the startup header on model, manual thinking level and session id", () => {
+		const fakeSession = (
+			model: { provider: string; id: string } | undefined,
+			thinkingLevel: string,
+			thinkingMode: "manual" | "auto",
+			sessionId: string,
+		) =>
+			({
+				state: { model, thinkingLevel },
+				thinkingMode,
+				sessionManager: { getSessionId: () => sessionId },
+			}) as unknown as AgentSession;
+		const model = { provider: "openrouter", id: "m1" };
+		expect(controlPanelHeaderKey(fakeSession(model, "high", "manual", "s1"))).toEqual({
+			model: "openrouter/m1/high",
+			session: "s1",
+		});
+		expect(controlPanelHeaderKey(fakeSession(undefined, "off", "manual", "s1")).model).toBe("//off");
+		// Auto thinking resolves a level per turn; it must not refresh the header each turn.
+		expect(controlPanelHeaderKey(fakeSession(model, "low", "auto", "s1")).model).toBe(
+			controlPanelHeaderKey(fakeSession(model, "xhigh", "auto", "s1")).model,
+		);
+
+		// The readers follow the current session, which /new and /resume replace.
+		let current = fakeSession(model, "high", "manual", "s1");
+		const readers = controlPanelStatusReaders(() => current);
+		expect(readers.headerKey?.()).toEqual({ model: "openrouter/m1/high", session: "s1" });
+		current = fakeSession({ provider: "openrouter", id: "m2" }, "high", "manual", "s2");
+		expect(readers.headerKey?.()).toEqual({ model: "openrouter/m2/high", session: "s2" });
 	});
 });

@@ -1,12 +1,14 @@
 import type { Component } from "omk-tui";
 import {
 	type ControlPanelContent,
+	type ControlPanelHeaderKey,
+	type ControlPanelStatusSnapshot,
 	renderControlPanelLayout,
 	renderControlPanelRightPane,
 } from "./control-panel-layout.ts";
 import { INTRO_MS, revealAt, shouldAnimateIntro, TICK_MS } from "./control-panel-motion.ts";
 
-export type { ControlPanelContent, ControlPanelStatusSnapshot } from "./control-panel-layout.ts";
+export type { ControlPanelContent, ControlPanelHeaderKey, ControlPanelStatusSnapshot } from "./control-panel-layout.ts";
 
 export interface ControlPanelMotionOptions {
 	requestRender: () => void;
@@ -15,8 +17,37 @@ export interface ControlPanelMotionOptions {
 	isHeaderVisibleHint: () => boolean;
 	getRenderWidth?: () => number;
 	now?: () => number;
+	/**
+	 * Whether the header rows were inside the viewport on the last frame (default: true). A header
+	 * that has scrolled into scrollback defers model refreshes: repainting a row above the viewport
+	 * forces a full redraw that re-emits the transcript.
+	 */
+	isInViewport?: () => boolean;
 }
 
+/** RUN labels that mean a turn (or compaction) is in progress. */
+const TURN_LABELS: ReadonlySet<string> = new Set(["running", "compacting", "retrying"]);
+
+function isTurnInProgress(snapshot: ControlPanelStatusSnapshot): boolean {
+	const label = snapshot.controlPlane?.run.label;
+	return label !== undefined && TURN_LABELS.has(label);
+}
+
+/**
+ * The startup header. It sits at the top of the transcript and scrolls into immutable terminal
+ * scrollback, where any change to its rows forces a full repaint and re-emits the transcript
+ * into scrollback. So the header reads the live status snapshot only until the first turn
+ * starts, then freezes on the last pre-turn snapshot and stops rebuilding it: RUN, VERIFY,
+ * ctx/meter and TODO keep the values they had before the first prompt. The status sidebar and
+ * the control-pane overlay show the live values.
+ *
+ * The frozen snapshot is re-captured when the content's `headerKey` changes. A new session
+ * (/new, /resume, /fork, which clear the transcript) goes back to the live header until that
+ * session's first turn starts. A new model or thinking level (/model, model cycling) re-reads the
+ * snapshot while the header is on screen; once it has scrolled into scrollback the header keeps its
+ * lines and marks the snapshot stale until it is visible again (the footer and the status sidebar
+ * already show the new model).
+ */
 export class ControlPanelComponent implements Component {
 	private expanded = false;
 	private readonly content: ControlPanelContent;
@@ -25,6 +56,11 @@ export class ControlPanelComponent implements Component {
 	private introStartMs: number | undefined;
 	private motionTimerId: ReturnType<typeof setInterval> | undefined;
 	private lastRenderWidth = 0;
+	private preTurnSnapshot: ControlPanelStatusSnapshot | undefined;
+	private frozenContent: ControlPanelContent | undefined;
+	private renderCache: { key: string; lines: string[] } | undefined;
+	private lastHeaderKey: ControlPanelHeaderKey | undefined;
+	private staleModel = false;
 
 	constructor(content: ControlPanelContent, motionOptions?: ControlPanelMotionOptions) {
 		this.content = content;
@@ -41,7 +77,9 @@ export class ControlPanelComponent implements Component {
 		}
 	}
 
-	invalidate(): void {}
+	invalidate(): void {
+		this.renderCache = undefined;
+	}
 
 	dispose(): void {
 		if (this.motionTimerId !== undefined) {
@@ -62,8 +100,77 @@ export class ControlPanelComponent implements Component {
 
 	render(width: number): string[] {
 		this.lastRenderWidth = width;
-		const lines = renderControlPanelLayout(this.content, this.expanded, width, this.currentReveal());
-		return this.shouldRenderPlain() ? lines.map(stripAnsi) : lines;
+		const reveal = this.currentReveal();
+		const plain = this.shouldRenderPlain();
+		this.syncHeaderKey();
+		const content = this.headerContent();
+		// Once frozen the header's inputs only change with width, expansion, the intro reveal or a
+		// theme change (invalidate), so reuse the rendered lines instead of re-laying out every frame.
+		const key = `${width}|${this.expanded}|${reveal}|${plain}`;
+		if (content === this.frozenContent && this.renderCache?.key === key) return this.renderCache.lines;
+		const layout = renderControlPanelLayout(content, this.expanded, width, reveal);
+		const lines = plain ? layout.map(stripAnsi) : layout;
+		this.renderCache = content === this.frozenContent ? { key, lines } : undefined;
+		return lines;
+	}
+
+	/**
+	 * Re-captures the header's status snapshot. With `newSession` (/new, /resume) the header goes
+	 * back to live until the session's first turn starts; otherwise (/model) a frozen header takes
+	 * the current snapshot, or only its model rows while a turn is running.
+	 */
+	refreshHeaderSnapshot(options: { newSession?: boolean } = {}): void {
+		this.staleModel = false;
+		this.renderCache = undefined;
+		this.preTurnSnapshot = undefined;
+		const frozen = this.frozenContent?.statusSnapshot?.();
+		const read = this.content.statusSnapshot;
+		if (options.newSession || frozen === undefined || read === undefined) {
+			this.frozenContent = undefined;
+			return;
+		}
+		const live = read();
+		const { modelProvider, modelId, thinkingLevel } = live;
+		const snapshot = isTurnInProgress(live) ? { ...frozen, modelProvider, modelId, thinkingLevel } : live;
+		this.frozenContent = { ...this.content, statusSnapshot: () => snapshot };
+	}
+
+	/** True while a model/thinking change waits for the scrolled-off header to be visible again. */
+	get headerSnapshotStale(): boolean {
+		return this.staleModel;
+	}
+
+	/** Refreshes the header when its model/thinking or session key changes since the last render. */
+	private syncHeaderKey(): void {
+		const key = this.content.headerKey?.();
+		const last = this.lastHeaderKey;
+		this.lastHeaderKey = key;
+		if (key !== undefined && last !== undefined) {
+			if (key.session !== last.session) {
+				this.refreshHeaderSnapshot({ newSession: true });
+				return;
+			}
+			if (key.model !== last.model) this.staleModel = true;
+		}
+		if (!this.staleModel) return;
+		const inViewport = this.motionOptions?.isInViewport?.() ?? true;
+		if (this.frozenContent === undefined || inViewport) this.refreshHeaderSnapshot();
+	}
+
+	/** Content with the header's status snapshot: live before the first turn, frozen after. */
+	private headerContent(): ControlPanelContent {
+		if (this.frozenContent !== undefined) return this.frozenContent;
+		const read = this.content.statusSnapshot;
+		if (read === undefined) return this.content;
+		const snapshot = read();
+		if (!isTurnInProgress(snapshot)) {
+			this.preTurnSnapshot = snapshot;
+			return { ...this.content, statusSnapshot: () => snapshot };
+		}
+		const frozen = this.preTurnSnapshot ?? snapshot;
+		this.preTurnSnapshot = undefined;
+		this.frozenContent = { ...this.content, statusSnapshot: () => frozen };
+		return this.frozenContent;
 	}
 
 	private now(): number {

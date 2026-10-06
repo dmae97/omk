@@ -1,13 +1,14 @@
 import { spawnSync } from "node:child_process";
+import * as os from "node:os";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import { getHeadroomRuntimeStatus } from "../../../core/context-budget-headroom.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
-import { loadMcpInventory, type McpServerEntry } from "../../../core/mcp-inventory.ts";
+import { loadMcpInventory, type McpInventory, type McpServerEntry } from "../../../core/mcp-inventory.ts";
 import type { SessionManager } from "../../../core/session-manager.ts";
 import { getCurrentTodoState } from "../../../core/todo-runtime-state.ts";
 import { readControlPlaneSignals } from "../control-plane-signals.ts";
 import { buildControlPlaneViewModel } from "../control-plane-view-model.ts";
-import type { ControlPanelStatusSnapshot } from "./control-panel-layout.ts";
+import type { ControlPanelContent, ControlPanelHeaderKey, ControlPanelStatusSnapshot } from "./control-panel-layout.ts";
 import { formatCwdForFooter } from "./footer.ts";
 
 const OMK_HUB_SKILL_NAMES = new Set([
@@ -116,6 +117,21 @@ export function parseHeadroomVersionOutput(output: string): string | null {
 	return match?.[1] ?? null;
 }
 
+/** The live control-pane overlay rebuilds its snapshot every frame; MCP inventory is read from disk. */
+const MCP_INVENTORY_TTL_MS = 5000;
+let mcpInventoryCache: { key: string; at: number; inventory: McpInventory } | undefined;
+
+/** `loadMcpInventory` cached per cwd/home for {@link MCP_INVENTORY_TTL_MS} (as the status sidebar does). */
+export function cachedMcpInventory(cwd: string, now: number = Date.now()): McpInventory {
+	const home = os.homedir();
+	const key = `${home}\0${cwd}`;
+	const cached = mcpInventoryCache;
+	if (cached && cached.key === key && now - cached.at < MCP_INVENTORY_TTL_MS) return cached.inventory;
+	const inventory = loadMcpInventory(cwd, home);
+	mcpInventoryCache = { key, at: now, inventory };
+	return inventory;
+}
+
 export function createControlPanelStatusSnapshot(
 	session: AgentSession,
 	sessionManager: SessionManager,
@@ -124,7 +140,7 @@ export function createControlPanelStatusSnapshot(
 	// One read of the live signals per snapshot: context usage walks the session branch, so the
 	// CTX fields and the view model share this read instead of calling getContextUsage() again.
 	const signals = readControlPlaneSignals(session, footerData, session.state.model?.contextWindow ?? 0);
-	const mcpInventory = loadMcpInventory(sessionManager.getCwd());
+	const mcpInventory = cachedMcpInventory(sessionManager.getCwd());
 	const loadedSkills = session.resourceLoader.getSkills().skills;
 	const ansiColorState = process.env.NO_COLOR ? "off" : "on";
 	const cwdLabel = formatCwdForFooter(sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
@@ -144,5 +160,32 @@ export function createControlPanelStatusSnapshot(
 		ansiColorState,
 		// Authority state is read from the live session each render, never asserted here.
 		controlPlane: buildControlPlaneViewModel(signals),
+	};
+}
+
+/**
+ * Identity of what the frozen startup header shows: model and thinking level, and the session.
+ * Auto thinking resolves a level per turn, so it keys as "auto" and does not refresh the header.
+ */
+export function controlPanelHeaderKey(session: AgentSession): ControlPanelHeaderKey {
+	const model = session.state.model;
+	const thinking = session.thinkingMode === "auto" ? "auto" : (session.state.thinkingLevel ?? "off");
+	return {
+		model: `${model?.provider ?? ""}/${model?.id ?? ""}/${thinking}`,
+		session: session.sessionManager.getSessionId(),
+	};
+}
+
+/** The control panel's status readers for the current session (which /new and /resume replace). */
+export function controlPanelStatusReaders(
+	getSession: () => AgentSession,
+	footerData?: ReadonlyFooterDataProvider,
+): Pick<ControlPanelContent, "statusSnapshot" | "headerKey"> {
+	return {
+		statusSnapshot: () => {
+			const session = getSession();
+			return createControlPanelStatusSnapshot(session, session.sessionManager, footerData);
+		},
+		headerKey: () => controlPanelHeaderKey(getSession()),
 	};
 }
