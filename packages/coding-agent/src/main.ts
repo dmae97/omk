@@ -15,6 +15,7 @@ import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
 import { attachSessionTransports } from "./cli/mcp-attach.ts";
 import { loadModelContractOrExit } from "./cli/model-contract.ts";
+import { isPackageCliCommand } from "./cli/package-commands.ts";
 import { isExplicitExtensionDiagnostic, resolveCliPaths } from "./cli/resource-paths.ts";
 import { handleCodexBarQuotaCommand } from "./codexbar-cli.ts";
 import { runInitCli } from "./commands/init-cli.ts";
@@ -524,15 +525,7 @@ export async function main(args: string[], options?: MainOptions) {
 		return;
 	}
 
-	const packageCliCommand = args[0];
-	if (
-		packageCliCommand === "config" ||
-		packageCliCommand === "install" ||
-		packageCliCommand === "remove" ||
-		packageCliCommand === "uninstall" ||
-		packageCliCommand === "update" ||
-		packageCliCommand === "list"
-	) {
+	if (isPackageCliCommand(args[0])) {
 		const { handleConfigCommand, handlePackageCommand } = await import("./package-manager-cli.ts");
 		if (await handlePackageCommand(args)) {
 			return;
