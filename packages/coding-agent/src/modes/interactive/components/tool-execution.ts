@@ -87,23 +87,11 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private getCallRenderer(): ToolDefinition<any, any>["renderCall"] | undefined {
-		if (!this.builtInToolDefinition) {
-			return this.toolDefinition?.renderCall;
-		}
-		if (!this.toolDefinition) {
-			return this.builtInToolDefinition.renderCall;
-		}
-		return this.toolDefinition.renderCall ?? this.builtInToolDefinition.renderCall;
+		return this.toolDefinition?.renderCall ?? this.builtInToolDefinition?.renderCall;
 	}
 
 	private getResultRenderer(): ToolDefinition<any, any>["renderResult"] | undefined {
-		if (!this.builtInToolDefinition) {
-			return this.toolDefinition?.renderResult;
-		}
-		if (!this.toolDefinition) {
-			return this.builtInToolDefinition.renderResult;
-		}
-		return this.toolDefinition.renderResult ?? this.builtInToolDefinition.renderResult;
+		return this.toolDefinition?.renderResult ?? this.builtInToolDefinition?.renderResult;
 	}
 
 	private hasRendererDefinition(): boolean {
@@ -111,13 +99,7 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private getRenderShell(): "default" | "self" {
-		if (!this.builtInToolDefinition) {
-			return this.toolDefinition?.renderShell ?? "default";
-		}
-		if (!this.toolDefinition) {
-			return this.builtInToolDefinition.renderShell ?? "default";
-		}
-		return this.toolDefinition.renderShell ?? this.builtInToolDefinition.renderShell ?? "default";
+		return this.toolDefinition?.renderShell ?? this.builtInToolDefinition?.renderShell ?? "default";
 	}
 
 	private getRenderContext(lastComponent: Component | undefined): ToolRenderContext {
@@ -125,6 +107,7 @@ export class ToolExecutionComponent extends Container {
 			args: this.args,
 			toolCallId: this.toolCallId,
 			invalidate: () => {
+				if (this.disposed) return;
 				this.invalidate();
 				this.ui.requestRender();
 			},
@@ -187,6 +170,9 @@ export class ToolExecutionComponent extends Container {
 	dispose(): void {
 		this.disposed = true;
 		this.images.dispose();
+		// Renderers keep live timers in `state.interval` (bash's elapsed-time ticker); they die with the row.
+		clearInterval(this.rendererState.interval);
+		this.rendererState.interval = undefined;
 	}
 
 	setExpanded(expanded: boolean): void {

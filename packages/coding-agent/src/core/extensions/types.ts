@@ -422,7 +422,10 @@ export interface ToolRenderContext<TState = any, TArgs = any> {
 	invalidate: () => void;
 	/** Previously returned component for this render slot, if any. */
 	lastComponent: Component | undefined;
-	/** Shared renderer state for this tool row. Initialized by tool-execution.ts. */
+	/**
+	 * Shared renderer state for this tool row. Initialized by tool-execution.ts. A timer stored in
+	 * `state.interval` is cleared when the row is disposed (chat cleared, turn ended with the tool pending).
+	 */
 	state: TState;
 	/** Working directory for this tool execution. */
 	cwd: string;

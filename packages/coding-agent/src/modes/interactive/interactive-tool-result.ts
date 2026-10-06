@@ -19,6 +19,12 @@ export function disposeComponent(component: unknown): void {
 		component.dispose();
 	}
 }
+/** Disposes every pending tool component (stopping renderer timers) and empties the map. */
+export function disposePendingTools(pending: Map<string, unknown>): void {
+	for (const component of pending.values()) disposeComponent(component);
+	pending.clear();
+}
+
 type ToolExecutionContent = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 
 type ToolExecutionResult = {
