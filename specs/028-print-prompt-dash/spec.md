@@ -38,11 +38,12 @@ The token after `-p`/`--print` is its prompt unless it is an option. The rule:
 | absent, `--`, `@file` | not consumed (unchanged) |
 | does not start with `-` | prompt (unchanged) |
 | exactly `-` | not consumed (unchanged; conventional stdin placeholder, still an error) |
-| a short flag `parseArgs` recognises (`-h -v -c -r -n -nt -nbt -t -xt -p -e -ne -ns -np -nc`) | flag (unchanged) |
-| a long-option token `--name` or `--name=value` with a whitespace-free name not starting with `-` (known or extension flag) | flag (unchanged) |
-| anything else starting with `-` (`- foo`, `-foo`, `--not-a-flag text`, `---` front matter, multi-line `- a\n- b`) | prompt (**new**, except `---`, which was already accepted) |
+| starts with `---` (front matter) | prompt (unchanged) |
+| a one-word dash token without whitespace (`-x`, `-foo`, `-h`, `--verbose`) | option (unchanged; a typo like `-p -x` still errors with `Unknown option`) |
+| a long-option token `--name=value` whose value contains whitespace (known or extension flag) | flag (unchanged) |
+| any other dash-led token containing whitespace or a newline (`- foo`, `--not-a-flag text`, multi-line `- a\n- b`) | prompt (**new**) |
 
-To pass a prompt that is exactly a known flag or long-option token, use the existing end-of-options terminator: `omk -p -- "--verbose"`.
+To pass a one-word dash prompt or a prompt that is exactly a flag, use the existing end-of-options terminator: `omk -p -- -foo`, `omk -p -- "--verbose"`. (Rule narrowed per Tech Lead review on #84: only whitespace-containing tokens change, so typo errors are kept.)
 
 ## Agent-Oriented Requirements
 
@@ -56,11 +57,11 @@ To pass a prompt that is exactly a known flag or long-option token, use the exis
 
 **Acceptance** (each measured by a named vitest case in `packages/coding-agent/test/args.test.ts`):
 1. `parseArgs(["-p", "- foo"])` → `messages: ["- foo"]`, `print: true`, zero diagnostics.
-2. `parseArgs(["-p", "-foo"])` → `messages: ["-foo"]`, zero diagnostics.
+2. `parseArgs(["-p", "--", "-foo"])` → `messages: ["-foo"]`, zero diagnostics; `parseArgs(["-p", "-foo"])` and `parseArgs(["-p", "-x"])` still produce `Unknown option`.
 3. `parseArgs(["-p", "--not-a-flag text"])` → `messages: ["--not-a-flag text"]`, empty `unknownFlags`.
 4. A multi-line prompt `"- step one\n- step two"` after `--print` → one message, zero diagnostics.
 5. Known flags after `-p` keep their meaning: every short flag literal in `args.ts` (extracted from source, so the list cannot drift) is never consumed as the prompt. `-p --provider openai "Say hi."` and `-p --ext-flag value` are unchanged.
-6. Genuinely unknown flags elsewhere still error: `["-x", "-p", "hi"]` and `["-p", "hi", "-foo"]` produce `Unknown option`. `-p -` is still an error.
+6. Genuinely unknown flags elsewhere still error: `["-x", "-p", "hi"]` and `["-p", "hi", "-foo"]`, `["-p", "-x"]` and `["-p", "-foo"]` produce `Unknown option`. `-p -` is still an error.
 7. `--` still works: `-p -- "--verbose"` → message `--verbose`, `verbose` unset. Existing positional/`--`/`@file` tests pass unchanged.
 
 ### Requirement 2 - Gates (Priority: P1)

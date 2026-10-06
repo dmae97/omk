@@ -58,20 +58,20 @@ export function isValidThinkingLevel(level: string): level is ThinkingLevel {
 	return VALID_THINKING_LEVELS.includes(level as ThinkingLevel);
 }
 
-/** Short flags parseArgs recognises; `--print` never takes one as its prompt. */
-const SHORT_FLAGS = new Set("-h -v -c -r -n -nt -nbt -t -xt -p -e -ne -ns -np -nc".split(" "));
 /** One long-option token (`--name` / `--name=value`); may be an extension flag. */
 const LONG_OPTION = /^--[^\s=-][^\s=]*(=[\s\S]*)?$/;
 
 /**
  * Whether the token after `--print` is its inline prompt. Prose may open with a
- * dash ("- step", "-foo", "--not-a-flag text"), so a dash-led token is the prompt
- * unless it is an option: a known short flag, a long-option token, the `--`
- * terminator, or the `-` stdin placeholder. `omk -p -- "--verbose"` forces text.
+ * dash ("- step", "--not-a-flag text"), so a dash-led token that contains
+ * whitespace is the prompt unless it is a long-option token (`--name=a b`).
+ * A one-word dash token (`-x`, `-foo`) stays an option, so typos still error;
+ * `omk -p -- -foo` forces it as text. `---` front matter is always a prompt.
  */
 function isInlinePrintPrompt(next: string | undefined): next is string {
 	if (next === undefined || next === "--" || next === "-" || next.startsWith("@")) return false;
-	return !next.startsWith("-") || (!SHORT_FLAGS.has(next) && !LONG_OPTION.test(next));
+	if (!next.startsWith("-") || next.startsWith("---")) return true;
+	return /\s/.test(next) && !LONG_OPTION.test(next);
 }
 
 export function parseArgs(args: string[]): Args {

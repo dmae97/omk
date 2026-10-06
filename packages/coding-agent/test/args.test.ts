@@ -84,9 +84,9 @@ describe("parseArgs", () => {
 		// with "- " used to abort the run with `Unknown option`.
 		test.each([
 			["a bullet", "- foo"],
-			["a dash-glued word", "-foo"],
 			["long-flag-shaped prose", "--not-a-flag text"],
 			["a multi-line bullet list", "- step one\n- step two"],
+			["one-word front matter", "---draft"],
 		])("takes %s after -p as the prompt", (_label, prompt) => {
 			for (const flag of ["-p", "--print"]) {
 				const result = parseArgs([flag, prompt]);
@@ -120,6 +120,8 @@ describe("parseArgs", () => {
 			for (const args of [
 				["-x", "-p", "hi"],
 				["-p", "hi", "-foo"],
+				["-p", "-x"],
+				["-p", "-foo"],
 				["-p", "-"],
 			]) {
 				const errors = parseArgs(args).diagnostics.filter((d) => d.type === "error");
@@ -131,6 +133,13 @@ describe("parseArgs", () => {
 			const result = parseArgs(["-p", "--", "--verbose"]);
 			expect(result.verbose).toBeUndefined();
 			expect(result.messages).toEqual(["--verbose"]);
+		});
+
+		test("lets -- force a one-word dash prompt after -p", () => {
+			const result = parseArgs(["-p", "--", "-foo"]);
+			expect(result.print).toBe(true);
+			expect(result.messages).toEqual(["-foo"]);
+			expect(result.diagnostics).toEqual([]);
 		});
 	});
 
