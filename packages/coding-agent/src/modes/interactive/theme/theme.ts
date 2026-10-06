@@ -9,6 +9,7 @@ import { getCustomThemesDir, getThemesDir } from "../../../config.ts";
 import type { SourceInfo } from "../../../core/source-info.ts";
 import { closeWatcher, watchWithErrorHandler } from "../../../utils/fs-watch.ts";
 import { highlight, supportsLanguage } from "../../../utils/syntax-highlight.ts";
+import { getTrueColorSupport } from "../../../utils/terminal-truecolor.ts";
 import { THEME_NAME_ALIASES } from "./theme-aliases.ts";
 
 // ============================================================================
@@ -612,8 +613,7 @@ function loadThemeJson(name: string): ThemeJson {
 }
 
 function createTheme(themeJson: ThemeJson, mode?: ColorMode, sourcePath?: string): Theme {
-	const colorTerm = process.env.COLORTERM?.toLowerCase() ?? "";
-	const colorMode = mode ?? (colorTerm === "truecolor" || colorTerm === "24bit" ? "truecolor" : "256color");
+	const colorMode = mode ?? (getTrueColorSupport() ? "truecolor" : "256color");
 	const resolvedColors = resolveThemeColors(themeJson.colors, themeJson.vars);
 	const fgColors: Record<ThemeColor, string | number> = {} as Record<ThemeColor, string | number>;
 	const bgColors: Record<ThemeBg, string | number> = {} as Record<ThemeBg, string | number>;

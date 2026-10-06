@@ -29,7 +29,10 @@ export interface ImageRenderOptions {
 	moveCursor?: boolean;
 }
 
-let cachedCapabilities: TerminalCapabilities | null = null;
+// Cache on globalThis: shared by all module instances and read (without importing
+// omk-tui) by coding-agent/src/utils/terminal-truecolor.ts, which mirrors trueColor.
+const CAPABILITIES_KEY = Symbol.for("omk-tui:terminal-capabilities");
+type CapabilitiesGlobal = Record<symbol, TerminalCapabilities | undefined>;
 
 // Default cell dimensions - updated by TUI when terminal responds to query
 let cellDimensions: CellDimensions = { widthPx: 9, heightPx: 18 };
@@ -117,19 +120,18 @@ export function detectCapabilities(tmuxForwardsHyperlink: () => boolean = probeT
 }
 
 export function getCapabilities(): TerminalCapabilities {
-	if (!cachedCapabilities) {
-		cachedCapabilities = detectCapabilities();
-	}
-	return cachedCapabilities;
+	const store = globalThis as CapabilitiesGlobal;
+	store[CAPABILITIES_KEY] ??= detectCapabilities();
+	return store[CAPABILITIES_KEY];
 }
 
 export function resetCapabilitiesCache(): void {
-	cachedCapabilities = null;
+	(globalThis as CapabilitiesGlobal)[CAPABILITIES_KEY] = undefined;
 }
 
 /** Override the cached capabilities. Useful in tests to exercise both code paths. */
 export function setCapabilities(caps: TerminalCapabilities): void {
-	cachedCapabilities = caps;
+	(globalThis as CapabilitiesGlobal)[CAPABILITIES_KEY] = caps;
 }
 
 const KITTY_PREFIX = "\x1b_G";

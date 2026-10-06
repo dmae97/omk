@@ -13,14 +13,10 @@ vi.mock("highlight.js/lib/index.js", async (importOriginal) => {
 
 describe("syntax highlighter lazy import", () => {
 	beforeEach(() => {
-		// theme.ts no longer statically imports omk-tui; drive truecolor via COLORTERM
-		// (same hint omk-tui uses) so headless cold paths stay clear of the TUI package.
-		process.env.COLORTERM = "truecolor";
 		setCapabilities({ images: null, trueColor: true, hyperlinks: false });
 	});
 
 	afterEach(() => {
-		delete process.env.COLORTERM;
 		resetCapabilitiesCache();
 	});
 
