@@ -110,6 +110,23 @@ describe("goal acceptance verification", () => {
 		expect(captureGoalWorkspace(root).sha256).not.toBe(edited.sha256);
 	});
 
+	it("ignores omk's own turn metrics and run journals but not other .omk files", () => {
+		const root = gitRepo();
+		const initial = captureGoalWorkspace(root);
+
+		mkdirSync(join(root, ".omk", "metrics"), { recursive: true });
+		mkdirSync(join(root, ".omk", "runs", "prompt-run-1"), { recursive: true });
+		writeFileSync(join(root, ".omk", "metrics", "turns.jsonl"), '{"turn":1}\n');
+		writeFileSync(join(root, ".omk", "runs", "prompt-run-1", "resource-observations.jsonl"), "{}\n");
+		expect(captureGoalWorkspace(root)).toEqual(initial);
+
+		writeFileSync(join(root, ".omk", "metrics", "turns.jsonl"), '{"turn":1}\n{"turn":2}\n');
+		expect(captureGoalWorkspace(root)).toEqual(initial);
+
+		writeFileSync(join(root, ".omk", "mcp.json"), "{}\n");
+		expect(captureGoalWorkspace(root).sha256).not.toBe(initial.sha256);
+	});
+
 	it("rejects a receipt whose stored bytes no longer match its digest", async () => {
 		const root = gitRepo();
 		const verifier = new GoalVerifier({ cwd: root, goalKey: "k-tamper", sandboxPreflight: noSandbox });
