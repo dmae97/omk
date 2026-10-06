@@ -1,7 +1,13 @@
 import { getProviders } from "omk-ai";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "../../core/provider-display-names.ts";
 
-const BUILT_IN_MODEL_PROVIDERS = new Set<string>(getProviders());
+let builtInModelProviders: ReadonlySet<string> | undefined;
+
+/** Built on first use so importing this module never evaluates models.generated. */
+function getBuiltInModelProviders(): ReadonlySet<string> {
+	builtInModelProviders ??= new Set<string>(getProviders());
+	return builtInModelProviders;
+}
 
 /**
  * Resolve a `/login <provider>` argument to a login option.
@@ -47,12 +53,12 @@ export function getApiKeyLoginDisplayName(providerId: string, resolvedName: stri
 export function isApiKeyLoginProvider(
 	providerId: string,
 	oauthProviderIds: ReadonlySet<string>,
-	builtInProviderIds: ReadonlySet<string> = BUILT_IN_MODEL_PROVIDERS,
+	builtInProviderIds?: ReadonlySet<string>,
 ): boolean {
 	if (BUILT_IN_PROVIDER_DISPLAY_NAMES[providerId]) {
 		return true;
 	}
-	if (builtInProviderIds.has(providerId)) {
+	if ((builtInProviderIds ?? getBuiltInModelProviders()).has(providerId)) {
 		return false;
 	}
 	return !oauthProviderIds.has(providerId);

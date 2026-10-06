@@ -373,11 +373,16 @@ export class ModelRegistry {
 	}
 
 	private validateConfig(config: ModelsConfig): void {
-		const builtInProviders = new Set<string>(getProviders());
+		// Only consult the built-in catalog when the answer changes validation, so a
+		// fully specified custom provider never evaluates models.generated.
+		let builtInProviders: Set<string> | undefined;
+		const isBuiltInProvider = (providerName: string): boolean => {
+			builtInProviders ??= new Set<string>(getProviders());
+			return builtInProviders.has(providerName);
+		};
 
 		for (const [providerName, providerConfig] of Object.entries(config.providers)) {
 			if (providerName === RETIRED_GROK_OAUTH_PROXY) continue;
-			const isBuiltIn = builtInProviders.has(providerName);
 			const hasProviderApi = !!providerConfig.api;
 			const models = providerConfig.models ?? [];
 			const hasModelOverrides =
@@ -390,7 +395,7 @@ export class ModelRegistry {
 						`Provider ${providerName}: must specify "baseUrl", "headers", "compat", "modelOverrides", or "models".`,
 					);
 				}
-			} else if (!isBuiltIn) {
+			} else if ((!providerConfig.baseUrl || !providerConfig.apiKey) && !isBuiltInProvider(providerName)) {
 				// Non-built-in providers with custom models require endpoint + auth.
 				if (!providerConfig.baseUrl) {
 					throw new Error(`Provider ${providerName}: "baseUrl" is required when defining custom models.`);
@@ -405,7 +410,7 @@ export class ModelRegistry {
 			for (const modelDef of models) {
 				const hasModelApi = !!modelDef.api;
 
-				if (!hasProviderApi && !hasModelApi && !isBuiltIn) {
+				if (!hasProviderApi && !hasModelApi && !isBuiltInProvider(providerName)) {
 					throw new Error(
 						`Provider ${providerName}, model ${modelDef.id}: no "api" specified. Set at provider or model level.`,
 					);
@@ -471,11 +476,14 @@ export class ModelRegistry {
 
 	private parseModels(config: ModelsConfig): Model<Api>[] {
 		const models: Model<Api>[] = [];
-		const builtInProviders = new Set<string>(getProviders());
+		let builtInProviders: Set<string> | undefined;
 
 		// Cache built-in defaults (api, baseUrl) per provider, extracted from first model.
+		// Looked up only when a model lacks api/baseUrl, so complete custom entries
+		// never evaluate models.generated.
 		const builtInDefaultsCache = new Map<string, { api: string; baseUrl: string }>();
 		const getBuiltInDefaults = (providerName: string): { api: string; baseUrl: string } | undefined => {
+			builtInProviders ??= new Set<string>(getProviders());
 			if (!builtInProviders.has(providerName)) return undefined;
 			if (builtInDefaultsCache.has(providerName)) return builtInDefaultsCache.get(providerName);
 			const builtIn = getModels(providerName as KnownProvider) as Model<Api>[];
@@ -493,13 +501,11 @@ export class ModelRegistry {
 			const modelDefs = providerConfig.models ?? [];
 			if (modelDefs.length === 0) continue; // Override-only, no custom models
 
-			const builtInDefaults = getBuiltInDefaults(providerName);
-
 			for (const modelDef of modelDefs) {
-				const api = modelDef.api ?? providerConfig.api ?? builtInDefaults?.api;
+				const api = modelDef.api ?? providerConfig.api ?? getBuiltInDefaults(providerName)?.api;
 				if (!api) continue;
 
-				const rawBaseUrl = modelDef.baseUrl ?? providerConfig.baseUrl ?? builtInDefaults?.baseUrl;
+				const rawBaseUrl = modelDef.baseUrl ?? providerConfig.baseUrl ?? getBuiltInDefaults(providerName)?.baseUrl;
 				if (!rawBaseUrl) continue;
 
 				// Same doubling guard for custom models.json entries — the anthropic
