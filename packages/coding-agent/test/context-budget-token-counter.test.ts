@@ -52,6 +52,25 @@ describe("context budget token counter", () => {
 		}
 	});
 
+	it("counts whitespace exactly where /\\s/u matches", () => {
+		// 24 whitespace chars cost ceil(24 / 12) = 2 tokens; every other class costs at least 6.
+		for (let codePoint = 0; codePoint <= 0xffff; codePoint++) {
+			if (codePoint >= 0xd800 && codePoint <= 0xdfff) continue;
+			const char = String.fromCharCode(codePoint);
+			const isWhitespace = estimateTextTokens(char.repeat(24), "unknown").tokens === 2;
+			expect(isWhitespace, `U+${codePoint.toString(16)}`).toBe(/\s/u.test(char));
+		}
+	});
+
+	it("pairs surrogates like string iteration and counts lone surrogates as other", () => {
+		const emoji = estimateTextTokens("😀😀😀😀😀", "unknown");
+		expect(emoji.tokens).toBe(9);
+		expect(emoji.notes).toContain("composition(emoji:5)");
+		expect(estimateTextTokens("\ud83d", "unknown").tokens).toBe(1);
+		expect(estimateTextTokens("\ude00\ud83d", "unknown").tokens).toBe(1);
+		expect(estimateTextTokens("\ude00\ud83d", "unknown").notes).toContain("composition()");
+	});
+
 	it("produces detailed notes with composition breakdown and non-ascii ratio", () => {
 		const result = estimateTextTokens("한국어 텍스트 abc", "gpt-4o");
 		expect(result.notes).toEqual(

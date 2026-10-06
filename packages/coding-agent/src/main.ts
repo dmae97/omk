@@ -63,6 +63,7 @@ import { runAcpMode } from "./modes/acp/acp-mode.ts";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.ts";
 import { ExtensionSelectorComponent } from "./modes/interactive/components/extension-selector.ts";
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
+import { settlePrintModeExit } from "./modes/print-exit-guard.ts";
 import { handleConfigCommand, handlePackageCommand } from "./package-manager-cli.ts";
 import { normalizePath, resolvePath } from "./utils/paths.ts";
 import { cleanupWindowsSelfUpdateQuarantine } from "./utils/windows-self-update.ts";
@@ -903,9 +904,7 @@ export async function main(args: string[], options?: MainOptions) {
 		});
 		stopThemeWatcher();
 		restoreStdout();
-		if (exitCode !== 0) {
-			process.exitCode = exitCode;
-		}
+		settlePrintModeExit(exitCode);
 		return;
 	}
 }
