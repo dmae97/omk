@@ -103,7 +103,7 @@ import type {
 import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/footer-data-provider.ts";
 import { OMK_GITHUB_REPOSITORY_URL } from "../../core/github-repository.ts";
 import { captureHostResourceSnapshot } from "../../core/host-resource-snapshot.ts";
-import { configureHttpDispatcher, formatHttpIdleTimeoutMs } from "../../core/http-dispatcher.ts";
+import { formatHttpIdleTimeoutMs, scheduleHttpDispatcher } from "../../core/http-dispatcher-install.ts";
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.ts";
 import { createCompactionSummaryMessage } from "../../core/messages.ts";
 import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScope } from "../../core/model-resolver.ts";
@@ -1868,7 +1868,7 @@ export class InteractiveMode {
 	}
 
 	private applyRuntimeSettings(): void {
-		configureHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
+		scheduleHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
 		this.footer.setSession(this.session);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
 		this.footerDataProvider.setCwd(this.sessionManager.getCwd());
@@ -4563,7 +4563,7 @@ export class InteractiveMode {
 					},
 					onHttpIdleTimeoutMsChange: (timeoutMs) => {
 						this.settingsManager.setHttpIdleTimeoutMs(timeoutMs);
-						configureHttpDispatcher(timeoutMs);
+						scheduleHttpDispatcher(timeoutMs);
 						this.showStatus(`HTTP idle timeout: ${formatHttpIdleTimeoutMs(timeoutMs)}`);
 					},
 					onThinkingLevelChange: (level) => {
@@ -5744,7 +5744,7 @@ export class InteractiveMode {
 
 		try {
 			await this.session.reload();
-			configureHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
+			scheduleHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
 			this.keybindings.reload();
 			const activeHeader = this.customHeader ?? this.builtInHeader;
 			if (isExpandable(activeHeader)) {

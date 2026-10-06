@@ -56,9 +56,19 @@ export function estimateTextTokens(input: string, modelId = "unknown"): TokenCou
 	let punctuation = 0;
 	let other = 0;
 
-	for (const char of input) {
-		const codePoint = char.codePointAt(0) ?? 0;
-		if (/\s/u.test(char)) {
+	// Index scan over UTF-16 code units, pairing surrogates exactly like `for...of`.
+	// A per-code-point string plus a `/\s/u` test allocated ~50 bytes per input
+	// char; callers count the whole transcript every turn, so garbage grew with history.
+	for (let index = 0; index < input.length; index++) {
+		let codePoint = input.charCodeAt(index);
+		if (codePoint >= 0xd800 && codePoint <= 0xdbff && index + 1 < input.length) {
+			const low = input.charCodeAt(index + 1);
+			if (low >= 0xdc00 && low <= 0xdfff) {
+				codePoint = (codePoint - 0xd800) * 0x400 + (low - 0xdc00) + 0x10000;
+				index++;
+			}
+		}
+		if (isUnicodeWhitespace(codePoint)) {
 			whitespace += 1;
 		} else if (isHangul(codePoint)) {
 			hangul += 1;
@@ -66,7 +76,7 @@ export function estimateTextTokens(input: string, modelId = "unknown"): TokenCou
 			kana += 1;
 		} else if (isCjkIdeograph(codePoint)) {
 			cjk += 1;
-		} else if (isAsciiAlphaNumeric(codePoint) || char === "_") {
+		} else if (isAsciiAlphaNumeric(codePoint) || codePoint === 0x5f) {
 			asciiWord += 1;
 		} else if (isEmojiOrWideSymbol(codePoint)) {
 			emojiOrWide += 1;
@@ -230,6 +240,23 @@ function selectOpenAiEncoding(modelId: string): string {
 		return "o200k_base";
 	}
 	return "cl100k_base";
+}
+
+/** Exactly the code points `/\s/u` matches: ECMAScript WhiteSpace and LineTerminator. */
+function isUnicodeWhitespace(codePoint: number): boolean {
+	if (codePoint <= 0x20) return codePoint === 0x20 || (codePoint >= 0x09 && codePoint <= 0x0d);
+	if (codePoint < 0xa0) return false;
+	return (
+		codePoint === 0xa0 ||
+		codePoint === 0x1680 ||
+		(codePoint >= 0x2000 && codePoint <= 0x200a) ||
+		codePoint === 0x2028 ||
+		codePoint === 0x2029 ||
+		codePoint === 0x202f ||
+		codePoint === 0x205f ||
+		codePoint === 0x3000 ||
+		codePoint === 0xfeff
+	);
 }
 
 function isAsciiAlphaNumeric(codePoint: number): boolean {
