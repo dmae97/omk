@@ -38,6 +38,10 @@ Conductor의 interactive-mode / omk-tui strip, Staff tiktoken(023), TL TUI windo
 2. `ModelRegistry`가 커스텀 `models.json`만으로 `find`/`resolveCliModel`에 성공하면 built-in 카탈로그(`getProviders`/`getModels`)를 호출하지 않는다.
 3. `--list-models`, 커스텀에 없는 provider/model, interactive 목록 등 built-in이 필요한 경로는 기존과 동일하게 동작한다.
 4. **측정**: vitest load/mock 카운터로 (1)(2) 고정. 보조로 ESM MODLOG TSV에 `models.generated` 행 부재(커스텀-only `-p`). 추정 절감: 소스 −1.21MB, RSS ~−3MB(#74).
+5. **`main()` 기준 (리뷰 후 추가)**: `baseUrl`·`apiKey`·`api`를 모두 적은 커스텀 provider로 `omk -p`를 끝까지 돌린 뒤 `isBuiltInModelsCatalogLoaded() === false`. `main()`을 거치는 vitest(`print-mode-lazy-models-catalog.test.ts`)로 고정한다.
+   - 모듈 최상위에서 카탈로그를 부르지 않는다(`interactive-login-options.ts`의 provider Set은 처음 쓸 때 만든다).
+   - `models.json` 검증·파싱은 답이 달라질 때만 `getProviders()`/`getModels()`를 부른다. provider에 `baseUrl`이나 `apiKey`가 없거나, 모델에 `api`/`baseUrl`이 없어 built-in 기본값을 물려받아야 할 때다.
+   - **로드돼도 되는 경우**: `models.json`의 provider가 built-in 기본값(api, baseUrl)에 기대는 경우, 그리고 `models.json` 없이 built-in provider/model로 실행하는 경우. 후자는 모델을 찾으려면 카탈로그가 필요하므로 지연 로드의 대상이 아니다.
 
 ### Win B — 스킬/확장 패키지 resolve 지연
 
