@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `Editor` and `Input` keep at most 200 undo snapshots (the internal `UndoStack` drops the oldest past its limit), so undo history no longer grows without bound while typing a long draft.
+
 ## [1.3.0] - 2026-10-04
 
 ### Changed
