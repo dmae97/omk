@@ -78,24 +78,34 @@ export function goalKeyOf(goal: Pick<DurableGoalSnapshot, "ref" | "createdAt">):
 }
 
 /**
- * The session workspace scope without goal state, resolved now. Receipts and
- * the ledger are written under goal state while a check runs, so binding them
- * would make every receipt stale the moment it was stored.
+ * Directories under `<cwd>/.omk` that omk itself writes while a session runs:
+ * goal receipts and ledger, per-turn metrics, and per-run journals. They are
+ * not task output, and they can change between a check and its completion.
+ */
+const OMK_OWNED_STATE_DIRS = ["goals", "metrics", "runs"] as const;
+
+/**
+ * The session workspace scope without omk's own state, resolved now. Receipts,
+ * the ledger, turn metrics and run journals are written while a check runs or
+ * right after a turn, so binding them would make a receipt stale the moment it
+ * was stored, or right before the goal completes.
  */
 function goalWorkspaceScope(cwd: string): {
 	readonly scope: WorkspaceScope;
 	readonly completeness: SessionScopeCompleteness;
 } {
 	const report = resolveSessionWorkspaceScopeReport(cwd, { maxPaths: GOAL_SCOPE_MAX_PATHS, fresh: true });
-	const excluded = relative(report.scope.root, canonicalPath(goalStateDirectory(cwd)))
-		.split(sep)
-		.join("/");
-	if (excluded.length === 0 || excluded.startsWith("..")) return report;
+	const excluded = OMK_OWNED_STATE_DIRS.map((dir) =>
+		relative(report.scope.root, canonicalPath(join(cwd, ".omk", dir)))
+			.split(sep)
+			.join("/"),
+	).filter((path) => path.length > 0 && !path.startsWith(".."));
+	if (excluded.length === 0) return report;
 	return {
 		scope: {
 			root: report.scope.root,
 			artifactPaths: report.scope.artifactPaths.filter(
-				(path) => path !== excluded && !path.startsWith(`${excluded}/`),
+				(path) => !excluded.some((dir) => path === dir || path.startsWith(`${dir}/`)),
 			),
 		},
 		completeness: report.completeness,
