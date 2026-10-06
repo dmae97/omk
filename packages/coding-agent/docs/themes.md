@@ -18,7 +18,7 @@ Themes are JSON files that define colors for the TUI.
 
 OMK loads themes from:
 
-- Built-in: `dark`, `light`, `omk-control`, `omk-control-grid-dark`, `omk-control-light`, `rust-forge`, plus bundled Tinted schemes (`catppuccin-mocha`, `tokyo-night-storm`, `kanagawa-dragon`, `gruvbox-dark`, `dracula`)
+- Built-in: `omk-paper-dark`, `omk-paper-light`, `dark`, `light`, `omk-control`, `omk-control-grid-dark`, `omk-control-light`, `rust-forge`, plus bundled Tinted schemes (`catppuccin-mocha`, `tokyo-night-storm`, `kanagawa-dragon`, `gruvbox-dark`, `dracula`)
 - Global: `~/.omk/agent/themes/*.json`
 - Project: `.omk/themes/*.json`
 - Packages: `themes/` directories or `omk.themes` entries in `package.json`
@@ -37,7 +37,9 @@ Select a theme via `/settings` or in `settings.json`:
 }
 ```
 
-On first run, omk detects your terminal background and defaults to `omk-control-grid-dark` on dark terminals or `omk-control-light` on light terminals. `omk-control-grid-dark` ports the OMK//CONTROL Night City TUI palette from the 0.78.8 visual console (`cyan`, `mint`, `magenta`, `purple`, `amber`, `red`, `cream`, `muted`, `gray` on `dark`/`surface`). The `rust-forge` and Tinted scheme themes are installed as additional selectable built-in themes, but they do not change the default OMK//CONTROL brand/tone.
+When no theme is set, omk detects your terminal background and uses `omk-paper-dark` on dark terminals or `omk-paper-light` on light terminals. The paper pair (aliases `paper`, `paper-dark`, `paper-light`, `omk-paper`) carries the paper/ink/vermillion design language of the README hero: ink text, secondary and tertiary ink for labels, and one accent reserved for the Verify stage, the active tab and live signals. Links and code use the info and teal hues, never the accent. `test/theme-paper.test.ts` holds every text role at 4.5:1 or more and every boundary at 3:1 or more against the paper surfaces and common terminal backgrounds (`#000000` and `#1e1e1e` for dark, `#ffffff` for light).
+
+An explicit `theme` setting always wins, so existing configurations keep their theme. `omk-control-grid-dark` (aliases `control`, `cyberpunk`, `night-city`) keeps the 0.78.8 OMK//CONTROL Night City palette; `rust-forge`, Aurora and the Tinted schemes stay selectable as before.
 
 The bundled Tinted themes are generated from [`tinted-theming/schemes`](https://github.com/tinted-theming/schemes) Base24 palettes (MIT): Catppuccin Mocha, Tokyo Night Storm, Kanagawa Dragon, Gruvbox Dark, and Dracula.
 
@@ -300,6 +302,8 @@ See the built-in themes:
 - [omk-control.json](../src/modes/interactive/theme/omk-control.json)
 - [omk-control-grid-dark.json](../src/modes/interactive/theme/omk-control-grid-dark.json)
 - [omk-control-light.json](../src/modes/interactive/theme/omk-control-light.json)
+- [omk-paper-dark.json](../src/modes/interactive/theme/omk-paper-dark.json)
+- [omk-paper-light.json](../src/modes/interactive/theme/omk-paper-light.json)
 - [rust-forge.json](../src/modes/interactive/theme/rust-forge.json)
 - [catppuccin-mocha.json](../src/modes/interactive/theme/catppuccin-mocha.json)
 - [tokyo-night-storm.json](../src/modes/interactive/theme/tokyo-night-storm.json)

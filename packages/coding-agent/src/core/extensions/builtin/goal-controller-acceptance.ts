@@ -106,7 +106,15 @@ export class GoalAcceptanceFlow {
 		const { result } = outcome;
 		if (result.status === "aborted") return;
 		if (result.passed) {
-			const completed = await this.acceptance.complete(store, outcome.goal, ctx.cwd);
+			let completed: DurableGoalSnapshot;
+			try {
+				completed = await this.acceptance.complete(store, outcome.goal, ctx.cwd);
+			} catch (error) {
+				// A rejected completion must surface; an unhandled throw here left the goal silently active.
+				if (!(error instanceof DurableGoalError)) throw error;
+				ctx.ui.notify(error.message, "error");
+				return;
+			}
 			ctx.ui.notify(
 				`${renderGoal(completed)}\ngoal completed: acceptance check passed (${receiptLabel(result)})`,
 				"info",

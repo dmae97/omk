@@ -26,6 +26,13 @@ function mkSession(baseUrl: string | undefined) {
 			getApiKeyForProvider: async () => "sk-sp-test",
 		},
 		autoCompactionEnabled: true,
+		// Control-plane authority sources read by the rail's view-model adapter (idle defaults).
+		isStreaming: false,
+		isCompacting: false,
+		isRetrying: false,
+		pendingMessageCount: 0,
+		lastTermination: undefined,
+		settingsManager: { getResourceGovernorSettings: () => ({}) },
 	} as any;
 }
 
@@ -102,5 +109,29 @@ describe("sidebar endpoint display", () => {
 		);
 		const out = stripVTControlCharacters(sb.render(40).join("\n"));
 		expect(out).not.toContain("endp ");
+	});
+
+	it("paints only the parsed host of a hostile baseUrl in the MODEL and USAGE sections", async () => {
+		// OSC 52 clipboard write, CSI clear screen, right-to-left override, 8-bit CSI.
+		const payload = "\x1b]52;c;ZXZpbA==\x07\x1b[2J\u202e\u009b";
+		const session = mkSession(`https://user:${payload}@token-plan.ap-southeast-1.maas.aliyuncs.com/${payload}/v1`);
+		const sb = new StatusSidebarComponent(
+			() => session,
+			mkData(),
+			() => true,
+			() => 32,
+			{ fetchSubscriptionUsage: unavailableUsage },
+		);
+		sb.render(40); // trigger fetch
+		await new Promise((r) => setTimeout(r, 10)); // let the promise settle
+		const lines = sb.render(40);
+		for (const line of lines) {
+			expect(line).not.toMatch(/\x1b(?!\[[0-9;]*m)/);
+			expect(line).not.toMatch(/[\u0080-\u009f\u202a-\u202e\u2066-\u2069]/);
+		}
+		const out = stripVTControlCharacters(lines.join("\n"));
+		expect(out).toContain("endp token-plan.ap-southeast-1.maas");
+		expect(out).toContain("run: qwencloud auth login");
+		expect(out).not.toMatch(/user|ZXZpbA/);
 	});
 });
