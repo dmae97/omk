@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_HTTP_IDLE_TIMEOUT_MS } from "../src/core/http-dispatcher.ts";
+import { DEFAULT_HTTP_IDLE_TIMEOUT_MS } from "../src/core/http-idle-timeout.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
 
 describe("SettingsManager", () => {

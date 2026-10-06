@@ -449,8 +449,8 @@ export {
 	type ToolSchedulerSetting,
 } from "./core/settings-manager.ts";
 // Skills
+export { formatSkillsForPrompt } from "./core/skills-prompt.ts";
 export {
-	formatSkillsForPrompt,
 	type LoadSkillsFromDirOptions,
 	type LoadSkillsResult,
 	loadSkills,

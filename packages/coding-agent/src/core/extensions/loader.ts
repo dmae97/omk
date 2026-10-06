@@ -7,7 +7,6 @@ import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createJiti } from "jiti/static";
 import type { KeyId } from "omk-tui";
 import { CONFIG_DIR_NAME, getAgentDir, isBunBinary } from "../../config.ts";
 import { resolvePath } from "../../utils/paths.ts";
@@ -19,6 +18,7 @@ import { LEGACY_PI_RUNTIME_ALIASES, type PiCompatibilityTarget } from "../pi-com
 import { createSyntheticSourceInfo } from "../source-info.ts";
 import { buildVirtualModules } from "./bundled-virtual-modules.ts";
 import { markContextHandlerNonMutating } from "./context-handler-options.ts";
+import { createJitiLazily } from "./lazy-imports.ts";
 import type {
 	Extension,
 	ExtensionAPI,
@@ -438,7 +438,7 @@ function createExtensionAPI(
 }
 
 async function loadExtensionModule(extensionPath: string, binaryMode = isBunBinary) {
-	const jiti = createJiti(import.meta.url, {
+	const jiti = await createJitiLazily(import.meta.url, {
 		moduleCache: false,
 		// In Bun binary: use virtualModules for bundled packages (no filesystem resolution)
 		// Also disable tryNative so jiti handles ALL imports (not just the entry point)

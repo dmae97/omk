@@ -806,6 +806,9 @@ let currentThemeName: string | undefined;
 let themeWatcher: fs.FSWatcher | undefined;
 let themeReloadTimer: NodeJS.Timeout | undefined;
 let onThemeChangeCallback: (() => void) | undefined;
+function notifyThemeChange(): void {
+	onThemeChangeCallback?.();
+}
 const registeredThemes = new Map<string, Theme>();
 
 export function setRegisteredThemes(themes: Theme[]): void {
@@ -840,9 +843,7 @@ export function setTheme(name: string, enableWatcher: boolean = false): { succes
 		if (enableWatcher) {
 			startThemeWatcher();
 		}
-		if (onThemeChangeCallback) {
-			onThemeChangeCallback();
-		}
+		notifyThemeChange();
 		return { success: true };
 	} catch (error) {
 		// Theme is invalid - fall back to dark theme
@@ -860,13 +861,14 @@ export function setThemeInstance(themeInstance: Theme): void {
 	setGlobalTheme(themeInstance);
 	currentThemeName = "<in-memory>";
 	stopThemeWatcher(); // Can't watch a direct instance
-	if (onThemeChangeCallback) {
-		onThemeChangeCallback();
-	}
+	notifyThemeChange();
 }
 
-export function onThemeChange(callback: () => void): void {
+export function onThemeChange(callback: () => void): () => void {
 	onThemeChangeCallback = callback;
+	return () => {
+		if (onThemeChangeCallback === callback) onThemeChangeCallback = undefined;
+	};
 }
 
 function startThemeWatcher(): void {
@@ -910,9 +912,7 @@ function startThemeWatcher(): void {
 				registeredThemes.set(watchedThemeName, reloadedTheme);
 				setGlobalTheme(reloadedTheme);
 				// Notify callback (to invalidate UI)
-				if (onThemeChangeCallback) {
-					onThemeChangeCallback();
-				}
+				notifyThemeChange();
 			} catch (_error) {
 				// Ignore errors (file might be in invalid state while being edited)
 			}

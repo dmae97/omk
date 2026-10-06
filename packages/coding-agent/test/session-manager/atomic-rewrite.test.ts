@@ -46,13 +46,21 @@ vi.mock("fs", async (importOriginal) => {
 
 const isWindows = process.platform === "win32";
 
+let probingMutationLock = false;
 function mutationLockIsHeld(path: string): boolean {
+	// The probe itself fsyncs while acquiring, which re-enters the fsync observer.
+	// Without this guard each nested probe starts another acquisition, recursing
+	// until the stack overflows.
+	if (probingMutationLock) return false;
+	probingMutationLock = true;
 	try {
 		acquireDurableFileMutationLockSync(path, { timeoutMs: 0 }).release();
 		return false;
 	} catch (error) {
 		if (error instanceof DurableFileLockBusyError) return true;
 		throw error;
+	} finally {
+		probingMutationLock = false;
 	}
 }
 
