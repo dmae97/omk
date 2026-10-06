@@ -31,9 +31,46 @@ function quoted(text: string, budget: AdmissionJsonBudget): string {
 	charge(budget, length);
 	return JSON.stringify(text);
 }
+/**
+ * `open + parts.join(",") + close` as one flat string. A template literal around
+ * the join leaves a rope, and the token counter then flattens it into a second
+ * full-transcript copy on every provider request.
+ */
+function joinWrapped(open: string, parts: string[], close: string): string {
+	if (parts.length === 0) return open + close;
+	parts[0] = open + parts[0];
+	parts[parts.length - 1] += close;
+	return parts.join(",");
+}
+/** `["[", e0, ",", e1, ..., "]"]`: the pieces of `joinWrapped("[", parts, "]")`, not joined. */
+function splitWrapped(parts: readonly string[]): string[] {
+	if (parts.length === 0) return ["[]"];
+	const pieces = ["["];
+	for (let index = 0; index < parts.length; index++) {
+		if (index > 0) pieces.push(",");
+		pieces.push(parts[index]);
+	}
+	pieces.push("]");
+	return pieces;
+}
 export function boundedAdmissionJson(value: unknown, budget: AdmissionJsonBudget): string {
+	return createAdmissionJsonRenderer(budget)(value, 0, false) as string;
+}
+/**
+ * Pieces whose `join("")` is exactly `boundedAdmissionJson(value, budget)`, with the
+ * same budget charges and errors. A top-level array stays split per element so a
+ * token counter can read a whole transcript without one joined history-sized copy.
+ */
+export function boundedAdmissionJsonParts(value: unknown, budget: AdmissionJsonBudget): string[] {
+	const rendered = createAdmissionJsonRenderer(budget)(value, 0, true);
+	return typeof rendered === "string" ? [rendered] : rendered;
+}
+function createAdmissionJsonRenderer(
+	budget: AdmissionJsonBudget,
+): (current: unknown, depth: number, split: boolean) => string | string[] {
 	const ancestors = new WeakSet<object>();
-	function visit(current: unknown, depth: number): string {
+	const visit = (current: unknown, depth: number): string => render(current, depth, false) as string;
+	function render(current: unknown, depth: number, split: boolean): string | string[] {
 		if (depth > 64 || ++budget.nodes > 100000) representationLimit();
 		if (current === null) {
 			charge(budget, 4);
@@ -70,7 +107,7 @@ export function boundedAdmissionJson(value: unknown, budget: AdmissionJsonBudget
 					if (desc && !("value" in desc)) throw new TypeError("admission.json_accessor");
 					parts.push(visit(desc?.value === undefined ? null : desc.value, depth + 1));
 				}
-				return `[${parts.join(",")}]`;
+				return split ? splitWrapped(parts) : joinWrapped("[", parts, "]");
 			}
 			// JSON ignores symbols and non-enumerable metadata (including TypeBox markers).
 			for (const key of Object.keys(current)) {
@@ -82,10 +119,10 @@ export function boundedAdmissionJson(value: unknown, budget: AdmissionJsonBudget
 				charge(budget, 1);
 				parts.push(`${name}:${visit(desc.value, depth + 1)}`);
 			}
-			return `{${parts.join(",")}}`;
+			return joinWrapped("{", parts, "}");
 		} finally {
 			ancestors.delete(current);
 		}
 	}
-	return visit(value, 0);
+	return render;
 }

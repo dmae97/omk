@@ -32,7 +32,7 @@ import { formatNoModelsAvailableMessage } from "./core/auth-guidance.ts";
 import { AuthStorage } from "./core/auth-storage.ts";
 import { collectSettingsDiagnostics, reportDiagnostics } from "./core/cli-diagnostics.ts";
 import type { ExtensionFactory } from "./core/extensions/types.ts";
-import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
+import { scheduleHttpDispatcher } from "./core/http-dispatcher-install.ts";
 import type { ModelRegistry } from "./core/model-registry.ts";
 import { resolveCliModel, resolveModelScope, type ScopedModel } from "./core/model-resolver.ts";
 import { restoreStdout, takeOverStdout } from "./core/output-guard.ts";
@@ -44,6 +44,7 @@ import { printTimings, resetTimings, time } from "./core/timings.ts";
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
 import { runAcpMode } from "./modes/acp/acp-mode.ts";
 import { createSessionMetadataLoaders } from "./modes/interactive/components/session-selector-loaders.ts";
+import { settlePrintModeExit } from "./modes/print-exit-guard.ts";
 import { runPrintMode } from "./modes/print-mode.ts";
 import { normalizePath, resolvePath } from "./utils/paths.ts";
 import { cleanupWindowsSelfUpdateQuarantine } from "./utils/windows-self-update.ts";
@@ -773,7 +774,7 @@ export async function main(args: string[], options?: MainOptions) {
 	time("createAgentSessionRuntime");
 	const { services, session, modelFallbackMessage } = runtime;
 	const { settingsManager, modelRegistry, resourceLoader } = services;
-	configureHttpDispatcher(settingsManager.getHttpIdleTimeoutMs());
+	scheduleHttpDispatcher(settingsManager.getHttpIdleTimeoutMs());
 
 	if (parsed.help) {
 		const extensionFlags = resourceLoader
@@ -882,9 +883,7 @@ export async function main(args: string[], options?: MainOptions) {
 			initialImages,
 		});
 		restoreStdout();
-		if (exitCode !== 0) {
-			process.exitCode = exitCode;
-		}
+		settlePrintModeExit(exitCode);
 		return;
 	}
 }

@@ -9,7 +9,8 @@ import {
 } from "./context-budget-system-prompt.ts";
 import { escapeXml, escapeXmlText } from "./context-budget-system-prompt-items.ts";
 import type { ContextFile } from "./context-file.ts";
-import { formatSkillsForPrompt, type Skill } from "./skills.ts";
+import type { Skill } from "./skills.ts";
+import { formatSkillsForPrompt } from "./skills-prompt.ts";
 
 const RUNTIME_TRUST_BOUNDARY = `
 
