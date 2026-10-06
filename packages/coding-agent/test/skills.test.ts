@@ -4,7 +4,12 @@ import { homedir } from "os";
 import { join, resolve } from "path";
 import { describe, expect, it } from "vitest";
 import type { ResourceDiagnostic } from "../src/core/diagnostics.ts";
-import { formatSkillsForPrompt, loadSkills, loadSkillsFromDir, type Skill } from "../src/core/skills.ts";
+import { loadSkills, loadSkillsFromDir, type Skill } from "../src/core/skills.ts";
+import {
+	compactSkillDescription,
+	formatSkillsForPrompt,
+	SKILL_PROMPT_COMPACT_THRESHOLD,
+} from "../src/core/skills-prompt.ts";
 import { createSyntheticSourceInfo } from "../src/core/source-info.ts";
 
 const fixturesDir = resolve(__dirname, "fixtures/skills");
@@ -448,6 +453,102 @@ Body that should also stay out of diagnostics`,
 
 			const result = formatSkillsForPrompt(skills);
 			expect(result).toBe("");
+		});
+	});
+
+	describe("compact skill prompt", () => {
+		const longDescription =
+			"Guides stable API and interface design. Use when designing APIs, module boundaries, or any public interface that other code depends on. Covers versioning, error shapes, and deprecation in detail.";
+		const manySkills = (count: number): Skill[] =>
+			Array.from({ length: count }, (_, i) =>
+				createTestSkill({
+					name: `skill-${i}`,
+					description: longDescription,
+					filePath: `/path/skill-${i}/SKILL.md`,
+					baseDir: `/path/skill-${i}`,
+				}),
+			);
+
+		it("keeps full descriptions at or below the threshold", () => {
+			const result = formatSkillsForPrompt(manySkills(SKILL_PROMPT_COMPACT_THRESHOLD));
+			expect(result).toContain(`<description>${longDescription}</description>`);
+			expect(result).not.toContain("Descriptions below are shortened");
+		});
+
+		it("shortens descriptions to the first sentence above the threshold and keeps absolute locations", () => {
+			const count = SKILL_PROMPT_COMPACT_THRESHOLD + 1;
+			const result = formatSkillsForPrompt(manySkills(count));
+			expect(result).toContain("Descriptions below are shortened");
+			expect(result).toContain(
+				"<description>Guides stable API and interface design. Use when designing APIs, module boundaries, or any public interface that other code depends on.</description>",
+			);
+			expect(result).toContain(`<location>/path/skill-${count - 1}/SKILL.md</location>`);
+			expect(result).not.toContain("deprecation");
+			expect(result.length).toBeLessThan(
+				formatSkillsForPrompt(manySkills(SKILL_PROMPT_COMPACT_THRESHOLD)).length * 1.2,
+			);
+		});
+
+		it("caps a long first sentence at a word boundary", () => {
+			const sentence = `${"word ".repeat(60).trim()}.`;
+			const compacted = compactSkillDescription(sentence, 40);
+			expect(compacted.length).toBeLessThanOrEqual(40);
+			expect(compacted.endsWith("…")).toBe(true);
+			expect(compacted).not.toMatch(/ …$/);
+		});
+
+		it("does not treat a version dot as a sentence end", () => {
+			expect(compactSkillDescription("Supports v1.2 configs. Extra detail.")).toBe("Supports v1.2 configs.");
+		});
+
+		it("does not split on abbreviations such as e.g.", () => {
+			expect(compactSkillDescription("Formats data, e.g. CSV or JSON, for reports. Extra detail.")).toBe(
+				"Formats data, e.g. CSV or JSON, for reports.",
+			);
+		});
+
+		it("keeps the first trigger sentence even when it is not second", () => {
+			const description = "Conducts multi-axis code review. Covers style and tests. Use before merging any change.";
+			expect(compactSkillDescription(description)).toBe(
+				"Conducts multi-axis code review. Use before merging any change.",
+			);
+		});
+
+		it("shortens the lead sentence first to keep the trigger sentence within the cap", () => {
+			const description = `${"Long lead words ".repeat(12).trim()}. Use when the task needs this skill.`;
+			const compacted = compactSkillDescription(description, 120);
+			expect(compacted.length).toBeLessThanOrEqual(120);
+			expect(compacted.endsWith("Use when the task needs this skill.")).toBe(true);
+			expect(compacted).toContain("… Use when");
+		});
+
+		it("keeps a minimum lead and truncates a very long trigger sentence instead", () => {
+			const lead = "Builds a weighted decision matrix to compare options against criteria with transparent scoring.";
+			const trigger = `Use this skill when the user needs to choose between ${"many options, ".repeat(20).trim()}`;
+			const compacted = compactSkillDescription(`${lead} ${trigger}`);
+			expect(compacted.length).toBeLessThanOrEqual(200);
+			expect(compacted).toContain("Use this skill when the user needs to choose");
+			expect(compacted.startsWith("Builds a weighted decision matrix")).toBe(true);
+		});
+
+		it("does not split at honorifics like Mr.", () => {
+			expect(compactSkillDescription("Drafts letters to Mr. Kim for review. Extra detail.")).toBe(
+				"Drafts letters to Mr. Kim for review.",
+			);
+		});
+
+		it("does not split at country abbreviations like U.S.", () => {
+			expect(compactSkillDescription("Lists U.S. compliance requirements for APIs. Extra detail.")).toBe(
+				"Lists U.S. compliance requirements for APIs.",
+			);
+		});
+
+		it("stays within maxChars below the minimum lead share", () => {
+			const lead = "Analyzes large repositories and summarizes their architecture in detail.";
+			const trigger = "Use when onboarding onto an unfamiliar codebase or planning a refactor.";
+			for (const maxChars of [10, 30, 50, 71]) {
+				expect(compactSkillDescription(`${lead} ${trigger}`, maxChars).length).toBeLessThanOrEqual(maxChars);
+			}
 		});
 	});
 
