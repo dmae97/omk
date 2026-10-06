@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { executeSandbox } from "../src/core/verified-run/broker.ts";
+import { liveSandboxGroupCount } from "../src/core/verified-run/sandbox-groups.ts";
 
 let workspace: string;
 beforeEach(() => {
@@ -53,5 +54,21 @@ describe("verified run owned process boundary", () => {
 
 	it("refuses dispatch without an identity gate instead of degrading to best effort", async () => {
 		await expect(executeSandbox({ ...request(), argv: ["/bin/true"] })).rejects.toThrow(/unsupported_boundary/);
+	});
+
+	it("drains tracked sandbox groups after normal exit, deadline, and cancel", async () => {
+		const before = liveSandboxGroupCount();
+		await executeSandbox({ ...request(), argv: ["/bin/sh", "-c", "printf ok"], onReady: () => {} });
+		await executeSandbox({ ...request(), timeoutMs: 300, argv: ["/bin/sh", "-c", "sleep 30"], onReady: () => {} });
+		const controller = new AbortController();
+		await executeSandbox({
+			...request(),
+			argv: ["/bin/sh", "-c", "sleep 30"],
+			signal: controller.signal,
+			onReady: () => {
+				setTimeout(() => controller.abort(), 50);
+			},
+		}).catch(() => undefined);
+		expect(liveSandboxGroupCount()).toBe(before);
 	});
 });
