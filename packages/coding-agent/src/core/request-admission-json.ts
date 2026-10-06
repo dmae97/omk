@@ -31,6 +31,17 @@ function quoted(text: string, budget: AdmissionJsonBudget): string {
 	charge(budget, length);
 	return JSON.stringify(text);
 }
+/**
+ * `open + parts.join(",") + close` as one flat string. A template literal around
+ * the join leaves a rope, and the token counter then flattens it into a second
+ * full-transcript copy on every provider request.
+ */
+function joinWrapped(open: string, parts: string[], close: string): string {
+	if (parts.length === 0) return open + close;
+	parts[0] = open + parts[0];
+	parts[parts.length - 1] += close;
+	return parts.join(",");
+}
 export function boundedAdmissionJson(value: unknown, budget: AdmissionJsonBudget): string {
 	const ancestors = new WeakSet<object>();
 	function visit(current: unknown, depth: number): string {
@@ -70,7 +81,7 @@ export function boundedAdmissionJson(value: unknown, budget: AdmissionJsonBudget
 					if (desc && !("value" in desc)) throw new TypeError("admission.json_accessor");
 					parts.push(visit(desc?.value === undefined ? null : desc.value, depth + 1));
 				}
-				return `[${parts.join(",")}]`;
+				return joinWrapped("[", parts, "]");
 			}
 			// JSON ignores symbols and non-enumerable metadata (including TypeBox markers).
 			for (const key of Object.keys(current)) {
@@ -82,7 +93,7 @@ export function boundedAdmissionJson(value: unknown, budget: AdmissionJsonBudget
 				charge(budget, 1);
 				parts.push(`${name}:${visit(desc.value, depth + 1)}`);
 			}
-			return `{${parts.join(",")}}`;
+			return joinWrapped("{", parts, "}");
 		} finally {
 			ancestors.delete(current);
 		}
