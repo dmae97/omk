@@ -6,6 +6,7 @@ import type { RunContract } from "omk-protocol";
 import { ownedGitMounts } from "./git-sandbox-layout.ts";
 import type { NamespaceIdentity } from "./namespace-identity.ts";
 import { identityFromSandboxInfo, PROCESS_GATE_ARGV } from "./process-gate.ts";
+import { releaseExitedSandboxGroup, trackSandboxGroup, untrackSandboxGroup } from "./sandbox-groups.ts";
 import { digestBytes, digestObject, VerifiedRunError } from "./storage.ts";
 import {
 	awaitBoundaryDrained,
@@ -123,7 +124,10 @@ export async function executeSandbox(request: SandboxExecution): Promise<Sandbox
 		...request.argv,
 	];
 	return new Promise((resolve, reject) => {
-		const child = spawn(backend.binary, argv, { env: {}, stdio: ["pipe", "pipe", "pipe", "pipe"] });
+		// Own process group: until bwrap's namespace init arms --die-with-parent it
+		// is reachable only through the group, so escalation must signal the group.
+		const child = spawn(backend.binary, argv, { env: {}, detached: true, stdio: ["pipe", "pipe", "pipe", "pipe"] });
+		trackSandboxGroup(child.pid);
 		let identity: NamespaceIdentity | undefined;
 		let gateFailed = false;
 		let gateError: unknown;
@@ -193,8 +197,10 @@ export async function executeSandbox(request: SandboxExecution): Promise<Sandbox
 		child.once("error", () => {
 			failure = "execution_failed";
 		});
+		child.once("exit", () => releaseExitedSandboxGroup(child.pid));
 		child.once("close", (exitCode) => {
 			finished = true;
+			untrackSandboxGroup(child.pid);
 			clearTimeout(deadline);
 			clearTimeout(cleanup);
 			request.signal?.removeEventListener("abort", abort);
