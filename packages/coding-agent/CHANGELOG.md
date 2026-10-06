@@ -9,7 +9,7 @@
 
 ### Changed
 
-- Assistant message views no longer keep a second copy of each block’s source text beside the Markdown/Text component; `setText` skips work when the displayed string is unchanged, which cuts TUI retained memory for long sessions.
+- Assistant message content views call `setText` only when a block’s source text changes, so finished Markdown instances and their render caches stay reused across streaming updates. Markdown/Text `setText` still no-ops when the displayed string is unchanged.
 - CLI no longer loads `undici` at process start. A fetch hook installs the global dispatcher on the first `fetch` (one common choke point for providers, OAuth and tools). `scheduleHttpDispatcher` remembers the idle timeout from settings without importing undici until then.
 - HTTP idle-timeout helpers (`parseHttpIdleTimeoutMs`, defaults, UI choices) live in `http-idle-timeout.ts` so `settings-manager` no longer pulls `undici` into the AgentSession import graph. `configureHttpDispatcher` still loads undici when the CLI or session actually configures the dispatcher.
 - The control rail (the startup deck column and the control-pane overlay in expanded view, `Ctrl+O`) now shows RUN, VERIFY, CONTEXT and RESOURCES, then TODO and SESSION. RUN has the turn state; VERIFY has one `verdict` row; CONTEXT has `model`, `think`, `ctx`, `meter` and `opt` (formerly `headroom`); RESOURCES has the governor mode (`gov`) and configured MCP/skill counts (`ext`, formerly `res`).
