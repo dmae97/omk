@@ -2,7 +2,8 @@ import type { Component } from "../tui.ts";
 import { applyBackgroundToLine, visibleWidth } from "../utils.ts";
 
 type RenderCache = {
-	childLines: string[];
+	/** Shallow copies of each child's rendered lines (guards against in-place mutation). */
+	childOutputs: string[][];
 	width: number;
 	bgSample: string | undefined;
 	lines: string[];
@@ -53,15 +54,19 @@ export class Box implements Component {
 		this.cache = undefined;
 	}
 
-	private matchCache(width: number, childLines: string[], bgSample: string | undefined): boolean {
+	private matchCache(width: number, childOutputs: string[][], bgSample: string | undefined): boolean {
 		const cache = this.cache;
-		return (
-			!!cache &&
-			cache.width === width &&
-			cache.bgSample === bgSample &&
-			cache.childLines.length === childLines.length &&
-			cache.childLines.every((line, i) => line === childLines[i])
-		);
+		if (!cache || cache.width !== width || cache.bgSample !== bgSample) return false;
+		if (cache.childOutputs.length !== childOutputs.length) return false;
+		for (let c = 0; c < childOutputs.length; c++) {
+			const previous = cache.childOutputs[c];
+			const current = childOutputs[c];
+			if (previous.length !== current.length) return false;
+			for (let i = 0; i < current.length; i++) {
+				if (previous[i] !== current[i]) return false;
+			}
+		}
+		return true;
 	}
 
 	invalidate(): void {
@@ -79,16 +84,18 @@ export class Box implements Component {
 		const contentWidth = Math.max(1, width - this.paddingX * 2);
 		const leftPad = " ".repeat(this.paddingX);
 
-		// Render all children
-		const childLines: string[] = [];
+		// Render all children. Compare their raw output with the cached copy before
+		// building padded lines: children return cached arrays, so an unchanged Box costs
+		// reference comparisons instead of re-concatenating and re-comparing every line.
+		const childOutputs: string[][] = [];
+		let lineCount = 0;
 		for (const child of this.children) {
 			const lines = child.render(contentWidth);
-			for (const line of lines) {
-				childLines.push(leftPad + line);
-			}
+			childOutputs.push(lines);
+			lineCount += lines.length;
 		}
 
-		if (childLines.length === 0) {
+		if (lineCount === 0) {
 			return [];
 		}
 
@@ -96,8 +103,15 @@ export class Box implements Component {
 		const bgSample = this.bgFn ? this.bgFn("test") : undefined;
 
 		// Check cache validity
-		if (this.matchCache(width, childLines, bgSample)) {
+		if (this.matchCache(width, childOutputs, bgSample)) {
 			return this.cache!.lines;
+		}
+
+		const childLines: string[] = [];
+		for (const lines of childOutputs) {
+			for (const line of lines) {
+				childLines.push(leftPad + line);
+			}
 		}
 
 		// Apply background and padding
@@ -119,7 +133,7 @@ export class Box implements Component {
 		}
 
 		// Update cache
-		this.cache = { childLines, width, bgSample, lines: result };
+		this.cache = { childOutputs: childOutputs.map((lines) => lines.slice()), width, bgSample, lines: result };
 
 		return result;
 	}

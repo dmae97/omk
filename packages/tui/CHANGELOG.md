@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `Box` compares its children's rendered lines with a shallow copy of the previous output before building padded lines, so an unchanged box no longer re-concatenates and re-compares every line each frame. A child that mutates its returned array in place still invalidates the cache.
+- `TUI` applies line normalization and segment resets, and collects Kitty image IDs, only for rows whose raw text changed since the previous frame (new `LineResetMemo`). Unchanged rows reuse the previous frame's output strings.
+
 ## [1.3.0] - 2026-10-04
 
 ### Changed
