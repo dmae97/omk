@@ -32,7 +32,9 @@ vi.mock("node:fs", async (importOriginal) => {
 			if (
 				cleanupFault.operation === "rename" &&
 				cleanupFault.remaining > 0 &&
-				String(path).includes(cleanupFault.scope)
+				String(path).includes(cleanupFault.scope) &&
+				// Retirement faults only: acquisition publishes a staged lock by rename too.
+				!String(path).includes(".stage-")
 			) {
 				cleanupFault.remaining -= 1;
 				throw Object.assign(new Error("injected lock rename retirement failure"), { code: "EIO" });
