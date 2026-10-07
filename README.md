@@ -127,9 +127,11 @@ as enabling an orchestration workflow.
 
 ## Evidence and limits
 
-No comparative benchmark result is published here yet. We have not established
-that OMK solves more tasks than another harness, that multi-agent execution
-improves success, or how much verification reduces false completion.
+One comparative benchmark result is published: a single Terminal-Bench 2.1 run
+against mini-swe-agent with the same model (below). Its success-rate difference
+is not statistically significant. We have not established that OMK solves more
+tasks than another harness, that multi-agent execution improves success, or how
+much verification reduces false completion.
 
 OMK targets state-of-the-art quality as a CLI coding-agent harness.
 SOTA is not verified.
@@ -162,6 +164,40 @@ turn costs and tool failures; it does not score task correctness.
 If you evaluate OMK, share a sanitized report and reproduction steps in a
 [GitHub issue](https://github.com/dmae97/omk/issues). Include failed and
 interrupted runs, not just successful examples.
+
+### Benchmark: Terminal-Bench 2.1
+
+Terminal-Bench 2.1, 89 tasks × 3 trials per harness, xAI `grok-4.7` at
+reasoning effort `xhigh` for both, run 2026-10-05 to 2026-10-06 KST. OMK was a
+1.3.0 evaluation build (commit `78cc483`) that includes pull requests not yet
+merged, not the published npm package. mini-swe-agent was version 2.4.6, run
+through Harbor.
+
+| Harness | Success rate (88 tasks × 3 trials) | Cost per trial (all 267 trials) | Median wall time per trial (all 267 trials) |
+| --- | --- | --- | --- |
+| OMK | 75.8% (200/264) | $0.581 | 482 s |
+| mini-swe-agent 2.4.6 | 71.6% (189/264) | $0.759 | 376 s |
+
+- The difference is +4.2 percentage points with a 95% confidence interval of
+  [−1.9, +10.2] (task-level paired bootstrap). The interval includes zero, so
+  this is **not** a statistically significant improvement.
+- OMK cost about 23% less per trial but was slower: 482 s median per trial
+  against 376 s.
+- Audit corrections: trials that tried to read Terminal-Bench sources or
+  answers score 0, which turned 4 mini-swe-agent passes and 1 OMK pass into
+  failures.
+  `prove-plus-comm` is excluded from both sides because our OMK adapter failed
+  to start in that task's working directory. Two transient provider errors were
+  retried; no trial was excluded.
+- OMK failed all three `pytorch-model-recovery` trials because the CLI rejected
+  an instruction starting with `- ` (fixed in #84). Without that
+  task the difference is +5.4 pp [0.0, +10.7].
+- Not a leaderboard run: 3 trials instead of the official 5, our own network
+  allowlist and apt cache proxy, and OMK alone had 150 s extra for a workspace
+  snapshot used in rescoring.
+
+Method, per-difficulty results, audit and reproduction notes:
+[Terminal-Bench 2.1 report](packages/coding-agent/docs/benchmarks/r8-terminal-bench-2.1.md).
 
 ## OMK//CONTROL
 
