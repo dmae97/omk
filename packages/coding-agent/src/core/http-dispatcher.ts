@@ -8,8 +8,22 @@ export {
 	parseHttpIdleTimeoutMs,
 } from "./http-idle-timeout.ts";
 
-const originalGlobalFetch = globalThis.fetch;
-let installedGlobalFetch: typeof globalThis.fetch | undefined;
+/**
+ * The `globalThis.fetch` value omk owns. Only while `globalThis.fetch` is still
+ * this value may `configureHttpDispatcher` replace it with undici's fetch; any
+ * other value is a deliberate override (an extension hook) and is left alone.
+ * Defaults to the fetch seen at import. The lazy installer imports this module
+ * on the first request, after extensions load, so it must call
+ * `adoptGlobalFetch` with its own hook before configuring.
+ */
+let ownedGlobalFetch: typeof globalThis.fetch = globalThis.fetch;
+
+/** The fetch that pairs with the dispatcher installed below. */
+export const dispatcherFetch = undici.fetch as unknown as typeof globalThis.fetch;
+
+export function adoptGlobalFetch(fetchFn: typeof globalThis.fetch): void {
+	ownedGlobalFetch = fetchFn;
+}
 
 export function configureHttpDispatcher(timeoutMs: number = DEFAULT_HTTP_IDLE_TIMEOUT_MS): void {
 	const normalizedTimeoutMs = parseHttpIdleTimeoutMs(timeoutMs);
@@ -26,13 +40,9 @@ export function configureHttpDispatcher(timeoutMs: number = DEFAULT_HTTP_IDLE_TI
 	// Keep fetch and the dispatcher on the same undici implementation. Node 26.0's
 	// bundled fetch can otherwise consume compressed responses through npm undici's
 	// dispatcher without decompressing them, causing response.json() failures.
-	// If a caller replaced fetch after module load, preserve that deliberate override.
-	const shouldInstallGlobals =
-		installedGlobalFetch === undefined
-			? globalThis.fetch === originalGlobalFetch
-			: globalThis.fetch === installedGlobalFetch;
-	if (shouldInstallGlobals) {
+	// If anyone else replaced fetch, preserve that deliberate override.
+	if (globalThis.fetch === ownedGlobalFetch) {
 		undici.install?.();
-		installedGlobalFetch = globalThis.fetch;
+		ownedGlobalFetch = globalThis.fetch;
 	}
 }
