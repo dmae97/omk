@@ -89,7 +89,7 @@ task made to other models through the request relay (see audit item 2).
      OMK CLI exited immediately with `Unknown option` (all 3 trials, 1.5 s).
      This is an OMK bug (or the adapter not passing `--`), so the primary result
      keeps these trials as 0; only the sensitivity row drops the task. The CLI
-     fix is in open pull request #84.
+     bug was fixed in #84.
 4. **Extra time for OMK.** OMK alone had 150 s added to its time budget to save
    a workspace snapshot for pre-check rescoring. On the same 195 trials the
    pre-check snapshots scored 82.1% versus 83.6% final. The run report
