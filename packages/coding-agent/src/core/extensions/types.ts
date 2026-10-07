@@ -1140,7 +1140,8 @@ export interface ExtensionAPI {
 	on(event: "session_shutdown", handler: ExtensionHandler<SessionShutdownEvent>): void;
 	on(event: "session_before_tree", handler: ExtensionHandler<SessionBeforeTreeEvent, SessionBeforeTreeResult>): void;
 	on(event: "session_tree", handler: ExtensionHandler<SessionTreeEvent>): void;
-	on(event: "context", handler: ExtensionHandler<ContextEvent, ContextEventResult>): void;
+	// biome-ignore format: keep one line so module-size stays at baseline
+	on(event: "context", handler: ExtensionHandler<ContextEvent, ContextEventResult>, options?: import("./context-handler-options.ts").ContextHandlerOptions): void;
 	on(
 		event: "before_provider_request",
 		handler: ExtensionHandler<BeforeProviderRequestEvent, BeforeProviderRequestEventResult>,

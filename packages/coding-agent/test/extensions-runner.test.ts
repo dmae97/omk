@@ -537,6 +537,60 @@ describe("ExtensionRunner", () => {
 			expect(messages[0].content).toBe("keep");
 			expect((out[0] as { content: string }).content).toBe("mutated");
 		});
+
+		it("still deep-clones an unmarked handler that only returns a new array", async () => {
+			const extCode = `
+				export default function(pi) {
+					pi.on("context", async (event) => ({ messages: [...event.messages] }));
+				}
+			`;
+			fs.writeFileSync(path.join(extensionsDir, "unmarked-cow.ts"), extCode);
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const messages = [{ role: "user" as const, content: "keep", timestamp: 1 }];
+			const out = await runner.emitContext(messages as never);
+			expect(out).not.toBe(messages);
+			expect(out[0]).not.toBe(messages[0]);
+			expect(out[0]).toEqual(messages[0]);
+		});
+
+		it("deep-clones when any registered context handler stays unmarked", async () => {
+			const extCode = `
+				export default function(pi) {
+					pi.on("context", async (event) => ({ messages: event.messages }), { mutatesMessages: false });
+					pi.on("context", async (event) => {
+						const message = event.messages[0];
+						if (message && "content" in message) message.content = "mutated";
+					});
+				}
+			`;
+			fs.writeFileSync(path.join(extensionsDir, "mixed.ts"), extCode);
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const messages = [{ role: "user" as const, content: "keep", timestamp: 1 }];
+			await runner.emitContext(messages as never);
+			expect(messages[0].content).toBe("keep");
+		});
+
+		it("shares message objects when every context handler opts out of mutation", async () => {
+			const extCode = `
+				export default function(pi) {
+					pi.on("context", async (event) => {
+						globalThis.__omkSeen = event.messages[0];
+						return { messages: [...event.messages, { role: "user", content: "extra", timestamp: 2 }] };
+					}, { mutatesMessages: false });
+				}
+			`;
+			fs.writeFileSync(path.join(extensionsDir, "all-nonmutating.ts"), extCode);
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const messages = [{ role: "user" as const, content: "keep", timestamp: 1 }];
+			const out = await runner.emitContext(messages as never);
+			expect((globalThis as { __omkSeen?: unknown }).__omkSeen).toBe(messages[0]);
+			expect(out).toHaveLength(2);
+			expect(out[0]).toBe(messages[0]);
+			delete (globalThis as { __omkSeen?: unknown }).__omkSeen;
+		});
 	});
 
 	describe("message renderers", () => {
