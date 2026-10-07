@@ -10,15 +10,13 @@ import * as net from "node:net";
 import { createInterface } from "node:readline";
 import chalk from "chalk";
 import { type ImageContent, modelsAreEqual } from "omk-ai";
-import { ProcessTerminal, setKeybindings, TUI } from "omk-tui";
 import { type Args, type Mode, parseArgs, printHelp } from "./cli/args.ts";
 import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
-import { listModels } from "./cli/list-models.ts";
 import { attachSessionTransports } from "./cli/mcp-attach.ts";
 import { loadModelContractOrExit } from "./cli/model-contract.ts";
+import { isPackageCliCommand } from "./cli/package-commands.ts";
 import { isExplicitExtensionDiagnostic, resolveCliPaths } from "./cli/resource-paths.ts";
-import { selectSession } from "./cli/session-picker.ts";
 import { handleCodexBarQuotaCommand } from "./codexbar-cli.ts";
 import { runInitCli } from "./commands/init-cli.ts";
 import { runPackageDoctorCli } from "./commands/package-doctor-cli.ts";
@@ -34,39 +32,28 @@ import {
 import { formatNoModelsAvailableMessage } from "./core/auth-guidance.ts";
 import { AuthStorage } from "./core/auth-storage.ts";
 import { collectSettingsDiagnostics, reportDiagnostics } from "./core/cli-diagnostics.ts";
-import { exportFromFile } from "./core/export-html/index.ts";
-import { createSessionMetadataLoaders } from "./modes/interactive/components/session-selector-loaders.ts";
-
-function isTruthyEnvFlag(value: string | undefined): boolean {
-	if (!value) return false;
-	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
-}
-
 import type { ExtensionFactory } from "./core/extensions/types.ts";
 import { scheduleHttpDispatcher } from "./core/http-dispatcher-install.ts";
-import { KeybindingsManager } from "./core/keybindings.ts";
 import type { ModelRegistry } from "./core/model-registry.ts";
 import { resolveCliModel, resolveModelScope, type ScopedModel } from "./core/model-resolver.ts";
 import { restoreStdout, takeOverStdout } from "./core/output-guard.ts";
 import type { CreateAgentSessionOptions } from "./core/sdk.ts";
-import {
-	formatMissingSessionCwdPrompt,
-	getMissingSessionCwdIssue,
-	MissingSessionCwdError,
-	type SessionCwdIssue,
-} from "./core/session-cwd.ts";
+import { getMissingSessionCwdIssue, MissingSessionCwdError } from "./core/session-cwd.ts";
 import { assertValidSessionId, SessionManager } from "./core/session-manager.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 import { printTimings, resetTimings, time } from "./core/timings.ts";
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
 import { runAcpMode } from "./modes/acp/acp-mode.ts";
-import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.ts";
-import { ExtensionSelectorComponent } from "./modes/interactive/components/extension-selector.ts";
-import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
+import { createSessionMetadataLoaders } from "./modes/interactive/components/session-selector-loaders.ts";
 import { settlePrintModeExit } from "./modes/print-exit-guard.ts";
-import { handleConfigCommand, handlePackageCommand } from "./package-manager-cli.ts";
+import { runPrintMode } from "./modes/print-mode.ts";
 import { normalizePath, resolvePath } from "./utils/paths.ts";
 import { cleanupWindowsSelfUpdateQuarantine } from "./utils/windows-self-update.ts";
+
+function isTruthyEnvFlag(value: string | undefined): boolean {
+	if (!value) return false;
+	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
+}
 
 export { isExplicitExtensionDiagnostic, resolveCliPaths };
 
@@ -382,6 +369,10 @@ async function createSessionManager(
 	}
 
 	if (parsed.resume) {
+		const [{ selectSession }, { initTheme, stopThemeWatcher }] = await Promise.all([
+			import("./cli/session-picker.ts"),
+			import("./modes/interactive/theme/theme.ts"),
+		]);
 		initTheme(settingsManager.getTheme(), true);
 		try {
 			const selectedPath = await selectSession(...createSessionMetadataLoaders(cwd, sessionDir));
@@ -507,40 +498,6 @@ function buildSessionOptions(
 	return { options, cliThinkingFromModel, diagnostics };
 }
 
-async function promptForMissingSessionCwd(
-	issue: SessionCwdIssue,
-	settingsManager: SettingsManager,
-): Promise<string | undefined> {
-	initTheme(settingsManager.getTheme());
-	setKeybindings(KeybindingsManager.create());
-
-	return new Promise((resolve) => {
-		const ui = new TUI(new ProcessTerminal(), settingsManager.getShowHardwareCursor());
-		ui.setClearOnShrink(settingsManager.getClearOnShrink());
-
-		let settled = false;
-		const finish = (result: string | undefined) => {
-			if (settled) {
-				return;
-			}
-			settled = true;
-			ui.stop();
-			resolve(result);
-		};
-
-		const selector = new ExtensionSelectorComponent(
-			formatMissingSessionCwdPrompt(issue),
-			["Continue", "Cancel"],
-			(option) => finish(option === "Continue" ? issue.fallbackCwd : undefined),
-			() => finish(undefined),
-			{ tui: ui },
-		);
-		ui.addChild(selector);
-		ui.setFocus(selector);
-		ui.start();
-	});
-}
-
 export interface MainOptions {
 	extensionFactories?: ExtensionFactory[];
 }
@@ -568,12 +525,14 @@ export async function main(args: string[], options?: MainOptions) {
 		return;
 	}
 
-	if (await handlePackageCommand(args)) {
-		return;
-	}
-
-	if (await handleConfigCommand(args)) {
-		return;
+	if (isPackageCliCommand(args[0])) {
+		const { handleConfigCommand, handlePackageCommand } = await import("./package-manager-cli.ts");
+		if (await handlePackageCommand(args)) {
+			return;
+		}
+		if (await handleConfigCommand(args)) {
+			return;
+		}
 	}
 
 	if (await handleCodexBarQuotaCommand(args)) {
@@ -624,6 +583,7 @@ export async function main(args: string[], options?: MainOptions) {
 	if (parsed.export) {
 		let result: string;
 		try {
+			const { exportFromFile } = await import("./core/export-html/index.ts");
 			const outputPath = parsed.messages.length > 0 ? parsed.messages[0] : undefined;
 			result = await exportFromFile(parsed.export, outputPath);
 		} catch (error: unknown) {
@@ -671,6 +631,7 @@ export async function main(args: string[], options?: MainOptions) {
 	const missingSessionCwdIssue = getMissingSessionCwdIssue(sessionManager, cwd);
 	if (missingSessionCwdIssue) {
 		if (appMode === "interactive") {
+			const { promptForMissingSessionCwd } = await import("./cli/missing-session-cwd-prompt.ts");
 			const selectedCwd = await promptForMissingSessionCwd(missingSessionCwdIssue, startupSettingsManager);
 			if (!selectedCwd) {
 				process.exit(0);
@@ -817,6 +778,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (parsed.listModels !== undefined) {
+		const { listModels } = await import("./cli/list-models.ts");
 		const searchPattern = typeof parsed.listModels === "string" ? parsed.listModels : undefined;
 		await listModels(modelRegistry, searchPattern);
 		process.exit(0);
@@ -839,8 +801,16 @@ export async function main(args: string[], options?: MainOptions) {
 		stdinContent,
 	);
 	time("prepareInitialMessage");
-	initTheme(settingsManager.getTheme(), appMode === "interactive");
-	time("initTheme");
+	// Print/json defer theme loading: headless output renders no TUI chrome, so the
+	// theme only loads if an extension reads ctx.ui.theme (the proxy initializes it
+	// lazily with the configured theme). Interactive and RPC initialize eagerly.
+	const { initTheme, setLazyThemeName } = await import("./modes/interactive/theme/theme.ts");
+	if (appMode === "interactive" || appMode === "rpc") {
+		initTheme(settingsManager.getTheme(), appMode === "interactive");
+		time("initTheme");
+	} else {
+		setLazyThemeName(settingsManager.getTheme());
+	}
 
 	// Show deprecation warnings in interactive mode
 	if (appMode === "interactive" && deprecationWarnings.length > 0) {
@@ -867,8 +837,13 @@ export async function main(args: string[], options?: MainOptions) {
 
 	if (appMode === "rpc") {
 		printTimings();
+		const { runRpcMode } = await import("./modes/rpc/rpc-mode.ts");
 		await runRpcMode(runtime);
 	} else if (appMode === "interactive") {
+		const [{ InteractiveMode }, { stopThemeWatcher }] = await Promise.all([
+			import("./modes/interactive/interactive-mode.ts"),
+			import("./modes/interactive/theme/theme.ts"),
+		]);
 		const interactiveMode = new InteractiveMode(runtime, {
 			migratedProviders,
 			modelFallbackMessage,
@@ -902,7 +877,6 @@ export async function main(args: string[], options?: MainOptions) {
 			initialMessage,
 			initialImages,
 		});
-		stopThemeWatcher();
 		restoreStdout();
 		settlePrintModeExit(exitCode);
 		return;

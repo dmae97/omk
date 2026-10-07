@@ -114,3 +114,27 @@ describe("SelectList", () => {
 		assert.equal(visibleIndexOf(rendered[0], "first"), visibleIndexOf(rendered[1], "second"));
 	});
 });
+
+describe("SelectList primary column width cache", () => {
+	it("keeps stable output across renders until the filter changes", () => {
+		const items = Array.from({ length: 200 }, (_, i) => ({
+			value: `skill-${String(i).padStart(4, "0")}`,
+			label: `skill-${String(i).padStart(4, "0")}`,
+			description: "A".repeat(120),
+		}));
+		const list = new SelectList(items, 10, testTheme, {
+			minPrimaryColumnWidth: 12,
+			maxPrimaryColumnWidth: 32,
+		});
+		const first = list.render(120);
+		const second = list.render(120);
+		assert.deepStrictEqual(second, first);
+
+		list.setFilter("skill-01");
+		const filtered = list.render(120);
+		assert.notDeepStrictEqual(filtered, first);
+		assert.ok(filtered.some((line) => line.includes("skill-01")));
+		// Cache must refresh after filter change and then stay stable again.
+		assert.deepStrictEqual(list.render(120), filtered);
+	});
+});
