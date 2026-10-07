@@ -4,6 +4,7 @@ import {
 	createOpenAiWasmTokenCounter,
 	createTokenCounterRegistry,
 	estimateTextTokens,
+	estimateTextTokensFromParts,
 	type OptionalModuleLoader,
 	type TokenCounterAdapter,
 } from "../src/core/context-budget-token-counter.ts";
@@ -69,6 +70,27 @@ describe("context budget token counter", () => {
 		expect(estimateTextTokens("\ud83d", "unknown").tokens).toBe(1);
 		expect(estimateTextTokens("\ude00\ud83d", "unknown").tokens).toBe(1);
 		expect(estimateTextTokens("\ude00\ud83d", "unknown").notes).toContain("composition()");
+	});
+
+	it('matches estimateTextTokens(parts.join("")) for JSON-shaped and plain parts', () => {
+		const cases: string[][] = [
+			[],
+			[""],
+			["", ""],
+			["hello"],
+			["[", '{"a":1}', ",", '{"b":2}', "]"],
+			["{", '"quote":"a\\n\\""', "}"],
+			["  ", "[", "x", "]", "  "],
+			["function ", "add() {", " return 1; ", "}"],
+			["😀", "한글", "中文"],
+			["a", "", "b"],
+		];
+		for (const parts of cases) {
+			expect(estimateTextTokensFromParts(parts, "m")).toEqual(estimateTextTokens(parts.join(""), "m"));
+		}
+		// Word-char joints fall back to join (still equal).
+		expect(estimateTextTokensFromParts(["fun", "ction"], "m")).toEqual(estimateTextTokens("function", "m"));
+		expect(estimateTextTokensFromParts(["\ud83d", "\ude00"], "m")).toEqual(estimateTextTokens("😀", "m"));
 	});
 
 	it("produces detailed notes with composition breakdown and non-ascii ratio", () => {
