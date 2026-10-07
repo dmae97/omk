@@ -4,6 +4,7 @@
 
 ### Changed
 
+- `Markdown.setText` / `Text.setText` no-op when the string is unchanged, so streaming updates can refresh message views without discarding wrap caches.
 - `SelectList` caches the primary column width until the filter or item set changes, so opening `/` with many skills no longer rescans every label on each render frame.
 
 ### Fixed

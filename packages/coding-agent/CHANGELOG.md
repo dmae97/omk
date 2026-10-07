@@ -9,6 +9,7 @@
 
 ### Changed
 
+- Assistant message content views call `setText` only when a block’s source text changes, so finished Markdown instances and their render caches stay reused across streaming updates. Markdown/Text `setText` still no-ops when the displayed string is unchanged.
 - Slash-command autocomplete (`SelectList`) caches the primary column width while the filter is unchanged, so `/` with large skill lists does less work per frame.
 - CLI no longer loads `undici` at process start. A fetch hook installs the global dispatcher on the first `fetch` (one common choke point for providers, OAuth and tools). `scheduleHttpDispatcher` remembers the idle timeout from settings without importing undici until then.
 - HTTP idle-timeout helpers (`parseHttpIdleTimeoutMs`, defaults, UI choices) live in `http-idle-timeout.ts` so `settings-manager` no longer pulls `undici` into the AgentSession import graph. `configureHttpDispatcher` still loads undici when the CLI or session actually configures the dispatcher.
