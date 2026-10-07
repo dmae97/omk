@@ -4,11 +4,16 @@ import { join } from "node:path";
 import { getModel } from "omk-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
+import { createEventBus } from "../src/core/event-bus.ts";
 import goalController from "../src/core/extensions/builtin/goal-controller.ts";
 import identicalLoop from "../src/core/extensions/builtin/identical-loop.ts";
 import promptPreset from "../src/core/extensions/builtin/prompt-preset.ts";
 import toolPairRepair from "../src/core/extensions/builtin/tool-pair-repair.ts";
 import type { ExtensionAPI, ExtensionContext } from "../src/core/extensions/types.ts";
+import {
+	isProgressStallSteerSuppressed,
+	setProgressStallSteerSuppressed,
+} from "../src/core/progress-stall-steer-gate.ts";
 import { DefaultResourceLoader } from "../src/core/resource-loader.ts";
 import { createAgentSession } from "../src/core/sdk.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
@@ -124,7 +129,9 @@ function createFactoryHarness() {
 	const handlers: CapturedHandler[] = [];
 	const messages: unknown[] = [];
 	const commands: string[] = [];
+	const events = createEventBus();
 	const omk = {
+		events,
 		on: (event: string, handler: CapturedHandler["handler"]) => {
 			handlers.push({ event, handler });
 		},
@@ -134,7 +141,7 @@ function createFactoryHarness() {
 	} as unknown as ExtensionAPI;
 	const fire = (event: string, payload: unknown, ctx?: unknown) =>
 		handlers.filter((entry) => entry.event === event).map((entry) => entry.handler(payload as never, ctx as never));
-	return { handlers, messages, commands, omk, fire };
+	return { handlers, messages, commands, omk, fire, events };
 }
 
 describe("identical-loop built-in factory", () => {
@@ -151,6 +158,128 @@ describe("identical-loop built-in factory", () => {
 		expect(harness.fire("tool_call", call)[0]).toMatchObject({ block: true });
 		harness.fire("input", { type: "input", text: "stop", source: "interactive" });
 		expect(harness.fire("tool_call", call)).toEqual([undefined]);
+	});
+
+	it("steers on near-duplicate bash without progress and respects the finish-check gate", () => {
+		setProgressStallSteerSuppressed(false);
+		const harness = createFactoryHarness();
+		identicalLoop(harness.omk, { remainingBudgetFraction: () => 0.5 });
+		for (let index = 0; index < 14; index += 1) {
+			const call = {
+				type: "tool_call",
+				toolCallId: `n-${index}`,
+				toolName: "bash",
+				input: { command: `python3 -c "import re, json; print(${index}); json.load(open('/app/re.json'))"` },
+			};
+			expect(harness.fire("tool_call", call)[0]).toBeUndefined();
+			harness.fire("tool_result", {
+				type: "tool_result",
+				toolCallId: `n-${index}`,
+				toolName: "bash",
+				input: call.input,
+				content: [{ type: "text", text: "ok" }],
+				isError: false,
+				details: undefined,
+			});
+		}
+		expect(
+			harness.messages.some((message) => (message as { customType?: string }).customType === "progress-stall"),
+		).toBe(true);
+
+		harness.messages.length = 0;
+		setProgressStallSteerSuppressed(true);
+		for (let index = 0; index < 14; index += 1) {
+			const call = {
+				type: "tool_call",
+				toolCallId: `s-${index}`,
+				toolName: "bash",
+				input: { command: `python3 -c "import re, json; print(${index + 20}); json.load(open('/app/re.json'))"` },
+			};
+			harness.fire("tool_call", call);
+			harness.fire("tool_result", {
+				type: "tool_result",
+				toolCallId: `s-${index}`,
+				toolName: "bash",
+				input: call.input,
+				content: [{ type: "text", text: "ok" }],
+				isError: false,
+				details: undefined,
+			});
+		}
+		expect(harness.messages).toHaveLength(0);
+		setProgressStallSteerSuppressed(false);
+	});
+
+	it("clears a stale process-wide suppression on session_start", () => {
+		const harness = createFactoryHarness();
+		identicalLoop(harness.omk);
+		setProgressStallSteerSuppressed(true);
+		harness.fire("session_start", { type: "session_start" });
+		expect(isProgressStallSteerSuppressed()).toBe(false);
+	});
+
+	it("uses the low-budget steer text when remainingBudgetFraction is under 20%", () => {
+		const harness = createFactoryHarness();
+		identicalLoop(harness.omk, { remainingBudgetFraction: () => 0.1 });
+		for (let index = 0; index < 14; index += 1) {
+			const call = {
+				type: "tool_call",
+				toolCallId: `b-${index}`,
+				toolName: "bash",
+				input: { command: `python3 -c "import re, json; print(${index}); json.load(open('/app/re.json'))"` },
+			};
+			harness.fire("tool_call", call);
+			harness.fire("tool_result", {
+				type: "tool_result",
+				toolCallId: `b-${index}`,
+				toolName: "bash",
+				input: call.input,
+				content: [{ type: "text", text: "ok" }],
+				isError: false,
+				details: undefined,
+			});
+		}
+		const stall = harness.messages.find(
+			(message) => (message as { customType?: string }).customType === "progress-stall",
+		) as { content?: string } | undefined;
+		expect(stall?.content).toMatch(/Save best state, run verification/);
+	});
+
+	it("stays quiet while finish_check is active on the event bus", () => {
+		setProgressStallSteerSuppressed(false);
+		const harness = createFactoryHarness();
+		identicalLoop(harness.omk, { remainingBudgetFraction: () => 0.5 });
+		const run = (prefix: string, offset: number) => {
+			for (let index = 0; index < 14; index += 1) {
+				const call = {
+					type: "tool_call",
+					toolCallId: `${prefix}-${index}`,
+					toolName: "bash",
+					input: {
+						command: `python3 -c "import re, json; print(${index + offset}); json.load(open('/app/re.json'))"`,
+					},
+				};
+				harness.fire("tool_call", call);
+				harness.fire("tool_result", {
+					type: "tool_result",
+					toolCallId: call.toolCallId,
+					toolName: "bash",
+					input: call.input,
+					content: [{ type: "text", text: "ok" }],
+					isError: false,
+					details: undefined,
+				});
+			}
+		};
+		const stalls = () =>
+			harness.messages.filter((message) => (message as { customType?: string }).customType === "progress-stall");
+
+		harness.events.emit("finish_check", { active: true });
+		run("f", 0);
+		expect(stalls()).toHaveLength(0);
+		harness.events.emit("finish_check", { active: false, ledger: [] });
+		run("g", 40);
+		expect(stalls().length).toBeGreaterThan(0);
 	});
 });
 

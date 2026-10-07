@@ -4,6 +4,8 @@
 
 ### Added
 
+- Progress-stall detector on the built-in identical-loop harness: a bounded ring buffer of recent tool calls, near-duplicate bash signatures (whitespace / number / quote / path-tail normalized, token-set Jaccard), and a no-progress signal (no successful edit/write in the last K calls, or repeated identical error outputs). Exact consecutive identical args still warn at 3 and block at 6; near-duplicates only steer (rate-limited), with a low remaining-budget message when an injected `remainingBudgetFraction` reports under 20%. Near-dup steers honor `setProgressStallSteerSuppressed` so a finish-check verification turn can silence them. Thresholds calibrated on R7 omk trial trajectories (window 32, similarity 0.65, need 6, no-progress 12, steer every 12).
+
 - Width-invariant property tests in `packages/tui` for `visibleWidth`, `truncateToWidth` and `wrapTextWithAnsi`, with `fast-check` 4.9.0 pinned as a devDependency there. Two known defects are recorded as `todo` tests: `truncateToWidth` can return text wider than `maxWidth` when an SGR code splits an emoji + VS16 grapheme, and `visibleWidth` counts a leading zero-width joiner as width.
 - Built-in themes `omk-paper-dark` and `omk-paper-light` (aliases `paper`, `paper-dark`, `paper-light`, `omk-paper`) in the README hero's palette: ink text, secondary and tertiary ink, one vermillion accent, and subdued info, teal, green and ochre for links, code and syntax. Every text role measures 4.5:1 or more and every boundary 3:1 or more against the paper surfaces and common terminal backgrounds, `#1e1e1e` included; three dark values are one step lighter than the web palette to get there. Both carry HTML-export paper surfaces.
 
