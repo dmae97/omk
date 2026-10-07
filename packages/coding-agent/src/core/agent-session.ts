@@ -5441,10 +5441,15 @@ export class AgentSession {
 	 */
 	async exportToHtml(outputPath?: string): Promise<string> {
 		const themeName = this.settingsManager.getTheme();
+		// Builtin TUI renderers live off the headless cold path; load them only for export.
+		const { withBuiltinToolRenderers } = await import("../modes/interactive/tool-renderers/index.ts");
 
 		// Create tool renderer if we have an extension runner (for custom tool HTML rendering)
 		const toolRenderer: ToolHtmlRenderer = createToolHtmlRenderer({
-			getToolDefinition: (name) => this.getToolDefinition(name),
+			getToolDefinition: (name) => {
+				const definition = this.getToolDefinition(name);
+				return definition ? withBuiltinToolRenderers(definition) : undefined;
+			},
 			theme,
 			cwd: this.sessionManager.getCwd(),
 		});

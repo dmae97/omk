@@ -6,6 +6,10 @@
 
 - `SelectList` caches the primary column width until the filter or item set changes, so opening `/` with many skills no longer rescans every label on each render frame.
 
+### Fixed
+
+- A streaming Markdown message no longer re-parses and re-wraps its whole text every frame. Finished top-level blocks keep their tokens and lines while the text only grows (about 8× less work per frame on a 27k-character reply).
+
 ## [1.3.0] - 2026-10-04
 
 ### Changed

@@ -1,8 +1,8 @@
 import { Marked, type Token, type Tokens } from "marked";
-import { isImageLine } from "../terminal-image.ts";
 import type { Component } from "../tui.ts";
 import { applyBackgroundToLine, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
 import { type MarkdownLinkTheme, renderMarkdownCodeLink, renderMarkdownLink } from "./markdown-links.ts";
+import { finishMarkdownLines, MarkdownStreamCache } from "./markdown-stream-cache.ts";
 import { StrictStrikethroughTokenizer, trimPartialClosingFences } from "./markdown-tokenizer.ts";
 
 const markdownParser = new Marked();
@@ -74,6 +74,7 @@ export class Markdown implements Component {
 	private cachedText?: string;
 	private cachedWidth?: number;
 	private cachedLines?: string[];
+	private streamCache = new MarkdownStreamCache();
 
 	constructor(
 		text: string,
@@ -93,10 +94,11 @@ export class Markdown implements Component {
 
 	setText(text: string): void {
 		this.text = text;
-		this.invalidate();
+		this.cachedLines = undefined; // keep the streaming prefix; render() checks it still applies
 	}
 
 	invalidate(): void {
+		this.streamCache.reset();
 		this.cachedText = undefined;
 		this.cachedWidth = undefined;
 		this.cachedLines = undefined;
@@ -124,56 +126,24 @@ export class Markdown implements Component {
 		// Replace tabs with 3 spaces for consistent rendering
 		const normalizedText = this.text.replace(/\t/g, "   ");
 
-		// Parse markdown to HTML-like tokens
-		const tokens = markdownParser.lexer(normalizedText);
+		// Parse markdown to tokens, reusing the stable prefix while a message streams
+		const tokens = this.streamCache.lex(normalizedText, (src) => markdownParser.lexer(src));
 		trimPartialClosingFences(tokens);
 
-		// Convert tokens to styled terminal output
-		const renderedLines: string[] = [];
-
-		for (let i = 0; i < tokens.length; i++) {
-			const token = tokens[i];
-			const nextToken = tokens[i + 1];
-			const tokenLines = this.renderToken(token, contentWidth, nextToken?.type);
-			for (const tokenLine of tokenLines) {
-				renderedLines.push(tokenLine);
-			}
-		}
-
-		// Wrap lines (NO padding, NO background yet)
-		const wrappedLines: string[] = [];
-		for (const line of renderedLines) {
-			if (isImageLine(line)) {
-				wrappedLines.push(line);
-			} else {
-				for (const wrappedLine of wrapTextWithAnsi(line, contentWidth)) {
-					wrappedLines.push(wrappedLine);
-				}
-			}
-		}
-
-		// Add margins and background to each wrapped line
-		const leftMargin = " ".repeat(this.paddingX);
-		const rightMargin = " ".repeat(this.paddingX);
 		const bgFn = this.defaultTextStyle?.bgColor;
 		const contentLines: string[] = [];
-
-		for (const line of wrappedLines) {
-			if (isImageLine(line)) {
-				contentLines.push(line);
-				continue;
-			}
-
-			const lineWithMargins = leftMargin + line + rightMargin;
-
-			if (bgFn) {
-				contentLines.push(applyBackgroundToLine(lineWithMargins, width, bgFn));
-			} else {
-				// No background - just pad to width
-				const visibleLen = visibleWidth(lineWithMargins);
-				const paddingNeeded = Math.max(0, width - visibleLen);
-				contentLines.push(lineWithMargins + " ".repeat(paddingNeeded));
-			}
+		for (let i = 0; i < tokens.length; i++) {
+			const nextType = tokens[i + 1]?.type;
+			const lines = this.streamCache.linesFor(tokens[i], i, width, nextType, () =>
+				finishMarkdownLines(
+					this.renderToken(tokens[i], contentWidth, nextType),
+					width,
+					contentWidth,
+					this.paddingX,
+					bgFn,
+				),
+			);
+			for (const line of lines) contentLines.push(line);
 		}
 
 		// Add top/bottom padding (empty lines)
