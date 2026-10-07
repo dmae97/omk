@@ -11,9 +11,11 @@ vi.mock("../src/core/http-dispatcher.ts", async () => {
 	state.importStarted++;
 	await new Promise((resolve) => setTimeout(resolve, 40));
 	return {
+		adoptGlobalFetch: () => {},
 		configureHttpDispatcher: () => {
 			state.configures++;
 		},
+		dispatcherFetch: globalThis.fetch,
 	};
 });
 

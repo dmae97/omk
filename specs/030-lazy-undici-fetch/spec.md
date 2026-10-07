@@ -50,7 +50,7 @@ Before #78, `http-dispatcher.ts` was imported at startup, before extensions, so 
 1. Hook installed, then an extension wraps `fetch`, then 3 requests: the extension hook is called 3 times, `globalThis.fetch` is still the extension hook, and the global dispatcher is an `EnvHttpProxyAgent`.
 2. Same setup, one request, `scheduleHttpDispatcher(120_000)`, one more request: the extension hook is called 2 times and is still `globalThis.fetch`.
 3. Hook installed, no extension, 2 requests: `globalThis.fetch === undici.fetch` and the dispatcher is an `EnvHttpProxyAgent` (unchanged behavior).
-4. Existing `http-dispatcher-lazy-undici.test.ts` (undici not loaded until the first fetch) and `http-dispatcher-install-concurrent.test.ts` (one install for overlapping callers) pass unchanged.
+4. Existing `http-dispatcher-lazy-undici.test.ts` (undici not loaded until the first fetch) passes unchanged. `http-dispatcher-install-concurrent.test.ts` (one install for overlapping callers) passes with its assertions unchanged; its module mock only gains the two new exports (`adoptGlobalFetch`, `dispatcherFetch`).
 
 ### Requirement 2 - Gates (Priority: P0)
 
@@ -70,4 +70,5 @@ Before #78, `http-dispatcher.ts` was imported at startup, before extensions, so 
 - `packages/coding-agent/src/core/http-dispatcher.ts`: one owned-fetch reference instead of the import-time capture; export the fetch that pairs with the dispatcher
 - `packages/coding-agent/src/core/http-dispatcher-install.ts`: hand the hook to the dispatcher before the first configure; forward to the paired fetch
 - `packages/coding-agent/test/http-dispatcher-fetch-override.test.ts`: the three cases above
+- `packages/coding-agent/test/http-dispatcher-install-concurrent.test.ts`: mock gains the two new exports
 - `packages/coding-agent/CHANGELOG.md`: one Fixed entry
