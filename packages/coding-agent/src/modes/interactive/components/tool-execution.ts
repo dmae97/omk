@@ -1,8 +1,9 @@
 import { Box, type Component, Container, Spacer, Text, type TUI } from "omk-tui";
 import type { ToolDefinition, ToolRenderContext } from "../../../core/extensions/types.ts";
 import { createAllToolDefinitions, type ToolName } from "../../../core/tools/index.ts";
-import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.ts";
 import { theme } from "../theme/theme.ts";
+import { getBuiltinToolRenderers } from "../tool-renderers/index.ts";
+import { getTextOutput as getRenderedTextOutput } from "../tool-renderers/render-utils.ts";
 import { ToolExecutionImages } from "./tool-execution-images.ts";
 
 export interface ToolExecutionOptions {
@@ -28,6 +29,7 @@ export class ToolExecutionComponent extends Container {
 	private isPartial = true;
 	private toolDefinition?: ToolDefinition<any, any>;
 	private builtInToolDefinition?: ToolDefinition<any, any>;
+	private builtinRenderers?: ReturnType<typeof getBuiltinToolRenderers>;
 	private ui: TUI;
 	private cwd: string;
 	private executionStarted = false;
@@ -54,6 +56,7 @@ export class ToolExecutionComponent extends Container {
 		this.args = args;
 		this.toolDefinition = toolDefinition;
 		this.builtInToolDefinition = createAllToolDefinitions(cwd)[toolName as ToolName];
+		this.builtinRenderers = getBuiltinToolRenderers(toolName);
 		this.showImages = options.showImages ?? true;
 		this.imageWidthCells = options.imageWidthCells ?? 60;
 		this.ui = ui;
@@ -87,37 +90,34 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private getCallRenderer(): ToolDefinition<any, any>["renderCall"] | undefined {
-		if (!this.builtInToolDefinition) {
-			return this.toolDefinition?.renderCall;
-		}
-		if (!this.toolDefinition) {
-			return this.builtInToolDefinition.renderCall;
-		}
-		return this.toolDefinition.renderCall ?? this.builtInToolDefinition.renderCall;
+		return (
+			this.toolDefinition?.renderCall ?? this.builtinRenderers?.renderCall ?? this.builtInToolDefinition?.renderCall
+		);
 	}
 
 	private getResultRenderer(): ToolDefinition<any, any>["renderResult"] | undefined {
-		if (!this.builtInToolDefinition) {
-			return this.toolDefinition?.renderResult;
-		}
-		if (!this.toolDefinition) {
-			return this.builtInToolDefinition.renderResult;
-		}
-		return this.toolDefinition.renderResult ?? this.builtInToolDefinition.renderResult;
+		return (
+			this.toolDefinition?.renderResult ??
+			this.builtinRenderers?.renderResult ??
+			this.builtInToolDefinition?.renderResult
+		);
 	}
 
 	private hasRendererDefinition(): boolean {
-		return this.builtInToolDefinition !== undefined || this.toolDefinition !== undefined;
+		return (
+			this.builtInToolDefinition !== undefined ||
+			this.toolDefinition !== undefined ||
+			this.builtinRenderers !== undefined
+		);
 	}
 
 	private getRenderShell(): "default" | "self" {
-		if (!this.builtInToolDefinition) {
-			return this.toolDefinition?.renderShell ?? "default";
-		}
-		if (!this.toolDefinition) {
-			return this.builtInToolDefinition.renderShell ?? "default";
-		}
-		return this.toolDefinition.renderShell ?? this.builtInToolDefinition.renderShell ?? "default";
+		return (
+			this.toolDefinition?.renderShell ??
+			this.builtinRenderers?.renderShell ??
+			this.builtInToolDefinition?.renderShell ??
+			"default"
+		);
 	}
 
 	private getRenderContext(lastComponent: Component | undefined): ToolRenderContext {
