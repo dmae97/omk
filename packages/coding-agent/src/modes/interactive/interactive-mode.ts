@@ -274,7 +274,6 @@ export class InteractiveMode {
 	private editorContainer: Container;
 	private footer: FooterComponent;
 	private footerDataProvider: FooterDataProvider;
-	private metricsTimer: ReturnType<typeof setInterval> | null = null;
 	// Stored so the same manager can be injected into custom editors, selectors, and extension UI.
 	private keybindings: KeybindingsManager;
 	private version: string;
@@ -897,12 +896,8 @@ export class InteractiveMode {
 			this.ui.requestRender();
 		});
 
-		// Periodically refresh footer metrics (CPU / memory).
-		this.metricsTimer = setInterval(() => {
-			this.footer.invalidate();
-			this.ui.requestRender();
-		}, 2000);
-		this.metricsTimer.unref();
+		// Refresh footer CPU/MEM every 2s; the footer runs the interval only while metrics are shown.
+		this.footer.setMetricsTickHandler(() => this.ui.requestRender());
 
 		// Initialize available provider count for footer display
 		await this.updateAvailableProviderCount();
@@ -6509,10 +6504,6 @@ export class InteractiveMode {
 		this.footer.dispose();
 		this.footerDataProvider.dispose();
 		this.unsubscribeThemedOutputStale?.();
-		if (this.metricsTimer) {
-			clearInterval(this.metricsTimer);
-			this.metricsTimer = null;
-		}
 		if (this.unsubscribe) {
 			this.unsubscribe();
 		}

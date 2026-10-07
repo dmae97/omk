@@ -16,9 +16,8 @@ import { execCommand } from "../exec.ts";
 import { readPackageManifest } from "../package-manifest.ts";
 import { LEGACY_PI_RUNTIME_ALIASES, type PiCompatibilityTarget } from "../pi-compat.ts";
 import { createSyntheticSourceInfo } from "../source-info.ts";
-import { buildVirtualModules } from "./bundled-virtual-modules.ts";
 import { markContextHandlerNonMutating } from "./context-handler-options.ts";
-import { createJitiLazily } from "./lazy-imports.ts";
+import { buildVirtualModulesLazily, createJitiLazily } from "./lazy-imports.ts";
 import type {
 	Extension,
 	ExtensionAPI,
@@ -440,10 +439,9 @@ function createExtensionAPI(
 async function loadExtensionModule(extensionPath: string, binaryMode = isBunBinary) {
 	const jiti = await createJitiLazily(import.meta.url, {
 		moduleCache: false,
-		// In Bun binary: use virtualModules for bundled packages (no filesystem resolution)
-		// Also disable tryNative so jiti handles ALL imports (not just the entry point)
-		// In Node.js/dev: use aliases to resolve to node_modules paths
-		...(binaryMode ? { virtualModules: buildVirtualModules(), tryNative: false } : { alias: getAliases() }),
+		// Bun binary: virtualModules; Node/dev: aliases. tryNative off so jiti owns all imports.
+		// biome-ignore format: keep ternary one line so loader.ts stays within module-size baseline
+		...(binaryMode ? { virtualModules: await buildVirtualModulesLazily(), tryNative: false } : { alias: getAliases() }),
 	});
 
 	const module = await jiti.import(extensionPath, { default: true });

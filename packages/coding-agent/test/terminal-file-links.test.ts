@@ -1,6 +1,6 @@
 import { resetCapabilitiesCache, setCapabilities } from "omk-tui";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { linkPath } from "../src/core/tools/render-utils.ts";
+import { linkPath } from "../src/modes/interactive/tool-renderers/render-utils.ts";
 
 afterEach(() => {
 	vi.unstubAllEnvs();

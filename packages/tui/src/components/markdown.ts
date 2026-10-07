@@ -93,6 +93,7 @@ export class Markdown implements Component {
 	}
 
 	setText(text: string): void {
+		if (text === this.text) return;
 		this.text = text;
 		this.cachedLines = undefined; // keep the streaming prefix; render() checks it still applies
 	}
