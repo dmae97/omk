@@ -127,10 +127,10 @@ as enabling an orchestration workflow.
 
 ## Evidence and limits
 
-One comparative benchmark result is published: a single Terminal-Bench 2.1 run
-against mini-swe-agent with the same model (below). Its success-rate difference
-is not statistically significant. We have not established that OMK solves more
-tasks than another harness, that multi-agent execution improves success, or how
+One dated comparison is available below: OMK and mini-SWE-agent on
+Terminal-Bench 2.1 with the same base model. The observed success-rate
+difference is not statistically significant, and the time budgets differed.
+It does not establish overall harness superiority, multi-agent gains, or how
 much verification reduces false completion.
 
 OMK targets state-of-the-art quality as a CLI coding-agent harness.
@@ -165,13 +165,29 @@ If you evaluate OMK, share a sanitized report and reproduction steps in a
 [GitHub issue](https://github.com/dmae97/omk/issues). Include failed and
 interrupted runs, not just successful examples.
 
-### Benchmark: Terminal-Bench 2.1
+### Terminal-Bench 2.1 · R8
 
-Terminal-Bench 2.1, 89 tasks × 3 trials per harness, xAI `grok-4.7` at
-reasoning effort `xhigh` for both, run 2026-10-05 to 2026-10-06 KST. OMK was a
-1.3.0 evaluation build (commit `78cc483`) that includes pull requests not yet
-merged, not the published npm package. mini-swe-agent was version 2.4.6, run
-through Harbor.
+<p align="center">
+  <img
+    src="readmeasset/omk-terminal-bench-r8.png"
+    alt="OMK versus mini-SWE-agent 2.4.6 on Terminal-Bench 2.1 with Grok-4.7 xhigh. Primary success: 75.8% (200/264) versus 71.6% (189/264). Recorded cost per graded trial: $0.581 versus $0.759. Median time: 482 versus 376 seconds. Success difference: +4.2 percentage points, 95% CI minus 1.9 to plus 10.2; not statistically significant. OMK had 150 additional seconds per trial and used an evaluation build."
+    width="1200"
+  />
+</p>
+
+**75.8% observed success · approximately 23% lower recorded model cost per
+graded trial.** OMK took longer: 482 s median, compared with 376 s for
+mini-SWE-agent. Both used xAI `grok-4.7` at reasoning effort `xhigh` in a
+2026-10-05–06 KST run of 89 tasks, with 3 trials per task per harness.
+
+The +4.2 percentage-point success difference is **not statistically significant**
+(95% task-level paired-bootstrap CI: −1.9 to +10.2 pp). OMK alone had **150 s
+extra per trial** for snapshots, so the time budgets were unequal. This result
+covers the **1.3.0 evaluation build `78cc483`**, including unmerged changes,
+rather than the published npm package. It is not an official leaderboard result.
+
+<details>
+<summary>Benchmark data and evaluation limits</summary>
 
 | Harness | Success rate (88 tasks × 3 trials) | Cost per trial (all 267 trials) | Median wall time per trial (all 267 trials) |
 | --- | --- | --- | --- |
@@ -196,8 +212,16 @@ through Harbor.
   allowlist and apt cache proxy, and OMK alone had 150 s extra for a workspace
   snapshot used in rescoring.
 
+- Costs count only the graded attempt, excluding prior failed retry attempts and
+  42 auxiliary model calls made by code inside one mini-SWE-agent task. They are
+  not total experiment spend.
+
 Method, per-difficulty results, audit and reproduction notes:
 [Terminal-Bench 2.1 report](packages/coding-agent/docs/benchmarks/r8-terminal-bench-2.1.md).
+
+</details>
+
+[Editable figure](readmeasset/omk-terminal-bench-r8.svg) · [Original report review](https://github.com/dmae97/omk/pull/86)
 
 ## OMK//CONTROL
 
