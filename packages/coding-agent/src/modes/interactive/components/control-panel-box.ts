@@ -226,3 +226,14 @@ export function fitLine(line: string, width: number): string {
 export function clipLine(line: string, width: number): string {
 	return visibleWidth(line) <= width ? line : truncateToWidth(line, width, "");
 }
+
+/**
+ * Usage bar: `filled` solid cells in `color`, the rest as a light-shade trough.
+ * The trough uses `dim`, not `borderMuted`: several dark themes set borderMuted within a
+ * shade of the background, and `░` paints only part of the cell, so the empty track vanished.
+ */
+export function meterBar(filled: number, cells: number, color: ThemeColor): string {
+	const total = Math.max(0, cells);
+	const solid = Math.max(0, Math.min(total, filled));
+	return `${theme.fg(color, "█".repeat(solid))}${theme.fg("dim", "░".repeat(total - solid))}`;
+}
