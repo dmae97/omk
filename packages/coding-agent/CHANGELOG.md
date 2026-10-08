@@ -4,6 +4,8 @@
 
 ### Added
 
+- Offline source-quote memory factorial CLI: isolated prior-session stores, paired independent/dependent tasks and explicit memory-off/on controls. The default report has 1,200 deterministic mechanism evaluations, not live LLM efficacy or KV measurements. See [offline experiment](docs/memory-factorial-experiment.md).
+- `/session` reports the last request's memory state and eligible/omitted counts without reading source quotes, enabling recall or changing the VERIFY verdict. See [memory recall hardening](docs/memory-recall-hardening.md).
 - Width-invariant property tests in `packages/tui` for `visibleWidth`, `truncateToWidth` and `wrapTextWithAnsi`, with `fast-check` 4.9.0 pinned as a devDependency there. Two known defects are recorded as `todo` tests: `truncateToWidth` can return text wider than `maxWidth` when an SGR code splits an emoji + VS16 grapheme, and `visibleWidth` counts a leading zero-width joiner as width.
 - Built-in themes `omk-paper-dark` and `omk-paper-light` (aliases `paper`, `paper-dark`, `paper-light`, `omk-paper`) in the README hero's palette: ink text, secondary and tertiary ink, one vermillion accent, and subdued info, teal, green and ochre for links, code and syntax. Every text role measures 4.5:1 or more and every boundary 3:1 or more against the paper surfaces and common terminal backgrounds, `#1e1e1e` included; three dark values are one step lighter than the web palette to get there. Both carry HTML-export paper surfaces.
 
@@ -28,6 +30,8 @@
 - Opening the expanded view (`Ctrl+O`) inks the wordmark in once: 420 ms, ease-out, from a faint pencil underdrawing to ink, with the Verify accent last. It changes colour only, never the layout, and is skipped for reduced motion, `NO_COLOR`, non-TTY output and narrow widths.
 
 ### Fixed
+- Closed source-quote memory wrappers release their controller/store references and skip closed predecessors. Already-aborted requests refuse before starting predecessor work, and closed controllers refuse new mutations.
+- Per-request static prompt/tool token counting reuses only the two immutable texts, while full message and envelope pricing remains exact. Source/record reads allocate their statted size plus one rather than maximum-size buffers; V2 skips token pricing for nonmatching records without caching validity or relaxing expiry/revocation checks.
 - The empty part of the context and usage meters (`░`) is visible again on dark themes. It was painted with `borderMuted`, which several themes set within a shade of the background (`omk-paper-dark` `#43413d`, `catppuccin-mocha` `#181825`, `omk-aurora-dark` `#161B27`), and `░` only fills part of the cell, so the track disappeared. The rail, header and sidebar meters now share one `meterBar` helper that paints the track with `dim`.
 - An extension that replaces `globalThis.fetch` keeps seeing every request again. Since undici began loading on the first `fetch`, that first request's install compared against the extension's hook instead of omk's own and replaced it with undici's `fetch`, so the hook ran only once per process. omk now sets the undici dispatcher and leaves an extension's `fetch` in place, as before the lazy load; without an extension, `globalThis.fetch` still becomes undici's `fetch`.
 - `omk -p` now arms an unref'd exit guard after print mode finishes: when a stray handle keeps the event loop alive past 2s (override with `OMK_PRINT_EXIT_GRACE_MS`, `0` disables), it writes the held resource kinds to stderr and exits with the run's code. Normal runs are unchanged because the timer is unref'd.
@@ -48,6 +52,15 @@
 
 - From the control rail: the STATUS and CONTROL sections, the `omk` and `sidebar` rows, the `pulse` sparkline (seeded from a hash of the status snapshot, not measured), the `MATRIX RAIN // NEON GRID ONLINE` line and the `pkg` package-intake row. Package intake still appears in the footer and in the pinned sidebar's SYSTEM section. The `CYBERPUNK OPS CORE` and `NIGHT-CITY-MATRIX-V3` lines are gone from both the rail and the hero.
 - The startup banner's hue gradient, scramble reveal, idle colour drift and sparkle starfield. `OMK_CONTROL_IDLE_DRIFT` no longer has an effect: the opening never loops.
+
+## [1.3.1] - 2026-10-08
+
+> Prepared source version, not published. The full release suite remains a publication gate; this section is not evidence of a tag, GitHub Release or npm publication.
+
+### Changed
+
+- All seven public workspace packages and their internal dependency ranges are aligned to 1.3.1. External dependency versions are unchanged.
+- Memory experiment, lifecycle/pricing and TUI recall-status changes remain documented in the coding-agent's `[Unreleased]` section and in the [1.3.1 preparation notes](../../.github/RELEASE_NOTES_v1.3.1.md). Existing unreleased work remains unaudited for final publication.
 
 ## [1.3.0] - 2026-10-04
 

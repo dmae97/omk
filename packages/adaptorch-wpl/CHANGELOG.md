@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-08
+
+> Prepared source version, not published. The full OMK release suite remains a publication gate.
+
+### Changed
+
+- Lockstep source-version alignment with the OMK packages. No AdaptOrch service or default transport is enabled by this preparation.
+
 ## [1.3.0] - 2026-10-04
 
 ### Changed

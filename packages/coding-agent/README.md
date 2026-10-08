@@ -258,7 +258,9 @@ npm test
 
 See [Development](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/development.md) and [CONTRIBUTING.md](https://github.com/dmae97/omk/blob/main/CONTRIBUTING.md).
 
-Release notes: [v1.3.0](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v1.3.0.md).
+Release preparation: [v1.3.1](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v1.3.1.md), not yet published. The latest confirmed public release is [v1.3.0](https://github.com/dmae97/omk/releases/tag/v1.3.0).
+
+The full release suite remains a publication gate; the installed CLI is not changed by this source version bump.
 
 ## License
 

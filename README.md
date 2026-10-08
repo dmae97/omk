@@ -448,7 +448,8 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.3.0](.github/RELEASE_NOTES_v1.3.0.md)
+- [Release notes for v1.3.1](.github/RELEASE_NOTES_v1.3.1.md)
+- Latest confirmed public release: [v1.3.0](https://github.com/dmae97/omk/releases/tag/v1.3.0); the 1.3.1 notes above are preparation only.
 
 ## Development
 
@@ -503,6 +504,17 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 > section above for the shipped guards and optional-corpus boundary.
 
 <!-- releases:start -->
+
+## Release v1.3.1
+
+> Prepared source version, not published. The full release suite remains a publication gate; this section is not evidence of a tag, GitHub Release or npm publication.
+
+### Changed
+
+- All seven public workspace packages and their internal dependency ranges are aligned to 1.3.1. External dependency versions are unchanged.
+- Memory experiment, lifecycle/pricing and TUI recall-status changes remain documented in the coding-agent's `[Unreleased]` section and in the [1.3.1 preparation notes](.github/RELEASE_NOTES_v1.3.1.md). Existing unreleased work remains unaudited for final publication.
+
+Release notes live in [RELEASE_NOTES_v1.3.1.md](.github/RELEASE_NOTES_v1.3.1.md).
 
 ## Release v1.3.0
 
@@ -577,14 +589,6 @@ Release notes live in [RELEASE_NOTES_v1.3.0.md](.github/RELEASE_NOTES_v1.3.0.md)
 - A post-dispatch rejection that provably never spawned (a deadline crossing between the dispatch journal and the supervisor call) now journals the exit and settles the run instead of leaving the execution id open forever.
 
 Release notes live in [RELEASE_NOTES_v1.2.4.md](.github/RELEASE_NOTES_v1.2.4.md).
-
-## Release v1.2.3
-
-### Fixed
-
-- Verified-run suite hardening: tests use a 15s cleanup budget so slow namespace teardown on ubuntu-22.04 runners drains before settling, matching the witness contract without weakening fail-closed outcomes (no product-code change).
-
-Release notes live in [RELEASE_NOTES_v1.2.3.md](.github/RELEASE_NOTES_v1.2.3.md).
 
 <!-- releases:end -->
 
