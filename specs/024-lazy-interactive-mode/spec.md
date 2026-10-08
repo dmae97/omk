@@ -53,6 +53,7 @@ Stack on #77. Make `main` **lazy-load** `interactive-mode`, and move tool `rende
 **Acceptance**:
 1. `main.ts` has no static `from "omk-tui"` and no static `InteractiveMode` import.
 2. `runPrintMode` stays statically reachable; `runRpcMode` / interactive / package-manager / list-models / export-html / session-picker load only when needed.
+   - *Note (PR #83 review follow-up)*: the package-manager part is verified through `main()` itself, not only through the word list in `cli/package-commands.ts`. `test/main-package-routing.test.ts` checks that importing `main.ts` and running a command handled earlier (`package doctor`) never load `package-manager-cli.ts`, and that `install` / `uninstall` / `list` / `config` reach its handlers with the original argv.
 3. Print/json skips unnecessary `initTheme` when headless output does not need TUI chrome.
    - *Note (PR #83 review)*: "skip" means **defer**, not "never". The no-UI extension context still exposes `ctx.ui.theme`, so the `theme` proxy initializes the theme lazily on first access (with the configured theme name recorded by `setLazyThemeName()` in print/json). An extension that reads `ctx.ui.theme` in `-p` (e.g. `examples/extensions/sandbox`) must keep working; if no extension touches it, no theme loads.
 
@@ -116,7 +117,7 @@ Stack on #77. Make `main` **lazy-load** `interactive-mode`, and move tool `rende
 - `packages/coding-agent/src/core/export-html/**` / `agent-session` export path — attach renderers only when exporting
 - `packages/coding-agent/test/tool-execution*.ts` (+ related) — keep green
 - `packages/coding-agent/test/terminal-file-links.test.ts` — import path update if needed
-- Review follow-up (PR #83): `utils/terminal-truecolor.ts`, `packages/tui/src/terminal-image.ts` (capabilities cache on `globalThis`), `core/extensions/builtin/todo-checklist.ts`, `cli/package-commands.ts`, `package-manager-cli.ts`, plus tests `terminal-truecolor-parity`, `print-mode-extension-theme`, `todo-checklist-headless-import`, `package-commands`
+- Review follow-up (PR #83): `utils/terminal-truecolor.ts`, `packages/tui/src/terminal-image.ts` (capabilities cache on `globalThis`), `core/extensions/builtin/todo-checklist.ts`, `cli/package-commands.ts`, `package-manager-cli.ts`, plus tests `terminal-truecolor-parity`, `print-mode-extension-theme`, `todo-checklist-headless-import`, `package-commands`, `main-package-routing`
 
 ## Verification Commands
 
