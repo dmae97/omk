@@ -6085,6 +6085,8 @@ export class InteractiveMode {
 		}
 		info += `${theme.fg("dim", "File:")} ${stats.sessionFile ?? "In-memory"}\n`;
 		info += `${theme.fg("dim", "ID:")} ${stats.sessionId}\n\n`;
+		const memory = this.session.memoryStatus;
+		info += `${theme.fg("dim", "Memory:")} ${memory.state} eligible=${memory.eligible} omitted=${memory.omitted}\n\n`;
 		info += `${theme.bold("Messages")}\n`;
 		info += `${theme.fg("dim", "User:")} ${stats.userMessages}\n`;
 		info += `${theme.fg("dim", "Assistant:")} ${stats.assistantMessages}\n`;

@@ -20,6 +20,7 @@ function livePredecessor(callback: Agent["transformContext"]): Agent["transformC
 export function memoryContextTransform(previous: Agent["transformContext"], enrich: Owner["enrich"]) {
 	const owner: Owner = { previous: livePredecessor(previous), enrich };
 	const transform: Transform = async (messages, signal) => {
+		signal?.throwIfAborted();
 		owner.previous = livePredecessor(owner.previous);
 		const transformed = owner.previous ? await owner.previous(messages, signal) : messages;
 		signal?.throwIfAborted();

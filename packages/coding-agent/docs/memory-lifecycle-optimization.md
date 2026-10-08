@@ -35,3 +35,5 @@ This reduces repeated static token-counter work; it does not claim O(1) history 
 - No build, TUI restart, global memory enablement, token-boundary approximation or persistent source cache was applied.
 
 The prior offline factorial experiment is a separate atomic commit. Only explicitly reviewed request paths are staged; unrelated changes remain unstaged. Commit and push require a valid operator-approved Git author identity.
+
+Further recall allocation, pre-cancellation and TUI status changes are described in [memory recall hardening](memory-recall-hardening.md).

@@ -154,4 +154,16 @@ describe.skipIf(process.platform === "win32")("session memory transform ownershi
 		abort.abort();
 		await expect(callback(messages, abort.signal)).rejects.toMatchObject({ name: "AbortError" });
 	});
+	it("does not start predecessor work for an already-aborted request", async () => {
+		const prior = vi.fn(async (input: AgentMessage[]) => input);
+		agent.transformContext = prior;
+		install();
+		const abort = new AbortController();
+		const cause = new Error("cancelled before transform");
+		abort.abort(cause);
+		const retrieve = vi.spyOn(VerifiedMemoryStore.prototype, "retrieve");
+		await expect(agent.transformContext?.(messages, abort.signal)).rejects.toBe(cause);
+		expect(prior).not.toHaveBeenCalled();
+		expect(retrieve).not.toHaveBeenCalled();
+	});
 });
