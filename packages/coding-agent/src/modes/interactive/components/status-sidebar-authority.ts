@@ -8,7 +8,7 @@ import {
 	type FailureCard,
 } from "../control-plane-view-model.ts";
 import { type ThemeColor, theme } from "../theme/theme.ts";
-import { boxTextLine } from "./control-panel-box.ts";
+import { boxTextLine, meterBar } from "./control-panel-box.ts";
 import { formatTokens } from "./footer.ts";
 
 /** Frame (`│ ` + ` │`) plus the 5-column label gutter shared with the `cwd  `/`git  ` rows. */
@@ -64,9 +64,9 @@ function meter(context: ContextView, width: number): string {
 	const cells = Math.max(METER_MIN_CELLS, Math.min(METER_MAX_CELLS, width - 9));
 	const color = authorityStyle(context.state).color;
 	if (context.percent === null) {
-		return `${theme.fg("borderMuted", "░".repeat(cells))} ${theme.fg(color, "??%")}`;
+		return `${meterBar(0, cells, color)} ${theme.fg(color, "??%")}`;
 	}
 	const clamped = Math.max(0, Math.min(100, context.percent));
 	const filled = Math.round((clamped / 100) * cells);
-	return `${theme.fg(color, "█".repeat(filled))}${theme.fg("borderMuted", "░".repeat(cells - filled))} ${theme.fg(color, `${Math.floor(clamped)}%`)}`;
+	return `${meterBar(filled, cells, color)} ${theme.fg(color, `${Math.floor(clamped)}%`)}`;
 }
