@@ -28,6 +28,39 @@ describe("prompt settlement reducer (§16)", () => {
 		expect(resolvePromptSettlementOutcome("completed", undefined)).toBe("completed");
 	});
 
+	it.each([
+		["provider_attempt", "activeProviderAttempts"],
+		["tool", "activeTools"],
+		["shard", "activeShards"],
+		["child", "activeChildren"],
+		["continuation", "queuedContinuations"],
+	] as const)("holds settlement until all %s reservations are released", (kind, field) => {
+		let state = terminalState();
+		state = reducePromptSettlement(state, { kind, delta: 1 });
+		state = reducePromptSettlement(state, { kind, delta: 1 });
+		expect(state[field]).toBe(2);
+		expect(shouldEmitPromptSettled(state)).toBe(false);
+		state = reducePromptSettlement(state, { kind, delta: -1 });
+		expect(state[field]).toBe(1);
+		expect(shouldEmitPromptSettled(state)).toBe(false);
+		state = reducePromptSettlement(state, { kind, delta: -1 });
+		expect(state[field]).toBe(0);
+		expect(shouldEmitPromptSettled(state)).toBe(true);
+		state = reducePromptSettlement(state, { kind, delta: -1 });
+		expect(state[field]).toBe(0);
+	});
+
+	it("preserves a present termination kind and omits an absent one", () => {
+		const present = settlePromptIfReady(
+			terminalState({ terminal: { outcome: "failed", terminationKind: "provider" } }),
+			1000,
+		);
+		expect(present.event?.terminationKind).toBe("provider");
+		const absent = settlePromptIfReady(terminalState(), 1000);
+		expect(absent.event).not.toBeNull();
+		expect(Object.hasOwn(absent.event ?? {}, "terminationKind")).toBe(false);
+	});
+
 	it("emits only when every §16.4 condition holds", () => {
 		expect(shouldEmitPromptSettled(terminalState())).toBe(true);
 		expect(shouldEmitPromptSettled(terminalState({ activeProviderAttempts: 1 }))).toBe(false);

@@ -19,9 +19,11 @@ import { assertLoadoutAccess, type LoadoutAccessGuard } from "../loadout-access-
 import { detectSandboxBackend } from "../sandbox/backend.ts";
 import type { SandboxBackendStatus, SandboxPathResolver, SandboxPolicy } from "../sandbox/policy.ts";
 import { buildSandboxedSpawnRequest, type SandboxedSpawnRequest } from "../sandbox/spawn.ts";
-import { OutputAccumulator } from "./output-accumulator.ts";
+import { formatBashOutput } from "./bash-output.ts";
+import { OutputAccumulator, type OutputSnapshot } from "./output-accumulator.ts";
+import { filterRtkOutput, shouldFilterRtkOutput } from "./rtk-output.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
-import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult } from "./truncate.ts";
+import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, type TruncationResult } from "./truncate.ts";
 
 const BASH_TIMEOUT_DESCRIPTION = `Timeout in seconds. Defaults to ${DEFAULT_BUILTIN_TOOL_TIMEOUTS.bash / 1000}s and the command is terminated at that bound, so raise it for long work such as large downloads, builds, or training runs.`;
 
@@ -36,6 +38,7 @@ export type BashToolInput = Static<typeof bashSchema>;
 export interface BashToolDetails {
 	truncation?: TruncationResult;
 	fullOutputPath?: string;
+	outputFilter?: OutputSnapshot["outputFilter"];
 }
 
 /**
@@ -265,7 +268,7 @@ export function createBashToolDefinition(
 	return {
 		name: "bash",
 		label: "bash",
-		description: `Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.`,
+		description: `Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds. OMK_RTK_OUTPUT=1 enables bounded RTK filtering for recognized successful Vitest/TypeScript checks, with raw output retained.`,
 		promptSnippet: "Execute bash commands (ls, grep, find, etc.)",
 		promptGuidelines: exposeSessionEnvironment
 			? ["Inspect PI_* environment variables for current model and session details."]
@@ -345,34 +348,19 @@ export function createBashToolDefinition(
 				scheduleOutputUpdate();
 			};
 
-			const finishOutput = async () => {
+			const finishOutput = async (exitCode?: number | null) => {
 				output.finish();
 				clearUpdateTimer();
 				emitOutputUpdate();
-				const snapshot = output.snapshot({ persistIfTruncated: true });
+				let snapshot = output.snapshot({ persistIfTruncated: true });
+				const filter = exitCode !== undefined && shouldFilterRtkOutput(spawnContext.command, snapshot, exitCode);
+				if (filter) snapshot = output.snapshot({ persist: true });
 				await output.closeTempFile();
-				return snapshot;
+				return filter ? filterRtkOutput(spawnContext.command, snapshot, signal) : snapshot;
 			};
 
-			const formatOutput = (snapshot: Awaited<ReturnType<typeof finishOutput>>, emptyText = "(no output)") => {
-				const truncation = snapshot.truncation;
-				let text = snapshot.content || emptyText;
-				let details: BashToolDetails | undefined;
-				if (truncation.truncated) {
-					details = { truncation, fullOutputPath: snapshot.fullOutputPath };
-					const startLine = truncation.totalLines - truncation.outputLines + 1;
-					const endLine = truncation.totalLines;
-					if (truncation.lastLinePartial) {
-						const lastLineSize = formatSize(output.getLastLineBytes());
-						text += `\n\n[Showing last ${formatSize(truncation.outputBytes)} of line ${endLine} (line is ${lastLineSize}). Full output: ${snapshot.fullOutputPath}]`;
-					} else if (truncation.truncatedBy === "lines") {
-						text += `\n\n[Showing lines ${startLine}-${endLine} of ${truncation.totalLines}. Full output: ${snapshot.fullOutputPath}]`;
-					} else {
-						text += `\n\n[Showing lines ${startLine}-${endLine} of ${truncation.totalLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Full output: ${snapshot.fullOutputPath}]`;
-					}
-				}
-				return { text, details };
-			};
+			const formatOutput = (snapshot: Awaited<ReturnType<typeof finishOutput>>, emptyText = "(no output)") =>
+				formatBashOutput(snapshot, output.getLastLineBytes(), emptyText);
 
 			const appendStatus = (text: string, status: string) => `${text ? `${text}\n\n` : ""}${status}`;
 
@@ -399,7 +387,7 @@ export function createBashToolDefinition(
 					throw err;
 				}
 
-				const snapshot = await finishOutput();
+				const snapshot = await finishOutput(exitCode);
 				const { text: outputText, details } = formatOutput(snapshot);
 				if (exitCode !== 0 && exitCode !== null) {
 					throw new Error(appendStatus(outputText, `Command exited with code ${exitCode}`));

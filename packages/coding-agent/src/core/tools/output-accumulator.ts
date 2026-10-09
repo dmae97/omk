@@ -14,6 +14,7 @@ export interface OutputSnapshot {
 	content: string;
 	truncation: TruncationResult;
 	fullOutputPath?: string;
+	outputFilter?: { readonly name: "rtk"; readonly filter: "vitest" | "tsc"; readonly status: "applied" | "fallback" };
 }
 
 function defaultTempFilePath(prefix: string): string {
@@ -88,7 +89,7 @@ export class OutputAccumulator {
 		}
 	}
 
-	snapshot(options: { persistIfTruncated?: boolean } = {}): OutputSnapshot {
+	snapshot(options: { persistIfTruncated?: boolean; persist?: boolean } = {}): OutputSnapshot {
 		const tailTruncation = truncateTail(this.getSnapshotText(), {
 			maxLines: this.maxLines,
 			maxBytes: this.maxBytes,
@@ -107,7 +108,7 @@ export class OutputAccumulator {
 			maxBytes: this.maxBytes,
 		};
 
-		if (options.persistIfTruncated && truncation.truncated) {
+		if (options.persist || (options.persistIfTruncated && truncation.truncated)) {
 			this.ensureTempFile();
 		}
 
