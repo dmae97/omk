@@ -195,6 +195,7 @@ export interface Settings {
 	enableSkillCommands?: boolean; // default: true - register skills as /skill:name commands
 	terminal?: TerminalSettings;
 	images?: ImageSettings;
+	fileTools?: import("./tools/workspace-write-guard.ts").FileToolsSettings; // write/edit boundary; global-only (resolveWorkspaceWriteRoots)
 	enabledModels?: string[]; // Model patterns for cycling (same format as --models CLI flag)
 	doubleEscapeAction?: "fork" | "tree" | "none"; // Action for double-escape with empty editor (default: "tree")
 	treeFilterMode?: "default" | "no-tools" | "user-only" | "labeled-only" | "all"; // Default filter when opening /tree

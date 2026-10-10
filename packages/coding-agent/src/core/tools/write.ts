@@ -6,6 +6,7 @@ import type { ToolDefinition } from "../extensions/types.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
+import { assertWorkspaceWrite } from "./workspace-write-guard.ts";
 
 const writeSchema = Type.Object({
 	path: Type.String({ description: "Path to the file to write (relative or absolute)" }),
@@ -34,6 +35,12 @@ export interface WriteToolOptions {
 	/** Custom operations for file writing. Default: local filesystem */
 	operations?: WriteOperations;
 	canWritePath?: (absolutePath: string) => boolean;
+	/**
+	 * Directories the tool may write into. When set, a path that resolves outside
+	 * all of them (after `..` and symlinks) is refused. Unset keeps the old
+	 * unrestricted behaviour for SDK callers; agent sessions always set it.
+	 */
+	workspaceRoots?: readonly string[];
 }
 
 export function createWriteToolDefinition(
@@ -57,6 +64,7 @@ export function createWriteToolDefinition(
 			_ctx?,
 		) {
 			const absolutePath = resolveToCwd(path, cwd);
+			assertWorkspaceWrite(options?.workspaceRoots, "Write", path, absolutePath);
 			if (options?.canWritePath && !options.canWritePath(absolutePath)) {
 				throw new Error(`Write blocked by active loadout policy: ${path}`);
 			}

@@ -16,6 +16,7 @@ import {
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
+import { assertWorkspaceWrite } from "./workspace-write-guard.ts";
 
 type EditRenderState = {
 	callComponent?: unknown;
@@ -81,6 +82,7 @@ export interface EditToolOptions {
 	/** Custom operations for file editing. Default: local filesystem */
 	operations?: EditOperations;
 	canWritePath?: (absolutePath: string) => boolean;
+	workspaceRoots?: readonly string[];
 }
 
 function prepareEditArguments(input: unknown): EditToolInput {
@@ -139,6 +141,7 @@ export function createEditToolDefinition(
 		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, _ctx?) {
 			const { path, edits } = validateEditInput(input);
 			const absolutePath = resolveToCwd(path, cwd);
+			assertWorkspaceWrite(options?.workspaceRoots, "Edit", path, absolutePath);
 			if (options?.canWritePath && !options.canWritePath(absolutePath)) {
 				throw new Error(`Edit blocked by active loadout policy: ${path}`);
 			}
