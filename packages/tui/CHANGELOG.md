@@ -4,8 +4,13 @@
 
 ### Changed
 
-- Chat-scale TUI sessions no longer re-normalize and re-diff every transcript row each frame: `LineResetMemo` reuses prior reset output (and Kitty ids) when a row's raw text is unchanged, so the differential renderer stays on reference equality for the stable prefix. `applyLineResets` / kitty-id helpers moved to `line-reset-memo.ts` (shrinks `tui.ts`).
-- New `WindowedContainer` freezes leading **settled** children into a line buffer once the live tail exceeds a configurable line budget, stops at the first `isRenderSettled() === false` child, duck-type-releases caches (including a future Markdown `streamCache`), and thaws on width change, `invalidate()`, an unsettled frozen child, or a `getRenderGeneration()` bump (covers setText and message-object replacement). `releaseRenderCache` / `isRenderSettled` are exported.
+- Long transcripts no longer cost per-frame work proportional to their length. The new `WindowedContainer` freezes settled children above a live-line budget into bounded line segments and stops re-rendering them; a frozen child that changes is re-rendered alone and only its segment is rebuilt. On a 100k-line headless transcript a keypress frame drops from ~33 ms to ~3 ms mean, and a change to an old, off-screen message stays under 5 ms p95 (was 35–38 ms mean).
+- `LineResetMemo` (split out of `tui.ts`) reuses the previous frame's reset output for unchanged rows, including rows shifted by lines inserted or removed above. The differential renderer finds changed rows from both ends and `Container.render` bulk-copies child output.
+- `Text`, `Markdown`, `Box`, `Spacer` and `Container` report `getRenderGeneration()`, a stamp from `nextRenderGeneration()` that rises on every visible change (containers include their children). `Component` gains optional `getRenderGeneration()` / `isRenderSettled()`. `isRenderSettled`, `releaseRenderCache`, `renderGeneration` and `nextRenderGeneration` are exported.
+
+### Fixed
+
+- Freezing a `Markdown` no longer clears its stream cache by assigning `undefined`, which made the next render after a resize throw; `Markdown.releaseRenderCache()` resets it instead.
 
 ## [1.3.2] - 2026-10-10
 

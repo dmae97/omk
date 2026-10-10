@@ -96,6 +96,18 @@ Steady-state cost may grow with the live window and changed tail, not with N.
 
 **Pass**: Dedicated cases in `windowed-container.test.ts` for pending→complete, generation bump, and message-object swap; randomized suite includes late old-child mutation and swap.
 
+### AC6 — Off-screen change cost does not grow with history
+
+**Method**: same harness as AC1 (`packages/tui/test/windowing-bench.ts`). Each measured frame changes an early, frozen message: `early-same` keeps its line count, `early-grow` alternates between one and two extra lines (every row below shifts).
+
+**Pass**: p95 `doRender` < 5 ms at 25k and 100k lines; only the changed child and its segment are re-rendered (`getLastRenderStats()` reports 1 refreshed child / 1 refreshed segment — package test `refreshes only the changed segment`).
+
+### AC7 — Real chat components at 20k lines
+
+**Method**: `TUI_BENCH=1 vitest run test/chat-windowing-bench.test.ts` in `packages/coding-agent` (user / Markdown assistant / finished bash tool cards in `ChatContainer`, real `Editor`, 120×40 sink). keypress = `handleInput("x")` + synchronous `doRender` (key-to-screen without the 16 ms render throttle).
+
+**Pass**: frame p95 < 16 ms and key-to-screen p95 < 30 ms at 20k lines (UI/UX baseline on `main` @ `a7ea4b8`: 36 ms / 47 ms).
+
 ### AC4 — Gates
 
 From repo root, with `PATH` including Node 22 and `nice -n 19`:
@@ -117,10 +129,12 @@ From repo root, with `PATH` including Node 22 and `nice -n 19`:
 
 ## Design (chosen)
 
-1. **`WindowedContainer`** (`packages/tui`): extends `Container`; keeps `frozenLines` + `frozenChildCount` + per-frozen `getRenderGeneration` snapshots; `setLiveLineBudget(n)`; on `render(width)`, thaw if width changed, `invalidate()`, a frozen child is unsettled, or a frozen child’s generation moved; render only children from `frozenChildCount`; while live lines exceed the budget, peel leading **settled** children into `frozenLines` and duck-type-release their render caches — **stop at the first unsettled child** (`isRenderSettled?(): boolean`; missing hook ⇒ settled); return `frozenLines.concat(live)`.
+1. **`WindowedContainer`** (`packages/tui`): extends `Container`; settled children above the live-line budget freeze into **segments** of at most 512 lines (child refs, per-child line counts, per-child generation, concatenated lines). Settled runs on both sides of an unsettled child freeze; unsettled children always render live. Each frame: a frozen child whose `getRenderGeneration()` moved is re-rendered alone and only its segment's buffer is rebuilt; a frozen child that turns unsettled drops only its segment; width change, `invalidate()`, `clear()` and edits of `children` that bypass `addChild`/`removeChild` (identity check) thaw everything. Freezing releases render caches without counting as a change (`releaseRenderCache`; Markdown implements it to reset its stream cache).
+   - **Generation stamps** (`render-generation.ts`): `nextRenderGeneration()` is a process-wide monotonic counter. `Text`, `Markdown`, `Box`, `Spacer` and `Container` stamp it on every visible change; containers report the max over themselves and their children. Stamps never repeat, so remove-then-add cannot land on an old value and no object identity is consulted (spec 026 R2). Components that implement the hook themselves must take values from `nextRenderGeneration()`.
 2. **`ChatContainer`**: extend `WindowedContainer` instead of `Container`; keep dispose/clear; default live budget (~3×40 or `setLiveLineBudget` from tests).
 3. **`LineResetMemo`**: extract applyLineResets + kitty id scan to `line-reset-memo.ts`; reuse prior out/ids when `raw[i] === previous raw[i]` so frozen prefix refs stay reference-equal through reset and diff. Overlaps open PR #56’s memo file by intent; Box half of #56 stays out (non-goal).
-4. **Settle semantics (single source of truth)**: packages/tui only defines the duck-typed hooks. Whether an assistant/tool message is settled is **not** reimplemented in coding-agent ad hoc — a shared predicate from spec `026-message-settled` (Staff) will back `isRenderSettled` / generation bumps on `AssistantMessageComponent` / `ToolExecutionComponent` in a **follow-up** once that PR lands. Generation must bump on content mutate **and** on agent-loop message-object replacement (`updateContent` / `setMessage` style), not only on in-place field mutation.
+4. **Settle semantics** follow spec 026 R1 (event boundaries, never message data): `AssistantMessageComponent` created empty for `message_start` is unsettled until `markRenderSettled()`; `ToolExecutionComponent` is unsettled until its final (non-partial) result; `ChatContainer.handleAgentEvent` settles open assistant messages at assistant `message_end` and everything still open at `agent_end` (backstop; tools keep their rendering). `updateContent` swaps the snapshot reference and stamps a new generation on every call. interactive-mode forwards each event after handling it (one line).
+5. **Frame cost outside the tree**: `LineResetMemo` also reuses rows at the same distance from the end (a block inserted/removed above shifts every row below), `doRender` finds the first/last changed row from both ends, skips the Kitty scan when the previous frame had no images, and `Container.render` bulk-copies child arrays.
 
 ## Files to be touched
 
@@ -133,16 +147,24 @@ From repo root, with `PATH` including Node 22 and `nice -n 19`:
 | `packages/tui/src/index.ts` | Export `WindowedContainer`, `releaseRenderCache`, `isRenderSettled` |
 | `packages/tui/test/windowed-container.test.ts` | Equivalence + freeze/cache-release tests (incl. randomized if feasible) |
 | `packages/tui/test/line-reset-memo.test.ts` | Memo reuse / identity tests |
-| `packages/coding-agent/src/modes/interactive/components/chat-container.ts` | Extend `WindowedContainer` |
+| `packages/tui/src/render-generation.ts` | New: generation stamps, settle/generation/cache-release helpers |
+| `packages/tui/src/components/{text,markdown,box,spacer}.ts` | Stamp generation on visible changes; Markdown `releaseRenderCache()` |
+| `packages/tui/test/windowing-bench.ts` | AC1 / AC6 harness |
+| `packages/coding-agent/src/modes/interactive/components/chat-container.ts` | Extend `WindowedContainer`; event-boundary settling + `agent_end` backstop |
+| `packages/coding-agent/src/modes/interactive/components/{assistant-message,tool-execution}.ts` | `isRenderSettled` / generation per spec 026 |
+| `packages/coding-agent/src/modes/interactive/interactive-mode.ts` | One line: forward each event to `chatContainer.handleAgentEvent` (pure LOC stays under baseline) |
+| `packages/coding-agent/test/chat-transcript-windowing.test.ts` | Spec 026 AC1/AC2 + frozen tool-card equivalence |
+| `packages/coding-agent/test/chat-windowing-bench.test.ts` | AC7 harness (opt-in, `TUI_BENCH=1`) |
 | `packages/tui/CHANGELOG.md` | `[Unreleased]` entry |
 | `packages/coding-agent/CHANGELOG.md` | `[Unreleased]` entry |
 | Optional harness script under `packages/tui/test/` | AC1/AC2 measurement (not required to run in CI every time) |
 
-Do **not** touch: `interactive-mode.ts` (baseline), `box.ts` / `markdown.ts` reuse logic from sibling PRs, `/workspace/omk-r7`, membench trees, or other agents’ worktrees.
+Do **not** touch: `interactive-mode.ts` beyond the one forwarding line, `box.ts` / `markdown.ts` reuse logic from sibling PRs, `/workspace/omk-r7`, membench trees, or other agents’ worktrees.
 
 ## Risks / merge notes
 
 - PR #56 also adds `line-reset-memo.ts` and rewires `tui.ts`. This spec’s memo should stay API-compatible (`apply`, `kittyImageIds`, `SEGMENT_RESET`, `extractKittyImageIds`) so a later merge keeps one implementation.
 - **#65 MarkdownStreamCache**: `releaseRenderCache` already prefers an explicit `releaseRenderCache()` method and also clears a duck-typed `streamCache` field if present. When #65 merges, Markdown should implement `releaseRenderCache()` (or keep `streamCache` as an own field) so freeze drops the stream cache in one place — do not teach WindowedContainer about Markdown internals beyond that.
-- **Follow-up (not in this PR’s coding-agent wiring)**: wire `isRenderSettled` / `getRenderGeneration` on assistant + tool components **only** by importing Staff’s shared settled predicate (spec 026). Until then, plain children remain freeze-eligible (hook absent ⇒ settled); TUI tests cover the hooks with stand-ins.
+- Components that implement `Component` directly with private mutable state and no `getRenderGeneration()` (e.g. easter-egg animations) are treated as immutable once frozen. Everything built from tui primitives reports changes automatically.
+- A tool call restored from history without a result stays live (cheap, one child) until a run's `agent_end`.
 - Live-window expand/collapse and frozen generation bumps / message swaps are covered by AC3/AC5. Terminal scrollback rows already emitted for a prior view are not rewritten (existing TUI scrollback policy).
