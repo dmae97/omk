@@ -455,7 +455,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.3.1](.github/RELEASE_NOTES_v1.3.1.md)
+- [Release notes for v1.3.2](.github/RELEASE_NOTES_v1.3.2.md)
 - Latest public release: [v1.3.1](https://github.com/dmae97/omk/releases/tag/v1.3.1). The notes linked above describe the next release until it is published.
 
 ## Development
@@ -511,6 +511,35 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 > section above for the shipped guards and optional-corpus boundary.
 
 <!-- releases:start -->
+
+## Release v1.3.2
+
+### Added
+
+- `omk doctor [--json] [--online]` checks the runtime, the agent directory, credentials, the model a first session would pick, the bash sandbox, `fd` and `rg`, and network reachability, and prints the fix for this machine. The checks run as a dependency graph with deadlines, so a root cause is reported once. The exit code is 0 when no check fails, 1 when one does and 2 for a usage error. `doctor` connects to nothing without `--online`, writes neither the agent directory nor `models.json` snapshots, and does not refresh an expired OAuth token. Previously `omk doctor` was sent to the model as a prompt.
+- A first run with no model configured opens the `/login` selector before the first prompt instead of failing that prompt (`Esc` skips it). When a Claude Code or Codex CLI login already exists on the machine, it names the `omk provider adopt <provider>` command that reuses it.
+- Standalone installer: `curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh`, attached to GitHub Releases from this release on. It downloads `omk-<os>-<arch>.tar.gz` and checks it against the release's `SHA256SUMS`, which it always takes from GitHub over HTTPS, also when `--base-url` names a download mirror (`--trust-mirror` takes the mirror's file instead, with a warning). It needs `curl`, resolves `latest` once, installs into `~/.omk/versions/<version>` and points `~/.omk/bin/omk` at it with an atomic rename. It never replaces an installed version directory: reinstalling the same archive does nothing, and another build of an installed version gets its own directory. `--allow-unverified` applies only when the release has no `SHA256SUMS` (HTTP 404); any other checksum failure stops the install. See [quickstart](packages/coding-agent/docs/quickstart.md).
+- Release builds attach `SHA256SUMS` and a signed build-provenance attestation that covers the binaries and `install.sh` (`gh attestation verify omk-linux-x64.tar.gz -R dmae97/omk`). The attestation runs in its own job, the only one that can mint an OIDC token, and the GitHub Release waits for it.
+- Opt-in RTK output filter for the built-in `bash` tool. With `OMK_RTK_OUTPUT=1` and `rtk` from `OMK_RTK_PATH` or `PATH`, successful output of 1 KiB or more from plain `vitest run` and `tsc --noEmit`/`tsgo --noEmit` commands is summarized with `rtk pipe`. The full output is kept in an owner-only file named in the result, and any filter problem returns the original output. Off by default; RTK is not bundled. See [RTK output filter](packages/coding-agent/docs/rtk-and-mutation-testing.md).
+- `omk run explain ID [--state-dir DIR] [--json]` and SDK `RunCoordinator.explain(id)` explain a verified run from one ledger snapshot: DAG dependencies and unfinished ancestors, candidate and receipt bindings, and claim closure. They are read-only and start, retry or approve nothing. See [verified run](packages/coding-agent/docs/verified-run.md).
+
+### Changed
+
+- `omk --version` and `-v` print the version without loading the runtime. On the measurement VM the Node CLI went from 635 ms to 62 ms (1,498 to 19 loaded modules) and the standalone binary from 554 ms to 385 ms.
+- With no default model configured, credentials are ranked: stored login, then a provider API key, then ambient cloud credentials. With AWS credentials in the environment and `ANTHROPIC_API_KEY` set, a first session now uses Anthropic instead of Amazon Bedrock, whose first request failed with a token error. When only ambient credentials exist, OMK names the variable that selected the provider. A configured default model is unchanged.
+- The bash sandbox counts as available only when `bwrap` actually runs a command, not from static checks. Hosts that block unprivileged user namespaces, setuid `bwrap` with `user.max_user_namespaces=0` included, now get setup steps for that host (package, AppArmor or container) instead of a raw `bwrap` error at the first command. See [Bash sandbox setup](packages/coding-agent/docs/sandbox-setup.md).
+- `fd` and `rg` are downloaded after the first frame instead of before it. Behind a stalled network the first frame took about 11 s and now takes about 1.2 s; offline startup is unchanged. Startup, `grep` and `find` share one download per tool.
+
+### Fixed
+
+- Extension messages sent with `triggerTurn`, background-task notifications among them, are delivered once, after the work that kept the session busy and on the resulting context: automatic or manual (`/compact`) compaction, a branch summary, a retry's model switch, prompt preflight, the resource check before a run, or a tool that settles after its run ended. Previously they failed with `PromptExecutionBusyError` and no follow-up turn ran, or, after a manual `/compact`, were answered from the context before compaction without being stored.
+- Follow-up input (`sendUserMessage(text, { deliverAs: "followUp" })`, or a prompt with `streamingBehavior`) that arrives while another prompt is still in preflight, its pre-prompt compaction included, runs with that prompt's run; if that prompt fails, the input runs on its own once the session is idle. Registered extension commands run at once in that window. Other slash text is still refused while the session is busy.
+- Text typed in the interactive TUI during compaction is sent when compaction ends: as a follow-up of the run that resumes, or as a new prompt. Previously the send failed and the text went back to the editor queue.
+- Clearing queued messages (`Esc`) also clears turn input that was waiting for the session to become idle.
+- A prompt whose run ended while extension input handlers were still processing it now runs in a new run budget instead of being refused.
+- Model requests no longer keep about 1.1 KB per request alive for the life of the process. Abort signals are linked with `linkAbortSignals()` instead of Node 22's `AbortSignal.any()`, and `npm run check:abort-signal-any` keeps new `AbortSignal.any()` calls out of the source.
+
+Release notes live in [RELEASE_NOTES_v1.3.2.md](.github/RELEASE_NOTES_v1.3.2.md).
 
 ## Release v1.3.1
 
@@ -634,22 +663,6 @@ Release notes live in [RELEASE_NOTES_v1.3.1.md](.github/RELEASE_NOTES_v1.3.1.md)
 - Fireworks, Together and OpenCode Go no longer default to a Kimi K2.6 id that the 2026-09-30 catalog refresh dropped; model resolution fell back to the provider's first catalog entry. Fireworks and Together default to Kimi K3 (`accounts/fireworks/models/kimi-k3`, `moonshotai/Kimi-K3`), which keeps their transport contract. OpenCode Go defaults to `deepseek-v4.1-flash`: OMK has not verified the request contract of its Kimi K3 or K2.7 Code, and models.dev marks its K2.6 deprecated.
 
 Release notes live in [RELEASE_NOTES_v1.3.0.md](.github/RELEASE_NOTES_v1.3.0.md).
-
-## Release v1.2.4
-
-### New Features
-
-- `omk provider adopt [<id>] [--from <source>] [--dry-run] [--json] [--status]` copies an existing Codex CLI or Claude Code CLI login into OMK's credential store, so a subscription does not have to be signed in twice. Sources are read-only, `--from` narrows to the provider's own mapping, and no token material reaches output.
-
-### Fixed
-
-- A credential store that cannot be read is no longer treated as "no credential": request auth refuses to substitute stale environment or models.json keys, `agent-session` reports the store error instead of advising `/login`, and a transient lock contention is retried instead of deciding authentication for the whole process lifetime.
-- `omk provider doctor` accepts engine-registered API types (`devin-agent`, `cursor-agent`) instead of rejecting them as unsupported.
-- Compaction commits survive append-only extension state written while the summary is generated; only provably inert `custom` tails are rebased, and a `length` stop that produced no summary text fails instead of committing an empty summary. The compaction source-entry bound is 65,536.
-- `addOAuthAccount` merges imported accounts inside the storage lock (no lost update across concurrent sessions) and never overwrites a usable stored refresh token with an absent one.
-- A post-dispatch rejection that provably never spawned (a deadline crossing between the dispatch journal and the supervisor call) now journals the exit and settles the run instead of leaving the execution id open forever.
-
-Release notes live in [RELEASE_NOTES_v1.2.4.md](.github/RELEASE_NOTES_v1.2.4.md).
 
 <!-- releases:end -->
 
