@@ -3142,6 +3142,7 @@ export class InteractiveMode {
 	private subscribeToAgent(): void {
 		this.unsubscribe = this.session.subscribe(async (event) => {
 			await this.handleEvent(event);
+			this.chatContainer.handleAgentEvent(event);
 		});
 	}
 
