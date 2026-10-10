@@ -55,7 +55,7 @@ function readPrivateRecord(path: string): unknown {
 			(process.getuid && before.uid !== BigInt(process.getuid()))
 		)
 			throw new Error("unsafe memory record");
-		const bytes = Buffer.alloc(MAX_RECORD_BYTES + 1);
+		const bytes = Buffer.alloc(Number(before.size) + 1);
 		let length = 0;
 		while (length < bytes.length) {
 			const n = readSync(fd, bytes, length, bytes.length - length, null);

@@ -21,7 +21,10 @@ type ConfigureHttpDispatcher = (timeoutMs?: number) => void;
 let pendingTimeoutMs = DEFAULT_HTTP_IDLE_TIMEOUT_MS;
 let configureFn: ConfigureHttpDispatcher | undefined;
 let installPromise: Promise<void> | undefined;
-let fetchHookInstalled = false;
+/** The wrapper `installHttpDispatcherFetchHook` put on `globalThis.fetch`. */
+let hookFetch: typeof globalThis.fetch | undefined;
+/** The fetch paired with the installed dispatcher; the hook forwards to it. */
+let pairedFetch: typeof globalThis.fetch | undefined;
 
 function normalizeTimeoutMs(timeoutMs: number): number {
 	const normalized = parseHttpIdleTimeoutMs(timeoutMs);
@@ -46,12 +49,17 @@ export function scheduleHttpDispatcher(timeoutMs: number = DEFAULT_HTTP_IDLE_TIM
 /** Load undici and install the dispatcher once. Safe to call concurrently. */
 export function ensureHttpDispatcherInstalled(): Promise<void> {
 	installPromise ??= (async () => {
-		const { configureHttpDispatcher } = await import("./http-dispatcher.ts");
+		const { adoptGlobalFetch, configureHttpDispatcher, dispatcherFetch } = await import("./http-dispatcher.ts");
+		// The import runs after extensions load. Compare against omk's own hook,
+		// not whatever `globalThis.fetch` is now, so an extension's hook survives.
+		if (hookFetch) adoptGlobalFetch(hookFetch);
 		configureFn = configureHttpDispatcher;
 		configureHttpDispatcher(pendingTimeoutMs);
+		pairedFetch = dispatcherFetch;
 	})().catch((error: unknown) => {
 		installPromise = undefined;
 		configureFn = undefined;
+		pairedFetch = undefined;
 		throw error;
 	});
 	return installPromise;
@@ -59,22 +67,19 @@ export function ensureHttpDispatcherInstalled(): Promise<void> {
 
 /**
  * Wrap `globalThis.fetch` so the first call installs the dispatcher before any
- * request leaves. `undici.install()` may replace `fetch`; we then forward to
- * the replacement. One common choke point covers providers, OAuth, and tools.
+ * request leaves. One common choke point covers providers, OAuth, and tools.
+ * The wrapper then forwards to the fetch paired with the dispatcher, never to
+ * `globalThis.fetch`: an extension that wrapped this hook stays in front of it.
  */
 export function installHttpDispatcherFetchHook(): void {
-	if (fetchHookInstalled) {
+	if (hookFetch) {
 		return;
 	}
-	fetchHookInstalled = true;
 	const priorFetch = globalThis.fetch.bind(globalThis);
 	const wrapper: typeof globalThis.fetch = async (input, init) => {
 		await ensureHttpDispatcherInstalled();
-		const current = globalThis.fetch;
-		if (current !== wrapper) {
-			return current(input, init);
-		}
-		return priorFetch(input, init);
+		return (pairedFetch ?? priorFetch)(input, init);
 	};
+	hookFetch = wrapper;
 	globalThis.fetch = wrapper;
 }

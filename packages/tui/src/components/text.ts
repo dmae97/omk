@@ -23,6 +23,7 @@ export class Text implements Component {
 	}
 
 	setText(text: string): void {
+		if (text === this.text) return;
 		this.text = text;
 		this.cachedText = undefined;
 		this.cachedWidth = undefined;

@@ -79,11 +79,10 @@ export function selectMemoryContext(
 		throw new RangeError("memory.duplicate_identity");
 	const terms = memoryQueryTerms(query);
 	if (budget === 0 || terms.length === 0) return { messages: [], selected: 0 };
-	const remaining = records.map((record) => ({
-		record,
-		matches: memoryMatches(record, terms),
-		cost: Math.max(1, count(counter, JSON.stringify(evidence(record)), modelId)),
-	}));
+	const remaining = records
+		.map((record) => ({ record, matches: memoryMatches(record, terms) }))
+		.filter((item) => item.matches.size > 0)
+		.map((item) => ({ ...item, cost: Math.max(1, count(counter, JSON.stringify(evidence(item.record)), modelId)) }));
 	const selected: VerifiedMemoryRecord[] = [];
 	const seen = new Map<string, number>();
 	// This pair is synthetic and transient, never an execution receipt. Stable metadata

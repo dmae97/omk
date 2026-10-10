@@ -10,14 +10,14 @@
  * - State is held per-loaded-extension and reset on session_start.
  * - The widget is mounted via ctx.ui.setWidget with a factory that binds the
  *   latest state snapshot, so each update re-renders with current items.
- * - Headless / no-UI sessions still update state and return a summary; the
- *   setWidget call is wrapped so a missing UI never breaks the tool.
+ * - Headless / no-UI sessions (`ctx.hasUI === false`, e.g. `omk -p` workers)
+ *   still update state and return a summary, but skip the widget entirely so
+ *   the TUI component (and omk-tui) never loads on that path.
  * - Web/extension observations are never involved; this tool only carries the
  *   model's own plan text.
  */
 
 import { StringEnum, Type } from "omk-ai";
-import { TodoChecklistComponent } from "../../../modes/interactive/components/todo-checklist.ts";
 import { resetCurrentTodoState, setCurrentTodoState } from "../../todo-runtime-state.ts";
 import type { TodoState, TodoStatus } from "../../todo-state.ts";
 import { EMPTY_TODO_STATE, setTodoItems, summary } from "../../todo-state.ts";
@@ -63,12 +63,13 @@ export default function todoChecklist(omk: ExtensionAPI): void {
 			);
 			setCurrentTodoState(state);
 			const snapshot = state;
-			try {
+			// Only a UI session mounts the widget. With a UI present, a failed import
+			// or setWidget is a real bug, so it surfaces instead of being swallowed.
+			if (ctx.hasUI) {
+				const { TodoChecklistComponent } = await import("../../../modes/interactive/components/todo-checklist.ts");
 				ctx.ui.setWidget("omk-todo", () => new TodoChecklistComponent(() => snapshot), {
 					placement: "aboveEditor",
 				});
-			} catch {
-				// UI may be unavailable in headless mode; state still updates.
 			}
 			const s = summary(state);
 			return {

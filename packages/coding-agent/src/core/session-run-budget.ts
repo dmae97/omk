@@ -15,6 +15,8 @@ interface RunBudgetLifecycle {
 	readonly assertIdle: () => void;
 	readonly stop: (error: RunBudgetExceededError) => void;
 	readonly reject: (error: RunBudgetExceededError | RunBudgetPolicyError) => void;
+	/** Called once an execute() scope has fully closed. */
+	readonly idle?: () => void;
 }
 
 /** Installs one scoped stream boundary; restores it without overwriting a later owner. */
@@ -58,6 +60,10 @@ export class SessionRunBudget {
 	}
 	get remainingMs(): number | undefined {
 		return this.current?.remainingMs;
+	}
+	/** A prompt holds an execute() scope (preflight or run). */
+	get active(): boolean {
+		return this.executing;
 	}
 	snapshot(): (RunBudgetSnapshot & { readonly requestAdmission?: RequestAdmissionSnapshot }) | undefined {
 		const budget = (this.current ?? this.previous)?.snapshot();
@@ -149,6 +155,7 @@ export class SessionRunBudget {
 				this.executing = false;
 				this.executionCompletion = undefined;
 				finishExecution?.();
+				this.lifecycle.idle?.();
 			}
 		}
 	}

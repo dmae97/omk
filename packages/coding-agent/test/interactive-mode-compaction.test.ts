@@ -53,7 +53,7 @@ describe("InteractiveMode compaction events", () => {
 				summary: "summary",
 			}),
 		);
-		expect(fakeThis.flushCompactionQueue).toHaveBeenCalledWith({ willRetry: false });
+		expect(fakeThis.flushCompactionQueue).toHaveBeenCalledWith();
 	});
 
 	test("renders manual cancellation once as a status instead of an error", async () => {
@@ -94,7 +94,7 @@ describe("InteractiveMode compaction events", () => {
 		expect(fakeThis.showError).not.toHaveBeenCalled();
 	});
 
-	test("flushes queued follow-up and steering into the retry turn when willRetry is true", async () => {
+	test("flushes queued follow-up and steering through prompt() with their delivery mode", async () => {
 		const fakeThis = {
 			compactionQueuedMessages: [
 				{ text: "queued follow-up", mode: "followUp" },
@@ -119,8 +119,9 @@ describe("InteractiveMode compaction events", () => {
 		await flushCompactionQueue.call(fakeThis, { willRetry: true });
 
 		expect(fakeThis.compactionQueuedMessages).toEqual([]);
-		expect(fakeThis.session.followUp).toHaveBeenCalledWith("queued follow-up");
-		expect(fakeThis.session.steer).toHaveBeenCalledWith("queued steer");
-		expect(fakeThis.session.prompt).not.toHaveBeenCalled();
+		expect(fakeThis.session.prompt).toHaveBeenNthCalledWith(1, "queued follow-up", { streamingBehavior: "followUp" });
+		expect(fakeThis.session.prompt).toHaveBeenNthCalledWith(2, "queued steer", { streamingBehavior: "steer" });
+		expect(fakeThis.session.followUp).not.toHaveBeenCalled();
+		expect(fakeThis.session.steer).not.toHaveBeenCalled();
 	});
 });

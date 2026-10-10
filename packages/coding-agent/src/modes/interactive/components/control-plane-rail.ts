@@ -7,7 +7,7 @@ import {
 	type ControlPlaneViewModel,
 } from "../control-plane-view-model.ts";
 import { type ThemeColor, theme } from "../theme/theme.ts";
-import { boxTextLine, labelCell, semanticBoxTextLine, sidebarRule } from "./control-panel-box.ts";
+import { boxTextLine, labelCell, meterBar, semanticBoxTextLine, sidebarRule } from "./control-panel-box.ts";
 import { formatBytes, formatTokens } from "./footer.ts";
 
 /**
@@ -184,6 +184,5 @@ function contextMeter(context: ContextView): string {
 	const percent = context.percent;
 	const filled = percent === null ? 0 : Math.round((percent / 100) * CONTEXT_METER_CELLS);
 	const figure = percent === null ? "??%" : `${floorPercent(percent, 0)}%`;
-	const bar = `${theme.fg(color, "█".repeat(filled))}${theme.fg("borderMuted", "░".repeat(CONTEXT_METER_CELLS - filled))}`;
-	return `${bar} ${theme.fg(color, figure)}`;
+	return `${meterBar(filled, CONTEXT_METER_CELLS, color)} ${theme.fg(color, figure)}`;
 }

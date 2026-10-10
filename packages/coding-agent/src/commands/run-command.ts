@@ -1,6 +1,7 @@
 import type { VerifiedRunRuntime } from "../core/verified-run/session-port.ts";
 import { runAdaptOrchDoctorCli } from "./adaptorch-doctor-cli.ts";
 import { runDoctorProviderCli } from "./doctor-provider-cli.ts";
+import { runOnboardDoctorCli } from "./onboard-doctor-cli.ts";
 import { runProviderAdoptCli } from "./provider-adopt-cli.ts";
 import { runProviderSyncCli } from "./provider-sync-cli.ts";
 import { runResourceDoctorCli } from "./resource-doctor-cli.ts";
@@ -17,6 +18,7 @@ const COMMANDS: ReadonlyArray<(args: string[]) => CliOutcome | Promise<CliOutcom
 	runDoctorProviderCli,
 	runResourceDoctorCli,
 	runAdaptOrchDoctorCli,
+	runOnboardDoctorCli,
 	runStatsCli,
 	runSdkSessionCli,
 	runRouterFeedbackCli,

@@ -21,7 +21,7 @@ import { singleLineDisplayText } from "../../../utils/display-text.ts";
 import { readControlPlaneSignals } from "../control-plane-signals.ts";
 import { buildControlPlaneViewModel } from "../control-plane-view-model.ts";
 import { type ThemeColor, theme } from "../theme/theme.ts";
-import { boxBottom, boxTextLine, boxTop, sidebarRule } from "./control-panel-box.ts";
+import { boxBottom, boxTextLine, boxTop, meterBar, sidebarRule } from "./control-panel-box.ts";
 import { classifyMcpStability } from "./control-panel-runtime-status.ts";
 import {
 	formatBytes,
@@ -560,7 +560,7 @@ function usageMeter(label: string, window: SubscriptionUsageWindow, width: numbe
 	const cells = Math.max(4, Math.min(METER_MAX_CELLS, innerWidth - labelText.length - percentText.length - 1));
 	const filled = Math.round((percent / 100) * cells);
 	const color = usageColor(percent);
-	return `${theme.fg("muted", labelText)}${theme.fg(color, "█".repeat(filled))}${theme.fg("borderMuted", "░".repeat(cells - filled))} ${theme.fg(color, percentText)}`;
+	return `${theme.fg("muted", labelText)}${meterBar(filled, cells, color)} ${theme.fg(color, percentText)}`;
 }
 
 function usageColor(percent: number): ThemeColor {

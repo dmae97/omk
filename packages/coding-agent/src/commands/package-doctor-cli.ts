@@ -1,3 +1,4 @@
+import { isPackageDoctorCommand } from "../cli/package-commands.ts";
 import { APP_NAME, getAgentDir } from "../config.ts";
 import { inspectPackageCompatibility, type PackageDoctorResult } from "../core/package-doctor.ts";
 import { DefaultPackageManager, type PackageInspection, type ResolvedResource } from "../core/package-manager.ts";
@@ -71,7 +72,7 @@ export async function runPackageDoctorCli(
 	args: string[],
 	dependencies: PackageDoctorCliDependencies = {},
 ): Promise<PackageDoctorCliOutcome> {
-	if (args[0] !== "package" || args[1] !== "doctor") return { handled: false, exitCode: 0 };
+	if (!isPackageDoctorCommand(args)) return { handled: false, exitCode: 0 };
 	const writeLine = dependencies.writeLine ?? ((line: string) => process.stdout.write(`${line}\n`));
 	const rest = args.slice(2);
 	if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {

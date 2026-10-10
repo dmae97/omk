@@ -152,7 +152,7 @@ const TOGETHER_REASONING_ONLY_MODELS = new Set([
 	"MiniMaxAI/MiniMax-M2.7",
 ]);
 const TOGETHER_REASONING_EFFORT_MODELS = new Set(["openai/gpt-oss-20b", "openai/gpt-oss-120b"]);
-const TOGETHER_TOGGLE_REASONING_EFFORT_MODELS = new Set(["deepseek-ai/DeepSeek-V4-Pro"]);
+const TOGETHER_TOGGLE_REASONING_EFFORT_MODELS = new Set(["deepseek-ai/DeepSeek-V4-Pro", "deepseek-ai/DeepSeek-V4-Pro-0813"]);
 const TOGETHER_FIXED_REASONING_LEVEL_MAP = {
 	off: null,
 	minimal: null,
@@ -1814,7 +1814,10 @@ async function generateModels() {
 	// Combine models (models.dev has priority)
 	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels, ...zylooModels].filter(
 		(model) =>
-			!((model.provider === "opencode" || model.provider === "opencode-go") && model.id === "gpt-5.3-codex-spark"),
+			!((model.provider === "opencode" || model.provider === "opencode-go") && model.id === "gpt-5.3-codex-spark") &&
+			// Native 5.5 needs new adaptive/off/replay handling; normalized OpenRouter routes keep their own contract.
+			!((model.api === "anthropic-messages" || model.api === "bedrock-converse-stream") &&
+				/(?:^|[/.])claude-(?:sonnet|haiku)-5[.-]5(?=[.@:-]|$)/.test(model.id)),
 	);
 
 	// Fix incorrect cache pricing for Claude Opus 4.5 from models.dev

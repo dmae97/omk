@@ -15,6 +15,8 @@ import { describePromptImageAttachment, type PromptImageAttachment } from "../..
 import { createAttachmentStrip } from "./components/attachment-strip.ts";
 import { ChatContainer } from "./components/chat-container.ts";
 import { createSessionMetadataLoaders } from "./components/session-selector-loaders.ts";
+import { planFirstRun } from "./first-run.ts";
+import { onThemedOutputStale, scheduleInteractiveStartupDeps } from "./startup-deps.ts";
 
 export { formatResumeCommand } from "./interactive-resume-command.ts";
 
@@ -130,7 +132,6 @@ import { openBrowser } from "../../utils/open-browser.ts";
 import { getCwdRelativePath } from "../../utils/paths.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { terminalMarkdownLinks } from "../../utils/terminal-links.ts";
-import { ensureTool } from "../../utils/tools-manager.ts";
 import { checkForNewOmkVersion, type LatestOmkRelease } from "../../utils/version-check.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
@@ -175,7 +176,6 @@ import {
 	getMarkdownTheme,
 	getThemeByName,
 	initTheme,
-	onThemeChange,
 	setRegisteredThemes,
 	setTheme,
 	setThemeInstance,
@@ -275,7 +275,6 @@ export class InteractiveMode {
 	private editorContainer: Container;
 	private footer: FooterComponent;
 	private footerDataProvider: FooterDataProvider;
-	private metricsTimer: ReturnType<typeof setInterval> | null = null;
 	// Stored so the same manager can be injected into custom editors, selectors, and extension UI.
 	private keybindings: KeybindingsManager;
 	private version: string;
@@ -329,6 +328,8 @@ export class InteractiveMode {
 
 	// Agent subscription unsubscribe function
 	private unsubscribe?: () => void;
+	/** Clears onThemedOutputStale (theme + highlight.js ready) registrations. */
+	private unsubscribeThemedOutputStale?: () => void;
 	private signalCleanupHandlers: Array<() => void> = [];
 
 	private isBashMode = false;
@@ -728,10 +729,11 @@ export class InteractiveMode {
 		// Load changelog (only show new entries, skip for resumed sessions)
 		this.changelogMarkdown = this.getChangelogForDisplay();
 
-		// Ensure fd and rg are available (downloads if missing, adds to PATH via getBinDir)
-		// Both are needed: fd for autocomplete, rg for grep tool and bash commands
-		const [fdPath] = await Promise.all([ensureTool("fd"), ensureTool("rg")]);
-		this.fdPath = fdPath;
+		// Resolve fd/rg without blocking the first render; a late fd rebuilds fd-backed autocomplete.
+		void scheduleInteractiveStartupDeps((fdPath) => {
+			this.fdPath = fdPath;
+			if (this.isInitialized) this.setupAutocompleteProvider();
+		});
 
 		if (this.session.scopedModels.length > 0 && (this.options.verbose || !this.settingsManager.getQuietStartup())) {
 			const modelList = this.session.scopedModels
@@ -886,8 +888,8 @@ export class InteractiveMode {
 		// Render initial messages AFTER showing loaded resources
 		this.renderInitialMessages();
 
-		// Set up theme file watcher
-		onThemeChange(() => {
+		// Theme change or a late highlight.js load: drop cached themed output and re-render
+		this.unsubscribeThemedOutputStale = onThemedOutputStale(() => {
 			this.ui.invalidate();
 			this.updateEditorBorderColor();
 			this.ui.requestRender();
@@ -898,12 +900,8 @@ export class InteractiveMode {
 			this.ui.requestRender();
 		});
 
-		// Periodically refresh footer metrics (CPU / memory).
-		this.metricsTimer = setInterval(() => {
-			this.footer.invalidate();
-			this.ui.requestRender();
-		}, 2000);
-		this.metricsTimer.unref();
+		// Refresh footer CPU/MEM every 2s; the footer runs the interval only while metrics are shown.
+		this.footer.setMetricsTickHandler(() => this.ui.requestRender());
 
 		// Initialize available provider count for footer display
 		await this.updateAvailableProviderCount();
@@ -970,6 +968,9 @@ export class InteractiveMode {
 		}
 
 		void this.maybeWarnAboutAnthropicSubscriptionAuth();
+		const firstRun = planFirstRun({ session: this.session, settings: this.settingsManager, initialMessage });
+		for (const notice of firstRun.notices) this.showWarning(notice);
+		if (firstRun.openLogin) this.showLoginAuthTypeSelector();
 
 		// Process initial messages
 		if (initialMessage) {
@@ -1838,7 +1839,7 @@ export class InteractiveMode {
 						this.editor.setText(result.editorText);
 					}
 					this.showStatus("Navigated to selected point");
-					void this.flushCompactionQueue({ willRetry: false });
+					void this.flushCompactionQueue();
 					return { cancelled: false };
 				},
 				switchSession: async (sessionPath, options) => {
@@ -3430,7 +3431,8 @@ export class InteractiveMode {
 						this.chatContainer.addChild(new Text(theme.fg("error", event.errorMessage), 1, 0));
 					}
 				}
-				void this.flushCompactionQueue({ willRetry: event.willRetry });
+				// After this call stack: a manual compaction clears its controller only after compaction_end returns.
+				queueMicrotask(() => void this.flushCompactionQueue());
 				this.ui.requestRender();
 				break;
 			}
@@ -4382,7 +4384,9 @@ export class InteractiveMode {
 		return !!extensionRunner.getCommand(commandName);
 	}
 
-	private async flushCompactionQueue(options?: { willRetry?: boolean }): Promise<void> {
+	/** Sends text queued during compaction through session.prompt(): it queues for a run that will resume, defers for
+	 * a prompt still in preflight, or starts a run when the session is idle. */
+	private async flushCompactionQueue(): Promise<void> {
 		if (this.compactionQueuedMessages.length === 0) {
 			return;
 		}
@@ -4403,21 +4407,6 @@ export class InteractiveMode {
 		};
 
 		try {
-			if (options?.willRetry) {
-				// When retry is pending, queue messages for the retry turn
-				for (const message of queuedMessages) {
-					if (this.isExtensionCommand(message.text)) {
-						await this.session.prompt(message.text);
-					} else if (message.mode === "followUp") {
-						await this.session.followUp(message.text);
-					} else {
-						await this.session.steer(message.text);
-					}
-				}
-				this.updatePendingMessagesDisplay();
-				return;
-			}
-
 			// Find first non-extension-command message to use as prompt
 			const firstPromptIndex = queuedMessages.findIndex((message) => !this.isExtensionCommand(message.text));
 			if (firstPromptIndex === -1) {
@@ -4437,20 +4426,15 @@ export class InteractiveMode {
 				await this.session.prompt(message.text);
 			}
 
-			// Send first prompt (starts streaming)
-			const promptPromise = this.session.prompt(firstPrompt.text).catch((error) => {
-				restoreQueue(error);
-			});
+			// Send first prompt: it starts a run, or queues for a run that still owns the session after compaction
+			const promptPromise = this.session
+				.prompt(firstPrompt.text, { streamingBehavior: firstPrompt.mode })
+				.catch(restoreQueue);
 
-			// Queue remaining messages
+			// Queue remaining messages on the same path as the first, so they keep their order behind it
 			for (const message of rest) {
-				if (this.isExtensionCommand(message.text)) {
-					await this.session.prompt(message.text);
-				} else if (message.mode === "followUp") {
-					await this.session.followUp(message.text);
-				} else {
-					await this.session.steer(message.text);
-				}
+				const queued = this.isExtensionCommand(message.text) ? undefined : { streamingBehavior: message.mode };
+				await this.session.prompt(message.text, queued);
 			}
 			this.updatePendingMessagesDisplay();
 			void promptPromise;
@@ -5088,7 +5072,7 @@ export class InteractiveMode {
 							this.editor.setText(result.editorText);
 						}
 						this.showStatus("Navigated to selected point");
-						void this.flushCompactionQueue({ willRetry: false });
+						void this.flushCompactionQueue();
 					} catch (error) {
 						this.showError(error instanceof Error ? error.message : String(error));
 					} finally {
@@ -6091,6 +6075,8 @@ export class InteractiveMode {
 		}
 		info += `${theme.fg("dim", "File:")} ${stats.sessionFile ?? "In-memory"}\n`;
 		info += `${theme.fg("dim", "ID:")} ${stats.sessionId}\n\n`;
+		const memory = this.session.memoryStatus;
+		info += `${theme.fg("dim", "Memory:")} ${memory.state} eligible=${memory.eligible} omitted=${memory.omitted}\n\n`;
 		info += `${theme.bold("Messages")}\n`;
 		info += `${theme.fg("dim", "User:")} ${stats.userMessages}\n`;
 		info += `${theme.fg("dim", "Assistant:")} ${stats.assistantMessages}\n`;
@@ -6509,10 +6495,7 @@ export class InteractiveMode {
 		for (const component of [this.chatContainer, this.builtInHeader, this.customHeader]) disposeComponent(component);
 		this.footer.dispose();
 		this.footerDataProvider.dispose();
-		if (this.metricsTimer) {
-			clearInterval(this.metricsTimer);
-			this.metricsTimer = null;
-		}
+		this.unsubscribeThemedOutputStale?.();
 		if (this.unsubscribe) {
 			this.unsubscribe();
 		}
