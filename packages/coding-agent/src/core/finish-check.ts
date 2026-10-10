@@ -91,6 +91,17 @@ export interface FinishCheckDecisionInput {
 	readonly elapsedFraction: number | undefined;
 }
 
+/**
+ * The discipline text is written for unattended benchmark runs: it puts system
+ * changes such as editing /etc or installing packages in scope. Like the check
+ * turn, it is only added to headless sessions unless the mode is `always`, so a
+ * session on the user's own machine never gets it by default.
+ */
+export function shouldAddFinishDiscipline(mode: FinishCheckMode, hasUI: boolean): boolean {
+	if (mode === "off") return false;
+	return mode === "always" || !hasUI;
+}
+
 /** Whether the settled run should get one verification turn. */
 export function shouldRunFinishCheck(input: FinishCheckDecisionInput): boolean {
 	if (input.mode === "off") return false;

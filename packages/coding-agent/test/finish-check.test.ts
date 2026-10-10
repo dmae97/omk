@@ -7,6 +7,7 @@ import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import finishCheck from "../src/core/extensions/builtin/finish-check.ts";
 import { HARNESS_FACTORIES } from "../src/core/extensions/builtin/harness-factories.ts";
+import type { ExtensionUIContext } from "../src/core/extensions/types.ts";
 import {
 	FINISH_CHECK_MAX_TOOL_CALLS,
 	FINISH_CHECK_MESSAGE,
@@ -16,6 +17,7 @@ import {
 	isWorkspaceMutatingTool,
 	resolveFinishCheckMode,
 	resolveTimeBudgetMs,
+	shouldAddFinishDiscipline,
 	shouldRunFinishCheck,
 } from "../src/core/finish-check.ts";
 import {
@@ -77,6 +79,14 @@ describe("finish-check policy", () => {
 		expect(shouldRunFinishCheck({ ...base, aborted: true })).toBe(false);
 		expect(shouldRunFinishCheck({ ...base, elapsedFraction: 0.5 })).toBe(true);
 		expect(shouldRunFinishCheck({ ...base, elapsedFraction: 0.95 })).toBe(false);
+	});
+
+	it("adds the discipline prompt only to headless sessions unless the mode is always", () => {
+		expect(shouldAddFinishDiscipline("headless", false)).toBe(true);
+		expect(shouldAddFinishDiscipline("headless", true)).toBe(false);
+		expect(shouldAddFinishDiscipline("always", true)).toBe(true);
+		expect(shouldAddFinishDiscipline("always", false)).toBe(true);
+		expect(shouldAddFinishDiscipline("off", false)).toBe(false);
 	});
 
 	it("names scope, early save, edge cases and environment in the prompt block", () => {
@@ -158,6 +168,25 @@ describe("finish-check extension in a headless session", () => {
 		expect(harness.faux.state.callCount).toBe(3);
 		expect(verifyTurnUsers.at(-1)).toBe(FINISH_CHECK_MESSAGE);
 		expect(harness.session.isStreaming).toBe(false);
+	});
+
+	it.each([
+		{ env: {}, expected: false },
+		{ env: { OMK_FINISH_CHECK: "always" }, expected: true },
+	])("keeps benchmark discipline out of sessions with a UI (env $env)", async ({ env, expected }) => {
+		let systemPrompt = "";
+		const harness = await createHarness({ extensionFactories: [(omk) => finishCheck(omk, { env })] });
+		harnesses.push(harness);
+		harness.session.extensionRunner.setUIContext({} as ExtensionUIContext, "tui");
+		harness.setResponses([
+			(context) => {
+				systemPrompt = context.systemPrompt ?? "";
+				return fauxAssistantMessage("just an answer");
+			},
+		]);
+		await harness.session.prompt("what is 2+2?");
+		expect(systemPrompt.includes("<finish_discipline>")).toBe(expected);
+		expect(systemPrompt.includes("editing /etc")).toBe(expected);
 	});
 
 	it("skips the verification turn when nothing changed", async () => {
