@@ -21,6 +21,13 @@ describe("subagentWorkerEnv", () => {
 		expect(subagentWorkerEnv({ OMK_FINISH_CHECK_WORKERS: "1" }).OMK_FINISH_CHECK).toBe("1");
 	});
 
+	it("passes OMK_RUN_LOG_DIR down and marks the worker's log lines (spec 042)", () => {
+		const env = subagentWorkerEnv({ OMK_RUN_LOG_DIR: "/logs/run-1" });
+		expect(env.OMK_RUN_LOG_DIR).toBe("/logs/run-1");
+		expect(env.OMK_RUN_LOG_ROLE).toBe("worker");
+		expect(subagentWorkerEnv({ PATH: "/bin" }).OMK_RUN_LOG_ROLE).toBeUndefined();
+	});
+
 	it("does not modify the parent environment", () => {
 		const parent = { OMK_TIME_BUDGET_SEC: "900" };
 		subagentWorkerEnv(parent);
