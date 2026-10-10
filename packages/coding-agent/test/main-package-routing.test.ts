@@ -3,10 +3,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Spec 024: main() routes package words with cli/package-commands.ts and only then
 // imports package-manager-cli.ts. These tests go through main() itself, so a static
 // import or a routing change in main.ts fails here, not only in the word list.
-const loaded = { packageManagerCli: 0, packageArgs: [] as string[][], configArgs: [] as string[][] };
+const loaded = {
+	packageManagerCli: 0,
+	packageDoctorCli: 0,
+	packageArgs: [] as string[][],
+	configArgs: [] as string[][],
+};
 
 // vi.doMock after vi.resetModules() so every test sees a fresh module graph and
-// the factory runs once per load of package-manager-cli.ts.
+// each factory runs once per load of its module.
+function mockPackageDoctorCli(): void {
+	// The real doctor runs, so `package doctor` keeps its usage exit code.
+	vi.doMock("../src/commands/package-doctor-cli.ts", async (importOriginal) => {
+		loaded.packageDoctorCli += 1;
+		return await importOriginal();
+	});
+}
+
 function mockPackageManagerCli(): void {
 	vi.doMock("../src/package-manager-cli.ts", () => {
 		loaded.packageManagerCli += 1;
@@ -29,7 +42,9 @@ describe("main() package command routing", () => {
 	beforeEach(() => {
 		vi.resetModules();
 		mockPackageManagerCli();
+		mockPackageDoctorCli();
 		loaded.packageManagerCli = 0;
+		loaded.packageDoctorCli = 0;
 		loaded.packageArgs = [];
 		loaded.configArgs = [];
 		originalExitCode = process.exitCode;
@@ -38,6 +53,7 @@ describe("main() package command routing", () => {
 
 	afterEach(() => {
 		vi.doUnmock("../src/package-manager-cli.ts");
+		vi.doUnmock("../src/commands/package-doctor-cli.ts");
 		process.exitCode = originalExitCode;
 	});
 
@@ -46,14 +62,16 @@ describe("main() package command routing", () => {
 		await main(args);
 	}
 
-	it("does not load package-manager-cli when main.ts is imported", async () => {
+	it("loads neither package CLI module when main.ts is imported", async () => {
 		await import("../src/main.ts");
 		expect(loaded.packageManagerCli).toBe(0);
+		expect(loaded.packageDoctorCli).toBe(0);
 	});
 
-	it("does not load package-manager-cli for a command main() handles before it", async () => {
+	it("loads only package-doctor-cli for package doctor", async () => {
 		await runMain(["package", "doctor"]);
 		expect(process.exitCode).toBe(2);
+		expect(loaded.packageDoctorCli).toBe(1);
 		expect(loaded.packageManagerCli).toBe(0);
 	});
 
@@ -63,6 +81,7 @@ describe("main() package command routing", () => {
 		expect(loaded.packageManagerCli).toBe(1);
 		expect(loaded.packageArgs).toEqual([args]);
 		expect(loaded.configArgs).toEqual([]);
+		expect(loaded.packageDoctorCli).toBe(0);
 	});
 
 	it("hands config to package-manager-cli's config handler", async () => {

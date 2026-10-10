@@ -15,11 +15,10 @@ import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
 import { attachSessionTransports } from "./cli/mcp-attach.ts";
 import { loadModelContractOrExit } from "./cli/model-contract.ts";
-import { isPackageCliCommand } from "./cli/package-commands.ts";
+import { isPackageCliCommand, isPackageDoctorCommand } from "./cli/package-commands.ts";
 import { isExplicitExtensionDiagnostic, resolveCliPaths } from "./cli/resource-paths.ts";
 import { handleCodexBarQuotaCommand } from "./codexbar-cli.ts";
 import { runInitCli } from "./commands/init-cli.ts";
-import { runPackageDoctorCli } from "./commands/package-doctor-cli.ts";
 import { runCommand } from "./commands/run-command.ts";
 import { ENV_SESSION_DIR, expandTildePath, getAgentDir, getPackageDir, VERSION } from "./config.ts";
 import { type CreateAgentSessionRuntimeFactory, createAgentSessionRuntime } from "./core/agent-session-runtime.ts";
@@ -519,9 +518,9 @@ export async function main(args: string[], options?: MainOptions) {
 		cleanupWindowsSelfUpdateQuarantine(getPackageDir());
 	}
 
-	const packageDoctor = await runPackageDoctorCli(args);
-	if (packageDoctor.handled) {
-		process.exitCode = packageDoctor.exitCode;
+	if (isPackageDoctorCommand(args)) {
+		const { runPackageDoctorCli } = await import("./commands/package-doctor-cli.ts");
+		process.exitCode = (await runPackageDoctorCli(args)).exitCode;
 		return;
 	}
 
