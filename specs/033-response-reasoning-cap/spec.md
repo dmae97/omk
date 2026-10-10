@@ -31,7 +31,7 @@ description: "Cap reasoning volume and wall time per model response; on overrun,
 
 ## Design
 
-A `StreamFn` wrapper, `createResponseReasoningCapStreamFn(inner, config)`, in `packages/coding-agent/src/core/response-reasoning-cap.ts`, installed around `createSdkProviderStream` in `core/sdk.ts`. No change to `packages/ai` or `packages/agent`.
+A `StreamFn` wrapper, `createResponseReasoningCapStreamFn(inner, config)`, in `packages/coding-agent/src/core/response-reasoning-cap.ts`, applied inside `createSdkProviderStream` (`core/sdk-provider-stream.ts`), which builds the main agent's `streamFn`. No change to `packages/ai` or `packages/agent`.
 
 1. **Activation.** Off unless `OMK_RESPONSE_REASONING_CAP=1`. When off, the wrapper is not installed at all.
 2. **Caps (per response attempt).**
@@ -96,5 +96,5 @@ A `StreamFn` wrapper, `createResponseReasoningCapStreamFn(inner, config)`, in `p
 
 - `specs/033-response-reasoning-cap/spec.md`: this spec (first commit)
 - `packages/coding-agent/src/core/response-reasoning-cap.ts`: config resolver and `StreamFn` wrapper
-- `packages/coding-agent/src/core/sdk.ts`: install the wrapper around `createSdkProviderStream`
+- `packages/coding-agent/src/core/sdk-provider-stream.ts`: `createSdkProviderStream` returns the wrapped stream function (keeps `sdk.ts` under its module-size baseline)
 - `packages/coding-agent/test/response-reasoning-cap.test.ts`: acceptance cases above
