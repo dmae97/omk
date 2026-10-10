@@ -10,6 +10,7 @@ import {
 	extractRequirements,
 	FINISH_CHECK_MAX_CHECKLIST_TOOL_CALLS,
 	finishCheckToolCap,
+	isNumericRequirement,
 	parseFinishCheckLedger,
 } from "../src/core/finish-check-requirements.ts";
 
@@ -47,6 +48,35 @@ describe("finish-check requirement extraction", () => {
 			"You image is in `/app/isos/win311.img`.",
 		]);
 		expect(extractRequirements("Your warrior must win 33% of battles against snake.red.")).toHaveLength(1);
+	});
+
+	// Review M1: a digit in a path or version next to an unrelated bound word made the item numeric and cost a measure turn.
+	it("counts a sentence as numeric only when a bound word sits next to a number", () => {
+		for (const sentence of [
+			"Save the file under /app/out1.txt",
+			"Follow the style guide above all else; use Python 3.11",
+			"Place results within step2/report.md",
+			"Install version 2.4.1 and keep it below the other packages.",
+		]) {
+			expect(isNumericRequirement(sentence), sentence).toBe(false);
+		}
+		for (const sentence of [
+			"The error must be at most 0.1.",
+			"Have a melting temperature between 58 and 72 degrees celsius.",
+			"Your warrior must achieve at least a 75% win rate against stone.red.",
+			"The length of re.json must be under 100,000 pairs.",
+			"Keep a minimum of 3 replicas.",
+			"Return 5 or more results.",
+			"Latency must be <= 200 ms.",
+			"Your warrior must win 33% of battles against snake.red.",
+			"The results must exactly match the Python baseline (within a `1e-10` tolerance).",
+			"Tune it so it takes 60% of the original time or less to simulate the scene.",
+			"The same full physics state should be reached within atol=1e-5 without NaN or Inf.",
+		]) {
+			expect(isNumericRequirement(sentence), sentence).toBe(true);
+		}
+		expect(extractRequirements("Save the file under /app/out1.txt")).toEqual(["Save the file under /app/out1.txt"]);
+		expect(extractRequirements("Follow the style guide above all else; use Python 3.11")).toEqual([]);
 	});
 
 	it("keeps relative files only when the sentence asks to produce them", () => {

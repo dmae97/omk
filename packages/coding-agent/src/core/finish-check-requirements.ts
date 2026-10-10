@@ -9,10 +9,15 @@ const MAX_REQUIREMENT_CHARS = 220;
 // Numeric sentences often list several limits (corewars: 75% for three opponents, 33% for two); 220 cut the last one off.
 const MAX_NUMERIC_REQUIREMENT_CHARS = 400;
 
-// Words that bound a number: "at least 0.62", "between 15 and 45", "no more than 150MB".
-const BOUND_WORDS =
-	/\b(?:at least|at most|no (?:more|less|fewer) than|(?:less|more|fewer|greater|smaller|larger|higher|lower) than|between|within|minimum|maximum|exactly|up to|under|below|above|exceeds?|or (?:more|less|fewer|better|higher|lower))\b/i;
-const NUMBER = /\d/;
+// A bound word right before a number: "at least 0.62", "between 15 and 45", "no more than 150MB", "at least a 75%".
+// The number must follow the word; a digit elsewhere (a path, a version) does not make a limit (review M1).
+const BOUND_BEFORE_NUMBER =
+	/\b(?:at least|at most|no (?:more|less|fewer) than|(?:less|more|fewer|greater|smaller|larger|higher|lower) than|between|within|minimum|maximum|exactly|up to|under|below|above|exceeds?)\s+(?:(?:a|an|of|the)\s+)?(?:[\w.]+\s*[=:]\s*)?[`'"]?[-−$£€]?\d/i;
+// "5 or more", "33% or better", "60% of the original time or less".
+const NUMBER_BEFORE_BOUND = /\d[\d.,]*\s*%?(?:\s+[a-z]+){0,5}\s+or (?:more|less|fewer|better|higher|lower)\b/i;
+// Paths, file names and version strings carry digits that are not limits.
+const NOT_A_LIMIT =
+	/(?:\S*\/\S*|\S+\.(?:json|csv|txt|py|md|bin|pt|so|c|js|ts|sh|toml|ya?ml|out|log|scm|png|ppm|html|red|img)\b|\bv?\d+(?:\.\d+){2,}\b|\bv\d+(?:\.\d+)*\b|\b(?:python|node|ruby|go|java|gcc|version)\s+\d+(?:\.\d+)+)/gi;
 const COMPARATOR = /(?:[<>]=?|[≤≥])\s*-?\d/;
 // A number with a unit or percentage, counted only when the sentence also says it is required.
 const UNIT_NUMBER =
@@ -50,9 +55,10 @@ const OUTPUT_WORDS = /\b(?:save[sd]?|write|writes|written|create|output|produce|
 
 /** 1 = bounds a number, 2 = names a path or file it asks for, 3 = names a path; undefined = not a requirement. */
 function requirementTier(sentence: string): 1 | 2 | 3 | undefined {
-	if (BOUND_WORDS.test(sentence) && NUMBER.test(sentence)) return 1;
-	if (COMPARATOR.test(sentence)) return 1;
-	if (UNIT_NUMBER.test(sentence) && REQUIRED.test(sentence)) return 1;
+	const prose = sentence.replace(NOT_A_LIMIT, " ");
+	if (BOUND_BEFORE_NUMBER.test(prose) || NUMBER_BEFORE_BOUND.test(prose)) return 1;
+	if (COMPARATOR.test(prose)) return 1;
+	if (UNIT_NUMBER.test(prose) && REQUIRED.test(prose)) return 1;
 	if (!ABSOLUTE_PATH.test(sentence))
 		return RELATIVE_FILE.test(sentence) && PRODUCE_WORDS.test(sentence) ? 2 : undefined;
 	return REQUIRED.test(sentence) || OUTPUT_WORDS.test(sentence) ? 2 : 3;
