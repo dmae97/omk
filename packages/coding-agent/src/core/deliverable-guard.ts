@@ -5,8 +5,8 @@
  */
 import { isAbsolute, resolve } from "node:path";
 import type { SizeLimit } from "./fast-check.ts";
-import { resolveTimeBudgetMs } from "./finish-check.ts";
 import { PRODUCE_WORDS, splitSentences } from "./finish-check-requirements.ts";
+import { resolveTimeBudgetMs } from "./remaining-budget.ts";
 
 /** Past this fraction of the budget a missing deliverable gets one steer. */
 export const DELIVERABLE_WATCHDOG_FRACTION = 0.4;
