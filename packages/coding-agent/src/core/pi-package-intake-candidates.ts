@@ -14,7 +14,6 @@ export type PiPackageLane =
 	| "code-search"
 	| "observability"
 	| "actor"
-	| "interactive-ui"
 	| "side-channel"
 	| "review";
 
@@ -171,21 +170,6 @@ export const P1_PI_PACKAGE_PORT_CANDIDATES: readonly PiPackagePortCandidate[] = 
 			// OMK already has the subagent tool + AdaptOrch WPL for orchestration;
 			// reference-only pattern comparison for a local actor-kernel model.
 			policyOverlay: { declaredUse: "workflow-reference", activateAlongsideScheduler: false },
-		},
-	},
-	{
-		id: "pi-ask-user",
-		lane: "interactive-ui",
-		laneLabel: "interactive-ui",
-		portMode: "measurement-gated",
-		piOrigins: ["pi-ask-user"],
-		candidate: {
-			name: "pi-ask-user",
-			exactVersion: P1_SYNTHETIC_PIN,
-			intendedUse: "measurement-gated",
-			declaredUse: "quality",
-			expectedResources: ["extension", "tool"],
-			metrics: ["clarification-round-trip-count", "selection-ui-render-latency"],
 		},
 	},
 	{

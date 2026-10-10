@@ -33,4 +33,5 @@ description: "Remove pi-ask-user from the Pi package intake candidates"
 - `specs/039-drop-pi-ask-user/spec.md` (first commit)
 - `packages/coding-agent/src/core/pi-package-intake-candidates.ts`
 - `packages/coding-agent/test/pi-package-intake.test.ts`
-- `packages/coding-agent/CHANGELOG.md`, `README.md` (release sync)
+
+No CHANGELOG entry: the intake list is internal planning data with no user-facing behavior, and #97 already adds the only `[Unreleased]` section, so a second entry would only create a merge conflict.
