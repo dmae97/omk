@@ -7,12 +7,12 @@ description: "Headless runs: warn early when a required output file is missing, 
 **Specification ID**: `034-deliverable-guard`
 **Feature Branch**: `feat/deliverable-guard` (off main `5c5806b`; spec drafted earlier on `spec/034-deliverable-watchdog`)
 **Created**: 2026-10-11
-**Status**: In progress (code on main; clock wiring waits for #63)
+**Status**: Implemented, opt-in (PR #100); default-on waits for Bench Analyst's A/B
 **Constitution**: [specs/constitution.md](../constitution.md)
 **Input**: Improvement candidate 2 in `/workspace/omk-ab/IMPROVEMENT_CANDIDATES_20261011.md` ("산출물 워치독 + 마지막 유효본 보존"). Tech Lead assigned it to Staff Engineer after 031.
-**Depends on**: #62 (`splitSentences`, the produce-word rules in `finish-check-requirements.ts`), merged; main is `5c5806b`. #63 (`readRunBudget()`, the shared run clock, spec 036) is not on main yet (Tech Lead, 2026-10-11: "시계를 읽는 부분은 #63이 들어간 뒤에 붙여 주세요").
+**Depends on**: #62 (`splitSentences`, the produce-word rules in `finish-check-requirements.ts`) and #63 (`readRunBudget()`, the shared run clock, spec 036), both merged; the branch carries main `c3ac89e`.
 
-**Clock until #63 lands**: the guard reads time through an injected `budgetFraction: () => number | undefined` (elapsed fraction of the run budget, undefined without one). Its default, `budgetFractionFromEnv`, is the source finish-check uses on main after #62: `OMK_TIME_BUDGET_SEC` against the time the extension loads. #63 (head `8a8e22b`, not merged) exposes `readRunBudget().elapsedFraction` (origin = process start, active only in print/json mode) and `excludeRunBudgetWaitMs`; wiring it is replacing the default with `() => readRunBudget()?.elapsedFraction`, with no change to the guard's logic or tests. Until then the 40% steer and 90% restore follow the same clock as finish-check's 75%/90% points; this default does not subtract the finish-check snapshot wait (finish-check does), and that skew goes away when both read #63.
+**Clock**: the guard reads time through `budgetFraction: () => number | undefined` (injectable for tests). The default, `runBudgetFraction`, reads it the way finish-check does after spec 036: `readRunBudget()?.elapsedFraction` when the shared run clock is bound (print/json mode, origin = run start), else `OMK_TIME_BUDGET_SEC` from the time the extension loads, so `always` in an interactive session still has a clock. The guard's own checks and copies are run time, not harness waits, so it does not call `excludeRunBudgetWaitMs` (spec 036 uses that for harness snapshot waits only). Tested in `deliverable-guard-run-clock.test.ts`: loaded at 60% of a 100 s budget it steers on the first tool event; it steers at 41 s and not at 39 s; it restores at 91 s while its own clock is still at 0.
 
 ## Evidence (R8, `improve/r8_omk_fail_details.txt`, `r8_omk_fail_classes.csv`)
 
@@ -79,7 +79,7 @@ Paths that only appear as inputs (`/app/decomp.c`, `/app/filter.py`, `/app/model
 ### Requirement 4 - Watchdog steer at 40% (P0)
 
 - When the shared clock (`readRunBudget()`) passes `DELIVERABLE_WATCHDOG_FRACTION = 0.4` and any deliverable does not exist, send one steer: it names the missing paths and says to write a simple working version to each now and improve it afterwards. Once per user task.
-- Checked on `tool_execution_end`, `message_end`, and by an unref'd timer that reads the budget fraction every 5 s, so a long single stream (write-compressor r2) is still caught; the steer is delivered at the next boundary. A polling timer needs only the fraction, so the #63 wiring stays one line.
+- Checked on `tool_execution_end`, `message_end`, and by an unref'd timer that reads the budget fraction every 5 s, so a long single stream (write-compressor r2) is still caught; the steer is delivered at the next boundary. The timer needs only the fraction.
 - No budget means no steer.
 
 ### Requirement 5 - Restore before the end (P0)
@@ -95,6 +95,17 @@ Paths that only appear as inputs (`/app/decomp.c`, `/app/filter.py`, `/app/model
 - Off is exactly main: the factory returns before registering any handler, timer or signal handler (tested). Per Bench Analyst's rule, the A/B flips only this flag on one main build, and default-on waits for that A/B.
 - Benchmark workers spawned by the subagent extension get it off, like `OMK_FINISH_CHECK` in #45.
 - The guard does not depend on finish-check being on, but when both are on, restore (b) runs before the finish-check turn, so the check sees the restored file.
+
+### Requirement 6b - Run log for the A/B (P0)
+
+- Bench runs use `--no-session --mode json`, so session entries and event-bus records never reach `omk.jsonl`. With `OMK_DELIVERABLE_GUARD_LOG=<path>` set and the guard on, the guard appends one JSON object per line to that file:
+  - `steer`: `kind` (`watchdog` | `restore`) and the paths named;
+  - `verdict`: at each restore point, per deliverable, the fast-check result and the decision (`keep` | `restore` | `no_copy`), with `path`, `point`, `ok`, `reason`, `ms`;
+  - `restore`: every restore record (90%, settle, and SIGTERM), with `path`, `point`, `outcome`, `reason`, sizes, sha256 and the saved-at fraction;
+  - `summary`: at each settle, `steers`, `restores`, `guardMs`.
+- Every line has `type` and `ts` (`Date.now()`, epoch ms). Lines never carry file contents or environment values.
+- Writes are synchronous (`appendFileSync`), so the SIGTERM line is on disk before exit. A failed write is swallowed; the first failure prints one diagnostic to stderr.
+- Guard off: no file is created even when the variable is set. Variable unset: nothing is written.
 
 ### Requirement 7 - Gates (P0)
 
@@ -127,10 +138,12 @@ Guard (harness tests with a fake clock and fake budget of 900 s):
 15. **Gating**: flag unset/off → no handlers, timers or signal handlers are registered; flag `on` with a UI → nothing; flag `on` headless → active. No budget → no steer and no 90% restore, but settle restore still works.
 16. **Order with finish-check**: both on, file deleted before settle → the finish-check turn's first tool sees the restored file.
 17. **Cleanup**: the store directory is gone after session shutdown; timers are cleared and do not keep the process alive.
+18. **Run log** (`deliverable-guard-log.test.ts`): guard off + `OMK_DELIVERABLE_GUARD_LOG` set → no file; guard on + variable unset → nothing written; a run with a watchdog steer, a 90% restore and a settle gives `steer`, `verdict`, `restore` and `summary` lines with `ts`; the SIGTERM restore line is written synchronously; an unwritable path does not throw and reports once.
 
 ## A/B measurement (Bench Analyst decides)
 
 - A: main with #62, #63 and this code, flag off. B: same build, `OMK_DELIVERABLE_GUARD=on`. One SHA, two env settings.
+- Both arms set `OMK_DELIVERABLE_GUARD_LOG` to a file in the run dir (in A no file appears, which confirms the flag was off); the adapter copies it into the trial's `agent/` directory. Steers, restores by reason and guard seconds are read from that file.
 - Targets: write-compressor, gpt2-codegolf, path-tracing-reverse, break-filter-js-from-html, extract-moves-from-video, train-fasttext (the T1 tasks above). tune-mjcf is left out: its R8 loss was a better candidate never saved, which this spec does not address.
 - Controls: 2 or 3 tasks with an output file that omk passed 3/3 in R8, to check that the steer and checks add no timeouts. At least one control first writes its output after 40% of the budget and still passes, so a mid-work steer is tested on a run that does not need it.
 - 3 runs per task per arm. Report reward, steers sent, restores by reason, guard seconds per run, cost. A noise-level difference is not a win.
@@ -154,7 +167,8 @@ Guard (harness tests with a fake clock and fake budget of 900 s):
 ## Expected Files
 
 - `specs/034-deliverable-guard/spec.md`: this spec (first commit)
-- `packages/coding-agent/src/core/deliverable-guard.ts`: `extractDeliverables`, size-limit parsing, flag parsing, steer texts, `budgetFractionFromEnv` (pure)
+- `packages/coding-agent/src/core/deliverable-guard.ts`: `extractDeliverables`, size-limit parsing, flag parsing, steer texts, `runBudgetFraction` (pure)
+- `packages/coding-agent/src/core/deliverable-guard-log.ts`: the `OMK_DELIVERABLE_GUARD_LOG` writer
 - `packages/coding-agent/src/core/deliverable-store.ts`: last-good copies, restore decisions, SIGTERM restore, cleanup (split from the extension for the module-size ceiling)
 - `packages/coding-agent/src/core/fast-check.ts`: `fastCheckFile` (shared with the per-edit diagnostics spec)
 - `packages/coding-agent/src/core/extensions/builtin/deliverable-guard.ts`: events, timer, steers, session entries
@@ -162,8 +176,4 @@ Guard (harness tests with a fake clock and fake budget of 900 s):
 - `packages/coding-agent/src/core/finish-check-requirements.ts`: export the sentence splitter and produce words
 - `packages/coding-agent/examples/extensions/subagent/worker-env.ts`: workers get the guard off
 - `packages/coding-agent/docs/environment-variables.md`, `docs/usage.md`. `CHANGELOG.md` is left for a follow-up because open #97 edits it too.
-- Tests: `test/deliverable-guard.test.ts` (extraction, AC 1-4), `test/fast-check.test.ts` (AC 5-7), `test/deliverable-guard-extension.test.ts` (AC 8-17 and the flag-off case), fixtures under `test/fixtures/deliverables/`
-
-## Follow-up after #63
-
-- Replace the default `budgetFraction` with `() => readRunBudget()?.elapsedFraction` in `extensions/builtin/deliverable-guard.ts` and drop `budgetFractionFromEnv`. The injected-fraction test already covers that shape.
+- Tests: `test/deliverable-guard.test.ts` (extraction, AC 1-4), `test/fast-check.test.ts` (AC 5-7), `test/deliverable-guard-extension.test.ts` (AC 8-17 and the flag-off case), `test/deliverable-guard-run-clock.test.ts` (shared run clock), `test/deliverable-guard-log.test.ts` (AC 18), fixtures under `test/fixtures/deliverables/`
