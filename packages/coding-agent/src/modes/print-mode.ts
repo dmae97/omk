@@ -10,6 +10,7 @@ import type { AssistantMessage, ImageContent } from "omk-ai";
 import type { AgentSessionRuntime } from "../core/agent-session-runtime.ts";
 import { flushRawStdout, writeRawStdout } from "../core/output-guard.ts";
 import type { PromptSettlementOutcome } from "../core/prompt-settlement.ts";
+import { startRunBudgetClock } from "../core/remaining-budget.ts";
 import { formatSessionTermination, type SessionTermination } from "../core/session-termination.ts";
 import { killTrackedDetachedChildren } from "../utils/shell.ts";
 
@@ -33,6 +34,8 @@ export interface PrintModeOptions {
  */
 export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: PrintModeOptions): Promise<number> {
 	const { mode, messages = [], initialMessage, initialImages } = options;
+	// Spec 036: the headless run owns the one budget clock (origin = process start).
+	startRunBudgetClock();
 	let exitCode = 0;
 	let session = runtimeHost.session;
 	let unsubscribe: (() => void) | undefined;

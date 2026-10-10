@@ -16,7 +16,6 @@ import {
 	finishDisciplinePrompt,
 	isWorkspaceMutatingTool,
 	resolveFinishCheckMode,
-	resolveTimeBudgetMs,
 	shouldAddFinishDiscipline,
 	shouldRunFinishCheck,
 } from "../src/core/finish-check.ts";
@@ -25,6 +24,7 @@ import {
 	requestPreCheckSnapshot,
 	resolveSnapshotHandshake,
 } from "../src/core/finish-check-snapshot.ts";
+import { resolveTimeBudgetMs } from "../src/core/remaining-budget.ts";
 import { createHarness, type Harness } from "./suite/harness.ts";
 
 function writeToolFor(runs: string[]): AgentTool {
@@ -312,6 +312,9 @@ describe("finish-check pre-check snapshot handshake", () => {
 		expect(result.status).toBe("timeout");
 		expect(result.waitedMs).toBe(1000);
 		expect(existsSync(join(dir, "pre-check-1.request"))).toBe(true);
+		// The request time stays an epoch even though the wait is measured on an injected or monotonic clock.
+		const requestedAt = JSON.parse(readFileSync(join(dir, "pre-check-1.request"), "utf8")).requestedAt;
+		expect(requestedAt).toBeGreaterThan(Date.parse("2020-01-01"));
 		expect(JSON.parse(readFileSync(join(dir, "pre-check-1.result"), "utf8")).status).toBe("timeout");
 	});
 
