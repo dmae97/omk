@@ -16,8 +16,8 @@ function isAssistantMessage(message: unknown): boolean {
 /**
  * Chat transcript container. Extends WindowedContainer so finished messages
  * above the live-line budget freeze into line segments and drop render caches.
- * Default budget (~120 rows) covers a few viewports without threading terminal
- * size through interactive-mode.ts (module-size baseline).
+ * interactive-mode attaches the terminal height (`setViewportRows`), so the
+ * budget is max(120, 2 × rows) and follows resizes; unattached it stays 120.
  *
  * "Finished" follows spec 026 R1 event boundaries, never message data: an
  * assistant message settles at `message_end`, a tool at its final result, and

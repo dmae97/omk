@@ -8,6 +8,16 @@ import { type Component, Container } from "./tui.ts";
  */
 const SEGMENT_MAX_LINES = 512;
 
+/**
+ * Live-line budget: the bottom `max(120, 2 × terminal rows)` lines always
+ * render live. Two viewports keep components that change without announcing
+ * it (animations, stateful extension renderers) live wherever the user can
+ * see them, also after scrolling back one screen; the 120 floor is the budget
+ * when no viewport is attached and on small terminals.
+ */
+const MIN_LIVE_LINE_BUDGET = 120;
+const LIVE_VIEWPORTS = 2;
+
 /** Contiguous settled children whose rendered lines are reused verbatim. */
 type FrozenSegment = {
 	/** Index in `children` of the first frozen child. */
@@ -46,15 +56,29 @@ export interface WindowedRenderStats {
 export class WindowedContainer extends Container {
 	private segments: FrozenSegment[] = [];
 	private frozenWidth = -1;
-	private liveLineBudget = 120;
+	private liveLineBudget = MIN_LIVE_LINE_BUDGET;
+	private viewportRows?: () => number;
+	private lastLiveLineBudget = MIN_LIVE_LINE_BUDGET;
 	private stats: WindowedRenderStats = { liveChildren: 0, refreshedChildren: 0, refreshedSegments: 0 };
 
+	/** Fixed budget (tests, embedders); detaches any viewport set by `setViewportRows`. */
 	setLiveLineBudget(lines: number): void {
+		this.viewportRows = undefined;
 		this.liveLineBudget = Math.max(1, Math.floor(lines));
 	}
 
+	/**
+	 * Follow the terminal height: budget = max(120, 2 × rows), re-read on every
+	 * render so a resize applies on the next frame.
+	 */
+	setViewportRows(rows: () => number): void {
+		this.viewportRows = rows;
+	}
+
 	getLiveLineBudget(): number {
-		return this.liveLineBudget;
+		if (!this.viewportRows) return this.liveLineBudget;
+		const rows = Math.floor(this.viewportRows());
+		return Math.max(MIN_LIVE_LINE_BUDGET, Number.isFinite(rows) ? rows * LIVE_VIEWPORTS : 0);
 	}
 
 	getFrozenChildCount(): number {
@@ -126,7 +150,10 @@ export class WindowedContainer extends Container {
 	}
 
 	override render(width: number): string[] {
-		if (width !== this.frozenWidth) this.thaw();
+		const budget = this.getLiveLineBudget();
+		// A taller terminal widens the live window: thaw so rows now inside it render live.
+		if (width !== this.frozenWidth || budget > this.lastLiveLineBudget) this.thaw();
+		this.lastLiveLineBudget = budget;
 		this.frozenWidth = width;
 		this.stats = { liveChildren: 0, refreshedChildren: 0, refreshedSegments: 0 };
 		this.reconcile(width);
@@ -158,7 +185,7 @@ export class WindowedContainer extends Container {
 		// concat is a bulk copy; spread arguments stay far below engine limits
 		// because frozen rows arrive as a few hundred segment arrays.
 		const out = parts.length < 8192 ? ([] as string[]).concat(...parts) : parts.flat();
-		this.freezeAboveBudget(parts, partStarts, live, liveLines);
+		this.freezeAboveBudget(parts, partStarts, live, liveLines, budget);
 		return out;
 	}
 
@@ -216,13 +243,19 @@ export class WindowedContainer extends Container {
 	}
 
 	/** Freeze settled live children that sit above the live-line budget. */
-	private freezeAboveBudget(parts: string[][], partStarts: number[], live: number[], liveLines: string[][]): void {
+	private freezeAboveBudget(
+		parts: string[][],
+		partStarts: number[],
+		live: number[],
+		liveLines: string[][],
+		budget: number,
+	): void {
 		let acc = 0;
 		let liveStart = this.children.length;
 		for (let p = parts.length - 1; p >= 0; p--) {
 			acc += parts[p].length;
 			liveStart = partStarts[p];
-			if (acc >= this.liveLineBudget) break;
+			if (acc >= budget) break;
 		}
 		let segmentIndex = 0;
 		for (let n = 0; n < live.length && live[n] < liveStart; n++) {

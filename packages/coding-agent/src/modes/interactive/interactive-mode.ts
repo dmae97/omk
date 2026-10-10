@@ -422,6 +422,7 @@ export class InteractiveMode {
 		this.version = VERSION;
 		this.ui = new TUI(new ProcessTerminal(), this.settingsManager.getShowHardwareCursor());
 		this.ui.setClearOnShrink(this.settingsManager.getClearOnShrink());
+		this.chatContainer.setViewportRows(() => this.ui.terminal.rows);
 		this.headerContainer = new Container();
 		this.pendingMessagesContainer = new Container();
 		this.statusContainer = new Container();

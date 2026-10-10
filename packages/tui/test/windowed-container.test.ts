@@ -256,6 +256,37 @@ describe("WindowedContainer", () => {
 		assert.equal(released, 1);
 	});
 
+	it("live budget follows the viewport: max(120, 2 × rows), re-read each render", () => {
+		const windowed = new WindowedContainer();
+		assert.equal(windowed.getLiveLineBudget(), 120);
+		let rows = 40;
+		windowed.setViewportRows(() => rows);
+		assert.equal(windowed.getLiveLineBudget(), 120);
+		rows = 100;
+		assert.equal(windowed.getLiveLineBudget(), 200);
+		windowed.setLiveLineBudget(30);
+		rows = 500;
+		assert.equal(windowed.getLiveLineBudget(), 30);
+	});
+
+	it("a taller terminal thaws rows that are now inside the live window", () => {
+		const full = new Container();
+		const windowed = new WindowedContainer();
+		let rows = 10;
+		windowed.setViewportRows(() => rows);
+		for (const target of [full, windowed]) {
+			for (let i = 0; i < 400; i++) target.addChild(new Text(`row ${i}`, 0, 0));
+		}
+		windowed.render(80);
+		const frozenSmall = windowed.getFrozenLineCount();
+		assert.equal(frozenSmall, 400 - 120);
+		rows = 150;
+		assert.deepEqual(windowed.render(80), full.render(80));
+		assert.equal(windowed.getFrozenLineCount(), 400 - 300);
+		rows = 10;
+		assert.deepEqual(windowed.render(80), full.render(80));
+	});
+
 	it("isRenderSettled defaults true when the hook is absent", () => {
 		assert.equal(isRenderSettled(new Text("x", 0, 0)), true);
 	});

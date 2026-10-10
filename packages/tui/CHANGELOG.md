@@ -5,6 +5,7 @@
 ### Changed
 
 - Long transcripts no longer cost per-frame work proportional to their length. The new `WindowedContainer` freezes settled children above a live-line budget into bounded line segments and stops re-rendering them; a frozen child that changes is re-rendered alone and only its segment is rebuilt. On a 100k-line headless transcript a keypress frame drops from ~33 ms to ~3 ms mean, and a change to an old, off-screen message stays under 5 ms p95 (was 35–38 ms mean).
+- `WindowedContainer.setViewportRows(() => rows)` makes the live-line budget follow the terminal: `max(120, 2 × rows)`, re-read every render; a taller terminal thaws the frozen prefix. Without it the budget stays 120 (`setLiveLineBudget` fixes it).
 - `LineResetMemo` (split out of `tui.ts`) reuses the previous frame's reset output for unchanged rows, including rows shifted by lines inserted or removed above. The differential renderer finds changed rows from both ends and `Container.render` bulk-copies child output.
 - `Text`, `Markdown`, `Box`, `Spacer` and `Container` report `getRenderGeneration()`, a stamp from `nextRenderGeneration()` that rises on every visible change (containers include their children). `Component` gains optional `getRenderGeneration()` / `isRenderSettled()`. `isRenderSettled`, `releaseRenderCache`, `renderGeneration` and `nextRenderGeneration` are exported.
 
