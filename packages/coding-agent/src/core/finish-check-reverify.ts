@@ -7,7 +7,11 @@
  * module holds the text and the pure helpers; `extensions/builtin/finish-check.ts`
  * and `finish-check-reverify-stage.ts` wire them to events.
  */
-import type { FinishCheckLedgerItem } from "./finish-check-requirements.ts";
+import {
+	buildFinishCheckContinueMessage,
+	extraTurnItems,
+	type FinishCheckLedgerItem,
+} from "./finish-check-requirements.ts";
 
 /** First line of the verifier instruction; the context filter keeps everything from it onward. */
 export const FINISH_CHECK_REVERIFY_MARKER = "<fresh_verification>";
@@ -92,4 +96,88 @@ export function freshContextMessages<T>(messages: readonly T[]): T[] | undefined
 		}
 	}
 	return undefined;
+}
+
+export interface VerifyFinding {
+	readonly id: number;
+	readonly status: "pass" | "fail";
+	readonly text: string;
+}
+
+export type VerifyVerdict = "pass" | "fail" | "unreported" | "void";
+
+export interface VerifyReply {
+	readonly verdict: Exclude<VerifyVerdict, "void">;
+	readonly findings: VerifyFinding[];
+	/** FAIL findings that count: none when the verdict is PASS. */
+	readonly failing: VerifyFinding[];
+}
+
+const VERIFY_LINE = /^[\s>*`-]*VERIFY\s+(\d+)\s*:\s*(PASS|FAIL)\b[\s`*]*(?:[-–—:]\s*)?(.*)$/gim;
+const VERDICT_LINE = /^[\s>*`-]*VERDICT\s*:[\s`*]*(PASS|FAIL)\b/gim;
+
+/** Reads the verifier's `VERIFY n: PASS|FAIL - …` lines and its last `VERDICT:` line. */
+export function parseVerifyReply(reply: string): VerifyReply {
+	const findings: VerifyFinding[] = [...reply.matchAll(VERIFY_LINE)].map((match) => ({
+		id: Number(match[1]),
+		status: match[2].toUpperCase() === "PASS" ? "pass" : "fail",
+		text: match[3].replace(/[`*]+$/g, "").trim(),
+	}));
+	const stated = [...reply.matchAll(VERDICT_LINE)].at(-1)?.[1]?.toLowerCase() as "pass" | "fail" | undefined;
+	const derived = findings.length === 0 ? "unreported" : findings.some((f) => f.status === "fail") ? "fail" : "pass";
+	const verdict = stated ?? derived;
+	return { verdict, findings, failing: verdict === "pass" ? [] : findings.filter((f) => f.status === "fail") };
+}
+
+/** Failing numeric items of the check ledger, then the verifier's own failing REQ comparisons not already listed. */
+export function mergeFailingItems(
+	check: readonly FinishCheckLedgerItem[],
+	verifier: readonly FinishCheckLedgerItem[],
+): FinishCheckLedgerItem[] {
+	const merged = extraTurnItems(check).failing;
+	const ids = new Set(merged.map((item) => item.id));
+	return [...merged, ...extraTurnItems(verifier).failing.filter((item) => !ids.has(item.id))];
+}
+
+/** The one fix turn after the verifier: its findings and any failing numeric items (spec 032, shared with 035). */
+export function buildReverifyFixMessage(
+	findings: readonly VerifyFinding[],
+	failing: readonly FinishCheckLedgerItem[],
+): string {
+	const parts: string[] = [];
+	if (findings.length > 0) {
+		parts.push(
+			[
+				"Fresh verification result: the task is not complete. An independent check of your deliverables found:",
+				...findings.map((finding) => `VERIFY ${finding.id}: FAIL - ${finding.text}`),
+				"Fix these problems. Keep the currently saved output in place until a new version measures better, and never leave a required output worse or missing. Re-run the failing checks on new inputs before you end, and end your reply with one `VERIFY <n>: PASS|FAIL - <what was checked>; expected <x>; got <y>` line per finding above.",
+			].join("\n"),
+		);
+	}
+	if (failing.length > 0) parts.push(buildFinishCheckContinueMessage(failing));
+	return parts.join("\n\n");
+}
+
+export interface VerifyUsage {
+	readonly costUsd: number;
+	readonly inputTokens: number;
+	readonly outputTokens: number;
+	readonly totalTokens: number;
+}
+
+/** Cost and token totals of the verifier turn's assistant messages, for the A/B's per-trial cost. */
+export function verifyUsage(messages: readonly unknown[]): VerifyUsage {
+	const totals = { costUsd: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+	for (const message of messages) {
+		const { role, usage } = message as {
+			role?: string;
+			usage?: { input?: number; output?: number; totalTokens?: number; cost?: { total?: number } };
+		};
+		if (role !== "assistant" || !usage) continue;
+		totals.costUsd += usage.cost?.total ?? 0;
+		totals.inputTokens += usage.input ?? 0;
+		totals.outputTokens += usage.output ?? 0;
+		totals.totalTokens += usage.totalTokens ?? 0;
+	}
+	return totals;
 }
