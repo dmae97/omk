@@ -5,7 +5,7 @@ description: "Finish check: a finish before 30% of the budget gets one fresh-con
 # Feature Specification: Fresh-context re-verification for early finishes (before 30% of budget)
 
 **Specification ID**: `032-fresh-context-reverify`
-**Feature Branch**: `spec/032-fresh-context-reverify` (spec only; the implementation branch stacks on #62 @ `bc34980`, which carries #44, #45 and spec 035)
+**Feature Branch**: `feat/032-fresh-context-reverify` from main `5c5806b` (#44, #45, #62 with spec 035, #99). The spec was drafted on `spec/032-fresh-context-reverify` on top of #62 @ `bc34980`.
 **Created**: 2026-10-11
 **Status**: Draft
 **Constitution**: [specs/constitution.md](../constitution.md)
@@ -33,7 +33,9 @@ From the report and `/workspace/omk-ab/improve/` (`r8_omk_fail_classes.csv`, `r8
 
 ### When it runs
 
-- Gate: `OMK_FINISH_CHECK_REVERIFY`. Unset or `0/off` means off (the default until the A/B shows a gain); `1/on` means on. It applies only where the finish check itself runs (`resolveFinishCheckMode`), and only with `OMK_TIME_BUDGET_SEC` set, because "early" has no meaning without a budget. Subagent workers never trigger: `subagentWorkerEnv` (#45) already strips `OMK_TIME_BUDGET_SEC` and turns the finish check off for them.
+- Gate: `OMK_FINISH_CHECK_REVERIFY`, read by `resolveFinishCheckReverify` with the same parsing as `OMK_FINISH_CHECK_EXTRA_TURN`: `1`/`true`/`on`/`enable`/`enabled` (any case, trimmed) is on; unset or any other value is off, the default until the A/B shows a gain. It applies only where the finish check itself runs (`resolveFinishCheckMode`), only in headless sessions (never with a UI, even with `OMK_FINISH_CHECK=always`), and only when the run has a budget, because "early" has no meaning without one.
+- Subagent workers never trigger: `subagentWorkerEnv` (#45) already strips `OMK_TIME_BUDGET_SEC` and turns the finish check off for them, and this change also adds `OMK_FINISH_CHECK_REVERIFY` to its lead-only variables, so a worker opted in with `OMK_FINISH_CHECK_WORKERS` still never runs the verifier.
+- **Budget source (seam until #63)**: the verifier reads the budget only through `FinishCheckOptions.readBudget`, a function returning `{ budgetMs, elapsedMs, elapsedFraction }` or `undefined`. Its default is built from the same source finish-check uses on main today (`OMK_TIME_BUDGET_SEC` and finish-check's own start time, with snapshot waits excluded). The snapshot shape is a subset of #63's `RunBudgetSnapshot`, so when #63 lands the default becomes `readRunBudget` in one line. The 75%/85%/90% thresholds keep finish-check's existing `elapsedFraction` until #63 moves them all together.
 - Trigger: the run's **first settle** of a user task (the moment the finish check is decided) is at `elapsedFraction < FINISH_CHECK_REVERIFY_FRACTION`.
 - Default **off**. It is turned on by default only after an A/B win (decision 4).
 - `FINISH_CHECK_REVERIFY_FRACTION = 0.3` is a named, exported constant in `src/core/finish-check.ts`, next to `FINISH_CHECK_SAVE_NOW_FRACTION` (0.75), `FINISH_CHECK_EXTRA_TURN_FRACTION` (0.85) and `FINISH_CHECK_SKIP_FRACTION` (0.9). It moves to the #63 RemainingBudget clock with them. A trigger at 0.5 may be measured later as a separate A/B arm; this spec ships 0.3.
@@ -46,13 +48,13 @@ work → settle (at < 30%) → check turn (#62, same context, REQ ledger)
      → at most one fix turn (shared with spec 035), then end
 ```
 
-Without the trigger, the flow is exactly #62 + spec 035.
+Without the trigger, the flow is exactly main as merged: #62 with spec 035, whose extra turn is behind `OMK_FINISH_CHECK_EXTRA_TURN`.
 
 ### What "fresh context" means in omk
 
 The verifier is **one turn in the same session whose model input is rebuilt from scratch** through the existing `context` extension event (`ContextEvent`, which fires before each LLM call and can replace `messages`).
 
-- **The model sees**: the system prompt (same tools, same `<finish_discipline>`), one user message with the original task prompt text, the verifier instruction, and only the verifier's own assistant and tool-result messages from this turn.
+- **The model sees**: the system prompt (same tools, same `<finish_discipline>`), one user message (the verifier instruction, which quotes the original task prompt in full), and only the messages after it: the verifier's own assistant and tool-result messages, and any steer sent during the turn.
 - **The model does not see**: earlier assistant messages, thinking, tool calls or results, the check turn, steers, or compaction summaries.
 - The handler finds the instruction by a fixed marker (`<fresh_verification>`) and keeps everything from it onward. When the verifier turn ends, the handler stops filtering, so the fix turn has the full history plus the verifier's report.
 
@@ -78,8 +80,8 @@ Why not a separate process or a subagent:
 - The deliverables list is hashed (size and sha256, files ≤ 64 MB) before and after the turn. A change is recorded as `mutated: true`, and the verification is **void** (decision 6). Its verdict is recorded as `void`, its findings are kept for the record but generate no fix turn, and its REQ measurements are not used either. omk does not restore the changed deliverable; restoring belongs to candidate 2 (`specs/034`, artifact preservation). Spec 035's own check-ledger result can still call for the single extra turn.
 
 **Caps**:
-- `FINISH_CHECK_REVERIFY_MAX_TOOL_CALLS = 10`, then the existing wrap-up steer.
-- `FINISH_CHECK_REVERIFY_TIME_FRACTION = 0.15`: once the verifier has used 15% of the budget, it gets the wrap-up steer once.
+- `FINISH_CHECK_REVERIFY_MAX_TOOL_CALLS = 10`, then a wrap-up steer. The verifier gets its own wrap-up text (`FINISH_CHECK_REVERIFY_WRAP_UP_MESSAGE`: stop testing, do not change the deliverables, reply with the `VERIFY` lines and `VERDICT`) instead of the check turn's, which asks for a one-line summary. The check turn's tool cap does not count verifier or fix-turn calls.
+- `FINISH_CHECK_REVERIFY_TIME_FRACTION = 0.15`: once the verifier has used 15% of the budget (read through `readBudget`), it gets the wrap-up steer. The steer is sent once per verifier, whichever cap is hit first.
 - The 75% save-now steer still applies.
 - The verifier starts below 30%, so with the caps it normally ends below about 45%, leaving the fix turn well inside spec 035's 85% cutoff.
 
@@ -95,7 +97,9 @@ Why not a separate process or a subagent:
 - This fix turn **is** spec 035's single extra turn (`FINISH_CHECK_MAX_EXTRA_TURNS = 1` is unchanged). There is one extra turn per task in total, ever, whatever triggered it: per task, at most one check turn, one verifier turn, and one fix turn.
 - When the verifier runs, spec 035's go-measure nudge is folded into the verifier turn, which receives the unmeasured items, so no separate nudge is sent.
 - When the trigger does not fire, spec 035 behaves exactly as merged.
-- No verifier after the fix turn, and no second fix turn. The fix turn's REQ and VERIFY lines are recorded with `round: 2`.
+- **With `OMK_FINISH_CHECK_EXTRA_TURN` off** (its default on main): `OMK_FINISH_CHECK_REVERIFY=on` implies the verifier's own fix turn, and that fix turn counts against the same single extra-turn allowance and gates (85% cutoff, not aborted, no pending input, not void). Only the verifier's findings (its `FAIL` lines and its own failing REQ comparisons) can trigger it; the check ledger's numeric fails alone do not, because that is spec 035's switch. When a fix turn is sent anyway, the message also lists the check ledger's failing REQ items, since they are known. Proposed here and listed under open questions for Tech Lead.
+- **With both flags on**: the trigger rules above apply unchanged (findings, ledger fails, or the verifier's REQ fails).
+- No verifier after the fix turn, and no second fix turn. The fix turn's REQ lines are recorded as a `finish_check_ledger` entry with `round: 2` (as in 035), and its `VERIFY` lines, if any, as a `finish_check_verify` entry with `round: 2`.
 - A verifier with no `VERIFY` lines, `VERDICT: PASS`, an aborted verifier, a void (mutated) verifier, or a pending user message produces no findings that count. Spec 035's ledger result alone then decides the fix turn.
 
 ### Records
@@ -107,16 +111,16 @@ Why not a separate process or a subagent:
 
 **Classification**: improve, opt-in (`OMK_FINISH_CHECK_REVERIFY=on`); no change when off.
 
-| Dimension | Baseline (#62 @ `bc34980`) | Acceptance target | Regression floor | Verification command | Evidence artifact |
+| Dimension | Baseline (main `5c5806b`) | Acceptance target | Regression floor | Verification command | Evidence artifact |
 | --- | --- | --- | --- | --- | --- |
-| Completion correctness | An early finish gets one same-context check that agrees with itself (0 FAIL / 66 lines in B′) | With the flag on, an early finish also gets one fresh-context verifier turn on new inputs and at most one fix turn | Flag off, a late finish, or no budget: identical to #62 + 035 (same messages, entries, events) | `../../node_modules/.bin/vitest run test/finish-check-reverify.test.ts test/finish-check-extra-turn.test.ts test/finish-check-requirements.test.ts test/finish-check.test.ts` in `packages/coding-agent` | those files |
+| Completion correctness | An early finish gets one same-context check that agrees with itself (0 FAIL / 66 lines in B′) | With the flag on, an early finish also gets one fresh-context verifier turn on new inputs and at most one fix turn | Flag off, a late finish, a UI session, or no budget: identical to main `5c5806b` (same messages, entries, events) | `../../node_modules/.bin/vitest run test/finish-check-reverify.test.ts test/finish-check-extra-turn.test.ts test/finish-check-requirements.test.ts test/finish-check.test.ts` in `packages/coding-agent` | those files |
 | Benchmark score | R8 omk on the primary target tasks: see table below | B − A ≥ +3 trials on primary targets (3 runs per task per arm) | Controls: B ≥ A − 1 trial; no new T1/T2 timeouts on any task | Small A/B | report under `/workspace/omk-ab/` |
 | Cost and time | — | Verifier turn median ≤ 10% of budget; per-trial cost +≤ 20% (recorded per trial) | — | A/B trajectories and `finish_check_verify.costUsd` | same report |
 
 ## Agent-Oriented Requirements
 
 ### Requirement 1 - Trigger and gate (P0)
-`resolveReverifyMode(env)`, `FINISH_CHECK_REVERIFY_FRACTION`, a pure `shouldReverify({ mode, enabled, budgetSet, firstSettleFraction, aborted, hasPendingMessages, checkRan })`. The fraction is taken at the first settle, before the check turn.
+`resolveFinishCheckReverify(value)`, `FINISH_CHECK_REVERIFY_FRACTION`, a pure `shouldReverify({ enabled, hasUI, firstSettleFraction, aborted, hasPendingMessages, alreadyVerified })` (no budget means `firstSettleFraction` is `undefined`, so no trigger). The fraction is read through `readBudget` at the first settle, before the check turn and any snapshot wait. `subagentWorkerEnv` drops `OMK_FINISH_CHECK_REVERIFY`.
 
 ### Requirement 2 - Fresh-context verifier turn (P0)
 `context` handler active only during the verifier turn; instruction builder with the deliverables list, the REQ list, the different-input step and the reply format; `parseVerifyReply`.
@@ -132,14 +136,14 @@ The first commit is this spec. `npm run check` before each commit; explicit-path
 
 ## Acceptance criteria (named vitest cases)
 
-Defaults: `OMK_FINISH_CHECK_REVERIFY=on`, `OMK_TIME_BUDGET_SEC=900`, headless, workspace mutated by `write /app/out.txt`, first settle at 180 s (20%).
+Defaults: `OMK_FINISH_CHECK_REVERIFY=on`, `OMK_FINISH_CHECK_EXTRA_TURN=on`, `OMK_TIME_BUDGET_SEC=900`, headless, workspace mutated by `write /app/out.txt`, first settle at 180 s (20%).
 
 1. **Trigger.** After the check turn settles, exactly one follow-up starts with `<fresh_verification>`. It contains the task prompt, `/app/out.txt`, the REQ list and the different-input step. Event `{ active: true, stage: "verify" }`.
 2. **Boundary at 0.3.** First settle at 269 s (29.9%) → the verifier runs. First settle at 270 s (exactly 30%) or 450 s (50%) → no verifier. The tests compare with `FINISH_CHECK_REVERIFY_FRACTION` by name. A separate test asserts `REVERIFY (0.3) < SAVE_NOW (0.75) < EXTRA_TURN (0.85) < SKIP (0.9)`.
 3. **The first settle decides.** First settle at 260 s, check turn ends at 330 s (36.7%) → the verifier still runs.
-4. **Off by default.** No env var → sent messages, entries and events equal the #62 + 035 flow for the same replies.
-5. **No budget, no trigger.** `OMK_TIME_BUDGET_SEC` unset → no verifier. `subagentWorkerEnv` output never enables it (extends the #45 worker-env test).
-6. **Fresh context** (harness test with the faux provider capturing `Context.messages`). During the verifier call, the messages are [task prompt, verifier instruction] plus the verifier's own tool round-trips. No earlier assistant text, tool result or check-turn message is present. On the next (fix) call, the full history is back. The verifier call uses the run's model and thinking level.
+4. **Off by default.** With `OMK_FINISH_CHECK_REVERIFY` unset, `off` or an unknown value, sent messages, entries and events equal main's flow for the same replies, with `OMK_FINISH_CHECK_EXTRA_TURN` both unset and on. `resolveFinishCheckReverify` accepts exactly the values `resolveFinishCheckExtraTurn` accepts.
+5. **No budget, no UI, no workers.** `OMK_TIME_BUDGET_SEC` unset → no verifier. A session with a UI (even with `OMK_FINISH_CHECK=always`) → no verifier. `subagentWorkerEnv` output never carries `OMK_FINISH_CHECK_REVERIFY` or a budget (extends the #45 worker-env test). An injected `readBudget` drives the trigger instead of the env budget.
+6. **Fresh context** (harness test with the faux provider capturing `Context.messages`). During the verifier call, the messages are [verifier instruction quoting the task prompt] plus the verifier's own tool round-trips. No earlier assistant text, tool result or check-turn message is present. On the next (fix) call, the full history is back. The verifier call uses the run's model and thinking level.
 7. **Read-only.** During the verifier, `write` and `edit` are blocked with the `/tmp/omk-verify/` reason; after it ends they run normally.
 8. **Mutated means void.** A verifier `bash` call changes `/app/out.txt` and the reply has `VERIFY 1: FAIL - …`. The entry has `mutated: true` and `verdict: "void"`, no fix turn is sent, and the deliverable is not restored. Variant: the check ledger also has `stone 74 >= 75` → one fix turn (threshold only), whose message does not contain the void finding.
 9. **Caps.** The 10th verifier tool call triggers the wrap-up steer once. With 15% of the budget (135 s) used inside the verifier, the steer comes once, whichever cap is hit first.
@@ -151,11 +155,12 @@ Defaults: `OMK_FINISH_CHECK_REVERIFY=on`, `OMK_TIME_BUDGET_SEC=900`, headless, w
 15. **No second verifier.** After a fix turn, or for any later settle of the same task, no `<fresh_verification>` is sent. A new user task resets this.
 16. **Instruction content.** The instruction contains the line about new inputs and "Do not count re-running the given examples", the `/tmp/omk-verify/` rule, the no-web-answers rule, and the reply format. The deliverables list is deduplicated and capped at 30.
 17. **Cost recorded.** The `finish_check_verify` entry carries `costUsd` and token totals summed from the verifier turn's assistant messages (faux usage in the test).
+18. **Extra-turn flag off.** With `OMK_FINISH_CHECK_EXTRA_TURN` unset: a verifier FAIL → one fix turn; the check ledger's `stone 74 >= 75` alone with a verifier PASS → no fix turn; a fix turn sent for a finding also lists the ledger's failing REQ item.
 
 ## A/B measurement
 
-- **A (baseline)**: #62 @ `bc34980` build (main `47e78c4` + #44 + #45 + #62 + spec 035), `OMK_FINISH_CHECK_REVERIFY` unset.
-- **B**: A + this change, with `OMK_FINISH_CHECK_REVERIFY=on`. Same model (grok-4.7 xhigh), same adapter, `time_budget=auto`.
+- **A (baseline)**: this branch's build with `OMK_FINISH_CHECK_REVERIFY` unset, identical to main `5c5806b` (AC4).
+- **B**: the same build with `OMK_FINISH_CHECK_REVERIFY=on`. Both arms use the same `OMK_FINISH_CHECK_EXTRA_TURN` value; unset is proposed, so 035's own A/B and this one do not mix (see open questions). Same model (grok-4.7 xhigh), same adapter, `time_budget=auto`.
 - 3 runs per task per arm.
 
 **Primary targets** at the 0.3 trigger: R8 omk trials in S/G/P that ended before 30% of the budget, on tasks with budgets ≤ 1800 s. These are 11 trials on 10 tasks.
@@ -201,3 +206,21 @@ Defaults: `OMK_FINISH_CHECK_REVERIFY=on`, `OMK_TIME_BUDGET_SEC=900`, headless, w
 4. **Default**: off. It is enabled by default only after an A/B win.
 5. **Model and effort**: the same as the run, to avoid confounding with spec 033.
 6. **Mutation**: a verifier that changes a deliverable is recorded as `mutated` and its result is void; no fix turn is generated from it. Restoring the deliverable belongs to candidate 2 (spec 034, artifact preservation).
+7. **Base and clock**: implement on main `5c5806b` (#62 merged, 035's extra turn behind `OMK_FINISH_CHECK_EXTRA_TURN`). Read the budget through an injectable seam with today's finish-check source, and switch it to #63's `readRunBudget()` only after #63 lands.
+
+## Open questions (for Tech Lead)
+
+1. **032 on, 035 extra-turn flag off.** Proposed (and implemented): the verifier's findings still get one fix turn, counted against the same single extra-turn allowance and gates, while the check ledger's numeric fails alone do not trigger it. The alternative is that the fix turn also requires `OMK_FINISH_CHECK_EXTRA_TURN=on`, which would make `OMK_FINISH_CHECK_REVERIFY=on` alone a verify-and-record-only mode.
+2. **A/B arms.** Proposed: both arms with `OMK_FINISH_CHECK_EXTRA_TURN` unset, so 032's effect is measured without 035's.
+
+## Expected Files
+
+- `specs/032-fresh-context-reverify/spec.md`: this spec
+- `packages/coding-agent/src/core/finish-check.ts`: `resolveFinishCheckReverify`, `FINISH_CHECK_REVERIFY_FRACTION`, `shouldReverify`
+- `packages/coding-agent/src/core/finish-check-reverify.ts`: pure module (instruction, deliverables list, reply parsing, fresh-context filter, fix message, cost totals, caps)
+- `packages/coding-agent/src/core/finish-check-reverify-hash.ts`: deliverable hashing (size and sha256, files ≤ 64 MB)
+- `packages/coding-agent/src/core/extensions/builtin/finish-check-reverify-stage.ts`: verifier turn wiring (context filter, write/edit block, caps, records)
+- `packages/coding-agent/src/core/extensions/builtin/finish-check.ts`: the budget seam, the trigger, and the shared fix turn
+- `packages/coding-agent/examples/extensions/subagent/worker-env.ts`: `OMK_FINISH_CHECK_REVERIFY` is lead-only
+- `packages/coding-agent/test/finish-check-reverify.test.ts`, `test/finish-check-reverify-flow.test.ts`, `test/finish-check-reverify-harness.test.ts`
+- `packages/coding-agent/docs/environment-variables.md`: `OMK_FINISH_CHECK_REVERIFY` row
