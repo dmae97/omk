@@ -17,7 +17,7 @@ import {
 	type ThinkingLevel,
 	type Usage,
 } from "omk-ai";
-import { ensureActiveRemainingBudget, type RemainingBudget } from "./remaining-budget.ts";
+import { getActiveRemainingBudget, type RemainingBudget } from "./remaining-budget.ts";
 
 export const DEFAULT_RESPONSE_REASONING_CAP_TOKENS = 20_000;
 export const DEFAULT_RESPONSE_WALL_CAP_MS = 240_000;
@@ -68,7 +68,8 @@ export function resolveResponseReasoningCapConfig(
 			positiveNumber(env.OMK_RESPONSE_REASONING_CAP_TOKENS, DEFAULT_RESPONSE_REASONING_CAP_TOKENS),
 		),
 		maxWallMs: Math.round(positiveNumber(env.OMK_RESPONSE_WALL_CAP_SEC, DEFAULT_RESPONSE_WALL_CAP_MS / 1000) * 1000),
-		budget: () => ensureActiveRemainingBudget(),
+		// Read-only: the clock is started at run start (spec 036), so both A/B arms share one origin.
+		budget: () => getActiveRemainingBudget(),
 	};
 }
 
