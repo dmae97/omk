@@ -7,6 +7,7 @@ import {
 	isWorkspaceMutatingTool,
 	resolveFinishCheckMode,
 	resolveTimeBudgetMs,
+	shouldAddFinishDiscipline,
 	shouldRunFinishCheck,
 } from "../../finish-check.ts";
 import {
@@ -41,9 +42,10 @@ function assistantText(message: unknown): string {
 }
 
 /**
- * Adds finish discipline to the system prompt and, in headless runs, one
- * verification turn after a run that changed the workspace. With
- * `OMK_TIME_BUDGET_SEC` it also tells the run to save its outputs at 75%.
+ * In headless runs (or with `OMK_FINISH_CHECK=always`), adds finish discipline
+ * to the system prompt and one verification turn after a run that changed the
+ * workspace. With `OMK_TIME_BUDGET_SEC` it also tells the run to save its
+ * outputs at 75%.
  */
 export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptions = {}): void {
 	const env = options.env ?? process.env;
@@ -81,9 +83,10 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 		return undefined;
 	});
 
-	omk.on("before_agent_start", (event) => ({
-		systemPrompt: `${event.systemPrompt}\n\n${finishDisciplinePrompt(budgetMs)}`,
-	}));
+	omk.on("before_agent_start", (event, ctx) => {
+		if (!shouldAddFinishDiscipline(mode, ctx.hasUI)) return undefined;
+		return { systemPrompt: `${event.systemPrompt}\n\n${finishDisciplinePrompt(budgetMs)}` };
+	});
 
 	const maybeWarnSaveNow = () => {
 		const fraction = elapsedFraction();
