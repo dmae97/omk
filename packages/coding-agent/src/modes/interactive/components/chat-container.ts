@@ -1,7 +1,10 @@
 import { type Component, isRenderSettled, WindowedContainer } from "omk-tui";
 import { disposeComponent } from "../interactive-tool-result.ts";
 
-type SettleableComponent = Component & { markRenderSettled?: () => void };
+type SettleableComponent = Component & {
+	markRenderSettled?: () => void;
+	getMessage?: () => { responseId?: string } | undefined;
+};
 
 /** The slice of an agent event the transcript lifecycle needs. */
 export interface ChatLifecycleEvent {
@@ -11,6 +14,11 @@ export interface ChatLifecycleEvent {
 
 function isAssistantMessage(message: unknown): boolean {
 	return typeof message === "object" && message !== null && (message as { role?: unknown }).role === "assistant";
+}
+
+function responseIdOf(message: unknown): string | undefined {
+	const id = (message as { responseId?: unknown } | undefined)?.responseId;
+	return typeof id === "string" && id.length > 0 ? id : undefined;
 }
 
 /**
@@ -57,13 +65,36 @@ export class ChatContainer extends WindowedContainer {
 	/** Feed every agent session event (after interactive-mode handled it). */
 	handleAgentEvent(event: ChatLifecycleEvent): void {
 		if (event.type === "message_end" && isAssistantMessage(event.message)) {
-			for (const child of this.pending) (child as SettleableComponent).markRenderSettled?.();
+			this.settleEndedMessage(event.message);
 			this.prunePending();
 		} else if (event.type === "agent_end") {
 			this.settleAll();
 		} else if (event.type === "tool_execution_end") {
 			this.prunePending();
 		}
+	}
+
+	/**
+	 * Settle only the message this `message_end` belongs to: the open message
+	 * with the same `responseId` when both carry one, else the oldest open
+	 * message whose `responseId` does not contradict the event's. A late
+	 * `message_end` must not settle every newer streaming message.
+	 */
+	private settleEndedMessage(message: unknown): void {
+		const id = responseIdOf(message);
+		let target: SettleableComponent | undefined;
+		for (const child of this.pending) {
+			const settleable = child as SettleableComponent;
+			if (typeof settleable.markRenderSettled !== "function" || this.isChildSettled(child)) continue;
+			const childId = responseIdOf(settleable.getMessage?.());
+			if (id !== undefined && childId === id) {
+				target = settleable;
+				break;
+			}
+			// A different known responseId is another message: never settle it here.
+			if (id === undefined || childId === undefined) target ??= settleable;
+		}
+		target?.markRenderSettled?.();
 	}
 
 	/** Backstop: treat every open child as finished (agent_end, end of a history rebuild). */

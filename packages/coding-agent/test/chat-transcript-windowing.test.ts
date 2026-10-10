@@ -241,6 +241,57 @@ describe("chat transcript windowing lifecycle (spec 026 AC1/AC2, spec 022)", () 
 		expect(tool.isRenderSettled()).toBe(false);
 	});
 
+	test("message_end settles only the matching open message (responseId, else the oldest)", () => {
+		const chat = new ChatContainer();
+		const older = new AssistantMessageComponent(undefined);
+		const newer = new AssistantMessageComponent(undefined);
+		chat.addChild(older);
+		chat.addChild(newer);
+		chat.handleAgentEvent({ type: "message_end", message: assistant([]) });
+		expect(older.isRenderSettled()).toBe(true);
+		expect(newer.isRenderSettled()).toBe(false);
+
+		const a = new AssistantMessageComponent(undefined);
+		const b = new AssistantMessageComponent(undefined);
+		a.updateContent({ ...assistant([]), responseId: "r-a" });
+		b.updateContent({ ...assistant([]), responseId: "r-b" });
+		chat.addChild(a);
+		chat.addChild(b);
+		chat.handleAgentEvent({ type: "message_end", message: { ...assistant([]), responseId: "r-b" } });
+		expect(b.isRenderSettled()).toBe(true);
+		expect(a.isRenderSettled()).toBe(false);
+		expect(newer.isRenderSettled()).toBe(false);
+		// A late message_end for a message no longer open contradicts every known id.
+		chat.handleAgentEvent({ type: "message_end", message: { ...assistant([]), responseId: "r-gone" } });
+		expect(a.isRenderSettled()).toBe(false);
+		chat.handleAgentEvent({ type: "agent_end" });
+		expect(chat.getLiveChildCount()).toBe(0);
+	});
+
+	test("late message_end then streaming past the live window keeps output equal to a plain Container (review P3)", () => {
+		const md = (i: number) => `## Heading ${i}\n\nSome **bold** and \`code\`.\n\n- a ${"word ".repeat(30)}\n- b\n`;
+		const full = new Container();
+		const chat = new ChatContainer();
+		chat.setLiveLineBudget(20);
+		for (const target of [full, chat]) {
+			for (let i = 0; i < 30; i++)
+				target.addChild(new AssistantMessageComponent(assistant([{ type: "text", text: md(i) }])));
+		}
+		const streamFull = new AssistantMessageComponent(undefined);
+		const streamChat = new AssistantMessageComponent(undefined);
+		full.addChild(streamFull);
+		chat.addChild(streamChat);
+		chat.handleAgentEvent({ type: "message_end", message: assistant([]) });
+		for (let k = 0; k < 5; k++) {
+			const message = assistant([{ type: "text", text: md(k).repeat(k + 1) }]);
+			streamFull.updateContent(message);
+			streamChat.updateContent(message);
+			full.addChild(new AssistantMessageComponent(assistant([{ type: "text", text: "tail ".repeat(400) }])));
+			chat.addChild(new AssistantMessageComponent(assistant([{ type: "text", text: "tail ".repeat(400) }])));
+			expect(chat.render(90)).toEqual(full.render(90));
+		}
+	});
+
 	test("AC2 every message_update swaps the reference and bumps the generation", async () => {
 		const updates = 12;
 		const agent = new Agent({
