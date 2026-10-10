@@ -53,15 +53,15 @@ Per call: `ceiling = max(1, availableSec, min(30, remainingSec − 5))`, where `
 
 #### Finish-check migration (owner: **#63**; OMK closes #64 once it is up)
 
-Merge order is #44 → #45 → #62 → #63. The migration is done **in #63, after #62 lands on main**: merge main into #63, then switch every finish-check budget check to the shared clock in the same PR. #64 (`feat/finish-check-budget-glue`) is then redundant, and OMK closes it. Until then nothing in #63 imports finish-check, and this PR only provides the API above.
+#44 (finish-check) **landed on main at `2ecdd7d`**. The remaining order is #45 → #62 → #63. The migration is done **in #63, after #62 lands on main**: merge main into #63, then switch every finish-check budget check to the shared clock in the same PR. #64 (`feat/finish-check-budget-glue`) is then redundant, and OMK closes it. Until then nothing in #63 imports finish-check, and this PR only provides the API above.
 
-Call sites, read via `git show` (#44 `fix/finish-check` at `50b49c9`; #62 `feat/finish-check-requirements` at `bc34980`). File `packages/coding-agent/src/core/extensions/builtin/finish-check.ts`, default export `finishCheck(omk, options)`:
+Call sites on main `2ecdd7d` (#44 as merged; same lines as `fix/finish-check` `50b49c9`), plus #62 `feat/finish-check-requirements` at `bc34980`. File `packages/coding-agent/src/core/extensions/builtin/finish-check.ts`, default export `finishCheck(omk, options)`:
 
-| Today (#44 line / #62 line) | After migration |
+| Today (main `2ecdd7d` line / #62 line) | After migration |
 | --- | --- |
 | `:34` / #62 same function: `const budgetMs = resolveTimeBudgetMs(env.OMK_TIME_BUDGET_SEC)` | Kept only for `finishDisciplinePrompt(budgetMs)`. Import `resolveTimeBudgetMs` from `remaining-budget.ts`, and delete the duplicate in `core/finish-check.ts:41-46` (#44 n1). |
 | `:37` `let startedAt = now()` (own clock from extension load, `Date.now`) | Removed in production. |
-| `:39` / #62 `:58` `const elapsedFraction = () => (now() - startedAt) / budgetMs` | `() => readRunBudget()?.elapsedFraction`. When `options.now` or `options.env` is injected (tests), keep the local clock so #44/#62 tests stay deterministic. |
+| `:39` / #62 `:58` `const elapsedFraction = () => (now() - startedAt) / budgetMs` | `() => readRunBudget()?.elapsedFraction`. When `options.now` or `options.env` is injected (tests), keep the local clock so the finish-check tests on main and in #62 stay deterministic. |
 | `:105` `startedAt += result.waitedMs` | `excludeRunBudgetWaitMs(result.waitedMs)` |
 
 The thresholds keep their values and all compare against that one `elapsedFraction`:
