@@ -1,7 +1,6 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-	budgetFractionFromEnv,
 	buildRestoreMessage,
 	buildWatchdogMessage,
 	DELIVERABLE_RESTORE_FRACTION,
@@ -9,6 +8,7 @@ import {
 	type Deliverable,
 	extractDeliverables,
 	resolveDeliverableGuardMode,
+	runBudgetFraction,
 } from "../../deliverable-guard.ts";
 import { DeliverableStore, type RestoreRecord } from "../../deliverable-store.ts";
 import type { ExtensionAPI } from "../types.ts";
@@ -29,8 +29,9 @@ export interface DeliverableGuardOptions {
 	readonly now?: () => number;
 	/**
 	 * Elapsed fraction of the run's time budget, or undefined without a budget.
-	 * Default: `OMK_TIME_BUDGET_SEC` from the time the extension loads, as finish-check
-	 * does on main. After #63 lands this becomes `() => readRunBudget()?.elapsedFraction`.
+	 * Default: the shared run clock (`readRunBudget()?.elapsedFraction`, spec 036), falling
+	 * back to `OMK_TIME_BUDGET_SEC` from load time when no clock is bound, as finish-check does.
+	 * The guard's own checks are run time, not harness waits, so nothing is excluded.
 	 */
 	readonly budgetFraction?: () => number | undefined;
 	readonly timers?: DeliverableGuardTimers;
@@ -69,7 +70,7 @@ export default function deliverableGuard(omk: ExtensionAPI, options: Deliverable
 	const env = options.env ?? process.env;
 	const mode = resolveDeliverableGuardMode(env.OMK_DELIVERABLE_GUARD);
 	if (mode === "off") return;
-	const fraction = options.budgetFraction ?? budgetFractionFromEnv(env, options.now ?? Date.now);
+	const fraction = options.budgetFraction ?? runBudgetFraction(env, options.now ?? (() => performance.now()));
 	const timers = options.timers ?? DEFAULT_TIMERS;
 	const store = new DeliverableStore(options.storeRoot ?? join(tmpdir(), "omk-deliverables", String(process.pid)));
 

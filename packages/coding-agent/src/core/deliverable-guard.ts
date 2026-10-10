@@ -6,7 +6,7 @@
 import { isAbsolute, resolve } from "node:path";
 import type { SizeLimit } from "./fast-check.ts";
 import { PRODUCE_WORDS, splitSentences } from "./finish-check-requirements.ts";
-import { resolveTimeBudgetMs } from "./remaining-budget.ts";
+import { readRunBudget, resolveTimeBudgetMs } from "./remaining-budget.ts";
 
 /** Past this fraction of the budget a missing deliverable gets one steer. */
 export const DELIVERABLE_WATCHDOG_FRACTION = 0.4;
@@ -164,12 +164,17 @@ export function buildRestoreMessage(notes: readonly RestoreNote[]): string {
 }
 
 /**
- * The run clock until #63 lands: elapsed fraction of `OMK_TIME_BUDGET_SEC` since
- * `now()` at the call, the same source finish-check uses on main. Undefined without
- * a budget. #63 replaces this with `readRunBudget()?.elapsedFraction`.
+ * Elapsed fraction of the run budget, as finish-check reads it (spec 036): the shared
+ * run clock (`readRunBudget()`, origin = run start, bound in print/json mode) when it
+ * is bound, else `OMK_TIME_BUDGET_SEC` from `now()` at this call, so `always` in an
+ * interactive session still has a clock. Undefined without a budget.
  */
-export function budgetFractionFromEnv(env: NodeJS.ProcessEnv, now: () => number): () => number | undefined {
+export function runBudgetFraction(env: NodeJS.ProcessEnv, now: () => number): () => number | undefined {
 	const budgetMs = resolveTimeBudgetMs(env.OMK_TIME_BUDGET_SEC);
 	const startedAt = now();
-	return () => (budgetMs === undefined ? undefined : (now() - startedAt) / budgetMs);
+	return () => {
+		const shared = readRunBudget();
+		if (shared) return shared.elapsedFraction;
+		return budgetMs === undefined ? undefined : (now() - startedAt) / budgetMs;
+	};
 }
