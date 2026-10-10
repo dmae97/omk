@@ -32,6 +32,11 @@ export const FINISH_CHECK_SKIP_FRACTION = 0.9;
 export const FINISH_CHECK_EXTRA_TURN_FRACTION = 0.85;
 /** Extra turns per user task after a finish check, shared by the threshold retry and the go-measure nudge. */
 export const FINISH_CHECK_MAX_EXTRA_TURNS = 1;
+/**
+ * A first settle before this fraction of the budget gets one fresh-context verifier turn after the check (spec 032,
+ * behind `OMK_FINISH_CHECK_REVERIFY`). It moves to the #63 RemainingBudget clock together with the other thresholds.
+ */
+export const FINISH_CHECK_REVERIFY_FRACTION = 0.3;
 
 export type FinishCheckMode = "off" | "headless" | "always";
 
@@ -162,4 +167,22 @@ export function decideExtraTurn(input: ExtraTurnDecisionInput): FinishCheckExtra
 		return undefined;
 	if (input.failing > 0) return input.unmeasured > 0 ? "both" : "threshold";
 	return "measure";
+}
+
+export interface ReverifyDecisionInput {
+	readonly enabled: boolean;
+	readonly hasUI: boolean;
+	/** Budget fraction at the task's first settle, before the check turn; `undefined` when the run has no budget. */
+	readonly firstSettleFraction: number | undefined;
+	/** The check turn stopped with `aborted` or `error`. */
+	readonly aborted: boolean;
+	readonly hasPendingMessages: boolean;
+	readonly alreadyVerified: boolean;
+}
+
+/** Whether a settled check turn is followed by the fresh-context verifier (spec 032). Headless runs with a budget only. */
+export function shouldReverify(input: ReverifyDecisionInput): boolean {
+	if (!input.enabled || input.hasUI || input.alreadyVerified || input.aborted || input.hasPendingMessages)
+		return false;
+	return input.firstSettleFraction !== undefined && input.firstSettleFraction < FINISH_CHECK_REVERIFY_FRACTION;
 }
