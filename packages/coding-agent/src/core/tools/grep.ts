@@ -4,7 +4,7 @@ import { spawn } from "child_process";
 import type { AgentTool } from "omk-agent-core";
 import path from "path";
 import { type Static, Type } from "typebox";
-import { ensureTool } from "../../utils/tools-manager.ts";
+import { ensureToolOnce } from "../../utils/ensure-tool-once.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -110,7 +110,7 @@ export function createGrepToolDefinition(
 
 				(async () => {
 					try {
-						const rgPath = await ensureTool("rg", true);
+						const rgPath = await ensureToolOnce("rg", true);
 						if (!rgPath) {
 							settle(() => reject(new Error("ripgrep (rg) is not available and could not be downloaded")));
 							return;

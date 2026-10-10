@@ -1,4 +1,5 @@
 import type { StreamFn } from "omk-agent-core";
+import { linkAbortSignals } from "./abort-link.ts";
 import { requestAdmissionPolicyFromEnv } from "./request-admission-policy.ts";
 import { createRequestAdmissionGuard, type RequestAdmissionGuard } from "./request-context-admission.ts";
 import { requestTraceFromEnv } from "./request-trace.ts";
@@ -18,11 +19,13 @@ export function wrapBudgetStream(
 		const remainingMs = budget.remainingMs;
 		let returnedStream = false;
 		let traceId: string | undefined;
+		// Explicit forwarding instead of AbortSignal.any(): see abort-link.ts for the Node 22 leak.
+		const link = options?.signal ? linkAbortSignals(options.signal, budget.signal) : undefined;
 		try {
 			traceId = trace?.begin(model.provider, model.id);
 			const stream = await source(model, context, {
 				...options,
-				signal: options?.signal ? AbortSignal.any([options.signal, budget.signal]) : budget.signal,
+				signal: link?.signal ?? budget.signal,
 				...(Object.keys(budget.limits).length > 0 ? { maxRetries: 0 } : {}),
 				...(remainingMs === undefined
 					? {}
@@ -38,6 +41,7 @@ export function wrapBudgetStream(
 					} catch {
 						/* Trace failure is not a new execution. */
 					} finally {
+						link?.dispose();
 						release();
 					}
 				},
@@ -47,6 +51,7 @@ export function wrapBudgetStream(
 					} catch {
 						/* Incomplete trace stays non-rankable. */
 					} finally {
+						link?.dispose();
 						release();
 					}
 				},
@@ -55,6 +60,7 @@ export function wrapBudgetStream(
 		} catch (error) {
 			// A broken result() contract leaves termination unknown, not refunded.
 			if (!returnedStream) {
+				link?.dispose();
 				try {
 					if (traceId) trace?.terminal(traceId, undefined, true);
 				} catch {

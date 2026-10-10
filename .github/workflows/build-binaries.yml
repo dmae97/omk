@@ -76,6 +76,13 @@ jobs:
       - name: Build binaries
         run: ./scripts/build-binaries.sh
 
+      - name: Generate SHA256SUMS and stage the installer
+        working-directory: packages/coding-agent/binaries
+        run: |
+          cp ../../../scripts/install.sh install.sh
+          sha256sum omk-*.tar.gz omk-*.zip install.sh > SHA256SUMS
+          cat SHA256SUMS
+
       - name: Extract changelog for this version
         id: changelog
         run: |
@@ -104,9 +111,34 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  attest:
+    # Signed build provenance for every release file, install.sh included (gh attestation verify).
+    # Only this job can mint an OIDC token; the build job, which runs installs and build scripts, cannot.
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - name: Download release bundle
+        # actions/download-artifact v4.3.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release-binaries-${{ env.RELEASE_TAG }}
+          path: /tmp/omk-release
+
+      - name: Attest release files
+        # actions/attest v4.2.2
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-checksums: /tmp/omk-release/SHA256SUMS
+
   release:
     runs-on: ubuntu-latest
-    needs: publish-npm
+    needs: [publish-npm, attest]
     permissions:
       contents: write
     env:
@@ -139,7 +171,9 @@ jobs:
             omk-linux-x64.tar.gz \
             omk-linux-arm64.tar.gz \
             omk-windows-x64.zip \
-            omk-windows-arm64.zip
+            omk-windows-arm64.zip \
+            SHA256SUMS \
+            install.sh
 
   publish-npm:
     # The runtime tests require unprivileged user/network namespaces.

@@ -247,6 +247,16 @@ OID에서 `refs/omk/accepted`로 compare-and-swap합니다. 작업 트리·브�
 소스 체크아웃에서는 root에서 `node --import tsx packages/coding-agent/src/cli.ts run ...`로
 동일 경로를 사용할 수 있습니다. 이 변경만으로 설치된 TUI가 갱신되지는 않습니다.
 
+### DAG와 증거 설명
+
+`omk run explain ID --state-dir DIR --json`과 SDK `RunCoordinator.explain(ID)`는
+같은 원장 snapshot의 DAG 의존성/미종료 조상, candidate/receipt 바인딩과 claim closure를
+읽기 전용으로 설명합니다. 새 실행, 재시도, 승인이나 원장 변경은 하지 않습니다.
+검증 없는 task 성공을 completion proof로 쓰지 않으며, 중복 실행 ID/claim ID는 evidence
+parser와 최종 판정에서 거부합니다. 결과 필드, 반례 검사와 최신 연구 적용 경계는
+[DAG 실행과 증거](dag-evidence.md)에 있습니다. 설명은 clean success와 verified closure를
+모두 만족해야 exit 0이며, 미완료/실패는 1입니다.
+
 ## SDK
 
 ```typescript

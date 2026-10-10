@@ -63,20 +63,23 @@ required for your first task.
 
 ## Quick start
 
-Requires Node.js 22.19 or newer. Start in the repository you want to work on:
+Install the standalone binary (no Node.js needed; the installer verifies the
+release's `SHA256SUMS` and refuses a mismatch), then start in your repository:
 
 ```bash
-npm install -g open-multi-agent-kit --ignore-scripts
-omk --version
+curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh
 cd your-project
 omk
 ```
 
-Without a global install, run `npx --ignore-scripts open-multi-agent-kit` from
-that directory.
+With Node.js 22.19 or newer you can use npm instead:
+`npm install -g open-multi-agent-kit --ignore-scripts`, or run
+`npx --ignore-scripts open-multi-agent-kit` without a global install.
 
-1. Run `/login` to authenticate a supported subscription or API-key provider.
-2. Run `/model` to choose an available model.
+1. On a first run OMK opens `/login` for you: sign in with a subscription or an
+   API key. An existing Claude Code or Codex CLI login can be reused with
+   `omk provider adopt`.
+2. Run `/model` to choose another available model at any time.
 3. Try a read-only first task:
 
 ```text
@@ -99,9 +102,13 @@ those results yourself; a request to run tests does not enable a verification
 gate.
 
 Built-in local bash requires `sandbox-exec` on macOS or `bwrap` plus
-unprivileged user namespaces on Linux. It blocks network access and fails
-closed if the backend is missing. See the [safety boundary](#verification-boundary)
-and [full quickstart](packages/coding-agent/docs/quickstart.md) for setup.
+unprivileged user namespaces on Linux (`sudo apt install bubblewrap` on Debian
+and Ubuntu). It blocks network access and fails closed if the backend is missing.
+`omk doctor` checks the runtime, credentials, the model a first session would
+pick, and the sandbox, and prints the fix for this machine. See
+[Bash sandbox setup](packages/coding-agent/docs/sandbox-setup.md), the
+[safety boundary](#verification-boundary) and the
+[full quickstart](packages/coding-agent/docs/quickstart.md).
 
 ## What runs by default
 

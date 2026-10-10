@@ -4,13 +4,38 @@ This page gets you from install to a useful first omk session.
 
 ## Install
 
-OMK is distributed as an npm package:
+The standalone binary needs no Node.js. The installer picks the archive for your OS and CPU,
+verifies it against the release's `SHA256SUMS`, and refuses to install on a mismatch:
+
+```bash
+curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh
+```
+
+It installs into `~/.omk/versions/<version>` and points `~/.omk/bin/omk` at it, so the previous
+version stays on disk. The archive is checked against the release's `SHA256SUMS`, which always comes
+from GitHub over HTTPS, even when `--base-url` names a download mirror (`--trust-mirror` takes it from
+the mirror instead). To also check the signed build provenance of an archive or of the installer:
+`gh attestation verify omk-linux-x64.tar.gz -R dmae97/omk` (or `install.sh`).
+
+With Node.js 22.19 or newer you can install the npm package instead:
 
 ```bash
 npm install -g --ignore-scripts open-multi-agent-kit
 ```
 
 `--ignore-scripts` disables dependency lifecycle scripts during install. OMK does not require install scripts for normal npm installs.
+
+On Linux, install bubblewrap before the first session; OMK runs every bash command inside it and
+blocks the command when it cannot start (`sudo apt install bubblewrap` on Debian and Ubuntu, other
+distributions in [Bash sandbox setup](sandbox-setup.md)). Then check the machine:
+
+```bash
+omk doctor
+```
+
+`omk doctor` is read-only. It reports the runtime, stored and environment credentials, the model a
+first session would pick, the bash sandbox, and search tools, each with the fix for this machine.
+Add `--online` to test provider reachability or `--json` for scripts.
 
 OMK 1.3.0 fixes replay-lock startup on macOS when the parent environment uses
 a non-English locale. If an older installation fails with a process-start
@@ -44,6 +69,10 @@ omk
 ```
 
 ## Authenticate
+
+On a first run with no usable model, OMK opens sign-in by itself (Esc skips it, `/login` reopens it).
+If a Claude Code or Codex CLI login already exists on the machine, the first screen names it; reuse
+it with `omk provider adopt anthropic` or `omk provider adopt openai-codex` instead of signing in again.
 
 OMK can use subscription providers through `/login`, or API-key providers through environment variables or the auth file.
 
