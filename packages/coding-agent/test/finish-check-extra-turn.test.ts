@@ -124,6 +124,30 @@ describe("finish-check extra turn: threshold retry", () => {
 	});
 });
 
+describe("finish-check extra turn: which message is read", () => {
+	const turn = (...texts: string[]) => ({
+		messages: texts
+			.flatMap((text) => [
+				{ role: "assistant", stopReason: "toolUse", content: [{ type: "text", text }] },
+				{ role: "toolResult", content: [{ type: "text", text: "REQ 1: PASS - stone 99 >= 75" }] },
+			])
+			.concat([{ role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Done." }] }]),
+	});
+
+	it("reads the latest assistant message of the turn that has REQ lines", async () => {
+		const run = await toCheck(COREWARS);
+		await run.fire("agent_settled", turn("REQ 1: PASS - stone 70 >= 75", MET, "Saving the output."));
+		expect(run.followUps()).toHaveLength(1);
+		expect(run.entries[0].data.items[0]).toMatchObject({ status: "pass", hasMeasurement: true });
+	});
+
+	it("still finds a miss written before the final summary", async () => {
+		const run = await toCheck(COREWARS);
+		await run.fire("agent_settled", turn(MISSED));
+		expect(run.events.at(-1)?.data.extraTurn).toBe("threshold");
+	});
+});
+
 describe("finish-check extra turn: go-measure nudge", () => {
 	it("nudges once when a numeric item has no REQ line", async () => {
 		const run = await toCheck(COREWARS);

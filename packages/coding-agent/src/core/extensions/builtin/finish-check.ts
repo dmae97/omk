@@ -18,6 +18,7 @@ import {
 	extractRequirements,
 	extraTurnItems,
 	finishCheckToolCap,
+	hasFinishCheckLedgerLines,
 	parseFinishCheckLedger,
 } from "../../finish-check-requirements.ts";
 import { requestPreCheckSnapshot, resolveSnapshotHandshake } from "../../finish-check-snapshot.ts";
@@ -41,6 +42,22 @@ function assistantText(message: unknown): string {
 	return content
 		.map((part: { type?: string; text?: string }) => (part?.type === "text" ? (part.text ?? "") : ""))
 		.join("\n");
+}
+
+/**
+ * The text the turn's REQ lines are read from: the latest assistant message of
+ * this run that has any, else the last assistant message. `messages` holds only
+ * the run that just settled, so an earlier turn's lines are never read.
+ */
+function ledgerReply(messages: readonly unknown[]): string {
+	let fallback: string | undefined;
+	for (let index = messages.length - 1; index >= 0; index--) {
+		if ((messages[index] as { role?: string } | undefined)?.role !== "assistant") continue;
+		const text = assistantText(messages[index]);
+		if (hasFinishCheckLedgerLines(text)) return text;
+		fallback ??= text;
+	}
+	return fallback ?? "";
 }
 
 /**
@@ -129,14 +146,15 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 		if (extraTurnActive) {
 			// The extra turn's REQ lines are recorded; nothing follows it, whatever they say.
 			extraTurnActive = false;
-			const ledger = parseFinishCheckLedger(assistantText(last), requirements);
+			const ledger = parseFinishCheckLedger(ledgerReply(event.messages), requirements);
 			omk.appendEntry(FINISH_CHECK_LEDGER_ENTRY, { items: ledger, round: 2 });
 			omk.events.emit(FINISH_CHECK_EVENT, { active: false, ledger, round: 2 });
 			return;
 		}
 		if (checkActive) {
 			checkActive = false;
-			const ledger = requirements.length > 0 ? parseFinishCheckLedger(assistantText(last), requirements) : [];
+			const ledger =
+				requirements.length > 0 ? parseFinishCheckLedger(ledgerReply(event.messages), requirements) : [];
 			if (ledger.length > 0) omk.appendEntry(FINISH_CHECK_LEDGER_ENTRY, { items: ledger });
 			const { failing, unmeasured } = extraTurnItems(ledger);
 			const extraTurn = decideExtraTurn({

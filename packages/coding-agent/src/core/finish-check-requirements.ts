@@ -146,6 +146,11 @@ export interface FinishCheckLedgerItem {
 
 const LEDGER_LINE = /^[\s>*`-]*REQ\s+(\d+)\s*:\s*(PASS|FAIL)\b[\s`*]*(?:[-–—:]\s*)?(.*)$/gim;
 
+/** Whether `text` has at least one `REQ n: PASS|FAIL` line. */
+export function hasFinishCheckLedgerLines(text: string): boolean {
+	return new RegExp(LEDGER_LINE.source, "im").test(text);
+}
+
 /** Reads the `REQ n: PASS|FAIL - value` lines from the check's reply, one entry per requirement. */
 export function parseFinishCheckLedger(reply: string, requirements: readonly string[]): FinishCheckLedgerItem[] {
 	const reported = new Map<number, { status: "pass" | "fail"; measured: string | undefined }>();
