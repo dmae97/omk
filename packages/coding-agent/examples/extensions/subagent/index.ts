@@ -54,6 +54,7 @@ import {
 import { runManagedProcess } from "./managed-process.ts";
 import { emptyUsage, type SingleResult, type SubagentAttemptResult } from "./subagent-runtime-types.ts";
 import { createSubagentStream } from "./subagent-stream.ts";
+import { subagentWorkerEnv } from "./worker-env.ts";
 import {
 	type GraphTask,
 	GraphValidationError,
@@ -425,6 +426,7 @@ async function runSingleAgentAttempt(
 			command: invocation.command,
 			args: invocation.args,
 			cwd: cwd ?? defaultCwd,
+			env: subagentWorkerEnv(process.env),
 			cutoffMs,
 			signal,
 			onStdout: stream.stdout,

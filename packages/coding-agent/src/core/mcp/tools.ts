@@ -104,6 +104,11 @@ export function mapMcpContent(blocks: readonly McpContentBlock[]): (TextContent 
 export interface CreateMcpToolDefinitionOptions {
 	/** Per-call deadline. Falls back to the client's default. */
 	readonly callTimeoutMs?: number;
+	/**
+	 * Outer tool-runner timeout. Set a little above the MCP deadline so a
+	 * configured `tool_timeout_sec` is not cut short by a global or prefix default.
+	 */
+	readonly toolTimeoutMs?: number;
 }
 
 /**
@@ -126,9 +131,10 @@ export function createMcpToolDefinition(
 		description: tool.description ?? `MCP tool "${tool.name}" from server "${serverName}".`,
 		parameters,
 		executionMode: "parallel",
-		async execute(_toolCallId, params): Promise<AgentToolResult<McpToolDetails>> {
+		...(options.toolTimeoutMs !== undefined ? { timeoutMs: options.toolTimeoutMs } : {}),
+		async execute(_toolCallId, params, signal): Promise<AgentToolResult<McpToolDetails>> {
 			try {
-				const result = await client.callTool(tool.name, params, options.callTimeoutMs);
+				const result = await client.callTool(tool.name, params, options.callTimeoutMs, signal);
 				const content = mapMcpContent(result.content);
 				return {
 					content: content.length > 0 ? content : [{ type: "text", text: "(no content)" }],

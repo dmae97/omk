@@ -36,6 +36,48 @@ describe("MCP client against a real stdio server", () => {
 		expect(() => client("ok", { requestTimeoutMs: Number.NaN })).toThrow(RangeError);
 		expect(() => client("ok", { requestTimeoutMs: 0.5 })).toThrow(RangeError);
 	});
+	it("aborts an in-flight tool call and tells the server to cancel it", async () => {
+		const c = client("hang", { requestTimeoutMs: 5000 });
+		await c.connect();
+		const transport = (c as unknown as { transport: { send(message: unknown): boolean } }).transport;
+		const send = vi.spyOn(transport, "send");
+		const controller = new AbortController();
+		const call = c.callTool("echo", { message: "hi" }, undefined, controller.signal);
+		controller.abort();
+		await expect(call).rejects.toThrow(/aborted/u);
+		const cancelled = send.mock.calls
+			.map(([message]) => message as { method?: string; params?: { requestId?: number } })
+			.find((message) => message.method === "notifications/cancelled");
+		expect(cancelled?.params?.requestId).toEqual(expect.any(Number));
+		await expect(c.callTool("echo", {}, undefined, controller.signal)).rejects.toThrow(/aborted/u);
+	});
+
+	it("sends notifications/cancelled when a tool call times out", async () => {
+		const c = client("hang", { requestTimeoutMs: 150 });
+		await c.connect();
+		const transport = (c as unknown as { transport: { send(message: unknown): boolean } }).transport;
+		const send = vi.spyOn(transport, "send");
+		await expect(c.callTool("echo", {})).rejects.toThrow(/timed out/u);
+		expect(
+			send.mock.calls.some(([message]) => (message as { method?: string }).method === "notifications/cancelled"),
+		).toBe(true);
+	});
+
+	it("does not send notifications/cancelled for a timed-out initialize", async () => {
+		const c = new McpClient({
+			name: "fake-silent-init",
+			handshakeTimeoutMs: 150,
+			transport: { command: process.execPath, args: [SERVER], env: { FAKE_MCP_MODE: "silent-init" } },
+		});
+		open.push(c);
+		const transport = (c as unknown as { transport: { send(message: unknown): boolean } }).transport;
+		const send = vi.spyOn(transport, "send");
+		await expect(c.connect()).rejects.toThrow(/timed out/u);
+		const methods = send.mock.calls.map(([message]) => (message as { method?: string }).method);
+		expect(methods).toContain("initialize");
+		expect(methods).not.toContain("notifications/cancelled");
+	});
+
 	it("completes the handshake and reports server identity", async () => {
 		const c = client("ok");
 		await c.connect();

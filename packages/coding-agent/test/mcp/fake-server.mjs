@@ -9,6 +9,7 @@
  *   FAKE_MCP_MODE=ok            normal server (default)
  *   FAKE_MCP_MODE=crash         exit non-zero before responding to initialize
  *   FAKE_MCP_MODE=hang          accept the handshake, never answer tools/call
+ *   FAKE_MCP_MODE=silent-init   never answer initialize
  *   FAKE_MCP_MODE=garbage       emit a non-JSON line before every response
  *   FAKE_MCP_MODE=no-tools      handshake succeeds, tools/list returns []
  *   FAKE_MCP_MODE=paged         tools/list returns two cursor-paginated pages
@@ -60,6 +61,7 @@ function send(message) {
 
 function handle(request) {
 	const { id, method, params } = request;
+	if (method === "initialize" && mode === "silent-init") return;
 	if (method === "initialize") {
 		send({
 			jsonrpc: "2.0",

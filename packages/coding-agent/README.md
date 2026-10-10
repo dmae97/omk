@@ -113,7 +113,7 @@ Type `/` in the editor to open command completion.
 
 ### Default Harness Safeguards
 
-OMK warns from the third repeated identical tool call and blocks the sixth. It also repairs unmatched tool pairs before provider requests and adds guidance for supported Kimi, GLM, and Grok models. `OMK_IDENTICAL_LOOP`, `OMK_TOOL_PAIR_REPAIR`, and `OMK_PROMPT_PRESET` opt out; `OMK_GOAL_CONTROLLER` controls `/goal` and continuation. An active goal continues after each settled turn; with an approved acceptance check it completes when the check passes on the current workspace. See [acceptance checks](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/run-protocol.md#acceptance-checks).
+OMK warns from the third repeated identical tool call and blocks the sixth. It also repairs unmatched tool pairs before provider requests and adds guidance for supported Kimi, GLM, and Grok models. `OMK_IDENTICAL_LOOP`, `OMK_TOOL_PAIR_REPAIR`, and `OMK_PROMPT_PRESET` opt out; `OMK_GOAL_CONTROLLER` controls `/goal` and continuation. Headless runs also get a one-time finish check after workspace changes (`OMK_FINISH_CHECK`, with `OMK_TIME_BUDGET_SEC` for an early-save reminder). An active goal continues after each settled turn; with an approved acceptance check it completes when the check passes on the current workspace. See [acceptance checks](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/run-protocol.md#acceptance-checks).
 
 See [Usage](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/usage.md) and [Keybindings](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/keybindings.md) for the complete interactive reference.
 

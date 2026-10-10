@@ -1,0 +1,29 @@
+import { describe, expect, it } from "vitest";
+import { subagentWorkerEnv } from "./worker-env.ts";
+
+describe("subagentWorkerEnv", () => {
+	it("turns the finish check off for workers and keeps lead-only settings out", () => {
+		const env = subagentWorkerEnv({
+			PATH: "/bin",
+			OMK_FINISH_CHECK: "always",
+			OMK_TIME_BUDGET_SEC: "900",
+			OMK_FINISH_CHECK_SNAPSHOT_DIR: "/opt/omk/snap",
+			OMK_FINISH_CHECK_SNAPSHOT_TIMEOUT_SEC: "60",
+		});
+		expect(env.PATH).toBe("/bin");
+		expect(env.OMK_FINISH_CHECK).toBe("0");
+		expect(env.OMK_TIME_BUDGET_SEC).toBeUndefined();
+		expect(env.OMK_FINISH_CHECK_SNAPSHOT_DIR).toBeUndefined();
+		expect(env.OMK_FINISH_CHECK_SNAPSHOT_TIMEOUT_SEC).toBeUndefined();
+	});
+
+	it("lets OMK_FINISH_CHECK_WORKERS opt workers in", () => {
+		expect(subagentWorkerEnv({ OMK_FINISH_CHECK_WORKERS: "1" }).OMK_FINISH_CHECK).toBe("1");
+	});
+
+	it("does not modify the parent environment", () => {
+		const parent = { OMK_TIME_BUDGET_SEC: "900" };
+		subagentWorkerEnv(parent);
+		expect(parent).toEqual({ OMK_TIME_BUDGET_SEC: "900" });
+	});
+});

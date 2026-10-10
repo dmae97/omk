@@ -141,8 +141,9 @@ import { loadHookInventory } from "./hook-inventory.ts";
 import { captureHostResourceSnapshot, type HostResourceSnapshot } from "./host-resource-snapshot.ts";
 import { decideLoadoutAccess, type LoadoutAccessPolicy } from "./loadout-access-policy.ts";
 import { buildCapabilityInventory } from "./loadout-runtime.ts";
-import { loadMcpServerConfigs } from "./mcp/config.ts";
+import { loadMcpServerConfigsWithReport, type McpConfigLoadReport } from "./mcp/config.ts";
 import { McpManager, type McpServerConfig, type McpServerStatus } from "./mcp/manager.ts";
+import { type McpProjectTrustSummary, projectTrustSummary } from "./mcp/trust-summary.ts";
 import { buildRuntimeProvenance } from "./runtime-provenance.ts";
 import { createSubagentLaneAuthority, type SubagentLaneAuthority } from "./subagent-lane-authority.ts";
 import { type ToolCallMetric, TurnMetricsSink } from "./turn-metrics.ts";
@@ -676,6 +677,8 @@ export class AgentSession {
 	private _baseToolDefinitions: Map<string, ToolDefinition> = new Map();
 	private _mcpManager: McpManager | undefined;
 	private _mcpAttaching = false;
+	/** Runtime-only: holds server env values, so never expose it; see `mcpProjectTrustReport()`. */
+	private _mcpLoadReport: McpConfigLoadReport | undefined;
 	private _mcpToolNames: Set<string> = new Set();
 	private _turnMetricsSink: TurnMetricsSink | undefined;
 	private _turnMetricsState: TurnMetricsState | undefined;
@@ -4463,7 +4466,8 @@ export class AgentSession {
 		servers?: readonly McpServerConfig[];
 		callTimeoutMs?: number;
 	}): Promise<McpServerStatus[]> {
-		const servers = options?.servers ?? loadMcpServerConfigs(this._cwd);
+		if (!options?.servers) this._mcpLoadReport = loadMcpServerConfigsWithReport(this._cwd);
+		const servers = options?.servers ?? this._mcpLoadReport?.servers ?? [];
 		await this._mcpManager?.closeAndWait();
 		this._shutdown.assertOpen();
 		this._mcpManager = undefined;
@@ -4489,6 +4493,15 @@ export class AgentSession {
 		this._customTools = [...this._customTools, ...(usable as ToolDefinition[])];
 		this._refreshToolRegistry();
 		return manager.status();
+	}
+
+	/**
+	 * Project MCP servers withheld at the last attach because `<cwd>/.omk/mcp.json`
+	 * is not trusted (or changed since it was trusted). Only the trust fields, never
+	 * server configs or env values. Undefined before the first config load.
+	 */
+	mcpProjectTrustReport(): McpProjectTrustSummary | undefined {
+		return projectTrustSummary(this._mcpLoadReport);
 	}
 
 	/** Status of MCP servers attached to this session. Empty when none were attached. */

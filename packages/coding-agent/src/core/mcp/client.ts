@@ -21,6 +21,7 @@ import {
 	type JsonRpcMessage,
 	type JsonRpcResponse,
 } from "./protocol.ts";
+import { cancelPendingRequest, withAbortListener } from "./request-cancel.ts";
 import { validateMcpCallResult } from "./result-contract.ts";
 import { McpStdioTransport, type StdioTransportOptions } from "./stdio-transport.ts";
 
@@ -224,9 +225,9 @@ export class McpClient {
 	 * resolves with `isError: true`, matching MCP semantics so the model sees
 	 * the server's own error text instead of a harness exception.
 	 */
-	async callTool(name: string, args: unknown, timeoutMs?: number): Promise<McpToolCallResult> {
+	async callTool(name: string, args: unknown, timeoutMs?: number, signal?: AbortSignal): Promise<McpToolCallResult> {
 		this.assertReady();
-		const result = await this.request("tools/call", { name, arguments: args ?? {} }, timeoutMs);
+		const result = await this.request("tools/call", { name, arguments: args ?? {} }, timeoutMs, signal);
 		return validateMcpCallResult(result);
 	}
 
@@ -252,7 +253,15 @@ export class McpClient {
 		if (!this.initialized) throw new Error(`MCP server "${this.options.name}" is not initialized`);
 	}
 
-	private request(method: string, params: unknown, timeoutMs?: number): Promise<unknown> {
+	/** Drop a pending request and best-effort tell the server; false when it already settled. */
+	private cancelPending(id: number, reason: string): boolean {
+		// MCP forbids cancelling `initialize`; a timed-out handshake is cleaned up without a notice.
+		const silent = this.closed || this.pending.get(id)?.method === "initialize";
+		return cancelPendingRequest(this.pending, id, reason, (notice) => silent || this.transport.send(notice));
+	}
+
+	private request(method: string, params: unknown, timeoutMs?: number, signal?: AbortSignal): Promise<unknown> {
+		if (signal?.aborted) return Promise.reject(new Error(`MCP request aborted (${method})`));
 		if (this.closed) {
 			return Promise.reject(new Error(this.exitReason ?? `MCP server "${this.options.name}" is closed`));
 		}
@@ -264,9 +273,13 @@ export class McpClient {
 		const id = this.nextId++;
 		const effectiveTimeout = validateMcpTimeoutMs(timeoutMs ?? this.requestTimeoutMs);
 		const deadline = performance.now() + effectiveTimeout;
-		return new Promise<unknown>((resolve, reject) => {
+		return new Promise<unknown>((rawResolve, rawReject) => {
+			const onAbort = () => {
+				if (this.cancelPending(id, "aborted by client")) reject(new Error(`MCP request aborted (${method})`));
+			};
+			const { resolve, reject } = withAbortListener(signal, onAbort, rawResolve, rawReject);
 			const timer = setTimeout(() => {
-				this.pending.delete(id);
+				if (!this.cancelPending(id, `timed out after ${effectiveTimeout}ms`)) return;
 				reject(new Error(`MCP server "${this.options.name}" timed out after ${effectiveTimeout}ms on ${method}`));
 			}, effectiveTimeout);
 			timer.unref?.();
