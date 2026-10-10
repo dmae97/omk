@@ -104,14 +104,16 @@ export function tryProviderHarnessDispatch<
 		if (state.blockers.length > 0) {
 			return { loadoutAccessPolicy: undefined, warnings: state.blockers, runtimeState: state };
 		}
-		const policy = runtime.createLoadoutPolicyFromRuntimeState(state, {
-			cwd: input.cwd,
-			commands: profile.commands,
-		});
+		const policy = grantSessionWorkspace(
+			runtime.createLoadoutPolicyFromRuntimeState(state, {
+				cwd: input.cwd,
+				commands: profile.commands,
+			}),
+		);
 		return {
 			loadoutAccessPolicy: policy,
 			warnings: uniqueSorted([
-				...state.warnings,
+				...state.warnings.filter((warning) => !SESSION_TOOL_MISSING_WARNINGS.has(warning)),
 				...(input.task?.trim() && state.activeSkills.length === 0 ? [`no ${spec.domainId} skill signals`] : []),
 			]),
 			runtimeState: state,
@@ -122,11 +124,36 @@ export function tryProviderHarnessDispatch<
 	}
 }
 
+/** Matches every command; `**` compiles to `.*` in the loadout command glob. */
+const SESSION_COMMAND_PATTERN = "**";
+
+/**
+ * A provider harness applies to the top-level session, which has no lane grant,
+ * so the runtime state carries empty read/write sets and a scoped shell with no
+ * allow patterns. Used as-is, that policy denies every read, write, edit, and
+ * bash call (only ls/find survive), which made Grok/Devin sessions unusable in
+ * headless `-p` mode. The harness is meant to shape skills, MCP, hooks, and the
+ * tool list, not to be stricter than running without it, so the session gets
+ * its workspace (cwd) as read/write root and any command not matching the
+ * profile's block patterns. Blocked paths (.env, secrets, keys, .git) still
+ * apply. Lane grants with explicit sets are left untouched.
+ */
+function grantSessionWorkspace(policy: LoadoutAccessPolicy): LoadoutAccessPolicy {
+	const scopeless = policy.readRoots.length === 0 && policy.writeRoots.length === 0;
+	const shellLocked = policy.commands.mode !== "none" && (policy.commands.allowPatterns?.length ?? 0) === 0;
+	return {
+		...policy,
+		readRoots: scopeless ? [policy.cwd] : policy.readRoots,
+		writeRoots: scopeless ? [policy.cwd] : policy.writeRoots,
+		commands: shellLocked ? { ...policy.commands, allowPatterns: [SESSION_COMMAND_PATTERN] } : policy.commands,
+	};
+}
+
 function composeProviderHarnessProfile(
 	spec: ProviderHarnessSpec,
 	input: ProviderHarnessDispatchInput<unknown, ProviderHarnessSkillSource>,
 ): ComposedLoadout {
-	const profile = composeLoadout("coder", spec.domainId);
+	const profile = withSessionTools(composeLoadout("coder", spec.domainId));
 	const task = input.task?.trim();
 	if (!task) {
 		return { ...profile, skills: { allow: [{ kind: "skill", names: [] }] } };
@@ -138,4 +165,23 @@ function composeProviderHarnessProfile(
 		...profile,
 		skills: { allow: [{ kind: "skill", names: [...selected] }] },
 	};
+}
+
+/**
+ * Tools the top-level harness session keeps even though the shared `coder` role
+ * and the harness domain profile allow only the seven builtins. The composed
+ * gate is an intersection, so extension tools such as `subagent` were dropped and
+ * Grok/Devin sessions could never fan out. They are added here, not to the
+ * `coder` role, because lanes also use that role and must not spawn subagents.
+ * If the extension is not loaded the tool is simply absent (no warning).
+ */
+const SESSION_ONLY_TOOLS = ["subagent"] as const;
+const SESSION_TOOL_MISSING_WARNINGS: ReadonlySet<string> = new Set(
+	SESSION_ONLY_TOOLS.map((tool) => `optional tool not available: ${tool}`),
+);
+
+function withSessionTools(profile: ComposedLoadout): ComposedLoadout {
+	const allow = profile.tools.allow;
+	if (!allow) return profile;
+	return { ...profile, tools: { ...profile.tools, allow: uniqueSorted([...allow, ...SESSION_ONLY_TOOLS]) } };
 }
