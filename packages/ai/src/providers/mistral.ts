@@ -25,6 +25,12 @@ import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { shortHash } from "../utils/hash.ts";
 import { parseStreamingJson } from "../utils/json-parse.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
+import {
+	type MistralReasoningEffort,
+	mapReasoningEffort,
+	usesPromptModeReasoning,
+	usesReasoningEffort,
+} from "./mistral-reasoning.ts";
 import { buildBaseOptions } from "./simple-options.ts";
 import { transformMessages } from "./transform-messages.ts";
 
@@ -34,7 +40,6 @@ const MAX_MISTRAL_ERROR_BODY_CHARS = 4000;
 /**
  * Provider-specific options for the Mistral API.
  */
-type MistralReasoningEffort = "none" | "high";
 
 export interface MistralOptions extends StreamOptions {
 	toolChoice?: "auto" | "none" | "any" | "required" | { type: "function"; function: { name: string } };
@@ -585,21 +590,6 @@ function buildToolResultText(text: string, hasImages: boolean, supportsImages: b
 	}
 
 	return isError ? "[tool error] (no tool output)" : "(no tool output)";
-}
-
-function usesReasoningEffort(model: Model<"mistral-conversations">): boolean {
-	return model.id === "mistral-small-2603" || model.id === "mistral-small-latest" || model.id === "mistral-medium-3.5";
-}
-
-function usesPromptModeReasoning(model: Model<"mistral-conversations">): boolean {
-	return model.reasoning && !usesReasoningEffort(model);
-}
-
-function mapReasoningEffort(
-	model: Model<"mistral-conversations">,
-	level: Exclude<SimpleStreamOptions["reasoning"], undefined>,
-): MistralReasoningEffort {
-	return (model.thinkingLevelMap?.[level] ?? "high") as MistralReasoningEffort;
 }
 
 function mapToolChoice(
