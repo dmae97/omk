@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from "omk-ai";
 import { Type } from "typebox";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgentSessionFromServices, createAgentSessionServices } from "../src/core/agent-session-services.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
@@ -30,7 +30,10 @@ describe("AgentSession ReplayLedger evidence freshness bridge", () => {
 		writeFileSync(join(cwd, "artifact.txt"), "stable\n");
 	});
 
-	afterEach(() => rmSync(root, { recursive: true, force: true }));
+	afterEach(() => {
+		vi.unstubAllEnvs();
+		rmSync(root, { recursive: true, force: true });
+	});
 
 	it("persists default CLI-composed timeout evidence without copying session bodies", async () => {
 		const faux = registerFauxProvider();
@@ -90,6 +93,8 @@ describe("AgentSession ReplayLedger evidence freshness bridge", () => {
 	});
 
 	it("blocks a receipt predating a late write mutation and accepts a later receipt through the same gate resolver", async () => {
+		// The faux script ends after "done"; keep the headless finish-check turn out of this timing test.
+		vi.stubEnv("OMK_FINISH_CHECK", "0");
 		const ledger = new ReplayLedgerManager(GOAL_ID, join(root, "ledger.jsonl"));
 		const executor = new VerifiedEvidenceExecutor({
 			store: new EvidenceReceiptStore(join(root, "receipts")),

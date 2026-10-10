@@ -100,6 +100,7 @@ export async function connectMcpRuntime(
 		const definitions = schemas.map((schema) =>
 			createMcpToolDefinition(runtime.config.name, ownedClient, schema, {
 				callTimeoutMs: options.callTimeoutMs,
+				toolTimeoutMs: mcpOuterToolTimeoutMs(options.callTimeoutMs ?? runtime.config.requestTimeoutMs),
 			}),
 		);
 		const admitted: typeof definitions = [];
@@ -129,4 +130,12 @@ export async function connectMcpRuntime(
 		runtime.state = "failed";
 		runtime.error = mcpPublicDiagnostic(error, "connect");
 	}
+}
+
+/** Grace added to the outer tool timer so the MCP deadline (with its cancel notice) fires first. */
+const MCP_OUTER_TIMEOUT_GRACE_MS = 5_000;
+
+/** Only a configured MCP deadline pins the outer timer; the 30s default keeps existing behavior. */
+export function mcpOuterToolTimeoutMs(mcpTimeoutMs: number | undefined): number | undefined {
+	return mcpTimeoutMs === undefined || mcpTimeoutMs <= 0 ? undefined : mcpTimeoutMs + MCP_OUTER_TIMEOUT_GRACE_MS;
 }
