@@ -79,6 +79,7 @@ A `StreamFn` wrapper, `createResponseReasoningCapStreamFn(inner, config)`, in `p
 ## Measurement (A/B, pending benchmark credits)
 
 - **Control build**: the same finish-check-enabled bench build used for R8/B′ (main + the unmerged finish-check stack #44 → #45 → #62 → #64), plus #63, with `OMK_RESPONSE_REASONING_CAP` unset.
+  - Every input is pinned by SHA, never by branch name, because the branches keep moving (#62 is getting spec 035): main `47e78c4`, #44 `276db35`, #45 `3fce389`, #62 `3eb9349` (before 035), #64 `f0ccc03`, #63 `54be529`. Treatment is the same SHAs plus #96, with the flag on.
 - **Treatment build**: the identical build with only 033 added and `OMK_RESPONSE_REASONING_CAP=1`. Nothing else toggled.
 - **Tasks** (Desk's target set), **3 runs each per arm**: adaptive-rejection-sampler, write-compressor, path-tracing-reverse, schemelike-metacircular-eval. Model grok-4.7 at `xhigh`, same TB timeouts as R8.
 - **Report**: pass count per task per arm; count of `response_reasoning_cap_retry` and `..._overrun_after_retry` diagnostics from session JSONL; per-response max wall time and reasoning tokens; total cost per arm.
