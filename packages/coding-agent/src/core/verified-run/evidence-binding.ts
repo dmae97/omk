@@ -1,4 +1,10 @@
-import { CLAIM_GRAPH_SCHEMA_VERSION, evaluateProofClosure, type RunContract } from "omk-protocol";
+import {
+	CLAIM_GRAPH_SCHEMA_VERSION,
+	evaluateProofClosure,
+	type ProofClosureResult,
+	type RunContract,
+	type WorkspaceCompleteness,
+} from "omk-protocol";
 import { digestBytes, VerifiedRunError } from "./storage.ts";
 
 export interface CheckObservation {
@@ -14,6 +20,8 @@ export interface CheckObservation {
 export function parseCheckObservations(value: unknown, nativeRequired: boolean): readonly CheckObservation[] {
 	if (!Array.isArray(value) || value.length > 32) throw new VerifiedRunError("integrity");
 	const rawChecks: readonly unknown[] = value;
+	const claims = new Set<string>();
+	const executions = new Set<string>();
 	return Object.freeze(
 		rawChecks.map((raw): CheckObservation => {
 			if (
@@ -21,8 +29,12 @@ export function parseCheckObservations(value: unknown, nativeRequired: boolean):
 				raw === null ||
 				!("claimId" in raw) ||
 				typeof raw.claimId !== "string" ||
+				!raw.claimId.trim() ||
+				claims.has(raw.claimId) ||
 				!("executionId" in raw) ||
 				typeof raw.executionId !== "string" ||
+				!raw.executionId.trim() ||
+				executions.has(raw.executionId) ||
 				!("stdoutDigest" in raw) ||
 				typeof raw.stdoutDigest !== "string" ||
 				!/^[a-f0-9]{64}$/.test(raw.stdoutDigest) ||
@@ -39,6 +51,8 @@ export function parseCheckObservations(value: unknown, nativeRequired: boolean):
 			if (nativeRequired && (typeof native !== "string" || !/^[a-f0-9]{64}$/.test(native)))
 				throw new VerifiedRunError("integrity");
 			if (!nativeRequired && native !== undefined) throw new VerifiedRunError("integrity");
+			claims.add(raw.claimId);
+			executions.add(raw.executionId);
 			return Object.freeze({
 				claimId: raw.claimId,
 				executionId: raw.executionId,
@@ -52,11 +66,40 @@ export function parseCheckObservations(value: unknown, nativeRequired: boolean):
 	);
 }
 
+interface RunClaimContext {
+	readonly candidate: string;
+	readonly environment: string;
+	readonly checks: readonly CheckObservation[];
+	readonly unresolvedEffectIds?: readonly string[];
+	readonly workspaceCompleteness?: WorkspaceCompleteness;
+}
+
 /** Only the authenticated adapter supplies these observations; the reducer itself grants no trust. */
-export function closesRunClaims(
-	contract: RunContract,
-	context: { readonly candidate: string; readonly environment: string; readonly checks: readonly CheckObservation[] },
-): boolean {
+export function closesRunClaims(contract: RunContract, context: RunClaimContext): boolean {
+	try {
+		return evaluateRunClaims(contract, context).verdict === "verified";
+	} catch (error) {
+		if (error instanceof VerifiedRunError && error.code === "integrity") return false;
+		throw error;
+	}
+}
+
+/** Read-only closure explanation; missing checks and live effects remain unresolved. */
+export function evaluateRunClaims(contract: RunContract, context: RunClaimContext): ProofClosureResult {
+	const claims = new Set<string>();
+	const executions = new Set<string>();
+	for (const check of context.checks) {
+		if (
+			!check.claimId.trim() ||
+			!check.executionId.trim() ||
+			claims.has(check.claimId) ||
+			executions.has(check.executionId) ||
+			!contract.checks.some((expected) => expected.claimId === check.claimId)
+		)
+			throw new VerifiedRunError("integrity");
+		claims.add(check.claimId);
+		executions.add(check.executionId);
+	}
 	const graph = {
 		schemaVersion: CLAIM_GRAPH_SCHEMA_VERSION,
 		claims: contract.checks.map((check) => ({
@@ -86,17 +129,15 @@ export function closesRunClaims(
 		environmentDigest: context.environment,
 		independenceGroup: check.executionId,
 	}));
-	return (
-		evaluateProofClosure({
-			graph,
-			observations,
-			witnessIndependence: "explicit-groups",
-			waivers: [],
-			sourceRoot: context.candidate,
-			environmentDigest: context.environment,
-			workspaceCompleteness: "complete",
-			unresolvedEffectIds: [],
-			now: "1970-01-01T00:00:00.000Z",
-		}).verdict === "verified"
-	);
+	return evaluateProofClosure({
+		graph,
+		observations,
+		witnessIndependence: "explicit-groups",
+		waivers: [],
+		sourceRoot: context.candidate,
+		environmentDigest: context.environment,
+		workspaceCompleteness: context.workspaceCompleteness ?? "complete",
+		unresolvedEffectIds: context.unresolvedEffectIds ?? [],
+		now: "1970-01-01T00:00:00.000Z",
+	});
 }

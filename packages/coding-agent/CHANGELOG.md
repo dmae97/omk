@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-10-10
+
+### Added
+
+- `omk doctor [--json] [--online]` checks the runtime, the agent directory, credentials, the model a first session would pick, the bash sandbox, `fd` and `rg`, and network reachability, and prints the fix for this machine. The checks run as a dependency graph with deadlines, so a root cause is reported once. The exit code is 0 when no check fails, 1 when one does and 2 for a usage error. `doctor` connects to nothing without `--online`, writes neither the agent directory nor `models.json` snapshots, and does not refresh an expired OAuth token. Previously `omk doctor` was sent to the model as a prompt.
+- A first run with no model configured opens the `/login` selector before the first prompt instead of failing that prompt (`Esc` skips it). When a Claude Code or Codex CLI login already exists on the machine, it names the `omk provider adopt <provider>` command that reuses it.
+- Standalone installer: `curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh`, attached to GitHub Releases from this release on. It downloads `omk-<os>-<arch>.tar.gz` and checks it against the release's `SHA256SUMS`, which it always takes from GitHub over HTTPS, also when `--base-url` names a download mirror (`--trust-mirror` takes the mirror's file instead, with a warning). It needs `curl`, resolves `latest` once, installs into `~/.omk/versions/<version>` and points `~/.omk/bin/omk` at it with an atomic rename. It never replaces an installed version directory: reinstalling the same archive does nothing, and another build of an installed version gets its own directory. `--allow-unverified` applies only when the release has no `SHA256SUMS` (HTTP 404); any other checksum failure stops the install. See [quickstart](docs/quickstart.md).
+- Release builds attach `SHA256SUMS` and a signed build-provenance attestation that covers the binaries and `install.sh` (`gh attestation verify omk-linux-x64.tar.gz -R dmae97/omk`). The attestation runs in its own job, the only one that can mint an OIDC token, and the GitHub Release waits for it.
+- Opt-in RTK output filter for the built-in `bash` tool. With `OMK_RTK_OUTPUT=1` and `rtk` from `OMK_RTK_PATH` or `PATH`, successful output of 1 KiB or more from plain `vitest run` and `tsc --noEmit`/`tsgo --noEmit` commands is summarized with `rtk pipe`. The full output is kept in an owner-only file named in the result, and any filter problem returns the original output. Off by default; RTK is not bundled. See [RTK output filter](docs/rtk-and-mutation-testing.md).
+- `omk run explain ID [--state-dir DIR] [--json]` and SDK `RunCoordinator.explain(id)` explain a verified run from one ledger snapshot: DAG dependencies and unfinished ancestors, candidate and receipt bindings, and claim closure. They are read-only and start, retry or approve nothing. See [verified run](docs/verified-run.md).
+
+### Changed
+
+- `omk --version` and `-v` print the version without loading the runtime. On the measurement VM the Node CLI went from 635 ms to 62 ms (1,498 to 19 loaded modules) and the standalone binary from 554 ms to 385 ms.
+- With no default model configured, credentials are ranked: stored login, then a provider API key, then ambient cloud credentials. With AWS credentials in the environment and `ANTHROPIC_API_KEY` set, a first session now uses Anthropic instead of Amazon Bedrock, whose first request failed with a token error. When only ambient credentials exist, OMK names the variable that selected the provider. A configured default model is unchanged.
+- The bash sandbox counts as available only when `bwrap` actually runs a command, not from static checks. Hosts that block unprivileged user namespaces, setuid `bwrap` with `user.max_user_namespaces=0` included, now get setup steps for that host (package, AppArmor or container) instead of a raw `bwrap` error at the first command. See [Bash sandbox setup](docs/sandbox-setup.md).
+- `fd` and `rg` are downloaded after the first frame instead of before it. Behind a stalled network the first frame took about 11 s and now takes about 1.2 s; offline startup is unchanged. Startup, `grep` and `find` share one download per tool.
+
+### Fixed
+
+- Extension messages sent with `triggerTurn`, background-task notifications among them, are delivered once, after the work that kept the session busy and on the resulting context: automatic or manual (`/compact`) compaction, a branch summary, a retry's model switch, prompt preflight, the resource check before a run, or a tool that settles after its run ended. Previously they failed with `PromptExecutionBusyError` and no follow-up turn ran, or, after a manual `/compact`, were answered from the context before compaction without being stored.
+- Follow-up input (`sendUserMessage(text, { deliverAs: "followUp" })`, or a prompt with `streamingBehavior`) that arrives while another prompt is still in preflight, its pre-prompt compaction included, runs with that prompt's run; if that prompt fails, the input runs on its own once the session is idle. Registered extension commands run at once in that window. Other slash text is still refused while the session is busy.
+- Text typed in the interactive TUI during compaction is sent when compaction ends: as a follow-up of the run that resumes, or as a new prompt. Previously the send failed and the text went back to the editor queue.
+- Clearing queued messages (`Esc`) also clears turn input that was waiting for the session to become idle.
+- A prompt whose run ended while extension input handlers were still processing it now runs in a new run budget instead of being refused.
+- Model requests no longer keep about 1.1 KB per request alive for the life of the process. Abort signals are linked with `linkAbortSignals()` instead of Node 22's `AbortSignal.any()`, and `npm run check:abort-signal-any` keeps new `AbortSignal.any()` calls out of the source.
+
+## [1.3.1] - 2026-10-08
+
+> Published 2026-10-08: tag `v1.3.1` (`a989d88`), GitHub Release and npm `latest` for all seven packages, built from that commit. The entries below, except the first Changed entry, were still listed under `[Unreleased]` when 1.3.1 was tagged; the 1.3.1 packages contain them. See also the [1.3.1 preparation notes](../../.github/RELEASE_NOTES_v1.3.1.md), written before publication.
+
 ### Added
 
 - Offline source-quote memory factorial CLI: isolated prior-session stores, paired independent/dependent tasks and explicit memory-off/on controls. The default report has 1,200 deterministic mechanism evaluations, not live LLM efficacy or KV measurements. See [offline experiment](docs/memory-factorial-experiment.md).
@@ -12,6 +43,7 @@
 
 ### Changed
 
+- All seven public workspace packages and their internal dependency ranges are aligned to 1.3.1. External dependency versions are unchanged.
 - Assistant message content views call `setText` only when a block’s source text changes, so finished Markdown instances and their render caches stay reused across streaming updates. Markdown/Text `setText` still no-ops when the displayed string is unchanged.
 - Slash-command autocomplete (`SelectList`) caches the primary column width while the filter is unchanged, so `/` with large skill lists does less work per frame.
 - CLI no longer loads `undici` at process start. A fetch hook installs the global dispatcher on the first `fetch` (one common choke point for providers, OAuth and tools). `scheduleHttpDispatcher` remembers the idle timeout from settings without importing undici until then.
@@ -31,6 +63,7 @@
 - Opening the expanded view (`Ctrl+O`) inks the wordmark in once: 420 ms, ease-out, from a faint pencil underdrawing to ink, with the Verify accent last. It changes colour only, never the layout, and is skipped for reduced motion, `NO_COLOR`, non-TTY output and narrow widths.
 
 ### Fixed
+
 - Closed source-quote memory wrappers release their controller/store references and skip closed predecessors. Already-aborted requests refuse before starting predecessor work, and closed controllers refuse new mutations.
 - Durable file locks are staged with their owner record and atomically renamed into place, so a crash cannot leave a newly acquired ownerless lock. Existing lock ownership and identity checks remain.
 - Goal acceptance excludes OMK-owned goal, metrics and run state from workspace freshness, so OMK's own bookkeeping no longer invalidates a passing check; task-file changes still do. Completion rejections are surfaced instead of leaving a goal silently active.
@@ -42,7 +75,6 @@
 - The empty part of the context and usage meters (`░`) is visible again on dark themes. It was painted with `borderMuted`, which several themes set within a shade of the background (`omk-paper-dark` `#43413d`, `catppuccin-mocha` `#181825`, `omk-aurora-dark` `#161B27`), and `░` only fills part of the cell, so the track disappeared. The rail, header and sidebar meters now share one `meterBar` helper that paints the track with `dim`.
 - An extension that replaces `globalThis.fetch` keeps seeing every request again. Since undici began loading on the first `fetch`, that first request's install compared against the extension's hook instead of omk's own and replaced it with undici's `fetch`, so the hook ran only once per process. omk now sets the undici dispatcher and leaves an extension's `fetch` in place, as before the lazy load; without an extension, `globalThis.fetch` still becomes undici's `fetch`.
 - `omk -p` now arms an unref'd exit guard after print mode finishes: when a stray handle keeps the event loop alive past 2s (override with `OMK_PRINT_EXIT_GRACE_MS`, `0` disables), it writes the held resource kinds to stderr and exits with the run's code. Normal runs are unchanged because the timer is unref'd.
-
 - The interactive footer metrics timer no longer requests a full TUI re-render every 2 seconds when system CPU/MEM metrics are disabled (the default). The footer now owns the interval and only runs it while metrics are shown, so toggling metrics starts and stops the timer instead of waking the event loop every 2 seconds. `footer.invalidate()` was already a no-op, so those ticks only burned render cost proportional to chat history length.
 - `omk -p "- …"` no longer exits with `Unknown option` when the inline prompt starts with a dash and contains whitespace or a newline. One-word dash tokens after `-p` still error; `omk -p -- -foo` passes them as text (spec 028).
 - Processes that import `AgentSession`, every `omk -p` worker included, no longer load jiti and its bundled Babel (about 1.5 MB of CommonJS) at startup. The extension loader imports `jiti/static` when it loads its first extension file, so a run without extension files never loads it. Importing `core/agent-session.js` alone now takes about 15 MB less RSS and 8 MB less heap after GC.
@@ -59,15 +91,6 @@
 
 - From the control rail: the STATUS and CONTROL sections, the `omk` and `sidebar` rows, the `pulse` sparkline (seeded from a hash of the status snapshot, not measured), the `MATRIX RAIN // NEON GRID ONLINE` line and the `pkg` package-intake row. Package intake still appears in the footer and in the pinned sidebar's SYSTEM section. The `CYBERPUNK OPS CORE` and `NIGHT-CITY-MATRIX-V3` lines are gone from both the rail and the hero.
 - The startup banner's hue gradient, scramble reveal, idle colour drift and sparkle starfield. `OMK_CONTROL_IDLE_DRIFT` no longer has an effect: the opening never loops.
-
-## [1.3.1] - 2026-10-08
-
-> Prepared source version, not published. The full release suite remains a publication gate; this section is not evidence of a tag, GitHub Release or npm publication.
-
-### Changed
-
-- All seven public workspace packages and their internal dependency ranges are aligned to 1.3.1. External dependency versions are unchanged.
-- Memory experiment, lifecycle/pricing and TUI recall-status changes remain documented in the coding-agent's `[Unreleased]` section and in the [1.3.1 preparation notes](../../.github/RELEASE_NOTES_v1.3.1.md). Existing unreleased work remains unaudited for final publication.
 
 ## [1.3.0] - 2026-10-04
 

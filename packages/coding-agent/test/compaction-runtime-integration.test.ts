@@ -3,15 +3,17 @@ import type { AgentEvent, AgentMessage } from "omk-agent-core";
 import {
 	type AssistantMessage,
 	createAssistantMessageEventStream,
+	type FauxResponseFactory,
 	fauxAssistantMessage,
 	fauxToolCall,
 	type Model,
 } from "omk-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AgentSession } from "../src/core/agent-session.ts";
 import type { CompactionSettings } from "../src/core/compaction/compaction.ts";
 import type { CompactionEnvelope } from "../src/core/compaction/transaction.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
-import { createHarness, type Harness } from "./suite/harness.ts";
+import { createHarness, getMessageText, type Harness, type HarnessOptions } from "./suite/harness.ts";
 
 type CompactionDetailsWithEnvelope = {
 	readonly compactionEnvelope?: CompactionEnvelope;
@@ -549,5 +551,155 @@ describe("compaction runtime transaction integration", () => {
 		const end = harness.eventsOfType("compaction_end").at(-1);
 		expect(end?.willRetry).toBe(false);
 		expect(end?.errorMessage).toMatch(/retrying cannot help/);
+	});
+});
+
+describe("messages that arrive while auto-compaction owns the session", () => {
+	const harnesses: Harness[] = [];
+	const WAKE = "background task finished";
+	type Send = (session: AgentSession) => Promise<void>;
+	const wake = { customType: "task-done", content: WAKE, display: true, details: {} };
+	// What extensions send to wake the agent: background-task notifications and wake-up prompts.
+	const senders: Record<string, Send> = {
+		"sendCustomMessage(triggerTurn, followUp)": (session) =>
+			session.sendCustomMessage(wake, { triggerTurn: true, deliverAs: "followUp" }),
+		"sendCustomMessage(triggerTurn, steer)": (session) => session.sendCustomMessage(wake, { triggerTurn: true }),
+		"sendUserMessage(followUp)": (session) => session.sendUserMessage(WAKE, { deliverAs: "followUp" }),
+	};
+
+	afterEach(() => {
+		while (harnesses.length > 0) harnesses.pop()?.cleanup();
+	});
+
+	// A split-turn compaction summarizes history and the turn prefix separately; count that as one summary.
+	const steps = (calls: string[]) => calls.filter((call, i) => call !== "summary" || calls[i - 1] !== "summary");
+
+	async function runWhileCompacting(
+		compactBefore: "post-run" | "pre-prompt",
+		send?: Send,
+		extensionFactories?: HarnessOptions["extensionFactories"],
+	) {
+		const harness = await createHarness({ settings: { compaction: { keepRecentTokens: 1 } }, extensionFactories });
+		harnesses.push(harness);
+		seedClosedTranscript(harness);
+		// Only the threshold decision is forced; the post-run check, summary, commit and resume run for real.
+		let compactNext = compactBefore === "pre-prompt";
+		const runtime = harness.session as unknown as AutoCompactionRuntime;
+		vi.spyOn(runtime, "_runtimeCompactionDecision").mockImplementation(() => {
+			const compact = compactNext;
+			compactNext = false;
+			return { compact, emergency: false };
+		});
+		const calls: string[] = [];
+		let delivery: Promise<unknown> | undefined;
+		const respond: FauxResponseFactory = (context) => {
+			if (context.systemPrompt?.startsWith("You are a context summarization assistant")) {
+				calls.push("summary");
+				// Lands while the summary is generated, i.e. while auto-compaction owns the session.
+				if (send)
+					delivery ??= send(harness.session).then(
+						() => "delivered",
+						(error: unknown) => error,
+					);
+				return fauxAssistantMessage("compaction summary");
+			}
+			const sawWake = context.messages.some((message) => getMessageText(message).includes(WAKE));
+			calls.push(sawWake ? "wake turn" : "turn");
+			if (!sawWake && compactBefore === "post-run" && !calls.includes("summary")) compactNext = true;
+			return fauxAssistantMessage(sawWake ? "handled the background result" : "turn done");
+		};
+		harness.setResponses(Array.from({ length: 6 }, () => respond));
+
+		const prompt = await harness.session.prompt("start").then(
+			() => "resolved",
+			(error: unknown) => error,
+		);
+		return { harness, calls, prompt, delivery };
+	}
+
+	function expectDeliveredAfterCompaction(harness: Harness): void {
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(1);
+		expect(harness.session.messages.some((message) => getMessageText(message).includes(WAKE))).toBe(true);
+		expect(harness.session.isStreaming).toBe(false);
+		expect(harness.session.isCompacting).toBe(false);
+		expect(harness.session.runJournalRecords.at(-1)?.event).toBe("run_finished");
+	}
+
+	it.each(Object.entries(senders))("delivers %s that lands during post-run auto-compaction", async (_name, send) => {
+		const { harness, calls, prompt, delivery } = await runWhileCompacting("post-run", send);
+
+		expect(prompt).toBe("resolved");
+		expect(await delivery).toBe("delivered");
+		expect(steps(calls)).toEqual(["turn", "summary", "wake turn"]);
+		expectDeliveredAfterCompaction(harness);
+	});
+
+	it.each([["sendCustomMessage(triggerTurn, followUp)"], ["sendUserMessage(followUp)"]] as const)(
+		"queues %s from pre-prompt compaction for the prompt's own run",
+		async (name) => {
+			const { harness, calls, prompt, delivery } = await runWhileCompacting("pre-prompt", senders[name]);
+
+			expect(prompt).toBe("resolved");
+			expect(await delivery).toBe("delivered");
+			expect(steps(calls)).toEqual(["summary", "turn", "wake turn"]);
+			expectDeliveredAfterCompaction(harness);
+		},
+	);
+
+	it("records a passive message from a session_compact handler without starting a turn", async () => {
+		// @narumitw/pi-goal re-publishes its goal contract this way after every compaction.
+		const { harness, calls, prompt } = await runWhileCompacting("post-run", undefined, [
+			(omk) => {
+				omk.on("session_compact", () => {
+					omk.sendMessage(
+						{ customType: "goal-contract", content: "goal contract", display: false },
+						{ triggerTurn: false },
+					);
+				});
+			},
+		]);
+
+		expect(prompt).toBe("resolved");
+		expect(steps(calls)).toEqual(["turn", "summary"]);
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(1);
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "custom_message")).toHaveLength(1);
+		expect(harness.session.runJournalRecords.at(-1)?.event).toBe("run_finished");
+	});
+
+	it("runs a prompt whose owning run ended while input handlers ran in a fresh budget scope, once", async () => {
+		let release = () => {};
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const seen: Array<string | undefined> = [];
+		const late: Send = (session) => session.prompt("late input", { streamingBehavior: "followUp" });
+		const { harness, calls, prompt, delivery } = await runWhileCompacting("post-run", late, [
+			(omk) => {
+				omk.on("input", async (event) => {
+					if (event.text !== "late input") return { action: "continue" as const };
+					seen.push(event.streamingBehavior);
+					await gate;
+					return { action: "continue" as const };
+				});
+			},
+		]);
+		// The late turn's request must run inside the budget scope it opened, not merely while some scope is active.
+		type BudgetScope = { current?: unknown; executionContext: { getStore(): unknown } };
+		const scope = (harness.session as unknown as { _runBudget: BudgetScope })._runBudget;
+		let lateTurnInScope: boolean | undefined;
+		const realStream = harness.session.agent.streamFn;
+		harness.session.agent.streamFn = (model, context, options) => {
+			if (context.messages.some((message) => getMessageText(message).includes("late input")))
+				lateTurnInScope ??= scope.current !== undefined && scope.executionContext.getStore() === scope.current;
+			return realStream(model, context, options);
+		};
+
+		expect(prompt).toBe("resolved");
+		release();
+		expect(await delivery).toBe("delivered");
+		expect(seen).toEqual(["followUp"]);
+		expect(steps(calls)).toEqual(["turn", "summary", "turn"]);
+		expect(lateTurnInScope).toBe(true);
+		expect(harness.session.runJournalRecords.at(-1)?.event).toBe("run_finished");
 	});
 });

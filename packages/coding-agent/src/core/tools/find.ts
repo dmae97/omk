@@ -3,7 +3,7 @@ import { spawn } from "child_process";
 import type { AgentTool } from "omk-agent-core";
 import path from "path";
 import { type Static, Type } from "typebox";
-import { ensureTool } from "../../utils/tools-manager.ts";
+import { ensureToolOnce } from "../../utils/ensure-tool-once.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
 import { pathExists, resolveToCwd } from "./path-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -157,7 +157,7 @@ export function createFindToolDefinition(
 						}
 
 						// Default implementation uses fd.
-						const fdPath = await ensureTool("fd", true);
+						const fdPath = await ensureToolOnce("fd", true);
 						if (signal?.aborted) {
 							settle(() => reject(new Error("Operation aborted")));
 							return;

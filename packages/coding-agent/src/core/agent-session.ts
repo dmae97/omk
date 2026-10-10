@@ -111,7 +111,6 @@ import {
 	type ExtensionMode,
 	ExtensionRunner,
 	type ExtensionUIContext,
-	type InputSource,
 	type MessageEndEvent,
 	type MessageStartEvent,
 	type MessageUpdateEvent,
@@ -199,11 +198,19 @@ function firstTextContent(result: unknown): string | undefined {
 
 import { createImmutableMessageSnapshot } from "./agent-session-snapshot.ts";
 import { redactCredentialShapedContent } from "./compaction/transaction.ts";
+import {
+	DeferredTurnInput,
+	inputAlreadyHandled,
+	preparedPromptOptions,
+	routesOutsideScope,
+	userMessage,
+} from "./deferred-turn-input.ts";
 import type { CustomMessage } from "./messages.ts";
 import { selectContextFilesForModel } from "./model-prompt-policy.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { findExactModelReferenceMatch } from "./model-resolver.ts";
 import { classifyPromptCacheTransition } from "./prompt-cache.ts";
+import type { PromptOptions } from "./prompt-options.ts";
 import * as promptSettlement from "./prompt-settlement.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import {
@@ -263,7 +270,6 @@ import {
 	ROUTER_FEEDBACK_LEVELS,
 	type RouterFeedbackRecord,
 } from "./router-feedback-collector.ts";
-import type { RunBudgetLimits } from "./run-budget-policy.ts";
 import type { RunJournalAuditDetails, RunJournalAuditEvent, RunJournalRecord } from "./run-journal.ts";
 import { type RunJournalQuarantineReport, RunJournalStore } from "./run-journal-store.ts";
 import { type RunResourceLease, RunResourceLeaseController } from "./run-resource-lease.ts";
@@ -271,7 +277,7 @@ import { SessionBashRuntime } from "./session-bash-runtime.ts";
 import { type BashResourcePermitGrant, SessionBashService } from "./session-bash-service.ts";
 import { SessionCompactionService } from "./session-compaction-service.ts";
 import { type SessionControlServer, startSessionControl } from "./session-control-server.ts";
-import { tryExecuteSessionCommand } from "./session-extension-command.ts";
+import { isSessionCommand, tryExecuteSessionCommand } from "./session-extension-command.ts";
 import { runtimeFailureCause, terminationMessage } from "./session-failure-cause.ts";
 import {
 	promptPreflightTermination,
@@ -478,23 +484,7 @@ interface ExecuteBashOptions {
 	sandboxPolicy?: BashSandboxPreflight;
 }
 
-/** Options for AgentSession.prompt() */
-export interface PromptOptions {
-	/** Shared logical request/concurrency limits and a monotonic deadline for this prompt. */
-	runBudget?: RunBudgetLimits;
-	/** Whether to expand file-based prompt templates (default: true) */
-	expandPromptTemplates?: boolean;
-	/** Image attachments */
-	images?: ImageContent[];
-	/** When streaming, how to queue the message: "steer" (interrupt) or "followUp" (wait). Required if streaming. */
-	streamingBehavior?: "steer" | "followUp";
-	/** Source of input for extension input event handlers. Defaults to "interactive". */
-	source?: InputSource;
-	activeSkillNames?: readonly string[];
-	activeSkillSource?: string;
-	/** Internal hook used by RPC mode to observe prompt preflight acceptance or rejection. */
-	preflightResult?: (success: boolean) => void;
-}
+export type { PromptOptions } from "./prompt-options.ts";
 
 /** Result from cycleModel() */
 export interface ModelCycleResult {
@@ -652,6 +642,7 @@ export class AgentSession {
 	private _followUpMessages: string[] = [];
 	/** Messages queued to be included with the next user prompt as context ("asides"). */
 	private _pendingNextTurnMessages: CustomMessage[] = [];
+	private readonly _deferredTurnInput = new DeferredTurnInput();
 
 	// Compaction state
 	private _compactionAbortController: AbortController | undefined = undefined;
@@ -774,6 +765,7 @@ export class AgentSession {
 				this.abortBranchSummary();
 			},
 			reject: (error) => this._publishRuntimeFailure(error),
+			idle: () => this._drainDeferredTurnInput(),
 		});
 		this.sessionManager = config.sessionManager;
 		this.settingsManager = config.settingsManager;
@@ -1917,6 +1909,32 @@ export class AgentSession {
 		);
 	}
 
+	/**
+	 * A run that has not finished owns the session and checks the agent queue before ending: streaming, retry,
+	 * the resource probe, work between turns (auto-compaction, retry route switch). Input that starts a turn
+	 * queues there; a second top-level run would be refused with PromptExecutionBusyError and the input dropped.
+	 */
+	private get _runOwnsSession(): boolean {
+		return this._promptLifecycle.running || this.isStreaming;
+	}
+
+	/** Busy, possibly with no agent loop to drain a queue (manual compaction, branch summary, preflight, settling). */
+	private get _sessionBusy(): boolean {
+		return this._promptLifecycle.active || this.isCompacting || this._runBudget.active;
+	}
+
+	/** Starts one run for deferred turn input once nothing owns the session; a macrotask, after scopes close. */
+	private _drainDeferredTurnInput(): void {
+		if (this._deferredTurnInput.size === 0) return;
+		setTimeout(() => {
+			if (this._sessionBusy) return; // the owner adopts it, or calls this again when it lets go
+			const next = this._deferredTurnInput.next();
+			// prompt() and _runAgentPrompt publish their own failures; nothing else awaits this run.
+			if (next && "prompt" in next) this.prompt(next.prompt.text, next.prompt.options).catch(() => undefined);
+			else if (next) this._shutdown.run(() => this._runAgentPrompt(next.messages)).catch(() => undefined);
+		}, 0);
+	}
+
 	/** All messages including custom types like BashExecutionMessage */
 	get messages(): AgentMessage[] {
 		return this.agent.state.messages;
@@ -2101,7 +2119,8 @@ export class AgentSession {
 			resourceObservations = this._resourceObservationJournals.get(promptRunId) ?? null;
 			this._metaRuntime.observeRunBudget(this._runBudget.snapshot());
 			await this.agent.prompt(messages);
-			while (await this._handlePostAgentRun()) {
+			// Re-checked synchronously before finish(): input queued after the last check must not hold the owner.
+			while ((await this._handlePostAgentRun()) || this.agent.hasQueuedMessages()) {
 				await this.agent.continue();
 			}
 		} catch (error) {
@@ -2121,6 +2140,7 @@ export class AgentSession {
 				}
 				resourceObservations?.record("prompt_settled_v1", settledObservationFacts(event));
 				this._emit(event);
+				this._drainDeferredTurnInput();
 			});
 		}
 	}
@@ -2411,9 +2431,9 @@ export class AgentSession {
 			return true;
 		}
 
-		// The agent loop drains both queues before emitting agent_end. Any messages
-		// here were queued by agent_end extension handlers and need a continuation.
-		return this.agent.hasQueuedMessages();
+		// The agent loop drains both queues before emitting agent_end. Any messages here were queued by agent_end
+		// extension handlers, or deferred while the run worked between turns; both need a continuation.
+		return this._deferredTurnInput.adopt(this.agent) || this.agent.hasQueuedMessages();
 	}
 
 	/**
@@ -2427,8 +2447,9 @@ export class AgentSession {
 	 */
 	prompt(text: string, options?: PromptOptions): Promise<void> {
 		return this._shutdown.run(() => {
-			if (options?.runBudget === undefined && (this.isStreaming || this.isRetrying))
-				return this._prompt(text, options);
+			const command = options?.expandPromptTemplates !== false && isSessionCommand(text, this._extensionRunner);
+			if (routesOutsideScope(command, options, this._runOwnsSession, this._runBudget.active))
+				return this._prompt(text, options, true);
 			return this._runBudget.execute(
 				options?.runBudget,
 				() => this._prompt(text, options),
@@ -2442,7 +2463,7 @@ export class AgentSession {
 		return this._runBudget.snapshot();
 	}
 
-	private async _prompt(text: string, options?: PromptOptions): Promise<void> {
+	private async _prompt(text: string, options?: PromptOptions, bypassed = false): Promise<void> {
 		const expandPromptTemplates = options?.expandPromptTemplates ?? true;
 		const preflightResult = options?.preflightResult;
 		let currentText = redactSensitiveText(text);
@@ -2487,12 +2508,12 @@ export class AgentSession {
 
 			// Emit input event for extension interception (before skill/template expansion)
 			let currentImages = options?.images;
-			if (this._extensionRunner.hasHandlers("input")) {
+			if (this._extensionRunner.hasHandlers("input") && !inputAlreadyHandled(options)) {
 				const inputResult = await this._extensionRunner.emitInput(
 					currentText,
 					currentImages,
 					options?.source ?? "interactive",
-					this.isStreaming || this.isRetrying ? options?.streamingBehavior : undefined,
+					this._runOwnsSession ? options?.streamingBehavior : undefined,
 				);
 				if (inputResult.action === "handled") {
 					preflightResult?.(true);
@@ -2512,14 +2533,20 @@ export class AgentSession {
 			}
 			expandedText = redactSensitiveText(expandedText);
 
-			// While a run or its retry backoff owns the session, queue instead of starting a competing top-level prompt.
-			if (this.isStreaming || this.isRetrying) {
+			// While a run owns the session, queue instead of starting a competing top-level prompt; while another
+			// prompt is in preflight, defer for its run (or run as a full prompt at idle if that prompt fails).
+			if (this._runOwnsSession || (bypassed && this._runBudget.active)) {
 				if (!options?.streamingBehavior) {
 					throw new Error(
 						"Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.",
 					);
 				}
-				if (options.streamingBehavior === "followUp") {
+				if (!this._runOwnsSession) {
+					this._deferredTurnInput.deferPrompt(expandedText, currentImages, options, promptSkills);
+					const shown = options.streamingBehavior === "followUp" ? this._followUpMessages : this._steeringMessages;
+					shown.push(expandedText);
+					this._emitQueueUpdate();
+				} else if (options.streamingBehavior === "followUp") {
 					await this._queueFollowUp(expandedText, currentImages);
 				} else {
 					await this._queueSteer(expandedText, currentImages);
@@ -2528,6 +2555,10 @@ export class AgentSession {
 				return;
 			}
 
+			// prompt() skipped the budget scope because a run owned the session, and that run ended while this input
+			// was prepared: resume it through prompt() in a fresh scope, without running its input handlers again.
+			// Returned unawaited, so its rejection reaches the caller without passing this preflight catch.
+			if (bypassed) return this.prompt(expandedText, preparedPromptOptions(options, currentImages, promptSkills));
 			this._promptLifecycle.assertIdle();
 			// Flush any pending bash messages before the new prompt
 			this._flushPendingBashMessages();
@@ -2566,19 +2597,8 @@ export class AgentSession {
 			// Manual mode never enters the router, so /think <level> always wins.
 			this._applyAutoThinkingLevelForTurn(expandedText);
 
-			// Build messages array (custom message if any, then user message)
-			messages = [];
-
-			// Add user message
-			const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: expandedText }];
-			if (currentImages) {
-				userContent.push(...currentImages);
-			}
-			messages.push({
-				role: "user",
-				content: userContent,
-				timestamp: Date.now(),
-			});
+			// Build messages array: the user message, then any pending custom messages
+			messages = [userMessage(expandedText, currentImages)];
 
 			// Inject any pending "nextTurn" messages as context alongside the user message
 			for (const msg of this._pendingNextTurnMessages) {
@@ -2753,15 +2773,7 @@ export class AgentSession {
 		this._invalidateContextBudgetCache({ type: "userSteering" });
 		this._steeringMessages.push(text);
 		this._emitQueueUpdate();
-		const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
-		if (images) {
-			content.push(...images);
-		}
-		this.agent.steer({
-			role: "user",
-			content,
-			timestamp: Date.now(),
-		});
+		this.agent.steer(userMessage(text, images));
 	}
 
 	/**
@@ -2770,15 +2782,7 @@ export class AgentSession {
 	private async _queueFollowUp(text: string, images?: ImageContent[]): Promise<void> {
 		this._followUpMessages.push(text);
 		this._emitQueueUpdate();
-		const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
-		if (images) {
-			content.push(...images);
-		}
-		this.agent.followUp({
-			role: "user",
-			content,
-			timestamp: Date.now(),
-		});
+		this.agent.followUp(userMessage(text, images));
 	}
 
 	/**
@@ -2825,14 +2829,16 @@ export class AgentSession {
 		if (options?.deliverAs === "nextTurn") {
 			this._pendingNextTurnMessages.push(appMessage);
 		} else if (this.isStreaming || this.isRetrying) {
-			// Retry backoff still owns the session (mirrors prompt()): starting a
-			// top-level run here races the pending agent.continue() and wedges the
-			// run journal, so queue for the retried run to drain instead.
+			// A running agent loop, or the retry about to continue it, drains the queue.
 			if (options?.deliverAs === "followUp") {
 				this.agent.followUp(appMessage);
 			} else {
 				this.agent.steer(appMessage);
 			}
+		} else if (options?.triggerTurn && this._sessionBusy) {
+			// Busy with no agent loop to drain a queue: a run adopts it, or it starts one once the session is idle.
+			// A top-level run started now would be refused, or would race the busy work on stale context.
+			this._deferredTurnInput.defer(appMessage, options.deliverAs);
 		} else if (options?.triggerTurn) {
 			await this._shutdown.run(() => this._runAgentPrompt(appMessage));
 		} else {
@@ -2899,6 +2905,7 @@ export class AgentSession {
 		this._steeringMessages = [];
 		this._followUpMessages = [];
 		this.agent.clearAllQueues();
+		this._deferredTurnInput.clear();
 		this._emitQueueUpdate();
 		this._promptLifecycle.flush();
 		return { steering, followUp };
@@ -3784,6 +3791,7 @@ export class AgentSession {
 		} finally {
 			this._compactionAbortController = undefined;
 			this._reconnectToAgent();
+			this._drainDeferredTurnInput();
 		}
 	}
 
@@ -5298,6 +5306,7 @@ export class AgentSession {
 			return { editorText, cancelled: false, summaryEntry };
 		} finally {
 			this._branchSummaryAbortController = undefined;
+			this._drainDeferredTurnInput();
 		}
 	}
 

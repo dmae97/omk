@@ -1,22 +1,31 @@
+import { ensureToolOnce } from "../../utils/ensure-tool-once.ts";
 import { loadSyntaxHighlighter, onSyntaxHighlighterReady } from "../../utils/syntax-highlight.ts";
-import { ensureTool } from "../../utils/tools-manager.ts";
+import { getToolPath } from "../../utils/tools-manager.ts";
 import { onThemeChange } from "./theme/theme.ts";
 
 /**
- * Interactive-only startup dependencies, resolved in parallel before the first render.
- * fd (autocomplete) and rg (grep tool, bash commands) are downloaded if missing and
- * added to PATH via getBinDir. highlight.js is loaded lazily (see
- * utils/syntax-highlight.ts) so headless modes never pay for it; a load failure only
- * leaves code blocks uncolored.
- * @returns Path to fd, if available.
+ * Interactive-only startup dependencies, resolved without blocking the first render.
+ *
+ * A locally available fd is reported synchronously, before the caller renders, so
+ * autocomplete starts fd-backed exactly as before. A missing fd or rg is fetched
+ * silently in the background: the first paint never waits on GitHub, a proxy or a
+ * stalled network, and a late fd is handed to `onFdPath` so the caller can rebuild
+ * autocomplete. highlight.js warms in the background; a late load re-renders through
+ * `onThemedOutputStale`.
+ * @returns Settles when every background fetch has finished (for tests and shutdown).
  */
-export async function ensureInteractiveStartupDeps(): Promise<string | undefined> {
-	const [fdPath] = await Promise.all([
-		ensureTool("fd"),
-		ensureTool("rg"),
-		loadSyntaxHighlighter().catch(() => undefined),
-	]);
-	return fdPath;
+export function scheduleInteractiveStartupDeps(onFdPath: (fdPath: string | undefined) => void): Promise<void> {
+	const pending: Promise<unknown>[] = [loadSyntaxHighlighter().catch(() => undefined)];
+	const localFd = getToolPath("fd") ?? undefined;
+	if (localFd) {
+		onFdPath(localFd);
+	} else {
+		pending.push(ensureToolOnce("fd", true).then(onFdPath));
+	}
+	if (!getToolPath("rg")) {
+		pending.push(ensureToolOnce("rg", true));
+	}
+	return Promise.allSettled(pending).then(() => undefined);
 }
 
 /**

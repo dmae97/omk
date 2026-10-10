@@ -15,7 +15,8 @@ import { describePromptImageAttachment, type PromptImageAttachment } from "../..
 import { createAttachmentStrip } from "./components/attachment-strip.ts";
 import { ChatContainer } from "./components/chat-container.ts";
 import { createSessionMetadataLoaders } from "./components/session-selector-loaders.ts";
-import { ensureInteractiveStartupDeps, onThemedOutputStale } from "./startup-deps.ts";
+import { planFirstRun } from "./first-run.ts";
+import { onThemedOutputStale, scheduleInteractiveStartupDeps } from "./startup-deps.ts";
 
 export { formatResumeCommand } from "./interactive-resume-command.ts";
 
@@ -728,8 +729,11 @@ export class InteractiveMode {
 		// Load changelog (only show new entries, skip for resumed sessions)
 		this.changelogMarkdown = this.getChangelogForDisplay();
 
-		// Ensure fd and rg are available and warm the lazy syntax highlighter before the first render
-		this.fdPath = await ensureInteractiveStartupDeps();
+		// Resolve fd/rg without blocking the first render; a late fd rebuilds fd-backed autocomplete.
+		void scheduleInteractiveStartupDeps((fdPath) => {
+			this.fdPath = fdPath;
+			if (this.isInitialized) this.setupAutocompleteProvider();
+		});
 
 		if (this.session.scopedModels.length > 0 && (this.options.verbose || !this.settingsManager.getQuietStartup())) {
 			const modelList = this.session.scopedModels
@@ -964,6 +968,9 @@ export class InteractiveMode {
 		}
 
 		void this.maybeWarnAboutAnthropicSubscriptionAuth();
+		const firstRun = planFirstRun({ session: this.session, settings: this.settingsManager, initialMessage });
+		for (const notice of firstRun.notices) this.showWarning(notice);
+		if (firstRun.openLogin) this.showLoginAuthTypeSelector();
 
 		// Process initial messages
 		if (initialMessage) {
@@ -1832,7 +1839,7 @@ export class InteractiveMode {
 						this.editor.setText(result.editorText);
 					}
 					this.showStatus("Navigated to selected point");
-					void this.flushCompactionQueue({ willRetry: false });
+					void this.flushCompactionQueue();
 					return { cancelled: false };
 				},
 				switchSession: async (sessionPath, options) => {
@@ -3424,7 +3431,8 @@ export class InteractiveMode {
 						this.chatContainer.addChild(new Text(theme.fg("error", event.errorMessage), 1, 0));
 					}
 				}
-				void this.flushCompactionQueue({ willRetry: event.willRetry });
+				// After this call stack: a manual compaction clears its controller only after compaction_end returns.
+				queueMicrotask(() => void this.flushCompactionQueue());
 				this.ui.requestRender();
 				break;
 			}
@@ -4376,7 +4384,9 @@ export class InteractiveMode {
 		return !!extensionRunner.getCommand(commandName);
 	}
 
-	private async flushCompactionQueue(options?: { willRetry?: boolean }): Promise<void> {
+	/** Sends text queued during compaction through session.prompt(): it queues for a run that will resume, defers for
+	 * a prompt still in preflight, or starts a run when the session is idle. */
+	private async flushCompactionQueue(): Promise<void> {
 		if (this.compactionQueuedMessages.length === 0) {
 			return;
 		}
@@ -4397,21 +4407,6 @@ export class InteractiveMode {
 		};
 
 		try {
-			if (options?.willRetry) {
-				// When retry is pending, queue messages for the retry turn
-				for (const message of queuedMessages) {
-					if (this.isExtensionCommand(message.text)) {
-						await this.session.prompt(message.text);
-					} else if (message.mode === "followUp") {
-						await this.session.followUp(message.text);
-					} else {
-						await this.session.steer(message.text);
-					}
-				}
-				this.updatePendingMessagesDisplay();
-				return;
-			}
-
 			// Find first non-extension-command message to use as prompt
 			const firstPromptIndex = queuedMessages.findIndex((message) => !this.isExtensionCommand(message.text));
 			if (firstPromptIndex === -1) {
@@ -4431,20 +4426,15 @@ export class InteractiveMode {
 				await this.session.prompt(message.text);
 			}
 
-			// Send first prompt (starts streaming)
-			const promptPromise = this.session.prompt(firstPrompt.text).catch((error) => {
-				restoreQueue(error);
-			});
+			// Send first prompt: it starts a run, or queues for a run that still owns the session after compaction
+			const promptPromise = this.session
+				.prompt(firstPrompt.text, { streamingBehavior: firstPrompt.mode })
+				.catch(restoreQueue);
 
-			// Queue remaining messages
+			// Queue remaining messages on the same path as the first, so they keep their order behind it
 			for (const message of rest) {
-				if (this.isExtensionCommand(message.text)) {
-					await this.session.prompt(message.text);
-				} else if (message.mode === "followUp") {
-					await this.session.followUp(message.text);
-				} else {
-					await this.session.steer(message.text);
-				}
+				const queued = this.isExtensionCommand(message.text) ? undefined : { streamingBehavior: message.mode };
+				await this.session.prompt(message.text, queued);
 			}
 			this.updatePendingMessagesDisplay();
 			void promptPromise;
@@ -5082,7 +5072,7 @@ export class InteractiveMode {
 							this.editor.setText(result.editorText);
 						}
 						this.showStatus("Navigated to selected point");
-						void this.flushCompactionQueue({ willRetry: false });
+						void this.flushCompactionQueue();
 					} catch (error) {
 						this.showError(error instanceof Error ? error.message : String(error));
 					} finally {

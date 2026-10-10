@@ -47,7 +47,7 @@ OMK stores user configuration under `~/.omk/agent/` and project configuration un
 Install `omk-book-to-skill` to compile documents into reusable skills without adding Python extractors to OMK core:
 
 ```bash
-omk install npm:omk-book-to-skill@1.3.0
+omk install npm:omk-book-to-skill@1.3.2
 ```
 
 It provides compile, update, and verification commands plus a local SHA-256 provenance manifest. See [Book to Skill](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/book-to-skill.md).
@@ -258,9 +258,7 @@ npm test
 
 See [Development](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/development.md) and [CONTRIBUTING.md](https://github.com/dmae97/omk/blob/main/CONTRIBUTING.md).
 
-Release preparation: [v1.3.1](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v1.3.1.md), not yet published. The latest confirmed public release is [v1.3.0](https://github.com/dmae97/omk/releases/tag/v1.3.0).
-
-The full release suite remains a publication gate; the installed CLI is not changed by this source version bump.
+Release notes: [v1.3.2](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v1.3.2.md). The latest public release is [v1.3.1](https://github.com/dmae97/omk/releases/tag/v1.3.1).
 
 ## License
 
