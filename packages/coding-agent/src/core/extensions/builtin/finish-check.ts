@@ -24,11 +24,14 @@ import {
 import { requestPreCheckSnapshot, resolveSnapshotHandshake } from "../../finish-check-snapshot.ts";
 import { excludeRunBudgetWaitMs, readRunBudget, resolveTimeBudgetMs } from "../../remaining-budget.ts";
 import type { ExtensionAPI } from "../types.ts";
+import type { FinishCheckBudgetReader } from "./finish-check-reverify-stage.ts";
 
 export interface FinishCheckOptions {
 	readonly env?: NodeJS.ProcessEnv;
 	readonly now?: () => number;
 	readonly sleep?: (ms: number) => Promise<void>;
+	/** Budget source for every finish-check threshold and spec 032's trigger; defaults to the shared run clock. */
+	readonly readBudget?: FinishCheckBudgetReader;
 }
 
 /** Event-bus channel for the verification turn: `{ active: true }` when it starts, `{ active: false, ledger }` when it ends. */
@@ -82,11 +85,13 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 	// extension load is kept, exactly as before.
 	let startedAt = now();
 	let snapshotSequence = 0;
-	const elapsedFraction = (): number | undefined => {
-		const shared = readRunBudget();
-		if (shared) return shared.elapsedFraction;
-		return budgetMs === undefined ? undefined : (now() - startedAt) / budgetMs;
-	};
+	const localBudget: FinishCheckBudgetReader = () =>
+		budgetMs === undefined
+			? undefined
+			: { budgetMs, elapsedMs: now() - startedAt, elapsedFraction: (now() - startedAt) / budgetMs };
+	// One budget source for the 0.75 / 0.85 / 0.90 checks and spec 032's 0.30 trigger.
+	const readBudget = options.readBudget ?? (() => readRunBudget() ?? localBudget());
+	const elapsedFraction = (): number | undefined => readBudget()?.elapsedFraction;
 
 	let mutated = false;
 	let checked = false;

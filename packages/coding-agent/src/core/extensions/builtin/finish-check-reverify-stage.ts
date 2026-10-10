@@ -23,10 +23,7 @@ import type { ExtensionAPI } from "../types.ts";
 /** Session entry type holding the verifier's result (spec 032). */
 export const FINISH_CHECK_VERIFY_ENTRY = "finish_check_verify";
 
-/**
- * The run budget as finish-check reads it. A subset of #63's `RunBudgetSnapshot`, so the
- * default reader can become `readRunBudget` once #63 lands.
- */
+/** The run budget as finish-check reads it: the fields of `RunBudgetSnapshot` (spec 036) that it uses. */
 export interface FinishCheckBudget {
 	readonly budgetMs: number;
 	readonly elapsedMs: number;

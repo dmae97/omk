@@ -34,7 +34,7 @@ export const FINISH_CHECK_EXTRA_TURN_FRACTION = 0.85;
 export const FINISH_CHECK_MAX_EXTRA_TURNS = 1;
 /**
  * A first settle before this fraction of the budget gets one fresh-context verifier turn after the check (spec 032,
- * behind `OMK_FINISH_CHECK_REVERIFY`). It moves to the #63 RemainingBudget clock together with the other thresholds.
+ * behind `OMK_FINISH_CHECK_REVERIFY`). Like the other thresholds it compares against the shared run clock (spec 036).
  */
 export const FINISH_CHECK_REVERIFY_FRACTION = 0.3;
 
