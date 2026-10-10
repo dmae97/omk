@@ -35,6 +35,7 @@ ${chalk.bold("Commands:")}
   ${APP_NAME} provider adopt [<id>]     Copy an existing Codex CLI / Claude Code CLI login into OMK's
                                  store (--from <source>, --dry-run, --status, --json)
   ${APP_NAME} session doctor            Inspect or safely repair one session (--session, --repair, --dry-run)
+  ${APP_NAME} doctor [--json] [--online]  Check runtime, credentials, default model, bash sandbox and tools (read-only)
   ${APP_NAME} doctor resources [--json] [--report] Inspect current pressure or aggregate local observations
   ${APP_NAME} doctor adaptorch [--json]  Verify ADAPTORCH_API_KEY reaches the AdaptOrch API (0 ok, 1 unset, 2 failed)
   ${APP_NAME} router-feedback compile-bias  Compile this repository's bounded router bias snapshot

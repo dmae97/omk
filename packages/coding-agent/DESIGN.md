@@ -21,6 +21,7 @@ Colour comes only from theme tokens. The default themes are the paper pair; othe
 | Status | `success` / `warning` / `error` | `#41996a` / `#ce791f` / `#ea6154` | `#285f42` / `#7e4a13` / `#a2211b` |
 
 - Palette source: AdaptOrch `frontend/src/index.css`. Three dark values are one step lighter than the web tokens (accent `#e84131`, tertiary `#87827a`, emphatic line) so text keeps 4.5:1 and boundaries 3:1 on common terminal backgrounds such as `#1e1e1e`; `test/theme-paper.test.ts` measures every role.
+- Meter troughs (`░`) use `dim`, not `borderMuted`: a light-shade glyph covers only part of the cell, so a hairline-strength color disappears on dark backgrounds. Every meter goes through `meterBar` in `control-panel-box.ts`.
 - Accent dosage: the accent marks the Verify stage (mark node and spoke, rule, the word `Verify`, flow `VERIFY`), the active tab, the `active` authority state, focus and critical signals. Titles, identities, section labels, counters, git branches, uptime, model ids, theme names and decorative bars use ink, never the accent.
 
 ## Status Vocabulary

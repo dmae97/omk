@@ -198,8 +198,13 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
 }
 
 /** Canonical provider-facing text for local input-capacity accounting. */
+/**
+ * Canonical admission JSON as pieces: `textParts.join("")` equals
+ * `JSON.stringify(canonical)`. Counting the pieces avoids one history-sized
+ * string per turn; each message is still serialized by `JSON.stringify`.
+ */
 export function canonicalizeMessagesForContextAdmission(messages: readonly Message[]): {
-	readonly text: string;
+	readonly textParts: readonly string[];
 	readonly imageCount: number;
 } {
 	let imageCount = 0;
@@ -233,7 +238,14 @@ export function canonicalizeMessagesForContextAdmission(messages: readonly Messa
 				throw new TypeError("Unsupported provider message role");
 		}
 	});
-	return { text: stringifyProviderMessages(canonical), imageCount };
+	const textParts = ["["];
+	for (let index = 0; index < canonical.length; index++) {
+		if (index > 0) textParts.push(",");
+		// Element objects are fresh literals, so each serializes as it would inside the array.
+		textParts.push(stringifyProviderMessages(canonical[index]));
+	}
+	textParts.push("]");
+	return { textParts, imageCount };
 }
 
 function stringifyProviderMessages(value: unknown): string {

@@ -1,5 +1,5 @@
 import type { Context } from "omk-ai";
-import { boundedAdmissionJson, representationLimit } from "./request-admission-json.ts";
+import { boundedAdmissionJson, boundedAdmissionJsonParts, representationLimit } from "./request-admission-json.ts";
 import type { RequestAdmissionPolicy } from "./request-admission-policy.ts";
 
 function record(value: unknown): Record<string, unknown> {
@@ -13,7 +13,8 @@ export function projectRequestForAdmission(
 	policy: RequestAdmissionPolicy,
 ): {
 	system: string;
-	messages: string;
+	/** Pieces of the messages JSON; `join("")` is the projected text. */
+	messageParts: readonly string[];
 	tools: string;
 	imageCount: number;
 } {
@@ -83,11 +84,11 @@ export function projectRequestForAdmission(
 				throw new TypeError("admission.invalid_role");
 		}
 	});
-	const messageText = boundedAdmissionJson(messages, budget);
+	const messageParts = boundedAdmissionJsonParts(messages, budget);
 	const tools = (context.tools ?? []).map((tool) => ({
 		name: tool.name,
 		description: tool.description,
 		parameters: tool.parameters,
 	}));
-	return { system, messages: messageText, tools: boundedAdmissionJson(tools, budget), imageCount };
+	return { system, messageParts, tools: boundedAdmissionJson(tools, budget), imageCount };
 }

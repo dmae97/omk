@@ -272,10 +272,10 @@ function collectModelIds(config: ModelsConfig): Set<string> {
 }
 
 function removedModelIds(previousContent: string, currentContent: string): string[] {
+	if (previousContent === currentContent) return []; // the usual startup case; skips two parses of models.json
 	try {
-		const parse = (raw: string) => JSON.parse(stripJsonComments(raw)) as ModelsConfig;
-		const before = collectModelIds(parse(previousContent));
-		const after = collectModelIds(parse(currentContent));
+		const before = collectModelIds(JSON.parse(stripJsonComments(previousContent)) as ModelsConfig);
+		const after = collectModelIds(JSON.parse(stripJsonComments(currentContent)) as ModelsConfig);
 		return [...before].filter((id) => !after.has(id)).sort((a, b) => a.localeCompare(b));
 	} catch {
 		return [];
@@ -290,15 +290,22 @@ export class ModelRegistry {
 	private loadError: string | undefined = undefined;
 	readonly authStorage: AuthStorage;
 	private modelsJsonPath: string | undefined;
+	private readonly snapshotOnLoad: boolean;
 
-	private constructor(authStorage: AuthStorage, modelsJsonPath: string | undefined) {
+	private constructor(authStorage: AuthStorage, modelsJsonPath: string | undefined, snapshotOnLoad = true) {
 		this.authStorage = authStorage;
 		this.modelsJsonPath = modelsJsonPath ? normalizePath(modelsJsonPath) : undefined;
+		this.snapshotOnLoad = snapshotOnLoad;
 		this.loadModels();
 	}
 
 	static create(authStorage: AuthStorage, modelsJsonPath: string = join(getAgentDir(), "models.json")): ModelRegistry {
 		return new ModelRegistry(authStorage, modelsJsonPath);
+	}
+
+	/** Loads models.json like create() but never writes to disk (no history snapshot), for diagnostics. */
+	static createReadOnly(authStorage: AuthStorage, modelsJsonPath: string): ModelRegistry {
+		return new ModelRegistry(authStorage, modelsJsonPath, false);
 	}
 
 	static inMemory(authStorage: AuthStorage): ModelRegistry {
@@ -431,7 +438,7 @@ export class ModelRegistry {
 
 			// Additional validation
 			this.validateConfig(config);
-			this.snapshotModelsJson(content, modelsJsonPath);
+			if (this.snapshotOnLoad) this.snapshotModelsJson(content, modelsJsonPath);
 
 			const overrides = new Map<string, ProviderOverride>();
 			const modelOverrides = new Map<string, Map<string, ModelOverride>>();
@@ -529,16 +536,11 @@ export class ModelRegistry {
 			const snapshotDir = `${modelsJsonPath}.snapshots`;
 			mkdirSync(snapshotDir, { recursive: true });
 			const previous = this.latestSnapshotPath(snapshotDir);
-			if (previous) {
-				const previousContent = readFileSync(previous, "utf8");
-				if (previousContent !== content) {
-					const removed = removedModelIds(previousContent, content);
-					if (removed.length > 0) {
-						console.warn(
-							`[model-registry] models.json changed since the last load; ${removed.length} model entr${removed.length === 1 ? "y" : "ies"} no longer present: ${removed.join(", ")}. Older versions are kept in ${snapshotDir}.`,
-						);
-					}
-				}
+			const removed = removedModelIds(previous ? readFileSync(previous, "utf8") : content, content);
+			if (removed.length > 0) {
+				console.warn(
+					`[model-registry] models.json changed since the last load; ${removed.length} model entr${removed.length === 1 ? "y" : "ies"} no longer present: ${removed.join(", ")}. Older versions are kept in ${snapshotDir}.`,
+				);
 			}
 			snapshotSequence += 1;
 			const stamp = `${new Date().toISOString().replace(/[:.]/g, "-")}-${snapshotSequence}`;

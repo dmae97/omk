@@ -1,4 +1,12 @@
 import { execSync } from "node:child_process";
+import {
+	type BubblewrapFunctionalProbe,
+	explainLinuxSandboxFailure,
+	type LinuxSandboxHost,
+	probeBubblewrap,
+	readLinuxSandboxHost,
+	userNamespacesEnabledFromProc,
+} from "./linux-probe.ts";
 import type { NetworkMode, SandboxBackendStatus, SandboxDecision, SandboxPolicy } from "./policy.ts";
 import { decideSandboxFallback } from "./policy.ts";
 
@@ -6,7 +14,14 @@ export type SandboxBackendType = "unsupported" | "seatbelt" | "bubblewrap";
 
 export type SandboxBackendProbe =
 	| { readonly platform: "macos"; readonly seatbeltAvailable: boolean }
-	| { readonly platform: "linux"; readonly bubblewrapAvailable: boolean; readonly userNamespacesEnabled: boolean }
+	| {
+			readonly platform: "linux";
+			readonly bubblewrapAvailable: boolean;
+			readonly userNamespacesEnabled: boolean;
+			/** Real bwrap start with production namespace flags; absent when static checks already failed. */
+			readonly functional?: BubblewrapFunctionalProbe;
+			readonly host?: LinuxSandboxHost;
+	  }
 	| { readonly platform: "unsupported"; readonly hostPlatform: string };
 
 export interface SandboxInvocation {
@@ -36,18 +51,6 @@ function commandExists(command: string): boolean {
 	}
 }
 
-function userNamespacesEnabled(): boolean {
-	try {
-		const value = execSync("sysctl -n kernel.unprivileged_userns_clone", {
-			stdio: ["ignore", "pipe", "ignore"],
-			encoding: "utf8",
-		}).trim();
-		return value === "1";
-	} catch {
-		return true;
-	}
-}
-
 function assertNever(value: never): never {
 	throw new Error(`Unexpected sandbox backend probe: ${JSON.stringify(value)}`);
 }
@@ -62,27 +65,24 @@ export function classifySandboxBackendProbe(probe: SandboxBackendProbe): Sandbox
 				...(probe.seatbeltAvailable ? {} : { unavailableReason: "sandbox-exec is not installed or unavailable." }),
 			};
 		case "linux": {
-			const backendAvailable = probe.bubblewrapAvailable && probe.userNamespacesEnabled;
-			let unavailableReason: string | undefined;
-			if (!probe.bubblewrapAvailable) {
-				unavailableReason = probe.userNamespacesEnabled
-					? "bwrap is not installed or unavailable."
-					: "bwrap is unavailable and unprivileged user namespaces are disabled.";
-			} else if (!probe.userNamespacesEnabled) {
-				unavailableReason = "Unprivileged user namespaces are disabled.";
-			}
+			// A probe result outranks the static /proc facts: setuid bwrap runs with unprivileged userns off.
+			const backendAvailable =
+				probe.bubblewrapAvailable && (probe.functional ? probe.functional.ok : probe.userNamespacesEnabled);
 			return {
 				platform: "linux",
 				backendAvailable,
 				domainAllowlistAvailable: false,
-				...(unavailableReason ? { unavailableReason } : {}),
+				...(backendAvailable ? {} : { unavailableReason: explainLinuxSandboxFailure(probe) }),
 			};
 		}
 		case "unsupported":
 			return {
 				platform: "unsupported",
 				backendAvailable: false,
-				unavailableReason: `No supported sandbox backend exists for ${probe.hostPlatform}.`,
+				unavailableReason:
+					probe.hostPlatform === "win32"
+						? "No supported sandbox backend exists for win32. Fix: run OMK inside WSL2, or restart with OMK_BASH_SANDBOX=audit to run unsandboxed with an audit trail."
+						: `No supported sandbox backend exists for ${probe.hostPlatform}.`,
 			};
 		default:
 			return assertNever(probe);
@@ -97,10 +97,16 @@ export function detectSandboxBackend(): SandboxBackendStatus {
 		});
 	}
 	if (process.platform === "linux") {
+		const bubblewrapAvailable = commandExists("bwrap");
+		const userNamespacesEnabled = userNamespacesEnabledFromProc();
+		const functional = bubblewrapAvailable ? probeBubblewrap() : undefined;
+		const healthy = functional?.ok ?? false;
 		return classifySandboxBackendProbe({
 			platform: "linux",
-			bubblewrapAvailable: commandExists("bwrap"),
-			userNamespacesEnabled: userNamespacesEnabled(),
+			bubblewrapAvailable,
+			userNamespacesEnabled,
+			...(functional ? { functional } : {}),
+			...(healthy ? {} : { host: readLinuxSandboxHost() }),
 		});
 	}
 	return classifySandboxBackendProbe({ platform: "unsupported", hostPlatform: process.platform });

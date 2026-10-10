@@ -3,7 +3,7 @@ import { VerifiedRunError } from "../core/verified-run/storage.ts";
 
 export const USAGE = `Usage: omk run plan --contract FILE [--json]
        omk run start --contract FILE --approve DIGEST --command-id ID [--state-dir DIR]
-       omk run inspect|evidence|status|events ID [--state-dir DIR] [--json]
+       omk run inspect|evidence|status|events|explain ID [--state-dir DIR] [--json]
        omk run authority [--state-dir DIR] [--json]
        omk run inspect ID --recovery|--writer-recovery|--task-recovery [--state-dir DIR]
        omk run retry-tasks ID --execute --tasks ID[,ID...]|- --approve DIGEST --base DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
@@ -30,6 +30,7 @@ const ACTIONS = [
 	"gc",
 	"inspect",
 	"status",
+	"explain",
 	"events",
 	"authority",
 	"evidence",

@@ -1,0 +1,26 @@
+{
+	"$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+	"plugins": ["@stryker-mutator/vitest-runner"],
+	"testRunner": "vitest",
+	"vitest": {
+		"configFile": "vitest.mutation.config.ts"
+	},
+	"mutate": [
+		"packages/coding-agent/src/core/prompt-settlement.ts",
+		"packages/coding-agent/src/core/session-prompt-lifecycle.ts"
+	],
+	"concurrency": 1,
+	"timeoutMS": 5000,
+	"dryRunTimeoutMinutes": 2,
+	"reporters": ["clear-text", "json", "html"],
+	"jsonReporter": {
+		"fileName": ".omk/runs/stryker/mutation.json"
+	},
+	"htmlReporter": {
+		"fileName": ".omk/runs/stryker/index.html"
+	},
+	"ignorePatterns": [
+		"/.omk", "/.pi", "/.kittify", "/kitty-specs", "/openwiki", "/research",
+		"/readmeasset", "/docs", "/vendor", "/specs", "**/resources", "**/dist"
+	]
+}

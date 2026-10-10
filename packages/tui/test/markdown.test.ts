@@ -1409,3 +1409,16 @@ bar`,
 		});
 	});
 });
+
+describe("Markdown setText cache", () => {
+	it("does not invalidate render cache when setText receives the same string", () => {
+		const md = new Markdown("hello **world**", 0, 0, defaultMarkdownTheme);
+		const first = md.render(40);
+		md.setText("hello **world**");
+		const second = md.render(40);
+		assert.strictEqual(second, first);
+		md.setText("hello **world**!");
+		const third = md.render(40);
+		assert.notStrictEqual(third, first);
+	});
+});

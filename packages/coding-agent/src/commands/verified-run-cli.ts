@@ -150,6 +150,12 @@ export async function runVerifiedRunCli(
 				exitCode = status.cleanSuccess ? 0 : 1;
 				break;
 			}
+			case "explain": {
+				const explanation = coordinator.explain(parsed.id ?? "");
+				result = explanation;
+				exitCode = explanation.status.cleanSuccess && explanation.proof.verdict === "verified" ? 0 : 1;
+				break;
+			}
 			case "events":
 				result = coordinator.events(parsed.id ?? "");
 				break;

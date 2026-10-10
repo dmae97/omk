@@ -5,6 +5,7 @@ import { getMarkdownTheme, theme } from "../theme/theme.ts";
 type ContentViewKind = "text" | "thinking" | "hidden-thinking";
 interface ContentView {
 	kind: ContentViewKind;
+	/** Source text used for change detection so unchanged blocks skip setText. */
 	text: string;
 	component: Markdown | Text;
 }
@@ -82,20 +83,21 @@ export class AssistantMessageComponent extends Container {
 
 	private contentView(index: number, kind: ContentViewKind, text: string): Markdown | Text {
 		const previous = this.contentViews.get(index);
+		const display = kind === "hidden-thinking" ? theme.italic(theme.fg("thinkingText", text)) : text;
 		if (previous?.kind === kind) {
+			// Only call setText when the block text actually changed so streaming updates
+			// leave finished Markdown instances and their render caches untouched.
 			if (previous.text !== text) {
-				previous.component.setText(
-					kind === "hidden-thinking" ? theme.italic(theme.fg("thinkingText", text)) : text,
-				);
+				previous.component.setText(display);
 				previous.text = text;
 			}
 			return previous.component;
 		}
 		const component =
 			kind === "hidden-thinking"
-				? new Text(theme.italic(theme.fg("thinkingText", text)), 1, 0)
+				? new Text(display, 1, 0)
 				: new Markdown(
-						text,
+						display,
 						1,
 						0,
 						this.markdownTheme,

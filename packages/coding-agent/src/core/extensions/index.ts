@@ -4,6 +4,7 @@
 
 export type { SlashCommandInfo, SlashCommandSource } from "../slash-commands.ts";
 export type { SourceInfo } from "../source-info.ts";
+export { CONTEXT_HANDLER_OPTIONS, type ContextHandlerOptions } from "./context-handler-options.ts";
 export {
 	createExtensionRuntime,
 	discoverAndLoadExtensions,

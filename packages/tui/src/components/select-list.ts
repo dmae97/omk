@@ -44,6 +44,8 @@ export class SelectList implements Component {
 	private maxVisible: number = 5;
 	private theme: SelectListTheme;
 	private layout: SelectListLayoutOptions;
+	/** Recomputed only when the filtered item set changes (not on every render). */
+	private cachedPrimaryColumnWidth: number | undefined;
 
 	public onSelect?: (item: SelectItem) => void;
 	public onCancel?: () => void;
@@ -55,12 +57,14 @@ export class SelectList implements Component {
 		this.maxVisible = maxVisible;
 		this.theme = theme;
 		this.layout = layout;
+		this.cachedPrimaryColumnWidth = undefined;
 	}
 
 	setFilter(filter: string): void {
 		this.filteredItems = this.items.filter((item) => item.value.toLowerCase().startsWith(filter.toLowerCase()));
 		// Reset selection when filter changes
 		this.selectedIndex = 0;
+		this.cachedPrimaryColumnWidth = undefined;
 	}
 
 	setSelectedIndex(index: number): void {
@@ -176,12 +180,16 @@ export class SelectList implements Component {
 	}
 
 	private getPrimaryColumnWidth(): number {
+		if (this.cachedPrimaryColumnWidth !== undefined) {
+			return this.cachedPrimaryColumnWidth;
+		}
 		const { min, max } = this.getPrimaryColumnBounds();
 		const widestPrimary = this.filteredItems.reduce((widest, item) => {
 			return Math.max(widest, visibleWidth(this.getDisplayValue(item)) + PRIMARY_COLUMN_GAP);
 		}, 0);
-
-		return clamp(widestPrimary, min, max);
+		const width = clamp(widestPrimary, min, max);
+		this.cachedPrimaryColumnWidth = width;
+		return width;
 	}
 
 	private getPrimaryColumnBounds(): { min: number; max: number } {

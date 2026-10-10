@@ -9,7 +9,7 @@ import { type Api, type Model, modelsAreEqual } from "omk-ai";
 import { isValidThinkingLevel } from "../cli/args.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import type { ModelRegistry } from "./model-registry.ts";
-import { defaultModelPerProvider } from "./provider-default-models.ts";
+import { defaultModelPerProvider, pickDefaultModel } from "./provider-default-models.ts";
 import { DEFAULT_SAFETY_FAILOVER_CANDIDATES, isStickySafetyModel } from "./provider-resilience.ts";
 
 export { defaultModelPerProvider } from "./provider-default-models.ts";
@@ -524,13 +524,12 @@ export async function findInitialModel(options: {
 			}
 		}
 
-		// Try to find a default model from known providers
-		for (const [provider, defaultId] of Object.entries(defaultModelPerProvider)) {
-			const match = usable.find((m) => m.provider === provider && m.id === defaultId);
-			if (match) {
-				return { model: match, thinkingLevel: DEFAULT_THINKING_LEVEL, fallbackMessage: undefined };
-			}
-		}
+		// Known-provider default, ranked by credential deliberateness before table order
+		const preferred = pickDefaultModel(
+			usable,
+			(provider) => modelRegistry.authStorage?.getAuthStatus(provider).source,
+		);
+		if (preferred) return { model: preferred, thinkingLevel: DEFAULT_THINKING_LEVEL, fallbackMessage: undefined };
 
 		// If no default found, use first usable (non-sticky)
 		return { model: usable[0], thinkingLevel: DEFAULT_THINKING_LEVEL, fallbackMessage: undefined };
@@ -584,15 +583,11 @@ export async function restoreModelFromSession(
 	const availableModels = await modelRegistry.getAvailable();
 
 	if (availableModels.length > 0) {
-		// Try to find a default model from known providers
-		let fallbackModel: Model<Api> | undefined;
-		for (const [provider, defaultId] of Object.entries(defaultModelPerProvider)) {
-			const match = availableModels.find((m) => m.provider === provider && m.id === defaultId);
-			if (match) {
-				fallbackModel = match;
-				break;
-			}
-		}
+		// Known-provider default, ranked by credential deliberateness before table order
+		let fallbackModel = pickDefaultModel(
+			availableModels,
+			(provider) => modelRegistry.authStorage?.getAuthStatus(provider).source,
+		);
 
 		// If no default found, use first available
 		if (!fallbackModel) {

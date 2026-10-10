@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-10-10
+
+### Changed
+
+- Lockstep version alignment with the OMK packages; no changes in this package.
+
+## [1.3.1] - 2026-10-08
+
+> Published 2026-10-08: tag `v1.3.1` (`a989d88`), GitHub Release and npm `latest` for all seven packages, built from that commit. The entries below, except the first Changed entry, were still listed under `[Unreleased]` when 1.3.1 was tagged; the 1.3.1 packages contain them.
+
+### Changed
+
+- Lockstep source-version alignment with the OMK packages. The memory-state display lives in the coding-agent `/session` command.
+- `Markdown.setText` / `Text.setText` no-op when the string is unchanged, so streaming updates can refresh message views without discarding wrap caches.
+- `SelectList` caches the primary column width until the filter or item set changes, so opening `/` with many skills no longer rescans every label on each render frame.
+
+### Fixed
+
+- A streaming Markdown message no longer re-parses and re-wraps its whole text every frame. Finished top-level blocks keep their tokens and lines while the text only grows (about 8× less work per frame on a 27k-character reply).
+
 ## [1.3.0] - 2026-10-04
 
 ### Changed
