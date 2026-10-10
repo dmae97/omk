@@ -6,7 +6,8 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { AssistantMessageComponent } from "../src/modes/interactive/components/assistant-message.ts";
 import { ChatContainer } from "../src/modes/interactive/components/chat-container.ts";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
-import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { UserMessageComponent } from "../src/modes/interactive/components/user-message.ts";
+import { getMarkdownTheme, initTheme } from "../src/modes/interactive/theme/theme.ts";
 
 class MockAssistantStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
 	constructor() {
@@ -290,6 +291,32 @@ describe("chat transcript windowing lifecycle (spec 026 AC1/AC2, spec 022)", () 
 			chat.addChild(new AssistantMessageComponent(assistant([{ type: "text", text: "tail ".repeat(400) }])));
 			expect(chat.render(90)).toEqual(full.render(90));
 		}
+	});
+
+	test("frozen Markdown messages and tool cards re-render equal to a plain Container across resizes (review P1)", () => {
+		const md = (i: number) =>
+			`## Heading ${i}\n\nSome **bold** and \`code\`.\n\n- a ${"word ".repeat(30)}\n- b\n\n\`\`\`ts\nconst x = ${i};\n\`\`\`\n`;
+		const build = (target: Container) => {
+			for (let i = 0; i < 30; i++) {
+				target.addChild(new UserMessageComponent(`question ${i} ${"q ".repeat(40)}`));
+				const content: AssistantMessage["content"] = [
+					{ type: "thinking", thinking: `think ${i}` },
+					{ type: "text", text: md(i) },
+				];
+				target.addChild(new AssistantMessageComponent(assistant(content), false, getMarkdownTheme()));
+				const tool = toolComponent("bash", `p1-${i}`, { command: `echo ${i}` });
+				tool.updateResult({ content: [{ type: "text", text: `out ${i}\n`.repeat(1 + (i % 4)) }], isError: false });
+				target.addChild(tool);
+			}
+		};
+		const full = new Container();
+		const chat = new ChatContainer();
+		chat.setLiveLineBudget(40);
+		build(full);
+		build(chat);
+		expect(chat.render(100)).toEqual(full.render(100));
+		expect(chat.getFrozenChildCount()).toBeGreaterThan(60);
+		for (const width of [60, 140, 100, 100]) expect(chat.render(width)).toEqual(full.render(width));
 	});
 
 	test("AC2 every message_update swaps the reference and bumps the generation", async () => {
