@@ -27,7 +27,7 @@ export const FINISH_CHECK_MAX_TOOL_CALLS = 6;
 export const FINISH_CHECK_SKIP_FRACTION = 0.9;
 /**
  * Past this fraction a check that found a missed or unmeasured numeric limit gets no extra turn (spec 035).
- * Sits between save-now (0.75) and skip (0.9); it moves to the #63 RemainingBudget clock together with them.
+ * Sits between save-now (0.75) and skip (0.9); all three compare against the shared run clock (spec 036).
  */
 export const FINISH_CHECK_EXTRA_TURN_FRACTION = 0.85;
 /** Extra turns per user task after a finish check, shared by the threshold retry and the go-measure nudge. */
@@ -50,14 +50,6 @@ export function resolveFinishCheckMode(value: string | undefined): FinishCheckMo
  */
 export function resolveFinishCheckExtraTurn(value: string | undefined): boolean {
 	return ["1", "true", "on", "enable", "enabled"].includes(value?.trim().toLowerCase() ?? "");
-}
-
-/** `OMK_TIME_BUDGET_SEC`: wall-clock seconds the caller allows for the whole run. */
-export function resolveTimeBudgetMs(value: string | undefined): number | undefined {
-	if (value === undefined || value.trim() === "") return undefined;
-	const seconds = Number(value);
-	if (!Number.isFinite(seconds) || seconds <= 0) return undefined;
-	return Math.round(seconds * 1000);
 }
 
 export function isWorkspaceMutatingTool(toolName: string): boolean {

@@ -48,7 +48,8 @@ export async function requestPreCheckSnapshot(
 	const donePath = join(config.dir, `pre-check-${sequence}.done`);
 	try {
 		mkdirSync(config.dir, { recursive: true });
-		writeFileSync(requestPath, `${JSON.stringify({ sequence, pid: process.pid, requestedAt: startedAt })}\n`);
+		// `deps.now` may be monotonic (spec 036); the request carries a wall-clock epoch for the harness.
+		writeFileSync(requestPath, `${JSON.stringify({ sequence, pid: process.pid, requestedAt: Date.now() })}\n`);
 	} catch (error) {
 		return { status: "error", waitedMs: deps.now() - startedAt, detail: String(error) };
 	}
