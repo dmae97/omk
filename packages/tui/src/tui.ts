@@ -8,6 +8,7 @@ import * as path from "node:path";
 import { performance } from "node:perf_hooks";
 import { isKeyRelease, matchesKey } from "./keys.ts";
 import { extractKittyImageIds, LineResetMemo, SEGMENT_RESET } from "./line-reset-memo.ts";
+import { maxChildGeneration, nextRenderGeneration } from "./render-generation.ts";
 import type { Terminal } from "./terminal.ts";
 import { finishTerminalFrame } from "./terminal-final-frame.ts";
 import { deleteKittyImage, getCapabilities, isImageLine, setCellDimensions } from "./terminal-image.ts";
@@ -40,6 +41,20 @@ export interface Component {
 	 * Called when theme changes or when component needs to re-render from scratch.
 	 */
 	invalidate(): void;
+
+	/**
+	 * Optional: stamp that rises on every visible change. Take values from
+	 * `nextRenderGeneration()` (render-generation.ts) so a container's
+	 * max-of-children stays monotonic. Off-screen windowing re-renders a frozen
+	 * child only when this moves. Missing ⇒ treated as immutable once rendered.
+	 */
+	getRenderGeneration?(): number;
+
+	/**
+	 * Optional: false while the component is still expected to change (a
+	 * streaming message, a running tool). Missing ⇒ settled.
+	 */
+	isRenderSettled?(): boolean;
 }
 
 type InputListenerResult = { consume?: boolean; data?: string } | undefined;
@@ -209,20 +224,30 @@ type OverlayFocusRestorePolicy = "clear" | "preserve";
  */
 export class Container implements Component {
 	children: Component[] = [];
+	/** Stamp of the last structural change (see render-generation.ts). */
+	protected structureGeneration = 0;
 
 	addChild(component: Component): void {
 		this.children.push(component);
+		this.structureGeneration = nextRenderGeneration();
 	}
 
 	removeChild(component: Component): void {
 		const index = this.children.indexOf(component);
 		if (index !== -1) {
 			this.children.splice(index, 1);
+			this.structureGeneration = nextRenderGeneration();
 		}
 	}
 
 	clear(): void {
 		this.children = [];
+		this.structureGeneration = nextRenderGeneration();
+	}
+
+	/** Raises whenever this container's child list or any descendant changes. */
+	getRenderGeneration(): number {
+		return maxChildGeneration(this.structureGeneration, this.children);
 	}
 
 	invalidate(): void {

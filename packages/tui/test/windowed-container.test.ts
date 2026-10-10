@@ -1,10 +1,30 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Box } from "../src/components/box.ts";
+import { Markdown, type MarkdownTheme } from "../src/components/markdown.ts";
 import { Spacer } from "../src/components/spacer.ts";
 import { Text } from "../src/components/text.ts";
+import { isRenderSettled, releaseRenderCache } from "../src/render-generation.ts";
 import { type Component, Container } from "../src/tui.ts";
-import { isRenderSettled, releaseRenderCache, WindowedContainer } from "../src/windowed-container.ts";
+import { WindowedContainer } from "../src/windowed-container.ts";
+
+const identity = (text: string) => text;
+const markdownTheme: MarkdownTheme = {
+	heading: identity,
+	link: identity,
+	linkUrl: identity,
+	code: identity,
+	codeBlock: identity,
+	codeBlockBorder: identity,
+	quote: identity,
+	quoteBorder: identity,
+	hr: identity,
+	listBullet: identity,
+	bold: identity,
+	italic: identity,
+	strikethrough: identity,
+	underline: identity,
+};
 
 function fillChat(target: Container, messages: number, body: string): void {
 	for (let i = 0; i < messages; i++) {
@@ -96,7 +116,9 @@ class SettlingMessage implements Component {
 	render(width: number): string[] {
 		this.renderCount += 1;
 		const line =
-			this.body.length > width ? this.body.slice(0, width) : this.body + " ".repeat(Math.max(0, width - this.body.length));
+			this.body.length > width
+				? this.body.slice(0, width)
+				: this.body + " ".repeat(Math.max(0, width - this.body.length));
 		return [line];
 	}
 }
@@ -180,16 +202,14 @@ describe("WindowedContainer", () => {
 		assert.equal(cacheChars(text), 0);
 	});
 
-	it("releaseRenderCache clears duck-typed streamCache without a hook", () => {
-		const fake = {
-			streamCache: { tokens: [1, 2, 3] },
-			invalidate() {},
-			render() {
-				return [""];
-			},
-		};
-		releaseRenderCache(fake as Component);
-		assert.equal(fake.streamCache, undefined);
+	it("releaseRenderCache on Markdown keeps it renderable and does not count as a change", () => {
+		const md = new Markdown("# Title\n\nSome **bold** text and a list:\n\n- a\n- b\n", 1, 0, markdownTheme);
+		const before = md.render(60);
+		const generation = md.getRenderGeneration();
+		releaseRenderCache(md);
+		assert.equal(cacheChars(md), 0);
+		assert.equal(md.getRenderGeneration(), generation);
+		assert.deepEqual(md.render(60), before);
 	});
 
 	it("isRenderSettled defaults true when the hook is absent", () => {
@@ -376,5 +396,143 @@ describe("WindowedContainer", () => {
 			trials++;
 		}
 		assert.ok(trials >= 144);
+	});
+	it("refreshes only the changed segment, reporting it in render stats", () => {
+		const full = new Container();
+		const windowed = new WindowedContainer();
+		windowed.setLiveLineBudget(20);
+		const body = "segment-body-".repeat(12);
+		fillChat(full, 400, body);
+		fillChat(windowed, 400, body);
+		assert.deepEqual(windowed.render(80), full.render(80));
+		assert.ok(windowed.getFrozenSegmentCount() > 3, `segments=${windowed.getFrozenSegmentCount()}`);
+		windowed.render(80);
+		assert.equal(windowed.getLastRenderStats().refreshedSegments, 0);
+		// Mutate a Text nested inside an early, frozen Box via the primitive API only.
+		const boxF = full.children[4] as Box;
+		const boxW = windowed.children[4] as Box;
+		(boxF.children[0] as Text).setText("EARLY-NESTED-EDIT\nwith a second line");
+		(boxW.children[0] as Text).setText("EARLY-NESTED-EDIT\nwith a second line");
+		const out = windowed.render(80);
+		assert.deepEqual(out, full.render(80));
+		assert.ok(out.some((line) => line.includes("EARLY-NESTED-EDIT")));
+		const stats = windowed.getLastRenderStats();
+		assert.equal(stats.refreshedSegments, 1);
+		assert.equal(stats.refreshedChildren, 1);
+	});
+
+	it("tracks structural edits inside frozen containers (addChild / removeChild / clear)", () => {
+		const full = new Container();
+		const windowed = new WindowedContainer();
+		windowed.setLiveLineBudget(10);
+		const make = (target: Container) => {
+			const cards: Container[] = [];
+			for (let i = 0; i < 30; i++) {
+				const card = new Container();
+				card.addChild(new Text(`card-${i}`, 0, 0));
+				target.addChild(card);
+				cards.push(card);
+			}
+			return cards;
+		};
+		const cardsF = make(full);
+		const cardsW = make(windowed);
+		assert.deepEqual(windowed.render(40), full.render(40));
+		for (const cards of [cardsF, cardsW]) {
+			cards[1].addChild(new Text("added-later", 0, 0));
+			cards[2].clear();
+			cards[3].removeChild(cards[3].children[0]);
+			cards[3].addChild(new Text("replaced", 0, 0));
+		}
+		assert.deepEqual(windowed.render(40), full.render(40));
+	});
+
+	it("removeChild of a frozen child and foreign edits of children stay equivalent", () => {
+		const full = new Container();
+		const windowed = new WindowedContainer();
+		windowed.setLiveLineBudget(12);
+		fillChat(full, 60, "remove-".repeat(10));
+		fillChat(windowed, 60, "remove-".repeat(10));
+		assert.deepEqual(windowed.render(70), full.render(70));
+		full.removeChild(full.children[5]);
+		windowed.removeChild(windowed.children[5]);
+		assert.deepEqual(windowed.render(70), full.render(70));
+		assert.ok(windowed.getFrozenChildCount() > 0);
+		// Direct splice bypasses removeChild: identity check must thaw, not misplace lines.
+		full.children.splice(3, 2);
+		windowed.children.splice(3, 2);
+		assert.deepEqual(windowed.render(70), full.render(70));
+	});
+
+	it("frozen Markdown edited later renders the new text", () => {
+		const full = new Container();
+		const windowed = new WindowedContainer();
+		windowed.setLiveLineBudget(10);
+		const mdF: Markdown[] = [];
+		const mdW: Markdown[] = [];
+		for (let i = 0; i < 20; i++) {
+			const text = `## Message ${i}\n\nParagraph with \`code\` and **bold** ${"words ".repeat(20)}`;
+			const f = new Markdown(text, 1, 0, markdownTheme);
+			const w = new Markdown(text, 1, 0, markdownTheme);
+			full.addChild(f);
+			windowed.addChild(w);
+			mdF.push(f);
+			mdW.push(w);
+		}
+		assert.deepEqual(windowed.render(60), full.render(60));
+		assert.ok(windowed.getFrozenChildCount() > 5);
+		mdF[1].setText("## Rewritten\n\n- one\n- two");
+		mdW[1].setText("## Rewritten\n\n- one\n- two");
+		assert.deepEqual(windowed.render(60), full.render(60));
+	});
+
+	it("randomized nested mutations, removals and appends stay equivalent", () => {
+		let state = 12345;
+		const rand = (n: number) => {
+			state = (state * 1103515245 + 12345) & 0x7fffffff;
+			return state % n;
+		};
+		for (let trial = 0; trial < 30; trial++) {
+			const full = new Container();
+			const windowed = new WindowedContainer();
+			windowed.setLiveLineBudget([4, 16, 40][trial % 3]);
+			const width = [30, 60, 100][rand(3)];
+			const add = () => {
+				const body = `t${trial}-${rand(1000)}-`.repeat(1 + rand(12));
+				const kind = rand(3);
+				const pad = rand(2);
+				for (const target of [full, windowed]) {
+					if (kind === 0) {
+						const box = new Box(1, pad, (s) => s);
+						box.addChild(new Text(body, 0, 0));
+						target.addChild(box);
+					} else if (kind === 1) {
+						target.addChild(new Text(body, 1, pad));
+					} else {
+						target.addChild(new Spacer(1 + pad));
+					}
+				}
+			};
+			for (let i = 0; i < 20; i++) add();
+			for (let step = 0; step < 25; step++) {
+				const op = rand(4);
+				const index = rand(full.children.length);
+				if (op === 0) add();
+				else if (op === 1 && full.children.length > 2) {
+					full.removeChild(full.children[index]);
+					windowed.removeChild(windowed.children[index]);
+				} else {
+					const text = `edit-${step}-`.repeat(1 + rand(10));
+					const lines = 1 + rand(3);
+					for (const target of [full, windowed]) {
+						const child = target.children[index];
+						if (child instanceof Text) child.setText(text);
+						else if (child instanceof Box && child.children[0] instanceof Text) child.children[0].setText(text);
+						else if (child instanceof Spacer) child.setLines(lines);
+					}
+				}
+				assert.deepEqual(windowed.render(width), full.render(width), `trial=${trial} step=${step}`);
+			}
+		}
 	});
 });

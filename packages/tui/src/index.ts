@@ -57,6 +57,12 @@ export {
 	parseKey,
 	setKittyProtocolActive,
 } from "./keys.ts";
+export {
+	isRenderSettled,
+	nextRenderGeneration,
+	releaseRenderCache,
+	renderGeneration,
+} from "./render-generation.ts";
 // Input buffering for batch splitting
 export { StdinBuffer, type StdinBufferEventMap, type StdinBufferOptions } from "./stdin-buffer.ts";
 // Terminal interface and implementations
@@ -106,4 +112,4 @@ export {
 } from "./tui.ts";
 // Utilities
 export { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "./utils.ts";
-export { isRenderSettled, releaseRenderCache, WindowedContainer } from "./windowed-container.ts";
+export { WindowedContainer, type WindowedRenderStats } from "./windowed-container.ts";

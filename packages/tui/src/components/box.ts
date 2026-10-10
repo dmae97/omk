@@ -1,3 +1,4 @@
+import { maxChildGeneration, nextRenderGeneration } from "../render-generation.ts";
 import type { Component } from "../tui.ts";
 import { applyBackgroundToLine, visibleWidth } from "../utils.ts";
 
@@ -19,6 +20,7 @@ export class Box implements Component {
 
 	// Cache for rendered output
 	private cache?: RenderCache;
+	private structureGeneration = 0;
 
 	constructor(paddingX = 1, paddingY = 1, bgFn?: (text: string) => string) {
 		this.paddingX = paddingX;
@@ -45,12 +47,21 @@ export class Box implements Component {
 	}
 
 	setBgFn(bgFn?: (text: string) => string): void {
+		if (bgFn === this.bgFn) return;
 		this.bgFn = bgFn;
-		// Don't invalidate here - we'll detect bgFn changes by sampling output
+		// Don't invalidate here - we'll detect bgFn changes by sampling output.
+		// The generation still moves so off-screen windowing re-renders this box.
+		this.structureGeneration = nextRenderGeneration();
 	}
 
 	private invalidateCache(): void {
 		this.cache = undefined;
+		this.structureGeneration = nextRenderGeneration();
+	}
+
+	/** Raises on child-list / background changes and on any descendant change. */
+	getRenderGeneration(): number {
+		return maxChildGeneration(this.structureGeneration, this.children);
 	}
 
 	private matchCache(width: number, childLines: string[], bgSample: string | undefined): boolean {
