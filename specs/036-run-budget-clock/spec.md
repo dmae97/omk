@@ -51,21 +51,27 @@ Per call: `ceiling = max(1, availableSec, min(30, remainingSec − 5))`, where `
 - `readRunBudget(): RunBudgetSnapshot | undefined` returns `{ budgetMs, elapsedMs, remainingMs, elapsedFraction, remainingFraction }` from the shared clock, or `undefined` when no budget is set.
 - `excludeRunBudgetWaitMs(ms)` takes harness snapshot waits out of the budget.
 
-#### How finish-check switches over once #44 lands (owner: #64, OMK)
+#### Finish-check migration (owner: **#63**; OMK closes #64 once it is up)
 
-In `fix/finish-check` (#44), `packages/coding-agent/src/core/extensions/builtin/finish-check.ts`, default export `finishCheck(omk, options)`:
+Merge order is #44 → #45 → #62 → #63. The migration is done **in #63, after #62 lands on main**: merge main into #63, then switch every finish-check budget check to the shared clock in the same PR. #64 (`feat/finish-check-budget-glue`) is then redundant, and OMK closes it. Until then nothing in #63 imports finish-check, and this PR only provides the API above.
 
-- `:33` `const budgetMs = resolveTimeBudgetMs(env.OMK_TIME_BUDGET_SEC)`
-- `:35` `let startedAt = now()` (its own clock, from extension load, `Date.now`)
-- `:37` `const elapsedFraction = () => (budgetMs === undefined ? undefined : (now() - startedAt) / budgetMs)`
-- `:102` `startedAt += result.waitedMs` (snapshot wait exclusion)
+Call sites, read via `git show` (#44 `fix/finish-check` at `50b49c9`; #62 `feat/finish-check-requirements` at `bc34980`). File `packages/coding-agent/src/core/extensions/builtin/finish-check.ts`, default export `finishCheck(omk, options)`:
 
-The switch, done in #64 after #44 → #45 → #62 → #63 merge:
+| Today (#44 line / #62 line) | After migration |
+| --- | --- |
+| `:34` / #62 same function: `const budgetMs = resolveTimeBudgetMs(env.OMK_TIME_BUDGET_SEC)` | Kept only for `finishDisciplinePrompt(budgetMs)`. Import `resolveTimeBudgetMs` from `remaining-budget.ts`, and delete the duplicate in `core/finish-check.ts:41-46` (#44 n1). |
+| `:37` `let startedAt = now()` (own clock from extension load, `Date.now`) | Removed in production. |
+| `:39` / #62 `:58` `const elapsedFraction = () => (now() - startedAt) / budgetMs` | `() => readRunBudget()?.elapsedFraction`. When `options.now` or `options.env` is injected (tests), keep the local clock so #44/#62 tests stay deterministic. |
+| `:105` `startedAt += result.waitedMs` | `excludeRunBudgetWaitMs(result.waitedMs)` |
 
-1. When `options.now`/`options.env` are not injected (production), `:37` becomes `() => readRunBudget()?.elapsedFraction`. Injected `now`/`env` keep the local clock so #44's tests stay deterministic.
-2. `:102` becomes `excludeRunBudgetWaitMs(result.waitedMs)` in production.
-3. `:33` keeps `budgetMs` only for `finishDisciplinePrompt(budgetMs)`. `resolveTimeBudgetMs` in `core/finish-check.ts:41-46` is dropped in favor of the one in `remaining-budget.ts` (#44 n2).
-4. The 75% save-now (`FINISH_CHECK_SAVE_NOW_FRACTION`), 90% skip (`FINISH_CHECK_SKIP_FRACTION`), and #62's 85% constant all compare against that one `elapsedFraction`. The thresholds don't change.
+The thresholds keep their values and all compare against that one `elapsedFraction`:
+
+- 0.75 `FINISH_CHECK_SAVE_NOW_FRACTION` (`core/finish-check.ts:23`, used at #62 `:90`)
+- 0.85 `FINISH_CHECK_EXTRA_TURN_FRACTION` (#62 `core/finish-check.ts:32`, `:128`)
+- 0.90 `FINISH_CHECK_SKIP_FRACTION` (`:27`, `:106`)
+- 0.30, the early-finish threshold. It is not on #62 `bc34980`. It moves over the same way when it lands (spec 035/032).
+
+Acceptance for that later change: a finish-check test with the shared clock bound at t=0 and the extension loaded at t=60 s of 100 s must report `elapsedFraction` 0.6, not 0.
 
 ## Acceptance
 
@@ -81,7 +87,7 @@ Named vitest cases:
 
 ## Non-goals
 
-- Pulling #44/#45/#62 into #63, or editing finish-check here. #64 does the switch.
+- Pulling #44/#45/#62 into #63 now. The finish-check switch happens in #63 after #62 is on main (see above).
 - Per-session clocks for RPC or SDK processes that host several runs (m1). The clock is per process and opt-in through `runPrintMode`. `bindActiveRemainingBudget(undefined)` resets it.
 - Background handoff for long commands.
 
