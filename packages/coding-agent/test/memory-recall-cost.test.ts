@@ -1,4 +1,4 @@
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -79,6 +79,20 @@ describe("bounded memory recall work", () => {
 		const original = Buffer.alloc;
 		vi.spyOn(Buffer, "alloc").mockImplementationOnce((size) => {
 			appendFileSync(record, " ");
+			return original(size);
+		});
+		expect(() => store.retrieve()).toThrow(/record changed/);
+	});
+	// File timestamps come from a coarse clock, so ctime alone misses a change within one tick (spec 041).
+	it.skipIf(process.platform === "win32")("refuses a record that shrinks during its bounded read", () => {
+		writeFileSync(join(root, "facts.txt"), "alpha storage");
+		const store = new VerifiedMemoryStore(root);
+		const admission = store.remember({ path: "facts.txt", startLine: 1, endLine: 1 });
+		if (admission.verdict !== "accept") throw new Error("fixture admission");
+		const record = join(root, ".omk", "verified-memory", `${admission.recordId}.json`);
+		const original = Buffer.alloc;
+		vi.spyOn(Buffer, "alloc").mockImplementationOnce((size) => {
+			truncateSync(record, statSync(record).size - 1);
 			return original(size);
 		});
 		expect(() => store.retrieve()).toThrow(/record changed/);

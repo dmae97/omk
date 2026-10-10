@@ -38,4 +38,5 @@ This is a bug in `readPrivateRecord` (`src/core/verified-memory-store.ts`), not 
 - `specs/041-memory-record-grow-check/spec.md` (first commit)
 - `packages/coding-agent/src/core/verified-memory-store.ts`
 - `packages/coding-agent/test/memory-recall-cost.test.ts`
-- `packages/coding-agent/CHANGELOG.md` (Fixed), `README.md` (release sync)
+
+No CHANGELOG entry in this PR: #97 adds the only `[Unreleased]` section and a second one would conflict. The release that ships both can add a Fixed line.
