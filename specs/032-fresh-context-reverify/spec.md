@@ -97,8 +97,8 @@ Why not a separate process or a subagent:
 - This fix turn **is** spec 035's single extra turn (`FINISH_CHECK_MAX_EXTRA_TURNS = 1` is unchanged). There is one extra turn per task in total, ever, whatever triggered it: per task, at most one check turn, one verifier turn, and one fix turn.
 - When the verifier runs, spec 035's go-measure nudge is folded into the verifier turn, which receives the unmeasured items, so no separate nudge is sent.
 - When the trigger does not fire, spec 035 behaves exactly as merged.
-- **With `OMK_FINISH_CHECK_EXTRA_TURN` off** (its default on main): `OMK_FINISH_CHECK_REVERIFY=on` implies the verifier's own fix turn, and that fix turn counts against the same single extra-turn allowance and gates (85% cutoff, not aborted, no pending input, not void). Only the verifier's findings (its `FAIL` lines and its own failing REQ comparisons) can trigger it; the check ledger's numeric fails alone do not, because that is spec 035's switch. When a fix turn is sent anyway, the message also lists the check ledger's failing REQ items, since they are known. Proposed here and listed under open questions for Tech Lead.
-- **With both flags on**: the trigger rules above apply unchanged (findings, ledger fails, or the verifier's REQ fails).
+- **With `OMK_FINISH_CHECK_EXTRA_TURN` off** (its default on main): the verifier only verifies and records. It still runs when its own trigger fires, and its `finish_check_verify` entry and `{ stage: "verify", fixTurn: false }` event are written, but no fix turn or continue message is sent, whatever it finds. The extra turn is created only by `OMK_FINISH_CHECK_EXTRA_TURN` (decision 9).
+- **With both flags on**: the trigger rules above apply unchanged (verifier findings, the verifier's REQ fails, or check-ledger fails).
 - No verifier after the fix turn, and no second fix turn. The fix turn's REQ lines are recorded as a `finish_check_ledger` entry with `round: 2` (as in 035), and its `VERIFY` lines, if any, as a `finish_check_verify` entry with `round: 2`.
 - A verifier with no `VERIFY` lines, `VERDICT: PASS`, an aborted verifier, a void (mutated) verifier, or a pending user message produces no findings that count. Spec 035's ledger result alone then decides the fix turn.
 
@@ -109,7 +109,7 @@ Why not a separate process or a subagent:
 
 ## CLI Harness Target Impact
 
-**Classification**: improve, opt-in (`OMK_FINISH_CHECK_REVERIFY=on`); no change when off.
+**Classification**: improve, opt-in (`OMK_FINISH_CHECK_REVERIFY=on`; the fix turn also needs `OMK_FINISH_CHECK_EXTRA_TURN=on`); no change when off.
 
 | Dimension | Baseline (main `5c5806b`) | Acceptance target | Regression floor | Verification command | Evidence artifact |
 | --- | --- | --- | --- | --- | --- |
@@ -156,7 +156,7 @@ Defaults: `OMK_FINISH_CHECK_REVERIFY=on`, `OMK_FINISH_CHECK_EXTRA_TURN=on`, `OMK
 15. **No second verifier.** After a fix turn, or for any later settle of the same task, no `<fresh_verification>` is sent. A new user task resets this.
 16. **Instruction content.** The instruction contains the line about new inputs and "Do not count re-running the given examples", the `/tmp/omk-verify/` rule, the no-web-answers rule, and the reply format. The deliverables list is deduplicated and capped at 30.
 17. **Cost recorded.** The `finish_check_verify` entry carries `costUsd` and token totals summed from the verifier turn's assistant messages (faux usage in the test).
-18. **Extra-turn flag off.** With `OMK_FINISH_CHECK_EXTRA_TURN` unset: a verifier FAIL → one fix turn; the check ledger's `stone 74 >= 75` alone with a verifier PASS → no fix turn; a fix turn sent for a finding also lists the ledger's failing REQ item.
+18. **Extra-turn flag off (decision 9).** With `OMK_FINISH_CHECK_REVERIFY=on` and `OMK_FINISH_CHECK_EXTRA_TURN` unset: the verifier runs and its verdict and findings are recorded (`finish_check_verify`, event `fixTurn: false`), but no fix turn or continue message is sent for a verifier FAIL, a check-ledger miss (`stone 74 >= 75`), a verifier REQ miss, or a verifier PASS; a later settle sends nothing. With both flags on, cases 10–12 apply.
 
 ## A/B measurement
 
@@ -211,6 +211,7 @@ Defaults: `OMK_FINISH_CHECK_REVERIFY=on`, `OMK_FINISH_CHECK_EXTRA_TURN=on`, `OMK
 7. **Base and clock**: implement on main `5c5806b` (#62 merged, 035's extra turn behind `OMK_FINISH_CHECK_EXTRA_TURN`). Read the budget through an injectable seam with today's finish-check source, and switch it to #63's `readRunBudget()` only after #63 lands (superseded by decision 8).
 
 8. **Clock**: #63 merged before this PR, so the trigger reads the shared run clock in this PR (decision 7's seam defaults to `readRunBudget()`).
+9. **Extra turn only from its own flag**: with `OMK_FINISH_CHECK_EXTRA_TURN` off, 032 only verifies and records; no fix turn. The extra turn is created by that one flag alone (one flag, one behaviour, a clean off switch). This settles open question 1.
 
 ## Bench visibility
 
@@ -218,9 +219,9 @@ Benches run `omk --no-session --mode json`. JSON mode writes only session events
 
 They will go to the shared run log (`appendRunLog("finish-check", record)` writing `$OMK_RUN_LOG_DIR/finish-check.jsonl`, Runtime Engineer's PR) once it merges: one record for the trigger decision (fired or not, first-settle fraction), one for the verifier result (verdict, finding counts, `mutated`, changed-path count, tool calls, seconds, cost, `fixTurn`). Records hold only hashes, paths and numbers, no prompt text, file contents or env values. The call sites are marked with `run-log (spec 032)` comments in `extensions/builtin/finish-check.ts`; wiring them is a follow-up on top of `run-log.ts`.
 
-## Open questions (for Tech Lead)
+## Open questions (for Tech Lead, all settled)
 
-1. **032 on, 035 extra-turn flag off.** Proposed (and implemented): the verifier's findings still get one fix turn, counted against the same single extra-turn allowance and gates, while the check ledger's numeric fails alone do not trigger it. The alternative is that the fix turn also requires `OMK_FINISH_CHECK_EXTRA_TURN=on`, which would make `OMK_FINISH_CHECK_REVERIFY=on` alone a verify-and-record-only mode.
+1. ~~032 on, 035 extra-turn flag off~~: decided by Tech Lead as decision 9 (verify and record only, no fix turn).
 2. ~~A/B arms~~: settled by Bench Analyst's rule (one flag per A/B; 032 runs with `OMK_FINISH_CHECK_EXTRA_TURN=on` in both arms).
 
 ## Expected Files
