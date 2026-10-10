@@ -8,7 +8,7 @@ import * as path from "node:path";
 import { performance } from "node:perf_hooks";
 import { isKeyRelease, matchesKey } from "./keys.ts";
 import { extractKittyImageIds, LineResetMemo, SEGMENT_RESET } from "./line-reset-memo.ts";
-import { maxChildGeneration, nextRenderGeneration } from "./render-generation.ts";
+import { maxChildGeneration, nextRenderGeneration, releaseRenderCache } from "./render-generation.ts";
 import type { Terminal } from "./terminal.ts";
 import { finishTerminalFrame } from "./terminal-final-frame.ts";
 import { deleteKittyImage, getCapabilities, isImageLine, setCellDimensions } from "./terminal-image.ts";
@@ -55,6 +55,14 @@ export interface Component {
 	 * streaming message, a running tool). Missing ⇒ settled.
 	 */
 	isRenderSettled?(): boolean;
+
+	/**
+	 * Optional: drop render caches that `render()` can rebuild from source.
+	 * Off-screen windowing calls it once a child freezes (its frozen lines are
+	 * then the only retained copy). Must not change the render generation or
+	 * the output of the next `render()`. Missing ⇒ nothing is released.
+	 */
+	releaseRenderCache?(): void;
 }
 
 type InputListenerResult = { consume?: boolean; data?: string } | undefined;
@@ -254,6 +262,11 @@ export class Container implements Component {
 		for (const child of this.children) {
 			child.invalidate?.();
 		}
+	}
+
+	/** Forwards to children; a container keeps no render cache of its own. */
+	releaseRenderCache(): void {
+		for (const child of this.children) releaseRenderCache(child);
 	}
 
 	render(width: number): string[] {

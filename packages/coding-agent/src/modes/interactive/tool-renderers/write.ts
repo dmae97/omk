@@ -19,6 +19,12 @@ class WriteCallRenderComponent extends Text {
 	constructor() {
 		super("", 0, 0);
 	}
+
+	/** A missing highlight cache makes the next update rebuild it in full. */
+	override releaseRenderCache(): void {
+		super.releaseRenderCache();
+		this.cache = undefined;
+	}
 }
 
 const WRITE_PARTIAL_FULL_HIGHLIGHT_LINES = 50;

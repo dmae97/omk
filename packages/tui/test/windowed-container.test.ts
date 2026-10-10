@@ -212,6 +212,50 @@ describe("WindowedContainer", () => {
 		assert.deepEqual(md.render(60), before);
 	});
 
+	it("leaves third-party fields named like caches alone (freeze + resize does not crash)", () => {
+		// Review P4: an extension component's `private cache = new Map()` is not a
+		// render cache; clearing it by name made the next render throw.
+		class ThirdParty implements Component {
+			private cache = new Map<number, string[]>();
+			render(width: number): string[] {
+				let lines = this.cache.get(width);
+				if (!lines) {
+					lines = [`tp@${width}`];
+					this.cache.set(width, lines);
+				}
+				return lines;
+			}
+			invalidate(): void {}
+		}
+		const full = new Container();
+		const windowed = new WindowedContainer();
+		windowed.setLiveLineBudget(5);
+		for (const target of [full, windowed]) {
+			const wrap = new Container();
+			wrap.addChild(new ThirdParty());
+			target.addChild(wrap);
+			for (let i = 0; i < 20; i++) target.addChild(new Text(`t${i}`, 0, 0));
+		}
+		windowed.render(80);
+		assert.ok(windowed.getFrozenChildCount() > 0);
+		assert.doesNotThrow(() => windowed.render(60));
+		assert.deepEqual(windowed.render(60), full.render(60));
+	});
+
+	it("releaseRenderCache only calls the opt-in hook", () => {
+		let released = 0;
+		const component = {
+			cachedLines: ["keep"],
+			render: () => ["x"],
+			invalidate: () => {},
+		};
+		releaseRenderCache(component);
+		assert.deepEqual(component.cachedLines, ["keep"]);
+		const hooked: Component = { ...component, releaseRenderCache: () => released++ };
+		releaseRenderCache(hooked);
+		assert.equal(released, 1);
+	});
+
 	it("isRenderSettled defaults true when the hook is absent", () => {
 		assert.equal(isRenderSettled(new Text("x", 0, 0)), true);
 	});

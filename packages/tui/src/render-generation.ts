@@ -50,38 +50,16 @@ export function maxChildGeneration(own: number, children: readonly Component[]):
 	return max;
 }
 
-type CacheNode = Component & {
-	releaseRenderCache?: () => void;
-	cachedLines?: string[];
-	cachedText?: string;
-	cachedWidth?: number;
-	cache?: unknown;
-	children?: Component[];
-};
+type CacheNode = Component & { releaseRenderCache?: () => void };
 
 /**
  * Drop render caches of a frozen (off-screen) component without changing its
- * render generation. An explicit `releaseRenderCache()` hook wins (Markdown
- * uses it to reset its stream cache); otherwise known cache fields are cleared
- * and children are walked.
+ * render generation. Opt-in only: a component releases exactly what its own
+ * `releaseRenderCache()` drops (Container and Box forward to their children).
+ * Components without the hook are left untouched; fields are never cleared by
+ * name, because a third-party field called `cache` may not be a render cache.
  */
 export function releaseRenderCache(component: Component): void {
 	const node = component as CacheNode;
-	if (typeof node.releaseRenderCache === "function") {
-		node.releaseRenderCache();
-		return;
-	}
-	if ("cachedLines" in node) {
-		node.cachedLines = undefined;
-		node.cachedText = undefined;
-		node.cachedWidth = undefined;
-	}
-	if ("cache" in node) {
-		node.cache = undefined;
-	}
-	if (Array.isArray(node.children)) {
-		for (const child of node.children) {
-			releaseRenderCache(child);
-		}
-	}
+	if (typeof node.releaseRenderCache === "function") node.releaseRenderCache();
 }

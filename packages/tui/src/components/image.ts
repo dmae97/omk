@@ -58,6 +58,11 @@ export class Image implements Component {
 		this.cachedWidth = undefined;
 	}
 
+	/** Off-screen windowing: the image ID is kept, so a re-render reuses it. */
+	releaseRenderCache(): void {
+		this.invalidate();
+	}
+
 	render(width: number): string[] {
 		if (this.cachedLines && this.cachedWidth === width) {
 			return this.cachedLines;

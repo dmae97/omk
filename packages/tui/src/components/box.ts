@@ -1,4 +1,4 @@
-import { maxChildGeneration, nextRenderGeneration } from "../render-generation.ts";
+import { maxChildGeneration, nextRenderGeneration, releaseRenderCache } from "../render-generation.ts";
 import type { Component } from "../tui.ts";
 import { applyBackgroundToLine, visibleWidth } from "../utils.ts";
 
@@ -73,6 +73,12 @@ export class Box implements Component {
 			cache.childLines.length === childLines.length &&
 			cache.childLines.every((line, i) => line === childLines[i])
 		);
+	}
+
+	/** Off-screen windowing: drop the padded-line cache (no generation change) and forward to children. */
+	releaseRenderCache(): void {
+		this.cache = undefined;
+		for (const child of this.children) releaseRenderCache(child);
 	}
 
 	invalidate(): void {

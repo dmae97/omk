@@ -11,6 +11,7 @@
 ### Fixed
 
 - Freezing a `Markdown` no longer clears its stream cache by assigning `undefined`, which made the next render after a resize throw; `Markdown.releaseRenderCache()` resets it instead.
+- Freezing no longer clears fields named `cache` / `cachedLines` / `cachedText` / `cachedWidth` by name, which crashed third-party components whose `cache` was not a render cache (e.g. a `Map`) on the next resize. Releasing is now opt-in through `Component.releaseRenderCache()`: `Text`, `Markdown`, `Box` and `Image` drop their caches, `Container` and `Box` forward to their children, other components are left untouched.
 
 ## [1.3.2] - 2026-10-10
 

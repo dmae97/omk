@@ -45,6 +45,13 @@ export class Text implements Component {
 		return this.renderGeneration;
 	}
 
+	/** Off-screen windowing: drop wrapped lines without counting as a change. */
+	releaseRenderCache(): void {
+		this.cachedText = undefined;
+		this.cachedWidth = undefined;
+		this.cachedLines = undefined;
+	}
+
 	invalidate(): void {
 		this.renderGeneration = nextRenderGeneration();
 		this.cachedText = undefined;
