@@ -9,6 +9,7 @@ import deliverableGuard, {
 	unrefInterval,
 } from "../src/core/extensions/builtin/deliverable-guard.ts";
 import finishCheck from "../src/core/extensions/builtin/finish-check.ts";
+import { HARNESS_FACTORIES } from "../src/core/extensions/builtin/harness-factories.ts";
 import type { ExtensionAPI } from "../src/core/extensions/types.ts";
 import { findOnPath } from "../src/core/fast-check.ts";
 
@@ -119,6 +120,12 @@ const settled = { messages: [{ role: "assistant", stopReason: "stop", content: [
 const restores = (h: Harness) => h.entries.filter((e) => e.type === DELIVERABLE_GUARD_ENTRY).map((e) => e.data);
 
 describe("deliverable guard: flag off is main", () => {
+	it("is a built-in harness extension loaded before finish-check", () => {
+		const vars = HARNESS_FACTORIES.map((entry) => entry.envVar);
+		expect(vars).toContain("OMK_DELIVERABLE_GUARD");
+		expect(vars.indexOf("OMK_DELIVERABLE_GUARD")).toBeLessThan(vars.indexOf("OMK_FINISH_CHECK"));
+	});
+
 	it("registers no handlers, timers or signal handlers when OMK_DELIVERABLE_GUARD is unset or off", () => {
 		for (const value of [undefined, "", "0", "off", "false"]) {
 			const h = harness({ OMK_TIME_BUDGET_SEC: "900", OMK_DELIVERABLE_GUARD: value });
