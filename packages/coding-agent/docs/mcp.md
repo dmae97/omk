@@ -37,13 +37,36 @@ Servers are read from three files, later wins on a name collision:
 }
 ```
 
+### Project configs need trust
+
+`<cwd>/.omk/mcp.json` comes with whatever repository you cloned, so OMK treats
+it as untrusted:
+
+- Its servers are **skipped** until you trust that exact file content. Trust is
+  stored in `~/.omk/mcp-trust.json` (mode 0600), keyed by the project's real
+  path and pinned to a SHA-256 of the file. Any later edit (a pull, a branch
+  switch) skips the servers again until you re-trust.
+- Even trusted project servers **do not inherit your environment**. They get a
+  small allowlist (`PATH`, `HOME`, `USER`, `LANG`, `TERM`, `TMPDIR`, `SHELL`
+  and their Windows equivalents) plus the literal `env` they declare.
+- `$VAR` / `${VAR}` in a project config's `command`, `args` and `cwd` are
+  **not** expanded from your environment; only a leading `~` is.
+- User configs (`~/.kimi/mcp.json`, `~/.omk/mcp.json`) are unaffected.
+
+Trust programmatically with `trustProjectMcpConfig(cwd)` (pass the reviewed
+`sha256` to refuse content that changed after review) and undo with
+`revokeProjectMcpTrust(cwd)`. For CI, `OMK_TRUST_PROJECT_MCP=1` trusts the
+project file for that process. `AgentSession.mcpProjectTrustReport()` lists the
+project servers that were skipped at the last attach.
+
 | Field | Meaning |
 | --- | --- |
 | `command`, `args` | Executable to spawn. **Required** — entries with only a `url` are skipped, since stdio is the supported transport. |
-| `env` | Extra environment for the child. Merged over the parent environment. Values are runtime-only and are never rendered or logged. |
+| `env` | Extra environment for the child. For user configs it is merged over the parent environment; for project configs it is merged over the small allowlist only. Values are runtime-only and are never rendered or logged. |
 | `cwd` | Working directory. Defaults to the session's cwd. |
 | `disabled` / `enabled: false` | Skip without deleting the entry. |
 | `startup_timeout_sec` | Handshake deadline. Raise it for `npx -y …@latest` servers whose first run downloads a package. |
+| `tool_timeout_sec` | Deadline for each request to this server, including tool calls (default 30, clamped to 1 s–24 h). Raise it for servers whose tools queue or run long. `OMK_MCP_TOOL_TIMEOUT_SEC` sets the default for servers that omit it. |
 
 ## Using it
 

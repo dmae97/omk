@@ -103,13 +103,20 @@ describe("pi package intake", () => {
 				"code-search",
 				"observability",
 				"actor",
-				"interactive-ui",
 				"side-channel",
 				"review",
 			]),
 		);
 		expect(labels).toContain("MCP");
 		expect(report.summary.topLanes.every((lane) => lane.total > 0)).toBe(true);
+	});
+
+	it("lists no candidate that stops to ask a person (spec 039)", () => {
+		for (const candidate of [...P0_PI_PACKAGE_PORT_CANDIDATES, ...P1_PI_PACKAGE_PORT_CANDIDATES]) {
+			expect(candidate.id).not.toBe("pi-ask-user");
+			expect(candidate.piOrigins).not.toContain("pi-ask-user");
+			expect(candidate.lane).not.toBe("interactive-ui");
+		}
 	});
 
 	it("P1 batch never claims native or permanent-adopt intent (unreviewed source)", () => {

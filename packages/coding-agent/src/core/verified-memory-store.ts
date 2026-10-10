@@ -64,8 +64,12 @@ function readPrivateRecord(path: string): unknown {
 		}
 		const after = fstatSync(fd, { bigint: true });
 		const current = lstatSync(path, { bigint: true });
+		// ctime comes from a coarse clock and can stay the same across writes, so compare sizes too.
 		if (
 			length > MAX_RECORD_BYTES ||
+			BigInt(length) !== before.size ||
+			before.size !== after.size ||
+			after.size !== current.size ||
 			before.ctimeNs !== after.ctimeNs ||
 			after.ino !== current.ino ||
 			after.dev !== current.dev ||
