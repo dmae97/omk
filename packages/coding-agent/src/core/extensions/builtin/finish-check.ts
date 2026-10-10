@@ -9,7 +9,6 @@ import {
 	isWorkspaceMutatingTool,
 	resolveFinishCheckExtraTurn,
 	resolveFinishCheckMode,
-	resolveTimeBudgetMs,
 	shouldAddFinishDiscipline,
 	shouldRunFinishCheck,
 } from "../../finish-check.ts";
@@ -23,6 +22,7 @@ import {
 	parseFinishCheckLedger,
 } from "../../finish-check-requirements.ts";
 import { requestPreCheckSnapshot, resolveSnapshotHandshake } from "../../finish-check-snapshot.ts";
+import { excludeRunBudgetWaitMs, readRunBudget, resolveTimeBudgetMs } from "../../remaining-budget.ts";
 import type { ExtensionAPI } from "../types.ts";
 
 export interface FinishCheckOptions {
@@ -69,17 +69,24 @@ function ledgerReply(messages: readonly unknown[]): string {
  */
 export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptions = {}): void {
 	const env = options.env ?? process.env;
-	const now = options.now ?? Date.now;
+	const now = options.now ?? (() => performance.now());
 	const mode = resolveFinishCheckMode(env.OMK_FINISH_CHECK);
 	if (mode === "off") return;
 	const budgetMs = resolveTimeBudgetMs(env.OMK_TIME_BUDGET_SEC);
 	// Spec 035's extra turn (and its 90% stop steer) is opt-in; off, the check ends as it did before.
 	const extraTurnEnabled = resolveFinishCheckExtraTurn(env.OMK_FINISH_CHECK_EXTRA_TURN);
 	const snapshot = resolveSnapshotHandshake(env);
-	// Time spent waiting for a harness snapshot is not part of the run's budget.
+	// Spec 036: the 0.75 / 0.85 / 0.90 checks read the shared run clock, which starts at process
+	// start in `runPrintMode`, so finish-check, the bash clamp and spec 033 agree on one origin.
+	// Without a bound clock (interactive `OMK_FINISH_CHECK=always`, unit tests) a local clock from
+	// extension load is kept, exactly as before.
 	let startedAt = now();
 	let snapshotSequence = 0;
-	const elapsedFraction = () => (budgetMs === undefined ? undefined : (now() - startedAt) / budgetMs);
+	const elapsedFraction = (): number | undefined => {
+		const shared = readRunBudget();
+		if (shared) return shared.elapsedFraction;
+		return budgetMs === undefined ? undefined : (now() - startedAt) / budgetMs;
+	};
 
 	let mutated = false;
 	let checked = false;
@@ -196,7 +203,9 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 		if (snapshot) {
 			snapshotSequence += 1;
 			const result = await requestPreCheckSnapshot(snapshot, snapshotSequence, { now, sleep: options.sleep });
-			startedAt += result.waitedMs;
+			// Time spent waiting for a harness snapshot is not part of the run's budget.
+			if (readRunBudget()) excludeRunBudgetWaitMs(result.waitedMs);
+			else startedAt += result.waitedMs;
 		}
 		checkActive = true;
 		omk.events.emit(FINISH_CHECK_EVENT, { active: true, requirements: [...requirements] });

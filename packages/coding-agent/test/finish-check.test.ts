@@ -16,7 +16,6 @@ import {
 	finishDisciplinePrompt,
 	isWorkspaceMutatingTool,
 	resolveFinishCheckMode,
-	resolveTimeBudgetMs,
 	shouldAddFinishDiscipline,
 	shouldRunFinishCheck,
 } from "../src/core/finish-check.ts";
@@ -25,6 +24,7 @@ import {
 	requestPreCheckSnapshot,
 	resolveSnapshotHandshake,
 } from "../src/core/finish-check-snapshot.ts";
+import { resolveTimeBudgetMs } from "../src/core/remaining-budget.ts";
 import { createHarness, type Harness } from "./suite/harness.ts";
 
 function writeToolFor(runs: string[]): AgentTool {
