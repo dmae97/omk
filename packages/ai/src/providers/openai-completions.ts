@@ -10,7 +10,7 @@ import type {
 	ChatCompletionSystemMessageParam,
 	ChatCompletionToolMessageParam,
 } from "openai/resources/chat/completions.js";
-import { calculateCost, clampThinkingLevel } from "../models.ts";
+import { clampThinkingLevel } from "../models.ts";
 import type {
 	AssistantMessage,
 	CacheRetention,
@@ -36,6 +36,7 @@ import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import { isCloudflareProvider, resolveCloudflareBaseUrl } from "./cloudflare.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import { getCompat, isModelStudioModel, type ResolvedOpenAICompletionsCompat } from "./openai-completions-compat.ts";
+import { parseChunkUsage } from "./openai-completions-usage.ts";
 import { resolveOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
 import { openAICompletionStopReason as mapStopReason } from "./provider-stop-reasons.ts";
 import { buildBaseOptions } from "./simple-options.ts";
@@ -1046,40 +1047,4 @@ function convertTools(
 			...(compat.supportsStrictMode !== false && { strict: false }),
 		},
 	}));
-}
-
-function parseChunkUsage(
-	rawUsage: {
-		prompt_tokens?: number;
-		completion_tokens?: number;
-		prompt_cache_hit_tokens?: number;
-		prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
-	},
-	model: Model<"openai-completions">,
-): AssistantMessage["usage"] {
-	const promptTokens = rawUsage.prompt_tokens || 0;
-	const cacheReadTokens = rawUsage.prompt_tokens_details?.cached_tokens ?? rawUsage.prompt_cache_hit_tokens ?? 0;
-	const cacheWriteTokens = rawUsage.prompt_tokens_details?.cache_write_tokens || 0;
-
-	// Follow documented OpenAI/OpenRouter semantics: cached_tokens is cache-read
-	// tokens (hits). OpenAI does not document or emit cache_write_tokens, but
-	// OpenRouter-compatible providers can include it as a separate write count.
-	// OpenRouter's own provider/tests affirm the separate mapping:
-	// https://github.com/OpenRouterTeam/ai-sdk-provider/pull/409
-	// Do not subtract writes from cached_tokens, otherwise spec-compliant
-	// providers are under-reported. DS4 mirrors this contract too:
-	// https://github.com/antirez/ds4/pull/29
-	const input = Math.max(0, promptTokens - cacheReadTokens - cacheWriteTokens);
-	// OpenAI completion_tokens already includes reasoning_tokens.
-	const outputTokens = rawUsage.completion_tokens || 0;
-	const usage: AssistantMessage["usage"] = {
-		input,
-		output: outputTokens,
-		cacheRead: cacheReadTokens,
-		cacheWrite: cacheWriteTokens,
-		totalTokens: input + outputTokens + cacheReadTokens + cacheWriteTokens,
-		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-	};
-	calculateCost(model, usage);
-	return usage;
 }
