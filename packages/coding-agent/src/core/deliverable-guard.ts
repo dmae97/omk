@@ -5,6 +5,7 @@
  */
 import { isAbsolute, resolve } from "node:path";
 import type { SizeLimit } from "./fast-check.ts";
+import { resolveTimeBudgetMs } from "./finish-check.ts";
 import { PRODUCE_WORDS, splitSentences } from "./finish-check-requirements.ts";
 
 /** Past this fraction of the budget a missing deliverable gets one steer. */
@@ -160,4 +161,15 @@ export function buildRestoreMessage(notes: readonly RestoreNote[]): string {
 		...lines,
 		"Keep these files in place. Replace one only with a version you have checked is valid.",
 	].join("\n");
+}
+
+/**
+ * The run clock until #63 lands: elapsed fraction of `OMK_TIME_BUDGET_SEC` since
+ * `now()` at the call, the same source finish-check uses on main. Undefined without
+ * a budget. #63 replaces this with `readRunBudget()?.elapsedFraction`.
+ */
+export function budgetFractionFromEnv(env: NodeJS.ProcessEnv, now: () => number): () => number | undefined {
+	const budgetMs = resolveTimeBudgetMs(env.OMK_TIME_BUDGET_SEC);
+	const startedAt = now();
+	return () => (budgetMs === undefined ? undefined : (now() - startedAt) / budgetMs);
 }
