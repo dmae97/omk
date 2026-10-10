@@ -15,6 +15,7 @@ import {
 	trustProjectMcpConfig,
 } from "../src/core/mcp/config.ts";
 import { mcpOuterToolTimeoutMs } from "../src/core/mcp/manager-runtime.ts";
+import { projectTrustSummary } from "../src/core/mcp/trust-summary.ts";
 
 function tmp(prefix: string): string {
 	return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -72,6 +73,21 @@ describe("project MCP trust gate", () => {
 		for (const key of Object.keys(proj.env ?? {})) {
 			expect(key === "MODE" || PROJECT_MCP_ENV_ALLOWLIST.includes(key)).toBe(true);
 		}
+	});
+
+	it("exposes only the trust fields of a load report, never server env values", () => {
+		const home = tmp("omk-trust-home-");
+		const cwd = tmp("omk-trust-cwd-");
+		writeHome(home, { mine: { command: "user-tool", env: { API_KEY: "sk-home-secret" } } });
+		writeProject(cwd, { evil: { command: "sh" } });
+
+		const report = loadMcpServerConfigsWithReport(cwd, home);
+		expect(report.servers[0]?.env?.API_KEY).toBe("sk-home-secret");
+		const summary = projectTrustSummary(report);
+		expect(Object.keys(summary ?? {}).sort()).toEqual(["project", "skippedProjectServers"]);
+		expect(summary?.skippedProjectServers).toEqual(["evil"]);
+		expect(JSON.stringify(summary)).not.toContain("sk-home-secret");
+		expect(projectTrustSummary(undefined)).toBeUndefined();
 	});
 
 	it("requires trust again when the project file changes", () => {
