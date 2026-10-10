@@ -167,6 +167,7 @@ describe("finish-check checklist message and ledger", () => {
 
 	it("asks numeric items for one comparison per limit, and keeps path-only wording", () => {
 		expect(buildFinishCheckMessage(extractRequirements(COREWARS))).toContain("`<label> <measured> <op> <limit>`");
+		expect(buildFinishCheckMessage(extractRequirements(COREWARS))).toContain("Write only the current measurement");
 		expect(buildFinishCheckMessage(["The model should be saved as /app/model.bin"])).not.toContain(
 			"<label> <measured> <op> <limit>",
 		);

@@ -104,7 +104,7 @@ export function finishCheckToolCap(requirementCount: number): number {
 }
 
 const NUMERIC_REPORT_LINE =
-	"For an item that states a numeric limit, write one comparison per limit as `<label> <measured> <op> <limit>`, separated by `;`, for example `REQ 1: FAIL - stone 74 >= 75; snake 39 >= 33`. A comparison that does not hold makes the item FAIL.";
+	"For an item that states a numeric limit, write one comparison per limit as `<label> <measured> <op> <limit>`, separated by `;`, for example `REQ 1: FAIL - stone 74 >= 75; snake 39 >= 33`. Write only the current measurement, not earlier values. A comparison that does not hold makes the item FAIL.";
 
 /** The finish-check message, with a measured checklist when the prompt has measurable requirements. */
 export function buildFinishCheckMessage(requirements: readonly string[]): string {
