@@ -18,7 +18,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -131,13 +131,23 @@ function readTextOrUndefined(path) {
 	}
 }
 
-function privateDocumentDigests(privateHome) {
+export function privateDocumentDigests(privateHome) {
 	const digests = [];
 	if (!existsSync(privateHome)) return digests;
 	for (const entry of readdirSync(privateHome, { withFileTypes: true })) {
-		if (!entry.isFile() || !PRIVATE_DOC_PATTERN.test(entry.name)) continue;
-		const content = readTextOrUndefined(join(privateHome, entry.name));
-		if (content !== undefined) digests.push([entry.name, digest(content)]);
+		if (!PRIVATE_DOC_PATTERN.test(entry.name)) continue;
+		// The owner's home links these documents from a separately versioned checkout: follow the link.
+		// Fail closed: a private document that cannot be read cannot be compared, so the guard cannot vouch.
+		const path = join(privateHome, entry.name);
+		let content;
+		try {
+			if (!statSync(path).isFile()) continue;
+			content = readFileSync(path);
+		} catch (error) {
+			throw new Error(`cannot read the private document ${entry.name}: ${error.code ?? error.message}`);
+		}
+		// Skip binaries: a NUL byte means it is not a document.
+		if (!content.includes(0)) digests.push([entry.name, digest(content.toString("utf8"))]);
 	}
 	return digests;
 }
@@ -163,10 +173,15 @@ function main() {
 		failures.push(`private stack signature in ${file}: ${JSON.stringify(marker)}`);
 	}
 
-	const privateDigests = privateDocumentDigests(privateHome);
-	if (privateDigests.length === 0) {
+	let privateDigests;
+	try {
+		privateDigests = privateDocumentDigests(privateHome);
+	} catch (error) {
+		failures.push(`${error.message} — fix or remove it so the duplicate check can compare`);
+	}
+	if (privateDigests?.length === 0) {
 		console.log(`Private agent home not present (${privateHome}) — duplicate check skipped.`);
-	} else {
+	} else if (privateDigests) {
 		const trackedDigests = [];
 		for (const file of tracked) {
 			const content = readContent(file);
