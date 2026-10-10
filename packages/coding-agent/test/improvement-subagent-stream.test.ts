@@ -39,5 +39,6 @@ it("preserves process settlement when reporter throws", async () => {
 	expect(result.isError).toBe(true);
 	const single = (result.details as ResultDetails).results[0];
 	expect(single.process?.reason).toBe("callback-error");
-	await expect(single.process?.settlement).resolves.toBeUndefined();
+	expect(single.process?.terminationObserved).toBe(true);
+	expect(single.process).not.toHaveProperty("settlement");
 });

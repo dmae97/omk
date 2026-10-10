@@ -52,7 +52,8 @@ export interface SingleResult {
 	/** Bounded display projection only, never a completed message or checkpoint. */
 	progress?: { readonly text: string; readonly sequence: number };
 	dependencyDigests?: Readonly<Record<string, string>>;
-	process?: ManagedProcessResult;
+	/** `settlement` is present on the owner's copy and stripped from tool-result details (toDetailsResult). */
+	process?: Omit<ManagedProcessResult, "settlement"> & { readonly settlement?: Promise<void> };
 	stream?: {
 		stdoutBytes: number;
 		stderrBytes: number;
@@ -76,6 +77,17 @@ export interface SingleResult {
 	errorMessage?: string;
 	step?: number;
 	deadline?: AgentDeadlineMetadata;
+}
+
+/**
+ * Tool-result `details` must be plain data, so the live `process.settlement`
+ * Promise stays with the lane owner (the value runSingleAgent returns) and only
+ * the snapshot fields cross the boundary.
+ */
+export function toDetailsResult(result: SingleResult): SingleResult {
+	if (!result.process) return result;
+	const { settlement: _settlement, ...process } = result.process;
+	return { ...result, process };
 }
 
 export interface SubagentAttemptResult {

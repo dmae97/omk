@@ -60,7 +60,8 @@ export function laneResult(
 	result: SingleResult,
 ): void | { status: "failed" } | { status: "unsettled"; settlement: Promise<void> } {
 	if (result.process?.terminationObserved === false)
-		return { status: "unsettled", settlement: result.process.settlement };
+		// A copy without the live Promise cannot prove termination, so the lane keeps its reservation.
+		return { status: "unsettled", settlement: result.process.settlement ?? new Promise<void>(() => {}) };
 	if (failedResult(result)) return { status: "failed" };
 }
 

@@ -52,7 +52,12 @@ import {
 	truncateParallelOutput,
 } from "./graph-result.ts";
 import { runManagedProcess } from "./managed-process.ts";
-import { emptyUsage, type SingleResult, type SubagentAttemptResult } from "./subagent-runtime-types.ts";
+import {
+	emptyUsage,
+	type SingleResult,
+	type SubagentAttemptResult,
+	toDetailsResult,
+} from "./subagent-runtime-types.ts";
 import { createSubagentStream } from "./subagent-stream.ts";
 import {
 	type GraphTask,
@@ -661,7 +666,7 @@ export default function (omk: ExtensionAPI) {
 					mode,
 					agentScope,
 					projectAgentsDir: discovery.projectAgentsDir,
-					results,
+					results: results.map(toDetailsResult),
 					executionBudget: summarizeExecutionBudget(executionBudget, results, executionPolicy.unbounded),
 					...(mode === "graph" && graphDetails
 						? { graph: { ...graphDetails, completedNodeIds: [...graphDetails.completedNodeIds] } }

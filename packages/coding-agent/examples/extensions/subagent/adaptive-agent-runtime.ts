@@ -28,7 +28,6 @@ import {
 	remainingExecutionMs,
 } from "./deadline-budget.ts";
 import type { DeadlineProfileStore } from "./deadline-profile-store.ts";
-import type { ManagedProcessResult } from "./managed-process.ts";
 import type {
 	DeadlineAttemptMetadata,
 	DeadlineOutcome,
@@ -100,7 +99,7 @@ export async function runAdaptiveAgent(options: RunAdaptiveAgentOptions): Promis
 	let duplicateResumeBlocked = false;
 	let lastCheckpoint: Awaited<ReturnType<typeof readCheckpoint>> | undefined;
 	let terminalOutcome: DeadlineOutcome = "budget-exhausted";
-	let unsettledProcess: ManagedProcessResult | undefined;
+	let unsettledProcess: SingleResult["process"];
 	const checkpointPrefix = options.checkpointPrefix ?? path.join(os.tmpdir(), "omk-subagent-checkpoint-");
 	const workspace = await createCheckpointWorkspace(checkpointPrefix);
 

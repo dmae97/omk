@@ -72,11 +72,12 @@ it.each([false, true])("preserves unsettled graph ownership without retry (bound
 		expect(children).toHaveLength(1);
 		const first = (result.details as ResultDetails).results[0];
 		expect(first.process?.terminationObserved).toBe(false);
+		// Tool-result details must be plain data: the live settlement Promise stays with the lane owner.
+		expect(first.process).not.toHaveProperty("settlement");
+		expect(() => structuredClone(result.details)).not.toThrow();
 		expect(owned).toBe(1);
 		children[0].emit("close", null, "SIGKILL");
-		await first.process?.settlement;
-		await Promise.resolve();
-		expect(owned).toBe(0);
+		await vi.waitFor(() => expect(owned).toBe(0));
 	} finally {
 		await env.cleanup();
 	}
