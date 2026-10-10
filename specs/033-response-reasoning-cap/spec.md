@@ -36,7 +36,7 @@ A `StreamFn` wrapper, `createResponseReasoningCapStreamFn(inner, config)`, in `p
 1. **Activation.** Off unless `OMK_RESPONSE_REASONING_CAP=1`. When off, the wrapper is not installed at all.
 2. **Caps (per response attempt).**
    - Reasoning tokens: `OMK_RESPONSE_REASONING_CAP_TOKENS`, default **20000** (the Desk's split point). Counted live as `max(ceil(thinking chars / 4), partial.usage.output)` while the response has produced no text and no tool call. `usage.output` is only used when the provider streams it.
-   - Wall time: `OMK_RESPONSE_WALL_CAP_SEC`, default **240 s**. When a RemainingBudget clock is active (`OMK_TIME_BUDGET_SEC`, #63) the cap is `min(240 s, 15% of the budget, remaining − save reserve)`, floored at 30 s. For the 900 s ARS budget that is 135 s; for a 3600 s task 240 s.
+   - Wall time: `OMK_RESPONSE_WALL_CAP_SEC`, default **240 s**. When the run clock is active (`OMK_TIME_BUDGET_SEC`, started once at run start by #63/spec 036 and only read here, so both A/B arms share one origin) the cap is `min(240 s, 15% of the budget, remaining − save reserve)`, floored at 30 s. For the 900 s ARS budget that is 135 s; for a 3600 s task 240 s.
 3. **Only runaway thinking is cut.** Caps are checked only until the first `text_start` or `toolcall_start`. Once the model is answering or calling a tool, the response is allowed to finish; cutting it would waste the work it just did.
 4. **On overrun.** Abort the attempt through a private `AbortController` linked to the caller's signal, drain it without forwarding its terminal event, then call the inner stream again with `reasoning` lowered one step (`ultra`/`max` → `xhigh` → `high` → `medium` → `low` → `minimal`). Retry happens **at most once per response**. If there is no lower level (`minimal`, off, or no `reasoning`), the cap is not enforced.
 5. **Second attempt.** Caps are still measured but not enforced: a second abort would leave the turn with no assistant message and end the run. An overrun on the retry is recorded only.
@@ -44,7 +44,8 @@ A `StreamFn` wrapper, `createResponseReasoningCapStreamFn(inner, config)`, in `p
 7. **Recording.** The final message gets `diagnostics` entries, which are saved in the session JSONL with the assistant message, so the bench can count them:
    - `response_reasoning_cap_retry` with `{ reason: "reasoning_tokens" | "wall_time", fromEffort, toEffort, reasoningTokens, elapsedMs, capTokens, capMs }`
    - `response_reasoning_cap_overrun_after_retry` with the same fields when the retry also passes a cap.
-   The first attempt's `usage` (tokens and cost) is added to the final message's `usage` so cost accounting does not drop the aborted attempt.
+   Usage (review #96 M1): the final message's **token** fields (`input`, `output`, `cacheRead`, `cacheWrite`, `totalTokens`) come from the **last attempt only**, because `calculateContextTokens` (`core/compaction/compaction.ts`) reads `totalTokens`, or falls back to the sum of those fields, as the context size. Summing them would make the context look up to 2× and fire compaction early. Only **`cost.*`** is summed, since both requests are billed. The aborted attempt's full usage (tokens and cost) is kept in the retry diagnostic as `details.abortedAttemptUsage`, so the bench can count billed tokens.
+9. **Listener cleanup** (review #96 M2): the abort link on the caller's signal is removed in a `finally` that also covers a throw from the first `inner()` call (setup errors such as auth). The error still propagates exactly as before.
 8. **No prompt change.** The Desk suggested also adding a "run one command now" nudge. It is left out so the A/B measures one change (effort reduction). It is a follow-up variant if this one shows no gain.
 
 ### Why opt-in by env var
@@ -63,13 +64,15 @@ A `StreamFn` wrapper, `createResponseReasoningCapStreamFn(inner, config)`, in `p
 
 **Acceptance** (named vitest cases in `packages/coding-agent/test/response-reasoning-cap.test.ts`, with a fake inner `StreamFn`):
 1. **Under cap → no retry.** A response with thinking below both caps calls the inner stream once, forwards every event, and returns its message with no cap diagnostics.
-2. **Reasoning-token cap → one retry at lower effort.** Thinking passes the token cap before any text: the first call's signal is aborted, the inner stream is called a second time with `reasoning: "high"` (from `xhigh`), the consumer sees one `start`, and the final message carries one `response_reasoning_cap_retry` diagnostic with `reason: "reasoning_tokens"` and the first attempt's usage added.
+2. **Reasoning-token cap → one retry at lower effort.** Thinking passes the token cap before any text: the first call's signal is aborted, the inner stream is called a second time with `reasoning: "high"` (from `xhigh`), the consumer sees one `start`, and the final message carries one `response_reasoning_cap_retry` diagnostic with `reason: "reasoning_tokens"`. Its token fields equal the retry's, its `cost.total` is the sum, and `details.abortedAttemptUsage` holds the first attempt's usage.
 3. **Wall-time cap → one retry.** A response that thinks past the wall cap (no deltas needed) is aborted and retried once at lower effort with `reason: "wall_time"`.
 4. **Second overrun is not retried.** If the retry also passes a cap, the inner stream is still called exactly twice, the retry runs to completion, and a `response_reasoning_cap_overrun_after_retry` diagnostic is recorded.
 5. **Feature off → no change.** With the flag unset, `resolveResponseReasoningCapConfig` returns `undefined` and the installer returns the inner `StreamFn` itself.
 6. **Caller abort is not a cap.** If the caller's signal aborts, no retry happens and the aborted result is passed through.
 7. **Answer already started → not cut.** Passing the cap after `text_start` or `toolcall_start` does not abort.
 8. Wall cap honors the RemainingBudget clock: `min(cap, 15% budget, remaining − reserve)`, floor 30 s (unit test of the resolver).
+9. **Context size is not inflated**: after a capped retry, `calculateContextTokens(final.usage)` equals the retry's own value (failed before this fix, when it was the sum).
+10. **No listener leak**: if the first `inner()` throws, the error propagates and no abort listener stays on the caller's signal.
 
 ### Requirement 2 - Gates (Priority: P0)
 
@@ -79,7 +82,7 @@ A `StreamFn` wrapper, `createResponseReasoningCapStreamFn(inner, config)`, in `p
 ## Measurement (A/B, pending benchmark credits)
 
 - **Control build**: the same finish-check-enabled bench build used for R8/B′ (main + the unmerged finish-check stack #44 → #45 → #62 → #64), plus #63, with `OMK_RESPONSE_REASONING_CAP` unset.
-  - Every input is pinned by SHA, never by branch name, because the branches keep moving (#62 is getting spec 035): main `47e78c4`, #44 `276db35`, #45 `3fce389`, #62 `3eb9349` (before 035), #64 `f0ccc03`, #63 `54be529`. Treatment is the same SHAs plus #96, with the flag on.
+  - Every input is pinned by SHA, never by branch name, because the branches keep moving (#62 is getting spec 035): main `47e78c4`, #44 `276db35`, #45 `3fce389`, #62 `3eb9349` (before 035), #64 `f0ccc03`, #63 `7faf062` (with the spec 036 review fixes; `54be529` bound the clock lazily, which confounded the arms). Treatment is the same SHAs plus #96, with the flag on.
 - **Treatment build**: the identical build with only 033 added and `OMK_RESPONSE_REASONING_CAP=1`. Nothing else toggled.
 - **Tasks** (Desk's target set), **3 runs each per arm**: adaptive-rejection-sampler, write-compressor, path-tracing-reverse, schemelike-metacircular-eval. Model grok-4.7 at `xhigh`, same TB timeouts as R8.
 - **Report**: pass count per task per arm; count of `response_reasoning_cap_retry` and `..._overrun_after_retry` diagnostics from session JSONL; per-response max wall time and reasoning tokens; total cost per arm.
