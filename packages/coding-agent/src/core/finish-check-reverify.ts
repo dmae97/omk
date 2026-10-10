@@ -19,6 +19,16 @@ export const FINISH_CHECK_REVERIFY_MARKER = "<fresh_verification>";
 export const FINISH_CHECK_REVERIFY_SCRATCH_DIR = "/tmp/omk-verify/";
 /** Deliverable paths listed in the instruction and hashed around the verifier. */
 export const FINISH_CHECK_REVERIFY_MAX_DELIVERABLES = 30;
+/** Tool calls the verifier may use before it is told to wrap up. */
+export const FINISH_CHECK_REVERIFY_MAX_TOOL_CALLS = 10;
+/** Share of the budget the verifier may use before it is told to wrap up. */
+export const FINISH_CHECK_REVERIFY_TIME_FRACTION = 0.15;
+
+export const FINISH_CHECK_REVERIFY_WRAP_UP_MESSAGE =
+	"Verification limit reached. Stop testing now, do not change the deliverables, and reply with the VERIFY lines for what you checked and the VERDICT line.";
+
+export const FINISH_CHECK_REVERIFY_BLOCK_REASON = `Deliverables are read-only during the fresh verification. Put scratch files under ${FINISH_CHECK_REVERIFY_SCRATCH_DIR} with bash instead.`;
+
 const ABSOLUTE_PATHS = /(?:^|[\s`'"(])(\/(?:[\w.@+-]+\/)*[\w.@+-]*[\w@+-])/g;
 
 /** Paths written in this task, then absolute paths the requirements name; deduplicated and capped. */
