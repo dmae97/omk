@@ -2,9 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Lockstep version alignment with the OMK packages; no changes in this package.
+
 ## [1.3.1] - 2026-10-08
 
-> Prepared source version, not published. The full OMK release suite remains a publication gate.
+> Published 2026-10-08: tag `v1.3.1` (`a989d88`), GitHub Release and npm `latest` for all seven packages, built from that commit.
 
 ### Changed
 
