@@ -217,6 +217,18 @@ describe("finish-check extra turn: one per task", () => {
 		expect(run.followUps()).toHaveLength(4);
 	});
 
+	it("ends after an aborted extra turn and does not restart it on resume", async () => {
+		const run = await toCheck(COREWARS);
+		await run.fire("agent_settled", settled(MISSED));
+		await run.fire("agent_settled", settled("", "aborted"));
+		expect(run.entries[1].data).toMatchObject({ round: 2, items: [{ status: "unreported" }] });
+		// Our own follow-ups (and other extension input) arrive as extension input and keep the used allowance.
+		await run.fire("input", { type: "input", text: "continue", source: "extension" });
+		await run.fire("tool_execution_end", { toolName: "write" });
+		await run.fire("agent_settled", settled(MISSED));
+		expect(run.followUps()).toHaveLength(2);
+	});
+
 	it("allows at most one extra turn", () => {
 		expect(FINISH_CHECK_MAX_EXTRA_TURNS).toBe(1);
 		const input = {
