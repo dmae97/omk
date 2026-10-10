@@ -46,7 +46,11 @@ describe("finish-check reverify in a session", () => {
 			extensionFactories: [
 				(omk) =>
 					finishCheck(omk, {
-						env: { OMK_FINISH_CHECK_REVERIFY: "on", OMK_TIME_BUDGET_SEC: "900" },
+						env: {
+							OMK_FINISH_CHECK_REVERIFY: "on",
+							OMK_FINISH_CHECK_EXTRA_TURN: "on",
+							OMK_TIME_BUDGET_SEC: "900",
+						},
 						now: () => 0,
 					}),
 			],

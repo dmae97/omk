@@ -249,20 +249,25 @@ describe("finish-check reverify flow: fix turn", () => {
 		expect(run.verifiers()).toHaveLength(2);
 	});
 
-	it("with the extra-turn flag off, only the verifier's findings start the fix turn (AC18)", async () => {
+	it("with the extra-turn flag off, verifies and records but never sends a fix turn (AC18, decision 9)", async () => {
 		const off = { OMK_FINISH_CHECK_REVERIFY: "on" };
+		for (const [task, check, verifier] of [
+			[TASK, "checked", `${ELF}\nVERDICT: FAIL`],
+			[COREWARS, "REQ 1: PASS - stone 74 >= 75", `${ELF}\nVERDICT: FAIL`],
+			[COREWARS, "Looks good.", "REQ 1: FAIL - stone 74 >= 75\nVERDICT: FAIL"],
+			[COREWARS, "REQ 1: PASS - stone 74 >= 75", "VERDICT: PASS"],
+		] as const) {
+			const run = await toVerifier(off, task, check);
+			await run.fire("agent_settled", settled(verifier));
+			expect(run.followUps(), verifier).toHaveLength(2);
+			expect(run.entries.at(-1)).toMatchObject({ type: FINISH_CHECK_VERIFY_ENTRY });
+			expect(run.events.at(-1)).toMatchObject({ active: false, stage: "verify", fixTurn: false });
+			await run.fire("agent_settled", settled("done"));
+			expect(run.followUps()).toHaveLength(2);
+		}
 		const run = await toVerifier(off);
-		await run.fire("agent_settled", settled(ELF));
-		expect(run.followUps()).toHaveLength(3);
-
-		const ledgerOnly = await toVerifier(off, COREWARS, "REQ 1: PASS - stone 74 >= 75");
-		await ledgerOnly.fire("agent_settled", settled("VERDICT: PASS"));
-		expect(ledgerOnly.followUps()).toHaveLength(2);
-
-		const both = await toVerifier(off, COREWARS, "REQ 1: PASS - stone 74 >= 75");
-		await both.fire("agent_settled", settled(ELF));
-		expect(both.followUps()).toHaveLength(3);
-		expect(both.followUps()[2]).toContain("stone 74 >= 75");
+		await run.fire("agent_settled", settled(`${ELF}\nVERDICT: FAIL`));
+		expect(run.entries.at(-1)).toMatchObject({ data: { verdict: "fail", findings: [{ id: 1, status: "fail" }] } });
 	});
 });
 

@@ -156,16 +156,19 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 		if (stage?.active) {
 			const reply = ledgerReply(event.messages, (text) => /^[\s>*`-]*(?:VERIFY|REQ)\s+\d+|VERDICT\s*:/im.test(text));
 			const outcome = await stage.finish(event.messages, reply);
-			// The fix turn is spec 035's single extra turn. Off, the check ledger's misses alone do not call for it (spec 032).
-			const trigger = mergeFailingItems(extraTurnEnabled ? checkLedger : [], outcome.ledger);
-			const fixTurn = decideExtraTurn({
-				extraTurnsUsed,
-				failing: outcome.failing.length + trigger.length,
-				unmeasured: 0,
-				aborted,
-				hasPendingMessages: ctx.hasPendingMessages(),
-				elapsedFraction: elapsedFraction(),
-			});
+			// The fix turn is spec 035's single extra turn, so only OMK_FINISH_CHECK_EXTRA_TURN creates it (spec 032
+			// decision 9); without it the verifier only verifies and records.
+			const failing = mergeFailingItems(checkLedger, outcome.ledger);
+			const fixTurn =
+				extraTurnEnabled &&
+				decideExtraTurn({
+					extraTurnsUsed,
+					failing: outcome.failing.length + failing.length,
+					unmeasured: 0,
+					aborted,
+					hasPendingMessages: ctx.hasPendingMessages(),
+					elapsedFraction: elapsedFraction(),
+				});
 			const { verdict, findings, mutated: verifierMutated } = outcome;
 			omk.events.emit(FINISH_CHECK_EVENT, {
 				active: false,
@@ -180,7 +183,6 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 			if (!fixTurn) return;
 			extraTurnsUsed += 1;
 			extraTurnActive = true;
-			const failing = mergeFailingItems(checkLedger, outcome.ledger);
 			omk.sendUserMessage(buildReverifyFixMessage(outcome.failing, failing), { deliverAs: "followUp" });
 			return;
 		}
