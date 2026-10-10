@@ -15,6 +15,7 @@
 
 ### Changed
 
+- The headless finish-discipline prompt now tells the run to solve the task from its statement and given files, and not to look up the task's official solution, reference tests or expected outputs online or in public repositories. General documentation stays allowed. In R8 a passing run was scored 0 after fetching a benchmark's reference solve script (spec 031).
 - `omk --version` and `-v` print the version without loading the runtime. On the measurement VM the Node CLI went from 635 ms to 62 ms (1,498 to 19 loaded modules) and the standalone binary from 554 ms to 385 ms.
 - With no default model configured, credentials are ranked: stored login, then a provider API key, then ambient cloud credentials. With AWS credentials in the environment and `ANTHROPIC_API_KEY` set, a first session now uses Anthropic instead of Amazon Bedrock, whose first request failed with a token error. When only ambient credentials exist, OMK names the variable that selected the provider. A configured default model is unchanged.
 - The bash sandbox counts as available only when `bwrap` actually runs a command, not from static checks. Hosts that block unprivileged user namespaces, setuid `bwrap` with `user.max_user_namespaces=0` included, now get setup steps for that host (package, AppArmor or container) instead of a raw `bwrap` error at the first command. See [Bash sandbox setup](docs/sandbox-setup.md).

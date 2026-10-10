@@ -100,6 +100,16 @@ describe("finish-check policy", () => {
 		expect(finishDisciplinePrompt(undefined)).not.toContain("wall-clock budget");
 	});
 
+	it("forbids looking up the task's official solution online, with or without a budget (spec 031)", () => {
+		for (const block of [finishDisciplinePrompt(undefined), finishDisciplinePrompt(600_000)]) {
+			const rule = block.split("\n").filter((line) => line.includes("official solution"));
+			expect(rule).toHaveLength(1);
+			expect(rule[0]).toContain("reference tests or expected outputs online or in public repositories");
+			expect(rule[0]).toContain("solve script");
+			expect(rule[0]).toContain("general documentation and library references are fine");
+		}
+	});
+
 	it("tells the verification turn to keep saved outputs valid", () => {
 		expect(FINISH_CHECK_MESSAGE).toContain("Change a file only when a check actually fails");
 		expect(FINISH_CHECK_MESSAGE).toContain("Do not search other directories");

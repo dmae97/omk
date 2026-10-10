@@ -56,6 +56,7 @@ export function finishDisciplinePrompt(timeBudgetMs: number | undefined): string
 		"Treat every stated requirement as testable. Before finishing, write and run quick checks for the edge cases each requirement implies (empty or missing fields, boundary values, option combinations, type preservation, large inputs), not only the given examples.",
 		"Check the environment the task states or implies (accounts and passwords, ports, services, paths, permissions) and confirm it is actually configured and running, not only written into a config file.",
 		"Never weaken, skip or delete existing tests to make them pass.",
+		"Solve the task from its statement and the files you were given. Do not look up the task's official solution, reference tests or expected outputs online or in public repositories (for example a benchmark's solve script); general documentation and library references are fine.",
 	];
 	if (timeBudgetMs !== undefined) {
 		const seconds = Math.round(timeBudgetMs / 1000);
