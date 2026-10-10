@@ -57,6 +57,9 @@ Every target item has more than one limit, so a design that infers "the" bound o
 - `parseFinishCheckLedger` evaluates each comparison it finds in the measured text. Numbers may carry `%`, a size unit, or thousands separators; both sides of one comparison must have the same unit (or none), otherwise that comparison is skipped, not guessed (`62%` vs `0.62` is skipped).
 - A ledger item gains `gaps: string[]` (the comparisons that are false, e.g. `stone 74 >= 75`) and `source: "reported" | "compared"`. If any comparison is false, the item's status is `fail` and `source` is `compared`, even when the line says PASS. A line that says FAIL stays `fail`. A PASS line whose comparisons are all true, or that has no parsable comparison, stays as reported.
 - A tier-1 item is **unmeasured** when it is `unreported`, or its line has no parsable comparison. The ledger item gains `numeric: boolean` and `hasMeasurement: boolean` (false for unmeasured tier-1 items; tier 2–3 items are always `true`, since they are not numeric). The name is not `measured` because #62's ledger already uses `measured` for the reported value string. An unmeasured item keeps its reported status; FAIL without a comparison is still `fail`.
+- Parsing rules: numbers may use an exponent (`1e-3`) and the unicode minus `−`; `=>` is read as `>=` and `=<` as `<=`; version-like numbers (`3.11`) are not compared. In each `;`-separated part only the last comparison chain is evaluated, so context such as `was 80 > 90 before, now 95 > 90` is judged on `95 > 90`. The message asks for the current measurement only.
+- Only `REQ <n>: PASS|FAIL` lines are read (case-insensitive). Other spellings (`REQ 1: PASSED`, `REQ 1 - PASS`) stay `unreported`; on a numeric item that costs the measure turn, which asks for the exact form again.
+- The REQ lines are read from the latest assistant message of the settled run that has any (else the last assistant message), so a run that writes its REQ lines and then makes one more tool call is still read. Earlier runs and tool results are never read.
 - Only arithmetic is checked. omk does not re-derive the limit from the task sentence and does not re-run the measurement; whether `75` is the task's real limit is the run's claim, recorded in the ledger.
 
 ### Requirement 2 - One extra turn per task: threshold retry or go-measure (Priority: P0)
@@ -85,7 +88,7 @@ The follow-up (`buildFinishCheckContinueMessage`) has one or two parts, both in 
 
 Then:
 
-- The extra turn is ordinary work: the check-turn tool cap and wrap-up steer do not apply to it. The 75% save-now steer still applies.
+- The extra turn is ordinary work: the check-turn tool cap and wrap-up steer do not apply to it. The 75% save-now steer still applies. When a budget is set and the extra turn reaches `FINISH_CHECK_SKIP_FRACTION` (90%), omk sends `FINISH_CHECK_EXTRA_TURN_STOP_MESSAGE` once as a steer: keep the best measured version saved and reply with the REQ lines.
 - When the extra turn settles, its REQ lines are parsed against the same requirements and appended as a second `finish_check_ledger` entry with `round: 2`, and a `finish_check` event `{ active: false, ledger, round: 2 }` is emitted (runs with `--no-session` have no session entries). No further check or extra turn follows, whatever the result: a go-measure turn that reveals a fail does not get a threshold retry, and a threshold retry that leaves items unmeasured does not get a go-measure turn.
 - `finish_check` end events carry `extraTurn: "threshold" | "measure" | "both" | undefined` and the REQ ids involved, so the bench logger can count them.
 - A `fail` on a tier 2–3 (path) item alone does not trigger the extra turn; missing deliverables belong to candidate 2 (`specs/034`).
@@ -97,7 +100,8 @@ Then:
 **Risk**: low
 
 - #62 cuts every item at 220 characters (`MAX_REQUIREMENT_CHARS`). On `winning-avg-corewars` that cut drops `g2-clear.red` from the 33% limit, so the checklist asks the run to verify a partial requirement. This is a correctness bug and is fixed in the same PR.
-- A tier-1 sentence is kept up to 400 characters (`MAX_NUMERIC_REQUIREMENT_CHARS`), so no limit is lost. Cutting after the last number would not work: in corewars the last number is `100 battles`, and `g2-clear.red` comes after it. Tier 2–3 items keep the 220-character cut.
+- A tier-1 sentence is kept whole up to 1000 characters (`MAX_NUMERIC_REQUIREMENT_CHARS`), so no limit is lost; a longer one is cut at its last `, ` or `; ` clause boundary before the limit, never mid-word. Cutting after the last number would not work: in corewars the last number is `100 battles`, and `g2-clear.red` comes after it. Tier 2–3 items keep the 220-character cut.
+- A sentence is tier 1 only when a bound word (`at least`, `less than`, `within`, `up to`, …) sits next to a number, or a number is followed by `or more`/`or less`; paths, file names and version strings are removed before this test, so `Save to /app/v2/out.csv` or `Use Python 3.11` is not numeric.
 
 ### Requirement 4 - Gates (Priority: P0)
 
@@ -139,6 +143,16 @@ Truncation bug (Requirement 3):
 16. **The corewars sentence keeps both limits.** `extractRequirements(corewarsPrompt)` returns one tier-1 item that contains `75%`, `stone.red`, `33%` and `g2-clear.red`, and does not end with `…`. On `3eb9349213` this case fails (the item ends at `snake.red` `…`).
 17. **Other items unchanged.** The train-fasttext and regex-chess items are identical to #62's output, and a tier-2 path sentence over 220 characters is still cut at 220.
 
+Review fixes (Tech Lead review of #62, 2026-10-11):
+
+18. **Bound word next to a number.** `Save the file under /app/out1.txt`, `… use Python 3.11`, `Place results within step2/report.md` and `Install version 2.4.1 and keep it below the other packages.` are not numeric; `within atol=1e-5`, ``within a `1e-10` tolerance``, `60% of the original time or less` are.
+19. **Parser.** `err 1e-3 <= 0.01` passes and `err 1e-2 <= 1e-3` fails; `−1 <= 0` passes; `python 3.11.2 >= 3.8.0` is skipped; `was 80 > 90 before, now 95 > 90` passes; `acc 0.7 => 0.62` passes.
+20. **Long numeric sentences.** A tier-1 sentence between 400 and 1000 characters is kept whole; a longer one ends at a clause boundary with ` …`.
+21. **Extra-turn stop steer.** In the extra turn, the stop steer is sent once at 90% (not at 88.9%), and never outside the extra turn.
+22. **Strict REQ form.** `REQ 1: PASSED`, `REQ 1 - PASS`, `REQ 1 PASS` → `unreported`; `req 1: pass` → `pass`.
+23. **Which message is read.** REQ lines in an earlier assistant message of the same run, followed by a tool call and `Done.`, are read; REQ text inside a tool result is not.
+24. **Abort and resume.** An aborted extra turn records a `round: 2` entry and ends; extension-source input afterwards does not restore the allowance.
+
 ## A/B measurement
 
 - **Baseline (A)**: main after #44 and #45 are merged (Staff Engineer is merging main `47e78c4` into them now), plus #62 as merged without this spec's change, so A already sends the checklist. If #62 is not merged when the A/B runs, A is main(#44+#45) + #62 @ its rebased head and B is the same + this change. A must not be bare main `47e78c4`: it has no finish check, so R8/B′ numbers would not line up.
@@ -165,6 +179,7 @@ Truncation bug (Requirement 3):
 3. Unmeasured tier-1 items get a go-measure turn, but it shares one extra turn per task with the threshold retry.
 4. Prose-admission detection is a non-goal (high false-positive rate).
 5. The 220-character cut that drops corewars' g2-clear limit is a correctness bug fixed in the same PR.
+6. Review of #62 (`REVIEW_STACK_20261011.md`): numeric tier needs a bound word next to a number (M1); exponent, unicode minus, `=>`/`=<`, version numbers and context comparisons in the parser (M2, m1–m3); tier-1 kept to 1000 characters with a clause cut (m4); one 90% stop steer in the extra turn (m5); strict REQ form kept on purpose (m6); latest REQ-bearing assistant message of the run is read (n1).
 
 ## Expected Files
 
@@ -173,5 +188,6 @@ Truncation bug (Requirement 3):
 - `packages/coding-agent/src/core/finish-check-requirements.ts`: comparison format in the message, `numeric`/`hasMeasurement`/`gaps`/`source` in the ledger, tier-1 cut rule, `extraTurnItems` and `buildFinishCheckContinueMessage` (here rather than in `finish-check.ts`, which this module already imports, to avoid an import cycle)
 - `packages/coding-agent/src/core/finish-check.ts`: `FINISH_CHECK_EXTRA_TURN_FRACTION`, `FINISH_CHECK_MAX_EXTRA_TURNS`, a pure `decideExtraTurn` decision
 - `packages/coding-agent/src/core/extensions/builtin/finish-check.ts`: the single extra turn and the round-2 ledger; the check-turn tool cap counts only during the check turn
-- `packages/coding-agent/test/finish-check-requirements.test.ts`: AC15–17 and ledger comparison cases
-- `packages/coding-agent/test/finish-check-extra-turn.test.ts`: AC1–14
+- `packages/coding-agent/test/finish-check-requirements.test.ts`: AC15–18, 20, 22 and ledger comparison cases
+- `packages/coding-agent/test/finish-check-compare.test.ts`: AC19
+- `packages/coding-agent/test/finish-check-extra-turn.test.ts`: AC1–14, 21, 23, 24
