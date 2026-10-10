@@ -7,6 +7,7 @@ import {
 	FINISH_CHECK_WRAP_UP_MESSAGE,
 	finishDisciplinePrompt,
 	isWorkspaceMutatingTool,
+	resolveFinishCheckExtraTurn,
 	resolveFinishCheckMode,
 	resolveTimeBudgetMs,
 	shouldAddFinishDiscipline,
@@ -72,6 +73,8 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 	const mode = resolveFinishCheckMode(env.OMK_FINISH_CHECK);
 	if (mode === "off") return;
 	const budgetMs = resolveTimeBudgetMs(env.OMK_TIME_BUDGET_SEC);
+	// Spec 035's extra turn (and its 90% stop steer) is opt-in; off, the check ends as it did before.
+	const extraTurnEnabled = resolveFinishCheckExtraTurn(env.OMK_FINISH_CHECK_EXTRA_TURN);
 	const snapshot = resolveSnapshotHandshake(env);
 	// Time spent waiting for a harness snapshot is not part of the run's budget.
 	let startedAt = now();
@@ -125,8 +128,9 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 	omk.on("tool_execution_end", (event) => {
 		if (isWorkspaceMutatingTool(event.toolName)) mutated = true;
 		maybeWarnSaveNow();
-		// Only the check turn is capped; the extra turn after it is ordinary work.
-		if (checkActive && !wrappedUp) {
+		// With the extra turn on, only the check turn is capped (the extra turn is ordinary work);
+		// off, the cap counts from the check to the next user task, as before spec 035.
+		if ((extraTurnEnabled ? checkActive : checked) && !wrappedUp) {
 			checkToolCalls += 1;
 			if (checkToolCalls >= finishCheckToolCap(requirements.length)) {
 				wrappedUp = true;
@@ -157,14 +161,16 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 				requirements.length > 0 ? parseFinishCheckLedger(ledgerReply(event.messages), requirements) : [];
 			if (ledger.length > 0) omk.appendEntry(FINISH_CHECK_LEDGER_ENTRY, { items: ledger });
 			const { failing, unmeasured } = extraTurnItems(ledger);
-			const extraTurn = decideExtraTurn({
-				extraTurnsUsed,
-				failing: failing.length,
-				unmeasured: unmeasured.length,
-				aborted,
-				hasPendingMessages: ctx.hasPendingMessages(),
-				elapsedFraction: elapsedFraction(),
-			});
+			const extraTurn =
+				extraTurnEnabled &&
+				decideExtraTurn({
+					extraTurnsUsed,
+					failing: failing.length,
+					unmeasured: unmeasured.length,
+					aborted,
+					hasPendingMessages: ctx.hasPendingMessages(),
+					elapsedFraction: elapsedFraction(),
+				});
 			if (!extraTurn) {
 				omk.events.emit(FINISH_CHECK_EVENT, { active: false, ledger });
 				return;

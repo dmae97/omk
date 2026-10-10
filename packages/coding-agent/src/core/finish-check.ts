@@ -44,6 +44,14 @@ export function resolveFinishCheckMode(value: string | undefined): FinishCheckMo
 	return "headless";
 }
 
+/**
+ * `OMK_FINISH_CHECK_EXTRA_TURN`: the spec 035 extra turn after a finish check. Off unless set to
+ * `1/true/on/enable/enabled`; it stays opt-in until the A/B shows a gain.
+ */
+export function resolveFinishCheckExtraTurn(value: string | undefined): boolean {
+	return ["1", "true", "on", "enable", "enabled"].includes(value?.trim().toLowerCase() ?? "");
+}
+
 /** `OMK_TIME_BUDGET_SEC`: wall-clock seconds the caller allows for the whole run. */
 export function resolveTimeBudgetMs(value: string | undefined): number | undefined {
 	if (value === undefined || value.trim() === "") return undefined;

@@ -12,10 +12,13 @@ import {
 	FINISH_CHECK_SAVE_NOW_FRACTION,
 	FINISH_CHECK_SKIP_FRACTION,
 	FINISH_CHECK_WRAP_UP_MESSAGE,
+	resolveFinishCheckExtraTurn,
 } from "../src/core/finish-check.ts";
 import { extractRequirements, parseFinishCheckLedger } from "../src/core/finish-check-requirements.ts";
 
 // spec 035 requirement 2: one extra turn per task, for a missed limit or an unmeasured one.
+// Opt-in: these cases run with OMK_FINISH_CHECK_EXTRA_TURN=on unless a case says otherwise.
+const EXTRA_TURN_ON: NodeJS.ProcessEnv = { OMK_FINISH_CHECK_EXTRA_TURN: "on" };
 
 const COREWARS =
 	"Your warrior must achieve at least a 75% win rate (75+ wins out of 100 battles) against `stone.red`, `vampire.red`, and `paper.red`, and achieve at least a 33% win rate (33+ wins out of 100 battles) against `snake.red` and `g2-clear.red`.";
@@ -34,7 +37,7 @@ const settled = (text: string, stopReason = "stop") => ({
 });
 
 /** Runs a task to the point where the finish check has been sent, at `settleMs` into the budget. */
-async function toCheck(prompt: string, settleMs = R2_SETTLE_MS, env: NodeJS.ProcessEnv = {}) {
+async function toCheck(prompt: string, settleMs = R2_SETTLE_MS, env: NodeJS.ProcessEnv = EXTRA_TURN_ON) {
 	const handlers = new Map<string, Handler[]>();
 	const sent: { text: string; deliverAs?: string }[] = [];
 	const entries: { type: string; data: { items: unknown[]; round?: number } }[] = [];
@@ -302,5 +305,51 @@ describe("finish-check extra turn: gates and scope", () => {
 			await run.fire("agent_settled", settled(reply));
 			expect(run.followUps()).toHaveLength(1);
 		}
+	});
+});
+
+describe("finish-check extra turn: OMK_FINISH_CHECK_EXTRA_TURN gate (default off)", () => {
+	it("reads the flag like the other OMK_* switches: only an on value enables it", () => {
+		for (const value of ["on", "1", "true", "ON", " enabled "])
+			expect(resolveFinishCheckExtraTurn(value), value).toBe(true);
+		for (const value of [undefined, "", "off", "0", "false", "yes please", "always"]) {
+			expect(resolveFinishCheckExtraTurn(value), String(value)).toBe(false);
+		}
+	});
+
+	for (const [label, env] of [
+		["unset", {}],
+		["off", { OMK_FINISH_CHECK_EXTRA_TURN: "off" }],
+		["unknown", { OMK_FINISH_CHECK_EXTRA_TURN: "maybe" }],
+	] as const) {
+		it(`ends after the check like before spec 035 when the flag is ${label}`, async () => {
+			for (const reply of [
+				MISSED,
+				"REQ 1: FAIL - stone 74 >= 75",
+				"Looks good.",
+				"REQ 1: PASS - all opponents beaten",
+			]) {
+				const run = await toCheck(COREWARS, R2_SETTLE_MS, env);
+				await run.fire("agent_settled", settled(reply));
+				const ledger = parseFinishCheckLedger(reply, extractRequirements(COREWARS));
+				expect(run.followUps()).toHaveLength(1);
+				expect(run.entries).toEqual([{ type: FINISH_CHECK_LEDGER_ENTRY, data: { items: ledger } }]);
+				expect(run.events.at(-1)).toEqual({ channel: FINISH_CHECK_EVENT, data: { active: false, ledger } });
+				// A later settle in the same task gets nothing, and no round-2 ledger is written.
+				run.setClock(3_300_000);
+				await run.fire("tool_execution_end", { toolName: "bash" });
+				await run.fire("agent_settled", settled(MISSED));
+				expect(run.followUps()).toHaveLength(1);
+				expect(run.entries).toHaveLength(1);
+				expect(run.sent.some((message) => message.text === FINISH_CHECK_EXTRA_TURN_STOP_MESSAGE)).toBe(false);
+			}
+		});
+	}
+
+	it("keeps the pre-035 check-turn tool cap, which also counts after the check turn settles", async () => {
+		const run = await toCheck(COREWARS, R2_SETTLE_MS, {});
+		await run.fire("agent_settled", settled(MET));
+		for (let i = 0; i < 20; i++) await run.fire("tool_execution_end", { toolName: "bash" });
+		expect(run.sent.filter((message) => message.text === FINISH_CHECK_WRAP_UP_MESSAGE)).toHaveLength(1);
 	});
 });

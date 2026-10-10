@@ -294,7 +294,7 @@ const settled = (text: string) => ({
 describe("finish-check extension checklist flow", () => {
 	it("sends the checklist, raises the cap, and records the ledger with start and end events", async () => {
 		const { omk, fire, sent, entries, events } = fakeOmk();
-		finishCheck(omk, { env: {} });
+		finishCheck(omk, { env: { OMK_FINISH_CHECK_EXTRA_TURN: "on" } });
 		await fire("input", { type: "input", text: FASTTEXT, source: "interactive" });
 		await fire("tool_execution_end", { toolName: "write" });
 		await fire("agent_settled", settled("done"), ctx);
@@ -333,7 +333,7 @@ describe("finish-check extension checklist flow", () => {
 			},
 		];
 		expect(entries).toEqual([{ type: FINISH_CHECK_LEDGER_ENTRY, data: { items: ledger } }]);
-		// REQ 1 failed, so the run gets its one extra turn (spec 035).
+		// REQ 1 failed, so the run gets its one extra turn (spec 035, opt-in).
 		expect(events.at(-1)).toEqual({
 			channel: FINISH_CHECK_EVENT,
 			data: { active: false, ledger, extraTurn: "threshold", extraTurnIds: [1] },
