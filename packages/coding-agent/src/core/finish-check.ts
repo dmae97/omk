@@ -25,6 +25,13 @@ export const FINISH_CHECK_SAVE_NOW_FRACTION = 0.75;
 export const FINISH_CHECK_MAX_TOOL_CALLS = 6;
 /** Past this fraction there is no time for an extra verification turn. */
 export const FINISH_CHECK_SKIP_FRACTION = 0.9;
+/**
+ * Past this fraction a check that found a missed or unmeasured numeric limit gets no extra turn (spec 035).
+ * Sits between save-now (0.75) and skip (0.9); it moves to the #63 RemainingBudget clock together with them.
+ */
+export const FINISH_CHECK_EXTRA_TURN_FRACTION = 0.85;
+/** Extra turns per user task after a finish check, shared by the threshold retry and the go-measure nudge. */
+export const FINISH_CHECK_MAX_EXTRA_TURNS = 1;
 
 export type FinishCheckMode = "off" | "headless" | "always";
 
@@ -98,4 +105,28 @@ export function shouldRunFinishCheck(input: FinishCheckDecisionInput): boolean {
 	if (input.alreadyChecked || !input.mutatedWorkspace || input.hasPendingMessages || input.aborted) return false;
 	if (input.elapsedFraction !== undefined && input.elapsedFraction >= FINISH_CHECK_SKIP_FRACTION) return false;
 	return true;
+}
+
+export type FinishCheckExtraTurn = "threshold" | "measure" | "both";
+
+export interface ExtraTurnDecisionInput {
+	readonly extraTurnsUsed: number;
+	/** Numeric items that failed, reported or by their own comparison. */
+	readonly failing: number;
+	/** Numeric items with no evaluable comparison that did not fail. */
+	readonly unmeasured: number;
+	readonly aborted: boolean;
+	readonly hasPendingMessages: boolean;
+	readonly elapsedFraction: number | undefined;
+}
+
+/** Which extra turn, if any, a settled finish check gets. One per user task, whatever its kind. */
+export function decideExtraTurn(input: ExtraTurnDecisionInput): FinishCheckExtraTurn | undefined {
+	if (input.failing === 0 && input.unmeasured === 0) return undefined;
+	if (input.extraTurnsUsed >= FINISH_CHECK_MAX_EXTRA_TURNS || input.aborted || input.hasPendingMessages)
+		return undefined;
+	if (input.elapsedFraction !== undefined && input.elapsedFraction >= FINISH_CHECK_EXTRA_TURN_FRACTION)
+		return undefined;
+	if (input.failing > 0) return input.unmeasured > 0 ? "both" : "threshold";
+	return "measure";
 }

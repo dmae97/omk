@@ -270,11 +270,16 @@ describe("finish-check extension checklist flow", () => {
 			},
 		];
 		expect(entries).toEqual([{ type: FINISH_CHECK_LEDGER_ENTRY, data: { items: ledger } }]);
-		expect(events.at(-1)).toEqual({ channel: FINISH_CHECK_EVENT, data: { active: false, ledger } });
+		// REQ 1 failed, so the run gets its one extra turn (spec 035).
+		expect(events.at(-1)).toEqual({
+			channel: FINISH_CHECK_EVENT,
+			data: { active: false, ledger, extraTurn: "threshold", extraTurnIds: [1] },
+		});
 
-		// The check runs once: a later settle sends nothing new.
+		// The check and the extra turn run once each: later settles send nothing new.
 		await fire("agent_settled", settled("ok"), ctx);
-		expect(sent.filter((message) => message.deliverAs === "followUp")).toHaveLength(1);
+		await fire("agent_settled", settled("ok"), ctx);
+		expect(sent.filter((message) => message.deliverAs === "followUp")).toHaveLength(2);
 	});
 
 	it("still emits start and end events without measurable requirements, and writes no ledger", async () => {

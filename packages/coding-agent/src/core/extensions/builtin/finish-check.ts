@@ -1,4 +1,5 @@
 import {
+	decideExtraTurn,
 	FINISH_CHECK_SAVE_NOW_FRACTION,
 	FINISH_CHECK_SAVE_NOW_MESSAGE,
 	FINISH_CHECK_WRAP_UP_MESSAGE,
@@ -9,8 +10,10 @@ import {
 	shouldRunFinishCheck,
 } from "../../finish-check.ts";
 import {
+	buildFinishCheckContinueMessage,
 	buildFinishCheckMessage,
 	extractRequirements,
+	extraTurnItems,
 	finishCheckToolCap,
 	parseFinishCheckLedger,
 } from "../../finish-check-requirements.ts";
@@ -60,6 +63,8 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 	let checkToolCalls = 0;
 	let wrappedUp = false;
 	let checkActive = false;
+	let extraTurnActive = false;
+	let extraTurnsUsed = 0;
 	let requirements: string[] = [];
 
 	omk.on("input", (event) => {
@@ -69,6 +74,8 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 			checked = false;
 			checkToolCalls = 0;
 			wrappedUp = false;
+			extraTurnActive = false;
+			extraTurnsUsed = 0;
 			requirements = extractRequirements(event.text);
 		}
 		return undefined;
@@ -89,7 +96,8 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 	omk.on("tool_execution_end", (event) => {
 		if (isWorkspaceMutatingTool(event.toolName)) mutated = true;
 		maybeWarnSaveNow();
-		if (checked && !wrappedUp) {
+		// Only the check turn is capped; the extra turn after it is ordinary work.
+		if (checkActive && !wrappedUp) {
 			checkToolCalls += 1;
 			if (checkToolCalls >= finishCheckToolCap(requirements.length)) {
 				wrappedUp = true;
@@ -105,14 +113,39 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 
 	omk.on("agent_settled", async (event, ctx) => {
 		const last = event.messages.at(-1);
+		const aborted = last?.role === "assistant" && (last.stopReason === "aborted" || last.stopReason === "error");
+		if (extraTurnActive) {
+			// The extra turn's REQ lines are recorded; nothing follows it, whatever they say.
+			extraTurnActive = false;
+			const ledger = parseFinishCheckLedger(assistantText(last), requirements);
+			omk.appendEntry(FINISH_CHECK_LEDGER_ENTRY, { items: ledger, round: 2 });
+			omk.events.emit(FINISH_CHECK_EVENT, { active: false, ledger, round: 2 });
+			return;
+		}
 		if (checkActive) {
 			checkActive = false;
 			const ledger = requirements.length > 0 ? parseFinishCheckLedger(assistantText(last), requirements) : [];
 			if (ledger.length > 0) omk.appendEntry(FINISH_CHECK_LEDGER_ENTRY, { items: ledger });
-			omk.events.emit(FINISH_CHECK_EVENT, { active: false, ledger });
+			const { failing, unmeasured } = extraTurnItems(ledger);
+			const extraTurn = decideExtraTurn({
+				extraTurnsUsed,
+				failing: failing.length,
+				unmeasured: unmeasured.length,
+				aborted,
+				hasPendingMessages: ctx.hasPendingMessages(),
+				elapsedFraction: elapsedFraction(),
+			});
+			if (!extraTurn) {
+				omk.events.emit(FINISH_CHECK_EVENT, { active: false, ledger });
+				return;
+			}
+			extraTurnsUsed += 1;
+			extraTurnActive = true;
+			const extraTurnIds = [...failing, ...unmeasured].map((item) => item.id);
+			omk.events.emit(FINISH_CHECK_EVENT, { active: false, ledger, extraTurn, extraTurnIds });
+			omk.sendUserMessage(buildFinishCheckContinueMessage(ledger), { deliverAs: "followUp" });
 			return;
 		}
-		const aborted = last?.role === "assistant" && (last.stopReason === "aborted" || last.stopReason === "error");
 		const run = shouldRunFinishCheck({
 			mode,
 			hasUI: ctx.hasUI,

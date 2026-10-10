@@ -167,3 +167,41 @@ export function parseFinishCheckLedger(reply: string, requirements: readonly str
 	}
 	return items;
 }
+
+/** Numeric items the extra turn acts on: failed ones, and ones with no evaluable comparison. */
+export function extraTurnItems(ledger: readonly FinishCheckLedgerItem[]): {
+	failing: FinishCheckLedgerItem[];
+	unmeasured: FinishCheckLedgerItem[];
+} {
+	const numeric = ledger.filter((item) => item.numeric);
+	return {
+		failing: numeric.filter((item) => item.status === "fail"),
+		unmeasured: numeric.filter((item) => item.status !== "fail" && !item.hasMeasurement),
+	};
+}
+
+const label = (item: FinishCheckLedgerItem) => `REQ ${item.id}: ${item.requirement ?? ""}`;
+
+/** The one follow-up after a check with failed or unmeasured numeric items (spec 035). */
+export function buildFinishCheckContinueMessage(ledger: readonly FinishCheckLedgerItem[]): string {
+	const { failing, unmeasured } = extraTurnItems(ledger);
+	const lines: string[] = [];
+	if (failing.length > 0) {
+		lines.push(
+			"Finish check result: the task is not complete. These limits are not met by your own measurement:",
+			...failing.map((item) => `${label(item)}\n  measured: ${item.gaps.join("; ") || item.measured || "FAIL"}`),
+			"Keep working on these items; the quick-fix-only rule of the check no longer applies to them. Keep the currently saved output in place until a new version measures better, and never leave a required output worse or missing.",
+		);
+	}
+	if (unmeasured.length > 0) {
+		lines.push(
+			"These numeric requirements were not measured:",
+			...unmeasured.map(label),
+			"Run a command that measures each one on the current outputs. Change the outputs only if the new measurement misses a limit.",
+		);
+	}
+	lines.push(
+		"When done, end your reply with one line per item above: `REQ <n>: PASS|FAIL - <label> <measured> <op> <limit>`, one comparison per limit, separated by `;`.",
+	);
+	return lines.join("\n");
+}
