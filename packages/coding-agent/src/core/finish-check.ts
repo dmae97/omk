@@ -44,12 +44,22 @@ export function resolveFinishCheckMode(value: string | undefined): FinishCheckMo
 	return "headless";
 }
 
+/** Opt-in finish-check switches are on only for `1/true/on/enable/enabled` (any case); anything else is off. */
+function resolveOptInFlag(value: string | undefined): boolean {
+	return ["1", "true", "on", "enable", "enabled"].includes(value?.trim().toLowerCase() ?? "");
+}
+
 /**
  * `OMK_FINISH_CHECK_EXTRA_TURN`: the spec 035 extra turn after a finish check. Off unless set to
  * `1/true/on/enable/enabled`; it stays opt-in until the A/B shows a gain.
  */
 export function resolveFinishCheckExtraTurn(value: string | undefined): boolean {
-	return ["1", "true", "on", "enable", "enabled"].includes(value?.trim().toLowerCase() ?? "");
+	return resolveOptInFlag(value);
+}
+
+/** `OMK_FINISH_CHECK_REVERIFY`: the spec 032 fresh-context verifier for early finishes. Same values as the extra turn. */
+export function resolveFinishCheckReverify(value: string | undefined): boolean {
+	return resolveOptInFlag(value);
 }
 
 /** `OMK_TIME_BUDGET_SEC`: wall-clock seconds the caller allows for the whole run. */
