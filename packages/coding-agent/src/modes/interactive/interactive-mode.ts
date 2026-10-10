@@ -3774,6 +3774,9 @@ export class InteractiveMode {
 		for (const [toolCallId, component] of renderedPendingTools) {
 			this.pendingTools.set(toolCallId, component);
 		}
+		// History is finished (startup, --continue, /resume, rebuilds): settle what is
+		// still open (e.g. orphaned tool calls) so it can freeze. A live run settles on agent_end.
+		if (!this.session.isStreaming) this.chatContainer.settleAll();
 		this.ui.requestRender();
 	}
 

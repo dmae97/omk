@@ -97,7 +97,11 @@ export class ChatContainer extends WindowedContainer {
 		target?.markRenderSettled?.();
 	}
 
-	/** Backstop: treat every open child as finished (agent_end, end of a history rebuild). */
+	/**
+	 * Backstop: treat every open child as finished. Called on `agent_end` and by
+	 * interactive-mode at the end of a history rebuild (`renderSessionContext`:
+	 * startup, `--continue`, `/resume`, rebuilds) when no run is streaming.
+	 */
 	settleAll(): void {
 		for (const child of this.pending) {
 			const settleable = child as SettleableComponent;

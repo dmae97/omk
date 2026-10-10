@@ -1,9 +1,10 @@
 import type { AgentMessage } from "omk-agent-core";
 import type { AssistantMessage, ToolResultMessage, Usage } from "omk-ai";
-import { Container, Text, type TUI } from "omk-tui";
+import { type Container, Text, type TUI } from "omk-tui";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import type { AgentSessionEvent } from "../../../src/core/agent-session.ts";
 import type { SessionContext } from "../../../src/core/session-manager.ts";
+import { ChatContainer } from "../../../src/modes/interactive/components/chat-container.ts";
 import type { ToolExecutionComponent } from "../../../src/modes/interactive/components/tool-execution.ts";
 import { InteractiveMode } from "../../../src/modes/interactive/interactive-mode.ts";
 import { initTheme } from "../../../src/modes/interactive/theme/theme.ts";
@@ -29,7 +30,7 @@ const EMPTY_USAGE: Usage = {
 
 type RenderSessionContextThis = {
 	pendingTools: Map<string, ToolExecutionComponent>;
-	chatContainer: Container;
+	chatContainer: ChatContainer;
 	footer: { invalidate(): void };
 	ui: TUI;
 	settingsManager: {
@@ -37,7 +38,7 @@ type RenderSessionContextThis = {
 		getImageWidthCells(): number;
 	};
 	sessionManager: { getCwd(): string };
-	session: { retryAttempt: number };
+	session: { retryAttempt: number; isStreaming: boolean };
 	toolOutputExpanded: boolean;
 	isInitialized: boolean;
 	updateEditorBorderColor(): void;
@@ -53,8 +54,9 @@ type RenderSessionContext = (
 
 type HandleEvent = (this: RenderSessionContextThis, event: AgentSessionEvent) => Promise<void>;
 
-function createFakeInteractiveModeThis(): RenderSessionContextThis {
-	const chatContainer = new Container();
+/** Default: a run is streaming (the #4167 case: thinking toggled while a tool runs). */
+function createFakeInteractiveModeThis(isStreaming = true): RenderSessionContextThis {
+	const chatContainer = new ChatContainer();
 	return {
 		pendingTools: new Map<string, ToolExecutionComponent>(),
 		chatContainer,
@@ -65,7 +67,7 @@ function createFakeInteractiveModeThis(): RenderSessionContextThis {
 			getImageWidthCells: () => 60,
 		},
 		sessionManager: { getCwd: () => process.cwd() },
-		session: { retryAttempt: 0 },
+		session: { retryAttempt: 0, isStreaming },
 		toolOutputExpanded: false,
 		isInitialized: true,
 		updateEditorBorderColor: vi.fn(),
@@ -170,6 +172,19 @@ describe("InteractiveMode.renderSessionContext", () => {
 		expect(fakeThis.pendingTools.has(TOOL_CALL_ID)).toBe(false);
 		expect(renderChat(fakeThis.chatContainer)).toContain("FINAL_RESULT");
 	});
+	test("settles history left open only when no run is streaming (spec 022 rebuild backstop)", () => {
+		const renderSessionContext = (
+			InteractiveMode.prototype as unknown as { renderSessionContext: RenderSessionContext }
+		).renderSessionContext;
+		const idle = createFakeInteractiveModeThis(false);
+		renderSessionContext.call(idle, createSessionContext([createAssistantToolCallMessage()]));
+		expect(idle.chatContainer.getLiveChildCount()).toBe(0);
+
+		const streaming = createFakeInteractiveModeThis(true);
+		renderSessionContext.call(streaming, createSessionContext([createAssistantToolCallMessage()]));
+		expect(streaming.chatContainer.getLiveChildCount()).toBe(1);
+	});
+
 	test("preserves valid tool result details and error status", async () => {
 		const details = { source: "extension" };
 		const result = { content: [{ type: "text" as const, text: "VALID_RESULT" }], details };
