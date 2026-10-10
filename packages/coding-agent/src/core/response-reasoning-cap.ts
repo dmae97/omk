@@ -91,20 +91,20 @@ interface AttemptOutcome {
 	readonly message: AssistantMessage;
 }
 
-function addUsage(into: Usage, from: Usage): Usage {
+/**
+ * Final usage after a retry. Token fields stay the retry's own: compaction reads
+ * `totalTokens` (or the sum of the token fields) as the context size, and summing
+ * would make the context look up to 2x. Only cost is summed, since both requests are billed.
+ */
+export function mergeRetryUsage(retry: Usage, aborted: Usage): Usage {
 	return {
-		...into,
-		input: into.input + from.input,
-		output: into.output + from.output,
-		cacheRead: into.cacheRead + from.cacheRead,
-		cacheWrite: into.cacheWrite + from.cacheWrite,
-		totalTokens: into.totalTokens + from.totalTokens,
+		...retry,
 		cost: {
-			input: into.cost.input + from.cost.input,
-			output: into.cost.output + from.cost.output,
-			cacheRead: into.cost.cacheRead + from.cost.cacheRead,
-			cacheWrite: into.cost.cacheWrite + from.cost.cacheWrite,
-			total: into.cost.total + from.cost.total,
+			input: retry.cost.input + aborted.cost.input,
+			output: retry.cost.output + aborted.cost.output,
+			cacheRead: retry.cost.cacheRead + aborted.cost.cacheRead,
+			cacheWrite: retry.cost.cacheWrite + aborted.cost.cacheWrite,
+			total: retry.cost.total + aborted.cost.total,
 		},
 	};
 }
@@ -126,8 +126,15 @@ export function createResponseReasoningCapStreamFn(
 		const linkAbort = () => controller.abort(callerSignal?.reason);
 		if (callerSignal?.aborted) linkAbort();
 		else callerSignal?.addEventListener("abort", linkAbort, { once: true });
-		// The first call stays awaited here so setup errors (auth) surface exactly as before.
-		const first = await inner(model, context, { ...options, signal: controller.signal });
+		// The first call stays awaited here so setup errors (auth) surface exactly as before,
+		// but the caller-signal link must not outlive a throw (review #96 M2).
+		let first: AssistantMessageEventStream;
+		try {
+			first = await inner(model, context, { ...options, signal: controller.signal });
+		} catch (error) {
+			callerSignal?.removeEventListener("abort", linkAbort);
+			throw error;
+		}
 		const out = createAssistantMessageEventStream();
 
 		const capMs = () => resolveResponseWallCapMs(config.maxWallMs, config.budget?.());
@@ -179,7 +186,13 @@ export function createResponseReasoningCapStreamFn(
 			else out.push({ type: "done", reason, message });
 			out.end(message);
 		};
-		const diagnostic = (type: string, outcome: AttemptOutcome, reason: ResponseCapReason, wallCapMs: number) =>
+		const diagnostic = (
+			type: string,
+			outcome: AttemptOutcome,
+			reason: ResponseCapReason,
+			wallCapMs: number,
+			extra?: Record<string, unknown>,
+		) =>
 			({
 				type,
 				timestamp: Date.now(),
@@ -191,6 +204,7 @@ export function createResponseReasoningCapStreamFn(
 					elapsedMs: outcome.elapsedMs,
 					capTokens: config.maxReasoningTokens,
 					capMs: wallCapMs,
+					...extra,
 				},
 			}) satisfies AssistantMessageDiagnostic;
 
@@ -215,7 +229,9 @@ export function createResponseReasoningCapStreamFn(
 					const retryOutcome = await runAttempt(retry, false, false, () => {});
 					const diagnostics = [
 						...(retryOutcome.message.diagnostics ?? []),
-						diagnostic(RESPONSE_CAP_RETRY_DIAGNOSTIC, firstOutcome, firstOutcome.capped, firstCapMs),
+						diagnostic(RESPONSE_CAP_RETRY_DIAGNOSTIC, firstOutcome, firstOutcome.capped, firstCapMs, {
+							abortedAttemptUsage: firstOutcome.message.usage,
+						}),
 					];
 					if (retryOutcome.overrun) {
 						diagnostics.push(
@@ -229,7 +245,7 @@ export function createResponseReasoningCapStreamFn(
 					}
 					finish({
 						...retryOutcome.message,
-						usage: addUsage(retryOutcome.message.usage, firstOutcome.message.usage),
+						usage: mergeRetryUsage(retryOutcome.message.usage, firstOutcome.message.usage),
 						diagnostics,
 					});
 				} finally {

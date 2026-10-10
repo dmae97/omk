@@ -7,6 +7,7 @@ import {
 	type SimpleStreamOptions,
 } from "omk-ai";
 import { describe, expect, it } from "vitest";
+import { calculateContextTokens } from "../src/core/compaction/compaction.ts";
 import { RemainingBudget } from "../src/core/remaining-budget.ts";
 import {
 	createResponseReasoningCapStreamFn,
@@ -140,9 +141,10 @@ describe("response reasoning cap (spec 033)", () => {
 			type: RESPONSE_CAP_RETRY_DIAGNOSTIC,
 			details: { reason: "reasoning_tokens", fromEffort: "xhigh", toEffort: "high", capTokens: 100 },
 		});
-		// The aborted attempt's usage is kept.
-		expect(result.usage.output).toBe(10);
+		// Tokens are the retry's own; cost covers both billed requests; the aborted usage is in the diagnostic.
+		expect(result.usage.output).toBe(5);
 		expect(result.usage.cost.total).toBeCloseTo(0.06);
+		expect(result.diagnostics?.[0].details?.abortedAttemptUsage).toMatchObject({ output: 5, totalTokens: 15 });
 	});
 
 	it("AC3 wall-time cap: silent thinking past the cap is retried once", async () => {
@@ -237,5 +239,36 @@ describe("response reasoning cap (spec 033)", () => {
 		expect(resolveResponseWallCapMs(240_000, budget)).toBe(30_000);
 		const long = new RemainingBudget({ budgetMs: 3_600_000, now: () => 0, startedAt: 0 });
 		expect(resolveResponseWallCapMs(240_000, long)).toBe(240_000);
+	});
+
+	it("review M1: a capped retry does not inflate the context size compaction reads", async () => {
+		const inner = fakeInner([{ thinking: [chunk, chunk, chunk, chunk] }, { thinking: [chunk], answer: "retry" }]);
+		const { result } = await run(createResponseReasoningCapStreamFn(inner.fn, config()));
+		expect(inner.calls).toHaveLength(2);
+		// The retry alone reports totalTokens 15; summing both attempts gave 30.
+		expect(calculateContextTokens(result.usage)).toBe(15);
+		expect(result.usage).toMatchObject({ input: 10, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 15 });
+	});
+
+	it("review M2: a setup throw leaves no abort listener on the caller's signal", async () => {
+		const controller = new AbortController();
+		const signal = controller.signal;
+		let listeners = 0;
+		const add = signal.addEventListener.bind(signal);
+		const remove = signal.removeEventListener.bind(signal);
+		signal.addEventListener = ((...args: Parameters<AbortSignal["addEventListener"]>) => {
+			listeners += 1;
+			add(...args);
+		}) as AbortSignal["addEventListener"];
+		signal.removeEventListener = ((...args: Parameters<AbortSignal["removeEventListener"]>) => {
+			listeners -= 1;
+			remove(...args);
+		}) as AbortSignal["removeEventListener"];
+		const failing: StreamFn = async () => {
+			throw new Error("No API key for xai");
+		};
+		const wrapped = createResponseReasoningCapStreamFn(failing, config());
+		await expect(wrapped(model, { messages: [] }, { reasoning: "xhigh", signal })).rejects.toThrow(/No API key/);
+		expect(listeners).toBe(0);
 	});
 });
