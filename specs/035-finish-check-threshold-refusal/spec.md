@@ -56,7 +56,7 @@ Every target item has more than one limit, so a design that infers "the" bound o
 - The checklist message asks that every tier-1 item report one comparison per limit, in the form `<label> <measured> <op> <limit>`, separated by `;`, where `<op>` is one of `>=`, `>`, `<=`, `<`, `=`, `≥`, `≤`. Example: `REQ 1: FAIL - stone 74 >= 75; paper 70 >= 75; vampire 82 >= 75; snake 7 >= 33; g2-clear 39 >= 33`. Path-only checklists keep #62's wording.
 - `parseFinishCheckLedger` evaluates each comparison it finds in the measured text. Numbers may carry `%`, a size unit, or thousands separators; both sides of one comparison must have the same unit (or none), otherwise that comparison is skipped, not guessed (`62%` vs `0.62` is skipped).
 - A ledger item gains `gaps: string[]` (the comparisons that are false, e.g. `stone 74 >= 75`) and `source: "reported" | "compared"`. If any comparison is false, the item's status is `fail` and `source` is `compared`, even when the line says PASS. A line that says FAIL stays `fail`. A PASS line whose comparisons are all true, or that has no parsable comparison, stays as reported.
-- A tier-1 item is **unmeasured** when it is `unreported`, or its line has no parsable comparison. The ledger item gains `measured: boolean` (false for unmeasured tier-1 items; tier 2–3 items are always `true`, since they are not numeric). An unmeasured item keeps its reported status; FAIL without a comparison is still `fail`.
+- A tier-1 item is **unmeasured** when it is `unreported`, or its line has no parsable comparison. The ledger item gains `numeric: boolean` and `hasMeasurement: boolean` (false for unmeasured tier-1 items; tier 2–3 items are always `true`, since they are not numeric). The name is not `measured` because #62's ledger already uses `measured` for the reported value string. An unmeasured item keeps its reported status; FAIL without a comparison is still `fail`.
 - Only arithmetic is checked. omk does not re-derive the limit from the task sentence and does not re-run the measurement; whether `75` is the task's real limit is the run's claim, recorded in the ledger.
 
 ### Requirement 2 - One extra turn per task: threshold retry or go-measure (Priority: P0)
@@ -86,7 +86,7 @@ The follow-up (`buildFinishCheckContinueMessage`) has one or two parts, both in 
 Then:
 
 - The extra turn is ordinary work: the check-turn tool cap and wrap-up steer do not apply to it. The 75% save-now steer still applies.
-- When the extra turn settles, its REQ lines are parsed against the same requirements and appended as a second `finish_check_ledger` entry with `round: 2`. No further check or extra turn follows, whatever the result: a go-measure turn that reveals a fail does not get a threshold retry, and a threshold retry that leaves items unmeasured does not get a go-measure turn.
+- When the extra turn settles, its REQ lines are parsed against the same requirements and appended as a second `finish_check_ledger` entry with `round: 2`, and a `finish_check` event `{ active: false, ledger, round: 2 }` is emitted (runs with `--no-session` have no session entries). No further check or extra turn follows, whatever the result: a go-measure turn that reveals a fail does not get a threshold retry, and a threshold retry that leaves items unmeasured does not get a go-measure turn.
 - `finish_check` end events carry `extraTurn: "threshold" | "measure" | "both" | undefined` and the REQ ids involved, so the bench logger can count them.
 - A `fail` on a tier 2–3 (path) item alone does not trigger the extra turn; missing deliverables belong to candidate 2 (`specs/034`).
 
@@ -97,7 +97,7 @@ Then:
 **Risk**: low
 
 - #62 cuts every item at 220 characters (`MAX_REQUIREMENT_CHARS`). On `winning-avg-corewars` that cut drops `g2-clear.red` from the 33% limit, so the checklist asks the run to verify a partial requirement. This is a correctness bug and is fixed in the same PR.
-- A tier-1 sentence is cut only after its last number, up to 400 characters, so no limit is lost. Tier 2–3 items keep the 220-character cut.
+- A tier-1 sentence is kept up to 400 characters (`MAX_NUMERIC_REQUIREMENT_CHARS`), so no limit is lost. Cutting after the last number would not work: in corewars the last number is `100 battles`, and `g2-clear.red` comes after it. Tier 2–3 items keep the 220-character cut.
 
 ### Requirement 4 - Gates (Priority: P0)
 
@@ -169,7 +169,9 @@ Truncation bug (Requirement 3):
 ## Expected Files
 
 - `specs/035-finish-check-threshold-refusal/spec.md`: this spec (first commit)
-- `packages/coding-agent/src/core/finish-check-requirements.ts`: comparison format in the message, comparison evaluation and `measured` in the ledger, tier-1 cut rule
-- `packages/coding-agent/src/core/finish-check.ts`: `FINISH_CHECK_EXTRA_TURN_FRACTION`, `FINISH_CHECK_MAX_EXTRA_TURNS`, `buildFinishCheckContinueMessage`, a pure `decideExtraTurn` decision
-- `packages/coding-agent/src/core/extensions/builtin/finish-check.ts`: the single extra turn and the round-2 ledger
-- `packages/coding-agent/test/finish-check-requirements.test.ts`, `packages/coding-agent/test/finish-check.test.ts`: the cases above
+- `packages/coding-agent/src/core/finish-check-compare.ts`: new pure module that evaluates `<measured> <op> <limit>` comparisons and units
+- `packages/coding-agent/src/core/finish-check-requirements.ts`: comparison format in the message, `numeric`/`hasMeasurement`/`gaps`/`source` in the ledger, tier-1 cut rule, `extraTurnItems` and `buildFinishCheckContinueMessage` (here rather than in `finish-check.ts`, which this module already imports, to avoid an import cycle)
+- `packages/coding-agent/src/core/finish-check.ts`: `FINISH_CHECK_EXTRA_TURN_FRACTION`, `FINISH_CHECK_MAX_EXTRA_TURNS`, a pure `decideExtraTurn` decision
+- `packages/coding-agent/src/core/extensions/builtin/finish-check.ts`: the single extra turn and the round-2 ledger; the check-turn tool cap counts only during the check turn
+- `packages/coding-agent/test/finish-check-requirements.test.ts`: AC15–17 and ledger comparison cases
+- `packages/coding-agent/test/finish-check-extra-turn.test.ts`: AC1–14
