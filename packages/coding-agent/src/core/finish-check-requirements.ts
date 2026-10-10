@@ -1,4 +1,5 @@
 import { FINISH_CHECK_MAX_TOOL_CALLS, FINISH_CHECK_MESSAGE } from "./finish-check.ts";
+import { checkComparisons } from "./finish-check-compare.ts";
 
 /** Most checklist items one finish check asks for; longer prompts keep the first ones. */
 export const FINISH_CHECK_MAX_REQUIREMENTS = 8;
@@ -57,6 +58,11 @@ function requirementTier(sentence: string): 1 | 2 | 3 | undefined {
 	return REQUIRED.test(sentence) || OUTPUT_WORDS.test(sentence) ? 2 : 3;
 }
 
+/** Whether a checklist item bounds a number (tier 1), so its result can be compared with a limit. */
+export function isNumericRequirement(item: string): boolean {
+	return requirementTier(item) === 1;
+}
+
 function shorten(sentence: string, tier: 1 | 2 | 3): string {
 	const flat = sentence.replace(/\s+/g, " ");
 	const max = tier === 1 ? MAX_NUMERIC_REQUIREMENT_CHARS : MAX_REQUIREMENT_CHARS;
@@ -91,6 +97,9 @@ export function finishCheckToolCap(requirementCount: number): number {
 	return Math.min(FINISH_CHECK_MAX_CHECKLIST_TOOL_CALLS, Math.max(FINISH_CHECK_MAX_TOOL_CALLS, requirementCount + 3));
 }
 
+const NUMERIC_REPORT_LINE =
+	"For an item that states a numeric limit, write one comparison per limit as `<label> <measured> <op> <limit>`, separated by `;`, for example `REQ 1: FAIL - stone 74 >= 75; snake 39 >= 33`. A comparison that does not hold makes the item FAIL.";
+
 /** The finish-check message, with a measured checklist when the prompt has measurable requirements. */
 export function buildFinishCheckMessage(requirements: readonly string[]): string {
 	if (requirements.length === 0) return FINISH_CHECK_MESSAGE;
@@ -105,6 +114,7 @@ export function buildFinishCheckMessage(requirements: readonly string[]): string
 		"Measured checklist. These lines from the task state limits or paths. For each one, run a command that measures it on the current outputs; restating your plan is not a measurement. When the task's test data is hidden, measure on data you did not train or tune on. Fix a failing item only if the fix is quick and keeps the saved outputs valid.",
 		...requirements.map((item, index) => `REQ ${index + 1}: ${item}`),
 		"End your reply with one line per item: `REQ <n>: PASS|FAIL - <measured value>`.",
+		...(requirements.some(isNumericRequirement) ? [NUMERIC_REPORT_LINE] : []),
 	].join("\n");
 }
 
@@ -113,6 +123,14 @@ export interface FinishCheckLedgerItem {
 	readonly requirement: string | undefined;
 	readonly status: "pass" | "fail" | "unreported";
 	readonly measured: string | undefined;
+	/** The item bounds a number, so it needs a `<measured> <op> <limit>` comparison. */
+	readonly numeric: boolean;
+	/** False for a numeric item with no evaluable comparison; path items are always true. */
+	readonly hasMeasurement: boolean;
+	/** Reported comparisons that do not hold, e.g. `stone 74 >= 75`. */
+	readonly gaps: string[];
+	/** `compared` when omk turned a reported PASS into a fail because its own comparison does not hold. */
+	readonly source: "reported" | "compared";
 }
 
 const LEDGER_LINE = /^[\s>*`-]*REQ\s+(\d+)\s*:\s*(PASS|FAIL)\b[\s`*]*(?:[-–—:]\s*)?(.*)$/gim;
@@ -132,11 +150,19 @@ export function parseFinishCheckLedger(reply: string, requirements: readonly str
 	const items: FinishCheckLedgerItem[] = [];
 	for (let id = 1; id <= count; id++) {
 		const entry = reported.get(id);
+		const requirement = requirements[id - 1];
+		const numeric = requirement !== undefined && isNumericRequirement(requirement);
+		const { evaluated, gaps } = checkComparisons(entry?.measured);
+		const compared = entry?.status === "pass" && gaps.length > 0;
 		items.push({
 			id,
-			requirement: requirements[id - 1],
-			status: entry?.status ?? "unreported",
+			requirement,
+			status: compared ? "fail" : (entry?.status ?? "unreported"),
 			measured: entry?.measured,
+			numeric,
+			hasMeasurement: !numeric || evaluated > 0,
+			gaps,
+			source: compared ? "compared" : "reported",
 		});
 	}
 	return items;

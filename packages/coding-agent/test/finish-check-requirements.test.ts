@@ -127,11 +127,79 @@ describe("finish-check checklist message and ledger", () => {
 
 	it("parses reported lines and marks missing ones unreported", () => {
 		const reply = "Checked.\nREQ 1: FAIL - 48 nt\n- **REQ 3: PASS** — 3/3 pairs within 5 C";
+		const extra = { numeric: false, hasMeasurement: true, gaps: [], source: "reported" };
 		expect(parseFinishCheckLedger(reply, ["a", "b", "c"])).toEqual([
-			{ id: 1, requirement: "a", status: "fail", measured: "48 nt" },
-			{ id: 2, requirement: "b", status: "unreported", measured: undefined },
-			{ id: 3, requirement: "c", status: "pass", measured: "3/3 pairs within 5 C" },
+			{ id: 1, requirement: "a", status: "fail", measured: "48 nt", ...extra },
+			{ id: 2, requirement: "b", status: "unreported", measured: undefined, ...extra },
+			{ id: 3, requirement: "c", status: "pass", measured: "3/3 pairs within 5 C", ...extra },
 		]);
+	});
+
+	it("asks numeric items for one comparison per limit, and keeps path-only wording", () => {
+		expect(buildFinishCheckMessage(extractRequirements(COREWARS))).toContain("`<label> <measured> <op> <limit>`");
+		expect(buildFinishCheckMessage(["The model should be saved as /app/model.bin"])).not.toContain(
+			"<label> <measured> <op> <limit>",
+		);
+	});
+});
+
+// spec 035 requirement 1: the ledger checks the arithmetic of the run's own comparisons.
+describe("finish-check ledger comparisons", () => {
+	const corewars = extractRequirements(COREWARS);
+	const item = (reply: string, requirements: readonly string[] = corewars) =>
+		parseFinishCheckLedger(reply, requirements)[0];
+
+	it("turns a PASS whose own numbers miss the limit into a compared fail (corewars r2, 74 < 75)", () => {
+		const result = item(
+			"REQ 1: PASS - stone 74 >= 75; paper 70 >= 75; vampire 82 >= 75; snake 7 >= 33; g2-clear 39 >= 33",
+		);
+		expect(result).toMatchObject({ status: "fail", source: "compared", numeric: true, hasMeasurement: true });
+		expect(result.gaps).toEqual(["stone 74 >= 75", "paper 70 >= 75", "snake 7 >= 33"]);
+	});
+
+	it("keeps an honest FAIL as reported", () => {
+		expect(item("REQ 1: FAIL - stone 74 >= 75")).toMatchObject({
+			status: "fail",
+			source: "reported",
+			gaps: ["stone 74 >= 75"],
+		});
+	});
+
+	it("accepts 75 >= 75", () => {
+		expect(
+			item("REQ 1: PASS - stone 75 >= 75; paper 78 >= 75; vampire 82 >= 75; snake 33 >= 33; g2-clear 39 >= 33"),
+		).toMatchObject({ status: "pass", source: "reported", gaps: [], hasMeasurement: true });
+	});
+
+	it("marks numeric items without a comparison as unmeasured, keeping the reported status", () => {
+		expect(item("REQ 1: PASS - all opponents beaten")).toMatchObject({ status: "pass", hasMeasurement: false });
+		expect(item("no checklist lines")).toMatchObject({ status: "unreported", hasMeasurement: false });
+		expect(item("REQ 1: FAIL - stone below target")).toMatchObject({ status: "fail", hasMeasurement: false });
+	});
+
+	it("compares only like units and skips mixed ones", () => {
+		const fasttext = extractRequirements(FASTTEXT);
+		expect(item("REQ 1: PASS - size 160MB < 150MB; accuracy 0.6105 >= 0.62", fasttext)).toMatchObject({
+			status: "fail",
+			gaps: ["size 160MB < 150MB", "accuracy 0.6105 >= 0.62"],
+		});
+		expect(item("REQ 1: PASS - accuracy 61% >= 0.62", fasttext)).toMatchObject({
+			status: "pass",
+			gaps: [],
+			hasMeasurement: false,
+		});
+		expect(item("REQ 1: PASS - 100,000 pairs > 99,999; 1.5 MB <= 10 MB; Tm 58 <= 61 <= 72", fasttext)).toMatchObject({
+			status: "pass",
+			gaps: [],
+		});
+		expect(item("REQ 1: PASS - Tm 58 <= 75 <= 72", fasttext)).toMatchObject({ status: "fail", source: "compared" });
+	});
+
+	it("treats path items as measured and not numeric", () => {
+		expect(item("", ["The model should be saved as /app/model.bin"])).toMatchObject({
+			numeric: false,
+			hasMeasurement: true,
+		});
 	});
 });
 
@@ -180,12 +248,25 @@ describe("finish-check extension checklist flow", () => {
 
 		await fire("agent_settled", settled("REQ 1: FAIL - 0.58 acc\nREQ 2: PASS - 92MB at /app/model.bin"), ctx);
 		const ledger = [
-			{ id: 1, requirement: extractRequirements(FASTTEXT)[0], status: "fail", measured: "0.58 acc" },
+			{
+				id: 1,
+				requirement: extractRequirements(FASTTEXT)[0],
+				status: "fail",
+				measured: "0.58 acc",
+				numeric: true,
+				hasMeasurement: false,
+				gaps: [],
+				source: "reported",
+			},
 			{
 				id: 2,
 				requirement: "The model should be saved as /app/model.bin",
 				status: "pass",
 				measured: "92MB at /app/model.bin",
+				numeric: false,
+				hasMeasurement: true,
+				gaps: [],
+				source: "reported",
 			},
 		];
 		expect(entries).toEqual([{ type: FINISH_CHECK_LEDGER_ENTRY, data: { items: ledger } }]);
