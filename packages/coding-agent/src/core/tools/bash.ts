@@ -8,7 +8,7 @@ import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
 import { assertLoadoutAccess, type LoadoutAccessGuard } from "../loadout-access-policy.ts";
 import {
 	bashBudgetTimeoutMessage,
-	ensureActiveRemainingBudget,
+	getActiveRemainingBudget,
 	resolveBashTimeoutForBudget,
 } from "../remaining-budget.ts";
 import {
@@ -210,11 +210,8 @@ export function createBashToolDefinition(
 
 			const appendStatus = (text: string, status: string) => `${text ? `${text}\n\n` : ""}${status}`;
 
-			const { effectiveTimeoutSec, clamp } = resolveBashTimeoutForBudget(
-				timeout,
-				DEFAULT_BUILTIN_TOOL_TIMEOUTS.bash / 1000,
-				ensureActiveRemainingBudget(),
-			);
+			// Read-only: the clock is started at run start (spec 036), never lazily here.
+			const { effectiveTimeoutSec, clamp } = resolveBashTimeoutForBudget(timeout, getActiveRemainingBudget());
 
 			try {
 				let exitCode: number | null;
@@ -240,7 +237,7 @@ export function createBashToolDefinition(
 						const secs = Number.isFinite(timedOutSec) && timedOutSec > 0 ? timedOutSec : effectiveTimeoutSec;
 						const status =
 							clamp?.clamped === true
-								? bashBudgetTimeoutMessage({ ...clamp, timeoutSec: secs })
+								? bashBudgetTimeoutMessage({ ...clamp, timeoutSec: secs ?? clamp.timeoutSec })
 								: `Command timed out after ${secs} seconds`;
 						throw new Error(appendStatus(text, status));
 					}

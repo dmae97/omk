@@ -1,17 +1,22 @@
 /**
- * Shared wall-clock budget for a coding run.
+ * Shared wall-clock budget for a coding run (spec 036).
  *
- * Harnesses pass `OMK_TIME_BUDGET_SEC`. Finish-check (75% save / 90% skip),
- * bash timeout clamps, and the progress-stall detector all read the same clock
- * so a long command cannot hold the turn past the reserve kept for save+verify.
+ * Harnesses pass `OMK_TIME_BUDGET_SEC`. `startRunBudgetClock()` binds one
+ * monotonic clock per process, anchored at the process time origin, and every
+ * consumer (bash clamp, finish-check via `readRunBudget()`, spec 033's response
+ * cap) reads that clock. Nothing binds it lazily, so all consumers share one origin.
  */
 
 /** Keep this fraction of the total budget free for save + verify (matches finish-check skip at 0.9). */
 export const REMAINING_BUDGET_SAVE_RESERVE_FRACTION = 0.1;
-/** At or below this remaining fraction, bash clamps to a hard 1s deadline. */
+/** At or below this remaining fraction the run is in its save reserve ("hard" policy). */
 export const REMAINING_BUDGET_HARD_KILL_FRACTION = 0.1;
+/** Inside the reserve a command may still run this long, so saving outputs is not killed at once. */
+export const BASH_SAVE_FLOOR_SEC = 30;
+/** The save floor never runs closer than this to the real end of the budget. */
+export const BASH_DEADLINE_GRACE_SEC = 5;
 
-export type BashTimeoutPolicy = "unbounded" | "soft" | "hard";
+export type BashTimeoutPolicy = "soft" | "hard";
 
 export interface RemainingBudgetOptions {
 	readonly budgetMs: number;
@@ -25,7 +30,7 @@ export interface ClampBashTimeoutResult {
 	/** Whether the requested timeout was reduced. */
 	readonly clamped: boolean;
 	readonly policy: BashTimeoutPolicy;
-	/** Whole seconds still on the clock after the clamp (0 when hard). */
+	/** Whole seconds still on the run clock when the clamp was computed. */
 	readonly remainingSec: number;
 }
 
@@ -41,7 +46,8 @@ export class RemainingBudget {
 			throw new Error("RemainingBudget requires a positive budgetMs");
 		}
 		this.budgetMs = Math.round(options.budgetMs);
-		this.now = options.now ?? Date.now;
+		// Monotonic: NTP or VM clock steps must not move the budget.
+		this.now = options.now ?? (() => performance.now());
 		this.startedAt = options.startedAt ?? this.now();
 	}
 
@@ -80,29 +86,22 @@ export class RemainingBudget {
 
 	/**
 	 * Cap a bash timeout so one command cannot eat the save+verify reserve.
-	 * `requestedSec` is the model-supplied or default timeout in seconds.
+	 * Ceiling: `max(1, remaining − reserve, min(30, remaining − 5))` seconds, so a
+	 * save command inside the reserve still gets up to 30 s. `requestedSec`
+	 * undefined (no model timeout) gets the ceiling itself.
 	 */
-	clampBashTimeoutSec(requestedSec: number): ClampBashTimeoutResult {
-		const safeRequested = Number.isFinite(requestedSec) && requestedSec > 0 ? Math.floor(requestedSec) : 1;
+	clampBashTimeoutSec(requestedSec: number | undefined): ClampBashTimeoutResult {
 		const remainingSec = Math.floor(this.remainingMs() / 1000);
+		const availableSec = Math.floor((this.remainingMs() - this.reserveMs()) / 1000);
+		const saveFloorSec = Math.min(BASH_SAVE_FLOOR_SEC, remainingSec - BASH_DEADLINE_GRACE_SEC);
+		const ceilingSec = Math.max(1, availableSec, saveFloorSec);
 		const policy = this.bashTimeoutPolicy();
-		if (policy === "hard") {
-			return {
-				timeoutSec: 1,
-				clamped: safeRequested > 1,
-				policy,
-				remainingSec,
-			};
+		if (requestedSec === undefined || !Number.isFinite(requestedSec) || requestedSec <= 0) {
+			return { timeoutSec: ceilingSec, clamped: true, policy, remainingSec };
 		}
-		const availableMs = this.remainingMs() - this.reserveMs();
-		const availableSec = Math.max(1, Math.floor(availableMs / 1000));
-		const timeoutSec = Math.min(safeRequested, availableSec);
-		return {
-			timeoutSec,
-			clamped: timeoutSec < safeRequested,
-			policy,
-			remainingSec,
-		};
+		const safeRequested = Math.max(1, Math.floor(requestedSec));
+		const timeoutSec = Math.min(safeRequested, ceilingSec);
+		return { timeoutSec, clamped: timeoutSec < safeRequested, policy, remainingSec };
 	}
 }
 
@@ -141,18 +140,50 @@ export function getActiveRemainingBudget(): RemainingBudget | undefined {
 }
 
 /**
- * Return the active clock, or lazily bind one from `OMK_TIME_BUDGET_SEC` on first use.
- * Call sites that must not start a clock (pure tests) should pass `{ bind: false }`.
+ * Start the run clock once per process, at run start (`runPrintMode`). The origin is
+ * the process time origin (`performance.now() === 0`), so startup and the first model
+ * turns count no matter when a consumer first reads it. Returns the bound clock, or
+ * `undefined` when `OMK_TIME_BUDGET_SEC` is not set.
  */
-export function ensureActiveRemainingBudget(options?: {
+export function startRunBudgetClock(options?: {
 	readonly env?: NodeJS.ProcessEnv;
 	readonly now?: () => number;
-	readonly bind?: boolean;
+	readonly startedAt?: number;
 }): RemainingBudget | undefined {
 	if (activeBudget) return activeBudget;
-	const budget = createRemainingBudgetFromEnv(options);
-	if (budget && options?.bind !== false) bindActiveRemainingBudget(budget);
+	const budget = createRemainingBudgetFromEnv({
+		env: options?.env,
+		now: options?.now,
+		startedAt: options?.startedAt ?? 0,
+	});
+	if (budget) bindActiveRemainingBudget(budget);
 	return budget;
+}
+
+export interface RunBudgetSnapshot {
+	readonly budgetMs: number;
+	readonly elapsedMs: number;
+	readonly remainingMs: number;
+	readonly elapsedFraction: number;
+	readonly remainingFraction: number;
+}
+
+/** The one accessor consumers (finish-check, spec 033) use. `undefined` when the run has no budget. */
+export function readRunBudget(): RunBudgetSnapshot | undefined {
+	const budget = activeBudget;
+	if (!budget) return undefined;
+	return {
+		budgetMs: budget.budgetMs,
+		elapsedMs: budget.elapsedMs(),
+		remainingMs: budget.remainingMs(),
+		elapsedFraction: budget.elapsedFraction(),
+		remainingFraction: budget.remainingFraction(),
+	};
+}
+
+/** Take a harness wait (for example a pre-check snapshot) out of the shared budget. */
+export function excludeRunBudgetWaitMs(ms: number): void {
+	activeBudget?.addExcludedWaitMs(ms);
 }
 
 /** Hint appended when a bash command is cut short by the budget clamp. */
@@ -163,19 +194,16 @@ export function bashBudgetTimeoutMessage(result: ClampBashTimeoutResult): string
 	return `Command timed out after ${result.timeoutSec} seconds (${result.remainingSec}s left on the run budget; narrow the work or continue in the background).`;
 }
 
-/** Resolve the seconds bash should wait, honoring an optional RemainingBudget clamp. */
+/**
+ * Resolve the seconds bash should wait. Without a budget the model's timeout passes
+ * through unchanged (including `undefined`), exactly as on main, so the outer
+ * `agent.toolTimeouts.bash` still governs. With a budget it is clamped.
+ */
 export function resolveBashTimeoutForBudget(
 	requestedTimeoutSec: number | undefined,
-	defaultTimeoutSec: number,
 	budget: RemainingBudget | undefined,
-): { readonly effectiveTimeoutSec: number; readonly clamp: ClampBashTimeoutResult | undefined } {
-	const requested =
-		requestedTimeoutSec !== undefined && Number.isFinite(requestedTimeoutSec) && requestedTimeoutSec > 0
-			? requestedTimeoutSec
-			: defaultTimeoutSec;
-	if (!budget) {
-		return { effectiveTimeoutSec: requested, clamp: undefined };
-	}
-	const clamp = budget.clampBashTimeoutSec(requested);
+): { readonly effectiveTimeoutSec: number | undefined; readonly clamp: ClampBashTimeoutResult | undefined } {
+	if (!budget) return { effectiveTimeoutSec: requestedTimeoutSec, clamp: undefined };
+	const clamp = budget.clampBashTimeoutSec(requestedTimeoutSec);
 	return { effectiveTimeoutSec: clamp.timeoutSec, clamp };
 }

@@ -2,12 +2,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
 	bindActiveRemainingBudget,
 	createRemainingBudgetFromEnv,
-	ensureActiveRemainingBudget,
+	excludeRunBudgetWaitMs,
 	getActiveRemainingBudget,
 	REMAINING_BUDGET_HARD_KILL_FRACTION,
 	REMAINING_BUDGET_SAVE_RESERVE_FRACTION,
 	RemainingBudget,
+	readRunBudget,
+	resolveBashTimeoutForBudget,
 	resolveTimeBudgetMs,
+	startRunBudgetClock,
 } from "../src/core/remaining-budget.ts";
 import { createEnvRemainingBudgetFraction } from "../src/core/remaining-budget-fraction.ts";
 
@@ -45,9 +48,9 @@ describe("RemainingBudget", () => {
 		expect(early.clamped).toBe(true);
 		expect(early.policy).toBe("soft");
 
-		now = 80_000; // 20s left, reserve 10s => available 10s
+		now = 80_000; // 20s left, reserve 10s => available 10s, save floor min(30, 20-5) = 15s
 		const mid = budget.clampBashTimeoutSec(300);
-		expect(mid.timeoutSec).toBe(10);
+		expect(mid.timeoutSec).toBe(15);
 		expect(mid.policy).toBe("soft");
 
 		now = 95_000; // 5% left => hard
@@ -71,14 +74,74 @@ describe("RemainingBudget", () => {
 });
 
 describe("active RemainingBudget binding", () => {
-	it("lazily binds from OMK_TIME_BUDGET_SEC", () => {
+	it("startRunBudgetClock binds once per process from the process time origin", () => {
 		expect(getActiveRemainingBudget()).toBeUndefined();
-		const budget = ensureActiveRemainingBudget({
-			env: { OMK_TIME_BUDGET_SEC: "60" },
-			now: () => 5_000,
-		});
+		const budget = startRunBudgetClock({ env: { OMK_TIME_BUDGET_SEC: "60" }, now: () => 5_000 });
 		expect(budget?.budgetMs).toBe(60_000);
 		expect(getActiveRemainingBudget()).toBe(budget);
+		// Origin is process start (0 on the performance timeline), not the call time.
+		expect(budget?.elapsedMs()).toBe(5_000);
+		expect(startRunBudgetClock({ env: { OMK_TIME_BUDGET_SEC: "999" } })).toBe(budget);
+	});
+
+	it("startRunBudgetClock binds nothing without OMK_TIME_BUDGET_SEC", () => {
+		expect(startRunBudgetClock({ env: {} })).toBeUndefined();
+		expect(getActiveRemainingBudget()).toBeUndefined();
+		expect(readRunBudget()).toBeUndefined();
+	});
+
+	it("defaults to the monotonic performance.now() clock", () => {
+		const budget = new RemainingBudget({ budgetMs: 1_000_000 });
+		const before = performance.now();
+		const elapsed = budget.elapsedMs();
+		expect(elapsed).toBeGreaterThanOrEqual(0);
+		expect(elapsed).toBeLessThanOrEqual(performance.now() - before + 50);
+		const origin = new RemainingBudget({ budgetMs: 1_000_000, startedAt: 0 });
+		expect(origin.elapsedMs()).toBeGreaterThanOrEqual(before);
+		expect(origin.elapsedMs()).toBeLessThan(Date.now()); // not epoch-based
+	});
+
+	it("readRunBudget reports the shared origin and excludeRunBudgetWaitMs shifts it", () => {
+		let now = 30_000;
+		startRunBudgetClock({ env: { OMK_TIME_BUDGET_SEC: "100" }, now: () => now });
+		expect(readRunBudget()).toEqual({
+			budgetMs: 100_000,
+			elapsedMs: 30_000,
+			remainingMs: 70_000,
+			elapsedFraction: 0.3,
+			remainingFraction: 0.7,
+		});
+		excludeRunBudgetWaitMs(10_000);
+		now = 50_000;
+		expect(readRunBudget()?.elapsedFraction).toBeCloseTo(0.4);
+	});
+
+	it("save floor: a command inside the reserve still gets up to 30s, never past the end", () => {
+		let now = 0;
+		const budget = new RemainingBudget({ budgetMs: 1_000_000, now: () => now, startedAt: 0 });
+		const at = (remainingSec: number) => {
+			now = 1_000_000 - remainingSec * 1000;
+			return budget.clampBashTimeoutSec(300);
+		};
+		expect(at(5)).toMatchObject({ timeoutSec: 1, policy: "hard" });
+		expect(at(20)).toMatchObject({ timeoutSec: 15, policy: "hard" });
+		expect(at(40)).toMatchObject({ timeoutSec: 30, policy: "hard" });
+		expect(at(95)).toMatchObject({ timeoutSec: 30, policy: "hard" });
+		expect(at(140)).toMatchObject({ timeoutSec: 40, policy: "soft" });
+		expect(at(20).timeoutSec).toBeLessThanOrEqual(20 - 5);
+	});
+
+	it("resolveBashTimeoutForBudget passes the timeout through without a budget", () => {
+		expect(resolveBashTimeoutForBudget(undefined, undefined)).toEqual({
+			effectiveTimeoutSec: undefined,
+			clamp: undefined,
+		});
+		expect(resolveBashTimeoutForBudget(1800, undefined).effectiveTimeoutSec).toBe(1800);
+		const budget = new RemainingBudget({ budgetMs: 100_000, now: () => 0, startedAt: 0 });
+		expect(resolveBashTimeoutForBudget(undefined, budget)).toMatchObject({
+			effectiveTimeoutSec: 90,
+			clamp: { clamped: true },
+		});
 	});
 
 	it("createEnvRemainingBudgetFraction prefers the active clock", () => {
