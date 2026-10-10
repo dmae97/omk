@@ -21,6 +21,18 @@ const FASTTEXT = `Train a fasttext model on the yelp data.
 The final model size needs to be less than 150MB but get at least 0.62 accuracy on a private test set.
 The model should be saved as /app/model.bin`;
 
+// From terminal-bench-2-1 winning-avg-corewars and regex-chess instruction.md.
+const COREWARS = [
+	"Write your program to `my_warrior.red`. ",
+	"Your warrior must achieve at least a 75% win rate (75+ wins out of 100 battles) against `stone.red`, `vampire.red`, and `paper.red`, and achieve at least a 33% win rate (33+ wins out of 100 battles) against `snake.red` and `g2-clear.red`.",
+	"Testing will be performed using pMARS batch mode: `pmars -b -r 100 -f my_warrior.red warriors/<opponent>.red`.",
+].join("\n");
+
+const REGEX_CHESS = [
+	"Write a JSON file called /app/re.json that is a list of [regex, replacement] pairs.",
+	"The length of re.json must be under 100,000 [regex, replacement]-pairs long, and under 10 megabytes in total.",
+].join("\n");
+
 describe("finish-check requirement extraction", () => {
 	it("keeps sentences that bound a number or name an absolute path", () => {
 		expect(extractRequirements(DNA)).toEqual([
@@ -69,11 +81,30 @@ describe("finish-check requirement extraction", () => {
 	});
 
 	it("drops duplicates and shortens very long lines", () => {
-		const long = `The output must be at least 5 lines ${"and more ".repeat(40)}`;
+		const long = `The output must be at least 5 lines ${"and more ".repeat(60)}`;
 		const items = extractRequirements(`${long}\n${long}`);
 		expect(items).toHaveLength(1);
-		expect(items[0].length).toBeLessThanOrEqual(220);
+		expect(items[0].length).toBe(400);
 		expect(items[0].endsWith("…")).toBe(true);
+	});
+
+	// spec 035 AC16: the 220-character cut dropped the g2-clear 33% limit.
+	it("keeps every limit of the corewars sentence", () => {
+		const [item] = extractRequirements(COREWARS);
+		for (const part of ["75%", "stone.red", "33%", "g2-clear.red"]) expect(item).toContain(part);
+		expect(item.endsWith("…")).toBe(false);
+	});
+
+	// spec 035 AC17: shorter numeric items and path items keep #62's output.
+	it("leaves other items and the path cut unchanged", () => {
+		expect(extractRequirements(REGEX_CHESS)).toEqual([
+			"Write a JSON file called /app/re.json that is a list of [regex, replacement] pairs.",
+			"The length of re.json must be under 100,000 [regex, replacement]-pairs long, and under 10 megabytes in total.",
+		]);
+		const path = `Save the report to /app/report/${"nested/".repeat(40)}out.txt`;
+		const [item] = extractRequirements(path);
+		expect(item.length).toBe(220);
+		expect(item.endsWith("…")).toBe(true);
 	});
 });
 

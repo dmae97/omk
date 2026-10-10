@@ -5,6 +5,8 @@ export const FINISH_CHECK_MAX_REQUIREMENTS = 8;
 /** Tool calls allowed for a checklist check never go above this. */
 export const FINISH_CHECK_MAX_CHECKLIST_TOOL_CALLS = 12;
 const MAX_REQUIREMENT_CHARS = 220;
+// Numeric sentences often list several limits (corewars: 75% for three opponents, 33% for two); 220 cut the last one off.
+const MAX_NUMERIC_REQUIREMENT_CHARS = 400;
 
 // Words that bound a number: "at least 0.62", "between 15 and 45", "no more than 150MB".
 const BOUND_WORDS =
@@ -55,9 +57,10 @@ function requirementTier(sentence: string): 1 | 2 | 3 | undefined {
 	return REQUIRED.test(sentence) || OUTPUT_WORDS.test(sentence) ? 2 : 3;
 }
 
-function shorten(sentence: string): string {
+function shorten(sentence: string, tier: 1 | 2 | 3): string {
 	const flat = sentence.replace(/\s+/g, " ");
-	return flat.length <= MAX_REQUIREMENT_CHARS ? flat : `${flat.slice(0, MAX_REQUIREMENT_CHARS - 1)}…`;
+	const max = tier === 1 ? MAX_NUMERIC_REQUIREMENT_CHARS : MAX_REQUIREMENT_CHARS;
+	return flat.length <= max ? flat : `${flat.slice(0, max - 1)}…`;
 }
 
 /**
@@ -72,7 +75,7 @@ export function extractRequirements(prompt: string, limit = FINISH_CHECK_MAX_REQ
 	for (const sentence of splitSentences(prompt)) {
 		const tier = requirementTier(sentence);
 		if (tier === undefined) continue;
-		const item = shorten(sentence);
+		const item = shorten(sentence, tier);
 		const key = item.toLowerCase();
 		if (seen.has(key)) continue;
 		seen.add(key);
