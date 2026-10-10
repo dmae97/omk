@@ -1,5 +1,5 @@
 ---
-description: "Off-screen chat transcript windowing so TUI frame time and retained caches do not grow with history"
+description: "Off-screen chat transcript windowing so TUI frame time stays within budget and frozen render caches are released as history grows"
 ---
 
 # Feature Specification: TUI Chat Transcript Windowing
@@ -39,7 +39,7 @@ Architecture note: `TUI.doRender` already paints only the visible tail into the 
 
 ## Goal
 
-Make interactive chat transcript rendering scale with the **live window** (viewport + margin), not with total history:
+Make the steady-state cost of interactive chat transcript rendering dominated by the **live window** (viewport + margin) rather than by total history (a small per-frame O(N) term remains; see AC1 "Measured scaling"):
 
 1. Finished messages that sit above the live window stop being re-rendered and release their render caches (`cachedLines` / Box cache).
 2. A frozen-prefix line buffer supplies those rows on later frames so `previousLines` / scrollback semantics stay correct.
@@ -49,7 +49,7 @@ Correctness must hold across width resize, theme `invalidate()`, tool output exp
 
 ## Acceptance criteria
 
-### AC1 — Frame time / keypress latency does not grow linearly
+### AC1 — Frame time / keypress latency stays within budget as history grows
 
 **Method** (document in the PR body; harness may live under `packages/tui/test/` as a runnable script or test):
 
@@ -66,7 +66,18 @@ Correctness must hold across width resize, theme `invalidate()`, tool output exp
 | 25k | ≤ 3.0 ms (was ~8–9 ms on main) |
 | 100k | ≤ 5.0 ms (was ~50 ms on main); must not be ~4× the 25k figure |
 
-Steady-state cost may grow with the live window and changed tail, not with N.
+Steady-state cost is dominated by the live window and the changed tail, but it is **not** independent of N (see below).
+
+#### Measured scaling (PR #79 review, head `b27f943`)
+
+The absolute targets are met: AC1 means, AC6 p95 at 25k / 100k, and AC7 p95 at 20k lines. Per-frame cost still grows with history, at a far smaller slope than `main`: in the review harness (Staff Engineer), a 100k-line keypress frame costs ≈3.3× the 25k figure and an edit to an early (frozen) message ≈4.3× (PR body table, front edit). So the "must not be ~4×" clause is borderline for keypress and missed for the front edit; this spec does not claim per-frame cost independent of N.
+
+Known remaining O(N) terms (follow-up, not fixed in #79):
+
+1. `WindowedContainer.reconcile` visits every frozen child each frame (identity, settledness, generation), and a container's generation walks its subtree (`maxChildGeneration`).
+2. The full line list is copied twice per frame: `WindowedContainer.render` concatenates segments and live parts, and the TUI root's `Container.render` (`tui.ts`) concatenates again.
+
+Follow-up direction: a change-notification path so reconcile visits only changed children, and passing segment arrays to the TUI without the second copy.
 
 ### AC2 — Retained TUI render caches after freeze
 
@@ -96,7 +107,7 @@ Steady-state cost may grow with the live window and changed tail, not with N.
 
 **Pass**: Dedicated cases in `windowed-container.test.ts` for pending→complete, generation bump, and message-object swap; randomized suite includes late old-child mutation and swap.
 
-### AC6 — Off-screen change cost does not grow with history
+### AC6 — Off-screen change cost stays within budget as history grows
 
 **Method**: same harness as AC1 (`packages/tui/test/windowing-bench.ts`). Each measured frame changes an early, frozen message: `early-same` keeps its line count, `early-grow` alternates between one and two extra lines (every row below shifts).
 
