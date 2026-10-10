@@ -66,21 +66,32 @@ function renderGeneration(component: Component): number {
 	return 0;
 }
 
+/** Contiguous settled children whose lines are reused until a child changes. */
+type FrozenSegment = {
+	from: number;
+	to: number;
+	lines: string[];
+	lineCounts: number[];
+	generations: number[];
+};
+
 /**
- * Container that freezes a leading prefix of settled children into a line buffer
- * once the live tail exceeds a line budget. Freezing stops at the first
- * unsettled child. Frozen children are not re-rendered and have their render
- * caches released. Width changes, invalidate(), an unsettled frozen child, or a
- * generation bump on a frozen child thaw the prefix.
+ * Container that freezes settled child *runs* (segments) above the live-line
+ * budget into line buffers, including settled runs that sit *after* unsettled
+ * children. Unsettled children always re-render. A generation bump updates
+ * only that child inside its segment (no full thaw). Full thaw is reserved
+ * for width resize and invalidate().
+ *
+ * Trade-off: freeze still calls `releaseRenderCache`, so a mutated frozen
+ * child re-renders from source once; siblings in other segments keep their
+ * stored lines. Segment line buffers are the retained display for frozen
+ * content (AC2: component caches cleared).
  */
 export class WindowedContainer extends Container {
-	private frozenLines: string[] = [];
-	private frozenChildCount = 0;
+	private segments: FrozenSegment[] = [];
 	private frozenWidth = -1;
-	private frozenGenerations: number[] = [];
 	private liveLineBudget = 120;
 
-	/** Rows of still-rendered (unfrozen) content to keep at the tail. */
 	setLiveLineBudget(lines: number): void {
 		this.liveLineBudget = Math.max(1, Math.floor(lines));
 	}
@@ -89,21 +100,35 @@ export class WindowedContainer extends Container {
 		return this.liveLineBudget;
 	}
 
-	/** How many leading children are currently represented only by frozenLines. */
 	getFrozenChildCount(): number {
-		return this.frozenChildCount;
+		let n = 0;
+		for (const seg of this.segments) n += seg.to - seg.from;
+		return n;
 	}
 
 	getFrozenLineCount(): number {
-		return this.frozenLines.length;
+		let n = 0;
+		for (const seg of this.segments) n += seg.lines.length;
+		return n;
+	}
+
+	/** Test/diagnostics: number of frozen settled runs. */
+	getFrozenSegmentCount(): number {
+		return this.segments.length;
+	}
+
+	/** Test/diagnostics: frozen child index ranges [from, to). */
+	getFrozenRanges(): ReadonlyArray<{ from: number; to: number }> {
+		return this.segments.map((seg) => ({ from: seg.from, to: seg.to }));
 	}
 
 	override removeChild(component: Component): void {
 		const index = this.children.indexOf(component);
-		if (index !== -1 && index < this.frozenChildCount) {
-			this.thaw();
+		if (index !== -1 && this.segmentCovering(index)) {
+			this.dropSegmentsOverlapping(index, index + 1);
 		}
 		super.removeChild(component);
+		this.reindexSegmentsAfterRemoval(index);
 	}
 
 	override clear(): void {
@@ -116,69 +141,168 @@ export class WindowedContainer extends Container {
 		super.invalidate();
 	}
 
-	/** Drop the frozen prefix and keep all children live. */
+	/** Full thaw — resize / invalidate only. */
 	thaw(): void {
-		this.frozenLines = [];
-		this.frozenChildCount = 0;
+		this.segments = [];
 		this.frozenWidth = -1;
-		this.frozenGenerations = [];
 	}
 
-	/** Thaw when a frozen child is no longer settled or its generation moved. */
-	private thawIfFrozenStale(): void {
-		for (let i = 0; i < this.frozenChildCount; i++) {
-			const child = this.children[i];
-			if (!isRenderSettled(child) || renderGeneration(child) !== this.frozenGenerations[i]) {
-				this.thaw();
-				return;
-			}
+	private segmentCovering(childIndex: number): FrozenSegment | undefined {
+		for (const seg of this.segments) {
+			if (childIndex >= seg.from && childIndex < seg.to) return seg;
 		}
+		return undefined;
+	}
+
+	private dropSegmentsOverlapping(from: number, to: number): void {
+		this.segments = this.segments.filter((seg) => seg.to <= from || seg.from >= to);
+	}
+
+	private reindexSegmentsAfterRemoval(removed: number): void {
+		if (removed < 0) return;
+		const next: FrozenSegment[] = [];
+		for (const seg of this.segments) {
+			if (seg.to <= removed) {
+				next.push(seg);
+			} else if (seg.from > removed) {
+				next.push({
+					...seg,
+					from: seg.from - 1,
+					to: seg.to - 1,
+				});
+			}
+			// Segment that contained the removed child was already dropped.
+		}
+		this.segments = next;
+	}
+
+	/**
+	 * Per-segment reconcile: drop if any child unsettled; otherwise splice
+	 * freshly rendered lines for generation-bumped children only.
+	 */
+	private reconcileSegments(width: number): void {
+		const next: FrozenSegment[] = [];
+		for (const seg of this.segments) {
+			if (seg.to > this.children.length) continue;
+
+			let unsettled = false;
+			const dirty: number[] = [];
+			for (let i = 0; i < seg.to - seg.from; i++) {
+				const child = this.children[seg.from + i];
+				if (!isRenderSettled(child)) {
+					unsettled = true;
+					break;
+				}
+				if (renderGeneration(child) !== seg.generations[i]) dirty.push(i);
+			}
+			if (unsettled) continue;
+			if (dirty.length === 0) {
+				next.push(seg);
+				continue;
+			}
+
+			const parts: string[][] = [];
+			const newCounts = seg.lineCounts.slice();
+			const newGens = seg.generations.slice();
+			let offset = 0;
+			for (let i = 0; i < seg.to - seg.from; i++) {
+				const prevCount = seg.lineCounts[i];
+				if (dirty.includes(i)) {
+					const fresh = this.children[seg.from + i].render(width);
+					parts.push(fresh);
+					newCounts[i] = fresh.length;
+					newGens[i] = renderGeneration(this.children[seg.from + i]);
+					releaseRenderCache(this.children[seg.from + i]);
+				} else {
+					parts.push(seg.lines.slice(offset, offset + prevCount));
+				}
+				offset += prevCount;
+			}
+			const lines: string[] = [];
+			for (const part of parts) {
+				for (const line of part) lines.push(line);
+			}
+			next.push({
+				from: seg.from,
+				to: seg.to,
+				lines,
+				lineCounts: newCounts,
+				generations: newGens,
+			});
+		}
+		this.segments = next;
 	}
 
 	override render(width: number): string[] {
-		if (width !== this.frozenWidth && this.frozenChildCount > 0) {
+		if (this.frozenWidth !== -1 && width !== this.frozenWidth) {
 			this.thaw();
-		} else if (this.frozenChildCount > 0) {
-			this.thawIfFrozenStale();
+		} else if (this.segments.length > 0) {
+			this.reconcileSegments(width);
 		}
 
-		const live: string[] = [];
-		const childLineCounts: number[] = [];
-		for (let i = this.frozenChildCount; i < this.children.length; i++) {
-			const childLines = this.children[i].render(width);
-			childLineCounts.push(childLines.length);
-			for (const line of childLines) {
-				live.push(line);
+		const n = this.children.length;
+		const childLines: (string[] | undefined)[] = new Array(n);
+
+		for (const seg of this.segments) {
+			let offset = 0;
+			for (let j = 0; j < seg.to - seg.from; j++) {
+				const count = seg.lineCounts[j];
+				childLines[seg.from + j] = seg.lines.slice(offset, offset + count);
+				offset += count;
 			}
 		}
 
-		while (
-			this.frozenChildCount < this.children.length - 1 &&
-			live.length > this.liveLineBudget &&
-			childLineCounts.length > 0
-		) {
-			const child = this.children[this.frozenChildCount];
-			// Never freeze past (or including) an unsettled child — pending tools /
-			// streaming assistants must stay live until they settle.
-			if (!isRenderSettled(child)) {
-				break;
+		for (let i = 0; i < n; i++) {
+			if (!childLines[i]) {
+				childLines[i] = this.children[i].render(width);
 			}
-			const count = childLineCounts[0];
-			if (live.length - count < 1) break;
-			const peeled = live.splice(0, count);
-			for (const line of peeled) {
-				this.frozenLines.push(line);
-			}
-			childLineCounts.shift();
-			this.frozenGenerations.push(renderGeneration(child));
-			releaseRenderCache(child);
-			this.frozenChildCount += 1;
 		}
 
+		let acc = 0;
+		let liveTailStart = n;
+		for (let i = n - 1; i >= 0; i--) {
+			acc += childLines[i]!.length;
+			liveTailStart = i;
+			if (acc >= this.liveLineBudget) break;
+		}
+
+		// Freeze maximal settled runs in [0, liveTailStart), including after gaps.
+		const newSegments: FrozenSegment[] = [];
+		let i = 0;
+		while (i < liveTailStart) {
+			if (!isRenderSettled(this.children[i])) {
+				i += 1;
+				continue;
+			}
+			const from = i;
+			while (i < liveTailStart && isRenderSettled(this.children[i])) i += 1;
+			const to = i;
+
+			const existing = this.segments.find((s) => s.from === from && s.to === to);
+			if (existing) {
+				newSegments.push(existing);
+				continue;
+			}
+
+			const lineCounts: number[] = [];
+			const lines: string[] = [];
+			const generations: number[] = [];
+			for (let j = from; j < to; j++) {
+				const linesJ = childLines[j]!;
+				lineCounts.push(linesJ.length);
+				for (const line of linesJ) lines.push(line);
+				generations.push(renderGeneration(this.children[j]));
+				releaseRenderCache(this.children[j]);
+			}
+			newSegments.push({ from, to, lines, lineCounts, generations });
+		}
+		this.segments = newSegments;
 		this.frozenWidth = width;
-		if (this.frozenLines.length === 0) {
-			return live;
+
+		const out: string[] = [];
+		for (let c = 0; c < n; c++) {
+			for (const line of childLines[c]!) out.push(line);
 		}
-		return this.frozenLines.concat(live);
+		return out;
 	}
 }
