@@ -257,14 +257,11 @@ export class Container implements Component {
 	}
 
 	render(width: number): string[] {
-		const lines: string[] = [];
-		for (const child of this.children) {
-			const childLines = child.render(width);
-			for (const line of childLines) {
-				lines.push(line);
-			}
-		}
-		return lines;
+		const parts: string[][] = [];
+		for (const child of this.children) parts.push(child.render(width));
+		// Always a fresh array (callers mutate it). Native concat bulk-copies large
+		// children such as a windowed transcript instead of pushing row by row.
+		return parts.length < 8192 ? ([] as string[]).concat(...parts) : parts.flat();
 	}
 }
 
@@ -1054,6 +1051,9 @@ export class TUI extends Container {
 	}
 
 	private expandLastChangedForKittyImages(firstChanged: number, lastChanged: number): number {
+		// previousKittyImageIds is the id set of exactly these previousLines: when it
+		// is empty no row can match, so skip the O(history) scan.
+		if (this.previousKittyImageIds.size === 0) return lastChanged;
 		let expandedLastChanged = lastChanged;
 		for (let i = firstChanged; i < this.previousLines.length; i++) {
 			if (extractKittyImageIds(this.previousLines[i]).length > 0) {
@@ -1287,18 +1287,24 @@ export class TUI extends Container {
 		}
 
 		// Find first and last changed lines
+		// Scan inward from both ends: unchanged rows compare by reference, and a
+		// change far above the viewport (which shifts every row below it) no longer
+		// costs a content comparison per history row.
 		let firstChanged = -1;
 		let lastChanged = -1;
 		const maxLines = Math.max(newLines.length, this.previousLines.length);
+		const rowDiffers = (i: number): boolean =>
+			(i < this.previousLines.length ? this.previousLines[i] : "") !== (i < newLines.length ? newLines[i] : "");
 		for (let i = 0; i < maxLines; i++) {
-			const oldLine = i < this.previousLines.length ? this.previousLines[i] : "";
-			const newLine = i < newLines.length ? newLines[i] : "";
-
-			if (oldLine !== newLine) {
-				if (firstChanged === -1) {
-					firstChanged = i;
-				}
+			if (rowDiffers(i)) {
+				firstChanged = i;
+				break;
+			}
+		}
+		for (let i = maxLines - 1; firstChanged !== -1 && i >= firstChanged; i--) {
+			if (rowDiffers(i)) {
 				lastChanged = i;
+				break;
 			}
 		}
 		if (firstChanged !== -1) {

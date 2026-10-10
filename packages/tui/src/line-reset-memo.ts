@@ -29,34 +29,66 @@ export function extractKittyImageIds(line: string): readonly number[] {
 
 /**
  * Per-row memo for line resets (normalization + SEGMENT_RESET) and Kitty image IDs.
- * Rows whose raw text equals the previous frame's raw text at the same index reuse
- * the previous output string and IDs. Unchanged component caches usually compare by
- * reference, so the renderer's diff stays on the cheap reference-equality path.
+ *
+ * A row reuses the previous frame's output when its raw text equals the previous
+ * raw row at the same index, or at the same distance from the end. The second
+ * candidate covers a block of rows inserted or removed above (an off-screen
+ * message growing by a line shifts every row below it), so one early change no
+ * longer re-normalizes the whole transcript. Output depends only on the raw
+ * text, so reuse on equal text is always exact. Unchanged component caches
+ * usually compare by reference, keeping the renderer's diff on the cheap path.
  */
 export class LineResetMemo {
 	private raw: string[] = [];
 	private out: string[] = [];
-	private ids: (readonly number[])[] = [];
+	/** Per-row Kitty IDs, or null when no row of the frame carries any (the common case). */
+	private ids: (readonly number[])[] | null = null;
+	/** Raw buffer from two frames ago, refilled instead of reallocated. */
+	private spareRaw: string[] = [];
 	/** Kitty image IDs present in the most recent `apply` result. */
 	kittyImageIds = new Set<number>();
 
 	/** Normalizes `lines` in place (image lines untouched) and returns it. */
 	apply(lines: string[]): string[] {
-		const raw = lines.slice();
-		const ids: (readonly number[])[] = new Array(lines.length);
-		const kittyImageIds = new Set<number>();
-		for (let i = 0; i < lines.length; i++) {
+		const count = lines.length;
+		const raw = this.spareRaw;
+		raw.length = count;
+		const previousRaw = this.raw;
+		const previousOut = this.out;
+		const previousIds = this.ids;
+		const previousLength = previousRaw.length;
+		const shift = previousLength - count;
+		let ids: (readonly number[])[] | null = null;
+		for (let i = 0; i < count; i++) {
 			const line = lines[i];
-			if (i < this.raw.length && this.raw[i] === line) {
-				lines[i] = this.out[i];
-				ids[i] = this.ids[i];
+			raw[i] = line;
+			let from = -1;
+			if (i < previousLength && previousRaw[i] === line) {
+				from = i;
+			} else if (shift !== 0) {
+				const aligned = i + shift;
+				if (aligned >= 0 && aligned < previousLength && previousRaw[aligned] === line) from = aligned;
+			}
+			let rowIds: readonly number[];
+			if (from !== -1) {
+				lines[i] = previousOut[from];
+				if (previousIds === null) continue;
+				rowIds = previousIds[from];
 			} else {
 				const output = isImageLine(line) ? line : normalizeTerminalOutput(line) + SEGMENT_RESET;
 				lines[i] = output;
-				ids[i] = extractKittyImageIds(output);
+				rowIds = extractKittyImageIds(output);
 			}
-			for (const id of ids[i]) kittyImageIds.add(id);
+			if (rowIds.length > 0) {
+				ids ??= new Array<readonly number[]>(count).fill(NO_IDS);
+				ids[i] = rowIds;
+			}
 		}
+		const kittyImageIds = new Set<number>();
+		if (ids !== null) {
+			for (const rowIds of ids) for (const id of rowIds) kittyImageIds.add(id);
+		}
+		this.spareRaw = previousRaw;
 		this.raw = raw;
 		this.out = lines;
 		this.ids = ids;
