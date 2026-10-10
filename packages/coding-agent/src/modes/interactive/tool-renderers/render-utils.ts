@@ -1,0 +1,60 @@
+import type { ImageContent, TextContent } from "omk-ai";
+import { getCapabilities, getImageDimensions, hyperlink, imageFallback } from "omk-tui";
+import { shortenPath } from "../../../core/tools/render-utils.ts";
+import { stripAnsi } from "../../../utils/ansi.ts";
+import { sanitizeBinaryOutput } from "../../../utils/shell.ts";
+import { terminalFileUrl } from "../../../utils/terminal-links.ts";
+import type { Theme } from "../theme/theme.ts";
+
+export function linkPath(styledText: string, rawPath: string, cwd: string): string {
+	if (!getCapabilities().hyperlinks) return styledText;
+	return hyperlink(styledText, terminalFileUrl(rawPath, cwd));
+}
+
+export function getTextOutput(
+	result: { content: Array<{ type: string; text?: string; data?: string; mimeType?: string }> } | undefined,
+	showImages: boolean,
+): string {
+	if (!result) return "";
+
+	const textBlocks = result.content.filter((c) => c.type === "text");
+	const imageBlocks = result.content.filter((c) => c.type === "image");
+
+	let output = textBlocks.map((c) => sanitizeBinaryOutput(stripAnsi(c.text || "")).replace(/\r/g, "")).join("\n");
+
+	const caps = getCapabilities();
+	if (imageBlocks.length > 0 && (!caps.images || !showImages)) {
+		const imageIndicators = imageBlocks
+			.map((img) => {
+				const mimeType = img.mimeType ?? "image/unknown";
+				const dims =
+					img.data && img.mimeType ? (getImageDimensions(img.data, img.mimeType) ?? undefined) : undefined;
+				return imageFallback(mimeType, dims);
+			})
+			.join("\n");
+		output = output ? `${output}\n${imageIndicators}` : imageIndicators;
+	}
+
+	return output;
+}
+
+export type ToolRenderResultLike<TDetails> = {
+	content: (TextContent | ImageContent)[];
+	details: TDetails;
+};
+
+export function invalidArgText(theme: Theme): string {
+	return theme.fg("error", "[invalid arg]");
+}
+
+export function renderToolPath(
+	rawPath: string | null,
+	theme: Theme,
+	cwd: string,
+	options?: { emptyFallback?: string },
+): string {
+	if (rawPath === null) return invalidArgText(theme);
+	const value = rawPath || options?.emptyFallback;
+	if (!value) return theme.fg("toolOutput", "...");
+	return linkPath(theme.fg("accent", shortenPath(value)), value, cwd);
+}

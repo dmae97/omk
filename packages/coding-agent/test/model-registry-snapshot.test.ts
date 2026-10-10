@@ -64,6 +64,14 @@ describe("model-registry models.json snapshots", () => {
 		expect(warnSpy).not.toHaveBeenCalled();
 	});
 
+	it("parses an unchanged models.json once per load", () => {
+		createRegistry().getAll();
+		const content = readFileSync(join(tempDir, "models.json"), "utf8");
+		const parse = vi.spyOn(JSON, "parse");
+		createRegistry().getAll();
+		expect(parse.mock.calls.filter(([text]) => text === content)).toHaveLength(1);
+	});
+
 	it("keeps the snapshot directory bounded", () => {
 		for (let round = 0; round < 13; round++) {
 			writeFileSync(join(tempDir, "models.json"), modelsConfig([`model-${round}`]));
@@ -71,5 +79,12 @@ describe("model-registry models.json snapshots", () => {
 		}
 		const files = readdirSync(join(tempDir, "models.json.snapshots"));
 		expect(files.length).toBeLessThanOrEqual(10);
+	});
+
+	it("loads models.json without touching the disk when created read-only", () => {
+		const registry = ModelRegistry.createReadOnly(AuthStorage.inMemory(), join(tempDir, "models.json"));
+		expect(registry.find("snapshot-test-provider", "model-b")).toBeDefined();
+		registry.refresh();
+		expect(readdirSync(tempDir)).toEqual(["models.json"]);
 	});
 });

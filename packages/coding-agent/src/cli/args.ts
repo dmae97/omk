@@ -58,6 +58,22 @@ export function isValidThinkingLevel(level: string): level is ThinkingLevel {
 	return VALID_THINKING_LEVELS.includes(level as ThinkingLevel);
 }
 
+/** One long-option token (`--name` / `--name=value`); may be an extension flag. */
+const LONG_OPTION = /^--[^\s=-][^\s=]*(=[\s\S]*)?$/;
+
+/**
+ * Whether the token after `--print` is its inline prompt. Prose may open with a
+ * dash ("- step", "--not-a-flag text"), so a dash-led token that contains
+ * whitespace is the prompt unless it is a long-option token (`--name=a b`).
+ * A one-word dash token (`-x`, `-foo`) stays an option, so typos still error;
+ * `omk -p -- -foo` forces it as text. `---` front matter is always a prompt.
+ */
+function isInlinePrintPrompt(next: string | undefined): next is string {
+	if (next === undefined || next === "--" || next === "-" || next.startsWith("@")) return false;
+	if (!next.startsWith("-") || next.startsWith("---")) return true;
+	return /\s/.test(next) && !LONG_OPTION.test(next);
+}
+
 export function parseArgs(args: string[]): Args {
 	const result: Args = {
 		messages: [],
@@ -156,9 +172,7 @@ export function parseArgs(args: string[]): Args {
 		} else if (arg === "--print" || arg === "-p") {
 			result.print = true;
 			const next = args[i + 1];
-			// `--` belongs to the terminator branch above, so leave it for the loop.
-			const inlineOk = next !== undefined && next !== "--" && !next.startsWith("@");
-			if (inlineOk && (!next.startsWith("-") || next.startsWith("---"))) {
+			if (isInlinePrintPrompt(next)) {
 				result.messages.push(next);
 				i++;
 			}

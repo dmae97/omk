@@ -59,6 +59,19 @@ export const PLACEHOLDER_SYMBOLS = new Set([
  */
 export const CLAIMS = [
 	{
+		claim: "omk doctor (read-only first-run environment check)",
+		readmeMarker: /`omk doctor`/,
+		docs: "packages/coding-agent/docs/sandbox-setup.md",
+		evidence: [
+			{
+				file: "packages/coding-agent/src/commands/onboard-doctor-cli.ts",
+				symbols: ["runOnboardDoctorCli", "runCheckDag"],
+			},
+			{ file: "packages/coding-agent/src/core/onboarding/check-dag.ts", symbols: ["runCheckDag", "validateCheckDag"] },
+			{ file: "packages/coding-agent/src/core/sandbox/linux-probe.ts", symbols: ["probeBubblewrap"] },
+		],
+	},
+	{
 		claim: "MCP (runtime client, not just inventory)",
 		readmeMarker: /\bMCP\b/,
 		docs: "packages/coding-agent/docs/mcp.md",

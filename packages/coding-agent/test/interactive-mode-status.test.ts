@@ -323,6 +323,34 @@ describe("InteractiveMode termination rendering", () => {
 	});
 });
 
+describe("InteractiveMode status sidebar toggle", () => {
+	function toggleOn(columns: number, rows: number, pinned: boolean) {
+		const fakeThis = {
+			statusSidebarPinned: pinned,
+			ui: { terminal: { columns, rows }, requestRender: vi.fn() },
+			showStatus: vi.fn(),
+		};
+		const toggle = Reflect.get(InteractiveMode.prototype, "toggleStatusSidebar") as (this: typeof fakeThis) => void;
+		toggle.call(fakeThis);
+		return fakeThis;
+	}
+
+	test("pinning on a terminal too small for the rail explains why nothing appears", () => {
+		const narrow = toggleOn(110, 40, false);
+		expect(narrow.statusSidebarPinned).toBe(true);
+		expect(narrow.showStatus).toHaveBeenCalledWith("Status sidebar pinned; it shows at 120+ columns and 16+ rows.");
+		expect(narrow.ui.requestRender).toHaveBeenCalled();
+		expect(toggleOn(160, 12, false).showStatus).toHaveBeenCalledTimes(1);
+	});
+
+	test("pinning where the rail fits, or unpinning anywhere, stays quiet", () => {
+		expect(toggleOn(160, 40, false).showStatus).not.toHaveBeenCalled();
+		const unpinned = toggleOn(110, 40, true);
+		expect(unpinned.statusSidebarPinned).toBe(false);
+		expect(unpinned.showStatus).not.toHaveBeenCalled();
+	});
+});
+
 describe("InteractiveMode.showStatus", () => {
 	beforeAll(() => {
 		// showStatus uses the global theme instance

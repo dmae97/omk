@@ -1,7 +1,51 @@
 # 모델 목록·thinking 갱신 기록
 
-확인일: 2026-09-30. 생성기와 공급자 어댑터를 수정한 뒤 `npm run models:refresh`로
+확인일: 2026-10-09. 생성기와 공급자 어댑터를 수정한 뒤 `npm run models:refresh`로
 두 카탈로그를 재생성했다. 생성 파일을 손으로 수정하지 않았다.
+
+## 2026-10-09 갱신: Mistral Large 4와 OpenCode Zen
+
+[Mistral 공식 모델 카드](https://docs.mistral.ai/models/mistral-large-4-0)는 10월 6일 공개 프리뷰를
+발표했다. 요청 ID는 `mistral-large-4`다. `mistral-large-4-0`는 문서에 병기된 이름이며,
+그 이름을 쓰는 custom model도 같은 native reasoning 제어를 받는다.
+
+| route | context / output | thinking | 공개 가격, 1M tokens |
+| --- | --- | --- | --- |
+| `mistral/mistral-large-4` | 1,048,576 / 262,144 | `none`, `high` | input $0.68, output $2.09, cache read $0.07 |
+| `opencode/mistral-large-4` | 524,288 / 262,144 | `none`, `high`, Chat Completions | 같은 한시 할인 가격 |
+| `opencode/big-pickle` | 200,000 / 32,000, text only | effort 목록 미선언 | 무료 기간의 목록 가격 0 |
+
+Context와 출력 한도는 [models.dev](https://models.dev/api.json)의 해당 route 선언을 대조했다.
+Zen endpoint/가격은 [공식 Zen 문서](https://opencode.ai/docs/zen/)와 공개 모델 API를 확인했다.
+Mistral 가격은 [공식 가격표](https://docs.mistral.ai/inference/pricing)의 공개 프리뷰 할인 값으로,
+영구 가격이나 실제 계정의 청구액이 아니다.
+
+[공식 reasoning 계약](https://docs.mistral.ai/capabilities/reasoning)에 맞춰 native Large 4는
+기존 Magistral `prompt_mode` 대신 `reasoning_effort`를 쓴다. `none`은 최소 사고와 trace 생략이며
+추론 연산이 완전히 꺼진다는 뜻이 아니다. OMK 선택기는 `off/high`만 표시한다. native off는
+기존처럼 제어를 생략해 서버 기본값을 보존하고, Zen off는 `reasoning_effort: none`을 보낸다.
+기존 대형 Mistral 모듈의 reasoning 선택 책임만 작은 모듈로 옮겼으며, 크기 baseline은 늘리지 않았다.
+
+Big Pickle은 이미 카탈로그에 있어 그대로 유지했다. Zen은 무료 기간에 수집한 입력을 모델 개선에
+사용할 수 있다고 명시하므로 개인 정보나 비공개 코드를 보내지 않는다. 기본 모델과 인증은 변경하지 않는다.
+
+재생성 시 함께 발견된 native Sonnet/Haiku 5.5는 보류했다. 현재 어댑터는 새 adaptive/off/replay
+계약을 모두 구현하지 않아 카탈로그만 추가하면 실패하는 경로를 광고한다. 해당 native Messages/Bedrock
+route를 생성기에서 제외하며, OpenRouter의 정규화된 별도 전송 계약은 유지한다. 공급자 원문은
+[Sonnet 5.5](https://platform.claude.com/docs/en/models/sonnet-5-5/overview)와
+[Haiku 5.5](https://platform.claude.com/docs/en/models/haiku-5-5/overview)에서 확인했다.
+
+Together의 undated `DeepSeek-V4-Pro`는 갱신 목록에서 빠졌다. 실제 남은 `DeepSeek-V4-Pro-0813`에
+기존 toggle/effort 계약을 적용해 effort 지원이 조용히 사라지지 않도록 했다.
+[공식 quickstart](https://docs.together.ai/docs/deepseek-v4-quickstart)는 high/max와 toggle을 선언한다.
+이번에는 기존 high만 명시하는 보수적 선택기를 유지한다. 최신 목록에서 미선정된 ID는 폐기 확정이 아니다.
+
+검사는 공급자 추론 없이 요청 전 payload와 카탈로그를 대조한다. 생성 파일은 기존
+`npm run models:refresh`로만 갱신한다. 계정별 사용 가능 여부, 실제 추론 품질과 청구액은 미검증이다.
+
+검토한 재생성 결과는 코딩 route 1,905 → 1,932개(40 providers, 추가 43, 미선정 16,
+기존 메타데이터 변경 67)다. native Claude 5.5 보류 18개를 포함한 최초 생성 1,950개와 구분한다.
+이미지 목록은 57 → 61개(추가 4, 제거 0)이며 실제 이미지 생성은 하지 않았다.
 
 ## 2026-09-30 갱신: GPT-6.1 Sol·Codex GPT-6 계열
 

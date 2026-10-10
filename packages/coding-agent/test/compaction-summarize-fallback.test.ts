@@ -129,6 +129,44 @@ describe("summarizeWithFallback", () => {
 		expect(r.summary).toBe("session summary");
 	});
 
+	it("rescues a context-overflow refusal onto the trim without alwaysRescue", async () => {
+		// Threshold and manual compaction reach the deterministic trim here; without
+		// this class they would hard-fail while the transcript is over the window.
+		const r = await summarizeWithFallback({
+			preparation: makePreparation(),
+			primaryModel: makeModel("devin", "swe-2"),
+			sessionModel: makeModel("deepseek", "v4.1-flash"),
+			isAborted: () => false,
+			summarize: failingSummarize("prompt is too long: maximum context length is 300000 tokens"),
+		});
+		expect(isDeterministic(r)).toBe(true);
+	});
+
+	it("rescues the local over-capacity admission refusal", async () => {
+		const r = await summarizeWithFallback({
+			preparation: makePreparation(),
+			primaryModel: makeModel("devin", "swe-2"),
+			sessionModel: undefined,
+			isAborted: () => false,
+			summarize: failingSummarize(
+				"omk.request_admission:over_capacity; Prompt input exceeds the safe model context window (estimated=230559, limit=219416).",
+			),
+		});
+		expect(isDeterministic(r)).toBe(true);
+	});
+
+	it("still propagates a configuration-class admission refusal", async () => {
+		await expect(
+			summarizeWithFallback({
+				preparation: makePreparation(),
+				primaryModel: makeModel("devin", "swe-2"),
+				sessionModel: makeModel("deepseek", "v4.1-flash"),
+				isAborted: () => false,
+				summarize: failingSummarize("omk.request_admission:unknown_window; model has no context window"),
+			}),
+		).rejects.toThrow(/unknown_window/);
+	});
+
 	it("propagates aborts even with alwaysRescue", async () => {
 		await expect(
 			summarizeWithFallback({

@@ -1,4 +1,5 @@
 import { closeSync, constants, fstatSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { createConnection } from "node:net";
 import { resolveDurableFileIdentity } from "./durable-file-identity.ts";
 import { isRecord } from "./session-control-protocol.ts";
 
@@ -54,6 +55,56 @@ export function readControlEndpoint(sessionPath: string): SessionControlEndpoint
 
 export function publishControlEndpoint(endpoint: SessionControlEndpoint): void {
 	writeFileSync(controlEndpointPath(endpoint.sessionPath), JSON.stringify(endpoint), { flag: "wx", mode: 0o600 });
+}
+
+/** One bounded connect: enough to see a live peer, short enough not to stall startup. */
+function controlSocketReachable(socketPath: string, timeoutMs: number): Promise<boolean> {
+	return new Promise((resolve) => {
+		const socket = createConnection(socketPath);
+		const timer = setTimeout(() => {
+			socket.destroy();
+			resolve(false);
+		}, timeoutMs);
+		timer.unref?.();
+		socket.once("connect", () => {
+			clearTimeout(timer);
+			socket.destroy();
+			resolve(true);
+		});
+		socket.once("error", () => {
+			clearTimeout(timer);
+			resolve(false);
+		});
+	});
+}
+
+/**
+ * A session that died without close() leaves `.control.json` behind, and `wx`
+ * would lock out every later control lease for that session file. Reclaim the
+ * file only when it is unreadable or its socket refuses a real connection;
+ * a reachable peer means another live session owns this control lease.
+ */
+export async function publishFreshControlEndpoint(endpoint: SessionControlEndpoint): Promise<void> {
+	try {
+		publishControlEndpoint(endpoint);
+		return;
+	} catch (error) {
+		if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+	}
+	const path = controlEndpointPath(endpoint.sessionPath);
+	let stale = false;
+	try {
+		const existing = readControlEndpoint(endpoint.sessionPath);
+		stale = !(await controlSocketReachable(existing.socketPath, 500));
+	} catch {
+		stale = true;
+	}
+	if (stale) {
+		unlinkSync(path);
+		publishControlEndpoint(endpoint);
+		return;
+	}
+	throw new Error("session control already active for this session file");
 }
 
 export function removeControlEndpoint(endpoint: SessionControlEndpoint): void {

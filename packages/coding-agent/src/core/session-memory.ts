@@ -2,12 +2,15 @@ import type { Agent, AgentMessage } from "omk-agent-core";
 import { estimateProjectedContextTokens } from "./compaction/index.ts";
 import type { SystemPromptContextBudgetOptions } from "./context-budget-system-prompt.ts";
 import { createTokenCounterForMode } from "./context-budget-token-counter.ts";
+import { memoryContextTransform } from "./memory-context-transform.ts";
+import { memoryTokenCounter } from "./memory-token-counter.ts";
 import {
 	assertContextInputWithinCapacity,
 	computeHardPromptInputLimit,
 	estimateContextInputTokens,
 	PromptInputCapacityError,
 } from "./prompt-budget.ts";
+import { serializePromptToolSchemas } from "./prompt-tool-projection.ts";
 import { memoryContextPair } from "./verified-memory-context.ts";
 import type { MemoryAdmission } from "./verified-memory-record.ts";
 import { VerifiedMemoryStore } from "./verified-memory-store.ts";
@@ -28,8 +31,8 @@ export class SessionMemory {
 	private readonly options: () => SystemPromptContextBudgetOptions | undefined;
 	private readonly effectiveWindow: (messages: AgentMessage[], window: number) => number;
 	private readonly latestCompactionTimestamp: () => string | undefined;
-	private readonly original: Agent["transformContext"];
-	private readonly wrapped: NonNullable<Agent["transformContext"]>;
+	private readonly transform: ReturnType<typeof memoryContextTransform>;
+	private closed = false;
 	private currentStatus: SessionMemoryStatus = { state: "disabled", eligible: 0, omitted: 0 };
 
 	constructor(
@@ -44,19 +47,15 @@ export class SessionMemory {
 		this.agent = agent;
 		this.cwd = cwd;
 		this.options = options;
-		this.original = agent.transformContext;
-		this.wrapped = async (messages, signal) => {
-			const transformed = this.original ? await this.original(messages, signal) : messages;
-			signal?.throwIfAborted();
-			return this.enrich(transformed);
-		};
-		agent.transformContext = this.wrapped;
+		this.transform = memoryContextTransform(agent.transformContext, (messages) => this.enrich(messages));
+		agent.transformContext = this.transform.transform;
 	}
 
 	get status(): SessionMemoryStatus {
 		return Object.freeze({ ...this.currentStatus });
 	}
 	private getStore(): VerifiedMemoryStore {
+		if (this.closed) throw new Error("Session memory is closed");
 		this.store ??= new VerifiedMemoryStore(this.cwd);
 		return this.store;
 	}
@@ -67,7 +66,12 @@ export class SessionMemory {
 		this.getStore().forget(id);
 	}
 	close(): void {
-		if (this.agent.transformContext === this.wrapped) this.agent.transformContext = this.original;
+		if (this.closed) return;
+		this.closed = true;
+		const previous = this.transform.close();
+		if (this.agent.transformContext === this.transform.transform) this.agent.transformContext = previous;
+		this.store = undefined;
+		this.currentStatus = { state: "disabled", eligible: 0, omitted: 0 };
 	}
 
 	private enrich(messages: AgentMessage[]): AgentMessage[] {
@@ -76,7 +80,12 @@ export class SessionMemory {
 		const options = this.options();
 		const model = this.agent.state.model;
 		if (!options || !model || !Number.isSafeInteger(model.contextWindow) || model.contextWindow <= 0) return messages;
-		const counter = options.tokenCounter ?? createTokenCounterForMode(options.tokenizerMode ?? "fallback");
+		const counter = memoryTokenCounter(
+			options.tokenCounter ?? createTokenCounterForMode(options.tokenizerMode ?? "fallback"),
+			model.id,
+			this.agent.state.systemPrompt,
+			serializePromptToolSchemas(this.agent.state.tools),
+		);
 		const limit = computeHardPromptInputLimit({
 			contextWindow: this.effectiveWindow(messages, model.contextWindow),
 			configuredMaxPromptTokens: options.maxPromptTokens,
@@ -95,8 +104,18 @@ export class SessionMemory {
 			const { records, omitted } = this.getStore().retrieve();
 			this.currentStatus = { state: "empty", eligible: records.length, omitted };
 			if (records.length === 0) return messages;
-			const budgetTokens = Math.max(0, Math.min(2048, limit.maxInputTokens - before.totalTokens - 512));
-			const projection = memoryContextPair(records, budgetTokens, options.queryContext ?? "", counter, model.id);
+			const mode = process.env.OMK_MEMORY_SELECTION ?? "legacy";
+			if (mode !== "legacy" && mode !== "v2") throw new RangeError("memory.invalid_selection_mode");
+			const budgetTokens = Math.max(
+				0,
+				Math.min(2048, limit.maxInputTokens - before.totalTokens - (mode === "legacy" ? 512 : 0)),
+			);
+			const projection = memoryContextPair(records, budgetTokens, options.queryContext ?? "", counter, model.id, {
+				mode,
+				fits: (candidate) =>
+					estimateContextInputTokens({ ...input, messages: [...messages, ...candidate] }).totalTokens <=
+					limit.maxInputTokens,
+			});
 			const pair = projection.messages;
 			const enriched = [...messages, ...pair];
 			// Price the host tool-pair envelope too; optional evidence never evicts the real prompt.

@@ -3,9 +3,10 @@ import type { AgentSession } from "../../../core/agent-session.ts";
 import { getHeadroomRuntimeStatus } from "../../../core/context-budget-headroom.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
 import { loadMcpInventory, type McpServerEntry } from "../../../core/mcp-inventory.ts";
-import { evaluatePiPackageIntake } from "../../../core/pi-package-intake.ts";
 import type { SessionManager } from "../../../core/session-manager.ts";
 import { getCurrentTodoState } from "../../../core/todo-runtime-state.ts";
+import { readControlPlaneSignals } from "../control-plane-signals.ts";
+import { buildControlPlaneViewModel } from "../control-plane-view-model.ts";
 import type { ControlPanelStatusSnapshot } from "./control-panel-layout.ts";
 import { formatCwdForFooter } from "./footer.ts";
 
@@ -120,36 +121,28 @@ export function createControlPanelStatusSnapshot(
 	sessionManager: SessionManager,
 	footerData?: ReadonlyFooterDataProvider,
 ): ControlPanelStatusSnapshot {
-	const contextUsage = session.getContextUsage();
-	const contextWindow = contextUsage?.contextWindow ?? session.state.model?.contextWindow ?? 0;
+	// One read of the live signals per snapshot: context usage walks the session branch, so the
+	// CTX fields and the view model share this read instead of calling getContextUsage() again.
+	const signals = readControlPlaneSignals(session, footerData, session.state.model?.contextWindow ?? 0);
 	const mcpInventory = loadMcpInventory(sessionManager.getCwd());
 	const loadedSkills = session.resourceLoader.getSkills().skills;
-	const packageIntake = evaluatePiPackageIntake().summary;
 	const ansiColorState = process.env.NO_COLOR ? "off" : "on";
 	const cwdLabel = formatCwdForFooter(sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
 	return {
 		modelId: session.state.model?.id,
 		modelProvider: session.state.model?.provider,
 		thinkingLevel: session.state.thinkingLevel ?? "off",
-		contextPercent: contextUsage?.percent ?? null,
-		contextWindowTokens: contextWindow,
-		contextTokens: contextUsage?.tokens ?? null,
+		contextPercent: signals.contextPercent ?? null,
+		contextWindowTokens: signals.contextWindowTokens ?? 0,
 		headroomStatus: formatHeadroomStatusLabel(),
 		optimizerPolicy: getHeadroomRuntimeStatus().selector,
 		mcpCount: countStableMcpServers(mcpInventory.entries),
 		skillCount: countRoutableNonHubSkills(loadedSkills),
-		packageIntake,
 		cwdLabel,
 		gitBranch: footerData?.getGitBranch(),
 		todoState: getCurrentTodoState(),
-		runtimeState: "ready",
-		routeState: "active",
-		evidenceState: "tracking",
-		controlState: "ready",
-		dagOrchestrationState: "DAG:omk-parallel-orchestrator",
 		ansiColorState,
-		startupState: "linked",
-		linkState: "ready",
-		sidebarState: "pinned",
+		// Authority state is read from the live session each render, never asserted here.
+		controlPlane: buildControlPlaneViewModel(signals),
 	};
 }

@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import { Markdown, type MarkdownTheme } from "omk-tui";
 import { selectConfig } from "./cli/config-selector.ts";
+import { CONFIG_COMMAND, type PackageCommand, resolvePackageCommand } from "./cli/package-commands.ts";
 import {
 	APP_NAME,
 	detectInstallMethod,
@@ -21,7 +22,7 @@ import {
 	quarantineWindowsNativeDependencies,
 } from "./utils/windows-self-update.ts";
 
-export type PackageCommand = "install" | "remove" | "update" | "list";
+export type { PackageCommand };
 
 type UpdateTarget = { type: "all" } | { type: "self" } | { type: "extensions"; source?: string };
 
@@ -146,12 +147,7 @@ List installed packages from user and project settings.
 
 function parsePackageCommand(args: string[]): PackageCommandOptions | undefined {
 	const [rawCommand, ...rest] = args;
-	let command: PackageCommand | undefined;
-	if (rawCommand === "uninstall") {
-		command = "remove";
-	} else if (rawCommand === "install" || rawCommand === "remove" || rawCommand === "update" || rawCommand === "list") {
-		command = rawCommand;
-	}
+	const command = resolvePackageCommand(rawCommand);
 	if (!command) {
 		return undefined;
 	}
@@ -390,7 +386,7 @@ function prepareWindowsNpmSelfUpdate(): void {
 }
 
 export async function handleConfigCommand(args: string[]): Promise<boolean> {
-	if (args[0] !== "config") {
+	if (args[0] !== CONFIG_COMMAND) {
 		return false;
 	}
 

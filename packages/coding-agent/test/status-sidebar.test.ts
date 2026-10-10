@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import fc from "fast-check";
 import { visibleWidth } from "omk-tui";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpServerStatus } from "../src/core/mcp/manager.ts";
@@ -12,6 +13,7 @@ import {
 	StatusSidebarComponent,
 	statusSidebarWidth,
 } from "../src/modes/interactive/components/status-sidebar.ts";
+import type { TerminationSignal } from "../src/modes/interactive/control-plane-view-model.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
@@ -104,6 +106,13 @@ function makeSession() {
 			> => ({ ok: false, error: "not configured in tests" }),
 		},
 		autoCompactionEnabled: true,
+		// Control-plane authority sources (idle defaults); authority-row tests override them per case.
+		isStreaming: false,
+		isCompacting: false,
+		isRetrying: false,
+		pendingMessageCount: 0,
+		lastTermination: undefined as TerminationSignal | undefined,
+		settingsManager: { getResourceGovernorSettings: () => ({}) },
 	};
 }
 
@@ -560,11 +569,11 @@ describe("StatusSidebarComponent (pinned opencode-style rail)", () => {
 			() => true,
 		);
 		const text = stripAnsi(sidebar.render(STATUS_SIDEBAR_WIDTH).join("\n"));
-		expect(text).toContain("+4 more");
+		expect(text).toContain("+6 more");
 		expect(text).toContain("12/12");
-		// Only the first 8 rows are rendered (default 32-row terminal).
-		expect(text).toContain("server-7");
-		expect(text).not.toContain("server-8");
+		// Only the first 6 rows are rendered (default 32-row terminal).
+		expect(text).toContain("server-5");
+		expect(text).not.toContain("server-6");
 	});
 
 	it("scales the rail width with the terminal (responsive, clamped)", () => {
@@ -577,8 +586,8 @@ describe("StatusSidebarComponent (pinned opencode-style rail)", () => {
 
 	it("lists more MCP servers on taller terminals", () => {
 		expect(mcpMaxRows(24)).toBe(4);
-		expect(mcpMaxRows(32)).toBe(8);
-		expect(mcpMaxRows(40)).toBe(16);
+		expect(mcpMaxRows(32)).toBe(6);
+		expect(mcpMaxRows(40)).toBe(14);
 		expect(mcpMaxRows(60)).toBe(18); // capped
 
 		mockInventory.entries = Array.from({ length: 12 }, (_, i) => entry(`server-${i}`));
@@ -589,7 +598,7 @@ describe("StatusSidebarComponent (pinned opencode-style rail)", () => {
 			() => 40,
 		);
 		const text = stripAnsi(tall.render(statusSidebarWidth(200)).join("\n"));
-		// 16 rows available → all 12 servers listed, no collapse line.
+		// 14 rows available → all 12 servers listed, no collapse line.
 		expect(text).toContain("server-11");
 		expect(text).not.toContain("more…");
 	});
@@ -679,5 +688,234 @@ describe("StatusSidebarComponent live MCP connectivity", () => {
 		);
 		sidebar.render(STATUS_SIDEBAR_WIDTH);
 		expect(checkHealth).not.toHaveBeenCalled();
+	});
+});
+
+const TOOL_FATAL: TerminationSignal = {
+	kind: "tool_fatal",
+	phase: "tool",
+	causeCode: "tool.fatal",
+	sideEffects: "possible",
+	retryable: false,
+	safeToAutoRetry: false,
+	nextAction: "Inspect ".repeat(25),
+};
+
+function renderRail(session: ReturnType<typeof makeSession>, width: number = STATUS_SIDEBAR_WIDTH): string[] {
+	return new StatusSidebarComponent(
+		() => session as never,
+		makeFooterData() as never,
+		() => true,
+	).render(width);
+}
+
+/** Plain text of the rail row carrying a 5-column label such as `"run  "`. */
+function railRow(lines: readonly string[], label: string): string | undefined {
+	return lines.map(stripAnsi).find((line) => line.startsWith(`│ ${label}`));
+}
+
+describe("StatusSidebarComponent authority rows (shared control-plane view model)", () => {
+	it("projects an idle run and the honest unverified verdict", () => {
+		const lines = renderRail(makeSession());
+		expect(railRow(lines, "run  ")).toContain("run  ✓ idle");
+		expect(railRow(lines, "vrfy ")).toContain("vrfy ? unverified");
+		expect(railRow(lines, "why  ")).toBeUndefined();
+	});
+
+	it("shows a streaming turn as running", () => {
+		const session = makeSession();
+		session.isStreaming = true;
+		expect(railRow(renderRail(session), "run  ")).toContain("run  ● running");
+	});
+
+	it.each([STATUS_SIDEBAR_WIDTH, STATUS_SIDEBAR_MAX_WIDTH])(
+		"carries the tool_fatal failure essentials within %i columns",
+		(width) => {
+			const session = makeSession();
+			session.lastTermination = TOOL_FATAL;
+			const lines = renderRail(session, width);
+			expect(TOOL_FATAL.nextAction).toHaveLength(200);
+			expect(railRow(lines, "run  ")).toContain("run  ! tool_fatal");
+			expect(railRow(lines, "why  ")).toContain("why  tool.fatal");
+			expect(railRow(lines, "rtry ")).toContain("rtry none · fx possible");
+			expect(railRow(lines, "next ")).toMatch(/^│ next Inspect .*… +│$/);
+			for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+		},
+	);
+
+	it.each([
+		{ percent: 42, glyph: "✓" },
+		{ percent: 75, glyph: "▲" },
+		{ percent: 95, glyph: "!" },
+	])("marks $percent% context with $glyph on the ctx row", ({ percent, glyph }) => {
+		const session = makeSession();
+		session.getContextUsage = () => ({ percent, contextWindow: 200000, tokens: percent * 2000 });
+		expect(railRow(renderRail(session), "ctx  ")).toContain(`ctx  ${glyph} ${percent.toFixed(1)}%/`);
+	});
+
+	it("never claims verification without evidence", () => {
+		const streaming = makeSession();
+		streaming.isStreaming = true;
+		const failed = makeSession();
+		failed.lastTermination = TOOL_FATAL;
+		for (const session of [makeSession(), streaming, failed]) {
+			const text = stripAnsi(renderRail(session).join("\n"));
+			expect(text.replaceAll("unverified", "")).not.toContain("verified");
+		}
+	});
+
+	it("yields MCP roster rows to the failure rows so the rail still fits the terminal", () => {
+		mockInventory.entries = Array.from({ length: 12 }, (_, i) => entry(`server-${i}`));
+		const failed = makeSession();
+		failed.lastTermination = TOOL_FATAL;
+		// Default 32-row terminal.
+		expect(renderRail(makeSession()).length).toBeLessThanOrEqual(32);
+		expect(renderRail(failed).length).toBeLessThanOrEqual(32);
+	});
+
+	it("renders journal-restored failure text as one terminal-safe row", () => {
+		const session = makeSession();
+		session.lastTermination = { ...TOOL_FATAL, nextAction: "Fix\nthe \u001b]52;c;cHduZWQ=\u0007tool" };
+		const lines = renderRail(session);
+		expect(lines.join("")).not.toContain("]52;");
+		expect(lines.some((line) => line.includes("\n"))).toBe(false);
+		expect(railRow(lines, "next ")).toContain("next Fix the tool");
+	});
+
+	it("floors the ctx percent and meter figure so neither reaches a threshold before the state", () => {
+		const session = makeSession();
+		session.getContextUsage = () => ({ percent: 69.96, contextWindow: 200000, tokens: 139920 });
+		const plain = renderRail(session).map(stripAnsi);
+		const ctxRow = plain.findIndex((line) => line.startsWith("│ ctx  "));
+		expect(plain[ctxRow]).toContain("ctx  ✓ 69.9%/");
+		expect(plain[ctxRow + 1]).toMatch(/ 69% +│$/);
+	});
+
+	it("floors the SYSTEM cpu figure and quota meters so no figure reaches its colour threshold early", async () => {
+		const session = makeSession();
+		session.state.model.provider = "anthropic";
+		session.modelRegistry.isUsingOAuthProvider = (provider) => provider === "anthropic";
+		const footer = makeFooterData();
+		footer.getCpuPercent = () => 69.96;
+		const requestRender = vi.fn();
+		const sidebar = new StatusSidebarComponent(
+			() => session as never,
+			footer as never,
+			() => true,
+			() => 32,
+			{
+				requestRender,
+				fetchSubscriptionUsage: async () => ({ label: "CLAUDE", windows: [{ label: "5H", usedPercent: 89.96 }] }),
+			},
+		);
+		sidebar.render(STATUS_SIDEBAR_WIDTH);
+		await vi.waitFor(() => expect(requestRender).toHaveBeenCalled());
+		const plain = sidebar.render(STATUS_SIDEBAR_WIDTH).map(stripAnsi);
+		// 89.96% is still below the 90% error colour, so the figure must not read 90%.
+		expect(plain.some((line) => line.includes("5H") && line.includes(" 89%"))).toBe(true);
+		expect(plain.some((line) => line.includes("cpu 69%"))).toBe(true);
+		expect(plain.join("\n")).not.toMatch(/90%|cpu 70%/);
+	});
+});
+
+describe("StatusSidebarComponent worst-case height", () => {
+	it.each([30, 36, 44])("keeps the tallest roster-capped rail inside a %i-row terminal", (termRows) => {
+		mockInventory.entries = Array.from({ length: 30 }, (_, i) => entry(`server-${i}`));
+		const session = makeSession();
+		session.state.model.baseUrl = "https://api.example.com/v1";
+		session.modelRegistry.isUsingOAuth = () => true; // cost row
+		const lines = new StatusSidebarComponent(
+			() => session as never,
+			makeFooterData() as never,
+			() => true,
+			() => termRows,
+		).render(STATUS_SIDEBAR_WIDTH);
+		const plain = lines.map(stripAnsi);
+		// Every optional row outside USAGE/EXT/failure is present and the roster overflows.
+		for (const label of ["git  ", "sess ", "endp ", "think ", "cost "]) expect(railRow(lines, label)).toBeDefined();
+		expect(plain.some((line) => line.includes("cpu 37% mem"))).toBe(true);
+		expect(plain.some((line) => /\+\d+ more…/.test(line))).toBe(true);
+		expect(lines.length).toBeLessThanOrEqual(termRows);
+		// The unpin hint and the bottom border close the rail inside the terminal.
+		expect(plain[plain.length - 2]).toContain("unpin");
+		expect(plain[plain.length - 1]).toMatch(/^└─+┘$/);
+	});
+});
+
+describe("StatusSidebarComponent display safety", () => {
+	/** OSC 52 clipboard write, CSI clear screen, right-to-left override, 8-bit CSI. */
+	const HOSTILE = "\x1b]52;c;ZXZpbA==\x07\x1b[2J\u202e\u009b";
+	/** Any escape except the SGR colour the rail paints itself. */
+	const NON_SGR_ESCAPE = /\x1b(?!\[[0-9;]*m)/;
+	const C1_OR_BIDI = /[\u0080-\u009f\u202a-\u202e\u2066-\u2069]/;
+
+	it.each([STATUS_SIDEBAR_WIDTH, STATUS_SIDEBAR_MAX_WIDTH])(
+		"renders hostile cwd, git, session, model, endpoint, MCP and journal text as inert rows at %i columns",
+		(width) => {
+			mockInventory.entries = [entry(`mcp${HOSTILE}-name`)];
+			const session = makeSession();
+			session.sessionManager.getCwd = () => `/srv/proj${HOSTILE}-x`;
+			session.sessionManager.getSessionName = () => `sess${HOSTILE}-name`;
+			session.state.model.id = `model${HOSTILE}-id`;
+			session.state.thinkingLevel = `high${HOSTILE}-level`;
+			// The URL parser rejects this host, so the endp row is omitted instead of painted.
+			session.state.model.baseUrl = `https://api${HOSTILE}.example.com/v1`;
+			session.lastTermination = { ...TOOL_FATAL, nextAction: `Fix${HOSTILE}-tool` };
+			const footer = makeFooterData();
+			footer.getGitBranch = () => `feat${HOSTILE}-branch`;
+			const lines = new StatusSidebarComponent(
+				() => session as never,
+				footer as never,
+				() => true,
+				() => 40,
+			).render(width);
+			for (const line of lines) {
+				expect(line).not.toMatch(NON_SGR_ESCAPE);
+				expect(line).not.toMatch(C1_OR_BIDI);
+				expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+			}
+			// Only the payload is dropped; every value keeps its own single row.
+			expect(railRow(lines, "cwd  ")).toContain("cwd  /srv/proj-x");
+			expect(railRow(lines, "git  ")).toContain("git  feat-branch");
+			expect(railRow(lines, "sess ")).toContain("sess sess-name");
+			expect(railRow(lines, "id   ")).toContain("id   model-id");
+			expect(railRow(lines, "think ")).toContain("think high-level");
+			expect(railRow(lines, "endp ")).toBeUndefined();
+			expect(railRow(lines, "next ")).toContain("next Fix-tool");
+			expect(lines.map(stripAnsi).some((line) => line.includes("● mcp-name"))).toBe(true);
+		},
+	);
+
+	it("keeps every line inert and within the rail for arbitrary hostile display text", () => {
+		const fragment = fc.oneof(
+			fc.string({ unit: "binary", maxLength: 12 }),
+			fc.constantFrom(HOSTILE, "\x1b]8;;https://x\x1b\\", "\x1b_Gf=100;AAAA\x1b\\", "\u0085", "\n", "\u2066"),
+		);
+		const text = fc.array(fragment, { maxLength: 4 }).map((parts) => parts.join(""));
+		const values = fc.record({ cwd: text, git: text, sess: text, model: text, mcp: text, next: text });
+		const width = fc.constantFrom(STATUS_SIDEBAR_WIDTH, STATUS_SIDEBAR_MAX_WIDTH);
+		fc.assert(
+			fc.property(values, width, (value, railWidth) => {
+				mockInventory.entries = [entry(value.mcp)];
+				const session = makeSession();
+				session.sessionManager.getCwd = () => value.cwd;
+				session.sessionManager.getSessionName = () => value.sess;
+				session.state.model.id = value.model;
+				session.lastTermination = { ...TOOL_FATAL, nextAction: value.next };
+				const footer = makeFooterData();
+				footer.getGitBranch = () => value.git;
+				const lines = new StatusSidebarComponent(
+					() => session as never,
+					footer as never,
+					() => true,
+				).render(railWidth);
+				for (const line of lines) {
+					expect(line).not.toMatch(NON_SGR_ESCAPE);
+					expect(line).not.toMatch(C1_OR_BIDI);
+					expect(visibleWidth(line)).toBeLessThanOrEqual(railWidth);
+				}
+			}),
+			{ numRuns: 80 },
+		);
 	});
 });

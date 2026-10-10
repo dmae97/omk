@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-10-10
+
+### Added
+
+- Mistral Large 4: `mistral/mistral-large-4` (1,048,576-token context, 262,144 output tokens) and `opencode/mistral-large-4` (524,288 / 262,144). Native Large 4 takes Mistral's `reasoning_effort` (`none`, `high`) instead of the Magistral `prompt_mode`, and the thinking selector offers off and high. Off omits the control on the native route, keeping the server default, and sends `none` on OpenCode Zen. Listed prices are Mistral's public-preview prices.
+
+### Changed
+
+- Model catalogs regenerated on 2026-10-09 with `npm run models:refresh`: 1,905 to 1,932 coding routes across 40 providers (43 added, 16 no longer in their providers' lists, which does not by itself mean retired, and 67 with updated metadata) and 57 to 61 image models. Native Anthropic Messages and Bedrock routes for Claude Sonnet 5.5 and Haiku 5.5 stay out until the adapters implement their adaptive, off and replay contract; their OpenRouter routes are listed. Together's `DeepSeek-V4-Pro-0813` keeps the effort control of the undated `DeepSeek-V4-Pro`, which Together no longer lists. See [model catalog refresh](../coding-agent/docs/model-catalog-refresh.md).
+
+## [1.3.1] - 2026-10-08
+
+> Published 2026-10-08: tag `v1.3.1` (`a989d88`), GitHub Release and npm `latest` for all seven packages, built from that commit.
+
+### Changed
+
+- Lockstep source-version alignment with the OMK packages. External dependency versions and provider catalog generation are unchanged by this preparation.
+
 ## [1.3.0] - 2026-10-04
 
 ### Added
