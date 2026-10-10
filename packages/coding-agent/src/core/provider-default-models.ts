@@ -53,3 +53,39 @@ export const defaultModelPerProvider = {
 	...builtInDefaultModelPerProvider,
 	...customDefaultModelPerProvider,
 } as const;
+
+/** Providers that authenticate from ambient cloud credential chains rather than a provider-specific key. */
+export const AMBIENT_CREDENTIAL_PROVIDERS: ReadonlySet<string> = new Set(["amazon-bedrock", "google-vertex"]);
+
+/**
+ * Where a provider's credential came from, as reported by `AuthStorage.getAuthStatus(...).source`
+ * ("stored", "runtime", "environment", "fallback", "models_json_key", ...). Only "stored" and
+ * "runtime" count as deliberate, so the type stays open to sources added later.
+ */
+export type CredentialSource = string | undefined;
+
+const providerTableOrder: readonly string[] = Object.keys(defaultModelPerProvider);
+const defaultIdByProvider: Readonly<Record<string, string>> = defaultModelPerProvider;
+
+/**
+ * Pick the default model among usable ones. Rank first by how deliberately the credential was
+ * configured, then by the provider table order: 0 = stored by /login or passed with --api-key,
+ * 1 = provider-specific key or models.json config, 2 = ambient cloud chains (AWS_PROFILE, ADC) that
+ * often exist for unrelated work. Without the tier, table order alone let ambient AWS keys outrank
+ * an explicit ANTHROPIC_API_KEY.
+ */
+export function pickDefaultModel<T extends { readonly provider: string; readonly id: string }>(
+	usable: readonly T[],
+	sourceOf: (provider: string) => CredentialSource,
+): T | undefined {
+	let best: { readonly model: T; readonly tier: number; readonly order: number } | undefined;
+	for (const model of usable) {
+		const order = providerTableOrder.indexOf(model.provider);
+		if (order === -1 || defaultIdByProvider[model.provider] !== model.id) continue;
+		const source = sourceOf(model.provider);
+		const tier =
+			source === "stored" || source === "runtime" ? 0 : AMBIENT_CREDENTIAL_PROVIDERS.has(model.provider) ? 2 : 1;
+		if (!best || tier < best.tier || (tier === best.tier && order < best.order)) best = { model, tier, order };
+	}
+	return best?.model;
+}

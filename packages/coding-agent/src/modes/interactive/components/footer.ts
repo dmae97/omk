@@ -3,7 +3,17 @@ import { type Component, truncateToWidth, visibleWidth } from "omk-tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
 import type { PiPackageIntakeSummary } from "../../../core/pi-package-intake.ts";
+import { type ContextPressure, contextPressure } from "../control-plane-view-model.ts";
 import { theme } from "../theme/theme.ts";
+import { FooterMetricsTimer } from "./footer-metrics-timer.ts";
+
+/** Context percentage colour per pressure band; normal and unknown stay uncoloured. */
+const CONTEXT_PRESSURE_COLOR: Readonly<Record<ContextPressure, "error" | "warning" | undefined>> = {
+	unknown: undefined,
+	normal: undefined,
+	elevated: "warning",
+	critical: "error",
+};
 
 /**
  * Sanitize text for display in a single-line status.
@@ -83,6 +93,7 @@ export function formatEndpointForFooter(baseUrl: string | undefined): string | u
 export class FooterComponent implements Component {
 	private autoCompactEnabled = true;
 	private showSystemMetrics = false;
+	private readonly metricsTimer = new FooterMetricsTimer();
 	private session: AgentSession;
 	private footerData: ReadonlyFooterDataProvider;
 
@@ -102,6 +113,20 @@ export class FooterComponent implements Component {
 	/** Show system-wide CPU/MEM metrics in the stats line (off by default). */
 	setShowSystemMetrics(enabled: boolean): void {
 		this.showSystemMetrics = enabled;
+		this.metricsTimer.setEnabled(enabled);
+	}
+
+	/**
+	 * Register the 2s refresh callback for live CPU/MEM metrics. The interval only
+	 * runs while metrics are shown, so the default (off) never wakes the event loop.
+	 */
+	setMetricsTickHandler(onTick: (() => void) | undefined): void {
+		this.metricsTimer.setHandler(onTick);
+	}
+
+	/** True when the footer is configured to show live CPU/MEM metrics. */
+	isShowingSystemMetrics(): boolean {
+		return this.showSystemMetrics;
 	}
 
 	/**
@@ -156,6 +181,7 @@ export class FooterComponent implements Component {
 	 */
 	dispose(): void {
 		// Git watcher cleanup handled by provider
+		this.setMetricsTickHandler(undefined);
 	}
 
 	render(width: number): string[] {
@@ -183,7 +209,9 @@ export class FooterComponent implements Component {
 		const contextUsage = this.session.getContextUsage();
 		const contextWindow = contextUsage?.contextWindow ?? state.model?.contextWindow ?? 0;
 		const contextPercentValue = contextUsage?.percent ?? 0;
-		const contextPercent = contextUsage?.percent !== null ? contextPercentValue.toFixed(1) : "?";
+		// Floor, never round: 69.96% shows 69.9%, so the number cannot reach a band before its colour does.
+		const contextPercent =
+			contextUsage?.percent !== null ? (Math.floor(contextPercentValue * 10) / 10).toFixed(1) : "?";
 
 		// Replace home directory with ~
 		let pwd = formatCwdForFooter(this.session.sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
@@ -226,20 +254,13 @@ export class FooterComponent implements Component {
 			statsParts.push({ text: formatPackageIntake(packageIntake), priority: 2 });
 		}
 
-		// Colorize context percentage based on usage
-		let contextPercentStr: string;
 		const autoIndicator = this.autoCompactEnabled ? " (auto)" : "";
 		const contextPercentDisplay =
 			contextPercent === "?"
 				? `?/${formatTokens(contextWindow)}${autoIndicator}`
 				: `${contextPercent}%/${formatTokens(contextWindow)}${autoIndicator}`;
-		if (contextPercentValue > 90) {
-			contextPercentStr = theme.fg("error", contextPercentDisplay);
-		} else if (contextPercentValue > 70) {
-			contextPercentStr = theme.fg("warning", contextPercentDisplay);
-		} else {
-			contextPercentStr = contextPercentDisplay;
-		}
+		const pressureColor = CONTEXT_PRESSURE_COLOR[contextPressure(contextUsage?.percent)];
+		const contextPercentStr = pressureColor ? theme.fg(pressureColor, contextPercentDisplay) : contextPercentDisplay;
 		// Context usage is the most important number in the footer - never drop it.
 		statsParts.push({ text: contextPercentStr, priority: Number.POSITIVE_INFINITY });
 

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test, vi } from "vitest";
 import { parseArgs, printHelp } from "../src/cli/args.ts";
 
@@ -77,6 +78,78 @@ describe("parseArgs", () => {
 			expect(result.print).toBe(true);
 			expect(result.provider).toBe("openai");
 			expect(result.messages).toEqual(["Say hi."]);
+		});
+
+		// Spec 028: prose may open with a dash. A benchmark instruction starting
+		// with "- " used to abort the run with `Unknown option`.
+		test.each([
+			["a bullet", "- foo"],
+			["long-flag-shaped prose", "--not-a-flag text"],
+			["a multi-line bullet list", "- step one\n- step two"],
+			["a tab-separated bullet", "-\tfoo"],
+			["prose opening with a known long flag", "--model x"],
+			["one-word front matter", "---draft"],
+		])("takes %s after -p as the prompt", (_label, prompt) => {
+			for (const flag of ["-p", "--print"]) {
+				const result = parseArgs([flag, prompt]);
+				expect(result.print).toBe(true);
+				expect(result.messages).toEqual([prompt]);
+				expect(result.diagnostics).toEqual([]);
+				expect(result.unknownFlags.size).toBe(0);
+			}
+		});
+
+		test("never takes a recognised short flag as the -p prompt", () => {
+			const source = readFileSync(new URL("../src/cli/args.ts", import.meta.url), "utf8");
+			const shortFlags = [...source.matchAll(/arg === "(-[a-z]+)"/g)].map((m) => m[1]);
+			expect(shortFlags.length).toBeGreaterThan(10);
+			for (const flag of shortFlags) {
+				expect(parseArgs(["-p", flag, "x"]).messages).not.toContain(flag);
+			}
+		});
+
+		test("keeps long-option tokens after -p as flags, extension flags included", () => {
+			const result = parseArgs(["-p", "--verbose", "--ext-flag", "value", "--other=a b", "go"]);
+			expect(result.verbose).toBe(true);
+			expect(result.messages).toEqual(["go"]);
+			expect([...result.unknownFlags]).toEqual([
+				["ext-flag", "value"],
+				["other", "a b"],
+			]);
+		});
+
+		test("still reports genuinely unknown options and the bare - placeholder", () => {
+			for (const args of [
+				["-x", "-p", "hi"],
+				["-p", "hi", "-foo"],
+				["-p", "-x"],
+				["-p", "-foo"],
+				["-p", "-"],
+			]) {
+				const errors = parseArgs(args).diagnostics.filter((d) => d.type === "error");
+				expect(errors.map((d) => d.message)).toEqual([expect.stringContaining("Unknown option")]);
+			}
+		});
+
+		test("lets -- force a flag-shaped prompt after -p", () => {
+			const result = parseArgs(["-p", "--", "--verbose"]);
+			expect(result.verbose).toBeUndefined();
+			expect(result.messages).toEqual(["--verbose"]);
+		});
+
+		test("keeps a leading --name=value token as a flag; -- passes it as text", () => {
+			const prose = "--retries=3 is wrong, fix";
+			expect(parseArgs(["-p", prose]).messages).toEqual([]);
+			const forced = parseArgs(["-p", "--", prose]);
+			expect(forced.messages).toEqual([prose]);
+			expect(forced.unknownFlags.size).toBe(0);
+		});
+
+		test("lets -- force a one-word dash prompt after -p", () => {
+			const result = parseArgs(["-p", "--", "-foo"]);
+			expect(result.print).toBe(true);
+			expect(result.messages).toEqual(["-foo"]);
+			expect(result.diagnostics).toEqual([]);
 		});
 	});
 

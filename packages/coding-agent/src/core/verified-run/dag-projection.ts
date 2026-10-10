@@ -3,7 +3,10 @@ import type { DagEvent, RunTaskProjection } from "./dag-types.ts";
 import type { RunProjection, WriterReduction } from "./run-types.ts";
 import { VerifiedRunError } from "./storage.ts";
 
-export function readyDagTasks(writer: RunDagWriter, state: RunProjection): readonly RunDagTask[] {
+export function readyDagTasks(
+	writer: RunDagWriter,
+	state: Pick<RunProjection, "tasks" | "generation">,
+): readonly RunDagTask[] {
 	const states = new Map(state.tasks.map((task) => [task.taskId, task]));
 	return writer.tasks.filter(
 		(task) =>

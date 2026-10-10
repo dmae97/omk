@@ -51,6 +51,14 @@ const GPT61_SOL_ID = /^gpt-6\.1-sol(?:-pro)?$/;
 /** New documented families not covered by the legacy generator's version checks. */
 export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 	if (!model.reasoning) return;
+	if (
+		(model.provider === "mistral" || model.provider === "opencode") &&
+		(model.id === "mistral-large-4" || model.id === "mistral-large-4-0") &&
+		(model.api === "mistral-conversations" || model.api === "openai-completions")
+	) {
+		// Mistral's preview exposes only none/high; Zen forwards the same Chat Completions contract.
+		model.thinkingLevelMap = { off: "none", minimal: null, low: null, medium: null, high: "high", xhigh: null, max: null, ultra: null };
+	}
 	if (model.provider === "vercel-ai-gateway" && model.id === "deepseek/deepseek-v4.1-flash" && model.api === "anthropic-messages") {
 		model.thinkingLevelMap = { minimal: null, low: "low", medium: null, high: "high", xhigh: null, max: "max" };
 		// Messages effort is separate from a token budget; do not collapse max through clampReasoning().

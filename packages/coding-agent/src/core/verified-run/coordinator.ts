@@ -22,6 +22,7 @@ import { preflightCheckReceipts } from "./check-receipt.ts";
 import { inspectTaskRecovery, retryDagTasks, type TaskRecoveryInspection } from "./dag-recovery.ts";
 import { createRunIssuer, type EvidenceRead, readRunEvidence, type VerifiedRunEvidence } from "./evidence.ts";
 import { readEvidenceProjection } from "./evidence-read-projection.ts";
+import { type RunExplanation, readRunExplanation } from "./explanation.ts";
 import { stopEvent } from "./interruption.ts";
 import { journalPath, type RunJournalRecord, readRunJournal, VerifiedRunJournal } from "./journal.ts";
 import type { RunPhaseContext } from "./phase-context.ts";
@@ -88,6 +89,11 @@ export class RunCoordinator {
 	 */
 	status(runId: string): RunStatus {
 		return withOwnedGitStatus(deriveRunStatus(this.inspect(runId)), this.inspectAuthority().status);
+	}
+
+	/** Journal-bound DAG blockers and authenticated closure, without dispatch. */
+	explain(runId: string): RunExplanation {
+		return readRunExplanation(stateRunPath(this.stateRoot, runId), runId, this.inspectAuthority().status);
 	}
 
 	/** The run's hashed journal records — the event stream the projection replays. */

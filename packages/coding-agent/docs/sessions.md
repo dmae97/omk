@@ -57,6 +57,12 @@ not expand slash commands or prompt templates.
 
 Abort signals the prompt (including preflight), bash, compaction and branch summary.
 It is not termination evidence and does not forcibly exit the owner process.
+Abort is bound to the admitted prompt generation that `status` reports. An abort may
+carry that exact generation and is refused when it does not match; one without a
+generation applies only while no abort has already consumed the current generation,
+so an earlier abort cannot silently cancel a later prompt. Every abort request id is
+remembered in a bounded 256-entry ledger, and cancellation is handled before the
+mutation bound below, so a session that exhausted prompt admission is still abortable.
 
 The native socket lives in a fresh `0700` directory with mode `0600`. An owner-only
 descriptor next to the transcript binds canonical path, exact ID, socket and fresh
@@ -67,9 +73,10 @@ Cleanup removes only a descriptor matching its own token and socket.
 
 Limits: one frame per connection, 32 KiB UTF-8 frame, 16,384 UTF-16 text units,
 8 connections, 10-second request timeout, 1024 distinct mutation IDs per enrollment.
-Duplicate mutation IDs and exhaustion refuse. This is an in-memory replay fence,
-not durable exactly-once delivery. Same-UID directory attacks, remote peers and
-Windows ACLs are outside this slice. Existing tool/admission policies still apply.
+Duplicate mutation IDs and exhaustion refuse new prompts and do not refuse abort.
+This is an in-memory replay fence, not durable exactly-once delivery. Same-UID
+directory attacks, remote peers and Windows ACLs are outside this slice. Existing
+tool/admission policies still apply.
 
 `await session.close()` seals work admission and joins registered producers,
 tool/lane settlement, logical streams and native MCP closure before releasing its

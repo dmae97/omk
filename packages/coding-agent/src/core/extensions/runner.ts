@@ -12,6 +12,7 @@ import type { ModelRegistry } from "../model-registry.ts";
 import type { SessionManager } from "../session-manager.ts";
 import type { SubagentLaneAuthority } from "../subagent-lane-authority.ts";
 import type { BuildSystemPromptOptions } from "../system-prompt.ts";
+import { contextHandlerMutatesMessages } from "./context-handler-options.ts";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
@@ -883,35 +884,30 @@ export class ExtensionRunner {
 	}
 
 	async emitContext(messages: AgentMessage[]): Promise<AgentMessage[]> {
-		const ctx = this.createContext();
-		let currentMessages = structuredClone(messages);
-
+		const queued: { path: string; handler: (...a: unknown[]) => Promise<unknown> }[] = [];
+		let clone = false;
 		for (const ext of this.extensions) {
-			const handlers = ext.handlers.get("context");
-			if (!handlers || handlers.length === 0) continue;
-
-			for (const handler of handlers) {
-				try {
-					const event: ContextEvent = { type: "context", messages: currentMessages };
-					const handlerResult = await handler(event, ctx);
-
-					if (handlerResult && (handlerResult as ContextEventResult).messages) {
-						currentMessages = (handlerResult as ContextEventResult).messages!;
-					}
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
-					const stack = err instanceof Error ? err.stack : undefined;
-					this.emitError({
-						extensionPath: ext.path,
-						event: "context",
-						error: message,
-						stack,
-					});
-				}
+			for (const handler of ext.handlers.get("context") ?? []) {
+				queued.push({ path: ext.path, handler });
+				clone ||= contextHandlerMutatesMessages(handler);
 			}
 		}
-
-		return currentMessages;
+		if (!queued.length) return [...messages];
+		let current = clone ? structuredClone(messages) : [...messages];
+		const ctx = this.createContext();
+		for (const { path, handler } of queued) {
+			try {
+				const result = (await handler({ type: "context", messages: current }, ctx)) as
+					| ContextEventResult
+					| undefined;
+				if (result?.messages) current = result.messages;
+			} catch (err) {
+				const e = err instanceof Error ? err : undefined;
+				// biome-ignore format: one line keeps runner.ts under module-size baseline
+				this.emitError({ extensionPath: path, event: "context", error: e?.message ?? String(err), stack: e?.stack });
+			}
+		}
+		return current;
 	}
 
 	async emitBeforeProviderRequest(payload: unknown): Promise<unknown> {

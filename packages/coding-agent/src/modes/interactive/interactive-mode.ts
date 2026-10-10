@@ -15,6 +15,8 @@ import { describePromptImageAttachment, type PromptImageAttachment } from "../..
 import { createAttachmentStrip } from "./components/attachment-strip.ts";
 import { ChatContainer } from "./components/chat-container.ts";
 import { createSessionMetadataLoaders } from "./components/session-selector-loaders.ts";
+import { planFirstRun } from "./first-run.ts";
+import { onThemedOutputStale, scheduleInteractiveStartupDeps } from "./startup-deps.ts";
 
 export { formatResumeCommand } from "./interactive-resume-command.ts";
 
@@ -102,7 +104,7 @@ import type {
 import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/footer-data-provider.ts";
 import { OMK_GITHUB_REPOSITORY_URL } from "../../core/github-repository.ts";
 import { captureHostResourceSnapshot } from "../../core/host-resource-snapshot.ts";
-import { configureHttpDispatcher, formatHttpIdleTimeoutMs } from "../../core/http-dispatcher.ts";
+import { formatHttpIdleTimeoutMs, scheduleHttpDispatcher } from "../../core/http-dispatcher-install.ts";
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.ts";
 import { createCompactionSummaryMessage } from "../../core/messages.ts";
 import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScope } from "../../core/model-resolver.ts";
@@ -130,7 +132,6 @@ import { openBrowser } from "../../utils/open-browser.ts";
 import { getCwdRelativePath } from "../../utils/paths.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { terminalMarkdownLinks } from "../../utils/terminal-links.ts";
-import { ensureTool } from "../../utils/tools-manager.ts";
 import { checkForNewOmkVersion, type LatestOmkRelease } from "../../utils/version-check.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
@@ -139,7 +140,7 @@ import { BorderedLoader } from "./components/bordered-loader.ts";
 import { BranchSummaryMessageComponent } from "./components/branch-summary-message.ts";
 import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.ts";
 import { ControlPanelComponent, ControlPanelRightPaneComponent } from "./components/control-panel.ts";
-import { CONTROL_PANEL_OVERLAY_MIN_WIDTH, CONTROL_PANEL_SIDEBAR_WIDTH } from "./components/control-panel-layout.ts";
+import { CONTROL_PANEL_SIDEBAR_WIDTH } from "./components/control-panel-layout.ts";
 import { createControlPanelStatusSnapshot } from "./components/control-panel-runtime-status.ts";
 import { CountdownTimer } from "./components/countdown-timer.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
@@ -161,16 +162,12 @@ import { SessionFailureComponent } from "./components/session-failure.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent, ThinkingSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
-import {
-	STATUS_SIDEBAR_GUTTER_GAP,
-	STATUS_SIDEBAR_MIN_WIDTH,
-	StatusSidebarComponent,
-	statusSidebarWidth,
-} from "./components/status-sidebar.ts";
+import { STATUS_SIDEBAR_GUTTER_GAP, StatusSidebarComponent, statusSidebarWidth } from "./components/status-sidebar.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
+import { pinnedRailNotice, railFits } from "./layout-class.ts";
 import { formatResourceDescription } from "./resource-description.ts";
 import {
 	getAvailableThemes,
@@ -179,7 +176,6 @@ import {
 	getMarkdownTheme,
 	getThemeByName,
 	initTheme,
-	onThemeChange,
 	setRegisteredThemes,
 	setTheme,
 	setThemeInstance,
@@ -279,7 +275,6 @@ export class InteractiveMode {
 	private editorContainer: Container;
 	private footer: FooterComponent;
 	private footerDataProvider: FooterDataProvider;
-	private metricsTimer: ReturnType<typeof setInterval> | null = null;
 	// Stored so the same manager can be injected into custom editors, selectors, and extension UI.
 	private keybindings: KeybindingsManager;
 	private version: string;
@@ -333,6 +328,8 @@ export class InteractiveMode {
 
 	// Agent subscription unsubscribe function
 	private unsubscribe?: () => void;
+	/** Clears onThemedOutputStale (theme + highlight.js ready) registrations. */
+	private unsubscribeThemedOutputStale?: () => void;
 	private signalCleanupHandlers: Array<() => void> = [];
 
 	private isBashMode = false;
@@ -732,10 +729,11 @@ export class InteractiveMode {
 		// Load changelog (only show new entries, skip for resumed sessions)
 		this.changelogMarkdown = this.getChangelogForDisplay();
 
-		// Ensure fd and rg are available (downloads if missing, adds to PATH via getBinDir)
-		// Both are needed: fd for autocomplete, rg for grep tool and bash commands
-		const [fdPath] = await Promise.all([ensureTool("fd"), ensureTool("rg")]);
-		this.fdPath = fdPath;
+		// Resolve fd/rg without blocking the first render; a late fd rebuilds fd-backed autocomplete.
+		void scheduleInteractiveStartupDeps((fdPath) => {
+			this.fdPath = fdPath;
+			if (this.isInitialized) this.setupAutocompleteProvider();
+		});
 
 		if (this.session.scopedModels.length > 0 && (this.options.verbose || !this.settingsManager.getQuietStartup())) {
 			const modelList = this.session.scopedModels
@@ -808,7 +806,6 @@ export class InteractiveMode {
 				requestRender: () => this.ui.requestRender(),
 				isTTY: () => process.stdout.isTTY === true,
 				isReducedMotion: () => process.env.OMK_REDUCED_MOTION === "1" || process.env.OMK_REDUCE_MOTION === "1",
-				isIdleDriftEnabled: () => process.env.OMK_CONTROL_IDLE_DRIFT !== "0",
 				isHeaderVisibleHint: () => this.customHeader === undefined,
 				getRenderWidth: () => this.ui.contentWidth,
 			});
@@ -823,8 +820,7 @@ export class InteractiveMode {
 					this.customHeader === undefined &&
 					this.toolOutputExpanded &&
 					!this.statusSidebarPinned &&
-					termWidth >= CONTROL_PANEL_OVERLAY_MIN_WIDTH &&
-					termHeight >= 12,
+					railFits(termWidth, termHeight),
 			});
 
 			// Setup UI layout
@@ -892,8 +888,8 @@ export class InteractiveMode {
 		// Render initial messages AFTER showing loaded resources
 		this.renderInitialMessages();
 
-		// Set up theme file watcher
-		onThemeChange(() => {
+		// Theme change or a late highlight.js load: drop cached themed output and re-render
+		this.unsubscribeThemedOutputStale = onThemedOutputStale(() => {
 			this.ui.invalidate();
 			this.updateEditorBorderColor();
 			this.ui.requestRender();
@@ -904,12 +900,8 @@ export class InteractiveMode {
 			this.ui.requestRender();
 		});
 
-		// Periodically refresh footer metrics (CPU / memory).
-		this.metricsTimer = setInterval(() => {
-			this.footer.invalidate();
-			this.ui.requestRender();
-		}, 2000);
-		this.metricsTimer.unref();
+		// Refresh footer CPU/MEM every 2s; the footer runs the interval only while metrics are shown.
+		this.footer.setMetricsTickHandler(() => this.ui.requestRender());
 
 		// Initialize available provider count for footer display
 		await this.updateAvailableProviderCount();
@@ -976,6 +968,9 @@ export class InteractiveMode {
 		}
 
 		void this.maybeWarnAboutAnthropicSubscriptionAuth();
+		const firstRun = planFirstRun({ session: this.session, settings: this.settingsManager, initialMessage });
+		for (const notice of firstRun.notices) this.showWarning(notice);
+		if (firstRun.openLogin) this.showLoginAuthTypeSelector();
 
 		// Process initial messages
 		if (initialMessage) {
@@ -1402,7 +1397,7 @@ export class InteractiveMode {
 		const lines: string[] = [];
 
 		for (const group of groups) {
-			lines.push(`  ${theme.fg("accent", group.scope)}`);
+			lines.push(`  ${theme.fg("muted", group.scope)}`);
 
 			const sortedPaths = [...group.paths].sort((a, b) => a.path.localeCompare(b.path));
 			for (const item of sortedPaths) {
@@ -1844,7 +1839,7 @@ export class InteractiveMode {
 						this.editor.setText(result.editorText);
 					}
 					this.showStatus("Navigated to selected point");
-					void this.flushCompactionQueue({ willRetry: false });
+					void this.flushCompactionQueue();
 					return { cancelled: false };
 				},
 				switchSession: async (sessionPath, options) => {
@@ -1875,7 +1870,7 @@ export class InteractiveMode {
 	}
 
 	private applyRuntimeSettings(): void {
-		configureHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
+		scheduleHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
 		this.footer.setSession(this.session);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
 		this.footerDataProvider.setCwd(this.sessionManager.getCwd());
@@ -2194,7 +2189,7 @@ export class InteractiveMode {
 
 	/** The pinned rail is only shown (and its gutter reserved) when the terminal is large enough. */
 	private isStatusSidebarVisible(termWidth: number, termHeight: number): boolean {
-		return this.statusSidebarPinned && termWidth >= STATUS_SIDEBAR_MIN_WIDTH && termHeight >= 16;
+		return this.statusSidebarPinned && railFits(termWidth, termHeight);
 	}
 
 	/**
@@ -2204,6 +2199,11 @@ export class InteractiveMode {
 		this.statusSidebarPinned = !this.statusSidebarPinned;
 		// The footer slot and the right gutter both key off isStatusSidebarVisible,
 		// so flipping the flag is enough — no child add/remove bookkeeping.
+		// Pinning on a terminal too small for the rail would otherwise change nothing visible.
+		if (this.statusSidebarPinned) {
+			const notice = pinnedRailNotice(this.ui.terminal.columns, this.ui.terminal.rows);
+			if (notice) this.showStatus(notice);
+		}
 		this.ui.requestRender();
 	}
 
@@ -3431,7 +3431,8 @@ export class InteractiveMode {
 						this.chatContainer.addChild(new Text(theme.fg("error", event.errorMessage), 1, 0));
 					}
 				}
-				void this.flushCompactionQueue({ willRetry: event.willRetry });
+				// After this call stack: a manual compaction clears its controller only after compaction_end returns.
+				queueMicrotask(() => void this.flushCompactionQueue());
 				this.ui.requestRender();
 				break;
 			}
@@ -4383,7 +4384,9 @@ export class InteractiveMode {
 		return !!extensionRunner.getCommand(commandName);
 	}
 
-	private async flushCompactionQueue(options?: { willRetry?: boolean }): Promise<void> {
+	/** Sends text queued during compaction through session.prompt(): it queues for a run that will resume, defers for
+	 * a prompt still in preflight, or starts a run when the session is idle. */
+	private async flushCompactionQueue(): Promise<void> {
 		if (this.compactionQueuedMessages.length === 0) {
 			return;
 		}
@@ -4404,21 +4407,6 @@ export class InteractiveMode {
 		};
 
 		try {
-			if (options?.willRetry) {
-				// When retry is pending, queue messages for the retry turn
-				for (const message of queuedMessages) {
-					if (this.isExtensionCommand(message.text)) {
-						await this.session.prompt(message.text);
-					} else if (message.mode === "followUp") {
-						await this.session.followUp(message.text);
-					} else {
-						await this.session.steer(message.text);
-					}
-				}
-				this.updatePendingMessagesDisplay();
-				return;
-			}
-
 			// Find first non-extension-command message to use as prompt
 			const firstPromptIndex = queuedMessages.findIndex((message) => !this.isExtensionCommand(message.text));
 			if (firstPromptIndex === -1) {
@@ -4438,20 +4426,15 @@ export class InteractiveMode {
 				await this.session.prompt(message.text);
 			}
 
-			// Send first prompt (starts streaming)
-			const promptPromise = this.session.prompt(firstPrompt.text).catch((error) => {
-				restoreQueue(error);
-			});
+			// Send first prompt: it starts a run, or queues for a run that still owns the session after compaction
+			const promptPromise = this.session
+				.prompt(firstPrompt.text, { streamingBehavior: firstPrompt.mode })
+				.catch(restoreQueue);
 
-			// Queue remaining messages
+			// Queue remaining messages on the same path as the first, so they keep their order behind it
 			for (const message of rest) {
-				if (this.isExtensionCommand(message.text)) {
-					await this.session.prompt(message.text);
-				} else if (message.mode === "followUp") {
-					await this.session.followUp(message.text);
-				} else {
-					await this.session.steer(message.text);
-				}
+				const queued = this.isExtensionCommand(message.text) ? undefined : { streamingBehavior: message.mode };
+				await this.session.prompt(message.text, queued);
 			}
 			this.updatePendingMessagesDisplay();
 			void promptPromise;
@@ -4565,7 +4548,7 @@ export class InteractiveMode {
 					},
 					onHttpIdleTimeoutMsChange: (timeoutMs) => {
 						this.settingsManager.setHttpIdleTimeoutMs(timeoutMs);
-						configureHttpDispatcher(timeoutMs);
+						scheduleHttpDispatcher(timeoutMs);
 						this.showStatus(`HTTP idle timeout: ${formatHttpIdleTimeoutMs(timeoutMs)}`);
 					},
 					onThinkingLevelChange: (level) => {
@@ -5089,7 +5072,7 @@ export class InteractiveMode {
 							this.editor.setText(result.editorText);
 						}
 						this.showStatus("Navigated to selected point");
-						void this.flushCompactionQueue({ willRetry: false });
+						void this.flushCompactionQueue();
 					} catch (error) {
 						this.showError(error instanceof Error ? error.message : String(error));
 					} finally {
@@ -5746,7 +5729,7 @@ export class InteractiveMode {
 
 		try {
 			await this.session.reload();
-			configureHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
+			scheduleHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
 			this.keybindings.reload();
 			const activeHeader = this.customHeader ?? this.builtInHeader;
 			if (isExpandable(activeHeader)) {
@@ -6092,6 +6075,8 @@ export class InteractiveMode {
 		}
 		info += `${theme.fg("dim", "File:")} ${stats.sessionFile ?? "In-memory"}\n`;
 		info += `${theme.fg("dim", "ID:")} ${stats.sessionId}\n\n`;
+		const memory = this.session.memoryStatus;
+		info += `${theme.fg("dim", "Memory:")} ${memory.state} eligible=${memory.eligible} omitted=${memory.omitted}\n\n`;
 		info += `${theme.bold("Messages")}\n`;
 		info += `${theme.fg("dim", "User:")} ${stats.userMessages}\n`;
 		info += `${theme.fg("dim", "Assistant:")} ${stats.assistantMessages}\n`;
@@ -6510,10 +6495,7 @@ export class InteractiveMode {
 		for (const component of [this.chatContainer, this.builtInHeader, this.customHeader]) disposeComponent(component);
 		this.footer.dispose();
 		this.footerDataProvider.dispose();
-		if (this.metricsTimer) {
-			clearInterval(this.metricsTimer);
-			this.metricsTimer = null;
-		}
+		this.unsubscribeThemedOutputStale?.();
 		if (this.unsubscribe) {
 			this.unsubscribe();
 		}

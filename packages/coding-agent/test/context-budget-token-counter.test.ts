@@ -4,6 +4,7 @@ import {
 	createOpenAiWasmTokenCounter,
 	createTokenCounterRegistry,
 	estimateTextTokens,
+	estimateTextTokensFromParts,
 	type OptionalModuleLoader,
 	type TokenCounterAdapter,
 } from "../src/core/context-budget-token-counter.ts";
@@ -50,6 +51,46 @@ describe("context budget token counter", () => {
 			const errorPct = Math.abs((result.tokens - expected) / expected) * 100;
 			expect(errorPct).toBeLessThanOrEqual(20);
 		}
+	});
+
+	it("counts whitespace exactly where /\\s/u matches", () => {
+		// 24 whitespace chars cost ceil(24 / 12) = 2 tokens; every other class costs at least 6.
+		for (let codePoint = 0; codePoint <= 0xffff; codePoint++) {
+			if (codePoint >= 0xd800 && codePoint <= 0xdfff) continue;
+			const char = String.fromCharCode(codePoint);
+			const isWhitespace = estimateTextTokens(char.repeat(24), "unknown").tokens === 2;
+			expect(isWhitespace, `U+${codePoint.toString(16)}`).toBe(/\s/u.test(char));
+		}
+	});
+
+	it("pairs surrogates like string iteration and counts lone surrogates as other", () => {
+		const emoji = estimateTextTokens("😀😀😀😀😀", "unknown");
+		expect(emoji.tokens).toBe(9);
+		expect(emoji.notes).toContain("composition(emoji:5)");
+		expect(estimateTextTokens("\ud83d", "unknown").tokens).toBe(1);
+		expect(estimateTextTokens("\ude00\ud83d", "unknown").tokens).toBe(1);
+		expect(estimateTextTokens("\ude00\ud83d", "unknown").notes).toContain("composition()");
+	});
+
+	it('matches estimateTextTokens(parts.join("")) for JSON-shaped and plain parts', () => {
+		const cases: string[][] = [
+			[],
+			[""],
+			["", ""],
+			["hello"],
+			["[", '{"a":1}', ",", '{"b":2}', "]"],
+			["{", '"quote":"a\\n\\""', "}"],
+			["  ", "[", "x", "]", "  "],
+			["function ", "add() {", " return 1; ", "}"],
+			["😀", "한글", "中文"],
+			["a", "", "b"],
+		];
+		for (const parts of cases) {
+			expect(estimateTextTokensFromParts(parts, "m")).toEqual(estimateTextTokens(parts.join(""), "m"));
+		}
+		// Word-char joints fall back to join (still equal).
+		expect(estimateTextTokensFromParts(["fun", "ction"], "m")).toEqual(estimateTextTokens("function", "m"));
+		expect(estimateTextTokensFromParts(["\ud83d", "\ude00"], "m")).toEqual(estimateTextTokens("😀", "m"));
 	});
 
 	it("produces detailed notes with composition breakdown and non-ascii ratio", () => {
