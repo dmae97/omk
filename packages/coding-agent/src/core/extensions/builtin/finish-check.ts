@@ -1,7 +1,9 @@
 import {
 	decideExtraTurn,
+	FINISH_CHECK_EXTRA_TURN_STOP_MESSAGE,
 	FINISH_CHECK_SAVE_NOW_FRACTION,
 	FINISH_CHECK_SAVE_NOW_MESSAGE,
+	FINISH_CHECK_SKIP_FRACTION,
 	FINISH_CHECK_WRAP_UP_MESSAGE,
 	finishDisciplinePrompt,
 	isWorkspaceMutatingTool,
@@ -67,6 +69,7 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 	let checkActive = false;
 	let extraTurnActive = false;
 	let extraTurnsUsed = 0;
+	let stoppedExtraTurn = false;
 	let requirements: string[] = [];
 
 	omk.on("input", (event) => {
@@ -78,6 +81,7 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 			wrappedUp = false;
 			extraTurnActive = false;
 			extraTurnsUsed = 0;
+			stoppedExtraTurn = false;
 			requirements = extractRequirements(event.text);
 		}
 		return undefined;
@@ -94,6 +98,11 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 			warnedSaveNow = true;
 			omk.sendUserMessage(FINISH_CHECK_SAVE_NOW_MESSAGE, { deliverAs: "steer" });
 		}
+		// The extra turn has no tool cap; at 90% it is told once to keep its best result and stop.
+		if (extraTurnActive && !stoppedExtraTurn && fraction !== undefined && fraction >= FINISH_CHECK_SKIP_FRACTION) {
+			stoppedExtraTurn = true;
+			omk.sendUserMessage(FINISH_CHECK_EXTRA_TURN_STOP_MESSAGE, { deliverAs: "steer" });
+		}
 	};
 
 	omk.on("tool_execution_end", (event) => {
@@ -109,7 +118,7 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 		}
 	});
 
-	// Long reasoning can pass 75% without any tool finishing; check when each assistant message ends too.
+	// Long reasoning can pass 75% (or 90% in the extra turn) without any tool finishing; check when each assistant message ends too.
 	omk.on("message_end", (event) => {
 		if (event.message.role === "assistant") maybeWarnSaveNow();
 	});

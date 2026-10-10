@@ -88,6 +88,10 @@ export const FINISH_CHECK_WRAP_UP_MESSAGE =
 export const FINISH_CHECK_SAVE_NOW_MESSAGE =
 	"Time check: about 75% of this run's time budget is used. Make sure every required output is saved at its exact path now, with your best working result so far. Finish the current step, then stop optimizing unless there is clearly time left.";
 
+/** Sent once during the extra turn when the run reaches {@link FINISH_CHECK_SKIP_FRACTION} of its budget. */
+export const FINISH_CHECK_EXTRA_TURN_STOP_MESSAGE =
+	"Time check: about 90% of this run's time budget is used. Stop this attempt now: keep the best measured version saved at the required paths, and reply with the REQ lines for what you have measured.";
+
 export interface FinishCheckDecisionInput {
 	readonly mode: FinishCheckMode;
 	readonly hasUI: boolean;

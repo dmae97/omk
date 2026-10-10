@@ -7,6 +7,7 @@ import type { ExtensionAPI } from "../src/core/extensions/types.ts";
 import {
 	decideExtraTurn,
 	FINISH_CHECK_EXTRA_TURN_FRACTION,
+	FINISH_CHECK_EXTRA_TURN_STOP_MESSAGE,
 	FINISH_CHECK_MAX_EXTRA_TURNS,
 	FINISH_CHECK_SAVE_NOW_FRACTION,
 	FINISH_CHECK_SKIP_FRACTION,
@@ -52,6 +53,9 @@ async function toCheck(prompt: string, settleMs = R2_SETTLE_MS, env: NodeJS.Proc
 		for (const handler of handlers.get(name) ?? []) await handler(event, context);
 	};
 	let clock = 0;
+	const setClock = (ms: number) => {
+		clock = ms;
+	};
 	finishCheck(omk, { env: { OMK_TIME_BUDGET_SEC: String(BUDGET_SEC), ...env }, now: () => clock });
 	const startTask = async (text: string) => {
 		await fire("input", { type: "input", text, source: "interactive" });
@@ -62,7 +66,7 @@ async function toCheck(prompt: string, settleMs = R2_SETTLE_MS, env: NodeJS.Proc
 	await startTask(prompt);
 	const followUps = () => sent.filter((message) => message.deliverAs === "followUp");
 	expect(followUps()).toHaveLength(1);
-	return { fire, sent, entries, events, followUps, startTask };
+	return { fire, sent, entries, events, followUps, startTask, setClock };
 }
 
 describe("finish-check extra turn: threshold retry", () => {
@@ -230,6 +234,30 @@ describe("finish-check extra turn: gates and scope", () => {
 		const interrupted = await toCheck(COREWARS);
 		await interrupted.fire("agent_settled", settled(MISSED), { ...ctx, hasPendingMessages: () => true });
 		expect(interrupted.followUps()).toHaveLength(1);
+	});
+
+	it("tells the extra turn once to save and stop at 90% of the budget", async () => {
+		const run = await toCheck(COREWARS);
+		await run.fire("agent_settled", settled(MISSED));
+		const stops = () => run.sent.filter((message) => message.text === FINISH_CHECK_EXTRA_TURN_STOP_MESSAGE);
+		run.setClock(3_200_000); // 88.9%
+		await run.fire("tool_execution_end", { toolName: "bash" });
+		expect(stops()).toHaveLength(0);
+		run.setClock(3_240_000); // 90%
+		await run.fire("tool_execution_end", { toolName: "bash" });
+		await run.fire("message_end", { message: { role: "assistant" } });
+		run.setClock(3_400_000);
+		await run.fire("tool_execution_end", { toolName: "bash" });
+		expect(stops()).toEqual([{ text: FINISH_CHECK_EXTRA_TURN_STOP_MESSAGE, deliverAs: "steer" }]);
+	});
+
+	it("sends no stop steer outside the extra turn", async () => {
+		const run = await toCheck(COREWARS);
+		await run.fire("agent_settled", settled(MET));
+		run.setClock(3_500_000);
+		await run.fire("tool_execution_end", { toolName: "bash" });
+		await run.fire("message_end", { message: { role: "assistant" } });
+		expect(run.sent.some((message) => message.text === FINISH_CHECK_EXTRA_TURN_STOP_MESSAGE)).toBe(false);
 	});
 
 	it("leaves path-only tasks unchanged", async () => {
