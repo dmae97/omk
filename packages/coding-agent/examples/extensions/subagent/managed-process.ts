@@ -37,6 +37,8 @@ export interface RunManagedProcessOptions {
 	readonly command: string;
 	readonly args: readonly string[];
 	readonly cwd: string;
+	/** Child environment; defaults to the parent's. */
+	readonly env?: NodeJS.ProcessEnv;
 	readonly cutoffMs: number;
 	readonly terminationGraceMs?: number;
 	readonly forceSettleMs?: number;
@@ -54,6 +56,7 @@ export async function runManagedProcess(options: RunManagedProcessOptions): Prom
 	try {
 		child = (options.spawnProcess ?? defaultSpawn)(options.command, options.args, {
 			cwd: options.cwd,
+			...(options.env === undefined ? {} : { env: options.env }),
 			shell: false,
 			stdio: ["ignore", "pipe", "pipe"],
 			detached: processGroup,

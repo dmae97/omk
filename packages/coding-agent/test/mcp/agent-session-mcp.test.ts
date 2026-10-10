@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { getModel } from "omk-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentSession } from "../../src/core/agent-session.ts";
+import { trustProjectMcpConfig } from "../../src/core/mcp/config.ts";
 import { DefaultResourceLoader } from "../../src/core/resource-loader.ts";
 import { createAgentSession } from "../../src/core/sdk.ts";
 import { SessionManager } from "../../src/core/session-manager.ts";
@@ -38,6 +39,8 @@ async function newSession(): Promise<AgentSession> {
 function writeMcpConfig(servers: Record<string, unknown>): void {
 	mkdirSync(join(tempDir, ".omk"), { recursive: true });
 	writeFileSync(join(tempDir, ".omk", "mcp.json"), JSON.stringify({ mcpServers: servers }), "utf8");
+	// Project configs load only after the user trusts this exact file content.
+	trustProjectMcpConfig(tempDir, fakeHome);
 }
 
 function stdioServer(mode: string): Record<string, unknown> {
