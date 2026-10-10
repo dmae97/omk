@@ -20,6 +20,8 @@ export interface LastGoodCopy {
 	readonly savedAtFraction?: number;
 }
 
+export type RestoreDecision = "keep" | "restore" | "no_copy";
+
 export interface RestoreRecord {
 	readonly path: string;
 	readonly outcome: "restored" | "missing_no_copy" | "invalid_no_copy" | "too_large";
@@ -126,15 +128,22 @@ export class DeliverableStore {
 		return deliverables.filter((deliverable) => !existsSync(deliverable.path)).map((deliverable) => deliverable.path);
 	}
 
-	/** Restores each deliverable that is missing or fails the fast check and has a last-good copy. */
-	async restoreBroken(deliverables: readonly Deliverable[]): Promise<RestoreRecord[]> {
+	/**
+	 * Restores each deliverable that is missing or fails the fast check and has a last-good copy.
+	 * `onVerdict` sees each deliverable's check and the decision taken.
+	 */
+	async restoreBroken(
+		deliverables: readonly Deliverable[],
+		onVerdict?: (path: string, check: FastCheckResult, decision: RestoreDecision) => void,
+	): Promise<RestoreRecord[]> {
 		const started = performance.now();
 		const records: RestoreRecord[] = [];
 		for (const [index, deliverable] of deliverables.entries()) {
 			const { check } = await this.check(index, deliverable);
+			const copy = this.copies.get(index);
+			onVerdict?.(deliverable.path, check, check.ok ? "keep" : copy ? "restore" : "no_copy");
 			if (check.ok) continue;
 			const reason = check.reason === "missing" ? "missing" : `invalid:${check.reason}`;
-			const copy = this.copies.get(index);
 			if (!copy) {
 				const outcome = this.tooLarge.has(index)
 					? "too_large"
@@ -169,7 +178,8 @@ export class DeliverableStore {
 	 * Best effort on SIGTERM: synchronous, existence and size only (no checker
 	 * processes while the process is going down).
 	 */
-	restoreSync(deliverables: readonly Deliverable[]): void {
+	restoreSync(deliverables: readonly Deliverable[]): RestoreRecord[] {
+		const records: RestoreRecord[] = [];
 		for (const [index, deliverable] of deliverables.entries()) {
 			const copy = this.copies.get(index);
 			if (!copy) continue;
@@ -183,10 +193,20 @@ export class DeliverableStore {
 				if (size !== undefined && size > 0 && !overLimit) continue;
 				mkdirSync(dirname(deliverable.path), { recursive: true });
 				copyFileSync(copy.file, deliverable.path);
+				records.push({
+					path: deliverable.path,
+					outcome: "restored",
+					reason: size === undefined ? "missing" : size === 0 ? "invalid:empty" : "invalid:size",
+					currentSize: size,
+					restoredSize: copy.size,
+					sha256: copy.sha256,
+					savedAtFraction: copy.savedAtFraction,
+				});
 			} catch {
 				// Nothing more to do while shutting down.
 			}
 		}
+		return records;
 	}
 
 	dispose(): void {

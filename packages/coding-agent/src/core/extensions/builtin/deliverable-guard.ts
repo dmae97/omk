@@ -10,6 +10,7 @@ import {
 	resolveDeliverableGuardMode,
 	runBudgetFraction,
 } from "../../deliverable-guard.ts";
+import { createGuardLog } from "../../deliverable-guard-log.ts";
 import { DeliverableStore, type RestoreRecord } from "../../deliverable-store.ts";
 import type { ExtensionAPI } from "../types.ts";
 
@@ -37,6 +38,8 @@ export interface DeliverableGuardOptions {
 	readonly timers?: DeliverableGuardTimers;
 	/** Where last-good copies live; default `<tmpdir>/omk-deliverables/<pid>`. */
 	readonly storeRoot?: string;
+	/** Reports the first failed `OMK_DELIVERABLE_GUARD_LOG` write; default stderr. */
+	readonly logError?: (message: string) => void;
 	/** Registers the SIGTERM handler; returns its remover. */
 	readonly onTerminate?: (handler: () => void) => () => void;
 }
@@ -72,6 +75,7 @@ export default function deliverableGuard(omk: ExtensionAPI, options: Deliverable
 	if (mode === "off") return;
 	const fraction = options.budgetFraction ?? runBudgetFraction(env, options.now ?? (() => performance.now()));
 	const timers = options.timers ?? DEFAULT_TIMERS;
+	const log = createGuardLog(env.OMK_DELIVERABLE_GUARD_LOG, options.logError);
 	const store = new DeliverableStore(options.storeRoot ?? join(tmpdir(), "omk-deliverables", String(process.pid)));
 
 	let deliverables: Deliverable[] = [];
@@ -94,9 +98,19 @@ export default function deliverableGuard(omk: ExtensionAPI, options: Deliverable
 			const data = { ...entry, point };
 			omk.appendEntry(DELIVERABLE_GUARD_ENTRY, data);
 			omk.events.emit(DELIVERABLE_GUARD_EVENT, data);
+			log({ type: "restore", ...data });
 			if (entry.outcome === "restored") restored += 1;
 		}
 	};
+	const steer = (kind: "watchdog" | "restore", paths: readonly string[], text: string) => {
+		steers += 1;
+		log({ type: "steer", kind, paths });
+		omk.sendUserMessage(text, { deliverAs: "steer" });
+	};
+	const restoreBroken = (point: "budget" | "settle") =>
+		store.restoreBroken(deliverables, (path, check, decision) =>
+			log({ type: "verdict", path, point, ok: check.ok, reason: check.reason, ms: check.ms, decision }),
+		);
 
 	const checkPoints = async () => {
 		if (deliverables.length === 0) return;
@@ -105,24 +119,23 @@ export default function deliverableGuard(omk: ExtensionAPI, options: Deliverable
 		if (!watchdogDone && elapsed >= DELIVERABLE_WATCHDOG_FRACTION) {
 			watchdogDone = true;
 			const missing = store.missing(deliverables);
-			if (missing.length > 0) {
-				steers += 1;
-				omk.sendUserMessage(buildWatchdogMessage(missing), { deliverAs: "steer" });
-			}
+			if (missing.length > 0) steer("watchdog", missing, buildWatchdogMessage(missing));
 		}
 		if (!budgetRestoreDone && elapsed >= DELIVERABLE_RESTORE_FRACTION) {
 			budgetRestoreDone = true;
-			const records = await store.restoreBroken(deliverables);
+			const records = await restoreBroken("budget");
 			record("budget", records);
 			const notes = records.flatMap((entry) =>
 				entry.outcome === "restored" && entry.restoredSize !== undefined
 					? [{ ...entry, restoredSize: entry.restoredSize, sizeLimit: limitOf(entry.path) }]
 					: [],
 			);
-			if (notes.length > 0) {
-				steers += 1;
-				omk.sendUserMessage(buildRestoreMessage(notes), { deliverAs: "steer" });
-			}
+			if (notes.length > 0)
+				steer(
+					"restore",
+					notes.map((note) => note.path),
+					buildRestoreMessage(notes),
+				);
 		}
 	};
 	const limitOf = (path: string) => deliverables.find((deliverable) => deliverable.path === path)?.sizeLimit;
@@ -142,7 +155,9 @@ export default function deliverableGuard(omk: ExtensionAPI, options: Deliverable
 		if (timer === undefined && fraction() !== undefined)
 			timer = timers.setInterval(() => serial(checkPoints), DELIVERABLE_GUARD_POLL_MS);
 		if (removeSignal === undefined && !ctx.hasUI)
-			removeSignal = (options.onTerminate ?? onSigterm)(() => store.restoreSync(deliverables));
+			removeSignal = (options.onTerminate ?? onSigterm)(() => {
+				for (const entry of store.restoreSync(deliverables)) log({ type: "restore", ...entry, point: "sigterm" });
+			});
 		return undefined;
 	});
 
@@ -161,13 +176,10 @@ export default function deliverableGuard(omk: ExtensionAPI, options: Deliverable
 		serial(async () => {
 			if (deliverables.length === 0) return;
 			await store.observe(deliverables, fraction());
-			record("settle", await store.restoreBroken(deliverables));
-			omk.events.emit(DELIVERABLE_GUARD_EVENT, {
-				type: "summary",
-				guardMs: store.takeGuardMs(),
-				steers,
-				restores: restored,
-			});
+			record("settle", await restoreBroken("settle"));
+			const summary = { type: "summary" as const, guardMs: store.takeGuardMs(), steers, restores: restored };
+			omk.events.emit(DELIVERABLE_GUARD_EVENT, summary);
+			log(summary);
 		}),
 	);
 
