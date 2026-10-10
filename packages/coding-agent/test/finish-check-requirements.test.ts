@@ -111,11 +111,30 @@ describe("finish-check requirement extraction", () => {
 	});
 
 	it("drops duplicates and shortens very long lines", () => {
-		const long = `The output must be at least 5 lines ${"and more ".repeat(60)}`;
+		const long = `The output must be at least 5 lines ${"and more ".repeat(150)}`;
 		const items = extractRequirements(`${long}\n${long}`);
 		expect(items).toHaveLength(1);
-		expect(items[0].length).toBe(400);
+		expect(items[0].length).toBe(1000);
 		expect(items[0].endsWith("…")).toBe(true);
+	});
+
+	// Review m4: a 400-character cut still dropped the last limit of a longer numeric sentence.
+	it("keeps a numeric sentence whole up to 1000 characters and cuts longer ones at a clause", () => {
+		const opponents = ["stone", "paper", "vampire", "snake", "g2-clear", "imp", "dwarf", "scanner"];
+		const sentence = `Your warrior must achieve ${opponents
+			.map(
+				(name, index) =>
+					`at least a ${30 + index}% win rate (${30 + index}+ wins out of 100 battles) against \`${name}.red\``,
+			)
+			.join(", and ")}.`;
+		expect(sentence.length).toBeGreaterThan(400);
+		expect(sentence.length).toBeLessThan(1000);
+		expect(extractRequirements(sentence)).toEqual([sentence]);
+
+		const clauses = Array.from({ length: 60 }, (_, index) => `at least ${index} points on test ${index}`);
+		const [cut] = extractRequirements(`The score must be ${clauses.join(", ")}.`);
+		expect(cut.length).toBeLessThanOrEqual(1000);
+		expect(cut).toMatch(/points on test \d+ …$/);
 	});
 
 	// spec 035 AC16: the 220-character cut dropped the g2-clear 33% limit.

@@ -7,7 +7,8 @@ export const FINISH_CHECK_MAX_REQUIREMENTS = 8;
 export const FINISH_CHECK_MAX_CHECKLIST_TOOL_CALLS = 12;
 const MAX_REQUIREMENT_CHARS = 220;
 // Numeric sentences often list several limits (corewars: 75% for three opponents, 33% for two); 220 cut the last one off.
-const MAX_NUMERIC_REQUIREMENT_CHARS = 400;
+// Up to this length a numeric sentence is kept whole; longer ones are cut at the last clause boundary (review m4).
+const MAX_NUMERIC_REQUIREMENT_CHARS = 1000;
 
 // A bound word right before a number: "at least 0.62", "between 15 and 45", "no more than 150MB", "at least a 75%".
 // The number must follow the word; a digit elsewhere (a path, a version) does not make a limit (review M1).
@@ -72,7 +73,11 @@ export function isNumericRequirement(item: string): boolean {
 function shorten(sentence: string, tier: 1 | 2 | 3): string {
 	const flat = sentence.replace(/\s+/g, " ");
 	const max = tier === 1 ? MAX_NUMERIC_REQUIREMENT_CHARS : MAX_REQUIREMENT_CHARS;
-	return flat.length <= max ? flat : `${flat.slice(0, max - 1)}…`;
+	if (flat.length <= max) return flat;
+	const head = flat.slice(0, max - 1);
+	// A numeric item ends at a clause, so the limits it keeps are complete ones.
+	const clause = tier === 1 ? Math.max(head.lastIndexOf(", "), head.lastIndexOf("; ")) : -1;
+	return clause > 0 ? `${head.slice(0, clause)} …` : `${head}…`;
 }
 
 /**
