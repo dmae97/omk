@@ -25,6 +25,13 @@ export const FINISH_CHECK_SAVE_NOW_FRACTION = 0.75;
 export const FINISH_CHECK_MAX_TOOL_CALLS = 6;
 /** Past this fraction there is no time for an extra verification turn. */
 export const FINISH_CHECK_SKIP_FRACTION = 0.9;
+/**
+ * Past this fraction a check that found a missed or unmeasured numeric limit gets no extra turn (spec 035).
+ * Sits between save-now (0.75) and skip (0.9); all three compare against the shared run clock (spec 036).
+ */
+export const FINISH_CHECK_EXTRA_TURN_FRACTION = 0.85;
+/** Extra turns per user task after a finish check, shared by the threshold retry and the go-measure nudge. */
+export const FINISH_CHECK_MAX_EXTRA_TURNS = 1;
 
 export type FinishCheckMode = "off" | "headless" | "always";
 
@@ -37,12 +44,12 @@ export function resolveFinishCheckMode(value: string | undefined): FinishCheckMo
 	return "headless";
 }
 
-/** `OMK_TIME_BUDGET_SEC`: wall-clock seconds the caller allows for the whole run. */
-export function resolveTimeBudgetMs(value: string | undefined): number | undefined {
-	if (value === undefined || value.trim() === "") return undefined;
-	const seconds = Number(value);
-	if (!Number.isFinite(seconds) || seconds <= 0) return undefined;
-	return Math.round(seconds * 1000);
+/**
+ * `OMK_FINISH_CHECK_EXTRA_TURN`: the spec 035 extra turn after a finish check. Off unless set to
+ * `1/true/on/enable/enabled`; it stays opt-in until the A/B shows a gain.
+ */
+export function resolveFinishCheckExtraTurn(value: string | undefined): boolean {
+	return ["1", "true", "on", "enable", "enabled"].includes(value?.trim().toLowerCase() ?? "");
 }
 
 export function isWorkspaceMutatingTool(toolName: string): boolean {
@@ -81,6 +88,10 @@ export const FINISH_CHECK_WRAP_UP_MESSAGE =
 export const FINISH_CHECK_SAVE_NOW_MESSAGE =
 	"Time check: about 75% of this run's time budget is used. Make sure every required output is saved at its exact path now, with your best working result so far. Finish the current step, then stop optimizing unless there is clearly time left.";
 
+/** Sent once during the extra turn when the run reaches {@link FINISH_CHECK_SKIP_FRACTION} of its budget. */
+export const FINISH_CHECK_EXTRA_TURN_STOP_MESSAGE =
+	"Time check: about 90% of this run's time budget is used. Stop this attempt now: keep the best measured version saved at the required paths, and reply with the REQ lines for what you have measured.";
+
 export interface FinishCheckDecisionInput {
 	readonly mode: FinishCheckMode;
 	readonly hasUI: boolean;
@@ -109,4 +120,28 @@ export function shouldRunFinishCheck(input: FinishCheckDecisionInput): boolean {
 	if (input.alreadyChecked || !input.mutatedWorkspace || input.hasPendingMessages || input.aborted) return false;
 	if (input.elapsedFraction !== undefined && input.elapsedFraction >= FINISH_CHECK_SKIP_FRACTION) return false;
 	return true;
+}
+
+export type FinishCheckExtraTurn = "threshold" | "measure" | "both";
+
+export interface ExtraTurnDecisionInput {
+	readonly extraTurnsUsed: number;
+	/** Numeric items that failed, reported or by their own comparison. */
+	readonly failing: number;
+	/** Numeric items with no evaluable comparison that did not fail. */
+	readonly unmeasured: number;
+	readonly aborted: boolean;
+	readonly hasPendingMessages: boolean;
+	readonly elapsedFraction: number | undefined;
+}
+
+/** Which extra turn, if any, a settled finish check gets. One per user task, whatever its kind. */
+export function decideExtraTurn(input: ExtraTurnDecisionInput): FinishCheckExtraTurn | undefined {
+	if (input.failing === 0 && input.unmeasured === 0) return undefined;
+	if (input.extraTurnsUsed >= FINISH_CHECK_MAX_EXTRA_TURNS || input.aborted || input.hasPendingMessages)
+		return undefined;
+	if (input.elapsedFraction !== undefined && input.elapsedFraction >= FINISH_CHECK_EXTRA_TURN_FRACTION)
+		return undefined;
+	if (input.failing > 0) return input.unmeasured > 0 ? "both" : "threshold";
+	return "measure";
 }

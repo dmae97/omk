@@ -16,7 +16,6 @@ import {
 	finishDisciplinePrompt,
 	isWorkspaceMutatingTool,
 	resolveFinishCheckMode,
-	resolveTimeBudgetMs,
 	shouldAddFinishDiscipline,
 	shouldRunFinishCheck,
 } from "../src/core/finish-check.ts";
@@ -25,6 +24,7 @@ import {
 	requestPreCheckSnapshot,
 	resolveSnapshotHandshake,
 } from "../src/core/finish-check-snapshot.ts";
+import { resolveTimeBudgetMs } from "../src/core/remaining-budget.ts";
 import { createHarness, type Harness } from "./suite/harness.ts";
 
 function writeToolFor(runs: string[]): AgentTool {
@@ -161,7 +161,7 @@ describe("finish-check extension in a headless session", () => {
 			},
 		]);
 
-		await harness.session.prompt("write out.txt");
+		await harness.session.prompt("write the deliverable");
 
 		expect(runs).toEqual(["out.txt"]);
 		expect(systemPrompt).toContain("<finish_discipline>");
@@ -268,7 +268,7 @@ describe("finish-check extension in a headless session", () => {
 			fauxAssistantMessage("done"),
 			...checkCalls,
 		]);
-		await harness.session.prompt("write out.txt");
+		await harness.session.prompt("write the deliverable");
 		expect(wrapUpSeenAt).toBe(FINISH_CHECK_MAX_TOOL_CALLS);
 		expect(runs).toHaveLength(1 + FINISH_CHECK_MAX_TOOL_CALLS);
 		expect(harness.session.isStreaming).toBe(false);
@@ -347,7 +347,7 @@ describe("finish-check pre-check snapshot handshake", () => {
 				return fauxAssistantMessage("verified");
 			},
 		]);
-		await harness.session.prompt("write out.txt");
+		await harness.session.prompt("write the deliverable");
 		expect(requestSeenBeforeCheck).toBe(true);
 		expect(harness.faux.state.callCount).toBe(3);
 		// 90s on the clock, but 50s of it was the snapshot wait, so the run is at 40% and no save-now steer fired.

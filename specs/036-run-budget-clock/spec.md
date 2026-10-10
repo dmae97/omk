@@ -51,27 +51,22 @@ Per call: `ceiling = max(1, availableSec, min(30, remainingSec − 5))`, where `
 - `readRunBudget(): RunBudgetSnapshot | undefined` returns `{ budgetMs, elapsedMs, remainingMs, elapsedFraction, remainingFraction }` from the shared clock, or `undefined` when no budget is set.
 - `excludeRunBudgetWaitMs(ms)` takes harness snapshot waits out of the budget.
 
-#### Finish-check migration (owner: **#63**; OMK closes #64 once it is up)
+#### Finish-check migration (done in #63 after #62 landed; OMK closes #64)
 
-#44 (finish-check) **landed on main at `2ecdd7d`**. The remaining order is #45 → #62 → #63. The migration is done **in #63, after #62 lands on main**: merge main into #63, then switch every finish-check budget check to the shared clock in the same PR. #64 (`feat/finish-check-budget-glue`) is then redundant, and OMK closes it. Until then nothing in #63 imports finish-check, and this PR only provides the API above.
+#62 landed on main at `5c5806b`, and #63 merged it. `extensions/builtin/finish-check.ts` now reads the shared clock:
 
-Call sites on main `2ecdd7d` (#44 as merged; same lines as `fix/finish-check` `50b49c9`), plus #62 `feat/finish-check-requirements` at `bc34980`. File `packages/coding-agent/src/core/extensions/builtin/finish-check.ts`, default export `finishCheck(omk, options)`:
-
-| Today (main `2ecdd7d` line / #62 line) | After migration |
-| --- | --- |
-| `:34` / #62 same function: `const budgetMs = resolveTimeBudgetMs(env.OMK_TIME_BUDGET_SEC)` | Kept only for `finishDisciplinePrompt(budgetMs)`. Import `resolveTimeBudgetMs` from `remaining-budget.ts`, and delete the duplicate in `core/finish-check.ts:41-46` (#44 n1). |
-| `:37` `let startedAt = now()` (own clock from extension load, `Date.now`) | Removed in production. |
-| `:39` / #62 `:58` `const elapsedFraction = () => (now() - startedAt) / budgetMs` | `() => readRunBudget()?.elapsedFraction`. When `options.now` or `options.env` is injected (tests), keep the local clock so the finish-check tests on main and in #62 stay deterministic. |
-| `:105` `startedAt += result.waitedMs` | `excludeRunBudgetWaitMs(result.waitedMs)` |
+- `elapsedFraction()` returns `readRunBudget().elapsedFraction` whenever a run clock is bound (print/json mode). Without a bound clock (interactive `OMK_FINISH_CHECK=always`, unit tests that inject `now`) it keeps the old local clock from extension load, so those paths behave exactly as before. The local clock's default is now `performance.now()` too.
+- A harness snapshot wait goes to `excludeRunBudgetWaitMs(waitedMs)` when the clock is bound, else to the local `startedAt` as before.
+- `resolveTimeBudgetMs` is imported from `remaining-budget.ts`; the duplicate in `core/finish-check.ts` is gone (#44 n1). `budgetMs` is still read from env for `finishDisciplinePrompt` and the local fallback.
 
 The thresholds keep their values and all compare against that one `elapsedFraction`:
 
-- 0.75 `FINISH_CHECK_SAVE_NOW_FRACTION` (`core/finish-check.ts:23`, used at #62 `:90`)
-- 0.85 `FINISH_CHECK_EXTRA_TURN_FRACTION` (#62 `core/finish-check.ts:32`, `:128`)
-- 0.90 `FINISH_CHECK_SKIP_FRACTION` (`:27`, `:106`)
-- 0.30, the early-finish threshold. It is not on #62 `bc34980`. It moves over the same way when it lands (spec 035/032).
+- 0.75 `FINISH_CHECK_SAVE_NOW_FRACTION`
+- 0.85 `FINISH_CHECK_EXTRA_TURN_FRACTION` (spec 035, behind `OMK_FINISH_CHECK_EXTRA_TURN`)
+- 0.90 `FINISH_CHECK_SKIP_FRACTION`
+- 0.30, spec 032's early-finish threshold, is not on main yet. It reads the same `elapsedFraction` when it lands.
 
-Acceptance for that later change: a finish-check test with the shared clock bound at t=0 and the extension loaded at t=60 s of 100 s must report `elapsedFraction` 0.6, not 0.
+Acceptance (`finish-check-run-clock.test.ts`, each fails on the old local clock): with the shared clock bound at t=0 and the extension loaded at t=60 s of 100 s, save-now fires at 76 s and not at 70 s; the check is skipped when the run settles at 91 s; the spec 035 extra turn is refused at 86 s; a 50 s snapshot wait leaves the shared clock at 0.4, not 0.9.
 
 ## Acceptance
 
@@ -87,7 +82,6 @@ Named vitest cases:
 
 ## Non-goals
 
-- Pulling #44/#45/#62 into #63 now. The finish-check switch happens in #63 after #62 is on main (see above).
 - Per-session clocks for RPC or SDK processes that host several runs (m1). The clock is per process and opt-in through `runPrintMode`. `bindActiveRemainingBudget(undefined)` resets it.
 - Background handoff for long commands.
 
