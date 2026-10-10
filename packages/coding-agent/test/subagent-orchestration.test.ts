@@ -447,3 +447,40 @@ describe("buildSubagentOrchestrationPlan", () => {
 		expect(plan.laneGrants[0]?.scheduler.writeSet).toEqual([]);
 	});
 });
+
+describe("subagent lane path scopes", () => {
+	it("blocks lane scopes that are absolute or climb out of the repository", () => {
+		const plan = buildSubagentOrchestrationPlan({
+			runId: "goal-escape",
+			lanes: [
+				{ id: "w", role: "executor", task: "edit", writeScope: ["../other-repo/src"] },
+				{ id: "r", role: "critic", task: "read", readScope: ["/etc"], evidenceOutput: "C:\\out.md" },
+				{ id: "u", role: "critic", task: "read", blockedPaths: ["file:/tmp/x"] },
+			],
+			inventory,
+			spawnPlan: spawnReceipt,
+		});
+
+		expect(plan.blockers).toEqual(
+			expect.arrayContaining([
+				"lane w writeScope escapes the repository: ../other-repo/src",
+				"lane r readScope escapes the repository: /etc",
+				"lane r evidenceOutput escapes the repository: C:\\out.md",
+				"lane u blockedPaths escapes the repository: file:/tmp/x",
+			]),
+		);
+	});
+
+	it("warns when a product-writing lane declares no write scope", () => {
+		const plan = buildSubagentOrchestrationPlan({
+			runId: "goal-unscoped",
+			lanes: [{ id: "x", role: "executor", task: "implement", readScope: ["src"] }],
+			inventory,
+			spawnPlan: spawnReceipt,
+		});
+
+		expect(plan.warnings).toContain(
+			"lane x may write product files but declares no writeScope; overlap is unchecked",
+		);
+	});
+});
