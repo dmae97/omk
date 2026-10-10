@@ -174,4 +174,22 @@ describe("AgentSession bash resource permits", () => {
 		expect(s.workloadPermitPool).toBe(pool);
 		expect(pool.snapshot().activeWeight).toBe(0);
 	});
+
+	it("sizes the shared pool from resourceGovernor.normalMaxHeavyProcesses in the default observe mode", () => {
+		const s = createSession({ mode: "observe", normalMaxHeavyProcesses: 4 });
+		expect(s.workloadPermitPool.snapshot().capacity).toBe(4);
+	});
+
+	it("re-syncs pool capacity to the configured heavy cap whenever subagent lane authority is built", () => {
+		const s = createSession({ mode: "observe", normalMaxHeavyProcesses: 4 });
+		s.workloadPermitPool.setCapacity(2);
+		const authorityHost = s as unknown as { _getSubagentLaneAuthority(): unknown };
+		authorityHost._getSubagentLaneAuthority();
+		expect(s.getWorkloadPermitSnapshot()?.capacity).toBe(4);
+	});
+
+	it("keeps the built-in pool capacity of 2 when nothing is configured", () => {
+		const s = createSession({ mode: "observe" });
+		expect(s.workloadPermitPool.snapshot().capacity).toBe(2);
+	});
 });

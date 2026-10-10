@@ -170,3 +170,23 @@ function pruneUndefined<T extends Record<string, number | undefined>>(record: T)
 	}
 	return pruned as Partial<T>;
 }
+
+/**
+ * Heavy-process budget the shared workload permit pool should hold: the live
+ * admission decision when one exists, otherwise the configured normal-tier cap
+ * (`resourceGovernor.normalMaxHeavyProcesses`), so observe mode and the first
+ * prompt honor settings instead of the pool's built-in default of 2.
+ */
+export function heavyProcessCapacity(
+	decision: { readonly maxHeavyProcesses?: number } | null | undefined,
+	settings: ResourceGovernorSettings | undefined,
+): number | undefined {
+	const fromDecision = decision?.maxHeavyProcesses;
+	if (fromDecision !== undefined && Number.isFinite(fromDecision) && fromDecision > 0) return fromDecision;
+	try {
+		const configured = resolveResourceGovernorSettings(settings).admission.caps.normal.maxHeavyProcesses;
+		return Number.isFinite(configured) && configured > 0 ? configured : undefined;
+	} catch {
+		return undefined;
+	}
+}

@@ -254,7 +254,7 @@ import {
 	type ResourcePressureStabilizer,
 	rederiveResourceAdmissionForPressure,
 } from "./resource-admission.ts";
-import { resolveResourceGovernorSettings } from "./resource-governor-settings.ts";
+import { heavyProcessCapacity, resolveResourceGovernorSettings } from "./resource-governor-settings.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import {
 	admissionObservationFacts,
@@ -2287,6 +2287,7 @@ export class AgentSession {
 			_customTools: this._customTools,
 		};
 		const inventory = buildCapabilityInventory(sessionView, this._resourceLoader, this._cwd, hookInventory);
+		this._syncWorkloadPermitCapacity();
 		return createSubagentLaneAuthority({
 			runId: this._activeRunId ?? `session-${this.sessionManager.getSessionId() ?? "unknown"}`,
 			promptRunId: this._promptLifecycle.activePromptRunId,
@@ -2319,8 +2320,17 @@ export class AgentSession {
 	 * child launcher wiring lands in M6.
 	 */
 	get workloadPermitPool(): WorkloadPermitPool {
-		this._workloadPermitPool ??= new WorkloadPermitPool();
+		this._workloadPermitPool ??= new WorkloadPermitPool({ capacity: this._targetWorkloadPermitCapacity() });
 		return this._workloadPermitPool;
+	}
+
+	private _targetWorkloadPermitCapacity(): number | undefined {
+		return heavyProcessCapacity(this._lastResourceAdmission, this.settingsManager.getResourceGovernorSettings());
+	}
+
+	private _syncWorkloadPermitCapacity(): void {
+		const capacity = this._targetWorkloadPermitCapacity();
+		if (capacity !== undefined) this.workloadPermitPool.setCapacity(capacity);
 	}
 
 	/**
