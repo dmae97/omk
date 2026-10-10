@@ -7,6 +7,26 @@
 - Chat-scale TUI sessions no longer re-normalize and re-diff every transcript row each frame: `LineResetMemo` reuses prior reset output (and Kitty ids) when a row's raw text is unchanged, so the differential renderer stays on reference equality for the stable prefix. `applyLineResets` / kitty-id helpers moved to `line-reset-memo.ts` (shrinks `tui.ts`).
 - New `WindowedContainer` freezes leading **settled** children into a line buffer once the live tail exceeds a configurable line budget, stops at the first `isRenderSettled() === false` child, duck-type-releases caches (including a future Markdown `streamCache`), and thaws on width change, `invalidate()`, an unsettled frozen child, or a `getRenderGeneration()` bump (covers setText and message-object replacement). `releaseRenderCache` / `isRenderSettled` are exported.
 
+## [1.3.2] - 2026-10-10
+
+### Changed
+
+- Lockstep version alignment with the OMK packages; no changes in this package.
+
+## [1.3.1] - 2026-10-08
+
+> Published 2026-10-08: tag `v1.3.1` (`a989d88`), GitHub Release and npm `latest` for all seven packages, built from that commit. The entries below, except the first Changed entry, were still listed under `[Unreleased]` when 1.3.1 was tagged; the 1.3.1 packages contain them.
+
+### Changed
+
+- Lockstep source-version alignment with the OMK packages. The memory-state display lives in the coding-agent `/session` command.
+- `Markdown.setText` / `Text.setText` no-op when the string is unchanged, so streaming updates can refresh message views without discarding wrap caches.
+- `SelectList` caches the primary column width until the filter or item set changes, so opening `/` with many skills no longer rescans every label on each render frame.
+
+### Fixed
+
+- A streaming Markdown message no longer re-parses and re-wraps its whole text every frame. Finished top-level blocks keep their tokens and lines while the text only grows (about 8× less work per frame on a 27k-character reply).
+
 ## [1.3.0] - 2026-10-04
 
 ### Changed

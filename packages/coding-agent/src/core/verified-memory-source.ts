@@ -52,7 +52,7 @@ export function readMemorySourceSnapshot(root: string, path: string) {
 		const before = fstatSync(fd, { bigint: true });
 		if (!before.isFile() || before.nlink !== 1n || before.size > BigInt(MAX_MEMORY_SOURCE_BYTES))
 			throw new Error("memory source size or type refused");
-		const bytes = Buffer.alloc(MAX_MEMORY_SOURCE_BYTES + 1);
+		const bytes = Buffer.alloc(Number(before.size) + 1);
 		let length = 0;
 		while (length < bytes.length) {
 			const read = readSync(fd, bytes, length, bytes.length - length, null);

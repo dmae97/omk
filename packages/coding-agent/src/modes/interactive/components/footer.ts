@@ -5,6 +5,7 @@ import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provi
 import type { PiPackageIntakeSummary } from "../../../core/pi-package-intake.ts";
 import { type ContextPressure, contextPressure } from "../control-plane-view-model.ts";
 import { theme } from "../theme/theme.ts";
+import { FooterMetricsTimer } from "./footer-metrics-timer.ts";
 
 /** Context percentage colour per pressure band; normal and unknown stay uncoloured. */
 const CONTEXT_PRESSURE_COLOR: Readonly<Record<ContextPressure, "error" | "warning" | undefined>> = {
@@ -92,6 +93,7 @@ export function formatEndpointForFooter(baseUrl: string | undefined): string | u
 export class FooterComponent implements Component {
 	private autoCompactEnabled = true;
 	private showSystemMetrics = false;
+	private readonly metricsTimer = new FooterMetricsTimer();
 	private session: AgentSession;
 	private footerData: ReadonlyFooterDataProvider;
 
@@ -111,6 +113,20 @@ export class FooterComponent implements Component {
 	/** Show system-wide CPU/MEM metrics in the stats line (off by default). */
 	setShowSystemMetrics(enabled: boolean): void {
 		this.showSystemMetrics = enabled;
+		this.metricsTimer.setEnabled(enabled);
+	}
+
+	/**
+	 * Register the 2s refresh callback for live CPU/MEM metrics. The interval only
+	 * runs while metrics are shown, so the default (off) never wakes the event loop.
+	 */
+	setMetricsTickHandler(onTick: (() => void) | undefined): void {
+		this.metricsTimer.setHandler(onTick);
+	}
+
+	/** True when the footer is configured to show live CPU/MEM metrics. */
+	isShowingSystemMetrics(): boolean {
+		return this.showSystemMetrics;
 	}
 
 	/**
@@ -165,6 +181,7 @@ export class FooterComponent implements Component {
 	 */
 	dispose(): void {
 		// Git watcher cleanup handled by provider
+		this.setMetricsTickHandler(undefined);
 	}
 
 	render(width: number): string[] {

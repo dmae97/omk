@@ -171,4 +171,102 @@ describe("prompt execution ownership", () => {
 		await pending;
 		expect(events[0]?.outcome).toBe("aborted");
 	});
+
+	it("reports owner identity and resolves an already idle wait", async () => {
+		const lifecycle = new SessionPromptLifecycle();
+		expect(lifecycle.active).toBe(false);
+		expect(lifecycle.activePromptRunId).toBeUndefined();
+		await lifecycle.waitForIdle();
+		const run = lifecycle.begin("identity");
+		expect(lifecycle.active).toBe(true);
+		expect(lifecycle.activePromptRunId).toBe("identity");
+		run.finish("completed", () => {});
+		expect(lifecycle.active).toBe(false);
+		expect(lifecycle.activePromptRunId).toBeUndefined();
+	});
+
+	it.each(["noteDetachedChild", "noteDetachedShard"] as const)(
+		"keeps %s ownership until both idempotent releases",
+		(method) => {
+			const lifecycle = new SessionPromptLifecycle();
+			const idleRelease = lifecycle[method]();
+			idleRelease();
+			const run = lifecycle.begin("owned");
+			const first = lifecycle[method]();
+			const second = lifecycle[method]();
+			const events: PromptSettledEvent[] = [];
+			run.finish("aborted", (event) => events.push(event));
+			expect(lifecycle.active).toBe(true);
+			expect(events).toEqual([]);
+			first();
+			first();
+			expect(events).toEqual([]);
+			second();
+			second();
+			expect(events.map((event) => event.promptRunId)).toEqual(["owned"]);
+			expect(lifecycle.active).toBe(false);
+		},
+	);
+
+	it("waits for the default late audit before notifying a finished producer", async () => {
+		const lifecycle = new SessionPromptLifecycle();
+		const run = lifecycle.begin("audit");
+		const gate = deferred();
+		const pending = lifecycle.wrapTool(tool(() => gate.promise)).execute("call", {});
+		const events: PromptSettledEvent[] = [];
+		run.finish("aborted", (event) => events.push(event));
+		gate.resolve();
+		await pending;
+		expect(events).toEqual([]);
+		lifecycle.flush();
+		expect(events.map((event) => event.outcome)).toEqual(["aborted"]);
+	});
+
+	it("allows idle wrapped tools and refuses them after disposal", async () => {
+		const lifecycle = new SessionPromptLifecycle();
+		let started = 0;
+		const wrapped = lifecycle.wrapTool(
+			tool(async () => {
+				started += 1;
+			}),
+		);
+		await wrapped.execute("idle", {});
+		expect(started).toBe(1);
+		lifecycle.dispose();
+		await expect(wrapped.execute("disposed", {})).rejects.toThrow(PromptExecutionBusyError);
+		expect(started).toBe(1);
+	});
+
+	it("releases idle waiters even when the terminal notification throws", async () => {
+		const lifecycle = new SessionPromptLifecycle();
+		const run = lifecycle.begin("throwing-notify");
+		const idle = lifecycle.waitForIdle();
+		expect(() =>
+			run.finish("failed", () => {
+				throw new Error("notify");
+			}),
+		).toThrow("notify");
+		await idle;
+		expect(lifecycle.active).toBe(false);
+	});
+
+	it("latches the first finish while real tool ownership is still active", async () => {
+		const lifecycle = new SessionPromptLifecycle();
+		const run = lifecycle.begin("latched");
+		const gate = deferred();
+		const pending = lifecycle.wrapTool(tool(() => gate.promise)).execute("call", {});
+		const outcomes: string[] = [];
+		run.finish("aborted", (event) => outcomes.push(event.outcome));
+		run.finish("completed", (event) => outcomes.push(event.outcome));
+		gate.resolve();
+		await pending;
+		lifecycle.flush();
+		expect(outcomes).toEqual(["aborted"]);
+	});
+
+	it("keeps a recognizable busy error for callers and diagnostics", () => {
+		const error = new PromptExecutionBusyError();
+		expect(error.name).toBe("PromptExecutionBusyError");
+		expect(error.message).toContain("actual termination");
+	});
 });

@@ -9,6 +9,7 @@ import {
 	snapshotRequestAdmissionPolicy,
 } from "./request-admission-policy.ts";
 import { projectRequestForAdmission } from "./request-admission-projection.ts";
+import { countTextParts } from "./text-token-estimate.ts";
 
 export interface RequestAdmissionSnapshot {
 	readonly inspected: number;
@@ -41,9 +42,11 @@ export function createRequestAdmissionGuard(
 			let decision: RequestAdmissionDecision;
 			try {
 				const projection = projectRequestForAdmission(context, policy);
-				const tokens = [projection.system, projection.messages, projection.tools].map(
-					(text) => counter.countText(text, model.id).tokens,
-				);
+				const tokens = [
+					counter.countText(projection.system, model.id).tokens,
+					countTextParts(counter, projection.messageParts, model.id).tokens,
+					counter.countText(projection.tools, model.id).tokens,
+				];
 				if (tokens.some((n) => !Number.isSafeInteger(n) || n < 0)) throw new TypeError("admission.invalid_count");
 				const total = tokens.reduce((a, b) => a + b, 0) + projection.imageCount * policy.imageTokens;
 				decision = decideRequestAdmission(

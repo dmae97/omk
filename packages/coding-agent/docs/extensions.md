@@ -617,7 +617,9 @@ omk.on("tool_execution_end", async (event, ctx) => {
 
 #### context
 
-Fired before each LLM call. Modify messages non-destructively. See [Session Format](session-format.md) for message types.
+Fired before each LLM call. See [Session Format](session-format.md) for message types.
+
+By default, `event.messages` is a deep copy (`structuredClone`) of the session transcript, so handlers may modify it in place.
 
 ```typescript
 omk.on("context", async (event, ctx) => {
@@ -626,6 +628,17 @@ omk.on("context", async (event, ctx) => {
   return { messages: filtered };
 });
 ```
+
+On long histories the deep copy costs time and memory on every request. A handler that never writes into `event.messages` or any nested object (content blocks, tool arguments, and so on) can register with `{ mutatesMessages: false }`:
+
+```typescript
+omk.on("context", (event) => {
+  const kept = event.messages.filter(m => !shouldPrune(m)); // builds a new array, never mutates
+  return kept.length === event.messages.length ? undefined : { messages: kept };
+}, { mutatesMessages: false });
+```
+
+The copy is skipped only when **every** registered `context` handler is marked this way; if any handler omits the flag, all handlers get a deep copy. When it is skipped, `event.messages` holds the **live session message objects**. A handler marked `mutatesMessages: false` that writes into them anyway corrupts the session transcript and everything later saved to the session file. Leave the flag off unless the handler only reads and returns new arrays or objects.
 
 #### before_provider_request
 

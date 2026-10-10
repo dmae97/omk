@@ -63,20 +63,23 @@ required for your first task.
 
 ## Quick start
 
-Requires Node.js 22.19 or newer. Start in the repository you want to work on:
+Install the standalone binary (no Node.js needed; the installer verifies the
+release's `SHA256SUMS` and refuses a mismatch), then start in your repository:
 
 ```bash
-npm install -g open-multi-agent-kit --ignore-scripts
-omk --version
+curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh
 cd your-project
 omk
 ```
 
-Without a global install, run `npx --ignore-scripts open-multi-agent-kit` from
-that directory.
+With Node.js 22.19 or newer you can use npm instead:
+`npm install -g open-multi-agent-kit --ignore-scripts`, or run
+`npx --ignore-scripts open-multi-agent-kit` without a global install.
 
-1. Run `/login` to authenticate a supported subscription or API-key provider.
-2. Run `/model` to choose an available model.
+1. On a first run OMK opens `/login` for you: sign in with a subscription or an
+   API key. An existing Claude Code or Codex CLI login can be reused with
+   `omk provider adopt`.
+2. Run `/model` to choose another available model at any time.
 3. Try a read-only first task:
 
 ```text
@@ -99,9 +102,13 @@ those results yourself; a request to run tests does not enable a verification
 gate.
 
 Built-in local bash requires `sandbox-exec` on macOS or `bwrap` plus
-unprivileged user namespaces on Linux. It blocks network access and fails
-closed if the backend is missing. See the [safety boundary](#verification-boundary)
-and [full quickstart](packages/coding-agent/docs/quickstart.md) for setup.
+unprivileged user namespaces on Linux (`sudo apt install bubblewrap` on Debian
+and Ubuntu). It blocks network access and fails closed if the backend is missing.
+`omk doctor` checks the runtime, credentials, the model a first session would
+pick, and the sandbox, and prints the fix for this machine. See
+[Bash sandbox setup](packages/coding-agent/docs/sandbox-setup.md), the
+[safety boundary](#verification-boundary) and the
+[full quickstart](packages/coding-agent/docs/quickstart.md).
 
 ## What runs by default
 
@@ -127,9 +134,11 @@ as enabling an orchestration workflow.
 
 ## Evidence and limits
 
-No comparative benchmark result is published here yet. We have not established
-that OMK solves more tasks than another harness, that multi-agent execution
-improves success, or how much verification reduces false completion.
+One dated comparison is available below: OMK and mini-SWE-agent on
+Terminal-Bench 2.1 with the same base model. The observed success-rate
+difference is not statistically significant, and the time budgets differed.
+It does not establish overall harness superiority, multi-agent gains, or how
+much verification reduces false completion.
 
 OMK targets state-of-the-art quality as a CLI coding-agent harness.
 SOTA is not verified.
@@ -162,6 +171,64 @@ turn costs and tool failures; it does not score task correctness.
 If you evaluate OMK, share a sanitized report and reproduction steps in a
 [GitHub issue](https://github.com/dmae97/omk/issues). Include failed and
 interrupted runs, not just successful examples.
+
+### Terminal-Bench 2.1 · R8
+
+<p align="center">
+  <img
+    src="readmeasset/omk-terminal-bench-r8.png"
+    alt="OMK versus mini-SWE-agent 2.4.6 on Terminal-Bench 2.1 with Grok-4.7 xhigh. Primary success: 75.8% (200/264) versus 71.6% (189/264). Recorded cost per graded trial: $0.581 versus $0.759. Median time: 482 versus 376 seconds. Success difference: +4.2 percentage points, 95% CI minus 1.9 to plus 10.2; not statistically significant. OMK had 150 additional seconds per trial and used an evaluation build."
+    width="1200"
+  />
+</p>
+
+**75.8% observed success · approximately 23% lower recorded model cost per
+graded trial.** OMK took longer: 482 s median, compared with 376 s for
+mini-SWE-agent. Both used xAI `grok-4.7` at reasoning effort `xhigh` in a
+2026-10-05–06 KST run of 89 tasks, with 3 trials per task per harness.
+
+The +4.2 percentage-point success difference is **not statistically significant**
+(95% task-level paired-bootstrap CI: −1.9 to +10.2 pp). OMK alone had **150 s
+extra per trial** for snapshots, so the time budgets were unequal. This result
+covers the **1.3.0 evaluation build `78cc483`**, including unmerged changes,
+rather than the published npm package. It is not an official leaderboard result.
+
+<details>
+<summary>Benchmark data and evaluation limits</summary>
+
+| Harness | Success rate (88 tasks × 3 trials) | Cost per trial (all 267 trials) | Median wall time per trial (all 267 trials) |
+| --- | --- | --- | --- |
+| OMK | 75.8% (200/264) | $0.581 | 482 s |
+| mini-swe-agent 2.4.6 | 71.6% (189/264) | $0.759 | 376 s |
+
+- The difference is +4.2 percentage points with a 95% confidence interval of
+  [−1.9, +10.2] (task-level paired bootstrap). The interval includes zero, so
+  this is **not** a statistically significant improvement.
+- OMK cost about 23% less per trial but was slower: 482 s median per trial
+  against 376 s.
+- Audit corrections: trials that tried to read Terminal-Bench sources or
+  answers score 0, which turned 4 mini-swe-agent passes and 1 OMK pass into
+  failures.
+  `prove-plus-comm` is excluded from both sides because our OMK adapter failed
+  to start in that task's working directory. Two transient provider errors were
+  retried; no trial was excluded.
+- OMK failed all three `pytorch-model-recovery` trials because the CLI rejected
+  an instruction starting with `- ` (fixed in #84). Without that
+  task the difference is +5.4 pp [0.0, +10.7].
+- Not a leaderboard run: 3 trials instead of the official 5, our own network
+  allowlist and apt cache proxy, and OMK alone had 150 s extra for a workspace
+  snapshot used in rescoring.
+
+- Costs count only the graded attempt, excluding prior failed retry attempts and
+  42 auxiliary model calls made by code inside one mini-SWE-agent task. They are
+  not total experiment spend.
+
+Method, per-difficulty results, audit and reproduction notes:
+[Terminal-Bench 2.1 report](packages/coding-agent/docs/benchmarks/r8-terminal-bench-2.1.md).
+
+</details>
+
+[Editable figure](readmeasset/omk-terminal-bench-r8.svg) · [Original report review](https://github.com/dmae97/omk/pull/86)
 
 ## OMK//CONTROL
 
@@ -388,7 +455,8 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.3.0](.github/RELEASE_NOTES_v1.3.0.md)
+- [Release notes for v1.3.2](.github/RELEASE_NOTES_v1.3.2.md)
+- Latest public release: [v1.3.1](https://github.com/dmae97/omk/releases/tag/v1.3.1). The notes linked above describe the next release until it is published.
 
 ## Development
 
@@ -443,6 +511,100 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 > section above for the shipped guards and optional-corpus boundary.
 
 <!-- releases:start -->
+
+## Release v1.3.2
+
+### Added
+
+- `omk doctor [--json] [--online]` checks the runtime, the agent directory, credentials, the model a first session would pick, the bash sandbox, `fd` and `rg`, and network reachability, and prints the fix for this machine. The checks run as a dependency graph with deadlines, so a root cause is reported once. The exit code is 0 when no check fails, 1 when one does and 2 for a usage error. `doctor` connects to nothing without `--online`, writes neither the agent directory nor `models.json` snapshots, and does not refresh an expired OAuth token. Previously `omk doctor` was sent to the model as a prompt.
+- A first run with no model configured opens the `/login` selector before the first prompt instead of failing that prompt (`Esc` skips it). When a Claude Code or Codex CLI login already exists on the machine, it names the `omk provider adopt <provider>` command that reuses it.
+- Standalone installer: `curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh`, attached to GitHub Releases from this release on. It downloads `omk-<os>-<arch>.tar.gz` and checks it against the release's `SHA256SUMS`, which it always takes from GitHub over HTTPS, also when `--base-url` names a download mirror (`--trust-mirror` takes the mirror's file instead, with a warning). It needs `curl`, resolves `latest` once, installs into `~/.omk/versions/<version>` and points `~/.omk/bin/omk` at it with an atomic rename. It never replaces an installed version directory: reinstalling the same archive does nothing, and another build of an installed version gets its own directory. `--allow-unverified` applies only when the release has no `SHA256SUMS` (HTTP 404); any other checksum failure stops the install. See [quickstart](packages/coding-agent/docs/quickstart.md).
+- Release builds attach `SHA256SUMS` and a signed build-provenance attestation that covers the binaries and `install.sh` (`gh attestation verify omk-linux-x64.tar.gz -R dmae97/omk`). The attestation runs in its own job, the only one that can mint an OIDC token, and the GitHub Release waits for it.
+- Opt-in RTK output filter for the built-in `bash` tool. With `OMK_RTK_OUTPUT=1` and `rtk` from `OMK_RTK_PATH` or `PATH`, successful output of 1 KiB or more from plain `vitest run` and `tsc --noEmit`/`tsgo --noEmit` commands is summarized with `rtk pipe`. The full output is kept in an owner-only file named in the result, and any filter problem returns the original output. Off by default; RTK is not bundled. See [RTK output filter](packages/coding-agent/docs/rtk-and-mutation-testing.md).
+- `omk run explain ID [--state-dir DIR] [--json]` and SDK `RunCoordinator.explain(id)` explain a verified run from one ledger snapshot: DAG dependencies and unfinished ancestors, candidate and receipt bindings, and claim closure. They are read-only and start, retry or approve nothing. See [verified run](packages/coding-agent/docs/verified-run.md).
+
+### Changed
+
+- `omk --version` and `-v` print the version without loading the runtime. On the measurement VM the Node CLI went from 635 ms to 62 ms (1,498 to 19 loaded modules) and the standalone binary from 554 ms to 385 ms.
+- With no default model configured, credentials are ranked: stored login, then a provider API key, then ambient cloud credentials. With AWS credentials in the environment and `ANTHROPIC_API_KEY` set, a first session now uses Anthropic instead of Amazon Bedrock, whose first request failed with a token error. When only ambient credentials exist, OMK names the variable that selected the provider. A configured default model is unchanged.
+- The bash sandbox counts as available only when `bwrap` actually runs a command, not from static checks. Hosts that block unprivileged user namespaces, setuid `bwrap` with `user.max_user_namespaces=0` included, now get setup steps for that host (package, AppArmor or container) instead of a raw `bwrap` error at the first command. See [Bash sandbox setup](packages/coding-agent/docs/sandbox-setup.md).
+- `fd` and `rg` are downloaded after the first frame instead of before it. Behind a stalled network the first frame took about 11 s and now takes about 1.2 s; offline startup is unchanged. Startup, `grep` and `find` share one download per tool.
+
+### Fixed
+
+- Extension messages sent with `triggerTurn`, background-task notifications among them, are delivered once, after the work that kept the session busy and on the resulting context: automatic or manual (`/compact`) compaction, a branch summary, a retry's model switch, prompt preflight, the resource check before a run, or a tool that settles after its run ended. Previously they failed with `PromptExecutionBusyError` and no follow-up turn ran, or, after a manual `/compact`, were answered from the context before compaction without being stored.
+- Follow-up input (`sendUserMessage(text, { deliverAs: "followUp" })`, or a prompt with `streamingBehavior`) that arrives while another prompt is still in preflight, its pre-prompt compaction included, runs with that prompt's run; if that prompt fails, the input runs on its own once the session is idle. Registered extension commands run at once in that window. Other slash text is still refused while the session is busy.
+- Text typed in the interactive TUI during compaction is sent when compaction ends: as a follow-up of the run that resumes, or as a new prompt. Previously the send failed and the text went back to the editor queue.
+- Clearing queued messages (`Esc`) also clears turn input that was waiting for the session to become idle.
+- A prompt whose run ended while extension input handlers were still processing it now runs in a new run budget instead of being refused.
+- Model requests no longer keep about 1.1 KB per request alive for the life of the process. Abort signals are linked with `linkAbortSignals()` instead of Node 22's `AbortSignal.any()`, and `npm run check:abort-signal-any` keeps new `AbortSignal.any()` calls out of the source.
+
+Release notes live in [RELEASE_NOTES_v1.3.2.md](.github/RELEASE_NOTES_v1.3.2.md).
+
+## Release v1.3.1
+
+> Published 2026-10-08: tag `v1.3.1` (`a989d88`), GitHub Release and npm `latest` for all seven packages, built from that commit. The entries below, except the first Changed entry, were still listed under `[Unreleased]` when 1.3.1 was tagged; the 1.3.1 packages contain them. See also the [1.3.1 preparation notes](.github/RELEASE_NOTES_v1.3.1.md), written before publication.
+
+### Added
+
+- Offline source-quote memory factorial CLI: isolated prior-session stores, paired independent/dependent tasks and explicit memory-off/on controls. The default report has 1,200 deterministic mechanism evaluations, not live LLM efficacy or KV measurements. See [offline experiment](packages/coding-agent/docs/memory-factorial-experiment.md).
+- `/session` reports the last request's memory state and eligible/omitted counts without reading source quotes, enabling recall or changing the VERIFY verdict. See [memory recall hardening](packages/coding-agent/docs/memory-recall-hardening.md).
+- Logical request admission has an `observe` default and explicit `OMK_REQUEST_ADMISSION_MODE=enforce` or `off` controls, with bounded JSON projection before logical dispatch. It is not provider-wire or billing accounting. See [request admission](packages/coding-agent/docs/phase5-runtime-boundaries.md).
+- Optional `OMK_MEMORY_SELECTION=v2` uses lexical query coverage and complete-span redundancy suppression, prices the actual synthetic tool pair and checks the full context. Legacy selection remains the default. Source snapshots are shared only within one recall, with freshness, expiry and revocation rechecked. See [recall selection](packages/coding-agent/docs/phase5-runtime-boundaries.md).
+- Built-in themes `omk-paper-dark` and `omk-paper-light` (aliases `paper`, `paper-dark`, `paper-light`, `omk-paper`) in the README hero's palette: ink text, secondary and tertiary ink, one vermillion accent, and subdued info, teal, green and ochre for links, code and syntax. Every text role measures 4.5:1 or more and every boundary 3:1 or more against the paper surfaces and common terminal backgrounds, `#1e1e1e` included; three dark values are one step lighter than the web palette to get there. Both carry HTML-export paper surfaces.
+
+### Changed
+
+- All seven public workspace packages and their internal dependency ranges are aligned to 1.3.1. External dependency versions are unchanged.
+- Assistant message content views call `setText` only when a block’s source text changes, so finished Markdown instances and their render caches stay reused across streaming updates. Markdown/Text `setText` still no-ops when the displayed string is unchanged.
+- Slash-command autocomplete (`SelectList`) caches the primary column width while the filter is unchanged, so `/` with large skill lists does less work per frame.
+- CLI no longer loads `undici` at process start. A fetch hook installs the global dispatcher on the first `fetch` (one common choke point for providers, OAuth and tools). `scheduleHttpDispatcher` remembers the idle timeout from settings without importing undici until then.
+- HTTP idle-timeout helpers (`parseHttpIdleTimeoutMs`, defaults, UI choices) live in `http-idle-timeout.ts` so `settings-manager` no longer pulls `undici` into the AgentSession import graph. `configureHttpDispatcher` still loads undici when the CLI or session actually configures the dispatcher.
+- The control rail (the startup deck column and the control-pane overlay in expanded view, `Ctrl+O`) now shows RUN, VERIFY, CONTEXT and RESOURCES, then TODO and SESSION. RUN has the turn state; VERIFY has one `verdict` row; CONTEXT has `model`, `think`, `ctx`, `meter` and `opt` (formerly `headroom`); RESOURCES has the governor mode (`gov`) and configured MCP/skill counts (`ext`, formerly `res`).
+- The control-pane overlay is anchored to the viewport and adds the live rows: RUN `queue` (queued message count), RESOURCES `cpu` (host CPU, the value the resource governor admits on; `busy` at or above its busy threshold) and `rss` (OMK process RSS), and, when a turn ends without completing, a failure card from the session termination record: cause, phase, side effects, retry policy (`auto`, `manual` or `none`) and next action. The startup deck column omits them: the startup header scrolls into terminal scrollback, where any later change re-emits up to four screens, so it keeps a fixed height and shows only turn-stable values.
+- The pinned status sidebar shows `run` and `vrfy` rows, plus the cause, retry policy, side effects and next action of a turn that ended without completing. Its MCP roster lists up to terminal rows − 26 servers (was − 24), so these rows take their height from the roster instead of pushing the bottom border and unpin hint off screen.
+- Status values pair a glyph with text: `✓` ok, `●` active, `!` blocked, `▲` degraded, `?` unknown, `~` stale, `◐` inconclusive. A value without a source shows as unknown (`?`), never as healthy.
+- The startup opening uses the paper/ink/vermillion design language of the README hero: a `FIG. 01 · THE CONTROL LOOP` plate, OMK's control-loop mark beside a serif half-block `OMK` wordmark, the tracked `OPEN MULTI-AGENT KIT` subtitle, an accent rule, the hero's lede (`Scope the work. Route the right agents. Verify every release.`), the `SCOPE → ROUTE → VERIFY → REPLAY` flow and a `MODEL … · THEME … · ANSI …` row. RUN, VERIFY and CTX appear only in the rail beside it. Below 120 columns the opening is a closed plate with `OMK · OPEN MULTI-AGENT KIT`, the lede, the status line `OMK vX · VERIFY … · MODEL … · ANSI ON|OFF` and the key hints (was `WELCOME TO OMK` and `OMK vX | VERIFY … | MODEL … | ANSI:…`); the expanded view adds the wordmark block and `THEME` once. The panel lines under the deck are left-aligned.
+- VERIFY reads `? unverified` in interactive sessions. No evidence workflow is attached to the interactive session, so a settled prompt or a completed turn does not change it.
+- Context pressure in the control rail, the pinned sidebar and the footer uses one threshold pair: elevated (warning color) from 70%, critical (error color) from 90%. Previously the rail and sidebar meters changed color at 65% and 85%, the sidebar `ctx` figure and the footer's context figure above 70% and 90%, and the rail `ctx` row was green at any usage.
+- Percentages in the control rail and the pinned sidebar, and the footer's context figure, are floored at display precision: 69.96% shows 69.9%, not 70.0%, so a figure never reaches a color band before its color changes.
+- Rail visibility comes from one layout classifier: XS below 80 columns, SM 80–119, MD 120–159, LG 160 and wider. Rails render only at MD or LG. The startup deck needs 120 columns (was 113), and the control-pane overlay needs 120 columns and 16 rows (was 112 and 12). These numbers may change after visual QA in native terminals.
+- The pinned status sidebar (`pinStatusSidebar`, `Ctrl+Q`) now needs at least 120 columns (was 96) and 16 rows; on smaller terminals the bottom status bar stays, and pinning with `Ctrl+Q` shows `Status sidebar pinned; it shows at 120+ columns and 16+ rows.`
+- When no theme is set, omk uses the new paper pair: `omk-paper-dark` on dark terminals, `omk-paper-light` on light ones (was `omk-control-panel` / `omk-control-light`). An explicit `theme` setting is unchanged; `omk-control-grid-dark` and the other built-in themes stay selectable.
+- The accent now marks only the Verify stage, the active tab and live signals. Frame titles, section labels, the rail identity, git branch, uptime, model id, token counts, usage labels, the activity sparkline, the theme name and the startup resource list's group labels use ink or secondary ink instead. Control-panel and status-sidebar frames use square hairline corners, and the single-column layouts use captioned plate rules (`┌─ LABEL ─┐`, `├─ LABEL ─┤`, `└─┘`).
+- Opening the expanded view (`Ctrl+O`) inks the wordmark in once: 420 ms, ease-out, from a faint pencil underdrawing to ink, with the Verify accent last. It changes colour only, never the layout, and is skipped for reduced motion, `NO_COLOR`, non-TTY output and narrow widths.
+
+### Fixed
+
+- Closed source-quote memory wrappers release their controller/store references and skip closed predecessors. Already-aborted requests refuse before starting predecessor work, and closed controllers refuse new mutations.
+- Durable file locks are staged with their owner record and atomically renamed into place, so a crash cannot leave a newly acquired ownerless lock. Existing lock ownership and identity checks remain.
+- Goal acceptance excludes OMK-owned goal, metrics and run state from workspace freshness, so OMK's own bookkeeping no longer invalidates a passing check; task-file changes still do. Completion rejections are surfaced instead of leaving a goal silently active.
+- Verified-run cancellation and owner exit kill the owned sandbox process group, including namespace setup before `--die-with-parent` is armed. Reaped empty groups are removed to avoid signaling a reused group number; signal delivery is not termination evidence.
+- Local session control enforces a total monotonic connection deadline, reclaims stale endpoints under its existing authorization checks and admits aborts independently of the prompt-command cap. Prompt generations can bind an abort to the intended request; acceptance does not prove termination. See [control deadlines](packages/coding-agent/docs/phase5-runtime-boundaries.md).
+- Skill lists with more than 24 visible entries use bounded descriptions that preserve both the lead and usage trigger, with abbreviation-aware sentence boundaries.
+- Headless runs defer interactive-mode, theme, syntax-highlighter and built-in tool-renderer imports until used. Explicit extension theme access still initializes the theme; session disposal removes highlighter-ready listeners.
+- Per-request static prompt/tool token counting reuses only the two immutable texts, while full message and envelope pricing remains exact. Source/record reads allocate their statted size plus one rather than maximum-size buffers; V2 skips token pricing for nonmatching records without caching validity or relaxing expiry/revocation checks.
+- The empty part of the context and usage meters (`░`) is visible again on dark themes. It was painted with `borderMuted`, which several themes set within a shade of the background (`omk-paper-dark` `#43413d`, `catppuccin-mocha` `#181825`, `omk-aurora-dark` `#161B27`), and `░` only fills part of the cell, so the track disappeared. The rail, header and sidebar meters now share one `meterBar` helper that paints the track with `dim`.
+- An extension that replaces `globalThis.fetch` keeps seeing every request again. Since undici began loading on the first `fetch`, that first request's install compared against the extension's hook instead of omk's own and replaced it with undici's `fetch`, so the hook ran only once per process. omk now sets the undici dispatcher and leaves an extension's `fetch` in place, as before the lazy load; without an extension, `globalThis.fetch` still becomes undici's `fetch`.
+- `omk -p` now arms an unref'd exit guard after print mode finishes: when a stray handle keeps the event loop alive past 2s (override with `OMK_PRINT_EXIT_GRACE_MS`, `0` disables), it writes the held resource kinds to stderr and exits with the run's code. Normal runs are unchanged because the timer is unref'd.
+- The interactive footer metrics timer no longer requests a full TUI re-render every 2 seconds when system CPU/MEM metrics are disabled (the default). The footer now owns the interval and only runs it while metrics are shown, so toggling metrics starts and stops the timer instead of waking the event loop every 2 seconds. `footer.invalidate()` was already a no-op, so those ticks only burned render cost proportional to chat history length.
+- `omk -p "- …"` no longer exits with `Unknown option` when the inline prompt starts with a dash and contains whitespace or a newline. One-word dash tokens after `-p` still error; `omk -p -- -foo` passes them as text (spec 028).
+- Processes that import `AgentSession`, every `omk -p` worker included, no longer load jiti and its bundled Babel (about 1.5 MB of CommonJS) at startup. The extension loader imports `jiti/static` when it loads its first extension file, so a run without extension files never loads it. Importing `core/agent-session.js` alone now takes about 15 MB less RSS and 8 MB less heap after GC.
+- Session-input and request-context admission no longer allocate one temporary string per transcript character when estimating tokens. `estimateTextTokens` walks UTF-16 code units with `charCodeAt` and an inlined Unicode whitespace table instead of `for...of` plus `/\s/u`, so long headless sessions keep the same token counts while cutting per-turn garbage that was pushing RSS up with history length.
+- `boundedAdmissionJson` returns a flat concatenated string (`joinWrapped`) instead of wrapping `parts.join(",")` in a template literal, so the token counter does not flatten a second full-transcript copy of the admission projection on every provider request.
+- Token counter adapters may implement optional `countTextParts(parts, modelId)`, which returns the same result as `countText(parts.join(""), modelId)` without building the joined text. The fallback estimator (`estimateTextTokensFromParts`, now in `text-token-estimate.ts`) and the token counter registry implement it; `countTextParts(counter, parts, modelId)` joins for adapters that do not.
+- Session-input admission (`estimateContextInputTokens`) and request-context admission count the transcript JSON as per-message pieces instead of first building one transcript-sized string. `canonicalizeMessagesForContextAdmission` now returns `textParts`, and `projectRequestForAdmission` returns `messageParts` (from the new `boundedAdmissionJsonParts`); joined, each is byte-identical to the previous text, and token counts, budget charges and errors are unchanged.
+- `ExtensionRunner.emitContext` returns a shallow copy instead of a `structuredClone` of the whole history when no extension registers a `context` handler. When any handler is registered the deep clone and handler semantics are unchanged. Default sessions always load the built-in `tool-pair-repair` context handler; see the next entry for how that case avoids the clone.
+- `on("context", handler, options?)` accepts optional `{ mutatesMessages: false }`. When every registered context handler opts in (or none exist), `emitContext` shares a shallow `[...messages]` array instead of `structuredClone`. Default / unmarked handlers keep today's deep clone. The built-in `tool-pair-repair` handler is marked non-mutating; it already builds new arrays via filter/spread and never writes into `event.messages`.
+- The startup panel no longer shows fixed status values as live state. The control rail, the hero strip and the narrow status line printed `ready`, `active`, `tracking`, `linked`, `pinned` and `DAG:omk-parallel-orchestrator` with no runtime source, most of them in the success color. Status rows now come from one `ControlPlaneViewModel` built from the live session by one adapter, `readControlPlaneSignals`; the pinned status sidebar builds the same view model through the same adapter.
+- Status rows in the control rail and the pinned sidebar, and the startup header's MODEL and THEME values, print session, run-journal, model, theme and file-system text (model id, theme name, cwd, git branch, session name, endpoint host, MCP server names, TODO labels, failure text) as one printable line: escape sequences, control characters and bidi marks are removed and line breaks become spaces. In 1.2.4 the rail's model, cwd, git and TODO rows and the pinned sidebar's cwd, git, session and model rows printed such text as-is; sidebar MCP names were already cleaned.
+
+### Removed
+
+- From the control rail: the STATUS and CONTROL sections, the `omk` and `sidebar` rows, the `pulse` sparkline (seeded from a hash of the status snapshot, not measured), the `MATRIX RAIN // NEON GRID ONLINE` line and the `pkg` package-intake row. Package intake still appears in the footer and in the pinned sidebar's SYSTEM section. The `CYBERPUNK OPS CORE` and `NIGHT-CITY-MATRIX-V3` lines are gone from both the rail and the hero.
+- The startup banner's hue gradient, scramble reveal, idle colour drift and sparkle starfield. `OMK_CONTROL_IDLE_DRIFT` no longer has an effect: the opening never loops.
+
+Release notes live in [RELEASE_NOTES_v1.3.1.md](.github/RELEASE_NOTES_v1.3.1.md).
 
 ## Release v1.3.0
 
@@ -501,30 +663,6 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 - Fireworks, Together and OpenCode Go no longer default to a Kimi K2.6 id that the 2026-09-30 catalog refresh dropped; model resolution fell back to the provider's first catalog entry. Fireworks and Together default to Kimi K3 (`accounts/fireworks/models/kimi-k3`, `moonshotai/Kimi-K3`), which keeps their transport contract. OpenCode Go defaults to `deepseek-v4.1-flash`: OMK has not verified the request contract of its Kimi K3 or K2.7 Code, and models.dev marks its K2.6 deprecated.
 
 Release notes live in [RELEASE_NOTES_v1.3.0.md](.github/RELEASE_NOTES_v1.3.0.md).
-
-## Release v1.2.4
-
-### New Features
-
-- `omk provider adopt [<id>] [--from <source>] [--dry-run] [--json] [--status]` copies an existing Codex CLI or Claude Code CLI login into OMK's credential store, so a subscription does not have to be signed in twice. Sources are read-only, `--from` narrows to the provider's own mapping, and no token material reaches output.
-
-### Fixed
-
-- A credential store that cannot be read is no longer treated as "no credential": request auth refuses to substitute stale environment or models.json keys, `agent-session` reports the store error instead of advising `/login`, and a transient lock contention is retried instead of deciding authentication for the whole process lifetime.
-- `omk provider doctor` accepts engine-registered API types (`devin-agent`, `cursor-agent`) instead of rejecting them as unsupported.
-- Compaction commits survive append-only extension state written while the summary is generated; only provably inert `custom` tails are rebased, and a `length` stop that produced no summary text fails instead of committing an empty summary. The compaction source-entry bound is 65,536.
-- `addOAuthAccount` merges imported accounts inside the storage lock (no lost update across concurrent sessions) and never overwrites a usable stored refresh token with an absent one.
-- A post-dispatch rejection that provably never spawned (a deadline crossing between the dispatch journal and the supervisor call) now journals the exit and settles the run instead of leaving the execution id open forever.
-
-Release notes live in [RELEASE_NOTES_v1.2.4.md](.github/RELEASE_NOTES_v1.2.4.md).
-
-## Release v1.2.3
-
-### Fixed
-
-- Verified-run suite hardening: tests use a 15s cleanup budget so slow namespace teardown on ubuntu-22.04 runners drains before settling, matching the witness contract without weakening fail-closed outcomes (no product-code change).
-
-Release notes live in [RELEASE_NOTES_v1.2.3.md](.github/RELEASE_NOTES_v1.2.3.md).
 
 <!-- releases:end -->
 

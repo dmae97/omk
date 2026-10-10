@@ -2,19 +2,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import chalk from "chalk";
-import {
-	type EditorTheme,
-	getCapabilities,
-	type MarkdownTheme,
-	type SelectListTheme,
-	type SettingsListTheme,
-} from "omk-tui";
+import type { EditorTheme, MarkdownTheme, SelectListTheme, SettingsListTheme } from "omk-tui";
 import { type Static, Type } from "typebox";
 import { Compile } from "typebox/compile";
 import { getCustomThemesDir, getThemesDir } from "../../../config.ts";
 import type { SourceInfo } from "../../../core/source-info.ts";
 import { closeWatcher, watchWithErrorHandler } from "../../../utils/fs-watch.ts";
 import { highlight, supportsLanguage } from "../../../utils/syntax-highlight.ts";
+import { getTrueColorSupport } from "../../../utils/terminal-truecolor.ts";
 import { THEME_NAME_ALIASES } from "./theme-aliases.ts";
 
 // ============================================================================
@@ -618,7 +613,7 @@ function loadThemeJson(name: string): ThemeJson {
 }
 
 function createTheme(themeJson: ThemeJson, mode?: ColorMode, sourcePath?: string): Theme {
-	const colorMode = mode ?? (getCapabilities().trueColor ? "truecolor" : "256color");
+	const colorMode = mode ?? (getTrueColorSupport() ? "truecolor" : "256color");
 	const resolvedColors = resolveThemeColors(themeJson.colors, themeJson.vars);
 	const fgColors: Record<ThemeColor, string | number> = {} as Record<ThemeColor, string | number>;
 	const bgColors: Record<ThemeBg, string | number> = {} as Record<ThemeBg, string | number>;
@@ -788,13 +783,26 @@ export function getDefaultTheme(): string {
 // Use globalThis to share theme across module loaders (tsx + jiti in dev mode)
 const THEME_KEY = Symbol.for("open-multi-agent-kit:theme");
 
+// Theme name for lazy initialization, set by modes that skip eager initTheme().
+const LAZY_THEME_NAME_KEY = Symbol.for("open-multi-agent-kit:theme-lazy-name");
+
+/**
+ * Record the theme to load if `theme` is read before initTheme() runs.
+ * Print/json mode skips eager initTheme(), but extensions still read
+ * `ctx.ui.theme` there (status lines, the sandbox example) and expect a theme.
+ */
+export function setLazyThemeName(themeName: string | undefined): void {
+	(globalThis as Record<symbol, string | undefined>)[LAZY_THEME_NAME_KEY] = themeName;
+}
+
 // Export theme as a getter that reads from globalThis
 // This ensures all module instances (tsx, jiti) see the same theme
 export const theme: Theme = new Proxy({} as Theme, {
 	get(_target, prop) {
-		const t = (globalThis as Record<symbol, Theme>)[THEME_KEY];
-		if (!t) throw new Error("Theme not initialized. Call initTheme() first.");
-		return (t as unknown as Record<string | symbol, unknown>)[prop];
+		const store = globalThis as Record<symbol, unknown>;
+		// First access without initTheme(): initialize lazily, without a file watcher.
+		if (!store[THEME_KEY]) initTheme(store[LAZY_THEME_NAME_KEY] as string | undefined);
+		return (store[THEME_KEY] as Record<string | symbol, unknown>)[prop];
 	},
 });
 
@@ -806,6 +814,9 @@ let currentThemeName: string | undefined;
 let themeWatcher: fs.FSWatcher | undefined;
 let themeReloadTimer: NodeJS.Timeout | undefined;
 let onThemeChangeCallback: (() => void) | undefined;
+function notifyThemeChange(): void {
+	onThemeChangeCallback?.();
+}
 const registeredThemes = new Map<string, Theme>();
 
 export function setRegisteredThemes(themes: Theme[]): void {
@@ -840,9 +851,7 @@ export function setTheme(name: string, enableWatcher: boolean = false): { succes
 		if (enableWatcher) {
 			startThemeWatcher();
 		}
-		if (onThemeChangeCallback) {
-			onThemeChangeCallback();
-		}
+		notifyThemeChange();
 		return { success: true };
 	} catch (error) {
 		// Theme is invalid - fall back to dark theme
@@ -860,13 +869,14 @@ export function setThemeInstance(themeInstance: Theme): void {
 	setGlobalTheme(themeInstance);
 	currentThemeName = "<in-memory>";
 	stopThemeWatcher(); // Can't watch a direct instance
-	if (onThemeChangeCallback) {
-		onThemeChangeCallback();
-	}
+	notifyThemeChange();
 }
 
-export function onThemeChange(callback: () => void): void {
+export function onThemeChange(callback: () => void): () => void {
 	onThemeChangeCallback = callback;
+	return () => {
+		if (onThemeChangeCallback === callback) onThemeChangeCallback = undefined;
+	};
 }
 
 function startThemeWatcher(): void {
@@ -910,9 +920,7 @@ function startThemeWatcher(): void {
 				registeredThemes.set(watchedThemeName, reloadedTheme);
 				setGlobalTheme(reloadedTheme);
 				// Notify callback (to invalidate UI)
-				if (onThemeChangeCallback) {
-					onThemeChangeCallback();
-				}
+				notifyThemeChange();
 			} catch (_error) {
 				// Ignore errors (file might be in invalid state while being edited)
 			}

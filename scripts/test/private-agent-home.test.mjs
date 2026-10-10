@@ -8,7 +8,9 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -20,6 +22,7 @@ import {
 	MARKER_ALLOWLIST,
 	PRIVATE_ARTIFACTS,
 	PRIVATE_DOC_PATTERN,
+	privateDocumentDigests,
 	STACK_MARKERS,
 } from "../check-private-agent-home.mjs";
 
@@ -107,6 +110,67 @@ describe("PRIVATE_DOC_PATTERN", () => {
 		for (const name of ["README.md", "CHANGELOG.md", "notes.md"]) {
 			assert.equal(PRIVATE_DOC_PATTERN.test(name), false, `should not match ${name}`);
 		}
+	});
+});
+
+describe("privateDocumentDigests", () => {
+	const withHome = (body) => {
+		const dir = mkdtempSync(join(tmpdir(), "private-home-"));
+		try {
+			const home = join(dir, "agent");
+			const checkout = join(dir, "checkout");
+			for (const path of [home, checkout]) mkdirSync(path, { recursive: true });
+			body(home, checkout);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	};
+
+	it("reads private documents that the home links from a separately versioned checkout", () => {
+		withHome((home, checkout) => {
+			writeFileSync(join(checkout, "AGENTS.md"), "private instructions\n");
+			symlinkSync(join(checkout, "AGENTS.md"), join(home, "AGENTS.md"));
+			writeFileSync(join(home, "README.md"), "not a private document\n");
+
+			const digest = createHash("sha256").update("private instructions\n").digest("hex");
+			// A name outside the private pattern is not a private document.
+			assert.deepEqual(privateDocumentDigests(home), [["AGENTS.md", digest]]);
+		});
+	});
+
+	it("skips the duplicate check only when the private home itself is absent", () => {
+		withHome((home) => {
+			assert.deepEqual(privateDocumentDigests(join(home, "absent")), []);
+		});
+	});
+
+	it("fails closed on a private document link whose target is gone", () => {
+		withHome((home, checkout) => {
+			symlinkSync(join(checkout, "moved.md"), join(home, "SOUL.md"));
+			assert.throws(() => privateDocumentDigests(home), /SOUL\.md.*ENOENT/);
+		});
+	});
+
+	it("fails closed on a private document it is not allowed to read", { skip: process.getuid?.() === 0 }, () => {
+		withHome((home) => {
+			writeFileSync(join(home, "INTEGRITY.md"), "private\n");
+			chmodSync(join(home, "INTEGRITY.md"), 0o000);
+			assert.throws(() => privateDocumentDigests(home), /INTEGRITY\.md.*EACCES/);
+		});
+	});
+
+	it("makes the guard fail, not skip, when a private document cannot be read", () => {
+		withHome((home, checkout) => {
+			symlinkSync(join(checkout, "moved.md"), join(home, "AGENTS.md"));
+			const result = spawnSync(process.execPath, [join(root, "scripts", "check-private-agent-home.mjs")], {
+				cwd: root,
+				encoding: "utf8",
+				env: { ...process.env, OMK_PRIVATE_AGENT_HOME: home },
+			});
+			assert.equal(result.status, 1, result.stdout + result.stderr);
+			assert.match(result.stderr, /AGENTS\.md.*ENOENT/);
+			assert.doesNotMatch(result.stdout, /duplicate check skipped/);
+		});
 	});
 });
 

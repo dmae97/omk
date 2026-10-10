@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { chmodSync, lstatSync, mkdirSync, rmdirSync } from "node:fs";
+import { chmodSync, lstatSync } from "node:fs";
 import { hostname, tmpdir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
-import { ensureDurableDirectorySync, fsyncDirectorySync, writeExclusiveFileDurablySync } from "./durable-file-io.ts";
+import { ensureDurableDirectorySync, fsyncDirectorySync } from "./durable-file-io.ts";
 import {
 	createDurableFileLockRetirement,
 	type DurableFileLockRetirement,
@@ -14,6 +14,7 @@ import {
 	readDurableFileLockOwnerSync,
 	sameDurableFileLockOwner,
 } from "./durable-file-lock-owner.ts";
+import { publishStagedDurableFileLockSync } from "./durable-file-lock-stage.ts";
 
 export type DurableFileLockPathObservation =
 	| { readonly status: "absent" }
@@ -162,25 +163,22 @@ export function durableFileLockPath(scope: string, key: string): string {
 	return join(getDurableFileLockRoot(), `${scope}-${key}.lock`);
 }
 
+/** Acquire a lock that is published atomically with its owner record (see durable-file-lock-stage.ts). */
 export function acquireDurableFileLockPathSync(key: string, path: string, deadline: number): HeldDurableFileLock {
 	while (true) {
 		const token = randomUUID();
-		try {
-			mkdirSync(path, { mode: 0o700 });
-		} catch (error) {
-			if (fileErrorCode(error) !== "EEXIST") throw error;
+		const expectedOwner = publishStagedDurableFileLockSync(
+			path,
+			ownerPath,
+			token,
+			() => new DurableFileLockOwnershipError(),
+		);
+		if (expectedOwner === undefined) {
 			if (inspectDurableFileLockPathSync(path, deadline).status === "absent") continue;
 			if (Date.now() >= deadline) throw new DurableFileLockBusyError();
 			Atomics.wait(WAITER, 0, 0, Math.min(10, deadline - Date.now()));
 			continue;
 		}
-		const directory = lstatSync(path, { bigint: true });
-		if (!directory.isDirectory() || directory.isSymbolicLink()) throw new DurableFileLockOwnershipError();
-		const expectedOwner: DurableFileLockOwnerSnapshot = Object.freeze({
-			owner: Object.freeze({ pid: process.pid, host: hostname(), token }),
-			dev: directory.dev.toString(),
-			ino: directory.ino.toString(),
-		});
 		const lock: HeldDurableFileLock = {
 			key,
 			path,
@@ -188,27 +186,18 @@ export function acquireDurableFileLockPathSync(key: string, path: string, deadli
 			expectedOwner,
 			retirement: createDurableFileLockRetirement(),
 		};
-		let ownerWritten = false;
 		try {
 			fsyncDirectorySync(dirname(path));
-			writeExclusiveFileDurablySync(ownerPath(path), Buffer.from(JSON.stringify(expectedOwner.owner), "utf8"));
-			ownerWritten = true;
 			assertDurableFileLockPathsOwnedSync([lock]);
 			return lock;
 		} catch (error) {
-			let cleanupError: unknown;
 			try {
-				if (ownerWritten) releaseDurableFileLockPathsSync([lock], [lock]);
-				else {
-					rmdirSync(path);
-					fsyncDirectorySync(dirname(path));
-				}
+				releaseDurableFileLockPathsSync([lock], [lock]);
 			} catch (failure) {
-				cleanupError = failure instanceof Error ? failure : new Error(String(failure));
-				if (ownerWritten && !(cleanupError instanceof DurableFileLockOwnershipError))
-					retainRetryableDurableFileLocks([lock]);
+				const cleanupError = failure instanceof Error ? failure : new Error(String(failure));
+				if (!(cleanupError instanceof DurableFileLockOwnershipError)) retainRetryableDurableFileLocks([lock]);
+				throw new AggregateError([error, cleanupError], "Durable file lock creation cleanup failed");
 			}
-			if (cleanupError) throw new AggregateError([error, cleanupError], "Durable file lock creation cleanup failed");
 			throw error;
 		}
 	}

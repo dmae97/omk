@@ -1,0 +1,11 @@
+{
+	"packages/ai/src/providers/cursor.ts": 1,
+	"packages/ai/src/providers/devin.ts": 1,
+	"packages/ai/src/utils/oauth/devin.ts": 1,
+	"packages/ai/src/utils/oauth/meta-protocol.ts": 2,
+	"packages/ai/src/utils/oauth/xai.ts": 2,
+	"packages/coding-agent/src/core/goal-acceptance.ts": 1,
+	"packages/coding-agent/src/core/subagent-lane-authority.ts": 1,
+	"packages/coding-agent/src/core/verified-run/dag-phase.ts": 1,
+	"packages/coding-agent/src/core/verified-run/writer-phase.ts": 1
+}

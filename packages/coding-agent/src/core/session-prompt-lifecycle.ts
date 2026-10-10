@@ -34,6 +34,11 @@ export class SessionPromptLifecycle {
 		return this.owner !== undefined;
 	}
 
+	/** An owner exists and has not called finish(): its run still checks the agent queue before ending. */
+	get running(): boolean {
+		return this.owner !== undefined && this.owner.terminal === undefined;
+	}
+
 	waitForIdle(): Promise<void> {
 		if (!this.owner) return Promise.resolve();
 		return new Promise<void>((resolve) => this.idleWaiters.add(resolve));

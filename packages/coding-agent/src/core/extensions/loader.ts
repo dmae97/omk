@@ -7,7 +7,6 @@ import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createJiti } from "jiti/static";
 import type { KeyId } from "omk-tui";
 import { CONFIG_DIR_NAME, getAgentDir, isBunBinary } from "../../config.ts";
 import { resolvePath } from "../../utils/paths.ts";
@@ -17,7 +16,8 @@ import { execCommand } from "../exec.ts";
 import { readPackageManifest } from "../package-manifest.ts";
 import { LEGACY_PI_RUNTIME_ALIASES, type PiCompatibilityTarget } from "../pi-compat.ts";
 import { createSyntheticSourceInfo } from "../source-info.ts";
-import { buildVirtualModules } from "./bundled-virtual-modules.ts";
+import { markContextHandlerNonMutating } from "./context-handler-options.ts";
+import { buildVirtualModulesLazily, createJitiLazily } from "./lazy-imports.ts";
 import type {
 	Extension,
 	ExtensionAPI,
@@ -261,11 +261,10 @@ function createExtensionAPI(
 ): ExtensionAPI {
 	const api = {
 		// Registration methods - write to extension
-		on(event: string, handler: HandlerFn): void {
+		on(event: string, handler: HandlerFn, options?: { mutatesMessages?: boolean }): void {
 			runtime.assertActive();
-			const list = extension.handlers.get(event) ?? [];
-			list.push(handler);
-			extension.handlers.set(event, list);
+			if (event === "context" && options?.mutatesMessages === false) markContextHandlerNonMutating(handler);
+			(extension.handlers.get(event) ?? extension.handlers.set(event, []).get(event)!).push(handler);
 		},
 
 		registerTool(tool: ToolDefinition): void {
@@ -438,12 +437,11 @@ function createExtensionAPI(
 }
 
 async function loadExtensionModule(extensionPath: string, binaryMode = isBunBinary) {
-	const jiti = createJiti(import.meta.url, {
+	const jiti = await createJitiLazily(import.meta.url, {
 		moduleCache: false,
-		// In Bun binary: use virtualModules for bundled packages (no filesystem resolution)
-		// Also disable tryNative so jiti handles ALL imports (not just the entry point)
-		// In Node.js/dev: use aliases to resolve to node_modules paths
-		...(binaryMode ? { virtualModules: buildVirtualModules(), tryNative: false } : { alias: getAliases() }),
+		// Bun binary: virtualModules; Node/dev: aliases. tryNative off so jiti owns all imports.
+		// biome-ignore format: keep ternary one line so loader.ts stays within module-size baseline
+		...(binaryMode ? { virtualModules: await buildVirtualModulesLazily(), tryNative: false } : { alias: getAliases() }),
 	});
 
 	const module = await jiti.import(extensionPath, { default: true });
