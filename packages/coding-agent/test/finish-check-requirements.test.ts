@@ -184,6 +184,19 @@ describe("finish-check checklist message and ledger", () => {
 		]);
 	});
 
+	it("reads only the asked-for `REQ <n>: PASS|FAIL` form; other spellings stay unreported", () => {
+		// Deliberate: a loose spelling on a numeric item costs the measure turn, which asks for the exact form.
+		for (const line of [
+			"REQ 1: PASSED - stone 80 >= 75",
+			"REQ 1 - PASS - stone 80 >= 75",
+			"REQ 1 PASS",
+			"REQ1: OK",
+		]) {
+			expect(parseFinishCheckLedger(line, ["a"])[0]?.status, line).toBe("unreported");
+		}
+		expect(parseFinishCheckLedger("req 1: pass - fine", ["a"])[0]?.status).toBe("pass");
+	});
+
 	it("asks numeric items for one comparison per limit, and keeps path-only wording", () => {
 		expect(buildFinishCheckMessage(extractRequirements(COREWARS))).toContain("`<label> <measured> <op> <limit>`");
 		expect(buildFinishCheckMessage(extractRequirements(COREWARS))).toContain("Write only the current measurement");
