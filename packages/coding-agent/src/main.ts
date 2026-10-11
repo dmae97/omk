@@ -17,9 +17,8 @@ import { attachSessionTransports } from "./cli/mcp-attach.ts";
 import { loadModelContractOrExit } from "./cli/model-contract.ts";
 import { isPackageCliCommand, isPackageDoctorCommand } from "./cli/package-commands.ts";
 import { isExplicitExtensionDiagnostic, resolveCliPaths } from "./cli/resource-paths.ts";
-import { handleCodexBarQuotaCommand } from "./codexbar-cli.ts";
+import { isQuotaCommand, mayBeRunCommand } from "./cli/subcommand-words.ts";
 import { runInitCli } from "./commands/init-cli.ts";
-import { runCommand } from "./commands/run-command.ts";
 import { ENV_SESSION_DIR, expandTildePath, getAgentDir, getPackageDir, VERSION } from "./config.ts";
 import { type CreateAgentSessionRuntimeFactory, createAgentSessionRuntime } from "./core/agent-session-runtime.ts";
 import {
@@ -534,14 +533,21 @@ export async function main(args: string[], options?: MainOptions) {
 		}
 	}
 
-	if (await handleCodexBarQuotaCommand(args)) {
-		return;
+	// Subcommand handlers load only for their own words, so `-p` workers skip them (spec 043).
+	if (isQuotaCommand(args)) {
+		const { handleCodexBarQuotaCommand } = await import("./codexbar-cli.ts");
+		if (await handleCodexBarQuotaCommand(args)) {
+			return;
+		}
 	}
 
-	const outcome = await runCommand(args, { createSession: createVerifiedRunAgentSession });
-	if (outcome.handled) {
-		process.exitCode = outcome.exitCode;
-		return;
+	if (mayBeRunCommand(args)) {
+		const { runCommand } = await import("./commands/run-command.ts");
+		const outcome = await runCommand(args, { createSession: createVerifiedRunAgentSession });
+		if (outcome.handled) {
+			process.exitCode = outcome.exitCode;
+			return;
+		}
 	}
 
 	const parsed = parseArgs(args);
