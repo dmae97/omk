@@ -16,6 +16,7 @@ const COLD_PATH_MODULES = {
 	acpMode: "../src/modes/acp/acp-mode.ts",
 	codexBarCli: "../src/codexbar-cli.ts",
 	sessionSelectorLoaders: "../src/modes/interactive/components/session-selector-loaders.ts",
+	exportHtml: "../src/core/export-html/index.ts",
 } as const;
 type ColdPathModule = keyof typeof COLD_PATH_MODULES;
 const loads = new Map<ColdPathModule, number>();
