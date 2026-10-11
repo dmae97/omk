@@ -24,9 +24,11 @@ import { performance } from "node:perf_hooks";
  * ignored (debug output, best-effort). Unset: no log object exists and the
  * resize handler is not wrapped (TerminalOutput.withResizeLog).
  *
- * The SIGWINCH omk sends itself on start (stale size after suspend) logs a
- * line with unchanged cols/rows; a suspend/resume cycle (external editor)
- * writes a final line per stop, so readers take the last final line.
+ * Node emits `resize` only when the tty size actually changed, so the SIGWINCH
+ * omk sends itself on start (stale size after suspend) logs a line only if the
+ * size changed while omk was stopped; there are no same-size lines. A
+ * suspend/resume cycle (external editor) writes a final line per stop, so
+ * readers take the last final line.
  */
 export class TerminalResizeLog {
 	private readonly path: string;
