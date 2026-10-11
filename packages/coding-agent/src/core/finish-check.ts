@@ -128,13 +128,31 @@ export function shouldAddFinishDiscipline(mode: FinishCheckMode, hasUI: boolean)
 	return mode === "always" || !hasUI;
 }
 
+/** Why a settled run gets no verification turn, in the order checked. */
+export type FinishCheckSkipReason =
+	| "off"
+	| "ui"
+	| "already-checked"
+	| "workspace-unchanged"
+	| "pending-input"
+	| "aborted"
+	| "late";
+
+/** The first reason a settled run gets no verification turn, or `undefined` when it gets one. */
+export function finishCheckSkipReason(input: FinishCheckDecisionInput): FinishCheckSkipReason | undefined {
+	if (input.mode === "off") return "off";
+	if (input.mode === "headless" && input.hasUI) return "ui";
+	if (input.alreadyChecked) return "already-checked";
+	if (!input.mutatedWorkspace) return "workspace-unchanged";
+	if (input.hasPendingMessages) return "pending-input";
+	if (input.aborted) return "aborted";
+	if (input.elapsedFraction !== undefined && input.elapsedFraction >= FINISH_CHECK_SKIP_FRACTION) return "late";
+	return undefined;
+}
+
 /** Whether the settled run should get one verification turn. */
 export function shouldRunFinishCheck(input: FinishCheckDecisionInput): boolean {
-	if (input.mode === "off") return false;
-	if (input.mode === "headless" && input.hasUI) return false;
-	if (input.alreadyChecked || !input.mutatedWorkspace || input.hasPendingMessages || input.aborted) return false;
-	if (input.elapsedFraction !== undefined && input.elapsedFraction >= FINISH_CHECK_SKIP_FRACTION) return false;
-	return true;
+	return finishCheckSkipReason(input) === undefined;
 }
 
 export type FinishCheckExtraTurn = "threshold" | "measure" | "both";
