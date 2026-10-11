@@ -172,9 +172,28 @@ export interface ReverifyDecisionInput {
 	readonly alreadyVerified: boolean;
 }
 
-/** Whether a settled check turn is followed by the fresh-context verifier (spec 032). Headless runs with a budget only. */
+/** Why the verifier does not run after a settled check turn (spec 032), in the order checked. */
+export type ReverifySkipReason =
+	| "disabled"
+	| "ui"
+	| "already-verified"
+	| "check-aborted"
+	| "pending-input"
+	| "no-budget"
+	| "late";
+
+/** The first reason the verifier does not run, or `undefined` when it does. Headless runs with a budget only. */
+export function reverifySkipReason(input: ReverifyDecisionInput): ReverifySkipReason | undefined {
+	if (!input.enabled) return "disabled";
+	if (input.hasUI) return "ui";
+	if (input.alreadyVerified) return "already-verified";
+	if (input.aborted) return "check-aborted";
+	if (input.hasPendingMessages) return "pending-input";
+	if (input.firstSettleFraction === undefined) return "no-budget";
+	return input.firstSettleFraction < FINISH_CHECK_REVERIFY_FRACTION ? undefined : "late";
+}
+
+/** Whether a settled check turn is followed by the fresh-context verifier (spec 032). */
 export function shouldReverify(input: ReverifyDecisionInput): boolean {
-	if (!input.enabled || input.hasUI || input.alreadyVerified || input.aborted || input.hasPendingMessages)
-		return false;
-	return input.firstSettleFraction !== undefined && input.firstSettleFraction < FINISH_CHECK_REVERIFY_FRACTION;
+	return reverifySkipReason(input) === undefined;
 }

@@ -7,6 +7,7 @@ import {
 	FINISH_CHECK_SKIP_FRACTION,
 	resolveFinishCheckExtraTurn,
 	resolveFinishCheckReverify,
+	reverifySkipReason,
 	shouldReverify,
 } from "../src/core/finish-check.ts";
 import { extractRequirements, parseFinishCheckLedger } from "../src/core/finish-check-requirements.ts";
@@ -81,6 +82,17 @@ describe("finish-check reverify: trigger", () => {
 		expect(shouldReverify({ ...base, aborted: true })).toBe(false);
 		expect(shouldReverify({ ...base, hasPendingMessages: true })).toBe(false);
 		expect(shouldReverify({ ...base, alreadyVerified: true })).toBe(false);
+	});
+
+	it("names the first reason it does not fire, for the run log (AC19)", () => {
+		expect(reverifySkipReason(base)).toBeUndefined();
+		expect(reverifySkipReason({ ...base, enabled: false })).toBe("disabled");
+		expect(reverifySkipReason({ ...base, hasUI: true, aborted: true })).toBe("ui");
+		expect(reverifySkipReason({ ...base, alreadyVerified: true })).toBe("already-verified");
+		expect(reverifySkipReason({ ...base, aborted: true, hasPendingMessages: true })).toBe("check-aborted");
+		expect(reverifySkipReason({ ...base, hasPendingMessages: true, firstSettleFraction: 0.5 })).toBe("pending-input");
+		expect(reverifySkipReason({ ...base, firstSettleFraction: undefined })).toBe("no-budget");
+		expect(reverifySkipReason({ ...base, firstSettleFraction: FINISH_CHECK_REVERIFY_FRACTION })).toBe("late");
 	});
 });
 
