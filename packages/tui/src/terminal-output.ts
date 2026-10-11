@@ -2,6 +2,7 @@ import { errorMonitor } from "node:events";
 import { appendFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Writable } from "node:stream";
+import { TerminalResizeLog } from "./terminal-resize-log.ts";
 
 export interface TerminalOutputStats {
 	readonly writeCalls: number;
@@ -49,9 +50,32 @@ export class TerminalOutput {
 		this.counters.errorCount++;
 	};
 
-	constructor(stream: Writable, log = "") {
+	private readonly resizeLog: TerminalResizeLog | undefined;
+
+	constructor(stream: Writable, log = "", resizeLog = process.env.OMK_TUI_RESIZE_LOG || "") {
 		this.stream = stream;
 		this.logPath = writeLogPath(log);
+		this.resizeLog = resizeLog ? new TerminalResizeLog(resizeLog) : undefined;
+		// Exits that skip stop (a dead tty's EIO goes straight to process.exit)
+		// still get their final line; after a normal stop this is a duplicate and skipped.
+		if (this.resizeLog) process.once("exit", () => this.resizeLog?.final(this.counters.submittedBytes));
+	}
+
+	/**
+	 * Wraps a resize handler so each resize first logs the bytes written so far
+	 * (OMK_TUI_RESIZE_LOG, see terminal-resize-log.ts). Returns the handler
+	 * itself when the log is off, so an unset variable costs nothing per event.
+	 */
+	withResizeLog(onResize: () => void, size: () => { cols: number; rows: number }): () => void {
+		const log = this.resizeLog;
+		if (!log) return onResize;
+		let prev = size();
+		return () => {
+			const next = size();
+			log.resize(this.counters.submittedBytes, next.cols, next.rows, prev.cols, prev.rows);
+			prev = next;
+			onResize();
+		};
 	}
 
 	write(data: string, log = false): void {
@@ -88,6 +112,7 @@ export class TerminalOutput {
 	}
 
 	stop(): void {
+		this.resizeLog?.final(this.counters.submittedBytes);
 		this.stream.off("drain", this.onDrain);
 		this.stream.off(errorMonitor, this.onError);
 		this.observing = false;

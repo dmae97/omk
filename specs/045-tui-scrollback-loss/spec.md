@@ -53,9 +53,9 @@ When set, omk appends JSON lines to `<path>` (synchronously, `appendFileSync`):
 - **On every resize event**, at the moment omk handles it and before it renders:
   `{"bytes":N,"cols":C,"rows":R,"t":T,"prevCols":PC,"prevRows":PR}`
 - **On terminal stop** (TUI stop, including SIGINT/SIGTERM/SIGHUP shutdown paths that stop the TUI):
-  `{"final":true,"bytes":N}`
+  `{"final":true,"bytes":N}`. Also on process `exit` when no final line with the same byte count was written yet: a dead terminal's EIO goes from the stdout error handler straight to `process.exit(129)` without stopping the TUI (this is what `tmux kill-server` does to the capture runs), and the exit hook still records the total. After a normal stop the exit hook sees the same count and writes nothing.
 
-`bytes` is the cumulative UTF-8 byte length of everything omk handed to stdout through its terminal writer (`TerminalOutput.write`, the same `submittedBytes` counter as the output stats), counted at the `write()` call. These are omk-side bytes, not pty bytes: no compensation for ONLCR `\n` → `\r\n`; the replayer converts. `t` is `performance.now()` in ms (monotonic). `prevCols`/`prevRows` are the size at the previous logged event (the size at start for the first one).
+`bytes` is the cumulative UTF-8 byte length of everything omk handed to stdout through its terminal writer (`TerminalOutput.write`, the same `submittedBytes` counter as the output stats), counted at the `write()` call. These are omk-side bytes, not pty bytes: no compensation for ONLCR `\n` → `\r\n`; the replayer converts. The tty's ONLCR turns *every* `\n` into `\r\n`, including the `\r\n` omk already writes, so the pty stream carries one extra byte per `\n`: raw offset R matches omk count B when `R − (number of \n in raw[0..R)) = B`. `t` is `performance.now()` in ms (monotonic). `prevCols`/`prevRows` are the size at the previous logged event (the size at start for the first one).
 
 **Bounds.** A resize line's `bytes` is an **upper bound** for where the resize hit the byte stream: bytes omk wrote but the terminal (tmux) had not read yet may be processed at the new size. The external `pipe-pane` file size taken before `resize-window` is a **lower bound**. The replayer judges at both ends and at the midpoint.
 
