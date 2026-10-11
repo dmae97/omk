@@ -48,6 +48,25 @@ function assertTranscriptKept(terminal: VirtualTerminal, transcript: string[], m
 	assert.deepStrictEqual(stacked, [], `rows printed more than ${maxCopies}x: ${stacked.join(", ")}`);
 }
 
+/** Copies of each transcript row, matched by the row's first word (an overlay may share the terminal row). */
+function copiesByFirstWord(terminal: VirtualTerminal, transcript: string[]): Map<string, number> {
+	const counts = new Map(transcript.map((row) => [row, 0]));
+	for (const line of terminal.getScrollBuffer()) {
+		const word = line.trimStart().split(/\s+/, 1)[0] ?? "";
+		const count = counts.get(word);
+		if (count !== undefined) counts.set(word, count + 1);
+	}
+	return counts;
+}
+
+/** A pinned rail like the status sidebar: top-right, full height, never takes focus. */
+class Rail implements Component {
+	render(width: number): string[] {
+		return Array.from({ length: 80 }, (_, index) => `|rail ${index}`.padEnd(width).slice(0, width));
+	}
+	invalidate(): void {}
+}
+
 async function settle(terminal: VirtualTerminal): Promise<void> {
 	await terminal.waitForRender().catch(() => terminal.flush());
 }
@@ -162,6 +181,37 @@ describe("resize scrollback loss regression", () => {
 		assert.strictEqual(occurrences(buffer, "C59 edited"), 1, "edited row appears once");
 		assert.strictEqual(occurrences(buffer, "C59"), 0, "stale copy is gone");
 		assertTranscriptKept(terminal, chat.transcript);
+		tui.stop();
+	});
+	it("does not re-send rows under a full-height overlay on every resize step", async () => {
+		const terminal = new VirtualTerminal(100, 40);
+		const tui = new TUI(terminal);
+		const chat = new ChatLike();
+		chat.footerRows = 3;
+		chat.transcript = rows(100);
+		tui.addChild(chat);
+		tui.setRightGutter(20);
+		tui.showOverlay(new Rail(), { anchor: "top-right", width: 20, maxHeight: "100%", nonCapturing: true });
+		tui.start();
+		await settle(terminal);
+
+		// Drag the window edge: 40 → 24 → 40, one row per resize event, three times.
+		for (let drag = 0; drag < 3; drag++) {
+			for (let height = 39; height >= 24; height--) {
+				terminal.resize(100, height);
+				await settle(terminal);
+			}
+			for (let height = 25; height <= 40; height++) {
+				terminal.resize(100, height);
+				await settle(terminal);
+			}
+		}
+
+		const copies = copiesByFirstWord(terminal, chat.transcript);
+		const missing = [...copies].filter(([, count]) => count === 0).map(([row]) => row);
+		const stacked = [...copies].filter(([, count]) => count > 1).map(([row, count]) => `${row}×${count}`);
+		assert.deepStrictEqual(missing, [], `rows lost: ${missing.join(", ")}`);
+		assert.deepStrictEqual(stacked, [], `rows re-sent under the overlay: ${stacked.join(", ")}`);
 		tui.stop();
 	});
 });

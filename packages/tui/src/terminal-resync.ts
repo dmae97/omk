@@ -28,33 +28,27 @@ export const REPAINT_BUDGET_SCREENS = 4;
  * not lost. Already-printed rows more than REPAINT_BUDGET_SCREENS screens
  * above the end are not re-sent; the start never moves below the cursor row.
  *
- * @param previousLines rows of the last frame, as the terminal received them
- * @param newLines rows of the frame about to be painted
+ * Rows are compared without overlays (`previousBase`/`currentBase`, the
+ * rows the components rendered): a full-height overlay such as the pinned
+ * status rail shifts relative to the content when the screen scrolls, so the
+ * composited rows above the cursor would all look changed and be re-sent on
+ * every resize step. What is written is the composited frame (`newLines`).
+ *
+ * @param previousBase pre-overlay rows of the last frame
+ * @param newLines composited rows of the frame about to be painted
  * @param cursorRow content row the hardware cursor was left on by the last frame
  * @param height terminal rows after the resize
+ * @param currentBase pre-overlay rows of the frame about to be painted (default: `newLines`)
  */
 export function resyncAfterResize(
-	previousLines: readonly string[],
+	previousBase: readonly string[],
 	newLines: readonly string[],
 	cursorRow: number,
 	height: number,
+	currentBase: readonly string[] = newLines,
 ): string {
 	if (newLines.length === 0) return "";
-	let first = Math.min(cursorRow, newLines.length - 1);
-	for (let i = 0; i < first; i++) {
-		if (previousLines[i] !== newLines[i]) {
-			first = i;
-			break;
-		}
-	}
-	// The budget only limits how far UP already-printed rows are re-sent. It
-	// must never push the start below the cursor: cursor-down stops at the
-	// screen bottom, so the rows in between would never be written (a resize
-	// frame that appended more than the budget lost them).
-	first = Math.min(
-		Math.max(first, newLines.length - height * REPAINT_BUDGET_SCREENS, 0),
-		Math.min(cursorRow, newLines.length - 1),
-	);
+	const { first } = resyncStart(previousBase, currentBase, newLines.length, cursorRow, height);
 	const up = cursorRow - first;
 	let buffer = up > 0 ? `\x1b[${up}A\r` : "\r";
 	for (let i = first; i < newLines.length; i++) {
@@ -62,4 +56,54 @@ export function resyncAfterResize(
 		buffer += `\x1b[2K${newLines[i]}`;
 	}
 	return buffer;
+}
+
+/**
+ * First row the resync rewrites, and whether the repaint budget moved it down
+ * from the first changed row. Requires `length > 0`.
+ */
+export function resyncStart(
+	previousBase: readonly string[],
+	currentBase: readonly string[],
+	length: number,
+	cursorRow: number,
+	height: number,
+): { first: number; capped: boolean } {
+	const top = Math.min(cursorRow, length - 1);
+	let changed = top;
+	for (let i = 0; i < top; i++) {
+		if (previousBase[i] !== currentBase[i]) {
+			changed = i;
+			break;
+		}
+	}
+	// The budget only limits how far UP already-printed rows are re-sent. It
+	// must never push the start below the cursor: cursor-down stops at the
+	// screen bottom, so the rows in between would never be written (a resize
+	// frame that appended more than the budget lost them).
+	const first = Math.min(Math.max(changed, length - height * REPAINT_BUDGET_SCREENS, 0), top);
+	return { first, capped: first > changed };
+}
+
+/** Per-TUI state for resyncAfterResize: the pre-overlay rows of the last two frames. */
+export class ResizeResync {
+	private previousBase: readonly string[] = [];
+	private currentBase: readonly string[] = [];
+
+	/** Records a frame's rows before overlays are composited; returns them unchanged. Call once per render. */
+	track<T extends readonly string[]>(base: T): T {
+		this.previousBase = this.currentBase;
+		this.currentBase = base;
+		return base;
+	}
+
+	/** resyncAfterResize for the frame last passed to track(), painted as `newLines`. */
+	after(newLines: readonly string[], cursorRow: number, height: number): string {
+		return resyncAfterResize(this.previousBase, newLines, cursorRow, height, this.currentBase);
+	}
+}
+
+/** Termux changes height when the software keyboard shows or hides; those resizes skip the clearing repaint. */
+export function isTermuxSession(): boolean {
+	return Boolean(process.env.TERMUX_VERSION);
 }

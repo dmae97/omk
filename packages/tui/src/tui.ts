@@ -10,7 +10,7 @@ import { isKeyRelease, matchesKey } from "./keys.ts";
 import type { Terminal } from "./terminal.ts";
 import { finishTerminalFrame } from "./terminal-final-frame.ts";
 import { deleteKittyImage, getCapabilities, isImageLine, setCellDimensions } from "./terminal-image.ts";
-import { REPAINT_BUDGET_SCREENS, resyncAfterResize } from "./terminal-resync.ts";
+import { isTermuxSession, REPAINT_BUDGET_SCREENS, ResizeResync } from "./terminal-resync.ts";
 import { extractSegments, normalizeTerminalOutput, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils.ts";
 
 const KITTY_SEQUENCE_PREFIX = "\x1b_G";
@@ -130,10 +130,6 @@ function parseSizeValue(value: SizeValue | undefined, referenceSize: number): nu
 		return Math.floor((referenceSize * parseFloat(match[1])) / 100);
 	}
 	return undefined;
-}
-
-function isTermuxSession(): boolean {
-	return Boolean(process.env.TERMUX_VERSION);
 }
 
 /**
@@ -292,6 +288,7 @@ export class TUI extends Container {
 	private static readonly MIN_CONTENT_COLUMNS = 20;
 	private maxLinesRendered = 0; // Track terminal's working area (max lines ever rendered)
 	private previousViewportTop = 0; // Track previous viewport top for resize-aware cursor moves
+	private readonly resizeResync = new ResizeResync(); // pre-overlay rows of recent frames, for height resizes
 	private fullRedrawCount = 0;
 	private stopped = false;
 
@@ -1188,7 +1185,7 @@ export class TUI extends Container {
 		// Render all components to get new lines. Children render at the content
 		// width (terminal minus the reserved right gutter); overlays composite at
 		// full-terminal coordinates below, so pinned rails own the gutter columns.
-		let newLines = finalLines ?? this.render(width - this.resolveRightGutter(width, height));
+		let newLines = this.resizeResync.track(finalLines ?? this.render(width - this.resolveRightGutter(width, height)));
 
 		// Composite overlays into the rendered lines (before differential compare)
 		if (finalLines === undefined && this.overlayStack.length > 0) {
@@ -1297,7 +1294,7 @@ export class TUI extends Container {
 		// In that environment, a full redraw causes the entire history to replay on every toggle.
 		if (heightChanged && !isTermuxSession()) {
 			logRedraw(`terminal height changed (${this.previousHeight} -> ${height})`);
-			fullRender(true, undefined, resyncAfterResize(this.previousLines, newLines, this.hardwareCursorRow, height));
+			fullRender(true, undefined, this.resizeResync.after(newLines, this.hardwareCursorRow, height));
 			return;
 		}
 

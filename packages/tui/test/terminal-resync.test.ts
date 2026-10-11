@@ -6,7 +6,7 @@
 
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { REPAINT_BUDGET_SCREENS, resyncAfterResize } from "../src/terminal-resync.ts";
+import { REPAINT_BUDGET_SCREENS, ResizeResync, resyncAfterResize } from "../src/terminal-resync.ts";
 
 const rows = (count: number, from = 0): string[] => Array.from({ length: count }, (_, index) => `R${from + index}`);
 
@@ -57,5 +57,19 @@ describe("resyncAfterResize", () => {
 		assert.ok(output.startsWith("\r"), JSON.stringify(output.slice(0, 12)));
 		assert.ok(!output.includes("B\r"), "no cursor-down move");
 		assert.deepStrictEqual(writtenRows(output), rows(121, 99));
+	});
+
+	it("compares rows without overlays, so a shifted overlay alone does not count as a change", () => {
+		const base = rows(30);
+		// Composited frames: an overlay column whose rows shifted by one since the last frame.
+		const composite = (shift: number) => base.map((row, index) => `${row} |rail ${index + shift}`);
+		const resync = new ResizeResync();
+		resync.track(base);
+		resync.track([...base]);
+		const output = resync.after(composite(1), 29, 24);
+		assert.ok(output.startsWith("\r"), JSON.stringify(output.slice(0, 12)));
+		assert.deepStrictEqual(writtenRows(output), ["R29 |rail 30"]);
+		// Comparing the composited rows instead would restart at row 0 (capped by the budget only).
+		assert.ok(resyncAfterResize(composite(0), composite(1), 29, 24).startsWith("\x1b[29A"));
 	});
 });
