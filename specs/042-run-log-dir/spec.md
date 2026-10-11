@@ -14,7 +14,7 @@ description: "One opt-in directory, OMK_RUN_LOG_DIR, where each runtime feature 
 ## Requirements
 
 1. **One env.** `OMK_RUN_LOG_DIR=<dir>` turns logging on. Unset or blank, `appendRunLog` returns `false` at once and creates no file or directory.
-2. **One file per feature.** `appendRunLog(name, record)` appends one JSON line to `<dir>/<name>.jsonl`. `name` must match `^[a-z0-9][a-z0-9-]{0,63}$`, so a record can never be written outside `<dir>`. Planned names: `deliverable-guard`, `finish-check`, `adaptorch-calls`, `cache`.
+2. **One file per feature.** `appendRunLog(name, record)` appends one JSON line to `<dir>/<name>.jsonl`. `name` must match `^[a-z0-9][a-z0-9-]{0,63}$`, so a record can never be written outside `<dir>`. Planned names: `deliverable-guard`, `finish-check`, `adaptorch-calls`, `cache`, `reasoning-cap` (spec 033).
 3. **Fields added to every line**, after the record so a record cannot overwrite them:
    - `t`: wall-clock epoch ms (`Date.now()`).
    - `elapsedFraction`: `readRunBudget()?.elapsedFraction` from the shared run clock (spec 036), or `null` when no clock is bound.
