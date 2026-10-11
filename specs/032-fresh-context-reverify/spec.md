@@ -115,7 +115,7 @@ Why not a separate process or a subagent:
 | Dimension | Baseline (main `5c5806b`) | Acceptance target | Regression floor | Verification command | Evidence artifact |
 | --- | --- | --- | --- | --- | --- |
 | Completion correctness | An early finish gets one same-context check that agrees with itself (0 FAIL / 66 lines in B′) | With the flag on, an early finish also gets one fresh-context verifier turn on new inputs and at most one fix turn | Flag off, a late finish, a UI session, or no budget: identical to main `5c5806b` (same messages, entries, events) | `../../node_modules/.bin/vitest run test/finish-check-reverify.test.ts test/finish-check-extra-turn.test.ts test/finish-check-requirements.test.ts test/finish-check.test.ts` in `packages/coding-agent` | those files |
-| Benchmark score | R8 omk on the primary target tasks: see table below | B − A ≥ +3 trials on primary targets (3 runs per task per arm) | Controls: B ≥ A − 1 trial; no new T1/T2 timeouts on any task | Small A/B | report under `/workspace/omk-ab/` |
+| Benchmark score | R8 omk on the primary target tasks: see table below | E − D ≥ +3 trials on primary targets (3 runs per task per arm) | Controls: E ≥ D − 1 trial; no new T1/T2 timeouts on any task | Small A/B | report under `/workspace/omk-ab/` |
 | Cost and time | — | Verifier turn median ≤ 10% of budget; per-trial cost +≤ 20% (recorded per trial) | — | A/B trajectories and `finish_check_verify.costUsd` | same report |
 
 ## Agent-Oriented Requirements
@@ -166,9 +166,12 @@ Defaults: `OMK_FINISH_CHECK_REVERIFY=on`, `OMK_FINISH_CHECK_EXTRA_TURN=on`, `OMK
 
 ## A/B measurement
 
-- **One build, one flag** (Bench Analyst's rule): both arms run the same main build (after this PR merges) and differ only in `OMK_FINISH_CHECK_REVERIFY`: unset in A, `on` in B. All other new opt-in flags are off in both arms, except `OMK_FINISH_CHECK_EXTRA_TURN=on` in **both** arms, because 032's fix turn is 035's single extra turn.
-- **A (baseline)**: `OMK_FINISH_CHECK_EXTRA_TURN=on`, `OMK_FINISH_CHECK_REVERIFY` unset (identical to main with 035 on, AC4).
-- **B**: `OMK_FINISH_CHECK_EXTRA_TURN=on`, `OMK_FINISH_CHECK_REVERIFY=on`. Same model (grok-4.7 xhigh), same adapter, `time_budget=auto`.
+- **Pin**: main `d69af96` (Tech Lead's joint A/B pin; it has 032–035 and their run logs). 032 is measured in the joint A/B with arms A–E on that one build (Bench Analyst's plan, `/workspace/omk-bench-analyst/AB_PLAN_d69af96.md`). 032's verdict is **D vs E**.
+- **One build, one flag** (Bench Analyst's rule): D and E differ only in `OMK_FINISH_CHECK_REVERIFY`: unset in D, `on` in E. All other new opt-in flags are off in both arms, except `OMK_FINISH_CHECK_EXTRA_TURN=on` in **both** arms, because 032's fix turn is 035's single extra turn.
+- **D (baseline)**: `OMK_FINISH_CHECK_EXTRA_TURN=on`, `OMK_FINISH_CHECK_REVERIFY` unset (identical to main with 035 on, AC4). D is also 035's treatment arm (spec 035: A vs D).
+- **E**: `OMK_FINISH_CHECK_EXTRA_TURN=on`, `OMK_FINISH_CHECK_REVERIFY=on`. Same model (grok-4.7 xhigh), same adapter, `time_budget=auto`.
+- **Shared arms**: the joint A/B shares arms between verdicts. A (all new flags off) is the control for 033, 034 and 035, so if A is low by chance all three look better together. D is both 032's control and 035's treatment, so a D that is high by chance makes 035 look better and 032 look worse. Report the D/E result with this caveat.
+- Benches run `omk --no-session --mode json` with `OMK_RUN_LOG_DIR` set in every arm; verifier evidence (trigger, verdict, fix turn) comes from `$OMK_RUN_LOG_DIR/finish-check.jsonl` (see "Bench visibility" and "Run log").
 - 3 runs per task per arm.
 
 **Primary targets** at the 0.3 trigger: R8 omk trials in S/G/P that ended before 30% of the budget, on tasks with budgets ≤ 1800 s. These are 11 trials on 10 tasks.
