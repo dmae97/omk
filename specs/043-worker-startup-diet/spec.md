@@ -66,12 +66,22 @@ Interactive mode, `--mode rpc`, `--mode acp`, `--resume`, `--export`, `/export`,
 | Dimension | Baseline (main `c3ac89e`) | Acceptance target | Regression floor | Verification | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | Module graph | 1,812 modules (1,775 files) on the worker argv | ≤ 1,690 (≥ 120 fewer); zero `commands/run-command`, `verified-run/`, `omk-adaptorch-wpl`, `modes/acp/`, `codexbar-cli`, `neo-cli`, `export-html/`, `session-selector-loaders` | No new module on the worker path | trace hook on the built branch, same argv and env | PR body + trace lists |
-| Start → first request (1 worker) | 654 ms median (busy box) | Median paired difference (branch − main) **≤ −25 ms** on a quiet box, and larger than main's own interquartile range in the same run | Not slower than main beyond noise | quiet-box interleaved run below | raw dir + summary |
-| Idle RSS (1 worker, slow mock) | 150.0 MiB median | Median paired difference **≤ −5 MiB** (the RSS noise seen in #80–#82 is ±5–8 MiB) | No increase beyond noise | same run | same |
-| One-tool-call worker (wall to exit, peak RSS) | measured in the same run (turn 1: one `read` of a small file; turn 2: final text) | **No regression**: median paired difference of wall time to exit ≤ main's own interquartile range in that run, and of peak RSS ≤ +5 MiB | Same as target | `bench/run-ab.sh` scenario `tool` | same raw dir |
-| 16 concurrent start | median 2.1–2.4 s, p90 2.6–2.7 s | Report p90 before/after (no pass bar; start is CPU bound, so it should move with per-worker CPU) | No regression beyond the 3-rep spread | same harness, N=16 × 3 reps per arm | same |
+| Start → first request (1 worker) | 654 ms median (busy box) | `startup_ms` **PASS**: 95 % CI of the paired difference (branch − main) excludes 0 and its median is **≤ −25 ms** | Not slower than main (CI not above 0) | quiet-box interleaved run, 20 pairs, `paired_verdict.py` | `pairs.tsv` + verdict table |
+| Idle RSS (1 worker, slow mock) | 150.0 MiB median | `idle_mib` **PASS**: 95 % CI of the paired difference excludes 0 and its median is **≤ −5 MiB** | No increase (CI not above 0) | same run | same |
+| One-tool-call worker (wall to exit, peak RSS) | measured in the same run (turn 1: one `read` of a small file; turn 2: final text) | **No regression**: `tool_peak_mib` CI upper bound **< +5 MiB**, and `tool_wall_ms` CI upper bound **< main's interquartile range** of wall time in the same run (printed by `analyze-ab.mjs`) | Same as target | `bench/run-ab.sh` scenario `tool` | same raw dir |
+| 16 concurrent start | median 2.1–2.4 s, p90 2.6–2.7 s | Report p90 before/after (no pass bar; start is CPU bound, so it should move with per-worker CPU) | No regression beyond the 3-rep spread | same harness, N=16 × 3 reps per arm | `conc16.tsv` |
 
 How the targets were set: phase 1 removes 131 of 1,775 files (7.4 %). Module loading is about 430 ms of a ~650 ms start, so a proportional share is about 30 ms. These are small application modules plus one package, so 25 ms is the bar. RSS from 131 small modules is expected to be a few MiB, likely **inside the ±5–8 MiB noise**. The decision order is in [Acceptance order](#acceptance-order-tech-lead-103).
+
+### Paired verdict rule (team rule for performance PRs)
+
+Tech Lead approved this on #103. It replaces the earlier rule that the median difference had to be larger than main's own interquartile range. It is now the team rule for every performance PR, not only this one.
+
+- **20 interleaved pairs** per scenario on a quiet box. d = branch − main for each pair.
+- The judge is Bench Analyst's `paired_verdict.py`: bootstrap 95 % CI of the median of d (10,000 resamples, fixed seed) plus a two-sided sign test. It reads `pairs.tsv`.
+- **Improvement target** (`--target metric=value`). **PASS**: CI upper bound < 0 and median ≤ value. **NOISE**: the CI contains 0. **SMALL**: the CI excludes 0 but the median misses the value. Targets here are `startup_ms=-25` and `idle_mib=-5`.
+- **No-regression check** (`--noreg metric=value`). Passes when the CI upper bound < value: `tool_peak_mib=5`, and `tool_wall_ms=<main's IQR of tool wall time in the same run>`.
+- Command: `python3 paired_verdict.py pairs.tsv --target startup_ms=-25 --target idle_mib=-5 --noreg tool_wall_ms=<IQR> --noreg tool_peak_mib=5`. Targets apply by metric name, so `startup_ms` is judged in both `fast` and `slow`. The `fast` scenario's `startup_ms` is the acceptance one; `slow` startup is reported.
 
 Why the tool-call scenario: time to first request only shows startup. Anything the diet defers (or any later phase that defers work) could come back on the first tool call and make the whole worker slower. A worker that makes one cheap tool call and exits shows that cost, so the branch must not regress there.
 
@@ -86,7 +96,7 @@ Why the tool-call scenario: time to first request only shows startup. Anything t
 ## Measurement method
 
 - Harness: [`bench/`](bench/) next to this spec. It is the worker cost harness from `RESULTS.md` (`harness.mjs`, `mock-server.mjs`) plus `mock-server-tool.mjs`, `run-ab.sh` (interleaved A/B with the `PAUSE` gate), `analyze-ab.mjs`, and the module inventory (`inventory.sh`, `trace-hook.mjs`, `analyze-inv.mjs`). It points at two worktrees built from the same lockfile and `node_modules`: main `c3ac89e` and the branch head. Raw output goes to `$OUT` (default `bench/out/`, git-ignored).
-- Single worker, three scenarios, ≥ 10 interleaved pairs each (order alternates per pair), one warm-up per arm and scenario. Report medians, p90, interquartile range, and the median of paired differences:
+- Single worker, three scenarios, **20 interleaved pairs** each (order alternates per pair; `run-ab.sh` default), one warm-up per arm and scenario. Report medians, p90, interquartile range, and the median of paired differences, and judge with the paired verdict rule above:
   - `fast`: mock answers at once. **Time to first request.**
   - `slow`: mock holds the answer 2,000 ms. **Idle RSS** = median `VmRSS` sampled every 50 ms from request arrival + 300 ms to response − 200 ms.
   - `tool`: turn 1 answers with one `read` tool call on `small.txt` in the worker's cwd, turn 2 (the request that carries the tool result) answers with final text. **Wall time from spawn to exit** and **peak RSS** (`/usr/bin/time -v`). A run counts only if the worker exits 0, made exactly two requests (turn 1 offered the `read` tool), and turn 2 saw the file contents.
@@ -98,8 +108,8 @@ Why the tool-call scenario: time to first request only shows startup. Anything t
 ## Acceptance order (Tech Lead, #103)
 
 1. **Measure phase 1** (this change) on a quiet box with all three scenarios and the 16-concurrent run.
-2. **If it does not clear noise** (start ≤ −25 ms beyond main's IQR and idle RSS ≤ −5 MiB), add phase 2 below and measure again the same way.
-3. **If it still does not clear noise**, #103 merges as cleanup that counts only the module drop (1,775 → 1,644 files), **provided nothing regresses**: start time, idle RSS, the one-tool-call wall time and peak RSS, and 16-concurrent p90.
+2. **If it does not clear noise** (`startup_ms` or `idle_mib` is not PASS under the paired verdict rule), add phase 2 below and measure again the same way.
+3. **If it still does not clear noise**, #103 merges as cleanup that counts only the module drop (1,775 → 1,644 files), **provided nothing regresses**: no `startup_ms` or `idle_mib` CI lies entirely above 0, both `tool` no-regression checks pass, and 16-concurrent p90 does not regress beyond the 3-rep spread.
 
 ## Phase 2 (not in this change)
 
