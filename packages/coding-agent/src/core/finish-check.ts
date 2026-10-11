@@ -32,6 +32,11 @@ export const FINISH_CHECK_SKIP_FRACTION = 0.9;
 export const FINISH_CHECK_EXTRA_TURN_FRACTION = 0.85;
 /** Extra turns per user task after a finish check, shared by the threshold retry and the go-measure nudge. */
 export const FINISH_CHECK_MAX_EXTRA_TURNS = 1;
+/**
+ * A first settle before this fraction of the budget gets one fresh-context verifier turn after the check (spec 032,
+ * behind `OMK_FINISH_CHECK_REVERIFY`). Like the other thresholds it compares against the shared run clock (spec 036).
+ */
+export const FINISH_CHECK_REVERIFY_FRACTION = 0.3;
 
 export type FinishCheckMode = "off" | "headless" | "always";
 
@@ -44,12 +49,22 @@ export function resolveFinishCheckMode(value: string | undefined): FinishCheckMo
 	return "headless";
 }
 
+/** Opt-in finish-check switches are on only for `1/true/on/enable/enabled` (any case); anything else is off. */
+function resolveOptInFlag(value: string | undefined): boolean {
+	return ["1", "true", "on", "enable", "enabled"].includes(value?.trim().toLowerCase() ?? "");
+}
+
 /**
  * `OMK_FINISH_CHECK_EXTRA_TURN`: the spec 035 extra turn after a finish check. Off unless set to
  * `1/true/on/enable/enabled`; it stays opt-in until the A/B shows a gain.
  */
 export function resolveFinishCheckExtraTurn(value: string | undefined): boolean {
-	return ["1", "true", "on", "enable", "enabled"].includes(value?.trim().toLowerCase() ?? "");
+	return resolveOptInFlag(value);
+}
+
+/** `OMK_FINISH_CHECK_REVERIFY`: the spec 032 fresh-context verifier for early finishes. Same values as the extra turn. */
+export function resolveFinishCheckReverify(value: string | undefined): boolean {
+	return resolveOptInFlag(value);
 }
 
 export function isWorkspaceMutatingTool(toolName: string): boolean {
@@ -144,4 +159,22 @@ export function decideExtraTurn(input: ExtraTurnDecisionInput): FinishCheckExtra
 		return undefined;
 	if (input.failing > 0) return input.unmeasured > 0 ? "both" : "threshold";
 	return "measure";
+}
+
+export interface ReverifyDecisionInput {
+	readonly enabled: boolean;
+	readonly hasUI: boolean;
+	/** Budget fraction at the task's first settle, before the check turn; `undefined` when the run has no budget. */
+	readonly firstSettleFraction: number | undefined;
+	/** The check turn stopped with `aborted` or `error`. */
+	readonly aborted: boolean;
+	readonly hasPendingMessages: boolean;
+	readonly alreadyVerified: boolean;
+}
+
+/** Whether a settled check turn is followed by the fresh-context verifier (spec 032). Headless runs with a budget only. */
+export function shouldReverify(input: ReverifyDecisionInput): boolean {
+	if (!input.enabled || input.hasUI || input.alreadyVerified || input.aborted || input.hasPendingMessages)
+		return false;
+	return input.firstSettleFraction !== undefined && input.firstSettleFraction < FINISH_CHECK_REVERIFY_FRACTION;
 }
