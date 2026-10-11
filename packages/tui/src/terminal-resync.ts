@@ -67,8 +67,9 @@ export function resyncAfterResize(
 }
 
 /**
- * First row the resync rewrites, and whether the repaint budget moved it down
- * from the first changed row. Requires `length > 0`.
+ * First row the resync rewrites, the first changed row at or above the cursor
+ * row, and whether the repaint budget moved the start down from it. Requires
+ * `length > 0`.
  */
 export function resyncStart(
 	previousBase: readonly string[],
@@ -76,7 +77,7 @@ export function resyncStart(
 	length: number,
 	cursorRow: number,
 	height: number,
-): { first: number; capped: boolean } {
+): { first: number; changed: number; capped: boolean } {
 	const top = Math.min(cursorRow, length - 1);
 	let changed = top;
 	for (let i = 0; i < top; i++) {
@@ -90,7 +91,7 @@ export function resyncStart(
 	// screen bottom, so the rows in between would never be written (a resize
 	// frame that appended more than the budget lost them).
 	const first = Math.min(Math.max(changed, length - height * REPAINT_BUDGET_SCREENS, 0), top);
-	return { first, capped: first > changed };
+	return { first, changed, capped: first > changed };
 }
 
 /** Per-TUI state for resyncAfterResize: the pre-overlay rows of the last two frames. */
@@ -105,9 +106,25 @@ export class ResizeResync {
 		return base;
 	}
 
+	/** How the last after() call chose its start, for OMK_DEBUG_REDRAW. */
+	detail = "";
+
 	/** resyncAfterResize for the frame last passed to track(), painted as `newLines`. */
 	after(newLines: readonly string[], cursorRow: number, height: number): string {
-		return resyncAfterResize(this.previousBase, newLines, cursorRow, height, this.currentBase);
+		const output = resyncAfterResize(this.previousBase, newLines, cursorRow, height, this.currentBase);
+		if (!output) {
+			this.detail = `resync none (frame fits: new=${newLines.length} <= height=${height})`;
+			return output;
+		}
+		const { first, changed, capped } = resyncStart(
+			this.previousBase,
+			this.currentBase,
+			newLines.length,
+			cursorRow,
+			height,
+		);
+		this.detail = `resync first=${first} changed=${changed} cursorRow=${cursorRow} capped=${capped}`;
+		return output;
 	}
 }
 

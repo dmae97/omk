@@ -13,6 +13,9 @@
  */
 
 import assert from "node:assert";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { type Component, CURSOR_MARKER, TUI } from "../src/tui.ts";
 import { VirtualTerminal } from "./virtual-terminal.ts";
@@ -236,5 +239,47 @@ describe("resize scrollback loss regression", () => {
 		const wrong = [...copies].filter(([, count]) => count !== 1).map(([row, count]) => `${row}×${count}`);
 		assert.deepStrictEqual(wrong, [], `short content rows not shown exactly once: ${wrong.join(", ")}`);
 		tui.stop();
+	});
+
+	it("logs the resync start, cursor row and budget clamp in OMK_DEBUG_REDRAW", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "omk-debug-redraw-"));
+		const saved = { redraw: process.env.OMK_DEBUG_REDRAW, agentDir: process.env.OMK_CODING_AGENT_DIR };
+		process.env.OMK_DEBUG_REDRAW = "1";
+		process.env.OMK_CODING_AGENT_DIR = dir;
+		try {
+			const terminal = new VirtualTerminal(80, 24);
+			const tui = new TUI(terminal);
+			const chat = new ChatLike();
+			chat.cursor = false;
+			chat.transcript = rows(99); // 100 rows, cursor left on row 99
+			tui.addChild(chat);
+			tui.start();
+			await settle(terminal);
+			// Nothing above the cursor changed; +120 rows: the budget start (220 - 80) is below the cursor.
+			terminal.resizeEmulatorOnly(80, 20);
+			chat.transcript = rows(219);
+			terminal.announceResize();
+			await settle(terminal);
+			// Row 0 changed, 220 rows at height 24: the budget moves the start from 0 down to 220 - 96.
+			chat.transcript = ["C1 edited", ...rows(218, 2)];
+			terminal.resize(80, 24);
+			await settle(terminal);
+			tui.stop();
+
+			const log = readFileSync(join(dir, "omk-debug.log"), "utf8");
+			const heights = log.split("\n").filter((line) => line.includes("terminal height changed"));
+			assert.strictEqual(heights.length, 2, log);
+			assert.match(heights[0], /\(24 -> 20; resync first=99 changed=99 cursorRow=99 capped=false\)/);
+			assert.match(heights[1], /\(20 -> 24; resync first=124 changed=0 cursorRow=219 capped=true\)/);
+		} finally {
+			for (const [key, value] of [
+				["OMK_DEBUG_REDRAW", saved.redraw],
+				["OMK_CODING_AGENT_DIR", saved.agentDir],
+			] as const) {
+				if (value === undefined) delete process.env[key];
+				else process.env[key] = value;
+			}
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });

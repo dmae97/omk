@@ -1266,9 +1266,8 @@ export class TUI extends Container {
 			this.previousHeight = height;
 		};
 
-		const debugRedraw = process.env.OMK_DEBUG_REDRAW === "1";
 		const logRedraw = (reason: string): void => {
-			if (!debugRedraw) return;
+			if (process.env.OMK_DEBUG_REDRAW !== "1") return;
 			const agentDir = process.env.OMK_CODING_AGENT_DIR ?? path.join(os.homedir(), ".omk", "agent");
 			const logPath = path.join(agentDir, "omk-debug.log");
 			const msg = `[${new Date().toISOString()}] fullRender: ${reason} (prev=${this.previousLines.length}, new=${newLines.length}, height=${height})\n`;
@@ -1293,8 +1292,9 @@ export class TUI extends Container {
 		// but Termux changes height when the software keyboard shows or hides.
 		// In that environment, a full redraw causes the entire history to replay on every toggle.
 		if (heightChanged && !isTermuxSession()) {
-			logRedraw(`terminal height changed (${this.previousHeight} -> ${height})`);
-			fullRender(true, undefined, this.resizeResync.after(newLines, this.hardwareCursorRow, height));
+			const resync = this.resizeResync.after(newLines, this.hardwareCursorRow, height);
+			logRedraw(`terminal height changed (${this.previousHeight} -> ${height}; ${this.resizeResync.detail})`);
+			fullRender(true, undefined, resync);
 			return;
 		}
 
