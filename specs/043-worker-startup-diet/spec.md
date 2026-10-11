@@ -77,6 +77,7 @@ How the targets were set: phase 1 removes 131 of 1,775 files (7.4 %). Module loa
 - `test/print-mode-worker-cold-path.test.ts`: runs `main()` with the exact worker argv (`--mode json -p --no-session --model mock/mock-1 --append-system-prompt <file> "Task: …"`) against a local OpenAI-compatible mock. Each cold-path module is wrapped in a `vi.doMock` load counter. The worker must answer and load none of `commands/run-command.ts`, `core/verified-run/coordinator.ts`, `modes/acp/acp-mode.ts`, `codexbar-cli.ts`, `session-selector-loaders.ts`, `core/export-html/index.ts`. On main `c3ac89e` it reports all six as loaded.
 - `test/main-subcommand-routing.test.ts`: importing `main.ts` loads neither handler module. `stats`, `doctor resources`, and `--doctor-provider` anywhere reach `runCommand` with the original argv and exit code. `quota` reaches only `codexbar-cli.ts`. For every handler word, a real `--help`-style argv is handled by the real `runCommand` and passes the gate. The worker argv is not handled.
 - `test/cli-neo-lazy-import.test.ts`: the node entry answers `--help` without resolving `neo-cli.ts` (a resolve hook fails the process if it does), and `omk neo` still loads it.
+- `test/agent-session-export-html.test.ts`: `AgentSession.exportToHtml` still writes an HTML file after export-html moved inside it.
 - Unchanged and passing: `main-package-routing`, `onboarding-version-fast-path`, `neo-distribution`, `acp-mode`, `session-selector-*`, `verified-run-*` (three import paths updated), every `*-cli` test, `print-mode*`, `sdk-model-contract`.
 
 ## Measurement method
@@ -111,4 +112,5 @@ How the targets were set: phase 1 removes 131 of 1,775 files (7.4 %). Module loa
 - `packages/coding-agent/src/core/agent-session-services.ts`, `src/index.ts`: move and re-point the export
 - `packages/coding-agent/src/cli.ts`: `neo-cli` only for `omk neo`
 - `packages/coding-agent/src/core/agent-session.ts`: export-html loaded inside `exportToHtml`
-- Tests: `print-mode-worker-cold-path`, `main-subcommand-routing`, `cli-neo-lazy-import` (new); three `verified-run-*` tests (import path)
+- Tests: `print-mode-worker-cold-path`, `main-subcommand-routing`, `cli-neo-lazy-import`, `agent-session-export-html` (new); three `verified-run-*` tests (import path)
+- `packages/coding-agent/CHANGELOG.md`: one Changed entry
