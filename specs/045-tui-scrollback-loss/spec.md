@@ -92,6 +92,18 @@ Code: `packages/tui/src/terminal-resize-log.ts` (`TerminalResizeLog`), owned by 
 - `packages/tui/src/terminal-resize-log.ts` (new), `packages/tui/src/terminal-output.ts`, `packages/tui/src/terminal.ts`
 - `packages/tui/test/terminal-resize-log.test.ts` (new)
 
-## Verification
+## Verification (2026-10-11 KST, Tech Lead)
 
-Filled in from the runs; see the PR body.
+Scenario: `capture_height79.py` (scrollback-20) copied with `OMK_TUI_RESIZE_LOG=<run>/resize-log.jsonl` added to the omk environment; otherwise unchanged (120×40 → 80 → 24 → 40 at 0.8 s while one reply streams, ~20k-line `--continue` session, offline mock, tmux 3.5a, `nice -n 10`). Strict check = `/workspace/omk-staff-replay/check.mjs` (headline + 72 code lines). Box load (1-min) 1.3–3.0 during the runs; not a quiet box.
+
+| arm | build | runs | strict loss, tmux scrollback | strict loss, replay at pipe offset (shift 0) |
+| --- | --- | ---: | ---: | ---: |
+| main | `5c9d738` (tui identical to `f887fd2`) | 10 | 3 (r1 `value1_4..1_6`, r8 section-2, r10 `value1_0`) | 2 (r8, r10) |
+| fix | this branch | 10 | **0** | **0** |
+| #79 + fix | `7ff7bba` + these commits cherry-picked (local only) | 10 | **0** | **0** |
+
+Interleaved main/fix pairs. 0/10 vs 3/10 alone is weak evidence (Fisher one-sided p ≈ 0.105); the deterministic evidence is the regression tests, which fail on main and on #79 `7ff7bba` (3, 4 and 4 rows lost) and pass with the fix. Duplicate markers are unchanged: 46 in every tmux scrollback, fix and main alike (the stream-end repair repaint).
+
+Resize log, fix runs: every run logged one line per resize; mapped to raw pty offsets with the ONLCR rule above, each omk offset is at or after the `pipe-pane` offset (0 to 6.4 KB later, about one frame), as an upper bound should be. On the run that also had `OMK_TUI_WRITE_LOG`, the final line maps exactly to the end of the raw capture (4,452,913 bytes). The 10 runs of the first batch were built before the exit hook and have no final line (`tmux kill-server` exits through EIO without a TUI stop); the 11 runs after it all have one. Replaying the fix and #79+fix captures at the omk offset and at the midpoint: no loss in any of them. At pipe offset −64 (earlier than the lower bound) 2 of the 10 fix runs show a loss in replay; tmux itself lost nothing in those runs.
+
+Not verified: real terminals (iTerm2, Windows Terminal/conpty, kitty, Alacritty) — whether each keeps the cursor's row across a height resize the way xterm.js and tmux do; Termux; resizes while an overlay is open; #79's own verdict (it needs a rebase onto this and a fresh 20-pair run).
