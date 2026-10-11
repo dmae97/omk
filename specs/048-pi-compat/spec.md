@@ -7,7 +7,7 @@ description: "Define which Pi packages and extensions run unmodified in omk, and
 **Specification ID**: `048-pi-compat`
 **Feature Branch**: `spec/048-pi-compat` (off main `0391505`; code facts below were read on `eda87d0`, and `0391505` changes none of the files cited)
 **Created**: 2026-10-11
-**Status**: Draft (scope only; no code in this PR)
+**Status**: Draft (scope only; no code in this PR). Tech Lead answered the open questions on #118 (2026-10-11); see "Decisions".
 **Constitution**: [specs/constitution.md](../constitution.md)
 **Input**: 인호 wants deep pi.dev integration: Pi packages and extensions should run in omk. Tech Lead assigned 048 to Staff Engineer, with the compatibility scope first. Runtime Engineer noted in the room that "pi package install is blocked"; this spec finds out what that means.
 **Related**: 039 (pi-ask-user dropped from the intake list), 043 (worker startup diet, paired measurement), 047 (browser control, Runtime Engineer), 051 (prompt-cache prefix stability guard, #117, open).
@@ -78,14 +78,14 @@ Latent, not reached by the smoke run: `uuidv7` missing from the `pi-ai` alias (`
 | --- | --- | --- | --- | --- |
 | Package manifest | `package.json` `"pi": {extensions, skills, prompts, themes}`; conventional dirs; `pi-package` keyword | Reads `omk` then `pi` then conventional dirs; Pi directory entries resolve `index.*` | works | `package-manifest.ts`, `package-manager.ts:2235-2245`, docs/packages.md |
 | Install sources | `npm:`, `git:`, URL, local; `-e` for one run; `--local` | Same syntax (`omk install`, `omk -e`) | works | `package-manager-cli.ts:84-99` |
-| Install safety | Docs: install with `--ignore-scripts`; project packages load only after project trust | Runs lifecycle scripts; no project-trust gate for project packages (MCP has its own trust summary) | gap (security, see Requirement 5) | `package-manager.ts:1060,1759`; `core/mcp/trust-summary.ts` |
+| Install safety | Docs: install with `--ignore-scripts`; project packages load only after project trust | Runs lifecycle scripts; no project-trust gate for project packages (MCP has its own trust summary) | gap (security, Requirements 5 and 7, P0 PR) | `package-manager.ts:1060,1759`; `core/mcp/trust-summary.ts` |
 | Import paths | `@earendil-works/pi-{coding-agent,agent-core,ai,ai/compat,ai/oauth,tui}`, `typebox` | Aliased to omk modules for both `@earendil-works` and `@mariozechner`; `typebox` and `@sinclair/typebox` aliased to omk's typebox 1.3.11 (Pi pins 1.3.27) | works | `pi-compat.ts`, `loader.ts:162-190` |
-| Exported values | Pi index exports | All names used by 68 examples and 4 packages resolve, except `CONFIG_DIR_NAME`, `uuidv7`, `collapseSystemMessages`, `getCurrentSystemPrompt`, `getCurrentTools`, `compat.anthropicMessagesApi`, `compat.openAIResponsesApi` | thin adapter for `CONFIG_DIR_NAME`, `uuidv7`; the provider internals are open question 4 | `static.json` |
+| Exported values | Pi index exports | All names used by 68 examples and 4 packages resolve, except `CONFIG_DIR_NAME`, `uuidv7`, `collapseSystemMessages`, `getCurrentSystemPrompt`, `getCurrentTools`, `compat.anthropicMessagesApi`, `compat.openAIResponsesApi` | thin adapter for `CONFIG_DIR_NAME`, `uuidv7`; provider internals out of scope (decision 4) | `static.json` |
 | Factory | `export default (pi: ExtensionAPI) => void \| Promise<void>` | Same | works | loader |
 | Events | 41 | 31 shared. Pi-only: `agent_before_settle`, `before_provider_headers`, `cache_warming_decision`, `context_with_system`, `mcp_servers_change`, `project_trust`, `provider_stream_event`, `session_compact_failed`, `ui_prompt_start`, `ui_prompt_end`. omk's `on()` accepts unknown names silently and never fires them | works for the 31; Pi-only ones: diagnostic only (thin), real emission is per-event work outside 048 | `types.d.ts` vs `types.ts` diff |
 | `pi.on()` return | unsubscribe function | `void` | thin adapter | `loader.ts:264` |
 | `before_agent_start.systemPromptOptions.sections` | named sections, mutable | not present | not feasible in v1 | `prompt-customizer.ts` |
-| `tool_call` result | `{block, reason, terminate}`, `parentToolCallId` | `{block, reason}` | thin adapter for `terminate` (open question 3) | PI1 notes §2 |
+| `tool_call` result | `{block, reason, terminate}`, `parentToolCallId` | `{block, reason}` | out of scope; separate spec later (decision 3) | PI1 notes §2 |
 | `tool_result` result | adds `structuredContent`, `usage` | `{content, details, isError}` | ignored fields; works for packages that only read them back | PI1 notes §2 |
 | `turn_end` result | `BoundaryResult{entries?, continue?}` | void | not feasible as a shim (changes the loop) | PI1 notes §2 |
 | Tool definition | `name, label, description, parameters, execute, renderCall/Result, promptSnippet, promptGuidelines, prepareArguments, executionMode` | Same | works | 4 packages registered 21 tools; 4 tool calls ran |
@@ -93,7 +93,7 @@ Latent, not reached by the smoke run: `uuidv7` missing from the `pi-ai` alias (`
 | Tool `execute` ctx | `ExtensionToolContext` (+ `tools`, `executeTool()`) | `ExtensionContext` | gap; no tested package used `executeTool` | PI1 notes §2 |
 | Registration API | `registerTool/Command/Shortcut/Flag/MessageRenderer/Provider`, `sendMessage` (`triggerTurn`, `deliverAs`), `sendUserMessage`, `appendEntry`, `exec`, tools, model, thinking, `events` | Same; `registerProvider(Provider)` object overload missing | works | bg-tasks follow-up turn ran |
 | Pi-only API | `getSettings`, `registerEntryRenderer`, `registerToolRenderer`, `registerMarkdownTransformer`, `register/unregisterMcpServer`, `getMcpServers`, `register/unregisterVirtualModel` | absent; calling one at load fails the extension (`… is not a function`) | `getSettings` read-only: thin; renderers: thin no-op; MCP and virtual models: not feasible as shims | 3 examples |
-| ExtensionContext | `isProjectTrusted()`, `scopedModels` | absent (omk adds `getSubagentLaneAuthority`) | thin adapter for `isProjectTrusted` (returns omk's answer, open question 2) | PI1 notes §2 |
+| ExtensionContext | `isProjectTrusted()`, `scopedModels` | absent (omk adds `getSubagentLaneAuthority`) | thin adapter: `isProjectTrusted()` returns the project trust gate's result, `false` without a decision (decision 2) | PI1 notes §2 |
 | UI context | `select, confirm, input, notify, setStatus, setWidget, setFooter, custom, editor …` | Same (superset); `hasUI=false` headless | works | — |
 | TUI components | `@earendil-works/pi-tui` `Container, Text, Markdown, Editor, Key, matchesKey, truncateToWidth …` | Aliased to omk-tui; names resolve | works for names; rendering under omk's TUI not tested (all runs headless) | `static.json` |
 | Settings files | `~/.pi/agent/settings.json`, `.pi/settings.json` | `~/.omk/agent/settings.json`, `.omk/settings.json` | different by design; no fallback read (Non-goals) | `config.ts:495-526` |
@@ -106,6 +106,11 @@ Latent, not reached by the smoke run: `uuidv7` missing from the `pi-ai` alias (`
 
 **Classification**: preserve. Nothing changes for benchmark runs: the adapter is off by default, and benches never load third-party packages. Its only measured requirement is that flag-off costs nothing (below).
 
+## Delivery order (Tech Lead, #118)
+
+1. **P0 security PR** (separate, first): Requirement 5 (install scripts off by default) and Requirement 7 (project trust gate). Independent of Pi compatibility; the risk exists today for every package.
+2. **048 adapter PR** (after the P0 PR): Requirements 2, 3, 6 and the docs (1, 4), including the spec 051 prompt-cache case once #117 has merged.
+
 ## Requirements
 
 ### Requirement 1 - Compatibility statement in the docs (P0, docs only)
@@ -115,17 +120,18 @@ Latent, not reached by the smoke run: `uuidv7` missing from the `pi-ai` alias (`
 
 ### Requirement 2 - Opt-in Pi adapter (P1)
 
-Flag `OMK_PI_COMPAT=1` (env; a setting `piCompat: true` is open question 1). **Off by default.** Off means: the adapter modules are never imported, and behavior is byte-for-byte today's, including the existing always-on aliases and `pi` manifest support, which 048 does not touch.
+Flag: env `OMK_PI_COMPAT=1`, or the setting `piCompat: true` read **only from the user-global settings** (`~/.omk/agent/settings.json`). A `piCompat` key in a project's `.omk/settings.json` is ignored (with one diagnostic naming the file), so cloning a repository can never turn the adapter on. The env var wins over the setting; `OMK_PI_COMPAT=0` turns it off even if the user setting is on. The value is resolved once, before extensions load. **Off by default.** Off means: the adapter modules are never imported, and behavior is byte-for-byte today's, including the existing always-on aliases and `pi` manifest support, which 048 does not touch.
 
 When on, the loader dynamically imports `src/core/pi-compat/adapter.ts` once and applies it to extensions whose source imports a Pi namespace (the loader already knows the specifier; `isLegacyPiRuntimeImport`):
 
-1. **Export shims.** Pi aliases resolve to small wrapper modules that re-export the omk module plus the missing names with omk semantics: `CONFIG_DIR_NAME` (omk's, i.e. `.omk`), `uuidv7` (RFC 9562 v7, local implementation). Provider internals (`anthropicMessagesApi` etc.) are not added (open question 4).
+1. **Export shims.** Pi aliases resolve to small wrapper modules that re-export the omk module plus the missing names with omk semantics: `CONFIG_DIR_NAME` (omk's, i.e. `.omk`), `uuidv7` (RFC 9562 v7, local implementation). Provider internals (`anthropicMessagesApi`, `openAIResponsesApi`, `collapseSystemMessages`, `getCurrentSystemPrompt`, `getCurrentTools`) are out of scope (decision 4); custom providers use omk's `registerProvider`.
 2. **`on()` returns an unsubscribe function** for adapted extensions.
 3. **Pi-only events**: `on()` still accepts them; the adapter records one diagnostic per extension and event ("`<event>` is never emitted by omk"), visible in `/extensions` or the startup notice and in `omk package doctor`.
 4. **Pi-only API methods with honest semantics only**: `getSettings()` returns a frozen read-only snapshot of omk's merged settings; `registerEntryRenderer`, `registerToolRenderer`, `registerMarkdownTransformer` are accepted as no-ops with one diagnostic. `registerVirtualModel`, `registerMcpServer`, `getMcpServers` stay undefined, so packages that feature-detect (`typeof pi.getSettings === "function"`, as pi-cache-optimizer does) keep degrading cleanly instead of calling a stub that pretends to work.
-5. `ExtensionContext.isProjectTrusted()` and `ToolCallEventResult.terminate`: pending open questions 2 and 3.
+5. **`ExtensionContext.isProjectTrusted()`** returns the result of the project trust gate (Requirement 7) for the session's cwd. With no gate decision (gate not shipped, not yet asked, or cannot decide) it returns `false`.
+6. `ToolCallEventResult.terminate` is out of scope; a separate spec later (decision 3).
 
-Not in the adapter: `systemPromptOptions.sections`, `turn_end` `BoundaryResult`, `agent_before_settle`, `context_with_system`, virtual models, MCP registration, `ExtensionToolContext.executeTool`. Each changes runtime behavior and needs its own spec if wanted.
+Not in the adapter: `ToolCallEventResult.terminate`, `systemPromptOptions.sections`, `turn_end` `BoundaryResult`, `agent_before_settle`, `context_with_system`, virtual models, MCP registration, `ExtensionToolContext.executeTool`. Each changes runtime behavior and needs its own spec if wanted.
 
 ### Requirement 3 - Doctor alignment (P1)
 
@@ -137,15 +143,29 @@ Not in the adapter: `systemPromptOptions.sections`, `turn_end` `BoundaryResult`,
 
 `package-procurement.ts` decides what omk bundles or ports; its `legacy-import` block stays. A code comment and `docs/packages.md` say that it does not apply to user installs. 048 changes no procurement rule.
 
-### Requirement 5 - Install safety for any third-party package (P0, separate PR)
+### Requirement 5 - Install safety for any third-party package (P0 security PR, ships first)
 
-Applies to all packages, flag or not, because the risk exists today:
+Applies to all packages, flag or not, because the risk exists today. Ships in the P0 security PR together with Requirement 7, before the adapter.
 
-- **No lifecycle scripts by default**: managed npm and git installs pass `--ignore-scripts`; `omk install --allow-scripts <source>` opts in for one install. Pi's own install guidance does the same.
+- **No lifecycle scripts by default**: managed npm and git installs (user, project and `-e` temporary scope, and `omk update`) pass `--ignore-scripts`. Pi's own install guidance does the same.
+- **Explicit opt-in**: `omk install --allow-scripts <source>` (also `omk update --allow-scripts`, `omk -e … --allow-scripts`) runs scripts for that one command.
+- **Failure names the option**: when an install or a package's first load fails after scripts were skipped (npm exit with a lifecycle/`gyp`/`node-pre-gyp`/`prebuild` signature, or a missing native `.node` binding at load), the error says scripts were skipped and gives the exact `--allow-scripts` command to retry. Native-build packages otherwise break with no hint.
+- **CHANGELOG**: an `[Unreleased]` `### Changed` entry describing the new default and `--allow-scripts`.
 - **No auto-install**: omk never installs a package because a settings file, a project, or an extension asks for it. `omk -e npm:…` keeps using its temporary scope; `omk install` stays an explicit user command.
 - **Confirmation**: interactive `omk install` of a source with extension code prints the doctor summary (Pi imports, hard-coded `.pi` paths, Pi-only events and APIs, child-process and network capabilities from `scanSourceCapabilities`) and asks before writing settings; `--yes` skips the prompt; non-TTY without `--yes` refuses.
 - **Provenance**: the installed version (npm exact version + integrity, or git commit SHA) is recorded in the settings entry or install metadata, and `omk list` shows it.
-- Project-level package trust (Pi's model) is open question 5.
+- Project-level package trust: Requirement 7.
+
+### Requirement 7 - Project trust gate (P0 security PR, ships first)
+
+Independent of Pi compatibility: loading packages and extensions declared by a cloned repository (`.omk/settings.json` `packages`/`extensions`, `.omk/extensions/`) is an existing risk. Ships with Requirement 5.
+
+- **What it gates**: installing and loading project-scoped packages and extensions, and any other project setting that loads code. User-global (`~/.omk`) resources are not gated.
+- **Interactive**: the first time a project's code-loading resources are about to load, omk asks once (list of what would load, trust / don't trust). The answer is stored per project path in the user-global agent dir, not in the project. Until answered, nothing project-scoped loads.
+- **`-p` / print / json mode and workers**: deny by default, never prompt. Only an explicit environment variable opens it (proposed name `OMK_TRUST_PROJECT=1`; exact name decided in the P0 PR). Workers inherit the parent's decision only through that variable.
+- A project setting cannot grant its own trust.
+- The gate's result is what `ExtensionContext.isProjectTrusted()` returns (Requirement 2, item 5).
+- The existing MCP project trust summary (`core/mcp/trust-summary.ts`) is left as is; aligning it with the gate is out of scope.
 
 ### Requirement 6 - Pi resources do not move the cacheable prefix mid-session (P0)
 
@@ -174,22 +194,28 @@ This is stronger evidence than the paired numbers and is an acceptance criterion
 3. `test/pi-compat-flag-off.test.ts`: with the flag off, the same fixtures behave as on main (`on()` returns `undefined`; `pi.registerEntryRenderer` is not a function; `CONFIG_DIR_NAME` import is `undefined`), so off is today's behavior.
 4. Fixtures under `test/fixtures/pi-compat/`: small hand-written extensions that reproduce the cases above (`preset`-like `CONFIG_DIR_NAME` use, `entry-renderer`-like registration, a Pi-only event, `getSettings` feature detection). No third-party code is vendored.
 5. Doctor: `test/package-doctor.test.ts` cases for Requirement 3 (Pi-only event → warning; missing export reported).
-6. Install safety (Requirement 5 PR): the npm/git install argv contains `--ignore-scripts` unless `--allow-scripts`; non-TTY install without `--yes` refuses; the recorded provenance has version + integrity or a commit SHA.
-7. Prompt-cache case (spec 051): in `test/suite/prompt-cache-stability.test.ts`, a variant with `OMK_PI_COMPAT=1`, two hand-written Pi fixture extensions (one registers a tool and a Pi-only event at load, one calls `getSettings()` and a no-op `registerEntryRenderer`) and one skill from a Pi-manifest fixture package: every call of both user tasks has the first call's system and tools hashes, and each main-lane call extends the previous one. #117 is not merged yet, so this case is added in 048's implementation PR on top of it; if 048's code lands first, it is a follow-up recorded in both specs.
+6. Install safety (P0 PR): the npm/git install argv contains `--ignore-scripts` unless `--allow-scripts`, for install, update and `-e`; a simulated script-dependent failure produces an error that contains the `--allow-scripts` retry command; non-TTY install without `--yes` refuses; the recorded provenance has version + integrity or a commit SHA.
+6a. Project trust gate (P0 PR): interactive first use asks once and remembers the answer outside the project; print mode and workers load no project package or extension without the env var and never prompt; with the env var they load; a project `.omk/settings.json` cannot mark itself trusted.
+6b. Flag scope (adapter PR): `piCompat: true` in user-global settings turns the adapter on; `piCompat: true` in a project `.omk/settings.json` (with the user setting and env unset) leaves it off, the adapter module is loaded 0 times (same `vi.doMock` counter as test 1), and one diagnostic names the ignored file; `OMK_PI_COMPAT=0` overrides the user setting.
+6c. `isProjectTrusted()` (adapter PR): returns the gate's result when trusted / not trusted, and `false` when the gate has no decision.
+7. Prompt-cache case (spec 051): in `test/suite/prompt-cache-stability.test.ts`, a variant with `OMK_PI_COMPAT=1`, two hand-written Pi fixture extensions (one registers a tool and a Pi-only event at load, one calls `getSettings()` and a no-op `registerEntryRenderer`) and one skill from a Pi-manifest fixture package: every call of both user tasks has the first call's system and tools hashes, and each main-lane call extends the previous one. Decision 8: this case goes into 048's implementation PR after #117 merges.
 8. Manual compatibility sweep (not CI, needs packages on disk): rerun `/workspace/omk-spec048-pi/e2e.mjs` over the 79 examples and 4 packages with the flag off and on; on must fix `preset.ts`, `provider-payload.ts`, `entry-renderer.ts`, `debug-provider.ts` and break none of the 68 that pass today.
 
 ## Acceptance criteria
 
 - **Zero cost when off.** With `OMK_PI_COMPAT` unset: (a) Perf Engineer's 20 interleaved pairs, judged by `paired_verdict.py --noreg`, are `PASS(no regression)` for CLI startup and worker startup at **+10 ms** max, idle RSS at **+5 MiB** max, and 100k first paint at +10 ms; (b) the CI test `test/pi-compat-lazy.test.ts` (PR #91 style) shows the compat adapter module is loaded 0 times on `main.ts` import and on loading a Pi extension; (c) `test/pi-compat-flag-off.test.ts` passes.
-- **No mid-session prefix change.** With `OMK_PI_COMPAT=1`, loading Pi extensions and a Pi package skill does not change the system prompt or tools within a session: the spec 051 case in test 7 passes (or, if #117 is still open when 048's code merges, the follow-up is recorded and the same assertion runs in `test/pi-compat-adapter.test.ts` with `omk-ai/prompt-hash`).
+- **No mid-session prefix change.** With `OMK_PI_COMPAT=1`, loading Pi extensions and a Pi package skill does not change the system prompt or tools within a session: the spec 051 case in test 7 passes (added in the adapter PR after #117 merges, decision 8).
+- **A project cannot enable the adapter.** Test 6b passes: `piCompat` in a project `.omk/settings.json` leaves the adapter off and unloaded; only the env var or the user-global setting turns it on.
+- **P0 PR first.** The adapter PR is opened only after the P0 security PR (Requirements 5 and 7, tests 6 and 6a, CHANGELOG `Changed` entry) has merged.
 - With `OMK_PI_COMPAT=1`: the sweep in test 8 passes ≥ 72 of 79 examples, and the 4 packages give the same tool results as above.
 - `omk package doctor` on pi-mcp-adapter 5.2.0 and pi-cache-optimizer 2.8.24 returns `compatible: true` with warnings.
 - `npm run check` passes; the module-size baseline is not raised.
 
 ## Non-goals
 
-- Reading `~/.pi/agent/settings.json` or `.pi/settings.json`, or loading packages installed by Pi. Pulling code from another tool's config would load extensions the user never approved for omk. A one-shot `omk config import-pi` that shows the list and asks is a possible follow-up (open question 6).
+- Reading `~/.pi/agent/settings.json` or `.pi/settings.json`, or loading packages installed by Pi. Pulling code from another tool's config would load extensions the user never approved for omk. `omk config import-pi` is not planned; it is added only when someone needs it (decision 6).
 - Redirecting hard-coded `.pi/` paths inside packages (env tricks, fs hooks). Packages that hard-code them keep their own state there; the doctor warns.
+- `ToolCallEventResult.terminate` (separate spec later) and Pi's provider internal exports.
 - Emitting the 10 Pi-only events, virtual models, MCP server registration from extensions, `turn_end` boundary results, named system-prompt sections.
 - Bundling or porting any Pi package into omk (that stays the intake/procurement path, spec 039).
 - `pi install` / `pi` CLI compatibility, Pi's SDK/RPC protocol.
@@ -197,26 +223,28 @@ This is stronger evidence than the paired numbers and is an acceptance criterion
 
 ## Security
 
-- An extension is code that runs in the omk process with the user's privileges: files, credentials in the environment, network, child processes. The adapter does not sandbox anything and must not be described as making packages safe. Project trust, if adopted (open question 5), only controls what loads; it is not a boundary either (Pi's own `docs/security.md` says the same).
+- An extension is code that runs in the omk process with the user's privileges: files, credentials in the environment, network, child processes. The adapter does not sandbox anything and must not be described as making packages safe. The project trust gate (Requirement 7) only controls what loads; it is not a boundary either (Pi's own `docs/security.md` says the same).
 - Today's install path runs npm lifecycle scripts; Requirement 5 turns that off by default. This is the largest risk found and is independent of the flag.
+- `piCompat` is honored only from user-global settings, so a cloned repository cannot turn the adapter on; project packages need the trust gate in any case.
 - Pi packages can include skills that tell the model to run programs; skills from packages load like omk skills.
 - Fixtures are hand-written; no third-party package source is committed to the repo.
 
-## Open questions for Tech Lead
+## Decisions (Tech Lead on #118, 2026-10-11; former open questions, resolved)
 
-1. Flag form: env `OMK_PI_COMPAT=1` only, or also a setting `piCompat: true` (persistent for people who use Pi packages daily)? A setting has to be read before extensions load; the lazy test covers both.
-2. `ExtensionContext.isProjectTrusted()`: omk has no general project trust. Return `true` (matches today's behavior, packages like pi-lens then act as in a trusted project), `false` (packages turn off project-local features), or leave it undefined?
-3. `ToolCallEventResult.terminate`: worth adding to omk's `tool_call` result (omk already honors `terminate` on tool results, `agent-loop.ts`)? It is small but it is a loop change, so maybe its own spec.
-4. Provider internals exported by Pi (`pi-ai/compat` `anthropicMessagesApi`, `openAIResponsesApi`; `collapseSystemMessages`, `getCurrentSystemPrompt`, `getCurrentTools`): out of scope (custom providers should use omk's `registerProvider` API), or map the ones omk has equivalents for?
-5. Project-scoped packages (`omk install -l` writes `.omk/settings.json`, which loads code when anyone opens the repo): adopt Pi's project-trust gate for project packages, in this spec or a separate one?
-6. Should `omk config import-pi` (show `~/.pi/agent/settings.json` packages, confirm each, write omk settings) exist at all?
-7. Requirement 5 (install safety) changes behavior for every package user. Ship it before the adapter, and does it need a CHANGELOG `Changed` entry with the `--allow-scripts` escape hatch?
-8. Spec 051 case: add it in 048's implementation PR after #117 merges (proposed), or have 051's owner add a generic "third-party extension loaded" variant now?
+1. **Flag form**: both env `OMK_PI_COMPAT` and the setting `piCompat`, but the setting is read only from user-global settings (`~/.omk`). A project `.omk/settings.json` cannot enable it; acceptance test 6b.
+2. **`isProjectTrusted()`**: returns the project trust gate's result (decision 5); `false` when there is no gate or it cannot decide.
+3. **`ToolCallEventResult.terminate`**: out of scope; a separate spec later.
+4. **Pi provider internal exports**: out of scope.
+5. **Project trust gate**: yes, independent of Pi compatibility. Interactive: ask once on first use. `-p` and workers: deny by default, opened only by an explicit env var. Ships in the P0 security PR (Requirement 7), not in the adapter PR.
+6. **`omk config import-pi`**: not now; only when someone needs it.
+7. **Install safety**: ships first as a separate P0 PR, before the adapter, together with the trust gate. Install scripts off by default, an explicit option to enable them (`--allow-scripts`), and a failure message that names that option. CHANGELOG entry under `Changed`.
+8. **Spec 051 case**: goes into the 048 implementation PR after #117 merges.
 
 ## Expected Files
 
 - `specs/048-pi-compat/spec.md`: this spec (first commit; this PR has only this file)
-- Later PRs: `packages/coding-agent/src/core/pi-compat/adapter.ts`, `src/core/pi-compat/exports/*.ts` (shim modules), `src/core/extensions/loader.ts` (flag check, dynamic import), `src/core/package-doctor*.ts`, `src/core/package-manager.ts` + `src/package-manager-cli.ts` (Requirement 5), `docs/packages.md`, `docs/environment-variables.md`, tests and fixtures listed above.
+- P0 security PR (first): `src/core/package-manager.ts`, `src/package-manager-cli.ts` (Requirement 5: `--ignore-scripts` default, `--allow-scripts`, failure message), a project trust gate module under `src/core/` and its wiring in the resource loader and print/worker startup (Requirement 7), `CHANGELOG.md` `[Unreleased]` `### Changed`, `docs/packages.md`, `docs/security.md`, `docs/environment-variables.md`, tests 6 and 6a.
+- 048 adapter PR (after the P0 PR and #117): `src/core/pi-compat/adapter.ts`, `src/core/pi-compat/exports/*.ts` (shim modules), `src/core/extensions/loader.ts` (flag check, dynamic import), the `piCompat` user-global setting, `src/core/package-doctor*.ts`, `test/suite/prompt-cache-stability.test.ts` (051 case), `docs/packages.md`, `docs/environment-variables.md`, tests 1–5, 6b, 6c, 7 and fixtures.
 
 ## What was not verified
 
