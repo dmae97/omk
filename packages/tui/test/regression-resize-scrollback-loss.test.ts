@@ -139,4 +139,29 @@ describe("resize scrollback loss regression", () => {
 		assertTranscriptKept(terminal, chat.transcript);
 		tui.stop();
 	});
+
+	it("re-sends a row above the cursor that changed in the resize frame, exactly once", async () => {
+		const terminal = new VirtualTerminal(80, 40);
+		const tui = new TUI(terminal);
+		const chat = new ChatLike();
+		chat.footerRows = 3;
+		chat.transcript = rows(80);
+		tui.addChild(chat);
+		tui.start();
+		await settle(terminal);
+
+		// 84 rows at 40: screen top is row 44. Shrinking to 24 drops the 3 footer rows below
+		// the cursor, so rows 57..59 stay on screen above the 24-row tail (60..83).
+		// Row 58 ("C59") changes in the same frame.
+		terminal.resizeEmulatorOnly(80, 24);
+		chat.transcript = chat.transcript.map((row) => (row === "C59" ? "C59 edited" : row));
+		terminal.announceResize();
+		await settle(terminal);
+
+		const buffer = terminal.getScrollBuffer();
+		assert.strictEqual(occurrences(buffer, "C59 edited"), 1, "edited row appears once");
+		assert.strictEqual(occurrences(buffer, "C59"), 0, "stale copy is gone");
+		assertTranscriptKept(terminal, chat.transcript);
+		tui.stop();
+	});
 });

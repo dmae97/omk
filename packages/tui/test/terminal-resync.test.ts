@@ -19,6 +19,22 @@ function writtenRows(output: string): string[] {
 }
 
 describe("resyncAfterResize", () => {
+	it("starts at the first row above the cursor that changed since the last frame", () => {
+		const previous = rows(10);
+		const next = [...previous];
+		next[6] = "R6 changed";
+		const output = resyncAfterResize(previous, next, 9, 24);
+		assert.ok(output.startsWith("\x1b[3A\r"), JSON.stringify(output.slice(0, 12)));
+		assert.deepStrictEqual(writtenRows(output), ["R6 changed", "R7", "R8", "R9"]);
+	});
+
+	it("starts at the cursor row when nothing above it changed", () => {
+		const previous = rows(10);
+		const output = resyncAfterResize(previous, [...previous, "R10"], 9, 24);
+		assert.ok(output.startsWith("\r"), JSON.stringify(output.slice(0, 12)));
+		assert.deepStrictEqual(writtenRows(output), ["R9", "R10"]);
+	});
+
 	it("re-sends at most REPAINT_BUDGET_SCREENS screens of already-printed rows", () => {
 		const height = 10;
 		const previous = rows(200);
