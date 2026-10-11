@@ -214,4 +214,27 @@ describe("resize scrollback loss regression", () => {
 		assert.deepStrictEqual(stacked, [], `rows re-sent under the overlay: ${stacked.join(", ")}`);
 		tui.stop();
 	});
+
+	it("does not duplicate short content that fits the screen across height changes (with an overlay)", async () => {
+		const terminal = new VirtualTerminal(100, 40);
+		const tui = new TUI(terminal);
+		const chat = new ChatLike();
+		chat.footerRows = 0;
+		chat.transcript = rows(10);
+		tui.addChild(chat);
+		tui.setRightGutter(20);
+		tui.showOverlay(new Rail(), { anchor: "top-right", width: 20, maxHeight: "100%", nonCapturing: true });
+		tui.start();
+		await settle(terminal);
+
+		for (const height of [24, 40, 12, 40]) {
+			terminal.resize(100, height);
+			await settle(terminal);
+		}
+
+		const copies = copiesByFirstWord(terminal, chat.transcript);
+		const wrong = [...copies].filter(([, count]) => count !== 1).map(([row, count]) => `${row}×${count}`);
+		assert.deepStrictEqual(wrong, [], `short content rows not shown exactly once: ${wrong.join(", ")}`);
+		tui.stop();
+	});
 });

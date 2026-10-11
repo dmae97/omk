@@ -34,6 +34,14 @@ export const REPAINT_BUDGET_SCREENS = 4;
  * composited rows above the cursor would all look changed and be re-sent on
  * every resize step. What is written is the composited frame (`newLines`).
  *
+ * A frame that fits the new screen needs no resync: the tail repaint writes
+ * all of it from the top. Resyncing it anyway is harmful when the frame was
+ * padded to the screen height (an overlay taller than short content): its
+ * rows are screen rows, not scrollback-anchored rows, so after a grow pulled
+ * rows back from scrollback the cursor's row no longer maps to the same
+ * content row and the line feeds push the pulled-back rows into scrollback a
+ * second time.
+ *
  * @param previousBase pre-overlay rows of the last frame
  * @param newLines composited rows of the frame about to be painted
  * @param cursorRow content row the hardware cursor was left on by the last frame
@@ -47,7 +55,7 @@ export function resyncAfterResize(
 	height: number,
 	currentBase: readonly string[] = newLines,
 ): string {
-	if (newLines.length === 0) return "";
+	if (newLines.length === 0 || newLines.length <= height) return "";
 	const { first } = resyncStart(previousBase, currentBase, newLines.length, cursorRow, height);
 	const up = cursorRow - first;
 	let buffer = up > 0 ? `\x1b[${up}A\r` : "\r";
