@@ -1,4 +1,5 @@
 import type { ExtensionFactory } from "../types.ts";
+import deliverableGuard from "./deliverable-guard.ts";
 import finishCheck from "./finish-check.ts";
 import goalController from "./goal-controller.ts";
 import identicalLoop from "./identical-loop.ts";
@@ -18,5 +19,7 @@ export const HARNESS_FACTORIES: readonly HarnessFactoryEntry[] = [
 	{ factory: toolPairRepair, path: "<builtin:tool-pair-repair>", envVar: "OMK_TOOL_PAIR_REPAIR" },
 	{ factory: promptPreset, path: "<builtin:prompt-preset>", envVar: "OMK_PROMPT_PRESET" },
 	{ factory: goalController, path: "<builtin:goal-controller>", envVar: "OMK_GOAL_CONTROLLER" },
+	// Before finish-check, so a file restored at settle is in place for the verification turn (spec 034).
+	{ factory: (omk) => deliverableGuard(omk), path: "<builtin:deliverable-guard>", envVar: "OMK_DELIVERABLE_GUARD" },
 	{ factory: (omk) => finishCheck(omk), path: "<builtin:finish-check>", envVar: "OMK_FINISH_CHECK" },
 ];
