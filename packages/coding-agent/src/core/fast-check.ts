@@ -3,14 +3,15 @@
  *
  * Existence, regular file, non-empty and size limit, then a syntax check for a few
  * extensions whose checker is quick and on `PATH`. A checker that is missing, hangs
- * or crashes gives "unknown", which counts as ok: a failed checker never makes a
- * file look broken. Shared with the per-edit diagnostics spec (040).
+ * or crashes, and a C file whose `#include` cannot be found, give "unknown", which
+ * counts as ok: a failed checker never makes a file look broken. Shared with the
+ * per-edit diagnostics spec (040).
  */
 import { spawn } from "node:child_process";
 import { accessSync, constants, mkdtempSync, rmSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, extname, join } from "node:path";
+import { delimiter, dirname, extname, join } from "node:path";
 
 export interface SizeLimit {
 	readonly bytes: number;
@@ -42,9 +43,19 @@ export const FAST_CHECK_TIMEOUT_MS = 5000;
 /** JSON files above this are not parsed in-process; they get existence and size only. */
 const MAX_JSON_BYTES = 32 * 1024 * 1024;
 
+/** `-I` the file's own directory, so `<x.h>` next to the file resolves as it would in a build. */
+const ccArgs = (path: string) => ["-fsyntax-only", "-I", dirname(path), path];
+/**
+ * gcc `fatal error: x.h: No such file or directory`, clang `fatal error: 'x.h' file not found`.
+ * The file may need `-I` flags we do not know; that is not a syntax error, so it counts as unknown.
+ */
+const MISSING_HEADER = /fatal error:.*(No such file or directory|file not found)/;
+/** Enough stderr to see the first diagnostics; the rest is dropped. */
+const MAX_STDERR_CHARS = 16 * 1024;
+
 const BUILTIN_CHECKERS: Readonly<Record<string, FastChecker>> = {
-	".c": { command: "cc", args: (path) => ["-fsyntax-only", path] },
-	".h": { command: "cc", args: (path) => ["-fsyntax-only", path] },
+	".c": { command: "cc", args: ccArgs },
+	".h": { command: "cc", args: ccArgs },
 	".py": { command: "python3", args: (path) => ["-m", "py_compile", path] },
 	".sh": { command: "bash", args: (path) => ["-n", path] },
 };
@@ -76,16 +87,21 @@ function runChecker(
 	args: string[],
 	timeoutMs: number,
 	env: NodeJS.ProcessEnv,
-): Promise<RunOutcome> {
+): Promise<{ outcome: RunOutcome; stderr: string }> {
 	return new Promise((resolve) => {
 		let settled = false;
+		let stderr = "";
 		const done = (outcome: RunOutcome) => {
 			if (settled) return;
 			settled = true;
 			clearTimeout(timer);
-			resolve(outcome);
+			resolve({ outcome, stderr });
 		};
-		const child = spawn(executable, args, { stdio: "ignore", detached: true, env });
+		const child = spawn(executable, args, { stdio: ["ignore", "ignore", "pipe"], detached: true, env });
+		child.stderr?.setEncoding("utf8");
+		child.stderr?.on("data", (chunk: string) => {
+			if (stderr.length < MAX_STDERR_CHARS) stderr += chunk.slice(0, MAX_STDERR_CHARS - stderr.length);
+		});
 		const timer = setTimeout(() => {
 			// Kill the whole process group so a checker's children do not outlive it.
 			try {
@@ -96,7 +112,8 @@ function runChecker(
 			done("timeout");
 		}, timeoutMs);
 		child.once("error", () => done("crash"));
-		child.once("exit", (code, signal) => {
+		// `close`, not `exit`: stderr is complete only once its pipe closes.
+		child.once("close", (code, signal) => {
 			if (signal !== null) done("crash");
 			else done(code === 0 ? "pass" : "fail");
 		});
@@ -125,12 +142,14 @@ async function contentCheck(
 	if (!executable) return "unknown:no-checker";
 	// py_compile writes bytecode; keep it out of the workspace.
 	const cacheDir = ext === ".py" ? mkdtempSync(join(tmpdir(), "omk-fast-check-")) : undefined;
-	const env = cacheDir ? { ...process.env, PYTHONPYCACHEPREFIX: cacheDir } : process.env;
+	// LC_ALL=C keeps compiler messages in English so MISSING_HEADER matches.
+	const env = { ...process.env, LC_ALL: "C", ...(cacheDir ? { PYTHONPYCACHEPREFIX: cacheDir } : {}) };
 	try {
-		const outcome = await runChecker(executable, checker.args(path), timeoutMs, env);
+		const { outcome, stderr } = await runChecker(executable, checker.args(path), timeoutMs, env);
 		if (outcome === "pass") return undefined;
-		if (outcome === "fail") return `syntax:${checker.command}`;
-		return `unknown:${outcome}`;
+		if (outcome !== "fail") return `unknown:${outcome}`;
+		if (checker.command === "cc" && MISSING_HEADER.test(stderr)) return "unknown:missing-header";
+		return `syntax:${checker.command}`;
 	} finally {
 		if (cacheDir) rmSync(cacheDir, { recursive: true, force: true });
 	}

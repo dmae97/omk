@@ -60,6 +60,28 @@ describe("fastCheckFile: content checks", () => {
 		expect((await fastCheckFile(file("good.c", "int main(void) { return 0; }\n"))).ok).toBe(true);
 	});
 
+	// Review of b0998ee: a header cc cannot find is not a syntax error, or a better newer file gets reverted.
+	it.skipIf(!findOnPath("cc"))("counts a missing #include as unknown (ok), not syntax:cc", async () => {
+		for (const include of ['"missing_dep.h"', "<omk_missing_dep_034.h>"]) {
+			const path = file("needs.c", `#include ${include}\nint main(void) { return 0; }\n`);
+			expect(await fastCheckFile(path)).toMatchObject({ ok: true, reason: "unknown:missing-header" });
+		}
+	});
+
+	it.skipIf(!findOnPath("cc"))("finds an angle-bracket header next to the file (-I its directory)", async () => {
+		mkdirSync(join(dir, "src"));
+		writeFileSync(join(dir, "src", "local_dep.h"), "int dep(void);\n");
+		const path = join(dir, "src", "main.c");
+		writeFileSync(path, "#include <local_dep.h>\nint main(void) { return dep(); }\n");
+		expect(await fastCheckFile(path)).toMatchObject({ ok: true, reason: undefined });
+	});
+
+	it.skipIf(!findOnPath("cc"))("still rejects a syntax error in a file whose headers are found", async () => {
+		writeFileSync(join(dir, "ok_dep.h"), "int dep(void);\n");
+		const path = file("broken.c", '#include "ok_dep.h"\nint main(void) { return dep() }\n');
+		expect(await fastCheckFile(path)).toMatchObject({ ok: false, reason: "syntax:cc" });
+	});
+
 	it.skipIf(!findOnPath("python3"))("rejects a .py file with a syntax error and leaves no bytecode", async () => {
 		expect(await fastCheckFile(file("bad.py", "def f(:\n  pass\n"))).toMatchObject({
 			ok: false,

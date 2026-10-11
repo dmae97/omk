@@ -254,6 +254,25 @@ describe("deliverable guard: restore", () => {
 		},
 	);
 
+	it.skipIf(!findOnPath("cc"))(
+		"a newer file whose #include cc cannot find is valid and kept at settle (review of b0998ee)",
+		async () => {
+			const h = harness(ON);
+			const path = join(work, "main.c");
+			await h.fire("input", task(path));
+			writeFileSync(path, "int main(void) { return 0; }\n");
+			h.at(100);
+			await h.fire("tool_execution_end", tool);
+			const better = '#include "needs_dash_I.h"\nint main(void) { return helper(); }\n';
+			writeFileSync(path, better);
+			h.at(200);
+			await h.fire("tool_execution_end", tool);
+			await h.fire("agent_settled", settled);
+			expect(readFileSync(path, "utf8")).toBe(better);
+			expect(restores(h)).toEqual([]);
+		},
+	);
+
 	it("train-fasttext r3: a deleted file is restored at settle with reason missing", async () => {
 		const h = harness(ON);
 		const path = join(work, "model.bin");

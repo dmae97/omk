@@ -151,6 +151,9 @@ export default function deliverableGuard(omk: ExtensionAPI, options: Deliverable
 		}
 	};
 	const limitOf = (path: string) => deliverables.find((deliverable) => deliverable.path === path)?.sizeLimit;
+	const restoreNow = (point: "sigterm" | "shutdown") => {
+		for (const entry of store.restoreSync(deliverables)) log({ type: "restore", ...entry, point });
+	};
 
 	omk.on("input", (event, ctx) => {
 		// Our own follow-ups (finish-check) arrive as extension input; only a new user task resets the guard.
@@ -167,9 +170,7 @@ export default function deliverableGuard(omk: ExtensionAPI, options: Deliverable
 		if (timer === undefined && fraction() !== undefined)
 			timer = timers.setInterval(() => serial(checkPoints), DELIVERABLE_GUARD_POLL_MS);
 		if (removeSignal === undefined && !ctx.hasUI)
-			removeSignal = (options.onTerminate ?? onSigterm)(() => {
-				for (const entry of store.restoreSync(deliverables)) log({ type: "restore", ...entry, point: "sigterm" });
-			});
+			removeSignal = (options.onTerminate ?? onSigterm)(() => restoreNow("sigterm"));
 		return undefined;
 	});
 
@@ -195,9 +196,12 @@ export default function deliverableGuard(omk: ExtensionAPI, options: Deliverable
 		}),
 	);
 
-	omk.on("session_shutdown", () => {
+	omk.on("session_shutdown", (event) => {
 		if (timer !== undefined) timers.clearInterval(timer);
 		timer = undefined;
+		// Print mode's SIGTERM listener (registered first) disposes the runtime, which can reach
+		// this handler before our own SIGTERM listener runs; put copies back before deleting them.
+		if (removeSignal !== undefined && event.reason === "quit") restoreNow("shutdown");
 		removeSignal?.();
 		removeSignal = undefined;
 		store.dispose();

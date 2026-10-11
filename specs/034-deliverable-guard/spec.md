@@ -68,8 +68,8 @@ Paths that only appear as inputs (`/app/decomp.c`, `/app/filter.py`, `/app/model
 ### Requirement 2 - Fast validity check, shared with the per-edit diagnostics spec (P0)
 
 - New `src/core/fast-check.ts`: `fastCheckFile(path, { sizeLimit?, timeoutMs = 5000 })` → `{ ok, reason?, ms }`.
-- `ok` requires: the file exists, is a regular file, is non-empty, and is within the size limit. Then by extension, only when the checker is on `PATH`: `.c`/`.h` `cc -fsyntax-only`, `.py` `python3 -m py_compile` (writing bytecode to a temp dir), `.json` `JSON.parse`, `.sh` `bash -n`. Other extensions (including `.xml`) get existence and size only: a tag-balance check would keep broken files as "good" copies (Tech Lead, 2026-10-11).
-- A checker that is missing, times out or crashes is "unknown", which counts as `ok` (the guard never discards a file because a checker failed). Every check runs with a 5 s timeout and is killed with its process group.
+- `ok` requires: the file exists, is a regular file, is non-empty, and is within the size limit. Then by extension, only when the checker is on `PATH`: `.c`/`.h` `cc -fsyntax-only -I <file's directory>`, `.py` `python3 -m py_compile` (writing bytecode to a temp dir), `.json` `JSON.parse`, `.sh` `bash -n`. Other extensions (including `.xml`) get existence and size only: a tag-balance check would keep broken files as "good" copies (Tech Lead, 2026-10-11).
+- A checker that is missing, times out or crashes is "unknown", which counts as `ok` (the guard never discards a file because a checker failed). A `cc` failure whose stderr says a header was not found (gcc `fatal error: x.h: No such file or directory`, clang `fatal error: 'x.h' file not found`; checkers run with `LC_ALL=C`) is `unknown:missing-header`, also `ok`: the build may pass `-I` flags the guard does not know, and calling that file broken would put an older copy over a better file (Tech Lead review of `b0998ee`). Every check runs with a 5 s timeout and is killed with its process group.
 
 ### Requirement 3 - Last-good copy (P0)
 
@@ -85,7 +85,7 @@ Paths that only appear as inputs (`/app/decomp.c`, `/app/filter.py`, `/app/model
 
 ### Requirement 5 - Restore before the end (P0)
 
-- Restore points: (a) the shared clock passes `DELIVERABLE_RESTORE_FRACTION = 0.9` (same point as `FINISH_CHECK_SKIP_FRACTION`), by the same timer as well as on events, once per task; (b) every `agent_settled`, before finish-check decides on its turn; (c) best effort on `SIGTERM` in headless runs: synchronous, existence and size only, no checker processes.
+- Restore points: (a) the shared clock passes `DELIVERABLE_RESTORE_FRACTION = 0.9` (same point as `FINISH_CHECK_SKIP_FRACTION`), by the same timer as well as on events, once per task; (b) every `agent_settled`, before finish-check decides on its turn; (c) best effort on `SIGTERM` in headless runs: synchronous, existence and size only, no checker processes. The same synchronous restore also runs in the guard's `session_shutdown` (reason `quit`) handler before the store is deleted, logged with `point: "shutdown"`: print mode's SIGTERM listener is registered before the guard's and disposes the runtime, so `session_shutdown` can delete the copies before the guard's own SIGTERM listener runs. After a normal settle this finds nothing to restore.
 - At a restore point, a deliverable is restored only when the current file is missing or `fastCheckFile` says not `ok`, and a last-good copy exists. A valid current file is never replaced.
 - After a restore at (a), the run gets one steer naming what was restored and why ("`/app/gpt2.c` was 5069 bytes, over the 5000-byte limit; restored the 4,8xx-byte copy from 62% of the budget"), so it does not overwrite it with the broken version again.
 - Every restore is written to a `deliverable_guard` session entry and emitted as an event: path, reason (`missing` | `invalid:<reason>`), restored size and sha256, the fraction it was saved at.
@@ -102,7 +102,7 @@ Paths that only appear as inputs (`/app/decomp.c`, `/app/filter.py`, `/app/model
 - Bench runs use `--no-session --mode json`, so session entries and event-bus records never reach `omk.jsonl`. The guard logs through spec 042's `appendRunLog("deliverable-guard", record)`: with `OMK_RUN_LOG_DIR` set and the guard on, one JSON line per event goes to `<OMK_RUN_LOG_DIR>/deliverable-guard.jsonl`:
   - `steer`: `kind` (`watchdog` | `restore`) and the paths named;
   - `verdict`: at each restore point, per deliverable, the fast-check result and the decision (`keep` | `restore` | `no_copy`), with `path`, `point`, `ok`, `reason`, `ms`;
-  - `restore`: every restore record (90%, settle, and SIGTERM), with `path`, `point`, `outcome`, `reason`, sizes, sha256 and the saved-at fraction;
+  - `restore`: every restore record (90%, settle, SIGTERM and shutdown), with `path`, `point`, `outcome`, `reason`, sizes, sha256 and the saved-at fraction;
   - `summary`: at each settle, `steers`, `restores`, `guardMs`.
 - `appendRunLog` adds `t` (epoch ms), `elapsedFraction` (shared clock or null), `pid` and `role`; guard records never use those keys. Records hold paths, reasons, numbers and hashes only (spec 042 privacy rule), never file contents or environment values.
 - `appendRunLog` writes with `appendFileSync`, so the SIGTERM line is on disk before exit, and never throws into the run.
@@ -126,6 +126,7 @@ Fast check (`fast-check.test.ts`):
 5. Missing, empty, directory and over-limit files are not `ok`, with distinct reasons.
 6. A `.c` file with a syntax error is not `ok` when `cc` exists; the test is skipped when `cc` is missing. Same for `.py` with `python3`.
 7. A checker that hangs is killed at the timeout and the result counts as `ok` with reason `unknown:timeout`.
+7b. A `.c` file whose `#include` (quoted or angled) does not exist is `ok` with reason `unknown:missing-header`; an angled header in the file's own directory is found through `-I`; a real syntax error in a file whose headers are found is still `syntax:cc` (`cc` present).
 
 Guard (harness tests with a fake clock and fake budget of 900 s):
 
@@ -139,6 +140,8 @@ Guard (harness tests with a fake clock and fake budget of 900 s):
 15. **Gating**: flag unset/off → no handlers, timers or signal handlers are registered; flag `on` with a UI → nothing; flag `on` headless → active. No budget → no steer and no 90% restore, but settle restore still works.
 16. **Order with finish-check**: both on, file deleted before settle → the finish-check turn's first tool sees the restored file.
 17. **Cleanup**: the store directory is gone after session shutdown; timers are cleared and do not keep the process alive.
+17b. **Header not found is not broken**: a compiling copy is saved, the newer file includes a header `cc` cannot find → kept at settle, nothing restored (`cc` present).
+17c. **SIGTERM in print mode** (`deliverable-guard-sigterm.test.ts`): through `runPrintMode`'s real SIGTERM listener, a missing deliverable with a copy is restored, then the store directory is deleted.
 18. **Run log** (`deliverable-guard-log.test.ts`): guard off + `OMK_RUN_LOG_DIR` set → no file; guard on + variable unset → nothing written; a run with a watchdog steer, a 90% restore and a settle gives `steer`, `verdict`, `restore` and `summary` lines carrying `t`/`elapsedFraction`/`pid`/`role`; no guard record sets those keys; no file contents or env values; the SIGTERM restore line is written synchronously.
 
 ## A/B measurement (Bench Analyst decides)
@@ -159,6 +162,10 @@ Guard (harness tests with a fake clock and fake budget of 900 s):
 - Re-running the task's tests or any network access.
 - Reverting changes made during 032's verification turn. 032 marks those results invalid; restoring the files is a follow-up once both specs are in.
 
+## Known risks
+
+- The 90% restore can revert a file that is only temporarily broken while the model fixes it over several edits. Accepted by design: the model is told by the restore steer, and the A/B measures it from the run log (tasks whose result goes 1→0 after a restore).
+
 ## Decisions (Tech Lead, 2026-10-11)
 
 1. At 40% the guard only steers; it does not force the next tool call to be a write. Bench Analyst agrees.
@@ -176,4 +183,4 @@ Guard (harness tests with a fake clock and fake budget of 900 s):
 - `packages/coding-agent/src/core/finish-check-requirements.ts`: export the sentence splitter and produce words
 - `packages/coding-agent/examples/extensions/subagent/worker-env.ts`: workers get the guard off
 - `packages/coding-agent/docs/environment-variables.md`, `docs/usage.md`. `CHANGELOG.md` is left for a follow-up because open #97 edits it too.
-- Tests: `test/deliverable-guard.test.ts` (extraction, AC 1-4), `test/fast-check.test.ts` (AC 5-7), `test/deliverable-guard-extension.test.ts` (AC 8-17 and the flag-off case), `test/deliverable-guard-run-clock.test.ts` (shared run clock), `test/deliverable-guard-log.test.ts` (AC 18), fixtures under `test/fixtures/deliverables/`
+- Tests: `test/deliverable-guard.test.ts` (extraction, AC 1-4), `test/fast-check.test.ts` (AC 5-7), `test/deliverable-guard-extension.test.ts` (AC 8-17 and the flag-off case), `test/deliverable-guard-run-clock.test.ts` (shared run clock), `test/deliverable-guard-log.test.ts` (AC 18), `test/deliverable-guard-sigterm.test.ts` (AC 17c), fixtures under `test/fixtures/deliverables/`
