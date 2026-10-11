@@ -165,6 +165,7 @@ Guard (harness tests with a fake clock and fake budget of 900 s):
 ## Known risks
 
 - The 90% restore can revert a file that is only temporarily broken while the model fixes it over several edits. Accepted by design: the model is told by the restore steer, and the A/B measures it from the run log (tasks whose result goes 1→0 after a restore).
+- A missing header is a fatal error for `cc`, so it stops there: a `.c`/`.h` file whose `#include` cannot be found is `unknown:missing-header` (counts as `ok`) even if it also has a real syntax error later in the file, and the guard keeps it instead of restoring the last good copy. Accepted: this errs toward keeping the newer file (Tech Lead review of #100).
 
 ## Decisions (Tech Lead, 2026-10-11)
 
