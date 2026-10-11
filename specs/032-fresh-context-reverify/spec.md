@@ -158,6 +158,9 @@ Defaults: `OMK_FINISH_CHECK_REVERIFY=on`, `OMK_FINISH_CHECK_EXTRA_TURN=on`, `OMK
 16. **Instruction content.** The instruction contains the line about new inputs and "Do not count re-running the given examples", the `/tmp/omk-verify/` rule, the no-web-answers rule, and the reply format. The deliverables list is deduplicated and capped at 30.
 17. **Cost recorded.** The `finish_check_verify` entry carries `costUsd` and token totals summed from the verifier turn's assistant messages (faux usage in the test).
 18. **Extra-turn flag off (decision 9).** With `OMK_FINISH_CHECK_REVERIFY=on` and `OMK_FINISH_CHECK_EXTRA_TURN` unset: the verifier runs and its verdict and findings are recorded (`finish_check_verify`, event `fixTurn: false`), but no fix turn or continue message is sent for a verifier FAIL, a check-ledger miss (`stone 74 >= 75`), a verifier REQ miss, or a verifier PASS; a later settle sends nothing. With both flags on, cases 10–12 apply.
+19. **Run log: trigger.** With `OMK_RUN_LOG_DIR` set, a fired trigger writes `{ type: "reverify-trigger", fired: true, reason: null, firstSettleFraction: 0.2 }`. A first settle at 50%, no budget, a UI session, an aborted check turn and a pending user message write `fired: false` with `reason` `"late"`, `"no-budget"`, `"ui"`, `"check-aborted"` and `"pending-input"`.
+20. **Run log: result.** A verifier FAIL with both flags on writes `verdict: "fail"`, `failed: 1`, `changed: []`, `toolCalls`, `verifyStartFraction`, `verifyEndFraction`, `fixTurn: true` and `fixTurnFraction`. A mutated verifier writes `verdict: "void"` with `changed: ["out.txt"]`. With `OMK_FINISH_CHECK_EXTRA_TURN` off the line has `fixTurn: false`, `fixTurnFraction: null`.
+21. **Run log: off and private.** `OMK_RUN_LOG_DIR` unset, or `OMK_FINISH_CHECK_REVERIFY` off: no 032 line, and no file when nothing else logs. No line contains the task text or the verifier's reply, and no line sets `t`, `elapsedFraction`, `pid` or `role` itself.
 
 ## A/B measurement
 
@@ -213,12 +216,22 @@ Defaults: `OMK_FINISH_CHECK_REVERIFY=on`, `OMK_FINISH_CHECK_EXTRA_TURN=on`, `OMK
 
 8. **Clock**: #63 merged before this PR, so the trigger reads the shared run clock in this PR (decision 7's seam defaults to `readRunBudget()`).
 9. **Extra turn only from its own flag**: with `OMK_FINISH_CHECK_EXTRA_TURN` off, 032 only verifies and records; no fix turn. The extra turn is created by that one flag alone (one flag, one behaviour, a clean off switch). This settles open question 1.
+10. **Run log** (after #101 and #102): the trigger decision and the verifier result go to `finish-check.jsonl` as described in "Run log". Nothing is written unless `OMK_RUN_LOG_DIR` is set and the flag is on; flag-off runs stay byte-identical to main.
 
 ## Bench visibility
 
 Benches run `omk --no-session --mode json`. JSON mode writes only session events (`session.subscribe`) to stdout: the follow-up user messages (check, verifier instruction, fix turn) and the assistant replies with their REQ/VERIFY lines appear there as message events, but `appendEntry` records (`finish_check_ledger`, `finish_check_verify`) and `omk.events.emit("finish_check", …)` events do not (no session file, and the extension event bus has no stdout subscriber). The trigger decision, verdict, `mutated` and whether the fix turn used the shared extra turn are therefore not visible in `omk.jsonl` today.
 
-They will go to the shared run log (`appendRunLog("finish-check", record)` writing `$OMK_RUN_LOG_DIR/finish-check.jsonl`, Runtime Engineer's PR) once it merges: one record for the trigger decision (fired or not, first-settle fraction), one for the verifier result (verdict, finding counts, `mutated`, changed-path count, tool calls, seconds, cost, `fixTurn`). Records hold only hashes, paths and numbers, no prompt text, file contents or env values. The call sites are marked with `run-log (spec 032)` comments in `extensions/builtin/finish-check.ts`; wiring them is a follow-up on top of `run-log.ts`.
+These go to the shared run log (spec 042): `appendRunLog("finish-check", record)` appends to `<OMK_RUN_LOG_DIR>/finish-check.jsonl`. See "Run log" below (decision 10).
+
+## Run log (decision 10)
+
+With `OMK_RUN_LOG_DIR` set and `OMK_FINISH_CHECK_REVERIFY` on, finish-check appends these lines to `<OMK_RUN_LOG_DIR>/finish-check.jsonl` through `appendRunLog("finish-check", …)` (spec 042). With `OMK_RUN_LOG_DIR` unset, or with the flag off, nothing is written (the same rule as spec 034's `deliverable-guard.jsonl`). Spec 035's `extra-turn` line has its own rule (spec 035, "Run log").
+
+`appendRunLog` adds `t`, `elapsedFraction`, `pid` and `role` to every line; finish-check never uses those names. Its `elapsedFraction` reads only the shared run clock and is `null` without one, so each line also carries the fraction finish-check itself used (the same budget reader as the 0.30 trigger, with the local-clock fallback). A line holds paths, numbers, booleans and enums only: no task text, no model output, no hash values.
+
+1. `{ type: "reverify-trigger", fired, reason, firstSettleFraction }`, once per task when the check turn settles (where the trigger is decided). `fired: true` has `reason: null`. Otherwise `reason` is the first that applies: `"ui"` (not headless), `"check-aborted"` (the check turn stopped with `aborted` or `error`), `"pending-input"` (a user message is waiting), `"no-budget"` (no budget to read), `"late"` (first settle at or after 30%). `firstSettleFraction` is the fraction at the task's first settle (`null` without a budget). No line when the check turn never ran.
+2. `{ type: "reverify-result", verdict, passed, failed, changed, deliverables, toolCalls, verifyStartFraction, verifyEndFraction, costUsd, inputTokens, outputTokens, totalTokens, fixTurn, fixTurnFraction }`, once when the verifier settles. `verdict` is `"pass" | "fail" | "unreported" | "void"`; `passed`/`failed` count its `VERIFY` findings; `changed` lists the deliverable paths whose size or hash changed during the verifier (empty unless `void`; paths only); `deliverables` is the number of paths it checked. `fixTurn` is whether the fix turn was sent (always `false` with `OMK_FINISH_CHECK_EXTRA_TURN` off) and `fixTurnFraction` the fraction when it was sent (`null` without a fix turn).
 
 ## Open questions (for Tech Lead, all settled)
 
@@ -237,3 +250,5 @@ They will go to the shared run log (`appendRunLog("finish-check", record)` writi
 - `packages/coding-agent/examples/extensions/subagent/worker-env.ts`: `OMK_FINISH_CHECK_REVERIFY` is lead-only
 - `packages/coding-agent/test/finish-check-reverify.test.ts`, `-reverify-hash.test.ts`, `-reverify-hash-limit.test.ts`, `-reverify-stage.test.ts`, `-reverify-flow.test.ts`, `-reverify-harness.test.ts`, `finish-check-budget-seam.test.ts`
 - `packages/coding-agent/docs/environment-variables.md`: `OMK_FINISH_CHECK_REVERIFY` row
+- `packages/coding-agent/src/core/extensions/builtin/finish-check-run-log.ts`: run-log records for 032 and 035 (decision 10)
+- `packages/coding-agent/test/finish-check-run-log.test.ts`: AC19–21 and spec 035's AC28
