@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // static import anywhere on the path fails here.
 const COLD_PATH_MODULES = {
 	runCommand: "../src/commands/run-command.ts",
+	verifiedRunCoordinator: "../src/core/verified-run/coordinator.ts",
 	codexBarCli: "../src/codexbar-cli.ts",
 } as const;
 type ColdPathModule = keyof typeof COLD_PATH_MODULES;

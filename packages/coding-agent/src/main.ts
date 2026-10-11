@@ -25,7 +25,6 @@ import {
 	type AgentSessionRuntimeDiagnostic,
 	createAgentSessionFromServices,
 	createAgentSessionServices,
-	createVerifiedRunAgentSession,
 } from "./core/agent-session-services.ts";
 import { formatNoModelsAvailableMessage } from "./core/auth-guidance.ts";
 import { AuthStorage } from "./core/auth-storage.ts";
@@ -542,7 +541,10 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (mayBeRunCommand(args)) {
-		const { runCommand } = await import("./commands/run-command.ts");
+		const [{ runCommand }, { createVerifiedRunAgentSession }] = await Promise.all([
+			import("./commands/run-command.ts"),
+			import("./core/verified-run-session.ts"),
+		]);
 		const outcome = await runCommand(args, { createSession: createVerifiedRunAgentSession });
 		if (outcome.handled) {
 			process.exitCode = outcome.exitCode;
