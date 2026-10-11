@@ -43,7 +43,7 @@ Every target item has more than one limit, so a design that infers "the" bound o
 | Dimension | Baseline (#62 @ `3eb9349213`) | Acceptance target | Regression floor | Verification command | Evidence artifact |
 | --- | --- | --- | --- | --- | --- |
 | Completion correctness | A REQ line whose own numbers fail its limit (e.g. `74 >= 75`) is recorded as reported and the run ends | The item is recorded `fail` with the gap, and the run gets one continue turn while time allows. An unmeasured tier-1 item gets a go-measure turn instead; the two share one extra turn | Runs whose limits pass and runs without tier-1 items behave exactly as #62 (same messages, same single check turn). A run never gets more than one extra turn per task | `../../node_modules/.bin/vitest run test/finish-check-requirements.test.ts test/finish-check.test.ts` in `packages/coding-agent` | those two test files |
-| Benchmark score | R8 omk: corewars 2/3, train-fasttext 0/3, regex-chess 1/3 | Small A/B (below): B ≥ A on the target tasks, corewars not worse | No new timeouts (T1/T2) caused by the continue turn on target or control tasks | Small A/B, 3 runs per task per arm | A/B report under `/workspace/omk-ab/` |
+| Benchmark score | R8 omk: corewars 2/3, train-fasttext 0/3, regex-chess 1/3 | Small A/B (below): D ≥ A on the target tasks, corewars not worse | No new timeouts (T1/T2) caused by the continue turn on target or control tasks | Small A/B, 3 runs per task per arm | A/B report under `/workspace/omk-ab/` |
 
 ## Agent-Oriented Requirements
 
@@ -164,7 +164,9 @@ Gate (default off):
 
 ## A/B measurement
 
-- With the gate, A and B can be the same #62 build: A runs with `OMK_FINISH_CHECK_EXTRA_TURN` unset (identical to #62 without the extra turn) and B with `OMK_FINISH_CHECK_EXTRA_TURN=on`. This replaces the two-build baseline below when #62 is merged with the gate.
+- **Pin**: main `d69af96` (Tech Lead's joint A/B pin; #62 is merged with the gate, and 032–035 and their run logs are in it). 035 is measured in the joint A/B with arms A–E on that one build (Bench Analyst's plan, `/workspace/omk-bench-analyst/AB_PLAN_d69af96.md`). 035's verdict is **A vs D**: A runs with `OMK_FINISH_CHECK_EXTRA_TURN` unset (identical to #62 without the extra turn) and D with `OMK_FINISH_CHECK_EXTRA_TURN=on`. All other new opt-in flags (`OMK_FINISH_CHECK_REVERIFY`, `OMK_RESPONSE_REASONING_CAP`, `OMK_DELIVERABLE_GUARD`) are off in both. This replaces the two-build baseline below.
+- **Shared arms**: A is the shared control for 033, 034 and 035, so if A is low by chance all three look better together. D is also 032's control (spec 032: D vs E). Report the A/D result with this caveat.
+- Benches run `omk --no-session --mode json` with `OMK_RUN_LOG_DIR` set in every arm; `extraTurn` counts by kind come from the `extra-turn` lines in `$OMK_RUN_LOG_DIR/finish-check.jsonl` (see "Run log").
 - **Baseline (A)**: main after #44 and #45 are merged (Staff Engineer is merging main `47e78c4` into them now), plus #62 as merged without this spec's change, so A already sends the checklist. If #62 is not merged when the A/B runs, A is main(#44+#45) + #62 @ its rebased head and B is the same + this change. A must not be bare main `47e78c4`: it has no finish check, so R8/B′ numbers would not line up.
 - **Target tasks** (class K in the report, plus the two B′ cases of the same shape):
   - `winning-avg-corewars`: R8 r2 ended at 77% of budget with 74 < 75. The main target; this is the case the change can catch.
