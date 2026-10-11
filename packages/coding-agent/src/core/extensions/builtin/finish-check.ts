@@ -10,8 +10,8 @@ import {
 	resolveFinishCheckExtraTurn,
 	resolveFinishCheckMode,
 	resolveFinishCheckReverify,
+	reverifySkipReason,
 	shouldAddFinishDiscipline,
-	shouldReverify,
 	shouldRunFinishCheck,
 } from "../../finish-check.ts";
 import {
@@ -34,6 +34,7 @@ import {
 	FINISH_CHECK_VERIFY_ENTRY,
 	type FinishCheckBudgetReader,
 } from "./finish-check-reverify-stage.ts";
+import { createFinishCheckRunLogger, type FinishCheckRunLog, finishCheckRunLog } from "./finish-check-run-log.ts";
 
 export interface FinishCheckOptions {
 	readonly env?: NodeJS.ProcessEnv;
@@ -41,6 +42,8 @@ export interface FinishCheckOptions {
 	readonly sleep?: (ms: number) => Promise<void>;
 	/** Budget source for every finish-check threshold and spec 032's trigger; defaults to the shared run clock. */
 	readonly readBudget?: FinishCheckBudgetReader;
+	/** Receives run-log records; default `appendRunLog("finish-check", record)` (spec 032 decision 10, spec 042). */
+	readonly runLog?: FinishCheckRunLog;
 }
 
 /** Event-bus channel for the verification turn: `{ active: true }` when it starts, `{ active: false, ledger }` when it ends. */
@@ -91,6 +94,10 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 	const stage = resolveFinishCheckReverify(env.OMK_FINISH_CHECK_REVERIFY)
 		? createReverifyStage(omk, readBudget)
 		: undefined;
+	const runLog = createFinishCheckRunLogger(options.runLog ?? finishCheckRunLog(env), {
+		reverify: stage !== undefined,
+		extraTurn: extraTurnEnabled,
+	});
 	let task = "";
 	let firstSettleFraction: number | undefined;
 	let checkLedger: FinishCheckLedgerItem[] = [];
@@ -163,6 +170,7 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 			// The fix turn is spec 035's single extra turn, so only OMK_FINISH_CHECK_EXTRA_TURN creates it (spec 032
 			// decision 9); without it the verifier only verifies and records.
 			const failing = mergeFailingItems(checkLedger, outcome.ledger);
+			const fraction = elapsedFraction();
 			const fixTurn =
 				extraTurnEnabled &&
 				decideExtraTurn({
@@ -171,8 +179,8 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 					unmeasured: 0,
 					aborted,
 					hasPendingMessages: ctx.hasPendingMessages(),
-					elapsedFraction: elapsedFraction(),
-				});
+					elapsedFraction: fraction,
+				}) !== undefined;
 			const { verdict, findings, mutated: verifierMutated } = outcome;
 			omk.events.emit(FINISH_CHECK_EVENT, {
 				active: false,
@@ -180,10 +188,9 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 				verdict,
 				findings,
 				mutated: verifierMutated,
-				fixTurn: Boolean(fixTurn),
+				fixTurn,
 			});
-			// run-log (spec 032): appendRunLog("finish-check", { stage: "verify", verdict, findings: counts,
-			// mutated, fixTurn }) goes here once run-log.ts lands (hashes, paths and numbers only).
+			runLog.verifyResult(outcome, failing.length, fixTurn, fraction);
 			if (!fixTurn) return;
 			extraTurnsUsed += 1;
 			extraTurnActive = true;
@@ -212,9 +219,9 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 				requirements.length > 0 ? parseFinishCheckLedger(ledgerReply(event.messages), requirements) : [];
 			if (ledger.length > 0) omk.appendEntry(FINISH_CHECK_LEDGER_ENTRY, { items: ledger });
 			const { failing, unmeasured } = extraTurnItems(ledger);
-			const verify =
-				stage !== undefined &&
-				shouldReverify({
+			const skip =
+				stage &&
+				reverifySkipReason({
 					enabled: true,
 					hasUI: ctx.hasUI,
 					firstSettleFraction,
@@ -222,15 +229,15 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 					hasPendingMessages: ctx.hasPendingMessages(),
 					alreadyVerified: stage.started,
 				});
-			// run-log (spec 032): appendRunLog("finish-check", { stage: "verify-trigger", fired: verify,
-			// firstSettleFraction }) goes here once run-log.ts lands.
-			if (verify) {
+			runLog.trigger(skip, firstSettleFraction);
+			if (stage && skip === undefined) {
 				checkLedger = ledger;
 				omk.events.emit(FINISH_CHECK_EVENT, { active: false, ledger });
 				omk.events.emit(FINISH_CHECK_EVENT, { active: true, stage: "verify" });
 				await stage.start({ task, requirements, unmeasured, cwd: ctx.cwd });
 				return;
 			}
+			const fraction = elapsedFraction();
 			const extraTurn =
 				extraTurnEnabled &&
 				decideExtraTurn({
@@ -239,8 +246,9 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 					unmeasured: unmeasured.length,
 					aborted,
 					hasPendingMessages: ctx.hasPendingMessages(),
-					elapsedFraction: elapsedFraction(),
+					elapsedFraction: fraction,
 				});
+			runLog.extraTurn(failing.length, unmeasured.length, Boolean(extraTurn), fraction);
 			if (!extraTurn) {
 				omk.events.emit(FINISH_CHECK_EVENT, { active: false, ledger });
 				return;

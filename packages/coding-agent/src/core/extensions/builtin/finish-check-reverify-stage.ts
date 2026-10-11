@@ -14,6 +14,7 @@ import {
 	parseVerifyReply,
 	reverifyDeliverables,
 	type VerifyFinding,
+	type VerifyUsage,
 	type VerifyVerdict,
 	verifyUsage,
 } from "../../finish-check-reverify.ts";
@@ -47,6 +48,15 @@ export interface ReverifyOutcome {
 	/** The verifier's own REQ measurements; empty when it is void. */
 	readonly ledger: FinishCheckLedgerItem[];
 	readonly mutated: boolean;
+	/** Deliverable paths whose fingerprint changed during the verifier (paths only). */
+	readonly changed: string[];
+	/** Number of deliverable paths the verifier checked. */
+	readonly deliverables: number;
+	readonly toolCalls: number;
+	/** Budget fractions when the verifier started and settled; `undefined` without a budget. */
+	readonly startFraction: number | undefined;
+	readonly endFraction: number | undefined;
+	readonly usage: VerifyUsage;
 }
 
 export interface ReverifyStage {
@@ -67,6 +77,7 @@ export function createReverifyStage(omk: ExtensionAPI, readBudget: FinishCheckBu
 	let toolCalls = 0;
 	let wrappedUp = false;
 	let startElapsedMs = 0;
+	let startFraction: number | undefined;
 	let paths: string[] = [];
 	let before: Record<string, string> = {};
 	let cwd = "";
@@ -126,7 +137,9 @@ export function createReverifyStage(omk: ExtensionAPI, readBudget: FinishCheckBu
 			before = await hashDeliverables(paths, cwd);
 			toolCalls = 0;
 			wrappedUp = false;
-			startElapsedMs = readBudget()?.elapsedMs ?? 0;
+			const budget = readBudget();
+			startElapsedMs = budget?.elapsedMs ?? 0;
+			startFraction = budget?.elapsedFraction;
 			active = true;
 			omk.sendUserMessage(buildReverifyMessage({ ...input, deliverables: paths }), { deliverAs: "followUp" });
 		},
@@ -137,11 +150,12 @@ export function createReverifyStage(omk: ExtensionAPI, readBudget: FinishCheckBu
 			const parsed = parseVerifyReply(reply);
 			const verdict: VerifyVerdict = mutated ? "void" : parsed.verdict;
 			const usage = verifyUsage(messages);
+			const end = readBudget();
 			omk.appendEntry(FINISH_CHECK_VERIFY_ENTRY, {
 				verdict,
 				findings: parsed.findings,
 				toolCalls,
-				elapsedMs: Math.max(0, (readBudget()?.elapsedMs ?? startElapsedMs) - startElapsedMs),
+				elapsedMs: Math.max(0, (end?.elapsedMs ?? startElapsedMs) - startElapsedMs),
 				mutated,
 				changed,
 				paths,
@@ -153,6 +167,12 @@ export function createReverifyStage(omk: ExtensionAPI, readBudget: FinishCheckBu
 				failing: mutated ? [] : parsed.failing,
 				ledger: mutated || requirements.length === 0 ? [] : parseFinishCheckLedger(reply, requirements),
 				mutated,
+				changed,
+				deliverables: paths.length,
+				toolCalls,
+				startFraction,
+				endFraction: end?.elapsedFraction,
+				usage,
 			};
 		},
 	};
