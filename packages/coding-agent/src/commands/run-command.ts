@@ -1,3 +1,4 @@
+import { mayBeRunCommand } from "../cli/subcommand-words.ts";
 import type { VerifiedRunRuntime } from "../core/verified-run/session-port.ts";
 import { runAdaptOrchDoctorCli } from "./adaptorch-doctor-cli.ts";
 import { runDoctorProviderCli } from "./doctor-provider-cli.ts";
@@ -26,6 +27,8 @@ const COMMANDS: ReadonlyArray<(args: string[]) => CliOutcome | Promise<CliOutcom
 
 /** Each handler owns a distinct prefix; preserve the first handled outcome. */
 export async function runCommand(args: string[], runtime?: VerifiedRunRuntime): Promise<CliOutcome> {
+	// main.ts imports this module only when the same check passes (spec 043).
+	if (!mayBeRunCommand(args)) return { handled: false, exitCode: 0 };
 	const providerAdopt = await runProviderAdoptCli(args);
 	if (providerAdopt.handled) return providerAdopt;
 	const providerSync = await runProviderSyncCli(args);
