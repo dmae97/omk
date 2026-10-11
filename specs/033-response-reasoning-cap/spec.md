@@ -45,8 +45,22 @@ A `StreamFn` wrapper, `createResponseReasoningCapStreamFn(inner, config)`, in `p
    - `response_reasoning_cap_retry` with `{ reason: "reasoning_tokens" | "wall_time", fromEffort, toEffort, reasoningTokens, elapsedMs, capTokens, capMs }`
    - `response_reasoning_cap_overrun_after_retry` with the same fields when the retry also passes a cap.
    Usage (review #96 M1): the final message's **token** fields (`input`, `output`, `cacheRead`, `cacheWrite`, `totalTokens`) come from the **last attempt only**, because `calculateContextTokens` (`core/compaction/compaction.ts`) reads `totalTokens`, or falls back to the sum of those fields, as the context size. Summing them would make the context look up to 2× and fire compaction early. Only **`cost.*`** is summed, since both requests are billed. The aborted attempt's full usage (tokens and cost) is kept in the retry diagnostic as `details.abortedAttemptUsage`, so the bench can count billed tokens.
-9. **Listener cleanup** (review #96 M2): the abort link on the caller's signal is removed in a `finally` that also covers a throw from the first `inner()` call (setup errors such as auth). The error still propagates exactly as before.
-8. **No prompt change.** The Desk suggested also adding a "run one command now" nudge. It is left out so the A/B measures one change (effort reduction). It is a follow-up variant if this one shows no gain.
+8. **Listener cleanup** (review #96 M2): the abort link on the caller's signal is removed in a `finally` that also covers a throw from the first `inner()` call (setup errors such as auth). The error still propagates exactly as before.
+9. **No prompt change.** The Desk suggested also adding a "run one command now" nudge. It is left out so the A/B measures one change (effort reduction). It is a follow-up variant if this one shows no gain.
+
+### Run log: `reasoning-cap.jsonl` (spec 042)
+
+Bench runs use `--no-session --mode json`, so the diagnostics above never reach a session JSONL. With the cap on **and** `OMK_RUN_LOG_DIR` set, the wrapper also appends to `<OMK_RUN_LOG_DIR>/reasoning-cap.jsonl` through `appendRunLog` (which adds `t`, `elapsedFraction`, `pid`, `role`). With the flag off the wrapper is not installed, so nothing is written; with no `OMK_RUN_LOG_DIR` no file or directory is created.
+
+- `{ event: "retry", attempt, reason, fromEffort, toEffort, reasoningTokens, elapsedMs, capTokens, capMs, input, cacheRead, cacheWrite, output, totalTokens }`: written when a first attempt is cut, before the retry is sent. The cap fields equal the `response_reasoning_cap_retry` diagnostic; the token fields are the aborted attempt's usage (`abortedAttemptUsage`).
+- `{ event: "retry_end", attempt, input, cacheRead, cacheWrite, output, totalTokens, stopReason }`: the retry's own usage when it finishes within the caps.
+- `{ event: "overrun_after_retry", attempt, reason, fromEffort, toEffort, reasoningTokens, elapsedMs, capTokens, capMs, input, cacheRead, cacheWrite, output, totalTokens, stopReason }`: written **instead of** `retry_end` when the retry also passes a cap (same fields as the `..._overrun_after_retry` diagnostic, plus the retry's usage).
+
+**Invariant: every `retry` line has exactly one terminal line** (`retry_end` or `overrun_after_retry`) with the same `attempt`. If the retry call throws, its stream fails, or the caller aborts, `retry_end` is still written, with `stopReason` `"error"` or `"aborted"` and zero tokens when there is no usage. `attempt` is a per-process counter, so lines pair on (`pid`, `attempt`); subagent workers append to the same file with their own `pid`.
+
+Privacy (spec 042): numbers, the cap reason, effort level names and the `stopReason` enum only. No prompt, thinking or answer text, and no error message.
+
+Logging is best effort: `appendRunLog` never throws, and the wrapper's events, final message and usage are the same with or without `OMK_RUN_LOG_DIR`.
 
 ### Why opt-in by env var
 
@@ -73,6 +87,7 @@ A `StreamFn` wrapper, `createResponseReasoningCapStreamFn(inner, config)`, in `p
 8. Wall cap honors the RemainingBudget clock: `min(cap, 15% budget, remaining − reserve)`, floor 30 s (unit test of the resolver).
 9. **Context size is not inflated**: after a capped retry, `calculateContextTokens(final.usage)` equals the retry's own value (failed before this fix, when it was the sum).
 10. **No listener leak**: if the first `inner()` throws, the error propagates and no abort listener stays on the caller's signal.
+11. **Run log** (`test/response-reasoning-cap-run-log.test.ts`, temp `OMK_RUN_LOG_DIR`): flag off writes no `reasoning-cap.jsonl`; no `OMK_RUN_LOG_DIR` writes no file and throws nothing; one cut gives one `retry` and one `retry_end` with the same `attempt` and the retry's token numbers; an overrun retry gives `overrun_after_retry` and no `retry_end`; a retry that throws or is aborted still gets one `retry_end`; two cuts give two pairs with distinct `attempt`; the file never contains the fake stream's thinking, answer or error text.
 
 ### Requirement 2 - Gates (Priority: P0)
 
@@ -86,7 +101,7 @@ A `StreamFn` wrapper, `createResponseReasoningCapStreamFn(inner, config)`, in `p
   - Both arms read one run clock started at process start (spec 036); the cap only reads it.
   - The earlier stacked pin (main `47e78c4` + #44/#45/#62/#64/#63 SHAs) is retired.
 - **Tasks** (Desk's target set), **3 runs each per arm**: adaptive-rejection-sampler, write-compressor, path-tracing-reverse, schemelike-metacircular-eval. Model grok-4.7 at `xhigh`, same TB timeouts as R8.
-- **Report**: pass count per task per arm; count of `response_reasoning_cap_retry` and `..._overrun_after_retry` diagnostics, read from the assistant messages in the `message_end` events of `omk.jsonl` (bench runs use `--no-session --mode json`, so there is no session JSONL); per-response max wall time and reasoning tokens; cost per run from the adapter's `omk_usage_raw.jsonl` xAI `cost_in_usd_ticks`, not omk's `usage.cost`, which leaves out reasoning tokens. An aborted first attempt may have no xAI usage line, so requests sent and usage lines are counted per run and missing ones reported next to the cost.
+- **Report**: pass count per task per arm; count of `retry` and `overrun_after_retry` lines in `<OMK_RUN_LOG_DIR>/reasoning-cap.jsonl` (bench runs use `--no-session --mode json`, so there is no session JSONL; the `message_end` diagnostics in `omk.jsonl` are a cross-check only); per-response max wall time and reasoning tokens; cost per run from the adapter's `omk_usage_raw.jsonl` xAI `cost_in_usd_ticks`, not omk's `usage.cost`, which leaves out reasoning tokens. An aborted first attempt may have no xAI usage line, so requests sent and usage lines are counted per run and missing ones reported next to the cost.
 
 ## Non-goals
 
@@ -102,3 +117,5 @@ A `StreamFn` wrapper, `createResponseReasoningCapStreamFn(inner, config)`, in `p
 - `packages/coding-agent/src/core/response-reasoning-cap.ts`: config resolver and `StreamFn` wrapper
 - `packages/coding-agent/src/core/sdk-provider-stream.ts`: `createSdkProviderStream` returns the wrapped stream function (keeps `sdk.ts` under its module-size baseline)
 - `packages/coding-agent/test/response-reasoning-cap.test.ts`: acceptance cases above
+- `packages/coding-agent/src/core/response-reasoning-cap-run-log.ts`: `reasoning-cap.jsonl` line builders (keeps the wrapper module under the 250 pure-LOC ceiling)
+- `packages/coding-agent/test/response-reasoning-cap-run-log.test.ts`: run-log lines and the one-terminal-line-per-retry invariant

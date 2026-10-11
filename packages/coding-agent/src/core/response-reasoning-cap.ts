@@ -18,6 +18,7 @@ import {
 	type Usage,
 } from "omk-ai";
 import { getActiveRemainingBudget, type RemainingBudget } from "./remaining-budget.ts";
+import { logReasoningCapRetry, type ReasoningCapDetails } from "./response-reasoning-cap-run-log.ts";
 
 export const DEFAULT_RESPONSE_REASONING_CAP_TOKENS = 20_000;
 export const DEFAULT_RESPONSE_WALL_CAP_MS = 240_000;
@@ -186,27 +187,21 @@ export function createResponseReasoningCapStreamFn(
 			else out.push({ type: "done", reason, message });
 			out.end(message);
 		};
-		const diagnostic = (
-			type: string,
+		const capDetails = (
 			outcome: AttemptOutcome,
 			reason: ResponseCapReason,
 			wallCapMs: number,
-			extra?: Record<string, unknown>,
-		) =>
-			({
-				type,
-				timestamp: Date.now(),
-				details: {
-					reason,
-					fromEffort: firstEffort,
-					toEffort: retryEffort,
-					reasoningTokens: outcome.reasoningTokens,
-					elapsedMs: outcome.elapsedMs,
-					capTokens: config.maxReasoningTokens,
-					capMs: wallCapMs,
-					...extra,
-				},
-			}) satisfies AssistantMessageDiagnostic;
+		): ReasoningCapDetails => ({
+			reason,
+			fromEffort: firstEffort,
+			toEffort: retryEffort,
+			reasoningTokens: outcome.reasoningTokens,
+			elapsedMs: outcome.elapsedMs,
+			capTokens: config.maxReasoningTokens,
+			capMs: wallCapMs,
+		});
+		const diagnostic = (type: string, details: ReasoningCapDetails, extra?: Record<string, unknown>) =>
+			({ type, timestamp: Date.now(), details: { ...details, ...extra } }) satisfies AssistantMessageDiagnostic;
 
 		void (async () => {
 			try {
@@ -216,6 +211,9 @@ export function createResponseReasoningCapStreamFn(
 					finish(firstOutcome.message);
 					return;
 				}
+				const retryDetails = capDetails(firstOutcome, firstOutcome.capped, firstCapMs);
+				// spec 042 run log: one `retry` line now, exactly one terminal line below (or in the catch).
+				const retryLog = logReasoningCapRetry(retryDetails, firstOutcome.message.usage);
 				const retryController = new AbortController();
 				const linkRetry = () => retryController.abort(callerSignal?.reason);
 				callerSignal?.addEventListener("abort", linkRetry, { once: true });
@@ -227,27 +225,28 @@ export function createResponseReasoningCapStreamFn(
 					});
 					const retryCapMs = capMs();
 					const retryOutcome = await runAttempt(retry, false, false, () => {});
+					const overrunDetails = retryOutcome.overrun
+						? capDetails(retryOutcome, retryOutcome.overrun, retryCapMs)
+						: undefined;
+					retryLog.end(retryOutcome.message.usage, retryOutcome.message.stopReason, overrunDetails);
 					const diagnostics = [
 						...(retryOutcome.message.diagnostics ?? []),
-						diagnostic(RESPONSE_CAP_RETRY_DIAGNOSTIC, firstOutcome, firstOutcome.capped, firstCapMs, {
+						diagnostic(RESPONSE_CAP_RETRY_DIAGNOSTIC, retryDetails, {
 							abortedAttemptUsage: firstOutcome.message.usage,
 						}),
 					];
-					if (retryOutcome.overrun) {
-						diagnostics.push(
-							diagnostic(
-								RESPONSE_CAP_OVERRUN_AFTER_RETRY_DIAGNOSTIC,
-								retryOutcome,
-								retryOutcome.overrun,
-								retryCapMs,
-							),
-						);
+					if (overrunDetails) {
+						diagnostics.push(diagnostic(RESPONSE_CAP_OVERRUN_AFTER_RETRY_DIAGNOSTIC, overrunDetails));
 					}
 					finish({
 						...retryOutcome.message,
 						usage: mergeRetryUsage(retryOutcome.message.usage, firstOutcome.message.usage),
 						diagnostics,
 					});
+				} catch (error) {
+					// The retry threw or its stream failed: still close the `retry` line (no-op if already ended).
+					retryLog.end(undefined, callerSignal?.aborted ? "aborted" : "error");
+					throw error;
 				} finally {
 					callerSignal?.removeEventListener("abort", linkRetry);
 				}
