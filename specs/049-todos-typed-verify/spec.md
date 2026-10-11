@@ -67,6 +67,7 @@ finish-check의 check turn은 지금처럼 settle 때 한 번 열린다(조건·
 - **우선순위.** `plan`은 todo 종류에서만 나온다(tool call로는 plan을 알 수 없다). 그 밖에는 037이 tool 신호를 우선하고, 어느 쪽에서 왔는지 `llm-call.jsonl`에 `phaseSource: "todo" | "tool"`로 남긴다. 이 로그는 037의 것이다.
 - **읽기 함수.** `todo-runtime-state.ts`에 순수 읽기 함수 `activeTodoKind(): TodoKind | undefined`를 추가한다(`nextActiveTodo` 기준, `unknown`이면 `undefined`). 037은 이것만 읽는다.
 - **사라진 것.** 초안의 `TaskClassV4` 변환표는 뺀다. 037이 `TodoKind`를 직접 쓰기 때문이다.
+- **037이 이 입력으로 하는 일 (참고, 037 결정).** 037은 단계를 effort 두 구간으로 묶는다: high = `plan`, `debug`, `verify` / low = `explore`, `edit`, `build`, `run`. 새 구간이 연속 2번의 LLM 호출 동안 유지될 때만 바꾸고, 한 실행에서 최대 4번까지 바꾼다. 049는 `TodoKind`만 공급하고, 이 규칙 때문에 049에서 바꿀 것은 없다.
 - effort를 바꾸는 것은 037의 몫이고, 요청 파라미터라 위 prompt cache 제약과 부딪히지 않는다. Adaptorch로 넘어가는 경로는 없다. 038과 같은 조건(로컬, HTTP MCP, 근빈 라이선스 서면 OK)이 갖춰지고 037 규칙표가 A/B에서 이긴 뒤의 일이다.
 
 ### R4 - 꺼짐 비용 0 (P0, Perf Engineer 기준)
@@ -97,11 +98,14 @@ finish-check의 check turn은 지금처럼 settle 때 한 번 열린다(조건·
 9. run log 줄에 label/command/path 원문이 없다(고유 문자열을 심고 파일 전체에서 검색).
 10. 꺼짐 cold-path 테스트와 Perf 측정(+10 ms, +5 MiB) 통과.
 
-## A/B 측정 (자리만, Bench Analyst가 정함)
+## A/B 측정 (현재 A/B 제외, 035 판정 뒤 재검토)
 
 - **새 지출 없음.** 고정점, arm, 대상·대조 과제, win 기준, 비용은 Bench Analyst가 033 A/B 결과 이후에 정하고 이 절에 고정한다. 인호의 OK와 크레딧이 있을 때만 돈다.
-- TB A/B에 넣을지는 Tech Lead가 정한다(질문 1). 넣는다면 **판정은 todo를 쓴 실행만** 대상으로 한다. R8에서 todo를 안 쓴 54%의 실행에서는 049가 아무것도 하지 않으므로, 전체 통과율로 보면 효과가 묻힌다. 어느 실행이 todo를 썼는지는 `todo-verify.jsonl`의 `todo-snapshot` 줄로 가린다.
-- 미리 정해 둘 것: (a) todo를 쓴 실행의 비율이 arm 사이에 비슷한지(플래그가 todo 사용 자체를 바꾸면 비교가 깨진다), (b) 비교는 `OMK_FINISH_CHECK_EXTRA_TURN=on`을 양쪽에 켠 상태에서 `OMK_TODO_VERIFY`만 다르게 하는 것이 맞는지(질문 3). 035와 같은 extra turn을 쓰므로 A(전부 꺼짐) 대비로 보면 035 효과가 섞인다.
+- **현재 공동 A/B에는 넣지 않는다 (Tech Lead 결정, 2026-10-11).** 고정점 `d69af96`은 바뀌지 않고, 049의 효과는 035 extra turn과 겹칠 가능성이 크다.
+- **035 판정 뒤에 다시 본다.**
+  - 035가 이기면: arm D(공동 계획 `AB_PLAN_d69af96.md`의 035 arm)와 D+049(`OMK_TODO_VERIFY=on`만 추가)를 비교하고, **todo를 쓴 실행만** 판정 대상으로 한다. R8에서 todo를 안 쓴 54%의 실행에서는 049가 아무것도 하지 않아서, 전체 통과율로 보면 효과가 묻힌다. 어느 실행이 todo를 썼는지는 `todo-verify.jsonl`의 `todo-snapshot` 줄로 가린다. 고정점, 과제, win 기준, 비용은 그때 Bench Analyst가 정하고 인호의 OK가 있어야 돈다.
+  - 035가 지면: 049를 TB에서 빼고 interactive와 multi-agent용으로만 둔다.
+- 그때 미리 확인할 것: todo를 쓴 실행의 비율이 두 arm에서 비슷한지. 플래그가 todo 사용 자체를 바꾸면 비교가 깨진다.
 - 근거는 `todo-verify.jsonl`과 `finish-check.jsonl`. 얻은 회차에 `hostFail` 또는 `fail`→extra turn 기록이 있어야 효과로 본다(034와 같은 모양).
 
 ## Non-goals
@@ -114,9 +118,9 @@ finish-check의 check turn은 지금처럼 settle 때 한 번 열린다(조건·
 
 ## 정해 주실 것 (Tech Lead)
 
-1. **TB A/B에 넣을지**: R8에서 46%의 실행이 todo를 썼으니 "거의 없음"은 아니에요. 다만 todo 검증은 035 extra turn과 겹쳐서 따로 보이는 효과가 작을 수 있어요. 넣는다면 todo를 쓴 실행만으로 판정할게요. (제 안: 033·035 결과가 나온 뒤에 넣어요. 035가 효과 없음이면 049의 TB 효과도 기대하기 어려워요.)
+1. ~~TB A/B에 넣을지~~: 정했어요. 현재 공동 A/B(`d69af96`)에는 넣지 않아요. 035가 이기면 todo를 쓴 실행만으로 D 대 D+049를 비교하고, 지면 TB에서 빼요(A/B 절).
 2. **command 확인을 host가 직접 돌릴지**: 제 안은 "돌리지 않음, 모델이 check turn에서 돌림"이에요. host 실행이 더 믿을 만하지만 승인·샌드박스 경로를 우회해요.
-3. **A/B 기준 arm**: 035 extra turn을 양쪽 다 켠 상태에서 049만 비교할지, 아니면 A(전부 꺼짐) 대비로 볼지요?
+3. ~~A/B 기준 arm~~: 정했어요. 035가 이긴 경우 arm D(공동 계획의 035 arm) 대 D+049예요. A(전부 꺼짐) 대비로는 보지 않아요(질문 1).
 4. ~~`kind` 목록~~: 정했어요. `TodoKind` 다섯 개를 049가 내보내고 037이 `build`/`run`을 더해요(R3).
 
 ## Expected Files (구현 PR)
