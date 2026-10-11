@@ -220,7 +220,7 @@ Privacy: names, enums, numbers and hashes only. No URL, host, title, page text, 
 ### Off == main (verdict)
 
 - Same box, **20 interleaved pairs** of main vs the implementation PR head, both with `OMK_BROWSER` unset.
-- Metrics: CLI startup time (`omk --version` path and interactive start to first frame), worker startup time (spec 043 `fast` scenario, `startup_ms`), idle RSS (spec 043 `slow` scenario, `idle_mib`), and 100k-message first paint (Perf Engineer's #79/#104 harness).
+- Metrics: CLI startup time (`omk --version` path and interactive start to first frame), worker startup time (spec 043 `fast` scenario, `startup_ms`), idle RSS (spec 043 `slow` scenario, `idle_mib`), and 100k-message first paint (`first_paint_ms` = `first_paint_s × 1000` from Perf Engineer's real-binary harness `/workspace/omk-perf-104/tools/firstpaint2.py`, headless tmux 120×40, `--continue` on the 450-turn session `sessions/t450`, no model calls; the harness moves into the repo with the #104 item-1 PR).
 - Judge with `/workspace/omk-bench-analyst/paired_verdict.py pairs.tsv --noreg cli_startup_ms=10 --noreg startup_ms=10 --noreg first_paint_ms=10 --noreg idle_mib=5`. Each must be `PASS(no regression)`: the CI upper bound of branch − main is below **+10 ms** for every startup metric and below **+5 MiB** for RSS.
 - Load is recorded per pair with the #106 harness (`specs/043-worker-startup-diet/bench/run-ab.sh`, `batch-load.tsv`); pairs whose `load1 > 2` are re-run.
 
@@ -271,7 +271,6 @@ These are acceptance items for the implementation PR, checked by its real-browse
 - Node's global `WebSocket` handshake against Firefox's `Origin` check (no Firefox on this box).
 - Chrome 154 (the box's version) through a matching `chromedriver`: headless launch with the proxy, `<-loopback>`, QUIC/WebRTC/DoH switches.
 - Whether Chrome's crashpad handler or zygote ever leaves the process group on this box (layer 2 covers it either way).
-- Where Perf Engineer's 100k first-paint harness lives after #79; the metric name `first_paint_ms` is a placeholder for whatever that harness emits.
 
 ## Expected Files
 
