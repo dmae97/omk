@@ -18,7 +18,9 @@ PAUSE_FILE=${PAUSE_FILE:-/workspace/omk-perf-workers/perf-workers/PAUSE}
 OUT=${OUT:-$HERE/out}; D=$OUT/raw/$LABEL-$(date +%H%M%S); mkdir -p "$D"; echo "$D" > "$OUT/LATEST"
 { echo "base $(git -C "$BASE_ROOT" rev-parse HEAD)"; echo "branch $(git -C "$BRANCH_ROOT" rev-parse HEAD)"; echo "pairs $PAIRS scenarios $SCENARIOS c16_reps $C16_REPS"; } > "$D/meta.txt"
 gate() { while [ -e "$PAUSE_FILE" ]; do echo "paused $(date +%T)" >> "$D/pause.log"; sleep 15; done; }
-cond() { { echo "== $1 $(date +%T.%N)"; cat /proc/loadavg; ps -eo pid,pcpu,rss,args --sort=-pcpu | head -6 | cut -c1-140; } >> "$D/conditions.log"; }
+cond() { { echo "== $1 $(date +%T.%N)"; cat /proc/loadavg; head -1 /proc/pressure/cpu 2>/dev/null; ps -eo pid,pcpu,rss,args --sort=-pcpu | head -6 | cut -c1-140; } >> "$D/conditions.log"; }
+# one line per batch edge for quick review: phase label time load1 load5 cpu-some-avg10
+edge() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$(date +%T)" "$(cut -d' ' -f1,2 /proc/loadavg | tr ' ' '\t')" "$(sed -n 's/^some avg10=\([0-9.]*\).*/\1/p' /proc/pressure/cpu 2>/dev/null)" >> "$D/batch-load.tsv"; }
 nice -n 10 node mock-server.mjs 18771 0 "$D/mock-fast.jsonl" > "$D/mock-fast.out" 2>&1 & MF=$!
 nice -n 10 node mock-server.mjs 18772 2000 "$D/mock-slow.jsonl" > "$D/mock-slow.out" 2>&1 & MS=$!
 nice -n 10 node mock-server-tool.mjs 18773 "$D/mock-tool.jsonl" > "$D/mock-tool.out" 2>&1 & MT=$!
@@ -27,8 +29,9 @@ port() { case $1 in fast | c16) echo 18771;; slow) echo 18772;; tool) echo 18773
 mockv() { case $1 in c16) echo fast;; *) echo "$1";; esac; }
 run() { # arm scenario rep [workers]
 	local root; [ "$1" = base ] && root=$BASE_ROOT || root=$BRANCH_ROOT
-	gate; cond "$1 $2 $3" "$D"
+	gate; cond "start $1 $2 $3" "$D"; edge start "$1-$2-r$3"
 	HARNESS_ROOT=$root HARNESS_ENV_DIR=$OUT/env HARNESS_ARM=$1 nice -n 10 node harness.mjs "$D" "$(mockv "$2")" "$(port "$2")" "${4:-1}" "$1-$2-r$3" >> "$D/harness.log" 2>&1
+	edge end "$1-$2-r$3"; cond "end $1 $2 $3" "$D"
 }
 for s in $SCENARIOS; do run base "$s" w0; run branch "$s" w0; done
 for i in $(seq 1 "$PAIRS"); do
