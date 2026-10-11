@@ -10,6 +10,9 @@ import { resolve } from "node:path";
 /** Files above this size are compared by size only. */
 export const FINISH_CHECK_REVERIFY_MAX_HASH_BYTES = 64 * 1024 * 1024;
 
+/** Deliverables fingerprinted at once. */
+export const FINISH_CHECK_REVERIFY_HASH_CONCURRENCY = 4;
+
 async function fingerprint(path: string, maxBytes: number): Promise<string> {
 	let info: Awaited<ReturnType<typeof stat>>;
 	try {
@@ -28,16 +31,26 @@ async function fingerprint(path: string, maxBytes: number): Promise<string> {
 	return `${info.size}:${hash.digest("hex")}`;
 }
 
-/** `size:sha256` per path (relative paths resolved against `cwd`), or `missing`, `directory`, `<size>:too-large`. */
+/**
+ * `size:sha256` per path (relative paths resolved against `cwd`), or `missing`, `directory`, `<size>:too-large`.
+ * At most {@link FINISH_CHECK_REVERIFY_HASH_CONCURRENCY} files are read at once.
+ */
 export async function hashDeliverables(
 	paths: readonly string[],
 	cwd: string,
 	maxBytes = FINISH_CHECK_REVERIFY_MAX_HASH_BYTES,
 ): Promise<Record<string, string>> {
-	const entries = await Promise.all(
-		paths.map(async (path) => [path, await fingerprint(resolve(cwd, path), maxBytes)]),
-	);
-	return Object.fromEntries(entries);
+	const results: string[] = new Array(paths.length);
+	let next = 0;
+	const worker = async (): Promise<void> => {
+		while (next < paths.length) {
+			const index = next++;
+			results[index] = await fingerprint(resolve(cwd, paths[index]), maxBytes);
+		}
+	};
+	const workers = Math.min(FINISH_CHECK_REVERIFY_HASH_CONCURRENCY, paths.length);
+	await Promise.all(Array.from({ length: workers }, worker));
+	return Object.fromEntries(paths.map((path, index) => [path, results[index]]));
 }
 
 /** Paths whose fingerprint differs between two snapshots. */
