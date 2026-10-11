@@ -82,6 +82,7 @@ Why not a separate process or a subagent:
 **Caps**:
 - `FINISH_CHECK_REVERIFY_MAX_TOOL_CALLS = 10`, then a wrap-up steer. The verifier gets its own wrap-up text (`FINISH_CHECK_REVERIFY_WRAP_UP_MESSAGE`: stop testing, do not change the deliverables, reply with the `VERIFY` lines and `VERDICT`) instead of the check turn's, which asks for a one-line summary. The check turn's tool cap does not count verifier or fix-turn calls.
 - `FINISH_CHECK_REVERIFY_TIME_FRACTION = 0.15`: once the verifier has used 15% of the budget (read through `readBudget`), it gets the wrap-up steer. The steer is sent once per verifier, whichever cap is hit first.
+- Both caps are advisory, like the check turn's tool cap: they only send the wrap-up steer and never block or abort a tool call.
 - The 75% save-now steer still applies.
 - The verifier starts below 30%, so with the caps it normally ends below about 45%, leaving the fix turn well inside spec 035's 85% cutoff.
 
