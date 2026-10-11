@@ -6,7 +6,8 @@ import { CONFIG_DIR_NAME, getAgentDir } from "../config.ts";
 import { parseFrontmatter } from "../utils/frontmatter.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
 import type { ResourceDiagnostic } from "./diagnostics.ts";
-import { cachedSkillScan, type SkillCatalogCacheEntry, writeSkillCatalog } from "./skills-catalog-cache.ts";
+import { cachedSkillScan, isSkillCatalogDirty, readSkillCatalog, writeSkillCatalog } from "./skills-catalog-cache.ts";
+import { cachedSkillFileLoad } from "./skills-catalog-file-cache.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 
 /** Max name length per spec */
@@ -319,11 +320,32 @@ function loadSkillsFromDirInternal(
 	return { skills, diagnostics };
 }
 
+type ParsedSkillFile = { skill: Omit<Skill, "sourceInfo"> | null; diagnostics: ResourceDiagnostic[] };
+
 function loadSkillFromFile(
 	filePath: string,
 	source: string,
 	sourceInfoOverride?: SourceInfo,
+	parsed: ParsedSkillFile = parseSkillFile(filePath),
 ): { skill: Skill | null; diagnostics: ResourceDiagnostic[] } {
+	const { skill, diagnostics } = parsed;
+	if (!skill) return { skill: null, diagnostics };
+	return {
+		skill: {
+			name: skill.name,
+			description: skill.description,
+			filePath: skill.filePath,
+			baseDir: skill.baseDir,
+			sourceInfo: sourceInfoOverride ?? createSkillSourceInfo(filePath, skill.baseDir, source),
+			disableModelInvocation: skill.disableModelInvocation,
+			contentHash: skill.contentHash,
+		},
+		diagnostics,
+	};
+}
+
+/** Everything that depends only on the file, so it can be cached per file. */
+function parseSkillFile(filePath: string): ParsedSkillFile {
 	const diagnostics: ResourceDiagnostic[] = [];
 
 	try {
@@ -358,7 +380,6 @@ function loadSkillFromFile(
 				description: frontmatter.description,
 				filePath,
 				baseDir: skillDir,
-				sourceInfo: sourceInfoOverride ?? createSkillSourceInfo(filePath, skillDir, source),
 				disableModelInvocation: frontmatter["disable-model-invocation"] === true,
 				contentHash: hashSkillContent(rawContent),
 			},
@@ -368,6 +389,15 @@ function loadSkillFromFile(
 		diagnostics.push({ type: "warning", message: sanitizeSkillLoadError(error), path: filePath });
 		return { skill: null, diagnostics };
 	}
+}
+
+/** Rejects malformed cache entries and non-string YAML scalars (dates, numbers) that JSON would not round-trip. */
+function isCacheableSkillFile(value: unknown): value is ParsedSkillFile {
+	const { skill, diagnostics } = (value ?? {}) as Partial<ParsedSkillFile>;
+	if (!Array.isArray(diagnostics)) return false;
+	if (skill === null) return true;
+	const fields = [skill?.name, skill?.description, skill?.filePath, skill?.baseDir, skill?.contentHash];
+	return fields.every((field) => typeof field === "string");
 }
 
 function hashSkillContent(content: string): string {
@@ -507,19 +537,22 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 	const collisionDiagnostics: ResourceDiagnostic[] = [];
 	let candidateOrder = 0;
 
-	// Startup fast path: per-dir fingerprint cache, written once at the end.
-	const catalogStore: Record<string, SkillCatalogCacheEntry<LoadSkillsResult>> = {};
+	// Startup fast path: per-dir and per-file fingerprint cache, read once on first use and written once at the end.
+	let catalogStore: ReturnType<typeof readSkillCatalog> | undefined;
 	const catalogEnabled = options.catalogCache ?? process.env.VITEST !== "true";
 	const catalogAgentDir = resolvedAgentDir;
+	const catalog = () => {
+		catalogStore ??= readSkillCatalog(catalogAgentDir);
+		return catalogStore;
+	};
 	function cachedScan(dir: string, source: string, resolver?: SkillSourceInfoResolver): LoadSkillsResult {
-		if (!catalogEnabled) {
-			return loadSkillsFromDirInternal(dir, source, true, undefined, undefined, resolver);
-		}
-		const { result, store } = cachedSkillScan<LoadSkillsResult>(catalogAgentDir, dir, () =>
-			loadSkillsFromDirInternal(dir, source, true, undefined, undefined, resolver),
-		);
-		if (store) Object.assign(catalogStore, store);
-		return result;
+		const scan = () => loadSkillsFromDirInternal(dir, source, true, undefined, undefined, resolver);
+		return catalogEnabled ? cachedSkillScan(catalogAgentDir, dir, scan, catalog()).result : scan();
+	}
+	function cachedLoadFile(filePath: string, source: string, sourceInfoOverride?: SourceInfo) {
+		if (!catalogEnabled) return loadSkillFromFile(filePath, source, sourceInfoOverride);
+		const parsed = cachedSkillFileLoad(catalog(), filePath, () => parseSkillFile(filePath), isCacheableSkillFile);
+		return loadSkillFromFile(filePath, source, sourceInfoOverride, parsed);
 	}
 
 	function addSkills(result: LoadSkillsResult) {
@@ -579,7 +612,7 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 			if (stats.isDirectory()) {
 				addSkills(cachedScan(resolvedPath, source, resolveSourceInfo));
 			} else if (stats.isFile() && resolvedPath.endsWith(".md")) {
-				const result = loadSkillFromFile(resolvedPath, source, resolveSourceInfo?.(resolvedPath));
+				const result = cachedLoadFile(resolvedPath, source, resolveSourceInfo?.(resolvedPath));
 				if (result.skill) {
 					addSkills({ skills: [result.skill], diagnostics: result.diagnostics });
 				} else {
@@ -610,7 +643,7 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 		}
 	}
 
-	if (catalogEnabled) {
+	if (catalogEnabled && catalogStore && isSkillCatalogDirty(catalogStore)) {
 		writeSkillCatalog(catalogAgentDir, catalogStore);
 	}
 

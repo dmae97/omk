@@ -47,10 +47,18 @@ export interface SkillCatalogCacheEntry<T> {
 	readonly result: T;
 }
 
-type CatalogStore = Record<string, SkillCatalogCacheEntry<unknown>>;
+export type CatalogStore = Record<string, SkillCatalogCacheEntry<unknown>>;
 
 const CACHE_FILE_NAME = "skill-catalog-v2.json";
 const MAX_ENTRIES = 64;
+/**
+ * Auto-discovery passes one SKILL.md path per skill, so file entries scale
+ * with the skill count, not the number of roots. 4,096 is 3.4x the largest
+ * known set (1,191 skills); an entry is about 0.7 KB, so the file stays under
+ * about 3 MB. Hits move to the end, so the least recently used are dropped.
+ */
+const MAX_FILE_ENTRIES = 4096;
+export const FILE_KEY_PREFIX = "file:";
 const MAX_WALK_DEPTH = 8;
 const MAX_WALK_ENTRIES = 20_000;
 const IGNORE_CONTROLS = new Set([".gitignore", ".ignore", ".fdignore"]);
@@ -161,10 +169,36 @@ export function readSkillCatalog(agentDir: string): CatalogStore {
 		const catalog: CatalogStore = {};
 		for (const [key, value] of Object.entries(parsed)) {
 			if (isSkillCatalogCacheEntry(value)) catalog[key] = value;
+			else markSkillCatalogDirty(catalog); // rewrite without the malformed entry
 		}
 		return catalog;
 	} catch {}
 	return {};
+}
+
+const dirtyStores = new WeakSet<CatalogStore>();
+
+/** Records that `store` no longer matches the cache file, so `loadSkills` must write it. */
+export function markSkillCatalogDirty(store: CatalogStore): void {
+	dirtyStores.add(store);
+}
+
+/** Removes `key` and marks the store dirty only when the entry existed. */
+export function dropSkillCatalogEntry(store: CatalogStore, key: string): void {
+	if (!Object.hasOwn(store, key)) return;
+	delete store[key];
+	markSkillCatalogDirty(store);
+}
+
+/**
+ * True after a miss, a new or changed entry or a dropped one, or when the caps
+ * would evict entries. An all-hit start writes nothing; its LRU order is not saved.
+ */
+export function isSkillCatalogDirty(store: CatalogStore): boolean {
+	if (dirtyStores.has(store)) return true;
+	const keys = Object.keys(store);
+	const files = keys.filter((k) => k.startsWith(FILE_KEY_PREFIX)).length;
+	return files > MAX_FILE_ENTRIES || keys.length - files > MAX_ENTRIES;
 }
 
 export function writeSkillCatalog(agentDir: string, store: CatalogStore): void {
@@ -173,8 +207,14 @@ export function writeSkillCatalog(agentDir: string, store: CatalogStore): void {
 		const cacheDir = join(agentDir, "cache");
 		mkdirSync(cacheDir, { recursive: true });
 		const keys = Object.keys(store);
+		const fileKeys = keys.filter((k) => k.startsWith(FILE_KEY_PREFIX));
+		const dirKeys = keys.filter((k) => !k.startsWith(FILE_KEY_PREFIX));
 		const trimmed: CatalogStore =
-			keys.length <= MAX_ENTRIES ? store : Object.fromEntries(keys.slice(-MAX_ENTRIES).map((k) => [k, store[k]]));
+			dirKeys.length <= MAX_ENTRIES && fileKeys.length <= MAX_FILE_ENTRIES
+				? store
+				: Object.fromEntries(
+						[...dirKeys.slice(-MAX_ENTRIES), ...fileKeys.slice(-MAX_FILE_ENTRIES)].map((k) => [k, store[k]]),
+					);
 		const data = JSON.stringify(trimmed);
 		const tmp = join(cacheDir, `${CACHE_FILE_NAME}.${process.pid}.${randomUUID()}.tmp`);
 		const fd = openSync(tmp, "wx", 0o600);
@@ -199,7 +239,7 @@ export function writeSkillCatalog(agentDir: string, store: CatalogStore): void {
 	}
 }
 
-function fingerprintEquals(a: SkillDirFingerprint, b: SkillDirFingerprint): boolean {
+export function fingerprintEquals(a: SkillDirFingerprint, b: SkillDirFingerprint): boolean {
 	return (
 		a.complete === true &&
 		b.complete === true &&
@@ -228,7 +268,7 @@ export function cachedSkillScan<T>(
 	const fingerprint = fingerprintSkillDir(dir);
 	const key = resolve(dir);
 	if (fingerprint.complete !== true) {
-		delete catalog[key];
+		dropSkillCatalogEntry(catalog, key);
 		return { result: scan(), store: catalog };
 	}
 	const hit = catalog[key];
@@ -239,8 +279,9 @@ export function cachedSkillScan<T>(
 	const afterScan = fingerprintSkillDir(dir);
 	if (fingerprintEquals(fingerprint, afterScan)) {
 		catalog[key] = { fingerprint: afterScan, result };
+		markSkillCatalogDirty(catalog);
 	} else {
-		delete catalog[key];
+		dropSkillCatalogEntry(catalog, key);
 	}
 	return { result, store: catalog };
 }
