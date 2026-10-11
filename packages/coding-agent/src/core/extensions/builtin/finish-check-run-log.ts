@@ -98,13 +98,18 @@ export interface FinishCheckRunLogOptions {
  * listens (an SDK host), the signal is raised again after the flush so the default exit is kept.
  */
 const onSigterm = (handler: () => void) => {
+	let active = true;
 	const listener = () => {
+		// Already written by session_shutdown (process.emit calls a copy of the listener list).
+		if (!active) return;
+		active = false;
 		process.off("SIGTERM", listener);
 		handler();
 		if (process.listenerCount("SIGTERM") === 0) process.kill(process.pid, "SIGTERM");
 	};
 	process.on("SIGTERM", listener);
 	return () => {
+		active = false;
 		process.off("SIGTERM", listener);
 	};
 };
