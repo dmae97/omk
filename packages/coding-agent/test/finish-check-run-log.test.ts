@@ -41,7 +41,12 @@ function setup(env: NodeJS.ProcessEnv, options: { hasUI?: boolean; budget?: bool
 		events: { emit: () => {}, on: () => () => {} },
 	} as unknown as ExtensionAPI;
 	let clock = 0;
+	const terminators = new Set<() => void>();
 	finishCheck(omk, {
+		onTerminate: (handler) => {
+			terminators.add(handler);
+			return () => terminators.delete(handler);
+		},
 		env: {
 			...(options.budget === false ? {} : { OMK_TIME_BUDGET_SEC: String(BUDGET_SEC) }),
 			...(options.logDir === false ? {} : { OMK_RUN_LOG_DIR: logDir }),
@@ -49,6 +54,13 @@ function setup(env: NodeJS.ProcessEnv, options: { hasUI?: boolean; budget?: bool
 		},
 		now: () => clock,
 	});
+	/** Calls the handlers without awaiting them, as the SIGTERM path does after the first await. */
+	const fireNow = (name: string, event: unknown) => {
+		for (const handler of handlers.get(name) ?? []) void handler(event, ctx);
+	};
+	const sigterm = () => {
+		for (const handler of [...terminators]) handler();
+	};
 	const fire = async (name: string, event: unknown) => {
 		for (const handler of handlers.get(name) ?? []) await handler(event, ctx);
 	};
@@ -74,7 +86,22 @@ function setup(env: NodeJS.ProcessEnv, options: { hasUI?: boolean; budget?: bool
 	const setPending = (value: boolean) => {
 		pending = value;
 	};
-	return { cwd, logDir, fire, at, work, raw, lines, ofType, followUps, setPending };
+	return {
+		cwd,
+		logDir,
+		handlers,
+		fire,
+		fireNow,
+		sigterm,
+		terminators,
+		at,
+		work,
+		raw,
+		lines,
+		ofType,
+		followUps,
+		setPending,
+	};
 }
 
 describe("finish-check run log: spec 032 trigger (AC19)", () => {
@@ -112,6 +139,165 @@ describe("finish-check run log: spec 032 trigger (AC19)", () => {
 		}
 		expect(late.ofType("reverify-trigger")[0].firstSettleFraction).toBe(0.5);
 		expect(noBudget.ofType("reverify-trigger")[0].firstSettleFraction).toBeNull();
+	});
+});
+
+describe("finish-check run log: exactly one trigger line per user task (AC19a)", () => {
+	const triggers = (run: ReturnType<typeof setup>) => run.ofType("reverify-trigger");
+	const SHUTDOWN = { type: "session_shutdown", reason: "quit" };
+	/** One user task: optional write, first settle at `seconds`, then `replies` as later settles of the same task. */
+	async function task(
+		run: ReturnType<typeof setup>,
+		opts: { write?: boolean; seconds?: number; stopReason?: string; pending?: boolean; replies?: string[] } = {},
+	) {
+		await run.fire("input", { type: "input", text: TASK, source: "interactive" });
+		if (opts.write ?? true) await run.fire("tool_execution_end", { toolName: "write" });
+		run.at(opts.seconds ?? 180);
+		run.setPending(opts.pending ?? false);
+		await run.fire("agent_settled", settled("done", opts.stopReason));
+		run.setPending(false);
+		for (const reply of opts.replies ?? []) await run.fire("agent_settled", settled(reply));
+	}
+
+	it("writes one line when the verifier fires, whatever follows in the task", async () => {
+		const run = setup(BOTH);
+		await task(run, { replies: ["checked", `${ELF}\nVERDICT: FAIL`, "fixed", "done again"] });
+		await run.fire("session_shutdown", SHUTDOWN);
+		expect(run.followUps()).toHaveLength(3);
+		expect(triggers(run)).toEqual([expect.objectContaining({ fired: true, reason: null, checkSkipReason: null })]);
+	});
+
+	it("writes one line when the check turn runs but the verifier does not", async () => {
+		const cases: [string, ReturnType<typeof setup>, Parameters<typeof task>[1]][] = [
+			["late", setup(BOTH), { seconds: 450, replies: ["checked", "done again"] }],
+			["no-budget", setup(BOTH, { budget: false }), { replies: ["checked", "done again"] }],
+			[
+				"ui",
+				setup({ ...BOTH, OMK_FINISH_CHECK: "always" }, { hasUI: true }),
+				{ replies: ["checked", "done again"] },
+			],
+		];
+		for (const [reason, run, opts] of cases) {
+			await task(run, opts);
+			await run.fire("session_shutdown", SHUTDOWN);
+			expect(triggers(run), reason).toEqual([
+				expect.objectContaining({ fired: false, reason, checkSkipReason: null }),
+			]);
+		}
+		const aborted = setup(BOTH);
+		await task(aborted);
+		await aborted.fire("agent_settled", settled("", "aborted"));
+		await aborted.fire("agent_settled", settled("done again"));
+		await aborted.fire("session_shutdown", SHUTDOWN);
+		expect(triggers(aborted)).toEqual([expect.objectContaining({ fired: false, reason: "check-aborted" })]);
+	});
+
+	it("holds the no-check-turn line until the task ends, then writes it once with the gate's reason", async () => {
+		const cases: [string, ReturnType<typeof setup>, Parameters<typeof task>[1], number][] = [
+			["workspace-unchanged", setup(BOTH), { write: false, replies: ["done again"] }, 0.2],
+			["late", setup(BOTH), { seconds: 0.95 * BUDGET_SEC, replies: ["done again"] }, 0.95],
+			["aborted", setup(BOTH), { stopReason: "aborted" }, 0.2],
+			["pending-input", setup(BOTH), { pending: true }, 0.2],
+			["ui", setup(BOTH, { hasUI: true }), { replies: ["done again"] }, 0.2],
+		];
+		for (const [checkSkipReason, run, opts, fraction] of cases) {
+			await task(run, opts);
+			expect(run.followUps(), checkSkipReason).toHaveLength(0);
+			expect(triggers(run), `${checkSkipReason} is held`).toEqual([]);
+			await run.fire("session_shutdown", SHUTDOWN);
+			await run.fire("session_shutdown", SHUTDOWN);
+			run.sigterm();
+			const lines = triggers(run);
+			expect(lines, checkSkipReason).toEqual([
+				expect.objectContaining({
+					type: "reverify-trigger",
+					fired: false,
+					reason: "no-check-turn",
+					checkSkipReason,
+				}),
+			]);
+			expect(lines[0].firstSettleFraction as number).toBeCloseTo(fraction);
+		}
+	});
+
+	it("writes the held line synchronously in session_shutdown, before any handler awaits", async () => {
+		const run = setup(BOTH);
+		await task(run, { write: false });
+		run.fireNow("session_shutdown", SHUTDOWN);
+		expect(triggers(run)).toEqual([expect.objectContaining({ reason: "no-check-turn" })]);
+		expect(run.terminators.size).toBe(0);
+	});
+
+	it("writes the held line on SIGTERM when no session_shutdown came, and only once", async () => {
+		const run = setup(BOTH);
+		await task(run, { write: false });
+		expect(run.terminators.size).toBe(1);
+		run.sigterm();
+		await run.fire("session_shutdown", SHUTDOWN);
+		expect(triggers(run)).toEqual([
+			expect.objectContaining({ reason: "no-check-turn", checkSkipReason: "workspace-unchanged" }),
+		]);
+	});
+
+	it("writes the held line when the next user task starts", async () => {
+		const run = setup(BOTH);
+		await task(run, { write: false });
+		await task(run, { seconds: 200, replies: ["checked"] });
+		await run.fire("session_shutdown", SHUTDOWN);
+		expect(triggers(run).map((line) => [line.fired, line.reason, line.checkSkipReason])).toEqual([
+			[false, "no-check-turn", "workspace-unchanged"],
+			[true, null, null],
+		]);
+	});
+
+	it("drops the held line when the verifier fires later in the same task", async () => {
+		const run = setup(BOTH);
+		await task(run, { write: false });
+		await run.fire("input", { type: "input", text: "extension follow-up", source: "extension" });
+		await run.fire("tool_execution_start", { toolName: "write", args: { path: "out.txt" } });
+		await run.fire("tool_execution_end", { toolName: "write" });
+		await run.fire("agent_settled", settled("done"));
+		await run.fire("agent_settled", settled("checked"));
+		expect(run.followUps()).toHaveLength(2);
+		await run.fire("session_shutdown", SHUTDOWN);
+		run.sigterm();
+		expect(triggers(run)).toEqual([expect.objectContaining({ fired: true, reason: null, checkSkipReason: null })]);
+		expect(run.terminators.size).toBe(0);
+	});
+
+	it("drops the held line when a later check turn decides not to verify", async () => {
+		const run = setup(BOTH);
+		await task(run, { write: false });
+		await run.fire("input", { type: "input", text: "extension follow-up", source: "extension" });
+		await run.fire("tool_execution_end", { toolName: "write" });
+		run.at(450);
+		await run.fire("agent_settled", settled("done"));
+		await run.fire("agent_settled", settled("checked"));
+		await run.fire("session_shutdown", SHUTDOWN);
+		expect(triggers(run)).toEqual([expect.objectContaining({ fired: false, reason: "late", checkSkipReason: null })]);
+	});
+});
+
+describe("finish-check run log: reverify off is main's behaviour (AC19b)", () => {
+	it("holds nothing, writes no 032 line and sends what main sends", async () => {
+		for (const env of [{}, { OMK_FINISH_CHECK_EXTRA_TURN: "on" }, { ...BOTH, OMK_FINISH_CHECK: "0" }]) {
+			const run = setup(env);
+			await run.fire("input", { type: "input", text: TASK, source: "interactive" });
+			run.at(180);
+			await run.fire("agent_settled", settled("done"));
+			expect(run.terminators.size).toBe(0);
+			expect(run.handlers.has("session_shutdown")).toBe(false);
+			await run.fire("session_shutdown", { type: "session_shutdown", reason: "quit" });
+			run.sigterm();
+			expect(run.followUps()).toHaveLength(0);
+			expect(existsSync(run.logDir)).toBe(false);
+		}
+		const main = setup({});
+		await main.work();
+		await main.fire("agent_settled", settled("checked"));
+		await main.fire("session_shutdown", { type: "session_shutdown", reason: "quit" });
+		expect(main.followUps()).toHaveLength(1);
+		expect(existsSync(main.logDir)).toBe(false);
 	});
 });
 
