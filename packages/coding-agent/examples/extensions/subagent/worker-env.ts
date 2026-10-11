@@ -3,15 +3,17 @@
  *
  * Workers run headless (`-p`), so the finish check would add a verification turn
  * to every worker on top of the lead's own. Workers get it only when
- * `OMK_FINISH_CHECK_WORKERS` opts in. The lead's time budget and snapshot
- * handshake describe the lead's run, so they are not passed down. Workers keep
- * `OMK_RUN_LOG_DIR` and are marked `OMK_RUN_LOG_ROLE=worker` (spec 042) so their
- * lines can be told apart from the lead's.
+ * `OMK_FINISH_CHECK_WORKERS` opts in. The lead's time budget, snapshot
+ * handshake and fresh-context verifier (spec 032) describe the lead's run, so
+ * they are not passed down. Workers keep `OMK_RUN_LOG_DIR` and are marked
+ * `OMK_RUN_LOG_ROLE=worker` (spec 042) so their lines can be told apart from
+ * the lead's.
  */
 const LEAD_ONLY_VARS = [
 	"OMK_TIME_BUDGET_SEC",
 	"OMK_FINISH_CHECK_SNAPSHOT_DIR",
 	"OMK_FINISH_CHECK_SNAPSHOT_TIMEOUT_SEC",
+	"OMK_FINISH_CHECK_REVERIFY",
 ];
 
 export function subagentWorkerEnv(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
