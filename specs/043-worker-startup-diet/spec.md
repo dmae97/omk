@@ -29,12 +29,12 @@ Method: `node --import trace-hook.mjs dist/cli.js --mode json -p --no-session --
 
 | Group | Modules | Needed by a `-p` worker? |
 | --- | ---: | --- |
-| `typebox` (index + compile + value + schema + locale) | 660 | Yes: tool schemas use `Type`. `typebox/compile` + `typebox/value` alone are 291 of these (models.json validation at startup, tool-argument validation). Deferral is phase 2 below. |
+| `typebox` (index + compile + value + schema + locale) | 660 | Yes: tool schemas use `Type`. `typebox/compile` + `typebox/value` alone are 291 of these (models.json validation at startup, tool-argument validation). Not deferred: the first tool call needs them (see phase 2). |
 | `open-multi-agent-kit` `dist/core/**` | 403 | Mostly. **Not needed: `core/verified-run/**` (62)**, reached only through `agent-session-services.ts` → `createVerifiedRunAgentSession` / `createRunCoordinator`. Also `core/export-html/**` (3), `core/neo/**` (2), codexbar/codex-web/onboarding/session-doctor helpers (≈10). |
 | `openai` SDK | 154 | Yes for `openai-completions` providers (the mock and many real ones). Already loaded per provider. |
 | `undici` | 109 | Yes: loaded on the first `fetch` (#78/#88). |
 | `yaml` | 72 | Yes: skill/prompt frontmatter. |
-| `omk-ai` / `omk-agent-core` / `omk-protocol` | 151 | Yes. One file, `omk-ai` `models.generated.js` (1.2 MB), costs about 23 ms to load on its own; see phase 2. |
+| `omk-ai` / `omk-agent-core` / `omk-protocol` | 151 | Yes. One file, `omk-ai` `models.generated.js` (1.2 MB), costs about 23 ms to load on its own. Out of scope: built-in provider workers need it (see phase 2). |
 | `dist/commands/**` | 22 | **No** except `init-cli` and `neo-cli`'s word check: doctor, stats, provider adopt/sync/doctor, sdk session, router-feedback, verified-run CLI. All reached from `main.ts` → `commands/run-command.ts`. |
 | `omk-adaptorch-wpl` | 25 | **No**: only `commands/adaptorch-doctor-cli.ts` uses it on this path. |
 | `dist/modes/acp/**` | 4 | **No**: `--mode acp` only. |
@@ -68,9 +68,12 @@ Interactive mode, `--mode rpc`, `--mode acp`, `--resume`, `--export`, `/export`,
 | Module graph | 1,812 modules (1,775 files) on the worker argv | ≤ 1,690 (≥ 120 fewer); zero `commands/run-command`, `verified-run/`, `omk-adaptorch-wpl`, `modes/acp/`, `codexbar-cli`, `neo-cli`, `export-html/`, `session-selector-loaders` | No new module on the worker path | trace hook on the built branch, same argv and env | PR body + trace lists |
 | Start → first request (1 worker) | 654 ms median (busy box) | Median paired difference (branch − main) **≤ −25 ms** on a quiet box, and larger than main's own interquartile range in the same run | Not slower than main beyond noise | quiet-box interleaved run below | raw dir + summary |
 | Idle RSS (1 worker, slow mock) | 150.0 MiB median | Median paired difference **≤ −5 MiB** (the RSS noise seen in #80–#82 is ±5–8 MiB) | No increase beyond noise | same run | same |
+| One-tool-call worker (wall to exit, peak RSS) | measured in the same run (turn 1: one `read` of a small file; turn 2: final text) | **No regression**: median paired difference of wall time to exit ≤ main's own interquartile range in that run, and of peak RSS ≤ +5 MiB | Same as target | `bench/run-ab.sh` scenario `tool` | same raw dir |
 | 16 concurrent start | median 2.1–2.4 s, p90 2.6–2.7 s | Report p90 before/after (no pass bar; start is CPU bound, so it should move with per-worker CPU) | No regression beyond the 3-rep spread | same harness, N=16 × 3 reps per arm | same |
 
-How the targets were set: phase 1 removes 131 of 1,775 files (7.4 %). Module loading is about 430 ms of a ~650 ms start, so a proportional share is about 30 ms. These are small application modules plus one package, so 25 ms is the bar. RSS from 131 small modules is expected to be a few MiB, likely **inside the ±5–8 MiB noise**. If the quiet-box run confirms that, the RSS part of acceptance needs phase 2, and Tech Lead decides whether phase 1 merges on start time and module count alone.
+How the targets were set: phase 1 removes 131 of 1,775 files (7.4 %). Module loading is about 430 ms of a ~650 ms start, so a proportional share is about 30 ms. These are small application modules plus one package, so 25 ms is the bar. RSS from 131 small modules is expected to be a few MiB, likely **inside the ±5–8 MiB noise**. The decision order is in [Acceptance order](#acceptance-order-tech-lead-103).
+
+Why the tool-call scenario: time to first request only shows startup. Anything the diet defers (or any later phase that defers work) could come back on the first tool call and make the whole worker slower. A worker that makes one cheap tool call and exits shows that cost, so the branch must not regress there.
 
 ## Acceptance tests
 
@@ -82,16 +85,49 @@ How the targets were set: phase 1 removes 131 of 1,775 files (7.4 %). Module loa
 
 ## Measurement method
 
-- Harness: the worker cost harness from `RESULTS.md` (`harness.mjs`, `mock-server.mjs`), pointed at two worktrees built from the same lockfile and `node_modules`: main `c3ac89e` and the branch head.
-- Single worker: ≥ 10 interleaved pairs (order alternates per pair) after one warm-up per arm, fast mock (0 ms) for start time and slow mock (2,000 ms) for idle RSS. Report medians, p90, and the median of paired differences. Idle RSS is the median `VmRSS` sampled every 50 ms from request arrival + 300 ms to response − 200 ms.
+- Harness: [`bench/`](bench/) next to this spec. It is the worker cost harness from `RESULTS.md` (`harness.mjs`, `mock-server.mjs`) plus `mock-server-tool.mjs`, `run-ab.sh` (interleaved A/B with the `PAUSE` gate), `analyze-ab.mjs`, and the module inventory (`inventory.sh`, `trace-hook.mjs`, `analyze-inv.mjs`). It points at two worktrees built from the same lockfile and `node_modules`: main `c3ac89e` and the branch head. Raw output goes to `$OUT` (default `bench/out/`, git-ignored).
+- Single worker, three scenarios, ≥ 10 interleaved pairs each (order alternates per pair), one warm-up per arm and scenario. Report medians, p90, interquartile range, and the median of paired differences:
+  - `fast`: mock answers at once. **Time to first request.**
+  - `slow`: mock holds the answer 2,000 ms. **Idle RSS** = median `VmRSS` sampled every 50 ms from request arrival + 300 ms to response − 200 ms.
+  - `tool`: turn 1 answers with one `read` tool call on `small.txt` in the worker's cwd, turn 2 (the request that carries the tool result) answers with final text. **Wall time from spawn to exit** and **peak RSS** (`/usr/bin/time -v`). A run counts only if the worker exits 0, made exactly two requests (turn 1 offered the `read` tool), and turn 2 saw the file contents.
 - 16 concurrent: 3 reps per arm, interleaved.
 - Quiet box: no other agent's build, test, or benchmark running. `/proc/loadavg` and the top CPU processes are logged before every run, and runs that overlap heavy work are flagged. Coordinated in the room. The perf-workers `PAUSE` file is honored.
 - Everything under `nice -n 10`, Node 22.23.3, page cache warm.
 
+## Acceptance order (Tech Lead, #103)
+
+1. **Measure phase 1** (this change) on a quiet box with all three scenarios and the 16-concurrent run.
+2. **If it does not clear noise** (start ≤ −25 ms beyond main's IQR and idle RSS ≤ −5 MiB), add phase 2 below and measure again the same way.
+3. **If it still does not clear noise**, #103 merges as cleanup that counts only the module drop (1,775 → 1,644 files), **provided nothing regresses**: start time, idle RSS, the one-tool-call wall time and peak RSS, and 16-concurrent p90.
+
 ## Phase 2 (not in this change)
 
-- **`models.generated` lazy load**: 1.2 MB, about 23 ms to load in isolation. Prior art: closed #80 (`perf/worker-rss-lazy-models` `f309e9b`, commits `645d473`, `9d0dbe2` browser loader, `3c2c070` Bun lazy require). It only helps workers on fully specified custom providers (built-in providers need the catalog), touches `model-registry.ts` heavily, and #80 measured −3.5 MiB RSS (noise) without measuring start time. Separate PR after phase 1 numbers.
-- **`typebox/compile` + `typebox/value` deferral** (291 modules, about 46 ms in isolation): needed at startup when `models.json` exists (schema check) and on the first tool call. Deferring only moves the cost unless the startup check changes. Needs its own design.
+The only phase 2 candidate is **validating `models.json` without `typebox/compile`**.
+
+Out of phase 2, and why:
+
+- **`typebox/compile` deferral in general.** A worker loads it on its first tool call anyway (`omk-ai` `utils/validation.ts` compiles tool schemas to check tool arguments). Making it lazy only moves the time later, and the one-tool-call scenario would show the same total.
+- **`models.generated` lazy load.** Tech Lead ruled it out: workers on built-in providers load the catalog anyway to resolve the model and its defaults, so only fully specified custom-provider workers could gain. #80's commits are not reused.
+
+### Profile: `models.json` validation with and without Compile (no code change)
+
+`core/model-registry-schema.ts` builds the schema and calls `Compile(ModelsConfigSchema)` at module top level, so the compile runs at every startup, also when there is no `models.json`. `model-registry.ts` then calls `validateModelsConfig.Check(parsed)` once per load.
+
+Method: `bench/`-style microbenchmark on the branch build, a fresh process per run, 9 runs per mode, medians, `nice -n 10`, box load1 about 2–5 (2026-10-11 09:13 KST). The input is the worker harness's mock `models.json`. Each mode first imports `typebox` (index, 369 modules, about 68–73 ms).
+
+| Step | With `Compile` (main today) | Without `Compile` (`Value.Check` on the same schema) |
+| --- | --- | --- |
+| Import the validator package after `typebox` | `typebox/compile`: 40.4 ms, +291 modules | `typebox/value`: 40.6 ms, +287 modules (`compile` already includes `value`) |
+| Load the schema module | 17.0 ms (builds the schema and compiles it) | 8.0 ms (builds the schema only) |
+| First `Check` of the mock `models.json` | 1.36 ms | 1.89 ms |
+| 100 more `Check` calls | 0.66 ms | 9.78 ms |
+
+Reading:
+
+- Dropping `Compile` here saves about **9 ms** of schema compilation per process. Package import costs the same, because `Value.Check` needs `typebox/value`, which is 287 of the same 291 modules.
+- On the worker path today, `omk-ai`'s index already imports `typebox/compile` and `typebox/value` at startup through `utils/validation.ts`, so neither package import goes away. Only the ~9 ms compile is saved, and that holds whether or not `models.json` exists. A hand-written validator would not change this while `omk-ai` keeps those imports.
+- Validation runs once per load, so the slower interpreter (~0.1 ms per check) does not matter.
+- Expected phase 2 gain is about 9 ms of start time and no material RSS change. That is below the 25 ms bar, so phase 2 is unlikely to clear noise by itself. It is recorded as an option for step 2 of the acceptance order, not as a plan.
 
 ## Non-goals
 
@@ -112,5 +148,6 @@ How the targets were set: phase 1 removes 131 of 1,775 files (7.4 %). Module loa
 - `packages/coding-agent/src/core/agent-session-services.ts`, `src/index.ts`: move and re-point the export
 - `packages/coding-agent/src/cli.ts`: `neo-cli` only for `omk neo`
 - `packages/coding-agent/src/core/agent-session.ts`: export-html loaded inside `exportToHtml`
+- `specs/043-worker-startup-diet/bench/**`: measurement harness (scenarios `fast`, `slow`, `tool`) and module inventory
 - Tests: `print-mode-worker-cold-path`, `main-subcommand-routing`, `cli-neo-lazy-import`, `agent-session-export-html` (new); three `verified-run-*` tests (import path)
 - `packages/coding-agent/CHANGELOG.md`: one Changed entry
