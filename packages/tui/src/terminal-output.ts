@@ -44,6 +44,14 @@ export function writeTerminalRaw(data: string): void {
 	else process.stdout.write(data);
 }
 
+/**
+ * Final resize-log lines still owed at process exit, for exits that skip stop
+ * (a dead tty's EIO goes straight to process.exit). One exit listener serves
+ * every TerminalOutput; stop removes its own entry, the next write re-adds it.
+ */
+const finalOnExit = new Set<() => void>();
+let exitHooked = false;
+
 /** Metadata-only observation. No paint queue, retries, or interception of error handling. */
 export class TerminalOutput {
 	private readonly stream: Writable;
@@ -70,9 +78,18 @@ export class TerminalOutput {
 		this.stream = stream;
 		this.logPath = writeLogPath(log);
 		this.resizeLog = resizeLog ? new TerminalResizeLog(resizeLog) : undefined;
-		// Exits that skip stop (a dead tty's EIO goes straight to process.exit)
-		// still get their final line; after a normal stop this is a duplicate and skipped.
-		if (this.resizeLog) process.once("exit", () => this.resizeLog?.final(this.counters.submittedBytes));
+		if (this.resizeLog) this.owesFinal();
+	}
+
+	private readonly finalLine = () => this.resizeLog?.final(this.counters.submittedBytes);
+
+	private owesFinal(): void {
+		finalOnExit.add(this.finalLine);
+		if (exitHooked) return;
+		exitHooked = true;
+		process.once("exit", () => {
+			for (const finalLine of finalOnExit) finalLine();
+		});
 	}
 
 	/**
@@ -98,6 +115,7 @@ export class TerminalOutput {
 			this.stream.on(errorMonitor, this.onError);
 			this.observing = true;
 			activeOutput = this;
+			if (this.resizeLog) this.owesFinal();
 		}
 		this.counters.writeCalls++;
 		this.counters.submittedBytes += Buffer.byteLength(data, "utf8");
@@ -127,7 +145,8 @@ export class TerminalOutput {
 	}
 
 	stop(): void {
-		this.resizeLog?.final(this.counters.submittedBytes);
+		this.finalLine();
+		finalOnExit.delete(this.finalLine);
 		this.stream.off("drain", this.onDrain);
 		this.stream.off(errorMonitor, this.onError);
 		this.observing = false;

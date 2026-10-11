@@ -158,4 +158,15 @@ describe("OMK_TUI_RESIZE_LOG", () => {
 		assert.deepEqual(stdout, ["\u0007"], "without a running TUI the write goes to stdout");
 		assert.equal(received.length, 3);
 	});
+
+	it("registers at most one process exit listener, however many outputs log", () => {
+		const before = process.listenerCount("exit");
+		const outputs = [1, 2, 3].map((index) => new TerminalOutput(sink(), "", join(dir, `resize-${index}.jsonl`)));
+		assert.ok(
+			process.listenerCount("exit") - before <= 1,
+			`exit listeners added: ${process.listenerCount("exit") - before}`,
+		);
+		for (const output of outputs) output.stop();
+		assert.ok(process.listenerCount("exit") - before <= 1);
+	});
 });
