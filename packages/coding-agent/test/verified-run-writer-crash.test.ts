@@ -7,8 +7,8 @@ import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
-import { createRunCoordinator } from "../src/core/agent-session-services.ts";
 import { planVerifiedRun } from "../src/core/run-execution-api.ts";
+import { createRunCoordinator } from "../src/core/verified-run-session.ts";
 
 it("restarts a SIGKILLed writer through CLI without borrowing time or losing its input checkpoint", async () => {
 	const root = mkdtempSync(join(tmpdir(), "writer-crash-"));

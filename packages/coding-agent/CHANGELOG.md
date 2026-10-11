@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- A headless `-p --mode json` worker (the subagent command line) loads 131 fewer modules at startup, 1,644 files instead of 1,775. The subcommand handlers (`doctor`, `stats`, `provider adopt|sync|doctor`, `sdk session`, `router-feedback`, `run`), the verified-run coordinator, `omk-adaptorch-wpl`, ACP mode, `omk quota`, `omk neo`, the `--resume` picker's loaders and HTML export now load only on the path that uses them. Commands behave as before.
+
 ## [1.3.2] - 2026-10-10
 
 ### Added
