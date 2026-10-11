@@ -396,9 +396,8 @@ function isCacheableSkillFile(value: unknown): value is ParsedSkillFile {
 	const { skill, diagnostics } = (value ?? {}) as Partial<ParsedSkillFile>;
 	if (!Array.isArray(diagnostics)) return false;
 	if (skill === null) return true;
-	return (
-		typeof skill?.name === "string" && typeof skill.description === "string" && typeof skill.filePath === "string"
-	);
+	const fields = [skill?.name, skill?.description, skill?.filePath, skill?.baseDir, skill?.contentHash];
+	return fields.every((field) => typeof field === "string");
 }
 
 function hashSkillContent(content: string): string {

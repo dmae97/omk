@@ -12,6 +12,8 @@ const skill = (name: string, description = `Complete description for ${name}`) =
 const cacheFile = (agentDir: string) => join(agentDir, "cache", "skill-catalog-v2.json");
 const fileKeys = (agentDir: string) => Object.keys(readSkillCatalog(agentDir)).filter((k) => k.startsWith("file:"));
 
+type CachedResult = { skill: Record<string, unknown>; diagnostics: unknown[] };
+
 let root: string;
 let agentDir: string;
 let skillsRoot: string;
@@ -181,13 +183,19 @@ describe("skill catalog cache for per-skill file paths", () => {
 });
 
 describe("skill catalog file cache robustness", () => {
-	it("treats a malformed cached result as a miss instead of failing the load", () => {
+	it.each([
+		["a non-object result", () => 1],
+		["a missing baseDir", (r: CachedResult) => ({ ...r, skill: { ...r.skill, baseDir: undefined } })],
+		["a numeric contentHash", (r: CachedResult) => ({ ...r, skill: { ...r.skill, contentHash: 42 } })],
+		["a numeric description", (r: CachedResult) => ({ ...r, skill: { ...r.skill, description: 7 } })],
+	])("treats %s in the cache as a miss instead of serving it", (_label, corrupt) => {
 		const path = writeSkill("alpha");
 		const baseline = loadSkills(options([path], { catalogCache: false }));
 		loadSkills(options([path]));
 		const raw = JSON.parse(readFileSync(cacheFile(agentDir), "utf8"));
-		raw[`file:${resolve(path)}`].result = 1;
+		const key = `file:${resolve(path)}`;
+		raw[key].result = corrupt(raw[key].result);
 		writeFileSync(cacheFile(agentDir), JSON.stringify(raw));
-		expect(loadSkills(options([path]))).toEqual(baseline);
+		expect(loadSkills(options([path]))).toStrictEqual(baseline);
 	});
 });
