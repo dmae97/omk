@@ -47,10 +47,18 @@ export interface SkillCatalogCacheEntry<T> {
 	readonly result: T;
 }
 
-type CatalogStore = Record<string, SkillCatalogCacheEntry<unknown>>;
+export type CatalogStore = Record<string, SkillCatalogCacheEntry<unknown>>;
 
 const CACHE_FILE_NAME = "skill-catalog-v2.json";
 const MAX_ENTRIES = 64;
+/**
+ * Auto-discovery passes one SKILL.md path per skill, so file entries scale
+ * with the skill count, not the number of roots. 4,096 is 3.4x the largest
+ * known set (1,191 skills); an entry is about 0.7 KB, so the file stays under
+ * about 3 MB. Hits move to the end, so the least recently used are dropped.
+ */
+const MAX_FILE_ENTRIES = 4096;
+const FILE_KEY_PREFIX = "file:";
 const MAX_WALK_DEPTH = 8;
 const MAX_WALK_ENTRIES = 20_000;
 const IGNORE_CONTROLS = new Set([".gitignore", ".ignore", ".fdignore"]);
@@ -173,8 +181,14 @@ export function writeSkillCatalog(agentDir: string, store: CatalogStore): void {
 		const cacheDir = join(agentDir, "cache");
 		mkdirSync(cacheDir, { recursive: true });
 		const keys = Object.keys(store);
+		const fileKeys = keys.filter((k) => k.startsWith(FILE_KEY_PREFIX));
+		const dirKeys = keys.filter((k) => !k.startsWith(FILE_KEY_PREFIX));
 		const trimmed: CatalogStore =
-			keys.length <= MAX_ENTRIES ? store : Object.fromEntries(keys.slice(-MAX_ENTRIES).map((k) => [k, store[k]]));
+			dirKeys.length <= MAX_ENTRIES && fileKeys.length <= MAX_FILE_ENTRIES
+				? store
+				: Object.fromEntries(
+						[...dirKeys.slice(-MAX_ENTRIES), ...fileKeys.slice(-MAX_FILE_ENTRIES)].map((k) => [k, store[k]]),
+					);
 		const data = JSON.stringify(trimmed);
 		const tmp = join(cacheDir, `${CACHE_FILE_NAME}.${process.pid}.${randomUUID()}.tmp`);
 		const fd = openSync(tmp, "wx", 0o600);
@@ -243,4 +257,46 @@ export function cachedSkillScan<T>(
 		delete catalog[key];
 	}
 	return { result, store: catalog };
+}
+
+/** One stat, no read: path identity plus size, mtime, ctime and inode, as for directories. */
+function fingerprintSkillFile(filePath: string): SkillDirFingerprint | undefined {
+	try {
+		const stats = statSync(filePath);
+		if (!stats.isFile()) return undefined;
+		const digest = createHash("sha256")
+			.update(JSON.stringify([filePath, stats.size, stats.mtimeMs, stats.ctimeMs, stats.ino, stats.dev]))
+			.digest("hex");
+		return { files: 1, maxMtimeMs: stats.mtimeMs, totalSize: stats.size, digest, complete: true };
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Per-file counterpart of `cachedSkillScan` for the one-SKILL.md-per-skill
+ * paths auto-discovery produces. Mutates `store`. A result is kept only when
+ * the file did not change while `load` ran and `valid` accepts it; a stored
+ * result that `valid` rejects is a miss.
+ */
+export function cachedSkillFileLoad<T>(
+	store: CatalogStore,
+	filePath: string,
+	load: () => T,
+	valid: (result: unknown) => result is T,
+): T {
+	const key = `${FILE_KEY_PREFIX}${resolve(filePath)}`;
+	const fingerprint = fingerprintSkillFile(resolve(filePath));
+	const hit = store[key];
+	delete store[key];
+	if (fingerprint && hit && fingerprintEquals(hit.fingerprint, fingerprint) && valid(hit.result)) {
+		store[key] = hit; // re-insert at the most recently used end
+		return structuredClone(hit.result) as T;
+	}
+	const result = load();
+	const after = fingerprintSkillFile(resolve(filePath));
+	if (fingerprint && after && fingerprintEquals(fingerprint, after) && valid(result)) {
+		store[key] = { fingerprint: after, result };
+	}
+	return result;
 }
