@@ -27,7 +27,8 @@ const REQUIRED = /\b(?:must|should|needs? to|required?|has to|have to|ensure|mak
 // An absolute path with at least two segments, optionally in backticks or quotes.
 const ABSOLUTE_PATH = /(?:^|[\s`'"(])(\/(?:[\w.@+-]+\/)+[\w.@+-]*[\w@+-])/;
 
-function splitSentences(prompt: string): string[] {
+/** Prompt sentences, skipping fenced code and indented lines; also used by the deliverable guard (spec 034). */
+export function splitSentences(prompt: string): string[] {
 	const sentences: string[] = [];
 	let inCodeBlock = false;
 	for (const line of prompt.split(/\r?\n/)) {
@@ -51,7 +52,7 @@ function splitSentences(prompt: string): string[] {
 // A relative file name such as `image.c` or `out/result.json`, counted only when the sentence asks to produce it.
 const RELATIVE_FILE =
 	/(?:^|[\s`'"(])(?:\.\/)?(?:[\w.@+-]+\/)*[\w@+-]+\.(?:json|csv|txt|py|md|bin|pt|so|c|js|ts|sh|toml|ya?ml|out|log|scm|png|ppm|html)\b/;
-const PRODUCE_WORDS = /\b(?:save[sd]?|write|writes|written|create|output|produce|place|store)\b/i;
+export const PRODUCE_WORDS = /\b(?:save[sd]?|write|writes|written|create|output|produce|place|store)\b/i;
 const OUTPUT_WORDS = /\b(?:save[sd]?|write|writes|written|create|output|produce|place|store|exists?|configure)\b/i;
 
 /** 1 = bounds a number, 2 = names a path or file it asks for, 3 = names a path; undefined = not a requirement. */
