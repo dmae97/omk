@@ -25,8 +25,7 @@ const args = process.argv.slice(2);
 if (args.length === 1 && (args[0] === "--version" || args[0] === "-v")) {
 	console.log(VERSION);
 } else {
-	const [{ runNeoCli }, { installHttpDispatcherFetchHook }, { main }] = await Promise.all([
-		import("./commands/neo-cli.ts"),
+	const [{ installHttpDispatcherFetchHook }, { main }] = await Promise.all([
 		import("./core/http-dispatcher-install.ts"),
 		import("./main.ts"),
 	]);
@@ -34,6 +33,8 @@ if (args.length === 1 && (args[0] === "--version" || args[0] === "-v")) {
 	// network request. Runtime timeout is scheduled once SettingsManager loads.
 	installHttpDispatcherFetchHook();
 	if (args[0] === "neo") {
+		// Only `omk neo` needs the Neo catalog; workers and other commands skip it (spec 043).
+		const { runNeoCli } = await import("./commands/neo-cli.ts");
 		process.exitCode = runNeoCli(args.slice(1), {
 			packageDir: getPackageDir(),
 			cwd: process.cwd(),

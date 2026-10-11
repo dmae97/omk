@@ -43,7 +43,7 @@ Every target item has more than one limit, so a design that infers "the" bound o
 | Dimension | Baseline (#62 @ `3eb9349213`) | Acceptance target | Regression floor | Verification command | Evidence artifact |
 | --- | --- | --- | --- | --- | --- |
 | Completion correctness | A REQ line whose own numbers fail its limit (e.g. `74 >= 75`) is recorded as reported and the run ends | The item is recorded `fail` with the gap, and the run gets one continue turn while time allows. An unmeasured tier-1 item gets a go-measure turn instead; the two share one extra turn | Runs whose limits pass and runs without tier-1 items behave exactly as #62 (same messages, same single check turn). A run never gets more than one extra turn per task | `../../node_modules/.bin/vitest run test/finish-check-requirements.test.ts test/finish-check.test.ts` in `packages/coding-agent` | those two test files |
-| Benchmark score | R8 omk: corewars 2/3, train-fasttext 0/3, regex-chess 1/3 | Small A/B (below): B ≥ A on the target tasks, corewars not worse | No new timeouts (T1/T2) caused by the continue turn on target or control tasks | Small A/B, 3 runs per task per arm | A/B report under `/workspace/omk-ab/` |
+| Benchmark score | R8 omk: corewars 2/3, train-fasttext 0/3, regex-chess 1/3 | Small A/B (below): D ≥ A on the target tasks, corewars not worse | No new timeouts (T1/T2) caused by the continue turn on target or control tasks | Small A/B, 3 runs per task per arm | A/B report under `/workspace/omk-ab/` |
 
 ## Agent-Oriented Requirements
 
@@ -160,10 +160,13 @@ Gate (default off):
 25. **Flag parsing.** `resolveFinishCheckExtraTurn` is true for `on`, `1`, `true`, `ON`, ` enabled `, and false for unset, `""`, `off`, `0`, `false`, `always` and other text.
 26. **Flag off is the pre-035 behaviour.** With the flag unset, `off` or an unknown value, cases 1, 2, 6 and 7 send no follow-up after the check turn; the session has exactly one ledger entry `{ items }`; the end event equals `{ active: false, ledger }`; a later settle in the same task (even past 90%) sends nothing and writes no round-2 entry; the stop steer is never sent. The check-turn tool cap still fires once when calls continue after the check turn settled.
 27. **Flag on.** Every other extra-turn case (1–13, 21, 23, 24) and the extension flow test run with `OMK_FINISH_CHECK_EXTRA_TURN=on`.
+28. **Run log.** With `OMK_RUN_LOG_DIR` set and the flag on: case 1 writes `{ type: "extra-turn", used: true, reasons: ["below-threshold"] }` with `extraTurnFraction` 0.77; case 6 `reasons: ["unmeasured"]`; case 3 `used: false, reasons: []`; case 12 `used: false, reasons: ["below-threshold"]`. The flag off or `OMK_RUN_LOG_DIR` unset writes no line.
 
 ## A/B measurement
 
-- With the gate, A and B can be the same #62 build: A runs with `OMK_FINISH_CHECK_EXTRA_TURN` unset (identical to #62 without the extra turn) and B with `OMK_FINISH_CHECK_EXTRA_TURN=on`. This replaces the two-build baseline below when #62 is merged with the gate.
+- **Pin**: main `d69af96` (Tech Lead's joint A/B pin; #62 is merged with the gate, and 032–035 and their run logs are in it). 035 is measured in the joint A/B with arms A–E on that one build (Bench Analyst's plan, `/workspace/omk-bench-analyst/AB_PLAN_d69af96.md`). 035's verdict is **A vs D**: A runs with `OMK_FINISH_CHECK_EXTRA_TURN` unset (identical to #62 without the extra turn) and D with `OMK_FINISH_CHECK_EXTRA_TURN=on`. All other new opt-in flags (`OMK_FINISH_CHECK_REVERIFY`, `OMK_RESPONSE_REASONING_CAP`, `OMK_DELIVERABLE_GUARD`) are off in both. This replaces the two-build baseline below.
+- **Shared arms**: A is the shared control for 033, 034 and 035, so if A is low by chance all three look better together. D is also 032's control (spec 032: D vs E). Report the A/D result with this caveat.
+- Benches run `omk --no-session --mode json` with `OMK_RUN_LOG_DIR` set in every arm; `extraTurn` counts by kind come from the `extra-turn` lines in `$OMK_RUN_LOG_DIR/finish-check.jsonl` (see "Run log").
 - **Baseline (A)**: main after #44 and #45 are merged (Staff Engineer is merging main `47e78c4` into them now), plus #62 as merged without this spec's change, so A already sends the checklist. If #62 is not merged when the A/B runs, A is main(#44+#45) + #62 @ its rebased head and B is the same + this change. A must not be bare main `47e78c4`: it has no finish check, so R8/B′ numbers would not line up.
 - **Target tasks** (class K in the report, plus the two B′ cases of the same shape):
   - `winning-avg-corewars`: R8 r2 ended at 77% of budget with 74 < 75. The main target; this is the case the change can catch.
@@ -181,6 +184,15 @@ Gate (default off):
 - No change to `finishDisciplinePrompt` (candidate 5, `specs/031`).
 - No move to the #63 `RemainingBudget` clock in this PR; that happens when #63 lands.
 
+## Run log (decision 8)
+
+With `OMK_RUN_LOG_DIR` set and `OMK_FINISH_CHECK_EXTRA_TURN` on, each decision about the single extra turn appends one line to `<OMK_RUN_LOG_DIR>/finish-check.jsonl` through `appendRunLog("finish-check", …)` (spec 042): `{ type: "extra-turn", used, reasons, extraTurnFraction }`. With `OMK_RUN_LOG_DIR` unset or the flag off, nothing is written.
+
+- A decision is made when the check turn settles and the verifier of spec 032 does not take over, and when that verifier settles. One line per decision, so at most two per task, and at most one with `used: true`.
+- `used`: whether the extra turn was sent.
+- `reasons`: what called for it, in this order: `"below-threshold"` (a numeric item missed its limit), `"unmeasured"` (a numeric item had no measurement), `"reverify-fix"` (spec 032's verifier failed). Empty when nothing called for it; non-empty with `used: false` when the turn was already used, the turn ended aborted or with a pending message, or it was 85% or later.
+- `extraTurnFraction`: the budget fraction finish-check read at the decision (`null` without a budget). `appendRunLog`'s own `t`, `elapsedFraction`, `pid` and `role` are added to the line; a line holds no task text or model output.
+
 ## Decisions (Tech Lead, 2026-10-11)
 
 1. Number stays 035, as a separate spec file shipped in the revived #62 PR.
@@ -190,6 +202,7 @@ Gate (default off):
 5. The 220-character cut that drops corewars' g2-clear limit is a correctness bug fixed in the same PR.
 6. Review of #62 (`REVIEW_STACK_20261011.md`): numeric tier needs a bound word next to a number (M1); exponent, unicode minus, `=>`/`=<`, version numbers and context comparisons in the parser (M2, m1–m3); tier-1 kept to 1000 characters with a clause cut (m4); one 90% stop steer in the extra turn (m5); strict REQ form kept on purpose (m6); latest REQ-bearing assistant message of the run is read (n1).
 7. Merge condition for #62: the extra turn ships behind `OMK_FINISH_CHECK_EXTRA_TURN`, default off. It is turned on by default only after Bench Analyst's A/B shows a gain; until then #62 changes only the ledger, parser and checklist text.
+8. Run log (after #102): the extra-turn decision is written to `finish-check.jsonl` as described in "Run log"; nothing is written unless `OMK_RUN_LOG_DIR` is set and `OMK_FINISH_CHECK_EXTRA_TURN` is on.
 
 ## Expected Files
 
@@ -202,3 +215,4 @@ Gate (default off):
 - `packages/coding-agent/test/finish-check-compare.test.ts`: AC19
 - `packages/coding-agent/test/finish-check-extra-turn.test.ts`: AC1–14, 21, 23–27
 - `packages/coding-agent/docs/environment-variables.md`: `OMK_FINISH_CHECK_EXTRA_TURN` row
+- `packages/coding-agent/test/finish-check-run-log.test.ts`: AC28 (the writer lives in `extensions/builtin/finish-check-run-log.ts`, see spec 032 decision 10)

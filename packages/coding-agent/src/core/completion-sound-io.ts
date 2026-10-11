@@ -1,5 +1,6 @@
 import { type SpawnOptions, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
+import { writeTerminalRaw } from "omk-tui";
 
 const SPAWN_KILL_TIMEOUT_MS = 1000;
 const SOUND_ENV_KEYS = [
@@ -61,7 +62,8 @@ export function defaultCompletionSoundIo(): CompletionSoundIo {
 			}),
 		writeBell: () => {
 			try {
-				process.stdout.write("\u0007");
+				// Through the TUI output when one is running, so OMK_TUI_RESIZE_LOG counts it.
+				writeTerminalRaw("\u0007");
 				return true;
 			} catch {
 				return false;

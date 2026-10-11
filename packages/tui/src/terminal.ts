@@ -131,7 +131,7 @@ export class ProcessTerminal implements Terminal {
 
 	start(onInput: (data: string) => void, onResize: () => void): void {
 		this.inputHandler = onInput;
-		this.resizeHandler = onResize;
+		this.resizeHandler = this.output.withResizeLog(onResize, () => ({ cols: this.columns, rows: this.rows }));
 
 		// Save previous state and enable raw mode
 		this.wasRaw = process.stdin.isRaw || false;

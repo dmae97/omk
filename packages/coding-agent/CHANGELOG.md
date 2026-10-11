@@ -6,6 +6,7 @@
 
 - The interactive chat no longer slows down as a session grows. `ChatContainer` freezes finished messages above the viewport and re-renders a frozen message only when it changes, for example a tool card expanded with `Ctrl+O` or a late tool result. On a 20k-line transcript of real message and tool components, a keypress frame drops from ~40 ms to ~1.7 ms mean (p95 ~52 ms → ~2 ms), and process RSS no longer climbs by ~180 MB during the first streaming response.
 - Whether a message is finished follows agent events, not message data: an assistant message is live from `message_start` to its `message_end`, a tool until its final result, and `agent_end` closes anything still open (a provider that throws mid-stream leaves its partial message without a `message_end`).
+- A headless `-p --mode json` worker (the subagent command line) loads 131 fewer modules at startup, 1,644 files instead of 1,775. The subcommand handlers (`doctor`, `stats`, `provider adopt|sync|doctor`, `sdk session`, `router-feedback`, `run`), the verified-run coordinator, `omk-adaptorch-wpl`, ACP mode, `omk quota`, `omk neo`, the `--resume` picker's loaders and HTML export now load only on the path that uses them. Commands behave as before.
 
 ## [1.3.2] - 2026-10-10
 

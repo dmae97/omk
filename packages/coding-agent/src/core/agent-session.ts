@@ -102,8 +102,7 @@ import {
 	isDevinProvider,
 	selectDevinHarnessSkills,
 } from "./devin-harness.ts";
-import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.ts";
-import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
+import type { ToolHtmlRenderer } from "./export-html/index.ts";
 import {
 	type ContextUsage,
 	type ExtensionCommandContextActions,
@@ -5463,8 +5462,12 @@ export class AgentSession {
 	 */
 	async exportToHtml(outputPath?: string): Promise<string> {
 		const themeName = this.settingsManager.getTheme();
-		// Builtin TUI renderers live off the headless cold path; load them only for export.
-		const { withBuiltinToolRenderers } = await import("../modes/interactive/tool-renderers/index.ts");
+		// Export and its TUI renderers live off the headless cold path; load them only here (spec 043).
+		const [{ withBuiltinToolRenderers }, { exportSessionToHtml }, { createToolHtmlRenderer }] = await Promise.all([
+			import("../modes/interactive/tool-renderers/index.ts"),
+			import("./export-html/index.ts"),
+			import("./export-html/tool-renderer.ts"),
+		]);
 
 		// Create tool renderer if we have an extension runner (for custom tool HTML rendering)
 		const toolRenderer: ToolHtmlRenderer = createToolHtmlRenderer({

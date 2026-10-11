@@ -17,16 +17,14 @@ import { attachSessionTransports } from "./cli/mcp-attach.ts";
 import { loadModelContractOrExit } from "./cli/model-contract.ts";
 import { isPackageCliCommand, isPackageDoctorCommand } from "./cli/package-commands.ts";
 import { isExplicitExtensionDiagnostic, resolveCliPaths } from "./cli/resource-paths.ts";
-import { handleCodexBarQuotaCommand } from "./codexbar-cli.ts";
+import { isQuotaCommand, mayBeRunCommand } from "./cli/subcommand-words.ts";
 import { runInitCli } from "./commands/init-cli.ts";
-import { runCommand } from "./commands/run-command.ts";
 import { ENV_SESSION_DIR, expandTildePath, getAgentDir, getPackageDir, VERSION } from "./config.ts";
 import { type CreateAgentSessionRuntimeFactory, createAgentSessionRuntime } from "./core/agent-session-runtime.ts";
 import {
 	type AgentSessionRuntimeDiagnostic,
 	createAgentSessionFromServices,
 	createAgentSessionServices,
-	createVerifiedRunAgentSession,
 } from "./core/agent-session-services.ts";
 import { formatNoModelsAvailableMessage } from "./core/auth-guidance.ts";
 import { AuthStorage } from "./core/auth-storage.ts";
@@ -42,8 +40,6 @@ import { assertValidSessionId, SessionManager } from "./core/session-manager.ts"
 import { SettingsManager } from "./core/settings-manager.ts";
 import { printTimings, resetTimings, time } from "./core/timings.ts";
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
-import { runAcpMode } from "./modes/acp/acp-mode.ts";
-import { createSessionMetadataLoaders } from "./modes/interactive/components/session-selector-loaders.ts";
 import { settlePrintModeExit } from "./modes/print-exit-guard.ts";
 import { runPrintMode } from "./modes/print-mode.ts";
 import { normalizePath, resolvePath } from "./utils/paths.ts";
@@ -368,9 +364,10 @@ async function createSessionManager(
 	}
 
 	if (parsed.resume) {
-		const [{ selectSession }, { initTheme, stopThemeWatcher }] = await Promise.all([
+		const [{ selectSession }, { initTheme, stopThemeWatcher }, { createSessionMetadataLoaders }] = await Promise.all([
 			import("./cli/session-picker.ts"),
 			import("./modes/interactive/theme/theme.ts"),
+			import("./modes/interactive/components/session-selector-loaders.ts"),
 		]);
 		initTheme(settingsManager.getTheme(), true);
 		try {
@@ -534,14 +531,24 @@ export async function main(args: string[], options?: MainOptions) {
 		}
 	}
 
-	if (await handleCodexBarQuotaCommand(args)) {
-		return;
+	// Subcommand handlers load only for their own words, so `-p` workers skip them (spec 043).
+	if (isQuotaCommand(args)) {
+		const { handleCodexBarQuotaCommand } = await import("./codexbar-cli.ts");
+		if (await handleCodexBarQuotaCommand(args)) {
+			return;
+		}
 	}
 
-	const outcome = await runCommand(args, { createSession: createVerifiedRunAgentSession });
-	if (outcome.handled) {
-		process.exitCode = outcome.exitCode;
-		return;
+	if (mayBeRunCommand(args)) {
+		const [{ runCommand }, { createVerifiedRunAgentSession }] = await Promise.all([
+			import("./commands/run-command.ts"),
+			import("./core/verified-run-session.ts"),
+		]);
+		const outcome = await runCommand(args, { createSession: createVerifiedRunAgentSession });
+		if (outcome.handled) {
+			process.exitCode = outcome.exitCode;
+			return;
+		}
 	}
 
 	const parsed = parseArgs(args);
@@ -556,6 +563,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 	time("parseArgs");
 	if (parsed.mode === "acp" && !parsed.help && !parsed.version) {
+		const { runAcpMode } = await import("./modes/acp/acp-mode.ts");
 		await runAcpMode(parsed);
 		return;
 	}

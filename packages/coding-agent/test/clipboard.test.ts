@@ -1,4 +1,6 @@
+import { Writable } from "node:stream";
 import { execSync, spawn } from "child_process";
+import { ProcessTerminal } from "omk-tui";
 import { platform } from "os";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { copyToClipboard } from "../src/utils/clipboard.ts";
@@ -110,6 +112,29 @@ describe("copyToClipboard", () => {
 		expect(nativeResolved).toBe(true);
 		expect(osc52Writes()).toHaveLength(1);
 		expect(mockedExecSync).not.toHaveBeenCalled();
+	});
+
+	test("OSC 52 goes through the running TUI's terminal output, so OMK_TUI_RESIZE_LOG counts it", async () => {
+		vi.stubEnv("SSH_CONNECTION", "client server");
+		const received: string[] = [];
+		const terminal = new ProcessTerminal(
+			new Writable({
+				write(chunk, _encoding, callback) {
+					received.push(String(chunk));
+					callback();
+				},
+			}),
+		);
+		terminal.write("frame");
+		try {
+			await copyToClipboard("hello");
+			const osc52 = `\x1b]52;c;${Buffer.from("hello").toString("base64")}\x07`;
+			expect(received).toEqual(["frame", osc52]);
+			expect(terminal.getOutputStats().submittedBytes).toBe(Buffer.byteLength(`frame${osc52}`));
+			expect(osc52Writes()).toHaveLength(0);
+		} finally {
+			terminal.stop();
+		}
 	});
 
 	test("local shell fallback success skips OSC 52", async () => {

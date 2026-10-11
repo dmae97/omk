@@ -2,13 +2,13 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createRunCoordinator } from "../src/core/agent-session-services.ts";
 import { planVerifiedRun } from "../src/core/run-execution-api.ts";
 import { canonicalJson } from "../src/core/run-journal.ts";
 import { acquireSessionOwnerLeaseSync } from "../src/core/session-owner-lease.ts";
 import { journalPath, readRunJournal } from "../src/core/verified-run/journal.ts";
 import * as recoveryClock from "../src/core/verified-run/recovery-clock.ts";
 import { digestObject } from "../src/core/verified-run/storage.ts";
+import { createRunCoordinator } from "../src/core/verified-run-session.ts";
 
 let root: string;
 beforeEach(() => {

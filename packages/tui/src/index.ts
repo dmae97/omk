@@ -95,7 +95,7 @@ export {
 	setCellDimensions,
 	type TerminalCapabilities,
 } from "./terminal-image.ts";
-export type { TerminalOutputStats } from "./terminal-output.ts";
+export { type TerminalOutputStats, writeTerminalRaw } from "./terminal-output.ts";
 export {
 	type Component,
 	Container,

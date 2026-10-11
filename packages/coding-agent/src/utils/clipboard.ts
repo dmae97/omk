@@ -1,4 +1,5 @@
 import { execSync, spawn } from "child_process";
+import { writeTerminalRaw } from "omk-tui";
 import { platform } from "os";
 import { isWaylandSession } from "./clipboard-image.ts";
 import { clipboard } from "./clipboard-native.ts";
@@ -28,7 +29,8 @@ function emitOsc52(text: string): boolean {
 	if (encoded.length > MAX_OSC52_ENCODED_LENGTH) {
 		return false;
 	}
-	process.stdout.write(`\x1b]52;c;${encoded}\x07`);
+	// Through the TUI output when one is running, so OMK_TUI_RESIZE_LOG counts it.
+	writeTerminalRaw(`\x1b]52;c;${encoded}\x07`);
 	return true;
 }
 

@@ -13,6 +13,7 @@ import {
 	FINISH_CHECK_MESSAGE,
 	FINISH_CHECK_SAVE_NOW_MESSAGE,
 	FINISH_CHECK_WRAP_UP_MESSAGE,
+	finishCheckSkipReason,
 	finishDisciplinePrompt,
 	isWorkspaceMutatingTool,
 	resolveFinishCheckMode,
@@ -79,6 +80,17 @@ describe("finish-check policy", () => {
 		expect(shouldRunFinishCheck({ ...base, aborted: true })).toBe(false);
 		expect(shouldRunFinishCheck({ ...base, elapsedFraction: 0.5 })).toBe(true);
 		expect(shouldRunFinishCheck({ ...base, elapsedFraction: 0.95 })).toBe(false);
+	});
+
+	it("names the first reason a settled run gets no verification turn (spec 032 run log)", () => {
+		expect(finishCheckSkipReason(base)).toBeUndefined();
+		expect(finishCheckSkipReason({ ...base, mode: "off", hasUI: true })).toBe("off");
+		expect(finishCheckSkipReason({ ...base, hasUI: true, mutatedWorkspace: false })).toBe("ui");
+		expect(finishCheckSkipReason({ ...base, alreadyChecked: true, aborted: true })).toBe("already-checked");
+		expect(finishCheckSkipReason({ ...base, mutatedWorkspace: false, aborted: true })).toBe("workspace-unchanged");
+		expect(finishCheckSkipReason({ ...base, hasPendingMessages: true, aborted: true })).toBe("pending-input");
+		expect(finishCheckSkipReason({ ...base, aborted: true, elapsedFraction: 0.95 })).toBe("aborted");
+		expect(finishCheckSkipReason({ ...base, elapsedFraction: 0.95 })).toBe("late");
 	});
 
 	it("adds the discipline prompt only to headless sessions unless the mode is always", () => {

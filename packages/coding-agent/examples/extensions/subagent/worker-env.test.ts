@@ -17,8 +17,20 @@ describe("subagentWorkerEnv", () => {
 		expect(env.OMK_FINISH_CHECK_SNAPSHOT_TIMEOUT_SEC).toBeUndefined();
 	});
 
+	it("turns the deliverable guard off for workers", () => {
+		expect(subagentWorkerEnv({ OMK_DELIVERABLE_GUARD: "on" }).OMK_DELIVERABLE_GUARD).toBe("0");
+		expect(subagentWorkerEnv({}).OMK_DELIVERABLE_GUARD).toBe("0");
+	});
+
 	it("lets OMK_FINISH_CHECK_WORKERS opt workers in", () => {
 		expect(subagentWorkerEnv({ OMK_FINISH_CHECK_WORKERS: "1" }).OMK_FINISH_CHECK).toBe("1");
+	});
+
+	it("passes OMK_RUN_LOG_DIR down and marks the worker's log lines (spec 042)", () => {
+		const env = subagentWorkerEnv({ OMK_RUN_LOG_DIR: "/logs/run-1" });
+		expect(env.OMK_RUN_LOG_DIR).toBe("/logs/run-1");
+		expect(env.OMK_RUN_LOG_ROLE).toBe("worker");
+		expect(subagentWorkerEnv({ PATH: "/bin" }).OMK_RUN_LOG_ROLE).toBeUndefined();
 	});
 
 	it("does not modify the parent environment", () => {

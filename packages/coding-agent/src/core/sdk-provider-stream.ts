@@ -8,6 +8,7 @@ import {
 import { type SimpleStreamOptions, streamSimple } from "omk-ai";
 import type { ModelRegistry } from "./model-registry.ts";
 import { mergeProviderAttributionHeaders } from "./provider-attribution.ts";
+import { createResponseReasoningCapStreamFn, resolveResponseReasoningCapConfig } from "./response-reasoning-cap.ts";
 import type { SettingsManager } from "./settings-manager.ts";
 
 interface SdkProviderRuntime {
@@ -20,8 +21,15 @@ interface SdkProviderRuntime {
 	) => void;
 }
 
-/** Shared by the main agent and first-party summary calls using agent.streamFn. */
+/**
+ * Shared by the main agent and first-party summary calls using agent.streamFn.
+ * Spec 033: wrapped with the opt-in per-response reasoning cap (`OMK_RESPONSE_REASONING_CAP=1`).
+ */
 export function createSdkProviderStream(runtime: SdkProviderRuntime): StreamFn {
+	return createResponseReasoningCapStreamFn(createProviderStream(runtime), resolveResponseReasoningCapConfig());
+}
+
+function createProviderStream(runtime: SdkProviderRuntime): StreamFn {
 	const { modelRegistry, settingsManager } = runtime;
 	const contract = runtime.modelContract === undefined ? undefined : snapshotModelContract(runtime.modelContract);
 	return async (model, context, options) => {
