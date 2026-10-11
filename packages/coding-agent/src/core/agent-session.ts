@@ -305,6 +305,7 @@ import type { SettingsManager } from "./settings-manager.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPromptPlan } from "./system-prompt.ts";
+import { resolveExtendedSystemPromptCache } from "./system-prompt-cache-boundary.ts";
 import { todoControlState } from "./todo-runtime-state.ts";
 import { mcpToolGroup } from "./tool-schema-budget.ts";
 import { type BashOperations, type BashSandboxPreflight, createLocalBashOperations } from "./tools/bash.ts";
@@ -2655,12 +2656,11 @@ export class AgentSession {
 			}
 			// Apply extension-modified system prompt, or reset to the turn plan.
 			if (result?.systemPrompt) {
-				const preservesCacheBoundary = result.systemPrompt === turnSystemPrompt.prompt;
+				// Spec 052: appended extension text keeps the planned boundary; other changes drop it.
+				const cache = resolveExtendedSystemPromptCache(turnSystemPrompt, result.systemPrompt);
 				this.agent.state.systemPrompt = result.systemPrompt;
-				this.agent.state.systemPromptCacheBoundary = preservesCacheBoundary
-					? turnSystemPrompt.cacheBoundary
-					: undefined;
-				this.agent.state.systemPromptCacheBoundaryBypass = !preservesCacheBoundary;
+				this.agent.state.systemPromptCacheBoundary = cache.cacheBoundary;
+				this.agent.state.systemPromptCacheBoundaryBypass = cache.bypass;
 			} else {
 				// Ensure we're using the turn prompt (in case the previous turn had modifications).
 				this.agent.state.systemPrompt = turnSystemPrompt.prompt;
