@@ -40,6 +40,8 @@ export class ToolExecutionComponent extends Container {
 		details?: any;
 	};
 	private hideComponent = false;
+	/** Spec 026 R1: live until the final (non-partial) result; ChatContainer adds the agent_end backstop. */
+	isRenderSettled = (): boolean => !this.isPartial;
 
 	constructor(
 		toolName: string,
@@ -252,19 +254,17 @@ export class ToolExecutionComponent extends Container {
 			const callRenderer = this.getCallRenderer();
 			if (!callRenderer) {
 				renderContainer.addChild(this.createCallFallback());
-				hasContent = true;
 			} else {
 				try {
 					const component = callRenderer(this.args, theme, this.getRenderContext(this.callRendererComponent));
 					this.callRendererComponent = component;
 					renderContainer.addChild(component);
-					hasContent = true;
 				} catch {
 					this.callRendererComponent = undefined;
 					renderContainer.addChild(this.createCallFallback());
-					hasContent = true;
 				}
 			}
+			hasContent = true;
 
 			if (this.result) {
 				const resultRenderer = this.getResultRenderer();

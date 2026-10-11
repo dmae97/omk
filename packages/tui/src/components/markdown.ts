@@ -1,4 +1,5 @@
 import { Marked, type Token, type Tokens } from "marked";
+import { nextRenderGeneration } from "../render-generation.ts";
 import type { Component } from "../tui.ts";
 import { applyBackgroundToLine, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
 import { type MarkdownLinkTheme, renderMarkdownCodeLink, renderMarkdownLink } from "./markdown-links.ts";
@@ -75,6 +76,7 @@ export class Markdown implements Component {
 	private cachedWidth?: number;
 	private cachedLines?: string[];
 	private streamCache = new MarkdownStreamCache();
+	private renderGeneration = 0;
 
 	constructor(
 		text: string,
@@ -95,10 +97,24 @@ export class Markdown implements Component {
 	setText(text: string): void {
 		if (text === this.text) return;
 		this.text = text;
+		this.renderGeneration = nextRenderGeneration();
 		this.cachedLines = undefined; // keep the streaming prefix; render() checks it still applies
 	}
 
+	getRenderGeneration(): number {
+		return this.renderGeneration;
+	}
+
+	/** Drop every render cache (off-screen windowing) without counting as a change. */
+	releaseRenderCache(): void {
+		this.streamCache.reset();
+		this.cachedText = undefined;
+		this.cachedWidth = undefined;
+		this.cachedLines = undefined;
+	}
+
 	invalidate(): void {
+		this.renderGeneration = nextRenderGeneration();
 		this.streamCache.reset();
 		this.cachedText = undefined;
 		this.cachedWidth = undefined;
