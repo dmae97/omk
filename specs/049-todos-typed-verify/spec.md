@@ -19,7 +19,9 @@ description: "update_todo 항목에 종류·난이도·완료 확인을 붙이�
 - finish-check는 todo를 전혀 보지 않는다. `update_todo`는 `READ_ONLY_TOOLS`에 들어 있어 workspace 변경으로도 세지 않는다(`finish-check.ts`). 검증 근거는 프롬프트에서 뽑은 REQ 문장(`extractRequirements`, 최대 8개)과 그 `REQ n: PASS|FAIL` 응답(`parseFinishCheckLedger`)뿐이다.
 - 그래서 모델이 todo를 `done`으로 바꿔도 그게 사실인지 아무도 확인하지 않는다.
 
-**사용 빈도 근거(중요)**: `/workspace/omk-bench/RESULTS.md` 69–71행(2026-10-03, grok-4.7, thinking=low, 자체 과제 13개)에서 single 65회 동안 `update_todo` 호출은 4회였고, multi의 lead는 61회였다. 즉 headless single 실행에서는 todo가 거의 없을 수 있다. R8(TB 2.x)의 호출 빈도는 아직 세지 않았다. 구현 전에 Bench Analyst가 R8 trajectory에서 실행당 `update_todo` 호출 수를 세고, 그 수가 너무 작으면 이 spec은 TB 점수보다 interactive/multi 품질 개선으로 범위를 좁힌다(질문 1).
+**사용 빈도 근거 (Bench Analyst, R8 집계, 2026-10-11)**: omk 실행 265회 중 123회(46%)가 `update_todo`를 불렀다. 호출은 모두 310번이고, 89개 과제 중 61개에서 나왔다. 부른 실행의 호출 수는 중앙값 3, 최대 4로, 실행당 tool call 약 44회에 비하면 작다. 실행 89회는 첫 tool call이 todo였다. 통과율은 todo를 쓴 실행이 82.9%, 안 쓴 실행이 69.7%였다. 다만 과제 난이도가 섞여 있어서(어떤 과제에서 todo를 쓰는지가 난이도와 엮임) 이 차이를 todo의 효과로 볼 수 없다. 예전 자체 벤치 수치(`/workspace/omk-bench/RESULTS.md` 69–71행, 2026-10-03, grok-4.7 single 65회 중 4회)는 과제와 설정이 달라 이 spec의 근거로 쓰지 않는다.
+
+**035와 겹치는 부분**: todo 검증의 실패는 035의 extra turn 1회를 같이 쓴다(R2-4). 그래서 todo를 쓴 실행에서 049가 더하는 몫은 "REQ 문장이 못 잡는 todo 확인" 정도일 가능성이 크고, 035 효과와 나누어 보기 어렵다. TB A/B에 들어간다면 판정은 todo를 쓴 실행만 대상으로 한다(A/B 절, 질문 1).
 
 ## 제약 (Tech Lead, 2026-10-11)
 
@@ -39,7 +41,7 @@ description: "update_todo 항목에 종류·난이도·완료 확인을 붙이�
 | `difficulty` | `low` \| `medium` \| `high` | 모델의 자기 추정. 037 입력일 뿐, 이 spec은 이 값으로 아무것도 정하지 않는다 |
 | `check` | `{ type: "file", path, minBytes?, contains? }` 또는 `{ type: "command", command, expect? }` | 이 항목이 끝났음을 보이는 방법. `expect`는 `exit0`(기본) 또는 출력에 들어 있어야 할 짧은 문자열 |
 
-- `kind`가 없으면 `unknown`으로 기록한다. 잘못된 enum은 도구 오류가 아니라 `unknown`으로 내린다(모델이 목록 전체를 다시 보내게 만들지 않으려고).
+- `kind`가 없으면 `unknown`으로 기록한다. 잘못된 enum은 도구 오류가 아니라 `unknown`으로 내린다(모델이 목록 전체를 다시 보내게 만들지 않으려고). `unknown`은 `TodoKind`의 값이 아니라 기록용 표시다(R3).
 - `check`는 항목당 하나. `command`는 500자, `contains`는 200자, `path`는 4096자에서 자른다. 확인이 붙은 항목은 목록당 최대 8개(`FINISH_CHECK_MAX_REQUIREMENTS`와 같은 값)만 검증 대상이고, 나머지는 기록만 한다.
 - 도구 결과 텍스트에 한 줄을 더한다: `checks: <n> attached · <k> without check` (숫자만). 플래그가 꺼지면 결과 텍스트도 main과 같다.
 
@@ -55,12 +57,17 @@ finish-check의 check turn은 지금처럼 settle 때 한 번 열린다(조건·
 6. `pending`/`blocked` 항목의 확인은 돌리지 않는다. 끝나지 않은 항목 수만 기록한다.
 7. todo가 없거나 확인이 붙은 항목이 없으면 finish-check는 main과 똑같이 동작한다(메시지 바이트까지 동일).
 
-### R3 - 037로 넘기는 입력 (P1, 037 구현은 하지 않음)
+### R3 - 037과의 계약 (P1, 037 구현은 하지 않음)
 
-- `todo-runtime-state.ts`에 순수 읽기 함수 `activeTodoKind(): TodoKind | undefined`를 추가한다(`nextActiveTodo` 기준).
-- 종류를 v4 router의 `TaskClassV4`(`reasoning-router-v4-weights.ts` 25행)로 옮기는 고정 표를 둔다: `plan→plan`, `explore→review`, `edit→simple-edit`, `debug→debug`, `verify→review`, `unknown→없음`. 037이 이 표를 쓸지, 자기 표를 쓸지는 037이 정한다.
-- effort를 바꾸는 것도 037의 몫이다. 037이 effort를 바꾸더라도 그건 요청 파라미터이지 system prompt가 아니므로 위 제약과 부딪히지 않는다는 점만 적어 둔다.
-- Adaptorch로 넘어가는 경로는 없다. 038과 같은 조건(로컬, HTTP MCP, 근빈 라이선스 서면 OK)이 갖춰지고 037 규칙표가 A/B에서 이긴 뒤의 일이다.
+방 결정(2026-10-11, Tech Lead·Runtime Engineer)이다. 049는 계약만 정하고 037을 구현하지 않는다.
+
+- **공유 타입 하나.** 049가 `packages/coding-agent/src/core/todo-state.ts`(지금 `TodoItem`, `TodoStatus`가 있고 `update_todo` 확장이 import하는 순수 모듈)에서 `export type TodoKind = "plan" | "explore" | "edit" | "debug" | "verify"`를 내보낸다. 값 목록 상수(`TODO_KINDS`)도 같은 파일에 둔다. 이 파일은 I/O가 없고 이미 기본 경로에서 로드되므로, 037이 import해도 꺼짐 비용(R4)이 늘지 않는다.
+- **037의 확장.** 037은 이 타입을 import해서 `Phase = TodoKind | "build" | "run"`으로 넓힌다. `build`와 `run`은 037 안에서만 쓰는 하위 단계라 049의 todo 스키마에는 없다.
+- **`unknown`과 todo 없음은 같다.** 잘못된 종류는 `unknown`이 되고, 037은 `unknown`과 todo가 없는 경우를 똑같이 다루어 자기 tool call 기반 단계 신호로 돌아간다.
+- **우선순위.** `plan`은 todo 종류에서만 나온다(tool call로는 plan을 알 수 없다). 그 밖에는 037이 tool 신호를 우선하고, 어느 쪽에서 왔는지 `llm-call.jsonl`에 `phaseSource: "todo" | "tool"`로 남긴다. 이 로그는 037의 것이다.
+- **읽기 함수.** `todo-runtime-state.ts`에 순수 읽기 함수 `activeTodoKind(): TodoKind | undefined`를 추가한다(`nextActiveTodo` 기준, `unknown`이면 `undefined`). 037은 이것만 읽는다.
+- **사라진 것.** 초안의 `TaskClassV4` 변환표는 뺀다. 037이 `TodoKind`를 직접 쓰기 때문이다.
+- effort를 바꾸는 것은 037의 몫이고, 요청 파라미터라 위 prompt cache 제약과 부딪히지 않는다. Adaptorch로 넘어가는 경로는 없다. 038과 같은 조건(로컬, HTTP MCP, 근빈 라이선스 서면 OK)이 갖춰지고 037 규칙표가 A/B에서 이긴 뒤의 일이다.
 
 ### R4 - 꺼짐 비용 0 (P0, Perf Engineer 기준)
 
@@ -93,31 +100,32 @@ finish-check의 check turn은 지금처럼 settle 때 한 번 열린다(조건·
 ## A/B 측정 (자리만, Bench Analyst가 정함)
 
 - **새 지출 없음.** 고정점, arm, 대상·대조 과제, win 기준, 비용은 Bench Analyst가 033 A/B 결과 이후에 정하고 이 절에 고정한다. 인호의 OK와 크레딧이 있을 때만 돈다.
-- 미리 정해 둘 것: (a) R8에서 실행당 `update_todo` 호출 수와 확인이 붙을 만한 todo 비율(지출 없이 기존 로그로), (b) 비교는 `OMK_FINISH_CHECK_EXTRA_TURN=on`을 양쪽에 켠 상태에서 `OMK_TODO_VERIFY`만 다르게 하는 것이 맞는지(질문 3).
+- TB A/B에 넣을지는 Tech Lead가 정한다(질문 1). 넣는다면 **판정은 todo를 쓴 실행만** 대상으로 한다. R8에서 todo를 안 쓴 54%의 실행에서는 049가 아무것도 하지 않으므로, 전체 통과율로 보면 효과가 묻힌다. 어느 실행이 todo를 썼는지는 `todo-verify.jsonl`의 `todo-snapshot` 줄로 가린다.
+- 미리 정해 둘 것: (a) todo를 쓴 실행의 비율이 arm 사이에 비슷한지(플래그가 todo 사용 자체를 바꾸면 비교가 깨진다), (b) 비교는 `OMK_FINISH_CHECK_EXTRA_TURN=on`을 양쪽에 켠 상태에서 `OMK_TODO_VERIFY`만 다르게 하는 것이 맞는지(질문 3). 035와 같은 extra turn을 쓰므로 A(전부 꺼짐) 대비로 보면 035 효과가 섞인다.
 - 근거는 `todo-verify.jsonl`과 `finish-check.jsonl`. 얻은 회차에 `hostFail` 또는 `fail`→extra turn 기록이 있어야 효과로 본다(034와 같은 모양).
 
 ## Non-goals
 
 - reasoning effort를 정하거나 바꾸는 것 (037).
-- 모델이 todo를 만들도록 매 task 메시지를 덧붙이는 것. 필요하면 질문 1의 답에 따라 별도 결정.
+- 모델이 todo를 만들도록 매 task 메시지를 덧붙이는 것. R8에서 46%가 이미 todo를 쓰므로 지금은 필요하지 않다.
 - host가 모델이 쓴 셸 명령을 직접 실행하는 것.
 - `metacognition/obligations.ts`(change-atom → 필수 obligation)와의 통합. 같은 문제를 다른 쪽에서 보는 모듈이라 나중에 합칠 수 있지만, 지금은 관측 전용이라 건드리지 않는다.
 - TODO 위젯 UI 변경, compaction `todoControlState`에 종류를 넣는 것.
 
 ## 정해 주실 것 (Tech Lead)
 
-1. **todo가 거의 없을 때**: 자체 벤치에서 single은 65회 중 `update_todo` 4회였다. R8 수를 세 보고 낮으면 (a) 이 spec을 interactive/multi용으로 두고 TB A/B에서 빼거나, (b) 첫 사용자 메시지 뒤에 "확인 방법을 붙여 todo를 쓰라"는 메시지를 덧붙이는 별도 플래그를 둘지요? (제 안: a. 덧붙이는 메시지는 매 실행 비용이 들고 todo 호출 turn이 늘어나요.)
+1. **TB A/B에 넣을지**: R8에서 46%의 실행이 todo를 썼으니 "거의 없음"은 아니에요. 다만 todo 검증은 035 extra turn과 겹쳐서 따로 보이는 효과가 작을 수 있어요. 넣는다면 todo를 쓴 실행만으로 판정할게요. (제 안: 033·035 결과가 나온 뒤에 넣어요. 035가 효과 없음이면 049의 TB 효과도 기대하기 어려워요.)
 2. **command 확인을 host가 직접 돌릴지**: 제 안은 "돌리지 않음, 모델이 check turn에서 돌림"이에요. host 실행이 더 믿을 만하지만 승인·샌드박스 경로를 우회해요.
 3. **A/B 기준 arm**: 035 extra turn을 양쪽 다 켠 상태에서 049만 비교할지, 아니면 A(전부 꺼짐) 대비로 볼지요?
-4. **`kind` 목록**: `plan/explore/edit/debug/verify` 다섯 개로 충분한지, 아니면 `TaskClassV4` 일곱 개(`trivial … plan`)를 그대로 쓸지요? 037과 한 목록을 쓰면 변환표가 필요 없어요.
+4. ~~`kind` 목록~~: 정했어요. `TodoKind` 다섯 개를 049가 내보내고 037이 `build`/`run`을 더해요(R3).
 
 ## Expected Files (구현 PR)
 
-- `packages/coding-agent/src/core/todo-state.ts`: `TodoKind`, `TodoDifficulty`, `TodoCheck` 타입(선택 필드)
+- `packages/coding-agent/src/core/todo-state.ts`: `TodoKind`와 `TODO_KINDS`(037과 공유), `TodoDifficulty`, `TodoCheck` 타입(선택 필드)
 - `packages/coding-agent/src/core/todo-verify.ts`: 플래그 해석, 스키마 확장, host 파일 확인, `TODO n:` 메시지·파싱, run log record (순수 + 작은 I/O)
 - `packages/coding-agent/src/core/extensions/builtin/todo-checklist.ts`: 플래그 켜짐에서만 확장 스키마 사용
 - `packages/coding-agent/src/core/extensions/builtin/finish-check.ts`: 플래그 켜짐에서만 todo 검증 연결, 035 실패 항목에 합치기
-- `packages/coding-agent/src/core/todo-runtime-state.ts`: `activeTodoKind()`
+- `packages/coding-agent/src/core/todo-runtime-state.ts`: `activeTodoKind()` (037이 읽는 유일한 입구)
 - `packages/coding-agent/examples/extensions/subagent/worker-env.ts`: `OMK_TODO_VERIFY=0`
 - `packages/coding-agent/docs/environment-variables.md`
 - Tests: `test/todo-verify.test.ts`(AC 2–7, 9), `test/todo-verify-extension.test.ts`(AC 1, 3, 8), `test/todo-verify-flag-off-cold-path.test.ts`(AC 1, 10)
