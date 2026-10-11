@@ -10,13 +10,23 @@ import {
 	resolveDeliverableGuardMode,
 	runBudgetFraction,
 } from "../../deliverable-guard.ts";
-import { createGuardLog } from "../../deliverable-guard-log.ts";
 import { DeliverableStore, type RestoreRecord } from "../../deliverable-store.ts";
+import { appendRunLog, type RunLogRecord, type RunLogValue } from "../../run-log.ts";
 import type { ExtensionAPI } from "../types.ts";
 
 /** Session entry and event-bus channel for restores and the per-settle summary. */
 export const DELIVERABLE_GUARD_ENTRY = "deliverable_guard";
 export const DELIVERABLE_GUARD_EVENT = "deliverable_guard";
+/** `<OMK_RUN_LOG_DIR>/deliverable-guard.jsonl`: steers, restore-point verdicts, restores and summaries (spec 042). */
+export const DELIVERABLE_GUARD_RUN_LOG = "deliverable-guard";
+
+/** Drops undefined fields; records hold paths, reasons and numbers only (spec 042 privacy rule). */
+function toRunLogRecord(fields: Readonly<Record<string, unknown>>): RunLogRecord {
+	const record: Record<string, RunLogValue> = {};
+	for (const [key, value] of Object.entries(fields)) if (value !== undefined) record[key] = value as RunLogValue;
+	return record;
+}
+
 /** How often the timer looks at the clock, so a long single stream still hits 40% and 90%. */
 export const DELIVERABLE_GUARD_POLL_MS = 5000;
 
@@ -38,8 +48,8 @@ export interface DeliverableGuardOptions {
 	readonly timers?: DeliverableGuardTimers;
 	/** Where last-good copies live; default `<tmpdir>/omk-deliverables/<pid>`. */
 	readonly storeRoot?: string;
-	/** Reports the first failed `OMK_DELIVERABLE_GUARD_LOG` write; default stderr. */
-	readonly logError?: (message: string) => void;
+	/** Receives each run-log record; default `appendRunLog("deliverable-guard", record)` (spec 042). */
+	readonly runLog?: (record: RunLogRecord) => void;
 	/** Registers the SIGTERM handler; returns its remover. */
 	readonly onTerminate?: (handler: () => void) => () => void;
 }
@@ -75,7 +85,9 @@ export default function deliverableGuard(omk: ExtensionAPI, options: Deliverable
 	if (mode === "off") return;
 	const fraction = options.budgetFraction ?? runBudgetFraction(env, options.now ?? (() => performance.now()));
 	const timers = options.timers ?? DEFAULT_TIMERS;
-	const log = createGuardLog(env.OMK_DELIVERABLE_GUARD_LOG, options.logError);
+	const runLog =
+		options.runLog ?? ((record: RunLogRecord) => appendRunLog(DELIVERABLE_GUARD_RUN_LOG, record, { env }));
+	const log = (fields: Readonly<Record<string, unknown>>) => runLog(toRunLogRecord(fields));
 	const store = new DeliverableStore(options.storeRoot ?? join(tmpdir(), "omk-deliverables", String(process.pid)));
 
 	let deliverables: Deliverable[] = [];

@@ -98,14 +98,14 @@ Paths that only appear as inputs (`/app/decomp.c`, `/app/filter.py`, `/app/model
 
 ### Requirement 6b - Run log for the A/B (P0)
 
-- Bench runs use `--no-session --mode json`, so session entries and event-bus records never reach `omk.jsonl`. With `OMK_DELIVERABLE_GUARD_LOG=<path>` set and the guard on, the guard appends one JSON object per line to that file:
+- Bench runs use `--no-session --mode json`, so session entries and event-bus records never reach `omk.jsonl`. The guard logs through spec 042's `appendRunLog("deliverable-guard", record)`: with `OMK_RUN_LOG_DIR` set and the guard on, one JSON line per event goes to `<OMK_RUN_LOG_DIR>/deliverable-guard.jsonl`:
   - `steer`: `kind` (`watchdog` | `restore`) and the paths named;
   - `verdict`: at each restore point, per deliverable, the fast-check result and the decision (`keep` | `restore` | `no_copy`), with `path`, `point`, `ok`, `reason`, `ms`;
   - `restore`: every restore record (90%, settle, and SIGTERM), with `path`, `point`, `outcome`, `reason`, sizes, sha256 and the saved-at fraction;
   - `summary`: at each settle, `steers`, `restores`, `guardMs`.
-- Every line has `type` and `ts` (`Date.now()`, epoch ms). Lines never carry file contents or environment values.
-- Writes are synchronous (`appendFileSync`), so the SIGTERM line is on disk before exit. A failed write is swallowed; the first failure prints one diagnostic to stderr.
-- Guard off: no file is created even when the variable is set. Variable unset: nothing is written.
+- `appendRunLog` adds `t` (epoch ms), `elapsedFraction` (shared clock or null), `pid` and `role`; guard records never use those keys. Records hold paths, reasons, numbers and hashes only (spec 042 privacy rule), never file contents or environment values.
+- `appendRunLog` writes with `appendFileSync`, so the SIGTERM line is on disk before exit, and never throws into the run.
+- Guard off: nothing is written even when `OMK_RUN_LOG_DIR` is set. `OMK_RUN_LOG_DIR` unset: nothing is written.
 
 ### Requirement 7 - Gates (P0)
 
@@ -138,12 +138,12 @@ Guard (harness tests with a fake clock and fake budget of 900 s):
 15. **Gating**: flag unset/off → no handlers, timers or signal handlers are registered; flag `on` with a UI → nothing; flag `on` headless → active. No budget → no steer and no 90% restore, but settle restore still works.
 16. **Order with finish-check**: both on, file deleted before settle → the finish-check turn's first tool sees the restored file.
 17. **Cleanup**: the store directory is gone after session shutdown; timers are cleared and do not keep the process alive.
-18. **Run log** (`deliverable-guard-log.test.ts`): guard off + `OMK_DELIVERABLE_GUARD_LOG` set → no file; guard on + variable unset → nothing written; a run with a watchdog steer, a 90% restore and a settle gives `steer`, `verdict`, `restore` and `summary` lines with `ts`; the SIGTERM restore line is written synchronously; an unwritable path does not throw and reports once.
+18. **Run log** (`deliverable-guard-log.test.ts`): guard off + `OMK_RUN_LOG_DIR` set → no file; guard on + variable unset → nothing written; a run with a watchdog steer, a 90% restore and a settle gives `steer`, `verdict`, `restore` and `summary` lines carrying `t`/`elapsedFraction`/`pid`/`role`; no guard record sets those keys; no file contents or env values; the SIGTERM restore line is written synchronously.
 
 ## A/B measurement (Bench Analyst decides)
 
 - A: main with #62, #63 and this code, flag off. B: same build, `OMK_DELIVERABLE_GUARD=on`. One SHA, two env settings.
-- Both arms set `OMK_DELIVERABLE_GUARD_LOG` to a file in the run dir (in A no file appears, which confirms the flag was off); the adapter copies it into the trial's `agent/` directory. Steers, restores by reason and guard seconds are read from that file.
+- Both arms set `OMK_RUN_LOG_DIR` to a directory in the run dir (in A no `deliverable-guard.jsonl` appears, which confirms the flag was off); the adapter copies it into the trial's `agent/` directory. Steers, restores by reason and guard seconds are read from that file.
 - Targets: write-compressor, gpt2-codegolf, path-tracing-reverse, break-filter-js-from-html, extract-moves-from-video, train-fasttext (the T1 tasks above). tune-mjcf is left out: its R8 loss was a better candidate never saved, which this spec does not address.
 - Controls: 2 or 3 tasks with an output file that omk passed 3/3 in R8, to check that the steer and checks add no timeouts. At least one control first writes its output after 40% of the budget and still passes, so a mid-work steer is tested on a run that does not need it.
 - 3 runs per task per arm. Report reward, steers sent, restores by reason, guard seconds per run, cost. A noise-level difference is not a win.
@@ -168,7 +168,6 @@ Guard (harness tests with a fake clock and fake budget of 900 s):
 
 - `specs/034-deliverable-guard/spec.md`: this spec (first commit)
 - `packages/coding-agent/src/core/deliverable-guard.ts`: `extractDeliverables`, size-limit parsing, flag parsing, steer texts, `runBudgetFraction` (pure)
-- `packages/coding-agent/src/core/deliverable-guard-log.ts`: the `OMK_DELIVERABLE_GUARD_LOG` writer
 - `packages/coding-agent/src/core/deliverable-store.ts`: last-good copies, restore decisions, SIGTERM restore, cleanup (split from the extension for the module-size ceiling)
 - `packages/coding-agent/src/core/fast-check.ts`: `fastCheckFile` (shared with the per-edit diagnostics spec)
 - `packages/coding-agent/src/core/extensions/builtin/deliverable-guard.ts`: events, timer, steers, session entries
