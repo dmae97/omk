@@ -39,12 +39,24 @@ Root cause: `packages/tui/src/tui.ts` `doRender`, height-change branch (`fullRen
 
 A resize keeps the cursor's row and the rows above it (terminals scroll or pull rows around the cursor; they do not move it off its row). So on a height change, before the existing `\x1b[H` tail repaint, omk writes (inside the same synchronized-output block):
 
-1. move up from the cursor's content row (`hardwareCursorRow`) to `first` = the first row that differs from the last frame, but not below the cursor's row, and not earlier than `REPAINT_BUDGET_SCREENS` screens above the end;
+1. move up from the cursor's content row (`hardwareCursorRow`) to `first`, then
 2. rewrite rows `first`..end with `\x1b[2K` + row + `\r\n`; rows that no longer fit scroll into scrollback in order.
+
+With `len = newLines.length`, `top = min(cursorRow, len − 1)` and `changed` = the first row `< top` that differs from the last frame (else `top`):
+
+`first = min(max(changed, len − height × REPAINT_BUDGET_SCREENS, 0), top)`
+
+The budget (`REPAINT_BUDGET_SCREENS` = 4) only limits how far **up** already-printed rows are re-sent; it never moves `first` below the cursor's row. (The first version clamped from below and then moved the cursor *down* to `first`: cursor-down stops at the screen bottom, so when one resize frame appended more than the budget, e.g. 100 rows at 24 → 20 rows with +120 rows, the rows between the cursor and `first` were never written. Review Major 1.) `capped` = `first > changed` (the budget moved the start down).
+
+**Rows are compared before overlays.** `changed` compares the rows the components rendered (`ResizeResync` keeps the pre-overlay rows of the last two frames, `previousBase`/`currentBase`), not the composited `previousLines`. A full-height overlay (the pinned right rail) shifts against the content when the screen scrolls, so the composited rows above the cursor all looked changed and every resize step re-sent the whole budget (100×40, rail overlay, 40 → 24 → 40 dragged one row at a time three times: rows 7× in scrollback). What is written is still the composited frame. (Review Major 2.)
+
+**A frame that fits the screen is not resynced** (`len ≤ height`): the tail repaint writes all of it from the top, so nothing can be lost. Resyncing it was harmful when an overlay pads a short frame to the screen height: those rows are screen rows, not scrollback-anchored rows, so after a grow pulled rows back from scrollback the cursor's row no longer mapped to the same content row and the line feeds pushed the pulled-back rows into scrollback again (10 rows + rail, 40 → 24 → 40 → 12 → 40: every row 3×; main 1×). (Review Minor 2.)
 
 The tail repaint then lands on a screen that already holds the same rows. If the move up is clamped at the screen top (the first changed row already scrolled away), the changed rows print below their stale copies: duplicated, never lost. When nothing changed and no rows were dropped, step 2 rewrites only the cursor row and the rows below it in place.
 
-Code: `packages/tui/src/terminal-resync.ts` (`resyncAfterResize`, plus `REPAINT_BUDGET_SCREENS`, moved out of `TUI` so both repairs share it), called from the height-change branch of `TUI.doRender`. Width changes keep the existing path (the terminal reflows rows, so row identity does not survive), and so does Termux.
+`OMK_DEBUG_REDRAW=1` logs the decision on the height-change line: `terminal height changed (A -> B; resync first=F changed=C cursorRow=R capped=bool)`, or `resync none (frame fits: new=N <= height=H)`.
+
+Code: `packages/tui/src/terminal-resync.ts` (`resyncAfterResize`, `resyncStart`, `ResizeResync`, plus `REPAINT_BUDGET_SCREENS`, moved out of `TUI` so both repairs share it), called from the height-change branch of `TUI.doRender`. Width changes keep the existing path (the terminal reflows rows, so row identity does not survive), and so does Termux.
 
 ### Resize log: `OMK_TUI_RESIZE_LOG=<path>`
 
@@ -59,7 +71,9 @@ When set, omk appends JSON lines to `<path>` (synchronously, `appendFileSync`):
 
 **Bounds.** A resize line's `bytes` is an **upper bound** for where the resize hit the byte stream: bytes omk wrote but the terminal (tmux) had not read yet may be processed at the new size. The external `pipe-pane` file size taken before `resize-window` is a **lower bound**. The replayer judges at both ends and at the midpoint.
 
-**Notes.** omk sends itself SIGWINCH on start (stale size after suspend), which logs one line with unchanged size. A suspend/resume cycle (external editor, Ctrl+Z) stops and restarts the terminal, so there can be more than one `final` line; readers take the last one. Writes that bypass the terminal writer (the external-editor notice printed with `process.stdout.write` while the TUI is stopped) are not counted.
+**Counted raw writes.** Terminal bytes written from outside the render path go through `writeTerminalRaw(data)` (exported by `omk-tui`): while a TUI is writing it routes through that TUI's `TerminalOutput` (registered on its first write, cleared by `stop`), so `bytes` and the output stats count them; with no TUI running it writes to stdout as before. Users: the completion-sound BEL (`coding-agent/src/core/completion-sound-io.ts`) and the OSC 52 clipboard sequence (`coding-agent/src/utils/clipboard.ts`). (Review Major 4.)
+
+**Notes.** Node emits `resize` only when the tty size actually changed, so the SIGWINCH omk sends itself on start (stale size after suspend) logs a line only if the size changed while omk was stopped; there are no same-size lines. A suspend/resume cycle (external editor, Ctrl+Z) stops and restarts the terminal, so there can be more than one `final` line; readers take the last one. Writes made while the TUI is stopped (the external-editor notice printed with `process.stdout.write`) are not counted. One module-level `exit` listener serves every `TerminalOutput` (each `stop` removes its own entry, the next write re-adds it), so creating several TUIs does not stack listeners. (Review Minor 3.)
 
 **Zero cost when unset**: no log object is created, and `TerminalOutput.withResizeLog` returns the original resize handler unchanged, so a resize does no extra work and no file is touched.
 
@@ -71,9 +85,15 @@ Code: `packages/tui/src/terminal-resize-log.ts` (`TerminalResizeLog`), owned by 
    - shrink 40 → 24 rows with three footer rows below the cursor: every transcript row is in scrollback exactly once (main loses 3);
    - shrink 80 → 24 while four rows are appended in the resize frame: every row exactly once (main loses 4);
    - the main-r4 shape (stream, terminal resized, one frame rendered for the old height, resize frame with 4 more rows; 40 → 80 → 24 → 40 with footer rows): no row lost, none printed more than twice (main loses 4; the 2× copies from height *grows* exist on main too and are unchanged).
+   - the resize frame appends more rows than the budget (100 rows, 24 → 20, +120 rows): every row exactly once (the first version of this fix lost `C100`..`C140`);
+   - a row above the cursor changes in the resize frame (80 rows + 3 footer rows, 40 → 24, `C59` edited): the edited row is in scrollback exactly once and the stale one is gone;
+   - full-height right overlay, 100×40, 100 rows + footer, 40 → 24 → 40 dragged one row per event three times: no row lost, none twice (the first version: rows 7×);
+   - 10 short rows + the same overlay, 40 → 24 → 40 → 12 → 40: every row exactly once (the first version: 3×);
+   - `OMK_DEBUG_REDRAW` height lines carry `first`/`changed`/`cursorRow`/`capped`.
+   Unit tests (`terminal-resync.test.ts`): start at the first changed row; at the cursor row when nothing changed; nothing when the frame fits; budget cap boundary; never below the cursor; overlay-only changes do not count.
 2. Existing `regression-resize-scrollback-stacking` and `regression-repaint-budget` tests still pass; the full `packages/tui` suite passes.
-3. `packages/tui/test/terminal-resize-log.test.ts`: resize lines carry exact UTF-8 `bytes`, `cols`/`rows`, `prevCols`/`prevRows` and monotonic `t`, and are on disk before the resize handler runs; stop appends `{"final":true,"bytes":N}`; `ProcessTerminal` reads the variable; unset returns the same handler and writes no file.
-4. Gates: `biome check` on changed files, `check-module-size`, `check-import-cycles`, `tsgo --noEmit` for `packages/tui`.
+3. `packages/tui/test/terminal-resize-log.test.ts`: resize lines carry exact UTF-8 `bytes`, `cols`/`rows`, `prevCols`/`prevRows` and monotonic `t`, and are on disk before the resize handler runs; stop appends `{"final":true,"bytes":N}`; `ProcessTerminal` reads the variable; unset returns the same handler and writes no file; `writeTerminalRaw` bytes are counted while a TUI writes and go to stdout after stop; at most one `exit` listener however many outputs log. `coding-agent` tests: the BEL and the OSC 52 sequence reach the running `ProcessTerminal`'s stream and its `submittedBytes`.
+4. Gates: `biome check` on changed files, `check-module-size`, `check-import-cycles`, `tsgo --noEmit` for `packages/tui` and `packages/coding-agent`, `coding-agent` vitest.
 5. Real run: the scrollback-20 scenario (`capture_height79.py` with `OMK_TUI_RESIZE_LOG` added) on the fixed build loses no strict marker in tmux scrollback, and its `resize-log.jsonl` has one line per resize plus a final line. Results are listed under Verification.
 
 ## Non-goals
@@ -90,7 +110,8 @@ Code: `packages/tui/src/terminal-resize-log.ts` (`TerminalResizeLog`), owned by 
 - `packages/tui/src/terminal-resync.ts` (new), `packages/tui/src/tui.ts`
 - `packages/tui/test/regression-resize-scrollback-loss.test.ts` (new), `packages/tui/test/virtual-terminal.ts` (`resizeEmulatorOnly`, `announceResize`), `packages/tui/test/regression-repaint-budget.test.ts` (comment points at the moved constant)
 - `packages/tui/src/terminal-resize-log.ts` (new), `packages/tui/src/terminal-output.ts`, `packages/tui/src/terminal.ts`
-- `packages/tui/test/terminal-resize-log.test.ts` (new)
+- `packages/tui/test/terminal-resize-log.test.ts` (new), `packages/tui/test/terminal-resync.test.ts` (new), `packages/tui/src/index.ts` (`writeTerminalRaw`)
+- `packages/coding-agent/src/core/completion-sound-io.ts`, `packages/coding-agent/src/utils/clipboard.ts`, `packages/coding-agent/test/completion-sound.test.ts`, `packages/coding-agent/test/clipboard.test.ts`
 
 ## Verification (2026-10-11 KST, Tech Lead)
 
@@ -106,4 +127,6 @@ Interleaved main/fix pairs. 0/10 vs 3/10 alone is weak evidence (Fisher one-side
 
 Resize log, fix runs: every run logged one line per resize; mapped to raw pty offsets with the ONLCR rule above, each omk offset is at or after the `pipe-pane` offset (0 to 6.4 KB later, about one frame), as an upper bound should be. On the run that also had `OMK_TUI_WRITE_LOG`, the final line maps exactly to the end of the raw capture (4,452,913 bytes). The 10 runs of the first batch were built before the exit hook and have no final line (`tmux kill-server` exits through EIO without a TUI stop); the 11 runs after it all have one. Replaying the fix and #79+fix captures at the omk offset and at the midpoint: no loss in any of them. At pipe offset −64 (earlier than the lower bound) 2 of the 10 fix runs show a loss in replay; tmux itself lost nothing in those runs.
 
-Not verified: real terminals (iTerm2, Windows Terminal/conpty, kitty, Alacritty) — whether each keeps the cursor's row across a height resize the way xterm.js and tmux do; Termux; resizes while an overlay is open; #79's own verdict (it needs a rebase onto this and a fresh 20-pair run).
+The real runs above used the first version (`7d75aac`). The review changes (budget never below the cursor, pre-overlay comparison, no resync for frames that fit, counted raw writes) are covered by the tests in criteria 1 and 3 and were not re-run in tmux.
+
+Not verified: real terminals (iTerm2, Windows Terminal/conpty, kitty, Alacritty) — whether each keeps the cursor's row across a height resize the way xterm.js and tmux do; Termux; resizes with a real overlay open in a real terminal (covered in xterm.js only); #79's own verdict (it needs a rebase onto this and a fresh 20-pair run).
