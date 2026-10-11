@@ -2,10 +2,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createRunCoordinator } from "../src/core/agent-session-services.ts";
 import { planVerifiedRun, RunCoordinator } from "../src/core/run-execution-api.ts";
 import { journalPath, VerifiedRunJournal } from "../src/core/verified-run/journal.ts";
 import type { RunEvent } from "../src/core/verified-run/run-types.ts";
+import { createRunCoordinator } from "../src/core/verified-run-session.ts";
 import { dagFixture } from "./verified-run-dag-fixture.ts";
 
 type Dispatch = Extract<RunEvent, { kind: "dispatch" }>;

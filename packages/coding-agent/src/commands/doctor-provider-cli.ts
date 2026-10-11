@@ -12,6 +12,7 @@
  */
 
 import { join } from "node:path";
+import { DOCTOR_PROVIDER_FLAG } from "../cli/subcommand-words.ts";
 import { AuthStorage } from "../core/auth-storage.ts";
 import { ModelRegistry } from "../core/model-registry.ts";
 import {
@@ -25,7 +26,6 @@ import {
 } from "./doctor-provider.ts";
 import { createProviderDoctorTransport } from "./doctor-provider-transport.ts";
 
-export const DOCTOR_PROVIDER_FLAG = "--doctor-provider";
 const USAGE = `Usage: omk provider doctor <provider-id> [--level <0|1>] [--model <model-id>] [--timeout <ms>] [--probe-model <model-id>] (legacy alias: omk ${DOCTOR_PROVIDER_FLAG} <provider-id>)`;
 const HELP = [
 	"Provider doctor: diagnose one provider's configuration and endpoint reachability.",
