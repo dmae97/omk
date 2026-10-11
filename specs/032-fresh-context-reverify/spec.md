@@ -77,7 +77,7 @@ Why not a separate process or a subagent:
 
 **Guards during the verifier turn**:
 - `write` and `edit` tool calls are blocked through the `tool_call` event, with a reason pointing to `/tmp/omk-verify/`. `bash` is not policed.
-- The deliverables list is hashed (size and sha256, files ≤ 64 MB, at most 4 files read at once) before and after the turn. A change is recorded as `mutated: true`, and the verification is **void** (decision 6). Its verdict is recorded as `void`, its findings are kept for the record but generate no fix turn, and its REQ measurements are not used either. omk does not restore the changed deliverable; restoring belongs to candidate 2 (`specs/034`, artifact preservation). Spec 035's own check-ledger result can still call for the single extra turn.
+- The deliverables list is hashed (size and sha256, files ≤ 8 MiB; larger files compare by size only; at most 4 files read at once) before and after the turn. A change is recorded as `mutated: true`, and the verification is **void** (decision 6). Its verdict is recorded as `void`, its findings are kept for the record but generate no fix turn, and its REQ measurements are not used either. omk does not restore the changed deliverable; restoring belongs to candidate 2 (`specs/034`, artifact preservation). Spec 035's own check-ledger result can still call for the single extra turn.
 
 **Caps**:
 - `FINISH_CHECK_REVERIFY_MAX_TOOL_CALLS = 10`, then a wrap-up steer. The verifier gets its own wrap-up text (`FINISH_CHECK_REVERIFY_WRAP_UP_MESSAGE`: stop testing, do not change the deliverables, reply with the `VERIFY` lines and `VERDICT`) instead of the check turn's, which asks for a one-line summary. The check turn's tool cap does not count verifier or fix-turn calls.
@@ -229,7 +229,7 @@ They will go to the shared run log (`appendRunLog("finish-check", record)` writi
 - `specs/032-fresh-context-reverify/spec.md`: this spec
 - `packages/coding-agent/src/core/finish-check.ts`: `resolveFinishCheckReverify`, `FINISH_CHECK_REVERIFY_FRACTION`, `shouldReverify`
 - `packages/coding-agent/src/core/finish-check-reverify.ts`: pure module (instruction, deliverables list, reply parsing, fresh-context filter, fix message, cost totals, caps)
-- `packages/coding-agent/src/core/finish-check-reverify-hash.ts`: deliverable hashing (size and sha256, files ≤ 64 MB, 4 reads at once)
+- `packages/coding-agent/src/core/finish-check-reverify-hash.ts`: deliverable hashing (size and sha256, files ≤ 8 MiB, 4 reads at once)
 - `packages/coding-agent/src/core/extensions/builtin/finish-check-reverify-stage.ts`: verifier turn wiring (context filter, write/edit block, caps, records)
 - `packages/coding-agent/src/core/extensions/builtin/finish-check.ts`: the budget reader, the trigger, and the shared fix turn
 - `packages/coding-agent/src/core/extensions/builtin/finish-check-reply.ts`: reply readers moved out of the extension (module size)

@@ -1,8 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { changedDeliverables, hashDeliverables } from "../src/core/finish-check-reverify-hash.ts";
+import {
+	changedDeliverables,
+	FINISH_CHECK_REVERIFY_MAX_HASH_BYTES,
+	hashDeliverables,
+} from "../src/core/finish-check-reverify-hash.ts";
 
 // spec 032: deliverables are hashed before and after the verifier; a change makes the verification void.
 
@@ -44,5 +48,14 @@ describe("finish-check reverify: deliverable hashes", () => {
 		const cwd = workspace();
 		writeFileSync(join(cwd, "big.bin"), "0123456789");
 		expect(await hashDeliverables(["big.bin"], cwd, 4)).toEqual({ "big.bin": "10:too-large" });
+	});
+
+	it("compares files over 8 MiB by size only by default", async () => {
+		const cwd = workspace();
+		const size = 8 * 1024 * 1024 + 1;
+		writeFileSync(join(cwd, "big.bin"), "");
+		truncateSync(join(cwd, "big.bin"), size);
+		expect(FINISH_CHECK_REVERIFY_MAX_HASH_BYTES).toBe(8 * 1024 * 1024);
+		expect(await hashDeliverables(["big.bin"], cwd)).toEqual({ "big.bin": `${size}:too-large` });
 	});
 });

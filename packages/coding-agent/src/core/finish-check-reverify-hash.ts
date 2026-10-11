@@ -8,7 +8,7 @@ import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
 
 /** Files above this size are compared by size only. */
-export const FINISH_CHECK_REVERIFY_MAX_HASH_BYTES = 64 * 1024 * 1024;
+export const FINISH_CHECK_REVERIFY_MAX_HASH_BYTES = 8 * 1024 * 1024;
 
 /** Deliverables fingerprinted at once. */
 export const FINISH_CHECK_REVERIFY_HASH_CONCURRENCY = 4;
