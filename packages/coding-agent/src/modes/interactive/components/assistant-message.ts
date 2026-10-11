@@ -1,5 +1,5 @@
 import type { AssistantMessage } from "omk-ai";
-import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "omk-tui";
+import { Container, Markdown, type MarkdownTheme, nextRenderGeneration, Spacer, Text } from "omk-tui";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 
 type ContentViewKind = "text" | "thinking" | "hidden-thinking";
@@ -25,6 +25,15 @@ export class AssistantMessageComponent extends Container {
 	private lastMessage?: AssistantMessage;
 	private hasToolCalls = false;
 	private readonly contentViews = new Map<number, ContentView>();
+	/**
+	 * Spec 026 R1: a message created empty for `message_start` is live until its
+	 * `message_end` (or the `agent_end` backstop) calls `markRenderSettled()`.
+	 * A message passed to the constructor (history, resume) is already final.
+	 */
+	private renderSettled: boolean;
+	/** Spec 026 R2: +1 per `updateContent`, i.e. per received snapshot. */
+	private contentRevision = 0;
+	private contentGeneration = 0;
 
 	constructor(
 		message?: AssistantMessage,
@@ -37,6 +46,7 @@ export class AssistantMessageComponent extends Container {
 		this.hideThinkingBlock = hideThinkingBlock;
 		this.markdownTheme = markdownTheme;
 		this.hiddenThinkingLabel = hiddenThinkingLabel;
+		this.renderSettled = message !== undefined;
 
 		// Container for text/thinking content
 		this.contentContainer = new Container();
@@ -45,6 +55,29 @@ export class AssistantMessageComponent extends Container {
 		if (message) {
 			this.updateContent(message);
 		}
+	}
+
+	isRenderSettled(): boolean {
+		return this.renderSettled;
+	}
+
+	markRenderSettled(): void {
+		if (this.renderSettled) return;
+		this.renderSettled = true;
+		this.contentGeneration = nextRenderGeneration();
+	}
+
+	override getRenderGeneration(): number {
+		return Math.max(super.getRenderGeneration(), this.contentGeneration);
+	}
+
+	/** The snapshot most recently passed to `updateContent` (never compared by identity). */
+	getMessage(): AssistantMessage | undefined {
+		return this.lastMessage;
+	}
+
+	getContentRevision(): number {
+		return this.contentRevision;
 	}
 
 	override invalidate(): void {
@@ -110,7 +143,11 @@ export class AssistantMessageComponent extends Container {
 	}
 
 	updateContent(message: AssistantMessage): void {
+		// Every message_update delivers a new frozen snapshot: swap the reference and
+		// bump the generation unconditionally instead of diffing object identity.
 		this.lastMessage = message;
+		this.contentRevision += 1;
+		this.contentGeneration = nextRenderGeneration();
 
 		// Clear content container
 		this.contentContainer.clear();

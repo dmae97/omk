@@ -1,3 +1,4 @@
+import { nextRenderGeneration } from "../render-generation.ts";
 import type { Component } from "../tui.ts";
 import { applyBackgroundToLine, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
 
@@ -14,6 +15,7 @@ export class Text implements Component {
 	private cachedText?: string;
 	private cachedWidth?: number;
 	private cachedLines?: string[];
+	private renderGeneration = 0;
 
 	constructor(text: string = "", paddingX: number = 1, paddingY: number = 1, customBgFn?: (text: string) => string) {
 		this.text = text;
@@ -25,6 +27,7 @@ export class Text implements Component {
 	setText(text: string): void {
 		if (text === this.text) return;
 		this.text = text;
+		this.renderGeneration = nextRenderGeneration();
 		this.cachedText = undefined;
 		this.cachedWidth = undefined;
 		this.cachedLines = undefined;
@@ -32,12 +35,25 @@ export class Text implements Component {
 
 	setCustomBgFn(customBgFn?: (text: string) => string): void {
 		this.customBgFn = customBgFn;
+		this.renderGeneration = nextRenderGeneration();
+		this.cachedText = undefined;
+		this.cachedWidth = undefined;
+		this.cachedLines = undefined;
+	}
+
+	getRenderGeneration(): number {
+		return this.renderGeneration;
+	}
+
+	/** Off-screen windowing: drop wrapped lines without counting as a change. */
+	releaseRenderCache(): void {
 		this.cachedText = undefined;
 		this.cachedWidth = undefined;
 		this.cachedLines = undefined;
 	}
 
 	invalidate(): void {
+		this.renderGeneration = nextRenderGeneration();
 		this.cachedText = undefined;
 		this.cachedWidth = undefined;
 		this.cachedLines = undefined;

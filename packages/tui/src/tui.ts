@@ -7,33 +7,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { performance } from "node:perf_hooks";
 import { isKeyRelease, matchesKey } from "./keys.ts";
+import { extractKittyImageIds, LineResetMemo, SEGMENT_RESET } from "./line-reset-memo.ts";
+import { maxChildGeneration, nextRenderGeneration, releaseRenderCache } from "./render-generation.ts";
 import type { Terminal } from "./terminal.ts";
 import { finishTerminalFrame } from "./terminal-final-frame.ts";
 import { deleteKittyImage, getCapabilities, isImageLine, setCellDimensions } from "./terminal-image.ts";
 import { isTermuxSession, REPAINT_BUDGET_SCREENS, ResizeResync } from "./terminal-resync.ts";
-import { extractSegments, normalizeTerminalOutput, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils.ts";
-
-const KITTY_SEQUENCE_PREFIX = "\x1b_G";
-
-function extractKittyImageIds(line: string): number[] {
-	const sequenceStart = line.indexOf(KITTY_SEQUENCE_PREFIX);
-	if (sequenceStart === -1) return [];
-
-	const paramsStart = sequenceStart + KITTY_SEQUENCE_PREFIX.length;
-	const paramsEnd = line.indexOf(";", paramsStart);
-	if (paramsEnd === -1) return [];
-
-	const params = line.slice(paramsStart, paramsEnd);
-	for (const param of params.split(",")) {
-		const [key, value] = param.split("=", 2);
-		if (key !== "i" || value === undefined) continue;
-		const id = Number(value);
-		if (Number.isInteger(id) && id > 0 && id <= 0xffffffff) {
-			return [id];
-		}
-	}
-	return [];
-}
+import { extractSegments, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils.ts";
 
 /**
  * Component interface - all components must implement this
@@ -62,6 +42,28 @@ export interface Component {
 	 * Called when theme changes or when component needs to re-render from scratch.
 	 */
 	invalidate(): void;
+
+	/**
+	 * Optional: stamp that rises on every visible change. Take values from
+	 * `nextRenderGeneration()` (render-generation.ts) so a container's
+	 * max-of-children stays monotonic. Off-screen windowing re-renders a frozen
+	 * child only when this moves. Missing ⇒ treated as immutable once rendered.
+	 */
+	getRenderGeneration?(): number;
+
+	/**
+	 * Optional: false while the component is still expected to change (a
+	 * streaming message, a running tool). Missing ⇒ settled.
+	 */
+	isRenderSettled?(): boolean;
+
+	/**
+	 * Optional: drop render caches that `render()` can rebuild from source.
+	 * Off-screen windowing calls it once a child freezes (its frozen lines are
+	 * then the only retained copy). Must not change the render generation or
+	 * the output of the next `render()`. Missing ⇒ nothing is released.
+	 */
+	releaseRenderCache?(): void;
 }
 
 type InputListenerResult = { consume?: boolean; data?: string } | undefined;
@@ -227,20 +229,30 @@ type OverlayFocusRestorePolicy = "clear" | "preserve";
  */
 export class Container implements Component {
 	children: Component[] = [];
+	/** Stamp of the last structural change (see render-generation.ts). */
+	protected structureGeneration = 0;
 
 	addChild(component: Component): void {
 		this.children.push(component);
+		this.structureGeneration = nextRenderGeneration();
 	}
 
 	removeChild(component: Component): void {
 		const index = this.children.indexOf(component);
 		if (index !== -1) {
 			this.children.splice(index, 1);
+			this.structureGeneration = nextRenderGeneration();
 		}
 	}
 
 	clear(): void {
 		this.children = [];
+		this.structureGeneration = nextRenderGeneration();
+	}
+
+	/** Raises whenever this container's child list or any descendant changes. */
+	getRenderGeneration(): number {
+		return maxChildGeneration(this.structureGeneration, this.children);
 	}
 
 	invalidate(): void {
@@ -249,15 +261,17 @@ export class Container implements Component {
 		}
 	}
 
+	/** Forwards to children; a container keeps no render cache of its own. */
+	releaseRenderCache(): void {
+		for (const child of this.children) releaseRenderCache(child);
+	}
+
 	render(width: number): string[] {
-		const lines: string[] = [];
-		for (const child of this.children) {
-			const childLines = child.render(width);
-			for (const line of childLines) {
-				lines.push(line);
-			}
-		}
-		return lines;
+		const parts: string[][] = [];
+		for (const child of this.children) parts.push(child.render(width));
+		// Always a fresh array (callers mutate it). Native concat bulk-copies large
+		// children such as a windowed transcript instead of pushing row by row.
+		return parts.length < 8192 ? ([] as string[]).concat(...parts) : parts.flat();
 	}
 }
 
@@ -268,6 +282,7 @@ export class TUI extends Container {
 	public terminal: Terminal;
 	private previousLines: string[] = [];
 	private previousKittyImageIds = new Set<number>();
+	private readonly lineResets = new LineResetMemo();
 	private previousWidth = 0;
 	private previousHeight = 0;
 	private focusedComponent: Component | null = null;
@@ -1032,29 +1047,6 @@ export class TUI extends Container {
 		return result;
 	}
 
-	private static readonly SEGMENT_RESET = "\x1b[0m\x1b]8;;\x07";
-
-	private applyLineResets(lines: string[]): string[] {
-		const reset = TUI.SEGMENT_RESET;
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			if (!isImageLine(line)) {
-				lines[i] = normalizeTerminalOutput(line) + reset;
-			}
-		}
-		return lines;
-	}
-
-	private collectKittyImageIds(lines: string[]): Set<number> {
-		const ids = new Set<number>();
-		for (const line of lines) {
-			for (const id of extractKittyImageIds(line)) {
-				ids.add(id);
-			}
-		}
-		return ids;
-	}
-
 	private deleteKittyImages(ids: Iterable<number>): string {
 		let buffer = "";
 		for (const id of ids) {
@@ -1064,6 +1056,9 @@ export class TUI extends Container {
 	}
 
 	private expandLastChangedForKittyImages(firstChanged: number, lastChanged: number): number {
+		// previousKittyImageIds is the id set of exactly these previousLines: when it
+		// is empty no row can match, so skip the O(history) scan.
+		if (this.previousKittyImageIds.size === 0) return lastChanged;
 		let expandedLastChanged = lastChanged;
 		for (let i = firstChanged; i < this.previousLines.length; i++) {
 			if (extractKittyImageIds(this.previousLines[i]).length > 0) {
@@ -1113,7 +1108,7 @@ export class TUI extends Container {
 		const afterPad = Math.max(0, afterTarget - base.afterWidth);
 
 		// Compose result
-		const r = TUI.SEGMENT_RESET;
+		const r = SEGMENT_RESET;
 		const result =
 			base.before +
 			" ".repeat(beforePad) +
@@ -1195,7 +1190,7 @@ export class TUI extends Container {
 		// Extract cursor position before applying line resets (marker must be found first)
 		const cursorPos = this.extractCursorPosition(newLines, height);
 
-		newLines = this.applyLineResets(newLines);
+		newLines = this.lineResets.apply(newLines);
 
 		// Helper to optionally clear the visible viewport and render all new lines
 		const fullRender = (clear: boolean, fromRow?: number, resync = ""): void => {
@@ -1261,7 +1256,7 @@ export class TUI extends Container {
 			this.previousViewportTop = Math.max(0, bufferLength - height);
 			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousLines = newLines;
-			this.previousKittyImageIds = this.collectKittyImageIds(newLines);
+			this.previousKittyImageIds = this.lineResets.kittyImageIds;
 			this.previousWidth = width;
 			this.previousHeight = height;
 		};
@@ -1299,18 +1294,24 @@ export class TUI extends Container {
 		}
 
 		// Find first and last changed lines
+		// Scan inward from both ends: unchanged rows compare by reference, and a
+		// change far above the viewport (which shifts every row below it) no longer
+		// costs a content comparison per history row.
 		let firstChanged = -1;
 		let lastChanged = -1;
 		const maxLines = Math.max(newLines.length, this.previousLines.length);
+		const rowDiffers = (i: number): boolean =>
+			(i < this.previousLines.length ? this.previousLines[i] : "") !== (i < newLines.length ? newLines[i] : "");
 		for (let i = 0; i < maxLines; i++) {
-			const oldLine = i < this.previousLines.length ? this.previousLines[i] : "";
-			const newLine = i < newLines.length ? newLines[i] : "";
-
-			if (oldLine !== newLine) {
-				if (firstChanged === -1) {
-					firstChanged = i;
-				}
+			if (rowDiffers(i)) {
+				firstChanged = i;
+				break;
+			}
+		}
+		for (let i = maxLines - 1; firstChanged !== -1 && i >= firstChanged; i--) {
+			if (rowDiffers(i)) {
 				lastChanged = i;
+				break;
 			}
 		}
 		if (firstChanged !== -1) {
@@ -1392,7 +1393,7 @@ export class TUI extends Container {
 			}
 			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousLines = newLines;
-			this.previousKittyImageIds = this.collectKittyImageIds(newLines);
+			this.previousKittyImageIds = this.lineResets.kittyImageIds;
 			this.previousWidth = width;
 			this.previousHeight = height;
 			this.previousViewportTop = prevViewportTop;
@@ -1544,7 +1545,7 @@ export class TUI extends Container {
 		this.positionHardwareCursor(cursorPos, newLines.length);
 
 		this.previousLines = newLines;
-		this.previousKittyImageIds = this.collectKittyImageIds(newLines);
+		this.previousKittyImageIds = this.lineResets.kittyImageIds;
 		this.previousWidth = width;
 		this.previousHeight = height;
 	}

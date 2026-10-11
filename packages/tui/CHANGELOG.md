@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Long transcripts cost far less per-frame work. The new `WindowedContainer` freezes settled children above a live-line budget into bounded line segments and stops re-rendering them; a frozen child that changes is re-rendered alone and only its segment is rebuilt. On a 100k-line headless transcript a keypress frame drops from ~33 ms to ~3 ms mean, and a change to an old, off-screen message stays under 5 ms p95 (was 35–38 ms mean). Per-frame cost still grows slowly with history (each frame scans frozen children and copies the line list twice): a 100k-line keypress frame is ≈3.3× the 25k one.
+- `WindowedContainer.setViewportRows(() => rows)` makes the live-line budget follow the terminal: `max(120, 2 × rows)`, re-read every render; a taller terminal thaws the frozen prefix. Without it the budget stays 120 (`setLiveLineBudget` fixes it).
+- `LineResetMemo` (split out of `tui.ts`) reuses the previous frame's reset output for unchanged rows, including rows shifted by lines inserted or removed above. The differential renderer finds changed rows from both ends and `Container.render` bulk-copies child output.
+- `Text`, `Markdown`, `Box`, `Spacer` and `Container` report `getRenderGeneration()`, a stamp from `nextRenderGeneration()` that rises on every visible change (containers include their children). `Component` gains optional `getRenderGeneration()` / `isRenderSettled()`. `isRenderSettled`, `releaseRenderCache`, `renderGeneration` and `nextRenderGeneration` are exported.
+
+### Fixed
+
+- Freezing a `Markdown` no longer clears its stream cache by assigning `undefined`, which made the next render after a resize throw; `Markdown.releaseRenderCache()` resets it instead.
+- Freezing no longer clears fields named `cache` / `cachedLines` / `cachedText` / `cachedWidth` by name, which crashed third-party components whose `cache` was not a render cache (e.g. a `Map`) on the next resize. Releasing is now opt-in through `Component.releaseRenderCache()`: `Text`, `Markdown`, `Box` and `Image` drop their caches, `Container` and `Box` forward to their children, other components are left untouched.
+
 ## [1.3.2] - 2026-10-10
 
 ### Changed

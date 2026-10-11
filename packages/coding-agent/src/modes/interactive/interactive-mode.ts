@@ -422,6 +422,7 @@ export class InteractiveMode {
 		this.version = VERSION;
 		this.ui = new TUI(new ProcessTerminal(), this.settingsManager.getShowHardwareCursor());
 		this.ui.setClearOnShrink(this.settingsManager.getClearOnShrink());
+		this.chatContainer.setViewportRows(() => this.ui.terminal.rows);
 		this.headerContainer = new Container();
 		this.pendingMessagesContainer = new Container();
 		this.statusContainer = new Container();
@@ -3142,6 +3143,7 @@ export class InteractiveMode {
 	private subscribeToAgent(): void {
 		this.unsubscribe = this.session.subscribe(async (event) => {
 			await this.handleEvent(event);
+			this.chatContainer.handleAgentEvent(event);
 		});
 	}
 
@@ -3772,6 +3774,9 @@ export class InteractiveMode {
 		for (const [toolCallId, component] of renderedPendingTools) {
 			this.pendingTools.set(toolCallId, component);
 		}
+		// History is finished (startup, --continue, /resume, rebuilds): settle what is
+		// still open (e.g. orphaned tool calls) so it can freeze. A live run settles on agent_end.
+		if (!this.session.isStreaming) this.chatContainer.settleAll();
 		this.ui.requestRender();
 	}
 
