@@ -13,7 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const COLD_PATH_MODULES = {
 	runCommand: "../src/commands/run-command.ts",
 	verifiedRunCoordinator: "../src/core/verified-run/coordinator.ts",
+	acpMode: "../src/modes/acp/acp-mode.ts",
 	codexBarCli: "../src/codexbar-cli.ts",
+	sessionSelectorLoaders: "../src/modes/interactive/components/session-selector-loaders.ts",
 } as const;
 type ColdPathModule = keyof typeof COLD_PATH_MODULES;
 const loads = new Map<ColdPathModule, number>();

@@ -40,8 +40,6 @@ import { assertValidSessionId, SessionManager } from "./core/session-manager.ts"
 import { SettingsManager } from "./core/settings-manager.ts";
 import { printTimings, resetTimings, time } from "./core/timings.ts";
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
-import { runAcpMode } from "./modes/acp/acp-mode.ts";
-import { createSessionMetadataLoaders } from "./modes/interactive/components/session-selector-loaders.ts";
 import { settlePrintModeExit } from "./modes/print-exit-guard.ts";
 import { runPrintMode } from "./modes/print-mode.ts";
 import { normalizePath, resolvePath } from "./utils/paths.ts";
@@ -366,9 +364,10 @@ async function createSessionManager(
 	}
 
 	if (parsed.resume) {
-		const [{ selectSession }, { initTheme, stopThemeWatcher }] = await Promise.all([
+		const [{ selectSession }, { initTheme, stopThemeWatcher }, { createSessionMetadataLoaders }] = await Promise.all([
 			import("./cli/session-picker.ts"),
 			import("./modes/interactive/theme/theme.ts"),
+			import("./modes/interactive/components/session-selector-loaders.ts"),
 		]);
 		initTheme(settingsManager.getTheme(), true);
 		try {
@@ -564,6 +563,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 	time("parseArgs");
 	if (parsed.mode === "acp" && !parsed.help && !parsed.version) {
+		const { runAcpMode } = await import("./modes/acp/acp-mode.ts");
 		await runAcpMode(parsed);
 		return;
 	}
