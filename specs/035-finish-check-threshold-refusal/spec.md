@@ -160,6 +160,7 @@ Gate (default off):
 25. **Flag parsing.** `resolveFinishCheckExtraTurn` is true for `on`, `1`, `true`, `ON`, ` enabled `, and false for unset, `""`, `off`, `0`, `false`, `always` and other text.
 26. **Flag off is the pre-035 behaviour.** With the flag unset, `off` or an unknown value, cases 1, 2, 6 and 7 send no follow-up after the check turn; the session has exactly one ledger entry `{ items }`; the end event equals `{ active: false, ledger }`; a later settle in the same task (even past 90%) sends nothing and writes no round-2 entry; the stop steer is never sent. The check-turn tool cap still fires once when calls continue after the check turn settled.
 27. **Flag on.** Every other extra-turn case (1–13, 21, 23, 24) and the extension flow test run with `OMK_FINISH_CHECK_EXTRA_TURN=on`.
+28. **Run log.** With `OMK_RUN_LOG_DIR` set and the flag on: case 1 writes `{ type: "extra-turn", used: true, reasons: ["below-threshold"] }` with `extraTurnFraction` 0.77; case 6 `reasons: ["unmeasured"]`; case 3 `used: false, reasons: []`; case 12 `used: false, reasons: ["below-threshold"]`. The flag off or `OMK_RUN_LOG_DIR` unset writes no line.
 
 ## A/B measurement
 
@@ -181,6 +182,15 @@ Gate (default off):
 - No change to `finishDisciplinePrompt` (candidate 5, `specs/031`).
 - No move to the #63 `RemainingBudget` clock in this PR; that happens when #63 lands.
 
+## Run log (decision 8)
+
+With `OMK_RUN_LOG_DIR` set and `OMK_FINISH_CHECK_EXTRA_TURN` on, each decision about the single extra turn appends one line to `<OMK_RUN_LOG_DIR>/finish-check.jsonl` through `appendRunLog("finish-check", …)` (spec 042): `{ type: "extra-turn", used, reasons, extraTurnFraction }`. With `OMK_RUN_LOG_DIR` unset or the flag off, nothing is written.
+
+- A decision is made when the check turn settles and the verifier of spec 032 does not take over, and when that verifier settles. One line per decision, so at most two per task, and at most one with `used: true`.
+- `used`: whether the extra turn was sent.
+- `reasons`: what called for it, in this order: `"below-threshold"` (a numeric item missed its limit), `"unmeasured"` (a numeric item had no measurement), `"reverify-fix"` (spec 032's verifier failed). Empty when nothing called for it; non-empty with `used: false` when the turn was already used, the turn ended aborted or with a pending message, or it was 85% or later.
+- `extraTurnFraction`: the budget fraction finish-check read at the decision (`null` without a budget). `appendRunLog`'s own `t`, `elapsedFraction`, `pid` and `role` are added to the line; a line holds no task text or model output.
+
 ## Decisions (Tech Lead, 2026-10-11)
 
 1. Number stays 035, as a separate spec file shipped in the revived #62 PR.
@@ -190,6 +200,7 @@ Gate (default off):
 5. The 220-character cut that drops corewars' g2-clear limit is a correctness bug fixed in the same PR.
 6. Review of #62 (`REVIEW_STACK_20261011.md`): numeric tier needs a bound word next to a number (M1); exponent, unicode minus, `=>`/`=<`, version numbers and context comparisons in the parser (M2, m1–m3); tier-1 kept to 1000 characters with a clause cut (m4); one 90% stop steer in the extra turn (m5); strict REQ form kept on purpose (m6); latest REQ-bearing assistant message of the run is read (n1).
 7. Merge condition for #62: the extra turn ships behind `OMK_FINISH_CHECK_EXTRA_TURN`, default off. It is turned on by default only after Bench Analyst's A/B shows a gain; until then #62 changes only the ledger, parser and checklist text.
+8. Run log (after #102): the extra-turn decision is written to `finish-check.jsonl` as described in "Run log"; nothing is written unless `OMK_RUN_LOG_DIR` is set and `OMK_FINISH_CHECK_EXTRA_TURN` is on.
 
 ## Expected Files
 
@@ -202,3 +213,4 @@ Gate (default off):
 - `packages/coding-agent/test/finish-check-compare.test.ts`: AC19
 - `packages/coding-agent/test/finish-check-extra-turn.test.ts`: AC1–14, 21, 23–27
 - `packages/coding-agent/docs/environment-variables.md`: `OMK_FINISH_CHECK_EXTRA_TURN` row
+- `packages/coding-agent/test/finish-check-run-log.test.ts`: AC28 (the writer lives in `extensions/builtin/finish-check-run-log.ts`, see spec 032 decision 10)
