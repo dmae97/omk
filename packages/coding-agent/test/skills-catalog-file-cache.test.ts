@@ -118,12 +118,39 @@ describe("skill catalog cache for per-skill file paths", () => {
 		]);
 	});
 
-	it("keeps file entries from earlier starts and moves hits to the most-recent end", () => {
+	it("keeps file entries from earlier starts and saves hits at the most-recent end when the start writes", () => {
 		const alpha = writeSkill("alpha");
 		const beta = writeSkill("beta");
 		loadSkills(options([alpha, beta]));
-		loadSkills(options([alpha])); // a start that only sees alpha must not forget beta
-		expect(fileKeys(agentDir)).toEqual([`file:${resolve(beta)}`, `file:${resolve(alpha)}`]);
+		const gamma = writeSkill("gamma");
+		loadSkills(options([alpha, gamma])); // a start that does not see beta must not forget it
+		expect(fileKeys(agentDir)).toEqual([`file:${resolve(beta)}`, `file:${resolve(alpha)}`, `file:${resolve(gamma)}`]);
+	});
+
+	it("does not rewrite the cache file on a start where every skill hits", () => {
+		const paths = [writeSkill("alpha"), writeSkill("beta")];
+		loadSkills(options(paths));
+		const old = new Date(Date.now() - 60_000);
+		utimesSync(cacheFile(agentDir), old, old);
+		const before = statSync(cacheFile(agentDir));
+		const content = readFileSync(cacheFile(agentDir), "utf8");
+
+		loadSkills(options(paths));
+		loadSkills(options([...paths].reverse()));
+
+		const after = statSync(cacheFile(agentDir));
+		expect([after.ino, after.mtimeMs]).toEqual([before.ino, before.mtimeMs]);
+		expect(readFileSync(cacheFile(agentDir), "utf8")).toBe(content);
+	});
+
+	it("still writes after an all-hit start once a skill changes", () => {
+		const path = writeSkill("alpha");
+		loadSkills(options([path]));
+		loadSkills(options([path]));
+		writeFileSync(path, skill("alpha", "changed after the hit"));
+		loadSkills(options([path]));
+		const entry = readSkillCatalog(agentDir)[`file:${resolve(path)}`];
+		expect((entry.result as { skill: { description: string } }).skill.description).toBe("changed after the hit");
 	});
 
 	it("a start without skill paths leaves the existing catalog alone", () => {

@@ -58,7 +58,7 @@ const MAX_ENTRIES = 64;
  * about 3 MB. Hits move to the end, so the least recently used are dropped.
  */
 const MAX_FILE_ENTRIES = 4096;
-const FILE_KEY_PREFIX = "file:";
+export const FILE_KEY_PREFIX = "file:";
 const MAX_WALK_DEPTH = 8;
 const MAX_WALK_ENTRIES = 20_000;
 const IGNORE_CONTROLS = new Set([".gitignore", ".ignore", ".fdignore"]);
@@ -169,10 +169,36 @@ export function readSkillCatalog(agentDir: string): CatalogStore {
 		const catalog: CatalogStore = {};
 		for (const [key, value] of Object.entries(parsed)) {
 			if (isSkillCatalogCacheEntry(value)) catalog[key] = value;
+			else markSkillCatalogDirty(catalog); // rewrite without the malformed entry
 		}
 		return catalog;
 	} catch {}
 	return {};
+}
+
+const dirtyStores = new WeakSet<CatalogStore>();
+
+/** Records that `store` no longer matches the cache file, so `loadSkills` must write it. */
+export function markSkillCatalogDirty(store: CatalogStore): void {
+	dirtyStores.add(store);
+}
+
+/** Removes `key` and marks the store dirty only when the entry existed. */
+export function dropSkillCatalogEntry(store: CatalogStore, key: string): void {
+	if (!Object.hasOwn(store, key)) return;
+	delete store[key];
+	markSkillCatalogDirty(store);
+}
+
+/**
+ * True after a miss, a new or changed entry or a dropped one, or when the caps
+ * would evict entries. An all-hit start writes nothing; its LRU order is not saved.
+ */
+export function isSkillCatalogDirty(store: CatalogStore): boolean {
+	if (dirtyStores.has(store)) return true;
+	const keys = Object.keys(store);
+	const files = keys.filter((k) => k.startsWith(FILE_KEY_PREFIX)).length;
+	return files > MAX_FILE_ENTRIES || keys.length - files > MAX_ENTRIES;
 }
 
 export function writeSkillCatalog(agentDir: string, store: CatalogStore): void {
@@ -213,7 +239,7 @@ export function writeSkillCatalog(agentDir: string, store: CatalogStore): void {
 	}
 }
 
-function fingerprintEquals(a: SkillDirFingerprint, b: SkillDirFingerprint): boolean {
+export function fingerprintEquals(a: SkillDirFingerprint, b: SkillDirFingerprint): boolean {
 	return (
 		a.complete === true &&
 		b.complete === true &&
@@ -242,7 +268,7 @@ export function cachedSkillScan<T>(
 	const fingerprint = fingerprintSkillDir(dir);
 	const key = resolve(dir);
 	if (fingerprint.complete !== true) {
-		delete catalog[key];
+		dropSkillCatalogEntry(catalog, key);
 		return { result: scan(), store: catalog };
 	}
 	const hit = catalog[key];
@@ -253,50 +279,9 @@ export function cachedSkillScan<T>(
 	const afterScan = fingerprintSkillDir(dir);
 	if (fingerprintEquals(fingerprint, afterScan)) {
 		catalog[key] = { fingerprint: afterScan, result };
+		markSkillCatalogDirty(catalog);
 	} else {
-		delete catalog[key];
+		dropSkillCatalogEntry(catalog, key);
 	}
 	return { result, store: catalog };
-}
-
-/** One stat, no read: path identity plus size, mtime, ctime and inode, as for directories. */
-function fingerprintSkillFile(filePath: string): SkillDirFingerprint | undefined {
-	try {
-		const stats = statSync(filePath);
-		if (!stats.isFile()) return undefined;
-		const digest = createHash("sha256")
-			.update(JSON.stringify([filePath, stats.size, stats.mtimeMs, stats.ctimeMs, stats.ino, stats.dev]))
-			.digest("hex");
-		return { files: 1, maxMtimeMs: stats.mtimeMs, totalSize: stats.size, digest, complete: true };
-	} catch {
-		return undefined;
-	}
-}
-
-/**
- * Per-file counterpart of `cachedSkillScan` for the one-SKILL.md-per-skill
- * paths auto-discovery produces. Mutates `store`. A result is kept only when
- * the file did not change while `load` ran and `valid` accepts it; a stored
- * result that `valid` rejects is a miss.
- */
-export function cachedSkillFileLoad<T>(
-	store: CatalogStore,
-	filePath: string,
-	load: () => T,
-	valid: (result: unknown) => result is T,
-): T {
-	const key = `${FILE_KEY_PREFIX}${resolve(filePath)}`;
-	const fingerprint = fingerprintSkillFile(resolve(filePath));
-	const hit = store[key];
-	delete store[key];
-	if (fingerprint && hit && fingerprintEquals(hit.fingerprint, fingerprint) && valid(hit.result)) {
-		store[key] = hit; // re-insert at the most recently used end
-		return structuredClone(hit.result) as T;
-	}
-	const result = load();
-	const after = fingerprintSkillFile(resolve(filePath));
-	if (fingerprint && after && fingerprintEquals(fingerprint, after) && valid(result)) {
-		store[key] = { fingerprint: after, result };
-	}
-	return result;
 }

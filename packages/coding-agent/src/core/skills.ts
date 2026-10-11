@@ -6,7 +6,8 @@ import { CONFIG_DIR_NAME, getAgentDir } from "../config.ts";
 import { parseFrontmatter } from "../utils/frontmatter.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
 import type { ResourceDiagnostic } from "./diagnostics.ts";
-import { cachedSkillFileLoad, cachedSkillScan, readSkillCatalog, writeSkillCatalog } from "./skills-catalog-cache.ts";
+import { cachedSkillScan, isSkillCatalogDirty, readSkillCatalog, writeSkillCatalog } from "./skills-catalog-cache.ts";
+import { cachedSkillFileLoad } from "./skills-catalog-file-cache.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 
 /** Max name length per spec */
@@ -643,7 +644,7 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 		}
 	}
 
-	if (catalogEnabled && catalogStore) {
+	if (catalogEnabled && catalogStore && isSkillCatalogDirty(catalogStore)) {
 		writeSkillCatalog(catalogAgentDir, catalogStore);
 	}
 
