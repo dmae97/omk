@@ -30,6 +30,20 @@ function writeLogPath(value: string): string {
 	return value;
 }
 
+/** The TerminalOutput of the running TUI: set on its first write, cleared by stop. */
+let activeOutput: TerminalOutput | undefined;
+
+/**
+ * Raw terminal bytes written from outside the render path (completion BEL,
+ * OSC 52 clipboard). While a TUI is writing they go through its
+ * TerminalOutput, so output stats and the OMK_TUI_RESIZE_LOG byte offsets
+ * count them; otherwise straight to stdout. May throw like stream.write.
+ */
+export function writeTerminalRaw(data: string): void {
+	if (activeOutput) activeOutput.write(data);
+	else process.stdout.write(data);
+}
+
 /** Metadata-only observation. No paint queue, retries, or interception of error handling. */
 export class TerminalOutput {
 	private readonly stream: Writable;
@@ -83,6 +97,7 @@ export class TerminalOutput {
 			this.stream.on("drain", this.onDrain);
 			this.stream.on(errorMonitor, this.onError);
 			this.observing = true;
+			activeOutput = this;
 		}
 		this.counters.writeCalls++;
 		this.counters.submittedBytes += Buffer.byteLength(data, "utf8");
@@ -116,5 +131,6 @@ export class TerminalOutput {
 		this.stream.off("drain", this.onDrain);
 		this.stream.off(errorMonitor, this.onError);
 		this.observing = false;
+		if (activeOutput === this) activeOutput = undefined;
 	}
 }

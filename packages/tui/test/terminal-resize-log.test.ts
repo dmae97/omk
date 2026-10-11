@@ -7,7 +7,7 @@ import { Writable } from "node:stream";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { ProcessTerminal } from "../src/terminal.ts";
-import { TerminalOutput } from "../src/terminal-output.ts";
+import { TerminalOutput, writeTerminalRaw } from "../src/terminal-output.ts";
 
 const sink = () =>
 	new Writable({
@@ -115,5 +115,47 @@ describe("OMK_TUI_RESIZE_LOG", () => {
 		output.write("x");
 		output.stop();
 		assert.equal(existsSync(logPath), false);
+	});
+
+	it("counts raw writes from outside the render path (BEL, OSC 52) in the logged byte offset", () => {
+		const received: string[] = [];
+		const stream = new Writable({
+			write(chunk, _encoding, callback) {
+				received.push(String(chunk));
+				callback();
+			},
+		});
+		const output = new TerminalOutput(stream, "", logPath);
+		const onResize = output.withResizeLog(
+			() => {},
+			() => ({ cols: 80, rows: 24 }),
+		);
+		output.write("frame\n");
+		writeTerminalRaw("\u0007");
+		writeTerminalRaw("\x1b]52;c;aGk=\x07");
+		onResize();
+		const raw = Buffer.byteLength("frame\n\u0007\x1b]52;c;aGk=\x07");
+		assert.equal(readLog(logPath)[0].bytes, raw);
+		assert.equal(output.snapshot().submittedBytes, raw);
+		assert.deepEqual(
+			received,
+			["frame\n", "\u0007", "\x1b]52;c;aGk=\x07"],
+			"raw writes go to the TUI's stream, in order",
+		);
+
+		output.stop();
+		const original = process.stdout.write;
+		const stdout: string[] = [];
+		process.stdout.write = ((chunk: string) => {
+			stdout.push(chunk);
+			return true;
+		}) as typeof process.stdout.write;
+		try {
+			writeTerminalRaw("\u0007");
+		} finally {
+			process.stdout.write = original;
+		}
+		assert.deepEqual(stdout, ["\u0007"], "without a running TUI the write goes to stdout");
+		assert.equal(received.length, 3);
 	});
 });
