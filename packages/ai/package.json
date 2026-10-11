@@ -53,6 +53,10 @@
 		"./bedrock-provider": {
 			"types": "./dist/bedrock-provider.d.ts",
 			"import": "./dist/bedrock-provider.js"
+		},
+		"./prompt-hash": {
+			"types": "./dist/prompt-hash.d.ts",
+			"import": "./dist/prompt-hash.js"
 		}
 	},
 	"bin": {
