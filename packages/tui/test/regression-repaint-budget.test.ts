@@ -14,11 +14,9 @@
 
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import { REPAINT_BUDGET_SCREENS } from "../src/terminal-resync.ts";
 import { type Component, TUI } from "../src/tui.ts";
 import { VirtualTerminal } from "./virtual-terminal.ts";
-
-/** Must match TUI.REPAINT_BUDGET_SCREENS. */
-const REPAINT_BUDGET_SCREENS = 4;
 
 class TestComponent implements Component {
 	lines: string[] = [];

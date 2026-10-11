@@ -1,4 +1,6 @@
 import { tmpdir } from "node:os";
+import { Writable } from "node:stream";
+import { ProcessTerminal } from "omk-tui";
 import { describe, expect, it } from "vitest";
 import {
 	type CompletionSoundCandidate,
@@ -9,6 +11,7 @@ import {
 	selectCompletionSoundCandidates,
 	shouldPlayCompletionSound,
 } from "../src/core/completion-sound.ts";
+import { defaultCompletionSoundIo } from "../src/core/completion-sound-io.ts";
 import type { PromptSettledEvent } from "../src/core/prompt-settlement.ts";
 
 function settledEvent(overrides: Partial<PromptSettledEvent> = {}): PromptSettledEvent {
@@ -243,5 +246,27 @@ describe("CompletionSoundService", () => {
 		});
 		const result = await service.handleSettled(settledEvent());
 		expect(result).toMatchObject({ backend: "none", attempted: false, success: true });
+	});
+});
+
+describe("defaultCompletionSoundIo().writeBell", () => {
+	it("writes the BEL through the running TUI's terminal output, so OMK_TUI_RESIZE_LOG counts it", () => {
+		const received: string[] = [];
+		const terminal = new ProcessTerminal(
+			new Writable({
+				write(chunk, _encoding, callback) {
+					received.push(String(chunk));
+					callback();
+				},
+			}),
+		);
+		terminal.write("frame");
+		try {
+			expect(defaultCompletionSoundIo().writeBell()).toBe(true);
+			expect(received).toEqual(["frame", "\u0007"]);
+			expect(terminal.getOutputStats().submittedBytes).toBe(Buffer.byteLength("frame\u0007"));
+		} finally {
+			terminal.stop();
+		}
 	});
 });

@@ -10,6 +10,7 @@ import { isKeyRelease, matchesKey } from "./keys.ts";
 import type { Terminal } from "./terminal.ts";
 import { finishTerminalFrame } from "./terminal-final-frame.ts";
 import { deleteKittyImage, getCapabilities, isImageLine, setCellDimensions } from "./terminal-image.ts";
+import { isTermuxSession, REPAINT_BUDGET_SCREENS, ResizeResync } from "./terminal-resync.ts";
 import { extractSegments, normalizeTerminalOutput, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils.ts";
 
 const KITTY_SEQUENCE_PREFIX = "\x1b_G";
@@ -129,10 +130,6 @@ function parseSizeValue(value: SizeValue | undefined, referenceSize: number): nu
 		return Math.floor((referenceSize * parseFloat(match[1])) / 100);
 	}
 	return undefined;
-}
-
-function isTermuxSession(): boolean {
-	return Boolean(process.env.TERMUX_VERSION);
 }
 
 /**
@@ -282,12 +279,6 @@ export class TUI extends Container {
 	private renderTimer: NodeJS.Timeout | undefined;
 	private lastRenderAt = 0;
 	private static readonly MIN_RENDER_INTERVAL_MS = 16;
-	/**
-	 * How far back a clearing repair repaint may reach, in viewport screens.
-	 * Bounds the scrollback churn of fixing rows that already scrolled off
-	 * (see the repaint budget note in doRender's fullRender helper).
-	 */
-	private static readonly REPAINT_BUDGET_SCREENS = 4;
 	private cursorRow = 0; // Logical cursor row (end of rendered content)
 	private hardwareCursorRow = 0; // Actual terminal cursor row (may differ due to IME positioning)
 	private showHardwareCursor = process.env.OMK_HARDWARE_CURSOR === "1";
@@ -297,6 +288,7 @@ export class TUI extends Container {
 	private static readonly MIN_CONTENT_COLUMNS = 20;
 	private maxLinesRendered = 0; // Track terminal's working area (max lines ever rendered)
 	private previousViewportTop = 0; // Track previous viewport top for resize-aware cursor moves
+	private readonly resizeResync = new ResizeResync(); // pre-overlay rows of recent frames, for height resizes
 	private fullRedrawCount = 0;
 	private stopped = false;
 
@@ -1193,7 +1185,7 @@ export class TUI extends Container {
 		// Render all components to get new lines. Children render at the content
 		// width (terminal minus the reserved right gutter); overlays composite at
 		// full-terminal coordinates below, so pinned rails own the gutter columns.
-		let newLines = finalLines ?? this.render(width - this.resolveRightGutter(width, height));
+		let newLines = this.resizeResync.track(finalLines ?? this.render(width - this.resolveRightGutter(width, height)));
 
 		// Composite overlays into the rendered lines (before differential compare)
 		if (finalLines === undefined && this.overlayStack.length > 0) {
@@ -1206,11 +1198,13 @@ export class TUI extends Container {
 		newLines = this.applyLineResets(newLines);
 
 		// Helper to optionally clear the visible viewport and render all new lines
-		const fullRender = (clear: boolean, fromRow?: number): void => {
+		const fullRender = (clear: boolean, fromRow?: number, resync = ""): void => {
 			this.fullRedrawCount += 1;
 			let buffer = "\x1b[?2026h"; // Begin synchronized output
 			if (clear) {
-				buffer += this.deleteKittyImages(this.previousKittyImageIds);
+				// A height resize first rewrites, relative to the cursor, the rows
+				// the resize may have cost scrollback (see resyncAfterResize).
+				buffer += this.deleteKittyImages(this.previousKittyImageIds) + resync;
 				// Repaint the visible screen IN PLACE: home the cursor, erase every row
 				// as it is rewritten below, then erase whatever is left over.
 				// \x1b[2J (erase all) is deliberately not used: conpty/Windows Terminal
@@ -1246,7 +1240,7 @@ export class TUI extends Container {
 			// destroys more history than it repairs (a long report loses its
 			// beginning). Rows older than the budget keep their existing copy.
 			// Without fromRow the clamp collapses to tailStart, i.e. tail-only.
-			const repairStart = newLines.length - height * TUI.REPAINT_BUDGET_SCREENS;
+			const repairStart = newLines.length - height * REPAINT_BUDGET_SCREENS;
 			const firstPrinted = clear ? Math.min(Math.max(fromRow ?? tailStart, repairStart), tailStart) : 0;
 			for (let i = firstPrinted; i < newLines.length; i++) {
 				if (i > firstPrinted) buffer += "\r\n";
@@ -1272,9 +1266,8 @@ export class TUI extends Container {
 			this.previousHeight = height;
 		};
 
-		const debugRedraw = process.env.OMK_DEBUG_REDRAW === "1";
 		const logRedraw = (reason: string): void => {
-			if (!debugRedraw) return;
+			if (process.env.OMK_DEBUG_REDRAW !== "1") return;
 			const agentDir = process.env.OMK_CODING_AGENT_DIR ?? path.join(os.homedir(), ".omk", "agent");
 			const logPath = path.join(agentDir, "omk-debug.log");
 			const msg = `[${new Date().toISOString()}] fullRender: ${reason} (prev=${this.previousLines.length}, new=${newLines.length}, height=${height})\n`;
@@ -1299,8 +1292,9 @@ export class TUI extends Container {
 		// but Termux changes height when the software keyboard shows or hides.
 		// In that environment, a full redraw causes the entire history to replay on every toggle.
 		if (heightChanged && !isTermuxSession()) {
-			logRedraw(`terminal height changed (${this.previousHeight} -> ${height})`);
-			fullRender(true);
+			const resync = this.resizeResync.after(newLines, this.hardwareCursorRow, height);
+			logRedraw(`terminal height changed (${this.previousHeight} -> ${height}; ${this.resizeResync.detail})`);
+			fullRender(true, undefined, resync);
 			return;
 		}
 
