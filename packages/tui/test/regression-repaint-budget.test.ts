@@ -17,7 +17,7 @@ import { describe, it } from "node:test";
 import { type Component, TUI } from "../src/tui.ts";
 import { VirtualTerminal } from "./virtual-terminal.ts";
 
-/** Must match TUI.REPAINT_BUDGET_SCREENS. */
+/** Must match REPAINT_BUDGET_SCREENS (src/terminal-resync.ts). */
 const REPAINT_BUDGET_SCREENS = 4;
 
 class TestComponent implements Component {

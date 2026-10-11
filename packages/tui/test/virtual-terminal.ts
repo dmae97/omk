@@ -126,6 +126,25 @@ export class VirtualTerminal implements Terminal {
 	}
 
 	/**
+	 * Resize only the emulated screen, as a real terminal does before the
+	 * process handles SIGWINCH: the TUI keeps reading the old size until
+	 * {@link announceResize} runs, so a frame can be written for the old size
+	 * and processed at the new one.
+	 */
+	resizeEmulatorOnly(columns: number, rows: number): void {
+		this.xterm.resize(columns, rows);
+	}
+
+	/** Report the emulator's current size to the TUI (the SIGWINCH half of {@link resize}). */
+	announceResize(): void {
+		this._columns = this.xterm.cols;
+		this._rows = this.xterm.rows;
+		if (this.resizeHandler) {
+			this.resizeHandler();
+		}
+	}
+
+	/**
 	 * Wait for all pending writes to complete. Viewport and scroll buffer will be updated.
 	 */
 	async flush(): Promise<void> {
