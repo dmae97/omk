@@ -2,7 +2,7 @@
 // usage: node analyze-ab.mjs <rawDir> [outDir]
 // Prints medians/p90/IQR per scenario and writes, into <rawDir> and (if given) <outDir>:
 //   pairs.tsv   - scenario, metric, pair, base, branch: input for paired_verdict.py
-//                 fast: startup_ms, peak_mib | slow: startup_ms, idle_mib | tool: tool_wall_ms, tool_peak_mib
+//                 fast: startup_ms, peak_mib | slow: slow_startup_ms (report-only), idle_mib | tool: tool_wall_ms, tool_peak_mib
 //   conc16.tsv  - same format, scenario c16, metric startup_p90_ms, one row per rep (16 workers at once)
 // Only runs that exit 0 with the expected mock traffic are paired; others are listed and dropped.
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -73,7 +73,7 @@ for (const w of ws) {
 // metric name in pairs.tsv -> field
 const METRICS = {
 	fast: [["startup_ms", "startup_ms"], ["peak_mib", "peak_mib"]],
-	slow: [["startup_ms", "startup_ms"], ["idle_mib", "idle_mib"]],
+	slow: [["slow_startup_ms", "startup_ms"], ["idle_mib", "idle_mib"]], // slow_startup_ms is report-only
 	tool: [["tool_wall_ms", "wall_ms"], ["tool_peak_mib", "peak_mib"]],
 };
 const tsv = ["scenario\tmetric\tpair\tbase\tbranch"];
@@ -127,5 +127,5 @@ write("pairs.tsv", tsv);
 write("conc16.tsv", c16tsv);
 if (Number.isFinite(toolWallIqr)) console.log(`main IQR tool_wall_ms = ${toolWallIqr.toFixed(1)} (pass to --noreg tool_wall_ms=${toolWallIqr.toFixed(1)})`);
 console.log(
-	`\nverdict: python3 /workspace/omk-bench-analyst/paired_verdict.py pairs.tsv --target startup_ms=-25 --target idle_mib=-5 --noreg tool_peak_mib=5${Number.isFinite(toolWallIqr) ? ` --noreg tool_wall_ms=${toolWallIqr.toFixed(1)}` : ""}`,
+	`\nverdict (startup_ms judges fast only; slow_startup_ms and peak_mib are report-only): python3 /workspace/omk-bench-analyst/paired_verdict.py pairs.tsv --target startup_ms=-25 --target idle_mib=-5 --noreg tool_peak_mib=5${Number.isFinite(toolWallIqr) ? ` --noreg tool_wall_ms=${toolWallIqr.toFixed(1)}` : ""}`,
 );
