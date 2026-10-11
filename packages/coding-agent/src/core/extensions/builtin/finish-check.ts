@@ -21,13 +21,14 @@ import {
 	extraTurnItems,
 	type FinishCheckLedgerItem,
 	finishCheckToolCap,
+	hasFinishCheckLedgerLines,
 	parseFinishCheckLedger,
 } from "../../finish-check-requirements.ts";
 import { buildReverifyFixMessage, mergeFailingItems, parseVerifyReply } from "../../finish-check-reverify.ts";
 import { requestPreCheckSnapshot, resolveSnapshotHandshake } from "../../finish-check-snapshot.ts";
 import { excludeRunBudgetWaitMs, readRunBudget, resolveTimeBudgetMs } from "../../remaining-budget.ts";
 import type { ExtensionAPI } from "../types.ts";
-import { assistantText, ledgerReply } from "./finish-check-reply.ts";
+import { hasVerifyReplyLines, ledgerReply } from "./finish-check-reply.ts";
 import {
 	createReverifyStage,
 	FINISH_CHECK_VERIFY_ENTRY,
@@ -154,7 +155,10 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 		const last = event.messages.at(-1);
 		const aborted = last?.role === "assistant" && (last.stopReason === "aborted" || last.stopReason === "error");
 		if (stage?.active) {
-			const reply = ledgerReply(event.messages, (text) => /^[\s>*`-]*(?:VERIFY|REQ)\s+\d+|VERDICT\s*:/im.test(text));
+			const reply = ledgerReply(
+				event.messages,
+				(text) => hasVerifyReplyLines(text) || hasFinishCheckLedgerLines(text),
+			);
 			const outcome = await stage.finish(event.messages, reply);
 			// The fix turn is spec 035's single extra turn, so only OMK_FINISH_CHECK_EXTRA_TURN creates it (spec 032
 			// decision 9); without it the verifier only verifies and records.
@@ -192,7 +196,7 @@ export default function finishCheck(omk: ExtensionAPI, options: FinishCheckOptio
 			const ledger = parseFinishCheckLedger(ledgerReply(event.messages), requirements);
 			omk.appendEntry(FINISH_CHECK_LEDGER_ENTRY, { items: ledger, round: 2 });
 			omk.events.emit(FINISH_CHECK_EVENT, { active: false, ledger, round: 2 });
-			const verify = stage?.started ? parseVerifyReply(assistantText(event.messages.at(-1))) : undefined;
+			const verify = stage?.started ? parseVerifyReply(ledgerReply(event.messages, hasVerifyReplyLines)) : undefined;
 			if (verify && verify.findings.length > 0) {
 				omk.appendEntry(FINISH_CHECK_VERIFY_ENTRY, {
 					verdict: verify.verdict,

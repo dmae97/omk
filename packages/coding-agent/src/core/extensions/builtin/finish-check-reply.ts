@@ -26,3 +26,10 @@ export function ledgerReply(messages: readonly unknown[], hasLines = hasFinishCh
 	}
 	return fallback ?? "";
 }
+
+const VERIFY_REPLY_LINE = /^[\s>*`-]*(?:VERIFY\s+\d+\s*:|VERDICT\s*:)/im;
+
+/** Whether `text` has a spec 032 `VERIFY n:` or `VERDICT:` line. */
+export function hasVerifyReplyLines(text: string): boolean {
+	return VERIFY_REPLY_LINE.test(text);
+}

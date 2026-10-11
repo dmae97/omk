@@ -178,6 +178,27 @@ describe("finish-check reverify flow: fix turn", () => {
 		expect(run.verifiers()).toHaveLength(1);
 	});
 
+	it("reads the fix turn's VERIFY lines from an earlier message when it ends with a short reply", async () => {
+		const run = await toVerifier();
+		await run.fire("agent_settled", settled(`${ELF}\nVERDICT: FAIL`));
+		const verifyLine = "VERIFY 1: PASS - parse new ELF; expected 0x401000; got 0x401000";
+		await run.fire("agent_settled", {
+			messages: [
+				{
+					role: "assistant",
+					stopReason: "toolUse",
+					content: [{ type: "text", text: `${verifyLine}\nVERDICT: PASS` }],
+				},
+				{ role: "toolResult", content: [{ type: "text", text: "saved" }] },
+				{ role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Done." }] },
+			],
+		});
+		expect(run.entries.at(-1)).toMatchObject({
+			type: FINISH_CHECK_VERIFY_ENTRY,
+			data: { round: 2, verdict: "pass", findings: [{ id: 1, status: "pass" }] },
+		});
+	});
+
 	it("voids a verifier that changed a deliverable; only the check ledger can still call for the turn (AC8)", async () => {
 		const run = await toVerifier();
 		writeFileSync(join(run.cwd, "out.txt"), "changed by the verifier");
