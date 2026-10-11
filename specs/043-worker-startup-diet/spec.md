@@ -91,6 +91,7 @@ Why the tool-call scenario: time to first request only shows startup. Anything t
   - `slow`: mock holds the answer 2,000 ms. **Idle RSS** = median `VmRSS` sampled every 50 ms from request arrival + 300 ms to response − 200 ms.
   - `tool`: turn 1 answers with one `read` tool call on `small.txt` in the worker's cwd, turn 2 (the request that carries the tool result) answers with final text. **Wall time from spawn to exit** and **peak RSS** (`/usr/bin/time -v`). A run counts only if the worker exits 0, made exactly two requests (turn 1 offered the `read` tool), and turn 2 saw the file contents.
 - 16 concurrent: 3 reps per arm, interleaved.
+- Output for the verdict: at the end of `run-ab.sh`, `analyze-ab.mjs` writes `pairs.tsv` (one header line; columns `scenario metric pair base branch`) into the run dir and `$OUT`, the input format of Bench Analyst's `paired_verdict.py`. Metric names match its flags: `fast` → `startup_ms`, `peak_mib`; `slow` → `startup_ms`, `idle_mib`; `tool` → `tool_wall_ms`, `tool_peak_mib`. It also prints main's interquartile range of `tool_wall_ms` for `--noreg`. The 16-concurrent p90 goes to a separate `conc16.tsv` (same format, scenario `c16`, metric `startup_p90_ms`, one row per rep).
 - Quiet box: no other agent's build, test, or benchmark running. `/proc/loadavg` and the top CPU processes are logged before every run, and runs that overlap heavy work are flagged. Coordinated in the room. The perf-workers `PAUSE` file is honored.
 - Everything under `nice -n 10`, Node 22.23.3, page cache warm.
 
