@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -228,7 +229,7 @@ describe("deliverable guard: restore", () => {
 				savedAtFraction: 0.62,
 			}),
 		]);
-		expect(restores(h)[0].sha256).toMatch(/^[0-9a-f]{64}$/);
+		expect(restores(h)[0].sha256).toBe(createHash("sha256").update(readFileSync(path)).digest("hex"));
 		expect(h.events.some((e) => e.channel === DELIVERABLE_GUARD_EVENT && e.data.reason === "invalid:size")).toBe(
 			true,
 		);

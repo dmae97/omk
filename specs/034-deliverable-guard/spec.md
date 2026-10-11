@@ -75,6 +75,7 @@ Paths that only appear as inputs (`/app/decomp.c`, `/app/filter.py`, `/app/model
 
 - After each `tool_execution_end`, for each deliverable: `stat`; if size or mtime changed since the last look, run `fastCheckFile`; if `ok`, copy the file to `<tmpdir>/omk-deliverables/<pid>/<index>-<basename>` and record size, sha256 and the elapsed fraction. Only the latest good copy per deliverable is kept.
 - Files over 256 MiB are not copied (recorded as `too_large`). The store is outside the workspace and deleted when the session shuts down.
+- Resource bounds (checked after Tech Lead's #101 note on concurrent large reads): there is no `Promise.all` over files. `observe`, `restoreBroken` and `restoreSync` walk at most 4 deliverables one at a time, and the extension runs every event's and the timer's file work through one serial chain, so at most one copy, hash or check runs at a time. The sha256 of a copy is streamed, so a file near the 256 MiB cap is never held in memory; the only whole-file read left is `JSON.parse` in `fastCheckFile`, capped at 32 MiB. No limiter is needed.
 
 ### Requirement 4 - Watchdog steer at 40% (P0)
 

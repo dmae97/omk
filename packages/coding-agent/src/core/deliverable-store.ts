@@ -4,8 +4,8 @@
  * session shutdown. A valid current file is never replaced.
  */
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
-import { copyFile, mkdir, readFile, stat } from "node:fs/promises";
+import { copyFileSync, createReadStream, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { copyFile, mkdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { Deliverable } from "./deliverable-guard.ts";
 import { type FastCheckResult, fastCheckFile } from "./fast-check.ts";
@@ -39,15 +39,20 @@ interface Seen {
 	readonly check: FastCheckResult;
 }
 
+/** Streams the file through the hash, so a copy near the 256 MiB cap is never held in memory. */
 async function sha256Of(file: string): Promise<string> {
-	return createHash("sha256")
-		.update(await readFile(file))
-		.digest("hex");
+	const hash = createHash("sha256");
+	for await (const chunk of createReadStream(file)) hash.update(chunk as Buffer);
+	return hash.digest("hex");
 }
 
 const roundFraction = (fraction: number | undefined) =>
 	fraction === undefined ? undefined : Math.round(fraction * 100) / 100;
 
+/**
+ * All file work is sequential: `observe`, `restoreBroken` and `restoreSync` walk at most
+ * four deliverables one at a time, and the extension runs them through one serial chain.
+ */
 export class DeliverableStore {
 	private readonly copies = new Map<number, LastGoodCopy>();
 	private readonly seen = new Map<number, Seen>();
