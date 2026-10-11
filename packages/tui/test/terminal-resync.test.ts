@@ -1,0 +1,45 @@
+/**
+ * Unit tests for resyncAfterResize: which rows a height-change resync re-sends
+ * and how the cursor gets there. Integration with a real emulator lives in
+ * regression-resize-scrollback-loss.test.ts.
+ */
+
+import assert from "node:assert";
+import { describe, it } from "node:test";
+import { REPAINT_BUDGET_SCREENS, resyncAfterResize } from "../src/terminal-resync.ts";
+
+const rows = (count: number, from = 0): string[] => Array.from({ length: count }, (_, index) => `R${from + index}`);
+
+/** Rows the resync output writes, in order (each row is preceded by an erase-line). */
+function writtenRows(output: string): string[] {
+	return output
+		.split("\x1b[2K")
+		.slice(1)
+		.map((row) => row.replace(/\r\n$/, ""));
+}
+
+describe("resyncAfterResize", () => {
+	it("re-sends at most REPAINT_BUDGET_SCREENS screens of already-printed rows", () => {
+		const height = 10;
+		const previous = rows(200);
+		const next = ["R0 changed", ...previous.slice(1)];
+		const output = resyncAfterResize(previous, next, 199, height);
+		const budgetStart = 200 - height * REPAINT_BUDGET_SCREENS;
+		assert.ok(output.startsWith(`\x1b[${199 - budgetStart}A\r`), JSON.stringify(output.slice(0, 12)));
+		const written = writtenRows(output);
+		assert.strictEqual(written[0], `R${budgetStart}`);
+		assert.strictEqual(written.length, 200 - budgetStart);
+	});
+
+	it("never starts below the cursor, even when the frame grew by more than the budget", () => {
+		// 100 printed rows, cursor on the last one, 120 rows appended in the resize frame:
+		// the budget start (220 - 80 = 140) is below the cursor, and moving down to it
+		// would skip rows 100..139 (cursor-down stops at the screen bottom).
+		const previous = rows(100);
+		const next = rows(220);
+		const output = resyncAfterResize(previous, next, 99, 20);
+		assert.ok(output.startsWith("\r"), JSON.stringify(output.slice(0, 12)));
+		assert.ok(!output.includes("B\r"), "no cursor-down move");
+		assert.deepStrictEqual(writtenRows(output), rows(121, 99));
+	});
+});

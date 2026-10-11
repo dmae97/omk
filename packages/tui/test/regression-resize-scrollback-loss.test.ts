@@ -121,4 +121,22 @@ describe("resize scrollback loss regression", () => {
 		assertTranscriptKept(terminal, chat.transcript, 2);
 		tui.stop();
 	});
+	it("keeps every row when the resize frame appends more rows than the repaint budget", async () => {
+		const terminal = new VirtualTerminal(80, 24);
+		const tui = new TUI(terminal);
+		const chat = new ChatLike();
+		chat.cursor = false;
+		chat.transcript = rows(99); // 100 rows with the editor row
+		tui.addChild(chat);
+		tui.start();
+		await settle(terminal);
+
+		terminal.resizeEmulatorOnly(80, 20);
+		chat.transcript = rows(219); // +120 rows in the resize frame (budget 4 × 20 = 80)
+		terminal.announceResize();
+		await settle(terminal);
+
+		assertTranscriptKept(terminal, chat.transcript);
+		tui.stop();
+	});
 });

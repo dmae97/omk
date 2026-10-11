@@ -25,8 +25,8 @@ export const REPAINT_BUDGET_SCREENS = 4;
  * repaint that follows lands on a screen that already holds the same rows.
  * If the walk up is clamped at the screen top (the first changed row already
  * scrolled away), the changed rows print below their stale copies: duplicated,
- * not lost. Rows more than REPAINT_BUDGET_SCREENS screens above the end are
- * never rewritten.
+ * not lost. Already-printed rows more than REPAINT_BUDGET_SCREENS screens
+ * above the end are not re-sent; the start never moves below the cursor row.
  *
  * @param previousLines rows of the last frame, as the terminal received them
  * @param newLines rows of the frame about to be painted
@@ -47,9 +47,16 @@ export function resyncAfterResize(
 			break;
 		}
 	}
-	first = Math.max(first, newLines.length - height * REPAINT_BUDGET_SCREENS, 0);
+	// The budget only limits how far UP already-printed rows are re-sent. It
+	// must never push the start below the cursor: cursor-down stops at the
+	// screen bottom, so the rows in between would never be written (a resize
+	// frame that appended more than the budget lost them).
+	first = Math.min(
+		Math.max(first, newLines.length - height * REPAINT_BUDGET_SCREENS, 0),
+		Math.min(cursorRow, newLines.length - 1),
+	);
 	const up = cursorRow - first;
-	let buffer = up > 0 ? `\x1b[${up}A\r` : up < 0 ? `\x1b[${-up}B\r` : "\r";
+	let buffer = up > 0 ? `\x1b[${up}A\r` : "\r";
 	for (let i = first; i < newLines.length; i++) {
 		if (i > first) buffer += "\r\n";
 		buffer += `\x1b[2K${newLines[i]}`;
