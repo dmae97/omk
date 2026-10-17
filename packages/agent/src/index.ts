@@ -89,6 +89,7 @@ export {
 	createTimeoutToolResult,
 	resolveToolExecutionPolicy,
 	resolveToolTimeoutMs,
+	runToolCallWithTimeout,
 	type ToolDispositionEnvelope,
 	type ToolLateSettlement,
 } from "./tool-timeout.ts";

@@ -1,4 +1,5 @@
 import type { AssistantMessage } from "omk-ai";
+import { truncateTail } from "./harness/utils/truncate.ts";
 import { createImmutableSnapshot } from "./plain-data.ts";
 import type {
 	AgentContext,
@@ -64,14 +65,14 @@ function createValidatedToolResultSnapshot(result: AgentToolResult<unknown>): Ag
 }
 
 /** Build the immutable terminal committed when a tool timeout wins. */
-export function createTimeoutToolResult(toolName: string, timeoutMs: number): AgentToolResult<ToolDispositionEnvelope> {
+export function createTimeoutToolResult(
+	toolName: string,
+	timeoutMs: number,
+	partial?: AgentToolResult<unknown>,
+): AgentToolResult<ToolDispositionEnvelope> {
+	const notice = `Tool "${toolName}" timed out after ${timeoutMs}ms. Cancellation was requested; execution may still be running.`;
 	return createImmutableSnapshot({
-		content: [
-			{
-				type: "text",
-				text: `Tool "${toolName}" timed out after ${timeoutMs}ms. Cancellation was requested; execution may still be running.`,
-			},
-		],
+		content: [{ type: "text", text: withPartialOutput(notice, partial) }],
 		details: {
 			omk: createToolResultEnvelope({
 				synthetic: true,
@@ -82,6 +83,19 @@ export function createTimeoutToolResult(toolName: string, timeoutMs: number): Ag
 			}),
 		},
 	});
+}
+
+/**
+ * Spec 076 #1: keep the text a tool streamed before the timeout won, ahead of the
+ * notice. Only text blocks are kept, capped by the shared tail limits (2000 lines /
+ * 50 KB, the same as bash and spec 066). Without streamed text the notice is unchanged.
+ */
+function withPartialOutput(notice: string, partial: AgentToolResult<unknown> | undefined): string {
+	const streamed = (partial?.content ?? []).map((block) => (block.type === "text" ? block.text : "")).join("");
+	if (!streamed) return notice;
+	const details = partial?.details as { fullOutputPath?: unknown } | undefined;
+	const fullOutput = typeof details?.fullOutputPath === "string" ? `\nFull output: ${details.fullOutputPath}` : "";
+	return `${truncateTail(streamed).content}\n\n${notice}${fullOutput}`;
 }
 
 /** Build the immutable terminal committed when parent abort wins. */

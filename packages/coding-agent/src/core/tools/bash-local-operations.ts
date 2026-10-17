@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { access as fsAccess } from "node:fs/promises";
-import { waitForChildProcess } from "../../utils/child-process.ts";
+import { waitForChildProcessExit } from "../../utils/child-process.ts";
 import {
 	getShellConfig,
 	getShellEnv,
@@ -103,14 +103,14 @@ export function createLocalBashOperations(options?: LocalBashOperationsOptions):
 				}
 				// Handle shell spawn errors and wait for the process to terminate without hanging
 				// on inherited stdio handles held by detached descendants.
-				const exitCode = await waitForChildProcess(child);
+				const { code: exitCode, signal: exitSignal } = await waitForChildProcessExit(child);
 				if (signal?.aborted) {
 					throw new Error("aborted");
 				}
 				if (timedOut) {
 					throw new Error(`timeout:${timeout}`);
 				}
-				return { exitCode };
+				return exitSignal && exitCode === null ? { exitCode, signal: exitSignal } : { exitCode };
 			} finally {
 				if (child.pid) untrackDetachedChildPid(child.pid);
 				if (timeoutHandle) clearTimeout(timeoutHandle);

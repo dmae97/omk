@@ -215,6 +215,7 @@ export function createBashToolDefinition(
 
 			try {
 				let exitCode: number | null;
+				let exitSignal: NodeJS.Signals | null | undefined;
 				try {
 					const result = await ops.exec(spawnContext.command, spawnContext.cwd, {
 						onData: handleData,
@@ -223,6 +224,7 @@ export function createBashToolDefinition(
 						env: spawnContext.env,
 					});
 					exitCode = result.exitCode;
+					exitSignal = result.signal;
 				} catch (err) {
 					const snapshot = await finishOutput();
 					const { text } = formatOutput(snapshot, "");
@@ -248,6 +250,11 @@ export function createBashToolDefinition(
 				const { text: outputText, details } = formatOutput(snapshot);
 				if (exitCode !== 0 && exitCode !== null) {
 					throw new Error(appendStatus(outputText, `Command exited with code ${exitCode}`));
+				}
+				if (exitCode === null && exitSignal) {
+					// A signal death (OOM killer, resource governor, user) is a failure, not a silent success.
+					const hint = exitSignal === "SIGKILL" ? " (possibly killed for running out of memory)" : "";
+					throw new Error(appendStatus(outputText, `Command terminated by signal ${exitSignal}${hint}`));
 				}
 				return { content: [{ type: "text", text: outputText }], details };
 			} finally {

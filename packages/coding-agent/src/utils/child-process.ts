@@ -44,10 +44,22 @@ export function spawnProcessSync(
  * then forcibly stop tracking the inherited handles.
  */
 export function waitForChildProcess(child: ChildProcess): Promise<number | null> {
+	return waitForChildProcessExit(child).then(({ code }) => code);
+}
+
+/** How a child process ended: an exit code, or the signal that killed it (`code` is then `null`). */
+export interface ChildProcessExit {
+	code: number | null;
+	signal: NodeJS.Signals | null;
+}
+
+/** Like {@link waitForChildProcess}, but also reports the terminating signal. */
+export function waitForChildProcessExit(child: ChildProcess): Promise<ChildProcessExit> {
 	return new Promise((resolve, reject) => {
 		let settled = false;
 		let exited = false;
 		let exitCode: number | null = null;
+		let exitSignal: NodeJS.Signals | null = null;
 		let postExitTimer: NodeJS.Timeout | undefined;
 		let stdoutEnded = child.stdout === null;
 		let stderrEnded = child.stderr === null;
@@ -64,19 +76,19 @@ export function waitForChildProcess(child: ChildProcess): Promise<number | null>
 			child.stderr?.removeListener("end", onStderrEnd);
 		};
 
-		const finalize = (code: number | null) => {
+		const finalize = (code: number | null, signal: NodeJS.Signals | null) => {
 			if (settled) return;
 			settled = true;
 			cleanup();
 			child.stdout?.destroy();
 			child.stderr?.destroy();
-			resolve(code);
+			resolve({ code, signal });
 		};
 
 		const maybeFinalizeAfterExit = () => {
 			if (!exited || settled) return;
 			if (stdoutEnded && stderrEnded) {
-				finalize(exitCode);
+				finalize(exitCode, exitSignal);
 			}
 		};
 
@@ -97,17 +109,18 @@ export function waitForChildProcess(child: ChildProcess): Promise<number | null>
 			reject(err);
 		};
 
-		const onExit = (code: number | null) => {
+		const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
 			exited = true;
 			exitCode = code;
+			exitSignal = signal;
 			maybeFinalizeAfterExit();
 			if (!settled) {
-				postExitTimer = setTimeout(() => finalize(code), EXIT_STDIO_GRACE_MS);
+				postExitTimer = setTimeout(() => finalize(code, signal), EXIT_STDIO_GRACE_MS);
 			}
 		};
 
-		const onClose = (code: number | null) => {
-			finalize(code);
+		const onClose = (code: number | null, signal: NodeJS.Signals | null) => {
+			finalize(code, signal);
 		};
 
 		child.stdout?.once("end", onStdoutEnd);

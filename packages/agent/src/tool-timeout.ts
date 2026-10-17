@@ -159,6 +159,8 @@ export async function runToolCallWithTimeout<TDetails = any>(
 	let raceSettled = false;
 	let disposed = false;
 	let timer: ReturnType<typeof setTimeout> | undefined;
+	// Last partial result streamed before terminality; the timeout result keeps its text (spec 076).
+	let lastPartial: AgentToolResult<TDetails> | undefined;
 
 	let resolveCause!: (cause: TerminalCause) => void;
 	const causePromise = new Promise<TerminalCause>((resolve) => {
@@ -204,6 +206,7 @@ export async function runToolCallWithTimeout<TDetails = any>(
 	// never let listener settlement or failure delay the terminal race.
 	const gatedUpdate: AgentToolUpdateCallback<TDetails> = (partialResult) => {
 		if (raceSettled) return;
+		lastPartial = partialResult;
 		void Promise.resolve()
 			.then(() => emitUpdate(partialResult))
 			.catch(() => undefined);
@@ -256,6 +259,8 @@ export async function runToolCallWithTimeout<TDetails = any>(
 	}
 
 	const result =
-		disposition === "timeout" ? createTimeoutToolResult(toolName, timeoutMs) : createAbortedToolResult(true);
+		disposition === "timeout"
+			? createTimeoutToolResult(toolName, timeoutMs, lastPartial)
+			: createAbortedToolResult(true);
 	return { result, isError: true, executionStarted: true, terminalDisposition: disposition };
 }
