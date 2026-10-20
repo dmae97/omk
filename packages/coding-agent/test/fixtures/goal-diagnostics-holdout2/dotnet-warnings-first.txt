@@ -1,0 +1,42 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+/repo/src/Svc0.cs(10,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc1.cs(11,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc2.cs(12,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc3.cs(13,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc4.cs(14,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc5.cs(15,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc6.cs(16,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc7.cs(17,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc8.cs(18,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc9.cs(19,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc10.cs(20,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc11.cs(21,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc12.cs(22,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc13.cs(23,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc14.cs(24,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc15.cs(25,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc16.cs(26,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc17.cs(27,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc18.cs(28,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc19.cs(29,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc20.cs(30,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc21.cs(31,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc22.cs(32,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc23.cs(33,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc24.cs(34,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc25.cs(35,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc26.cs(36,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc27.cs(37,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc28.cs(38,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc29.cs(39,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc30.cs(40,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Svc31.cs(41,17): warning CS0168: The variable 'e' is declared but never used [/repo/src/App.csproj]
+/repo/src/Program.cs(12,5): error CS0103: The name 'config' does not exist in the current context [/repo/src/App.csproj]
+
+Build FAILED.
+
+    32 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:03.21

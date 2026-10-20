@@ -1,0 +1,59 @@
+
+  Parser
+    ✔ parses case 0
+    ✔ parses case 1
+    ✔ parses case 2
+    ✔ parses case 3
+    ✔ parses case 4
+    ✔ parses case 5
+    ✔ parses case 6
+    ✔ parses case 7
+    ✔ parses case 8
+    ✔ parses case 9
+    ✔ parses case 10
+    ✔ parses case 11
+    ✔ parses case 12
+    ✔ parses case 13
+    ✔ parses case 14
+    ✔ parses case 15
+    ✔ parses case 16
+    ✔ parses case 17
+    ✔ parses case 18
+    ✔ parses case 19
+    ✔ parses case 20
+    ✔ parses case 21
+    ✔ parses case 22
+    ✔ parses case 23
+    ✔ parses case 24
+    ✔ parses case 25
+    ✔ parses case 26
+    ✔ parses case 27
+    ✔ parses case 28
+    ✔ parses case 29
+
+  30 passing (45ms)
+  1 failing
+
+  1) Parser
+       parses nested blocks:
+
+      AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+      + actual - expected
+
+      + 'Block'
+      - 'Node'
+      at Context.<anonymous> (test/parser.test.js:40:12)
+      at Context.<anonymous> (test/parser.test.js:41:12)
+      at Context.<anonymous> (test/parser.test.js:42:12)
+      at Context.<anonymous> (test/parser.test.js:43:12)
+      at Context.<anonymous> (test/parser.test.js:44:12)
+      at Context.<anonymous> (test/parser.test.js:45:12)
+      at Context.<anonymous> (test/parser.test.js:46:12)
+      at Context.<anonymous> (test/parser.test.js:47:12)
+      at Context.<anonymous> (test/parser.test.js:48:12)
+      at Context.<anonymous> (test/parser.test.js:49:12)
+      at Context.<anonymous> (test/parser.test.js:50:12)
+      at Context.<anonymous> (test/parser.test.js:51:12)
+      at Context.<anonymous> (test/parser.test.js:52:12)
+      at Context.<anonymous> (test/parser.test.js:53:12)
+      at Context.<anonymous> (test/parser.test.js:54:12)

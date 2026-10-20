@@ -1,0 +1,55 @@
+Randomized with seed 41873
+
+  User#save case 1 handles input set 0
+  User#validate case 2 handles input set 3
+  User#destroy case 3 handles input set 6
+  User#reload case 4 handles input set 9
+  User#save case 5 handles input set 12
+  User#validate case 6 handles input set 15
+  User#destroy case 7 handles input set 18
+  User#reload case 8 handles input set 21
+  User#save case 9 handles input set 24
+  User#validate case 10 handles input set 27
+  User#destroy case 11 handles input set 30
+  User#reload case 12 handles input set 33
+  User#save case 13 handles input set 36
+  User#validate case 14 handles input set 39
+  User#destroy case 15 handles input set 42
+  User#reload case 16 handles input set 45
+  User#save case 17 handles input set 48
+  User#validate case 18 handles input set 51
+  User#destroy case 19 handles input set 54
+  User#reload case 20 handles input set 57
+  User#save case 21 handles input set 60
+  User#validate case 22 handles input set 63
+  User#destroy case 23 handles input set 66
+  User#reload case 24 handles input set 69
+  User#save case 25 handles input set 72
+  User#validate case 26 handles input set 75
+  User#destroy case 27 handles input set 78
+  User#reload case 28 handles input set 81
+
+Failures:
+
+  1) Invoice#total applies the discount before tax
+     Failure/Error: expect(invoice.total).to eq(108.0)
+
+       expected: 108.0
+            got: 110.0
+
+       (compared using ==)
+     # ./spec/models/invoice_spec.rb:22:in `block (2 levels) in <top (required)>'
+
+  2) Invoice#total rounds to two decimals
+     Failure/Error: expect(invoice.total).to eq(9.99)
+       expected: 9.99
+            got: 10.0
+     # ./spec/models/invoice_spec.rb:31:in `block (2 levels) in <top (required)>'
+
+Finished in 1.42 seconds (files took 0.61 seconds to load)
+34 examples, 2 failures
+
+Failed examples:
+
+rspec ./spec/models/invoice_spec.rb:20 # Invoice#total applies the discount before tax
+rspec ./spec/models/invoice_spec.rb:29 # Invoice#total rounds to two decimals

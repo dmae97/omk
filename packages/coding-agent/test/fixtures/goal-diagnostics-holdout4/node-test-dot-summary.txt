@@ -1,0 +1,39 @@
+..........X.X.X.....
+....................
+...............
+
+Failed tests:
+
+✖ percent coupon (0.821234ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 180
+  
+      at TestContext.<anonymous> (file:///home/dev/project/test/cart.test.js:9:39)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1047:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:744:18)
+      at Test.postRun (node:internal/test_runner/test:1173:19)
+      at Test.run (node:internal/test_runner/test:1101:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1442:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 180,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+✖ stock lookup without sku (0.125114ms)
+  TypeError: sku required
+      at fetchStock (file:///home/dev/project/cart.js:3:55)
+      at TestContext.<anonymous> (file:///home/dev/project/test/cart.test.js:11:67)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1047:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:744:18)
+      at Test.postRun (node:internal/test_runner/test:1173:19)
+      at Test.run (node:internal/test_runner/test:1101:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:744:7)
+✖ coupons (1.639189ms)
+  '2 subtests failed'

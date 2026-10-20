@@ -1,0 +1,12 @@
+{
+ "vitest-60-pass.txt": " ❯ test/lexer.test.ts (2 tests | 1 failed)",
+ "jest-55-pass.txt": "FAIL src/date.test.js",
+ "tsc-multi.txt": "src/m0.ts(0,3): error TS2339: Property 'x0' does not exist on type 'Y'.",
+ "eslint-warn-flood.txt": "  7:3  error  'x' is not defined  no-undef",
+ "pytest-short.txt": "E   AssertionError: assert 2 == 3",
+ "make-gcc.txt": "f7.c:12:5: error: implicit declaration of function 'foo'",
+ "gradle.txt": "Main.java:5: error: cannot find symbol",
+ "ruby-rspec.txt": "     Failure/Error: expect(u.name).to eq('A B')",
+ "deno-ansi.txt": "error: AssertionError: Values are not equal",
+ "korean-30-pass.txt": "❌ 실패: 날짜 형식이 달라요 📅 (src/날짜.ts:9)"
+}

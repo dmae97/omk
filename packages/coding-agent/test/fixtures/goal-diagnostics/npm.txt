@@ -1,0 +1,57 @@
+> app@1.0.0 build
+> node build.js
+
+building chunk 0 ...
+building chunk 1 ...
+building chunk 2 ...
+building chunk 3 ...
+building chunk 4 ...
+building chunk 5 ...
+building chunk 6 ...
+building chunk 7 ...
+building chunk 8 ...
+building chunk 9 ...
+npm ERR! code ELIFECYCLE
+npm ERR! errno 1
+npm ERR! app@1.0.0 build: `node build.js`
+npm ERR! Exit status 1
+npm ERR! detail line 0
+npm ERR! detail line 1
+npm ERR! detail line 2
+npm ERR! detail line 3
+npm ERR! detail line 4
+npm ERR! detail line 5
+npm ERR! detail line 6
+npm ERR! detail line 7
+npm ERR! detail line 8
+npm ERR! detail line 9
+npm ERR! detail line 10
+npm ERR! detail line 11
+npm ERR! detail line 12
+npm ERR! detail line 13
+npm ERR! detail line 14
+npm ERR! detail line 15
+npm ERR! detail line 16
+npm ERR! detail line 17
+npm ERR! detail line 18
+npm ERR! detail line 19
+npm ERR! detail line 20
+npm ERR! detail line 21
+npm ERR! detail line 22
+npm ERR! detail line 23
+npm ERR! detail line 24
+npm ERR! detail line 25
+npm ERR! detail line 26
+npm ERR! detail line 27
+npm ERR! detail line 28
+npm ERR! detail line 29
+npm ERR! detail line 30
+npm ERR! detail line 31
+npm ERR! detail line 32
+npm ERR! detail line 33
+npm ERR! detail line 34
+npm ERR! detail line 35
+npm ERR! detail line 36
+npm ERR! detail line 37
+npm ERR! detail line 38
+npm ERR! detail line 39

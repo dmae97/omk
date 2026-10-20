@@ -1,0 +1,42 @@
+-- The CXX compiler identification is GNU 13.2.0
+-- Detecting CXX compiler ABI info - done
+-- Configuring done (0.4s)
+-- Generating done (0.0s)
+[  3%] Building CXX object src/CMakeFiles/core.dir/unit_01.cpp.o
+[  6%] Building CXX object src/CMakeFiles/core.dir/unit_02.cpp.o
+[  9%] Building CXX object src/CMakeFiles/core.dir/unit_03.cpp.o
+[ 12%] Building CXX object src/CMakeFiles/core.dir/unit_04.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/core.dir/unit_05.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/core.dir/unit_06.cpp.o
+[ 21%] Building CXX object src/CMakeFiles/core.dir/unit_07.cpp.o
+[ 24%] Building CXX object src/CMakeFiles/core.dir/unit_08.cpp.o
+[ 27%] Building CXX object src/CMakeFiles/core.dir/unit_09.cpp.o
+[ 30%] Building CXX object src/CMakeFiles/core.dir/unit_10.cpp.o
+[ 33%] Building CXX object src/CMakeFiles/core.dir/unit_11.cpp.o
+[ 36%] Building CXX object src/CMakeFiles/core.dir/unit_12.cpp.o
+[ 39%] Building CXX object src/CMakeFiles/core.dir/unit_13.cpp.o
+[ 42%] Building CXX object src/CMakeFiles/core.dir/unit_14.cpp.o
+[ 45%] Building CXX object src/CMakeFiles/core.dir/unit_15.cpp.o
+[ 48%] Building CXX object src/CMakeFiles/core.dir/unit_16.cpp.o
+[ 51%] Building CXX object src/CMakeFiles/core.dir/unit_17.cpp.o
+[ 54%] Building CXX object src/CMakeFiles/core.dir/unit_18.cpp.o
+[ 57%] Building CXX object src/CMakeFiles/core.dir/unit_19.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/core.dir/unit_20.cpp.o
+[ 63%] Building CXX object src/CMakeFiles/core.dir/unit_21.cpp.o
+[ 66%] Building CXX object src/CMakeFiles/core.dir/unit_22.cpp.o
+[ 69%] Building CXX object src/CMakeFiles/core.dir/unit_23.cpp.o
+[ 72%] Building CXX object src/CMakeFiles/core.dir/unit_24.cpp.o
+[ 75%] Building CXX object src/CMakeFiles/core.dir/unit_25.cpp.o
+[ 78%] Building CXX object src/CMakeFiles/core.dir/unit_26.cpp.o
+[ 81%] Building CXX object src/CMakeFiles/core.dir/unit_27.cpp.o
+[ 84%] Building CXX object src/CMakeFiles/core.dir/unit_28.cpp.o
+[ 87%] Building CXX object src/CMakeFiles/core.dir/unit_29.cpp.o
+[ 90%] Building CXX object src/CMakeFiles/core.dir/unit_30.cpp.o
+[ 93%] Building CXX object src/CMakeFiles/core.dir/unit_31.cpp.o
+[ 96%] Building CXX object src/CMakeFiles/core.dir/unit_32.cpp.o
+/src/net/socket.cpp: In member function 'void Socket::bind(int)':
+/src/net/socket.cpp:57:12: note: candidate expects 2 arguments, 1 provided
+   57 |     ::bind(fd_);
+      |     ~~~~~~^~~~~
+make[2]: *** [src/CMakeFiles/core.dir/build.make:244: src/CMakeFiles/core.dir/net/socket.cpp.o] Stop 1
+make[1]: *** [CMakeFiles/Makefile2:98: src/CMakeFiles/core.dir/all] Stop 2

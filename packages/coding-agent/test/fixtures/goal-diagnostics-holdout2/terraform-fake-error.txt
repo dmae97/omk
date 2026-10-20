@@ -1,0 +1,57 @@
+Initializing the backend...
+2026-10-20T11:00:01.000Z [WARN]  provider.aws: Error: transient throttling, retrying (attempt 1/5)
+aws_s3_bucket.logs[0]: Refreshing state... [id=logs-0]
+aws_s3_bucket.logs[1]: Refreshing state... [id=logs-1]
+aws_s3_bucket.logs[2]: Refreshing state... [id=logs-2]
+aws_s3_bucket.logs[3]: Refreshing state... [id=logs-3]
+aws_s3_bucket.logs[4]: Refreshing state... [id=logs-4]
+aws_s3_bucket.logs[5]: Refreshing state... [id=logs-5]
+aws_s3_bucket.logs[6]: Refreshing state... [id=logs-6]
+aws_s3_bucket.logs[7]: Refreshing state... [id=logs-7]
+aws_s3_bucket.logs[8]: Refreshing state... [id=logs-8]
+aws_s3_bucket.logs[9]: Refreshing state... [id=logs-9]
+aws_s3_bucket.logs[10]: Refreshing state... [id=logs-10]
+aws_s3_bucket.logs[11]: Refreshing state... [id=logs-11]
+aws_s3_bucket.logs[12]: Refreshing state... [id=logs-12]
+aws_s3_bucket.logs[13]: Refreshing state... [id=logs-13]
+aws_s3_bucket.logs[14]: Refreshing state... [id=logs-14]
+aws_s3_bucket.logs[15]: Refreshing state... [id=logs-15]
+aws_s3_bucket.logs[16]: Refreshing state... [id=logs-16]
+aws_s3_bucket.logs[17]: Refreshing state... [id=logs-17]
+aws_s3_bucket.logs[18]: Refreshing state... [id=logs-18]
+aws_s3_bucket.logs[19]: Refreshing state... [id=logs-19]
+aws_s3_bucket.logs[20]: Refreshing state... [id=logs-20]
+aws_s3_bucket.logs[21]: Refreshing state... [id=logs-21]
+aws_s3_bucket.logs[22]: Refreshing state... [id=logs-22]
+aws_s3_bucket.logs[23]: Refreshing state... [id=logs-23]
+aws_s3_bucket.logs[24]: Refreshing state... [id=logs-24]
+aws_s3_bucket.logs[25]: Refreshing state... [id=logs-25]
+aws_s3_bucket.logs[26]: Refreshing state... [id=logs-26]
+aws_s3_bucket.logs[27]: Refreshing state... [id=logs-27]
+aws_s3_bucket.logs[28]: Refreshing state... [id=logs-28]
+aws_s3_bucket.logs[29]: Refreshing state... [id=logs-29]
+aws_s3_bucket.logs[30]: Refreshing state... [id=logs-30]
+aws_s3_bucket.logs[31]: Refreshing state... [id=logs-31]
+aws_s3_bucket.logs[32]: Refreshing state... [id=logs-32]
+aws_s3_bucket.logs[33]: Refreshing state... [id=logs-33]
+aws_s3_bucket.logs[34]: Refreshing state... [id=logs-34]
+aws_s3_bucket.logs[35]: Refreshing state... [id=logs-35]
+aws_s3_bucket.logs[36]: Refreshing state... [id=logs-36]
+aws_s3_bucket.logs[37]: Refreshing state... [id=logs-37]
+aws_s3_bucket.logs[38]: Refreshing state... [id=logs-38]
+aws_s3_bucket.logs[39]: Refreshing state... [id=logs-39]
+aws_s3_bucket.logs[40]: Refreshing state... [id=logs-40]
+aws_s3_bucket.logs[41]: Refreshing state... [id=logs-41]
+aws_s3_bucket.logs[42]: Refreshing state... [id=logs-42]
+aws_s3_bucket.logs[43]: Refreshing state... [id=logs-43]
+aws_s3_bucket.logs[44]: Refreshing state... [id=logs-44]
+
+Planning failed. Terraform encountered an error while generating this plan.
+
+│ Error: Reference to undeclared resource
+│
+│   on main.tf line 14, in resource "aws_instance" "web":
+│   14:   subnet_id = aws_subnet.missing.id
+│
+│ A managed resource "aws_subnet" "missing" has not been declared in the root module.
+╵

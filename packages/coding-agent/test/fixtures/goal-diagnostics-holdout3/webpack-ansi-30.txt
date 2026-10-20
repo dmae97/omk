@@ -1,0 +1,43 @@
+<i> [webpack-dev-middleware] wait until bundle finished
+asset chunk-000.js 12.0 KiB [emitted] [minimized] (name: chunk-0)
+asset chunk-001.js 13.1 KiB [emitted] [minimized] (name: chunk-1)
+asset chunk-002.js 14.2 KiB [emitted] [minimized] (name: chunk-2)
+asset chunk-003.js 15.3 KiB [emitted] [minimized] (name: chunk-3)
+asset chunk-004.js 16.4 KiB [emitted] [minimized] (name: chunk-4)
+asset chunk-005.js 17.5 KiB [emitted] [minimized] (name: chunk-5)
+asset chunk-006.js 18.6 KiB [emitted] [minimized] (name: chunk-6)
+asset chunk-007.js 19.7 KiB [emitted] [minimized] (name: chunk-7)
+asset chunk-008.js 20.8 KiB [emitted] [minimized] (name: chunk-8)
+asset chunk-009.js 21.9 KiB [emitted] [minimized] (name: chunk-9)
+asset chunk-010.js 22.0 KiB [emitted] [minimized] (name: chunk-10)
+asset chunk-011.js 23.1 KiB [emitted] [minimized] (name: chunk-11)
+asset chunk-012.js 24.2 KiB [emitted] [minimized] (name: chunk-12)
+asset chunk-013.js 25.3 KiB [emitted] [minimized] (name: chunk-13)
+asset chunk-014.js 26.4 KiB [emitted] [minimized] (name: chunk-14)
+asset chunk-015.js 27.5 KiB [emitted] [minimized] (name: chunk-15)
+asset chunk-016.js 28.6 KiB [emitted] [minimized] (name: chunk-16)
+asset chunk-017.js 29.7 KiB [emitted] [minimized] (name: chunk-17)
+asset chunk-018.js 30.8 KiB [emitted] [minimized] (name: chunk-18)
+asset chunk-019.js 31.9 KiB [emitted] [minimized] (name: chunk-19)
+asset chunk-020.js 32.0 KiB [emitted] [minimized] (name: chunk-20)
+asset chunk-021.js 33.1 KiB [emitted] [minimized] (name: chunk-21)
+asset chunk-022.js 34.2 KiB [emitted] [minimized] (name: chunk-22)
+asset chunk-023.js 35.3 KiB [emitted] [minimized] (name: chunk-23)
+asset chunk-024.js 36.4 KiB [emitted] [minimized] (name: chunk-24)
+asset chunk-025.js 37.5 KiB [emitted] [minimized] (name: chunk-25)
+asset chunk-026.js 38.6 KiB [emitted] [minimized] (name: chunk-26)
+asset chunk-027.js 39.7 KiB [emitted] [minimized] (name: chunk-27)
+asset chunk-028.js 40.8 KiB [emitted] [minimized] (name: chunk-28)
+asset chunk-029.js 41.9 KiB [emitted] [minimized] (name: chunk-29)
+orphan modules 88.4 KiB [orphan] 41 modules
+runtime modules 2.71 KiB 6 modules
+
+[1m[31mERROR in ./src/components/Checkout.tsx 17:8-34[39m[22m
+Module not found: Error: Can't resolve './PaymentForm' in '/app/src/components'
+resolve './PaymentForm' in '/app/src/components'
+  using description file: /app/package.json (relative path: ./src/components)
+
+[1m[31mERROR in ./src/api/client.ts 3:0-28[39m[22m
+Module not found: Error: Can't resolve 'axios-retry' in '/app/src/api'
+
+webpack 5.94.0 compiled with 2 errors in 4211 ms

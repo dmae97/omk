@@ -1,0 +1,18 @@
+INFO: Invocation ID: 1f2e3d4c
+INFO: Analyzed target //app:main (12 packages loaded, 340 targets configured).
+INFO: Found 1 target...
+[0 / 120] Compiling src/lib0.cc; 0s linux-sandbox
+[10 / 120] Compiling src/lib1.cc; 0s linux-sandbox
+[20 / 120] Compiling src/lib2.cc; 0s linux-sandbox
+[30 / 120] Compiling src/lib3.cc; 0s linux-sandbox
+[40 / 120] Compiling src/lib4.cc; 0s linux-sandbox
+[50 / 120] Compiling src/lib5.cc; 0s linux-sandbox
+[60 / 120] Compiling src/lib6.cc; 0s linux-sandbox
+[70 / 120] Compiling src/lib7.cc; 0s linux-sandbox
+ERROR: /repo/app/BUILD:3:10: Compiling app/main.cc failed: (Exit 1): gcc failed: error executing command
+app/main.cc:7:3: error: 'foo' was not declared in this scope
+    7 |   foo();
+      |   ^~~
+Target //app:main failed to build
+INFO: Elapsed time: 2.114s
+FAILED: Build did NOT complete successfully

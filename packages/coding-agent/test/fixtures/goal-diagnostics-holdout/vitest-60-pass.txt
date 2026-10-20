@@ -1,0 +1,86 @@
+ RUN  v3.2.4 /repo
+
+ ✓ test/u0.test.ts (4 tests) 0ms
+ ✓ test/u1.test.ts (4 tests) 1ms
+ ✓ test/u2.test.ts (4 tests) 2ms
+ ✓ test/u3.test.ts (4 tests) 3ms
+ ✓ test/u4.test.ts (4 tests) 4ms
+ ✓ test/u5.test.ts (4 tests) 5ms
+ ✓ test/u6.test.ts (4 tests) 6ms
+ ✓ test/u7.test.ts (4 tests) 7ms
+ ✓ test/u8.test.ts (4 tests) 8ms
+ ✓ test/u9.test.ts (4 tests) 9ms
+ ✓ test/u10.test.ts (4 tests) 10ms
+ ✓ test/u11.test.ts (4 tests) 11ms
+ ✓ test/u12.test.ts (4 tests) 12ms
+ ✓ test/u13.test.ts (4 tests) 13ms
+ ✓ test/u14.test.ts (4 tests) 14ms
+ ✓ test/u15.test.ts (4 tests) 15ms
+ ✓ test/u16.test.ts (4 tests) 16ms
+ ✓ test/u17.test.ts (4 tests) 17ms
+ ✓ test/u18.test.ts (4 tests) 18ms
+ ✓ test/u19.test.ts (4 tests) 19ms
+ ✓ test/u20.test.ts (4 tests) 20ms
+ ✓ test/u21.test.ts (4 tests) 21ms
+ ✓ test/u22.test.ts (4 tests) 22ms
+ ✓ test/u23.test.ts (4 tests) 23ms
+ ✓ test/u24.test.ts (4 tests) 24ms
+ ✓ test/u25.test.ts (4 tests) 25ms
+ ✓ test/u26.test.ts (4 tests) 26ms
+ ✓ test/u27.test.ts (4 tests) 27ms
+ ✓ test/u28.test.ts (4 tests) 28ms
+ ✓ test/u29.test.ts (4 tests) 29ms
+ ✓ test/u30.test.ts (4 tests) 30ms
+ ✓ test/u31.test.ts (4 tests) 31ms
+ ✓ test/u32.test.ts (4 tests) 32ms
+ ✓ test/u33.test.ts (4 tests) 33ms
+ ✓ test/u34.test.ts (4 tests) 34ms
+ ✓ test/u35.test.ts (4 tests) 35ms
+ ✓ test/u36.test.ts (4 tests) 36ms
+ ✓ test/u37.test.ts (4 tests) 37ms
+ ✓ test/u38.test.ts (4 tests) 38ms
+ ✓ test/u39.test.ts (4 tests) 39ms
+ ✓ test/u40.test.ts (4 tests) 40ms
+ ✓ test/u41.test.ts (4 tests) 41ms
+ ✓ test/u42.test.ts (4 tests) 42ms
+ ✓ test/u43.test.ts (4 tests) 43ms
+ ✓ test/u44.test.ts (4 tests) 44ms
+ ✓ test/u45.test.ts (4 tests) 45ms
+ ✓ test/u46.test.ts (4 tests) 46ms
+ ✓ test/u47.test.ts (4 tests) 47ms
+ ✓ test/u48.test.ts (4 tests) 48ms
+ ✓ test/u49.test.ts (4 tests) 49ms
+ ✓ test/u50.test.ts (4 tests) 50ms
+ ✓ test/u51.test.ts (4 tests) 51ms
+ ✓ test/u52.test.ts (4 tests) 52ms
+ ✓ test/u53.test.ts (4 tests) 53ms
+ ✓ test/u54.test.ts (4 tests) 54ms
+ ✓ test/u55.test.ts (4 tests) 55ms
+ ✓ test/u56.test.ts (4 tests) 56ms
+ ✓ test/u57.test.ts (4 tests) 57ms
+ ✓ test/u58.test.ts (4 tests) 58ms
+ ✓ test/u59.test.ts (4 tests) 59ms
+ ❯ test/lexer.test.ts (2 tests | 1 failed)
+   × lexer > reads numbers
+     → expected 12 to be 13
+   0| code
+   1| code
+   2| code
+   3| code
+   4| code
+   5| code
+   6| code
+   7| code
+   8| code
+   9| code
+   10| code
+   11| code
+   12| code
+   13| code
+   14| code
+   15| code
+   16| code
+   17| code
+   18| code
+   19| code
+ Tests  1 failed | 241 passed

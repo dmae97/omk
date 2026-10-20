@@ -1,0 +1,79 @@
+   Compiling dep0 v0.0.0
+   Compiling dep1 v0.1.0
+   Compiling dep2 v0.2.0
+   Compiling dep3 v0.3.0
+   Compiling dep4 v0.4.0
+   Compiling dep5 v0.5.0
+   Compiling dep6 v0.6.0
+   Compiling dep7 v0.7.0
+   Compiling dep8 v0.8.0
+   Compiling dep9 v0.9.0
+   Compiling dep10 v0.10.0
+   Compiling dep11 v0.11.0
+error[E0308]: mismatched types
+ --> src/main.rs:4:18
+  |
+4 |     let x: u32 = "hello";
+  |            ---   ^^^^^^^ expected `u32`, found `&str`
+
+warning: unused variable: `v0`
+ --> src/lib.rs:0:9
+warning: unused variable: `v1`
+ --> src/lib.rs:1:9
+warning: unused variable: `v2`
+ --> src/lib.rs:2:9
+warning: unused variable: `v3`
+ --> src/lib.rs:3:9
+warning: unused variable: `v4`
+ --> src/lib.rs:4:9
+warning: unused variable: `v5`
+ --> src/lib.rs:5:9
+warning: unused variable: `v6`
+ --> src/lib.rs:6:9
+warning: unused variable: `v7`
+ --> src/lib.rs:7:9
+warning: unused variable: `v8`
+ --> src/lib.rs:8:9
+warning: unused variable: `v9`
+ --> src/lib.rs:9:9
+warning: unused variable: `v10`
+ --> src/lib.rs:10:9
+warning: unused variable: `v11`
+ --> src/lib.rs:11:9
+warning: unused variable: `v12`
+ --> src/lib.rs:12:9
+warning: unused variable: `v13`
+ --> src/lib.rs:13:9
+warning: unused variable: `v14`
+ --> src/lib.rs:14:9
+warning: unused variable: `v15`
+ --> src/lib.rs:15:9
+warning: unused variable: `v16`
+ --> src/lib.rs:16:9
+warning: unused variable: `v17`
+ --> src/lib.rs:17:9
+warning: unused variable: `v18`
+ --> src/lib.rs:18:9
+warning: unused variable: `v19`
+ --> src/lib.rs:19:9
+warning: unused variable: `v20`
+ --> src/lib.rs:20:9
+warning: unused variable: `v21`
+ --> src/lib.rs:21:9
+warning: unused variable: `v22`
+ --> src/lib.rs:22:9
+warning: unused variable: `v23`
+ --> src/lib.rs:23:9
+warning: unused variable: `v24`
+ --> src/lib.rs:24:9
+warning: unused variable: `v25`
+ --> src/lib.rs:25:9
+warning: unused variable: `v26`
+ --> src/lib.rs:26:9
+warning: unused variable: `v27`
+ --> src/lib.rs:27:9
+warning: unused variable: `v28`
+ --> src/lib.rs:28:9
+warning: unused variable: `v29`
+ --> src/lib.rs:29:9
+error: could not compile `app` due to 1 previous error

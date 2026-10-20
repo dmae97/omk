@@ -1,0 +1,70 @@
+Running 41 tests using 4 workers
+
+  ✓  0 [chromium] › tests/page0.spec.ts:8:3 › renders (100ms)
+  ✓  1 [chromium] › tests/page1.spec.ts:8:3 › renders (101ms)
+  ✓  2 [chromium] › tests/page2.spec.ts:8:3 › renders (102ms)
+  ✓  3 [chromium] › tests/page3.spec.ts:8:3 › renders (103ms)
+  ✓  4 [chromium] › tests/page4.spec.ts:8:3 › renders (104ms)
+  ✓  5 [chromium] › tests/page5.spec.ts:8:3 › renders (105ms)
+  ✓  6 [chromium] › tests/page6.spec.ts:8:3 › renders (106ms)
+  ✓  7 [chromium] › tests/page7.spec.ts:8:3 › renders (107ms)
+  ✓  8 [chromium] › tests/page8.spec.ts:8:3 › renders (108ms)
+  ✓  9 [chromium] › tests/page9.spec.ts:8:3 › renders (109ms)
+  ✓  10 [chromium] › tests/page10.spec.ts:8:3 › renders (110ms)
+  ✓  11 [chromium] › tests/page11.spec.ts:8:3 › renders (111ms)
+  ✓  12 [chromium] › tests/page12.spec.ts:8:3 › renders (112ms)
+  ✓  13 [chromium] › tests/page13.spec.ts:8:3 › renders (113ms)
+  ✓  14 [chromium] › tests/page14.spec.ts:8:3 › renders (114ms)
+  ✓  15 [chromium] › tests/page15.spec.ts:8:3 › renders (115ms)
+  ✓  16 [chromium] › tests/page16.spec.ts:8:3 › renders (116ms)
+  ✓  17 [chromium] › tests/page17.spec.ts:8:3 › renders (117ms)
+  ✓  18 [chromium] › tests/page18.spec.ts:8:3 › renders (118ms)
+  ✓  19 [chromium] › tests/page19.spec.ts:8:3 › renders (119ms)
+  ✓  20 [chromium] › tests/page20.spec.ts:8:3 › renders (120ms)
+  ✓  21 [chromium] › tests/page21.spec.ts:8:3 › renders (121ms)
+  ✓  22 [chromium] › tests/page22.spec.ts:8:3 › renders (122ms)
+  ✓  23 [chromium] › tests/page23.spec.ts:8:3 › renders (123ms)
+  ✓  24 [chromium] › tests/page24.spec.ts:8:3 › renders (124ms)
+  ✓  25 [chromium] › tests/page25.spec.ts:8:3 › renders (125ms)
+  ✓  26 [chromium] › tests/page26.spec.ts:8:3 › renders (126ms)
+  ✓  27 [chromium] › tests/page27.spec.ts:8:3 › renders (127ms)
+  ✓  28 [chromium] › tests/page28.spec.ts:8:3 › renders (128ms)
+  ✓  29 [chromium] › tests/page29.spec.ts:8:3 › renders (129ms)
+  ✓  30 [chromium] › tests/page30.spec.ts:8:3 › renders (130ms)
+  ✓  31 [chromium] › tests/page31.spec.ts:8:3 › renders (131ms)
+  ✓  32 [chromium] › tests/page32.spec.ts:8:3 › renders (132ms)
+  ✓  33 [chromium] › tests/page33.spec.ts:8:3 › renders (133ms)
+  ✓  34 [chromium] › tests/page34.spec.ts:8:3 › renders (134ms)
+  ✓  35 [chromium] › tests/page35.spec.ts:8:3 › renders (135ms)
+  ✓  36 [chromium] › tests/page36.spec.ts:8:3 › renders (136ms)
+  ✓  37 [chromium] › tests/page37.spec.ts:8:3 › renders (137ms)
+  ✓  38 [chromium] › tests/page38.spec.ts:8:3 › renders (138ms)
+  ✓  39 [chromium] › tests/page39.spec.ts:8:3 › renders (139ms)
+  1) [chromium] › tests/login.spec.ts:12:5 › logs in with valid user
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Welcome')
+      at tests/login.spec.ts:14:7
+      at tests/login.spec.ts:15:7
+      at tests/login.spec.ts:16:7
+      at tests/login.spec.ts:17:7
+      at tests/login.spec.ts:18:7
+      at tests/login.spec.ts:19:7
+      at tests/login.spec.ts:20:7
+      at tests/login.spec.ts:21:7
+      at tests/login.spec.ts:22:7
+      at tests/login.spec.ts:23:7
+      at tests/login.spec.ts:24:7
+      at tests/login.spec.ts:25:7
+      at tests/login.spec.ts:26:7
+      at tests/login.spec.ts:27:7
+      at tests/login.spec.ts:28:7
+      at tests/login.spec.ts:29:7
+      at tests/login.spec.ts:30:7
+      at tests/login.spec.ts:31:7
+      at tests/login.spec.ts:32:7
+      at tests/login.spec.ts:33:7
+
+  1 failed
+  40 passed (12.3s)

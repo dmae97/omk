@@ -1,0 +1,13 @@
+{
+ "tsc.txt": "src/mod1.ts(11,5): error TS2322: Type 'string' is not assignable to type 'number'.",
+ "vitest.txt": " ❯ test/parser.test.ts (3 tests | 1 failed) 21ms",
+ "eslint.txt": "  12:7  error  'unused' is assigned a value but never used  no-unused-vars",
+ "jest.txt": "FAIL src/sum.test.js",
+ "npm.txt": "npm ERR! code ELIFECYCLE",
+ "node-stack.txt": "TypeError: config.port must be a number",
+ "python-traceback.txt": "Traceback (most recent call last):",
+ "cargo.txt": "error[E0308]: mismatched types",
+ "go-test.txt": "    parse_test.go:27: got 3, want 4",
+ "ansi-vitest.txt": "× tokenizer > splits words",
+ "korean-emoji.txt": "❌ 실패: 파서가 중첩 블록을 처리하지 못했어요 🧩 (src/파서.ts:42)"
+}

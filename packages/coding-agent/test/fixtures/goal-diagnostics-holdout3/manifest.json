@@ -1,0 +1,131 @@
+{
+ "rspec-28-pass.txt": {
+  "groundTruthLine": 35,
+  "groundTruthLastLine": 44,
+  "groundTruthText": "     Failure/Error: expect(invoice.total).to eq(108.0)",
+  "groundTruthLastText": "     Failure/Error: expect(invoice.total).to eq(9.99)",
+  "linesBefore": 34,
+  "sanitizedBytes": 1992,
+  "sanitizedLines": 55,
+  "tags": [
+   ">24-before"
+  ]
+ },
+ "maven-zero-errors-decoy.txt": {
+  "groundTruthLine": 36,
+  "groundTruthLastLine": 45,
+  "groundTruthText": "[ERROR] Tests run: 4, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.31 s <<< FAILURE! -- in com.shop.api.OrderControllerTest",
+  "groundTruthLastText": "[ERROR]   OrderControllerTest.rejectsEmptyCart:57 expected: <400> but was: <200>",
+  "linesBefore": 35,
+  "sanitizedBytes": 2608,
+  "sanitizedLines": 48,
+  "tags": [
+   "deceptive-pattern-strings",
+   ">24-before"
+  ]
+ },
+ "deno-error-names-decoy.txt": {
+  "groundTruthLine": 30,
+  "groundTruthLastLine": 55,
+  "groundTruthText": "session cookie expires ... FAILED (12ms)",
+  "groundTruthLastText": "error: Test failed",
+  "linesBefore": 29,
+  "sanitizedBytes": 1504,
+  "sanitizedLines": 55,
+  "tags": [
+   "deceptive-pattern-strings",
+   ">24-before"
+  ]
+ },
+ "ctest-fake-error.txt": {
+  "groundTruthLine": 34,
+  "groundTruthLastLine": 45,
+  "groundTruthText": "    Test #16: matrix_inverse ...................***Failed    0.05 sec",
+  "groundTruthLastText": "\t 16 - matrix_inverse (Failed)",
+  "linesBefore": 33,
+  "sanitizedBytes": 2028,
+  "sanitizedLines": 46,
+  "tags": [
+   "planted-fake-error",
+   ">24-before"
+  ]
+ },
+ "exunit-summary-mid.txt": {
+  "groundTruthLine": 8,
+  "groundTruthLastLine": 20,
+  "groundTruthText": "  1) test totals with promo code (Shop.CartTest)",
+  "groundTruthLastText": "135 tests, 1 failure",
+  "linesBefore": 7,
+  "sanitizedBytes": 1856,
+  "sanitizedLines": 52,
+  "tags": [
+   "summary-only-candidate"
+  ]
+ },
+ "ruff-keywordless-28.txt": {
+  "groundTruthLine": 30,
+  "groundTruthLastLine": 39,
+  "groundTruthText": "src/pkg/billing.py:14:5: F841 Local variable `retry_count` is assigned to but never used",
+  "groundTruthLastText": "src/pkg/billing.py:31:1: E402 Module level import not at top of file",
+  "linesBefore": 29,
+  "sanitizedBytes": 1558,
+  "sanitizedLines": 42,
+  "tags": [
+   "keyword-less",
+   "fallback-candidate",
+   ">24-before"
+  ]
+ },
+ "golangci-warnings-first.txt": {
+  "groundTruthLine": 15,
+  "groundTruthLastLine": 21,
+  "groundTruthText": "internal/store/cache.go:88:2: ineffectual assignment to err (ineffassign)",
+  "groundTruthLastText": "cmd/server/main.go:42:15: SA1019: grpc.WithInsecure is deprecated (staticcheck)",
+  "linesBefore": 14,
+  "sanitizedBytes": 2685,
+  "sanitizedLines": 45,
+  "tags": [
+   "warnings-first"
+  ]
+ },
+ "webpack-ansi-30.txt": {
+  "groundTruthLine": 35,
+  "groundTruthLastLine": 43,
+  "groundTruthText": "ERROR in ./src/components/Checkout.tsx 17:8-34",
+  "groundTruthLastText": "webpack 5.94.0 compiled with 2 errors in 4211 ms",
+  "linesBefore": 34,
+  "sanitizedBytes": 2548,
+  "sanitizedLines": 43,
+  "tags": [
+   ">24-before",
+   "ansi"
+  ]
+ },
+ "cmake-keywordless-36.txt": {
+  "groundTruthLine": 38,
+  "groundTruthLastLine": 42,
+  "groundTruthText": "/src/net/socket.cpp:57:12: note: candidate expects 2 arguments, 1 provided",
+  "groundTruthLastText": "make[1]: *** [CMakeFiles/Makefile2:98: src/CMakeFiles/core.dir/all] Stop 2",
+  "linesBefore": 37,
+  "sanitizedBytes": 2592,
+  "sanitizedLines": 42,
+  "tags": [
+   "keyword-less",
+   "fallback-candidate",
+   ">24-before"
+  ]
+ },
+ "pytest-error-names-decoy.txt": {
+  "groundTruthLine": 26,
+  "groundTruthLastLine": 48,
+  "groundTruthText": "tests/test_sync.py::test_resume_after_crash FAILED                         [ 44%]",
+  "groundTruthLastText": "========================= 1 failed, 27 passed in 0.88s =========================",
+  "linesBefore": 25,
+  "sanitizedBytes": 2771,
+  "sanitizedLines": 48,
+  "tags": [
+   "deceptive-pattern-strings",
+   ">24-before"
+  ]
+ }
+}

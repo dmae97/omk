@@ -1,0 +1,42 @@
+$ ruff check src/
+Checking src/pkg/module_00.py ... clean
+Checking src/pkg/module_01.py ... clean
+Checking src/pkg/module_02.py ... clean
+Checking src/pkg/module_03.py ... clean
+Checking src/pkg/module_04.py ... clean
+Checking src/pkg/module_05.py ... clean
+Checking src/pkg/module_06.py ... clean
+Checking src/pkg/module_07.py ... clean
+Checking src/pkg/module_08.py ... clean
+Checking src/pkg/module_09.py ... clean
+Checking src/pkg/module_10.py ... clean
+Checking src/pkg/module_11.py ... clean
+Checking src/pkg/module_12.py ... clean
+Checking src/pkg/module_13.py ... clean
+Checking src/pkg/module_14.py ... clean
+Checking src/pkg/module_15.py ... clean
+Checking src/pkg/module_16.py ... clean
+Checking src/pkg/module_17.py ... clean
+Checking src/pkg/module_18.py ... clean
+Checking src/pkg/module_19.py ... clean
+Checking src/pkg/module_20.py ... clean
+Checking src/pkg/module_21.py ... clean
+Checking src/pkg/module_22.py ... clean
+Checking src/pkg/module_23.py ... clean
+Checking src/pkg/module_24.py ... clean
+Checking src/pkg/module_25.py ... clean
+Checking src/pkg/module_26.py ... clean
+Checking src/pkg/module_27.py ... clean
+src/pkg/billing.py:14:5: F841 Local variable `retry_count` is assigned to but never used
+   |
+12 |     def charge(self, amount):
+13 |         token = self._token()
+14 |         retry_count = 3
+   |         ^^^^^^^^^^^ F841
+   |
+   = help: Remove assignment to unused variable `retry_count`
+
+src/pkg/billing.py:31:1: E402 Module level import not at top of file
+
+Found 2 violations.
+[*] 1 fixable with the `--fix` option.

@@ -1,0 +1,68 @@
+
+ RUN  v3.2.4 /repo/packages/app
+
+ ✓ test/unit/case0.test.ts (12 tests) 3ms
+ ✓ test/unit/case1.test.ts (12 tests) 4ms
+ ✓ test/unit/case2.test.ts (12 tests) 5ms
+ ✓ test/unit/case3.test.ts (12 tests) 6ms
+ ✓ test/unit/case4.test.ts (12 tests) 7ms
+ ✓ test/unit/case5.test.ts (12 tests) 8ms
+ ✓ test/unit/case6.test.ts (12 tests) 9ms
+ ✓ test/unit/case7.test.ts (12 tests) 10ms
+ ✓ test/unit/case8.test.ts (12 tests) 11ms
+ ✓ test/unit/case9.test.ts (12 tests) 12ms
+ ✓ test/unit/case10.test.ts (12 tests) 13ms
+ ✓ test/unit/case11.test.ts (12 tests) 14ms
+ ✓ test/unit/case12.test.ts (12 tests) 15ms
+ ✓ test/unit/case13.test.ts (12 tests) 16ms
+ ❯ test/parser.test.ts (3 tests | 1 failed) 21ms
+   × parser > parses nested blocks 9ms
+     → expected { kind: 'Block' } to deeply equal { kind: 'Node' }
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/parser.test.ts > parser > parses nested blocks
+AssertionError: expected { kind: 'Block' } to deeply equal { kind: 'Node' }
+
+- Expected
++ Received
+
+  {
+-   "kind": "Node",
++   "kind": "Block",
+  }
+
+ ❯ test/parser.test.ts:42:18
+     40|   line 0
+     41|   line 1
+     42|   line 2
+     43|   line 3
+     44|   line 4
+     45|   line 5
+     46|   line 6
+     47|   line 7
+     48|   line 8
+     49|   line 9
+     50|   line 10
+     51|   line 11
+     52|   line 12
+     53|   line 13
+     54|   line 14
+     55|   line 15
+     56|   line 16
+     57|   line 17
+     58|   line 18
+     59|   line 19
+     60|   line 20
+     61|   line 21
+     62|   line 22
+     63|   line 23
+     64|   line 24
+     65|   line 25
+     66|   line 26
+     67|   line 27
+     68|   line 28
+     69|   line 29
+
+ Test Files  1 failed | 14 passed (15)
+      Tests  1 failed | 170 passed (171)

@@ -1,0 +1,85 @@
+{
+ "playwright-40-pass.txt": {
+  "groundTruthLine": 43,
+  "groundTruthText": "  1) [chromium] › tests/login.spec.ts:12:5 › logs in with valid user",
+  "linesBefore": 42,
+  "tags": [
+   ">24-before"
+  ]
+ },
+ "mocha-30-pass.txt": {
+  "groundTruthLine": 35,
+  "groundTruthText": "  1 failing",
+  "linesBefore": 34,
+  "tags": [
+   ">24-before",
+   "keyword-less"
+  ]
+ },
+ "phpunit-deceptive.txt": {
+  "groundTruthLine": 35,
+  "groundTruthText": "There was 1 failure:",
+  "linesBefore": 34,
+  "tags": [
+   "deceptive-pattern-strings",
+   ">24-before"
+  ]
+ },
+ "terraform-fake-error.txt": {
+  "groundTruthLine": 51,
+  "groundTruthText": "│ Error: Reference to undeclared resource",
+  "linesBefore": 50,
+  "tags": [
+   "planted-fake-error",
+   ">24-before"
+  ]
+ },
+ "mypy.txt": {
+  "groundTruthLine": 3,
+  "groundTruthText": "src/app/models.py:10: error: Incompatible types in assignment (expression has type \"str\", variable has type \"int\")  [assignment]",
+  "linesBefore": 2,
+  "tags": []
+ },
+ "dotnet-warnings-first.txt": {
+  "groundTruthLine": 35,
+  "groundTruthText": "/repo/src/Program.cs(12,5): error CS0103: The name 'config' does not exist in the current context [/repo/src/App.csproj]",
+  "linesBefore": 34,
+  "tags": [
+   "warnings-first",
+   ">24-before"
+  ]
+ },
+ "xcodebuild-keywordless.txt": {
+  "groundTruthLine": 30,
+  "groundTruthText": "/repo/AppTests/DateTests.swift:21: XCTAssertEqual failed: (\"2025\") is not equal to (\"2026\")",
+  "linesBefore": 29,
+  "tags": [
+   "keyword-less",
+   ">24-before"
+  ]
+ },
+ "bazel.txt": {
+  "groundTruthLine": 12,
+  "groundTruthText": "ERROR: /repo/app/BUILD:3:10: Compiling app/main.cc failed: (Exit 1): gcc failed: error executing command",
+  "linesBefore": 11,
+  "tags": []
+ },
+ "kotlin-deceptive.txt": {
+  "groundTruthLine": 5,
+  "groundTruthText": "e: file:///repo/app/src/Main.kt:4:5 Unresolved reference 'fooBar'.",
+  "linesBefore": 4,
+  "tags": [
+   "deceptive-pattern-strings",
+   "keyword-less"
+  ]
+ },
+ "ava-korean-28-pass.txt": {
+  "groundTruthLine": 29,
+  "groundTruthText": "  ✘ [fail]: 날짜 › 연도 형식이 달라요 📅",
+  "linesBefore": 28,
+  "tags": [
+   ">24-before",
+   "korean-emoji"
+  ]
+ }
+}

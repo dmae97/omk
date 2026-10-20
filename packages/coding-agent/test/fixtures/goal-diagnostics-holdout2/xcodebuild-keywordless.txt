@@ -1,0 +1,52 @@
+Test Suite 'All tests' started at 2026-10-20 11:00:00.000
+Test Case '-[AppTests.ModelTests testCase0]' started.
+Test Case '-[AppTests.ModelTests testCase0]' passed (0.002 seconds).
+Test Case '-[AppTests.ModelTests testCase1]' started.
+Test Case '-[AppTests.ModelTests testCase1]' passed (0.002 seconds).
+Test Case '-[AppTests.ModelTests testCase2]' started.
+Test Case '-[AppTests.ModelTests testCase2]' passed (0.002 seconds).
+Test Case '-[AppTests.ModelTests testCase3]' started.
+Test Case '-[AppTests.ModelTests testCase3]' passed (0.002 seconds).
+Test Case '-[AppTests.ModelTests testCase4]' started.
+Test Case '-[AppTests.ModelTests testCase4]' passed (0.002 seconds).
+Test Case '-[AppTests.ModelTests testCase5]' started.
+Test Case '-[AppTests.ModelTests testCase5]' passed (0.002 seconds).
+Test Case '-[AppTests.ModelTests testCase6]' started.
+Test Case '-[AppTests.ModelTests testCase6]' passed (0.002 seconds).
+Test Case '-[AppTests.ModelTests testCase7]' started.
+Test Case '-[AppTests.ModelTests testCase7]' passed (0.002 seconds).
+Test Case '-[AppTests.ModelTests testCase8]' started.
+Test Case '-[AppTests.ModelTests testCase8]' passed (0.002 seconds).
+Test Case '-[AppTests.ModelTests testCase9]' started.
+Test Case '-[AppTests.ModelTests testCase9]' passed (0.002 seconds).
+Test Case '-[AppTests.ModelTests testCase10]' started.
+Test Case '-[AppTests.ModelTests testCase10]' passed (0.002 seconds).
+Test Case '-[AppTests.ModelTests testCase11]' started.
+Test Case '-[AppTests.ModelTests testCase11]' passed (0.002 seconds).
+Test Case '-[AppTests.ModelTests testCase12]' started.
+Test Case '-[AppTests.ModelTests testCase12]' passed (0.002 seconds).
+Test Case '-[AppTests.ModelTests testCase13]' started.
+Test Case '-[AppTests.ModelTests testCase13]' passed (0.002 seconds).
+/repo/AppTests/DateTests.swift:21: XCTAssertEqual failed: ("2025") is not equal to ("2026")
+Test Case '-[AppTests.DateTests testYear]' failed (0.004 seconds).
+    frame 0
+    frame 1
+    frame 2
+    frame 3
+    frame 4
+    frame 5
+    frame 6
+    frame 7
+    frame 8
+    frame 9
+    frame 10
+    frame 11
+    frame 12
+    frame 13
+    frame 14
+    frame 15
+    frame 16
+    frame 17
+    frame 18
+    frame 19
+Executed 15 tests, with 1 failure (0 unexpected) in 0.041 seconds

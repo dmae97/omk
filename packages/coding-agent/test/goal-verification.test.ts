@@ -2,7 +2,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildDiagnosticExcerpt } from "../src/core/goal-acceptance-diagnostic.ts";
 import { captureGoalWorkspace, GoalVerifier, goalKeyOf, goalStateDirectory } from "../src/core/goal-verification.ts";
 import { detectSandboxBackend } from "../src/core/sandbox/backend.ts";
 import { createWorkspaceSandboxPolicy } from "../src/core/sandbox/default-policy.ts";
@@ -41,6 +42,7 @@ function receiptsOf(root: string, goalKey: string): string[] {
 }
 
 afterEach(() => {
+	vi.unstubAllEnvs();
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -179,5 +181,31 @@ describe("goal acceptance verification", () => {
 		expect(key).toMatch(/^[0-9a-f]{16}$/);
 		expect(goalKeyOf({ ...goal, ref: { id: "session", revision: 9 } })).toBe(key);
 		expect(goalKeyOf({ ...goal, createdAt: "2026-09-30T00:00:01.000Z" })).not.toBe(key);
+	});
+});
+
+describe("spec 094 diagnostic window", () => {
+	it("captures no head window with OMK_GOAL_DIAGNOSTICS off, and the same tail either way", async () => {
+		const command = "echo 'early: error TS2322'; seq 1 60000; exit 1";
+		const off = await new GoalVerifier({ cwd: gitRepo(), goalKey: "k-off", sandboxPreflight: noSandbox }).run(
+			command,
+		);
+		expect(off.diagnosticOutput).toBeUndefined();
+		expect("diagnosticOutput" in off).toBe(false);
+
+		vi.stubEnv("OMK_GOAL_DIAGNOSTICS", "1");
+		const on = await new GoalVerifier({ cwd: gitRepo(), goalKey: "k-on", sandboxPreflight: noSandbox }).run(command);
+		expect(on.outputTail).toBe(off.outputTail);
+		const output = on.diagnosticOutput;
+		expect(output?.complete).toBe(false);
+		expect(output?.head.startsWith("early: error TS2322\n1\n2\n")).toBe(true);
+		expect(output?.tail.endsWith("59999\n60000\n")).toBe(true);
+		expect(output?.totalBytes).toBeGreaterThan(300_000);
+		const excerpt = output ? buildDiagnosticExcerpt(output) : undefined;
+		expect(excerpt?.text).toContain("early: error TS2322");
+		expect(excerpt?.mode).toBe("error-ts");
+		expect(output?.anchor?.first?.line).toBe(1);
+		expect(output?.anchor?.last.pattern).toBe("tail");
+		expect(excerpt?.text.endsWith("59999\n60000")).toBe(true);
 	});
 });

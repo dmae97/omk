@@ -1,0 +1,56 @@
+FAIL ./calc.test.js
+  ● calc › round half cents
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2.68
+    Received: 2.67
+
+      27 | test('clamp case 9',()=>expect(c.clamp(9,2,8)).toBe(Math.min(Math.max(9,2),8)));
+      28 | test('clamp case 10',()=>expect(c.clamp(10,2,8)).toBe(Math.min(Math.max(10,2),8)));
+    > 29 | test('round half cents',()=>expect(c.round(2.675)).toBe(2.68));
+         |                                                    ^
+      30 | test('fail-safe default clamp',()=>expect(c.clamp(5,0,10)).toBe(5));
+      31 | test('clamp error band upper',()=>expect(c.clamp(12,2,8)).toEqual({value:8}));
+      32 | test('parse rejects bad number',()=>expect(c.parse('x1')).toBeGreaterThan(0));
+
+      at Object.toBe (calc.test.js:29:52)
+
+  ● calc › clamp error band upper
+
+    expect(received).toEqual(expected) // deep equality
+
+    Expected: {"value": 8}
+    Received: 8
+
+      29 | test('round half cents',()=>expect(c.round(2.675)).toBe(2.68));
+      30 | test('fail-safe default clamp',()=>expect(c.clamp(5,0,10)).toBe(5));
+    > 31 | test('clamp error band upper',()=>expect(c.clamp(12,2,8)).toEqual({value:8}));
+         |                                                           ^
+      32 | test('parse rejects bad number',()=>expect(c.parse('x1')).toBeGreaterThan(0));
+      33 | });
+      34 |
+
+      at Object.toEqual (calc.test.js:31:59)
+
+  ● calc › parse rejects bad number
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   NaN
+
+      30 | test('fail-safe default clamp',()=>expect(c.clamp(5,0,10)).toBe(5));
+      31 | test('clamp error band upper',()=>expect(c.clamp(12,2,8)).toEqual({value:8}));
+    > 32 | test('parse rejects bad number',()=>expect(c.parse('x1')).toBeGreaterThan(0));
+         |                                                           ^
+      33 | });
+      34 |
+
+      at Object.toBeGreaterThan (calc.test.js:32:59)
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 27 passed, 30 total
+Snapshots:   0 total
+Time:        0.304 s, estimated 1 s
+Ran all test suites.

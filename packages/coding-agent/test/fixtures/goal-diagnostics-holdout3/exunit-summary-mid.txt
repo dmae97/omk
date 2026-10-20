@@ -1,0 +1,52 @@
+Compiling 3 files (.ex)
+Generated shop app
+Running ExUnit with seed: 551203, max_cases: 16
+
+............................................................
+............................................
+
+  1) test totals with promo code (Shop.CartTest)
+     test/shop/cart_test.exs:47
+     Assertion with == failed
+     code:  assert Cart.total(cart) == Decimal.new("18.00")
+     left:  Decimal.new("20.00")
+     right: Decimal.new("18.00")
+     stacktrace:
+       test/shop/cart_test.exs:52: (test)
+
+..............................
+
+Finished in 0.9 seconds (0.4s async, 0.5s sync)
+135 tests, 1 failure
+
+Randomized with seed 551203
+[debug] QUERY OK source="carts" db=1.0ms
+[debug] QUERY OK source="carts" db=2.1ms
+[debug] QUERY OK source="carts" db=3.2ms
+[debug] QUERY OK source="carts" db=4.3ms
+[debug] QUERY OK source="carts" db=5.4ms
+[debug] QUERY OK source="carts" db=1.5ms
+[debug] QUERY OK source="carts" db=2.6ms
+[debug] QUERY OK source="carts" db=3.7ms
+[debug] QUERY OK source="carts" db=4.8ms
+[debug] QUERY OK source="carts" db=5.0ms
+[debug] QUERY OK source="carts" db=1.1ms
+[debug] QUERY OK source="carts" db=2.2ms
+[debug] QUERY OK source="carts" db=3.3ms
+[debug] QUERY OK source="carts" db=4.4ms
+[debug] QUERY OK source="carts" db=5.5ms
+[debug] QUERY OK source="carts" db=1.6ms
+[debug] QUERY OK source="carts" db=2.7ms
+[debug] QUERY OK source="carts" db=3.8ms
+[debug] QUERY OK source="carts" db=4.0ms
+[debug] QUERY OK source="carts" db=5.1ms
+[debug] QUERY OK source="carts" db=1.2ms
+[debug] QUERY OK source="carts" db=2.3ms
+[debug] QUERY OK source="carts" db=3.4ms
+[debug] QUERY OK source="carts" db=4.5ms
+[debug] QUERY OK source="carts" db=5.6ms
+[debug] QUERY OK source="carts" db=1.7ms
+[debug] QUERY OK source="carts" db=2.8ms
+[debug] QUERY OK source="carts" db=3.0ms
+[debug] QUERY OK source="carts" db=4.1ms
+[debug] QUERY OK source="carts" db=5.2ms

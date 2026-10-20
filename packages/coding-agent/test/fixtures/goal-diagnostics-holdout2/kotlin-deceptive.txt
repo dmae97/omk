@@ -1,0 +1,15 @@
+> Task :app:checkKotlinGradlePluginConfigurationErrors
+> Task :app:compileKotlin
+Compiling src/error.ts bridge via kotlin-js (0 errors)
+w: file:///repo/app/src/ErrorHandler.kt:9:5 'toUpperCase(): String' is deprecated
+e: file:///repo/app/src/Main.kt:4:5 Unresolved reference 'fooBar'.
+
+> Task :app:compileKotlin FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileKotlin'.
+> Compilation error. See log for more details
+
+BUILD FAILED in 4s

@@ -1,0 +1,52 @@
++ go test -v -count=1 ./...
+# example.com/ledger/ledger
+# [example.com/ledger/ledger]
+ledger/report.go:4:36: fmt.Printf format %d has arg r.Lines of wrong type []string
+=== RUN   TestConvert
+=== RUN   TestConvert/case
+    fx_test.go:3: rate table row 0 ok
+=== RUN   TestConvert/case#01
+    fx_test.go:3: rate table row 1 ok
+=== RUN   TestConvert/case#02
+    fx_test.go:3: rate table row 2 ok
+=== RUN   TestConvert/case#03
+    fx_test.go:3: rate table row 3 ok
+=== RUN   TestConvert/case#04
+    fx_test.go:3: rate table row 4 ok
+=== RUN   TestConvert/case#05
+    fx_test.go:3: rate table row 5 ok
+--- PASS: TestConvert (0.00s)
+    --- PASS: TestConvert/case (0.00s)
+    --- PASS: TestConvert/case#01 (0.00s)
+    --- PASS: TestConvert/case#02 (0.00s)
+    --- PASS: TestConvert/case#03 (0.00s)
+    --- PASS: TestConvert/case#04 (0.00s)
+    --- PASS: TestConvert/case#05 (0.00s)
+PASS
+ok  	example.com/ledger/fx	0.002s
+FAIL	example.com/ledger/ledger [build failed]
+=== RUN   TestClampLow
+--- PASS: TestClampLow (0.00s)
+=== RUN   TestClampHigh
+--- PASS: TestClampHigh (0.00s)
+=== RUN   TestClampMid
+    util_test.go:5: checking mid value
+--- PASS: TestClampMid (0.00s)
+=== RUN   TestClampTable
+=== RUN   TestClampTable/neg
+=== RUN   TestClampTable/zero
+=== RUN   TestClampTable/one
+=== RUN   TestClampTable/five
+=== RUN   TestClampTable/nine
+=== RUN   TestClampTable/ten
+--- PASS: TestClampTable (0.00s)
+    --- PASS: TestClampTable/neg (0.00s)
+    --- PASS: TestClampTable/zero (0.00s)
+    --- PASS: TestClampTable/one (0.00s)
+    --- PASS: TestClampTable/five (0.00s)
+    --- PASS: TestClampTable/nine (0.00s)
+    --- PASS: TestClampTable/ten (0.00s)
+PASS
+ok  	example.com/ledger/util	0.001s
+FAIL
+exit 1

@@ -1,0 +1,55 @@
+[info] step 0
+[info] step 1
+[info] step 2
+[info] step 3
+[info] step 4
+[info] step 5
+[info] step 6
+[info] step 7
+/repo/src/index.js:17
+    throw new TypeError('config.port must be a number');
+    ^
+
+TypeError: config.port must be a number
+    at fn0 (/repo/src/lib0.js:0:3)
+    at fn1 (/repo/src/lib1.js:1:3)
+    at fn2 (/repo/src/lib2.js:2:3)
+    at fn3 (/repo/src/lib3.js:3:3)
+    at fn4 (/repo/src/lib4.js:4:3)
+    at fn5 (/repo/src/lib5.js:5:3)
+    at fn6 (/repo/src/lib6.js:6:3)
+    at fn7 (/repo/src/lib7.js:7:3)
+    at fn8 (/repo/src/lib8.js:8:3)
+    at fn9 (/repo/src/lib9.js:9:3)
+    at fn10 (/repo/src/lib10.js:10:3)
+    at fn11 (/repo/src/lib11.js:11:3)
+    at fn12 (/repo/src/lib12.js:12:3)
+    at fn13 (/repo/src/lib13.js:13:3)
+    at fn14 (/repo/src/lib14.js:14:3)
+    at fn15 (/repo/src/lib15.js:15:3)
+    at fn16 (/repo/src/lib16.js:16:3)
+    at fn17 (/repo/src/lib17.js:17:3)
+    at fn18 (/repo/src/lib18.js:18:3)
+    at fn19 (/repo/src/lib19.js:19:3)
+    at fn20 (/repo/src/lib20.js:20:3)
+    at fn21 (/repo/src/lib21.js:21:3)
+    at fn22 (/repo/src/lib22.js:22:3)
+    at fn23 (/repo/src/lib23.js:23:3)
+    at fn24 (/repo/src/lib24.js:24:3)
+    at fn25 (/repo/src/lib25.js:25:3)
+    at fn26 (/repo/src/lib26.js:26:3)
+    at fn27 (/repo/src/lib27.js:27:3)
+    at fn28 (/repo/src/lib28.js:28:3)
+    at fn29 (/repo/src/lib29.js:29:3)
+    at fn30 (/repo/src/lib30.js:30:3)
+    at fn31 (/repo/src/lib31.js:31:3)
+    at fn32 (/repo/src/lib32.js:32:3)
+    at fn33 (/repo/src/lib33.js:33:3)
+    at fn34 (/repo/src/lib34.js:34:3)
+    at fn35 (/repo/src/lib35.js:35:3)
+    at fn36 (/repo/src/lib36.js:36:3)
+    at fn37 (/repo/src/lib37.js:37:3)
+    at fn38 (/repo/src/lib38.js:38:3)
+    at fn39 (/repo/src/lib39.js:39:3)
+
+Node.js v22.19.0

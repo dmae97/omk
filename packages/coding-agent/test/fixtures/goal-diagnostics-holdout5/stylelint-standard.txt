@@ -1,0 +1,45 @@
+
+admin.css
+  1:17  ✖  Unknown property "colr"                          property-no-unknown
+  2:6   ✖  Too many declarations, maximum 1                 declaration-block-single-line-max-declarations
+  2:30  ✖  Disallowed unit                                  length-zero-no-unit
+  3:3   ✖  Too many declarations, maximum 1                 declaration-block-single-line-max-declarations
+  3:5   ✖  Duplicate property "color"                       declaration-block-no-duplicate-properties
+  5:1   ✖  Expected empty line before at-rule               at-rule-empty-line-before
+  5:19  ✖  Expected "context" media feature range notation  media-feature-range-notation
+  6:13  ✖  Too many declarations, maximum 1                 declaration-block-single-line-max-declarations
+  6:31  ✖  Expected quotes around "url" function argument   function-url-quotes
+  6:54  ✖  Missing generic font family                      font-family-no-missing-generic-family-keyword
+  7:22  ✖  Expected single space after "-" operator         function-calc-no-unspaced-operator
+  7:22  ✖  Expected single space before "-" operator        function-calc-no-unspaced-operator
+
+app.css
+  1:17  ✖  Unknown property "colr"                          property-no-unknown
+  2:6   ✖  Too many declarations, maximum 1                 declaration-block-single-line-max-declarations
+  2:30  ✖  Disallowed unit                                  length-zero-no-unit
+  3:3   ✖  Too many declarations, maximum 1                 declaration-block-single-line-max-declarations
+  3:5   ✖  Duplicate property "color"                       declaration-block-no-duplicate-properties
+  5:1   ✖  Expected empty line before at-rule               at-rule-empty-line-before
+  5:19  ✖  Expected "context" media feature range notation  media-feature-range-notation
+  6:13  ✖  Too many declarations, maximum 1                 declaration-block-single-line-max-declarations
+  6:31  ✖  Expected quotes around "url" function argument   function-url-quotes
+  6:54  ✖  Missing generic font family                      font-family-no-missing-generic-family-keyword
+  7:22  ✖  Expected single space after "-" operator         function-calc-no-unspaced-operator
+  7:22  ✖  Expected single space before "-" operator        function-calc-no-unspaced-operator
+
+theme.css
+  1:11  ✖  Unknown property "colr"                          property-no-unknown
+  2:6   ✖  Too many declarations, maximum 1                 declaration-block-single-line-max-declarations
+  2:30  ✖  Disallowed unit                                  length-zero-no-unit
+  3:3   ✖  Too many declarations, maximum 1                 declaration-block-single-line-max-declarations
+  3:5   ✖  Duplicate property "color"                       declaration-block-no-duplicate-properties
+  5:1   ✖  Expected empty line before at-rule               at-rule-empty-line-before
+  5:19  ✖  Expected "context" media feature range notation  media-feature-range-notation
+  6:8   ✖  Too many declarations, maximum 1                 declaration-block-single-line-max-declarations
+  6:26  ✖  Expected quotes around "url" function argument   function-url-quotes
+  6:49  ✖  Missing generic font family                      font-family-no-missing-generic-family-keyword
+  7:22  ✖  Expected single space after "-" operator         function-calc-no-unspaced-operator
+  7:22  ✖  Expected single space before "-" operator        function-calc-no-unspaced-operator
+
+✖ 36 problems (36 errors, 0 warnings)
+  21 errors potentially fixable with the "--fix" option.

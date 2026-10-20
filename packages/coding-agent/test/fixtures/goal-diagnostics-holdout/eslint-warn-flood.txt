@@ -1,0 +1,94 @@
+/repo/src/w0.ts
+  0:1  warning  Unexpected console statement  no-console
+
+/repo/src/w1.ts
+  1:1  warning  Unexpected console statement  no-console
+
+/repo/src/w2.ts
+  2:1  warning  Unexpected console statement  no-console
+
+/repo/src/w3.ts
+  3:1  warning  Unexpected console statement  no-console
+
+/repo/src/w4.ts
+  4:1  warning  Unexpected console statement  no-console
+
+/repo/src/w5.ts
+  5:1  warning  Unexpected console statement  no-console
+
+/repo/src/w6.ts
+  6:1  warning  Unexpected console statement  no-console
+
+/repo/src/w7.ts
+  7:1  warning  Unexpected console statement  no-console
+
+/repo/src/w8.ts
+  8:1  warning  Unexpected console statement  no-console
+
+/repo/src/w9.ts
+  9:1  warning  Unexpected console statement  no-console
+
+/repo/src/w10.ts
+  10:1  warning  Unexpected console statement  no-console
+
+/repo/src/w11.ts
+  11:1  warning  Unexpected console statement  no-console
+
+/repo/src/w12.ts
+  12:1  warning  Unexpected console statement  no-console
+
+/repo/src/w13.ts
+  13:1  warning  Unexpected console statement  no-console
+
+/repo/src/w14.ts
+  14:1  warning  Unexpected console statement  no-console
+
+/repo/src/w15.ts
+  15:1  warning  Unexpected console statement  no-console
+
+/repo/src/w16.ts
+  16:1  warning  Unexpected console statement  no-console
+
+/repo/src/w17.ts
+  17:1  warning  Unexpected console statement  no-console
+
+/repo/src/w18.ts
+  18:1  warning  Unexpected console statement  no-console
+
+/repo/src/w19.ts
+  19:1  warning  Unexpected console statement  no-console
+
+/repo/src/w20.ts
+  20:1  warning  Unexpected console statement  no-console
+
+/repo/src/w21.ts
+  21:1  warning  Unexpected console statement  no-console
+
+/repo/src/w22.ts
+  22:1  warning  Unexpected console statement  no-console
+
+/repo/src/w23.ts
+  23:1  warning  Unexpected console statement  no-console
+
+/repo/src/w24.ts
+  24:1  warning  Unexpected console statement  no-console
+
+/repo/src/w25.ts
+  25:1  warning  Unexpected console statement  no-console
+
+/repo/src/w26.ts
+  26:1  warning  Unexpected console statement  no-console
+
+/repo/src/w27.ts
+  27:1  warning  Unexpected console statement  no-console
+
+/repo/src/w28.ts
+  28:1  warning  Unexpected console statement  no-console
+
+/repo/src/w29.ts
+  29:1  warning  Unexpected console statement  no-console
+
+/repo/src/bad.ts
+  7:3  error  'x' is not defined  no-undef
+
+✖ 31 problems (1 error, 30 warnings)

@@ -1,0 +1,53 @@
+collecting ...
+tests/test_m0.py::test_ok PASSED
+tests/test_m1.py::test_ok PASSED
+tests/test_m2.py::test_ok PASSED
+tests/test_m3.py::test_ok PASSED
+tests/test_m4.py::test_ok PASSED
+tests/test_m5.py::test_ok PASSED
+tests/test_m6.py::test_ok PASSED
+tests/test_m7.py::test_ok PASSED
+tests/test_m8.py::test_ok PASSED
+tests/test_m9.py::test_ok PASSED
+Traceback (most recent call last):
+  File "/repo/pkg/mod0.py", line 0, in f0
+    return f1(x)
+  File "/repo/pkg/mod1.py", line 7, in f1
+    return f2(x)
+  File "/repo/pkg/mod2.py", line 14, in f2
+    return f3(x)
+  File "/repo/pkg/mod3.py", line 21, in f3
+    return f4(x)
+  File "/repo/pkg/mod4.py", line 28, in f4
+    return f5(x)
+  File "/repo/pkg/mod5.py", line 35, in f5
+    return f6(x)
+  File "/repo/pkg/mod6.py", line 42, in f6
+    return f7(x)
+  File "/repo/pkg/mod7.py", line 49, in f7
+    return f8(x)
+  File "/repo/pkg/mod8.py", line 56, in f8
+    return f9(x)
+  File "/repo/pkg/mod9.py", line 63, in f9
+    return f10(x)
+  File "/repo/pkg/mod10.py", line 70, in f10
+    return f11(x)
+  File "/repo/pkg/mod11.py", line 77, in f11
+    return f12(x)
+  File "/repo/pkg/mod12.py", line 84, in f12
+    return f13(x)
+  File "/repo/pkg/mod13.py", line 91, in f13
+    return f14(x)
+  File "/repo/pkg/mod14.py", line 98, in f14
+    return f15(x)
+  File "/repo/pkg/mod15.py", line 105, in f15
+    return f16(x)
+  File "/repo/pkg/mod16.py", line 112, in f16
+    return f17(x)
+  File "/repo/pkg/mod17.py", line 119, in f17
+    return f18(x)
+  File "/repo/pkg/mod18.py", line 126, in f18
+    return f19(x)
+  File "/repo/pkg/mod19.py", line 133, in f19
+    return f20(x)
+ValueError: invalid literal for int() with base 10: 'abc'

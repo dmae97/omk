@@ -1,0 +1,45 @@
+level=info msg="[config_reader] Config search paths: [./ /repo]"
+level=info msg="[lintersdb] Active 9 linters"
+level=warning msg="[runner] The linter 'deadcode' is deprecated (since v1.49.0) path=pkg/x0"
+level=warning msg="[runner] The linter 'deadcode' is deprecated (since v1.49.0) path=pkg/x1"
+level=warning msg="[runner] The linter 'deadcode' is deprecated (since v1.49.0) path=pkg/x2"
+level=warning msg="[runner] The linter 'deadcode' is deprecated (since v1.49.0) path=pkg/x3"
+level=warning msg="[runner] The linter 'deadcode' is deprecated (since v1.49.0) path=pkg/x4"
+level=warning msg="[runner] The linter 'deadcode' is deprecated (since v1.49.0) path=pkg/x5"
+level=warning msg="[runner] The linter 'deadcode' is deprecated (since v1.49.0) path=pkg/x6"
+level=warning msg="[runner] The linter 'deadcode' is deprecated (since v1.49.0) path=pkg/x7"
+level=warning msg="[runner] The linter 'deadcode' is deprecated (since v1.49.0) path=pkg/x8"
+level=warning msg="[runner] The linter 'deadcode' is deprecated (since v1.49.0) path=pkg/x9"
+level=warning msg="[runner] The linter 'deadcode' is deprecated (since v1.49.0) path=pkg/x10"
+level=warning msg="[runner] The linter 'deadcode' is deprecated (since v1.49.0) path=pkg/x11"
+internal/store/cache.go:88:2: ineffectual assignment to err (ineffassign)
+	err = c.flush()
+	^
+internal/store/cache.go:120:9: Error return value of `conn.Close` is not checked (errcheck)
+	defer conn.Close()
+	      ^
+cmd/server/main.go:42:15: SA1019: grpc.WithInsecure is deprecated (staticcheck)
+	conn, _ := grpc.Dial(addr, grpc.WithInsecure())
+	             ^
+level=info msg="[runner] processed file 0 of 20"
+level=info msg="[runner] processed file 1 of 20"
+level=info msg="[runner] processed file 2 of 20"
+level=info msg="[runner] processed file 3 of 20"
+level=info msg="[runner] processed file 4 of 20"
+level=info msg="[runner] processed file 5 of 20"
+level=info msg="[runner] processed file 6 of 20"
+level=info msg="[runner] processed file 7 of 20"
+level=info msg="[runner] processed file 8 of 20"
+level=info msg="[runner] processed file 9 of 20"
+level=info msg="[runner] processed file 10 of 20"
+level=info msg="[runner] processed file 11 of 20"
+level=info msg="[runner] processed file 12 of 20"
+level=info msg="[runner] processed file 13 of 20"
+level=info msg="[runner] processed file 14 of 20"
+level=info msg="[runner] processed file 15 of 20"
+level=info msg="[runner] processed file 16 of 20"
+level=info msg="[runner] processed file 17 of 20"
+level=info msg="[runner] processed file 18 of 20"
+level=info msg="[runner] processed file 19 of 20"
+level=info msg="File cache stats: 214 entries of total size 1.9MiB"
+level=info msg="Execution took 3.81s"

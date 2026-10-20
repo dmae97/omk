@@ -1,0 +1,46 @@
+................................................................................F
+
+Failures:
+
+  1) User#name returns full name
+     Failure/Error: expect(u.name).to eq('A B')
+     # ./spec/u_spec.rb:0
+     # ./spec/u_spec.rb:1
+     # ./spec/u_spec.rb:2
+     # ./spec/u_spec.rb:3
+     # ./spec/u_spec.rb:4
+     # ./spec/u_spec.rb:5
+     # ./spec/u_spec.rb:6
+     # ./spec/u_spec.rb:7
+     # ./spec/u_spec.rb:8
+     # ./spec/u_spec.rb:9
+     # ./spec/u_spec.rb:10
+     # ./spec/u_spec.rb:11
+     # ./spec/u_spec.rb:12
+     # ./spec/u_spec.rb:13
+     # ./spec/u_spec.rb:14
+     # ./spec/u_spec.rb:15
+     # ./spec/u_spec.rb:16
+     # ./spec/u_spec.rb:17
+     # ./spec/u_spec.rb:18
+     # ./spec/u_spec.rb:19
+     # ./spec/u_spec.rb:20
+     # ./spec/u_spec.rb:21
+     # ./spec/u_spec.rb:22
+     # ./spec/u_spec.rb:23
+     # ./spec/u_spec.rb:24
+     # ./spec/u_spec.rb:25
+     # ./spec/u_spec.rb:26
+     # ./spec/u_spec.rb:27
+     # ./spec/u_spec.rb:28
+     # ./spec/u_spec.rb:29
+     # ./spec/u_spec.rb:30
+     # ./spec/u_spec.rb:31
+     # ./spec/u_spec.rb:32
+     # ./spec/u_spec.rb:33
+     # ./spec/u_spec.rb:34
+     # ./spec/u_spec.rb:35
+     # ./spec/u_spec.rb:36
+     # ./spec/u_spec.rb:37
+     # ./spec/u_spec.rb:38
+     # ./spec/u_spec.rb:39

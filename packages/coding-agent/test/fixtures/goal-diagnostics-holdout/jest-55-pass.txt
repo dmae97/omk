@@ -1,0 +1,74 @@
+PASS src/a0.test.js
+PASS src/a1.test.js
+PASS src/a2.test.js
+PASS src/a3.test.js
+PASS src/a4.test.js
+PASS src/a5.test.js
+PASS src/a6.test.js
+PASS src/a7.test.js
+PASS src/a8.test.js
+PASS src/a9.test.js
+PASS src/a10.test.js
+PASS src/a11.test.js
+PASS src/a12.test.js
+PASS src/a13.test.js
+PASS src/a14.test.js
+PASS src/a15.test.js
+PASS src/a16.test.js
+PASS src/a17.test.js
+PASS src/a18.test.js
+PASS src/a19.test.js
+PASS src/a20.test.js
+PASS src/a21.test.js
+PASS src/a22.test.js
+PASS src/a23.test.js
+PASS src/a24.test.js
+PASS src/a25.test.js
+PASS src/a26.test.js
+PASS src/a27.test.js
+PASS src/a28.test.js
+PASS src/a29.test.js
+PASS src/a30.test.js
+PASS src/a31.test.js
+PASS src/a32.test.js
+PASS src/a33.test.js
+PASS src/a34.test.js
+PASS src/a35.test.js
+PASS src/a36.test.js
+PASS src/a37.test.js
+PASS src/a38.test.js
+PASS src/a39.test.js
+PASS src/a40.test.js
+PASS src/a41.test.js
+PASS src/a42.test.js
+PASS src/a43.test.js
+PASS src/a44.test.js
+PASS src/a45.test.js
+PASS src/a46.test.js
+PASS src/a47.test.js
+PASS src/a48.test.js
+PASS src/a49.test.js
+PASS src/a50.test.js
+PASS src/a51.test.js
+PASS src/a52.test.js
+PASS src/a53.test.js
+PASS src/a54.test.js
+FAIL src/date.test.js
+  ● formats ISO dates
+    Expected: "2026"
+    Received: "2025"
+      at f (src/date.test.js:0:1)
+      at f (src/date.test.js:1:1)
+      at f (src/date.test.js:2:1)
+      at f (src/date.test.js:3:1)
+      at f (src/date.test.js:4:1)
+      at f (src/date.test.js:5:1)
+      at f (src/date.test.js:6:1)
+      at f (src/date.test.js:7:1)
+      at f (src/date.test.js:8:1)
+      at f (src/date.test.js:9:1)
+      at f (src/date.test.js:10:1)
+      at f (src/date.test.js:11:1)
+      at f (src/date.test.js:12:1)
+      at f (src/date.test.js:13:1)
+      at f (src/date.test.js:14:1)

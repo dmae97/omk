@@ -1,0 +1,58 @@
+Trying:
+    rate_for("KR")
+Expecting:
+    0.1
+ok
+Trying:
+    round(apply(1000, "KR"), 2)
+Expecting:
+    1100.0
+ok
+Trying:
+    apply(1000, "JP")
+Expecting:
+    1100
+**********************************************************************
+File "/home/dev/project/billing/tax.py", line 7, in tax
+Failed example:
+    apply(1000, "JP")
+Expected:
+    1100
+Got:
+    1100.0
+Trying:
+    rate_for("XX")
+Expecting:
+    0.0
+**********************************************************************
+File "/home/dev/project/billing/tax.py", line 9, in tax
+Failed example:
+    rate_for("XX")
+Exception raised:
+    Traceback (most recent call last):
+      File "/usr/lib/python3.13/doctest.py", line 1395, in __run
+        exec(compile(example.source, filename, "single",
+        ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     compileflags, True), test.globs)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "<doctest tax[3]>", line 1, in <module>
+        rate_for("XX")
+        ~~~~~~~~^^^^^^
+      File "/home/dev/project/billing/tax.py", line 16, in rate_for
+        return RATES[country]
+               ~~~~~^^^^^^^^^
+    KeyError: 'XX'
+7 items had no tests:
+    tax.apply
+    tax.invoice_line
+    tax.invoice_line.__init__
+    tax.invoice_line.describe
+    tax.invoice_line.total
+    tax.parse_csv
+    tax.rate_for
+**********************************************************************
+1 item had failures:
+   2 of   4 in tax
+4 tests in 8 items.
+2 passed and 2 failed.
+***Test Failed*** 2 failures.

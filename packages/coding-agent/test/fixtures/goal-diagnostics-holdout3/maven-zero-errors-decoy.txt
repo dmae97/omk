@@ -1,0 +1,48 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO]
+[INFO] shop-core                                                          [jar]
+[INFO] shop-api                                                           [jar]
+[INFO]
+[INFO] --- maven-surefire-plugin:3.2.5:test (default-test) @ shop-core ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO]
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.shop.core.PriceTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.08 s -- in com.shop.core.PriceTest
+[INFO] Running com.shop.core.CartTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.08 s -- in com.shop.core.CartTest
+[INFO] Running com.shop.core.ErrorMapperTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.08 s -- in com.shop.core.ErrorMapperTest
+[INFO] Running com.shop.core.TaxTableTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.08 s -- in com.shop.core.TaxTableTest
+[INFO] Running com.shop.core.CouponTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.08 s -- in com.shop.core.CouponTest
+[INFO] Running com.shop.core.InventoryTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.08 s -- in com.shop.core.InventoryTest
+[INFO] Running com.shop.core.ErrorsResponseTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.08 s -- in com.shop.core.ErrorsResponseTest
+[INFO]
+[INFO] Results:
+[INFO]
+[INFO] Tests run: 42, Failures: 0, Errors: 0, Skipped: 0
+[INFO]
+[INFO] --- maven-surefire-plugin:3.2.5:test (default-test) @ shop-api ---
+[INFO]  T E S T S
+[INFO] Running com.shop.api.OrderControllerTest
+[ERROR] Tests run: 4, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.31 s <<< FAILURE! -- in com.shop.api.OrderControllerTest
+[ERROR] com.shop.api.OrderControllerTest.rejectsEmptyCart -- Time elapsed: 0.04 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: expected: <400> but was: <200>
+	at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:151)
+	at com.shop.api.OrderControllerTest.rejectsEmptyCart(OrderControllerTest.java:57)
+[INFO]
+[INFO] Results:
+[INFO]
+[ERROR] Failures: 
+[ERROR]   OrderControllerTest.rejectsEmptyCart:57 expected: <400> but was: <200>
+[INFO]
+[ERROR] Tests run: 4, Failures: 1, Errors: 0, Skipped: 0
+[INFO] BUILD FAILURE

@@ -60,7 +60,7 @@ Fixtures that fit the cap whole are invalid (hard stop), as in 095.
 | A1 | holdout4 (≥10 fixtures) | **10/10** by the rule above |
 | A2 | holdout1 + holdout2 + holdout3 (regression floor, training) | ≥ 28/30 by the same rule **and** first error line (`groundTruthLine`) shown in 30/30 (no regression) |
 | A3a | all diagnostics flags off | output byte-identical to main on all existing goal-diagnostics fixtures |
-| A3b | only `OMK_GOAL_DIAGNOSTICS_V3` off | output byte-identical to the 095 branch head (`feat/095-two-window-excerpt`) on the same fixtures |
+| A3b | only `OMK_GOAL_DIAGNOSTICS_V3` off | output byte-identical to the frozen 095 branch head `025bb97eed` (`feat/095-two-window-excerpt`; no further commits to that branch) on the same fixtures |
 | A4 | caps | every excerpt ≤ 1,536 B and ≤ 40 lines |
 | A5 | unit | decoy (success line containing "error") never anchors |
 | A6 | unit | D4 known-format tests (skip info/warning; never skip error/fatal; unlisted format not skipped) |
@@ -100,3 +100,21 @@ holdout3 is training only; it is not acceptance.
 2. D4 scope — **resolved:** only listed known formats (logfmt `level=`, JSON `"level":`); error/fatal never skipped; tests for both.
 3. holdout4 author — **resolved:** Bench Analyst outside the room, given format conditions only; no room member authors it.
 4. Flag — **resolved:** separate `OMK_GOAL_DIAGNOSTICS_V3` (rollback = unset; A3 byte-identity simpler to check).
+
+## Amendments (implementation decisions, recorded before any holdout4 measurement)
+
+Both decisions below were found via synthetic unit tests in `packages/coding-agent/test/goal-acceptance-diagnostic-v3.test.ts`, before any holdout4 measurement. Implemented in `765cb68e57`.
+
+1. **D5 stricter.** Warnings anchor window 1 only when no error-marker, failure-marker (D1), or `file:line` shape (D2) line exists anywhere in the output. This replaces "when a D1/D2 line exists later" above; a warning that comes after an error line no longer anchors either. Test group: `spec 097 D5 warnings`.
+2. **Cut line dropped whole (flag on only).** With `OMK_GOAL_DIAGNOSTICS_V3=1`, a window-1 line after the anchor that would be truncated at the cap is dropped whole, not cut with a marker. It is then either elided by the middle marker or shown whole by window 2. The drop keeps an answer line from being half-shown in window 1 and lets it appear whole at the start of window 2. A mutation run (drop disabled) showed the 097 scorer still matches the cut line when it ends a segment, so this amendment is not needed for scoring and is justified by readability only. This was found through the synthetic generated outputs in `spec 097 A4 caps`. It is now pinned by the dedicated synthetic test `spec 097 amendment 2: window-1 line cut at cap is dropped whole`, which covers flag on (no partial line or cut marker inside window 1, the dropped line opens window 2, and the second answer line is still matched by the 097 scorer) and flag off (095 behaviour unchanged, the line is still cut). Flag off is unchanged (095 behaviour, A3b golden).
+
+### Implementer declaration
+
+The implementer (Harness Engineer) touched holdout4 only through an automated CR-byte check and the manifest sha256 check. The two amendments above came from synthetic unit tests, not from holdout4. The implementer cannot fully rule out having seen fixture content during those checks.
+
+### Evaluation change (Tech Lead ruling, before any holdout4 measurement)
+
+- **holdout3 label exposure:** some holdout3 manifest labels appeared on screen before holdout4 was written. holdout3 stays an A2 regression floor only.
+- **holdout4 is reference-only.** It is measured once at the frozen, Tech Lead-approved implementation head, and the result is recorded. It is not used for A1.
+- **A1 moves to holdout5.** holdout5 has ≥ 10 fixtures, written by Bench Analyst on `main`, with a top-level `authorDeclaration`. It uses no tool that appears in holdout1–4, including `go test`, `unittest`, `doctest`, and `node --test`. It has the same type minimums and `kind` field as holdout4. holdout5 is merged only after Tech Lead approves and freezes the implementation head. There is one official measurement, on that merge commit. Pass = 10/10.
+- **Feature freeze:** 2026-10-23 12:00 KST. If A1 has not passed by then, 097 moves to 1.5.1.

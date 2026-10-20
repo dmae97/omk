@@ -1,0 +1,41 @@
+Done processing a01.cc
+Done processing a02.cc
+Done processing a03.cc
+Done processing a04.cc
+Done processing a05.cc
+Done processing a06.cc
+Done processing a07.cc
+Done processing a08.cc
+Done processing a09.cc
+Done processing a10.cc
+Done processing a11.cc
+Done processing a12.cc
+Done processing a13.cc
+Done processing a14.cc
+Done processing a15.cc
+Done processing a16.cc
+Done processing a17.cc
+Done processing a18.cc
+Done processing a19.cc
+Done processing a20.cc
+Done processing a21.cc
+Done processing a22.cc
+Done processing a23.cc
+Done processing a24.cc
+Done processing a25.cc
+Done processing a26.cc
+Done processing a27.cc
+Done processing a28.cc
+Done processing a29.cc
+z_main.cc:3:  Missing space before {  [whitespace/braces] [5]
+z_main.cc:4:  Missing spaces around =  [whitespace/operators] [4]
+z_main.cc:4:  Missing space after ,  [whitespace/comma] [3]
+z_main.cc:5:  Missing spaces around ==  [whitespace/operators] [3]
+z_main.cc:5:  Missing space before ( in if(  [whitespace/parens] [5]
+z_main.cc:5:  Missing space after ,  [whitespace/comma] [3]
+z_main.cc:7:  Missing space after ,  [whitespace/comma] [3]
+z_main.cc:7:  Missing space before {  [whitespace/braces] [5]
+z_main.cc:8:  Missing space after ,  [whitespace/comma] [3]
+z_main.cc:8:  Missing space before {  [whitespace/braces] [5]
+Done processing z_main.cc
+Total errors found: 10

@@ -1,0 +1,54 @@
+PASS src/ok0.test.js
+PASS src/ok1.test.js
+PASS src/ok2.test.js
+PASS src/ok3.test.js
+PASS src/ok4.test.js
+PASS src/ok5.test.js
+PASS src/ok6.test.js
+PASS src/ok7.test.js
+PASS src/ok8.test.js
+PASS src/ok9.test.js
+PASS src/ok10.test.js
+PASS src/ok11.test.js
+PASS src/ok12.test.js
+PASS src/ok13.test.js
+PASS src/ok14.test.js
+PASS src/ok15.test.js
+PASS src/ok16.test.js
+PASS src/ok17.test.js
+PASS src/ok18.test.js
+PASS src/ok19.test.js
+FAIL src/sum.test.js
+  ● sum › adds numbers
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 3
+    Received: 4
+      at Object.<anonymous> (src/sum.test.js:0:5)
+      at Object.<anonymous> (src/sum.test.js:1:5)
+      at Object.<anonymous> (src/sum.test.js:2:5)
+      at Object.<anonymous> (src/sum.test.js:3:5)
+      at Object.<anonymous> (src/sum.test.js:4:5)
+      at Object.<anonymous> (src/sum.test.js:5:5)
+      at Object.<anonymous> (src/sum.test.js:6:5)
+      at Object.<anonymous> (src/sum.test.js:7:5)
+      at Object.<anonymous> (src/sum.test.js:8:5)
+      at Object.<anonymous> (src/sum.test.js:9:5)
+      at Object.<anonymous> (src/sum.test.js:10:5)
+      at Object.<anonymous> (src/sum.test.js:11:5)
+      at Object.<anonymous> (src/sum.test.js:12:5)
+      at Object.<anonymous> (src/sum.test.js:13:5)
+      at Object.<anonymous> (src/sum.test.js:14:5)
+      at Object.<anonymous> (src/sum.test.js:15:5)
+      at Object.<anonymous> (src/sum.test.js:16:5)
+      at Object.<anonymous> (src/sum.test.js:17:5)
+      at Object.<anonymous> (src/sum.test.js:18:5)
+      at Object.<anonymous> (src/sum.test.js:19:5)
+      at Object.<anonymous> (src/sum.test.js:20:5)
+      at Object.<anonymous> (src/sum.test.js:21:5)
+      at Object.<anonymous> (src/sum.test.js:22:5)
+      at Object.<anonymous> (src/sum.test.js:23:5)
+      at Object.<anonymous> (src/sum.test.js:24:5)
+
+Tests:       1 failed, 80 passed, 81 total

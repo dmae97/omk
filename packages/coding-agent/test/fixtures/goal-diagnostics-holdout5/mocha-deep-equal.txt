@@ -1,0 +1,59 @@
+
+
+  Queue
+    ✔ keeps size after 1 pushes
+    ✔ keeps size after 2 pushes
+    ✔ keeps size after 3 pushes
+    ✔ keeps size after 4 pushes
+    ✔ keeps size after 5 pushes
+    ✔ keeps size after 6 pushes
+    ✔ keeps size after 7 pushes
+    ✔ keeps size after 8 pushes
+    ✔ keeps size after 9 pushes
+    ✔ keeps size after 10 pushes
+    ✔ keeps size after 11 pushes
+    ✔ keeps size after 12 pushes
+    ✔ keeps size after 13 pushes
+    ✔ keeps size after 14 pushes
+    ✔ keeps size after 15 pushes
+    ✔ keeps size after 16 pushes
+    ✔ keeps size after 17 pushes
+    ✔ keeps size after 18 pushes
+    ✔ keeps size after 19 pushes
+    ✔ keeps size after 20 pushes
+    ✔ keeps size after 21 pushes
+    ✔ keeps size after 22 pushes
+    ✔ keeps size after 23 pushes
+    ✔ keeps size after 24 pushes
+    ✔ keeps size after 25 pushes
+    ✔ keeps size after 26 pushes
+    ✔ logs no exception when empty pop
+    1) pops in FIFO order
+    ✔ error count stays zero
+
+
+  28 passing (13ms)
+  1 failing
+
+  1) Queue
+       pops in FIFO order:
+
+      AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
++ actual - expected
+
+  [
++   'b',
++   'a'
+-   'a',
+-   'b'
+  ]
+      + expected - actual
+
+       [
+      -  "b"
+         "a"
+      +  "b"
+       ]
+
+      at Context.<anonymous> (q.spec.js:30:77)
+      at process.processImmediate (node:internal/timers:483:21)

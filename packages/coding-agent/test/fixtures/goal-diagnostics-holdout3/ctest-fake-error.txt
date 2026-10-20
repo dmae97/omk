@@ -1,0 +1,46 @@
+Test project /build
+      Start  1: unit_parse
+    Test  #1: unit_parse .......................   Passed    0.02 sec
+      Start  2: unit_case_2
+    Test # 2: unit_case_2 ....................   Passed    0.01 sec
+      Start  3: unit_case_3
+    Test # 3: unit_case_3 ....................   Passed    0.01 sec
+      Start  4: unit_case_4
+    Test # 4: unit_case_4 ....................   Passed    0.01 sec
+      Start  5: unit_case_5
+    Test # 5: unit_case_5 ....................   Passed    0.01 sec
+      Start  6: unit_case_6
+    Test # 6: unit_case_6 ....................   Passed    0.01 sec
+      Start  7: unit_case_7
+    Test # 7: unit_case_7 ....................   Passed    0.01 sec
+      Start  8: unit_case_8
+    Test # 8: unit_case_8 ....................   Passed    0.01 sec
+      Start  9: unit_case_9
+    Test # 9: unit_case_9 ....................   Passed    0.01 sec
+      Start 10: unit_case_10
+    Test #10: unit_case_10 ....................   Passed    0.01 sec
+      Start 11: unit_case_11
+    Test #11: unit_case_11 ....................   Passed    0.01 sec
+      Start 12: unit_case_12
+    Test #12: unit_case_12 ....................   Passed    0.01 sec
+      Start 13: unit_case_13
+    Test #13: unit_case_13 ....................   Passed    0.01 sec
+      Start 14: unit_case_14
+    Test #14: unit_case_14 ....................   Passed    0.01 sec
+      Start 15: log_redaction
+[log] Error: simulated upstream outage (expected by test, ignore)
+    Test #15: log_redaction ....................   Passed    0.03 sec
+      Start 16: matrix_inverse
+    Test #16: matrix_inverse ...................***Failed    0.05 sec
+/src/tests/matrix_test.cpp:41: CHECK( approx(inv[0][1], -0.5) ) is NOT correct!
+  values: CHECK( -0.49 == Approx(-0.5) )
+      Start 17: matrix_det
+    Test #17: matrix_det .......................   Passed    0.01 sec
+
+94% tests passed, 1 tests failed out of 17
+
+Total Test time (real) =   0.41 sec
+
+The following tests FAILED:
+	 16 - matrix_inverse (Failed)
+Errors while running CTest

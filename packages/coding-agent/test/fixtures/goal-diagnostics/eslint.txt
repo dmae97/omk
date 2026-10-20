@@ -1,0 +1,155 @@
+
+/repo/src/a.ts
+  12:7  error  'unused' is assigned a value but never used  no-unused-vars
+
+/repo/src/m0.ts
+  0:1  warning  Unexpected console statement  no-console
+
+/repo/src/m1.ts
+  1:1  warning  Unexpected console statement  no-console
+
+/repo/src/m2.ts
+  2:1  warning  Unexpected console statement  no-console
+
+/repo/src/m3.ts
+  3:1  warning  Unexpected console statement  no-console
+
+/repo/src/m4.ts
+  4:1  warning  Unexpected console statement  no-console
+
+/repo/src/m5.ts
+  5:1  warning  Unexpected console statement  no-console
+
+/repo/src/m6.ts
+  6:1  warning  Unexpected console statement  no-console
+
+/repo/src/m7.ts
+  7:1  warning  Unexpected console statement  no-console
+
+/repo/src/m8.ts
+  8:1  warning  Unexpected console statement  no-console
+
+/repo/src/m9.ts
+  9:1  warning  Unexpected console statement  no-console
+
+/repo/src/m10.ts
+  10:1  warning  Unexpected console statement  no-console
+
+/repo/src/m11.ts
+  11:1  warning  Unexpected console statement  no-console
+
+/repo/src/m12.ts
+  12:1  warning  Unexpected console statement  no-console
+
+/repo/src/m13.ts
+  13:1  warning  Unexpected console statement  no-console
+
+/repo/src/m14.ts
+  14:1  warning  Unexpected console statement  no-console
+
+/repo/src/m15.ts
+  15:1  warning  Unexpected console statement  no-console
+
+/repo/src/m16.ts
+  16:1  warning  Unexpected console statement  no-console
+
+/repo/src/m17.ts
+  17:1  warning  Unexpected console statement  no-console
+
+/repo/src/m18.ts
+  18:1  warning  Unexpected console statement  no-console
+
+/repo/src/m19.ts
+  19:1  warning  Unexpected console statement  no-console
+
+/repo/src/m20.ts
+  20:1  warning  Unexpected console statement  no-console
+
+/repo/src/m21.ts
+  21:1  warning  Unexpected console statement  no-console
+
+/repo/src/m22.ts
+  22:1  warning  Unexpected console statement  no-console
+
+/repo/src/m23.ts
+  23:1  warning  Unexpected console statement  no-console
+
+/repo/src/m24.ts
+  24:1  warning  Unexpected console statement  no-console
+
+/repo/src/m25.ts
+  25:1  warning  Unexpected console statement  no-console
+
+/repo/src/m26.ts
+  26:1  warning  Unexpected console statement  no-console
+
+/repo/src/m27.ts
+  27:1  warning  Unexpected console statement  no-console
+
+/repo/src/m28.ts
+  28:1  warning  Unexpected console statement  no-console
+
+/repo/src/m29.ts
+  29:1  warning  Unexpected console statement  no-console
+
+/repo/src/m30.ts
+  30:1  warning  Unexpected console statement  no-console
+
+/repo/src/m31.ts
+  31:1  warning  Unexpected console statement  no-console
+
+/repo/src/m32.ts
+  32:1  warning  Unexpected console statement  no-console
+
+/repo/src/m33.ts
+  33:1  warning  Unexpected console statement  no-console
+
+/repo/src/m34.ts
+  34:1  warning  Unexpected console statement  no-console
+
+/repo/src/m35.ts
+  35:1  warning  Unexpected console statement  no-console
+
+/repo/src/m36.ts
+  36:1  warning  Unexpected console statement  no-console
+
+/repo/src/m37.ts
+  37:1  warning  Unexpected console statement  no-console
+
+/repo/src/m38.ts
+  38:1  warning  Unexpected console statement  no-console
+
+/repo/src/m39.ts
+  39:1  warning  Unexpected console statement  no-console
+
+/repo/src/m40.ts
+  40:1  warning  Unexpected console statement  no-console
+
+/repo/src/m41.ts
+  41:1  warning  Unexpected console statement  no-console
+
+/repo/src/m42.ts
+  42:1  warning  Unexpected console statement  no-console
+
+/repo/src/m43.ts
+  43:1  warning  Unexpected console statement  no-console
+
+/repo/src/m44.ts
+  44:1  warning  Unexpected console statement  no-console
+
+/repo/src/m45.ts
+  45:1  warning  Unexpected console statement  no-console
+
+/repo/src/m46.ts
+  46:1  warning  Unexpected console statement  no-console
+
+/repo/src/m47.ts
+  47:1  warning  Unexpected console statement  no-console
+
+/repo/src/m48.ts
+  48:1  warning  Unexpected console statement  no-console
+
+/repo/src/m49.ts
+  49:1  warning  Unexpected console statement  no-console
+
+✖ 51 problems (1 error, 50 warnings)
