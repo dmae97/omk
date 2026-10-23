@@ -119,6 +119,24 @@ seven public packages agree. Publishing runs in CI. Released changelog sections 
 immutable — new work goes under `[Unreleased]`. Details and the full rule set are in
 [`specs/constitution.md`](specs/constitution.md).
 
+## Operating mode
+
+- **Mode:** 24/7 YOLO. The team decides and proceeds without 1:1 confirmations.
+- **Still required:** Tech Lead review and green CI before merge; a changed head needs
+  re-review; pin the baseline SHA before measuring; zero new dependencies.
+- **Git:** no force-push, no `--no-verify`. Once a PR is open, do not rebase — merge `main`
+  to catch up. Merge with `gh pr merge --merge --match-head-commit <sha>`. Commits are
+  authored as `dmae97`.
+- **Release and cost:** `npm publish` and `v*` tags only with 인호's approval. Paid runs only
+  within a dollar cap 인호 posts himself. Never hand-create a GitHub Release; let the release
+  workflow create it (a hand-made v1.5.6 release is why it has no binaries).
+- **Security:** never print, log, or commit keys or secrets.
+- **Licensing:** copy code only from MIT or Apache-2.0 sources, with a source header at the
+  top of the file; for Apache-2.0 also update `NOTICE`. GPL, unlicensed, or closed-source
+  code (e.g. Claude Code) is for ideas only — copy none of it.
+- **Public claims:** no "#1" or ranking claims. Describe bench numbers only as
+  "self-measured under TB 4.0 rules".
+
 ## Publication boundary
 
 The operator's private agent home (`~/.omk/agent`) holds personal skills, agents, prompts,
