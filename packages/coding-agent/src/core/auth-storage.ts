@@ -448,6 +448,7 @@ export class AuthStorage {
 
 				if (matchIndex >= 0) {
 					const current_ = accounts[matchIndex];
+					// wall-clock: expires is a persisted absolute expiry shared with other sessions
 					if (current_ && typeof current_.expires === "number" && current_.expires > Date.now()) {
 						this.data = currentData;
 						return {
@@ -706,6 +707,7 @@ export class AuthStorage {
 		rejectedApiKey?: string,
 	): Promise<{ apiKey: string; newCredentials: OAuthCredentials } | null> {
 		const now = Date.now();
+		// wall-clock: account.expires is a persisted absolute expiry
 		if (now >= account.expires) {
 			return await getOAuthApiKey(providerId, { [providerId]: account });
 		}

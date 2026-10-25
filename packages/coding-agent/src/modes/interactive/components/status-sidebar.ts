@@ -106,10 +106,10 @@ export class StatusSidebarComponent implements Component {
 
 	// --- living elements: rolling CPU sparkline + cached MCP/usage data ---
 	private cpuHistory: number[] = [];
-	private lastSparkSampleAt = 0;
+	private lastSparkSampleAt = Number.NEGATIVE_INFINITY;
 	private mcpCache: { at: number; cwd: string; entries: McpServerEntry[] } | undefined;
-	private lastMcpProbeAt = 0;
-	private lastMcpReconnectAt = 0;
+	private lastMcpProbeAt = Number.NEGATIVE_INFINITY;
+	private lastMcpReconnectAt = Number.NEGATIVE_INFINITY;
 	private mcpProbeInFlight = false;
 	private subscriptionUsageProviders: readonly string[] = [];
 
@@ -374,7 +374,7 @@ export class StatusSidebarComponent implements Component {
 	 * tool call attaches them (manager lazy-connect design).
 	 */
 	private refreshMcpHealth(session: AgentSession): void {
-		const now = Date.now();
+		const now = performance.now();
 		if (this.mcpProbeInFlight) return;
 		const probeDue = now - this.lastMcpProbeAt >= MCP_HEALTH_INTERVAL_MS;
 		const reconnectDue = now - this.lastMcpReconnectAt >= MCP_RECONNECT_INTERVAL_MS;
@@ -393,7 +393,7 @@ export class StatusSidebarComponent implements Component {
 	}
 
 	private loadMcpEntries(cwd: string): McpServerEntry[] {
-		const now = Date.now();
+		const now = performance.now();
 		if (this.mcpCache && this.mcpCache.cwd === cwd && now - this.mcpCache.at < MCP_CACHE_TTL_MS) {
 			return this.mcpCache.entries;
 		}
@@ -409,7 +409,7 @@ export class StatusSidebarComponent implements Component {
 
 	/** Rolling CPU sparkline — a living pulse along the top of the rail. */
 	private sparkline(width: number): string {
-		const now = Date.now();
+		const now = performance.now();
 		const cpu = this.footerData.getCpuPercent();
 		if (cpu !== null && now - this.lastSparkSampleAt >= SPARK_SAMPLE_MS) {
 			this.lastSparkSampleAt = now;
@@ -536,6 +536,7 @@ function codexSubscriptionSnapshot(snapshot: CodexUsageSnapshot | undefined): Su
 }
 
 function formatReset(resetsAt: number): string {
+	// wall-clock: resetsAt is a Unix timestamp from the provider
 	const seconds = Math.max(0, Math.ceil(resetsAt - Date.now() / 1000));
 	if (seconds < 60) return "now";
 	const totalMinutes = Math.ceil(seconds / 60);

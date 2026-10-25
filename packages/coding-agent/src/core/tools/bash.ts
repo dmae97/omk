@@ -153,12 +153,12 @@ export function createBashToolDefinition(
 			});
 			let updateTimer: NodeJS.Timeout | undefined;
 			let updateDirty = false;
-			let lastUpdateAt = 0;
+			let lastUpdateAt = Number.NEGATIVE_INFINITY;
 
 			const emitOutputUpdate = () => {
 				if (!onUpdate || !updateDirty) return;
 				updateDirty = false;
-				lastUpdateAt = Date.now();
+				lastUpdateAt = performance.now();
 				const snapshot = output.snapshot({ persistIfTruncated: true });
 				onUpdate({
 					content: [{ type: "text", text: snapshot.content || "" }],
@@ -179,7 +179,7 @@ export function createBashToolDefinition(
 			const scheduleOutputUpdate = () => {
 				if (!onUpdate) return;
 				updateDirty = true;
-				const delay = BASH_UPDATE_THROTTLE_MS - (Date.now() - lastUpdateAt);
+				const delay = BASH_UPDATE_THROTTLE_MS - (performance.now() - lastUpdateAt);
 				if (delay <= 0) {
 					clearUpdateTimer();
 					emitOutputUpdate();

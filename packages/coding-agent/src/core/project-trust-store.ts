@@ -160,6 +160,7 @@ function acquireLock(lock: string): HeldTrustLock | undefined {
 		} else if (observed.legacy) {
 			try {
 				// No pid exists to check in the legacy format. Check once more for a newly published owner.
+				// wall-clock: a legacy lock has only its directory mtime, which the kernel stamps from the wall clock
 				if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS && readLockOwner(lock).legacy) {
 					rmSync(lock, { recursive: true, force: true });
 					continue;

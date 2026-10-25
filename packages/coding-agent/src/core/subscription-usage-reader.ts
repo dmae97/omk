@@ -49,13 +49,13 @@ export class SubscriptionUsageReader {
 		const existing = this.entries.get(provider);
 		if (existing?.inFlight) return existing.inFlight;
 		const revision = getSubscriptionUsageRevision(provider);
-		if (existing && existing.revision === revision && Date.now() - existing.fetchedAt < source.ttlMs) {
+		if (existing && existing.revision === revision && performance.now() - existing.fetchedAt < source.ttlMs) {
 			return Promise.resolve(existing.snapshot);
 		}
 		const entry: UsageEntry = {
 			owner,
 			snapshot: existing?.snapshot,
-			fetchedAt: Date.now(),
+			fetchedAt: performance.now(),
 			revision,
 		};
 		this.entries.set(provider, entry);

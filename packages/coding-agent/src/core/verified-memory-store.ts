@@ -194,6 +194,7 @@ export class VerifiedMemoryStore {
 			const record = parseMemoryRecord(readPrivateRecord(join(directory, filename)));
 			if (record.id !== filename.slice(0, -5) || record.workspaceId !== this.workspace.id)
 				throw new Error("memory scope mismatch");
+			// wall-clock: createdAt and expiresAt are persisted absolute times
 			if (
 				record.createdAt > Date.now() ||
 				record.expiresAt <= Date.now() ||
@@ -213,6 +214,7 @@ export class VerifiedMemoryStore {
 				continue;
 			}
 			// Disk reading may span revocation or expiry. Recheck before publishing the quote.
+			// wall-clock: expiresAt is a persisted absolute time
 			if (record.expiresAt <= Date.now() || hasTombstone(join(directory, `${record.id}.revoked.json`))) {
 				omitted++;
 				continue;

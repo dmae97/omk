@@ -184,7 +184,7 @@ function hashMessage(message: string): string {
  * the write, `afterWrite()` inside the queue after it, then `report()` outside it.
  */
 export class EditDiagnosticsRun {
-	private readonly started = Date.now();
+	private readonly started = performance.now();
 	private readonly perCheck = perCheckTimeoutMs();
 	private base: FileDiagnosticsResult | undefined;
 	private baseMs = 0;
@@ -220,7 +220,7 @@ export class EditDiagnosticsRun {
 	}
 
 	private budget(): number {
-		return Math.min(this.perCheck, PER_EDIT_TIMEOUT_MS - (Date.now() - this.started));
+		return Math.min(this.perCheck, PER_EDIT_TIMEOUT_MS - (performance.now() - this.started));
 	}
 
 	private async check(): Promise<FileDiagnosticsResult> {
@@ -243,9 +243,9 @@ export class EditDiagnosticsRun {
 	 */
 	async baseline(fileExisted = true): Promise<void> {
 		this.newFile = !fileExisted;
-		const t = Date.now();
+		const t = performance.now();
 		this.base = fileExisted ? await this.check() : { lines: [] };
-		this.baseMs = Date.now() - t;
+		this.baseMs = performance.now() - t;
 	}
 
 	async afterWrite(): Promise<void> {
@@ -266,7 +266,7 @@ export class EditDiagnosticsRun {
 			postMs: this.postMs,
 			// Checker time only (baseline + post), so the wall-time guardrail can subtract it.
 			diagMs: this.baseMs + this.postMs,
-			totalMs: Date.now() - this.started,
+			totalMs: performance.now() - this.started,
 			checkerRan: this.ran,
 			...extra,
 		});
@@ -278,7 +278,7 @@ export class EditDiagnosticsRun {
 			path: this.path,
 			phase,
 			perCheckMs: this.perCheck,
-			elapsedMs: Date.now() - this.started,
+			elapsedMs: performance.now() - this.started,
 		});
 		this.log("timeout", { phase });
 		return {
@@ -298,9 +298,9 @@ export class EditDiagnosticsRun {
 		if (!base) return this.skip("baseline unavailable");
 		if (base.timedOut) return this.timeout("baseline");
 		if (base.skipped) return this.skip(`baseline unavailable: ${base.skipped}`);
-		const tPost = Date.now();
+		const tPost = performance.now();
 		const post = await this.check();
-		this.postMs = Date.now() - tPost;
+		this.postMs = performance.now() - tPost;
 		if (post.timedOut) return this.timeout("post");
 		if (post.skipped) return this.skip(post.skipped);
 		const now = await snapshotFile(this.absolutePath);

@@ -414,17 +414,17 @@ export class ProcessTerminal implements Terminal {
 		const previousHandler = this.inputHandler;
 		this.inputHandler = undefined;
 
-		let lastDataTime = Date.now();
+		let lastDataTime = performance.now();
 		const onData = () => {
-			lastDataTime = Date.now();
+			lastDataTime = performance.now();
 		};
 
 		process.stdin.on("data", onData);
-		const endTime = Date.now() + maxMs;
+		const endTime = performance.now() + maxMs;
 
 		try {
 			while (true) {
-				const now = Date.now();
+				const now = performance.now();
 				const timeLeft = endTime - now;
 				if (timeLeft <= 0) break;
 				if (now - lastDataTime >= idleMs) break;

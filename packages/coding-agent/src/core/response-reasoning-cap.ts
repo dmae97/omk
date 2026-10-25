@@ -147,7 +147,7 @@ export function createResponseReasoningCapStreamFn(
 			forwardStart: boolean,
 			abort: () => void,
 		): Promise<AttemptOutcome> => {
-			const startedAt = Date.now();
+			const startedAt = performance.now();
 			const wallCapMs = capMs();
 			let thinkingChars = 0;
 			let reasoningTokens = 0;
@@ -177,7 +177,7 @@ export function createResponseReasoningCapStreamFn(
 				clearTimeout(timer);
 			}
 			const message = await response.result();
-			const elapsedMs = Date.now() - startedAt;
+			const elapsedMs = performance.now() - startedAt;
 			return enforce && hit
 				? { capped: hit, reasoningTokens, elapsedMs, message }
 				: { overrun: hit, reasoningTokens, elapsedMs, message };

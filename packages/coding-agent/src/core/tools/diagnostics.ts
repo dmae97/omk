@@ -85,11 +85,11 @@ async function checkLanguage(
 ): Promise<LanguageResult> {
 	const key = `${language}\0${cwd}\0${path ?? ""}\0${cacheStamp(cwd, path)}`;
 	const cached = cache.get(key);
-	if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.result;
+	if (cached && performance.now() - cached.at < CACHE_TTL_MS) return cached.result;
 	const result = await CHECKERS[language](cwd, path, timeoutMs);
 	// size >= 16 guarantees a first key exists.
 	if (cache.size >= 16) cache.delete(cache.keys().next().value as string);
-	cache.set(key, { at: Date.now(), result });
+	cache.set(key, { at: performance.now(), result });
 	return result;
 }
 

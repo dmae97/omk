@@ -118,6 +118,7 @@ export function isCursorTokenExpiringSoon(token: string, thresholdSeconds = 300)
 		if (!payload) return true;
 		const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
 		const currentTime = Math.floor(Date.now() / 1000);
+		// wall-clock: exp is the JWT's absolute Unix expiry
 		return decoded.exp - currentTime < thresholdSeconds;
 	} catch {
 		return true;

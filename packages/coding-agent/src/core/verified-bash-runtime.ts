@@ -92,14 +92,14 @@ export function resolveSessionWorkspaceScopeReport(
 	const key = `${maxPaths}\0${cwd}`;
 	const customFilter = options?.excludePath !== undefined;
 	const cached = options?.fresh || customFilter ? undefined : scopeCache.get(key);
-	if (cached && Date.now() - cached.at < SCOPE_TTL_MS) return cached.report;
+	if (cached && performance.now() - cached.at < SCOPE_TTL_MS) return cached.report;
 	const report = computeSessionWorkspaceScope(cwd, maxPaths, options?.excludePath);
 	if (!customFilter) {
 		if (scopeCache.size >= SCOPE_CACHE_MAX) {
 			const oldest = scopeCache.keys().next().value;
 			if (oldest !== undefined) scopeCache.delete(oldest);
 		}
-		scopeCache.set(key, { at: Date.now(), report });
+		scopeCache.set(key, { at: performance.now(), report });
 	}
 	return report;
 }

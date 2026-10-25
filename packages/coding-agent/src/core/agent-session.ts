@@ -1532,7 +1532,7 @@ export class AgentSession {
 				this._messageEndReplacements.set(event, finalizedReplacement);
 			}
 		} else if (event.type === "tool_execution_start") {
-			this._turnMetricsState?.toolStarts.set(event.toolCallId, Date.now());
+			this._turnMetricsState?.toolStarts.set(event.toolCallId, performance.now());
 			const extensionEvent: ToolExecutionStartEvent = {
 				type: "tool_execution_start",
 				toolCallId: event.toolCallId,
@@ -1585,7 +1585,7 @@ export class AgentSession {
 		state.toolStarts.delete(toolCallId);
 		state.toolCalls.push({
 			name: toolName,
-			durationMs: startedAt === undefined ? 0 : Date.now() - startedAt,
+			durationMs: startedAt === undefined ? 0 : performance.now() - startedAt,
 			ok: !isError,
 			...(isError ? { error: firstTextContent(result) } : {}),
 		});
@@ -2368,7 +2368,7 @@ export class AgentSession {
 			this._workloadPermitPool ??= new WorkloadPermitPool({ capacity: decision.maxHeavyProcesses });
 			const pool = this._workloadPermitPool;
 			pool.setCapacity(decision.maxHeavyProcesses);
-			const waitStartedMs = Date.now();
+			const waitStartedMs = performance.now();
 			this._resourceObservations?.record("workload_permit_wait_v1", {
 				workloadClass: classification.workloadClass,
 				weight: verdict.weight,
@@ -2386,7 +2386,7 @@ export class AgentSession {
 				this._resourceObservations?.record("workload_permit_acquired_v1", {
 					workloadClass: classification.workloadClass,
 					weight: verdict.weight,
-					waitMs: Date.now() - waitStartedMs,
+					waitMs: performance.now() - waitStartedMs,
 				});
 				return {
 					release: () => {
