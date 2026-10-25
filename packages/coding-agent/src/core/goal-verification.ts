@@ -40,6 +40,13 @@ import { resolveSessionWorkspaceScopeReport, type SessionScopeCompleteness } fro
 export const GOAL_ACCEPTANCE_TIMEOUT_MS = DEFAULT_BUILTIN_TOOL_TIMEOUTS.bash ?? 300_000;
 /** Dirty paths bound per workspace state; more are reported as `partial_truncated`. */
 export const GOAL_SCOPE_MAX_PATHS = 512;
+/**
+ * Per-git-call bound for the goal binding. The 1.5 s per-bash-call default is exceeded by
+ * `git status` on a loaded host, which read as `unavailable` and refused completion. This runs
+ * once per acceptance check, so a longer bound costs little; a git that hangs past it still
+ * fails closed as `unavailable`.
+ */
+export const GOAL_SCOPE_GIT_TIMEOUT_MS = 10_000;
 
 const OUTPUT_TAIL_CHARS = 2_000;
 /** Spec 100: runner summaries sit at the end of the output; this much is kept only to read counts. */
@@ -115,6 +122,7 @@ function goalWorkspaceScope(cwd: string): {
 	return resolveSessionWorkspaceScopeReport(cwd, {
 		maxPaths: GOAL_SCOPE_MAX_PATHS,
 		fresh: true,
+		gitTimeoutMs: GOAL_SCOPE_GIT_TIMEOUT_MS,
 		excludePath: (path, root) => {
 			if (root !== excludedRoot) {
 				excludedRoot = root;

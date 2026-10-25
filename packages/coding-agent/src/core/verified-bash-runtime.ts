@@ -86,14 +86,21 @@ export function resolveSessionWorkspaceScopeReport(
 		readonly fresh?: boolean;
 		/** Goal-specific exclusions are applied before the cap and are never cached. */
 		readonly excludePath?: (artifactPath: string, root: string) => boolean;
+		/** Per-git-call bound; a custom bound is never cached, so a short default's timeout is not reused. */
+		readonly gitTimeoutMs?: number;
 	},
 ): SessionWorkspaceScopeReport {
 	const maxPaths = options?.maxPaths ?? SCOPE_MAX_PATHS;
 	const key = `${maxPaths}\0${cwd}`;
-	const customFilter = options?.excludePath !== undefined;
+	const customFilter = options?.excludePath !== undefined || options?.gitTimeoutMs !== undefined;
 	const cached = options?.fresh || customFilter ? undefined : scopeCache.get(key);
 	if (cached && performance.now() - cached.at < SCOPE_TTL_MS) return cached.report;
-	const report = computeSessionWorkspaceScope(cwd, maxPaths, options?.excludePath);
+	const report = computeSessionWorkspaceScope(
+		cwd,
+		maxPaths,
+		options?.excludePath,
+		options?.gitTimeoutMs ?? GIT_TIMEOUT_MS,
+	);
 	if (!customFilter) {
 		if (scopeCache.size >= SCOPE_CACHE_MAX) {
 			const oldest = scopeCache.keys().next().value;
@@ -119,12 +126,13 @@ function unavailableScope(root: string): SessionWorkspaceScopeReport {
 function computeSessionWorkspaceScope(
 	cwd: string,
 	maxPaths: number,
-	excludePath?: (artifactPath: string, root: string) => boolean,
+	excludePath: ((artifactPath: string, root: string) => boolean) | undefined,
+	gitTimeoutMs: number,
 ): SessionWorkspaceScopeReport {
 	try {
 		const top = spawnSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], {
 			encoding: "utf8",
-			timeout: GIT_TIMEOUT_MS,
+			timeout: gitTimeoutMs,
 			stdio: ["ignore", "pipe", "ignore"],
 		});
 		if (top.status !== 0 || typeof top.stdout !== "string") return unavailableScope(cwd);
@@ -134,7 +142,7 @@ function computeSessionWorkspaceScope(
 		// `dir/`, whose trailing slash fails assertNormalizedArtifactPath downstream
 		// and kills every verified bash call in the session.
 		const status = spawnSync("git", ["-C", cwd, "status", "--porcelain=v1", "-z", "--untracked-files=all"], {
-			timeout: GIT_TIMEOUT_MS,
+			timeout: gitTimeoutMs,
 			maxBuffer: 4 * 1024 * 1024,
 			stdio: ["ignore", "pipe", "ignore"],
 		});
