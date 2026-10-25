@@ -20,9 +20,9 @@ const fixtures = [
 		path: "/anthropic/v1/messages",
 	},
 	{
-		id: "gemini-4-argon-contributor",
+		id: "gemini-4-argon",
 		body: 'data: {"candidates":[{"content":{"parts":[{"text":"ok"}],"role":"model"},"finishReason":"STOP"}]}\n\n',
-		path: "/google/v1beta/models/gemini-4-argon-contributor:streamGenerateContent",
+		path: "/google/v1beta/models/gemini-4-argon:streamGenerateContent",
 	},
 ];
 

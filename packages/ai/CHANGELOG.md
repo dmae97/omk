@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Regenerated the model catalog from models.dev and live provider listings (2026-10-26). Models that upstream marked deprecated or delisted are removed, including GitHub Copilot `gpt-5.4`, `gpt-5.5` and `gpt-5-mini`, older Mistral open models, Together `MiniMax-M2.7` and Xiaomi `mimo-v2` models. OpenCode Go replaces `gemini-4-argon-contributor` with `gemini-4-argon` and adds `kimi-k3.1-pro` and `minimax-m3.1-flash`. Direct Mistral Large 4 pricing now uses the list price after the launch sale ended.
+
 ### Fixed
 
 - WorkBuddy refusals with a `{ code, msg, requestId }` body now preserve the provider's message, code and request ID instead of reporting `<status> status code (no body)`. Normalization is scoped to WorkBuddy; HTTP status, headers, successful streams, OpenAI-shaped errors and empty bodies retain their existing behavior.
