@@ -301,9 +301,12 @@ describe("AgentSession runtime termination production", () => {
 			journalPath: `${sessionPath}.runjournal`,
 			sessionId: original.sessionId,
 		});
+		// Start the unclosed run at the journal's current revision; the count depends on what the prompt persisted.
+		const currentRevision = last(writer.records)?.sessionRevision;
+		expect(currentRevision).toBeDefined();
 		writer.start({
 			runId: "run-left-open",
-			sessionRevision: 4,
+			sessionRevision: currentRevision!,
 			timestamp: "2026-07-17T02:00:00.000Z",
 		});
 
