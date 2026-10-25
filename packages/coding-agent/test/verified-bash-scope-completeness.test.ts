@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import fc from "fast-check";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveSessionWorkspaceScopeReport } from "../src/core/verified-bash-runtime.ts";
 
 /**
@@ -152,4 +152,39 @@ describe("resolveSessionWorkspaceScopeReport", () => {
 			{ numRuns: 12 },
 		);
 	});
+});
+
+describe.skipIf(process.platform === "win32")("resolveSessionWorkspaceScopeReport git time bound", () => {
+	let root: string;
+	let bin: string;
+
+	beforeEach(() => {
+		root = mkdtempSync(join(tmpdir(), "omk-scope-slow-"));
+		initRepository(root);
+		writeFileSync(join(root, "dirty.txt"), "dirty\n");
+		const realGit = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+		bin = mkdtempSync(join(tmpdir(), "omk-slow-git-"));
+		writeFileSync(
+			join(bin, "git"),
+			`#!/bin/sh\nfor a in "$@"; do [ "$a" = status ] && sleep 1.6 && break; done\nexec '${realGit}' "$@"\n`,
+			{ mode: 0o755 },
+		);
+		vi.stubEnv("PATH", `${bin}${delimiter}${process.env.PATH ?? ""}`);
+	});
+
+	afterEach(() => {
+		vi.unstubAllEnvs();
+		rmSync(root, { recursive: true, force: true });
+		rmSync(bin, { recursive: true, force: true });
+	});
+
+	it("keeps the per-bash-call default bound and lets a caller wait longer without caching it", () => {
+		// `git status` takes at least 1.6 s here: past the 1.5 s default, within the caller's 10 s bound.
+		expect(resolveSessionWorkspaceScopeReport(root, { fresh: true }).completeness).toBe("unavailable");
+		const bounded = resolveSessionWorkspaceScopeReport(root, { gitTimeoutMs: 10_000 });
+		expect(bounded.completeness).toBe("complete");
+		expect(bounded.scope.artifactPaths).toEqual(["dirty.txt"]);
+		// The longer-bound answer is not cached for default callers, which still time out.
+		expect(resolveSessionWorkspaceScopeReport(root).completeness).toBe("unavailable");
+	}, 30_000);
 });

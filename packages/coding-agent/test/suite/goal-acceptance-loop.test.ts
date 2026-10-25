@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
 import { fauxAssistantMessage } from "omk-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDurableGoal } from "../../src/core/durable-goal.ts";
@@ -31,7 +32,7 @@ async function createGoal(harness: Harness, objective: string, maxRounds: number
 	);
 }
 
-async function settle(harness: Harness, prompt: string): Promise<void> {
+async function settle(harness: Harness, prompt: string, timeout = 20_000): Promise<void> {
 	await harness.session.prompt(prompt);
 	await vi.waitFor(
 		async () => {
@@ -39,7 +40,7 @@ async function settle(harness: Harness, prompt: string): Promise<void> {
 			expect(harness.session.isStreaming).toBe(false);
 			expect(harness.getPendingResponseCount()).toBe(0);
 		},
-		{ timeout: 20_000, interval: 50 },
+		{ timeout, interval: 50 },
 	);
 	await harness.session.agent.waitForIdle();
 }
@@ -118,6 +119,44 @@ describe("durable goal loop through a live session", () => {
 			.filter((entry) => entry.type === "custom" && entry.customType === "goal_verification");
 		expect(verifications).toHaveLength(3);
 	});
+
+	// Under host load `git status` can outlast the 1.5 s budget of the per-bash-call workspace scope.
+	// The goal binding then read as unavailable and completion was refused, leaving the goal active.
+	it.skipIf(process.platform === "win32")(
+		"completes the goal when git status is slower than the bash scope budget",
+		async () => {
+			const harness = await newHarness();
+			const realGit = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+			const bin = mkdtempSync(join(tmpdir(), "omk-slow-git-"));
+			try {
+				writeFileSync(
+					join(bin, "git"),
+					// 1.6 s always exceeds the 1.5 s bash bound and stays well inside the goal's 10 s bound.
+					`#!/bin/sh\nfor a in "$@"; do [ "$a" = status ] && sleep 1.6 && break; done\nexec '${realGit}' "$@"\n`,
+					{ mode: 0o755 },
+				);
+				vi.stubEnv("PATH", `${bin}${delimiter}${process.env.PATH ?? ""}`);
+				harness.setResponses([
+					() => {
+						writeFileSync(join(harness.tempDir, "done.txt"), "done\n");
+						return fauxAssistantMessage("created done.txt");
+					},
+				]);
+				await harness.session.prompt("/goal Create done.txt");
+				await harness.session.prompt("/goal verify test -f done.txt");
+
+				// Every workspace capture waits on the slowed git, so allow for them beyond the default wait.
+				await settle(harness, "go", 50_000);
+
+				const goal = await goalStore(harness).current();
+				expect(goal?.status).toBe("completed");
+				expect(goal?.evidence).toHaveLength(1);
+			} finally {
+				rmSync(bin, { recursive: true, force: true });
+			}
+		},
+		90_000,
+	);
 
 	it("blocks the goal at the round limit and never forwards check output to the model", async () => {
 		const harness = await newHarness();
