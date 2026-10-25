@@ -7,6 +7,8 @@ const aiSrcOAuth = fileURLToPath(new URL("../ai/src/oauth.ts", import.meta.url))
 const agentSrcIndex = fileURLToPath(new URL("../agent/src/index.ts", import.meta.url));
 const protocolSrcIndex = fileURLToPath(new URL("../protocol/src/index.ts", import.meta.url));
 const adaptorchWplSrcIndex = fileURLToPath(new URL("../adaptorch-wpl/src/index.ts", import.meta.url));
+const selfSrcIndex = fileURLToPath(new URL("./src/index.ts", import.meta.url));
+const selfSrcHooks = fileURLToPath(new URL("./src/core/hooks/index.ts", import.meta.url));
 
 export default defineConfig({
 	test: {
@@ -23,6 +25,10 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: [
+			// Examples import this package by name; without these the name resolved through node_modules to
+			// dist/, which an unbuilt checkout lacks and a built one holds as a stale, separate module copy.
+			{ find: /^open-multi-agent-kit$/, replacement: selfSrcIndex },
+			{ find: /^open-multi-agent-kit\/hooks$/, replacement: selfSrcHooks },
 			{ find: /^omk-tui$/, replacement: tuiSrcIndex },
 			{ find: /^omk-protocol$/, replacement: protocolSrcIndex },
 			{ find: /^omk-adaptorch-wpl$/, replacement: adaptorchWplSrcIndex },
