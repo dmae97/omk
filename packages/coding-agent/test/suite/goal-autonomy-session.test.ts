@@ -16,6 +16,8 @@ async function idle(h: Harness): Promise<void> {
 		async () => {
 			await h.session.agent.waitForIdle();
 			expect(h.session.isStreaming).toBe(false);
+			expect(h.session.getRunBudgetSnapshot()?.closed ?? true).toBe(true);
+			expect(h.session.pendingMessageCount).toBe(0);
 		},
 		{ timeout: 20_000, interval: 50 },
 	);
@@ -48,6 +50,44 @@ describe("spec 119 through a live AgentSession", () => {
 		harnesses.push(h);
 		return h;
 	}
+
+	it("does not report idle while a prompt is still in preflight before streaming", async () => {
+		let entered!: () => void;
+		let release!: () => void;
+		const started = new Promise<void>((resolve) => {
+			entered = resolve;
+		});
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const h = await createHarness({
+			extensionFactories: [
+				(omk) => {
+					omk.on("before_agent_start", async () => {
+						entered();
+						await gate;
+					});
+				},
+			],
+		});
+		harnesses.push(h);
+		h.setResponses([fauxAssistantMessage("done")]);
+		const run = h.session.prompt("go");
+		await started;
+		const waiting = idle(h);
+		try {
+			expect(
+				await Promise.race([
+					waiting.then(() => "idle"),
+					new Promise<string>((resolve) => setImmediate(() => resolve("busy"))),
+				]),
+			).toBe("busy");
+		} finally {
+			release();
+			await run;
+			await waiting;
+		}
+	});
 
 	it("G0: flag off, a bash timeout keeps the main envelope; the cause stays in memory only", async () => {
 		const h = await make(false);
@@ -145,10 +185,22 @@ describe("spec 119 through a live AgentSession", () => {
 		expect((await store(h).current())?.status).toBe("paused");
 		expect(getUserTexts(h)).toEqual(["go", "actually, change direction"]);
 
-		await h.session.prompt("/goal resume");
-		// Resumed under the round cap: one resume message, then one continuation per settled round up to 8.
-		await vi.waitFor(() => expect(getUserTexts(h).length).toBe(11), { timeout: 15_000, interval: 50 });
-		await idle(h);
+		let resolveSettled!: () => void;
+		const settled = new Promise<void>((resolve) => {
+			resolveSettled = resolve;
+		});
+		const unsubscribe = h.session.subscribe((event) => {
+			if (event.type === "prompt_settled") resolveSettled();
+		});
+		try {
+			await h.session.prompt("/goal resume");
+			// Observe the owning run's terminal event, not a partially delivered continuation queue.
+			await settled;
+			await idle(h);
+		} finally {
+			unsubscribe();
+		}
+		expect(getUserTexts(h)).toHaveLength(11);
 		expect(getUserTexts(h).slice(2)).toEqual([
 			"Continue the active goal (0/8): Write the report",
 			...Array.from({ length: 8 }, (_, i) => `Continue the active goal (${i + 1}/8): Write the report`),

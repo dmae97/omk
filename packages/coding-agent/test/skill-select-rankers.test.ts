@@ -40,6 +40,21 @@ describe("bm25 mode (spec 058 R2)", () => {
 		expect(result.metacon).toBeUndefined();
 	});
 
+	it("reuses document terms across queries without caching exclusions or stale bodies", () => {
+		const docs = [doc("pdf", "PDF forms"), doc("kube", "kubernetes deploy")];
+		rankSkills("bm25", "pdf", docs, { limit: 2 });
+		const normalize = vi.spyOn(String.prototype, "normalize");
+		try {
+			expect(rankSkills("bm25", "kubernetes", docs, { limit: 2 }).hits.map((hit) => hit.name)).toEqual(["kube"]);
+			expect(normalize).toHaveBeenCalledTimes(1);
+			expect(rankSkills("bm25", "kubernetes", docs, { limit: 2, exclude: new Set(["kube"]) }).hits).toEqual([]);
+			docs[1] = doc("kube", "PDF deploy");
+			expect(rankSkills("bm25", "kubernetes", docs, { limit: 2 }).hits).toEqual([]);
+		} finally {
+			normalize.mockRestore();
+		}
+	});
+
 	it("breaks equal scores by name", () => {
 		// Same length and term counts, so equal BM25 scores; the order must not depend on the input order.
 		const twins = [doc("b-twin", "same words here"), doc("a-twin", "same words here"), ...filler(5)];

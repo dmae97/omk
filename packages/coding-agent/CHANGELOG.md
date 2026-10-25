@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- Repeated local skill searches reuse unchanged document term frequencies instead of tokenizing the entire catalog again. Changed bodies are retokenized, input bounds are revalidated, and scores, exclusions and ranking order remain query-specific.
 - Local safe-context-window rejections during tool turns now enter bounded overflow compaction recovery instead of being classified as invalid provider responses. Auto-compaction opt-out and the hard input ceiling remain unchanged.
 - Durations, throttles, in-memory caches and deadlines now use a monotonic clock, so a wall-clock step (seen on WSL2) no longer makes them fire early, late or never. This covers the double Ctrl+C and Esc windows, the working timer, the bash output throttle, the subscription usage, diagnostics and workspace scope caches, edit diagnostic budgets, OAuth device-code polling and the TUI input drain. `npm run check` now rejects new wall-clock durations and proper-lockfile locks without an explicit stale window.
 
