@@ -1,80 +1,53 @@
 # Gondolin signature security
 
-OMK 1.4.0's optional Gondolin example mitigates
 [CVE-2026-85393 / GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv)
-before every VM start. The registry's `node-forge` 1.4.0 remains affected;
-there is no official patched release at the time of this change. This is a
-temporary OMK runtime fix, not a claim that the upstream package is patched.
+is a `node-forge` RSA PKCS#1 v1.5 parser flaw: the `DigestInfo` validator ignored
+extra children inside the nested `DigestAlgorithm`, allowing malformed
+signatures. `node-forge` has no patched release.
 
-## Cause and actual path
+## Current state
 
-RSA PKCS#1 v1.5 signatures contain an ASN.1 `DigestInfo` with a nested
-`DigestAlgorithm`. Forge's validator consumes the expected fields but ignores
-extra children. Version 1.4.0 checks the outer count and misses the nested count,
-allowing malformed signatures; the advisory describes low-exponent RSA forgery.
+The optional Gondolin example now depends on `@earendil-works/gondolin` 0.14.0,
+which no longer depends on `node-forge`. Gondolin builds its local MITM
+certificates with its own DER encoder and verifies cached leaf certificates with
+Node's `X509Certificate` (OpenSSL), so the affected parser is no longer on that
+path. `npm audit --omit=dev` no longer reports Gondolin or `node-forge`.
 
-Gondolin calls `caCert.verify(leafCert)` while reading cached local MITM leaf
-certificates. The cache is checked against its local CA. External server TLS
-verification uses Node/Undici, not this Forge verification function. The seven
-public core package manifests and CLI shrinkwrap exclude Gondolin/Forge;
-the separately installed example depends on them. Gondolin's generated CA
-uses exponent 65537, but persisted CA material has no exponent restriction.
+OMK 1.4.0 through 1.5.8 shipped a temporary runtime guard (`signature-guard.ts`)
+that patched Forge's ASN.1 validator before every VM start. It has been removed
+together with the dependency it protected. Previously copied extension
+directories should be replaced with the current example; upgrading the CLI alone
+does not update those copies.
 
-## Mitigation
-
-[`signature-guard.ts`](../examples/extensions/gondolin/signature-guard.ts) loads
-the exact CommonJS Forge instance resolved from Gondolin's package directory.
-It adds the nested count check proposed in
-[upstream PR #1152](https://github.com/digitalbazaar/forge/pull/1152): only the OID
-and optional NULL parameter may occur inside `DigestAlgorithm`, and the outer
-`DigestInfo` must contain exactly its algorithm and digest. Local boundary
-regressions additionally reproduced acceptance of nonempty NULL, unterminated
-OID and nonminimal OID values; the guard requires empty NULL and canonical OID
-encoding to close those primitive-value garbage slots too. Existing type,
-OID, digest, padding and trailing-byte checks remain active. SHA signatures
-with and without NULL parameters and RSA-PSS retain their existing behavior.
-
-The example and root override pin Forge 1.4.0. Startup requires its reviewed
-`lib/rsa.js` and `lib/asn1.js` SHA256 values and rejects a changed version, changed implementation or
-replaced guard. No lifecycle script or on-disk library patch is needed, so
-`npm install --ignore-scripts` still installs a usable guarded example.
-Copy the entire example directory and load its `index.ts` through OMK.
-Previously copied extensions must also be updated while preserving local
-customizations; upgrading the CLI alone does not replace those copies.
-
-This fix covers the OMK example's process. It does not patch a separately
-launched `gondolin` CLI, another application, or trusted extension code that
-deliberately modifies the process. Keep certificate caches private to their
-owner and do not import untrusted CA keys. No live service was attacked.
+The scope is unchanged: this covers the OMK example's process. It does not cover
+a separately launched `gondolin` CLI or another application. Keep certificate
+caches private to their owner and do not import untrusted CA keys.
 
 ## Reproducible evidence
 
 From `packages/coding-agent`:
 
 ```bash
-node ../../node_modules/vitest/dist/cli.js --run test/gondolin-signature-guard.test.ts
+node ../../node_modules/vitest/dist/cli.js --run test/gondolin-signature-regression.test.ts
 ```
 
-The suite generates disposable synthetic RSA keys in memory. A test-owned
-private key constructs malformed encoded messages; this demonstrates the
-verification flaw, not private-key-free exploit generation. Unguarded Forge
-and Gondolin's actual cached-leaf verification accept the nested extra element;
-the guarded instance and Node's independent crypto verifier reject it.
-Normally issued certificates, default 2048-bit/exponent-65537 CA material,
-SHA1/256/384/512 with optional NULL, and RSA-PSS pass. Nested and outer garbage,
-nonempty NULL, unterminated or nonminimal OID,
-bad padding, trailing bytes, changed messages, issuer mismatch, dependency
-drift and guard replacement fail. A mocked VM startup verifies the real
-extension installs the guard before `VM.create`; no hypervisor or network runs.
-
-`npm audit --omit=dev --audit-level=moderate` still reports the upstream advisory
-under Forge and Gondolin and exits nonzero. No audit threshold, ignored advisory,
-dependency classification or security workflow changed. Test results provide
-evidence for this specific path; they do not prove absence of all vulnerabilities.
+The suite generates disposable RSA keys in memory (including exponent 3 from the
+advisory) and builds certificates with Gondolin's own encoder. It replays the
+malformed fixtures the former guard blocked against Gondolin's real cached-leaf
+verification function, with no guard installed: a nested extra element with and
+without NULL, a nested extra sequence, nonempty NULL, unterminated and
+nonminimal OID, a mismatched digest OID, outer garbage and a corrupted signature
+are all rejected. Each fixture is decrypted with the CA public key to confirm it
+carries the intended structure, and a well-formed `DigestInfo` built the same way
+verifies, so the rejections come from the structure alone. Normally issued
+leaves verify and a foreign issuer is rejected. The suite also fails if
+Gondolin's manifest or shipped sources reference `node-forge` again. A mocked VM
+startup checks that the real extension reaches `VM.create`; no hypervisor or
+network runs. These results cover this specific path; they do not prove the
+absence of all vulnerabilities.
 
 ## Maintenance
 
-When an official patch is available, review the published source and advisory,
-update the pin, rerun this regression suite and full CI, then remove the runtime
-guard only after the unguarded dependency rejects the malformed fixture.
-Until then, dependency changes intentionally require a new guard review.
+If a future Gondolin release reintroduces `node-forge` or another ASN.1
+signature parser, the regression suite fails. Review the dependency and its
+advisory status before updating the test.

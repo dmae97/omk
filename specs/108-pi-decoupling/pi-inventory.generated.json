@@ -5,7 +5,7 @@
 			"manifest": "packages/coding-agent/examples/extensions/gondolin/package.json",
 			"kind": "dependencies",
 			"name": "@earendil-works/gondolin",
-			"version": "0.12.0"
+			"version": "0.14.0"
 		},
 		{
 			"manifest": "packages/coding-agent/package.json",
@@ -418,7 +418,7 @@
 			"scope": "test"
 		},
 		{
-			"file": "packages/coding-agent/test/gondolin-signature-guard.test.ts:6",
+			"file": "packages/coding-agent/test/gondolin-signature-regression.test.ts:14",
 			"module": "packages/coding-agent",
 			"kind": "static",
 			"specifier": "@earendil-works/gondolin",
@@ -428,17 +428,7 @@
 			"scope": "test"
 		},
 		{
-			"file": "packages/coding-agent/test/gondolin-signature-guard.test.ts:38",
-			"module": "packages/coding-agent",
-			"kind": "mention",
-			"specifier": "@earendil-works/gondolin/package.json",
-			"symbols": [
-				"*"
-			],
-			"scope": "test"
-		},
-		{
-			"file": "packages/coding-agent/test/gondolin-signature-guard.test.ts:40",
+			"file": "packages/coding-agent/test/gondolin-signature-regression.test.ts:49",
 			"module": "packages/coding-agent",
 			"kind": "mention",
 			"specifier": "@earendil-works/gondolin/package.json",
