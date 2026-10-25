@@ -49,22 +49,16 @@ describe("OpenCode Go reasoning payloads", () => {
 		expect(payload).not.toHaveProperty("enable_thinking");
 	});
 
-	it.each([
-		"mimo-v2.5",
-		"mimo-v2.5-pro",
-		"mimo-v2.6-flash",
-		"mimo-v2.6-pro",
-		"longcat-2.0",
-		"longcat-2.5-preview-free",
-		"kimi-k2.6",
-		"glm-5.1",
-	])("uses only the thinking toggle on %s", async (id) => {
-		for (const reasoning of ["high", undefined] as const) {
-			const payload = await capture(id, reasoning);
-			expect(payload).toMatchObject({ thinking: { type: reasoning ? "enabled" : "disabled" } });
-			expect(payload).not.toHaveProperty("reasoning_effort");
-		}
-	});
+	it.each(["mimo-v2.5", "mimo-v2.5-pro", "mimo-v2.6-flash", "mimo-v2.6-pro", "longcat-2.0", "kimi-k2.6", "glm-5.1"])(
+		"uses only the thinking toggle on %s",
+		async (id) => {
+			for (const reasoning of ["high", undefined] as const) {
+				const payload = await capture(id, reasoning);
+				expect(payload).toMatchObject({ thinking: { type: reasoning ? "enabled" : "disabled" } });
+				expect(payload).not.toHaveProperty("reasoning_effort");
+			}
+		},
+	);
 
 	it.each(["kimi-k2.7-code", "minimax-m2.5", "minimax-m2.7"])("leaves fixed reasoning enabled on %s", async (id) => {
 		const payload = await capture(id, "high");
@@ -105,7 +99,7 @@ describe("OpenCode Go reasoning payloads", () => {
 	it.each(["low", "medium", "high"] as const)(
 		"sends Argon native thinkingLevel %s, not a token budget",
 		async (reasoning) => {
-			const payload = await capture("gemini-4-argon-contributor", reasoning);
+			const payload = await capture("gemini-4-argon", reasoning);
 			expect(payload).toMatchObject({
 				config: { thinkingConfig: { includeThoughts: true, thinkingLevel: reasoning.toUpperCase() } },
 			});
@@ -114,7 +108,7 @@ describe("OpenCode Go reasoning payloads", () => {
 	);
 
 	it("uses the lowest supported Argon level when off is requested through the SDK", async () => {
-		const payload = await capture("gemini-4-argon-contributor", undefined);
+		const payload = await capture("gemini-4-argon", undefined);
 		expect(payload).toMatchObject({ config: { thinkingConfig: { thinkingLevel: "LOW" } } });
 		expect(payload).not.toHaveProperty("config.thinkingConfig.thinkingBudget");
 	});

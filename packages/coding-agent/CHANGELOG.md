@@ -6,6 +6,10 @@
 
 - A default-on `deepseek_harness` built-in for native DeepSeek and recognized DeepSeek model IDs on gateways. It adds scoped execution guidance and projects oversized successful tool results to Unicode-safe head/tail excerpts at 80% context pressure, preserving original session history. `OMK_DEEPSEEK_HARNESS=0` independently disables it. No upstream runtime, credentials, session-log uploads, or protocol changes are introduced. See [DeepSeek harness](docs/deepseek-harness.md).
 
+### Changed
+
+- The GitHub Copilot default model is now `gpt-6.1-sol`. Copilot retired `gpt-5.4`, which left Copilot without an automatic default during first-run onboarding.
+
 ### Fixed
 
 - Local safe-context-window rejections during tool turns now enter bounded overflow compaction recovery instead of being classified as invalid provider responses. Auto-compaction opt-out and the hard input ceiling remain unchanged.

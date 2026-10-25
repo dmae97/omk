@@ -15,7 +15,7 @@ const builtInDefaultModelPerProvider = {
 	meta: "muse-spark-1.3",
 	google: "gemini-3.1-pro-preview",
 	"google-vertex": "gemini-3.1-pro-preview",
-	"github-copilot": "gpt-5.4",
+	"github-copilot": "gpt-6.1-sol",
 	openrouter: "moonshotai/kimi-k2.6",
 	"vercel-ai-gateway": "zai/glm-5.1",
 	xai: "grok-4.20-0309-reasoning",
