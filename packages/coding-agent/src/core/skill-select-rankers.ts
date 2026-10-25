@@ -6,7 +6,7 @@
  * with `planSkills`. Neither imports `omk-adaptorch-wpl` or any network client (AC 6).
  */
 import { createHash } from "node:crypto";
-import { rankCorpus, retrievalTokens } from "../metacognition/retrieval.ts";
+import { type CorpusDocument, rankCorpus, retrievalTokens } from "../metacognition/retrieval.ts";
 import { type CapabilityNeed, planSkills, type SkillDescriptor, type SkillPlan } from "../metacognition/skills.ts";
 
 export type SkillSelectRankMode = "bm25" | "metacon";
@@ -93,6 +93,17 @@ export function rankSkills(
 	return { ...metacon(query, docs, pool, options), matchCount: pool.length };
 }
 
+const corpusDocuments = new WeakMap<RankDoc, CorpusDocument>();
+
+function corpusDocument(doc: RankDoc): CorpusDocument {
+	const cached = corpusDocuments.get(doc);
+	const body = `${doc.name} ${doc.description}`;
+	if (cached?.id === doc.name && cached.uri === doc.location && cached.body === body) return cached;
+	const document = { id: doc.name, uri: doc.location, body };
+	corpusDocuments.set(doc, document);
+	return document;
+}
+
 /** Preserve BM25 scores/order, then remove aliases and exclusions before capping distinct candidates. */
 function bm25Pool(
 	query: string,
@@ -106,11 +117,7 @@ function bm25Pool(
 		docs.filter((doc) => exclude?.has(doc.name) && doc.contentHash).map((doc) => doc.contentHash),
 	);
 	const seen = new Set<string>();
-	const corpus = [...byName.values()].map((doc) => ({
-		id: doc.name,
-		uri: doc.location,
-		body: `${doc.name} ${doc.description}`,
-	}));
+	const corpus = [...byName.values()].map(corpusDocument);
 	const pool: Omit<RankedSkill, "source">[] = [];
 	for (const hit of rankCorpus(bounded, corpus)) {
 		const doc = byName.get(hit.id);

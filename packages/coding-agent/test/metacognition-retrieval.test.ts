@@ -2,7 +2,7 @@
  * Ported from docs/OMK_skill_knowledge_control_2026-09-19.zip
  * (test/retrieval.test.mjs) — node:test → vitest, same assertions.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	type AcquisitionOptions,
 	AcquisitionPool,
@@ -44,6 +44,30 @@ describe("retrieval and acquisition pool", () => {
 		expect(searchCorpus("nothing", corpus)).toEqual([]);
 		expect(searchCorpus("test", corpus, 0)).toEqual([]);
 		expect(() => searchCorpus("test", corpus, Number.NaN)).toThrow();
+	});
+	it("reuses unchanged corpus terms but revalidates and retokenizes changed documents", () => {
+		const corpus = [
+			{ id: "go", uri: "repo:go", body: "Go context cancellation" },
+			{ id: "ui", uri: "repo:ui", body: "UI keyboard focus" },
+		];
+		searchCorpus("Go", corpus);
+		const normalize = vi.spyOn(String.prototype, "normalize");
+		try {
+			expect(searchCorpus("keyboard", corpus).map((hit) => hit.id)).toEqual(["ui"]);
+			expect(normalize).toHaveBeenCalledTimes(1); // only the new query
+			corpus[0].body = "Go keyboard";
+			normalize.mockClear();
+			expect(
+				searchCorpus("keyboard", corpus)
+					.map((hit) => hit.id)
+					.sort(),
+			).toEqual(["go", "ui"]);
+			expect(normalize).toHaveBeenCalledTimes(2); // changed body and query
+			corpus[0].uri = "";
+			expect(() => searchCorpus("keyboard", corpus)).toThrow();
+		} finally {
+			normalize.mockRestore();
+		}
 	});
 	it("successful retrieval consumes a request and releases actual ownership", async () => {
 		const p = pool();
