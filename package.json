@@ -99,13 +99,13 @@
 		"postcss": "8.5.24",
 		"protobufjs": "7.6.5",
 		"shell-quote": "1.11.0",
+		"zod": "4.6.7",
 		"vite": {
 			".": "7.3.5",
 			"esbuild": "0.28.1"
 		},
 		"@earendil-works/gondolin": {
-			"node-forge": "1.4.0",
-			"undici": "6.28.1"
+			"undici": "6.29.1"
 		}
 	}
 }

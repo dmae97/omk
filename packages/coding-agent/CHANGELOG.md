@@ -15,6 +15,11 @@
 - Local safe-context-window rejections during tool turns now enter bounded overflow compaction recovery instead of being classified as invalid provider responses. Auto-compaction opt-out and the hard input ceiling remain unchanged.
 - Durations, throttles, in-memory caches and deadlines now use a monotonic clock, so a wall-clock step (seen on WSL2) no longer makes them fire early, late or never. This covers the double Ctrl+C and Esc windows, the working timer, the bash output throttle, the subscription usage, diagnostics and workspace scope caches, edit diagnostic budgets, OAuth device-code polling and the TUI input drain. `npm run check` now rejects new wall-clock durations and proper-lockfile locks without an explicit stale window.
 
+### Security
+
+- `npm audit --omit=dev` is clean again. `undici` is updated to 8.12.3 (EventSource memory, SRI token and content-encoding advisories), and a root override moves `zod` to 4.6.7 for every SDK and the sandbox example (oversized constrained collection advisory; no fixed 3.x release exists).
+- The optional Gondolin example now uses Gondolin 0.14.0 with `undici` 6.29.1. Gondolin no longer depends on `node-forge`, so the temporary CVE-2026-85393 runtime guard is removed; a regression suite replays the malformed signatures against Gondolin's real cached-leaf verification. The example now requires Node.js 22.19.0 or later. Replace previously copied example directories. See [Gondolin signature security](docs/gondolin-security.md).
+
 ## [1.5.8] - 2026-10-24
 
 ### Added

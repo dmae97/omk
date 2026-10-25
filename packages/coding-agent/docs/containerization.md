@@ -102,15 +102,13 @@ The extension mounts the host cwd at `/workspace` in the VM and overrides `read`
 User `!` commands are routed into the VM, as well.
 File changes under `/workspace` write through to the host.
 
-Requirements: Node.js >= 23.6.0 for `@earendil-works/gondolin`, plus QEMU (requires installation through your package manager).
+Requirements: Node.js >= 22.19.0 for `@earendil-works/gondolin`, plus QEMU (requires installation through your package manager).
 
-OMK's Gondolin example applies a runtime signature guard before starting a VM.
-It rejects the malformed nested RSA digest structure in CVE-2026-85393 and
-refuses startup if the reviewed dependency implementation changes. Copy the
-whole example directory, including `signature-guard.ts`; the raw Gondolin CLI
-does not receive this guard. The registry dependency still appears in `npm
-audit`. See [Gondolin signature security](gondolin-security.md) for the exact
-scope, regression evidence and upstream-patch maintenance requirement.
+The example uses Gondolin 0.14.0, which no longer depends on `node-forge`, so the
+former runtime signature guard for CVE-2026-85393 has been removed. Replace
+previously copied example directories with the current one. See
+[Gondolin signature security](gondolin-security.md) for the scope and
+regression evidence.
 
 ## Plain Docker
 
