@@ -18,6 +18,21 @@ describe("kill ring retention", () => {
 		assert.equal(ring.peek(), String(KILL_RING_MAX_ENTRIES));
 	});
 
+	it("evicts by kill age even after yank-pop rotates the ring", () => {
+		const ring = new KillRing();
+		for (let i = 0; i < KILL_RING_MAX_ENTRIES; i++) ring.push(String(i), { prepend: false });
+		ring.rotate();
+		ring.push("new", { prepend: false });
+		const retained = new Set<string>();
+		for (let i = 0; i < KILL_RING_MAX_ENTRIES; i++) {
+			retained.add(ring.peek()!);
+			ring.rotate();
+		}
+		assert.equal(retained.has("0"), false);
+		assert.equal(retained.has(String(KILL_RING_MAX_ENTRIES - 1)), true);
+		assert.equal(retained.has("new"), true);
+	});
+
 	it("evicts older entries when the character budget is exceeded", () => {
 		const ring = new KillRing();
 		const block = "a".repeat(KILL_RING_MAX_CODE_UNITS / 2);
