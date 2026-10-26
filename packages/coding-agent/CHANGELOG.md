@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- Bound adaptive-effort tool-call deduplication state. If its limit is reached, new calls use the configured reasoning effort for the rest of the stream wrapper lifetime.
+- Bound adaptive-effort tool-call deduplication state. If its limit is reached, the adaptive wrapper passes through the configured reasoning effort for the rest of its lifetime; other limits may still apply.
 - A compaction is no longer stamped earlier than the messages it covers when the wall clock steps backward (observed on WSL2 as ~6.8 second resyncs). Previously the compacted history's old usage still counted after compaction, so the next prompt was rejected with `context_input_capacity_exceeded`. The compaction timestamp now follows the newest message on its branch for steps up to one minute.
 - Usage estimates, input admission and compaction gates now use active-branch entry order to distinguish covered messages from new responses. Assistant usage and overflow errors arriving after compaction while the wall clock is still recovering are no longer discarded as stale; repeated compactions are distinguished by entry ID even when their timestamps match.
 

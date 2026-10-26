@@ -182,7 +182,7 @@ export function createAdaptiveEffortStreamFn(inner: StreamFn, options: AdaptiveE
 		options.onHistoryLimit ??
 		(() => {
 			process.emitWarning(
-				"Adaptive effort reached its tool-call history limit; using the configured reasoning effort until this stream is recreated.",
+				"Adaptive effort reached its tool-call history limit; passing through the configured reasoning effort until this stream is recreated. Other limits may still apply.",
 				{ code: "OMK_ADAPTIVE_EFFORT_HISTORY_LIMIT" },
 			);
 			appendRunLog("adaptive-effort", { event: "history_limit" });
