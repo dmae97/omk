@@ -1,11 +1,3 @@
-<p align="center">
-  <img
-    src="readmeasset/omk-hero.svg"
-    alt="OMK, Open Multi-Agent Kit. Make done pass a check. The mark shows a four-stage control loop with three routed lanes."
-    width="100%"
-  />
-</p>
-
 <h1 align="center">OMK</h1>
 
 <p align="center">
@@ -31,12 +23,17 @@
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-runs-by-default">Default or opt-in?</a> ·
+  <a href="#context-cache-and-memory">Context &amp; memory</a> ·
   <a href="#evidence-and-limits">Evidence and limits</a><br />
   <a href="#faq">Choosing OMK</a> ·
   <a href="packages/coding-agent/docs/index.md">Documentation</a>
 </p>
 
 ---
+
+| **CONTROL** | **CHOICE** | **EVIDENCE** |
+| :--- | :--- | :--- |
+| Keep the work in your terminal and repository. | Switch providers and models in one session. | Define a check before a goal can complete. |
 
 OMK is a lightweight, MIT-licensed AI coding agent for your terminal, written in
 TypeScript. Switch models in one session, add subagents when you need them, and
@@ -94,17 +91,17 @@ required for your first task.
 - **Honest evidence.** Claims below link to the docs that back them, and the limits are stated next to them.
 
 ```mermaid
-flowchart LR
-  U[You: prompt or /goal] --> L[Agent loop]
-  L --> M[Model via /model<br/>subscription, API key or local]
-  M --> L
-  L --> T[Tools: read, edit, sandboxed bash]
-  T --> L
-  L -->|settled turn| V{/goal verify<br/>check passes?}
-  V -- no --> L
-  V -- yes --> D[Goal complete<br/>fresh receipt]
-  X[Optional: subagents, MCP, skills, extensions] -.-> L
+flowchart TD
+  P["Prompt or goal"] --> A["Agent loop"]
+  A --> S["Settled turn"]
+  S --> R["Response"]
+  S -->|"goal verification configured"| V["Run acceptance check"]
+  V -->|"pass on current workspace"| D["Goal complete"]
+  V -->|"fail"| A
 ```
+
+The loop uses your selected model and available tools. Subagents, MCP, skills,
+and extensions depend on your configuration.
 
 ## Quick start
 
@@ -184,6 +181,31 @@ The internal lane launcher and automatic command-sharding primitives are not
 connected to the default CLI path. Installing their packages is not the same
 as enabling an orchestration workflow.
 
+## Context, cache and memory
+
+OMK manages several distinct resources. A prompt-cache boundary, a local cache,
+and the process's RAM are not the same thing; provider cache hits and costs
+depend on the provider and the request.
+
+| Layer | What OMK does | Default and scope |
+| --- | --- | --- |
+| **Prompt prefix** | Preserves the cache boundary when an extension changes only the dynamic tail and the prefix matches byte for byte. | On by default; this does not guarantee a provider cache hit. [`OMK_PREFIX_BOUNDARY`](packages/coding-agent/docs/environment-variables.md) |
+| **Context Budget V2** | Reserves response and safety space, keeps required items, and selects representations of optional context that fit. | Off by default; enable globally or for a process. [Context selection](packages/coding-agent/docs/runtime-algorithms.md#context-selection) |
+| **Local context cache** | Reuses eligible representation and negative-result entries; cached plans stay in session memory. | Only when Context Budget V2 is enabled. Representations persist per workspace by default; a memory-only option is available. [Settings](packages/coding-agent/docs/settings.md#context-budget) |
+| **Session history** | Compaction can summarize earlier context; saved sessions support resume. | Compaction and its settings are separate from persistent knowledge and provider-side caches. [Sessions](packages/coding-agent/docs/sessions.md) |
+| **Host resources** | The resource governor can observe host capacity and admission decisions. | `observe` is the default; adaptive throttling requires configuration. [Resource governor](packages/coding-agent/docs/settings.md#resource-governor) |
+
+For one process, opt into context budgeting and keep its cache in session memory:
+
+```bash
+OMK_CONTEXT_GOVERNOR=1 OMK_CONTEXT_GOVERNOR_CACHE=memory omk
+```
+
+Memory-only changes where entries are kept; it is not a guarantee of lower RAM
+use. Cache effectiveness, memory use, latency and cost depend on the workload.
+Measure them before claiming an improvement; [turn metrics](packages/coding-agent/docs/metrics.md)
+show what can be recorded.
+
 ## Evidence and limits
 
 One dated comparison is available below: OMK and mini-SWE-agent on
@@ -226,13 +248,11 @@ interrupted runs, not just successful examples.
 
 ### Terminal-Bench 2.1 · R8
 
-<p align="center">
-  <img
-    src="readmeasset/omk-terminal-bench-r8.png"
-    alt="OMK versus mini-SWE-agent 2.4.6 on Terminal-Bench 2.1 with Grok-4.7 xhigh. Primary success: 75.8% (200/264) versus 71.6% (189/264). Recorded cost per graded trial: $0.581 versus $0.759. Median time: 482 versus 376 seconds. Success difference: +4.2 percentage points, 95% CI minus 1.9 to plus 10.2; not statistically significant. OMK had 150 additional seconds per trial and used an evaluation build."
-    width="1200"
-  />
-</p>
+| Self-measured result | OMK evaluation build | mini-SWE-agent 2.4.6 |
+| --- | ---: | ---: |
+| Observed success | 75.8% (200/264) | 71.6% (189/264) |
+| Recorded cost per trial | $0.581 | $0.759 |
+| Median wall time per trial | 482 s | 376 s |
 
 **75.8% observed success · approximately 23% lower recorded model cost per
 graded trial.** OMK took longer: 482 s median, compared with 376 s for
@@ -287,13 +307,11 @@ Method, per-difficulty results, audit and reproduction notes:
 The terminal UI shows the selected model, tools, and session status. Additional
 signals depend on the integrations you configure.
 
-<p align="center">
-  <img
-    src="landing/assets/omk_tui.jpg"
-    alt="OMK//CONTROL terminal dashboard showing model routing, tools, and session status"
-    width="960"
-  />
-</p>
+| In the terminal | What it shows |
+| --- | --- |
+| Model | Selected provider and model |
+| Tools | Available tools and their activity |
+| Session | Status and the current conversation |
 
 The header reads `omk v<package.version> · OMK//CONTROL`; the installed package
 version is the source of truth.
@@ -304,16 +322,12 @@ version is the source of truth.
 <summary>How scope, routing, verification, and replay fit together</summary>
 
 OMK's provider-neutral coding-agent CLI also exposes a multi-agent control
-plane for explicitly configured workflows. The diagram describes that design,
+plane for explicitly configured workflows. The stages describe that design,
 not what every prompt automatically runs.
 
-<p align="center">
-  <img
-    src="readmeasset/omk-control-loop.gif"
-    alt="Animated OMK control loop showing Scope, Route, Verify, and Replay"
-    width="900"
-  />
-</p>
+| **01 SCOPE** | **02 ROUTE** | **03 VERIFY** | **04 REPLAY** |
+| --- | --- | --- | --- |
+| Define the task and boundaries. | Choose models and configured tools. | Run the declared checks. | Retain state and evidence for recovery. |
 
 The v0.98.3 SDK rejects incomplete first-party judge responses and exposes
 deterministic ties; it is not an automatic TUI judge.
@@ -327,9 +341,6 @@ deterministic ties; it is not an automatic TUI judge.
    checks block those workflows; advisory judging cannot replace them.
 4. Preserve receipts and replay state for bounded session recovery; continue
    durable goals from explicit reducer state.
-
-The animation changes once every 1.5 seconds and contains no flashing. The four
-steps above are the complete text alternative.
 
 </details>
 
