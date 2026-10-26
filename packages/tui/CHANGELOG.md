@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.5.9] - 2026-10-26
+
+### Fixed
+
+- Autocomplete acceptance is rejected when the editor text, cursor or request changed after the list was shown, and the terminal input drain uses a monotonic clock.
+
 ## [1.5.8] - 2026-10-24
 
 
