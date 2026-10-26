@@ -99,12 +99,12 @@ export function runCodexTask(binary: string, task: string, supervisorOverride?: 
 			supervisorClosed = true;
 			if (outcomeUnknown) return finish(1);
 			if (!cancelled && result === undefined) return unknown();
-			const start = Date.now();
+			const start = performance.now();
 			const checkGroup = () => {
 				try {
 					if (!child.pid) return unknown();
 					process.kill(-child.pid, 0);
-					if (Date.now() - start >= 3_000) return unknown();
+					if (performance.now() - start >= 3_000) return unknown();
 					poll = setTimeout(checkGroup, 50);
 				} catch (error) {
 					if ((error as NodeJS.ErrnoException).code === "ESRCH") finish(cancelled || result || 0);
