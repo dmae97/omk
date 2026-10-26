@@ -12,7 +12,16 @@
 /** Legacy `omk --doctor-provider <id>` alias; accepted anywhere in argv. */
 export const DOCTOR_PROVIDER_FLAG = "--doctor-provider";
 
-export const RUN_COMMAND_WORDS = ["provider", "run", "session", "doctor", "stats", "sdk", "router-feedback"] as const;
+export const RUN_COMMAND_WORDS = [
+	"provider",
+	"run",
+	"session",
+	"doctor",
+	"stats",
+	"sdk",
+	"router-feedback",
+	"codex-ultra",
+] as const;
 
 export const QUOTA_COMMAND = "quota";
 
