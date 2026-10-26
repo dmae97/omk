@@ -83,6 +83,22 @@ describe("bundled pstack project installer", () => {
 		).toHaveLength(0);
 	});
 
+	it("preserves an existing AdaptOrch skill and configuration while installing pstack", () => {
+		const agentDir = join(root, "agent-home");
+		const skillDir = join(agentDir, "skills", "adaptorch-route");
+		mkdirSync(skillDir, { recursive: true });
+		const skill = "---\nname: adaptorch-route\ndescription: Existing route skill\n---\nRoute advice.\n";
+		writeFileSync(join(skillDir, "SKILL.md"), skill);
+		const settings = '{"adaptorchBridge":{"enabled":true}}\n';
+		writeFileSync(join(agentDir, "settings.json"), settings);
+		installProjectPstack(root, bundle, false, line, undefined, agentDir);
+		const result = loadSkills({ cwd: root, agentDir, includeDefaults: true, skillPaths: [], catalogCache: false });
+		expect(result.skills.find((item) => item.name === "adaptorch-route")?.filePath).toBe(join(skillDir, "SKILL.md"));
+		expect(result.skills.find((item) => item.name === "pstack-poteto-mode")).toBeDefined();
+		expect(readFileSync(join(skillDir, "SKILL.md"), "utf8")).toBe(skill);
+		expect(readFileSync(join(agentDir, "settings.json"), "utf8")).toBe(settings);
+	});
+
 	it.each(["user", "project"] as const)("rejects an existing %s pstack skill before writing", (scope) => {
 		const agentDir = join(root, "agent-home");
 		const existingDir =
