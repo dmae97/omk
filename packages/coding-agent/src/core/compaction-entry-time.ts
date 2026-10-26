@@ -15,6 +15,30 @@ interface BranchEntryLike {
 	readonly message?: { readonly timestamp?: number };
 }
 
+/** Session order is authoritative; wall-clock epochs can overlap on either side of a compaction. */
+export interface CompactionUsageBoundary {
+	readonly id: string;
+	readonly timestamp: string;
+	readonly compactedMessages: ReadonlySet<object>;
+}
+
+/** Context reconstruction reuses entry.message objects, including when a session is reopened. */
+export function getCompactionUsageBoundary(
+	branch: readonly (BranchEntryLike & { readonly id: string; readonly timestamp: string })[],
+): CompactionUsageBoundary | undefined {
+	for (let i = branch.length - 1; i >= 0; i--) {
+		const entry = branch[i];
+		if (entry.type !== "compaction") continue;
+		const compactedMessages = new Set<object>();
+		for (let j = 0; j < i; j++) {
+			const before = branch[j];
+			if (before.type === "message" && before.message) compactedMessages.add(before.message);
+		}
+		return { id: entry.id, timestamp: entry.timestamp, compactedMessages };
+	}
+	return undefined;
+}
+
 export function getLatestCompactionEntry<E extends { readonly type: string }>(
 	entries: readonly E[],
 ): Extract<E, { type: "compaction" }> | null {
@@ -27,10 +51,9 @@ export function getLatestCompactionEntry<E extends { readonly type: string }>(
 }
 
 /**
- * Timestamp for a compaction appended after `branch`. Usage at or before the latest compaction is
- * ignored as stale, and threshold checks skip messages at or before it, so a compaction must not be
- * stamped earlier than any message on its branch even when the wall clock stepped backward since
- * that message was written.
+ * Timestamp for a compaction appended after `branch`. Keep it after covered messages for display
+ * and legacy timestamp-only callers. Runtime usage and gates use branch order so messages written
+ * while the clock recovers are still fresh.
  */
 export function compactionTimestamp(nowMs: number, branch: readonly BranchEntryLike[]): string {
 	let latest = Number.NEGATIVE_INFINITY;

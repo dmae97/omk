@@ -1,6 +1,7 @@
 import type { AgentMessage } from "omk-agent-core";
 import type { AssistantMessage, Message } from "omk-ai";
-import { type ContextUsageEstimate, estimateContextTokens, estimateTokens } from "./compaction.ts";
+import type { CompactionUsageBoundary } from "../compaction-entry-time.ts";
+import { type ContextUsageEstimate, estimateProjectedContextTokens, estimateTokens } from "./compaction.ts";
 
 type RoleMessage = AgentMessage | Message;
 
@@ -58,14 +59,13 @@ export function dropClosedTurnReasoning<T extends RoleMessage>(messages: readonl
 export function estimateNextTurnContextTokens(
 	messages: AgentMessage[],
 	pendingMessages: AgentMessage[],
-	ignoreUsageAtOrBefore?: string,
+	usageBoundary?: string | CompactionUsageBoundary,
 ): ContextUsageEstimate | undefined {
 	if (!pendingMessages.some((message) => message.role === "user")) return undefined;
 	const turnStart = lastUserIndex(messages);
 	if (!messages.slice(turnStart + 1).some(hasReasoning)) return undefined;
-	const boundary = ignoreUsageAtOrBefore ? Date.parse(ignoreUsageAtOrBefore) : Number.NaN;
 	const all = [...messages, ...pendingMessages];
-	const projected = estimateContextTokens(all, Number.isFinite(boundary) ? boundary : undefined);
+	const projected = estimateProjectedContextTokens(messages, pendingMessages, usageBoundary);
 	const covered = projected.lastUsageIndex ?? -1;
 	let dropped = 0;
 	for (let i = turnStart + 1; i <= covered; i++) {

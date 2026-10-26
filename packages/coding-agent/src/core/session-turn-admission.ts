@@ -1,6 +1,7 @@
 import type { AgentMessage, AgentState, AgentTool } from "omk-agent-core";
 import type { Api, Model } from "omk-ai";
 import type { CompactionSettings } from "./compaction/compaction-headroom.ts";
+import type { CompactionUsageBoundary } from "./compaction-entry-time.ts";
 import { createTokenCounterForMode, type TokenCounterAdapter } from "./context-budget-token-counter.ts";
 import { admissionKey } from "./performance-upgrade/admission-key.ts";
 import { PromptInputCapacityError } from "./prompt-budget.ts";
@@ -29,6 +30,7 @@ export interface SessionTurnAdmissionHost {
 	readonly contextWindow: (pending: readonly AgentMessage[], sessionWindow: number) => number;
 	readonly compactionSettings: () => CompactionSettings;
 	readonly latestCompactionTimestamp: () => string | undefined;
+	readonly compactionUsageBoundary?: () => CompactionUsageBoundary | undefined;
 	/** Group a tool is withheld with (its MCP server); `undefined` keeps it in every request. */
 	readonly toolGroup: (toolName: string) => string | undefined;
 	/** Compacts retained history once; called only while auto-compaction is enabled. */
@@ -151,6 +153,7 @@ export class SessionTurnAdmission {
 				effectiveWindow: (window) => this.host.contextWindow(pending, window),
 				counter,
 				latestCompactionTimestamp: this.host.latestCompactionTimestamp(),
+				compactionUsageBoundary: this.host.compactionUsageBoundary?.(),
 			};
 		}, compact);
 	}

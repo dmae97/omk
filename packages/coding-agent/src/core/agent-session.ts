@@ -78,6 +78,7 @@ import { isOverflowRecoveryProgress, overflowRecoveryFailureMessage } from "./co
 import { overflowRetryBlocked } from "./compaction/overflow-retry-guard.ts";
 import { compactionEmitWillRetry } from "./compaction/resume-policy.ts";
 import { type CompactionSummaryInput, summarizeSessionCompaction } from "./compaction/session-summary.ts";
+import { getCompactionUsageBoundary } from "./compaction-entry-time.ts";
 import { isSessionModelOverflow, shouldSkipCompactionCheck } from "./compaction-gate.ts";
 import {
 	estimateToolResultReserve,
@@ -893,7 +894,7 @@ export class AgentSession {
 				this._cwd,
 				() => this._getContextBudgetOptions(),
 				(messages, window) => this._effectiveTurnContextWindow(messages, window),
-				() => getLatestCompactionEntry(this.sessionManager.getBranch())?.timestamp,
+				() => getCompactionUsageBoundary(this.sessionManager.getBranch()),
 			);
 			this._turnAdmission = installTurnAdmission(this as unknown as TurnAdmissionSession);
 		} catch (error) {
@@ -3312,7 +3313,7 @@ export class AgentSession {
 		const estimate = estimateProjectedContextTokens(
 			this.agent.state.messages,
 			pendingMessages,
-			getLatestCompactionEntry(this.sessionManager.getBranch())?.timestamp,
+			getCompactionUsageBoundary(this.sessionManager.getBranch()),
 		);
 		const pressure = estimate.tokens / contextWindow;
 		if (pressure >= 0.9) return 3;
@@ -3854,12 +3855,12 @@ export class AgentSession {
 		const contextWindow = this._effectiveTurnContextWindow(pendingMessages, sessionWindow);
 		if (contextWindow <= 0) return false;
 
-		// Usage recorded at or before the latest compaction is ignored, so stale pre-compaction
+		// Usage recorded before the latest compaction in branch order is ignored, so stale pre-compaction
 		// usage can neither retrigger compaction nor hide a genuinely oversized projected turn.
-		const compactedAt = getLatestCompactionEntry(this.sessionManager.getBranch())?.timestamp;
+		const usageBoundary = getCompactionUsageBoundary(this.sessionManager.getBranch());
 		const estimate =
-			estimateNextTurnContextTokens(this.agent.state.messages, pendingMessages, compactedAt) ??
-			estimateProjectedContextTokens(this.agent.state.messages, pendingMessages, compactedAt);
+			estimateNextTurnContextTokens(this.agent.state.messages, pendingMessages, usageBoundary) ??
+			estimateProjectedContextTokens(this.agent.state.messages, pendingMessages, usageBoundary);
 		const decision = this._runtimeCompactionDecision(estimate.tokens, contextWindow, settings);
 		if (decision.compact) {
 			return this._runThresholdCompaction(decision.emergency);
@@ -3882,14 +3883,14 @@ export class AgentSession {
 		const settings = this.settingsManager.getCompactionSettings();
 		// Stale pre-compaction usage/errors must not retrigger compaction on the
 		// first prompt after one finished.
-		const compactionEntry = getLatestCompactionEntry(this.sessionManager.getBranch());
+		const compactionBoundary = getCompactionUsageBoundary(this.sessionManager.getBranch());
 		if (
 			shouldSkipCompactionCheck({
 				enabled: settings.enabled,
 				skipAbortedCheck,
 				stopReason: assistantMessage.stopReason,
 				messageTimestamp: assistantMessage.timestamp,
-				latestCompactionTimestamp: compactionEntry ? new Date(compactionEntry.timestamp).getTime() : undefined,
+				messagePrecedesCompaction: compactionBoundary?.compactedMessages.has(assistantMessage),
 			})
 		) {
 			return false;
@@ -3937,19 +3938,9 @@ export class AgentSession {
 		let contextTokens: number;
 		if (assistantMessage.stopReason === "error") {
 			const messages = this.agent.state.messages;
-			const estimate = estimateContextTokens(messages);
+			const estimate = estimateContextTokens(messages, compactionBoundary);
 			if (estimate.lastUsageIndex === null) return false; // No usage data at all
-			// Verify the usage source is post-compaction. Kept pre-compaction messages
-			// have stale usage reflecting the old (larger) context and would falsely
-			// trigger compaction right after one just finished.
-			const usageMsg = messages[estimate.lastUsageIndex];
-			if (
-				compactionEntry &&
-				usageMsg.role === "assistant" &&
-				(usageMsg as AssistantMessage).timestamp <= new Date(compactionEntry.timestamp).getTime()
-			) {
-				return false;
-			}
+			if (compactionBoundary?.compactedMessages.has(messages[estimate.lastUsageIndex])) return false;
 			contextTokens = estimate.tokens;
 		} else {
 			contextTokens = calculateContextTokens(assistantMessage.usage);

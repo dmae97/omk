@@ -5,6 +5,7 @@
  */
 import type { Agent, AgentMessage } from "omk-agent-core";
 import { type Api, type Model, registerSessionResourceCleanup } from "omk-ai";
+import { getCompactionUsageBoundary } from "./compaction-entry-time.ts";
 import type { EventBus } from "./event-bus.ts";
 import type { ExtensionRunner } from "./extensions/runner.ts";
 import { isRequiredToolsEnabled, type RequiredToolContract } from "./required-tools.ts";
@@ -63,6 +64,7 @@ export function installTurnAdmission(session: TurnAdmissionSession): SessionTurn
 		contextWindow: (pending, window) => session._effectiveTurnContextWindow([...pending], window),
 		compactionSettings: () => session.settingsManager.getCompactionSettings(),
 		latestCompactionTimestamp: () => getLatestCompactionEntry(session.sessionManager.getBranch())?.timestamp,
+		compactionUsageBoundary: () => getCompactionUsageBoundary(session.sessionManager.getBranch()),
 		toolGroup: (name) => (session._mcpToolNames.has(name) ? mcpToolGroup(name) : undefined),
 		compact: async () => {
 			await session._runThresholdCompaction(true);
