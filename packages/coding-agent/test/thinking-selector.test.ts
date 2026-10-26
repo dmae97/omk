@@ -1,9 +1,11 @@
+import { stripVTControlCharacters } from "node:util";
 import type { ThinkingLevel } from "omk-agent-core";
 import { setKeybindings } from "omk-tui";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../src/core/slash-commands.ts";
 import { ThinkingSelectorComponent } from "../src/modes/interactive/components/settings-selector.ts";
+import { ThinkingSelectorComponent as StandaloneThinkingSelectorComponent } from "../src/modes/interactive/components/thinking-selector.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 
 describe("thinking selector command support", () => {
@@ -41,5 +43,23 @@ describe("thinking selector command support", () => {
 
 		expect(changes).toEqual(["medium"]);
 		expect(completed).toBe("medium");
+	});
+
+	it("describes ultra consistently without claiming automatic delegation", () => {
+		const settings = new ThinkingSelectorComponent(
+			{ thinkingLevel: "ultra", availableThinkingLevels: ["ultra"] },
+			{ onThinkingLevelChange: () => {}, onCancel: () => {} },
+		);
+		const standalone = new StandaloneThinkingSelectorComponent(
+			"ultra",
+			["ultra"],
+			() => {},
+			() => {},
+		);
+		for (const selector of [settings, standalone]) {
+			const rendered = stripVTControlCharacters(selector.render(80).join("\n"));
+			expect(rendered).toContain("Does not enable delegation; effort varies by model");
+			expect(rendered).not.toContain("automatic task delegation");
+		}
 	});
 });

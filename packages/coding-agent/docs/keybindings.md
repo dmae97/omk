@@ -66,6 +66,11 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 | `tui.editor.yankPop` | `alt+y` | Cycle through deleted text after yank |
 | `tui.editor.undo` | `ctrl+-` | Undo last edit |
 
+Deleted-text history retains up to 128 entries and 2,097,152 UTF-16 code units.
+Older entries are discarded first; the latest entry is retained even if it exceeds
+the size limit so it can still be yanked. These are retention limits, not process
+memory measurements.
+
 ### TUI Clipboard and Selection
 
 | Keybinding id | Default | Description |
