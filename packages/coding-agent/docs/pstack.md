@@ -23,6 +23,8 @@ The prefix avoids collisions with ordinary unprefixed skill names, but it does n
 
 Project agents use the existing subagent extension. Its default scope is `user`; to discover and dispatch these project definitions, choose `agentScope: "project"` or `"both"` for a subagent call. Interactive calls prompt for project-agent trust. Headless calls cannot prompt, so use project scope only for a trusted project. Installing files does not approve a repository, automatically call any agent or change the agent scope. OMK host policies and the user's instructions take priority over instructions in a skill. Some upstream skills contain scripts that may request network access, install tools or perform GitHub operations. They run only if explicitly invoked under the normal tool and permission boundaries.
 
+OMK's Node/Vitest suite excludes tests inside the vendored `resources/pstack` tree. They are retained as upstream resources and use separate Bun or Node test runners; running them is an explicit, separate upstream operation and may install tools or packages. The exclusion does not remove OMK's own pstack integration tests.
+
 The subagent implementation is an example extension and is not loaded merely by installing this bundle. For a global npm installation on macOS or Linux, launch it explicitly from the initialized project:
 
 ```sh

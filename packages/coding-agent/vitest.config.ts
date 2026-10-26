@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 const tuiSrcIndex = fileURLToPath(new URL("../tui/src/index.ts", import.meta.url));
 const aiSrcIndex = fileURLToPath(new URL("../ai/src/index.ts", import.meta.url));
@@ -12,6 +12,8 @@ const selfSrcHooks = fileURLToPath(new URL("./src/core/hooks/index.ts", import.m
 
 export default defineConfig({
 	test: {
+		// Bundled pstack keeps upstream Bun/Node test suites for opt-in upstream use.
+		exclude: [...configDefaults.exclude, "resources/pstack/**"],
 		globals: true,
 		environment: "node",
 		testTimeout: 30000,
