@@ -1,0 +1,14 @@
+{
+  "source": "https://github.com/backnotprop/pstack",
+  "commit": "f51fdeba3d803ef90e4eaa4a95ffb4e76008ab37",
+  "license": "MIT",
+  "adaptations": [
+    "OMK project paths in poteto-agent.md",
+    "OMK authority and tool boundaries in both agents",
+    "Pin vendored Bun tool devDependencies to versions already resolved in bun.lock",
+    "Normalize automate-me trailing blank line",
+    "Namespace skill names and slash invocations under pstack- to avoid generic-name collisions",
+    "Map poteto-mode entrypoint and Task delegation to OMK skill and subagent interfaces",
+    "Namespace bundled agent names with pstack-"
+  ]
+}

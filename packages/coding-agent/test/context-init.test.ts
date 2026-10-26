@@ -241,6 +241,7 @@ describe("user context initialization", () => {
 		expect(readdirSync(workspace).sort()).toEqual(
 			[
 				".git",
+				".omk",
 				"AGENTS.md",
 				"ARCHITECTURE.md",
 				"CLAUDE.md",
@@ -251,6 +252,89 @@ describe("user context initialization", () => {
 				"TASKS.md",
 			].sort(),
 		);
+	});
+
+	it.skipIf(process.platform === "win32")(
+		"rejects unsafe destinations before creating project context and explains recovery",
+		() => {
+			const projectTemplates = fileURLToPath(new URL("../examples/project-context", import.meta.url));
+			const workspace = join(root, "recover-project");
+			const outside = join(root, "outside");
+			mkdirSync(workspace);
+			mkdirSync(outside);
+			symlinkSync(outside, join(workspace, ".omk"), "dir");
+			const options = {
+				cwd: workspace,
+				templatesDir: projectTemplates,
+				writeLine: (line: string) => lines.push(line),
+			};
+			expect(runInitCli(["init", "--project"], options).exitCode).toBe(1);
+			expect(lines.join("\n")).toContain("rerun omk init --project");
+			expect(readdirSync(workspace)).toEqual([".omk"]);
+			rmSync(join(workspace, ".omk"));
+			expect(runInitCli(["init", "--project"], options).exitCode).toBe(0);
+			expect(statSync(join(workspace, ".omk", "agents", "pstack-poteto-agent.md")).isFile()).toBe(true);
+		},
+	);
+
+	it("rejects a conflicting user skill before writing project documents", () => {
+		const projectTemplates = fileURLToPath(new URL("../examples/project-context", import.meta.url));
+		const workspace = join(root, "conflict-project");
+		const userSkill = join(agentDir, "skills", "custom");
+		mkdirSync(workspace);
+		mkdirSync(userSkill, { recursive: true });
+		writeFileSync(
+			join(userSkill, "SKILL.md"),
+			"---\nname: pstack-how\ndescription: Existing user skill\n---\nKeep me.\n",
+		);
+		const result = runInitCli(["init", "--project"], {
+			cwd: workspace,
+			agentDir,
+			templatesDir: projectTemplates,
+			writeLine: (line) => lines.push(line),
+		});
+		expect(result.exitCode).toBe(1);
+		expect(lines.join("\n")).toContain("Pstack skill name conflicts: pstack-how");
+		expect(readdirSync(workspace)).toEqual([]);
+	});
+
+	it("continues a bare launch when a pstack collision prevents automatic setup", () => {
+		const projectTemplates = fileURLToPath(new URL("../examples/project-context", import.meta.url));
+		const workspace = join(root, "bare-conflict");
+		const userSkill = join(agentDir, "skills", "custom");
+		mkdirSync(workspace);
+		mkdirSync(userSkill, { recursive: true });
+		expect(spawnSync("git", ["init", "--quiet", workspace]).status).toBe(0);
+		writeFileSync(
+			join(userSkill, "SKILL.md"),
+			"---\nname: pstack-how\ndescription: Existing user skill\n---\nKeep me.\n",
+		);
+		const options = {
+			cwd: workspace,
+			agentDir,
+			templatesDir: projectTemplates,
+			env: {},
+			writeLine: (line: string) => lines.push(line),
+		};
+		expect(runInitCli([], options)).toEqual({ handled: false, exitCode: 0 });
+		expect(lines.join("\n")).toContain("Automatic project setup failed. Continuing normal launch");
+		expect(readdirSync(workspace)).toEqual([".git"]);
+	});
+
+	it("keeps bare-launch failure behavior for missing project context templates", () => {
+		const workspace = join(root, "bare-missing-templates");
+		mkdirSync(workspace);
+		expect(spawnSync("git", ["init", "--quiet", workspace]).status).toBe(0);
+		const result = runInitCli([], {
+			cwd: workspace,
+			agentDir,
+			templatesDir: join(root, "missing-templates"),
+			env: {},
+			writeLine: (line) => lines.push(line),
+		});
+		expect(result).toEqual({ handled: true, exitCode: 1 });
+		expect(lines.join("\n")).not.toContain("Continuing normal launch");
+		expect(readdirSync(workspace)).toEqual([".git"]);
 	});
 
 	it("honors the launcher's bare-interactive marker after lean arguments are injected", () => {
