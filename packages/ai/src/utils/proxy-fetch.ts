@@ -44,6 +44,11 @@ export async function proxyAwareFetch(input: string | URL | Request, init?: Requ
 			},
 			(res) => {
 				const chunks: Buffer[] = [];
+				// A response can fail after headers have arrived. In that case the
+				// request itself has already succeeded, but `end` will never fire.
+				// Reject so OAuth callers do not wait forever retaining the chunks.
+				res.once("error", reject);
+				res.once("aborted", () => reject(new Error("Proxy response aborted")));
 				res.on("data", (chunk: Buffer) => {
 					chunks.push(chunk);
 				});
