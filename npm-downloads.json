@@ -3,5 +3,5 @@
 	"label": "downloads",
 	"message": "2.5k/month",
 	"color": "brightgreen",
-	"cacheSeconds": 3601
+	"cacheSeconds": 3600
 }
