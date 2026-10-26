@@ -16,7 +16,13 @@ import {
 } from "omk-ai";
 import { Type } from "typebox";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createAdaptiveEffortStreamFn, lowGroupEffort, MAX_EFFORT_SWITCHES } from "../src/core/adaptive-effort.ts";
+import {
+	ADAPTIVE_EFFORT_MAX_SEEN_CODE_UNITS,
+	ADAPTIVE_EFFORT_MAX_SEEN_IDS,
+	createAdaptiveEffortStreamFn,
+	lowGroupEffort,
+	MAX_EFFORT_SWITCHES,
+} from "../src/core/adaptive-effort.ts";
 import {
 	createLlmCallRunLogStreamFn,
 	type LlmCallPhaseFields,
@@ -129,6 +135,131 @@ afterEach(() => {
 	setLlmCallPhaseFields(undefined);
 	resetCurrentTodoState();
 	vi.unstubAllEnvs();
+});
+
+describe("bounded adaptive effort history", () => {
+	function harness() {
+		let lastOptions: SimpleStreamOptions | undefined;
+		let lastFields: LlmCallPhaseFields | undefined;
+		let reports = 0;
+		const inner: StreamFn = (_model, _context, options) => {
+			lastOptions = options;
+			return createAssistantMessageEventStream();
+		};
+		const fn = createAdaptiveEffortStreamFn(inner, {
+			todoKind: () => undefined,
+			record: (fields) => {
+				lastFields = fields;
+			},
+			onHistoryLimit: () => {
+				reports++;
+			},
+		});
+		const options: SimpleStreamOptions = { reasoning: "xhigh" };
+		const call = (ids: string[], name: "bash" | "read" = "read") =>
+			fn(
+				grok47,
+				{
+					systemPrompt: "",
+					tools: TOOLS,
+					messages: [
+						assistant(
+							ids.map((id) => ({
+								type: "toolCall",
+								id,
+								name,
+								arguments: name === "bash" ? { command: "pytest -q" } : {},
+							})),
+						),
+					],
+				},
+				options,
+			);
+		return { call, options, lastOptions: () => lastOptions, lastFields: () => lastFields, reports: () => reports };
+	}
+
+	it("preserves duplicate suppression through the limit and fails back to the configured effort", () => {
+		const a = harness();
+		a.call(["id-0"], "bash");
+		for (let i = 1; i < ADAPTIVE_EFFORT_MAX_SEEN_IDS; i++) a.call([`id-${i}`]);
+		a.call(["id-0"], "bash"); // Revisiting an older branch is still deduplicated at capacity.
+		expect(a.lastOptions()?.reasoning).toBe("high");
+		expect(a.lastFields()?.phase).toBe("explore");
+		expect(a.reports()).toBe(0);
+		a.call(["new-id"]);
+		expect(a.lastOptions()).toBe(a.options);
+		expect(a.lastFields()).toBeUndefined();
+		expect(a.reports()).toBe(1);
+		a.call(["id-0"]); // Once saturated no forgotten ID is reclassified.
+		expect(a.lastOptions()).toBe(a.options);
+		expect(a.reports()).toBe(1);
+		const independent = harness();
+		independent.call(["id-0"]);
+		expect(independent.lastOptions()?.reasoning).toBe("high");
+	});
+
+	it("fails back for an oversized ID without caching it", () => {
+		const a = harness();
+		a.call(["x".repeat(ADAPTIVE_EFFORT_MAX_SEEN_CODE_UNITS + 1)]);
+		expect(a.lastOptions()).toBe(a.options);
+		expect(a.reports()).toBe(1);
+	});
+
+	it("allows the exact code-unit limit and fails back for one additional unit", () => {
+		const a = harness();
+		const id = "x".repeat(ADAPTIVE_EFFORT_MAX_SEEN_CODE_UNITS);
+		a.call([id]);
+		a.call([id]);
+		expect(a.reports()).toBe(0);
+		a.call(["x"]);
+		expect(a.lastOptions()).toBe(a.options);
+		expect(a.reports()).toBe(1);
+	});
+
+	it("logs only a non-sensitive limit event when run logging is enabled", () => {
+		const dir = mkdtempSync(join(tmpdir(), "omk-adaptive-limit-"));
+		vi.stubEnv("OMK_RUN_LOG_DIR", dir);
+		const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+		try {
+			let calls = 0;
+			const fn = createAdaptiveEffortStreamFn(
+				() => {
+					calls++;
+					return createAssistantMessageEventStream();
+				},
+				{ record: () => undefined, todoKind: () => undefined },
+			);
+			const privateId = "z".repeat(ADAPTIVE_EFFORT_MAX_SEEN_CODE_UNITS + 1);
+			const context: Context = {
+				systemPrompt: "",
+				tools: TOOLS,
+				messages: [assistant([{ type: "toolCall", id: privateId, name: "read", arguments: {} }])],
+			};
+			fn(grok47, context, { reasoning: "xhigh" });
+			fn(grok47, context, { reasoning: "xhigh" });
+			const output = readFileSync(join(dir, "adaptive-effort.jsonl"), "utf8");
+			expect(output.trim().split("\n")).toHaveLength(1);
+			expect(JSON.parse(output)).toMatchObject({ event: "history_limit" });
+			expect(output).not.toContain(privateId);
+			expect(calls).toBe(2);
+			expect(warning).toHaveBeenCalledTimes(1);
+			expect(warning).toHaveBeenCalledWith(expect.stringContaining("configured reasoning effort"), {
+				code: "OMK_ADAPTIVE_EFFORT_HISTORY_LIMIT",
+			});
+		} finally {
+			warning.mockRestore();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("fails back for the whole request when a multi-call message crosses the cap", () => {
+		const a = harness();
+		for (let i = 0; i < ADAPTIVE_EFFORT_MAX_SEEN_IDS - 1; i++) a.call([`id-${i}`]);
+		a.call(["new-1", "new-2"]);
+		expect(a.lastOptions()).toBe(a.options);
+		expect(a.lastFields()).toBeUndefined();
+		expect(a.reports()).toBe(1);
+	});
 });
 
 // ---------------------------------------------------------------------------------------------

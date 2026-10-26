@@ -33,6 +33,7 @@ import {
 	type TodoKind,
 	toolPhase,
 } from "./phase-classifier.ts";
+import { appendRunLog } from "./run-log.ts";
 import { activeTodoKind } from "./todo-runtime-state.ts";
 
 export const ADAPTIVE_EFFORT_ENV = "OMK_ADAPTIVE_EFFORT";
@@ -41,6 +42,9 @@ export const MAX_EFFORT_SWITCHES = 4;
 const LOW_GROUP_TARGET: ThinkingLevel = "high";
 const LEVELS: readonly ThinkingLevel[] = ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
 const RECENT_CALLS = 5;
+/** Once saturated, preserve correctness by disabling adaptation rather than forgetting seen IDs. */
+export const ADAPTIVE_EFFORT_MAX_SEEN_IDS = 8192;
+export const ADAPTIVE_EFFORT_MAX_SEEN_CODE_UNITS = 1024 * 1024;
 
 export interface AdaptiveEffortOptions {
 	/**
@@ -50,6 +54,8 @@ export interface AdaptiveEffortOptions {
 	readonly todoKind?: () => TodoKind | undefined;
 	/** Run-log sink for the 037 fields; defaults to the `llm-call.jsonl` setter (spec 059). */
 	readonly record?: (fields: LlmCallPhaseFields | undefined) => void;
+	/** Called once if tracking saturates; errors cannot affect provider requests. */
+	readonly onHistoryLimit?: () => void;
 }
 
 function providerValue(model: Model<Api>, level: ThinkingLevel): string | null {
@@ -98,6 +104,8 @@ function toolFailed(context: Context, toolCallId: string): boolean {
 /** Per-session classifier and switch state. */
 class AdaptiveEffortState {
 	private readonly seen = new Set<string>();
+	private seenCodeUnits = 0;
+	private saturated = false;
 	private recent: RecentCall[] = [];
 	private toolPrev: Phase | undefined;
 	private resolved: ResolvedPhase | undefined;
@@ -110,7 +118,18 @@ class AdaptiveEffortState {
 		let signal: Phase | undefined;
 		for (const part of lastAssistant(context)?.content ?? []) {
 			if (part.type !== "toolCall" || this.seen.has(part.id)) continue;
+			if (
+				this.seen.size >= ADAPTIVE_EFFORT_MAX_SEEN_IDS ||
+				this.seenCodeUnits + part.id.length > ADAPTIVE_EFFORT_MAX_SEEN_CODE_UNITS
+			) {
+				this.seen.clear();
+				this.seenCodeUnits = 0;
+				this.recent = [];
+				this.saturated = true;
+				return undefined;
+			}
 			this.seen.add(part.id);
+			this.seenCodeUnits += part.id.length;
 			const failed = toolFailed(context, part.id);
 			let phase: Phase | undefined;
 			let key: string | null = null;
@@ -129,8 +148,10 @@ class AdaptiveEffortState {
 	}
 
 	/** One classification per outer call: resolve the phase, apply hysteresis and the switch cap. */
-	classify(context: Context, todoKind: TodoKind | undefined, clamped: boolean): LlmCallPhaseFields {
+	classify(context: Context, todoKind: TodoKind | undefined, clamped: boolean): LlmCallPhaseFields | undefined {
+		if (this.saturated) return undefined;
 		this.resolved = resolvePhase(todoKind, this.toolSignal(context), this.resolved);
+		if (this.saturated) return undefined;
 		const wanted = effortGroupOf(this.resolved?.phase);
 		let effortSwitch: LlmCallPhaseFields["effortSwitch"] = null;
 		// A clamped call sends the same effort in both groups, so it neither moves nor counts toward a switch.
@@ -157,7 +178,17 @@ class AdaptiveEffortState {
 export function createAdaptiveEffortStreamFn(inner: StreamFn, options: AdaptiveEffortOptions = {}): StreamFn {
 	const todoKind = options.todoKind ?? activeTodoKind;
 	const record = options.record ?? setLlmCallPhaseFields;
+	const onHistoryLimit =
+		options.onHistoryLimit ??
+		(() => {
+			process.emitWarning(
+				"Adaptive effort reached its tool-call history limit; passing through the configured reasoning effort until this stream is recreated. Other limits may still apply.",
+				{ code: "OMK_ADAPTIVE_EFFORT_HISTORY_LIMIT" },
+			);
+			appendRunLog("adaptive-effort", { event: "history_limit" });
+		});
 	const state = new AdaptiveEffortState();
+	let reportedLimit = false;
 	return (model, context, streamOptions) => {
 		// Summary and compaction calls carry no tools: untouched, and they do not move the state.
 		if (!context.tools || context.tools.length === 0) {
@@ -166,6 +197,18 @@ export function createAdaptiveEffortStreamFn(inner: StreamFn, options: AdaptiveE
 		}
 		const low = lowGroupEffort(model, streamOptions?.reasoning);
 		const fields = state.classify(context, todoKind(), low === undefined);
+		if (!fields) {
+			record(undefined);
+			if (!reportedLimit) {
+				reportedLimit = true;
+				try {
+					onHistoryLimit();
+				} catch {
+					// Diagnostic failure must not affect the provider call.
+				}
+			}
+			return inner(model, context, streamOptions);
+		}
 		record(fields);
 		if (fields.effortGroup === "high" || low === undefined) return inner(model, context, streamOptions);
 		return inner(model, context, { ...streamOptions, reasoning: low });

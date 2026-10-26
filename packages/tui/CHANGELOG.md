@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Bound the deleted-text history used by editor and input yank operations, while retaining the newest oversized entry for an immediate yank.
+
 ## [1.5.9] - 2026-10-26
 
 ### Fixed

@@ -1,7 +1,6 @@
 import {
 	BedrockRuntimeClient,
 	type BedrockRuntimeClientConfig,
-	BedrockRuntimeServiceException,
 	StopReason as BedrockStopReason,
 	type Tool as BedrockTool,
 	CachePointType,
@@ -47,6 +46,7 @@ import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { parseStreamingJson } from "../utils/json-parse.ts";
 import { createHttpProxyAgentsForTarget } from "../utils/node-http-proxy.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
+import { formatBedrockError } from "./bedrock-errors.ts";
 import {
 	getModelMatchCandidates,
 	isAnthropicClaudeModel,
@@ -190,8 +190,12 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream", BedrockOpt
 			config.authSchemePreference = ["httpBearerAuth"];
 		}
 
+		let client: BedrockRuntimeClient | undefined;
+		let failed = false;
+		let failure: unknown;
+		let terminalReason: Exclude<StopReason, "error" | "aborted"> = "stop";
 		try {
-			const client = new BedrockRuntimeClient(config);
+			client = new BedrockRuntimeClient(config);
 			if (options.headers && Object.keys(options.headers).length > 0) {
 				addCustomHeadersMiddleware(client, options.headers);
 			}
@@ -260,54 +264,40 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream", BedrockOpt
 			if (output.stopReason === "error" || output.stopReason === "aborted") {
 				throw new Error("An unknown error occurred");
 			}
-
-			stream.push({ type: "done", reason: output.stopReason, message: output });
-			stream.end();
+			terminalReason = output.stopReason;
 		} catch (error) {
+			failed = true;
+			failure = error;
+		} finally {
+			// Each stream owns its SDK client and associated connection pool. Cleanup
+			// follows stream consumption and precedes the terminal event.
+			try {
+				client?.destroy();
+			} catch (error) {
+				if (!failed) {
+					failed = true;
+					failure = error;
+				}
+			}
+		}
+
+		if (failed) {
 			for (const block of output.content) {
 				delete (block as Block).index;
 				// partialJson is only a streaming scratch buffer; never persist it.
 				delete (block as Block).partialJson;
 			}
 			output.stopReason = options.signal?.aborted ? "aborted" : "error";
-			output.errorMessage = formatBedrockError(error);
+			output.errorMessage = formatBedrockError(failure);
 			stream.push({ type: "error", reason: output.stopReason, error: output });
-			stream.end();
+		} else {
+			stream.push({ type: "done", reason: terminalReason, message: output });
 		}
+		stream.end();
 	})();
 
 	return stream;
 };
-
-/**
- * Human-readable prefixes for Bedrock SDK exception names.
- * The downstream retry logic in agent-session matches patterns like
- * `server.?error` and `service.?unavailable`, so we preserve the legacy
- * prefix format rather than using the raw SDK exception name.
- */
-const BEDROCK_ERROR_PREFIXES: Record<string, string> = {
-	InternalServerException: "Internal server error",
-	ModelStreamErrorException: "Model stream error",
-	ValidationException: "Validation error",
-	ThrottlingException: "Throttling error",
-	ServiceUnavailableException: "Service unavailable",
-};
-
-/**
- * Format a Bedrock error with a human-readable prefix.
- * AWS SDK exceptions (both from `client.send()` and from stream event items)
- * extend BedrockRuntimeServiceException. We map the `.name` to a stable
- * human-readable prefix so downstream consumers (retry logic, context-overflow
- * detection) can distinguish error categories via simple string matching.
- */
-function formatBedrockError(error: unknown): string {
-	const message = error instanceof Error ? error.message : JSON.stringify(error);
-	if (error instanceof BedrockRuntimeServiceException) {
-		const prefix = BEDROCK_ERROR_PREFIXES[error.name] ?? error.name;
-		return `${prefix}: ${message}`;
-	}
-	return message;
-}
 
 /**
  * Header keys that must never be overwritten by caller-supplied headers.

@@ -30,7 +30,7 @@ const THINKING_DESCRIPTIONS: Record<ThinkingLevel, string> = {
 	high: "Deep reasoning (~16k tokens)",
 	xhigh: "Very high reasoning (~32k tokens)",
 	max: "Maximum reasoning (highest effort)",
-	ultra: "Maximum reasoning with automatic task delegation",
+	ultra: "Does not enable delegation; effort varies by model",
 };
 
 export interface ThinkingSelectorConfig {
