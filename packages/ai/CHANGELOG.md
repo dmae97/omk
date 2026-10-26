@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.5.9] - 2026-10-26
+
+### Added
+
+- Kimi K3.1 Pro: `k3.1-pro` and `k3.1-pro-highspeed` in the `kimi-coding` catalog (thinking always on, fixed sampling) and `kimi-k3.1-pro` and `kimi-k3.1-pro-highspeed` in the `moonshotai` catalog with published platform pricing (#280).
+
 ### Changed
 
 - Regenerated the model catalog from models.dev and live provider listings (2026-10-26). Models that upstream marked deprecated or delisted are removed, including GitHub Copilot `gpt-5.4`, `gpt-5.5` and `gpt-5-mini`, older Mistral open models, Together `MiniMax-M2.7` and Xiaomi `mimo-v2` models. OpenCode Go replaces `gemini-4-argon-contributor` with `gemini-4-argon` and adds `kimi-k3.1-pro` and `minimax-m3.1-flash`. Direct Mistral Large 4 pricing now uses the list price after the launch sale ended.
