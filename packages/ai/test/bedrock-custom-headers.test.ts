@@ -13,6 +13,7 @@ vi.mock("@aws-sdk/client-bedrock-runtime", () => {
 	class BedrockRuntimeServiceException extends Error {}
 
 	class BedrockRuntimeClient {
+		destroy() {}
 		middlewareStack = {
 			add: (handler: MiddlewareHandler, opts: { step?: string; name?: string; priority?: string }) => {
 				bedrockMock.middlewareRegistrations.push({ handler, opts });
