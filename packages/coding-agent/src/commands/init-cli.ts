@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { getAgentDir, getExamplesPath } from "../config.ts";
+import { getAgentDir, getExamplesPath, getPackageDir } from "../config.ts";
 import { PROJECT_CONTEXT_DOCUMENTS } from "../core/project-context-files.ts";
+import { installProjectPstack, PstackConflictError, preflightProjectPstack } from "./pstack-install.ts";
 
 const GLOBAL_DOCUMENTS = ["AGENTS.md", "INTERNET.md", "CLAUDE.md"] as const;
 const PROJECT_DOCUMENTS = ["AGENTS.md", "CLAUDE.md", ...PROJECT_CONTEXT_DOCUMENTS] as const;
@@ -40,6 +41,12 @@ export function bootstrapEmptyProjectContext(
 	const writeLine = options.writeLine ?? ((line: string) => process.stdout.write(`${line}\n`));
 	writeLine("Empty Git repository detected. Creating missing project context documents.");
 	const outcome = runInitCli(["init", "--project"], { ...options, cwd, writeLine });
+	if (outcome.pstackFailed) {
+		writeLine(
+			"Automatic project setup failed. Continuing normal launch; resolve the issue and run omk init --project to retry.",
+		);
+		return { ran: true, exitCode: 0 };
+	}
 	return { ran: true, exitCode: outcome.exitCode };
 }
 
@@ -47,7 +54,7 @@ export function bootstrapEmptyProjectContext(
 export function runInitCli(
 	args: readonly string[],
 	options: InitOptions = {},
-): { readonly handled: boolean; readonly exitCode: number } {
+): { readonly handled: boolean; readonly exitCode: number; readonly pstackFailed?: boolean } {
 	if (args[0] !== "init") {
 		const bootstrap = bootstrapEmptyProjectContext(args, options);
 		return { handled: bootstrap.ran && bootstrap.exitCode !== 0, exitCode: bootstrap.exitCode };
@@ -59,7 +66,9 @@ export function runInitCli(
 		return { handled: true, exitCode: 2 };
 	}
 	if (flags.includes("--help") || flags.includes("-h")) {
-		writeLine(`${USAGE}\nCreate portable context documents only when missing. Existing instructions are preserved.`);
+		writeLine(
+			`${USAGE}\nCreate portable context documents only when missing. Project setup also installs bundled pstack resources without replacing existing files.`,
+		);
 		return { handled: true, exitCode: 0 };
 	}
 	const project = flags.includes("--project");
@@ -69,8 +78,15 @@ export function runInitCli(
 		return { handled: true, exitCode: 2 };
 	}
 
+	let inPstack = false;
 	try {
 		const targetDir = project ? resolve(options.cwd ?? process.cwd()) : resolve(options.agentDir ?? getAgentDir());
+		const pstackDir = join(getPackageDir(), "resources", "pstack");
+		if (project) {
+			inPstack = true;
+			preflightProjectPstack(targetDir, pstackDir, options.agentDir ?? getAgentDir());
+			inPstack = false;
+		}
 		const directory = lstatSync(targetDir, { throwIfNoEntry: false });
 		if (directory && !directory.isDirectory()) {
 			writeLine("Cannot initialize context: the target directory must be a real directory, not a file or symlink.");
@@ -109,6 +125,11 @@ export function runInitCli(
 				writeLine(`Preserved concurrent file: ${JSON.stringify(document.path)}`);
 			}
 		}
+		if (project) {
+			inPstack = true;
+			installProjectPstack(targetDir, pstackDir, dryRun, writeLine, undefined, options.agentDir ?? getAgentDir());
+			inPstack = false;
+		}
 		writeLine(
 			dryRun
 				? "Dry run: no files written."
@@ -116,8 +137,13 @@ export function runInitCli(
 		);
 		return { handled: true, exitCode: 0 };
 	} catch (error) {
+		if (error instanceof PstackConflictError) writeLine(error.message);
 		const code = error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "unknown";
 		writeLine(`Context setup failed (${code}). Check the target directory and bundled context templates.`);
-		return { handled: true, exitCode: 1 };
+		if (inPstack)
+			writeLine(
+				"Existing documents remain. Resolve any incomplete pstack installation, then rerun omk init --project.",
+			);
+		return inPstack ? { handled: true, exitCode: 1, pstackFailed: true } : { handled: true, exitCode: 1 };
 	}
 }
