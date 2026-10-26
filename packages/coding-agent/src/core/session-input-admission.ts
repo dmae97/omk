@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AgentMessage, AgentState } from "omk-agent-core";
 import type { Api, Model } from "omk-ai";
 import { estimateNextTurnContextTokens, estimateProjectedContextTokens } from "./compaction/index.ts";
+import type { CompactionUsageBoundary } from "./compaction-entry-time.ts";
 import type { SystemPromptContextBudgetOptions } from "./context-budget-system-prompt.ts";
 import { createTokenCounterForMode, type TokenCounterAdapter } from "./context-budget-token-counter.ts";
 import type { ContextBudgetCacheProviderV2 } from "./context-budget-v2-types.ts";
@@ -66,11 +67,11 @@ export function sessionContextBudgetOptions(
 function projectedUsageAfterCompaction(
 	messages: AgentMessage[],
 	pending: AgentMessage[],
-	latestCompactionTimestamp?: string,
+	usageBoundary?: string | CompactionUsageBoundary,
 ): number {
 	return (
-		estimateNextTurnContextTokens(messages, pending, latestCompactionTimestamp) ??
-		estimateProjectedContextTokens(messages, pending, latestCompactionTimestamp)
+		estimateNextTurnContextTokens(messages, pending, usageBoundary) ??
+		estimateProjectedContextTokens(messages, pending, usageBoundary)
 	).tokens;
 }
 
@@ -102,6 +103,7 @@ export interface SessionInputCapacityInput {
 	readonly effectiveWindow: (window: number) => number;
 	readonly counter: TokenCounterAdapter;
 	readonly latestCompactionTimestamp?: string;
+	readonly compactionUsageBoundary?: CompactionUsageBoundary;
 }
 
 /** Capacity rejection raised after an automatic compaction already rewrote the retained history. */
@@ -141,7 +143,11 @@ export function assertSessionInputCapacity(input: SessionInputCapacityInput): vo
 		tools: state.tools,
 		modelId: limit.model.id,
 		tokenCounter: input.counter,
-		projectedUsageTokens: projectedUsageAfterCompaction(state.messages, pending, input.latestCompactionTimestamp),
+		projectedUsageTokens: projectedUsageAfterCompaction(
+			state.messages,
+			pending,
+			input.compactionUsageBoundary ?? input.latestCompactionTimestamp,
+		),
 	});
 }
 
@@ -202,7 +208,9 @@ export async function admitSessionInput(
 	const after = buildInput();
 	const retry = capacityRejection(after);
 	if (!retry) return;
-	const compacted = after.latestCompactionTimestamp !== before.latestCompactionTimestamp;
+	const compacted =
+		after.compactionUsageBoundary?.id !== before.compactionUsageBoundary?.id ||
+		after.latestCompactionTimestamp !== before.latestCompactionTimestamp;
 	throw withFixedOverhead(compacted ? new CompactedPromptInputCapacityError(retry) : retry, fixedInputEstimate(after));
 }
 

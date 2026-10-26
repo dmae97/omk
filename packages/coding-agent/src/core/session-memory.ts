@@ -1,5 +1,6 @@
 import type { Agent, AgentMessage } from "omk-agent-core";
 import { estimateProjectedContextTokens } from "./compaction/index.ts";
+import type { CompactionUsageBoundary } from "./compaction-entry-time.ts";
 import type { SystemPromptContextBudgetOptions } from "./context-budget-system-prompt.ts";
 import { createTokenCounterForMode } from "./context-budget-token-counter.ts";
 import { isDefaultOnEnvFlag } from "./env-flag.ts";
@@ -31,7 +32,7 @@ export class SessionMemory {
 	private readonly cwd: string;
 	private readonly options: () => SystemPromptContextBudgetOptions | undefined;
 	private readonly effectiveWindow: (messages: AgentMessage[], window: number) => number;
-	private readonly latestCompactionTimestamp: () => string | undefined;
+	private readonly usageBoundary: () => string | CompactionUsageBoundary | undefined;
 	private readonly transform: ReturnType<typeof memoryContextTransform>;
 	private closed = false;
 	private currentStatus: SessionMemoryStatus = { state: "disabled", eligible: 0, omitted: 0 };
@@ -41,10 +42,10 @@ export class SessionMemory {
 		cwd: string,
 		options: () => SystemPromptContextBudgetOptions | undefined,
 		effectiveWindow: (messages: AgentMessage[], window: number) => number,
-		latestCompactionTimestamp: () => string | undefined = () => undefined,
+		usageBoundary: () => string | CompactionUsageBoundary | undefined = () => undefined,
 	) {
 		this.effectiveWindow = effectiveWindow;
-		this.latestCompactionTimestamp = latestCompactionTimestamp;
+		this.usageBoundary = usageBoundary;
 		this.agent = agent;
 		this.cwd = cwd;
 		this.options = options;
@@ -98,7 +99,7 @@ export class SessionMemory {
 			tools: this.agent.state.tools,
 			modelId: model.id,
 			tokenCounter: counter,
-			projectedUsageTokens: estimateProjectedContextTokens(messages, [], this.latestCompactionTimestamp()).tokens,
+			projectedUsageTokens: estimateProjectedContextTokens(messages, [], this.usageBoundary()).tokens,
 		};
 		const before = assertContextInputWithinCapacity({ ...input, maxInputTokens: limit.maxInputTokens });
 		try {

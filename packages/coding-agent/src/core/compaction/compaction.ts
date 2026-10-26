@@ -24,6 +24,7 @@ export {
 export type { CompactFailoverOptions } from "./model-failover.ts";
 export { completeSummarization } from "./summary-completion.ts";
 
+import type { CompactionUsageBoundary } from "../compaction-entry-time.ts";
 import { convertToLlm } from "../messages.ts";
 import { buildSessionContext, type CompactionEntry, type SessionEntry } from "../session-manager.ts";
 import {
@@ -121,15 +122,17 @@ export interface ContextUsageEstimate {
 
 function getLastAssistantUsageInfo(
 	messages: AgentMessage[],
-	ignoreUsageAtOrBeforeMs?: number,
+	usageBoundary?: number | CompactionUsageBoundary,
 ): { usage: Usage; index: number } | undefined {
 	for (let i = messages.length - 1; i >= 0; i--) {
 		const message = messages[i];
-		// Usage reported at or before the latest compaction priced history that no longer exists.
+		// Prefer branch order. The numeric boundary remains for callers without session entries.
 		const stale =
-			ignoreUsageAtOrBeforeMs !== undefined &&
-			message.role === "assistant" &&
-			(message as AssistantMessage).timestamp <= ignoreUsageAtOrBeforeMs;
+			typeof usageBoundary === "object"
+				? usageBoundary.compactedMessages.has(message)
+				: usageBoundary !== undefined &&
+					message.role === "assistant" &&
+					(message as AssistantMessage).timestamp <= usageBoundary;
 		if (stale) continue;
 		const usage = getAssistantUsage(message);
 		if (usage) return { usage, index: i };
@@ -143,9 +146,9 @@ function getLastAssistantUsageInfo(
  */
 export function estimateContextTokens(
 	messages: AgentMessage[],
-	ignoreUsageAtOrBeforeMs?: number,
+	usageBoundary?: number | CompactionUsageBoundary,
 ): ContextUsageEstimate {
-	const usageInfo = getLastAssistantUsageInfo(messages, ignoreUsageAtOrBeforeMs);
+	const usageInfo = getLastAssistantUsageInfo(messages, usageBoundary);
 
 	if (!usageInfo) {
 		let estimated = 0;
@@ -178,10 +181,10 @@ export function estimateContextTokens(
 export function estimateProjectedContextTokens(
 	messages: AgentMessage[],
 	pendingMessages: AgentMessage[],
-	ignoreUsageAtOrBefore?: string,
+	usageBoundary?: string | CompactionUsageBoundary,
 ): ContextUsageEstimate {
-	const boundary = ignoreUsageAtOrBefore ? Date.parse(ignoreUsageAtOrBefore) : Number.NaN;
-	return estimateContextTokens([...messages, ...pendingMessages], Number.isFinite(boundary) ? boundary : undefined);
+	const boundary = typeof usageBoundary === "string" ? Date.parse(usageBoundary) : usageBoundary;
+	return estimateContextTokens([...messages, ...pendingMessages], boundary);
 }
 
 // ============================================================================

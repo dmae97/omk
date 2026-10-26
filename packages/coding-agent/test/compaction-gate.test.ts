@@ -32,6 +32,17 @@ describe("shouldSkipCompactionCheck", () => {
 		expect(shouldSkipCompactionCheck({ ...base, messageTimestamp: 1001 })).toBe(false);
 		expect(shouldSkipCompactionCheck({ ...base, latestCompactionTimestamp: undefined })).toBe(false);
 	});
+
+	it("prefers branch order when clock timestamps overlap or are corrupt", () => {
+		expect(shouldSkipCompactionCheck({ ...base, messageTimestamp: 999, messagePrecedesCompaction: false })).toBe(
+			false,
+		);
+		expect(shouldSkipCompactionCheck({ ...base, messagePrecedesCompaction: true })).toBe(true);
+		expect(shouldSkipCompactionCheck({ ...base, enabled: false, messagePrecedesCompaction: false })).toBe(true);
+		expect(shouldSkipCompactionCheck({ ...base, stopReason: "aborted", messagePrecedesCompaction: false })).toBe(
+			true,
+		);
+	});
 });
 
 describe("isSessionModelOverflow", () => {

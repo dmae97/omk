@@ -14,9 +14,12 @@ export function shouldSkipCompactionCheck(input: {
 	readonly stopReason: string;
 	readonly messageTimestamp: number;
 	readonly latestCompactionTimestamp?: number;
+	/** When supplied, branch order overrides the legacy wall-clock comparison. */
+	readonly messagePrecedesCompaction?: boolean;
 }): boolean {
 	if (!input.enabled) return true;
 	if (input.skipAbortedCheck && input.stopReason === "aborted") return true;
+	if (input.messagePrecedesCompaction !== undefined) return input.messagePrecedesCompaction;
 	return input.latestCompactionTimestamp !== undefined && input.messageTimestamp <= input.latestCompactionTimestamp;
 }
 
