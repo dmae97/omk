@@ -1,21 +1,34 @@
 import { spawn } from "node:child_process";
 import { Transform } from "node:stream";
+import { fileURLToPath } from "node:url";
 
 const MAX_OUTPUT_BYTES = 16_000_000;
 
-/** Codex executes in its own process group so Ctrl-C reaches it exactly once. */
-export function runCodexTask(binary: string, task: string): Promise<number> {
-	return new Promise((resolve) => {
-		const child = spawn(
-			binary,
-			["exec", "--json", "--model", "gpt-6.1-terra", "--config", 'model_reasoning_effort="ultra"', "-"],
-			{ stdio: ["pipe", "pipe", "inherit"], detached: true },
+/** The supervisor owns its process group and only it may signal that group while alive. */
+export function runCodexTask(binary: string, task: string, supervisorOverride?: string): Promise<number> {
+	if (process.versions.bun) {
+		process.stderr.write(
+			"Codex Ultra supervisor requires the Node.js npm installation; standalone Bun is not supported.\n",
 		);
+		return Promise.resolve(1);
+	}
+	return new Promise((resolve) => {
+		const source = import.meta.url.endsWith(".ts");
+		const file =
+			supervisorOverride ??
+			fileURLToPath(new URL(`./codex-ultra-supervisor.${source ? "ts" : "js"}`, import.meta.url));
+		const child = spawn(process.execPath, [...(source ? ["--experimental-strip-types"] : []), file], {
+			stdio: ["ignore", "pipe", "inherit", "ipc"],
+			detached: true,
+		});
 		let done = false;
-		let interrupted = 0;
-		let forceTimer: ReturnType<typeof setTimeout> | undefined;
-		let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+		let cancelled = 0;
+		let result: number | undefined;
+		let outcomeUnknown = false;
+		let supervisorClosed = false;
 		let outputBytes = 0;
+		let deadline: ReturnType<typeof setTimeout> | undefined;
+		let poll: ReturnType<typeof setTimeout> | undefined;
 		const limiter = new Transform({
 			transform(chunk: Buffer, _encoding, callback) {
 				outputBytes += chunk.length;
@@ -23,60 +36,82 @@ export function runCodexTask(binary: string, task: string): Promise<number> {
 				callback(null, chunk);
 			},
 		});
-		const signalGroup = (signal: NodeJS.Signals) => {
-			try {
-				if (child.pid) process.kill(-child.pid, signal);
-			} catch {
-				child.kill(signal);
-			}
-		};
 		const finish = (code: number) => {
 			if (done) return;
 			done = true;
-			clearTimeout(forceTimer);
-			clearTimeout(deadlineTimer);
+			clearTimeout(deadline);
+			clearTimeout(poll);
 			process.off("SIGINT", interrupt);
 			process.off("SIGTERM", terminate);
 			process.stdout.off("error", outputError);
 			resolve(code);
 		};
-		const stop = (code: number, signal: NodeJS.Signals) => {
-			if (interrupted) return;
-			interrupted = code;
-			if (child.exitCode !== null || child.signalCode !== null) return;
-			signalGroup(signal);
-			forceTimer = setTimeout(() => signalGroup("SIGKILL"), 1_000);
-			deadlineTimer = setTimeout(() => {
-				process.stderr.write("Codex process group could not be confirmed stopped.\n");
-				finish(1);
-			}, 4_000);
+		const unknown = () => {
+			if (done || outcomeUnknown) return;
+			outcomeUnknown = true;
+			process.stderr.write("Codex process-group outcome is unknown; descendant termination was not verified.\n");
+			if (supervisorClosed) return finish(1);
+			// Disconnect requests cleanup through the supervisor's IPC disconnect handler.
+			if (child.connected) child.disconnect();
+			clearTimeout(deadline);
+			deadline = setTimeout(() => finish(1), 5_000);
 		};
-		const interrupt = () => stop(130, "SIGINT");
-		const terminate = () => stop(143, "SIGTERM");
-		const outputError = () => stop(1, "SIGTERM");
+		const stop = (code: number) => {
+			if (cancelled || done) return;
+			cancelled = code;
+			if (child.connected)
+				child.send({ type: "cancel" }, (error) => {
+					if (error) unknown();
+				});
+			else return unknown();
+			deadline = setTimeout(unknown, 5_000);
+		};
+		const interrupt = () => stop(130);
+		const terminate = () => stop(143);
+		const outputError = () => stop(1);
 		limiter.on("error", () => {
 			process.stderr.write("Codex output exceeds the 16 MB limit.\n");
-			stop(1, "SIGTERM");
+			stop(1);
 		});
 		process.on("SIGINT", interrupt);
 		process.on("SIGTERM", terminate);
 		process.stdout.on("error", outputError);
-		child.on("error", () => {
-			process.stderr.write("Unable to start Codex CLI.\n");
-			finish(1);
-		});
-		child.stdin.on("error", () => stop(1, "SIGTERM"));
-		child.stdout.pipe(limiter).pipe(process.stdout, { end: false });
-		child.stdin.end(task);
-		child.on("exit", () => {
-			if (interrupted) clearTimeout(forceTimer);
-		});
-		child.on("close", (code, signal) => {
-			if (interrupted) {
-				process.stderr.write("Codex cancellation requested; descendant process outcome is unknown.\n");
-				return finish(1);
+		if (child.stdout) child.stdout.pipe(limiter).pipe(process.stdout, { end: false });
+		else unknown();
+		child.on("message", (value: unknown) => {
+			if (!value || typeof value !== "object" || !("type" in value)) return;
+			if (value.type === "ready" && child.connected && !cancelled) {
+				child.send({ type: "start", task, binary }, (error) => {
+					if (error) unknown();
+				});
+			} else if (
+				value.type === "result" &&
+				"code" in value &&
+				Number.isInteger(value.code) &&
+				(value.code as number) >= 0 &&
+				(value.code as number) <= 255
+			) {
+				result = value.code as number;
 			}
-			finish(code ?? (signal ? 1 : 0));
+		});
+		child.on("error", unknown);
+		child.on("close", () => {
+			supervisorClosed = true;
+			if (outcomeUnknown) return finish(1);
+			if (!cancelled && result === undefined) return unknown();
+			const start = Date.now();
+			const checkGroup = () => {
+				try {
+					if (!child.pid) return unknown();
+					process.kill(-child.pid, 0);
+					if (Date.now() - start >= 3_000) return unknown();
+					poll = setTimeout(checkGroup, 50);
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code === "ESRCH") finish(cancelled || result || 0);
+					else unknown();
+				}
+			};
+			checkGroup();
 		});
 	});
 }

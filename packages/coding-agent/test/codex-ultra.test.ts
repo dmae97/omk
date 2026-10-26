@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mayBeRunCommand } from "../src/cli/subcommand-words.ts";
 import { runCodexUltra, supportedCodexVersion } from "../src/commands/codex-ultra.ts";
 import { codexUltraAvailable } from "../src/commands/codex-ultra-catalog.ts";
+import { runCodexTask } from "../src/commands/codex-ultra-exec.ts";
 import { readCodexVersion } from "../src/commands/codex-ultra-version.ts";
 import { runCommand } from "../src/commands/run-command.ts";
 
@@ -23,6 +24,7 @@ beforeEach(() => {
 		`#!/usr/bin/env node
 const fs = require("node:fs");
 const readline = require("node:readline");
+const spawn = require("node:child_process").spawn;
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.ULTRA_TEST_LOG, JSON.stringify(args) + "\\n");
 if (args[0] === "--version") {
@@ -37,6 +39,10 @@ if (args[0] === "--version") {
   console.log(process.env.ULTRA_TEST_VERSION || "codex-cli 0.159.0"); process.exit(0);
 }
 if (args[0] === "exec") {
+  if (process.env.ULTRA_TEST_GRANDCHILD) {
+    const script = 'process.on("SIGTERM",()=>{}); require("fs").writeFileSync(process.env.ULTRA_TEST_GRAND_READY,String(process.pid)); setInterval(()=>{},1000); setTimeout(()=>process.exit(0),6000);';
+    spawn(process.execPath, ["-e", script], {stdio:"ignore"}).unref();
+  }
   if (process.env.ULTRA_TEST_OUTPUT_FLOOD) {
     fs.writeFileSync(process.env.ULTRA_TEST_PID, String(process.pid));
     process.on("SIGTERM", () => {});
@@ -49,8 +55,15 @@ if (args[0] === "exec") {
     if (!process.env.ULTRA_TEST_INTERACTIVE_WAIT) { process.stdout.write('{"type":"done"}\\n'); process.exit(0); }
   });
   if (process.env.ULTRA_TEST_INTERACTIVE_WAIT) {
+    if (process.env.ULTRA_TEST_SELF_EXIT) setTimeout(() => { fs.writeFileSync(process.env.ULTRA_TEST_SELF_EXIT, "exited"); process.exit(0); }, 1000);
+    fs.writeFileSync(process.env.ULTRA_TEST_PID, String(process.pid));
     process.on("SIGINT", () => { fs.writeFileSync(process.env.ULTRA_TEST_SIGNAL, "SIGINT"); process.exit(130); });
-    fs.writeFileSync(process.env.ULTRA_TEST_READY, "ready"); setInterval(() => {}, 1000); return;
+    process.on("SIGTERM", () => { fs.writeFileSync(process.env.ULTRA_TEST_SIGNAL, "SIGTERM"); process.exit(143); });
+    const ready = () => {
+      if (process.env.ULTRA_TEST_GRANDCHILD && !fs.existsSync(process.env.ULTRA_TEST_GRAND_READY)) return;
+      fs.writeFileSync(process.env.ULTRA_TEST_READY, "ready");
+    };
+    setInterval(ready, 10); return;
   }
   return;
 }
@@ -83,6 +96,7 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
 	vi.stubEnv("ULTRA_TEST_READY", join(dir, "ready"));
 	vi.stubEnv("ULTRA_TEST_SIGNAL", join(dir, "signal"));
 	vi.stubEnv("ULTRA_TEST_PROMPT", join(dir, "task"));
+	vi.stubEnv("ULTRA_TEST_GRAND_READY", join(dir, "grandchild"));
 	vi.stubEnv("PATH", `${dir}${delimiter}${process.env.PATH ?? ""}`);
 });
 
@@ -210,8 +224,103 @@ describe.skipIf(process.platform === "win32")("Codex Terra Ultra CLI", () => {
 			throw new Error("driver did not reach the interactive CLI");
 		}
 		driver.kill("SIGINT");
-		expect(await result).toBe(1);
-		expect(readFileSync(join(dir, "signal"), "utf8")).toBe("SIGINT");
+		expect(await result).toBe(130);
+		expect(readFileSync(join(dir, "signal"), "utf8")).toBe("SIGTERM");
+	});
+
+	it("returns unknown instead of claiming cleanup if a descendant remains after leader exit", async () => {
+		vi.stubEnv("ULTRA_TEST_INTERACTIVE_WAIT", "1");
+		vi.stubEnv("ULTRA_TEST_GRANDCHILD", "1");
+		const source = pathToFileURL(join(process.cwd(), "src/commands/codex-ultra.ts")).href;
+		const driver = spawn(
+			process.execPath,
+			[
+				"--input-type=module",
+				"-e",
+				`import { runCodexUltra } from ${JSON.stringify(source)}; process.exitCode = await runCodexUltra([], "task");`,
+			],
+			{ stdio: ["ignore", "ignore", "pipe"] },
+		);
+		let stderr = "";
+		driver.stderr.on("data", (chunk: Buffer) => {
+			stderr += chunk.toString("utf8");
+		});
+		const result = new Promise<number | null>((resolve) => driver.once("close", resolve));
+		const start = Date.now();
+		while (!existsSync(join(dir, "ready")) && Date.now() - start < 5_000)
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		if (!existsSync(join(dir, "ready"))) {
+			driver.kill("SIGKILL");
+			throw new Error("driver was not ready");
+		}
+		const grandchild = Number(readFileSync(join(dir, "grandchild"), "utf8"));
+		driver.kill("SIGINT");
+		const code = await result;
+		let alive = true;
+		try {
+			process.kill(grandchild, 0);
+		} catch {
+			alive = false;
+		}
+		if (alive) {
+			expect(code).toBe(1);
+			expect(stderr).toContain("unknown");
+		} else expect(code).toBe(130);
+	}, 12_000);
+
+	it("supervisor cancels its Codex child after its parent disappears", async () => {
+		vi.stubEnv("ULTRA_TEST_INTERACTIVE_WAIT", "1");
+		const source = pathToFileURL(join(process.cwd(), "src/commands/codex-ultra.ts")).href;
+		const driver = spawn(
+			process.execPath,
+			[
+				"--input-type=module",
+				"-e",
+				`import { runCodexUltra } from ${JSON.stringify(source)}; process.exitCode = await runCodexUltra([], "task");`,
+			],
+			{ stdio: "ignore" },
+		);
+		const start = Date.now();
+		while (!existsSync(join(dir, "ready")) && Date.now() - start < 5_000)
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		if (!existsSync(join(dir, "ready"))) {
+			driver.kill("SIGKILL");
+			throw new Error("driver was not ready");
+		}
+		const closed = new Promise<void>((resolve) => driver.once("close", () => resolve()));
+		driver.kill("SIGKILL");
+		await closed;
+		const signalStart = Date.now();
+		while (!existsSync(join(dir, "signal")) && Date.now() - signalStart < 5_000)
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		expect(readFileSync(join(dir, "signal"), "utf8")).toBe("SIGTERM");
+		const childPid = Number(readFileSync(join(dir, "server.pid"), "utf8"));
+		const terminationStart = Date.now();
+		let alive = true;
+		while (alive && Date.now() - terminationStart < 5_000) {
+			try {
+				process.kill(childPid, 0);
+			} catch {
+				alive = false;
+			}
+			if (alive) await new Promise((resolve) => setTimeout(resolve, 25));
+		}
+		expect(alive).toBe(false);
+	}, 12_000);
+
+	it("reports unknown if the supervisor crashes while its child is still running", async () => {
+		vi.stubEnv("ULTRA_TEST_INTERACTIVE_WAIT", "1");
+		vi.stubEnv("ULTRA_TEST_SELF_EXIT", join(dir, "selfexit"));
+		const fixture = join(dir, "crash-supervisor.cjs");
+		writeFileSync(
+			fixture,
+			`process.on("message", (message) => { require("child_process").spawn(message.binary, ["exec"], {stdio:"ignore"}).unref(); setTimeout(() => process.kill(process.pid, "SIGKILL"), 300); }); process.send({type:"ready"});`,
+		);
+		expect(await runCodexTask(binary, "task", fixture)).toBe(1);
+		const start = Date.now();
+		while (!existsSync(join(dir, "selfexit")) && Date.now() - start < 4_000)
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		expect(readFileSync(join(dir, "selfexit"), "utf8")).toBe("exited");
 	});
 
 	it("terminates and reaps a child exceeding the output limit", async () => {
