@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- A compaction is no longer stamped earlier than the messages it covers when the wall clock steps backward (observed on WSL2 as ~6.8 second resyncs). Previously the compacted history's old usage still counted after compaction, so the next prompt was rejected with `context_input_capacity_exceeded`. The compaction timestamp now follows the newest message on its branch for steps up to one minute.
+
 ## [1.5.9] - 2026-10-26
 
 ### Added
