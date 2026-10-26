@@ -1,0 +1,75 @@
+name: npm downloads badge
+
+# The README downloads badge reads a static shields.io endpoint file published here,
+# so shields.io never queries api.npmjs.org per viewer ("rate limited by upstream
+# service"). One request a day; a failed request leaves the published value in place.
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-downloads-badge
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      # Only to push npm-downloads.json to the data-only `badges` branch.
+      contents: write
+    env:
+      BADGE_BRANCH: badges
+      BADGE_FILE: npm-downloads.json
+    steps:
+      - name: Checkout
+        # actions/checkout v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        # actions/setup-node v5.0.0
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+
+      - name: Build badge
+        run: node scripts/npm-downloads-badge.mjs --package open-multi-agent-kit --out "$RUNNER_TEMP/$BADGE_FILE"
+
+      - name: Publish badge
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          remote="https://github.com/${GITHUB_REPOSITORY}.git"
+          auth="http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+          work="$RUNNER_TEMP/badge-branch"
+          git init -q "$work"
+          cd "$work"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Exit 2 means the branch is absent; any other failure stops the job.
+          status=0
+          git -c "$auth" ls-remote --exit-code --heads "$remote" "$BADGE_BRANCH" > /dev/null || status=$?
+          if [ "$status" -eq 0 ]; then
+            git -c "$auth" fetch -q --depth=1 "$remote" "$BADGE_BRANCH"
+            git checkout -q -B "$BADGE_BRANCH" FETCH_HEAD
+          elif [ "$status" -eq 2 ]; then
+            git checkout -q --orphan "$BADGE_BRANCH"
+          else
+            exit "$status"
+          fi
+          cp "$RUNNER_TEMP/$BADGE_FILE" "$BADGE_FILE"
+          git add -- "$BADGE_FILE"
+          if git diff --cached --quiet; then
+            echo "badge unchanged"
+            exit 0
+          fi
+          git commit -q -m "chore(badges): npm downloads $(node -p "require('./$BADGE_FILE').message")"
+          git -c "$auth" push -q "$remote" "HEAD:refs/heads/$BADGE_BRANCH"
+          echo "published $(cat "$BADGE_FILE" | tr -d '\n\t')"
