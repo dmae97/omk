@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { HttpsProxyAgent } from "https-proxy-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { proxyAwareFetch } from "../src/utils/proxy-fetch.ts";
@@ -56,5 +57,23 @@ describe("proxyAwareFetch", () => {
 		await expect(proxyAwareFetch("https://api.meta.ai/muse-code/key")).rejects.toThrow("proxy unavailable");
 		expect(fetchMock).not.toHaveBeenCalled();
 		expect(connect).toHaveBeenCalledOnce();
+	});
+
+	it("rejects when a proxied response is interrupted after headers", async () => {
+		resetProxyEnv();
+		const server = createServer((_request, response) => {
+			response.writeHead(200, { "content-length": "100" });
+			response.write("partial");
+			setTimeout(() => response.destroy(), 10);
+		});
+		await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+		try {
+			const address = server.address();
+			if (!address || typeof address === "string") throw new Error("Expected TCP listener");
+			process.env.HTTP_PROXY = `http://127.0.0.1:${address.port}`;
+			await expect(proxyAwareFetch("http://example.test/token")).rejects.toThrow();
+		} finally {
+			await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+		}
 	});
 });
