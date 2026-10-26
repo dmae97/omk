@@ -4,9 +4,15 @@
  * Tracks killed (deleted) text entries. Consecutive kills can accumulate
  * into a single entry. Supports yank (paste most recent) and yank-pop
  * (cycle through older entries).
+ * Retention is bounded by entry count and UTF-16 code units. A single newest
+ * entry may exceed the character budget so the last kill can still be yanked.
  */
+export const KILL_RING_MAX_ENTRIES = 128;
+export const KILL_RING_MAX_CODE_UNITS = 2 * 1024 * 1024;
+
 export class KillRing {
 	private ring: string[] = [];
+	private codeUnits = 0;
 
 	/**
 	 * Add text to the kill ring.
@@ -21,9 +27,18 @@ export class KillRing {
 
 		if (opts.accumulate && this.ring.length > 0) {
 			const last = this.ring.pop()!;
-			this.ring.push(opts.prepend ? text + last : last + text);
+			this.codeUnits -= last.length;
+			text = opts.prepend ? text + last : last + text;
+			this.ring.push(text);
 		} else {
 			this.ring.push(text);
+		}
+		this.codeUnits += text.length;
+		while (
+			this.ring.length > 1 &&
+			(this.ring.length > KILL_RING_MAX_ENTRIES || this.codeUnits > KILL_RING_MAX_CODE_UNITS)
+		) {
+			this.codeUnits -= this.ring.shift()!.length;
 		}
 	}
 
