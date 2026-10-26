@@ -193,6 +193,7 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream", BedrockOpt
 		let client: BedrockRuntimeClient | undefined;
 		let failed = false;
 		let failure: unknown;
+		let terminalReason: Exclude<StopReason, "error" | "aborted"> = "stop";
 		try {
 			client = new BedrockRuntimeClient(config);
 			if (options.headers && Object.keys(options.headers).length > 0) {
@@ -263,6 +264,7 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream", BedrockOpt
 			if (output.stopReason === "error" || output.stopReason === "aborted") {
 				throw new Error("An unknown error occurred");
 			}
+			terminalReason = output.stopReason;
 		} catch (error) {
 			failed = true;
 			failure = error;
@@ -289,7 +291,7 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream", BedrockOpt
 			output.errorMessage = formatBedrockError(failure);
 			stream.push({ type: "error", reason: output.stopReason, error: output });
 		} else {
-			stream.push({ type: "done", reason: output.stopReason, message: output });
+			stream.push({ type: "done", reason: terminalReason, message: output });
 		}
 		stream.end();
 	})();
