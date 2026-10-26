@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyCurrentThinkingMetadata } from "../scripts/catalog-thinking.ts";
 import { getModels, getSupportedThinkingLevels } from "../src/models.ts";
 import { streamSimpleOpenAICodexResponses } from "../src/providers/openai-codex-responses.ts";
+import { streamSimpleOpenAICompletions } from "../src/providers/openai-completions.ts";
+import { streamSimpleOpenAIResponses } from "../src/providers/openai-responses.ts";
 import type { Api, Context, KnownProvider, Model, ThinkingLevel } from "../src/types.ts";
 
 /**
@@ -143,6 +145,59 @@ describe("GPT-6 family on the openai-codex route", () => {
 });
 
 describe("GPT-6.1 Sol on API routes", () => {
+	it.each([undefined, "low", "xhigh", "max"] as const)(
+		"serializes Terra OpenAI Responses %s reasoning",
+		async (reasoning) => {
+			const model = getModels("openai").find((entry) => entry.id === "gpt-6.1-terra");
+			if (!model || model.api !== "openai-responses") throw new Error("Missing OpenAI Terra Responses route");
+			let body: unknown;
+			vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+				body = await new Request(input, init).json();
+				return sseResponse();
+			});
+			const result = await streamSimpleOpenAIResponses(model, context, { apiKey: "fixture", reasoning }).result();
+			expect(result.stopReason).toBe("stop");
+			expect(body).toMatchObject({
+				model: "gpt-6.1-terra",
+				reasoning: { effort: reasoning === undefined ? "none" : reasoning },
+			});
+		},
+	);
+
+	it.each([undefined, "low", "xhigh", "max"] as const)(
+		"serializes Terra OpenRouter %s reasoning",
+		async (reasoning) => {
+			const model = getModels("openrouter").find((entry) => entry.id === "openai/gpt-6.1-terra");
+			if (!model || model.api !== "openai-completions") throw new Error("Missing OpenRouter Terra route");
+			let body: unknown;
+			vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+				body = await new Request(input, init).json();
+				const chunk = { id: "fixture", choices: [{ index: 0, delta: { content: "ok" }, finish_reason: "stop" }] };
+				return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`, {
+					headers: { "content-type": "text/event-stream" },
+				});
+			});
+			const result = await streamSimpleOpenAICompletions(model, context, { apiKey: "fixture", reasoning }).result();
+			expect(result.stopReason).toBe("stop");
+			expect(body).toMatchObject({
+				model: "openai/gpt-6.1-terra",
+				reasoning: reasoning === undefined ? { enabled: false } : { effort: reasoning },
+			});
+		},
+	);
+
+	it.each([
+		["openai", "gpt-6.1-terra"],
+		["azure-openai-responses", "gpt-6.1-terra"],
+		["openrouter", "openai/gpt-6.1-terra"],
+	] as const)("exposes %s/%s with the documented Terra ladder", (provider, id) => {
+		const model = requireModel(provider, id);
+		expect(model.contextWindow).toBe(1_050_000);
+		expect(model.maxTokens).toBe(128_000);
+		expect(model.thinkingLevelMap).toMatchObject({ off: "none", minimal: null, max: "max", ultra: null });
+		expect(getSupportedThinkingLevels(model)).toEqual(["off", ...API_LADDER]);
+	});
+
 	it.each([
 		["openai", "gpt-6.1-sol"],
 		["azure-openai-responses", "gpt-6.1-sol"],

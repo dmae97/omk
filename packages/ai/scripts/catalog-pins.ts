@@ -36,8 +36,10 @@ const KEEP_IDS: { provider: string; id: string; reason: string }[] = [
 	{ provider: "openai", id: "gpt-5.2-chat-latest", reason: "dropped by models.dev; existing users may pin it, removal needs separate review" },
 	{ provider: "openai", id: "gpt-5.3-chat-latest", reason: "dropped by models.dev; existing users may pin it, removal needs separate review" },
 	{ provider: "opencode", id: "space-bunny-free", reason: "dropped by OpenCode Zen listing; removal needs separate review" },
+	{ provider: "opencode", id: "deepseek-v4-flash", reason: "absent from current models.dev listing; removal needs separate review" },
 	{ provider: "opencode-go", id: "space-bunny", reason: "dropped by OpenCode Go listing; removal needs separate review" },
 	{ provider: "openrouter", id: "deepseek/deepseek-r1", reason: "dropped by OpenRouter /models; removal needs separate review" },
+	{ provider: "openrouter", id: "arcee-ai/trinity-large-thinking", reason: "absent from current OpenRouter listing; removal needs separate review" },
 	{ provider: "vercel-ai-gateway", id: "stealth/cat-jam", reason: "dropped by Vercel AI Gateway /models; removal needs separate review" },
 ];
 
@@ -106,6 +108,9 @@ const PINNED_FIELDS: { provider: string; id: string; fields: ("cost" | "contextW
 
 /** Values set from official provider docs. Each entry cites its source. */
 const OVERRIDES: { provider: string; id: string; set: Partial<Pick<Model<Api>, "contextWindow" | "maxTokens">> & { cost?: Partial<Model<Api>["cost"]> } }[] = [
+	// GPT-4.1 nano's documented max output is 32,768, not the 942,818 from the gateway listing.
+	// https://developers.openai.com/api/docs/models/gpt-4.1-nano
+	{ provider: "openrouter", id: "openai/gpt-4.1-nano", set: { maxTokens: 32768 } },
 	// MiniMax-M3.1-Flash max output 524,288: https://platform.minimax.io/docs/api-reference/text-chat-openai
 	{ provider: "opencode", id: "minimax-m3.1-flash-free", set: { maxTokens: 524288 } },
 	{ provider: "openrouter", id: "minimax/minimax-m3.1-flash:free", set: { maxTokens: 524288 } },
@@ -125,8 +130,10 @@ export function applyCatalogPins(models: Model<Api>[], committed: Catalog): Mode
 	const excluded = new Set(EXCLUDE_UNVERIFIED_NEW_IDS.map((e) => key(e.provider, e.id)));
 	const result = models.filter(
 		(model) =>
-			committed[model.provider]?.[model.id] !== undefined ||
-			!(excluded.has(key(model.provider, model.id)) || NON_TEXT_OUTPUT_IDS.has(model.id)),
+			// This batch-only route is not verified for OMK's synchronous chat consumer.
+			!(model.provider === "openrouter" && model.id === "openai/gpt-6.1-terra:batch") &&
+			(committed[model.provider]?.[model.id] !== undefined ||
+				!(excluded.has(key(model.provider, model.id)) || NON_TEXT_OUTPUT_IDS.has(model.id))),
 	);
 	const present = new Set(result.map((model) => key(model.provider, model.id)));
 	for (const keep of KEEP_IDS) {

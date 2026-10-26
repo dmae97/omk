@@ -25,11 +25,12 @@ describe("DeepSeek V4.1 Flash thinking", () => {
 		if (provider === "vercel-ai-gateway") expect(model.compat).toMatchObject({ forceAdaptiveThinking: true });
 	});
 
-	it("keeps the OpenRouter base snapshot distinct from the 1017 route", () => {
+	it("keeps OpenRouter base and 1017 pricing distinct while respecting their current output limits", () => {
 		const base = getModels("openrouter").find((entry) => entry.id === "deepseek/deepseek-v4.1-flash");
 		const snapshot = getModels("openrouter").find((entry) => entry.id === "deepseek/deepseek-v4.1-flash-1017");
 		expect(base).toMatchObject({
-			maxTokens: 943718,
+			// OpenRouter /api/v1/models lists 393,216 for both routes (checked 2026-10-27).
+			maxTokens: 393216,
 			cost: { input: 0.0648, output: 0.144, cacheRead: 0.0016 },
 		});
 		expect(snapshot).toMatchObject({
