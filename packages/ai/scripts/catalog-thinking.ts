@@ -47,6 +47,7 @@ export function applyGpt6AstraUltraAlias(model: Model<Api>): void {
 // models.dev declares low~max on the openai, azure, opencode, and github-copilot Responses routes
 // (checked 2026-09-30). OpenRouter carries its own mandatory declaration.
 const GPT61_SOL_ID = /^gpt-6\.1-sol(?:-pro)?$/;
+const GPT61_TERRA_ID = /^gpt-6\.1-terra$/;
 // Vercel fronts V4.1 Flash and its dated snapshots (the `-1017` rollout was published
 // 2026-10-17) with anthropic-messages; the Messages effort ladder matches the same
 // none/low/high/max contract the base route carries.
@@ -148,6 +149,15 @@ export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 			high: "high",
 			xhigh: "xhigh",
 			max: "max",
+		};
+	}
+	if (
+		model.provider === "openai" && GPT61_TERRA_ID.test(model.id) && model.api === "openai-responses" ||
+		model.provider === "azure-openai-responses" && GPT61_TERRA_ID.test(model.id) && model.api === "azure-openai-responses"
+	) {
+		// https://developers.openai.com/api/docs/models/gpt-6.1-terra
+		model.thinkingLevelMap = {
+			off: "none", minimal: null, low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max", ultra: null,
 		};
 	}
 	if (/(?:^|[/.])claude-opus-5(?:[.@:-]|$)/.test(model.id) && !OPUS_55_ID.test(model.id)) {

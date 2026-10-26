@@ -65,4 +65,16 @@ describe("OpenRouter catalog coverage", () => {
 			expect(model.baseUrl).toBe("https://openrouter.ai/api/v1");
 		}
 	});
+
+	it("keeps GPT-4.1 nano within its documented output limit", () => {
+		const model = getModels("openrouter").find((entry) => entry.id === "openai/gpt-4.1-nano");
+		expect(model?.maxTokens).toBe(32_768);
+	});
+
+	it("does not expose Terra's batch-only route to the synchronous chat consumer", () => {
+		const ids = new Set(getModels("openrouter").map((model) => model.id));
+		expect(ids.has("openai/gpt-6.1-terra:batch")).toBe(false);
+		expect(ids.has("openai/gpt-6.1-terra")).toBe(true);
+		expect(ids.has("openai/gpt-6.1-sol:batch")).toBe(true);
+	});
 });
