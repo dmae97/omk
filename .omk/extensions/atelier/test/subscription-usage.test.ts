@@ -24,13 +24,96 @@ describe("native subscription usage presentation", () => {
 		expect(registry.get("omk:subscription-usage")).toBeUndefined();
 		registry.dispose();
 	});
-	it("keeps unsupported hosts, missing values and invalid numbers unavailable", () => {
+	it("shows an empty state instead of an error when the host has no usage source", () => {
 		const events = createEventBus();
 		const registry = createSidebarPanelRegistry({ events });
 		const panel = createSubscriptionUsagePanel({ events }, {});
 		panel.refresh();
-		expect(registry.get("omk:subscription-usage")?.rows[0]?.text).toContain("host usage unavailable");
+		expect(JSON.stringify(registry.get("omk:subscription-usage")?.rows)).toContain(
+			"No subscription usage source on this host",
+		);
+		expect(panel.summary(80)).toBe("");
 		panel.dispose();
+		const undefinedSnapshots = createSubscriptionUsagePanel({ events }, { getSubscriptionUsage: () => undefined });
+		undefinedSnapshots.refresh();
+		expect(registry.get("omk:subscription-usage")?.rows.map((row) => row.text)).toEqual([
+			"No subscription usage source on this host",
+		]);
+		expect(registry.get("omk:subscription-usage")?.keyValues).toBeUndefined();
+		expect(undefinedSnapshots.summary(80)).toBe("");
+		undefinedSnapshots.dispose();
+		const noProviders = createSubscriptionUsagePanel({ events }, { getSubscriptionUsage: () => [] });
+		noProviders.refresh();
+		expect(JSON.stringify(registry.get("omk:subscription-usage")?.rows)).toContain(
+			"No configured subscription providers",
+		);
+		expect(noProviders.summary(80)).toBe("");
+		noProviders.dispose();
+		registry.dispose();
+	});
+	it("preserves the host receiver and clears stale quota when its source disappears", () => {
+		const events = createEventBus();
+		const registry = createSidebarPanelRegistry({ events });
+		const data: {
+			snapshots: ReturnType<NonNullable<SubscriptionUsageData["getSubscriptionUsage"]>>;
+		} & SubscriptionUsageData = {
+			snapshots: [{ label: "CODEX", windows: [{ label: "5H", usedPercent: 35 }] }],
+			getSubscriptionUsage() {
+				return this.snapshots;
+			},
+		};
+		const panel = createSubscriptionUsagePanel({ events }, data);
+		panel.refresh();
+		expect(panel.summary(80)).toBe("CODEX 5H 35%");
+		data.snapshots = undefined;
+		panel.refresh();
+		expect(panel.summary(80)).toBe("");
+		expect(registry.get("omk:subscription-usage")?.keyValues).toBeUndefined();
+		expect(registry.get("omk:subscription-usage")?.rows.map((row) => row.text)).toEqual([
+			"No subscription usage source on this host",
+		]);
+		data.snapshots = [{ label: "CODEX", windows: [], message: "provider offline" }];
+		panel.refresh();
+		expect(panel.summary(80)).toBe("CODEX provider offline");
+		data.snapshots = [];
+		panel.refresh();
+		expect(panel.summary(80)).toBe("");
+		expect(registry.get("omk:subscription-usage")?.rows.map((row) => row.text)).toEqual([
+			"No configured subscription providers",
+		]);
+		panel.dispose();
+		registry.dispose();
+	});
+
+	it("recovers from a failed host reader without retaining its diagnostic", () => {
+		const events = createEventBus();
+		const registry = createSidebarPanelRegistry({ events });
+		let failing = true;
+		const panel = createSubscriptionUsagePanel(
+			{ events },
+			{
+				getSubscriptionUsage() {
+					if (failing) throw new Error("PRIVATE_DETAIL");
+					return undefined;
+				},
+			},
+		);
+		panel.refresh();
+		expect(panel.summary(80)).toBe("Quota: usage unavailable");
+		failing = false;
+		panel.refresh();
+		expect(panel.summary(80)).toBe("");
+		expect(registry.get("omk:subscription-usage")?.rows.map((row) => row.text)).toEqual([
+			"No subscription usage source on this host",
+		]);
+		expect(JSON.stringify(registry.get("omk:subscription-usage"))).not.toContain("PRIVATE_DETAIL");
+		panel.dispose();
+		registry.dispose();
+	});
+
+	it("keeps invalid numbers unavailable", () => {
+		const events = createEventBus();
+		const registry = createSidebarPanelRegistry({ events });
 		const invalid = createSubscriptionUsagePanel(
 			{ events },
 			{

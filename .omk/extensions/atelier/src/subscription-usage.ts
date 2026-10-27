@@ -9,11 +9,18 @@ import { sanitizeInline } from "../vendor/src/text.ts";
 
 export const SUBSCRIPTION_PANEL_ID = "omk:subscription-usage";
 export interface SubscriptionUsageData {
-	getSubscriptionUsage?(): readonly {
-		readonly label: string;
-		readonly windows: readonly { readonly label: string; readonly usedPercent: number; readonly resetsAt?: number }[];
-		readonly message?: string;
-	}[];
+	/** Optional host source. It may be absent, or return undefined while no data exists. */
+	getSubscriptionUsage?():
+		| readonly {
+				readonly label: string;
+				readonly windows: readonly {
+					readonly label: string;
+					readonly usedPercent: number;
+					readonly resetsAt?: number;
+				}[];
+				readonly message?: string;
+		  }[]
+		| undefined;
 }
 
 function resetTime(at: number | undefined, now: number): string {
@@ -43,11 +50,15 @@ export function createSubscriptionUsagePanel(
 			if (disposed) return;
 			const keyValues: SidebarPanelKeyValueRow[] = [];
 			const summaries: string[] = [];
+			let emptyText = "No configured subscription providers";
 			try {
-				const snapshots = "getSubscriptionUsage" in data ? data.getSubscriptionUsage?.() : undefined;
+				const getUsage = "getSubscriptionUsage" in data ? data.getSubscriptionUsage : undefined;
+				const snapshots = typeof getUsage === "function" ? getUsage.call(data) : undefined;
 				if (!snapshots) {
-					keyValues.push({ label: "Host", value: "host usage unavailable", valueRole: "muted" });
-					summaries.push("Quota: host usage unavailable");
+					// The host exposes no subscription usage source, or has not produced one
+					// yet. That is an empty state, not a provider failure, so stay quiet
+					// instead of reporting "host usage unavailable".
+					emptyText = "No subscription usage source on this host";
 				} else {
 					for (const snapshot of snapshots) {
 						const label = sanitizeInline(snapshot.label);
@@ -95,7 +106,7 @@ export function createSubscriptionUsagePanel(
 							text: truncateToWidth(`${row.label} ${row.value}`, 150, "…"),
 							role: row.valueRole,
 						}))
-					: ["No configured subscription providers"],
+					: [emptyText],
 			};
 			const fingerprint = JSON.stringify(next);
 			if (fingerprint !== previous) {
