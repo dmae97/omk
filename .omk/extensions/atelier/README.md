@@ -52,7 +52,7 @@ bash scripts/omk-tmux.sh --resume <session-id>
 
 `QUOTA` 패널은 호스트의 모든 설정된 구독 그룹을 받아 사용 비율, 5H/7D 등의 관측 창, 리셋까지 남은 시간을 표시합니다. 네이티브 xAI 응답에 관측된 `productUsage` 행이 있으면 같은 호스트 스냅샷에 포함되어 여기에도 나타납니다. `usagePercent`가 없는 행은 0%로 보이지 않습니다. 활성 그룹이 먼저 나오며 호스트 `subscriptionUsageProviders` allowlist를 그대로 따릅니다. 0은 실제 관측값일 때만 표시합니다. Meta의 `no observed usage yet`, offline, 미지원 API는 추정으로 채우지 않습니다.
 
-패널은 기본 표시되고 저장된 숨김 설정은 유지합니다. 좁거나 낮은 터미널에서는 푸터 요약도 제공하며 Display에서 순서/표시를 조절할 수 있습니다. 확장이 별도 인증 파일이나 provider API를 읽지 않고 `footerData.getSubscriptionUsage()` -> 기존 TTL/revision 캐시를 사용합니다. 이 API가 없는 구버전 설치 엔진은 `host usage unavailable`로 표시합니다. `/reload`만으로 구버전 엔진 자체에 새 API가 생기지는 않습니다.
+패널은 기본 표시되고 저장된 숨김 설정은 유지합니다. 좁거나 낮은 터미널에서는 푸터 요약도 제공하며 Display에서 순서/표시를 조절할 수 있습니다. 확장이 별도 인증 파일이나 provider API를 읽지 않고 `footerData.getSubscriptionUsage()` -> 기존 TTL/revision 캐시를 사용합니다. 이 API가 없거나 `undefined`를 반환하면 `No subscription usage source on this host` 빈 상태로 표시하고 푸터 요약은 비웁니다. 빈 배열은 `No configured subscription providers`로 구분합니다. 실제 provider 진단 메시지와 조회 예외의 `usage unavailable` 표시는 유지합니다. `/reload`만으로 구버전 엔진 자체에 새 API가 생기지는 않습니다.
 
 ## 제한
 
