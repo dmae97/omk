@@ -9,6 +9,11 @@
     "Normalize automate-me trailing blank line",
     "Namespace skill names and slash invocations under pstack- to avoid generic-name collisions",
     "Map poteto-mode entrypoint and Task delegation to OMK skill and subagent interfaces",
-    "Namespace bundled agent names with pstack-"
+    "Namespace bundled agent names with pstack-",
+    "Rewrite the bundle for OMK only: subagent extension calls, OMK skill folders, OMK session transcripts, and timed shell wait loops replace cross-harness instructions",
+    "Replace Cursor model slugs and family fallback rules with the OMK session model and inherit-parent/auto aliases; setup-pstack writes ~/.omk/agent/pstack-models.md without frontmatter",
+    "Map cursor-team-kit helpers to OMK equivalents (omk-aislop for deslop, Playwright/CDP for UI control, tmux/PTY for CLI control)",
+    "Point poteto-help links at files that exist in this bundle instead of the upstream guide and harness docs",
+    "Keep watch-pr Bugbot detection (author cursor, CURSOR_AUTOMATION_ID) as an external review-bot integration, not a harness dependency"
   ]
 }

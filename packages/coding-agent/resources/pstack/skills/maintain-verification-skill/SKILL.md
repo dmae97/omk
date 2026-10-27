@@ -22,7 +22,7 @@ Only edit the verification skill's own directory (its SKILL.md, features/, and a
 
 ## Pass
 
-0. **Locate the target.** Find the verification skill to maintain: the project-local skill whose body has launch/drive sections and a feature map (usually `verify-*/` in the project's skill folder: `.cursor/skills/`, `.claude/skills/`, `.pi/skills/`, or `.agents/skills/`). Several candidates → ask which one; none → stop and point at `/skill:pstack-create-verification-skill` instead of inventing a target.
+0. **Locate the target.** Find the verification skill to maintain: the project-local skill whose body has launch/drive sections and a feature map (usually `verify-*/` in the project's skill folder: `.omk/skills/`). Several candidates → ask which one; none → stop and point at `/skill:pstack-create-verification-skill` instead of inventing a target.
 
 1. **Index hygiene.** Read the feature map README and glob its sibling files. Fix missing, extra, duplicate, or dead entries. Lightweight; no generated inventory.
 

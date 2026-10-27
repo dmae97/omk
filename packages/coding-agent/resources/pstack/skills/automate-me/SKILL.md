@@ -10,13 +10,13 @@ A guided flow for turning the user's working conventions into a skill agents wil
 
 This skill orchestrates three others: an inline mining pass (see step 1), your harness's skill-authoring skill (authoring), and the **unslop** skill (prose discipline). It sequences them. It doesn't replace them.
 
-The skill-authoring skill is `create-skill` in Cursor (built in) or Anthropic's `skill-creator`. If you have neither, follow the Agent Skills format at agentskills.io. "`create-skill`" below means whichever of these you use.
+The skill-authoring skill is an installed `skill-creator` skill when present, otherwise the Agent Skills format at agentskills.io. "`create-skill`" below means whichever of these you use.
 
 ## Flow
 
 ### 0. Check for an existing skill
 
-Look recursively for `*-mode/SKILL.md` matching the user's handle in your harness's skill folders. In the project: `.cursor/skills/` (Cursor), `.claude/skills/` (Claude Code), `.pi/skills/` (Pi), or `.agents/skills/` (Codex, OpenCode, and others). For the user: `~/.cursor/skills/`, `~/.claude/skills/`, `~/.pi/agent/skills/`, `~/.codex/skills/`, `~/.config/opencode/skills/`, or `~/.agents/skills/`. Mode skills can live in a personal category directory (`<skills>/<handle>/`), not only at the top level. If one exists, confirm intent with your structured-question tool (`AskQuestion` in Cursor, `AskUserQuestion` in Claude Code, `question` in OpenCode) unless they already said "update my skill" or similar:
+Look recursively for `*-mode/SKILL.md` matching the user's handle in your harness's skill folders. In the project: `.omk/skills/`. For the user: `~/.omk/agent/skills/`. Mode skills can live in a personal category directory (`<skills>/<handle>/`), not only at the top level. If one exists, confirm intent with your structured-question tool (in OMK, ask in chat with numbered options) unless they already said "update my skill" or similar:
 
 - Update the existing skill (default for repeat runs)
 - Start fresh (rare, ask why before doing it)
@@ -28,15 +28,12 @@ Update mode changes the rest of the flow:
 
 ### 1. Mine their history
 
-Locate the active workspace's transcripts before fanning out. Use only that workspace's directory. Don't glob across every project's directory. That crosses workspace boundaries and reads private chats from unrelated projects. Where they live depends on your harness:
+Locate the active workspace's transcripts before fanning out. Use only that workspace's directory. Don't glob across every project's directory. That crosses workspace boundaries and reads private chats from unrelated projects. In OMK they live in the active workspace's session directory:
 
-- **Cursor:** the system prompt names the workspace's `agent-transcripts/` directory under `~/.cursor/projects/`.
-- **Claude Code:** `~/.claude/projects/<slug>/*.jsonl`, where `<slug>` is the workspace path with every character that isn't a letter or digit turned into "-".
-- **Pi:** `~/.pi/agent/sessions/--<slug>--/*.jsonl`, where `<slug>` is the workspace path with the leading slash dropped and each "/" turned into "-".
-- **Codex:** `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. Keep only files whose first line has `payload.cwd` equal to the workspace path.
-- **Other harnesses:** the harness's session directory for this workspace.
+- `~/.omk/agent/sessions/--<slug>--/*.jsonl`, where `<slug>` is the workspace path with the leading slash dropped and each "/" turned into "-".
+- Keep only sessions whose recorded cwd is this workspace; never read another project's sessions.
 
-Survey recent agent conversations within that scope for recurring patterns. Run multiple parallel subagents across slices of history (e.g. last 2-4 weeks, split into 3 slices so each has enough material). Pick each subagent's reasoning level and fast or standard speed for the job, per the Subagents section of the **poteto-mode** skill. Each slice mining subagent reads transcripts from the workspace-scoped path the parent provides, looks for the signals below, and returns a short structured list of patterns it saw with evidence pointers. Default signals worth hunting:
+Survey recent agent conversations within that scope for recurring patterns. Run multiple parallel subagents across slices of history (e.g. last 2-4 weeks, split into 3 slices so each has enough material). OMK subagents inherit the session model and effort; pass no model, effort, or speed fields. Each slice mining subagent reads transcripts from the workspace-scoped path the parent provides, looks for the signals below, and returns a short structured list of patterns it saw with evidence pointers. Default signals worth hunting:
 
 - Response preferences (length, tone, format, "dumb it down" corrections)
 - Delegation habits (subagents, models, specialized workflows, parallelism)
@@ -49,9 +46,9 @@ Cross-check across slices before elevating a signal. Patterns seen in 2+ slices 
 
 ### 2. Ask the user directly
 
-Mining misses intent that hasn't come up yet. Use your structured-question tool (structured multi-choice: `AskQuestion` in Cursor, `AskUserQuestion` in Claude Code, `question` in OpenCode) rather than asking the user to type from scratch. If your harness has none, ask in chat with numbered options.
+Mining misses intent that hasn't come up yet. Use your structured-question tool (in OMK, numbered options in chat) rather than asking the user to type from scratch. If your harness has none, ask in chat with numbered options.
 
-Shape: one or two questions with 4-6 options each, multi-select (`allow_multiple: true` in Cursor) for category questions. Start broad ("Which areas matter most?"), then follow up on selected areas with specific options. After the structured rounds, one free-form chat question catches anything the options missed.
+Shape: one or two questions with 4-6 options each, multi-select for category questions. Start broad ("Which areas matter most?"), then follow up on selected areas with specific options. After the structured rounds, one free-form chat question catches anything the options missed.
 
 Don't dump 20 questions.
 
