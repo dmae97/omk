@@ -42,7 +42,7 @@ Swap in the real paths, skills, and done checks. Informal wording works.
 
 ## Away and back
 
-- `/skill:pstack-poteto-mode im going to bed. <goal> in a fresh worktree off <base>. done means <checks>. keep a decision log. don't ask me before committing. /loop until done. if you're truly stuck after a few hours, stop and write up why.`
+- `/skill:pstack-poteto-mode im going to bed. <goal> in a fresh worktree off <base>. done means <checks>. keep a decision log. don't ask me before committing. keep a timed wait loop until done. if you're truly stuck after a few hours, stop and write up why.`
 - `/skill:pstack-show-me-your-work catch me up on what you did last night.` Read its Attention section first.
 - `/skill:pstack-ketchup` catches you up on this chat since your last message and lists every call that waits on you.
 - `/skill:pstack-poteto-mode full autopilot on this queue. each item is independent.`

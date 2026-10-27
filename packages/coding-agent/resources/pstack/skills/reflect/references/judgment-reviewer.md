@@ -17,7 +17,7 @@ Scan for:
 
 ## Scope to skills and tools the session actually used
 
-Route findings only to skills, tools, or MCPs this transcript used. A skill counts as used when the transcript shows a `Read` of its `SKILL.md` (under a workspace skill folder: `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, `.pi/skills/`; a user-level one: `~/.cursor/skills/`, `~/.claude/skills/`, `~/.codex/skills/`, `~/.pi/agent/skills/`, `~/.agents/skills/`; or a plugin path such as `~/.cursor/plugins/` or `~/.claude/plugins/`), a skill-invocation call (`Skill` in Claude Code, `skill` in OpenCode), a subagent prompt (`Task`, `Agent`, `task`, `spawn_agent`) naming its path, or a tool call (Shell, Grep, MCP, etc.) matching its documented commands. Speculative routings to skills the parent never opened do not count.
+Route findings only to skills, tools, or MCPs this transcript used. A skill counts as used when the transcript shows a `Read` of its `SKILL.md` (under a workspace skill folder: `.omk/skills/`; a user-level one: `~/.omk/agent/skills/`; or a bundle path such as `.omk/skills/pstack/`), a `/skill:<name>` invocation, a `subagent` call naming its path, or a tool call (Shell, Grep, MCP, etc.) matching its documented commands. Speculative routings to skills the parent never opened do not count.
 
 Two finding shapes are valid:
 - The parent invoked the skill and you found a real gap in its body. Route to the skill's relevant section.

@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { discoverAgents } from "../examples/extensions/subagent/agents.ts";
 import { installProjectPstack } from "../src/commands/pstack-install.ts";
-import { getPackageDir } from "../src/config.ts";
+import { ENV_AGENT_DIR, getPackageDir } from "../src/config.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { expandSkillCommand } from "../src/core/skill-admission-session.ts";
 import { loadSkills, loadSkillsFromDir } from "../src/core/skills.ts";
@@ -22,11 +22,20 @@ import { loadSkills, loadSkillsFromDir } from "../src/core/skills.ts";
 const bundle = join(getPackageDir(), "resources", "pstack");
 let root: string;
 let output: string[];
+let previousAgentDir: string | undefined;
 beforeEach(() => {
 	root = mkdtempSync(join(tmpdir(), "omk-pstack-"));
 	output = [];
+	// The install preflight reads the default user skill directory. Isolate it so a
+	// pstack bundle already installed on this machine cannot collide with the fixture.
+	previousAgentDir = process.env[ENV_AGENT_DIR];
+	process.env[ENV_AGENT_DIR] = join(root, "agent-home");
 });
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+afterEach(() => {
+	if (previousAgentDir === undefined) delete process.env[ENV_AGENT_DIR];
+	else process.env[ENV_AGENT_DIR] = previousAgentDir;
+	rmSync(root, { recursive: true, force: true });
+});
 const line = (message: string) => output.push(message);
 
 describe("bundled pstack project installer", () => {
