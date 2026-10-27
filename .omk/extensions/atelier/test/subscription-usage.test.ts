@@ -24,13 +24,32 @@ describe("native subscription usage presentation", () => {
 		expect(registry.get("omk:subscription-usage")).toBeUndefined();
 		registry.dispose();
 	});
-	it("keeps unsupported hosts, missing values and invalid numbers unavailable", () => {
+	it("shows an empty state instead of an error when the host has no usage source", () => {
 		const events = createEventBus();
 		const registry = createSidebarPanelRegistry({ events });
 		const panel = createSubscriptionUsagePanel({ events }, {});
 		panel.refresh();
-		expect(registry.get("omk:subscription-usage")?.rows[0]?.text).toContain("host usage unavailable");
+		expect(JSON.stringify(registry.get("omk:subscription-usage")?.rows)).toContain(
+			"No subscription usage source on this host",
+		);
+		expect(panel.summary(80)).toBe("");
 		panel.dispose();
+		const undefinedSnapshots = createSubscriptionUsagePanel({ events }, { getSubscriptionUsage: () => undefined });
+		undefinedSnapshots.refresh();
+		expect(undefinedSnapshots.summary(80)).toBe("");
+		undefinedSnapshots.dispose();
+		const noProviders = createSubscriptionUsagePanel({ events }, { getSubscriptionUsage: () => [] });
+		noProviders.refresh();
+		expect(JSON.stringify(registry.get("omk:subscription-usage")?.rows)).toContain(
+			"No configured subscription providers",
+		);
+		expect(noProviders.summary(80)).toBe("");
+		noProviders.dispose();
+		registry.dispose();
+	});
+	it("keeps invalid numbers unavailable", () => {
+		const events = createEventBus();
+		const registry = createSidebarPanelRegistry({ events });
 		const invalid = createSubscriptionUsagePanel(
 			{ events },
 			{
