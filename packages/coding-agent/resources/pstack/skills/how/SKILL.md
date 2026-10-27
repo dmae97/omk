@@ -19,7 +19,7 @@ If the scope is ambiguous, state your interpretation and explore. The user can r
 
 When in doubt, take the simple path.
 
-**Subagent tool.** Spawns in this skill use OMK's `subagent` extension. Call it with `agent`, `task`, and `agentScope`, and use `tasks: [{agent, task}, ...]` for a parallel fan-out. Keep the prompt and the model. Drop parameters your tool doesn't have. If the `subagent` extension is not loaded or the project is not trusted, run each role yourself, one after another.
+**Subagent tool.** Spawns in this skill use OMK's `subagent` extension. Call it with `agent`, `task`, and `agentScope`, and use `tasks: [{agent, task}, ...]` for a parallel fan-out. Keep the prompt and inherit the session model. Pass no model, effort, or speed fields. If the `subagent` extension is not loaded or the project is not trusted, run each role yourself, one after another.
 
 ## 2. Explore (complex only)
 

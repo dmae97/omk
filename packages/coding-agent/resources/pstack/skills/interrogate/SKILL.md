@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Interrogate
 
-Spawn one reviewer per configured model to adversarially review code changes. The adversarial signal comes from model diversity, not assigned personas. The deliverable is a synthesized verdict. Do NOT auto-apply changes.
+Spawn one reviewer per configured role entry to adversarially review code changes. OMK delegates inherit the session model, so independent briefs provide review separation, not model diversity. The deliverable is a synthesized verdict. Do NOT auto-apply changes.
 
 ## Step 1, Scope
 
@@ -24,9 +24,9 @@ Before spawning reviewers, state the intent in one clear paragraph from the user
 
 ## Step 3, Spawn Reviewers
 
-Launch all reviewers in a single message with the Task tool, one per entry on the `interrogate reviewers` line in the pstack settings file (`~/.omk/agent/pstack-models.md`, written by `/skill:pstack-setup-pstack`), labeled Reviewer A, B, and so on to match the entry count. If the file or that line is missing, use the table defaults.
+Launch all reviewers in a single message with the `subagent` extension, one per entry on the `interrogate reviewers` line in the pstack settings file (`~/.omk/agent/pstack-models.md`, written by `/skill:pstack-setup-pstack`), labeled Reviewer A, B, and so on to match the entry count. If the file or that line is missing, use the table defaults.
 
-**Subagent tool.** Spawns in this skill use OMK's `subagent` extension. Call it with `agent`, `task`, and `agentScope`, and use `tasks: [{agent, task}, ...]` for a parallel fan-out. Keep the prompt and the model. Drop parameters your tool doesn't have. If the `subagent` extension is not loaded or the project is not trusted, run each reviewer yourself, one after another.
+**Subagent tool.** Spawns in this skill use OMK's `subagent` extension. Call it with `agent`, `task`, and `agentScope`, and use `tasks: [{agent, task}, ...]` for a parallel fan-out. Keep the prompt and inherit the session model. Pass no model, effort, or speed fields. If the `subagent` extension is not loaded or the project is not trusted, run each reviewer yourself, one after another.
 
 | Subagent | Default model |
 |----------|---------------|
@@ -41,11 +41,11 @@ Read `references/reviewer-prompt.md` and fill in the same template for every rev
 
 ## Step 4, Synthesize
 
-As results come back, build a unified picture. Parse every reviewer's findings. Merge findings that describe the same issue differently, and note which models raised each one. Findings two or more models raised independently are the highest signal. Read a lone model's finding, but weight it accordingly. Note disagreements. If one model flags something and another explicitly says the opposite, that is context for the verdict.
+As results come back, build a unified picture. Parse every reviewer's findings. Merge findings that describe the same issue differently, and note which reviewer labels raised each one. Findings two or more reviewers raised independently are the highest signal. Read a lone reviewer's finding, but weight it accordingly. Note disagreements. If one reviewer flags something and another explicitly says the opposite, that is context for the verdict.
 
 ## Step 5, Lead Judgment
 
-You are the lead reviewer, a pragmatic senior engineer, not a neutral aggregator. Read `references/lead-judgment.md` for the full framework. Put every finding in one of four buckets, with the model(s) that raised it and a one-line rationale.
+You are the lead reviewer, a pragmatic senior engineer, not a neutral aggregator. Read `references/lead-judgment.md` for the full framework. Put every finding in one of four buckets, with the reviewer label(s) that raised it and a one-line rationale.
 
 - **Act on**. Real issues affecting correctness, security, or maintainability given the actual goals. They would block a real PR.
 - **Consider**. Legitimate, but you're not sure they outweigh the cost of addressing them now. Worth the user's attention.
@@ -61,7 +61,7 @@ You are the lead reviewer, a pragmatic senior engineer, not a neutral aggregator
 - Reviewer [label]: [model name], [N findings] (one bullet per reviewer)
 
 ### Act On
-[Each: description, which models raised it, why it matters.]
+[Each: description, which reviewers raised it, why it matters.]
 
 ### Consider
 [Each: description, which models raised it, the tradeoff.]
@@ -73,4 +73,4 @@ You are the lead reviewer, a pragmatic senior engineer, not a neutral aggregator
 [Each with a brief rationale.]
 
 ### Agreement Map
-[Where models agreed and diverged, and what that pattern tells us.]
+[Where reviewers agreed and diverged. State that shared-model agreement is not cross-model evidence.]

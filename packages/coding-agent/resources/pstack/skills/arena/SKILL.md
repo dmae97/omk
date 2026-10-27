@@ -14,12 +14,12 @@ Every candidate gets the same prompt, so the prompt is the contract.
 
 1. State the artifact each candidate is producing.
 2. Derive the rubric, 3-6 concrete gradeable criteria for what success looks like on *this* task. It is the picker's tool in Phase D. Candidates only see the task.
-3. Pick the runners. Use the `arena runners` line in the pstack settings file (`~/.omk/agent/pstack-models.md`, written by `/skill:pstack-setup-pstack`). If the file or that line is missing, run both runners on the session model. An `auto` or `inherit-parent` entry in this line or the cross-judge line means the session model. If a configured entry is not in the OMK catalog, run that seat on the session model and say so. If it rejects a default, use the closest valid slug of the same family from its error message or your harness's model list. Spawn more runners when the arena covers multiple design directions. Use the same model N times when the work is generation-bound rather than judgment-sensitive. OMK subagents inherit the session model and effort; pass no model, effort, or speed fields.
+3. Pick the runners. Use the `arena runners` line in the pstack settings file (`~/.omk/agent/pstack-models.md`, written by `/skill:pstack-setup-pstack`). If the file or that line is missing, run both runners on the session model. An `auto` or `inherit-parent` entry in this line or the cross-judge line means the session model. If a configured entry is not in the OMK catalog, run that seat on the session model and say so. Model preferences do not override the current delegate model; report the inherited model for every seat. Spawn more runners when the arena covers multiple design directions. Use the same model N times when the work is generation-bound rather than judgment-sensitive. OMK subagents inherit the session model and effort; pass no model, effort, or speed fields.
 4. Give each candidate its own output location (a git worktree where possible, otherwise `/tmp/arena-<slug>/candidate-<n>/`), per the **separate-before-serializing-shared-state** principle skill.
 
 ## Phase B: Fan out
 
-Spawn all N subagents in one message with `run_in_background: true`, each with the task, the path to the shared grounding, its own output path, and instructions to produce the artifact and a short rationale naming the alternatives it considered and what it rejected.
+Spawn all N subagents with `tasks: [{agent, task}, ...]` and the trusted `agentScope`, each with the task, the path to the shared grounding, its own output path, and instructions to produce the artifact and a short rationale naming the alternatives it considered and what it rejected.
 
 If a candidate produces no output, proceed with N-1 and note the dropout.
 

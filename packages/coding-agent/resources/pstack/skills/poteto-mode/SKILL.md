@@ -101,7 +101,7 @@ Read the leaf skill in full for any principle you apply. Each entry names when i
 
 Use the OMK `subagent` mapping above for delegates when the extension and project trust are available. The current session owns the playbook and final review. Let each delegate inherit the session model. Do not invent model diversity or pass unsupported Task parameters.
 
-You own every subagent's work. Review the diff and write your own summary, don't pass through what it said. A second opinion is the same prompt against a different model. Agreement is high-signal.
+You own every subagent's work. Review the diff and write your own summary, don't pass through what it said. A second opinion uses a fresh brief on the inherited session model. Treat agreement as same-model evidence, not model diversity.
 
 **Fresh subagents by default.** Give new work to a fresh subagent with consolidated scope, meaning the original brief, every later directive, and the prior agent's report and branch. This holds for a fix round, a follow-up, a retry, and the next queue item. Resume, message, or queue a follow-up on an existing subagent only when the new work strictly needs state that lives in that agent and is costly to move: its local checkout, its uncommitted changes, or a process it still runs, such as a dev server, a simulator, or a babysit watcher. A stop or hold order to a running agent is not reuse. A role such as a PR owner outlives its agent. Once that agent returns, a fresh agent takes the role's next round. Interrupt-chained resumes silently drop directives, so fire a fresh subagent with consolidated scope rather than trusting a "done" summary.
 

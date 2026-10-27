@@ -62,9 +62,9 @@ At the end of the run, before handing back, check the log told the truth. Read t
 
 Correct the log, not the story. The audit never edits or removes a row, even an invented one. When a row records neither a real decision nor a real action, or its claim or evidence is wrong, add a row that supersedes it with what actually happened and a pointer that resolves. This audit does not check rows outside this run's stretches. If this run's own work shows one of them is wrong, supersede it like any wrong call.
 
-## Cross-model review of the trail
+## Independent review of the trail
 
-Before handing back, spawn a subagent on a different model family from the one that did the work. Self-review is not a substitute. The subagent reads the audit trail and the run's transcript, then flags what the user should pay attention to. Not a redo of the work, a scan for what's suboptimal or risky. OMK subagents inherit the session model and effort; pass no model, effort, or speed fields.
+Before handing back, request a fresh reviewer on the session model when delegation is permitted. If delegation is unavailable or prohibited, perform a separate local review pass and report that limitation. Do not claim model diversity. The subagent reads the audit trail and the run's transcript, then flags what the user should pay attention to. Not a redo of the work, a scan for what's suboptimal or risky. OMK subagents inherit the session model and effort; pass no model, effort, or speed fields.
 
 - Decisions logged with weak or absent evidence.
 - Verification steps skipped or claimed without proof in the transcript.

@@ -14,6 +14,7 @@
     "Replace Cursor model slugs and family fallback rules with the OMK session model and inherit-parent/auto aliases; setup-pstack writes ~/.omk/agent/pstack-models.md without frontmatter",
     "Map cursor-team-kit helpers to OMK equivalents (omk-aislop for deslop, Playwright/CDP for UI control, tmux/PTY for CLI control)",
     "Point poteto-help links at files that exist in this bundle instead of the upstream guide and harness docs",
-    "Keep watch-pr Bugbot detection (author cursor, CURSOR_AUTOMATION_ID) as an external review-bot integration, not a harness dependency"
+    "Keep watch-pr Bugbot detection (author cursor, CURSOR_AUTOMATION_ID) as an external review-bot integration, not a harness dependency",
+    "Complete OMK-only call contracts and help links; remove unsupported background/cloud/model parameters and Custom Modes; describe native session JSONL records and same-model review limitations"
   ]
 }

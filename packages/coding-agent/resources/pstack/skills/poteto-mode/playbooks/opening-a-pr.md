@@ -2,7 +2,7 @@
 
 Invoked at the end of every other playbook.
 
-**Worktree.** Work from a git worktree off main. Subagents inherit it. Multiple `Task` calls on the same branch each get their own worktree, or `git fetch && git reset --hard origin/<branch>` between them. Dirty branch with unrelated work: patch out, fresh worktree, apply. Snarled worktree: reset from main, redo minimally.
+**Worktree.** Work from an isolated local git worktree off the intended base. Give each writer its own worktree and pass its absolute path in the brief. Preserve unrelated dirty work in place. Never reset, stash or clean another session's changes to prepare a task.
 
 **Commits.** Commit liberally. Rebase into small, ordered commits before opening PRs. Each commit is a future PR: landable, ordered to tell the story. Amend when the fix belongs in a just-made commit. New commit when separable. Commit bodies don't restate the subject.
 

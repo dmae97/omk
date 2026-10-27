@@ -17,8 +17,8 @@
 1. **Frame.** State what variant is under test and what behavior counts as success. Write the rubric (3-6 concrete criteria) for the judge only. Hold it back from candidates.
 2. **Set up sanitized environments.** Per-candidate working dir with the variant in place. Plant any context an organic task would have: a project skeleton, the skills the candidate would naturally read.
 3. **Author one organic prompt.** What a user would type. No leakage of what's being measured.
-4. **Spawn N parallel candidates** on different models per the **arena** skill's Phase B. Each works in its own sanitized dir. Same prompt to each. OMK subagents inherit the session model and effort; pass no model, effort, or speed fields.
-5. **Spawn one blinded judge** on a different model family per the **arena** skill's Phase C. Judge sees outputs by sanitized label and the rubric, never a model name.
+4. **Spawn N parallel candidates** on the session model per the **arena** skill's Phase B. Each works in its own sanitized dir. Same prompt to each. OMK subagents inherit the session model and effort; pass no model, effort, or speed fields.
+5. **Spawn one blinded judge** with a separate brief per the **arena** skill's Phase C. Judge sees outputs by sanitized label and the rubric, never a model name.
 6. **Verify the chain from transcripts, not self-report.** Read each candidate's local transcript in the active workspace's session directory (in OMK, the active workspace's directory under `~/.omk/agent/sessions/`). Do not glob across every project's directory. That crosses workspace boundaries and reads private chats from unrelated projects. Look at which files each candidate actually opened. Grade chain-following from the files it really read plus the shape of the code, never from the candidate's own claims.
 7. **Read every candidate output yourself** end to end. Compare to the judge's verdict. Disagreement means a model is biased or the rubric is ambiguous. Synthesize.
 

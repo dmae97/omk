@@ -26,7 +26,7 @@ Open a todolist with one entry per phase before launching anything.
 
 Spawn all N workers in one message as parallel `subagent` calls (`tasks: [{agent, task}, ...]`) using the step 3 model choice. Every worker runs locally, so give each its own git worktree or output path, and keep on this machine only the work that needs its files, auth, or running apps.
 
-When a worker must start from a non-default pushed branch, pass `cloud_base_branch`.
+When a worker must start from a non-default branch, create its local worktree from that explicit ref and include its absolute path in the brief.
 
 **Subagent parameters.** Pass only `agent`, `task`, and `agentScope`. Workers run locally, so give each one its own worktree or output path. Keep the brief. If the `subagent` extension is not loaded or the project is not trusted, run the workers yourself, one after another.
 

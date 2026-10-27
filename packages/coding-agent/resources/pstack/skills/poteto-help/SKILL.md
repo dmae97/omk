@@ -8,9 +8,9 @@ disable-model-invocation: true
 
 Answer the user's question about pstack, hand them a prompt they can send, and link the file the answer came from. For a help question, don't start the work. The user asked how, and a pstack run spends real tokens, so let them send the prompt.
 
-A message that asks for work, such as "use pstack to fix this bug", is not a help question. Read [`poteto-mode`](../poteto-mode/SKILL.md), do the work under it, and mention once that a Custom Mode keeps it on.
+A message that asks for work, such as "use pstack to fix this bug", is not a help question. Read [`poteto-mode`](../poteto-mode/SKILL.md), do the work under it, and invoke the skill again at the start of each new task.
 
-This file maps questions to the skills and guide pages that hold the answers. Those files own the details. Read the file you route to before you quote it, and trust it when it disagrees with this map. The links here point into the installed plugin, which the user may not be able to open, so give the user the file's public copy: `https://github.com/backnotprop/pstack/` followed by its path.
+This file maps questions to the skills and guide pages that hold the answers. Those files own the details. Read the file you route to before you quote it, and trust it when it disagrees with this map. The links here point into the installed plugin, which the user may not be able to open, so give the user the file's public copy: `https://github.com/dmae97/omk/blob/main/packages/coding-agent/resources/pstack/` followed by its bundle-relative path. For unmerged changes, cite the local file instead of claiming the public copy contains them.
 
 ## Find out what they need
 
@@ -36,7 +36,7 @@ When the model rule is missing and it matters, ask whether the user wants to pic
 ## Get set up
 
 1. Install with `omk init --project`, which writes the bundled pstack resources into the project's `.omk/` directory without fetching or running upstream code.
-2. Run [`/skill:pstack-setup-pstack`](../setup-pstack/SKILL.md). It asks for a reasoning budget, maps a model to each role, and writes a rule. The rule applies to new chats. Then it offers once each to generate a verification skill and a formal verification skill for the project, unless the project already has one.
+2. Run [`/skill:pstack-setup-pstack`](../setup-pstack/SKILL.md). It records a recommended reasoning budget and role preferences in a settings file. Skills read it at task start; it does not automatically switch the session model or effort. Then it offers once each to generate a verification skill and a formal verification skill for the project, unless the project already has one.
 3. Start a real task with `/skill:pstack-poteto-mode`, a goal, and a check that can pass or fail.
 
 Installing changes nothing until the user invokes a skill. Only `/skill:pstack-setup-pstack` loads from the user's words. The [poteto-mode](../poteto-mode/SKILL.md) and [setup-pstack](../setup-pstack/SKILL.md) have the details. Offer to word their first prompt with them, per [`references/prompting.md`](references/prompting.md).
@@ -51,11 +51,7 @@ The OMK adapter section of [`poteto-mode`](../poteto-mode/SKILL.md) maps subagen
 
 `/skill:pstack-poteto-mode` matches the task to a playbook, copies the playbook's steps into the todo list, and runs the other skills as the steps need them. A step it skips stays in the list as `skip: <reason>`. A good prompt states the goal and how to tell it's done. It doesn't list skills, because a hand-written sequence tends to drop or reorder steps the playbook would keep. Read [`references/prompting.md`](references/prompting.md) before you help word one. [poteto-mode](../poteto-mode/SKILL.md) has examples.
 
-Whether `/skill:pstack-poteto-mode` stays on depends on how the user starts it:
-
-- Enter on `/skill:pstack-poteto-mode` attaches the skill to one message. It fades as the chat moves on.
-- Option+Enter on Mac or Alt+Enter on Windows, or Use as Mode from the skill entry, makes it a Custom Mode. It stays in context every turn until the user exits the mode, and it stays out of casual turns.
-- Start each new task with `/skill:pstack-poteto-mode`.
+Start each new task with `/skill:pstack-poteto-mode`. OMK loads the named skill for that request. Installing pstack does not activate a persistent mode or change keyboard bindings.
 
 Link the [Agent Skills format](https://agentskills.io) when this comes up. Mid-chat, "new task" makes the mode match a fresh playbook. `/skill:pstack-poteto-mode` already uses `pstack-poteto-agent` for the subagents its playbook steps spawn. To get the same style from a subagent of your own, spawn it with `agent: "pstack-poteto-agent"`.
 
@@ -77,8 +73,8 @@ The default answer is `/skill:pstack-poteto-mode`, which runs most of the others
 | Know what a small diff could break outside itself | [`/skill:pstack-blast-radius`](../blast-radius/SKILL.md) |
 | Settle types and module shape before code that crosses a function boundary | [`/skill:pstack-architect`](../architect/SKILL.md) |
 | Get several attempts at one brief, merged into the best one | [`/skill:pstack-arena`](../arena/SKILL.md) |
-| Run parallel checks over slices, or race workers, as cloud agents | [`/skill:pstack-swarm`](../swarm/SKILL.md) |
-| Have different models review a diff and try to break it | [`/skill:pstack-interrogate`](../interrogate/SKILL.md) |
+| Run local checks over slices, or race isolated workers | [`/skill:pstack-swarm`](../swarm/SKILL.md) |
+| Have independent reviewers inspect a diff and try to break it | [`/skill:pstack-interrogate`](../interrogate/SKILL.md) |
 | Fix a bug test-first when a cheap local test exists | [`/skill:pstack-tdd`](../tdd/SKILL.md) |
 | Apply TypeScript rules to `.ts` or `.tsx` work | [`/skill:pstack-typescript-best-practices`](../typescript-best-practices/SKILL.md) |
 | Strip comments before review, using a reviewer that didn't write them | [`/skill:pstack-no-comments`](../no-comments/SKILL.md) |
@@ -138,13 +134,13 @@ Principles are one-rule skills that `/skill:pstack-poteto-mode` reads and cites 
 
 | Symptom | Fix |
 |---|---|
-| The mode stopped applying after a few turns | It was started with Enter. Start it as a Custom Mode, or start each task with `/skill:pstack-poteto-mode`. |
+| The mode stopped applying after a few turns | Start each new task with `/skill:pstack-poteto-mode`. |
 | A question got treated as the next step of the last task | Say "new task", or say the turn doesn't need the mode. |
-| A new model choice had no effect | The rule from `/skill:pstack-setup-pstack` applies to new chats. Start one. |
+| A new model choice had no effect | Role preferences cannot switch the session model. Select it with `/model`; delegates inherit it. |
 | Runs cost more than expected | See the cost paragraph under Get set up. |
 | A skill didn't load on its own | Only `/skill:pstack-setup-pstack` loads from the user's words. The others load when the user types them or when `/skill:pstack-poteto-mode` runs them, and it doesn't run every skill. |
-| Parallel agents overwrote each other | Give each agent its own worktree, or run them as cloud agents, which each get their own machine. |
-| An overnight run moved but finished nothing | A timed wait loop needs a check that can pass or fail, not a duration. See [guide page 7](../../docs/guide/07-overnight.md). |
+| Parallel agents overwrote each other | Give each writer its own local worktree or output directory. |
+| An overnight run moved but finished nothing | A timed wait loop needs a check that can pass or fail, not a duration. See [Autonomous run](../poteto-mode/playbooks/autonomous-run.md). |
 | The reply claims success from a green build | Ask for the real command, flow, stored value, or profile. That's the prove-it-works principle. |
 
 For a run that drifts, [`references/prompting.md`](references/prompting.md) has one-line steers. [recipes](references/recipes.md) has more pitfalls and the recipes worth copying.

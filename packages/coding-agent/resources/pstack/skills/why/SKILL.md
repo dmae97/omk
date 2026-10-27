@@ -8,9 +8,9 @@ disable-model-invocation: true
 
 Investigate the motivation and intent behind code. The companion `how` skill answers what the code does and how it works. `why` answers what forces led to its shape.
 
-Each spawn below names a role line in the pstack settings file (`~/.omk/agent/pstack-models.md`, written by `/skill:pstack-setup-pstack`) and a default. Set `model` to that line's value, or to the default if the file or the line is missing. Leave `model` unset when the value is `auto` or `inherit-parent`. If a configured model is not in the OMK catalog, run that seat on the session model and say so; never claim a cross-model seat you did not run. OMK subagents inherit the session model and effort; pass no model, effort, or speed fields.
+Each spawn below names a role line in the pstack settings file (`~/.omk/agent/pstack-models.md`, written by `/skill:pstack-setup-pstack`) and a default. Use that entry to name the role, but inherit the session model even when the entry names another catalog model. If a configured model is not in the OMK catalog, run that seat on the session model and say so; never claim a cross-model seat you did not run. OMK subagents inherit the session model and effort; pass no model, effort, or speed fields.
 
-Every spawn is `generalPurpose` with `readonly: false` (agent mode). **Do not use readonly/Ask mode.** It strips MCP access, which disables the MCP-backed investigators and the synthesizer's citation spot-checks. Investigators still shouldn't write anything.
+Use the registered OMK agent with an investigation-only brief. Do not pass read-only mode or general-purpose type fields from another harness. Check which MCP tools the delegate actually has; unavailable tools are a reported coverage gap. Investigators should not write anything.
 
 ## Operating Posture
 
@@ -53,7 +53,7 @@ Each investigator's prompt is `references/investigator-prompt.md` filled in, plu
 - `references/sources/incident-postmortem.md` **if the target code looks defensive** (null checks, retry logic, timeout handling, rate limiting, feature flags, egress guards, OOM handlers)
 - the code anchor and the user's original question
 
-**Subagent tool.** Spawns in this skill use OMK's `subagent` extension. Call it with `agent`, `task`, and `agentScope`, and use `tasks: [{agent, task}, ...]` for a parallel fan-out. Keep the prompt and the model. Drop parameters your tool doesn't have. If the `subagent` extension is not loaded or the project is not trusted, run each investigator yourself, one after another.
+**Subagent tool.** Spawns in this skill use OMK's `subagent` extension. Call it with `agent`, `task`, and `agentScope`, and use `tasks: [{agent, task}, ...]` for a parallel fan-out. Keep the prompt and inherit the session model. Pass no model, effort, or speed fields. If the `subagent` extension is not loaded or the project is not trusted, run each investigator yourself, one after another.
 
 ### Investigator roster, one per available evidence category
 
