@@ -42,7 +42,10 @@
 		"transport",
 		"state-management"
 	],
-	"author": "Mario Zechner",
+	"author": "Geunbin Yu",
+	"contributors": [
+		"Mario Zechner"
+	],
 	"license": "MIT",
 	"repository": {
 		"type": "git",
