@@ -95,3 +95,7 @@ f9d688d57766f3c4d72b592cc25ea3881bebf46d:packages/ai/scripts/generate-models.ts:
 f9d688d57766f3c4d72b592cc25ea3881bebf46d:packages/ai/scripts/generate-models.ts:generic-api-key:99
 fc04fb0ca4873456d21bb575d8184d3bddfaa7d2:packages/ai/src/utils/oauth/xai-oauth.ts:generic-api-key:20
 fc5d8b888859e92447babbccf8c814d0060a7aeb:packages/ai/test/issue-1846-repro.test.ts:generic-api-key:10
+c180835e7096d6c6d65222438e57db543ec187a7:packages/coding-agent/test/evidence-command.test.ts:curl-auth-header:21
+c180835e7096d6c6d65222438e57db543ec187a7:packages/coding-agent/test/evidence-command.test.ts:curl-auth-header:26
+c180835e7096d6c6d65222438e57db543ec187a7:packages/coding-agent/test/evidence-receipt.test.ts:curl-auth-header:410
+c180835e7096d6c6d65222438e57db543ec187a7:packages/coding-agent/test/evidence-receipt.test.ts:curl-auth-header:415
