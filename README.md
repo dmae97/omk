@@ -490,7 +490,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.9](.github/RELEASE_NOTES_v1.5.9.md)
+- [Release notes for v1.5.10](.github/RELEASE_NOTES_v1.5.10.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -563,6 +563,16 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v1.5.10
+
+### Fixed
+
+- Bound adaptive-effort tool-call deduplication state. If its limit is reached, the adaptive wrapper passes through the configured reasoning effort for the rest of its lifetime; other limits may still apply.
+- A compaction is no longer stamped earlier than the messages it covers when the wall clock steps backward (observed on WSL2 as ~6.8 second resyncs). Previously the compacted history's old usage still counted after compaction, so the next prompt was rejected with `context_input_capacity_exceeded`. The compaction timestamp now follows the newest message on its branch for steps up to one minute.
+- Usage estimates, input admission and compaction gates now use active-branch entry order to distinguish covered messages from new responses. Assistant usage and overflow errors arriving after compaction while the wall clock is still recovering are no longer discarded as stale; repeated compactions are distinguished by entry ID even when their timestamps match.
+
+Release notes live in [RELEASE_NOTES_v1.5.10.md](.github/RELEASE_NOTES_v1.5.10.md).
+
 ## Release v1.5.9
 
 ### Added
@@ -619,29 +629,6 @@ With all new flags off, behavior is the same as 1.5.7.
 - `AGENTS.md` lists the goal autonomy flag.
 
 Release notes live in [RELEASE_NOTES_v1.5.8.md](.github/RELEASE_NOTES_v1.5.8.md).
-
-## Release v1.5.7
-
-### Added
-
-- Structured diagnostics after `edit` and `write` behind `OMK_EDIT_DIAGNOSTICS` (flag, default off). Diagnostics are skipped when remote `operations` are passed (#250).
-- Head plus tail bash output behind `OMK_EXEC_TRUNCATE_MIDDLE` (flag, default off) (#246).
-- A `session_info` line in JSON output behind `OMK_JSON_SESSION_INFO` (flag, default off) (#244).
-
-With all three flags off, behavior is the same as 1.5.6.
-
-### Fixed
-
-- Bash output keeps the full 50KB tail when one long line spans several chunks (#238).
-
-### Changed
-
-- Bench tooling: an ATIF trajectory exporter in `scripts/bench/atif-export.mjs` (#239), which also maps seq 2+ session-info lines (#251).
-- Design specs added, not implemented: 113 head+tail bash output (#245), 114 indent-insensitive edit matching (#249).
-- `AGENTS.md` records the autonomous development mode and the patch-release order (#241, #247).
-- Pi inventory tests cover `.mts`, `.cts`, `.tsx` and `.mjs` discovery (#236).
-
-Release notes live in [RELEASE_NOTES_v1.5.7.md](.github/RELEASE_NOTES_v1.5.7.md).
 
 <!-- releases:end -->
 
