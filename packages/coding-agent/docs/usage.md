@@ -145,7 +145,7 @@ changes/unavailability, forced masking, narrow-terminal wrapping and theme chang
 
 ### Durable Goals
 
-Use `/goal <objective>` to create or update the durable goal for the current working directory; `/goal` without arguments shows its status. `/goal verify <command>` approves an acceptance check: it runs after each settled turn, and the goal completes only when the check passes on the current workspace. See [Run Protocol](run-protocol.md#durable-goal-lifecycle) for the authoritative persistence, round-limit, continuation, acceptance, and SDK lifecycle rules.
+Use `/goal <objective>` to create or update the durable goal for the current working directory; `/goal` without arguments shows its status. `/goal verify <command>` approves an acceptance check: it runs after each settled turn, and the goal completes only when the check passes on the current workspace. `/goal verify` with no command re-runs the approved check. Passing `--reuse` skips that run when the passing receipt in the current goal generation still matches the workspace; `--force` forces a fresh run even then. Reuse is opt-in because an acceptance result can depend on more than file contents. See [Run Protocol](run-protocol.md#durable-goal-lifecycle) for the authoritative persistence, round-limit, continuation, acceptance, and SDK lifecycle rules.
 
 ## Built-in Harness Safeguards
 

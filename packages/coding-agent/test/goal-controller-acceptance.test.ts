@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -666,5 +666,67 @@ describe("spec 094 acceptance diagnostics in the repair follow-up", () => {
 		const on = await failOnce("1");
 		expect(on.h.messages[0]).toContain("\nmissing-feature\n</acceptance-diagnostic>");
 		expect(on.h.messages[0]).not.toContain("Full output:");
+	});
+});
+
+describe("acceptance receipt reuse on /goal verify", () => {
+	function counterFile(): { dir: string; file: string; count: () => number } {
+		const dir = realpathSync(mkdtempSync(join(tmpdir(), "omk-goal-reuse-")));
+		roots.push(dir);
+		const file = join(dir, "count.txt");
+		writeFileSync(file, "");
+		return {
+			dir,
+			file,
+			count: () =>
+				readFileSync(file, "utf8")
+					.split("\n")
+					.filter((line: string) => line === "x").length,
+		};
+	}
+
+	it("skips an unchanged passing check, and --force runs it again", async () => {
+		const cwd = gitRepo();
+		const counter = counterFile();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal(`verify echo x >> ${counter.file}`);
+		expect(counter.count()).toBe(1);
+
+		await h.goal("verify");
+		expect(counter.count()).toBe(2);
+
+		await h.goal("verify --reuse");
+		expect(counter.count()).toBe(2);
+		expect(lastNotice(h)).toContain("acceptance already verified for this workspace state");
+
+		await h.goal("verify --force");
+		expect(counter.count()).toBe(3);
+		expect(lastNotice(h)).toContain("acceptance check passed");
+	});
+
+	it("runs the check again when the workspace changed", async () => {
+		const cwd = gitRepo();
+		const counter = counterFile();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal(`verify echo x >> ${counter.file}`);
+		expect(counter.count()).toBe(1);
+
+		writeFileSync(join(cwd, "app.txt"), "v2\n");
+		await h.goal("verify --reuse");
+		expect(counter.count()).toBe(2);
+	});
+
+	it("runs a newly approved command instead of reusing the old receipt", async () => {
+		const cwd = gitRepo();
+		const counter = counterFile();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal(`verify echo x >> ${counter.file}`);
+		expect(counter.count()).toBe(1);
+
+		await h.goal(`verify echo x >> ${counter.file} && echo x >> ${counter.file}`);
+		expect(counter.count()).toBe(3);
 	});
 });

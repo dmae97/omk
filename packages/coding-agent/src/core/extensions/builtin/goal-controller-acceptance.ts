@@ -14,8 +14,8 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "..
 import { evaluateCommandGate, getAssumeYesConfirmPolicies } from "./command-safety-gate.ts";
 import { repairFollowUp } from "./goal-acceptance-repair.ts";
 import { type GoalAcceptanceTestHooks, GoalTaskFacts } from "./goal-acceptance-task-facts.ts";
-import { parseRequiredToolsDeclaration } from "./goal-controller-required-tools.ts";
 import { displayCommand, displayError, failureText, receiptLabel, renderGoal } from "./goal-controller-text.ts";
+import * as verifyArgs from "./goal-controller-verify-args.ts";
 
 type ContinueGoal = (advanced: DurableGoalSnapshot, detail: string) => void;
 type RunOutcome = GoalCheckOutcome & { readonly artifact?: OutputArtifact };
@@ -69,7 +69,8 @@ export class GoalAcceptanceFlow {
 			);
 		}
 		// Spec 104 (flag on only): an explicit `--requires` declaration; nothing is inferred.
-		const { command, tools } = parseRequiredToolsDeclaration(text.slice("verify".length).trim());
+		const args = verifyArgs.parseVerifyCommandText(text);
+		const { command, tools } = args;
 		const previous = this.acceptance.approvedCommand(existing);
 		const previousTools = this.acceptance.requiredTools(existing);
 		if (command.length > 0) {
@@ -90,6 +91,10 @@ export class GoalAcceptanceFlow {
 				"invalid-input",
 				"no acceptance check is approved in this session; use /goal verify <command>",
 			);
+		}
+		if (verifyArgs.shouldReuseVerifiedCheck(this.acceptance, existing, ctx.cwd, args)) {
+			ctx.ui.notify(verifyArgs.acceptanceReuseMessage(renderGoal(existing, this.line(existing))), "info");
+			return;
 		}
 		let outcome: GoalCheckOutcome;
 		try {
