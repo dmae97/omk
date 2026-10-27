@@ -39,6 +39,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Checkout release tooling
+        # The tag being recovered may predate the manifest and reconciliation
+        # scripts. Use the workflow ref (main for workflow_dispatch) for tooling,
+        # while the first checkout above still builds the tagged source.
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.ref_name }}
+          path: .omk-release-tooling
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Verify source matches release tag
         run: |
           if ! git show-ref --verify --quiet "refs/tags/${RELEASE_TAG}"; then
@@ -76,11 +87,20 @@ jobs:
       - name: Build binaries
         run: ./scripts/build-binaries.sh
 
-      - name: Generate SHA256SUMS and stage the installer
+      - name: Stage installer and generate release manifest
         working-directory: packages/coding-agent/binaries
+        env:
+          BUN_VERSION: 1.3.10
         run: |
           cp ../../../scripts/install.sh install.sh
-          sha256sum omk-*.tar.gz omk-*.zip install.sh > SHA256SUMS
+          SOURCE_SHA="$(git -C ../../.. rev-parse "${RELEASE_TAG}^{commit}")"
+          node ../../../.omk-release-tooling/scripts/release-manifest.mjs \
+            --bundle . \
+            --tag "${RELEASE_TAG}" \
+            --source-sha "${SOURCE_SHA}" \
+            --write
+          test -s release-manifest.json
+          test -s SHA256SUMS
           cat SHA256SUMS
 
       - name: Release notes for this version
@@ -153,6 +173,15 @@ jobs:
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
+      - name: Checkout release tooling
+        # actions/checkout v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.ref_name }}
+          path: .omk-release-tooling
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Download release bundle
         # actions/download-artifact v4.3.0
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -160,28 +189,16 @@ jobs:
           name: release-binaries-${{ env.RELEASE_TAG }}
           path: /tmp/omk-release
 
-      - name: Create GitHub Release and upload binaries
+      - name: Reconcile GitHub Release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "GitHub Release ${RELEASE_TAG} already exists;" \
-              "skipping binary upload."
-            exit 0
-          fi
-
-          cd /tmp/omk-release
-          gh release create "${RELEASE_TAG}" \
-            --title "${RELEASE_TAG}" \
-            --notes-file release-notes.md \
-            omk-darwin-arm64.tar.gz \
-            omk-darwin-x64.tar.gz \
-            omk-linux-x64.tar.gz \
-            omk-linux-arm64.tar.gz \
-            omk-windows-x64.zip \
-            omk-windows-arm64.zip \
-            SHA256SUMS \
-            install.sh
+          node .omk-release-tooling/scripts/reconcile-release.mjs \
+            --tag "${RELEASE_TAG}" \
+            --bundle /tmp/omk-release \
+            --repo "${GH_REPO}" \
+            --verify-downloads \
+            --apply
 
   publish-npm:
     # The runtime tests require unprivileged user/network namespaces.
