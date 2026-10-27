@@ -4,14 +4,8 @@
  * unset or "0" keeps today's follow-up byte for byte. The diagnostic is text in
  * the follow-up only: it never feeds the gate, completion or approvals.
  */
-import { buildDiagnosticExcerpt } from "./goal-acceptance-diagnostic-excerpt.ts";
 import { AnchorScanner } from "./goal-acceptance-diagnostic-scanner.ts";
-import {
-	GOAL_DIAGNOSTIC_TAG,
-	GOAL_DIAGNOSTIC_TRUST,
-	sanitizeDiagnosticText,
-	utf8Bytes,
-} from "./goal-acceptance-diagnostic-text.ts";
+import { sanitizeDiagnosticText, utf8Bytes } from "./goal-acceptance-diagnostic-text.ts";
 import type { DiagnosticAnchor, DiagnosticOutput } from "./goal-acceptance-diagnostic-types.ts";
 
 export { buildDiagnosticExcerpt } from "./goal-acceptance-diagnostic-excerpt.ts";
