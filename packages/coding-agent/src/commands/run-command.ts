@@ -1,6 +1,7 @@
 import { mayBeRunCommand } from "../cli/subcommand-words.ts";
 import type { VerifiedRunRuntime } from "../core/verified-run/session-port.ts";
 import { runAdaptOrchDoctorCli } from "./adaptorch-doctor-cli.ts";
+import { runCodexUltraCommand } from "./codex-ultra.ts";
 import { runDoctorProviderCli } from "./doctor-provider-cli.ts";
 import { runOnboardDoctorCli } from "./onboard-doctor-cli.ts";
 import { runProviderAdoptCli } from "./provider-adopt-cli.ts";
@@ -15,6 +16,7 @@ import { runVerifiedRunCli } from "./verified-run-cli.ts";
 type CliOutcome = { readonly handled: boolean; readonly exitCode: number };
 
 const COMMANDS: ReadonlyArray<(args: string[]) => CliOutcome | Promise<CliOutcome>> = [
+	runCodexUltraCommand,
 	runSessionDoctorCli,
 	runDoctorProviderCli,
 	runResourceDoctorCli,
