@@ -62,7 +62,12 @@ describe("OMK_TASK_RESULT flag (spec 096)", () => {
 		expect(zero.events).toEqual(off.events);
 		expect(zero.settled).toEqual(off.settled);
 		expect(on.settled).toEqual(off.settled);
-		// Emission is deferred until the agent-session wiring lands; until then on == off.
-		expect(on.events).toEqual(off.events);
+		// Flag on adds exactly one new event right after prompt_settled; everything else is unchanged.
+		const settledAt = off.events.indexOf("prompt_settled");
+		expect(on.events).toEqual([
+			...off.events.slice(0, settledAt + 1),
+			"task_result",
+			...off.events.slice(settledAt + 1),
+		]);
 	});
 });

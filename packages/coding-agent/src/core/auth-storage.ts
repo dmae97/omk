@@ -69,6 +69,8 @@ type LockResult<T> = {
 };
 
 const AUTH_FILE_WRITE_OPTIONS = { encoding: "utf-8", mode: 0o600 } as const;
+// Shared by sync and async holders: async refreshes mtime every stale/2 (15 s), so a 10 s sync default took live locks.
+const AUTH_LOCK_STALE_MS = 30_000;
 
 export interface AuthStorageBackend {
 	withLock<T>(fn: (current: string | undefined) => LockResult<T>): T;
@@ -103,7 +105,7 @@ export class FileAuthStorageBackend implements AuthStorageBackend {
 
 		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 			try {
-				return lockfile.lockSync(path, { realpath: false });
+				return lockfile.lockSync(path, { realpath: false, stale: AUTH_LOCK_STALE_MS });
 			} catch (error) {
 				const code =
 					typeof error === "object" && error !== null && "code" in error
@@ -113,10 +115,8 @@ export class FileAuthStorageBackend implements AuthStorageBackend {
 					throw error;
 				}
 				lastError = error;
-				const start = Date.now();
-				while (Date.now() - start < delayMs) {
-					// Sleep synchronously to avoid changing callers to async.
-				}
+				// Sleep without spinning; the wait is monotonic, so a wall-clock step cannot stretch it.
+				Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
 			}
 		}
 
@@ -166,7 +166,7 @@ export class FileAuthStorageBackend implements AuthStorageBackend {
 					maxTimeout: 10000,
 					randomize: true,
 				},
-				stale: 30000,
+				stale: AUTH_LOCK_STALE_MS,
 				onCompromised: (err) => {
 					lockCompromised = true;
 					lockCompromisedError = err;
@@ -448,6 +448,7 @@ export class AuthStorage {
 
 				if (matchIndex >= 0) {
 					const current_ = accounts[matchIndex];
+					// wall-clock: expires is a persisted absolute expiry shared with other sessions
 					if (current_ && typeof current_.expires === "number" && current_.expires > Date.now()) {
 						this.data = currentData;
 						return {
@@ -706,6 +707,7 @@ export class AuthStorage {
 		rejectedApiKey?: string,
 	): Promise<{ apiKey: string; newCredentials: OAuthCredentials } | null> {
 		const now = Date.now();
+		// wall-clock: account.expires is a persisted absolute expiry
 		if (now >= account.expires) {
 			return await getOAuthApiKey(providerId, { [providerId]: account });
 		}

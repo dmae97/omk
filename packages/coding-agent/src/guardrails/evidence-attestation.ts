@@ -1,7 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type {
 	CommandHmacBinding,
-	CommandRedactionSummary,
 	EvidenceCommandDescriptor,
 	ReplayEvent,
 	ReplayLedgerHead,
@@ -89,47 +88,28 @@ export function createCommandHmacBinder(): CommandHmacBinder {
 	});
 }
 
-const processCommandHmacBinder = createCommandHmacBinder();
-
-/** Compatibility binder for callers that do not need later strict verification. */
-export function bindEvidenceCommandHmac(command: EvidenceCommandDescriptor): CommandHmacBinding {
-	return processCommandHmacBinder.bind(command);
-}
-
 export interface TrustBindingIssue {
 	readonly detail: string;
 	readonly hard: boolean;
 }
 
 const COMMAND_ISSUES = {
-	missing: { detail: "is missing", hard: false },
 	verifier: { detail: "verifier is missing", hard: false },
 	invalid: { detail: "is invalid", hard: true },
-	redaction: { detail: "does not match its redaction", hard: true },
 } as const satisfies Record<string, TrustBindingIssue>;
 
+/** Verify a legacy command binding. New receipts do not create bindings. */
 export function verifyCommandAttestation(input: {
 	readonly receiptId: string;
 	readonly binding: CommandHmacBinding | undefined;
-	readonly persistedCommand: EvidenceCommandDescriptor;
-	readonly persistedSummary: CommandRedactionSummary | undefined;
 	readonly binder: Pick<CommandHmacBinder, "verify"> | undefined;
 	readonly resolveCommand: ((receiptId: string) => EvidenceCommandDescriptor | undefined) | undefined;
-	readonly redact: (command: EvidenceCommandDescriptor) => {
-		readonly command: EvidenceCommandDescriptor;
-		readonly summary: CommandRedactionSummary;
-	};
 }): TrustBindingIssue | undefined {
-	if (input.binding === undefined) return COMMAND_ISSUES.missing;
+	if (input.binding === undefined) return undefined;
 	if (!input.binder || !input.resolveCommand) return COMMAND_ISSUES.verifier;
 	try {
 		const command = input.resolveCommand(input.receiptId);
-		if (command === undefined || !input.binder.verify(command, input.binding)) return COMMAND_ISSUES.invalid;
-		const redacted = input.redact(command);
-		return JSON.stringify(redacted.command) === JSON.stringify(input.persistedCommand) &&
-			JSON.stringify(redacted.summary) === JSON.stringify(input.persistedSummary)
-			? undefined
-			: COMMAND_ISSUES.redaction;
+		return command !== undefined && input.binder.verify(command, input.binding) ? undefined : COMMAND_ISSUES.invalid;
 	} catch {
 		return COMMAND_ISSUES.invalid;
 	}

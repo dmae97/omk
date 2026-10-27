@@ -2752,6 +2752,70 @@ describe("Editor component", () => {
 			assert.strictEqual(editor.getText(), "/load-skills s");
 		});
 
+		for (const key of ["\t", "\r"]) {
+			it(`rejects a stale completion accepted with ${key === "\t" ? "Tab" : "Enter"}`, async () => {
+				const editor = new Editor(createTestTUI(), defaultEditorTheme);
+				let finishNext: ((value: null) => void) | undefined;
+				let calls = 0;
+				const provider: AutocompleteProvider = {
+					getSuggestions: async () => {
+						calls++;
+						if (calls > 1)
+							return new Promise<null>((resolve) => {
+								finishNext = resolve;
+							});
+						return {
+							items: [
+								{ value: "two", label: "two" },
+								{ value: "three", label: "three" },
+							],
+							prefix: "t",
+						};
+					},
+					applyCompletion,
+				};
+				editor.setAutocompleteProvider(provider);
+				editor.setText("/cmd t");
+				editor.handleInput("\t");
+				await flushAutocomplete();
+				assert.strictEqual(editor.isShowingAutocomplete(), true);
+
+				editor.handleInput("w");
+				editor.handleInput(key);
+				assert.strictEqual(editor.getText(), "/cmd tw");
+				finishNext?.(null);
+				await flushAutocomplete();
+			});
+		}
+
+		it("recovers the request queue after a provider rejection", async () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			let calls = 0;
+			const provider: AutocompleteProvider = {
+				getSuggestions: async () => {
+					calls++;
+					if (calls === 1) throw new Error("provider unavailable");
+					return {
+						items: [
+							{ value: "two", label: "two" },
+							{ value: "three", label: "three" },
+						],
+						prefix: "t",
+					};
+				},
+				applyCompletion,
+			};
+			editor.setAutocompleteProvider(provider);
+			editor.setText("/cmd t");
+			editor.handleInput("\t");
+			await flushAutocomplete();
+
+			editor.handleInput("\t");
+			await flushAutocomplete();
+			assert.strictEqual(calls, 2);
+			assert.strictEqual(editor.isShowingAutocomplete(), true);
+		});
+
 		it("does not show argument completions when command has no argument completer", async () => {
 			const editor = new Editor(createTestTUI(), defaultEditorTheme);
 			const provider = new CombinedAutocompleteProvider(

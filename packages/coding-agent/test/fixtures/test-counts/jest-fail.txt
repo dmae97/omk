@@ -1,0 +1,22 @@
+FAIL ./b.test.js
+  ✓ ok (1 ms)
+  ✕ broken (3 ms)
+
+  ● broken
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2
+    Received: 1
+
+    > 1 | test("ok", () => {}); test("broken", () => expect(1).toBe(2));
+        |                                                      ^
+      2 |
+
+      at Object.toBe (b.test.js:1:54)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 passed, 2 total
+Snapshots:   0 total
+Time:        0.225 s
+Ran all test suites matching /b.test.js/i.

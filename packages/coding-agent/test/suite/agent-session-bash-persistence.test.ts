@@ -2,9 +2,16 @@ import { Buffer } from "node:buffer";
 import type { AgentTool } from "omk-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "omk-ai";
 import { Type } from "typebox";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BashOperations } from "../../src/core/tools/bash.ts";
 import { createHarness, type Harness } from "./harness.ts";
+
+beforeEach(() => {
+	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0"); // characterizes the pre-106 path; lifecycle defaults on
+});
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
 
 function getEntryTypes(harness: Harness): string[] {
 	return harness.sessionManager.getEntries().map((entry) => entry.type);

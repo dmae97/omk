@@ -17,6 +17,7 @@ export function uuidv7(): string {
 	fillRandomBytes(random);
 	const timestamp = Date.now();
 
+	// wall-clock: UUIDv7 embeds Unix milliseconds; this comparison keeps ids ordered when the clock steps back
 	if (timestamp > lastTimestamp) {
 		sequence = random[6] * 0x1000000 + random[7] * 0x10000 + random[8] * 0x100 + random[9];
 		lastTimestamp = timestamp;

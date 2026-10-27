@@ -1,0 +1,3 @@
+{"type":"session","version":3,"id":"sb","timestamp":"2026-01-01T00:00:00Z","cwd":"/fake"}
+{"type":"message","id":"x","parentId":null,"timestamp":"t","message":{"role":"toolResult","toolCallId":"c","toolName":"write","content":[{"type":"text","text":"Operation aborted"}],"isError":true,"timestamp":0}}
+{"type":"message","id":"x","parentId":null,"timestamp":"t","message":{"role":"toolResult","toolCallId":"c","toolName":"edit","content":[{"type":"text","text":"ok"}],"isError":false,"timestamp":0,"details":{"omk":{"schema":"tool-result/v2","synthetic":false,"disposition":"completed","executionStarted":true}}}}

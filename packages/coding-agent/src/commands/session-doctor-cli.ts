@@ -13,7 +13,6 @@ import {
 	statSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
-import lockfile from "proper-lockfile";
 import { atomicRewriteFileSync } from "../core/atomic-session-file.ts";
 import { type DecideCompactionCommitInput, validateCompactionEnvelope } from "../core/compaction/transaction.ts";
 import {
@@ -35,6 +34,11 @@ import {
 } from "../core/session-doctor-plan.ts";
 import { inspectSessionIntegrity, type SessionIntegrityReport } from "../core/session-integrity.ts";
 import { SessionManager } from "../core/session-manager.ts";
+import {
+	acquireSessionOwnerLeaseSync,
+	type SessionOwnerLease,
+	SessionOwnerLeaseHeldError,
+} from "../core/session-owner-lease.ts";
 import {
 	decideSessionPathAccess,
 	type SessionPathAccessInput,
@@ -71,7 +75,7 @@ export interface SessionDoctorCliResult {
 	readonly normalizedChecks: readonly SessionDoctorNormalizedCheck[];
 	readonly appliedActions: number;
 	readonly preconditionSha256: string;
-	readonly errorCode?: "precondition_changed" | "repair_failed";
+	readonly errorCode?: "precondition_changed" | "repair_failed" | "session_in_use";
 }
 
 export interface SessionDoctorCliBatchResult {
@@ -350,34 +354,29 @@ function applySessionActions(
 			action.kind === "quarantine_session_trailing_fragment" || action.kind === "append_synthetic_tool_result",
 	);
 	if (sessionActions.length === 0) return 0;
-	const release = lockfile.lockSync(sessionPath, { realpath: false });
-	try {
-		const current = new Uint8Array(readFileSync(sessionPath));
-		if (sha256(current) !== preconditionSha256) throw new Error("precondition_changed");
-		const prefix = current.subarray(0, report.completePrefix.byteCount);
-		if (report.trailingFragment) {
-			writeQuarantineBytesDurably(`${sessionPath}.quarantine-${repairId}`, current.subarray(prefix.byteLength));
-		}
-		const records = parsePrefixEntries(prefix);
-		let parentId = report.activeLeafId;
-		for (const action of sessionActions) {
-			if (action.kind !== "append_synthetic_tool_result") continue;
-			let id = `doctor-${repairId.slice(0, 20)}-${action.sequence}`;
-			while (records.some((record) => record.id === id)) id = `${id}-x`;
-			records.push({
-				type: "message",
-				id,
-				parentId,
-				timestamp: new Date(now.getTime() + action.sequence).toISOString(),
-				message: action.message,
-			});
-			parentId = id;
-		}
-		atomicRewriteFileSync(sessionPath, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`);
-		return sessionActions.length;
-	} finally {
-		release();
+	const current = new Uint8Array(readFileSync(sessionPath));
+	if (sha256(current) !== preconditionSha256) throw new Error("precondition_changed");
+	const prefix = current.subarray(0, report.completePrefix.byteCount);
+	if (report.trailingFragment) {
+		writeQuarantineBytesDurably(`${sessionPath}.quarantine-${repairId}`, current.subarray(prefix.byteLength));
 	}
+	const records = parsePrefixEntries(prefix);
+	let parentId = report.activeLeafId;
+	for (const action of sessionActions) {
+		if (action.kind !== "append_synthetic_tool_result") continue;
+		let id = `doctor-${repairId.slice(0, 20)}-${action.sequence}`;
+		while (records.some((record) => record.id === id)) id = `${id}-x`;
+		records.push({
+			type: "message",
+			id,
+			parentId,
+			timestamp: new Date(now.getTime() + action.sequence).toISOString(),
+			message: action.message,
+		});
+		parentId = id;
+	}
+	atomicRewriteFileSync(sessionPath, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`);
+	return sessionActions.length;
 }
 
 function applyJournalActions(
@@ -391,26 +390,19 @@ function applyJournalActions(
 		(action) => action.kind === "quarantine_journal_trailing_fragment" || action.kind === "recover_run",
 	);
 	if (journalActions.length === 0) return 0;
-	const release = lockfile.lockSync(journalPath, { realpath: false });
-	try {
-		const current = new Uint8Array(readFileSync(journalPath));
-		if (sha256(current) !== preconditionSha256) throw new Error("precondition_changed");
-		const prefix = current.subarray(0, report.completePrefix.byteCount);
-		if (report.trailingByteCount > 0) {
-			writeQuarantineBytesDurably(`${journalPath}.quarantine-${repairId}`, current.subarray(prefix.byteLength));
-		}
-		const recovery = journalActions.find(
-			(action): action is Extract<SessionDoctorAction, { kind: "recover_run" }> => action.kind === "recover_run",
-		);
-		const suffix = recovery
-			? new TextEncoder().encode(`${serializeRunJournalLine(recovery.terminalRecord)}\n`)
-			: null;
-		const output = suffix ? Buffer.concat([Buffer.from(prefix), Buffer.from(suffix)]) : prefix;
-		atomicRewriteFileSync(journalPath, output);
-		return journalActions.length;
-	} finally {
-		release();
+	const current = new Uint8Array(readFileSync(journalPath));
+	if (sha256(current) !== preconditionSha256) throw new Error("precondition_changed");
+	const prefix = current.subarray(0, report.completePrefix.byteCount);
+	if (report.trailingByteCount > 0) {
+		writeQuarantineBytesDurably(`${journalPath}.quarantine-${repairId}`, current.subarray(prefix.byteLength));
 	}
+	const recovery = journalActions.find(
+		(action): action is Extract<SessionDoctorAction, { kind: "recover_run" }> => action.kind === "recover_run",
+	);
+	const suffix = recovery ? new TextEncoder().encode(`${serializeRunJournalLine(recovery.terminalRecord)}\n`) : null;
+	const output = suffix ? Buffer.concat([Buffer.from(prefix), Buffer.from(suffix)]) : prefix;
+	atomicRewriteFileSync(journalPath, output);
+	return journalActions.length;
 }
 
 function applyCompactionActions(
@@ -421,22 +413,17 @@ function applyCompactionActions(
 ): number {
 	const abandon = actions.find((action) => action.kind === "abandon_stale_compaction");
 	if (!abandon) return 0;
-	const release = lockfile.lockSync(sidecarPath, { realpath: false });
-	try {
-		if (sha256(readFileSync(sidecarPath)) !== preconditionSha256) throw new Error("precondition_changed");
-		renameSync(sidecarPath, `${sidecarPath}.abandoned-${repairId}`);
-		if (process.platform !== "win32") {
-			const dirFd = openSync(dirname(sidecarPath), "r");
-			try {
-				fsyncSync(dirFd);
-			} finally {
-				closeSync(dirFd);
-			}
+	if (sha256(readFileSync(sidecarPath)) !== preconditionSha256) throw new Error("precondition_changed");
+	renameSync(sidecarPath, `${sidecarPath}.abandoned-${repairId}`);
+	if (process.platform !== "win32") {
+		const dirFd = openSync(dirname(sidecarPath), "r");
+		try {
+			fsyncSync(dirFd);
+		} finally {
+			closeSync(dirFd);
 		}
-		return 1;
-	} finally {
-		release();
 	}
+	return 1;
 }
 
 function refusedResult(
@@ -593,6 +580,19 @@ export async function runSessionDoctorCli(
 
 	overrides.beforeExecute?.();
 	let appliedActions = 0;
+	// A live session appends to the JSONL, run journal and compaction sidecar under its owner lease for its
+	// whole lifetime, so the repair takes that same lease: holding it excludes live sessions and other doctors.
+	let owner: SessionOwnerLease;
+	try {
+		owner = acquireSessionOwnerLeaseSync(sessionPath);
+	} catch (error) {
+		const result = refusedResult(
+			base,
+			error instanceof SessionOwnerLeaseHeldError ? "session_in_use" : "repair_failed",
+		);
+		writeLine(JSON.stringify(result, null, 2));
+		return { handled: true, exitCode: result.exitCode, result };
+	}
 	try {
 		appliedActions += applySessionActions(sessionPath, repairId, report, plan.actions, preconditionSha256, now);
 		if (journalBytes && journalReport) {
@@ -613,6 +613,8 @@ export async function runSessionDoctorCli(
 		const result = refusedResult(base, code);
 		writeLine(JSON.stringify(result, null, 2));
 		return { handled: true, exitCode: result.exitCode, result };
+	} finally {
+		owner.release();
 	}
 
 	const finalSession = inspectSessionIntegrity(readFileSync(sessionPath));

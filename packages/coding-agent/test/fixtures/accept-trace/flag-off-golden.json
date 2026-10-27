@@ -1,0 +1,18 @@
+{
+	"turns": "{\"schemaVersion\":\"omk-turn-metrics-2\",\"sessionId\":\"golden\",\"turnIndex\":0,\"startedAtEpochMs\":1800000000000,\"endedAtEpochMs\":1800000000000,\"durationMs\":0,\"toolCalls\":[],\"toolCallCount\":0,\"toolFailureCount\":0,\"provider\":\"anthropic\",\"model\":\"claude-sonnet-4-5\",\"stopReason\":\"stop\"}\n{\"schemaVersion\":\"omk-turn-metrics-2\",\"sessionId\":\"golden\",\"turnIndex\":0,\"startedAtEpochMs\":1800000000000,\"endedAtEpochMs\":1800000000000,\"durationMs\":0,\"toolCalls\":[],\"toolCallCount\":0,\"toolFailureCount\":0,\"provider\":\"anthropic\",\"model\":\"claude-sonnet-4-5\",\"usage\":{\"input\":10,\"output\":3,\"cacheRead\":0,\"cacheWrite\":0,\"costUsd\":0.001},\"stopReason\":\"stop\",\"purpose\":\"suggestion\",\"parentTurnIndex\":0,\"suggestionOutcome\":\"shown\"}\n{\"schemaVersion\":\"omk-turn-metrics-2\",\"sessionId\":\"golden\",\"turnIndex\":1,\"startedAtEpochMs\":1800000000000,\"endedAtEpochMs\":1800000000000,\"durationMs\":0,\"toolCalls\":[],\"toolCallCount\":0,\"toolFailureCount\":0,\"provider\":\"anthropic\",\"model\":\"claude-sonnet-4-5\",\"stopReason\":\"stop\"}\n{\"schemaVersion\":\"omk-turn-metrics-2\",\"sessionId\":\"golden\",\"turnIndex\":0,\"startedAtEpochMs\":1800000000000,\"endedAtEpochMs\":1800000000000,\"durationMs\":0,\"toolCalls\":[],\"toolCallCount\":0,\"toolFailureCount\":0,\"provider\":\"anthropic\",\"model\":\"claude-sonnet-4-5\",\"usage\":{\"input\":10,\"output\":3,\"cacheRead\":0,\"cacheWrite\":0,\"costUsd\":0.001},\"stopReason\":\"stop\",\"purpose\":\"suggestion\",\"parentTurnIndex\":0,\"suggestionOutcome\":\"shown\"}\n",
+	"files": [
+		"turns.jsonl"
+	],
+	"editor": [
+		"true|39|base",
+		"false|40|base",
+		"false|41|base",
+		"false|42|base",
+		"false|43|base",
+		"false|1|base"
+	],
+	"mainRequests": [
+		"{\"systemPrompt\":\"s\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"first\"}],\"timestamp\":1}],\"tools\":[]}",
+		"{\"systemPrompt\":\"s\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Run the SECRET-SUGGESTION parser tests now.\"}],\"timestamp\":1}],\"tools\":[]}"
+	]
+}

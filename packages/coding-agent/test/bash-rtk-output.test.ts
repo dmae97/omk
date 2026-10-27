@@ -1,8 +1,18 @@
 import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { type BashOperations, createBashTool } from "../src/core/tools/bash.ts";
+
+// Pins the pre-default-on output shape: explicitly opt out of the default-on flag(s).
+const saved_OMK_EXEC_TRUNCATE_MIDDLE = process.env.OMK_EXEC_TRUNCATE_MIDDLE;
+beforeAll(() => {
+	process.env.OMK_EXEC_TRUNCATE_MIDDLE = "0";
+});
+afterAll(() => {
+	if (saved_OMK_EXEC_TRUNCATE_MIDDLE === undefined) delete process.env.OMK_EXEC_TRUNCATE_MIDDLE;
+	else process.env.OMK_EXEC_TRUNCATE_MIDDLE = saved_OMK_EXEC_TRUNCATE_MIDDLE;
+});
 
 let dir: string;
 const artifacts = new Set<string>();
@@ -60,7 +70,15 @@ describe.skipIf(process.platform === "win32")("bash RTK output-only filter", () 
 		expect(exec.mock.calls[0][0]).toBe(command);
 	});
 
-	it("does nothing by default", async () => {
+	it("default on: unset env filters through rtk like 1", async () => {
+		vi.stubEnv("OMK_RTK_OUTPUT", undefined);
+		installFilter("throw new Error('must not execute')");
+		const { bash } = tool();
+		const result = await bash.execute("call", { command });
+		expect(result.details).toMatchObject({ outputFilter: { name: "rtk" } });
+	});
+
+	it("does nothing with OMK_RTK_OUTPUT=0", async () => {
 		vi.stubEnv("OMK_RTK_OUTPUT", "0");
 		installFilter("throw new Error('must not execute')");
 		const { bash } = tool();

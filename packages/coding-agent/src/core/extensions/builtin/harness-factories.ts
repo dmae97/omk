@@ -1,4 +1,5 @@
 import type { ExtensionFactory } from "../types.ts";
+import deepseekHarness from "./deepseek-harness.ts";
 import deliverableGuard from "./deliverable-guard.ts";
 import finishCheck from "./finish-check.ts";
 import goalController from "./goal-controller.ts";
@@ -17,6 +18,7 @@ export interface HarnessFactoryEntry {
 export const HARNESS_FACTORIES: readonly HarnessFactoryEntry[] = [
 	{ factory: identicalLoop, path: "<builtin:identical-loop>", envVar: "OMK_IDENTICAL_LOOP" },
 	{ factory: toolPairRepair, path: "<builtin:tool-pair-repair>", envVar: "OMK_TOOL_PAIR_REPAIR" },
+	{ factory: deepseekHarness, path: "<builtin:deepseek-harness>", envVar: "OMK_DEEPSEEK_HARNESS" },
 	{ factory: promptPreset, path: "<builtin:prompt-preset>", envVar: "OMK_PROMPT_PRESET" },
 	{ factory: goalController, path: "<builtin:goal-controller>", envVar: "OMK_GOAL_CONTROLLER" },
 	// Before finish-check, so a file restored at settle is in place for the verification turn (spec 034).

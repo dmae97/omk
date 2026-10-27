@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.5.9] - 2026-10-26
+
+### Fixed
+
+- A tool call's own timeout now bounds the outer tool timer, so a requested timeout longer than the default limit is no longer cut short.
+
+## [1.5.8] - 2026-10-24
+
+
+## [1.5.7] - 2026-10-23
+
+
+## [1.5.6] - 2026-10-22
+
+
+## [1.5.5] - 2026-10-21
+
+
 ## [1.5.4] - 2026-10-20
 
 ### Changed

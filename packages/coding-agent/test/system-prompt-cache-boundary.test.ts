@@ -26,7 +26,7 @@ describe("resolveExtendedSystemPromptCache (spec 052)", () => {
 			`Prefix.\n${plan.prompt}`,
 			`${STABLE}\nCurrent date: 2026-10-12\n\nappended`,
 		]) {
-			expect(resolveExtendedSystemPromptCache(plan, prompt)).toEqual(dropped);
+			expect(resolveExtendedSystemPromptCache(plan, prompt, { prefixBoundary: false })).toMatchObject(dropped);
 		}
 	});
 

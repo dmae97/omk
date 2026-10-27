@@ -16,6 +16,7 @@ import { devinHarnessAutoApplyEnabled, isDevinProvider, selectDevinHarnessSkills
 import { grokHarnessAutoApplyEnabled, isGrokOAuthProvider, selectGrokHarnessSkills } from "./grok-harness.ts";
 import type { CustomMessage } from "./messages.ts";
 import { appendRunLog } from "./run-log.ts";
+import { type AutoLoadStore, autoLoadSkills } from "./skill-auto-load.ts";
 import { SkillSearchGate } from "./skill-search-gate.ts";
 import type { Skill } from "./skills.ts";
 import { compactSkillDescription } from "./skills-prompt.ts";
@@ -72,11 +73,32 @@ export class PromptSkillFreeze {
 	/** Spec 050 skill-search decision, fixed tool and candidates for this session. */
 	readonly skillSearch = new SkillSearchGate();
 
+	/** Spec 117: the session store auto-loaded skill bodies are admitted into (none: auto-load never runs). */
+	private readonly admission: (() => AutoLoadStore) | undefined;
+
+	constructor(admission?: () => AutoLoadStore) {
+		this.admission = admission;
+	}
+
 	/** R3 task start: the R6 plan plus, in an active session, one candidate message (not in workers, R7). */
 	async turn(input: PromptSkillTurnInput): Promise<PromptSkillTurn> {
 		const plan = this.planTurn(input);
 		const candidates = await this.skillSearch.candidates(input.budgetQuery, input.env, explicitSkillNames(input));
-		return candidates ? { ...plan, messages: [...plan.messages, candidates] } : plan;
+		const withCandidates = candidates ? { ...plan, messages: [...plan.messages, candidates] } : plan;
+		const store = this.admission?.();
+		const content = store
+			? autoLoadSkills({ store, skills: input.skills, query: input.budgetQuery, env: input.env })
+			: undefined;
+		if (content === undefined) return withCandidates;
+		const timestamp = (input.now ?? Date.now)();
+		const message: CustomMessage = {
+			role: "custom",
+			customType: PROMPT_SKILLS_CUSTOM_TYPE,
+			content,
+			display: false,
+			timestamp,
+		};
+		return { ...withCandidates, messages: [...withCandidates.messages, message] };
 	}
 
 	private planTurn(input: PromptSkillTurnInput): PromptSkillTurn {

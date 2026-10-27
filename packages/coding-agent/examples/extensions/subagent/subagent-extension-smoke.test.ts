@@ -3,6 +3,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtensionAPI } from "open-multi-agent-kit";
 import { afterEach, describe, expect, it } from "vitest";
+import { installProjectPstack } from "../../../src/commands/pstack-install.ts";
+import { getPackageDir } from "../../../src/config.ts";
 
 interface SmokeToolResult {
 	readonly content: readonly { readonly type: string; readonly text?: string }[];
@@ -349,6 +351,119 @@ describe("subagent extension registration and spawn smoke", () => {
 			plannedShards: 9,
 			completedShards: 9,
 		});
+	}, 120_000);
+
+	it("concurrent calls from different sessions give each worker its own OMK_RUN_LOG_PARENT_SESSION", async () => {
+		const cwd = await fs.promises.mkdtemp(path.join(os.tmpdir(), "omk-subagent-parent-session-smoke-"));
+		cleanupPaths.push(cwd);
+		const projectAgentsDir = path.join(cwd, ".omk", "agents");
+		const agentHome = path.join(cwd, "agent-home");
+		await fs.promises.mkdir(projectAgentsDir, { recursive: true });
+		await fs.promises.mkdir(agentHome, { recursive: true });
+		await fs.promises.writeFile(
+			path.join(projectAgentsDir, "fixture-agent.md"),
+			"---\nname: fixture-agent\ndescription: Offline extension smoke fixture\n---\nReturn the fixture result.\n",
+			"utf8",
+		);
+		const envFile = path.join(cwd, "worker-env.jsonl");
+		const savedLogDir = process.env.OMK_RUN_LOG_DIR;
+		process.argv[1] = path.join(import.meta.dirname, "fixtures", "fake-omk-json.mjs");
+		process.env.OMK_CODING_AGENT_DIR = agentHome;
+		process.env.OMK_FAKE_ENV_FILE = envFile;
+		process.env.OMK_RUN_LOG_DIR = path.join(cwd, "run-log");
+		try {
+			let registered: unknown;
+			const api = {
+				registerTool(tool: unknown) {
+					registered = tool;
+				},
+			} as unknown as ExtensionAPI;
+			const { default: registerSubagent } = await import("./index.ts");
+			registerSubagent(api);
+			if (!isSmokeTool(registered)) throw new Error("subagent tool was not registered");
+			const tool = registered;
+			const call = (sessionId: string) =>
+				tool.execute(
+					`call-${sessionId}`,
+					{
+						agent: "fixture-agent",
+						task: `task-for-${sessionId}`,
+						agentScope: "project",
+						confirmProjectAgents: false,
+						executionBudgetMs: 120_000,
+						maxResumeAttempts: 0,
+					},
+					new AbortController().signal,
+					undefined,
+					{
+						cwd,
+						hasUI: false,
+						sessionManager: { getSessionId: () => sessionId, getEntries: () => [] },
+					},
+				);
+			const results = await Promise.all([call("sess-one"), call("sess-two")]);
+			for (const r of results) expect(r.isError).not.toBe(true);
+			const rows = (await fs.promises.readFile(envFile, "utf8"))
+				.trim()
+				.split("\n")
+				.map((line) => JSON.parse(line) as { task: string; parent: string | null });
+			expect(rows).toHaveLength(2);
+			for (const row of rows) {
+				const owner = row.task.includes("sess-one") ? "sess-one" : "sess-two";
+				expect(row.parent).toBe(owner);
+			}
+		} finally {
+			delete process.env.OMK_FAKE_ENV_FILE;
+			if (savedLogDir === undefined) delete process.env.OMK_RUN_LOG_DIR;
+			else process.env.OMK_RUN_LOG_DIR = savedLogDir;
+		}
+	}, 120_000);
+	it("dispatches an installed pstack agent only after interactive project trust confirmation", async () => {
+		const cwd = await fs.promises.mkdtemp(path.join(os.tmpdir(), "omk-pstack-dispatch-"));
+		cleanupPaths.push(cwd);
+		const agentHome = path.join(cwd, "agent-home");
+		await fs.promises.mkdir(agentHome);
+		installProjectPstack(cwd, path.join(getPackageDir(), "resources", "pstack"), false, () => {});
+		process.argv[1] = path.join(import.meta.dirname, "fixtures", "fake-omk-json.mjs");
+		process.env.OMK_CODING_AGENT_DIR = agentHome;
+		const argvFile = path.join(cwd, "worker-argv.jsonl");
+		process.env.OMK_FAKE_ARGV_FILE = argvFile;
+		let registered: unknown;
+		const { default: registerSubagent } = await import("./index.ts");
+		registerSubagent({
+			registerTool(tool: unknown) {
+				registered = tool;
+			},
+		} as unknown as ExtensionAPI);
+		if (!isSmokeTool(registered)) throw new Error("subagent tool was not registered");
+		let confirmed = 0;
+		const result = await registered.execute(
+			"pstack-fixture",
+			{
+				agent: "pstack-poteto-agent",
+				task: "Read the installed poteto-mode skill, then return the fixture result.",
+				agentScope: "project",
+				executionBudgetMs: 120_000,
+				maxResumeAttempts: 0,
+			},
+			new AbortController().signal,
+			undefined,
+			{
+				cwd,
+				hasUI: true,
+				ui: {
+					confirm: async () => {
+						confirmed++;
+						return true;
+					},
+				},
+			},
+		);
+		expect(confirmed).toBe(1);
+		expect(result.isError).not.toBe(true);
+		expect(result.content[0]?.text).toContain("fixture subagent completed");
+		const argv = JSON.parse((await fs.promises.readFile(argvFile, "utf8")).trim()) as string[];
+		expect(argv).toContain("--append-system-prompt");
 	}, 120_000);
 });
 

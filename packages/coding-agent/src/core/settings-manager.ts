@@ -256,7 +256,8 @@ export class FileSettingsStorage implements SettingsStorage {
 
 		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 			try {
-				return lockfile.lockSync(path, { realpath: false });
+				// 30 s, not the 10 s default: staleness is mtime vs Date.now(), and WSL2 steps the wall clock by seconds.
+				return lockfile.lockSync(path, { realpath: false, stale: 30_000 });
 			} catch (error) {
 				const code =
 					typeof error === "object" && error !== null && "code" in error
@@ -266,10 +267,8 @@ export class FileSettingsStorage implements SettingsStorage {
 					throw error;
 				}
 				lastError = error;
-				const start = Date.now();
-				while (Date.now() - start < delayMs) {
-					// Sleep synchronously to avoid changing callers to async.
-				}
+				// Sleep without spinning; the wait is monotonic, so a wall-clock step cannot stretch it.
+				Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
 			}
 		}
 

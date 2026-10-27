@@ -45,7 +45,7 @@ function abortableSleep(ms: number, signal: AbortSignal | undefined, cancelMessa
 export async function pollOAuthDeviceCodeFlow<T>(options: OAuthDeviceCodePollOptions<T>): Promise<T> {
 	const deadline =
 		typeof options.expiresInSeconds === "number"
-			? Date.now() + options.expiresInSeconds * 1000
+			? performance.now() + options.expiresInSeconds * 1000
 			: Number.POSITIVE_INFINITY;
 	let intervalMs = Math.max(
 		MINIMUM_INTERVAL_MS,
@@ -53,7 +53,7 @@ export async function pollOAuthDeviceCodeFlow<T>(options: OAuthDeviceCodePollOpt
 	);
 
 	let slowDownResponses = 0;
-	while (Date.now() < deadline) {
+	while (performance.now() < deadline) {
 		if (options.signal?.aborted) {
 			throw new Error(CANCEL_MESSAGE);
 		}
@@ -71,7 +71,7 @@ export async function pollOAuthDeviceCodeFlow<T>(options: OAuthDeviceCodePollOpt
 			intervalMs = Math.max(MINIMUM_INTERVAL_MS, intervalMs + SLOW_DOWN_INTERVAL_INCREMENT_MS);
 		}
 
-		const remainingMs = deadline - Date.now();
+		const remainingMs = deadline - performance.now();
 		if (remainingMs <= 0) {
 			break;
 		}

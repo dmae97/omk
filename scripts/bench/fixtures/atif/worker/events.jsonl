@@ -1,0 +1,9 @@
+{"type":"session","version":3,"id":"sess-worker","timestamp":"2026-10-23T03:00:00.000Z","cwd":"/app"}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"Count lines via a worker."}],"timestamp":1792000001000}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"toolCall","id":"call_w","name":"subagent","arguments":{"task":"count lines"}}],"api":"openai-responses","provider":"openai","model":"gpt-5","responseId":"resp_w1","usage":{"input":100,"output":20,"cacheRead":50,"cacheWrite":5,"totalTokens":175,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"toolUse","timestamp":1792000002000}}
+{"type":"tool_execution_start","toolCallId":"call_w","toolName":"subagent","args":{"task":"count lines"}}
+{"type":"tool_execution_update","toolCallId":"call_w","toolName":"subagent","args":{"task":"count lines"},"partialResult":{"content":[]}}
+{"type":"tool_execution_end","toolCallId":"call_w","toolName":"subagent","result":{"content":[{"type":"text","text":"42"}],"details":{"exitCode":0}},"isError":false}
+{"type":"message_start","message":{"role":"toolResult","toolCallId":"call_w","toolName":"subagent","content":[{"type":"text","text":"42"}],"isError":false,"timestamp":1792000003000}}
+{"type":"message_end","message":{"role":"toolResult","toolCallId":"call_w","toolName":"subagent","content":[{"type":"text","text":"42"}],"isError":false,"timestamp":1792000003000}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Worker reports 42 lines."}],"api":"openai-responses","provider":"openai","model":"gpt-5","responseId":"resp_w2","usage":{"input":100,"output":20,"cacheRead":50,"cacheWrite":5,"totalTokens":175,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1792000004000}}

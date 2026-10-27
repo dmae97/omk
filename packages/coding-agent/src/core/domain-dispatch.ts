@@ -7,6 +7,7 @@
  */
 
 import { routeDomain } from "./domain-router.ts";
+import { isDefaultOnEnvFlag } from "./env-flag.ts";
 import type { RegisteredTool, ToolDefinition } from "./extensions/types.ts";
 import type { LoadoutAccessPolicy } from "./loadout-access-policy.ts";
 import {
@@ -94,7 +95,7 @@ export function createDomainDispatchRuntimeSession(
 export function isDomainRoutingEnabled(
 	env: NodeJS.ProcessEnv | Readonly<Record<string, string | undefined>> = process.env,
 ): boolean {
-	return env.OMK_DOMAIN_ROUTING === "1";
+	return isDefaultOnEnvFlag(env.OMK_DOMAIN_ROUTING);
 }
 
 export function tryDomainDispatch(input: DomainDispatchInput): DomainDispatchResult {

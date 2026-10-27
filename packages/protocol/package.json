@@ -1,6 +1,6 @@
 {
 	"name": "omk-protocol",
-	"version": "1.5.4",
+	"version": "1.5.9",
 	"description": "Canonical OMK Run Protocol contracts and pure semantic reducers",
 	"type": "module",
 	"main": "./dist/index.js",

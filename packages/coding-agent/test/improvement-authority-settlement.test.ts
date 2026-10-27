@@ -90,7 +90,7 @@ describe("authority callback result ownership", () => {
 					decision: input.decision,
 					effectiveLaneWidth: 1,
 				});
-				return { outcomes: [], effectiveLaneWidth: 1, maxObservedConcurrency: 1 };
+				return { outcomes: [], effectiveLaneWidth: 1, maxObservedConcurrency: 1, allLanesCompleted: false };
 			});
 			await createSubagentLaneAuthority({
 				runId: "r04",
@@ -124,7 +124,7 @@ describe("authority callback result ownership", () => {
 				decision: input.decision,
 				effectiveLaneWidth: 1,
 			});
-			return { outcomes: [], effectiveLaneWidth: 1, maxObservedConcurrency: 1 };
+			return { outcomes: [], effectiveLaneWidth: 1, maxObservedConcurrency: 1, allLanesCompleted: false };
 		});
 		await createSubagentLaneAuthority({
 			runId: "r04",

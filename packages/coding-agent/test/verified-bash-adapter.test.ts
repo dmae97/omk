@@ -75,7 +75,7 @@ describe("executeVerifiedBash", () => {
 		};
 	}
 
-	it("binds the exact shell script, redacted combined output, artifacts, and strict gate", async () => {
+	it("binds the exact shell script, raw combined output, artifacts, and strict gate", async () => {
 		// Given: a trusted runner that emits a secret-shaped value and creates the selected artifact.
 		const rawOutput = Buffer.from("token=super-secret-value\nverification passed\n");
 		let observedScript = "";
@@ -93,15 +93,14 @@ describe("executeVerifiedBash", () => {
 		// When: the default adapter executes the runner.
 		const result = await executeVerifiedBash(request(evidenceExecutor, operations));
 
-		// Then: the receipt binds exactly what reached the runner and only redacted combined bytes.
+		// Then: the receipt binds exactly what reached the runner and the raw combined bytes (no redaction).
 		expect(observedScript).toBe(SCRIPT);
 		expect(result.receipt.core.command).toEqual({ kind: "shell", shell: SHELL, script: SCRIPT });
 		expect(VERIFIED_BASH_REDACTION_POLICY_ID).toBe(
-			"omk-bash-combined-v1+omk-sensitive-text-v1+capture-tail-128k+tail-64k",
+			"omk-bash-combined-v2+raw-unredacted+utf8+capture-tail-128k+tail-64k",
 		);
 		expect(result.receipt.core.output.redactionPolicyId).toBe(VERIFIED_BASH_REDACTION_POLICY_ID);
-		const redacted = Buffer.from(rawOutput.toString("utf8"));
-		expect(result.receipt.core.output.stdout).toEqual({ sha256: sha256(redacted), byteCount: redacted.byteLength });
+		expect(result.receipt.core.output.stdout).toEqual({ sha256: sha256(rawOutput), byteCount: rawOutput.byteLength });
 		expect(result.receipt.core.output.stderr.byteCount).toBe(0);
 		expect(result.receipt.core.workspaceAfter.artifacts[0].state).toBe("file");
 
@@ -178,7 +177,7 @@ describe("executeVerifiedBash", () => {
 		expect(result.receipt.core).toMatchObject({ status: "aborted", exitCode: null });
 	});
 
-	it("executes the original secret-bearing script and persists only the redacted representation", async () => {
+	it("executes a secret-bearing script and persists it without command redaction", async () => {
 		// Given: a script containing an inline credential and an observing runner.
 		const secretScript =
 			"curl -H 'Authorization: Bearer synthetic-adapter-secret-token' https://example.invalid && mkdir -p dist"; // gitleaks:allow -- intentional fake credential fixture
@@ -196,38 +195,13 @@ describe("executeVerifiedBash", () => {
 			script: secretScript,
 		});
 
-		// Then: the runner received the original while the receipt persisted the tokenized form.
+		// Then: the runner and the receipt both carry the original script.
 		expect(observedScript).toBe(secretScript);
-		expect(result.receipt.core.command).toEqual({
-			kind: "shell",
-			shell: SHELL,
-			script: "curl -H 'Authorization: Bearer [REDACTED]' https://example.invalid && mkdir -p dist",
-		});
-		expect(result.receipt.core.commandRedaction?.placeholders).toEqual([{ type: "authorization-header", count: 1 }]);
-		expect(result.receipt.core.commandBinding?.algorithm).toBe("hmac-sha256");
+		expect(result.receipt.core.command).toEqual({ kind: "shell", shell: SHELL, script: secretScript });
+		expect(result.receipt.core.commandRedaction).toBeUndefined();
+		expect(result.receipt.core.commandBinding).toBeUndefined();
 		expect(new ReplayLedgerManager(GOAL_ID, ledgerPath).getEvents()).toHaveLength(1);
-		expect(readFileSync(result.receiptPath, "utf8")).not.toContain("synthetic-adapter-secret-token");
-	});
-
-	it("fails closed before the runner when redaction metadata would be oversize", async () => {
-		// Given: a script with more inline secrets than the placeholder metadata bound allows.
-		let executions = 0;
-		const operations: BashOperations = {
-			exec: async () => {
-				executions++;
-				return { exitCode: 0 };
-			},
-		};
-
-		// When/Then: redaction fails before the runner side effect and no ledger event exists.
-		await expect(
-			executeVerifiedBash({
-				...request(createExecutor("verified-bash-oversize"), operations),
-				script: Array.from({ length: 300 }, (_, index) => `tool --token synthetic-oversize-${index}`).join("; "),
-			}),
-		).rejects.toThrow(/placeholder/i);
-		expect(executions).toBe(0);
-		expect(new ReplayLedgerManager(GOAL_ID, ledgerPath).getEvents()).toHaveLength(0);
+		expect(readFileSync(result.receiptPath, "utf8")).toContain("synthetic-adapter-secret-token");
 	});
 
 	it.each([null, Number.NaN, 1.5])("rejects invalid runner exit code %s without a ledger event", async (exitCode) => {
@@ -299,6 +273,33 @@ describe("executeVerifiedBash", () => {
 		const redacted = Buffer.from(rawOutput.toString("utf8"));
 		const bounded = redacted.subarray(-64 * 1024);
 		expect(result.receipt.core.output.stdout).toEqual({ sha256: sha256(bounded), byteCount: bounded.byteLength });
+		expect(result.receipt.core.output.stderr.byteCount).toBe(0);
+	});
+	it("policy id matches the processing it names: no redaction, 128k capture, 64k tail", async () => {
+		// Given: output larger than the capture bound with a secret-shaped line in the receipt tail.
+		const tailMarker = "token=super-secret-value\n";
+		const big = Buffer.concat([Buffer.alloc(200 * 1024, "a"), Buffer.from(tailMarker)]);
+		const operations: BashOperations = {
+			exec: async (_script, cwd, options) => {
+				options.onData(big.subarray(0, 100 * 1024));
+				options.onData(big.subarray(100 * 1024));
+				mkdirSync(join(cwd, "dist"));
+				writeFileSync(join(cwd, "dist", "result.txt"), "verified\n");
+				return { exitCode: 0 };
+			},
+		};
+		const result = await executeVerifiedBash(request(createExecutor("verified-bash-policy"), operations));
+
+		// Then: every id segment is backed by observed behaviour.
+		const segments = VERIFIED_BASH_REDACTION_POLICY_ID.split("+");
+		expect(segments).toEqual(["omk-bash-combined-v2", "raw-unredacted", "utf8", "capture-tail-128k", "tail-64k"]);
+		expect(segments.some((s) => s.includes("sensitive") || s.includes("redact-"))).toBe(false);
+		const expectedTail = big.subarray(-64 * 1024);
+		expect(result.receipt.core.output.stdout).toEqual({
+			sha256: sha256(expectedTail),
+			byteCount: 64 * 1024,
+		});
+		expect(expectedTail.toString("utf8").endsWith(tailMarker)).toBe(true);
 		expect(result.receipt.core.output.stderr.byteCount).toBe(0);
 	});
 });

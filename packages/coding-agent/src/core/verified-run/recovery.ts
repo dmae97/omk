@@ -3,7 +3,6 @@ import { MAX_VERIFIED_RUN_GENERATIONS, type RunResumeCommand } from "omk-protoco
 import type { RunAuthority } from "./authority-runtime.ts";
 import { commandEnvironmentDigest, probeVerifiedSandbox } from "./broker.ts";
 import { loadCandidate } from "./candidate.ts";
-import { preflightCheckReceipts } from "./check-receipt.ts";
 import type { JournalSnapshot } from "./journal.ts";
 import { probeNamespace } from "./namespace-identity.ts";
 import { readRunClock, remainingVerification } from "./recovery-clock.ts";
@@ -121,7 +120,6 @@ export async function resumeFrozenCandidate(
 		assertCandidateRecoverable(runPath, snapshot);
 		const first = snapshot.records[0]?.event;
 		if (first?.kind !== "created") throw new VerifiedRunError("integrity");
-		preflightCheckReceipts(first.contract);
 		probeVerifiedSandbox();
 		assertCandidateRecoverable(runPath, snapshot);
 		if (options.signal?.aborted) throw new VerifiedRunError("cancelled");

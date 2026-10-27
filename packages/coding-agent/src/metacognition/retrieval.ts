@@ -34,6 +34,19 @@ export function searchCorpus(query: string, corpus: readonly CorpusDocument[], l
 	return rankCorpus(query, corpus).slice(0, limit);
 }
 
+const documentTerms = new WeakMap<CorpusDocument, { body: string; length: number; frequencies: Map<string, number> }>();
+
+function termsFor(document: CorpusDocument): { length: number; frequencies: Map<string, number> } {
+	const cached = documentTerms.get(document);
+	if (cached?.body === document.body) return cached;
+	const tokens = retrievalTokens(document.body);
+	const frequencies = new Map<string, number>();
+	for (const token of tokens) frequencies.set(token, (frequencies.get(token) ?? 0) + 1);
+	const terms = { body: document.body, length: tokens.length, frequencies };
+	documentTerms.set(document, terms);
+	return terms;
+}
+
 /** Rank the bounded corpus before consumer-specific de-duplication and result limits. */
 export function rankCorpus(query: string, corpus: readonly CorpusDocument[]): SearchHit[] {
 	text(query, "query", 4096);
@@ -49,10 +62,7 @@ export function rankCorpus(query: string, corpus: readonly CorpusDocument[]): Se
 		ensure(typeof d.body === "string" && d.body.length <= 100_000, "document too large");
 		totalChars += d.body.length;
 		ensure(totalChars <= 10_000_000, "corpus byte/character policy exceeded");
-		const tokens = retrievalTokens(d.body);
-		const frequencies = new Map<string, number>();
-		for (const token of tokens) frequencies.set(token, (frequencies.get(token) ?? 0) + 1);
-		return { d, length: tokens.length, frequencies };
+		return { d, ...termsFor(d) };
 	});
 	const terms = [...new Set(retrievalTokens(query))];
 	if (!terms.length || !documents.length) return [];

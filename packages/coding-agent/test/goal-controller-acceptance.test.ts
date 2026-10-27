@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +7,8 @@ import { createDurableGoal, nextDurableGoalTimestamp } from "../src/core/durable
 import { DurableGoalStore } from "../src/core/durable-goal-store.ts";
 import goalController, { type GoalControllerOptions } from "../src/core/extensions/builtin/goal-controller.ts";
 import type { ExtensionAPI, ExtensionCommandContext, RegisteredCommand } from "../src/core/extensions/types.ts";
-import { GoalVerifier } from "../src/core/goal-verification.ts";
+import { GoalAcceptance } from "../src/core/goal-acceptance.ts";
+import { GOAL_SCOPE_MAX_PATHS, GoalVerifier } from "../src/core/goal-verification.ts";
 import { createWorkspaceSandboxPolicy } from "../src/core/sandbox/default-policy.ts";
 
 interface Harness {
@@ -90,6 +91,8 @@ function store(cwd: string): DurableGoalStore {
 
 beforeEach(() => {
 	vi.stubEnv("OMK_BASH_SANDBOX", "off");
+	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0"); // characterizes the pre-106 path; lifecycle defaults on
+	vi.stubEnv("OMK_GOAL_AUTONOMY", "0"); // pre-119 controller path; autonomy is default on
 });
 
 afterEach(() => {
@@ -132,6 +135,26 @@ describe("/goal acceptance checks", () => {
 
 		expect(lastNotice(h)).toContain("the workspace changed after the acceptance check passed; run /goal verify");
 		expect((await store(cwd).current())?.status).toBe("active");
+	});
+
+	it("refuses whole-workspace completion when the verified scope is truncated", async () => {
+		const cwd = gitRepo();
+		for (let index = 0; index <= GOAL_SCOPE_MAX_PATHS; index++) {
+			writeFileSync(join(cwd, `task-${index}.txt`), "work\n");
+		}
+		const goalStore = store(cwd);
+		await goalStore.create(
+			createDurableGoal({ id: "session", objective: "Ship the app", maxRounds: 2, now: new Date().toISOString() }),
+		);
+		const goal = await goalStore.current();
+		if (!goal) throw new Error("goal missing");
+		const acceptance = new GoalAcceptance();
+		acceptance.approve(goal, "true");
+		const checked = await acceptance.check(goalStore, goal, cwd);
+		expect(checked.result.workspace.completeness).toBe("partial_truncated");
+
+		await expect(acceptance.complete(goalStore, checked.goal, cwd)).rejects.toThrow(/workspace scope is incomplete/);
+		expect((await goalStore.current())?.status).toBe("active");
 	});
 
 	it("reports a failing check with its output tail and attaches nothing", async () => {
@@ -303,18 +326,65 @@ describe("/goal acceptance checks", () => {
 		expect(h.messages).toEqual([]);
 	});
 
-	it("does not approve a command the receipt path cannot run", async () => {
+	it("pins a delayed passing receipt to the goal generation and contract that started it", async () => {
+		for (const mutation of ["objective", "maxRounds", "advance-round", "contract"] as const) {
+			const cwd = gitRepo();
+			const goalStore = store(cwd);
+			await goalStore.create(
+				createDurableGoal({ id: "session", objective: "Ship A", maxRounds: 3, now: new Date().toISOString() }),
+			);
+			const goal = await goalStore.current();
+			if (!goal) throw new Error("goal missing");
+			let release: (() => void) | undefined;
+			let markStarted: (() => void) | undefined;
+			const gate = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			const started = new Promise<void>((resolve) => {
+				markStarted = resolve;
+			});
+			const acceptance = new GoalAcceptance((options) => {
+				const verifier = new GoalVerifier(options);
+				const run = verifier.run.bind(verifier);
+				verifier.run = async (command, signal, onOutput) => {
+					const result = await run(command, signal, onOutput);
+					markStarted?.();
+					await gate;
+					return result;
+				};
+				return verifier;
+			});
+			acceptance.approve(goal, "true");
+			const checking = acceptance.check(goalStore, goal, cwd);
+			await started;
+			if (mutation === "contract") {
+				acceptance.approve(goal, "false");
+			} else {
+				const command =
+					mutation === "advance-round"
+						? { kind: "advance-round" as const, ref: goal.ref }
+						: {
+								kind: "edit" as const,
+								ref: goal.ref,
+								...(mutation === "objective" ? { objective: "Ship B" } : { maxRounds: 4 }),
+							};
+				await goalStore.transition(command, nextDurableGoalTimestamp(goal));
+			}
+			if (!release) throw new Error("verifier gate missing");
+			release();
+
+			await expect(checking).rejects.toThrow(/goal changed while its acceptance check ran/);
+			expect((await goalStore.current())?.evidence).toEqual([]);
+		}
+	});
+
+	it("approves a dynamic shell check now that command redaction is removed", async () => {
 		const cwd = gitRepo();
 		const h = harness(cwd);
 		await h.goal("Ship the app");
 
 		await h.goal('verify test "$(cat app.txt)" = v1');
-		expect(lastNotice(h)).toContain(
-			"acceptance check could not run, so it was not approved: shell command is dynamic or malformed",
-		);
-		await h.goal("verify");
-
-		expect(lastNotice(h)).toContain("no acceptance check is approved in this session");
+		expect(lastNotice(h)).toContain("acceptance check passed");
 		expect((await store(cwd).current())?.status).toBe("active");
 	});
 
@@ -347,7 +417,143 @@ describe("/goal acceptance checks", () => {
 	});
 });
 
+describe("/goal acceptance contract revision (spec 099)", () => {
+	function outsideFlag(): string {
+		const dir = realpathSync(mkdtempSync(join(tmpdir(), "omk-goal-flag-")));
+		roots.push(dir);
+		return join(dir, "flag");
+	}
+
+	it("refuses completion when a changed check fails after the old check passed", async () => {
+		const cwd = gitRepo();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal("verify true");
+		expect(lastNotice(h)).toContain("acceptance check passed");
+
+		await h.goal("verify false");
+		expect(h.notifications.at(-1)?.level).toBe("warning");
+		await h.goal("complete");
+
+		expect((await store(cwd).current())?.status).toBe("active");
+	});
+
+	it("refuses completion when the same check fails after it passed", async () => {
+		const cwd = gitRepo();
+		const flag = outsideFlag();
+		writeFileSync(flag, "ok\n");
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal(`verify test -f ${flag}`);
+		expect(lastNotice(h)).toContain("acceptance check passed");
+
+		unlinkSync(flag);
+		await h.goal("verify");
+		expect(h.notifications.at(-1)?.level).toBe("warning");
+		await h.goal("complete");
+
+		expect((await store(cwd).current())?.status).toBe("active");
+	});
+
+	it("allows completion when the same check passes after it failed", async () => {
+		const cwd = gitRepo();
+		const flag = outsideFlag();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal(`verify test -f ${flag}`);
+		expect(h.notifications.at(-1)?.level).toBe("warning");
+
+		writeFileSync(flag, "ok\n");
+		await h.goal("verify");
+		expect(lastNotice(h)).toContain("acceptance check passed");
+		await h.goal("complete");
+
+		expect((await store(cwd).current())?.status).toBe("completed");
+	});
+
+	it("refuses completion when the check script changes to fail and is restored", async () => {
+		const cwd = gitRepo();
+		const script = join(cwd, "check.sh");
+		writeFileSync(script, "exit 0\n");
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal("verify sh check.sh");
+		expect(lastNotice(h)).toContain("acceptance check passed");
+
+		writeFileSync(script, "exit 1\n");
+		await h.goal("verify");
+		expect(h.notifications.at(-1)?.level).toBe("warning");
+		writeFileSync(script, "exit 0\n");
+		await h.goal("complete");
+
+		expect((await store(cwd).current())?.status).toBe("active");
+	});
+
+	it("refuses completion on a passing receipt once its approval is withdrawn", async () => {
+		const cwd = gitRepo();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		const goalStore = store(cwd);
+		const acceptance = new GoalAcceptance();
+		const goal = await goalStore.current();
+		if (!goal) throw new Error("goal missing");
+		acceptance.approve(goal, "true");
+		const passed = await acceptance.check(goalStore, goal, cwd);
+		expect(passed.result.passed).toBe(true);
+
+		acceptance.approve(passed.goal, undefined);
+
+		await expect(acceptance.complete(goalStore, passed.goal, cwd)).rejects.toThrow(/run \/goal verify/);
+		expect((await goalStore.current())?.status).toBe("active");
+	});
+
+	it("does not revive an old pass when the approval returns to an earlier command", async () => {
+		const cwd = gitRepo();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal("verify true");
+		expect(lastNotice(h)).toContain("acceptance check passed");
+		const goalStore = store(cwd);
+		const acceptance = new GoalAcceptance();
+		const goal = await goalStore.current();
+		if (!goal) throw new Error("goal missing");
+		acceptance.approve(goal, "true");
+		const passed = await acceptance.check(goalStore, goal, cwd);
+		expect(passed.result.passed).toBe(true);
+
+		acceptance.approve(passed.goal, "false");
+		acceptance.approve(passed.goal, "true");
+		await expect(acceptance.complete(goalStore, passed.goal, cwd)).rejects.toThrow(/run \/goal verify/);
+
+		const rerun = await acceptance.check(goalStore, passed.goal, cwd);
+		expect(rerun.result.passed).toBe(true);
+		expect((await acceptance.complete(goalStore, rerun.goal, cwd)).status).toBe("completed");
+	});
+
+	it("never counts an aborted run as a pass", async () => {
+		const cwd = gitRepo();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		const goalStore = store(cwd);
+		const acceptance = new GoalAcceptance();
+		const goal = await goalStore.current();
+		if (!goal) throw new Error("goal missing");
+		acceptance.approve(goal, "true");
+		const aborted = new AbortController();
+		aborted.abort();
+		const outcome = await acceptance.check(goalStore, goal, cwd, aborted.signal);
+		expect(outcome.result.status).toBe("aborted");
+
+		await expect(acceptance.complete(goalStore, outcome.goal, cwd)).rejects.toThrow(/run \/goal verify/);
+	});
+});
+
 describe("spec 094 acceptance diagnostics in the repair follow-up", () => {
+	// Spec 094 predates spec 098; these cases pin it against the plain follow-up.
+	beforeEach(() => {
+		vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "0");
+	});
+
 	async function failOnce(env: string | undefined, command = "echo missing-feature; exit 4") {
 		if (env !== undefined) vi.stubEnv("OMK_GOAL_DIAGNOSTICS", env);
 		const cwd = gitRepo();
@@ -356,7 +562,9 @@ describe("spec 094 acceptance diagnostics in the repair follow-up", () => {
 		await h.goal(`verify ${command}`);
 		const before = await store(cwd).current();
 		await h.settle();
-		const receiptId = (h.entries.at(-1)?.data as { receiptId: string }).receiptId;
+		const latestEntry = h.entries.at(-1);
+		if (!latestEntry) throw new Error("goal verification entry missing");
+		const receiptId = (latestEntry.data as { receiptId: string }).receiptId;
 		return { cwd, h, before, receiptId };
 	}
 
@@ -410,7 +618,9 @@ describe("spec 094 acceptance diagnostics in the repair follow-up", () => {
 		const goal = await store(cwd).current();
 		expect(goal?.status).toBe("active");
 		expect(goal?.evidence).toEqual([]);
-		expect((h.entries.at(-1)?.data as { passed: boolean }).passed).toBe(false);
+		const latestEntry = h.entries.at(-1);
+		if (!latestEntry) throw new Error("goal verification entry missing");
+		expect((latestEntry.data as { passed: boolean }).passed).toBe(false);
 		expect(h.messages[0].match(/<\/acceptance-diagnostic>/g)).toHaveLength(1);
 		expect(h.messages[0].endsWith("</acceptance-diagnostic>")).toBe(true);
 		await h.goal("");
@@ -445,5 +655,16 @@ describe("spec 094 acceptance diagnostics in the repair follow-up", () => {
 		expect(h.messages).toHaveLength(2);
 		expect(h.messages[0]).toMatch(/attempt="[^"]+#1"/);
 		expect(h.messages[1]).toMatch(/attempt="[^"]+#2"/);
+	});
+
+	it("keeps the spec 098 recall follow-up unless spec 094 is enabled", async () => {
+		vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "1");
+		const off = await failOnce(undefined);
+		expect(off.h.messages[0]).toContain("Full output: .omk/goals/recall/");
+		expect(off.h.messages[0]).not.toContain("acceptance-diagnostic");
+
+		const on = await failOnce("1");
+		expect(on.h.messages[0]).toContain("\nmissing-feature\n</acceptance-diagnostic>");
+		expect(on.h.messages[0]).not.toContain("Full output:");
 	});
 });

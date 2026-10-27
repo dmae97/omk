@@ -53,9 +53,10 @@ function createAssistantMessage(text: string): AssistantMessage {
 }
 
 async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
-	const startedAt = Date.now();
+	// Monotonic: WSL2 hosts were seen moving Date.now() ~8.5s forward and back every few seconds.
+	const startedAt = performance.now();
 	while (!predicate()) {
-		if (Date.now() - startedAt > timeoutMs) {
+		if (performance.now() - startedAt > timeoutMs) {
 			throw new Error("waitFor timed out");
 		}
 		await new Promise((resolve) => setTimeout(resolve, 25));
@@ -236,10 +237,11 @@ describe("AgentSession resource governor lease", () => {
 			baselineCap: 4,
 			abortable: true,
 		});
-		const promptPromise = s.prompt("hello");
+		// Handled up front: if a step below throws, dispose() must not leave this run's rejection unhandled.
+		const promptSettled = s.prompt("hello").catch(() => {});
 		await waitFor(() => s.isStreaming);
 		await s.abort();
-		await promptPromise.catch(() => {});
+		await promptSettled;
 		expect(agent.maxToolConcurrency).toBe(4);
 	});
 

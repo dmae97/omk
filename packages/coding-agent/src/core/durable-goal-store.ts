@@ -7,6 +7,8 @@ import { parseDurableGoalSnapshot } from "./durable-goal-parse.ts";
 import { applyDurableGoalCommand } from "./durable-goal-reducer.ts";
 
 export const DURABLE_GOAL_JOURNAL_SCHEMA_VERSION = "omk.goal.journal.v1" as const;
+// Staleness is lock mtime vs Date.now(): a 10 s default let a wall-clock step hand a live lock to another writer.
+const GOAL_LOCK_STALE_MS = 30_000;
 
 export interface DurableGoalJournal {
 	readonly schemaVersion: typeof DURABLE_GOAL_JOURNAL_SCHEMA_VERSION;
@@ -32,7 +34,7 @@ export class DurableGoalStore {
 	}
 
 	async create(goal: DurableGoalSnapshot): Promise<DurableGoalSnapshot> {
-		return this.withLock(async () => {
+		return this.withLock(async (assertHeld) => {
 			if ((await this.readUnlocked()) !== null) {
 				throw new DurableGoalError("store-exists", "durable goal already exists");
 			}
@@ -48,37 +50,45 @@ export class DurableGoalStore {
 			) {
 				throw invalidStore();
 			}
-			await this.writeUnlocked({
-				schemaVersion: DURABLE_GOAL_JOURNAL_SCHEMA_VERSION,
-				goalId: initial.ref.id,
-				revisions: [initial],
-			});
+			await this.writeUnlocked(
+				{ schemaVersion: DURABLE_GOAL_JOURNAL_SCHEMA_VERSION, goalId: initial.ref.id, revisions: [initial] },
+				assertHeld,
+			);
 			return initial;
 		});
 	}
 
 	async transition(command: DurableGoalCommand, now: string): Promise<DurableGoalSnapshot> {
-		return this.withLock(async () => {
+		return this.withLock(async (assertHeld) => {
 			const journal = await this.readUnlocked();
 			const current = journal?.revisions.at(-1);
 			if (!journal || !current) throw new DurableGoalError("store-missing", "durable goal does not exist");
 			const next = applyDurableGoalCommand(current, command, now);
-			await this.writeUnlocked({ ...journal, revisions: [...journal.revisions, next] });
+			await this.writeUnlocked({ ...journal, revisions: [...journal.revisions, next] }, assertHeld);
 			return next;
 		});
 	}
 
-	private async withLock<T>(operation: () => Promise<T>): Promise<T> {
+	private async withLock<T>(operation: (assertHeld: () => void) => Promise<T>): Promise<T> {
 		const directory = dirname(this.filePath);
 		await mkdir(directory, { recursive: true });
+		let lost: Error | undefined;
 		const release = await lockfile.lock(this.filePath, {
 			realpath: false,
+			stale: GOAL_LOCK_STALE_MS,
 			retries: { retries: 5, factor: 1, minTimeout: 5, maxTimeout: 25 },
+			// The default handler throws from a timer, an uncaught exception that ends the process.
+			onCompromised: (error) => {
+				lost = error;
+			},
 		});
 		try {
-			return await operation();
+			return await operation(() => {
+				if (lost) throw lost;
+			});
 		} finally {
-			await release();
+			// A compromised lock is already released; releasing again only rejects with ERELEASED.
+			if (!lost) await release();
 		}
 	}
 
@@ -98,10 +108,12 @@ export class DurableGoalStore {
 		}
 	}
 
-	private async writeUnlocked(journal: DurableGoalJournal): Promise<void> {
+	private async writeUnlocked(journal: DurableGoalJournal, assertHeld: () => void): Promise<void> {
 		const tempPath = join(dirname(this.filePath), `.goal-${randomUUID()}.tmp`);
 		try {
 			await writeFile(tempPath, `${JSON.stringify(journal, null, 2)}\n`, "utf8");
+			// Another writer may own the journal once the lock is lost; publishing now could drop its revision.
+			assertHeld();
 			await rename(tempPath, this.filePath);
 		} catch (error) {
 			await rm(tempPath, { force: true });

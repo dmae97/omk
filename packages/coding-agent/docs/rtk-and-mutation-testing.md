@@ -7,11 +7,11 @@
 
 ```bash
 rtk --version
-OMK_RTK_OUTPUT=1 OMK_RTK_PATH=/absolute/path/to/rtk omk
+OMK_RTK_PATH=/absolute/path/to/rtk omk   # OMK_RTK_OUTPUT는 기본 on
 ```
 
-`OMK_RTK_PATH`를 생략하면 `PATH`의 `rtk`를 사용한다. `OMK_RTK_OUTPUT=0` 또는 미설정은
-기존 동작이다. 개인 설정, RTK hook, 자동 명령 rewrite나 telemetry를 활성화하지 않는다.
+`OMK_RTK_PATH`를 생략하면 `PATH`의 `rtk`를 사용한다. `OMK_RTK_OUTPUT`는 기본 on이며 `0`/`false`/`off`로 끄면
+기존 동작이다. `rtk`가 없거나 실패하면 원래 출력으로 돌아간다(fallback). 개인 설정, RTK hook, 자동 명령 rewrite나 telemetry를 활성화하지 않는다.
 RTK 서브프로세스에는 자격증명/세션 환경을 넘기지 않고 `RTK_TELEMETRY_DISABLED=1`을 설정한다.
 
 적용 범위:

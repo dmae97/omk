@@ -104,12 +104,12 @@ describe("fastCheckFile: content checks", () => {
 	});
 
 	it("kills a hanging checker at the timeout and counts it as ok with unknown:timeout", async () => {
-		const started = Date.now();
+		const started = performance.now();
 		const result = await fastCheckFile(file("slow.c", "int x;\n"), {
 			timeoutMs: 300,
 			checkers: { ".c": { command: "sh", args: () => ["-c", "sleep 30 & sleep 30"] } },
 		});
 		expect(result).toMatchObject({ ok: true, reason: "unknown:timeout" });
-		expect(Date.now() - started).toBeLessThan(5000);
+		expect(performance.now() - started).toBeLessThan(5000);
 	});
 });

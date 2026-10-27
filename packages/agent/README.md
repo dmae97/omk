@@ -503,9 +503,11 @@ Return `terminate: true` from `execute()` or `afterToolCall` to hint that the ag
 Every tool call is guarded by a timeout. The effective timeout for a call is resolved in order:
 
 1. `AgentTool.timeoutMs` (per tool)
-2. `AgentLoopConfig.toolTimeouts[name]` (per-name override)
-3. `AgentLoopConfig.toolTimeoutMs` (fallback)
-4. No timer when all of the above are `0` or unset
+2. `AgentTool.resolveCallTimeoutMs(args)` (argument-dependent tool override)
+3. `AgentLoopConfig.toolTimeouts[name]` (per-name override)
+4. `AgentLoopConfig.toolTimeoutMs` (fallback)
+
+The first defined value wins; `0` disables the timer. The argument resolver receives the authorized, immutable arguments after preflight hooks, and `undefined` falls back to settings. Existing tools without a resolver keep their previous behavior. Agent-core does not infer timeout units from argument names.
 
 When a timeout wins the race, the agent closes the tool call and commits a synthetic terminal result with a `timeout` disposition. The same happens for `abort` or blocked calls. If the provider itself ends with `error` or `aborted` while emitting complete, unambiguous tool calls, the agent closes those calls without executing them. Terminal abort paths stop before hooks, queue polling, or another provider request. The transcript retains each terminal result and its disposition.
 

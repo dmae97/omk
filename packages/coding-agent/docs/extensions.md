@@ -1853,6 +1853,8 @@ omk.registerTool({
 
 **Timeouts:** Set `timeoutMs` for a static tool timeout, or return a per-call value from `resolveTimeoutMs(ctx)`. A resolved value takes precedence over `timeoutMs` and `agent.toolTimeouts`; `undefined` falls back to them, while `0` disables the timer. The resolver runs against the current extension context before each call. Values must be integer milliseconds from `0` through `2147483647`; invalid values fail before execution.
 
+Use `resolveCallTimeoutMs(args)` when the timeout depends on call arguments. It receives the authorized, immutable argument snapshot after `tool_call` hooks. Its value is used below the static/context timeout and above settings; `undefined` keeps the fallback. Tools named `bash` automatically honor a finite positive `timeout` argument in seconds with a 5-second outer teardown grace, unless their definition supplies an overriding timeout. Other tools do not infer units or timeouts from an argument's name.
+
 ```typescript
 resolveTimeoutMs(ctx) {
   return ctx.thinkingLevel === "ultra" ? 0 : undefined;

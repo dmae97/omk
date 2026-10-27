@@ -7,7 +7,7 @@
 - V2 selection does not tokenize records with no lexical match. All admitted records still undergo source validation. The complete candidate pair and final request retain their existing token accounting; call identity, matching, utility and tie rules are unchanged. Legacy selection is unchanged.
 - TUI `/session` displays `Memory: <state> eligible=<count> omitted=<count>`. This reads the last request's `memoryStatus` once, not the store, and never displays source quotes. Opening it does not enable recall or submit a model request. `ready` means optional context was admitted, not semantic truth or successful verification.
 
-Recall still requires both `OMK_VERIFIED_MEMORY=1` and Context Budget V2. Persistent record formats, limits, TTL, revocation, transcript/compaction exclusion and defaults are unchanged. No source-validity cache or cross-request token cache is added.
+Recall still requires both `OMK_VERIFIED_MEMORY` (default on; `0`/`false`/`off` opts out) and Context Budget V2. Persistent record formats, limits, TTL, revocation, transcript/compaction exclusion and defaults are unchanged. No source-validity cache or cross-request token cache is added.
 
 ## Verification boundaries
 

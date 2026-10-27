@@ -90,6 +90,7 @@ export class SessionPromptLifecycle {
 			prepareArguments: tool.prepareArguments,
 			executionMode: tool.executionMode,
 			resourceClaims: tool.resourceClaims,
+			resolveCallTimeoutMs: tool.resolveCallTimeoutMs,
 			// A spread would evaluate and freeze the context-sensitive timeout too early.
 			get timeoutMs() {
 				return tool.timeoutMs;

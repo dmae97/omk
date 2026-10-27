@@ -472,20 +472,22 @@ function schedulePreparedLanes(
 }
 
 function lanesConflict(left: PreparedLane, right: PreparedLane): boolean {
+	return laneGrantsConflict(left.grant, right.grant);
+}
+
+/** Read/write path conflict between two lane grants (writer vs. reader or writer). */
+export function laneGrantsConflict(left: SubagentLaneGrant, right: SubagentLaneGrant): boolean {
 	return (
 		pathsConflict(
-			left.grant.scheduler.writeSet.map((entry) => entry.path),
+			left.scheduler.writeSet.map((entry) => entry.path),
 			[
-				...right.grant.scheduler.readSet.map((entry) => entry.path),
-				...right.grant.scheduler.writeSet.map((entry) => entry.path),
+				...right.scheduler.readSet.map((entry) => entry.path),
+				...right.scheduler.writeSet.map((entry) => entry.path),
 			],
 		) ||
 		pathsConflict(
-			right.grant.scheduler.writeSet.map((entry) => entry.path),
-			[
-				...left.grant.scheduler.readSet.map((entry) => entry.path),
-				...left.grant.scheduler.writeSet.map((entry) => entry.path),
-			],
+			right.scheduler.writeSet.map((entry) => entry.path),
+			[...left.scheduler.readSet.map((entry) => entry.path), ...left.scheduler.writeSet.map((entry) => entry.path)],
 		)
 	);
 }

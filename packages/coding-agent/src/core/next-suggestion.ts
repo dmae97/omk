@@ -15,8 +15,18 @@
  * session log, compaction input, or the next main request.
  */
 import type { StreamFn } from "omk-agent-core";
-import type { Api, AssistantMessage, Context, Model, SimpleStreamOptions, ThinkingBudgets, UserMessage } from "omk-ai";
-import { addsThinkingBudgetToMaxTokens, DEFAULT_THINKING_BUDGETS } from "omk-ai";
+import type { Api, AssistantMessage, Context, Model, SimpleStreamOptions, Usage, UserMessage } from "omk-ai";
+import { linkAbortSignals } from "./abort-link.ts";
+import {
+	cappedSuggestionOptions,
+	checkSuggestionCache,
+	estimateSuggestionCostUsd,
+	type SuggestionBudget,
+} from "./next-suggestion-budget.ts";
+import { suggestionEffectiveMaxTokens, suggestionMaxTokens } from "./next-suggestion-options.ts";
+import { tagRequestPurpose } from "./request-purpose.ts";
+
+export { SUGGESTION_MAX_TOKENS, suggestionEffectiveMaxTokens, suggestionMaxTokens } from "./next-suggestion-options.ts";
 
 export const NEXT_SUGGESTIONS_ENV = "OMK_NEXT_SUGGESTIONS";
 /** PREREG: skip when ≥ 90% of the active quota window is used. */
@@ -26,22 +36,6 @@ export const SHORT_CACHE_TTL_MS = 5 * 60_000;
 /** Cache considered cold this long after the last main request with `long` retention. */
 export const LONG_CACHE_TTL_MS = 60 * 60_000;
 export const MAX_SUGGESTION_CHARS = 200;
-/** The suggestion request differs from the main request only in this output cap. */
-export const SUGGESTION_MAX_TOKENS = 128;
-/**
- * Output cap for the suggestion request. Reasoning is never disabled (that
- * would change the request bytes); the final provider cap is the thinking
- * budget + 128 with reasoning on and 128 with reasoning off. Providers that
- * already add the budget to an explicit cap (`adjustMaxTokensForThinking`)
- * get 128 only, so the budget is not counted twice.
- */
-export function suggestionMaxTokens(model: Model<Api>, options: SimpleStreamOptions | undefined): number {
-	const level = options?.reasoning;
-	if (!level || addsThinkingBudgetToMaxTokens(model)) return SUGGESTION_MAX_TOKENS;
-	const key: keyof ThinkingBudgets = level === "xhigh" || level === "max" || level === "ultra" ? "high" : level;
-	const budget = options?.thinkingBudgets?.[key] ?? DEFAULT_THINKING_BUDGETS[key];
-	return budget + SUGGESTION_MAX_TOKENS;
-}
 /** The quota check is abandoned (and the suggestion skipped) after this long. */
 export const USAGE_CHECK_TIMEOUT_MS = 2_000;
 
@@ -82,6 +76,11 @@ export class MainRequestRecorder {
 			this.last = { model, context, options, atMs: this.now() };
 			return inner(model, context, options);
 		};
+		// Preserve source-owned identity brands used by mandatory credential checks.
+		for (const key of Object.getOwnPropertySymbols(inner)) {
+			const descriptor = Object.getOwnPropertyDescriptor(inner, key);
+			if (descriptor) Object.defineProperty(wrapped, key, descriptor);
+		}
 		return wrapped;
 	}
 
@@ -99,7 +98,11 @@ export type SuggestionSkipReason =
 	| "no_cache_support"
 	| "cache_cold"
 	| "near_usage_limit"
-	| "usage_unavailable";
+	| "usage_unavailable"
+	// Spec 103, caps flag on only:
+	| "over_cost_cap"
+	| "cache_capability_unknown"
+	| "budget_unset";
 
 export interface SuggestionPlanInput {
 	readonly record: RecordedMainRequest | undefined;
@@ -108,11 +111,33 @@ export interface SuggestionPlanInput {
 	readonly currentModel: { readonly provider: string; readonly id: string } | undefined;
 	readonly nowMs: number;
 	readonly usage: QuotaUsage;
+	/** Spec 103: present only with `OMK_NEXT_SUGGESTIONS_CAPS` on; `budget` undefined ⇒ skip `budget_unset`. */
+	readonly caps?: { readonly budget: SuggestionBudget | undefined };
+}
+
+/** Caps-flag-only request fields: the (possibly lower-reasoning) options and the wall-time deadline. */
+export interface SuggestionCapsPlan {
+	readonly options: SimpleStreamOptions | undefined;
+	readonly deadlineMs: number;
+	readonly estimatedCostUsd: number;
+	/** Spec 103b: `cappedSuggestionOptions` lowered the recorded reasoning level. */
+	readonly reasoningCapped: boolean;
+}
+
+/** Spec 103b: numbers attached to an `over_cost_cap` skip (caps flag on only). */
+export interface SuggestionCostCapHit {
+	readonly estimatedCostUsd: number;
+	readonly maxCostUsd: number;
 }
 
 export type SuggestionPlan =
-	| { readonly kind: "skip"; readonly reason: SuggestionSkipReason }
-	| { readonly kind: "request"; readonly record: RecordedMainRequest; readonly finalAssistant: AssistantMessage };
+	| { readonly kind: "skip"; readonly reason: SuggestionSkipReason; readonly costCap?: SuggestionCostCapHit }
+	| {
+			readonly kind: "request";
+			readonly record: RecordedMainRequest;
+			readonly finalAssistant: AssistantMessage;
+			readonly caps?: SuggestionCapsPlan;
+	  };
 
 export function cacheTtlMs(options: SimpleStreamOptions | undefined): number {
 	if (options?.cacheRetention === "none") return 0;
@@ -136,13 +161,41 @@ export function planSuggestion(input: SuggestionPlanInput): SuggestionPlan {
 	if (!model || model.provider !== record.model.provider || model.id !== record.model.id) {
 		return skip("model_changed");
 	}
-	if (!supportsPromptCache(record.model, record.options)) return skip("no_cache_support");
-	if (input.nowMs - record.atMs >= cacheTtlMs(record.options)) return skip("cache_cold");
+	if (input.caps) {
+		const cache = checkSuggestionCache(record.model, record.options, input.nowMs - record.atMs);
+		if (cache !== "ok") return skip(cache);
+	} else {
+		if (!supportsPromptCache(record.model, record.options)) return skip("no_cache_support");
+		if (input.nowMs - record.atMs >= cacheTtlMs(record.options)) return skip("cache_cold");
+	}
 	if (input.usage === "unavailable") return skip("usage_unavailable");
 	if (typeof input.usage === "number" && !(input.usage < NEAR_USAGE_LIMIT_PERCENT)) {
 		return skip("near_usage_limit");
 	}
-	return { kind: "request", record, finalAssistant: final };
+	if (!input.caps) return { kind: "request", record, finalAssistant: final };
+	const budget = input.caps.budget;
+	if (!budget) return skip("budget_unset");
+	const options = cappedSuggestionOptions(record.options, budget);
+	const context = buildSuggestionContext(record, final);
+	const estimatedCostUsd = estimateSuggestionCostUsd(
+		record.model,
+		context,
+		suggestionEffectiveMaxTokens(record.model, options),
+	);
+	if (!(estimatedCostUsd <= budget.maxCostUsd)) {
+		return { kind: "skip", reason: "over_cost_cap", costCap: { estimatedCostUsd, maxCostUsd: budget.maxCostUsd } };
+	}
+	return {
+		kind: "request",
+		record,
+		finalAssistant: final,
+		caps: {
+			options,
+			deadlineMs: budget.deadlineMs,
+			estimatedCostUsd,
+			reasoningCapped: options?.reasoning !== record.options?.reasoning,
+		},
+	};
 }
 
 /** The recorded main context with the final answer and the instruction appended at the end only. */
@@ -169,22 +222,81 @@ export function extractSuggestion(message: AssistantMessage): string | undefined
 	return line.length > MAX_SUGGESTION_CHARS ? `${line.slice(0, MAX_SUGGESTION_CHARS - 1)}…` : line;
 }
 
-/** Run the background suggestion request; never throws. */
+export type SuggestionOutcome = "shown" | "empty" | "aborted" | "timeout" | "error";
+
+/** Spec 103 §2.2. `usage: undefined` is missing coverage, never 0. */
+export interface SuggestionResult {
+	readonly text?: string;
+	readonly usage?: Usage;
+	readonly outcome: SuggestionOutcome;
+	readonly latencyMs: number;
+}
+
+export interface SuggestionRequestExtras {
+	readonly caps?: SuggestionCapsPlan;
+	readonly now?: () => number;
+	/** Test seam for the wall-time deadline; defaults to `AbortSignal.timeout`. */
+	readonly timeoutSignal?: (ms: number) => AbortSignal;
+}
+
+function reportedUsage(message: unknown): Usage | undefined {
+	const usage = (message as { usage?: Usage } | undefined)?.usage;
+	return usage && typeof usage === "object" && typeof usage.input === "number" ? usage : undefined;
+}
+
+/**
+ * Run the background suggestion request; never throws. Without caps the
+ * provider request is byte-identical to spec 091; the result now carries the
+ * provider-reported usage so it can be settled as `purpose: "suggestion"`.
+ */
 export async function requestNextSuggestion(
 	streamFn: StreamFn,
 	record: RecordedMainRequest,
 	finalAssistant: AssistantMessage,
 	signal: AbortSignal,
-): Promise<string | undefined> {
+	extras: SuggestionRequestExtras = {},
+): Promise<SuggestionResult> {
+	const now = extras.now ?? Date.now;
+	const started = now();
+	const caps = extras.caps;
+	const deadline = caps ? (extras.timeoutSignal ?? AbortSignal.timeout)(caps.deadlineMs) : undefined;
+	const link = deadline ? linkAbortSignals(signal, deadline) : undefined;
+	const requestSignal = link?.signal ?? signal;
+	const options = caps ? caps.options : record.options;
+	const finish = (outcome: SuggestionOutcome, usage?: Usage, text?: string): SuggestionResult => {
+		link?.dispose();
+		const settled = deadline?.aborted && !signal.aborted ? "timeout" : signal.aborted ? "aborted" : outcome;
+		return {
+			...(settled === "shown" && text ? { text } : {}),
+			...(usage ? { usage } : {}),
+			outcome: settled,
+			latencyMs: Math.max(0, now() - started),
+		};
+	};
+	let stream: Awaited<ReturnType<StreamFn>>;
 	try {
-		const stream = await streamFn(record.model, buildSuggestionContext(record, finalAssistant), {
-			...record.options,
-			maxTokens: suggestionMaxTokens(record.model, record.options),
-			signal,
-		});
-		const result = await stream.result();
-		return signal.aborted ? undefined : extractSuggestion(result);
+		const requestOptions = {
+			...options,
+			maxTokens: suggestionMaxTokens(record.model, options),
+			signal: requestSignal,
+		};
+		stream = await streamFn(
+			record.model,
+			buildSuggestionContext(record, finalAssistant),
+			tagRequestPurpose(requestOptions, "suggestion"),
+		);
 	} catch {
-		return undefined;
+		return finish("error");
 	}
+	let result: AssistantMessage;
+	try {
+		result = await stream.result();
+	} catch (error) {
+		return finish("error", reportedUsage(error));
+	}
+	const usage = reportedUsage(result);
+	if (requestSignal.aborted || result.stopReason === "aborted") return finish("aborted", usage);
+	if (result.stopReason === "error") return finish("error", usage);
+	const text = extractSuggestion(result);
+	return finish(text ? "shown" : "empty", usage, text);
 }

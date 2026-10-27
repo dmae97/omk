@@ -7,7 +7,7 @@ import { getModels, getSupportedThinkingLevels } from "../src/models.ts";
  * read only the old key, so a live refresh silently dropped the whole `kimi-coding`
  * provider from the catalog. Both new keys publish the same four models.
  */
-const expectedIds = ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"];
+const expectedIds = ["k3", "k3-256k", "k3.1-pro", "k3.1-pro-highspeed", "kimi-for-coding", "kimi-for-coding-highspeed"];
 
 describe("kimi-coding catalog", () => {
 	it("keeps the Kimi For Coding provider after the models.dev key rename", () => {

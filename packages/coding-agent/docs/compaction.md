@@ -81,7 +81,7 @@ A compaction invoked inside the current prompt's preflight shares that budget ra
 
 ### Overflow Recovery
 
-If a provider rejects a request for context overflow despite OMK's projection, OMK removes the rejected assistant message from retry context, compacts, and retries automatically. Recovery is bounded and staged:
+If a provider rejects a request for context overflow despite OMK's projection, OMK removes the rejected assistant message from retry context, compacts, and retries automatically. The same recovery handles a local `Prompt input exceeds the safe model context window` rejection when tool results grow the request beyond the input ceiling during a running turn. This is a capacity failure, not an invalid provider response; the hard ceiling remains enforced. With auto-compaction disabled, OMK stops with guidance to compact, reduce context, or switch models. Recovery is bounded and staged:
 
 1. The first recovery uses the configured compaction budgets.
 2. If that retry also overflows, OMK recompacts from the previous kept boundary with `reserveTokens`, `reservedOutputTokens`, and `keepRecentTokens` capped at 4096, then retries once more.

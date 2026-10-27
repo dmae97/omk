@@ -223,16 +223,15 @@ function acquireLedgerLockSync(path: string): () => void {
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
-			return lockfile.lockSync(path, { realpath: false });
+			// 30 s, not the 10 s default: staleness is mtime vs Date.now(), and WSL2 steps the wall clock by seconds.
+			return lockfile.lockSync(path, { realpath: false, stale: 30_000 });
 		} catch (error) {
 			if (errorCode(error) !== "ELOCKED" || attempt === maxAttempts) {
 				throw error;
 			}
 			lastError = error;
-			const start = Date.now();
-			while (Date.now() - start < delayMs) {
-				// Busy-wait briefly; mirrors the auth-storage/settings-manager sync retry pattern.
-			}
+			// Sleep without spinning; the wait is monotonic, so a wall-clock step cannot stretch it.
+			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
 		}
 	}
 

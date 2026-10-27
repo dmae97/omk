@@ -51,7 +51,7 @@ async function fixture() {
 	const first = event(200, 0.1);
 	await writeFile(
 		join(asyncDir, "events.jsonl"),
-		[first, first, event(300, 0.2)].map((row) => JSON.stringify(row)).join("\n") + "\n",
+		`${[first, first, event(300, 0.2)].map((row) => JSON.stringify(row)).join("\n")}\n`,
 	);
 	const options = {
 		cwd,

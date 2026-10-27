@@ -67,7 +67,7 @@ Through 1.2.4 the controller advanced the round at every attempt's `agent_end` a
 
 For programmatic lifecycle control, import `createDurableGoal`, `parseDurableGoalSnapshot`, `applyDurableGoalCommand`, and `DurableGoalStore` from `open-multi-agent-kit`. The reducer supports edit, pause, resume, block, round advancement, evidence attachment, completion, and clear transitions.
 
-Every mutation consumes the current revisioned `GoalRef`; stale revisions are rejected. Editing the objective or round limit, or advancing a round, starts a new semantic generation and invalidates earlier completion evidence. Completion requires lowercase SHA-256 evidence captured during the current generation. The built-in controller dates each transition no earlier than the journal's last timestamp, so a wall clock that steps back does not fail it. Programmatic callers get the same rule from `nextDurableGoalTimestamp(goal)`: pass its result as the `now` argument of `applyDurableGoalCommand()` or `DurableGoalStore.transition()`. A raw `new Date().toISOString()` fails with `goal timestamps must be monotonic` once the clock has stepped back.
+Every mutation consumes the current revisioned `GoalRef`; stale revisions are rejected. Editing the objective or round limit, or advancing a round, starts a new semantic generation and invalidates earlier completion evidence. Completion requires lowercase SHA-256 evidence captured during the current generation. The built-in controller dates each transition no earlier than the journal's last timestamp, so a wall clock that steps back does not fail it. Programmatic callers get the same rule from `nextDurableGoalTimestamp(goal)`: pass its result as the `now` argument of `applyDurableGoalCommand()` or `DurableGoalStore.transition()`. A raw `new Date().toISOString()` fails with `goal timestamps must be monotonic` once the clock has stepped back. The journal lock is reclaimed only after 30 s without a refresh, so a forward clock step shorter than that cannot hand a live writer's lock to another session. A writer that loses its lock anyway fails with `ECOMPROMISED` before publishing the journal, and the process keeps running.
 
 ### Acceptance checks
 
@@ -82,13 +82,13 @@ Every mutation consumes the current revisioned `GoalRef`; stale revisions are re
 | `/goal complete` | Requires a receipt from this session that passed in the current generation and still matches the workspace. |
 | `/goal` | Shows the approved check and whether a passing receipt still matches the workspace. |
 
-The workspace state is the manifest digest of HEAD, the git dirty set and the dirty files' contents, without `.omk/goals`. A tracked edit, a new untracked file or a HEAD move after the check makes the evidence stale, and `/goal complete` asks for `/goal verify` again. Each check writes a `goal_verification` session entry with the receipt ID, digest, status and exit code.
+The workspace state is the manifest digest of HEAD, the git dirty set and the dirty files' contents, without `.omk/goals`, `.omk/metrics`, or `.omk/runs`. Host-owned state is excluded before the 512-path cap is applied. A tracked edit, a new untracked file or a HEAD move after the check makes the evidence stale, and `/goal complete` asks for `/goal verify` again. Each check writes a `goal_verification` session entry with the receipt ID, digest, status and exit code.
 
 Limits:
 
 - The approval and the trusted receipts live in the OMK process. The agent can write the workspace, the goal journal and the receipt files, so nothing read back from them approves a command. After a restart, approve the check again with `/goal verify <command>`. Until then `/goal complete` uses the reducer rule above.
 - The receipt path accepts static command lines only. Variable expansion and command substitution (`$HOME`, `$(...)`) fail closed; put them in a script and verify `sh ./check.sh`.
-- Outside a git work tree the workspace state binds nothing (`unavailable`), so a later edit cannot make the evidence stale. More than 512 dirty paths are bound partially (`partial_truncated`).
+- Outside a git work tree the workspace state binds nothing (`unavailable`). More than 512 goal-relevant dirty paths are bound partially (`partial_truncated`). Acceptance-gated completion requires `complete` scope; unavailable or partial evidence is never promoted to whole-workspace verification.
 - The check proves what the command checks. A weak command completes a goal early.
 
 ### Seam checkpoints

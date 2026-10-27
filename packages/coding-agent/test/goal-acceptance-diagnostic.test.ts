@@ -2,17 +2,19 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-	buildAcceptanceDiagnostic,
 	buildDiagnosticExcerpt,
 	diagnosticOutputFromText,
 	GOAL_DIAGNOSTIC_MAX_BYTES,
 	GOAL_DIAGNOSTIC_MAX_LINES,
 	goalDiagnosticsEnabled,
 	matchErrorLine,
-	renderAcceptanceDiagnostic,
 	sanitizeDiagnosticText,
 	utf8Bytes,
 } from "../src/core/goal-acceptance-diagnostic.ts";
+import {
+	buildAcceptanceDiagnostic,
+	renderAcceptanceDiagnostic,
+} from "../src/core/goal-acceptance-diagnostic-render.ts";
 
 const FIXTURES = join(import.meta.dirname, "fixtures", "goal-diagnostics");
 const MARKER = /\n\[… \d+ bytes elided …\]\n/g;

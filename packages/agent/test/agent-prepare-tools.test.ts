@@ -100,4 +100,50 @@ describe("Agent.prepareTools", () => {
 		expect(sent).toEqual([["keep"]]);
 		expect(pendingSeen).toEqual([0]);
 	});
+
+	it("a prepareTools throw on continue still opens the run, ends it with the real error, and sends nothing", async () => {
+		const sent: string[][] = [];
+		const agent = recordingAgent(sent);
+		await agent.prompt("hello");
+		class Unavailable extends Error {}
+		const cause = new Unavailable("required tool missing");
+		agent.prepareTools = () => {
+			throw cause;
+		};
+		const events: string[] = [];
+		agent.subscribe((event) => {
+			events.push(event.type);
+		});
+		agent.followUp({ role: "user", content: [{ type: "text", text: "next" }], timestamp: Date.now() });
+
+		const error = await agent.continue().catch((caught: unknown) => caught);
+
+		expect(error).toBe(cause);
+		expect(events[0]).toBe("agent_start");
+		expect(events.at(-1)).toBe("agent_end");
+		expect(events.filter((type) => type === "agent_start")).toHaveLength(1);
+		expect(sent).toHaveLength(1);
+		expect(agent.state.isStreaming).toBe(false);
+		const last = agent.state.messages.at(-1);
+		expect(last).toMatchObject({ role: "assistant", stopReason: "error" });
+		expect((last as { errorMessage?: string }).errorMessage).toContain("required tool missing");
+	});
+
+	it("a prepareTools throw on prompt follows the same lifecycle", async () => {
+		const sent: string[][] = [];
+		const agent = recordingAgent(sent);
+		const cause = new Error("boom");
+		agent.prepareTools = () => {
+			throw cause;
+		};
+		const events: string[] = [];
+		agent.subscribe((event) => {
+			events.push(event.type);
+		});
+
+		await expect(agent.prompt("hello")).rejects.toBe(cause);
+		expect(events[0]).toBe("agent_start");
+		expect(events.at(-1)).toBe("agent_end");
+		expect(sent).toHaveLength(0);
+	});
 });

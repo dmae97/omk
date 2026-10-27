@@ -1,0 +1,9 @@
+{
+	"source": "scripts/bench/fixtures/atif/plain (exported by scripts/bench/atif-export.mjs)",
+	"harborCommit": "209a48a",
+	"validator": "harbor.utils.trajectory_validator.validate_trajectory + Trajectory.model_validate",
+	"pydantic": "2.14.1",
+	"schema_version": "ATIF-v1.8",
+	"result": "valid (plain, tool-error, worker fixtures)",
+	"validatedAt": "2026-10-23"
+}

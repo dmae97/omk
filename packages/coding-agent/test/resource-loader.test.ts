@@ -388,9 +388,11 @@ Content`,
 			consoleError.mockRestore();
 		});
 
-		it("should skip AGENTS.md and CLAUDE.md discovery when noContextFiles is true", async () => {
+		it("should skip all context document discovery when noContextFiles is true", async () => {
 			writeFileSync(join(cwd, "AGENTS.md"), "# Project Guidelines\n\nBe helpful.");
 			writeFileSync(join(cwd, "CLAUDE.md"), "# Claude Guidelines\n\nBe helpful.");
+			writeFileSync(join(cwd, "PRD.md"), "# Product requirements");
+			writeFileSync(join(cwd, "PROGRESS.md"), "# Current progress");
 
 			const loader = new DefaultResourceLoader({ cwd, agentDir, noContextFiles: true });
 			await loader.reload();

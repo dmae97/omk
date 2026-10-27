@@ -10,6 +10,7 @@ import {
 import { RunBudget, type RunBudgetSnapshot } from "./run-budget.ts";
 import { RunBudgetExceededError, type RunBudgetLimits, RunBudgetPolicyError } from "./run-budget-policy.ts";
 import { PromptExecutionBusyError } from "./session-prompt-lifecycle.ts";
+import { PrefixBoundaryCauseHolder } from "./system-prompt-cache-boundary.ts";
 
 interface RunBudgetLifecycle {
 	readonly assertIdle: () => void;
@@ -17,6 +18,8 @@ interface RunBudgetLifecycle {
 	readonly reject: (error: RunBudgetExceededError | RunBudgetPolicyError) => void;
 	/** Called once an execute() scope has fully closed. */
 	readonly idle?: () => void;
+	/** Spec 102: the owning session's boundary-cause handoff to the request trace. */
+	readonly prefixCauses?: PrefixBoundaryCauseHolder;
 }
 
 /** Installs one scoped stream boundary; restores it without overwriting a later owner. */
@@ -55,6 +58,12 @@ export class SessionRunBudget {
 		this.lifecycle = lifecycle;
 	}
 
+	private ownPrefixCauses: PrefixBoundaryCauseHolder | undefined;
+	/** The owning session's spec 102 cause holder, created by AgentSession. */
+	get prefixCauses(): PrefixBoundaryCauseHolder {
+		this.ownPrefixCauses ??= this.lifecycle.prefixCauses ?? new PrefixBoundaryCauseHolder();
+		return this.ownPrefixCauses;
+	}
 	get failure(): RunBudgetExceededError | undefined {
 		return this.current?.failure;
 	}
@@ -79,6 +88,10 @@ export class SessionRunBudget {
 	}
 	waitForIdle(): Promise<void> {
 		return (this.current ?? this.previous)?.waitForIdle() ?? Promise.resolve();
+	}
+	/** True once the owning session closed this budget (session dispose). */
+	get closed(): boolean {
+		return this.disposed;
 	}
 	close(): void {
 		this.disposed = true;
@@ -118,7 +131,7 @@ export class SessionRunBudget {
 			this.current = scopedBudget;
 			this.admission = undefined;
 			this.admission = createRequestAdmissionGuard(requestAdmissionPolicyFromEnv());
-			wrapped = wrapBudgetStream(source, scopedBudget, this.admission);
+			wrapped = wrapBudgetStream(source, scopedBudget, this.admission, this.prefixCauses);
 			if (sourceAuth !== undefined) {
 				wrappedAuth = async (provider) => {
 					scopedBudget.assertAdmission();

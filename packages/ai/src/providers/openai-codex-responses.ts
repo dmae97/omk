@@ -152,6 +152,7 @@ function getRetryAfterDelayMs(headers: Headers): number | undefined {
 
 	const date = Date.parse(retryAfter);
 	if (!Number.isNaN(date)) {
+		// wall-clock: Retry-After is an HTTP date set by the server
 		return Math.max(0, date - Date.now());
 	}
 
@@ -1593,6 +1594,7 @@ async function parseErrorResponse(response: Response): Promise<{ message: string
 			const code = err.code || err.type || "";
 			if (/usage_limit_reached|usage_not_included|rate_limit_exceeded/i.test(code) || response.status === 429) {
 				const plan = err.plan_type ? ` (${err.plan_type.toLowerCase()} plan)` : "";
+				// wall-clock: resets_at is a Unix timestamp set by the server
 				const mins = err.resets_at
 					? Math.max(0, Math.round((err.resets_at * 1000 - Date.now()) / 60000))
 					: undefined;

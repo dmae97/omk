@@ -1,0 +1,9 @@
+
+ RUN  v4.1.11 /tmp/fx100/v
+
+
+ Test Files  1 skipped (1)
+      Tests  3 skipped (3)
+   Start at  08:52:06
+   Duration  137ms (transform 15ms, setup 0ms, import 25ms, tests 0ms, environment 0ms)
+

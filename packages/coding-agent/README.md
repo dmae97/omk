@@ -1,6 +1,8 @@
 # OMK
 
-Provider-neutral terminal coding agent with optional multi-agent orchestration, scoped tools, replayable sessions, and evidence-backed verification.
+An open-source multi-agent coding CLI for your terminal: switch models in one session and finish a goal only when your test passes.
+
+OMK is a lightweight, MIT-licensed AI coding agent written in TypeScript, with optional multi-agent orchestration, scoped tools, replayable sessions, and evidence-backed verification. It is a standalone CLI, so it can serve as an open-source alternative to a single-provider agent such as Claude Code.
 
 OMK supports interactive terminal use, non-interactive output, RPC integration, and an embeddable TypeScript SDK. It works with API-key and subscription providers without making one provider the control plane.
 
@@ -23,6 +25,14 @@ npx --ignore-scripts open-multi-agent-kit
 ```
 
 The published package name remains `open-multi-agent-kit`; the command is `omk`.
+
+Or install the standalone binary, which needs no Node.js (macOS, Linux):
+
+```bash
+curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh
+```
+
+The script checks the download against `SHA256SUMS` and installs to `~/.omk/bin`. Windows builds are on the [releases page](https://github.com/dmae97/omk/releases/latest).
 
 ## Quick Start
 
@@ -47,7 +57,7 @@ OMK stores user configuration under `~/.omk/agent/` and project configuration un
 Install `omk-book-to-skill` to compile documents into reusable skills without adding Python extractors to OMK core:
 
 ```bash
-omk install npm:omk-book-to-skill@1.5.4
+omk install npm:omk-book-to-skill@1.5.9
 ```
 
 It provides compile, update, and verification commands plus a local SHA-256 provenance manifest. See [Book to Skill](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/book-to-skill.md).
@@ -115,6 +125,10 @@ Type `/` in the editor to open command completion.
 
 OMK warns from the third repeated identical tool call and blocks the sixth. It also repairs unmatched tool pairs before provider requests and adds guidance for supported Kimi, GLM, and Grok models. `OMK_IDENTICAL_LOOP`, `OMK_TOOL_PAIR_REPAIR`, and `OMK_PROMPT_PRESET` opt out; `OMK_GOAL_CONTROLLER` controls `/goal` and continuation. Headless runs also get a one-time finish check after workspace changes (`OMK_FINISH_CHECK`, with `OMK_TIME_BUDGET_SEC` for an early-save reminder). An active goal continues after each settled turn; with an approved acceptance check it completes when the check passes on the current workspace. See [acceptance checks](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/run-protocol.md#acceptance-checks).
 
+These harness features are on by default; set the variable to `0`, `false` or `off` to restore the earlier behavior: `OMK_EDIT_DIAGNOSTICS`, `OMK_EXEC_TRUNCATE_MIDDLE`, `OMK_JSON_SESSION_INFO` (adds `omk_session_info` lines to `--mode json`), `OMK_GOAL_AUTONOMY`, `OMK_SKILL_ADMISSION`, `OMK_SKILL_AUTO_LOAD` and `OMK_EVIDENCE_LIFECYCLE` (default conditional delete of verified goal-recall files only; `observe` deletes nothing). See [environment variables](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/environment-variables.md).
+
+Also on by default, with the same opt-out: `OMK_ADAPTIVE_EFFORT`, `OMK_DOMAIN_ROUTING`, `OMK_GOAL_OUTPUT_RECALL`, `OMK_LANE_READY_QUEUE`, `OMK_LANE_FAILURE_SCOPE`, `OMK_RTK_OUTPUT`, `OMK_SESSION_CONTROL`, `OMK_VERIFIED_MEMORY`, `OMK_RESPONSE_REASONING_CAP`, `OMK_PREFIX_BOUNDARY`.
+
 See [Usage](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/usage.md) and [Keybindings](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/keybindings.md) for the complete interactive reference.
 
 ### Repository Understanding
@@ -158,9 +172,9 @@ See [Compaction](https://github.com/dmae97/omk/blob/main/packages/coding-agent/d
 
 Run `omk init --global --dry-run` to preview portable user instructions, then
 `omk init --global` to create missing files without overwriting existing context or
-settings. See [User context setup](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/context-files.md).
+settings. Use `omk init --project` for the repository document set and bundled pstack skills and agents. Existing files are preserved. Project agents require explicit scope; interactive runs prompt for trust. See [User context setup](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/context-files.md) and [Pstack setup](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/pstack.md).
 
-OMK discovers project instructions such as `AGENTS.md` from the current directory and parent directories. Use `--no-context-files` when a clean session must not load project context.
+OMK discovers project instructions such as `AGENTS.md` from the current directory and parent directories. It also loads `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `RULES.md`, `TASKS.md`, and `PROGRESS.md`. Use `--no-context-files` when a clean session must not load project context.
 
 ### Prompt Caching
 
@@ -258,7 +272,7 @@ npm test
 
 See [Development](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/development.md) and [CONTRIBUTING.md](https://github.com/dmae97/omk/blob/main/CONTRIBUTING.md).
 
-Release notes: [v1.5.4](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v1.5.4.md). Public releases: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). Source-version notes can describe a candidate until its tag workflow completes.
+Release notes: [v1.5.9](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v1.5.9.md). Public releases: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). Source-version notes can describe a candidate until its tag workflow completes.
 
 ## License
 

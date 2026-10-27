@@ -18,6 +18,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { cumulativeCacheReadShare, isUsageInputSemanticsVerified } from "omk-ai";
+import { addSuggestionTotals, type PurposeUsageTotals, summarizeByPurpose } from "./turn-metrics-purpose.ts";
 import {
 	buildTurnMetricRecord,
 	parseTurnMetricRecord,
@@ -118,16 +120,34 @@ export interface ToolAggregate {
 	readonly totalMs: number;
 }
 
+export interface UsageCoverage {
+	readonly turnsWithUsage: number;
+	readonly turnsMissingUsage: number;
+	/** Turns with usage whose provider did not report cache writes; excluded from cache share. */
+	readonly turnsMissingCacheWrite: number;
+	/** Providers with usage whose `input` semantics were not verified (shown as 미검증). */
+	readonly unverifiedProviders: readonly string[];
+}
+
 export interface TurnMetricsSummary {
 	readonly turns: number;
 	readonly sessions: number;
 	readonly models: readonly string[];
+	/** Sum of catalog-price estimates (`UsageCost.total`). */
 	readonly totalCostUsd: number;
+	/** Sum of provider-reported billed amounts; only turns that reported one contribute. */
+	readonly billedCostUsd: number;
+	readonly billedTurns: number;
+	readonly usageCoverage: UsageCoverage;
 	readonly totals: TurnUsageMetric;
 	readonly turnDurationP50Ms: number;
 	readonly turnDurationP95Ms: number;
 	readonly timeToFirstChunkP50Ms?: number;
 	readonly cacheReadShare: number;
+	/** Which turns `cacheReadShare` was computed over: turns with usage and a reported cacheWrite. */
+	readonly cacheReadShareCoverage: Readonly<Record<"turnsUsed" | "turnsTotal" | "turnsMissingCacheWrite", number>>;
+	/** `true` when `totalCostUsd` includes a turn with unknown cacheWrite, so it is a lower bound (하한). */
+	readonly costIsLowerBound: boolean;
 	readonly compactions: number;
 	readonly failovers: number;
 	readonly contextCachePlanHitRate?: number;
@@ -136,6 +156,8 @@ export interface TurnMetricsSummary {
 	readonly tools: readonly ToolAggregate[];
 	/** Lines that could not be parsed as a metric record. */
 	readonly malformedLines: number;
+	/** Spec 103: only when suggestion records exist; `totals` above is the sum of both. */
+	readonly byPurpose?: Readonly<Record<"main" | "suggestion", PurposeUsageTotals>>;
 }
 
 function percentile(sorted: readonly number[], fraction: number): number {
@@ -171,16 +193,38 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 	let planHits = 0;
 	let planObservations = 0;
 	let provenanceMismatchTurns = 0;
+	// Spec 103: suggestion records count only toward cost totals (and `byPurpose`), never as turns.
+	let { billedTurns, billedCostUsd } = addSuggestionTotals(records, totals);
+	let turnsMissingUsage = 0;
+	let turnsMissingCacheWrite = 0;
+	// Cache share is computed over covered usage only: turns whose cache writes are known.
+	const covered = { input: 0, cacheRead: 0, cacheWrite: 0 };
+	const unverifiedProviders = new Set<string>();
 
-	for (const record of records) {
+	const mainRecords = records.filter((record) => record.purpose !== "suggestion");
+	for (const record of mainRecords) {
 		sessions.add(record.sessionId);
 		if (record.model) models.add(record.provider ? `${record.provider}/${record.model}` : record.model);
 		if (record.usage) {
 			totals.input += record.usage.input;
 			totals.output += record.usage.output;
 			totals.cacheRead += record.usage.cacheRead;
-			totals.cacheWrite += record.usage.cacheWrite;
+			if (record.usage.cacheWrite === undefined) {
+				turnsMissingCacheWrite++;
+			} else {
+				totals.cacheWrite += record.usage.cacheWrite;
+				covered.input += record.usage.input;
+				covered.cacheRead += record.usage.cacheRead;
+				covered.cacheWrite += record.usage.cacheWrite;
+			}
 			totals.costUsd += record.usage.costUsd;
+			if (record.usage.billedUsd !== undefined) {
+				billedCostUsd += record.usage.billedUsd;
+				billedTurns++;
+			}
+			if (!isUsageInputSemanticsVerified(record.provider)) unverifiedProviders.add(record.provider ?? "unknown");
+		} else {
+			turnsMissingUsage++;
 		}
 		turnDurations.push(record.durationMs);
 		if (typeof record.timeToFirstChunkMs === "number") firstChunkTimes.push(record.timeToFirstChunkMs);
@@ -225,23 +269,40 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 		})
 		.sort((a, b) => b.totalMs - a.totalMs || a.name.localeCompare(b.name));
 
-	const promptSideTotal = totals.input + totals.cacheRead;
 	return {
-		turns: records.length,
+		turns: mainRecords.length,
 		sessions: sessions.size,
 		models: [...models].sort(),
 		totalCostUsd: totals.costUsd,
+		billedCostUsd,
+		billedTurns,
+		usageCoverage: {
+			turnsWithUsage: mainRecords.length - turnsMissingUsage,
+			turnsMissingUsage,
+			turnsMissingCacheWrite,
+			unverifiedProviders: [...unverifiedProviders].sort(),
+		},
 		totals,
 		turnDurationP50Ms: percentile(turnDurations, 0.5),
 		turnDurationP95Ms: percentile(turnDurations, 0.95),
 		timeToFirstChunkP50Ms: firstChunkTimes.length > 0 ? percentile(firstChunkTimes, 0.5) : undefined,
-		cacheReadShare: promptSideTotal === 0 ? 0 : totals.cacheRead / promptSideTotal,
+		// Shared helper: cacheRead / (input + cacheRead + cacheWrite) over token sums of
+		// covered turns only; turns with unknown cache writes are counted in
+		// usageCoverage.turnsMissingCacheWrite instead of being treated as 0.
+		cacheReadShare: cumulativeCacheReadShare([covered]) ?? 0,
+		cacheReadShareCoverage: {
+			turnsUsed: mainRecords.length - turnsMissingUsage - turnsMissingCacheWrite,
+			turnsTotal: mainRecords.length,
+			turnsMissingCacheWrite,
+		},
+		costIsLowerBound: turnsMissingCacheWrite > 0,
 		compactions,
 		failovers,
 		contextCachePlanHitRate: planObservations === 0 ? undefined : planHits / planObservations,
 		provenanceMismatchTurns,
 		tools,
 		malformedLines,
+		...(records.some((r) => r.purpose === "suggestion") ? { byPurpose: summarizeByPurpose(records) } : {}),
 	};
 }
 

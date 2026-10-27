@@ -18,4 +18,10 @@ export interface PromptOptions {
 	activeSkillSource?: string;
 	/** Internal hook used by RPC mode to observe prompt preflight acceptance or rejection. */
 	preflightResult?: (success: boolean) => void;
+	/**
+	 * Internal hook (next-suggestion accept trace): called once with the branch prompt() actually took: "prompt" when
+	 * a run starts, or the requested streamingBehavior when the input is queued (steer/followUp) or deferred for a
+	 * prompt in preflight. Not called for input an extension command or input hook handled.
+	 */
+	dispatched?: (via: "prompt" | "steer" | "followUp", text: string) => void;
 }

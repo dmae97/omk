@@ -1,3 +1,18 @@
+/**
+ * `OMK_SESSION_CONTROL`: default on; `0`/`false`/`off` opts out (inline parse: importing core/env-flag here would
+ * add a cli/ edge). `required` is true only when the variable is set to a non-opt-out value: then a control start
+ * failure closes the session and throws as before. By default an unsupported session (Windows, `--no-session`, not
+ * owned) just runs without live control.
+ */
+export function sessionControlMode(raw: string | undefined = process.env.OMK_SESSION_CONTROL): {
+	readonly enabled: boolean;
+	readonly required: boolean;
+} {
+	if (raw === undefined) return { enabled: true, required: false };
+	const enabled = !["0", "false", "off"].includes(raw.trim().toLowerCase());
+	return { enabled, required: enabled };
+}
+
 // Structural shapes on purpose: importing the core types here would put cli/ in an import cycle.
 export async function attachSessionTransports(
 	session: {
@@ -5,13 +20,15 @@ export async function attachSessionTransports(
 		startControl(): Promise<void>;
 		close(): Promise<void>;
 	},
-	controlEnabled = process.env.OMK_SESSION_CONTROL === "1",
+	control: boolean | { readonly enabled: boolean; readonly required: boolean } = sessionControlMode(),
 ): Promise<Array<{ type: "warning"; message: string }>> {
+	const mode = typeof control === "boolean" ? { enabled: control, required: control } : control;
 	const diagnostics = mcpAttachDiagnostics(await session.attachMcpServers());
-	if (controlEnabled) {
+	if (mode.enabled) {
 		try {
 			await session.startControl();
 		} catch (error) {
+			if (!mode.required) return diagnostics;
 			await session.close();
 			throw error;
 		}

@@ -45,6 +45,34 @@ describe("tool definition wrapper", () => {
 		expect(roundTripped.resourceClaims).toBe(resourceClaims);
 	});
 
+	it("preserves argument-dependent timeouts through both wrapper directions", () => {
+		const definition: ToolDefinition = {
+			name: "call-timeout",
+			label: "Call timeout",
+			description: "Test tool",
+			parameters: Type.Object({}),
+			resolveCallTimeoutMs: (args) => (args === "long" ? 600_000 : undefined),
+			execute: async () => ({ content: [], details: undefined }),
+		};
+		const tool = wrapToolDefinition(definition);
+		expect(tool.resolveCallTimeoutMs?.("long")).toBe(600_000);
+		expect(tool.resolveCallTimeoutMs?.({ timeout: 900 })).toBeUndefined();
+		const roundTripped = wrapToolDefinition(createToolDefinitionFromAgentTool(tool));
+		expect(roundTripped.resolveCallTimeoutMs?.("long")).toBe(600_000);
+	});
+
+	it.each([Number.NaN, -1, 0.5, 2_147_483_648])("rejects invalid call timeout %s", (timeoutMs) => {
+		const tool = wrapToolDefinition({
+			name: "invalid-call-timeout",
+			label: "Call timeout",
+			description: "Test tool",
+			parameters: Type.Object({}),
+			resolveCallTimeoutMs: () => timeoutMs,
+			execute: async () => ({ content: [], details: undefined }),
+		});
+		expect(() => tool.resolveCallTimeoutMs?.({})).toThrow(/Invalid timeout/);
+	});
+
 	it.each([Number.NaN, -1, 0.5, 2_147_483_648])("rejects invalid resolved timeout %s", (timeoutMs) => {
 		const definition: ToolDefinition = {
 			name: "invalid-timeout",

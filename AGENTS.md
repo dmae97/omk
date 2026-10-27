@@ -102,6 +102,77 @@ reuses an existing API implementation, plus the wider matrix (`tokens`, `abort`,
 live-credential cases behind `describe.skipIf` on that provider's own environment
 variable so a keyless run still passes.
 
+## Autonomous development mode (24/7)
+
+The repository owner runs agent teams on this repo in continuous autonomous mode. Agents
+keep working without asking for a per-step OK: open branches and PRs, push work branches,
+review, and merge.
+
+Still required in this mode:
+
+- Merge only after the reviewer approved the current head SHA and CI is green. Use a merge
+  commit pinned to that SHA (`gh pr merge N --merge --match-head-commit <sha>`). Any head
+  change needs a new review.
+- After a PR is open, never rebase, amend, force-push, or use `--no-verify`; update it by
+  merging `main` in. Commits are authored as `dmae97`.
+- One concern per PR. No new dependency without review. Pin the measurement baseline SHA
+  before an A/B. Never skip or bypass CI, and do not edit workflow files without the
+  owner's OK.
+- Releases: patch releases (bump the last number by 1, e.g. 1.5.6 to 1.5.7) are always
+  allowed, including the tag and npm publish; minor and major releases need the owner's OK.
+  Cut a patch only when at least one user-facing PR has merged since the last tag, `main`
+  CI is green, and `npm ci`, build, test, and `npm pack --dry-run` pass in a clean clone.
+  Use a release PR that changes only CHANGELOG and versions. In the CHANGELOG, mark
+  default-off features as "flag, default off" and make no performance claims without an
+  A/B result. After the release PR merges, push only the tag: the release workflow
+  publishes to npm and creates the GitHub Release with binaries. Never publish or create
+  the Release by hand.
+- Paid benchmark runs wait for a dollar cap the owner sets.
+- Never print, log, or commit secrets.
+- Code copied from other projects must be MIT or Apache-2.0: name the source at the top of
+  the file, and update `NOTICE` for Apache-2.0 code. GPL, unlicensed, or source-available
+  code (for example Claude Code) is a reference for ideas only.
+- Public text makes no ranking claims. Benchmark numbers are described only as
+  "self-measured under TB 4.0 rules".
+
+## Goal autonomy
+
+`OMK_GOAL_AUTONOMY` (flag, default on since this change; `0`/`false`/`off` opts out, spec 119) lets an active `/goal` stop itself with
+`budget-limit`, `deadline`, `outcome-unknown`, or `scope-changed`. The budget is set only by
+the user via `/goal budget <usd|-> [<deadline ISO>|-]` (or `/goal budget clear`) and counts
+subagent lane cost; an unknown remaining budget stops with `budget-limit`. User steering
+pauses the goal and only `/goal resume` restarts it. Stop reasons are custom entries; the
+`omk.goal.v1` schema is unchanged. With the flag explicitly off (`OMK_GOAL_AUTONOMY=0`), session output is
+byte-identical to the pre-default-on baseline (G0). No A/B result exists yet, so make no performance claims.
+
+## Default-on harness flags
+
+These `OMK_*` feature flags are on by default (unset, or any value other than the opt-outs). Set one to `0`,
+`false` or `off` (trimmed, case-insensitive) to restore the earlier behavior. This mirrors
+`packages/coding-agent/README.md`; details are in `packages/coding-agent/docs/environment-variables.md`.
+
+| Flag | Default | Disable |
+|---|---|---|
+| `OMK_EDIT_DIAGNOSTICS` | on | `OMK_EDIT_DIAGNOSTICS=0` |
+| `OMK_EXEC_TRUNCATE_MIDDLE` | on | `OMK_EXEC_TRUNCATE_MIDDLE=0` |
+| `OMK_JSON_SESSION_INFO` | on (adds `omk_session_info` lines to `--mode json`) | `OMK_JSON_SESSION_INFO=0` |
+| `OMK_GOAL_AUTONOMY` | on | `OMK_GOAL_AUTONOMY=0` |
+| `OMK_SKILL_ADMISSION` | on | `OMK_SKILL_ADMISSION=0` |
+| `OMK_SKILL_AUTO_LOAD` | on (subagent workers set `0`) | `OMK_SKILL_AUTO_LOAD=0` |
+| `OMK_EVIDENCE_LIFECYCLE` | conditional delete of verified goal-recall files only; `observe` deletes nothing | `OMK_EVIDENCE_LIFECYCLE=0` |
+| `OMK_ADAPTIVE_EFFORT` | on (cost; subagent workers set `0`) | `OMK_ADAPTIVE_EFFORT=0` |
+| `OMK_DOMAIN_ROUTING` | on (cost/routing) | `OMK_DOMAIN_ROUTING=0` |
+| `OMK_GOAL_OUTPUT_RECALL` | on | `OMK_GOAL_OUTPUT_RECALL=0` |
+| `OMK_LANE_READY_QUEUE` | on | `OMK_LANE_READY_QUEUE=0` |
+| `OMK_LANE_FAILURE_SCOPE` | on | `OMK_LANE_FAILURE_SCOPE=0` |
+| `OMK_RTK_OUTPUT` | on (raw output when `rtk` is missing) | `OMK_RTK_OUTPUT=0` |
+| `OMK_SESSION_CONTROL` | on; unset never fails startup, an explicit `1` is required | `OMK_SESSION_CONTROL=0` |
+| `OMK_VERIFIED_MEMORY` | on (needs Context Budget V2) | `OMK_VERIFIED_MEMORY=0` |
+| `OMK_RESPONSE_REASONING_CAP` | on (cost) | `OMK_RESPONSE_REASONING_CAP=0` |
+| `OMK_PREFIX_BOUNDARY` | on (prompt cache) | `OMK_PREFIX_BOUNDARY=0` |
+
+G0 (`test/suite/g0-session-hash.ts`) must match main with all of them set to `0`.
+
 ## Git and safety
 
 - Multiple sessions may share this working tree. Stage only files you changed, by explicit

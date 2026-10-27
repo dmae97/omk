@@ -4,7 +4,6 @@ import { type RunTaskRetryCommand, runDagAncestors } from "omk-protocol";
 import type { RunAuthority } from "./authority-runtime.ts";
 import { probeVerifiedSandbox } from "./broker.ts";
 import { assertCandidateScope, loadCandidate } from "./candidate.ts";
-import { preflightCheckReceipts } from "./check-receipt.ts";
 import { composeDagCandidate } from "./dag-candidates.ts";
 import { executeDag } from "./dag-phase.ts";
 import { assertTaskSelection, taskCheckpoints } from "./dag-retry-projection.ts";
@@ -92,7 +91,6 @@ export async function retryDagTasks(
 	return withRecoveryLease(runPath, command, async ({ snapshot, journal }) => {
 		const { contract } = assertDagRecoverable(runPath, snapshot);
 		assertTaskSelection(contract, snapshot.state, command.taskIds);
-		preflightCheckReceipts(contract);
 		probeVerifiedSandbox();
 		assertDagRecoverable(runPath, snapshot);
 		if (options.signal?.aborted) throw new VerifiedRunError("cancelled");

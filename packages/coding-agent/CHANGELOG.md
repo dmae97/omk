@@ -4,6 +4,125 @@
 
 ### Fixed
 
+- Bound adaptive-effort tool-call deduplication state. If its limit is reached, the adaptive wrapper passes through the configured reasoning effort for the rest of its lifetime; other limits may still apply.
+- A compaction is no longer stamped earlier than the messages it covers when the wall clock steps backward (observed on WSL2 as ~6.8 second resyncs). Previously the compacted history's old usage still counted after compaction, so the next prompt was rejected with `context_input_capacity_exceeded`. The compaction timestamp now follows the newest message on its branch for steps up to one minute.
+- Usage estimates, input admission and compaction gates now use active-branch entry order to distinguish covered messages from new responses. Assistant usage and overflow errors arriving after compaction while the wall clock is still recovering are no longer discarded as stale; repeated compactions are distinguished by entry ID even when their timestamps match.
+
+## [1.5.9] - 2026-10-26
+
+### Added
+
+- A default-on `deepseek_harness` built-in for native DeepSeek and recognized DeepSeek model IDs on gateways. It adds scoped execution guidance and projects oversized successful tool results to Unicode-safe head/tail excerpts at 80% context pressure, preserving original session history. `OMK_DEEPSEEK_HARNESS=0` independently disables it. No upstream runtime, credentials, session-log uploads, or protocol changes are introduced. See [DeepSeek harness](docs/deepseek-harness.md).
+- Project context documents. `omk init --project` creates missing `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `RULES.md`, `TASKS.md` and `PROGRESS.md` without overwriting files, and the project-directory walk loads each once as context. A bare `omk` launch in an otherwise empty Git repository root creates them too; `OMK_PROJECT_CONTEXT_BOOTSTRAP=0` disables that bootstrap. See [User context setup](docs/context-files.md).
+- Acceptance diagnostics behind `OMK_GOAL_DIAGNOSTICS` (flag, default off, spec 094). After a failed `/goal` acceptance check, the repair follow-up carries a bounded excerpt of the check output anchored at the first error line, falling back to head/tail (#170).
+
+### Changed
+
+- Seventeen `OMK_*` harness flags are now on by default: `OMK_EDIT_DIAGNOSTICS`, `OMK_EXEC_TRUNCATE_MIDDLE`, `OMK_JSON_SESSION_INFO`, `OMK_GOAL_AUTONOMY`, `OMK_SKILL_ADMISSION`, `OMK_SKILL_AUTO_LOAD`, `OMK_EVIDENCE_LIFECYCLE`, `OMK_ADAPTIVE_EFFORT`, `OMK_DOMAIN_ROUTING`, `OMK_GOAL_OUTPUT_RECALL`, `OMK_LANE_READY_QUEUE`, `OMK_LANE_FAILURE_SCOPE`, `OMK_RTK_OUTPUT`, `OMK_SESSION_CONTROL`, `OMK_VERIFIED_MEMORY`, `OMK_RESPONSE_REASONING_CAP` and `OMK_PREFIX_BOUNDARY`. Set any of them to `0`, `false` or `off` to restore the 1.5.8 behavior; with all of them off the G0 session hash is unchanged. `OMK_EVIDENCE_LIFECYCLE` now deletes only verified goal-recall files (`observe` deletes nothing), subagent workers keep `OMK_SKILL_AUTO_LOAD` and `OMK_ADAPTIVE_EFFORT` off, and an unset `OMK_SESSION_CONTROL` never fails startup. There is no on/off benchmark for these defaults yet (#279, #281).
+- Evidence receipts store commands verbatim. Command credential redaction and its credential preflight are removed; existing v3 receipts with `commandRedaction` and `commandBinding` remain readable. Keep secrets out of command lines and pass them through the environment or credential storage (#223).
+- The GitHub Copilot default model is now `gpt-6.1-sol`. Copilot retired `gpt-5.4`, which left Copilot without an automatic default during first-run onboarding.
+
+### Fixed
+
+- A durable goal whose approved acceptance check passed no longer stays active on a loaded host. The goal workspace binding now allows each git call 10 seconds instead of the 1.5 second per-bash-call bound, which `git status` could exceed and which then refused completion as an unavailable workspace scope. A git that hangs past the longer bound still fails closed; the bash tool scope keeps its 1.5 second bound.
+- Repeated local skill searches reuse unchanged document term frequencies instead of tokenizing the entire catalog again. Changed bodies are retokenized, input bounds are revalidated, and scores, exclusions and ranking order remain query-specific.
+- Local safe-context-window rejections during tool turns now enter bounded overflow compaction recovery instead of being classified as invalid provider responses. Auto-compaction opt-out and the hard input ceiling remain unchanged.
+- A per-call bash `timeout` now also bounds the outer tool timer, so a requested timeout longer than the fixed 300 second limit is no longer cut short. Extension tools and session wrappers receive the same bound.
+- Lock ownership no longer depends on the wall clock alone. The durable goal journal lock uses a 30 second stale window and a lost lock fails the write instead of crashing the process; the sync `auth.json` lock uses the same 30 second window as OAuth refresh, so a live refresh lock is no longer taken over; the trust store lock is reclaimed by owner pid and released only by its owner; and `omk session doctor` repair takes the session owner lease and refuses a live session with `session_in_use`.
+- Goal evidence is pinned to its generation and a complete workspace scope, stale autocomplete acceptance is rejected, and next-suggestion cost ceilings, stream identity and request lifetimes are aligned.
+- The status sidebar reads the current session's shared usage reader after `/new` or resume instead of the first session's.
+- `omk run cancel` reads the run journal in reader mode, so an owner appending at the same time no longer makes it fail with `integrity`; persistent concurrent change reports `concurrent_change`.
+- Durations, throttles, in-memory caches and deadlines now use a monotonic clock, so a wall-clock step (seen on WSL2) no longer makes them fire early, late or never. This covers the double Ctrl+C and Esc windows, the working timer, the bash output throttle, the subscription usage, diagnostics and workspace scope caches, edit diagnostic budgets, OAuth device-code polling and the TUI input drain. `npm run check` now rejects new wall-clock durations and proper-lockfile locks without an explicit stale window.
+
+### Security
+
+- Goal-recall evidence deletion refuses to run when `.omk/goals/recall` or one of its parents is a symlink.
+- `npm audit --omit=dev` is clean again. `undici` is updated to 8.12.3 (EventSource memory, SRI token and content-encoding advisories), and a root override moves `zod` to 4.6.7 for every SDK and the sandbox example (oversized constrained collection advisory; no fixed 3.x release exists).
+- The optional Gondolin example now uses Gondolin 0.14.0 with `undici` 6.29.1. Gondolin no longer depends on `node-forge`, so the temporary CVE-2026-85393 runtime guard is removed; a regression suite replays the malformed signatures against Gondolin's real cached-leaf verification. The example now requires Node.js 22.19.0 or later. Replace previously copied example directories. See [Gondolin signature security](docs/gondolin-security.md).
+
+## [1.5.8] - 2026-10-24
+
+### Added
+
+- Goal autonomy behind `OMK_GOAL_AUTONOMY=1` (flag, default off). `/goal budget <usd|-> [<deadline ISO>|-]` sets a user-only cost and deadline budget that includes subagent lane cost; the goal stops with `budget-limit`, `deadline`, `outcome-unknown` or `scope-changed`, steering pauses it, and only `/goal resume` restarts it. Stop reasons are custom entries; the `omk.goal.v1` schema is unchanged (#266, #268).
+- Strong-only skill auto-load behind `OMK_SKILL_AUTO_LOAD` (flag, default off), with an observe-only `skill-autoload.jsonl` log (#262).
+- Evidence recall delete-after-use behind `OMK_EVIDENCE_LIFECYCLE=delete` (flag, default off; `observe` only records) (#263).
+
+With all new flags off, behavior is the same as 1.5.7.
+
+### Fixed
+
+- Evidence recall delete recovery can no longer fail `session_start` (#264).
+- `session_info` JSON test no longer flakes (#265).
+
+### Changed
+
+- Research count scripts for spec 117 and 119 on synthetic fixtures (#267), NaN/Infinity tolerance (#269), header comment fix (#271).
+- Spec 118 D3 measurement addendum, design only (#272).
+- `AGENTS.md` lists the goal autonomy flag.
+
+## [1.5.7] - 2026-10-23
+
+### Added
+
+- Structured diagnostics after `edit` and `write` behind `OMK_EDIT_DIAGNOSTICS` (flag, default off). Diagnostics are skipped when remote `operations` are passed (#250).
+- Head plus tail bash output behind `OMK_EXEC_TRUNCATE_MIDDLE` (flag, default off) (#246).
+- A `session_info` line in JSON output behind `OMK_JSON_SESSION_INFO` (flag, default off) (#244).
+
+With all three flags off, behavior is the same as 1.5.6.
+
+### Fixed
+
+- Bash output keeps the full 50KB tail when one long line spans several chunks (#238).
+
+### Changed
+
+- Bench tooling: an ATIF trajectory exporter in `scripts/bench/atif-export.mjs` (#239), which also maps seq 2+ session-info lines (#251).
+- Design specs added, not implemented: 113 head+tail bash output (#245), 114 indent-insensitive edit matching (#249).
+- `AGENTS.md` records the autonomous development mode and the patch-release order (#241, #247).
+- Pi inventory tests cover `.mts`, `.cts`, `.tsx` and `.mjs` discovery (#236).
+
+## [1.5.6] - 2026-10-22
+
+### Added
+
+- Lane ready frontier behind `OMK_LANE_READY_QUEUE=1` (default off). A lane starts as soon as its dependencies finish, up to the lane-width limit. Frontier counts are logged to `subagent-lane-frontier.jsonl` (#212).
+- Lane failure scope behind `OMK_LANE_FAILURE_SCOPE=1` (default off). A lane that fails without writing anything blocks only its descendants. Adds `allLanesCompleted` (#208).
+- The edit tool records which match stage succeeded, or why matching failed, in the run log. This only observes; edit behavior is unchanged. Subagent workers inherit the parent session id through `OMK_RUN_LOG_PARENT_SESSION` (#235).
+- Session skill admission behind `OMK_SKILL_ADMISSION` (`1`, `true` or `on`; default off). A session admits at most 10 unique skill bodies, and the count survives resume and compaction. It covers explicit, steer and follow-up skill loads, `SKILL.md` reads through the `read` tool, and skills handed to workers; workers start with `--no-skills` and get only admitted skills (#209, #210). Not gated yet: reading `SKILL.md` through bash, and `SKILL.md` reads inside a worker.
+- Evidence lifecycle observe-only mode behind `OMK_EVIDENCE_LIFECYCLE=observe` (default off). It reports what would be deleted and deletes nothing; the trace stores only hashes and counts (#211).
+
+With all four flags off, behavior is the same as 1.5.5.
+
+### Fixed
+
+- The required-tools contract listener no longer leaks or fires twice on dispose and re-install (#204).
+- `npm run check` exits 0 again (#206).
+- Bash output now reports `truncated: true` when leading chunks were dropped; before, it could say `truncated: false` after losing the start of the output (#224).
+- Diagnostics after `edit` and `write` no longer return stale cached results, and file paths are matched exactly (#226).
+- A flaky evidence-lifecycle two-session test is stable again (#222).
+
+### Changed
+
+- Design specs added, not implemented: 107 edit diagnostics (#225), 108-1 pi dependency inventory with a regeneration check script (#229), 109 single-binary distribution (#228), 110 ATIF trajectory export (#231), 111 finish-confirm gate (#230), 112 JSON session info (#234).
+- The trademark notice moved out of `LICENSE`, so GitHub detects the MIT license. AdaptOrch logo files moved to `readmeasset/adaptorch/` with a `NOTICE` saying they are not MIT-licensed (#205).
+
+## [1.5.5] - 2026-10-21
+
+### Behavior change (security)
+
+- Secret redaction no longer runs on text, log, session, run-journal and bash-output paths (d58ed90719). Secrets that appear in those values (for example API responses recorded by `ApiBroker`, compaction input, journal entries, verified-bash output) are now written to disk as-is. If you relied on omk to mask them, keep secrets out of tool output or clean those files yourself.
+
+### Changed
+
+- `VERIFIED_BASH_REDACTION_POLICY_ID` is now `omk-bash-combined-v2+raw-unredacted+utf8+capture-tail-128k+tail-64k`. The old id claimed `omk-sensitive-text-v1` redaction that no longer runs. Receipts already written with the old id are unchanged; code that compares against the old string must update.
+
+### Deprecated
+
+- `redactForModel` is still exported from the package root with its v1.5.4 behavior, but omk no longer calls it. It will be removed in 2.0.0.
+
+### Fixed
+
 - Next-task suggestions follow the editor on screen. An extension that swaps in its own editor at session start (for example `pi-powerline-footer`) left the gray suggestion on the hidden default editor, so it never appeared and Tab never inserted it.
 
 ## [1.5.4] - 2026-10-20

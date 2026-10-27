@@ -6,18 +6,30 @@
  * I/O is the one-time module-scope catalog build, which scans the live skill
  * tree under the agent directory.
  */
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 import { auditCapabilities, classifyAgent, deriveCapabilities } from "./agent-capability-router.ts";
 import { buildCapabilityCatalog } from "./capabilities.ts";
 import { DOMAIN_PROFILES } from "./domain-profiles.ts";
 
-// Built once at module scope from the live skill tree under the agent
-// directory. This is populated during local verification but empty in CI (the
-// agent skill catalog is not checked out on the runner), so the skill-catalog
-// -dependent assertions below are guarded with `skipIf(!hasSkillCatalog)`. The
-// MCP/hooks sets are a fixed OMK list and stay populated everywhere.
-const catalog = buildCapabilityCatalog({ agentDir: `${process.env.HOME ?? "/home/yu"}/.omk/agent` });
+// Deterministic fixture catalog. The live agent skill tree differs per machine
+// and no longer carries every pool name (for example react-patterns and seo),
+// so binding these ranking assertions to it made them depend on the operator's
+// checkout instead of the router logic under test.
+const fixtureAgentDir = mkdtempSync(join(tmpdir(), "omk-capability-router-"));
+for (const name of ["react-patterns", "vercel-react-best-practices", "seo"]) {
+	const dir = join(fixtureAgentDir, "skills", name);
+	mkdirSync(dir, { recursive: true });
+	writeFileSync(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: fixture skill\n---\nbody\n`);
+}
+const catalog = buildCapabilityCatalog({ agentDir: fixtureAgentDir });
 const hasSkillCatalog = catalog.skills.size > 0;
+
+afterAll(() => {
+	rmSync(fixtureAgentDir, { recursive: true, force: true });
+});
 
 describe("domain profile safety", () => {
 	it("does not route agents to offensive jailbreak skills", () => {

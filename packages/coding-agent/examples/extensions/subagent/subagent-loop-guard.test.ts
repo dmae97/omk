@@ -213,6 +213,29 @@ const streamResult = (): SingleResult => ({
 	usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
 });
 
+// #279 turned these 7 harness flags default on; main 1ff132d200 predates all of them.
+const PR279_DEFAULT_ON_FLAGS = [
+	"OMK_EDIT_DIAGNOSTICS",
+	"OMK_EXEC_TRUNCATE_MIDDLE",
+	"OMK_JSON_SESSION_INFO",
+	"OMK_GOAL_AUTONOMY",
+	"OMK_SKILL_ADMISSION",
+	"OMK_SKILL_AUTO_LOAD",
+	"OMK_EVIDENCE_LIFECYCLE",
+] as const;
+const pinnedOff = Object.fromEntries(PR279_DEFAULT_ON_FLAGS.map((k) => [k, "0"]));
+const readGolden = () =>
+	JSON.parse(
+		fs.readFileSync(path.join(import.meta.dirname, "fixtures", "first-request.main-1ff132d200.json"), "utf8"),
+	) as Record<string, string>;
+
+async function recordFirstRequest(name: string, flag: string | undefined, extraEnv: Record<string, string>) {
+	const requestFile = path.join(cwd, `request-${name}.jsonl`);
+	await fs.promises.rm(requestFile, { force: true });
+	await runTasks(["normal:0"], flag, { OMK_FAKE_REQUEST_FILE: requestFile, ...extraEnv });
+	return normalizeRequest((await fs.promises.readFile(requestFile, "utf8")).trim());
+}
+
 describe("spec 071 flag off: the guard only observes", () => {
 	it.each([
 		["unset", undefined],
@@ -220,14 +243,33 @@ describe("spec 071 flag off: the guard only observes", () => {
 	])(
 		"OMK_SUBAGENT_RUNTIME=%s: the first request to the model is byte-identical to main 1ff132d200",
 		async (name, flag) => {
-			const requestFile = path.join(cwd, `request-${name}.jsonl`);
-			await fs.promises.rm(requestFile, { force: true });
-			await runTasks(["normal:0"], flag, { OMK_FAKE_REQUEST_FILE: requestFile });
-			const recorded = normalizeRequest((await fs.promises.readFile(requestFile, "utf8")).trim());
-			const golden = JSON.parse(
-				fs.readFileSync(path.join(import.meta.dirname, "fixtures", "first-request.main-1ff132d200.json"), "utf8"),
-			) as Record<string, string>;
-			expect(recorded).toBe(golden[name]);
+			// Pin all 7 #279 flags off so this compares only OMK_SUBAGENT_RUNTIME against main. The pins are
+			// inherited into the recorded worker env; strip exactly those injected `"KEY":"0",` entries, except where
+			// the worker itself sets the same entry on main (OMK_SKILL_AUTO_LOAD), which stays in the golden.
+			let recorded = await recordFirstRequest(name, flag, pinnedOff);
+			const golden = readGolden()[name];
+			for (const key of PR279_DEFAULT_ON_FLAGS) {
+				const entry = `"${key}":"0",`;
+				if (golden.includes(entry)) continue;
+				expect(recorded.split(entry).length - 1).toBe(1);
+				recorded = recorded.replace(entry, "");
+			}
+			expect(recorded).toBe(golden);
+		},
+		60_000,
+	);
+
+	it.each([
+		["unset", undefined],
+		["0", "0"],
+	])(
+		"OMK_SUBAGENT_RUNTIME=%s with #279 flags at defaults: first request differs from main only by --no-skills",
+		async (name, flag) => {
+			const recorded = await recordFirstRequest(`default-${name}`, flag, {});
+			const golden = readGolden()[name];
+			const anchor = '"--no-extensions",';
+			expect(golden.split(anchor)).toHaveLength(2);
+			expect(recorded).toBe(golden.replace(anchor, `${anchor}"--no-skills",`));
 		},
 		60_000,
 	);

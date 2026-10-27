@@ -16,6 +16,16 @@ import {
 } from "../src/index.ts";
 import * as shellModule from "../src/utils/shell.ts";
 
+// Pins the pre-default-on output shape: explicitly opt out of the default-on flag(s).
+const saved_OMK_EXEC_TRUNCATE_MIDDLE = process.env.OMK_EXEC_TRUNCATE_MIDDLE;
+beforeAll(() => {
+	process.env.OMK_EXEC_TRUNCATE_MIDDLE = "0";
+});
+afterAll(() => {
+	if (saved_OMK_EXEC_TRUNCATE_MIDDLE === undefined) delete process.env.OMK_EXEC_TRUNCATE_MIDDLE;
+	else process.env.OMK_EXEC_TRUNCATE_MIDDLE = saved_OMK_EXEC_TRUNCATE_MIDDLE;
+});
+
 // Hosts may have a locale configured that is not installed (e.g. LC_ALL=ko_KR.UTF-8),
 // which makes spawned shells print a setlocale warning on stderr and break exact
 // output assertions below. Pin LC_ALL to the always-available C locale for this file.

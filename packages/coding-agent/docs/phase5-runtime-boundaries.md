@@ -4,7 +4,7 @@ This change is based on `935b4882763feb1da46e5f8ccaef05624190b135`. It preserves
 
 `OMK_REQUEST_ADMISSION_MODE=observe` is the default. `enforce` refuses locally estimated oversized or malformed requests before logical dispatch; `off` disables this inspection. The JSON projection has cumulative length, node and depth bounds before building owned strings. This is not a final provider-wire, HTTP-attempt or billing guarantee. Exact model token accounting remains provider-specific.
 
-`OMK_VERIFIED_MEMORY=1` keeps the existing explicit memory opt-in. A recall now shares at most eight source snapshots inside one call, rechecks current file metadata and rechecks expiry/revocation after source verification. No snapshot is retained across model requests. The source schema, trust policy and exact quote semantics are unchanged.
+`OMK_VERIFIED_MEMORY` is on by default (`0`/`false`/`off` opts out). A recall now shares at most eight source snapshots inside one call, rechecks current file metadata and rechecks expiry/revocation after source verification. No snapshot is retained across model requests. The source schema, trust policy and exact quote semantics are unchanged.
 
 `OMK_MEMORY_SELECTION=legacy` remains the default. `v2` uses lexical query coverage, diminishing term utility and complete-span redundancy suppression. Each proposed selection prices the actual synthetic tool pair and passes a full-context fit callback; rejected candidates do not automatically discard later feasible items. Empty or non-overlapping queries select no quotes. The synthetic pair uses deterministic identifiers and timestamp zero, and is never an execution receipt. This heuristic is not a semantic retrieval system or optimal knapsack.
 

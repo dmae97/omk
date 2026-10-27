@@ -9,11 +9,18 @@
 import type { AssistantMessage, ImageContent } from "omk-ai";
 import type { AgentSessionRuntime } from "../core/agent-session-runtime.ts";
 import { OVERFLOW_RECOVERY_FAILED } from "../core/compaction/overflow-recovery-progress.ts";
+import {
+	createJsonSessionInfoEmitter,
+	type JsonSessionInfoEmitter,
+	jsonSessionInfoEnabled,
+	setJsonSessionInfoEmitter,
+} from "../core/json-session-info.ts";
 import { flushRawStdout, writeRawStdout } from "../core/output-guard.ts";
 import { formatPinnedQuotaFailoverNotice } from "../core/pinned-quota-failover-notice.ts";
 import type { PromptSettlementOutcome } from "../core/prompt-settlement.ts";
 import { startRunBudgetClock } from "../core/remaining-budget.ts";
 import { formatSessionTermination, type SessionTermination } from "../core/session-termination.ts";
+import { taskResultSurfaceLine } from "../core/task-result-format.ts";
 import { killTrackedDetachedChildren } from "../utils/shell.ts";
 
 /**
@@ -49,6 +56,9 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 	let overflowRecoveryFailure: string | undefined;
 	let renderedTermination: SessionTermination | undefined;
 	const signalCleanupHandlers: Array<() => void> = [];
+	// Spec 112: only json mode with OMK_JSON_SESSION_INFO on (default; `0`/`false`/`off` opts out) creates an emitter; otherwise nothing changes.
+	const sessionInfo: JsonSessionInfoEmitter | undefined =
+		mode === "json" && jsonSessionInfoEnabled() ? createJsonSessionInfoEmitter(writeRawStdout) : undefined;
 
 	const renderTermination = (termination: SessionTermination): void => {
 		if (termination.kind === "completed" || renderedTermination === termination) return;
@@ -156,9 +166,21 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 			},
 		});
 
+		if (sessionInfo) {
+			// First line right after the header; later provider requests re-emit only on a hash change.
+			sessionInfo.observe({ systemPrompt: session.agent.state.systemPrompt, tools: session.agent.state.tools });
+			setJsonSessionInfoEmitter(sessionInfo);
+		}
+
 		unsubscribe?.();
 		unsubscribe = session.subscribe((event) => {
 			if (event.type === "prompt_settled") latestOutcome = event.outcome;
+			// Spec 096 (flag on only): stdout and the exit code stay unchanged; json mode gets the raw event below.
+			if (mode === "text") {
+				// Spec 100: the downgrade line is the TUI's line too.
+				const taskResultLine = taskResultSurfaceLine(event);
+				if (taskResultLine !== undefined) process.stderr.write(`${taskResultLine}\n`);
+			}
 			if (event.type === "pinned_quota_failover")
 				process.stderr.write(`${formatPinnedQuotaFailoverNotice(event)}\n`);
 			if (
@@ -254,6 +276,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 			cleanup();
 		}
 		await disposeRuntime();
+		if (sessionInfo) setJsonSessionInfoEmitter(undefined);
 		await flushRawStdout();
 	}
 }

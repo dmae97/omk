@@ -1,0 +1,19 @@
+# OMK (Open Multi-Agent Kit)
+
+> Open-source, MIT-licensed coding agent CLI for the terminal, written in TypeScript. Switch models in one session, add subagents when needed, and mark a goal done only when a check you choose passes (`/goal verify`).
+
+Install: `npm install -g open-multi-agent-kit --ignore-scripts` (Node.js 22.19+), or `curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh` for the standalone binary. Then run `omk` in your project.
+
+## Docs
+
+- [README](https://github.com/dmae97/omk/blob/main/README.md): overview, quick start, defaults, FAQ
+- [Documentation index](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/index.md)
+- [Providers](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/providers.md): subscriptions, API keys, local models
+- [Goal demo](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/goal-demo.md): a small reproducible `/goal verify` run
+- [Run protocol](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/run-protocol.md)
+
+## Project
+
+- [Releases](https://github.com/dmae97/omk/releases)
+- [npm package](https://www.npmjs.com/package/open-multi-agent-kit)
+- [Contributing](https://github.com/dmae97/omk/blob/main/CONTRIBUTING.md)

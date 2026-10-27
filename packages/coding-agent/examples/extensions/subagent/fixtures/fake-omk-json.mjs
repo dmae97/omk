@@ -6,6 +6,14 @@ if (process.env.OMK_FAKE_ARGV_FILE) {
 	appendFileSync(process.env.OMK_FAKE_ARGV_FILE, `${JSON.stringify(process.argv.slice(2))}\n`);
 }
 
+// Tests read the worker's run-log parent session back from this file.
+if (process.env.OMK_FAKE_ENV_FILE) {
+	appendFileSync(
+		process.env.OMK_FAKE_ENV_FILE,
+		`${JSON.stringify({ task: process.argv[process.argv.length - 1], parent: process.env.OMK_RUN_LOG_PARENT_SESSION ?? null })}\n`,
+	);
+}
+
 const expectedModel = process.env.OMK_EXPECTED_MODEL;
 if (expectedModel) {
 	const modelIndex = process.argv.indexOf("--model");

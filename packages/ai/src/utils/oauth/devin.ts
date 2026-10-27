@@ -135,6 +135,7 @@ export async function loginDevin(
 			throw new Error("Devin token exchange response missing token");
 		const access = normalizeDevinToken(data.token);
 		const expires = tokenExpiry(access);
+		// wall-clock: expires comes from the token's own expiry claim
 		if (expires <= Date.now()) throw new Error("Devin returned an expired session token; sign in again");
 		return { access, refresh: access, expires };
 	} finally {
@@ -150,6 +151,7 @@ export const devinOAuthProvider: OAuthProviderInterface = {
 	usesCallbackServer: false,
 	login: loginDevin,
 	async refreshToken(credentials) {
+		// wall-clock: expires is a persisted absolute expiry
 		if (credentials.expires <= Date.now())
 			throw new Error("Devin session expired; run /login devin again (no refresh endpoint)");
 		return credentials;

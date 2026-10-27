@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { withRunSignal } from "../src/commands/verified-run-signal.ts";
 import { planVerifiedRun, RunCoordinator } from "../src/core/run-execution-api.ts";
 import { acquireSessionOwnerLeaseSync, inspectSessionOwnerLeaseSync } from "../src/core/session-owner-lease.ts";
@@ -66,9 +66,9 @@ function fixture(writer: string[]) {
 }
 
 async function until(condition: () => boolean, timeoutMs = 20000): Promise<void> {
-	const deadline = Date.now() + timeoutMs;
+	const deadline = performance.now() + timeoutMs;
 	while (!condition()) {
-		if (Date.now() > deadline) throw new Error("condition not reached");
+		if (performance.now() > deadline) throw new Error("condition not reached");
 		await new Promise((resolve) => setTimeout(resolve, 20));
 	}
 }
@@ -155,6 +155,24 @@ describe("omk run cancel", () => {
 			expect(outcome).toMatchObject({ outcome: "not_observed" });
 			expect(readRunCancelRequest(f.runPath)).toBeNull();
 		} finally {
+			clearTimeout(release);
+		}
+	});
+
+	it("waits the full --wait-ms even when the wall clock jumps forward", async () => {
+		const f = fixture(["/bin/cp", "input", "output"]);
+		await f.start();
+		const owner = acquireSessionOwnerLeaseSync(journalPath(f.runPath));
+		const release = setTimeout(() => owner.release(), 150);
+		// Every Date.now() call moves 6s forward, like the WSL2 jumps; performance.now() is untouched.
+		const real = Date.now.bind(Date);
+		let calls = 0;
+		const clock = vi.spyOn(Date, "now").mockImplementation(() => real() + 6000 * calls++);
+		try {
+			const outcome = await cancelVerifiedRun(f.runPath, { waitMs: 10000, pollMs: 20 });
+			expect(outcome).toMatchObject({ outcome: "not_observed" });
+		} finally {
+			clock.mockRestore();
 			clearTimeout(release);
 		}
 	});

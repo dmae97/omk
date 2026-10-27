@@ -25,6 +25,8 @@ export interface SubagentLaneContext {
 export interface LaunchSubagentLanesInput {
 	readonly plan: SubagentOrchestrationPlan;
 	readonly promptRunId: string;
+	/** Session id for the `lane-plan` run-log line only; never affects scheduling. */
+	readonly sessionId?: string | null;
 	readonly decision: ResourceAdmissionDecision;
 	readonly permitPool: WorkloadPermitPool;
 	readonly configuredMaxParallelLanes?: number;

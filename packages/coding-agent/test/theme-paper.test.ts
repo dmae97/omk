@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
@@ -202,8 +204,19 @@ describe("paper theme names", () => {
 	});
 
 	it("never names a theme or alias after the separate AdaptOrch product", () => {
-		const aliases: Readonly<Record<string, string>> = THEME_NAME_ALIASES;
-		const names: string[] = [...getAvailableThemes(), ...Object.keys(aliases), ...Object.values(aliases)];
-		expect(names.filter((themeName) => /adaptorch/i.test(themeName))).toEqual([]);
+		// A user theme directory can contain an unrelated custom theme; isolate it so this
+		// assertion covers only shipped names and aliases.
+		const previousAgentDir = process.env.OMK_CODING_AGENT_DIR;
+		const agentDir = mkdtempSync(join(tmpdir(), "omk-paper-themes-"));
+		process.env.OMK_CODING_AGENT_DIR = agentDir;
+		try {
+			const aliases: Readonly<Record<string, string>> = THEME_NAME_ALIASES;
+			const names: string[] = [...getAvailableThemes(), ...Object.keys(aliases), ...Object.values(aliases)];
+			expect(names.filter((themeName) => /adaptorch/i.test(themeName))).toEqual([]);
+		} finally {
+			if (previousAgentDir === undefined) delete process.env.OMK_CODING_AGENT_DIR;
+			else process.env.OMK_CODING_AGENT_DIR = previousAgentDir;
+			rmSync(agentDir, { recursive: true, force: true });
+		}
 	});
 });

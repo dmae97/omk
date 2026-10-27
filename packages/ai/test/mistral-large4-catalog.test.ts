@@ -15,8 +15,15 @@ const direct: Model<"mistral-conversations"> = {
 	input: ["text", "image"],
 	contextWindow: 1048576,
 	maxTokens: 262144,
-	cost: { input: 0.68, output: 2.09, cacheRead: 0.07, cacheWrite: 0 },
+	cost: { input: 1.36, output: 4.18, cacheRead: 0.14, cacheWrite: 0 },
 };
+
+// Mistral ended the Large 4 launch sale: docs.mistral.ai/inference/pricing lists $1.36 / $0.14 cached /
+// $4.18 (2026-10-26). OpenCode Zen bills its own rate, which models.dev still reports at the sale price.
+const routeCost = {
+	mistral: { input: 1.36, output: 4.18, cacheRead: 0.14, cacheWrite: 0 },
+	opencode: { input: 0.68, output: 2.09, cacheRead: 0.07, cacheWrite: 0 },
+} as const;
 
 function capture(model: Model<"mistral-conversations">, reasoning?: "medium" | "high") {
 	let payload: unknown;
@@ -42,7 +49,7 @@ describe("Mistral Large 4 documented routes", () => {
 			input: ["text", "image"],
 			contextWindow: provider === "mistral" ? 1048576 : 524288,
 			maxTokens: 262144,
-			cost: { input: 0.68, output: 2.09, cacheRead: 0.07, cacheWrite: 0 },
+			cost: routeCost[provider],
 		});
 		if (!model) throw new Error("Missing Large 4 route");
 		expect(getSupportedThinkingLevels(model)).toEqual(["off", "high"]);

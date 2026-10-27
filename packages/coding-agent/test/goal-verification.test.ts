@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildDiagnosticExcerpt } from "../src/core/goal-acceptance-diagnostic.ts";
-import { captureGoalWorkspace, GoalVerifier, goalKeyOf, goalStateDirectory } from "../src/core/goal-verification.ts";
+import {
+	captureGoalWorkspace,
+	GOAL_SCOPE_MAX_PATHS,
+	GoalVerifier,
+	goalKeyOf,
+	goalStateDirectory,
+} from "../src/core/goal-verification.ts";
 import { detectSandboxBackend } from "../src/core/sandbox/backend.ts";
 import { createWorkspaceSandboxPolicy } from "../src/core/sandbox/default-policy.ts";
 
@@ -127,6 +133,22 @@ describe("goal acceptance verification", () => {
 
 		writeFileSync(join(root, ".omk", "mcp.json"), "{}\n");
 		expect(captureGoalWorkspace(root).sha256).not.toBe(initial.sha256);
+	});
+
+	it("excludes host-owned state before applying the workspace path cap", () => {
+		const root = gitRepo();
+		const initial = captureGoalWorkspace(root);
+		mkdirSync(goalStateDirectory(root), { recursive: true });
+		for (let index = 0; index < GOAL_SCOPE_MAX_PATHS; index++) {
+			writeFileSync(join(goalStateDirectory(root), `state-${index}.json`), "{}\n");
+		}
+		writeFileSync(join(root, "work.txt"), "work\n");
+
+		const captured = captureGoalWorkspace(root);
+		expect(captured.completeness).toBe("complete");
+		expect(captured.sha256).not.toBe(initial.sha256);
+		writeFileSync(join(goalStateDirectory(root), "state-0.json"), "changed\n");
+		expect(captureGoalWorkspace(root)).toEqual(captured);
 	});
 
 	it("rejects a receipt whose stored bytes no longer match its digest", async () => {

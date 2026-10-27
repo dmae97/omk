@@ -15,7 +15,7 @@
  *   omk -e /path/to/omk/packages/coding-agent/examples/extensions/gondolin
  *
  * Requirements:
- *   - Node.js >= 23.6.0 for @earendil-works/gondolin
+ *   - Node.js >= 22.19.0 for @earendil-works/gondolin
  *   - QEMU installed (for example, `brew install qemu` on macOS)
  */
 
@@ -43,7 +43,6 @@ import {
 	truncateLine,
 	type WriteOperations,
 } from "open-multi-agent-kit";
-import { installGondolinSignatureGuard } from "./signature-guard.ts";
 
 const GUEST_WORKSPACE = "/workspace";
 const DEFAULT_GREP_LIMIT = 100;
@@ -378,7 +377,6 @@ export default function (omk: ExtensionAPI) {
 	let shellPath = "/bin/sh";
 
 	async function startVm(ctx?: ExtensionContext): Promise<VM> {
-		installGondolinSignatureGuard();
 		ctx?.ui.setStatus("gondolin", ctx.ui.theme.fg("accent", `Gondolin: starting ${GUEST_WORKSPACE}`));
 		const created = await VM.create({
 			sessionLabel: `omk ${path.basename(localCwd)}`,

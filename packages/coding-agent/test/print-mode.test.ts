@@ -1,9 +1,19 @@
 import type { ImageContent } from "omk-ai";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PromptSettledEvent } from "../src/core/prompt-settlement.ts";
 import { classifySessionTermination } from "../src/index.ts";
 import { runPrintMode } from "../src/modes/print-mode.ts";
 import { createAssistantMessage, createRuntimeHost } from "./print-mode-fixtures.ts";
+
+// Pins the pre-default-on output shape: explicitly opt out of the default-on flag(s).
+const saved_OMK_JSON_SESSION_INFO = process.env.OMK_JSON_SESSION_INFO;
+beforeAll(() => {
+	process.env.OMK_JSON_SESSION_INFO = "0";
+});
+afterAll(() => {
+	if (saved_OMK_JSON_SESSION_INFO === undefined) delete process.env.OMK_JSON_SESSION_INFO;
+	else process.env.OMK_JSON_SESSION_INFO = saved_OMK_JSON_SESSION_INFO;
+});
 
 const printIo = vi.hoisted(() => ({ output: [] as string[] }));
 

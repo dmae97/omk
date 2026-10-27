@@ -173,7 +173,9 @@ A corpus over 200 pages or 4 MiB is refused rather than truncated, so the runtim
 | `agent.toolTimeoutMs` | number | `0` | Fallback tool execution timeout in milliseconds; `0` disables the fallback timer |
 | `agent.toolTimeouts` | object | built-in defaults | Per-tool-name timeout overrides; `0` disables that tool's timer |
 
-Built-in defaults are 30 seconds for `read`, `grep`, `find`, and `ls`; 60 seconds for `edit` and `write`; and 300 seconds for `bash`. Explicit `agent.toolTimeouts` entries override these defaults. Extension tools may override settings per call with `resolveTimeoutMs(ctx)`; otherwise custom tools without a per-name value use `agent.toolTimeoutMs`. Timeout values must be integer milliseconds from `0` through `2147483647`.
+Built-in defaults are 30 seconds for `read`, `grep`, `find`, and `ls`; 60 seconds for `edit` and `write`; and 300 seconds for `bash`. Explicit `agent.toolTimeouts` entries override these defaults when the tool supplies no timeout. Extension tools may override settings per call with `resolveTimeoutMs(ctx)` or argument-dependent `resolveCallTimeoutMs(args)`; a static/context timeout takes precedence over an argument-dependent timeout. Otherwise custom tools without a per-name value use `agent.toolTimeoutMs`. Timeout values must be integer milliseconds from `0` through `2147483647`.
+
+For tools named `bash`, a finite positive call argument `timeout` (seconds) sets the command deadline and overrides the settings fallback. The outer tool guard allows an additional 5 seconds for process teardown, capped at `2147483647` ms, so a requested `timeout: 600` is not preempted by the default 300-second guard. This also applies to extension replacements such as Landstrip. A static/context tool timeout still wins, including `0`; cancellation and remaining-run-budget clamping are unchanged. Omitted or non-positive arguments keep the settings fallback, and requests above the executor's timer range fail before execution.
 
 ```json
 {

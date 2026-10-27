@@ -2,6 +2,16 @@ import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const fileMutationQueues = new Map<string, Promise<void>>();
+let fileMutationGeneration = 0;
+
+/**
+ * Monotonic counter bumped after every queued file mutation settles. Caches of
+ * derived file state (e.g. diagnostics) key on it so a result computed before
+ * an edit is never served after it.
+ */
+export function getFileMutationGeneration(): number {
+	return fileMutationGeneration;
+}
 let registrationQueue = Promise.resolve();
 
 function isMissingPathError(error: unknown): boolean {
@@ -53,6 +63,7 @@ export async function withFileMutationQueue<T>(filePath: string, fn: () => Promi
 	try {
 		return await fn();
 	} finally {
+		fileMutationGeneration++;
 		releaseNext();
 		if (fileMutationQueues.get(key) === chainedQueue) {
 			fileMutationQueues.delete(key);

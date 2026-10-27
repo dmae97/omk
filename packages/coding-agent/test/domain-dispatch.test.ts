@@ -71,15 +71,17 @@ const makeResourceLoader = (): ResourceLoader => ({
 });
 
 describe("isDomainRoutingEnabled", () => {
-	it("only enables domain routing with explicit opt-in", () => {
-		expect(isDomainRoutingEnabled({})).toBe(false);
+	it("is default on; only 0/false/off opt out", () => {
+		expect(isDomainRoutingEnabled({})).toBe(true);
 		expect(isDomainRoutingEnabled({ OMK_DOMAIN_ROUTING: "0" })).toBe(false);
+		expect(isDomainRoutingEnabled({ OMK_DOMAIN_ROUTING: " False " })).toBe(false);
+		expect(isDomainRoutingEnabled({ OMK_DOMAIN_ROUTING: "off" })).toBe(false);
 		expect(isDomainRoutingEnabled({ OMK_DOMAIN_ROUTING: "1" })).toBe(true);
 	});
 });
 
 describe("tryDomainDispatch", () => {
-	it("returns a no-op result when opt-in is off", () => {
+	it("returns a no-op result when opted out (=0)", () => {
 		const result = tryDomainDispatch({
 			role: "coder",
 			initialPrompt: "build a frontend UI component",
@@ -87,7 +89,7 @@ describe("tryDomainDispatch", () => {
 			resourceLoader: makeResourceLoader(),
 			cwd: "/project",
 			agentDir: "/agent",
-			env: {},
+			env: { OMK_DOMAIN_ROUTING: "0" },
 		});
 
 		expect(result).toEqual({

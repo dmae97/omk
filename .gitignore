@@ -44,7 +44,28 @@ packages/*/.omk/
 !.omk/prompts/
 !.omk/prompts/**
 !.omk/skills/
-!.omk/skills/**
+# Public project skills are an allowlist. Personal skills belong in the user's
+# agent skill directory; a new skill here stays private until it is listed below.
+.omk/skills/*
+!.omk/skills/add-llm-provider.md
+!.omk/skills/caveman/
+!.omk/skills/cli-anything/
+!.omk/skills/clone-website/
+!.omk/skills/context7-mcp/
+!.omk/skills/gitreverse/
+!.omk/skills/omk-computeruse/
+!.omk/skills/omk-engine/
+!.omk/skills/omk-harness-loop/
+!.omk/skills/omk-higgsfield/
+!.omk/skills/omk-neo/
+!.omk/skills/ponytail/
+!.omk/skills/ponytail-audit/
+!.omk/skills/ponytail-debt/
+!.omk/skills/ponytail-gain/
+!.omk/skills/ponytail-help/
+!.omk/skills/ponytail-review/
+!.omk/skills/reverse-skill/
+!.omk/skills/taste-skill/
 # Private research corpora; never version or publish.
 .omk/skills/system-prompts-leaks/
 .omk/skills/omk-godmod/

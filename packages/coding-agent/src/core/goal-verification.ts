@@ -31,6 +31,7 @@ import {
 } from "./goal-acceptance-diagnostic.ts";
 import { detectSandboxBackend } from "./sandbox/backend.ts";
 import { createDefaultBashSandboxPreflight, resolveBashSandboxMode } from "./sandbox/default-policy.ts";
+import { type CheckKind, classifyCheckKind, parseTestCounts, type TestCounts } from "./test-counts.ts";
 import type { BashSandboxPreflight } from "./tools/bash.ts";
 import { executeVerifiedLocalBash } from "./verified-bash-adapter.ts";
 import { resolveSessionWorkspaceScopeReport, type SessionScopeCompleteness } from "./verified-bash-runtime.ts";
@@ -39,8 +40,17 @@ import { resolveSessionWorkspaceScopeReport, type SessionScopeCompleteness } fro
 export const GOAL_ACCEPTANCE_TIMEOUT_MS = DEFAULT_BUILTIN_TOOL_TIMEOUTS.bash ?? 300_000;
 /** Dirty paths bound per workspace state; more are reported as `partial_truncated`. */
 export const GOAL_SCOPE_MAX_PATHS = 512;
+/**
+ * Per-git-call bound for the goal binding. The 1.5 s per-bash-call default is exceeded by
+ * `git status` on a loaded host, which read as `unavailable` and refused completion. This runs
+ * once per acceptance check, so a longer bound costs little; a git that hangs past it still
+ * fails closed as `unavailable`.
+ */
+export const GOAL_SCOPE_GIT_TIMEOUT_MS = 10_000;
 
 const OUTPUT_TAIL_CHARS = 2_000;
+/** Spec 100: runner summaries sit at the end of the output; this much is kept only to read counts. */
+const COUNT_TAIL_CHARS = 16_000;
 const CLAIM_COMMAND_CHARS = 160;
 const LANE_ID = "goal-acceptance";
 
@@ -64,6 +74,10 @@ export interface GoalAcceptanceResult {
 	readonly workspace: GoalWorkspaceState;
 	/** Redacted end of the combined output, for the operator only. */
 	readonly outputTail: string;
+	/** Spec 100: what the approved command is, from its text. */
+	readonly checkKind?: CheckKind;
+	/** Spec 100: counts from the runner's summary text; absent when unreadable or not a test runner. */
+	readonly tests?: TestCounts;
 	/** Head/tail window for the spec 094 diagnostic; present only with OMK_GOAL_DIAGNOSTICS on. */
 	readonly diagnosticOutput?: DiagnosticOutput;
 }
@@ -103,22 +117,24 @@ function goalWorkspaceScope(cwd: string): {
 	readonly scope: WorkspaceScope;
 	readonly completeness: SessionScopeCompleteness;
 } {
-	const report = resolveSessionWorkspaceScopeReport(cwd, { maxPaths: GOAL_SCOPE_MAX_PATHS, fresh: true });
-	const excluded = OMK_OWNED_STATE_DIRS.map((dir) =>
-		relative(report.scope.root, canonicalPath(join(cwd, ".omk", dir)))
-			.split(sep)
-			.join("/"),
-	).filter((path) => path.length > 0 && !path.startsWith(".."));
-	if (excluded.length === 0) return report;
-	return {
-		scope: {
-			root: report.scope.root,
-			artifactPaths: report.scope.artifactPaths.filter(
-				(path) => !excluded.some((dir) => path === dir || path.startsWith(`${dir}/`)),
-			),
+	let excludedRoot: string | undefined;
+	let excluded: readonly string[] = [];
+	return resolveSessionWorkspaceScopeReport(cwd, {
+		maxPaths: GOAL_SCOPE_MAX_PATHS,
+		fresh: true,
+		gitTimeoutMs: GOAL_SCOPE_GIT_TIMEOUT_MS,
+		excludePath: (path, root) => {
+			if (root !== excludedRoot) {
+				excludedRoot = root;
+				excluded = OMK_OWNED_STATE_DIRS.map((dir) =>
+					relative(root, canonicalPath(join(cwd, ".omk", dir)))
+						.split(sep)
+						.join("/"),
+				).filter((dir) => dir.length > 0 && !dir.startsWith(".."));
+			}
+			return excluded.some((dir) => path === dir || path.startsWith(`${dir}/`));
 		},
-		completeness: report.completeness,
-	};
+	});
 }
 
 /** Capture the goal-relevant workspace state now, bypassing the session scope cache. */
@@ -147,9 +163,10 @@ export class GoalVerifier {
 	}
 
 	/** Run the check once. Throws when it cannot run at all, for example when the sandbox refuses it. */
-	async run(command: string, signal?: AbortSignal): Promise<GoalAcceptanceResult> {
+	async run(command: string, signal?: AbortSignal, onOutput?: (data: Buffer) => void): Promise<GoalAcceptanceResult> {
 		const claim = `goal acceptance: ${command.slice(0, CLAIM_COMMAND_CHARS)}`;
 		const tail = new OutputTail(OUTPUT_TAIL_CHARS, goalDiagnosticsEnabled() ? GOAL_DIAGNOSTIC_WINDOW_CHARS : 0);
+		const countTail = new OutputTail(COUNT_TAIL_CHARS);
 		const sandboxPolicy = this.sandboxPreflight();
 		const execution = await executeVerifiedLocalBash({
 			evidenceExecutor: this.executor,
@@ -163,7 +180,11 @@ export class GoalVerifier {
 			executor: "ci-runner",
 			...(sandboxPolicy !== undefined ? { sandboxPolicy } : {}),
 			...(signal !== undefined ? { signal } : {}),
-			onData: (data) => tail.push(data),
+			onData: (data) => {
+				tail.push(data);
+				countTail.push(data);
+				onOutput?.(data);
+			},
 		});
 		const { gate, passed } = checkReceiptWithStrictGate({
 			executor: this.executor,
@@ -174,6 +195,8 @@ export class GoalVerifier {
 			execution,
 		});
 		const { core, envelope } = execution.receipt;
+		const checkKind = classifyCheckKind(command);
+		const tests = checkKind === "test_runner" ? parseTestCounts(countTail.text(), command) : undefined;
 		return {
 			receiptId: core.receiptId,
 			digest: envelope.coreSha256,
@@ -184,6 +207,8 @@ export class GoalVerifier {
 			gateReason: gate.reason,
 			workspace: captureGoalWorkspace(this.cwd),
 			outputTail: tail.text(),
+			checkKind,
+			...(tests !== undefined ? { tests } : {}),
 			...(tail.capturesDiagnostic ? { diagnosticOutput: tail.diagnostic() } : {}),
 		};
 	}

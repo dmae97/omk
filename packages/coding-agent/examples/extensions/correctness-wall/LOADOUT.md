@@ -1,6 +1,6 @@
 # Correctness Wall — optional loadout (copy-paste)
 
-Use this when you run OMK with the default **`omk-core-verified`** preset and want a **B2C patch safety screen** on `edit` / `write` before changes land on disk. The wall is policy- and evidence-limited; it is **not** proof of correctness. Canonical operator doc: [`docs/correctness-wall.md`](../../docs/correctness-wall.md).
+Use this when you run OMK with the default **`omk-core-verified`** preset and want a **B2C patch safety screen** on `edit` / `write` before changes land on disk. The wall is policy- and evidence-limited; it is **not** proof of correctness. Canonical operator doc: [`docs/correctness-wall.md`](../../../docs/correctness-wall.md).
 
 ## When to enable
 
@@ -11,7 +11,7 @@ Use this when you run OMK with the default **`omk-core-verified`** preset and wa
 | Block out-of-scope or secret-shaped diffs | `soft` or `hard` + explicit scope globs |
 | Full outcome adjudication (OA) | Call tool `correctness_wall_evaluate` with fixture — not on the edit hook path |
 
-**Routing note:** Domain router may send similar work to [`qa-testing`](../../docs/loadout-domains/qa-testing.md) (`execute-tests`, green-run evidence). The wall complements that lane: it gates **apply**, not **test execution**. For monorepo layout and extension paths, load skill **`packages`** when wiring paths from a checkout.
+**Routing note:** Domain router may send similar work to [`qa-testing`](../../../docs/loadout-domains/qa-testing.md) (`execute-tests`, green-run evidence). The wall complements that lane: it gates **apply**, not **test execution**. For monorepo layout and extension paths, load skill **`packages`** when wiring paths from a checkout.
 
 ## Copy-paste: session start
 
@@ -34,7 +34,7 @@ cp -r packages/coding-agent/examples/extensions/correctness-wall ~/.omk/agent/ex
 
 ## Dogfood phase 2 (soft) — internal lanes
 
-After shadow telemetry review (see [correctness-wall.md](../../docs/correctness-wall.md#recommended-rollout-shadow--soft--hard)):
+After shadow telemetry review (see [correctness-wall.md](../../../docs/correctness-wall.md#recommended-rollout-shadow--soft--hard)):
 
 ```bash
 export OMK_PATCH_SAFETY_WALL_MODE=soft
@@ -77,11 +77,11 @@ Does not require blocking mode; useful for planners/reviewers:
 | `.omk/wall-cache/shadow-telemetry.ndjson` | Shadow-mode audit trail |
 | `.omk/wall-cache/repair-budget.json` | Capped repair hints per packet |
 
-Final claims still need project rules: e.g. `npm run check` / targeted tests per [`AGENTS.md`](../../../../AGENTS.md) — the wall does not replace those.
+Final claims still need project rules: e.g. `npm run check` / targeted tests per [`AGENTS.md`](../../../../../AGENTS.md) — the wall does not replace those.
 
 ## See also
 
-- [correctness-wall.md](../../docs/correctness-wall.md) — verdicts, fast vs deep wall, Adaptorch relationship
-- [adaptorch-preview.md](../../docs/adaptorch-preview.md) — preview planning (separate from apply gate)
+- [correctness-wall.md](../../../docs/correctness-wall.md) — verdicts, fast vs deep wall, Adaptorch relationship
+- [adaptorch-preview.md](../../../docs/adaptorch-preview.md) — preview planning (separate from apply gate)
 - [README.md](./README.md) — env vars, hook behavior, limitations
-- Domain catalog: [loadout-domains/README.md](../../docs/loadout-domains/README.md)
+- Domain catalog: [loadout-domains/README.md](../../../docs/loadout-domains/README.md)

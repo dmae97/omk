@@ -5,8 +5,7 @@ import { fsyncDirectorySync } from "../durable-file-directory.ts";
 import { writeExclusiveFileDurablySync } from "../durable-file-io.ts";
 import { canonicalJson } from "../run-journal.ts";
 import { inspectSessionOwnerLeaseSync } from "../session-owner-lease.ts";
-import { journalPath } from "./journal.ts";
-import { requireRunJournal } from "./recovery-command.ts";
+import { journalPath, readRunJournal } from "./journal.ts";
 import { readRegularFile, VerifiedRunError } from "./storage.ts";
 
 /**
@@ -140,14 +139,18 @@ export async function cancelVerifiedRun(
 	runPath: string,
 	options: { readonly waitMs: number; readonly pollMs?: number },
 ): Promise<RunCancelOutcome> {
-	const runId = requireRunJournal(runPath).state.runId;
+	// Read-only like inspect/explain (spec 088): a live append is retried within 250 ms, and a
+	// budget that runs out is concurrent_change, never integrity. Cancel never appends to the journal.
+	const journal = readRunJournal(runPath, { mode: "reader" });
+	if (!journal) throw new VerifiedRunError("missing_run");
+	const runId = journal.state.runId;
 	const lease = journalPath(runPath);
 	if (inspectSessionOwnerLeaseSync(lease).status === "absent")
 		return Object.freeze({ runId, outcome: "not_running", requestId: null });
 	const { requestId } = requestRunCancel(runPath);
-	const deadline = Date.now() + options.waitMs;
+	const deadline = performance.now() + options.waitMs;
 	while (inspectSessionOwnerLeaseSync(lease).status !== "absent") {
-		if (Date.now() >= deadline) return Object.freeze({ runId, outcome: "pending", requestId });
+		if (performance.now() >= deadline) return Object.freeze({ runId, outcome: "pending", requestId });
 		await new Promise((resolve) => setTimeout(resolve, options.pollMs ?? 100));
 	}
 	const outcome = withdrawRunCancelRequest(runPath, requestId) ? "not_observed" : "observed";

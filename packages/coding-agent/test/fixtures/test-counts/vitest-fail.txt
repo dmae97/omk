@@ -1,0 +1,31 @@
+
+ RUN  v4.1.11 /tmp/fx100/v
+
+ ❯ b.test.js (2 tests | 1 failed) 6ms
+   × broken 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  b.test.js > broken
+AssertionError: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ b.test.js:2:54
+      1| import { test, expect } from "vitest";
+      2| test("ok", () => {}); test("broken", () => expect(1).toBe(2));
+       |                                                      ^
+      3|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  08:52:06
+   Duration  208ms (transform 14ms, setup 0ms, import 24ms, tests 6ms, environment 0ms)
+

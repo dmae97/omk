@@ -11,6 +11,15 @@ function validateExtensionToolTimeout(timeoutMs: number | undefined, toolName: s
 	return timeoutMs;
 }
 
+/** The bash contract uses seconds; leave time for process teardown before the outer guard. */
+function resolveBashCallTimeoutMs(args: unknown): number | undefined {
+	if (typeof args !== "object" || args === null || !("timeout" in args)) return undefined;
+	const seconds = args.timeout;
+	if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0) return undefined;
+	if (seconds * 1000 > MAX_TOOL_TIMEOUT_MS) throw new Error("Bash timeout exceeds the supported timer range");
+	return Math.min(MAX_TOOL_TIMEOUT_MS, Math.ceil(seconds * 1000) + 5_000);
+}
+
 /** Wrap a ToolDefinition into an AgentTool for the core runtime. */
 export function wrapToolDefinition<TDetails = unknown>(
 	definition: ToolDefinition<any, TDetails>,
@@ -24,6 +33,12 @@ export function wrapToolDefinition<TDetails = unknown>(
 		prepareArguments: definition.prepareArguments,
 		executionMode: definition.executionMode,
 		resourceClaims: definition.resourceClaims,
+		resolveCallTimeoutMs: (args) =>
+			validateExtensionToolTimeout(
+				definition.resolveCallTimeoutMs?.(args) ??
+					(definition.name === "bash" ? resolveBashCallTimeoutMs(args) : undefined),
+				definition.name,
+			),
 		get timeoutMs() {
 			const ctx = ctxFactory?.();
 			const timeoutMs = (ctx ? definition.resolveTimeoutMs?.(ctx) : undefined) ?? definition.timeoutMs;
@@ -58,6 +73,7 @@ export function createToolDefinitionFromAgentTool(tool: AgentTool<any>): ToolDef
 		executionMode: tool.executionMode,
 		resourceClaims: tool.resourceClaims,
 		timeoutMs: tool.timeoutMs,
+		resolveCallTimeoutMs: tool.resolveCallTimeoutMs,
 		execute: async (toolCallId, params, signal, onUpdate) => tool.execute(toolCallId, params, signal, onUpdate),
 	};
 }

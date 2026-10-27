@@ -1,6 +1,13 @@
 import type { AssistantMessage, Context, SimpleStreamOptions } from "omk-ai";
-import { addsThinkingBudgetToMaxTokens, adjustMaxTokensForThinking, getModel } from "omk-ai";
+import {
+	addsThinkingBudgetToMaxTokens,
+	adjustMaxTokensForThinking,
+	getModel,
+	isBuiltinStreamFn,
+	streamSimple,
+} from "omk-ai";
 import { describe, expect, it } from "vitest";
+import { wrapBudgetStream } from "../src/core/budget-stream.ts";
 import {
 	buildSuggestionContext,
 	extractSuggestion,
@@ -13,8 +20,10 @@ import {
 	SHORT_CACHE_TTL_MS,
 	SUGGESTION_INSTRUCTION,
 	SUGGESTION_MAX_TOKENS,
+	suggestionEffectiveMaxTokens,
 	suggestionMaxTokens,
 } from "../src/core/next-suggestion.ts";
+import { RunBudget } from "../src/core/run-budget.ts";
 
 const model = getModel("anthropic", "claude-sonnet-4-5")!;
 
@@ -77,6 +86,17 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 		expect(seen[0]?.[1]).toBe(context);
 		expect(seen[0]?.[2]).toBe(options);
 		expect(recorder.lastRequest).toEqual({ model, context, options, atMs: 5 });
+	});
+
+	it("preserves builtin and custom stream identity through recorder and budget wrappers", () => {
+		const recorder = new MainRequestRecorder();
+		const budget = new RunBudget({ maxRequests: 1 }, () => {});
+		try {
+			expect(isBuiltinStreamFn(wrapBudgetStream(recorder.wrap(streamSimple), budget))).toBe(true);
+			expect(isBuiltinStreamFn(wrapBudgetStream(recorder.wrap((() => undefined) as never), budget))).toBe(false);
+		} finally {
+			budget.close();
+		}
 	});
 
 	it("keeps the main prefix byte-identical and appends the instruction only at the end", () => {
@@ -169,13 +189,14 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 			return { result: async () => assistant("Next.") };
 		}) as never;
 		const controller = new AbortController();
-		const text = await requestNextSuggestion(
+		const result = await requestNextSuggestion(
 			streamFn,
 			{ ...record, options: mainOptions },
 			assistant("Done."),
 			controller.signal,
 		);
-		expect(text).toBe("Next.");
+		expect(result.text).toBe("Next.");
+		expect(result.outcome).toBe("shown");
 		expect(seenModel).toBe(model);
 		expect(seenContext?.systemPrompt).toBe(context.systemPrompt);
 		expect(SUGGESTION_MAX_TOKENS).toBe(128);
@@ -207,9 +228,11 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 		expect(addsThinkingBudgetToMaxTokens(model)).toBe(true);
 		expect(sent).toBe(128);
 		expect(final).toBe(expected);
+		expect(suggestionEffectiveMaxTokens(model, extra)).toBe(expected);
 		// A provider without that adjustment gets budget + 128 directly.
 		expect(addsThinkingBudgetToMaxTokens(openaiModel)).toBe(false);
 		expect(suggestionMaxTokens(openaiModel, extra)).toBe(expected);
+		expect(suggestionEffectiveMaxTokens(openaiModel, extra)).toBe(expected);
 
 		const mainOptions = { apiKey: "k", maxTokens: 32000, ...extra };
 		let seen: Record<string, unknown> | undefined;
@@ -231,6 +254,16 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 		// Reasoning is kept, not disabled: every other key is unchanged.
 		expect(rest).toEqual(mainRest);
 		expect(Object.keys(seen ?? {}).sort()).toEqual([...Object.keys(mainOptions), "signal"].sort());
+	});
+
+	it("uses the provider's clamped ceiling for adaptive and budget-based thinking", () => {
+		const options: SimpleStreamOptions = { reasoning: "high" };
+		const adaptive = {
+			...model,
+			compat: { ...model.compat, forceAdaptiveThinking: true as const },
+		};
+		expect(suggestionEffectiveMaxTokens(adaptive, options)).toBe(16384 + 128);
+		expect(suggestionEffectiveMaxTokens({ ...model, maxTokens: 4096 }, options)).toBe(4096);
 	});
 
 	it("extracts one trimmed sentence and rejects error replies", () => {

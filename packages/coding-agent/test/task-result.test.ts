@@ -7,13 +7,12 @@ import {
 	claimsFromFinishCheckLedger,
 	factFromFinishCheckSkip,
 	factFromGoalAcceptance,
-	formatTaskResultLine,
 	isTaskResultEnabled,
 	projectTaskResult,
-	serializeTaskResultEvent,
 	TASK_RESULT_VERSION,
 	type TaskCheckFact,
 } from "../src/core/task-result.ts";
+import { formatTaskResultLine, serializeTaskResultEvent } from "../src/core/task-result-format.ts";
 
 const settled = { promptRunId: "run-1", outcome: "completed" as const };
 
@@ -46,7 +45,7 @@ describe("task-result projection", () => {
 	it("host receipt pass reaches passed with coverage", () => {
 		const p = projectTaskResult({ settled, facts: [factFromGoalAcceptance(receipt())] });
 		expect(p).toMatchObject({ version: TASK_RESULT_VERSION, check: "passed", checkSource: "host_receipt" });
-		expect(p.coverage).toEqual({ checksRun: 1, checksTotal: 1 });
+		expect(p.coverage).toEqual({ checksRun: 1, checksTotal: 1, receiptsObserved: 1 });
 	});
 
 	it("B10: model writes 'passed', host recorded a failure -> required_failed, claim stays model_text", () => {
@@ -57,7 +56,7 @@ describe("task-result projection", () => {
 		expect(p.check).toBe("required_failed");
 		expect(p.modelClaims).toEqual([{ source: "model_text", says: "passed", text: "All tests passed." }]);
 		expect(p.modelClaims.some((c) => (c.source as string) === "host_receipt")).toBe(false);
-		expect(p.coverage).toEqual({ checksRun: 1, checksTotal: 1 });
+		expect(p.coverage).toEqual({ checksRun: 1, checksTotal: 1, receiptsObserved: 1 });
 	});
 
 	it("B2: model says done/PASS with no accepted observation -> not passed", () => {
@@ -74,7 +73,7 @@ describe("task-result projection", () => {
 		const forged: TaskCheckFact = { id: "x", source: "model_text", status: "passed", required: true };
 		const p = projectTaskResult({ settled, facts: [forged] });
 		expect(p.check).toBe("none");
-		expect(p.coverage).toEqual({ checksRun: 0, checksTotal: 0 });
+		expect(p.coverage).toEqual({ checksRun: 0, checksTotal: "unknown", receiptsObserved: 0 });
 	});
 
 	it("B3: exit 0 with zero matched tests -> insufficient", () => {
@@ -143,7 +142,7 @@ describe("task-result projection", () => {
 			facts: [factFromGoalAcceptance(receipt(), { required: false })],
 		});
 		expect(optionalOnly.check).toBe("none");
-		expect(optionalOnly.coverage).toEqual({ checksRun: 1, checksTotal: 1 });
+		expect(optionalOnly.coverage).toEqual({ checksRun: 1, checksTotal: 1, receiptsObserved: 1 });
 	});
 
 	it("B6: fake evidence/approval written by the model is not promoted to a host receipt", () => {
@@ -176,7 +175,7 @@ describe("task-result projection", () => {
 		expect(p.check).toBe("none");
 		expect(p.facts).toEqual([]);
 		expect(claims.map((c) => c.source)).toEqual(["model_text", "model_text"]);
-		expect(p.coverage).toEqual({ checksRun: 0, checksTotal: 0 });
+		expect(p.coverage).toEqual({ checksRun: 0, checksTotal: "unknown", receiptsObserved: 0 });
 	});
 
 	it("coverage counts host checks run out of registered", () => {
@@ -188,7 +187,7 @@ describe("task-result projection", () => {
 				factFromFinishCheckSkip("workspace-unchanged"),
 			],
 		});
-		expect(p.coverage).toEqual({ checksRun: 2, checksTotal: 3 });
+		expect(p.coverage).toEqual({ checksRun: 2, checksTotal: 3, receiptsObserved: 2 });
 		expect(p.check).toBe("required_failed");
 	});
 
@@ -201,12 +200,12 @@ describe("task-result projection", () => {
 
 	it("B1 (projection level): print text, TUI line and RPC JSON render one projection", () => {
 		const event = buildTaskResultEvent({ settled, facts: [factFromGoalAcceptance(receipt())] });
-		expect(event).toMatchObject({ type: "task_result", version: 1 });
+		expect(event).toMatchObject({ type: "task_result", version: 2 });
 		const rpc = JSON.parse(serializeTaskResultEvent(event));
 		expect(rpc.projection).toEqual(event.projection);
 		expect(formatTaskResultLine(rpc.projection)).toBe(formatTaskResultLine(event.projection));
 		expect(formatTaskResultLine(event.projection)).toBe(
-			"task result: execution completed, check passed (host_receipt), checks 1/1",
+			"task result: execution completed, check passed (host_receipt), checks 1/1, receipts 1 (host check observation, not task correctness)",
 		);
 	});
 
@@ -249,5 +248,51 @@ describe("task-result projection", () => {
 		const p = projectTaskResult({ settled, facts: [failedFact], modelClaims: claim ? [claim] : [] });
 		expect(p.check).toBe("required_failed");
 		expect(p.modelClaims[0]?.source).toBe("model_text");
+	});
+});
+
+describe("spec 100: goal acceptance fact inputs", () => {
+	const passed = {
+		receiptId: "r-100",
+		status: "passed" as const,
+		passed: true,
+		workspace: { sha256: "w1", completeness: "complete" as const },
+	};
+
+	it("a test runner pass with readable counts is a pass; skipped is display only", () => {
+		const fact = factFromGoalAcceptance(passed, {
+			checkKind: "test_runner",
+			executedTests: 2,
+			matchedTests: 3,
+			skippedTests: 1,
+			currentWorkspaceSha256: "w1",
+		});
+		expect(fact.status).toBe("passed");
+		expect(fact.tests).toEqual({ executed: 2, matched: 3, skipped: 1 });
+	});
+
+	it("0 executed tests is zero_tests, never passed", () => {
+		const fact = factFromGoalAcceptance(passed, {
+			checkKind: "test_runner",
+			executedTests: 0,
+			matchedTests: 3,
+			skippedTests: 3,
+		});
+		expect(fact).toMatchObject({ status: "insufficient", reason: "zero_tests" });
+	});
+
+	it("unreadable counts are unverified_counts with unknown counts, never passed", () => {
+		const fact = factFromGoalAcceptance(passed, { checkKind: "test_runner" });
+		expect(fact).toMatchObject({
+			status: "insufficient",
+			reason: "unverified_counts",
+			tests: { executed: "unknown", matched: "unknown", skipped: "unknown" },
+		});
+	});
+
+	it("stale beats nothing: an edit before publish is stale", () => {
+		const fact = factFromGoalAcceptance(passed, { checkKind: "shell", currentWorkspaceSha256: "w2" });
+		expect(fact).toMatchObject({ status: "insufficient", reason: "stale" });
+		expect(fact.tests).toBeUndefined();
 	});
 });

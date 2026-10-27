@@ -119,7 +119,8 @@ Additional built-in read-only tools (`grep`, `find`, `ls`) are available through
 ## Give omk project instructions
 
 For optional, portable user defaults, preview `omk init --global --dry-run`, then
-run `omk init --global`. Existing instructions and settings are preserved.
+run `omk init --global`. For a project document set, use `omk init --project --dry-run`
+and `omk init --project`. Existing instructions and settings are preserved.
 See [User context setup](context-files.md) for migration, loading, and interoperability.
 
 OMK loads context files at startup. Add an `AGENTS.md` file to tell it how to work in a project:
@@ -136,6 +137,9 @@ OMK loads:
 
 - `~/.omk/agent/AGENTS.md` for global instructions
 - `AGENTS.md` or `CLAUDE.md` from parent directories and the current directory
+- `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `RULES.md`, `TASKS.md`, and `PROGRESS.md` from the same project-directory walk
+
+A bare `omk` launch creates missing standard documents in an otherwise empty Git repository root. Set `OMK_PROJECT_CONTEXT_BOOTSTRAP=0` to disable that default.
 
 Restart omk, or run `/reload`, after changing context files.
 

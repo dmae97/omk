@@ -404,6 +404,10 @@ input pin 이전 또는 process identity 기록 이전의 crash window는 여전
 | `not_observed` | 소유자가 먼저 끝나 요청을 회수함 | 0 |
 | `pending` | 대기 시간(기본 10초, 최대 600초) 뒤에도 소유 중이며 요청은 남음 | 1 |
 
+cancel은 run id를 얻으려고 원장을 읽기 전용(reader 모드)으로 읽습니다. 소유자가 append하는
+중이면 최대 250ms 동안 다시 읽고, 그래도 계속 바뀌면 `concurrent_change`로 실패합니다.
+원장이 실제로 손상됐을 때만 `integrity`입니다.
+
 새 작업은 시작할 때 살아 있는 소유자가 없는 run의 남은 요청을 지우므로, 오래된 요청이
 관계없는 작업을 취소하지 않습니다. SDK 호출자는 `watchRunCancelRequest()`로 같은 요청을
 자신의 `AbortSignal`에 연결할 수 있습니다.

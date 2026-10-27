@@ -32,6 +32,7 @@ import type { AssistantMessage } from "../types.ts";
  * - Ollama: Some deployments truncate silently, others return errors like "prompt too long; exceeded max context length by X tokens"
  */
 const OVERFLOW_PATTERNS = [
+	/prompt input (?:still )?exceeds the safe model context window/i, // OMK local full-request capacity guard
 	/prompt is too long/i, // Anthropic token overflow
 	/request_too_large/i, // Anthropic request byte-size overflow (HTTP 413)
 	/input is too long for requested model/i, // Amazon Bedrock

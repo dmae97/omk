@@ -38,7 +38,7 @@ export type DurableFileLockObservation =
 
 export function inspectDurableFileLockSync(path: string, scope: string): DurableFileLockObservation {
 	drainRetryableDurableFileLocksSync();
-	const deadline = Date.now();
+	const deadline = performance.now();
 	const observations = resolveDurableFileIdentity(path).lockKeys.map((key) =>
 		inspectDurableFileLockPathSync(durableFileLockPath(scope, key), deadline),
 	);
@@ -91,7 +91,7 @@ function createLock(scope: string, identity: DurableFileIdentity, held: HeldDura
 		transfer(nextPath, options = {}) {
 			if (released) throw new TypeError("Cannot transfer a released durable file lock");
 			assertDurableFileLockPathsOwnedSync(held);
-			const deadline = Date.now() + lockTimeout(options);
+			const deadline = performance.now() + lockTimeout(options);
 			for (let attempt = 0; attempt < 4; attempt += 1) {
 				const nextIdentity = resolveDurableFileIdentity(nextPath);
 				const added: HeldDurableFileLock[] = [];
@@ -139,7 +139,7 @@ export function acquireDurableFileLockSync(
 	options: DurableFileLockOptions = {},
 ): DurableFileLock {
 	drainRetryableDurableFileLocksSync();
-	const deadline = Date.now() + lockTimeout(options);
+	const deadline = performance.now() + lockTimeout(options);
 	for (let attempt = 0; attempt < 4; attempt += 1) {
 		const identity = resolveDurableFileIdentity(path);
 		const held: HeldDurableFileLock[] = [];

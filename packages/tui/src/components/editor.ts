@@ -1,4 +1,4 @@
-import type { AutocompleteProvider, AutocompleteSuggestions } from "../autocomplete.ts";
+import type { AutocompleteProvider } from "../autocomplete.ts";
 import { getKeybindings } from "../keybindings.ts";
 import { decodePrintableKey, matchesKey } from "../keys.ts";
 import { KillRing } from "../kill-ring.ts";
@@ -6,8 +6,14 @@ import { type Component, CURSOR_MARKER, type Focusable, type TUI } from "../tui.
 import { UndoStack } from "../undo-stack.ts";
 import { getGraphemeSegmenter, getWordSegmenter, isWhitespaceChar, truncateToWidth, visibleWidth } from "../utils.ts";
 import { findWordBackward, findWordForward } from "../word-navigation.ts";
+import {
+	type AutocompleteSnapshot,
+	autocompleteDebounceMs,
+	autocompleteSnapshotMatches,
+	buildAutocompleteList,
+} from "./editor-autocomplete.ts";
 import { createScrollBorder } from "./editor-scroll-border.ts";
-import { SelectList, type SelectListLayoutOptions, type SelectListTheme } from "./select-list.ts";
+import type { SelectList, SelectListTheme } from "./select-list.ts";
 
 const graphemeSegmenter = getGraphemeSegmenter();
 const wordSegmenter = getWordSegmenter();
@@ -221,13 +227,6 @@ export interface EditorOptions {
 	autocompleteMaxVisible?: number;
 }
 
-const SLASH_COMMAND_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
-	minPrimaryColumnWidth: 12,
-	maxPrimaryColumnWidth: 32,
-};
-
-const ATTACHMENT_AUTOCOMPLETE_DEBOUNCE_MS = 20;
-
 export class Editor implements Component, Focusable {
 	private state: EditorState = {
 		lines: [""],
@@ -265,6 +264,7 @@ export class Editor implements Component, Focusable {
 	private autocompleteRequestTask: Promise<void> = Promise.resolve();
 	private autocompleteStartToken: number = 0;
 	private autocompleteRequestId: number = 0;
+	private autocompleteSnapshot?: AutocompleteSnapshot;
 
 	// Paste tracking for large pastes
 	private pastes: Map<number, string> = new Map();
@@ -625,6 +625,21 @@ export class Editor implements Component, Focusable {
 
 			if (kb.matches(data, "tui.select.up") || kb.matches(data, "tui.select.down")) {
 				this.autocompleteList.handleInput(data);
+				return;
+			}
+
+			if (
+				(kb.matches(data, "tui.input.tab") || kb.matches(data, "tui.select.confirm")) &&
+				(!this.autocompleteSnapshot ||
+					!autocompleteSnapshotMatches(this.autocompleteSnapshot, {
+						text: this.getText(),
+						line: this.state.cursorLine,
+						col: this.state.cursorCol,
+						requestId: this.autocompleteRequestId,
+					}))
+			) {
+				this.clearAutocompleteUi();
+				this.tui.requestRender();
 				return;
 			}
 
@@ -2129,44 +2144,6 @@ export class Editor implements Component, Focusable {
 		return this.isSlashMenuAllowed() && /^[a-zA-Z0-9][a-zA-Z0-9.\-_]*$/.test(textBeforeCursor);
 	}
 
-	// Autocomplete methods
-	/**
-	 * Find the best autocomplete item index for the given prefix.
-	 * Returns -1 if no match is found.
-	 *
-	 * Match priority:
-	 * 1. Exact match (prefix === item.value) -> always selected
-	 * 2. Prefix match -> first item whose value starts with prefix
-	 * 3. No match -> -1 (keep default highlight)
-	 *
-	 * Matching is case-sensitive and checks item.value only.
-	 */
-	private getBestAutocompleteMatchIndex(items: Array<{ value: string; label: string }>, prefix: string): number {
-		if (!prefix) return -1;
-
-		let firstPrefixIndex = -1;
-
-		for (let i = 0; i < items.length; i++) {
-			const value = items[i]!.value;
-			if (value === prefix) {
-				return i; // Exact match always wins
-			}
-			if (firstPrefixIndex === -1 && value.startsWith(prefix)) {
-				firstPrefixIndex = i;
-			}
-		}
-
-		return firstPrefixIndex;
-	}
-
-	private createAutocompleteList(
-		prefix: string,
-		items: Array<{ value: string; label: string; description?: string }>,
-	): SelectList {
-		const layout = prefix.startsWith("/") ? SLASH_COMMAND_SELECT_LIST_LAYOUT : undefined;
-		return new SelectList(items, this.autocompleteMaxVisible, this.theme.selectList, layout);
-	}
-
 	private tryTriggerAutocomplete(explicitTab: boolean = false): void {
 		this.requestAutocomplete({ force: false, explicitTab });
 	}
@@ -2211,7 +2188,8 @@ export class Editor implements Component, Focusable {
 		this.cancelAutocompleteRequest();
 		const startToken = ++this.autocompleteStartToken;
 
-		const debounceMs = this.getAutocompleteDebounceMs(options);
+		const currentLine = this.state.lines[this.state.cursorLine] || "";
+		const debounceMs = autocompleteDebounceMs(options, currentLine.slice(0, this.state.cursorCol));
 		if (debounceMs > 0) {
 			this.autocompleteDebounceTimer = setTimeout(() => {
 				this.autocompleteDebounceTimer = undefined;
@@ -2229,32 +2207,32 @@ export class Editor implements Component, Focusable {
 	): Promise<void> {
 		const previousTask = this.autocompleteRequestTask;
 		this.autocompleteRequestTask = (async () => {
-			await previousTask;
-			if (startToken !== this.autocompleteStartToken || !this.autocompleteProvider) {
-				return;
+			let controller: AbortController | undefined;
+			let requestId: number | undefined;
+			try {
+				await previousTask;
+				if (startToken !== this.autocompleteStartToken || !this.autocompleteProvider) {
+					return;
+				}
+
+				controller = new AbortController();
+				this.autocompleteAbort = controller;
+				requestId = ++this.autocompleteRequestId;
+				const snapshotText = this.getText();
+				const snapshotLine = this.state.cursorLine;
+				const snapshotCol = this.state.cursorCol;
+
+				await this.runAutocompleteRequest(requestId, controller, snapshotText, snapshotLine, snapshotCol, options);
+			} catch {
+				if (controller?.signal.aborted || requestId === undefined || requestId !== this.autocompleteRequestId) {
+					return;
+				}
+				this.autocompleteAbort = undefined;
+				this.clearAutocompleteUi();
+				this.tui.requestRender();
 			}
-
-			const controller = new AbortController();
-			this.autocompleteAbort = controller;
-			const requestId = ++this.autocompleteRequestId;
-			const snapshotText = this.getText();
-			const snapshotLine = this.state.cursorLine;
-			const snapshotCol = this.state.cursorCol;
-
-			await this.runAutocompleteRequest(requestId, controller, snapshotText, snapshotLine, snapshotCol, options);
 		})();
 		await this.autocompleteRequestTask;
-	}
-
-	private getAutocompleteDebounceMs(options: { force: boolean; explicitTab: boolean }): number {
-		if (options.explicitTab || options.force) {
-			return 0;
-		}
-
-		const currentLine = this.state.lines[this.state.cursorLine] || "";
-		const textBeforeCursor = currentLine.slice(0, this.state.cursorCol);
-		const isSymbolAutocompleteContext = /(?:^|[ \t])(?:@(?:"[^"]*|[^\s]*)|#[^\s]*)$/.test(textBeforeCursor);
-		return isSymbolAutocompleteContext ? ATTACHMENT_AUTOCOMPLETE_DEBOUNCE_MS : 0;
 	}
 
 	private async runAutocompleteRequest(
@@ -2274,7 +2252,18 @@ export class Editor implements Component, Focusable {
 			{ signal: controller.signal, force: options.force },
 		);
 
-		if (!this.isAutocompleteRequestCurrent(requestId, controller, snapshotText, snapshotLine, snapshotCol)) {
+		if (
+			controller.signal.aborted ||
+			!autocompleteSnapshotMatches(
+				{ text: snapshotText, line: snapshotLine, col: snapshotCol, requestId },
+				{
+					text: this.getText(),
+					line: this.state.cursorLine,
+					col: this.state.cursorCol,
+					requestId: this.autocompleteRequestId,
+				},
+			)
+		) {
 			return;
 		}
 
@@ -2310,36 +2299,21 @@ export class Editor implements Component, Focusable {
 			return;
 		}
 
-		this.applyAutocompleteSuggestions(suggestions, options.force ? "force" : "regular");
-		this.tui.requestRender();
-	}
-
-	private isAutocompleteRequestCurrent(
-		requestId: number,
-		controller: AbortController,
-		snapshotText: string,
-		snapshotLine: number,
-		snapshotCol: number,
-	): boolean {
-		return (
-			!controller.signal.aborted &&
-			requestId === this.autocompleteRequestId &&
-			this.getText() === snapshotText &&
-			this.state.cursorLine === snapshotLine &&
-			this.state.cursorCol === snapshotCol
-		);
-	}
-
-	private applyAutocompleteSuggestions(suggestions: AutocompleteSuggestions, state: "regular" | "force"): void {
+		this.autocompleteSnapshot = {
+			text: snapshotText,
+			line: snapshotLine,
+			col: snapshotCol,
+			requestId,
+		};
 		this.autocompletePrefix = suggestions.prefix;
-		this.autocompleteList = this.createAutocompleteList(suggestions.prefix, suggestions.items);
-
-		const bestMatchIndex = this.getBestAutocompleteMatchIndex(suggestions.items, suggestions.prefix);
-		if (bestMatchIndex >= 0) {
-			this.autocompleteList.setSelectedIndex(bestMatchIndex);
-		}
-
-		this.autocompleteState = state;
+		this.autocompleteList = buildAutocompleteList(
+			suggestions.prefix,
+			suggestions.items,
+			this.autocompleteMaxVisible,
+			this.theme.selectList,
+		);
+		this.autocompleteState = options.force ? "force" : "regular";
+		this.tui.requestRender();
 	}
 
 	private cancelAutocompleteRequest(): void {
@@ -2356,6 +2330,7 @@ export class Editor implements Component, Focusable {
 		this.autocompleteState = null;
 		this.autocompleteList = undefined;
 		this.autocompletePrefix = "";
+		this.autocompleteSnapshot = undefined;
 	}
 
 	private cancelAutocomplete(): void {

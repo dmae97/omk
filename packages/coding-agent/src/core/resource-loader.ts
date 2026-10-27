@@ -5,7 +5,9 @@ import { CONFIG_DIR_NAME } from "../config.ts";
 import { loadThemeFromPath, type Theme } from "../modes/interactive/theme/theme.ts";
 import type { ContextFile } from "./context-file.ts";
 import type { ResourceDiagnostic } from "./diagnostics.ts";
+import { loadProjectContextFiles } from "./project-context-files.ts";
 
+export { loadProjectContextFiles };
 export type { ResourceCollision, ResourceDiagnostic } from "./diagnostics.ts";
 
 import { canonicalizePath, isLocalPath, resolvePath } from "../utils/paths.ts";
@@ -48,6 +50,8 @@ export interface ResourceLoader {
 	getAppendSystemPrompt(): string[];
 	extendResources(paths: ResourceExtensionPaths): void;
 	reload(): Promise<void>;
+	/** The extension event bus, when the loader owns one (spec 096 task-result collector). */
+	getEventBus?(): EventBus;
 }
 
 function resolvePromptInput(input: string | undefined, description: string): string | undefined {
@@ -65,112 +69,6 @@ function resolvePromptInput(input: string | undefined, description: string): str
 	}
 
 	return input;
-}
-
-function loadContextFileFromDir(dir: string): ContextFile | null {
-	const candidates = ["AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"];
-	for (const filename of candidates) {
-		const filePath = join(dir, filename);
-		if (existsSync(filePath)) {
-			try {
-				if (!statSync(filePath).isFile()) {
-					continue;
-				}
-				return {
-					path: filePath,
-					content: readFileSync(filePath, "utf-8"),
-				};
-			} catch (error) {
-				console.error(chalk.yellow(`Warning: Could not read ${filePath}: ${error}`));
-			}
-		}
-	}
-	return null;
-}
-
-function loadOverrideFilesFromDir(dir: string): ContextFile[] {
-	const candidates = ["AGENTS.override.md", "AGENTS.GODMODE.md", "GODMODE.md", "ENI.override.md"];
-	const results: ContextFile[] = [];
-	for (const filename of candidates) {
-		const filePath = join(dir, filename);
-		if (existsSync(filePath)) {
-			try {
-				results.push({
-					path: filePath,
-					content: readFileSync(filePath, "utf-8"),
-				});
-			} catch (error) {
-				console.error(chalk.yellow(`Warning: Could not read ${filePath}: ${error}`));
-			}
-		}
-	}
-	return results;
-}
-
-function isGlobalContextFile(file: ContextFile, agentDir: string): boolean {
-	const resolvedAgentDir = resolvePath(agentDir);
-	const normalizedPath = resolve(file.path);
-	const parentDir = resolve(normalizedPath, "..");
-	return parentDir === resolvedAgentDir;
-}
-
-export function loadProjectContextFiles(options: { cwd: string; agentDir: string }): ContextFile[] {
-	const resolvedCwd = resolvePath(options.cwd);
-	const resolvedAgentDir = resolvePath(options.agentDir);
-
-	const contextFiles: ContextFile[] = [];
-	const seenPaths = new Set<string>();
-
-	const globalContext = loadContextFileFromDir(resolvedAgentDir);
-	if (globalContext) {
-		contextFiles.push({ ...globalContext, isGlobal: true });
-		seenPaths.add(globalContext.path);
-	}
-
-	const globalOverrides = loadOverrideFilesFromDir(resolvedAgentDir);
-	for (const override of globalOverrides) {
-		if (!seenPaths.has(override.path)) {
-			contextFiles.push({ ...override, isGlobal: true });
-			seenPaths.add(override.path);
-		}
-	}
-
-	const ancestorContextFiles: ContextFile[] = [];
-
-	let currentDir = resolvedCwd;
-	const root = resolve("/");
-
-	while (true) {
-		const contextFile = loadContextFileFromDir(currentDir);
-		if (contextFile && !seenPaths.has(contextFile.path)) {
-			ancestorContextFiles.unshift({
-				...contextFile,
-				isGlobal: isGlobalContextFile(contextFile, resolvedAgentDir),
-			});
-			seenPaths.add(contextFile.path);
-		}
-
-		const dirOverrides = loadOverrideFilesFromDir(currentDir);
-		for (const override of dirOverrides) {
-			if (!seenPaths.has(override.path)) {
-				ancestorContextFiles.unshift({
-					...override,
-					isGlobal: isGlobalContextFile(override, resolvedAgentDir),
-				});
-				seenPaths.add(override.path);
-			}
-		}
-
-		if (currentDir === root) break;
-
-		const parentDir = resolve(currentDir, "..");
-		if (parentDir === currentDir) break;
-		currentDir = parentDir;
-	}
-
-	contextFiles.push(...ancestorContextFiles);
-
-	return contextFiles;
 }
 
 export interface DefaultResourceLoaderOptions {
@@ -314,6 +212,10 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.extensionThemeSourceInfos = new Map();
 		this.lastPromptPaths = [];
 		this.lastThemePaths = [];
+	}
+
+	getEventBus(): EventBus {
+		return this.eventBus;
 	}
 
 	getExtensions(): LoadExtensionsResult {

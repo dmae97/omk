@@ -1,0 +1,1 @@
+{"trials":[{"taskId":"ta","reward":NaN,"note":"NaN Infinity in string"},{"taskId":"tb","score":-Infinity},{"taskId":"tc","score":Infinity}]}

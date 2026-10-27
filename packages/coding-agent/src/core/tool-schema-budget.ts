@@ -18,6 +18,8 @@ export interface ToolSchemaFitInput {
 	readonly groupOf: (toolName: string) => string | undefined;
 	readonly budgetTokens: number;
 	readonly countTokens: (text: string) => number;
+	/** Spec 104: trusted host policy only; groups holding a required tool are never withheld. */
+	readonly pinnedGroups?: ReadonlySet<string>;
 }
 
 /** Server segment of a namespaced MCP tool name (`server__tool`). */
@@ -51,6 +53,7 @@ export function fitToolSchemas(input: ToolSchemaFitInput): ToolSchemaFit {
 		groupOf: input.groupOf,
 		budgetTokens: input.budgetTokens,
 		count: (tools) => input.countTokens(serializePromptToolSchemas(tools)),
+		...(input.pinnedGroups ? { pinnedGroups: input.pinnedGroups } : {}),
 	});
 	return { tools: fit.tools, withheld: fit.withheld };
 }

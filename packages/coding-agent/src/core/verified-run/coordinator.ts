@@ -18,7 +18,6 @@ import {
 } from "./authority-runtime.ts";
 import { commandEnvironmentDigest, probeVerifiedSandbox } from "./broker.ts";
 import { captureCandidate, materializeCandidate, storeCandidate } from "./candidate.ts";
-import { preflightCheckReceipts } from "./check-receipt.ts";
 import { inspectTaskRecovery, retryDagTasks, type TaskRecoveryInspection } from "./dag-recovery.ts";
 import { createRunIssuer, type EvidenceRead, readRunEvidence, type VerifiedRunEvidence } from "./evidence.ts";
 import { readEvidenceProjection } from "./evidence-read-projection.ts";
@@ -231,7 +230,6 @@ export class RunCoordinator {
 		const base = captureCandidate(contract.workspace.root, contract.budget);
 		if (base.digest !== contract.workspace.baseDigest) throw new VerifiedRunError("base_conflict");
 		const environmentDigest = commandEnvironmentDigest(contract, "gated-v1");
-		preflightCheckReceipts(contract);
 		probeVerifiedSandbox();
 		ensureDurableDirectorySync(runPath);
 		return this.authorityPool.run(runPath, contract.runId, async (authority: RunAuthority) => {

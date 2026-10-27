@@ -14,7 +14,7 @@ import { createAttachmentStrip } from "./components/attachment-strip.ts";
 import { ChatContainer } from "./components/chat-container.ts";
 import { createSessionMetadataLoaders } from "./components/session-selector-loaders.ts";
 import { planFirstRun } from "./first-run.ts";
-import { installInteractiveNextSuggestions } from "./next-suggestion-controller.ts";
+import { disposeInteractiveNextSuggestions, installInteractiveNextSuggestions } from "./next-suggestion-controller.ts";
 import { PromptAttachmentDraft } from "./prompt-attachment-draft.ts";
 import { onThemedOutputStale, scheduleInteractiveStartupDeps } from "./startup-deps.ts";
 
@@ -309,8 +309,8 @@ export class InteractiveMode {
 	private readonly defaultHiddenThinkingLabel = "Thinking...";
 	private hiddenThinkingLabel = this.defaultHiddenThinkingLabel;
 
-	private lastSigintTime = 0;
-	private lastEscapeTime = 0;
+	private lastSigintTime = Number.NEGATIVE_INFINITY;
+	private lastEscapeTime = Number.NEGATIVE_INFINITY;
 	private changelogMarkdown: string | undefined = undefined;
 	private startupNoticesShown = false;
 	private anthropicSubscriptionWarningShown = false;
@@ -2021,9 +2021,9 @@ export class InteractiveMode {
 			this.getWorkingLoaderMessage(),
 			this.workingIndicatorOptions,
 		);
-		const startedAt = this.workingStartedAt ?? Date.now();
+		const startedAt = this.workingStartedAt ?? performance.now();
 		loader.setDynamicSuffix(() => {
-			const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+			const seconds = Math.max(0, Math.floor((performance.now() - startedAt) / 1000));
 			const parts = [`${seconds}s`, `${keyText("app.interrupt")} interrupt`];
 			if (!this.toolOutputExpanded && this.pendingTools.size > 0) {
 				parts.push(`${keyText("app.tools.expand")} expand tools`);
@@ -2739,14 +2739,14 @@ export class InteractiveMode {
 				// Double-escape with empty editor triggers /tree, /fork, or nothing based on setting
 				const action = this.settingsManager.getDoubleEscapeAction();
 				if (action !== "none") {
-					const now = Date.now();
+					const now = performance.now();
 					if (now - this.lastEscapeTime < 500) {
 						if (action === "tree") {
 							this.showTreeSelector();
 						} else {
 							this.showUserMessageSelector();
 						}
-						this.lastEscapeTime = 0;
+						this.lastEscapeTime = Number.NEGATIVE_INFINITY;
 					} else {
 						this.lastEscapeTime = now;
 					}
@@ -3146,7 +3146,7 @@ export class InteractiveMode {
 					.then((result) => this.session.recordCompletionSoundResult(event.promptRunId, result));
 				break;
 			case "agent_start":
-				this.workingStartedAt = Date.now();
+				this.workingStartedAt = performance.now();
 				disposePendingTools(this.pendingTools);
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
@@ -3831,7 +3831,7 @@ export class InteractiveMode {
 	// =========================================================================
 
 	private handleCtrlC(): void {
-		const now = Date.now();
+		const now = performance.now();
 		if (now - this.lastSigintTime < 500) {
 			void this.shutdown();
 		} else {
@@ -6502,6 +6502,7 @@ export class InteractiveMode {
 	}
 
 	stop(options: { finalSessionLog?: boolean } = {}): void {
+		disposeInteractiveNextSuggestions();
 		// A hung `headroom --version` must not hold shutdown for its timeouts or outlive this process.
 		abortHeadroomVersionProbe();
 		this.unregisterSignalHandlers();

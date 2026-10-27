@@ -93,7 +93,7 @@ async function runCli(varyArgs: boolean): Promise<CliResult> {
   });
 }`,
 	);
-	const started = Date.now();
+	const started = performance.now();
 	try {
 		return await new Promise<CliResult>((resolve) => {
 			const child = spawn(
@@ -126,7 +126,7 @@ async function runCli(varyArgs: boolean): Promise<CliResult> {
 			}, WALL_CLOCK_MS);
 			child.on("close", (code) => {
 				clearTimeout(guard);
-				resolve({ code, timedOut, elapsedMs: Date.now() - started, requests, stdout, stderr });
+				resolve({ code, timedOut, elapsedMs: performance.now() - started, requests, stdout, stderr });
 			});
 		});
 	} finally {

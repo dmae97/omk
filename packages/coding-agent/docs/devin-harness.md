@@ -79,11 +79,11 @@ With a Devin credential configured, the status rail's USAGE section shows the ac
 
 ## Domain routing
 
-Selecting the `devin` provider auto-applies the `devin-harness` loadout by default; this does not require `OMK_DOMAIN_ROUTING=1`. Set `OMK_DEVIN_HARNESS=0` to disable that provider-specific dispatch. The flag is independent from `OMK_GROK_HARNESS`.
+Selecting the `devin` provider auto-applies the `devin-harness` loadout by default; this does not depend on `OMK_DOMAIN_ROUTING`. Set `OMK_DEVIN_HARNESS=0` to disable that provider-specific dispatch. The flag is independent from `OMK_GROK_HARNESS`.
 
 Loadout policies reject extension tools that shadow builtins fail-closed. A host that intentionally replaces the builtin `bash` (for example a Landstrip shell provider) should keep `OMK_DEVIN_HARNESS=0` in its launcher until the replacement is removed or bridged; the `devin.md` overlay and the model budget still apply in that case.
 
-General prompt-based domain routing is separate and opt-in through `OMK_DOMAIN_ROUTING=1`. It selects one of the profiles under [`loadout-domains/`](loadout-domains/README.md) and composes it with the active role loadout. SWE-2 presets only set provider, model, thinking level, and instruction pointers.
+General prompt-based domain routing is separate and on by default (`OMK_DOMAIN_ROUTING=0` opts out). It selects one of the profiles under [`loadout-domains/`](loadout-domains/README.md) and composes it with the active role loadout. SWE-2 presets only set provider, model, thinking level, and instruction pointers.
 
 ## Model selection
 

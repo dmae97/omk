@@ -7,10 +7,11 @@ import {
 	type ThinkingBudgets,
 	type Transport,
 } from "omk-ai";
-import { planFailureTermination, runAgentLoop, runAgentLoopContinue } from "./agent-loop.ts";
+import { runAgentLoop, runAgentLoopContinue } from "./agent-loop.ts";
 import { createMutableAgentState, type MutableAgentState } from "./agent-state.ts";
 import { deliverToListeners } from "./listener-delivery.ts";
 import { PendingMessageQueue } from "./pending-message-queue.ts";
+import { endFailedRun, prepareRun } from "./run-failure.ts";
 import { type ModelContract, snapshotModelContract } from "./run-model-contract.ts";
 import { createImmutableSnapshot } from "./tool-execution-boundary.ts";
 import type {
@@ -368,7 +369,7 @@ export class Agent {
 		await this.runWithLifecycle(async (signal) => {
 			await runAgentLoop(
 				messages,
-				this.createContextSnapshot(messages),
+				prepareRun(() => this.createContextSnapshot(messages)),
 				this.createLoopConfig(options),
 				(event) => this.processEvents(event),
 				signal,
@@ -380,7 +381,7 @@ export class Agent {
 	private async runContinuation(): Promise<void> {
 		await this.runWithLifecycle(async (signal) => {
 			await runAgentLoopContinue(
-				this.createContextSnapshot(),
+				prepareRun(() => this.createContextSnapshot()),
 				this.createLoopConfig(),
 				(event) => this.processEvents(event),
 				signal,
@@ -455,36 +456,16 @@ export class Agent {
 		this._state.streamingMessage = undefined;
 		this._state.errorMessage = undefined;
 
+		let preparation: { cause: unknown } | undefined;
 		try {
 			await executor(abortController.signal);
 		} catch (error) {
-			const failure = error instanceof Error ? error : new Error(String(error));
-			await this.handleRunFailure(failure, abortController.signal.aborted);
+			const emit = (event: AgentEvent) => this.processEvents(event);
+			preparation = await endFailedRun(error, this._state, abortController.signal.aborted, emit);
 		} finally {
 			this.finishRun();
 		}
-	}
-
-	private async handleRunFailure(error: unknown, aborted: boolean): Promise<void> {
-		// Apply the same failure-termination contract as the low-level loop so the
-		// disposition of any unresolved tool calls matches transcript repair:
-		// an unambiguous open turn is closed with exactly one synthetic result per
-		// missing call before a single coherent failure assistant, and an ambiguous
-		// transcript fails closed without fabricating a turn over corruption.
-		const plan = planFailureTermination(this._state.messages, this._state.model, error, aborted);
-
-		for (const result of plan.closureResults) {
-			await this.processEvents({ type: "message_start", message: result });
-			await this.processEvents({ type: "message_end", message: result });
-		}
-
-		if (plan.failureMessage) {
-			await this.processEvents({ type: "message_start", message: plan.failureMessage });
-			await this.processEvents({ type: "message_end", message: plan.failureMessage });
-			await this.processEvents({ type: "turn_end", message: plan.failureMessage, toolResults: [] });
-		}
-
-		await this.processEvents({ type: "agent_end", messages: plan.messages });
+		if (preparation) throw preparation.cause;
 	}
 
 	private finishRun(): void {

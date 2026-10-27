@@ -206,6 +206,7 @@ adapter is covered by loopback HTTP/2 protocol tests.
 - `gpt-5.6-moa` runs bounded, tool-free GPT-5.6 Sol and Terra advisers concurrently, then streams a Sol synthesis with the active tools and tool history. Synthesis tool calls enter the normal agent loop; each follow-up model turn repeats the three-call workflow. Adviser and synthesis output remain independently capped.
 - On GPT-5.6 models OMK sends `xhigh` for its `max` and `ultra` tiers; `ultra` on the MoA model additionally represents the Sol/Terra delegation workflow.
 - GPT-6.1 Sol (`gpt-6.1-sol`, the Codex default since 2026-09-29), GPT-6 Astra, GPT-6 Sol and GPT-6 Luna follow the Codex client's bundled catalog: efforts `low` through `max` with no `off` or `minimal` (thinking stays on), an 872,000-token window and 128,000 output tokens. `ultra` appears on 6.1 Sol, Astra and 6 Sol and sends the effort the Codex client sends for it: `xhigh` on 6.1 Sol and Astra, `max` on 6 Sol. In the Codex app `ultra` also delegates to subagents automatically; in OMK it only selects that effort.
+- When using stored Codex OAuth, OMK uses its selected account for its own requests; a runtime `--api-key` can override it. Selecting `ultra` does not pin that account for the optional subagent extension's worker processes: they reload the stored selection, which can change while a run is active, and do not inherit a parent's in-memory API-key override.
 
 ```bash
 omk --provider openai-codex --model gpt-5.6-moa --thinking ultra
@@ -236,6 +237,11 @@ Both authentication modes use the built-in `xai` provider. Run `/login` for subs
 For project presets, Imagine guidance, and the exact `grok-4.6`, `grok-4.5`, and `grok-4.3` thinking mappings, see [Grok harness](grok-harness.md).
 
 ## API Keys
+
+DeepSeek models use the existing provider transports and credentials. OMK's
+[DeepSeek harness](deepseek-harness.md) adds a model-scoped local engine, including
+recognized gateway model IDs, without installing the upstream `dsh` runtime or
+changing the API endpoint.
 
 ### Environment Variables or Auth File
 

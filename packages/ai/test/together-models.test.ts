@@ -66,10 +66,16 @@ describe("Together models", () => {
 			thinkingFormat: "together",
 		});
 
-		const minimax = getModel("together", "MiniMaxAI/MiniMax-M2.7");
-		expect(minimax.thinkingLevelMap).toEqual({ off: null, minimal: null, low: null, medium: null });
-		expect(minimax.compat?.thinkingFormat).toBeUndefined();
-		expect(minimax.compat?.supportsReasoningEffort).toBe(false);
+		// models.dev marked MiniMax-M2.7 deprecated (2026-10-26); Together lists its successor M3 as
+		// "Hybrid (on by default)", toggled with reasoning.enabled and without reasoning_effort
+		// (docs.together.ai/docs/reasoning-overview). Serverless no longer lists a reasoning-only model.
+		const minimax = getModel("together", "MiniMaxAI/MiniMax-M3");
+		expect(minimax.reasoning).toBe(true);
+		expect(minimax.thinkingLevelMap).toEqual({ minimal: null, low: null, medium: null });
+		expect(minimax.compat).toMatchObject({
+			supportsReasoningEffort: false,
+			thinkingFormat: "together",
+		});
 	});
 
 	it("resolves TOGETHER_API_KEY from the environment", () => {

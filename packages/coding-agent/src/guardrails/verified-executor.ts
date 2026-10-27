@@ -8,8 +8,6 @@ import type {
 	Sha256Hex,
 	WorkspaceScope,
 } from "../types/evidence.ts";
-import { redactCommandDescriptor } from "./command-redaction.ts";
-import { type CommandHmacBinder, createCommandHmacBinder } from "./evidence-attestation.ts";
 import type { AlreadyRedactedOutputBytes } from "./evidence-receipt.ts";
 import {
 	computeEvidenceCommandSha256,
@@ -60,7 +58,6 @@ export interface VerifiedEvidenceExecutorOptions {
 	readonly ledger: ReplayLedgerManager;
 	readonly now?: () => Date;
 	readonly receiptIdFactory?: () => string;
-	readonly commandAttestationBinder?: CommandHmacBinder;
 }
 
 export class VerifiedEvidenceExecutorError extends Error {
@@ -121,15 +118,12 @@ export class VerifiedEvidenceExecutor {
 	private readonly ledger: ReplayLedgerManager;
 	private readonly now: () => Date;
 	private readonly receiptIdFactory: () => string;
-	private readonly commandAttestationBinder: CommandHmacBinder;
-	private readonly attestedCommands = new Map<string, EvidenceCommandDescriptor>();
 
 	constructor(options: VerifiedEvidenceExecutorOptions) {
 		this.store = options.store;
 		this.ledger = options.ledger;
 		this.now = options.now ?? (() => new Date());
 		this.receiptIdFactory = options.receiptIdFactory ?? randomUUID;
-		this.commandAttestationBinder = options.commandAttestationBinder ?? createCommandHmacBinder();
 	}
 
 	readonly resolveReceipt = (receiptId: string): EvidenceReceipt => this.store.read(receiptId);
@@ -138,11 +132,6 @@ export class VerifiedEvidenceExecutor {
 		this.ledger.getEvents().find((event) => event.seq === seq);
 
 	readonly resolveVerifiedLedgerSnapshot = () => this.ledger.getVerifiedSnapshot();
-
-	readonly resolveAttestedCommand = (receiptId: string): EvidenceCommandDescriptor | undefined => {
-		const command = this.attestedCommands.get(receiptId);
-		return command === undefined ? undefined : structuredClone(command);
-	};
 
 	/** Latest relevant `workspace_mutation` seq from this executor's own replay ledger. */
 	readonly resolveLatestWorkspaceMutationSeq = (scope: WorkspaceScope): number | null =>
@@ -155,8 +144,6 @@ export class VerifiedEvidenceExecutor {
 		| "resolveVerifiedLedgerSnapshot"
 		| "captureWorkspaceFingerprint"
 		| "resolveLatestWorkspaceMutationSeq"
-		| "commandAttestationBinder"
-		| "resolveAttestedCommand"
 	> {
 		return {
 			resolveReceipt: this.resolveReceipt,
@@ -164,8 +151,6 @@ export class VerifiedEvidenceExecutor {
 			resolveVerifiedLedgerSnapshot: this.resolveVerifiedLedgerSnapshot,
 			captureWorkspaceFingerprint,
 			resolveLatestWorkspaceMutationSeq: this.resolveLatestWorkspaceMutationSeq,
-			commandAttestationBinder: this.commandAttestationBinder,
-			resolveAttestedCommand: this.resolveAttestedCommand,
 		};
 	}
 
@@ -179,12 +164,9 @@ export class VerifiedEvidenceExecutor {
 		if (!isSafeEvidenceReceiptId(receiptId)) {
 			throw new VerifiedEvidenceExecutorError("receiptIdFactory returned an unsafe receipt ID");
 		}
-		// Tokenize the persisted representation and bind the ORIGINAL command under the
-		// internal process key BEFORE any side effect; unrepresentable or oversize
-		// redaction metadata fails closed here. The original is never persisted.
-		const redaction = redactCommandDescriptor(request.command);
-		const commandBinding = this.commandAttestationBinder.bind(request.command);
-		const receiptCommandSha256 = computeEvidenceCommandSha256(redaction.command);
+		// Persist the command as supplied. Command credential redaction is removed;
+		// output-byte policy remains the caller's responsibility.
+		const receiptCommandSha256 = computeEvidenceCommandSha256(request.command);
 		const workspaceBefore = captureWorkspaceFingerprint(request.workspaceScope);
 		const started = this.now();
 		const startedMs = started.getTime();
@@ -208,9 +190,7 @@ export class VerifiedEvidenceExecutor {
 			goalId: request.goalId,
 			...(request.laneId !== undefined ? { laneId: request.laneId } : {}),
 			claim: request.claim,
-			command: redaction.command,
-			commandRedaction: redaction.summary,
-			commandBinding,
+			command: request.command,
 			cwd: request.cwd,
 			timeoutMs: request.timeoutMs,
 			startedAt: started.toISOString(),
@@ -234,7 +214,6 @@ export class VerifiedEvidenceExecutor {
 			ledgerBinding: { seq: event.seq, eventHash: parseSha256Hex(event.eventHash, "ledger eventHash") },
 		});
 		const receiptPath = this.store.write(boundReceipt);
-		this.attestedCommands.set(receiptId, structuredClone(request.command));
 		return {
 			receipt: boundReceipt,
 			receiptPath,

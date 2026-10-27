@@ -1,8 +1,9 @@
-import type { AgentTool } from "omk-agent-core";
+import { type AgentTool, ToolTerminalError } from "omk-agent-core";
 import { type Static, Type } from "typebox";
 import { getShellEnv } from "../../utils/shell.ts";
 import { DEFAULT_BUILTIN_TOOL_TIMEOUTS } from "../agent-tool-settings.ts";
 import { classifyShellCommand } from "../command-safety.ts";
+import { isDefaultOnEnvFlag } from "../env-flag.ts";
 import { isCommandSafetyDisabled } from "../extensions/builtin/command-safety-gate.ts";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
 import { assertLoadoutAccess, type LoadoutAccessGuard } from "../loadout-access-policy.ts";
@@ -18,6 +19,7 @@ import {
 } from "./bash-local-operations.ts";
 import type { BashOperations } from "./bash-operations.ts";
 import { formatBashOutput } from "./bash-output.ts";
+import { logBashOutput } from "./bash-output-observe.ts";
 import { OutputAccumulator, type OutputSnapshot } from "./output-accumulator.ts";
 import { filterRtkOutput, shouldFilterRtkOutput } from "./rtk-output.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -144,15 +146,19 @@ export function createBashToolDefinition(
 				}
 			}
 
-			const output = new OutputAccumulator({ tempFilePrefix: "omk-bash" });
+			// Spec 113: read per call; default off (byte-identical to tail-only output).
+			const output = new OutputAccumulator({
+				tempFilePrefix: "omk-bash",
+				headTail: isDefaultOnEnvFlag(process.env.OMK_EXEC_TRUNCATE_MIDDLE),
+			});
 			let updateTimer: NodeJS.Timeout | undefined;
 			let updateDirty = false;
-			let lastUpdateAt = 0;
+			let lastUpdateAt = Number.NEGATIVE_INFINITY;
 
 			const emitOutputUpdate = () => {
 				if (!onUpdate || !updateDirty) return;
 				updateDirty = false;
-				lastUpdateAt = Date.now();
+				lastUpdateAt = performance.now();
 				const snapshot = output.snapshot({ persistIfTruncated: true });
 				onUpdate({
 					content: [{ type: "text", text: snapshot.content || "" }],
@@ -173,7 +179,7 @@ export function createBashToolDefinition(
 			const scheduleOutputUpdate = () => {
 				if (!onUpdate) return;
 				updateDirty = true;
-				const delay = BASH_UPDATE_THROTTLE_MS - (Date.now() - lastUpdateAt);
+				const delay = BASH_UPDATE_THROTTLE_MS - (performance.now() - lastUpdateAt);
 				if (delay <= 0) {
 					clearUpdateTimer();
 					emitOutputUpdate();
@@ -202,6 +208,8 @@ export function createBashToolDefinition(
 				const filter = exitCode !== undefined && shouldFilterRtkOutput(spawnContext.command, snapshot, exitCode);
 				if (filter) snapshot = output.snapshot({ persist: true });
 				await output.closeTempFile();
+				// Run log only (no-op without OMK_RUN_LOG_DIR); numbers only, never throws.
+				logBashOutput(snapshot.truncation, ctx);
 				return filter ? filterRtkOutput(spawnContext.command, snapshot, signal) : snapshot;
 			};
 
@@ -229,7 +237,7 @@ export function createBashToolDefinition(
 					const snapshot = await finishOutput();
 					const { text } = formatOutput(snapshot, "");
 					if (err instanceof Error && err.message === "aborted") {
-						throw new Error(appendStatus(text, "Command aborted"));
+						throw new ToolTerminalError("aborted", appendStatus(text, "Command aborted"));
 					}
 					if (err instanceof Error && err.message.startsWith("timeout:")) {
 						// Prefer the executor's reported seconds (timeout:N) so mocks and
@@ -241,7 +249,7 @@ export function createBashToolDefinition(
 							clamp?.clamped === true
 								? bashBudgetTimeoutMessage({ ...clamp, timeoutSec: secs ?? clamp.timeoutSec })
 								: `Command timed out after ${secs} seconds`;
-						throw new Error(appendStatus(text, status));
+						throw new ToolTerminalError("timeout", appendStatus(text, status));
 					}
 					throw err;
 				}

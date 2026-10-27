@@ -12,7 +12,13 @@ export function formatBashOutput(snapshot: OutputSnapshot, lastLineBytes: number
 		details = { truncation, fullOutputPath: snapshot.fullOutputPath };
 		const startLine = truncation.totalLines - truncation.outputLines + 1;
 		const endLine = truncation.totalLines;
-		if (truncation.lastLinePartial) {
+		if (truncation.strategy === "head-tail") {
+			// Spec 113: the marker inside `content` names the cut; this notice keeps the off-arm shape.
+			const headEnd = truncation.headLines ?? 0;
+			const inside = truncation.omittedLines === 0 && headEnd === truncation.totalLines;
+			const tailStart = inside ? headEnd : headEnd + (truncation.omittedLines ?? 0) + 1;
+			text += `\n\n[Showing lines 1-${headEnd} and ${tailStart}-${truncation.totalLines} of ${truncation.totalLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Full output: ${snapshot.fullOutputPath}]`;
+		} else if (truncation.lastLinePartial) {
 			const lastLineSize = formatSize(lastLineBytes);
 			text += `\n\n[Showing last ${formatSize(truncation.outputBytes)} of line ${endLine} (line is ${lastLineSize}). Full output: ${snapshot.fullOutputPath}]`;
 		} else if (truncation.truncatedBy === "lines") {

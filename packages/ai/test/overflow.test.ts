@@ -30,6 +30,13 @@ function createErrorMessage(errorMessage: string): AssistantMessage {
 }
 
 describe("isContextOverflow", () => {
+	it.each([
+		"Prompt input exceeds the safe model context window (estimated=658105, limit=656800).",
+		"Prompt input still exceeds the safe model context window after automatic compaction (estimated=658105, limit=656800).",
+	])("detects local capacity rejections: %s", (text) => {
+		expect(isContextOverflow(createErrorMessage(text), 1_000_000)).toBe(true);
+	});
+
 	it("detects explicit Ollama prompt-too-long errors", () => {
 		const message = createErrorMessage("400 `prompt too long; exceeded max context length by 100918 tokens`");
 		expect(isContextOverflow(message, 32768)).toBe(true);

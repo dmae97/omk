@@ -22,6 +22,7 @@ import type { Message } from "omk-ai";
 import { StringEnum } from "omk-ai";
 import { Container, Markdown, Spacer, Text } from "omk-tui";
 import {
+	admitWorkerSkills,
 	createSubagentLoopGuard,
 	type ExtensionAPI,
 	getAgentDir,
@@ -38,10 +39,11 @@ import {
 	type AgentCapabilities,
 	buildCapabilitiesPreamble,
 	buildCapabilityCatalog,
-	buildEnforcementArgs,
 	type CapabilityCatalog,
 	parseEmbeddedCapabilities,
 	validateCapabilities,
+	type WorkerSkillAdmit,
+	workerSkillArgs,
 } from "./capabilities.ts";
 import {
 	createExecutionBudget,
@@ -337,6 +339,12 @@ type ResultUpdateCallback = (partial: SingleResult) => void;
 /** Worker extension argv for a worker `--model` (spec 057): `--no-extensions` plus forwarded `-e` paths. */
 type WorkerExtensionArgsFn = (model: string | undefined) => string[];
 
+/** Spec 106 SK6: the parent session's admission store for one subagent tool call, keyed by its args closure. */
+const workerSkillAdmission = new WeakMap<WorkerExtensionArgsFn, WorkerSkillAdmit>();
+
+/** Spawning session id for one subagent tool call, keyed by its args closure (no module-global state). */
+const workerSpawningSession = new WeakMap<WorkerExtensionArgsFn, string | undefined>();
+
 async function runSingleAgentAttempt(
 	defaultCwd: string,
 	agents: AgentConfig[],
@@ -350,6 +358,7 @@ async function runSingleAgentAttempt(
 	onUpdate: ResultUpdateCallback | undefined,
 	workerExtensionArgs: WorkerExtensionArgsFn,
 	loopGuard: SubagentLoopGuard,
+	spawningSessionId: string | undefined,
 ): Promise<SubagentAttemptResult> {
 	const agent = agents.find((candidate) => candidate.name === agentName);
 	if (!agent) throw new Error(`Unknown agent: ${agentName}`);
@@ -388,13 +397,15 @@ async function runSingleAgentAttempt(
 			console.warn(`[subagent] agent "${agentName}" declares unknown capabilities: ${unknowns.join(", ")}`);
 		}
 	}
-	// Opt-in hard enforcement: restrict the subprocess to the declared skills only, via the
-	// existing --no-skills + --skill <path> flags (no core change). Off by default.
-	if (agent.enforceCapabilities && validatedCapabilities) {
-		for (const arg of buildEnforcementArgs(validatedCapabilities, getCapabilityCatalog())) {
-			args.push(arg);
-		}
-	}
+	// Spec 106 SK6 (OMK_SKILL_ADMISSION): see workerSkillArgs; flag off keeps the legacy args byte-identical.
+	const skillArgs = workerSkillArgs(
+		validatedCapabilities,
+		getCapabilityCatalog,
+		agent.enforceCapabilities === true,
+		workerSkillAdmission.get(workerExtensionArgs),
+	);
+	args.push(...skillArgs.args);
+	if (skillArgs.notices.length > 0) task = `${skillArgs.notices.join("\n")}\n\n${task}`;
 
 	let tmpPromptDir: string | null = null;
 	let tmpPromptPath: string | null = null;
@@ -448,7 +459,7 @@ async function runSingleAgentAttempt(
 			command: invocation.command,
 			args: invocation.args,
 			cwd: workerCwd,
-			env: subagentWorkerEnv(childSubagentEnv(process.env), projectTrust),
+			env: subagentWorkerEnv(childSubagentEnv(process.env), projectTrust, spawningSessionId),
 			cutoffMs,
 			signal,
 			onStdout: stream.stdout,
@@ -538,6 +549,7 @@ async function runSingleAgent(
 		: undefined;
 	// Spec 071: always on, one guard per logical task, so resumed attempts keep the usage already counted.
 	const loopGuard = createSubagentLoopGuard();
+	const spawningSessionId = workerSpawningSession.get(workerExtensionArgs);
 	if (unbounded) {
 		return (
 			await runSingleAgentAttempt(
@@ -553,6 +565,7 @@ async function runSingleAgent(
 				reportUpdate,
 				workerExtensionArgs,
 				loopGuard,
+				spawningSessionId,
 			)
 		).result;
 	}
@@ -586,6 +599,7 @@ async function runSingleAgent(
 				input.onUpdate,
 				workerExtensionArgs,
 				loopGuard,
+				spawningSessionId,
 			),
 	});
 }
@@ -681,6 +695,12 @@ export default function (omk: ExtensionAPI) {
 			);
 			const workerExtensionArgs: WorkerExtensionArgsFn = (model) =>
 				workerExtensions.argsFor(model, ctx.modelRegistry);
+			const parentLedger = {
+				getEntries: () => ctx.sessionManager.getEntries(),
+				appendCustomEntry: (customType: string, data?: unknown) => omk.appendEntry(customType, data),
+			};
+			workerSpawningSession.set(workerExtensionArgs, ctx.sessionManager?.getSessionId?.());
+			workerSkillAdmission.set(workerExtensionArgs, (granted) => admitWorkerSkills(parentLedger, granted));
 			const confirmProjectAgents = params.confirmProjectAgents ?? true;
 			const executionPolicy = resolveSubagentExecutionPolicy(
 				ctx.thinkingLevel,

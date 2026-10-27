@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Bound the deleted-text history used by editor and input yank operations, while retaining the newest oversized entry for an immediate yank.
+
+## [1.5.9] - 2026-10-26
+
+### Fixed
+
+- Autocomplete acceptance is rejected when the editor text, cursor or request changed after the list was shown, and the terminal input drain uses a monotonic clock.
+
+## [1.5.8] - 2026-10-24
+
+
+## [1.5.7] - 2026-10-23
+
+
+## [1.5.6] - 2026-10-22
+
+
+## [1.5.5] - 2026-10-21
+
+
 ## [1.5.4] - 2026-10-20
 
 ### Changed

@@ -104,14 +104,19 @@ Turn metrics — 412 turns across 27 session(s)
   models        anthropic/claude-sonnet-4-5
   turn duration p50 4.2s · p95 31.8s
   input 91,204 · output 22,880 · cacheRead 1,904,551 · cacheWrite 88,100
-  cache read share 95.4% of prompt-side usage
-  cost          $4.8812
+  cache read share 95.4% of prompt-side usage (input + cacheRead + cacheWrite) · coverage 412/412 turns (0/412 missing cacheWrite)
+  cost          estimated $4.8812 (price table) · billed n/a
   compactions 6 · failovers 1 · ctx plan hit 41.2%
 
   tool                 calls   fail%     p50     p95    total
   bash                   688    4.2%   210ms    3.1s     4.1m
   edit                   201    9.0%    38ms   140ms    12.4s
 ```
+
+Cache read share is computed only over turns whose provider reported cache
+writes; the coverage line always shows how many turns were used. When any turn
+has an unknown cacheWrite, the estimated cost is a lower bound (하한): stats
+prints `≥ $…` and `--json` sets `costIsLowerBound: true`.
 
 ## What is recorded
 

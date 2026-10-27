@@ -1,0 +1,2 @@
+const clip = require("@mariozechner/clipboard");
+module.exports = clip;

@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDurableGoal, nextDurableGoalTimestamp } from "../src/core/durable-goal.ts";
 import { DurableGoalStore } from "../src/core/durable-goal-store.ts";
 import goalController from "../src/core/extensions/builtin/goal-controller.ts";
@@ -29,7 +29,9 @@ function harness() {
 
 describe("goal controller seam checkpoints", () => {
 	const roots: string[] = [];
+	beforeEach(() => vi.stubEnv("OMK_GOAL_AUTONOMY", "0")); // pre-119 controller path; autonomy is default on
 	afterEach(async () => {
+		vi.unstubAllEnvs();
 		vi.restoreAllMocks();
 		await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 	});

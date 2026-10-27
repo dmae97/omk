@@ -10,7 +10,7 @@ import { getModel } from "omk-ai";
 import { getAgentDir } from "../src/config.ts";
 import { AgentSession } from "../src/core/agent-session.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
-import { createEventBus } from "../src/core/event-bus.ts";
+import { createEventBus, type EventBus } from "../src/core/event-bus.ts";
 import type { Extension, ExtensionFactory, LoadExtensionsResult } from "../src/core/extensions/index.ts";
 import { createExtensionRuntime, loadExtensionFromFactory } from "../src/core/extensions/loader.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
@@ -143,12 +143,17 @@ export async function createTestExtensionsResult(
 		extensions.push(await loadExtensionFromFactory(factory, cwd, eventBus, runtime, extensionPath));
 	}
 
-	return {
+	const result: LoadExtensionsResult = {
 		extensions,
 		errors: [],
 		runtime,
 	};
+	testEventBuses.set(result, eventBus);
+	return result;
 }
+
+/** The bus each test extensions result was loaded with, so the loader can expose it (spec 096). */
+const testEventBuses = new WeakMap<LoadExtensionsResult, EventBus>();
 
 export interface CreateTestResourceLoaderOptions {
 	extensionsResult?: LoadExtensionsResult;
@@ -160,6 +165,7 @@ export function createTestResourceLoader(options: CreateTestResourceLoaderOption
 		errors: [],
 		runtime: createExtensionRuntime(),
 	};
+	const eventBus = testEventBuses.get(extensionsResult) ?? createEventBus();
 
 	return {
 		getExtensions: () => extensionsResult,
@@ -171,6 +177,7 @@ export function createTestResourceLoader(options: CreateTestResourceLoaderOption
 		getAppendSystemPrompt: () => [],
 		extendResources: () => {},
 		reload: async () => {},
+		getEventBus: () => eventBus,
 	};
 }
 

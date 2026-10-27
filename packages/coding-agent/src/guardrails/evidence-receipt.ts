@@ -1,7 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type {
 	CommandHmacBinding,
-	CommandRedactionSummary,
 	EvidenceCommandDescriptor,
 	EvidenceExecutor,
 	EvidenceOutputCapture,
@@ -16,12 +15,7 @@ import type {
 	TrustedEvidenceAttestation,
 	WorkspaceFingerprint,
 } from "../types/evidence.ts";
-import {
-	assertCredentialFreeEvidenceCommand,
-	parseCommandHmacBinding,
-	parseCommandRedactionSummary,
-	parseEvidenceCommandShape,
-} from "./command-redaction.ts";
+import { parseEvidenceCommandShape, parseLegacyCommandBinding } from "./evidence-command.ts";
 import { parseWorkspaceFingerprint } from "./workspace-fingerprint.ts";
 
 const SHA256_HEX = /^[0-9a-f]{64}$/;
@@ -56,7 +50,9 @@ export interface EvidenceReceiptCoreInputFields {
 	readonly alreadyRedactedOutput: AlreadyRedactedOutputBytes;
 	readonly executor: EvidenceExecutor;
 	readonly toolCallId?: string;
-	readonly commandRedaction?: CommandRedactionSummary;
+	/** @deprecated Legacy metadata from the removed command credential redaction feature. */
+	readonly commandRedaction?: unknown;
+	/** @deprecated Legacy keyed binding from the removed command credential redaction feature. */
 	readonly commandBinding?: CommandHmacBinding;
 }
 
@@ -163,13 +159,6 @@ function timestamp(value: unknown, label: string): string {
 	return parsed;
 }
 
-/** Strict structural parse plus the credential-free policy for persisted commands. */
-function parseCommand(value: unknown): EvidenceCommandDescriptor {
-	const command = parseEvidenceCommandShape(value);
-	assertCredentialFreeEvidenceCommand(command);
-	return command;
-}
-
 function parseOutputDigest(value: unknown, label: string): EvidenceOutputCapture["stdout"] {
 	const raw = exactObject(value, label, ["sha256", "byteCount"]);
 	return Object.freeze({
@@ -240,7 +229,7 @@ export function parseEvidenceReceiptCore(value: unknown): EvidenceReceiptCore {
 	const goalId = nonEmptyString(raw.goalId, "receipt core goalId");
 	const laneId = optionalNonEmptyString(raw.laneId, "receipt core laneId");
 	const claim = nonEmptyString(raw.claim, "receipt core claim");
-	const command = parseCommand(raw.command);
+	const command = parseEvidenceCommandShape(raw.command);
 	const cwd = nonEmptyString(raw.cwd, "receipt core cwd");
 	const timeoutMs = raw.timeoutMs === null ? null : positiveInteger(raw.timeoutMs, "receipt core timeoutMs");
 	const startedAt = timestamp(raw.startedAt, "receipt core startedAt");
@@ -260,14 +249,10 @@ export function parseEvidenceReceiptCore(value: unknown): EvidenceReceiptCore {
 	}
 	const executor = raw.executor as EvidenceExecutor;
 	const toolCallId = optionalNonEmptyString(raw.toolCallId, "receipt core toolCallId");
-	const commandRedaction =
-		raw.commandRedaction === undefined ? undefined : parseCommandRedactionSummary(raw.commandRedaction);
-	const commandBinding = raw.commandBinding === undefined ? undefined : parseCommandHmacBinding(raw.commandBinding);
+	const commandRedaction = raw.commandRedaction;
+	const commandBinding = raw.commandBinding === undefined ? undefined : parseLegacyCommandBinding(raw.commandBinding);
 	if (commandBinding !== undefined && commandRedaction === undefined) {
 		throw new Error("receipt core commandBinding requires commandRedaction");
-	}
-	if (commandRedaction !== undefined && commandRedaction.placeholders.length > 0 && commandBinding === undefined) {
-		throw new Error("receipt core commandRedaction with applied placeholders requires commandBinding");
 	}
 	const disposition = parseDisposition(raw.status, raw.exitCode);
 	const fields: EvidenceReceiptCoreFields = {
@@ -315,7 +300,7 @@ export function serializeEvidenceReceiptCore(core: EvidenceReceiptCore): string 
 export function computeEvidenceCommandSha256(command: EvidenceCommandDescriptor): Sha256Hex {
 	return createHash("sha256")
 		.update(COMMAND_DIGEST_DOMAIN, "utf8")
-		.update(canonicalJson(parseCommand(command)), "utf8")
+		.update(canonicalJson(parseEvidenceCommandShape(command)), "utf8")
 		.digest("hex") as Sha256Hex;
 }
 

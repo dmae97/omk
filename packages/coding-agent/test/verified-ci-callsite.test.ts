@@ -105,7 +105,7 @@ describe("verified local bash callsite", () => {
 		expect(readFileSync(result.reportPath, "utf8")).toContain("| evidence-gate | open |");
 	});
 
-	it("persists no command secret in the CI receipt, contract report, or ledger", async () => {
+	it("persists the CI command as supplied without command redaction", async () => {
 		// Given: a CI verification command carrying env, API-header, and URL-query canaries.
 		const secrets = {
 			environment: "synthetic-ci-env-canary",
@@ -148,34 +148,10 @@ describe("verified local bash callsite", () => {
 		expect(result.gate.status).toBe("open");
 		expect(readFileSync(join(workspaceRoot, "dist", "ci-result.txt"), "utf8")).toBe("ci-verified\n");
 
-		// Then: only typed placeholders and the keyed binding are serialized anywhere.
-		expect(result.receipt.core.command).toMatchObject({ kind: "shell" });
-		const persistedScript = (result.receipt.core.command as { script: string }).script;
-		expect(persistedScript).toContain("X-API-Key\\:[REDACTED]");
-		expect(persistedScript).toContain("'X-API-Key':[REDACTED]");
-		expect(persistedScript).toContain("?api_key\\=[REDACTED]");
-		expect(persistedScript).toContain("'?api_key'=[REDACTED]");
-		expect(persistedScript).toContain("?api%5Fkey=[REDACTED]");
-		expect(result.receipt.core.commandRedaction?.placeholders).toEqual([
-			{ type: "api-key-header", count: 3 },
-			{ type: "env-assignment", count: 1 },
-			{ type: "known-token", count: 2 },
-			{ type: "url-query", count: 4 },
-		]);
-		expect(result.receipt.core.commandBinding?.algorithm).toBe("hmac-sha256");
-		const forbidden = [
-			...Object.values(secrets),
-			...Object.values(secrets).map((value) => createHash("sha256").update(value).digest("hex")),
-			createHash("sha256").update(script).digest("hex"),
-			createHash("sha256")
-				.update(JSON.stringify({ kind: "shell", shell: getShellConfig().shell, script }))
-				.digest("hex"),
-		];
-		for (const artifact of [result.receiptPath, result.reportPath, join(evidenceDir, "ledger", "events.jsonl")]) {
-			const persisted = readFileSync(artifact, "utf8");
-			for (const value of forbidden) expect(persisted).not.toContain(value);
-		}
-		expect(readFileSync(result.reportPath, "utf8")).toContain("client_secret=[REDACTED]");
+		// Then: the receipt carries the original command and omits legacy redaction metadata.
+		expect(result.receipt.core.command).toEqual({ kind: "shell", shell: getShellConfig().shell, script });
+		expect(result.receipt.core.commandRedaction).toBeUndefined();
+		expect(result.receipt.core.commandBinding).toBeUndefined();
 	});
 
 	it("binds git workspace fingerprints for a CI run inside a git repository", async () => {

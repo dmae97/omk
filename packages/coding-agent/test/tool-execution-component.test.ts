@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { Text, type TUI } from "omk-tui";
 import { Type } from "typebox";
-import { beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { getReadmePath } from "../src/config.ts";
 import type { ToolDefinition } from "../src/core/extensions/types.ts";
 import { type BashOperations, createBashToolDefinition } from "../src/core/tools/bash.ts";
@@ -10,6 +10,16 @@ import { createWriteToolDefinition } from "../src/core/tools/write.ts";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
 import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
+
+// Pins the pre-default-on output shape: explicitly opt out of the default-on flag(s).
+const saved_OMK_EXEC_TRUNCATE_MIDDLE = process.env.OMK_EXEC_TRUNCATE_MIDDLE;
+beforeAll(() => {
+	process.env.OMK_EXEC_TRUNCATE_MIDDLE = "0";
+});
+afterAll(() => {
+	if (saved_OMK_EXEC_TRUNCATE_MIDDLE === undefined) delete process.env.OMK_EXEC_TRUNCATE_MIDDLE;
+	else process.env.OMK_EXEC_TRUNCATE_MIDDLE = saved_OMK_EXEC_TRUNCATE_MIDDLE;
+});
 
 function createBaseToolDefinition(name = "custom_tool"): ToolDefinition {
 	return {

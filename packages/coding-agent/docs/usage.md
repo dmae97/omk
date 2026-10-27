@@ -156,13 +156,23 @@ Use `/goal <objective>` to create or update the durable goal for the current wor
 | Identical-loop guard | Warns from the third consecutive identical tool call and blocks the sixth | `OMK_IDENTICAL_LOOP=0` |
 | Tool-pair repair | Removes unmatched tool-use and tool-result blocks from outbound context | `OMK_TOOL_PAIR_REPAIR=0` |
 | Model prompt presets | Adds model-specific execution guidance for GPT-6 Astra and supported Claude, Kimi, GLM, and Grok models | `OMK_PROMPT_PRESET=0` |
+| DeepSeek engine | Adds DeepSeek-only guidance and prunes oversized successful tool results in outbound context at 80% context pressure; original history stays intact | `OMK_DEEPSEEK_HARNESS=0` |
 | Goal controller | Registers `/goal`, continues active goals within their round limit after each settled turn, and completes a goal when its approved acceptance check passes | `OMK_GOAL_CONTROLLER=0` |
 | Finish check | In headless runs, adds scope, early-save, edge-case and environment rules to the system prompt and one verification turn after a run that changed the workspace; with `OMK_TIME_BUDGET_SEC`, also tells the run to save outputs at 75% of the budget | `OMK_FINISH_CHECK=0` |
 | Deliverable guard (experimental) | Off by default. With `OMK_DELIVERABLE_GUARD=on`, headless runs keep the last valid copy of each output file the prompt names, are reminded at 40% of `OMK_TIME_BUDGET_SEC` when one is missing, and get a missing or broken file restored at 90% and when the run settles | Off unless set |
 
 These built-ins remain active with `--no-extensions`. A custom `ResourceLoader` owns its own extension set and does not receive them automatically.
 
-Claude models use a clean prompt context by default: OMK keeps tools, skills, and the Claude preset but omits discovered `AGENTS.md` and `CLAUDE.md` files. This avoids provider false positives caused by unrelated instruction text. Set `OMK_CLAUDE_CONTEXT_FILES=1` to restore those files for Claude.
+Claude models use a clean prompt context by default: OMK keeps tools, skills, and the Claude preset but omits all discovered context documents. This avoids provider false positives caused by unrelated instruction text. Set `OMK_CLAUDE_CONTEXT_FILES=1` to restore those files for Claude.
+
+### DeepSeek
+
+The default-on `deepseek_harness` engine follows the current selected model,
+including recognized DeepSeek IDs on gateways. It does not run `dsh`, change
+provider settings or permissions, or upload session logs. Its independent
+`OMK_DEEPSEEK_HARNESS=0` opt-out leaves other built-ins unchanged. See
+[DeepSeek harness](deepseek-harness.md) for the upstream assessment, exact model
+boundary, pruning limits, and verification scope.
 
 ### GPT-6 Astra
 
@@ -286,7 +296,7 @@ omk session doctor --session <path|id> --repair --dry-run
 omk session doctor --session <path|id> --repair
 ```
 
-The doctor verifies the session's complete JSONL prefix, run journal, compaction envelopes/transactions, replay-evidence links, workspace, and provider/model binding. `--dry-run` plans repairs without writing. Repair mode rechecks file hashes under a lock before writing and only allows unambiguous missing tool results, exact trailing-fragment quarantine, unclosed-run crash recovery, and stale compaction abandonment. Duplicate/orphan tool results, duplicate IDs, broken hashes/chains, and changed preconditions are refused.
+The doctor verifies the session's complete JSONL prefix, run journal, compaction envelopes/transactions, replay-evidence links, workspace, and provider/model binding. `--dry-run` plans repairs without writing. Repair mode takes the session owner lease, so it refuses a session that is open in another OMK process (`session_in_use`). It rechecks file hashes under that lease before writing and only allows unambiguous missing tool results, exact trailing-fragment quarantine, unclosed-run crash recovery, and stale compaction abandonment. Duplicate/orphan tool results, duplicate IDs, broken hashes/chains, and changed preconditions are refused.
 
 Session and journal bytes after the final newline are copied byte-for-byte to a `.quarantine-*` file before the original is atomically rewritten to its valid complete prefix. Opening a session uses the same complete-prefix rule; `SessionManager.getQuarantineReport()` reports any startup quarantine.
 
@@ -300,7 +310,9 @@ OMK loads `AGENTS.md` or `CLAUDE.md` at startup from:
 - parent directories, walking up from the current working directory
 - the current directory
 
-Use context files for project conventions, commands, safety rules, and preferences. Disable loading with `--no-context-files` or `-nc`.
+During the same project-directory walk, it loads `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `RULES.md`, `TASKS.md`, and `PROGRESS.md` once each. Use `omk init --project` to create missing project documents without overwriting existing files. A bare `omk` launch also creates them in an otherwise empty Git repository root; `OMK_PROJECT_CONTEXT_BOOTSTRAP=0` disables that bootstrap. See [User context setup](context-files.md) for the exact scope and preservation rules.
+
+Use context files for project conventions, commands, safety rules, and preferences. Disable all context document loading with `--no-context-files` or `-nc`.
 
 The core prompt builder places a fixed runtime trust boundary before loaded context and skill metadata. Global context can constrain project context, but loaded resources cannot expand user authorization or override active runtime/security controls. Context paths and text are XML-escaped before prompt assembly so resource content cannot break out of its structural envelope. This is defense in depth, not a code sandbox: extensions are executable trusted code and can explicitly rewrite the system prompt or final provider payload.
 
@@ -455,7 +467,7 @@ A long text `read` returns a bounded window and continuation marker. Truncation 
 | `--no-prompt-templates` | Disable prompt template discovery |
 | `--theme <path>` | Load a theme; repeatable |
 | `--no-themes` | Disable theme discovery |
-| `--no-context-files`, `-nc` | Disable `AGENTS.md` and `CLAUDE.md` discovery |
+| `--no-context-files`, `-nc` | Disable context document discovery and loading |
 
 Combine `--no-*` with explicit flags to load exactly what you need, ignoring settings. Example:
 

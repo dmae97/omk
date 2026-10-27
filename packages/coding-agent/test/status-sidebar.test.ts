@@ -18,6 +18,22 @@ import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
 // Deterministic MCP roster so the rail test does not depend on the host's real config.
+const usageHooks = vi.hoisted(() => ({
+	load: undefined as undefined | ((session: unknown, provider?: string) => Promise<unknown>),
+}));
+
+// Passthrough unless a test installs a hook: only the production (non-injected) reader path is observed.
+vi.mock("../src/core/provider-usage.ts", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../src/core/provider-usage.ts")>();
+	return {
+		...actual,
+		loadSubscriptionUsage: (...args: Parameters<typeof actual.loadSubscriptionUsage>) =>
+			usageHooks.load
+				? (usageHooks.load(args[0], args[2]) as ReturnType<typeof actual.loadSubscriptionUsage>)
+				: actual.loadSubscriptionUsage(...args),
+	};
+});
+
 vi.mock("../src/core/mcp-inventory.ts", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../src/core/mcp-inventory.ts")>();
 	return {
@@ -353,6 +369,42 @@ describe("StatusSidebarComponent (pinned opencode-style rail)", () => {
 		expect(text).toContain("CLAUDE");
 		expect(plainLines.some((line) => line.includes("5H") && line.includes("35%"))).toBe(true);
 		expect(plainLines.some((line) => line.includes("7D") && line.includes("18%"))).toBe(true);
+	});
+
+	it("reads quota for the current session after the session object is replaced (/new, resume)", async () => {
+		const first = makeSession();
+		const second = makeSession();
+		for (const session of [first, second]) {
+			session.modelRegistry.isUsingOAuth = () => true;
+			session.modelRegistry.isUsingOAuthProvider = (provider) => provider === "anthropic";
+		}
+		let current = first;
+		const seen: unknown[] = [];
+		usageHooks.load = async (session) => {
+			seen.push(session);
+			return { label: "CLAUDE", windows: [{ label: "5H", usedPercent: session === first ? 11 : 22 }] };
+		};
+		try {
+			const sidebar = new StatusSidebarComponent(
+				() => current as never,
+				makeFooterData() as never,
+				() => true,
+				() => 32,
+				{ requestRender: vi.fn() },
+			);
+			sidebar.render(STATUS_SIDEBAR_WIDTH);
+			await vi.waitFor(() => expect(seen).toEqual([first]));
+			current = second;
+			sidebar.render(STATUS_SIDEBAR_WIDTH);
+			await vi.waitFor(() => expect(seen).toEqual([first, second]));
+			await vi.waitFor(() => {
+				const text = stripAnsi(sidebar.render(STATUS_SIDEBAR_WIDTH).join("\n"));
+				expect(text).toContain("22%");
+				expect(text).not.toContain("11%");
+			});
+		} finally {
+			usageHooks.load = undefined;
+		}
 	});
 
 	it("refreshes Claude quota immediately after passive headers arrive", async () => {

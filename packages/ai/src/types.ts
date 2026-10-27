@@ -296,6 +296,12 @@ export interface Usage {
 	cacheWrite: number;
 	/** Subset of `cacheWrite` written with 1h retention. Only Anthropic reports this split. */
 	cacheWrite1h?: number;
+	/**
+	 * `true` when the provider did not report cache writes at all. `cacheWrite`
+	 * is then a 0 placeholder for cost arithmetic only and must not be read as
+	 * "no write"; metrics record it as unknown and exclude it from cache share.
+	 */
+	cacheWriteUnknown?: true;
 	totalTokens: number;
 	cost: UsageCost;
 }

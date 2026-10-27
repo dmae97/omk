@@ -249,9 +249,9 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 	it("fails closed when the quota check times out, without delaying the main turn", async () => {
 		const h = harness(tempCwd());
 		const plans = planRecorder(h, () => new Promise<never>(() => {}), { usageTimeoutMs: 30 });
-		const started = Date.now();
+		const started = performance.now();
 		await h.session.prompt("first");
-		expect(Date.now() - started).toBeLessThan(1000);
+		expect(performance.now() - started).toBeLessThan(1000);
 		await vi.waitFor(() => expect(plans).toEqual(["usage_unavailable"]));
 		expect(h.calls()).toBe(1);
 	});
@@ -319,6 +319,19 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		expect(offReads).toBe(0);
 		expect(off.calls()).toBe(1);
+	});
+
+	it("does not read quota when cheap turn eligibility already rejects the suggestion", async () => {
+		const h = harness(tempCwd(), { mainStopReason: "error" });
+		let quotaReads = 0;
+		const plans = planRecorder(h, async () => {
+			quotaReads++;
+			return "no_quota";
+		});
+		await h.session.prompt("first");
+		await vi.waitFor(() => expect(plans).toEqual(["not_completed"]));
+		expect(quotaReads).toBe(0);
+		expect(h.calls()).toBe(1);
 	});
 
 	it("skips after a provider error with zero extra calls", async () => {
@@ -440,6 +453,31 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		await vi.waitFor(() => expect(controller.suggestion).toBe(SUGGESTION));
 		expect(editor.onBeforeInput?.("\t")).toBe(false);
 		expect(editor.state.text).toBe("");
+	});
+
+	it("dispose aborts pending work, blocks late UI updates, and permits clean reinstall", async () => {
+		let release: (() => void) | undefined;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const h = harness(tempCwd(), { suggestionGate: gate });
+		const original = h.session.agent.streamFn;
+		const editor = fakeEditor();
+		const controller = install(h.session, editor);
+		await h.session.prompt("first");
+		await vi.waitFor(() => expect(h.suggestion).toHaveLength(1));
+
+		controller.dispose();
+		release?.();
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(controller.suggestion).toBeUndefined();
+		expect(editor.state.placeholder).toBe("base");
+		expect(editor.onBeforeInput).toBeUndefined();
+		expect(h.session.agent.streamFn).toBe(original);
+
+		const replacement = install(h.session, editor);
+		expect(replacement).not.toBe(controller);
+		replacement.dispose();
 	});
 
 	it("real CustomEditor: gray suggestion renders, Tab inserts, typing dismisses, Tab without suggestion is untouched", async () => {

@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -207,10 +206,10 @@ describe("VerifiedEvidenceExecutor", () => {
 		expect(result.receipt.core.exitCode).toBe(disposition.exitCode);
 	});
 
-	it("redacts secret-bearing commands, binds the original via HMAC, and persists no secret", async () => {
+	it("persists a secret-bearing command as supplied without credential redaction", async () => {
 		// Given: a verification command carrying an inline credential value.
 		let executions = 0;
-		const executor = createExecutor("redacted-receipt-1");
+		const executor = createExecutor("raw-receipt-1");
 		const secretRequest = {
 			...request(async () => {
 				executions++;
@@ -234,56 +233,21 @@ describe("VerifiedEvidenceExecutor", () => {
 		// When: the executor records the execution.
 		const result = await executor.execute(secretRequest);
 
-		// Then: the callback ran the original request while only the redacted form persisted.
+		// Then: the command is persisted exactly as supplied, with no redaction metadata.
 		expect(executions).toBe(1);
-		expect(result.receipt.core.command).toEqual({
-			kind: "argv",
-			executable: "curl",
-			argv: ["--token", "[REDACTED]", "https://example.test"],
-		});
-		expect(result.receipt.core.commandRedaction?.placeholders).toEqual([{ type: "cli-option-value", count: 1 }]);
-		expect(result.receipt.core.commandBinding).toMatchObject({ algorithm: "hmac-sha256" });
-		expect(result.receipt.core.commandBinding?.mac).toMatch(/^[0-9a-f]{64}$/);
+		expect(result.receipt.core.command).toEqual(secretRequest.command);
+		expect(result.receipt.core.commandRedaction).toBeUndefined();
+		expect(result.receipt.core.commandBinding).toBeUndefined();
 		expect(result.evidenceMetadata.receiptCommandSha256).toBe(
 			computeEvidenceCommandSha256(result.receipt.core.command),
 		);
-		const serialized = serializeEvidenceReceipt(result.receipt);
-		const plainCommandHash = createHash("sha256").update(JSON.stringify(secretRequest.command)).digest("hex");
-		const unredactedCommandDigest = createHash("sha256")
-			.update("omk:evidence:receipt-v3:command\0")
-			.update(
-				JSON.stringify({
-					argv: secretRequest.command.argv,
-					executable: secretRequest.command.executable,
-					kind: secretRequest.command.kind,
-				}),
-			)
-			.digest("hex");
-		expect(serialized).not.toContain("synthetic-executor-secret-value");
-		expect(serialized).not.toContain(plainCommandHash);
-		expect(serialized).not.toContain(unredactedCommandDigest);
-		expect(serialized).toContain("[REDACTED]");
-		expect(executor.resolveReceipt("redacted-receipt-1")).toEqual(result.receipt);
+		expect(serializeEvidenceReceipt(result.receipt)).toContain("synthetic-executor-secret-value");
+		expect(executor.resolveReceipt("raw-receipt-1")).toEqual(result.receipt);
 	});
 
-	it("normalizes shell-equivalent credential forms without serializing canaries or plain hashes", async () => {
-		const canaries = {
-			headerEscaped: "header-escaped-canary",
-			headerConcatenated: "header-concatenated-canary",
-			queryEscaped: "query-escaped-canary",
-			queryConcatenated: "query-concatenated-canary",
-			queryEncoded: "query-encoded-canary",
-			github: `github_pat_${"A".repeat(24)}`,
-			google: `AIza${"B".repeat(35)}`,
-		};
-		const script =
-			`printf '%s' X-API-Key\\:${canaries.headerEscaped}; ` +
-			`printf '%s' 'X-API-Key':${canaries.headerConcatenated}; ` +
-			`printf '%s' ?api_key\\=${canaries.queryEscaped}; ` +
-			`printf '%s' '?api_key'=${canaries.queryConcatenated}; ` +
-			`printf '%s' '?api%5Fkey=${canaries.queryEncoded}'; ` +
-			`printf '%s' ${canaries.github}; printf '%s' ${canaries.google}`;
-		const executor = createExecutor("shell-normalized-receipt");
+	it("persists a shell script as supplied without credential redaction", async () => {
+		const script = "printf '%s' 'X-API-Key: synthetic-shell-canary'";
+		const executor = createExecutor("raw-shell-receipt");
 
 		const result = await executor.execute({
 			...request(async () => ({
@@ -298,85 +262,13 @@ describe("VerifiedEvidenceExecutor", () => {
 			command: { kind: "shell", shell: "/bin/sh", script },
 		});
 
-		expect(result.receipt.core.commandRedaction?.placeholders).toEqual([
-			{ type: "api-key-header", count: 2 },
-			{ type: "known-token", count: 2 },
-			{ type: "url-query", count: 3 },
-		]);
-		const plainHashes = [
-			...Object.values(canaries).map((value) => createHash("sha256").update(value).digest("hex")),
-			createHash("sha256").update(script).digest("hex"),
-			createHash("sha256")
-				.update(JSON.stringify({ kind: "shell", shell: "/bin/sh", script }))
-				.digest("hex"),
-		];
-		for (const serialized of [
-			serializeEvidenceReceipt(result.receipt),
-			JSON.stringify(result.evidenceMetadata),
-			readFileSync(result.receiptPath, "utf8"),
-			readFileSync(ledgerPath, "utf8"),
-		]) {
-			for (const value of [...Object.values(canaries), ...plainHashes]) expect(serialized).not.toContain(value);
-		}
+		expect(result.receipt.core.command).toEqual({ kind: "shell", shell: "/bin/sh", script });
+		expect(result.receipt.core.commandRedaction).toBeUndefined();
+		expect(result.receipt.core.commandBinding).toBeUndefined();
+		expect(serializeEvidenceReceipt(result.receipt)).toContain("synthetic-shell-canary");
 	});
 
-	it("records a command binding and empty redaction summary for secret-free commands", async () => {
-		const executor = createExecutor("clean-binding-receipt");
-		const result = await executor.execute(
-			request(async () => ({
-				status: "passed",
-				exitCode: 0,
-				alreadyRedactedOutput: {
-					redactionPolicyId: "test-policy-v1",
-					stdout: Buffer.alloc(0),
-					stderr: Buffer.alloc(0),
-				},
-			})),
-		);
-		expect(result.receipt.core.command).toEqual({
-			kind: "argv",
-			executable: "node",
-			argv: ["--run", "focused-test"],
-		});
-		expect(result.receipt.core.commandRedaction?.placeholders).toEqual([]);
-		expect(result.receipt.core.commandBinding?.algorithm).toBe("hmac-sha256");
-	});
-
-	it("fails closed before execution when redacted command metadata would be oversize", async () => {
-		// Given: more inline secrets than the placeholder metadata bound allows.
-		let executions = 0;
-		const executor = createExecutor("oversize-redaction");
-		const script = Array.from({ length: 300 }, (_, index) => `tool --token synthetic-oversize-${index}`).join("; ");
-		const oversizeRequest = {
-			...request(async () => {
-				executions++;
-				return {
-					status: "passed" as const,
-					exitCode: 0 as const,
-					alreadyRedactedOutput: {
-						redactionPolicyId: "test-policy-v1",
-						stdout: Buffer.alloc(0),
-						stderr: Buffer.alloc(0),
-					},
-				};
-			}),
-			command: { kind: "shell" as const, shell: "/bin/sh", script },
-		};
-
-		// When/Then: the request is rejected before any side effect or ledger event.
-		let message = "";
-		try {
-			await executor.execute(oversizeRequest);
-		} catch (error) {
-			message = error instanceof Error ? error.message : String(error);
-		}
-		expect(message).toMatch(/placeholder/i);
-		expect(message).not.toContain("synthetic-oversize");
-		expect(executions).toBe(0);
-		expect(new ReplayLedgerManager("goal-1", ledgerPath).getEvents()).toHaveLength(0);
-	});
-
-	it("rejects a tampered core whose redaction summary lost its command binding", async () => {
+	it("keeps legacy redaction metadata without requiring a command binding", async () => {
 		const executor = createExecutor("binding-consistency");
 		const result = await executor.execute(
 			request(async () => ({
@@ -397,7 +289,10 @@ describe("VerifiedEvidenceExecutor", () => {
 			},
 		});
 		delete tampered.commandBinding;
-		expect(() => parseEvidenceReceiptCore(tampered)).toThrow(/commandBinding/);
+		expect(parseEvidenceReceiptCore(tampered).commandRedaction).toEqual({
+			policyId: "omk-command-redaction-v1",
+			placeholders: [{ type: "cli-option-value", count: 1 }],
+		});
 	});
 
 	it("keeps executor-captured provenance when the callback returns forged receipt fields", async () => {

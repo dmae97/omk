@@ -10,8 +10,9 @@ afterEach(() => vi.unstubAllEnvs());
 describe.skipIf(process.platform === "win32")("source quote memory runtime", () => {
 	it.each([
 		["0", "1"],
+		["false", "1"],
 		["1", "0"],
-	])("requires both recall and V2 opt-in (%s/%s)", async (memory, budget) => {
+	])("requires both recall (default on; 0/false/off opt out) and V2 (%s/%s)", async (memory, budget) => {
 		vi.stubEnv("OMK_VERIFIED_MEMORY", memory);
 		vi.stubEnv("OMK_CONTEXT_GOVERNOR", budget);
 		const h = await createHarness({ persistSession: true });
@@ -31,6 +32,30 @@ describe.skipIf(process.platform === "win32")("source quote memory runtime", () 
 			expect(captured).toHaveLength(1);
 			expect(captured[0]).not.toContain("Storage uses append-only");
 			expect(h.session.memoryStatus.state).toBe("disabled");
+		} finally {
+			await h.session.close();
+			h.cleanup();
+		}
+	});
+
+	it("default on: unset OMK_VERIFIED_MEMORY recalls pinned evidence when V2 is on", async () => {
+		vi.stubEnv("OMK_VERIFIED_MEMORY", undefined);
+		vi.stubEnv("OMK_CONTEXT_GOVERNOR", "1");
+		const h = await createHarness({ persistSession: true });
+		try {
+			writeFileSync(join(h.tempDir, "facts.txt"), "Storage uses append-only events.");
+			expect((await h.session.rememberSource({ path: "facts.txt", startLine: 1, endLine: 1 })).verdict).toBe(
+				"accept",
+			);
+			const captured: string[] = [];
+			h.setResponses([
+				(context) => {
+					captured.push(JSON.stringify(context));
+					return fauxAssistantMessage("offline");
+				},
+			]);
+			await h.session.prompt("Storage?");
+			expect(captured[0]).toContain("Storage uses append-only");
 		} finally {
 			await h.session.close();
 			h.cleanup();

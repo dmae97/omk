@@ -4,6 +4,7 @@ import { basename } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { waitForChildProcess } from "../../utils/child-process.ts";
 import { killProcessTree, trackDetachedChildPid, untrackDetachedChildPid } from "../../utils/shell.ts";
+import { isDefaultOnEnvFlag } from "../env-flag.ts";
 import { scanShellComplexity } from "../workload-shell-scan.ts";
 import type { OutputSnapshot } from "./output-accumulator.ts";
 import { DEFAULT_MAX_BYTES } from "./truncate.ts";
@@ -36,7 +37,7 @@ export function rtkFilterForCommand(command: string): RtkFilter | undefined {
 /** Only completed, bounded successful output is eligible; all other output stays raw. */
 export function shouldFilterRtkOutput(command: string, snapshot: OutputSnapshot, exitCode: number | null): boolean {
 	return (
-		process.env.OMK_RTK_OUTPUT === "1" &&
+		isDefaultOnEnvFlag(process.env.OMK_RTK_OUTPUT) &&
 		exitCode === 0 &&
 		!snapshot.truncation.truncated &&
 		Buffer.byteLength(snapshot.content) >= 1024 &&

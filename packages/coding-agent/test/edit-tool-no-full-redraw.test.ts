@@ -44,9 +44,9 @@ async function waitForRenderedText(
 	onRetry?: () => void,
 	timeoutMs = 2000,
 ): Promise<string> {
-	const deadline = Date.now() + timeoutMs;
+	const deadline = performance.now() + timeoutMs;
 	let lastRender = "";
-	while (Date.now() < deadline) {
+	while (performance.now() < deadline) {
 		onRetry?.();
 		await waitForRender();
 		lastRender = getRender();

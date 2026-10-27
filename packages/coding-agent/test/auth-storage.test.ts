@@ -885,16 +885,14 @@ describe("AuthStorage", () => {
 				});
 
 				// Another OMK session holds the auth store lock while this process starts, so the
-				// constructor's read fails and the credential map stays empty.
-				const release = await lockfile.lock(authJsonPath, { retries: 0, stale: 60_000 });
-				try {
-					authStorage = AuthStorage.create(authJsonPath);
-					const apiKey = await authStorage.getApiKey("anthropic");
-					expect(apiKey).toBeUndefined();
-					expect(authStorage.drainErrors().length).toBeGreaterThan(0);
-				} finally {
-					await release();
-				}
+				// constructor's read fails and the credential map stays empty. The holder is another
+				// process, so model it as the bare lock directory: an in-process proper-lockfile lock
+				// shares the module's lock table, and a steal then surfaced as a release error.
+				mkdirSync(`${authJsonPath}.lock`);
+				authStorage = AuthStorage.create(authJsonPath);
+				const apiKey = await authStorage.getApiKey("anthropic");
+				expect(apiKey).toBeUndefined();
+				expect(authStorage.drainErrors().length).toBeGreaterThan(0);
 			} finally {
 				if (originalApiKey === undefined) delete process.env.ANTHROPIC_API_KEY;
 				else process.env.ANTHROPIC_API_KEY = originalApiKey;

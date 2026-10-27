@@ -67,7 +67,19 @@ async function createTestSdkSession(
 }
 
 describe("createAgentSession domain dispatch wiring", () => {
-	it("keeps domain routing default-off and leaves active tools mutable", async () => {
+	it("default on: the routed loadout replaces the plain default tool set", async () => {
+		const { session } = await createTestSdkSession({
+			domainRoutingPrompt: "Implement a responsive frontend UI component",
+		});
+		try {
+			expect(session.getActiveToolNames()).not.toEqual(["read", "bash", "edit", "write", "diagnostics"]);
+		} finally {
+			session.dispose();
+		}
+	});
+
+	it("OMK_DOMAIN_ROUTING=0 keeps the old tool set and leaves active tools mutable", async () => {
+		process.env.OMK_DOMAIN_ROUTING = "0";
 		const { session } = await createTestSdkSession({
 			domainRoutingPrompt: "Implement a responsive frontend UI component",
 		});

@@ -2,6 +2,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, fsyncSync, openSync, realpathSync, writeSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
+import {
+	boundaryChangeReason,
+	type DispatchFingerprints,
+	loadProjectTraceSalt,
+	REQUEST_PURPOSES,
+	type RequestPurpose,
+} from "./request-trace-metadata.ts";
 
 function boundedId(value: string): string {
 	if (typeof value !== "string" || value.length === 0 || value.length > 256 || /[\u0000-\u001f\u007f]/u.test(value))
@@ -20,7 +27,10 @@ function safeUsage(value: unknown): Record<string, number> | undefined {
 	if (usage.cost !== null && typeof usage.cost === "object") {
 		const total = (usage.cost as Record<string, unknown>).total;
 		if (typeof total === "number" && Number.isFinite(total) && total >= 0) result.estimatedUsd = total;
+		const billed = (usage.cost as Record<string, unknown>).billed;
+		if (typeof billed === "number" && Number.isFinite(billed) && billed >= 0) result.billedUsd = billed;
 	}
+	result.uncached = result.input;
 	return result;
 }
 export class RequestTrace {
@@ -31,7 +41,10 @@ export class RequestTrace {
 	private closedScope = false;
 	private closedFile = false;
 	private failed = false;
-	constructor(path: string, privateLimit = 40_000) {
+	private readonly lastFingerprints = new Map<string, DispatchFingerprints>();
+	readonly salt: Buffer | undefined;
+	constructor(path: string, privateLimit = 40_000, salt?: Buffer) {
+		this.salt = salt;
 		if (!isAbsolute(path) || realpathSync(dirname(path)) !== resolve(dirname(path)))
 			throw new TypeError("trace.requires_absolute_nonsymlink_path");
 		if (!Number.isSafeInteger(privateLimit) || privateLimit < 4 || privateLimit > 100_000)
@@ -68,10 +81,37 @@ export class RequestTrace {
 		this.previous = hash;
 		this.sequence++;
 	}
-	begin(provider: string, model: string): string {
+	/** Metadata only: fingerprints are salted HMACs computed by the caller; no prompt bytes are accepted here. */
+	begin(
+		provider: string,
+		model: string,
+		meta?: {
+			purpose?: RequestPurpose;
+			cacheScope?: string;
+			fingerprints?: DispatchFingerprints;
+			prefixCause?: "suffix_changed" | "bypass_surrogate" | "flag_off";
+			/** Off arm only: what the flag-on rule would have recorded. Metadata only. */
+			shadowReason?: "suffix_changed" | "bypass_surrogate";
+		},
+	): string {
 		if (this.closedScope) throw new Error("trace.scope_closed");
 		const id = randomUUID();
-		this.append({ kind: "logical_dispatch", id, provider: boundedId(provider), model: boundedId(model) });
+		const key = `${provider}\u0000${model}`;
+		const fingerprints = meta?.fingerprints;
+		const purpose = meta?.purpose && REQUEST_PURPOSES.includes(meta.purpose) ? meta.purpose : "unknown";
+		const reason = boundaryChangeReason(this.lastFingerprints.get(key), fingerprints, meta?.prefixCause);
+		if (fingerprints) this.lastFingerprints.set(key, fingerprints);
+		this.append({
+			kind: "logical_dispatch",
+			id,
+			provider: boundedId(provider),
+			model: boundedId(model),
+			purpose,
+			cacheScope: meta?.cacheScope === undefined ? "default" : boundedId(meta.cacheScope),
+			...(fingerprints ? { prefixFingerprint: fingerprints.prefix, toolSchemaFingerprint: fingerprints.tools } : {}),
+			boundaryChangeReason: reason,
+			...(reason === "flag_off" && meta?.shadowReason ? { shadowBoundaryChangeReason: meta.shadowReason } : {}),
+		});
 		this.active.add(id);
 		return id;
 	}
@@ -92,6 +132,13 @@ export class RequestTrace {
 				id,
 				stopReason,
 				usageComplete,
+				usageMissing: usage === undefined,
+				costSource:
+					usage?.billedUsd !== undefined
+						? "provider_billed"
+						: usage?.estimatedUsd !== undefined
+							? "price_table"
+							: "none",
 				...(usage ? { usage } : {}),
 			});
 		} catch {
@@ -131,7 +178,7 @@ export function requestTraceFromEnv(signal: AbortSignal): RequestTrace | undefin
 	const path = process.env.OMK_EVAL_TRACE;
 	if (path === undefined) return undefined;
 	signal.throwIfAborted();
-	const trace = new RequestTrace(path);
+	const trace = new RequestTrace(path, undefined, loadProjectTraceSalt(process.cwd()));
 	signal.addEventListener("abort", () => trace.closeScope(), { once: true });
 	return trace;
 }

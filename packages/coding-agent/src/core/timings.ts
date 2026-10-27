@@ -1,16 +1,16 @@
 const ENABLED = process.env.OMK_TIMING === "1";
 const timings: Array<{ label: string; ms: number }> = [];
-let lastTime = Date.now();
+let lastTime = performance.now();
 
 export function resetTimings(): void {
 	if (!ENABLED) return;
 	timings.length = 0;
-	lastTime = Date.now();
+	lastTime = performance.now();
 }
 
 export function time(label: string): void {
 	if (!ENABLED) return;
-	const now = Date.now();
+	const now = performance.now();
 	timings.push({ label, ms: now - lastTime });
 	lastTime = now;
 }

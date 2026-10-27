@@ -27,6 +27,8 @@ export type {
 export interface SubagentLaneAuthorityHostBinding {
 	readonly runId: string;
 	readonly promptRunId?: string;
+	/** Spawning session id, for the `lane-plan` run-log line only. */
+	readonly sessionId?: string | null;
 	readonly decision: ResourceAdmissionDecision | null;
 	readonly permitPool: import("./workload-permit-pool.ts").WorkloadPermitPool;
 	readonly inventory: CapabilityInventory;
@@ -62,6 +64,7 @@ export function createSubagentLaneAuthority(binding: SubagentLaneAuthorityHostBi
 	const {
 		runId,
 		promptRunId,
+		sessionId,
 		decision: hostDecision,
 		permitPool,
 		inventory,
@@ -135,6 +138,7 @@ export function createSubagentLaneAuthority(binding: SubagentLaneAuthorityHostBi
 				const result = await launchSubagentLanes({
 					plan,
 					promptRunId: promptRunId ?? runId,
+					sessionId,
 					decision: resolvedDecision,
 					permitPool,
 					configuredMaxParallelLanes: input.configuredMaxParallelLanes,

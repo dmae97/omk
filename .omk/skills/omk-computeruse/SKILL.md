@@ -46,6 +46,17 @@ Keep OMK as the root planner. Treat Cua Driver, Stagehand, Playwright, Chrome De
 - Do not assume `cua-driver` exposes arbitrary shell execution. Use OMK's governed shell for local commands; use a separately approved remote-command transport when the target host differs.
 - Keep one writer per app/session. Parallel lanes may inspect independent sessions, but they must not share a mutable desktop or browser session.
 
+## Browser action guard (auto mode)
+
+Some installs load an optional Jev browser guard extension (`jev-browser-guard`). It is not part of this repository. When it is loaded, it judges each granular browser action before the tool runs. In auto mode, enabled by the user in the OMK agent directory's `jev-browser.json` (`{"auto": true}`) or with `OMK_JEV_BROWSER_AUTO=1`, it arms itself from each user prompt. No `/jev-browser start` or confirmation dialog is needed. Work with it as follows:
+
+- Take a browser snapshot before acting. An action result that already contains the page state (`Page URL:` / `Page Snapshot`) counts as the next observation.
+- If an action is held, the guard refuses only that call. Take a fresh snapshot and choose a different, safer action, or ask the user. After three consecutive holds (errors included) the workflow pauses until the next user message; stop and report.
+- Use granular browser tools. Browser `evaluate`/`run_code` scripts, autonomous browser agents, batches, and shell commands that launch a browser driver are blocked. Ordinary shell work is not.
+- The auto-mode setting is the user's data-transfer consent. Do not create or change it, or the environment flag, unless the user asks.
+- A Jev pass does not authorize purchases, submissions, deletes, or credential entry.
+- `/jev-browser stop` pauses auto mode for the session; `/jev-browser start` resumes it.
+
 ## Runtime selection summary
 
 | Target | Default route | Escalation |

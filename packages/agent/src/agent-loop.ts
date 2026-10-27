@@ -1500,7 +1500,7 @@ async function authorizePlannedToolCall(
 			tool: plan.tool,
 			args,
 			eventArgs: createImmutableSnapshot(args),
-			timeoutMs: resolveToolTimeoutMs(plan.tool, config, plan.toolCall.name),
+			timeoutMs: resolveToolTimeoutMs(plan.tool, config, plan.toolCall.name, args),
 		};
 	} catch (error) {
 		return immediateOutcome("failed", error instanceof Error ? error.message : String(error));

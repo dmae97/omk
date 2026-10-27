@@ -113,7 +113,7 @@ describe("reasoning cap run log (spec 033/042)", () => {
 	it("flag off: no reasoning-cap.jsonl even with OMK_RUN_LOG_DIR set", async () => {
 		const dir = logDir();
 		const inner = fakeInner([cut, retryOk]);
-		const off = resolveResponseReasoningCapConfig({ [RUN_LOG_DIR_ENV]: dir });
+		const off = resolveResponseReasoningCapConfig({ [RUN_LOG_DIR_ENV]: dir, OMK_RESPONSE_REASONING_CAP: "0" });
 		expect(createResponseReasoningCapStreamFn(inner.fn, off)).toBe(inner.fn);
 		await run(createResponseReasoningCapStreamFn(inner.fn, off));
 		expect(readdirSync(dir)).toEqual([]);

@@ -7,6 +7,7 @@ import { runSessionDoctorCli } from "../src/commands/session-doctor-cli.ts";
 import { inspectRunJournal } from "../src/core/run-journal.ts";
 import { RunJournalStore } from "../src/core/run-journal-store.ts";
 import { inspectSessionIntegrity } from "../src/core/session-integrity.ts";
+import { acquireSessionOwnerLeaseSync } from "../src/core/session-owner-lease.ts";
 
 function assistant(toolCallId: string) {
 	return {
@@ -273,6 +274,30 @@ describe("omk session doctor CLI", () => {
 		expect(repaired.exitCode).toBe(0);
 		expect(existsSync(sidecar)).toBe(false);
 		expect(existsSync(`${sidecar}.abandoned-${repaired.result?.repairId}`)).toBe(true);
+	});
+
+	it("refuses to repair a session that a live OMK process owns", async () => {
+		// A running session holds the session owner lease for its lifetime and appends to the JSONL
+		// and run journal under it. The doctor's own proper-lockfile lock was a different lock, so a
+		// repair rewrote the file under the live writer and the writer's next append was lost.
+		const fragment = '{"partial":';
+		writeSession(records(assistant("call-1")), fragment);
+		const before = readFileSync(sessionPath);
+		const liveOwner = acquireSessionOwnerLeaseSync(sessionPath);
+		try {
+			const outcome = await invoke(["session", "doctor", "--session", sessionPath, "--repair"]);
+
+			expect(outcome.exitCode).toBe(2);
+			expect(outcome.result?.status).toBe("refused");
+			expect(outcome.result?.errorCode).toBe("session_in_use");
+			expect(readFileSync(sessionPath)).toEqual(before);
+			expect(existsSync(`${sessionPath}.quarantine-${outcome.result?.repairId}`)).toBe(false);
+		} finally {
+			liveOwner.release();
+		}
+
+		const repaired = await invoke(["session", "doctor", "--session", sessionPath, "--repair"]);
+		expect(repaired.exitCode).toBe(0);
 	});
 
 	it("refuses CAS when session bytes change between planning and execution", async () => {

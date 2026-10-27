@@ -1,6 +1,6 @@
 {
 	"name": "omk-book-to-skill",
-	"version": "1.5.4",
+	"version": "1.5.9",
 	"description": "Optional OMK adapter for compiling documents into provenance-tracked agent skills",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -13,7 +13,7 @@
 		"./package.json": "./package.json"
 	},
 	"bin": {
-		"omk-book-to-skill": "./dist/cli.js"
+		"omk-book-to-skill": "dist/cli.js"
 	},
 	"files": [
 		"dist",
@@ -51,7 +51,7 @@
 	},
 	"devDependencies": {
 		"@types/node": "24.12.4",
-		"open-multi-agent-kit": "^1.5.4",
+		"open-multi-agent-kit": "^1.5.9",
 		"typescript": "5.9.3",
 		"vitest": "4.1.11"
 	},

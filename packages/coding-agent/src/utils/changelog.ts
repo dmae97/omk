@@ -71,7 +71,7 @@ export function parseChangelog(changelogPath: string): ChangelogEntry[] {
 }
 
 /**
- * Compare versions. Returns: -1 if v1 < v2, 0 if v1 === v2, 1 if v1 > v2
+ * Compare versions. Returns a negative number if v1 < v2, zero if equal, or a positive number if v1 > v2.
  */
 export function compareVersions(v1: ChangelogEntry, v2: ChangelogEntry): number {
 	if (v1.major !== v2.major) return v1.major - v2.major;

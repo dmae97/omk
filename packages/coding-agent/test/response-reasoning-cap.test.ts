@@ -174,11 +174,21 @@ describe("response reasoning cap (spec 033)", () => {
 		]);
 	});
 
-	it("AC5 feature off: env unset returns no config and the inner StreamFn itself", () => {
+	it("default on: env unset returns the default config", () => {
+		expect(resolveResponseReasoningCapConfig({})).toMatchObject({ maxReasoningTokens: 20000 });
+	});
+
+	it("AC5 feature off: 0/false/off return no config and the inner StreamFn itself", () => {
 		const inner = fakeInner([{ thinking: [] }]);
-		expect(resolveResponseReasoningCapConfig({})).toBeUndefined();
-		expect(resolveResponseReasoningCapConfig({ OMK_RESPONSE_REASONING_CAP: "0" })).toBeUndefined();
-		expect(createResponseReasoningCapStreamFn(inner.fn, resolveResponseReasoningCapConfig({}))).toBe(inner.fn);
+		for (const v of ["0", "false", " OFF "]) {
+			expect(resolveResponseReasoningCapConfig({ OMK_RESPONSE_REASONING_CAP: v })).toBeUndefined();
+		}
+		expect(
+			createResponseReasoningCapStreamFn(
+				inner.fn,
+				resolveResponseReasoningCapConfig({ OMK_RESPONSE_REASONING_CAP: "0" }),
+			),
+		).toBe(inner.fn);
 		expect(
 			resolveResponseReasoningCapConfig({
 				OMK_RESPONSE_REASONING_CAP: "1",

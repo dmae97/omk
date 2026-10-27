@@ -57,6 +57,18 @@ function baseOptions(overrides: Partial<Parameters<typeof runToolCallWithTimeout
 }
 
 describe("resolveToolTimeoutMs", () => {
+	it("resolves call arguments between a static tool limit and settings", () => {
+		const resolveCallTimeoutMs = vi.fn((args: unknown) => (typeof args === "number" ? args : undefined));
+		const tool = { resolveCallTimeoutMs };
+		const config = { toolTimeouts: { echo: 20 }, toolTimeoutMs: 30 };
+		expect(resolveToolTimeoutMs(tool, config, "echo", 600_000)).toBe(600_000);
+		expect(resolveToolTimeoutMs(tool, config, "echo", 0)).toBe(0);
+		expect(resolveToolTimeoutMs(tool, config, "echo", undefined)).toBe(20);
+		resolveCallTimeoutMs.mockClear();
+		expect(resolveToolTimeoutMs({ ...tool, timeoutMs: 10 }, config, "echo", 600_000)).toBe(10);
+		expect(resolveCallTimeoutMs).not.toHaveBeenCalled();
+	});
+
 	it("applies per-tool > per-name > global precedence and disables on absent/zero", () => {
 		// Per-tool wins over per-name and global.
 		expect(resolveToolTimeoutMs({ timeoutMs: 10 }, { toolTimeouts: { echo: 20 }, toolTimeoutMs: 30 }, "echo")).toBe(

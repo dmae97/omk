@@ -13,7 +13,7 @@ function runScenario(
 	filter: string,
 ): Promise<{ code: number | null; timedOut: boolean; elapsedMs: number; output: string }> {
 	return new Promise((resolve) => {
-		const started = Date.now();
+		const started = performance.now();
 		const child = spawn(
 			process.execPath,
 			[VITEST_BIN, "run", "--pool=forks", "test/scenarios/oversized-output-hang.scenario.test.ts", "-t", filter],
@@ -34,7 +34,7 @@ function runScenario(
 		}, WALL_CLOCK_MS);
 		child.on("close", (code) => {
 			clearTimeout(guard);
-			resolve({ code, timedOut, elapsedMs: Date.now() - started, output: output.slice(-4000) });
+			resolve({ code, timedOut, elapsedMs: performance.now() - started, output: output.slice(-4000) });
 		});
 	});
 }

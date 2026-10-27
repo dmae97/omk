@@ -163,7 +163,10 @@ export function durableFileLockPath(scope: string, key: string): string {
 	return join(getDurableFileLockRoot(), `${scope}-${key}.lock`);
 }
 
-/** Acquire a lock that is published atomically with its owner record (see durable-file-lock-stage.ts). */
+/**
+ * Acquire a lock that is published atomically with its owner record (see durable-file-lock-stage.ts).
+ * `deadline` is a performance.now() value, so a wall-clock jump cannot cut the wait short.
+ */
 export function acquireDurableFileLockPathSync(key: string, path: string, deadline: number): HeldDurableFileLock {
 	while (true) {
 		const token = randomUUID();
@@ -175,8 +178,8 @@ export function acquireDurableFileLockPathSync(key: string, path: string, deadli
 		);
 		if (expectedOwner === undefined) {
 			if (inspectDurableFileLockPathSync(path, deadline).status === "absent") continue;
-			if (Date.now() >= deadline) throw new DurableFileLockBusyError();
-			Atomics.wait(WAITER, 0, 0, Math.min(10, deadline - Date.now()));
+			if (performance.now() >= deadline) throw new DurableFileLockBusyError();
+			Atomics.wait(WAITER, 0, 0, Math.min(10, deadline - performance.now()));
 			continue;
 		}
 		const lock: HeldDurableFileLock = {

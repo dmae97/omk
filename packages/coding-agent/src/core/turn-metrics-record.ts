@@ -6,6 +6,27 @@ export const MAX_ERROR_CHARS = 200;
 const ERROR_CLASSES = ["timeout", "aborted", "permission", "not_found", "invalid_input", "unknown"] as const;
 type ErrorClass = (typeof ERROR_CLASSES)[number];
 const STOP_REASONS = ["stop", "length", "toolUse", "error", "aborted"];
+/** Spec 103: a record without `purpose` is a main turn (legacy readers ignore the field). */
+export const TURN_METRIC_PURPOSES = ["main", "suggestion"] as const;
+export type TurnMetricPurpose = (typeof TURN_METRIC_PURPOSES)[number];
+export const SUGGESTION_OUTCOMES = ["shown", "empty", "aborted", "timeout", "error"] as const;
+export type SuggestionMetricOutcome = (typeof SUGGESTION_OUTCOMES)[number];
+/** Spec 103b: closed skip-reason enum for caps-on skip records (mirrors `SuggestionSkipReason`). */
+export const SUGGESTION_SKIP_REASONS = [
+	"no_record",
+	"not_completed",
+	"error",
+	"aborted",
+	"model_changed",
+	"no_cache_support",
+	"cache_cold",
+	"near_usage_limit",
+	"usage_unavailable",
+	"over_cost_cap",
+	"cache_capability_unknown",
+	"budget_unset",
+] as const;
+export type SuggestionMetricSkipReason = (typeof SUGGESTION_SKIP_REASONS)[number];
 
 export interface ToolCallMetric {
 	readonly name: string;
@@ -21,8 +42,30 @@ export interface TurnUsageMetric {
 	readonly input: number;
 	readonly output: number;
 	readonly cacheRead: number;
-	readonly cacheWrite: number;
+	/** Omitted when the provider did not report cache writes (unknown, not 0). */
+	readonly cacheWrite?: number;
+	/** Catalog-price estimate (`UsageCost.total`). */
 	readonly costUsd: number;
+	/** Provider-reported billed amount (`UsageCost.billed`), only when the provider returns one. */
+	readonly billedUsd?: number;
+}
+/** Map provider `Usage` to the metric shape: estimate (`total`) and provider-reported `billed` stay separate. */
+export function turnUsageMetricFromUsage(usage: {
+	readonly input: number;
+	readonly output: number;
+	readonly cacheRead: number;
+	readonly cacheWrite: number;
+	readonly cacheWriteUnknown?: true;
+	readonly cost: { readonly total: number; readonly billed?: number };
+}): TurnUsageMetric {
+	return {
+		input: usage.input,
+		output: usage.output,
+		cacheRead: usage.cacheRead,
+		...(usage.cacheWriteUnknown ? {} : { cacheWrite: usage.cacheWrite }),
+		costUsd: usage.cost.total,
+		...(usage.cost.billed === undefined ? {} : { billedUsd: usage.cost.billed }),
+	};
 }
 export interface TurnMetricInput {
 	readonly sessionId: string;
@@ -39,6 +82,16 @@ export interface TurnMetricInput {
 	readonly failovers?: number;
 	readonly contextCache?: { readonly planHit: boolean; readonly hits: number; readonly misses: number };
 	readonly runtimeProvenance?: RuntimeProvenance;
+	/** Spec 103: `suggestion` records are separate requests, never folded into the parent turn. */
+	readonly purpose?: TurnMetricPurpose;
+	readonly parentTurnIndex?: number;
+	readonly suggestionOutcome?: SuggestionMetricOutcome;
+	/** Spec 103b (caps flag on only): enums, booleans and numbers; never text. */
+	readonly capsApplied?: true;
+	readonly reasoningCapped?: boolean;
+	readonly suggestionSkip?: SuggestionMetricSkipReason;
+	readonly estimatedCostUsd?: number;
+	readonly maxCostUsd?: number;
 }
 export interface TurnMetricRecord extends Omit<TurnMetricInput, "toolCalls"> {
 	readonly schemaVersion: typeof TURN_METRICS_SCHEMA_VERSION;
@@ -73,6 +126,10 @@ function boolean(value: unknown): boolean {
 	if (typeof value !== "boolean") throw new TypeError("Invalid metric boolean");
 	return value;
 }
+function literalTrue(value: unknown): true {
+	if (value !== true) throw new TypeError("Invalid metric flag");
+	return true;
+}
 function classifyError(value: unknown): ErrorClass {
 	if (value !== undefined && typeof value !== "string") throw new TypeError("Invalid metric error text");
 	const text = value?.slice(0, MAX_ERROR_CHARS) ?? "";
@@ -82,6 +139,10 @@ function classifyError(value: unknown): ErrorClass {
 	if (/not found|enoent/iu.test(text)) return "not_found";
 	if (/invalid|validation/iu.test(text)) return "invalid_input";
 	return "unknown";
+}
+function member<T extends string>(value: unknown, allowed: readonly T[]): T {
+	for (const item of allowed) if (value === item) return item;
+	throw new TypeError("Invalid metric enum");
 }
 function parseErrorClass(value: unknown): ErrorClass | undefined {
 	if (value === undefined) return undefined;
@@ -137,8 +198,9 @@ function project(value: unknown, source: "input" | "v1" | "v2"): TurnMetricRecor
 						input: quantity(usage.input, true),
 						output: quantity(usage.output, true),
 						cacheRead: quantity(usage.cacheRead, true),
-						cacheWrite: quantity(usage.cacheWrite, true),
+						...(usage.cacheWrite === undefined ? {} : { cacheWrite: quantity(usage.cacheWrite, true) }),
 						costUsd: quantity(usage.costUsd),
+						...(usage.billedUsd === undefined ? {} : { billedUsd: quantity(usage.billedUsd) }),
 					},
 				}),
 		...(input.stopReason === undefined ? {} : { stopReason: input.stopReason }),
@@ -154,6 +216,18 @@ function project(value: unknown, source: "input" | "v1" | "v2"): TurnMetricRecor
 					},
 				}),
 		...(runtimeProvenance ? { runtimeProvenance } : {}),
+		...(input.purpose === undefined ? {} : { purpose: member(input.purpose, TURN_METRIC_PURPOSES) }),
+		...(input.parentTurnIndex === undefined ? {} : { parentTurnIndex: quantity(input.parentTurnIndex, true) }),
+		...(input.suggestionOutcome === undefined
+			? {}
+			: { suggestionOutcome: member(input.suggestionOutcome, SUGGESTION_OUTCOMES) }),
+		...(input.capsApplied === undefined ? {} : { capsApplied: literalTrue(input.capsApplied) }),
+		...(input.reasoningCapped === undefined ? {} : { reasoningCapped: boolean(input.reasoningCapped) }),
+		...(input.suggestionSkip === undefined
+			? {}
+			: { suggestionSkip: member(input.suggestionSkip, SUGGESTION_SKIP_REASONS) }),
+		...(input.estimatedCostUsd === undefined ? {} : { estimatedCostUsd: quantity(input.estimatedCostUsd) }),
+		...(input.maxCostUsd === undefined ? {} : { maxCostUsd: quantity(input.maxCostUsd) }),
 	};
 }
 

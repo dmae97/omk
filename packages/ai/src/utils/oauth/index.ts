@@ -269,6 +269,7 @@ export async function getOAuthApiKey(
 	}
 
 	// Refresh if expired
+	// wall-clock: creds.expires is a persisted absolute expiry
 	if (Date.now() >= creds.expires) {
 		try {
 			creds = await provider.refreshToken(creds);

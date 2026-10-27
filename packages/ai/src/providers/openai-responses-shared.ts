@@ -29,6 +29,7 @@ import type { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { shortHash } from "../utils/hash.ts";
 import { parseStreamingJson } from "../utils/json-parse.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
+import { parseResponsesUsage } from "./openai-responses-usage.ts";
 import { openAIResponseStopReason as mapStopReason } from "./provider-stop-reasons.ts";
 import { stableTools } from "./tool-schema.ts";
 import { transformMessages } from "./transform-messages.ts";
@@ -500,16 +501,7 @@ export async function processResponsesStream<TApi extends Api>(
 				output.responseId = response.id;
 			}
 			if (response?.usage) {
-				const cachedTokens = response.usage.input_tokens_details?.cached_tokens || 0;
-				output.usage = {
-					// OpenAI includes cached tokens in input_tokens, so subtract to get non-cached input
-					input: (response.usage.input_tokens || 0) - cachedTokens,
-					output: response.usage.output_tokens || 0,
-					cacheRead: cachedTokens,
-					cacheWrite: 0,
-					totalTokens: response.usage.total_tokens || 0,
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-				};
+				output.usage = parseResponsesUsage(response.usage, model);
 			}
 			calculateCost(model, output.usage);
 			if (options?.applyServiceTierPricing) {

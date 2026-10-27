@@ -21,6 +21,7 @@ const ENV_KEYS = [
 	"OMK_RUN_LOG_DIR",
 	"OMK_TRUST_PROJECT",
 	"OMK_PRINT_EXIT_GRACE_MS",
+	"HOME",
 ] as const;
 let loads = 0;
 
@@ -145,6 +146,9 @@ describe("skill search cold path (spec 050 AC 3)", () => {
 		originalExitCode = process.exitCode;
 		process.exitCode = undefined;
 		process.env.OMK_CODING_AGENT_DIR = agentDir;
+		// The loader also reads $HOME/.agents/skills, which OMK_CODING_AGENT_DIR does not cover.
+		// Isolate HOME or a large user skill set makes skill search active here.
+		process.env.HOME = tempDir;
 		process.env.OMK_FINISH_CHECK = "0";
 		process.env.OMK_OFFLINE = "1";
 		process.env.OMK_TRUST_PROJECT = "0";

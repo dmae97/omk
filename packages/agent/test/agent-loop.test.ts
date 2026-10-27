@@ -105,6 +105,61 @@ function identityConverter(messages: AgentMessage[]): Message[] {
 }
 
 describe("agentLoop with AgentMessage", () => {
+	it.each(["dag-v2", "waves-v1"] as const)(
+		"resolves timeout from authorized call arguments in %s",
+		async (toolScheduler) => {
+			const resolveCallTimeoutMs = vi.fn((args: unknown) => {
+				expect(args).toEqual({ timeout: 600 });
+				expect(Object.isFrozen(args)).toBe(true);
+				return 605_000;
+			});
+			const tool: AgentTool = {
+				name: "timed",
+				label: "Timed",
+				description: "Test call timeout",
+				parameters: Type.Object({ timeout: Type.Number() }),
+				resolveCallTimeoutMs,
+				execute: async () => {
+					await new Promise((resolve) => setTimeout(resolve, 20));
+					return { content: [], details: undefined };
+				},
+			};
+			let call = 0;
+			const streamFn = () => {
+				const response = new MockAssistantStream();
+				const message =
+					++call === 1
+						? createAssistantMessage(
+								[{ type: "toolCall", id: "t1", name: "timed", arguments: { timeout: 1 } }],
+								"toolUse",
+							)
+						: createAssistantMessage([{ type: "text", text: "done" }]);
+				queueMicrotask(() => response.push({ type: "done", reason: call === 1 ? "toolUse" : "stop", message }));
+				return response;
+			};
+			const stream = agentLoop(
+				[createUserMessage("go")],
+				{ systemPrompt: "", messages: [], tools: [tool] },
+				{
+					model: createModel(),
+					convertToLlm: identityConverter,
+					toolScheduler,
+					toolTimeouts: { timed: 1 },
+					beforeToolCall: async ({ args }) => {
+						if (typeof args === "object" && args !== null) Object.assign(args, { timeout: 600 });
+						return undefined;
+					},
+				},
+				undefined,
+				streamFn,
+			);
+			const results: AgentEvent[] = [];
+			for await (const event of stream) results.push(event);
+			expect(resolveCallTimeoutMs).toHaveBeenCalledOnce();
+			expect(results.find((event) => event.type === "tool_execution_end")).toMatchObject({ isError: false });
+		},
+	);
+
 	it("should emit events with AgentMessage types", async () => {
 		const context: AgentContext = {
 			systemPrompt: "You are helpful.",

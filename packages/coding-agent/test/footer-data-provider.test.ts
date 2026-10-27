@@ -84,9 +84,9 @@ function emitReftableChange(provider: FooterDataProvider): void {
 }
 
 async function waitFor(condition: () => boolean, timeoutMs = 3000): Promise<void> {
-	const startedAt = Date.now();
+	const startedAt = performance.now();
 	while (!condition()) {
-		if (Date.now() - startedAt > timeoutMs) {
+		if (performance.now() - startedAt > timeoutMs) {
 			throw new Error("Timed out waiting for condition");
 		}
 		await new Promise((resolve) => setTimeout(resolve, 10));

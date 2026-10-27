@@ -68,7 +68,11 @@ export class DeferredTurnInput {
 		options: PromptOptions,
 		skills: ActiveSkillState,
 	): void {
-		const prepared = preparedPromptOptions({ ...options, preflightResult: undefined }, images, skills);
+		const prepared = preparedPromptOptions(
+			{ ...options, preflightResult: undefined, dispatched: undefined },
+			images,
+			skills,
+		);
 		this.defer(userMessage(text, images), options.streamingBehavior, { text, options: prepared });
 	}
 

@@ -2,12 +2,19 @@ import { randomBytes } from "node:crypto";
 import { createWriteStream, type WriteStream } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { registerEvidenceArtifact, TOOL_OUTPUT_LOG_CONSUMERS } from "../evidence-lifecycle.ts";
+import { HeadCapture, headTailTruncation } from "./output-head-tail.ts";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, type TruncationResult, truncateTail } from "./truncate.ts";
 
 export interface OutputAccumulatorOptions {
 	maxLines?: number;
 	maxBytes?: number;
 	tempFilePrefix?: string;
+	/**
+	 * Spec 113: show head + marker + tail instead of tail only when a limit is passed
+	 * (bash passes `OMK_EXEC_TRUNCATE_MIDDLE` default-on, `0`/`false`/`off` opts out).
+	 */
+	headTail?: boolean;
 }
 
 export interface OutputSnapshot {
@@ -53,6 +60,8 @@ export class OutputAccumulator {
 	private hasOpenLine = false;
 	private finished = false;
 
+	private readonly head: HeadCapture | undefined;
+
 	private tempFilePath: string | undefined;
 	private tempFileStream: WriteStream | undefined;
 
@@ -61,6 +70,7 @@ export class OutputAccumulator {
 		this.maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
 		this.maxRollingBytes = Math.max(this.maxBytes * 2, 1);
 		this.tempFilePrefix = options.tempFilePrefix ?? "omk-output";
+		this.head = options.headTail === true ? new HeadCapture(this.maxBytes, this.maxLines) : undefined;
 	}
 
 	append(data: Buffer): void {
@@ -113,6 +123,15 @@ export class OutputAccumulator {
 			this.ensureTempFile();
 		}
 
+		if (this.head && truncated) {
+			const headTail = headTailTruncation(truncation, {
+				headText: this.head.text,
+				tailText: this.getSnapshotText(),
+				fullOutputPath: this.tempFilePath,
+			});
+			return { content: headTail.content, truncation: headTail, fullOutputPath: this.tempFilePath };
+		}
+
 		return {
 			content: truncation.content,
 			truncation,
@@ -141,6 +160,12 @@ export class OutputAccumulator {
 			stream.once("finish", onFinish);
 			stream.end();
 		});
+		if (this.tempFilePath)
+			registerEvidenceArtifact({
+				producer: "tool-output-log",
+				path: this.tempFilePath,
+				requiredConsumers: TOOL_OUTPUT_LOG_CONSUMERS,
+			});
 	}
 
 	getLastLineBytes(): number {
@@ -153,6 +178,7 @@ export class OutputAccumulator {
 		}
 
 		const bytes = byteLength(text);
+		this.head?.append(text, bytes);
 		this.totalDecodedBytes += bytes;
 		this.tailText += text;
 		this.tailBytes += bytes;

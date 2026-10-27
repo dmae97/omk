@@ -57,12 +57,12 @@ describe("retryProviderRequest", () => {
 	it("aborts promptly during the backoff sleep", async () => {
 		const controller = new AbortController();
 		const request = vi.fn().mockRejectedValue(providerError(429, new Headers({ "retry-after": "30" })));
-		const started = Date.now();
+		const started = performance.now();
 		setTimeout(() => controller.abort(), 20);
 		await expect(retryProviderRequest(request, { maxRetries: 3, signal: controller.signal })).rejects.toMatchObject({
 			name: "AbortError",
 		});
-		expect(Date.now() - started).toBeLessThan(5_000);
+		expect(performance.now() - started).toBeLessThan(5_000);
 		expect(request).toHaveBeenCalledTimes(1);
 	});
 

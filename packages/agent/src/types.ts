@@ -541,11 +541,13 @@ export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any
 	 * commits an immediate terminal timeout result and aborts the tool's child
 	 * `AbortSignal`, so a tool that ignores the signal cannot stall the run.
 	 *
-	 * Precedence: this value overrides `AgentLoopConfig.toolTimeouts[name]`, which
-	 * overrides `AgentLoopConfig.toolTimeoutMs`. Absent, non-finite, or
+	 * Precedence: this value overrides `resolveCallTimeoutMs(args)`, then
+	 * `AgentLoopConfig.toolTimeouts[name]`, then `AgentLoopConfig.toolTimeoutMs`. Absent, non-finite, or
 	 * non-positive values disable the timeout and preserve current behavior.
 	 */
 	timeoutMs?: number;
+	/** Argument-dependent timeout in ms. Static timeoutMs wins; undefined falls back to config. */
+	resolveCallTimeoutMs?: (args: unknown) => number | undefined;
 }
 
 /**

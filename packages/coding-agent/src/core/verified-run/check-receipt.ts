@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import type { RunCheck, RunContract } from "omk-protocol";
-import { assertCredentialFreeEvidenceCommand } from "../../guardrails/command-redaction.ts";
 import { createEvidenceReceipt, parseSha256Hex, validateEvidenceReceipt } from "../../guardrails/evidence-receipt.ts";
 import { computeWorkspaceManifestSha256 } from "../../guardrails/workspace-fingerprint.ts";
 import type {
@@ -19,10 +18,6 @@ function command(check: RunCheck): EvidenceCommandDescriptor {
 	const executable = check.argv[0];
 	if (!executable) throw new VerifiedRunError("integrity");
 	return { kind: "argv", executable, argv: check.argv.slice(1) };
-}
-
-export function preflightCheckReceipts(contract: RunContract): void {
-	for (const check of contract.checks) assertCredentialFreeEvidenceCommand(command(check));
 }
 
 function fingerprint(manifest: CandidateManifest): WorkspaceFingerprint {

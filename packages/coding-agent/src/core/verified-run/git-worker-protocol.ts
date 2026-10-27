@@ -106,6 +106,7 @@ export function readGitRequest(path: string): GitWorkerRequest {
 
 export function readGitStartGate(path: string): GitWorkerNotice & { readonly authorizationDeadline: number } {
 	const raw = object(readJson(path, 4096));
+	// wall-clock: the coordinating process set this deadline, and a monotonic clock is not shared across processes
 	if (
 		raw.kind !== "prepared" ||
 		typeof raw.authorizationDeadline !== "number" ||

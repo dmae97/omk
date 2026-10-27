@@ -8,8 +8,16 @@ import type { WorkspaceScope } from "../types/evidence.ts";
 import { getShellConfig } from "../utils/shell.ts";
 import { type BashOperations, type BashSandboxPreflight, createLocalBashOperations } from "./tools/bash.ts";
 
+/**
+ * Names what this adapter actually does to receipt output, nothing more:
+ * combined stdout+stderr, no secret redaction (raw text), UTF-8 decode/re-encode,
+ * capture bounded to the last 128 KiB, receipt bounded to the last 64 KiB.
+ * The v1 id claimed `omk-sensitive-text-v1` redaction that was removed; receipts
+ * already written with the v1 id are left as they are.
+ * If the processing changes, change this id (the adapter test asserts both).
+ */
 export const VERIFIED_BASH_REDACTION_POLICY_ID =
-	"omk-bash-combined-v1+omk-sensitive-text-v1+capture-tail-128k+tail-64k" as const;
+	"omk-bash-combined-v2+raw-unredacted+utf8+capture-tail-128k+tail-64k" as const;
 
 const MAX_CAPTURE_BYTES = MAX_EVIDENCE_RECEIPT_OUTPUT_BYTES * 2;
 
@@ -65,6 +73,7 @@ export async function executeVerifiedBash(
 		request.onData?.(data);
 	};
 
+	// Field name is the executor contract; this policy performs no redaction.
 	const alreadyRedactedOutput = () => {
 		const outputBytes = Buffer.from(combined.toString("utf8"));
 		const bounded =

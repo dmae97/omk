@@ -75,9 +75,9 @@ describe("omk run cancel and gc from the public CLI", () => {
 		});
 		const exited = new Promise<number | null>((resolve) => child.once("close", resolve));
 		try {
-			const deadline = Date.now() + 45000;
+			const deadline = performance.now() + 45000;
 			while ((readRunJournal(join(stateRoot, "slow"))?.state.activeExecutionIds.length ?? 0) === 0) {
-				if (Date.now() > deadline) throw new Error("writer never started");
+				if (performance.now() > deadline) throw new Error("writer never started");
 				await new Promise((resolve) => setTimeout(resolve, 50));
 			}
 			const cancelled = cli(["run", "cancel", "slow", "--wait-ms", "30000", "--state-dir", stateRoot, "--json"]);

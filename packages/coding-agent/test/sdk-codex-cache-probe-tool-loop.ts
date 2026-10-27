@@ -336,9 +336,9 @@ async function main(): Promise<void> {
 		const promptTokens = estimateTokens(prompt);
 		const previousMessagesLength = session.messages.length;
 		const websocketStatsBefore = getWebSocketStatsSnapshot(session.sessionId);
-		const startedAt = Date.now();
+		const startedAt = performance.now();
 		await session.prompt(prompt);
-		const elapsedMs = Date.now() - startedAt;
+		const elapsedMs = Math.round(performance.now() - startedAt);
 		turnElapsedMs.push(elapsedMs);
 
 		const newMessages = session.messages.slice(previousMessagesLength);

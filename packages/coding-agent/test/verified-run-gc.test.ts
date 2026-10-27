@@ -125,9 +125,9 @@ describe("verified-run artifact GC", () => {
 	it("keeps a cancelled run inside its budget and collects it once the budget cap has passed", async () => {
 		const controller = new AbortController();
 		const pending = run("cancelled", ["/bin/sh", "-c", "cp input output && sleep 30"], controller.signal);
-		const deadline = Date.now() + 20000;
+		const deadline = performance.now() + 20000;
 		while (!existsSync(join(stateRoot, "cancelled", "writer", "output"))) {
-			if (Date.now() > deadline) throw new Error("writer never started");
+			if (performance.now() > deadline) throw new Error("writer never started");
 			await new Promise((resolve) => setTimeout(resolve, 20));
 		}
 		controller.abort();

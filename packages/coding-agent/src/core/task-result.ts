@@ -22,8 +22,10 @@ import type { FinishCheckSkipReason } from "./finish-check.ts";
 import type { FinishCheckLedgerItem } from "./finish-check-requirements.ts";
 import type { GoalAcceptanceResult } from "./goal-verification.ts";
 import type { PromptSettledEvent, PromptSettlementOutcome } from "./prompt-settlement.ts";
+import type { CheckKind } from "./test-counts.ts";
 
-export const TASK_RESULT_VERSION = 1 as const;
+/** v2 (spec 100): check identity, attempts, test counts, unknown coverage and the downgrade event. */
+export const TASK_RESULT_VERSION = 2 as const;
 
 /** Check-observation axis (spec 096 change 2). */
 export type TaskCheckObservation =
@@ -48,7 +50,33 @@ export type TaskCheckInsufficientReason =
 	| "skipped"
 	| "unavailable"
 	| "gate_closed"
-	| "aborted";
+	| "aborted"
+	/** Spec 100: the check ran and passed but its required check never got a result in this run. */
+	| "not_run"
+	/** Spec 100: a test runner's counts could not be read from its output (parser, not environment). */
+	| "unverified_counts"
+	/** Spec 100: the check passed, then the host refused to complete the goal on it. */
+	| "completion_refused"
+	/** Spec 104: a required tool was absent or could not fit the input ceiling; never `complete`. */
+	| "required_capability_missing";
+
+/** A count the runner printed, or `unknown` when it printed none we can read. Never a guessed 0. */
+export type TaskTestCount = number | "unknown";
+
+export interface TaskTestCounts {
+	readonly executed: TaskTestCount;
+	readonly matched: TaskTestCount;
+	/** Display only: never changes a status. */
+	readonly skipped: TaskTestCount;
+}
+
+/** One earlier or current result of the same check in this run. */
+export interface TaskCheckAttempt {
+	readonly attempt: number;
+	readonly status: TaskCheckFactStatus;
+	readonly reason?: TaskCheckInsufficientReason;
+	readonly receiptId?: string;
+}
 
 /** One observation from one registered check. */
 export interface TaskCheckFact {
@@ -61,6 +89,17 @@ export interface TaskCheckFact {
 	readonly reason?: TaskCheckInsufficientReason;
 	/** The host receipt id, set only for `host_receipt` facts. */
 	readonly receiptId?: string;
+	/** Spec 100: one id per required check (approved command); attempts of it share the id. */
+	readonly checkId?: string;
+	readonly checkRevision?: number;
+	/** 1-based attempt of `checkId` in this run; a downgrade replaces the same attempt. */
+	readonly attempt?: number;
+	readonly checkKind?: CheckKind;
+	readonly tests?: TaskTestCounts;
+	/** Why the host refused completion, bounded, for `completion_refused`. */
+	readonly detail?: string;
+	/** Earlier attempts of the same check, oldest first; set by the collector. */
+	readonly attempts?: readonly TaskCheckAttempt[];
 }
 
 /** What the model said about the result. Never promoted to a host fact. */
@@ -74,8 +113,10 @@ export interface TaskModelClaim {
 export interface TaskResultCoverage {
 	/** Host-registered checks that ran to a pass or a failure. */
 	readonly checksRun: number;
-	/** Host-registered checks, run or not. */
-	readonly checksTotal: number;
+	/** Required checks (one per approved command), run or not; `unknown` with no approved command. Never a guessed 0. */
+	readonly checksTotal: number | "unknown";
+	/** Host receipts seen in this run, attempts included. */
+	readonly receiptsObserved: number;
 }
 
 export interface TaskResultProjection {
@@ -88,6 +129,15 @@ export interface TaskResultProjection {
 	readonly coverage: TaskResultCoverage;
 	readonly facts: readonly TaskCheckFact[];
 	readonly modelClaims: readonly TaskModelClaim[];
+}
+
+/** Spec 100: the earlier `passed` fact of a check is no longer a pass; emitted the moment it happens. */
+export interface TaskResultDowngradeEvent {
+	readonly type: "task_result_downgrade";
+	readonly version: typeof TASK_RESULT_VERSION;
+	readonly promptRunId: string;
+	readonly from: "passed";
+	readonly fact: TaskCheckFact;
 }
 
 /** The new versioned event; `*_settled` events are unchanged (D1). */
@@ -109,7 +159,7 @@ export function isTaskResultEnabled(env: Readonly<Record<string, string | undefi
 	return value === "1" || value === "true";
 }
 
-function hostFacts(facts: readonly TaskCheckFact[]): TaskCheckFact[] {
+export function hostFacts(facts: readonly TaskCheckFact[]): TaskCheckFact[] {
 	return facts.filter((fact) => fact.source === "host_receipt");
 }
 
@@ -133,9 +183,15 @@ export function projectCheckObservation(
 
 export function projectCoverage(facts: readonly TaskCheckFact[]): TaskResultCoverage {
 	const host = hostFacts(facts);
+	const receipts = new Set<string>();
+	for (const fact of host) {
+		for (const attempt of fact.attempts ?? []) if (attempt.receiptId) receipts.add(attempt.receiptId);
+		if (fact.receiptId) receipts.add(fact.receiptId);
+	}
 	return {
 		checksRun: host.filter((fact) => fact.status === "passed" || fact.status === "failed").length,
-		checksTotal: host.length,
+		checksTotal: host.length === 0 ? "unknown" : host.length,
+		receiptsObserved: receipts.size,
 	};
 }
 
@@ -166,7 +222,18 @@ export interface GoalAcceptanceFactOptions {
 	readonly currentWorkspaceSha256?: string;
 	/** Tests the check matched, when the runner reports it; 0 is never a pass. */
 	readonly matchedTests?: number;
+	/** Spec 100: tests that ran (passed or failed); 0 is never a pass. */
+	readonly executedTests?: number;
+	readonly skippedTests?: number;
+	readonly checkKind?: CheckKind;
+	readonly checkId?: string;
+	readonly checkRevision?: number;
+	readonly attempt?: number;
 	readonly required?: boolean;
+}
+
+function countOf(value: number | undefined): TaskTestCount {
+	return value === undefined ? "unknown" : value;
 }
 
 /** One host fact from a goal acceptance receipt. */
@@ -174,11 +241,25 @@ export function factFromGoalAcceptance(
 	result: Pick<GoalAcceptanceResult, "receiptId" | "status" | "passed" | "workspace">,
 	options: GoalAcceptanceFactOptions = {},
 ): TaskCheckFact {
+	const testRunner = options.checkKind === "test_runner";
 	const base = {
-		id: `goal-acceptance:${result.receiptId}`,
+		id: options.checkId ?? `goal-acceptance:${result.receiptId}`,
 		source: "host_receipt" as const,
 		required: options.required ?? true,
 		receiptId: result.receiptId,
+		...(options.checkId !== undefined ? { checkId: options.checkId } : {}),
+		...(options.checkRevision !== undefined ? { checkRevision: options.checkRevision } : {}),
+		...(options.attempt !== undefined ? { attempt: options.attempt } : {}),
+		...(options.checkKind !== undefined ? { checkKind: options.checkKind } : {}),
+		...(testRunner
+			? {
+					tests: {
+						executed: countOf(options.executedTests),
+						matched: countOf(options.matchedTests),
+						skipped: countOf(options.skippedTests),
+					},
+				}
+			: {}),
 	};
 	switch (result.status) {
 		case "failed":
@@ -194,7 +275,11 @@ export function factFromGoalAcceptance(
 	if (completeness === "unavailable") return { ...base, status: "insufficient", reason: "unavailable" };
 	if (completeness !== "complete") return { ...base, status: "insufficient", reason: "partial" };
 	if (!result.passed) return { ...base, status: "insufficient", reason: "gate_closed" };
-	if (options.matchedTests === 0) return { ...base, status: "insufficient", reason: "zero_tests" };
+	if (options.matchedTests === 0 || options.executedTests === 0)
+		return { ...base, status: "insufficient", reason: "zero_tests" };
+	// Spec 100 decision 3: a test runner whose counts could not be read is never a pass.
+	if (testRunner && (options.matchedTests === undefined || options.executedTests === undefined))
+		return { ...base, status: "insufficient", reason: "unverified_counts" };
 	if (options.currentWorkspaceSha256 !== undefined && options.currentWorkspaceSha256 !== result.workspace.sha256)
 		return { ...base, status: "insufficient", reason: "stale" };
 	return { ...base, status: "passed" };
@@ -249,18 +334,4 @@ export function claimFromModelText(text: string): TaskModelClaim | undefined {
 	if (pass) return { source: "model_text", says: "passed", text: boundClaim(text) };
 	if (hasZeroFail) return { source: "model_text", says: "unknown", text: boundClaim(text) };
 	return undefined;
-}
-
-// ---------------------------------------------------------------------------
-// Surface renderers. Every surface renders the same projection object (B1).
-
-/** One line for print text mode and the TUI. */
-export function formatTaskResultLine(projection: TaskResultProjection): string {
-	const { checksRun, checksTotal } = projection.coverage;
-	return `task result: execution ${projection.execution}, check ${projection.check} (${projection.checkSource}), checks ${checksRun}/${checksTotal}`;
-}
-
-/** The RPC / print-json line: the event itself, serialized once. */
-export function serializeTaskResultEvent(event: TaskResultEvent): string {
-	return JSON.stringify(event);
 }

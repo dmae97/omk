@@ -722,13 +722,16 @@ describe("AgentSession compaction characterization", () => {
 		await expect(sessionInternals._runAutoCompaction("threshold", false)).resolves.toBe(true);
 	});
 
-	it("does not retry overflow recovery more than twice", async () => {
+	it.each([
+		"prompt is too long",
+		"Prompt input exceeds the safe model context window (estimated=658105, limit=656800).",
+	])("does not retry overflow recovery more than twice: %s", async (errorMessage) => {
 		const harness = await createHarness();
 		harnesses.push(harness);
 		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
 		const overflowMessage = createAssistant(harness, {
 			stopReason: "error",
-			errorMessage: "prompt is too long",
+			errorMessage,
 			timestamp: Date.now(),
 		});
 		const runAutoCompactionSpy = vi.spyOn(sessionInternals, "_runAutoCompaction").mockResolvedValue(false);
@@ -952,6 +955,36 @@ describe("AgentSession compaction characterization", () => {
 		const compactionEntries = harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction");
 		expect(compactionEntries).toHaveLength(1);
 		expect(compactionEntries[0]).toMatchObject({ summary: "projected compacted" });
+		expect(harness.faux.state.callCount).toBe(1);
+	});
+
+	it("admits the compacted context when the wall clock steps backward before compaction", async () => {
+		// WSL2 hypervisor resyncs were observed stepping the wall clock back ~6.8s between turns.
+		const seededAt = Date.parse("2026-10-26T05:44:37.336Z");
+		vi.useFakeTimers({ toFake: ["Date"] });
+		vi.setSystemTime(seededAt);
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, reserveTokens: 1000, keepRecentTokens: 1 } },
+			models: [{ id: "faux-1", contextWindow: 200_000 }],
+			extensionFactories: [extensionSummary("compacted after clock step")],
+		});
+		harnesses.push(harness);
+		harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "seed" }],
+			timestamp: seededAt - 1000,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 179_990, timestamp: seededAt }),
+		);
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+		harness.setResponses([fauxAssistantMessage("after clock step")]);
+
+		vi.setSystemTime(seededAt - 6_755);
+		await expect(harness.session.prompt("x".repeat(80))).resolves.toBeUndefined();
+
+		const compactionEntries = harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction");
+		expect(compactionEntries).toHaveLength(1);
 		expect(harness.faux.state.callCount).toBe(1);
 	});
 

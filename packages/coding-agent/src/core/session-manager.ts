@@ -13,6 +13,7 @@ import {
 	createSessionRevisionToken,
 	type SessionRevisionToken,
 } from "./compaction/transaction.ts";
+import { compactionTimestamp } from "./compaction-entry-time.ts";
 import { acquireDurableFileMutationLockSync } from "./durable-file-identity.ts";
 import { appendFileDurablySync, ensureDurableDirectorySync } from "./durable-file-io.ts";
 import { enforcePrivateFileModeSync } from "./durable-file-mode.ts";
@@ -46,6 +47,7 @@ import {
 import { assertSessionOwnerRecoveryAllowedUnlockedSync, type SessionOwnerLease } from "./session-owner-lease.ts";
 
 export { SessionManagerStaleWriteError };
+export { getLatestCompactionEntry } from "./compaction-entry-time.ts";
 export type { SessionListEntry, SessionMetadata } from "./session-listing.ts";
 export type { SessionQuarantineReport };
 
@@ -298,15 +300,6 @@ export function parseSessionEntries(content: string): FileEntry[] {
 	}
 
 	return entries;
-}
-
-export function getLatestCompactionEntry(entries: SessionEntry[]): CompactionEntry | null {
-	for (let i = entries.length - 1; i >= 0; i--) {
-		if (entries[i].type === "compaction") {
-			return entries[i] as CompactionEntry;
-		}
-	}
-	return null;
 }
 
 /**
@@ -1030,7 +1023,8 @@ export class SessionManager {
 			type: "compaction",
 			id: generateId(this.byId),
 			parentId: this.leafId,
-			timestamp: new Date().toISOString(),
+			// Never older than a covered message, even after a backward wall-clock step.
+			timestamp: compactionTimestamp(Date.now(), this.getBranch()),
 			summary,
 			firstKeptEntryId,
 			tokensBefore,

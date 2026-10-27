@@ -46,11 +46,12 @@ function startMockServer(bodies: string[]): Promise<Server> {
 }
 
 const CASES = [
-	{ label: "flag unset", env: {}, loaded: false },
 	{ label: "flag 0", env: { OMK_ADAPTIVE_EFFORT: "0" }, loaded: false },
-	{ label: "flag true (only exactly 1 is on)", env: { OMK_ADAPTIVE_EFFORT: "true" }, loaded: false },
-	// Control: the counters do see the modules when the flag is on.
-	{ label: "flag 1 (control)", env: { OMK_ADAPTIVE_EFFORT: "1" }, loaded: true },
+	{ label: "flag false", env: { OMK_ADAPTIVE_EFFORT: "false" }, loaded: false },
+	{ label: "flag off", env: { OMK_ADAPTIVE_EFFORT: "off" }, loaded: false },
+	// Default on: the counters see the modules when unset or 1.
+	{ label: "flag unset (default on)", env: {}, loaded: true },
+	{ label: "flag 1", env: { OMK_ADAPTIVE_EFFORT: "1" }, loaded: true },
 ];
 
 describe("adaptive effort cold path (spec 037 R2.2)", () => {

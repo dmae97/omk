@@ -199,36 +199,10 @@ export interface EvidenceOutputCapture {
 	readonly stderr: EvidenceOutputDigest;
 }
 
-/** CLI form that produced one or more `[REDACTED]` placeholders in a persisted command. */
-export type CommandRedactionPlaceholderType =
-	| "api-key-header"
-	| "authorization-header"
-	| "basic-auth"
-	| "bearer-token"
-	| "cli-option-inline"
-	| "cli-option-value"
-	| "cookie-header"
-	| "env-assignment"
-	| "known-token"
-	| "url-credential"
-	| "url-query";
-
-export interface CommandRedactionPlaceholder {
-	readonly type: CommandRedactionPlaceholderType;
-	readonly count: number;
-}
-
-/** Bounded description of the placeholders applied to a persisted redacted command. */
-export interface CommandRedactionSummary {
-	readonly policyId: string;
-	/** Unique types in ascending order; empty when nothing was redacted. */
-	readonly placeholders: readonly CommandRedactionPlaceholder[];
-}
-
 /**
- * Keyed commitment to the original (pre-redaction) command. The HMAC key is
- * process-internal and never persisted or exported, so this value is not
- * verifiable (and not brute-forceable) outside the executing trust boundary.
+ * Legacy keyed commitment from the removed command credential redaction
+ * feature. New receipts never create one; the field remains readable so old
+ * v3 receipts keep their original core digest.
  */
 export interface CommandHmacBinding {
 	readonly algorithm: "hmac-sha256";
@@ -266,9 +240,9 @@ export interface EvidenceReceiptCoreFields {
 	readonly output: EvidenceOutputCapture;
 	readonly executor: EvidenceExecutor;
 	readonly toolCallId?: string;
-	/** Redaction metadata for the persisted `command` representation. */
-	readonly commandRedaction?: CommandRedactionSummary;
-	/** Keyed binding of the ORIGINAL command; required when placeholders were applied. */
+	/** @deprecated Legacy metadata from the removed command credential redaction feature. */
+	readonly commandRedaction?: unknown;
+	/** @deprecated Legacy keyed binding from the removed command credential redaction feature. */
 	readonly commandBinding?: CommandHmacBinding;
 }
 

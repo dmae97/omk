@@ -16,7 +16,6 @@ import type {
 	VerifiedReplayLedgerSnapshot,
 	WorkspaceScope,
 } from "../types/evidence.ts";
-import { redactCommandDescriptor } from "./command-redaction.ts";
 import {
 	type CommandHmacBinder,
 	latestRelevantWorkspaceMutationSeq,
@@ -503,11 +502,8 @@ function receiptIssue(
 		const attestationIssue = verifyCommandAttestation({
 			receiptId: receipt.core.receiptId,
 			binding: receipt.core.commandBinding,
-			persistedCommand: receipt.core.command,
-			persistedSummary: receipt.core.commandRedaction,
 			binder: options.commandAttestationBinder,
 			resolveCommand: options.resolveAttestedCommand,
-			redact: redactCommandDescriptor,
 		});
 		if (attestationIssue !== undefined) {
 			return receiptCheckIssue(

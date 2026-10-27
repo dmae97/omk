@@ -8,6 +8,7 @@ export * from "./images.ts";
 export * from "./images-api-registry.ts";
 export * from "./models.ts";
 export * from "./pi-compat.ts";
+export * from "./prompt-cache-capability.ts";
 export type { BedrockOptions, BedrockThinkingDisplay } from "./providers/amazon-bedrock.ts";
 export type { AnthropicEffort, AnthropicOptions, AnthropicThinkingDisplay } from "./providers/anthropic.ts";
 export type { AzureOpenAIResponsesOptions } from "./providers/azure-openai-responses.ts";
@@ -40,6 +41,7 @@ export {
 export * from "./session-resources.ts";
 export * from "./stream.ts";
 export * from "./types.ts";
+export * from "./usage-share.ts";
 export * from "./utils/claude-code-identity.ts";
 export * from "./utils/diagnostics.ts";
 export * from "./utils/event-stream.ts";

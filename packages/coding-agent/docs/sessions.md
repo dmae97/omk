@@ -26,7 +26,7 @@ omk sdk session inspect [id]
 omk sdk session send <id> "message"
 ```
 
-Without `--live`, `send` requires an exact session ID and appends only when the session has no active owner; it does not execute the message. An explicitly enrolled owner (`OMK_SESSION_CONTROL=1`) also supports `send <id> "text" --live`, `status <id> --live` and `abort <id> --live` over private local IPC. Live failures never fall back to appending. See [Local live session control](#local-live-session-control) and [SDK](sdk.md#inspect-persisted-sessions-from-the-cli).
+Without `--live`, `send` requires an exact session ID and appends only when the session has no active owner; it does not execute the message. An enrolled owner (`OMK_SESSION_CONTROL`, default on; `0`/`false`/`off` opts out) also supports `send <id> "text" --live`, `status <id> --live` and `abort <id> --live` over private local IPC. Live failures never fall back to appending. See [Local live session control](#local-live-session-control) and [SDK](sdk.md#inspect-persisted-sessions-from-the-cli).
 
 Opt-in [project source-quote memory](#project-source-quote-memory) can carry explicitly pinned evidence across sessions in the same workspace. Recall revalidates the source on every model request and does not persist its tool-data projection in the transcript.
 
@@ -34,8 +34,10 @@ For the JSONL file format and SessionManager API, see [Session Format](session-f
 
 ## Local live session control
 
-Experimental, opt-in POSIX control of an already-running persisted session. Start
-its owner with `OMK_SESSION_CONTROL=1 omk`, or call `await session.startControl()`
+Experimental POSIX control of an already-running persisted session. The CLI enrolls
+its owner by default (`OMK_SESSION_CONTROL=0` opts out; when unset, a session that cannot
+enroll, such as `--no-session` or Windows, simply runs without control, while an explicit
+`OMK_SESSION_CONTROL=1` still fails startup), or call `await session.startControl()`
 from the SDK. No configuration file is changed. An ephemeral session cannot enroll.
 Once a message has persisted, use the exact session ID:
 
@@ -104,7 +106,7 @@ console.log(session.memoryStatus); // counts/state, never quote text
 if (admission.verdict === "accept") await session.forgetMemory(admission.recordId);
 ```
 
-Recall requires `OMK_VERIFIED_MEMORY=1` and Context Budget V2 (global
+Recall requires `OMK_VERIFIED_MEMORY` (default on; `0` opts out) and Context Budget V2 (global
 `contextBudget.enabled` or `OMK_CONTEXT_GOVERNOR=1`). Both remain opt-in; no setting
 or environment file is changed. Each provider request, including tool continuations,
 rechecks source digest/span, workspace identity, expiry and revocation. The V2

@@ -37,6 +37,7 @@ import { isCloudflareProvider, resolveCloudflareBaseUrl } from "./cloudflare.ts"
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import { getCompat, isModelStudioModel, type ResolvedOpenAICompletionsCompat } from "./openai-completions-compat.ts";
 import { parseChunkUsage } from "./openai-completions-usage.ts";
+import { fetchWithProviderErrorEnvelope } from "./openai-error-envelope.ts";
 import { resolveOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
 import { openAICompletionStopReason as mapStopReason } from "./provider-stop-reasons.ts";
 import { buildBaseOptions } from "./simple-options.ts";
@@ -495,6 +496,8 @@ function createClient(
 		baseURL: isCloudflareProvider(model.provider) ? resolveCloudflareBaseUrl(model) : model.baseUrl,
 		dangerouslyAllowBrowser: true,
 		defaultHeaders,
+		// WorkBuddy's `{ code, msg }` error body would otherwise read "(no body)".
+		fetch: model.provider === "workbuddy" ? fetchWithProviderErrorEnvelope : undefined,
 	});
 }
 

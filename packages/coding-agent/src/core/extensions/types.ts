@@ -484,6 +484,8 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 	timeoutMs?: number;
 	/** Resolve a per-call timeout; `undefined` falls back to `timeoutMs` or settings. */
 	resolveTimeoutMs?: (ctx: ExtensionContext) => number | undefined;
+	/** Argument-dependent timeout, below the static/context timeout and above settings. */
+	resolveCallTimeoutMs?: AgentTool<TParams, TDetails>["resolveCallTimeoutMs"];
 
 	/** Execute the tool. */
 	execute(

@@ -184,7 +184,7 @@ async function main(): Promise<void> {
 	for (let turn = 1; turn <= args.turns; turn++) {
 		context.messages.push({ role: "user", content: buildPrompt(turn), timestamp: Date.now() });
 		const beforeStats = getOpenAICodexWebSocketDebugStats(args.sessionId);
-		const started = Date.now();
+		const started = performance.now();
 		let requests = 0;
 		let assistantCount = 0;
 		let toolResults = 0;
@@ -237,7 +237,7 @@ async function main(): Promise<void> {
 			if (requests > 4) throw new Error(`Too many requests for turn ${turn}`);
 		}
 
-		const elapsedMs = Date.now() - started;
+		const elapsedMs = Math.round(performance.now() - started);
 		elapsed.push(elapsedMs);
 		const afterStats = getOpenAICodexWebSocketDebugStats(args.sessionId);
 		const statLine = afterStats

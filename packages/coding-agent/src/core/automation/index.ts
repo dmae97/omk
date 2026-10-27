@@ -889,6 +889,33 @@ export function canonicalHash(value: unknown): string {
 	return sha256(stableStringify(value));
 }
 
+/**
+ * @deprecated Kept for 1.5.x compatibility with the v1.5.4 export; removed in 2.0.0.
+ * omk itself no longer calls this. Behavior matches v1.5.4.
+ */
+export function redactForModel(value: unknown): unknown {
+	if (typeof value === "string") return redactString(value);
+	if (Array.isArray(value)) return value.map((item) => redactForModel(item));
+	if (isRecord(value)) {
+		const out: Record<string, unknown> = {};
+		for (const [key, child] of Object.entries(value)) {
+			out[key] =
+				classifyEnvKey(key, typeof child === "string" ? child : "") === "public"
+					? redactForModel(child)
+					: "[REDACTED]";
+		}
+		return out;
+	}
+	return value;
+}
+
+function redactString(value: string): string {
+	return value
+		.replace(/Bearer\s+[A-Za-z0-9._~+/=-]{8,}/g, "Bearer [REDACTED]")
+		.replace(/([?&]?(?:access_)?token=)[^&\s]+/gi, "$1[REDACTED]")
+		.replace(/((?:api[_-]?key|password|secret)=)[^&\s]+/gi, "$1[REDACTED]");
+}
+
 function booleanResult(pass: boolean, kind: string, description: string): VerificationResult {
 	return {
 		pass,

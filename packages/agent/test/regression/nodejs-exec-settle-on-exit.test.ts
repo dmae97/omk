@@ -24,9 +24,9 @@ describe("NodeExecutionEnv exec settles on exit, not close", () => {
 		"resolves promptly when a background child inherits the stdio pipes",
 		async () => {
 			const env = new NodeExecutionEnv({ cwd: createTempDir() });
-			const start = Date.now();
+			const start = performance.now();
 			const result = getOrThrow(await env.exec("printf started; sleep 2 & exit 0"));
-			const elapsed = Date.now() - start;
+			const elapsed = performance.now() - start;
 			expect(result.exitCode).toBe(0);
 			expect(result.stdout).toBe("started");
 			// Without the fix this waits for the backgrounded sleep (~2000 ms) to release
@@ -39,11 +39,11 @@ describe("NodeExecutionEnv exec settles on exit, not close", () => {
 		"bounds timeout settlement even when a descendant escapes the process group",
 		async () => {
 			const env = new NodeExecutionEnv({ cwd: createTempDir() });
-			const start = Date.now();
+			const start = performance.now();
 			// The setsid'd child escapes killProcessTree's process-group SIGKILL and keeps
 			// the inherited pipes open; the shell itself is killed by the timeout.
 			const result = await env.exec("setsid sleep 5 & sleep 10", { timeout: 0.3 });
-			const elapsed = Date.now() - start;
+			const elapsed = performance.now() - start;
 			expect(result.ok).toBe(false);
 			if (!result.ok) expect(result.error).toMatchObject({ code: "timeout" });
 			// Without the fix this resolves only when the escaped sleep exits (~5000 ms);

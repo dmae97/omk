@@ -1,0 +1,2 @@
+import { Agent } from "@mariozechner/pi-agent-core";
+export const a = Agent;

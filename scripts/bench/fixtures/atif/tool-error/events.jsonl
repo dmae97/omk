@@ -1,0 +1,11 @@
+{"type":"session","version":3,"id":"sess-err","timestamp":"2026-10-23T03:00:00.000Z","cwd":"/app"}
+{"type":"agent_start"}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"Fix x.ts"}],"timestamp":1792000001000}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"toolCall","id":"call_e","name":"edit","arguments":{"path":"x.ts","oldText":"a","newText":"b"}}],"api":"openai-responses","provider":"openai","model":"gpt-5","usage":{"input":100,"output":20,"cacheRead":50,"cacheWrite":5,"totalTokens":175,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"toolUse","timestamp":1792000002000}}
+{"type":"tool_execution_start","toolCallId":"call_e","toolName":"edit","args":{"path":"x.ts","oldText":"a","newText":"b"}}
+{"type":"tool_execution_update","toolCallId":"call_e","toolName":"edit","args":{"path":"x.ts","oldText":"a","newText":"b"},"partialResult":{"content":[]}}
+{"type":"tool_execution_end","toolCallId":"call_e","toolName":"edit","result":{"content":[{"type":"text","text":"oldText not found"}],"details":{"exitCode":1}},"isError":true}
+{"type":"message_start","message":{"role":"toolResult","toolCallId":"call_e","toolName":"edit","content":[{"type":"text","text":"oldText not found"}],"isError":true,"timestamp":1792000003000}}
+{"type":"message_end","message":{"role":"toolResult","toolCallId":"call_e","toolName":"edit","content":[{"type":"text","text":"oldText not found"}],"isError":true,"timestamp":1792000003000}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"The edit failed; stopping."}],"api":"openai-responses","provider":"openai","model":"gpt-5","usage":{"input":100,"output":20,"cacheRead":50,"cacheWrite":5,"totalTokens":175,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1792000004000}}
+{"type":"session_termination","termination":{"kind":"error","message":"stopped"}}

@@ -5,6 +5,8 @@ an operator's personal configuration, install skills, or enable external service
 
 ## Initialize an installed OMK
 
+### Global user context
+
 ```bash
 omk init --global --dry-run
 omk init --global
@@ -15,6 +17,23 @@ The second creates missing documents in `~/.omk/agent/`. Both are offline and re
 before migrations, settings, credentials, sessions, extensions, and model startup.
 There is no install hook: installing or updating the npm package does not alter
 user instructions, including when installed with `--ignore-scripts`.
+
+### Project context
+
+```bash
+omk init --project --dry-run
+omk init --project
+```
+
+Project setup creates the standard document set in the current working directory:
+`AGENTS.md`, `CLAUDE.md`, `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `RULES.md`,
+`TASKS.md`, and `PROGRESS.md`. It never overwrites existing documents.
+
+A bare `omk` launch with no arguments also runs this setup when the current directory
+is the root of an otherwise empty Git repository, meaning it contains only `.git`.
+This default bootstrap does not run for non-Git directories, non-empty repositories,
+subdirectories, or commands with arguments. Set `OMK_PROJECT_CONTEXT_BOOTSTRAP=0`
+to disable it. Use explicit `init --project` for other empty directories.
 
 Choose another user config directory with the existing environment override:
 
@@ -27,9 +46,9 @@ Use the same override when starting OMK. PowerShell users can set
 `$env:OMK_CODING_AGENT_DIR` before running the commands. Paths with spaces and
 non-ASCII characters are supported. The destination must be a real directory,
 not a file or symlink; parent directories should be trusted and user-controlled.
-New files use owner-only permissions on POSIX. Existing directory modes are unchanged.
+New global files use owner-only permissions on POSIX. Project files use mode `0644` subject to the process umask. Existing directory modes are unchanged.
 
-`--global` is required; `init` without a scope or with unsupported flags exits `2`.
+Exactly one of `--global` or `--project` is required; `init` without a scope, with both scopes, or with unsupported flags exits `2`.
 `--help` exits `0`. Setup and preservation succeed with `0`; file or template errors
 exit `1`. `--offline` is accepted but not needed for this command.
 
@@ -40,20 +59,28 @@ exit `1`. `--offline` is accepted but not needed for this command.
 | `AGENTS.md` | Work, verification, permissions, skills, runtime identity | Preferred global context entry point |
 | `INTERNET.md` | Source selection, freshness, citations, network permissions | Read on demand when web work is needed |
 | `CLAUDE.md` | Thin interoperability entry point referring to `AGENTS.md` | OMK fallback; another host needs explicit configuration |
+| `PRD.md` | Product goals, users, requirements, and non-goals | Automatic project context |
+| `ARCHITECTURE.md` | Stack, folders, interfaces, and data flow | Automatic project context |
+| `DESIGN.md` | Visual language, components, accessibility, and interaction intent | Automatic project context |
+| `RULES.md` | Coding style, verification rules, and prohibited actions | Automatic project context |
+| `TASKS.md` | Small ordered work items and acceptance conditions | Automatic project context |
+| `PROGRESS.md` | Verified outcomes, current failures, and next steps | Automatic project context |
 
 OMK's entry-point search order within each directory is `AGENTS.md`, `AGENTS.MD`,
-`CLAUDE.md`, then `CLAUDE.MD`; only the first readable file is used. Global context
-loads before ancestor and working-directory context. Markdown links and Claude Code
-`@` imports are not expanded by OMK. `INTERNET.md` and `SOUL.md` are not automatically
-loaded by filename. The starter `AGENTS.md` tells the agent to read `INTERNET.md`
-when relevant, so ordinary coding tasks do not carry the whole web guide.
+`CLAUDE.md`, then `CLAUDE.MD`; only the first readable file is used. During the same
+ancestor walk, OMK also loads `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `RULES.md`,
+`TASKS.md`, and `PROGRESS.md` once each. Global context loads before ancestor and
+working-directory context. Markdown links and Claude Code `@` imports are not expanded
+by OMK. `INTERNET.md` and `SOUL.md` are not automatically loaded by filename. The starter
+`AGENTS.md` tells the agent to read `INTERNET.md` when relevant, so ordinary coding tasks
+do not carry the whole web guide.
 
 Existing compatibility files `AGENTS.override.md`, `AGENTS.GODMODE.md`, `GODMODE.md`,
 and `ENI.override.md` are also discovered in global and ancestor directories.
 Setup does not generate, import, modify, or delete them. Review old files yourself
 when migrating: installing a new guide does not retire an old override.
 
-`--no-context-files` disables discovery. Claude models inside OMK omit discovered
+`--no-context-files` disables entry-point, override, and standard project document discovery. Claude models inside OMK omit discovered
 context by default; `OMK_CLAUDE_CONTEXT_FILES=1` restores it. Setup does not change
 that provider behavior or write the environment override. See [Usage](usage.md#context-files)
 and [Environment variables](environment-variables.md).
@@ -82,7 +109,7 @@ and [Settings](settings.md). Neither a skill nor a markdown policy grants tool a
 
 ## Distribution and interoperability
 
-The templates live in [`examples/context/`](../examples/context/) inside the package.
+The global templates live in [`examples/context/`](../examples/context/) and project templates in `examples/project-context/` inside the package.
 Existing npm `files` and binary asset-copy rules include `examples/`; the initializer
 resolves that directory from the installed package, not from a developer's checkout.
 `OMK_PACKAGE_DIR` retains its documented package-root override.

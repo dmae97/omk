@@ -11,6 +11,7 @@ import {
 	TURN_METRICS_SCHEMA_VERSION,
 	type TurnMetricInput,
 	TurnMetricsSink,
+	turnUsageMetricFromUsage,
 } from "../src/core/turn-metrics.ts";
 
 let dir: string;
@@ -147,8 +148,122 @@ describe("turn metrics summary", () => {
 		expect(summary.models).toEqual(["anthropic/claude-sonnet-4-5"]);
 		expect(summary.totals.output).toBe(50);
 		expect(summary.totalCostUsd).toBeCloseTo(0.0225, 6);
-		// cacheRead 1000 of (input 200 + cacheRead 1000)
-		expect(summary.cacheReadShare).toBeCloseTo(1000 / 1200, 6);
+		// cacheRead 1000 of (input 200 + cacheRead 1000 + cacheWrite 10)
+		expect(summary.cacheReadShare).toBeCloseTo(1000 / 1210, 6);
+	});
+
+	it("uses input + cacheRead + cacheWrite as the denominator (input 100, read 800, write 100 = 80%)", () => {
+		const summary = summarizeTurnMetrics(
+			lines([turn({ usage: { input: 100, output: 1, cacheRead: 800, cacheWrite: 100, costUsd: 0 } })]),
+		);
+		expect(summary.cacheReadShare).toBe(0.8);
+		expect(renderStatsReport(summary, "/tmp/turns.jsonl").join("\n")).toContain("cache read share 80.0%");
+	});
+
+	it("keeps the previous share when cache write is 0", () => {
+		const summary = summarizeTurnMetrics(
+			lines([turn({ usage: { input: 11, output: 1, cacheRead: 989, cacheWrite: 0, costUsd: 0 } })]),
+		);
+		expect(summary.cacheReadShare).toBeCloseTo(0.989, 12);
+	});
+
+	it("records an unreported cacheWrite as unknown and excludes it from cache share", () => {
+		const metric = turnUsageMetricFromUsage({
+			input: 200,
+			output: 1,
+			cacheRead: 800,
+			cacheWrite: 0,
+			cacheWriteUnknown: true,
+			cost: { total: 0 },
+		});
+		expect(metric.cacheWrite).toBeUndefined();
+		const summary = summarizeTurnMetrics(
+			lines([
+				turn({ turnIndex: 0, usage: { input: 100, output: 1, cacheRead: 800, cacheWrite: 100, costUsd: 0 } }),
+				turn({ turnIndex: 1, usage: metric }),
+			]),
+		);
+		expect(summary.usageCoverage.turnsMissingCacheWrite).toBe(1);
+		expect(summary.cacheReadShare).toBe(0.8);
+		expect(summary.totals.cacheWrite).toBe(100);
+		expect(renderStatsReport(summary, "/tmp/turns.jsonl").join("\n")).toContain("1 missing cacheWrite");
+		expect(summary.cacheReadShareCoverage).toEqual({ turnsUsed: 1, turnsTotal: 2, turnsMissingCacheWrite: 1 });
+		const report = renderStatsReport(summary, "/tmp/turns.jsonl").join("\n");
+		expect(report).toContain("cache read share 80.0%");
+		expect(report).toContain("coverage 1/2 turns (1/2 missing cacheWrite)");
+	});
+
+	it("labels the estimated cost a lower bound when a turn has unknown cacheWrite", () => {
+		const unknown = turnUsageMetricFromUsage({
+			input: 1,
+			output: 1,
+			cacheRead: 0,
+			cacheWrite: 0,
+			cacheWriteUnknown: true,
+			cost: { total: 0.25 },
+		});
+		const summary = summarizeTurnMetrics(
+			lines([
+				turn({ turnIndex: 0, usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, costUsd: 0.5 } }),
+				turn({ turnIndex: 1, usage: unknown }),
+			]),
+		);
+		expect(summary.costIsLowerBound).toBe(true);
+		const report = renderStatsReport(summary, "/tmp/turns.jsonl").join("\n");
+		expect(report).toContain("estimated ≥ $0.7500 (price table; 하한/lower bound");
+	});
+
+	it("does not mark cost as a lower bound and shows full coverage when all cacheWrites are reported", () => {
+		const summary = summarizeTurnMetrics(
+			lines([turn({ usage: { input: 100, output: 1, cacheRead: 800, cacheWrite: 100, costUsd: 0.1 } })]),
+		);
+		expect(summary.costIsLowerBound).toBe(false);
+		const report = renderStatsReport(summary, "/tmp/turns.jsonl").join("\n");
+		expect(report).toContain("coverage 1/1 turns (0/1 missing cacheWrite)");
+		expect(report).toContain("estimated $0.1000 (price table)");
+		expect(report).not.toContain("하한");
+	});
+
+	it("keeps a reported cacheWrite of 0 as covered", () => {
+		const metric = turnUsageMetricFromUsage({
+			input: 200,
+			output: 1,
+			cacheRead: 800,
+			cacheWrite: 0,
+			cost: { total: 0 },
+		});
+		expect(metric.cacheWrite).toBe(0);
+		const summary = summarizeTurnMetrics(lines([turn({ usage: metric })]));
+		expect(summary.usageCoverage.turnsMissingCacheWrite).toBe(0);
+		expect(summary.cacheReadShare).toBe(0.8);
+	});
+
+	it("separates estimated and billed cost and reports usage coverage", () => {
+		const summary = summarizeTurnMetrics(
+			lines([
+				turn({ turnIndex: 0, usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, costUsd: 0.5 } }),
+				turn({
+					turnIndex: 1,
+					provider: "xai",
+					usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, costUsd: 0.2, billedUsd: 0.3 },
+				}),
+				turn({ turnIndex: 2, usage: undefined }),
+			]),
+		);
+		expect(summary.totalCostUsd).toBeCloseTo(0.7, 12);
+		expect(summary.billedCostUsd).toBeCloseTo(0.3, 12);
+		expect(summary.billedTurns).toBe(1);
+		expect(summary.usageCoverage).toEqual({
+			turnsWithUsage: 2,
+			turnsMissingUsage: 1,
+			turnsMissingCacheWrite: 0,
+			unverifiedProviders: ["xai"],
+		});
+		const report = renderStatsReport(summary, "/tmp/turns.jsonl").join("\n");
+		expect(report).toContain("estimated $0.7000 (price table)");
+		expect(report).toContain("billed $0.3000 (provider-reported, 1 turn(s))");
+		expect(report).toContain("1 missing usage");
+		expect(report).toContain("미검증 (unverified input semantics): xai");
 	});
 
 	it("computes per-tool failure rate and latency percentiles", () => {

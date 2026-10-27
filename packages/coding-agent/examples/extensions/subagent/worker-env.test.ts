@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import { subagentWorkerEnv } from "./worker-env.ts";
 
 describe("subagentWorkerEnv", () => {
+	it("passes the spawning session id only when the run log is on, never inherited", () => {
+		const on = subagentWorkerEnv(
+			{ OMK_RUN_LOG_DIR: "/tmp/rl", OMK_RUN_LOG_PARENT_SESSION: "old" },
+			undefined,
+			"lead-1",
+		);
+		expect(on.OMK_RUN_LOG_PARENT_SESSION).toBe("lead-1");
+		expect(on.OMK_RUN_LOG_ROLE).toBe("worker");
+		expect(
+			subagentWorkerEnv({ OMK_RUN_LOG_DIR: "/tmp/rl", OMK_RUN_LOG_PARENT_SESSION: "old" })
+				.OMK_RUN_LOG_PARENT_SESSION,
+		).toBeUndefined();
+		expect(subagentWorkerEnv({}, undefined, "lead-1").OMK_RUN_LOG_PARENT_SESSION).toBeUndefined();
+	});
+
 	it("turns the finish check off for workers and keeps lead-only settings out", () => {
 		const env = subagentWorkerEnv({
 			PATH: "/bin",

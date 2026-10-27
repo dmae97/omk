@@ -103,12 +103,12 @@ describe("captureHostResourceSnapshot", () => {
 	});
 
 	it("times out a hanging disk probe within the preflight deadline (§6.3)", async () => {
-		const startedAt = Date.now();
+		const startedAt = performance.now();
 		const snapshot = await captureHostResourceSnapshot({
 			maxProbeMs: 60,
 			io: healthyIo({ statfs: () => new Promise(() => {}) }),
 		});
-		expect(Date.now() - startedAt).toBeLessThan(2000);
+		expect(performance.now() - startedAt).toBeLessThan(2000);
 		expect(snapshot.workspaceAvailableBytes).toBeNull();
 		expect(snapshot.diagnostics).toContain("probe.disk.timeout");
 	});

@@ -1,0 +1,38 @@
+TAP version 13
+# Subtest: ok
+ok 1 - ok
+  ---
+  duration_ms: 0.532626
+  type: 'test'
+  ...
+# Subtest: broken
+not ok 2 - broken
+  ---
+  duration_ms: 0.535482
+  type: 'test'
+  location: '/tmp/fx100/n/b.test.mjs:2:23'
+  failureType: 'testCodeFailure'
+  error: '1 == 2'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 2
+  actual: 1
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///tmp/fx100/n/b.test.mjs:2:51)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 1
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 43.777478

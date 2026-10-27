@@ -35,6 +35,16 @@ export interface TruncationResult {
 	maxLines: number;
 	/** The max bytes limit that was applied */
 	maxBytes: number;
+	/** Spec 113 (`OMK_EXEC_TRUNCATE_MIDDLE=1`, bash only): set when head + marker + tail is shown. */
+	strategy?: "head-tail";
+	/** Spec 113: lines (1-based count from line 1) kept at the start; a partial line 1 counts as 1. */
+	headLines?: number;
+	/** Spec 113: decoded bytes kept at the start. */
+	headBytes?: number;
+	/** Spec 113: whole lines cut between head and tail. */
+	omittedLines?: number;
+	/** Spec 113: decoded bytes cut between head and tail. */
+	omittedBytes?: number;
 }
 
 export interface TruncationOptions {
@@ -255,7 +265,8 @@ export interface HeadTailTruncationResult {
 	maxBytes: number;
 }
 
-function truncateStringToBytesFromStart(str: string, maxBytes: number): string {
+/** UTF-8 safe byte prefix: never cuts inside a code point (so never ends on a lone high surrogate). */
+export function truncateStringToBytesFromStart(str: string, maxBytes: number): string {
 	const buf = Buffer.from(str, "utf-8");
 	if (buf.length <= maxBytes) return str;
 	let end = maxBytes;

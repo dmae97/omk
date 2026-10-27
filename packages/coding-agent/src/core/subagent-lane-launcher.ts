@@ -1,10 +1,13 @@
 import { assertLaneCap, snapshotLaneLaunchInput } from "./lane-input-snapshot.ts";
 import type { LaneOutcome } from "./subagent-lane-contract.ts";
+import { allLanesCompleted, createLaneFailureScope, laneFailureScopeEnabled } from "./subagent-lane-failure-scope.ts";
 import type { LaunchSubagentLanesInput } from "./subagent-lane-input.ts";
+import { observeLanePlan } from "./subagent-lane-plan-observe.ts";
+import { laneReadyFrontierEnabled, logReadyFrontier, runReadyFrontier } from "./subagent-lane-ready-frontier.ts";
 import type { SubagentOrchestrationPlan } from "./subagent-orchestration.ts";
 import { WorkloadPermitError } from "./workload-permit-pool.ts";
 
-export type { LaunchSubagentLanesInput, SubagentLaneContext } from "./subagent-lane-input.ts";
+export type { LaneOutcome, LaunchSubagentLanesInput, SubagentLaneContext } from "./subagent-lane-input.ts";
 
 /**
  * Subagent lane launch authority (OMK v0.97.x roadmap §14, M6/PR10).
@@ -53,12 +56,12 @@ export function computeEffectiveLaneWidth(input: EffectiveLaneWidthInput): numbe
 	return Number.isFinite(width) ? Math.max(0, Math.floor(width)) : 0;
 }
 
-export type { LaneOutcome };
-
 export interface LaunchSubagentLanesResult {
 	readonly outcomes: readonly LaneOutcome[];
 	readonly effectiveLaneWidth: number;
 	readonly maxObservedConcurrency: number;
+	/** True only when every lane completed (no false completion on partial progress). */
+	readonly allLanesCompleted: boolean;
 }
 
 /**
@@ -86,7 +89,7 @@ function computeHeavyAdmissionGate(
  * Never throws for lane failures; the caller reads per-lane outcomes.
  */
 export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Promise<LaunchSubagentLanesResult> {
-	const input = snapshotLaneLaunchInput(request);
+	const input = observeLanePlan(snapshotLaneLaunchInput(request));
 	const poolSnapshot = input.permitPool.snapshot();
 	const heavyAdmission = computeHeavyAdmissionGate(
 		poolSnapshot,
@@ -108,10 +111,47 @@ export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Pr
 	let hasUnsettled = false;
 	let active = 0;
 	let maxObservedConcurrency = 0;
+	const failureScope = createLaneFailureScope(input.plan, laneFailureScopeEnabled());
 
+	if (laneReadyFrontierEnabled() && effectiveLaneWidth > 0 && !input.signal?.aborted) {
+		// Spec 106 DG2: dependency-driven ready queue instead of the batch barrier.
+		const stats = await runReadyFrontier({
+			plan: input.plan,
+			width: effectiveLaneWidth,
+			failureScope,
+			signal: input.signal,
+			outcomes,
+			runLane: (laneId) =>
+				runLane(input, laneId, effectiveLaneWidth, {
+					blocked: () => hasUnsettled,
+					markUnsettled: () => {
+						hasUnsettled = true;
+					},
+					enter: () => {
+						active += 1;
+						maxObservedConcurrency = Math.max(maxObservedConcurrency, active);
+					},
+					exit: () => {
+						active -= 1;
+					},
+				}),
+			hasUnsettled: () => hasUnsettled,
+		});
+		logReadyFrontier(stats.notStartedDueToFailure, outcomes.length, laneFailureScopeEnabled(), true);
+		return {
+			outcomes: outcomes.sort((a, b) => sourceOrder.get(a.laneId)! - sourceOrder.get(b.laneId)!),
+			effectiveLaneWidth,
+			maxObservedConcurrency,
+			allLanesCompleted: allLanesCompleted(outcomes),
+		};
+	}
+
+	let failSkips = 0; // lanes C1 kept from starting (not abort/unsettled holds)
 	for (const batch of input.plan.batches) {
-		const blocked = outcomes.some((outcome) => outcome.status !== "completed");
+		const prior = [...outcomes];
+		const blocked = batch.laneIds.every((laneId) => failureScope.isBlocked(laneId, prior));
 		if (input.signal?.aborted || effectiveLaneWidth === 0 || blocked) {
+			if (!input.signal?.aborted && effectiveLaneWidth && !hasUnsettled) failSkips += batch.laneIds.length;
 			for (const laneId of batch.laneIds) {
 				outcomes.push({
 					laneId,
@@ -132,7 +172,9 @@ export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Pr
 			while (cursor < batch.laneIds.length) {
 				const laneId = batch.laneIds[cursor];
 				cursor += 1;
-				if (input.signal?.aborted || hasUnsettled) {
+				const failureBlocked = failureScope.isBlocked(laneId, prior);
+				if (failureBlocked && !input.signal?.aborted && !hasUnsettled) failSkips += 1;
+				if (input.signal?.aborted || hasUnsettled || failureBlocked) {
 					outcomes.push({ laneId, status: input.signal?.aborted ? "skipped-abort" : "blocked-dependency" });
 					continue;
 				}
@@ -159,10 +201,13 @@ export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Pr
 		}
 		await Promise.all(runners);
 	}
+	// Spec 106 §2a: batch arm of the A/B covariate; written only with C1 on.
+	if (laneFailureScopeEnabled()) logReadyFrontier(failSkips, outcomes.length, true, false);
 	return {
 		outcomes: outcomes.sort((a, b) => sourceOrder.get(a.laneId)! - sourceOrder.get(b.laneId)!),
 		effectiveLaneWidth,
 		maxObservedConcurrency,
+		allLanesCompleted: allLanesCompleted(outcomes),
 	};
 }
 

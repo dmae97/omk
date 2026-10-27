@@ -1,0 +1,595 @@
+{
+	"schema": 1,
+	"manifests": [
+		{
+			"manifest": "packages/coding-agent/examples/extensions/gondolin/package.json",
+			"kind": "dependencies",
+			"name": "@earendil-works/gondolin",
+			"version": "0.14.0"
+		},
+		{
+			"manifest": "packages/coding-agent/package.json",
+			"kind": "optionalDependencies",
+			"name": "@mariozechner/clipboard",
+			"version": "0.3.9"
+		},
+		{
+			"manifest": "scripts/cross-platform-clipboard/package.json",
+			"kind": "dependencies",
+			"name": "@mariozechner/clipboard",
+			"version": "0.3.9"
+		},
+		{
+			"manifest": "scripts/cross-platform-clipboard/package.json",
+			"kind": "dependencies",
+			"name": "@mariozechner/clipboard-darwin-arm64",
+			"version": "0.3.9"
+		},
+		{
+			"manifest": "scripts/cross-platform-clipboard/package.json",
+			"kind": "dependencies",
+			"name": "@mariozechner/clipboard-darwin-x64",
+			"version": "0.3.9"
+		},
+		{
+			"manifest": "scripts/cross-platform-clipboard/package.json",
+			"kind": "dependencies",
+			"name": "@mariozechner/clipboard-linux-arm64-gnu",
+			"version": "0.3.9"
+		},
+		{
+			"manifest": "scripts/cross-platform-clipboard/package.json",
+			"kind": "dependencies",
+			"name": "@mariozechner/clipboard-linux-x64-gnu",
+			"version": "0.3.9"
+		},
+		{
+			"manifest": "scripts/cross-platform-clipboard/package.json",
+			"kind": "dependencies",
+			"name": "@mariozechner/clipboard-win32-arm64-msvc",
+			"version": "0.3.9"
+		},
+		{
+			"manifest": "scripts/cross-platform-clipboard/package.json",
+			"kind": "dependencies",
+			"name": "@mariozechner/clipboard-win32-x64-msvc",
+			"version": "0.3.9"
+		}
+	],
+	"imports": [
+		{
+			"file": ".omk/extensions/atelier/vendor/src/editor.ts:1",
+			"module": ".omk/extensions",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"CustomEditor"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/editor.ts:2",
+			"module": ".omk/extensions",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"truncateToWidth",
+				"visibleWidth"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/footer.ts:1",
+			"module": ".omk/extensions",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"Component",
+				"truncateToWidth",
+				"visibleWidth"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/image-compositor.ts:1",
+			"module": ".omk/extensions",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"OverlayOptions",
+				"TUI",
+				"visibleWidth"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/menu.ts:1",
+			"module": ".omk/extensions",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"getSettingsListTheme",
+				"ExtensionAPI",
+				"ExtensionContext"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/menu.ts:6",
+			"module": ".omk/extensions",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"Container",
+				"SelectItem",
+				"SelectList",
+				"SettingItem",
+				"SettingsList",
+				"Text",
+				"truncateToWidth"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/menu.ts:5",
+			"module": ".omk/extensions",
+			"kind": "mention",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"*"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/menu.ts:14",
+			"module": ".omk/extensions",
+			"kind": "mention",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"*"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/overlay-lifecycle.ts:1",
+			"module": ".omk/extensions",
+			"kind": "type-only",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"ExtensionContext"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/overlay-lifecycle.ts:2",
+			"module": ".omk/extensions",
+			"kind": "type-only",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"Component",
+				"OverlayOptions",
+				"TUI"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/run-activity.ts:3",
+			"module": ".omk/extensions",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"truncateToWidth",
+				"visibleWidth"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/run-activity.ts:2",
+			"module": ".omk/extensions",
+			"kind": "type-only",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"ExtensionEvent"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/settings-workspace.ts:1",
+			"module": ".omk/extensions",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"matchesKey",
+				"truncateToWidth",
+				"visibleWidth"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/sidebar-panels.ts:1",
+			"module": ".omk/extensions",
+			"kind": "type-only",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"ExtensionAPI"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/sidebar.ts:3",
+			"module": ".omk/extensions",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"Component",
+				"OverlayHandle",
+				"truncateToWidth",
+				"visibleWidth"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/sidebar.ts:2",
+			"module": ".omk/extensions",
+			"kind": "type-only",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"ExtensionContext"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/state.ts:2",
+			"module": ".omk/extensions",
+			"kind": "type-only",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"ExtensionAPI",
+				"ExtensionContext"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/subagent-cost-chart.ts:1",
+			"module": ".omk/extensions",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"truncateToWidth",
+				"visibleWidth"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/subagent-cost-image.ts:2",
+			"module": ".omk/extensions",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"allocateImageId",
+				"getCapabilities",
+				"getCellDimensions",
+				"Image"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/subagent-usage-view.ts:2",
+			"module": ".omk/extensions",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"matchesKey",
+				"truncateToWidth",
+				"visibleWidth"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/subagent-usage-view.ts:1",
+			"module": ".omk/extensions",
+			"kind": "type-only",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"ExtensionContext"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/text.ts:1",
+			"module": ".omk/extensions",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"truncateToWidth"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/todos.ts:1",
+			"module": ".omk/extensions",
+			"kind": "type-only",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"ExtensionContext"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": ".omk/extensions/atelier/vendor/src/workspace-pulse.ts:3",
+			"module": ".omk/extensions",
+			"kind": "type-only",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"ExecOptions",
+				"ExecResult"
+			],
+			"scope": "vendored"
+		},
+		{
+			"file": "packages/agent/src/types.ts:382",
+			"module": "packages/agent",
+			"kind": "mention",
+			"specifier": "@mariozechner/agent",
+			"symbols": [
+				"*"
+			],
+			"scope": "src"
+		},
+		{
+			"file": "packages/coding-agent/src/utils/clipboard-native.ts:22",
+			"module": "packages/coding-agent",
+			"kind": "require",
+			"specifier": "@mariozechner/clipboard",
+			"symbols": [
+				"*"
+			],
+			"scope": "src"
+		},
+		{
+			"file": "packages/coding-agent/test/clipboard-image-bmp-conversion.test.ts:62",
+			"module": "packages/coding-agent",
+			"kind": "mention",
+			"specifier": "@mariozechner/clipboard",
+			"symbols": [
+				"*"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/clipboard-native.test.ts:20",
+			"module": "packages/coding-agent",
+			"kind": "mention",
+			"specifier": "@mariozechner/clipboard",
+			"symbols": [
+				"*"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/clipboard-native.test.ts:21",
+			"module": "packages/coding-agent",
+			"kind": "mention",
+			"specifier": "@mariozechner/clipboard",
+			"symbols": [
+				"*"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/extensions-discovery.test.ts:86",
+			"module": "packages/coding-agent",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-ai",
+			"symbols": [
+				"Type"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/extensions-discovery.test.ts:87",
+			"module": "packages/coding-agent",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-ai/compat",
+			"symbols": [
+				"complete",
+				"StringEnum"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/extensions-discovery.test.ts:88",
+			"module": "packages/coding-agent",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"Key"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/extensions-discovery.test.ts:89",
+			"module": "packages/coding-agent",
+			"kind": "type-only",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"ExtensionAPI"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/gondolin-signature-regression.test.ts:14",
+			"module": "packages/coding-agent",
+			"kind": "static",
+			"specifier": "@earendil-works/gondolin",
+			"symbols": [
+				"VM"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/gondolin-signature-regression.test.ts:49",
+			"module": "packages/coding-agent",
+			"kind": "mention",
+			"specifier": "@earendil-works/gondolin/package.json",
+			"symbols": [
+				"*"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/package-doctor-cli.test.ts:75",
+			"module": "packages/coding-agent",
+			"kind": "mention",
+			"specifier": "@earendil-works/pi-utils",
+			"symbols": [
+				"*"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/package-doctor.test.ts:69",
+			"module": "packages/coding-agent",
+			"kind": "static",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"Key"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/package-doctor.test.ts:70",
+			"module": "packages/coding-agent",
+			"kind": "type-only",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"ExtensionAPI"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/package-doctor.test.ts:33",
+			"module": "packages/coding-agent",
+			"kind": "mention",
+			"specifier": "@earendil-works/pi-utils",
+			"symbols": [
+				"*"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/package-doctor.test.ts:68",
+			"module": "packages/coding-agent",
+			"kind": "mention",
+			"specifier": "@earendil-works/pi-ai",
+			"symbols": [
+				"*"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/package-doctor.test.ts:193",
+			"module": "packages/coding-agent",
+			"kind": "mention",
+			"specifier": "@earendil-works/pi-coding-agent",
+			"symbols": [
+				"*"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/package-procurement.test.ts:314",
+			"module": "packages/coding-agent",
+			"kind": "mention",
+			"specifier": "@mariozechner/pi-tui",
+			"symbols": [
+				"*"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/coding-agent/test/pi-package-intake.test.ts:48",
+			"module": "packages/coding-agent",
+			"kind": "mention",
+			"specifier": "@earendil-works/pi-mcp-adapter",
+			"symbols": [
+				"*"
+			],
+			"scope": "test"
+		},
+		{
+			"file": "packages/tui/test/upstream-pi-exports.test.ts:5",
+			"module": "packages/tui",
+			"kind": "mention",
+			"specifier": "@earendil-works/pi-tui",
+			"symbols": [
+				"*"
+			],
+			"scope": "test"
+		}
+	],
+	"runtimeAliases": [
+		{
+			"specifier": "@earendil-works/pi-agent-core",
+			"target": "agent-core"
+		},
+		{
+			"specifier": "@earendil-works/pi-agent-core/node",
+			"target": "agent-core-node"
+		},
+		{
+			"specifier": "@earendil-works/pi-ai",
+			"target": "ai"
+		},
+		{
+			"specifier": "@earendil-works/pi-ai/compat",
+			"target": "ai"
+		},
+		{
+			"specifier": "@earendil-works/pi-ai/oauth",
+			"target": "ai-oauth"
+		},
+		{
+			"specifier": "@earendil-works/pi-coding-agent",
+			"target": "coding-agent"
+		},
+		{
+			"specifier": "@earendil-works/pi-tui",
+			"target": "tui"
+		},
+		{
+			"specifier": "@mariozechner/pi-agent-core",
+			"target": "agent-core"
+		},
+		{
+			"specifier": "@mariozechner/pi-agent-core/node",
+			"target": "agent-core-node"
+		},
+		{
+			"specifier": "@mariozechner/pi-ai",
+			"target": "ai"
+		},
+		{
+			"specifier": "@mariozechner/pi-ai/compat",
+			"target": "ai"
+		},
+		{
+			"specifier": "@mariozechner/pi-ai/oauth",
+			"target": "ai-oauth"
+		},
+		{
+			"specifier": "@mariozechner/pi-coding-agent",
+			"target": "coding-agent"
+		},
+		{
+			"specifier": "@mariozechner/pi-tui",
+			"target": "tui"
+		}
+	],
+	"aliasConsumers": [
+		"packages/ai/src/index.ts:10",
+		"packages/coding-agent/src/core/extensions/bundled-virtual-modules.ts:23",
+		"packages/coding-agent/src/core/extensions/loader.ts:17",
+		"packages/coding-agent/src/core/package-doctor.ts:11"
+	]
+}

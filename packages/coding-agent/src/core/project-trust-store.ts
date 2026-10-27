@@ -24,6 +24,8 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { CONFIG_DIR_NAME } from "../config.ts";
+import { fileErrorCode } from "./durable-file-lock-owner.ts";
+import { processIsLive } from "./durable-file-lock-storage.ts";
 import { canonicalDir, type ProjectCodeSurface } from "./project-code-fingerprint.ts";
 
 export type ProjectTrustDecision = "trusted" | "denied";
@@ -73,27 +75,109 @@ function sleepSync(ms: number): void {
 	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-/** Take the lock directory; break it when stale; give up (unlocked write) after LOCK_WAIT_MS. */
-function acquireLock(lock: string): boolean {
-	const deadline = Date.now() + LOCK_WAIT_MS;
-	for (;;) {
+interface TrustLockOwner {
+	readonly pid: number;
+	readonly host: string;
+	readonly token: string;
+}
+interface HeldTrustLock {
+	readonly path: string;
+	readonly token: string;
+}
+
+/** Missing owner records are legacy locks; malformed or unreadable records are never reclaimed. */
+function readLockOwner(lock: string): { readonly owner?: TrustLockOwner; readonly legacy: boolean } {
+	let raw: string;
+	try {
+		raw = readFileSync(path.join(lock, "owner.json"), "utf8");
+	} catch (error) {
+		if (fileErrorCode(error) === "ENOENT") return { legacy: true };
+		return { legacy: false };
+	}
+	try {
+		const value: unknown = JSON.parse(raw);
+		if (typeof value !== "object" || value === null) return { legacy: false };
+		const { pid, host, token } = value as Record<string, unknown>;
+		if (
+			!Number.isSafeInteger(pid) ||
+			Number(pid) <= 0 ||
+			typeof host !== "string" ||
+			host.length === 0 ||
+			typeof token !== "string" ||
+			token.length === 0
+		)
+			return { legacy: false };
+		return { owner: { pid: Number(pid), host, token }, legacy: false };
+	} catch {
+		return { legacy: false };
+	}
+}
+
+/**
+ * Create the directory exclusively, then record its owner. Ownerless leftovers use the legacy age fallback.
+ * `busy` means another lock exists; `unavailable` keeps the old unlocked-write fallback for other errors.
+ */
+function createLock(lock: string): HeldTrustLock | "busy" | "unavailable" {
+	const token = randomBytes(16).toString("hex");
+	try {
+		mkdirSync(lock, { mode: 0o700 });
+	} catch (error) {
+		return fileErrorCode(error) === "EEXIST" ? "busy" : "unavailable";
+	}
+	try {
+		const fd = openSync(path.join(lock, "owner.json"), "wx", 0o600);
 		try {
-			mkdirSync(lock, { mode: 0o700 });
-			return true;
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "EEXIST") return false;
+			writeSync(fd, JSON.stringify({ pid: process.pid, host: os.hostname(), token }));
+		} finally {
+			closeSync(fd);
 		}
-		try {
-			if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) {
+		return { path: lock, token };
+	} catch {
+		rmSync(lock, { recursive: true, force: true });
+		return "unavailable";
+	}
+}
+
+/**
+ * Take the lock directory. A recorded live owner is never reclaimed because of its mtime;
+ * a dead owner is reclaimed only after its token is re-read. Ownerless directories from the
+ * old protocol retain the age-based fallback. Give up (unlocked write) after LOCK_WAIT_MS.
+ */
+function acquireLock(lock: string): HeldTrustLock | undefined {
+	const deadline = performance.now() + LOCK_WAIT_MS;
+	for (;;) {
+		const held = createLock(lock);
+		if (held === "unavailable") return undefined;
+		if (held !== "busy") return held;
+		const observed = readLockOwner(lock);
+		const owner = observed.owner;
+		if (owner && owner.host === os.hostname() && !processIsLive(owner.pid)) {
+			// Re-read before removal: another process may have reclaimed and reused the path.
+			if (readLockOwner(lock).owner?.token === owner.token) {
 				rmSync(lock, { recursive: true, force: true });
 				continue;
 			}
-		} catch {
-			continue; // released between mkdir and stat
+		} else if (observed.legacy) {
+			try {
+				// No pid exists to check in the legacy format. Check once more for a newly published owner.
+				// wall-clock: a legacy lock has only its directory mtime, which the kernel stamps from the wall clock
+				if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS && readLockOwner(lock).legacy) {
+					rmSync(lock, { recursive: true, force: true });
+					continue;
+				}
+			} catch {
+				// Released between the owner check and stat: retry after the deadline check below.
+			}
 		}
-		if (Date.now() >= deadline) return false;
+		if (performance.now() >= deadline) return undefined;
 		sleepSync(25);
 	}
+}
+
+/** Never remove a replacement owner's lock after ours was reclaimed or the owner file changed. */
+function releaseLock(held: HeldTrustLock | undefined): void {
+	if (!held) return;
+	if (readLockOwner(held.path).owner?.token === held.token) rmSync(held.path, { recursive: true, force: true });
 }
 
 function writeStoreFile(file: string, store: TrustStoreFile): void {
@@ -124,7 +208,7 @@ function updateStore(home: string, change: (store: TrustStoreFile) => boolean): 
 		const store = readStore(home);
 		if (change(store)) writeStoreFile(file, store);
 	} finally {
-		if (locked) rmSync(lock, { recursive: true, force: true });
+		releaseLock(locked);
 	}
 }
 

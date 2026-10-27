@@ -1,11 +1,3 @@
-<p align="center">
-  <img
-    src="readmeasset/omk-hero.svg"
-    alt="OMK, Open Multi-Agent Kit. Make done pass a check. The mark shows a four-stage control loop with three routed lanes."
-    width="100%"
-  />
-</p>
-
 <h1 align="center">OMK</h1>
 
 <p align="center">
@@ -14,13 +6,16 @@
 </p>
 
 <p align="center">
-  A terminal coding agent with model switching and explicit, test-backed goals.
+  An open-source multi-agent coding CLI for your terminal: switch models in one
+  session and finish a goal only when your test passes.
 </p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm version" src="https://img.shields.io/npm/v/open-multi-agent-kit?style=flat-square&label=npm" /></a>
-  <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm downloads per month" src="https://img.shields.io/npm/dm/open-multi-agent-kit?style=flat-square" /></a><br />
-  <a href="https://github.com/dmae97/omk/releases/latest"><img alt="latest GitHub release" src="https://img.shields.io/github/v/release/dmae97/omk?style=flat-square&label=release" /></a><br />
+  <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm downloads per month" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdmae97%2Fomk%2Fbadges%2Fnpm-downloads.json&style=flat-square" /></a><br />
+  <a href="https://github.com/dmae97/omk/releases/latest"><img alt="latest GitHub release" src="https://img.shields.io/github/v/release/dmae97/omk?style=flat-square&label=release" /></a>
+  <a href="https://github.com/dmae97/omk/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/dmae97/omk/ci.yml?branch=main&style=flat-square&label=CI" /></a>
+  <a href="https://github.com/dmae97/omk/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/dmae97/omk?style=flat-square" /></a><br />
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/open-multi-agent-kit?style=flat-square" /></a>
   <img alt="supported Node.js version" src="https://img.shields.io/node/v/open-multi-agent-kit?style=flat-square" />
 </p>
@@ -28,12 +23,38 @@
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-runs-by-default">Default or opt-in?</a> ·
+  <a href="#context-cache-and-memory">Context &amp; memory</a> ·
   <a href="#evidence-and-limits">Evidence and limits</a><br />
   <a href="#faq">Choosing OMK</a> ·
   <a href="packages/coding-agent/docs/index.md">Documentation</a>
 </p>
 
 ---
+
+| **CONTROL** | **CHOICE** | **EVIDENCE** |
+| :--- | :--- | :--- |
+| Keep the work in your terminal and repository. | Switch providers and models in one session. | Define a check before a goal can complete. |
+
+OMK is a lightweight, MIT-licensed AI coding agent for your terminal, written in
+TypeScript. Switch models in one session, add subagents when you need them, and
+mark a goal done only when your own check passes. It is a standalone CLI, so it
+can serve as an open-source alternative to a single-provider agent such as
+Claude Code.
+
+Requires Node.js 22.19 or newer:
+
+```bash
+npm install -g open-multi-agent-kit --ignore-scripts
+cd your-project
+omk
+```
+
+The first run opens `/login` (subscription, API key, or local model). To try it
+without a global install: `npx --ignore-scripts open-multi-agent-kit`.
+Details in [Quick start](#quick-start).
+
+<!-- TODO: terminal demo GIF goes here (install, `omk`, a `/goal verify` run passing).
+     Record a real session; do not use a mock-up. -->
 
 ## Why OMK
 
@@ -61,20 +82,48 @@ Start with one agent that reads files, edits code, and runs commands. Add
 subagents or explicit verification workflows when you need them; neither is
 required for your first task.
 
+### At a glance
+
+- **Done means a passing check.** `/goal verify <command>` completes a goal only when your check passes on the current workspace.
+- **One session, many models.** Switch with `/model` mid-conversation; resume later with `/resume` or `omk -c`.
+- **Sandboxed by default.** Built-in bash runs under `sandbox-exec` or `bwrap`, without network, and fails closed.
+- **Opt-in power.** Subagents, MCP servers, skills and extensions load only when you configure them.
+- **Honest evidence.** Claims below link to the docs that back them, and the limits are stated next to them.
+
+```mermaid
+flowchart TD
+  P["Prompt or goal"] --> A["Agent loop"]
+  A --> S["Settled turn"]
+  S --> R["Response"]
+  S -->|"goal verification configured"| V["Run acceptance check"]
+  V -->|"pass on current workspace"| D["Goal complete"]
+  V -->|"fail"| A
+```
+
+The loop uses your selected model and available tools. Subagents, MCP, skills,
+and extensions depend on your configuration.
+
 ## Quick start
 
-Install the standalone binary (no Node.js needed; the installer verifies the
-release's `SHA256SUMS` and refuses a mismatch), then start in your repository:
+Install from npm (Node.js 22.19 or newer), then start in your repository:
 
 ```bash
-curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh
+npm install -g open-multi-agent-kit --ignore-scripts
 cd your-project
 omk
 ```
 
-With Node.js 22.19 or newer you can use npm instead:
-`npm install -g open-multi-agent-kit --ignore-scripts`, or run
-`npx --ignore-scripts open-multi-agent-kit` without a global install.
+Or run `npx --ignore-scripts open-multi-agent-kit` without a global install.
+
+Or install the standalone binary, which needs no Node.js (macOS, Linux):
+
+```bash
+curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh
+```
+
+The script checks the download against the release's `SHA256SUMS` and installs
+to `~/.omk/bin`; add that folder to your `PATH` as it tells you. Windows builds
+are attached to each [release](https://github.com/dmae97/omk/releases/latest).
 
 1. On a first run OMK opens `/login` for you: sign in with a subscription or an
    API key. An existing Claude Code or Codex CLI login can be reused with
@@ -132,6 +181,31 @@ The internal lane launcher and automatic command-sharding primitives are not
 connected to the default CLI path. Installing their packages is not the same
 as enabling an orchestration workflow.
 
+## Context, cache and memory
+
+OMK manages several distinct resources. A prompt-cache boundary, a local cache,
+and the process's RAM are not the same thing; provider cache hits and costs
+depend on the provider and the request.
+
+| Layer | What OMK does | Default and scope |
+| --- | --- | --- |
+| **Prompt prefix** | Preserves the cache boundary when an extension changes only the dynamic tail and the prefix matches byte for byte. | On by default; this does not guarantee a provider cache hit. [`OMK_PREFIX_BOUNDARY`](packages/coding-agent/docs/environment-variables.md) |
+| **Context Budget V2** | Reserves response and safety space, keeps required items, and selects representations of optional context that fit. | Off by default; enable globally or for a process. [Context selection](packages/coding-agent/docs/runtime-algorithms.md#context-selection) |
+| **Local context cache** | Reuses eligible representation and negative-result entries; cached plans stay in session memory. | Only when Context Budget V2 is enabled. Representations persist per workspace by default; a memory-only option is available. [Settings](packages/coding-agent/docs/settings.md#context-budget) |
+| **Session history** | Compaction can summarize earlier context; saved sessions support resume. | Compaction and its settings are separate from persistent knowledge and provider-side caches. [Sessions](packages/coding-agent/docs/sessions.md) |
+| **Host resources** | The resource governor can observe host capacity and admission decisions. | `observe` is the default; adaptive throttling requires configuration. [Resource governor](packages/coding-agent/docs/settings.md#resource-governor) |
+
+For one process, opt into context budgeting and keep its cache in session memory:
+
+```bash
+OMK_CONTEXT_GOVERNOR=1 OMK_CONTEXT_GOVERNOR_CACHE=memory omk
+```
+
+Memory-only changes where entries are kept; it is not a guarantee of lower RAM
+use. Cache effectiveness, memory use, latency and cost depend on the workload.
+Measure them before claiming an improvement; [turn metrics](packages/coding-agent/docs/metrics.md)
+show what can be recorded.
+
 ## Evidence and limits
 
 One dated comparison is available below: OMK and mini-SWE-agent on
@@ -174,13 +248,11 @@ interrupted runs, not just successful examples.
 
 ### Terminal-Bench 2.1 · R8
 
-<p align="center">
-  <img
-    src="readmeasset/omk-terminal-bench-r8.png"
-    alt="OMK versus mini-SWE-agent 2.4.6 on Terminal-Bench 2.1 with Grok-4.7 xhigh. Primary success: 75.8% (200/264) versus 71.6% (189/264). Recorded cost per graded trial: $0.581 versus $0.759. Median time: 482 versus 376 seconds. Success difference: +4.2 percentage points, 95% CI minus 1.9 to plus 10.2; not statistically significant. OMK had 150 additional seconds per trial and used an evaluation build."
-    width="1200"
-  />
-</p>
+| Self-measured result | OMK evaluation build | mini-SWE-agent 2.4.6 |
+| --- | ---: | ---: |
+| Observed success | 75.8% (200/264) | 71.6% (189/264) |
+| Recorded cost per trial | $0.581 | $0.759 |
+| Median wall time per trial | 482 s | 376 s |
 
 **75.8% observed success · approximately 23% lower recorded model cost per
 graded trial.** OMK took longer: 482 s median, compared with 376 s for
@@ -213,7 +285,7 @@ rather than the published npm package. It is not an official leaderboard result.
   to start in that task's working directory. Two transient provider errors were
   retried; no trial was excluded.
 - OMK failed all three `pytorch-model-recovery` trials because the CLI rejected
-  an instruction starting with `- ` (fixed in #84). Without that
+  an instruction starting with a dash and a space (fixed in #84). Without that
   task the difference is +5.4 pp [0.0, +10.7].
 - Not a leaderboard run: 3 trials instead of the official 5, our own network
   allowlist and apt cache proxy, and OMK alone had 150 s extra for a workspace
@@ -235,13 +307,11 @@ Method, per-difficulty results, audit and reproduction notes:
 The terminal UI shows the selected model, tools, and session status. Additional
 signals depend on the integrations you configure.
 
-<p align="center">
-  <img
-    src="landing/assets/omk_tui.jpg"
-    alt="OMK//CONTROL terminal dashboard showing model routing, tools, and session status"
-    width="960"
-  />
-</p>
+| In the terminal | What it shows |
+| --- | --- |
+| Model | Selected provider and model |
+| Tools | Available tools and their activity |
+| Session | Status and the current conversation |
 
 The header reads `omk v<package.version> · OMK//CONTROL`; the installed package
 version is the source of truth.
@@ -252,16 +322,12 @@ version is the source of truth.
 <summary>How scope, routing, verification, and replay fit together</summary>
 
 OMK's provider-neutral coding-agent CLI also exposes a multi-agent control
-plane for explicitly configured workflows. The diagram describes that design,
+plane for explicitly configured workflows. The stages describe that design,
 not what every prompt automatically runs.
 
-<p align="center">
-  <img
-    src="readmeasset/omk-control-loop.gif"
-    alt="Animated OMK control loop showing Scope, Route, Verify, and Replay"
-    width="900"
-  />
-</p>
+| **01 SCOPE** | **02 ROUTE** | **03 VERIFY** | **04 REPLAY** |
+| --- | --- | --- | --- |
+| Define the task and boundaries. | Choose models and configured tools. | Run the declared checks. | Retain state and evidence for recovery. |
 
 The v0.98.3 SDK rejects incomplete first-party judge responses and exposes
 deterministic ties; it is not an automatic TUI judge.
@@ -275,9 +341,6 @@ deterministic ties; it is not an automatic TUI judge.
    checks block those workflows; advisory judging cannot replace them.
 4. Preserve receipts and replay state for bounded session recovery; continue
    durable goals from explicit reducer state.
-
-The animation changes once every 1.5 seconds and contains no flashing. The four
-steps above are the complete text alternative.
 
 </details>
 
@@ -386,34 +449,6 @@ setting off the prompt is byte-identical to one built without a corpus.
 
 </details>
 
-## OMK + AdaptOrch
-
-<a href="https://adaptorch.com/?utm_source=github&utm_medium=readme&utm_campaign=omk">
-  <img
-    src="readmeasset/omk-adaptorch-banner.svg"
-    alt="OMK writes and runs code. AdaptOrch checks what it wrote. correctness_claim: false — it ran, and this is what happened."
-    width="100%"
-  />
-</a>
-
-OMK is this local, MIT-licensed coding agent. AdaptOrch is a separate
-proprietary evidence service. Neither requires the other: installing OMK does
-not create an AdaptOrch account or make calls to it by default.
-
-For an optional integration, see the [WPL package and clients](packages/adaptorch-wpl/README.md)
-and [MCP setup](packages/coding-agent/docs/mcp.md). The WPL package exposes
-state, client, and adjudication primitives, not an automatic verification loop
-for every CLI prompt.
-
-AdaptOrch's reports carry `correctness_claim=false`; they are not semantic
-correctness proofs or OMK harness benchmark results.
-[Review AdaptOrch plans](https://adaptorch.com/?utm_source=github&utm_medium=readme&utm_campaign=omk#pricing)
-· [Claim boundary](https://adaptorch.com/claim-boundary?utm_source=github&utm_medium=readme&utm_campaign=omk)
-
-<sub>The AdaptOrch name and marks identify that separate proprietary product
-and appear here with permission. They are excluded from this repository's MIT
-grant — see [LICENSE](LICENSE).</sub>
-
 ## Prior art
 
 <details>
@@ -455,7 +490,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.4](.github/RELEASE_NOTES_v1.5.4.md)
+- [Release notes for v1.5.9](.github/RELEASE_NOTES_v1.5.9.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -475,6 +510,22 @@ published CLI includes a generated `npm-shrinkwrap.json`. Read
 change.
 
 ## FAQ
+
+### What is OMK?
+
+OMK (Open Multi-Agent Kit) is an open-source coding agent CLI for the terminal.
+It reads files, edits code, and runs commands in your repository. You can switch
+models inside one session, add subagents when a task needs them, and use
+`/goal verify` so a goal only counts as done when your chosen check passes. It
+is MIT-licensed and written in TypeScript.
+
+### How do I install OMK?
+
+With Node.js 22.19 or newer, run
+`npm install -g open-multi-agent-kit --ignore-scripts`, then `omk` in your
+project. Without Node.js, use the standalone installer on macOS or Linux:
+`curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh`.
+See [Quick start](#quick-start).
 
 ### Why use OMK instead of Claude Code?
 
@@ -500,40 +551,6 @@ Not automatically. Subagents require setup, and verification must be part of
 the chosen workflow. Its result covers the declared checks, not all behavior. See
 [what runs by default](#what-runs-by-default) and [evidence and limits](#evidence-and-limits).
 
-## Next: v1.5.0 (planned, not released)
-
-This section tracks planned work. Nothing here ships until it is merged and released, and every number below comes from mock-model A/B runs, not real models.
-
-| Item | Status | What it changes |
-| --- | --- | --- |
-| MCP tool output cap (spec 066) | Merged (#145) | Large MCP results are cut to the first and last 2000 lines / 50KB, and the full text is saved to a private file (mode 0600). `OMK_MCP_OUTPUT_CAP=0` turns it off. Mock A/B: a fact at the end of a 1MB result went from 0/20 to 20/20 success. Known cost: when the fact sits in the middle, billed input tokens rise (200KB: +59%, 1MB: about 60x). |
-| Pre-commit dependency-tree hook fix | Merged (#146) | Stops a false `invalid` report for the root `qs` override on npm 10.9.3. |
-| Temp output cleanup (spec 068) | Spec approved | Opt-in `OMK_TEMP_OUTPUT_CLEANUP=1` removes OMK's own saved output files on exit and in a daily startup sweep. |
-| Truncated output navigation (spec 069) | Spec drafted | Opt-in hints that point the model to `grep` the saved file before reading it in pages, aimed at the mid-output token cost above. |
-| Search, edit and read tool research | Research | Survey of current agent tools such as fff before any change to `grep`, `find`, `read` or `edit`. |
-| Prompt cache prefix measurement (spec 070) | Spec drafted | Offline measurement of how much of each request prefix stays byte-identical between turns, and what breaks it. No runtime change. |
-| Subagent runtime (spec 071) | Spec approved | Opt-in `OMK_SUBAGENT_RUNTIME`. At most 4 subagents, further limited by the resource tier: 2 at once on the default `normal` tier and 1 on constrained tiers. A request over the limit is refused with a typed `busy` error (with the limit and tier name) instead of queued. The lead and all workers share one turn and token budget. Each subagent gets its own git worktree. |
-| Parallel session protocol | Planning | A written contract for messages, file ownership locks, completion and failure reports, and cancel propagation between parallel sessions. |
-| Reasoning auto v5 for subagents | Planning | Builds on auto v4 after a memory and CPU baseline for subagents. |
-| Subagent loop guard and git pre-checks | Planning | Always on for subagents, with no flag. A subagent cannot start another subagent, and it stops after 3 identical calls in a row, 3 repeated errors, an A/B ping-pong, or 5 turns without progress. Before reporting done it must leave a clean `git status`, updated docs, and a conflict-free `git merge-tree` against main. |
-| Image previews and model image size (spec 075) | Planning | Tool-result images get the same 6-line, 80-column preview limit as prompt attachments, with a one-line text fallback. Images sent to the model follow the provider's documented resize rule; saved originals stay full size. |
-
-Behavior changes planned for 1.5.0: a subagent request over the concurrency limit is refused with a typed `busy` error instead of waiting, and Ultra mode gets the same limit. The limit is the smaller of 4 and the resource tier's heavy-process limit, so the default `normal` tier runs 2 subagents at once.
-
-To run 4 at once on the `normal` tier, set this in `settings.json`:
-
-```json
-{ "resourceGovernor": { "normalMaxHeavyProcesses": 4 } }
-```
-
-In a mock run, 4 truly concurrent workers finished about 24% faster than the default of 2 but used about 65% more peak memory (777MB vs 472MB). Real workers hold larger contexts, so expect the extra memory to be higher.
-
-On hold:
-
-- Stryker upgrade and removing the `qs` override. The latest `@stryker-mutator/core` (10.0.0) still pins `typed-rest-client ~2.3.0`, so the override stays for now.
-- A hard limit on repeated reads of saved output. Spec 069 starts with hints only; a hard limit waits for real-model data showing hints are not enough.
-- Real-model re-measurement of timeouts and of the opt-in hints. This needs a cost approval first.
-
 ## Recent releases
 
 <details>
@@ -546,62 +563,107 @@ On hold:
 
 <!-- releases:start -->
 
-## Release v1.5.4
+## Release v1.5.9
 
 ### Added
 
-- `/jev set`, `/jev status`, and `/jev clear` manage the TypeSafe (JEV) key in `auth.json`. `status` prints only `stored`, `env`, or `none`; no subcommand echoes key characters or makes a network call. A stored key wins over `TYPESAFE_API_KEY`, as for every other provider.
-- An extension that registers `/jev` still receives `/jev <query>`. The built-in command handles only `set`, `status`, `clear`, and a bare `/jev`.
-- Next-task suggestions after a completed turn, behind `OMK_NEXT_SUGGESTIONS` (default off). A suggestion reuses the warm prompt cache of the same model, caps output at the thinking budget plus 128 tokens (128 with reasoning off), and is skipped when the cache is cold, the model changed, or provider usage is unavailable or at 90% or more.
-- A pinned model that fails over on quota exhaustion shows one warning per turn and writes a `pinned-quota-failover` run-log record. Set `providerResilience.autoFailoverOnQuotaExhaustion: false` to keep the pin.
+- A default-on `deepseek_harness` built-in for native DeepSeek and recognized DeepSeek model IDs on gateways. It adds scoped execution guidance and projects oversized successful tool results to Unicode-safe head/tail excerpts at 80% context pressure, preserving original session history. `OMK_DEEPSEEK_HARNESS=0` independently disables it. No upstream runtime, credentials, session-log uploads, or protocol changes are introduced. See [DeepSeek harness](packages/coding-agent/docs/deepseek-harness.md).
+- Project context documents. `omk init --project` creates missing `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `RULES.md`, `TASKS.md` and `PROGRESS.md` without overwriting files, and the project-directory walk loads each once as context. A bare `omk` launch in an otherwise empty Git repository root creates them too; `OMK_PROJECT_CONTEXT_BOOTSTRAP=0` disables that bootstrap. See [User context setup](packages/coding-agent/docs/context-files.md).
+- Acceptance diagnostics behind `OMK_GOAL_DIAGNOSTICS` (flag, default off, spec 094). After a failed `/goal` acceptance check, the repair follow-up carries a bounded excerpt of the check output anchored at the first error line, falling back to head/tail (#170).
 
 ### Changed
 
-- Quota exhaustion is no longer retried on the same model. The turn fails over at once when `providerResilience.autoFailoverOnQuotaExhaustion` is on, and otherwise ends with `QuotaExhaustedNoRetryError` and a run-log record. Other retryable errors keep exponential backoff, honor a `Retry-After` hint, and cap a single wait at 60 s.
+- Seventeen `OMK_*` harness flags are now on by default: `OMK_EDIT_DIAGNOSTICS`, `OMK_EXEC_TRUNCATE_MIDDLE`, `OMK_JSON_SESSION_INFO`, `OMK_GOAL_AUTONOMY`, `OMK_SKILL_ADMISSION`, `OMK_SKILL_AUTO_LOAD`, `OMK_EVIDENCE_LIFECYCLE`, `OMK_ADAPTIVE_EFFORT`, `OMK_DOMAIN_ROUTING`, `OMK_GOAL_OUTPUT_RECALL`, `OMK_LANE_READY_QUEUE`, `OMK_LANE_FAILURE_SCOPE`, `OMK_RTK_OUTPUT`, `OMK_SESSION_CONTROL`, `OMK_VERIFIED_MEMORY`, `OMK_RESPONSE_REASONING_CAP` and `OMK_PREFIX_BOUNDARY`. Set any of them to `0`, `false` or `off` to restore the 1.5.8 behavior; with all of them off the G0 session hash is unchanged. `OMK_EVIDENCE_LIFECYCLE` now deletes only verified goal-recall files (`observe` deletes nothing), subagent workers keep `OMK_SKILL_AUTO_LOAD` and `OMK_ADAPTIVE_EFFORT` off, and an unset `OMK_SESSION_CONTROL` never fails startup. There is no on/off benchmark for these defaults yet (#279, #281).
+- Evidence receipts store commands verbatim. Command credential redaction and its credential preflight are removed; existing v3 receipts with `commandRedaction` and `commandBinding` remain readable. Keep secrets out of command lines and pass them through the environment or credential storage (#223).
+- The GitHub Copilot default model is now `gpt-6.1-sol`. Copilot retired `gpt-5.4`, which left Copilot without an automatic default during first-run onboarding.
 
 ### Fixed
 
-- A run-journal reader drops the torn tail of an in-progress append only while the owner lease is live, retries for at most 250 ms, and retries a journal that has no complete record yet.
+- A durable goal whose approved acceptance check passed no longer stays active on a loaded host. The goal workspace binding now allows each git call 10 seconds instead of the 1.5 second per-bash-call bound, which `git status` could exceed and which then refused completion as an unavailable workspace scope. A git that hangs past the longer bound still fails closed; the bash tool scope keeps its 1.5 second bound.
+- Repeated local skill searches reuse unchanged document term frequencies instead of tokenizing the entire catalog again. Changed bodies are retokenized, input bounds are revalidated, and scores, exclusions and ranking order remain query-specific.
+- Local safe-context-window rejections during tool turns now enter bounded overflow compaction recovery instead of being classified as invalid provider responses. Auto-compaction opt-out and the hard input ceiling remain unchanged.
+- A per-call bash `timeout` now also bounds the outer tool timer, so a requested timeout longer than the fixed 300 second limit is no longer cut short. Extension tools and session wrappers receive the same bound.
+- Lock ownership no longer depends on the wall clock alone. The durable goal journal lock uses a 30 second stale window and a lost lock fails the write instead of crashing the process; the sync `auth.json` lock uses the same 30 second window as OAuth refresh, so a live refresh lock is no longer taken over; the trust store lock is reclaimed by owner pid and released only by its owner; and `omk session doctor` repair takes the session owner lease and refuses a live session with `session_in_use`.
+- Goal evidence is pinned to its generation and a complete workspace scope, stale autocomplete acceptance is rejected, and next-suggestion cost ceilings, stream identity and request lifetimes are aligned.
+- The status sidebar reads the current session's shared usage reader after `/new` or resume instead of the first session's.
+- `omk run cancel` reads the run journal in reader mode, so an owner appending at the same time no longer makes it fail with `integrity`; persistent concurrent change reports `concurrent_change`.
+- Durations, throttles, in-memory caches and deadlines now use a monotonic clock, so a wall-clock step (seen on WSL2) no longer makes them fire early, late or never. This covers the double Ctrl+C and Esc windows, the working timer, the bash output throttle, the subscription usage, diagnostics and workspace scope caches, edit diagnostic budgets, OAuth device-code polling and the TUI input drain. `npm run check` now rejects new wall-clock durations and proper-lockfile locks without an explicit stale window.
 
 ### Security
 
-- `/jev set` rejects keys that start with `!`. `getApiKey` runs such a stored value as a shell command, so the key is refused and nothing is written.
+- Goal-recall evidence deletion refuses to run when `.omk/goals/recall` or one of its parents is a symlink.
+- `npm audit --omit=dev` is clean again. `undici` is updated to 8.12.3 (EventSource memory, SRI token and content-encoding advisories), and a root override moves `zod` to 4.6.7 for every SDK and the sandbox example (oversized constrained collection advisory; no fixed 3.x release exists).
+- The optional Gondolin example now uses Gondolin 0.14.0 with `undici` 6.29.1. Gondolin no longer depends on `node-forge`, so the temporary CVE-2026-85393 runtime guard is removed; a regression suite replays the malformed signatures against Gondolin's real cached-leaf verification. The example now requires Node.js 22.19.0 or later. Replace previously copied example directories. See [Gondolin signature security](packages/coding-agent/docs/gondolin-security.md).
 
-### Tests
+Release notes live in [RELEASE_NOTES_v1.5.9.md](.github/RELEASE_NOTES_v1.5.9.md).
 
-- `test.sh` removes every variable whose name contains `KEY`, `SECRET`, `TOKEN`, `PASSWORD`, or `CREDENTIAL` (any case), plus a short list of credential-bearing names the pattern misses, so a release test run cannot reach a live provider with the operator's key.
+## Release v1.5.8
 
-Release notes live in [RELEASE_NOTES_v1.5.4.md](.github/RELEASE_NOTES_v1.5.4.md).
+### Added
 
-## Release v1.5.3
+- Goal autonomy behind `OMK_GOAL_AUTONOMY=1` (flag, default off). `/goal budget <usd|-> [<deadline ISO>|-]` sets a user-only cost and deadline budget that includes subagent lane cost; the goal stops with `budget-limit`, `deadline`, `outcome-unknown` or `scope-changed`, steering pauses it, and only `/goal resume` restarts it. Stop reasons are custom entries; the `omk.goal.v1` schema is unchanged (#266, #268).
+- Strong-only skill auto-load behind `OMK_SKILL_AUTO_LOAD` (flag, default off), with an observe-only `skill-autoload.jsonl` log (#262).
+- Evidence recall delete-after-use behind `OMK_EVIDENCE_LIFECYCLE=delete` (flag, default off; `observe` only records) (#263).
+
+With all new flags off, behavior is the same as 1.5.7.
 
 ### Fixed
 
-- Skill search now passes the active TODO kind to metacon ranking. The `phase` input existed in the ranker and run log but `SkillSearchGate` never supplied it, so ranking and `phaseSource` always reported the `task` default.
-- Concurrent attachment previews now share one in-flight Photon decode. A second repaint of the same active attachment no longer allocates another full-resolution image and resized RGBA buffer; a dropped draft still releases its entry through the existing `WeakMap`.
-- Reading a run journal now retries a torn tail as a concurrent change instead of reporting `integrity`. A live writer appending one record can be observed between its size/ctime check and the read, so a reader could see a partial final line; `readRunJournal` retries that bounded window and still fails with `journal_truncated` once the retries are exhausted. Middle-file corruption keeps reporting `integrity`.
-
-### Tests
-
-- Two compaction tests pin a 1 ms retry backoff instead of inheriting the default 5-attempt, 2 s-base policy. The retry path and assertions are unchanged; without the pin they waited about 62 s for a 503 and exceeded the 30 s Vitest timeout, which failed CI on every run since the default changed in 1.5.1.
-- `verified-run.test.ts` gives its fixture 30 s of work and verify budget and derives the "past the work deadline" clock from that budget. The old 3 s budget also bounded process spawn, so a loaded host spent it before the writer ran and the suite reported `deadline`; the timeout behavior keeps its own test with `workMs: 100`.
-- `verified-run-authority-restart.test.ts` uses a 60 s grant TTL. Its fixtures assert restart quarantine, not expiry, and a 1 s TTL let a loaded host expire the grant before `dispatchIntent()` committed. Expiry stays pinned deterministically in `verified-run-authority-store.test.ts`.
-- `memory-factorial` waits up to 30 s for the host clock instead of 5 s. A WSL2 time resync can hold `Date.now()` for seconds while `performance.now()` advances; the store's real-clock guard and the test's future-dated-memory assertions are unchanged.
-- The `journal-read-retry` mutator writes each record with one `pwrite` call, so the fixture only produces the two valid journal states it claims to produce. The reader-side retry above is what makes the live-writer assertions hold without weakening them.
-
-Release notes live in [RELEASE_NOTES_v1.5.3.md](.github/RELEASE_NOTES_v1.5.3.md).
-
-## Release v1.5.2
+- Evidence recall delete recovery can no longer fail `session_start` (#264).
+- `session_info` JSON test no longer flakes (#265).
 
 ### Changed
 
-- Lockstep version alignment with OMK 1.5.2 to restore publication of all seven workspace packages after the 1.5.1 registry staging conflict. Provider recovery behavior is unchanged from 1.5.1.
+- Research count scripts for spec 117 and 119 on synthetic fixtures (#267), NaN/Infinity tolerance (#269), header comment fix (#271).
+- Spec 118 D3 measurement addendum, design only (#272).
+- `AGENTS.md` lists the goal autonomy flag.
 
-Release notes live in [RELEASE_NOTES_v1.5.2.md](.github/RELEASE_NOTES_v1.5.2.md).
+Release notes live in [RELEASE_NOTES_v1.5.8.md](.github/RELEASE_NOTES_v1.5.8.md).
+
+## Release v1.5.7
+
+### Added
+
+- Structured diagnostics after `edit` and `write` behind `OMK_EDIT_DIAGNOSTICS` (flag, default off). Diagnostics are skipped when remote `operations` are passed (#250).
+- Head plus tail bash output behind `OMK_EXEC_TRUNCATE_MIDDLE` (flag, default off) (#246).
+- A `session_info` line in JSON output behind `OMK_JSON_SESSION_INFO` (flag, default off) (#244).
+
+With all three flags off, behavior is the same as 1.5.6.
+
+### Fixed
+
+- Bash output keeps the full 50KB tail when one long line spans several chunks (#238).
+
+### Changed
+
+- Bench tooling: an ATIF trajectory exporter in `scripts/bench/atif-export.mjs` (#239), which also maps seq 2+ session-info lines (#251).
+- Design specs added, not implemented: 113 head+tail bash output (#245), 114 indent-insensitive edit matching (#249).
+- `AGENTS.md` records the autonomous development mode and the patch-release order (#241, #247).
+- Pi inventory tests cover `.mts`, `.cts`, `.tsx` and `.mjs` discovery (#236).
+
+Release notes live in [RELEASE_NOTES_v1.5.7.md](.github/RELEASE_NOTES_v1.5.7.md).
 
 <!-- releases:end -->
 
 </details>
+
+## Contributing
+
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md)
+first, run `npm run check` and `npm test` before opening a pull request, and
+report security issues as described in [SECURITY.md](SECURITY.md).
+
+## Star OMK
+
+If a check-backed “done” is useful to you, a
+[star on GitHub](https://github.com/dmae97/omk/stargazers) helps other
+developers find OMK.
+
+<p align="center">
+  <a href="https://star-history.com/#dmae97/omk&Date">
+    <img alt="Star history chart for dmae97/omk" src="https://api.star-history.com/svg?repos=dmae97/omk&type=Date" width="600" />
+  </a>
+</p>
 
 ## Acknowledgments
 
@@ -611,6 +673,12 @@ MIT-licensed coding-agent harness — and began from the
 removed in this release line; OMK `0.9x` is OMK-native (see
 [`specs/constitution.md`](specs/constitution.md)), and the design debt to both
 projects stands. Thank you.
+
+## OMK + AdaptOrch
+
+AdaptOrch is a separate, optional product and is not called by default. See
+[OMK + AdaptOrch](packages/coding-agent/docs/omk-adaptorch.md) for the optional integration and
+[TRADEMARKS.md](TRADEMARKS.md) for the name and marks.
 
 ## License
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mcpAttachDiagnostics } from "../src/cli/mcp-attach.ts";
+import { attachSessionTransports, mcpAttachDiagnostics, sessionControlMode } from "../src/cli/mcp-attach.ts";
 import { McpManager } from "../src/core/mcp/manager.ts";
 
 describe("mcpAttachDiagnostics", () => {
@@ -62,5 +62,49 @@ describe("mcpAttachDiagnostics", () => {
 			{ type: "warning", message: 'MCP server "serena" failed: spawn uvx ENOENT' },
 			{ type: "warning", message: 'MCP server "slow" connecting' },
 		]);
+	});
+});
+
+describe("OMK_SESSION_CONTROL (default on)", () => {
+	const fake = (fail: boolean) => {
+		const calls: string[] = [];
+		return {
+			calls,
+			session: {
+				attachMcpServers: async () => [],
+				startControl: async () => {
+					calls.push("start");
+					if (fail) throw new Error("Session control requires an owned persisted session");
+				},
+				close: async () => {
+					calls.push("close");
+				},
+			},
+		};
+	};
+
+	it("parses unset as on but not required; 0/false/off opt out; 1 is required", () => {
+		expect(sessionControlMode(undefined)).toEqual({ enabled: true, required: false });
+		for (const v of ["0", "false", " OFF "])
+			expect(sessionControlMode(v)).toEqual({ enabled: false, required: false });
+		expect(sessionControlMode("1")).toEqual({ enabled: true, required: true });
+	});
+
+	it("default: starts control, and an unsupported session keeps running without it", async () => {
+		const ok = fake(false);
+		await attachSessionTransports(ok.session, sessionControlMode(undefined));
+		expect(ok.calls).toEqual(["start"]);
+		const bad = fake(true);
+		await expect(attachSessionTransports(bad.session, sessionControlMode(undefined))).resolves.toEqual([]);
+		expect(bad.calls).toEqual(["start"]);
+	});
+
+	it("=0 never starts control; explicit 1 still closes and throws on failure", async () => {
+		const off = fake(true);
+		await attachSessionTransports(off.session, sessionControlMode("0"));
+		expect(off.calls).toEqual([]);
+		const req = fake(true);
+		await expect(attachSessionTransports(req.session, sessionControlMode("1"))).rejects.toThrow(/owned persisted/);
+		expect(req.calls).toEqual(["start", "close"]);
 	});
 });

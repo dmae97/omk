@@ -83,6 +83,7 @@ export {
 	type ToolResourceAccess,
 	type ToolResourceClaim,
 } from "./tool-resource-claims.ts";
+export * from "./tool-terminal-cause.ts";
 // Per-call timeout / cancellation / late settlement (ALG-004)
 export {
 	createAbortedToolResult,

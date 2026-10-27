@@ -1,0 +1,504 @@
+{
+  "schema_version": "ATIF-v1.8",
+  "session_id": "sess-plain",
+  "agent": {
+    "name": "omk",
+    "version": "1.5.6",
+    "model_name": "gpt-5"
+  },
+  "steps": [
+    {
+      "source": "system",
+      "message": "[omk: system prompt not present in event stream; systemHash=sys0123abcd]",
+      "extra": {
+        "omk": {
+          "systemPrompt": {
+            "placeholder": true,
+            "systemHash": "sys0123abcd",
+            "reason": "json mode emits no system prompt (spec 110 Q1/Q3)"
+          }
+        }
+      },
+      "step_id": 1
+    },
+    {
+      "source": "user",
+      "message": "List the files in /app.",
+      "step_id": 2,
+      "timestamp": "2026-10-14T17:46:41.000Z",
+      "extra": {
+        "omk": {
+          "event": {
+            "type": "message_end"
+          },
+          "message": {
+            "role": "user",
+            "timestamp": 1792000001000
+          },
+          "layout": {
+            "kind": "blocks",
+            "blocks": [
+              {
+                "type": "text",
+                "_text": true
+              }
+            ],
+            "lengths": [
+              23
+            ]
+          }
+        }
+      }
+    },
+    {
+      "source": "agent",
+      "message": "Listing.",
+      "step_id": 3,
+      "timestamp": "2026-10-14T17:46:42.000Z",
+      "model_name": "gpt-5",
+      "reasoning_content": "Plan: list files.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_1",
+          "function_name": "bash",
+          "arguments": {
+            "command": "ls"
+          }
+        }
+      ],
+      "extra": {
+        "omk": {
+          "event": {
+            "type": "message_end"
+          },
+          "message": {
+            "role": "assistant",
+            "api": "openai-responses",
+            "provider": "openai",
+            "model": "gpt-5",
+            "responseId": "resp_1",
+            "usage": {
+              "input": 100,
+              "output": 20,
+              "cacheRead": 50,
+              "cacheWrite": 5,
+              "totalTokens": 175,
+              "cost": {
+                "input": 0,
+                "output": 0,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "total": 0
+              }
+            },
+            "stopReason": "toolUse",
+            "timestamp": 1792000002000
+          },
+          "blocks": [
+            {
+              "type": "thinking",
+              "thinkingSignature": "rs_1",
+              "_slot": "thinking"
+            },
+            {
+              "type": "text",
+              "_slot": "text"
+            },
+            {
+              "type": "toolCall",
+              "_slot": "toolCall"
+            }
+          ],
+          "textLengths": [
+            8
+          ],
+          "thinkingLengths": [
+            17
+          ]
+        }
+      },
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_1",
+            "content": "a.txt\nb.txt\n",
+            "extra": {
+              "omk": {
+                "isError": false,
+                "toolName": "bash",
+                "event": {},
+                "result": {
+                  "details": {
+                    "exitCode": 0
+                  }
+                },
+                "hasResultObject": true,
+                "layout": {
+                  "kind": "blocks",
+                  "blocks": [
+                    {
+                      "type": "text",
+                      "_text": true
+                    }
+                  ],
+                  "lengths": [
+                    12
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 155,
+        "completion_tokens": 20,
+        "cached_tokens": 50,
+        "cost_usd": 0.001,
+        "extra": {
+          "omk": {
+            "t": "2026-10-14T17:46:40.000Z",
+            "elapsedFraction": 0,
+            "pid": 4242,
+            "role": "lead",
+            "provider": "openai",
+            "model": "gpt-5",
+            "systemHash": "sys0123abcd",
+            "toolsHash": "tools4567ef",
+            "phase": "work",
+            "phaseSource": "default",
+            "requestedAtMs": 1792000000000,
+            "responseId": "resp_1",
+            "cacheWrite": 5,
+            "costInUsdTicks": 10,
+            "usageMissing": false,
+            "stopReason": "stop",
+            "durationMs": 900,
+            "gapMs": 10,
+            "_line": 0
+          }
+        }
+      },
+      "llm_call_count": 1
+    },
+    {
+      "source": "agent",
+      "message": "Done: two files.\n\nSecond paragraph.",
+      "step_id": 4,
+      "timestamp": "2026-10-14T17:46:44.000Z",
+      "model_name": "gpt-5",
+      "extra": {
+        "omk": {
+          "event": {
+            "type": "message_end"
+          },
+          "message": {
+            "role": "assistant",
+            "api": "openai-responses",
+            "provider": "openai",
+            "model": "gpt-5",
+            "responseId": "resp_2",
+            "usage": {
+              "input": 100,
+              "output": 20,
+              "cacheRead": 50,
+              "cacheWrite": 5,
+              "totalTokens": 175,
+              "cost": {
+                "input": 0,
+                "output": 0,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "total": 0
+              }
+            },
+            "stopReason": "stop",
+            "timestamp": 1792000004000
+          },
+          "blocks": [
+            {
+              "type": "text",
+              "_slot": "text"
+            },
+            {
+              "type": "text",
+              "_slot": "text"
+            }
+          ],
+          "textLengths": [
+            16,
+            17
+          ],
+          "thinkingLengths": []
+        }
+      },
+      "metrics": {
+        "prompt_tokens": 156,
+        "completion_tokens": 21,
+        "cached_tokens": 50,
+        "cost_usd": 0.002,
+        "extra": {
+          "omk": {
+            "t": "2026-10-14T17:46:41.000Z",
+            "elapsedFraction": 0.01,
+            "pid": 4242,
+            "role": "lead",
+            "provider": "openai",
+            "model": "gpt-5",
+            "systemHash": "sys0123abcd",
+            "toolsHash": "tools4567ef",
+            "phase": "work",
+            "phaseSource": "default",
+            "requestedAtMs": 1792000001000,
+            "responseId": "resp_2",
+            "cacheWrite": 5,
+            "costInUsdTicks": 20,
+            "usageMissing": false,
+            "stopReason": "stop",
+            "durationMs": 900,
+            "gapMs": 10,
+            "_line": 1
+          }
+        }
+      },
+      "llm_call_count": 1
+    }
+  ],
+  "final_metrics": {
+    "total_prompt_tokens": 311,
+    "total_completion_tokens": 41,
+    "total_cached_tokens": 100,
+    "total_cost_usd": 0.003,
+    "total_steps": 4
+  },
+  "extra": {
+    "omk": {
+      "export": {
+        "exporterVersion": "1",
+        "inputHashes": {
+          "events": "fd2dd5dd37196bcce7d0a51e35a9b26a812af0eee6355fb9b02e2f59ddfafcb3",
+          "run-log/finish-check.jsonl": "59f2c95ce49947b64d77faac3accde16c17876ef11c252631a67daa1d5c522de",
+          "run-log/llm-call.jsonl": "38e01c92a612d1ec1cf03256d482dda94546087b311e76b104dc91091150cbeb"
+        }
+      },
+      "header": {
+        "type": "session",
+        "version": 3,
+        "id": "sess-plain",
+        "timestamp": "2026-10-23T03:00:00.000Z",
+        "cwd": "/app"
+      },
+      "sessionInfo": null,
+      "eventLog": [
+        {
+          "ref": "header"
+        },
+        {
+          "raw": {
+            "type": "agent_start"
+          }
+        },
+        {
+          "raw": {
+            "type": "turn_start"
+          }
+        },
+        {
+          "ref": "step",
+          "step": 2
+        },
+        {
+          "raw": {
+            "type": "provider_request",
+            "requestId": "r1",
+            "provider": "openai",
+            "model": "gpt-5"
+          }
+        },
+        {
+          "raw": {
+            "type": "message_start",
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "thinking",
+                  "thinking": "Plan: list files.",
+                  "thinkingSignature": "rs_1"
+                },
+                {
+                  "type": "text",
+                  "text": "Listing."
+                },
+                {
+                  "type": "toolCall",
+                  "id": "call_1",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls"
+                  }
+                }
+              ],
+              "api": "openai-responses",
+              "provider": "openai",
+              "model": "gpt-5",
+              "responseId": "resp_1",
+              "usage": {
+                "input": 100,
+                "output": 20,
+                "cacheRead": 50,
+                "cacheWrite": 5,
+                "totalTokens": 175,
+                "cost": {
+                  "input": 0,
+                  "output": 0,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "total": 0
+                }
+              },
+              "stopReason": "toolUse",
+              "timestamp": 1792000002000
+            }
+          }
+        },
+        {
+          "ref": "step",
+          "step": 3
+        },
+        {
+          "ref": "toolStart",
+          "step": 3,
+          "id": "call_1",
+          "extra": {}
+        },
+        {
+          "raw": {
+            "type": "tool_execution_update",
+            "toolCallId": "call_1",
+            "toolName": "bash",
+            "args": {
+              "command": "ls"
+            },
+            "partialResult": {
+              "content": []
+            }
+          }
+        },
+        {
+          "ref": "toolEnd",
+          "step": 3,
+          "index": 0
+        },
+        {
+          "raw": {
+            "type": "message_start",
+            "message": {
+              "role": "toolResult",
+              "toolCallId": "call_1",
+              "toolName": "bash",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "a.txt\nb.txt\n"
+                }
+              ],
+              "isError": false,
+              "timestamp": 1792000003000
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "message_end",
+            "message": {
+              "role": "toolResult",
+              "toolCallId": "call_1",
+              "toolName": "bash",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "a.txt\nb.txt\n"
+                }
+              ],
+              "isError": false,
+              "timestamp": 1792000003000
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "turn_end",
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "thinking",
+                  "thinking": "Plan: list files.",
+                  "thinkingSignature": "rs_1"
+                },
+                {
+                  "type": "text",
+                  "text": "Listing."
+                },
+                {
+                  "type": "toolCall",
+                  "id": "call_1",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls"
+                  }
+                }
+              ],
+              "api": "openai-responses",
+              "provider": "openai",
+              "model": "gpt-5",
+              "responseId": "resp_1",
+              "usage": {
+                "input": 100,
+                "output": 20,
+                "cacheRead": 50,
+                "cacheWrite": 5,
+                "totalTokens": 175,
+                "cost": {
+                  "input": 0,
+                  "output": 0,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "total": 0
+                }
+              },
+              "stopReason": "toolUse",
+              "timestamp": 1792000002000
+            },
+            "toolResults": []
+          }
+        },
+        {
+          "ref": "step",
+          "step": 4
+        },
+        {
+          "raw": {
+            "type": "agent_end",
+            "messages": []
+          }
+        }
+      ],
+      "hasLlmCallLog": true,
+      "unmatchedLlmCalls": [],
+      "workerLlmCalls": [],
+      "runLog": {
+        "finish-check": [
+          {
+            "t": "2026-10-23T03:00:05.000Z",
+            "elapsedFraction": 0.05,
+            "pid": 4242,
+            "role": "lead",
+            "verdict": "pass"
+          }
+        ]
+      }
+    }
+  }
+}

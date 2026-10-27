@@ -6,6 +6,8 @@ import {
 	snapshotModelContract,
 } from "omk-agent-core";
 import { type SimpleStreamOptions, streamSimple } from "omk-ai";
+import { isDefaultOnEnvFlag } from "./env-flag.ts";
+import { createJsonSessionInfoStreamFn } from "./json-session-info.ts";
 import { createLlmCallRunLogStreamFn } from "./llm-call-run-log.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { mergeProviderAttributionHeaders } from "./provider-attribution.ts";
@@ -32,13 +34,17 @@ interface SdkProviderRuntime {
  */
 export function createSdkProviderStream(runtime: SdkProviderRuntime): StreamFn {
 	const capped = createResponseReasoningCapStreamFn(
-		createModelContractStreamFn(createLlmCallRunLogStreamFn(createProviderStream(runtime)), runtime.modelContract),
+		createModelContractStreamFn(
+			createLlmCallRunLogStreamFn(createJsonSessionInfoStreamFn(createProviderStream(runtime))),
+			runtime.modelContract,
+		),
 		resolveResponseReasoningCapConfig(),
 	);
-	return process.env.OMK_ADAPTIVE_EFFORT === "1" ? createLazyAdaptiveEffortStreamFn(capped) : capped;
+	return isDefaultOnEnvFlag(process.env.OMK_ADAPTIVE_EFFORT) ? createLazyAdaptiveEffortStreamFn(capped) : capped;
 }
 
 /**
+ * Spec 112: directly under the log, `OMK_JSON_SESSION_INFO=1` sees the same request context the log hashes.
  * Spec 037, outermost: `OMK_ADAPTIVE_EFFORT=1` (exactly "1") picks the effort per phase. The module
  * is imported on the first call only, so with the flag off nothing is loaded and `capped` is returned.
  */

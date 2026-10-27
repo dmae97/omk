@@ -41,8 +41,8 @@ function isAlive(pid: number): boolean {
  * been reaped, so the pid can still answer `kill(pid, 0)` for a moment.
  */
 async function waitUntilGone(pid: number, timeoutMs: number): Promise<boolean> {
-	const deadline = Date.now() + timeoutMs;
-	while (Date.now() < deadline) {
+	const deadline = performance.now() + timeoutMs;
+	while (performance.now() < deadline) {
 		if (!isAlive(pid)) return true;
 		await new Promise((resolve) => setTimeout(resolve, 10));
 	}
@@ -50,8 +50,8 @@ async function waitUntilGone(pid: number, timeoutMs: number): Promise<boolean> {
 }
 
 async function waitForFile(path: string, timeoutMs: number): Promise<string> {
-	const deadline = Date.now() + timeoutMs;
-	while (Date.now() < deadline) {
+	const deadline = performance.now() + timeoutMs;
+	while (performance.now() < deadline) {
 		if (existsSync(path)) {
 			const content = readFileSync(path, "utf8").trim();
 			if (content) return content;
@@ -85,11 +85,11 @@ describe.skipIf(process.platform === "win32")("InteractiveMode.stop() and a hung
 		const pid = Number(await waitForFile(pidFile, 2_000));
 		expect(isAlive(pid)).toBe(true);
 
-		const stoppedAt = Date.now();
+		const stoppedAt = performance.now();
 		(InteractiveMode.prototype.stop as (this: unknown) => void).call(stoppableFakeThis());
 
 		await expect(probe).resolves.toBeNull();
-		expect(Date.now() - stoppedAt).toBeLessThan(500);
+		expect(performance.now() - stoppedAt).toBeLessThan(500);
 		await expect(waitUntilGone(pid, 1_000)).resolves.toBe(true);
 		expect(formatHeadroomStatusLabel()).not.toMatch(/^headroom:/);
 	});

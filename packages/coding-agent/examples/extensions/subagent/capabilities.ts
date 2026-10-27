@@ -380,3 +380,30 @@ export function parseEmbeddedCapabilities(systemPrompt: string): AgentCapabiliti
 	if (skills.length === 0 && mcp.length === 0 && hooks.length === 0) return undefined;
 	return { skills, mcp, hooks };
 }
+
+/** Parent-session admission for a worker hand-off; returns undefined when admission is off (OMK_SKILL_ADMISSION). */
+export type WorkerSkillAdmit = (
+	granted: readonly { name: string; filePath: string }[],
+) => { args: string[]; notices: string[] } | undefined;
+
+/**
+ * Spec 106 SK6: the worker's skill launch args. Admission off (no `admit`, or it returns undefined): exactly the
+ * legacy behavior, `buildEnforcementArgs` when `enforceCapabilities` is on, nothing otherwise. Admission on: each
+ * granted skill takes a parent-session slot; the worker gets `--no-skills` plus only the admitted paths.
+ */
+export function workerSkillArgs(
+	validated: ValidatedCapabilities | undefined,
+	catalog: () => CapabilityCatalog,
+	enforceCapabilities: boolean,
+	admit: WorkerSkillAdmit | undefined,
+): { args: string[]; notices: string[] } {
+	const admitted = admit?.(
+		(validated?.skills ?? []).flatMap((name) => {
+			const filePath = resolveSkillPaths([name], catalog())[0];
+			return filePath ? [{ name, filePath }] : [];
+		}),
+	);
+	if (admitted) return admitted;
+	if (enforceCapabilities && validated) return { args: buildEnforcementArgs(validated, catalog()), notices: [] };
+	return { args: [], notices: [] };
+}

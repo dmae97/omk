@@ -86,6 +86,24 @@ describe("durable file mutation identity", () => {
 		expect(symbolic.canonicalPath).toBe(direct.canonicalPath);
 	});
 
+	it("waits its full lock timeout even when the wall clock jumps forward", () => {
+		const target = join(root, "clock.jsonl");
+		writeFileSync(target, "seed\n");
+		const held = acquireDurableFileMutationLockSync(target, { timeoutMs: 0 });
+		// Every Date.now() call moves 6s forward, like the WSL2 jumps; performance.now() is untouched.
+		const real = Date.now.bind(Date);
+		let calls = 0;
+		const clock = vi.spyOn(Date, "now").mockImplementation(() => real() + 6000 * calls++);
+		const started = performance.now();
+		try {
+			expect(() => acquireDurableFileMutationLockSync(target, { timeoutMs: 300 })).toThrow(DurableFileLockBusyError);
+			expect(performance.now() - started).toBeGreaterThanOrEqual(250);
+		} finally {
+			clock.mockRestore();
+			held.release();
+		}
+	});
+
 	it.skipIf(isWindows)("serializes mutation lock acquisition through hardlink and symlink aliases", () => {
 		const target = join(root, "target.jsonl");
 		const hardlink = join(root, "hardlink.jsonl");

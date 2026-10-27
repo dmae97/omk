@@ -4,7 +4,6 @@ import type { RunWriterRestartCommand } from "omk-protocol";
 import type { RunAuthority } from "./authority-runtime.ts";
 import { probeVerifiedSandbox } from "./broker.ts";
 import { loadCandidate, materializeCandidate } from "./candidate.ts";
-import { preflightCheckReceipts } from "./check-receipt.ts";
 import type { JournalSnapshot } from "./journal.ts";
 import { readRunClock, remainingRunTime } from "./recovery-clock.ts";
 import { requireRunJournal, withRecoveryLease } from "./recovery-command.ts";
@@ -102,7 +101,6 @@ export async function restartIsolatedWriter(
 		if (first?.kind !== "created") throw new VerifiedRunError("integrity");
 		if (first.contract.profile === "linux-scripted-agent-v1" && !options.runtime)
 			throw new VerifiedRunError("writer_backend_missing");
-		preflightCheckReceipts(first.contract);
 		probeVerifiedSandbox();
 		assertWriterRecoverable(runPath, snapshot);
 		if (options.signal?.aborted) throw new VerifiedRunError("cancelled");

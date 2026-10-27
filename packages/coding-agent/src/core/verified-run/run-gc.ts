@@ -86,6 +86,7 @@ function keepReason(runPath: string, state: RunProjection, olderThanMs: number):
 	const done = unrecoverable(state);
 	if (done === null) return "clock_unknown";
 	if (!done) return "recoverable";
+	// wall-clock: compared with the journal's file mtime, which the kernel stamps from the wall clock
 	if (Date.now() - lstatSync(journalPath(runPath)).mtimeMs < olderThanMs) return "recent";
 	return null;
 }

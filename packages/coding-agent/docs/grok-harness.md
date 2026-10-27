@@ -45,9 +45,9 @@ The proxy provider is retired. Remove stale `grok-oauth-proxy` entries from `mod
 
 ## Domain routing
 
-Selecting the native `xai` provider auto-applies the `grok-harness` loadout by default; this does not require `OMK_DOMAIN_ROUTING=1`. Set `OMK_GROK_HARNESS=0` to disable that provider-specific dispatch.
+Selecting the native `xai` provider auto-applies the `grok-harness` loadout by default; this does not depend on `OMK_DOMAIN_ROUTING`. Set `OMK_GROK_HARNESS=0` to disable that provider-specific dispatch.
 
-General prompt-based domain routing is separate and opt-in through `OMK_DOMAIN_ROUTING=1`. It selects one of the profiles under [`loadout-domains/`](loadout-domains/README.md) and composes it with the active role loadout. Grok presets only set provider, model, thinking level, and instruction pointers.
+General prompt-based domain routing is separate and on by default (`OMK_DOMAIN_ROUTING=0` opts out). It selects one of the profiles under [`loadout-domains/`](loadout-domains/README.md) and composes it with the active role loadout. Grok presets only set provider, model, thinking level, and instruction pointers.
 
 ## Chat model selection
 
