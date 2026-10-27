@@ -1,0 +1,72 @@
+src/main.ts(2,20): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/main.ts(3,7): error TS2322: Type 'string' is not assignable to type 'number'.
+src/main.ts(4,15): error TS2339: Property 'nmae' does not exist on type 'User'.
+src/user.ts(4,55): error TS18048: 'u.email' is possibly 'undefined'.
+src/user.ts(5,82): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es5.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2015.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2016.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2017.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2018.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2019.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2020.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2021.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2022.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.dom.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.dom.iterable.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.dom.asynciterable.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.webworker.importscripts.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.scripthost.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2015.core.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2015.collection.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2015.generator.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2015.iterable.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2015.promise.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2015.proxy.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2015.reflect.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2015.symbol.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2015.symbol.wellknown.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2016.array.include.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2016.intl.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2017.arraybuffer.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2017.date.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2017.object.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2017.sharedmemory.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2017.string.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2017.intl.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2017.typedarrays.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2018.asyncgenerator.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2018.asynciterable.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2018.intl.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2018.promise.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2018.regexp.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2019.array.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2019.object.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2019.string.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2019.symbol.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2019.intl.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2020.bigint.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2020.date.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2020.promise.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2020.sharedmemory.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2020.string.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2020.symbol.wellknown.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2020.intl.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2020.number.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2021.promise.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2021.string.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2021.weakref.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2021.intl.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2022.array.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2022.error.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2022.intl.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2022.object.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2022.string.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2022.regexp.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.decorators.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.decorators.legacy.d.ts
+/home/dev/proj/node_modules/@typescript/typescript-linux-x64/lib/lib.es2022.full.d.ts
+/home/dev/proj/tsc1/src/errors.ts
+/home/dev/proj/tsc1/src/user.ts
+/home/dev/proj/tsc1/src/main.ts

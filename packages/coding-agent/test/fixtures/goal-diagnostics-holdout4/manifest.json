@@ -1,0 +1,209 @@
+{
+  "authorDeclaration": "작성 전 097 spec, PR #174, 하네스 방 논의를 보지 않았음",
+  "flake8-undefined-name.txt": {
+    "groundTruthLine": 56,
+    "groundTruthLastLine": 56,
+    "groundTruthText": "billing/zreport.py:10:12: F821 undefined name 'totl'",
+    "groundTruthLastText": "billing/zreport.py:10:12: F821 undefined name 'totl'",
+    "linesBefore": 55,
+    "sanitizedBytes": 4147,
+    "sanitizedLines": 105,
+    "tags": [
+      "severity-filter",
+      "stats-duplicate",
+      ">24-before"
+    ],
+    "tool": "flake8",
+    "kind": [
+      "a",
+      "c"
+    ],
+    "failureType": "lint",
+    "sha256": "47a35ecf4a396b3846ee8d8e3287b0ec3dc50cd38111d1f315cefe4fbd4698bd"
+  },
+  "go-build-compile.txt": {
+    "groundTruthLine": 63,
+    "groundTruthLastLine": 65,
+    "groundTruthText": "internal/store/store.go:2:27: \"os\" imported and not used",
+    "groundTruthLastText": "internal/store/store.go:9:77: it.Quantity undefined (type Item has no field or method Quantity)",
+    "linesBefore": 62,
+    "sanitizedBytes": 1258,
+    "sanitizedLines": 66,
+    "tags": [
+      "stdlib-noise-before",
+      ">24-before"
+    ],
+    "tool": "go build",
+    "kind": [
+      "a",
+      "b",
+      "c"
+    ],
+    "failureType": "build",
+    "sha256": "846e1e6ded3be9d4ff6e0a80bfb8b99e6155ae39c239fbb4e7dcbe505eec713f"
+  },
+  "go-test-panic.txt": {
+    "groundTruthLine": 27,
+    "groundTruthLastLine": 31,
+    "groundTruthText": "    ledger_test.go:6: Balance() = -150, want 350",
+    "groundTruthLastText": "panic: runtime error: slice bounds out of range [1:0] [recovered, repanicked]",
+    "linesBefore": 26,
+    "sanitizedBytes": 2014,
+    "sanitizedLines": 58,
+    "tags": [
+      "panic-after-assert",
+      ">24-before"
+    ],
+    "tool": "go test",
+    "kind": [
+      "a",
+      "b",
+      "c"
+    ],
+    "failureType": "test",
+    "sha256": "bb731b8542c2afde475c0d72f63001fe750889941d0c63f1788cd6965e5732b5"
+  },
+  "go-test-vet.txt": {
+    "groundTruthLine": 4,
+    "groundTruthLastLine": 4,
+    "groundTruthText": "ledger/report.go:4:36: fmt.Printf format %d has arg r.Lines of wrong type []string",
+    "groundTruthLastText": "ledger/report.go:4:36: fmt.Printf format %d has arg r.Lines of wrong type []string",
+    "linesBefore": 3,
+    "sanitizedBytes": 1699,
+    "sanitizedLines": 52,
+    "tags": [
+      "error-near-top",
+      "passing-noise-after"
+    ],
+    "tool": "go test (vet)",
+    "kind": [
+      "b",
+      "c"
+    ],
+    "failureType": "test",
+    "sha256": "367a2c3778933c42c18f693876e144a87ec2fb6497c2e7eedf9fa9e091efbcd8"
+  },
+  "node-test-dot-summary.txt": {
+    "groundTruthLine": 8,
+    "groundTruthLastLine": 29,
+    "groundTruthText": "  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:",
+    "groundTruthLastText": "  TypeError: sku required",
+    "linesBefore": 7,
+    "sanitizedBytes": 1577,
+    "sanitizedLines": 39,
+    "tags": [],
+    "tool": "node --test (dot reporter)",
+    "kind": [
+      "b",
+      "d"
+    ],
+    "failureType": "test",
+    "sha256": "e19082aeff07738a13ea24642ff5180e221d8b32747f9e518d99c5ecdea3cbe4"
+  },
+  "node-test-runner.txt": {
+    "groundTruthLine": 14,
+    "groundTruthLastLine": 36,
+    "groundTruthText": "    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:",
+    "groundTruthLastText": "    TypeError [Error]: sku required",
+    "linesBefore": 13,
+    "sanitizedBytes": 3564,
+    "sanitizedLines": 91,
+    "tags": [
+      "recap-duplicates"
+    ],
+    "tool": "node --test",
+    "kind": [
+      "b"
+    ],
+    "failureType": "test",
+    "sha256": "bbdbbb9c6c5166d28ec0ffe78ea16aaa58c02799e43bbbf15d39d098cfd3ad77"
+  },
+  "perl-prove.txt": {
+    "groundTruthLine": 6,
+    "groundTruthLastLine": 30,
+    "groundTruthText": "#   Failed test 'trailing'",
+    "groundTruthLastText": "#   Failed test 'slug 'Ünïcode''",
+    "linesBefore": 5,
+    "sanitizedBytes": 1329,
+    "sanitizedLines": 55,
+    "tags": [
+      "warning-interleaved"
+    ],
+    "tool": "prove",
+    "kind": [
+      "b"
+    ],
+    "failureType": "test",
+    "sha256": "d498d86883806a20d0a2122d67ddf4ef911423c5ac058bf308ba3dd3d82fca49"
+  },
+  "pylint-severity-mix.txt": {
+    "groundTruthLine": 24,
+    "groundTruthLastLine": 25,
+    "groundTruthText": "billing/zreport.py:10:11: E0602: Undefined variable 'totl' (undefined-variable)",
+    "groundTruthLastText": "billing/zreport.py:16:11: E1101: Instance of 'invoice_line' has no 'descrbe' member; maybe 'describe'? (no-member)",
+    "linesBefore": 23,
+    "sanitizedBytes": 4391,
+    "sanitizedLines": 54,
+    "tags": [
+      "severity-filter"
+    ],
+    "tool": "pylint",
+    "kind": [
+      "b",
+      "c"
+    ],
+    "failureType": "lint",
+    "sha256": "453e6f1d37923841647ab4bac765379a48368ffdc71b587b7ddc1a5042818cf2"
+  },
+  "python-doctest.txt": {
+    "groundTruthLine": 17,
+    "groundTruthLastLine": 44,
+    "groundTruthText": "Failed example:",
+    "groundTruthLastText": "    KeyError: 'XX'",
+    "linesBefore": 16,
+    "sanitizedBytes": 1522,
+    "sanitizedLines": 58,
+    "tags": [],
+    "tool": "python -m doctest",
+    "kind": [
+      "b"
+    ],
+    "failureType": "test",
+    "sha256": "cfb170894e1b6e5ab900fa52a8802f2f8b14ae29e65a5bc9a3036281ce9e6678"
+  },
+  "python-unittest.txt": {
+    "groundTruthLine": 29,
+    "groundTruthLastLine": 38,
+    "groundTruthText": "KeyError: 'XX'",
+    "groundTruthLastText": "AssertionError: 85 != 90",
+    "linesBefore": 28,
+    "sanitizedBytes": 2080,
+    "sanitizedLines": 43,
+    "tags": [
+      ">24-before"
+    ],
+    "tool": "python -m unittest",
+    "kind": [
+      "a",
+      "b"
+    ],
+    "failureType": "test",
+    "sha256": "2ad0500207baa60279a4c596a6a0a225593d8b788b40a4d9b35dfbef89a79450"
+  },
+  "shellcheck-deploy-script.txt": {
+    "groundTruthLine": 5,
+    "groundTruthLastLine": 68,
+    "groundTruthText": "         ^------------------^ SC2045 (error): Iterating over ls output is fragile. Use globs.",
+    "groundTruthLastText": "             ^-- SC2071 (error): > is for string comparisons. Use -gt instead.",
+    "linesBefore": 4,
+    "sanitizedBytes": 2241,
+    "sanitizedLines": 79,
+    "tags": [
+      "severity-filter"
+    ],
+    "tool": "shellcheck",
+    "kind": [],
+    "failureType": "lint",
+    "sha256": "8ee333890bb15d4e7e093dadcff4ca582ff6463f65b5aa3da3b89454dc383faf"
+  }
+}

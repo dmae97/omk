@@ -1,0 +1,42 @@
+inventory.py: note: In function "total":
+inventory.py:17:16: error: Generator has incompatible item type "float"; expected "bool"  [misc]
+inventory.py: note: In function "restock":
+inventory.py:20:5: error: Item "None" of "Item | None" has no attribute "qty"  [union-attr]
+inventory.py: note: In function "label":
+inventory.py:23:5: error: Returning Any from function declared to return "str"  [no-any-return]
+inventory.py:23:21: error: Unsupported operand types for + ("str" and "int")  [operator]
+inventory.py: note: In function "load":
+inventory.py:26:28: error: Argument 2 to "Item" has incompatible type "str"; expected "int"  [arg-type]
+cli.py: note: In function "main":
+cli.py:5:11: error: Too many arguments for "total"  [call-arg]
+cli.py:6:30: error: Argument 2 to "restock" has incompatible type "int"; expected "str"  [arg-type]
+cli.py:7:15: error: Module has no attribute "lookup"  [attr-defined]
+cli.py:8:12: error: Incompatible return value type (got "str", expected "int")  [return-value]
+shipping.py: note: In function "total":
+shipping.py:17:16: error: Generator has incompatible item type "float"; expected "bool"  [misc]
+shipping.py: note: In function "restock":
+shipping.py:20:5: error: Item "None" of "ShippingRow | None" has no attribute "qty"  [union-attr]
+shipping.py: note: In function "label":
+shipping.py:23:5: error: Returning Any from function declared to return "str"  [no-any-return]
+shipping.py:23:21: error: Unsupported operand types for + ("str" and "int")  [operator]
+shipping.py: note: In function "load":
+shipping.py:26:35: error: Argument 2 to "ShippingRow" has incompatible type "str"; expected "int"  [arg-type]
+orders.py: note: In function "total":
+orders.py:17:16: error: Generator has incompatible item type "float"; expected "bool"  [misc]
+orders.py: note: In function "restock":
+orders.py:20:5: error: Item "None" of "OrdersRow | None" has no attribute "qty"  [union-attr]
+orders.py: note: In function "label":
+orders.py:23:5: error: Returning Any from function declared to return "str"  [no-any-return]
+orders.py:23:21: error: Unsupported operand types for + ("str" and "int")  [operator]
+orders.py: note: In function "load":
+orders.py:26:33: error: Argument 2 to "OrdersRow" has incompatible type "str"; expected "int"  [arg-type]
+billing.py: note: In function "total":
+billing.py:17:16: error: Generator has incompatible item type "float"; expected "bool"  [misc]
+billing.py: note: In function "restock":
+billing.py:20:5: error: Item "None" of "BillingRow | None" has no attribute "qty"  [union-attr]
+billing.py: note: In function "label":
+billing.py:23:5: error: Returning Any from function declared to return "str"  [no-any-return]
+billing.py:23:21: error: Unsupported operand types for + ("str" and "int")  [operator]
+billing.py: note: In function "load":
+billing.py:26:34: error: Argument 2 to "BillingRow" has incompatible type "str"; expected "int"  [arg-type]
+Found 24 errors in 5 files (checked 5 source files)

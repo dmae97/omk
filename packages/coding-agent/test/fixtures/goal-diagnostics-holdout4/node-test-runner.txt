@@ -1,0 +1,91 @@
+▶ total
+  ✔ sums 1 items (0.771369ms)
+  ✔ sums 2 items (0.107965ms)
+  ✔ sums 3 items (0.074674ms)
+  ✔ sums 4 items (0.066959ms)
+  ✔ sums 5 items (0.063689ms)
+  ✔ sums 6 items (0.057825ms)
+  ✔ sums 7 items (0.06714ms)
+  ✔ sums 8 items (0.064004ms)
+✔ total (2.436855ms)
+▶ coupons
+  ✔ fixed coupon (0.25853ms)
+  ✖ percent coupon (1.255788ms)
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    0 !== 180
+    
+        at TestContext.<anonymous> (file:///home/dev/project/test/cart.test.js:9:39)
+        at Test.runInAsyncScope (node:async_hooks:206:9)
+        at Test.run (node:internal/test_runner/test:796:25)
+        at Suite.processPendingSubtests (node:internal/test_runner/test:526:18)
+        at Test.postRun (node:internal/test_runner/test:889:19)
+        at Test.run (node:internal/test_runner/test:835:12)
+        at async Promise.all (index 0)
+        at async Suite.run (node:internal/test_runner/test:1135:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:526:7) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 0,
+      expected: 180,
+      operator: 'strictEqual'
+    }
+
+  ✔ stock lookup (0.245939ms)
+  ✖ stock lookup without sku (0.342083ms)
+    TypeError [Error]: sku required
+        at fetchStock (file:///home/dev/project/cart.js:3:55)
+        at TestContext.<anonymous> (file:///home/dev/project/test/cart.test.js:11:67)
+        at Test.runInAsyncScope (node:async_hooks:206:9)
+        at Test.run (node:internal/test_runner/test:796:25)
+        at Suite.processPendingSubtests (node:internal/test_runner/test:526:18)
+        at Test.postRun (node:internal/test_runner/test:889:19)
+        at Test.run (node:internal/test_runner/test:835:12)
+        at async Suite.processPendingSubtests (node:internal/test_runner/test:526:7)
+
+  ﹣ remote pricing (0.094956ms) # SKIP
+✖ coupons (2.622957ms)
+ℹ tests 13
+ℹ suites 2
+ℹ pass 10
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 144.370105
+
+✖ failing tests:
+
+test at test/cart.test.js:9:3
+✖ percent coupon (1.255788ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 180
+  
+      at TestContext.<anonymous> (file:///home/dev/project/test/cart.test.js:9:39)
+      at Test.runInAsyncScope (node:async_hooks:206:9)
+      at Test.run (node:internal/test_runner/test:796:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:526:18)
+      at Test.postRun (node:internal/test_runner/test:889:19)
+      at Test.run (node:internal/test_runner/test:835:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1135:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:526:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 180,
+    operator: 'strictEqual'
+  }
+
+test at test/cart.test.js:11:3
+✖ stock lookup without sku (0.342083ms)
+  TypeError [Error]: sku required
+      at fetchStock (file:///home/dev/project/cart.js:3:55)
+      at TestContext.<anonymous> (file:///home/dev/project/test/cart.test.js:11:67)
+      at Test.runInAsyncScope (node:async_hooks:206:9)
+      at Test.run (node:internal/test_runner/test:796:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:526:18)
+      at Test.postRun (node:internal/test_runner/test:889:19)
+      at Test.run (node:internal/test_runner/test:835:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:526:7)

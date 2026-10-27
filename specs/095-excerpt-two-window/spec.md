@@ -93,6 +93,33 @@ defeats this design — stated, not mitigated in 095.
 
 Each rule gets a unit test with a positive and a negative example.
 
+### Decisions recorded before holdout3 (Tech Lead, 2026-10-20)
+
+1. **Summary-line-only case: unchanged.** When only a summary line matches,
+   window 1 is the head fallback and the summary line anchors window 2 only.
+   Reason: a new placement rule to recover `ava-korean-28-pass` would be tuning
+   to holdout2; holdout2 stays 9/10 with that fixture as a known miss.
+2. **Lines rejected by R1–R4 count as nonexistent.** They do not count as
+   "another error pattern matched" (so they cannot disable summary anchoring)
+   and do not affect window selection. Reason: otherwise one planted
+   `[WARN] Error:` line could switch off summary placement, the same injection
+   steering R1–R4 exist to block.
+
+### Implementer choices (fixed before holdout3)
+
+- **R4 normalization:** the R4 key is the trimmed line with each run of digits
+  replaced by `#`. Reason: repeated lines that differ only in counters,
+  timestamps or ids collapse to one key, without fuzzier matching.
+- **Marker byte allocation:** the leading marker counts inside window 1
+  (768 B / 20 lines); the middle and trailing markers each reserve 48 B from
+  window 2, and the trailing marker takes 1 of window 2's 19 lines; the total
+  cap always holds. Reason: markers are budgeted up front so the 1,536 B /
+  40-line cap can never be exceeded.
+- **Long lines:** the anchor line is always kept, context lines above it are
+  dropped first, and a line that still does not fit is cut at a
+  code-point-safe byte budget. Reason: the anchor is the evidence; context is
+  expendable, and cuts must never split a UTF-8 sequence.
+
 ## Pre-registration order (binding)
 
 1. **Commit P:** patterns, exclusions, R1–R4, N1/N2, window caps as code

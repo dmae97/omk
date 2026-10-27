@@ -1,0 +1,26 @@
+
+   /home/dev/proj/html1/./index.html
+      L5 |<div id="main"><img src="logo.png"><p class=lead>Error-free since 2019</p></div>
+                                               ^ The value of attribute [ class ] must be in double quotes. (attr-value-double-quotes)
+      L6 |<div id="main"><a href="#">Report a failure</A></div>
+              ^ The id value [ main ] must be unique. (id-unique)
+      L6 |...v id="main"><a href="#">Report a failure</A></div>
+                                                     ^ The html element name of [ A ] must be in lowercase. (tagname-lowercase)
+
+   /home/dev/proj/html1/./contact.html
+      L5 |<div id="main"><img src="logo.png"><p class=lead>Error-free since 2019</p></div>
+                                               ^ The value of attribute [ class ] must be in double quotes. (attr-value-double-quotes)
+      L6 |<div id="main"><a href="#">Report a failure</A></div>
+              ^ The id value [ main ] must be unique. (id-unique)
+      L6 |...v id="main"><a href="#">Report a failure</A></div>
+                                                     ^ The html element name of [ A ] must be in lowercase. (tagname-lowercase)
+
+   /home/dev/proj/html1/./about.html
+      L5 |<div id="main"><img src="logo.png"><p class=lead>Error-free since 2019</p></div>
+                                               ^ The value of attribute [ class ] must be in double quotes. (attr-value-double-quotes)
+      L6 |<div id="main"><a href="#">Report a failure</A></div>
+              ^ The id value [ main ] must be unique. (id-unique)
+      L6 |...v id="main"><a href="#">Report a failure</A></div>
+                                                     ^ The html element name of [ A ] must be in lowercase. (tagname-lowercase)
+
+Scanned 3 files, found 9 errors in 3 files (15 ms)

@@ -1,0 +1,515 @@
+{
+	"source": "025bb97eed packages/coding-agent/src/core/goal-acceptance-diagnostic.ts (OMK_GOAL_DIAGNOSTICS_V3 unset)",
+	"excerpts": {
+		"goal-diagnostics/ansi-vitest.txt": {
+			"sha256": "c63db73a9538bd719f8ffa2edc81921bed30bdf9ffb7d36205ef36f83b102d2d",
+			"truncated": true,
+			"mode": "cross-mark",
+			"windows": [
+				[
+					9,
+					27
+				],
+				[
+					56,
+					73
+				]
+			]
+		},
+		"goal-diagnostics/cargo.txt": {
+			"sha256": "031ab7b90900643ebb259bab580312e6c228137fb7abf3020b057a6a61ddb5c9",
+			"truncated": true,
+			"mode": "error-code",
+			"windows": [
+				[
+					10,
+					28
+				],
+				[
+					76,
+					79
+				]
+			]
+		},
+		"goal-diagnostics/eslint.txt": {
+			"sha256": "ec1c5a372c204c0f02af85e3ee037bac39f9e54a15adb6ffd55a6d53f6b6cc28",
+			"truncated": true,
+			"mode": "eslint-error",
+			"windows": [
+				[
+					1,
+					20
+				],
+				[
+					152,
+					155
+				]
+			]
+		},
+		"goal-diagnostics/go-test.txt": {
+			"sha256": "2877a7753d1c240bcaf0c9967068e6266fd47a1625f51a79c217365b86b6e809",
+			"truncated": true,
+			"mode": "go-fail",
+			"windows": [
+				[
+					15,
+					33
+				],
+				[
+					68,
+					71
+				]
+			]
+		},
+		"goal-diagnostics/jest.txt": {
+			"sha256": "dc50d2ea105d2c41b4b1ffe88152686a9d6c07ad7728bab33be4bdb3ac9682f3",
+			"truncated": true,
+			"mode": "fail-marker",
+			"windows": [
+				[
+					18,
+					36
+				],
+				[
+					41,
+					54
+				]
+			]
+		},
+		"goal-diagnostics/korean-emoji.txt": {
+			"sha256": "915c88764cd85124ba7bf59da5d3f7b87418b8333900ac310badc9669060eee0",
+			"truncated": true,
+			"mode": "cross-mark",
+			"windows": [
+				[
+					10,
+					22
+				],
+				[
+					84,
+					93
+				]
+			]
+		},
+		"goal-diagnostics/node-stack.txt": {
+			"sha256": "2ef23499f0790297e49f3b08045666e3b1415bc344f365b76d7e7a30a54f941f",
+			"truncated": true,
+			"mode": "named-error",
+			"windows": [
+				[
+					10,
+					28
+				],
+				[
+					38,
+					55
+				]
+			]
+		},
+		"goal-diagnostics/npm.txt": {
+			"sha256": "7ba9f8c537cbf73647fc2519a421022f168c9684783757e9f887ab69638a0bdf",
+			"truncated": true,
+			"mode": "npm-err",
+			"windows": [
+				[
+					11,
+					29
+				],
+				[
+					40,
+					57
+				]
+			]
+		},
+		"goal-diagnostics/python-traceback.txt": {
+			"sha256": "9116592afd58d41485d37e55ce6cd1de0eb174f09a8e46edb9509c4f6e070f0b",
+			"truncated": true,
+			"mode": "traceback",
+			"windows": [
+				[
+					9,
+					27
+				],
+				[
+					50,
+					53
+				]
+			]
+		},
+		"goal-diagnostics/tsc.txt": {
+			"sha256": "0fc211c84f23931fc23a92d2c752dcbc72459a5aa566e867b11ab88f5851d359",
+			"truncated": true,
+			"mode": "error-ts",
+			"windows": [
+				[
+					1,
+					8
+				],
+				[
+					57,
+					63
+				]
+			]
+		},
+		"goal-diagnostics/vitest.txt": {
+			"sha256": "35e6243e8915693764236f0da4f80eee884f3713d8a4b50f8651e015344e7063",
+			"truncated": true,
+			"mode": "cross-mark",
+			"windows": [
+				[
+					16,
+					34
+				],
+				[
+					51,
+					68
+				]
+			]
+		},
+		"goal-diagnostics-holdout/deno-ansi.txt": {
+			"sha256": "17e38a7b9d5381351cc176d6417d028a21f85f56031962843ef0a32a1a7939c7",
+			"truncated": true,
+			"mode": "error-colon",
+			"windows": [
+				[
+					7,
+					25
+				],
+				[
+					33,
+					50
+				]
+			]
+		},
+		"goal-diagnostics-holdout/eslint-warn-flood.txt": {
+			"sha256": "d336d1ebeeeab219ce8544203c487aec2be5d278d59d15bda25420e6c9a5b3bd",
+			"truncated": true,
+			"mode": "eslint-error",
+			"windows": [
+				[
+					89,
+					94
+				]
+			]
+		},
+		"goal-diagnostics-holdout/gradle.txt": {
+			"sha256": "bfc20f15832d671f091aa9fbf3f9f964d1f65f362bc84f33d6d2e84849e3a73f",
+			"truncated": true,
+			"mode": "error-colon",
+			"windows": [
+				[
+					9,
+					27
+				],
+				[
+					50,
+					53
+				]
+			]
+		},
+		"goal-diagnostics-holdout/jest-55-pass.txt": {
+			"sha256": "34ad8f4d1c7e82b1cc2679750a4bfeb5637a266e9462938c1d9f2b7ebf8db52a",
+			"truncated": true,
+			"mode": "fail-marker",
+			"windows": [
+				[
+					53,
+					71
+				],
+				[
+					72,
+					74
+				]
+			]
+		},
+		"goal-diagnostics-holdout/korean-30-pass.txt": {
+			"sha256": "f26fd11ab9224d9f26b1c1c9175f6bcf94a1bbcd7c77e231cb0e703364b4331e",
+			"truncated": true,
+			"mode": "cross-mark",
+			"windows": [
+				[
+					28,
+					46
+				],
+				[
+					47,
+					61
+				]
+			]
+		},
+		"goal-diagnostics-holdout/make-gcc.txt": {
+			"sha256": "9212bac87028234e6e45ca56bfa608ef4a5eea62e8e4bd2f371ad3cc85e97cac",
+			"truncated": true,
+			"mode": "error-colon",
+			"windows": [
+				[
+					5,
+					23
+				],
+				[
+					32,
+					49
+				]
+			]
+		},
+		"goal-diagnostics-holdout/pytest-short.txt": {
+			"sha256": "259ce84f2540d3331d3f9dfe7e1a7e03006f7db6aea43b4a352d9741419f905c",
+			"truncated": true,
+			"mode": "named-error",
+			"windows": [
+				[
+					3,
+					21
+				],
+				[
+					29,
+					46
+				]
+			]
+		},
+		"goal-diagnostics-holdout/ruby-rspec.txt": {
+			"sha256": "29b2e71bbd2762efdc81db2bc30c7dc5bee790587c48a722539235f9ae539af0",
+			"truncated": true,
+			"mode": "error-colon",
+			"windows": [
+				[
+					3,
+					21
+				],
+				[
+					29,
+					46
+				]
+			]
+		},
+		"goal-diagnostics-holdout/tsc-multi.txt": {
+			"sha256": "5c4e7f0a68510d4007e8af3b1ea63dc507f72770bf86b46e340d891a02d84fb8",
+			"truncated": true,
+			"mode": "error-ts",
+			"windows": [
+				[
+					1,
+					11
+				],
+				[
+					73,
+					81
+				]
+			]
+		},
+		"goal-diagnostics-holdout/vitest-60-pass.txt": {
+			"sha256": "bf4afa0429ef116fe1a39b99f0e4a6abdc25a1ded8362b38445bec58c8fca5b4",
+			"truncated": true,
+			"mode": "cross-mark",
+			"windows": [
+				[
+					61,
+					79
+				],
+				[
+					80,
+					86
+				]
+			]
+		},
+		"goal-diagnostics-holdout2/ava-korean-28-pass.txt": {
+			"sha256": "c094c96d01828446c88fbfcb715ec86f6d53420bf8bf118c1ac3bcd5b1964354",
+			"truncated": true,
+			"mode": "summary-failed",
+			"windows": [
+				[
+					1,
+					20
+				],
+				[
+					40,
+					43
+				]
+			]
+		},
+		"goal-diagnostics-holdout2/bazel.txt": {
+			"sha256": "30e06ae74baabc664b5f1204f8f943e0ef00a0ca05a92da2ef783e49b7b52f5f",
+			"truncated": false,
+			"mode": "error-word",
+			"windows": null
+		},
+		"goal-diagnostics-holdout2/dotnet-warnings-first.txt": {
+			"sha256": "5165f03092cf5c9fc5977b53f89e6a7393820bd2443a0102dcc1fa4bb3b0bcb0",
+			"truncated": true,
+			"mode": "fallback",
+			"windows": null
+		},
+		"goal-diagnostics-holdout2/kotlin-deceptive.txt": {
+			"sha256": "5037a4e7d0f0dda2b06e9704ef6828aff287dd2e35a8327e9335f0c30f776889",
+			"truncated": false,
+			"mode": "fail-marker",
+			"windows": null
+		},
+		"goal-diagnostics-holdout2/mocha-30-pass.txt": {
+			"sha256": "88e3e927ac38b7d8675fcb12137d25037d1703bb8dd70861c619dc89c1c66cc0",
+			"truncated": true,
+			"mode": "summary-failing",
+			"windows": [
+				[
+					1,
+					20
+				],
+				[
+					32,
+					49
+				]
+			]
+		},
+		"goal-diagnostics-holdout2/mypy.txt": {
+			"sha256": "7bbd752be817cf0a4a248ed6f67a9508da1790dd6404adaa610905096fab9e4a",
+			"truncated": true,
+			"mode": "error-colon",
+			"windows": [
+				[
+					1,
+					11
+				],
+				[
+					25,
+					34
+				]
+			]
+		},
+		"goal-diagnostics-holdout2/phpunit-deceptive.txt": {
+			"sha256": "926b1644523713d53b37019da18316340e8e069ac2cb1bfdd3fd75cc5e0eb310",
+			"truncated": true,
+			"mode": "fallback",
+			"windows": null
+		},
+		"goal-diagnostics-holdout2/playwright-40-pass.txt": {
+			"sha256": "ee59699251d596bf0ecc943fe6c4c6d576faf4a3dde2614b998b34b044657b5a",
+			"truncated": true,
+			"mode": "error-word",
+			"windows": [
+				[
+					42,
+					60
+				],
+				[
+					61,
+					70
+				]
+			]
+		},
+		"goal-diagnostics-holdout2/terraform-fake-error.txt": {
+			"sha256": "a55bf7791c3c3e7d16d539f76701d4e6ea7a7dc496524e296ba00dd032affaf3",
+			"truncated": true,
+			"mode": "error-colon",
+			"windows": [
+				[
+					48,
+					57
+				]
+			]
+		},
+		"goal-diagnostics-holdout2/xcodebuild-keywordless.txt": {
+			"sha256": "1b83e95bab2953050c8779b08f283ab0085fdf945047451c7c92ecc8fbe8dbbf",
+			"truncated": true,
+			"mode": "fallback",
+			"windows": null
+		},
+		"goal-diagnostics-holdout3/cmake-keywordless-36.txt": {
+			"sha256": "8f327ee004d0fd4752756dd856b3900567ef738f4d87a8d875b1275c48cd8fee",
+			"truncated": true,
+			"mode": "fallback",
+			"windows": null
+		},
+		"goal-diagnostics-holdout3/ctest-fake-error.txt": {
+			"sha256": "176081b4f005f52958f8632fa77f1d04946a90b949538fcbf1b1b472be78adb0",
+			"truncated": true,
+			"mode": "error-colon",
+			"windows": [
+				[
+					28,
+					46
+				]
+			]
+		},
+		"goal-diagnostics-holdout3/deno-error-names-decoy.txt": {
+			"sha256": "bee50485f15f52dc926c7600ac7c62099f003a2d54f05f4c7a7871654ee80b87",
+			"truncated": true,
+			"mode": "error-colon",
+			"windows": [
+				[
+					1,
+					20
+				],
+				[
+					52,
+					55
+				]
+			]
+		},
+		"goal-diagnostics-holdout3/exunit-summary-mid.txt": {
+			"sha256": "ad9464af0cc844505ffa96de8492b7aa053f11f9fc7babec5245b6bd69d6942e",
+			"truncated": true,
+			"mode": "fallback",
+			"windows": null
+		},
+		"goal-diagnostics-holdout3/golangci-warnings-first.txt": {
+			"sha256": "4134e71d617f6994732fc5e560eae515233af23d5246e71b3b43d0c56a6b21a8",
+			"truncated": true,
+			"mode": "fallback",
+			"windows": null
+		},
+		"goal-diagnostics-holdout3/maven-zero-errors-decoy.txt": {
+			"sha256": "579f8b8c9abc942ede078bc189bc739d1f113cbe9509abb86f9994b6e012ce71",
+			"truncated": true,
+			"mode": "named-error",
+			"windows": [
+				[
+					35,
+					48
+				]
+			]
+		},
+		"goal-diagnostics-holdout3/pytest-error-names-decoy.txt": {
+			"sha256": "3db374d94fbb5a5b7857db5d4ecb52815d808f0594240378b6765f99b97bd615",
+			"truncated": true,
+			"mode": "pytest-e",
+			"windows": [
+				[
+					39,
+					48
+				]
+			]
+		},
+		"goal-diagnostics-holdout3/rspec-28-pass.txt": {
+			"sha256": "bb1d8d785c643a0ca5397824802cb319024874538db235ebdc0d92c7f6a8b6d0",
+			"truncated": true,
+			"mode": "error-colon",
+			"windows": [
+				[
+					32,
+					50
+				],
+				[
+					51,
+					55
+				]
+			]
+		},
+		"goal-diagnostics-holdout3/ruff-keywordless-28.txt": {
+			"sha256": "522d84604740007bfd907346e1c3b23d0c9ad98298822208b562cdde5f729da4",
+			"truncated": true,
+			"mode": "fallback",
+			"windows": null
+		},
+		"goal-diagnostics-holdout3/webpack-ansi-30.txt": {
+			"sha256": "8073e2a861e0ccc914a328e5b433c6362a036d3136589c95760823316adc895b",
+			"truncated": true,
+			"mode": "error-word",
+			"windows": [
+				[
+					32,
+					43
+				]
+			]
+		}
+	}
+}

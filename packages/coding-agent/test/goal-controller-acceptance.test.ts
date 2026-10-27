@@ -585,6 +585,18 @@ describe("spec 094 acceptance diagnostics in the repair follow-up", () => {
 		}
 	});
 
+	it("spec 097 A3a: OMK_GOAL_DIAGNOSTICS_V3=1 alone (diagnostics off) keeps main's follow-up byte for byte", async () => {
+		for (const env of [undefined, "0"]) {
+			vi.stubEnv("OMK_GOAL_DIAGNOSTICS_V3", "1");
+			const { h, receiptId } = await failOnce(env, "echo missing-feature; exit 4");
+			expect(h.messages).toEqual([golden(receiptId)]);
+			expect(h.messages.join("")).not.toContain("acceptance-diagnostic");
+			expect(Object.keys(h.entries.at(-1)?.data as object).sort()).toEqual(
+				["digest", "exitCode", "goalId", "goalRevision", "passed", "receiptId", "status", "trigger"].sort(),
+			);
+		}
+	});
+
 	it("AC1: flag on carries check, attempt and workspace identity plus the output", async () => {
 		const { h, before, receiptId } = await failOnce("1");
 		expect(h.messages).toHaveLength(1);

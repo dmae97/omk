@@ -1,0 +1,105 @@
++ flake8 --show-source --statistics --count billing test_tax.py
+billing/tax.py:12:1: F401 'os' imported but unused
+import os, sys
+^
+billing/tax.py:12:1: F401 'sys' imported but unused
+import os, sys
+^
+billing/tax.py:12:10: E401 multiple imports on one line
+import os, sys
+         ^
+billing/tax.py:15:1: E302 expected 2 blank lines, found 0
+def rate_for(country):
+^
+billing/tax.py:17:1: E302 expected 2 blank lines, found 0
+def apply(amount, country):
+^
+billing/tax.py:18:5: F841 local variable 'unused' is assigned to but never used
+    unused = 3
+    ^
+billing/tax.py:20:1: E302 expected 2 blank lines, found 0
+class invoice_line:
+^
+billing/tax.py:22:17: E225 missing whitespace around operator
+        self.qty=qty; self.price = price
+                ^
+billing/tax.py:22:21: E702 multiple statements on one line (semicolon)
+        self.qty=qty; self.price = price
+                    ^
+billing/tax.py:24:5: E301 expected 1 blank line, found 0
+    def total(self):
+    ^
+billing/tax.py:26:31: E701 multiple statements on one line (colon)
+        for d in self.discount: t = t - d
+                              ^
+billing/tax.py:28:5: E301 expected 1 blank line, found 0
+    def describe(self, verbose = False):
+    ^
+billing/tax.py:28:31: E251 unexpected spaces around keyword / parameter equals
+    def describe(self, verbose = False):
+                              ^
+billing/tax.py:28:33: E251 unexpected spaces around keyword / parameter equals
+    def describe(self, verbose = False):
+                                ^
+billing/tax.py:29:20: E712 comparison to True should be 'if cond is True:' or 'if cond:'
+        if verbose == True:
+                   ^
+billing/tax.py:33:1: E302 expected 2 blank lines, found 0
+def parse_csv(text):
+^
+billing/tax.py:35:34: E741 ambiguous variable name 'l'
+        rows = [l.split(",") for l in text.splitlines()]
+                                 ^
+billing/tax.py:36:5: E722 do not use bare 'except'
+    except:
+    ^
+billing/zreport.py:10:12: F821 undefined name 'totl'
+    return totl
+           ^
+test_tax.py:1:16: E401 multiple imports on one line
+import unittest, logging
+               ^
+test_tax.py:2:1: F401 'billing.tax.apply' imported but unused
+from billing.tax import rate_for, apply, invoice_line, parse_csv
+^
+test_tax.py:4:1: E302 expected 2 blank lines, found 0
+class RateTests(unittest.TestCase):
+^
+test_tax.py:8:1: E302 expected 2 blank lines, found 0
+class LineTests(unittest.TestCase):
+^
+test_tax.py:10:80: E501 line too long (87 > 79 characters)
+    def test_discount(self): self.assertEqual(invoice_line(2, 50, [10, 5]).total(), 90)
+                                                                               ^
+test_tax.py:11:80: E501 line too long (95 > 79 characters)
+    def test_describe(self): self.assertEqual(invoice_line(1, 2).describe(True), "line: 1 x 2")
+                                                                               ^
+test_tax.py:12:5: E301 expected 1 blank line, found 0
+    def test_csv(self):
+    ^
+test_tax.py:15:5: E301 expected 1 blank line, found 0
+    def test_csv_empty(self): self.assertEqual(parse_csv(""), [])
+    ^
+test_tax.py:18:1: E305 expected 2 blank lines after class or function definition, found 0
+if __name__ == "__main__": unittest.main()
+^
+test_tax.py:18:26: E701 multiple statements on one line (colon)
+if __name__ == "__main__": unittest.main()
+                         ^
+1     E225 missing whitespace around operator
+2     E251 unexpected spaces around keyword / parameter equals
+4     E301 expected 1 blank line, found 0
+6     E302 expected 2 blank lines, found 0
+1     E305 expected 2 blank lines after class or function definition, found 0
+2     E401 multiple imports on one line
+2     E501 line too long (87 > 79 characters)
+2     E701 multiple statements on one line (colon)
+1     E702 multiple statements on one line (semicolon)
+1     E712 comparison to True should be 'if cond is True:' or 'if cond:'
+1     E722 do not use bare 'except'
+1     E741 ambiguous variable name 'l'
+3     F401 'os' imported but unused
+1     F821 undefined name 'totl'
+1     F841 local variable 'unused' is assigned to but never used
+29
+exit 1

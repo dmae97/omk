@@ -1,0 +1,55 @@
+Check file:///app/src/server_test.ts
+running 31 tests from ./src/server_test.ts
+error handler returns 500 json ... ok (3ms)
+parses error: prefix in headers ... ok (3ms)
+router matches /errors path ... ok (3ms)
+route 0 responds ... ok (3ms)
+route 1 responds ... ok (3ms)
+route 2 responds ... ok (3ms)
+route 3 responds ... ok (3ms)
+route 4 responds ... ok (3ms)
+route 5 responds ... ok (3ms)
+route 6 responds ... ok (3ms)
+route 7 responds ... ok (3ms)
+route 8 responds ... ok (3ms)
+route 9 responds ... ok (3ms)
+route 10 responds ... ok (3ms)
+route 11 responds ... ok (3ms)
+route 12 responds ... ok (3ms)
+route 13 responds ... ok (3ms)
+route 14 responds ... ok (3ms)
+route 15 responds ... ok (3ms)
+route 16 responds ... ok (3ms)
+route 17 responds ... ok (3ms)
+route 18 responds ... ok (3ms)
+route 19 responds ... ok (3ms)
+route 20 responds ... ok (3ms)
+route 21 responds ... ok (3ms)
+route 22 responds ... ok (3ms)
+route 23 responds ... ok (3ms)
+session cookie expires ... FAILED (12ms)
+route 24 responds ... ok (2ms)
+route 25 responds ... ok (2ms)
+route 26 responds ... ok (2ms)
+route 27 responds ... ok (2ms)
+
+ ERRORS 
+
+session cookie expires => ./src/server_test.ts:88:6
+error: AssertionError: Values are not equal.
+
+    [Diff] Actual / Expected
+
+-   3600
++   1800
+
+    at assertEquals (https://jsr.io/@std/assert/1.0.8/equals.ts:51:9)
+    at file:///app/src/server_test.ts:94:5
+
+ FAILURES 
+
+session cookie expires => ./src/server_test.ts:88:6
+
+FAILED | 30 passed | 1 failed (418ms)
+
+error: Test failed

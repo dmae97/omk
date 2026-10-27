@@ -1,0 +1,43 @@
+1..38
+ok 1 slug word1
+ok 2 slug word2
+ok 3 slug word3
+ok 4 slug word4
+ok 5 slug word5
+ok 6 slug word6
+ok 7 slug word7
+ok 8 slug word8
+ok 9 slug word9
+ok 10 slug word10
+ok 11 slug word11
+ok 12 slug word12
+ok 13 slug word13
+ok 14 slug word14
+ok 15 slug word15
+ok 16 slug word16
+ok 17 slug word17
+ok 18 slug word18
+ok 19 slug word19
+ok 20 slug word20
+ok 21 slug word21
+ok 22 slug word22
+ok 23 slug word23
+ok 24 slug word24
+ok 25 slug word25
+ok 26 prints error usage when no args
+not ok 27 collapses double spaces
+# (in test file slug.bats, line 28)
+#   `@test "collapses double spaces" { run ./slug.sh "a  b"; [ "$output" = "a-b" ]; }' failed
+ok 28 help exits zero
+not ok 29 keeps unicode letters
+# (in test file slug.bats, line 30)
+#   `@test "keeps unicode letters" { run ./slug.sh "Café"; [ "$output" = "café" ]; }' failed
+ok 30 fail-fast flag ignored
+ok 31 digits 1 kept
+ok 32 digits 2 kept
+ok 33 digits 3 kept
+ok 34 digits 4 kept
+ok 35 digits 5 kept
+ok 36 digits 6 kept
+ok 37 digits 7 kept
+ok 38 digits 8 kept

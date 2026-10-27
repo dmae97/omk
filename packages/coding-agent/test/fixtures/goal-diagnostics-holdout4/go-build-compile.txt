@@ -1,0 +1,66 @@
++ go build -a -v ./...
+internal/goarch
+internal/unsafeheader
+internal/godebugs
+internal/byteorder
+internal/coverage/rtcov
+internal/goos
+internal/goexperiment
+internal/profilerecord
+internal/cpu
+math/bits
+internal/abi
+internal/runtime/atomic
+internal/runtime/syscall/linux
+internal/runtime/gc
+internal/runtime/sys
+internal/asan
+internal/msan
+internal/strconv
+internal/runtime/math
+internal/runtime/pprof/label
+internal/trace/tracev2
+cmp
+unicode/utf8
+sync/atomic
+internal/bytealg
+internal/chacha8rand
+internal/runtime/exithook
+internal/runtime/gc/scan
+unicode
+math
+internal/race
+internal/synctest
+internal/stringslite
+internal/runtime/maps
+internal/sync
+internal/runtime/cgroup
+runtime
+iter
+internal/reflectlite
+sync
+slices
+errors
+internal/testlog
+io
+internal/oserror
+path
+strconv
+syscall
+reflect
+strings
+internal/syscall/execenv
+time
+internal/syscall/unix
+io/fs
+internal/poll
+internal/fmtsort
+internal/filepathlite
+os
+fmt
+example.com/inventory/internal/store
+# example.com/inventory/internal/store
+internal/store/store.go:2:27: "os" imported and not used
+internal/store/store.go:8:36: invalid operation: it.Qty += n (mismatched types int and string)
+internal/store/store.go:9:77: it.Quantity undefined (type Item has no field or method Quantity)
+exit status 1

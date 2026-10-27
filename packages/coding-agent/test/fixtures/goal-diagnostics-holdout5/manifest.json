@@ -1,0 +1,333 @@
+{
+  "authorDeclaration": "작성 전과 작성 중 097 spec(specs/097-*), diagnostics 소스, PR #174, PR #175, 하네스 방 논의, 다른 holdout manifest를 보지 않았음",
+  "jest-assertions.txt": {
+    "groundTruthLine": 4,
+    "groundTruthLastLine": 38,
+    "groundTruthText": "    expect(received).toBe(expected) // Object.is equality",
+    "groundTruthLastText": "    expect(received).toBeGreaterThan(expected)",
+    "linesBefore": 3,
+    "sanitizedBytes": 2092,
+    "sanitizedLines": 56,
+    "tags": [
+      "jest",
+      "assertion",
+      "multi-failure"
+    ],
+    "tool": "jest",
+    "kind": [
+      "b",
+      "c"
+    ],
+    "failureType": "test",
+    "sha256": "84ef7d146fcac92513f89f2cdf802b7440e646a38aa2c9c2d2a480a8045fdbb2",
+    "a1Excluded": true
+  },
+  "jest-coverage-threshold.txt": {
+    "groundTruthLine": 37,
+    "groundTruthLastLine": 37,
+    "groundTruthText": "Jest: Coverage for branches (25%) does not meet \"global\" threshold (80%)",
+    "groundTruthLastText": "Jest: Coverage for branches (25%) does not meet \"global\" threshold (80%)",
+    "linesBefore": 36,
+    "sanitizedBytes": 2258,
+    "sanitizedLines": 43,
+    "tags": [
+      "jest",
+      "coverage",
+      "summary-only"
+    ],
+    "tool": "jest",
+    "kind": [
+      "a",
+      "c",
+      "d"
+    ],
+    "failureType": "test",
+    "sha256": "c3874d6cfa206a80c747062ea499de40f04f98c7290cb191a603255526f9a800",
+    "a1Excluded": true
+  },
+  "mocha-deep-equal.txt": {
+    "groundTruthLine": 41,
+    "groundTruthLastLine": 41,
+    "groundTruthText": "      AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:",
+    "groundTruthLastText": "      AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:",
+    "linesBefore": 40,
+    "sanitizedBytes": 1423,
+    "sanitizedLines": 59,
+    "tags": [
+      "mocha",
+      "assertion",
+      "long-preamble"
+    ],
+    "tool": "mocha",
+    "kind": [
+      "a",
+      "b"
+    ],
+    "failureType": "test",
+    "sha256": "cd72f4cab31e03fe2f6700bbc99ab38f82b71f01eb882c346406252c620ff911",
+    "a1Excluded": true
+  },
+  "tsc-listfiles.txt": {
+    "groundTruthLine": 1,
+    "groundTruthLastLine": 5,
+    "groundTruthText": "src/main.ts(2,20): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.",
+    "groundTruthLastText": "src/user.ts(5,82): error TS2322: Type 'string | undefined' is not assignable to type 'string'.",
+    "linesBefore": 0,
+    "sanitizedBytes": 6119,
+    "sanitizedLines": 72,
+    "tags": [
+      "typescript",
+      "trailing-noise"
+    ],
+    "tool": "tsc",
+    "kind": [
+      "b"
+    ],
+    "failureType": "typecheck",
+    "sha256": "430f984de8a3ea59f47af4f77811ee7b50ece1af58b717c39205e11dc06fb063",
+    "a1Excluded": true
+  },
+  "eslint-warnings-then-errors.txt": {
+    "groundTruthLine": 44,
+    "groundTruthLastLine": 46,
+    "groundTruthText": "  1:30  error  Duplicate key 'mode'                 no-dupe-keys",
+    "groundTruthLastText": "  4:10  error  'formatFailure' is not defined       no-undef",
+    "linesBefore": 43,
+    "sanitizedBytes": 3477,
+    "sanitizedLines": 49,
+    "tags": [
+      "eslint",
+      "warnings-first"
+    ],
+    "tool": "eslint",
+    "kind": [
+      "a",
+      "b"
+    ],
+    "failureType": "lint",
+    "sha256": "76d141a908567ae135109aa827df28deb288524999e5b9571ab11694d74e28ff",
+    "a1Excluded": true
+  },
+  "mypy-strict.txt": {
+    "groundTruthLine": 2,
+    "groundTruthLastLine": 41,
+    "groundTruthText": "inventory.py:17:16: error: Generator has incompatible item type \"float\"; expected \"bool\"  [misc]",
+    "groundTruthLastText": "billing.py:26:34: error: Argument 2 to \"BillingRow\" has incompatible type \"str\"; expected \"int\"  [arg-type]",
+    "linesBefore": 1,
+    "sanitizedBytes": 2967,
+    "sanitizedLines": 42,
+    "tags": [
+      "mypy",
+      "python",
+      "many-diagnostics"
+    ],
+    "tool": "mypy",
+    "kind": [
+      "b"
+    ],
+    "failureType": "typecheck",
+    "sha256": "f5f792a74c53132a198320dfbc48b3501c42fbf3c7c5c810d4b2f4548d028344",
+    "a1Excluded": true
+  },
+  "pyright-basic.txt": {
+    "groundTruthLine": 2,
+    "groundTruthLastLine": 38,
+    "groundTruthText": "  /home/dev/proj/py1/billing.py:17:12 - error: Type \"float | Literal[0]\" is not assignable to return type \"int\"",
+    "groundTruthLastText": "  /home/dev/proj/py1/shipping.py:26:35 - error: Argument of type \"str\" cannot be assigned to parameter \"qty\" of type \"int\" in function \"__init__\"",
+    "linesBefore": 1,
+    "sanitizedBytes": 3513,
+    "sanitizedLines": 40,
+    "tags": [
+      "pyright",
+      "python",
+      "continuation-lines"
+    ],
+    "tool": "pyright",
+    "kind": [
+      "b"
+    ],
+    "failureType": "typecheck",
+    "sha256": "4fcf683e75b27ee8621ef4259b73dd890826d51bf07d9df54fa599f096f64250"
+  },
+  "yamllint-truthy-then-syntax.txt": {
+    "groundTruthLine": 28,
+    "groundTruthLastLine": 29,
+    "groundTruthText": "  44:5      error    duplication of key \"image\" in mapping  (key-duplicates)",
+    "groundTruthLastText": "  47:6      error    syntax error: expected <block end>, but found '<block sequence start>' (syntax)",
+    "linesBefore": 27,
+    "sanitizedBytes": 2141,
+    "sanitizedLines": 29,
+    "tags": [
+      "yaml",
+      "warnings-first"
+    ],
+    "tool": "yamllint",
+    "kind": [
+      "a"
+    ],
+    "failureType": "lint",
+    "sha256": "04309126ee955fd3e183fda4b735d9bf526134d7dd91a4469f376079d919d0f6"
+  },
+  "markdownlint-docs.txt": {
+    "groundTruthLine": 1,
+    "groundTruthLastLine": 52,
+    "groundTruthText": "errors.md:1 error MD022/blanks-around-headings Headings should be surrounded by blank lines [Expected: 1; Actual: 0; Below] [Context: \"# Errors\"]",
+    "groundTruthLastText": "usage.md:10 error MD040/fenced-code-language Fenced code blocks should have a language specified [Context: \"```\"]",
+    "linesBefore": 0,
+    "sanitizedBytes": 6087,
+    "sanitizedLines": 52,
+    "tags": [
+      "markdown",
+      "all-lines-errors"
+    ],
+    "tool": "markdownlint",
+    "kind": [],
+    "failureType": "lint",
+    "sha256": "db094b012c374d9fc2c5359e81c4a9a65297651ec4c3c910ac0287d4c4fa01d3"
+  },
+  "stylelint-standard.txt": {
+    "groundTruthLine": 3,
+    "groundTruthLastLine": 42,
+    "groundTruthText": "  1:17  ✖  Unknown property \"colr\"                          property-no-unknown",
+    "groundTruthLastText": "  7:22  ✖  Expected single space before \"-\" operator        function-calc-no-unspaced-operator",
+    "linesBefore": 2,
+    "sanitizedBytes": 3603,
+    "sanitizedLines": 45,
+    "tags": [
+      "css",
+      "no-keyword"
+    ],
+    "tool": "stylelint",
+    "kind": [
+      "b",
+      "c"
+    ],
+    "failureType": "lint",
+    "sha256": "52ee349d94793e33f1f7a778a5630e97f9eef1c971eca6c0b6ea06728033831f"
+  },
+  "bats-tap.txt": {
+    "groundTruthLine": 28,
+    "groundTruthLastLine": 32,
+    "groundTruthText": "not ok 27 collapses double spaces",
+    "groundTruthLastText": "not ok 29 keeps unicode letters",
+    "linesBefore": 27,
+    "sanitizedBytes": 1014,
+    "sanitizedLines": 43,
+    "tags": [
+      "bats",
+      "tap",
+      "shell"
+    ],
+    "tool": "bats",
+    "kind": [
+      "a",
+      "b",
+      "c"
+    ],
+    "failureType": "test",
+    "sha256": "7b27d662f3d432b51529c87bd2ef50e97a53591597f58d7ee56b9a1967248557"
+  },
+  "htmlhint-attrs.txt": {
+    "groundTruthLine": 4,
+    "groundTruthLastLine": 24,
+    "groundTruthText": "                                               ^ The value of attribute [ class ] must be in double quotes. (attr-value-double-quotes)",
+    "groundTruthLastText": "                                                     ^ The html element name of [ A ] must be in lowercase. (tagname-lowercase)",
+    "linesBefore": 3,
+    "sanitizedBytes": 1812,
+    "sanitizedLines": 26,
+    "tags": [
+      "html",
+      "caret-lines"
+    ],
+    "tool": "htmlhint",
+    "kind": [
+      "b",
+      "c"
+    ],
+    "failureType": "lint",
+    "sha256": "243cc28911b80790c7b153c49a8b7344e00de729cfcc59106eb2f5912f1f1538"
+  },
+  "c8-branch-threshold.txt": {
+    "groundTruthLine": 38,
+    "groundTruthLastLine": 38,
+    "groundTruthText": "ERROR: Coverage for branches (67.05%) does not meet global threshold (80%)",
+    "groundTruthLastText": "ERROR: Coverage for branches (67.05%) does not meet global threshold (80%)",
+    "linesBefore": 37,
+    "sanitizedBytes": 2143,
+    "sanitizedLines": 38,
+    "tags": [
+      "c8",
+      "coverage",
+      "summary-only"
+    ],
+    "tool": "c8",
+    "kind": [
+      "a",
+      "b",
+      "d"
+    ],
+    "failureType": "test",
+    "sha256": "613ec45c282949ffc5bc5e48674799d0e248c2ffb71ee27be7439f5ef7ffff49"
+  },
+  "sqlfluff-ansi.txt": {
+    "groundTruthLine": 9,
+    "groundTruthLastLine": 82,
+    "groundTruthText": "L:   1 | P:   1 | LT09 | Select targets should be on a new line unless there is",
+    "groundTruthLastText": "L:   4 | P:  14 | LT01 | Expected single whitespace between comma ',' and numeric",
+    "linesBefore": 8,
+    "sanitizedBytes": 5459,
+    "sanitizedLines": 86,
+    "tags": [
+      "sql",
+      "wrapped-continuation"
+    ],
+    "tool": "sqlfluff",
+    "kind": [
+      "b",
+      "c"
+    ],
+    "failureType": "lint",
+    "sha256": "4c3e76686f2c30a40a02ec04a7ecda0d02b671b252034dadd16988ee16c64202"
+  },
+  "cpplint-done-flood.txt": {
+    "groundTruthLine": 30,
+    "groundTruthLastLine": 39,
+    "groundTruthText": "z_main.cc:3:  Missing space before {  [whitespace/braces] [5]",
+    "groundTruthLastText": "z_main.cc:8:  Missing space before {  [whitespace/braces] [5]",
+    "linesBefore": 29,
+    "sanitizedBytes": 1344,
+    "sanitizedLines": 41,
+    "tags": [
+      "cpp",
+      "progress-noise"
+    ],
+    "tool": "cpplint",
+    "kind": [
+      "a",
+      "b",
+      "c"
+    ],
+    "failureType": "lint",
+    "sha256": "0b783c291b41c793b328f160452751f42266a1402769eda552af68c2c10d8ce4"
+  },
+  "codespell-context.txt": {
+    "groundTruthLine": 3,
+    "groundTruthLastLine": 111,
+    "groundTruthText": "./changelog.md:1: teh ==> the",
+    "groundTruthLastText": "./notes.md:6: accomodate ==> accommodate",
+    "linesBefore": 2,
+    "sanitizedBytes": 4147,
+    "sanitizedLines": 111,
+    "tags": [
+      "spelling",
+      "context-lines"
+    ],
+    "tool": "codespell",
+    "kind": [
+      "b",
+      "c"
+    ],
+    "failureType": "lint",
+    "sha256": "be35b81fbd691913e712f3803662ec102370677d1fe3abe50213b8b73db3b9c7"
+  }
+}

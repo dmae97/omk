@@ -1,0 +1,43 @@
+test_bulk_1 (test_tax.LineTests.test_bulk_1) ... ok
+test_bulk_2 (test_tax.LineTests.test_bulk_2) ... ok
+test_bulk_3 (test_tax.LineTests.test_bulk_3) ... ok
+test_bulk_4 (test_tax.LineTests.test_bulk_4) ... ok
+test_bulk_5 (test_tax.LineTests.test_bulk_5) ... ok
+test_bulk_6 (test_tax.LineTests.test_bulk_6) ... ok
+test_bulk_7 (test_tax.LineTests.test_bulk_7) ... ok
+test_csv (test_tax.LineTests.test_csv) ... csv parser is deprecated, use billing.io
+ok
+test_csv_empty (test_tax.LineTests.test_csv_empty) ... ok
+test_describe (test_tax.LineTests.test_describe) ... ok
+test_discount (test_tax.LineTests.test_discount) ... FAIL
+test_remote (test_tax.LineTests.test_remote) ... skipped 'needs network'
+test_total (test_tax.LineTests.test_total) ... ok
+test_kr (test_tax.RateTests.test_kr) ... ok
+test_unknown (test_tax.RateTests.test_unknown) ... ERROR
+test_us (test_tax.RateTests.test_us) ... ok
+
+======================================================================
+ERROR: test_unknown (test_tax.RateTests.test_unknown)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/dev/project/test_tax.py", line 7, in test_unknown
+    def test_unknown(self): self.assertEqual(rate_for("XX"), 0.0)
+                                             ~~~~~~~~^^^^^^
+  File "/home/dev/project/billing/tax.py", line 16, in rate_for
+    return RATES[country]
+           ~~~~~^^^^^^^^^
+KeyError: 'XX'
+
+======================================================================
+FAIL: test_discount (test_tax.LineTests.test_discount)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/dev/project/test_tax.py", line 17, in test_discount
+    def test_discount(self): self.assertEqual(invoice_line(2, 50, [10, 5]).total(), 90)
+                             ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 85 != 90
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.001s
+
+FAILED (failures=1, errors=1, skipped=1)

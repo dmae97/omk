@@ -1,0 +1,40 @@
+/home/dev/proj/py1/billing.py
+  /home/dev/proj/py1/billing.py:17:12 - error: Type "float | Literal[0]" is not assignable to return type "int"
+    Type "float | Literal[0]" is not assignable to type "int"
+      "float" is not assignable to "int" (reportReturnType)
+  /home/dev/proj/py1/billing.py:20:22 - error: "qty" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/dev/proj/py1/billing.py:23:12 - error: Operator "+" not supported for types "str" and "int" (reportOperatorIssue)
+  /home/dev/proj/py1/billing.py:26:34 - error: Argument of type "str" cannot be assigned to parameter "qty" of type "int" in function "__init__"
+    "str" is not assignable to "int" (reportArgumentType)
+/home/dev/proj/py1/cli.py
+  /home/dev/proj/py1/cli.py:5:34 - error: Expected 1 positional argument (reportCallIssue)
+  /home/dev/proj/py1/cli.py:6:30 - error: Argument of type "Literal[42]" cannot be assigned to parameter "sku" of type "str" in function "restock"
+    "Literal[42]" is not assignable to "str" (reportArgumentType)
+  /home/dev/proj/py1/cli.py:7:25 - error: "lookup" is not a known attribute of module "inventory" (reportAttributeAccessIssue)
+  /home/dev/proj/py1/cli.py:8:12 - error: Type "str" is not assignable to return type "int"
+    "str" is not assignable to "int" (reportReturnType)
+/home/dev/proj/py1/inventory.py
+  /home/dev/proj/py1/inventory.py:17:12 - error: Type "float | Literal[0]" is not assignable to return type "int"
+    Type "float | Literal[0]" is not assignable to type "int"
+      "float" is not assignable to "int" (reportReturnType)
+  /home/dev/proj/py1/inventory.py:20:22 - error: "qty" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/dev/proj/py1/inventory.py:23:12 - error: Operator "+" not supported for types "str" and "int" (reportOperatorIssue)
+  /home/dev/proj/py1/inventory.py:26:28 - error: Argument of type "str" cannot be assigned to parameter "qty" of type "int" in function "__init__"
+    "str" is not assignable to "int" (reportArgumentType)
+/home/dev/proj/py1/orders.py
+  /home/dev/proj/py1/orders.py:17:12 - error: Type "float | Literal[0]" is not assignable to return type "int"
+    Type "float | Literal[0]" is not assignable to type "int"
+      "float" is not assignable to "int" (reportReturnType)
+  /home/dev/proj/py1/orders.py:20:22 - error: "qty" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/dev/proj/py1/orders.py:23:12 - error: Operator "+" not supported for types "str" and "int" (reportOperatorIssue)
+  /home/dev/proj/py1/orders.py:26:33 - error: Argument of type "str" cannot be assigned to parameter "qty" of type "int" in function "__init__"
+    "str" is not assignable to "int" (reportArgumentType)
+/home/dev/proj/py1/shipping.py
+  /home/dev/proj/py1/shipping.py:17:12 - error: Type "float | Literal[0]" is not assignable to return type "int"
+    Type "float | Literal[0]" is not assignable to type "int"
+      "float" is not assignable to "int" (reportReturnType)
+  /home/dev/proj/py1/shipping.py:20:22 - error: "qty" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/dev/proj/py1/shipping.py:23:12 - error: Operator "+" not supported for types "str" and "int" (reportOperatorIssue)
+  /home/dev/proj/py1/shipping.py:26:35 - error: Argument of type "str" cannot be assigned to parameter "qty" of type "int" in function "__init__"
+    "str" is not assignable to "int" (reportArgumentType)
+20 errors, 0 warnings, 0 informations

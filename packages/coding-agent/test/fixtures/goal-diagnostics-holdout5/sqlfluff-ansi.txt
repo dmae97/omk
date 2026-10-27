@@ -1,0 +1,86 @@
+==== sqlfluff ====
+sqlfluff:                4.4.0 python:                 3.13.5
+implementation:        cpython verbosity:                   1
+dialect:                  ansi templater:               jinja
+rules:                                all
+==== readout ====
+
+== [daily.sql] FAIL
+L:   1 | P:   1 | LT09 | Select targets should be on a new line unless there is
+                       | only one select target. [layout.select_targets]
+L:   1 | P:   8 | RF02 | Unqualified reference 'id' found in select with more
+                       | than one referenced table/view.
+                       | [references.qualification]
+L:   1 | P:  11 | LT01 | Expected single whitespace between comma ',' and naked
+                       | identifier. [layout.spacing]
+L:   1 | P:  11 | RF02 | Unqualified reference 'name' found in select with more
+                       | than one referenced table/view.
+                       | [references.qualification]
+L:   1 | P:  15 | LT01 | Unexpected whitespace before comma ','. [layout.spacing]
+L:   1 | P:  18 | RF02 | Unqualified reference 'error_count' found in select with
+                       | more than one referenced table/view.
+                       | [references.qualification]
+L:   1 | P:  30 | CP01 | Keywords must be consistently lower case.
+                       | [capitalisation.keywords]
+L:   1 | P:  41 | AL01 | Implicit/explicit aliasing of table. [aliasing.table]
+L:   2 | P:   1 | AM05 | Join clauses should be fully qualified. [ambiguous.join]
+L:   2 | P:   1 | CP01 | Keywords must be consistently lower case.
+                       | [capitalisation.keywords]
+L:   2 | P:  13 | AL01 | Implicit/explicit aliasing of table. [aliasing.table]
+L:   2 | P:  22 | LT01 | Expected single whitespace between naked identifier and
+                       | raw comparison operator '='. [layout.spacing]
+L:   2 | P:  23 | LT01 | Expected single whitespace between raw comparison
+                       | operator '=' and naked identifier. [layout.spacing]
+L:   3 | P:   1 | CP01 | Keywords must be consistently lower case.
+                       | [capitalisation.keywords]
+L:   3 | P:  30 | LT01 | Expected only single space before naked identifier.
+                       | Found '  '. [layout.spacing]
+L:   3 | P:  40 | LT01 | Expected single whitespace between naked identifier and
+                       | raw comparison operator '='. [layout.spacing]
+L:   3 | P:  41 | LT01 | Expected single whitespace between raw comparison
+                       | operator '=' and numeric literal. [layout.spacing]
+L:   4 | P:  12 | LT01 | Expected single whitespace between comma ',' and numeric
+                       | literal. [layout.spacing]
+L:   4 | P:  14 | LT01 | Expected single whitespace between comma ',' and numeric
+                       | literal. [layout.spacing]
+== [report.sql] FAIL
+L:   1 | P:   1 | LT09 | Select targets should be on a new line unless there is
+                       | only one select target. [layout.select_targets]
+L:   1 | P:   8 | RF02 | Unqualified reference 'id' found in select with more
+                       | than one referenced table/view.
+                       | [references.qualification]
+L:   1 | P:  11 | LT01 | Expected single whitespace between comma ',' and naked
+                       | identifier. [layout.spacing]
+L:   1 | P:  11 | RF02 | Unqualified reference 'name' found in select with more
+                       | than one referenced table/view.
+                       | [references.qualification]
+L:   1 | P:  15 | LT01 | Unexpected whitespace before comma ','. [layout.spacing]
+L:   1 | P:  18 | RF02 | Unqualified reference 'error_count' found in select with
+                       | more than one referenced table/view.
+                       | [references.qualification]
+L:   1 | P:  30 | CP01 | Keywords must be consistently lower case.
+                       | [capitalisation.keywords]
+L:   1 | P:  41 | AL01 | Implicit/explicit aliasing of table. [aliasing.table]
+L:   2 | P:   1 | AM05 | Join clauses should be fully qualified. [ambiguous.join]
+L:   2 | P:   1 | CP01 | Keywords must be consistently lower case.
+                       | [capitalisation.keywords]
+L:   2 | P:  13 | AL01 | Implicit/explicit aliasing of table. [aliasing.table]
+L:   2 | P:  22 | LT01 | Expected single whitespace between naked identifier and
+                       | raw comparison operator '='. [layout.spacing]
+L:   2 | P:  23 | LT01 | Expected single whitespace between raw comparison
+                       | operator '=' and naked identifier. [layout.spacing]
+L:   3 | P:   1 | CP01 | Keywords must be consistently lower case.
+                       | [capitalisation.keywords]
+L:   3 | P:  30 | LT01 | Expected only single space before naked identifier.
+                       | Found '  '. [layout.spacing]
+L:   3 | P:  40 | LT01 | Expected single whitespace between naked identifier and
+                       | raw comparison operator '='. [layout.spacing]
+L:   3 | P:  41 | LT01 | Expected single whitespace between raw comparison
+                       | operator '=' and numeric literal. [layout.spacing]
+L:   4 | P:  12 | LT01 | Expected single whitespace between comma ',' and numeric
+                       | literal. [layout.spacing]
+L:   4 | P:  14 | LT01 | Expected single whitespace between comma ',' and numeric
+                       | literal. [layout.spacing]
+==== summary ====
+violations:       38 status:         FAIL
+All Finished!

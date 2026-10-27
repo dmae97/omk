@@ -1,0 +1,79 @@
++ shellcheck deploy.sh
+
+In deploy.sh line 4:
+for f in $(ls $LOG_DIR/*.log); do
+         ^------------------^ SC2045 (error): Iterating over ls output is fragile. Use globs.
+
+
+In deploy.sh line 5:
+  echo Rotating $f
+                ^-- SC2086 (info): Double quote to prevent globbing and word splitting.
+
+Did you mean: 
+  echo Rotating "$f"
+
+
+In deploy.sh line 6:
+  mv $f $f.1
+     ^-- SC2086 (info): Double quote to prevent globbing and word splitting.
+        ^-- SC2086 (info): Double quote to prevent globbing and word splitting.
+
+Did you mean: 
+  mv "$f" "$f".1
+
+
+In deploy.sh line 8:
+cd $TARGET
+^--------^ SC2164 (warning): Use 'cd ... || exit' or 'cd ... || return' in case cd fails.
+   ^-----^ SC2086 (info): Double quote to prevent globbing and word splitting.
+
+Did you mean: 
+cd "$TARGET" || exit
+
+
+In deploy.sh line 9:
+rm -rf $BUILD_DIR/*
+       ^----------^ SC2115 (warning): Use "${var:?}" to ensure this never expands to /* .
+       ^--------^ SC2086 (info): Double quote to prevent globbing and word splitting.
+
+Did you mean: 
+rm -rf "$BUILD_DIR"/*
+
+
+In deploy.sh line 10:
+if [ $TARGET == "prod" ]; then
+     ^-----^ SC2086 (info): Double quote to prevent globbing and word splitting.
+
+Did you mean: 
+if [ "$TARGET" == "prod" ]; then
+
+
+In deploy.sh line 13:
+read name
+^--^ SC2162 (info): read without -r will mangle backslashes.
+
+
+In deploy.sh line 16:
+echo $arr
+     ^--^ SC2128 (warning): Expanding an array without an index only gives the first element.
+     ^--^ SC2086 (info): Double quote to prevent globbing and word splitting.
+
+Did you mean: 
+echo "$arr"
+
+
+In deploy.sh line 17:
+if [[ $count > 10 ]]; then echo big; fi
+      ^----^ SC2154 (warning): count is referenced but not assigned.
+             ^-- SC2071 (error): > is for string comparisons. Use -gt instead.
+
+
+In deploy.sh line 22:
+until [ -f /tmp/ready ] do sleep 1; done
+                        ^-- SC1010 (warning): Use semicolon or linefeed before 'do' (or quote to make it literal).
+
+For more information:
+  https://www.shellcheck.net/wiki/SC2045 -- Iterating over ls output is fragi...
+  https://www.shellcheck.net/wiki/SC2071 -- > is for string comparisons. Use ...
+  https://www.shellcheck.net/wiki/SC1010 -- Use semicolon or linefeed before ...
+exit 1

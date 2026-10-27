@@ -1,0 +1,48 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.4, pytest-8.3.2, pluggy-1.5.0
+rootdir: /app
+collected 48 items
+
+tests/test_mod_00.py::test_handles_error_payload_0 PASSED          [  2%]
+tests/test_mod_01.py::test_handles_error_payload_1 PASSED          [  4%]
+tests/test_mod_02.py::test_handles_error_payload_2 PASSED          [  6%]
+tests/test_mod_03.py::test_handles_error_payload_3 PASSED          [  8%]
+tests/test_mod_04.py::test_handles_error_payload_4 PASSED          [ 10%]
+tests/test_mod_05.py::test_handles_error_payload_5 PASSED          [ 12%]
+tests/test_mod_06.py::test_handles_error_payload_6 PASSED          [ 14%]
+tests/test_mod_07.py::test_handles_error_payload_7 PASSED          [ 16%]
+tests/test_mod_08.py::test_handles_error_payload_8 PASSED          [ 18%]
+tests/test_mod_09.py::test_handles_error_payload_9 PASSED          [ 20%]
+tests/test_mod_10.py::test_handles_error_payload_10 PASSED          [ 22%]
+tests/test_mod_11.py::test_handles_error_payload_11 PASSED          [ 24%]
+tests/test_mod_12.py::test_handles_error_payload_12 PASSED          [ 26%]
+tests/test_mod_13.py::test_handles_error_payload_13 PASSED          [ 28%]
+tests/test_mod_14.py::test_handles_error_payload_14 PASSED          [ 30%]
+tests/test_mod_15.py::test_handles_error_payload_15 PASSED          [ 32%]
+tests/test_mod_16.py::test_handles_error_payload_16 PASSED          [ 34%]
+tests/test_mod_17.py::test_handles_error_payload_17 PASSED          [ 36%]
+tests/test_mod_18.py::test_handles_error_payload_18 PASSED          [ 38%]
+tests/test_mod_19.py::test_handles_error_payload_19 PASSED          [ 40%]
+tests/test_sync.py::test_resume_after_crash FAILED                         [ 44%]
+tests/test_mod_21.py::test_ok_21 PASSED          [ 44%]
+tests/test_mod_22.py::test_ok_22 PASSED          [ 46%]
+tests/test_mod_23.py::test_ok_23 PASSED          [ 48%]
+tests/test_mod_24.py::test_ok_24 PASSED          [ 50%]
+tests/test_mod_25.py::test_ok_25 PASSED          [ 52%]
+tests/test_mod_26.py::test_ok_26 PASSED          [ 54%]
+tests/test_mod_27.py::test_ok_27 PASSED          [ 56%]
+
+=================================== FAILURES ===================================
+__________________________ test_resume_after_crash ___________________________
+
+    def test_resume_after_crash(tmp_path):
+        s = Sync(tmp_path)
+        s.crash()
+>       assert s.resume() == 3
+E       assert 2 == 3
+E        +  where 2 = <bound method Sync.resume of <Sync>>()
+
+tests/test_sync.py:19: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_sync.py::test_resume_after_crash - assert 2 == 3
+========================= 1 failed, 27 passed in 0.88s =========================

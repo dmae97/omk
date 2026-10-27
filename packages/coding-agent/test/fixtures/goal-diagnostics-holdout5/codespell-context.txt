@@ -1,0 +1,111 @@
+> This is teh changelog.
+: We recieve data and seperate it.
+./changelog.md:1: teh ==> the
+: This is teh changelog.
+> We recieve data and seperate it.
+: The failure is occured when adress is wrong.
+./changelog.md:2: recieve ==> receive
+: This is teh changelog.
+> We recieve data and seperate it.
+: The failure is occured when adress is wrong.
+./changelog.md:2: seperate ==> separate
+: We recieve data and seperate it.
+> The failure is occured when adress is wrong.
+: An exception is thrown untill retry.
+./changelog.md:3: occured ==> occurred
+: We recieve data and seperate it.
+> The failure is occured when adress is wrong.
+: An exception is thrown untill retry.
+./changelog.md:3: adress ==> address
+: The failure is occured when adress is wrong.
+> An exception is thrown untill retry.
+: Definately check the enviroment first.
+./changelog.md:4: untill ==> until
+: An exception is thrown untill retry.
+> Definately check the enviroment first.
+: It is neccessary to accomodate.
+./changelog.md:5: Definately ==> Definitely
+: An exception is thrown untill retry.
+> Definately check the enviroment first.
+: It is neccessary to accomodate.
+./changelog.md:5: enviroment ==> environment
+: Definately check the enviroment first.
+> It is neccessary to accomodate.
+./changelog.md:6: neccessary ==> necessary
+: Definately check the enviroment first.
+> It is neccessary to accomodate.
+./changelog.md:6: accomodate ==> accommodate
+> This is teh guide.
+: We recieve data and seperate it.
+./guide.md:1: teh ==> the
+: This is teh guide.
+> We recieve data and seperate it.
+: The failure is occured when adress is wrong.
+./guide.md:2: recieve ==> receive
+: This is teh guide.
+> We recieve data and seperate it.
+: The failure is occured when adress is wrong.
+./guide.md:2: seperate ==> separate
+: We recieve data and seperate it.
+> The failure is occured when adress is wrong.
+: An exception is thrown untill retry.
+./guide.md:3: occured ==> occurred
+: We recieve data and seperate it.
+> The failure is occured when adress is wrong.
+: An exception is thrown untill retry.
+./guide.md:3: adress ==> address
+: The failure is occured when adress is wrong.
+> An exception is thrown untill retry.
+: Definately check the enviroment first.
+./guide.md:4: untill ==> until
+: An exception is thrown untill retry.
+> Definately check the enviroment first.
+: It is neccessary to accomodate.
+./guide.md:5: Definately ==> Definitely
+: An exception is thrown untill retry.
+> Definately check the enviroment first.
+: It is neccessary to accomodate.
+./guide.md:5: enviroment ==> environment
+: Definately check the enviroment first.
+> It is neccessary to accomodate.
+./guide.md:6: neccessary ==> necessary
+: Definately check the enviroment first.
+> It is neccessary to accomodate.
+./guide.md:6: accomodate ==> accommodate
+> This is teh notes.
+: We recieve data and seperate it.
+./notes.md:1: teh ==> the
+: This is teh notes.
+> We recieve data and seperate it.
+: The failure is occured when adress is wrong.
+./notes.md:2: recieve ==> receive
+: This is teh notes.
+> We recieve data and seperate it.
+: The failure is occured when adress is wrong.
+./notes.md:2: seperate ==> separate
+: We recieve data and seperate it.
+> The failure is occured when adress is wrong.
+: An exception is thrown untill retry.
+./notes.md:3: occured ==> occurred
+: We recieve data and seperate it.
+> The failure is occured when adress is wrong.
+: An exception is thrown untill retry.
+./notes.md:3: adress ==> address
+: The failure is occured when adress is wrong.
+> An exception is thrown untill retry.
+: Definately check the enviroment first.
+./notes.md:4: untill ==> until
+: An exception is thrown untill retry.
+> Definately check the enviroment first.
+: It is neccessary to accomodate.
+./notes.md:5: Definately ==> Definitely
+: An exception is thrown untill retry.
+> Definately check the enviroment first.
+: It is neccessary to accomodate.
+./notes.md:5: enviroment ==> environment
+: Definately check the enviroment first.
+> It is neccessary to accomodate.
+./notes.md:6: neccessary ==> necessary
+: Definately check the enviroment first.
+> It is neccessary to accomodate.
+./notes.md:6: accomodate ==> accommodate

@@ -1,0 +1,49 @@
+
+/home/dev/proj/eslint1/a-logger.js
+   1:1  warning  Unexpected var, use let or const instead           no-var
+   1:5  warning  'unused1' is assigned a value but never used       no-unused-vars
+   2:5  warning  'keep1' is never reassigned. Use 'const' instead   prefer-const
+   3:1  warning  Unexpected var, use let or const instead           no-var
+   3:5  warning  'unused2' is assigned a value but never used       no-unused-vars
+   4:5  warning  'keep2' is never reassigned. Use 'const' instead   prefer-const
+   5:1  warning  Unexpected var, use let or const instead           no-var
+   5:5  warning  'unused3' is assigned a value but never used       no-unused-vars
+   6:5  warning  'keep3' is never reassigned. Use 'const' instead   prefer-const
+   7:1  warning  Unexpected var, use let or const instead           no-var
+   7:5  warning  'unused4' is assigned a value but never used       no-unused-vars
+   8:5  warning  'keep4' is never reassigned. Use 'const' instead   prefer-const
+   9:1  warning  Unexpected var, use let or const instead           no-var
+   9:5  warning  'unused5' is assigned a value but never used       no-unused-vars
+  10:5  warning  'keep5' is never reassigned. Use 'const' instead   prefer-const
+  11:1  warning  Unexpected var, use let or const instead           no-var
+  11:5  warning  'unused6' is assigned a value but never used       no-unused-vars
+  12:5  warning  'keep6' is never reassigned. Use 'const' instead   prefer-const
+  13:1  warning  Unexpected var, use let or const instead           no-var
+  13:5  warning  'unused7' is assigned a value but never used       no-unused-vars
+  14:5  warning  'keep7' is never reassigned. Use 'const' instead   prefer-const
+  15:1  warning  Unexpected var, use let or const instead           no-var
+  15:5  warning  'unused8' is assigned a value but never used       no-unused-vars
+  16:5  warning  'keep8' is never reassigned. Use 'const' instead   prefer-const
+  17:1  warning  Unexpected var, use let or const instead           no-var
+  17:5  warning  'unused9' is assigned a value but never used       no-unused-vars
+  18:5  warning  'keep9' is never reassigned. Use 'const' instead   prefer-const
+  19:1  warning  Unexpected var, use let or const instead           no-var
+  19:5  warning  'unused10' is assigned a value but never used      no-unused-vars
+  20:5  warning  'keep10' is never reassigned. Use 'const' instead  prefer-const
+  21:1  warning  Unexpected var, use let or const instead           no-var
+  21:5  warning  'unused11' is assigned a value but never used      no-unused-vars
+  22:5  warning  'keep11' is never reassigned. Use 'const' instead  prefer-const
+  23:1  warning  Unexpected var, use let or const instead           no-var
+  23:5  warning  'unused12' is assigned a value but never used      no-unused-vars
+  24:5  warning  'keep12' is never reassigned. Use 'const' instead  prefer-const
+  25:1  warning  Unexpected var, use let or const instead           no-var
+  25:5  warning  'unused13' is assigned a value but never used      no-unused-vars
+  26:5  warning  'keep13' is never reassigned. Use 'const' instead  prefer-const
+
+/home/dev/proj/eslint1/b-report.js
+  1:30  error  Duplicate key 'mode'                 no-dupe-keys
+  3:18  error  Expected '===' and instead saw '=='  eqeqeq
+  4:10  error  'formatFailure' is not defined       no-undef
+
+✖ 42 problems (3 errors, 39 warnings)
+  0 errors and 26 warnings potentially fixable with the `--fix` option.
