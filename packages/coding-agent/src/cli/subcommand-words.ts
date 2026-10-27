@@ -21,6 +21,7 @@ export const RUN_COMMAND_WORDS = [
 	"sdk",
 	"router-feedback",
 	"codex-ultra",
+	"explore",
 ] as const;
 
 export const QUOTA_COMMAND = "quota";

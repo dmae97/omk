@@ -22,6 +22,7 @@ ${chalk.bold("Usage:")}
 
 ${chalk.bold("Commands:")}
   ${APP_NAME} codex-ultra             Run a stdin task through a separate Codex CLI Terra Ultra session
+  ${APP_NAME} explore <question>    Print a read-only evidence pack of matching files and line ranges
   ${APP_NAME} init [--global|--project] [--dry-run]
                                  Create missing context documents without overwriting existing files
   ${APP_NAME} install <source> [-l]     Install extension source and add to settings
