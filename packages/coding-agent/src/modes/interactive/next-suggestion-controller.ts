@@ -3,43 +3,28 @@
  *
  * Installed only when `OMK_NEXT_SUGGESTIONS` is on; otherwise
  * {@link installNextSuggestions} returns without touching the session or the
- * editor. Tab inserts the suggestion into an empty editor (never sends); any
- * other key dismisses it and cancels a pending generation. A result that
- * arrives after the user typed or sent the next turn is discarded.
+ * editor. Tab inserts the suggestion without sending it. Any other key dismisses it
+ * and cancels pending generation, except the opt-in exact-prefix inline path.
+ * A result that arrives after the user typed or sent the next turn is discarded.
  */
 import type { StreamFn } from "omk-agent-core";
 import type { AssistantMessage } from "omk-ai";
 import { getKeybindings } from "omk-tui";
-import type { AgentSession } from "../../core/agent-session.ts";
-import {
-	isNextSuggestionsEnabled,
-	MainRequestRecorder,
-	type QuotaUsage,
-	type RecordedMainRequest,
-} from "../../core/next-suggestion.ts";
-import {
-	dismissReasonForKey,
-	suggestionAcceptTracker,
-	traceQueuedDispatch,
-	userMessageText,
-} from "../../core/next-suggestion-accept-trace.ts";
-import * as settlement from "../../core/next-suggestion-settlement.ts";
-import type { SubscriptionUsageReader } from "../../core/subscription-usage-reader.ts";
-import {
-	disposeInteractiveSubscriptionUsage,
-	interactiveSubscriptionUsageReader,
-} from "./interactive-subscription-usage.ts";
+import { isNextSuggestionsEnabled, MainRequestRecorder, type RecordedMainRequest } from "../../core/next-suggestion.ts";
+import { dismissReasonForKey, traceQueuedDispatch, userMessageText } from "../../core/next-suggestion-accept-trace.ts";
 import { NextSuggestionCandidate } from "./next-suggestion-candidate.ts";
-import { runSettledSuggestion } from "./next-suggestion-run.ts";
+import {
+	isPrefixSuggestionsEnabled,
+	projectSuggestion,
+	type ShownState,
+	showEmptySuggestion,
+	showInlineSuggestion,
+} from "./next-suggestion-prefix.ts";
+import { createShownState, lastAssistant, runSettledSuggestion } from "./next-suggestion-run.ts";
 import type { NextSuggestionOptions, SuggestionSessionPort } from "./next-suggestion-types.ts";
 import { type ActiveEditor, followActiveEditor, type SuggestionEditorPort } from "./suggestion-active-editor.ts";
 
 export type { NextSuggestionOptions, SuggestionSessionPort } from "./next-suggestion-types.ts";
-
-function lastAssistant(messages: readonly unknown[]): AssistantMessage | undefined {
-	const last = messages.at(-1) as { role?: string } | undefined;
-	return last?.role === "assistant" ? (last as AssistantMessage) : undefined;
-}
 
 export class NextSuggestionController {
 	private readonly session: SuggestionSessionPort;
@@ -50,12 +35,12 @@ export class NextSuggestionController {
 	private readonly inner: StreamFn;
 	private generation = 0;
 	private readonly keyHandler = (data: string): boolean => this.handleKey(data);
-	private pending: AbortController | undefined;
+	pending: AbortController | undefined;
 	private pendingTask: Promise<void> | undefined;
 	private pendingRecord: RecordedMainRequest | undefined;
 	private pendingFinal: AssistantMessage | undefined;
 	private readonly candidates: NextSuggestionCandidate;
-	private shown: string | undefined;
+	private shown: ShownState | undefined;
 	private readonly wrapped: StreamFn;
 	private readonly unsubscribe: () => void;
 	private turnsInRun = 0;
@@ -113,7 +98,7 @@ export class NextSuggestionController {
 	}
 
 	get suggestion(): string | undefined {
-		return this.shown;
+		return this.shown?.text;
 	}
 
 	/** Dismiss the visible suggestion and cancel any pending generation. */
@@ -127,29 +112,69 @@ export class NextSuggestionController {
 		if (this.shown !== undefined) {
 			this.shown = undefined;
 			this.editor.setPlaceholder(this.basePlaceholder);
+			this.editor.setInlineSuggestion?.("");
 			this.options.requestRender?.();
 		}
 	}
 
 	private handleKey(data: string): boolean {
 		if (this.disposed) return false;
-		const suggestion = this.shown;
-		if (suggestion !== undefined) this.candidates.dismiss(suggestion);
+		const shown = this.shown;
+		const suggestion = shown?.text;
+		const text = this.editor.getText();
 		const isTab = this.options.isTab ?? ((key: string) => getKeybindings().matches(key, "tui.input.tab"));
 		const trace = this.options.acceptTrace;
-		trace?.observeEditor(this.editor.getText(), Date.now());
+		trace?.observeEditor(text, Date.now());
+
+		if (suggestion !== undefined && isTab(data) && !this.editor.isShowingAutocomplete()) {
+			const projection = projectSuggestion(suggestion, { text, cursor: this.editor.getCursor?.() });
+			if (
+				projection.kind === "empty-editor" ||
+				(isPrefixSuggestionsEnabled(this.options.env) && projection.kind === "inline-suffix")
+			) {
+				this.candidates.dismiss(suggestion);
+				trace?.accepted(Date.now());
+				this.cancel();
+				if (projection.kind === "empty-editor") this.editor.setText(projection.text);
+				else if (this.editor.insertTextAtCursor) this.editor.insertTextAtCursor(projection.text);
+				else this.editor.setText(text + projection.text);
+				return true;
+			}
+		}
+
 		if (
 			suggestion !== undefined &&
-			isTab(data) &&
-			this.editor.getText().length === 0 &&
+			isPrefixSuggestionsEnabled(this.options.env) &&
+			dismissReasonForKey(data) === "typed_over" &&
 			!this.editor.isShowingAutocomplete()
 		) {
-			trace?.accepted(Date.now());
-			this.cancel();
-			this.editor.setText(suggestion);
-			return true;
+			const cursor = this.editor.getCursor?.();
+			const projection = cursor
+				? projectSuggestion(suggestion, {
+						text: text + data,
+						cursor: { line: cursor.line, col: cursor.col + data.length },
+					})
+				: { kind: "none" as const };
+			if (projection.kind === "inline-suffix" && shown) {
+				if (shown.surface === "empty-editor") trace?.dismissed("typed_over", Date.now());
+				showInlineSuggestion({
+					suffix: projection.text,
+					suggestion: shown.text,
+					candidate: shown.candidate,
+					state: shown,
+					editor: this.editor,
+					basePlaceholder: this.basePlaceholder,
+					acceptTrace: trace,
+					requestRender: this.options.requestRender,
+				});
+				return false;
+			}
 		}
-		if (suggestion !== undefined) trace?.dismissed(dismissReasonForKey(data), Date.now());
+
+		if (suggestion !== undefined) {
+			trace?.dismissed(dismissReasonForKey(data), Date.now());
+			this.candidates.dismiss(suggestion);
+		}
 		this.cancel();
 		return false;
 	}
@@ -195,35 +220,32 @@ export class NextSuggestionController {
 			parentTurnIndex: Math.max(0, this.turnsInRun - 1),
 			isCurrent: () => generation === this.generation,
 			editorEmpty: () => this.editor.getText().length === 0,
-			onPending: (controller) => {
-				this.pending = controller;
+			pendingOwner: this,
+			show: (text, record, parentTurnIndex, settledAtEpochMs, quotaCheckedAtEpochMs, source) => {
+				this.shown = createShownState(
+					text,
+					record,
+					parentTurnIndex,
+					settledAtEpochMs,
+					quotaCheckedAtEpochMs,
+					source,
+				);
+				showEmptySuggestion({
+					suggestion: text,
+					candidate: this.shown.candidate,
+					editor: this.editor,
+					basePlaceholder: this.basePlaceholder,
+					acceptTrace: this.options.acceptTrace,
+					requestRender: this.options.requestRender,
+				});
 			},
-			show: (text, source, parentTurnIndex, settledAt, quotaCheckedAt) =>
-				this.show(text, source, parentTurnIndex, settledAt, quotaCheckedAt),
 		});
-	}
-
-	private show(
-		text: string,
-		record: RecordedMainRequest,
-		parentTurnIndex: number,
-		settledAtEpochMs: number,
-		quotaCheckedAtEpochMs: number,
-	): void {
-		this.shown = text;
-		this.editor.setPlaceholder(text);
-		const { provider, id } = record.model;
-		const timing = { settledAtEpochMs, quotaCheckedAtEpochMs, shownAtEpochMs: Date.now() };
-		this.options.acceptTrace?.shown({ parentTurnIndex, provider, model: id, ...timing }, text);
-		this.options.requestRender?.();
 	}
 }
 
 export { type ActiveEditor, followActiveEditor, type SuggestionEditorPort };
 
-let active: NextSuggestionController | undefined;
-let activeSession: SuggestionSessionPort | undefined;
-let activeInteractiveSession: AgentSession | undefined;
+let active: NextSuggestionController | undefined, activeSession: SuggestionSessionPort | undefined;
 
 /**
  * No-op unless the flag is on. Idempotent per session: rebinding the same
@@ -243,44 +265,8 @@ export function installNextSuggestions(
 	return active;
 }
 
-/**
- * Highest used percent across the active provider's quota windows. A provider
- * with no quota source reports `"no_quota"`; a source that returns no windows
- * (offline, credential missing, API error) reports `"unavailable"`.
- */
-export async function activeQuotaUsage(session: AgentSession, reader: SubscriptionUsageReader): Promise<QuotaUsage> {
-	const snapshot = await reader.read(session.state.model?.provider ?? "");
-	if (snapshot === undefined) return "no_quota";
-	const used = snapshot.windows
-		.map((window) => window.usedPercent)
-		.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-	return used.length > 0 ? Math.max(...used) : "unavailable";
-}
-
-/** Interactive wiring: one call site in interactive-mode. */
-export function installInteractiveNextSuggestions(
-	session: AgentSession,
-	activeEditor: () => ActiveEditor,
-	basePlaceholder: string,
-	requestRender: () => void,
-	usageReader?: SubscriptionUsageReader,
-): NextSuggestionController | undefined {
-	const editor = followActiveEditor(activeEditor, basePlaceholder);
-	const reader = usageReader ?? interactiveSubscriptionUsageReader(session, requestRender);
-	activeInteractiveSession = session;
-	return installNextSuggestions(session as unknown as SuggestionSessionPort, editor, basePlaceholder, {
-		requestRender,
-		quotaUsage: () => activeQuotaUsage(session, reader),
-		settle: settlement.suggestionMetricsSettler(() => session.sessionId, session.sessionManager.getCwd()),
-		acceptTrace: suggestionAcceptTracker(() => session.sessionId, session.sessionManager.getCwd()),
-	});
-}
-
-/** Release the active suggestion controller and shared UI notifications at TUI shutdown. */
-export function disposeInteractiveNextSuggestions(): void {
+/** Release the active controller without owning interactive usage-reader state. */
+export function disposeNextSuggestions(): void {
 	active?.dispose();
-	if (activeInteractiveSession) {
-		disposeInteractiveSubscriptionUsage(activeInteractiveSession);
-		activeInteractiveSession = undefined;
-	}
+	activeSession = undefined;
 }

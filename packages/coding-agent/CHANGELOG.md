@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Exact-prefix inline suffixes for next-task suggestions behind `OMK_NEXT_SUGGESTIONS_PREFIX` (flag, default off), with `OMK_NEXT_SUGGESTIONS` also enabled. Typing an exact prefix preserves the current candidate, shows the remaining suffix at the document end without another provider call, and inserts it with Tab after rechecking editor freshness. Accept traces record generated/cache-served candidates and empty-editor/inline-prefix surfaces without storing prompt or suggestion text.
+
 ## [1.5.10] - 2026-10-27
 
 ### Fixed

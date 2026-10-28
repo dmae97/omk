@@ -14,7 +14,7 @@ import { createAttachmentStrip } from "./components/attachment-strip.ts";
 import { ChatContainer } from "./components/chat-container.ts";
 import { createSessionMetadataLoaders } from "./components/session-selector-loaders.ts";
 import { planFirstRun } from "./first-run.ts";
-import { disposeInteractiveNextSuggestions, installInteractiveNextSuggestions } from "./next-suggestion-controller.ts";
+import { disposeInteractiveNextSuggestions, installInteractiveNextSuggestions } from "./next-suggestion-interactive.ts";
 import { PromptAttachmentDraft } from "./prompt-attachment-draft.ts";
 import { onThemedOutputStale, scheduleInteractiveStartupDeps } from "./startup-deps.ts";
 
