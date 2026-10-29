@@ -26,7 +26,10 @@
 		"typescript",
 		"cli"
 	],
-	"author": "Mario Zechner",
+	"author": "Geunbin Yu",
+	"contributors": [
+		"Mario Zechner"
+	],
 	"license": "MIT",
 	"repository": {
 		"type": "git",
