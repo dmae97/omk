@@ -23,6 +23,7 @@
 		}
 	},
 	"files": [
+		"LICENSE",
 		"dist",
 		"docs",
 		"examples",

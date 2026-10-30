@@ -63,6 +63,7 @@
 		"omk-ai": "dist/cli.js"
 	},
 	"files": [
+		"LICENSE",
 		"dist",
 		"README.md",
 		"CHANGELOG.md",

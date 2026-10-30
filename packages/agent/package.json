@@ -17,6 +17,7 @@
 		"./package.json": "./package.json"
 	},
 	"files": [
+		"LICENSE",
 		"dist",
 		"README.md",
 		"CHANGELOG.md"
