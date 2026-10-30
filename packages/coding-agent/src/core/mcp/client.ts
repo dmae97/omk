@@ -14,7 +14,7 @@
 
 import { validateMcpTimeoutMs } from "./deadline-policy.ts";
 import { type McpFailure, mcpExitFailure, mcpTimeoutFailure } from "./failure.ts";
-import { parseMcpInitializeResult } from "./initialize-contract.ts";
+import { MCP_PROTOCOL_VERSION, parseMcpInitializeResult, SUPPORTED_PROTOCOL_VERSIONS } from "./initialize-contract.ts";
 import {
 	formatJsonRpcError,
 	isJsonRpcResponse,
@@ -26,20 +26,8 @@ import { cancelPendingRequest, withAbortListener } from "./request-cancel.ts";
 import { validateMcpCallResult } from "./result-contract.ts";
 import { McpStdioTransport, type StdioTransportExit, type StdioTransportOptions } from "./stdio-transport.ts";
 
-/** Protocol revision this client offers; matches LATEST_PROTOCOL_VERSION of @modelcontextprotocol/sdk 1.32. */
-export const MCP_PROTOCOL_VERSION = "2025-11-25";
-/**
- * Protocol revisions this client accepts from a server. A server that does not
- * speak the offered revision answers with its own latest one, so every older
- * stdio revision whose tools surface this client uses is listed. The handshake
- * fails closed on any other value instead of guessing at forward compatibility.
- */
-export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [
-	"2024-11-05",
-	"2025-03-26",
-	"2025-06-18",
-	MCP_PROTOCOL_VERSION,
-];
+/** Protocol revisions live beside the handshake validator; re-exported for existing importers. */
+export { MCP_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS } from "./initialize-contract.ts";
 /** Default per-request deadline. */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 /** Default handshake deadline. Servers that install on first run need more room than a normal call. */

@@ -1,5 +1,20 @@
 import { McpFailure } from "./failure.ts";
 
+/** Protocol revision this client offers; matches LATEST_PROTOCOL_VERSION of @modelcontextprotocol/sdk 1.32. */
+export const MCP_PROTOCOL_VERSION = "2025-11-25";
+/**
+ * Protocol revisions this client accepts from a server. A server that does not
+ * speak the offered revision answers with its own latest one, so every older
+ * stdio revision whose tools surface this client uses is listed. The handshake
+ * fails closed on any other value instead of guessing at forward compatibility.
+ */
+export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [
+	"2024-11-05",
+	"2025-03-26",
+	"2025-06-18",
+	MCP_PROTOCOL_VERSION,
+];
+
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
 }
