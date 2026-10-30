@@ -13,6 +13,7 @@
  */
 
 import { validateMcpTimeoutMs } from "./deadline-policy.ts";
+import { type McpFailure, mcpExitFailure, mcpTimeoutFailure } from "./failure.ts";
 import { parseMcpInitializeResult } from "./initialize-contract.ts";
 import {
 	formatJsonRpcError,
@@ -23,7 +24,7 @@ import {
 } from "./protocol.ts";
 import { cancelPendingRequest, withAbortListener } from "./request-cancel.ts";
 import { validateMcpCallResult } from "./result-contract.ts";
-import { McpStdioTransport, type StdioTransportOptions } from "./stdio-transport.ts";
+import { McpStdioTransport, type StdioTransportExit, type StdioTransportOptions } from "./stdio-transport.ts";
 
 /** Protocol revision this client offers; matches LATEST_PROTOCOL_VERSION of @modelcontextprotocol/sdk 1.32. */
 export const MCP_PROTOCOL_VERSION = "2025-11-25";
@@ -110,7 +111,7 @@ export class McpClient {
 	private nextId = 1;
 	private initialized = false;
 	private closed = false;
-	private exitReason: string | undefined;
+	private exitError: McpFailure | undefined;
 	private info: McpServerInfo = {};
 	private lastProtocolErrorReason: string | undefined;
 	private readonly options: McpClientOptions;
@@ -124,7 +125,7 @@ export class McpClient {
 			onDecodeError: (reason) => {
 				this.lastProtocolErrorReason = reason;
 			},
-			onExit: ({ code, signal }) => this.handleExit(code, signal),
+			onExit: (exit) => this.handleExit(exit),
 		});
 	}
 
@@ -146,7 +147,7 @@ export class McpClient {
 	 * silently reusing a dead process.
 	 */
 	async connect(): Promise<void> {
-		if (this.closed) throw new Error(this.exitReason ?? `MCP server "${this.options.name}" is closed`);
+		if (this.closed) throw this.exitError ?? new Error(`MCP server "${this.options.name}" is closed`);
 		if (this.initialized) return;
 		this.transport.start();
 
@@ -242,7 +243,7 @@ export class McpClient {
 	close(): void {
 		if (this.closed) return;
 		this.transport.close();
-		this.handleExit(null, null);
+		this.handleExit({ code: null, signal: null });
 	}
 
 	/** Physical direct-process/stdio settlement is separate from logical request rejection. */
@@ -252,11 +253,11 @@ export class McpClient {
 
 	/** Why the server is unusable, when it is; includes the latest decode failure. */
 	get failure(): string | undefined {
-		return this.exitReason ?? this.lastProtocolErrorReason;
+		return this.exitError?.message ?? this.lastProtocolErrorReason;
 	}
 
 	private assertReady(): void {
-		if (this.closed) throw new Error(this.exitReason ?? `MCP server "${this.options.name}" is closed`);
+		if (this.closed) throw this.exitError ?? new Error(`MCP server "${this.options.name}" is closed`);
 		if (!this.initialized) throw new Error(`MCP server "${this.options.name}" is not initialized`);
 	}
 
@@ -270,7 +271,7 @@ export class McpClient {
 	private request(method: string, params: unknown, timeoutMs?: number, signal?: AbortSignal): Promise<unknown> {
 		if (signal?.aborted) return Promise.reject(new Error(`MCP request aborted (${method})`));
 		if (this.closed) {
-			return Promise.reject(new Error(this.exitReason ?? `MCP server "${this.options.name}" is closed`));
+			return Promise.reject(this.exitError ?? new Error(`MCP server "${this.options.name}" is closed`));
 		}
 		if (this.pending.size >= MAX_PENDING_REQUESTS) {
 			return Promise.reject(
@@ -287,7 +288,7 @@ export class McpClient {
 			const { resolve, reject } = withAbortListener(signal, onAbort, rawResolve, rawReject);
 			const timer = setTimeout(() => {
 				if (!this.cancelPending(id, `timed out after ${effectiveTimeout}ms`)) return;
-				reject(new Error(`MCP server "${this.options.name}" timed out after ${effectiveTimeout}ms on ${method}`));
+				reject(mcpTimeoutFailure(this.options.name, method, effectiveTimeout));
 			}, effectiveTimeout);
 			timer.unref?.();
 			this.pending.set(id, { resolve, reject, timer, method, deadline });
@@ -313,7 +314,7 @@ export class McpClient {
 		this.pending.delete(response.id);
 		clearTimeout(pending.timer);
 		if (performance.now() >= pending.deadline) {
-			pending.reject(new Error(`MCP response arrived after deadline (${pending.method})`));
+			pending.reject(mcpTimeoutFailure(this.options.name, pending.method));
 			return;
 		}
 		if (response.error) {
@@ -323,14 +324,12 @@ export class McpClient {
 		pending.resolve(response.result);
 	}
 
-	private handleExit(code: number | null, signal: string | null): void {
+	private handleExit(exit: StdioTransportExit): void {
 		if (this.closed) return;
 		this.closed = true;
 		this.initialized = false;
-		const detail = signal ? `signal ${signal}` : code === null ? "spawn failure" : `exit code ${code}`;
-		const stderr = this.transport.stderr.trim();
-		this.exitReason = `MCP server "${this.options.name}" stopped (${detail})${stderr ? `: ${stderr}` : ""}`;
-		const reason = new Error(this.exitReason);
+		const reason = mcpExitFailure(this.options.name, exit, this.transport.stderr.trim());
+		this.exitError = reason;
 		for (const [id, pending] of this.pending) {
 			clearTimeout(pending.timer);
 			this.pending.delete(id);
