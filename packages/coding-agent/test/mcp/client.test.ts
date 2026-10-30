@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { McpClient } from "../../src/core/mcp/client.ts";
+import { MCP_PROTOCOL_VERSION, McpClient } from "../../src/core/mcp/client.ts";
 import { McpManager } from "../../src/core/mcp/manager.ts";
 import { buildMcpToolName, mapMcpContent, sanitizeToolNameSegment } from "../../src/core/mcp/tools.ts";
 
@@ -9,11 +9,13 @@ const SERVER = path.join(path.dirname(fileURLToPath(import.meta.url)), "fake-ser
 
 const open: { close(): void }[] = [];
 
-function client(mode: string, overrides: { requestTimeoutMs?: number } = {}): McpClient {
+function client(mode: string, overrides: { requestTimeoutMs?: number; protocol?: string } = {}): McpClient {
+	const env: Record<string, string> = { FAKE_MCP_MODE: mode };
+	if (overrides.protocol !== undefined) env.FAKE_MCP_PROTOCOL = overrides.protocol;
 	const instance = new McpClient({
 		name: `fake-${mode}`,
 		requestTimeoutMs: overrides.requestTimeoutMs,
-		transport: { command: process.execPath, args: [SERVER], env: { FAKE_MCP_MODE: mode } },
+		transport: { command: process.execPath, args: [SERVER], env },
 	});
 	open.push(instance);
 	return instance;
@@ -83,6 +85,24 @@ describe("MCP client against a real stdio server", () => {
 		await c.connect();
 		expect(c.ready).toBe(true);
 		expect(c.serverInfo).toEqual({ name: "fake-mcp", version: "9.9.9" });
+	});
+
+	it("offers the latest protocol revision and a server that echoes it is accepted", async () => {
+		expect(MCP_PROTOCOL_VERSION).toBe("2025-11-25");
+		const c = client("ok", { protocol: "echo" });
+		await c.connect();
+		expect(c.ready).toBe(true);
+	});
+
+	it.each(["2024-11-05", "2025-03-26", "2025-06-18"])("accepts a server that downgrades to %s", async (version) => {
+		const c = client("ok", { protocol: version });
+		await c.connect();
+		expect(c.ready).toBe(true);
+	});
+
+	it("fails closed on an unknown protocol revision", async () => {
+		const c = client("ok", { protocol: "2099-01-01" });
+		await expect(c.connect()).rejects.toThrow(/unsupported protocol version/u);
 	});
 
 	it("lists tools with their JSON Schema intact", async () => {
@@ -306,6 +326,29 @@ describe("MCP tool naming and content mapping", () => {
 	it("sanitizes characters providers reject", () => {
 		expect(sanitizeToolNameSegment("chrome-devtools")).toBe("chrome-devtools");
 		expect(sanitizeToolNameSegment("weird name!@#")).toBe("weird_name_");
+	});
+
+	it("prefixes a server label that would start with a digit", () => {
+		// `21st` is a real MCP server name in the wild. `21st__search` made Kimi's
+		// anthropic-messages endpoint answer 400 "function name is invalid, must start
+		// with a letter" and drop the whole request, tools and all.
+		expect(sanitizeToolNameSegment("21st")).toBe("mcp_21st");
+		expect(buildMcpToolName("21st", "search")).toBe("mcp_21st__search");
+		expect(buildMcpToolName("21st", "search")).toMatch(/^[a-zA-Z][a-zA-Z0-9_-]*$/u);
+	});
+
+	it("always starts a label with a letter", () => {
+		expect(sanitizeToolNameSegment("2fast")).toBe("mcp_2fast");
+		expect(sanitizeToolNameSegment("-dash")).toBe("mcp_-dash");
+		expect(sanitizeToolNameSegment("_internal")).toBe("mcp_internal");
+		expect(sanitizeToolNameSegment("!!!")).toBe("mcp");
+		expect(buildMcpToolName("", "search")).toBe("mcp__search");
+	});
+
+	it("keeps the prefix when truncating a name from a digit-leading server", () => {
+		const name = buildMcpToolName("21st", "t".repeat(200));
+		expect(name.length).toBe(64);
+		expect(name.startsWith("mcp_21st__")).toBe(true);
 	});
 
 	it("keeps the server prefix when truncating a long name", () => {
