@@ -328,6 +328,29 @@ describe("MCP tool naming and content mapping", () => {
 		expect(sanitizeToolNameSegment("weird name!@#")).toBe("weird_name_");
 	});
 
+	it("prefixes a server label that would start with a digit", () => {
+		// `21st` is a real MCP server name in the wild. `21st__search` made Kimi's
+		// anthropic-messages endpoint answer 400 "function name is invalid, must start
+		// with a letter" and drop the whole request, tools and all.
+		expect(sanitizeToolNameSegment("21st")).toBe("mcp_21st");
+		expect(buildMcpToolName("21st", "search")).toBe("mcp_21st__search");
+		expect(buildMcpToolName("21st", "search")).toMatch(/^[a-zA-Z][a-zA-Z0-9_-]*$/u);
+	});
+
+	it("always starts a label with a letter", () => {
+		expect(sanitizeToolNameSegment("2fast")).toBe("mcp_2fast");
+		expect(sanitizeToolNameSegment("-dash")).toBe("mcp_-dash");
+		expect(sanitizeToolNameSegment("_internal")).toBe("mcp_internal");
+		expect(sanitizeToolNameSegment("!!!")).toBe("mcp");
+		expect(buildMcpToolName("", "search")).toBe("mcp__search");
+	});
+
+	it("keeps the prefix when truncating a name from a digit-leading server", () => {
+		const name = buildMcpToolName("21st", "t".repeat(200));
+		expect(name.length).toBe(64);
+		expect(name.startsWith("mcp_21st__")).toBe(true);
+	});
+
 	it("keeps the server prefix when truncating a long name", () => {
 		const name = buildMcpToolName("server", "t".repeat(200));
 		expect(name.length).toBe(64);
