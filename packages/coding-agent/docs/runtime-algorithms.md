@@ -1,5 +1,10 @@
 # Runtime Algorithms and Direction
 
+> **Current review baseline:** for the 2026-10-30 harness test results and
+> repository-wide blockers, see [Harness quality review](harness-improvements.md).
+> The mechanism table and dated sections below remain point-in-time design records;
+> do not infer current release or default-on status from their original wording alone.
+
 ## Current feature status (audit §19.3)
 
 "Implemented", "wired", "enabled", "verified in CI", "released", and
