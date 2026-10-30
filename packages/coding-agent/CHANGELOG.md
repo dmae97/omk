@@ -6,6 +6,10 @@
 
 - Exact-prefix inline suffixes for next-task suggestions behind `OMK_NEXT_SUGGESTIONS_PREFIX` (flag, default off), with `OMK_NEXT_SUGGESTIONS` also enabled. Typing an exact prefix preserves the current candidate, shows the remaining suffix at the document end without another provider call, and inserts it with Tab after rechecking editor freshness. Accept traces record generated/cache-served candidates and empty-editor/inline-prefix surfaces without storing prompt or suggestion text.
 
+### Changed
+
+- Session skill admission no longer has a 10-body cap. Explicit calls, steering/follow-up, `SKILL.md` reads, legacy sessions, and worker hand-offs accept and deduplicate any number of unique skill bodies. Unknown-version admission records still fail closed, and `OMK_SKILL_ADMISSION=0` remains the opt-out.
+
 ## [1.5.10] - 2026-10-27
 
 ### Fixed

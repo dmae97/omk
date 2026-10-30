@@ -12,7 +12,6 @@ import {
 	isSkillAdmissionEnabled,
 	isSkillAdmissionRecord,
 	makeSkillAdmissionRecord,
-	SKILL_ADMISSION_CAP,
 	SKILL_ADMISSION_ENTRY_TYPE,
 	SkillAdmissionLedger,
 	type SkillAdmissionRecord,
@@ -38,33 +37,19 @@ function refusalNotice(skillId: string, reason: string): string {
 	return `[skill admission] "${skillId}" was not loaded: ${reason}.`;
 }
 
-const SKILL_BLOCK = /^<skill name="([^"]+)" location="[^"]+">\n([\s\S]*?)\n<\/skill>(?:\n\n[\s\S]+)?$/;
-
 /** Rebuild from the whole session file: resume, compaction and model switch never reset the count. */
 export function restoreSkillAdmissionLedger(entries: readonly SessionEntry[]): SkillAdmissionLedger {
 	const records: SkillAdmissionRecord[] = [];
-	const legacyBodies = new Set<string>();
 	let unknownRecord = false;
 	for (const entry of entries) {
 		if (entry.type === "custom" && entry.customType === SKILL_ADMISSION_ENTRY_TYPE) {
 			if (isSkillAdmissionRecord(entry.data)) records.push(entry.data);
 			else unknownRecord = true;
-			continue;
-		}
-		if (entry.type !== "message" || entry.message.role !== "user") continue;
-		const content = entry.message.content;
-		const texts =
-			typeof content === "string" ? [content] : content.flatMap((p) => (p.type === "text" ? [p.text] : []));
-		for (const text of texts) {
-			const match = text.match(SKILL_BLOCK);
-			if (match) legacyBodies.add(`${match[1]}\u0000${skillBodyDigest(match[2] ?? "")}`);
 		}
 	}
 	const ledger = SkillAdmissionLedger.restore(records);
 	// Unknown schemaVersion/policyRevision: fail closed (refuse new admissions), never restart from 0.
 	if (unknownRecord) ledger.markUnknownRecord();
-	// SK7: only a session that never wrote a ledger is reconstructed from history.
-	if (records.length === 0 && !unknownRecord) ledger.markLegacy(legacyBodies.size);
 	return ledger;
 }
 
@@ -80,12 +65,7 @@ export function admitSkillBody(
 	const ledger = restoreSkillAdmissionLedger(sessionManager.getEntries());
 	const digest = skillBodyDigest(body);
 	const decision = ledger.reserve(skillId, digest);
-	if (!decision.ok) {
-		if (decision.reason === "cap") return `session skill cap ${SKILL_ADMISSION_CAP} reached`;
-		if (decision.reason === "unknown_record")
-			return "session has skill admission records of an unknown version (fail closed)";
-		return `session already holds more than ${SKILL_ADMISSION_CAP} skill bodies (legacy)`;
-	}
+	if (!decision.ok) return "session has skill admission records of an unknown version (fail closed)";
 	if (decision.reused) return true;
 	// reserve and commit run in one synchronous turn; the expanded text is handed straight to the request.
 	ledger.commit(decision.requestId);

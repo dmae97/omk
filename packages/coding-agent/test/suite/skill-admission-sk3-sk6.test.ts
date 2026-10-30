@@ -11,7 +11,7 @@ import { admitWorkerSkills } from "../../src/core/skill-admission-session.ts";
 import type { Skill } from "../../src/core/skills.ts";
 import { createReadTool } from "../../src/core/tools/read.ts";
 import { createTestResourceLoader } from "../utilities.ts";
-import { createHarness, getUserTexts, type Harness } from "./harness.ts";
+import { createHarness, type Harness } from "./harness.ts";
 
 const harnesses: Harness[] = [];
 afterEach(() => {
@@ -76,7 +76,7 @@ describe("spec 106 SK3: model read of SKILL.md", () => {
 		expect(ledger(harness)).toHaveLength(0);
 	});
 
-	it("SK3 cross-path: explicit, steer and read share one cap of 10; same body on another path takes no slot", async () => {
+	it("SK3 cross-path: explicit, steer and read share unlimited admission and dedupe the same body", async () => {
 		vi.stubEnv("OMK_SKILL_ADMISSION", "1");
 		const { harness, skills } = await setup(13);
 		for (let i = 0; i < 5; i++) {
@@ -86,31 +86,27 @@ describe("spec 106 SK3: model read of SKILL.md", () => {
 		// reading a body already admitted explicitly reuses its slot (same digest), relative path included
 		expect(await modelReads(harness, "skills/skill-0/SKILL.md")).toContain("body of skill-0");
 		expect(harness.session.admitSkillBody("steer-only", "steer body", "steer")).toBe(true);
-		for (let i = 5; i < 9; i++) expect(await modelReads(harness, skills[i].filePath)).toContain(`body of skill-${i}`);
-		expect(ledger(harness)).toHaveLength(10);
+		for (let i = 5; i < 13; i++)
+			expect(await modelReads(harness, skills[i].filePath)).toContain(`body of skill-${i}`);
+		expect(ledger(harness)).toHaveLength(14);
 
-		const refused = await modelReads(harness, skills[9].filePath);
-		expect(refused).toBe('[skill admission] "skill-9" was not loaded: session skill cap 10 reached.');
-		// a refused read is not a slot; the explicit path for the same skill is refused too
-		harness.setResponses([fauxAssistantMessage("ok")]);
-		await harness.session.prompt("/skill:skill-9 go");
-		expect(getUserTexts(harness).at(-1)).toContain('"skill-9" was not loaded: session skill cap 10 reached');
-		// re-reading an admitted body still works at the cap
+		// re-reading an admitted body still works after more than 10 unique admissions
 		expect(await modelReads(harness, skills[6].filePath)).toContain("body of skill-6");
 		const sources = ledger(harness).map((r) => r?.source);
-		expect(sources.filter((s) => s === "read")).toHaveLength(4);
+		expect(sources.filter((s) => s === "read")).toHaveLength(8);
 		expect(sources.filter((s) => s === "explicit")).toHaveLength(5);
-		expect(ledger(harness)).toHaveLength(10);
+		expect(sources.filter((s) => s === "steer")).toHaveLength(1);
+		expect(ledger(harness)).toHaveLength(14);
 	});
 
-	it("non-SKILL.md reads are never gated, even at the cap", async () => {
+	it("non-SKILL.md reads do not create admission records, even after 10 unique skills", async () => {
 		vi.stubEnv("OMK_SKILL_ADMISSION", "1");
 		const { harness, skills } = await setup(1);
 		for (let i = 0; i < 10; i++) harness.session.admitSkillBody(`s${i}`, `b${i}`, "explicit");
 		const other = join(skills[0].baseDir, "notes.md");
 		writeFileSync(other, "plain notes");
 		expect(await modelReads(harness, other)).toContain("plain notes");
-		expect(await modelReads(harness, skills[0].filePath)).toContain("session skill cap 10 reached");
+		expect(await modelReads(harness, skills[0].filePath)).toContain("body of skill-0");
 	});
 
 	it("unknown ledger version: a SKILL.md read fails closed", async () => {
@@ -129,14 +125,14 @@ describe("spec 106 SK6: worker skill hand-off", () => {
 		expect(ledger(harness)).toHaveLength(0);
 	});
 
-	it("worker grants take parent slots; the worker gets only admitted skills and notices for the rest", async () => {
+	it("worker grants share unlimited parent admission and dedupe repeated hand-offs", async () => {
 		vi.stubEnv("OMK_SKILL_ADMISSION", "1");
 		const { harness, skills } = await setup(12);
 		for (let i = 0; i < 8; i++) {
 			harness.setResponses([fauxAssistantMessage("ok")]);
 			await harness.session.prompt(`/skill:skill-${i} go`);
 		}
-		// skill-0 already admitted (reuse), skill-8 and skill-9 fill the cap, skill-10/11 refused
+		// skill-0 is reused, while skill-8 through skill-11 take the parent past 10 unique bodies
 		const grant = [skills[0], skills[8], skills[9], skills[10], skills[11]];
 		const handoff = admitWorkerSkills(harness.sessionManager, grant);
 		expect(handoff?.args).toEqual([
@@ -147,17 +143,16 @@ describe("spec 106 SK6: worker skill hand-off", () => {
 			skills[8].filePath,
 			"--skill",
 			skills[9].filePath,
+			"--skill",
+			skills[10].filePath,
+			"--skill",
+			skills[11].filePath,
 		]);
-		expect(handoff?.notices).toEqual([
-			'[skill admission] "skill-10" was not loaded: session skill cap 10 reached.',
-			'[skill admission] "skill-11" was not loaded: session skill cap 10 reached.',
-		]);
-		expect(ledger(harness).filter((r) => r?.source === "worker")).toHaveLength(2);
-		// the parent's own paths now see the cap the workers consumed
-		expect(await modelReads(harness, skills[10].filePath)).toContain("session skill cap 10 reached");
-		// a second worker with the same grant re-uses slots: no growth past 10
-		expect(admitWorkerSkills(harness.sessionManager, grant)?.notices).toHaveLength(2);
-		expect(ledger(harness)).toHaveLength(10);
+		expect(handoff?.notices).toEqual([]);
+		expect(ledger(harness).filter((r) => r?.source === "worker")).toHaveLength(4);
+		expect(await modelReads(harness, skills[10].filePath)).toContain("body of skill-10");
+		expect(admitWorkerSkills(harness.sessionManager, grant)?.notices).toHaveLength(0);
+		expect(ledger(harness)).toHaveLength(12);
 	});
 
 	it("worker with no granted skills gets --no-skills only (cannot self-load unadmitted bodies)", async () => {
