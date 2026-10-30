@@ -1036,6 +1036,7 @@ describe("AgentSession compaction characterization", () => {
 	});
 
 	it("admits the reported opencode-go/deepseek-v4.1-flash overflow through prompt() by compacting first", async () => {
+		vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-15T00:00:00Z") });
 		// Reported: estimated=627823 > limit=516000 while threshold compaction still waited for 900k.
 		const harness = await createHarness({
 			settings: { compaction: { enabled: true, keepRecentTokens: 1 } },

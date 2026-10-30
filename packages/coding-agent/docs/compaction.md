@@ -87,6 +87,13 @@ If a provider rejects a request for context overflow despite OMK's projection, O
 2. If that retry also overflows, OMK recompacts from the previous kept boundary with `reserveTokens`, `reservedOutputTokens`, and `keepRecentTokens` capped at 4096, then retries once more.
 3. A third overflow stops recovery and reports an actionable error instead of looping.
 
+The compaction boundary is entry-based. Usage reported before a committed compaction is excluded
+from the next prompt's estimate rather than being added again to the summary and retained tail.
+For example, a pre-compaction assistant usage of 264,849 tokens must not force the next SWE-2
+request back over its 219,416-token input ceiling. If this stale-usage behavior appears in an
+existing process, verify the running engine and restart it on a current build instead of raising
+the model's declared window.
+
 Compaction cannot shrink a latest user message that alone exceeds the provider's effective context window; split that input or select a model with a larger effective window.
 
 ### Model Selection
