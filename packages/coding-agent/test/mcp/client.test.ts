@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { McpClient } from "../../src/core/mcp/client.ts";
+import { MCP_PROTOCOL_VERSION, McpClient } from "../../src/core/mcp/client.ts";
 import { McpManager } from "../../src/core/mcp/manager.ts";
 import { buildMcpToolName, mapMcpContent, sanitizeToolNameSegment } from "../../src/core/mcp/tools.ts";
 
@@ -9,11 +9,13 @@ const SERVER = path.join(path.dirname(fileURLToPath(import.meta.url)), "fake-ser
 
 const open: { close(): void }[] = [];
 
-function client(mode: string, overrides: { requestTimeoutMs?: number } = {}): McpClient {
+function client(mode: string, overrides: { requestTimeoutMs?: number; protocol?: string } = {}): McpClient {
+	const env: Record<string, string> = { FAKE_MCP_MODE: mode };
+	if (overrides.protocol !== undefined) env.FAKE_MCP_PROTOCOL = overrides.protocol;
 	const instance = new McpClient({
 		name: `fake-${mode}`,
 		requestTimeoutMs: overrides.requestTimeoutMs,
-		transport: { command: process.execPath, args: [SERVER], env: { FAKE_MCP_MODE: mode } },
+		transport: { command: process.execPath, args: [SERVER], env },
 	});
 	open.push(instance);
 	return instance;
@@ -83,6 +85,24 @@ describe("MCP client against a real stdio server", () => {
 		await c.connect();
 		expect(c.ready).toBe(true);
 		expect(c.serverInfo).toEqual({ name: "fake-mcp", version: "9.9.9" });
+	});
+
+	it("offers the latest protocol revision and a server that echoes it is accepted", async () => {
+		expect(MCP_PROTOCOL_VERSION).toBe("2025-11-25");
+		const c = client("ok", { protocol: "echo" });
+		await c.connect();
+		expect(c.ready).toBe(true);
+	});
+
+	it.each(["2024-11-05", "2025-03-26", "2025-06-18"])("accepts a server that downgrades to %s", async (version) => {
+		const c = client("ok", { protocol: version });
+		await c.connect();
+		expect(c.ready).toBe(true);
+	});
+
+	it("fails closed on an unknown protocol revision", async () => {
+		const c = client("ok", { protocol: "2099-01-01" });
+		await expect(c.connect()).rejects.toThrow(/unsupported protocol version/u);
 	});
 
 	it("lists tools with their JSON Schema intact", async () => {
