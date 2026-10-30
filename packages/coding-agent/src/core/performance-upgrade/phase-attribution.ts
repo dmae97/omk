@@ -23,9 +23,9 @@ import {
  * siblings, which is why it is not the partition. Each input field is read once; a getter cannot
  * change a value after it was validated.
  *
- * Cost: O(M log M) to sort the M <= 2|V| + 2 breakpoints, plus O(K * A) for K segments with at
- * most A spans active at once. Deep nesting or wide overlap makes A approach |V|, so the worst
- * case is O(|V|^2); that is fine for offline evaluation of one turn, not for a hot path.
+ * Cost: O(M log M) to sort the M <= 2|V| + 2 breakpoints, plus O(|V| log |V|) for the
+ * active-winner heap and per-parent child-interval unions. It avoids rescanning every active
+ * span for every segment, so deep nesting and wide overlap do not make the partition quadratic.
  */
 export type PhaseSpan = Pick<MeasurementSpan, "spanId" | "parentId" | "phase" | "monotonicStart" | "monotonicEnd">;
 
@@ -108,6 +108,88 @@ function outranks(a: Clipped, b: Clipped): boolean {
 	return a.spanId < b.spanId;
 }
 
+class ActiveSpanHeap {
+	readonly #items: Clipped[] = [];
+
+	get top(): Clipped | undefined {
+		return this.#items[0];
+	}
+
+	push(value: Clipped): void {
+		const items = this.#items;
+		let index = items.length;
+		items.push(value);
+		while (index > 0) {
+			const parent = (index - 1) >> 1;
+			if (!outranks(value, items[parent])) break;
+			items[index] = items[parent];
+			index = parent;
+		}
+		items[index] = value;
+	}
+
+	pop(): void {
+		const items = this.#items;
+		const last = items.pop();
+		if (items.length === 0 || last === undefined) return;
+		let index = 0;
+		while (true) {
+			const left = 2 * index + 1;
+			if (left >= items.length) break;
+			const right = left + 1;
+			const child = right < items.length && outranks(items[right], items[left]) ? right : left;
+			if (!outranks(items[child], last)) break;
+			items[index] = items[child];
+			index = child;
+		}
+		items[index] = last;
+	}
+}
+
+/** Exclusive time is a span's clipped interval minus the union of its direct children's intervals. */
+function computeExclusiveTicks(clipped: readonly Clipped[]): Map<string, number> {
+	const children = new Map<string, Clipped[]>();
+	for (const span of clipped) {
+		if (span.parentId === undefined || span.clippedEnd <= span.clippedStart) continue;
+		const siblings = children.get(span.parentId);
+		if (siblings === undefined) children.set(span.parentId, [span]);
+		else siblings.push(span);
+	}
+	const result = new Map<string, number>();
+	for (const span of clipped) {
+		const start = span.clippedStart;
+		const end = span.clippedEnd;
+		if (end <= start) {
+			result.set(span.spanId, 0);
+			continue;
+		}
+		const intervals = children.get(span.spanId);
+		if (intervals === undefined) {
+			result.set(span.spanId, end - start);
+			continue;
+		}
+		intervals.sort((a, b) => a.clippedStart - b.clippedStart || a.clippedEnd - b.clippedEnd);
+		let covered = 0;
+		let unionStart = start;
+		let unionEnd = start;
+		for (const child of intervals) {
+			const childStart = Math.max(start, child.clippedStart);
+			const childEnd = Math.min(end, child.clippedEnd);
+			if (childEnd <= childStart) continue;
+			if (childStart > unionEnd) {
+				covered += unionEnd - unionStart;
+				unionStart = childStart;
+				unionEnd = childEnd;
+			} else if (childEnd > unionEnd) {
+				unionEnd = childEnd;
+			}
+		}
+		covered += unionEnd - unionStart;
+		result.set(span.spanId, Math.max(0, end - start - covered));
+	}
+	return result;
+}
+
 export function attributePhases(input: PhaseAttributionInput): PhaseAttribution {
 	const { spans, submittedAt, settledAt } = input;
 	if (!isTick(submittedAt) || !isTick(settledAt)) throw new MeasurementInputError("invalid_tick", "window");
@@ -126,30 +208,19 @@ export function attributePhases(input: PhaseAttributionInput): PhaseAttribution 
 		MeasurementPhase,
 		number
 	>;
-	const exclusiveTicks = new Map<string, number>(snapshots.map((span) => [span.spanId, 0]));
+	const exclusiveTicks = computeExclusiveTicks(clipped);
 	const points = [
 		...new Set([submittedAt, settledAt, ...clipped.flatMap((c) => [c.clippedStart, c.clippedEnd])]),
 	].sort((a, b) => a - b);
 	const byStart = clipped.filter((c) => c.clippedEnd > c.clippedStart).sort((a, b) => a.clippedStart - b.clippedStart);
-	let active: Clipped[] = [];
+	const active = new ActiveSpanHeap();
 	let next = 0;
 	for (let k = 0; k + 1 < points.length; k++) {
 		const segmentStart = points[k];
 		const length = points[k + 1] - segmentStart;
 		while (next < byStart.length && byStart[next].clippedStart <= segmentStart) active.push(byStart[next++]);
-		active = active.filter((c) => c.clippedEnd > segmentStart);
-		let winner: Clipped | undefined;
-		const activeParents = new Set<string>();
-		for (const c of active) {
-			if (winner === undefined || outranks(c, winner)) winner = c;
-			if (c.parentId !== undefined) activeParents.add(c.parentId);
-		}
-		phaseTicks[winner?.phase ?? "unattributed"] += length;
-		for (const c of active) {
-			if (!activeParents.has(c.spanId)) {
-				exclusiveTicks.set(c.spanId, (exclusiveTicks.get(c.spanId) ?? 0) + length);
-			}
-		}
+		while (active.top !== undefined && active.top.clippedEnd <= segmentStart) active.pop();
+		phaseTicks[active.top?.phase ?? "unattributed"] += length;
 	}
 	return { turnTicks: settledAt - submittedAt, phaseTicks, exclusiveTicks, clippedSpans };
 }
