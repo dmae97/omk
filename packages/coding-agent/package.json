@@ -23,6 +23,7 @@
 		}
 	},
 	"files": [
+		"LICENSE",
 		"dist",
 		"docs",
 		"examples",
@@ -102,7 +103,10 @@
 		"coding-agent-cli",
 		"open-source"
 	],
-	"author": "Mario Zechner",
+	"author": "Geunbin Yu",
+	"contributors": [
+		"Mario Zechner"
+	],
 	"license": "MIT",
 	"repository": {
 		"type": "git",

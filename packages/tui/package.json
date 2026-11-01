@@ -11,6 +11,7 @@
 		"prepublishOnly": "npm run clean && npm run build"
 	},
 	"files": [
+		"LICENSE",
 		"dist/**/*",
 		"native/win32/prebuilds/**/*.node",
 		"native/darwin/prebuilds/**/*.node",
@@ -26,7 +27,10 @@
 		"typescript",
 		"cli"
 	],
-	"author": "Mario Zechner",
+	"author": "Geunbin Yu",
+	"contributors": [
+		"Mario Zechner"
+	],
 	"license": "MIT",
 	"repository": {
 		"type": "git",

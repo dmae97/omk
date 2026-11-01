@@ -1,0 +1,13 @@
+OMK (open-multi-agent-kit)
+Copyright (c) 2026 ClassicMate (modifications and additions in this fork)
+
+OMK started as a fork of pi by
+Mario Zechner (https://github.com/badlogic/pi-mono, which now redirects to
+https://github.com/earendil-works/pi), released under the MIT License:
+
+    Copyright (c) 2025 Mario Zechner
+
+The original copyright notice and the MIT permission notice are kept in
+LICENSE and apply to this project. Mario Zechner is credited as a
+contributor in the package.json of the packages derived from pi
+(open-multi-agent-kit, omk-ai, omk-tui, omk-agent-core).

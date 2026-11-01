@@ -17,6 +17,7 @@
 		"./package.json": "./package.json"
 	},
 	"files": [
+		"LICENSE",
 		"dist",
 		"README.md",
 		"CHANGELOG.md"
@@ -42,7 +43,10 @@
 		"transport",
 		"state-management"
 	],
-	"author": "Mario Zechner",
+	"author": "Geunbin Yu",
+	"contributors": [
+		"Mario Zechner"
+	],
 	"license": "MIT",
 	"repository": {
 		"type": "git",

@@ -63,6 +63,7 @@
 		"omk-ai": "dist/cli.js"
 	},
 	"files": [
+		"LICENSE",
 		"dist",
 		"README.md",
 		"CHANGELOG.md",
@@ -99,7 +100,10 @@
 		"unified",
 		"api"
 	],
-	"author": "Mario Zechner",
+	"author": "Geunbin Yu",
+	"contributors": [
+		"Mario Zechner"
+	],
 	"license": "MIT",
 	"repository": {
 		"type": "git",
