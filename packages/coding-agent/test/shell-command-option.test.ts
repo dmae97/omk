@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { curlValue } from "../src/guardrails/shell-command-option.ts";
+import { normalizeStaticShell, StaticShellSyntaxError } from "../src/guardrails/shell-command-tokenizer.ts";
 
 describe("curlValue", () => {
 	it.each(["--config", "--output", "--upload-file"])("locates the file value of %s", (option) => {
@@ -17,6 +18,11 @@ describe("curlValue", () => {
 		expect(curlValue("-H")).toEqual({ kind: "header", offset: 2 });
 	});
 
+	it("locates the offset of values attached to the short option", () => {
+		expect(curlValue("-oout.txt")).toEqual({ kind: "file", offset: 2 });
+		expect(curlValue("-sSoout.txt")).toEqual({ kind: "file", offset: 4 });
+	});
+
 	it("locates values after bundled short flags", () => {
 		expect(curlValue("-sSo")).toEqual({ kind: "file", offset: 4 });
 		expect(curlValue("-sH")).toEqual({ kind: "header", offset: 3 });
@@ -26,5 +32,13 @@ describe("curlValue", () => {
 		expect(curlValue("--silent")).toBeUndefined();
 		expect(curlValue("-v")).toBeUndefined();
 		expect(curlValue("x")).toBeUndefined();
+	});
+});
+
+describe("curl attached short-option values in the shell guardrail", () => {
+	it("treats the attached file value as the file, not the URL", () => {
+		expect(() => normalizeStaticShell("curl -oout.txt https://example.test?reg?on=CANARY")).toThrow(
+			StaticShellSyntaxError,
+		);
 	});
 });
