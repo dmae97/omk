@@ -57,8 +57,11 @@ describe("summaryTextOrThrow", () => {
 		);
 	});
 
-	it("reports an empty summary when stop produced no content", () => {
-		expect(() => summaryTextOrThrow(response("stop", []), FAILURE)).toThrow(
+	it.each([
+		["no content", []],
+		["only whitespace", [{ type: "text", text: "  \n " }]],
+	])("reports an empty summary when stop produced %s", (_label, content) => {
+		expect(() => summaryTextOrThrow(response("stop", content), FAILURE)).toThrow(
 			`${FAILURE}: the model returned an empty summary`,
 		);
 	});
