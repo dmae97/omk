@@ -62,6 +62,7 @@ Colour comes only from theme tokens. The default themes are the paper pair; othe
 - Right control pane (`control-plane-rail.ts`): tab bar, OMK://CONTROL identity, then RUN, VERIFY, CONTEXT, RESOURCES, TODO and SESSION. `RailSurface` selects the rows:
   - `header` (startup deck column), fixed height: RUN `state`; VERIFY `verdict`, the rail's only evidence row; CONTEXT `model`, `think`, `ctx`, `meter`, `opt`; RESOURCES `gov`, `ext` (configured MCP/skill counts, neutral color); TODO; SESSION.
   - `overlay` (control-pane overlay in expanded view): the header rows plus RUN `queue`, a failure card after a settled turn that did not complete (`cause`, `phase`, `effects`, `retry`, `next`, from the session termination record), and RESOURCES `cpu` and `rss`. `cpu` is host CPU, the value the resource governor admits on and the footer's `CPU` figure shows; it reads `▲ busy` at or above the governor's busy threshold, and OMK's own process CPU never sets it. `rss` is the OMK process RSS.
+- R·NODE (`rnode/`, [docs](docs/rnode-tui.md)): overlay only, after SESSION and inside the pane frame, while `/rnode` binds a verified run. Rows are `run`, `proof` (the snapshot's `proofVerdict`, never a node count), `feed`, the `exec`/`vrfy`/`app`/`pub` axes verbatim, then nodes layered by dependency depth. It takes only the rows the terminal leaves below the rail and collapses the rest into `+N more`. The startup header never shows it.
 - Status rows project one `ControlPlaneViewModel`: `buildControlPlaneViewModel` over the signals that one adapter, `readControlPlaneSignals`, reads from the live session. The rail adds only tabs, identity, TODO and SESSION.
 - Pinned status sidebar: projects the same view model as `run`/`vrfy` rows, failure essentials (`why`, `rtry`, `next`), and a `ctx` row and meter in the context pressure color.
 - Expanded resources: unboxed terminal sections below the deck.
@@ -72,6 +73,7 @@ Colour comes only from theme tokens. The default themes are the paper pair; othe
 - tmux capture must show no overflow at the target reference width; visual QA renders the capture (paper dark and light) and checks it against the README hero before completion.
 - Status rows derive from `ControlPlaneViewModel`; no hardcoded state strings or decorative telemetry in the rail.
 - Startup header surfaces render only turn-stable values; live values stay in viewport-anchored surfaces. `test/control-plane-header-surface.test.ts` requires identical header output across queue, failure card, CPU and RSS changes.
+- `test/rnode-overlay.test.ts` requires R·NODE to stay out of every header render and keep the overlay frame closed at any terminal height.
 - Status rows pass session, journal and file-system text through `singleLineDisplayText`, so no escape sequence, control character or bidi mark reaches the terminal.
 - `test/control-panel-brand.test.ts` holds the brand rules: fixed geometry at every reveal value, the accent only on the Verify stage, no AdaptOrch name on any control-panel surface.
 - The release gate (`scripts/check-release-consistency.mjs`) requires the plate `FIG. 01 · THE CONTROL LOOP` in `control-panel-brand.ts`.

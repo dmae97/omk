@@ -227,15 +227,18 @@ export class ControlPanelComponent implements Component {
 
 export class ControlPanelRightPaneComponent implements Component {
 	private readonly content: ControlPanelContent;
+	private readonly getRows: (() => number) | undefined;
 
-	constructor(content: ControlPanelContent) {
+	/** `getRows` reports the terminal height so optional sections never push the frame off screen. */
+	constructor(content: ControlPanelContent, getRows?: () => number) {
 		this.content = content;
+		this.getRows = getRows;
 	}
 
 	invalidate(): void {}
 
 	render(width: number): string[] {
-		return renderControlPanelRightPane(this.content, width);
+		return renderControlPanelRightPane(this.content, width, this.getRows?.());
 	}
 }
 
