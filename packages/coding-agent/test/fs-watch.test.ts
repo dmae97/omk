@@ -1,9 +1,10 @@
-import { EventEmitter } from "node:events";
-import { type FSWatcher, mkdtempSync, rmSync } from "node:fs";
+import type { EventEmitter } from "node:events";
+import type { FSWatcher } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { FS_WATCH_RETRY_DELAY_MS, closeWatcher, watchWithErrorHandler } from "../src/fs-watch.ts";
+import { closeWatcher, FS_WATCH_RETRY_DELAY_MS, watchWithErrorHandler } from "../src/utils/fs-watch.ts";
 
 describe("fs watch helpers", () => {
 	it("exposes the configured retry delay", () => {
