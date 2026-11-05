@@ -7,6 +7,7 @@ import { collectVerifiedRuns } from "../core/verified-run/run-gc.ts";
 import { publishPolicyDigest } from "../core/verified-run/run-publish.ts";
 import type { VerifiedRunRuntime } from "../core/verified-run/session-port.ts";
 import { digestBytes, readJson, stateRunPath, VerifiedRunError } from "../core/verified-run/storage.ts";
+import { readRunGraph } from "../core/verified-run/workbench-run-graph.ts";
 import { operationFailure, parse, required, retention, USAGE, waitMs } from "./verified-run-cli-args.ts";
 import { withRunSignal } from "./verified-run-signal.ts";
 
@@ -156,6 +157,9 @@ export async function runVerifiedRunCli(
 				exitCode = explanation.status.cleanSuccess && explanation.proof.verdict === "verified" ? 0 : 1;
 				break;
 			}
+			case "graph":
+				result = readRunGraph(stateRoot, parsed.id ?? "");
+				break;
 			case "events":
 				result = coordinator.events(parsed.id ?? "");
 				break;
