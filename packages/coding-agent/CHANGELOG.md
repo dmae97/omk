@@ -11,6 +11,7 @@
 
 ### Changed
 
+- The Kimi quota read (`GET https://api.kimi.com/coding/v1/usages`) now sends `User-Agent: omk` and no `X-Msh-Platform`/`X-Msh-Version` headers, instead of identifying as Kimi CLI. This matches the other USAGE providers; the endpoint answers the same for OAuth and API-key credentials.
 - The startup deck drops its own status column while the pinned status rail is on screen, so RUN, VERIFY, TODO and SESSION are no longer drawn twice side by side. Once the deck scrolls into scrollback it keeps its layout.
 - The pinned status panel now renders with OpenTUI by default: an offscreen renderer process returns ANSI rows while `omk-tui` keeps terminal and input ownership. It shows model, run, verification, host CPU/RAM, context, usage, MCP, the session's `update_todo` progress, the running tool and a bound `/rnode` run first; `Ctrl+O` adds details. Set `OMK_OPENTUI_STATUS_RAIL=0` for the native sidebar; Node below 26.4, a missing optional `@opentui/core` and renderer failures or timeouts fall back to it. See [hybrid status panel](docs/tui.md#hybrid-opentui-status-panel).
 - The native status sidebar shows a SYSTEM block near the top: whole-host CPU and RAM meters, physical memory used/total, and a separate `omk` row for this process's CPU and RSS. Missing samples stay `?`/unavailable, the activity sparkline tracks host CPU, and the MCP roster gives up its rows to these meters on short terminals. See [pinned status resources](docs/tui.md#pinned-status-resources).

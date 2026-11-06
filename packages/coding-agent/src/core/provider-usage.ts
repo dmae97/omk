@@ -575,9 +575,7 @@ async function fetchKimiUsage(label: string, apiKey: string, fetchImpl: FetchLik
 		headers: {
 			Authorization: `Bearer ${apiKey}`,
 			Accept: "application/json",
-			"User-Agent": "KimiCLI/1.5",
-			"X-Msh-Platform": "kimi_cli",
-			"X-Msh-Version": "1.5",
+			"User-Agent": "omk",
 		},
 	});
 	const windows = parseKimiUsageSnapshot(payload);
