@@ -83,10 +83,11 @@ export function renderControlPanelLayout(
 	expanded: boolean,
 	width: number,
 	reveal = 1,
+	deckRail = true,
 ): string[] {
 	if (width <= 0) return [];
 	// One snapshot per render call: building it reads the live session, so every helper shares it.
-	const frame: DeckFrame = { content, snapshot: statusSnapshot(content), reveal };
+	const frame: DeckFrame = { content, snapshot: statusSnapshot(content), reveal, deckRail };
 	return expanded ? renderExpanded(frame, width) : renderCompact(frame, width);
 }
 
@@ -95,6 +96,8 @@ interface DeckFrame {
 	readonly content: ControlPanelContent;
 	readonly snapshot: ControlPanelStatusSnapshot;
 	readonly reveal: number;
+	/** False while the pinned status rail shows the same status beside the deck. */
+	readonly deckRail: boolean;
 }
 
 /** Label of the narrow layouts' opening divider: the product name, in ink rather than the accent. */
@@ -135,6 +138,7 @@ function renderCompact(frame: DeckFrame, width: number): string[] {
 }
 
 function renderDeck(frame: DeckFrame, width: number): string[] {
+	if (!frame.deckRail) return [...heroPanel(frame, width), ...deckFooterLines(frame, width)];
 	const { leftWidth, sidebarWidth } = deckWidths(width);
 	if (leftWidth < 72) return [];
 	const hero = heroPanel(frame, leftWidth);
@@ -151,10 +155,16 @@ function renderDeck(frame: DeckFrame, width: number): string[] {
 		CONTROL_PANEL_GAP_WIDTH,
 		width,
 	);
-	// Left-aligned under the deck, like the hero's copy; no centred brochure lines.
-	lines.push(fitLine(`  ${frame.content.compactInstructions()}`, width));
-	lines.push(fitLine(`  ${theme.fg("dim", frame.content.compactOnboarding())}`, width));
+	lines.push(...deckFooterLines(frame, width));
 	return lines;
+}
+
+/** Left-aligned under the deck, like the hero's copy; no centred brochure lines. */
+function deckFooterLines(frame: DeckFrame, width: number): string[] {
+	return [
+		fitLine(`  ${frame.content.compactInstructions()}`, width),
+		fitLine(`  ${theme.fg("dim", frame.content.compactOnboarding())}`, width),
+	];
 }
 
 function deckWidths(width: number): { leftWidth: number; sidebarWidth: number } {
@@ -222,6 +232,7 @@ function renderExpanded(frame: DeckFrame, width: number): string[] {
 	if (railFits(width)) {
 		const { leftWidth, sidebarWidth } = deckWidths(width);
 		const resourceLines = ["", ...content.onboarding().split("\n")];
+		if (!frame.deckRail) return [...renderDeck(frame, width), ...resourceLines.map((line) => fitLine(line, width))];
 		const rightRail = blankSidebarRail(sidebarWidth, resourceLines.length);
 		const lines = [...renderDeck(frame, width)];
 		lines.push(...composeColumns(resourceLines, leftWidth, rightRail, sidebarWidth, CONTROL_PANEL_GAP_WIDTH, width));
