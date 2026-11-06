@@ -7,30 +7,9 @@ import { normalizePath, resolvePath } from "../utils/paths.ts";
 import type { NotificationSettings } from "./completion-sound.ts";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-idle-timeout.ts";
 import type { ResourceGovernorSettings } from "./resource-governor-settings.ts";
+import { parseDefaultActiveSkills, parseSubscriptionUsageProviders } from "./settings-list-values.ts";
 import { deepMergeSettings, mergeLayeredSettings } from "./settings-merge.ts";
 import { resolveScrollbackSeedScreens } from "./terminal-settings.ts";
-
-const MAX_DEFAULT_ACTIVE_SKILLS = 64;
-const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
-
-function parseDefaultActiveSkills(value: unknown): string[] {
-	if (value === undefined) return [];
-	if (!Array.isArray(value) || value.length > MAX_DEFAULT_ACTIVE_SKILLS) {
-		throw new Error(`defaultActiveSkills must be an array of at most ${MAX_DEFAULT_ACTIVE_SKILLS} skill names`);
-	}
-	const names: string[] = [];
-	const seen = new Set<string>();
-	for (const item of value) {
-		if (typeof item !== "string" || item.length > 64 || !SKILL_NAME_PATTERN.test(item)) {
-			throw new Error("defaultActiveSkills entries must be valid skill names");
-		}
-		if (!seen.has(item)) {
-			seen.add(item);
-			names.push(item);
-		}
-	}
-	return names;
-}
 
 export interface CompactionSettings {
 	enabled?: boolean; // default: true
@@ -209,6 +188,7 @@ export interface Settings {
 	autocompleteMaxVisible?: number; // Max visible items in autocomplete dropdown (default: 5)
 	showHardwareCursor?: boolean; // Show terminal cursor while still positioning it for IME
 	pinStatusSidebar?: boolean; // Pin the bottom-bar status as a fixed right sidebar (opencode-style rail with MCP list)
+	subscriptionUsageProviders?: string[]; // Global-only usage-rail allowlist; omitted shows all configured groups
 	markdown?: MarkdownSettings;
 	warnings?: WarningSettings;
 	sessionDir?: string; // Custom session storage directory (same format as --session-dir CLI flag)
@@ -1289,6 +1269,18 @@ export class SettingsManager {
 
 	getPinStatusSidebar(): boolean {
 		return this.settings.pinStatusSidebar ?? process.env.OMK_PIN_STATUS_SIDEBAR === "1";
+	}
+
+	/**
+	 * Global-only usage-rail allowlist; undefined shows every configured group. The rail reads it every frame,
+	 * so an invalid value fails closed (no usage requests) instead of throwing during render.
+	 */
+	getSubscriptionUsageProviders(): readonly string[] | undefined {
+		try {
+			return parseSubscriptionUsageProviders(this.globalSettings.subscriptionUsageProviders);
+		} catch {
+			return [];
+		}
 	}
 
 	setPinStatusSidebar(pinned: boolean): void {

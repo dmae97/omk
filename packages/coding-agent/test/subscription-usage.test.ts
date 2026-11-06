@@ -20,6 +20,7 @@ import {
 } from "../src/core/provider-usage.ts";
 import { parseCommandCodeUsageSnapshot } from "../src/core/provider-usage-commandcode.ts";
 import { parseDevinUsageSnapshot } from "../src/core/provider-usage-devin.ts";
+import { InMemorySettingsStorage, SettingsManager } from "../src/core/settings-manager.ts";
 
 /** Minimal protobuf field encoder for Devin GetUserStatus fixtures. */
 function pfield(no: number, value: string | number | boolean | Uint8Array): Buffer {
@@ -54,12 +55,14 @@ function session(
 		oauthProviders?: readonly string[];
 		configuredProviders?: readonly string[];
 		apiKeys?: Readonly<Record<string, string>>;
+		allowedProviders?: string[];
 	} = {},
 ) {
 	const oauthProviders = new Set(options.oauthProviders ?? []);
 	const configuredProviders = new Set(options.configuredProviders ?? []);
 	return {
 		state: { model: { provider, baseUrl: "https://example.test/v1" } },
+		settingsManager: SettingsManager.inMemory({ subscriptionUsageProviders: options.allowedProviders }),
 		modelRegistry: {
 			isUsingOAuthProvider: (candidate: string) => oauthProviders.has(candidate),
 			getProviderAuthStatus: (candidate: string) =>
@@ -140,6 +143,31 @@ describe("subscription usage providers", () => {
 		expect(getConfiguredSubscriptionUsageProviders(configured as never)).toEqual(["commandcode", "zai"]);
 	});
 
+	it("keeps an excluded active provider out of the usage rail", () => {
+		const configured = session("anthropic", {
+			oauthProviders: ["anthropic", "openai-codex"],
+			allowedProviders: ["openai-codex"],
+		});
+		expect(getConfiguredSubscriptionUsageProviders(configured as never)).toEqual(["openai-codex"]);
+	});
+
+	it("hides every usage group when the allowlist is empty", () => {
+		const configured = session("anthropic", { oauthProviders: ["anthropic"], allowedProviders: [] });
+		expect(getConfiguredSubscriptionUsageProviders(configured as never)).toEqual([]);
+	});
+
+	it("fails closed on an invalid allowlist instead of throwing during render", () => {
+		const configured = session("anthropic", { oauthProviders: ["anthropic"], allowedProviders: [""] });
+		expect(() => configured.settingsManager.getSubscriptionUsageProviders()).not.toThrow();
+		expect(getConfiguredSubscriptionUsageProviders(configured as never)).toEqual([]);
+	});
+
+	it("reads the allowlist from global settings only, so a project cannot change it", () => {
+		const storage = new InMemorySettingsStorage();
+		storage.withLock("global", () => JSON.stringify({ subscriptionUsageProviders: ["openai-codex"] }));
+		storage.withLock("project", () => JSON.stringify({ subscriptionUsageProviders: [] }));
+		expect(SettingsManager.fromStorage(storage).getSubscriptionUsageProviders()).toEqual(["openai-codex"]);
+	});
 	it("merges passive Codex response limits into missing polled windows", async () => {
 		const token = codexToken("acct-passive-merge");
 		recordCodexPassiveUsage(token, {

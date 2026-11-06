@@ -32,7 +32,7 @@ function mkSession(baseUrl: string | undefined) {
 		isRetrying: false,
 		pendingMessageCount: 0,
 		lastTermination: undefined,
-		settingsManager: { getResourceGovernorSettings: () => ({}) },
+		settingsManager: { getResourceGovernorSettings: () => ({}), getSubscriptionUsageProviders: () => undefined },
 	} as any;
 }
 

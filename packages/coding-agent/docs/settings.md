@@ -79,6 +79,7 @@ Global-only, default-off lifecycle for a future v4 advisory source. The timeout,
 | `autocompleteMaxVisible` | number | `5` | Max visible items in autocomplete dropdown (3-20) |
 | `showHardwareCursor` | boolean | `false` | Show the terminal cursor while TUI positions it for IME support |
 | `pinStatusSidebar` | boolean | `false` | Pin the bottom status bar as a responsive right rail (opencode-style): width scales with the terminal (~26%, 34–48 cols), the MCP roster grows on taller terminals, and the content column shrinks to match so the prompt is never covered. The rail shows only when the terminal has at least 120 columns and 16 rows; otherwise the bottom status bar is used. Toggle anytime with `Ctrl+Q`; pinning on a smaller terminal shows a status line with those minimums. Also enabled by `OMK_PIN_STATUS_SIDEBAR=1` |
+| `subscriptionUsageProviders` | string[] | omitted | Global settings only. Allowlist of usage groups (for example `["openai-codex", "anthropic"]`) shown in the pinned rail's USAGE section and requested from providers. Omitted shows every configured group; `[]` hides them all and sends no usage requests. A project `.omk/settings.json` cannot change it. An invalid value (not an array of non-empty provider IDs) also hides them all |
 
 ### Telemetry and update checks
 
