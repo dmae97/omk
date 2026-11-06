@@ -42,6 +42,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "login", description: "Configure provider authentication" },
 	{ name: "logout", description: "Remove provider authentication" },
 	{ name: "jev", description: "TypeSafe (Jev) key: set, status, clear" },
+	{ name: "rnode", description: "Observe a verified run in the control pane: <runId> [--state-dir DIR], off" },
 	{ name: "new", description: "Start a new session" },
 	{ name: "compact", description: "Manually compact the session context" },
 	{ name: "resume", description: "Resume a different session" },

@@ -110,7 +110,7 @@
 	"packages/coding-agent/src/modes/interactive/components/status-sidebar.ts": 490,
 	"packages/coding-agent/src/modes/interactive/components/tool-execution.ts": 289,
 	"packages/coding-agent/src/modes/interactive/components/tree-selector.ts": 992,
-	"packages/coding-agent/src/modes/interactive/interactive-mode.ts": 5470,
+	"packages/coding-agent/src/modes/interactive/interactive-mode.ts": 5478,
 	"packages/coding-agent/src/modes/interactive/theme/theme.ts": 1053,
 	"packages/coding-agent/src/modes/rpc/rpc-client.ts": 347,
 	"packages/coding-agent/src/modes/rpc/rpc-mode.ts": 598,
