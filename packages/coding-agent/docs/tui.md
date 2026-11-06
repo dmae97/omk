@@ -307,9 +307,32 @@ terminal-control commands. No additional agent or model runs.
   rendering child alone receives `--experimental-ffi`; unsupported runtimes,
   missing native libraries, render failures and timeouts fall back to the native
   sidebar. It does not enable FFI in the main process.
-- Set `OMK_OPENTUI_STATUS_RAIL=0` for the native sidebar.
+- Set `OMK_OPENTUI_STATUS_RAIL=0` for the native sidebar. The separate tmux pane
+  below remains an independent opt-in and takes precedence when active.
 - A bound `/rnode` run is the panel's first section, so height trimming drops
   Session, Runtime and Connections before it; see [R·NODE](rnode-tui.md).
+
+## Isolated tmux status pane
+
+Inside tmux, `OMK_TMUX_STATUS_RAIL=1` moves the pinned status rail into a separate
+40-column pane. The chat and editor keep their own terminal, cursor and scrollback.
+No extra model or agent runs in the status pane. The pane reuses live session,
+verification, context, usage, MCP and runtime data with a borderless section layout.
+
+- `Ctrl+Q` in the main pane hides or restores the status pane.
+- Focus the status pane to scroll with `PageUp`/`PageDown`, arrows, `j`/`k`, or
+  `g`/`G`. This never sends input to the agent.
+- Terminals narrower than 114 columns keep the native footer/rail instead. A failed
+  split or closed viewer also restores the native layout.
+- Closing OMK removes only its own status pane and its private temporary frames.
+  Other tmux panes and sessions are not touched. tmux isolates terminal layout,
+  not filesystem permissions or command execution.
+- While active, the pane replaces the in-process rail, including the OpenTUI panel;
+  it uses the native rail's content. An extension footer stops the pane until the
+  footer is removed.
+- The core does not start a tmux server automatically. Launch OMK inside an existing
+  tmux session with the environment flag, or configure a local launcher to create
+  a dedicated tmux session first. Without the flag, the native rail is unchanged.
 
 ## Keyboard Input
 
