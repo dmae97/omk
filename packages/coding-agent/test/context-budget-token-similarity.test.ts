@@ -88,6 +88,18 @@ describe("context-budget-token-similarity", () => {
 				["optimization", 1],
 			]);
 			expect(fuzzyTokenWeight("optim", itemSet, weights)).toBe(1);
+
+			// Dual positive matches: "colour" (weight 3 * similarity 2/3 = 2) vs "coloring" (weight 1 * similarity 1 = 1)
+			// Tested in both insertion orders to ensure max is chosen regardless of iteration order
+			const dualWeights = new Map([
+				["colour", 3],
+				["coloring", 1],
+			]);
+			const orderA = new Set(["colour", "coloring"]);
+			const orderB = new Set(["coloring", "colour"]);
+
+			expect(fuzzyTokenWeight("color", orderA, dualWeights)).toBeCloseTo(2, 3);
+			expect(fuzzyTokenWeight("color", orderB, dualWeights)).toBeCloseTo(2, 3);
 		});
 
 		it("multiplies non-containment Dice similarity by item weight", () => {
