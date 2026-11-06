@@ -98,4 +98,28 @@ describe("createPermitDeadline", () => {
 		await vi.advanceTimersByTimeAsync(200);
 		expect(onExpire).not.toHaveBeenCalled();
 	});
+
+	it("chunks delays larger than the 32-bit setTimeout maximum", async () => {
+		vi.useFakeTimers();
+		const MAX = 2_147_483_647;
+		let t = 0;
+		const clock = (): number => t;
+		const onExpire = vi.fn();
+		const deadline = createPermitDeadline(MAX + 1000, onExpire, clock);
+
+		expect(vi.getTimerCount()).toBe(1);
+
+		t = MAX;
+		await vi.advanceTimersByTimeAsync(MAX);
+		expect(onExpire).not.toHaveBeenCalled();
+		expect(deadline.expired()).toBe(false);
+		expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+		t = MAX + 1000;
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(onExpire).toHaveBeenCalledTimes(1);
+		expect(deadline.expired()).toBe(true);
+
+		deadline.cancel();
+	});
 });
