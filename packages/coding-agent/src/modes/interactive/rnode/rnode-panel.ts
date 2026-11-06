@@ -1,7 +1,12 @@
 import { truncateToWidth } from "omk-tui";
 import { singleLineDisplayText } from "../../../utils/display-text.ts";
 import { boxTextLine, semanticBoxTextLine, sidebarRule } from "../components/control-panel-box.ts";
-import { type AuthorityCell, authorityStyle, authorityText } from "../control-plane-view-model.ts";
+import {
+	type AuthorityCell,
+	authorityStyle,
+	authorityText,
+	type UiAuthorityState,
+} from "../control-plane-view-model.ts";
 import { theme } from "../theme/theme.ts";
 import type { RNodeCell, RNodeViewModel } from "./rnode-model.ts";
 
@@ -12,6 +17,44 @@ export interface RNodePending {
 }
 
 export type RNodePanelInput = RNodeViewModel | RNodePending | undefined;
+
+/** One label/value row for surfaces that lay out their own rows (the OpenTUI status panel). */
+export interface RNodeStatusRow {
+	readonly label: string;
+	readonly value: string;
+	/** Colour source; undefined means neutral ink. */
+	readonly state: UiAuthorityState | undefined;
+}
+
+/** Same content as `renderRNodePanel`, as rows; the caller sanitizes and colours them. */
+export function rnodeStatusRows(view: RNodePanelInput): RNodeStatusRow[] {
+	if (view === undefined) return [];
+	const cell = (label: string, value: AuthorityCell): RNodeStatusRow => ({
+		label,
+		value: authorityText(value),
+		state: value.state,
+	});
+	if (!("layers" in view)) return [{ label: "Run", value: view.runId, state: undefined }, cell("Feed", view.feed)];
+	return [
+		{ label: "Run", value: `${view.runId} · rev ${view.revision} · gen ${view.generation}`, state: undefined },
+		cell("Proof", view.proof),
+		cell("Feed", view.feed),
+		{ label: "Exec", value: view.axes.slice(0, 2).join("/"), state: undefined },
+		// One row per outcome axis, as in the boxed panel, so `reconciliation_required` is never clipped.
+		...["Verification", "Application", "Publication"].map((label, index) => ({
+			label,
+			value: view.axes[index + 2] ?? "?",
+			state: undefined,
+		})),
+		...view.layers.flatMap((layer) =>
+			layer.nodes.map((node) => ({
+				label: node.id,
+				value: `${authorityText(node)} a${node.attempt}${node.dependsOn.length > 0 ? ` ← ${node.dependsOn.join(", ")}` : ""}`,
+				state: node.state,
+			})),
+		),
+	];
+}
 
 export interface RNodePanelOptions {
 	readonly width: number;

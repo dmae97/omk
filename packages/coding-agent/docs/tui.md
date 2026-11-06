@@ -268,6 +268,49 @@ const image = new Image(
 );
 ```
 
+## Hybrid OpenTUI status panel
+
+The pinned status panel renders with OpenTUI by default since 2.0.
+The conversation, editor, keyboard focus and terminal output stay owned by `omk-tui`.
+OpenTUI runs in a separate offscreen rendering process and returns ANSI rows, not
+terminal-control commands. No additional agent or model runs.
+
+- Compact mode shows model/provider, run state, verification evidence, whole-host
+  CPU/RAM meters, context, active-provider usage and an MCP summary. RAM details
+  show physical memory used/total (total minus free). Short panels collapse the
+  host meters into a summary row before dropping optional connection details.
+  Unknown metrics stay unavailable; measured zero remains zero.
+- Runtime details distinguish `CPU (OMK)` and `RSS (OMK)` from host metrics and
+  show process uptime. Child processes are not included in the OMK process figures.
+- When this session has a successful `update_todo`, compact mode also shows its
+  completion count and next active task (or pending/blocked task). A failed or
+  proposed update is not applied. The current session branch is the source,
+  including after resume; another session's global checklist is never used.
+- A running tool adds only its name, elapsed seconds and concurrent-tool count.
+  Timing starts at actual execution, not tool-call generation. No command arguments
+  are displayed. Completion, cancellation, branch/session changes and shutdown
+  release the live timer.
+- Details distinguish selected skills from bodies loaded/read in this prompt.
+  Recommended skills are not labelled loaded. Recent checks show observed test
+  counts from recognized single-runner commands (optionally after `cd`) and
+  diagnostic results. Compound commands, missing counts and skipped diagnostics
+  are not promoted to success. `earlier` marks a result preceding an observed
+  edit/write; these observations never change the separate `Verify` authority
+  to verified and are not a current-workspace acceptance receipt.
+- `Ctrl+O` toggles tool expansion and status details together. Larger terminals
+  also show individual connections, session and runtime details; short terminals
+  prioritize essential status, skill and check observations over connection lists
+  and runtime details. Custom keybindings are reflected in the panel hint.
+- `Ctrl+Q` hides/restores the panel. Below 120 columns or 16 rows the existing
+  footer layout is used, without covering the editor.
+- Requires the optional `@opentui/core` dependency and Node 26.4 or newer. The
+  rendering child alone receives `--experimental-ffi`; unsupported runtimes,
+  missing native libraries, render failures and timeouts fall back to the native
+  sidebar. It does not enable FFI in the main process.
+- Set `OMK_OPENTUI_STATUS_RAIL=0` for the native sidebar.
+- A bound `/rnode` run is the panel's first section, so height trimming drops
+  Session, Runtime and Connections before it; see [R·NODE](rnode-tui.md).
+
 ## Keyboard Input
 
 Use `matchesKey()` for key detection:

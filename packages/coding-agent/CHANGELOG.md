@@ -6,6 +6,10 @@
 
 - `/rnode <runId> [--state-dir DIR]` binds a verified run read-only and shows its R·NODE graph (run, proof, feed, outcome axes, nodes by dependency depth) in the pinned status sidebar, under RUN and VERIFY, or in the expanded control pane. It never executes, retries or approves, and never appears in the scrollback header. When rows run short it drops the outcome-axis rows before any node. See [R·NODE](docs/rnode-tui.md).
 
+### Changed
+
+- The pinned status panel now renders with OpenTUI by default: an offscreen renderer process returns ANSI rows while `omk-tui` keeps terminal and input ownership. It shows model, run, verification, host CPU/RAM, context, usage, MCP, the session's `update_todo` progress, the running tool and a bound `/rnode` run first; `Ctrl+O` adds details. Set `OMK_OPENTUI_STATUS_RAIL=0` for the native sidebar; Node below 26.4, a missing optional `@opentui/core` and renderer failures or timeouts fall back to it. See [hybrid status panel](docs/tui.md#hybrid-opentui-status-panel).
+
 ## [1.5.10] - 2026-10-27
 
 ### Fixed

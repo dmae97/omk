@@ -311,6 +311,21 @@ export class StatusSidebarComponent implements Component {
 		for (const provider of this.subscriptionUsageProviders) void this.usageReader.refresh(provider);
 	}
 
+	/** Usage snapshots for the OpenTUI status panel, read through the same TTL/revision reader as the rail. */
+	getSubscriptionUsage(): readonly SubscriptionUsageSnapshot[] {
+		this.refreshSubscriptionUsage();
+		return this.subscriptionUsageProviders.map((provider) => {
+			const snapshot = this.usageReader.snapshot(provider);
+			return snapshot
+				? { ...snapshot, windows: snapshot.windows.map((window) => ({ ...window })) }
+				: {
+						label: getSubscriptionUsageSource(provider)?.label ?? provider,
+						windows: [],
+						message: this.usageReader.hasInFlight(provider) ? "loading…" : "usage unavailable",
+					};
+		});
+	}
+
 	private subscriptionUsageSection(width: number): string[] {
 		if (this.subscriptionUsageProviders.length === 0) return [];
 		const lines = [railRule(width, "USAGE", theme.fg("muted", String(this.subscriptionUsageProviders.length)))];

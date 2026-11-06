@@ -32,7 +32,8 @@ verified-run graph from [`readRunGraph()`](run-graph.md). Three constraints shap
   the feed cell. It never writes to the journal.
 - Transform: `reduceRunGraph` applies the cursor rules, then
   `buildRNodeViewModel` produces a view model that has no colour or width.
-- Output: `renderRNodePanel`, a pure function of the view model and a row budget.
+- Output: `renderRNodePanel` (boxed rows) and `rnodeStatusRows` (OpenTUI
+  label/value rows). Both are pure functions of the view model and a row budget.
 - Failure: a failed read keeps the last snapshot and marks `feed` unreadable.
   An incomparable cursor is rejected, never merged.
 
@@ -51,7 +52,9 @@ Without `--state-dir` the state root is `verified-runs` under the OMK agent
 directory, the same default as `omk run graph`. The run ID must match the
 verified-run ID rule, so a path such as `../x` is rejected before any read.
 R·NODE then appears in whichever right rail is on screen. With the status
-sidebar pinned (Ctrl+Q) it sits under RUN and VERIFY in the sidebar. Unpinned,
+sidebar pinned (Ctrl+Q) it sits under RUN and VERIFY in the sidebar: the
+OpenTUI panel (the default) or the native fallback rail (`OMK_OPENTUI_STATUS_RAIL=0`
+or an unsupported runtime). Unpinned,
 it sits at the bottom of the control-pane overlay in the expanded view (Ctrl+O
 by default). One binding exists per session; binding again replaces it.
 
@@ -134,11 +137,14 @@ Data flows one way: `RunGraphSnapshot` → `RNodeFeedState` → `RNodeViewModel`
   SESSION when `content.rnode` returns a binding. It gives R·NODE at most 16
   rows and never more than the terminal leaves below the rail. The header
   renderer never calls `content.rnode`.
-- `StatusSidebarComponent` renders the same panel after RUN and VERIFY. It
+- `StatusSidebarComponent` (native fallback rail) renders the same panel after RUN and VERIFY. It
   takes at most 16 rows from the MCP roster's budget, after USAGE and failure
   rows, and leaves the roster its floor of 4 rows, so R·NODE never grows the
   rail past the terminal. With fewer than 2 spare rows the section is omitted.
   The roster stops at 18 rows, so on tall terminals R·NODE uses spare height.
+- `rnodeStatusRows(view)` gives the same content as label/value rows.
+  `statusPanelModel` puts them first in the OpenTUI panel's sections, because
+  that renderer trims Session, Runtime and Connections before any other section.
 - When rows run short, `renderRNodePanel` drops the four axis rows before any
   node, so `proof`, `feed`, node states and `+N more` stay visible.
 
@@ -183,7 +189,7 @@ Three whole shapes were compared.
   roadmap leaves durable event replay to a later connection contract. Each poll
   is a synchronous journal read on the UI thread. This is cheap for the 16-task
   verified-run profile but was not measured on a large journal.
-- We accept that the pinned sidebar gives R·NODE only the roster's row budget
+- We accept that the native fallback rail gives R·NODE only the roster's row budget
   above its floor, in exchange for never pushing the unpin hint off screen. With
   many subscription USAGE rows, a short terminal shows `run`, `proof`, `feed`
   and `+N more` only, or omits the section.
@@ -198,8 +204,8 @@ Three whole shapes were compared.
 
 ## Open questions and risks
 
-- Should R·NODE outrank USAGE for the pinned sidebar's spare rows while a run
-  is bound?
+- Should R·NODE outrank USAGE for the native fallback rail's spare rows while a
+  run is bound? The default OpenTUI panel already keeps it first.
 - Should the binding survive `/new` and `/resume`? Today it lasts for the
   process and is not saved with the session.
 - When a native consumer lands, should both reducers read one shared frame
@@ -207,7 +213,7 @@ Three whole shapes were compared.
 
 ## Next implementation step
 
-Capture the overlay and the pinned sidebar in the paper light theme and add
+Capture the overlay and the pinned OpenTUI panel in the paper light theme and add
 them to the visual QA gate in `DESIGN.md`.
 
 - Baseline: the gate has no R·NODE capture today.

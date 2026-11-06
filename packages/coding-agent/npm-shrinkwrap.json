@@ -31,7 +31,8 @@
 				"omk-protocol": "^1.5.10"
 			},
 			"optionalDependencies": {
-				"@mariozechner/clipboard": "0.3.9"
+				"@mariozechner/clipboard": "0.3.9",
+				"@opentui/core": "0.7.0"
 			},
 			"bin": {
 				"omk": "dist/cli.js"
@@ -639,6 +640,169 @@
 				"zod-to-json-schema": "^3.25.0"
 			}
 		},
+		"node_modules/@opentui/core": {
+			"version": "0.7.0",
+			"resolved": "https://registry.npmjs.org/@opentui/core/-/core-0.7.0.tgz",
+			"integrity": "sha512-2iWBw9oo+ZJfPbOWeTLXfDV63yTDRfclxltI4IgTa6n7OB90x5xplLMH3y9DXhnWibzTui00GbK3ZCwKfUU1SQ==",
+			"license": "MIT",
+			"dependencies": {
+				"bun-ffi-structs": "0.3.1",
+				"diff": "9.0.0",
+				"marked": "17.0.1",
+				"string-width": "7.2.0"
+			},
+			"optionalDependencies": {
+				"@opentui/core-darwin-arm64": "0.7.0",
+				"@opentui/core-darwin-x64": "0.7.0",
+				"@opentui/core-linux-arm64": "0.7.0",
+				"@opentui/core-linux-arm64-musl": "0.7.0",
+				"@opentui/core-linux-x64": "0.7.0",
+				"@opentui/core-linux-x64-musl": "0.7.0",
+				"@opentui/core-win32-arm64": "0.7.0",
+				"@opentui/core-win32-x64": "0.7.0"
+			},
+			"peerDependencies": {
+				"web-tree-sitter": "0.25.10"
+			},
+			"engines": {
+				"bun": ">=1.3.14",
+				"node": ">=26.4.0"
+			},
+			"optional": true
+		},
+		"node_modules/@opentui/core-darwin-arm64": {
+			"version": "0.7.0",
+			"resolved": "https://registry.npmjs.org/@opentui/core-darwin-arm64/-/core-darwin-arm64-0.7.0.tgz",
+			"integrity": "sha512-meEyZVUeCIauqHLWo/IsSlKzZPTnGIEjRLigefSZbrSAcOiMryd3OcUWvSByIXpYb9UPOpW0YxKKfVwepb9u2A==",
+			"license": "MIT",
+			"os": [
+				"darwin"
+			],
+			"cpu": [
+				"arm64"
+			],
+			"optional": true
+		},
+		"node_modules/@opentui/core-darwin-x64": {
+			"version": "0.7.0",
+			"resolved": "https://registry.npmjs.org/@opentui/core-darwin-x64/-/core-darwin-x64-0.7.0.tgz",
+			"integrity": "sha512-hZQ4OfAua5CtUv3hpZ81zhNTTLULbg0leQ/3eupjefityGP6163eS56IzymTWuiM/mVD/7Ad5bicH0I2JXhr1g==",
+			"license": "MIT",
+			"os": [
+				"darwin"
+			],
+			"cpu": [
+				"x64"
+			],
+			"optional": true
+		},
+		"node_modules/@opentui/core-linux-arm64": {
+			"version": "0.7.0",
+			"resolved": "https://registry.npmjs.org/@opentui/core-linux-arm64/-/core-linux-arm64-0.7.0.tgz",
+			"integrity": "sha512-/u+Kalzkz8NntUW5zjypgt9fnzeKohLG9YMEas7n98KvyaYScrtO4Mdj5iv/STNB3IfocJOChzYAbO6C8TmlPQ==",
+			"license": "MIT",
+			"os": [
+				"linux"
+			],
+			"cpu": [
+				"arm64"
+			],
+			"optional": true
+		},
+		"node_modules/@opentui/core-linux-arm64-musl": {
+			"version": "0.7.0",
+			"resolved": "https://registry.npmjs.org/@opentui/core-linux-arm64-musl/-/core-linux-arm64-musl-0.7.0.tgz",
+			"integrity": "sha512-BkTn+WLf9OPR4KhBnuOki+R/cgk2qwbL49eQn5fEYPeiJD4HPalGbEZDea59UjwNEJ7rqKq2yuPAXQjkDZ6y3w==",
+			"license": "MIT",
+			"os": [
+				"linux"
+			],
+			"cpu": [
+				"arm64"
+			],
+			"libc": [
+				"musl"
+			],
+			"optional": true
+		},
+		"node_modules/@opentui/core-linux-x64": {
+			"version": "0.7.0",
+			"resolved": "https://registry.npmjs.org/@opentui/core-linux-x64/-/core-linux-x64-0.7.0.tgz",
+			"integrity": "sha512-OD2tGl1r27zcgCsuc+TYU5e+qhrbsRSI0YUBEb0ebQo8P6Ps2FL9LFenH9om4fddCh06G9Zd45ekJMhlDrGD3Q==",
+			"license": "MIT",
+			"os": [
+				"linux"
+			],
+			"cpu": [
+				"x64"
+			],
+			"optional": true
+		},
+		"node_modules/@opentui/core-linux-x64-musl": {
+			"version": "0.7.0",
+			"resolved": "https://registry.npmjs.org/@opentui/core-linux-x64-musl/-/core-linux-x64-musl-0.7.0.tgz",
+			"integrity": "sha512-HrJbcAIuayzQmWVzv+cjez37fNHL9FDoHmjwxAb4iK5GTjl89FZCxeKopyua14RA6WpP8/zUJQi8U16mm6XptA==",
+			"license": "MIT",
+			"os": [
+				"linux"
+			],
+			"cpu": [
+				"x64"
+			],
+			"libc": [
+				"musl"
+			],
+			"optional": true
+		},
+		"node_modules/@opentui/core-win32-arm64": {
+			"version": "0.7.0",
+			"resolved": "https://registry.npmjs.org/@opentui/core-win32-arm64/-/core-win32-arm64-0.7.0.tgz",
+			"integrity": "sha512-8yqBoRsDbvKl2kGX0O8t5kpnVEnbzs+2qUZlJ8sbeA3Z+73WFj36G+clUIMVxpspOu78iKXlD84NIwTxjZUPKw==",
+			"license": "MIT",
+			"os": [
+				"win32"
+			],
+			"cpu": [
+				"arm64"
+			],
+			"optional": true
+		},
+		"node_modules/@opentui/core-win32-x64": {
+			"version": "0.7.0",
+			"resolved": "https://registry.npmjs.org/@opentui/core-win32-x64/-/core-win32-x64-0.7.0.tgz",
+			"integrity": "sha512-OfNAX7fNFHhOiiojUkIjhVOZf+IDjpbpT5G7HrxGqhlZ+n4jITrrJzACHctteWbMUYcibieJzIIoKuLdmD5I+w==",
+			"license": "MIT",
+			"os": [
+				"win32"
+			],
+			"cpu": [
+				"x64"
+			],
+			"optional": true
+		},
+		"node_modules/@opentui/core/node_modules/diff": {
+			"version": "9.0.0",
+			"resolved": "https://registry.npmjs.org/diff/-/diff-9.0.0.tgz",
+			"integrity": "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==",
+			"license": "BSD-3-Clause",
+			"engines": {
+				"node": ">=0.3.1"
+			},
+			"optional": true
+		},
+		"node_modules/@opentui/core/node_modules/marked": {
+			"version": "17.0.1",
+			"resolved": "https://registry.npmjs.org/marked/-/marked-17.0.1.tgz",
+			"integrity": "sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg==",
+			"license": "MIT",
+			"bin": {
+				"marked": "bin/marked.js"
+			},
+			"engines": {
+				"node": ">= 20"
+			},
+			"optional": true
+		},
 		"node_modules/@protobufjs/aspromise": {
 			"version": "1.1.2",
 			"resolved": "https://registry.npmjs.org/@protobufjs/aspromise/-/aspromise-1.1.2.tgz",
@@ -801,6 +965,19 @@
 				"node": ">= 14"
 			}
 		},
+		"node_modules/ansi-regex": {
+			"version": "6.5.0",
+			"resolved": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.5.0.tgz",
+			"integrity": "sha512-zhvbbbdt1kbw7EJ9OQoxmQcuaNR9P5kTj7e/YdmOSU10aHWbycofJxA6jKfoEy3vlLdctOF9ZHaxLtmSm998wQ==",
+			"license": "MIT",
+			"engines": {
+				"node": ">=12"
+			},
+			"optional": true,
+			"funding": {
+				"url": "https://github.com/chalk/ansi-regex?sponsor=1"
+			}
+		},
 		"node_modules/balanced-match": {
 			"version": "4.0.4",
 			"resolved": "https://registry.npmjs.org/balanced-match/-/balanced-match-4.0.4.tgz",
@@ -862,6 +1039,16 @@
 			"resolved": "https://registry.npmjs.org/buffer-equal-constant-time/-/buffer-equal-constant-time-1.0.1.tgz",
 			"integrity": "sha512-zRpUiDwd/xk6ADqPMATG8vc9VPrkck7T07OIx0gnjmJAnHnTVXNQG3vfvWNuiZIkwu9KrKdA1iJKfsfTVxE6NA==",
 			"license": "BSD-3-Clause"
+		},
+		"node_modules/bun-ffi-structs": {
+			"version": "0.3.1",
+			"resolved": "https://registry.npmjs.org/bun-ffi-structs/-/bun-ffi-structs-0.3.1.tgz",
+			"integrity": "sha512-3gM7PpVWLyrwxWjcilSiGuhWanhZivvo6l0u573NziPH6f/gwk6McbaYgn7oJWov6pKGRTDbrg94W5DcJsKTtQ==",
+			"license": "MIT",
+			"peerDependencies": {
+				"typescript": "^5"
+			},
+			"optional": true
 		},
 		"node_modules/canonicalize": {
 			"version": "4.0.0",
@@ -944,6 +1131,12 @@
 			"dependencies": {
 				"safe-buffer": "^5.0.1"
 			}
+		},
+		"node_modules/emoji-regex": {
+			"version": "10.6.0",
+			"resolved": "https://registry.npmjs.org/emoji-regex/-/emoji-regex-10.6.0.tgz",
+			"integrity": "sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==",
+			"license": "MIT"
 		},
 		"node_modules/extend": {
 			"version": "3.0.2",
@@ -1527,6 +1720,40 @@
 			"resolved": "https://registry.npmjs.org/signal-exit/-/signal-exit-3.0.7.tgz",
 			"integrity": "sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ==",
 			"license": "ISC"
+		},
+		"node_modules/string-width": {
+			"version": "7.2.0",
+			"resolved": "https://registry.npmjs.org/string-width/-/string-width-7.2.0.tgz",
+			"integrity": "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==",
+			"license": "MIT",
+			"dependencies": {
+				"emoji-regex": "^10.3.0",
+				"get-east-asian-width": "^1.0.0",
+				"strip-ansi": "^7.1.0"
+			},
+			"engines": {
+				"node": ">=18"
+			},
+			"optional": true,
+			"funding": {
+				"url": "https://github.com/sponsors/sindresorhus"
+			}
+		},
+		"node_modules/strip-ansi": {
+			"version": "7.2.0",
+			"resolved": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-7.2.0.tgz",
+			"integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
+			"license": "MIT",
+			"dependencies": {
+				"ansi-regex": "^6.2.2"
+			},
+			"engines": {
+				"node": ">=12"
+			},
+			"optional": true,
+			"funding": {
+				"url": "https://github.com/chalk/strip-ansi?sponsor=1"
+			}
 		},
 		"node_modules/ts-algebra": {
 			"version": "2.0.0",

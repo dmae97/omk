@@ -4,7 +4,8 @@ import { VerifiedRunError } from "../src/core/verified-run/storage.ts";
 import type { RunGraphSnapshot } from "../src/core/verified-run/workbench-run-graph.ts";
 import { STATUS_SIDEBAR_WIDTH, StatusSidebarComponent } from "../src/modes/interactive/components/status-sidebar.ts";
 import { RNodeController } from "../src/modes/interactive/rnode/rnode-controller.ts";
-import type { RNodePanelInput } from "../src/modes/interactive/rnode/rnode-panel.ts";
+import { type RNodePanelInput, rnodeStatusRows } from "../src/modes/interactive/rnode/rnode-panel.ts";
+import { statusPanelModel } from "../src/modes/interactive/status-panel-model.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
@@ -188,5 +189,44 @@ describe("pinned status sidebar R·NODE", () => {
 		expect(text).toContain("dag-9");
 		expect(text).toContain("~ unreadable");
 		failing.dispose();
+	});
+});
+
+describe("OpenTUI status panel R·NODE", () => {
+	const controller = new RNodeController({ changed: () => {}, read: snapshot });
+	controller.bind({ runId: "dag-1", stateRoot: "/runs" });
+
+	function model(rnode: RNodePanelInput, expanded = false) {
+		return statusPanelModel(session() as never, footer as never, [], expanded, undefined, rnode);
+	}
+
+	it("adds no section while no run is bound", () => {
+		expect(model(undefined).sections.map((section) => section.title)).toEqual(["Connections"]);
+	});
+
+	it("puts R·NODE first so height trimming drops other sections before it", () => {
+		for (const expanded of [false, true]) {
+			const sections = model(controller.panelInput(), expanded).sections;
+			expect(sections[0]?.title).toBe("R·NODE");
+		}
+		const rows = model(controller.panelInput()).sections[0]?.rows ?? [];
+		expect(rows.map((row) => [row.label, row.value])).toEqual([
+			["Run", "dag-1 · rev 3 · gen 1"],
+			["Proof", "? unverified"],
+			["Feed", "✓ live"],
+			["Exec", "running/open"],
+			["Verification", "not_requested"],
+			["Application", "not_requested"],
+			["Publication", "none"],
+			["fetch", "✓ done a1"],
+			["build", "● running a1 ← fetch"],
+		]);
+	});
+
+	it("shows only the run and feed for a run that was never read", () => {
+		expect(rnodeStatusRows({ runId: "dag-9", feed: { state: "stale", label: "unreadable" } })).toEqual([
+			{ label: "Run", value: "dag-9", state: undefined },
+			{ label: "Feed", value: "~ unreadable", state: "stale" },
+		]);
 	});
 });
