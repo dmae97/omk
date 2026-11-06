@@ -48,9 +48,10 @@ const SOURCES: Readonly<Record<string, SubscriptionUsageSource>> = {
 		{ provider: "zhipu-coding-plan", oauthOnly: true },
 	]),
 	xai: source("GROK", "grok", [{ provider: "xai", oauthOnly: true }]),
-	// Muse Code exposes no public quota endpoint, so the rail shows
-	// the subscription entry without live usage windows (qwen-oauth precedent).
-	meta: source("META", "unavailable", [{ provider: "meta", oauthOnly: true }]),
+	// Muse Code exposes no public quota endpoint; its host reports the account's
+	// last-observed subscription window over MSP (`usage/read`), so the rail reads
+	// the CLI probe instead of polling HTTP.
+	meta: source("META", "meta", [{ provider: "meta", oauthOnly: true }], 5 * MINUTE_TTL_MS),
 	// Devin CLI subscription: GetUserStatus accepts the session token whether it
 	// came from /login devin (OAuth store) or an already-owned DEVIN_API_KEY.
 	devin: source("DEVIN", "devin", [
