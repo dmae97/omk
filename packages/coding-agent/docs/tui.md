@@ -268,6 +268,16 @@ const image = new Image(
 );
 ```
 
+## Pinned status resources
+
+The pinned right sidebar shows whole-host CPU activity and RAM meters near the
+top, before model details. RAM includes used/total physical memory (total minus
+free, not a platform-specific available-memory estimate). The separate `omk`
+row shows this OMK process's CPU and RSS, not all tools or child processes.
+Missing samples remain `?`/`unavailable`, never a healthy zero. The activity
+sparkline tracks host CPU. Shorter terminals reduce the MCP roster first. This is
+the native sidebar (`OMK_OPENTUI_STATUS_RAIL=0` or the OpenTUI fallback).
+
 ## Hybrid OpenTUI status panel
 
 The pinned status panel renders with OpenTUI by default since 2.0.

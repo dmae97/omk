@@ -139,8 +139,7 @@ Data flows one way: `RunGraphSnapshot` → `RNodeFeedState` → `RNodeViewModel`
   renderer never calls `content.rnode`.
 - `StatusSidebarComponent` (native fallback rail) renders the same panel after RUN and VERIFY. It
   takes at most 16 rows from the MCP roster's budget, after USAGE and failure
-  rows, and leaves the roster its floor of 4 rows, so R·NODE never grows the
-  rail past the terminal. With fewer than 2 spare rows the section is omitted.
+  rows, so R·NODE never grows the rail past the terminal. With fewer than 2 spare rows the section is omitted.
   The roster stops at 18 rows, so on tall terminals R·NODE uses spare height.
 - `rnodeStatusRows(view)` gives the same content as label/value rows.
   `statusPanelModel` puts them first in the OpenTUI panel's sections, because
@@ -189,8 +188,7 @@ Three whole shapes were compared.
   roadmap leaves durable event replay to a later connection contract. Each poll
   is a synchronous journal read on the UI thread. This is cheap for the 16-task
   verified-run profile but was not measured on a large journal.
-- We accept that the native fallback rail gives R·NODE only the roster's row budget
-  above its floor, in exchange for never pushing the unpin hint off screen. With
+- We accept that the native fallback rail gives R·NODE only the roster's row budget, in exchange for never pushing the unpin hint off screen. With
   many subscription USAGE rows, a short terminal shows `run`, `proof`, `feed`
   and `+N more` only, or omits the section.
 

@@ -25,15 +25,10 @@ import { type RNodePanelInput, renderRNodePanel } from "../rnode/rnode-panel.ts"
 import { type ThemeColor, theme } from "../theme/theme.ts";
 import { boxBottom, boxTextLine, boxTop, meterBar, sidebarRule } from "./control-panel-box.ts";
 import { classifyMcpStability } from "./control-panel-runtime-status.ts";
-import {
-	formatBytes,
-	formatCwdForFooter,
-	formatEndpointForFooter,
-	formatPackageIntake,
-	formatTokens,
-} from "./footer.ts";
+import { formatCwdForFooter, formatEndpointForFooter, formatPackageIntake, formatTokens } from "./footer.ts";
 import { keyText } from "./keybinding-hints.ts";
 import { sidebarAuthorityRows, sidebarContextRows, sidebarFailureRows } from "./status-sidebar-authority.ts";
+import { sidebarSystemRows } from "./status-sidebar-system.ts";
 
 export const STATUS_SIDEBAR_WIDTH = 34;
 export const STATUS_SIDEBAR_MAX_WIDTH = 48;
@@ -50,9 +45,7 @@ export function statusSidebarWidth(termWidth: number): number {
 }
 
 /** Rail rows that are not roster entries; see `mcpMaxRows`. */
-const RAIL_FIXED_ROWS = 26;
-/** The roster always keeps this many rows, so R·NODE takes only the rows above it. */
-const MCP_MIN_ROWS = 4;
+const RAIL_FIXED_ROWS = 29;
 /** Most rows R·NODE takes from the roster budget; more nodes collapse into `+N more`. */
 const RNODE_SIDEBAR_ROWS = 16;
 
@@ -61,11 +54,12 @@ const RNODE_SIDEBAR_ROWS = 16;
  * "+N more" collapse. With every optional row shown except USAGE, EXT and the
  * failure rows, 26 rail rows are not roster entries (frame, up/act, run/vrfy,
  * cwd/git/sess, the MODEL, CONTEXT and TOKENS blocks, MCP rule, "+N more", the
- * SYSTEM block, unpin hint). The roster gets the rest, so that rail fits a
- * terminal of 30+ rows; callers pass USAGE and failure rows as reserved rows.
+ * SYSTEM block, unpin hint). Host CPU/RAM meters add three rows, reserving 29
+ * rows total. Short terminals may collapse the roster entirely; callers pass
+ * USAGE and failure rows as reserved rows.
  */
 export function mcpMaxRows(termRows: number): number {
-	return Math.max(MCP_MIN_ROWS, Math.min(18, termRows - RAIL_FIXED_ROWS));
+	return Math.max(0, Math.min(18, termRows - RAIL_FIXED_ROWS));
 }
 
 const METER_MAX_CELLS = 24;
@@ -186,6 +180,8 @@ export class StatusSidebarComponent implements Component {
 		const usageLines = this.subscriptionUsageSection(width);
 		const rnodeRows = this.rnodeSection(width, usageLines.length + failureRows.length);
 		lines.push(...rnodeRows);
+		// --- System: whole-host meters near the top; the roster yields its rows to them ---
+		lines.push(...sidebarSystemRows(width, this.footerData, vm.resources));
 
 		// --- Location ---
 		// Session, file-system and model text is reduced to one printable line before it reaches the terminal.
@@ -268,16 +264,6 @@ export class StatusSidebarComponent implements Component {
 		// Conditional rows (USAGE, failure essentials, R·NODE) take their height from the roster, not the terminal.
 		lines.push(...this.mcpSection(width, session, usageLines.length + failureRows.length + rnodeRows.length));
 
-		// --- System ---
-		lines.push(sidebarRule(width, "SYSTEM"));
-		const cpu = this.footerData.getCpuPercent();
-		const mem = this.footerData.getMemoryRssBytes();
-		const sysParts: string[] = [];
-		if (cpu !== null) sysParts.push(`cpu ${Math.floor(cpu)}%`);
-		if (mem !== null) sysParts.push(`mem ${formatBytes(mem)}`);
-		if (sysParts.length > 0) {
-			lines.push(boxTextLine(width, theme.fg("muted", sysParts.join(" "))));
-		}
 		lines.push(boxTextLine(width, theme.fg("dim", formatPackageIntake(this.footerData.getPackageIntakeSummary()))));
 
 		// --- Extension statuses ---
@@ -295,14 +281,13 @@ export class StatusSidebarComponent implements Component {
 	}
 
 	/**
-	 * The bound run outranks the MCP inventory for the roster's rows above its floor. Below a rule and one row it
-	 * says nothing, so a terminal with no spare rows drops the section instead of growing the rail.
+	 * The bound run outranks the MCP inventory for the roster's rows, so it takes them first. Below a rule and
+	 * one row it says nothing, so a terminal with no spare rows drops the section instead of growing the rail.
 	 */
 	private rnodeSection(width: number, reservedRows: number): string[] {
 		const input = this.rnode?.();
 		if (input === undefined) return [];
-		const spare = this.getTerminalRows() - reservedRows - RAIL_FIXED_ROWS - MCP_MIN_ROWS;
-		const maxRows = Math.min(RNODE_SIDEBAR_ROWS, spare);
+		const maxRows = Math.min(RNODE_SIDEBAR_ROWS, mcpMaxRows(this.getTerminalRows() - reservedRows));
 		return maxRows >= 2 ? renderRNodePanel(input, { width, maxRows }) : [];
 	}
 
@@ -451,8 +436,8 @@ export class StatusSidebarComponent implements Component {
 	/** Rolling CPU sparkline — a living pulse along the top of the rail. */
 	private sparkline(width: number): string {
 		const now = performance.now();
-		const cpu = this.footerData.getCpuPercent();
-		if (cpu !== null && now - this.lastSparkSampleAt >= SPARK_SAMPLE_MS) {
+		const cpu = this.footerData.getSystemCpuPercent();
+		if (cpu !== null && Number.isFinite(cpu) && now - this.lastSparkSampleAt >= SPARK_SAMPLE_MS) {
 			this.lastSparkSampleAt = now;
 			this.cpuHistory.push(Math.max(0, Math.min(100, cpu)));
 			if (this.cpuHistory.length > SPARK_WINDOW) {
