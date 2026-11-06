@@ -67,7 +67,11 @@ function handle(request) {
 			jsonrpc: "2.0",
 			id,
 			result: {
-				protocolVersion: "2025-06-18",
+				// Echo the client's revision, or answer with a pinned older one, to exercise negotiation.
+				protocolVersion:
+					process.env.FAKE_MCP_PROTOCOL === "echo"
+						? params?.protocolVersion
+						: (process.env.FAKE_MCP_PROTOCOL ?? "2025-06-18"),
 				capabilities: { tools: {} },
 				serverInfo: { name: "fake-mcp", version: process.env.FAKE_MCP_VERSION ?? "9.9.9" },
 			},

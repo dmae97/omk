@@ -36,12 +36,19 @@ export interface StdioTransportOptions {
 	readonly maxPendingWriteBytes?: number;
 }
 
+export interface StdioTransportExit {
+	readonly code: number | null;
+	readonly signal: string | null;
+	/** OS error code observed before spawn, not a server-provided message. */
+	readonly spawnErrorCode?: string;
+}
+
 export interface StdioTransportHandlers {
 	readonly onMessage: (message: JsonRpcMessage) => void;
 	/** Malformed frames are surfaced, never silently dropped. */
 	readonly onDecodeError?: (reason: string) => void;
 	/** Called at most once, with the exit code or signal. */
-	readonly onExit: (info: { readonly code: number | null; readonly signal: string | null }) => void;
+	readonly onExit: (info: StdioTransportExit) => void;
 }
 
 export class McpStdioTransport {
@@ -50,6 +57,8 @@ export class McpStdioTransport {
 	private readonly killGraceMs: number;
 	private stderrTail = "";
 	private exited = false;
+	private spawned = false;
+	private spawnErrorCode: string | undefined;
 	private directExitObserved = false;
 	private closing = false;
 	private readonly closedPromise: Promise<void>;
@@ -119,7 +128,11 @@ export class McpStdioTransport {
 
 		// A stdin EPIPE after the server exits is expected, not an error worth throwing.
 		child.stdin.on("error", () => {});
-		child.on("error", (error: Error) => {
+		child.once("spawn", () => {
+			this.spawned = true;
+		});
+		child.on("error", (error: NodeJS.ErrnoException) => {
+			if (!this.spawned) this.spawnErrorCode = error.code ?? "UNKNOWN";
 			this.stderrTail = `${this.stderrTail}${error.message}\n`.slice(-MAX_STDERR_TAIL_CHARS);
 			// `error` can mean a failed kill, not termination. `close` owns finality.
 		});
@@ -212,6 +225,10 @@ export class McpStdioTransport {
 		}
 		this.decoder.reset();
 		this.resolveClosed?.();
-		this.handlers.onExit({ code, signal });
+		this.handlers.onExit({
+			code,
+			signal,
+			...(this.spawnErrorCode === undefined ? {} : { spawnErrorCode: this.spawnErrorCode }),
+		});
 	}
 }
