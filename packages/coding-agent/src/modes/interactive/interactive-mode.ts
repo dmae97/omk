@@ -164,17 +164,20 @@ import { SessionFailureComponent } from "./components/session-failure.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent, ThinkingSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
-import { STATUS_SIDEBAR_GUTTER_GAP, StatusSidebarComponent, statusSidebarWidth } from "./components/status-sidebar.ts";
+import type { StatusSidebarComponent } from "./components/status-sidebar.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
+import type { HybridStatusPanel } from "./hybrid-status-panel.ts";
 import { runJevCommand } from "./jev-command.ts";
 import { pinnedRailNotice, railFits } from "./layout-class.ts";
 import { formatResourceDescription } from "./resource-description.ts";
 import { handleRNodeInput } from "./rnode/rnode-command.ts";
 import { RNodeController } from "./rnode/rnode-controller.ts";
 import { createSkillPickerForDraft } from "./skill-picker-draft.ts";
+import { StatusPanelActivity } from "./status-panel-activity.ts";
+import { setupStatusSidebar } from "./status-sidebar-setup.ts";
 import {
 	getAvailableThemes,
 	getAvailableThemesWithPaths,
@@ -385,6 +388,9 @@ export class InteractiveMode {
 
 	// Pinned status sidebar (Ctrl+Q): bottom bar data as a fixed right rail
 	private statusSidebar: StatusSidebarComponent | undefined;
+	/** OpenTUI rendering of the pinned rail; undefined when `OMK_OPENTUI_STATUS_RAIL=0`. */
+	private hybridStatusPanel: HybridStatusPanel | undefined;
+	private readonly statusPanelActivity = new StatusPanelActivity(() => this.ui.requestRender());
 	private statusSidebarPinned = false;
 	// Footer slot: always mounted. It hides the bottom bar only while the pinned
 	// rail is actually visible, so narrow terminals never lose the status line.
@@ -870,29 +876,17 @@ export class InteractiveMode {
 		// rail is actually visible, so the same data is never rendered twice.
 		this.statusSidebarPinned = this.settingsManager.getPinStatusSidebar();
 		this.ui.addChild(this.footerSlot);
-		this.statusSidebar = new StatusSidebarComponent(
-			() => this.session,
-			this.footerDataProvider,
-			() => this.session.autoCompactionEnabled,
-			() => this.ui.terminal.rows,
-			{ requestRender: () => this.ui.requestRender(), rnode: () => this.rnode.panelInput() },
-		);
-		this.ui.showOverlay(this.statusSidebar, {
-			anchor: "top-right",
-			// Responsive: ~26% of the terminal, clamped — grows on fullscreen.
-			width: (termWidth) => statusSidebarWidth(termWidth),
-			maxHeight: "100%",
-			nonCapturing: true,
-			visible: (termWidth, termHeight) => this.isStatusSidebarVisible(termWidth, termHeight),
+		// The overlay and the reserved gutter share one visibility policy, so the prompt is never covered.
+		const status = setupStatusSidebar({
+			ui: this.ui,
+			getSession: () => this.session,
+			footerData: this.footerDataProvider,
+			readActivity: () => this.statusPanelActivity.read(this.session),
+			rnode: () => this.rnode.panelInput(),
+			visible: (width, height) => this.isStatusSidebarVisible(width, height),
 		});
-		// Reserve real layout space for the rail: chat, editor, and widgets render
-		// at (terminal - rail) width, so the prompt is never covered by the sidebar.
-		// Must stay in lockstep with the overlay width above.
-		this.ui.setRightGutter((termWidth, termHeight) =>
-			this.isStatusSidebarVisible(termWidth, termHeight)
-				? statusSidebarWidth(termWidth) + STATUS_SIDEBAR_GUTTER_GAP
-				: 0,
-		);
+		this.statusSidebar = status.sidebar;
+		this.hybridStatusPanel = status.statusPanel;
 
 		this.ui.setFocus(this.editor);
 
@@ -2148,7 +2142,7 @@ export class InteractiveMode {
 		}
 		// Clear transient extension overlays without evicting pinned chrome:
 		// a blind ui.hideOverlay() pops the status rail on session resume/new/fork/reload.
-		this.ui.hideOverlaysExcept(this.statusSidebar);
+		this.ui.hideOverlaysExcept(this.hybridStatusPanel ?? this.statusSidebar);
 		this.clearExtensionTerminalInputListeners();
 		this.setExtensionFooter(undefined);
 		this.setExtensionHeader(undefined);
@@ -3143,6 +3137,7 @@ export class InteractiveMode {
 		}
 
 		this.footer.invalidate();
+		if (this.hybridStatusPanel) this.statusPanelActivity.observe(this.session, event);
 
 		switch (event.type) {
 			case "prompt_settled":
@@ -4140,6 +4135,7 @@ export class InteractiveMode {
 
 	private setToolsExpanded(expanded: boolean): void {
 		this.toolOutputExpanded = expanded;
+		this.hybridStatusPanel?.setExpanded(expanded);
 		const activeHeader = this.customHeader ?? this.builtInHeader;
 		if (isExpandable(activeHeader)) {
 			activeHeader.setExpanded(expanded);
@@ -6509,6 +6505,8 @@ export class InteractiveMode {
 	}
 
 	stop(options: { finalSessionLog?: boolean } = {}): void {
+		this.hybridStatusPanel?.dispose();
+		this.statusPanelActivity?.dispose();
 		this.rnode?.dispose();
 		disposeInteractiveNextSuggestions();
 		// A hung `headroom --version` must not hold shutdown for its timeouts or outlive this process.

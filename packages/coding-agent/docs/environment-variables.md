@@ -86,6 +86,7 @@ These variables are read by OMK itself. The default-on built-in harness flags be
 | `OMK_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
 | `OMK_SHARE_VIEWER_URL` | Override the base URL used by `/share` |
 | `OMK_HARDWARE_CURSOR` | Set to `1` to show the hardware cursor; see [Terminal setup](terminal-setup.md) |
+| `OMK_OPENTUI_STATUS_RAIL` | Default on since 2.0: the pinned status panel renders with OpenTUI offscreen while `omk-tui` keeps terminal/input ownership. `0` keeps the native sidebar. Requires optional `@opentui/core` and Node 26.4+. Other runtimes or renderer failures fall back to the native sidebar. `Ctrl+O` expands details; see [hybrid status panel](tui.md#hybrid-opentui-status-panel) |
 | `OMK_SCROLLBACK_SCREENS` | Transcript history screens rendered above the live tail on session load/rebuild. `0` renders only the live tail. Blank or non-finite values use default 50; negatives clamp to zero and fractions are floored. A finite `terminal.scrollbackSeedScreens` setting takes precedence. Skipped prefix children still undergo identity checks; the complete exit log is rendered separately |
 | `OMK_CONTEXT_GOVERNOR` | Context Budget V2 process override: `1` forces it on and `0` forces it off; otherwise the global `contextBudget.enabled` setting applies |
 | `OMK_CONTEXT_GOVERNOR_CACHE` | Set to `memory` to keep representations, negative results, and plans in session memory instead of persisting representations per workspace |
