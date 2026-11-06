@@ -128,7 +128,7 @@ function makeSession() {
 		isRetrying: false,
 		pendingMessageCount: 0,
 		lastTermination: undefined as TerminationSignal | undefined,
-		settingsManager: { getResourceGovernorSettings: () => ({}) },
+		settingsManager: { getResourceGovernorSettings: () => ({}), getSubscriptionUsageProviders: () => undefined },
 	};
 }
 

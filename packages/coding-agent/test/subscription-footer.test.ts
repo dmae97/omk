@@ -8,6 +8,7 @@ describe("subscription footer connection", () => {
 		let configured = true;
 		const current = {
 			state: { model: { provider: "anthropic" } },
+			settingsManager: { getSubscriptionUsageProviders: () => undefined },
 			modelRegistry: {
 				isUsingOAuthProvider: (provider: string) => configured && provider === "anthropic",
 				getProviderAuthStatus: () => ({ configured: false }),
