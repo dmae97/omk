@@ -4,6 +4,7 @@ import type { AgentSession } from "./agent-session.ts";
 import { fetchCommandCodeUsage } from "./provider-usage-commandcode.ts";
 import { fetchDevinUsage } from "./provider-usage-devin.ts";
 import { fetchOpenCodeGoUsage } from "./provider-usage-go.ts";
+import { fetchMetaUsage, type MuseUsageProbe } from "./provider-usage-meta.ts";
 import { type QwenCliRunner, runQwenCli } from "./provider-usage-qwen-cli.ts";
 import {
 	credentialConfigured,
@@ -89,6 +90,7 @@ export async function loadSubscriptionUsage(
 	fetchImpl: FetchLike = fetch,
 	provider = session.state.model?.provider,
 	qwenCliRunner: QwenCliRunner = runQwenCli,
+	museProbe?: MuseUsageProbe,
 ): Promise<SubscriptionUsageSnapshot | undefined> {
 	const model = session.state.model;
 	const usageSource = getSubscriptionUsageSource(provider);
@@ -104,6 +106,10 @@ export async function loadSubscriptionUsage(
 	if (usageSource.kind === "qwen-token-plan") {
 		// The QwenCloud CLI authenticates itself; no OMK-held credential is used.
 		return await fetchQwenTokenPlanUsage(usageSource.label, qwenCliRunner);
+	}
+	if (usageSource.kind === "meta") {
+		// Muse Code authenticates the account itself; no OMK-held credential is used.
+		return await fetchMetaUsage(usageSource.label, museProbe);
 	}
 
 	const credential = await resolveCredential(session, usageSource);

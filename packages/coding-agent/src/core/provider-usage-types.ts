@@ -27,6 +27,7 @@ export type UsageKind =
 	| "grok"
 	| "devin"
 	| "commandcode"
+	| "meta"
 	| "opencode-go"
 	| "qwen-token-plan"
 	| "unavailable";
