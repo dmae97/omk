@@ -27,7 +27,12 @@ describe("createPermitDeadline", () => {
 	it("throws RangeError when the clock returns a non-finite value", () => {
 		for (const value of [NaN, Infinity, -Infinity]) {
 			expectRangeError(
-				() => createPermitDeadline(100, () => {}, () => value),
+				() =>
+					createPermitDeadline(
+						100,
+						() => {},
+						() => value,
+					),
 				"Deadline clock must be finite",
 			);
 		}
@@ -69,7 +74,7 @@ describe("createPermitDeadline", () => {
 
 	it("re-arms instead of expiring when the clock has not reached the deadline", async () => {
 		vi.useFakeTimers();
-		let t = 0;
+		const t = 0;
 		const clock = (): number => t;
 		const onExpire = vi.fn();
 		const deadline = createPermitDeadline(100, onExpire, clock);
