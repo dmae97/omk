@@ -561,6 +561,11 @@ describe("subscription usage providers", () => {
 			fetchMock,
 		);
 		expect(fetchMock).toHaveBeenCalledOnce();
+		// The quota read identifies OMK honestly; it does not impersonate Kimi CLI.
+		const headers = new Headers((fetchMock.mock.calls[0] as unknown as [unknown, RequestInit])[1].headers);
+		expect(headers.get("user-agent")).toBe("omk");
+		expect(headers.has("x-msh-platform")).toBe(false);
+		expect(headers.has("x-msh-version")).toBe(false);
 		expect(result).toEqual({ label: "KIMI", windows: [{ label: "TOTAL", usedPercent: 24 }] });
 	});
 
