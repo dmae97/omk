@@ -186,6 +186,35 @@ describe("StatusSidebarComponent (pinned opencode-style rail)", () => {
 		}
 	});
 
+	it("shows whole-host CPU and RAM before the model and distinguishes the OMK process", () => {
+		const footer = {
+			...makeFooterData(),
+			getSystemCpuPercent: () => 82.9,
+			getSystemMemoryUsedBytes: () => 12 * 1024 ** 3,
+			getSystemMemoryTotalBytes: () => 16 * 1024 ** 3,
+		};
+		const sidebar = new StatusSidebarComponent(
+			() => makeSession() as never,
+			footer as never,
+			() => true,
+		);
+		const lines = sidebar.render(STATUS_SIDEBAR_WIDTH);
+		const plain = lines.map(stripAnsi).join("\n");
+		expect(plain).toMatch(/CPU.*82%/);
+		expect(plain).toMatch(/RAM.*75%/);
+		expect(plain).toContain("12.0G / 16.0G");
+		expect(plain).toContain("omk  cpu 37% rss 512M");
+		expect(plain.indexOf("SYSTEM")).toBeLessThan(plain.indexOf("MODEL"));
+		for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(STATUS_SIDEBAR_WIDTH);
+	});
+
+	it("keeps missing host samples unavailable instead of using the process CPU", () => {
+		const text = stripAnsi(renderRail(makeSession()).join("\n"));
+		expect(text).toMatch(/CPU.*\?/);
+		expect(text).toMatch(/RAM.*\?/);
+		expect(text).not.toMatch(/CPU.*37%/);
+	});
+
 	it("shows the MCP roster with a stable/total counter and stability dots", () => {
 		const sidebar = new StatusSidebarComponent(
 			() => makeSession() as never,
@@ -621,11 +650,11 @@ describe("StatusSidebarComponent (pinned opencode-style rail)", () => {
 			() => true,
 		);
 		const text = stripAnsi(sidebar.render(STATUS_SIDEBAR_WIDTH).join("\n"));
-		expect(text).toContain("+6 more");
+		expect(text).toContain("+9 more");
 		expect(text).toContain("12/12");
-		// Only the first 6 rows are rendered (default 32-row terminal).
-		expect(text).toContain("server-5");
-		expect(text).not.toContain("server-6");
+		// Host meters take priority over the roster in a 32-row terminal.
+		expect(text).toContain("server-2");
+		expect(text).not.toContain("server-3");
 	});
 
 	it("scales the rail width with the terminal (responsive, clamped)", () => {
@@ -637,9 +666,9 @@ describe("StatusSidebarComponent (pinned opencode-style rail)", () => {
 	});
 
 	it("lists more MCP servers on taller terminals", () => {
-		expect(mcpMaxRows(24)).toBe(4);
-		expect(mcpMaxRows(32)).toBe(6);
-		expect(mcpMaxRows(40)).toBe(14);
+		expect(mcpMaxRows(24)).toBe(0);
+		expect(mcpMaxRows(32)).toBe(3);
+		expect(mcpMaxRows(40)).toBe(11);
 		expect(mcpMaxRows(60)).toBe(18); // capped
 
 		mockInventory.entries = Array.from({ length: 12 }, (_, i) => entry(`server-${i}`));
@@ -647,10 +676,10 @@ describe("StatusSidebarComponent (pinned opencode-style rail)", () => {
 			() => makeSession() as never,
 			makeFooterData() as never,
 			() => true,
-			() => 40,
+			() => 44,
 		);
 		const text = stripAnsi(tall.render(statusSidebarWidth(200)).join("\n"));
-		// 14 rows available → all 12 servers listed, no collapse line.
+		// All 12 servers fit on a taller terminal.
 		expect(text).toContain("server-11");
 		expect(text).not.toContain("more…");
 	});
@@ -885,7 +914,7 @@ describe("StatusSidebarComponent worst-case height", () => {
 		const plain = lines.map(stripAnsi);
 		// Every optional row outside USAGE/EXT/failure is present and the roster overflows.
 		for (const label of ["git  ", "sess ", "endp ", "think ", "cost "]) expect(railRow(lines, label)).toBeDefined();
-		expect(plain.some((line) => line.includes("cpu 37% mem"))).toBe(true);
+		expect(plain.some((line) => line.includes("omk  cpu 37% rss"))).toBe(true);
 		expect(plain.some((line) => /\+\d+ more…/.test(line))).toBe(true);
 		expect(lines.length).toBeLessThanOrEqual(termRows);
 		// The unpin hint and the bottom border close the rail inside the terminal.
