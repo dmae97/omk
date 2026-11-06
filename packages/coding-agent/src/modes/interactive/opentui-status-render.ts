@@ -1,14 +1,15 @@
-import { BoxRenderable, type CapturedLine, TextAttributes, TextRenderable } from "@opentui/core";
-import type { TestRenderer } from "@opentui/core/testing";
+import type { OpenTui, OpenTuiCapturedLine, OpenTuiNode, OpenTuiRenderer } from "./opentui-core.ts";
 import type { StatusPanelModel } from "./status-panel-model.ts";
 
 /** OpenTUI owns layout and its memory framebuffer. It never writes the host terminal. */
 export function buildStatusScene(
-	renderer: TestRenderer,
+	openTui: OpenTui,
+	renderer: OpenTuiRenderer,
 	model: StatusPanelModel,
 	width: number,
 	height: number,
-): BoxRenderable {
+): OpenTuiNode {
+	const { BoxRenderable, TextRenderable } = openTui;
 	const p = model.palette;
 	const root = new BoxRenderable(renderer, {
 		width,
@@ -25,12 +26,12 @@ export function buildStatusScene(
 			id: `status-${++id}`,
 			content,
 			fg: color,
-			attributes: bold ? TextAttributes.BOLD : 0,
+			attributes: bold ? openTui.boldAttribute : 0,
 			height: 1,
 			flexShrink: 0,
 			wrapMode: "none",
 		});
-	const pair = (parent: BoxRenderable, label: string, value: string, color = p.text) => {
+	const pair = (parent: OpenTuiNode, label: string, value: string, color = p.text) => {
 		const row = new BoxRenderable(renderer, {
 			height: 1,
 			width: "100%",
@@ -147,14 +148,14 @@ export function buildStatusScene(
 	return root;
 }
 
-export function statusSpansToAnsi(lines: CapturedLine[]): string[] {
+export function statusSpansToAnsi(lines: readonly OpenTuiCapturedLine[], boldAttribute: number): string[] {
 	return lines.map(
 		(line) =>
 			`${line.spans
 				.map((span) => {
 					const [r, g, b] = span.fg.toInts();
 					const [br, bg, bb, ba] = span.bg.toInts();
-					return `\x1b[0m\x1b[38;2;${r};${g};${b}m${ba > 0 ? `\x1b[48;2;${br};${bg};${bb}m` : ""}${span.attributes & TextAttributes.BOLD ? "\x1b[1m" : ""}${span.text}`;
+					return `\x1b[0m\x1b[38;2;${r};${g};${b}m${ba > 0 ? `\x1b[48;2;${br};${bg};${bb}m` : ""}${span.attributes & boldAttribute ? "\x1b[1m" : ""}${span.text}`;
 				})
 				.join("")}\x1b[0m`,
 	);

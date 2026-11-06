@@ -1,8 +1,9 @@
-import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing";
+import { loadOpenTui, type OpenTui, type OpenTuiTestSetup } from "./opentui-core.ts";
 import { buildStatusScene, statusSpansToAnsi } from "./opentui-status-render.ts";
 import type { StatusPanelModel } from "./status-panel-model.ts";
 
-let setup: TestRendererSetup | undefined;
+let openTui: OpenTui | undefined;
+let setup: OpenTuiTestSetup | undefined;
 let root: ReturnType<typeof buildStatusScene> | undefined;
 let closing = false;
 let pending: { id: number; width: number; height: number; model: StatusPanelModel } | undefined;
@@ -12,7 +13,8 @@ async function renderPending(): Promise<void> {
 	while (pending && !closing) {
 		const request = pending;
 		pending = undefined;
-		setup ??= await createTestRenderer({
+		openTui ??= await loadOpenTui();
+		setup ??= await openTui.createTestRenderer({
 			width: request.width,
 			height: request.height,
 			exitOnCtrlC: false,
@@ -22,11 +24,14 @@ async function renderPending(): Promise<void> {
 		});
 		setup.resize(request.width, request.height);
 		root?.destroyRecursively();
-		root = buildStatusScene(setup.renderer, request.model, request.width, request.height);
+		root = buildStatusScene(openTui, setup.renderer, request.model, request.width, request.height);
 		setup.renderer.root.add(root);
 		await setup.renderOnce();
 		if (!closing && process.connected)
-			process.send?.({ id: request.id, lines: statusSpansToAnsi(setup.captureSpans().lines) });
+			process.send?.({
+				id: request.id,
+				lines: statusSpansToAnsi(setup.captureSpans().lines, openTui.boldAttribute),
+			});
 	}
 }
 
