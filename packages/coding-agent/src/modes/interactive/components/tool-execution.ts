@@ -4,6 +4,7 @@ import { createAllToolDefinitions, type ToolName } from "../../../core/tools/ind
 import { theme } from "../theme/theme.ts";
 import { getBuiltinToolRenderers } from "../tool-renderers/index.ts";
 import { getTextOutput as getRenderedTextOutput } from "../tool-renderers/render-utils.ts";
+import { guardExtensionRender } from "./extension-render-guard.ts";
 import { ToolExecutionImages } from "./tool-execution-images.ts";
 
 export interface ToolExecutionOptions {
@@ -258,7 +259,7 @@ export class ToolExecutionComponent extends Container {
 				try {
 					const component = callRenderer(this.args, theme, this.getRenderContext(this.callRendererComponent));
 					this.callRendererComponent = component;
-					renderContainer.addChild(component);
+					renderContainer.addChild(guardExtensionRender(component, () => this.createCallFallback()));
 				} catch {
 					this.callRendererComponent = undefined;
 					renderContainer.addChild(this.createCallFallback());
@@ -283,7 +284,7 @@ export class ToolExecutionComponent extends Container {
 							this.getRenderContext(this.resultRendererComponent),
 						);
 						this.resultRendererComponent = component;
-						renderContainer.addChild(component);
+						renderContainer.addChild(guardExtensionRender(component, () => this.createResultFallback()));
 						hasContent = true;
 					} catch {
 						this.resultRendererComponent = undefined;
