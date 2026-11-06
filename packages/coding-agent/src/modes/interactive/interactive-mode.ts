@@ -875,7 +875,7 @@ export class InteractiveMode {
 			this.footerDataProvider,
 			() => this.session.autoCompactionEnabled,
 			() => this.ui.terminal.rows,
-			{ requestRender: () => this.ui.requestRender() },
+			{ requestRender: () => this.ui.requestRender(), rnode: () => this.rnode.panelInput() },
 		);
 		this.ui.showOverlay(this.statusSidebar, {
 			anchor: "top-right",

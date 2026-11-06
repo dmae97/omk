@@ -176,12 +176,24 @@ describe("renderRNodePanel", () => {
 		expect(text).toContain("← build");
 	});
 
-	test("bounds rows and counts hidden nodes", () => {
-		const lines = renderRNodePanel(view, { width: 44, maxRows: 11 }).map(stripAnsi);
-		expect(lines).toHaveLength(11);
+	test("drops the axis rows before any node, then counts hidden nodes", () => {
+		const full = renderRNodePanel(view, { width: 44, maxRows: 14 }).map(stripAnsi).join("\n");
+		expect(full).toContain(" exec:");
+		expect(full).toContain("test");
+
+		const short = renderRNodePanel(view, { width: 44, maxRows: 11 }).map(stripAnsi);
+		expect(short.length).toBeLessThanOrEqual(11);
+		const text = short.join("\n");
+		expect(text).not.toContain(" exec:");
+		expect(text).toContain("? unverified");
+		for (const id of ["fetch", "build", "test"]) expect(text).toContain(id);
+		expect(text).not.toContain("more");
+
+		const lines = renderRNodePanel(view, { width: 44, maxRows: 7 }).map(stripAnsi);
+		expect(lines).toHaveLength(7);
 		expect(lines.at(-2)).toContain("fetch");
 		expect(lines.at(-1)).toContain("+2 more");
-		const tight = renderRNodePanel(view, { width: 44, maxRows: 10 }).map(stripAnsi);
+		const tight = renderRNodePanel(view, { width: 44, maxRows: 6 }).map(stripAnsi);
 		expect(tight.at(-1)).toContain("+3 more");
 		expect(tight.some((line) => line.includes("L0"))).toBe(false);
 	});

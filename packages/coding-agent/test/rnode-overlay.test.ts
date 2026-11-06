@@ -147,6 +147,7 @@ describe("runRNodeCommand", () => {
 		const h = host();
 		runRNodeCommand({ kind: "bind", runId: "dag-1", stateDir: undefined }, controller, h, CONTEXT);
 		expect(read).toHaveBeenLastCalledWith(join("/agent", "verified-runs"), "dag-1");
+		expect(h.status.mock.calls[0]?.[0]).toContain("pinned status sidebar");
 		expect(h.status.mock.calls[0]?.[0]).toContain("ctrl+o");
 		runRNodeCommand({ kind: "bind", runId: "dag-1", stateDir: "runs" }, controller, h, CONTEXT);
 		expect(read).toHaveBeenLastCalledWith(resolve("/work", "runs"), "dag-1");
