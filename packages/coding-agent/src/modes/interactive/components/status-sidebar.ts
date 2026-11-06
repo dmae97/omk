@@ -296,7 +296,7 @@ export class StatusSidebarComponent implements Component {
 		for (const provider of this.subscriptionUsageProviders) void this.usageReader.refresh(provider);
 	}
 
-	/** Usage snapshots for the OpenTUI status panel, read through the same TTL/revision reader as the rail. */
+	/** Usage snapshots through the shared TTL/revision reader; extension footers read them while the rail is hidden. */
 	getSubscriptionUsage(): readonly SubscriptionUsageSnapshot[] {
 		this.refreshSubscriptionUsage();
 		return this.subscriptionUsageProviders.map((provider) => {
@@ -312,21 +312,17 @@ export class StatusSidebarComponent implements Component {
 	}
 
 	private subscriptionUsageSection(width: number): string[] {
-		if (this.subscriptionUsageProviders.length === 0) return [];
-		const lines = [railRule(width, "USAGE", theme.fg("muted", String(this.subscriptionUsageProviders.length)))];
-		for (const provider of this.subscriptionUsageProviders) {
-			const source = getSubscriptionUsageSource(provider);
-			const snapshot = this.usageReader.snapshot(provider);
-			const label = snapshot?.label ?? source?.label;
-			if (!label) continue;
+		const snapshots = this.getSubscriptionUsage();
+		if (snapshots.length === 0) return [];
+		const lines = [railRule(width, "USAGE", theme.fg("muted", String(snapshots.length)))];
+		for (const snapshot of snapshots) {
+			const label = snapshot.label;
 			const activeEndpoint =
-				provider === this.getSession().state.model?.provider
+				label === getSubscriptionUsageSource(this.getSession().state.model?.provider)?.label
 					? singleLineDisplayText(formatEndpointForFooter(this.getSession().state.model?.baseUrl) ?? "")
 					: undefined;
-			if (!snapshot) {
-				if (this.usageReader.hasInFlight(provider)) {
-					lines.push(boxTextLine(width, `${theme.fg("text", label)} ${theme.fg("dim", "loading…")}`));
-				}
+			if (snapshot.message === "loading…") {
+				lines.push(boxTextLine(width, `${theme.fg("text", label)} ${theme.fg("dim", "loading…")}`));
 				continue;
 			}
 			if (snapshot.windows.length === 0) {

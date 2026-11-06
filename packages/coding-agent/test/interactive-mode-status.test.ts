@@ -352,6 +352,24 @@ describe("InteractiveMode status sidebar toggle", () => {
 	});
 });
 
+describe("InteractiveMode status sidebar visibility", () => {
+	function visible(customFooter: object | undefined, tmuxActive = false) {
+		const fakeThis = { statusSidebarPinned: true, customFooter, tmuxStatusRail: { active: tmuxActive } };
+		const isVisible = Reflect.get(InteractiveMode.prototype, "isStatusSidebarVisible") as (
+			this: typeof fakeThis,
+			columns: number,
+			rows: number,
+		) => boolean;
+		return isVisible.call(fakeThis, 160, 40);
+	}
+
+	test("an extension footer takes the status slot from the pinned rail", () => {
+		expect(visible(undefined)).toBe(true);
+		expect(visible({ render: () => [] })).toBe(false);
+		expect(visible(undefined, true)).toBe(false);
+	});
+});
+
 describe("InteractiveMode.showStatus", () => {
 	beforeAll(() => {
 		// showStatus uses the global theme instance

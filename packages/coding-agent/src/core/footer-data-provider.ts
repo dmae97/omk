@@ -1,53 +1,11 @@
 import { type ExecFileException, execFile, spawnSync } from "child_process";
-import { existsSync, type FSWatcher, readFileSync, type Stats, statSync, unwatchFile, watchFile } from "fs";
-import { dirname, join, resolve } from "path";
+import { existsSync, type FSWatcher, readFileSync, type Stats, unwatchFile, watchFile } from "fs";
+import { dirname, join } from "path";
 import { closeWatcher, FS_WATCH_RETRY_DELAY_MS, watchWithErrorHandler } from "../utils/fs-watch.ts";
+import { findGitPaths, type GitPaths } from "./footer-git-paths.ts";
 import { MetricsSampler } from "./metrics-sampler.ts";
 import { evaluatePiPackageIntake, type PiPackageIntakeSummary } from "./pi-package-intake.ts";
-
-type GitPaths = {
-	repoDir: string;
-	commonGitDir: string;
-	headPath: string;
-};
-
-/**
- * Find git metadata paths by walking up from cwd.
- * Handles both regular git repos (.git is a directory) and worktrees (.git is a file).
- */
-function findGitPaths(cwd: string): GitPaths | null {
-	let dir = cwd;
-	while (true) {
-		const gitPath = join(dir, ".git");
-		if (existsSync(gitPath)) {
-			try {
-				const stat = statSync(gitPath);
-				if (stat.isFile()) {
-					const content = readFileSync(gitPath, "utf8").trim();
-					if (content.startsWith("gitdir: ")) {
-						const gitDir = resolve(dir, content.slice(8).trim());
-						const headPath = join(gitDir, "HEAD");
-						if (!existsSync(headPath)) return null;
-						const commonDirPath = join(gitDir, "commondir");
-						const commonGitDir = existsSync(commonDirPath)
-							? resolve(gitDir, readFileSync(commonDirPath, "utf8").trim())
-							: gitDir;
-						return { repoDir: dir, commonGitDir, headPath };
-					}
-				} else if (stat.isDirectory()) {
-					const headPath = join(gitPath, "HEAD");
-					if (!existsSync(headPath)) return null;
-					return { repoDir: dir, commonGitDir: gitPath, headPath };
-				}
-			} catch {
-				return null;
-			}
-		}
-		const parent = dirname(dir);
-		if (parent === dir) return null;
-		dir = parent;
-	}
-}
+import type { SubscriptionUsageSnapshot } from "./provider-usage-types.ts";
 
 /** Ask git for the current branch. Returns null on detached HEAD or if git is unavailable. */
 function resolveBranchWithGitSync(repoDir: string): string | null {
@@ -102,6 +60,8 @@ export class FooterDataProvider {
 	private cwd: string;
 	private static readonly WATCH_DEBOUNCE_MS = 500;
 
+	/** Read-only snapshots from the host-owned native usage cache; set by the pinned rail, read by extension footers. */
+	getSubscriptionUsage?: () => readonly SubscriptionUsageSnapshot[];
 	private extensionStatuses = new Map<string, string>();
 	private cachedBranch: string | null | undefined = undefined;
 	private gitPaths: GitPaths | null | undefined = undefined;
@@ -429,4 +389,5 @@ export type ReadonlyFooterDataProvider = Pick<
 	| "getSystemMemoryUsedBytes"
 	| "getSystemMemoryTotalBytes"
 	| "getPackageIntakeSummary"
->;
+> &
+	Pick<Partial<FooterDataProvider>, "getSubscriptionUsage">;

@@ -86,6 +86,9 @@ describe("status sidebar mounting", () => {
 		expect(options.ui.contentWidth).toBe(200 - statusSidebarWidth(200) - STATUS_SIDEBAR_GUTTER_GAP);
 		pinned = false;
 		expect(options.ui.contentWidth).toBe(200);
+		const snapshots = [{ label: "CODEX", windows: [] }];
+		vi.spyOn(status.sidebar, "getSubscriptionUsage").mockReturnValue(snapshots);
+		expect(options.footerData.getSubscriptionUsage?.()).toBe(snapshots);
 	});
 
 	it("mounts no tmux owner unless OMK_TMUX_STATUS_RAIL=1 inside tmux", () => {

@@ -31,6 +31,8 @@ export function setupStatusSidebar(options: StatusSidebarSetup) {
 		() => ui.terminal.rows,
 		{ requestRender: () => ui.requestRender(), rnode: options.rnode },
 	);
+	// Extension footers read usage through the rail's reader, so they never start a second poller.
+	footerData.getSubscriptionUsage = () => sidebar.getSubscriptionUsage();
 	// OpenTUI is the default pinned rail since 2.0; `0` opts out. Unsupported runtimes fall back to `sidebar`.
 	const statusPanel =
 		process.env.OMK_OPENTUI_STATUS_RAIL !== "0"
