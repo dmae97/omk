@@ -95,4 +95,10 @@ export {
 } from "./verified-run/run-status.ts";
 export type { RunRecoveryMarker } from "./verified-run/run-types.ts";
 export { VerifiedRunError } from "./verified-run/storage.ts";
+export {
+	projectRunGraph,
+	RUN_GRAPH_VERSION,
+	type RunGraphSnapshot,
+	readRunGraph,
+} from "./verified-run/workbench-run-graph.ts";
 export type { WriterRecoveryInspection } from "./verified-run/writer-recovery.ts";
