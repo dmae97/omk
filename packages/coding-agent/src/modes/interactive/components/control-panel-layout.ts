@@ -1,6 +1,7 @@
 import { nextActiveTodo, type TodoState, summary as todoSummary } from "../../../core/todo-state.ts";
 import { buildControlPlaneViewModel, type ControlPlaneViewModel } from "../control-plane-view-model.ts";
 import { railFits } from "../layout-class.ts";
+import { type RNodePanelInput, renderRNodePanel } from "../rnode/rnode-panel.ts";
 import { theme } from "../theme/theme.ts";
 import {
 	boxBottom,
@@ -28,6 +29,8 @@ import {
 
 export const CONTROL_PANEL_SIDEBAR_WIDTH = 38;
 export const CONTROL_PANEL_GAP_WIDTH = 2;
+/** Most rows the overlay gives R·NODE; more nodes collapse into `+N more`. */
+export const RNODE_OVERLAY_ROWS = 16;
 
 export interface ControlPanelContent {
 	appName: string;
@@ -42,6 +45,8 @@ export interface ControlPanelContent {
 	 * re-captures its frozen snapshot when it changes (/model, /new, /resume); see ControlPanelComponent.
 	 */
 	headerKey?: () => ControlPanelHeaderKey;
+	/** Bound verified-run graph (`/rnode`). Overlay only: it changes mid-turn, so the header never reads it. */
+	rnode?: () => RNodePanelInput;
 }
 
 export interface ControlPanelHeaderKey {
@@ -95,10 +100,23 @@ interface DeckFrame {
 /** Label of the narrow layouts' opening divider: the product name, in ink rather than the accent. */
 const OPENING_LABEL = "OMK · OPEN MULTI-AGENT KIT";
 
-/** Viewport-anchored control-pane overlay: the one rail surface that may show live values. */
-export function renderControlPanelRightPane(content: ControlPanelContent, width: number): string[] {
+/**
+ * Viewport-anchored control-pane overlay: the one rail surface that may show live values.
+ * `rows` is the terminal height; R·NODE takes only the rows the rail leaves, so the frame still closes.
+ */
+export function renderControlPanelRightPane(
+	content: ControlPanelContent,
+	width: number,
+	rows = Number.POSITIVE_INFINITY,
+): string[] {
 	if (width <= 0) return [];
-	return sidebarPanel(statusSnapshot(content), width, "overlay");
+	const rail = sidebarPanel(statusSnapshot(content), width, "overlay");
+	const rnode = content.rnode?.();
+	const maxRows = Math.min(RNODE_OVERLAY_ROWS, rows - rail.length);
+	// Below the rule plus one row there is nothing worth showing.
+	if (rnode === undefined || !(maxRows >= 2)) return rail;
+	// R·NODE closes inside the pane frame, after SESSION and before the bottom edge.
+	return [...rail.slice(0, -1), ...renderRNodePanel(rnode, { width, maxRows }), ...rail.slice(-1)];
 }
 
 function renderCompact(frame: DeckFrame, width: number): string[] {

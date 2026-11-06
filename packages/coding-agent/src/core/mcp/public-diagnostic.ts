@@ -1,9 +1,12 @@
 import type { McpClient } from "./client.ts";
+import { publicMcpFailure } from "./failure.ts";
 
 /** Error messages, stacks and stringification may contain server-echoed secrets. */
 export function mcpPublicDiagnostic(error: unknown, phase: "connect" | "health"): string {
 	let category = "Error";
 	try {
+		const failure = publicMcpFailure(error);
+		if (failure) return `mcp.${phase}_failed (${failure})`;
 		if (error instanceof Error) {
 			const name: unknown = error.name;
 			if (typeof name === "string" && ["TypeError", "RangeError", "TimeoutError", "AbortError"].includes(name)) {

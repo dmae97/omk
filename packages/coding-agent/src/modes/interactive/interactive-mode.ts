@@ -172,6 +172,8 @@ import { UserMessageSelectorComponent } from "./components/user-message-selector
 import { runJevCommand } from "./jev-command.ts";
 import { pinnedRailNotice, railFits } from "./layout-class.ts";
 import { formatResourceDescription } from "./resource-description.ts";
+import { handleRNodeInput } from "./rnode/rnode-command.ts";
+import { RNodeController } from "./rnode/rnode-controller.ts";
 import { createSkillPickerForDraft } from "./skill-picker-draft.ts";
 import {
 	getAvailableThemes,
@@ -295,6 +297,7 @@ export class InteractiveMode {
 		warning: (message) => this.showWarning(message),
 	});
 	private readonly attachmentStripContainer = new Container();
+	private readonly rnode = new RNodeController({ changed: () => this.ui.requestRender() });
 	private interactiveLoopActive = true;
 	private loadingAnimation: Loader | undefined = undefined;
 	// Wall-clock start of the current agent turn, for the working loader elapsed suffix
@@ -815,6 +818,7 @@ export class InteractiveMode {
 					`Press ${keyText("app.tools.expand")} to show full startup help and loaded resources.`,
 				onboarding: () => `OMK can explain its own features and look up its docs. Ask it how to use or extend OMK.`,
 				...controlPanelStatusReaders(() => this.session, this.footerDataProvider),
+				rnode: () => this.rnode.panelInput(),
 			};
 			const controlPanel = new ControlPanelComponent(controlPanelContent, {
 				requestRender: () => this.ui.requestRender(),
@@ -828,7 +832,7 @@ export class InteractiveMode {
 			this.builtInHeader = controlPanel;
 			// The headroom label is probed off the render path; repaint once if a version turns up.
 			void repaintWhenHeadroomVersionResolves(() => this.ui.requestRender());
-			this.ui.showOverlay(new ControlPanelRightPaneComponent(controlPanelContent), {
+			this.ui.showOverlay(new ControlPanelRightPaneComponent(controlPanelContent, () => this.ui.terminal.rows), {
 				anchor: "top-right",
 				width: CONTROL_PANEL_SIDEBAR_WIDTH,
 				maxHeight: "100%",
@@ -2976,6 +2980,9 @@ export class InteractiveMode {
 				this.editor.setText("");
 				await runJevCommand(text, this.session.modelRegistry.authStorage, this.ui, this.dialogHost);
 				return;
+			}
+			if (handleRNodeInput(text, this.rnode, this.dialogHost, () => this.sessionManager.getCwd())) {
+				return this.editor.setText("");
 			}
 			if (text === "/new") {
 				this.editor.setText("");
@@ -6502,6 +6509,7 @@ export class InteractiveMode {
 	}
 
 	stop(options: { finalSessionLog?: boolean } = {}): void {
+		this.rnode?.dispose();
 		disposeInteractiveNextSuggestions();
 		// A hung `headroom --version` must not hold shutdown for its timeouts or outlive this process.
 		abortHeadroomVersionProbe();

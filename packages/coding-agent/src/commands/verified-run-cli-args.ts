@@ -3,7 +3,7 @@ import { VerifiedRunError } from "../core/verified-run/storage.ts";
 
 export const USAGE = `Usage: omk run plan --contract FILE [--json]
        omk run start --contract FILE --approve DIGEST --command-id ID [--state-dir DIR]
-       omk run inspect|evidence|status|events|explain ID [--state-dir DIR] [--json]
+       omk run inspect|evidence|status|events|explain|graph ID [--state-dir DIR] [--json]
        omk run authority [--state-dir DIR] [--json]
        omk run inspect ID --recovery|--writer-recovery|--task-recovery [--state-dir DIR]
        omk run retry-tasks ID --execute --tasks ID[,ID...]|- --approve DIGEST --base DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
@@ -17,6 +17,7 @@ The opt-in command, scripted-agent and bounded command-DAG profiles never apply 
 Resume rechecks a fixed candidate. Writer/task recovery preserves input checkpoints and budgets. Command-DAG concurrency defaults to 1 and supports an explicit cap of 2.
 Cancel (SIGINT, SIGTERM or omk run cancel from another shell) pauses the run: restart-writer, resume or retry-tasks continue it inside the original budget.
 GC removes only derived workspaces of runs that can no longer recover (default --older-than 7d); without --execute it reports what it would remove.
+Graph emits a versioned read-only verified-run snapshot for workbench clients; exit 0 means the read succeeded, not that the run passed.
 Plan amendment, managed apply and TUI/RPC control are not implemented.`;
 
 const ACTIONS = [
@@ -31,6 +32,7 @@ const ACTIONS = [
 	"inspect",
 	"status",
 	"explain",
+	"graph",
 	"events",
 	"authority",
 	"evidence",

@@ -59,4 +59,4 @@ Maintainers prioritize correctness, security, compatibility, and evidence. Revie
 
 ## Questions
 
-Ask on [Discord](https://discord.com/invite/nKXTsAcmbT).
+Ask on [Discord](https://discord.gg/zgCX5uRy4).

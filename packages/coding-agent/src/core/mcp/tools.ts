@@ -58,9 +58,31 @@ export interface McpToolDetails {
 	readonly structuredContent?: unknown;
 }
 
-/** Reduce an arbitrary label to the character set providers accept for tool names. */
+/** Added in front of a label whose first character is not a letter. */
+const TOOL_NAME_PREFIX = "mcp_";
+/** Stands in for a label that sanitizes to nothing. */
+const TOOL_NAME_FALLBACK = "mcp";
+
+/**
+ * Reduce an arbitrary label to the character set providers accept for tool names,
+ * and guarantee the first character is a letter.
+ *
+ * The character set alone is not enough. Kimi's anthropic-messages endpoint ends the
+ * whole run with `400 "function name is invalid, must start with a letter and can
+ * contain letters, numbers, underscores, and dashes"` when any tool name starts with
+ * a digit. An MCP server literally named `21st` produced `21st__search`, so every
+ * `k3`/`k3.1-pro` request carrying that server's tools failed, while the same request
+ * without tools succeeded. Prefixing here degrades the label, not the session.
+ *
+ * Renaming is visible: an allowlist or deny list that names the old shape (for example
+ * `21st__search`) must be updated to `mcp_21st__search`.
+ */
 export function sanitizeToolNameSegment(segment: string): string {
-	return segment.replace(/[^a-zA-Z0-9_-]/gu, "_").replace(/_{2,}/gu, "_");
+	const cleaned = segment.replace(/[^a-zA-Z0-9_-]/gu, "_").replace(/_{2,}/gu, "_");
+	if (/^[a-zA-Z]/u.test(cleaned)) return cleaned;
+	// Leading underscores are dropped so the result does not read as two separators.
+	const remainder = cleaned.replace(/^_+/u, "");
+	return remainder.length === 0 ? TOOL_NAME_FALLBACK : `${TOOL_NAME_PREFIX}${remainder}`;
 }
 
 /**
