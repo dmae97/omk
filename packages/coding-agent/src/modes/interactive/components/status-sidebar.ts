@@ -21,6 +21,7 @@ import { singleLineDisplayText } from "../../../utils/display-text.ts";
 import { readControlPlaneSignals } from "../control-plane-signals.ts";
 import { buildControlPlaneViewModel } from "../control-plane-view-model.ts";
 import { interactiveSubscriptionUsageReader } from "../interactive-subscription-usage.ts";
+import { type RNodePanelInput, renderRNodePanel } from "../rnode/rnode-panel.ts";
 import { type ThemeColor, theme } from "../theme/theme.ts";
 import { boxBottom, boxTextLine, boxTop, meterBar, sidebarRule } from "./control-panel-box.ts";
 import { classifyMcpStability } from "./control-panel-runtime-status.ts";
@@ -48,6 +49,13 @@ export function statusSidebarWidth(termWidth: number): number {
 	return Math.max(STATUS_SIDEBAR_WIDTH, Math.min(STATUS_SIDEBAR_MAX_WIDTH, Math.floor(termWidth * 0.26)));
 }
 
+/** Rail rows that are not roster entries; see `mcpMaxRows`. */
+const RAIL_FIXED_ROWS = 26;
+/** The roster always keeps this many rows, so R·NODE takes only the rows above it. */
+const MCP_MIN_ROWS = 4;
+/** Most rows R·NODE takes from the roster budget; more nodes collapse into `+N more`. */
+const RNODE_SIDEBAR_ROWS = 16;
+
 /**
  * Responsive MCP roster rows: taller terminals list more servers before the
  * "+N more" collapse. With every optional row shown except USAGE, EXT and the
@@ -57,7 +65,7 @@ export function statusSidebarWidth(termWidth: number): number {
  * terminal of 30+ rows; callers pass USAGE and failure rows as reserved rows.
  */
 export function mcpMaxRows(termRows: number): number {
-	return Math.max(4, Math.min(18, termRows - 26));
+	return Math.max(MCP_MIN_ROWS, Math.min(18, termRows - RAIL_FIXED_ROWS));
 }
 
 const METER_MAX_CELLS = 24;
@@ -85,6 +93,8 @@ type StatusSidebarOptions = Readonly<{
 	fetchCodexUsage?: CodexUsageFetcher;
 	/** Shared with other UI consumers; an internal reader is created when omitted. */
 	usageReader?: SubscriptionUsageReader;
+	/** Bound verified-run graph (`/rnode`); pinning hides the control-pane overlay that would otherwise show it. */
+	rnode?: () => RNodePanelInput;
 }>;
 
 /**
@@ -103,6 +113,7 @@ export class StatusSidebarComponent implements Component {
 	private requestRender: () => void;
 	/** Caller-owned or fetcher-specific reader; undefined means the shared per-session reader. */
 	private readonly ownUsageReader: SubscriptionUsageReader | undefined;
+	private readonly rnode: (() => RNodePanelInput) | undefined;
 
 	// --- living elements: rolling CPU sparkline + cached MCP/usage data ---
 	private cpuHistory: number[] = [];
@@ -125,6 +136,7 @@ export class StatusSidebarComponent implements Component {
 		this.getAutoCompactEnabled = getAutoCompactEnabled;
 		this.getTerminalRows = getTerminalRows;
 		this.requestRender = options.requestRender ?? (() => {});
+		this.rnode = options.rnode;
 		const legacyFetcher = options.fetchCodexUsage;
 		const fetchSubscriptionUsage =
 			options.fetchSubscriptionUsage ??
@@ -171,6 +183,9 @@ export class StatusSidebarComponent implements Component {
 		// --- Authority: RUN, VERIFY, and failure essentials (pinning hides the control-pane overlay) ---
 		const failureRows = sidebarFailureRows(width, vm.run.failure);
 		lines.push(...sidebarAuthorityRows(width, vm), ...failureRows);
+		const usageLines = this.subscriptionUsageSection(width);
+		const rnodeRows = this.rnodeSection(width, usageLines.length + failureRows.length);
+		lines.push(...rnodeRows);
 
 		// --- Location ---
 		// Session, file-system and model text is reduced to one printable line before it reaches the terminal.
@@ -205,7 +220,6 @@ export class StatusSidebarComponent implements Component {
 		}
 
 		// --- Active provider subscription quota ---
-		const usageLines = this.subscriptionUsageSection(width);
 		lines.push(...usageLines);
 
 		// --- Context ---
@@ -251,8 +265,8 @@ export class StatusSidebarComponent implements Component {
 		}
 
 		// --- MCP roster (live connectivity + opencode-style stability dots) ---
-		// Conditional rows (USAGE, failure essentials) take their height from the roster, not the terminal.
-		lines.push(...this.mcpSection(width, session, usageLines.length + failureRows.length));
+		// Conditional rows (USAGE, failure essentials, R·NODE) take their height from the roster, not the terminal.
+		lines.push(...this.mcpSection(width, session, usageLines.length + failureRows.length + rnodeRows.length));
 
 		// --- System ---
 		lines.push(sidebarRule(width, "SYSTEM"));
@@ -278,6 +292,18 @@ export class StatusSidebarComponent implements Component {
 		lines.push(boxTextLine(width, theme.fg("dim", `${keyText("app.sidebar.toggle")} unpin`)));
 		lines.push(boxBottom(width));
 		return lines;
+	}
+
+	/**
+	 * The bound run outranks the MCP inventory for the roster's rows above its floor. Below a rule and one row it
+	 * says nothing, so a terminal with no spare rows drops the section instead of growing the rail.
+	 */
+	private rnodeSection(width: number, reservedRows: number): string[] {
+		const input = this.rnode?.();
+		if (input === undefined) return [];
+		const spare = this.getTerminalRows() - reservedRows - RAIL_FIXED_ROWS - MCP_MIN_ROWS;
+		const maxRows = Math.min(RNODE_SIDEBAR_ROWS, spare);
+		return maxRows >= 2 ? renderRNodePanel(input, { width, maxRows }) : [];
 	}
 
 	private refreshSubscriptionUsage(): void {

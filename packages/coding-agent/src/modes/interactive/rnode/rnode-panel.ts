@@ -42,45 +42,49 @@ function nodeRow(width: number, node: RNodeCell): string {
 	return boxTextLine(width, `${theme.fg(authorityStyle(node.state).color, status)}${rest}`);
 }
 
-function headerRows(view: RNodePanelInput, width: number): string[] {
+/** `axes` are the five state axes; they are the first rows to go when the budget is short. */
+function headerRows(view: RNodePanelInput, width: number): { core: string[]; axes: string[] } {
 	const rule = sidebarRule(width, "R·NODE");
 	if (view === undefined) {
-		return [rule, authorityRow(width, "run", { state: "unknown", label: "no run graph source" })];
+		return { core: [rule, authorityRow(width, "run", { state: "unknown", label: "no run graph source" })], axes: [] };
 	}
 	if (!("layers" in view)) {
-		return [
-			rule,
-			semanticBoxTextLine(width, "run", view.runId, "middle", LABEL_COLUMN),
-			authorityRow(width, "feed", view.feed),
-		];
+		const run = semanticBoxTextLine(width, "run", view.runId, "middle", LABEL_COLUMN);
+		return { core: [rule, run, authorityRow(width, "feed", view.feed)], axes: [] };
 	}
 	const run = `${view.runId} · rev ${view.revision} · gen ${view.generation}`;
-	return [
-		rule,
-		semanticBoxTextLine(width, "run", run, "middle", LABEL_COLUMN),
-		authorityRow(width, "proof", view.proof),
-		authorityRow(width, "feed", view.feed),
-		// One row per outcome axis so the longest values (`reconciliation_required`) fit a 38-column pane.
-		semanticBoxTextLine(width, "exec", view.axes.slice(0, 2).join("/"), "start", LABEL_COLUMN, "muted"),
-		...["vrfy", "app", "pub"].map((label, index) =>
-			semanticBoxTextLine(width, label, view.axes[index + 2] ?? "?", "start", LABEL_COLUMN, "muted"),
-		),
-	];
+	return {
+		core: [
+			rule,
+			semanticBoxTextLine(width, "run", run, "middle", LABEL_COLUMN),
+			authorityRow(width, "proof", view.proof),
+			authorityRow(width, "feed", view.feed),
+		],
+		axes: [
+			// One row per outcome axis so the longest values (`reconciliation_required`) fit a 38-column pane.
+			semanticBoxTextLine(width, "exec", view.axes.slice(0, 2).join("/"), "start", LABEL_COLUMN, "muted"),
+			...["vrfy", "app", "pub"].map((label, index) =>
+				semanticBoxTextLine(width, label, view.axes[index + 2] ?? "?", "start", LABEL_COLUMN, "muted"),
+			),
+		],
+	};
 }
 
 /**
  * Viewport-anchored surfaces only: the graph changes mid-turn, so it never belongs in the
- * scrollback header. Rows past `maxRows` collapse into a `+N more` count of hidden nodes.
+ * scrollback header. Short budgets drop the axis rows first; nodes past `maxRows` collapse into `+N more`.
  */
 export function renderRNodePanel(view: RNodePanelInput, options: RNodePanelOptions): string[] {
 	const { width, maxRows } = options;
-	const header = headerRows(view, width);
-	if (header.length >= maxRows) return header.slice(0, Math.max(0, maxRows));
 	const layers = view !== undefined && "layers" in view ? view.layers : [];
 	const body = layers.flatMap((layer) => [
 		{ line: sidebarRule(width, layer.depth === null ? "UNORDERED" : `L${layer.depth}`), nodes: 0 },
 		...layer.nodes.map((node) => ({ line: nodeRow(width, node), nodes: 1 })),
 	]);
+	const { core, axes } = headerRows(view, width);
+	// When everything does not fit, nodes outrank the axis rows: proof and node states stay visible.
+	const header = core.length + axes.length + body.length > maxRows ? core : [...core, ...axes];
+	if (header.length >= maxRows) return header.slice(0, Math.max(0, maxRows));
 	const room = maxRows - header.length;
 	if (body.length <= room) return [...header, ...body.map((row) => row.line)];
 	let cut = room - 1;

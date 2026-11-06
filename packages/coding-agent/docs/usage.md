@@ -76,7 +76,7 @@ this display change enables no foreign tools or compatibility guarantees.
 | `/resource [probe\|policy]` | Show resource pressure and effective concurrency for this run |
 | `/debug [save]` | Preview runtime diagnostics; explicitly save a metadata-only local report |
 | `/goal [objective]` | Show or set the durable goal for the current working directory |
-| `/rnode <runId> [--state-dir DIR]`, `/rnode off` | Observe a verified run's node graph read-only in the expanded control pane; see [R·NODE](rnode-tui.md) |
+| `/rnode <runId> [--state-dir DIR]`, `/rnode off` | Observe a verified run's node graph read-only in the pinned status sidebar or the expanded control pane; see [R·NODE](rnode-tui.md) |
 | `/tree` | Jump to any point in the session and continue from there |
 | `/fork` | Create a new session from a previous user message |
 | `/clone` | Duplicate the current active branch into a new session |

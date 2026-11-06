@@ -39,7 +39,7 @@ export interface RNodeCommandContext {
 	/** Default state root, the same one `omk run graph` uses without `--state-dir`. */
 	readonly agentDir: string;
 	readonly cwd: string;
-	/** Key text for toggling the expanded control pane, where R·NODE renders. */
+	/** Key text for the expanded control pane, where R·NODE renders while the status sidebar is not pinned. */
 	readonly expandKey: string;
 }
 
@@ -75,7 +75,7 @@ export function runRNodeCommand(
 					: resolve(context.cwd, command.stateDir);
 			controller.bind({ runId: command.runId, stateRoot });
 			const failure = controller.failure;
-			const where = `Observing ${command.runId} read-only; it shows in the expanded control pane (${context.expandKey}).`;
+			const where = `Observing ${command.runId} read-only; it shows in the pinned status sidebar, or the expanded control pane (${context.expandKey}).`;
 			if (failure === undefined) host.status(where);
 			else host.error(`${where} First read failed: ${failure}. Polling continues.`);
 		}

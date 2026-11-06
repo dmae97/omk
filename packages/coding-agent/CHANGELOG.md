@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `/rnode <runId> [--state-dir DIR]` binds a verified run read-only and shows its R·NODE graph (run, proof, feed, outcome axes, nodes by dependency depth) in the pinned status sidebar, under RUN and VERIFY, or in the expanded control pane. It never executes, retries or approves, and never appears in the scrollback header. When rows run short it drops the outcome-axis rows before any node. See [R·NODE](docs/rnode-tui.md).
+
 ## [1.5.10] - 2026-10-27
 
 ### Fixed
