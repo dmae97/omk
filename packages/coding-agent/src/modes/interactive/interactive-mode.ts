@@ -193,6 +193,8 @@ import {
 	type ThemeColor,
 	theme,
 } from "./theme/theme.ts";
+import { checkTmuxKeyboardSetup } from "./tmux-keyboard.ts";
+import type { TmuxStatusRail } from "./tmux-status-rail.ts";
 import { createTuiDiagnostics, createTuiDiagnosticsView, saveTuiDiagnostics } from "./tui-diagnostics.ts";
 import { captureTuiRuntime, inspectTuiRuntime } from "./tui-runtime-info.ts";
 
@@ -390,13 +392,19 @@ export class InteractiveMode {
 	private statusSidebar: StatusSidebarComponent | undefined;
 	/** OpenTUI rendering of the pinned rail; undefined when `OMK_OPENTUI_STATUS_RAIL=0`. */
 	private hybridStatusPanel: HybridStatusPanel | undefined;
+	/** Optional tmux pane that takes over the pinned rail (`OMK_TMUX_STATUS_RAIL=1`). */
+	private tmuxStatusRail: TmuxStatusRail | undefined;
 	private readonly statusPanelActivity = new StatusPanelActivity(() => this.ui.requestRender());
 	private statusSidebarPinned = false;
 	// Footer slot: always mounted. It hides the bottom bar only while the pinned
 	// rail is actually visible, so narrow terminals never lose the status line.
 	private footerSlot: Component = {
 		render: (width: number): string[] => {
-			if (this.isStatusSidebarVisible(this.ui.terminal.columns, this.ui.terminal.rows)) return [];
+			if (
+				this.tmuxStatusRail?.active ||
+				this.isStatusSidebarVisible(this.ui.terminal.columns, this.ui.terminal.rows)
+			)
+				return [];
 			return (this.customFooter ?? this.footer).render(width);
 		},
 		invalidate: (): void => {
@@ -881,12 +889,14 @@ export class InteractiveMode {
 			ui: this.ui,
 			getSession: () => this.session,
 			footerData: this.footerDataProvider,
+			pinned: this.statusSidebarPinned,
 			readActivity: () => this.statusPanelActivity.read(this.session),
 			rnode: () => this.rnode.panelInput(),
 			visible: (width, height) => this.isStatusSidebarVisible(width, height),
 		});
 		this.statusSidebar = status.sidebar;
 		this.hybridStatusPanel = status.statusPanel;
+		this.tmuxStatusRail = status.tmuxRail;
 
 		this.ui.setFocus(this.editor);
 
@@ -960,7 +970,7 @@ export class InteractiveMode {
 		});
 
 		// Check tmux keyboard setup asynchronously
-		this.checkTmuxKeyboardSetup().then((warning) => {
+		checkTmuxKeyboardSetup().then((warning) => {
 			if (warning) {
 				this.showWarning(warning);
 			}
@@ -1040,53 +1050,6 @@ export class InteractiveMode {
 		} catch {
 			return [];
 		}
-	}
-
-	private async checkTmuxKeyboardSetup(): Promise<string | undefined> {
-		if (!process.env.TMUX) return undefined;
-
-		const runTmuxShow = (option: string): Promise<string | undefined> => {
-			return new Promise((resolve) => {
-				const proc = spawn("tmux", ["show", "-gv", option], {
-					stdio: ["ignore", "pipe", "ignore"],
-				});
-				let stdout = "";
-				const timer = setTimeout(() => {
-					proc.kill();
-					resolve(undefined);
-				}, 2000);
-
-				proc.stdout?.on("data", (data) => {
-					stdout += data.toString();
-				});
-				proc.on("error", () => {
-					clearTimeout(timer);
-					resolve(undefined);
-				});
-				proc.on("close", (code) => {
-					clearTimeout(timer);
-					resolve(code === 0 ? stdout.trim() : undefined);
-				});
-			});
-		};
-
-		const [extendedKeys, extendedKeysFormat] = await Promise.all([
-			runTmuxShow("extended-keys"),
-			runTmuxShow("extended-keys-format"),
-		]);
-
-		// If we couldn't query tmux (timeout, sandbox, etc.), don't warn
-		if (extendedKeys === undefined) return undefined;
-
-		if (extendedKeys !== "on" && extendedKeys !== "always") {
-			return "tmux extended-keys is off. Modified Enter keys may not work. Add `set -g extended-keys on` to ~/.tmux.conf and restart tmux.";
-		}
-
-		if (extendedKeysFormat === "xterm") {
-			return "tmux extended-keys-format is xterm. OMK works best with csi-u. Add `set -g extended-keys-format csi-u` to ~/.tmux.conf and restart tmux.";
-		}
-
-		return undefined;
 	}
 
 	/**
@@ -2203,7 +2166,7 @@ export class InteractiveMode {
 
 	/** The pinned rail is only shown (and its gutter reserved) when the terminal is large enough. */
 	private isStatusSidebarVisible(termWidth: number, termHeight: number): boolean {
-		return this.statusSidebarPinned && railFits(termWidth, termHeight);
+		return !this.tmuxStatusRail?.active && this.statusSidebarPinned && railFits(termWidth, termHeight);
 	}
 
 	/**
@@ -2211,10 +2174,12 @@ export class InteractiveMode {
 	 */
 	private toggleStatusSidebar(): void {
 		this.statusSidebarPinned = !this.statusSidebarPinned;
+		if (this.statusSidebarPinned && this.customFooter === undefined) this.tmuxStatusRail?.start();
+		else this.tmuxStatusRail?.stop();
 		// The footer slot and the right gutter both key off isStatusSidebarVisible,
 		// so flipping the flag is enough — no child add/remove bookkeeping.
 		// Pinning on a terminal too small for the rail would otherwise change nothing visible.
-		if (this.statusSidebarPinned) {
+		if (this.statusSidebarPinned && !this.tmuxStatusRail?.active) {
 			const notice = pinnedRailNotice(this.ui.terminal.columns, this.ui.terminal.rows);
 			if (notice) this.showStatus(notice);
 		}
@@ -2237,6 +2202,9 @@ export class InteractiveMode {
 		// The footer slot stays mounted and renders whichever footer is active,
 		// so swapping footers requires no child add/remove bookkeeping.
 		this.customFooter = factory ? factory(this.ui, theme, this.footerDataProvider) : undefined;
+		// An extension footer owns the status; the tmux pane steps aside until it is removed.
+		if (this.customFooter) this.tmuxStatusRail?.stop();
+		else if (this.statusSidebarPinned) this.tmuxStatusRail?.start();
 
 		this.ui.requestRender();
 	}
@@ -6505,6 +6473,7 @@ export class InteractiveMode {
 	}
 
 	stop(options: { finalSessionLog?: boolean } = {}): void {
+		this.tmuxStatusRail?.dispose();
 		this.hybridStatusPanel?.dispose();
 		this.statusPanelActivity?.dispose();
 		this.rnode?.dispose();

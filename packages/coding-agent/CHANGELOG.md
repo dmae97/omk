@@ -5,6 +5,7 @@
 ### Added
 
 - `/rnode <runId> [--state-dir DIR]` binds a verified run read-only and shows its R·NODE graph (run, proof, feed, outcome axes, nodes by dependency depth) in the pinned status sidebar, under RUN and VERIFY, or in the expanded control pane. It never executes, retries or approves, and never appears in the scrollback header. When rows run short it drops the outcome-axis rows before any node. See [R·NODE](docs/rnode-tui.md).
+- `OMK_TMUX_STATUS_RAIL=1` (opt-in, already inside tmux) moves the pinned status rail into a separate 40-column tmux pane, so the chat and editor keep their own terminal, cursor and scrollback. `Ctrl+Q` hides or restores it; the pane scrolls with `PageUp`/`PageDown`, arrows, `j`/`k` and `g`/`G` without sending input to the agent. Terminals narrower than 114 columns, a failed split or a closed viewer keep the native layout, and OMK removes only its own pane and temporary frames. See [tmux status pane](docs/tui.md#isolated-tmux-status-pane).
 
 ### Changed
 
