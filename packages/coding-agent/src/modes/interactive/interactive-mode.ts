@@ -841,6 +841,10 @@ export class InteractiveMode {
 				isHeaderVisibleHint: () => this.customHeader === undefined,
 				getRenderWidth: () => this.ui.contentWidth,
 				isInViewport: () => this.ui.viewportTop === 0,
+				// The pinned rail (in-process, OpenTUI or tmux pane) already shows this status.
+				isPinnedRailVisible: () =>
+					this.tmuxStatusRail?.active === true ||
+					this.isStatusSidebarVisible(this.ui.terminal.columns, this.ui.terminal.rows),
 			});
 			controlPanel.setExpanded(this.getStartupExpansionState());
 			this.builtInHeader = controlPanel;

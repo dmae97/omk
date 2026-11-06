@@ -23,6 +23,8 @@ export interface ControlPanelMotionOptions {
 	 * forces a full redraw that re-emits the transcript.
 	 */
 	isInViewport?: () => boolean;
+	/** True while a pinned status rail is on screen; the deck then drops its own status column. */
+	isPinnedRailVisible?: () => boolean;
 }
 
 /** RUN labels that mean a turn (or compaction) is in progress. */
@@ -61,6 +63,7 @@ export class ControlPanelComponent implements Component {
 	private renderCache: { key: string; lines: string[] } | undefined;
 	private lastHeaderKey: ControlPanelHeaderKey | undefined;
 	private staleModel = false;
+	private deckRail = true;
 
 	constructor(content: ControlPanelContent, motionOptions?: ControlPanelMotionOptions) {
 		this.content = content;
@@ -106,9 +109,14 @@ export class ControlPanelComponent implements Component {
 		const content = this.headerContent();
 		// Once frozen the header's inputs only change with width, expansion, the intro reveal or a
 		// theme change (invalidate), so reuse the rendered lines instead of re-laying out every frame.
-		const key = `${width}|${this.expanded}|${reveal}|${plain}`;
+		// Once scrolled into scrollback the deck keeps its geometry: changing rows above the viewport
+		// would force a full redraw that re-emits the transcript.
+		if (this.motionOptions?.isInViewport?.() ?? true)
+			this.deckRail = this.motionOptions?.isPinnedRailVisible?.() !== true;
+		const deckRail = this.deckRail;
+		const key = `${width}|${this.expanded}|${reveal}|${plain}|${deckRail}`;
 		if (content === this.frozenContent && this.renderCache?.key === key) return this.renderCache.lines;
-		const layout = renderControlPanelLayout(content, this.expanded, width, reveal);
+		const layout = renderControlPanelLayout(content, this.expanded, width, reveal, deckRail);
 		const lines = plain ? layout.map(stripAnsi) : layout;
 		this.renderCache = content === this.frozenContent ? { key, lines } : undefined;
 		return lines;
