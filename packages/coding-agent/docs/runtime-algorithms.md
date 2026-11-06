@@ -1,5 +1,10 @@
 # Runtime Algorithms and Direction
 
+> **Current review baseline:** for the 2026-10-30 harness test results and
+> repository-wide blockers, see [Harness quality review](harness-improvements.md).
+> The mechanism table and dated sections below remain point-in-time design records;
+> do not infer current release or default-on status from their original wording alone.
+
 ## Current feature status (audit §19.3)
 
 "Implemented", "wired", "enabled", "verified in CI", "released", and
@@ -468,8 +473,18 @@ than after every block: any checkpoint schedule
 keeps the bounds' anytime validity under their i.i.d. assumption, while
 re-evaluating after each of N blocks costs O(N^2 log N) in total.
 
-Coverage: 184 tests pass locally, up from 133: `measurement-trace.test.ts` 35,
-`phase-attribution.test.ts` 26, `phase-attribution.property.test.ts` 2 (1,000
+2026-10-30 algorithm update: `attributePhases` now maintains the winning active span in a
+lazy-deletion max heap and computes each span's exclusive time from the union of its direct
+children's clipped intervals. The real-end, real-start, depth and spanId ranking rules are
+unchanged. Sorting breakpoints, heap operations and the per-parent interval sorts cost
+O(|V| log |V|), eliminating the former per-segment scan of every active span. The 10,000-deep
+nested regression failed before the change at 3,687.955 ms against a 2 s budget and passes after
+it; a separate direct local run of that fixture took 128.367 ms. These are single-host fixture
+measurements, not p95, whole-turn latency or a measured product speedup. The randomized oracle
+now checks both phase ownership and exclusive ticks.
+
+Coverage: 185 tests pass locally, up from 133: `measurement-trace.test.ts` 35,
+`phase-attribution.test.ts` 27, `phase-attribution.property.test.ts` 2 (1,000
 fast-check cases against a tick-by-tick oracle), `anytime-bounds.test.ts` 40,
 `promotion-gate.test.ts` 34 and `verified-cost.test.ts` 47. A first local
 cross-check, made in the first implementation pass with a script that was not

@@ -29,6 +29,8 @@ export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const SESSION_SALT_FILE = "suggestion-trace-salt";
 
 export type SentAs = "exact" | "edited" | "cleared" | "abandoned";
+export type SuggestionCandidateSource = "generated" | "cache";
+export type SuggestionDisplaySurface = "empty-editor" | "inline-prefix";
 /** Dispatch path at submit time: new run, steer into the running turn, or follow-up queued after it. */
 export type SentVia = "prompt" | "steer" | "followUp";
 /** `abandoned`: shown, then replaced by another suggestion or the session ended, with no input. */
@@ -45,6 +47,8 @@ export interface ShownSuggestionMeta {
 	readonly parentTurnIndex: number;
 	readonly provider: string;
 	readonly model: string;
+	readonly candidateSource?: SuggestionCandidateSource;
+	readonly displaySurface?: SuggestionDisplaySurface;
 	/** `prompt_settled` handled (turn end as seen by the controller). */
 	readonly settledAtEpochMs: number;
 	/** Quota check finished (the request starts right after). */

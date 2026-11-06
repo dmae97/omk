@@ -11,6 +11,7 @@ import { AuthStorage } from "../src/core/auth-storage.ts";
 import { KeybindingsManager } from "../src/core/keybindings.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
 import { type QuotaUsage, SUGGESTION_INSTRUCTION } from "../src/core/next-suggestion.ts";
+import { SuggestionAcceptTracker, type SuggestionOutcomeRecord } from "../src/core/next-suggestion-accept-trace.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
 import { CustomEditor } from "../src/modes/interactive/components/custom-editor.ts";
@@ -478,6 +479,48 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		const replacement = install(h.session, editor);
 		expect(replacement).not.toBe(controller);
 		replacement.dispose();
+	});
+
+	it("prefix experiment reuses the current candidate without provider calls and accepts one undo unit", async () => {
+		initTheme("dark");
+		const ui = new TUI(new VirtualTerminal(80, 30));
+		const editor = new CustomEditor(ui, getEditorTheme(), new KeybindingsManager());
+		editor.setPlaceholder("base");
+		const h = harness(tempCwd());
+		const records: Array<Omit<SuggestionOutcomeRecord, "schemaVersion" | "sessionHash">> = [];
+		const trace = new SuggestionAcceptTracker((record) => records.push(record));
+		const controller = installNextSuggestions(h.session as unknown as SuggestionSessionPort, editor, "base", {
+			env: { ...ON, OMK_NEXT_SUGGESTIONS_PREFIX: "1" },
+			isTab: (data) => data === "\t",
+			quotaUsage: async () => "no_quota" as const,
+			acceptTrace: trace,
+		});
+		controllers.push(controller!);
+		await h.session.prompt("first");
+		await vi.waitFor(() => expect(controller!.suggestion).toBe(SUGGESTION));
+		const calls = h.calls();
+
+		editor.handleInput("R");
+		expect(h.calls()).toBe(calls);
+		expect(controller!.suggestion).toBe(SUGGESTION);
+		expect(editor.render(80).join("\n")).toContain("un the parser tests next.");
+		expect(records[0]).toMatchObject({
+			candidateSource: "generated",
+			displaySurface: "empty-editor",
+			outcome: "dismissed",
+		});
+		editor.handleInput("\t");
+		expect(editor.getText()).toBe(SUGGESTION);
+		expect(h.calls()).toBe(calls);
+		trace.sent(SUGGESTION, Date.now(), "prompt");
+		expect(records.at(-1)).toMatchObject({
+			candidateSource: "generated",
+			displaySurface: "inline-prefix",
+			outcome: "accepted",
+			sentAs: "exact",
+		});
+		editor.handleInput("\x1b[45;5u");
+		expect(editor.getText()).toBe("R");
 	});
 
 	it("real CustomEditor: gray suggestion renders, Tab inserts, typing dismisses, Tab without suggestion is untouched", async () => {

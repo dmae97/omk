@@ -1117,6 +1117,34 @@ describe("AgentSession compaction characterization", () => {
 		expect(harness.faux.state.callCount).toBe(0);
 	});
 
+	it("admits a compacted SWE-2 turn without reusing pre-compaction usage 264849", async () => {
+		// Reported: estimated=264850, limit=219416 after automatic compaction. The
+		// compaction boundary, not the old assistant usage, must own the next estimate.
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, keepRecentTokens: 10_000 } },
+			models: [{ id: "swe-2", contextWindow: 262_000, maxTokens: 16_384 }],
+			extensionFactories: [extensionSummary("must not run")],
+		});
+		harnesses.push(harness);
+		const now = Date.now();
+		const keptTurnId = harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "x".repeat(600_000) }],
+			timestamp: now - 4000,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 264_849, timestamp: now - 3000 }),
+		);
+		harness.sessionManager.appendCompaction("earlier summary", keptTurnId, 264_849);
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+		harness.setResponses([fauxAssistantMessage("answered within the 219416-token ceiling")]);
+
+		await expect(harness.session.prompt("go")).resolves.toBeUndefined();
+
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(1);
+		expect(harness.faux.state.callCount).toBe(1);
+	});
+
 	it("re-compacts the retained tail when the latest entry is already a compaction and admission still overflows", async () => {
 		// Reported devin/swe-2 wedge: a committed compaction kept history that still overflows the
 		// ceiling, and admission recovery refused to compact again, so every prompt was rejected.

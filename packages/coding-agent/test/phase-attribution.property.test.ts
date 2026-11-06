@@ -73,6 +73,19 @@ function tickOracle({ spans, submittedAt, settledAt }: Case): Record<Measurement
 	return totals;
 }
 
+function exclusiveOracle({ spans, submittedAt, settledAt }: Case): Record<string, number> {
+	const totals = Object.fromEntries(spans.map((span) => [span.spanId, 0])) as Record<string, number>;
+	const clip = (value: number) => Math.min(Math.max(value, submittedAt), settledAt);
+	for (let tick = submittedAt; tick < settledAt; tick++) {
+		const covering = spans.filter((span) => clip(span.monotonicStart) <= tick && tick < clip(span.monotonicEnd));
+		const activeParents = new Set(covering.flatMap((span) => (span.parentId === undefined ? [] : [span.parentId])));
+		for (const span of covering) {
+			if (!activeParents.has(span.spanId)) totals[span.spanId]++;
+		}
+	}
+	return totals;
+}
+
 describe("attributePhases partition properties", () => {
 	it("sums to the turn length and matches the tick oracle", () => {
 		fc.assert(
@@ -83,6 +96,7 @@ describe("attributePhases partition properties", () => {
 				expect(phaseSum).toBe(result.turnTicks);
 				expect(MEASUREMENT_PHASES.every((phase) => result.phaseTicks[phase] >= 0)).toBe(true);
 				expect(result.phaseTicks).toEqual(tickOracle(input));
+				expect(Object.fromEntries(result.exclusiveTicks)).toEqual(exclusiveOracle(input));
 			}),
 			{ numRuns: 1_000, seed: 20260928 },
 		);

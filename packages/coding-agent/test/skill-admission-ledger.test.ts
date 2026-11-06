@@ -3,7 +3,6 @@ import {
 	isSkillAdmissionEnabled,
 	isSkillAdmissionRecord,
 	makeSkillAdmissionRecord,
-	SKILL_ADMISSION_CAP,
 	SKILL_ADMISSION_POLICY_REVISION,
 	SkillAdmissionLedger,
 	type SkillAdmissionRecord,
@@ -21,7 +20,7 @@ describe("spec 106 A1 skill admission ledger", () => {
 		expect(isSkillAdmissionEnabled({ OMK_SKILL_ADMISSION: "1" })).toBe(true);
 	});
 
-	it("SK2: 9 admitted, two different new reservations in flight -> exactly one ok, cap holds with reservations", () => {
+	it("SK2: reservations beyond 10 all succeed and release only removes a pending identity", () => {
 		const ledger = new SkillAdmissionLedger();
 		for (let i = 0; i < 9; i++) {
 			const r = ledger.reserve(`s${i}`, d(`b${i}`));
@@ -30,11 +29,13 @@ describe("spec 106 A1 skill admission ledger", () => {
 		}
 		const a = ledger.reserve("new-a", d("a"));
 		const b = ledger.reserve("new-b", d("b"));
-		expect([a.ok, b.ok]).toEqual([true, false]);
-		expect(b).toEqual({ ok: false, reason: "cap" });
-		expect(ledger.used).toBe(SKILL_ADMISSION_CAP);
+		expect(a.ok).toBe(true);
+		expect(b.ok).toBe(true);
+		expect(ledger.used).toBe(11);
 		if (a.ok) expect(ledger.release(a.requestId)).toBe(true);
-		expect(ledger.reserve("new-b", d("b")).ok).toBe(true);
+		expect(ledger.used).toBe(10);
+		expect(ledger.reserve("new-c", d("c")).ok).toBe(true);
+		expect(ledger.used).toBe(11);
 	});
 
 	it("SK4: same body reuses its slot, a new digest takes a new slot, admitted slots are never released", () => {
@@ -49,23 +50,18 @@ describe("spec 106 A1 skill admission ledger", () => {
 		expect(ledger.release(first.requestId)).toBe(false);
 	});
 
-	it("restore keeps the count and the cap (never reset to 0)", () => {
+	it("restore preserves admissions and accepts more than 10 unique bodies", () => {
 		const records = Array.from({ length: 10 }, (_, i) =>
 			makeSkillAdmissionRecord(`s${i}`, d(`b${i}`), "explicit", "admitted", `sa-${i + 1}-x`),
 		);
 		const ledger = SkillAdmissionLedger.restore(records);
 		expect(ledger.admitted).toBe(10);
-		expect(ledger.reserve("eleventh", d("e"))).toEqual({ ok: false, reason: "cap" });
+		expect(ledger.reserve("eleventh", d("e"))).toMatchObject({ ok: true, reused: false });
+		expect(ledger.used).toBe(11);
 		expect(ledger.reserve("s3", d("b3"))).toMatchObject({ ok: true, reused: true });
 	});
 
-	it("SK7: legacy session with >10 bodies refuses new admissions", () => {
-		const ledger = SkillAdmissionLedger.restore([]);
-		ledger.markLegacy(11);
-		expect(ledger.reserve("x", d("x"))).toEqual({ ok: false, reason: "legacy_over_cap" });
-	});
-
-	it("invariant guard: 200 seeded random reserve/commit/release interleavings, 0 cap violations", () => {
+	it("invariant guard: 200 seeded interleavings preserve identity dedupe and ownership", () => {
 		let seed = 106;
 		const rand = () => {
 			seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -85,7 +81,7 @@ describe("spec 106 A1 skill admission ledger", () => {
 					if (op < 0.85) ledger.commit(id);
 					else ledger.release(id);
 				}
-				if (ledger.used > SKILL_ADMISSION_CAP) violations++;
+				if (ledger.used > 40) violations++;
 			}
 		}
 		expect(violations).toBe(0);

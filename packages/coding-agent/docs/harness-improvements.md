@@ -1,4 +1,143 @@
-# OMK 하네스 개선 점검 — 2026-09-05
+# OMK 하네스 코드와 품질 점검 — 2026-10-30
+
+대상 독자는 OMK 유지보수 담당자와 릴리스 검토자다. 이 문서는 현재 하네스의 검증 상태와
+후속 작업을 구분한다. 전체 제품의 정확성, 보안, 성능 또는 원격 CI 통과를 보증하지 않는다.
+
+## 기준과 범위
+
+- 브랜치: `feat/explore-agent-tool`
+- 시작 HEAD: `7c04fba991ebc66e48a7f2ffbc5246c6d1f50e6e`
+- 패키지 기준: `open-multi-agent-kit` 1.5.10
+- 범위: `packages/coding-agent`의 세션 수명주기, 컨텍스트 예산, compaction, durable goal,
+  도구 실행과 session control. 전체 비-e2e 시험에서는 다른 workspace의 실패도 구분해 기록한다.
+- 작업 트리에는 다른 세션의 미커밋 변경이 다수 있었다. 결과는 순수한 HEAD가 아니라
+  **검사 시점의 작업 트리**에 대한 것이다. 다른 세션의 소스와 생성 카탈로그는 수정하지 않았다.
+
+## 종합 판정
+
+**초기 감사에서 발견한 AI와 TUI 실패는 후속 디버깅으로 해소했고, 최종 전체 비-e2e 시험과 저장소 정적 가드가 모두 통과했다.**
+
+초기 `packages/coding-agent` 검사에서는 901개 시험 파일에서 10,282개 테스트가 통과하고 57개가 걸러졌다.
+그러나 초기 전체 `./test.sh`는 AI 모델 카탈로그 실패 6건과 TUI의 기존 너비 속성 실패 2건으로
+종료 코드 `1`이었다. 아래 발견 표는 그 초기 상태를 보존한다. 후속 수정과 최종 결과는 다음 절에 기록한다.
+
+## 후속 디버깅 결과
+
+- **AI stale 회귀 정리:** live OpenCode Go와 models.dev 응답이 모두 `200`이고 대상 6개 ID는
+  live 목록에 없음을 확인했다. 생성 카탈로그를 되살리는 대신 `packages/ai/test/opencode-go-payload.test.ts`에서
+  제거된 모델의 오래된 기대를 정리했다. payload와 catalog 대상 검사 88개가 통과했다.
+- **TUI 너비 계산 수정:** `packages/tui/src/visible-width.ts`는 선행 비출력 문자를 제거한 base의
+  trailing AM만 추가 계산한다. `packages/tui/src/utils.ts`는 전체 입력이 실제로 맞는지 먼저 확인하고,
+  ANSI로 분리된 grapheme의 보존 접두사는 부분 폭 합이 아니라 전체 후보 폭으로 제한한다. W4b와 W5b를
+  정식 회귀로 복귀시켜 속성 테스트 10개와 TUI 전체 844개 테스트가 통과했다.
+- **pi-lens 후속 정리:** `reasoning-drop.ts`의 이중 assertion을 `Object.entries()`로 제거하고,
+  cache invalidation의 bare `object`를 `Record<string, unknown>`로 좁혔다. 관련 회귀 82개와 두 파일의
+  error-level 재진단이 통과했다. JSON과 외부 모듈 경계의 의도된 `unknown`은 그대로 유지한다.
+- **무제한 스킬 admission:** `skill-admission-ledger.ts`의 10개 제한과 legacy cap 거부를 제거했다.
+  명시 호출, resume, `read`, worker hand-off와 자동 로드에서 10개를 초과한 본문을 허용하고,
+  dedupe와 unknown-version fail-closed는 유지한다. 대상 회귀 44개와 `npm run check`가 통과했다.
+- **SWE-2 stale usage 회귀:** 실제 `estimated=264850`, `limit=219416` 사례를 재구성했다.
+  현재 소스와 활성 `dist`는 compaction 경계 뒤 추정값을 이전 usage 없이 다시 계산한다.
+  `agent-session-compaction.test.ts`에 정확한 공개 경로 회귀를 추가해 관련 74개 테스트가 통과했다.
+- **최종 전체 검증:** `npm run check`와 `./test.sh`가 모두 종료 코드 `0`이다. 최종 coding-agent
+  시험은 901개 파일에서 10,276개 통과 및 57개 skip, AI는 140개 파일에서 1,325개 통과 및 818개 skip,
+  TUI는 844개 통과 및 실패 0이다.
+
+## 우선순위별 발견
+
+| 우선순위 | 발견 | 근거와 권고 |
+| --- | --- | --- |
+| P1 | `opencode-go` payload 회귀 6건이 모델 누락으로 실패 | `packages/ai/test/opencode-go-payload.test.ts`가 요구하는 `mimo-v2.5`, `mimo-v2.5-pro`, `kimi-k2.6`, `glm-5.1`, `minimax-m2.5`, `minimax-m2.7`을 현재 `getModels("opencode-go")` 결과에서 찾지 못한다. 생성 파일을 손으로 고치지 말고 카탈로그 생성 작업에서 공급자 응답과 diff를 검토한 뒤 같은 회귀를 다시 실행해야 한다. |
+| P1 | TUI 너비 계산의 알려진 속성 결함 2건이 전체 시험을 실패시킴 | `packages/tui/test/width-invariants.property.test.ts`의 W4b와 W5b가 각각 ZWJ가 앞선 태국어 입력과 SGR로 분리된 하트 grapheme에서 실패한다. 요약상 일반 테스트 842개는 통과하지만 known-defect 속성 검사가 종료 코드를 실패로 만든다. |
+| P2 | `AgentSession`이 정적 분석과 리뷰 가능 범위를 초과 | `packages/coding-agent/src/core/agent-session.ts`는 5,598줄이며 5,000줄 LSP 진단 상한을 넘는다. 모듈 크기 ratchet는 기존 baseline 아래에서 통과하지만, 이는 구조 개선 증거가 아니다. 동작 변경과 분리해 `specs/agent-session-split/spec.md`의 책임별 분해를 갱신하는 편이 안전하다. |
+| P2 | 타입 경계 보조 진단과 미확인 파일이 남음 | 하네스 경로 100개 제한 검사에서 bare `object`, `unknown` 반환, 이중 assertion 관련 보조 진단 23건이 나왔다. 52개 파일은 확인 불가 또는 미실행이다. 이 항목들은 `tsgo` 오류와 동일시하지 않으며 개별 소스 검토 없이 일괄 수정하지 않는다. |
+| P2 | 명세 원본의 상태 문구와 현재 동작이 서로 다른 시점을 가리킴 | 다수의 `spec.md`는 작성 당시 draft 상태를 그대로 보존한다. `specs/README.md`는 이를 현재 상태로 재해석하지 않고 전체 색인과 시점 구분을 제공해야 한다. |
+| P3 | 저장소 리뷰 그래프를 생성하지 못함 | 프로젝트 파일 수가 2,333개 상한을 넘어 `project_report`가 비활성화됐다. 이번 판정은 모듈별 검사와 실제 테스트에 근거하며 전 저장소 호출 그래프 분석은 미검증으로 남긴다. |
+
+## 다섯 축 검토
+
+### Correctness
+
+- coding-agent의 비-e2e 회귀 10,282개 통과는 현재 하네스의 강한 긍정 증거다.
+- 전체 성공으로 확대 해석할 수 없는 AI와 TUI 실패를 별도로 유지한다.
+- live provider, 유료 실행, 실제 원격 CI와 전체 e2e는 이번 검사에 포함하지 않는다.
+
+### Readability and architecture
+
+- `npm run check:module-size`는 통과하며 61개 모듈이 baseline보다 작아졌다고 보고한다.
+  이 baseline은 다른 세션의 변경과 섞일 수 있으므로 이번 문서 작업에서 자동 갱신하지 않는다.
+- import cycle 검사는 기존 34개 baseline을 유지한다. 새 순환 참조가 없다는 뜻이지 순환 참조가
+  없다는 뜻은 아니다.
+- `AgentSession`의 크기와 LSP 상한 초과는 향후 분해의 가장 구체적인 구조 신호다.
+
+### Security
+
+- `startSessionControl()`은 소유한 영속 세션, POSIX 전용 소켓, 0700 디렉터리, 0600 소켓,
+  랜덤 토큰, 요청 크기와 연결 수 상한, 세대별 abort 제한을 확인한다.
+- 이는 소스 검토와 회귀에 근거한 경계 확인이며 침투 시험이나 OS 수준 격리 증명은 아니다.
+- 로그와 문서에 인증 정보를 기록하지 않았다.
+
+### Performance
+
+- 컨텍스트 예산과 캐시 관련 회귀는 coding-agent 전체 시험에 포함된다.
+- 이번 작업은 A/B, p95, RSS, provider cache hit 또는 모델 품질을 측정하지 않았으므로
+  성능 개선이나 회귀를 주장하지 않는다.
+
+### Verification quality
+
+- 저장소 표준 `test.sh`를 사용해 인증 정보 없는 격리 환경에서 비-e2e 시험을 실행했다.
+- 전체 시험이 실패한 뒤에도 각 workspace의 결과를 개별 집계해 하네스 통과와 외부 실패를
+  구분했다. 실패한 검사를 생략하거나 약화하지 않았다.
+- 빌드는 저장소 규칙에 따라 이번 문서와 검사 요청에서 실행하지 않았다. 따라서 현재 `dist`나
+  실행 중인 TUI 반영은 검증하지 않는다.
+
+## 문서와 Spec Kitty 동기화
+
+- 사용자 문서의 현재 진입점은 [Usage](usage.md), [Environment Variables](environment-variables.md),
+  [Run Protocol](run-protocol.md), [SDK](sdk.md), [Sessions](sessions.md),
+  [Compaction](compaction.md)과 [Metrics](metrics.md)다.
+- 아래 2026-09-05 기록과 [Runtime Algorithms and Direction](runtime-algorithms.md)은
+  시점별 기록으로 유지하고, 최신 판정은 이 문서의 앞부분에 기록한다.
+- `specs/README.md`는 001부터 119까지 존재하는 명세를 색인한다. 원본 명세의 draft 문구는
+  역사 기록이며 현재 동작은 소스, 테스트와 release tag로 확인한다.
+- Spec Kitty CLI와 `.kittify/metadata.yaml`은 모두 3.2.7이며 `spec-kitty upgrade
+  --agent-check --json`도 `action: none`, `reason: up_to_date`를 반환했다.
+- 현재 `kitty-specs/attachment-preview-memory-operational-01M45JAP`는 2026-10-05에 승인된
+  별도 미션이다. 이번 하네스 감사 결과를 그 미션에 덧붙이지 않는다.
+- Spec Kitty 3.2.7의 `mission create`는 스캐폴드 커밋을 항상 수행한다. 이번 요청에는 커밋
+  승인이 없으므로 새 미션을 만들지 않았다. `.kittify/config.yaml`의 자동 커밋 설정은 바꾸지 않고,
+  `specs/README.md`의 명세 색인만 갱신했다.
+
+## 실행 기록
+
+| 명령 | 종료 상태 | 결과 |
+| --- | --- | --- |
+| `spec-kitty upgrade --agent-check --json` | 0 | 설치 버전과 최신 버전 모두 3.2.7 |
+| `./test.sh` 초기 실행 | 1 | coding-agent 901개 파일, 10,282개 통과 및 57개 skip. AI 6개 실패와 TUI known-defect 2개로 전체 실패 |
+| `npm run check:module-size` (`npm run check` 남) | 0 | 기존 baseline 유지, 61개 모듈 축소 보고 |
+| `npm run check:import-cycles` (`npm run check` 남) | 0 | 기존 34개 baseline 유지 |
+| LSP 보조 진단, 하네스 경로 최대 100개 | 부분 확인 | 35개 clean, 보조 진단 23건, 52개 미확인, `agent-session.ts` 상한 초과 |
+| `npm run check` | 0 | Biome, 타입 검사, 문서 링크와 저장소 가드 통과 |
+| AI payload와 catalog 대상 검사 | 0 | 2개 파일, 88개 통과 |
+| TUI 속성 검사 | 0 | W4b와 W5b를 정식 회귀로 복귀, 10개 통과 |
+| pi-lens 후속 회귀 | 0 | compaction과 cache invalidation 3개 파일, 82개 통과 |
+| 무제한 스킬 admission 회귀 | 0 | ledger, 세션, read, worker, 자동 로드, 문맥 예산 44개 통과 |
+| SWE-2 admission 회귀 | 0 | compaction 경계의 stale usage 제외를 포함해 74개 통과 |
+| `./test.sh` 최종 실행 | 0 | 전체 비-e2e 통과. coding-agent 10,276개, AI 1,325개, TUI 844개 통과 |
+
+## 최종 검증과 남은 범위
+
+최종 `npm run check`와 `./test.sh`는 모두 종료 코드 `0`으로 통과했다. `git diff --check`도 종료 코드 `0`이다.
+처음 링크 가드는 새 미추적 문서 링크를 거부했으므로, 신규 파일을 커밋하는 대신 기존 추적 문서인
+이 파일에 감사 내용을 통합하고 2026-09-05 기록은 아래에 보존했다.
+
+명시적으로 미검증인 항목은 전체 e2e, live provider, 유료 벤치마크, 성능 A/B, 원격 CI,
+설치된 배포본, 현재 `dist`, 실행 중인 세션 반영, 전 저장소 호출 그래프다. 이 문서는
+로컬 작업 트리의 시점별 감사이며 독립 리뷰어나 사람의 릴리스 승인을 대신하지 않는다.
+
+---
+
+## 2026-09-05 기록
 
 기준은 `60f520f0c1`에서 시작한 현재 작업 트리입니다. 시작 시 다른 작업의
 미커밋 변경이 존재했으며 이를 보존했습니다. 아래는 주요 실행 경로에 대한

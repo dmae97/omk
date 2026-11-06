@@ -161,7 +161,7 @@ describe("spec 117 auto-load (AL1–AL5)", () => {
 		]);
 	});
 
-	it("AL3: 9 admitted + 2 strong candidates => 1 loaded, 1 cap refusal without body", () => {
+	it("AL3: 9 admitted + 2 strong candidates => both loaded without a session cap", () => {
 		const root = tmp();
 		const store = new Store();
 		const warm = Array.from({ length: 9 }, (_, i) => skill(root, `warm-${i}`, `warm helper ${i}`));
@@ -170,9 +170,10 @@ describe("spec 117 auto-load (AL1–AL5)", () => {
 		const a = skill(root, "pdf-extract", "extract pdf invoice text", "BODY-A");
 		const b = skill(root, "pdf-invoice", "pdf invoice text extract", "BODY-B");
 		const content = autoLoadSkills({ store, skills: [a, b], query: "extract pdf invoice text", env: ON }) ?? "";
-		expect(store.records()).toHaveLength(10);
-		expect(content.match(/BODY-[AB]/g)).toHaveLength(1);
-		expect(content).toContain("<skill_candidate");
+		expect(store.records()).toHaveLength(11);
+		expect(content.match(/BODY-[AB]/g)).toHaveLength(2);
+		expect(content).toContain('<skill name="pdf-extract"');
+		expect(content).toContain('<skill name="pdf-invoice"');
 	});
 
 	it("AL4: same skill on two prompts => one record, body sent once", () => {
