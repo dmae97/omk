@@ -151,6 +151,7 @@ import { DynamicBorder } from "./components/dynamic-border.ts";
 import { EarendilAnnouncementComponent } from "./components/earendil-announcement.ts";
 import { ExtensionEditorComponent } from "./components/extension-editor.ts";
 import { ExtensionInputComponent } from "./components/extension-input.ts";
+import { guardExtensionRender } from "./components/extension-render-guard.ts";
 import { ExtensionSelectorComponent } from "./components/extension-selector.ts";
 import { FooterComponent } from "./components/footer.ts";
 import { abortHeadroomVersionProbe, repaintWhenHeadroomVersionResolves } from "./components/headroom-version-probe.ts";
@@ -2077,7 +2078,7 @@ export class InteractiveMode {
 			component = container;
 		} else {
 			// Factory function - create component
-			component = content(this.ui, theme);
+			component = guardExtensionRender(content(this.ui, theme));
 		}
 
 		const targetMap = placement === "belowEditor" ? this.extensionWidgetsBelow : this.extensionWidgetsAbove;
@@ -2211,7 +2212,7 @@ export class InteractiveMode {
 
 		// The footer slot stays mounted and renders whichever footer is active,
 		// so swapping footers requires no child add/remove bookkeeping.
-		this.customFooter = factory ? factory(this.ui, theme, this.footerDataProvider) : undefined;
+		this.customFooter = factory ? guardExtensionRender(factory(this.ui, theme, this.footerDataProvider)) : undefined;
 		// An extension footer owns the status; the tmux pane steps aside until it is removed.
 		if (this.customFooter) this.tmuxStatusRail?.stop();
 		else if (this.statusSidebarPinned) this.tmuxStatusRail?.start();
@@ -2239,7 +2240,7 @@ export class InteractiveMode {
 
 		if (factory) {
 			// Create and add custom header
-			this.customHeader = factory(this.ui, theme);
+			this.customHeader = guardExtensionRender(factory(this.ui, theme));
 			if (isExpandable(this.customHeader)) {
 				this.customHeader.setExpanded(this.toolOutputExpanded);
 			}
@@ -2523,7 +2524,10 @@ export class InteractiveMode {
 
 		if (factory) {
 			// Create the custom editor with tui, theme, and keybindings
-			const newEditor = factory(this.ui, getEditorTheme(), this.keybindings);
+			const newEditor = guardExtensionRender(factory(this.ui, getEditorTheme(), this.keybindings), () => {
+				this.setCustomEditorComponent(undefined);
+				return this.defaultEditor;
+			});
 
 			// Wire up callbacks from the default editor
 			newEditor.onSubmit = this.defaultEditor.onSubmit;
@@ -2624,13 +2628,15 @@ export class InteractiveMode {
 			let overlayHandle: OverlayHandle | undefined;
 			let closed = false;
 
-			const close = (result: T) => {
+			// A render failure closes the UI with an error, so the awaiting tool call never stays pending.
+			const close = (result: T, error?: Error) => {
 				if (closed) return;
 				closed = true;
 				if (isOverlay) overlayHandle?.hide();
 				else restoreEditor();
 				// Note: both branches above already call requestRender
-				resolve(result);
+				if (error) reject(error);
+				else resolve(result);
 				try {
 					component?.dispose?.();
 				} catch {
@@ -2641,7 +2647,10 @@ export class InteractiveMode {
 			Promise.resolve(factory(this.ui, theme, this.keybindings, close))
 				.then((c) => {
 					if (closed) return;
-					component = c;
+					component = guardExtensionRender(c, () => {
+						close(undefined as T, new Error("Extension render failed"));
+						return undefined;
+					});
 					if (isOverlay) {
 						// Resolve overlay options - can be static or dynamic function
 						const resolveOptions = (): OverlayOptions | undefined => {

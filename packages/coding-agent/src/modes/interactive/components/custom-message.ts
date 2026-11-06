@@ -5,6 +5,7 @@ import type { MessageRenderer } from "../../../core/extensions/types.ts";
 import type { CustomMessage } from "../../../core/messages.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 
+import { guardExtensionRender } from "./extension-render-guard.ts";
 /**
  * Component that renders a custom message entry from extensions.
  * Uses distinct styling to differentiate from user messages.
@@ -62,7 +63,13 @@ export class CustomMessageComponent extends Container {
 				if (component) {
 					// Custom renderer provides its own styled component
 					this.customComponent = component;
-					this.addChild(component);
+					this.addChild(
+						guardExtensionRender(component, () => {
+							this.customRenderer = undefined;
+							this.rebuild();
+							return this.box;
+						}),
+					);
 					return;
 				}
 			} catch {

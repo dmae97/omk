@@ -14,6 +14,10 @@
 - The native status sidebar shows a SYSTEM block near the top: whole-host CPU and RAM meters, physical memory used/total, and a separate `omk` row for this process's CPU and RSS. Missing samples stay `?`/unavailable, the activity sparkline tracks host CPU, and the MCP roster gives up its rows to these meters on short terminals. See [pinned status resources](docs/tui.md#pinned-status-resources).
 - A custom footer set with `ctx.ui.setFooter` now owns the status slot: the pinned status rail steps aside while it is set, instead of hiding the extension footer. `footerData.getSubscriptionUsage()` gives extension footers the host's subscription usage snapshots through the rail's existing reader, with no second poller. See [custom footer](docs/tui.md#pattern-6-custom-footer).
 
+### Fixed
+
+- An extension component whose `render()` or `invalidate()` throws no longer breaks the TUI. The failed instance shows `Extension render failed` and is not called again; tool rows keep their raw result, custom messages keep their content, a failed custom editor restores the default editor, and failed custom UI rejects instead of leaving its tool pending. See [extensions](docs/extensions.md#fallback).
+
 ## [1.5.10] - 2026-10-27
 
 ### Fixed

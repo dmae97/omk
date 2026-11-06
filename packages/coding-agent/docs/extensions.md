@@ -2208,6 +2208,15 @@ If a slot renderer is not defined or throws:
 - `renderCall`: Shows the tool name
 - `renderResult`: Shows raw text from `content`
 
+Exceptions from a returned component's `render()` or `invalidate()` are also contained.
+The failed instance shows `Extension render failed` and is not called again; return a
+new component to recover. Tool rows retain their raw result text and execution status,
+and custom messages retain their original content. Widgets, headers and footers show
+the notice; a failed custom editor restores the default editor with its text. Failed
+custom UI is closed and rejects with the fixed error instead of leaving its tool pending.
+The guard preserves component identity, focus and disposal methods. It does not catch
+`handleInput()` errors, sandbox extension code or change verification outcomes.
+
 ## Custom UI
 
 Extensions can interact with users via `ctx.ui` methods and customize how messages/tools render.
