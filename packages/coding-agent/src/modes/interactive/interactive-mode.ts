@@ -2166,7 +2166,13 @@ export class InteractiveMode {
 
 	/** The pinned rail is only shown (and its gutter reserved) when the terminal is large enough. */
 	private isStatusSidebarVisible(termWidth: number, termHeight: number): boolean {
-		return !this.tmuxStatusRail?.active && this.statusSidebarPinned && railFits(termWidth, termHeight);
+		// An extension footer owns the status slot, so the pinned rail steps aside while it is set.
+		return (
+			!this.tmuxStatusRail?.active &&
+			this.customFooter === undefined &&
+			this.statusSidebarPinned &&
+			railFits(termWidth, termHeight)
+		);
 	}
 
 	/**

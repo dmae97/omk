@@ -11,6 +11,7 @@
 
 - The pinned status panel now renders with OpenTUI by default: an offscreen renderer process returns ANSI rows while `omk-tui` keeps terminal and input ownership. It shows model, run, verification, host CPU/RAM, context, usage, MCP, the session's `update_todo` progress, the running tool and a bound `/rnode` run first; `Ctrl+O` adds details. Set `OMK_OPENTUI_STATUS_RAIL=0` for the native sidebar; Node below 26.4, a missing optional `@opentui/core` and renderer failures or timeouts fall back to it. See [hybrid status panel](docs/tui.md#hybrid-opentui-status-panel).
 - The native status sidebar shows a SYSTEM block near the top: whole-host CPU and RAM meters, physical memory used/total, and a separate `omk` row for this process's CPU and RSS. Missing samples stay `?`/unavailable, the activity sparkline tracks host CPU, and the MCP roster gives up its rows to these meters on short terminals. See [pinned status resources](docs/tui.md#pinned-status-resources).
+- A custom footer set with `ctx.ui.setFooter` now owns the status slot: the pinned status rail steps aside while it is set, instead of hiding the extension footer. `footerData.getSubscriptionUsage()` gives extension footers the host's subscription usage snapshots through the rail's existing reader, with no second poller. See [custom footer](docs/tui.md#pattern-6-custom-footer).
 
 ## [1.5.10] - 2026-10-27
 

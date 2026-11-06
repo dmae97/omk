@@ -937,6 +937,7 @@ ctx.ui.setFooter((tui, theme, footerData) => ({
   render(width: number): string[] {
     // footerData.getGitBranch(): string | null
     // footerData.getExtensionStatuses(): ReadonlyMap<string, string>
+    // footerData.getSubscriptionUsage?.(): readonly SubscriptionUsageSnapshot[] | undefined
     return [`${ctx.model?.id} (${footerData.getGitBranch() || "no git"})`];
   },
   dispose: footerData.onBranchChange(() => tui.requestRender()), // reactive
@@ -944,6 +945,11 @@ ctx.ui.setFooter((tui, theme, footerData) => ({
 
 ctx.ui.setFooter(undefined); // restore default
 ```
+
+While a custom footer is set, it owns the status slot: the pinned status rail (and the tmux status pane)
+steps aside until the footer is removed. `getSubscriptionUsage` is optional; older hosts do not provide it.
+It returns detached snapshots from the host's own usage reader (the same TTL and revision cache as the
+rail), so calling it in `render` starts no extra polling. Missing usage stays `usage unavailable`, never 0%.
 
 Token stats available via `ctx.sessionManager.getBranch()` and `ctx.model`.
 
