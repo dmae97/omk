@@ -24,7 +24,6 @@ function getEnv(): NodeJS.ProcessEnv {
 
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import type { Readable } from "node:stream";
-import { globSync } from "glob";
 import ignore from "ignore";
 import { CONFIG_DIR_NAME } from "../config.ts";
 import { spawnProcess, spawnProcessSync } from "../utils/child-process.ts";
@@ -32,11 +31,21 @@ import { type GitSource, parseGitUrl } from "../utils/git.ts";
 import { canonicalizePath, isLocalPath, markPathIgnoredByCloudSync, resolvePath } from "../utils/paths.ts";
 import { isStdoutTakenOver } from "./output-guard.ts";
 import { extractNpmPackageTarball } from "./package-archive.ts";
+import {
+	addIgnoreRules,
+	collectAutoExtensionEntries,
+	hasGlobPattern,
+	isOverridePattern,
+	resolveManifestPaths,
+	toPosixPath,
+} from "./package-extension-entries.ts";
 import { buildGitDependencyInstallArgs, buildNpmInstallArgs } from "./package-install-args.ts";
 import {
+	type PackageManifestDialect,
 	type PackageManifestResolution,
 	type PackageResourceManifest,
 	readPackageManifest as readPackageManifestFile,
+	resolvePackageManifestDialect,
 } from "./package-manifest.ts";
 import { applyPatterns, isEnabledByOverrides } from "./package-resource-patterns.ts";
 import { collectProjectAutoExtensionEntries, trustedProjectSettings } from "./project-code-settings.ts";
@@ -136,6 +145,8 @@ interface PackageManagerOptions {
 	settingsManager: SettingsManager;
 	/** Run package lifecycle scripts; only an explicit `omk install|update --allow-scripts` sets it. */
 	allowScripts?: boolean;
+	/** Omission preserves 1.x Pi manifest compatibility. */
+	packageManifestDialect?: PackageManifestDialect;
 }
 
 type SourceScope = "user" | "project" | "temporary";
@@ -212,13 +223,7 @@ const FILE_PATTERNS: Record<ResourceType, RegExp> = {
 	themes: /\.json$/,
 };
 
-const IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"];
-
 type IgnoreMatcher = ReturnType<typeof ignore>;
-
-function toPosixPath(p: string): string {
-	return p.split(sep).join("/");
-}
 
 function getHomeDir(): string {
 	return process.env.HOME || homedir();
@@ -231,59 +236,8 @@ export function getExtensionTempFolder(agentDir: string): string {
 	return tempFolder;
 }
 
-function prefixIgnorePattern(line: string, prefix: string): string | null {
-	const trimmed = line.trim();
-	if (!trimmed) return null;
-	if (trimmed.startsWith("#") && !trimmed.startsWith("\\#")) return null;
-
-	let pattern = line;
-	let negated = false;
-
-	if (pattern.startsWith("!")) {
-		negated = true;
-		pattern = pattern.slice(1);
-	} else if (pattern.startsWith("\\!")) {
-		pattern = pattern.slice(1);
-	}
-
-	if (pattern.startsWith("/")) {
-		pattern = pattern.slice(1);
-	}
-
-	const prefixed = prefix ? `${prefix}${pattern}` : pattern;
-	return negated ? `!${prefixed}` : prefixed;
-}
-
-function addIgnoreRules(ig: IgnoreMatcher, dir: string, rootDir: string): void {
-	const relativeDir = relative(rootDir, dir);
-	const prefix = relativeDir ? `${toPosixPath(relativeDir)}/` : "";
-
-	for (const filename of IGNORE_FILE_NAMES) {
-		const ignorePath = join(dir, filename);
-		if (!existsSync(ignorePath)) continue;
-		try {
-			const content = readFileSync(ignorePath, "utf-8");
-			const patterns = content
-				.split(/\r?\n/)
-				.map((line) => prefixIgnorePattern(line, prefix))
-				.filter((line): line is string => Boolean(line));
-			if (patterns.length > 0) {
-				ig.add(patterns);
-			}
-		} catch {}
-	}
-}
-
 function isPattern(s: string): boolean {
 	return s.startsWith("!") || s.startsWith("+") || s.startsWith("-") || s.includes("*") || s.includes("?");
-}
-
-function isOverridePattern(s: string): boolean {
-	return s.startsWith("!") || s.startsWith("+") || s.startsWith("-");
-}
-
-function hasGlobPattern(s: string): boolean {
-	return s.includes("*") || s.includes("?");
 }
 
 function splitPatterns(entries: string[]): { plain: string[]; patterns: string[] } {
@@ -553,100 +507,16 @@ function collectAutoThemeEntries(dir: string): string[] {
 	return entries;
 }
 
-function resolveExtensionEntries(dir: string): string[] | null {
-	const packageJsonPath = join(dir, "package.json");
-	if (existsSync(packageJsonPath)) {
-		const manifest = readPackageManifestFile(packageJsonPath)?.manifest;
-		if (manifest?.extensions?.length) {
-			const entries: string[] = [];
-			for (const extPath of manifest.extensions) {
-				const resolvedExtPath = resolve(dir, extPath);
-				if (existsSync(resolvedExtPath)) {
-					entries.push(resolvedExtPath);
-				}
-			}
-			if (entries.length > 0) {
-				return entries;
-			}
-		}
-	}
-
-	const indexTs = join(dir, "index.ts");
-	const indexJs = join(dir, "index.js");
-	if (existsSync(indexTs)) {
-		return [indexTs];
-	}
-	if (existsSync(indexJs)) {
-		return [indexJs];
-	}
-
-	return null;
-}
-
-function collectAutoExtensionEntries(dir: string): string[] {
-	const entries: string[] = [];
-	if (!existsSync(dir)) return entries;
-
-	// First check if this directory itself has explicit extension entries (package.json or index)
-	const rootEntries = resolveExtensionEntries(dir);
-	if (rootEntries) {
-		return rootEntries;
-	}
-
-	// Otherwise, discover extensions from directory contents
-	const ig = ignore();
-	addIgnoreRules(ig, dir, dir);
-
-	try {
-		const dirEntries = readdirSync(dir, { withFileTypes: true });
-		for (const entry of dirEntries) {
-			if (entry.name.startsWith(".")) continue;
-			if (entry.name === "node_modules") continue;
-
-			const fullPath = join(dir, entry.name);
-			let isDir = entry.isDirectory();
-			let isFile = entry.isFile();
-
-			if (entry.isSymbolicLink()) {
-				try {
-					const stats = statSync(fullPath);
-					isDir = stats.isDirectory();
-					isFile = stats.isFile();
-				} catch {
-					continue;
-				}
-			}
-
-			const relPath = toPosixPath(relative(dir, fullPath));
-			const ignorePath = isDir ? `${relPath}/` : relPath;
-			if (ig.ignores(ignorePath)) continue;
-
-			if (isFile && (entry.name.endsWith(".ts") || entry.name.endsWith(".js"))) {
-				entries.push(fullPath);
-			} else if (isDir) {
-				const resolvedEntries = resolveExtensionEntries(fullPath);
-				if (resolvedEntries) {
-					entries.push(...resolvedEntries);
-				}
-			}
-		}
-	} catch {
-		// Ignore errors
-	}
-
-	return entries;
-}
-
 /**
  * Collect resource files from a directory based on resource type.
  * Extensions use smart discovery (index.ts in subdirs), others use recursive collection.
  */
-function collectResourceFiles(dir: string, resourceType: ResourceType): string[] {
+function collectResourceFiles(dir: string, resourceType: ResourceType, dialect: PackageManifestDialect): string[] {
 	if (resourceType === "skills") {
 		return collectSkillEntries(dir, "root");
 	}
 	if (resourceType === "extensions") {
-		return collectAutoExtensionEntries(dir);
+		return collectAutoExtensionEntries(dir, dialect);
 	}
 	return collectFiles(dir, FILE_PATTERNS[resourceType]);
 }
@@ -656,11 +526,13 @@ export class DefaultPackageManager implements PackageManager {
 	private agentDir: string;
 	private settingsManager: SettingsManager;
 	private readonly allowScripts: boolean;
+	private readonly packageManifestDialect: PackageManifestDialect;
 	private globalNpmRoot: string | undefined;
 	private globalNpmRootCommandKey: string | undefined;
 	private progressCallback: ProgressCallback | undefined;
 
 	constructor(options: PackageManagerOptions) {
+		this.packageManifestDialect = resolvePackageManifestDialect(options.packageManifestDialect);
 		this.cwd = resolvePath(options.cwd);
 		this.agentDir = resolvePath(options.agentDir);
 		this.settingsManager = options.settingsManager;
@@ -2081,6 +1953,7 @@ export class DefaultPackageManager implements PackageManager {
 		filter: PackageFilter | undefined,
 		metadata: PathMetadata,
 	): boolean {
+		const manifestResolution = this.readPackageManifest(packageRoot);
 		if (filter) {
 			for (const resourceType of RESOURCE_TYPES) {
 				const patterns = filter[resourceType as keyof PackageFilter];
@@ -2094,7 +1967,6 @@ export class DefaultPackageManager implements PackageManager {
 			return true;
 		}
 
-		const manifestResolution = this.readPackageManifest(packageRoot);
 		if (manifestResolution?.key !== null && manifestResolution?.key !== undefined) {
 			const manifest = manifestResolution.manifest ?? {};
 			for (const resourceType of RESOURCE_TYPES) {
@@ -2115,7 +1987,7 @@ export class DefaultPackageManager implements PackageManager {
 			const dir = join(packageRoot, resourceType);
 			if (existsSync(dir)) {
 				// Collect all files from the directory (all enabled by default)
-				const files = collectResourceFiles(dir, resourceType);
+				const files = collectResourceFiles(dir, resourceType, this.packageManifestDialect);
 				for (const f of files) {
 					this.addResource(this.getTargetMap(accumulator, resourceType), f, metadata, true);
 				}
@@ -2140,7 +2012,7 @@ export class DefaultPackageManager implements PackageManager {
 		const dir = join(packageRoot, resourceType);
 		if (existsSync(dir)) {
 			// Collect all files from the directory (all enabled by default)
-			const files = collectResourceFiles(dir, resourceType);
+			const files = collectResourceFiles(dir, resourceType, this.packageManifestDialect);
 			for (const f of files) {
 				this.addResource(target, f, metadata, true);
 			}
@@ -2200,14 +2072,14 @@ export class DefaultPackageManager implements PackageManager {
 		if (!existsSync(conventionDir)) {
 			return { allFiles: [], enabledByManifest: new Set() };
 		}
-		const allFiles = collectResourceFiles(conventionDir, resourceType);
+		const allFiles = collectResourceFiles(conventionDir, resourceType, this.packageManifestDialect);
 		return { allFiles, enabledByManifest: new Set(allFiles) };
 	}
 
 	private readPackageManifest(packageRoot: string): PackageManifestResolution | null {
 		const packageJsonPath = join(packageRoot, "package.json");
 		if (!existsSync(packageJsonPath)) return null;
-		const resolvedManifest = readPackageManifestFile(packageJsonPath);
+		const resolvedManifest = readPackageManifestFile(packageJsonPath, this.packageManifestDialect);
 		if (!resolvedManifest) return null;
 		if (resolvedManifest.diagnostics.length > 0) {
 			throw new Error(
@@ -2252,20 +2124,7 @@ export class DefaultPackageManager implements PackageManager {
 	}
 
 	private collectFilesFromManifestEntries(entries: string[], root: string, resourceType: ResourceType): string[] {
-		const sourceEntries = entries.filter((entry) => !isOverridePattern(entry));
-		const resolved = sourceEntries.flatMap((entry) => {
-			if (!hasGlobPattern(entry)) {
-				return [resolve(root, entry)];
-			}
-
-			return globSync(entry, {
-				cwd: root,
-				absolute: true,
-				dot: false,
-				nodir: false,
-			}).map((match) => resolve(match));
-		});
-		return this.collectFilesFromPaths(resolved, resourceType);
+		return this.collectFilesFromPaths(resolveManifestPaths(entries, root), resourceType);
 	}
 
 	private resolveLocalEntries(
@@ -2358,7 +2217,9 @@ export class DefaultPackageManager implements PackageManager {
 		// Project extensions from .omk/
 		addResources(
 			"extensions",
-			collectProjectAutoExtensionEntries(this.settingsManager, projectDirs.extensions, collectAutoExtensionEntries),
+			collectProjectAutoExtensionEntries(this.settingsManager, projectDirs.extensions, (dir) =>
+				collectAutoExtensionEntries(dir, this.packageManifestDialect),
+			),
 			projectMetadata,
 			projectOverrides.extensions,
 			projectBaseDir,
@@ -2407,7 +2268,7 @@ export class DefaultPackageManager implements PackageManager {
 		// User extensions from ~/.omk/agent/
 		addResources(
 			"extensions",
-			collectAutoExtensionEntries(userDirs.extensions),
+			collectAutoExtensionEntries(userDirs.extensions, this.packageManifestDialect),
 			userMetadata,
 			userOverrides.extensions,
 			globalBaseDir,
@@ -2462,7 +2323,7 @@ export class DefaultPackageManager implements PackageManager {
 				if (stats.isFile()) {
 					files.push(p);
 				} else if (stats.isDirectory()) {
-					files.push(...collectResourceFiles(p, resourceType));
+					files.push(...collectResourceFiles(p, resourceType, this.packageManifestDialect));
 				}
 			} catch {
 				// Ignore errors

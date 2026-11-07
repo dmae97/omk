@@ -1,7 +1,7 @@
 import type { TriggerSpec } from "./domain-types.ts";
 
-/** Cap on how many times a single keyword phrase can contribute (prevents runaway). */
-export const KEYWORD_OCCURRENCE_CAP = 3;
+/** Repetition is not independent evidence; keyword and regex triggers contribute once (labelled-corpus A/B). */
+export const KEYWORD_OCCURRENCE_CAP = 1;
 
 export interface CompiledTrigger {
 	readonly spec: TriggerSpec;

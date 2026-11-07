@@ -47,8 +47,15 @@ RTK_TEST_EXECUTABLE=/absolute/path/to/rtk node ../../node_modules/vitest/dist/cl
 ## StrykerJS는 개발 전용
 
 루트 devDependencies에 `@stryker-mutator/core`와 공식 Vitest runner 10.0.0을 고정했다.
-Node >=22와 기존 Vitest 3.2.6을 사용한다. 일반 `npm test`, `npm run check`, 사용자 세션에서는
+Node >=22.19와 보안 패치된 Vitest 4.1.11을 사용한다. 일반 `npm test`, `npm run check`, 사용자 세션에서는
 mutation을 실행하지 않는다. 검사 전에 기존 프로젝트 절차로 의존성과 필요한 workspace build를 준비한다.
+
+Vitest와 V8 coverage는 루트와 workspace에서 같은 4.1.11 버전으로 고정한다. 루트 고정은
+Stryker의 peer 해석과 coverage 로더가 다른 checkout의 구버전을 가져오는 것을 막는다.
+개발 도구의 파일 복사/정리는 `shx` 대신 Node 표준 파일 API를 사용해 취약한 braces 의존 경로를 제거한다.
+`source-map-js`는 offset 검증이 추가된 1.2.2 이상을 사용한다. 잠금 파일 회귀 검사는
+`scripts/test/test-toolchain-security.test.mjs`에 있다. 공식 패치가 없는 Forge/Gondolin 경로는
+별도 [서명 검증 방어](gondolin-security.md)를 유지하며, 전체 audit의 경고를 숨기지 않는다.
 
 ```bash
 npm install --ignore-scripts

@@ -21,7 +21,6 @@ import {
 } from "omk-ai";
 import { registerOAuthProvider, resetOAuthProviders } from "omk-ai/oauth";
 import { join } from "path";
-import type { TLocalizedValidationError } from "typebox/error";
 import { getAgentDir } from "../config.ts";
 import { warnDeprecation } from "../utils/deprecation.ts";
 import { stripJsonComments } from "../utils/json.ts";
@@ -29,7 +28,13 @@ import { normalizePath } from "../utils/paths.ts";
 import type { AuthStatus, AuthStorage } from "./auth-storage.ts";
 import { GROK_OAUTH_PROVIDER } from "./grok-playbook.ts";
 import { ModelRegistryRefreshInputs } from "./model-registry-refresh-inputs.ts";
-import { type ModelOverride, type ModelsConfig, validateModelsConfig } from "./model-registry-schema.ts";
+import {
+	formatValidationPath,
+	isModelVisible,
+	type ModelOverride,
+	type ModelsConfig,
+	validateModelsConfig,
+} from "./model-registry-schema.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "./provider-display-names.ts";
 import {
 	clearConfigValueCache,
@@ -41,19 +46,6 @@ import {
 	resolveConfigValueUncached,
 	resolveHeadersOrThrow,
 } from "./resolve-config-value.ts";
-
-function formatValidationPath(error: TLocalizedValidationError): string {
-	if (error.keyword === "required") {
-		const requiredProperties = (error.params as { requiredProperties?: string[] }).requiredProperties;
-		const requiredProperty = requiredProperties?.[0];
-		if (requiredProperty) {
-			const basePath = error.instancePath.replace(/^\//, "").replace(/\//g, ".");
-			return basePath ? `${basePath}.${requiredProperty}` : requiredProperty;
-		}
-	}
-	const path = error.instancePath.replace(/^\//, "").replace(/\//g, ".");
-	return path || "root";
-}
 
 /** Provider override config (baseUrl, compat) without request auth/headers */
 interface ProviderOverride {
@@ -289,6 +281,7 @@ export class ModelRegistry {
 	private modelRequestHeaders: Map<string, Record<string, string>> = new Map();
 	private registeredProviders: Map<string, ProviderConfigInput> = new Map();
 	private loadError: string | undefined = undefined;
+	private visibility: ModelsConfig["visibility"];
 	readonly authStorage: AuthStorage;
 	private modelsJsonPath: string | undefined;
 	private readonly snapshotOnLoad: boolean;
@@ -428,12 +421,15 @@ export class ModelRegistry {
 
 	private loadCustomModels(modelsJsonPath: string): CustomModelsResult {
 		if (!existsSync(modelsJsonPath)) {
+			this.visibility = undefined;
 			return emptyCustomModelsResult();
 		}
 
 		try {
 			const content = readFileSync(modelsJsonPath, "utf-8");
 			const parsed = JSON.parse(stripJsonComments(content)) as unknown;
+			// A malformed explicit filter must not accidentally expose every authenticated provider.
+			if (Object.hasOwn(parsed ?? {}, "visibility")) this.visibility = { providers: [] };
 
 			if (!validateModelsConfig.Check(parsed)) {
 				const errors =
@@ -448,6 +444,7 @@ export class ModelRegistry {
 
 			// Additional validation
 			this.validateConfig(config);
+			this.visibility = config.visibility;
 			if (this.snapshotOnLoad) this.snapshotModelsJson(content, modelsJsonPath);
 
 			const overrides = new Map<string, ProviderOverride>();
@@ -649,11 +646,11 @@ export class ModelRegistry {
 	}
 
 	/**
-	 * Get only models that have auth configured.
+	 * Get authenticated models allowed by the optional list visibility policy.
 	 * This is a fast check that doesn't refresh OAuth tokens.
 	 */
 	getAvailable(): Model<Api>[] {
-		return this.models.filter((m) => this.hasConfiguredAuth(m));
+		return this.models.filter((model) => isModelVisible(model, this.visibility) && this.hasConfiguredAuth(model));
 	}
 
 	/**

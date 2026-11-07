@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import {
 	chmodSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
@@ -35,6 +36,25 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
 describe("user context initialization", () => {
+	it("installs missing global agents on a bare launch and preserves edits", () => {
+		const options = { cwd: root, agentDir, env: {}, writeLine: (line: string) => lines.push(line) };
+		expect(runInitCli([], options)).toEqual({ handled: false, exitCode: 0 });
+		const agent = join(agentDir, "agents", "pstack-poteto-agent.md");
+		expect(readFileSync(agent, "utf8")).toContain("pstack-poteto-agent");
+		writeFileSync(agent, "custom agent");
+		expect(runInitCli([], options)).toEqual({ handled: false, exitCode: 0 });
+		expect(readFileSync(agent, "utf8")).toBe("custom agent");
+	});
+
+	it("continues launch and warns when the global agents directory is unsafe", () => {
+		mkdirSync(agentDir);
+		writeFileSync(join(agentDir, "agents"), "keep");
+		const outcome = runInitCli([], { cwd: root, agentDir, env: {}, writeLine: (line) => lines.push(line) });
+		expect(outcome).toEqual({ handled: false, exitCode: 0 });
+		expect(readFileSync(join(agentDir, "agents"), "utf8")).toBe("keep");
+		expect(lines.join("\n")).toContain("pstack");
+	});
+
 	it("leaves unrelated CLI arguments unhandled", () => {
 		// Given a normal model prompt, when dispatching it to setup.
 		const outcome = initialize(["--print", "explain init"]);
@@ -110,9 +130,9 @@ describe("user context initialization", () => {
 			writeFileSync(join(agentDir, name), "# User-owned context\n");
 			// When installing missing defaults.
 			const outcome = initialize();
-			// Then only the web companion is added.
+			// Then the web companion and bundled agents are added without shadowing the entry point.
 			expect(outcome.exitCode).toBe(0);
-			expect(readdirSync(agentDir).sort()).toEqual([name, "INTERNET.md"].sort());
+			expect(readdirSync(agentDir).sort()).toEqual([name, "INTERNET.md", "agents"].sort());
 			expect(readFileSync(join(agentDir, name), "utf8")).toBe("# User-owned context\n");
 		},
 	);
@@ -126,7 +146,7 @@ describe("user context initialization", () => {
 		const outcome = initialize();
 		// Then user content is unchanged and the inventory is stable.
 		expect(outcome.exitCode).toBe(0);
-		expect(readdirSync(agentDir).sort()).toEqual(["AGENTS.md", "CLAUDE.md", "INTERNET.md"]);
+		expect(readdirSync(agentDir).sort()).toEqual(["AGENTS.md", "CLAUDE.md", "INTERNET.md", "agents"]);
 		expect(readFileSync(join(agentDir, "AGENTS.md"), "utf8")).toBe("# Custom instructions\n");
 		expect(readFileSync(join(agentDir, "INTERNET.md"), "utf8")).toBe("# Custom network policy\n");
 	});
@@ -178,7 +198,7 @@ describe("user context initialization", () => {
 		const outcome = initialize();
 		// Then it does not shadow that symlink with a new AGENTS.md.
 		expect(outcome.exitCode).toBe(0);
-		expect(readdirSync(agentDir).sort()).toEqual(["CLAUDE.md", "INTERNET.md"]);
+		expect(readdirSync(agentDir).sort()).toEqual(["CLAUDE.md", "INTERNET.md", "agents"]);
 	});
 
 	it.skipIf(process.platform === "win32")("creates owner-only files and directory on POSIX", () => {
@@ -186,7 +206,10 @@ describe("user context initialization", () => {
 		initialize();
 		// Then initial context does not expose future personal edits to other users.
 		expect(statSync(agentDir).mode & 0o777).toBe(0o700);
-		for (const name of readdirSync(agentDir)) expect(statSync(join(agentDir, name)).mode & 0o777).toBe(0o600);
+		for (const name of ["AGENTS.md", "CLAUDE.md", "INTERNET.md"]) {
+			expect(statSync(join(agentDir, name)).mode & 0o777).toBe(0o600);
+		}
+		expect(statSync(join(agentDir, "agents")).mode & 0o777).toBe(0o700);
 	});
 
 	it("loads only the installed global AGENTS entry point through the real loader", () => {
@@ -233,6 +256,7 @@ describe("user context initialization", () => {
 
 		const outcome = bootstrapEmptyProjectContext([], {
 			cwd: workspace,
+			agentDir,
 			templatesDir: projectTemplates,
 			env: {},
 			writeLine: (line) => lines.push(line),
@@ -265,6 +289,7 @@ describe("user context initialization", () => {
 			symlinkSync(outside, join(workspace, ".omk"), "dir");
 			const options = {
 				cwd: workspace,
+				agentDir,
 				templatesDir: projectTemplates,
 				writeLine: (line: string) => lines.push(line),
 			};
@@ -321,6 +346,40 @@ describe("user context initialization", () => {
 		expect(readdirSync(workspace)).toEqual([".git"]);
 	});
 
+	it("installs pstack on bare launch in an existing Git project without creating context documents", () => {
+		const workspace = join(root, "existing-repo");
+		mkdirSync(workspace);
+		expect(spawnSync("git", ["init", "--quiet", workspace]).status).toBe(0);
+		writeFileSync(join(workspace, "README.md"), "Existing project\n");
+		const result = runInitCli([], { cwd: workspace, agentDir, env: {}, writeLine: (line) => lines.push(line) });
+		expect(result).toEqual({ handled: false, exitCode: 0 });
+		expect(existsSync(join(workspace, ".omk", "skills", "pstack", "poteto-mode", "SKILL.md"))).toBe(true);
+		expect(existsSync(join(workspace, "AGENTS.md"))).toBe(false);
+	});
+
+	it("does not repeat preserved pstack notices on a subsequent bare launch", () => {
+		const workspace = join(root, "quiet-existing-project");
+		mkdirSync(workspace);
+		writeFileSync(join(workspace, "package.json"), "{}\n");
+		const options = { cwd: workspace, agentDir, env: {}, writeLine: (line: string) => lines.push(line) };
+		runInitCli([], options);
+		lines.length = 0;
+		expect(runInitCli([], options)).toEqual({ handled: false, exitCode: 0 });
+		expect(lines).toEqual([]);
+		runInitCli(["init", "--project"], options);
+		expect(lines.join("\n")).toContain("Preserved pstack skills:");
+		expect(lines.join("\n")).toContain("Project agents require explicit project scope");
+	});
+
+	it("installs pstack in a non-Git project with a project manifest", () => {
+		const workspace = join(root, "manifest-project");
+		mkdirSync(workspace);
+		writeFileSync(join(workspace, "package.json"), "{}\n");
+		runInitCli([], { cwd: workspace, agentDir, env: {}, writeLine: (line) => lines.push(line) });
+		expect(existsSync(join(workspace, ".omk", "skills", "pstack", "poteto-mode", "SKILL.md"))).toBe(true);
+		expect(existsSync(join(workspace, "AGENTS.md"))).toBe(false);
+	});
+
 	it("keeps bare-launch failure behavior for missing project context templates", () => {
 		const workspace = join(root, "bare-missing-templates");
 		mkdirSync(workspace);
@@ -344,6 +403,7 @@ describe("user context initialization", () => {
 		expect(spawnSync("git", ["init", "--quiet", workspace]).status).toBe(0);
 		const outcome = bootstrapEmptyProjectContext(["-ne"], {
 			cwd: workspace,
+			agentDir,
 			templatesDir: projectTemplates,
 			env: { OMK_BARE_INTERACTIVE: "1" },
 			writeLine: (line) => lines.push(line),

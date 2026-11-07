@@ -1,5 +1,5 @@
 import { crc32, deflateSync } from "node:zlib";
-import { allocateImageId, getCapabilities, getCellDimensions, Image } from "@earendil-works/pi-tui";
+import { allocateImageId, getCapabilities, getCellDimensions, Image } from "omk-tui";
 import type { Rgb } from "./palette.ts";
 
 interface CostImageCurve {

@@ -153,6 +153,17 @@ Subagent workers start with `--no-extensions`, so these extensions do not load i
 
 npm dependencies work too. Add a `package.json` next to your extension (or in a parent directory), run `npm install`, and imports from `node_modules/` are resolved automatically.
 
+Legacy Pi imports of `@earendil-works/pi-ai/compat` and `@mariozechner/pi-ai/compat`
+resolve to the OMK AI exports in both Node aliases and Bun virtual modules. The
+no-argument `openAIResponsesApi()` factory returns `api`, `stream`, and
+`streamSimple` for the existing lazy OpenAI Responses adapter. Use its
+provider-local streamer when wrapping a provider; calling the global
+`streamSimple` dispatcher from an override of that same API would recurse.
+This compatibility factory does not authenticate or send a request at load time.
+
+The public `CONFIG_DIR_NAME` export identifies OMK's `.omk` directory for Pi
+extensions that construct configuration paths, including SuPi's global settings.
+
 For distributed omk packages installed with `omk install` (npm or git), runtime deps must be in `dependencies`. Package installation uses production installs (`npm install --omit=dev`) by default, so `devDependencies` are not available at runtime; when `npmCommand` is configured, git packages use plain `install` for compatibility with wrappers.
 
 Node.js built-ins (`node:fs`, `node:path`, etc.) are also available.
@@ -486,12 +497,12 @@ omk.on("session_shutdown", async (event, ctx) => {
 
 #### before_agent_start
 
-Fired after user submits prompt, before agent loop. Can inject a message and/or modify the system prompt.
+Fired before a run starts from a user prompt or an idle custom message with `triggerTurn`. `messageType: "user"` carries `prompt` and `images`; `messageType: "custom"` carries `message` instead. Check the discriminant before reading prompt-only fields. Both paths accept injected context and system-prompt overrides, including pending `deliverAs: "nextTurn"` context. The session is busy while these handlers run, so turn-triggering custom messages join the starting run and user messages require a delivery mode.
 
 ```typescript
 omk.on("before_agent_start", async (event, ctx) => {
-  // event.prompt - user's prompt text
-  // event.images - attached images (if any)
+  // event.messageType - "user" or "custom"
+  // user: event.prompt and event.images; custom: event.message
   // event.systemPrompt - current chained system prompt for this handler
   //   (includes changes from earlier before_agent_start handlers)
   // event.systemPromptOptions - structured options used to build the system prompt
@@ -527,8 +538,7 @@ Inside `before_agent_start`, `event.systemPrompt` and `ctx.getSystemPrompt()` bo
 retries a transient provider failure, the prompt produces several `agent_end`
 events, so `agent_end` alone does not mark the end of the work.
 
-`agent_settled` fires once, immediately after the `agent_end` that no retry
-follows. Use it to release per-run state exactly once.
+`agent_settled` fires once after retries, auto-compaction, queued continuations, and owned tool executions have settled. `event.aborted` identifies cancelled runs; OMK also retains `event.messages` for existing consumers. Turn-triggering input sent from this handler is deferred until the old run scope closes. User messages may set `expandPromptTemplates: true` to run a deferred extension command, as used by worktree session handoff.
 
 ```typescript
 omk.on("agent_start", async (_event, ctx) => {});
@@ -538,7 +548,7 @@ omk.on("agent_end", async (event, ctx) => {
 });
 
 omk.on("agent_settled", async (event, ctx) => {
-  // No retry follows. Safe to clear activity, finalize queues, or release locks.
+  // event.aborted - true for cancelled runs; no retry or queued continuation follows.
 });
 ```
 
@@ -1026,6 +1036,10 @@ omk.on("before_agent_start", (event, ctx) => {
   console.log(`System prompt length: ${prompt.length}`);
 });
 ```
+
+### ctx.isProjectTrusted()
+
+Returns whether this session's project-code trust gate is open. It follows the current `SettingsManager` decision, so withheld project code returns `false` and upstream Pi extensions can keep project-local configuration disabled. A runner without a session trust binding returns `false`. Like other context methods, it throws on a stale context. This mirrors upstream Pi's `ctx.isProjectTrusted()` (0.79.1+) without bypassing OMK's existing gate.
 
 ## ExtensionCommandContext
 

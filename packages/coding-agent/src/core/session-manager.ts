@@ -850,7 +850,8 @@ export class SessionManager {
 
 	private _assertAcceptedDurableHead(): void {
 		if (!this.sessionFile) return;
-		const current = sessionDurableHeadFromFile(this.sessionFile, this.leafId, loadEntriesFromFile(this.sessionFile));
+		// The full file digest and generation verify these already accepted identities without reparsing history.
+		const current = sessionDurableHeadFromFile(this.sessionFile, this.leafId, this.fileEntries);
 		if (
 			(current === null && existsSync(this.sessionFile)) ||
 			!sameDurableSessionHead(current, this.acceptedDurableHead)

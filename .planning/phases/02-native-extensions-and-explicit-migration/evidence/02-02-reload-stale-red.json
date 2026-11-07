@@ -1,0 +1,13 @@
+{
+  "command": "(cd packages/coding-agent && LIVE_E2E=0 node ../../node_modules/vitest/dist/cli.js --run test/native-extension-lifecycle.test.ts --reporter=junit --outputFile=../../.planning/phases/02-native-extensions-and-explicit-migration/evidence/02-02-reload-stale-red.xml)",
+  "exitCode": 1,
+  "output": "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<testsuites name=\"vitest tests\" tests=\"3\" failures=\"1\" errors=\"0\" time=\"1.561197559\">\n    <testsuite name=\"test/native-extension-lifecycle.test.ts\" timestamp=\"2026-11-05T13:00:47.329Z\" hostname=\"NucBoxEVO-X2\" tests=\"3\" failures=\"1\" errors=\"0\" skipped=\"0\" time=\"1.561197559\">\n        <testcase classname=\"test/native-extension-lifecycle.test.ts\" name=\"native extension lifecycle continuity &gt; retains native selection, metadata, trust and subscription cleanup through reload, with stale guards across new and cwd-changing resume\" time=\"1.511741349\">\n        </testcase>\n        <testcase classname=\"test/native-extension-lifecycle.test.ts\" name=\"native extension lifecycle continuity &gt; rejects captured APIs and contexts after native session reload\" time=\"0.04372598\">\n            <failure message=\"expected [Function] to throw an error\" type=\"AssertionError\">\nAssertionError: expected [Function] to throw an error\n\n- Expected:\nnull\n\n+ Received:\nundefined\n\n ❯ test/native-extension-lifecycle.test.ts:128:48\n            </failure>\n        </testcase>\n        <testcase classname=\"test/native-extension-lifecycle.test.ts\" name=\"native extension lifecycle continuity &gt; does not let native selection grant trust to an unapproved project\" time=\"0.0043478\">\n        </testcase>\n    </testsuite>\n</testsuites>\n",
+  "targetTest": "test/native-extension-lifecycle.test.ts#native extension lifecycle continuity > rejects captured APIs and contexts after native session reload",
+  "targetFile": "packages/coding-agent/test/native-extension-lifecycle.test.ts",
+  "expected": "Captured extension API and ctx throw stale errors after reload",
+  "actual": "captured.api.getActiveTools() returned instead of throwing",
+  "semanticAssessment": "Named test executed and failed on the planned stale guard assertion; two independent native lifecycle/trust controls passed and the report has zero errors. Existing session reload replaces its runner without invalidation. No out-of-scope source was changed.",
+  "reportPath": ".planning/phases/02-native-extensions-and-explicit-migration/evidence/02-02-reload-stale-red.xml",
+  "runStartedAt": "2026-11-05T13:00:47.329Z",
+  "reportModifiedAt": "2026-11-05T13:00:47.327Z"
+}

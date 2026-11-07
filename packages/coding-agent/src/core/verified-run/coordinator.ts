@@ -1,10 +1,8 @@
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import {
-	parseRunContract,
 	parseRunPublishCommand,
 	parseRunResumeCommand,
-	parseRunStartCommand,
 	parseRunTaskRetryCommand,
 	parseRunWriterRestartCommand,
 } from "omk-protocol";
@@ -34,6 +32,7 @@ import { deriveRunStatus, type RunStatus } from "./run-status.ts";
 import { withOwnedGitStatus } from "./run-status-owned.ts";
 import type { RunProjection } from "./run-types.ts";
 import type { VerifiedRunRuntime } from "./session-port.ts";
+import { parseApprovedRunStart } from "./start-preflight.ts";
 import {
 	assertStateOutsideWorkspace,
 	digestBytes,
@@ -207,13 +206,7 @@ export class RunCoordinator {
 	async start(input: unknown, request: unknown, approval: VerifiedRunApproval): Promise<RunProjection> {
 		const began = performance.now();
 		const clock = readRunClock();
-		const contract = parseRunContract(input);
-		const command = parseRunStartCommand(request);
-		const contractDigest = digestObject(contract);
-		if (approval.approvedContractDigest !== contractDigest) throw new VerifiedRunError("approval");
-		if (command.contractDigest !== contractDigest || command.runId !== contract.runId)
-			throw new VerifiedRunError("command_conflict");
-		if (approval.signal?.aborted) throw new VerifiedRunError("cancelled");
+		const { contract, command, contractDigest } = parseApprovedRunStart(input, request, approval);
 		assertStateOutsideWorkspace(this.stateRoot, contract.workspace.root);
 		const runPath = stateRunPath(this.stateRoot, contract.runId);
 		const existing = readRunJournal(runPath);

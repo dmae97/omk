@@ -1,0 +1,12 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v2.0.0 — Pi-independent OMK",
+  "phases": [],
+  "next": {
+    "command": "/gsd-progress --next",
+    "label": "Advance to the next step (plan phase 02)",
+    "reason": "Phase 2 of 6 — needs a plan"
+  },
+  "updated_at": "2026-11-05T08:52:06.112Z"
+}

@@ -65,8 +65,9 @@ describe("sync lock stale window", () => {
 
 	it.each(cases)("$name leaves a fresh lock alone after a 20 s wall-clock step", ({ target, attempt }) => {
 		const lockDir = holdLock(target, 0);
-		const realNow = Date.now.bind(Date);
-		vi.spyOn(Date, "now").mockImplementation(() => realNow() + 20_000);
+		// Freeze the simulated step: a real host resync must not add a second jump mid-retry.
+		const steppedNow = Date.now() + 20_000;
+		vi.spyOn(Date, "now").mockReturnValue(steppedNow);
 
 		expect(outcomeOf(() => attempt(dir))).toMatch(/ELOCKED|io-error/);
 		expect(existsSync(lockDir)).toBe(true);

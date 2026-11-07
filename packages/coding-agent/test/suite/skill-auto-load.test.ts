@@ -10,7 +10,11 @@ import { subagentWorkerEnv } from "../../examples/extensions/subagent/worker-env
 import { PROMPT_SKILLS_CUSTOM_TYPE, PromptSkillFreeze } from "../../src/core/prompt-skill-message.ts";
 import type { SessionEntry } from "../../src/core/session-manager.ts";
 import { SKILL_ADMISSION_ENTRY_TYPE } from "../../src/core/skill-admission-ledger.ts";
-import { gateSkillRead, restoreSkillAdmissionLedger } from "../../src/core/skill-admission-session.ts";
+import {
+	beginSkillAdmissionTurn,
+	gateSkillRead,
+	restoreSkillAdmissionLedger,
+} from "../../src/core/skill-admission-session.ts";
 import { autoLoadSkills, resetSkillAutoLoadWarning, skillAutoLoadActive } from "../../src/core/skill-auto-load.ts";
 import {
 	nextSkillAutoloadSeq,
@@ -161,7 +165,7 @@ describe("spec 117 auto-load (AL1–AL5)", () => {
 		]);
 	});
 
-	it("AL3: 9 admitted + 2 strong candidates => 1 loaded, 1 cap refusal without body", () => {
+	it("AL3: nine current admissions leave one slot; a new prompt can load the remaining candidate", () => {
 		const root = tmp();
 		const store = new Store();
 		const warm = Array.from({ length: 9 }, (_, i) => skill(root, `warm-${i}`, `warm helper ${i}`));
@@ -172,7 +176,12 @@ describe("spec 117 auto-load (AL1–AL5)", () => {
 		const content = autoLoadSkills({ store, skills: [a, b], query: "extract pdf invoice text", env: ON }) ?? "";
 		expect(store.records()).toHaveLength(10);
 		expect(content.match(/BODY-[AB]/g)).toHaveLength(1);
-		expect(content).toContain("<skill_candidate");
+		expect(content).toContain('<skill name="pdf-extract"');
+		expect(content).toContain('<skill_candidate name="pdf-invoice"');
+		beginSkillAdmissionTurn(store, ON);
+		expect(autoLoadSkills({ store, skills: [a, b], query: "extract pdf invoice text", env: ON })).toContain("BODY-B");
+		expect(store.records()).toHaveLength(11);
+		expect(restoreSkillAdmissionLedger(store.entries).used).toBe(1);
 	});
 
 	it("AL4: same skill on two prompts => one record, body sent once", () => {
@@ -181,7 +190,7 @@ describe("spec 117 auto-load (AL1–AL5)", () => {
 		expect(autoLoadSkills({ store, skills: [pdf], query: QUERY, env: ON })).toContain("PDF-BODY-SECRET");
 		expect(autoLoadSkills({ store, skills: [pdf], query: QUERY, env: ON })).toBe(undefined);
 		expect(store.records()).toHaveLength(1);
-		// AL6: resume rebuilds the count from the auto record; it is never reset.
+		// AL6: resume alone rebuilds the current prompt's count from the auto record.
 		expect(restoreSkillAdmissionLedger(store.entries).used).toBe(1);
 	});
 

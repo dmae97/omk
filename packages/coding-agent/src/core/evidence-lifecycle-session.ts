@@ -98,8 +98,8 @@ export class EvidenceSessionShutdown extends SessionShutdown {
 	}
 
 	override closeSession(...args: Parameters<SessionShutdown["closeSession"]>): Promise<void> {
-		const [source, owned, finalize] = args;
-		return super.closeSession(source, owned, this.dropThen(finalize));
+		const [source, owned, finalize, recover] = args;
+		return super.closeSession(source, owned, this.dropThen(finalize), recover);
 	}
 
 	override disposeIdle(finalize: () => void): void {

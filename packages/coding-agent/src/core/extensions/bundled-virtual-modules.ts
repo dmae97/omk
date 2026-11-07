@@ -16,10 +16,12 @@ import * as _bundledOmkAgentCore from "omk-agent-core";
 import * as _bundledOmkAgentCoreNode from "omk-agent-core/node";
 import * as _bundledOmkAi from "omk-ai";
 import * as _bundledOmkAiOauth from "omk-ai/oauth";
+import * as _bundledOmkAiPromptHash from "omk-ai/prompt-hash";
 import * as _bundledOmkTui from "omk-tui";
 import * as _bundledTypebox from "typebox";
 import * as _bundledTypeboxCompile from "typebox/compile";
 import * as _bundledTypeboxValue from "typebox/value";
+import { type PackageManifestDialect, resolvePackageManifestDialect } from "../package-manifest.ts";
 import { LEGACY_PI_RUNTIME_ALIASES, type PiCompatibilityTarget } from "../pi-compat.ts";
 
 /**
@@ -43,16 +45,22 @@ const LEGACY_PI_VIRTUAL_TARGETS: Record<Exclude<PiCompatibilityTarget, "coding-a
 };
 
 /** Modules available to extensions via virtualModules (compiled Bun binary only). */
-export function buildVirtualModules(): Record<string, unknown> {
+export function buildVirtualModules(dialect: PackageManifestDialect = "omk+pi"): Record<string, unknown> {
+	resolvePackageManifestDialect(dialect);
 	const bundledCodingAgent = _bundledCodingAgentNamespace;
 	const legacyTargets: Record<PiCompatibilityTarget, unknown> = {
 		...LEGACY_PI_VIRTUAL_TARGETS,
 		"coding-agent": bundledCodingAgent,
 	};
 	return {
-		...Object.fromEntries(
-			Object.entries(LEGACY_PI_RUNTIME_ALIASES).map(([specifier, target]) => [specifier, legacyTargets[target]]),
-		),
+		...(dialect === "omk+pi"
+			? Object.fromEntries(
+					Object.entries(LEGACY_PI_RUNTIME_ALIASES).map(([specifier, target]) => [
+						specifier,
+						legacyTargets[target],
+					]),
+				)
+			: {}),
 		typebox: _bundledTypebox,
 		"typebox/compile": _bundledTypeboxCompile,
 		"typebox/value": _bundledTypeboxValue,
@@ -64,6 +72,7 @@ export function buildVirtualModules(): Record<string, unknown> {
 		"omk-tui": _bundledOmkTui,
 		"omk-ai": _bundledOmkAi,
 		"omk-ai/oauth": _bundledOmkAiOauth,
+		"omk-ai/prompt-hash": _bundledOmkAiPromptHash,
 		"open-multi-agent-kit": bundledCodingAgent,
 	};
 }

@@ -173,14 +173,11 @@ export function serializeConversation(messages: Message[]): string {
 			if (content) parts.push(`[User]: ${content}`);
 		} else if (msg.role === "assistant") {
 			const textParts: string[] = [];
-			const thinkingParts: string[] = [];
 			const toolCalls: string[] = [];
 
 			for (const block of msg.content) {
 				if (block.type === "text") {
 					textParts.push(block.text);
-				} else if (block.type === "thinking") {
-					thinkingParts.push(block.thinking);
 				} else if (block.type === "toolCall") {
 					const args = block.arguments as Record<string, unknown>;
 					const argsStr = Object.entries(args)
@@ -190,9 +187,6 @@ export function serializeConversation(messages: Message[]): string {
 				}
 			}
 
-			if (thinkingParts.length > 0) {
-				parts.push(`[Assistant thinking]: ${thinkingParts.join("\n")}`);
-			}
 			if (textParts.length > 0) {
 				parts.push(`[Assistant]: ${textParts.join("\n")}`);
 			}

@@ -14,7 +14,7 @@ import { createAttachmentStrip } from "./components/attachment-strip.ts";
 import { ChatContainer } from "./components/chat-container.ts";
 import { createSessionMetadataLoaders } from "./components/session-selector-loaders.ts";
 import { planFirstRun } from "./first-run.ts";
-import { disposeInteractiveNextSuggestions, installInteractiveNextSuggestions } from "./next-suggestion-controller.ts";
+import { disposeInteractiveNextSuggestions, installInteractiveNextSuggestions } from "./next-suggestion-interactive.ts";
 import { PromptAttachmentDraft } from "./prompt-attachment-draft.ts";
 import { onThemedOutputStale, scheduleInteractiveStartupDeps } from "./startup-deps.ts";
 
@@ -155,11 +155,13 @@ import { guardExtensionRender } from "./components/extension-render-guard.ts";
 import { ExtensionSelectorComponent } from "./components/extension-selector.ts";
 import { FooterComponent } from "./components/footer.ts";
 import { abortHeadroomVersionProbe, repaintWhenHeadroomVersionResolves } from "./components/headroom-version-probe.ts";
+import { InputReadinessComponent } from "./components/input-readiness.ts";
 import { formatKeyText, keyDisplayText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.ts";
 import { LoginDialogComponent } from "./components/login-dialog.ts";
 import { ModelSelectorComponent } from "./components/model-selector.ts";
 import { OAuthAccountSelectorComponent } from "./components/oauth-account-selector.ts";
 import { type AuthSelectorProvider, OAuthSelectorComponent } from "./components/oauth-selector.ts";
+import { createResourceReloadBox } from "./components/resource-reload-box.ts";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.ts";
 import { SessionFailureComponent } from "./components/session-failure.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
@@ -171,6 +173,7 @@ import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
 import type { HybridStatusPanel } from "./hybrid-status-panel.ts";
+import { waitForInteractiveInput } from "./interactive-input.ts";
 import { runJevCommand } from "./jev-command.ts";
 import { pinnedRailNotice, railFits } from "./layout-class.ts";
 import { formatResourceDescription } from "./resource-description.ts";
@@ -879,6 +882,7 @@ export class InteractiveMode {
 		this.renderWidgets(); // Initialize with default spacer
 		this.ui.addChild(this.widgetContainerAbove);
 		this.ui.addChild(this.attachmentStripContainer);
+		this.ui.addChild(new InputReadinessComponent(() => this.onInputCallback !== undefined));
 		this.ui.addChild(this.editorContainer);
 		this.ui.addChild(this.widgetContainerBelow);
 		this.ui.addChild(this.noticeContainer);
@@ -1944,6 +1948,7 @@ export class InteractiveMode {
 				})();
 			},
 			getSystemPrompt: () => this.session.systemPrompt,
+			isProjectTrusted: () => extensionRunner.createContext().isProjectTrusted(),
 			getSubagentLaneAuthority: () => null,
 		});
 
@@ -2051,8 +2056,7 @@ export class InteractiveMode {
 	): void {
 		const placement = options?.placement ?? "aboveEditor";
 		const removeExisting = (map: Map<string, Component & { dispose?(): void }>) => {
-			const existing = map.get(key);
-			if (existing?.dispose) existing.dispose();
+			map.get(key)?.dispose?.();
 			map.delete(key);
 		};
 
@@ -3780,16 +3784,9 @@ export class InteractiveMode {
 	}
 
 	async getUserInput(): Promise<InteractivePromptPayload> {
-		const queuedPayload = this.pendingPromptPayloads.shift();
-		if (queuedPayload !== undefined) {
-			return queuedPayload;
-		}
-
-		return new Promise((resolve) => {
-			this.onInputCallback = (payload: InteractivePromptPayload) => {
-				this.onInputCallback = undefined;
-				resolve(payload);
-			};
+		return waitForInteractiveInput(this.pendingPromptPayloads, (callback) => {
+			this.onInputCallback = callback;
+			this.ui.requestRender();
 		});
 	}
 
@@ -5720,15 +5717,7 @@ export class InteractiveMode {
 
 		this.resetExtensionUI();
 
-		const reloadBox = new Container();
-		const borderColor = (s: string) => theme.fg("border", s);
-		reloadBox.addChild(new DynamicBorder(borderColor));
-		reloadBox.addChild(new Spacer(1));
-		reloadBox.addChild(
-			new Text(theme.fg("muted", "Reloading keybindings, extensions, skills, prompts, themes..."), 1, 0),
-		);
-		reloadBox.addChild(new Spacer(1));
-		reloadBox.addChild(new DynamicBorder(borderColor));
+		const reloadBox = createResourceReloadBox();
 
 		const previousEditor = this.editor;
 		this.editorContainer.clear();
@@ -5783,7 +5772,9 @@ export class InteractiveMode {
 				this.showError(`models.json error: ${modelsJsonError}`);
 			}
 			this.lastResourceReloadAt = new Date().toISOString();
-			this.showStatus("Reloaded keybindings, extensions, skills, prompts, themes");
+			this.showStatus(
+				"Reloaded keybindings, extensions, skills, prompts, themes. Core code is unchanged; restart OMK after a core update.",
+			);
 		} catch (error) {
 			dismissReloadBox(previousEditor as Component);
 			this.showError(`Reload failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -6524,9 +6515,7 @@ export class InteractiveMode {
 		this.footer.dispose();
 		this.footerDataProvider.dispose();
 		this.unsubscribeThemedOutputStale?.();
-		if (this.unsubscribe) {
-			this.unsubscribe();
-		}
+		this.unsubscribe?.();
 		if (this.isInitialized) {
 			if (finalLines === undefined) {
 				this.ui.stop();

@@ -975,7 +975,7 @@ function createClient(
 			},
 			sessionAffinityHeaders,
 			model.headers,
-			optionsHeaders,
+			model.provider === "kimi-coding" ? { ...optionsHeaders, "user-agent": "omk" } : optionsHeaders,
 		),
 	});
 

@@ -108,3 +108,9 @@ export {
 	parseTaskSpec,
 	parseWaiverRecord,
 } from "./validation.ts";
+export {
+	MAX_WORKBENCH_CONTROL_BYTES,
+	parseWorkbenchControlFrame,
+	WORKBENCH_CONTROL_VERSION,
+	type WorkbenchStartControl,
+} from "./workbench-control.ts";

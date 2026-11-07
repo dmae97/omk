@@ -7,19 +7,19 @@ import { streamSimpleOpenAIResponses } from "../src/providers/openai-responses.t
 import type { Api, Context, KnownProvider, Model, ThinkingLevel } from "../src/types.ts";
 
 /**
- * GPT-6.1 Sol (released 2026-09-29) and the GPT-6 family on the ChatGPT/Codex route.
+ * GPT-6.1 Sol/Terra and the GPT-6 family on the ChatGPT/Codex route.
  *
- * Checked 2026-09-30:
+ * Codex bundled catalog checked 2026-10-27; OpenAI API metadata checked 2026-09-30:
  * - OpenAI documents `gpt-6.1-sol`: 1,050,000 context, 128,000 output, effort
  *   low/medium/high/xhigh/max. `none` and `minimal` are not supported.
  *   https://developers.openai.com/api/docs/models/gpt-6.1-sol
  * - models.dev declares the same low-through-max ladder on the `openai`, `azure`,
  *   `opencode`, and `github-copilot` routes; OpenRouter declares it as mandatory.
- * - Codex bundled catalog (openai/codex b1e72963c3, codex-rs/models-manager/models.json):
- *   gpt-6.1-sol, gpt-6-astra, and gpt-6-sol list low..max plus `ultra`; gpt-6-luna stops at
- *   max. context_window is 272,000 and max_context_window 872,000; the client clamps a
+ * - Codex bundled catalog (openai/codex c587d6e54cb1, codex-rs/models-manager/models.json):
+ *   gpt-6.1-sol, gpt-6.1-terra, gpt-6-astra, and gpt-6-sol list low..max plus `ultra`; gpt-6-luna stops at
+ *   max. context_window is 272,000 (500,000 on 6.1 Terra) and max_context_window 872,000; the client clamps a
  *   configured window to the latter. `ultra` never reaches the wire: the client sends the
- *   model's `multi_agent_reasoning_effort` (xhigh for 6.1 Sol and Astra) or, when that is
+ *   model's `multi_agent_reasoning_effort` (xhigh for 6.1 Sol, 6.1 Terra and Astra) or, when that is
  *   unset, the highest listed non-ultra effort (max for gpt-6-sol).
  */
 
@@ -88,6 +88,7 @@ afterEach(() => {
 describe("GPT-6 family on the openai-codex route", () => {
 	it.each([
 		["gpt-6.1-sol", { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 }],
+		["gpt-6.1-terra", { input: 1, output: 5, cacheRead: 0.05, cacheWrite: 1.25 }],
 		["gpt-6-astra", { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 }],
 		["gpt-6-sol", { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 }],
 		["gpt-6-luna", { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 }],
@@ -104,9 +105,12 @@ describe("GPT-6 family on the openai-codex route", () => {
 		});
 	});
 
-	it.each(["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol"])("offers %s the Codex ladder through ultra", (id) => {
-		expect(getSupportedThinkingLevels(requireCodexModel(id))).toEqual(CODEX_ULTRA_LADDER);
-	});
+	it.each(["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-sol"])(
+		"offers %s the Codex ladder through ultra",
+		(id) => {
+			expect(getSupportedThinkingLevels(requireCodexModel(id))).toEqual(CODEX_ULTRA_LADDER);
+		},
+	);
 
 	it("stops gpt-6-luna at max because Codex lists no ultra for it", () => {
 		expect(getSupportedThinkingLevels(requireCodexModel("gpt-6-luna"))).toEqual(API_LADDER);
@@ -120,6 +124,8 @@ describe("GPT-6 family on the openai-codex route", () => {
 		["gpt-6.1-sol", "max", "max"],
 		["gpt-6.1-sol", "ultra", "xhigh"],
 		["gpt-6.1-sol", "minimal", "low"],
+		["gpt-6.1-terra", "low", "low"],
+		["gpt-6.1-terra", "ultra", "xhigh"],
 		["gpt-6-astra", "ultra", "xhigh"],
 		["gpt-6-sol", "ultra", "max"],
 		["gpt-6-luna", "max", "max"],

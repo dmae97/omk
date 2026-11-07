@@ -7,6 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
+import { createEventBus } from "../src/core/event-bus.ts";
 import { createExtensionRuntime, discoverAndLoadExtensions } from "../src/core/extensions/loader.ts";
 import { ExtensionRunner } from "../src/core/extensions/runner.ts";
 import type {
@@ -353,6 +354,19 @@ describe("ExtensionRunner", () => {
 			expect(tools).toHaveLength(1);
 			expect(tools[0]?.definition.description).toBe("first");
 		});
+
+		it("exposes active tools and markdown transformers on the runner for host-level callers", async () => {
+			// pi-fabric calls these on the runner itself (upstream pi API), not on the extension API.
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			runner.bindCore(
+				{ ...extensionActions, getActiveTools: () => ["read", "fabric_exec"] },
+				extensionContextActions,
+			);
+
+			expect(runner.getActiveTools()).toEqual(["read", "fabric_exec"]);
+			expect(runner.getMarkdownTransformers()).toEqual([]);
+		});
 	});
 
 	describe("command collection", () => {
@@ -477,6 +491,26 @@ describe("ExtensionRunner", () => {
 			const ctx = runner.createContext();
 			expect(ctx.mode).toBe("tui");
 			expect(ctx.hasUI).toBe(true);
+		});
+
+		it("reports the bound project trust decision and rejects a stale ctx", async () => {
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			expect(runner.createContext().isProjectTrusted()).toBe(false);
+			let trusted = false;
+			runner.bindCore(extensionActions, { ...extensionContextActions, isProjectTrusted: () => trusted });
+
+			const ctx = runner.createContext();
+			const commandCtx = runner.createCommandContext();
+			expect(ctx.isProjectTrusted()).toBe(false);
+			expect(commandCtx.isProjectTrusted()).toBe(false);
+			trusted = true;
+			expect(ctx.isProjectTrusted()).toBe(true);
+			expect(commandCtx.isProjectTrusted()).toBe(true);
+
+			runner.invalidate();
+			expect(() => ctx.isProjectTrusted()).toThrow(/stale/);
+			expect(() => commandCtx.isProjectTrusted()).toThrow(/stale/);
 		});
 	});
 
@@ -922,6 +956,48 @@ describe("ExtensionRunner", () => {
 
 			expect(runner.hasHandlers("tool_call")).toBe(true);
 			expect(runner.hasHandlers("agent_end")).toBe(false);
+		});
+	});
+	describe("startup event settlement", () => {
+		it("waits for session_start handlers before returning", async () => {
+			const extCode = `
+				export default function(pi) {
+					pi.on("session_start", async () => {
+						await new Promise((resolve) => setTimeout(resolve, 30));
+						pi.events.emit("startup-settled", {});
+					});
+				}
+			`;
+			fs.writeFileSync(path.join(extensionsDir, "slow-start.ts"), extCode);
+			const events = createEventBus();
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir, events);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			let settled = false;
+			events.on("startup-settled", () => {
+				settled = true;
+			});
+			await runner.emit({ type: "session_start", reason: "startup" });
+			expect(settled).toBe(true);
+		});
+
+		it("still waits for session_before_switch so cancel can stop the switch", async () => {
+			const extCode = `
+				export default function(pi) {
+					pi.on("session_before_switch", async () => {
+						await new Promise((resolve) => setTimeout(resolve, 30));
+						return { cancel: true };
+					});
+				}
+			`;
+			fs.writeFileSync(path.join(extensionsDir, "cancel-switch.ts"), extCode);
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const outcome = await runner.emit({
+				type: "session_before_switch",
+				reason: "resume",
+				targetSessionFile: path.join(tempDir, "next.jsonl"),
+			});
+			expect(outcome?.cancel).toBe(true);
 		});
 	});
 });

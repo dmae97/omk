@@ -1,14 +1,20 @@
 import { readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
+import { runtimeImportCheck } from "./package-doctor-runtime-imports.ts";
 import {
-	importedSpecifiers,
 	PACKAGE_DOCTOR_SUPPORTED_EVENTS,
 	scanPackageExtensionSources,
 	sourceFilesMatching,
 	subscribedEvents,
 } from "./package-doctor-source-scan.ts";
-import { type PackageManifestDiagnostic, type PackageManifestKey, resolvePackageManifest } from "./package-manifest.ts";
-import { isLegacyPiRuntimeImport, isSupportedLegacyPiRuntimeImport } from "./pi-compat.ts";
+import {
+	type PackageManifestDiagnostic,
+	type PackageManifestDialect,
+	type PackageManifestKey,
+	PackageManifestPolicyError,
+	resolvePackageManifest,
+	resolvePackageManifestDialect,
+} from "./package-manifest.ts";
 
 export interface PackageDoctorResources {
 	extensions: string[];
@@ -21,6 +27,7 @@ export interface PackageDoctorInput {
 	source: string;
 	packageRoot: string;
 	resources: PackageDoctorResources;
+	packageManifestDialect?: PackageManifestDialect;
 }
 
 export interface PackageDoctorCheck {
@@ -103,24 +110,6 @@ function check(
 	};
 }
 
-function runtimeImportCheck(unsupportedFiles: string[], aliasedFiles: string[]): PackageDoctorCheck {
-	if (unsupportedFiles.length > 0) {
-		return check("error", "runtime-imports", "Unsupported Pi runtime imports require a compatibility shim", [
-			...unsupportedFiles,
-			...aliasedFiles,
-		]);
-	}
-	if (aliasedFiles.length > 0) {
-		return check(
-			"warning",
-			"runtime-imports",
-			"Legacy Pi runtime imports will use OMK compatibility aliases",
-			aliasedFiles,
-		);
-	}
-	return check("pass", "runtime-imports", "No legacy Pi runtime imports detected");
-}
-
 function headlessUiCheck(uiFiles: string[], unguardedFiles: string[]): PackageDoctorCheck {
 	if (uiFiles.length === 0) return check("pass", "headless-ui", "No UI-only behavior detected");
 	if (unguardedFiles.length === 0) return check("pass", "headless-ui", "UI use is guarded for headless modes");
@@ -129,6 +118,7 @@ function headlessUiCheck(uiFiles: string[], unguardedFiles: string[]): PackageDo
 
 /** Static-only compatibility inspection. Extension modules are never imported or executed. */
 export function inspectPackageCompatibility(input: PackageDoctorInput): PackageDoctorResult {
+	const dialect = resolvePackageManifestDialect(input.packageManifestDialect);
 	const root = resolve(input.packageRoot);
 	let packageJson: unknown = {};
 	let packageJsonDiagnostics: PackageManifestDiagnostic[] = [];
@@ -137,18 +127,19 @@ export function inspectPackageCompatibility(input: PackageDoctorInput): PackageD
 	} catch {
 		packageJsonDiagnostics = [{ path: "package.json", message: "package.json must contain valid JSON" }];
 	}
-	const manifest = resolvePackageManifest(packageJson);
+	let manifest: ReturnType<typeof resolvePackageManifest>;
+	let manifestPolicyError = false;
+	try {
+		manifest = resolvePackageManifest(packageJson, dialect);
+	} catch (error) {
+		if (!(error instanceof PackageManifestPolicyError)) throw error;
+		manifestPolicyError = true;
+		manifest = resolvePackageManifest(packageJson, "omk+pi");
+		packageJsonDiagnostics.push({ path: "pi", message: error.message });
+	}
 	const manifestDiagnostics = [...packageJsonDiagnostics, ...manifest.diagnostics];
 	const { sources, skipped } = scanPackageExtensionSources(root, input.resources.extensions);
 	const allText = sources.map((source) => source.text).join("\n");
-	const aliasedImportFiles = sourceFilesMatching(sources, (text) =>
-		importedSpecifiers(text).some((specifier) => isSupportedLegacyPiRuntimeImport(specifier)),
-	);
-	const unsupportedImportFiles = sourceFilesMatching(sources, (text) =>
-		importedSpecifiers(text).some(
-			(specifier) => isLegacyPiRuntimeImport(specifier) && !isSupportedLegacyPiRuntimeImport(specifier),
-		),
-	);
 	const storageFiles = sourceFilesMatching(sources, (text) =>
 		/(?:~\/\.pi|["']\.pi["']|PI_CODING_AGENT_DIR|PI_TODO_PATH)/u.test(text),
 	);
@@ -174,15 +165,17 @@ export function inspectPackageCompatibility(input: PackageDoctorInput): PackageD
 		check(
 			manifestDiagnostics.length === 0 ? "pass" : "error",
 			"manifest",
-			manifestDiagnostics.length > 0
-				? "The selected package manifest is malformed"
-				: manifest.key === null
-					? "Using convention directories"
-					: `Using package.json ${manifest.key} manifest`,
+			manifestPolicyError
+				? 'Pi-only manifests require migration to an "omk" manifest'
+				: manifestDiagnostics.length > 0
+					? "The selected package manifest is malformed"
+					: manifest.key === null
+						? "Using convention directories"
+						: `Using package.json ${manifest.key} manifest`,
 			manifestDiagnostics.map((diagnostic) => diagnostic.path),
 		),
 		check(totalResources > 0 ? "pass" : "error", "resources", `${totalResources} package resource(s) resolved`),
-		runtimeImportCheck(unsupportedImportFiles, aliasedImportFiles),
+		runtimeImportCheck(sources, packageJson, dialect),
 		check(
 			storageFiles.length === 0 ? "pass" : "warning",
 			"storage-paths",
@@ -211,7 +204,7 @@ export function inspectPackageCompatibility(input: PackageDoctorInput): PackageD
 			skipped.length === 0 ? "pass" : "warning",
 			"scan-coverage",
 			skipped.length === 0
-				? `${sources.length} extension file(s) inspected statically`
+				? `${sources.length} extension file(s) inspected statically${dialect === "omk" ? "; bare/computed/transitive dependency coverage is incomplete" : ""}`
 				: `Static scan skipped ${skipped.length} file(s)`,
 			skipped,
 		),

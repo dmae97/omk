@@ -1,6 +1,6 @@
 /**
  * Spec 106 A1 in-process: AgentSession's single skill admission decision (flag `OMK_SKILL_ADMISSION`).
- * SK1 cap with refusal notices, SK5 resume + compaction + model switch keep the count, flag off writes nothing.
+ * SK1 per-prompt admission with dedupe, SK5 resume + compaction + model switch preserve records, flag off writes nothing.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -67,31 +67,30 @@ describe("spec 106 A1 session skill admission", () => {
 		expect(getUserTexts(harness).filter((t) => t.startsWith("<skill name="))).toHaveLength(12);
 	});
 
-	it("SK1: across explicit, steer and followUp paths at most 10 unique bodies are delivered, refusals are explicit", async () => {
+	it("SK1: separate prompts deliver more than 10 bodies while repeats within a prompt reuse their slot", async () => {
 		vi.stubEnv("OMK_SKILL_ADMISSION", "1");
 		const { harness } = await harnessWithSkills(14);
 		for (let i = 0; i < 6; i++) {
 			harness.setResponses([fauxAssistantMessage("ok")]);
 			await harness.session.prompt(`/skill:skill-${i} go`);
 		}
-		// re-invoking an admitted body takes no new slot
+		// A new prompt may reactivate an old body; repeating it within that prompt takes no extra slot.
 		harness.setResponses([fauxAssistantMessage("ok")]);
 		await harness.session.prompt("/skill:skill-0 again");
+		expect(harness.session.admitSkillBody("skill-0", "body of skill-0", "read")).toBe(true);
 		for (let i = 6; i < 14; i++) {
 			harness.setResponses([fauxAssistantMessage("ok")]);
 			await harness.session.prompt(`/skill:skill-${i} go`);
 		}
-		expect(harness.session.admitSkillBody("other", "body", "followUp")).toMatch(/cap 10/);
+		expect(harness.session.admitSkillBody("other", "body", "followUp")).toBe(true);
 		const entries = admissionEntries(harness.sessionManager);
-		expect(entries).toHaveLength(10);
+		expect(entries).toHaveLength(16);
 		const texts = getUserTexts(harness);
-		expect(texts.filter((t) => t.startsWith("<skill name="))).toHaveLength(11);
-		const notices = texts.filter((t) => t.startsWith("[skill admission]"));
-		expect(notices).toHaveLength(4);
-		expect(notices[0]).toContain('"skill-10" was not loaded: session skill cap 10 reached');
+		expect(texts.filter((t) => t.startsWith("<skill name="))).toHaveLength(15);
+		expect(texts.filter((t) => t.startsWith("[skill admission]"))).toHaveLength(0);
 	});
 
-	it("SK5: resume, compaction and model switch keep the admitted count (no reset to 0)", async () => {
+	it("SK5: resume, compaction and model switch preserve the current prompt's admissions", async () => {
 		vi.stubEnv("OMK_SKILL_ADMISSION", "1");
 		const { harness, skills } = await harnessWithSkills(11, { persistSession: true });
 		for (let i = 0; i < 10; i++) {
@@ -103,7 +102,7 @@ describe("spec 106 A1 session skill admission", () => {
 		sm.appendCompaction("summary", kept?.id ?? "", 1000);
 		const second = harness.models[1] ?? harness.getModel();
 		await harness.session.setModel(second);
-		expect(harness.session.admitSkillBody("skill-10", "new body", "explicit")).toMatch(/cap 10/);
+		expect(harness.session.admitSkillBody("skill-10", "new body", "explicit")).toBe(true);
 
 		const file = sm.getSessionFile();
 		expect(file).toBeTruthy();
@@ -112,14 +111,14 @@ describe("spec 106 A1 session skill admission", () => {
 			resourceLoader: loaderWith(skills),
 		});
 		harnesses.push(resumed);
-		expect(admissionEntries(resumed.sessionManager)).toHaveLength(10);
-		expect(resumed.session.admitSkillBody("skill-10", "new body", "steer")).toMatch(/cap 10/);
+		expect(admissionEntries(resumed.sessionManager)).toHaveLength(11);
+		expect(resumed.session.admitSkillBody("skill-10", "new body", "steer")).toBe(true);
 		resumed.setResponses([fauxAssistantMessage("ok")]);
 		await resumed.session.prompt("/skill:skill-10 go");
-		expect(getUserTexts(resumed).at(-1)).toContain('"skill-10" was not loaded');
+		expect(getUserTexts(resumed).at(-1)).toContain('<skill name="skill-10"');
 	});
 
-	it("SK7: a session without ledger records but more than 10 delivered bodies refuses new admissions", async () => {
+	it("SK7: a legacy session without ledger records admits more than 10 delivered bodies", async () => {
 		vi.stubEnv("OMK_SKILL_ADMISSION", "0");
 		const { harness } = await harnessWithSkills(12);
 		for (let i = 0; i < 11; i++) {
@@ -127,7 +126,7 @@ describe("spec 106 A1 session skill admission", () => {
 			await harness.session.prompt(`/skill:skill-${i} go`);
 		}
 		vi.stubEnv("OMK_SKILL_ADMISSION", "1");
-		expect(harness.session.admitSkillBody("skill-11", "x", "explicit")).toMatch(/legacy/);
+		expect(harness.session.admitSkillBody("skill-11", "x", "explicit")).toBe(true);
 	});
 
 	it("fail closed: an unknown schemaVersion or policyRevision record refuses every new skill (no restart from 0)", async () => {

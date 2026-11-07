@@ -66,6 +66,14 @@ preserves package-local setup files and source aliases; a root invocation must
 not silently test stale `dist` dependencies. The coding-agent project resolves
 `omk-adaptorch-wpl` to its source entrypoint during tests.
 
+The coding-agent test setup shares a clock anchored to monotonic elapsed time
+between `Date.now()`, `new Date()` and `Date()`, so host wall-clock resyncs cannot
+invalidate integration receipts or consume deadlines. Explicit dates and injected
+verification clocks remain unchanged; clock anomaly and stale-lock boundary tests
+still exercise rejection. Simulated clock steps use fixed timestamps rather than
+accumulating real host resyncs, and pruning fixtures use explicit ordered file
+mtimes instead of comparing the process clock to the filesystem clock.
+
 Package-local targeted commands continue to work, for example from
 `packages/coding-agent`:
 

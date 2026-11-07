@@ -5,6 +5,21 @@ export const PACKAGE_RESOURCE_KEYS = ["extensions", "skills", "prompts", "themes
 
 export type PackageResourceKey = (typeof PACKAGE_RESOURCE_KEYS)[number];
 export type PackageManifestKey = "omk" | "pi";
+export type PackageManifestDialect = "omk" | "omk+pi";
+
+export function resolvePackageManifestDialect(value: unknown = "omk+pi"): PackageManifestDialect {
+	if (value !== "omk" && value !== "omk+pi") {
+		throw new TypeError('packageManifestDialect must be "omk" or "omk+pi"');
+	}
+	return value;
+}
+
+export class PackageManifestPolicyError extends Error {
+	constructor() {
+		super('Pi-only package manifests are not allowed by packageManifestDialect "omk"');
+		this.name = "PackageManifestPolicyError";
+	}
+}
 
 export interface PackageResourceManifest {
 	extensions?: string[];
@@ -86,10 +101,15 @@ function parseManifest(
 	return { manifest, diagnostics };
 }
 
-/** Resolve package resources with the stable precedence omk > pi > convention. */
-export function resolvePackageManifest(value: unknown): PackageManifestResolution {
+/** Resolve package resources with authoritative omk precedence and an explicit compatibility boundary. */
+export function resolvePackageManifest(
+	value: unknown,
+	dialect: PackageManifestDialect = "omk+pi",
+): PackageManifestResolution {
+	resolvePackageManifestDialect(dialect);
 	const pkg = isRecord(value) ? value : {};
 	const present = { omk: hasOwn(pkg, "omk"), pi: hasOwn(pkg, "pi") };
+	if (!present.omk && present.pi && dialect === "omk") throw new PackageManifestPolicyError();
 	let key: PackageManifestKey | null = null;
 	if (present.omk) key = "omk";
 	else if (present.pi) key = "pi";
@@ -100,9 +120,13 @@ export function resolvePackageManifest(value: unknown): PackageManifestResolutio
 	return { key, manifest: parsed.manifest, diagnostics: parsed.diagnostics, present };
 }
 
-export function readPackageManifest(packageJsonPath: string): PackageManifestResolution | null {
+export function readPackageManifest(
+	packageJsonPath: string,
+	dialect: PackageManifestDialect = "omk+pi",
+): PackageManifestResolution | null {
+	let value: unknown;
 	try {
-		return resolvePackageManifest(JSON.parse(readFileSync(packageJsonPath, "utf8")) as unknown);
+		value = JSON.parse(readFileSync(packageJsonPath, "utf8")) as unknown;
 	} catch {
 		return {
 			key: null,
@@ -111,4 +135,5 @@ export function readPackageManifest(packageJsonPath: string): PackageManifestRes
 			present: { omk: false, pi: false },
 		};
 	}
+	return resolvePackageManifest(value, dialect);
 }

@@ -15,11 +15,13 @@ import { loadSkillsWithBundled } from "./bundled-skills.ts";
 import { createEventBus, type EventBus } from "./event-bus.ts";
 import commandSafetyGate from "./extensions/builtin/command-safety-gate.ts";
 import { HARNESS_FACTORIES } from "./extensions/builtin/harness-factories.ts";
+import { createTencentMemoryExtension } from "./extensions/builtin/tencent-memory.ts";
 import todoChecklist from "./extensions/builtin/todo-checklist.ts";
 import { createExtensionRuntime, loadExtensionFromFactory, loadExtensions } from "./extensions/loader.ts";
 import type { Extension, ExtensionFactory, ExtensionRuntime, LoadExtensionsResult } from "./extensions/types.ts";
 import { isLegacyAutoSkillResource } from "./legacy-resource-policy.ts";
 import { DefaultPackageManager, type PathMetadata } from "./package-manager.ts";
+import { type PackageManifestDialect, resolvePackageManifestDialect } from "./package-manifest.ts";
 import type { PromptTemplate } from "./prompt-templates.ts";
 import { loadPromptTemplates } from "./prompt-templates.ts";
 import { SettingsManager } from "./settings-manager.ts";
@@ -76,6 +78,7 @@ export interface DefaultResourceLoaderOptions {
 	agentDir: string;
 	settingsManager?: SettingsManager;
 	eventBus?: EventBus;
+	packageManifestDialect?: PackageManifestDialect;
 	additionalExtensionPaths?: string[];
 	additionalSkillPaths?: string[];
 	additionalPromptTemplatePaths?: string[];
@@ -114,6 +117,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private settingsManager: SettingsManager;
 	private eventBus: EventBus;
 	private packageManager: DefaultPackageManager;
+	private readonly packageManifestDialect: PackageManifestDialect;
 	private additionalExtensionPaths: string[];
 	private additionalSkillPaths: string[];
 	private additionalPromptTemplatePaths: string[];
@@ -166,6 +170,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private lastThemePaths: string[];
 
 	constructor(options: DefaultResourceLoaderOptions) {
+		this.packageManifestDialect = resolvePackageManifestDialect(options.packageManifestDialect);
 		this.cwd = resolvePath(options.cwd);
 		this.agentDir = resolvePath(options.agentDir);
 		this.settingsManager = options.settingsManager ?? SettingsManager.create(this.cwd, this.agentDir);
@@ -174,6 +179,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 			cwd: this.cwd,
 			agentDir: this.agentDir,
 			settingsManager: this.settingsManager,
+			packageManifestDialect: this.packageManifestDialect,
 		});
 		this.additionalExtensionPaths = options.additionalExtensionPaths ?? [];
 		this.additionalSkillPaths = options.additionalSkillPaths ?? [];
@@ -374,7 +380,9 @@ export class DefaultResourceLoader implements ResourceLoader {
 		// handlers (or keep stale extensions alive) on the shared event bus.
 		this.disposeExtensionEventSubscriptions();
 
-		const extensionsResult = await loadExtensions(extensionPaths, this.cwd, this.eventBus);
+		const extensionsResult = await loadExtensions(extensionPaths, this.cwd, this.eventBus, {
+			packageManifestDialect: this.packageManifestDialect,
+		});
 
 		// Keep exactly one visible task list. A user-installed `todo` extension owns
 		// the checklist UI; otherwise fall back to OMK's built-in `update_todo`.
@@ -418,6 +426,17 @@ export class DefaultResourceLoader implements ResourceLoader {
 				this.eventBus,
 				extensionsResult.runtime,
 				path,
+			);
+			extensionsResult.extensions.push(extension);
+		}
+
+		if (!this.noExtensions && !isDisabledByEnv(process.env.OMK_TENCENT_MEMORY)) {
+			const extension = await loadExtensionFromFactory(
+				createTencentMemoryExtension(this.agentDir),
+				this.cwd,
+				this.eventBus,
+				extensionsResult.runtime,
+				"<builtin:tencent-memory>",
 			);
 			extensionsResult.extensions.push(extension);
 		}

@@ -29,6 +29,8 @@ const ALLOWED_KEYS = new Set([
 	"parentTurnIndex",
 	"provider",
 	"model",
+	"candidateSource",
+	"displaySurface",
 	"settledAtEpochMs",
 	"quotaCheckedAtEpochMs",
 	"shownAtEpochMs",
@@ -90,6 +92,20 @@ describe("accept trace: tracker state machine", () => {
 		expect(
 			suggestionAcceptTracker(() => "s", "/nonexistent", { ...TRACE_ON, OMK_TURN_METRICS: "off" }),
 		).toBeUndefined();
+	});
+
+	it("carries candidate source and display surface as metadata only", () => {
+		const { t, records } = tracker();
+		t.shown({ ...meta, candidateSource: "cache", displaySurface: "inline-prefix" }, "secret suggestion");
+		t.accepted(50);
+		t.sent("secret suggestion", 60);
+		expect(records[0]).toMatchObject({
+			candidateSource: "cache",
+			displaySurface: "inline-prefix",
+			outcome: "accepted",
+			sentAs: "exact",
+		});
+		expect(JSON.stringify(records)).not.toContain("secret suggestion");
 	});
 
 	it("Tab then exact send ⇒ one accepted record with msToAccept", () => {

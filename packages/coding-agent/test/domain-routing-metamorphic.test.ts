@@ -84,36 +84,20 @@ describe("routing is invariant to meaning-preserving rewrites", () => {
 	});
 });
 
-describe("known asymmetry: keyword triggers count, regex triggers do not", () => {
+describe("independent trigger evidence", () => {
 	/**
-	 * `keywordMatcher` returns an occurrence count (capped at 3) while
-	 * `regexMatcher` returns 0 or 1, so repeating a request inflates a domain
-	 * scored by keywords and leaves a domain scored by regex flat. Whether the
-	 * signal came from a keyword or a regex is an authoring detail of the
-	 * registry, and it should not decide the route.
-	 *
-	 * Both repairs — counting regex hits, or making keywords boolean — change
-	 * live routing, and the corpus holds no repeated-keyword entry to judge them
-	 * against, so this documents the behaviour instead of asserting it is right.
-	 * If a change makes this test fail, that is the decision being made: record
-	 * the labelled evidence for it rather than updating the expectation.
+	 * Offline labelled-corpus A/B (54 entries): occurrence counts and boolean
+	 * keywords both had 53/54 single-line accuracy. With each request duplicated,
+	 * counted keywords flipped 2 routes and fell to 51/54; boolean keywords
+	 * flipped none and stayed 53/54. Repetition is therefore not new evidence.
 	 */
-	it("duplicating a request can move the route", () => {
+	it("duplicating a request does not move the route or its score", () => {
 		const task = "write unit tests for the auth module";
 		const once = routeDomain({ task });
 		const twice = routeDomain({ task: `${task} ${task}` });
 
-		expect(once.primary.id).toBe("qa-testing");
-		expect(twice.primary.id).toBe("backend-api");
-
-		// The QA signal is a regex and does not grow; the backend signal is a
-		// keyword and does.
-		const qaOnce = once.scores.find((score) => score.id === "qa-testing")?.score;
-		const qaTwice = twice.scores.find((score) => score.id === "qa-testing")?.score;
-		expect(qaTwice).toBe(qaOnce);
-
-		const backendOnce = once.scores.find((score) => score.id === "backend-api")?.score ?? 0;
-		const backendTwice = twice.scores.find((score) => score.id === "backend-api")?.score ?? 0;
-		expect(backendTwice).toBeGreaterThan(backendOnce);
+		expect(twice.primary.id).toBe(once.primary.id);
+		expect(twice.confidence).toBe(once.confidence);
+		expect(twice.scores).toEqual(once.scores);
 	});
 });

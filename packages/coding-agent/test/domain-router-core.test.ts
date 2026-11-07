@@ -20,9 +20,9 @@ const makeProfile = (triggers: DomainProfile["triggers"]): DomainProfile => ({
 const primaryId = (task: string, paths?: readonly string[]): string => routeDomain({ task, paths }).primary.id;
 
 describe("domain trigger matchers", () => {
-	it("keyword matcher counts repeated literal phrases and caps contributions at three", () => {
+	it("keyword matcher treats repeated literal phrases as one independent signal", () => {
 		const match = keywordMatcher("a+b");
-		expect(match("a+b a+b a+b a+b")).toBe(3);
+		expect(match("a+b a+b a+b a+b")).toBe(1);
 		expect(match("a+b and a-b")).toBe(1);
 	});
 
@@ -30,7 +30,7 @@ describe("domain trigger matchers", () => {
 		const match = keywordMatcher("orm");
 		expect(match("analyze the query performance")).toBe(0);
 		expect(match("typeorm model")).toBe(0);
-		expect(match("orm query orm")).toBe(2);
+		expect(match("orm query orm")).toBe(1);
 	});
 
 	it("regex matcher tests once regardless of repeated matches", () => {

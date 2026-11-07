@@ -385,6 +385,7 @@ render(width: number): string[] {
 
 Utilities:
 - `visibleWidth(str)` - Get display width (ignores ANSI codes)
+- `sliceByColumn(str, startCol, length, strict?)` - Extract visible terminal columns while preserving ANSI codes; strict mode excludes wide characters crossing the boundary
 - `truncateToWidth(str, width, ellipsis?)` - Truncate with optional ellipsis
 - `wrapTextWithAnsi(str, width)` - Word wrap preserving ANSI codes
 

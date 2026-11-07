@@ -19,6 +19,19 @@ export function resolveProvenance(argv, env = process.env) {
 	return provenanceSupported(env);
 }
 
+/** An existing version is reusable only when the registry artifact is this exact candidate. */
+export function decideExistingPublication(local, registry) {
+	if (!registry?.integrity || !local?.integrity) return "unverifiable";
+	if (registry.integrity !== local.integrity) return "conflict";
+	if (registry.gitHead && local.gitHead && registry.gitHead !== local.gitHead) return "conflict";
+	return "reuse";
+}
+
+/** Every lockstep package must resolve `latest` to the release version before release completion. */
+export function latestMismatches(version, latestByName) {
+	return Object.entries(latestByName).filter(([, latest]) => latest !== version).map(([name]) => name);
+}
+
 const isMain = Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 const packages = [
@@ -115,8 +128,23 @@ function assertBuildOutputExists(directory) {
 
 function validatePack(directory) {
 	const result = run("npm", ["pack", "--dry-run", "--ignore-scripts", "--json"], { capture: true, cwd: directory });
-	const packed = JSON.parse(result.stdout)[0];
+	let packed;
+	try {
+		packed = JSON.parse(result.stdout)[0];
+	} catch (error) {
+		throw new Error(`npm pack returned invalid JSON for ${directory}`, { cause: error });
+	}
 	console.log(`  ${packed.filename}: ${packed.files.length} files, ${packed.size} bytes packed, ${packed.unpackedSize} bytes unpacked`);
+	return packed;
+}
+
+function registryJson(args) {
+	const output = run("npm", ["view", ...args, "--json"], { capture: true }).stdout || "null";
+	try {
+		return JSON.parse(output);
+	} catch (error) {
+		throw new Error(`npm view returned invalid JSON for ${args.join(" ")}`, { cause: error });
+	}
 }
 
 function isPublished(name, version) {
@@ -176,7 +204,11 @@ if (isMain) {
 		}
 
 		if (published) {
-			console.log(`Skipping ${pkg.name}@${version}: already published\n`);
+			const local = { integrity: validatePack(pkg.directory).integrity, gitHead: run("git", ["rev-parse", "HEAD"], { capture: true }).stdout.trim() };
+			const registry = { integrity: registryJson([`${pkg.name}@${version}`, "dist.integrity"]), gitHead: registryJson([`${pkg.name}@${version}`, "gitHead"]) };
+			const decision = decideExistingPublication(local, registry);
+			if (decision !== "reuse") throw new Error(`${pkg.name}@${version} already exists with ${decision} identity; refusing to treat it as this candidate`);
+			console.log(`Reusing ${pkg.name}@${version}: registry identity matches this candidate\n`);
 			continue;
 		}
 
@@ -187,5 +219,10 @@ if (isMain) {
 		publishArgs.push("--ignore-scripts");
 		run("npm", publishArgs, { cwd: pkg.directory });
 		console.log();
+	}
+	if (!dryRun) {
+		const latest = Object.fromEntries(packages.map((pkg) => [pkg.name, registryJson([pkg.name, "dist-tags.latest"])]));
+		const mismatched = latestMismatches(versions[0], latest);
+		if (mismatched.length > 0) throw new Error(`npm latest does not match ${versions[0]} for: ${mismatched.join(", ")}`);
 	}
 }

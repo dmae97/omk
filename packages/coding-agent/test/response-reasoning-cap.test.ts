@@ -117,6 +117,18 @@ const config = (overrides: Partial<ResponseReasoningCapConfig> = {}): ResponseRe
 const chunk = "x".repeat(200); // 50 estimated tokens
 
 describe("response reasoning cap (spec 033)", () => {
+	it("retains confirmed billed usage when retry setup throws", async () => {
+		const first = fakeInner([{ thinking: [chunk, chunk, chunk, chunk] }]);
+		let calls = 0;
+		const inner: StreamFn = (...args) => {
+			if (calls++ > 0) throw new Error("retry setup failed");
+			return first.fn(...args);
+		};
+		const { result } = await run(createResponseReasoningCapStreamFn(inner, config()));
+		expect(result.stopReason).toBe("error");
+		expect(result.usage.cost.total).toBeCloseTo(0.03);
+		expect(result.diagnostics).toContainEqual(expect.objectContaining({ type: "usage_incomplete" }));
+	});
 	it("AC1 under cap: one call, events forwarded, no cap diagnostics", async () => {
 		const inner = fakeInner([{ thinking: [chunk], answer: "done" }]);
 		const { events, result } = await run(createResponseReasoningCapStreamFn(inner.fn, config()));

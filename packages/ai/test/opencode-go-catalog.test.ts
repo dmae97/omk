@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { getModels, getSupportedThinkingLevels } from "../src/models.ts";
 
-// OpenCode's live /inference/go/v1/models and models.dev, checked 2026-10-26.
+// OpenCode's live /inference/go/v1/models and models.dev, checked 2026-10-29.
+// space-bunny remains an explicitly preserved compatibility ID outside the live list.
 // omen-alpha is listed upstream but has no published tool/limit metadata.
 // gemini-4-argon replaced gemini-4-argon-contributor; longcat-2.5-preview-free left the live list.
 const IDS = [
@@ -10,34 +11,25 @@ const IDS = [
 	"deepseek-v4-pro",
 	"deepseek-v4.1-flash",
 	"gemini-4-argon",
-	"glm-5.1",
 	"glm-5.2",
 	"glm-5.3",
 	"glm-5.3-flash",
 	"gpt-5.6-luna",
 	"gpt-6-luna",
-	"grok-4.6",
 	"grok-4.7",
 	"hy3",
 	"hy4-preview",
 	"iceman-contributor-free",
-	"kimi-k2.6",
 	"kimi-k2.7-code",
 	"kimi-k3",
 	"kimi-k3.1-pro",
 	"longcat-2.0",
-	"mimo-v2.5",
-	"mimo-v2.5-pro",
 	"mimo-v2.6-flash",
 	"mimo-v2.6-pro",
-	"minimax-m2.5",
-	"minimax-m2.7",
 	"minimax-m3",
 	"minimax-m3.1-flash",
 	"muse-spark-1.2-contributor",
 	"muse-spark-1.3-contributor",
-	"qwen3.6-plus",
-	"qwen3.7-max",
 	"qwen3.7-plus",
 	"qwen3.8-flash",
 	"qwen3.8-max",
@@ -68,6 +60,15 @@ describe("OpenCode Go catalog", () => {
 			"deepseek-v4-flash-vision-exp",
 			"gemini-4-argon-contributor",
 			"longcat-2.5-preview-free",
+			"glm-5.1",
+			"grok-4.6",
+			"kimi-k2.6",
+			"mimo-v2.5",
+			"mimo-v2.5-pro",
+			"minimax-m2.5",
+			"minimax-m2.7",
+			"qwen3.6-plus",
+			"qwen3.7-max",
 		]) {
 			expect(
 				getModels("opencode-go").find((model) => model.id === id),
@@ -92,14 +93,12 @@ describe("OpenCode Go catalog", () => {
 		["glm-5.3", ["low", "high", "max"]],
 		["glm-5.3-flash", ["low", "high", "max"]],
 		["grok-4.7", ["low", "medium", "high", "xhigh"]],
-		["grok-4.6", ["low", "medium", "high", "xhigh"]],
 		["gpt-5.6-luna", ["off", "low", "medium", "high", "xhigh", "max"]],
 		["gpt-6-luna", ["off", "low", "medium", "high", "xhigh", "max"]],
 		["kimi-k3", ["max"]],
 		["kimi-k3.1-pro", ["low", "high", "max"]],
 		["minimax-m3.1-flash", ["low", "medium", "high", "xhigh", "max"]],
 		["kimi-k2.7-code", ["high"]],
-		["kimi-k2.6", ["off", "high"]],
 		["hy3", ["off", "low", "high"]],
 		["hy4-preview", ["off", "high"]],
 		["beam-free", ["low", "medium", "high", "xhigh", "max"]],
@@ -113,7 +112,7 @@ describe("OpenCode Go catalog", () => {
 		expect(getSupportedThinkingLevels(requireModel(id))).toEqual(levels);
 	});
 
-	it.each(["mimo-v2.5", "mimo-v2.5-pro", "mimo-v2.6-flash", "mimo-v2.6-pro", "longcat-2.0"])(
+	it.each(["mimo-v2.6-flash", "mimo-v2.6-pro", "longcat-2.0"])(
 		"advertises a toggle, not fictional effort tiers for %s",
 		(id) => {
 			const model = requireModel(id);

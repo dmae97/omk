@@ -14,6 +14,7 @@ import {
 	makeSkillAdmissionRecord,
 	SKILL_ADMISSION_CAP,
 	SKILL_ADMISSION_ENTRY_TYPE,
+	SKILL_ADMISSION_SCHEMA_VERSION,
 	SkillAdmissionLedger,
 	type SkillAdmissionRecord,
 	type SkillAdmissionSource,
@@ -29,6 +30,19 @@ export interface SkillAdmissionStore {
 	appendCustomEntry(customType: string, data?: unknown): unknown;
 }
 
+export const SKILL_ADMISSION_TURN_ENTRY_TYPE = "skill_admission_turn";
+
+/** New user prompts get ten slots; queued input and automatic continuations keep the current scope. */
+export function beginSkillAdmissionTurn(
+	sessionManager: SkillAdmissionStore,
+	env: NodeJS.ProcessEnv = process.env,
+): void {
+	if (!isSkillAdmissionEnabled(env)) return;
+	sessionManager.appendCustomEntry(SKILL_ADMISSION_TURN_ENTRY_TYPE, {
+		schemaVersion: SKILL_ADMISSION_SCHEMA_VERSION,
+	});
+}
+
 /** The slot identity of a skill body: SKILL.md without frontmatter, so every path (explicit, read, worker) dedupes. */
 export function readSkillFileBody(filePath: string): string {
 	return stripFrontmatter(readFileSync(filePath, "utf-8")).trim();
@@ -38,33 +52,24 @@ function refusalNotice(skillId: string, reason: string): string {
 	return `[skill admission] "${skillId}" was not loaded: ${reason}.`;
 }
 
-const SKILL_BLOCK = /^<skill name="([^"]+)" location="[^"]+">\n([\s\S]*?)\n<\/skill>(?:\n\n[\s\S]+)?$/;
-
-/** Rebuild from the whole session file: resume, compaction and model switch never reset the count. */
+/** Replay the latest prompt scope; resume, compaction and model switch alone never reset its count. */
 export function restoreSkillAdmissionLedger(entries: readonly SessionEntry[]): SkillAdmissionLedger {
 	const records: SkillAdmissionRecord[] = [];
-	const legacyBodies = new Set<string>();
 	let unknownRecord = false;
 	for (const entry of entries) {
+		if (entry.type === "custom" && entry.customType === SKILL_ADMISSION_TURN_ENTRY_TYPE) {
+			const data = entry.data as { schemaVersion?: unknown } | undefined;
+			if (data?.schemaVersion === SKILL_ADMISSION_SCHEMA_VERSION) records.length = 0;
+			else unknownRecord = true;
+		}
 		if (entry.type === "custom" && entry.customType === SKILL_ADMISSION_ENTRY_TYPE) {
 			if (isSkillAdmissionRecord(entry.data)) records.push(entry.data);
 			else unknownRecord = true;
-			continue;
-		}
-		if (entry.type !== "message" || entry.message.role !== "user") continue;
-		const content = entry.message.content;
-		const texts =
-			typeof content === "string" ? [content] : content.flatMap((p) => (p.type === "text" ? [p.text] : []));
-		for (const text of texts) {
-			const match = text.match(SKILL_BLOCK);
-			if (match) legacyBodies.add(`${match[1]}\u0000${skillBodyDigest(match[2] ?? "")}`);
 		}
 	}
 	const ledger = SkillAdmissionLedger.restore(records);
 	// Unknown schemaVersion/policyRevision: fail closed (refuse new admissions), never restart from 0.
 	if (unknownRecord) ledger.markUnknownRecord();
-	// SK7: only a session that never wrote a ledger is reconstructed from history.
-	if (records.length === 0 && !unknownRecord) ledger.markLegacy(legacyBodies.size);
 	return ledger;
 }
 
@@ -81,10 +86,9 @@ export function admitSkillBody(
 	const digest = skillBodyDigest(body);
 	const decision = ledger.reserve(skillId, digest);
 	if (!decision.ok) {
-		if (decision.reason === "cap") return `session skill cap ${SKILL_ADMISSION_CAP} reached`;
-		if (decision.reason === "unknown_record")
-			return "session has skill admission records of an unknown version (fail closed)";
-		return `session already holds more than ${SKILL_ADMISSION_CAP} skill bodies (legacy)`;
+		return decision.reason === "cap"
+			? `prompt skill cap ${SKILL_ADMISSION_CAP} reached; select more skills in the next user prompt`
+			: "session has skill admission records of an unknown version (fail closed)";
 	}
 	if (decision.reused) return true;
 	// reserve and commit run in one synchronous turn; the expanded text is handed straight to the request.

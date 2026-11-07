@@ -70,6 +70,7 @@ type HarnessSource = "grok-harness" | "devin-harness";
  */
 export class PromptSkillFreeze {
 	private frozen: FrozenChoice | undefined;
+	private previousOptions: BuildSystemPromptOptions | undefined;
 	/** Spec 050 skill-search decision, fixed tool and candidates for this session. */
 	readonly skillSearch = new SkillSearchGate();
 
@@ -81,8 +82,17 @@ export class PromptSkillFreeze {
 	}
 
 	/** R3 task start: the R6 plan plus, in an active session, one candidate message (not in workers, R7). */
-	async turn(input: PromptSkillTurnInput): Promise<PromptSkillTurn> {
+	async turn(input: PromptSkillTurnInput, continuation = false): Promise<PromptSkillTurn> {
+		if (
+			continuation &&
+			this.previousOptions &&
+			this.frozen?.base === input.base &&
+			sameNames(this.frozen.defaults, input.defaults)
+		) {
+			return { options: this.previousOptions, messages: [] };
+		}
 		const plan = this.planTurn(input);
+		this.previousOptions = plan.options;
 		const candidates = await this.skillSearch.candidates(input.budgetQuery, input.env, explicitSkillNames(input));
 		const withCandidates = candidates ? { ...plan, messages: [...plan.messages, candidates] } : plan;
 		const store = this.admission?.();

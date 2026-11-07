@@ -10,6 +10,9 @@ packages/*/dist-chrome/
 packages/*/dist-firefox/
 *.cpuprofile
 
+# Rust build artifacts
+/native/*/target/
+
 # Local browser captures and console logs (preserve locally; never ship).
 /.playwright-mcp/
 
@@ -209,3 +212,6 @@ collect.sh
 .kittify/workspaces/
 .worktrees/
 kitty-ops/ops-index.jsonl
+
+# Custom-version local files (contain personal config; keep local only)
+packages/coding-agent/test/provider-adopt-cli.test.ts

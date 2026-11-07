@@ -288,6 +288,13 @@ describe("parseArgs", () => {
 	});
 
 	describe("--extension flag", () => {
+		test.each(["omk", "omk+pi"])("parses the explicit %s package manifest dialect", (dialect) => {
+			for (const flags of [["--package-manifest-dialect", dialect], [`--package-manifest-dialect=${dialect}`]]) {
+				expect(parseArgs(flags)).toMatchObject({ packageManifestDialect: dialect, diagnostics: [] });
+				expect(parseArgs(flags).unknownFlags.size).toBe(0);
+			}
+		});
+
 		test("parses single --extension", () => {
 			const result = parseArgs(["--extension", "./my-extension.ts"]);
 			expect(result.extensions).toEqual(["./my-extension.ts"]);

@@ -2,7 +2,7 @@ import {
 	getSettingsListTheme,
 	type ExtensionAPI,
 	type ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+} from "open-multi-agent-kit";
 import {
 	Container,
 	type SelectItem,
@@ -11,7 +11,7 @@ import {
 	SettingsList,
 	Text,
 	truncateToWidth,
-} from "@earendil-works/pi-tui";
+} from "omk-tui";
 import { saveUserConfigPatch } from "./config.ts";
 import { isLifetimeActive, openLifecycleOverlay, type OverlayLifetime } from "./overlay-lifecycle.ts";
 import type { ThemeLike } from "./palette.ts";

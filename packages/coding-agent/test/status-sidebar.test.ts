@@ -239,6 +239,35 @@ describe("StatusSidebarComponent (pinned opencode-style rail)", () => {
 		expect(text).toContain("○");
 	});
 
+	it("shows whole-host CPU and RAM before the model and distinguishes the OMK process", () => {
+		const footer = {
+			...makeFooterData(),
+			getSystemCpuPercent: () => 82.9,
+			getSystemMemoryUsedBytes: () => 12 * 1024 ** 3,
+			getSystemMemoryTotalBytes: () => 16 * 1024 ** 3,
+		};
+		const sidebar = new StatusSidebarComponent(
+			() => makeSession() as never,
+			footer as never,
+			() => true,
+		);
+		const lines = sidebar.render(STATUS_SIDEBAR_WIDTH);
+		const plain = lines.map(stripAnsi).join("\n");
+		expect(plain).toMatch(/CPU.*82%/);
+		expect(plain).toMatch(/RAM.*75%/);
+		expect(plain).toContain("12.0G / 16.0G");
+		expect(plain).toContain("omk  cpu 37% rss 512M");
+		expect(plain.indexOf("SYSTEM")).toBeLessThan(plain.indexOf("MODEL"));
+		for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(STATUS_SIDEBAR_WIDTH);
+	});
+
+	it("keeps missing host samples unavailable instead of using the process CPU", () => {
+		const text = stripAnsi(renderRail(makeSession()).join("\n"));
+		expect(text).toMatch(/CPU.*\?/);
+		expect(text).toMatch(/RAM.*\?/);
+		expect(text).not.toMatch(/CPU.*37%/);
+	});
+
 	it("renders the live header elements (uptime + activity sparkline)", () => {
 		const sidebar = new StatusSidebarComponent(
 			() => makeSession() as never,

@@ -69,6 +69,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	vi.restoreAllMocks();
 	vi.unstubAllEnvs();
 	resetEvidenceLifecycleForTest();
 	for (const path of [...roots.splice(0), ...cleanup.splice(0)]) rmSync(path, { recursive: true, force: true });
@@ -166,10 +167,12 @@ describe("spec 106 D1 observe", () => {
 	});
 
 	it("existing pruners still delete as before and are recorded as removed-by-existing-policy", () => {
+		// The process clock may be ahead of filesystem mtimes after a host resync.
+		vi.spyOn(Date, "now").mockReturnValue(Date.now() + 14_700);
 		const cwd = tempRoot("omk-d1-prune-");
 		const files = [1, 2, 3].map((n) => {
 			const artifact = recall(cwd, "g");
-			const at = new Date(Date.now() - (10 - n) * 1000);
+			const at = new Date(n * 1000);
 			utimesSync(artifact.absolutePath, at, at);
 			return artifact.absolutePath;
 		});

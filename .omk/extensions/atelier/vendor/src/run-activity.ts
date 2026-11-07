@@ -1,6 +1,6 @@
 import nodePath from "node:path";
-import type { ExtensionEvent } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import type { ExtensionEvent } from "open-multi-agent-kit";
+import { truncateToWidth, visibleWidth } from "omk-tui";
 import { displayHomePath, displayPathWithin } from "./display-path.ts";
 import { isRecord, PLACEHOLDER, sanitizeInline } from "./text.ts";
 import type { DisplayValue, ResponsePerformance } from "./types.ts";

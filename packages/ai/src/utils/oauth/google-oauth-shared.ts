@@ -6,9 +6,10 @@
  * Originally adapted from the oh-my-pi project for Node.js (no Bun dependencies);
  * that tree is no longer vendored here (ADR-OMP-010).
  */
-import type { Server } from "node:http";
-import { oauthErrorHtml, oauthSuccessHtml } from "./oauth-page.ts";
+import { startGoogleOAuthCallback } from "./google-oauth-callback.ts";
 import type { OAuthCredentials, OAuthLoginCallbacks } from "./types.ts";
+
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 export interface GoogleOAuthFlowConfig {
 	clientId: string;
@@ -57,87 +58,22 @@ async function getUserEmail(accessToken: string): Promise<string | undefined> {
 	return undefined;
 }
 
-function startCallbackServer(
-	port: number,
-	callbackPath: string,
-): Promise<{
-	server: Server;
-	redirectUri: string;
-	waitForCode: () => Promise<{ code: string; state: string } | null>;
-	cancelWait: () => void;
-}> {
-	const hostname = "127.0.0.1";
-	const redirectUri = `http://${hostname}:${port}${callbackPath}`;
-
-	return getNodeApis().then(({ createServer }) => {
-		return new Promise((resolveServer) => {
-			let settled = false;
-
-			const server = createServer((req, res) => {
-				if (!req.url?.startsWith(callbackPath)) {
-					res.writeHead(404).end();
-					return;
-				}
-				const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-				const code = url.searchParams.get("code");
-				const state = url.searchParams.get("state");
-				const error = url.searchParams.get("error");
-
-				if (error || !code) {
-					res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
-					res.end(oauthErrorHtml);
-					return;
-				}
-
-				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-				res.end(oauthSuccessHtml);
-
-				if (!settled) {
-					settled = true;
-					setImmediate(() => {
-						resolveServer({
-							server,
-							redirectUri,
-							waitForCode: () => Promise.resolve({ code, state: state || "" }),
-							cancelWait: () => {},
-						});
-					});
-				}
-			});
-
-			server.listen(port, hostname, () => {
-				// Server ready
-			});
-
-			server.on("error", () => {
-				if (!settled) {
-					settled = true;
-					// Try random port fallback
-					const fallback = createServer(server.listeners("request")[0] as any);
-					fallback.listen(0, hostname, () => {
-						const addr = fallback.address();
-						const actualPort = typeof addr === "object" && addr ? addr.port : port;
-						const fallbackUri = `http://${hostname}:${actualPort}${callbackPath}`;
-						resolveServer({
-							server: fallback,
-							redirectUri: fallbackUri,
-							waitForCode: () => Promise.resolve(null),
-							cancelWait: () => {},
-						});
-					});
-				}
-			});
-		});
-	});
-}
-
 /** Run the full Google OAuth login flow. */
 export async function runGoogleOAuthLogin(
 	callbacks: OAuthLoginCallbacks,
 	config: GoogleOAuthFlowConfig,
 ): Promise<OAuthCredentials> {
+	callbacks.signal?.throwIfAborted();
+	if (config.tokenUrl !== GOOGLE_TOKEN_URL) throw new Error("Unsupported Google token endpoint");
 	const state = crypto.randomUUID();
-	const server = await startCallbackServer(config.callbackPort, config.callbackPath);
+	const { createServer } = await getNodeApis();
+	const server = await startGoogleOAuthCallback(
+		createServer,
+		config.callbackPort,
+		config.callbackPath,
+		state,
+		callbacks.signal,
+	);
 
 	const authParams = new URLSearchParams({
 		client_id: config.clientId,
@@ -151,30 +87,30 @@ export async function runGoogleOAuthLogin(
 
 	const authUrl = `${config.authUrl}?${authParams.toString()}`;
 
-	callbacks.onAuth({ url: authUrl, instructions: "Complete the sign-in in your browser." });
-	callbacks.onProgress?.("Waiting for browser authentication...");
-
-	let result: { code: string; state: string } | null;
+	let code: string | null;
 	try {
-		result = await server.waitForCode();
+		callbacks.onAuth({ url: authUrl, instructions: "Complete the sign-in in your browser." });
+		callbacks.onProgress?.("Waiting for browser authentication...");
+		code = await server.code;
 	} finally {
-		server.cancelWait();
-		server.server.close();
+		await server.close();
 	}
 
-	if (!result) {
+	callbacks.signal?.throwIfAborted();
+	if (!code) {
 		throw new Error("Login cancelled or timed out");
 	}
 
 	callbacks.onProgress?.("Exchanging authorization code for tokens...");
 
-	const tokenResponse = await fetch(config.tokenUrl, {
+	const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
 		method: "POST",
+		signal: callbacks.signal,
 		headers: { "Content-Type": "application/x-www-form-urlencoded" },
 		body: new URLSearchParams({
 			client_id: config.clientId,
 			client_secret: config.clientSecret,
-			code: result.code,
+			code,
 			grant_type: "authorization_code",
 			redirect_uri: server.redirectUri,
 		}),
@@ -216,7 +152,8 @@ export async function refreshGoogleToken(
 	refreshToken: string,
 	projectId: string,
 ): Promise<OAuthCredentials> {
-	const response = await fetch(config.tokenUrl, {
+	if (config.tokenUrl !== GOOGLE_TOKEN_URL) throw new Error("Unsupported Google token endpoint");
+	const response = await fetch(GOOGLE_TOKEN_URL, {
 		method: "POST",
 		headers: { "Content-Type": "application/x-www-form-urlencoded" },
 		body: new URLSearchParams({

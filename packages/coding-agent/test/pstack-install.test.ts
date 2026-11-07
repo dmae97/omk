@@ -39,6 +39,14 @@ afterEach(() => {
 const line = (message: string) => output.push(message);
 
 describe("bundled pstack project installer", () => {
+	it("allows a separately installed OMK pstack bundle in the user skill directory", () => {
+		const agentDir = join(root, "agent-home");
+		cpSync(join(bundle, "skills"), join(agentDir, "skills", "pstack"), { recursive: true });
+		cpSync(join(bundle, "UPSTREAM.json"), join(agentDir, "skills", "pstack", "UPSTREAM.json"));
+		installProjectPstack(root, bundle, false, line, undefined, agentDir);
+		expect(existsSync(join(root, ".omk", "skills", "pstack", "poteto-mode", "SKILL.md"))).toBe(true);
+	});
+
 	it("installs offline and the native skill loader finds poteto-mode and its principles", () => {
 		installProjectPstack(root, bundle, false, line);
 		const skillsDir = join(root, ".omk", "skills");

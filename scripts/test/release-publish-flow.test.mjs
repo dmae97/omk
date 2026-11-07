@@ -28,6 +28,29 @@ describe("publish.mjs provenance resolution", () => {
 	});
 });
 
+describe("publish.mjs registry identity gates", () => {
+	it("reuses only an identical existing artifact", async () => {
+		const { decideExistingPublication } = await import(join(root, "scripts", "publish.mjs"));
+		const local = { integrity: "sha512-a", gitHead: "abc" };
+		assert.equal(decideExistingPublication(local, local), "reuse");
+		assert.equal(decideExistingPublication(local, { ...local, integrity: "sha512-b" }), "conflict");
+		assert.equal(decideExistingPublication(local, { ...local, gitHead: "def" }), "conflict");
+		assert.equal(decideExistingPublication(local, {}), "unverifiable");
+	});
+
+	it("rejects incomplete latest promotion", async () => {
+		const { latestMismatches } = await import(join(root, "scripts", "publish.mjs"));
+		assert.deepEqual(latestMismatches("1.0.1", { a: "1.0.1", b: "1.0.0" }), ["b"]);
+	});
+
+	it("packed smoke installs every tarball and runs the installed bin", () => {
+		const source = readFileSync(join(root, "scripts", "packed-npm-smoke.mjs"), "utf8");
+		assert.match(source, /npm", \["pack"/);
+		assert.match(source, /--ignore-scripts/);
+		assert.match(source, /--version/);
+	});
+});
+
 describe("release.mjs preflight and README sync", () => {
 	it("computes target versions for bump types and explicit versions", async () => {
 		const { computeTargetVersion } = await import(join(root, "scripts", "release.mjs"));

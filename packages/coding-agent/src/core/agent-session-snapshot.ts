@@ -119,3 +119,13 @@ function freezeSnapshot<T>(value: T, seen = new WeakSet<object>()): T {
 export function createImmutableMessageSnapshot(message: AgentMessage): AgentMessage {
 	return freezeSnapshot(clonePlainSnapshot(message) as AgentMessage);
 }
+
+export function findLastAssistantMessage(
+	messages: readonly AgentMessage[],
+): Extract<AgentMessage, { role: "assistant" }> | undefined {
+	for (let index = messages.length - 1; index >= 0; index--) {
+		const message = messages[index];
+		if (message.role === "assistant") return message;
+	}
+	return undefined;
+}

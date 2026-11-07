@@ -3,6 +3,7 @@ import { applyCommandProjectTrustGate } from "../cli/project-trust-gate.ts";
 import { APP_NAME, getAgentDir } from "../config.ts";
 import { inspectPackageCompatibility, type PackageDoctorResult } from "../core/package-doctor.ts";
 import { DefaultPackageManager, type PackageInspection, type ResolvedResource } from "../core/package-manager.ts";
+import type { PackageManifestDialect } from "../core/package-manifest.ts";
 import { SettingsManager } from "../core/settings-manager.ts";
 
 export interface PackageDoctorCliOutcome {
@@ -18,7 +19,7 @@ export interface PackageDoctorCliDependencies {
 }
 
 function usage(): string {
-	return `Usage: ${APP_NAME} package doctor <source>\n\nStatically inspects package.json manifest precedence and extension compatibility.\nRemote npm packages are packed and boundedly extracted without dependency installation or lifecycle scripts.\nThe doctor never imports or executes extension modules.`;
+	return `Usage: ${APP_NAME} package doctor <source> [--package-manifest-dialect omk|omk+pi]\n\nStatically inspects package.json manifest precedence and extension compatibility.\nThe explicit target defaults to omk+pi; omk diagnoses native migration without loading modules.\nRemote npm packages are packed and boundedly extracted without dependency installation or lifecycle scripts.\nThe doctor never imports or executes extension modules.`;
 }
 
 function writeJson(writeLine: (line: string) => void, value: unknown): void {
@@ -59,7 +60,13 @@ async function defaultPrepare(source: string, cwd: string, agentDir: string): Pr
 	const settingsManager = SettingsManager.create(cwd, agentDir);
 	// Spec 053: `npm pack` must not run an untrusted project's npmCommand; never asks, warns on stderr.
 	await applyCommandProjectTrustGate(cwd, settingsManager);
-	const packageManager = new DefaultPackageManager({ cwd, agentDir, settingsManager });
+	// Preparation must expose legacy resources even when diagnosing a native target.
+	const packageManager = new DefaultPackageManager({
+		cwd,
+		agentDir,
+		settingsManager,
+		packageManifestDialect: "omk+pi",
+	});
 	return packageManager.preparePackageInspection(source);
 }
 
@@ -74,9 +81,23 @@ export async function runPackageDoctorCli(
 		writeLine(usage());
 		return { handled: true, exitCode: 0 };
 	}
-	if (rest.length !== 1 || !rest[0] || rest[0].startsWith("-")) return usageError(writeLine);
-
-	const source = rest[0];
+	let source: string | undefined;
+	let packageManifestDialect: PackageManifestDialect | undefined;
+	for (let i = 0; i < rest.length; i++) {
+		const arg = rest[i];
+		if (arg === "--package-manifest-dialect" || arg.startsWith("--package-manifest-dialect=")) {
+			const value =
+				arg === "--package-manifest-dialect" ? rest[++i] : arg.slice("--package-manifest-dialect=".length);
+			if (packageManifestDialect !== undefined || (value !== "omk" && value !== "omk+pi"))
+				return usageError(writeLine);
+			packageManifestDialect = value;
+		} else if (!arg || arg.startsWith("-") || source !== undefined) {
+			return usageError(writeLine);
+		} else {
+			source = arg;
+		}
+	}
+	if (source === undefined) return usageError(writeLine);
 	const cwd = dependencies.cwd ?? process.cwd();
 	const agentDir = dependencies.agentDir ?? getAgentDir();
 	let inspection: PackageInspection | undefined;
@@ -86,6 +107,7 @@ export async function runPackageDoctorCli(
 			source,
 			packageRoot: inspection.packageRoot,
 			resources: resourcePaths(inspection),
+			packageManifestDialect,
 		});
 		writeJson(writeLine, result);
 		return { handled: true, exitCode: result.compatible ? 0 : 1 };

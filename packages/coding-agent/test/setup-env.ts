@@ -14,10 +14,10 @@
  * hypervisor resyncs wall time. The authority store correctly refuses a
  * decreasing trusted clock (`clock_anomaly`), and the boundary suites cover
  * that refusal with explicit mocks — but integration tests that only need a
- * sane clock were flaking on host noise. Wrapping `Date.now` here keeps every
- * test's clock non-decreasing; tests that mock `Date.now` themselves
- * (vi.spyOn / fake timers) replace this wrapper, so their semantics are
- * unchanged.
+ * sane clock were flaking on host noise. Date.now and no-argument Date construction
+ * share an epoch anchored to monotonic elapsed time, avoiding resyncs in either
+ * direction. Explicit dates and injected verification clocks stay untouched, so
+ * anomaly tests can still exercise fail-closed behavior.
  *
  * Agent dir: `OMK_CODING_AGENT_DIR` (ENV_AGENT_DIR in src/config.ts) survives
  * the scrub on purpose. test.sh points it at a throwaway directory, so the
@@ -49,7 +49,22 @@ export function createMonotonicNow(source: () => number): () => number {
 	};
 }
 
-Date.now = createMonotonicNow(Date.now);
+/** Anchor wall time once; subsequent host resyncs cannot consume deadlines or reverse receipts. */
+export function createStableNow(wall: () => number, elapsed: () => number): () => number {
+	const epoch = wall();
+	const started = elapsed();
+	return createMonotonicNow(() => epoch + Math.floor(elapsed() - started));
+}
+
+Date.now = createStableNow(Date.now, () => Number(process.hrtime.bigint() / 1_000_000n));
+globalThis.Date = new Proxy(Date, {
+	apply(target) {
+		return new target(Date.now()).toString();
+	},
+	construct(target, args, newTarget) {
+		return Reflect.construct(target, args.length === 0 ? [Date.now()] : args, newTarget);
+	},
+});
 
 const PROVIDER_PREFIX =
 	/^(ANTHROPIC_|OPENAI_|GROK_|XAI_|DEEPSEEK_|GEMINI_|GOOGLE_API_KEY|MISTRAL_|GROQ_|CEREBRAS_|OPENROUTER_|AWS_|GH_TOKEN|GITHUB_TOKEN|GITLAB_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN)/;

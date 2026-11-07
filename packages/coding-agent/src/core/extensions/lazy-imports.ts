@@ -32,11 +32,13 @@ export async function createJitiLazily(...args: Parameters<CreateJiti>): Promise
 }
 
 /** `buildVirtualModules()` without a static `omk-tui` edge on the Node cold path. */
-export async function buildVirtualModulesLazily(): Promise<ReturnType<BundledVirtualModules["buildVirtualModules"]>> {
+export async function buildVirtualModulesLazily(
+	...args: Parameters<BundledVirtualModules["buildVirtualModules"]>
+): Promise<ReturnType<BundledVirtualModules["buildVirtualModules"]>> {
 	bundledVirtualModules ??= import("./bundled-virtual-modules.ts").catch((error: unknown) => {
 		bundledVirtualModules = undefined;
 		throw error;
 	});
 	const { buildVirtualModules } = await bundledVirtualModules;
-	return buildVirtualModules();
+	return buildVirtualModules(...args);
 }

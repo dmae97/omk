@@ -524,6 +524,11 @@ export class AuthorityStore {
 		return this.context.path;
 	}
 
+	/** Lifecycle only: current durable bytes/head still require independent inspection. */
+	get isReleased(): boolean {
+		return this.released;
+	}
+
 	get head(): AuthorityHead {
 		return this.accepted.head;
 	}
@@ -604,6 +609,7 @@ export class AuthorityStore {
 				closeSync(fd);
 			}
 			this.context.hooks.afterLedgerFsync?.();
+			if (this.released) throw new AuthorityStoreError("stale_owner");
 			publishHead(this.context, head);
 			const verified = loadCommitted(this.context, false, this.incrementalReplay ? current : undefined);
 			if (verified.parsed.lastSeq !== head.lastSeq || verified.parsed.lastHash !== head.lastHash)
@@ -657,6 +663,8 @@ export class AuthorityStore {
 		const authorizationDeadline = input.now + input.ttl;
 		if (!Number.isSafeInteger(authorizationDeadline)) throw new RangeError("authorization deadline overflow");
 		const incarnation = sequence(input.incarnation);
+		// Cached dispositions need the same owner/head fence as a new reservation.
+		this.commit([]);
 		if (this.state.incarnations.get(input.sessionId) !== incarnation)
 			throw new AuthorityStoreError("stale_incarnation");
 		if (!/^[a-f0-9]{64}$/.test(input.intentDigest)) throw new TypeError("intentDigest must be a sha256 hex digest");
@@ -669,29 +677,23 @@ export class AuthorityStore {
 		// one reports expiry; an in-flight grant is a duplicate only when the
 		// full intent matches — otherwise it is an ID collision (I09/I20).
 		const tombstone = this.state.tombstones.get(input.commandId);
-		if (tombstone) {
-			const grant = this.state.grants.get(tombstone.grantSequence);
-			if (!grant) throw new AuthorityStoreError("corrupt");
-			assertSameCommandMeaning(grant, {
+		const prior = tombstone
+			? this.state.grants.get(tombstone.grantSequence)
+			: [...this.state.grants.values()].find((grant) => grant.commandId === input.commandId);
+		if (tombstone && !prior) throw new AuthorityStoreError("corrupt");
+		if (prior) {
+			assertSameCommandMeaning(prior, {
 				intentDigest: input.intentDigest,
 				sessionId: input.sessionId,
 				incarnation,
 				claims,
 				weight,
 			});
-			if (tombstone.expiresAtMs <= input.now) return { status: "result-expired" };
-			return { status: "result", resultDigest: tombstone.resultDigest, token: grant.token };
-		}
-		for (const grant of this.state.grants.values()) {
-			if (grant.commandId !== input.commandId) continue;
-			assertSameCommandMeaning(grant, {
-				intentDigest: input.intentDigest,
-				sessionId: input.sessionId,
-				incarnation,
-				claims,
-				weight,
-			});
-			return { status: "granted", token: grant.token, duplicate: true };
+			if (tombstone) {
+				if (tombstone.expiresAtMs <= input.now) return { status: "result-expired" };
+				return { status: "result", resultDigest: tombstone.resultDigest, token: prior.token };
+			}
+			return { status: "granted", token: prior.token, duplicate: true };
 		}
 
 		if (this.pendingReconcile) throw new AuthorityStoreError("reconcile_pending");

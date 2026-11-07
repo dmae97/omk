@@ -149,6 +149,24 @@ session:
 | Server emits a non-JSON line | The line is dropped and decoding resynchronizes at the next newline. |
 | Server emits a frame larger than 16 MiB | One framing error is reported; the remainder is discarded until the next newline. |
 
+Native startup warnings preserve the `mcp.connect_failed` prefix and include a
+fixed diagnostic code plus a recovery hint. Arbitrary server error text is never
+used to infer these codes or copied into the warning:
+
+| Code | Check |
+| --- | --- |
+| `mcp.spawn_not_found` | Configured `command`, `PATH`, and `cwd`; either the executable or its working directory may be missing. |
+| `mcp.spawn_permission_denied` | Executable and directory permissions. Do not disable browser isolation. |
+| `mcp.spawn_failed` | The local process configuration. |
+| `mcp.server_exited` | The numeric exit code, launcher prerequisites, and local stderr. Raising the handshake timeout does not repair a process exit. |
+| `mcp.request_timeout` | `startup_timeout_sec` for initialization, `tool_timeout_sec` for catalog requests and health probes. |
+| `mcp.invalid_initialize_result` / `mcp.unsupported_protocol` | The command's stdio MCP support and compatible protocol revision. |
+
+Unknown errors retain the opaque `mcp.connect_failed (Error)` form. Raw stderr,
+commands, arguments and server payloads remain outside manager diagnostics.
+Failed servers are not restarted automatically; explicit health recovery retains
+the existing connection queue and process-retirement ownership.
+
 Low-level SDK callers can set `McpServerConfig.inheritEnv` to `false` to avoid
 inheriting the parent environment. Omitting it preserves the transport default;
 this option is not yet wired into the `mcp.json` parser. Client request and
@@ -170,7 +188,7 @@ local write does not prove that the server handled the request.
 ## Checking your configuration
 
 ```bash
-node scripts/mcp-smoke.mjs                       # connect everything, print status
+node scripts/mcp-smoke.mjs                       # connect enabled servers, print status
 node scripts/mcp-smoke.mjs github playwright     # only these
 OMK_MCP_SMOKE_HANDSHAKE_MS=120000 node scripts/mcp-smoke.mjs   # override slow handshakes
 ```
@@ -179,7 +197,24 @@ The script prints server state, tool counts, and bounded numeric version cores
 when available. The manager status omits free-form server-reported versions and
 strips prerelease/build suffixes before exposure. The low-level client's
 `serverInfo` remains raw; this format check is not general secret redaction.
-The script never prints configured env values.
+The script never prints configured env values or raw stderr. It skips disabled
+entries, uses the client's normal handshake default unless overridden, and waits
+for its direct MCP processes to close before exiting. Exit status is `1` if an
+enabled server fails, a requested name is unknown, or the override is invalid;
+otherwise it is `0`. The override must be a positive integer within Node's timer
+range. The probe starts the configured commands, so run it only for servers you
+intend to execute.
+
+### Browser servers that share a launcher
+
+If Chrome DevTools and Playwright fail together, first check whether their
+configuration delegates to the same browser/CDP launcher. `mcp.server_exited`
+means that launcher or server stopped, not that a longer handshake is needed.
+Check browser readiness and profile/port ownership locally. A running Chrome
+process alone does not prove that its CDP listener is ready. Do not kill personal
+browser processes, expose CDP beyond loopback, disable sandboxing, or switch
+profiles as an automatic recovery step. After correcting the prerequisite,
+recreate the intended session or request explicit SDK health recovery.
 
 ### Package and credential errors
 

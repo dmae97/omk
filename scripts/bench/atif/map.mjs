@@ -56,11 +56,30 @@ function metricsFrom(line) {
 	return metrics;
 }
 
+/** Attempt-level task cost. Missing usage is unknown, never free; repeated response IDs bill once. */
+export function costAccounting(lines) {
+	const seen = new Set();
+	const totals = { lead_cost_usd: 0, worker_cost_usd: 0, unknown_calls: 0, duplicate_calls: 0 };
+	for (const line of lines) {
+		const id = line?.responseId ? `${isWorker(line) ? "worker" : "lead"}:${line.responseId}` : undefined;
+		if (id && seen.has(id)) {
+			totals.duplicate_calls++;
+			continue;
+		}
+		if (id) seen.add(id);
+		if (typeof line?.costTotal !== "number" || !Number.isFinite(line.costTotal) || line.costTotal < 0) totals.unknown_calls++;
+		else totals[isWorker(line) ? "worker_cost_usd" : "lead_cost_usd"] += line.costTotal;
+	}
+	const known = totals.lead_cost_usd + totals.worker_cost_usd;
+	const coverage = lines.length === 0 ? "unknown" : totals.unknown_calls === 0 ? "complete" : "partial";
+	return { ...totals, task_total_cost_usd: coverage === "complete" ? known : null, known_cost_usd: known, cost_coverage: coverage };
+}
+
 /**
  * @param {{ events: object[], runLog: Record<string, object[]>, agentVersion: string,
- *   inputHashes?: object }} input
+ *   inputHashes?: object, runtimeIdentity?: object }} input
  */
-export function buildTrajectory({ events, runLog, agentVersion, inputHashes = {} }) {
+export function buildTrajectory({ events, runLog, agentVersion, inputHashes = {}, runtimeIdentity = {} }) {
 	const steps = [];
 	const eventLog = []; // one entry per input event, in order
 	let header;
@@ -242,6 +261,12 @@ export function buildTrajectory({ events, runLog, agentVersion, inputHashes = {}
 		extra: {
 			omk: {
 				export: { exporterVersion: EXPORTER_VERSION, inputHashes },
+				runtimeIdentity: {
+					version: agentVersion,
+					sourceSha: runtimeIdentity.sourceSha ?? null,
+					artifactDigest: runtimeIdentity.artifactDigest ?? null,
+				},
+				costAccounting: costAccounting(runLog[LLM_CALL] ?? []),
 				header: header ?? null,
 				sessionInfo: sessionInfo
 					? omit(sessionInfo, typeof sessionInfo.systemPrompt === "string" ? ["systemPrompt", "tools"] : ["tools"])
