@@ -93,6 +93,24 @@ describe("Codex SSE framing", () => {
 		).result();
 	};
 
+	it.each(["x-extension: value\n\n", "retry: nope\n\n"])(
+		"ignores %j in its own read and still completes the turn",
+		async (ignored) => {
+			const encoder = new TextEncoder();
+			const reads = [ignored, events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")];
+			const body = new ReadableStream<Uint8Array>({
+				start(controller) {
+					for (const read of reads) controller.enqueue(encoder.encode(read));
+					controller.close();
+				},
+			});
+			const result = await finish(body);
+			expect(result.errorMessage).toBeUndefined();
+			expect(result.stopReason).toBe("stop");
+			expect(result.content).toEqual([expect.objectContaining({ type: "text", text: "안녕하세요" })]);
+		},
+	);
+
 	it("fails the turn on invalid event JSON", async () => {
 		const result = await finish(`data: ${JSON.stringify(events[0])}\n\ndata: {nope\n\n`);
 		expect(result.stopReason).toBe("error");
