@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- The OpenAI Codex SSE transport now accepts a bare CR as a line terminator, as the SSE spec allows. Before, it split events only on `\n\n` or `\r\n\r\n`, so a CR-framed stream delivered no events and the turn never finished. Framing now uses `eventsource-parser` 4.1.3 (MIT, new dependency). JSON validation, `[DONE]` handling, abort and stream cleanup are unchanged. A line that keeps growing across reads without completing an event now fails the turn with `Codex SSE buffered over 16777216 characters without an event` instead of buffering without limit; an event that arrives within one read is not limited.
+
 ## [1.5.10] - 2026-10-27
 
 ## [1.5.9] - 2026-10-26

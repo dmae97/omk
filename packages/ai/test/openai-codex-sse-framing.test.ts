@@ -80,4 +80,39 @@ describe("Codex SSE framing", () => {
 			});
 		}
 	}
+
+	const finish = async (body: string | ReadableStream<Uint8Array>) => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(body, { headers: { "content-type": "text/event-stream" } })),
+		);
+		return streamOpenAICodexResponses(
+			model,
+			{ messages: [] },
+			{ apiKey: `aaa.${payload}.bbb`, transport: "sse" },
+		).result();
+	};
+
+	it("fails the turn on invalid event JSON", async () => {
+		const result = await finish(`data: ${JSON.stringify(events[0])}\n\ndata: {nope\n\n`);
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toMatch(/^Invalid Codex SSE JSON: /);
+	});
+
+	it("fails the turn instead of buffering an unterminated line past 16 MiB characters", async () => {
+		const mib = new TextEncoder().encode("x".repeat(1024 * 1024));
+		let reads = 0;
+		const body = new ReadableStream<Uint8Array>({
+			pull(controller) {
+				if (reads === 0) controller.enqueue(new TextEncoder().encode('data: "'));
+				else if (reads <= 20) controller.enqueue(mib);
+				else controller.close();
+				reads++;
+			},
+		});
+		const result = await finish(body);
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toBe("Codex SSE buffered over 16777216 characters without an event");
+		expect(reads).toBeLessThanOrEqual(18);
+	});
 });
