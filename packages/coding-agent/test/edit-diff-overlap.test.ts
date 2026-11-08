@@ -42,6 +42,13 @@ describe("edit tool rejects oldText that matches at overlapping positions", () =
 		expect(await runEdit("aaab", [{ oldText: "aaa", newText: "Z" }])).toEqual({ ok: true, file: "Zb" });
 	});
 
+	it("keeps the earlier result for whitespace-only oldText, which normalizes to an empty needle", async () => {
+		const result = await runEdit("a b", [{ oldText: " ", newText: "_" }]);
+		expect(result).toMatchObject({ ok: false, file: "a b" });
+		expect(result.ok === false && result.error).toMatch(/Found 2 occurrences/);
+		expect(await runEdit("ab ", [{ oldText: " ", newText: "_" }])).toEqual({ ok: true, file: "ab_" });
+	});
+
 	it("names the overlapping edit in a multi-edit call and writes nothing", async () => {
 		const file = "head\naaaa\n";
 		const result = await runEdit(file, [
