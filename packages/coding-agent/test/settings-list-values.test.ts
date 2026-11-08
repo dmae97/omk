@@ -51,8 +51,8 @@ describe("parseSubscriptionUsageProviders", () => {
 		expect(parseSubscriptionUsageProviders([" openai"])).toEqual([" openai"]);
 	});
 
-	it.each([[""], ["  "]])("rejects empty or whitespace-only entries %j", (value) => {
-		expect(() => parseSubscriptionUsageProviders(value)).toThrow(new Error(PROVIDERS_ERROR));
+	it.each(["", "  "])("rejects the empty or whitespace-only entry %j", (entry) => {
+		expect(() => parseSubscriptionUsageProviders([entry])).toThrow(new Error(PROVIDERS_ERROR));
 	});
 
 	it("rejects a non-array value", () => {
