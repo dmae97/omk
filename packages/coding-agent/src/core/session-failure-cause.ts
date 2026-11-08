@@ -16,9 +16,8 @@ import { requestAdmissionFailure } from "./request-admission-policy.ts";
  *     so guidance points at retry/model-switch rather than transcript sanitize.
  */
 
-import { type AssistantMessage, isContextOverflow } from "omk-ai";
+import { type AssistantMessage, hasStatusCodeLike, isContextOverflow } from "omk-ai";
 import {
-	hasStatusCodeLike,
 	isClaudeCodeVersionTooOldMessage,
 	isCodexChatgptAccountUnsupportedModelMessage,
 	isPermanentInvalidRequestMessage,

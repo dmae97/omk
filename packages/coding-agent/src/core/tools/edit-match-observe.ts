@@ -8,7 +8,7 @@
 import { createHash } from "node:crypto";
 import { normalize } from "node:path";
 import { appendRunLog, RUN_LOG_DIR_ENV, type RunLogValue, runLogRole } from "../run-log.ts";
-import { normalizeForFuzzyMatch, normalizeToLF } from "./edit-diff.ts";
+import { countFuzzyOccurrences, normalizeForFuzzyMatch, normalizeToLF } from "./edit-diff.ts";
 
 export const EDIT_MATCH_RUN_LOG = "edit-match";
 /** Set by the subagent worker env (`subagentWorkerEnv`) to the spawning session's id. */
@@ -30,10 +30,6 @@ interface EditLike {
 /** sha256 of the normalized path, first 16 hex chars. */
 export function editPathHash(path: string): string {
 	return createHash("sha256").update(normalize(path)).digest("hex").slice(0, 16);
-}
-
-function countFuzzy(content: string, oldText: string): number {
-	return normalizeForFuzzyMatch(content).split(normalizeForFuzzyMatch(oldText)).length - 1;
 }
 
 /** True when oldText matches a run of whole file lines once each line is trimmed on both sides. */
@@ -64,7 +60,7 @@ export function classifyEditMatchFailure(
 	for (let i = 0; i < edits.length; i++) {
 		const oldText = normalizeToLF(edits[i].oldText);
 		if (oldText.length === 0) return { reason: "unknown", editIndex: i };
-		const occurrences = countFuzzy(content, oldText);
+		const occurrences = countFuzzyOccurrences(content, oldText);
 		if (occurrences > 1) return { reason: "multiple_matches", editIndex: i };
 		if (occurrences === 1 || content.includes(oldText)) continue;
 		return { reason: matchesIgnoringIndent(content, oldText) ? "indent_only" : "not_found", editIndex: i };

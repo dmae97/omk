@@ -19,6 +19,7 @@
 
 ### Fixed
 
+- The `edit` tool now rejects an `oldText` that matches at overlapping positions instead of replacing the first one. Replacing `aaa` in `aaaa` used to write `Za`; it now leaves the file unchanged and returns the existing `Found 2 occurrences ... Please provide more context to make it unique.` error. The same applies to CRLF, BOM and fuzzy-normalized matches and to each entry of `edits[]`, and the run-log failure class for these calls is now `multiple_matches`. Unique matches are unaffected.
 - An extension component whose `render()` or `invalidate()` throws no longer breaks the TUI. The failed instance shows `Extension render failed` and is not called again; tool rows keep their raw result, custom messages keep their content, a failed custom editor restores the default editor, and failed custom UI rejects instead of leaving its tool pending. See [extensions](docs/extensions.md#fallback).
 
 ## [1.5.10] - 2026-10-27
