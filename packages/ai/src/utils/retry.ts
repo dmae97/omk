@@ -1,5 +1,6 @@
 import type { AssistantMessage } from "../types.ts";
 import { retryBackoffDelayMs } from "./retry-backoff.ts";
+import { hasStatusCodeLike } from "./status-code.ts";
 
 function buildProviderErrorPattern(patterns: readonly string[]): RegExp {
 	return new RegExp(patterns.join("|"), "i");
@@ -36,26 +37,17 @@ const NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN = buildProviderErrorPattern([
 	"billing",
 ]);
 
+// A bare digit run used to count here, so "maximum is 5000 characters" retried a 400.
+// Cloudflare origin errors 520-527 (observed Explabs/1017 shape "520 status code (no body)")
+// are transient like 502-504.
+const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527] as const;
+
 const RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
-	// Generic provider load, HTTP status, and server-side transient failures.
+	// Generic provider load and server-side transient failures. Status codes are
+	// matched by RETRYABLE_STATUS_CODES with context, not as bare digits here.
 	"overloaded",
 	"rate.?limit",
 	"too many requests",
-	"429",
-	"500",
-	"502",
-	"503",
-	"504",
-	// Cloudflare origin errors. Observed Explabs/1017 shape:
-	// "520 status code (no body)". 521-527 are the same transient family.
-	"520",
-	"521",
-	"522",
-	"523",
-	"524",
-	"525",
-	"526",
-	"527",
 	"gateway request failed",
 	"gateway overloaded",
 	"gateway draining",
@@ -261,5 +253,7 @@ export function isRetryableAssistantError(message: AssistantMessage): boolean {
 	if (message.stopReason !== "error" || !message.errorMessage) return false;
 	const errorMessage = message.errorMessage;
 	if (NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN.test(errorMessage)) return false;
-	return RETRYABLE_PROVIDER_ERROR_PATTERN.test(errorMessage);
+	return (
+		RETRYABLE_PROVIDER_ERROR_PATTERN.test(errorMessage) || hasStatusCodeLike(errorMessage, RETRYABLE_STATUS_CODES)
+	);
 }
