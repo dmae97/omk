@@ -28,7 +28,8 @@ const events = [
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Codex SSE framing", () => {
-	for (const newline of ["\n", "\r\n"]) {
+	// The SSE spec allows LF, CRLF and a bare CR as line terminators.
+	for (const newline of ["\n", "\r\n", "\r"]) {
 		for (const byteChunks of [false, true]) {
 			it(`delivers ${JSON.stringify(newline)} events before EOF (${byteChunks ? "byte" : "whole"} chunks)`, async () => {
 				let cancelled = false;
