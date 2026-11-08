@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- `hasStatusCodeLike(text, codes)` is exported. It matches a status code only next to a transport word (`HTTP 503`, `status code 502`, `429 Too Many Requests`), so a number inside a message body does not count. It moved here from `open-multi-agent-kit`, which now imports it.
+
+### Fixed
+
+- `retryAssistantCall` and `isRetryableAssistantError`, which compaction and branch summaries use, no longer retry an error because any digit run in it reads as a status code. `400 invalid input: maximum is 5000 characters` and `HTTP 400 limit 1500 tokens` used to call the provider again and now fail at once. `503 Service Unavailable`, `520 status code (no body)`, `429 Too Many Requests`, `Error: 503` and `Request failed with status code 502` still retry. This matches the agent-turn classifier in `open-multi-agent-kit`.
+
 ## [1.5.10] - 2026-10-27
 
 ## [1.5.9] - 2026-10-26
