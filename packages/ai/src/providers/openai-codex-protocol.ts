@@ -32,8 +32,9 @@ export async function* parseSSE(response: Response, signal?: AbortSignal): Async
 	const parser = createParser({
 		maxBufferSize: MAX_CODEX_SSE_BUFFER_CHARS,
 		onEvent: (event) => pending.push(event),
+		// Unknown fields and a bad `retry` value also arrive here; SSE ignores them, as the old parser did.
 		onError: (error) => {
-			overflow = error;
+			if (error.type === "max-buffer-size-exceeded") overflow = error;
 		},
 	});
 	const onAbort = () => {
