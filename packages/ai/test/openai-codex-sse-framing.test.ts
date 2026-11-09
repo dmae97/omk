@@ -28,7 +28,8 @@ const events = [
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Codex SSE framing", () => {
-	for (const newline of ["\n", "\r\n"]) {
+	// The SSE spec allows LF, CRLF and a bare CR as line terminators.
+	for (const newline of ["\n", "\r\n", "\r"]) {
 		for (const byteChunks of [false, true]) {
 			it(`delivers ${JSON.stringify(newline)} events before EOF (${byteChunks ? "byte" : "whole"} chunks)`, async () => {
 				let cancelled = false;
@@ -79,4 +80,57 @@ describe("Codex SSE framing", () => {
 			});
 		}
 	}
+
+	const finish = async (body: string | ReadableStream<Uint8Array>) => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(body, { headers: { "content-type": "text/event-stream" } })),
+		);
+		return streamOpenAICodexResponses(
+			model,
+			{ messages: [] },
+			{ apiKey: `aaa.${payload}.bbb`, transport: "sse" },
+		).result();
+	};
+
+	it.each(["x-extension: value\n\n", "retry: nope\n\n"])(
+		"ignores %j in its own read and still completes the turn",
+		async (ignored) => {
+			const encoder = new TextEncoder();
+			const reads = [ignored, events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")];
+			const body = new ReadableStream<Uint8Array>({
+				start(controller) {
+					for (const read of reads) controller.enqueue(encoder.encode(read));
+					controller.close();
+				},
+			});
+			const result = await finish(body);
+			expect(result.errorMessage).toBeUndefined();
+			expect(result.stopReason).toBe("stop");
+			expect(result.content).toEqual([expect.objectContaining({ type: "text", text: "안녕하세요" })]);
+		},
+	);
+
+	it("fails the turn on invalid event JSON", async () => {
+		const result = await finish(`data: ${JSON.stringify(events[0])}\n\ndata: {nope\n\n`);
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toMatch(/^Invalid Codex SSE JSON: /);
+	});
+
+	it("fails the turn instead of buffering an unterminated line past 16 MiB characters", async () => {
+		const mib = new TextEncoder().encode("x".repeat(1024 * 1024));
+		let reads = 0;
+		const body = new ReadableStream<Uint8Array>({
+			pull(controller) {
+				if (reads === 0) controller.enqueue(new TextEncoder().encode('data: "'));
+				else if (reads <= 20) controller.enqueue(mib);
+				else controller.close();
+				reads++;
+			},
+		});
+		const result = await finish(body);
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toBe("Codex SSE buffered over 16777216 characters without an event");
+		expect(reads).toBeLessThanOrEqual(18);
+	});
 });
