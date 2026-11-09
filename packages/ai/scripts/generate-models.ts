@@ -1822,6 +1822,30 @@ async function generateModels() {
 		writeModelCatalog([...preserved.filter((model) => model.provider !== "cursor"), ...cursorModels()]);
 		return;
 	}
+	if (process.argv.includes("--fable-only")) {
+		// Keep a new Fable release reviewable without absorbing unrelated upstream drift.
+		const freshModels = [
+			...(await loadModelsDevData()),
+			...(await fetchOpenRouterModels()),
+			...(await fetchAiGatewayModels()),
+		].filter((model) => isClaudeFableModel(model.id));
+		for (const model of freshModels) {
+			applyModelMetadata(model);
+			applyCurrentThinkingMetadata(model);
+		}
+		const freshProviders = new Set(freshModels.map((model) => model.provider));
+		const preserved: Model<Api>[] = Object.values(MODELS).flatMap((models) => Object.values(models));
+		writeModelCatalog(
+			applyCatalogPins(
+				[
+					...preserved.filter((model) => !isClaudeFableModel(model.id) || !freshProviders.has(model.provider)),
+					...freshModels,
+				],
+				MODELS,
+			),
+		);
+		return;
+	}
 	// Fetch models from both sources
 	// models.dev: Anthropic, Google, OpenAI, Groq, Cerebras
 	// OpenRouter: xAI and other providers (excluding Anthropic, Google, OpenAI)
