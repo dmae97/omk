@@ -1,0 +1,46 @@
+
+# OMK - Open Multi-Agent Kit
+# Funding and sponsorship configuration
+# https://github.com/dmae97/omk
+
+# GitHub Sponsors
+# Requires an active GitHub Sponsors account
+github: [dmae97]
+
+# Patreon
+# patreon: your_username
+
+# Open Collective
+# open_collective: your_collective
+
+# Ko-fi
+# ko_fi: your_username
+
+# Tidelift
+# tidelift: npm/your_package
+
+# Community Bridge
+# community_bridge: your_project
+
+# Liberapay
+# liberapay: your_username
+
+# IssueHunt
+# issuehunt: your_username
+
+# LFX Crowdfunding
+# lfx_crowdfunding: your_project
+
+# Polar
+# polar: your_username
+
+# Buy Me a Coffee
+# buy_me_a_coffee: your_username
+
+# thanks.dev
+# thanks_dev: u/gh/dmae97
+
+# Custom sponsorship URLs
+# Maximum 4 URLs
+# custom:
+#   - "https://your-sponsorship-page.com"
