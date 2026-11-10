@@ -38,7 +38,7 @@ describe("T-06/T-16 thinking passthrough (omk payload table, spec 1.1)", () => {
 	it("reasoner: thinking omitted -> explicit enabled + the default effort from config", async () => {
 		await h.chat(plain(), { model: "OMK/reasoner", messages: msg() });
 		expect(last().thinking).toEqual({ type: "enabled" });
-		expect(last().reasoning_effort).toBe("high");
+		expect(last().reasoning_effort).toBe("low");
 	});
 	it("reasoner: level off (thinking disabled) -> 400 thinking_required, no upstream call", async () => {
 		const n = h.mock.requests.length;

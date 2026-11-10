@@ -16,7 +16,7 @@
 		"OMK/reasoner": {
 			"upstream": "deepseek-flash",
 			"thinking": "enabled",
-			"default_effort": "high",
+			"default_effort": "low",
 			"max_effort": "high",
 			"public": {
 				"context_length": 1000000,

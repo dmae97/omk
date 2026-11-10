@@ -162,7 +162,7 @@
       "peak": false,
       "upstreamModel": "deepseek-flash",
       "stream": false,
-      "effort": "high"
+      "effort": "low"
     }
   },
   {
@@ -185,7 +185,7 @@
       "peak": false,
       "upstreamModel": "deepseek-flash",
       "stream": true,
-      "effort": "high"
+      "effort": "low"
     }
   },
   {
@@ -286,7 +286,7 @@
       "peak": false,
       "upstreamModel": "deepseek-flash",
       "stream": false,
-      "effort": "high",
+      "effort": "low",
       "replay": true
     }
   },
@@ -310,7 +310,7 @@
       "peak": false,
       "upstreamModel": "deepseek-flash",
       "stream": false,
-      "effort": "high"
+      "effort": "low"
     }
   },
   {
@@ -332,7 +332,7 @@
       "peak": false,
       "upstreamModel": "deepseek-flash",
       "stream": false,
-      "effort": "high"
+      "effort": "low"
     }
   },
   {
@@ -420,7 +420,7 @@
       "peak": true,
       "upstreamModel": "deepseek-v4-pro",
       "stream": false,
-      "effort": "high"
+      "effort": "low"
     }
   },
   {
