@@ -22,6 +22,7 @@
 </p>
 
 <p align="center">
+  <a href="#60-second-start">60-second start</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-runs-by-default">Default or opt-in?</a> ·
   <a href="#context-cache-and-memory">Context &amp; memory</a> ·
@@ -29,40 +30,6 @@
   <a href="#faq">Choosing OMK</a> ·
   <a href="packages/coding-agent/docs/index.md">Documentation</a> ·
   <a href="https://discord.gg/zgCX5uRy4">Discord</a>
-</p>
-
-<!-- Community PR authors: non-owner, non-bot accounts with a pull request directly in dmae97/omk.
-     Include open, merged, and closed PRs; keep the profiles in alphabetical order. -->
-<h2 align="center">Built with our community</h2>
-
-<p align="center">
-  Thank you to everyone who has opened a pull request directly in OMK.<br />
-  Your time, ideas, and care help this project grow.
-</p>
-
-<table align="center">
-  <tr>
-    <td align="center"><a href="https://github.com/2409324124"><img src="https://avatars.githubusercontent.com/u/89211418?v=4" width="68" height="68" alt="@2409324124" /><br /><sub><strong>2409324124</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/AndreIsraelAO"><img src="https://avatars.githubusercontent.com/u/209568354?v=4" width="68" height="68" alt="@AndreIsraelAO" /><br /><sub><strong>AndreIsraelAO</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/AnushreeKasturi"><img src="https://avatars.githubusercontent.com/u/219416439?v=4" width="68" height="68" alt="@AnushreeKasturi" /><br /><sub><strong>AnushreeKasturi</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/dannyward630"><img src="https://avatars.githubusercontent.com/u/71604164?v=4" width="68" height="68" alt="@dannyward630" /><br /><sub><strong>dannyward630</strong></sub></a></td>
-  </tr>
-  <tr>
-    <td align="center"><a href="https://github.com/HangMine"><img src="https://avatars.githubusercontent.com/u/32837290?v=4" width="68" height="68" alt="@HangMine" /><br /><sub><strong>HangMine</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/laozhej"><img src="https://avatars.githubusercontent.com/u/104217479?v=4" width="68" height="68" alt="@laozhej" /><br /><sub><strong>laozhej</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/lj1166"><img src="https://avatars.githubusercontent.com/u/187236931?v=4" width="68" height="68" alt="@lj1166" /><br /><sub><strong>lj1166</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/nova-loop"><img src="https://avatars.githubusercontent.com/u/332996007?v=4" width="68" height="68" alt="@nova-loop" /><br /><sub><strong>nova-loop</strong></sub></a></td>
-  </tr>
-  <tr>
-    <td align="center"><a href="https://github.com/pemalama12"><img src="https://avatars.githubusercontent.com/u/221099317?v=4" width="68" height="68" alt="@pemalama12" /><br /><sub><strong>pemalama12</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/shishir2305"><img src="https://avatars.githubusercontent.com/u/87112493?v=4" width="68" height="68" alt="@shishir2305" /><br /><sub><strong>shishir2305</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/Sudhakar7J"><img src="https://avatars.githubusercontent.com/u/35969068?v=4" width="68" height="68" alt="@Sudhakar7J" /><br /><sub><strong>Sudhakar7J</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/Unluckyathecking"><img src="https://avatars.githubusercontent.com/u/111193970?v=4" width="68" height="68" alt="@Unluckyathecking" /><br /><sub><strong>Unluckyathecking</strong></sub></a></td>
-  </tr>
-</table>
-
-<p align="center">
-  <sub>Open, merged, and closed pull requests · <a href="https://github.com/dmae97/omk/pulls?q=is%3Apr">Explore OMK pull requests</a></sub>
 </p>
 
 ---
@@ -77,7 +44,9 @@ mark a goal done only when your own check passes. It is a standalone CLI, so it
 can serve as an open-source alternative to a single-provider agent such as
 Claude Code.
 
-Requires Node.js 22.19 or newer:
+## 60-second start
+
+You need Node.js 22.19 or newer and a git repository that has a test command.
 
 ```bash
 npm install -g open-multi-agent-kit --ignore-scripts
@@ -85,9 +54,20 @@ cd your-project
 omk
 ```
 
-The first run opens `/login` (subscription, API key, or local model). To try it
-without a global install: `npx --ignore-scripts open-multi-agent-kit`.
-Details in [Quick start](#quick-start).
+On the first run OMK opens `/login` (subscription, API key, or local model).
+Then, inside OMK, give it a goal and name the check:
+
+```text
+/goal Fix the failing test without changing its assertions.
+/goal verify npm test
+```
+
+OMK asks you to approve the command, runs it, and runs it again after each
+settled turn. The goal completes only when it exits 0. Swap `npm test` for your
+project's own check.
+
+No global install? Run `npx --ignore-scripts open-multi-agent-kit`. The
+standalone binary and the setup details are in [Quick start](#quick-start).
 
 <!-- TODO: terminal demo GIF goes here (install, `omk`, a `/goal verify` run passing).
      Record a real session; do not use a mock-up. -->
@@ -669,6 +649,40 @@ Release notes live in [RELEASE_NOTES_v1.5.8.md](.github/RELEASE_NOTES_v1.5.8.md)
 <!-- releases:end -->
 
 </details>
+
+<!-- Community PR authors: non-owner, non-bot accounts with a pull request directly in dmae97/omk.
+     Include open, merged, and closed PRs; keep the profiles in alphabetical order. -->
+<h2 align="center">Built with our community</h2>
+
+<p align="center">
+  Thank you to everyone who has opened a pull request directly in OMK.<br />
+  Your time, ideas, and care help this project grow.
+</p>
+
+<table align="center">
+  <tr>
+    <td align="center"><a href="https://github.com/2409324124"><img src="https://avatars.githubusercontent.com/u/89211418?v=4" width="68" height="68" alt="@2409324124" /><br /><sub><strong>2409324124</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/AndreIsraelAO"><img src="https://avatars.githubusercontent.com/u/209568354?v=4" width="68" height="68" alt="@AndreIsraelAO" /><br /><sub><strong>AndreIsraelAO</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/AnushreeKasturi"><img src="https://avatars.githubusercontent.com/u/219416439?v=4" width="68" height="68" alt="@AnushreeKasturi" /><br /><sub><strong>AnushreeKasturi</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/dannyward630"><img src="https://avatars.githubusercontent.com/u/71604164?v=4" width="68" height="68" alt="@dannyward630" /><br /><sub><strong>dannyward630</strong></sub></a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/HangMine"><img src="https://avatars.githubusercontent.com/u/32837290?v=4" width="68" height="68" alt="@HangMine" /><br /><sub><strong>HangMine</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/laozhej"><img src="https://avatars.githubusercontent.com/u/104217479?v=4" width="68" height="68" alt="@laozhej" /><br /><sub><strong>laozhej</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/lj1166"><img src="https://avatars.githubusercontent.com/u/187236931?v=4" width="68" height="68" alt="@lj1166" /><br /><sub><strong>lj1166</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/nova-loop"><img src="https://avatars.githubusercontent.com/u/332996007?v=4" width="68" height="68" alt="@nova-loop" /><br /><sub><strong>nova-loop</strong></sub></a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/pemalama12"><img src="https://avatars.githubusercontent.com/u/221099317?v=4" width="68" height="68" alt="@pemalama12" /><br /><sub><strong>pemalama12</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/shishir2305"><img src="https://avatars.githubusercontent.com/u/87112493?v=4" width="68" height="68" alt="@shishir2305" /><br /><sub><strong>shishir2305</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/Sudhakar7J"><img src="https://avatars.githubusercontent.com/u/35969068?v=4" width="68" height="68" alt="@Sudhakar7J" /><br /><sub><strong>Sudhakar7J</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/Unluckyathecking"><img src="https://avatars.githubusercontent.com/u/111193970?v=4" width="68" height="68" alt="@Unluckyathecking" /><br /><sub><strong>Unluckyathecking</strong></sub></a></td>
+  </tr>
+</table>
+
+<p align="center">
+  <sub>Open, merged, and closed pull requests · <a href="https://github.com/dmae97/omk/pulls?q=is%3Apr">Explore OMK pull requests</a></sub>
+</p>
 
 ## Contributing
 
