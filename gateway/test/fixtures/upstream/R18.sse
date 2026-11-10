@@ -1,0 +1,14 @@
+: keep-alive
+
+: keep-alive
+
+data: {"id":"chatcmpl-deepseek-R18","object":"chat.completion.chunk","created":1790000000,"model":"deepseek-flash","system_fingerprint":"fp_deepseek_x","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
+
+: keep-alive
+
+data: {"id":"chatcmpl-deepseek-R18","object":"chat.completion.chunk","created":1790000000,"model":"deepseek-flash","system_fingerprint":"fp_deepseek_x","choices":[{"index":0,"delta":{"content":"Finally."},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-deepseek-R18","object":"chat.completion.chunk","created":1790000000,"model":"deepseek-flash","system_fingerprint":"fp_deepseek_x","choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":50,"completion_tokens":8,"total_tokens":58,"prompt_tokens_details":{"cached_tokens":20},"prompt_cache_hit_tokens":20,"prompt_cache_miss_tokens":30}}
+
+data: [DONE]
+

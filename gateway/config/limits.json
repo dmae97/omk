@@ -1,0 +1,13 @@
+{
+	"_comment": "All values are ASSUMPTIONS from the room (Pricing Analyst, 2026-11-11), not measurements. Re-tune after real usage data.",
+	"plans": {
+		"A": { "monthly_token_cap": 5000000 },
+		"B": { "monthly_token_cap": 20000000 }
+	},
+	"per_request": {
+		"default_max_tokens": { "OMK/coder": 8192, "OMK/reasoner": 32768 },
+		"max_tokens_ceiling": { "OMK/coder": null, "OMK/reasoner": 32768 }
+	},
+	"rpm_per_key": 60,
+	"concurrent_per_key": 4
+}

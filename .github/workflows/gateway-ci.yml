@@ -1,0 +1,42 @@
+name: Gateway CI
+
+# Local prototype CI for gateway/ only. Not pushed; no secrets, no deploy, no real upstream key.
+on:
+  pull_request:
+    paths:
+      - "gateway/**"
+      - ".github/workflows/gateway-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gateway:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - name: Checkout
+        # actions/checkout v5.1.0 (same pin as ci.yml)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        # actions/setup-node v5.0.0 (same pin as ci.yml)
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gateway/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test (mock upstream, in-memory Postgres, fixtures R01-R20)
+        run: npm test

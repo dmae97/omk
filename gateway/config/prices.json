@@ -1,0 +1,17 @@
+{
+	"_comment": "USD per 1M tokens, from the upstream pricing page read 2026-11-11 (see spec section 2). Not hardcoded in code.",
+	"price_table_version": "2026-11-11",
+	"models": {
+		"deepseek-flash": {
+			"peak": { "hit": 0.006, "miss": 0.3, "out": 1.2 },
+			"offpeak": { "hit": 0.003, "miss": 0.15, "out": 0.6 }
+		},
+		"deepseek-v4-pro": {
+			"peak": { "hit": 0.044, "miss": 1.32, "out": 3.96 },
+			"offpeak": { "hit": 0.022, "miss": 0.66, "out": 1.98 }
+		}
+	},
+	"peak_windows_kst": { "days": ["Mon", "Tue", "Wed", "Thu", "Fri"], "hours": ["10:00-13:00", "15:00-19:00"] },
+	"holidays_off_peak": [],
+	"peak_instant": "request_start"
+}

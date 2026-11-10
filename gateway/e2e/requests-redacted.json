@@ -1,0 +1,220 @@
+[
+  {
+    "at": "2026-11-10T21:36:03.246Z",
+    "method": "GET",
+    "path": "/healthz",
+    "caseId": null,
+    "hasAuth": false,
+    "authorization": null
+  },
+  {
+    "at": "2026-11-10T21:36:03.259Z",
+    "method": "GET",
+    "path": "/healthz",
+    "caseId": null,
+    "hasAuth": false,
+    "authorization": null
+  },
+  {
+    "at": "2026-11-10T21:36:04.150Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "caseId": "1a",
+    "hasAuth": true,
+    "authorization": "[REDACTED]",
+    "model": "OMK/coder",
+    "stream": false,
+    "thinking": null,
+    "reasoning_effort": null,
+    "tools": null,
+    "messageRoles": [
+      "user"
+    ],
+    "hasToolMessage": false
+  },
+  {
+    "at": "2026-11-10T21:36:04.282Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "caseId": "1b",
+    "hasAuth": true,
+    "authorization": "[REDACTED]",
+    "model": "coder",
+    "stream": true,
+    "thinking": null,
+    "reasoning_effort": null,
+    "tools": null,
+    "messageRoles": [
+      "user"
+    ],
+    "hasToolMessage": false
+  },
+  {
+    "at": "2026-11-10T21:36:04.928Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "caseId": null,
+    "hasAuth": true,
+    "authorization": "[REDACTED]",
+    "model": "coder",
+    "stream": true,
+    "thinking": null,
+    "reasoning_effort": null,
+    "tools": null,
+    "messageRoles": [
+      "system",
+      "user"
+    ],
+    "hasToolMessage": false
+  },
+  {
+    "at": "2026-11-10T21:36:04.997Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "caseId": "2",
+    "hasAuth": true,
+    "authorization": "[REDACTED]",
+    "model": "reasoner",
+    "stream": true,
+    "thinking": {
+      "type": "enabled"
+    },
+    "reasoning_effort": "low",
+    "tools": null,
+    "messageRoles": [
+      "user"
+    ],
+    "hasToolMessage": false
+  },
+  {
+    "at": "2026-11-10T21:36:05.564Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "caseId": null,
+    "hasAuth": true,
+    "authorization": "[REDACTED]",
+    "model": "reasoner",
+    "stream": true,
+    "thinking": {
+      "type": "enabled"
+    },
+    "reasoning_effort": "low",
+    "tools": null,
+    "messageRoles": [
+      "system",
+      "user"
+    ],
+    "hasToolMessage": false
+  },
+  {
+    "at": "2026-11-10T21:36:05.661Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "caseId": "3a",
+    "hasAuth": true,
+    "authorization": "[REDACTED]",
+    "model": "coder",
+    "stream": true,
+    "thinking": null,
+    "reasoning_effort": null,
+    "tools": [
+      "get_weather"
+    ],
+    "messageRoles": [
+      "user"
+    ],
+    "hasToolMessage": false
+  },
+  {
+    "at": "2026-11-10T21:36:05.673Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "caseId": "3b",
+    "hasAuth": true,
+    "authorization": "[REDACTED]",
+    "model": "coder",
+    "stream": true,
+    "thinking": null,
+    "reasoning_effort": null,
+    "tools": [
+      "get_weather"
+    ],
+    "messageRoles": [
+      "user",
+      "assistant",
+      "tool"
+    ],
+    "hasToolMessage": true
+  },
+  {
+    "at": "2026-11-10T21:36:05.682Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "caseId": "4a",
+    "hasAuth": true,
+    "authorization": "[REDACTED]",
+    "model": "coder",
+    "stream": true,
+    "thinking": null,
+    "reasoning_effort": null,
+    "tools": null,
+    "messageRoles": [
+      "user"
+    ],
+    "hasToolMessage": false
+  },
+  {
+    "at": "2026-11-10T21:36:05.692Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "caseId": "4b",
+    "hasAuth": true,
+    "authorization": "[REDACTED]",
+    "model": "reasoner",
+    "stream": true,
+    "thinking": {
+      "type": "disabled"
+    },
+    "reasoning_effort": null,
+    "tools": null,
+    "messageRoles": [
+      "user"
+    ],
+    "hasToolMessage": false
+  },
+  {
+    "at": "2026-11-10T21:36:06.197Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "caseId": "5b",
+    "hasAuth": true,
+    "authorization": "[REDACTED]",
+    "model": "coder",
+    "stream": true,
+    "thinking": null,
+    "reasoning_effort": null,
+    "tools": null,
+    "messageRoles": [
+      "user"
+    ],
+    "hasToolMessage": false
+  },
+  {
+    "at": "2026-11-10T21:36:06.785Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "caseId": null,
+    "hasAuth": true,
+    "authorization": "[REDACTED]",
+    "model": "coder",
+    "stream": true,
+    "thinking": null,
+    "reasoning_effort": null,
+    "tools": null,
+    "messageRoles": [
+      "system",
+      "user"
+    ],
+    "hasToolMessage": false
+  }
+]
