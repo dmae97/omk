@@ -5,8 +5,8 @@
  * in test files since (7389353a6f), so `git diff ea03fcf76b HEAD -- 'packages/*\/src' packages/ai/scripts` is empty.
  *
  * Regenerate (QA / after a reviewed `npm run models:refresh`), from packages/coding-agent:
- *   UPDATE_OMK_PROVIDER_GOLDENS=1 node ../../node_modules/vitest/dist/cli.js --run test/omk-provider-*.test.ts
- *   git diff --stat test/fixtures/omk-provider   # empty when the catalog is unchanged
+ *   UPDATE_OMK_PROVIDER_GOLDENS=1 node ../../node_modules/vitest/dist/cli.js --run test/omk-provider-registry-golden.test.ts test/omk-provider-resolver-golden.test.ts test/omk-provider-harness-golden.test.ts
+ *   git diff --exit-code -- test/fixtures/omk-provider   # empty when the catalog is unchanged
  * The variable deliberately does not start with `OMK_`: test/setup-env.ts deletes every OMK_* variable.
  */
 import { createHash } from "node:crypto";
