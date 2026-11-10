@@ -28,6 +28,8 @@ export interface SystemPromptContextBudgetOptions {
 	readonly maxInactiveSkills?: number;
 	/** Current user query text for relevance-aware skill ranking. */
 	readonly queryContext?: string;
+	/** Read-only shadow observer; called after the native plan is final and never changes selection. */
+	readonly observePlan?: (plan: PromptContextBudgetPlanV2, items: readonly ContextBudgetItemV2[]) => void;
 }
 
 export interface SystemPromptBudgetedResourcesInput {
@@ -68,6 +70,7 @@ export function renderSystemPromptBudgetedResources(
 			`context_budget.hard_pin_over_capacity (required=${plan.usedTokens}, available=${plan.availableTokens})`,
 		);
 	}
+	input.options.observePlan?.(plan, items);
 	if (items.length === 0 && !plan.emergency && plan.observability.diagnosticReasons.length === 0) {
 		return { text: renderEmptyBudgetNote(plan), plan };
 	}
