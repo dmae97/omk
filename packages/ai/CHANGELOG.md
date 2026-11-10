@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.5.11] - 2026-11-10
+
 ### Added
 
 - Claude Fable 5.2 joins the Anthropic, Bedrock, OpenCode, OpenRouter and Vercel AI Gateway catalogs. Fable models expose their adaptive `low` through `max` efforts without unsupported off or minimal tiers.

@@ -1,6 +1,6 @@
 {
 	"name": "open-multi-agent-kit",
-	"version": "1.5.10",
+	"version": "1.5.11",
 	"description": "Open-source multi-agent coding CLI for the terminal (TypeScript, MIT). Switch models mid-session; finish goals only when your test passes.",
 	"type": "module",
 	"omkConfig": {
@@ -44,26 +44,26 @@
 		"link-workspace-deps": "node ./scripts/link-workspace-deps.mjs"
 	},
 	"dependencies": {
-		"omk-agent-core": "^1.5.10",
-		"omk-ai": "^1.5.10",
-		"omk-tui": "^1.5.10",
+		"omk-agent-core": "^1.5.11",
+		"omk-ai": "^1.5.11",
+		"omk-tui": "^1.5.11",
 		"@silvia-odwyer/photon-node": "0.3.4",
 		"canonicalize": "4.0.0",
 		"chalk": "5.6.2",
 		"cross-spawn": "7.0.6",
 		"diff": "8.0.4",
-		"glob": "14.0.3",
+		"glob": "14.0.4",
 		"highlight.js": "10.7.3",
 		"hosted-git-info": "9.0.3",
 		"ignore": "7.0.6",
 		"jiti": "2.7.0",
-		"minimatch": "11.0.3",
+		"minimatch": "11.0.5",
 		"proper-lockfile": "4.1.2",
 		"typebox": "1.3.11",
-		"undici": "8.12.3",
+		"undici": "8.12.4",
 		"yaml": "2.9.0",
-		"omk-adaptorch-wpl": "^1.5.10",
-		"omk-protocol": "^1.5.10"
+		"omk-adaptorch-wpl": "^1.5.11",
+		"omk-protocol": "^1.5.11"
 	},
 	"overrides": {
 		"rimraf": "6.1.2",
