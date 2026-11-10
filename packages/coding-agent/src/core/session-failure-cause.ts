@@ -1,3 +1,4 @@
+import { omkAuthFailureCause } from "./omk-provider/failure-cause.ts";
 import { requestAdmissionFailure } from "./request-admission-policy.ts";
 /**
  * Failure-text to `SessionTerminationCause` classification.
@@ -62,6 +63,8 @@ export function providerFailureCause(message: AssistantMessage, contextWindow: n
 	const text = message.errorMessage ?? "";
 	const admission = requestAdmissionFailure(text);
 	if (admission) return admission;
+	const omkAuth = omkAuthFailureCause(text);
+	if (omkAuth) return omkAuth;
 	if (isContextOverflow(message, contextWindow)) {
 		return { area: "provider", code: "context_overflow" };
 	}
@@ -133,6 +136,8 @@ export function providerFailureCause(message: AssistantMessage, contextWindow: n
 export function preflightFailureCause(message: string, hasModel: boolean): SessionTerminationCause {
 	const admission = requestAdmissionFailure(message);
 	if (admission) return admission;
+	const omkAuth = omkAuthFailureCause(message);
+	if (omkAuth) return omkAuth;
 	if (!hasModel || /no model|model selected|model is required/i.test(message)) {
 		return { area: "configuration", code: "invalid" };
 	}
