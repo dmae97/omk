@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 export const UPSTREAM_SENTINEL_KEY = `SENTINEL_UPSTREAM_${"KEY"}_0123456789abcdef`;
 
 export type Script =
-	| { kind: "json"; status?: number; body: unknown; headers?: Record<string, string> }
+	| { kind: "json"; status?: number; body: unknown; headers?: Record<string, string>; gate?: Promise<void> }
 	| { kind: "sse"; body: string }
 	| { kind: "raw"; status: number; body: string; headers?: Record<string, string> }
 	| { kind: "sse-slow"; first: string; then: () => Promise<void>; rest?: string }
@@ -77,6 +77,7 @@ export class MockUpstream {
 			return;
 		}
 		if (s.kind === "json") {
+			if (s.gate) await s.gate;
 			res.writeHead(s.status ?? 200, { "content-type": "application/json", server: "deepseek-edge", ...(s.headers ?? {}) });
 			res.end(JSON.stringify(s.body));
 		} else if (s.kind === "raw") {

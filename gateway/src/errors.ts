@@ -27,11 +27,11 @@ export class GatewayError extends Error {
 }
 
 export const E = {
-	tokenMissing: () => new GatewayError(401, "token_missing", "authentication_error", "No token provided. Send 'Authorization: Bearer <your OMK account token>'."),
+	tokenMissing: () => new GatewayError(401, "token_missing", "authentication_error", "No token provided. Send your OMK account token in the 'Authorization' header, using the 'Bearer' scheme."),
 	tokenInvalid: () => new GatewayError(401, "token_invalid", "authentication_error", "The token is not valid. Check OMK_ACCOUNT_TOKEN or ask for a new one."),
 	tokenExpired: () => new GatewayError(401, "token_expired", "authentication_error", "This token has expired. Ask the admin for a new token."),
 	tokenRevoked: () => new GatewayError(403, "token_revoked", "permission_error", "This token was revoked. Ask the admin for a new token."),
-	modelNotAllowed: (m: string) => new GatewayError(403, "model_not_allowed", "permission_error", `Model '${m}' is not available for this token. Available models are listed at GET /v1/models.`, { param: "model" }),
+	modelNotAllowed: () => new GatewayError(403, "model_not_allowed", "permission_error", "This model is not available for this token. Available models are listed at GET /v1/models.", { param: "model" }),
 	invalid: (message: string, param?: string, code = "invalid_request") => new GatewayError(400, code, "invalid_request_error", message, { param: param ?? null }),
 	unavailable: (status: 502 | 503, retryAfter?: number) =>
 		new GatewayError(status, "upstream_unavailable", "api_error", "The model service is temporarily unavailable. Please retry shortly.", retryAfter === undefined ? {} : { retryAfter }),

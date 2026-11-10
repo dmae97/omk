@@ -27,7 +27,7 @@ export function checkModel(body: any, config: GatewayConfig, user: UserRow): { m
 	const model = isObj(body) ? body.model : undefined;
 	if (typeof model !== "string" || !model) throw E.invalid("'model' is required.", "model");
 	const cfg = Object.hasOwn(config.models, model) ? config.models[model] : undefined;
-	if (!cfg || (user.allowed_models && !user.allowed_models.includes(model))) throw E.modelNotAllowed(model.slice(0, 64));
+	if (!cfg || (user.allowed_models && !user.allowed_models.includes(model))) throw E.modelNotAllowed();
 	return { model, cfg };
 }
 

@@ -12,6 +12,8 @@ import { MockUpstream, UPSTREAM_SENTINEL_KEY } from "./mock-upstream.js";
 export const gatewayRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const realConfigDir = join(gatewayRoot, "config");
 
+export type Res = Omit<Response, "json"> & { json(): Promise<any> };
+
 export interface Harness {
 	app: ReturnType<typeof createApp>;
 	db: Db;
@@ -23,8 +25,8 @@ export interface Harness {
 	users: Record<string, { token: string; keyId: string; userId: string }>;
 	configDir: string;
 	close(): Promise<void>;
-	call(path: string, init: { method?: string; token?: string | null; body?: unknown; headers?: Record<string, string> }): Promise<Response>;
-	chat(token: string | null, body: unknown): Promise<Response>;
+	call(path: string, init: { method?: string; token?: string | null; body?: unknown; headers?: Record<string, string> }): Promise<Res>;
+	chat(token: string | null, body: unknown): Promise<Res>;
 }
 
 /** Copies the real config to a temp dir so a test can edit the files the way an operator would. */
@@ -67,7 +69,7 @@ export async function makeHarness(opts: { configDir?: string; start?: string; up
 		const headers: Record<string, string> = { ...(init.headers ?? {}) };
 		if (init.token) headers.authorization = `Bearer ${init.token}`;
 		if (init.body !== undefined) headers["content-type"] = "application/json";
-		return Promise.resolve(app.request(path, { method: init.method ?? "GET", headers, body: init.body === undefined ? undefined : typeof init.body === "string" ? init.body : JSON.stringify(init.body) }));
+		return Promise.resolve<Res>(app.request(path, { method: init.method ?? "GET", headers, body: init.body === undefined ? undefined : typeof init.body === "string" ? init.body : JSON.stringify(init.body) }));
 	};
 	return {
 		app,

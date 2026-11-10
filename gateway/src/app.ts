@@ -330,6 +330,7 @@ export function createApp(deps: AppDeps) {
 		let usageRaw: any = null;
 		let finish: string | null = null;
 		let finalized = false;
+		let cancelled = false;
 		const finalize = async (reason: string) => {
 			if (finalized) return;
 			finalized = true;
@@ -388,11 +389,12 @@ export function createApp(deps: AppDeps) {
 					}
 					if (out) controller.enqueue(enc.encode(out));
 				} catch {
-					await finalize("upstream_error");
+					await finalize(cancelled ? "client_abort" : "upstream_error");
 					controller.error(new Error("upstream stream failed"));
 				}
 			},
 			async cancel() {
+				cancelled = true;
 				ac.abort();
 				await reader.cancel().catch(() => {});
 				await finalize("client_abort");
