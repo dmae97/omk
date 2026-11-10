@@ -30,7 +30,7 @@ describe("OMK provider registration with OMK_PROVIDER_OMK=1", () => {
 		}
 	});
 
-	it("registers nothing and says why when OMK_GATEWAY_BASE_URL is missing or blank", () => {
+	it("warns when OMK_GATEWAY_BASE_URL is missing or blank and registers the models with the unset-URL marker (omk-provider-base-url-missing.test.ts)", () => {
 		for (const url of [undefined, "", "   "]) {
 			const registry = createCatalogRegistry();
 			const diagnostics = registerOmkProviderIfEnabled(registry, {
@@ -40,7 +40,8 @@ describe("OMK provider registration with OMK_PROVIDER_OMK=1", () => {
 			expect(diagnostics).toHaveLength(1);
 			expect(diagnostics[0]).toMatchObject({ type: "warning" });
 			expect(diagnostics[0].message).toContain("OMK_GATEWAY_BASE_URL");
-			expect(registry.getAll()).toHaveLength(golden.modelCount);
+			expect(registry.getAll()).toHaveLength(golden.modelCount + 2);
+			expect(registry.find("OMK", "coder")?.baseUrl).toBe("https://omk-base-url-unset.invalid/v1");
 		}
 	});
 
@@ -76,7 +77,7 @@ describe("OMK provider registration with OMK_PROVIDER_OMK=1", () => {
 		}
 	});
 
-	it("has no OAuth registration yet (token login is PR b) and is unavailable without a token", () => {
+	it("registers the /login token flow and is unavailable until a token exists (see omk-provider-login.test.ts)", () => {
 		const previous = process.env.OMK_ACCOUNT_TOKEN;
 		try {
 			delete process.env.OMK_ACCOUNT_TOKEN;
@@ -85,7 +86,7 @@ describe("OMK provider registration with OMK_PROVIDER_OMK=1", () => {
 					.getAvailable()
 					.filter((m) => m.provider === "OMK"),
 			).toEqual([]);
-			expect(getOAuthProviders().map((p) => p.id)).not.toContain("OMK");
+			expect(getOAuthProviders().map((p) => p.id)).toContain("OMK");
 		} finally {
 			if (previous !== undefined) process.env.OMK_ACCOUNT_TOKEN = previous;
 		}
