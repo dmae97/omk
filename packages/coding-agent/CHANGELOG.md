@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+## [1.5.11] - 2026-11-10
+
 ### Added
 
+- `OMK_ONTOLOGY_SHADOW=1` (experimental, default off) records a worktree-scoped comparison between native Context Budget selection and a bounded local metadata index. It requires active Context Budget, never changes prompt selection, and stores no raw prompts, queries, commands or absolute paths. See [ontology shadow index](docs/ontology-shadow.md) (#379).
 - META usage in the status rail: with a Meta OAuth login, OMK reads the current and weekly windows from the official Muse Code CLI (`muse serve` with writes and shell disabled, MSP `usage/read`, no prompt or model call). An unobserved host shows `no observed usage yet`, not 0%. See [providers](docs/providers.md).
 - `subscriptionUsageProviders` (global settings only) limits which subscription usage groups the status rail shows and requests. Omitted keeps every configured group; `[]` hides them all and makes no usage requests. A project settings file cannot change it, and an invalid value fails closed. See [settings](docs/settings.md).
 - `/rnode <runId> [--state-dir DIR]` binds a verified run read-only and shows its R·NODE graph (run, proof, feed, outcome axes, nodes by dependency depth) in the pinned status sidebar, under RUN and VERIFY, or in the expanded control pane. It never executes, retries or approves, and never appears in the scrollback header. When rows run short it drops the outcome-axis rows before any node. See [R·NODE](docs/rnode-tui.md).
@@ -34,6 +37,11 @@
 - An extension component whose `render()` or `invalidate()` throws no longer breaks the TUI. The failed instance shows `Extension render failed` and is not called again; tool rows keep their raw result, custom messages keep their content, a failed custom editor restores the default editor, and failed custom UI rejects instead of leaving its tool pending. See [extensions](docs/extensions.md#fallback).
 - MCP servers that answer the handshake with protocol `2025-03-26` no longer fail to connect (#326).
 - `open-multi-agent-kit`, `omk-ai`, `omk-tui`, `omk-agent-core`, `omk-protocol` and `omk-adaptorch-wpl` now ship the repository's MIT `LICENSE` in their npm tarballs; `omk-book-to-skill` keeps its own license (#320).
+
+### Security
+
+- Update `undici` from 8.12.3 to 8.12.4, including the fix for ASCII-whitespace integrity metadata bypass (GHSA-r4pc-4jcp-7pqc). The OMK dispatcher fetch now rejects mismatched hashes surrounded by tabs, line breaks, carriage returns or form feeds. Use the explicit npm implementation on Bun instead of its native shim, and preserve the method, headers and body of pre-created Requests across lazy installation. Cache/redirect-specific upstream advisories require the affected interceptors; this does not claim that every advisory was reachable in OMK or that updating npm undici changes Node's built-in fetch.
+- Update `glob` to 14.0.4 and the direct/root-override `minimatch` pin to 11.0.5. Verify the published default ESM/CJS bundles as well as the external dependency tree; retain existing import paths, `brace-expansion` and TypeBox pins. No startup or per-worker memory reduction is claimed.
 
 ## [1.5.10] - 2026-10-27
 
