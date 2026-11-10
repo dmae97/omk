@@ -1,0 +1,32 @@
+{
+	"_comment": "Public model ID -> upstream mapping. Editing this file (and restarting) is the only change needed to switch a row to the larger upstream model.",
+	"models": {
+		"OMK/coder": {
+			"upstream": "deepseek-flash",
+			"thinking": "disabled",
+			"public": {
+				"context_length": 1000000,
+				"max_output_tokens": 393216,
+				"input_modalities": ["text"],
+				"thinking": "off",
+				"tools": true,
+				"json_mode": true
+			}
+		},
+		"OMK/reasoner": {
+			"upstream": "deepseek-flash",
+			"thinking": "enabled",
+			"default_effort": "low",
+			"max_effort": "high",
+			"public": {
+				"context_length": 1000000,
+				"max_output_tokens": 393216,
+				"input_modalities": ["text"],
+				"thinking": "always",
+				"reasoning_effort": ["low", "high"],
+				"tools": true,
+				"json_mode": true
+			}
+		}
+	}
+}
