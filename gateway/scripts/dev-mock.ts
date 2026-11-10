@@ -1,13 +1,13 @@
 // Local demo: starts a tiny mock upstream and the gateway against it (no real key, no network).
 // Usage: npm run dev:mock   then curl the printed token. Modes are documented in README.md ("Dev mock modes").
 import { serve } from "@hono/node-server";
-import { issueKey } from "../src/admin.js";
-import { createApp } from "../src/app.js";
-import { loadConfig } from "../src/config.js";
-import { openDb } from "../src/db.js";
-import { createLogger } from "../src/logger.js";
-import { configDir } from "./_cli.js";
-import { DEV_MOCK_UPSTREAM_KEY, createDevMockUpstream } from "./dev-mock-upstream.js";
+import { issueKey } from "../src/admin.ts";
+import { createApp } from "../src/app.ts";
+import { loadConfig } from "../src/config.ts";
+import { openDb } from "../src/db.ts";
+import { createLogger } from "../src/logger.ts";
+import { configDir } from "./_cli.ts";
+import { DEV_MOCK_UPSTREAM_KEY, createDevMockUpstream } from "./dev-mock-upstream.ts";
 
 const mock = createDevMockUpstream();
 await mock.start();

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { makeHarness, msg, okJson, U, type Harness } from "./helpers/harness.js";
+import { makeHarness, msg, okJson, U, type Harness } from "./helpers/harness.ts";
 
 let h: Harness;
 beforeAll(async () => {

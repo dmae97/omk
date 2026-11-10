@@ -503,7 +503,7 @@ JSON mode (`response_format`) is covered in T-06.
 | T-06 | Thinking parameter and `response_format: json_object` passthrough: client payload from omk (section 1.1, off/low/high/max) arrives upstream as the expected `thinking` + `reasoning_effort`; coder always `disabled` |
 | T-07 | Upstream-name scrub (section 7) on bodies, SSE chunks, errors (including mock upstream error bodies that contain the brand), headers, `/v1/models`, Polar outbox payloads |
 | T-08 | Secrets: run all fixtures with sentinel upstream key and sentinel user tokens; grep stdout/stderr/log files/DB dump/outbox for the sentinels and for `Bearer ` values; zero hits. Log redaction paths cover `authorization`, `x-api-key`, request bodies are not logged |
-| T-09 | Auth: missing/invalid/revoked key -> 401; key stored hashed |
+| T-09 | Auth: missing, invalid or revoked account token returns 401; tokens are stored only as SHA-256 hashes |
 | T-10 | Upstream 429/500/timeout -> neutral error, `Retry-After`, no usage row, no double billing on retry |
 | T-11 | Client abort mid-stream -> upstream request aborted, `usage_missing` row, not counted as reconciled |
 | T-12 | Polar outbox (flag off by default): rows created, dedup `external_id` stable across retries; contract test against a stubbed `POST /v1/events/ingest` |

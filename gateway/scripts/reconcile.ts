@@ -1,7 +1,7 @@
 // Usage: npm run reconcile [-- --month 2026-11]   (stop the gateway server first)
-import { openDb } from "../src/db.js";
-import { reportFromDb } from "../src/reconcile.js";
-import { args, assertServerStopped, dataDir } from "./_cli.js";
+import { openDb } from "../src/db.ts";
+import { reportFromDb } from "../src/reconcile.ts";
+import { args, assertServerStopped, dataDir } from "./_cli.ts";
 
 const a = args(process.argv.slice(2));
 assertServerStopped();

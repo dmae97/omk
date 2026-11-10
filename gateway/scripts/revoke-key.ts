@@ -1,7 +1,7 @@
 // Usage: npm run revoke-key -- --key <key_id>   (stop the gateway server first)
-import { openDb } from "../src/db.js";
-import { revoke } from "../src/admin.js";
-import { args, assertServerStopped, dataDir } from "./_cli.js";
+import { openDb } from "../src/db.ts";
+import { revoke } from "../src/admin.ts";
+import { args, assertServerStopped, dataDir } from "./_cli.ts";
 
 const a = args(process.argv.slice(2));
 if (typeof a.key !== "string") {

@@ -1,10 +1,10 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { issueKey, revoke } from "../src/admin.js";
-import { generateToken, hashToken } from "../src/tokens.js";
-import { gatewayRoot, makeHarness, msg, okJson, U, type Harness } from "./helpers/harness.js";
-import { UPSTREAM_SENTINEL_KEY } from "./helpers/mock-upstream.js";
+import { issueKey, revoke } from "../src/admin.ts";
+import { generateToken, hashToken } from "../src/tokens.ts";
+import { gatewayRoot, makeHarness, msg, okJson, U, type Harness } from "./helpers/harness.ts";
+import { UPSTREAM_SENTINEL_KEY } from "./helpers/mock-upstream.ts";
 
 // Patterns are assembled from parts so this file is not a hit for its own scan.
 const OMK_TOKEN_RE = new RegExp(`${"omk"}_[a-z]+_`);
@@ -16,7 +16,7 @@ const OLD_ENV = `${"OMK_GATEWAY_"}${"TOKEN"}`;
 
 function walk(dir: string, out: string[] = []): string[] {
 	for (const name of readdirSync(dir)) {
-		if (["node_modules", ".data", ".git"].includes(name)) continue;
+		if (["node_modules", ".data", ".git", "e2e"].includes(name)) continue;
 		const p = join(dir, name);
 		if (statSync(p).isDirectory()) walk(p, out);
 		else out.push(p);

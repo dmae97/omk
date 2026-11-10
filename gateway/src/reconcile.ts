@@ -1,4 +1,4 @@
-import type { Queryable } from "./db.js";
+import type { Queryable } from "./db.ts";
 
 export interface Row {
 	[k: string]: any;

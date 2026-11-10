@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { BRAND_RE } from "../src/config.js";
-import { gatewayRoot, makeHarness, msg, U, type Harness, type Res } from "./helpers/harness.js";
-import { parseSse } from "./helpers/sse.js";
+import { BRAND_RE } from "../src/config.ts";
+import { gatewayRoot, makeHarness, msg, U, type Harness, type Res } from "./helpers/harness.ts";
+import { parseSse } from "./helpers/sse.ts";
 
 const brand = `${"deep"}${"seek"}`;
 let h: Harness;

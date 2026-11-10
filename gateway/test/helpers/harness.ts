@@ -2,12 +2,12 @@ import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createApp } from "../../src/app.js";
-import { issueKey } from "../../src/admin.js";
-import { loadConfig, type GatewayConfig } from "../../src/config.js";
-import { openDb, type Db } from "../../src/db.js";
-import { createLogger } from "../../src/logger.js";
-import { MockUpstream, UPSTREAM_SENTINEL_KEY } from "./mock-upstream.js";
+import { createApp } from "../../src/app.ts";
+import { issueKey } from "../../src/admin.ts";
+import { loadConfig, type GatewayConfig } from "../../src/config.ts";
+import { openDb, type Db } from "../../src/db.ts";
+import { createLogger } from "../../src/logger.ts";
+import { MockUpstream, UPSTREAM_SENTINEL_KEY } from "./mock-upstream.ts";
 
 export const gatewayRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const realConfigDir = join(gatewayRoot, "config");

@@ -1,8 +1,8 @@
 import type { AddressInfo } from "node:net";
 import { serve } from "@hono/node-server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { checkInvariants, reportFromDb } from "../src/reconcile.js";
-import { editJson, makeHarness, msg, okJson, tempConfig, U, type Harness } from "./helpers/harness.js";
+import { checkInvariants, reportFromDb } from "../src/reconcile.ts";
+import { editJson, makeHarness, msg, okJson, tempConfig, U, type Harness } from "./helpers/harness.ts";
 
 const chunk = (delta: object, finish: string | null = null, usage?: object) =>
 	`data: ${JSON.stringify({ id: "x", model: "up", choices: [{ index: 0, delta, finish_reason: finish }], ...(usage ? { usage } : {}) })}\n\n`;

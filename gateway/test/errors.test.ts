@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { issueKey, revoke } from "../src/admin.js";
-import { BRAND_RE } from "../src/config.js";
-import { generateToken } from "../src/tokens.js";
-import { editJson, makeHarness, msg, okJson, tempConfig, U, type Harness, type Res } from "./helpers/harness.js";
+import { issueKey, revoke } from "../src/admin.ts";
+import { BRAND_RE } from "../src/config.ts";
+import { generateToken } from "../src/tokens.ts";
+import { editJson, makeHarness, msg, okJson, tempConfig, U, type Harness, type Res } from "./helpers/harness.ts";
 
 let h: Harness;
 beforeAll(async () => {

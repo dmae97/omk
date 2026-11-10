@@ -8,12 +8,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
-import { issueKey } from "../src/admin.js";
-import { createApp } from "../src/app.js";
-import { loadConfig } from "../src/config.js";
-import { openDb } from "../src/db.js";
-import { createLogger } from "../src/logger.js";
-import { DEV_MOCK_UPSTREAM_KEY, createDevMockUpstream } from "../scripts/dev-mock-upstream.js";
+import { issueKey } from "../src/admin.ts";
+import { createApp } from "../src/app.ts";
+import { loadConfig } from "../src/config.ts";
+import { openDb } from "../src/db.ts";
+import { createLogger } from "../src/logger.ts";
+import { DEV_MOCK_UPSTREAM_KEY, createDevMockUpstream } from "../scripts/dev-mock-upstream.ts";
 import { redact, redactJson } from "./redact.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));

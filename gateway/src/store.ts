@@ -1,5 +1,5 @@
-import type { Db, Queryable } from "./db.js";
-import { newId } from "./tokens.js";
+import type { Db, Queryable } from "./db.ts";
+import { newId } from "./tokens.ts";
 
 export interface UserRow {
 	id: string;

@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { checkInvariants, compareToUpstream, reportFromDb } from "../src/reconcile.js";
-import { editJson, gatewayRoot, makeHarness, realConfigDir, tempConfig, type Harness } from "./helpers/harness.js";
-import { parseSse, usageOf } from "./helpers/sse.js";
+import { checkInvariants, compareToUpstream, reportFromDb } from "../src/reconcile.ts";
+import { editJson, gatewayRoot, makeHarness, realConfigDir, tempConfig, type Harness } from "./helpers/harness.ts";
+import { parseSse, usageOf } from "./helpers/sse.ts";
 
 interface Case {
 	id: string;

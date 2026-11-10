@@ -2,10 +2,10 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
-import { createApp } from "./app.js";
-import { loadConfig } from "./config.js";
-import { openDb } from "./db.js";
-import { createLogger } from "./logger.js";
+import { createApp } from "./app.ts";
+import { loadConfig } from "./config.ts";
+import { openDb } from "./db.ts";
+import { createLogger } from "./logger.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const configDir = resolve(process.env.OMK_GATEWAY_CONFIG_DIR ?? join(here, "..", "config"));

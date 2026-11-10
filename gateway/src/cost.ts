@@ -1,4 +1,4 @@
-import type { GatewayConfig, PriceNano } from "./config.js";
+import type { GatewayConfig, PriceNano } from "./config.ts";
 
 export interface TokenCounts {
 	hit: number;

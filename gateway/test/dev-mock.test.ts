@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DEV_MOCK_UPSTREAM_KEY, MOCK_TEXT, createDevMockUpstream, mockMode } from "../scripts/dev-mock-upstream.js";
-import { issueKey } from "../src/admin.js";
-import { createApp } from "../src/app.js";
-import { loadConfig } from "../src/config.js";
-import { openDb, type Db } from "../src/db.js";
-import { createLogger } from "../src/logger.js";
-import { parseSse } from "./helpers/sse.js";
-import { realConfigDir } from "./helpers/harness.js";
+import { DEV_MOCK_UPSTREAM_KEY, MOCK_TEXT, createDevMockUpstream, mockMode } from "../scripts/dev-mock-upstream.ts";
+import { issueKey } from "../src/admin.ts";
+import { createApp } from "../src/app.ts";
+import { loadConfig } from "../src/config.ts";
+import { openDb, type Db } from "../src/db.ts";
+import { createLogger } from "../src/logger.ts";
+import { parseSse } from "./helpers/sse.ts";
+import { realConfigDir } from "./helpers/harness.ts";
 
 const WEATHER_TOOL = [{ type: "function", function: { name: "get_weather", parameters: { type: "object", properties: { city: { type: "string" } } } } }];
 const FOLLOWUP = [

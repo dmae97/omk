@@ -1,6 +1,6 @@
-import type { Db } from "./db.js";
-import { createUser, insertKey, revokeKey } from "./store.js";
-import { generateToken, hashToken } from "./tokens.js";
+import type { Db } from "./db.ts";
+import { createUser, insertKey, revokeKey } from "./store.ts";
+import { generateToken, hashToken } from "./tokens.ts";
 
 export interface IssueOptions {
 	userId?: string;

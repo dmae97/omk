@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { checkInvariants } from "../src/reconcile.js";
-import { editJson, makeHarness, msg, okJson, tempConfig, U, type Harness } from "./helpers/harness.js";
+import { checkInvariants } from "../src/reconcile.ts";
+import { editJson, makeHarness, msg, okJson, tempConfig, U, type Harness } from "./helpers/harness.ts";
 
 describe("caps and reservation (values come from config tables)", () => {
 	let h: Harness;

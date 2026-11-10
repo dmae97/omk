@@ -1,6 +1,6 @@
-import { EFFORT_ORDER, type Effort, type GatewayConfig, type ModelCfg } from "./config.js";
-import { E, GatewayError } from "./errors.js";
-import type { UserRow } from "./store.js";
+import { EFFORT_ORDER, type Effort, type GatewayConfig, type ModelCfg } from "./config.ts";
+import { E, GatewayError } from "./errors.ts";
+import type { UserRow } from "./store.ts";
 
 const IMAGE_PART_TYPES = new Set(["image_url", "image", "input_image", "file", "input_file", "input_audio"]);
 // Per upstream docs: minimal -> low, medium/xhigh -> high.

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { BRAND_RE, loadConfig, toNano } from "../src/config.js";
-import { costs } from "../src/cost.js";
-import { isPeak, kstMonthKey, nextKstMonthStart, secondsUntil, isoKst } from "../src/time.js";
-import { TOKEN_PREFIX, generateToken, hashToken, isWellFormedToken } from "../src/tokens.js";
-import { normalizeUsage, estimateUsage } from "../src/meter.js";
-import { editJson, realConfigDir, tempConfig } from "./helpers/harness.js";
+import { BRAND_RE, loadConfig, toNano } from "../src/config.ts";
+import { costs } from "../src/cost.ts";
+import { isPeak, kstMonthKey, nextKstMonthStart, secondsUntil, isoKst } from "../src/time.ts";
+import { TOKEN_PREFIX, generateToken, hashToken, isWellFormedToken } from "../src/tokens.ts";
+import { normalizeUsage, estimateUsage } from "../src/meter.ts";
+import { editJson, realConfigDir, tempConfig } from "./helpers/harness.ts";
 
 const win = { days: ["Mon", "Tue", "Wed", "Thu", "Fri"], hours: ["10:00-13:00", "15:00-19:00"] };
 const peak = (iso: string, holidays: string[] = []) => isPeak(new Date(iso), win, holidays);

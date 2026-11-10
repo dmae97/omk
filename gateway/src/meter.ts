@@ -1,7 +1,7 @@
-import type { GatewayConfig } from "./config.js";
-import { costs } from "./cost.js";
-import type { UsageEvent } from "./store.js";
-import { isPeak, kstMonthKey } from "./time.js";
+import type { GatewayConfig } from "./config.ts";
+import { costs } from "./cost.ts";
+import type { UsageEvent } from "./store.ts";
+import { isPeak, kstMonthKey } from "./time.ts";
 
 export interface Normalized {
 	prompt: number;

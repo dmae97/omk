@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import type { GatewayConfig } from "./config.js";
-import type { Db } from "./db.js";
-import { E, GatewayError } from "./errors.js";
-import { KeyLimiter } from "./limiter.js";
-import { createLogger, type Logger } from "./logger.js";
-import { buildEvent, estimateUsage, normalizeUsage, polarPayload, type Normalized } from "./meter.js";
-import { findKeyByHash, monthlyUsed, recordDenied, recordUsage, releaseReservation, reservedTokens, tryReserve, type KeyRow, type UserRow } from "./store.js";
-import { formatKst, isoKst, kstMonthKey, nextKstMonthStart, secondsUntil } from "./time.js";
-import { hashToken, isWellFormedToken, newId } from "./tokens.js";
-import { checkCaps, checkModel, validateRequest, type Validated } from "./validate.js";
+import type { GatewayConfig } from "./config.ts";
+import type { Db } from "./db.ts";
+import { E, GatewayError } from "./errors.ts";
+import { KeyLimiter } from "./limiter.ts";
+import { createLogger, type Logger } from "./logger.ts";
+import { buildEvent, estimateUsage, normalizeUsage, polarPayload, type Normalized } from "./meter.ts";
+import { findKeyByHash, monthlyUsed, recordDenied, recordUsage, releaseReservation, reservedTokens, tryReserve, type KeyRow, type UserRow } from "./store.ts";
+import { formatKst, isoKst, kstMonthKey, nextKstMonthStart, secondsUntil } from "./time.ts";
+import { hashToken, isWellFormedToken, newId } from "./tokens.ts";
+import { checkCaps, checkModel, validateRequest, type Validated } from "./validate.ts";
 
 export interface AppDeps {
 	config: GatewayConfig;

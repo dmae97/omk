@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { BRAND_RE } from "../src/config.js";
-import { enqueueOutbox } from "../src/store.js";
-import { editJson, makeHarness, msg, okJson, tempConfig, U, type Harness } from "./helpers/harness.js";
+import { BRAND_RE } from "../src/config.ts";
+import { enqueueOutbox } from "../src/store.ts";
+import { editJson, makeHarness, msg, okJson, tempConfig, U, type Harness } from "./helpers/harness.ts";
 
 describe("T-12 Polar outbox (outbox only, no network)", () => {
 	let h: Harness;

@@ -1,9 +1,9 @@
 // Usage: npm run issue-key -- --label "alice" --plan A [--expires-in-days 30] [--allow-max-effort] [--user <usr_id>]
 // Prints the token ONCE on stdout. Stop the gateway server first (single-process data dir).
-import { issueKey } from "../src/admin.js";
-import { loadConfig } from "../src/config.js";
-import { openDb } from "../src/db.js";
-import { args, assertServerStopped, configDir, dataDir } from "./_cli.js";
+import { issueKey } from "../src/admin.ts";
+import { loadConfig } from "../src/config.ts";
+import { openDb } from "../src/db.ts";
+import { args, assertServerStopped, configDir, dataDir } from "./_cli.ts";
 
 const a = args(process.argv.slice(2));
 const config = loadConfig(configDir());

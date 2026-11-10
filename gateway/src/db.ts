@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
-import { SCHEMA } from "./schema.js";
+import { SCHEMA } from "./schema.ts";
 
 export interface Queryable {
 	query<T = any>(sql: string, params?: unknown[]): Promise<{ rows: T[] }>;
