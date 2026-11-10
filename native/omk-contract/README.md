@@ -29,7 +29,9 @@ The repository pins Rust 1.99.0 in the root `rust-toolchain.toml`.
 
 ## Status
 
-Stage K0 units T001 to T003 are complete: the toolchain pin, the crate skeleton,
-and the compatibility tables (`src/compat.rs`, nine tests pinning the TypeScript
-values exactly). Later units (generator, fixtures, wire types, capability matrix,
-CI) are tracked in `specs/120-rust-core/tasks.md`.
+Stage K0 units T001, T002, T003 and T008 are complete: the toolchain pin, the
+crate skeleton, the compatibility tables and the extension-host wire types
+(`src/host_wire.rs`, ten tests covering the 28 events, the 24 API methods, the
+specifier map, the version check, the frame bound and host-loss disposition).
+Later units (generator, fixtures, wire types, capability matrix, CI) are tracked
+in `specs/120-rust-core/tasks.md`.

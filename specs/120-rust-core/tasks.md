@@ -85,7 +85,7 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
   > gate: command-pass
   > risk: high
 
-- [ ] T008 Define version 1 of the extension-host wire: handshake, frame bound, the 28 events, the 24 API methods, the specifier map and host-loss reporting. Types and bound tests only, no transport
+- [x] T008 Define version 1 of the extension-host wire: handshake, frame bound, the 28 events, the 24 API methods, the specifier map and host-loss reporting. Types and bound tests only, no transport
   > role: architect
   > deps: T003
   > files: [`native/omk-contract/src/host_wire.rs`, `native/omk-contract/tests/host_wire.rs`]

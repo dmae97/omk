@@ -6,12 +6,16 @@
 //! edit. The alias table is data; the host's resolver applies it as a generic
 //! specifier map and names no Pi package itself.
 
+use serde::{Deserialize, Serialize};
+
 /// Dialect for managed-package manifests and legacy import handling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PackageManifestDialect {
     /// Native manifests only. Legacy Pi specifiers get no implicit aliases.
+    #[serde(rename = "omk")]
     Omk,
     /// Explicit opt-in compatibility with legacy Pi packages.
+    #[serde(rename = "omk+pi")]
     OmkPlusPi,
 }
 
