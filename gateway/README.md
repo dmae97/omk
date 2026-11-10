@@ -33,7 +33,7 @@ npm start                # uses the URL; PGlite pid lock is skipped
 npm test                 # default suite still runs on PGlite; the cap-race test runs only when the URL is set
 ```
 
-The cap-race test (`test/pg-race.test.ts`) is skipped unless `OMK_GATEWAY_DATABASE_URL` is set. It fires 50 concurrent requests against a tight monthly cap and asserts that reserved tokens never exceed the cap. Do not point this variable at a shared or hosted database.
+The cap-race test (`test/pg-race.test.ts`) is skipped unless `OMK_GATEWAY_DATABASE_URL` is set. It fires 50 concurrent requests against a tight monthly cap and asserts that reserved tokens never exceed the cap. Do not point this variable at a shared or hosted database. The exact pre-hosting reproduction steps, expected numbers, and cleanup are in [`e2e/PG-RACE.md`](e2e/PG-RACE.md).
 
 `issue-key`, `revoke-key` and `reconcile` honor the same URL and can run while the server is up (Postgres is multi-connection). With PGlite they still require the server to be stopped.
 
