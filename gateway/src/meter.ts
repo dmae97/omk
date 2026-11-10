@@ -28,11 +28,17 @@ export function normalizeUsage(u: any): Normalized {
 	return { prompt, hit, miss, completion, reasoning, answer: Math.max(0, completion - reasoning), total, anomaly };
 }
 
-/** Estimate for a stream that ended without usage. Output only: the prompt size was never reported. */
-export function estimateFromOutput(chars: { content: number; reasoning: number; tool: number }, charsPerToken: number): Normalized {
+/**
+ * Estimate for a response that ended without upstream usage (client abort, upstream error, missing usage).
+ * Input: estimated from the request body with the same chars-per-token rule as the reservation, priced
+ * ALL as cache miss (PM decision 2026-11-11). Output: estimated from the received output text.
+ * The caller marks the row estimated=true, which covers both input and output.
+ */
+export function estimateUsage(promptChars: number, chars: { content: number; reasoning: number; tool: number }, charsPerToken: number): Normalized {
+	const prompt = Math.ceil(Math.max(0, promptChars) / charsPerToken);
 	const completion = Math.ceil((chars.content + chars.reasoning + chars.tool) / charsPerToken);
-	const reasoning = Math.ceil(chars.reasoning / charsPerToken);
-	return { prompt: 0, hit: 0, miss: 0, completion, reasoning, answer: Math.max(0, completion - reasoning), total: completion, anomaly: false };
+	const reasoning = Math.min(completion, Math.ceil(chars.reasoning / charsPerToken));
+	return { prompt, hit: 0, miss: prompt, completion, reasoning, answer: completion - reasoning, total: prompt + completion, anomaly: false };
 }
 
 export function buildEvent(o: {

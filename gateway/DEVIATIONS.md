@@ -6,7 +6,7 @@
 | user-billed cost follows peak/off-peak | user-billed cost ALWAYS at peak; upstream cost uses the flag | room decision (Pricing Analyst) |
 | T-09: revoked -> 401 | 403 `token_revoked` | error contract 1A and QA |
 | T-02: code `monthly_token_cap` | `quota_exceeded` | error contract 1A |
-| aborted stream: `usage_missing`, bill zero (Q6) | `estimated=true`, output-only estimate, never reserved max | PM decision 2026-11-11 |
+| aborted stream: `usage_missing`, bill zero (Q6) | `estimated=true`; input estimated from the request body (same chars-per-token rule as the reservation) and priced all as cache miss; output estimated from received text; never the reserved max; reconciliation reports estimated rows separately | PM decisions 2026-11-11 |
 | store last 4 chars of the token | hash only; logs show first 8 chars of the hash | QA 4, PM adopted |
 | `POST /admin/keys` etc. | CLI scripts only | PM: no admin UI |
 | `cost_usd_micros` | `billed_cost_nano_usd`, `upstream_cost_nano_usd` | exact integer math for 0.006 USD/1M style prices |

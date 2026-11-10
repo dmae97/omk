@@ -1,7 +1,7 @@
 import type { AddressInfo } from "node:net";
 import { serve } from "@hono/node-server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { reportFromDb } from "../src/reconcile.js";
+import { checkInvariants, reportFromDb } from "../src/reconcile.js";
 import { editJson, makeHarness, msg, okJson, tempConfig, U, type Harness } from "./helpers/harness.js";
 
 const chunk = (delta: object, finish: string | null = null, usage?: object) =>
@@ -112,7 +112,7 @@ describe("T-11 aborted / truncated streams: estimate, estimated=true, never the 
 		await h.close();
 	});
 
-	it("client aborts mid-stream: upstream request aborted, estimated row from received output only", async () => {
+	it("client aborts mid-stream: upstream request aborted, estimated row (input from request body, all cache miss; output from received text)", async () => {
 		let release!: () => void;
 		const hold = new Promise<void>((r) => (release = r));
 		const first = chunk({ role: "assistant", content: "", reasoning_content: "" }) + chunk({ reasoning_content: "x".repeat(40) }) + chunk({ content: "y".repeat(80) });
@@ -121,7 +121,7 @@ describe("T-11 aborted / truncated streams: estimate, estimated=true, never the 
 		const res = await fetch(`${base}/v1/chat/completions`, {
 			method: "POST",
 			headers: { authorization: `Bearer ${h.users.plain!.token}`, "content-type": "application/json" },
-			body: JSON.stringify({ model: "OMK/reasoner", messages: msg(), stream: true, max_tokens: 20000 }),
+			body: JSON.stringify({ model: "OMK/reasoner", messages: msg("p".repeat(100)), stream: true, max_tokens: 20000 }),
 			signal: ac.signal,
 		});
 		expect(res.status).toBe(200);
@@ -134,7 +134,8 @@ describe("T-11 aborted / truncated streams: estimate, estimated=true, never the 
 		release();
 		await until(async () => (await h.db.query("SELECT count(*)::int n FROM usage_events")).rows[0].n === 1);
 		const row = (await h.db.query("SELECT * FROM usage_events")).rows[0];
-		expect(row).toMatchObject({ estimated: true, end_reason: "client_abort", prompt_tokens: 0, reasoning_tokens: 10, completion_tokens: 30, answer_tokens: 20, total_tokens: 30, finish_reason: null, upstream_usage_json: null });
+		expect(row).toMatchObject({ estimated: true, end_reason: "client_abort", prompt_tokens: 25, cache_hit_tokens: 0, cache_miss_tokens: 25, reasoning_tokens: 10, completion_tokens: 30, answer_tokens: 20, total_tokens: 55, finish_reason: null, upstream_usage_json: null });
+		expect(checkInvariants(row)).toEqual([]);
 		expect(row.total_tokens).toBeLessThan(20000); // never the reserved max
 		await until(() => h.mock.requests[0]!.aborted);
 		expect((await h.db.query("SELECT count(*)::int n FROM reservations")).rows[0].n).toBe(0);
@@ -153,10 +154,10 @@ describe("T-11 aborted / truncated streams: estimate, estimated=true, never the 
 		await (await h.chat(t, { model: "OMK/coder", messages: msg() })).text();
 		const rows = (await h.db.query("SELECT * FROM usage_events ORDER BY ts_start, id")).rows;
 		const est = rows.find((r) => r.estimated)!;
-		expect(est).toMatchObject({ end_reason: "upstream_ended_without_usage", completion_tokens: 6, finish_reason: "stop" });
-		expect(est.billed_cost_nano_usd).toBe(6 * 1200); // output-only estimate, at the peak output price
+		expect(est).toMatchObject({ end_reason: "upstream_ended_without_usage", prompt_tokens: 1, cache_hit_tokens: 0, cache_miss_tokens: 1, completion_tokens: 6, total_tokens: 7, finish_reason: "stop" });
+		expect(Number(est.billed_cost_nano_usd)).toBe(1 * 300 + 6 * 1200); // input as cache miss + output, both at the peak price
 		const rep = await reportFromDb(h.db);
-		expect(rep.estimated).toMatchObject({ rows: 1, tokens: 6 });
+		expect(rep.estimated).toMatchObject({ rows: 1, tokens: 7 });
 		expect(rep.exact).toMatchObject({ rows: 1, tokens: 14 });
 	});
 

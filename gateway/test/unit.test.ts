@@ -3,7 +3,7 @@ import { BRAND_RE, loadConfig, toNano } from "../src/config.js";
 import { costs } from "../src/cost.js";
 import { isPeak, kstMonthKey, nextKstMonthStart, secondsUntil, isoKst } from "../src/time.js";
 import { TOKEN_PREFIX, generateToken, hashToken, isWellFormedToken } from "../src/tokens.js";
-import { normalizeUsage, estimateFromOutput } from "../src/meter.js";
+import { normalizeUsage, estimateUsage } from "../src/meter.js";
 import { editJson, realConfigDir, tempConfig } from "./helpers/harness.js";
 
 const win = { days: ["Mon", "Tue", "Wed", "Thu", "Fri"], hours: ["10:00-13:00", "15:00-19:00"] };
@@ -100,8 +100,9 @@ describe("usage normalization", () => {
 		expect(u).toMatchObject({ hit: 4, miss: 6, anomaly: false });
 		expect(normalizeUsage({ prompt_tokens: 10, completion_tokens: 5, total_tokens: 99, prompt_cache_hit_tokens: 1, prompt_cache_miss_tokens: 1 }).anomaly).toBe(true);
 	});
-	it("estimate is output-only and never zero-divides", () => {
-		expect(estimateFromOutput({ content: 40, reasoning: 20, tool: 0 }, 4)).toMatchObject({ prompt: 0, completion: 15, reasoning: 5, answer: 10, total: 15 });
+	it("estimate: input from request chars, all cache miss; output from received text", () => {
+		expect(estimateUsage(10, { content: 40, reasoning: 20, tool: 0 }, 4)).toMatchObject({ prompt: 3, hit: 0, miss: 3, completion: 15, reasoning: 5, answer: 10, total: 18, anomaly: false });
+		expect(estimateUsage(0, { content: 0, reasoning: 0, tool: 0 }, 4)).toMatchObject({ prompt: 0, miss: 0, completion: 0, total: 0 });
 	});
 });
 

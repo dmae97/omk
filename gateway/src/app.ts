@@ -6,7 +6,7 @@ import type { Db } from "./db.js";
 import { E, GatewayError } from "./errors.js";
 import { KeyLimiter } from "./limiter.js";
 import { createLogger, type Logger } from "./logger.js";
-import { buildEvent, estimateFromOutput, normalizeUsage, polarPayload, type Normalized } from "./meter.js";
+import { buildEvent, estimateUsage, normalizeUsage, polarPayload, type Normalized } from "./meter.js";
 import { findKeyByHash, monthlyUsed, recordDenied, recordUsage, releaseReservation, reservedTokens, tryReserve, type KeyRow, type UserRow } from "./store.js";
 import { formatKst, isoKst, kstMonthKey, nextKstMonthStart, secondsUntil } from "./time.js";
 import { hashToken, isWellFormedToken, newId } from "./tokens.js";
@@ -317,7 +317,7 @@ export function createApp(deps: AppDeps) {
 			}
 			countChars(json, chars);
 			const has = json?.usage && typeof json.usage === "object";
-			const usage = has ? normalizeUsage(json.usage) : estimateFromOutput(chars, config.gateway.estimateCharsPerToken);
+			const usage = has ? normalizeUsage(json.usage) : estimateUsage(ctx.v.promptChars, chars, config.gateway.estimateCharsPerToken);
 			await persist(ctx, usage, finishOf(json), !has, has ? "complete" : "upstream_ended_without_usage", has ? json.usage : null);
 			await releaseAll();
 			return c.json(scrubObject(json, ctx));
@@ -336,7 +336,7 @@ export function createApp(deps: AppDeps) {
 			finalized = true;
 			try {
 				if (usageRaw) await persist(ctx, normalizeUsage(usageRaw), finish, false, reason, usageRaw);
-				else await persist(ctx, estimateFromOutput(chars, config.gateway.estimateCharsPerToken), finish, true, reason === "complete" ? "upstream_ended_without_usage" : reason, null);
+				else await persist(ctx, estimateUsage(ctx.v.promptChars, chars, config.gateway.estimateCharsPerToken), finish, true, reason === "complete" ? "upstream_ended_without_usage" : reason, null);
 			} catch (e) {
 				log.warn("usage_persist_failed", { request_id: ctx.requestId, msg: e instanceof Error ? e.name : "unknown" });
 			} finally {

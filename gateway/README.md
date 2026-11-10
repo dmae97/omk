@@ -61,7 +61,7 @@ One immutable `usage_events` row per request that reached upstream: hit, miss, c
 (read verbatim from upstream `usage`), timestamp, `peak` by request START in KST (Mon-Fri 10-13 and 15-19, end exclusive).
 User-billed cost is always at the peak price; the upstream cost uses the peak flag. Costs are integer nano-USD
 (USD per 1M tokens equals nano-USD per token, so the math is exact).
-A stream that ends or is aborted without `usage` gets an output-only estimate with `estimated=true`, never the reserved maximum.
+A stream that ends or is aborted without `usage` gets `estimated=true`: input is estimated from the request body (4 chars per token, all priced as cache miss) and output from the text received. It is never the reserved maximum, and reconciliation reports estimated rows separately.
 `npm run reconcile` reports exact and estimated rows separately.
 Polar: `polar_outbox` rows only, deduplicated by `external_id`. No network call anywhere.
 
