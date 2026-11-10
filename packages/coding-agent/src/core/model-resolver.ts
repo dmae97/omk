@@ -11,6 +11,7 @@ import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { defaultModelPerProvider, pickDefaultModel } from "./provider-default-models.ts";
 import { DEFAULT_SAFETY_FAILOVER_CANDIDATES, isStickySafetyModel } from "./provider-resilience.ts";
+import { bareMatchCandidates } from "./qualified-only-providers.ts";
 
 export { defaultModelPerProvider } from "./provider-default-models.ts";
 
@@ -80,7 +81,7 @@ export function findExactModelReferenceMatch(
 		}
 	}
 
-	const idMatches = availableModels.filter((model) => model.id.toLowerCase() === normalizedReference);
+	const idMatches = bareMatchCandidates(availableModels).filter((m) => m.id.toLowerCase() === normalizedReference);
 	return idMatches.length === 1 ? idMatches[0] : undefined;
 }
 
@@ -95,7 +96,7 @@ function tryMatchModel(modelPattern: string, availableModels: Model<Api>[]): Mod
 	}
 
 	// No exact match - fall back to partial matching
-	const matches = availableModels.filter(
+	const matches = bareMatchCandidates(availableModels).filter(
 		(m) =>
 			m.id.toLowerCase().includes(modelPattern.toLowerCase()) ||
 			m.name?.toLowerCase().includes(modelPattern.toLowerCase()),
@@ -113,11 +114,10 @@ function tryMatchModel(modelPattern: string, availableModels: Model<Api>[]): Mod
 		// Prefer alias - if multiple aliases, pick the one that sorts highest
 		aliases.sort((a, b) => b.id.localeCompare(a.id));
 		return aliases[0];
-	} else {
-		// No alias found, pick latest dated version
-		datedVersions.sort((a, b) => b.id.localeCompare(a.id));
-		return datedVersions[0];
 	}
+	// No alias found, pick latest dated version
+	datedVersions.sort((a, b) => b.id.localeCompare(a.id));
+	return datedVersions[0];
 }
 
 export interface ParsedModelResult {
@@ -366,7 +366,7 @@ export function resolveCliModel(options: {
 	// This handles models whose IDs naturally contain slashes (e.g. OpenRouter-style IDs).
 	if (!provider) {
 		const lower = cliModel.toLowerCase();
-		const exact = availableModels.find(
+		const exact = bareMatchCandidates(availableModels).find(
 			(m) => m.id.toLowerCase() === lower || `${m.provider}/${m.id}`.toLowerCase() === lower,
 		);
 		if (exact) {
