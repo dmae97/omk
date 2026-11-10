@@ -89,6 +89,30 @@ mod tests {
         }
     }
     #[test]
+    fn agrees_with_independent_finite_clock_oracle() {
+        for line in include_str!("../tests/fixtures/phase-deadline.csv")
+            .lines()
+            .skip(1)
+        {
+            let row: Vec<_> = line.split(',').collect();
+            assert_eq!(row.len(), 4);
+            let deadline = PhaseDeadline {
+                boot_id: "0123abcd-0000-4000-8000-00000000beef".into(),
+                deadline_ms: row[1].parse().expect("deadline"),
+            };
+            let clock = uptime_upper_ms(row[0]);
+            let result = clock.and_then(|now| deadline.check_at(&deadline.boot_id, now));
+            assert_eq!(
+                result.map_or_else(|error| error, |_| "ok"),
+                row[3],
+                "{line}"
+            );
+            if let Ok(now) = clock {
+                assert_eq!(now, row[2].parse::<u64>().expect("upper"), "{line}");
+            }
+        }
+    }
+    #[test]
     fn deadline_is_inclusive_boot_bound_and_never_reset() {
         let deadline = PhaseDeadline {
             boot_id: "0123abcd-0000-4000-8000-00000000beef".into(),

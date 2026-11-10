@@ -37,7 +37,7 @@ racing file replacement between validation and OS exec.
 |---|---|
 | Approve contract, acquire grant, commit dispatch/process identity | Node durable authority and journal |
 | Spawn gated sandbox, release after commit, retain bounded output | Rust |
-| Monotonic execution timeout, cancellation, process-group kill and reap | Rust |
+| Monotonic execution timeout, original boot-bound phase cap, cancellation, process-group kill and reap | Rust |
 | Namespace identity and termination checks | Rust, independently checked again by Node |
 | Durable termination receipt after a witnessed drain | Rust |
 | Per-request accepted/ready/committed/terminal execution record | Rust; Node still owns grants and settlement |
@@ -135,6 +135,30 @@ Real `RLIMIT_FSIZE=0` and blocked-marker-publication tests verify that failed
 persistence emits no `finished` and cannot be accepted by the record reader.
 A recovered result still requires independent namespace-termination observation.
 
+## Original phase deadline owned by Rust
+
+Production verified-run dispatches pass `phaseDeadline: { bootId, deadlineMs }`
+from the already anchored journal budget. Writers use `workDeadlineMs`; verifiers
+use `verificationDeadlineMs`. Rust checks this absolute boot-clock cap before
+record creation/spawn, throughout supervision and after durable commit before
+code release. Detachment never restarts it. Relative per-command timeout, output
+limits and cleanup limits still apply independently.
+
+Rust reads the Linux boot ID and `/proc/uptime`, not a replacement parent's wall
+clock. The proc clock truncates to centiseconds; its conservative upper bound can
+expire up to 10 ms early rather than extending the cap. This is not a hard
+real-time OS termination guarantee. Unknown clocks and boot mismatches fail
+closed. Accepted native records persist this exact cap; reconnect and verifier
+receipt continuation compare it with the original journal before control or
+settlement. An altered cap cannot authorize a longer run.
+
+Older private v1 callers without this optional field retain relative-timeout
+behavior, but their records cannot satisfy the new phase-bound reconnect gate.
+Older binaries reject the new request field without fallback. Build and explicitly
+select a matching host when testing this source version; no installed binary is
+replaced automatically. The existing binary hash/environment binding still
+prevents silently reusing results from a different host.
+
 ## Reconnect the same native writer (opt-in)
 
 For `linux-command-v1` only, set `OMK_RUST_EXECUTION_RECONNECT=1` together with
@@ -217,8 +241,14 @@ Authority replay derives `startProvenance` from the original `effect-started`
 and subsequent cancellation/expiry events. Compaction preserves it for retained
 grants, so reconnect does not depend on archived event rows. An epoch restart
 alone is not revocation; cancellation and recorded expiry remain drain-only
-after any number of snapshots. This changes no token, claims, deadline or grant
-retention policy. A settled grant dropped by compaction is still unavailable.
+after any number of snapshots. This changes no token, claims or deadline.
+Runtime authority compaction also preserves settled grants while their run is
+recoverable, unsettled, publication-open or undecidable from journal/clock evidence.
+It uses the same recovery hold policy as workspace GC. Retention is evidence,
+not renewed authorization: expired results retain their original tombstone expiry
+and duplicate-command disposition. Once recovery is closed, ordinary grant and
+tombstone compaction can remove them. A grant already dropped by an older
+compaction remains unavailable. No automatic compaction or GC was added.
 
 Legacy event logs replay without rewriting their original bytes. Legacy snapshots
 that already lost start/revocation provenance remain refused rather than guessed;
@@ -300,8 +330,13 @@ Authority-compaction acceptance additionally runs
 `verified-run-authority-provenance.test.ts` and
 `verified-run-rust-compaction.test.ts`. These cover repeated snapshots, recorded
 cancellation/expiry, legacy and malformed provenance, actual source-CLI writer
-reconnect, and continuation of a verifier grant kept by result retention.
-They do not change GC's conservative handling of already-dropped grants.
+reconnect and continuation of the original writer/verifier grants without
+synthetic result retention. `verified-run-grant-retention.test.ts` covers
+pre-candidate/pre-attestation windows, rewrite-crash recovery, unknown evidence,
+unchanged expiry and release after the original recovery cap.
+`verified-run-rust-phase-deadline.test.ts` covers detached native expiry without a
+cancel or replacement observer, commit gating, wrong boots and forged caps.
+They do not reconstruct already-dropped grants.
 
 Acceptance additionally runs `verified-run-native-gc.test.ts`,
 `verified-run-native-gc-guards.test.ts`, `verified-run-native-gc-storage.test.ts` and

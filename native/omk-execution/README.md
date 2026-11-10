@@ -15,7 +15,7 @@ journal and authority start, then sends a matching `commit`. Only then does Rust
 release the command. A missing, malformed, repeated or wrong-owner commit never
 permits an additional dispatch.
 
-Rust owns child lifetime, combined stdout/stderr retention, monotonic deadline,
+Rust owns child lifetime, combined stdout/stderr retention, monotonic timeout and original boot-bound phase deadline,
 process-group cancellation and namespace-init termination observation. Output
 arrives in bounded byte-array frames, preserving non-UTF-8 command output. The
 parent checks identity, ordering, retained bytes and termination again. A lost
@@ -40,6 +40,17 @@ an approval or a replacement for the grant ledger. Accepted records also contain
 parent. The production binding covers its original grant token, intent, execution
 ID and run generation. Rust records the original wall-clock start once; execution
 timeouts and reported duration still use the same monotonic start across detachment.
+
+Production starts also supply `phaseDeadline: { bootId, deadlineMs }` from the
+already anchored journal. Rust persists it in the accepted record and checks it
+before spawn, while supervising, and after the synced commit before releasing
+code. A lost parent cannot reset this absolute Linux boot-clock cap. The relative
+command timeout still applies. `/proc/uptime` has centisecond precision; Rust uses
+the conservative upper bound, allowing at most 10 ms early expiry rather than
+extending the cap. Clocks and boot mismatches fail closed. This is not hard
+real-time termination. Old v1 requests can omit the field but cannot satisfy the
+new production phase-bound reconnect gate. Old binaries reject the new field
+without fallback. Approval, grants and the journal still belong to Node.
 
 The terminal record is synced **before** `finished` is sent to the parent. A
 storage failure cannot emit a successful finished event. The consumer must still
@@ -74,7 +85,11 @@ See [the command and limits](../../packages/coding-agent/docs/rust-execution-hos
 and [verifier continuation](../../packages/coding-agent/docs/rust-execution-host.md#reconnect-the-same-verifier).
 
 Reconnectable records are retained across settlement/candidate/verification crash
-windows. Explicit `omk run gc` can retire records only once recovery is closed,
+windows. Runtime authority compaction now also keeps settled grants while the run
+can recover, is unsettled/publication-open, or its recovery evidence is unknown.
+Grant retention and workspace GC share the same recovery hold policy. Retention
+never extends authorization or tombstone expiry. Completed/expired recoverability
+allows ordinary compaction again; no automatic sweep was added. Explicit `omk run gc` can retire records only once recovery is closed,
 the original grant is terminated, both host and namespace are gone, retention has
 elapsed and private bytes still match. It syncs a `.gc.jsonl` retirement rename
 before removing companions, keeping interrupted cleanup retryable. Unprovable,
@@ -148,7 +163,14 @@ including exact time/byte limits, backwards time and a large exact integer, and
 rejects a changed decision. This finite comparison is not a formal proof of the
 entire host or its concurrent/process behavior.
 
+A separate base-R check validates 14 exact phase-clock cases, including inclusive
+expiry, conservative centisecond quantization, invalid input and safe-integer
+boundaries. Rust consumes the same fixed cases. A changed expected verdict must
+fail the R check; this finite oracle is not a proof of process cleanup.
+
 ```sh
+/path/to/Rscript --vanilla scripts/architecture/verify-phase-deadline.R \
+  native/omk-execution/tests/fixtures/phase-deadline.csv
 OMK_RSCRIPT=/path/to/Rscript node scripts/architecture/verify-execution-budget.mjs \
   /path/to/new-evidence-directory /path/to/budget-fixtures
 ```

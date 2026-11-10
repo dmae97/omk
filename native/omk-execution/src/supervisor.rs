@@ -87,6 +87,9 @@ fn supervise(
         .as_ref()
         .map_or_else(Instant::now, Record::started);
     let mut budget = Budget::new(request.timeout_ms, request.max_output_bytes)?;
+    if let Some(deadline) = &request.phase_deadline {
+        deadline.check()?;
+    }
     let mut child = OwnedChild::spawn(request)?;
     link.emitter.emit(&Event::Spawned {
         request_id: &request.request_id,

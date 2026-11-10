@@ -26,7 +26,7 @@ it("keeps an expired tombstone's disposition while its settled grant is retained
 	const store = AuthorityStore.open(authorityStorePath(root), {
 		capacity: 1,
 		clock: () => 100,
-		retainGrant: () => retain,
+		retainGrant: (grant) => retain && grant.commandId === "execution",
 	});
 	try {
 		store.reconcile();
@@ -53,7 +53,12 @@ it("keeps an expired tombstone's disposition while its settled grant is retained
 		expect(store.effectStarted(result.token, input.claims)).toBe(true);
 		expect(store.confirmTerminated(result.token)).toBe(true);
 		store.retainResult(input.commandId, digestObject("result"), 100, 10);
-		expect(store.compact(200).dropped).toBe(0);
+		const disposable = store.acquire({ ...input, commandId: "disposable" });
+		if (disposable.status !== "granted") throw new Error("disposable grant missing");
+		expect(store.cancel(disposable.token)).toBe(true);
+		expect(store.compact(200).dropped).toBe(1);
+		expect(AuthorityStore.inspectJournal(store.path).records).toHaveLength(1);
+		expect(AuthorityStore.inspect(store.path).tombstones.get(input.commandId)?.expiresAtMs).toBe(110);
 		expect(store.lookup(input.commandId, 200).status).toBe("result-expired");
 		expect(store.acquire({ ...input, now: 200 }).status).toBe("result-expired");
 		expect(store.state.grants.get(result.token.grantSequence)?.token).toEqual(result.token);
@@ -61,7 +66,7 @@ it("keeps an expired tombstone's disposition while its settled grant is retained
 		retain = false;
 		expect(store.compact(200).dropped).toBe(2);
 		expect(store.lookup(input.commandId, 200).status).toBe("unknown");
-		expect(store.state.grantCounter).toBe(result.token.grantSequence);
+		expect(store.state.grantCounter).toBe(disposable.token.grantSequence);
 	} finally {
 		store.release();
 		rmSync(root, { recursive: true, force: true });
