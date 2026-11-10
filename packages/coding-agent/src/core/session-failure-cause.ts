@@ -1,3 +1,4 @@
+import { omkAuthAwareCause } from "./omk-provider/failure-cause.ts";
 import { requestAdmissionFailure } from "./request-admission-policy.ts";
 /**
  * Failure-text to `SessionTerminationCause` classification.
@@ -58,7 +59,7 @@ export function terminationMessage(value: string | undefined, fallback: string):
 }
 
 /** Classify a failed provider turn from the assistant message it produced. */
-export function providerFailureCause(message: AssistantMessage, contextWindow: number): SessionTerminationCause {
+function genericProviderFailureCause(message: AssistantMessage, contextWindow: number): SessionTerminationCause {
 	const text = message.errorMessage ?? "";
 	const admission = requestAdmissionFailure(text);
 	if (admission) return admission;
@@ -130,7 +131,7 @@ export function providerFailureCause(message: AssistantMessage, contextWindow: n
  * Classify a preflight rejection raised before the provider was called.
  * `hasModel` is false when no model is selected for the session.
  */
-export function preflightFailureCause(message: string, hasModel: boolean): SessionTerminationCause {
+function genericPreflightFailureCause(message: string, hasModel: boolean): SessionTerminationCause {
 	const admission = requestAdmissionFailure(message);
 	if (admission) return admission;
 	if (!hasModel || /no model|model selected|model is required/i.test(message)) {
@@ -158,6 +159,14 @@ export function preflightFailureCause(message: string, hasModel: boolean): Sessi
 	if (/append|persist|write/i.test(message)) return { area: "persistence", code: "append_failed" };
 	if (/tool/i.test(message)) return { area: "tool", code: "fatal" };
 	return { area: "internal", code: "unclassified" };
+}
+
+export function providerFailureCause(message: AssistantMessage, contextWindow: number): SessionTerminationCause {
+	return omkAuthAwareCause(message.errorMessage ?? "", () => genericProviderFailureCause(message, contextWindow));
+}
+
+export function preflightFailureCause(message: string, hasModel: boolean): SessionTerminationCause {
+	return omkAuthAwareCause(message, () => genericPreflightFailureCause(message, hasModel));
 }
 
 /** Classify a value thrown out of the session runtime itself. */

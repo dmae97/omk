@@ -1,0 +1,326 @@
+{
+	"provider": {
+		"OMK account token missing. Set OMK_ACCOUNT_TOKEN or run /login and choose OMK.": {
+			"area": "provider",
+			"code": "auth"
+		},
+		"OMK gateway base URL missing. Set OMK_GATEWAY_BASE_URL (for example https://host/v1); OMK requests are refused until it is set.": {
+			"area": "provider",
+			"code": "protocol"
+		},
+		"OMK token rejected (401 token_invalid): the gateway does not accept this token.": {
+			"area": "provider",
+			"code": "protocol"
+		},
+		"OMK token expired (401 token_expired): ask the admin for a new token.": {
+			"area": "provider",
+			"code": "protocol"
+		},
+		"OMK token revoked (403 token_revoked): ask the admin for a new token.": {
+			"area": "provider",
+			"code": "protocol"
+		},
+		"OMK model not allowed for this token (403 model_not_allowed): choose another OMK model with /model.": {
+			"area": "provider",
+			"code": "protocol"
+		},
+		"OMK monthly quota exceeded (quota_exceeded, not retried).": {
+			"area": "provider",
+			"code": "rate_limit"
+		},
+		"OMK rate limited (429 rate_limited), still throttled after retrying.": {
+			"area": "provider",
+			"code": "rate_limit"
+		},
+		"401 Incorrect API key provided": {
+			"area": "provider",
+			"code": "protocol"
+		},
+		"403 Forbidden": {
+			"area": "provider",
+			"code": "auth"
+		},
+		"429 Too Many Requests": {
+			"area": "provider",
+			"code": "rate_limit"
+		},
+		"400 Bad request": {
+			"area": "provider",
+			"code": "protocol"
+		},
+		"503 Service Unavailable": {
+			"area": "provider",
+			"code": "network"
+		},
+		"Connection error.": {
+			"area": "provider",
+			"code": "network"
+		},
+		"No API key found for OMK.\n\nUse /login to log into a provider via OAuth or API key.": {
+			"area": "provider",
+			"code": "auth"
+		},
+		"authentication failed": {
+			"area": "provider",
+			"code": "auth"
+		},
+		"rate limit exceeded": {
+			"area": "provider",
+			"code": "rate_limit"
+		},
+		"Monthly usage limit reached": {
+			"area": "provider",
+			"code": "rate_limit"
+		},
+		"tool_call_id is not found": {
+			"area": "provider",
+			"code": "protocol"
+		},
+		"stop_reason=refusal": {
+			"area": "provider",
+			"code": "refusal"
+		},
+		"tool crashed": {
+			"area": "tool",
+			"code": "fatal"
+		},
+		"compaction failed": {
+			"area": "provider",
+			"code": "protocol"
+		},
+		"write failed": {
+			"area": "provider",
+			"code": "protocol"
+		},
+		"no model selected": {
+			"area": "provider",
+			"code": "protocol"
+		},
+		"model is required": {
+			"area": "provider",
+			"code": "protocol"
+		},
+		"": {
+			"area": "provider",
+			"code": "protocol"
+		}
+	},
+	"preflightWithModel": {
+		"OMK account token missing. Set OMK_ACCOUNT_TOKEN or run /login and choose OMK.": {
+			"area": "provider",
+			"code": "auth"
+		},
+		"OMK gateway base URL missing. Set OMK_GATEWAY_BASE_URL (for example https://host/v1); OMK requests are refused until it is set.": {
+			"area": "internal",
+			"code": "unclassified"
+		},
+		"OMK token rejected (401 token_invalid): the gateway does not accept this token.": {
+			"area": "internal",
+			"code": "unclassified"
+		},
+		"OMK token expired (401 token_expired): ask the admin for a new token.": {
+			"area": "internal",
+			"code": "unclassified"
+		},
+		"OMK token revoked (403 token_revoked): ask the admin for a new token.": {
+			"area": "internal",
+			"code": "unclassified"
+		},
+		"OMK model not allowed for this token (403 model_not_allowed): choose another OMK model with /model.": {
+			"area": "internal",
+			"code": "unclassified"
+		},
+		"OMK monthly quota exceeded (quota_exceeded, not retried).": {
+			"area": "provider",
+			"code": "rate_limit"
+		},
+		"OMK rate limited (429 rate_limited), still throttled after retrying.": {
+			"area": "internal",
+			"code": "unclassified"
+		},
+		"401 Incorrect API key provided": {
+			"area": "provider",
+			"code": "auth"
+		},
+		"403 Forbidden": {
+			"area": "provider",
+			"code": "auth"
+		},
+		"429 Too Many Requests": {
+			"area": "internal",
+			"code": "unclassified"
+		},
+		"400 Bad request": {
+			"area": "internal",
+			"code": "unclassified"
+		},
+		"503 Service Unavailable": {
+			"area": "provider",
+			"code": "network"
+		},
+		"Connection error.": {
+			"area": "internal",
+			"code": "unclassified"
+		},
+		"No API key found for OMK.\n\nUse /login to log into a provider via OAuth or API key.": {
+			"area": "provider",
+			"code": "auth"
+		},
+		"authentication failed": {
+			"area": "provider",
+			"code": "auth"
+		},
+		"rate limit exceeded": {
+			"area": "internal",
+			"code": "unclassified"
+		},
+		"Monthly usage limit reached": {
+			"area": "provider",
+			"code": "rate_limit"
+		},
+		"tool_call_id is not found": {
+			"area": "tool",
+			"code": "fatal"
+		},
+		"stop_reason=refusal": {
+			"area": "internal",
+			"code": "unclassified"
+		},
+		"tool crashed": {
+			"area": "tool",
+			"code": "fatal"
+		},
+		"compaction failed": {
+			"area": "compaction",
+			"code": "failed"
+		},
+		"write failed": {
+			"area": "persistence",
+			"code": "append_failed"
+		},
+		"no model selected": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"model is required": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"": {
+			"area": "internal",
+			"code": "unclassified"
+		}
+	},
+	"preflightNoModel": {
+		"OMK account token missing. Set OMK_ACCOUNT_TOKEN or run /login and choose OMK.": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"OMK gateway base URL missing. Set OMK_GATEWAY_BASE_URL (for example https://host/v1); OMK requests are refused until it is set.": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"OMK token rejected (401 token_invalid): the gateway does not accept this token.": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"OMK token expired (401 token_expired): ask the admin for a new token.": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"OMK token revoked (403 token_revoked): ask the admin for a new token.": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"OMK model not allowed for this token (403 model_not_allowed): choose another OMK model with /model.": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"OMK monthly quota exceeded (quota_exceeded, not retried).": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"OMK rate limited (429 rate_limited), still throttled after retrying.": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"401 Incorrect API key provided": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"403 Forbidden": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"429 Too Many Requests": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"400 Bad request": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"503 Service Unavailable": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"Connection error.": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"No API key found for OMK.\n\nUse /login to log into a provider via OAuth or API key.": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"authentication failed": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"rate limit exceeded": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"Monthly usage limit reached": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"tool_call_id is not found": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"stop_reason=refusal": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"tool crashed": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"compaction failed": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"write failed": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"no model selected": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"model is required": {
+			"area": "configuration",
+			"code": "invalid"
+		},
+		"": {
+			"area": "configuration",
+			"code": "invalid"
+		}
+	},
+	"noApiKey": {
+		"OMK": "No API key found for OMK.\n\nUse /login to log into a provider via OAuth or API key. See:\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/providers.md\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/models.md",
+		"openai": "No API key found for openai.\n\nUse /login to log into a provider via OAuth or API key. See:\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/providers.md\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/models.md",
+		"opencode-go": "No API key found for opencode-go.\n\nUse /login to log into a provider via OAuth or API key. See:\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/providers.md\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/models.md",
+		"unknown": "No API key found for the selected model.\n\nUse /login to log into a provider via OAuth or API key. See:\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/providers.md\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/models.md"
+	}
+}

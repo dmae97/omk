@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { getDocsPath } from "../config.ts";
+import { omkNoCredentialMessage } from "./omk-provider/messages.ts";
 
 const UNKNOWN_PROVIDER = "unknown";
 
@@ -21,5 +22,5 @@ export function formatNoModelSelectedMessage(): string {
 
 export function formatNoApiKeyFoundMessage(provider: string): string {
 	const providerDisplay = provider === UNKNOWN_PROVIDER ? "the selected model" : provider;
-	return `No API key found for ${providerDisplay}.\n\n${getProviderLoginHelp()}`;
+	return omkNoCredentialMessage(provider, `No API key found for ${providerDisplay}.\n\n${getProviderLoginHelp()}`);
 }
