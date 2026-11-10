@@ -116,6 +116,7 @@ using one as a statement about the present runtime.
 | 117 | [Skill auto-selection and body load](117-skill-auto-load/spec.md) |
 | 118 | [Evidence delete-after-use](118-evidence-delete/spec.md) |
 | 119 | [Goal autonomy](119-goal-autonomy/spec.md) |
+| 120 | [Rust core through the headless candidate](120-rust-core/spec.md) |
 
 Additional records:
 
