@@ -104,21 +104,31 @@ export async function reservedTokens(db: Queryable, userId: string, month: strin
 }
 
 /**
- * Atomic check-and-reserve in ONE statement. Race-safe on PGlite (single connection).
- * On a multi-connection Postgres this needs an advisory lock or SERIALIZABLE (open issue).
+ * Check-and-reserve inside a transaction, serialized on the per-user monthly row.
+ * The no-op UPSERT takes a row lock even when the row already exists (plain
+ * `ON CONFLICT DO NOTHING` would not), so concurrent connections cannot both
+ * pass the remaining-cap check. PGlite (one connection, plus a query mutex)
+ * keeps its previous behaviour.
  */
-export async function tryReserve(db: Queryable, o: { userId: string; month: string; tokens: number; cap: number; now: Date }): Promise<string | null> {
+export async function tryReserve(db: Db, o: { userId: string; month: string; tokens: number; cap: number; now: Date }): Promise<string | null> {
 	const id = newId("rsv");
-	const r = await db.query(
-		`INSERT INTO reservations(id,user_id,month,tokens,created_at)
-		 SELECT $1::text,$2::text,$3::text,$4::bigint,$5::timestamptz
-		 WHERE $6::bigint
-		   - COALESCE((SELECT tokens FROM usage_monthly WHERE user_id=$2::text AND month=$3::text),0)
-		   - COALESCE((SELECT SUM(tokens) FROM reservations WHERE user_id=$2::text AND month=$3::text),0) >= $4::bigint
-		 RETURNING id`,
-		[id, o.userId, o.month, o.tokens, o.now.toISOString(), o.cap],
-	);
-	return r.rows[0] ? id : null;
+	return db.transaction(async (tx) => {
+		await tx.query(
+			`INSERT INTO usage_monthly(user_id, month) VALUES ($1, $2)
+			 ON CONFLICT (user_id, month) DO UPDATE SET user_id = usage_monthly.user_id`,
+			[o.userId, o.month],
+		);
+		const r = await tx.query(
+			`INSERT INTO reservations(id,user_id,month,tokens,created_at)
+			 SELECT $1::text,$2::text,$3::text,$4::bigint,$5::timestamptz
+			 WHERE $6::bigint
+			   - COALESCE((SELECT tokens FROM usage_monthly WHERE user_id=$2::text AND month=$3::text),0)
+			   - COALESCE((SELECT SUM(tokens) FROM reservations WHERE user_id=$2::text AND month=$3::text),0) >= $4::bigint
+			 RETURNING id`,
+			[id, o.userId, o.month, o.tokens, o.now.toISOString(), o.cap],
+		);
+		return r.rows[0] ? id : null;
+	});
 }
 
 export async function releaseReservation(db: Queryable, id: string | null): Promise<void> {

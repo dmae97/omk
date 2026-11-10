@@ -8,7 +8,7 @@ Spec: `specs/omk-gateway/spec.md`. Room decisions override the spec where they d
   The client base URL includes `/v1` (for example `http://127.0.0.1:8787/v1`); the client appends `/chat/completions`.
 - Public model IDs: `OMK/coder` (thinking off) and `OMK/reasoner` (thinking on). No third ID.
   The mapping to upstream models is a config table: `config/models.json`.
-- Stack: Hono on Node + Postgres. The prototype uses PGlite (embedded Postgres, WASM): no external service, in-memory in tests.
+- Stack: Hono on Node + Postgres. The prototype defaults to PGlite (embedded Postgres, WASM): no external service, in-memory in tests. A real Postgres is optional via `OMK_GATEWAY_DATABASE_URL` (required before hosting, for race-safe monthly cap reservation).
 
 ## Run
 
@@ -17,6 +17,25 @@ cd gateway && npm ci
 npm test                 # typecheck separately: npm run typecheck
 npm run dev:mock         # gateway + mock upstream, in-memory DB, prints a one-time dev token
 ```
+
+## Real Postgres (optional, required before hosting)
+
+PGlite stays the default. To use a local Postgres (bind it to `127.0.0.1` only; do not commit the password):
+
+```bash
+# example: a throwaway local container, not a hosted database
+docker run -d --name omk-gateway-pg --publish 127.0.0.1:5432:5432 \
+  -e POSTGRES_USER=omk_gw -e POSTGRES_PASSWORD='<local-only>' -e POSTGRES_DB=omk_gateway \
+  postgres:17
+
+export OMK_GATEWAY_DATABASE_URL='postgres://omk_gw:<local-only>@127.0.0.1:5432/omk_gateway'
+npm start                # uses the URL; PGlite pid lock is skipped
+npm test                 # default suite still runs on PGlite; the cap-race test runs only when the URL is set
+```
+
+The cap-race test (`test/pg-race.test.ts`) is skipped unless `OMK_GATEWAY_DATABASE_URL` is set. It fires 50 concurrent requests against a tight monthly cap and asserts that reserved tokens never exceed the cap. Do not point this variable at a shared or hosted database.
+
+`issue-key`, `revoke-key` and `reconcile` honor the same URL and can run while the server is up (Postgres is multi-connection). With PGlite they still require the server to be stopped.
 
 Real local run (needs an official upstream key from the owner, never committed):
 

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createApp } from "../../src/app.ts";
 import { issueKey } from "../../src/admin.ts";
 import { loadConfig, type GatewayConfig } from "../../src/config.ts";
-import { openDb, type Db } from "../../src/db.ts";
+import { openDb, openPostgres, type Db } from "../../src/db.ts";
 import { createLogger } from "../../src/logger.ts";
 import { MockUpstream, UPSTREAM_SENTINEL_KEY } from "./mock-upstream.ts";
 
@@ -44,12 +44,12 @@ export function editJson(dir: string, name: string, fn: (o: any) => void): void 
 	writeFileSync(p, JSON.stringify(o, null, 2));
 }
 
-export async function makeHarness(opts: { configDir?: string; start?: string; upstreamKey?: string | null } = {}): Promise<Harness> {
+export async function makeHarness(opts: { configDir?: string; start?: string; upstreamKey?: string | null; databaseUrl?: string } = {}): Promise<Harness> {
 	const configDir = opts.configDir ?? realConfigDir;
 	const config = loadConfig(configDir);
 	const mock = new MockUpstream();
 	await mock.start();
-	const db = await openDb();
+	const db = opts.databaseUrl ? await openPostgres(opts.databaseUrl) : await openDb();
 	const logs: string[] = [];
 	const clock = { now: new Date(opts.start ?? "2026-11-11T14:00:00+09:00") };
 	const mono = { ms: 1_000_000 };

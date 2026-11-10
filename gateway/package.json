@@ -4,7 +4,9 @@
 	"private": true,
 	"description": "Local prototype: OpenAI-compatible OMK gateway (not published, not deployed)",
 	"type": "module",
-	"engines": { "node": ">=20" },
+	"engines": {
+		"node": ">=20"
+	},
 	"scripts": {
 		"start": "tsx src/server.ts",
 		"dev:mock": "tsx scripts/dev-mock.ts",
@@ -17,10 +19,12 @@
 	"dependencies": {
 		"@electric-sql/pglite": "0.5.16",
 		"@hono/node-server": "2.1.6",
-		"hono": "4.13.17"
+		"hono": "4.13.17",
+		"pg": "8.23.1"
 	},
 	"devDependencies": {
 		"@types/node": "20.19.43",
+		"@types/pg": "8.23.1",
 		"tsx": "4.23.15",
 		"typescript": "5.9.3",
 		"vitest": "4.1.12"

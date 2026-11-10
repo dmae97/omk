@@ -1,6 +1,7 @@
-import { dirname, join, resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { openDb, openPostgres, type Db } from "../src/db.ts";
 
 export function dataDir(): string {
 	const here = dirname(fileURLToPath(import.meta.url));
@@ -38,4 +39,12 @@ export function args(argv: string[]): Record<string, string | true> {
 		} else out[a.slice(2)] = true;
 	}
 	return out;
+}
+
+/** Opens Postgres when OMK_GATEWAY_DATABASE_URL is set; otherwise the PGlite data dir (and refuses if the server holds it). */
+export async function openCliDb(): Promise<Db> {
+	const url = process.env.OMK_GATEWAY_DATABASE_URL;
+	if (url) return openPostgres(url);
+	assertServerStopped();
+	return openDb(dataDir());
 }

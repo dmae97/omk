@@ -1,9 +1,8 @@
 // Usage: npm run issue-key -- --label "alice" --plan A [--expires-in-days 30] [--allow-max-effort] [--user <usr_id>]
-// Prints the token ONCE on stdout. Stop the gateway server first (single-process data dir).
+// Prints the token ONCE on stdout. With PGlite, stop the gateway server first (single-process data dir).
 import { issueKey } from "../src/admin.ts";
 import { loadConfig } from "../src/config.ts";
-import { openDb } from "../src/db.ts";
-import { args, assertServerStopped, configDir, dataDir } from "./_cli.ts";
+import { args, configDir, openCliDb } from "./_cli.ts";
 
 const a = args(process.argv.slice(2));
 const config = loadConfig(configDir());
@@ -16,8 +15,7 @@ if (typeof a.label !== "string") {
 	console.error("--label is required");
 	process.exit(1);
 }
-assertServerStopped();
-const db = await openDb(dataDir());
+const db = await openCliDb();
 const now = new Date();
 const days = typeof a["expires-in-days"] === "string" ? Number(a["expires-in-days"]) : null;
 const r = await issueKey(db, {
