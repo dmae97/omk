@@ -47,6 +47,7 @@ For the full first-run flow, see [Quickstart](quickstart.md).
 - [Keybindings](keybindings.md) - default shortcuts and custom keybindings.
 - [Sessions](sessions.md) - session management, branching, and tree navigation.
 - [Compaction](compaction.md) - context compaction and branch summarization.
+- [Ontology shadow index](ontology-shadow.md) - default-off, worktree-scoped comparison evidence for Context Budget V2.
 
 ## Customization
 
