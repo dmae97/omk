@@ -1,0 +1,51 @@
+{
+  "schema": "omk.contract.fixtures.v1",
+  "generatedBy": "scripts/record-contract-fixtures.mjs",
+  "sources": [
+    "packages/coding-agent/test/suite/g0-session-hash.ts",
+    "packages/coding-agent/test/suite/fixtures/session-equivalence",
+    "scripts/fixtures/rpc-recorder-driver.ts"
+  ],
+  "files": [
+    {
+      "path": "g0/provider-requests.jsonl",
+      "sha256": "d408173db778d5bb056eba31ad87840518a9cf4268d2f07a91698f89e0698fe1"
+    },
+    {
+      "path": "g0/session.jsonl",
+      "sha256": "b80f094445c137807a36a0c51baa96ebf7cdc566c21aa1a59b23109ba23ff6ee"
+    },
+    {
+      "path": "rpc-transcript.jsonl",
+      "sha256": "7b1ea1c869507a0de239575732f03d6d944907c68710949cff30291dc02469fc"
+    },
+    {
+      "path": "session-equivalence/admission-pressure.json",
+      "sha256": "93e5301250a4844009e84da2d9c2b28437b7e84c3da65e1eae7d758ba2b386c2"
+    },
+    {
+      "path": "session-equivalence/forced-compaction.json",
+      "sha256": "57216fb8368db3b5f7605ecadf5cfee039436797767fc39056d262d7d1811357"
+    },
+    {
+      "path": "session-equivalence/mcp-over-budget.json",
+      "sha256": "f976421255f15c7ac82171718cbdf511b738fad63f5c5b4df03a34835e049439"
+    },
+    {
+      "path": "session-equivalence/plain-prompt.json",
+      "sha256": "1537fc79c0b152e9db3e53f924153647d45b12e39c8f0a99239bbe5dbc45c303"
+    },
+    {
+      "path": "session-equivalence/retry-transient.json",
+      "sha256": "b4a3202b1d474f6cb256cb32c87c30e790678a04aacbbeca11c1059d9ebdf3d6"
+    },
+    {
+      "path": "session-equivalence/spec103b-trace.json",
+      "sha256": "82053e8f223568e12bddeb03c29cef79e8d56664cce42fdd62ba3fd90cd2de67"
+    },
+    {
+      "path": "session-equivalence/tool-round-trip.json",
+      "sha256": "b34c9492bc730242aa5108c8fe0f0dab122a53888ba74adc9c4a3f19ba02df17"
+    }
+  ]
+}

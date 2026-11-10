@@ -51,7 +51,7 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
 
 ## Phase 3: Wire and session types
 
-- [ ] T005 Record synthetic session and RPC fixtures from the TypeScript implementation with the offline faux provider. This task adds no Rust
+- [x] T005 Record synthetic session and RPC fixtures from the TypeScript implementation with the offline faux provider. This task adds no Rust
   > role: coder
   > deps: T002
   > files: [`scripts/record-contract-fixtures.mjs`, `native/omk-contract/tests/fixtures/`]
