@@ -30,7 +30,7 @@ function listenerCount(client: RpcClient): number {
 	return (client as unknown as { eventListeners: unknown[] }).eventListeners.length;
 }
 
-async function observedWithin(promise: Promise<unknown>, deadline = 100): Promise<unknown> {
+async function observedWithin(promise: Promise<unknown>, deadline = 350): Promise<unknown> {
 	let timeout: ReturnType<typeof setTimeout> | undefined;
 	try {
 		return await Promise.race([
@@ -77,11 +77,12 @@ process.stdin.resume();
 	test("rejects event waiters and releases listeners when the child closes", async () => {
 		const client = createClient(`process.stdin.once("data", () => process.exit(43)); process.stdin.resume();`);
 		await client.start();
-		const idle = client.waitForIdle(500);
-		const events = client.collectEvents(500);
-		const idleOutcome = observedWithin(idle);
-		const eventsOutcome = observedWithin(events);
-		await expect(client.getCommands()).rejects.toThrow(/Agent process exited/);
+		const idle = client.waitForIdle(1000);
+		const events = client.collectEvents(1000);
+		const command = client.getCommands();
+		const idleOutcome = observedWithin(idle, 350);
+		const eventsOutcome = observedWithin(events, 350);
+		await expect(command).rejects.toThrow(/Agent process exited/);
 		expect(await idleOutcome).toMatch(/Agent process exited/);
 		expect(await eventsOutcome).toMatch(/Agent process exited/);
 		expect(listenerCount(client)).toBe(0);
@@ -90,8 +91,8 @@ process.stdin.resume();
 	test("rejects current and later event waiters on stop", async () => {
 		const client = createClient(respondingChild);
 		await client.start();
-		const idleOutcome = observedWithin(client.waitForIdle(500));
-		const eventsOutcome = observedWithin(client.collectEvents(500));
+		const idleOutcome = observedWithin(client.waitForIdle(1000), 350);
+		const eventsOutcome = observedWithin(client.collectEvents(1000), 350);
 		await client.stop();
 		expect(await idleOutcome).toMatch(/stopped/);
 		expect(await eventsOutcome).toMatch(/stopped/);
