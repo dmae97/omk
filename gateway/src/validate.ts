@@ -24,8 +24,10 @@ function isObj(v: unknown): v is Record<string, any> {
 }
 
 export function checkModel(body: any, config: GatewayConfig, user: UserRow): { model: string; cfg: ModelCfg } {
-	const model = isObj(body) ? body.model : undefined;
-	if (typeof model !== "string" || !model) throw E.invalid("'model' is required.", "model");
+	const raw = isObj(body) ? body.model : undefined;
+	if (typeof raw !== "string" || !raw) throw E.invalid("'model' is required.", "model");
+	// The omk client strips the provider prefix on the wire ("coder", "reasoner"); accept both forms.
+	const model = !raw.includes("/") && Object.hasOwn(config.models, `OMK/${raw}`) ? `OMK/${raw}` : raw;
 	const cfg = Object.hasOwn(config.models, model) ? config.models[model] : undefined;
 	if (!cfg || (user.allowed_models && !user.allowed_models.includes(model))) throw E.modelNotAllowed();
 	return { model, cfg };

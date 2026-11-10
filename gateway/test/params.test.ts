@@ -124,4 +124,8 @@ describe("T-17 FIM / prefix", () => {
 		const r = await h.chat(plain(), { model: "OMK/reasoner", messages: [{ role: "user", content: "x" }, { role: "assistant", content: "a", reasoning_content: "why" }, { role: "user", content: "y" }] });
 		expect(r.status).toBe(200);
 	});
+	it.each([["coder", "OMK/coder"], ["reasoner", "OMK/reasoner"]])("bare wire model name %s is accepted as %s", async (bare) => {
+		const r = await h.chat(plain(), { model: bare, messages: msg() });
+		expect(r.status).toBe(200);
+	});
 });
