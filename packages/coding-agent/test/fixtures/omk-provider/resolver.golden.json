@@ -1,0 +1,179 @@
+{
+	"baseSha": "ea03fcf76b438f12f0cebcd6b255d24d4cb52741",
+	"outcomes": {
+		"--model coder": {
+			"model": "experientiallabs/qwen3-coder-plus",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--model reasoner": {
+			"model": null,
+			"thinkingLevel": null,
+			"warning": null,
+			"error": "Model \"reasoner\" not found. Use --list-models to see available models."
+		},
+		"--model flash": {
+			"model": "vercel-ai-gateway/zai/glm-5.3-flashx",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--model deepseek": {
+			"model": "openrouter/deepseek/deepseek-v4.1-flash:batch",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--model pro": {
+			"model": "huggingface/XiaomiMiMo/MiMo-V2.5-Pro",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--model omk": {
+			"model": null,
+			"thinkingLevel": null,
+			"warning": null,
+			"error": "Model \"omk\" not found. Use --list-models to see available models."
+		},
+		"--model OMK": {
+			"model": null,
+			"thinkingLevel": null,
+			"warning": null,
+			"error": "Model \"OMK\" not found. Use --list-models to see available models."
+		},
+		"--model coder:high": {
+			"model": "experientiallabs/qwen3-coder-plus",
+			"thinkingLevel": "high",
+			"warning": null,
+			"error": null
+		},
+		"--model reasoner:max": {
+			"model": null,
+			"thinkingLevel": null,
+			"warning": null,
+			"error": "Model \"reasoner:max\" not found. Use --list-models to see available models."
+		},
+		"--model flash:off": {
+			"model": "vercel-ai-gateway/zai/glm-5.3-flashx",
+			"thinkingLevel": "off",
+			"warning": null,
+			"error": null
+		},
+		"--model deepseek/deepseek-flash": {
+			"model": "deepseek/deepseek-flash",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--model deepseek-flash": {
+			"model": "deepseek/deepseek-flash",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--model deepseek-flash:high": {
+			"model": "deepseek/deepseek-flash",
+			"thinkingLevel": "high",
+			"warning": null,
+			"error": null
+		},
+		"--model deepseek-v4-pro": {
+			"model": "deepseek/deepseek-v4-pro",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--model DeepSeek/DeepSeek-V4-Pro": {
+			"model": "deepseek/deepseek-v4-pro",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--model anthropic/claude-opus-4-8": {
+			"model": "anthropic/claude-opus-4-8",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--model openai/gpt-5.4": {
+			"model": "openai/gpt-5.4",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--model openrouter/deepseek/deepseek-chat": {
+			"model": "openrouter/deepseek/deepseek-chat",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--model zai/glm-5.1": {
+			"model": "vercel-ai-gateway/zai/glm-5.1",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--model OMK/coder": {
+			"model": null,
+			"thinkingLevel": null,
+			"warning": null,
+			"error": "Model \"OMK/coder\" not found. Use --list-models to see available models."
+		},
+		"--model OMK/reasoner": {
+			"model": null,
+			"thinkingLevel": null,
+			"warning": null,
+			"error": "Model \"OMK/reasoner\" not found. Use --list-models to see available models."
+		},
+		"--model omk/coder": {
+			"model": null,
+			"thinkingLevel": null,
+			"warning": null,
+			"error": "Model \"omk/coder\" not found. Use --list-models to see available models."
+		},
+		"--model OMK/coder:high": {
+			"model": null,
+			"thinkingLevel": null,
+			"warning": null,
+			"error": "Model \"OMK/coder:high\" not found. Use --list-models to see available models."
+		},
+		"--model OMK/unknown-model": {
+			"model": null,
+			"thinkingLevel": null,
+			"warning": null,
+			"error": "Model \"OMK/unknown-model\" not found. Use --list-models to see available models."
+		},
+		"--provider deepseek --model flash": {
+			"model": "deepseek/deepseek-v4-flash",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--provider deepseek --model deepseek/deepseek-flash": {
+			"model": "deepseek/deepseek-flash",
+			"thinkingLevel": null,
+			"warning": null,
+			"error": null
+		},
+		"--provider OMK --model coder": {
+			"model": null,
+			"thinkingLevel": null,
+			"warning": null,
+			"error": "Unknown provider \"OMK\". Use --list-models to see available providers/models."
+		},
+		"--provider OMK --model OMK/reasoner": {
+			"model": null,
+			"thinkingLevel": null,
+			"warning": null,
+			"error": "Unknown provider \"OMK\". Use --list-models to see available providers/models."
+		},
+		"--provider omk --model coder": {
+			"model": null,
+			"thinkingLevel": null,
+			"warning": null,
+			"error": "Unknown provider \"omk\". Use --list-models to see available providers/models."
+		}
+	}
+}

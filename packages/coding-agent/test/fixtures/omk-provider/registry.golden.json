@@ -1,0 +1,190 @@
+{
+	"baseSha": "ea03fcf76b438f12f0cebcd6b255d24d4cb52741",
+	"providerCount": 41,
+	"modelCount": 2268,
+	"oauthProviderIds": [
+		"anthropic",
+		"cursor",
+		"devin",
+		"github-copilot",
+		"gitlab-duo",
+		"google-antigravity",
+		"google-gemini-cli",
+		"kimi-code",
+		"meta",
+		"openai-codex",
+		"opencode-go",
+		"opencode-zen",
+		"perplexity",
+		"qwen-oauth",
+		"xai",
+		"zhipu-coding-plan"
+	],
+	"providers": {
+		"amazon-bedrock": {
+			"count": 185,
+			"sha256": "37abc6c44fd53df119e67c01537a2e70809fd432edae60e2bbbad25cec99aee0"
+		},
+		"ant-ling": {
+			"count": 3,
+			"sha256": "0c9454525d1f173ef32be7fd728e0715d310afbdbd65cad8bfe05c6ce9b6ed25"
+		},
+		"anthropic": {
+			"count": 16,
+			"sha256": "52e6db17b16c6919f5eb468869ef745ff952d61b327c619db469ae8974a2ee5e"
+		},
+		"azure-openai-responses": {
+			"count": 48,
+			"sha256": "34832c1712ce6c868f8e794fdbc87de7e20d841383d0514912e6068fc671dabc"
+		},
+		"cerebras": {
+			"count": 2,
+			"sha256": "3b583e1e574672d213faf361302dd9a8c9a484f3a3156a1f771451a9888b29da"
+		},
+		"cloudflare-ai-gateway": {
+			"count": 37,
+			"sha256": "4963816b65dbe8b94aa63669e4b639055ff11f4b05804687b1a6815d837cac00"
+		},
+		"cloudflare-workers-ai": {
+			"count": 19,
+			"sha256": "27b3a685c8258e9b74c5e8cdebc3f5005ddd3db7aae4343d451a38f3863f6ef8"
+		},
+		"cursor": {
+			"count": 223,
+			"sha256": "a066c7def852911b10b9f2ac6fde8d8086038f1216814f14f8cd7f6650d7ad59"
+		},
+		"deepseek": {
+			"count": 3,
+			"sha256": "57874d82b934efe5a70a099830e4f0304e58aee19c29803ff563b64fdc6988c9"
+		},
+		"devin": {
+			"count": 257,
+			"sha256": "4127b2701c6bf108170096b1ef86748ed51365c2fb984de52c3eba63e503c577"
+		},
+		"experientiallabs": {
+			"count": 235,
+			"sha256": "918923c133d7d062116aa44191ee4457c4e1d8da486ca83adb2d6ffa7c976bdb"
+		},
+		"fireworks": {
+			"count": 29,
+			"sha256": "36c078c436a4abf7d5aaf920e04f69d3a75c2cc5b7f0af382ff75e38c5c28166"
+		},
+		"github-copilot": {
+			"count": 26,
+			"sha256": "02b80982f5392be7899ffaa15c936eb0c29ecad35daa476a3963791a15ba0d7b"
+		},
+		"google": {
+			"count": 24,
+			"sha256": "796a95e3d7081fcc77e4008db63b191ef80c3b7b9e29955b0bef2b064d1ac809"
+		},
+		"google-vertex": {
+			"count": 21,
+			"sha256": "575cc49e46b9d85f091e6ea21aad8402ee3abc8b28de7fa53c5ee8539d8f0dd6"
+		},
+		"groq": {
+			"count": 7,
+			"sha256": "e523e3187041388371d8d89edee8c5af5f9840105b1a50598fc7018999b50cc4"
+		},
+		"huggingface": {
+			"count": 76,
+			"sha256": "34e323b42f15005ec5a216252191e493d886d02a63889e2ee6117fec1b394059"
+		},
+		"kimi-coding": {
+			"count": 6,
+			"sha256": "f56703c54afd6dc63d64a5ed9d8a7e1a5c604330abf430cf24806286a6694b38"
+		},
+		"meta": {
+			"count": 6,
+			"sha256": "4c00d0b1c36a84f9f585453f39fbbfcffe614d21ff2bbfc0648a38615a0a975d"
+		},
+		"minimax": {
+			"count": 3,
+			"sha256": "16d806c81e6cee60034e041672a939c33731ea178dd1a3acf655821b2803c565"
+		},
+		"minimax-cn": {
+			"count": 3,
+			"sha256": "6f11d7ea7043e2156ef1dd5042cb91427fe0bc5f705d09faf1f5e80ca76966f5"
+		},
+		"mistral": {
+			"count": 32,
+			"sha256": "b36f8c9019cbc82e86c7b23820ef812cd4895c259dd4f9eabcfadfd68d7d2977"
+		},
+		"moonshotai": {
+			"count": 6,
+			"sha256": "70dd5df15368025342c784a808cf609d77d69763f7364485310dde49c5f15494"
+		},
+		"moonshotai-cn": {
+			"count": 6,
+			"sha256": "3429a7bc73f3d75fee388d380a2ba3bd01b6fc13db604bcbfd2471a1eba678cc"
+		},
+		"nvidia": {
+			"count": 21,
+			"sha256": "578cbe023be6b1b35aa7b562717be4849f2f082ea76cf33eb54e1243bba466c0"
+		},
+		"openai": {
+			"count": 48,
+			"sha256": "99785c643b1c1ea43f5a244a962948b2c265b65641cbbc9d54e43dfa30f24ea7"
+		},
+		"openai-codex": {
+			"count": 12,
+			"sha256": "0f141ca5b9e9c8ceeff78d355cdfd3d09ebeda668c1f8860e4f1c0e8906c856c"
+		},
+		"opencode": {
+			"count": 81,
+			"sha256": "73bb287e6d51b8fca2c6d1f5786993d753dc1ddcea2d78ff8e94a5edbbddd35c"
+		},
+		"opencode-go": {
+			"count": 38,
+			"sha256": "2d70d8d64eb2045e389228b59bf8d36ccb46d393ec38b6e708ff8baac7bfce1c"
+		},
+		"openrouter": {
+			"count": 402,
+			"sha256": "0063d6299c327c6127ca4dd45998bacf2ee2893e15f06d03ccc42c281ad90fd5"
+		},
+		"together": {
+			"count": 12,
+			"sha256": "30670c2e05a820d6f8cac411fa76b78821c9d6adeef7aade3ddde90e9854c6d9"
+		},
+		"vercel-ai-gateway": {
+			"count": 300,
+			"sha256": "5ce5b5a0dc3b760a3975aa95db7497166e7f35b01627cb1b674903e0513ad090"
+		},
+		"workbuddy": {
+			"count": 27,
+			"sha256": "4b9e35237473662e9c5d97910d3d69c5e21d7c3efc5fbbdec7c587b5d5809484"
+		},
+		"xai": {
+			"count": 10,
+			"sha256": "a17d1909df17419e717cf589e4389e4f2725f7ada535524454e50df7bfa51964"
+		},
+		"xiaomi": {
+			"count": 6,
+			"sha256": "372c0dc2888163488168b70cd0739266a08ed1a007ba8786960a7c327f8fe454"
+		},
+		"xiaomi-token-plan-ams": {
+			"count": 6,
+			"sha256": "b2f5dc5f5750e198370f84f5909cbe6ec831f51e864c8663f9dde1f1d46a89a0"
+		},
+		"xiaomi-token-plan-cn": {
+			"count": 6,
+			"sha256": "0fe457583bcee2e91ff230d29ead4de3e6e15d3e10b3e4965449c7cb62c98147"
+		},
+		"xiaomi-token-plan-sgp": {
+			"count": 6,
+			"sha256": "44447b1ecd80e81635e495ac1bcc53c12171e5458a4c74cfbb3ad4410ad51b3a"
+		},
+		"zai": {
+			"count": 7,
+			"sha256": "d998bf24ad1ffdcd32b77b5b37a378be1daa63d4c122756710f7c0ac451acab5"
+		},
+		"zai-coding-cn": {
+			"count": 7,
+			"sha256": "31f824865b5174cacdc36e9db360daf84135e0f890983933dd7cd544e6c5846f"
+		},
+		"zyloo": {
+			"count": 6,
+			"sha256": "c69da72c2620444fd75d26619d602ea007532de99f5cdf7c6345315285a0b212"
+		}
+	},
+	"sha256": "b503207d9666be31efb66d40030c12e909f9cdb8475c38987902af2fb354da9b"
+}
