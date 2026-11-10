@@ -6,6 +6,9 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export const PACKAGES = ["ai", "tui", "agent", "protocol", "adaptorch-wpl", "coding-agent", "book-to-skill"];
 export const APPROVED_ROOT = "/mnt/omkdata/tmp/opencode";
+// default-omitted: legacy import with no dialect flag must fail like "missing" (OMK 2.0 native default).
+export const CASES = ["native", "missing", "installed", "default-omitted", "compat-explicit"];
+export const FAILING_CASES = new Set(["missing", "default-omitted"]);
 export const digest = (value) => createHash("sha256").update(typeof value === "string" || Buffer.isBuffer(value) ? value : JSON.stringify(value)).digest("hex");
 export const fileDigest = (path) => digest(readFileSync(path));
 export const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
@@ -63,7 +66,7 @@ export function assertNoLinksOutside(root, allowMissing = false) {
 export function isolatedEnv(root, inherited = process.env) {
 	return { PATH: inherited.PATH, HOME: join(root, "home"), XDG_CONFIG_HOME: join(root, "home", ".config"), XDG_CACHE_HOME: join(root, "home", ".cache"), TMPDIR: root,
 		OMK_CODING_AGENT_DIR: join(root, "agent"), OMK_OFFLINE: "1", OMK_TRUST_PROJECT: "1", OMK_SKIP_VERSION_CHECK: "1", NO_COLOR: "1", CI: "1",
-		NPM_CONFIG_USERCONFIG: "/dev/null", NPM_CONFIG_GLOBALCONFIG: "/dev/null", NPM_CONFIG_CACHE: join(root, "npm-cache"), NPM_CONFIG_OFFLINE: "true", NPM_CONFIG_IGNORE_SCRIPTS: "true" };
+		NPM_CONFIG_USERCONFIG: "/dev/null", NPM_CONFIG_GLOBALCONFIG: join(root, "npm-globalrc"), NPM_CONFIG_CACHE: join(root, "npm-cache"), NPM_CONFIG_OFFLINE: "true", NPM_CONFIG_IGNORE_SCRIPTS: "true" };
 }
 export function run(command, args, cwd, work, label, options = {}) {
 	const logs = ["stdout", "stderr"].map((kind) => join(work, `${label}.${kind}.log`));
@@ -82,11 +85,13 @@ export function inputs(source) {
 		.filter((path) => !/(^|\/)(?:node_modules|dist|dist\.bak|dist-chrome|dist-firefox|\.git|sessions|\.cache|coverage|\.turbo|__pycache__)(\/|$)|\.tsbuildinfo$|\.log$|\.bak(?:-|$)|(^|\/)(?:\.env|\.npmrc|auth\.json|credentials\.json)|\.(pem|key|p12|pfx)$|(^|\/)corpus(\/|$)/i.test(path) && existsSync(join(source, path)))
 		.map((path) => { assert(lstatSync(join(source, path)).isFile(), `source link/special file requires review: ${path}`); return { path, sha256: fileDigest(join(source, path)), mode: statSync(join(source, path)).mode & 0o777 }; });
 }
-export function auditMembers(members, verbose) {
+export function auditMembers(members, verbose, publicSources = []) {
 	assert(members.length > 0, "missing public tarball members");
 	for (const path of members) {
 		assert(path.startsWith("package/") && !path.split("/").includes("..") && !path.includes("\\"), `unsafe tarball member: ${path}`);
-		assert(!/(^|\/)(?:\.git|\.omk|\.pi|\.npmrc|\.env[^/]*|sessions?|caches?|corpus|auth\.json)(\/|$)|\.(pem|p12|key)$/i.test(path), `private tarball member: ${path}`);
+		assert(!/(^|\/)(?:\.git|\.omk|\.pi|\.npmrc|\.env[^/]*|sessions|caches?|corpus|auth\.json)(\/|$)|\.(pem|p12|key)$/i.test(path), `private tarball member: ${path}`);
+		const module = path.match(/^package\/dist\/(.+)\.(?:js|d\.ts)(?:\.map)?$/);
+		assert(!/(^|\/)session(\/|$)/i.test(path) || module && publicSources.includes(`src/${module[1]}.ts`), `unbound session tarball member: ${path}`);
 		assert(/^package\/(dist|docs|examples|resources|skills|vendor|native)(\/|$)|^package\/(package\.json|npm-shrinkwrap\.json|LICENSE|NOTICE|README\.md|CHANGELOG\.md|DEVIN-NOTICE|containerization\.md|upstream\.json)$/.test(path.replace(/\/$/, "")), `non-public tarball member: ${path}`);
 	}
 	assert(verbose.every((line) => /^[d-]/.test(line)), "tarball contains link or special type");
@@ -165,7 +170,7 @@ export function prepare(source, work, frozen) {
 		const path = contained(join(work, "tarballs"), resolve(work, "tarballs", packed.filename));
 		const members = run("tar", ["-tzf", path], work, work, `members-${dir}`).stdout.trim().split("\n");
 		const verbose = run("tar", ["-tvzf", path], work, work, `member-types-${dir}`).stdout.trim().split("\n");
-		auditMembers(members, verbose);
+		auditMembers(members, verbose, files.filter((row) => row.path.startsWith(`packages/${dir}/src/`)).map((row) => row.path.slice(`packages/${dir}/`.length)));
 		const unpack = join(work, "unpacked", dir); mkdirSync(unpack);
 		run("tar", ["-xzf", path, "--no-same-owner", "-C", unpack], work, work, `extract-${dir}`);
 		assert(/MIT|Permission is hereby granted/.test(readFileSync(join(unpack, "package", "LICENSE"), "utf8")), "missing MIT license notice");
@@ -176,22 +181,43 @@ export function prepare(source, work, frozen) {
 	checkCandidate(work);
 	return receipt;
 }
+export function copyNpmCache(work, inherited = process.env) {
+	const cache = join(inherited.npm_config_cache ?? inherited.NPM_CONFIG_CACHE ?? join(inherited.HOME, ".npm"), "_cacache");
+	assert(existsSync(cache), "existing npm cache unavailable; no network fallback is authorized");
+	cpSync(cache, join(work, "npm-cache", "_cacache"), { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE });
+	assertNoLinksOutside(join(work, "npm-cache"));
+}
+export function consumerLock(candidate, manifest) {
+	const packages = { "": structuredClone(manifest) };
+	for (const [path, row] of Object.entries(candidate.reviewedLock.packages)) {
+		if (path.startsWith("node_modules/") && !row.link) packages[path] = structuredClone(row);
+	}
+	for (const tarball of candidate.tarballs) {
+		const workspacePath = `packages/${tarball.dir}`;
+		const workspace = candidate.reviewedLock.packages[workspacePath];
+		assert(workspace?.name === tarball.name && workspace.version === tarball.version, `workspace lock identity mismatch: ${tarball.name}`);
+		const row = structuredClone(workspace);
+		delete row.devDependencies;
+		packages[`node_modules/${tarball.name}`] = { ...row, resolved: `file:${tarball.path}` };
+		for (const [path, dependency] of Object.entries(candidate.reviewedLock.packages)) {
+			if (path.startsWith(`${workspacePath}/node_modules/`) && !dependency.link) packages[`node_modules/${tarball.name}${path.slice(workspacePath.length)}`] = structuredClone(dependency);
+		}
+	}
+	const lock = { name: manifest.name, lockfileVersion: 3, requires: true, packages };
+	assertLocked(lock, candidate.reviewedLock, candidate.tarballs);
+	return lock;
+}
 export function installConsumer(work) {
 	const candidate = checkCandidate(work);
 	const prefix = join(work, "consumer");
 	assert(!existsSync(prefix), "consumer prefix must be fresh");
 	mkdirSync(prefix);
-	writeJson(join(prefix, "package.json"), { name: "native-artifact-consumer", private: true, type: "module", dependencies: Object.fromEntries(candidate.tarballs.map((row) => [row.name, `file:${row.path}`])) });
-	const cache = join(process.env.HOME, ".npm", "_cacache");
-	assert(existsSync(cache), "existing npm cache unavailable; no network fallback is authorized");
-	cpSync(cache, join(work, "npm-cache", "_cacache"), { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE });
-	assertNoLinksOutside(join(work, "npm-cache"));
-	const common = ["--prefix", prefix, "install", "--offline", "--ignore-scripts", "--no-audit", "--no-fund", "--workspaces=false"];
-	run("npm", [...common, "--package-lock-only", ...candidate.tarballs.map((row) => row.path)], prefix, work, "consumer-resolve");
-	const lock = readJson(join(prefix, "package-lock.json"));
-	assertLocked(lock, candidate.reviewedLock, candidate.tarballs, prefix);
+	const manifest = { name: "native-artifact-consumer", private: true, type: "module", dependencies: Object.fromEntries(candidate.tarballs.map((row) => [row.name, `file:${row.path}`])) };
+	writeJson(join(prefix, "package.json"), manifest);
+	const lock = consumerLock(candidate, manifest);
 	writeJson(join(prefix, "npm-shrinkwrap.json"), lock);
-	run("npm", [...common, "--package-lock=false", ...candidate.tarballs.map((row) => row.path)], prefix, work, "consumer-install");
+	copyNpmCache(work);
+	run("npm", ["--prefix", prefix, "ci", "--offline", "--ignore-scripts", "--no-audit", "--no-fund", "--workspaces=false", "--omit=dev"], prefix, work, "consumer-install");
 	assertLocked(readJson(join(prefix, "npm-shrinkwrap.json")), candidate.reviewedLock, candidate.tarballs, prefix);
 	if (existsSync(join(prefix, "node_modules/.package-lock.json"))) assertLocked(readJson(join(prefix, "node_modules/.package-lock.json")), candidate.reviewedLock, candidate.tarballs, prefix);
 	assertNoLinksOutside(prefix);

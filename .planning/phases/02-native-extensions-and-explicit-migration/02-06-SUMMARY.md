@@ -36,11 +36,14 @@ commits: 0
 plan_head_before: 0d6e74b0d21cdb810c88c42381457eff944b935f
 plan_head_after: 0d6e74b0d21cdb810c88c42381457eff944b935f
 duration: 28min
-completed: null
-status: halted
+completed: 2026-11-08
+status: complete
+completion-scope: authorized six-step source and artifact acceptance only; broad requirements and activation remain blocked
 ---
 
 # Phase 2 Plan 6: Native Extension Artifact Tooling Summary
+
+> **2026-11-08 result:** combined artifact `verify` passed for candidate `2962df3d…`. See [Final combined acceptance](#final-combined-acceptance-2026-11-08). The halted handoff below is retained as history.
 
 **Artifact tooling and 25 harness tests are implemented; actual source snapshot, build, tarballs, installation, Node/Bun execution and installed declarations remain unrun pending main's explicit freeze.**
 
@@ -166,3 +169,53 @@ RED and GREEN behavior evidence are recorded above. Commits are intentionally ab
 - HEAD remains `0d6e74b0d21cdb810c88c42381457eff944b935f`; measured `git rev-list --count 0d6e74b0d21cdb810c88c42381457eff944b935f..HEAD` is 0. No commit is claimed.
 - No TODO/FIXME/placeholder implementation was found in the tooling/consumer files.
 - Self-check applies only to the tooling handoff. Actual artifacts, installed declarations and combined acceptance remain blocked/unrun.
+
+## Final combined acceptance, 2026-11-08
+
+Work root: `/mnt/omkdata/tmp/opencode/omk-v2-sdk092-20261108-115739/`. The candidate was built from the task-owned worktree `.worktrees/verify-buncjs-20261108`. Its frozen public inputs, `2962df3dd7df590254d4ef2067daa8c0ea80c7d746e9f221cfb10b262177b17c` (3,751 files with modes), equal the main checkout fingerprint before and after every stage. Emitted output digest: `e2c16a641fcd541c70095bb68bea52f83b1f23092c1a27346c05ed67ca70e25e`. Base HEAD is `48fb8e33a8`, with uncommitted changes.
+
+| Stage | Command | Result |
+|---|---|---|
+| prepare | `native-extension-artifact-gate.mjs prepare --frozen-inputs 2962df3d…` | exit 0; seven packages built, packed and audited |
+| node | `… node` | exit 0; five CLI cases and SDK four-tool reload/cwd receipt |
+| bun | `… bun` | exit 0; real Linux x64 compiled binary, all five cases incl. installed CJS subpath; tool receipts equal Node |
+| types | `… types` | exit 0; strict NodeNext installed consumer, no `skipLibCheck`, 0 errors |
+| source | `source-checks.mjs` (all seven groups) | every group exit 0; inputs equal candidate before and after each group |
+| verify | `… verify` | **exit 0**, `{"status":"pass","activation":"not-authorized"}` |
+
+Source groups ran in the worktree with an isolated HOME and agent directory, `LIVE_E2E=0` and one Vitest worker:
+
+| Group | Observed |
+|---|---|
+| phase1 (unchanged ten files) | 266 passed |
+| native-loader | 33 passed |
+| cli-sdk | 117 passed |
+| doctor | 33 passed |
+| preservation | inventory: 89 public entries and 10 builtins; 316 + 114 tests passed |
+| atelier | 88 passed, 1 skipped (`native-notification`); typecheck exit 0; vendor 31 pinned files verified |
+| root-check | `npm run check` exit 0; 588 passed, 30 skipped, 0 failed |
+
+The runner `source-checks.mjs` reuses the 2026-11-07 group definitions, and `assemble-source.mjs` refuses stale or failed groups. Both are retained in the work root. Two failed environment attempts are kept: `source-attempt1-nodist/` (workspace `dist` absent in the worktree) and `source-attempt2-extdeps/` (ignored `.omk/extensions/omk-computeruse-stagehand/node_modules` absent). They were fixed by an ordinary `npm run build` in the worktree and by copying the main checkout's ignored extension dependency trees. No test, expectation or gate changed. Fixes that made this candidate pass are recorded in [the 2026-11-08 acceptance record](02-ACCEPTANCE-20261108.md): Bun `--compile-autoload-package-json`, the SDK-free `GoogleThinkingLevel`, and `@anthropic-ai/sdk` 0.92.0 with the ambient-header guard.
+
+### Six-step disposition
+
+| Step | Status | Evidence |
+|---|---|---|
+| 02-01 native loader | pass | phase1 and native-loader groups; [02-01 summary](02-01-SUMMARY.md) |
+| 02-02 CLI/doctor/SDK/lifecycle | pass | cli-sdk and doctor groups |
+| 02-03 Atelier batch A | pass | atelier group |
+| 02-04 Atelier batch B and vendor hashes | pass | atelier group, vendor check |
+| 02-05 inventory and preservation | pass | preservation group |
+| 02-06 artifact acceptance | pass | node, bun, types, verify above |
+
+All six authorized source-work steps have observed passing results for one candidate.
+
+### Superseded by the native default, 2026-11-08
+
+The owner then approved the `omk` default. Candidate `019d076c…` passed all gate stages and combined `verify` with the default switched. spec-108 dispositions are in [the acceptance record](02-ACCEPTANCE-20261108.md#continuation-native-default-omk-2026-11-08). The first bullet below is historical.
+
+### Not accepted by this result
+
+- **V2-CORE-01, final default.** Omitted and undefined dialects remain `omk+pi`. No default flip or engine activation was authorized or performed. spec-108 marks alias-layer removal as decided separately.
+- **spec-108 obligations: unresolved, with no owner decision recorded.** 108-2 Terminal-Bench equivalence (±3pp CI) needs free runs or a posted dollar cap. Token/time ratios, deterministic tool-order replay and identical pass/fail/skip counts against main were not run. One-module-per-PR (108-3) was not applied to this uncommitted batch. Swap order step 4 deprecation semantics are undecided.
+- Minimum Node/npm, platforms other than Linux x64, clipboard classification, private user resources, live providers, TUI/UI, R parity, Rust ownership and desktop. Versions remain 1.5.10. Nothing was committed, pushed or published.

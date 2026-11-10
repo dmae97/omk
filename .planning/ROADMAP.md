@@ -64,8 +64,8 @@ documentation gaps, then follow the constitution's milestone release procedure.
 | Phase | Status | Evidence |
 |---|---|---|
 | 1 | Complete | Final goal verification 4/4, all three review findings resolved, 266 targeted tests and root check passed. |
-| 2 | Ready to plan | Context, research, test-pattern map and draft validation exist; no runtime/default activation performed. |
+| 2 | Native default and combined artifact gates passed; phase closure remains open | Node/Bun/types/source acceptance passed for candidate `019d076c…`; exact-origin revalidation and current package fingerprint match passed. Native default is `omk`, explicit compatibility remains. Remaining spec-108 criteria are separate. See [acceptance](phases/02-native-extensions-and-explicit-migration/02-ACCEPTANCE-20261108.md). |
 | 3 | Not started | Existing TUI observations are not native visual acceptance. |
-| 4 | Not started | R executable unavailable in the current session. |
-| 5 | Partial pre-existing prototypes | No Rust execution-owner migration claimed. |
+| 4 | Partial finite mathematical acceptance | Existing R 4.4.3 ran 6,566 host-budget traces and TS/R/Rust DAG/allocation acceptance. Sixty oracle/negative-control tests passed without skips. Broader policy and recovery gates remain open. |
+| 5 | Bounded H1–H2g source acceptance, native supervision/reconnect opt-in and explicit GC | Rust supervises Linux commands and publishes durable execution-record prefixes. Coordinator/CLI reconnect preserves original writer/verifier grants, candidates, generation and phase budgets. Explicit native-record GC keeps recoverable/unprovable records and retires only independently proven terminal data; interrupted deletion is retryable. Node retains authority, scheduling and publication. Native snapshots stream with bounded state. Start/revocation provenance survives compaction for retained grants; dropped-grant recovery, witness retention, DAG/scripted-agent/session reconnect, desktop and full Rust ownership remain incomplete. See [H1](RUST-HOST-01-RESULT.md), [H2b](RUST-HOST-02B-RESULT.md), [H2c](RUST-HOST-02C-RESULT.md), [H2d](RUST-HOST-02D-RESULT.md), [H2e](RUST-HOST-02E-RESULT.md), [H2f](RUST-HOST-02F-RESULT.md), [H2g](RUST-HOST-02G-RESULT.md) and [stream results](WORKBENCH-STREAM-01-RESULT.md). |
 | 6 | Not started | Version remains 1.5.10. |

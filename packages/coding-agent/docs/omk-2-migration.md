@@ -6,9 +6,11 @@ The owner-declared milestone is **Orbit-based native desktop UI + gpui-flow DAG
 views + Rust execution host**, with R as an independent development/CI oracle.
 Windows, Linux/WSLg and macOS are target platforms, not currently certified platforms.
 
-The current delivery is an additive, read-only [run graph observation bridge](run-graph.md).
-Production execution remains Node. There is no migrated desktop application or
-Rust execution controller yet. Package versions remain unchanged until release gates pass.
+The current delivery includes the read-only [run graph observation bridge](run-graph.md)
+and an opt-in [Rust sandbox execution host](#h1-real-rust-execution-supervision-2026-11-08) for Linux
+verified-run writer/verifier commands. Default execution, durable authority and
+scheduling remain Node. There is no migrated desktop application or full Rust
+agent controller. Package versions remain unchanged until release gates pass.
 
 This is not a fresh specification framework or a replacement for existing specs.
 The repository constitution, existing runtime contracts and accepted N02 fixture remain authoritative.
@@ -69,7 +71,7 @@ absence is not counted as success. Existing dirty/staged work is not a disposabl
 | C1 Rust observation consumer | Bounded typed decoding and monotonic full-snapshot view | Rust RED/GREEN and actual Node CLI to Rust binary tests | Implemented; not an execution host |
 | U0 compatibility spike | One Orbit/gpui-flow panel from reviewed pinned sources | Resolved GPUI graph; native build and input checks | Partial: adapted GPUI/gpui-flow sample renders on WSLg; Orbit shell and platform parity remain open |
 | R0 policy parity | Scope mathematical functions before porting them | Independent expected values, fixed inputs and decision/state checks | Partial: inactive finite DAG port and exact TS/R/Rust gate; broader policy parity remains open |
-| H0 host ownership slices | Move one existing execution boundary at a time | Approval, stale-owner fencing, cancellation/settlement, budget and crash tests | Partial: test-only no-execution start-admission fixture; Rust execution ownership has not moved |
+| H0 host ownership slices | Move one existing execution boundary at a time | Approval, stale-owner fencing, cancellation/settlement, budget and crash tests | Partial: no-execution admission fixture plus opt-in Linux Rust sandbox supervision. Durable grants, scheduling, recovery journal and publication remain Node |
 | U1 live workbench | Session/chat/model/skills/MCP/diff/goal views and DAG observations | Feature matrix, real runtime events and reconnect tests | Not implemented |
 | P0 platform acceptance | Windows, Linux/WSLg and macOS installation paths | Installed-app behavior, IME/clipboard, recovery and resource checks | Not verified |
 | Release 2.0.0 | Feature and documentation closure | All required gates; constitution's milestone release procedure | Not eligible |
@@ -241,6 +243,25 @@ control, reconnect, execution handover, settlement and platform acceptance remai
 open. `VerifiedRunApproval` still has no expiry field; the fixture's trusted host
 authorization deadline is a separate boundary.
 
+### H1 real Rust execution supervision, 2026-11-08
+
+The Linux execution host is wired into the existing
+verified-run broker, not only a test fixture. With an explicit trusted binary
+selection, Rust owns each sandbox process, the commit gate, output/time budgets,
+cancellation and termination observation. Node commits approval/authority/journal
+state before release and independently checks termination. Lost native outcomes
+remain quarantined, with no fallback dispatch.
+
+The production budget reducer has an independent base-R prefix-sum/first-violation
+oracle and boundary tests. Existing DAG reduction/allocation TS/R/Rust parity is
+also executable with an explicitly selected R installation. These finite checks
+are not a proof of arbitrary policy correctness or process recovery.
+
+This does not complete the host milestone: durable grant ownership, multi-run
+scheduling, sessions/providers, workbench/UI, publication and other platforms
+remain on their previous paths or unimplemented. The default and installed engine
+are unchanged.
+
 ## Pi-independent core staging
 
 The approved 2.0 target also removes implicit Pi compatibility from OMK's default
@@ -292,10 +313,30 @@ installation, safe execution or runtime compatibility. It never evaluates or
 rewrites the inspected package, and prepares with compatibility selection so
 legacy resources remain inspectable.
 
-Omission/undefined still select `omk+pi`, and versions stay at 1.5.10. Source
-CLI/SDK tool and provider-owner checks do not certify every lifecycle or extension
-feature, packaged Node or compiled Bun. Those gates require their own receipts;
-no default activation, installed-engine replacement or publication follows.
+That staging record kept omission at `omk+pi`. The native default below supersedes it.
+
+### Native default, 2026-11-08
+
+The owner approved switching the default after the Phase 2 combined acceptance.
+Omission and `undefined` now select `omk` for the package manager, resource loader,
+direct extension loaders, Bun virtual modules and `omk package doctor`.
+Compatibility is still available, unchanged, through
+`--package-manifest-dialect omk+pi` or `packageManifestDialect: "omk+pi"`. It is
+not removed. A native load failure that names a legacy Pi package appends a
+migration hint pointing to that option and to the doctor. Doctor preparation
+still uses compatibility, so legacy resources stay inspectable.
+
+What breaks without opting in: extensions that import `@earendil-works/pi-*`,
+`@mariozechner/pi-*` or `@oh-my-pi/pi-*` without installing them, and packages
+that declare only a `pi` manifest. Migrate the imports to `open-multi-agent-kit`,
+`omk-ai`, `omk-tui` or `omk-agent-core`, and rename the manifest key to `omk`.
+There is no persisted setting or environment switch yet; the opt-in is per
+process or per SDK construction.
+
+spec-108 disposition for this switch: the free Terminal-Bench equivalence
+criterion was waived by the owner on 2026-11-08. The other 108-2/108-3 criteria
+are recorded in the Phase 2 acceptance record. Versions remain 1.5.10 until the
+milestone release gates pass.
 
 The six authorized source-work steps are inventory, native wiring,
 repository/example migration, local-user preservation, diagnostics/documentation

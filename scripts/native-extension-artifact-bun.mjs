@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { assertFiles, assertNoLinksOutside, checkCandidate, digest, fileDigest, readJson, run, tree, writeJson } from "./native-extension-artifact-candidate.mjs";
+import { assertFiles, assertNoLinksOutside, CASES, checkCandidate, FAILING_CASES, digest, fileDigest, readJson, run, tree, writeJson } from "./native-extension-artifact-candidate.mjs";
 
 export function validateBunReceipt(receipt) {
 	assert(receipt.compiled === true, "actual compiled behavior required, not a version-only executable");
-	for (const name of ["native", "missing", "installed", "compat-omitted", "compat-explicit"]) assert(receipt.cases?.some((row) => row.name === name && row.status === "pass"), `missing compiled matrix ${name}`);
+	for (const name of CASES) assert(receipt.cases?.some((row) => row.name === name && row.status === "pass"), `missing compiled matrix ${name}`);
 	assert(receipt.namespaceStartup === true && receipt.worker?.sha256 && receipt.entry?.sha256, "namespace startup/worker assets missing");
 	assert(receipt.binary?.sha256 && receipt.archive?.sha256 && receipt.assets?.length > 0, "compiled binary/assets receipt missing");
-	for (const row of receipt.cases.filter((item) => item.name !== "missing")) assert(row.events.some((event) => event.event === "tool" && event.runtime.bun && /\$bunfs|~BUN|%7EBUN/.test(event.runtime.main)), "compiled runtime behavior not observed");
+	for (const row of receipt.cases.filter((item) => !FAILING_CASES.has(item.name))) assert(row.events.some((event) => event.event === "tool" && event.runtime.bun && /\$bunfs|~BUN|%7EBUN/.test(event.runtime.main)), "compiled runtime behavior not observed");
 }
 export function runBun(work, matrix) {
 	const candidate = checkCandidate(work);
@@ -43,7 +43,7 @@ export function runBun(work, matrix) {
 	for (const path of ["omk/package.json", "omk/photon_rs_bg.wasm", "omk/README.md"]) assert(assets.some((row) => row.path === `binary-runtime/${path}`), `missing copied binary asset ${path}`);
 	const cases = matrix(work, executable, true);
 	const node = readJson(join(work, "node.json"));
-	for (const row of cases.filter((item) => item.name !== "missing")) {
+	for (const row of cases.filter((item) => !FAILING_CASES.has(item.name))) {
 		const tools = (events) => events.filter((item) => item.event === "tool").map(({ input, result, identity, provider }) => ({ input, result, identity, provider }));
 		assert.deepEqual(tools(row.events), tools(node.cases.find((item) => item.name === row.name).events), "compiled/Node deterministic tool receipt differs");
 	}

@@ -48,11 +48,15 @@ export default function artifactExtension(api: ExtensionAPI) {
 		api: "native-artifact-fixture", baseUrl: "https://example.invalid", apiKey: "offline-fixture-not-a-credential",
 		models: [{ id: "offline", name: "Offline artifact fixture", reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 100000, maxTokens: 1024 }],
 		streamSimple(model, context) {
-			const recent = context.messages.slice(context.messages.findLastIndex((message) => message.role === "user"));
-			const completed = recent.some((message) => message.role === "toolResult" && message.toolName === "artifact_increment");
+			const request = context.messages.findLastIndex((message) => {
+				if (message.role !== "user") return false;
+				const text = typeof message.content === "string" ? message.content : message.content.filter((part) => part.type === "text").map((part) => part.text).join("");
+				return ["run the offline fixture", "run the offline artifact fixture", "run the offline artifact fixture after reload"].includes(text);
+			});
+			const completed = context.messages.slice(request).some((message) => message.role === "toolResult" && message.toolName === "artifact_increment");
 			record({ event: "provider", provider: model.provider, model: model.id, completed });
 			const message = { role: "assistant" as const, api: model.api, provider: model.provider, model: model.id, timestamp: Date.now(),
-				content: completed ? [{ type: "text" as const, text: "offline artifact complete" }] : [{ type: "toolCall" as const, id: "artifact-call", name: "artifact_increment", arguments: { value: 41 } }],
+				content: completed ? [{ type: "text" as const, text: "offline artifact complete" }] : [{ type: "toolCall" as const, id: `artifact-call-${request}`, name: "artifact_increment", arguments: { value: 41 } }],
 				stopReason: completed ? "stop" as const : "toolUse" as const,
 				usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
 			const stream = createAssistantMessageEventStream();

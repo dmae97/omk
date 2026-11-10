@@ -117,23 +117,26 @@ describe("package doctor target selection", () => {
 		expect(JSON.parse(lines.join("\n"))).toMatchObject({ error: { code: "cli-usage" } });
 	});
 
-	it("preserves omission JSON and cleanup with explicit compatibility", async () => {
-		const outputs: string[] = [];
-		for (const flags of [[source], ["--package-manifest-dialect", "omk+pi", source]]) {
+	it("matches explicit native JSON on omission and keeps explicit compatibility (OMK 2.0 default)", async () => {
+		const results: Array<{ exitCode: number; output: string }> = [];
+		for (const flags of [
+			[source],
+			["--package-manifest-dialect", "omk", source],
+			["--package-manifest-dialect", "omk+pi", source],
+		]) {
 			const lines: string[] = [];
 			const cleanup = vi.fn();
-			expect(
-				(
-					await runPackageDoctorCli(["package", "doctor", ...flags], {
-						prepare: async () => ({ ...inspection(), cleanup }),
-						writeLine: (line) => lines.push(line),
-					})
-				).exitCode,
-			).toBe(0);
+			const { exitCode } = await runPackageDoctorCli(["package", "doctor", ...flags], {
+				prepare: async () => ({ ...inspection(), cleanup }),
+				writeLine: (line) => lines.push(line),
+			});
 			expect(cleanup).toHaveBeenCalledOnce();
-			outputs.push(lines.join("\n"));
+			results.push({ exitCode, output: lines.join("\n") });
 		}
-		expect(outputs[1]).toBe(outputs[0]);
+		const [omitted, native, compatible] = results;
+		expect(omitted).toEqual(native);
+		expect(compatible?.exitCode).toBe(0);
+		expect(compatible?.output).not.toBe(omitted?.output);
 	});
 
 	it("cleans prepared sources when scanning fails", async () => {
@@ -165,13 +168,13 @@ describe("package doctor target selection", () => {
 		},
 	);
 
-	it("keeps actual omission and explicit compatibility JSON identical", () => {
+	it("matches actual explicit native JSON on omission and keeps explicit compatibility (OMK 2.0 default)", () => {
 		const omitted = actualCli([source]);
+		const native = actualCli(["--package-manifest-dialect=omk", source]);
 		const explicit = actualCli(["--package-manifest-dialect=omk+pi", source]);
-		expect(omitted.error).toBeUndefined();
-		expect(explicit.error).toBeUndefined();
-		expect([omitted.status, explicit.status]).toEqual([0, 0]);
-		expect(explicit.stdout).toBe(omitted.stdout);
+		expect([omitted.error, native.error, explicit.error]).toEqual([undefined, undefined, undefined]);
+		expect([omitted.status, native.status, explicit.status]).toEqual([1, 1, 0]);
+		expect(omitted.stdout).toBe(native.stdout);
 		expect(existsSync(join(source, "executed"))).toBe(false);
 	});
 });

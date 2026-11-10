@@ -8,6 +8,8 @@ import {
 	type AuthorityStoreHooks,
 	authorityStorePath,
 } from "./authority-store.ts";
+import { nativeWitnessDir, probeWithNativeWitness } from "./native-witness.ts";
+import { retainRunGrant } from "./run-retention.ts";
 import { type AuthorityStatus, deriveAuthorityStatus } from "./run-status.ts";
 import { probeOwnedNamespace } from "./supervisor-adapter.ts";
 
@@ -31,11 +33,14 @@ import { probeOwnedNamespace } from "./supervisor-adapter.ts";
  * missing identity is not a termination witness: a lost writer lease does
  * not prove a Git child or hook has exited, and the ref outbox is not that
  * proof either. Those grants stay `"unknown"` until a supervisor witness
- * settles them (F07).
+ * settles them (F07). With a state root, a native host's durable termination
+ * receipt can resolve an inconclusive live probe, never an alive one.
  */
-export function runAuthorityProbe(grant: AuthorityGrantRecord): ReturnType<AuthorityProbe> {
+export function runAuthorityProbe(grant: AuthorityGrantRecord, stateRoot?: string): ReturnType<AuthorityProbe> {
 	if (!grant.identity) return "unknown";
-	return probeOwnedNamespace(grant.identity);
+	if (stateRoot === undefined) return probeOwnedNamespace(grant.identity);
+	const status = probeWithNativeWitness(grant.identity, nativeWitnessDir(stateRoot));
+	return status === "gone" ? "terminated" : status;
 }
 
 /** Total admissible weight of concurrently unsettled grants for one state root. */
@@ -55,7 +60,8 @@ export interface OpenRunAuthorityStoreOptions {
 export function openRunAuthorityStore(runPath: string, options: OpenRunAuthorityStoreOptions = {}): AuthorityStore {
 	const store = AuthorityStore.open(authorityStorePath(dirname(runPath)), {
 		capacity: options.capacity ?? RUN_AUTHORITY_CAPACITY,
-		probe: options.probe ?? runAuthorityProbe,
+		probe: options.probe ?? ((grant) => runAuthorityProbe(grant, dirname(runPath))),
+		retainGrant: (grant) => retainRunGrant(dirname(runPath), grant),
 		...(options.hooks ? { hooks: options.hooks } : {}),
 	});
 	try {

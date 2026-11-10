@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- The default package manifest dialect is now native `omk`. Extensions that import legacy Pi packages without installing them, and packages with only a `pi` manifest, no longer load by default. Opt into compatibility with `--package-manifest-dialect omk+pi`, or `packageManifestDialect: "omk+pi"` in SDK constructors. The load error now names this option. `omk package doctor` also defaults to the native target. See [the OMK 2 migration notes](docs/omk-2-migration.md#native-default-2026-11-08).
+
 ### Added
 
 - META usage in the status rail: with a Meta OAuth login, OMK reads the current and weekly windows from the official Muse Code CLI (`muse serve` with writes and shell disabled, MSP `usage/read`, no prompt or model call). An unobserved host shows `no observed usage yet`, not 0%. See [providers](docs/providers.md).

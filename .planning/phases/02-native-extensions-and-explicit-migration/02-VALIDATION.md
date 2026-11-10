@@ -1,13 +1,21 @@
 ---
 phase: "02"
 slug: native-extensions-and-explicit-migration
-status: draft
+status: blocked
 nyquist_compliant: false
 wave_0_complete: false
 created: 2026-11-05
 ---
 
 # Phase 2 executable validation and source coverage audit
+
+## Current execution status, 2026-11-08
+
+**Update, native default: the default dialect is now `omk`; candidate `019d076c…` passed every gate stage and combined `verify`.** See [the native-default continuation](02-ACCEPTANCE-20261108.md#continuation-native-default-omk-2026-11-08). Three items need owner confirmation before the phase checkbox: tokens per turn, clipboard classification, and the one-module-per-PR split. The paragraph below is the earlier pre-switch status. **Six-step source and artifact acceptance passed. Phase 2 requirements remain blocked on activation.** Combined `verify` exited 0 for candidate `2962df3d…` at `/mnt/omkdata/tmp/opencode/omk-v2-sdk092-20261108-115739/`, with `prepare`, `node`, `bun`, `types` and all seven source groups passing. Per-step results are in [02-06-SUMMARY.md](02-06-SUMMARY.md#final-combined-acceptance-2026-11-08) and the fixes in [the latest continuation](02-ACCEPTANCE-20261108.md). Front-matter `status: blocked` refers to the phase. V2-CORE-01 needs the final-default flip, and the spec-108 equivalence, benchmark, one-module-per-PR and deprecation obligations still need an owner decision. Neither is granted here. The earlier [2026-11-07 continuation](02-ACCEPTANCE-20261107.md) is retained as history, not current npm-cache status.
+
+The historical planning matrix below is unchanged. Its unrun labels describe the original planning handoff, not the current results above. The latest candidate and failure logs, not historic status rows or a successful build, determine acceptance.
+
+## Original planning record
 
 This is a plan, not a completed acceptance record. Main's saved
 `task1-valid-red.log` was read during planning: **5 intended assertion failures,

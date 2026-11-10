@@ -58,10 +58,13 @@ describe("package doctor CLI", () => {
 
 	it("inspects a package, returns machine-readable JSON, and cleans temporary sources", async () => {
 		const cleanup = vi.fn();
-		const outcome = await runPackageDoctorCli(["package", "doctor", "./fixture"], {
-			writeLine: (line) => lines.push(line),
-			prepare: async () => ({ ...inspection(), cleanup }),
-		});
+		const outcome = await runPackageDoctorCli(
+			["package", "doctor", "./fixture", "--package-manifest-dialect", "omk+pi"],
+			{
+				writeLine: (line) => lines.push(line),
+				prepare: async () => ({ ...inspection(), cleanup }),
+			},
+		);
 		const output = parsedOutput<{ manifest: { selected: string }; compatible: boolean }>();
 
 		expect(outcome).toEqual({ handled: true, exitCode: 0 });

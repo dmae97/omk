@@ -103,8 +103,10 @@ describe("extensions discovery", () => {
 			`,
 		);
 
-		const discovered = await discoverAndLoadExtensions([], tempDir, tempDir);
-		const binaryFactory = await loadExtensionModuleWithVirtualModulesForTests(extensionPath);
+		// Legacy Pi aliases are explicit opt-in since OMK 2.0.
+		const compat = { packageManifestDialect: "omk+pi" } as const;
+		const discovered = await discoverAndLoadExtensions([], tempDir, tempDir, undefined, compat);
+		const binaryFactory = await loadExtensionModuleWithVirtualModulesForTests(extensionPath, compat);
 
 		expect(discovered.errors).toHaveLength(0);
 		expect(discovered.extensions[0]?.commands.has("legacy-pi")).toBe(true);
@@ -234,7 +236,9 @@ describe("extensions discovery", () => {
 		fs.writeFileSync(path.join(subdir, "index.ts"), extensionCode);
 		fs.writeFileSync(path.join(subdir, "package.json"), JSON.stringify({ pi: { extensions: ["./"] } }));
 
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+		const result = await discoverAndLoadExtensions([], tempDir, tempDir, undefined, {
+			packageManifestDialect: "omk+pi",
+		});
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);

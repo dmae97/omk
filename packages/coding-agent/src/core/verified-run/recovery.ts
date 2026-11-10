@@ -1,10 +1,10 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { MAX_VERIFIED_RUN_GENERATIONS, type RunResumeCommand } from "omk-protocol";
 import type { RunAuthority } from "./authority-runtime.ts";
 import { commandEnvironmentDigest, probeVerifiedSandbox } from "./broker.ts";
 import { loadCandidate } from "./candidate.ts";
 import type { JournalSnapshot } from "./journal.ts";
-import { probeNamespace } from "./namespace-identity.ts";
+import { nativeWitnessDir, probeWithNativeWitness } from "./native-witness.ts";
 import { readRunClock, remainingVerification } from "./recovery-clock.ts";
 import { requireRunJournal, withRecoveryLease } from "./recovery-command.ts";
 import type { RunProjection } from "./run-types.ts";
@@ -53,7 +53,7 @@ function assertCandidateRecoverable(runPath: string, journal: JournalSnapshot): 
 			dispatch?.kind !== "dispatch" ||
 			dispatch.role !== "verifier" ||
 			!identity ||
-			probeNamespace(identity) !== "gone"
+			probeWithNativeWitness(identity, nativeWitnessDir(dirname(runPath))) !== "gone"
 		)
 			throw new VerifiedRunError("unsettled");
 	}

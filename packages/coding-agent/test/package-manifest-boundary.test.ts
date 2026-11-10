@@ -121,35 +121,32 @@ describe("managed package manifest dialect boundary", () => {
 		expect(existsSync(join(root, "executed"))).toBe(false);
 	});
 
-	it.each([undefined, "omk+pi"] as const)(
-		"preserves filtered and unfiltered Pi compatibility for %s",
-		async (dialect) => {
-			const root = fixture("legacy", { pi: declaredManifest });
-			const paths = await manager(dialect).resolveExtensionSources([root]);
-			settingsManager.setPackages([
-				{ source: root, extensions: ["**/*"], skills: ["**/*"], prompts: ["**/*"], themes: ["**/*"] },
-			]);
-			const filtered = await manager(dialect).resolve();
-			for (const type of resourceTypes) {
-				expect(paths[type].map((resource) => resource.path)).toEqual([join(root, declaredFiles[type])]);
-				expect(filtered[type].map((resource) => resource.path)).toEqual([join(root, declaredFiles[type])]);
-			}
-			expect(existsSync(join(root, "executed"))).toBe(false);
-		},
-	);
+	it.each(["omk+pi"] as const)("preserves filtered and unfiltered Pi compatibility for %s", async (dialect) => {
+		const root = fixture("legacy", { pi: declaredManifest });
+		const paths = await manager(dialect).resolveExtensionSources([root]);
+		settingsManager.setPackages([
+			{ source: root, extensions: ["**/*"], skills: ["**/*"], prompts: ["**/*"], themes: ["**/*"] },
+		]);
+		const filtered = await manager(dialect).resolve();
+		for (const type of resourceTypes) {
+			expect(paths[type].map((resource) => resource.path)).toEqual([join(root, declaredFiles[type])]);
+			expect(filtered[type].map((resource) => resource.path)).toEqual([join(root, declaredFiles[type])]);
+		}
+		expect(existsSync(join(root, "executed"))).toBe(false);
+	});
 
-	it("preserves compatibility when the constructor option is omitted entirely", async () => {
+	it("uses the native dialect when the constructor option is omitted entirely (OMK 2.0 default)", async () => {
 		const root = fixture("omitted", { pi: declaredManifest });
-		const compatible = new DefaultPackageManager({ cwd, agentDir, settingsManager });
-		const paths = await compatible.resolveExtensionSources([root]);
-		for (const type of resourceTypes) expect(paths[type]).toHaveLength(1);
+		const omitted = new DefaultPackageManager({ cwd, agentDir, settingsManager });
+		expectNoResources(await omitted.resolveExtensionSources([root]));
+		expect(existsSync(join(root, "executed"))).toBe(false);
 	});
 
 	it.each([{}, { extensions: [] }, { extensions: ["./missing.ts"] }, { extensions: "./invalid.ts" }])(
 		"preserves 1.x nested extension fallback in compatibility mode for Pi %j",
 		async (pi) => {
 			const root = fixture("agent/extensions/legacy-fallback", { pi });
-			const paths = await manager().resolve();
+			const paths = await manager("omk+pi").resolve();
 			expect(paths.extensions.map((resource) => resource.path)).toEqual([join(root, "index.ts")]);
 			expectNoResources(await manager("omk").resolve());
 			expect(existsSync(join(root, "executed"))).toBe(false);
@@ -266,7 +263,7 @@ describe("managed package manifest dialect boundary", () => {
 		}
 		expectNoResources(paths);
 		expect(existsSync(join(root, "executed"))).toBe(false);
-		const legacy = await manager().resolve();
+		const legacy = await manager("omk+pi").resolve();
 		expect(legacy.extensions.map((resource) => resource.path)).toEqual([join(root, declaredFiles.extensions)]);
 	});
 

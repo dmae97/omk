@@ -1,12 +1,9 @@
 #![forbid(unsafe_code)]
 
-use omk_workbench_wire::{MAX_FRAME_BYTES, decode_frame};
+use omk_workbench_wire::{MAX_FRAME_BYTES, consume_stream, decode_frame};
 use std::io::{self, Read, Write};
 
-fn run() -> Result<(), ()> {
-    if std::env::args_os().len() != 1 {
-        return Err(());
-    }
+fn run_once() -> Result<(), ()> {
     let mut bytes = Vec::new();
     io::stdin()
         .lock()
@@ -21,6 +18,19 @@ fn run() -> Result<(), ()> {
         .write_all(&output)
         .and_then(|()| stdout.flush())
         .map_err(|_| ())
+}
+
+fn run() -> Result<(), ()> {
+    let mut args = std::env::args_os().skip(1);
+    match args.next() {
+        None => run_once(),
+        Some(arg) if arg == "--stream" && args.next().is_none() => {
+            consume_stream(&mut io::stdin().lock(), &mut io::stdout().lock())
+                .map(|_| ())
+                .map_err(|_| ())
+        }
+        _ => Err(()),
+    }
 }
 
 fn main() -> std::process::ExitCode {

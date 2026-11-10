@@ -7,7 +7,12 @@ export type PackageResourceKey = (typeof PACKAGE_RESOURCE_KEYS)[number];
 export type PackageManifestKey = "omk" | "pi";
 export type PackageManifestDialect = "omk" | "omk+pi";
 
-export function resolvePackageManifestDialect(value: unknown = "omk+pi"): PackageManifestDialect {
+/** OMK 2.0 default. Legacy Pi compatibility ("omk+pi") is an explicit opt-in. */
+export const DEFAULT_PACKAGE_MANIFEST_DIALECT: PackageManifestDialect = "omk";
+
+export function resolvePackageManifestDialect(
+	value: unknown = DEFAULT_PACKAGE_MANIFEST_DIALECT,
+): PackageManifestDialect {
 	if (value !== "omk" && value !== "omk+pi") {
 		throw new TypeError('packageManifestDialect must be "omk" or "omk+pi"');
 	}
@@ -104,7 +109,7 @@ function parseManifest(
 /** Resolve package resources with authoritative omk precedence and an explicit compatibility boundary. */
 export function resolvePackageManifest(
 	value: unknown,
-	dialect: PackageManifestDialect = "omk+pi",
+	dialect: PackageManifestDialect = DEFAULT_PACKAGE_MANIFEST_DIALECT,
 ): PackageManifestResolution {
 	resolvePackageManifestDialect(dialect);
 	const pkg = isRecord(value) ? value : {};
@@ -122,7 +127,7 @@ export function resolvePackageManifest(
 
 export function readPackageManifest(
 	packageJsonPath: string,
-	dialect: PackageManifestDialect = "omk+pi",
+	dialect: PackageManifestDialect = DEFAULT_PACKAGE_MANIFEST_DIALECT,
 ): PackageManifestResolution | null {
 	let value: unknown;
 	try {
