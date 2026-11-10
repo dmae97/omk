@@ -77,9 +77,9 @@ describe("OMK provider registration with OMK_PROVIDER_OMK=1", () => {
 	});
 
 	it("has no OAuth registration yet (token login is PR b) and is unavailable without a token", () => {
-		const previous = process.env.OMK_GATEWAY_TOKEN;
+		const previous = process.env.OMK_ACCOUNT_TOKEN;
 		try {
-			delete process.env.OMK_GATEWAY_TOKEN;
+			delete process.env.OMK_ACCOUNT_TOKEN;
 			expect(
 				registryWithOmk()
 					.getAvailable()
@@ -87,22 +87,22 @@ describe("OMK provider registration with OMK_PROVIDER_OMK=1", () => {
 			).toEqual([]);
 			expect(getOAuthProviders().map((p) => p.id)).not.toContain("OMK");
 		} finally {
-			if (previous !== undefined) process.env.OMK_GATEWAY_TOKEN = previous;
+			if (previous !== undefined) process.env.OMK_ACCOUNT_TOKEN = previous;
 		}
 	});
 
-	it("has credentials only once OMK_GATEWAY_TOKEN is set", () => {
-		const previous = process.env.OMK_GATEWAY_TOKEN;
+	it("has credentials only once OMK_ACCOUNT_TOKEN is set", () => {
+		const previous = process.env.OMK_ACCOUNT_TOKEN;
 		try {
-			delete process.env.OMK_GATEWAY_TOKEN;
+			delete process.env.OMK_ACCOUNT_TOKEN;
 			const registry = registryWithOmk();
 			const model = registry.find("OMK", "coder");
 			expect(model && registry.hasConfiguredAuth(model)).toBe(false);
-			process.env.OMK_GATEWAY_TOKEN = FIXTURE_TOKEN;
+			process.env.OMK_ACCOUNT_TOKEN = FIXTURE_TOKEN;
 			expect(model && registry.hasConfiguredAuth(model)).toBe(true);
 		} finally {
-			if (previous === undefined) delete process.env.OMK_GATEWAY_TOKEN;
-			else process.env.OMK_GATEWAY_TOKEN = previous;
+			if (previous === undefined) delete process.env.OMK_ACCOUNT_TOKEN;
+			else process.env.OMK_ACCOUNT_TOKEN = previous;
 		}
 	});
 
