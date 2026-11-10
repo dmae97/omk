@@ -214,18 +214,18 @@
   },
   {
     "id": "R10",
-    "description": "reasoner, stream, effort max, allow-listed user",
+    "description": "reasoner, stream, explicit effort high",
     "upstreamFile": "R10.sse",
     "clock": "2026-11-11T20:15:00+09:00",
     "model": "OMK/reasoner",
-    "user": "maxeffort",
+    "user": "plain",
     "request": {
       "stream": true,
-      "reasoning_effort": "max",
+      "reasoning_effort": "high",
       "messages": [
         {
           "role": "user",
-          "content": "max effort"
+          "content": "high effort"
         }
       ]
     },
@@ -233,7 +233,7 @@
       "peak": false,
       "upstreamModel": "deepseek-flash",
       "stream": true,
-      "effort": "max"
+      "effort": "high"
     }
   },
   {

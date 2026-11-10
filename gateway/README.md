@@ -22,7 +22,7 @@ Real local run (needs an official upstream key from the owner, never committed):
 
 ```bash
 export <upstream key env var named in src/server.ts>=...   # read from the environment only, never logged
-npm run issue-key -- --label alice --plan A [--expires-in-days 30] [--allow-max-effort]   # server stopped
+npm run issue-key -- --label alice --plan A [--expires-in-days 30]   # server stopped
 npm start                # http://127.0.0.1:8787/v1
 npm run revoke-key -- --key <key_id>
 npm run reconcile -- --month 2026-11

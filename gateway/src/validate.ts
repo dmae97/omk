@@ -110,7 +110,8 @@ export function checkCaps(v: Validated, config: GatewayConfig, user: UserRow): G
 		);
 	}
 	if (v.effort && v.cfg.max_effort) {
-		const allowed: Effort = user.allow_max_effort ? "max" : v.cfg.max_effort;
+		// PM 2026-11-11: low/high only for everyone; no per-user max allow-list.
+		const allowed: Effort = v.cfg.max_effort;
 		if (EFFORT_ORDER.indexOf(v.effort) > EFFORT_ORDER.indexOf(allowed)) {
 			return new GatewayError(
 				429,

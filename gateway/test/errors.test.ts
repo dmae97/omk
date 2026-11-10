@@ -104,9 +104,9 @@ describe("error contract (spec 1A table)", () => {
 		const b = await h.chat(t, { model: "OMK/reasoner", messages: msg(), reasoning_effort: "max" });
 		const eb = await expectErr(b, 429, "request_limit_exceeded", "rate_limit_error");
 		expect(eb.param).toBe("reasoning_effort");
-		// the allow-listed user may use max
-		h.mock.enqueue(okJson("deepseek-flash", U(1, 1, 1, 1)));
-		expect((await h.chat(h.users.maxeffort!.token, { model: "OMK/reasoner", messages: msg(), reasoning_effort: "max" })).status).toBe(200);
+		// no allow-list: a user issued with allow_max_effort is still capped at high
+		const c = await h.chat(h.users.maxeffort!.token, { model: "OMK/reasoner", messages: msg(), reasoning_effort: "max" });
+		await expectErr(c, 429, "request_limit_exceeded", "rate_limit_error");
 	});
 
 	it("429 rate_limited: rpm window with Retry-After, retryable (no x-omk-retryable header)", async () => {

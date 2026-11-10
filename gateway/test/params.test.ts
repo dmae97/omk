@@ -31,9 +31,11 @@ describe("T-06/T-16 thinking passthrough (omk payload table, spec 1.1)", () => {
 		expect(last().thinking).toEqual({ type: "enabled" });
 		expect(last().reasoning_effort).toBe(want);
 	});
-	it("reasoner: effort max is forwarded for the allow-listed user", async () => {
-		await h.chat(h.users.maxeffort!.token, { model: "OMK/reasoner", messages: msg(), thinking: { type: "enabled" }, reasoning_effort: "max" });
-		expect(last().reasoning_effort).toBe("max");
+	it("reasoner: effort max is rejected with 429 for every user and never reaches upstream", async () => {
+		const before = h.mock.requests.length;
+		const r = await h.chat(h.users.maxeffort!.token, { model: "OMK/reasoner", messages: msg(), thinking: { type: "enabled" }, reasoning_effort: "max" });
+		expect(r.status).toBe(429);
+		expect(h.mock.requests.length).toBe(before);
 	});
 	it("reasoner: thinking omitted -> explicit enabled + the default effort from config", async () => {
 		await h.chat(plain(), { model: "OMK/reasoner", messages: msg() });
