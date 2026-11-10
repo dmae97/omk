@@ -14,6 +14,10 @@ describe("isExactRecord", () => {
 		expect(isExactRecord({ a: 1 }, ["a", "b"])).toBe(false);
 	});
 
+	it("rejects an object with the same number of keys but a different key name", () => {
+		expect(isExactRecord({ a: 1, b: 2 }, ["a", "c"])).toBe(false);
+	});
+
 	it("rejects an object with an extra key", () => {
 		expect(isExactRecord({ a: 1, b: 2 }, ["a"])).toBe(false);
 	});
