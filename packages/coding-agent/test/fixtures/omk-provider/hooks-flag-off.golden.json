@@ -318,9 +318,9 @@
 		}
 	},
 	"noApiKey": {
-		"OMK": "No API key found for OMK.\n\nUse /login to log into a provider via OAuth or API key. See:\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/providers.md\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/models.md",
-		"openai": "No API key found for openai.\n\nUse /login to log into a provider via OAuth or API key. See:\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/providers.md\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/models.md",
-		"opencode-go": "No API key found for opencode-go.\n\nUse /login to log into a provider via OAuth or API key. See:\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/providers.md\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/models.md",
-		"unknown": "No API key found for the selected model.\n\nUse /login to log into a provider via OAuth or API key. See:\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/providers.md\n  /workspace/omk-provider-token-login-v2/packages/coding-agent/docs/models.md"
+		"OMK": "No API key found for OMK.\n\nUse /login to log into a provider via OAuth or API key. See:\n  <DOCS>/providers.md\n  <DOCS>/models.md",
+		"openai": "No API key found for openai.\n\nUse /login to log into a provider via OAuth or API key. See:\n  <DOCS>/providers.md\n  <DOCS>/models.md",
+		"opencode-go": "No API key found for opencode-go.\n\nUse /login to log into a provider via OAuth or API key. See:\n  <DOCS>/providers.md\n  <DOCS>/models.md",
+		"unknown": "No API key found for the selected model.\n\nUse /login to log into a provider via OAuth or API key. See:\n  <DOCS>/providers.md\n  <DOCS>/models.md"
 	}
 }

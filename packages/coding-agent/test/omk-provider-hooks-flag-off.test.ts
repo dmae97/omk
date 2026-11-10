@@ -1,5 +1,6 @@
 import type { AssistantMessage } from "omk-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { getDocsPath } from "../src/config.ts";
 import { formatNoApiKeyFoundMessage } from "../src/core/auth-guidance.ts";
 import { preflightFailureCause, providerFailureCause } from "../src/core/session-failure-cause.ts";
 import { FLAG_ENV, FLAG_OFF_VARIANTS, goldenOrUpdate, variantLabel, withFlag } from "./omk-provider-golden-lib.ts";
@@ -50,7 +51,10 @@ function observe(texts: readonly string[], providers: readonly string[]) {
 		),
 		preflightWithModel: Object.fromEntries(texts.map((t) => [t, preflightFailureCause(t, true)])),
 		preflightNoModel: Object.fromEntries(texts.map((t) => [t, preflightFailureCause(t, false)])),
-		noApiKey: Object.fromEntries(providers.map((p) => [p, formatNoApiKeyFoundMessage(p)])),
+		// The docs path depends on the checkout location, so it is replaced with a placeholder on both sides.
+		noApiKey: Object.fromEntries(
+			providers.map((p) => [p, formatNoApiKeyFoundMessage(p).split(getDocsPath()).join("<DOCS>")]),
+		),
 	};
 }
 
