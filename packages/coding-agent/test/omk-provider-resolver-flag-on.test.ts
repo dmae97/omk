@@ -26,8 +26,6 @@ function resolve(key: string): Outcome {
 
 /** Patterns that name OMK explicitly: they are allowed (and expected) to change once the provider exists. */
 const EXPLICIT_OMK = /omk/i;
-/** Short bare patterns that substring-match the new OMK ids; see the it.fails below. */
-const CAPTURED = ["--model coder", "--model reasoner", "--model coder:high", "--model reasoner:max"];
 
 describe("CLI model resolution with OMK_PROVIDER_OMK=1", () => {
 	it("resolves --model OMK/coder and OMK/reasoner (any case of the provider) to the OMK models", () => {
@@ -46,7 +44,7 @@ describe("CLI model resolution with OMK_PROVIDER_OMK=1", () => {
 	});
 
 	it("every short or canonical pattern that does not mention OMK resolves exactly as on main", () => {
-		const keys = Object.keys(golden).filter((k) => !EXPLICIT_OMK.test(k) && !CAPTURED.includes(k));
+		const keys = Object.keys(golden).filter((k) => !EXPLICIT_OMK.test(k));
 		expect(keys.length).toBeGreaterThanOrEqual(15);
 		for (const key of keys) expect({ key, ...resolve(key) }).toEqual({ key, ...golden[key] });
 		for (const key of ["--model flash", "--model deepseek", "--model pro", "--model deepseek/deepseek-flash"]) {
@@ -60,18 +58,18 @@ describe("CLI model resolution with OMK_PROVIDER_OMK=1", () => {
 		expect(resolve("--provider deepseek --model flash")).toEqual(golden["--provider deepseek --model flash"]);
 	});
 
-	// BLOCKER (reported on the PR): the bare ids `coder` and `reasoner` are exact id matches for the new models, and
-	// model-resolver.ts has no hook to exclude a provider from fuzzy matching. It cannot be prevented without editing
-	// model-resolver.ts (out of scope). `it.fails` keeps the CI green while the behavior exists and turns red the
-	// moment the resolver is changed, so the expectation below must then be promoted to a plain `it`.
-	it.fails("short patterns coder/reasoner still resolve as on main (not to OMK/*)", () => {
-		for (const key of CAPTURED) expect({ key, ...resolve(key) }).toEqual({ key, ...golden[key] });
+	it("bare `coder` and `reasoner` are not captured: coder -> qwen3-coder-plus, reasoner -> not found, as on main", () => {
+		expect(resolve("--model coder").model).toBe("experientiallabs/qwen3-coder-plus");
+		expect(resolve("--model reasoner").model).toBeNull();
+		expect(resolve("--model reasoner").error).toContain("not found");
+		for (const key of ["--model coder", "--model reasoner", "--model coder:high", "--model reasoner:max"]) {
+			expect({ key, ...resolve(key) }).toEqual({ key, ...golden[key] });
+		}
 	});
 
-	it("documents today's capture: coder -> OMK/coder (main: qwen3-coder-plus), reasoner -> OMK/reasoner (main: none)", () => {
-		expect(golden["--model coder"].model).toBe("experientiallabs/qwen3-coder-plus");
-		expect(resolve("--model coder").model).toBe("OMK/coder");
-		expect(golden["--model reasoner"].model).toBeNull();
-		expect(resolve("--model reasoner").model).toBe("OMK/reasoner");
+	it("only the full reference or an explicit --provider reaches OMK: OMK/coder and --provider OMK --model coder", () => {
+		expect(resolve("--model OMK/coder").model).toBe("OMK/coder");
+		expect(resolve("--provider OMK --model coder").model).toBe("OMK/coder");
+		expect(resolve("--model omk/reasoner").model).toBe("OMK/reasoner");
 	});
 });

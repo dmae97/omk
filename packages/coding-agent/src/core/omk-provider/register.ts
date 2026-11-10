@@ -1,4 +1,5 @@
 import type { ModelRegistry } from "../model-registry.ts";
+import { markQualifiedOnlyProvider } from "../qualified-only-providers.ts";
 import { isOmkProviderEnabled, OMK_ACCOUNT_TOKEN_ENV, OMK_GATEWAY_BASE_URL_ENV } from "./flag.ts";
 import { OMK_MODEL_TABLE, OMK_PROVIDER_ID } from "./models.ts";
 import { OMK_API, omkStreamSimple } from "./route.ts";
@@ -36,6 +37,7 @@ export function registerOmkProviderIfEnabled(
 			apiKey: `$${OMK_ACCOUNT_TOKEN_ENV}`,
 			models: OMK_MODEL_TABLE.map(({ harness: _harness, noReasoningRoute: _route, ...model }) => model),
 		});
+		markQualifiedOnlyProvider(OMK_PROVIDER_ID);
 		return [];
 	} catch (error) {
 		return [{ type: "error", message: `OMK provider registration failed: ${(error as Error).message}` }];
