@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { makeHarness, msg, okJson, U, type Harness } from "./helpers/harness.ts";
+import { EFFORT_ORDER } from "../src/config.ts";
 
 let h: Harness;
 beforeAll(async () => {
@@ -138,4 +140,24 @@ describe("T-17 FIM / prefix", () => {
 			expect(h.mock.requests.length).toBe(before);
 		},
 	);
+});
+
+describe("advertised reasoning_effort matches what the gateway allows", () => {
+	const cfg = JSON.parse(readFileSync(new URL("../config/models.json", import.meta.url), "utf8")).models["OMK/reasoner"];
+	const advertised: string[] = cfg.public.reasoning_effort;
+	it("the public list is exactly the levels up to max_effort", () => {
+		expect(advertised).toEqual(EFFORT_ORDER.slice(0, EFFORT_ORDER.indexOf(cfg.max_effort) + 1));
+	});
+	it.each(EFFORT_ORDER.map((e) => [e]))("effort %s: forwarded if advertised, else 429 with no upstream call", async (e) => {
+		const before = h.mock.requests.length;
+		const r = await h.chat(plain(), { model: "OMK/reasoner", messages: msg(), thinking: { type: "enabled" }, reasoning_effort: e });
+		if (advertised.includes(e)) {
+			expect(r.status).toBe(200);
+			expect(last().reasoning_effort).toBe(e);
+		} else {
+			expect(r.status).toBe(429);
+			expect((await r.json()).error.param).toBe("reasoning_effort");
+			expect(h.mock.requests.length).toBe(before);
+		}
+	});
 });
