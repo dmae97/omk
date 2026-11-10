@@ -4,7 +4,7 @@ import { completeSummarization, generateSummary } from "../src/core/compaction/c
 import { registerOmkProviderIfEnabled } from "../src/core/omk-provider/register.ts";
 import { capturePayload, registryWithOmk } from "./omk-provider-flag-on-lib.ts";
 import { createCatalogRegistry } from "./omk-provider-golden-lib.ts";
-import { openOmkSession, stubGateway } from "./omk-provider-session-lib.ts";
+import { firstWorkerRequest, openOmkSession, stubGateway } from "./omk-provider-session-lib.ts";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -148,4 +148,17 @@ describe("real AgentSession turns (built like main.ts: services hook, resolveCli
 		expect(sent(wire)).toEqual(REASONER_LOW);
 		close();
 	});
+});
+
+describe("subagent path: a real child `omk --mode json -p --model <agent.model>` with the worker environment", () => {
+	it.each(["OMK/reasoner", "OMK/reasoner:off", "OMK/reasoner:high"])(
+		"agent model %s goes out as reasoner with thinking enabled, never coder or disabled",
+		async (agentModel) => {
+			const body = await firstWorkerRequest(agentModel);
+			const effort = agentModel.endsWith(":high") ? "high" : "low";
+			expect(body).toMatchObject({ model: "reasoner", thinking: { type: "enabled" }, reasoning_effort: effort });
+			expect(JSON.stringify(body)).not.toContain("disabled");
+		},
+		40_000,
+	);
 });
