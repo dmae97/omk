@@ -53,14 +53,27 @@ async function capturePayload(
 const FABLE_MODELS = [
 	["anthropic", "claude-fable-5"],
 	["anthropic", "claude-fable-5-1"],
+	["anthropic", "claude-fable-5-2"],
 ] as const;
 
 describe("Claude Fable thinking", () => {
-	it.each(FABLE_MODELS)("exposes the full effort ladder up to max (%s/%s)", (provider, id) => {
+	it("exposes the documented Fable 5.2 limits and pricing", () => {
+		const model = getModel("anthropic", "claude-fable-5-2");
+		expect(model).toMatchObject({
+			reasoning: true,
+			contextWindow: 1_000_000,
+			maxTokens: 128_000,
+			cost: { input: 8, output: 40, cacheRead: 0.2, cacheWrite: 10 },
+		});
+		expect(model.input).toContain("image");
+	});
+
+	it.each(FABLE_MODELS)("keeps adaptive thinking on with the full effort ladder (%s/%s)", (provider, id) => {
 		const levels = getSupportedThinkingLevels(getModel(provider, id));
 
-		expect(levels).toContain("xhigh");
-		expect(levels).toContain("max");
+		expect(levels).not.toContain("off");
+		expect(levels).not.toContain("minimal");
+		expect(levels).toEqual(expect.arrayContaining(["low", "medium", "high", "xhigh", "max"]));
 	});
 
 	it.each(FABLE_MODELS)("sends adaptive thinking with effort max (%s/%s)", async (provider, id) => {

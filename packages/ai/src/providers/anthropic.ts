@@ -8,7 +8,6 @@ import type {
 } from "@anthropic-ai/sdk/resources/messages.js";
 import { calculateCost } from "../models.ts";
 import type {
-	AnthropicMessagesCompat,
 	Api,
 	AssistantMessage,
 	CacheRetention,
@@ -32,6 +31,13 @@ import { headersToRecord } from "../utils/headers.ts";
 import { parseJsonWithRepair, parseStreamingJson } from "../utils/json-parse.ts";
 import { retryProviderRequest } from "../utils/provider-retry.ts";
 import { sanitizeSurrogates, sanitizeSurrogatesDeep } from "../utils/sanitize-unicode.ts";
+import {
+	getAnthropicCompat,
+	readAnthropicStopCategory,
+	resolveAnthropicResponseModel,
+	SERVER_SIDE_FALLBACK_BETA,
+	supportsServerSideFallback,
+} from "./anthropic-compat.ts";
 import { sanitizeOversizedImages } from "./anthropic-image-guard.ts";
 import { resolveCloudflareBaseUrl } from "./cloudflare.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
@@ -166,26 +172,7 @@ export type AnthropicThinkingDisplay = "summarized" | "omitted";
 const FINE_GRAINED_TOOL_STREAMING_BETA = "fine-grained-tool-streaming-2025-05-14";
 const INTERLEAVED_THINKING_BETA = "interleaved-thinking-2025-05-14";
 
-function getAnthropicCompat(
-	model: Model<"anthropic-messages">,
-): Required<Omit<AnthropicMessagesCompat, "forceAdaptiveThinking">> {
-	// Fable and Opus 5.5 reject `thinking.type.disabled`; every other Anthropic model accepts it.
-	const rejectsDisabledThinking = /(^|[/.])claude-(?:fable-|opus-5(?:\.5|-5)(?:[^\d]|$))/.test(model.id);
-	// Auto-detect session affinity and cache control support from provider
-	const isFireworks = model.provider === "fireworks";
-	const isCloudflareAiGatewayAnthropic =
-		model.provider === "cloudflare-ai-gateway" && model.baseUrl.includes("anthropic");
-	return {
-		supportsEagerToolInputStreaming: model.compat?.supportsEagerToolInputStreaming ?? !isFireworks,
-		supportsLongCacheRetention: model.compat?.supportsLongCacheRetention ?? !isFireworks,
-		sendSessionAffinityHeaders:
-			model.compat?.sendSessionAffinityHeaders ?? !!(isFireworks || isCloudflareAiGatewayAnthropic),
-		supportsCacheControlOnTools: model.compat?.supportsCacheControlOnTools ?? !isFireworks,
-		supportsTemperature: model.compat?.supportsTemperature ?? true,
-		supportsDisabledThinking: model.compat?.supportsDisabledThinking ?? !rejectsDisabledThinking,
-		allowEmptySignature: model.compat?.allowEmptySignature ?? false,
-	};
-}
+type AnthropicStreamingParams = MessageCreateParamsStreaming & { fallbacks?: "default" };
 
 export interface AnthropicOptions extends StreamOptions {
 	/**
@@ -525,6 +512,8 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 		};
 
 		let rawStopReason: string | undefined;
+		let rawStopCategory: string | undefined;
+		let responseModel: Model<Api> = model;
 
 		try {
 			let client: Anthropic;
@@ -591,6 +580,10 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 			for await (const event of iterateAnthropicEvents(response, options?.signal)) {
 				if (event.type === "message_start") {
 					output.responseId = event.message.id;
+					if (event.message.model) {
+						output.model = event.message.model;
+						responseModel = resolveAnthropicResponseModel(model, event.message.model);
+					}
 					// Capture initial token usage from message_start event
 					// This ensures we have input token counts even if the stream is aborted early
 					output.usage.input = event.message.usage.input_tokens || 0;
@@ -601,7 +594,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 					// Anthropic doesn't provide total_tokens, compute from components
 					output.usage.totalTokens =
 						output.usage.input + output.usage.output + output.usage.cacheRead + output.usage.cacheWrite;
-					calculateCost(model, output.usage);
+					calculateCost(responseModel, output.usage);
 				} else if (event.type === "content_block_start") {
 					if (event.content_block.type === "text") {
 						const block: Block = {
@@ -727,6 +720,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 						rawStopReason = event.delta.stop_reason;
 						output.stopReason = mapStopReason(event.delta.stop_reason);
 					}
+					rawStopCategory = readAnthropicStopCategory(event.delta) ?? rawStopCategory;
 					// Only update usage fields if present (not null).
 					// Preserves input_tokens from message_start when proxies omit it in message_delta.
 					if (event.usage.input_tokens != null) {
@@ -744,7 +738,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 					// Anthropic doesn't provide total_tokens, compute from components
 					output.usage.totalTokens =
 						output.usage.input + output.usage.output + output.usage.cacheRead + output.usage.cacheWrite;
-					calculateCost(model, output.usage);
+					calculateCost(responseModel, output.usage);
 				}
 			}
 
@@ -766,7 +760,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 				} else {
 					throw new Error(
 						output.stopReason === "error"
-							? `Model ended the turn with a content/safety stop (stop_reason=${rawStopReason ?? "refusal"}); the response was not completed. Often a false positive on benign input — rephrase or retry.`
+							? `Model ended the turn with a content/safety stop (stop_reason=${rawStopReason ?? "refusal"}${rawStopCategory ? `, stop_category=${rawStopCategory}` : ""}); the response was not completed. Often a false positive on benign input — rephrase or retry.`
 							: "An unknown error occurred",
 					);
 				}
@@ -884,6 +878,7 @@ function createClient(
 	// Adaptive thinking models have interleaved thinking built in, so skip the beta header.
 	const needsInterleavedBeta = interleavedThinking && model.compat?.forceAdaptiveThinking !== true;
 	const betaFeatures: string[] = [];
+	if (supportsServerSideFallback(model)) betaFeatures.push(SERVER_SIDE_FALLBACK_BETA);
 	if (useFineGrainedToolStreamingBeta) {
 		betaFeatures.push(FINE_GRAINED_TOOL_STREAMING_BETA);
 	}
@@ -987,15 +982,16 @@ function buildParams(
 	context: Context,
 	isOAuthToken: boolean,
 	options?: AnthropicOptions,
-): MessageCreateParamsStreaming {
+): AnthropicStreamingParams {
 	const { cacheControl } = getCacheControl(model, options?.cacheRetention);
 	const compat = getAnthropicCompat(model);
-	const params: MessageCreateParamsStreaming = {
+	const params: AnthropicStreamingParams = {
 		model: model.id,
 		messages: convertMessages(context.messages, model, isOAuthToken, cacheControl, compat.allowEmptySignature),
 		max_tokens: options?.maxTokens ?? model.maxTokens,
 		stream: true,
 	};
+	if (supportsServerSideFallback(model)) params.fallbacks = "default";
 
 	const systemPromptBlocks = convertSystemPrompt(context, cacheControl);
 	// For OAuth tokens, we MUST include Claude Code identity.
