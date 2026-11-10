@@ -10,7 +10,7 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
 
 ## Phase 1: Scaffold
 
-- [ ] T001 Pin the Rust toolchain at 1.99.0 in `rust-toolchain.toml`
+- [x] T001 Pin the Rust toolchain at 1.99.0 in `rust-toolchain.toml`
   > role: coder
   > deps: none
   > files: [`rust-toolchain.toml`]
@@ -18,7 +18,7 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
   > gate: command-pass
   > risk: low
 
-- [ ] T002 Create the `native/omk-contract` crate with `serde` and `serde_json` pinned to the versions the existing crates use
+- [x] T002 Create the `native/omk-contract` crate with `serde` and `serde_json` pinned to the versions the existing crates use
   > role: coder
   > deps: T001
   > files: [`native/omk-contract/Cargo.toml`, `native/omk-contract/Cargo.lock`, `native/omk-contract/src/lib.rs`, `native/omk-contract/README.md`, `native/omk-contract/THIRD-PARTY-NOTICES.md`]
