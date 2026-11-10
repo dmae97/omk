@@ -99,3 +99,4 @@ c180835e7096d6c6d65222438e57db543ec187a7:packages/coding-agent/test/evidence-com
 c180835e7096d6c6d65222438e57db543ec187a7:packages/coding-agent/test/evidence-command.test.ts:curl-auth-header:26
 c180835e7096d6c6d65222438e57db543ec187a7:packages/coding-agent/test/evidence-receipt.test.ts:curl-auth-header:410
 c180835e7096d6c6d65222438e57db543ec187a7:packages/coding-agent/test/evidence-receipt.test.ts:curl-auth-header:415
+dc532f326c37729c7e126863bd1e5b8ee934e349:packages/coding-agent/test/omk-provider-gateway-errors.test.ts:generic-api-key:240

@@ -237,7 +237,7 @@ describe("OMK base URL and credential prompts", () => {
 });
 
 describe("OMK token never appears in errors, diagnostics or logs", () => {
-	const SECRET = "omk-sentinel-5f3a9c1e7b2d4a60";
+	const SECRET = "omk-test-token-not-a-secret";
 
 	it("not even when the gateway echoes it back", async () => {
 		const sinks: string[] = [];
