@@ -1,3 +1,6 @@
 node_modules
 .data
 *.pglite
+
+# T-13 harness ephemeral output (may be regenerated)
+e2e/_report.json
