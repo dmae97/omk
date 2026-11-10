@@ -1,0 +1,31 @@
+{
+  "id": "chatcmpl-deepseek-R07",
+  "object": "chat.completion",
+  "created": 1790000000,
+  "model": "deepseek-flash",
+  "system_fingerprint": "fp_deepseek_x",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Answer.",
+        "reasoning_content": "Let me think."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 300,
+    "completion_tokens": 220,
+    "total_tokens": 520,
+    "prompt_tokens_details": {
+      "cached_tokens": 100
+    },
+    "prompt_cache_hit_tokens": 100,
+    "prompt_cache_miss_tokens": 200,
+    "completion_tokens_details": {
+      "reasoning_tokens": 150
+    }
+  }
+}

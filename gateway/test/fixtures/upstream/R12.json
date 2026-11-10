@@ -1,0 +1,31 @@
+{
+  "id": "chatcmpl-deepseek-R12",
+  "object": "chat.completion",
+  "created": 1790000000,
+  "model": "deepseek-flash",
+  "system_fingerprint": "fp_deepseek_x",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Cut off",
+        "reasoning_content": "Long thought"
+      },
+      "finish_reason": "length"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 60,
+    "completion_tokens": 64,
+    "total_tokens": 124,
+    "prompt_tokens_details": {
+      "cached_tokens": 20
+    },
+    "prompt_cache_hit_tokens": 20,
+    "prompt_cache_miss_tokens": 40,
+    "completion_tokens_details": {
+      "reasoning_tokens": 64
+    }
+  }
+}

@@ -1,0 +1,492 @@
+[
+  {
+    "id": "R01",
+    "description": "coder, non-stream, all miss",
+    "upstreamFile": "R01.json",
+    "clock": "2026-11-11T14:00:00+09:00",
+    "model": "OMK/coder",
+    "user": "plain",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "hello"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": false
+    }
+  },
+  {
+    "id": "R02",
+    "description": "coder, non-stream, full cache hit",
+    "upstreamFile": "R02.json",
+    "clock": "2026-11-11T14:05:00+09:00",
+    "model": "OMK/coder",
+    "user": "plain",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "hello again"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": false
+    }
+  },
+  {
+    "id": "R03",
+    "description": "coder, non-stream, partial hit",
+    "upstreamFile": "R03.json",
+    "clock": "2026-11-11T14:10:00+09:00",
+    "model": "OMK/coder",
+    "user": "plain",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "partial"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": false
+    }
+  },
+  {
+    "id": "R04",
+    "description": "coder, stream, usage in last chunk",
+    "upstreamFile": "R04.sse",
+    "clock": "2026-11-11T14:15:00+09:00",
+    "model": "OMK/coder",
+    "user": "plain",
+    "request": {
+      "stream": true,
+      "messages": [
+        {
+          "role": "user",
+          "content": "stream"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": true
+    }
+  },
+  {
+    "id": "R05",
+    "description": "coder, stream, tool call",
+    "upstreamFile": "R05.sse",
+    "clock": "2026-11-11T14:20:00+09:00",
+    "model": "OMK/coder",
+    "user": "plain",
+    "request": {
+      "stream": true,
+      "messages": [
+        {
+          "role": "user",
+          "content": "weather?"
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "get_weather",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": true
+    }
+  },
+  {
+    "id": "R06",
+    "description": "coder, Fri 10:00:00 KST exactly (first peak second)",
+    "upstreamFile": "R06.json",
+    "clock": "2026-11-13T10:00:00+09:00",
+    "model": "OMK/coder",
+    "user": "plain",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "edge"
+        }
+      ]
+    },
+    "expect": {
+      "peak": true,
+      "upstreamModel": "deepseek-flash",
+      "stream": false
+    }
+  },
+  {
+    "id": "R07",
+    "description": "reasoner, non-stream, reasoning_tokens > 0",
+    "upstreamFile": "R07.json",
+    "clock": "2026-11-11T20:00:00+09:00",
+    "model": "OMK/reasoner",
+    "user": "plain",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "think"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": false,
+      "effort": "high"
+    }
+  },
+  {
+    "id": "R08",
+    "description": "reasoner, stream, reasoning deltas",
+    "upstreamFile": "R08.sse",
+    "clock": "2026-11-11T20:05:00+09:00",
+    "model": "OMK/reasoner",
+    "user": "plain",
+    "request": {
+      "stream": true,
+      "messages": [
+        {
+          "role": "user",
+          "content": "think stream"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": true,
+      "effort": "high"
+    }
+  },
+  {
+    "id": "R09",
+    "description": "reasoner, stream, effort low",
+    "upstreamFile": "R09.sse",
+    "clock": "2026-11-11T20:10:00+09:00",
+    "model": "OMK/reasoner",
+    "user": "plain",
+    "request": {
+      "stream": true,
+      "reasoning_effort": "low",
+      "messages": [
+        {
+          "role": "user",
+          "content": "low effort"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": true,
+      "effort": "low"
+    }
+  },
+  {
+    "id": "R10",
+    "description": "reasoner, stream, effort max, allow-listed user",
+    "upstreamFile": "R10.sse",
+    "clock": "2026-11-11T20:15:00+09:00",
+    "model": "OMK/reasoner",
+    "user": "maxeffort",
+    "request": {
+      "stream": true,
+      "reasoning_effort": "max",
+      "messages": [
+        {
+          "role": "user",
+          "content": "max effort"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": true,
+      "effort": "max"
+    }
+  },
+  {
+    "id": "R11",
+    "description": "reasoner, tool loop turn with reasoning_content replay",
+    "upstreamFile": "R11.json",
+    "clock": "2026-11-11T20:20:00+09:00",
+    "model": "OMK/reasoner",
+    "user": "plain",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "weather in Seoul?"
+        },
+        {
+          "role": "assistant",
+          "content": null,
+          "reasoning_content": "I should call the tool.",
+          "tool_calls": [
+            {
+              "id": "call_1",
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "arguments": "{\"city\":\"Seoul\"}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "call_1",
+          "content": "18C clear"
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "get_weather",
+            "parameters": {
+              "type": "object"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": false,
+      "effort": "high",
+      "replay": true
+    }
+  },
+  {
+    "id": "R12",
+    "description": "reasoner, finish_reason length",
+    "upstreamFile": "R12.json",
+    "clock": "2026-11-11T20:25:00+09:00",
+    "model": "OMK/reasoner",
+    "user": "plain",
+    "request": {
+      "max_tokens": 64,
+      "messages": [
+        {
+          "role": "user",
+          "content": "long"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": false,
+      "effort": "high"
+    }
+  },
+  {
+    "id": "R13",
+    "description": "reasoner, reasoning_tokens = 0 in thinking mode",
+    "upstreamFile": "R13.json",
+    "clock": "2026-11-11T20:30:00+09:00",
+    "model": "OMK/reasoner",
+    "user": "plain",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "trivial"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": false,
+      "effort": "high"
+    }
+  },
+  {
+    "id": "R14",
+    "description": "coder, peak timestamp (Wed 11:00 KST)",
+    "upstreamFile": "R14.json",
+    "clock": "2026-11-11T11:00:00+09:00",
+    "model": "OMK/coder",
+    "user": "plain",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "peak"
+        }
+      ]
+    },
+    "expect": {
+      "peak": true,
+      "upstreamModel": "deepseek-flash",
+      "stream": false
+    }
+  },
+  {
+    "id": "R15",
+    "description": "coder, off-peak timestamp (Sat 11:00 KST)",
+    "upstreamFile": "R15.json",
+    "clock": "2026-11-14T11:00:00+09:00",
+    "model": "OMK/coder",
+    "user": "plain",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "weekend"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": false
+    }
+  },
+  {
+    "id": "R16",
+    "description": "coder, Fri 09:59:59 KST (last off-peak second)",
+    "upstreamFile": "R16.json",
+    "clock": "2026-11-13T09:59:59+09:00",
+    "model": "OMK/coder",
+    "user": "plain",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "edge2"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": false
+    }
+  },
+  {
+    "id": "R17",
+    "description": "reasoner mapped to the larger upstream model via config only",
+    "upstreamFile": "R17.json",
+    "clock": "2026-11-12T16:00:00+09:00",
+    "model": "OMK/reasoner",
+    "user": "plain",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "pro"
+        }
+      ]
+    },
+    "configSwap": {
+      "OMK/reasoner": "deepseek-v4-pro"
+    },
+    "expect": {
+      "peak": true,
+      "upstreamModel": "deepseek-v4-pro",
+      "stream": false,
+      "effort": "high"
+    }
+  },
+  {
+    "id": "R18",
+    "description": "coder, stream with keep-alive comments",
+    "upstreamFile": "R18.sse",
+    "clock": "2026-11-11T14:30:00+09:00",
+    "model": "OMK/coder",
+    "user": "plain",
+    "request": {
+      "stream": true,
+      "messages": [
+        {
+          "role": "user",
+          "content": "slow"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": true,
+      "keepAlive": 3
+    }
+  },
+  {
+    "id": "R19",
+    "description": "coder, finish_reason content_filter",
+    "upstreamFile": "R19.json",
+    "clock": "2026-11-11T14:35:00+09:00",
+    "model": "OMK/coder",
+    "user": "plain",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "filtered"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": false
+    }
+  },
+  {
+    "id": "R20",
+    "description": "coder, stream, insufficient_system_resource with usage",
+    "upstreamFile": "R20.sse",
+    "clock": "2026-11-11T14:40:00+09:00",
+    "model": "OMK/coder",
+    "user": "plain",
+    "request": {
+      "stream": true,
+      "messages": [
+        {
+          "role": "user",
+          "content": "busy"
+        }
+      ]
+    },
+    "expect": {
+      "peak": false,
+      "upstreamModel": "deepseek-flash",
+      "stream": true
+    }
+  }
+]

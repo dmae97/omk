@@ -1,0 +1,31 @@
+{
+  "id": "chatcmpl-deepseek-R11",
+  "object": "chat.completion",
+  "created": 1790000000,
+  "model": "deepseek-flash",
+  "system_fingerprint": "fp_deepseek_x",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "It is 18C and clear.",
+        "reasoning_content": "Tool said 18C."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 220,
+    "completion_tokens": 60,
+    "total_tokens": 280,
+    "prompt_tokens_details": {
+      "cached_tokens": 180
+    },
+    "prompt_cache_hit_tokens": 180,
+    "prompt_cache_miss_tokens": 40,
+    "completion_tokens_details": {
+      "reasoning_tokens": 20
+    }
+  }
+}
