@@ -128,4 +128,14 @@ describe("T-17 FIM / prefix", () => {
 		const r = await h.chat(plain(), { model: bare, messages: msg() });
 		expect(r.status).toBe(200);
 	});
+	it.each(["deepseek-flash", "qwen3-coder-plus", "experientiallabs/qwen3-coder-plus", "coder-plus", "Coder", "omk/coder", "OMK/flash", "deepseek/coder"])(
+		"name %s is not mapped to an OMK model (403, no upstream call)",
+		async (name) => {
+			const before = h.mock.requests.length;
+			const r = await h.chat(plain(), { model: name, messages: msg() });
+			expect(r.status).toBe(403);
+			expect(((await r.json()) as any).error.code).toBe("model_not_allowed");
+			expect(h.mock.requests.length).toBe(before);
+		},
+	);
 });
