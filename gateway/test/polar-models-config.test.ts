@@ -75,7 +75,7 @@ describe("T-19 /v1/models and routing", () => {
 			expect(m.omk.context_length).toBe(1_000_000);
 		}
 		expect(j.data[0].omk.thinking).toBe("off");
-		expect(j.data[1].omk).toMatchObject({ thinking: "always", reasoning_effort: ["low", "high", "max"], max_tokens_ceiling: 32768 });
+		expect(j.data[1].omk).toMatchObject({ thinking: "always", reasoning_effort: ["low", "high"], max_tokens_ceiling: 32768 });
 		expect(j.data[0].omk).not.toHaveProperty("max_tokens_ceiling"); // coder ceiling is unset in config
 		expect(BRAND_RE.test(JSON.stringify(j))).toBe(false);
 	});

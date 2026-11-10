@@ -23,7 +23,7 @@
 				"max_output_tokens": 393216,
 				"input_modalities": ["text"],
 				"thinking": "always",
-				"reasoning_effort": ["low", "high", "max"],
+				"reasoning_effort": ["low", "high"],
 				"tools": true,
 				"json_mode": true
 			}
