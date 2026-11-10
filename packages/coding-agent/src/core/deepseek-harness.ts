@@ -1,5 +1,6 @@
 import type { AgentMessage } from "omk-agent-core";
 import type { ToolResultMessage } from "omk-ai";
+import { isOmkHarnessModel } from "./omk-provider/harness-marker.ts";
 
 export const DEEPSEEK_HARNESS_GUIDELINES = [
 	"Inspect the relevant source and existing tests, make the smallest complete change, and verify the requested behavior before claiming completion.",
@@ -15,6 +16,7 @@ const MARKER = "\n\n[deepseek_harness: tool result middle omitted; original reta
 
 export function isDeepSeekHarnessModel(model: { readonly provider: string; readonly id: string } | undefined): boolean {
 	if (!model) return false;
+	if (isOmkHarnessModel(model)) return true;
 	if (model.provider === "deepseek") return true;
 	const id = model.id.split("/").at(-1) ?? "";
 	return /^deepseek[-_.](?:v\d|r\d|(?:chat|reasoner|flash|pro|coder)(?:$|[-_.:]))/i.test(id);
