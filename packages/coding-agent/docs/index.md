@@ -36,6 +36,7 @@ For the full first-run flow, see [Quickstart](quickstart.md).
 
 - [Quickstart](quickstart.md) - install, authenticate, and run a first session.
 - [Using OMK](usage.md) - interactive mode, `/goal`, default harness safeguards, context files, and CLI reference.
+- [Edit recovery](edit-recovery.md) - bounded hints for missing text, indentation differences, and ambiguous edit candidates.
 - [Providers](providers.md) - subscription and API-key setup for built-in providers.
 - [Provider Resilience](provider-resilience.md) - retry, failover, quota, and safety-stop recovery.
 - [Native xAI Grok](grok-harness.md) - authentication, weekly SuperGrok usage, presets, and thinking tiers.

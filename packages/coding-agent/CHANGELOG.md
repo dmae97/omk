@@ -29,6 +29,7 @@
 
 ### Fixed
 
+- Failed `edit` calls now append bounded recovery hints: read ranges for indentation-only differences, original candidate positions for ambiguous matches, and an observation when the replacement text is already present. Failures still write nothing, including multi-edit calls; successful responses, run-log records, write permissions and match rules are unchanged. See [edit recovery](docs/edit-recovery.md).
 - The `edit` tool now rejects an `oldText` that matches at overlapping positions instead of replacing the first one. Replacing `aaa` in `aaaa` used to write `Za`; it now leaves the file unchanged and returns the existing `Found 2 occurrences ... Please provide more context to make it unique.` error. The same applies to CRLF, BOM and fuzzy-normalized matches and to each entry of `edits[]`, and the run-log failure class for these calls is now `multiple_matches`. Unique matches are unaffected.
 - An extension component whose `render()` or `invalidate()` throws no longer breaks the TUI. The failed instance shows `Extension render failed` and is not called again; tool rows keep their raw result, custom messages keep their content, a failed custom editor restores the default editor, and failed custom UI rejects instead of leaving its tool pending. See [extensions](docs/extensions.md#fallback).
 - MCP servers that answer the handshake with protocol `2025-03-26` no longer fail to connect (#326).

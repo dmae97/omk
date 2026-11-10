@@ -20,6 +20,7 @@ import {
 	restoreLineEndings,
 	stripBom,
 } from "./edit-diff.ts";
+import { addEditFailureFeedback } from "./edit-failure-feedback.ts";
 import { editMatchObserver } from "./edit-match-observe.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { resolveToCwd } from "./path-utils.ts";
@@ -199,7 +200,8 @@ export function createEditToolDefinition(
 				} catch (error) {
 					// Failure path only: the classifier never runs on a successful edit.
 					editMatchObserver.logFailure(absolutePath, normalizedContent, edits, ctx);
-					throw error;
+					if (!(error instanceof Error)) throw error;
+					throw addEditFailureFeedback(error, normalizedContent, edits);
 				}
 				const { baseContent, newContent } = applied;
 				throwIfAborted();
