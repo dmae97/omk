@@ -99,7 +99,7 @@ describe("OMK models are text-only", () => {
 	it.each(["coder", "reasoner"])("%s: image blocks are dropped from the request", async (id) => {
 		const model = registry.find("OMK", id);
 		if (!model) throw new Error("missing model");
-		const payload = await capturePayload(model, {}, [
+		const payload = await capturePayload(model, { reasoning: "low" }, [
 			{
 				role: "user",
 				content: [

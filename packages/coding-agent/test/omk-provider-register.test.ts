@@ -44,10 +44,10 @@ describe("OMK provider registration with OMK_PROVIDER_OMK=1", () => {
 		}
 	});
 
-	it("uses the URL from the env var as given (trailing slashes trimmed) and routes through openai-completions", () => {
+	it("uses the URL from the env var as given (trailing slashes trimmed) and uses the OMK stream path (omk-completions)", () => {
 		const registry = registryWithOmk({ ...ON_ENV, OMK_GATEWAY_BASE_URL: ` ${GATEWAY_URL}// ` });
 		for (const id of ["coder", "reasoner"]) {
-			expect(registry.find("OMK", id)).toMatchObject({ api: "openai-completions", baseUrl: GATEWAY_URL });
+			expect(registry.find("OMK", id)).toMatchObject({ api: "omk-completions", baseUrl: GATEWAY_URL });
 		}
 	});
 
