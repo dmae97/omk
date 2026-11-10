@@ -5,14 +5,17 @@ import { OMK_MODEL_TABLE, OMK_PROVIDER_ID } from "./models.ts";
 export const OMK_API = "omk-completions";
 const BACKING_API = "openai-completions";
 
+function routeOf(model: Model<Api>): string | undefined {
+	if (model.provider !== OMK_PROVIDER_ID) return undefined;
+	return OMK_MODEL_TABLE.find((entry) => entry.id === model.id)?.noReasoningRoute;
+}
+
 /**
- * For a model whose table entry names a `noReasoningRoute`, the same model as that entry describes (id, thinking
- * support, limits, compat), so a call without a reasoning level goes out as e.g. `coder` with no `thinking` field.
+ * The model that the table entry's `noReasoningRoute` names (id, thinking support, limits, compat), so a call without
+ * a reasoning level goes out as e.g. `coder` with no `thinking` field.
  */
-function routedModel(model: Model<Api>): Model<Api> {
-	if (model.provider !== OMK_PROVIDER_ID) return model;
-	const route = OMK_MODEL_TABLE.find((entry) => entry.id === model.id)?.noReasoningRoute;
-	const target = route === undefined ? undefined : OMK_MODEL_TABLE.find((entry) => entry.id === route);
+function routedModel(model: Model<Api>, route: string): Model<Api> {
+	const target = OMK_MODEL_TABLE.find((entry) => entry.id === route);
 	if (!target) return model;
 	return {
 		...model,
@@ -29,13 +32,19 @@ function routedModel(model: Model<Api>): Model<Api> {
 }
 
 /**
- * Stream path for OMK models. With a reasoning level the request goes out unchanged (the built-in clamps `off` and
- * `minimal` up to `low` and `max` down to `high` via the model's level map, so thinking is always enabled). Without
- * one, internal calls are re-addressed to the fallback model, because `OMK/reasoner` with `thinking: disabled` is
- * rejected by the gateway (400 `thinking_required`).
+ * Stream path for OMK models. `OMK/reasoner` with `thinking: disabled` is rejected by the gateway (400
+ * `thinking_required`), and a user turn must never be swapped to another model, so:
+ * - with a reasoning level: unchanged (the built-in clamps `off`/`minimal` up to `low` and `max` down to `high`);
+ * - an agent turn whose state is `off` (the agent loop always carries the `reasoning` key, `undefined` when off, even
+ *   on paths that skip the session's clamp): sent as `reasoning: "minimal"`, which is not in the level map and clamps up to `low`;
+ * - an internal call (no `reasoning` key at all, e.g. branch summaries): re-addressed to the fallback model.
+ * If the key were ever dropped from a user turn it would land in the last case; the session-path tests pin it.
  */
 export function omkStreamSimple(model: Model<Api>, context: Context, options?: SimpleStreamOptions) {
-	return streamBacking(options?.reasoning ? model : routedModel(model), context, options);
+	const route = routeOf(model);
+	if (route === undefined || options?.reasoning) return streamBacking(model, context, options);
+	if (options && "reasoning" in options) return streamBacking(model, context, { ...options, reasoning: "minimal" });
+	return streamBacking(routedModel(model, route), context, options);
 }
 
 function streamBacking(model: Model<Api>, context: Context, options?: SimpleStreamOptions) {
