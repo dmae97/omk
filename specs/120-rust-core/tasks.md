@@ -28,7 +28,7 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
 
 ## Phase 2: Compatibility tables (spec §5a)
 
-- [ ] T003 Define the dialect values, the 14-entry alias table, the legacy-import classifier and the migration hint in Rust, test-first against the values in `packages/coding-agent/src/core/pi-compat.ts`
+- [x] T003 Define the dialect values, the 14-entry alias table, the legacy-import classifier and the migration hint in Rust, test-first against the values in `packages/coding-agent/src/core/pi-compat.ts`
   > role: coder
   > deps: T002
   > files: [`native/omk-contract/src/compat.rs`, `native/omk-contract/tests/compat.rs`]

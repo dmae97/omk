@@ -9,5 +9,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod compat;
+
 /// Contract schema version for the extension-host wire (spec 120, stage K0).
 pub const HOST_WIRE_VERSION: u32 = 1;
