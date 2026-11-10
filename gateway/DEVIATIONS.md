@@ -16,6 +16,8 @@
 | `model_not_allowed` message names the model | generic message | echoing client input would reproduce any brand string the client typed |
 | `/v1/models` unauthenticated? (unspecified) | requires a token | consistent with all other `/v1` routes |
 | Postgres server | PGlite (embedded Postgres) | no local server or paid service on the box |
-| T-13 (real omk client against the gateway) | not covered | needs the Provider Engineer's client PR |
+| T-13 (real omk client against the gateway) | mock now serves stream SSE and tool-call (JSON and SSE) plus a tool-result follow-up; client e2e not yet run | needs the Provider Engineer's #387 head against `npm run dev:mock` |
 
 - 2026-11-11: reasoner effort is low/high only for every user (PM decision). `max` always returns 429 `request_limit_exceeded`. The `users.allow_max_effort` column and `issueKey({allowMaxEffort})` option remain but are ignored by validation; remove them in a later cleanup.
+
+- 2026-11-11: `scripts/dev-mock.ts` mock upstream gained deterministic stream / tool-call / tool-follow-up modes (see README). T-13 client e2e against this mock is still outstanding.

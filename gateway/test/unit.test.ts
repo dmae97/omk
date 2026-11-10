@@ -102,6 +102,8 @@ describe("usage normalization", () => {
 	});
 	it("estimate: input from request chars, all cache miss; output from received text", () => {
 		expect(estimateUsage(10, { content: 40, reasoning: 20, tool: 0 }, 4)).toMatchObject({ prompt: 3, hit: 0, miss: 3, completion: 15, reasoning: 5, answer: 10, total: 18, anomaly: false });
+		// thinking-only (no content yet): reasoning chars still count toward output, not ~0
+		expect(estimateUsage(8, { content: 0, reasoning: 40, tool: 0 }, 4)).toMatchObject({ prompt: 2, hit: 0, miss: 2, completion: 10, reasoning: 10, answer: 0, total: 12, anomaly: false });
 		expect(estimateUsage(0, { content: 0, reasoning: 0, tool: 0 }, 4)).toMatchObject({ prompt: 0, miss: 0, completion: 0, total: 0 });
 	});
 });

@@ -146,6 +146,34 @@ describe("T-11 aborted / truncated streams: estimate, estimated=true, never the 
 		expect(rep.exact.rows).toBe(0);
 	});
 
+	it("reasoner stream aborted during thinking (only reasoning_content received): output estimate counts reasoning chars, not ~0", async () => {
+		let release!: () => void;
+		const hold = new Promise<void>((r) => (release = r));
+		const first = chunk({ role: "assistant", content: "", reasoning_content: "" }) + chunk({ reasoning_content: "x".repeat(40) });
+		h.mock.enqueue({ kind: "sse-slow", first, then: () => hold });
+		const ac = new AbortController();
+		const res = await fetch(`${base}/v1/chat/completions`, {
+			method: "POST",
+			headers: { authorization: `Bearer ${h.users.plain!.token}`, "content-type": "application/json" },
+			body: JSON.stringify({ model: "OMK/reasoner", messages: msg("p".repeat(100)), stream: true, max_tokens: 20000 }),
+			signal: ac.signal,
+		});
+		expect(res.status).toBe(200);
+		const reader = res.body!.getReader();
+		let got = "";
+		const dec = new TextDecoder();
+		while (!got.includes("xxxxx")) got += dec.decode((await reader.read()).value);
+		ac.abort();
+		await until(() => h.mock.requests[0]!.aborted);
+		release();
+		await until(async () => (await h.db.query("SELECT count(*)::int n FROM usage_events")).rows[0].n === 1);
+		const row = (await h.db.query("SELECT * FROM usage_events")).rows[0];
+		// 40 reasoning chars / 4 = 10 tokens; no content, so answer is 0 and completion is not ~0
+		expect(row).toMatchObject({ estimated: true, end_reason: "client_abort", prompt_tokens: 25, cache_hit_tokens: 0, cache_miss_tokens: 25, reasoning_tokens: 10, completion_tokens: 10, answer_tokens: 0, total_tokens: 35, finish_reason: null, upstream_usage_json: null });
+		expect(checkInvariants(row)).toEqual([]);
+		expect((await h.db.query("SELECT count(*)::int n FROM reservations")).rows[0].n).toBe(0);
+	});
+
 	it("upstream ends normally but without usage: estimated, flagged, reconciliation keeps it separate", async () => {
 		h.mock.enqueue({ kind: "sse", body: chunk({ content: "z".repeat(21) }, "stop") + "data: [DONE]\n\n" });
 		h.mock.enqueue(okJson("up", U(5, 5, 4)));

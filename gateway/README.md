@@ -31,6 +31,42 @@ npm run reconcile -- --month 2026-11
 Clients send the token as a Bearer credential. Headless clients read it from `OMK_ACCOUNT_TOKEN`.
 A PGlite data dir is single-process: the CLI scripts refuse to run while the server holds it.
 
+## Dev mock modes
+
+`npm run dev:mock` serves the gateway at `http://127.0.0.1:8787/v1` in front of a local mock upstream.
+The mock picks a response only from the request body (deterministic, no randomness). The default
+non-stream JSON reply is unchanged. `$TOKEN` is the one-time dev token printed at startup.
+
+| Trigger | Response |
+|---|---|
+| default (no `stream`, no `tools`) | non-stream JSON, content `mock reply` |
+| `stream: true` on `OMK/coder` | SSE `chat.completion.chunk` content deltas, a final usage chunk, then `data: [DONE]` |
+| `stream: true` on `OMK/reasoner` | same, plus `reasoning_content` deltas (`Let me think step by step.`) before the answer |
+| `tools` present, no message with `role: "tool"` | a tool call: name = first tool's name (or `get_weather`), arguments `{"city":"Seoul"}`, id `call_1`, `finish_reason` `tool_calls`. SSE deltas if `stream: true` |
+| a message with `role: "tool"` | a normal answer (`It's 18C and clear in Seoul.`). On the reasoner this is preceded by the same reasoning text. JSON or SSE |
+
+```bash
+# stream (coder)
+curl -N http://127.0.0.1:8787/v1/chat/completions \
+  -H "authorization: Bearer $TOKEN" -H "content-type: application/json" \
+  -d '{"model":"OMK/coder","messages":[{"role":"user","content":"hi"}],"stream":true}'
+
+# stream (reasoner): includes reasoning_content deltas
+curl -N http://127.0.0.1:8787/v1/chat/completions \
+  -H "authorization: Bearer $TOKEN" -H "content-type: application/json" \
+  -d '{"model":"OMK/reasoner","messages":[{"role":"user","content":"hi"}],"stream":true}'
+
+# tool call (non-stream)
+curl http://127.0.0.1:8787/v1/chat/completions \
+  -H "authorization: Bearer $TOKEN" -H "content-type: application/json" \
+  -d '{"model":"OMK/coder","messages":[{"role":"user","content":"weather?"}],"tools":[{"type":"function","function":{"name":"get_weather","parameters":{"type":"object","properties":{"city":{"type":"string"}}}}}]}'
+
+# follow-up after the tool result
+curl http://127.0.0.1:8787/v1/chat/completions \
+  -H "authorization: Bearer $TOKEN" -H "content-type: application/json" \
+  -d '{"model":"OMK/coder","messages":[{"role":"user","content":"weather?"},{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"Seoul\"}"}}]},{"role":"tool","tool_call_id":"call_1","content":"18C clear"}]}'
+```
+
 ## Tokens
 
 `omk` + `_test_` prefix (see `src/tokens.ts`) followed by 32 random alphanumerics (CSPRNG). Shown once at issuance,
