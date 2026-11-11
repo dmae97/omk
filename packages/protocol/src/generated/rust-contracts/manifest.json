@@ -2,7 +2,7 @@
 	"schema": "omk.contract.declarations.v1",
 	"scope": "wire declarations; the pi-compat.ts runtime table is checked by compat-table.mjs",
 	"sourcesSha256": "b66c4e84cfbc52afe77e801c2537c3198af1de95ca76b8cff6a2bbc2ef75bd4e",
-	"generatorSha256": "950397a1012ded92c8cdd2d0445296009e056f8476af3282e153bade19c30283",
+	"generatorSha256": "94fad8644651c937fb2e94ff4ca1c01ee39f2ec42fd3d476abaf4ba319dd6d7f",
 	"files": [
 		{
 			"path": "compat.ts",

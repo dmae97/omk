@@ -23,7 +23,6 @@ export function readRustBundle() {
 		[
 			"run",
 			"--quiet",
-			"--offline",
 			"--locked",
 			"--manifest-path",
 			join(ROOT, "native/omk-contract/Cargo.toml"),
