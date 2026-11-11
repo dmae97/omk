@@ -902,6 +902,146 @@ describe("AuthStorage", () => {
 		});
 	});
 
+	describe("token refresh does not hold the credential store", () => {
+		// Sessions share one auth.json. The refresh request used to run inside the store lock, so one
+		// provider answering slowly (or a dead login retried every minute by every session) kept all
+		// the others from reading their own, still valid, credentials.
+		function uniqueId(label: string): string {
+			return `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+		}
+
+		function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+			let resolve!: (value: T) => void;
+			const promise = new Promise<T>((settle) => {
+				resolve = settle;
+			});
+			return { promise, resolve };
+		}
+
+		/** An OAuth provider whose refresh stays in flight until the test releases it. */
+		function registerGatedProvider(id: string) {
+			const started = deferred<void>();
+			const gate = deferred<void>();
+			const state = { refreshCalls: 0, started: started.promise, release: () => gate.resolve() };
+			registerOAuthProvider({
+				id,
+				name: id,
+				async login() {
+					throw new Error("Not used in this test");
+				},
+				async refreshToken(credentials) {
+					state.refreshCalls++;
+					started.resolve();
+					await gate.promise;
+					return {
+						...credentials,
+						access: `${id}-refreshed`,
+						refresh: `${id}-rotated`,
+						expires: Date.now() + 3_600_000,
+					};
+				},
+				getApiKey(credentials) {
+					return credentials.access;
+				},
+			});
+			return state;
+		}
+
+		function expired(id: string) {
+			return { type: "oauth", refresh: `${id}-refresh`, access: `${id}-expired`, expires: Date.now() - 10_000 };
+		}
+
+		function readAuthJson(): Record<string, { access?: string; refresh?: string; key?: string }> {
+			return JSON.parse(readFileSync(authJsonPath, "utf-8"));
+		}
+
+		test("a refresh in flight for one provider does not delay another provider's token", async () => {
+			const slowId = uniqueId("slow-provider");
+			const slow = registerGatedProvider(slowId);
+			writeAuthJson({
+				[slowId]: expired(slowId),
+				anthropic: {
+					type: "oauth",
+					refresh: "r",
+					access: "valid-anthropic-token",
+					expires: Date.now() + 3_600_000,
+				},
+			});
+			const sessionA = AuthStorage.create(authJsonPath);
+			const sessionB = AuthStorage.create(authJsonPath);
+
+			const slowKey = sessionA.getApiKey(slowId);
+			await slow.started;
+
+			const blocked = new Promise<string>((resolve) =>
+				setTimeout(() => resolve("blocked behind the refresh"), 1_000),
+			);
+			expect(await Promise.race([sessionB.getApiKey("anthropic"), blocked])).toBe("valid-anthropic-token");
+
+			slow.release();
+			expect(await slowKey).toBe(`${slowId}-refreshed`);
+			expect(readAuthJson()[slowId]).toMatchObject({ access: `${slowId}-refreshed`, refresh: `${slowId}-rotated` });
+		});
+
+		test("two sessions that find the same expired token refresh it once", async () => {
+			const id = uniqueId("shared-provider");
+			const provider = registerGatedProvider(id);
+			writeAuthJson({ [id]: expired(id) });
+			const sessionA = AuthStorage.create(authJsonPath);
+			const sessionB = AuthStorage.create(authJsonPath);
+
+			const first = sessionA.getApiKey(id);
+			await provider.started;
+			const second = sessionB.getApiKey(id);
+			provider.release();
+
+			expect(await first).toBe(`${id}-refreshed`);
+			expect(await second).toBe(`${id}-refreshed`);
+			expect(provider.refreshCalls).toBe(1);
+		});
+
+		test("a store change made during the refresh survives the write-back", async () => {
+			const id = uniqueId("writeback-provider");
+			const provider = registerGatedProvider(id);
+			writeAuthJson({ [id]: expired(id) });
+			const sessionA = AuthStorage.create(authJsonPath);
+			const sessionB = AuthStorage.create(authJsonPath);
+
+			const refreshing = sessionA.getApiKey(id);
+			await provider.started;
+			sessionB.set("other-provider", { type: "api_key", key: "added-during-refresh" });
+			provider.release();
+
+			expect(await refreshing).toBe(`${id}-refreshed`);
+			expect(sessionB.drainErrors()).toEqual([]);
+			const stored = readAuthJson();
+			expect(stored["other-provider"]).toMatchObject({ key: "added-during-refresh" });
+			expect(stored[id]).toMatchObject({ access: `${id}-refreshed` });
+		});
+
+		test("a login that replaced the account during the refresh is not overwritten", async () => {
+			const id = uniqueId("relogin-provider");
+			const provider = registerGatedProvider(id);
+			writeAuthJson({ [id]: expired(id) });
+			const sessionA = AuthStorage.create(authJsonPath);
+			const sessionB = AuthStorage.create(authJsonPath);
+
+			const refreshing = sessionA.getApiKey(id);
+			await provider.started;
+			sessionB.set(id, {
+				type: "oauth",
+				refresh: "new-login-refresh",
+				access: "new-login-access",
+				expires: Date.now() + 3_600_000,
+			});
+			provider.release();
+			await refreshing;
+
+			expect(readAuthJson()[id]).toMatchObject({ access: "new-login-access", refresh: "new-login-refresh" });
+			expect(await sessionA.getApiKey(id)).toBe("new-login-access");
+		});
+	});
+
 	describe("persistence semantics", () => {
 		test("set preserves unrelated external edits", () => {
 			writeAuthJson({

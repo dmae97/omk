@@ -17,6 +17,7 @@ const DEVICE_ID_FILENAME = "kimi-device-id";
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 const DEFAULT_DEVICE_FLOW_TTL_MS = 15 * 60 * 1000;
 const OAUTH_EXPIRY_SKEW_MS = 5 * 60 * 1000;
+const REFRESH_TIMEOUT_MS = 30_000;
 
 export const KIMI_CODE_OAUTH_PROVIDER_ID = "kimi-code";
 
@@ -216,6 +217,8 @@ export async function refreshKimiToken(refreshToken: string): Promise<OAuthCrede
 			client_id: CLIENT_ID,
 			refresh_token: refreshToken,
 		}),
+		// Callers hold a refresh lock across this request; an unanswered one must end.
+		signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
 	});
 
 	const payload = (await response.json()) as TokenResponse;

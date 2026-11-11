@@ -63,6 +63,18 @@ export type AuthStatus = {
 
 export { type AuthStorageBackend, FileAuthStorageBackend, InMemoryAuthStorageBackend } from "./auth-storage-backend.ts";
 
+/** Mirrors the cases in which `resolveAccountToken` goes to the network. */
+function oauthAccountNeedsRefresh(
+	provider: OAuthProviderInterface,
+	account: OAuthCredentials,
+	minRemainingMs: number,
+	rejectedApiKey: string | undefined,
+): boolean {
+	// wall-clock: account.expires is a persisted absolute expiry
+	if (Date.now() + minRemainingMs >= account.expires) return true;
+	return rejectedApiKey !== undefined && provider.getApiKey(account) === rejectedApiKey;
+}
+
 /**
  * Credential storage backed by a JSON file.
  */
@@ -469,7 +481,12 @@ export class AuthStorage {
 	}
 
 	/**
-	 * Resolve the explicitly selected account and refresh it under the storage lock.
+	 * Resolve the explicitly selected account, refreshing it when it needs to be.
+	 *
+	 * The store lock is held only to read and to write. The refresh request runs under the
+	 * provider's own refresh lock: sessions share one auth.json, and a refresh inside the store lock
+	 * let one slow provider, or a dead login every session retried, keep all of them from reading
+	 * credentials that were still valid.
 	 *
 	 * `minRemainingMs` lets a long operation demand headroom. An access token is
 	 * resolved once and then reused for the whole request, so a token that is
@@ -484,39 +501,68 @@ export class AuthStorage {
 		const provider = getOAuthProvider(providerId);
 		if (!provider) return null;
 
+		const stored = await this.readSelectedOAuthAccount(providerId);
+		if (!stored) return null;
+		if (!oauthAccountNeedsRefresh(provider, stored, minRemainingMs, rejectedApiKey)) {
+			return { apiKey: provider.getApiKey(stored), newCredentials: stored };
+		}
+
+		const refresh = async () => {
+			// Another process may have refreshed while this one waited for the refresh lock;
+			// resolveAccountToken re-checks the account as it is stored now.
+			const account = await this.readSelectedOAuthAccount(providerId);
+			if (!account) return null;
+			const resolved = await this.resolveAccountToken(provider, providerId, account, minRemainingMs, rejectedApiKey);
+			if (!resolved || resolved.newCredentials === account) return resolved;
+			return this.storeRefreshedOAuthAccount(providerId, account, resolved);
+		};
+		return this.storage.withRefreshLock ? this.storage.withRefreshLock(providerId, refresh) : refresh();
+	}
+
+	/** Selected account as stored right now; refreshes the in-memory credential map. */
+	private readSelectedOAuthAccount(providerId: OAuthProviderId): Promise<OAuthCredentials | undefined> {
+		return this.storage.withLockAsync(async (current) => {
+			this.data = this.parseStorageData(current);
+			this.loadError = null;
+			return { result: this.getOAuthCredentials(providerId) };
+		});
+	}
+
+	/**
+	 * Write a refreshed account back. The store may have changed during the refresh: the account is
+	 * found again by the refresh token that was spent, the stored selection is kept, and an account
+	 * a newer login replaced is left alone.
+	 */
+	private storeRefreshedOAuthAccount(
+		providerId: OAuthProviderId,
+		refreshedFrom: OAuthCredentials,
+		resolved: { apiKey: string; newCredentials: OAuthCredentials },
+	): Promise<{ apiKey: string; newCredentials: OAuthCredentials }> {
 		return this.storage.withLockAsync(async (current) => {
 			const currentData = this.parseStorageData(current);
 			this.data = currentData;
 			this.loadError = null;
 
+			const newCredentials = { ...refreshedFrom, ...resolved.newCredentials };
+			const result = { ...resolved, newCredentials };
 			const credential = currentData[providerId];
-			if (credential?.type !== "oauth") {
-				return { result: null };
-			}
+			if (credential?.type !== "oauth") return { result };
 
 			const accounts = [...getOAuthAccounts(credential)];
-			const accountIndex = getSelectedOAuthAccountIndex(credential, accounts.length);
-			const account = accounts[accountIndex];
-			if (!account) return { result: null };
+			const selected = getSelectedOAuthAccountIndex(credential, accounts.length);
+			const accountIndex =
+				accounts[selected]?.refresh === refreshedFrom.refresh
+					? selected
+					: accounts.findIndex((account) => account.refresh === refreshedFrom.refresh);
+			if (accountIndex < 0) return { result };
 
-			const resolved = await this.resolveAccountToken(provider, providerId, account, minRemainingMs, rejectedApiKey);
-			if (!resolved) return { result: null };
-
-			if (resolved.newCredentials === account) {
-				return { result: resolved };
-			}
-
-			const newCredentials = { ...account, ...resolved.newCredentials };
 			accounts[accountIndex] = newCredentials;
 			const merged: AuthStorageData = {
 				...currentData,
-				[providerId]: createOAuthCredential(accounts, accountIndex),
+				[providerId]: createOAuthCredential(accounts, selected),
 			};
 			this.data = merged;
-			return {
-				result: { ...resolved, newCredentials },
-				next: JSON.stringify(merged, null, 2),
-			};
+			return { result, next: JSON.stringify(merged, null, 2) };
 		});
 	}
 
