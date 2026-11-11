@@ -10,4 +10,4 @@ resolver = "3"
 
 [dependencies]
 serde = { version = "=1.0.229", default-features = false, features = ["std", "derive"] }
-serde_json = { version = "=1.0.154", default-features = false, features = ["std"] }
+serde_json = { version = "=1.0.154", default-features = false, features = ["std", "raw_value"] }
