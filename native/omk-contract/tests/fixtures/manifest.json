@@ -1,23 +1,29 @@
 {
-  "schema": "omk.contract.fixtures.v1",
+  "schema": "omk.contract.fixtures.v2",
   "generatedBy": "scripts/record-contract-fixtures.mjs",
-  "sources": [
-    "packages/coding-agent/test/suite/g0-session-hash.ts",
-    "packages/coding-agent/test/suite/fixtures/session-equivalence",
-    "scripts/fixtures/rpc-recorder-driver.ts"
-  ],
+  "origin": {
+    "head": "437ae8fdf79e05fb374e88d15509b6e969680c63",
+    "selectedSourceSha256": "27fc98d3a1e19e212f5d102432997b0069aa1d937a84a07771308f86538977cd"
+  },
+  "normalization": {
+    "paths": "synthetic placeholders",
+    "uuids": "first occurrence",
+    "fauxApi": "faux:<api>",
+    "promptSettledDurationMs": 0
+  },
+  "copiedGoldenEvidence": "archived synthetic records only; not fresh parity evidence",
   "files": [
     {
       "path": "g0/provider-requests.jsonl",
-      "sha256": "d408173db778d5bb056eba31ad87840518a9cf4268d2f07a91698f89e0698fe1"
+      "sha256": "7316e43485a9804dbdd949e1691a9365bda2ecc6f3204921be922b1cd871319a"
     },
     {
       "path": "g0/session.jsonl",
-      "sha256": "b80f094445c137807a36a0c51baa96ebf7cdc566c21aa1a59b23109ba23ff6ee"
+      "sha256": "007f16e6a7e8ed4bc5e1b8bf709499516ad3700250c8504454357473c35d1ef2"
     },
     {
       "path": "rpc-transcript.jsonl",
-      "sha256": "7b1ea1c869507a0de239575732f03d6d944907c68710949cff30291dc02469fc"
+      "sha256": "c32ad2cd1db9c97ccfdacbc6761fe5cf68d657719a7bb5edc309fad6e38cdc36"
     },
     {
       "path": "session-equivalence/admission-pressure.json",
