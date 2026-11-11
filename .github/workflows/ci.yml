@@ -132,3 +132,75 @@ jobs:
 
       - name: Test
         run: npm test
+
+  # Spec 120 decisions C3 to C7: the three workflow additions the owner allowed.
+  # The toolchain, rustfmt and clippy come from rust-toolchain.toml.
+  cargo:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        # actions/checkout v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        # actions/setup-node v5.0.0
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install
+          cargo --version
+
+      - name: Format, Clippy and tests for every native crate
+        run: node scripts/check-native.mjs
+
+  rust-macos:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        # actions/checkout v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install
+          cargo --version
+
+      - name: Contract crate
+        run: |
+          m=native/omk-contract/Cargo.toml
+          cargo fmt --check --manifest-path "$m"
+          cargo clippy --locked --manifest-path "$m" --all-targets \
+            -- -D warnings
+          cargo test --locked --manifest-path "$m"
+
+  rust-windows:
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        # actions/checkout v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install
+          cargo --version
+
+      - name: Contract crate
+        run: |
+          m=native/omk-contract/Cargo.toml
+          cargo fmt --check --manifest-path "$m"
+          cargo clippy --locked --manifest-path "$m" --all-targets \
+            -- -D warnings
+          cargo test --locked --manifest-path "$m"

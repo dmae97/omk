@@ -126,8 +126,9 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
 - [ ] T011 Add the Rust checks to `npm run check` and add the cargo, macOS and Windows jobs to CI. This is the only task that edits workflow files (C3, C7)
   > role: coder
   > deps: T002
-  > files: [`package.json`, `scripts/check-native.mjs`, `scripts/test/check-native.test.mjs`, `native/omk-policy/tests/reduction.rs`, `.github/workflows/ci.yml`]
-  > progress: local half done. `npm run check` runs `check:native`: `cargo fmt --check`, Clippy with `-D warnings` and `cargo test`, `--locked`, for every crate under `native/`. A missing cargo fails. One existing Clippy finding in `omk-policy` tests was fixed. The CI jobs are not added yet
+  > files: [`package.json`, `scripts/check-native.mjs`, `scripts/test/check-native.test.mjs`, `native/omk-policy/tests/reduction.rs`, `rust-toolchain.toml`, `.github/workflows/ci.yml`]
+  > progress: local half done. `npm run check` runs `check:native`: `cargo fmt --check`, Clippy with `-D warnings` and `cargo test`, `--locked`, for every crate under `native/`. A missing cargo fails. One existing Clippy finding in `omk-policy` tests was fixed
+  > progress: CI jobs added as three new jobs in `ci.yml`, with no change to existing jobs or triggers: `cargo` (ubuntu-22.04, every native crate), `rust-macos` (macos-15) and `rust-windows` (windows-2025), the last two for `omk-contract`, the K0 crate. `omk-execution` is a Linux sandbox supervisor and is not built on the other two. `rust-toolchain.toml` now lists `rustfmt` and `clippy` so rustup installs them with the pinned toolchain. Checked off when the three jobs pass on a run
   > verify: `npm run check` locally, and the three CI jobs pass on the pull request
   > gate: command-pass
   > risk: high
