@@ -77,6 +77,24 @@ For project-level Claude Code skills, add to `.omk/settings.json`:
 
 This is progressive disclosure: only descriptions are always in context, full instructions load on-demand.
 
+### Automatic loading checks the current context
+
+With `OMK_SKILL_AUTO_LOAD` and skill admission enabled (both default on), strong
+matches can contribute up to three bodies within the per-prompt skill budget
+(12,000 estimated body tokens, using UTF-8 bytes divided by four).
+The native session checks its active branch and retained context before skipping
+a body that was admitted earlier. If compaction or branch navigation removed the
+instructions, a relevant body can be loaded again using its existing admission
+slot. A body already present is not duplicated. A changed body still needs a new
+slot, and the lifetime admission cap is never reset by compaction or branching.
+
+When `OMK_RUN_LOG_DIR` is set, `skill-autoload.jsonl` includes `contextChecked`,
+`contextAbsent` and `restoredFromHistory` for each candidate. These fields record instruction
+availability and delivery, not task success or verification. No body cache or
+extra model call is introduced. Custom SDK stores without `buildSessionContext`
+retain the earlier lifetime deduplication behavior. Set `OMK_SKILL_AUTO_LOAD=0`
+to disable automatic loading; explicit skill commands remain available.
+
 ### Catalog cache
 
 Startup caches skill metadata in `cache/skill-catalog-v2.json` under the agent
