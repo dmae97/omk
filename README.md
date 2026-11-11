@@ -546,7 +546,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.12](.github/RELEASE_NOTES_v1.5.12.md)
+- [Release notes for v1.5.13](.github/RELEASE_NOTES_v1.5.13.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -619,6 +619,24 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v1.5.13
+
+### Added
+
+- `AuthStorageBackend.withRefreshLock(key, fn)` is an optional backend method that serializes one provider's token refresh across the processes sharing the backend. `FileAuthStorageBackend` and `InMemoryAuthStorageBackend` implement it; a custom backend without it runs refreshes unserialized (#408).
+- `AuthStorage.getApiKey(provider, { background: true })` and `ModelRegistry.getApiKeyForProvider(provider, { background: true })` mark a caller nobody is waiting on, such as polling. Such a call skips an OAuth refresh that failed recently instead of repeating it (#409).
+
+### Fixed
+
+- An account rate limit no longer spends the whole retry budget in 14 seconds. A 429 or `rate_limit_error` that is not quota exhaustion and carries no `Retry-After` hint now waits 8 times the configured backoff per attempt, capped at 60 seconds, minus up to 25% jitter so sessions throttled together do not retry together. With `retry.baseDelayMs: 2000` and `retry.maxRetries: 3` the retries span 81 to 108 seconds instead of 14. A `Retry-After` hint, a retry on a route OMK just switched to and `retry.baseDelayMs: 0` behave as before. See [rate limits and credential retries](packages/coding-agent/docs/provider-resilience.md#rate-limits-and-credential-retries).
+- Compaction and branch-summary calls wait out a rate limit the same way, and honor a `Retry-After` hint in the error text (capped at 60 seconds). They used the plain 2, 4 and 8 second backoff.
+- A request whose stored OAuth login could not be resolved (the token endpoint was unreachable, or another session held the credential store) is retried within the normal retry budget instead of ending the turn. No request and no other key is sent for the failed attempt; if the login never resolves, the turn ends with the message naming `/login <provider>`. When the token endpoint refuses the refresh (HTTP 400 or 401, `invalid_grant`), the turn ends at once with that message, because the refresh token is dead. A credential the provider rejected is still not retried.
+- A logged-in session no longer sends the `models.json` provider key when its stored OAuth login cannot be resolved. With `anthropic.apiKey: "$ANTHROPIC_API_KEY"` and a dead key in the environment, a request that could not take the credential lock used to go out with that key and end the turn with `401 invalid x-api-key`. An unexpired stored token is now used as it is, and an unresolved login is reported as an authentication failure (#407).
+- Sessions sharing `auth.json` no longer wait on each other's OAuth refresh. The refresh request runs outside the credential store lock, under a per-provider refresh lock, so an expired token is still refreshed once; the store lock is held only to read and to write, and is taken without yielding the event loop. The Kimi refresh request gets the 30 second timeout the other providers use (#408).
+- The usage rail no longer sends a token request every minute for a login that cannot refresh. A failed OAuth refresh is remembered per provider for the refresh token that was tried, and usage polling waits before trying that token again: one minute, doubling with each consecutive failure up to thirty minutes. A request you are waiting on always tries, and a new login or another account is tried at once. Each session remembers this for itself (#409).
+
+Release notes live in [RELEASE_NOTES_v1.5.13.md](.github/RELEASE_NOTES_v1.5.13.md).
+
 ## Release v1.5.12
 
 ### Changed
@@ -680,16 +698,6 @@ Release notes live in [RELEASE_NOTES_v1.5.12.md](.github/RELEASE_NOTES_v1.5.12.m
 - Update `glob` to 14.0.4 and the direct/root-override `minimatch` pin to 11.0.5. Verify the published default ESM/CJS bundles as well as the external dependency tree; retain existing import paths, `brace-expansion` and TypeBox pins. No startup or per-worker memory reduction is claimed.
 
 Release notes live in [RELEASE_NOTES_v1.5.11.md](.github/RELEASE_NOTES_v1.5.11.md).
-
-## Release v1.5.10
-
-### Fixed
-
-- Bound adaptive-effort tool-call deduplication state. If its limit is reached, the adaptive wrapper passes through the configured reasoning effort for the rest of its lifetime; other limits may still apply.
-- A compaction is no longer stamped earlier than the messages it covers when the wall clock steps backward (observed on WSL2 as ~6.8 second resyncs). Previously the compacted history's old usage still counted after compaction, so the next prompt was rejected with `context_input_capacity_exceeded`. The compaction timestamp now follows the newest message on its branch for steps up to one minute.
-- Usage estimates, input admission and compaction gates now use active-branch entry order to distinguish covered messages from new responses. Assistant usage and overflow errors arriving after compaction while the wall clock is still recovering are no longer discarded as stale; repeated compactions are distinguished by entry ID even when their timestamps match.
-
-Release notes live in [RELEASE_NOTES_v1.5.10.md](.github/RELEASE_NOTES_v1.5.10.md).
 
 <!-- releases:end -->
 
