@@ -983,6 +983,45 @@ describe("AuthStorage", () => {
 			expect(readAuthJson()[slowId]).toMatchObject({ access: `${slowId}-refreshed`, refresh: `${slowId}-rotated` });
 		});
 
+		test("a token that needs no refresh never holds the store lock across an await", async () => {
+			// A session resolves its key at request start, right before it assembles the prompt. A lock
+			// taken with the async API spans event-loop turns, so it stayed held for as long as that
+			// synchronous work ran: a 2 s stall in one session was a 2 s hold for all of them.
+			writeAuthJson({
+				anthropic: {
+					type: "oauth",
+					refresh: "r",
+					access: "valid-anthropic-token",
+					expires: Date.now() + 3_600_000,
+				},
+			});
+			authStorage = AuthStorage.create(authJsonPath);
+			const asyncLock = vi.spyOn(lockfile, "lock");
+
+			expect(await authStorage.getApiKey("anthropic")).toBe("valid-anthropic-token");
+			expect(asyncLock).not.toHaveBeenCalled();
+		});
+
+		test("waits for the store lock when another process holds it at that instant", async () => {
+			writeAuthJson({
+				anthropic: {
+					type: "oauth",
+					refresh: "r",
+					access: "valid-anthropic-token",
+					expires: Date.now() + 3_600_000,
+				},
+			});
+			authStorage = AuthStorage.create(authJsonPath);
+			const busy = Object.assign(new Error("Lock file is already being held"), { code: "ELOCKED" });
+			vi.spyOn(lockfile, "lockSync").mockImplementation(() => {
+				throw busy;
+			});
+			const asyncLock = vi.spyOn(lockfile, "lock");
+
+			expect(await authStorage.getApiKey("anthropic")).toBe("valid-anthropic-token");
+			expect(asyncLock).toHaveBeenCalledTimes(1);
+		});
+
 		test("two sessions that find the same expired token refresh it once", async () => {
 			const id = uniqueId("shared-provider");
 			const provider = registerGatedProvider(id);

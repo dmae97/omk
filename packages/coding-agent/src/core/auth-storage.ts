@@ -17,7 +17,12 @@ import {
 import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from "omk-ai/oauth";
 import { join } from "path";
 import { getAgentDir } from "../config.ts";
-import { type AuthStorageBackend, FileAuthStorageBackend, InMemoryAuthStorageBackend } from "./auth-storage-backend.ts";
+import {
+	type AuthStorageBackend,
+	FileAuthStorageBackend,
+	InMemoryAuthStorageBackend,
+	type LockResult,
+} from "./auth-storage-backend.ts";
 import {
 	findMatchingOAuthAccount,
 	findOAuthAccountMatch,
@@ -519,9 +524,26 @@ export class AuthStorage {
 		return this.storage.withRefreshLock ? this.storage.withRefreshLock(providerId, refresh) : refresh();
 	}
 
+	/**
+	 * Run a read-modify-write of the store without yielding while the lock is held.
+	 *
+	 * A session resolves its key at request start, right before it assembles the prompt. The async
+	 * lock spans event-loop turns, so it stayed held for as long as that synchronous work ran and
+	 * every other session waited. The synchronous lock is taken and released within one turn; the
+	 * async one is the fallback for the instant another process holds it.
+	 */
+	private async withStoreLock<T>(fn: (current: string | undefined) => LockResult<T>): Promise<T> {
+		try {
+			return this.storage.withLock(fn);
+		} catch (error) {
+			if ((error as { code?: unknown } | null)?.code !== "ELOCKED") throw error;
+			return this.storage.withLockAsync(async (current) => fn(current));
+		}
+	}
+
 	/** Selected account as stored right now; refreshes the in-memory credential map. */
 	private readSelectedOAuthAccount(providerId: OAuthProviderId): Promise<OAuthCredentials | undefined> {
-		return this.storage.withLockAsync(async (current) => {
+		return this.withStoreLock((current) => {
 			this.data = this.parseStorageData(current);
 			this.loadError = null;
 			return { result: this.getOAuthCredentials(providerId) };
@@ -538,7 +560,7 @@ export class AuthStorage {
 		refreshedFrom: OAuthCredentials,
 		resolved: { apiKey: string; newCredentials: OAuthCredentials },
 	): Promise<{ apiKey: string; newCredentials: OAuthCredentials }> {
-		return this.storage.withLockAsync(async (current) => {
+		return this.withStoreLock((current) => {
 			const currentData = this.parseStorageData(current);
 			this.data = currentData;
 			this.loadError = null;
