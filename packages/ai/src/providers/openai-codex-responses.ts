@@ -44,6 +44,7 @@ import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord } from "../utils/headers.ts";
 import { isRetryableCodexHttpError, parseCodexHttpError } from "./openai-codex-http-errors.ts";
 import { GPT_56_MOA_MODEL_ID, streamOpenAICodexMoa } from "./openai-codex-moa.ts";
+import { CodexProtocolError, parseSSE } from "./openai-codex-protocol.ts";
 import { resolveOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
 import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.ts";
 import { buildBaseOptions } from "./simple-options.ts";
@@ -611,18 +612,6 @@ class CodexApiError extends Error {
 	}
 }
 
-class CodexProtocolError extends Error {
-	readonly payload?: unknown;
-	readonly cause?: unknown;
-
-	constructor(message: string, options?: { payload?: unknown; cause?: unknown }) {
-		super(message);
-		this.name = "CodexProtocolError";
-		this.payload = options?.payload;
-		this.cause = options?.cause;
-	}
-}
-
 function isCodexNonTransportError(error: unknown): boolean {
 	return error instanceof CodexApiError || error instanceof CodexProtocolError;
 }
@@ -779,73 +768,6 @@ async function* mapCodexEvents(
 function normalizeCodexStatus(status: unknown): CodexResponseStatus | undefined {
 	if (typeof status !== "string") return undefined;
 	return CODEX_RESPONSE_STATUSES.has(status as CodexResponseStatus) ? (status as CodexResponseStatus) : undefined;
-}
-
-// ============================================================================
-// SSE Parsing
-// ============================================================================
-
-async function* parseSSE(response: Response, signal?: AbortSignal): AsyncGenerator<Record<string, unknown>> {
-	if (!response.body) return;
-
-	const reader = response.body.getReader();
-	const decoder = new TextDecoder();
-	let buffer = "";
-	const onAbort = () => {
-		void reader.cancel().catch(() => {});
-	};
-	signal?.addEventListener("abort", onAbort, { once: true });
-
-	try {
-		while (true) {
-			if (signal?.aborted) {
-				throw new Error("Request was aborted");
-			}
-			const { done, value } = await reader.read();
-			if (signal?.aborted) {
-				throw new Error("Request was aborted");
-			}
-			if (done) break;
-			buffer += decoder.decode(value, { stream: true });
-
-			let boundary = /\r?\n\r?\n/.exec(buffer);
-			while (boundary) {
-				const chunk = buffer.slice(0, boundary.index);
-				buffer = buffer.slice(boundary.index + boundary[0].length);
-
-				const dataLines = chunk
-					.split("\n")
-					.filter((l) => l.startsWith("data:"))
-					.map((l) => l.slice(5).trim());
-				if (dataLines.length > 0) {
-					const data = dataLines.join("\n").trim();
-					if (data && data !== "[DONE]") {
-						try {
-							yield JSON.parse(data) as Record<string, unknown>;
-						} catch (cause) {
-							throw new CodexProtocolError(`Invalid Codex SSE JSON: ${formatThrownValue(cause)}`, {
-								cause,
-								payload: data,
-							});
-						}
-					}
-				}
-				boundary = /\r?\n\r?\n/.exec(buffer);
-			}
-		}
-	} finally {
-		signal?.removeEventListener("abort", onAbort);
-		try {
-			await reader.cancel();
-		} catch {
-			// The terminal event may have already closed the stream.
-		}
-		try {
-			reader.releaseLock();
-		} catch {
-			// Ignore cleanup races after cancellation.
-		}
-	}
 }
 
 // ============================================================================

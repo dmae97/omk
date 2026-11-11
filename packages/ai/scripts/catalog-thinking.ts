@@ -186,6 +186,28 @@ export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 		if (model.api === "anthropic-messages")
 			model.compat = { ...model.compat, forceAdaptiveThinking: true, supportsDisabledThinking: false };
 	}
+	if (model.id.toLowerCase().includes("fable")) {
+		// https://platform.claude.com/docs/en/models/fable-5-2/overview
+		// Fable always thinks adaptively and exposes low through max, never off or a token budget.
+		model.thinkingLevelMap = {
+			off: null,
+			minimal: null,
+			low: "low",
+			medium: "medium",
+			high: "high",
+			xhigh: "xhigh",
+			max: "max",
+			ultra: model.thinkingLevelMap?.ultra,
+		};
+		if (model.api === "anthropic-messages") {
+			model.compat = {
+				...model.compat,
+				forceAdaptiveThinking: true,
+				supportsDisabledThinking: false,
+				supportsTemperature: false,
+			};
+		}
+	}
 	// gemini-4-argon (2026-10-13) keeps the 3.7/3.8 Flash contract: Google's thinking doc
 	// lists it On (medium) with low/medium/high only, so there is no real off level.
 	// https://ai.google.dev/gemini-api/docs/thinking (checked 2026-10-14)

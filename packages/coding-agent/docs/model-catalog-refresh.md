@@ -1,6 +1,36 @@
 # 모델 목록·thinking 갱신 기록
 
-확인일: 2026-10-30. 생성 파일은 손으로 수정하지 않고 생성기로 갱신한다.
+확인일: 2026-11-10. 생성 파일은 손으로 수정하지 않고 생성기로 갱신한다.
+
+## 2026-11-10: Claude Fable 5.2와 Anthropic fallback
+
+[공식 Fable 5.2 문서](https://platform.claude.com/docs/en/models/fable-5-2/overview)에
+따라 `claude-fable-5-2`를 추가했다. 직접 API의 context는 1,000,000, 출력은 128,000이며,
+1M tokens당 input/output/cache-read/5분 cache-write 가격은 $8/$40/$0.20/$10다.
+Fable은 adaptive thinking이 항상 켜져 있으므로 `low/medium/high/xhigh/max`만 노출하고
+`off`, `minimal`, manual `budget_tokens`와 sampling parameter는 보내지 않는다.
+
+```bash
+node packages/ai/scripts/generate-models.ts --fable-only
+```
+
+이 명령은 models.dev, OpenRouter와 Vercel의 Fable route만 갱신한다. 다른 모델과 정적
+Cursor/Devin lane은 보존한다. 게이트웨이의 가격과 한도는 각 route의 선언이며 직접 API와
+같다고 가정하지 않는다. 카탈로그 추가가 계정별 이용 권한이나 데이터 전송 동의는 아니다.
+Fable 5.2의 데이터 보존 조건은 공식 문서를 확인하고 비공개 입력 전송 전에 검토한다.
+
+[공식 refusal/fallback 계약](https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback)에
+따라 Fable 5.x, Opus 5/5.5와 Sonnet 5.5의 공식 HTTPS API 요청에
+`fallbacks: "default"`와 `server-side-fallback-2026-07-01` beta를 보낸다.
+다른 proxy와 Haiku 5.5에는 보내지 않는다. Haiku는 서버 측 fallback을 지원하지 않는다.
+권장 fallback이 없는 거부는 그대로 오류다. 성공한 stream은 실제 응답 모델을 기록하고,
+등록된 모델이면 그 모델의 카탈로그 가격으로 계산한다. 미등록 모델은 요청 모델의
+가격 추정치를 유지하므로 실제 청구액으로 간주하지 않는다. 남은 refusal의
+`stop_details.category`는 후속 usage-only event에서도 보존한다.
+
+검증은 전송 전 payload, 합성 SSE와 카탈로그 보존 비교로 수행한다. 유료 공급자 추론,
+계정별 권한, 실제 fallback 선택과 청구액은 검증하지 않는다. 로컬 custom model과
+인증 설정은 이 변경에 포함하지 않는다.
 
 ## 2026-10-30 후속: 기존 자격과 공식 사용 범위 재확인
 

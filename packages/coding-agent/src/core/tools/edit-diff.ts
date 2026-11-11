@@ -6,6 +6,7 @@
 import * as Diff from "diff";
 import { constants } from "fs";
 import { access, readFile } from "fs/promises";
+import { countOverlappingOccurrences } from "./edit-occurrences.ts";
 import { resolveToCwd } from "./path-utils.ts";
 
 export function detectLineEnding(content: string): "\r\n" | "\n" {
@@ -277,10 +278,9 @@ export function stripBom(content: string): { bom: string; text: string } {
 	return content.startsWith("\uFEFF") ? { bom: "\uFEFF", text: content.slice(1) } : { bom: "", text: content };
 }
 
-function countOccurrences(content: string, oldText: string): number {
-	const fuzzyContent = normalizeForFuzzyMatch(content);
-	const fuzzyOldText = normalizeForFuzzyMatch(oldText);
-	return fuzzyContent.split(fuzzyOldText).length - 1;
+/** Fuzzy-normalized match count of oldText in content, overlapping matches included. */
+export function countFuzzyOccurrences(content: string, oldText: string): number {
+	return countOverlappingOccurrences(normalizeForFuzzyMatch(content), normalizeForFuzzyMatch(oldText));
 }
 
 function getNotFoundError(path: string, editIndex: number, totalEdits: number): Error {
@@ -362,7 +362,7 @@ export function applyEditsToNormalizedContent(
 			throw getNotFoundError(path, i, normalizedEdits.length);
 		}
 
-		const occurrences = countOccurrences(baseContent, edit.oldText);
+		const occurrences = countFuzzyOccurrences(baseContent, edit.oldText);
 		if (occurrences > 1) {
 			throw getDuplicateError(path, i, normalizedEdits.length, occurrences);
 		}

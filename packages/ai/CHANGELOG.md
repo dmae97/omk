@@ -7,6 +7,21 @@
 - Pinned `@anthropic-ai/sdk` 0.92.0. Its declarations now compile for strict consumers without `skipLibCheck`. The SDK's new `ANTHROPIC_CUSTOM_HEADERS` environment variable is ignored: Anthropic requests keep sending only headers from model configuration and request options, and the selected API key or OAuth token is not replaced.
 - `GoogleThinkingLevel` is declared in an SDK-free module, so the root declarations no longer load `@google/genai`.
 
+## [1.5.11] - 2026-11-10
+
+### Added
+
+- Claude Fable 5.2 joins the Anthropic, Bedrock, OpenCode, OpenRouter and Vercel AI Gateway catalogs. Fable models expose their adaptive `low` through `max` efforts without unsupported off or minimal tiers.
+
+- `hasStatusCodeLike(text, codes)` is exported. It matches a status code only next to a transport word (`HTTP 503`, `status code 502`, `429 Too Many Requests`), so a number inside a message body does not count. It moved here from `open-multi-agent-kit`, which now imports it.
+
+### Fixed
+
+- First-party Anthropic requests for Fable 5.x, Opus 5/5.5 and Sonnet 5.5 enable the official `fallbacks: "default"` refusal retry. Proxy requests and Haiku 5.5 are excluded. Stream results record the responding model and its catalog cost, and preserve refusal categories across usage-only events.
+
+- `retryAssistantCall` and `isRetryableAssistantError`, which compaction and branch summaries use, no longer retry an error because any digit run in it reads as a status code. `400 invalid input: maximum is 5000 characters` and `HTTP 400 limit 1500 tokens` used to call the provider again and now fail at once. `503 Service Unavailable`, `520 status code (no body)`, `429 Too Many Requests`, `Error: 503` and `Request failed with status code 502` still retry. This matches the agent-turn classifier in `open-multi-agent-kit`.
+- The OpenAI Codex SSE transport now accepts a bare CR as a line terminator, as the SSE spec allows. Before, it split events only on `\n\n` or `\r\n\r\n`, so a CR-framed stream delivered no events and the turn never finished. Framing now uses `eventsource-parser` 4.1.3 (MIT, new dependency). JSON validation, `[DONE]` handling, abort and stream cleanup are unchanged. A line that keeps growing across reads without completing an event now fails the turn with `Codex SSE buffered over 16777216 characters without an event` instead of buffering without limit; an event that arrives within one read is not limited.
+
 ## [1.5.10] - 2026-10-27
 
 ## [1.5.9] - 2026-10-26

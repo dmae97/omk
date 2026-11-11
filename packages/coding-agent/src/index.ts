@@ -155,6 +155,22 @@ export {
 	serializeContextCacheSnapshot,
 } from "./core/context-budget-governor-v2.ts";
 export {
+	ONTOLOGY_SHADOW_MAX_QUERY_RESULTS,
+	ONTOLOGY_SHADOW_MAX_RESOURCES,
+	ONTOLOGY_SHADOW_PRODUCER_VERSION,
+	type OntologyShadowQuery,
+	type OntologyShadowQueryResult,
+	type OntologyShadowRelation,
+	type OntologyShadowResource,
+	type OntologyShadowRevision,
+	type OntologyShadowScope,
+	queryOntologyShadowStore,
+	resolveOntologyShadowHead,
+	resolveOntologyShadowScope,
+	writeOntologyShadowStore,
+} from "./core/ontology-shadow-store.ts";
+export type { OntologyShadowObservation } from "./core/ontology-shadow.ts";
+export {
 	computeReservedTokenBudget,
 	estimateToolResultReserve,
 	ReservedTokenBudgetError,

@@ -64,17 +64,30 @@ const logLines = () => {
 	}
 };
 
-describe("edit match observation: tool output unchanged vs main", () => {
+describe("edit match observation: original outcomes and logging parity", () => {
 	for (const c of EDIT_CASES) {
 		for (const logging of [false, true]) {
-			it(`${c.name} (run log ${logging ? "on" : "off"}) is byte-identical to main`, async () => {
+			it(`${c.name} (run log ${logging ? "on" : "off"}) preserves main's outcome and original diagnostic`, async () => {
 				if (logging) process.env[RUN_LOG_DIR_ENV] = logDir;
 				else delete process.env[RUN_LOG_DIR_ENV];
 				const got = await runCase(c.name);
-				expect(JSON.stringify(got)).toBe(JSON.stringify(GOLDEN[c.name]));
+				if (["not-found", "indent-only", "duplicate"].includes(c.name) && typeof got.error === "string") {
+					const [original, hint] = got.error.split("\n");
+					expect({ ...got, error: original }).toEqual(GOLDEN[c.name]);
+					expect(hint).toMatch(/^Edit recovery for edits\[0\]: .* No changes were written\.$/);
+				} else {
+					expect(got).toEqual(GOLDEN[c.name]);
+				}
 			});
 		}
 	}
+
+	it.each(EDIT_CASES)("$name returns identical feedback with logging on or off", async ({ name }) => {
+		delete process.env[RUN_LOG_DIR_ENV];
+		const withoutLog = await runCase(name);
+		process.env[RUN_LOG_DIR_ENV] = logDir;
+		expect(await runCase(name)).toEqual(withoutLog);
+	});
 });
 
 describe("edit match observation: run log lines", () => {

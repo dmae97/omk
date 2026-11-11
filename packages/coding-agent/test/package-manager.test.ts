@@ -1763,6 +1763,24 @@ Content`,
 			expect(result.skills.some((r) => isEnabled(r, "pdf-to-markdown", "includes"))).toBe(true);
 			expect(result.skills.some((r) => isEnabled(r, "document-processor-api", "includes"))).toBe(true);
 		});
+
+		it("expands manifest globs and applies extglob exclusions", async () => {
+			const pkgDir = join(tempDir, "glob-manifest-pkg");
+			mkdirSync(join(pkgDir, "extensions"), { recursive: true });
+			for (const name of ["alpha", "beta", "gamma"]) {
+				writeFileSync(join(pkgDir, "extensions", `${name}.ts`), "export default function() {};");
+			}
+			writeFileSync(
+				join(pkgDir, "package.json"),
+				JSON.stringify({
+					name: "glob-manifest-pkg",
+					omk: { extensions: ["extensions/*{alpha,beta}.ts", "!**/@(beta).ts"] },
+				}),
+			);
+
+			const result = await packageManager.resolveExtensionSources([pkgDir]);
+			expect(result.extensions.map((resource) => resource.path)).toEqual([join(pkgDir, "extensions", "alpha.ts")]);
+		});
 	});
 
 	describe("pattern filtering in package filters", () => {

@@ -139,6 +139,7 @@ import { buildCapabilityInventory } from "./loadout-runtime.ts";
 import { loadMcpServerConfigsWithReport, type McpConfigLoadReport } from "./mcp/config.ts";
 import { McpManager, type McpServerConfig, type McpServerStatus } from "./mcp/manager.ts";
 import { type McpProjectTrustSummary, projectTrustSummary } from "./mcp/trust-summary.ts";
+import { type OntologyShadowObservation, withOntologyShadowObservation } from "./ontology-shadow.ts";
 import { buildRuntimeProvenance } from "./runtime-provenance.ts";
 import { createSubagentLaneAuthority, type SubagentLaneAuthority } from "./subagent-lane-authority.ts";
 import { resolveWorkspaceWriteRoots } from "./tools/workspace-write-guard.ts";
@@ -740,6 +741,8 @@ export class AgentSession {
 	private _modelRegistry: ModelRegistry;
 	/** Lazy provider: representations persist per workspace by default; plans stay session-memory-only. */
 	private _contextBudgetCacheProvider: ContextBudgetCacheProviderV2 | undefined;
+	/** Latest read-only shadow comparison. Evidence only; never feeds prompt selection. */
+	ontologyShadowObservation: OntologyShadowObservation | null = null;
 	private _contextCacheInvalidationSnapshot: ContextCacheInvalidationSnapshot;
 
 	// Tool registry for extension getTools/setTools
@@ -2002,7 +2005,7 @@ export class AgentSession {
 		queryContext = this._extractCurrentQuery(),
 		model: Model<any> | undefined = this.model,
 	): BuildSystemPromptOptions["contextBudget"] | undefined {
-		return sessionContextBudgetOptions(
+		const options = sessionContextBudgetOptions(
 			model,
 			queryContext,
 			() => this.settingsManager.getContextBudgetEnabled(),
@@ -2013,6 +2016,15 @@ export class AgentSession {
 				return cache;
 			},
 		);
+		return withOntologyShadowObservation(options, {
+			cwd: this._cwd,
+			queryContext,
+			model,
+			resourceLoader: this._resourceLoader,
+			setObservation: (observation) => {
+				this.ontologyShadowObservation = observation;
+			},
+		});
 	}
 
 	/**

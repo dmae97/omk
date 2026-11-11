@@ -6,6 +6,8 @@
 
 - `Editor.setInlineSuggestion()` renders a dim suffix only at the document end. Direct text replacement and insertion clear stale inline text, while the owner controls per-key dismissal and acceptance.
 
+## [1.5.11] - 2026-11-10
+
 ## [1.5.10] - 2026-10-27
 
 ### Fixed
@@ -20,11 +22,15 @@
 
 ## [1.5.8] - 2026-10-24
 
+
 ## [1.5.7] - 2026-10-23
+
 
 ## [1.5.6] - 2026-10-22
 
+
 ## [1.5.5] - 2026-10-21
+
 
 ## [1.5.4] - 2026-10-20
 
