@@ -135,7 +135,7 @@ import { captureHostResourceSnapshot, type HostResourceSnapshot } from "./host-r
 import { decideLoadoutAccess, type LoadoutAccessPolicy } from "./loadout-access-policy.ts";
 import { buildCapabilityInventory } from "./loadout-runtime.ts";
 import { loadMcpServerConfigsWithReport, type McpConfigLoadReport } from "./mcp/config.ts";
-import { McpManager, type McpServerConfig, type McpServerStatus } from "./mcp/manager.ts";
+import { type McpAttachOptions, McpManager, type McpServerStatus } from "./mcp/manager.ts";
 import { type McpProjectTrustSummary, projectTrustSummary } from "./mcp/trust-summary.ts";
 import { type OntologyShadowObservation, withOntologyShadowObservation } from "./ontology-shadow.ts";
 import { buildRuntimeProvenance } from "./runtime-provenance.ts";
@@ -4469,10 +4469,7 @@ export class AgentSession {
 	 * Returns per-server status so a caller can surface failures; an empty
 	 * configuration returns an empty array without spawning anything.
 	 */
-	attachMcpServers(options?: {
-		servers?: readonly McpServerConfig[];
-		callTimeoutMs?: number;
-	}): Promise<McpServerStatus[]> {
+	attachMcpServers(options?: McpAttachOptions): Promise<McpServerStatus[]> {
 		if (this._mcpAttaching) return Promise.reject(new Error("MCP attachment already in progress"));
 		this._mcpAttaching = true;
 		return this._shutdown
@@ -4482,10 +4479,7 @@ export class AgentSession {
 			});
 	}
 
-	private async _attachMcpServers(options?: {
-		servers?: readonly McpServerConfig[];
-		callTimeoutMs?: number;
-	}): Promise<McpServerStatus[]> {
+	private async _attachMcpServers(options?: McpAttachOptions): Promise<McpServerStatus[]> {
 		if (!options?.servers) this._mcpLoadReport = loadMcpServerConfigsWithReport(this._cwd);
 		const servers = options?.servers ?? this._mcpLoadReport?.servers ?? [];
 		await this._mcpManager?.closeAndWait();
@@ -4503,15 +4497,19 @@ export class AgentSession {
 			cwd: this._cwd,
 			clientInfo: { name: APP_NAME, version: VERSION },
 			callTimeoutMs: options?.callTimeoutMs,
+			onToolsChanged: (definitions) => {
+				if (this._shutdown.isClosing || this._mcpManager !== manager) return;
+				// A recovered catalog replaces handles bound to the retired client; builtins still win.
+				const usable = definitions.filter((definition) => !this._baseToolDefinitions.has(definition.name));
+				this._customTools = this._customTools.filter((definition) => !this._mcpToolNames.has(definition.name));
+				this._mcpToolNames = new Set(usable.map((definition) => definition.name));
+				this._customTools.push(...(usable as ToolDefinition[]));
+				this._refreshToolRegistry();
+			},
 		});
 		this._mcpManager = manager;
-		const definitions = await manager.listToolDefinitions();
+		await manager.listToolDefinitions();
 		this._shutdown.assertOpen();
-		// A builtin always wins a name collision; MCP must never shadow `bash`.
-		const usable = definitions.filter((definition) => !this._baseToolDefinitions.has(definition.name));
-		this._mcpToolNames = new Set(usable.map((definition) => definition.name));
-		this._customTools = [...this._customTools, ...(usable as ToolDefinition[])];
-		this._refreshToolRegistry();
 		return manager.status();
 	}
 
