@@ -51,6 +51,10 @@ For a safety stop or recognized quota/billing error, OMK:
 3. selects the first non-sticky candidate that exists and has configured authentication;
 4. switches models before retrying with a short delay.
 
+A failover or route-rotation switch applies to the current session only. It is recorded in the session transcript but never written as `defaultProvider`/`defaultModel`, so the next session starts on the model you chose, not on the last failover target.
+
+If the candidate OMK switched to rejects the request outright (for example `403 Access to model denied`, an authentication error, or an unsupported model), that candidate is marked failed for the turn and the chain advances to the next authenticated candidate. When no candidate remains, the turn ends with that error instead of retrying the denied model. The same error from the model you selected yourself is still not retried, and with a `--model`/`--provider` pin a denied candidate ends the turn instead of moving to another model.
+
 A content/safety stop gets at most one automatic retry, including a retry that switches model, regardless of the larger transport retry budget. Other transient failures keep the configured retry policy and backoff. Plain authentication errors remain non-retryable and do not trigger failover.
 
 Recognized quota shapes include billing-cycle usage limits (`429 Go usage limit exceeded`), `insufficient_quota`, `free_limit_reached`, exhausted balances/credits, `GoUsageLimitError`, `FreeUsageLimitError`, and out-of-budget responses. These are classified as `provider.rate_limit`, even when a provider wraps them in HTTP 403. Provider-capacity bodies that omit a status or limit token are classified the same way: xAI `currently at capacity` / `high demand` (HTTP 429) and Anthropic `overloaded_error` / `Overloaded` (HTTP 529). Left unmatched they fall through to `provider.protocol` and advertise orphan-`tool_call_id` sanitize.

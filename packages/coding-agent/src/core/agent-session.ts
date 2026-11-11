@@ -201,6 +201,7 @@ import {
 	routesOutsideScope,
 	userMessage,
 } from "./deferred-turn-input.ts";
+import { isFailoverCandidateDenial, switchFailoverModel } from "./failover-model-switch.ts";
 import { goalAutonomySteerInput } from "./goal-continuation.ts";
 import type { CustomMessage } from "./messages.ts";
 import { selectContextFilesForModel } from "./model-prompt-policy.ts";
@@ -220,13 +221,11 @@ import {
 	resolveProviderResilience,
 	sameModelRouteCandidates,
 	shouldEjectStickySafetyModel,
-	shouldHonorProviderFailover,
 	stickySafetyBlockMessage,
 } from "./provider-resilience.ts";
 import {
 	failoverModelKey,
 	isEmptyStreamedCompletion,
-	isFailoverTriggerError,
 	isRetryableAssistantError,
 	nextRetryAttempt,
 	retryBudgetForAssistantError,
@@ -3000,9 +2999,10 @@ export class AgentSession {
 	/**
 	 * Set model directly.
 	 * Validates that auth is configured, saves to session and settings.
+	 * `persistDefault: false` switches this session only; automatic failover must not rewrite the saved default.
 	 * @throws Error if no auth is configured for the model
 	 */
-	async setModel(model: Model<any>): Promise<void> {
+	async setModel(model: Model<any>, options?: { persistDefault?: boolean }): Promise<void> {
 		if (!this._modelRegistry.hasConfiguredAuth(model)) {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
@@ -3031,7 +3031,7 @@ export class AgentSession {
 		this.agent.state.systemPromptCacheBoundary = this._baseSystemPromptCacheBoundary;
 		this.agent.state.systemPromptCacheBoundaryBypass = false;
 		this.sessionManager.appendModelChange(model.provider, model.id);
-		this.settingsManager.setDefaultModelAndProvider(model.provider, model.id);
+		if (options?.persistDefault !== false) this.settingsManager.setDefaultModelAndProvider(model.provider, model.id);
 
 		// Re-clamp thinking level for new model's capabilities
 		this.setThinkingLevel(thinkingLevel);
@@ -4812,6 +4812,7 @@ export class AgentSession {
 	 */
 	private _isRetryableError(message: AssistantMessage): boolean {
 		const quotaOk = quotaAllowsRetry(message.errorMessage, this.settingsManager.getProviderResilienceSettings());
+		if (isFailoverCandidateDenial(message, this.model, this._refusedModels, this._modelPinned)) return true;
 		return quotaOk && isRetryableAssistantError(message, this.model?.contextWindow ?? 0);
 	}
 
@@ -4907,7 +4908,7 @@ export class AgentSession {
 				continue;
 			}
 			try {
-				await this.setModel(next);
+				await this.setModel(next, { persistDefault: false });
 				// The old route just failed upstream — keep it out of this turn's retries.
 				this._refusedModels.add(failoverModelKey(current.provider, current.id));
 				return `${next.provider}/${next.id}`;
@@ -4918,53 +4919,21 @@ export class AgentSession {
 		return undefined;
 	}
 
-	/**
-	 * Content/safety stops (stop_reason=refusal) are often false positives on coding turns
-	 * for Fable AND Claude Opus/Sonnet. Retrying the same model usually reprints the refusal —
-	 * switch via provider-resilience chain first. Failover targets still skip sticky models.
-	 */
+	/** Switch away from a model that cannot finish this turn; see `switchFailoverModel`. */
 	private async _maybeFailoverFromSafetyStop(message: AssistantMessage): Promise<string | undefined> {
-		const resilience = resolveProviderResilience(this.settingsManager.getProviderResilienceSettings());
-		const quotaExhausted = isQuotaExhaustionMessage(message.errorMessage);
-		if (!shouldHonorProviderFailover(quotaExhausted, resilience, this._modelPinned, this.model)) {
-			return undefined;
-		}
-		// Fire on safety-stop FPs AND on billing/quota exhaustion: both mean the
-		// current model cannot finish this turn and same-model retry is useless.
-		if (!isFailoverTriggerError(message.errorMessage)) {
-			return undefined;
-		}
-
 		const current = this.model;
-		// v10.0-Ω: do NOT gate on isStickySafetyModel(source).
-		// claude-opus-5 emits the same stop_reason=refusal FP; same-model retry is useless.
-
-		// v10.3-Ω: mark the model that just refused so we never re-pick it this turn.
-		if (current) this._refusedModels.add(failoverModelKey(current.provider, current.id));
-
-		const pick = pickFailoverCandidate(
-			resilience.failoverCandidates,
-			current ? { provider: current.provider, id: current.id } : undefined,
-			(c) => {
-				// Skip any model that already refused/failed this turn → advance the chain.
-				if (this._refusedModels.has(failoverModelKey(c.provider, c.id))) return false;
-				const next = this._modelRegistry.find(c.provider, c.id);
-				if (!next) return false;
-				return this._modelRegistry.hasConfiguredAuth(next);
+		const next = await switchFailoverModel(
+			{
+				model: current,
+				modelPinned: this._modelPinned,
+				settings: this.settingsManager.getProviderResilienceSettings(),
+				refused: this._refusedModels,
+				registry: this._modelRegistry,
+				switchTo: (model) => this.setModel(model, { persistDefault: false }),
 			},
+			message,
 		);
-		if (!pick) return undefined;
-
-		const next = this._modelRegistry.find(pick.provider, pick.id);
-		if (!next) return undefined;
-		try {
-			await this.setModel(next);
-			return this._pinNotice.afterFailover(quotaExhausted, current, next);
-		} catch {
-			// setModel failed (auth/guard) — blacklist so next retry advances further.
-			this._refusedModels.add(failoverModelKey(pick.provider, pick.id));
-			return undefined;
-		}
+		return next && this._pinNotice.afterFailover(isQuotaExhaustionMessage(message.errorMessage), current, next);
 	}
 
 	private async _prepareRetry(message: AssistantMessage): Promise<boolean> {
@@ -4976,6 +4945,7 @@ export class AgentSession {
 			maxRetries,
 		});
 		if (attempt === undefined) return false;
+		const candidateDenied = isFailoverCandidateDenial(message, this.model, this._refusedModels, this._modelPinned);
 
 		// Upstream-unavailable (gateway 5xx / dropped stream / dead relay stream):
 		// rotate to another authenticated route of the SAME model family so the
@@ -4987,6 +4957,8 @@ export class AgentSession {
 
 		// Content/safety stop (Fable/Opus/Sonnet): switch model BEFORE delay so retry is not same-model refusal.
 		const failoverTo = await this._maybeFailoverFromSafetyStop(message);
+		// A denied candidate with nowhere left to go ends the turn; retrying it only repeats the denial.
+		if (candidateDenied && failoverTo === undefined) return false;
 		const switchedVia = failoverTo ? `failover ${failoverTo}` : rotatedTo ? `route ${rotatedTo}` : undefined;
 		// Spec 090: quota failover waits 0, quota without failover ends with no retry; other waits cap at 60s.
 		const delayMs = planRetryWait(message, settings, attempt, failoverTo, rotatedTo, this._runBudget.remainingMs);
