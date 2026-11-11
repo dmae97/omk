@@ -23,6 +23,7 @@ import {
 	InMemoryAuthStorageBackend,
 	type LockResult,
 } from "./auth-storage-backend.ts";
+import { isOAuthRefreshRejection } from "./credential-resolution-failure.ts";
 import {
 	findMatchingOAuthAccount,
 	findOAuthAccountMatch,
@@ -89,6 +90,8 @@ export class AuthStorage {
 	private fallbackResolver?: (provider: string) => string | undefined;
 	private loadError: Error | null = null;
 	private errors: Error[] = [];
+	/** Providers whose last login refresh the token endpoint refused; cleared by the next attempt. */
+	private refusedOAuthRefreshes = new Set<string>();
 	private storage: AuthStorageBackend;
 
 	private constructor(storage: AuthStorageBackend) {
@@ -430,6 +433,11 @@ export class AuthStorage {
 		return this.loadError !== null;
 	}
 
+	/** True when the token endpoint refused the last refresh of this provider's login. */
+	wasOAuthRefreshRefused(providerId: string): boolean {
+		return this.refusedOAuthRefreshes.has(providerId);
+	}
+
 	/**
 	 * Login to an OAuth provider. Repeated logins append distinct accounts and
 	 * update an existing account when the provider exposes a stable identity.
@@ -675,6 +683,7 @@ export class AuthStorage {
 		}
 
 		if (cred?.type === "oauth") {
+			this.refusedOAuthRefreshes.delete(providerId);
 			try {
 				const result = await this.resolveOAuthTokenWithLock(providerId, options?.minRemainingMs ?? 0);
 				if (result) {
@@ -682,6 +691,7 @@ export class AuthStorage {
 				}
 			} catch (error) {
 				this.recordError(error);
+				if (isOAuthRefreshRejection(error)) this.refusedOAuthRefreshes.add(providerId);
 				// Credentials are preserved so a later request or /login can recover.
 				this.reload();
 				return undefined;
