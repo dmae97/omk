@@ -39,6 +39,7 @@ import {
 	getSelectedOAuthAccountIndex,
 	type OAuthCredential,
 } from "./oauth-credential.ts";
+import { OAuthRefreshBackoff, OAuthRefreshDeferredError } from "./oauth-refresh-backoff.ts";
 import { resolveConfigValue } from "./resolve-config-value.ts";
 
 const RETIRED_GROK_OAUTH_PROXY = "grok-oauth-proxy";
@@ -93,6 +94,7 @@ export class AuthStorage {
 	/** Providers whose last login refresh the token endpoint refused; cleared by the next attempt. */
 	private refusedOAuthRefreshes = new Set<string>();
 	private storage: AuthStorageBackend;
+	private readonly refreshBackoff = new OAuthRefreshBackoff();
 
 	private constructor(storage: AuthStorageBackend) {
 		this.storage = storage;
@@ -510,6 +512,7 @@ export class AuthStorage {
 		providerId: OAuthProviderId,
 		minRemainingMs = 0,
 		rejectedApiKey?: string,
+		background = false,
 	): Promise<{ apiKey: string; newCredentials: OAuthCredentials } | null> {
 		const provider = getOAuthProvider(providerId);
 		if (!provider) return null;
@@ -519,13 +522,29 @@ export class AuthStorage {
 		if (!oauthAccountNeedsRefresh(provider, stored, minRemainingMs, rejectedApiKey)) {
 			return { apiKey: provider.getApiKey(stored), newCredentials: stored };
 		}
+		// A background caller does not repeat a refresh of this token that failed a moment ago.
+		const deferIfFailedRecently = (account: OAuthCredentials) => {
+			if (background && this.refreshBackoff.isDeferred(providerId, account.refresh)) {
+				throw new OAuthRefreshDeferredError(providerId);
+			}
+		};
+		deferIfFailedRecently(stored);
 
 		const refresh = async () => {
 			// Another process may have refreshed while this one waited for the refresh lock;
 			// resolveAccountToken re-checks the account as it is stored now.
 			const account = await this.readSelectedOAuthAccount(providerId);
 			if (!account) return null;
-			const resolved = await this.resolveAccountToken(provider, providerId, account, minRemainingMs, rejectedApiKey);
+			if (oauthAccountNeedsRefresh(provider, account, minRemainingMs, rejectedApiKey))
+				deferIfFailedRecently(account);
+			let resolved: { apiKey: string; newCredentials: OAuthCredentials } | null;
+			try {
+				resolved = await this.resolveAccountToken(provider, providerId, account, minRemainingMs, rejectedApiKey);
+			} catch (error) {
+				this.refreshBackoff.recordFailure(providerId, account.refresh);
+				throw error;
+			}
+			this.refreshBackoff.clear(providerId);
 			if (!resolved || resolved.newCredentials === account) return resolved;
 			return this.storeRefreshedOAuthAccount(providerId, account, resolved);
 		};
@@ -658,10 +677,13 @@ export class AuthStorage {
 	 * 3. OAuth token from auth.json (auto-refreshed with locking)
 	 * 4. Environment variable
 	 * 5. Fallback resolver (models.json custom providers)
+	 *
+	 * `background` marks a caller nobody is waiting on (usage polling). It does not repeat an OAuth
+	 * refresh that failed recently; a request the user is waiting on always tries.
 	 */
 	async getApiKey(
 		providerId: string,
-		options?: { includeFallback?: boolean; minRemainingMs?: number },
+		options?: { includeFallback?: boolean; minRemainingMs?: number; background?: boolean },
 	): Promise<string | undefined> {
 		// Runtime override takes highest priority
 		const runtimeKey = this.runtimeOverrides.get(providerId);
@@ -685,11 +707,18 @@ export class AuthStorage {
 		if (cred?.type === "oauth") {
 			this.refusedOAuthRefreshes.delete(providerId);
 			try {
-				const result = await this.resolveOAuthTokenWithLock(providerId, options?.minRemainingMs ?? 0);
+				const result = await this.resolveOAuthTokenWithLock(
+					providerId,
+					options?.minRemainingMs ?? 0,
+					undefined,
+					options?.background,
+				);
 				if (result) {
 					return result.apiKey;
 				}
 			} catch (error) {
+				// The failure this stands for was recorded when it happened.
+				if (error instanceof OAuthRefreshDeferredError) return undefined;
 				this.recordError(error);
 				if (isOAuthRefreshRejection(error)) this.refusedOAuthRefreshes.add(providerId);
 				// Credentials are preserved so a later request or /login can recover.
