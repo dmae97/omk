@@ -59,7 +59,7 @@ export function runReadyFrontier(input: ReadyFrontierInput): Promise<ReadyFronti
 	const grants = new Map(input.plan.laneGrants.map((grant) => [grant.laneId, grant]));
 	const settled = new Map<string, LaneOutcome["status"]>();
 	const inFlight = new Set<string>();
-	const pending = [...order];
+	const pending = [...(input.plan.preferredLaneOrder ?? order)];
 	// Outcomes of lanes that actually ran. Frontier-generated `blocked-dependency`
 	// outcomes are excluded so a C1-isolated block does not escalate to a
 	// global one (the batch loop never fed same-batch blocks back either).

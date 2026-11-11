@@ -66,6 +66,15 @@ bounds the number of simultaneous worker processes; it is not a byte-level guara
 for aggregate RSS. Measure the lead, workers, MCP processes, and retained results
 together before claiming a memory reduction.
 
+## AdaptOrch routing
+
+The optional [AdaptOrch result consumer](adaptorch-subagent-routing.md) uses an
+actually executed MCP routing result for the matching task graph. It is off by
+default; `shadow` records proposals and `enforce` can prioritize ready lanes or
+narrow sequential execution. Stage order creates no additional stage barriers.
+The effort limits, dependency and path checks, host admission, permits, and
+termination ownership described here remain authoritative.
+
 ## Verification and rollback
 
 Baseline: OMK 1.5.11, commit

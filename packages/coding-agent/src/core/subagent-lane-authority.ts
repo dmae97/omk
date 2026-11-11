@@ -2,9 +2,9 @@ import { tryAcquireLaneDispatch } from "./lane-dispatch-ownership.ts";
 import { snapshotLaneDecision } from "./lane-input-snapshot.ts";
 import type { CapabilityInventory } from "./loadouts.ts";
 import { RESOURCE_ADMISSION_VERSION, type ResourceAdmissionDecision } from "./resource-admission.ts";
-import type { SubagentLaneAuthority } from "./subagent-lane-contract.ts";
+import type { SubagentLaneAuthority, SubagentLaneSpec } from "./subagent-lane-contract.ts";
 import { launchSubagentLanes } from "./subagent-lane-launcher.ts";
-import { buildSubagentOrchestrationPlan } from "./subagent-orchestration.ts";
+import { buildSubagentOrchestrationPlan, type SubagentOrchestrationPlan } from "./subagent-orchestration.ts";
 
 /**
  * Spec 020 Req1 — extension-facing subagent lane authority.
@@ -34,6 +34,10 @@ export interface SubagentLaneAuthorityHostBinding {
 	readonly inventory: CapabilityInventory;
 	readonly signal?: AbortSignal;
 	readonly getRemainingExecutionMs?: () => number | undefined;
+	readonly applyRoutingReceipt?: (
+		plan: SubagentOrchestrationPlan,
+		lanes: readonly SubagentLaneSpec[],
+	) => SubagentOrchestrationPlan;
 	readonly spawnThreshold?: number;
 	readonly noteDetachedChild: () => () => void;
 }
@@ -103,7 +107,7 @@ export function createSubagentLaneAuthority(binding: SubagentLaneAuthorityHostBi
 			}
 			try {
 				const launchLane = input.launchLane.bind(input);
-				const plan = buildSubagentOrchestrationPlan({
+				let plan = buildSubagentOrchestrationPlan({
 					runId,
 					lanes: input.lanes,
 					inventory,
@@ -111,6 +115,7 @@ export function createSubagentLaneAuthority(binding: SubagentLaneAuthorityHostBi
 					spawnThreshold,
 					maxParallelLanes: input.configuredMaxParallelLanes === 0 ? undefined : input.configuredMaxParallelLanes,
 				});
+				plan = binding.applyRoutingReceipt?.(plan, input.lanes) ?? plan;
 				if (plan.blockers.length > 0) {
 					return {
 						outcomes: [],
