@@ -93,6 +93,12 @@ session.getToolDefinition("playwright__navigate");
 - A built-in tool always wins a name collision; MCP can never shadow `bash`.
 - Calling `attachMcpServers()` again replaces the previous MCP tools rather than
   duplicating them.
+- Explicit `mcpCheckHealth({ reconnectFailed: true })` recovery publishes the
+  newly admitted catalog, including changed schemas and tool names. During an
+  outage, registered tools fail against their closed client; they are never
+  replayed against the replacement server. Keeping those registrations until
+  recovery preserves disabled tool selections. Healthy, unchanged catalogs keep
+  their existing handles and prompt prefix.
 - `session.dispose()` terminates every server it started.
 
 ### Bounded startup

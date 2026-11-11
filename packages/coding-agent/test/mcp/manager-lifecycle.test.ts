@@ -70,6 +70,7 @@ describe("McpManager close during an in-flight connect", () => {
 
 	it("does not let a stale health failure replace a newer connection", async () => {
 		const oldPing = deferred<void>();
+		const catalogs: string[][] = [];
 		let created = 0;
 		const oldClient = {
 			connect: async () => {},
@@ -90,6 +91,7 @@ describe("McpManager close during an in-flight connect", () => {
 		const manager = new McpManager({
 			servers: [{ name: "alpha", command: "fake" }],
 			createClient: () => (created++ === 0 ? oldClient : newClient),
+			onToolsChanged: (tools) => catalogs.push(tools.map((tool) => tool.name)),
 		});
 		try {
 			await manager.connect("alpha");
@@ -100,6 +102,7 @@ describe("McpManager close during an in-flight connect", () => {
 			await staleProbe;
 			expect(manager.status()[0]).toMatchObject({ state: "ready", toolCount: 1, serverVersion: "2.0.0" });
 			expect((await manager.listToolDefinitions()).map((tool) => tool.name)).toEqual(["alpha__new"]);
+			expect(catalogs).toEqual([["alpha__old"], ["alpha__new"]]);
 		} finally {
 			manager.close();
 		}
