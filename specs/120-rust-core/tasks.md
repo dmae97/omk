@@ -4,7 +4,8 @@
 **Output**: task list with execution metadata
 
 Each task ends in a state its `verify` command checks. A task that adds behavior writes the
-failing test first and records the failure before the fix. No task is started.
+failing test first and records the failure before the fix. Checkboxes record completed units,
+not completion of K0 or platform acceptance.
 
 In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract/Cargo.toml`.
 
@@ -59,26 +60,30 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
   > gate: command-pass
   > risk: medium
 
-- [ ] T006 [P] Define the session JSONL types and round-trip every session fixture
+- [x] T006 [P] Define the session JSONL types and round-trip every session fixture
   > role: coder
   > deps: T005
-  > files: [`native/omk-contract/src/session.rs`, `native/omk-contract/tests/roundtrip.rs`]
+  > files: [`native/omk-contract/src/session.rs`, `native/omk-contract/src/session_message.rs`, `native/omk-contract/src/session_jsonl.rs`, `native/omk-contract/src/lib.rs`, `native/omk-contract/Cargo.toml`, `native/omk-contract/tests/roundtrip.rs`, `native/omk-contract/README.md`]
   > metric: RC1 round trip, sessions
-  > baseline: fixtures from T005 at `48fb8e33a8`
-  > target: every fixture re-encodes to the same bytes
+  > baseline: unchanged T005 v2 corpus, recorded at `437ae8fdf7` with source digest in `tests/fixtures/manifest.json`
+  > target: all 24 G0 JSONL records re-encode byte-identically; six archived scenarios replay 22 typed trace-entry projections with explicit `<T>` numeric timestamp normalization, not raw archive-byte parity
+  > coverage: header, all nine entry kinds, known/extension message roles, unknown fields, explicit null, malformed inputs; the metrics-only seventh archive has no session entries
+  > dependency: enable existing pinned serde_json's `raw_value` feature only; no new dependency or lockfile change
   > regression-floor: zero differing fixtures
   > verify: `cargo test CARGO_K0 --test roundtrip session`
   > evidence: test output in the pull request
   > gate: command-pass
   > risk: high
 
-- [ ] T007 [P] Define the public RPC wire types and round-trip every RPC fixture
+- [x] T007 [P] Define the public RPC wire types and round-trip every RPC fixture
   > role: coder
   > deps: T005
-  > files: [`native/omk-contract/src/rpc.rs`, `native/omk-contract/tests/roundtrip.rs`]
+  > files: [`native/omk-contract/src/rpc*.rs`, `native/omk-contract/src/jsonl.rs`, `native/omk-contract/src/session_jsonl.rs`, `native/omk-contract/src/lib.rs`, `native/omk-contract/tests/roundtrip.rs`, `native/omk-contract/tests/support/rpc_*.rs`, `native/omk-contract/README.md`]
   > metric: RC1 round trip, RPC
-  > baseline: fixtures from T005 at `48fb8e33a8`
-  > target: every fixture re-encodes to the same bytes
+  > baseline: unchanged T005 v2 RPC transcript at `437ae8fdf7`, source/fixture digests in `tests/fixtures/manifest.json`
+  > target: all 35 transcript rows re-encode to the same bytes, with 4 input and 31 output messages independently checked against their directional types
+  > coverage: 29 command/success/error shapes, state/data, nine UI methods, UI response guards, session/provider/assistant-stream events, unknown fields, nullable versus omitted data and malformed inputs; command/UI inventories match current TypeScript source
+  > preservation: existing session tests unchanged; shared JSON record implementation keeps T006 behavior; no fixture, dependency or lockfile changes
   > regression-floor: zero differing fixtures
   > verify: `cargo test CARGO_K0 --test roundtrip rpc`
   > evidence: test output in the pull request
@@ -93,10 +98,12 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
   > gate: command-pass
   > risk: high
 
-- [ ] T009 Generate TypeScript declarations for T006 to T008 and extend the drift check to them
+- [x] T009 Generate TypeScript declarations for T006 to T008 and extend the drift check to them
   > role: coder
   > deps: T004, T006, T007, T008
-  > files: [`native/omk-contract/src/bin/omk-contract-gen.rs`, `scripts/check-contract-drift.mjs`, `packages/protocol/src/`]
+  > files: [`native/omk-contract/src/bin/omk-contract-gen.rs`, `native/omk-contract/tests/generator.rs`, `scripts/generate-contracts.mjs`, `scripts/check-contract-drift.mjs`, `scripts/contracts/`, `scripts/test/check-contract-drift.test.mjs`, `scripts/test/contract-declarations.test.mjs`, `packages/protocol/src/generated/rust-contracts/`]
+  > scope: wire declarations only. T004 is still blocked, so the drift check does not cover `pi-compat.ts`; T004 adds that table when it lands. The generated files are type-only and are not exported from the package root
+  > coverage: deterministic output, changed/missing/extra/symlinked artifacts, Rust field and variant renames, fail-closed unsupported syntax and serde attributes, pinned digests for hand-written serde implementations, recorded session/RPC rows and all 29 command samples compiled against the types, invalid command/UI/host/session shapes rejected
   > verify: `node scripts/check-contract-drift.mjs && npm run check`
   > gate: command-pass
   > risk: medium
