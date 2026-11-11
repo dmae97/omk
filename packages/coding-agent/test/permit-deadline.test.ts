@@ -16,7 +16,7 @@ function expectRangeError(fn: () => void, message: string): void {
 
 describe("createPermitDeadline", () => {
 	it("throws RangeError for non-positive or non-finite durations", () => {
-		for (const duration of [0, -1, NaN, Infinity]) {
+		for (const duration of [0, -1, NaN, Infinity, -Infinity]) {
 			expectRangeError(
 				() => createPermitDeadline(duration, () => {}),
 				"Deadline duration must be finite and positive",
@@ -86,6 +86,27 @@ describe("createPermitDeadline", () => {
 		deadline.cancel();
 	});
 
+	it("follows an early timer re-arm through actual expiration", async () => {
+		vi.useFakeTimers();
+		let t = 0;
+		const clock = (): number => t;
+		const onExpire = vi.fn();
+		const deadline = createPermitDeadline(100, onExpire, clock);
+
+		// Clock lags behind timer
+		t = 60;
+		await vi.advanceTimersByTimeAsync(100);
+		expect(onExpire).not.toHaveBeenCalled();
+		expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+		// Monotonic clock reaches deadline
+		t = 100;
+		await vi.advanceTimersByTimeAsync(40);
+		expect(onExpire).toHaveBeenCalledTimes(1);
+
+		deadline.cancel();
+	});
+
 	it("never calls onExpire after cancel()", async () => {
 		vi.useFakeTimers();
 		let t = 0;
@@ -119,6 +140,20 @@ describe("createPermitDeadline", () => {
 		await vi.advanceTimersByTimeAsync(1000);
 		expect(onExpire).toHaveBeenCalledTimes(1);
 		expect(deadline.expired()).toBe(true);
+
+		deadline.cancel();
+	});
+
+	it("operates with default performance.now clock", async () => {
+		vi.useFakeTimers();
+		const onExpire = vi.fn();
+
+		const deadline = createPermitDeadline(50, onExpire);
+		expect(deadline.expired()).toBe(false);
+
+		await vi.advanceTimersByTimeAsync(50);
+		expect(deadline.expired()).toBe(true);
+		expect(onExpire).toHaveBeenCalledTimes(1);
 
 		deadline.cancel();
 	});
