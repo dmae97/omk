@@ -8,6 +8,7 @@
  * Flag off and run log off: returns before any work. Log lines hold hashes, booleans and numbers only.
  */
 import { resolve } from "node:path";
+import type { AgentMessage } from "omk-agent-core";
 import { isDefaultOnEnvFlag } from "./env-flag.ts";
 import { RUN_LOG_DIR_ENV, type RunLogRecord } from "./run-log.ts";
 import { isSkillAdmissionEnabled, SKILL_ADMISSION_ENTRY_TYPE, skillBodyDigest } from "./skill-admission-ledger.ts";
@@ -114,9 +115,11 @@ function runAutoLoad(
 	const ambiguousPicks = picks.filter((pick) => pick.band === "ambiguous").slice(0, MAX_SELECTED_SKILLS);
 	if (strongPicks.length === 0 && ambiguousPicks.length === 0 && !observe) return undefined;
 	const already = admittedKeys(input.store);
+	const context = already.size > 0 ? input.store.buildSessionContext?.().messages : undefined;
 	const budget = input.budgetTokens ?? SKILL_AUTO_LOAD_BUDGET_TOKENS;
 	let usedTokens = 0;
 	let alreadyAdmitted = 0;
+	let newAdmissions = 0;
 	const blocks: string[] = [];
 	const refused: Skill[] = [];
 	const candidates: RunLogRecord[] = [];
@@ -130,7 +133,12 @@ function runAutoLoad(
 		const digest = body === undefined ? null : skillBodyDigest(body);
 		const isAdmitted = digest !== null && already.has(`${pick.skill.name}\u0000${digest}`);
 		if (isAdmitted) alreadyAdmitted++;
-		const wouldLoad = pick.band === "strong" && body !== undefined && !isAdmitted;
+		const block = body === undefined ? undefined : skillBlock(pick.skill, body);
+		const inContext =
+			isAdmitted &&
+			(context === undefined ||
+				(block !== undefined && (input.query.includes(block) || hasSkillBody(context, block, body ?? ""))));
+		const wouldLoad = pick.band === "strong" && body !== undefined && !inContext;
 		const bodyBytes = body === undefined ? 0 : Buffer.byteLength(body, "utf8");
 		const bodyTokens = Math.ceil(bodyBytes / 4);
 		let loaded = false;
@@ -141,7 +149,8 @@ function runAutoLoad(
 			else if (admitSkillBody(input.store, pick.skill.name, body, "auto", env) === true) {
 				loaded = true;
 				usedTokens += bodyTokens;
-				blocks.push(skillBlock(pick.skill, body));
+				if (!isAdmitted) newAdmissions++;
+				blocks.push(block!);
 			} else {
 				capRefused = true;
 				refused.push(pick.skill);
@@ -154,6 +163,9 @@ function runAutoLoad(
 			band: pick.band,
 			wouldLoad,
 			loaded,
+			contextChecked: context !== undefined,
+			contextAbsent: isAdmitted && !inContext,
+			restoredFromHistory: loaded && isAdmitted,
 			capRefused,
 			overBudget,
 			bodyBytes,
@@ -170,7 +182,7 @@ function runAutoLoad(
 				seq: nextSkillAutoloadSeq(sessionId),
 				requestTokensBefore: null,
 				alreadyAdmitted,
-				admittedTotal: already.size + blocks.length,
+				admittedTotal: already.size + newAdmissions,
 				flags: { autoLoad: skillAutoLoadFlag(env), admission: isSkillAdmissionEnabled(env) },
 				candidates,
 			},
@@ -179,6 +191,20 @@ function runAutoLoad(
 	}
 	if (blocks.length === 0 && refused.length === 0) return undefined;
 	return renderAutoLoadMessage(blocks, refused);
+}
+
+/** Presence is evidence of delivered instructions, not a claim that applying them succeeded. */
+function hasSkillBody(messages: readonly AgentMessage[], block: string, body: string): boolean {
+	return messages.some((message) => {
+		if (message.role !== "user" && message.role !== "custom" && message.role !== "toolResult") return false;
+		if (message.role === "custom" && message.customType !== "prompt-skills") return false;
+		const read = message.role === "toolResult" && message.toolName === "read" && !message.isError;
+		if (message.role === "toolResult" && !read) return false;
+		const contains = (text: string) => text.includes(block) || (read && body.length > 0 && text.includes(body));
+		return typeof message.content === "string"
+			? contains(message.content)
+			: message.content.some((part) => part.type === "text" && contains(part.text));
+	});
 }
 
 function skillBlock(skill: Skill, body: string): string {
