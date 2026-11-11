@@ -7,16 +7,14 @@ import { context, fileName, isWire, normalType, wireIdent } from "./rust-types.m
 import { customType, validateAdapters } from "./serde-adapters.mjs";
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const hash = (text) => createHash("sha256").update(text).digest("hex");
-function format(name, text) {
-	if (name.endsWith(".json")) return JSON.stringify(JSON.parse(text), null, "\t") + "\n";
+const format = (name, text) =>
+	name.endsWith(".json")
+		? JSON.stringify(JSON.parse(text), null, "\t") + "\n"
+		: formatTypeScript("packages/protocol/src/generated/rust-contracts/" + name, text);
+export function formatTypeScript(name, text) {
 	const result = spawnSync(
 		process.execPath,
-		[
-			ROOT + "node_modules/@biomejs/biome/bin/biome",
-			"check",
-			"--write",
-			"--stdin-file-path=" + ROOT + "packages/protocol/src/generated/rust-contracts/" + name,
-		],
+		[ROOT + "node_modules/@biomejs/biome/bin/biome", "check", "--write", "--stdin-file-path=" + ROOT + name],
 		{ input: text, encoding: "utf8", timeout: 120000, maxBuffer: 4 * 1024 * 1024 },
 	);
 	if (result.error || result.signal || result.status !== 0)
@@ -108,7 +106,7 @@ export function generateArtifacts(bundle) {
 	];
 	const manifest = {
 		schema: "omk.contract.declarations.v1",
-		scope: "wire declarations only; T004 compatibility table drift not checked",
+		scope: "wire declarations; the pi-compat.ts runtime table is checked by compat-table.mjs",
 		sourcesSha256: hash(JSON.stringify(Object.entries(bundle.files).sort())),
 		generatorSha256: hash(
 			bundle.generator + recipes.map((n) => n + ":" + hash(readFileSync(new URL(n, import.meta.url)))).join("\n"),

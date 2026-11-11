@@ -1,8 +1,8 @@
 {
 	"schema": "omk.contract.declarations.v1",
-	"scope": "wire declarations only; T004 compatibility table drift not checked",
-	"sourcesSha256": "0165241388031b4cad2d54adad0d4d8165b4e24c8bac0a501cfa2c1a6c5b1f7a",
-	"generatorSha256": "7e5ec7d2c104bcde300c4bffa9a9500abb88720d48d431256dd0ef45167c524c",
+	"scope": "wire declarations; the pi-compat.ts runtime table is checked by compat-table.mjs",
+	"sourcesSha256": "b66c4e84cfbc52afe77e801c2537c3198af1de95ca76b8cff6a2bbc2ef75bd4e",
+	"generatorSha256": "950397a1012ded92c8cdd2d0445296009e056f8476af3282e153bade19c30283",
 	"files": [
 		{
 			"path": "compat.ts",

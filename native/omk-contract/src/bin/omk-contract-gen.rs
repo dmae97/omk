@@ -1,6 +1,10 @@
 //! Deterministic source catalog for the in-repository TypeScript emitter.
 //! Cargo compiles the actual contracts before this catalog can be emitted.
 #![forbid(unsafe_code)]
+use omk_contract::compat::{
+    CLASSIFIER_NAMESPACES, LEGACY_PACKAGES, LEGACY_PI_IMPORT_HINT, LEGACY_PI_RUNTIME_ALIASES,
+    PackageManifestDialect, PiCompatibilityTarget,
+};
 use std::{collections::BTreeMap, error::Error, fs, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -28,6 +32,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         "files": files,
         "generator": include_str!("omk-contract-gen.rs"),
         "hostWireVersion": omk_contract::HOST_WIRE_VERSION,
+        "compat": {
+            "dialects": PackageManifestDialect::ALL.map(PackageManifestDialect::as_str),
+            "defaultDialect": PackageManifestDialect::default_dialect().as_str(),
+            "targets": PiCompatibilityTarget::ALL.map(PiCompatibilityTarget::as_str),
+            "aliases": LEGACY_PI_RUNTIME_ALIASES.map(|(specifier, target)| [specifier, target.as_str()]),
+            "classifierNamespaces": CLASSIFIER_NAMESPACES,
+            "legacyPackages": LEGACY_PACKAGES,
+            "hint": LEGACY_PI_IMPORT_HINT,
+        },
     });
     println!("{}", serde_json::to_string(&catalog)?);
     Ok(())

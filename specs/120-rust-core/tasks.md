@@ -37,10 +37,11 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
   > gate: command-pass
   > risk: low
 
-- [ ] T004 Generate the Node core's compatibility tables from the crate and add the drift check. Blocked while `pi-compat.ts` holds another session's uncommitted changes
+- [x] T004 Generate the Node core's compatibility tables from the crate and add the drift check. Unblocked on 2026-11-11 once `pi-compat.ts` had no uncommitted changes
   > role: coder
   > deps: T003
-  > files: [`native/omk-contract/src/bin/omk-contract-gen.rs`, `scripts/check-contract-drift.mjs`, `scripts/test/check-contract-drift.test.mjs`, `packages/coding-agent/src/core/pi-compat.ts`]
+  > files: [`native/omk-contract/src/compat.rs`, `native/omk-contract/src/bin/omk-contract-gen.rs`, `native/omk-contract/tests/compat.rs`, `scripts/contracts/compat-table.mjs`, `scripts/contracts/typescript.mjs`, `scripts/check-contract-drift.mjs`, `scripts/generate-contracts.mjs`, `scripts/test/compat-table.test.mjs`, `packages/coding-agent/src/core/pi-compat.ts`, `packages/protocol/src/generated/rust-contracts/manifest.json`]
+  > result: the regenerated body equals the pre-T004 source byte for byte; the only diff is the two-line generated header. A hand edit fails the drift check. `pi-inventory --check` is unchanged
   > metric: PA2 table drift
   > baseline: `pi-compat.ts` at the commit that lands this task
   > target: regeneration produces no diff
@@ -102,7 +103,7 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
   > role: coder
   > deps: T004, T006, T007, T008
   > files: [`native/omk-contract/src/bin/omk-contract-gen.rs`, `native/omk-contract/tests/generator.rs`, `scripts/generate-contracts.mjs`, `scripts/check-contract-drift.mjs`, `scripts/contracts/`, `scripts/test/check-contract-drift.test.mjs`, `scripts/test/contract-declarations.test.mjs`, `packages/protocol/src/generated/rust-contracts/`]
-  > scope: wire declarations only. T004 is still blocked, so the drift check does not cover `pi-compat.ts`; T004 adds that table when it lands. The generated files are type-only and are not exported from the package root
+  > scope: wire declarations only. When T009 landed T004 was still blocked; T004 has since added `pi-compat.ts` to the drift check. The generated files are type-only and are not exported from the package root
   > coverage: deterministic output, changed/missing/extra/symlinked artifacts, Rust field and variant renames, fail-closed unsupported syntax and serde attributes, pinned digests for hand-written serde implementations, recorded session/RPC rows and all 29 command samples compiled against the types, invalid command/UI/host/session shapes rejected
   > verify: `node scripts/check-contract-drift.mjs && npm run check`
   > gate: command-pass

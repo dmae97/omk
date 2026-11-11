@@ -1,9 +1,8 @@
 //! Pi compatibility tables (spec 120, §5a).
 //!
 //! This module is the single source of truth for the values that
-//! `packages/coding-agent/src/core/pi-compat.ts` carries today. The TypeScript
-//! copy is generated from this crate in T004, and a drift check fails on a hand
-//! edit. The alias table is data; the host's resolver applies it as a generic
+//! `packages/coding-agent/src/core/pi-compat.ts` carries. That TypeScript copy
+//! is generated from the values below, and a drift check fails on a hand edit. The alias table is data; the host's resolver applies it as a generic
 //! specifier map and names no Pi package itself.
 
 use serde::{Deserialize, Serialize};
@@ -20,6 +19,8 @@ pub enum PackageManifestDialect {
 }
 
 impl PackageManifestDialect {
+    pub const ALL: [PackageManifestDialect; 2] = [Self::Omk, Self::OmkPlusPi];
+
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Omk => "omk",
@@ -45,6 +46,15 @@ pub enum PiCompatibilityTarget {
 }
 
 impl PiCompatibilityTarget {
+    pub const ALL: [PiCompatibilityTarget; 6] = [
+        Self::CodingAgent,
+        Self::AgentCore,
+        Self::AgentCoreNode,
+        Self::Ai,
+        Self::AiOauth,
+        Self::Tui,
+    ];
+
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::CodingAgent => "coding-agent",
@@ -98,10 +108,10 @@ pub const LEGACY_PI_RUNTIME_ALIASES: [(&str, PiCompatibilityTarget); 14] = [
 
 /// Namespaces the legacy-import classifier recognizes. The alias table has two
 /// of them; `@oh-my-pi` is classified but never aliased.
-const CLASSIFIER_NAMESPACES: [&str; 3] = ["mariozechner", "earendil-works", "oh-my-pi"];
+pub const CLASSIFIER_NAMESPACES: [&str; 3] = ["mariozechner", "earendil-works", "oh-my-pi"];
 
 /// Package names after the `pi-` prefix, in the TypeScript alternation order.
-const LEGACY_PACKAGES: [&str; 6] = [
+pub const LEGACY_PACKAGES: [&str; 6] = [
     "agent-core",
     "ai",
     "coding-agent",

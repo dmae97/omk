@@ -1,3 +1,5 @@
+// Generated from native/omk-contract/src/compat.rs. Do not edit.
+// Run: node scripts/generate-contracts.mjs --write
 export type PiCompatibilityTarget = "coding-agent" | "agent-core" | "agent-core-node" | "ai" | "ai-oauth" | "tui";
 
 const PI_NAMESPACES = ["@earendil-works", "@mariozechner"] as const;

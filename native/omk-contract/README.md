@@ -10,8 +10,8 @@ execution host, scheduler or SDK. The Node core remains the production owner.
 ## Contract
 
 - Schema types and compatibility tables are being moved here. TypeScript wire
-  declarations are generated from this crate (T009); generating the Node
-  compatibility tables is still pending (T004).
+  declarations (T009) and the Node core's `pi-compat.ts` runtime table (T004)
+  are generated from this crate.
 - Round-trip gates use synthetic fixtures only. No real session, credential,
   prompt or user path enters the repository.
 - Dependencies are limited to `serde` and `serde_json`, pinned with `=`, matching
@@ -33,10 +33,25 @@ The repository pins Rust 1.99.0 in the root `rust-toolchain.toml`.
 
 ## Status
 
-Stage K0 units T001, T002, T003, T005, T006, T007, T008 and T009 are complete:
-toolchain, crate skeleton, compatibility tables, synthetic fixtures, session/public
-RPC contracts, extension-host wire types and their TypeScript declarations. K0 as a
-whole is not complete.
+Stage K0 units T001 to T009 are complete: toolchain, crate skeleton,
+compatibility tables and their generated Node copy, synthetic fixtures,
+session/public RPC contracts, extension-host wire types and their TypeScript
+declarations. K0 as a whole is not complete.
+
+### T004 compatibility table
+
+- `omk-contract-gen` also prints the compiled compatibility values: dialects,
+  default dialect, targets, the 14 aliases, the classifier namespaces and
+  packages, and the hint text. They come from the constants in `compat.rs`, not
+  from parsing its source.
+- `scripts/contracts/compat-table.mjs` renders
+  `packages/coding-agent/src/core/pi-compat.ts` from those values. The alias table
+  keeps its namespace-times-suffix form, so `scripts/pi-inventory.mjs` reads it
+  unchanged. A table that form cannot express, an unknown target or an unsafe
+  name stops generation.
+- `node scripts/check-contract-drift.mjs` fails on a hand edit of that file. The
+  regenerated body equals the pre-T004 source byte for byte; only the two-line
+  generated header was added.
 
 ### T009 TypeScript declarations
 
@@ -56,8 +71,8 @@ node scripts/check-contract-drift.mjs         # read-only; fails on any differen
   or types stop generation instead of guessing a wire shape. Hand-written serde
   implementations are pinned by digest in `scripts/contracts/serde-adapters.json`;
   changing one fails generation until the adapter mapping is reviewed.
-- Declarations describe JSON shapes only. They do not validate input at runtime,
-  and they do not cover the T004 compatibility tables.
+- Declarations describe JSON shapes only. They do not validate input at runtime.
+  The runtime compatibility table is the separate T004 output above.
 
 `tests/fixtures` contains ten data files. The recorder's `--check` mode freshly
 records G0 and RPC and compares the seven copied session-equivalence goldens as
