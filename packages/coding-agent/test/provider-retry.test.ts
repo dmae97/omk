@@ -1,6 +1,9 @@
 import fc from "fast-check";
 import { fauxAssistantMessage, fauxText, fauxThinking, fauxToolCall } from "omk-ai";
 import { describe, expect, it } from "vitest";
+import { AuthStorage } from "../src/core/auth-storage.ts";
+import { isOAuthRefreshRejection, rejectedOAuthLoginMessage } from "../src/core/credential-resolution-failure.ts";
+import { resolveUnresolvedOAuthLogin } from "../src/core/provider-request-key.ts";
 import {
 	computeRetryDelayMs,
 	failoverModelKey,
@@ -71,6 +74,97 @@ describe("isRetryableAssistantError", () => {
 				0,
 			),
 		).toBe(false);
+	});
+});
+
+describe("isRetryableAssistantError on credential resolution failures", () => {
+	// Observed 2026-11-11: several sessions shared auth.json. A request that could not resolve its
+	// stored login ended the turn mid-work, and typing the next prompt succeeded at once, because
+	// the other session had finished its refresh by then.
+	function unresolvedLoginError(): string {
+		const storage = AuthStorage.inMemory({
+			// wall-clock: a persisted absolute expiry, ten seconds in the past
+			anthropic: { type: "oauth", refresh: "refresh-token", access: "expired", expires: Date.now() - 10_000 },
+		});
+		const resolved = resolveUnresolvedOAuthLogin(storage, "anthropic");
+		if (!resolved || resolved.ok) throw new Error("expected an unresolved OAuth login");
+		return resolved.error;
+	}
+
+	it("retries a stored login that could not be resolved locally", () => {
+		expect(isRetryableAssistantError(errorMessage(unresolvedLoginError()), 0)).toBe(true);
+	});
+
+	it("retries a credential store that another session kept busy", () => {
+		expect(
+			isRetryableAssistantError(
+				errorMessage(
+					'The credential store for "anthropic" could not be read' +
+						" (another OMK session may be refreshing credentials). Retry in a moment.",
+				),
+				0,
+			),
+		).toBe(true);
+	});
+
+	it("never retries a credential the provider rejected or one that is missing", () => {
+		expect(
+			isRetryableAssistantError(
+				errorMessage('401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}'),
+				0,
+			),
+		).toBe(false);
+		expect(
+			isRetryableAssistantError(
+				errorMessage(
+					'Authentication failed for "anthropic". Credentials may have expired or network is unavailable.' +
+						" Run '/login anthropic' to re-authenticate.",
+				),
+				0,
+			),
+		).toBe(false);
+		expect(isRetryableAssistantError(errorMessage("No API key for provider: anthropic"), 0)).toBe(false);
+	});
+});
+
+describe("isOAuthRefreshRejection", () => {
+	const wrapped = (cause: string) => new Error("Failed to refresh OAuth token for x", { cause: new Error(cause) });
+
+	it("recognizes a token endpoint that refused the grant, through the cause chain", () => {
+		// RFC 6749 section 5.2: 400 and 401 from a token endpoint name a grant or client fault.
+		for (const message of [
+			"Anthropic token refresh request failed. url=u; details=Error: HTTP request failed. status=400; url=u",
+			"Meta token refresh failed (HTTP 400): invalid_grant",
+			"xAI token refresh failed: 401 unauthorized",
+			"GitLab OAuth refresh failed: 400 {}",
+			"Qwen token refresh failed (400)",
+			"Kimi token refresh failed: invalid_grant",
+		]) {
+			expect(isOAuthRefreshRejection(new Error(message)), message).toBe(true);
+			expect(isOAuthRefreshRejection(wrapped(message)), message).toBe(true);
+		}
+	});
+
+	it("leaves everything else to the retry", () => {
+		for (const error of [
+			new Error("Anthropic token refresh request failed. url=u; details=TypeError: fetch failed"),
+			new Error("xAI token refresh failed: 503 upstream"),
+			new Error("Qwen token refresh failed (429)"),
+			new Error("Meta token refresh failed (HTTP 403)"),
+			new Error("refresh endpoint unavailable"),
+			Object.assign(new Error("Lock file is already being held"), { code: "ELOCKED" }),
+			wrapped("The operation was aborted due to timeout"),
+			"status=400",
+			undefined,
+		]) {
+			expect(isOAuthRefreshRejection(error)).toBe(false);
+		}
+	});
+
+	it("builds a message the retry gate does not match", () => {
+		const message = rejectedOAuthLoginMessage("anthropic");
+		expect(message).toContain("/login anthropic");
+		expect(isRetryableAssistantError(errorMessage(message), 0)).toBe(false);
 	});
 });
 

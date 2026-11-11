@@ -12,6 +12,7 @@
 import type { OAuthCredentials } from "omk-ai";
 import { getOAuthProvider } from "omk-ai/oauth";
 import type { AuthStorage } from "./auth-storage.ts";
+import { rejectedOAuthLoginMessage, unresolvedOAuthLoginMessage } from "./credential-resolution-failure.ts";
 import { resolveConfigValueOrThrow } from "./resolve-config-value.ts";
 
 export type ProviderRequestKey = { ok: true; apiKey: string | undefined } | { ok: false; error: string };
@@ -43,13 +44,9 @@ export function resolveUnresolvedOAuthLogin(
 	if (apiKey !== undefined) return { ok: true, apiKey };
 	// A store that could not be read keeps its own message: /login cannot clear a read failure.
 	if (authStorage.hasLoadError()) return { ok: true, apiKey: undefined };
-	return {
-		ok: false,
-		error:
-			`Authentication failed for "${provider}": the stored OAuth login could not be used` +
-			` (token refresh failed, or the credential store was busy). No other key was sent in its place.` +
-			` Retry, or run '/login ${provider}' to re-authenticate.`,
-	};
+	// A refused refresh ends the turn at once; the other failures are retried by the agent loop.
+	const refused = authStorage.wasOAuthRefreshRefused(provider);
+	return { ok: false, error: (refused ? rejectedOAuthLoginMessage : unresolvedOAuthLoginMessage)(provider) };
 }
 
 export async function resolveProviderRequestKey(

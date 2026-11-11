@@ -98,6 +98,7 @@ import {
 } from "./context-budget-v2-cache-invalidation.ts";
 import { createMemoryContextBudgetCacheProviderV2 } from "./context-budget-v2-cache-provider.ts";
 import type { ContextBudgetCacheProviderV2 } from "./context-budget-v2-types.ts";
+import { credentialStoreUnreadableMessage } from "./credential-resolution-failure.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { devinPlaybookAppendForProvider } from "./devin-harness.ts";
 import { EvidenceSessionShutdown } from "./evidence-lifecycle-session.ts";
@@ -230,7 +231,13 @@ import {
 	nextRetryAttempt,
 	retryBudgetForAssistantError,
 } from "./provider-retry.ts";
-import { planRetryWait, quotaAllowsRetry, recordQuotaOutcome, shouldRotateRoute } from "./quota-retry-policy.ts";
+import {
+	planRetryWait,
+	quotaAllowsRetry,
+	recordQuotaOutcome,
+	shouldRotateRoute,
+	summarizationRetryPolicy,
+} from "./quota-retry-policy.ts";
 import { getBiasStepsForCell, parseRouterBiasSnapshot, type RouterBiasSnapshot } from "./reasoning-router-bias.ts";
 import {
 	classifyTaskV4,
@@ -1200,10 +1207,7 @@ export class AgentSession {
 		// A credential store that could not be read is not the same as an unauthenticated provider:
 		// say so instead of advising /login, which cannot clear a read failure.
 		if (this._modelRegistry.hasCredentialStoreError()) {
-			throw new Error(
-				`The credential store for "${model.provider}" could not be read` +
-					` (another OMK session may be refreshing credentials). Retry in a moment.`,
-			);
+			throw new Error(credentialStoreUnreadableMessage(model.provider));
 		}
 
 		const isOAuth = this._modelRegistry.isUsingOAuth(model);
@@ -3608,7 +3612,7 @@ export class AgentSession {
 					input.signal,
 					this.thinkingLevel,
 					this.agent.streamFn,
-					this.settingsManager.getRetrySettings(),
+					summarizationRetryPolicy(this.settingsManager.getRetrySettings()),
 					this._summarizationRetryCallbacks({ source: "compaction", reason: input.reason }),
 					this._compactionFailoverModels(model),
 					{
@@ -5213,7 +5217,7 @@ export class AgentSession {
 					replaceInstructions,
 					reserveTokens: branchSummarySettings.reserveTokens,
 					streamFn: this.agent.streamFn,
-					retry: this.settingsManager.getRetrySettings(),
+					retry: summarizationRetryPolicy(this.settingsManager.getRetrySettings()),
 					callbacks: this._summarizationRetryCallbacks({ source: "branchSummary" }),
 				});
 				if (result.aborted) {
