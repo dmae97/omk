@@ -46,8 +46,8 @@ test("Rust table values, not template text, decide the generated aliases and hin
 test("alias tables the namespace form cannot express and unsafe values fail closed", () => {
 	for (const mutate of [
 		(c) => (c.aliases = c.aliases.slice(1)),
-		(c) => (c.aliases[0] = ["@earendil-works/pi-coding-agent", "unknown-target"]),
-		(c) => (c.aliases[0] = ['@earendil-works/pi-coding-agent"', "coding-agent"]),
+		(c) => (c.aliases[0] = [c.aliases[0][0], "unknown-target"]),
+		(c) => (c.aliases[0] = [`${c.aliases[0][0]}"`, c.aliases[0][1]]),
 		(c) => (c.classifierNamespaces = ["mariozechner|.*"]),
 		(c) => (c.legacyPackages = []),
 		(c) => (c.dialects = ["omk"]),
