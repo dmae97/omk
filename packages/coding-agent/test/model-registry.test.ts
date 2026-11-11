@@ -1793,10 +1793,15 @@ describe("ModelRegistry", () => {
 				const model = getModelsForProvider(registry, "anthropic")[0];
 				expect(model).toBeDefined();
 
+				// Busy for both ways of taking the store lock: the synchronous attempt and the waiting one.
+				vi.spyOn(lockfile, "lockSync").mockImplementation(() => {
+					throw lockBusy();
+				});
 				const lockSpy = vi.spyOn(lockfile, "lock").mockRejectedValueOnce(lockBusy());
 
 				const auth = await registry.getApiKeyAndHeaders(model);
 				expect(auth).toMatchObject({ ok: true, apiKey: "sk-ant-oat01-valid-stored-token" });
+				expect(lockSpy).toHaveBeenCalledTimes(1);
 
 				lockSpy.mockRejectedValueOnce(lockBusy());
 				expect(await registry.getApiKeyForProvider("anthropic")).toBe("sk-ant-oat01-valid-stored-token");
