@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AnthropicMessagesCompat, Api, Context, Model, OpenAICompletionsCompat } from "omk-ai";
 import { getApiProvider } from "omk-ai";
-import { getOAuthProvider } from "omk-ai/oauth";
+import { getOAuthProvider, registerOAuthProvider } from "omk-ai/oauth";
+import lockfile from "proper-lockfile";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { clearApiKeyCache, ModelRegistry, type ProviderConfigInput } from "../src/core/model-registry.ts";
@@ -1721,6 +1722,108 @@ describe("ModelRegistry", () => {
 				// The models.json literal key must not stand in for the unreadable stored credential:
 				// apiKey stays undefined instead of resolving "literal_api_key_value".
 				if (auth.ok) expect(auth.apiKey).toBeUndefined();
+			});
+
+			/** What proper-lockfile rejects with once another process held the lock past every retry. */
+			function lockBusy(): Error {
+				return Object.assign(new Error("Lock file is already being held"), { code: "ELOCKED" });
+			}
+
+			test("a stored OAuth login that fails to resolve is never replaced by the models.json key", async () => {
+				// Production shape: models.json carried `apiKey: "$ANTHROPIC_API_KEY"` next to a stored
+				// OAuth login. When the token could not be resolved, that key went out in its place and
+				// the provider answered 401 "invalid x-api-key" for a session that was logged in.
+				const providerId = `oauth-with-models-json-key-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+				registerOAuthProvider({
+					id: providerId,
+					name: "OAuth provider with a models.json key",
+					async login() {
+						throw new Error("Not used in this test");
+					},
+					async refreshToken() {
+						throw new Error("refresh endpoint unavailable");
+					},
+					getApiKey(credentials) {
+						return credentials.access;
+					},
+				});
+				writeFileSync(
+					join(tempDir, "auth.json"),
+					JSON.stringify({
+						[providerId]: {
+							type: "oauth",
+							refresh: "refresh-token",
+							access: "expired-access-token",
+							expires: Date.now() - 10_000,
+						},
+					}),
+				);
+				writeRawModelsJson({ [providerId]: providerWithApiKey("literal_api_key_value") });
+
+				const storage = AuthStorage.create(join(tempDir, "auth.json"));
+				const registry = ModelRegistry.create(storage, modelsJsonPath);
+				expect(registry.hasCredentialStoreError()).toBe(false);
+
+				const model = registry.find(providerId, "test-model");
+				expect(model).toBeDefined();
+				const auth = await registry.getApiKeyAndHeaders(model!);
+				expect(auth).toEqual({ ok: false, error: expect.stringContaining(`/login ${providerId}`) });
+				expect(await registry.getApiKeyForProvider(providerId)).toBeUndefined();
+			});
+
+			test("a busy credential lock keeps a logged-in session on its stored token", async () => {
+				// The observed failure: several sessions shared auth.json, one request could not take
+				// the lock within the retry window, and `anthropic.apiKey: "$ANTHROPIC_API_KEY"` from
+				// models.json went out instead of the OAuth token that still had an hour left.
+				writeFileSync(
+					join(tempDir, "auth.json"),
+					JSON.stringify({
+						anthropic: {
+							type: "oauth",
+							refresh: "refresh-token",
+							access: "sk-ant-oat01-valid-stored-token",
+							expires: Date.now() + 3_600_000,
+						},
+					}),
+				);
+				writeRawModelsJson({ anthropic: { baseUrl: "https://api.anthropic.com", apiKey: "dead-models-json-key" } });
+
+				const storage = AuthStorage.create(join(tempDir, "auth.json"));
+				const registry = ModelRegistry.create(storage, modelsJsonPath);
+				const model = getModelsForProvider(registry, "anthropic")[0];
+				expect(model).toBeDefined();
+
+				const lockSpy = vi.spyOn(lockfile, "lock").mockRejectedValueOnce(lockBusy());
+
+				const auth = await registry.getApiKeyAndHeaders(model);
+				expect(auth).toMatchObject({ ok: true, apiKey: "sk-ant-oat01-valid-stored-token" });
+
+				lockSpy.mockRejectedValueOnce(lockBusy());
+				expect(await registry.getApiKeyForProvider("anthropic")).toBe("sk-ant-oat01-valid-stored-token");
+			});
+
+			test("a busy credential lock reports an expired login instead of sending the models.json key", async () => {
+				writeFileSync(
+					join(tempDir, "auth.json"),
+					JSON.stringify({
+						anthropic: {
+							type: "oauth",
+							refresh: "refresh-token",
+							access: "sk-ant-oat01-expired-stored-token",
+							expires: Date.now() - 10_000,
+						},
+					}),
+				);
+				writeRawModelsJson({ anthropic: { baseUrl: "https://api.anthropic.com", apiKey: "dead-models-json-key" } });
+
+				const storage = AuthStorage.create(join(tempDir, "auth.json"));
+				const registry = ModelRegistry.create(storage, modelsJsonPath);
+				const model = getModelsForProvider(registry, "anthropic")[0];
+
+				vi.spyOn(lockfile, "lock").mockRejectedValueOnce(lockBusy());
+
+				const auth = await registry.getApiKeyAndHeaders(model);
+				expect(auth).toEqual({ ok: false, error: expect.stringContaining("/login anthropic") });
 			});
 		});
 	});

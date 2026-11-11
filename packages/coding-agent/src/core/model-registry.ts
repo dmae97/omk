@@ -31,13 +31,13 @@ import { GROK_OAUTH_PROVIDER } from "./grok-playbook.ts";
 import { ModelRegistryRefreshInputs } from "./model-registry-refresh-inputs.ts";
 import { type ModelOverride, type ModelsConfig, validateModelsConfig } from "./model-registry-schema.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "./provider-display-names.ts";
+import { resolveProviderRequestKey, resolveUnresolvedOAuthLogin } from "./provider-request-key.ts";
 import {
 	clearConfigValueCache,
 	getConfigValueEnvVarNames,
 	isCommandConfigValue,
 	isConfigValueConfigured,
 	isLegacyEnvVarNameConfigValue,
-	resolveConfigValueOrThrow,
 	resolveConfigValueUncached,
 	resolveHeadersOrThrow,
 } from "./resolve-config-value.ts";
@@ -723,14 +723,9 @@ export class ModelRegistry {
 	async getApiKeyAndHeaders(model: Model<Api>, options?: { minRemainingMs?: number }): Promise<ResolvedRequestAuth> {
 		try {
 			const providerConfig = this.providerRequestConfigs.get(model.provider);
-			const apiKeyFromAuthStorage = await this.authStorage.getApiKey(model.provider, {
-				includeFallback: false,
-				minRemainingMs: options?.minRemainingMs,
-			});
-			// A models.json provider key must not stand in for a stored credential whose store could not
-			// be read: that substitution sent a stale environment token to the provider, and the 401
-			// ("OAuth access token is invalid") survived re-running /login.
-			const apiKey = apiKeyFromAuthStorage ?? this.resolveModelsJsonApiKey(model.provider, providerConfig);
+			const key = await resolveProviderRequestKey(this.authStorage, model.provider, providerConfig?.apiKey, options);
+			if (!key.ok) return key;
+			const apiKey = key.apiKey;
 
 			const providerHeaders = resolveHeadersOrThrow(providerConfig?.headers, `provider "${model.provider}"`);
 			const modelHeaders = resolveHeadersOrThrow(
@@ -810,6 +805,8 @@ export class ModelRegistry {
 			return apiKey;
 		}
 
+		const login = resolveUnresolvedOAuthLogin(this.authStorage, provider);
+		if (login) return login.ok ? login.apiKey : undefined;
 		const providerApiKey = this.providerRequestConfigs.get(provider)?.apiKey;
 		return providerApiKey ? resolveConfigValueUncached(providerApiKey) : undefined;
 	}
@@ -825,19 +822,6 @@ export class ModelRegistry {
 	 */
 	hasCredentialStoreError(): boolean {
 		return this.authStorage.hasLoadError();
-	}
-
-	/**
-	 * A models.json provider key must not stand in for a stored credential whose store could not
-	 * be read: that substitution sent a stale environment token to the provider, and the 401
-	 * ("OAuth access token is invalid") survived re-running /login.
-	 */
-	private resolveModelsJsonApiKey(
-		provider: string,
-		providerConfig: ProviderRequestConfig | undefined,
-	): string | undefined {
-		if (this.authStorage.hasLoadError() || !providerConfig?.apiKey) return undefined;
-		return resolveConfigValueOrThrow(providerConfig.apiKey, `API key for provider "${provider}"`);
 	}
 
 	/** Check if a model is using OAuth credentials (subscription). */
