@@ -111,10 +111,12 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
 
 ## Phase 4: Capability matrix (spec §6)
 
-- [ ] T010 List every user-visible feature and all 25 files under `src/core/extensions/builtin` with one disposition each: ported, hosted or refused. Mark the safety gates that F4 sends to K3. Add a check that fails on a missing or duplicate entry
+- [x] T010 List every user-visible feature and all 25 files under `src/core/extensions/builtin` with one disposition each: ported, hosted or refused. Mark the safety gates that F4 sends to K3. Add a check that fails on a missing or duplicate entry
   > role: architect
   > deps: T008
-  > files: [`specs/120-rust-core/capability-matrix.json`, `scripts/check-capability-matrix.mjs`, `scripts/test/check-capability-matrix.test.mjs`]
+  > files: [`specs/120-rust-core/capability-matrix.json`, `scripts/lib/capability-matrix.mjs`, `scripts/check-capability-matrix.mjs`, `scripts/test/check-capability-matrix.test.mjs`]
+  > result: 75 features and 25 built-in files. Modes, built-in tools and built-in slash commands are read from source, so a new one without an entry fails. Only `command-safety-gate.ts` is a safety gate (ported, K3). `identical-loop.ts` and `finish-check-reverify-stage.ts` also block tool calls; they are classified as refused and carry a `reviewNote` for the owner
+  > open: refusing a default-on built-in (for example `identical-loop`) under the Rust core needs a defined trigger before K5; CM1 decides how it is observed
   > verify: `node scripts/check-capability-matrix.mjs`
   > gate: command-pass
   > risk: medium
