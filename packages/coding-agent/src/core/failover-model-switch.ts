@@ -14,14 +14,16 @@ import { failoverModelKey, isFailoverTriggerError } from "./provider-retry.ts";
  * The model failover/rotation picked this turn rejected the request outright (403 entitlement,
  * auth, unsupported model). It can never serve this turn, so the chain advances instead of the
  * turn ending on it. `refused` is non-empty only inside an automatic sequence, so a denial from
- * the user's own model stays non-retryable.
+ * the user's own model stays non-retryable. A `--model` pin keeps the pre-existing behavior: the
+ * turn ends on the denial rather than moving to yet another model.
  */
 export function isFailoverCandidateDenial(
 	message: AssistantMessage,
 	current: { readonly provider: string; readonly id: string } | undefined,
 	refused: ReadonlySet<string>,
+	modelPinned: boolean,
 ): boolean {
-	if (!current || refused.size === 0) return false;
+	if (modelPinned || !current || refused.size === 0) return false;
 	if (message.provider !== current.provider || message.model !== current.id) return false;
 	if (refused.has(failoverModelKey(current.provider, current.id))) return false;
 	return message.stopReason === "error" && isTerminalProviderErrorMessage(message.errorMessage);
@@ -52,7 +54,7 @@ export async function switchFailoverModel(
 ): Promise<Model<Api> | undefined> {
 	const resilience = resolveProviderResilience(host.settings);
 	const current = host.model;
-	const candidateDenied = isFailoverCandidateDenial(message, current, host.refused);
+	const candidateDenied = isFailoverCandidateDenial(message, current, host.refused, host.modelPinned);
 	if (!candidateDenied) {
 		const quotaExhausted = isQuotaExhaustionMessage(message.errorMessage);
 		if (!shouldHonorProviderFailover(quotaExhausted, resilience, host.modelPinned, current)) return undefined;

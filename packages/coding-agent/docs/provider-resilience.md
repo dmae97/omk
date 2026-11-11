@@ -53,7 +53,7 @@ For a safety stop or recognized quota/billing error, OMK:
 
 A failover or route-rotation switch applies to the current session only. It is recorded in the session transcript but never written as `defaultProvider`/`defaultModel`, so the next session starts on the model you chose, not on the last failover target.
 
-If the candidate OMK switched to rejects the request outright (for example `403 Access to model denied`, an authentication error, or an unsupported model), that candidate is marked failed for the turn and the chain advances to the next authenticated candidate. When no candidate remains, the turn ends with that error instead of retrying the denied model. The same error from the model you selected yourself is still not retried.
+If the candidate OMK switched to rejects the request outright (for example `403 Access to model denied`, an authentication error, or an unsupported model), that candidate is marked failed for the turn and the chain advances to the next authenticated candidate. When no candidate remains, the turn ends with that error instead of retrying the denied model. The same error from the model you selected yourself is still not retried, and with a `--model`/`--provider` pin a denied candidate ends the turn instead of moving to another model.
 
 A content/safety stop gets at most one automatic retry, including a retry that switches model, regardless of the larger transport retry budget. Other transient failures keep the configured retry policy and backoff. Plain authentication errors remain non-retryable and do not trigger failover.
 

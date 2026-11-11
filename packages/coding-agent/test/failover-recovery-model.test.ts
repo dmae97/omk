@@ -36,7 +36,11 @@ afterEach(() => {
 });
 
 /** Each provider answers with a fixed error, or succeeds when it has none. */
-function createSession(errors: Record<string, string>, candidates: Array<{ provider: string; id: string }>) {
+function createSession(
+	errors: Record<string, string>,
+	candidates: Array<{ provider: string; id: string }>,
+	modelPinned = false,
+) {
 	tempDir = mkdtempSync(join(tmpdir(), "omk-failover-model-"));
 	const calls: string[] = [];
 	const agent = new Agent({
@@ -86,6 +90,7 @@ function createSession(errors: Record<string, string>, candidates: Array<{ provi
 		settingsManager,
 		cwd: tempDir,
 		modelRegistry: ModelRegistry.create(authStorage, tempDir),
+		modelPinned,
 		resourceLoader: createTestResourceLoader(),
 	});
 	return { session, settingsManager, calls };
@@ -125,5 +130,11 @@ describe("automatic failover model selection", () => {
 		await created.session.prompt("Test");
 		expect(created.calls).toEqual(["anthropic/claude-sonnet-4-5"]);
 		expect(created.session.model?.id).toBe("claude-sonnet-4-5");
+	});
+
+	it("keeps a --model pin when the quota failover candidate denies access", async () => {
+		const created = createSession({ anthropic: QUOTA, "opencode-go": DENIED }, [QWEN, DEEPSEEK], true);
+		await created.session.prompt("Test");
+		expect(created.calls).toEqual(["anthropic/claude-sonnet-4-5", "opencode-go/qwen3.8-max"]);
 	});
 });

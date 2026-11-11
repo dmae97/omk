@@ -2999,9 +2999,9 @@ export class AgentSession {
 	/**
 	 * Set model directly.
 	 * Validates that auth is configured, saves to session and settings.
+	 * `persistDefault: false` switches this session only; automatic failover must not rewrite the saved default.
 	 * @throws Error if no auth is configured for the model
 	 */
-	/** `persistDefault: false` switches this session only; automatic failover must not rewrite the saved default. */
 	async setModel(model: Model<any>, options?: { persistDefault?: boolean }): Promise<void> {
 		if (!this._modelRegistry.hasConfiguredAuth(model)) {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
@@ -4812,7 +4812,7 @@ export class AgentSession {
 	 */
 	private _isRetryableError(message: AssistantMessage): boolean {
 		const quotaOk = quotaAllowsRetry(message.errorMessage, this.settingsManager.getProviderResilienceSettings());
-		if (isFailoverCandidateDenial(message, this.model, this._refusedModels)) return true;
+		if (isFailoverCandidateDenial(message, this.model, this._refusedModels, this._modelPinned)) return true;
 		return quotaOk && isRetryableAssistantError(message, this.model?.contextWindow ?? 0);
 	}
 
@@ -4945,7 +4945,7 @@ export class AgentSession {
 			maxRetries,
 		});
 		if (attempt === undefined) return false;
-		const candidateDenied = isFailoverCandidateDenial(message, this.model, this._refusedModels);
+		const candidateDenied = isFailoverCandidateDenial(message, this.model, this._refusedModels, this._modelPinned);
 
 		// Upstream-unavailable (gateway 5xx / dropped stream / dead relay stream):
 		// rotate to another authenticated route of the SAME model family so the
