@@ -33,6 +33,7 @@ export interface SubagentLaneAuthorityHostBinding {
 	readonly permitPool: import("./workload-permit-pool.ts").WorkloadPermitPool;
 	readonly inventory: CapabilityInventory;
 	readonly signal?: AbortSignal;
+	readonly getRemainingExecutionMs?: () => number | undefined;
 	readonly spawnThreshold?: number;
 	readonly noteDetachedChild: () => () => void;
 }
@@ -78,6 +79,7 @@ export function createSubagentLaneAuthority(binding: SubagentLaneAuthorityHostBi
 		permitPool,
 		activePromptRunId: promptRunId,
 		getCurrentResourceAdmission: () => decision,
+		getRemainingExecutionMs: binding.getRemainingExecutionMs,
 		noteDetachedChild,
 		dispatchLanes: async (input) => {
 			if (pendingSettlements.size > 0) {

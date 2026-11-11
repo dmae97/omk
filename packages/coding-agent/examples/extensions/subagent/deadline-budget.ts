@@ -2,24 +2,53 @@ export type DeadlineSampleOutcome = "completed" | "cutoff" | "aborted" | "failed
 
 export interface SubagentExecutionPolicy {
 	readonly unbounded: boolean;
-	readonly maxParallelTasks: number | undefined;
+	readonly maxParallelTasks: number;
 	readonly concurrency: number;
+	readonly defaultExecutionBudgetMs: number;
 }
+
+/** Engineering limits, not measured latency or quality guarantees. Higher effort never removes a host limit. */
+const EFFORT_LIMITS: Readonly<Record<string, readonly [concurrency: number, tasks: number, deadlineMs: number]>> = {
+	off: [1, 4, 120_000],
+	minimal: [1, 4, 120_000],
+	low: [1, 4, 180_000],
+	medium: [2, 6, 240_000],
+	high: [2, 8, 360_000],
+	xhigh: [3, 8, 480_000],
+	max: [4, 12, 600_000],
+	ultra: [4, 16, 840_000],
+};
 
 export function resolveSubagentExecutionPolicy(
 	thinkingLevel: string | undefined,
 	parallelTaskCount: number,
-	executionBudgetExplicit = false,
+	_executionBudgetExplicit = false,
 ): SubagentExecutionPolicy {
-	const taskCount = Math.max(1, Math.floor(parallelTaskCount));
-	if (thinkingLevel === "ultra") {
-		return { unbounded: !executionBudgetExplicit, maxParallelTasks: undefined, concurrency: taskCount };
-	}
-	return { unbounded: false, maxParallelTasks: 8, concurrency: Math.min(4, taskCount) };
+	const taskCount = Number.isFinite(parallelTaskCount) ? Math.max(1, Math.floor(parallelTaskCount)) : 1;
+	const limits =
+		thinkingLevel !== undefined && Object.hasOwn(EFFORT_LIMITS, thinkingLevel)
+			? EFFORT_LIMITS[thinkingLevel]
+			: EFFORT_LIMITS.high;
+	const [concurrency, maxParallelTasks, defaultExecutionBudgetMs] = limits;
+	return {
+		unbounded: false,
+		maxParallelTasks,
+		concurrency: Math.min(concurrency, taskCount),
+		defaultExecutionBudgetMs,
+	};
+}
+
+/** Leave the lead time to integrate results, perform required checks, and report honestly. */
+export const PARENT_COMPLETION_RESERVE_MS = 30_000;
+
+export function childExecutionBudgetMs(requestedMs: number, parentRemainingMs: number | undefined): number {
+	if (parentRemainingMs === undefined) return requestedMs;
+	if (!Number.isFinite(parentRemainingMs)) return 0;
+	return Math.min(requestedMs, Math.max(0, Math.floor(parentRemainingMs - PARENT_COMPLETION_RESERVE_MS)));
 }
 
 export function exceedsParallelTaskLimit(policy: SubagentExecutionPolicy, taskCount: number): boolean {
-	return policy.maxParallelTasks !== undefined && taskCount > policy.maxParallelTasks;
+	return !Number.isSafeInteger(taskCount) || taskCount < 1 || taskCount > policy.maxParallelTasks;
 }
 
 export interface TaskDemand {

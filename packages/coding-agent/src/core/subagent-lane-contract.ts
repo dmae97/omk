@@ -121,6 +121,8 @@ export interface SubagentLaneAuthority {
 	readonly permitPool: WorkloadPermitPool;
 	/** §14.4 read-only — the most recent resource admission decision for this prompt, if any. */
 	getCurrentResourceAdmission(): ResourceAdmissionDecision | null;
+	/** Live host deadline headroom; undefined means the parent has no time limit. */
+	getRemainingExecutionMs?(): number | undefined;
 	/** Current active prompt run id for settlement counters, if a run is open. */
 	readonly activePromptRunId: string | undefined;
 	/**

@@ -67,7 +67,8 @@ describe.each([false, true])("graph authority=%s", (governed) => {
 		const final = result.details as ResultDetails;
 		expect(final.graph?.completedNodeIds).toEqual(["A", "B"]);
 		expect(final.results.every((r) => r.progress === undefined)).toBe(true);
-		expect(final.results[1].output).toContain("### A\nTask: progress");
+		expect(final.results[0].output).toContain("progress");
+		expect(final.results[1].output).toContain(`### A\n${final.results[0].output}`);
 		expect(final.results[1].output).not.toContain("early preview");
 	});
 
@@ -93,7 +94,8 @@ describe.each([false, true])("graph authority=%s", (governed) => {
 		expect(details.results.map((r) => r.nodeId)).toEqual(["A", "B", "C"]);
 		expect(details.results[0].output).toContain("slow-first");
 		expect(details.results[1].output).toContain("fast-second");
-		expect(details.results[2].output).toContain("### A\nTask: slow-first");
+		expect(details.results[2].output).toContain(`### A\n${details.results[0].output}`);
+		expect(details.results[2].output).toContain(`### B\n${details.results[1].output}`);
 	});
 });
 it("uses lane context cancellation before spawning", async () => {
