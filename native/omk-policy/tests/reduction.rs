@@ -58,7 +58,7 @@ fn invalid_typed_inputs_fail_before_reduction() {
     assert_eq!(closure_bytes(MAX_NODES + 1), Err(PolicyError::NodeLimit));
     assert_eq!(reduce(&[], MAX_CLOSURE_BYTES + 1), Err(PolicyError::Budget));
     assert_eq!(
-        reduce(&vec![vec![0; 1_000_001]], 0),
+        reduce(&[vec![0; 1_000_001]], 0),
         Err(PolicyError::EdgeLimit)
     );
     for graph in [
