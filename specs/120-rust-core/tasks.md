@@ -126,7 +126,8 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
 - [ ] T011 Add the Rust checks to `npm run check` and add the cargo, macOS and Windows jobs to CI. This is the only task that edits workflow files (C3, C7)
   > role: coder
   > deps: T002
-  > files: [`package.json`, `scripts/check-native.mjs`, `.github/workflows/ci.yml`]
+  > files: [`package.json`, `scripts/check-native.mjs`, `scripts/test/check-native.test.mjs`, `native/omk-policy/tests/reduction.rs`, `.github/workflows/ci.yml`]
+  > progress: local half done. `npm run check` runs `check:native`: `cargo fmt --check`, Clippy with `-D warnings` and `cargo test`, `--locked`, for every crate under `native/`. A missing cargo fails. One existing Clippy finding in `omk-policy` tests was fixed. The CI jobs are not added yet
   > verify: `npm run check` locally, and the three CI jobs pass on the pull request
   > gate: command-pass
   > risk: high
