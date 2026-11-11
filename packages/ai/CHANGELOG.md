@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.5.13] - 2026-11-11
+
 ### Added
 
 - `RetryPolicy.delayMs(backoffMs, errorMessage)` lets a caller of `retryAssistantCall` replace the backoff of one retry. A result that is not a non-negative number keeps the backoff, and one longer than a timer can hold is capped. Without it the backoff is unchanged.
@@ -9,6 +11,10 @@
 ### Changed
 
 - The `Failed to refresh OAuth token for <provider>` error thrown by `getOAuthApiKey` carries the provider's refresh error as its `cause`. The message is unchanged.
+
+### Fixed
+
+- `refreshKimiToken` aborts after 30 seconds, like the other providers' refresh requests. It had no timeout (#408).
 
 ## [1.5.12] - 2026-11-11
 
