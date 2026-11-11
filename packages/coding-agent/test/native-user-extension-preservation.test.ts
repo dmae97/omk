@@ -48,7 +48,7 @@ export default function(api) { if (!Key.escape) throw new Error("missing key con
 		expect(result.errors[0].error).toContain("@earendil-works/pi-tui");
 		expect(input.paths.map((path) => readFileSync(path))).toEqual(input.before);
 	});
-	it.each([undefined, "omk+pi"] as const)(
+	it.each(["omk+pi"] as const)(
 		"compatibility %s retains synthetic legacy registration without rewriting",
 		async (dialect) => {
 			const input = fixture();
@@ -122,10 +122,11 @@ export default function(api) { if (!Key.escape) throw new Error("missing key con
 			resources: { extensions: [input.entry], skills: [], prompts: [], themes: [] },
 		};
 		const implicit = inspectPackageCompatibility(common);
-		expect(JSON.stringify(inspectPackageCompatibility({ ...common, packageManifestDialect: "omk+pi" }))).toBe(
-			JSON.stringify(implicit),
-		);
+		const compatible = inspectPackageCompatibility({ ...common, packageManifestDialect: "omk+pi" });
+		expect(compatible.checks.find((check) => check.id === "runtime-imports")?.status).toBe("warning");
 		const native = inspectPackageCompatibility({ ...common, packageManifestDialect: "omk" });
+		// OMK 2.0: the omitted target is native.
+		expect(JSON.stringify(implicit)).toBe(JSON.stringify(native));
 		expect(native.checks.find((check) => check.id === "runtime-imports")?.status).toBe("error");
 		expect(existsSync(marker)).toBe(false);
 		expect(input.paths.map((path) => readFileSync(path))).toEqual(before);

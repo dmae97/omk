@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type {
 	CacheControlEphemeral,
 	ContentBlockParam,
@@ -32,6 +31,7 @@ import { headersToRecord } from "../utils/headers.ts";
 import { parseJsonWithRepair, parseStreamingJson } from "../utils/json-parse.ts";
 import { retryProviderRequest } from "../utils/provider-retry.ts";
 import { sanitizeSurrogates, sanitizeSurrogatesDeep } from "../utils/sanitize-unicode.ts";
+import { type Anthropic, OmkAnthropic } from "./anthropic-client.ts";
 import { sanitizeOversizedImages } from "./anthropic-image-guard.ts";
 import { resolveCloudflareBaseUrl } from "./cloudflare.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
@@ -892,7 +892,7 @@ function createClient(
 	}
 
 	if (model.provider === "cloudflare-ai-gateway") {
-		const client = new Anthropic({
+		const client = new OmkAnthropic({
 			apiKey: null,
 			authToken: null,
 			baseURL: resolveCloudflareBaseUrl(model),
@@ -916,7 +916,7 @@ function createClient(
 
 	// Copilot: Bearer auth, selective betas.
 	if (model.provider === "github-copilot") {
-		const client = new Anthropic({
+		const client = new OmkAnthropic({
 			apiKey: null,
 			authToken: apiKey,
 			baseURL: model.baseUrl,
@@ -938,7 +938,7 @@ function createClient(
 
 	// OAuth: Bearer auth, Claude Code identity headers
 	if (isOAuthToken(apiKey)) {
-		const client = new Anthropic({
+		const client = new OmkAnthropic({
 			apiKey: null,
 			authToken: apiKey,
 			baseURL: model.baseUrl,
@@ -962,7 +962,7 @@ function createClient(
 	// API key auth
 	const sessionAffinityHeaders: Record<string, string | null> =
 		sessionId && getAnthropicCompat(model).sendSessionAffinityHeaders ? { "x-session-affinity": sessionId } : {};
-	const client = new Anthropic({
+	const client = new OmkAnthropic({
 		apiKey,
 		authToken: null,
 		baseURL: model.baseUrl,

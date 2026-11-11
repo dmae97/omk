@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { assertFiles, assertPackage, checkCandidate, contained, digest, fileDigest, inputs, installConsumer, isolatedEnv, prepare, readJson, run, writeJson } from "./native-extension-artifact-candidate.mjs";
+import { assertFiles, assertPackage, CASES, checkCandidate, FAILING_CASES, contained, digest, fileDigest, inputs, installConsumer, isolatedEnv, prepare, readJson, run, writeJson } from "./native-extension-artifact-candidate.mjs";
 import { runBun, validateBunReceipt } from "./native-extension-artifact-bun.mjs";
 
-export const CASES = ["native", "missing", "installed", "compat-omitted", "compat-explicit"];
+export { CASES, FAILING_CASES };
 const SOURCE_GROUPS = ["phase1", "native-loader", "cli-sdk", "doctor", "preservation", "atelier", "root-check"];
 const source = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const guardSource = `
@@ -58,7 +58,7 @@ function caseTree(work, base, name, candidate) {
 	writeJson(join(root, "agent", "settings.json"), { packages: [], quietStartup: true, compaction: { enabled: false } });
 	copyFileSync(join(candidate.snapshot, "scripts/fixtures/native-extension-artifact-extension.ts"), join(cwd, "extension.ts"));
 	const legacy = 'import { Key } from "@earendil-works/pi-tui"; export const identity = Key.escape ? "compatibility-alias" : "wrong";';
-	let route = name.startsWith("compat-") || name === "missing" ? legacy : 'export const identity = "native";';
+	let route = name.startsWith("compat-") || FAILING_CASES.has(name) ? legacy : 'export const identity = "native";';
 	if (name === "installed") {
 		const nm = join(cwd, "node_modules");
 		const pi = join(nm, "@earendil-works", "pi-ai");
@@ -81,7 +81,8 @@ function caseTree(work, base, name, candidate) {
 }
 function eventsAt(path) { return existsSync(path) ? readFileSync(path, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)) : []; }
 function checkBehavior(result, events, name, compiled) {
-	if (name === "missing") {
+	if (FAILING_CASES.has(name)) {
+		if (name === "default-omitted") assert.match(result.stderr, /--package-manifest-dialect omk\+pi/, "default native failure lacks the migration hint");
 		assert.equal(result.status, 1, "missing legacy import must fail normal startup");
 		assert.match(result.stderr, /Failed to load extension[\s\S]*@earendil-works\/pi-tui/);
 		assert.doesNotMatch(result.stderr, /Unknown option|No models available|No API key/);
@@ -110,7 +111,7 @@ export function runMatrix(work, executable, compiled = false) {
 	if (!compiled) writeFileSync(guard, guardSource, { flag: "wx" });
 	const cases = CASES.map((name) => {
 		const fixture = caseTree(work, base, name, candidate);
-		const flags = name === "compat-omitted" ? [] : ["--package-manifest-dialect", name === "compat-explicit" ? "omk+pi" : "omk"];
+		const flags = name === "default-omitted" ? [] : ["--package-manifest-dialect", name === "compat-explicit" ? "omk+pi" : "omk"];
 		const args = ["-p", "--no-session", "--no-extensions", "--no-builtin-tools", "-e", join(fixture.cwd, "extension.ts"), "--model", "native-artifact-fixture/offline", ...flags, "run the offline fixture"];
 		const result = run(compiled ? executable : process.execPath, compiled ? args : ["--import", guard, executable, ...args], fixture.cwd, work, `${compiled ? "bun" : "node"}-${name}`, { env: fixture.env, allowFailure: true });
 		const events = eventsAt(fixture.env.NATIVE_ARTIFACT_RECEIPT);
@@ -163,7 +164,7 @@ export function validateReceipts(evidence) {
 		assert.equal(stage.status, "pass", `failed ${name} receipt`);
 		assert(!stage.environment?.NODE_PATH && !stage.environment?.NODE_OPTIONS, "leaked runtime environment");
 	}
-	const environments = [evidence.stages.node.environment, ...[...evidence.stages.node.cases, ...evidence.stages.bun.cases].filter((row) => row.name !== "missing").map((row) => row.environment)];
+	const environments = [evidence.stages.node.environment, ...[...evidence.stages.node.cases, ...evidence.stages.bun.cases].filter((row) => !FAILING_CASES.has(row.name)).map((row) => row.environment)];
 	for (const env of environments) {
 		assert(env?.HOME && env.agentDir && env.cwd && !env.NODE_PATH && !env.NODE_OPTIONS, "missing or leaked runtime environment");
 		for (const path of [env.HOME, env.agentDir, env.cwd]) contained(evidence.work, resolve(path));

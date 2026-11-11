@@ -93,9 +93,11 @@ The doctor never imports extension modules. For npm sources it downloads the reg
 
 ### Explicit native manifest dialect
 
-Native loading is staged behind an explicit choice. Omission and `undefined`
-still use `omk+pi`; package versions remain at 1.5.10. Select the dialect for one
-CLI process, or independently select the static doctor's diagnostic target:
+Since OMK 2.0 the default is native `omk`: omission and `undefined` select `omk`,
+and Pi compatibility (`omk+pi`) is an explicit opt-in. A native-mode load failure
+that names a legacy Pi package says how to migrate or opt in. Select the dialect
+for one CLI process, or independently select the static doctor's diagnostic target,
+which also defaults to `omk`:
 
 ```bash
 omk --package-manifest-dialect omk -e ./my-extension.ts

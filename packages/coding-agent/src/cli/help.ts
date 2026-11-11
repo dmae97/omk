@@ -76,7 +76,7 @@ ${chalk.bold("Options:")}
   --extension, -e <path>         Load an extension file (can be used multiple times)
   --no-extensions, -ne           Disable extension discovery (explicit -e paths still work)
   --package-manifest-dialect <omk|omk+pi>
-                                 Explicit native loading or compatibility (default: omk+pi)
+                                 Native loading or legacy Pi compatibility (default: omk)
                                  Also accepted by package doctor for static target diagnosis
   --skill <path>                 Load a skill file or directory (can be used multiple times)
   --no-skills, -ns               Disable skills discovery and loading

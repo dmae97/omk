@@ -2,6 +2,7 @@ import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import {
 	parseRunPublishCommand,
+	parseRunReconnectCommand,
 	parseRunResumeCommand,
 	parseRunTaskRetryCommand,
 	parseRunWriterRestartCommand,
@@ -22,6 +23,7 @@ import { readEvidenceProjection } from "./evidence-read-projection.ts";
 import { type RunExplanation, readRunExplanation } from "./explanation.ts";
 import { stopEvent } from "./interruption.ts";
 import { journalPath, type RunJournalRecord, readRunJournal, VerifiedRunJournal } from "./journal.ts";
+import { completedNativeReconnect, reconnectNativeExecution } from "./native-reconnect.ts";
 import type { RunPhaseContext } from "./phase-context.ts";
 import { inspectRunRecovery, type RecoveryInspection, resumeFrozenCandidate } from "./recovery.ts";
 import { anchorRunBudget, readRunClock } from "./recovery-clock.ts";
@@ -188,6 +190,19 @@ export class RunCoordinator {
 			}),
 		);
 		return this.inspect(command.runId);
+	}
+
+	async reconnect(input: unknown, approval: VerifiedRunApproval): Promise<RunProjection> {
+		const command = parseRunReconnectCommand(input);
+		if (approval.approvedContractDigest !== command.contractDigest) throw new VerifiedRunError("approval");
+		const completed = completedNativeReconnect(stateRunPath(this.stateRoot, command.runId), command);
+		if (completed) return this.inspect(command.runId);
+		return this.withAuthority(command.runId, (runPath, authority) =>
+			reconnectNativeExecution(runPath, command, {
+				authority,
+				...(approval.signal ? { signal: approval.signal } : {}),
+			}),
+		);
 	}
 
 	async restartWriter(input: unknown, approval: VerifiedRunApproval): Promise<RunProjection> {

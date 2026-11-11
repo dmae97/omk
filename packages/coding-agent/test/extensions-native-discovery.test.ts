@@ -22,7 +22,7 @@ describe("direct discovery preserves its compatibility contract", () => {
 		}`;
 	}
 
-	it.each([undefined, "omk+pi"] as const)("retains directory indexes and order for %s", async (dialect) => {
+	it.each(["omk+pi"] as const)("retains directory indexes and order for %s", async (dialect) => {
 		write("project/.omk/extensions/a.ts", code("local"));
 		write("agent/extensions/b.js", code("global"));
 		const configured = join(root, "configured");

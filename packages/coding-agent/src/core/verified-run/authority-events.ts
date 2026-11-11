@@ -7,8 +7,7 @@ import {
 	type Sequence,
 	sequence,
 } from "../../coordination/types.ts";
-import type { NamespaceIdentity } from "./namespace-identity.ts";
-import { parseNamespaceIdentity } from "./namespace-identity.ts";
+import { type NamespaceIdentity, parseNamespaceIdentity } from "./namespace-identity.ts";
 import { VerifiedRunError } from "./storage.ts";
 
 /**
@@ -41,6 +40,8 @@ export interface AuthorityGrantRecord {
 	readonly dispatchId: string | null;
 	readonly actualClaims: readonly ResourceClaim[] | null;
 	readonly identity: NamespaceIdentity | null;
+	/** Absent when a legacy snapshot discarded the start/revocation history. */
+	readonly startProvenance?: "started" | "revoked";
 }
 
 export interface AuthorityTombstone {
@@ -182,6 +183,7 @@ function claim(raw: unknown): ResourceClaim {
 	if (typeof raw !== "object" || raw === null) throw new VerifiedRunError("integrity");
 	const value: Record<string, unknown> = Object.fromEntries(Object.entries(raw));
 	try {
+		// SAFETY: canonicalClaim validates every field before constructing a claim from this untrusted record.
 		return canonicalClaim(value as unknown as ResourceClaimInput);
 	} catch {
 		throw new VerifiedRunError("integrity");
@@ -223,6 +225,13 @@ function grantRecord(raw: unknown): AuthorityGrantRecord {
 	if (SETTLED_EFFECT_STATES.has(value.state as EffectState) && value.effectLive)
 		throw new VerifiedRunError("integrity");
 	if (value.state === "quarantined" && !value.effectLive) throw new VerifiedRunError("integrity");
+	if (
+		value.startProvenance !== undefined &&
+		((value.startProvenance !== "started" && value.startProvenance !== "revoked") ||
+			value.actualClaims === null ||
+			["reserved", "starting", "cancelled"].includes(value.state))
+	)
+		throw new VerifiedRunError("integrity");
 	return Object.freeze({
 		token: token(value.token),
 		commandId: text(value.commandId),
@@ -234,6 +243,7 @@ function grantRecord(raw: unknown): AuthorityGrantRecord {
 		dispatchId: value.dispatchId === null ? null : text(value.dispatchId),
 		actualClaims: value.actualClaims === null ? null : claimList(value.actualClaims),
 		identity: value.identity === null ? null : parseNamespaceIdentity(value.identity),
+		...(value.startProvenance === undefined ? {} : { startProvenance: value.startProvenance }),
 	});
 }
 
@@ -422,6 +432,7 @@ function reduceAuthorityEvent(state: MutableAuthorityProjection, event: Authorit
 				grant.dispatchId !== null ||
 				grant.actualClaims !== null ||
 				grant.identity !== null ||
+				grant.startProvenance !== undefined ||
 				grant.token.authorityEpoch !== state.epoch ||
 				state.incarnations.get(grant.token.sessionId) !== grant.token.sessionIncarnation ||
 				grant.token.grantSequence !== nextSeq(state.grantCounter) ||
@@ -485,6 +496,7 @@ function reduceAuthorityEvent(state: MutableAuthorityProjection, event: Authorit
 				effectLive: true,
 				actualClaims: event.actualClaims,
 				identity: event.identity ?? grant.identity,
+				startProvenance: "started",
 			});
 			break;
 		}
@@ -500,7 +512,11 @@ function reduceAuthorityEvent(state: MutableAuthorityProjection, event: Authorit
 			} else {
 				const outcome = grant.effectLive ? "quarantined" : "cancelled";
 				if (event.outcome !== outcome) throw new VerifiedRunError("integrity");
-				state.grants.set(event.grantSequence, { ...grant, state: event.outcome });
+				state.grants.set(event.grantSequence, {
+					...grant,
+					state: event.outcome,
+					...(grant.startProvenance === undefined ? {} : { startProvenance: "revoked" as const }),
+				});
 			}
 			break;
 		}
@@ -561,14 +577,7 @@ export function projectAuthority(
 				tombstones: new Map(),
 			};
 	for (const event of events) reduceAuthorityEvent(state, event);
-	return Object.freeze({
-		epoch: state.epoch,
-		reconciledEpoch: state.reconciledEpoch,
-		incarnations: state.incarnations,
-		grantCounter: state.grantCounter,
-		grants: state.grants,
-		tombstones: state.tombstones,
-	});
+	return Object.freeze(state);
 }
 
 /** Grants still holding claims — quarantined included (broker parity). */
@@ -590,14 +599,7 @@ export function applyAuthorityEvents(
 		tombstones: new Map(base.tombstones),
 	};
 	for (const event of events) reduceAuthorityEvent(state, event);
-	return Object.freeze({
-		epoch: state.epoch,
-		reconciledEpoch: state.reconciledEpoch,
-		incarnations: state.incarnations,
-		grantCounter: state.grantCounter,
-		grants: state.grants,
-		tombstones: state.tombstones,
-	});
+	return Object.freeze(state);
 }
 
 export function snapshotFromProjection(state: AuthorityProjection): AuthoritySnapshotState {

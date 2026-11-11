@@ -32,11 +32,14 @@ describe("Pi provider factory compatibility", () => {
 				`,
 			);
 
-			const result = await loadExtensions([extension], directory);
+			// Pi provider factory compatibility is an explicit opt-in since OMK 2.0.
+			const result = await loadExtensions([extension], directory, undefined, { packageManifestDialect: "omk+pi" });
 			expect(result.errors).toEqual([]);
 			expect(result.extensions).toHaveLength(1);
 			expect(result.runtime.pendingProviderRegistrations[0]?.name).toBe("compat-fixture");
-			expect(await loadExtensionModuleWithVirtualModulesForTests(extension)).toBeTypeOf("function");
+			expect(
+				await loadExtensionModuleWithVirtualModulesForTests(extension, { packageManifestDialect: "omk+pi" }),
+			).toBeTypeOf("function");
 		});
 	}
 });

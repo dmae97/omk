@@ -48,9 +48,9 @@ describe("native automatic manifest branch independence", () => {
 		const nativePath = write(`${wrapper}/left/shared/native.ts`, "export default function() {}");
 		const managed = await manager("omk").resolveExtensionSources([root]);
 		expect(managed.extensions.map((r) => r.path)).toEqual([nativePath]);
-		const compatible = await manager().resolve();
+		const compatible = await manager("omk+pi").resolve();
 		expect(compatible.extensions.map((r) => r.path)).toEqual(entries.map((entry) => join(root, entry)));
-		expect(await manager("omk+pi").resolve()).toEqual(compatible);
+		expect(await manager().resolve()).toEqual(await manager("omk").resolve());
 		expect((await manager("omk").resolve()).extensions.map((r) => r.path)).toEqual([nativePath]);
 	});
 
@@ -73,9 +73,9 @@ describe("native automatic manifest branch independence", () => {
 		const root = join(tempDir, wrapper);
 		const managed = await manager("omk").resolveExtensionSources([root]);
 		expect(managed.extensions.map((r) => r.path)).toEqual([nativePath]);
-		const compatible = await manager().resolve();
+		const compatible = await manager("omk+pi").resolve();
 		expect(compatible.extensions.map((r) => r.path)).toEqual(entries.map((entry) => join(root, entry)));
-		expect(await manager("omk+pi").resolve()).toEqual(compatible);
+		expect(await manager().resolve()).toEqual(await manager("omk").resolve());
 		expect((await manager("omk").resolve()).extensions.map((r) => r.path)).toEqual([nativePath]);
 	});
 });

@@ -83,16 +83,20 @@ describe("static native package diagnosis", () => {
 		expect(result.checks.find(({ id }) => id === "runtime-imports")?.status).toBe("pass");
 	});
 
-	it("preserves byte-equivalent compatibility JSON on omission and undefined", () => {
+	it("uses byte-equivalent native JSON on omission and undefined (OMK 2.0 default)", () => {
 		const input = fixture({ pi: { extensions: ["./entry.ts"] } }, 'import "@earendil-works/pi-ai";');
-		const baseline = JSON.stringify(inspectPackageCompatibility(input));
-		for (const dialect of [undefined, "omk+pi"]) {
+		const native = JSON.stringify(inspectPackageCompatibility({ ...input, packageManifestDialect: "omk" }));
+		for (const dialect of [undefined]) {
 			expect(
 				JSON.stringify(
 					inspectPackageCompatibility({ ...input, packageManifestDialect: dialect } as PackageDoctorInput),
 				),
-			).toBe(baseline);
+			).toBe(native);
 		}
+		expect(JSON.stringify(inspectPackageCompatibility(input))).toBe(native);
+		expect(JSON.stringify(inspectPackageCompatibility({ ...input, packageManifestDialect: "omk+pi" }))).not.toBe(
+			native,
+		);
 	});
 
 	it("validates untyped construction before filesystem access", () => {

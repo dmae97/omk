@@ -19,7 +19,7 @@ export interface PackageDoctorCliDependencies {
 }
 
 function usage(): string {
-	return `Usage: ${APP_NAME} package doctor <source> [--package-manifest-dialect omk|omk+pi]\n\nStatically inspects package.json manifest precedence and extension compatibility.\nThe explicit target defaults to omk+pi; omk diagnoses native migration without loading modules.\nRemote npm packages are packed and boundedly extracted without dependency installation or lifecycle scripts.\nThe doctor never imports or executes extension modules.`;
+	return `Usage: ${APP_NAME} package doctor <source> [--package-manifest-dialect omk|omk+pi]\n\nStatically inspects package.json manifest precedence and extension compatibility.\nThe target defaults to omk (native, OMK 2.0); omk+pi diagnoses the legacy compatibility profile.\nRemote npm packages are packed and boundedly extracted without dependency installation or lifecycle scripts.\nThe doctor never imports or executes extension modules.`;
 }
 
 function writeJson(writeLine: (line: string) => void, value: unknown): void {

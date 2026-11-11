@@ -62,10 +62,9 @@ describe("automatic package manifest dialect boundary", () => {
 				writeFileSync(${JSON.stringify(sentinel)}, "executed");
 				export default function() {}`,
 			);
-			const compatible = await resolve();
+			const compatible = await resolve("omk+pi");
 			expect(compatible.extensions.map((r) => r.path).sort()).toEqual([nativePath, join(root, "legacy")].sort());
-			const explicitCompatible = await resolve("omk+pi");
-			expect(explicitCompatible).toEqual(compatible);
+			expect(await resolve()).toEqual(await resolve("omk"));
 			expect(existsSync(sentinel)).toBe(false);
 			const managed = await resolve("omk", root);
 			expect(managed.extensions.map((r) => r.path)).toEqual([nativePath]);
@@ -92,9 +91,9 @@ describe("automatic package manifest dialect boundary", () => {
 			const extraPath = write(`${wrapper}/extra.ts`, "export default function() {}");
 			const managed = await resolve("omk", root);
 			expect(managed.extensions.map((r) => r.path).sort()).toEqual([indexPath, extraPath].sort());
-			const compatible = await resolve();
+			const compatible = await resolve("omk+pi");
 			expect(compatible.extensions.map((r) => r.path)).toEqual([indexPath]);
-			expect(await resolve("omk+pi")).toEqual(compatible);
+			expect(await resolve()).toEqual(await resolve("omk"));
 			const native = await resolve("omk");
 			expect(native.extensions.map((r) => r.path).sort()).toEqual([indexPath, extraPath].sort());
 			expect(native.extensions.every((r) => r.enabled)).toBe(true);
@@ -167,11 +166,11 @@ describe("automatic package manifest dialect boundary", () => {
 			);
 			const managed = await resolve("omk", root);
 			expect(managed.extensions.map((r) => r.path).sort()).toEqual([nativePath, siblingPath].sort());
-			const compatible = await resolve();
+			const compatible = await resolve("omk+pi");
 			expect(compatible.extensions.map((r) => r.path)).toEqual(
 				entry.includes("*") ? [join(root, "sibling")] : [join(root, "groups/one"), join(root, "sibling")],
 			);
-			expect(await resolve("omk+pi")).toEqual(compatible);
+			expect(await resolve()).toEqual(await resolve("omk"));
 			const native = await resolve("omk");
 			expect(native.extensions.map((r) => r.path).sort()).toEqual([nativePath, siblingPath].sort());
 			const loaded = await loadExtensions(
@@ -194,7 +193,7 @@ describe("automatic package manifest dialect boundary", () => {
 			write(`${wrapper}/nested/index.ts`, "export default function() {}");
 			const native = await resolve("omk");
 			expect(native.extensions.map((r) => r.path)).toEqual([nativePath]);
-			const compatible = await resolve();
+			const compatible = await resolve("omk+pi");
 			expect(compatible.extensions.map((r) => r.path)).toEqual([join(tempDir, wrapper, "nested"), nativePath]);
 		},
 	);
@@ -206,18 +205,19 @@ describe("automatic package manifest dialect boundary", () => {
 		const extraPath = write(`${wrapper}/extra.ts`, "export default function() {}");
 		expect((await resolve("omk", join(tempDir, wrapper))).extensions.map((r) => r.path)).toEqual([extraPath]);
 		expect((await resolve("omk")).extensions.map((r) => r.path)).toEqual([extraPath]);
-		expect((await resolve()).extensions.map((r) => r.path)).toEqual([indexPath]);
+		expect((await resolve("omk+pi")).extensions.map((r) => r.path)).toEqual([indexPath]);
+		expect((await resolve()).extensions.map((r) => r.path)).toEqual([extraPath]);
 	});
 
 	it.each([{}, { extensions: [] }, { extensions: ["./missing.ts"] }, { extensions: "./index.ts" }])(
-		"preserves default automatic index fallback for authoritative omk %j",
+		"preserves the compatibility automatic index fallback for authoritative omk %j",
 		async (omk) => {
 			const wrapper = "agent/extensions/wrapper";
 			write(`${wrapper}/package.json`, JSON.stringify({ omk }));
 			const indexPath = write(`${wrapper}/index.ts`, nativeExtension);
-			expect((await resolve()).extensions.map((r) => r.path)).toEqual([indexPath]);
 			expect((await resolve("omk+pi")).extensions.map((r) => r.path)).toEqual([indexPath]);
 			expect((await resolve("omk")).extensions).toEqual([]);
+			expect((await resolve()).extensions).toEqual([]);
 		},
 	);
 });

@@ -21,7 +21,11 @@ import * as _bundledOmkTui from "omk-tui";
 import * as _bundledTypebox from "typebox";
 import * as _bundledTypeboxCompile from "typebox/compile";
 import * as _bundledTypeboxValue from "typebox/value";
-import { type PackageManifestDialect, resolvePackageManifestDialect } from "../package-manifest.ts";
+import {
+	DEFAULT_PACKAGE_MANIFEST_DIALECT,
+	type PackageManifestDialect,
+	resolvePackageManifestDialect,
+} from "../package-manifest.ts";
 import { LEGACY_PI_RUNTIME_ALIASES, type PiCompatibilityTarget } from "../pi-compat.ts";
 
 /**
@@ -45,7 +49,9 @@ const LEGACY_PI_VIRTUAL_TARGETS: Record<Exclude<PiCompatibilityTarget, "coding-a
 };
 
 /** Modules available to extensions via virtualModules (compiled Bun binary only). */
-export function buildVirtualModules(dialect: PackageManifestDialect = "omk+pi"): Record<string, unknown> {
+export function buildVirtualModules(
+	dialect: PackageManifestDialect = DEFAULT_PACKAGE_MANIFEST_DIALECT,
+): Record<string, unknown> {
 	resolvePackageManifestDialect(dialect);
 	const bundledCodingAgent = _bundledCodingAgentNamespace;
 	const legacyTargets: Record<PiCompatibilityTarget, unknown> = {

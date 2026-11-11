@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Pinned `@anthropic-ai/sdk` 0.92.0. Its declarations now compile for strict consumers without `skipLibCheck`. The SDK's new `ANTHROPIC_CUSTOM_HEADERS` environment variable is ignored: Anthropic requests keep sending only headers from model configuration and request options, and the selected API key or OAuth token is not replaced.
+- `GoogleThinkingLevel` is declared in an SDK-free module, so the root declarations no longer load `@google/genai`.
+
 ## [1.5.10] - 2026-10-27
 
 ## [1.5.9] - 2026-10-26

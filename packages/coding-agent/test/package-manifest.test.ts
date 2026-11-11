@@ -11,9 +11,12 @@ import {
 
 describe("package manifest compatibility", () => {
 	it("uses package.json pi when omk is absent", () => {
-		const resolved = resolvePackageManifest({
-			pi: { extensions: ["./index.ts"], skills: ["./skills"] },
-		});
+		const resolved = resolvePackageManifest(
+			{
+				pi: { extensions: ["./index.ts"], skills: ["./skills"] },
+			},
+			"omk+pi",
+		);
 
 		expect(resolved).toEqual({
 			key: "pi",
@@ -48,9 +51,12 @@ describe("package manifest compatibility", () => {
 	});
 
 	it("rejects manifest paths that escape the package", () => {
-		const resolved = resolvePackageManifest({
-			pi: { extensions: ["./safe.ts", "../outside.ts", "/absolute.ts", "!../excluded.ts", "C:\\escape.ts"] },
-		});
+		const resolved = resolvePackageManifest(
+			{
+				pi: { extensions: ["./safe.ts", "../outside.ts", "/absolute.ts", "!../excluded.ts", "C:\\escape.ts"] },
+			},
+			"omk+pi",
+		);
 
 		expect(resolved.manifest).toEqual({ extensions: ["./safe.ts"] });
 		expect(resolved.diagnostics.map((diagnostic) => diagnostic.path)).toEqual([
@@ -74,9 +80,10 @@ describe("package manifest compatibility", () => {
 describe("native package manifest policy", () => {
 	it.each([{}, null, { extensions: "./legacy.ts" }])("rejects Pi-only manifests before parsing %j", (pi) => {
 		expect(() => resolvePackageManifest({ pi }, "omk")).toThrow(PackageManifestPolicyError);
+		expect(() => resolvePackageManifest({ pi }, undefined)).toThrow(PackageManifestPolicyError);
 	});
 
-	it.each([undefined, "omk+pi"] as const)("preserves compatibility for %s", (dialect) => {
+	it.each(["omk+pi"] as const)("preserves compatibility for %s", (dialect) => {
 		expect(resolvePackageManifest({ pi: { extensions: ["./legacy.ts"] } }, dialect)).toMatchObject({
 			key: "pi",
 			manifest: { extensions: ["./legacy.ts"] },

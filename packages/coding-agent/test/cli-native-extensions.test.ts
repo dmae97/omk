@@ -195,7 +195,26 @@ describe("package manifest dialect CLI validation", () => {
 		},
 	);
 
-	it.each([{ flags: [] }, { flags: ["--package-manifest-dialect=omk+pi"] }])(
+	it("fails a legacy alias import by default with a migration hint (OMK 2.0 native default)", () => {
+		const extension = executableFixture(false);
+		const result = runCli([
+			"-p",
+			"--no-session",
+			"--no-extensions",
+			"--no-builtin-tools",
+			"-e",
+			extension,
+			"--model",
+			"native-cli-fixture/offline",
+			"run the fixture",
+		]);
+		expect(result.error).toBeUndefined();
+		expect(result.status).not.toBe(0);
+		expect(result.stderr).toContain("--package-manifest-dialect omk+pi");
+		expect(existsSync(join(cwd, "tool.json"))).toBe(false);
+	});
+
+	it.each([{ flags: ["--package-manifest-dialect=omk+pi"] }])(
 		"keeps supported legacy alias execution with compatibility $flags",
 		({ flags }) => {
 			const extension = executableFixture(false);

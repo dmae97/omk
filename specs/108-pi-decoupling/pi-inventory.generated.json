@@ -168,7 +168,7 @@
 			"scope": "test"
 		},
 		{
-			"file": "packages/coding-agent/test/cli-native-extensions.test.ts:228",
+			"file": "packages/coding-agent/test/cli-native-extensions.test.ts:247",
 			"module": "packages/coding-agent",
 			"kind": "mention",
 			"specifier": "@earendil-works/pi-tui",
@@ -178,7 +178,7 @@
 			"scope": "test"
 		},
 		{
-			"file": "packages/coding-agent/test/cli-native-extensions.test.ts:241",
+			"file": "packages/coding-agent/test/cli-native-extensions.test.ts:260",
 			"module": "packages/coding-agent",
 			"kind": "mention",
 			"specifier": "@earendil-works/pi-tui",
@@ -559,7 +559,7 @@
 			"scope": "test"
 		},
 		{
-			"file": "packages/coding-agent/test/package-doctor-cli.test.ts:75",
+			"file": "packages/coding-agent/test/package-doctor-cli.test.ts:78",
 			"module": "packages/coding-agent",
 			"kind": "mention",
 			"specifier": "@earendil-works/pi-utils",
@@ -659,7 +659,7 @@
 			"scope": "test"
 		},
 		{
-			"file": "packages/coding-agent/test/package-doctor-native-profile.test.ts:116",
+			"file": "packages/coding-agent/test/package-doctor-native-profile.test.ts:120",
 			"module": "packages/coding-agent",
 			"kind": "mention",
 			"specifier": "@oh-my-pi/pi-utils/subpath",
@@ -709,7 +709,7 @@
 			"scope": "test"
 		},
 		{
-			"file": "packages/coding-agent/test/package-doctor.test.ts:193",
+			"file": "packages/coding-agent/test/package-doctor.test.ts:195",
 			"module": "packages/coding-agent",
 			"kind": "mention",
 			"specifier": "@earendil-works/pi-coding-agent",
@@ -859,8 +859,8 @@
 	],
 	"aliasConsumers": [
 		"packages/ai/src/index.ts:10",
-		"packages/coding-agent/src/core/extensions/bundled-virtual-modules.ts:25",
-		"packages/coding-agent/src/core/extensions/loader.ts:17",
+		"packages/coding-agent/src/core/extensions/bundled-virtual-modules.ts:29",
+		"packages/coding-agent/src/core/extensions/loader.ts:21",
 		"packages/coding-agent/src/core/package-doctor-runtime-imports.ts:3"
 	]
 }

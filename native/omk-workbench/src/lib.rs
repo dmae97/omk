@@ -1,9 +1,11 @@
 #![forbid(unsafe_code)]
 
 mod model;
+mod stream;
 mod validation;
 
 pub use model::Snapshot;
+pub use stream::{StreamError, consume_stream};
 
 pub const MAX_FRAME_BYTES: usize = 262_144;
 

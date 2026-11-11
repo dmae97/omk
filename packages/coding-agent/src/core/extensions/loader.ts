@@ -13,8 +13,12 @@ import { resolvePath } from "../../utils/paths.ts";
 import { createEventBus, type EventBus } from "../event-bus.ts";
 import type { ExecOptions } from "../exec.ts";
 import { execCommand } from "../exec.ts";
-import { type PackageManifestDialect, resolvePackageManifestDialect } from "../package-manifest.ts";
-import { LEGACY_PI_RUNTIME_ALIASES, type PiCompatibilityTarget } from "../pi-compat.ts";
+import {
+	DEFAULT_PACKAGE_MANIFEST_DIALECT,
+	type PackageManifestDialect,
+	resolvePackageManifestDialect,
+} from "../package-manifest.ts";
+import { LEGACY_PI_RUNTIME_ALIASES, legacyPiImportHint, type PiCompatibilityTarget } from "../pi-compat.ts";
 import { createSyntheticSourceInfo } from "../source-info.ts";
 import { transferGoalCostSink } from "./builtin/goal-cost-accounting.ts";
 import { markContextHandlerNonMutating } from "./context-handler-options.ts";
@@ -406,7 +410,7 @@ function createExtensionAPI(
 async function loadExtensionModule(
 	extensionPath: string,
 	binaryMode = isBunBinary,
-	dialect: PackageManifestDialect = "omk+pi",
+	dialect: PackageManifestDialect = DEFAULT_PACKAGE_MANIFEST_DIALECT,
 ) {
 	const jiti = await createJitiLazily(import.meta.url, {
 		moduleCache: false,
@@ -474,7 +478,7 @@ async function loadExtension(
 		return { extension: transferGoalCostSink(api, extension), error: null };
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		return { extension: null, error: `Failed to load extension: ${message}` };
+		return { extension: null, error: `Failed to load extension: ${message}${legacyPiImportHint(message, dialect)}` };
 	}
 }
 
