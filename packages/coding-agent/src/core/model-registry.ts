@@ -799,8 +799,11 @@ export class ModelRegistry {
 	/**
 	 * Get API key for a provider.
 	 */
-	async getApiKeyForProvider(provider: string): Promise<string | undefined> {
-		const apiKey = await this.authStorage.getApiKey(provider, { includeFallback: false });
+	async getApiKeyForProvider(provider: string, options?: { background?: boolean }): Promise<string | undefined> {
+		const apiKey = await this.authStorage.getApiKey(provider, {
+			includeFallback: false,
+			background: options?.background,
+		});
 		if (apiKey !== undefined) {
 			return apiKey;
 		}

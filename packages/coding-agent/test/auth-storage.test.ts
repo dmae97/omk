@@ -1081,6 +1081,91 @@ describe("AuthStorage", () => {
 		});
 	});
 
+	describe("background callers do not repeat a refresh that keeps failing", () => {
+		// The usage rail asks for every configured provider's key about once a minute in every session.
+		// A login that could no longer refresh sent a token request each time, for as long as it stayed
+		// in the store.
+		function registerDeadProvider() {
+			const id = `dead-login-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+			const state = { id, refreshCalls: 0 };
+			registerOAuthProvider({
+				id,
+				name: id,
+				async login() {
+					throw new Error("Not used in this test");
+				},
+				async refreshToken() {
+					state.refreshCalls++;
+					throw new Error("invalid_grant");
+				},
+				getApiKey(credentials) {
+					return credentials.access;
+				},
+			});
+			return state;
+		}
+
+		function expiredLogin(refresh: string) {
+			return { type: "oauth" as const, refresh, access: "expired-access", expires: Date.now() - 10_000 };
+		}
+
+		const background = { includeFallback: false, background: true };
+
+		test("asks the token endpoint once across repeated background calls", async () => {
+			const dead = registerDeadProvider();
+			writeAuthJson({ [dead.id]: expiredLogin("dead-refresh") });
+			authStorage = AuthStorage.create(authJsonPath);
+
+			for (let poll = 0; poll < 3; poll++) {
+				expect(await authStorage.getApiKey(dead.id, background)).toBeUndefined();
+			}
+
+			expect(dead.refreshCalls).toBe(1);
+			expect(authStorage.drainErrors()).toHaveLength(1);
+		});
+
+		test("a request the user is waiting on still tries", async () => {
+			const dead = registerDeadProvider();
+			writeAuthJson({ [dead.id]: expiredLogin("dead-refresh") });
+			authStorage = AuthStorage.create(authJsonPath);
+
+			await authStorage.getApiKey(dead.id, background);
+			expect(await authStorage.getApiKey(dead.id)).toBeUndefined();
+
+			expect(dead.refreshCalls).toBe(2);
+		});
+
+		test("tries again once the wait has passed", async () => {
+			const dead = registerDeadProvider();
+			writeAuthJson({ [dead.id]: expiredLogin("dead-refresh") });
+			authStorage = AuthStorage.create(authJsonPath);
+			const startedAt = performance.now();
+			const clock = vi.spyOn(performance, "now").mockReturnValue(startedAt);
+
+			await authStorage.getApiKey(dead.id, background);
+			clock.mockReturnValue(startedAt + 59_000);
+			await authStorage.getApiKey(dead.id, background);
+			expect(dead.refreshCalls).toBe(1);
+
+			clock.mockReturnValue(startedAt + 61_000);
+			await authStorage.getApiKey(dead.id, background);
+			expect(dead.refreshCalls).toBe(2);
+		});
+
+		test("a new login for the provider is tried at once", async () => {
+			const dead = registerDeadProvider();
+			writeAuthJson({ [dead.id]: expiredLogin("dead-refresh") });
+			authStorage = AuthStorage.create(authJsonPath);
+			await authStorage.getApiKey(dead.id, background);
+
+			// Another session logged in again; this one only sees the store change.
+			AuthStorage.create(authJsonPath).set(dead.id, expiredLogin("refresh-from-new-login"));
+			await authStorage.getApiKey(dead.id, background);
+
+			expect(dead.refreshCalls).toBe(2);
+		});
+	});
+
 	describe("persistence semantics", () => {
 		test("set preserves unrelated external edits", () => {
 			writeAuthJson({
