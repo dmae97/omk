@@ -16,7 +16,7 @@
 | `model_not_allowed` message names the model | generic message | echoing client input would reproduce any brand string the client typed |
 | `/v1/models` unauthenticated? (unspecified) | requires a token | consistent with all other `/v1` routes |
 | Postgres server | PGlite (embedded Postgres) | no local server or paid service on the box |
-| T-13 (real omk client against the gateway) | run against the local mock (`npm run dev:mock` stack), not a real upstream: 9/9 client cases and the usage_events check passed with client 674eded44a (contains #387 head cd25e92907); see `e2e/T-13-results.md` | no real upstream key on the box; repeat against a real upstream before hosting |
+| T-13 (real omk client against the gateway) | run against the local mock (`npm run dev:mock` stack), not a real upstream: 9/9 client cases and the usage_events check passed with client 674eded44a (contains #387 head cd25e92907); see `e2e/T-13-results.md`. Re-run 2026-11-11 12:13 KST with client 13753b84ac (#392 merge, token login and gateway errors): 9/9 and usage_events PASS, see `e2e/t13-392/` | no real upstream key on the box; repeat against a real upstream before hosting |
 
 - 2026-11-11: reasoner effort is low/high only for every user (PM decision). `max` always returns 429 `request_limit_exceeded`. The `users.allow_max_effort` column and `issueKey({allowMaxEffort})` option remain but are ignored by validation; remove them in a later cleanup.
 
