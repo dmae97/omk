@@ -254,13 +254,13 @@ function prefixIgnorePattern(line: string, prefix: string): string | null {
 	return negated ? `!${prefixed}` : prefixed;
 }
 
-function addIgnoreRules(ig: IgnoreMatcher, dir: string, rootDir: string): void {
+function addIgnoreRules(ig: IgnoreMatcher, dir: string, rootDir: string, entries?: readonly { name: string }[]): void {
 	const relativeDir = relative(rootDir, dir);
 	const prefix = relativeDir ? `${toPosixPath(relativeDir)}/` : "";
 
 	for (const filename of IGNORE_FILE_NAMES) {
 		const ignorePath = join(dir, filename);
-		if (!existsSync(ignorePath)) continue;
+		if (entries ? !entries.some((entry) => entry.name === filename) : !existsSync(ignorePath)) continue;
 		try {
 			const content = readFileSync(ignorePath, "utf-8");
 			const patterns = content
@@ -366,14 +366,12 @@ function collectSkillEntries(
 	rootDir?: string,
 ): string[] {
 	const entries: string[] = [];
-	if (!existsSync(dir)) return entries;
-
 	const root = rootDir ?? dir;
 	const ig = ignoreMatcher ?? ignore();
-	addIgnoreRules(ig, dir, root);
 
 	try {
 		const dirEntries = readdirSync(dir, { withFileTypes: true });
+		addIgnoreRules(ig, dir, root, dirEntries);
 
 		for (const entry of dirEntries) {
 			if (entry.name !== "SKILL.md") {
