@@ -2315,6 +2315,7 @@ export class AgentSession {
 			inventory,
 			signal: this.agent?.signal,
 			noteDetachedChild: () => this._promptLifecycle.noteDetachedChild(),
+			getRemainingExecutionMs: () => this._runBudget.remainingMs,
 		});
 	}
 

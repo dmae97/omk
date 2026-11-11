@@ -18,7 +18,9 @@ Delegate tasks to specialized subagents with isolated context windows.
 - **Cutoff learning**: Completion/cutoff history is persisted per provider and model under the agent state directory
 - **Bounded cost**: At most 3 semantic shards and 1 resume across the whole logical task by default
 - **Attempt receipts**: Bounded execution preserves the final attempt identity, process termination receipt, and stream digest/limits (tool-result details stay plain data; the live settlement Promise is kept internally); usage and output remain cumulative across attempts
-- **Ultra execution**: Removes task-count, concurrency, internal deadline, and outer tool-timeout caps; Ctrl+C cancellation still propagates
+- **Effort budgets**: Every effort, including Ultra, has finite task, concurrency, and deadline limits. Workers inherit the parent effort through `--thinking`; their resolved model applies the existing capability clamp
+- **Parent completion reserve**: When the host supplies a remaining run budget, child work leaves 30 seconds for integration and required verification; the budget is checked again immediately before spawn
+- **Shared ownership**: Single, chain, parallel, and graph modes all use the session lane authority when available. A timeout cannot release ownership of a process whose termination is unconfirmed
 
 ## Structure
 
@@ -31,6 +33,7 @@ subagent/
 ├── checkpoint-runtime.ts       # Bounded checkpoint protocol
 ├── deadline-budget.ts          # Token + wall-clock planning and cutoff learning
 ├── deadline-profile-store.ts   # Persistent provider/model profiles
+├── owned-agent.ts              # Single/chain admission and process-settlement ownership
 ├── managed-process.ts          # Process-tree termination and cleanup
 ├── managed-process-tree.ts     # Process-group observation and signalling
 ├── subagent-stream.ts          # Bounded JSONL output parser and stream receipt
@@ -63,7 +66,8 @@ src="$(pwd)/packages/coding-agent/examples/extensions/subagent"
 for f in index.ts agents.ts agent-capability-router.ts capabilities.ts domain-profiles.ts \
   adaptive-agent-runtime.ts adaptive-result.ts checkpoint-runtime.ts deadline-budget.ts \
   deadline-profile-store.ts managed-process.ts managed-process-tree.ts subagent-runtime-types.ts \
-  subagent-stream.ts graph-result.ts workflow-graph.ts; do
+  subagent-stream.ts graph-result.ts workflow-graph.ts owned-agent.ts \
+  worker-env.ts worker-extensions.ts nesting.ts; do
   ln -sf "$src/$f" ~/.omk/agent/extensions/subagent/$f
 done
 
@@ -134,7 +138,7 @@ Use a chain: first have scout find the read tool, then have planner suggest impr
 | Mode | Parameter | Description |
 |------|-----------|-------------|
 | Single | `{ agent, task }` | One logical task; the runtime may split it into bounded semantic shards |
-| Parallel | `{ tasks: [...] }` | Multiple logical tasks; non-Ultra allows max 8 and 4 concurrent, while Ultra starts all requested tasks concurrently |
+| Parallel | `{ tasks: [...] }` | Independent logical tasks, bounded by the effort policy and the parent admission limit |
 | Chain | `{ chain: [...] }` | Sequential with `{previous}` placeholder and a fair deadline share per remaining step |
 | Graph | `{ graph: [{ id, agent, task, dependsOn? }] }` | Validated dependency DAG; ready nodes run in parallel waves, and any failed wave blocks downstream nodes |
 
@@ -144,13 +148,15 @@ Optional execution controls:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `executionBudgetMs` | `840000` | Non-Ultra internal hard budget; when explicitly supplied it also bounds Ultra execution, otherwise Ultra is unbounded |
-| `maxResumeAttempts` | `1` | Retries only the active unfinished shard; accepted range is 0-2 and ignored by unbounded Ultra execution |
+| `executionBudgetMs` | Effort dependent | Finite internal budget; explicit values from 60000 to 840000 ms override the effort default, but cannot extend the parent budget |
+| `maxResumeAttempts` | `1` | Retries only the active unfinished shard; accepted range is 0-2 and all retries consume the same budget |
+
+See [Subagent execution budgets](../../../docs/subagents.md) for the effort table, settlement contract, and verification scope.
 
 ## Output Display
 
 Graph mode forwards progress in both the session-governed and legacy paths,
-including non-Ultra adaptive attempts. The first text delta is shown immediately;
+including all adaptive attempts. The first text delta is shown immediately;
 later deltas are coalesced on arrival at a 100 ms interval, without a timer queue.
 The latest node preview retains at most 4,096 UTF-16 code units. Completed
 messages still update immediately. Previews are not receipts, checkpoint text,
@@ -229,8 +235,8 @@ Project agents override user agents with the same name when `agentScope: "both"`
 - **Exit code != 0**: Tool returns error with stderr/output
 - **stopReason "error"**: LLM error propagated with error message
 - **stopReason "aborted"**: User abort (Ctrl+C) terminates and reaps the subprocess tree
-- **stopReason "deadline"**: Outside Ultra, an internal cutoff returns elapsed/deadline/checkpoint/resume metadata instead of reaching the outer tool timeout
-- **Ultra**: No scheduler or attempt deadline is armed; provider, network, OS, and explicit caller cancellation still apply
+- **stopReason "deadline"**: An internal cutoff returns elapsed/deadline/checkpoint/resume metadata. Insufficient parent integration reserve prevents a new worker from starting
+- **Ultra**: Up to 4 concurrent workers and 16 logical tasks, with a finite default budget of 14 minutes; parent admission can narrow these limits
 - **Chain mode**: Stops at first failing step, reports which step failed, and preserves completed earlier steps
 - **Graph mode**: Rejects malformed graphs before spawn; a failed wave prevents all downstream starts and preserves completed node evidence
 - **Duplicate prevention**: A cutoff with no new checkpoint or streamed evidence is not retried
@@ -242,6 +248,7 @@ Project agents override user agents with the same name when `agentScope: "both"`
 - Parallel model-visible output is capped at 50 KB per task; full results remain in tool details
 - Agents discovered fresh on each invocation (allows editing mid-session)
 - Workers load no user extensions by default, so extension tools (for example from an MCP adapter) are missing there unless `OMK_WORKER_EXTENSIONS` names the extension; see [Extensions in workers](#extensions-in-workers)
-- Outside Ultra, parallel mode is limited to 8 tasks and 4 concurrent processes; Ultra has no extension-imposed count or concurrency cap and can consume substantial host/provider resources
+- Effort caps apply per tool call. The session admission and shared permit pool can reduce parallelism further; the effort table is not an aggregate process RSS limit
+- Cancellation and process cleanup can fail. An unconfirmed child remains owned and is reported as unsettled, never successful; the runtime cannot guarantee that every delegated task succeeds before the lead completes
 - Automatic semantic pre-sharding requires an explicit numbered/checklist action list; indivisible prose is checkpointed and resumed as one shard
 - Checkpoints are best-effort child artifacts plus runtime-captured stream evidence; workspace side effects remain the source of truth after a cutoff
