@@ -2,13 +2,17 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, test } from "node:test";
-import { assertLocked, consumerLock, isolatedEnv } from "../native-extension-artifact-candidate.mjs";
+import { after, afterEach, test } from "node:test";
+import { approvedRoot, assertLocked, consumerLock, isolatedEnv } from "../native-extension-artifact-candidate.mjs";
 
+const approved = mkdtempSync(join(tmpdir(), "omk-consumer-lock-root-"));
+process.env.OMK_ARTIFACT_WORK_ROOT = approved;
+after(() => rmSync(approved, { recursive: true, force: true }));
 const roots = [];
 function fixture() {
-	const root = mkdtempSync("/mnt/omkdata/tmp/opencode/consumer-lock-unit-");
+	const root = mkdtempSync(join(approvedRoot(), "consumer-lock-unit-"));
 	roots.push(root);
 	return root;
 }

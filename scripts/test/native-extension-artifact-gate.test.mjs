@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, test } from "node:test";
-import { assertFiles, assertLocked, assertNoLinksOutside, assertPackage, assertWork, auditMembers, checkCandidate, copyNpmCache, digest, fileDigest, isolatedEnv } from "../native-extension-artifact-candidate.mjs";
+import { after, afterEach, test } from "node:test";
+import { approvedRoot, assertFiles, assertLocked, assertNoLinksOutside, assertPackage, assertWork, auditMembers, checkCandidate, copyNpmCache, digest, fileDigest, isolatedEnv } from "../native-extension-artifact-candidate.mjs";
 import { validateBunReceipt } from "../native-extension-artifact-bun.mjs";
 import { validateReceipts } from "../native-extension-artifact-gate.mjs";
 
+const approved = mkdtempSync(join(tmpdir(), "omk-artifact-root-"));
+process.env.OMK_ARTIFACT_WORK_ROOT = approved;
+after(() => rmSync(approved, { recursive: true, force: true }));
 const roots = [];
 function fixture() {
-	const root = mkdtempSync("/mnt/omkdata/tmp/opencode/artifact-unit-");
+	const root = mkdtempSync(join(approvedRoot(), "artifact-unit-"));
 	roots.push(root);
 	return root;
 }
@@ -29,6 +33,18 @@ function completeEvidence() {
 }
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
+test("the approved work root override must be absolute, normalized and not the filesystem root", () => {
+	try {
+		for (const unsafe of ["relative/root", "/tmp/../etc", "/"]) {
+			process.env.OMK_ARTIFACT_WORK_ROOT = unsafe;
+			assert.throws(() => approvedRoot(), /unsafe approved work root/);
+		}
+		delete process.env.OMK_ARTIFACT_WORK_ROOT;
+		assert.equal(approvedRoot(), "/mnt/omkdata/tmp/opencode");
+	} finally {
+		process.env.OMK_ARTIFACT_WORK_ROOT = approved;
+	}
+});
 test("rejects an unsafe or reused work root without writing", () => {
 	const root = fixture();
 	assert.throws(() => assertWork(process.cwd(), process.cwd(), true), /external|unsafe/);

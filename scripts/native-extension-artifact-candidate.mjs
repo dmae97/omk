@@ -5,7 +5,13 @@ import { constants, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, open
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export const PACKAGES = ["ai", "tui", "agent", "protocol", "adaptorch-wpl", "coding-agent", "book-to-skill"];
-export const APPROVED_ROOT = "/mnt/omkdata/tmp/opencode";
+export const DEFAULT_APPROVED_ROOT = "/mnt/omkdata/tmp/opencode";
+// OMK_ARTIFACT_WORK_ROOT relocates the owned work root (CI and tests); it must be an absolute, normalized, non-root path.
+export function approvedRoot() {
+	const root = process.env.OMK_ARTIFACT_WORK_ROOT || DEFAULT_APPROVED_ROOT;
+	assert(isAbsolute(root) && resolve(root) === root && root !== sep, `unsafe approved work root: ${root}`);
+	return root;
+}
 // default-omitted: legacy import with no dialect flag must fail like "missing" (OMK 2.0 native default).
 export const CASES = ["native", "missing", "installed", "default-omitted", "compat-explicit"];
 export const FAILING_CASES = new Set(["missing", "default-omitted"]);
@@ -18,9 +24,10 @@ export function contained(root, path) {
 	return path;
 }
 export function assertWork(work, source, fresh = false) {
-	assert(isAbsolute(work) && resolve(work) === work && work !== APPROVED_ROOT, "unsafe work root");
-	contained(realpathSync(APPROVED_ROOT), realpathSync(dirname(work)));
-	contained(APPROVED_ROOT, work);
+	const root = approvedRoot();
+	assert(isAbsolute(work) && resolve(work) === work && work !== root, "unsafe work root");
+	contained(realpathSync(root), realpathSync(dirname(work)));
+	contained(root, work);
 	assert(!source.startsWith(`${work}/`) && !work.startsWith(`${source}/`) && work !== source, "work must be external to source and its ancestors");
 	if (fresh) assert(!existsSync(work), "work root must be fresh, not existing");
 	else assert(statSync(work).uid === process.getuid() && !lstatSync(work).isSymbolicLink(), "work root is not exclusively owned");
