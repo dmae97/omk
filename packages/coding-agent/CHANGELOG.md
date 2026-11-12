@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Next-task suggestions (`OMK_NEXT_SUGGESTIONS`, flag, default off) now show a complete prompt in the empty editor: a title, then input, verification, evidence and result sections rendered by the host from the session transcript. A local suggestion appears before any provider call and stays when the model reply is empty, malformed, timed out or failed; Tab inserts exactly the displayed text and refuses a suggestion whose session state changed. Multi-line editor placeholders render below the cursor row. See [environment variables](docs/environment-variables.md).
+
 ### Breaking Changes
 
 - The default package manifest dialect is now native `omk`. Extensions that import legacy Pi packages without installing them, and packages with only a `pi` manifest, no longer load by default. Opt into compatibility with `--package-manifest-dialect omk+pi`, or `packageManifestDialect: "omk+pi"` in SDK constructors. The load error now names this option. `omk package doctor` also defaults to the native target. See [the OMK 2 migration notes](docs/omk-2-migration.md#native-default-2026-11-08).

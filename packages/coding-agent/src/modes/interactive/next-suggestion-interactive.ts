@@ -29,6 +29,7 @@ export function installInteractiveNextSuggestions(
 	activeInteractiveSession = session;
 	return installNextSuggestions(session, editor, basePlaceholder, {
 		requestRender,
+		modelUsable: () => session.model !== undefined && session.modelRegistry.hasConfiguredAuth(session.model),
 		quotaUsage: () => activeQuotaUsage(session, reader),
 		settle: settlement.suggestionMetricsSettler(() => session.sessionId, session.sessionManager.getCwd()),
 		acceptTrace: suggestionAcceptTracker(() => session.sessionId, session.sessionManager.getCwd()),
