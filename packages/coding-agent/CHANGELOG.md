@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.5.14] - 2026-11-12
+
+### Fixed
+
+- Turns on Anthropic models gated to Claude Code 2.1.290 or newer no longer fail with HTTP 400 `claude_code_version_too_old` when you are logged in with an Anthropic OAuth subscription. The `custom-provider-anthropic` example extension sends the same version in its user agent (#393).
+
 ## [1.5.13] - 2026-11-11
 
 ### Added
