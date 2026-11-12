@@ -2,7 +2,7 @@
 //!
 //! These tests pin the exact values of
 //! `packages/coding-agent/src/core/pi-compat.ts` at the K0 baseline.
-//! The TypeScript copy is generated from this crate in T004.
+//! The TypeScript copy is generated from this crate (T004).
 
 use omk_contract::compat::{
     LEGACY_PI_IMPORT_HINT, LEGACY_PI_RUNTIME_ALIASES, PackageManifestDialect,
@@ -164,4 +164,24 @@ fn targets_expose_typescript_names() {
     assert_eq!(PiCompatibilityTarget::Ai.as_str(), "ai");
     assert_eq!(PiCompatibilityTarget::AiOauth.as_str(), "ai-oauth");
     assert_eq!(PiCompatibilityTarget::Tui.as_str(), "tui");
+}
+
+#[test]
+fn generator_lists_cover_every_variant_once_in_declaration_order() {
+    let position = |target: PiCompatibilityTarget| match target {
+        PiCompatibilityTarget::CodingAgent => 0,
+        PiCompatibilityTarget::AgentCore => 1,
+        PiCompatibilityTarget::AgentCoreNode => 2,
+        PiCompatibilityTarget::Ai => 3,
+        PiCompatibilityTarget::AiOauth => 4,
+        PiCompatibilityTarget::Tui => 5,
+    };
+    let positions: Vec<usize> = PiCompatibilityTarget::ALL
+        .into_iter()
+        .map(position)
+        .collect();
+    assert_eq!(positions, (0..6).collect::<Vec<_>>());
+    let dialects = PackageManifestDialect::ALL.map(PackageManifestDialect::as_str);
+    assert_eq!(dialects, ["omk", "omk+pi"]);
+    assert!(PackageManifestDialect::ALL.contains(&PackageManifestDialect::default_dialect()));
 }

@@ -54,14 +54,17 @@ const { runRpcMode } = await import("../../packages/coding-agent/src/modes/rpc/r
 
 const harness = await createHarness({ persistSession: true });
 harness.setResponses([fauxAssistantMessage("hello back"), fauxAssistantMessage("second answer")]);
+// SAFETY: the fixture sends only get_state and prompt. This runRpcMode path uses
+// session, setRebindSession and dispose; session replacement stubs always cancel.
 const runtimeHost = {
 	session: harness.session,
 	newSession: async () => ({ cancelled: true }),
 	switchSession: async () => ({ cancelled: true }),
 	fork: async () => ({ cancelled: true, selectedText: "" }),
-	dispose: async () => {},
+	dispose: async () => { harness.cleanup(); },
 	setRebindSession: () => {},
-} as unknown as Parameters<typeof runRpcMode>[0];
+};
 
 // runRpcMode never returns; it reads stdin until EOF and then exits.
-await runRpcMode(runtimeHost);
+// SAFETY: only get_state/prompt/EOF are sent; their runtime fields exist above.
+await runRpcMode(runtimeHost as unknown as Parameters<typeof runRpcMode>[0]);
