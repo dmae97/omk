@@ -125,6 +125,25 @@ describe("skill admission limit is per top-level prompt, not session lifetime", 
 		},
 	);
 
+	it("prompts that admit no skill write no turn marker, so such sessions keep the pre-marker entry sequence", async () => {
+		const { harness, skills } = await setup(1);
+		const markers = () =>
+			harness.sessionManager
+				.getEntries()
+				.filter((entry) => entry.type === "custom" && entry.customType === "skill_admission_turn");
+		for (const text of ["first", "second"]) {
+			harness.setResponses([fauxAssistantMessage("done")]);
+			await harness.session.prompt(text);
+		}
+		expect(markers()).toHaveLength(0);
+		await readSkills(harness, skills);
+		expect(markers()).toHaveLength(0);
+		harness.setResponses([fauxAssistantMessage("done")]);
+		await harness.session.prompt("after an admission");
+		expect(markers()).toHaveLength(1);
+		expect(restoreSkillAdmissionLedger(harness.sessionManager.getEntries()).used).toBe(0);
+	});
+
 	it("unknown turn-marker versions stay fail closed even when a new prompt begins", async () => {
 		const { harness } = await setup(1);
 		harness.sessionManager.appendCustomEntry("skill_admission_turn", { schemaVersion: 999 });

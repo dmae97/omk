@@ -1,4 +1,4 @@
-import { Stagehand } from "@browserbasehq/stagehand";
+import type { Stagehand } from "@browserbasehq/stagehand";
 import { Type } from "typebox";
 import { z } from "zod";
 import type { ExtensionAPI, ExtensionContext } from "open-multi-agent-kit";
@@ -41,6 +41,9 @@ export default function omkComputerUseStagehand(omk: ExtensionAPI): void {
 		if (session) return session;
 		if (!initialization) {
 			initialization = (async () => {
+				// Deliberate exception to the top-level import rule: the package is installed per extension
+				// (`npm ci` here), so registering the tools must not need it; only starting a browser does.
+				const { Stagehand } = await import("@browserbasehq/stagehand");
 				const model = process.env.OMK_STAGEHAND_MODEL?.trim();
 				const next = model
 					? new Stagehand({ env: "LOCAL", model, verbose: 0, logInferenceToFile: false })
