@@ -709,6 +709,32 @@ Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md)
 first, run `npm run check` and `npm test` before opening a pull request, and
 report security issues as described in [SECURITY.md](SECURITY.md).
 
+## OMK + AdaptOrch
+
+<a href="https://adaptorch.com/?utm_source=github&utm_medium=readme&utm_campaign=omk-contributing">
+  <img
+    src="readmeasset/adaptorch/omk-adaptorch-banner.svg"
+    alt="OMK writes and runs code. AdaptOrch checks what it wrote. correctness_claim: false — it ran, and this is what happened."
+    width="100%"
+  />
+</a>
+
+OMK writes and runs the code. **AdaptOrch** checks what it wrote. When an
+agent's "done" is not enough for your review, AdaptOrch gives you a record of
+what actually ran and what happened, and every report says
+`correctness_claim=false` so nobody mistakes it for a proof.
+
+AdaptOrch is a separate, optional product. Installing OMK does not create an
+AdaptOrch account, and OMK does not call it by default. To wire it in, start
+with [OMK + AdaptOrch](packages/coding-agent/docs/omk-adaptorch.md), then
+[review the plans](https://adaptorch.com/?utm_source=github&utm_medium=readme&utm_campaign=omk-contributing#pricing)
+and the
+[claim boundary](https://adaptorch.com/claim-boundary?utm_source=github&utm_medium=readme&utm_campaign=omk-contributing).
+
+<sub>The AdaptOrch name and marks identify that separate proprietary product
+and appear here with permission. They are excluded from this repository's MIT
+grant — see [TRADEMARKS.md](TRADEMARKS.md).</sub>
+
 ## Star OMK
 
 If a check-backed “done” is useful to you, a
@@ -729,12 +755,6 @@ MIT-licensed coding-agent harness — and began from the
 removed in this release line; OMK `0.9x` is OMK-native (see
 [`specs/constitution.md`](specs/constitution.md)), and the design debt to both
 projects stands. Thank you.
-
-## OMK + AdaptOrch
-
-AdaptOrch is a separate, optional product and is not called by default. See
-[OMK + AdaptOrch](packages/coding-agent/docs/omk-adaptorch.md) for the optional integration and
-[TRADEMARKS.md](TRADEMARKS.md) for the name and marks.
 
 ## License
 
