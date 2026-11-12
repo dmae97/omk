@@ -132,6 +132,8 @@ standalone binary and the setup details are in [Quick start](#quick-start).
 <!-- TODO: terminal demo GIF goes here (install, `omk`, a `/goal verify` run passing).
      Record a real session; do not use a mock-up. -->
 
+If omk helps you, a ⭐ on GitHub helps other people find it.
+
 ## Why OMK
 
 An AI saying “done” is not an acceptance check. With `/goal verify`, you choose
