@@ -12,7 +12,7 @@ import {
 	autocompleteSnapshotMatches,
 	buildAutocompleteList,
 } from "./editor-autocomplete.ts";
-import { formatEditorSuffix } from "./editor-inline-suggestion.ts";
+import { formatEditorSuffix, formatPlaceholderContinuation } from "./editor-inline-suggestion.ts";
 import { createScrollBorder } from "./editor-scroll-border.ts";
 import type { SelectList, SelectListTheme } from "./select-list.ts";
 
@@ -483,6 +483,8 @@ export class Editor implements Component, Focusable {
 		// hardware cursor for IME candidate-window placement even while
 		// autocomplete (e.g. slash-command menu) is visible.
 		const emitCursorMarker = this.focused;
+		const hint = { placeholder: this.placeholder, inlineSuggestion: this.inlineSuggestion, state: this.state };
+		const hintView = { ...hint, autocompleteActive: this.autocompleteState !== null, style: this.theme.placeholder };
 
 		for (const layoutLine of visibleLines) {
 			let displayText = layoutLine.text;
@@ -517,14 +519,7 @@ export class Editor implements Component, Focusable {
 					}
 				}
 
-				const suffix = formatEditorSuffix({
-					placeholder: this.placeholder,
-					inlineSuggestion: this.inlineSuggestion,
-					state: this.state,
-					autocompleteActive: this.autocompleteState !== null,
-					availableWidth: contentWidth - lineVisibleWidth,
-					style: this.theme.placeholder,
-				});
+				const suffix = formatEditorSuffix({ ...hintView, availableWidth: contentWidth - lineVisibleWidth });
 				displayText += suffix.text;
 				lineVisibleWidth += suffix.width;
 			}
@@ -535,6 +530,9 @@ export class Editor implements Component, Focusable {
 
 			// Render the line (no side borders, just horizontal lines above and below)
 			result.push(`${leftPadding}${displayText}${padding}${lineRightPadding}`);
+		}
+		for (const row of formatPlaceholderContinuation(hintView, contentWidth, Math.floor(terminalRows * 0.6))) {
+			result.push(`${leftPadding}${row}${rightPadding}`);
 		}
 
 		// Render bottom border (with scroll indicator if more content below)
