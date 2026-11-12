@@ -11,6 +11,17 @@ import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
 import { createTestResourceLoader } from "./utilities.ts";
 
+// AgentSession summarizes through session-summary.ts, which imports the ladder and compact() from their own
+// modules rather than from index.js, so the index stubs below do not reach it. Stub it with the same result.
+vi.mock("../src/core/compaction/session-summary.ts", () => ({
+	summarizeSessionCompaction: async (input: { preparation: { firstKeptEntryId: string } }) => ({
+		summary: "compacted",
+		firstKeptEntryId: input.preparation.firstKeptEntryId,
+		tokensBefore: 100,
+		details: {},
+	}),
+}));
+
 vi.mock("../src/core/compaction/index.js", () => ({
 	calculateContextTokens: (usage: {
 		input: number;
