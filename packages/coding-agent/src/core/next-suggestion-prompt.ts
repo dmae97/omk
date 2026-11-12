@@ -218,3 +218,15 @@ export function isWellFormedSuggestionPrompt(text: string): boolean {
 		return cursor === lines.length;
 	});
 }
+
+/**
+ * Skill-selection query for an accepted suggestion prompt: its title and scope line. The other
+ * items are host wording about checks and evidence, which describes no capability of the task.
+ * Undefined for text that is not a host-rendered suggestion prompt.
+ */
+export function suggestionSkillQuery(text: string): string | undefined {
+	if (!isWellFormedSuggestionPrompt(text)) return undefined;
+	const lines = text.split("\n");
+	const scope = (lines[3] ?? "").replace(/^- [^:]+:\s*/, "");
+	return `${lines[0]}\n${scope}`;
+}

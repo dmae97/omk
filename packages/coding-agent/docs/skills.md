@@ -94,6 +94,20 @@ record versions still fail closed. Skills' names/descriptions in the inventory
 or `defaultActiveSkills` are metadata, not loaded bodies, and do not spend slots.
 Prompt/token budgets apply independently; `OMK_SKILL_ADMISSION=0` opts out.
 
+### Requests with several capabilities
+
+The skill selector behind automatic loads and provider-harness grants scores the whole
+request and, when it has two or more clauses (split at sentence ends, list items, commas and
+`and`/`then`/`그리고`-style conjunctions), each clause on its own. A skill counts with its best
+clause, so "fix the React layout, add pytest tests, and review the compose networking" can
+reach a frontend, a testing and a Docker skill instead of three near-duplicate review skills.
+A clause needs three or more content words and two matched words to count. The grant still
+holds at most three skills and takes one per clause before a second skill for a clause that is
+already covered; the wider explored set is kept as `candidates` with the clause each matched and,
+when not granted, the skill that already covers it. A single-clause request ranks exactly as
+before. An accepted next-task suggestion prompt is matched by its title and scope line, not by
+the host's checklist wording.
+
 ### Catalog cache
 
 Startup caches skill metadata in `cache/skill-catalog-v2.json` under the agent
