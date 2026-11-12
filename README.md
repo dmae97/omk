@@ -72,6 +72,26 @@
   <sub>Open, merged, and closed pull requests · <a href="https://github.com/dmae97/omk/pulls?q=is%3Apr">Explore OMK pull requests</a></sub>
 </p>
 
+<p align="center">
+  <a href="https://adaptorch.com/?utm_source=github&utm_medium=readme&utm_campaign=omk-community">
+    <img
+      src="readmeasset/adaptorch/omk-adaptorch-banner.svg"
+      alt="OMK writes and runs code. AdaptOrch checks what it wrote. correctness_claim: false — it ran, and this is what happened."
+      width="100%"
+    />
+  </a>
+</p>
+
+<p align="center">
+  <strong>OMK writes and runs the code. AdaptOrch checks what it wrote.</strong><br />
+  When an agent's “done” is not enough for your review, AdaptOrch keeps a record of what actually ran
+  and what happened, and every report says <code>correctness_claim=false</code>.<br />
+  <sub>A separate, optional product: OMK never calls it by default.
+  <a href="#omk--adaptorch">How it fits</a> |
+  <a href="https://adaptorch.com/?utm_source=github&utm_medium=readme&utm_campaign=omk-community#pricing">Plans</a> |
+  <a href="https://adaptorch.com/claim-boundary?utm_source=github&utm_medium=readme&utm_campaign=omk-community">Claim boundary</a></sub>
+</p>
+
 ---
 
 | **CONTROL** | **CHOICE** | **EVIDENCE** |
