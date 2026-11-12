@@ -390,11 +390,18 @@ describe("spec 100 guards", () => {
 			"core/extensions/builtin/goal-controller-acceptance.ts",
 			"core/extensions/builtin/goal-controller.ts",
 		]);
-		// The built-in registration passes the factory itself; the loader calls factories with one argument.
+		// The built-in registration passes the factory itself; the loader calls factories with one argument,
+		// only through initializeExtension, whose single call passes nothing but the API.
 		const registry = readFileSync(join(SRC, "core/extensions/builtin/harness-factories.ts"), "utf8");
 		expect(registry).toContain("{ factory: goalController, ");
 		const loader = readFileSync(join(SRC, "core/extensions/loader.ts"), "utf8");
-		expect(loader.match(/await factory\(([^)]*)\)/g)).toEqual(["await factory(api)", "await factory(api)"]);
+		expect(loader.match(/\bfactory\(/g)).toBeNull();
+		expect(loader.match(/initializeExtension\(([^)]*)\)/g)).toEqual([
+			"initializeExtension(factory, api, extension)",
+			"initializeExtension(factory, api, extension)",
+		]);
+		const initialize = readFileSync(join(SRC, "core/extensions/initialize-extension.ts"), "utf8");
+		expect(initialize.match(/\bfactory\(([^)]*)\)/g)).toEqual(["factory(api)"]);
 		// No env var, flag or setting names the hooks.
 		const flow = readFileSync(join(SRC, "core/extensions/builtin/goal-controller-acceptance.ts"), "utf8");
 		const hookLines = flow
