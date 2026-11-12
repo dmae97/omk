@@ -135,10 +135,10 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
   > gate: command-pass
   > risk: high
 
-- [ ] T012 Run the K0 gates and update the user documents
+- [x] T012 Run the K0 gates and update the user documents
   > role: qa
   > deps: T004, T009, T010, T011
-  > files: [`packages/coding-agent/docs/omk-2-rust-core.md`, `packages/coding-agent/docs/omk-2-migration.md`]
+  > files: [`packages/coding-agent/docs/omk-2-rust-core.md`, `packages/coding-agent/docs/omk-2-migration.md`, `native/omk-contract/tests/fixtures/g0/session.jsonl`, `native/omk-contract/tests/fixtures/manifest.json`, `native/omk-contract/tests/roundtrip.rs`, `native/omk-contract/README.md`]
   > metric: G0 default behavior
   > baseline: the G0 suite on `48fb8e33a8`
   > target: unchanged
@@ -147,3 +147,5 @@ In `verify`, `CARGO_K0` stands for `--locked --manifest-path native/omk-contract
   > evidence: check output in the pull request
   > gate: command-pass
   > risk: low
+  > result: G0 with every default-on flag `0` is byte-identical between `48fb8e33a8` and `3632e73ffa` (session `1dfa40a7d0f2…`, requests `63ab57c90c02…`). With defaults the head equals `origin/main` `b8f3d1a1ec`; against `48fb8e33a8` only the four `skill_admission_turn` markers #418 removed differ. `cargo test CARGO_K0` passes after the G0 contract fixture was re-recorded (24 to 20 records). `npm run check` and `npm test` passed on CI run 43146789487. Details in `omk-2-rust-core.md#k0-status-2026-11-12`
+  > open: `record-contract-fixtures.mjs --check` depends on the checkout path length and runs in neither `npm run check` nor CI

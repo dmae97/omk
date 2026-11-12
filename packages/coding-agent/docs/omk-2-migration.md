@@ -356,3 +356,21 @@ and the root compiler passed. The complete root check remains blocked by unrelat
 stale subscription-usage build outputs. This is a bounded lifecycle correction,
 not a measured whole-process memory reduction or completion of artifact, native
 UI, independent R or Rust execution gates.
+
+### K0 Rust contracts, 2026-11-12
+
+Stage K0 of spec 120 is delivered on `2.0.0` (pull requests #417 and #418, head
+`3632e73ffa`). The `native/omk-contract` crate owns the session JSONL, public RPC
+and extension-host wire types and the `omk+pi` compatibility tables; the Node
+core's `pi-compat.ts` and the type-only declarations under
+`packages/protocol/src/generated/rust-contracts/` are generated from it, and a
+drift check fails on a hand edit. The capability matrix lists every user-visible
+feature and built-in extension with one disposition. `npm run check` now runs
+format, Clippy and tests for every crate under `native/`, and CI adds a cargo job
+and macOS and Windows jobs for the contract crate.
+
+Nothing in production calls the crate, so this moves no ownership. G0 with every
+default-on flag set to `0` is byte-identical to `48fb8e33a8`. Gate results,
+limits and open items are in
+[the Rust core plan](omk-2-rust-core.md#k0-status-2026-11-12). K1 waits for the
+owner's dependency review bundle (decision B1).

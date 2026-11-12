@@ -49,7 +49,8 @@ fn session_g0_jsonl_roundtrips_every_record_byte_for_byte() {
         encoded.push_str(&serde_json::to_string(&parsed).unwrap());
         encoded.push('\n');
     }
-    assert_eq!((headers, messages, custom), (1, 14, 9));
+    // Five custom entries since #418 stopped writing skill_admission_turn for prompts that admit no skill.
+    assert_eq!((headers, messages, custom), (1, 14, 5));
     assert_eq!(encoded.as_bytes(), source.as_bytes());
 }
 
