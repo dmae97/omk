@@ -546,7 +546,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.13](.github/RELEASE_NOTES_v1.5.13.md)
+- [Release notes for v1.5.14](.github/RELEASE_NOTES_v1.5.14.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -619,6 +619,14 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v1.5.14
+
+### Fixed
+
+- Turns on Anthropic models gated to Claude Code 2.1.290 or newer no longer fail with HTTP 400 `claude_code_version_too_old` when you are logged in with an Anthropic OAuth subscription. The `custom-provider-anthropic` example extension sends the same version in its user agent (#393).
+
+Release notes live in [RELEASE_NOTES_v1.5.14.md](.github/RELEASE_NOTES_v1.5.14.md).
+
 ## Release v1.5.13
 
 ### Added
@@ -655,49 +663,6 @@ Release notes live in [RELEASE_NOTES_v1.5.13.md](.github/RELEASE_NOTES_v1.5.13.m
 - When the model a failover switched to rejects the request outright (for example `403 Access to model denied`, an authentication error or an unsupported model), OMK marks it failed for the turn and tries the next authenticated candidate instead of ending the turn there. With a `--model`/`--provider` pin, a denied candidate still ends the turn. See [provider resilience](packages/coding-agent/docs/provider-resilience.md#failover-behavior) (#395).
 
 Release notes live in [RELEASE_NOTES_v1.5.12.md](.github/RELEASE_NOTES_v1.5.12.md).
-
-## Release v1.5.11
-
-### Added
-
-- `OMK_ONTOLOGY_SHADOW=1` (experimental, default off) records a worktree-scoped comparison between native Context Budget selection and a bounded local metadata index. It requires active Context Budget, never changes prompt selection, and stores no raw prompts, queries, commands or absolute paths. See [ontology shadow index](packages/coding-agent/docs/ontology-shadow.md) (#379).
-- META usage in the status rail: with a Meta OAuth login, OMK reads the current and weekly windows from the official Muse Code CLI (`muse serve` with writes and shell disabled, MSP `usage/read`, no prompt or model call). An unobserved host shows `no observed usage yet`, not 0%. See [providers](packages/coding-agent/docs/providers.md).
-- `subscriptionUsageProviders` (global settings only) limits which subscription usage groups the status rail shows and requests. Omitted keeps every configured group; `[]` hides them all and makes no usage requests. A project settings file cannot change it, and an invalid value fails closed. See [settings](packages/coding-agent/docs/settings.md).
-- `/rnode <runId> [--state-dir DIR]` binds a verified run read-only and shows its R·NODE graph (run, proof, feed, outcome axes, nodes by dependency depth) in the pinned status sidebar, under RUN and VERIFY, or in the expanded control pane. It never executes, retries or approves, and never appears in the scrollback header. When rows run short it drops the outcome-axis rows before any node. See [R·NODE](packages/coding-agent/docs/rnode-tui.md).
-- `OMK_TMUX_STATUS_RAIL=1` (opt-in, already inside tmux) moves the pinned status rail into a separate 40-column tmux pane, so the chat and editor keep their own terminal, cursor and scrollback. `Ctrl+Q` hides or restores it; the pane scrolls with `PageUp`/`PageDown`, arrows, `j`/`k` and `g`/`G` without sending input to the agent. Terminals narrower than 114 columns, a failed split or a closed viewer keep the native layout, and OMK removes only its own pane and temporary frames. See [tmux status pane](packages/coding-agent/docs/tui.md#isolated-tmux-status-pane).
-- `omk explore <question>` searches the current workspace read-only and prints a JSON evidence pack of file paths and line ranges instead of whole files. It uses ripgrep when available and a Node directory walk otherwise, reads within a fixed budget, and reports what it skipped in `coverage.notVisited` and `budget.truncated`. See [explorer](packages/coding-agent/docs/explorer.md) (#316).
-- `omk run graph RUN_ID` and the SDK's `readRunGraph()` print one read-only `omk.run-graph.v1` snapshot of a verified run's ledger and authority state. They never execute, recover, publish or edit the ledger. Exit 0 means the read succeeded, not that the run passed; a bad argument exits 2 and a missing run or damaged evidence exits 1. See [run graph](packages/coding-agent/docs/run-graph.md) (#343).
-- `/goal verify --reuse` skips the acceptance run when the passing receipt in the current goal generation still matches the workspace; `--force` or `--rerun` runs it anyway. A new approved command, a workspace change or an earlier failure always runs it. Plain `/goal verify` still runs every time. See [usage](packages/coding-agent/docs/usage.md#durable-goals) (#315).
-- MCP startup failures now carry one of a fixed set of codes with a remediation hint: `mcp.spawn_not_found`, `mcp.spawn_permission_denied`, `mcp.spawn_failed`, `mcp.server_exited`, `mcp.request_timeout`, `mcp.invalid_initialize_result` and `mcp.unsupported_protocol`. The code comes only from Node spawn errors and exit metadata, never from server stderr or JSON-RPC payloads; other errors stay opaque (#326).
-
-### Changed
-
-- The Kimi quota read (`GET https://api.kimi.com/coding/v1/usages`) now sends `User-Agent: omk` and no `X-Msh-Platform`/`X-Msh-Version` headers, instead of identifying as Kimi CLI. This matches the other USAGE providers; the endpoint answers the same for OAuth and API-key credentials.
-- The startup deck drops its own status column while the pinned status rail is on screen, so RUN, VERIFY, TODO and SESSION are no longer drawn twice side by side. Once the deck scrolls into scrollback it keeps its layout.
-- The pinned status panel now renders with OpenTUI by default: an offscreen renderer process returns ANSI rows while `omk-tui` keeps terminal and input ownership. It shows model, run, verification, host CPU/RAM, context, usage, MCP, the session's `update_todo` progress, the running tool and a bound `/rnode` run first; `Ctrl+O` adds details. Set `OMK_OPENTUI_STATUS_RAIL=0` for the native sidebar; Node below 26.4, a missing optional `@opentui/core` and renderer failures or timeouts fall back to it. See [hybrid status panel](packages/coding-agent/docs/tui.md#hybrid-opentui-status-panel).
-- The native status sidebar shows a SYSTEM block near the top: whole-host CPU and RAM meters, physical memory used/total, and a separate `omk` row for this process's CPU and RSS. Missing samples stay `?`/unavailable, the activity sparkline tracks host CPU, and the MCP roster gives up its rows to these meters on short terminals. See [pinned status resources](packages/coding-agent/docs/tui.md#pinned-status-resources).
-- A custom footer set with `ctx.ui.setFooter` now owns the status slot: the pinned status rail steps aside while it is set, instead of hiding the extension footer. `footerData.getSubscriptionUsage()` gives extension footers the host's subscription usage snapshots through the rail's existing reader, with no second poller. See [custom footer](packages/coding-agent/docs/tui.md#pattern-6-custom-footer).
-- The MCP client offers protocol `2025-11-25` and accepts servers that answer `2024-11-05`, `2025-03-26` or `2025-06-18`. Unknown revisions are still rejected (#326).
-- MCP server labels that do not start with a letter now get an `mcp_` prefix in tool names, because Kimi's anthropic-messages endpoint rejects a whole request when any tool name starts with a non-letter. A server labeled `21st` now exposes `mcp_21st__search` instead of `21st__search`; update allow and deny lists that use the old name (#326).
-- MCP `tools/call` results accept any JSON value in `structuredContent`, not only objects. This is looser than the MCP spec, which defines it as an object. NaN and Infinity, functions, undefined properties, accessor and non-plain objects, and nesting deeper than 100 levels are still rejected (#326).
-- The bundled pstack skills and agents target OMK only. Delegation uses the `subagent` extension, model roles default to `inherit-parent` (the session model), and skill, transcript and model-settings paths live under `.omk/` and `~/.omk/agent/`. See [pstack](packages/coding-agent/docs/pstack.md) (#313).
-- `glob` 14.0.3 and `minimatch` 11.0.3 replace 13.0.6 and 10.2.6 to resolve GHSA-3g3m-2fjr-6pw4 and GHSA-g3hv-75wg-m249, including the root override and the published shrinkwrap (#332).
-- The npm `author` of `open-multi-agent-kit`, `omk-ai`, `omk-tui` and `omk-agent-core` is now Geunbin Yu, with Mario Zechner listed in `contributors`; the repository `NOTICE` records that OMK started as a fork of pi (#318).
-
-### Fixed
-
-- Failed `edit` calls now append bounded recovery hints: read ranges for indentation-only differences, original candidate positions for ambiguous matches, and an observation when the replacement text is already present. Failures still write nothing, including multi-edit calls; successful responses, run-log records, write permissions and match rules are unchanged. See [edit recovery](packages/coding-agent/docs/edit-recovery.md).
-- The `edit` tool now rejects an `oldText` that matches at overlapping positions instead of replacing the first one. Replacing `aaa` in `aaaa` used to write `Za`; it now leaves the file unchanged and returns the existing `Found 2 occurrences ... Please provide more context to make it unique.` error. The same applies to CRLF, BOM and fuzzy-normalized matches and to each entry of `edits[]`, and the run-log failure class for these calls is now `multiple_matches`. Unique matches are unaffected.
-- An extension component whose `render()` or `invalidate()` throws no longer breaks the TUI. The failed instance shows `Extension render failed` and is not called again; tool rows keep their raw result, custom messages keep their content, a failed custom editor restores the default editor, and failed custom UI rejects instead of leaving its tool pending. See [extensions](packages/coding-agent/docs/extensions.md#fallback).
-- MCP servers that answer the handshake with protocol `2025-03-26` no longer fail to connect (#326).
-- `open-multi-agent-kit`, `omk-ai`, `omk-tui`, `omk-agent-core`, `omk-protocol` and `omk-adaptorch-wpl` now ship the repository's MIT `LICENSE` in their npm tarballs; `omk-book-to-skill` keeps its own license (#320).
-
-### Security
-
-- Update `undici` from 8.12.3 to 8.12.4, including the fix for ASCII-whitespace integrity metadata bypass (GHSA-r4pc-4jcp-7pqc). The OMK dispatcher fetch now rejects mismatched hashes surrounded by tabs, line breaks, carriage returns or form feeds. Use the explicit npm implementation on Bun instead of its native shim, and preserve the method, headers and body of pre-created Requests across lazy installation. Cache/redirect-specific upstream advisories require the affected interceptors; this does not claim that every advisory was reachable in OMK or that updating npm undici changes Node's built-in fetch.
-- Update `glob` to 14.0.4 and the direct/root-override `minimatch` pin to 11.0.5. Verify the published default ESM/CJS bundles as well as the external dependency tree; retain existing import paths, `brace-expansion` and TypeBox pins. No startup or per-worker memory reduction is claimed.
-
-Release notes live in [RELEASE_NOTES_v1.5.11.md](.github/RELEASE_NOTES_v1.5.11.md).
 
 <!-- releases:end -->
 
