@@ -90,7 +90,8 @@ manifest hashes and inventory; it does not overwrite the stored fixtures.
   the compact G0 JSONL's field order, nested payloads, numbers and escapes intact.
   Use `into_entry()` then `from_entry()` to change typed data; new records use
   serde field order. Arbitrary outer whitespace is not a byte-preservation promise.
-- Tests compare all 24 G0 records and the complete JSONL byte for byte. Six
+- Tests compare all 20 G0 records and the complete JSONL byte for byte (24 until
+  the T012 re-recording; #418 dropped four empty `skill_admission_turn` markers). Six
   archived scenarios contribute 22 `trace.entries`: tests explicitly replace
   numeric message timestamp sentinel `<T>` with `0` in memory, then check compact
   typed projections. The seventh golden is metrics-only and has no session entries.

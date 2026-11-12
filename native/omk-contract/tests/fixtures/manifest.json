@@ -2,7 +2,7 @@
   "schema": "omk.contract.fixtures.v2",
   "generatedBy": "scripts/record-contract-fixtures.mjs",
   "origin": {
-    "head": "437ae8fdf79e05fb374e88d15509b6e969680c63",
+    "head": "3632e73ffa33b3c3373835c26d03f950d8593fad",
     "selectedSourceSha256": "27fc98d3a1e19e212f5d102432997b0069aa1d937a84a07771308f86538977cd"
   },
   "normalization": {
@@ -19,7 +19,7 @@
     },
     {
       "path": "g0/session.jsonl",
-      "sha256": "007f16e6a7e8ed4bc5e1b8bf709499516ad3700250c8504454357473c35d1ef2"
+      "sha256": "c1dc0e813cc4583ecee8ca8d58332f478e6064f2e266b8a96083578995d56a30"
     },
     {
       "path": "rpc-transcript.jsonl",
