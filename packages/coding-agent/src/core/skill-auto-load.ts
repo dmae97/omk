@@ -9,6 +9,7 @@
  */
 import { resolve } from "node:path";
 import { isDefaultOnEnvFlag } from "./env-flag.ts";
+import { suggestionSkillQuery } from "./next-suggestion-prompt.ts";
 import { RUN_LOG_DIR_ENV, type RunLogRecord } from "./run-log.ts";
 import { isSkillAdmissionEnabled, SKILL_ADMISSION_ENTRY_TYPE, skillBodyDigest } from "./skill-admission-ledger.ts";
 import { admitSkillBody, readSkillFileBody, type SkillAdmissionStore } from "./skill-admission-session.ts";
@@ -105,7 +106,17 @@ function runAutoLoad(
 	const invocable = input.skills.filter((skill) => !skill.disableModelInvocation);
 	const byName = new Map(invocable.map((skill) => [skill.name, skill]));
 	const picks: Pick[] = [];
-	for (const score of selectSkills({ task: input.query, skills: invocable }).scores) {
+	// The complementary grant goes first, so the per-prompt cap is spent on distinct request clauses
+	// before a second skill for a clause that is already covered. Single-clause prompts keep score order.
+	// An accepted suggestion prompt is matched by its task, not by the host's checklist wording.
+	const task = suggestionSkillQuery(input.query) ?? input.query;
+	const selection = selectSkills({ task, skills: invocable });
+	const granted = new Set(selection.selected.map((skill) => skill.name));
+	const ordered = [
+		...selection.scores.filter((score) => granted.has(score.name)),
+		...selection.scores.filter((score) => !granted.has(score.name)),
+	];
+	for (const score of ordered) {
 		const skill = byName.get(score.name);
 		if (!skill || score.score < SKILL_WEAK_THRESHOLD) continue;
 		picks.push({ skill, band: score.score >= SKILL_STRONG_THRESHOLD ? "strong" : "ambiguous" });

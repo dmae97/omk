@@ -383,16 +383,23 @@ function findDependencyBlockers(lanes: readonly PreparedLane[]): string[] {
 	return blockers;
 }
 
+/**
+ * A receipt consumer depends on the producers whose receipt its read scope covers: a consumer of
+ * the whole run directory waits for every producer, one reading a single receipt only for its writer.
+ */
 function applyReceiptConsumerDependencies(lanes: readonly PreparedLane[]): PreparedLane[] {
-	const receiptProducerIds = lanes
-		.filter((lane) => lane.grant.evidenceOutput !== undefined && !isReceiptConsumerRole(lane.spec.role))
-		.map((lane) => lane.spec.id);
-
+	const producers = lanes.filter(
+		(lane) => lane.grant.evidenceOutput !== undefined && !isReceiptConsumerRole(lane.spec.role),
+	);
 	return lanes.map((lane) => {
-		if (!isReceiptReadingConsumer(lane) || receiptProducerIds.length === 0) return lane;
+		const reads = isReceiptConsumerRole(lane.spec.role) ? (lane.spec.readScope ?? []).filter(isReceiptPath) : [];
+		if (reads.length === 0 || producers.length === 0) return lane;
+		const covered = producers.filter((producer) =>
+			reads.some((path) => lanePathsIntersect(path, producer.grant.evidenceOutput ?? "")),
+		);
 		const dependsOn = uniqueSorted([
 			...lane.dependsOn,
-			...receiptProducerIds.filter((producerId) => producerId !== lane.spec.id),
+			...covered.map((producer) => producer.spec.id).filter((producerId) => producerId !== lane.spec.id),
 		]);
 		if (arrayEquals(dependsOn, lane.dependsOn)) return lane;
 		return {
@@ -404,11 +411,6 @@ function applyReceiptConsumerDependencies(lanes: readonly PreparedLane[]): Prepa
 			},
 		};
 	});
-}
-
-function isReceiptReadingConsumer(lane: PreparedLane): boolean {
-	if (!isReceiptConsumerRole(lane.spec.role)) return false;
-	return (lane.spec.readScope ?? []).some(isReceiptPath);
 }
 
 function isReceiptConsumerRole(role: SubagentOrchestrationRole): boolean {

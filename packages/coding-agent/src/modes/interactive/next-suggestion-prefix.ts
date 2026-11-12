@@ -1,4 +1,3 @@
-import type { RecordedMainRequest } from "../../core/next-suggestion.ts";
 import type {
 	SuggestionAcceptTracker,
 	SuggestionCandidateSource,
@@ -36,29 +35,50 @@ export function projectSuggestion(candidate: string, snapshot: SuggestionEditorS
 }
 
 export interface ShownCandidate {
-	readonly record: RecordedMainRequest;
+	/** Provider and model the suggestion belongs to; empty strings when the session has no model. */
+	readonly provider: string;
+	readonly model: string;
 	readonly parentTurnIndex: number;
 	readonly settledAtEpochMs: number;
 	readonly quotaCheckedAtEpochMs: number;
 	readonly source: SuggestionCandidateSource;
 }
 
-export type ShownState = { text: string; readonly candidate: ShownCandidate; surface: SuggestionDisplaySurface };
-
-export function createShownState(
-	text: string,
-	record: RecordedMainRequest,
-	parentTurnIndex: number,
-	settledAtEpochMs: number,
-	quotaCheckedAtEpochMs: number,
-	source: SuggestionCandidateSource,
-): ShownState {
-	return {
-		text,
-		candidate: { record, parentTurnIndex, settledAtEpochMs, quotaCheckedAtEpochMs, source },
-		surface: "empty-editor",
-	};
+/** Session state a shown suggestion was built from; accept re-checks it before inserting. */
+export interface SuggestionRevision {
+	readonly messageCount: number;
+	readonly lastMessage: unknown;
+	readonly modelKey: string;
 }
+
+export function suggestionRevision(
+	messages: readonly unknown[],
+	model: { readonly provider: string; readonly id: string } | undefined,
+	canSend = model !== undefined,
+): SuggestionRevision {
+	// A login that makes the same model usable is a state change: a "blocked" suggestion goes stale.
+	const key = model ? `${model.provider}/${model.id}` : "";
+	return { messageCount: messages.length, lastMessage: messages.at(-1), modelKey: canSend ? key : `${key}!` };
+}
+
+export function sameRevision(left: SuggestionRevision, right: SuggestionRevision): boolean {
+	return (
+		left.messageCount === right.messageCount &&
+		left.lastMessage === right.lastMessage &&
+		left.modelKey === right.modelKey
+	);
+}
+
+export type ShownState = {
+	/** The full prompt: exactly what the placeholder shows and what Tab inserts. */
+	text: string;
+	readonly title: string;
+	/** Accepted model sentence behind the suggestion, when one contributed (candidate-cache key). */
+	readonly task?: string;
+	readonly candidate: ShownCandidate;
+	readonly revision: SuggestionRevision;
+	surface: SuggestionDisplaySurface;
+};
 
 export interface SuggestionDisplayInput {
 	readonly suggestion: string;
@@ -67,6 +87,8 @@ export interface SuggestionDisplayInput {
 	readonly basePlaceholder: string;
 	readonly acceptTrace?: SuggestionAcceptTracker;
 	readonly requestRender?: () => void;
+	/** The suggestion on screen is being refined in place rather than replaced by a new one. */
+	readonly refines?: boolean;
 }
 
 export interface InlineSuggestionDisplayInput extends SuggestionDisplayInput {
@@ -78,20 +100,18 @@ export function showEmptySuggestion(input: SuggestionDisplayInput): void {
 	const { candidate, editor, suggestion } = input;
 	editor.setInlineSuggestion?.("");
 	editor.setPlaceholder(suggestion);
-	const { provider, id } = candidate.record.model;
-	input.acceptTrace?.shown(
-		{
-			parentTurnIndex: candidate.parentTurnIndex,
-			provider,
-			model: id,
-			candidateSource: candidate.source,
-			displaySurface: "empty-editor",
-			settledAtEpochMs: candidate.settledAtEpochMs,
-			quotaCheckedAtEpochMs: candidate.quotaCheckedAtEpochMs,
-			shownAtEpochMs: Date.now(),
-		},
-		suggestion,
-	);
+	const meta = {
+		parentTurnIndex: candidate.parentTurnIndex,
+		provider: candidate.provider,
+		model: candidate.model,
+		candidateSource: candidate.source,
+		displaySurface: "empty-editor" as const,
+		settledAtEpochMs: candidate.settledAtEpochMs,
+		quotaCheckedAtEpochMs: candidate.quotaCheckedAtEpochMs,
+		shownAtEpochMs: Date.now(),
+	};
+	if (input.refines) input.acceptTrace?.refined(meta, suggestion);
+	else input.acceptTrace?.shown(meta, suggestion);
 	input.requestRender?.();
 }
 
@@ -101,12 +121,11 @@ export function showInlineSuggestion(input: InlineSuggestionDisplayInput): void 
 	editor.setPlaceholder(input.basePlaceholder);
 	editor.setInlineSuggestion?.(input.suffix);
 	if (firstInline) {
-		const { provider, id } = candidate.record.model;
 		input.acceptTrace?.shown(
 			{
 				parentTurnIndex: candidate.parentTurnIndex,
-				provider,
-				model: id,
+				provider: candidate.provider,
+				model: candidate.model,
 				candidateSource: candidate.source,
 				displaySurface: "inline-prefix",
 				settledAtEpochMs: candidate.settledAtEpochMs,

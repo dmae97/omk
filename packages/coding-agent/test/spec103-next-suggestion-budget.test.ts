@@ -310,7 +310,7 @@ describe("spec 103 §2.2: usage settlement", () => {
 		})!;
 		await mainTurn(session, emit);
 		await c.onSettled("completed");
-		expect(c.suggestion).toBe("Run tests next.");
+		expect(c.title).toBe("Run tests next.");
 		c.dispose();
 		expect(settled).toHaveLength(1);
 		const input = suggestionMetricInput("sess", settled[0]!);
@@ -360,7 +360,7 @@ describe("spec 103 §2.2: usage settlement", () => {
 		await vi.waitFor(() => expect(suggestionCalls).toBe(1));
 		release?.();
 		await Promise.all([first, second]);
-		expect(c.suggestion).toBe("Run tests next.");
+		expect(c.title).toBe("Run tests next.");
 		expect(settled).toHaveLength(1);
 		c.dispose();
 	});
@@ -389,7 +389,7 @@ describe("spec 103 §2.2: usage settlement", () => {
 		await mainTurn(session, emit);
 		await c.onSettled("completed");
 		await c.onSettled("completed");
-		expect(c.suggestion).toBe("Run tests next.");
+		expect(c.title).toBe("Run tests next.");
 		expect(suggestionCalls).toBe(1);
 		expect(quotaReads).toBe(1);
 		expect(settled).toHaveLength(1);

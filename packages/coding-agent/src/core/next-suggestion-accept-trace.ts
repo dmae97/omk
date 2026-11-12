@@ -29,7 +29,8 @@ export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const SESSION_SALT_FILE = "suggestion-trace-salt";
 
 export type SentAs = "exact" | "edited" | "cleared" | "abandoned";
-export type SuggestionCandidateSource = "generated" | "cache";
+/** `local`: built by the host from session facts, with no model sentence. */
+export type SuggestionCandidateSource = "generated" | "cache" | "local";
 export type SuggestionDisplaySurface = "empty-editor" | "inline-prefix";
 /** Dispatch path at submit time: new run, steer into the running turn, or follow-up queued after it. */
 export type SentVia = "prompt" | "steer" | "followUp";
@@ -125,6 +126,12 @@ export class SuggestionAcceptTracker {
 	shown(meta: ShownSuggestionMeta, text: string): void {
 		this.flush(meta.shownAtEpochMs);
 		this.pending = { meta, text };
+	}
+
+	/** A model sentence refined the suggestion still on screen: same shown event, so no `abandoned` record. */
+	refined(meta: ShownSuggestionMeta, text: string): void {
+		if (!this.pending || this.pending.acceptedAtEpochMs !== undefined) this.shown(meta, text);
+		else this.pending = { meta: { ...meta, shownAtEpochMs: this.pending.meta.shownAtEpochMs }, text };
 	}
 
 	accepted(atEpochMs: number): void {

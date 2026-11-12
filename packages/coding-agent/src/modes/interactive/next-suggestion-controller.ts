@@ -3,9 +3,11 @@
  *
  * Installed only when `OMK_NEXT_SUGGESTIONS` is on; otherwise
  * {@link installNextSuggestions} returns without touching the session or the
- * editor. Tab inserts the suggestion without sending it. Any other key dismisses it
- * and cancels pending generation, except the opt-in exact-prefix inline path.
- * A result that arrives after the user typed or sent the next turn is discarded.
+ * editor. The placeholder shows the whole prompt (title, then input → verification →
+ * evidence → result) and Tab inserts exactly that text without sending it. Any other key
+ * dismisses it and cancels pending generation, except the opt-in exact-prefix inline path.
+ * A result that arrives after the user typed or sent the next turn is discarded, and Tab
+ * drops a suggestion whose session state changed since it was shown.
  */
 import type { StreamFn } from "omk-agent-core";
 import type { AssistantMessage } from "omk-ai";
@@ -17,10 +19,18 @@ import {
 	isPrefixSuggestionsEnabled,
 	projectSuggestion,
 	type ShownState,
-	showEmptySuggestion,
+	sameRevision,
 	showInlineSuggestion,
+	suggestionRevision,
 } from "./next-suggestion-prefix.ts";
-import { createShownState, lastAssistant, runSettledSuggestion } from "./next-suggestion-run.ts";
+import { initialSuggestion, presentSuggestion } from "./next-suggestion-present.ts";
+import {
+	type ComposedSuggestion,
+	lastAssistant,
+	runSettledSuggestion,
+	type SuggestionShowTiming,
+	sessionCanSend,
+} from "./next-suggestion-run.ts";
 import type { NextSuggestionOptions, SuggestionSessionPort } from "./next-suggestion-types.ts";
 import { type ActiveEditor, followActiveEditor, type SuggestionEditorPort } from "./suggestion-active-editor.ts";
 
@@ -78,6 +88,10 @@ export class NextSuggestionController {
 		});
 		editor.onBeforeInput = this.keyHandler;
 		if (options.acceptTrace) this.restorePrompt = traceQueuedDispatch(session, options.acceptTrace);
+		// No turn settles in front of a fresh controller (startup, resume, session switch): show the local one now.
+		const composed = initialSuggestion(session, editor, options);
+		const at = Date.now();
+		if (composed) this.present(composed, { parentTurnIndex: 0, settledAtEpochMs: at, quotaCheckedAtEpochMs: at });
 	}
 
 	/** Detach from the session and editor; restores the stream function if still ours. */
@@ -97,8 +111,18 @@ export class NextSuggestionController {
 		}
 	}
 
+	/** The full prompt on screen: what the placeholder shows and what Tab inserts. */
 	get suggestion(): string | undefined {
 		return this.shown?.text;
+	}
+
+	get title(): string | undefined {
+		return this.shown?.title;
+	}
+
+	private present(composed: ComposedSuggestion, timing: SuggestionShowTiming): void {
+		const { session, editor, basePlaceholder, options, shown: previous } = this;
+		this.shown = presentSuggestion({ session, editor, basePlaceholder, options, previous, composed, timing });
 	}
 
 	/** Dismiss the visible suggestion and cancel any pending generation. */
@@ -126,13 +150,21 @@ export class NextSuggestionController {
 		const trace = this.options.acceptTrace;
 		trace?.observeEditor(text, Date.now());
 
-		if (suggestion !== undefined && isTab(data) && !this.editor.isShowingAutocomplete()) {
+		if (shown && suggestion !== undefined && isTab(data) && !this.editor.isShowingAutocomplete()) {
 			const projection = projectSuggestion(suggestion, { text, cursor: this.editor.getCursor?.() });
+			const { messages } = this.session.agent.state;
+			const live = suggestionRevision(messages, this.session.model, sessionCanSend(this.session, this.options));
+			if (projection.kind !== "none" && !sameRevision(shown.revision, live)) {
+				// The session moved on (compaction, tree navigation, model change): never insert a stale prompt.
+				trace?.dismissed("other", Date.now());
+				this.cancel();
+				return false;
+			}
 			if (
 				projection.kind === "empty-editor" ||
 				(isPrefixSuggestionsEnabled(this.options.env) && projection.kind === "inline-suffix")
 			) {
-				this.candidates.dismiss(suggestion);
+				if (shown.task) this.candidates.dismiss(shown.task);
 				trace?.accepted(Date.now());
 				this.cancel();
 				if (projection.kind === "empty-editor") this.editor.setText(projection.text);
@@ -173,7 +205,7 @@ export class NextSuggestionController {
 
 		if (suggestion !== undefined) {
 			trace?.dismissed(dismissReasonForKey(data), Date.now());
-			this.candidates.dismiss(suggestion);
+			if (shown?.task) this.candidates.dismiss(shown.task);
 		}
 		this.cancel();
 		return false;
@@ -221,24 +253,7 @@ export class NextSuggestionController {
 			isCurrent: () => generation === this.generation,
 			editorEmpty: () => this.editor.getText().length === 0,
 			pendingOwner: this,
-			show: (text, record, parentTurnIndex, settledAtEpochMs, quotaCheckedAtEpochMs, source) => {
-				this.shown = createShownState(
-					text,
-					record,
-					parentTurnIndex,
-					settledAtEpochMs,
-					quotaCheckedAtEpochMs,
-					source,
-				);
-				showEmptySuggestion({
-					suggestion: text,
-					candidate: this.shown.candidate,
-					editor: this.editor,
-					basePlaceholder: this.basePlaceholder,
-					acceptTrace: this.options.acceptTrace,
-					requestRender: this.options.requestRender,
-				});
-			},
+			show: (composed, timing) => this.present(composed, timing),
 		});
 	}
 }
