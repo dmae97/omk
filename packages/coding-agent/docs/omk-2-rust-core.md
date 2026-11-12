@@ -1,8 +1,10 @@
 # OMK 2.0 Rust core plan
 
-Status: **plan, not implementation**. Recorded 2026-11-10 on branch `2.0.0` at
-`48fb8e33a8`. Workspace and published versions are 1.5.10 and stay there until the
-release gates in [the migration roadmap](omk-2-migration.md) pass. The contract for
+Status: **plan; stage K0 delivered, K1 to K5 not started**. Recorded 2026-11-10 on
+branch `2.0.0` at `48fb8e33a8`; K0 closed 2026-11-12 at `3632e73ffa` (see
+[K0 status](#k0-status-2026-11-12)). The workspace version on `2.0.0` is 1.5.11, and
+versions stay unchanged by this work until the release gates in
+[the migration roadmap](omk-2-migration.md) pass. The contract for
 stages K0 to K5 is spec 120, `specs/120-rust-core/spec.md`. Every decision behind
 it is recorded by ID in `specs/120-rust-core/decisions.md`, and the K0 work is laid
 out in `plan.md` and `tasks.md` in the same directory.
@@ -68,6 +70,10 @@ dependency.
 
 The Rust share of the codebase is under two percent. A full core port is a
 multi-release effort. Treat any schedule that assumes otherwise as unreviewed.
+
+After K0 (2026-11-12) there are five crates and 7,761 lines under `native/`: the
+four above plus `omk-contract` (3,739 lines). `omk-contract` has no production
+caller either; the Node core consumes only the TypeScript it generates.
 
 ## Remaining Pi surface
 
@@ -347,6 +353,42 @@ Rules that carry over unchanged:
 - The Orbit and gpui-flow desktop work. It is a client of the public RPC and does
   not depend on this plan.
 
+## K0 status, 2026-11-12
+
+Stage K0 (spec 120 tasks T001 to T012) is delivered on `2.0.0` through pull
+requests #417 and #418, with the G0 fixture re-recorded under T012. No production
+caller uses the contract crate, and the Node core behaves as before except for
+the #418 fix below.
+
+| Gate | Check | Result |
+| --- | --- | --- |
+| RC1 | `cargo test --locked --manifest-path native/omk-contract/Cargo.toml` | Pass. 20 G0 session records and 35 RPC transcript rows re-encode byte for byte |
+| PA2 | `node scripts/check-contract-drift.mjs` | Pass. 19 declaration files and `pi-compat.ts` match Rust; a hand edit of `pi-compat.ts` fails |
+| G0, every default-on flag `0` | `test/suite/g0-session-hash.ts`, base `48fb8e33a8` against head `3632e73ffa`, same script and `TMPDIR` | Identical: session `1dfa40a7d0f2…`, provider requests `63ab57c90c02…` |
+| G0, defaults | Same script, head against `origin/main` `b8f3d1a1ec` | Identical: session `2da8abecdb15…`, provider requests `26c289af3080…`. Against `48fb8e33a8` only four `skill_admission_turn` entries differ |
+| Capability matrix | `node scripts/check-capability-matrix.mjs` | Pass. 75 features and all 25 built-in extension files, one disposition each |
+| Rust in checks and CI | `npm run check:native`; CI jobs `cargo`, `rust-macos`, `rust-windows` | Pass locally and on [run 43146789487](https://github.com/dmae97/omk/actions/runs/43146789487) at `3632e73ffa` |
+| Repository | `npm run check` and `npm test` (CI `build-check-test`) | Pass on the same run |
+
+The default-mode G0 difference is intentional. The 2.0.0 snapshot made every prompt
+write a `skill_admission_turn` marker even when no skill was admitted; #418 writes
+it only when the prompt's scope holds an admission record, which restored the
+session bytes that `main` writes. The contract fixture `g0/session.jsonl` was
+re-recorded with `scripts/record-contract-fixtures.mjs` for the same reason (24 to
+20 records).
+
+Limits of this evidence:
+
+- macOS and Windows ran only the contract crate's format, Clippy and tests. That is
+  the K0 platform scope, not three-platform acceptance (PL1 is a K5 gate).
+- `record-contract-fixtures.mjs --check` is not portable. The faux provider counts
+  tokens as `ceil(chars / 4)` and the system prompt contains the checkout path, so a
+  checkout path of a different length changes the RPC transcript's usage numbers.
+  It passes from a path as long as the repository root, and it is in neither
+  `npm run check` nor CI.
+- The `secret-scan` CI job fails on `workflow_dispatch` runs because it scans every
+  ref's history; `gitleaks` over the K0 commit ranges found nothing.
+
 ## What is still open
 
 The owner's questions are closed in `specs/120-rust-core/decisions.md`. Three
@@ -359,6 +401,17 @@ things still need the owner before the stage that uses them:
    approved before K5 (F5).
 3. **The terminal UI engine.** Port the existing renderer or build on a Rust
    library. It is K6 work and does not block 2.0.0.
+
+K0 left review items that do not block K1:
+
+- The capability matrix classifies `identical-loop.ts` and
+  `finish-check-reverify-stage.ts` as refused, not as safety gates, although both
+  block tool calls. Each carries a `reviewNote`; F4 needs the owner's reading before
+  K3.
+- Refusing a default-on built-in under the Rust core needs a defined trigger and an
+  observable error before K5 (CM1).
+- The stagehand project extension now loads `@browserbasehq/stagehand` on first
+  browser use, an exception to the top-level import rule recorded in #418.
 
 ## Verification status of this document
 
@@ -373,3 +426,7 @@ were wrong and are fixed above.
 Not checked: what each internal import of a built-in extension does, whether every
 one of the 28 events has a blocking return path, and any claim about another project beyond what its
 README or the cited survey states. No code was built or run for this plan.
+
+Added 2026-11-12: the K0 status section and the post-K0 line count. Its results
+come from the commands it names, run on `3632e73ffa` and the cited CI run; the
+plan sections above were not re-verified.
