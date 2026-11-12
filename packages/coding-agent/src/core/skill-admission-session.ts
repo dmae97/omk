@@ -32,12 +32,25 @@ export interface SkillAdmissionStore {
 
 export const SKILL_ADMISSION_TURN_ENTRY_TYPE = "skill_admission_turn";
 
-/** New user prompts get ten slots; queued input and automatic continuations keep the current scope. */
+/**
+ * New user prompts get ten slots; queued input and automatic continuations keep the current scope.
+ * The marker only clears records, so it is written only when the scope since the last marker holds one:
+ * a session that never admits a skill keeps the entry sequence it had before markers existed.
+ */
 export function beginSkillAdmissionTurn(
 	sessionManager: SkillAdmissionStore,
 	env: NodeJS.ProcessEnv = process.env,
 ): void {
 	if (!isSkillAdmissionEnabled(env)) return;
+	const entries = sessionManager.getEntries();
+	let scopeHasRecord = false;
+	for (let i = entries.length - 1; i >= 0 && !scopeHasRecord; i--) {
+		const entry = entries[i];
+		if (entry.type !== "custom") continue;
+		if (entry.customType === SKILL_ADMISSION_TURN_ENTRY_TYPE) break;
+		scopeHasRecord = entry.customType === SKILL_ADMISSION_ENTRY_TYPE;
+	}
+	if (!scopeHasRecord) return;
 	sessionManager.appendCustomEntry(SKILL_ADMISSION_TURN_ENTRY_TYPE, {
 		schemaVersion: SKILL_ADMISSION_SCHEMA_VERSION,
 	});
