@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -8,7 +8,7 @@ describe("findGitPaths", () => {
 	let root: string;
 
 	beforeEach(() => {
-		root = mkdtempSync(join(tmpdir(), "omk-footer-git-paths-"));
+		root = realpathSync(mkdtempSync(join(tmpdir(), "omk-footer-git-paths-")));
 	});
 
 	afterEach(() => {
@@ -98,6 +98,14 @@ describe("findGitPaths", () => {
 		});
 	});
 
+	it("returns null when the gitdir of a linked worktree does not exist", () => {
+		const worktree = join(root, "missing-wt");
+		mkdirSync(worktree, { recursive: true });
+		writeFileSync(join(worktree, ".git"), `gitdir: ${join(root, "does-not-exist")}\n`);
+
+		expect(findGitPaths(worktree)).toBeNull();
+	});
+
 	it("returns null when the gitdir of a linked worktree has no HEAD", () => {
 		const { worktree } = makeLinkedWorktree({ head: false });
 
@@ -116,5 +124,12 @@ describe("findGitPaths", () => {
 			commonGitDir: gitDir,
 			headPath: join(gitDir, "HEAD"),
 		});
+	});
+
+	it("returns null when directory is outside any git repository", () => {
+		const plainDir = join(root, "not-a-repo");
+		mkdirSync(plainDir, { recursive: true });
+
+		expect(findGitPaths(plainDir)).toBeNull();
 	});
 });
