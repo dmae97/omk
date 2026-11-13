@@ -942,9 +942,9 @@ ctx.sessionManager.getBranch()        // Current branch
 ctx.sessionManager.getLeafId()        // Current leaf entry ID
 ```
 
-### ctx.modelRegistry / ctx.model
+### ctx.modelRegistry / ctx.model / ctx.scopedModels
 
-Access to models and API keys.
+Access to models and API keys. `ctx.scopedModels` is the read-only model list selected for the current session scope, including each entry's optional thinking level. It is empty when no scope is configured. Use `ctx.modelRegistry.getAvailable()` for all authenticated models visible to the registry.
 
 ### ctx.signal
 
@@ -1527,6 +1527,10 @@ Use `sourceInfo` as the canonical provenance field. Do not infer ownership from 
 
 Built-in interactive commands (like `/model` and `/settings`) are not included here. They are handled only in interactive
 mode and would not execute if sent via `prompt`.
+
+### omk.registerEntryRenderer(customType, renderer)
+
+Register a custom TUI renderer for a display-only `CustomEntry` written with `omk.appendEntry()`. Unlike `registerMessageRenderer()`, this does not create or convert an LLM message. The renderer receives the persisted entry, `{ expanded }`, and the current theme. Entries without a registered renderer remain hidden. See [Display-only entry rendering](#display-only-entry-rendering).
 
 ### omk.registerMessageRenderer(customType, renderer)
 
@@ -2608,6 +2612,21 @@ omk.sendMessage({
   details: { ... },            // Available in renderer
 });
 ```
+
+### Display-only entry rendering
+
+Use `omk.appendEntry()` for persisted companion content that must stay out of the model transcript, then register an entry renderer to show it:
+
+```typescript
+omk.registerEntryRenderer("plain-rewrite", (entry, _options, theme) => {
+  const data = entry.data as { text: string };
+  return new Text(theme.fg("accent", data.text), 0, 0);
+});
+
+omk.appendEntry("plain-rewrite", { text: "Plain-language companion" });
+```
+
+The entry is persisted and rendered for the current branch on transcript rebuilds. New entries render when appended. `buildSessionContext()` does not include them, so later model calls never receive the companion text. Use `sendMessage()` and `registerMessageRenderer()` instead when the content should participate in LLM context.
 
 ### Theme Colors
 

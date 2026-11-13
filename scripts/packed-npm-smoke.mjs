@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const packages = ["ai", "tui", "agent", "protocol", "adaptorch-wpl", "coding-agent", "book-to-skill"];
+const packages = ["ai", "tui", "agent", "protocol", "adaptorch-wpl", "coding-agent", "book-to-skill", "speak-like-you-eat"];
 const work = mkdtempSync(join(tmpdir(), "omk-packed-smoke-"));
 
 function run(command, args, options = {}) {

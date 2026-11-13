@@ -1,0 +1,69 @@
+{
+	"name": "omk-speak-like-you-eat",
+	"version": "1.5.11",
+	"description": "Optional OMK extension for plain-language companion rewrites",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./extension": {
+			"types": "./dist/extension.d.ts",
+			"import": "./dist/extension.js"
+		},
+		"./package.json": "./package.json"
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE",
+		"UPSTREAM-LICENSE",
+		"CHANGELOG.md",
+		"upstream.json"
+	],
+	"scripts": {
+		"clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+		"build": "tsgo -p tsconfig.build.json",
+		"test": "vitest --run",
+		"prepublishOnly": "npm run clean && npm run build"
+	},
+	"keywords": [
+		"omk",
+		"omk-package",
+		"omk-extension",
+		"plain-language",
+		"writing",
+		"rewrite"
+	],
+	"author": "ClassicMate",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/dmae97/omk.git",
+		"directory": "packages/speak-like-you-eat"
+	},
+	"engines": {
+		"node": ">=22.19.0"
+	},
+	"peerDependencies": {
+		"omk-ai": "*",
+		"omk-tui": "*",
+		"open-multi-agent-kit": "*"
+	},
+	"devDependencies": {
+		"@types/node": "24.12.4",
+		"omk-ai": "^1.5.11",
+		"omk-tui": "^1.5.11",
+		"open-multi-agent-kit": "^1.5.11",
+		"typescript": "5.9.3",
+		"vitest": "4.1.11"
+	},
+	"omk": {
+		"extensions": [
+			"./dist/extension.js"
+		]
+	}
+}

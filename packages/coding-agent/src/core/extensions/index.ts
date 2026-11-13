@@ -54,6 +54,7 @@ export type {
 	EditorFactory,
 	EditToolCallEvent,
 	EditToolResultEvent,
+	EntryRenderer,
 	ExecOptions,
 	ExecResult,
 	Extension,

@@ -19,5 +19,5 @@ it("every public workspace ships a changelog with its current version", () => {
 		assert.equal(release?.[1], pkg.version, `${pkg.name}: dated changelog must match package version`);
 		checked.push(pkg.name);
 	}
-	assert.equal(checked.length, 7);
+	assert.equal(checked.length, 8);
 });

@@ -22,6 +22,7 @@ const packages = [
 	"packages/adaptorch-wpl",
 	"packages/coding-agent",
 	"packages/book-to-skill",
+	"packages/speak-like-you-eat",
 ];
 
 // book-to-skill has its own upstream-derived LICENSE, so it must not be
@@ -31,6 +32,7 @@ const additionalNotices = new Map([
 	["packages/ai", ["DEVIN-NOTICE"]],
 	["packages/coding-agent", ["resources/pstack/LICENSE"]],
 	["packages/book-to-skill", ["vendor/book-to-skill/LICENSE.md"]],
+	["packages/speak-like-you-eat", ["UPSTREAM-LICENSE"]],
 ]);
 const rootLicense = readFileSync(join(repoRoot, "LICENSE"));
 

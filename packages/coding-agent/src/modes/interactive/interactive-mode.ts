@@ -120,7 +120,7 @@ import {
 } from "../../core/resource-governor-settings.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
-import { type SessionContext, SessionManager } from "../../core/session-manager.ts";
+import { type CustomEntry, type SessionContext, SessionManager } from "../../core/session-manager.ts";
 import type { SessionTermination } from "../../core/session-termination.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
@@ -145,6 +145,7 @@ import { CONTROL_PANEL_SIDEBAR_WIDTH } from "./components/control-panel-layout.t
 import { controlPanelStatusReaders } from "./components/control-panel-runtime-status.ts";
 import { CountdownTimer } from "./components/countdown-timer.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
+import { CustomEntryComponent } from "./components/custom-entry.ts";
 import { CustomMessageComponent } from "./components/custom-message.ts";
 import { DaxnutsComponent } from "./components/daxnuts.ts";
 import { DynamicBorder } from "./components/dynamic-border.ts";
@@ -1924,6 +1925,7 @@ export class InteractiveMode {
 			cwd: this.sessionManager.getCwd(),
 			sessionManager: this.sessionManager,
 			modelRegistry: this.session.modelRegistry,
+			scopedModels: this.session.scopedModels,
 			model: this.session.model,
 			thinkingLevel: this.session.thinkingLevel,
 			isIdle: () => !this.session.isStreaming,
@@ -3171,6 +3173,11 @@ export class InteractiveMode {
 				this.ui.requestRender();
 				break;
 
+			case "custom_entry":
+				this.addCustomEntryToChat(event.entry);
+				this.ui.requestRender();
+				break;
+
 			case "session_info_changed":
 				this.updateTerminalTitle();
 				this.footer.invalidate();
@@ -3595,6 +3602,14 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
+	private addCustomEntryToChat(entry: CustomEntry): void {
+		const renderer = this.session.extensionRunner.getEntryRenderer(entry.customType);
+		if (!renderer) return;
+		const component = new CustomEntryComponent(entry, renderer);
+		component.setExpanded(this.toolOutputExpanded);
+		this.chatContainer.addChild(component);
+	}
+
 	private addMessageToChat(message: AgentMessage, options?: { populateHistory?: boolean }): void {
 		switch (message.role) {
 			case "bashExecution": {
@@ -3755,6 +3770,10 @@ export class InteractiveMode {
 				// All other messages use standard rendering
 				this.addMessageToChat(message, options);
 			}
+		}
+
+		for (const entry of this.sessionManager.getBranch()) {
+			if (entry.type === "custom") this.addCustomEntryToChat(entry);
 		}
 
 		for (const [toolCallId, component] of renderedPendingTools) {

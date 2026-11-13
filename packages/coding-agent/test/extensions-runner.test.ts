@@ -645,6 +645,35 @@ describe("ExtensionRunner", () => {
 			const missing = runner.getMessageRenderer("not-exists");
 			expect(missing).toBeUndefined();
 		});
+
+		it("gets display-only entry renderers without converting entries to messages", async () => {
+			const extCode = `
+				export default function(pi) {
+					pi.registerEntryRenderer("slye.rewrite", (entry, options, theme) => null);
+				}
+			`;
+			fs.writeFileSync(path.join(extensionsDir, "entry-renderer.ts"), extCode);
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			expect(runner.getEntryRenderer("slye.rewrite")).toBeDefined();
+			expect(runner.getEntryRenderer("not-exists")).toBeUndefined();
+			expect(sessionManager.buildSessionContext().messages).toEqual([]);
+		});
+	});
+
+	describe("scoped model context", () => {
+		it("exposes the session's scoped models without changing the available-model registry", async () => {
+			modelRegistry.registerProvider("test", providerModelConfig);
+			const model = modelRegistry.find("test", "instant-model");
+			if (!model) throw new Error("fixture model missing");
+			const runner = new ExtensionRunner([], createExtensionRuntime(), tempDir, sessionManager, modelRegistry);
+			runner.bindCore(extensionActions, {
+				...extensionContextActions,
+				getScopedModels: () => [{ model, thinkingLevel: "off" }],
+			});
+			expect(runner.createContext().scopedModels).toEqual([{ model, thinkingLevel: "off" }]);
+			expect(runner.createContext().modelRegistry).toBe(modelRegistry);
+		});
 	});
 
 	describe("flags", () => {

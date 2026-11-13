@@ -288,7 +288,7 @@ import {
 	sessionInputTokenLimit,
 	transcriptHasImages,
 } from "./session-input-admission.ts";
-import type { BranchSummaryEntry, SessionManager } from "./session-manager.ts";
+import type { BranchSummaryEntry, CustomEntry, SessionManager } from "./session-manager.ts";
 import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.ts";
 import { SessionMemory } from "./session-memory.ts";
 import { acquireSessionOwnerLeaseSync, type SessionOwnerLease } from "./session-owner-lease.ts";
@@ -374,6 +374,7 @@ export type AgentSessionEvent =
 			steering: readonly string[];
 			followUp: readonly string[];
 	  }
+	| { type: "custom_entry"; entry: CustomEntry }
 	| { type: "compaction_start"; reason: "manual" | "threshold" | "overflow" }
 	| { type: "session_info_changed"; name: string | undefined }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
@@ -4383,8 +4384,10 @@ export class AgentSession {
 					});
 				},
 				appendEntry: (customType, data) => {
-					this.sessionManager.appendCustomEntry(customType, data);
+					const entryId = this.sessionManager.appendCustomEntry(customType, data);
 					this._recordEvidenceReceiptInvalidation(customType);
+					const entry = this.sessionManager.getEntry(entryId);
+					if (entry?.type === "custom") this._emit({ type: "custom_entry", entry });
 				},
 				setSessionName: (name) => {
 					this.setSessionName(name);
@@ -4414,6 +4417,7 @@ export class AgentSession {
 			},
 			{
 				getModel: () => this.model,
+				getScopedModels: () => this.scopedModels,
 				isIdle: () => !this._sessionBusy,
 				getSignal: () => this._extensionSettlement.signal ?? this.agent.signal,
 				abort: () => {

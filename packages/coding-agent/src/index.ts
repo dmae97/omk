@@ -526,6 +526,7 @@ export {
 	AssistantMessageComponent,
 	BashExecutionComponent,
 	BorderedLoader,
+	CustomEntryComponent,
 	BranchSummaryMessageComponent,
 	CompactionSummaryMessageComponent,
 	CustomEditor,

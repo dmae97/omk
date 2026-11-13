@@ -192,6 +192,11 @@ certification. Default activation, platform acceptance and publication remain
 separate gates. See [the staging contract](../../../specs/108-pi-decoupling/spec.md).
 The local migration roadmap is `packages/coding-agent/docs/omk-2-migration.md`.
 
+## First-party optional packages
+
+- [Book to Skill](book-to-skill.md) compiles documents into provenance-tracked agent skills without adding Python extractors to OMK core.
+- [Speak Like You Eat](speak-like-you-eat.md) adds display-only ELI5 and Light companion rewrites with manual and automatic modes. It is not loaded by default.
+
 ## Package Sources
 
 OMK accepts three source types in settings and `omk install`.

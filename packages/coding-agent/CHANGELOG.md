@@ -4,6 +4,7 @@
 
 ### Added
 
+- `omk-speak-like-you-eat` adapts SLYE 1.6.1 as an optional OMK package with manual and automatic plain-language companions, ELI5 and Light tabs, scoped model selection, trusted project settings, custom prompts, cancellation, and retry behavior. Extension contexts now expose session-scoped models, and `registerEntryRenderer()` renders persisted custom entries without adding them to LLM context. See [Speak Like You Eat](docs/speak-like-you-eat.md) and [Extensions](docs/extensions.md#display-only-entry-rendering).
 - Next-task suggestions (`OMK_NEXT_SUGGESTIONS`, flag, default off) now show a complete prompt in the empty editor: a title, then input, verification, evidence and result sections rendered by the host from the session transcript. A local suggestion appears before any provider call and stays when the model reply is empty, malformed, timed out or failed; Tab inserts exactly the displayed text and refuses a suggestion whose session state changed. Multi-line editor placeholders render below the cursor row. See [environment variables](docs/environment-variables.md).
 
 ### Changed

@@ -52,8 +52,10 @@ import type { KeybindingsManager } from "../keybindings.ts";
 import type { CustomMessage } from "../messages.ts";
 import type { ModelRegistry } from "../model-registry.ts";
 import type { AgentSettledEvent } from "../session-extension-settlement.ts";
+import type { EntryRenderer, MessageRenderOptions } from "./entry-renderer.ts";
 
 export type { AgentSettledEvent } from "../session-extension-settlement.ts";
+export type { EntryRenderer, MessageRenderOptions } from "./entry-renderer.ts";
 
 import type {
 	BranchSummaryEntry,
@@ -320,6 +322,8 @@ export interface ExtensionContext {
 	sessionManager: ReadonlySessionManager;
 	/** Model registry for API key resolution */
 	modelRegistry: ModelRegistry;
+	/** Models selected for this session's scope. Empty when no scope is configured. */
+	scopedModels?: ReadonlyArray<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 	/** Current model (may be undefined) */
 	model: Model<any> | undefined;
 	/** Current thinking level, when provided by the session runtime. */
@@ -1078,10 +1082,6 @@ export interface SessionBeforeTreeResult {
 // Message Rendering
 // ============================================================================
 
-export interface MessageRenderOptions {
-	expanded: boolean;
-}
-
 export type MessageRenderer<T = unknown> = (
 	message: CustomMessage<T>,
 	options: MessageRenderOptions,
@@ -1203,6 +1203,9 @@ export interface ExtensionAPI {
 	// =========================================================================
 	// Message Rendering
 	// =========================================================================
+
+	/** Register a custom renderer for display-only CustomEntry records. */
+	registerEntryRenderer<T = unknown>(customType: string, renderer: EntryRenderer<T>): void;
 
 	/** Register a custom renderer for CustomMessageEntry. */
 	registerMessageRenderer<T = unknown>(customType: string, renderer: MessageRenderer<T>): void;
@@ -1556,6 +1559,8 @@ export interface ExtensionActions {
  */
 export interface ExtensionContextActions {
 	getModel: () => Model<any> | undefined;
+	/** Session-scoped models; absent bindings expose an empty scope. */
+	getScopedModels?: () => ReadonlyArray<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 	isIdle: () => boolean;
 	getSignal: () => AbortSignal | undefined;
 	abort: () => void;
@@ -1611,6 +1616,7 @@ export interface Extension {
 	handlers: Map<string, HandlerFn[]>;
 	tools: Map<string, RegisteredTool>;
 	messageRenderers: Map<string, MessageRenderer>;
+	entryRenderers?: Map<string, EntryRenderer>;
 	commands: Map<string, RegisteredCommand>;
 	flags: Map<string, ExtensionFlag>;
 	shortcuts: Map<KeyId, ExtensionShortcut>;

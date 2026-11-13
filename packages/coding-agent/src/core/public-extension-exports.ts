@@ -19,6 +19,7 @@ export type {
 	ContextUsage,
 	CustomToolCallEvent,
 	EditToolCallEvent,
+	EntryRenderer,
 	ExecOptions,
 	ExecResult,
 	Extension,

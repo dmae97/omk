@@ -73,6 +73,7 @@ describe("release.mjs preflight and README sync", () => {
 			fixture,
 			[
 				"omk install npm:omk-book-to-skill@0.97.0",
+				"omk install npm:omk-speak-like-you-eat@0.97.0",
 				"Release notes: [v0.97.0](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v0.97.0.md).",
 			].join("\n"),
 		);
@@ -80,6 +81,7 @@ describe("release.mjs preflight and README sync", () => {
 			updateCodingAgentReadme("0.98.0", fixture);
 			const text = readFileSync(fixture, "utf8");
 			assert.match(text, /npm:omk-book-to-skill@0\.98\.0/);
+			assert.match(text, /npm:omk-speak-like-you-eat@0\.98\.0/);
 			assert.match(text, /RELEASE_NOTES_v0\.98\.0\.md/);
 			assert.doesNotMatch(text, /0\.97\.0/);
 		} finally {

@@ -62,6 +62,16 @@ omk install npm:omk-book-to-skill@1.5.11
 
 It provides compile, update, and verification commands plus a local SHA-256 provenance manifest. See [Book to Skill](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/book-to-skill.md).
 
+## Optional plain-language companions
+
+Install `omk-speak-like-you-eat` to add display-only ELI5 and Light rewrites without changing the original response or sending the companion back into LLM context:
+
+```bash
+omk install npm:omk-speak-like-you-eat@1.5.11
+```
+
+Use `/slye` for a manual rewrite, `/slye on` for automatic rewrites, and `ctrl+\` to switch versions. See [Speak Like You Eat](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/speak-like-you-eat.md).
+
 ## Providers & Models
 
 OMK includes provider adapters for Anthropic, OpenAI Codex, Google, OpenCode, Kimi, Qwen, ZAI/GLM, native xAI/Grok, and other compatible services. Availability depends on the credentials and endpoints configured on the current machine.

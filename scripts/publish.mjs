@@ -42,6 +42,7 @@ const packages = [
 	{ directory: "packages/adaptorch-wpl", name: "omk-adaptorch-wpl" },
 	{ directory: "packages/coding-agent", name: "open-multi-agent-kit" },
 	{ directory: "packages/book-to-skill", name: "omk-book-to-skill" },
+	{ directory: "packages/speak-like-you-eat", name: "omk-speak-like-you-eat" },
 ];
 
 const dryRun = process.argv.includes("--dry-run");

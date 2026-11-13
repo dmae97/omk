@@ -2,7 +2,7 @@
  * Extension runner - executes extensions and manages their lifecycle.
  */
 
-import type { AgentMessage } from "omk-agent-core";
+import type { AgentMessage, ThinkingLevel } from "omk-agent-core";
 import type { ImageContent, Model } from "omk-ai";
 import type { KeyId } from "omk-tui";
 import type { ResourceDiagnostic } from "../diagnostics.ts";
@@ -12,6 +12,7 @@ import type { SessionManager } from "../session-manager.ts";
 import type { SubagentLaneAuthority } from "../subagent-lane-authority.ts";
 import type { BuildSystemPromptOptions } from "../system-prompt.ts";
 import { contextHandlerMutatesMessages } from "./context-handler-options.ts";
+import { findRenderer } from "./entry-renderer.ts";
 import { noOpUIContext } from "./no-op-ui-context.ts";
 import type {
 	BeforeAgentStartEvent,
@@ -22,6 +23,7 @@ import type {
 	ContextEvent,
 	ContextEventResult,
 	ContextUsage,
+	EntryRenderer,
 	Extension,
 	ExtensionActions,
 	ExtensionCommandContext,
@@ -202,6 +204,7 @@ export class ExtensionRunner {
 	private modelRegistry: ModelRegistry;
 	private errorListeners: Set<ExtensionErrorListener> = new Set();
 	private getModel: () => Model<any> | undefined = () => undefined;
+	private getScopedModelsFn: () => ReadonlyArray<{ model: Model<any>; thinkingLevel?: ThinkingLevel }> = () => [];
 	private isIdleFn: () => boolean = () => true;
 	private getSignalFn: () => AbortSignal | undefined = () => undefined;
 	private waitForIdleFn: () => Promise<void> = async () => {};
@@ -267,6 +270,7 @@ export class ExtensionRunner {
 
 		// Context actions (required)
 		this.getModel = contextActions.getModel;
+		this.getScopedModelsFn = contextActions.getScopedModels ?? (() => []);
 		this.isIdleFn = contextActions.isIdle;
 		this.getSignalFn = contextActions.getSignal;
 		this.abortFn = contextActions.abort;
@@ -494,13 +498,11 @@ export class ExtensionRunner {
 	}
 
 	getMessageRenderer(customType: string): MessageRenderer | undefined {
-		for (const ext of this.extensions) {
-			const renderer = ext.messageRenderers.get(customType);
-			if (renderer) {
-				return renderer;
-			}
-		}
-		return undefined;
+		return findRenderer(this.extensions, (extension) => extension.messageRenderers.get(customType));
+	}
+
+	getEntryRenderer(customType: string): EntryRenderer | undefined {
+		return findRenderer(this.extensions, (extension) => extension.entryRenderers?.get(customType));
 	}
 
 	private resolveRegisteredCommands(): ResolvedCommand[] {
@@ -591,6 +593,10 @@ export class ExtensionRunner {
 			get modelRegistry() {
 				runner.assertActive();
 				return runner.modelRegistry;
+			},
+			get scopedModels() {
+				runner.assertActive();
+				return runner.getScopedModelsFn();
 			},
 			get model() {
 				runner.assertActive();

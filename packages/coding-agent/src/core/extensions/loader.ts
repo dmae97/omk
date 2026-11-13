@@ -31,6 +31,7 @@ import { createExtensionRuntime } from "./runtime.ts";
 export { createExtensionRuntime } from "./runtime.ts";
 
 import type {
+	EntryRenderer,
 	Extension,
 	ExtensionAPI,
 	ExtensionFactory,
@@ -278,6 +279,11 @@ function createExtensionAPI(
 			runtime.assertActive();
 			extension.messageRenderers.set(customType, renderer as MessageRenderer);
 		},
+		registerEntryRenderer<T>(customType: string, renderer: EntryRenderer<T>): void {
+			runtime.assertActive();
+			if (extension.entryRenderers === undefined) extension.entryRenderers = new Map();
+			extension.entryRenderers.set(customType, renderer as EntryRenderer);
+		},
 
 		// Flag access - checks extension registered it, reads from runtime
 		getFlag(name: string): boolean | string | undefined {
@@ -449,6 +455,7 @@ function createExtension(extensionPath: string, resolvedPath: string): Extension
 		handlers: new Map(),
 		tools: new Map(),
 		messageRenderers: new Map(),
+		entryRenderers: new Map(),
 		commands: new Map(),
 		flags: new Map(),
 		shortcuts: new Map(),

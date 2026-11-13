@@ -4,7 +4,7 @@ This document describes the source layout and the ownership contracts that must 
 
 ## Package boundaries
 
-Arrows mean ordinary production `dependencies` among the seven top-level package manifests, not execution authority. Peer, development and optional dependencies, and nested example workspaces, are outside this graph.
+Arrows mean ordinary production `dependencies` among the eight top-level package manifests, not execution authority. Peer, development and optional dependencies, and nested example workspaces, are outside this graph.
 
 ```mermaid
 flowchart TD
@@ -15,9 +15,10 @@ flowchart TD
   CLI --> WPL[omk-adaptorch-wpl]
   Agent --> AI
   Book[omk-book-to-skill]
+  Slye[omk-speak-like-you-eat]
 ```
 
-The protocol package is not a declared production dependency of agent-core. Book-to-skill has no edge under `dependencies` in this graph, but does declare the CLI as a peer/development dependency. The Go modules `initcheck` and `promptguard` are outside the npm lockstep graph. Do not infer additional imports, call paths or shared locks from the picture.
+The protocol package is not a declared production dependency of agent-core. Book-to-skill and Speak Like You Eat have no edges under `dependencies` in this graph, but declare the CLI and other host packages as peer/development dependencies. The Go modules `initcheck` and `promptguard` are outside the npm lockstep graph. Do not infer additional imports, call paths or shared locks from the picture.
 
 The CLI's [service factory](../src/core/agent-session-services.ts) supplies dependencies to [AgentSession](../src/core/agent-session.ts). The session coordinates input, context, model selection, extensions, resource admission and persistence. [Agent execution](../../agent/src/agent-loop.ts) runs turns and tool batches; [provider streaming](../../ai/src/stream.ts) resolves the provider implementation. CLI, TUI, print, RPC and SDK behavior needs entry-point testing, not only unit tests for the underlying reducers.
 
