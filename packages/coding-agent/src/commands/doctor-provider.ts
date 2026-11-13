@@ -367,7 +367,7 @@ interface TomlScanState {
 	containers: ("[" | "{")[];
 }
 
-interface KimiTomlProviderEntry {
+export interface KimiTomlProviderEntry {
 	name: string;
 	type?: string;
 	baseUrl?: string;
@@ -375,13 +375,13 @@ interface KimiTomlProviderEntry {
 	apiKey?: string;
 }
 
-interface KimiConfigValues {
+export interface KimiConfigValues {
 	baseUrl?: string;
 	modelName?: string;
 	providers: KimiTomlProviderEntry[];
 }
 
-type KimiConfigLoad =
+export type KimiConfigLoad =
 	| { kind: "missing" }
 	| { kind: "ok"; value: KimiConfigValues }
 	| { kind: "invalid"; line: number; reason: string };
@@ -700,7 +700,7 @@ function parseTomlTable(line: string): { components?: string[]; array?: boolean;
  * but extracts only root `base_url`/`model_name` and `[providers.<name>]` string fields. Fixed
  * line-number errors ensure credentials and other file content are never echoed.
  */
-function loadKimiConfig(path: string): KimiConfigLoad {
+export function loadKimiConfig(path: string): KimiConfigLoad {
 	if (!existsSync(path)) return { kind: "missing" };
 	let content: string;
 	try {
@@ -785,23 +785,37 @@ function nonemptyEnv(name: string): string | undefined {
 	return value && value.length > 0 ? value : undefined;
 }
 
-interface KimiResolution {
+export interface KimiResolution {
 	baseUrl?: string;
 	modelName?: string;
 	baseUrlSource?: "kimi-environment" | "kimi-config-toml";
-	/** First `[providers.<name>]` entry with `type = "openai_legacy"` and a base URL (§10.2). */
 	customProvider?: { name: string; baseUrl: string; modelName?: string; apiKey?: string };
 	failure?: { line: number; reason: string };
 }
 
-function resolveKimiConfig(kimiConfigPath: string | undefined): KimiResolution {
+export function resolveKimiConfig(kimiConfigPath: string | undefined, targetProviderId?: string): KimiResolution {
 	const path = kimiConfigPath ?? join(homedir(), ".kimi", "config.toml");
 	const loaded = loadKimiConfig(path);
 	if (loaded.kind === "invalid") return { failure: { line: loaded.line, reason: loaded.reason } };
 	const fileValues: KimiConfigValues = loaded.kind === "ok" ? loaded.value : { providers: [] };
+	const isCustom = targetProviderId !== undefined;
+	const custom = fileValues.providers.find(
+		(entry) => (isCustom ? entry.name === targetProviderId : true) && entry.type === "openai_legacy" && entry.baseUrl,
+	);
+	if (isCustom) {
+		return {
+			customProvider: custom
+				? {
+						name: custom.name,
+						baseUrl: custom.baseUrl as string,
+						modelName: custom.modelName,
+						apiKey: custom.apiKey,
+					}
+				: undefined,
+		};
+	}
 	const envBaseUrl = nonemptyEnv("KIMI_BASE_URL");
 	const envModelName = nonemptyEnv("KIMI_MODEL_NAME");
-	const custom = fileValues.providers.find((entry) => entry.type === "openai_legacy" && entry.baseUrl);
 	return {
 		baseUrl: envBaseUrl ?? fileValues.baseUrl,
 		modelName: envModelName ?? fileValues.modelName,
@@ -1328,8 +1342,18 @@ function resolveProviderTarget(
 		return { failure: unresolvedFailure(providerId, level, "auth-config-invalid", "auth.json is invalid") };
 	}
 
-	const kimi = providerId === KIMI_PROVIDER_ID ? resolveKimiConfig(options.kimiConfigPath) : {};
-	if (kimi.failure) {
+	const configured = modelsConfig.kind === "ok" ? modelsConfig.value.providers[providerId] : undefined;
+	const nativeProviders = getProviders();
+	const isNative = nativeProviders.includes(providerId as KnownProvider);
+	const storedAuth = authConfig.kind === "ok" && authConfig.value[providerId] !== undefined;
+	const environmentAuth = findEnvKeys(providerId) !== undefined;
+
+	const isKimi = providerId === KIMI_PROVIDER_ID;
+	const kimi =
+		isKimi || (!configured && !isNative && !storedAuth && !environmentAuth)
+			? resolveKimiConfig(options.kimiConfigPath, isKimi ? undefined : providerId)
+			: {};
+	if (isKimi && kimi.failure) {
 		return {
 			failure: unresolvedFailure(
 				providerId,
@@ -1340,9 +1364,6 @@ function resolveProviderTarget(
 		};
 	}
 
-	const configured = modelsConfig.kind === "ok" ? modelsConfig.value.providers[providerId] : undefined;
-	const nativeProviders = getProviders();
-	const isNative = nativeProviders.includes(providerId as KnownProvider);
 	const nativeModels = isNative ? (getModels(providerId as KnownProvider) as Model<Api>[]) : [];
 	const configuredModels = configured?.models ?? [];
 	// At Level 2 the probe model is the paid target and therefore drives endpoint resolution.
@@ -1393,8 +1414,6 @@ function resolveProviderTarget(
 		baseUrl = baseUrl ?? nativeModel?.baseUrl;
 	}
 
-	const storedAuth = authConfig.kind === "ok" && authConfig.value[providerId] !== undefined;
-	const environmentAuth = findEnvKeys(providerId) !== undefined;
 	const configuredAuth = configured?.apiKey ? isConfigValueConfigured(configured.apiKey) : false;
 	const headerAuth = configured?.headers !== undefined && Object.keys(configured.headers).length > 0;
 	const customApiKey = kimiCustomSelected ? kimi.customProvider?.apiKey : undefined;
@@ -1414,7 +1433,7 @@ function resolveProviderTarget(
 					? "models.json"
 					: undefined;
 
-	if (!configured && !isNative && !storedAuth && !environmentAuth) {
+	if (!configured && !isNative && !storedAuth && !environmentAuth && !kimiCustomSelected) {
 		return { failure: unresolvedFailure(providerId, level, "provider-not-found", "Provider was not found") };
 	}
 
