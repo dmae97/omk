@@ -564,6 +564,59 @@ Or set `GOOGLE_APPLICATION_CREDENTIALS` to a service account key file.
 
 **Via extensions:** For providers that need custom API implementations or OAuth flows, create an extension. See [custom-provider.md](custom-provider.md) and [examples/extensions/custom-provider-gitlab-duo](../examples/extensions/custom-provider-gitlab-duo/).
 
+### Custom OpenAI-Compatible Providers
+
+You can connect local or custom servers (Ollama, LM Studio, LocalAI, vLLM, or custom proxies) in two ways:
+
+#### 1. In `models.json`
+
+Configure the provider under `~/.omk/agent/models.json`:
+
+```json
+{
+  "providers": {
+    "ollama": {
+      "baseUrl": "http://localhost:11434/v1",
+      "apiKey": "ollama",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "llama3",
+          "name": "Llama 3"
+        }
+      ]
+    }
+  }
+}
+```
+
+Key points:
+- `api`: Specify `"openai-completions"` for standard `/v1/chat/completions` endpoints.
+- `baseUrl`: The root API endpoint URL (e.g. `http://localhost:11434/v1`).
+- `apiKey`: If your endpoint does not require authentication, supply a placeholder string (e.g. `"ollama"` or `"none"`).
+
+#### 2. In `~/.kimi/config.toml`
+
+OMK also recognizes OpenAI-compatible legacy providers configured in `~/.kimi/config.toml`:
+
+```toml
+[providers.ollama]
+type = "openai_legacy"
+base_url = "http://localhost:11434/v1"
+model_name = "llama3"
+api_key = "optional-key"
+```
+
+When configured with `type = "openai_legacy"`, OMK treats the endpoint as a custom OpenAI-compatible provider, skipping native-only credential constraints.
+
+#### Diagnostics & Health Checks
+
+Use OMK's doctor commands to verify your setup:
+
+- **General diagnostic**: Run `omk doctor` (or `omk doctor --json`). It inspects `models.json` and `~/.kimi/config.toml`, verifies provider credentials and default model resolution, and avoids false warnings about missing cloud credentials.
+- **Provider-specific diagnostic**: Run `omk provider doctor <provider-id>` (e.g., `omk provider doctor ollama` or `omk provider doctor kimi-coding`).
+- **Endpoint connectivity**: Add `--level 1` (e.g. `omk provider doctor ollama --level 1`) to perform non-destructive HTTP GET health probes against the `/models` endpoint.
+
 ## Resolution Order
 
 When resolving credentials for a provider:

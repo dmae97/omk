@@ -20,6 +20,7 @@ import { AMBIENT_CREDENTIAL_PROVIDERS } from "../core/provider-default-models.ts
 import { detectSandboxBackend } from "../core/sandbox/backend.ts";
 import { resolveBashSandboxMode } from "../core/sandbox/default-policy.ts";
 import { getToolPath } from "../utils/tools-manager.ts";
+import { findCustomDefaultModel, findCustomProviders, isConfiguredCredentialSource } from "./onboard-doctor-custom.ts";
 
 export interface DoctorContext {
 	readonly agentDir: string;
@@ -107,6 +108,7 @@ const credentialsCheck: CheckNode<DoctorContext> = {
 			if (keys?.length) envProviders.push(`${provider} (${keys[0]})`);
 			else if (AMBIENT_CREDENTIAL_PROVIDERS.has(provider) && getEnvApiKey(provider)) ambientProviders.push(provider);
 		}
+		const customProviders = findCustomProviders(context.agentDir, context.env, readJsonObject);
 		const adoptable: string[] = [];
 		for (const [provider, sources] of Object.entries(PROVIDER_CREDENTIAL_SOURCES)) {
 			for (const source of sources) {
@@ -115,13 +117,20 @@ const credentialsCheck: CheckNode<DoctorContext> = {
 				}
 			}
 		}
-		const data = { stored: storedProviders, environment: envProviders, ambient: ambientProviders, adoptable };
+		const data = {
+			stored: storedProviders,
+			environment: envProviders,
+			custom: customProviders,
+			ambient: ambientProviders,
+			adoptable,
+		};
 		const parts = [
 			storedProviders.length > 0 ? `stored: ${storedProviders.join(", ")}` : undefined,
 			envProviders.length > 0 ? `env: ${envProviders.join(", ")}` : undefined,
+			customProviders.length > 0 ? `custom: ${customProviders.join(", ")}` : undefined,
 			ambientProviders.length > 0 ? `ambient: ${ambientProviders.join(", ")}` : undefined,
 		].filter((part): part is string => part !== undefined);
-		if (storedProviders.length > 0 || envProviders.length > 0)
+		if (storedProviders.length > 0 || envProviders.length > 0 || customProviders.length > 0)
 			return { status: "pass", summary: parts.join(" · "), data };
 		const reuse = adoptable.length > 0 ? ` Or reuse an existing login: ${adoptable.join("; ")}.` : "";
 		if (ambientProviders.length > 0) {
@@ -158,12 +167,19 @@ const defaultModelCheck: CheckNode<DoctorContext> = {
 			modelRegistry: registry,
 		});
 		const model = result.model;
-		if (!model)
+		if (!model) {
+			const customFallback = findCustomDefaultModel(context.env, registry);
+			if (customFallback) return { status: "pass", summary: customFallback.summary };
 			return { status: "fail", summary: "no usable model", fix: "Configure credentials first (see above)." };
+		}
 		const ambient = AMBIENT_CREDENTIAL_PROVIDERS.has(model.provider);
-		const source = auth.getAuthStatus(model.provider).source ?? (ambient ? "ambient" : "environment");
+		const registryAuthStatus = registry.getProviderAuthStatus(model.provider);
+		let source: string | undefined = registryAuthStatus.source ?? auth.getAuthStatus(model.provider).source;
+		if (!source && !getProviders().includes(model.provider as any)) source = "models.json";
+		source = source ?? (ambient ? "ambient" : "environment");
 		const summary = `${model.provider}/${model.id} (credential: ${source})`;
-		if (ambient && source !== "stored" && source !== "runtime") {
+		const isConfiguredSource = isConfiguredCredentialSource(source);
+		if (ambient && !isConfiguredSource) {
 			return {
 				status: "warn",
 				summary: `${summary} chosen from ambient cloud credentials`,
