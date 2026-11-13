@@ -8,6 +8,7 @@ OMK packages bundle extensions, skills, prompt templates, and themes so you can 
 
 - [Install and Manage](#install-and-manage)
 - [Pi Compatibility and Package Doctor](#pi-compatibility-and-package-doctor)
+- [First-party Optional Packages](#first-party-optional-packages)
 - [Package Sources](#package-sources)
 - [Creating a OMK Package](#creating-a-omk-package)
 - [Package Structure](#package-structure)
@@ -195,7 +196,15 @@ The local migration roadmap is `packages/coding-agent/docs/omk-2-migration.md`.
 ## First-party optional packages
 
 - [Book to Skill](book-to-skill.md) compiles documents into provenance-tracked agent skills without adding Python extractors to OMK core.
-- [Speak Like You Eat](speak-like-you-eat.md) adds display-only ELI5 and Light companion rewrites with manual and automatic modes. It is not loaded by default.
+- [Speak Like You Eat](#speak-like-you-eat) adds display-only ELI5 and Light companion rewrites with manual and automatic modes. It is not loaded by default.
+
+### Speak Like You Eat
+
+From a source checkout, build the package with `npm run build --workspace packages/speak-like-you-eat`, then install it with `omk install ./packages/speak-like-you-eat`. Run `/reload` in an existing session.
+
+Use `/slye model` to choose an authenticated model, `/slye` to rewrite the latest eligible response manually, and `/slye on` or `/slye off` to control automatic rewriting. Settings live in `~/.omk/agent/slye.json` or `.omk/slye.json` in a trusted project; the trusted project file overrides global settings. Untrusted project settings are ignored.
+
+The companion leaves the original response and later LLM context unchanged. Each rewrite makes two provider requests, one for ELI5 and one for Light, with separate cost and latency. Press `ctrl+\` to switch the cards. SLYE is inactive in print, JSON and RPC modes.
 
 ## Package Sources
 

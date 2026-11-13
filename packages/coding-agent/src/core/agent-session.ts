@@ -103,7 +103,7 @@ import { createMemoryContextBudgetCacheProviderV2 } from "./context-budget-v2-ca
 import type { ContextBudgetCacheProviderV2 } from "./context-budget-v2-types.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { devinPlaybookAppendForProvider } from "./devin-harness.ts";
-import { EvidenceSessionShutdown } from "./evidence-lifecycle-session.ts";
+import { EVIDENCE_RECEIPT_CUSTOM_TYPES, EvidenceSessionShutdown } from "./evidence-lifecycle-session.ts";
 import type { ToolHtmlRenderer } from "./export-html/index.ts";
 import {
 	type ContextUsage,
@@ -978,12 +978,6 @@ export class AgentSession {
 			return;
 		}
 		this._contextBudgetCacheProvider?.setInvalidationSnapshot?.(result.snapshot);
-	}
-
-	private _recordEvidenceReceiptInvalidation(customType: string): void {
-		if (customType === "evidence_receipt" || customType === "evidence-receipt") {
-			this._invalidateContextBudgetCache({ type: "evidenceReceipt" });
-		}
 	}
 
 	private _sessionRevision(): number {
@@ -2851,7 +2845,8 @@ export class AgentSession {
 			details: message.details,
 			timestamp: Date.now(),
 		} satisfies CustomMessage<T>;
-		this._recordEvidenceReceiptInvalidation(message.customType);
+		if (EVIDENCE_RECEIPT_CUSTOM_TYPES.has(message.customType))
+			this._invalidateContextBudgetCache({ type: "evidenceReceipt" });
 		if (options?.deliverAs === "nextTurn") {
 			this._pendingNextTurnMessages.push(appMessage);
 		} else if (this.isStreaming || this.isRetrying || (options?.triggerTurn && this._runOwnsSession)) {
@@ -4385,7 +4380,8 @@ export class AgentSession {
 				},
 				appendEntry: (customType, data) => {
 					const entryId = this.sessionManager.appendCustomEntry(customType, data);
-					this._recordEvidenceReceiptInvalidation(customType);
+					if (EVIDENCE_RECEIPT_CUSTOM_TYPES.has(customType))
+						this._invalidateContextBudgetCache({ type: "evidenceReceipt" });
 					const entry = this.sessionManager.getEntry(entryId);
 					if (entry?.type === "custom") this._emit({ type: "custom_entry", entry });
 				},

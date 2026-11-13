@@ -13,6 +13,7 @@ import { withEvidenceSession } from "./evidence-lifecycle-scope.ts";
 import { SessionShutdown } from "./session-shutdown.ts";
 
 export const EVIDENCE_LIFECYCLE_ENTRY_TYPE = "evidence_lifecycle";
+export const EVIDENCE_RECEIPT_CUSTOM_TYPES: ReadonlySet<string> = new Set(["evidence_receipt", "evidence-receipt"]);
 
 export interface EvidenceLifecycleEntryData {
 	readonly schemaVersion: 1;

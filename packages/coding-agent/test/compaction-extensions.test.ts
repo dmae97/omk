@@ -76,6 +76,7 @@ describe.skipIf(!API_KEY)("Compaction extensions", () => {
 			path: "test-extension",
 			resolvedPath: "/test/test-extension.ts",
 			sourceInfo: createSyntheticSourceInfo("<test:test-extension>", { source: "test" }),
+			entryRenderers: new Map(),
 			handlers,
 			tools: new Map(),
 			messageRenderers: new Map(),
@@ -231,6 +232,7 @@ describe.skipIf(!API_KEY)("Compaction extensions", () => {
 			path: "throwing-extension",
 			resolvedPath: "/test/throwing-extension.ts",
 			sourceInfo: createSyntheticSourceInfo("<test:throwing-extension>", { source: "test" }),
+			entryRenderers: new Map(),
 			handlers: new Map<string, ((event: any, ctx: any) => Promise<any>)[]>([
 				[
 					"session_before_compact",
@@ -280,6 +282,7 @@ describe.skipIf(!API_KEY)("Compaction extensions", () => {
 			path: "extension1",
 			resolvedPath: "/test/extension1.ts",
 			sourceInfo: createSyntheticSourceInfo("<test:extension1>", { source: "test" }),
+			entryRenderers: new Map(),
 			handlers: new Map<string, ((event: any, ctx: any) => Promise<any>)[]>([
 				[
 					"session_before_compact",
@@ -311,6 +314,7 @@ describe.skipIf(!API_KEY)("Compaction extensions", () => {
 			path: "extension2",
 			resolvedPath: "/test/extension2.ts",
 			sourceInfo: createSyntheticSourceInfo("<test:extension2>", { source: "test" }),
+			entryRenderers: new Map(),
 			handlers: new Map<string, ((event: any, ctx: any) => Promise<any>)[]>([
 				[
 					"session_before_compact",

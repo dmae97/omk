@@ -61,6 +61,9 @@ extend only this new oracle, not the old provider or K0 goldens.
 
 ## Observed verification
 
+These are the original slice's observations. The later owner-requested whole-tree
+repair and passing full check are recorded in [the follow-up](#follow-up-whole-tree-check-repair).
+
 - `/tmp/omk-k1-json-red.log`: the initial scaffold did not compile because the new
   API/observation field did not exist. This is **not** valid behavioral RED evidence.
 - Isolated compiled probes then disabled invalid-escape repair and replaced partial
@@ -125,3 +128,69 @@ HOME, `CARGO_NET_OFFLINE=true` and an allowlisted PATH. No API/OAuth operation o
 live-provider conformance is tested. GNU Linux is the only native host exercised;
 macOS/Windows and the other reviewed target/platform cells remain unverified.
 No binary is published, and no commit/push is performed.
+
+## Follow-up whole-tree check repair
+
+The owner subsequently requested repair of the remaining repository check errors
+while preserving existing work, goldens and reviewed dependencies.
+
+Fresh inspection found that concurrent changes had already fixed the module-size
+ratchet and workspace diagram. Those changes and the new optional-field host
+compatibility handling were preserved, not replaced or baselined away. This pass
+completed extension/compaction test fixtures, formatted the affected registration
+and SLYE settings code, and added legacy registry/model-scope regression tests.
+The SLYE package link now points to an actual quick-start section in the existing
+tracked `packages.md`; the separate untracked guide remains intact. Neither the
+Git index nor the documentation checker was changed to hide a missing target.
+
+Observed results:
+
+- Full `npm run check`: **exit 0**, including native fmt/Clippy/locked tests, all
+  six resolution graphs, fresh K0/K1 recordings, TypeScript, documentation guards
+  and browser smoke. Log: `/tmp/omk-check-repair-full-check.log`.
+- Constitution tests: 721 total, 690 passed, 31 skipped, zero failures.
+- Targeted coding-agent extension/compaction tests: 45 passed, 8 skipped. Live
+  compaction cases stayed disabled in the credential-free environment.
+- SLYE synthetic tests: 33 passed, zero skips; no provider requests.
+- Request-start SHA-256 inventory: all 21 files unchanged, covering both provider
+  corpora, K0 goldens/manifest, npm/Cargo locks, approved provider manifest, review
+  JSON, dependency notices and the module-size baseline. This preserves the state
+  at the start of the follow-up, not an older snapshot over concurrent work.
+  Receipt: `/tmp/omk-check-repair-preservation-result.json`.
+- `git diff --check`: exit 0. No dependency, golden, threshold, skip policy or
+  workflow was changed to obtain this result. No commit, push or publication.
+
+This supersedes the earlier full-check blocker, not the native-platform or live
+provider verification limits. The existing skipped R/Bun/live-provider cases and
+non-Linux target acceptance remain outside the observed pass.
+
+Suggested change message: `확장 호환 타입과 패키지 문서 일관성을 복구하고 전체 검사를 통과시킨다`.
+
+### Deferred repair commit after SLYE/custom-entry
+
+Owner authorization now covers committing SLYE/custom-entry prerequisites first,
+then these check repairs separately. Prerequisite commit `a247169725` contains the
+optional package, public entry-renderer/scoped-model API and package integration.
+Its selected snapshot passed TypeScript and 75 synthetic tests. Review also found
+a start-time abort race; the new failing regression was fixed without provider calls.
+
+This repair retains the module-size baseline and reuses the existing two evidence
+receipt identifiers to remove a redundant AgentSession helper. The receipt cache
+invalidation behavior stays unchanged. Fixture defaults, legacy registry/scope
+regressions, package-document navigation and this verification record are separate
+from the prerequisite commit. K0 goldens, K1 code/approval/locks and unrelated G1
+work are excluded.
+
+The configured `.husky/_` directory is absent in this checkout. This, rather than
+isolated HOME, explains the earlier missing automatic hook. The unchanged project
+pre-commit script was explicitly run after the prerequisite commit: exit 0,
+721 constitution cases (690 passed, 31 skipped). The repair commit uses a temporary
+executable hook that delegates to that same script; no repository hook, permanent
+configuration, threshold or skip policy is weakened. No live API, publishing or
+push is authorized by these local commits.
+
+The combined selected snapshot, excluding unrelated working-tree changes, passes
+TypeScript and the unchanged module-size ratchet. Focused host/cache regressions
+pass 50 cases (8 live cases skipped); SLYE passes 34 synthetic cases. Logs are
+`/tmp/omk-slye-repair-types.log`, `/tmp/omk-slye-repair-size.log`,
+`/tmp/omk-slye-repair-core-tests.log` and `/tmp/omk-slye-repair-package-tests.log`.
