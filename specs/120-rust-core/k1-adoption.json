@@ -1,0 +1,13 @@
+{
+  "schema": "omk.k1.adoption.v1",
+  "date": "2026-11-12",
+  "scope": "first Anthropic synthetic recorder and Rust replay, not all K1",
+  "authorization": "Owner explicitly approved B1 reviewed K1 bundle, incorporation and builds under recorded license and platform restrictions.",
+  "reviewSha256": "609eb2e6889488a0c80bd3501d514daf14757b40a67ae9d419f061fe5d30cf93",
+  "noticesSha256": "e1b274d60e25b12d9ff5ea8c7841080823b4e497977d1817c053aa9ab4bfe884",
+  "fixtureSha256": "9a0485fa14c1da7904c80f7b80630e0416f493b39663843ea21872d047e1f46a",
+  "nativeAcceptance": {
+    "x86_64-unknown-linux-gnu": "local build, fmt, Clippy -D warnings and offline replay tests passed; not full PL1 acceptance",
+    "otherFiveTargets": "not run; native hosts required"
+  }
+}

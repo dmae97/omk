@@ -106,6 +106,33 @@ acceptance in spec 120.
 | H1 | Committing this session's documents | Commit the new files and the one-line `specs/README.md` row. Files that also hold other sessions' uncommitted changes stay uncommitted |
 | H2 | Features from the harness survey | None approved. The survey failed its audit: no metric, baseline or threshold. Each feature needs its own spec |
 
+## J. K1 resolution-only review, 2026-11-12
+
+| ID | Decision | Chosen |
+| --- | --- | --- |
+| J1 | Permit a temporary dependency-resolution lockfile before final B1 approval | **Owner-approved narrow exception.** The owner explicitly approved generating a dependency-resolution lockfile in a temporary directory and reviewing K1 transitives, without building or incorporating dependencies into the project. |
+
+J1 allows an isolated review manifest, registry metadata/source downloads,
+`cargo generate-lockfile`, `cargo metadata` and `cargo tree`. It does not approve
+compilation, execution of dependency build scripts or procedural macros, changes
+to production Cargo manifests/lockfiles, release, or the final B1 bundle. Sanitized
+review records may be retained in this spec; the actual lockfile stays temporary.
+The proposed pins, observed graph and remaining risks are recorded in
+[k1-dependency-review.md](k1-dependency-review.md).
+
+## J2. K1 B1 adoption, 2026-11-12
+
+| ID | Decision | Chosen |
+| --- | --- | --- |
+| J2 | Approve the reviewed K1 bundle and its first implementation unit | **Owner-approved.** The owner explicitly approved B1, project incorporation, builds, the first synthetic Anthropic recorder and Rust replay under the review's license and platform constraints. |
+
+J2 applies to the exact frozen graph in [the B1 review](k1-dependency-review.md),
+not a fresh dependency resolution or the rest of K1. The historical J1 review JSON
+is unchanged. [The adoption record](k1-adoption.md) records the owner authorization,
+license retention, synthetic oracle, replay scope and remaining native-platform
+gates. No publication, live provider/OAuth call, workflow change, new bundle or
+full RC2/PL1 acceptance is authorized or implied.
+
 ## Still open
 
 - The terminal UI engine: port the existing renderer or build on a Rust library. It is K6

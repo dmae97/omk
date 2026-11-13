@@ -57,7 +57,7 @@
 		"check:clock-lock": "node scripts/check-clock-and-lock.mjs",
 		"inventory:pi": "node scripts/pi-inventory.mjs",
 		"check:pi-inventory": "node scripts/pi-inventory.mjs --check",
-		"check:native": "node scripts/check-native.mjs"
+		"check:native": "node scripts/check-provider-dependencies.mjs --graphs && node scripts/check-native.mjs && node scripts/record-provider-fixtures.mjs --check && node scripts/record-anthropic-json-fixtures.mjs --check"
 	},
 	"knip": {
 		"ignore": [
