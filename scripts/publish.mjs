@@ -32,6 +32,17 @@ export function latestMismatches(version, latestByName) {
 	return Object.entries(latestByName).filter(([, latest]) => latest !== version).map(([name]) => name);
 }
 
+/** npm can take minutes to expose a fresh publish (404 or the old `latest`); poll a bounded number of times before failing. */
+export async function waitForLatest(version, names, readLatest, { attempts = 30, delayMs = 30_000, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
+	let mismatched = names;
+	for (let attempt = 1; ; attempt++) {
+		mismatched = latestMismatches(version, Object.fromEntries(mismatched.map((name) => [name, readLatest(name)])));
+		if (mismatched.length === 0 || attempt >= attempts) return mismatched;
+		console.log(`npm latest is not ${version} yet for: ${mismatched.join(", ")}; retry ${attempt}/${attempts - 1} in ${delayMs / 1000}s`);
+		await sleep(delayMs);
+	}
+}
+
 const isMain = Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 const packages = [
@@ -222,8 +233,16 @@ if (isMain) {
 		console.log();
 	}
 	if (!dryRun) {
-		const latest = Object.fromEntries(packages.map((pkg) => [pkg.name, registryJson([pkg.name, "dist-tags.latest"])]));
-		const mismatched = latestMismatches(versions[0], latest);
+		const readLatest = (name) => {
+			try {
+				return registryJson([name, "dist-tags.latest"]);
+			} catch (error) {
+				// A first-ever publish 404s until the registry catches up; other failures stay fatal.
+				if (String(error?.message).includes("E404")) return null;
+				throw error;
+			}
+		};
+		const mismatched = await waitForLatest(versions[0], packages.map((pkg) => pkg.name), readLatest);
 		if (mismatched.length > 0) throw new Error(`npm latest does not match ${versions[0]} for: ${mismatched.join(", ")}`);
 	}
 }
