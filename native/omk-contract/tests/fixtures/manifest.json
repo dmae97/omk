@@ -2,7 +2,7 @@
   "schema": "omk.contract.fixtures.v2",
   "generatedBy": "scripts/record-contract-fixtures.mjs",
   "origin": {
-    "head": "3632e73ffa33b3c3373835c26d03f950d8593fad",
+    "head": "3045c4ca2f548865b4638759a4e253cd23333688",
     "selectedSourceSha256": "27fc98d3a1e19e212f5d102432997b0069aa1d937a84a07771308f86538977cd"
   },
   "normalization": {

@@ -7,7 +7,8 @@ import { checkDeclarationTypes } from "../contracts/typecheck.mjs";
 test("generated types accept recorded sessions/RPC and reject invalid command, UI and host shapes", () => {
 	const result = checkDeclarationTypes(generateArtifacts(readRustBundle()));
 	assert.equal(result.status, 0, result.output);
-	// 97 since the G0 fixture lost four empty skill_admission_turn records (#418).
-	assert.ok(result.positiveSamples >= 97);
+	// I1: 20 session rows + 35 RPC rows + 29 commands + 14 explicit boundary shapes,
+	// including a legacy marker even though new sessions no longer emit empty ones.
+	assert.equal(result.positiveSamples, 98);
 	assert.ok(result.negativeSamples >= 10);
 });
