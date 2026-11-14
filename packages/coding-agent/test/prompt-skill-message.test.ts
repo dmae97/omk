@@ -185,6 +185,17 @@ describe("PromptSkillFreeze (spec 050 R6)", () => {
 		expect((await other.turn(input(noRead))).messages).toEqual([]);
 	});
 
+	it("ranks a signal-less follow-up's relevant skills by the session's earlier user prompt", async () => {
+		const freeze = new PromptSkillFreeze();
+		const budgeted = { base: { cwd: "/w", skills: SKILLS, contextBudget: BUDGET }, contextBudget: () => BUDGET };
+		await freeze.turn(input(budgeted));
+		const followUp = { ...budgeted, query: "다시 해줘" };
+		expect((await freeze.turn(input(followUp))).messages).toEqual([]);
+		const history = [{ role: "user", content: "Keep the context window small under pressure" }];
+		const content = String((await freeze.turn(input({ ...followUp, history }))).messages[0]?.content);
+		expect(content).toContain("<name>headroom</name>");
+	});
+
 	it("reuses the current selection for automatic follow-ups without adding skill messages", async () => {
 		const freeze = new PromptSkillFreeze();
 		await freeze.turn(input({ provider: "xai" }));

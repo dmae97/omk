@@ -10,13 +10,13 @@
 
 import { createHash } from "node:crypto";
 import { type ActiveSkillState, addActiveSkills } from "./active-skill-state.ts";
-import { scoreSkillRelevance } from "./context-budget-relevance.ts";
 import { escapeXml } from "./context-budget-system-prompt-items.ts";
 import { devinHarnessAutoApplyEnabled, isDevinProvider, selectDevinHarnessSkills } from "./devin-harness.ts";
 import { grokHarnessAutoApplyEnabled, isGrokOAuthProvider, selectGrokHarnessSkills } from "./grok-harness.ts";
 import type { CustomMessage } from "./messages.ts";
 import { appendRunLog } from "./run-log.ts";
 import { type AutoLoadStore, autoLoadSkills } from "./skill-auto-load.ts";
+import { type HistoryMessage, rankRelevantSkills, recentUserPrompts } from "./skill-context-relevance.ts";
 import { SkillSearchGate } from "./skill-search-gate.ts";
 import type { Skill } from "./skills.ts";
 import { compactSkillDescription } from "./skills-prompt.ts";
@@ -38,6 +38,8 @@ export interface PromptSkillTurnInput {
 	readonly harnessQuery: string;
 	/** Expanded prompt text, the contextBudget query. */
 	readonly budgetQuery: string;
+	/** Session history before this prompt; its last user prompts rank `<relevant_skills>` for a signal-less follow-up. */
+	readonly history?: readonly HistoryMessage[];
 	readonly contextPressure: () => boolean;
 	readonly contextBudget: (query: string) => BuildSystemPromptOptions["contextBudget"];
 	readonly env?: NodeJS.ProcessEnv;
@@ -142,7 +144,13 @@ export class PromptSkillFreeze {
 		// In skill-search mode the budget renders no skill list, so there is nothing to supersede (R6).
 		const relevant =
 			budgetSkillsVisible(input.base) && !this.skillSearch.active
-				? relevantSkills(input.skills, input.budgetQuery, current.names)
+				? rankRelevantSkills(
+						input.skills,
+						input.budgetQuery,
+						current.names,
+						recentUserPrompts(input.history ?? []),
+						PROMPT_SKILLS_RELEVANT_LIMIT,
+					)
 				: [];
 		if (!activeChanged && relevant.length === 0) return { options, messages: [] };
 		const active = activeChanged ? resolveSkills(input.skills, current.names) : undefined;
@@ -185,18 +193,6 @@ function sameNames(a: readonly string[], b: readonly string[]): boolean {
 /** contextBudget renders a skill list only when it is on and the session has the `read` tool. */
 function budgetSkillsVisible(base: BuildSystemPromptOptions): boolean {
 	return base.contextBudget !== undefined && (!base.selectedTools || base.selectedTools.includes("read"));
-}
-
-function relevantSkills(skills: readonly Skill[], query: string, activeNames: readonly string[]): Skill[] {
-	if (query.trim() === "") return [];
-	const active = new Set(activeNames);
-	return skills
-		.filter((skill) => !skill.disableModelInvocation && !active.has(skill.name))
-		.map((skill, index) => ({ skill, index, score: scoreSkillRelevance(skill, query) }))
-		.filter((entry) => entry.score > 0)
-		.sort((a, b) => b.score - a.score || a.index - b.index)
-		.slice(0, PROMPT_SKILLS_RELEVANT_LIMIT)
-		.map((entry) => entry.skill);
 }
 
 function resolveSkills(skills: readonly Skill[], names: readonly string[]): Skill[] {
