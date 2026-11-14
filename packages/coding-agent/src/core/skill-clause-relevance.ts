@@ -29,6 +29,9 @@ const NAME_TOKEN_WEIGHT = 3;
 const NAME_MATCH_BONUS = 0.2;
 const NEUTRAL_SCORE = 0.3;
 const CLAUSE_BOUNDARY = /[\r\n]+|[.!?;:]+(?=\s|$)|,\s+|\s+(?:and|then|also|plus)\s+|\s+(?:그리고|및|또한)\s+|[。；]/giu;
+// An expanded `/skill:` block is host markup (tag, location path, body), not the user's request: its
+// short lines would match every `skill-*` name. It still counts toward `whole`, as before clauses.
+const SKILL_BLOCK = /<skill name="[^"]*" location="[^"]*">\n[\s\S]*?\n<\/skill>/gu;
 
 export interface TaskClause {
 	readonly text: string;
@@ -39,7 +42,7 @@ export interface TaskClause {
 export function splitTaskClauses(task: string): TaskClause[] {
 	const clauses: TaskClause[] = [];
 	const seen = new Set<string>();
-	for (const fragment of task.split(CLAUSE_BOUNDARY)) {
+	for (const fragment of task.replace(SKILL_BLOCK, "\n").split(CLAUSE_BOUNDARY)) {
 		const text = fragment
 			.replace(/^[\s#>*-]+/u, "")
 			.replace(/^(?:and|then|also|plus|그리고|및|또한)\s+/iu, "")

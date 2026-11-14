@@ -89,6 +89,24 @@ describe("selectSkills with several capabilities", () => {
 		});
 	});
 
+	it("an expanded /skill: block is host markup, not request clauses", () => {
+		const siblings = Array.from({ length: 4 }, (_, i) => ({ name: `skill-${i}`, description: `helper ${i}` }));
+		const block = (dir: string) =>
+			`<skill name="skill-0" location="${dir}/skills/skill-0/SKILL.md">\nReferences are relative to ${dir}/skills/skill-0.\n\nbody of skill-0\n</skill>`;
+		const wrapped = `${block("/tmp/pi-suite-1794617370570-q3cj0rk7cu")}\n\ngo`;
+		expect(splitTaskClauses(wrapped)).toEqual([]);
+		const result = selectSkills({ task: wrapped, skills: siblings });
+		for (const sibling of siblings) {
+			expect(result.scores.find((score) => score.name === sibling.name)?.score).toBe(
+				scoreSkillRelevance(sibling, wrapped),
+			);
+		}
+		// The user's own request after the block still splits.
+		expect(
+			splitTaskClauses(`${block("/tmp/x")}\n\nFix the parser crash. Then add unit tests`).map((c) => c.text),
+		).toEqual(["Fix the parser crash", "add unit tests"]);
+	});
+
 	it("no matching skill falls back to the general path with an explicit reason", () => {
 		const result = selectSkills({ task: "translate this poem into French please", skills: catalog });
 		expect(result).toMatchObject({ selected: [], candidates: [], confidence: "fallback" });
