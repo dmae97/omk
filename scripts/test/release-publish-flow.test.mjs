@@ -43,6 +43,27 @@ describe("publish.mjs registry identity gates", () => {
 		assert.deepEqual(latestMismatches("1.0.1", { a: "1.0.1", b: "1.0.0" }), ["b"]);
 	});
 
+	it("waits for npm to expose a fresh latest before declaring a mismatch", async () => {
+		const { waitForLatest } = await import(join(root, "scripts", "publish.mjs"));
+		const seen = { a: ["1.0.1"], b: [null, "1.0.0", "1.0.1"] };
+		const sleeps = [];
+		const mismatched = await waitForLatest("1.0.1", ["a", "b"], (name) => seen[name].shift(), {
+			attempts: 5,
+			delayMs: 7,
+			sleep: async (ms) => sleeps.push(ms),
+		});
+		assert.deepEqual(mismatched, []);
+		assert.deepEqual(sleeps, [7, 7]);
+	});
+
+	it("still fails after the bounded wait when latest never moves", async () => {
+		const { waitForLatest } = await import(join(root, "scripts", "publish.mjs"));
+		let reads = 0;
+		const mismatched = await waitForLatest("1.0.1", ["a"], () => (reads++, "1.0.0"), { attempts: 3, delayMs: 0, sleep: async () => {} });
+		assert.deepEqual(mismatched, ["a"]);
+		assert.equal(reads, 3);
+	});
+
 	it("packed smoke installs every tarball and runs the installed bin", () => {
 		const source = readFileSync(join(root, "scripts", "packed-npm-smoke.mjs"), "utf8");
 		assert.match(source, /npm", \["pack"/);
