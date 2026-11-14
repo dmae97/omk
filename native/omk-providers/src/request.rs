@@ -1,3 +1,4 @@
+use crate::request_history::{HistoryMessage, Message, Text, messages};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json, value::RawValue};
 
@@ -10,6 +11,8 @@ pub struct Input {
     pub system: String,
     pub user: String,
     pub tools: Vec<Tool>,
+    #[serde(default)]
+    history: Vec<HistoryMessage>,
 }
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -18,16 +21,6 @@ pub struct Tool {
     description: String,
     properties: Box<RawValue>,
     required: Vec<String>,
-}
-#[derive(Serialize)]
-struct Message<'a> {
-    role: &'a str,
-    content: &'a str,
-}
-#[derive(Serialize)]
-struct Text<'a> {
-    r#type: &'a str,
-    text: &'a str,
 }
 #[derive(Serialize)]
 struct Schema<'a> {
@@ -91,10 +84,7 @@ pub fn build_request(input: &Input) -> Result<Value, String> {
     }
     let body = Body {
         model: &input.model,
-        messages: vec![Message {
-            role: "user",
-            content: &input.user,
-        }],
+        messages: messages(&input.history, &input.user),
         max_tokens: input.max_tokens,
         stream: true,
         system: if input.system.is_empty() {
