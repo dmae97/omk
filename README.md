@@ -104,6 +104,12 @@ mark a goal done only when your own check passes. It is a standalone CLI, so it
 can serve as an open-source alternative to a single-provider agent such as
 Claude Code.
 
+> **OMK 2.0 migration status: prerelease.** The `2.0.0` milestone is published,
+> but the independent Rust core is not ready to select. The default agent still
+> runs on Node. Native `omk` package loading is the shipped breaking change;
+> complete Pi removal and Rust/platform acceptance remain open.
+> See [why 2.0.0](#why-200-and-what-changed).
+
 ## 60-second start
 
 You need Node.js 22.19 or newer and a git repository that has a test command.
@@ -159,6 +165,40 @@ OMK is a standalone CLI, not a plugin for Claude Code or OpenCode. It supports
 Start with one agent that reads files, edits code, and runs commands. Add
 subagents or explicit verification workflows when you need them; neither is
 required for your first task.
+
+### Why 2.0.0 and what changed
+
+2.0.0 marks the move to OMK-native packages by default, rather than silently
+loading legacy Pi manifests and substituting Pi SDK imports. That breaks some
+existing extension installations, so the owner declared a milestone version.
+It does not mean the Rust rewrite is complete. The migration remains prerelease;
+GitHub currently lists the published `v2.0.0` milestone as a non-prerelease, and
+npm has `2.0.0`. Those publication labels are not Rust-core acceptance evidence.
+
+| Area | What shipped in the 2.0.0 milestone | What remains |
+| --- | --- | --- |
+| Native packages | The default manifest dialect is `omk`; Pi-only manifests and imports that relied on implicit aliases no longer load by default | Migrate extension manifests and imports, then check them with `omk package doctor <source>`. Native mode is not proof that every Pi dependency is gone |
+| Extension SDK | Session-scoped models and `registerEntryRenderer()` for display-only persisted entries; optional `omk-speak-like-you-eat` companions | Existing extensions still need migration and compatibility checks |
+| Suggestions and skills | Next-task suggestions with Tab insertion (`OMK_NEXT_SUGGESTIONS`, flag, default off); clause-aware automatic skill selection | These do not enable multi-agent execution or verify an answer |
+| Rust core | K0 contract types and generated TypeScript declarations | Provider, loop, tool and extension-host migration, the K5 headless candidate, and packaged-artifact acceptance on Linux, macOS and Windows |
+
+For native extensions, rename the `pi` manifest key to `omk` and replace legacy
+SDK imports with the matching `open-multi-agent-kit`, `omk-ai`, `omk-tui` or
+`omk-agent-core` API. Do not enable `omk+pi` just to hide migration failures.
+The explicit compatibility adapter remains available for installations that
+choose it; it is not the native migration path or the default.
+
+The standalone download bundles the current JavaScript runtime. Needing no
+separate Node installation does not make it a Rust-owned agent core. The
+opt-in Linux Rust sandbox supervisor is also a separate, bounded capability,
+not the full core. The Rust terminal UI and remaining subsystem ownership follow
+the headless candidate in the existing staged plan. Upstream copyright and
+license notices remain required throughout the port.
+
+See the [migration guide](packages/coding-agent/docs/omk-2-migration.md),
+[Rust core plan](packages/coding-agent/docs/omk-2-rust-core.md) and
+[published milestone notes](.github/RELEASE_NOTES_v2.0.0.md) for the scope and gates.
+This status note was checked on 2026-11-14; it does not retag or republish 2.0.0.
 
 ### At a glance
 
