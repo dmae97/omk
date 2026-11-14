@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-14
+
 ### Added
 
 - `omk-speak-like-you-eat` adapts SLYE 1.6.1 as an optional OMK package with manual and automatic plain-language companions, ELI5 and Light tabs, scoped model selection, trusted project settings, custom prompts, cancellation, and retry behavior. Extension contexts now expose session-scoped models, and `registerEntryRenderer()` renders persisted custom entries without adding them to LLM context. See [Speak Like You Eat](docs/speak-like-you-eat.md) and [Extensions](docs/extensions.md#display-only-entry-rendering).

@@ -1,6 +1,6 @@
 {
 	"name": "omk-speak-like-you-eat",
-	"version": "1.5.14",
+	"version": "2.0.0",
 	"description": "Optional OMK extension for plain-language companion rewrites",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -55,9 +55,9 @@
 	},
 	"devDependencies": {
 		"@types/node": "24.12.4",
-		"omk-ai": "^1.5.14",
-		"omk-tui": "^1.5.14",
-		"open-multi-agent-kit": "^1.5.14",
+		"omk-ai": "^2.0.0",
+		"omk-tui": "^2.0.0",
+		"open-multi-agent-kit": "^2.0.0",
 		"typescript": "5.9.3",
 		"vitest": "4.1.11"
 	},

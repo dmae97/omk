@@ -568,7 +568,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.14](.github/RELEASE_NOTES_v1.5.14.md)
+- [Release notes for v2.0.0](.github/RELEASE_NOTES_v2.0.0.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -641,6 +641,27 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v2.0.0
+
+### Added
+
+- `omk-speak-like-you-eat` adapts SLYE 1.6.1 as an optional OMK package with manual and automatic plain-language companions, ELI5 and Light tabs, scoped model selection, trusted project settings, custom prompts, cancellation, and retry behavior. Extension contexts now expose session-scoped models, and `registerEntryRenderer()` renders persisted custom entries without adding them to LLM context. See [Speak Like You Eat](packages/coding-agent/docs/speak-like-you-eat.md) and [Extensions](packages/coding-agent/docs/extensions.md#display-only-entry-rendering).
+- Next-task suggestions (`OMK_NEXT_SUGGESTIONS`, flag, default off) now show a complete prompt in the empty editor: a title, then input, verification, evidence and result sections rendered by the host from the session transcript. A local suggestion appears before any provider call and stays when the model reply is empty, malformed, timed out or failed; Tab inserts exactly the displayed text and refuses a suggestion whose session state changed. Multi-line editor placeholders render below the cursor row. See [environment variables](packages/coding-agent/docs/environment-variables.md).
+
+### Changed
+
+- Skill selection for automatic loads and provider-harness grants scores each clause of a multi-capability request and grants one skill per clause before a second for the same clause, still at most three. Single-clause requests rank as before. See [skills](packages/coding-agent/docs/skills.md#requests-with-several-capabilities).
+
+### Breaking Changes
+
+- The default package manifest dialect is now native `omk`. Extensions that import legacy Pi packages without installing them, and packages with only a `pi` manifest, no longer load by default. Opt into compatibility with `--package-manifest-dialect omk+pi`, or `packageManifestDialect: "omk+pi"` in SDK constructors. The load error now names this option. `omk package doctor` also defaults to the native target. See [the OMK 2 migration notes](packages/coding-agent/docs/omk-2-migration.md#native-default-2026-11-08).
+
+### Fixed
+
+- A receipt-reading critic, visual-QA or document lane now depends only on the producers whose receipt its read scope covers; a lane reading the whole run directory still waits for every producer. Writer serialization and the failure scope are unchanged.
+
+Release notes live in [RELEASE_NOTES_v2.0.0.md](.github/RELEASE_NOTES_v2.0.0.md).
+
 ## Release v1.5.14
 
 ### Fixed
@@ -666,25 +687,6 @@ Release notes live in [RELEASE_NOTES_v1.5.14.md](.github/RELEASE_NOTES_v1.5.14.m
 - The usage rail no longer sends a token request every minute for a login that cannot refresh. A failed OAuth refresh is remembered per provider for the refresh token that was tried, and usage polling waits before trying that token again: one minute, doubling with each consecutive failure up to thirty minutes. A request you are waiting on always tries, and a new login or another account is tried at once. Each session remembers this for itself (#409).
 
 Release notes live in [RELEASE_NOTES_v1.5.13.md](.github/RELEASE_NOTES_v1.5.13.md).
-
-## Release v1.5.12
-
-### Changed
-
-- The bundled subagent extension gives every effort, including Ultra, finite limits per tool call: concurrent workers, logical tasks and a default execution budget of 1 / 4 / 2 min (off, minimal), 1 / 4 / 3 min (low), 2 / 6 / 4 min (medium), 2 / 8 / 6 min (high and unknown), 3 / 8 / 8 min (xhigh), 4 / 12 / 10 min (max) and 4 / 16 / 14 min (ultra). Ultra no longer removes the task, concurrency, internal deadline or outer tool-timeout caps; the outer timeout is 855 seconds. Host admission and permits can narrow these further. These are engineering limits, not measured latency or memory results. See [subagent execution budgets](packages/coding-agent/docs/subagents.md) (#403).
-- Outside Ultra, the subagent extension used to run up to 4 workers at once, accept 8 parallel or graph tasks and default to a 14 minute budget at every effort. Concurrency is now 1 at low and below and 2 at medium and high, the task limit also applies to `chain` calls, and the default budget follows the effort. A call over the task limit is rejected before any worker starts. An explicit `executionBudgetMs` (60,000 to 840,000) still replaces the default budget (#403).
-- Subagent workers receive the parent's effort as `--thinking`; the worker clamps it to its resolved model. When the host run has a deadline, worker budgets leave 30 seconds for the lead's integration and verification, and the remaining time is checked again immediately before each spawn. With no capacity left the call returns an incomplete result instead of starting a worker (#403).
-- Skill discovery decides whether a directory has `.gitignore`, `.ignore` or `.fdignore` from the directory listing it already read, instead of probing for the three files in every directory, and resolves paths with one native `realpath` call. The discovered skill set is unchanged (#394).
-
-### Fixed
-
-- Single and chain subagent launches now go through the same session lane authority as graph and parallel work. A worker whose process termination is unconfirmed keeps its child ownership and resource reservation; a timeout alone no longer marks it complete or lets a new dispatch bypass it (#403).
-- Automatic skill loading checks the current retained context before skipping a body admitted earlier. A relevant body removed by compaction or branch navigation is loaded again in its existing admission slot; a body still present is not duplicated, and a changed body still needs a new slot. `skill-autoload.jsonl` records `contextChecked`, `contextAbsent` and `restoredFromHistory`. See [automatic skill loading](packages/coding-agent/docs/skills.md#automatic-loading-checks-the-current-context) (#402).
-- After `mcpCheckHealth({ reconnectFailed: true })` reconnects a server, the session uses the replacement server's admitted tool catalog, including changed names and schemas, instead of handles bound to the closed connection. Disabled tool selections are kept, and a call made against the old connection is not replayed against the new one. See [native MCP attachment](packages/coding-agent/docs/mcp.md) (#401).
-- An automatic failover or route rotation no longer becomes the saved default model. The switch is recorded in the session only, so the next session starts on the model you chose (#395).
-- When the model a failover switched to rejects the request outright (for example `403 Access to model denied`, an authentication error or an unsupported model), OMK marks it failed for the turn and tries the next authenticated candidate instead of ending the turn there. With a `--model`/`--provider` pin, a denied candidate still ends the turn. See [provider resilience](packages/coding-agent/docs/provider-resilience.md#failover-behavior) (#395).
-
-Release notes live in [RELEASE_NOTES_v1.5.12.md](.github/RELEASE_NOTES_v1.5.12.md).
 
 <!-- releases:end -->
 

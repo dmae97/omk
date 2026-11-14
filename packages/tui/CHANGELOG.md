@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-14
+
 ### Added
 
 - `Editor.setInlineSuggestion()` renders a dim suffix only at the document end. Direct text replacement and insertion clear stale inline text, while the owner controls per-key dismissal and acceptance.
