@@ -120,13 +120,20 @@ function totals(trials) {
  * @param {string} manifestPath @param {string} expectedSha256
  */
 export function auditBenchmark(manifestPath, expectedSha256) {
+	return auditBenchmarkTrials(manifestPath, expectedSha256).report;
+}
+
+/** Internal composition seam: share raw trial-ID uniqueness across repeat audits.
+ * Never serialize trialIds; only the allowlisted report is public.
+ * @param {string} manifestPath @param {string} expectedSha256
+ * @param {Set<string>} trialIds
+ */
+export function auditBenchmarkTrials(manifestPath, expectedSha256, trialIds = new Set()) {
 	text(expectedSha256, /^[a-f0-9]{64}$/u, "invalid_options");
 	const file = readJson(manifestPath, "manifest");
 	if (file.sha256 !== expectedSha256) throw new AuditError("manifest_digest_mismatch");
 	const manifest = parseManifest(file.value);
 	const root = dirname(resolve(manifestPath));
-	/** @type {Set<string>} */
-	const trialIds = new Set();
 	const A = readArm({
 		directory: jobDirectory(root, manifest.arms.A.job),
 		arm: manifest.arms.A,
@@ -150,7 +157,7 @@ export function auditBenchmark(manifestPath, expectedSha256) {
 		else paired.n00++;
 	}
 	paired.deltaPp = (100 * (paired.n10 - paired.n01)) / manifest.tasks.length;
-	return {
+	const report = {
 		schemaVersion: "omk-tb21-audit-report-2",
 		status: "complete",
 		runId: manifest.runId,
@@ -165,4 +172,5 @@ export function auditBenchmark(manifestPath, expectedSha256) {
 			...[...B.values()].map(({ taskId, sha256 }) => ({ arm: "B", taskId, sha256 })),
 		],
 	};
+	return { report, manifest, trials: { A, B } };
 }
