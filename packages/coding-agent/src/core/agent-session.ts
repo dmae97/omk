@@ -101,6 +101,7 @@ import {
 } from "./context-budget-v2-cache-invalidation.ts";
 import { createMemoryContextBudgetCacheProviderV2 } from "./context-budget-v2-cache-provider.ts";
 import type { ContextBudgetCacheProviderV2 } from "./context-budget-v2-types.ts";
+import { credentialStoreUnreadableMessage } from "./credential-resolution-failure.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { devinPlaybookAppendForProvider } from "./devin-harness.ts";
 import { EVIDENCE_RECEIPT_CUSTOM_TYPES, EvidenceSessionShutdown } from "./evidence-lifecycle-session.ts";
@@ -137,7 +138,7 @@ import { captureHostResourceSnapshot, type HostResourceSnapshot } from "./host-r
 import { decideLoadoutAccess, type LoadoutAccessPolicy } from "./loadout-access-policy.ts";
 import { buildCapabilityInventory } from "./loadout-runtime.ts";
 import { loadMcpServerConfigsWithReport, type McpConfigLoadReport } from "./mcp/config.ts";
-import { McpManager, type McpServerConfig, type McpServerStatus } from "./mcp/manager.ts";
+import { type McpAttachOptions, McpManager, type McpServerStatus } from "./mcp/manager.ts";
 import { type McpProjectTrustSummary, projectTrustSummary } from "./mcp/trust-summary.ts";
 import { type OntologyShadowObservation, withOntologyShadowObservation } from "./ontology-shadow.ts";
 import { buildRuntimeProvenance } from "./runtime-provenance.ts";
@@ -206,6 +207,7 @@ import {
 	userMessageText,
 } from "./deferred-turn-input.ts";
 import { prepareMessageStart } from "./extensions/before-agent-start.ts";
+import { isFailoverCandidateDenial, switchFailoverModel } from "./failover-model-switch.ts";
 import { goalAutonomySteerInput } from "./goal-continuation.ts";
 import type { CustomMessage } from "./messages.ts";
 import { selectContextFilesForModel } from "./model-prompt-policy.ts";
@@ -225,18 +227,22 @@ import {
 	resolveProviderResilience,
 	sameModelRouteCandidates,
 	shouldEjectStickySafetyModel,
-	shouldHonorProviderFailover,
 	stickySafetyBlockMessage,
 } from "./provider-resilience.ts";
 import {
 	failoverModelKey,
 	isEmptyStreamedCompletion,
-	isFailoverTriggerError,
 	isRetryableAssistantError,
 	nextRetryAttempt,
 	retryBudgetForAssistantError,
 } from "./provider-retry.ts";
-import { planRetryWait, quotaAllowsRetry, recordQuotaOutcome, shouldRotateRoute } from "./quota-retry-policy.ts";
+import {
+	planRetryWait,
+	quotaAllowsRetry,
+	recordQuotaOutcome,
+	shouldRotateRoute,
+	summarizationRetryPolicy,
+} from "./quota-retry-policy.ts";
 import { getBiasStepsForCell, parseRouterBiasSnapshot, type RouterBiasSnapshot } from "./reasoning-router-bias.ts";
 import {
 	classifyTaskV4,
@@ -1197,10 +1203,7 @@ export class AgentSession {
 		// A credential store that could not be read is not the same as an unauthenticated provider:
 		// say so instead of advising /login, which cannot clear a read failure.
 		if (this._modelRegistry.hasCredentialStoreError()) {
-			throw new Error(
-				`The credential store for "${model.provider}" could not be read` +
-					` (another OMK session may be refreshing credentials). Retry in a moment.`,
-			);
+			throw new Error(credentialStoreUnreadableMessage(model.provider));
 		}
 
 		const isOAuth = this._modelRegistry.isUsingOAuth(model);
@@ -2313,6 +2316,7 @@ export class AgentSession {
 			inventory,
 			signal: this.agent?.signal,
 			noteDetachedChild: () => this._promptLifecycle.noteDetachedChild(),
+			getRemainingExecutionMs: () => this._runBudget.remainingMs,
 		});
 	}
 
@@ -3018,9 +3022,10 @@ export class AgentSession {
 	/**
 	 * Set model directly.
 	 * Validates that auth is configured, saves to session and settings.
+	 * `persistDefault: false` switches this session only; automatic failover must not rewrite the saved default.
 	 * @throws Error if no auth is configured for the model
 	 */
-	async setModel(model: Model<any>): Promise<void> {
+	async setModel(model: Model<any>, options?: { persistDefault?: boolean }): Promise<void> {
 		if (!this._modelRegistry.hasConfiguredAuth(model)) {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
@@ -3049,7 +3054,7 @@ export class AgentSession {
 		this.agent.state.systemPromptCacheBoundary = this._baseSystemPromptCacheBoundary;
 		this.agent.state.systemPromptCacheBoundaryBypass = false;
 		this.sessionManager.appendModelChange(model.provider, model.id);
-		this.settingsManager.setDefaultModelAndProvider(model.provider, model.id);
+		if (options?.persistDefault !== false) this.settingsManager.setDefaultModelAndProvider(model.provider, model.id);
 
 		// Re-clamp thinking level for new model's capabilities
 		this.setThinkingLevel(thinkingLevel);
@@ -3615,7 +3620,7 @@ export class AgentSession {
 			request: () => ({
 				thinkingLevel: this.thinkingLevel,
 				streamFn: this._compactionUsage.stream(this.agent.streamFn, input.reason),
-				retry: this.settingsManager.getRetrySettings(),
+				retry: summarizationRetryPolicy(this.settingsManager.getRetrySettings()),
 				callbacks: summarizationRetryCallbacks((event) => this._emit(event), {
 					source: "compaction",
 					reason: input.reason,
@@ -4471,10 +4476,7 @@ export class AgentSession {
 	 * Returns per-server status so a caller can surface failures; an empty
 	 * configuration returns an empty array without spawning anything.
 	 */
-	attachMcpServers(options?: {
-		servers?: readonly McpServerConfig[];
-		callTimeoutMs?: number;
-	}): Promise<McpServerStatus[]> {
+	attachMcpServers(options?: McpAttachOptions): Promise<McpServerStatus[]> {
 		if (this._mcpAttaching) return Promise.reject(new Error("MCP attachment already in progress"));
 		this._mcpAttaching = true;
 		return this._shutdown
@@ -4484,10 +4486,7 @@ export class AgentSession {
 			});
 	}
 
-	private async _attachMcpServers(options?: {
-		servers?: readonly McpServerConfig[];
-		callTimeoutMs?: number;
-	}): Promise<McpServerStatus[]> {
+	private async _attachMcpServers(options?: McpAttachOptions): Promise<McpServerStatus[]> {
 		if (!options?.servers) this._mcpLoadReport = loadMcpServerConfigsWithReport(this._cwd);
 		const servers = options?.servers ?? this._mcpLoadReport?.servers ?? [];
 		await this._mcpManager?.closeAndWait();
@@ -4505,15 +4504,19 @@ export class AgentSession {
 			cwd: this._cwd,
 			clientInfo: { name: APP_NAME, version: VERSION },
 			callTimeoutMs: options?.callTimeoutMs,
+			onToolsChanged: (definitions) => {
+				if (this._shutdown.isClosing || this._mcpManager !== manager) return;
+				// A recovered catalog replaces handles bound to the retired client; builtins still win.
+				const usable = definitions.filter((definition) => !this._baseToolDefinitions.has(definition.name));
+				this._customTools = this._customTools.filter((definition) => !this._mcpToolNames.has(definition.name));
+				this._mcpToolNames = new Set(usable.map((definition) => definition.name));
+				this._customTools.push(...(usable as ToolDefinition[]));
+				this._refreshToolRegistry();
+			},
 		});
 		this._mcpManager = manager;
-		const definitions = await manager.listToolDefinitions();
+		await manager.listToolDefinitions();
 		this._shutdown.assertOpen();
-		// A builtin always wins a name collision; MCP must never shadow `bash`.
-		const usable = definitions.filter((definition) => !this._baseToolDefinitions.has(definition.name));
-		this._mcpToolNames = new Set(usable.map((definition) => definition.name));
-		this._customTools = [...this._customTools, ...(usable as ToolDefinition[])];
-		this._refreshToolRegistry();
 		return manager.status();
 	}
 
@@ -4821,6 +4824,7 @@ export class AgentSession {
 	 */
 	private _isRetryableError(message: AssistantMessage): boolean {
 		const quotaOk = quotaAllowsRetry(message.errorMessage, this.settingsManager.getProviderResilienceSettings());
+		if (isFailoverCandidateDenial(message, this.model, this._refusedModels, this._modelPinned)) return true;
 		return quotaOk && isRetryableAssistantError(message, this.model?.contextWindow ?? 0);
 	}
 
@@ -4885,7 +4889,7 @@ export class AgentSession {
 				continue;
 			}
 			try {
-				await this.setModel(next);
+				await this.setModel(next, { persistDefault: false });
 				// The old route just failed upstream — keep it out of this turn's retries.
 				this._refusedModels.add(failoverModelKey(current.provider, current.id));
 				return `${next.provider}/${next.id}`;
@@ -4896,53 +4900,21 @@ export class AgentSession {
 		return undefined;
 	}
 
-	/**
-	 * Content/safety stops (stop_reason=refusal) are often false positives on coding turns
-	 * for Fable AND Claude Opus/Sonnet. Retrying the same model usually reprints the refusal —
-	 * switch via provider-resilience chain first. Failover targets still skip sticky models.
-	 */
+	/** Switch away from a model that cannot finish this turn; see `switchFailoverModel`. */
 	private async _maybeFailoverFromSafetyStop(message: AssistantMessage): Promise<string | undefined> {
-		const resilience = resolveProviderResilience(this.settingsManager.getProviderResilienceSettings());
-		const quotaExhausted = isQuotaExhaustionMessage(message.errorMessage);
-		if (!shouldHonorProviderFailover(quotaExhausted, resilience, this._modelPinned, this.model)) {
-			return undefined;
-		}
-		// Fire on safety-stop FPs AND on billing/quota exhaustion: both mean the
-		// current model cannot finish this turn and same-model retry is useless.
-		if (!isFailoverTriggerError(message.errorMessage)) {
-			return undefined;
-		}
-
 		const current = this.model;
-		// v10.0-Ω: do NOT gate on isStickySafetyModel(source).
-		// claude-opus-5 emits the same stop_reason=refusal FP; same-model retry is useless.
-
-		// v10.3-Ω: mark the model that just refused so we never re-pick it this turn.
-		if (current) this._refusedModels.add(failoverModelKey(current.provider, current.id));
-
-		const pick = pickFailoverCandidate(
-			resilience.failoverCandidates,
-			current ? { provider: current.provider, id: current.id } : undefined,
-			(c) => {
-				// Skip any model that already refused/failed this turn → advance the chain.
-				if (this._refusedModels.has(failoverModelKey(c.provider, c.id))) return false;
-				const next = this._modelRegistry.find(c.provider, c.id);
-				if (!next) return false;
-				return this._modelRegistry.hasConfiguredAuth(next);
+		const next = await switchFailoverModel(
+			{
+				model: current,
+				modelPinned: this._modelPinned,
+				settings: this.settingsManager.getProviderResilienceSettings(),
+				refused: this._refusedModels,
+				registry: this._modelRegistry,
+				switchTo: (model) => this.setModel(model, { persistDefault: false }),
 			},
+			message,
 		);
-		if (!pick) return undefined;
-
-		const next = this._modelRegistry.find(pick.provider, pick.id);
-		if (!next) return undefined;
-		try {
-			await this.setModel(next);
-			return this._pinNotice.afterFailover(quotaExhausted, current, next);
-		} catch {
-			// setModel failed (auth/guard) — blacklist so next retry advances further.
-			this._refusedModels.add(failoverModelKey(pick.provider, pick.id));
-			return undefined;
-		}
+		return next && this._pinNotice.afterFailover(isQuotaExhaustionMessage(message.errorMessage), current, next);
 	}
 
 	private async _prepareRetry(message: AssistantMessage): Promise<boolean> {
@@ -4954,6 +4926,7 @@ export class AgentSession {
 			maxRetries,
 		});
 		if (attempt === undefined) return false;
+		const candidateDenied = isFailoverCandidateDenial(message, this.model, this._refusedModels, this._modelPinned);
 
 		// Upstream-unavailable (gateway 5xx / dropped stream / dead relay stream):
 		// rotate to another authenticated route of the SAME model family so the
@@ -4965,6 +4938,8 @@ export class AgentSession {
 
 		// Content/safety stop (Fable/Opus/Sonnet): switch model BEFORE delay so retry is not same-model refusal.
 		const failoverTo = await this._maybeFailoverFromSafetyStop(message);
+		// A denied candidate with nowhere left to go ends the turn; retrying it only repeats the denial.
+		if (candidateDenied && failoverTo === undefined) return false;
 		const switchedVia = failoverTo ? `failover ${failoverTo}` : rotatedTo ? `route ${rotatedTo}` : undefined;
 		// Spec 090: quota failover waits 0, quota without failover ends with no retry; other waits cap at 60s.
 		const delayMs = planRetryWait(message, settings, attempt, failoverTo, rotatedTo, this._runBudget.remainingMs);
@@ -5230,7 +5205,7 @@ export class AgentSession {
 							this._shutdown.assertOpen();
 							return this.agent.streamFn(...args);
 						}),
-					retry: this.settingsManager.getRetrySettings(),
+					retry: summarizationRetryPolicy(this.settingsManager.getRetrySettings()),
 					callbacks: summarizationRetryCallbacks((event) => this._emit(event), { source: "branchSummary" }),
 				});
 				if (result.aborted) {

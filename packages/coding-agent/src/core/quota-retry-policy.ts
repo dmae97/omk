@@ -8,9 +8,11 @@
  * `providerResilience.autoFailoverOnQuotaExhaustion` is on, pinned or not) or
  * ends at once with {@link QuotaExhaustedNoRetryError}. Other retryable errors
  * keep the exponential backoff and honor a Retry-After hint, capped at
- * {@link MAX_RETRY_WAIT_MS}.
+ * {@link MAX_RETRY_WAIT_MS}. A rate limit with no hint waits longer than that
+ * backoff; see {@link rateLimitBackoffMs}.
  */
-import type { AssistantMessage } from "omk-ai";
+import type { AssistantMessage, RetryPolicy } from "omk-ai";
+import { hasStatusCodeLike } from "omk-ai";
 import { classifyProviderError } from "./provider-error-classification.ts";
 import {
 	isUpstreamUnavailableMessage,
@@ -61,6 +63,32 @@ export function retryAfterHintMs(errorMessage: string | undefined): number | und
 	return Number.isFinite(value) && value >= 0 ? Math.round(value) : undefined;
 }
 
+/** A rate-limited retry waits this many times the configured backoff, up to {@link MAX_RETRY_WAIT_MS}. */
+export const RATE_LIMIT_BACKOFF_FACTOR = 8;
+
+/** Share of a rate-limit wait that jitter may take off. */
+const RATE_LIMIT_JITTER = 0.25;
+
+/** Provider throttling that the next request may clear: a 429 or `rate_limit_error`, never an exhausted quota. */
+export function isRateLimitError(errorMessage: string | undefined): boolean {
+	if (!errorMessage || isQuotaExhaustedError(errorMessage)) return false;
+	return /rate.?limit|too many requests/i.test(errorMessage) || hasStatusCodeLike(errorMessage, [429]);
+}
+
+/**
+ * Backoff for a rate limit that came without a Retry-After hint.
+ *
+ * Observed 2026-11-11: five sessions on one account were throttled together. With `maxRetries: 3`
+ * the 2 s, 4 s and 8 s backoff spent every retry 14 s after the first 429 and each turn ended,
+ * though the prompt the user typed next went through. Three retries at the 2 s base now span 81
+ * to 108 s, and the jitter keeps sessions that were throttled together from retrying together.
+ * `randomValue` is a draw from [0, 1). A backoff already past the cap is returned unchanged.
+ */
+export function rateLimitBackoffMs(backoffMs: number, randomValue: number): number {
+	const stretched = Math.min(backoffMs * RATE_LIMIT_BACKOFF_FACTOR, MAX_RETRY_WAIT_MS);
+	return Math.max(backoffMs, Math.round(stretched * (1 - randomValue * RATE_LIMIT_JITTER)));
+}
+
 /** One retry wait: 0 after a quota failover, else Retry-After (capped at 60s) or backoff, within the run budget. */
 export function retryWaitMs(input: {
 	readonly quotaFailover: boolean;
@@ -74,6 +102,23 @@ export function retryWaitMs(input: {
 	const hint = retryAfterHintMs(input.errorMessage);
 	const requested = hint === undefined ? input.backoffMs : Math.min(hint, MAX_RETRY_WAIT_MS);
 	return Math.min(requested, input.remainingMs ?? Number.POSITIVE_INFINITY);
+}
+
+/**
+ * `settings.retry` for the summarization retry loop in omk-ai, which compaction and branch summaries
+ * use. Their calls go to the same account as the agent turn, so a rate limit and a Retry-After
+ * hint get the same waits. That loop never retries quota exhaustion and has no route to switch.
+ */
+export function summarizationRetryPolicy(settings: RetryPolicy, random: () => number = Math.random): RetryPolicy {
+	return {
+		...settings,
+		delayMs: (backoffMs, errorMessage) =>
+			retryWaitMs({
+				quotaFailover: false,
+				backoffMs: isRateLimitError(errorMessage) ? rateLimitBackoffMs(backoffMs, random()) : backoffMs,
+				errorMessage,
+			}),
+	};
 }
 
 /** Retry gate: quota exhaustion is retryable only through failover. */
@@ -96,11 +141,15 @@ export function planRetryWait(
 	failoverTo: string | undefined,
 	rotatedTo: string | undefined,
 	remainingMs: number | undefined,
+	random: () => number = Math.random,
 ): number | undefined {
 	const quota = isQuotaExhaustedError(message.errorMessage);
 	if (quota && failoverTo === undefined) return undefined;
 	const switched = failoverTo !== undefined || rotatedTo !== undefined;
-	const backoffMs = computeRetryDelayMs(settings.baseDelayMs, attempt, switched);
+	const configuredMs = computeRetryDelayMs(settings.baseDelayMs, attempt, switched);
+	// A route that was just switched to is not the one being throttled.
+	const rateLimited = !switched && isRateLimitError(message.errorMessage);
+	const backoffMs = rateLimited ? rateLimitBackoffMs(configuredMs, random()) : configuredMs;
 	return retryWaitMs({ quotaFailover: quota, backoffMs, errorMessage: message.errorMessage, remainingMs });
 }
 

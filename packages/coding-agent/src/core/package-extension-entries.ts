@@ -41,13 +41,19 @@ function prefixIgnorePattern(line: string, prefix: string): string | null {
 	return negated ? `!${prefixed}` : prefixed;
 }
 
-export function addIgnoreRules(ig: IgnoreMatcher, dir: string, rootDir: string): void {
+export function addIgnoreRules(
+	ig: IgnoreMatcher,
+	dir: string,
+	rootDir: string,
+	entries?: readonly { name: string }[],
+): void {
 	const relativeDir = relative(rootDir, dir);
 	const prefix = relativeDir ? `${toPosixPath(relativeDir)}/` : "";
 
 	for (const filename of IGNORE_FILE_NAMES) {
 		const ignorePath = join(dir, filename);
-		if (!existsSync(ignorePath)) continue;
+		// A caller that already listed the directory skips one existsSync probe per ignore file.
+		if (entries ? !entries.some((entry) => entry.name === filename) : !existsSync(ignorePath)) continue;
 		try {
 			const content = readFileSync(ignorePath, "utf-8");
 			const patterns = content

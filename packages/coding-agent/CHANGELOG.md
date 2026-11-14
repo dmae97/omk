@@ -19,6 +19,45 @@
 
 - A receipt-reading critic, visual-QA or document lane now depends only on the producers whose receipt its read scope covers; a lane reading the whole run directory still waits for every producer. Writer serialization and the failure scope are unchanged.
 
+## [1.5.14] - 2026-11-12
+
+### Fixed
+
+- Turns on Anthropic models gated to Claude Code 2.1.290 or newer no longer fail with HTTP 400 `claude_code_version_too_old` when you are logged in with an Anthropic OAuth subscription. The `custom-provider-anthropic` example extension sends the same version in its user agent (#393).
+
+## [1.5.13] - 2026-11-11
+
+### Added
+
+- `AuthStorageBackend.withRefreshLock(key, fn)` is an optional backend method that serializes one provider's token refresh across the processes sharing the backend. `FileAuthStorageBackend` and `InMemoryAuthStorageBackend` implement it; a custom backend without it runs refreshes unserialized (#408).
+- `AuthStorage.getApiKey(provider, { background: true })` and `ModelRegistry.getApiKeyForProvider(provider, { background: true })` mark a caller nobody is waiting on, such as polling. Such a call skips an OAuth refresh that failed recently instead of repeating it (#409).
+
+### Fixed
+
+- An account rate limit no longer spends the whole retry budget in 14 seconds. A 429 or `rate_limit_error` that is not quota exhaustion and carries no `Retry-After` hint now waits 8 times the configured backoff per attempt, capped at 60 seconds, minus up to 25% jitter so sessions throttled together do not retry together. With `retry.baseDelayMs: 2000` and `retry.maxRetries: 3` the retries span 81 to 108 seconds instead of 14. A `Retry-After` hint, a retry on a route OMK just switched to and `retry.baseDelayMs: 0` behave as before. See [rate limits and credential retries](docs/provider-resilience.md#rate-limits-and-credential-retries).
+- Compaction and branch-summary calls wait out a rate limit the same way, and honor a `Retry-After` hint in the error text (capped at 60 seconds). They used the plain 2, 4 and 8 second backoff.
+- A request whose stored OAuth login could not be resolved (the token endpoint was unreachable, or another session held the credential store) is retried within the normal retry budget instead of ending the turn. No request and no other key is sent for the failed attempt; if the login never resolves, the turn ends with the message naming `/login <provider>`. When the token endpoint refuses the refresh (HTTP 400 or 401, `invalid_grant`), the turn ends at once with that message, because the refresh token is dead. A credential the provider rejected is still not retried.
+- A logged-in session no longer sends the `models.json` provider key when its stored OAuth login cannot be resolved. With `anthropic.apiKey: "$ANTHROPIC_API_KEY"` and a dead key in the environment, a request that could not take the credential lock used to go out with that key and end the turn with `401 invalid x-api-key`. An unexpired stored token is now used as it is, and an unresolved login is reported as an authentication failure (#407).
+- Sessions sharing `auth.json` no longer wait on each other's OAuth refresh. The refresh request runs outside the credential store lock, under a per-provider refresh lock, so an expired token is still refreshed once; the store lock is held only to read and to write, and is taken without yielding the event loop. The Kimi refresh request gets the 30 second timeout the other providers use (#408).
+- The usage rail no longer sends a token request every minute for a login that cannot refresh. A failed OAuth refresh is remembered per provider for the refresh token that was tried, and usage polling waits before trying that token again: one minute, doubling with each consecutive failure up to thirty minutes. A request you are waiting on always tries, and a new login or another account is tried at once. Each session remembers this for itself (#409).
+
+## [1.5.12] - 2026-11-11
+
+### Changed
+
+- The bundled subagent extension gives every effort, including Ultra, finite limits per tool call: concurrent workers, logical tasks and a default execution budget of 1 / 4 / 2 min (off, minimal), 1 / 4 / 3 min (low), 2 / 6 / 4 min (medium), 2 / 8 / 6 min (high and unknown), 3 / 8 / 8 min (xhigh), 4 / 12 / 10 min (max) and 4 / 16 / 14 min (ultra). Ultra no longer removes the task, concurrency, internal deadline or outer tool-timeout caps; the outer timeout is 855 seconds. Host admission and permits can narrow these further. These are engineering limits, not measured latency or memory results. See [subagent execution budgets](docs/subagents.md) (#403).
+- Outside Ultra, the subagent extension used to run up to 4 workers at once, accept 8 parallel or graph tasks and default to a 14 minute budget at every effort. Concurrency is now 1 at low and below and 2 at medium and high, the task limit also applies to `chain` calls, and the default budget follows the effort. A call over the task limit is rejected before any worker starts. An explicit `executionBudgetMs` (60,000 to 840,000) still replaces the default budget (#403).
+- Subagent workers receive the parent's effort as `--thinking`; the worker clamps it to its resolved model. When the host run has a deadline, worker budgets leave 30 seconds for the lead's integration and verification, and the remaining time is checked again immediately before each spawn. With no capacity left the call returns an incomplete result instead of starting a worker (#403).
+- Skill discovery decides whether a directory has `.gitignore`, `.ignore` or `.fdignore` from the directory listing it already read, instead of probing for the three files in every directory, and resolves paths with one native `realpath` call. The discovered skill set is unchanged (#394).
+
+### Fixed
+
+- Single and chain subagent launches now go through the same session lane authority as graph and parallel work. A worker whose process termination is unconfirmed keeps its child ownership and resource reservation; a timeout alone no longer marks it complete or lets a new dispatch bypass it (#403).
+- Automatic skill loading checks the current retained context before skipping a body admitted earlier. A relevant body removed by compaction or branch navigation is loaded again in its existing admission slot; a body still present is not duplicated, and a changed body still needs a new slot. `skill-autoload.jsonl` records `contextChecked`, `contextAbsent` and `restoredFromHistory`. See [automatic skill loading](docs/skills.md#automatic-loading-checks-the-current-context) (#402).
+- After `mcpCheckHealth({ reconnectFailed: true })` reconnects a server, the session uses the replacement server's admitted tool catalog, including changed names and schemas, instead of handles bound to the closed connection. Disabled tool selections are kept, and a call made against the old connection is not replayed against the new one. See [native MCP attachment](docs/mcp.md) (#401).
+- An automatic failover or route rotation no longer becomes the saved default model. The switch is recorded in the session only, so the next session starts on the model you chose (#395).
+- When the model a failover switched to rejects the request outright (for example `403 Access to model denied`, an authentication error or an unsupported model), OMK marks it failed for the turn and tries the next authenticated candidate instead of ending the turn there. With a `--model`/`--provider` pin, a denied candidate still ends the turn. See [provider resilience](docs/provider-resilience.md#failover-behavior) (#395).
+
 ## [1.5.11] - 2026-11-10
 
 ### Added

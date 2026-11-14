@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AgentSession } from "../src/core/agent-session.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
+import { resolveUnresolvedOAuthLogin } from "../src/core/provider-request-key.ts";
 import { QuotaExhaustedNoRetryError, quotaNoRetryErrorOf } from "../src/core/quota-retry-policy.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
@@ -398,6 +399,39 @@ describe("AgentSession retry", () => {
 		const starts = recordRetries(created.session, true);
 		await created.session.prompt("Test");
 		expect(starts[0]?.delayMs).toBe(60_000);
+	});
+
+	it("waits out an account rate limit that carries no Retry-After", async () => {
+		// Observed 2026-11-11: 2 s, 4 s and 8 s spent the retry budget 14 s after the first 429,
+		// and every session sharing the account stopped mid-work.
+		const created = createSession({
+			failCount: 99,
+			baseDelayMs: 2000,
+			errorMessage:
+				'429 {"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed your' +
+				" account's rate limit. Please try again later.\"}}",
+		});
+		const starts = recordRetries(created.session, true);
+		await created.session.prompt("Test");
+		expect(starts[0]?.delayMs).toBeGreaterThan(12_000);
+		expect(starts[0]?.delayMs).toBeLessThanOrEqual(16_000);
+	});
+
+	it("retries a stored login another session was still refreshing", async () => {
+		const storage = AuthStorage.inMemory({
+			// wall-clock: a persisted absolute expiry, ten seconds in the past
+			anthropic: { type: "oauth", refresh: "refresh-token", access: "expired", expires: Date.now() - 10_000 },
+		});
+		const unresolved = resolveUnresolvedOAuthLogin(storage, "anthropic");
+		if (!unresolved || unresolved.ok) throw new Error("expected an unresolved OAuth login");
+		const created = createSession({ failCount: 1, errorMessage: unresolved.error });
+		const starts = recordRetries(created.session);
+
+		await created.session.prompt("Test");
+
+		expect(created.getCallCount()).toBe(2);
+		expect(starts.map((start) => start.attempt)).toEqual([1]);
+		expect(created.session.isRetrying).toBe(false);
 	});
 
 	it("shows one pinned-quota failover notice per turn on a pinned model (spec 089)", async () => {

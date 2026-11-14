@@ -27,6 +27,7 @@ import {
 	type ExtensionAPI,
 	getAgentDir,
 	getMarkdownTheme,
+	type SubagentLaneAuthority,
 	type SubagentLoopGuard,
 	withFileMutationQueue,
 	workerProjectTrustEnv,
@@ -46,6 +47,7 @@ import {
 	workerSkillArgs,
 } from "./capabilities.ts";
 import {
+	childExecutionBudgetMs,
 	createExecutionBudget,
 	type ExecutionBudget,
 	exceedsParallelTaskLimit,
@@ -63,6 +65,7 @@ import {
 } from "./graph-result.ts";
 import { runManagedProcess } from "./managed-process.ts";
 import { canSpawnSubagents, childSubagentEnv } from "./nesting.ts";
+import { runOwnedAgent } from "./owned-agent.ts";
 import {
 	emptyUsage,
 	type SingleResult,
@@ -81,7 +84,6 @@ import {
 } from "./workflow-graph.ts";
 
 const COLLAPSED_ITEM_COUNT = 10;
-const DEFAULT_EXECUTION_BUDGET_MS = 840_000;
 const MAX_EXECUTION_BUDGET_MS = 840_000;
 const EXECUTION_CLEANUP_RESERVE_MS = 15_000;
 const DEFAULT_ATTEMPT_CUTOFF_MS = 600_000;
@@ -344,6 +346,7 @@ const workerSkillAdmission = new WeakMap<WorkerExtensionArgsFn, WorkerSkillAdmit
 
 /** Spawning session id for one subagent tool call, keyed by its args closure (no module-global state). */
 const workerSpawningSession = new WeakMap<WorkerExtensionArgsFn, string | undefined>();
+const workerParentRemainingMs = new WeakMap<WorkerExtensionArgsFn, () => number | undefined>();
 
 /** Applies one lane's declared write scope to the actual worker process, preserving per-call ownership maps. */
 function scopedWorkerArgs(
@@ -466,6 +469,23 @@ async function runSingleAgentAttempt(
 		args.push(`Task: ${task}`);
 		const workerCwd = cwd ?? defaultCwd;
 		const projectTrust = await workerProjectTrustEnv({ parentCwd: defaultCwd, workerCwd, signal });
+		// Recheck the host budget at the final spawn boundary, after trust and capability work.
+		cutoffMs = childExecutionBudgetMs(cutoffMs, workerParentRemainingMs.get(workerExtensionArgs)?.());
+		if (cutoffMs <= 0) {
+			currentResult.exitCode = 124;
+			currentResult.stopReason = "deadline";
+			currentResult.errorMessage =
+				"Parent execution budget reserved for integration and verification; child not started";
+			return {
+				result: currentResult,
+				process: {
+					reason: "cutoff",
+					elapsedMs: 0,
+					cleanup: { termSent: false, killSent: false, processGroup: false },
+					terminationObserved: true,
+				},
+			};
+		}
 		const stream = createSubagentStream(currentResult, onUpdate ? emitUpdate : undefined, signal, loopGuard);
 		const invocation = getOmkInvocation(args);
 		const processResult = await runManagedProcess({
@@ -538,7 +558,33 @@ async function runSingleAgent(
 	profileStore: DeadlineProfileStore,
 	pendingSequentialTasks: number,
 	workerExtensionArgs: WorkerExtensionArgsFn,
+	laneAuthority?: SubagentLaneAuthority | null,
 ): Promise<SingleResult> {
+	if (laneAuthority) {
+		return runOwnedAgent(laneAuthority, {
+			agent: agentName,
+			task,
+			step,
+			signal,
+			launch: (laneSignal) =>
+				runSingleAgent(
+					defaultCwd,
+					agents,
+					agentName,
+					task,
+					cwd,
+					step,
+					laneSignal,
+					onUpdate,
+					makeDetails,
+					unbounded,
+					budget,
+					profileStore,
+					pendingSequentialTasks,
+					workerExtensionArgs,
+				),
+		});
+	}
 	const agent = agents.find((candidate) => candidate.name === agentName);
 	if (!agent) {
 		const available = agents.map((candidate) => `"${candidate.name}"`).join(", ") || "none";
@@ -563,25 +609,6 @@ async function runSingleAgent(
 	// Spec 071: always on, one guard per logical task, so resumed attempts keep the usage already counted.
 	const loopGuard = createSubagentLoopGuard();
 	const spawningSessionId = workerSpawningSession.get(workerExtensionArgs);
-	if (unbounded) {
-		return (
-			await runSingleAgentAttempt(
-				defaultCwd,
-				agents,
-				agentName,
-				task,
-				task,
-				cwd,
-				step,
-				0,
-				signal,
-				reportUpdate,
-				workerExtensionArgs,
-				loopGuard,
-				spawningSessionId,
-			)
-		).result;
-	}
 	return await runAdaptiveAgent({
 		agentName,
 		agentSource: agent.source,
@@ -665,10 +692,9 @@ const SubagentParams = Type.Object({
 	executionBudgetMs: Type.Optional(
 		Type.Integer({
 			description:
-				"Internal wall-clock budget. Defaults to 840000ms outside Ultra; supplying it also bounds Ultra execution.",
+				"Internal wall-clock budget. Omit for the effort-specific finite default. The parent's remaining time reserves integration and verification capacity.",
 			minimum: 60_000,
 			maximum: MAX_EXECUTION_BUDGET_MS,
-			default: DEFAULT_EXECUTION_BUDGET_MS,
 		}),
 	),
 	maxResumeAttempts: Type.Optional(
@@ -692,12 +718,12 @@ export default function (omk: ExtensionAPI) {
 		description: [
 			"Delegate tasks to specialized subagents with isolated context.",
 			"Modes: single, parallel, chain, or graph (validated dependency DAG with parallel waves and {dependencies} handoff).",
-			"Long work is predictively sharded by token and wall-clock demand, checkpointed, and resumed only from unfinished work; Ultra removes task-count and concurrency caps, plus the execution deadline unless executionBudgetMs is supplied.",
+			"Effort sets bounded concurrency, task counts and deadlines, including Ultra. Delegate independent work early; leave time for integration and required verification. Long work is checkpointed and resumes only unfinished work within the budget.",
 			'Default agent scope is "user" (from ~/.omk/agent/agents).',
 			'To enable project-local agents in .omk/agents, set agentScope: "both" (or "project").',
 		].join(" "),
 		parameters: SubagentParams,
-		resolveTimeoutMs: (ctx) => (ctx.thinkingLevel === "ultra" ? 0 : undefined),
+		resolveTimeoutMs: () => MAX_EXECUTION_BUDGET_MS + EXECUTION_CLEANUP_RESERVE_MS,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const agentScope: AgentScope = params.agentScope ?? "user";
@@ -706,22 +732,32 @@ export default function (omk: ExtensionAPI) {
 			const agents = discovery.agents.map((agent) =>
 				agent.model || !selectedModel ? agent : { ...agent, model: selectedModel },
 			);
-			const workerExtensionArgs: WorkerExtensionArgsFn = (model) =>
-				workerExtensions.argsFor(model, ctx.modelRegistry);
+			// The worker SDK clamps --thinking against its resolved model, including pinned models.
+			const workerExtensionArgs: WorkerExtensionArgsFn = (model) => [
+				...workerExtensions.argsFor(model, ctx.modelRegistry),
+				...(ctx.thinkingLevel === undefined ? [] : ["--thinking", ctx.thinkingLevel]),
+			];
 			const parentLedger = {
 				getEntries: () => ctx.sessionManager.getEntries(),
 				appendCustomEntry: (customType: string, data?: unknown) => omk.appendEntry(customType, data),
 			};
 			workerSpawningSession.set(workerExtensionArgs, ctx.sessionManager?.getSessionId?.());
 			workerSkillAdmission.set(workerExtensionArgs, (granted) => admitWorkerSkills(parentLedger, granted));
+			const laneAuthority = ctx.getSubagentLaneAuthority?.();
+			if (laneAuthority?.getRemainingExecutionMs)
+				workerParentRemainingMs.set(workerExtensionArgs, laneAuthority.getRemainingExecutionMs);
 			const confirmProjectAgents = params.confirmProjectAgents ?? true;
+			const taskCount = params.tasks?.length || params.graph?.length || params.chain?.length || 1;
 			const executionPolicy = resolveSubagentExecutionPolicy(
 				ctx.thinkingLevel,
-				params.tasks?.length ?? params.graph?.length ?? 1,
+				taskCount,
 				params.executionBudgetMs !== undefined,
 			);
 			const executionBudget = createExecutionBudget({
-				hardDeadlineMs: params.executionBudgetMs ?? DEFAULT_EXECUTION_BUDGET_MS,
+				hardDeadlineMs: childExecutionBudgetMs(
+					params.executionBudgetMs ?? executionPolicy.defaultExecutionBudgetMs,
+					laneAuthority?.getRemainingExecutionMs?.(),
+				),
 				cleanupReserveMs: EXECUTION_CLEANUP_RESERVE_MS,
 				maxResumeAttempts: params.maxResumeAttempts ?? 1,
 				maxTaskShards: MAX_TASK_SHARDS,
@@ -758,6 +794,19 @@ export default function (omk: ExtensionAPI) {
 						},
 					],
 					details: makeDetails("single")([]),
+				};
+			}
+
+			if (exceedsParallelTaskLimit(executionPolicy, taskCount)) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Too many subagent tasks (${taskCount}). Max is ${executionPolicy.maxParallelTasks} for this effort.`,
+						},
+					],
+					details: makeDetails(hasChain ? "chain" : hasTasks ? "parallel" : "graph")([]),
+					isError: true,
 				};
 			}
 
@@ -827,6 +876,7 @@ export default function (omk: ExtensionAPI) {
 						profileStore,
 						params.chain.length - i,
 						workerExtensionArgs,
+						laneAuthority,
 					);
 					results.push(result);
 
@@ -881,7 +931,6 @@ export default function (omk: ExtensionAPI) {
 				// routes through buildSubagentOrchestrationPlan → launchSubagentLanes.
 				// Batches run sequentially, so renderDependencyContext sees completed
 				// dependency outputs at launch time.
-				const laneAuthority = ctx.getSubagentLaneAuthority?.();
 				if (laneAuthority) {
 					const nodeById = new Map(plan.tasks);
 					const lanes = params.graph.map((node) => ({
@@ -1071,7 +1120,6 @@ export default function (omk: ExtensionAPI) {
 				// tasks route through buildSubagentOrchestrationPlan →
 				// launchSubagentLanes (parent admission + shared pool + settlement).
 				// Without one (bare/test contexts) keep the local concurrency path.
-				const laneAuthority = ctx.getSubagentLaneAuthority?.();
 				let results: SingleResult[];
 				if (laneAuthority) {
 					const laneIndexById = new Map<string, number>();
@@ -1227,6 +1275,7 @@ export default function (omk: ExtensionAPI) {
 					profileStore,
 					1,
 					workerExtensionArgs,
+					laneAuthority,
 				);
 				const isError = isFailedResult(result);
 				if (isError) {

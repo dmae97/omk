@@ -1,4 +1,5 @@
 import type { AssistantMessage } from "../types.ts";
+import { MAX_RETRY_TIMER_MS } from "./provider-retry-sleep.ts";
 import { retryBackoffDelayMs } from "./retry-backoff.ts";
 import { hasStatusCodeLike } from "./status-code.ts";
 
@@ -127,6 +128,11 @@ export interface RetryPolicy {
 	 * `+Infinity` takes the cap.
 	 */
 	baseDelayMs: number;
+	/**
+	 * Replaces the backoff of one retry; receives that backoff and the error text. A result that is
+	 * not a non-negative number keeps the backoff, and one longer than a timer holds takes the cap.
+	 */
+	delayMs?: (backoffMs: number, errorMessage: string) => number;
 }
 
 /** Optional callbacks emitted by {@link retryAssistantCall} around each retry. */
@@ -222,7 +228,11 @@ export async function retryAssistantCall(
 
 		attempt++;
 		lastRetry = { attempt, errorMessage: response.errorMessage || "Unknown error" };
-		const delayMs = retryBackoffDelayMs(policy!.baseDelayMs, attempt);
+		const backoffMs = retryBackoffDelayMs(policy!.baseDelayMs, attempt);
+		const requestedMs = policy!.delayMs?.(backoffMs, lastRetry.errorMessage);
+		// `>= 0` is false for undefined and NaN.
+		const delayMs =
+			requestedMs !== undefined && requestedMs >= 0 ? Math.min(requestedMs, MAX_RETRY_TIMER_MS) : backoffMs;
 		await callbacks?.onRetryScheduled?.(attempt, maxAttempts, delayMs, lastRetry.errorMessage);
 
 		// Normalize aborts during retry backoff to the same AssistantMessage shape as

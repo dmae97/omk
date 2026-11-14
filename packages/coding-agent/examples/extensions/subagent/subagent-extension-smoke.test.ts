@@ -61,7 +61,7 @@ afterEach(async () => {
 });
 
 describe("subagent extension registration and spawn smoke", () => {
-	it("inherits the selected session model across the managed process boundary", async () => {
+	it("inherits the selected session model and effort across the managed process boundary", async () => {
 		const cwd = await fs.promises.mkdtemp(path.join(os.tmpdir(), "omk-subagent-extension-smoke-"));
 		cleanupPaths.push(cwd);
 		const projectAgentsDir = path.join(cwd, ".omk", "agents");
@@ -76,6 +76,8 @@ describe("subagent extension registration and spawn smoke", () => {
 		process.argv[1] = path.join(import.meta.dirname, "fixtures", "fake-omk-json.mjs");
 		process.env.OMK_CODING_AGENT_DIR = agentHome;
 		process.env.OMK_EXPECTED_MODEL = "openai-codex/session-selected-model";
+		const argvFile = path.join(cwd, "worker-argv.jsonl");
+		process.env.OMK_FAKE_ARGV_FILE = argvFile;
 
 		let registered: unknown;
 		const api = {
@@ -99,7 +101,12 @@ describe("subagent extension registration and spawn smoke", () => {
 			},
 			new AbortController().signal,
 			undefined,
-			{ cwd, hasUI: false, model: { provider: "openai-codex", id: "session-selected-model" } },
+			{
+				cwd,
+				hasUI: false,
+				thinkingLevel: "medium",
+				model: { provider: "openai-codex", id: "session-selected-model" },
+			},
 		);
 		const details = result.details as SmokeDetails;
 
@@ -112,6 +119,8 @@ describe("subagent extension registration and spawn smoke", () => {
 			deadline: { outcome: "completed" },
 		});
 		expect(details.results[0]?.deadline?.attempts).toHaveLength(1);
+		const argv = JSON.parse((await fs.promises.readFile(argvFile, "utf8")).trim()) as string[];
+		expect(argv[argv.indexOf("--thinking") + 1]).toBe("medium");
 		expect(details.executionBudget).toMatchObject({
 			hardDeadlineMs: 120_000,
 			plannedShards: 1,
@@ -295,7 +304,7 @@ describe("subagent extension registration and spawn smoke", () => {
 		});
 	}, 120_000);
 
-	it("honors an explicit internal execution budget in Ultra while removing parallel limits", async () => {
+	it("honors an explicit internal execution budget and keeps Ultra bounded", async () => {
 		const cwd = await fs.promises.mkdtemp(path.join(os.tmpdir(), "omk-subagent-ultra-smoke-"));
 		cleanupPaths.push(cwd);
 		const projectAgentsDir = path.join(cwd, ".omk", "agents");
@@ -320,7 +329,7 @@ describe("subagent extension registration and spawn smoke", () => {
 		registerSubagent(api);
 		if (!isSmokeTool(registered)) throw new Error("subagent tool was not registered");
 
-		expect(registered.resolveTimeoutMs?.({ thinkingLevel: "ultra" })).toBe(0);
+		expect(registered.resolveTimeoutMs?.({ thinkingLevel: "ultra" })).toBe(855_000);
 		const result = await registered.execute(
 			"fixture-ultra-call",
 			{

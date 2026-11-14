@@ -1,5 +1,10 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { CLAUDE_CODE_EXTERNAL_USER_AGENT } from "omk-ai";
 import { describe, expect, it, vi } from "vitest";
+import { AuthStorage } from "../src/core/auth-storage.ts";
+import { ModelRegistry } from "../src/core/model-registry.ts";
 import {
 	buildQwenCliEnvironment,
 	fetchQwenTokenPlanUsage,
@@ -973,5 +978,45 @@ describe("qwen token-plan billing fallback", () => {
 				: { kind: "ran" as const, exitCode: 0, stdout },
 		);
 		expect(snapshot.message).toBe("no active token plan");
+	});
+});
+
+describe("usage polling and a login that can no longer refresh", () => {
+	it("sends one token request for a dead kimi-code login, not one per poll", async () => {
+		// Observed 2026-11-11: the Kimi token endpoint answered 404 with an HTML page, the stored
+		// kimi-code login had expired, and every session's rail retried the refresh every minute.
+		const dir = mkdtempSync(join(tmpdir(), "omk-usage-dead-login-"));
+		try {
+			writeFileSync(
+				join(dir, "auth.json"),
+				JSON.stringify({
+					"kimi-code": { type: "oauth", refresh: "dead-refresh", access: "expired", expires: Date.now() - 10_000 },
+				}),
+			);
+			const tokenRequests: string[] = [];
+			vi.stubGlobal(
+				"fetch",
+				vi.fn(async (url: string | URL | Request) => {
+					tokenRequests.push(String(url));
+					return new Response("<html><h1>404 Not Found</h1></html>", { status: 404 });
+				}),
+			);
+			const authStorage = AuthStorage.create(join(dir, "auth.json"));
+			const testSession = {
+				state: { model: { provider: "kimi-coding", baseUrl: "https://example.test/v1" } },
+				settingsManager: SettingsManager.inMemory({}),
+				modelRegistry: ModelRegistry.create(authStorage, join(dir, "models.json")),
+			};
+			const usageFetch = vi.fn(async () => Response.json({}));
+
+			for (let poll = 0; poll < 3; poll++) {
+				await loadSubscriptionUsage(testSession as never, usageFetch, "kimi-coding");
+			}
+
+			expect(tokenRequests.filter((url) => url.endsWith("/oauth2/token"))).toHaveLength(1);
+		} finally {
+			vi.unstubAllGlobals();
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });

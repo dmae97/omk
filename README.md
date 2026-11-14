@@ -32,6 +32,66 @@
   <a href="https://discord.gg/zgCX5uRy4">Discord</a>
 </p>
 
+<!-- Community PR authors: non-owner, non-bot accounts with a pull request directly in dmae97/omk.
+     Include open, merged, and closed PRs; keep the profiles in alphabetical order. -->
+<h2 align="center">Built with our community</h2>
+
+<p align="center">
+  Thank you to everyone who has opened a pull request directly in OMK.<br />
+  Your time, ideas, and care help this project grow.
+</p>
+
+<table align="center">
+  <tr>
+    <td align="center"><a href="https://github.com/2409324124"><img src="https://avatars.githubusercontent.com/u/89211418?v=4" width="68" height="68" alt="@2409324124" /><br /><sub><strong>2409324124</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/Abhinav3499"><img src="https://avatars.githubusercontent.com/u/143208042?v=4" width="68" height="68" alt="@Abhinav3499" /><br /><sub><strong>Abhinav3499</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/AndreIsraelAO"><img src="https://avatars.githubusercontent.com/u/209568354?v=4" width="68" height="68" alt="@AndreIsraelAO" /><br /><sub><strong>AndreIsraelAO</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/anhnt256"><img src="https://avatars.githubusercontent.com/u/19179293?v=4" width="68" height="68" alt="@anhnt256" /><br /><sub><strong>anhnt256</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/AnushreeKasturi"><img src="https://avatars.githubusercontent.com/u/219416439?v=4" width="68" height="68" alt="@AnushreeKasturi" /><br /><sub><strong>AnushreeKasturi</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/dannyward630"><img src="https://avatars.githubusercontent.com/u/71604164?v=4" width="68" height="68" alt="@dannyward630" /><br /><sub><strong>dannyward630</strong></sub></a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/HangMine"><img src="https://avatars.githubusercontent.com/u/32837290?v=4" width="68" height="68" alt="@HangMine" /><br /><sub><strong>HangMine</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/imsurya26"><img src="https://avatars.githubusercontent.com/u/219236223?v=4" width="68" height="68" alt="@imsurya26" /><br /><sub><strong>imsurya26</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/laozhej"><img src="https://avatars.githubusercontent.com/u/104217479?v=4" width="68" height="68" alt="@laozhej" /><br /><sub><strong>laozhej</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/lj1166"><img src="https://avatars.githubusercontent.com/u/187236931?v=4" width="68" height="68" alt="@lj1166" /><br /><sub><strong>lj1166</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/Muhtasim-Munif-Fahim"><img src="https://avatars.githubusercontent.com/u/204097607?v=4" width="68" height="68" alt="@Muhtasim-Munif-Fahim" /><br /><sub><strong>Muhtasim-Munif-Fahim</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/nova-loop"><img src="https://avatars.githubusercontent.com/u/332996007?v=4" width="68" height="68" alt="@nova-loop" /><br /><sub><strong>nova-loop</strong></sub></a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/pemalama12"><img src="https://avatars.githubusercontent.com/u/221099317?v=4" width="68" height="68" alt="@pemalama12" /><br /><sub><strong>pemalama12</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/Shellghostt"><img src="https://avatars.githubusercontent.com/u/144815351?v=4" width="68" height="68" alt="@Shellghostt" /><br /><sub><strong>Shellghostt</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/shishir2305"><img src="https://avatars.githubusercontent.com/u/87112493?v=4" width="68" height="68" alt="@shishir2305" /><br /><sub><strong>shishir2305</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/shoaibriazdev"><img src="https://avatars.githubusercontent.com/u/334688131?v=4" width="68" height="68" alt="@shoaibriazdev" /><br /><sub><strong>shoaibriazdev</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/Sudhakar7J"><img src="https://avatars.githubusercontent.com/u/35969068?v=4" width="68" height="68" alt="@Sudhakar7J" /><br /><sub><strong>Sudhakar7J</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/Unluckyathecking"><img src="https://avatars.githubusercontent.com/u/111193970?v=4" width="68" height="68" alt="@Unluckyathecking" /><br /><sub><strong>Unluckyathecking</strong></sub></a></td>
+  </tr>
+</table>
+
+<p align="center">
+  <sub>Open, merged, and closed pull requests · <a href="https://github.com/dmae97/omk/pulls?q=is%3Apr">Explore OMK pull requests</a></sub>
+</p>
+
+<p align="center">
+  <a href="https://adaptorch.com/?utm_source=github&utm_medium=readme&utm_campaign=omk-community">
+    <img
+      src="readmeasset/adaptorch/omk-adaptorch-banner.svg"
+      alt="OMK writes and runs code. AdaptOrch checks what it wrote. correctness_claim: false — it ran, and this is what happened."
+      width="100%"
+    />
+  </a>
+</p>
+
+<p align="center">
+  <strong>OMK writes and runs the code. AdaptOrch checks what it wrote.</strong><br />
+  When an agent's “done” is not enough for your review, AdaptOrch keeps a record of what actually ran
+  and what happened, and every report says <code>correctness_claim=false</code>.<br />
+  <sub>A separate, optional product: OMK never calls it by default.
+  <a href="#omk--adaptorch">How it fits</a> |
+  <a href="https://adaptorch.com/?utm_source=github&utm_medium=readme&utm_campaign=omk-community#pricing">Plans</a> |
+  <a href="https://adaptorch.com/claim-boundary?utm_source=github&utm_medium=readme&utm_campaign=omk-community">Claim boundary</a></sub>
+</p>
+
 ---
 
 | **CONTROL** | **CHOICE** | **EVIDENCE** |
@@ -71,6 +131,8 @@ standalone binary and the setup details are in [Quick start](#quick-start).
 
 <!-- TODO: terminal demo GIF goes here (install, `omk`, a `/goal verify` run passing).
      Record a real session; do not use a mock-up. -->
+
+If omk helps you, a ⭐ on GitHub helps other people find it.
 
 ## Why OMK
 
@@ -506,7 +568,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.11](.github/RELEASE_NOTES_v1.5.11.md)
+- [Release notes for v1.5.14](.github/RELEASE_NOTES_v1.5.14.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -579,130 +641,54 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
-## Release v1.5.11
+## Release v1.5.14
+
+### Fixed
+
+- Turns on Anthropic models gated to Claude Code 2.1.290 or newer no longer fail with HTTP 400 `claude_code_version_too_old` when you are logged in with an Anthropic OAuth subscription. The `custom-provider-anthropic` example extension sends the same version in its user agent (#393).
+
+Release notes live in [RELEASE_NOTES_v1.5.14.md](.github/RELEASE_NOTES_v1.5.14.md).
+
+## Release v1.5.13
 
 ### Added
 
-- `OMK_ONTOLOGY_SHADOW=1` (experimental, default off) records a worktree-scoped comparison between native Context Budget selection and a bounded local metadata index. It requires active Context Budget, never changes prompt selection, and stores no raw prompts, queries, commands or absolute paths. See [ontology shadow index](packages/coding-agent/docs/ontology-shadow.md) (#379).
-- META usage in the status rail: with a Meta OAuth login, OMK reads the current and weekly windows from the official Muse Code CLI (`muse serve` with writes and shell disabled, MSP `usage/read`, no prompt or model call). An unobserved host shows `no observed usage yet`, not 0%. See [providers](packages/coding-agent/docs/providers.md).
-- `subscriptionUsageProviders` (global settings only) limits which subscription usage groups the status rail shows and requests. Omitted keeps every configured group; `[]` hides them all and makes no usage requests. A project settings file cannot change it, and an invalid value fails closed. See [settings](packages/coding-agent/docs/settings.md).
-- `/rnode <runId> [--state-dir DIR]` binds a verified run read-only and shows its R·NODE graph (run, proof, feed, outcome axes, nodes by dependency depth) in the pinned status sidebar, under RUN and VERIFY, or in the expanded control pane. It never executes, retries or approves, and never appears in the scrollback header. When rows run short it drops the outcome-axis rows before any node. See [R·NODE](packages/coding-agent/docs/rnode-tui.md).
-- `OMK_TMUX_STATUS_RAIL=1` (opt-in, already inside tmux) moves the pinned status rail into a separate 40-column tmux pane, so the chat and editor keep their own terminal, cursor and scrollback. `Ctrl+Q` hides or restores it; the pane scrolls with `PageUp`/`PageDown`, arrows, `j`/`k` and `g`/`G` without sending input to the agent. Terminals narrower than 114 columns, a failed split or a closed viewer keep the native layout, and OMK removes only its own pane and temporary frames. See [tmux status pane](packages/coding-agent/docs/tui.md#isolated-tmux-status-pane).
-- `omk explore <question>` searches the current workspace read-only and prints a JSON evidence pack of file paths and line ranges instead of whole files. It uses ripgrep when available and a Node directory walk otherwise, reads within a fixed budget, and reports what it skipped in `coverage.notVisited` and `budget.truncated`. See [explorer](packages/coding-agent/docs/explorer.md) (#316).
-- `omk run graph RUN_ID` and the SDK's `readRunGraph()` print one read-only `omk.run-graph.v1` snapshot of a verified run's ledger and authority state. They never execute, recover, publish or edit the ledger. Exit 0 means the read succeeded, not that the run passed; a bad argument exits 2 and a missing run or damaged evidence exits 1. See [run graph](packages/coding-agent/docs/run-graph.md) (#343).
-- `/goal verify --reuse` skips the acceptance run when the passing receipt in the current goal generation still matches the workspace; `--force` or `--rerun` runs it anyway. A new approved command, a workspace change or an earlier failure always runs it. Plain `/goal verify` still runs every time. See [usage](packages/coding-agent/docs/usage.md#durable-goals) (#315).
-- MCP startup failures now carry one of a fixed set of codes with a remediation hint: `mcp.spawn_not_found`, `mcp.spawn_permission_denied`, `mcp.spawn_failed`, `mcp.server_exited`, `mcp.request_timeout`, `mcp.invalid_initialize_result` and `mcp.unsupported_protocol`. The code comes only from Node spawn errors and exit metadata, never from server stderr or JSON-RPC payloads; other errors stay opaque (#326).
+- `AuthStorageBackend.withRefreshLock(key, fn)` is an optional backend method that serializes one provider's token refresh across the processes sharing the backend. `FileAuthStorageBackend` and `InMemoryAuthStorageBackend` implement it; a custom backend without it runs refreshes unserialized (#408).
+- `AuthStorage.getApiKey(provider, { background: true })` and `ModelRegistry.getApiKeyForProvider(provider, { background: true })` mark a caller nobody is waiting on, such as polling. Such a call skips an OAuth refresh that failed recently instead of repeating it (#409).
+
+### Fixed
+
+- An account rate limit no longer spends the whole retry budget in 14 seconds. A 429 or `rate_limit_error` that is not quota exhaustion and carries no `Retry-After` hint now waits 8 times the configured backoff per attempt, capped at 60 seconds, minus up to 25% jitter so sessions throttled together do not retry together. With `retry.baseDelayMs: 2000` and `retry.maxRetries: 3` the retries span 81 to 108 seconds instead of 14. A `Retry-After` hint, a retry on a route OMK just switched to and `retry.baseDelayMs: 0` behave as before. See [rate limits and credential retries](packages/coding-agent/docs/provider-resilience.md#rate-limits-and-credential-retries).
+- Compaction and branch-summary calls wait out a rate limit the same way, and honor a `Retry-After` hint in the error text (capped at 60 seconds). They used the plain 2, 4 and 8 second backoff.
+- A request whose stored OAuth login could not be resolved (the token endpoint was unreachable, or another session held the credential store) is retried within the normal retry budget instead of ending the turn. No request and no other key is sent for the failed attempt; if the login never resolves, the turn ends with the message naming `/login <provider>`. When the token endpoint refuses the refresh (HTTP 400 or 401, `invalid_grant`), the turn ends at once with that message, because the refresh token is dead. A credential the provider rejected is still not retried.
+- A logged-in session no longer sends the `models.json` provider key when its stored OAuth login cannot be resolved. With `anthropic.apiKey: "$ANTHROPIC_API_KEY"` and a dead key in the environment, a request that could not take the credential lock used to go out with that key and end the turn with `401 invalid x-api-key`. An unexpired stored token is now used as it is, and an unresolved login is reported as an authentication failure (#407).
+- Sessions sharing `auth.json` no longer wait on each other's OAuth refresh. The refresh request runs outside the credential store lock, under a per-provider refresh lock, so an expired token is still refreshed once; the store lock is held only to read and to write, and is taken without yielding the event loop. The Kimi refresh request gets the 30 second timeout the other providers use (#408).
+- The usage rail no longer sends a token request every minute for a login that cannot refresh. A failed OAuth refresh is remembered per provider for the refresh token that was tried, and usage polling waits before trying that token again: one minute, doubling with each consecutive failure up to thirty minutes. A request you are waiting on always tries, and a new login or another account is tried at once. Each session remembers this for itself (#409).
+
+Release notes live in [RELEASE_NOTES_v1.5.13.md](.github/RELEASE_NOTES_v1.5.13.md).
+
+## Release v1.5.12
 
 ### Changed
 
-- The Kimi quota read (`GET https://api.kimi.com/coding/v1/usages`) now sends `User-Agent: omk` and no `X-Msh-Platform`/`X-Msh-Version` headers, instead of identifying as Kimi CLI. This matches the other USAGE providers; the endpoint answers the same for OAuth and API-key credentials.
-- The startup deck drops its own status column while the pinned status rail is on screen, so RUN, VERIFY, TODO and SESSION are no longer drawn twice side by side. Once the deck scrolls into scrollback it keeps its layout.
-- The pinned status panel now renders with OpenTUI by default: an offscreen renderer process returns ANSI rows while `omk-tui` keeps terminal and input ownership. It shows model, run, verification, host CPU/RAM, context, usage, MCP, the session's `update_todo` progress, the running tool and a bound `/rnode` run first; `Ctrl+O` adds details. Set `OMK_OPENTUI_STATUS_RAIL=0` for the native sidebar; Node below 26.4, a missing optional `@opentui/core` and renderer failures or timeouts fall back to it. See [hybrid status panel](packages/coding-agent/docs/tui.md#hybrid-opentui-status-panel).
-- The native status sidebar shows a SYSTEM block near the top: whole-host CPU and RAM meters, physical memory used/total, and a separate `omk` row for this process's CPU and RSS. Missing samples stay `?`/unavailable, the activity sparkline tracks host CPU, and the MCP roster gives up its rows to these meters on short terminals. See [pinned status resources](packages/coding-agent/docs/tui.md#pinned-status-resources).
-- A custom footer set with `ctx.ui.setFooter` now owns the status slot: the pinned status rail steps aside while it is set, instead of hiding the extension footer. `footerData.getSubscriptionUsage()` gives extension footers the host's subscription usage snapshots through the rail's existing reader, with no second poller. See [custom footer](packages/coding-agent/docs/tui.md#pattern-6-custom-footer).
-- The MCP client offers protocol `2025-11-25` and accepts servers that answer `2024-11-05`, `2025-03-26` or `2025-06-18`. Unknown revisions are still rejected (#326).
-- MCP server labels that do not start with a letter now get an `mcp_` prefix in tool names, because Kimi's anthropic-messages endpoint rejects a whole request when any tool name starts with a non-letter. A server labeled `21st` now exposes `mcp_21st__search` instead of `21st__search`; update allow and deny lists that use the old name (#326).
-- MCP `tools/call` results accept any JSON value in `structuredContent`, not only objects. This is looser than the MCP spec, which defines it as an object. NaN and Infinity, functions, undefined properties, accessor and non-plain objects, and nesting deeper than 100 levels are still rejected (#326).
-- The bundled pstack skills and agents target OMK only. Delegation uses the `subagent` extension, model roles default to `inherit-parent` (the session model), and skill, transcript and model-settings paths live under `.omk/` and `~/.omk/agent/`. See [pstack](packages/coding-agent/docs/pstack.md) (#313).
-- `glob` 14.0.3 and `minimatch` 11.0.3 replace 13.0.6 and 10.2.6 to resolve GHSA-3g3m-2fjr-6pw4 and GHSA-g3hv-75wg-m249, including the root override and the published shrinkwrap (#332).
-- The npm `author` of `open-multi-agent-kit`, `omk-ai`, `omk-tui` and `omk-agent-core` is now Geunbin Yu, with Mario Zechner listed in `contributors`; the repository `NOTICE` records that OMK started as a fork of pi (#318).
+- The bundled subagent extension gives every effort, including Ultra, finite limits per tool call: concurrent workers, logical tasks and a default execution budget of 1 / 4 / 2 min (off, minimal), 1 / 4 / 3 min (low), 2 / 6 / 4 min (medium), 2 / 8 / 6 min (high and unknown), 3 / 8 / 8 min (xhigh), 4 / 12 / 10 min (max) and 4 / 16 / 14 min (ultra). Ultra no longer removes the task, concurrency, internal deadline or outer tool-timeout caps; the outer timeout is 855 seconds. Host admission and permits can narrow these further. These are engineering limits, not measured latency or memory results. See [subagent execution budgets](packages/coding-agent/docs/subagents.md) (#403).
+- Outside Ultra, the subagent extension used to run up to 4 workers at once, accept 8 parallel or graph tasks and default to a 14 minute budget at every effort. Concurrency is now 1 at low and below and 2 at medium and high, the task limit also applies to `chain` calls, and the default budget follows the effort. A call over the task limit is rejected before any worker starts. An explicit `executionBudgetMs` (60,000 to 840,000) still replaces the default budget (#403).
+- Subagent workers receive the parent's effort as `--thinking`; the worker clamps it to its resolved model. When the host run has a deadline, worker budgets leave 30 seconds for the lead's integration and verification, and the remaining time is checked again immediately before each spawn. With no capacity left the call returns an incomplete result instead of starting a worker (#403).
+- Skill discovery decides whether a directory has `.gitignore`, `.ignore` or `.fdignore` from the directory listing it already read, instead of probing for the three files in every directory, and resolves paths with one native `realpath` call. The discovered skill set is unchanged (#394).
 
 ### Fixed
 
-- Failed `edit` calls now append bounded recovery hints: read ranges for indentation-only differences, original candidate positions for ambiguous matches, and an observation when the replacement text is already present. Failures still write nothing, including multi-edit calls; successful responses, run-log records, write permissions and match rules are unchanged. See [edit recovery](packages/coding-agent/docs/edit-recovery.md).
-- The `edit` tool now rejects an `oldText` that matches at overlapping positions instead of replacing the first one. Replacing `aaa` in `aaaa` used to write `Za`; it now leaves the file unchanged and returns the existing `Found 2 occurrences ... Please provide more context to make it unique.` error. The same applies to CRLF, BOM and fuzzy-normalized matches and to each entry of `edits[]`, and the run-log failure class for these calls is now `multiple_matches`. Unique matches are unaffected.
-- An extension component whose `render()` or `invalidate()` throws no longer breaks the TUI. The failed instance shows `Extension render failed` and is not called again; tool rows keep their raw result, custom messages keep their content, a failed custom editor restores the default editor, and failed custom UI rejects instead of leaving its tool pending. See [extensions](packages/coding-agent/docs/extensions.md#fallback).
-- MCP servers that answer the handshake with protocol `2025-03-26` no longer fail to connect (#326).
-- `open-multi-agent-kit`, `omk-ai`, `omk-tui`, `omk-agent-core`, `omk-protocol` and `omk-adaptorch-wpl` now ship the repository's MIT `LICENSE` in their npm tarballs; `omk-book-to-skill` keeps its own license (#320).
+- Single and chain subagent launches now go through the same session lane authority as graph and parallel work. A worker whose process termination is unconfirmed keeps its child ownership and resource reservation; a timeout alone no longer marks it complete or lets a new dispatch bypass it (#403).
+- Automatic skill loading checks the current retained context before skipping a body admitted earlier. A relevant body removed by compaction or branch navigation is loaded again in its existing admission slot; a body still present is not duplicated, and a changed body still needs a new slot. `skill-autoload.jsonl` records `contextChecked`, `contextAbsent` and `restoredFromHistory`. See [automatic skill loading](packages/coding-agent/docs/skills.md#automatic-loading-checks-the-current-context) (#402).
+- After `mcpCheckHealth({ reconnectFailed: true })` reconnects a server, the session uses the replacement server's admitted tool catalog, including changed names and schemas, instead of handles bound to the closed connection. Disabled tool selections are kept, and a call made against the old connection is not replayed against the new one. See [native MCP attachment](packages/coding-agent/docs/mcp.md) (#401).
+- An automatic failover or route rotation no longer becomes the saved default model. The switch is recorded in the session only, so the next session starts on the model you chose (#395).
+- When the model a failover switched to rejects the request outright (for example `403 Access to model denied`, an authentication error or an unsupported model), OMK marks it failed for the turn and tries the next authenticated candidate instead of ending the turn there. With a `--model`/`--provider` pin, a denied candidate still ends the turn. See [provider resilience](packages/coding-agent/docs/provider-resilience.md#failover-behavior) (#395).
 
-### Security
-
-- Update `undici` from 8.12.3 to 8.12.4, including the fix for ASCII-whitespace integrity metadata bypass (GHSA-r4pc-4jcp-7pqc). The OMK dispatcher fetch now rejects mismatched hashes surrounded by tabs, line breaks, carriage returns or form feeds. Use the explicit npm implementation on Bun instead of its native shim, and preserve the method, headers and body of pre-created Requests across lazy installation. Cache/redirect-specific upstream advisories require the affected interceptors; this does not claim that every advisory was reachable in OMK or that updating npm undici changes Node's built-in fetch.
-- Update `glob` to 14.0.4 and the direct/root-override `minimatch` pin to 11.0.5. Verify the published default ESM/CJS bundles as well as the external dependency tree; retain existing import paths, `brace-expansion` and TypeBox pins. No startup or per-worker memory reduction is claimed.
-
-Release notes live in [RELEASE_NOTES_v1.5.11.md](.github/RELEASE_NOTES_v1.5.11.md).
-
-## Release v1.5.10
-
-### Fixed
-
-- Bound adaptive-effort tool-call deduplication state. If its limit is reached, the adaptive wrapper passes through the configured reasoning effort for the rest of its lifetime; other limits may still apply.
-- A compaction is no longer stamped earlier than the messages it covers when the wall clock steps backward (observed on WSL2 as ~6.8 second resyncs). Previously the compacted history's old usage still counted after compaction, so the next prompt was rejected with `context_input_capacity_exceeded`. The compaction timestamp now follows the newest message on its branch for steps up to one minute.
-- Usage estimates, input admission and compaction gates now use active-branch entry order to distinguish covered messages from new responses. Assistant usage and overflow errors arriving after compaction while the wall clock is still recovering are no longer discarded as stale; repeated compactions are distinguished by entry ID even when their timestamps match.
-
-Release notes live in [RELEASE_NOTES_v1.5.10.md](.github/RELEASE_NOTES_v1.5.10.md).
-
-## Release v1.5.9
-
-### Added
-
-- A default-on `deepseek_harness` built-in for native DeepSeek and recognized DeepSeek model IDs on gateways. It adds scoped execution guidance and projects oversized successful tool results to Unicode-safe head/tail excerpts at 80% context pressure, preserving original session history. `OMK_DEEPSEEK_HARNESS=0` independently disables it. No upstream runtime, credentials, session-log uploads, or protocol changes are introduced. See [DeepSeek harness](packages/coding-agent/docs/deepseek-harness.md).
-- Project context documents. `omk init --project` creates missing `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `RULES.md`, `TASKS.md` and `PROGRESS.md` without overwriting files, and the project-directory walk loads each once as context. A bare `omk` launch in an otherwise empty Git repository root creates them too; `OMK_PROJECT_CONTEXT_BOOTSTRAP=0` disables that bootstrap. See [User context setup](packages/coding-agent/docs/context-files.md).
-- Acceptance diagnostics behind `OMK_GOAL_DIAGNOSTICS` (flag, default off, spec 094). After a failed `/goal` acceptance check, the repair follow-up carries a bounded excerpt of the check output anchored at the first error line, falling back to head/tail (#170).
-
-### Changed
-
-- Seventeen `OMK_*` harness flags are now on by default: `OMK_EDIT_DIAGNOSTICS`, `OMK_EXEC_TRUNCATE_MIDDLE`, `OMK_JSON_SESSION_INFO`, `OMK_GOAL_AUTONOMY`, `OMK_SKILL_ADMISSION`, `OMK_SKILL_AUTO_LOAD`, `OMK_EVIDENCE_LIFECYCLE`, `OMK_ADAPTIVE_EFFORT`, `OMK_DOMAIN_ROUTING`, `OMK_GOAL_OUTPUT_RECALL`, `OMK_LANE_READY_QUEUE`, `OMK_LANE_FAILURE_SCOPE`, `OMK_RTK_OUTPUT`, `OMK_SESSION_CONTROL`, `OMK_VERIFIED_MEMORY`, `OMK_RESPONSE_REASONING_CAP` and `OMK_PREFIX_BOUNDARY`. Set any of them to `0`, `false` or `off` to restore the 1.5.8 behavior; with all of them off the G0 session hash is unchanged. `OMK_EVIDENCE_LIFECYCLE` now deletes only verified goal-recall files (`observe` deletes nothing), subagent workers keep `OMK_SKILL_AUTO_LOAD` and `OMK_ADAPTIVE_EFFORT` off, and an unset `OMK_SESSION_CONTROL` never fails startup. There is no on/off benchmark for these defaults yet (#279, #281).
-- Evidence receipts store commands verbatim. Command credential redaction and its credential preflight are removed; existing v3 receipts with `commandRedaction` and `commandBinding` remain readable. Keep secrets out of command lines and pass them through the environment or credential storage (#223).
-- The GitHub Copilot default model is now `gpt-6.1-sol`. Copilot retired `gpt-5.4`, which left Copilot without an automatic default during first-run onboarding.
-
-### Fixed
-
-- A durable goal whose approved acceptance check passed no longer stays active on a loaded host. The goal workspace binding now allows each git call 10 seconds instead of the 1.5 second per-bash-call bound, which `git status` could exceed and which then refused completion as an unavailable workspace scope. A git that hangs past the longer bound still fails closed; the bash tool scope keeps its 1.5 second bound.
-- Repeated local skill searches reuse unchanged document term frequencies instead of tokenizing the entire catalog again. Changed bodies are retokenized, input bounds are revalidated, and scores, exclusions and ranking order remain query-specific.
-- Local safe-context-window rejections during tool turns now enter bounded overflow compaction recovery instead of being classified as invalid provider responses. Auto-compaction opt-out and the hard input ceiling remain unchanged.
-- A per-call bash `timeout` now also bounds the outer tool timer, so a requested timeout longer than the fixed 300 second limit is no longer cut short. Extension tools and session wrappers receive the same bound.
-- Lock ownership no longer depends on the wall clock alone. The durable goal journal lock uses a 30 second stale window and a lost lock fails the write instead of crashing the process; the sync `auth.json` lock uses the same 30 second window as OAuth refresh, so a live refresh lock is no longer taken over; the trust store lock is reclaimed by owner pid and released only by its owner; and `omk session doctor` repair takes the session owner lease and refuses a live session with `session_in_use`.
-- Goal evidence is pinned to its generation and a complete workspace scope, stale autocomplete acceptance is rejected, and next-suggestion cost ceilings, stream identity and request lifetimes are aligned.
-- The status sidebar reads the current session's shared usage reader after `/new` or resume instead of the first session's.
-- `omk run cancel` reads the run journal in reader mode, so an owner appending at the same time no longer makes it fail with `integrity`; persistent concurrent change reports `concurrent_change`.
-- Durations, throttles, in-memory caches and deadlines now use a monotonic clock, so a wall-clock step (seen on WSL2) no longer makes them fire early, late or never. This covers the double Ctrl+C and Esc windows, the working timer, the bash output throttle, the subscription usage, diagnostics and workspace scope caches, edit diagnostic budgets, OAuth device-code polling and the TUI input drain. `npm run check` now rejects new wall-clock durations and proper-lockfile locks without an explicit stale window.
-
-### Security
-
-- Goal-recall evidence deletion refuses to run when `.omk/goals/recall` or one of its parents is a symlink.
-- `npm audit --omit=dev` is clean again. `undici` is updated to 8.12.3 (EventSource memory, SRI token and content-encoding advisories), and a root override moves `zod` to 4.6.7 for every SDK and the sandbox example (oversized constrained collection advisory; no fixed 3.x release exists).
-- The optional Gondolin example now uses Gondolin 0.14.0 with `undici` 6.29.1. Gondolin no longer depends on `node-forge`, so the temporary CVE-2026-85393 runtime guard is removed; a regression suite replays the malformed signatures against Gondolin's real cached-leaf verification. The example now requires Node.js 22.19.0 or later. Replace previously copied example directories. See [Gondolin signature security](packages/coding-agent/docs/gondolin-security.md).
-
-Release notes live in [RELEASE_NOTES_v1.5.9.md](.github/RELEASE_NOTES_v1.5.9.md).
+Release notes live in [RELEASE_NOTES_v1.5.12.md](.github/RELEASE_NOTES_v1.5.12.md).
 
 <!-- releases:end -->
 
 </details>
-
-<!-- Community PR authors: non-owner, non-bot accounts with a pull request directly in dmae97/omk.
-     Include open, merged, and closed PRs; keep the profiles in alphabetical order. -->
-<h2 align="center">Built with our community</h2>
-
-<p align="center">
-  Thank you to everyone who has opened a pull request directly in OMK.<br />
-  Your time, ideas, and care help this project grow.
-</p>
-
-<table align="center">
-  <tr>
-    <td align="center"><a href="https://github.com/2409324124"><img src="https://avatars.githubusercontent.com/u/89211418?v=4" width="68" height="68" alt="@2409324124" /><br /><sub><strong>2409324124</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/AndreIsraelAO"><img src="https://avatars.githubusercontent.com/u/209568354?v=4" width="68" height="68" alt="@AndreIsraelAO" /><br /><sub><strong>AndreIsraelAO</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/AnushreeKasturi"><img src="https://avatars.githubusercontent.com/u/219416439?v=4" width="68" height="68" alt="@AnushreeKasturi" /><br /><sub><strong>AnushreeKasturi</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/dannyward630"><img src="https://avatars.githubusercontent.com/u/71604164?v=4" width="68" height="68" alt="@dannyward630" /><br /><sub><strong>dannyward630</strong></sub></a></td>
-  </tr>
-  <tr>
-    <td align="center"><a href="https://github.com/HangMine"><img src="https://avatars.githubusercontent.com/u/32837290?v=4" width="68" height="68" alt="@HangMine" /><br /><sub><strong>HangMine</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/laozhej"><img src="https://avatars.githubusercontent.com/u/104217479?v=4" width="68" height="68" alt="@laozhej" /><br /><sub><strong>laozhej</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/lj1166"><img src="https://avatars.githubusercontent.com/u/187236931?v=4" width="68" height="68" alt="@lj1166" /><br /><sub><strong>lj1166</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/nova-loop"><img src="https://avatars.githubusercontent.com/u/332996007?v=4" width="68" height="68" alt="@nova-loop" /><br /><sub><strong>nova-loop</strong></sub></a></td>
-  </tr>
-  <tr>
-    <td align="center"><a href="https://github.com/pemalama12"><img src="https://avatars.githubusercontent.com/u/221099317?v=4" width="68" height="68" alt="@pemalama12" /><br /><sub><strong>pemalama12</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/shishir2305"><img src="https://avatars.githubusercontent.com/u/87112493?v=4" width="68" height="68" alt="@shishir2305" /><br /><sub><strong>shishir2305</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/Sudhakar7J"><img src="https://avatars.githubusercontent.com/u/35969068?v=4" width="68" height="68" alt="@Sudhakar7J" /><br /><sub><strong>Sudhakar7J</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/Unluckyathecking"><img src="https://avatars.githubusercontent.com/u/111193970?v=4" width="68" height="68" alt="@Unluckyathecking" /><br /><sub><strong>Unluckyathecking</strong></sub></a></td>
-  </tr>
-</table>
-
-<p align="center">
-  <sub>Open, merged, and closed pull requests · <a href="https://github.com/dmae97/omk/pulls?q=is%3Apr">Explore OMK pull requests</a></sub>
-</p>
 
 ## Contributing
 

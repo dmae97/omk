@@ -1,6 +1,7 @@
 import type { AssistantMessage } from "omk-ai";
 import { isContextOverflow } from "omk-ai";
 import { MAX_TIMER_DELAY_MS } from "../utils/sleep.ts";
+import { isTransientCredentialFailureMessage } from "./credential-resolution-failure.ts";
 import {
 	isContentSafetyStopMessage,
 	isQuotaExhaustionMessage,
@@ -40,6 +41,8 @@ export function isRetryableAssistantError(message: AssistantMessage, contextWind
 	if (message.stopReason !== "error" || !message.errorMessage) return false;
 	if (isContextOverflow(message, contextWindow)) return false;
 	if (isQuotaExhaustionMessage(message.errorMessage)) return true;
+	// No request left this process: another session held the credential store or its refresh.
+	if (isTransientCredentialFailureMessage(message.errorMessage)) return true;
 	return isTransientProviderErrorMessage(message.errorMessage);
 }
 

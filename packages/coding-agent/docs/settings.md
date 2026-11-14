@@ -304,6 +304,8 @@ Keep `retry.provider.maxRetries` at `0` unless provider-level retries are explic
 
 At the agent level, recognized quota and billing-cycle failures are retryable so OMK can first switch to an authenticated `providerResilience.failoverCandidates` entry. If no candidate qualifies, normal retry backoff applies. See [Provider Resilience](provider-resilience.md).
 
+A rate limit (HTTP 429, `rate_limit_error`, "too many requests") that is not quota exhaustion waits longer than the plain backoff: 8 times the delay `retry.baseDelayMs` gives for that attempt, capped at 60 seconds, minus up to 25% jitter. At the defaults the first three waits are 12 to 16, 24 to 32 and 45 to 60 seconds instead of 2, 4 and 8. A `Retry-After` hint in the error still replaces this wait, and `retry.baseDelayMs: 0` still means no wait. See [rate limits and credential retries](provider-resilience.md#rate-limits-and-credential-retries).
+
 ```json
 {
   "retry": {

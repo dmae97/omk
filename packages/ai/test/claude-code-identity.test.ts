@@ -15,7 +15,7 @@ import {
  * have observed and has to live in exactly one module — the original failure
  * was three copies drifting apart (2.1.75 / 2.1.75 / 2.1.177).
  */
-const NEWEST_OBSERVED_GATE: readonly [number, number, number] = [2, 1, 251];
+const NEWEST_OBSERVED_GATE: readonly [number, number, number] = [2, 1, 290];
 
 function parseVersion(value: string): [number, number, number] {
 	const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value);

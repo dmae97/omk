@@ -7,6 +7,28 @@
 - Pinned `@anthropic-ai/sdk` 0.92.0. Its declarations now compile for strict consumers without `skipLibCheck`. The SDK's new `ANTHROPIC_CUSTOM_HEADERS` environment variable is ignored: Anthropic requests keep sending only headers from model configuration and request options, and the selected API key or OAuth token is not replaced.
 - `GoogleThinkingLevel` is declared in an SDK-free module, so the root declarations no longer load `@google/genai`.
 
+## [1.5.14] - 2026-11-12
+
+### Fixed
+
+- Anthropic OAuth requests identify as Claude Code 2.1.322 instead of 2.1.280. Anthropic rejects an OAuth request whose Claude Code version is older than a model's gate with HTTP 400 `claude_code_version_too_old`; the gate observed on the newest model is 2.1.290, so every turn on that model failed (#393).
+
+## [1.5.13] - 2026-11-11
+
+### Added
+
+- `RetryPolicy.delayMs(backoffMs, errorMessage)` lets a caller of `retryAssistantCall` replace the backoff of one retry. A result that is not a non-negative number keeps the backoff, and one longer than a timer can hold is capped. Without it the backoff is unchanged.
+
+### Changed
+
+- The `Failed to refresh OAuth token for <provider>` error thrown by `getOAuthApiKey` carries the provider's refresh error as its `cause`. The message is unchanged.
+
+### Fixed
+
+- `refreshKimiToken` aborts after 30 seconds, like the other providers' refresh requests. It had no timeout (#408).
+
+## [1.5.12] - 2026-11-11
+
 ## [1.5.11] - 2026-11-10
 
 ### Added

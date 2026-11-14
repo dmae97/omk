@@ -320,14 +320,12 @@ function collectSkillEntries(
 	rootDir?: string,
 ): string[] {
 	const entries: string[] = [];
-	if (!existsSync(dir)) return entries;
-
 	const root = rootDir ?? dir;
 	const ig = ignoreMatcher ?? ignore();
-	addIgnoreRules(ig, dir, root);
 
 	try {
 		const dirEntries = readdirSync(dir, { withFileTypes: true });
+		addIgnoreRules(ig, dir, root, dirEntries);
 
 		for (const entry of dirEntries) {
 			if (entry.name !== "SKILL.md") {
