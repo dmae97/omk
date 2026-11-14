@@ -122,7 +122,12 @@ export function tryDomainDispatch(input: DomainDispatchInput): DomainDispatchRes
 			assignedReadPaths: input.scopeHints?.readScope,
 			assignedWritePaths: input.scopeHints?.writeScope,
 		});
-		const policy = createPolicyOrThrow(state, profile.commands, input.cwd, input.blockedPaths);
+		const executeScope = input.scopeHints?.executeScope;
+		const commands =
+			executeScope && profile.commands?.mode && profile.commands.mode !== "none"
+				? { ...profile.commands, mode: profile.commands.mode, allowPatterns: uniqueSorted(executeScope) }
+				: profile.commands;
+		const policy = createPolicyOrThrow(state, commands, input.cwd, input.blockedPaths);
 		const integrity = validatePolicyIntegrity(policy, state);
 		return {
 			loadoutAccessPolicy: policy,
@@ -139,6 +144,19 @@ export function tryDomainDispatch(input: DomainDispatchInput): DomainDispatchRes
 	} catch (error) {
 		return noPolicy(true, [errorMessage(error)], domainUsed, trace);
 	}
+}
+
+/** SDK/CLI policy entry: ordinary routing is best-effort, explicit user scope fails closed. */
+export function scopedDomainPolicy(input: DomainDispatchInput): LoadoutAccessPolicy | undefined {
+	const scoped = Object.values(input.scopeHints ?? {}).some((values) => values && values.length > 0);
+	if (!input.initialPrompt.trim() || !isDomainRoutingEnabled(input.env)) {
+		if (scoped) throw new Error("Domain scope requires OMK_DOMAIN_ROUTING and an initial prompt");
+		return undefined;
+	}
+	const dispatch = tryDomainDispatch({ ...input, initialPrompt: input.initialPrompt.trim() });
+	if (scoped && !dispatch.loadoutAccessPolicy)
+		throw new Error(`Domain scope could not be enforced: ${dispatch.warnings.join("; ")}`);
+	return dispatch.loadoutAccessPolicy;
 }
 
 function createPolicyOrThrow(

@@ -6,9 +6,16 @@
  * skill cap, input-order ties, and an ambiguity flag when a tentative leader
  * is within the documented margin of the runner-up.
  *
+ * A request with several capability clauses is also scored clause by clause
+ * (`skill-clause-relevance.ts`): a skill counts with its best clause, and the grant
+ * takes one skill per clause before a second skill for a clause it already covers.
+ * Exploration and grant stay separate: `candidates` lists every skill above the weak
+ * floor with the clause it matched, while `selected` keeps the 2–3 cap.
+ *
  * I/O-free. Callers still decide whether to mark the result active.
  */
 import { scoreSkillRelevance } from "./context-budget-relevance.ts";
+import { scoreSkillByClauses, splitTaskClauses } from "./skill-clause-relevance.ts";
 
 /** Documented lane grant cap: load at most 2–3 skills. */
 export const MAX_SELECTED_SKILLS = 3;
@@ -36,6 +43,16 @@ interface SkillScore {
 
 interface SelectedSkill extends SkillScore {
 	readonly description: string;
+	/** The request clause this skill was granted for; absent when the whole request or a path matched. */
+	readonly covers?: string;
+}
+
+/** One explored skill above the weak floor, granted or not. */
+export interface SkillCandidateMatch extends SkillScore {
+	readonly covers?: string;
+	readonly selected: boolean;
+	/** Granted skill that already covers the same clause; such a candidate is not granted. */
+	readonly redundantWith?: string;
 }
 
 export interface SelectSkillsInput {
@@ -49,6 +66,8 @@ export interface SelectSkillsInput {
 export interface SkillSelectionResult {
 	readonly selected: readonly SelectedSkill[];
 	readonly scores: readonly SkillScore[];
+	/** Every skill above the weak floor in rank order: the explored set, wider than `selected`. */
+	readonly candidates: readonly SkillCandidateMatch[];
 	readonly confidence: SkillConfidence;
 	readonly ambiguous: boolean;
 	readonly reason: string;
@@ -63,17 +82,38 @@ export function selectSkills(input: SelectSkillsInput): SkillSelectionResult {
 		return fallback([], "no skill signals detected");
 	}
 
+	// A single clause is the whole request: clause scoring would add nothing to it.
+	const found = task === "" ? [] : splitTaskClauses(task);
+	const clauses = found.length >= 2 ? found : [];
 	const ranked = skills
 		.map((skill, index) => {
-			let score = task === "" ? 0 : scoreSkillRelevance(skill, task);
+			const byClause = task === "" ? undefined : scoreSkillByClauses(skill, task, clauses);
+			let score = byClause?.whole ?? 0;
+			let clause = -1;
+			let matches = 0;
+			for (const [clauseIndex, clauseScore] of (byClause?.clauses ?? []).entries()) {
+				const clauseMatches = byClause?.clauseMatches[clauseIndex] ?? 0;
+				if (clauseScore > score || (clause >= 0 && clauseScore === score && clauseMatches > matches)) {
+					score = clauseScore;
+					clause = clauseIndex;
+					matches = clauseMatches;
+				}
+			}
 			const pathIdentity = { name: skill.name, description: "" };
 			for (const token of pathTokens) {
-				score = Math.max(score, scoreSkillRelevance(pathIdentity, token));
+				const pathScore = scoreSkillRelevance(pathIdentity, token);
+				if (pathScore > score) {
+					score = pathScore;
+					clause = -1;
+					matches = 0;
+				}
 			}
-			return { skill, index, score };
+			return { skill, index, score, clause, matches };
 		})
 		.sort((left, right) => {
 			if (right.score !== left.score) return right.score - left.score;
+			// Only clause matches carry a count, so single-clause requests keep input-order ties.
+			if (right.matches !== left.matches) return right.matches - left.matches;
 			return left.index - right.index;
 		});
 
@@ -87,11 +127,21 @@ export function selectSkills(input: SelectSkillsInput): SkillSelectionResult {
 	if (!leader) {
 		return fallback(scores, "no skill signals detected");
 	}
-	const selected = aboveWeak.slice(0, Math.max(0, max)).map((entry) => ({
-		name: entry.skill.name,
-		description: entry.skill.description,
-		score: entry.score,
-	}));
+	// One skill per clause first; whole-request and path matches keep their rank-order slots.
+	const coveredBy = new Map<number, string>();
+	const selected: SelectedSkill[] = [];
+	const candidates: SkillCandidateMatch[] = [];
+	for (const entry of aboveWeak) {
+		const covers = entry.clause >= 0 ? clauses[entry.clause]?.text : undefined;
+		const redundantWith = entry.clause >= 0 ? coveredBy.get(entry.clause) : undefined;
+		const take = redundantWith === undefined && selected.length < max;
+		const match = { name: entry.skill.name, score: entry.score, ...(covers ? { covers } : {}) };
+		if (take) {
+			selected.push({ ...match, description: entry.skill.description });
+			if (entry.clause >= 0) coveredBy.set(entry.clause, entry.skill.name);
+		}
+		candidates.push({ ...match, selected: take, ...(redundantWith ? { redundantWith } : {}) });
+	}
 	const runner = aboveWeak[1];
 	const confidence: SkillConfidence = leader.score >= SKILL_STRONG_THRESHOLD ? "confident" : "tentative";
 	const ambiguous =
@@ -101,11 +151,11 @@ export function selectSkills(input: SelectSkillsInput): SkillSelectionResult {
 			? `ambiguous: ${leader.skill.name}(${formatScore(leader.score)}) vs ${runner.skill.name}(${formatScore(runner.score)})`
 			: `${leader.skill.name} selected (${formatScore(leader.score)})`;
 
-	return { selected, scores, confidence, ambiguous, reason };
+	return { selected, scores, candidates, confidence, ambiguous, reason };
 }
 
 function fallback(scores: readonly SkillScore[], reason: string): SkillSelectionResult {
-	return { selected: [], scores, confidence: "fallback", ambiguous: false, reason };
+	return { selected: [], scores, candidates: [], confidence: "fallback", ambiguous: false, reason };
 }
 
 function formatScore(score: number): string {

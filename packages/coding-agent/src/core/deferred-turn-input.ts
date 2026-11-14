@@ -10,6 +10,32 @@ export function userMessage(text: string, images?: ImageContent[]): AgentMessage
 	return { role: "user", content, timestamp: Date.now() };
 }
 
+export function userMessageText(message: { role: string; content: unknown }): string {
+	if (message.role !== "user") return "";
+	if (typeof message.content === "string") return message.content;
+	return (message.content as TextContent[])
+		.filter((block) => block.type === "text")
+		.map((block) => block.text)
+		.join("");
+}
+
+export function currentUserQuery(messages: readonly AgentMessage[]): string | undefined {
+	for (let index = messages.length - 1; index >= 0; index--) {
+		const message = messages[index];
+		if (!message || message.role !== "user") continue;
+		const content = message.content;
+		if (typeof content === "string") return content.trim() || undefined;
+		if (Array.isArray(content))
+			return (
+				content
+					.flatMap((block) => (block.type === "text" ? [block.text] : []))
+					.join("\n")
+					.trim() || undefined
+			);
+	}
+	return undefined;
+}
+
 /** A user prompt deferred while another prompt was in preflight; it runs as a full prompt if no run adopts it. */
 export interface DeferredPrompt {
 	readonly text: string;
@@ -93,7 +119,7 @@ export function routesOutsideScope(
 	scopeHeld: boolean,
 ): boolean {
 	if (options?.runBudget !== undefined) return false;
-	return runOwns || (scopeHeld && (options?.streamingBehavior !== undefined || command));
+	return command || runOwns || (scopeHeld && options?.streamingBehavior !== undefined);
 }
 
 const handledInput = new WeakSet<PromptOptions>();

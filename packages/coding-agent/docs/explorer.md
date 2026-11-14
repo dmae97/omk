@@ -76,10 +76,30 @@ definition in source outranks the same term in documentation or a test reference
 `.md` files and `*.test.*`/`*.spec.*` files are penalized rather than allowed to dominate
 the top of the list. Results are deterministic for the same question and budget.
 
+## Agent tool and automatic delegation
+
+`explore` is also registered as an agent tool in `core/tools`, so the **single main agent**
+can call it in-process. There is no subagent in this design: the explorer runs inside the
+same agent that reads files.
+
+The tool description and `exploration-policy.ts` encode when to use it:
+
+| Signal | Threshold | Decision |
+| --- | --- | --- |
+| Expected separate searches | `minSearches = 2` | explore |
+| Expected files to inspect | `minFiles = 4` | explore |
+| Main-context pressure | `contextPressure = 0.7` | explore |
+| One known file or symbol, low pressure | below all three | direct read |
+
+`omk explore --auto [--searches N] [--files N] [--pressure P] <question>` prints that
+decision as `{ "decision": { "mode", "reason" } }`, and includes the evidence pack only
+when the mode is `explore`. This makes the threshold behavior testable without an agent
+loop.
+
 ## Next steps
 
-- Delegate the same exploration to a read-only subagent with the same schema, with an
-  in-process fallback when the extension is unavailable.
 - Feed ranges into the main read path instead of whole files, and re-check the range
   before any edit. Line numbers are hints, not proof; the main agent re-reads before it
   changes code.
+- If an execution topology ever fans work out, that belongs to the DAG/topology layer,
+  not to this read-only single-agent path.

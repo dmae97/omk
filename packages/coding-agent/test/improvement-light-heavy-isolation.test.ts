@@ -27,7 +27,8 @@ describe("R07 light/heavy isolation through authority", () => {
 		const result = await authority.dispatchLanes({
 			lanes: (mixed ? ["heavy", "light-a"] : ["light-a", "light-b"]).map((id) => ({
 				id,
-				role: "executor" as const,
+				// Read-only lanes: undeclared writers are serialized by the scheduler.
+				role: "critic" as const,
 				task: id,
 				agentName: "test-agent",
 			})),

@@ -71,6 +71,27 @@ describe("skills", () => {
 			expect(diagnostics.some((d: ResourceDiagnostic) => d.message.includes("invalid characters"))).toBe(true);
 		});
 
+		it("accepts dot-separated name segments such as Spec Kitty command skills", () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "skills-dotted-name-"));
+			try {
+				const warnsInvalidChars = (name: string, dirName: string): boolean => {
+					const dir = join(tempDir, dirName);
+					mkdirSync(dir);
+					writeFileSync(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: Dotted name probe\n---\nBody`);
+					const { skills, diagnostics } = loadSkillsFromDir({ dir, source: "test" });
+					expect(skills.map((skill) => skill.name)).toEqual([name]);
+					return diagnostics.some((d: ResourceDiagnostic) => d.message.includes("invalid characters"));
+				};
+
+				expect(warnsInvalidChars("spec-kitty.tasks-outline", "dotted")).toBe(false);
+				expect(warnsInvalidChars("spec-kitty..plan", "double-dot")).toBe(true);
+				expect(warnsInvalidChars(".spec-kitty", "leading-dot")).toBe(true);
+				expect(warnsInvalidChars("spec-kitty.", "trailing-dot")).toBe(true);
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
+		});
+
 		it("should warn when name exceeds 64 characters", () => {
 			const { skills, diagnostics } = loadSkillsFromDir({
 				dir: join(fixturesDir, "long-name"),

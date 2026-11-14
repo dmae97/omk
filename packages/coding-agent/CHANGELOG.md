@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-14
+
+### Added
+
+- `omk-speak-like-you-eat` adapts SLYE 1.6.1 as an optional OMK package with manual and automatic plain-language companions, ELI5 and Light tabs, scoped model selection, trusted project settings, custom prompts, cancellation, and retry behavior. Extension contexts now expose session-scoped models, and `registerEntryRenderer()` renders persisted custom entries without adding them to LLM context. See [Speak Like You Eat](docs/speak-like-you-eat.md) and [Extensions](docs/extensions.md#display-only-entry-rendering).
+- Next-task suggestions (`OMK_NEXT_SUGGESTIONS`, flag, default off) now show a complete prompt in the empty editor: a title, then input, verification, evidence and result sections rendered by the host from the session transcript. A local suggestion appears before any provider call and stays when the model reply is empty, malformed, timed out or failed; Tab inserts exactly the displayed text and refuses a suggestion whose session state changed. Multi-line editor placeholders render below the cursor row. See [environment variables](docs/environment-variables.md).
+
+### Changed
+
+- Skill selection for automatic loads and provider-harness grants scores each clause of a multi-capability request and grants one skill per clause before a second for the same clause, still at most three. Single-clause requests rank as before. See [skills](docs/skills.md#requests-with-several-capabilities).
+
+### Breaking Changes
+
+- The default package manifest dialect is now native `omk`. Extensions that import legacy Pi packages without installing them, and packages with only a `pi` manifest, no longer load by default. Opt into compatibility with `--package-manifest-dialect omk+pi`, or `packageManifestDialect: "omk+pi"` in SDK constructors. The load error now names this option. `omk package doctor` also defaults to the native target. See [the OMK 2 migration notes](docs/omk-2-migration.md#native-default-2026-11-08).
+
+### Fixed
+
+- A receipt-reading critic, visual-QA or document lane now depends only on the producers whose receipt its read scope covers; a lane reading the whole run directory still waits for every producer. Writer serialization and the failure scope are unchanged.
+
 ## [1.5.14] - 2026-11-12
 
 ### Fixed

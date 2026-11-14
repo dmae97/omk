@@ -13,6 +13,16 @@ import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } fr
 
 const CLIENT_ID = "17e5f671-d194-4dfb-9706-5516cb48c098";
 const DEFAULT_OAUTH_HOST = "https://auth.kimi.com";
+/**
+ * RFC 8628 device authorization endpoint. Kimi moved it from `/oauth2/device/code`,
+ * which now answers `404` from nginx, to the Go service under `/api/oauth/`. The old
+ * path is what produced "Kimi device authorization failed: 404 <html>...nginx".
+ */
+const DEVICE_AUTHORIZATION_PATH = "/api/oauth/device_authorization";
+/** Token endpoint that accepts the device-code and refresh grants. */
+const TOKEN_PATH = "/api/oauth/token";
+/** Fallback verification page when the server omits both verification URIs. */
+const FALLBACK_VERIFICATION_PATH = "/code/authorize_device";
 const DEVICE_ID_FILENAME = "kimi-device-id";
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 const DEFAULT_DEVICE_FLOW_TTL_MS = 15 * 60 * 1000;
@@ -37,10 +47,6 @@ interface TokenResponse {
 	error?: string;
 	error_description?: string;
 	interval?: number;
-}
-
-function _sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function resolveOAuthHost(): string {
@@ -106,15 +112,17 @@ async function requestDeviceAuthorization(
 	signal?: AbortSignal,
 ): Promise<DeviceAuthorizationResponse> {
 	const deviceModel = getDeviceModel();
-	const response = await fetch(`${host}/oauth2/device/code`, {
+	const response = await fetch(`${host}${DEVICE_AUTHORIZATION_PATH}`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/x-www-form-urlencoded",
 			Accept: "application/json",
 		},
+		// No `scope`: this endpoint answers `invalid_scope` ("Requested scope is not
+		// allowed") for every value, including `openid`, and issues the device code
+		// only when the parameter is absent.
 		body: new URLSearchParams({
 			client_id: CLIENT_ID,
-			scope: "openid profile email offline_access",
 			device_id: deviceId,
 			device_model: deviceModel,
 		}),
@@ -129,6 +137,22 @@ async function requestDeviceAuthorization(
 	return (await response.json()) as DeviceAuthorizationResponse;
 }
 
+/**
+ * Parse a token response body.
+ *
+ * An HTML error page from a proxy or a moved endpoint would otherwise surface as an
+ * opaque `SyntaxError: Unexpected token '<'`. Keeping the status and the first bytes of
+ * the body makes a redirect or outage diagnosable from the login error alone.
+ */
+async function parseTokenResponse(response: Response, failurePrefix: string): Promise<TokenResponse> {
+	const text = await response.text();
+	try {
+		return (text.length > 0 ? JSON.parse(text) : {}) as TokenResponse;
+	} catch {
+		throw new Error(`${failurePrefix}: ${response.status} ${text.slice(0, 200)}`);
+	}
+}
+
 async function pollKimiToken(
 	host: string,
 	deviceCode: string,
@@ -139,7 +163,7 @@ async function pollKimiToken(
 	| { status: "failed"; message: string }
 	| { status: "complete"; value: OAuthCredentials }
 > {
-	const response = await fetch(`${host}/oauth2/token`, {
+	const response = await fetch(`${host}${TOKEN_PATH}`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/x-www-form-urlencoded",
@@ -153,7 +177,7 @@ async function pollKimiToken(
 		signal,
 	});
 
-	const payload = (await response.json()) as TokenResponse;
+	const payload = await parseTokenResponse(response, "Kimi token polling failed");
 
 	if (response.ok && payload.access_token) {
 		const expiresInMs = (payload.expires_in ?? 3600) * 1000;
@@ -186,7 +210,9 @@ export async function loginKimiCode(callbacks: OAuthLoginCallbacks): Promise<OAu
 	}
 
 	const verificationUri =
-		device.verification_uri_complete || `${device.verification_uri || host}/activate?user_code=${device.user_code}`;
+		device.verification_uri_complete ||
+		device.verification_uri ||
+		`${host}${FALLBACK_VERIFICATION_PATH}?user_code=${encodeURIComponent(device.user_code)}`;
 
 	callbacks.onAuth({
 		url: verificationUri,
@@ -206,7 +232,7 @@ export async function loginKimiCode(callbacks: OAuthLoginCallbacks): Promise<OAu
 export async function refreshKimiToken(refreshToken: string): Promise<OAuthCredentials> {
 	const host = resolveOAuthHost();
 
-	const response = await fetch(`${host}/oauth2/token`, {
+	const response = await fetch(`${host}${TOKEN_PATH}`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/x-www-form-urlencoded",
@@ -221,7 +247,7 @@ export async function refreshKimiToken(refreshToken: string): Promise<OAuthCrede
 		signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
 	});
 
-	const payload = (await response.json()) as TokenResponse;
+	const payload = await parseTokenResponse(response, "Kimi token refresh failed");
 
 	if (!response.ok || !payload.access_token) {
 		const detail = payload.error_description || payload.error || String(response.status);

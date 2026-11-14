@@ -3,7 +3,12 @@ import { lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFil
 import { join, resolve } from "node:path";
 import { getAgentDir, getExamplesPath, getPackageDir } from "../config.ts";
 import { PROJECT_CONTEXT_DOCUMENTS } from "../core/project-context-files.ts";
-import { installProjectPstack, PstackConflictError, preflightProjectPstack } from "./pstack-install.ts";
+import {
+	installProjectPstack,
+	installPstackAgents,
+	PstackConflictError,
+	preflightProjectPstack,
+} from "./pstack-install.ts";
 
 const GLOBAL_DOCUMENTS = ["AGENTS.md", "INTERNET.md", "CLAUDE.md"] as const;
 const PROJECT_DOCUMENTS = ["AGENTS.md", "CLAUDE.md", ...PROJECT_CONTEXT_DOCUMENTS] as const;
@@ -56,7 +61,62 @@ export function runInitCli(
 	options: InitOptions = {},
 ): { readonly handled: boolean; readonly exitCode: number; readonly pstackFailed?: boolean } {
 	if (args[0] !== "init") {
+		const env = options.env ?? process.env;
+		if (args.length === 0 || env.OMK_BARE_INTERACTIVE === "1") {
+			try {
+				const agentDir = resolve(options.agentDir ?? getAgentDir());
+				const existing = lstatSync(agentDir, { throwIfNoEntry: false });
+				if (existing && !existing.isDirectory()) throw new Error("agent directory is not a real directory");
+				if (!existing) mkdirSync(agentDir, { recursive: true, mode: 0o700 });
+				installPstackAgents(agentDir, join(getPackageDir(), "resources", "pstack"), false, () => {});
+			} catch (error) {
+				const code =
+					error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "unknown";
+				const message = `Warning: automatic pstack agent installation failed (${code}); continuing startup. Run omk init --global after resolving the destination.`;
+				if (options.writeLine) options.writeLine(message);
+				else process.stderr.write(`${message}\n`);
+			}
+		}
 		const bootstrap = bootstrapEmptyProjectContext(args, options);
+		const disabled = BOOTSTRAP_DISABLED_VALUES.has(env.OMK_PROJECT_CONTEXT_BOOTSTRAP?.trim().toLowerCase() ?? "");
+		if (!bootstrap.ran && !disabled && (args.length === 0 || env.OMK_BARE_INTERACTIVE === "1")) {
+			const cwd = realpathSync(resolve(options.cwd ?? process.cwd()));
+			const git = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+				cwd,
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			});
+			const projectRoot = git.status === 0 && realpathSync(git.stdout.trim()) === cwd;
+			const standaloneProject =
+				git.status !== 0 &&
+				readdirSync(cwd).some((name) =>
+					[".omk", "package.json", "pyproject.toml", "Cargo.toml", "go.mod"].includes(name),
+				);
+			if (projectRoot || standaloneProject) {
+				const writeLine = options.writeLine ?? ((line: string) => process.stdout.write(`${line}\n`));
+				try {
+					installProjectPstack(
+						cwd,
+						join(getPackageDir(), "resources", "pstack"),
+						false,
+						(line) => {
+							if (
+								!line.startsWith("Preserved ") &&
+								!line.startsWith("Project agents require explicit project scope.")
+							) {
+								writeLine(line);
+							}
+						},
+						undefined,
+						options.agentDir ?? getAgentDir(),
+					);
+				} catch (error) {
+					writeLine(
+						`Automatic pstack setup failed: ${error instanceof Error ? error.message : "unknown error"}. Run omk init --project to retry.`,
+					);
+				}
+			}
+		}
 		return { handled: bootstrap.ran && bootstrap.exitCode !== 0, exitCode: bootstrap.exitCode };
 	}
 	const writeLine = options.writeLine ?? ((line: string) => process.stdout.write(`${line}\n`));
@@ -67,7 +127,7 @@ export function runInitCli(
 	}
 	if (flags.includes("--help") || flags.includes("-h")) {
 		writeLine(
-			`${USAGE}\nCreate portable context documents only when missing. Project setup also installs bundled pstack resources without replacing existing files.`,
+			`${USAGE}\nCreate portable context documents only when missing. Global setup installs bundled pstack agents; project setup also installs pstack skills and agents without replacing existing files.`,
 		);
 		return { handled: true, exitCode: 0 };
 	}
@@ -129,6 +189,10 @@ export function runInitCli(
 			inPstack = true;
 			installProjectPstack(targetDir, pstackDir, dryRun, writeLine, undefined, options.agentDir ?? getAgentDir());
 			inPstack = false;
+		} else {
+			inPstack = true;
+			installPstackAgents(targetDir, pstackDir, dryRun, writeLine);
+			inPstack = false;
 		}
 		writeLine(
 			dryRun
@@ -142,7 +206,7 @@ export function runInitCli(
 		writeLine(`Context setup failed (${code}). Check the target directory and bundled context templates.`);
 		if (inPstack)
 			writeLine(
-				"Existing documents remain. Resolve any incomplete pstack installation, then rerun omk init --project.",
+				`Existing documents remain. Resolve any incomplete pstack installation, then rerun omk init --${project ? "project" : "global"}.`,
 			);
 		return inPstack ? { handled: true, exitCode: 1, pstackFailed: true } : { handled: true, exitCode: 1 };
 	}

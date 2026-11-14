@@ -8,6 +8,7 @@ OMK packages bundle extensions, skills, prompt templates, and themes so you can 
 
 - [Install and Manage](#install-and-manage)
 - [Pi Compatibility and Package Doctor](#pi-compatibility-and-package-doctor)
+- [First-party Optional Packages](#first-party-optional-packages)
 - [Package Sources](#package-sources)
 - [Creating a OMK Package](#creating-a-omk-package)
 - [Package Structure](#package-structure)
@@ -90,6 +91,120 @@ omk package doctor git:github.com/user/repo@v1
 The command emits a versioned JSON report and returns `0` when no compatibility error is found, `1` for an incompatible package or inspection failure, and `2` for invalid CLI usage. It checks manifest precedence, declared resources, legacy Pi runtime imports, `.pi` storage paths, lifecycle event names, headless UI guards, and resume signals.
 
 The doctor never imports extension modules. For npm sources it downloads the registry tarball with `npm pack --ignore-scripts` and extracts bounded regular files without installing dependencies. Git inspection clones without running `npm install`. These static checks are advisory and do not make third-party code trusted.
+
+### Explicit native manifest dialect
+
+Since OMK 2.0 the default is native `omk`: omission and `undefined` select `omk`,
+and Pi compatibility (`omk+pi`) is an explicit opt-in. A native-mode load failure
+that names a legacy Pi package says how to migrate or opt in. Select the dialect
+for one CLI process, or independently select the static doctor's diagnostic target,
+which also defaults to `omk`:
+
+```bash
+omk --package-manifest-dialect omk -e ./my-extension.ts
+omk --package-manifest-dialect=omk+pi -e ./legacy-extension.ts
+omk package doctor ./local-package --package-manifest-dialect omk
+omk package doctor --package-manifest-dialect=omk+pi ./local-package
+```
+
+Both space and equals forms accept only `omk` and `omk+pi`. Empty, missing,
+invalid or repeated selections fail before extensions are evaluated or doctor
+preparation starts. This is not an environment flag or persisted setting, and
+it grants no project trust or command authority.
+
+`DefaultPackageManager` and `DefaultResourceLoader` constructor options accept
+`packageManifestDialect?: "omk" | "omk+pi"`. The loader captures the chosen value
+at construction and retains it on reload. Direct APIs accept the same option in
+their final options argument: `loadExtensions(paths, cwd, eventBus?, options?)`
+and `discoverAndLoadExtensions(configured, cwd, agentDir?, eventBus?, options?)`.
+
+With an explicit `"omk"` dialect, a Pi-only managed-package manifest is rejected
+as a policy error, not treated as missing or invalid JSON. It cannot fall through
+to `index.ts`, conventional resource directories, resource filters or nested
+extension discovery. Native `omk` manifests remain authoritative, including when
+both keys are present. Packages with neither key retain convention discovery.
+Existing manifest path validation still applies.
+
+Native automatic discovery expands manifest globs and collects declared extension
+directories under the same policy. It detects cycles within each active branch
+and bounds nested manifest traversal to 64 levels. Final selection removes
+duplicate canonical paths without letting one branch's exclusions affect another.
+Compatibility mode retains its
+existing literal-entry and index-fallback behavior.
+
+Direct directory discovery remains distinct from managed-package resolution.
+It preserves authoritative empty/malformed manifests, the four supported index
+suffixes and existing discovery order. Native Pi-only directory selection is
+terminal rather than permission to evaluate a conventional fallback.
+
+Native `omk` supplies no implicit Pi aliases in Node/Jiti or Bun virtual modules.
+Boundary A still permits ordinary user-installed dependencies, including Pi
+packages, subpaths and transitive dependencies, with their own installed identity.
+Missing dependencies fail normal resolution. This is not a runtime declaration
+check, namespace blacklist, import firewall or sandbox.
+
+The native doctor reports Pi-only manifests and undeclared literal legacy imports
+as migration errors. A matching `dependencies`, `peerDependencies` or
+`optionalDependencies` declaration produces a warning, not installation or runtime
+compatibility certification. Scoped subpaths match their exact package root;
+similarly prefixed package names do not count. Doctor preparation deliberately
+uses compatibility selection so it can inspect legacy source without loading it.
+The existing bounded relative-source walk, redaction and original-byte
+preservation remain in place. Bare dependency graphs, computed imports and
+transitive dependency behavior remain outside static coverage. Omission retains
+the existing `schemaVersion: 1` JSON shape and compatibility results.
+
+### SDK loader injection
+
+Use the existing public loader injection, not a second `createAgentSession` flag:
+
+```typescript
+import { createAgentSession, DefaultResourceLoader, getAgentDir, SessionManager } from "open-multi-agent-kit";
+
+const cwd = process.cwd();
+const agentDir = getAgentDir();
+const resourceLoader = new DefaultResourceLoader({
+  cwd,
+  agentDir,
+  packageManifestDialect: "omk",
+  additionalExtensionPaths: ["./my-extension.ts"],
+});
+await resourceLoader.reload();
+const { session } = await createAgentSession({
+  cwd,
+  agentDir,
+  resourceLoader,
+  sessionManager: SessionManager.inMemory(cwd),
+});
+try {
+  await session.bindExtensions({ mode: "print" });
+} finally {
+  await session.close();
+}
+```
+
+Reload retires previous extension contexts. The default loader also retires
+replaced factory APIs; a custom loader that retains its runtime keeps those APIs
+active for the new contexts.
+
+Existing custom `ResourceLoader` injection is unchanged. Source CLI/SDK checks
+are not installed Node, compiled Bun, complete extension-feature or lifecycle
+certification. Default activation, platform acceptance and publication remain
+separate gates. See [the staging contract](../../../specs/108-pi-decoupling/spec.md).
+The local migration roadmap is `packages/coding-agent/docs/omk-2-migration.md`.
+
+## First-party optional packages
+
+- [Book to Skill](book-to-skill.md) compiles documents into provenance-tracked agent skills without adding Python extractors to OMK core.
+- [Speak Like You Eat](#speak-like-you-eat) adds display-only ELI5 and Light companion rewrites with manual and automatic modes. It is not loaded by default.
+
+### Speak Like You Eat
+
+From a source checkout, build the package with `npm run build --workspace packages/speak-like-you-eat`, then install it with `omk install ./packages/speak-like-you-eat`. Run `/reload` in an existing session.
+
+Use `/slye model` to choose an authenticated model, `/slye` to rewrite the latest eligible response manually, and `/slye on` or `/slye off` to control automatic rewriting. Settings live in `~/.omk/agent/slye.json` or `.omk/slye.json` in a trusted project; the trusted project file overrides global settings. Untrusted project settings are ignored.
+
+The companion leaves the original response and later LLM context unchanged. Each rewrite makes two provider requests, one for ELI5 and one for Light, with separate cost and latency. Press `ctrl+\` to switch the cards. SLYE is inactive in print, JSON and RPC modes.
 
 ## Package Sources
 

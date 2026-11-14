@@ -4,6 +4,7 @@
  */
 
 import type { ThinkingLevel } from "omk-agent-core";
+import type { PackageManifestDialect } from "../core/package-manifest.ts";
 
 export type Mode = "text" | "json" | "rpc" | "acp";
 
@@ -11,6 +12,7 @@ export interface Args {
 	provider?: string;
 	model?: string;
 	modelContractFile?: string;
+	packageManifestDialect?: PackageManifestDialect;
 	apiKey?: string;
 	systemPrompt?: string;
 	appendSystemPrompt?: string[];
@@ -29,6 +31,8 @@ export interface Args {
 	models?: string[];
 	tools?: string[];
 	excludeTools?: string[];
+	/** Explicit authority applied to the routed initial-prompt loadout. */
+	scopeHints?: { readScope?: string[]; writeScope?: string[]; executeScope?: string[] };
 	noTools?: boolean;
 	noBuiltinTools?: boolean;
 	extensions?: string[];
@@ -81,6 +85,7 @@ export function parseArgs(args: string[]): Args {
 		unknownFlags: new Map(),
 		diagnostics: [],
 	};
+	let seenPackageManifestDialect = false;
 
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
@@ -120,6 +125,21 @@ export function parseArgs(args: string[]): Args {
 				result.modelContractFile = value;
 				if (arg === "--model-contract") i++;
 			}
+		} else if (arg === "--package-manifest-dialect" || arg.startsWith("--package-manifest-dialect=")) {
+			const value =
+				arg === "--package-manifest-dialect" ? args[i + 1] : arg.slice("--package-manifest-dialect=".length);
+			if (arg === "--package-manifest-dialect" && value !== undefined && !value.startsWith("-")) i++;
+			if (seenPackageManifestDialect) {
+				result.diagnostics.push({ type: "error", message: "--package-manifest-dialect may only be supplied once" });
+			} else if (value !== "omk" && value !== "omk+pi") {
+				result.diagnostics.push({
+					type: "error",
+					message: '--package-manifest-dialect requires "omk" or "omk+pi"',
+				});
+			} else {
+				result.packageManifestDialect = value;
+			}
+			seenPackageManifestDialect = true;
 		} else if (arg === "--api-key" && i + 1 < args.length) {
 			result.apiKey = args[++i];
 		} else if (arg === "--system-prompt" && i + 1 < args.length) {
@@ -159,6 +179,14 @@ export function parseArgs(args: string[]): Args {
 				.split(",")
 				.map((s) => s.trim())
 				.filter((name) => name.length > 0);
+		} else if ((arg === "--read-scope" || arg === "--write-scope" || arg === "--exec-scope") && i + 1 < args.length) {
+			const key = arg === "--read-scope" ? "readScope" : arg === "--write-scope" ? "writeScope" : "executeScope";
+			const values = args[++i]
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean);
+			result.scopeHints ??= {};
+			result.scopeHints[key] = [...(result.scopeHints[key] ?? []), ...values];
 		} else if (arg === "--thinking" && i + 1 < args.length) {
 			const level = args[++i];
 			if (isValidThinkingLevel(level)) {

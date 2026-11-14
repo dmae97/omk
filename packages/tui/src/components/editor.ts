@@ -4,7 +4,7 @@ import { decodePrintableKey, matchesKey } from "../keys.ts";
 import { KillRing } from "../kill-ring.ts";
 import { type Component, CURSOR_MARKER, type Focusable, type TUI } from "../tui.ts";
 import { UndoStack } from "../undo-stack.ts";
-import { getGraphemeSegmenter, getWordSegmenter, isWhitespaceChar, truncateToWidth, visibleWidth } from "../utils.ts";
+import { getGraphemeSegmenter, getWordSegmenter, isWhitespaceChar, visibleWidth } from "../utils.ts";
 import { findWordBackward, findWordForward } from "../word-navigation.ts";
 import {
 	type AutocompleteSnapshot,
@@ -12,6 +12,7 @@ import {
 	autocompleteSnapshotMatches,
 	buildAutocompleteList,
 } from "./editor-autocomplete.ts";
+import { formatEditorSuffix, formatPlaceholderContinuation } from "./editor-inline-suggestion.ts";
 import { createScrollBorder } from "./editor-scroll-border.ts";
 import type { SelectList, SelectListTheme } from "./select-list.ts";
 
@@ -246,6 +247,8 @@ export class Editor implements Component, Focusable {
 
 	// Placeholder shown while the editor is empty
 	private placeholder: string = "";
+	// Inline suffix shown after the cursor at the document end
+	private inlineSuggestion: string = "";
 
 	// Vertical scrolling support
 	private scrollOffset: number = 0;
@@ -480,6 +483,8 @@ export class Editor implements Component, Focusable {
 		// hardware cursor for IME candidate-window placement even while
 		// autocomplete (e.g. slash-command menu) is visible.
 		const emitCursorMarker = this.focused;
+		const hint = { placeholder: this.placeholder, inlineSuggestion: this.inlineSuggestion, state: this.state };
+		const hintView = { ...hint, autocompleteActive: this.autocompleteState !== null, style: this.theme.placeholder };
 
 		for (const layoutLine of visibleLines) {
 			let displayText = layoutLine.text;
@@ -514,16 +519,9 @@ export class Editor implements Component, Focusable {
 					}
 				}
 
-				// Placeholder: dim hint text after the cursor while the editor is empty
-				if (this.placeholder.length > 0 && this.isTextEmpty() && !this.autocompleteState) {
-					const available = contentWidth - lineVisibleWidth;
-					if (available > 0) {
-						const placeholderFn = this.theme.placeholder ?? ((s: string) => `\x1b[2m${s}\x1b[22m`);
-						const truncated = truncateToWidth(this.placeholder, available, "");
-						displayText += placeholderFn(truncated);
-						lineVisibleWidth += visibleWidth(truncated);
-					}
-				}
+				const suffix = formatEditorSuffix({ ...hintView, availableWidth: contentWidth - lineVisibleWidth });
+				displayText += suffix.text;
+				lineVisibleWidth += suffix.width;
 			}
 
 			// Calculate padding based on actual visible width
@@ -532,6 +530,9 @@ export class Editor implements Component, Focusable {
 
 			// Render the line (no side borders, just horizontal lines above and below)
 			result.push(`${leftPadding}${displayText}${padding}${lineRightPadding}`);
+		}
+		for (const row of formatPlaceholderContinuation(hintView, contentWidth, Math.floor(terminalRows * 0.6))) {
+			result.push(`${leftPadding}${row}${rightPadding}`);
 		}
 
 		// Render bottom border (with scroll indicator if more content below)
@@ -956,8 +957,9 @@ export class Editor implements Component, Focusable {
 		this.placeholder = text;
 	}
 
-	private isTextEmpty(): boolean {
-		return this.state.lines.length === 1 && this.state.lines[0] === "";
+	/** Set an inline suffix rendered dim at the document end; empty clears it. */
+	setInlineSuggestion(text: string): void {
+		this.inlineSuggestion = text;
 	}
 
 	private expandPasteMarkers(text: string): string {
@@ -2336,6 +2338,7 @@ export class Editor implements Component, Focusable {
 	private cancelAutocomplete(): void {
 		this.cancelAutocompleteRequest();
 		this.clearAutocompleteUi();
+		this.inlineSuggestion = "";
 	}
 
 	public isShowingAutocomplete(): boolean {

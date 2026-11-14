@@ -310,7 +310,7 @@ describe("spec 103 §2.2: usage settlement", () => {
 		})!;
 		await mainTurn(session, emit);
 		await c.onSettled("completed");
-		expect(c.suggestion).toBe("Run tests next.");
+		expect(c.title).toBe("Run tests next.");
 		c.dispose();
 		expect(settled).toHaveLength(1);
 		const input = suggestionMetricInput("sess", settled[0]!);
@@ -360,7 +360,7 @@ describe("spec 103 §2.2: usage settlement", () => {
 		await vi.waitFor(() => expect(suggestionCalls).toBe(1));
 		release?.();
 		await Promise.all([first, second]);
-		expect(c.suggestion).toBe("Run tests next.");
+		expect(c.title).toBe("Run tests next.");
 		expect(settled).toHaveLength(1);
 		c.dispose();
 	});
@@ -389,7 +389,7 @@ describe("spec 103 §2.2: usage settlement", () => {
 		await mainTurn(session, emit);
 		await c.onSettled("completed");
 		await c.onSettled("completed");
-		expect(c.suggestion).toBe("Run tests next.");
+		expect(c.title).toBe("Run tests next.");
 		expect(suggestionCalls).toBe(1);
 		expect(quotaReads).toBe(1);
 		expect(settled).toHaveLength(1);
@@ -451,12 +451,20 @@ describe("spec 103 §2.2: usage settlement", () => {
 		const seen: Array<{ context: string; options: Record<string, unknown> }> = [];
 		const options: SimpleStreamOptions = { reasoning: "high", cacheRetention: "short", sessionId: "s" };
 		const listeners: Array<(e: { type: string; outcome?: string }) => unknown> = [];
-		const final = assistant("Done.", { timestamp: Date.now() });
+		// A real reply is stamped after its request; stamping it before made the planner see the
+		// recorded request as newer than the reply (`no_record`) whenever a millisecond passed.
+		let final: ReturnType<typeof assistant> | undefined;
 		const session = {
 			agent: {
 				streamFn: ((_m: unknown, c: Context, o: Record<string, unknown>) => {
 					seen.push({ context: JSON.stringify(c), options: o });
-					return { result: async () => (c.messages.length > 1 ? assistant("Next.") : final) };
+					return {
+						result: async () => {
+							if (c.messages.length > 1) return assistant("Next.");
+							final = assistant("Done.", { timestamp: Date.now() });
+							return final;
+						},
+					};
 				}) as unknown as StreamFn,
 				state: { messages: [] as unknown[] },
 			},
@@ -479,14 +487,15 @@ describe("spec 103 §2.2: usage settlement", () => {
 				quotaUsage: async () => "no_quota",
 			},
 		)!;
-		await (await session.agent.streamFn(anthropic, context, options)).result();
-		session.agent.state.messages = [...context.messages, final];
+		const reply = await (await session.agent.streamFn(anthropic, context, options)).result();
+		expect(reply).toBe(final);
+		session.agent.state.messages = [...context.messages, reply];
 		await c.onSettled("completed");
 		c.dispose();
 		expect(seen).toHaveLength(2);
 		const expected = JSON.stringify({
 			...context,
-			messages: [...context.messages, final, JSON.parse(seen[1]!.context).messages.at(-1)],
+			messages: [...context.messages, reply, JSON.parse(seen[1]!.context).messages.at(-1)],
 		});
 		expect(seen[1]!.context).toBe(expected);
 		const { signal, ...rest } = seen[1]!.options;

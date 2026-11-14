@@ -5,8 +5,6 @@
 		"noEmit": true,
 		"baseUrl": "../../..",
 		"paths": {
-			"@earendil-works/pi-coding-agent": ["packages/coding-agent/src/index.ts"],
-			"@earendil-works/pi-tui": ["packages/tui/src/index.ts"],
 			"open-multi-agent-kit": ["packages/coding-agent/src/index.ts"],
 			"omk-tui": ["packages/tui/src/index.ts"],
 			"omk-ai": ["packages/ai/src/index.ts"],

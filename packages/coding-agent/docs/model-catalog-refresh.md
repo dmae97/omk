@@ -32,6 +32,162 @@ Fable 5.2의 데이터 보존 조건은 공식 문서를 확인하고 비공개 
 계정별 권한, 실제 fallback 선택과 청구액은 검증하지 않는다. 로컬 custom model과
 인증 설정은 이 변경에 포함하지 않는다.
 
+## 2026-10-30 후속: 기존 자격과 공식 사용 범위 재확인
+
+설정된 환경 변수뿐 아니라 기존 자격 저장소, Muse/OpenCode CLI 저장소와 운영자가 이미
+사용하던 API 메모의 공급자별 명시 라벨을 재확인했다. 원문 자격은 출력하거나 저장소에
+복사하지 않았다. 메모에서 찾은 Mistral 키는 공식 API에서 HTTP 401이다. 같은 기존
+Kimi Coding 키는 Moonshot의 중국/글로벌 공식 API 양쪽에서 HTTP 401이다.
+발급/회수 여부를 확인할 수 없으므로 만료라고 단정하지 않는다.
+
+- Windows의 기존 Ollama를 확인한 뒤 WSL의 원래 `127.0.0.1:11434/v1/models`도
+  HTTP 200이다. 실제 설치된 Qwen 모델의 짧은 ID와 Hugging Face 전체 ID 두 개를
+  확인했고, 이미 있던 짧은 ID는 보존하며 빠진 전체 ID 하나만 추가했다. 모델 파일을
+  다운로드하거나 추론을 실행하지 않았다. `/api/show`는 도구, thinking, vision과
+  아키텍처 context 262,144를 선언하지만 실행 서버의 할당 context를 보장하지 않는다.
+  새 별칭에는 미확인 최대 출력이나 분화된 effort를 이식하지 않았다.
+- DeepInfra의 공식 `/v1/openai/models`는 무인증으로 173개를 반환한다. 인증 키가
+  없다고 목록 조회 자체도 막혔다고 분류했던 부분을 정정했다. 기존 도구 지원 목록의
+  일치 ID 53개 중 context/가격이 달라진 29개를 이 공개 표면에 맞췄다. 공개 목록의
+  `max_tokens`가 출력 전용 상한인지는 확인되지 않아 출력/effort 계약은 유지했다.
+  공개 목록에 없는 기존 ID도 삭제하지 않았다. 실제 추론에는 별도 API 키가 필요하다.
+- Together의 공식 최신 [quickstart](https://docs.together.ai/docs/quickstart)는
+  `https://api.together.ai/v1`을 사용한다. 로컬의 옛 `.xyz` 주소를 현재 주소로 정정했다.
+  무인증 요청의 401은 주소 도달 확인일 뿐 인증 복구가 아니다.
+- Moonshot이 Kimi Coding 전용 키를 재사용하던 참조는 `$MOONSHOT_API_KEY`로,
+  존재하지 않는 옛 Model Studio international 키 파일은 `$DASHSCOPE_API_KEY`로 바꿨다.
+  새 키를 대신 만들거나 다른 상품/지역 키를 대입하지 않았다.
+- Muse CLI의 기존 Meta 키로 목록 8개 조회는 성공했다. 그러나
+  [공식 구독 문서](https://dev.meta.ai/docs/muse-code/subscriptions)는 구독 자격을
+  Muse Code CLI 전용으로 한정한다. 이전의 "OAuth 만료"만으로 원인을 설명하거나
+  `/login meta` 재로그인으로 OMK 구독 사용을 권하는 것은 적절하지 않다.
+  구독 토큰을 OMK로 이식/갱신하지 않고, 별도의 일반 API 키를 위한 로컬 `meta-api`
+  프로필을 준비했다. 이 프로필은 표준 Muse Spark 3개만 포함하고 Contributor 모델이나
+  Muse 전용 헤더를 추가하지 않는다. `$META_API_KEY`는 일반 Model API 키여야 하며
+  사용 시 종량제 비용이 발생한다. 기존 OAuth 기록과 기본 선택은 그대로 보존했다.
+- CrofAI 운영사의 [현재 공지](https://www.nahcrof.com/)는 서비스 종료와 Polar를 통한
+  기존 고객 환불 처리다. API 이전으로 추정하지 않는다. Zyloo API는 공개 DNS에서도
+  NXDOMAIN이며 검색에 남은 정상 상태 문구를 실시간 확인으로 취급하지 않는다.
+- 로컬 Qwen/Flash Next의 Windows와 WSL 포트 8080/18081은 응답하지 않는다.
+  확인한 경로에 재사용 가능한 런처/서버가 없어 모델 설치나 방화벽 변경으로 확대하지 않았다.
+
+사용자가 필요한 서비스를 계속 쓸 때만 공식 콘솔에서 자격을 준비한다. 기존 메모,
+인증 저장소, 지정된 환경 파일과 Windows 사용자 환경에서 해당 키를 확보하지 못했다.
+
+| 항목 | 사용자가 필요한 조치 | 로컬 참조 |
+| --- | --- | --- |
+| Mistral | [Studio](https://console.mistral.ai/home?profile_dialog=api-keys)에서 정상 API 키 확인/재발급 | `MISTRAL_API_KEY` |
+| Moonshot | [중국 Kimi API 콘솔](https://platform.kimi.com/console/api-keys)의 직접 API 키 사용, Coding 키와 구분 | `MOONSHOT_API_KEY` |
+| Together | [프로젝트 키](https://api.together.ai/settings/projects/~current/api-keys) 준비 | `TOGETHER_API_KEY` |
+| Cohere | [대시보드](https://dashboard.cohere.com/api-keys)의 API 키 준비 | `COHERE_API_KEY` |
+| Fireworks | [공식 키 페이지](https://app.fireworks.ai/settings/users/api-keys)의 API 키 준비 | `FIREWORKS_API_KEY` |
+| Perplexity | [API Console](https://console.perplexity.ai/project/keys)의 키 준비 | `PERPLEXITY_API_KEY` |
+| DeepInfra | [대시보드](https://deepinfra.com/dash/api_keys)의 키 준비 | `DEEPINFRA_API_KEY` |
+| Model Studio international | [Singapore API 키](https://modelstudio.console.alibabacloud.com/ap-southeast-1/settings/api-key) 준비. 이미 동작하는 token-plan 키와 구분 | `DASHSCOPE_API_KEY` |
+| MiMo Coding Plan | [플랜 관리](https://platform.xiaomimimo.com/#/console/plan-manage)의 Singapore 전용 `tp-` 키 확인. 직접 API 키로 대체 불가 | `MIMO_CODING_PLAN_API_KEY` |
+| Meta | [Model API](https://dev.meta.ai/)의 일반 종량제 키 준비. Muse 구독은 공식 CLI에서 사용 | `META_API_KEY`, provider `meta-api` |
+| 로컬 Qwen/Flash Next | 기존 서버/모델 설치 경로 복구 후 8080/18081 서버 시작. Ollama에 없는 과거 별칭은 원래 모델/Modelfile 필요 | 기존 설정 보존 |
+| CrofAI/Zyloo | CrofAI는 필요하면 운영사 환불 확인, Zyloo는 운영사 복구/공식 주소 안내 확인 | API 키 재발급만으로 해결되지 않음 |
+
+키 값은 채팅이나 셸 명령 이력에 넣지 않고 기존 비공개 환경 저장소에 해당 이름으로
+저장한다. 구매, 결제 수단 등록, 타 서비스 키 전용, 사용자 로그인은 자동 수행하지 않는다.
+
+설치본의 스키마/읽기 전용 레지스트리, 실제 Ollama HTTP 조회와 CLI 모델 목록 확인은
+종료 0이다. 인증 파일 내용과 기본 설정은 백업과 byte 비교로 보존했다. 문서 링크 검사도
+종료 0이며 엔진 코드는 이번에 바꾸지 않았다. 이전에 전달된 실패 보고의
+`prompt-attempt-accounting.test.ts` 3개도 현재 소스에서 재실행하여 모두 통과했다.
+모델 추론, 다운로드, 전체 빌드, 전체 테스트 실행과 현재 세션 재시작은 하지 않았다.
+제안 메시지: `docs: 공급자 복구 상태와 공식 자격 사용 범위 정정`.
+
+## 2026-10-29 후속: 실패 공급자 진단과 로컬 목록 보정
+
+앞선 Python 조회의 403만으로 계정 차단을 판단하지 않았다. 실제 Node HTTP 경로에서는
+Command Code 94개와 Groq 11개가 HTTP 200이다. 정확한 403 발생 계층은 확정하지 않았다.
+존재하지 않는 옛 홈의 인증 파일 참조는 현재 파일로 바꾸고 파일 권한을 0600으로 제한했다.
+키 내용과 기본 선택 설정은 보존했다. MiMo 별칭도 같은 공식 서비스의 기존 저장 자격을
+참조하도록 보정했다. 인증 조회와 공개 메타데이터 갱신은 구분한다.
+
+| 공급자 | 확인 결과와 처리 |
+| --- | --- |
+| Command Code | 인증 목록 94개, 현재 8개 추가. `supported_endpoints`에 따라 Messages 전용 모델의 잘못된 Chat Completions 경로 수정. 기존 목록에서만 남은 4개는 미검증 보존 |
+| Groq | 인증 11개 중 도구 지원 텍스트 4개를 생성기에 반영. 음성/가드와 도구 미지원 제외. 구형 내장 3개 미선정, 실제 로컬 전용 2개 보존 |
+| Kimi Coding | 경로 보정 후 인증 6개. 표시명과 context를 호출 표면과 대조. output/effort는 기존 호환 계약과 구분 |
+| Nous | 경로 보정 후 인증 383개, 텍스트/도구 349개 반영. 기존 미검증 2개 보존 |
+| Model Studio token plan | 경로 보정 후 인증 20개, 같은 endpoint의 보조 메타데이터와 대조한 텍스트/도구 12개 반영. 이미지/음성/비디오와 미확인 auto 제외 |
+| Xiaomi/MiMo | 저장된 직접 API 자격으로 인증 7개, 텍스트 3개 확인. 이 자격으로 별도 coding-plan 권한까지 추정하지 않음 |
+| Moonshot | 옛 경로는 수정했으나 해당 기존 키는 HTTP 401. Kimi Coding 키가 별도 Moonshot API 자격을 보장하지 않음 |
+| Together, Mistral, Cohere, Fireworks, Perplexity, DeepInfra | 설정된 키가 환경/자격 저장소에 없음. 공개 models.dev와 공식 모델 문서를 대조하고 지원 메타데이터 갱신. 인증 검증 아님 |
+| Model Studio international | 참조한 키 파일 자체가 없음. 같은 공식 endpoint의 공개 메타데이터만 갱신 |
+| Meta | 저장 OAuth 만료, 별도 참조 키 파일 없음. 자격을 바꾸거나 갱신하지 않고 목록 보존 |
+| Zyloo | 로컬과 공개 DNS 모두 API 호스트 NXDOMAIN. 정적 6개 보존, 최신 인증 확인 아님 |
+| CrofAI | 기존 API가 다른 도메인으로 302, 이전 문서가 가리킨 API/문서는 404. 키를 새 호스트에 전송하지 않고 기존 목록 보존 |
+| 로컬 Ollama, Qwen, Flash Next | 설정 포트 3개 모두 리스너 없음. 서버를 임의 기동하거나 모델 삭제하지 않음 |
+| Cursor, Devin, WorkBuddy | 기존 정적 계약 보존. 이번 후속 작업에서 별도 인증 목록을 새로 확보하지 않음 |
+
+Groq 생성기는 `GROQ_API_KEY`가 있으면 공식 `/openai/v1/models`의 호출 집합, 도구 지원,
+modality, 가격과 한도를 우선한다. 키가 없으면 기존 보조 카탈로그를 사용한다.
+HTTP 실패, 중복 ID, 빈/불완전 목록, 잘못된 한도나 가격은 저장 전에 실패한다.
+인증 헤더가 다른 호스트로 이동하지 않도록 redirect는 거부한다.
+
+후속 `npm run models:refresh`는 `--allow-partial` 없이 종료 0, 41개 공급자 2,235개 route,
+이미지 63개다. Zyloo는 키 없이 정적 항목을 보존했으므로 모든 공급자의 인증 조회 성공을
+뜻하지 않는다. 로컬 덮어쓰기는 34개 공급자, 1,445 → 1,865개 route다. 수치는 기반 모델
+중복을 포함한다. 기존 custom-only 항목과 실패 공급자 목록은 보존했다.
+
+Command Code의 새 행에 없는 출력 상한은 임의로 이식하지 않고 OMK 기본값을 사용한다.
+새 행의 가격은 [공식 요금표](https://commandcode.ai/docs/resources/pricing-limits)를 확인했다.
+Nous가 출력 상한을 선언하지 않은 행도 OMK 기본값을 사용한다. Model Studio 한도는
+공개 보조 메타데이터이며 계정별 최대 출력 실행으로 확인한 값이 아니다. 목록 조회가
+실제 추론, entitlement, 요금, 데이터 정책 동의의 검증을 대신하지 않는다.
+
+개발 checkout과 설치본의 `npm run check`는 모두 종료 0이다. 표적 카탈로그/payload
+254개, 생성기 guard 5개, 설치 레지스트리/resolver 115개와 설치 Groq/payload 46개가
+통과했다. 중복 실행을 합산한 전체 테스트 수로 표현하지 않는다. 격리 컴파일 후 생성
+카탈로그의 JS/declaration/map만 설치했고 어댑터 전체를 교체하지 않았다. 설치 레지스트리
+새 프로세스는 3,132개 route를 읽었고, 실제 CLI `--list-models qwen3.8-27b`에서도
+Groq의 현재 ID를 확인했다. 주 LSP 4파일과 세션 오류 진단은 차단 오류 없음이다.
+
+인증 파일 내용, 기본 선택 설정과 참조한 키 내용은 백업과 byte 비교로 보존을 확인했다.
+보존 목록, 인증 참조와 API별 경로를 직접 검토했다. 공급자 추론, OAuth 갱신, commit/push,
+현재 세션 재시작은 하지 않았다. 제안 메시지: `fix(ai): Groq 인증 목록 우선과 공급자 조회 실패 진단`.
+
+## 2026-10-29 전체 갱신과 Experiential Labs 호출 표면 대조
+
+`npm run models:refresh`를 `--allow-partial` 없이 실행했다. 생성기 범위는
+41개 공급자, 텍스트/도구 route 2,259 → 2,238개다. 추가 29개, 미선정 50개,
+기존 항목 변경 151개이며 서로 다른 기반 모델 수가 아니다. OpenRouter 이미지 목록은
+63개로 변화 없다. 현재 API 목록에서 빠졌다는 사실은 모든 계정의 사용 불가나
+공식 폐기 공지를 뜻하지 않는다.
+
+조회한 원천은 models.dev, NVIDIA NIM, OpenRouter, Vercel AI Gateway,
+OpenCode Go, Experiential Labs의 공개 목록과 인증된 `/v1/models`다.
+Experiential은 공개 957개와 호출 표면 314개를 대조해 도구 지원, 텍스트 출력,
+활성 라우트를 만족하는 221개를 선정했다. 호출 표면의 `supports_tools: false`는
+공개 설명보다 우선하고, `true`이면 오래된 공개 `supported_params` 누락 때문에
+제외하지 않는다. 호출 표면의 context/output 상한도 상류 모델 설명보다 우선한다.
+빈 중간 페이지나 잘못된 total은 실패하며 불완전한 목록을 쓰지 않는다.
+
+OpenRouter와 Vercel의 현재 자체 API에 등재된 Mercury 3 등 5개 route의 이전
+보류를 해제했다. 게이트웨이 가격/context/output을 10월 20일 스냅샷으로 되돌리던
+규칙은 제거했다. 공급자 원본 모델의 한도와 게이트웨이 route의 선언은 구분하며,
+GPT-4.1 nano의 문서화된 출력 상한과 기존 전송/effort 호환성 보호는 유지했다.
+OpenCode Go는 라이브 28개와 명시적으로 보존한 `space-bunny` 1개를 포함한다.
+
+### 최신 확인이 아닌 보존 항목
+
+- Zyloo 인증 조회는 DNS 해석 실패다. 최종 생성은 키 없이 기존 정적 6개를 보존했다.
+- Cursor, Devin, WorkBuddy 및 기타 정적 항목은 생성기에 기록된 계약을 유지했다.
+  오늘 새로 실시간 목록을 검증했다는 뜻이 아니다.
+- `catalog-pins.ts`에 남은 호환 ID, 미확인 직접 공급자 항목과 effort 보호는 유지했다.
+- 계정별 entitlement, 모델 추론, 실제 청구와 최대 출력 실행은 검사하지 않았다.
+  목록의 가격 0은 미가격값일 수 있으며 무료 보장이 아니다.
+
+로컬 `models.json`은 별도 백업 후 동일 ID의 오래된 덮어쓰기도 함께 동기화한다.
+인증 참조, 공급자 endpoint, 기본 선택 모델, 로컬 전용 모델은 보존한다.
+조회가 거부되거나 자격을 확인할 수 없는 별도 공급자는 그 상태를 기록하고
+목록을 추정해 삭제하지 않는다. 설치 카탈로그 반영과 실행 중 세션의 메모리 갱신은
+별개이므로 새 프로세스에서 목록을 확인한다.
+
 ## 2026-10-18 Experiential Labs
 
 [모델 페이지](https://platform.experientiallabs.ai/models)와

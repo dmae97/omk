@@ -1,14 +1,32 @@
+export interface SuggestionEditorCursor {
+	readonly line: number;
+	readonly col: number;
+}
+
 export interface SuggestionEditorPort {
 	getText(): string;
 	setText(text: string): void;
 	setPlaceholder(text: string): void;
+	setInlineSuggestion?(text: string): void;
+	getCursor?(): SuggestionEditorCursor | undefined;
+	insertTextAtCursor?(text: string): void;
 	isShowingAutocomplete(): boolean;
 	onBeforeInput?: (data: string) => boolean;
 }
 
 /** An editor interactive mode can swap at runtime; extensions may install their own. */
 export type ActiveEditor = Pick<SuggestionEditorPort, "getText" | "setText"> &
-	Partial<Pick<SuggestionEditorPort, "setPlaceholder" | "isShowingAutocomplete" | "onBeforeInput">>;
+	Partial<
+		Pick<
+			SuggestionEditorPort,
+			| "setPlaceholder"
+			| "setInlineSuggestion"
+			| "getCursor"
+			| "insertTextAtCursor"
+			| "isShowingAutocomplete"
+			| "onBeforeInput"
+		>
+	>;
 
 /**
  * Port over whichever editor is active when it is used. An extension that swaps in its own
@@ -19,9 +37,14 @@ export type ActiveEditor = Pick<SuggestionEditorPort, "getText" | "setText"> &
 export function followActiveEditor(getEditor: () => ActiveEditor, basePlaceholder: string): SuggestionEditorPort {
 	let hook: ((data: string) => boolean) | undefined;
 	let shownOn: ActiveEditor | undefined;
+	let inlineShownOn: ActiveEditor | undefined;
 	const attached = new Set<ActiveEditor>();
 	const current = (): ActiveEditor => {
 		const editor = getEditor();
+		if (inlineShownOn && inlineShownOn !== editor) {
+			inlineShownOn.setInlineSuggestion?.("");
+			inlineShownOn = undefined;
+		}
 		if (hook && editor.onBeforeInput === undefined) {
 			editor.onBeforeInput = hook;
 			attached.add(editor);
@@ -30,7 +53,25 @@ export function followActiveEditor(getEditor: () => ActiveEditor, basePlaceholde
 	};
 	return {
 		getText: () => current().getText(),
-		setText: (text) => current().setText(text),
+		setText: (text) => {
+			if (inlineShownOn) {
+				inlineShownOn.setInlineSuggestion?.("");
+				inlineShownOn = undefined;
+			}
+			current().setText(text);
+		},
+		getCursor: () => current().getCursor?.(),
+		insertTextAtCursor: (text) => {
+			const editor = current();
+			if (editor.insertTextAtCursor) editor.insertTextAtCursor(text);
+			else editor.setText(editor.getText() + text);
+		},
+		setInlineSuggestion: (text) => {
+			const editor = current();
+			if (inlineShownOn && inlineShownOn !== editor) inlineShownOn.setInlineSuggestion?.("");
+			editor.setInlineSuggestion?.(text);
+			inlineShownOn = text.length > 0 ? editor : undefined;
+		},
 		isShowingAutocomplete: () => current().isShowingAutocomplete?.() ?? false,
 		setPlaceholder: (text) => {
 			const editor = current();

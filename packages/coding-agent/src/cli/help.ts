@@ -69,9 +69,15 @@ ${chalk.bold("Options:")}
                                  Applies to built-in, extension, and custom tools
   --exclude-tools, -xt <tools>   Comma-separated denylist of tool names to disable
                                  Applies to built-in, extension, and custom tools
+  --read-scope <paths>           Domain-routed read roots (comma-separated)
+  --write-scope <paths>          Domain-routed write roots (comma-separated)
+  --exec-scope <patterns>        Domain-routed command allow patterns (comma-separated)
   --thinking <level>             Set thinking level: off, minimal, low, medium, high, xhigh, max, ultra
   --extension, -e <path>         Load an extension file (can be used multiple times)
   --no-extensions, -ne           Disable extension discovery (explicit -e paths still work)
+  --package-manifest-dialect <omk|omk+pi>
+                                 Native loading or legacy Pi compatibility (default: omk)
+                                 Also accepted by package doctor for static target diagnosis
   --skill <path>                 Load a skill file or directory (can be used multiple times)
   --no-skills, -ns               Disable skills discovery and loading
   --prompt-template <path>       Load a prompt template file or directory (can be used multiple times)

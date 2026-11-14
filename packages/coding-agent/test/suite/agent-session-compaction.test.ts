@@ -6,7 +6,7 @@ import {
 	fauxToolCall,
 	type Model,
 } from "omk-ai";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CompactionEnvelope } from "../../src/core/compaction/transaction.ts";
 import { PromptInputCapacityError } from "../../src/core/prompt-budget.ts";
 import type { ExtensionFactory } from "../../src/index.ts";
@@ -127,6 +127,11 @@ function seedAdmissionOverflowHistory(harness: Harness): void {
 
 describe("AgentSession compaction characterization", () => {
 	const harnesses: Harness[] = [];
+
+	beforeEach(() => {
+		vi.useFakeTimers({ toFake: ["Date"] });
+		vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+	});
 
 	afterEach(() => {
 		vi.useRealTimers();
@@ -927,6 +932,8 @@ describe("AgentSession compaction characterization", () => {
 	});
 
 	it("compacts before provider request and admits the compacted context", async () => {
+		// Usage and compaction timestamps must share a clock; real timers and budgets remain active.
+		vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-15T00:00:00Z") });
 		const harness = await createHarness({
 			settings: { compaction: { enabled: true, reserveTokens: 1000, keepRecentTokens: 1 } },
 			models: [{ id: "faux-1", contextWindow: 200_000 }],
@@ -989,6 +996,7 @@ describe("AgentSession compaction characterization", () => {
 	});
 
 	it("recovers from an admission overflow by compacting and sending the prompt", async () => {
+		vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-15T00:00:00Z") });
 		// 200k window, 50k output reserve -> admission ceiling 130k. The history holds ~150k tokens.
 		const harness = await createHarness({
 			settings: { compaction: { enabled: true, keepRecentTokens: 1 } },
@@ -1036,6 +1044,7 @@ describe("AgentSession compaction characterization", () => {
 	});
 
 	it("admits the reported opencode-go/deepseek-v4.1-flash overflow through prompt() by compacting first", async () => {
+		vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-15T00:00:00Z") });
 		// Reported: estimated=627823 > limit=516000 while threshold compaction still waited for 900k.
 		const harness = await createHarness({
 			settings: { compaction: { enabled: true, keepRecentTokens: 1 } },
@@ -1115,6 +1124,34 @@ describe("AgentSession compaction characterization", () => {
 		});
 		expect(harness.session.lastTermination?.nextAction).toContain("Shorten the latest input");
 		expect(harness.faux.state.callCount).toBe(0);
+	});
+
+	it("admits a compacted SWE-2 turn without reusing pre-compaction usage 264849", async () => {
+		// Reported: estimated=264850, limit=219416 after automatic compaction. The
+		// compaction boundary, not the old assistant usage, must own the next estimate.
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, keepRecentTokens: 10_000 } },
+			models: [{ id: "swe-2", contextWindow: 262_000, maxTokens: 16_384 }],
+			extensionFactories: [extensionSummary("must not run")],
+		});
+		harnesses.push(harness);
+		const now = Date.now();
+		const keptTurnId = harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "x".repeat(600_000) }],
+			timestamp: now - 4000,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, { stopReason: "stop", totalTokens: 264_849, timestamp: now - 3000 }),
+		);
+		harness.sessionManager.appendCompaction("earlier summary", keptTurnId, 264_849);
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+		harness.setResponses([fauxAssistantMessage("answered within the 219416-token ceiling")]);
+
+		await expect(harness.session.prompt("go")).resolves.toBeUndefined();
+
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(1);
+		expect(harness.faux.state.callCount).toBe(1);
 	});
 
 	it("re-compacts the retained tail when the latest entry is already a compaction and admission still overflows", async () => {

@@ -21,7 +21,7 @@ describe("kimi-coding catalog", () => {
 				api: "anthropic-messages",
 				provider: "kimi-coding",
 				baseUrl: "https://api.kimi.com/coding",
-				headers: { "User-Agent": "KimiCLI/1.5" },
+				headers: { "User-Agent": "omk" },
 				reasoning: true,
 			});
 		}

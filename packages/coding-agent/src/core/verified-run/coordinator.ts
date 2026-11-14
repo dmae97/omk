@@ -1,10 +1,9 @@
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import {
-	parseRunContract,
 	parseRunPublishCommand,
+	parseRunReconnectCommand,
 	parseRunResumeCommand,
-	parseRunStartCommand,
 	parseRunTaskRetryCommand,
 	parseRunWriterRestartCommand,
 } from "omk-protocol";
@@ -24,6 +23,7 @@ import { readEvidenceProjection } from "./evidence-read-projection.ts";
 import { type RunExplanation, readRunExplanation } from "./explanation.ts";
 import { stopEvent } from "./interruption.ts";
 import { journalPath, type RunJournalRecord, readRunJournal, VerifiedRunJournal } from "./journal.ts";
+import { completedNativeReconnect, reconnectNativeExecution } from "./native-reconnect.ts";
 import type { RunPhaseContext } from "./phase-context.ts";
 import { inspectRunRecovery, type RecoveryInspection, resumeFrozenCandidate } from "./recovery.ts";
 import { anchorRunBudget, readRunClock } from "./recovery-clock.ts";
@@ -34,6 +34,7 @@ import { deriveRunStatus, type RunStatus } from "./run-status.ts";
 import { withOwnedGitStatus } from "./run-status-owned.ts";
 import type { RunProjection } from "./run-types.ts";
 import type { VerifiedRunRuntime } from "./session-port.ts";
+import { parseApprovedRunStart } from "./start-preflight.ts";
 import {
 	assertStateOutsideWorkspace,
 	digestBytes,
@@ -191,6 +192,19 @@ export class RunCoordinator {
 		return this.inspect(command.runId);
 	}
 
+	async reconnect(input: unknown, approval: VerifiedRunApproval): Promise<RunProjection> {
+		const command = parseRunReconnectCommand(input);
+		if (approval.approvedContractDigest !== command.contractDigest) throw new VerifiedRunError("approval");
+		const completed = completedNativeReconnect(stateRunPath(this.stateRoot, command.runId), command);
+		if (completed) return this.inspect(command.runId);
+		return this.withAuthority(command.runId, (runPath, authority) =>
+			reconnectNativeExecution(runPath, command, {
+				authority,
+				...(approval.signal ? { signal: approval.signal } : {}),
+			}),
+		);
+	}
+
 	async restartWriter(input: unknown, approval: VerifiedRunApproval): Promise<RunProjection> {
 		const command = parseRunWriterRestartCommand(input);
 		if (approval.approvedContractDigest !== command.contractDigest) throw new VerifiedRunError("approval");
@@ -207,13 +221,7 @@ export class RunCoordinator {
 	async start(input: unknown, request: unknown, approval: VerifiedRunApproval): Promise<RunProjection> {
 		const began = performance.now();
 		const clock = readRunClock();
-		const contract = parseRunContract(input);
-		const command = parseRunStartCommand(request);
-		const contractDigest = digestObject(contract);
-		if (approval.approvedContractDigest !== contractDigest) throw new VerifiedRunError("approval");
-		if (command.contractDigest !== contractDigest || command.runId !== contract.runId)
-			throw new VerifiedRunError("command_conflict");
-		if (approval.signal?.aborted) throw new VerifiedRunError("cancelled");
+		const { contract, command, contractDigest } = parseApprovedRunStart(input, request, approval);
 		assertStateOutsideWorkspace(this.stateRoot, contract.workspace.root);
 		const runPath = stateRunPath(this.stateRoot, contract.runId);
 		const existing = readRunJournal(runPath);

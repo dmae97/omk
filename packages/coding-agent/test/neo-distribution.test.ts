@@ -40,14 +40,16 @@ function context(output: (text: string) => void) {
 }
 
 describe("Neo distribution and safe setup", () => {
-	it("discovers six real bundled skills in a clean directory without writing MCP config", () => {
+	it("discovers Neo and Tencent bundled skills without writing MCP config", () => {
 		const loaded = loadSkillsWithBundled(false, {
 			cwd: root,
 			agentDir: join(root, "agent"),
 			skillPaths: [],
 			includeDefaults: false,
 		});
-		expect(loaded.skills.map((skill) => skill.name).sort()).toEqual([...NEO_SKILL_NAMES].sort());
+		expect(loaded.skills.map((skill) => skill.name).sort()).toEqual(
+			[...NEO_SKILL_NAMES, "omk-tencent-memory"].sort(),
+		);
 		expect(loaded.diagnostics).toEqual([]);
 		expect(existsSync(join(root, ".omk", "mcp.json"))).toBe(false);
 	});
@@ -62,7 +64,7 @@ describe("Neo distribution and safe setup", () => {
 		writeFileSync(file, "---\nname: omk-site\ndescription: User owned site policy\n---\nUser policy\n");
 		const options = { cwd: root, agentDir: root, skillPaths: [file], includeDefaults: false };
 		const loaded = loadSkillsWithBundled(false, options);
-		expect(loaded.skills).toHaveLength(6);
+		expect(loaded.skills).toHaveLength(7);
 		expect(loaded.skills.find((skill) => skill.name === "omk-site")?.filePath).toBe(file);
 		expect(loadSkillsWithBundled(true, options).skills.map((skill) => skill.filePath)).toEqual([file]);
 	});
@@ -80,7 +82,7 @@ describe("Neo distribution and safe setup", () => {
 				.getSkills()
 				.skills.map((skill) => skill.name)
 				.sort(),
-		).toEqual([...NEO_SKILL_NAMES].sort());
+		).toEqual([...NEO_SKILL_NAMES, "omk-tencent-memory"].sort());
 	});
 	it("honors noSkills through DefaultResourceLoader without removing explicit skills", async () => {
 		const file = join(root, "explicit.md");
@@ -127,6 +129,7 @@ describe("Neo distribution and safe setup", () => {
 		expect(loaded.skills.map((skill) => skill.filePath)).toEqual([file]);
 		expect(loaded.diagnostics).toEqual([
 			expect.objectContaining({ type: "warning", path: join(root, "resources", "neo", "skills") }),
+			expect.objectContaining({ type: "warning", path: join(root, "resources", "skills") }),
 		]);
 	});
 	it("does not falsely report MCP connections or perform setup during listing", () => {

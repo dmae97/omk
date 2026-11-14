@@ -240,7 +240,8 @@ export function updateCodingAgentReadme(version, path = "packages/coding-agent/R
 			`[v${version}]($1${version}$2)`,
 		)
 		.replace(/RELEASE_NOTES_v\d+\.\d+\.\d+\.md/g, `RELEASE_NOTES_v${version}.md`)
-		.replace(/npm:omk-book-to-skill@\d+\.\d+\.\d+/g, `npm:omk-book-to-skill@${version}`);
+		.replace(/npm:omk-book-to-skill@\d+\.\d+\.\d+/g, `npm:omk-book-to-skill@${version}`)
+		.replace(/npm:omk-speak-like-you-eat@\d+\.\d+\.\d+/g, `npm:omk-speak-like-you-eat@${version}`);
 	if (updated !== content) {
 		writeFileSync(path, updated);
 		console.log(`  Updated ${path} version references to ${version}`);

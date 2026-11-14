@@ -8,6 +8,7 @@ export interface ProcessReduction {
 	readonly dispatched: Set<string>;
 	readonly checked: Set<string>;
 	activeRole: "writer" | "verifier";
+	lastDispatch?: Extract<RunEvent, { kind: "dispatch" }>;
 }
 type ProcessEvent = Extract<RunEvent, { kind: "dispatch" | "process_ready" | "exited" }>;
 
@@ -41,6 +42,15 @@ export function reduceProcessEvent(context: WriterReduction, event: ProcessEvent
 					throw new VerifiedRunError("integrity");
 				progress.checked.add(event.claimId);
 			}
+			if (
+				event.timeoutMs !== undefined &&
+				(event.role !== "verifier" ||
+					!Number.isSafeInteger(event.timeoutMs) ||
+					event.timeoutMs <= 0 ||
+					event.timeoutMs > contract.budget.verifyMs)
+			)
+				throw new VerifiedRunError("integrity");
+			progress.lastDispatch = event;
 			progress.dispatched.add(event.executionId);
 			progress.activeRole = event.role;
 			context.state = {

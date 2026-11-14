@@ -99,6 +99,16 @@ describe("copyToClipboard", () => {
 		expect(mockedSpawn).not.toHaveBeenCalled();
 	});
 
+	test.each(["darwin", "win32", "linux"] as const)(
+		"PI_CLIPBOARD_OSC52=1 copies to remote terminal after successful %s copy",
+		async (platform) => {
+			vi.stubEnv("PI_CLIPBOARD_OSC52", "1");
+			mockedPlatform.mockReturnValue(platform);
+			if (platform === "linux") vi.stubEnv("DISPLAY", ":99");
+			await copyToClipboard("hello");
+			expect(osc52Writes()).toEqual([`\x1b]52;c;${Buffer.from("hello").toString("base64")}\x07`]);
+		},
+	);
 	test("remote native success emits OSC 52 after native write", async () => {
 		vi.stubEnv("SSH_CONNECTION", "client server");
 		mocks.clipboard.setText.mockImplementation(async () => {

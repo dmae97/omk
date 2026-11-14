@@ -157,10 +157,12 @@ describe("auto skill context feedback", () => {
 					String(message.content).includes(f.body),
 			),
 		).toHaveLength(1);
-		expect(
-			harness.sessionManager
-				.getEntries()
-				.filter((entry) => entry.type === "custom" && entry.customType === SKILL_ADMISSION_ENTRY_TYPE),
-		).toHaveLength(1);
+		// 2.0.0 scopes admissions per prompt (spec 106 SK1): the second prompt re-admits the same body
+		// in its own allowance, so each prompt holds one record for it.
+		const admissions = harness.sessionManager
+			.getEntries()
+			.filter((entry) => entry.type === "custom" && entry.customType === SKILL_ADMISSION_ENTRY_TYPE);
+		expect(admissions).toHaveLength(2);
+		expect(new Set(admissions.map((entry) => (entry as { data?: { digest?: string } }).data?.digest)).size).toBe(1);
 	});
 });

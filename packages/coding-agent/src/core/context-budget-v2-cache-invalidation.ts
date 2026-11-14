@@ -169,7 +169,7 @@ function assertPlainObject(value: unknown, scope: string): asserts value is Reco
 }
 
 /** Reject getter/setter accessors, whose reads are not stable. */
-function assertNoAccessors(record: object, scope: string): void {
+function assertNoAccessors(record: Record<string, unknown>, scope: string): void {
 	for (const key of Object.getOwnPropertyNames(record)) {
 		const desc = Object.getOwnPropertyDescriptor(record, key);
 		if (desc !== undefined && (typeof desc.get === "function" || typeof desc.set === "function")) {

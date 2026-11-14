@@ -19,7 +19,7 @@ import { basename, dirname, join as joinPath } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import type { Agent, AgentEvent, AgentMessage, AgentState, AgentTool, ThinkingLevel } from "omk-agent-core";
 import { getVisionRouteModel } from "omk-agent-core";
-import type { Api, AssistantMessage, ImageContent, Message, Model, TextContent } from "omk-ai";
+import type { Api, AssistantMessage, ImageContent, Model, TextContent } from "omk-ai";
 import {
 	clampThinkingLevel,
 	cleanupSessionResources,
@@ -27,7 +27,6 @@ import {
 	getSupportedThinkingLevels,
 	isBuiltinStreamFn,
 	modelsAreEqual,
-	type RetryCallbacks,
 	resetApiProviders,
 } from "omk-ai";
 import { APP_NAME, getAgentDir, VERSION } from "../config.ts";
@@ -65,7 +64,6 @@ import {
 	type CompactionResult,
 	calculateContextTokens,
 	collectEntriesForBranchSummary,
-	compact,
 	estimateContextTokens,
 	estimateNextTurnContextTokens,
 	estimateProjectedContextTokens,
@@ -73,11 +71,16 @@ import {
 	prepareCompaction,
 	resolveCompactionModel,
 } from "./compaction/index.ts";
-import { summarizeWithOAuthRecovery } from "./compaction/oauth-recovery.ts";
 import { isOverflowRecoveryProgress, overflowRecoveryFailureMessage } from "./compaction/overflow-recovery-progress.ts";
 import { overflowRetryBlocked } from "./compaction/overflow-retry-guard.ts";
 import { compactionEmitWillRetry } from "./compaction/resume-policy.ts";
 import { type CompactionSummaryInput, summarizeSessionCompaction } from "./compaction/session-summary.ts";
+import {
+	compactionFailoverModels,
+	type SummarizationRetryEvent,
+	summarizationRetryCallbacks,
+} from "./compaction/session-summary-observation.ts";
+import { SessionCompactionUsage, summarizeObservedCompaction } from "./compaction/session-usage.ts";
 import { getCompactionUsageBoundary } from "./compaction-entry-time.ts";
 import { isSessionModelOverflow, shouldSkipCompactionCheck } from "./compaction-gate.ts";
 import {
@@ -101,14 +104,13 @@ import type { ContextBudgetCacheProviderV2 } from "./context-budget-v2-types.ts"
 import { credentialStoreUnreadableMessage } from "./credential-resolution-failure.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { devinPlaybookAppendForProvider } from "./devin-harness.ts";
-import { EvidenceSessionShutdown } from "./evidence-lifecycle-session.ts";
+import { EVIDENCE_RECEIPT_CUSTOM_TYPES, EvidenceSessionShutdown } from "./evidence-lifecycle-session.ts";
 import type { ToolHtmlRenderer } from "./export-html/index.ts";
 import {
 	type ContextUsage,
 	type ExtensionCommandContextActions,
 	type ExtensionErrorListener,
 	type ExtensionMode,
-	ExtensionRunner,
 	type ExtensionUIContext,
 	type MessageEndEvent,
 	type MessageStartEvent,
@@ -128,7 +130,7 @@ import {
 	type TurnStartEvent,
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
-import { emitSessionShutdownEvent } from "./extensions/runner.ts";
+import { ExtensionRunner, emitSessionShutdownEvent } from "./extensions/runner.ts";
 import { assertTextChatModelForCompletion } from "./grok-harness.ts";
 import { grokPlaybookAppendForProvider } from "./grok-playbook.ts";
 import { loadHookInventory } from "./hook-inventory.ts";
@@ -193,15 +195,18 @@ function firstTextContent(result: unknown): string | undefined {
 	return undefined;
 }
 
-import { createImmutableMessageSnapshot } from "./agent-session-snapshot.ts";
+import { createImmutableMessageSnapshot, findLastAssistantMessage } from "./agent-session-snapshot.ts";
 import { installTurnAdmission, type TurnAdmissionSession } from "./agent-session-turn-admission-host.ts";
 import {
+	currentUserQuery,
 	DeferredTurnInput,
 	inputAlreadyHandled,
 	preparedPromptOptions,
 	routesOutsideScope,
 	userMessage,
+	userMessageText,
 } from "./deferred-turn-input.ts";
+import { prepareMessageStart } from "./extensions/before-agent-start.ts";
 import { isFailoverCandidateDenial, switchFailoverModel } from "./failover-model-switch.ts";
 import { goalAutonomySteerInput } from "./goal-continuation.ts";
 import type { CustomMessage } from "./messages.ts";
@@ -210,6 +215,7 @@ import type { ModelRegistry } from "./model-registry.ts";
 import { findExactModelReferenceMatch } from "./model-resolver.ts";
 import { type PinnedQuotaFailoverEvent, PinnedQuotaFailoverNotice } from "./pinned-quota-failover-notice.ts";
 import { classifyPromptCacheTransition } from "./prompt-cache.ts";
+import { continuationPromptOptions, isPromptContinuation } from "./prompt-continuation.ts";
 import type { PromptOptions } from "./prompt-options.ts";
 import * as promptSettlement from "./prompt-settlement.ts";
 import { PromptSkillFreeze } from "./prompt-skill-message.ts";
@@ -218,7 +224,6 @@ import {
 	isQuotaExhaustionMessage,
 	isStickySafetyModel,
 	pickFailoverCandidate,
-	resolveFailoverCandidates,
 	resolveProviderResilience,
 	sameModelRouteCandidates,
 	shouldEjectStickySafetyModel,
@@ -281,6 +286,7 @@ import { type BashResourcePermitGrant, SessionBashService } from "./session-bash
 import { SessionCompactionService } from "./session-compaction-service.ts";
 import { type SessionControlServer, startSessionControl } from "./session-control-server.ts";
 import { isSessionCommand, tryExecuteSessionCommand } from "./session-extension-command.ts";
+import { SessionExtensionSettlement } from "./session-extension-settlement.ts";
 import { runtimeFailureCause, terminationMessage } from "./session-failure-cause.ts";
 import {
 	promptPreflightTermination,
@@ -288,7 +294,7 @@ import {
 	sessionInputTokenLimit,
 	transcriptHasImages,
 } from "./session-input-admission.ts";
-import type { BranchSummaryEntry, SessionManager } from "./session-manager.ts";
+import type { BranchSummaryEntry, CustomEntry, SessionManager } from "./session-manager.ts";
 import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.ts";
 import { SessionMemory } from "./session-memory.ts";
 import { acquireSessionOwnerLeaseSync, type SessionOwnerLease } from "./session-owner-lease.ts";
@@ -305,10 +311,15 @@ import {
 import type { SessionTurnAdmission } from "./session-turn-admission.ts";
 import type { SettingsManager } from "./settings-manager.ts";
 import type { SkillAdmissionSource } from "./skill-admission-ledger.ts";
-import { admitSkillBody, expandSkillCommand, gateSkillRead } from "./skill-admission-session.ts";
+import {
+	admitSkillBody,
+	beginSkillAdmissionTurn,
+	expandSkillCommand,
+	gateSkillRead,
+} from "./skill-admission-session.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
-import { type BuildSystemPromptOptions, buildSystemPromptPlan } from "./system-prompt.ts";
+import type { BuildSystemPromptOptions } from "./system-prompt.ts";
 import { PrefixBoundaryCauseHolder } from "./system-prompt-cache-boundary.ts";
 import * as taskResultWiring from "./task-result-collector.ts";
 import { todoControlState } from "./todo-runtime-state.ts";
@@ -369,6 +380,7 @@ export type AgentSessionEvent =
 			steering: readonly string[];
 			followUp: readonly string[];
 	  }
+	| { type: "custom_entry"; entry: CustomEntry }
 	| { type: "compaction_start"; reason: "manual" | "threshold" | "overflow" }
 	| { type: "session_info_changed"; name: string | undefined }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
@@ -384,20 +396,7 @@ export type AgentSessionEvent =
 	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
 	| PinnedQuotaFailoverEvent
 	| { type: "bash_execution_update"; id?: string; delta: string }
-	| {
-			type: "summarization_retry_scheduled";
-			attempt: number;
-			maxAttempts: number;
-			delayMs: number;
-			errorMessage: string;
-	  }
-	| { type: "summarization_retry_attempt_start"; source: "branchSummary" }
-	| {
-			type: "summarization_retry_attempt_start";
-			source: "compaction";
-			reason: "manual" | "threshold" | "overflow";
-	  }
-	| { type: "summarization_retry_finished" }
+	| SummarizationRetryEvent
 	| { type: "session_termination"; termination: SessionTermination }
 	| {
 			/**
@@ -638,7 +637,7 @@ export class AgentSession {
 	private readonly _turnAdmission: SessionTurnAdmission;
 	private _control: Promise<SessionControlServer> | undefined;
 	private readonly _promptLifecycle = new SessionPromptLifecycle({
-		canSettle: () => !this.isStreaming && !this.agent.hasQueuedMessages(),
+		canSettle: () => !this.isStreaming && !this.agent.hasQueuedMessages() && !this._extensionSettlement.unsettled,
 		auditsLateSettlement: () => this.agent.toolExecutionPolicy?.lateSettlement !== "ignore",
 	});
 	private _messageEndReplacements = new WeakMap<Extract<AgentEvent, { type: "message_end" }>, AgentMessage>();
@@ -651,6 +650,8 @@ export class AgentSession {
 	private _pendingNextTurnMessages: CustomMessage[] = [];
 	private readonly _promptSkillFreeze = new PromptSkillFreeze(() => this.sessionManager);
 	private readonly _deferredTurnInput = new DeferredTurnInput();
+	private readonly _extensionSettlement = new SessionExtensionSettlement();
+	private readonly _compactionUsage = new SessionCompactionUsage(this);
 
 	// Compaction state
 	private _compactionAbortController: AbortController | undefined = undefined;
@@ -778,6 +779,7 @@ export class AgentSession {
 			},
 			stop: (error) => {
 				this._pendingRuntimeTerminationCause = { area: "budget", code: error.code };
+				this._extensionSettlement.abort();
 				this.agent.abort();
 				this.abortRetry();
 				this.abortCompaction();
@@ -849,12 +851,12 @@ export class AgentSession {
 		this._compactionService = new SessionCompactionService({
 			sessionManager: this.sessionManager,
 			pendingToolCallIds: () => this.agent.state.pendingToolCalls,
-			getUserMessageText: (message) => this._getUserMessageText(message),
+			getUserMessageText: userMessageText,
 			cwd: this._cwd,
 			// Host control authority for preserved provenance: the TODO ledger is
 			// the only production producer today; the service binds its snapshot to
 			// the compaction commit boundary and discards stale summaries.
-			controlState: todoControlState,
+			controlState: () => todoControlState(this.sessionManager.getSessionId()),
 			invalidateContextBudget: () => this._invalidateContextBudgetCache({ type: "transcriptRepair" }),
 			refreshAgentMessages: () => {
 				this.agent.state.messages = this.sessionManager.buildSessionContext().messages;
@@ -982,12 +984,6 @@ export class AgentSession {
 			return;
 		}
 		this._contextBudgetCacheProvider?.setInvalidationSnapshot?.(result.snapshot);
-	}
-
-	private _recordEvidenceReceiptInvalidation(customType: string): void {
-		if (customType === "evidence_receipt" || customType === "evidence-receipt") {
-			this._invalidateContextBudgetCache({ type: "evidenceReceipt" });
-		}
 	}
 
 	private _sessionRevision(): number {
@@ -1330,7 +1326,7 @@ export class AgentSession {
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
 		// This ensures the UI sees the updated queue state
 		if (event.type === "message_start" && event.message.role === "user") {
-			const messageText = this._getUserMessageText(event.message);
+			const messageText = userMessageText(event.message);
 			if (messageText) {
 				// Check steering queue first
 				const steeringIndex = this._steeringMessages.indexOf(messageText);
@@ -1369,6 +1365,7 @@ export class AgentSession {
 
 		// Handle session persistence
 		if (finalizedEvent.type === "message_end") {
+			this._extensionSettlement.record(finalizedEvent.message);
 			// Check if this is a custom message from extensions
 			if (finalizedEvent.message.role === "custom") {
 				// Persist as CustomMessageEntry
@@ -1435,25 +1432,9 @@ export class AgentSession {
 		return false;
 	}
 
-	/** Extract text content from a message */
-	private _getUserMessageText(message: Message): string {
-		if (message.role !== "user") return "";
-		const content = message.content;
-		if (typeof content === "string") return content;
-		const textBlocks = content.filter((c) => c.type === "text");
-		return textBlocks.map((c) => (c as TextContent).text).join("");
-	}
-
 	/** Find the last assistant message in agent state (including aborted ones) */
 	private _findLastAssistantMessage(): AssistantMessage | undefined {
-		const messages = this.agent.state.messages;
-		for (let i = messages.length - 1; i >= 0; i--) {
-			const msg = messages[i];
-			if (msg.role === "assistant") {
-				return msg as AssistantMessage;
-			}
-		}
-		return undefined;
+		return findLastAssistantMessage(this.agent.state.messages);
 	}
 
 	private _replaceFinalizedMessage(target: AgentMessage, replacement: AgentMessage): AgentMessage {
@@ -1485,12 +1466,6 @@ export class AgentSession {
 			await this._extensionRunner.emit({ type: "agent_start" });
 		} else if (event.type === "agent_end") {
 			await this._extensionRunner.emit({ type: "agent_end", messages: event.messages });
-			// `agent_end` fires once per attempt. Extensions that release per-run
-			// state need the boundary no retry follows, so mark it explicitly.
-			if (!this._willRetryAfterAgentEnd(event)) {
-				await this._extensionRunner.emit({ type: "agent_settled", messages: event.messages });
-				this._shutdown.settled();
-			}
 		} else if (event.type === "turn_start") {
 			this._turnMetricsState = {
 				startedAtEpochMs: Date.now(),
@@ -1701,10 +1676,21 @@ export class AgentSession {
 	}
 
 	close(): Promise<void> {
-		return this._shutdown.closeSession(
-			this,
-			{ budget: this._runBudget, lifecycle: this._promptLifecycle, mcp: this._mcpManager, control: this._control },
-			() => this._disposeNow(),
+		this._extensionSettlement.abort();
+		return this._extensionSettlement.before(
+			() =>
+				this._shutdown.closeSession(
+					this,
+					{
+						budget: this._runBudget,
+						lifecycle: this._promptLifecycle,
+						mcp: this._mcpManager,
+						control: this._control,
+					},
+					() => this._disposeNow(),
+					() => this._extensionSettlement.recover(),
+				),
+			false,
 		);
 	}
 
@@ -1922,18 +1908,32 @@ export class AgentSession {
 
 	/** Busy, possibly with no agent loop to drain a queue (manual compaction, branch summary, preflight, settling). */
 	private get _sessionBusy(): boolean {
-		return this._promptLifecycle.active || this.isCompacting || this._runBudget.active;
+		return (
+			this._promptLifecycle.active || this.isCompacting || this._runBudget.active || this._extensionSettlement.busy
+		);
 	}
 
 	/** Starts one run for deferred turn input once nothing owns the session; a macrotask, after scopes close. */
 	private _drainDeferredTurnInput(): void {
-		if (this._deferredTurnInput.size === 0) return;
+		if (this._deferredTurnInput.size === 0 && !this._extensionSettlement.pending) return;
 		setTimeout(() => {
 			if (this._sessionBusy) return; // the owner adopts it, or calls this again when it lets go
+			const settledAction = this._extensionSettlement.take();
+			if (settledAction) {
+				settledAction().catch((error) => this._publishRuntimeFailure(error));
+				return;
+			}
 			const next = this._deferredTurnInput.next();
 			// prompt() and _runAgentPrompt publish their own failures; nothing else awaits this run.
 			if (next && "prompt" in next) this.prompt(next.prompt.text, next.prompt.options).catch(() => undefined);
-			else if (next) this._shutdown.runEvidence(() => this._runAgentPrompt(next.messages)).catch(() => undefined);
+			else if (next)
+				this._shutdown
+					.runEvidence(() =>
+						this._runBudget.execute(undefined, () =>
+							this._compactionUsage.run(() => this._runAgentPrompt(next.messages), this.agent.streamFn),
+						),
+					)
+					.catch(() => undefined);
 		}, 0);
 	}
 
@@ -1996,24 +1996,7 @@ export class AgentSession {
 	 * a matching skill matters most.
 	 */
 	private _extractCurrentQuery(): string | undefined {
-		const messages = this.messages;
-		for (let i = messages.length - 1; i >= 0; i--) {
-			const msg = messages[i];
-			if (!msg || !("role" in msg) || msg.role !== "user") {
-				continue;
-			}
-			const content = (msg as { content: string | (TextContent | ImageContent)[] }).content;
-			if (typeof content === "string") {
-				const trimmed = content.trim();
-				return trimmed.length > 0 ? trimmed : undefined;
-			}
-			if (Array.isArray(content)) {
-				const textParts = content.flatMap((item) => (item.type === "text" ? [item.text] : []));
-				const joined = textParts.join("\n").trim();
-				return joined.length > 0 ? joined : undefined;
-			}
-		}
-		return undefined;
+		return currentUserQuery(this.messages);
 	}
 
 	private _getContextBudgetOptions(
@@ -2078,13 +2061,10 @@ export class AgentSession {
 	}
 
 	private _getDefaultActiveSkills(): string[] {
-		const trustedSkillNames = new Set(
-			this._resourceLoader
-				.getSkills()
-				.skills.filter((skill) => skill.sourceInfo.scope === "user")
-				.map((skill) => skill.name),
+		return promptAssembly.defaultActiveSkillNames(
+			this._resourceLoader.getSkills().skills,
+			this.settingsManager.getDefaultActiveSkills(),
 		);
-		return this.settingsManager.getDefaultActiveSkills().filter((name) => trustedSkillNames.has(name));
 	}
 
 	private _rebuildSystemPrompt(toolNames: string[], model: Model<any> | undefined = this.model): string {
@@ -2123,6 +2103,7 @@ export class AgentSession {
 		this._overflowRecoveryAttempts = 0; // spec 061: fresh overflow-recovery budget per user prompt
 		this._pinNotice.resetTurn(); // spec 089: re-arm the once-per-turn pinned quota notice
 		const ownedRun = this._promptLifecycle.begin(promptRunId);
+		this._extensionSettlement.begin(promptRunId);
 		// Spec 096: undefined with OMK_TASK_RESULT off (no subscription, no event).
 		// Spec 100: the collector emits task_result_downgrade through this the moment a pass is withdrawn.
 		const emit = (event: taskResultWiring.TaskResultDowngradeEvent) => this._emit(event);
@@ -2136,6 +2117,21 @@ export class AgentSession {
 		try {
 			this._runBudget.assertActive();
 			resourceLease = await this._beginResourceGovernedRun(promptRunId);
+			const first = Array.isArray(messages) ? messages[0] : messages;
+			if (first?.role === "custom") {
+				const pending = this._pendingNextTurnMessages;
+				this._pendingNextTurnMessages = [];
+				const prepared = await prepareMessageStart(
+					this._extensionRunner,
+					{ messageType: "custom", message: first },
+					this._baseSystemPromptOptions,
+					this._runBudget.prefixCauses,
+				);
+				messages = [...(Array.isArray(messages) ? messages : [messages]), ...pending, ...prepared.messages];
+				Object.assign(this.agent.state, prepared.promptState);
+				this._recordPromptCachePlan(prepared.modified ? "extension-override" : "turn-plan");
+				this._runBudget.assertActive();
+			}
 			resourceObservations = this._resourceObservationJournals.get(promptRunId) ?? null;
 			this._metaRuntime.observeRunBudget(this._runBudget.snapshot());
 			await this.agent.prompt(messages);
@@ -2151,6 +2147,7 @@ export class AgentSession {
 			if (this._runBudget.failure && this._lastTermination?.kind !== "budget_exhausted")
 				this._publishRuntimeFailure(this._runBudget.failure);
 			outcome = promptSettlement.resolvePromptSettlementOutcome(outcome, this._lastTermination?.kind);
+			this._extensionSettlement.finish();
 			this._flushPendingBashMessages();
 			this._metaRuntime.observeRunBudget(this._runBudget.snapshot());
 			ownedRun.finish(outcome, (event) => {
@@ -2462,8 +2459,22 @@ export class AgentSession {
 			return true;
 		}
 
-		// The agent loop drains both queues before emitting agent_end. Any messages here were queued by agent_end
-		// extension handlers, or deferred while the run worked between turns; both need a continuation.
+		// Drain attempt continuations before telling extensions that no retry follows.
+		if (this._deferredTurnInput.adopt(this.agent) || this.agent.hasQueuedMessages()) return true;
+		if (this._shutdown.isClosing) return false;
+		const aborted =
+			this._userAbortRequested ||
+			this._lastTermination?.kind === "user_abort" ||
+			this._findLastAssistantMessage()?.stopReason === "aborted";
+		// Messages are the attempts since the previous settlement of this run, so consumers never re-count history.
+		await this._extensionSettlement.settle(
+			this._extensionSettlement.snapshot(aborted),
+			(operation) => this._shutdown.runSettlement(operation),
+			this._compactionUsage.bindSettlement(this._extensionRunner, () => this._shutdown.settled()),
+			() => this._drainDeferredTurnInput(),
+			(error) => this._publishRuntimeFailure(error),
+		);
+		// Host checks and ordinary follow-ups belong to this run, before task_result closes its collector.
 		return this._deferredTurnInput.adopt(this.agent) || this.agent.hasQueuedMessages();
 	}
 
@@ -2477,17 +2488,31 @@ export class AgentSession {
 	 * @throws Error if no model selected or no API key available (when not streaming)
 	 */
 	prompt(text: string, options?: PromptOptions): Promise<void> {
-		return this._shutdown.runEvidence(() => {
+		if (
+			options?.expandPromptTemplates !== false &&
+			this._extensionSettlement.defer(() => this.prompt(text, continuationPromptOptions(options)))
+		)
+			return Promise.resolve();
+		const operation = this._shutdown.runEvidence(async () => {
 			const command = options?.expandPromptTemplates !== false && isSessionCommand(text, this._extensionRunner);
+			const queued = !command && options?.streamingBehavior !== undefined && this._runOwnsSession;
+			if (queued && options?.runBudget === undefined) {
+				await this._prompt(text, options, true);
+				if (this._extensionSettlement.blocked) await this._extensionSettlement.recover();
+				return;
+			}
+			if (this._extensionSettlement.unsettled && !queued)
+				await this._extensionSettlement.recover(() => this._runBudget.waitForExecution());
 			if (routesOutsideScope(command, options, this._runOwnsSession, this._runBudget.active))
 				return this._prompt(text, options, true);
 			return this._runBudget.execute(
 				options?.runBudget,
-				() => this._prompt(text, options),
+				() => this._compactionUsage.run(() => this._prompt(text, options), this.agent.streamFn),
 				options?.preflightResult,
 				() => this._shutdown.closedByCommand,
 			);
 		});
+		return this._extensionSettlement.after(operation, () => this._sessionBusy);
 	}
 
 	getRunBudgetSnapshot() {
@@ -2554,6 +2579,10 @@ export class AgentSession {
 					currentText = inputResult.text;
 					currentImages = inputResult.images ?? currentImages;
 				}
+			}
+
+			if (!this._runOwnsSession && !bypassed && !isPromptContinuation(options)) {
+				beginSkillAdmissionTurn(this.sessionManager);
 			}
 
 			// Expand skill commands (/skill:name args) and prompt templates (/template args)
@@ -2635,58 +2664,34 @@ export class AgentSession {
 			this._pendingNextTurnMessages = [];
 
 			// Spec 050 R6: the first prompt's skill choice goes into a session-frozen system prompt, later ones into a message.
-			const turnSkills = await this._promptSkillFreeze.turn({
-				base: this._baseSystemPromptOptions,
-				provider: this.model?.provider,
-				selection: promptSkills,
-				defaults: defaultActiveSkills,
-				skills: this._resourceLoader.getSkills().skills,
-				harnessQuery: isBangSkillInvocation ? currentText : expandedText,
-				budgetQuery: expandedText,
-				contextPressure: () => this._computePressureBucket(messages) > 0,
-				contextBudget: (query) => this._getContextBudgetOptions(query),
-			});
+			const turnSkills = await this._promptSkillFreeze.turn(
+				{
+					base: this._baseSystemPromptOptions,
+					provider: this.model?.provider,
+					selection: promptSkills,
+					defaults: defaultActiveSkills,
+					skills: this._resourceLoader.getSkills().skills,
+					harnessQuery: isBangSkillInvocation ? currentText : expandedText,
+					budgetQuery: expandedText,
+					contextPressure: () => this._computePressureBucket(messages) > 0,
+					contextBudget: (query) => this._getContextBudgetOptions(query),
+				},
+				isPromptContinuation(options),
+			);
 			messages.push(...turnSkills.messages);
 			const turnSystemPromptOptions = turnSkills.options;
 			const admissionTokenCounter =
 				turnSystemPromptOptions.contextBudget?.tokenCounter ??
 				createTokenCounterForMode(turnSystemPromptOptions.contextBudget?.tokenizerMode ?? "fallback");
-			const turnSystemPrompt = buildSystemPromptPlan(turnSystemPromptOptions);
-
-			// Emit before_agent_start extension event
-			const result = await this._extensionRunner.emitBeforeAgentStart(
-				expandedText,
-				currentImages,
-				turnSystemPrompt.prompt,
+			const prepared = await prepareMessageStart(
+				this._extensionRunner,
+				{ messageType: "user", prompt: expandedText, images: currentImages },
 				turnSystemPromptOptions,
+				this._runBudget.prefixCauses,
 			);
-			// Add all custom messages from extensions
-			if (result?.messages) {
-				for (const msg of result.messages) {
-					messages.push({
-						role: "custom",
-						customType: msg.customType,
-						content: msg.content,
-						display: msg.display,
-						details: msg.details,
-						timestamp: Date.now(),
-					});
-				}
-			}
-			// Apply extension-modified system prompt, or reset to the turn plan.
-			if (result?.systemPrompt) {
-				// Spec 052/102: appended text (or, with OMK_PREFIX_BOUNDARY, a changed tail) keeps the boundary.
-				const cache = this._runBudget.prefixCauses.resolve(turnSystemPrompt, result.systemPrompt);
-				this.agent.state.systemPrompt = result.systemPrompt;
-				this.agent.state.systemPromptCacheBoundary = cache.cacheBoundary;
-				this.agent.state.systemPromptCacheBoundaryBypass = cache.bypass;
-			} else {
-				// Ensure we're using the turn prompt (in case the previous turn had modifications).
-				this.agent.state.systemPrompt = turnSystemPrompt.prompt;
-				this.agent.state.systemPromptCacheBoundary = turnSystemPrompt.cacheBoundary;
-				this.agent.state.systemPromptCacheBoundaryBypass = false;
-			}
-			this._recordPromptCachePlan(result?.systemPrompt ? "extension-override" : "turn-plan");
+			messages.push(...prepared.messages);
+			Object.assign(this.agent.state, prepared.promptState);
+			this._recordPromptCachePlan(prepared.modified ? "extension-override" : "turn-plan");
 			await this._promptSkillFreeze.skillSearch.logSession(this.agent.state);
 
 			await this._checkProjectedCompaction(messages);
@@ -2833,6 +2838,9 @@ export class AgentSession {
 		options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
 	): Promise<void> {
 		this._shutdown.assertOpen();
+		if (options?.triggerTurn && this._extensionSettlement.defer(() => this.sendCustomMessage(message, options)))
+			return;
+		if (options?.triggerTurn && this._extensionSettlement.blocked) await this._extensionSettlement.recover();
 		const appMessage = {
 			role: "custom" as const,
 			customType: message.customType,
@@ -2841,10 +2849,11 @@ export class AgentSession {
 			details: message.details,
 			timestamp: Date.now(),
 		} satisfies CustomMessage<T>;
-		this._recordEvidenceReceiptInvalidation(message.customType);
+		if (EVIDENCE_RECEIPT_CUSTOM_TYPES.has(message.customType))
+			this._invalidateContextBudgetCache({ type: "evidenceReceipt" });
 		if (options?.deliverAs === "nextTurn") {
 			this._pendingNextTurnMessages.push(appMessage);
-		} else if (this.isStreaming || this.isRetrying) {
+		} else if (this.isStreaming || this.isRetrying || (options?.triggerTurn && this._runOwnsSession)) {
 			// A running agent loop, or the retry about to continue it, drains the queue.
 			if (options?.deliverAs === "followUp") {
 				this.agent.followUp(appMessage);
@@ -2856,7 +2865,14 @@ export class AgentSession {
 			// A top-level run started now would be refused, or would race the busy work on stale context.
 			this._deferredTurnInput.defer(appMessage, options.deliverAs);
 		} else if (options?.triggerTurn) {
-			await this._shutdown.runEvidence(() => this._runAgentPrompt(appMessage));
+			await this._extensionSettlement.after(
+				this._shutdown.runEvidence(() =>
+					this._runBudget.execute(undefined, () =>
+						this._compactionUsage.run(() => this._runAgentPrompt(appMessage), this.agent.streamFn),
+					),
+				),
+				() => this._sessionBusy,
+			);
 		} else {
 			this.agent.state.messages.push(appMessage);
 			this.sessionManager.appendCustomMessageEntry(
@@ -2879,7 +2895,7 @@ export class AgentSession {
 	 */
 	async sendUserMessage(
 		content: string | (TextContent | ImageContent)[],
-		options?: { deliverAs?: "steer" | "followUp" },
+		options?: { deliverAs?: "steer" | "followUp"; expandPromptTemplates?: boolean },
 	): Promise<void> {
 		// Normalize content to text string + optional images
 		let text: string;
@@ -2903,7 +2919,7 @@ export class AgentSession {
 
 		// Use prompt() with expandPromptTemplates: false to skip command handling and template expansion
 		await this.prompt(text, {
-			expandPromptTemplates: false,
+			expandPromptTemplates: options?.expandPromptTemplates ?? false,
 			streamingBehavior: options?.deliverAs,
 			images,
 			source: "extension",
@@ -2950,10 +2966,12 @@ export class AgentSession {
 	 * Abort current operation and wait for agent to become idle.
 	 */
 	async abort(): Promise<void> {
-		this._userAbortRequested = this.isStreaming || this.isRetrying || this._runBudget.cancelPreflight();
+		this._userAbortRequested =
+			this._extensionSettlement.abort() || this.isStreaming || this.isRetrying || this._runBudget.cancelPreflight();
 		this.abortRetry();
 		this.agent.abort();
 		await this.agent.waitForIdle();
+		await this._extensionSettlement.wait();
 	}
 
 	/** Record an observed process signal before a mode begins shutdown. */
@@ -3597,43 +3615,20 @@ export class AgentSession {
 	 * the summarization retried; the retry classifier rightly never replays a 401.
 	 */
 	private _summarizeCompaction(input: CompactionSummaryInput): Promise<CompactionResult> {
-		const { model } = input;
-		return summarizeWithOAuthRecovery({
-			apiKey: input.apiKey,
-			provider: model.provider,
-			refreshRejectedToken: (rejected) => this._modelRegistry.refreshRejectedOAuthToken(model, rejected),
-			run: (requestApiKey) =>
-				compact(
-					input.preparation,
-					model,
-					requestApiKey,
-					input.headers,
-					input.customInstructions,
-					input.signal,
-					this.thinkingLevel,
-					this.agent.streamFn,
-					summarizationRetryPolicy(this.settingsManager.getRetrySettings()),
-					this._summarizationRetryCallbacks({ source: "compaction", reason: input.reason }),
-					this._compactionFailoverModels(model),
-					{
-						// The primary's key belongs to its provider; each cross-provider
-						// candidate resolves its own credential or is skipped.
-						resolveCandidateAuth: (candidate) => this._getCompactionRequestAuth(candidate),
-					},
-				),
+		return summarizeObservedCompaction(input, {
+			refreshRejectedToken: (rejected) => this._modelRegistry.refreshRejectedOAuthToken(input.model, rejected),
+			request: () => ({
+				thinkingLevel: this.thinkingLevel,
+				streamFn: this._compactionUsage.stream(this.agent.streamFn, input.reason),
+				retry: summarizationRetryPolicy(this.settingsManager.getRetrySettings()),
+				callbacks: summarizationRetryCallbacks((event) => this._emit(event), {
+					source: "compaction",
+					reason: input.reason,
+				}),
+				failoverModels: compactionFailoverModels(input.model, this.settingsManager, this._modelRegistry),
+				resolveCandidateAuth: (candidate) => this._getCompactionRequestAuth(candidate),
+			}),
 		});
-	}
-
-	private _compactionFailoverModels(primary: Model<Api>): Model<Api>[] {
-		const candidates = resolveFailoverCandidates(this.settingsManager.getProviderResilienceSettings());
-		const available = this._modelRegistry.getAvailable();
-		const models: Model<Api>[] = [];
-		for (const candidate of candidates) {
-			if (candidate.provider === primary.provider && candidate.id === primary.id) continue;
-			const resolved = available.find((m) => m.provider === candidate.provider && m.id === candidate.id);
-			if (resolved) models.push(resolved);
-		}
-		return models;
 	}
 
 	/**
@@ -3642,7 +3637,9 @@ export class AgentSession {
 	 * @param customInstructions Optional instructions for the compaction summary
 	 */
 	compact(customInstructions?: string): Promise<CompactionResult> {
-		return this._shutdown.run(() => this._compact(customInstructions));
+		return this._shutdown.run(() =>
+			this._extensionSettlement.beforeProducer(() => this._compact(customInstructions)),
+		);
 	}
 
 	private async _compact(customInstructions?: string, retrying = false): Promise<CompactionResult> {
@@ -4387,8 +4384,11 @@ export class AgentSession {
 					});
 				},
 				appendEntry: (customType, data) => {
-					this.sessionManager.appendCustomEntry(customType, data);
-					this._recordEvidenceReceiptInvalidation(customType);
+					const entryId = this.sessionManager.appendCustomEntry(customType, data);
+					if (EVIDENCE_RECEIPT_CUSTOM_TYPES.has(customType))
+						this._invalidateContextBudgetCache({ type: "evidenceReceipt" });
+					const entry = this.sessionManager.getEntry(entryId);
+					if (entry?.type === "custom") this._emit({ type: "custom_entry", entry });
 				},
 				setSessionName: (name) => {
 					this.setSessionName(name);
@@ -4418,8 +4418,9 @@ export class AgentSession {
 			},
 			{
 				getModel: () => this.model,
-				isIdle: () => !this.isStreaming,
-				getSignal: () => this.agent.signal,
+				getScopedModels: () => this.scopedModels,
+				isIdle: () => !this._sessionBusy,
+				getSignal: () => this._extensionSettlement.signal ?? this.agent.signal,
 				abort: () => {
 					if (this._extensionAbortHandler) {
 						this._extensionAbortHandler();
@@ -4444,6 +4445,7 @@ export class AgentSession {
 					})();
 				},
 				getSystemPrompt: () => this.systemPrompt,
+				isProjectTrusted: () => !this.settingsManager.isProjectCodeWithheld(),
 				getSystemPromptOptions: () => this._baseSystemPromptOptions,
 				// Spec 020 Req1 — session-bound lane authority for extension tool
 				// contexts (subagent spawn funnel). Rebuilt on demand so it always
@@ -4778,31 +4780,38 @@ export class AgentSession {
 	}
 
 	reload(): Promise<void> {
-		return this._shutdown.run(() => this._reload());
+		return this._shutdown.run(() => this._extensionSettlement.before(() => this._reload()));
 	}
 
 	private async _reload(): Promise<void> {
-		const previousFlagValues = this._extensionRunner.getFlagValues();
-		await emitSessionShutdownEvent(this._extensionRunner, { type: "session_shutdown", reason: "reload" });
-		await this.settingsManager.reload();
-		this._invalidateContextBudgetCache({ type: "settings" });
-		resetApiProviders();
-		await this._resourceLoader.reload();
-		this._buildRuntime({
-			activeToolNames: this.getActiveToolNames(),
-			flagValues: previousFlagValues,
-			includeAllExtensionTools: true,
-		});
+		return this._compactionUsage.reload(
+			async () => {
+				await this._extensionSettlement.recover();
+				const previousFlagValues = this._extensionRunner.getFlagValues();
+				await emitSessionShutdownEvent(this._extensionRunner, { type: "session_shutdown", reason: "reload" });
+				await this.settingsManager.reload();
+				this._invalidateContextBudgetCache({ type: "settings" });
+				resetApiProviders();
+				await this._resourceLoader.reload();
+				this._extensionRunner.invalidate(undefined, this._resourceLoader.getExtensions().runtime);
+				this._buildRuntime({
+					activeToolNames: this.getActiveToolNames(),
+					flagValues: previousFlagValues,
+					includeAllExtensionTools: true,
+				});
 
-		const hasBindings =
-			this._extensionUIContext ||
-			this._extensionCommandContextActions ||
-			this._extensionShutdownHandler ||
-			this._extensionErrorListener;
-		if (hasBindings) {
-			await this._extensionRunner.emit({ type: "session_start", reason: "reload" });
-			await this.extendResourcesFromExtensions("reload");
-		}
+				const hasBindings =
+					this._extensionUIContext ||
+					this._extensionCommandContextActions ||
+					this._extensionShutdownHandler ||
+					this._extensionErrorListener;
+				if (hasBindings) {
+					await this._extensionRunner.emit({ type: "session_start", reason: "reload" });
+					await this.extendResourcesFromExtensions("reload");
+				}
+			},
+			(operation) => this._extensionSettlement.observe(operation),
+		);
 	}
 
 	// =========================================================================
@@ -4817,37 +4826,6 @@ export class AgentSession {
 		const quotaOk = quotaAllowsRetry(message.errorMessage, this.settingsManager.getProviderResilienceSettings());
 		if (isFailoverCandidateDenial(message, this.model, this._refusedModels, this._modelPinned)) return true;
 		return quotaOk && isRetryableAssistantError(message, this.model?.contextWindow ?? 0);
-	}
-
-	/**
-	 * Retry policy + callbacks shared by compaction and branch-summary summarization calls.
-	 * Uses the same `settings.retry` budget/backoff as agent-turn retries so a single transient
-	 * stream drop no longer fails the whole operation. `source` carries the context
-	 * the TUI needs to render the retry and recreate the underlying indicator.
-	 */
-	private _summarizationRetryCallbacks(
-		source: { source: "branchSummary" } | { source: "compaction"; reason: "manual" | "threshold" | "overflow" },
-	): RetryCallbacks {
-		return {
-			onRetryScheduled: (attempt, maxAttempts, delayMs, errorMessage) => {
-				this._emit({
-					type: "summarization_retry_scheduled",
-					attempt,
-					maxAttempts,
-					delayMs,
-					errorMessage,
-				});
-			},
-			onRetryAttemptStart: () => {
-				this._emit({
-					type: "summarization_retry_attempt_start",
-					...source,
-				});
-			},
-			onRetryFinished: () => {
-				this._emit({ type: "summarization_retry_finished" });
-			},
-		};
 	}
 
 	/**
@@ -5117,13 +5095,16 @@ export class AgentSession {
 	 * @returns Result with editorText (if user message) and cancelled status
 	 */
 	navigateTree(targetId: string, options?: Parameters<AgentSession["_navigateTree"]>[1]) {
-		return this._shutdown.run(() => this._navigateTree(targetId, options));
+		return this._shutdown.run(() =>
+			this._extensionSettlement.beforeProducer(() => this._navigateTree(targetId, options)),
+		);
 	}
 
 	private async _navigateTree(
 		targetId: string,
 		options: { summarize?: boolean; customInstructions?: string; replaceInstructions?: boolean; label?: string } = {},
 	): Promise<{ editorText?: string; cancelled: boolean; aborted?: boolean; summaryEntry?: BranchSummaryEntry }> {
+		this._shutdown.assertOpen();
 		const oldLeafId = this.sessionManager.getLeafId();
 
 		// No-op if already at target
@@ -5206,7 +5187,10 @@ export class AgentSession {
 			if (options.summarize && entriesToSummarize.length > 0 && !extensionSummary) {
 				const model = this.model;
 				if (!model) throw new Error("No model available for summarization");
-				const { apiKey, headers } = await this._getRequiredRequestAuth(model);
+				const { apiKey, headers } = await this._extensionSettlement.beforeProducer(async () => {
+					this._shutdown.assertOpen();
+					return this._getRequiredRequestAuth(model);
+				});
 				const branchSummarySettings = this.settingsManager.getBranchSummarySettings();
 				const result = await generateBranchSummary(entriesToSummarize, {
 					model,
@@ -5216,9 +5200,13 @@ export class AgentSession {
 					customInstructions,
 					replaceInstructions,
 					reserveTokens: branchSummarySettings.reserveTokens,
-					streamFn: this.agent.streamFn,
+					streamFn: (...args) =>
+						this._extensionSettlement.beforeProducer(async () => {
+							this._shutdown.assertOpen();
+							return this.agent.streamFn(...args);
+						}),
 					retry: summarizationRetryPolicy(this.settingsManager.getRetrySettings()),
-					callbacks: this._summarizationRetryCallbacks({ source: "branchSummary" }),
+					callbacks: summarizationRetryCallbacks((event) => this._emit(event), { source: "branchSummary" }),
 				});
 				if (result.aborted) {
 					return { cancelled: true, aborted: true };
@@ -5236,78 +5224,81 @@ export class AgentSession {
 				summaryDetails = extensionSummary.details;
 			}
 
-			// Determine the new leaf position based on target type
-			let newLeafId: string | null;
-			let editorText: string | undefined;
+			return await this._extensionSettlement.beforeProducer(async () => {
+				this._shutdown.assertOpen();
+				// Determine the new leaf position based on target type
+				let newLeafId: string | null;
+				let editorText: string | undefined;
 
-			if (targetEntry.type === "message" && targetEntry.message.role === "user") {
-				// User message: leaf = parent (null if root), text goes to editor
-				newLeafId = targetEntry.parentId;
-				editorText = this._extractUserMessageText(targetEntry.message.content);
-			} else if (targetEntry.type === "custom_message") {
-				// Custom message: leaf = parent (null if root), text goes to editor
-				newLeafId = targetEntry.parentId;
-				if (typeof targetEntry.content === "string") {
-					editorText = targetEntry.content;
+				if (targetEntry.type === "message" && targetEntry.message.role === "user") {
+					// User message: leaf = parent (null if root), text goes to editor
+					newLeafId = targetEntry.parentId;
+					editorText = this._extractUserMessageText(targetEntry.message.content);
+				} else if (targetEntry.type === "custom_message") {
+					// Custom message: leaf = parent (null if root), text goes to editor
+					newLeafId = targetEntry.parentId;
+					if (typeof targetEntry.content === "string") {
+						editorText = targetEntry.content;
+					} else {
+						editorText = targetEntry.content
+							.flatMap((item) => {
+								if (item.type === "text") return [item.text];
+								return [];
+							})
+							.join("");
+					}
 				} else {
-					editorText = targetEntry.content
-						.flatMap((item) => {
-							if (item.type === "text") return [item.text];
-							return [];
-						})
-						.join("");
+					// Non-user message: leaf = selected node
+					newLeafId = targetId;
 				}
-			} else {
-				// Non-user message: leaf = selected node
-				newLeafId = targetId;
-			}
 
-			// Switch leaf (with or without summary)
-			// Summary is attached at the navigation target position (newLeafId), not the old branch
-			let summaryEntry: BranchSummaryEntry | undefined;
-			if (summaryText) {
-				// Create summary at target position (can be null for root)
-				const summaryId = this.sessionManager.branchWithSummary(
-					newLeafId,
-					summaryText,
-					summaryDetails,
-					fromExtension,
-				);
-				summaryEntry = this.sessionManager.getEntry(summaryId) as BranchSummaryEntry;
+				// Switch leaf (with or without summary)
+				// Summary is attached at the navigation target position (newLeafId), not the old branch
+				let summaryEntry: BranchSummaryEntry | undefined;
+				if (summaryText) {
+					// Create summary at target position (can be null for root)
+					const summaryId = this.sessionManager.branchWithSummary(
+						newLeafId,
+						summaryText,
+						summaryDetails,
+						fromExtension,
+					);
+					summaryEntry = this.sessionManager.getEntry(summaryId) as BranchSummaryEntry;
 
-				// Attach label to the summary entry
-				if (label) {
-					this.sessionManager.appendLabelChange(summaryId, label);
+					// Attach label to the summary entry
+					if (label) {
+						this.sessionManager.appendLabelChange(summaryId, label);
+					}
+				} else if (newLeafId === null) {
+					// No summary, navigating to root - reset leaf
+					this.sessionManager.resetLeaf();
+				} else {
+					// No summary, navigating to non-root
+					this.sessionManager.branch(newLeafId);
 				}
-			} else if (newLeafId === null) {
-				// No summary, navigating to root - reset leaf
-				this.sessionManager.resetLeaf();
-			} else {
-				// No summary, navigating to non-root
-				this.sessionManager.branch(newLeafId);
-			}
 
-			// Attach label to target entry when not summarizing (no summary entry to label)
-			if (label && !summaryText) {
-				this.sessionManager.appendLabelChange(targetId, label);
-			}
+				// Attach label to target entry when not summarizing (no summary entry to label)
+				if (label && !summaryText) {
+					this.sessionManager.appendLabelChange(targetId, label);
+				}
 
-			// Update agent state
-			const sessionContext = this.sessionManager.buildSessionContext();
-			this.agent.state.messages = sessionContext.messages;
+				// Update agent state
+				const sessionContext = this.sessionManager.buildSessionContext();
+				this.agent.state.messages = sessionContext.messages;
 
-			// Emit session_tree event
-			await this._extensionRunner.emit({
-				type: "session_tree",
-				newLeafId: this.sessionManager.getLeafId(),
-				oldLeafId,
-				summaryEntry,
-				fromExtension: summaryText ? fromExtension : undefined,
+				// Emit session_tree event
+				await this._extensionRunner.emit({
+					type: "session_tree",
+					newLeafId: this.sessionManager.getLeafId(),
+					oldLeafId,
+					summaryEntry,
+					fromExtension: summaryText ? fromExtension : undefined,
+				});
+
+				// Emit to custom tools
+
+				return { editorText, cancelled: false, summaryEntry };
 			});
-
-			// Emit to custom tools
-
-			return { editorText, cancelled: false, summaryEntry };
 		} finally {
 			this._branchSummaryAbortController = undefined;
 			this._drainDeferredTurnInput();

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import nodePath from "node:path";
-import type { ExecOptions, ExecResult } from "@earendil-works/pi-coding-agent";
+import type { ExecOptions, ExecResult } from "open-multi-agent-kit";
 import { toDisplayPath } from "./display-path.ts";
 
 const GIT_TIMEOUT_MS = 2_000;

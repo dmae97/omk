@@ -11,6 +11,7 @@ function createContext(tokens: number | null, compact = vi.fn()): ExtensionConte
 		sessionManager: {} as ExtensionContext["sessionManager"],
 		modelRegistry: {} as ExtensionContext["modelRegistry"],
 		model: undefined,
+		scopedModels: [],
 		isIdle: () => true,
 		signal: undefined,
 		abort: vi.fn(),
@@ -19,6 +20,7 @@ function createContext(tokens: number | null, compact = vi.fn()): ExtensionConte
 		getContextUsage: () => ({ tokens, contextWindow: 200_000, percent: tokens === null ? null : tokens / 2000 }),
 		compact,
 		getSystemPrompt: () => "",
+		isProjectTrusted: () => true,
 		getSubagentLaneAuthority: () => null,
 	};
 }

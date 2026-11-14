@@ -51,6 +51,12 @@ import type { ReadonlyFooterDataProvider } from "../footer-data-provider.ts";
 import type { KeybindingsManager } from "../keybindings.ts";
 import type { CustomMessage } from "../messages.ts";
 import type { ModelRegistry } from "../model-registry.ts";
+import type { AgentSettledEvent } from "../session-extension-settlement.ts";
+import type { EntryRenderer, MessageRenderOptions } from "./entry-renderer.ts";
+
+export type { AgentSettledEvent } from "../session-extension-settlement.ts";
+export type { EntryRenderer, MessageRenderOptions } from "./entry-renderer.ts";
+
 import type {
 	BranchSummaryEntry,
 	CompactionEntry,
@@ -78,12 +84,14 @@ import type {
 	WriteToolInput,
 } from "../tools/index.ts";
 
+import type { BeforeAgentStartEvent as StartEvent } from "./before-agent-start-types.ts";
 import type { SessionInfoChangedEvent, SessionStartEvent } from "./session-lifecycle-types.ts";
 
 export type { ExecOptions, ExecResult } from "../exec.ts";
 export type { BuildSystemPromptOptions } from "../system-prompt.ts";
 export type { AgentToolResult, AgentToolUpdateCallback, ToolExecutionMode };
 export type { AppKeybinding, KeybindingsManager } from "../keybindings.ts";
+export type { BeforeAgentStartTrigger } from "./before-agent-start-types.ts";
 
 // ============================================================================
 // UI Context
@@ -314,6 +322,8 @@ export interface ExtensionContext {
 	sessionManager: ReadonlySessionManager;
 	/** Model registry for API key resolution */
 	modelRegistry: ModelRegistry;
+	/** Models selected for this session's scope. Empty when no scope is configured. */
+	scopedModels?: ReadonlyArray<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 	/** Current model (may be undefined) */
 	model: Model<any> | undefined;
 	/** Current thinking level, when provided by the session runtime. */
@@ -334,6 +344,8 @@ export interface ExtensionContext {
 	compact(options?: CompactOptions): void;
 	/** Get the current effective system prompt. */
 	getSystemPrompt(): string;
+	/** Whether this session permits project-local code/config. Throws on a stale context. */
+	isProjectTrusted(): boolean;
 	/**
 	 * Spec 020 Req1 — canonical subagent lane authority bound to this session.
 	 * Route parallel/graph child launches through its dispatchLanes() so they
@@ -397,7 +409,7 @@ export interface ReplacedSessionContext extends ExtensionCommandContext {
 
 	sendUserMessage(
 		content: string | (TextContent | ImageContent)[],
-		options?: { deliverAs?: "steer" | "followUp" },
+		options?: { deliverAs?: "steer" | "followUp"; expandPromptTemplates?: boolean },
 	): Promise<void>;
 }
 
@@ -650,19 +662,9 @@ export interface AfterProviderResponseEvent {
 	headers: Record<string, string>;
 }
 
-/** Fired after user submits prompt but before agent loop. */
-export interface BeforeAgentStartEvent {
-	type: "before_agent_start";
-	/** The raw user prompt text (after expansion). */
-	prompt: string;
-	/** Images attached to the user prompt, if any. */
-	images?: ImageContent[];
-	/** The fully assembled system prompt string. */
-	systemPrompt: string;
-	/** Structured options used to build the system prompt. Extensions can inspect this to understand what OMK loaded without re-discovering resources. */
-	systemPromptOptions: BuildSystemPromptOptions;
-}
-
+export type BeforeAgentStartEvent = StartEvent<BuildSystemPromptOptions>;
+export type BeforeAgentStartUserEvent = Extract<BeforeAgentStartEvent, { messageType: "user" }>;
+export type BeforeAgentStartCustomEvent = Extract<BeforeAgentStartEvent, { messageType: "custom" }>;
 /** Fired when an agent loop starts */
 export interface AgentStartEvent {
 	type: "agent_start";
@@ -680,10 +682,6 @@ export interface AgentEndEvent {
  * end of the work when the session retries a transient provider failure. This
  * is the boundary at which per-run state may be released exactly once.
  */
-export interface AgentSettledEvent {
-	type: "agent_settled";
-	messages: AgentMessage[];
-}
 
 /** Fired at the start of each turn */
 export interface TurnStartEvent {
@@ -1084,10 +1082,6 @@ export interface SessionBeforeTreeResult {
 // Message Rendering
 // ============================================================================
 
-export interface MessageRenderOptions {
-	expanded: boolean;
-}
-
 export type MessageRenderer<T = unknown> = (
 	message: CustomMessage<T>,
 	options: MessageRenderOptions,
@@ -1210,6 +1204,9 @@ export interface ExtensionAPI {
 	// Message Rendering
 	// =========================================================================
 
+	/** Register a custom renderer for display-only CustomEntry records. */
+	registerEntryRenderer<T = unknown>(customType: string, renderer: EntryRenderer<T>): void;
+
 	/** Register a custom renderer for CustomMessageEntry. */
 	registerMessageRenderer<T = unknown>(customType: string, renderer: MessageRenderer<T>): void;
 
@@ -1229,7 +1226,7 @@ export interface ExtensionAPI {
 	 */
 	sendUserMessage(
 		content: string | (TextContent | ImageContent)[],
-		options?: { deliverAs?: "steer" | "followUp" },
+		options?: { deliverAs?: "steer" | "followUp"; expandPromptTemplates?: boolean },
 	): void;
 
 	/** Append a custom entry to the session for state persistence (not sent to LLM). */
@@ -1467,7 +1464,7 @@ export type SendMessageHandler = <T = unknown>(
 
 export type SendUserMessageHandler = (
 	content: string | (TextContent | ImageContent)[],
-	options?: { deliverAs?: "steer" | "followUp" },
+	options?: { deliverAs?: "steer" | "followUp"; expandPromptTemplates?: boolean },
 ) => void;
 
 export type AppendEntryHandler = <T = unknown>(customType: string, data?: T) => void;
@@ -1509,13 +1506,13 @@ export interface ExtensionRuntimeState {
 	pendingProviderRegistrations: Array<{ name: string; config: ProviderConfig; extensionPath: string }>;
 	/**
 	 * Provider name → `resolvedPath` of the extension that registered it last (spec 057 R9).
-	 * Written by the per-extension `registerProvider`; cleared only by the owner's `unregisterProvider`.
+	 * Written by per-extension `registerProvider`; removed by the owner's `unregisterProvider` or runtime retirement.
 	 * Built-in overrides (`baseUrl`/`headers` only) count as ownership (R11).
 	 */
 	providerOwners: Map<string, string>;
 	/** Throws when this extension instance is stale after runtime replacement. */
 	assertActive: () => void;
-	/** Marks this extension instance as stale after runtime replacement or reload. */
+	/** Marks this runtime stale and releases its action callbacks, pending registrations and inventory. */
 	invalidate: (message?: string) => void;
 	/**
 	 * Register or unregister a provider.
@@ -1562,6 +1559,8 @@ export interface ExtensionActions {
  */
 export interface ExtensionContextActions {
 	getModel: () => Model<any> | undefined;
+	/** Session-scoped models; absent bindings expose an empty scope. */
+	getScopedModels?: () => ReadonlyArray<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 	isIdle: () => boolean;
 	getSignal: () => AbortSignal | undefined;
 	abort: () => void;
@@ -1570,6 +1569,8 @@ export interface ExtensionContextActions {
 	getContextUsage: () => ContextUsage | undefined;
 	compact: (options?: CompactOptions) => void;
 	getSystemPrompt: () => string;
+	/** Session-bound project trust decision; absent bindings fail closed. */
+	isProjectTrusted?: () => boolean;
 	getSystemPromptOptions?: () => BuildSystemPromptOptions;
 	/** Spec 020 — session-bound subagent lane authority for extension tool contexts. */
 	getSubagentLaneAuthority?: () => import("../subagent-lane-contract.ts").SubagentLaneAuthority | null;
@@ -1615,6 +1616,7 @@ export interface Extension {
 	handlers: Map<string, HandlerFn[]>;
 	tools: Map<string, RegisteredTool>;
 	messageRenderers: Map<string, MessageRenderer>;
+	entryRenderers?: Map<string, EntryRenderer>;
 	commands: Map<string, RegisteredCommand>;
 	flags: Map<string, ExtensionFlag>;
 	shortcuts: Map<KeyId, ExtensionShortcut>;

@@ -1,0 +1,18 @@
+{
+  "extends": "../../../../tsconfig.json",
+  "include": [
+    "../../../../packages/coding-agent/src/**/*.d.ts",
+    "../../../../packages/coding-agent/src/cli/args.ts",
+    "../../../../packages/coding-agent/src/cli/help.ts",
+    "../../../../packages/coding-agent/src/main.ts",
+    "../../../../packages/coding-agent/src/core/package-doctor.ts",
+    "../../../../packages/coding-agent/src/core/package-doctor-runtime-imports.ts",
+    "../../../../packages/coding-agent/src/commands/package-doctor-cli.ts",
+    "../../../../packages/coding-agent/test/args.test.ts",
+    "../../../../packages/coding-agent/test/cli-native-extensions.test.ts",
+    "../../../../packages/coding-agent/test/package-doctor-native-profile.test.ts",
+    "../../../../packages/coding-agent/test/package-doctor-native-cli.test.ts",
+    "../../../../packages/coding-agent/test/sdk-native-extensions.test.ts",
+    "../../../../packages/coding-agent/test/native-extension-lifecycle.test.ts"
+  ]
+}

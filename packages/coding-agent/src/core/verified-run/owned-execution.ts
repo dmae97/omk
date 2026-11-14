@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
+import { dirname } from "node:path";
 import { performance } from "node:perf_hooks";
 import type { ResourceClaimInput } from "../../coordination/resource.ts";
 import type { GrantToken } from "../../coordination/types.ts";
@@ -7,6 +8,9 @@ import type { RunAuthority } from "./authority-runtime.ts";
 import { executeSandbox, type SandboxOutcome } from "./broker.ts";
 import type { VerifiedRunJournal } from "./journal.ts";
 import type { NamespaceIdentity } from "./namespace-identity.ts";
+import { discardNativeWitness, nativeWitnessDir } from "./native-witness.ts";
+import { reattachRustExecution } from "./rust-host-reattach.ts";
+import { discardRustExecutionRecord, nativeExecutionDir, nativeRequestId } from "./rust-host-record.ts";
 import { digestObject, VerifiedRunError } from "./storage.ts";
 
 export interface OwnedRunCommand {
@@ -16,6 +20,7 @@ export interface OwnedRunCommand {
 	readonly deadline: number;
 	readonly claimId: string | null;
 	readonly taskId?: string;
+	readonly detachable?: true;
 }
 export interface OwnedRunResult {
 	readonly executionId: string;
@@ -30,7 +35,7 @@ export interface OwnedRunResult {
  * matches real tree containment; `realpathSync` keeps two spellings of the
  * same directory one claim.
  */
-function workspaceClaim(
+export function workspaceClaim(
 	workspace: string,
 	access: "read" | "write",
 	generation: number,
@@ -79,16 +84,28 @@ export async function executeRunCommand(
 	// gated driver) is anchored. Dispatching without it would run code whose
 	// termination cannot be witnessed — refuse rather than degrade.
 	if (!journal.state.budget) throw new VerifiedRunError("unsupported_boundary");
+	const phaseDeadlineMs =
+		request.role === "writer" ? journal.state.budget.workDeadlineMs : journal.state.verificationDeadlineMs;
+	if (phaseDeadlineMs === null) throw new VerifiedRunError("unsupported_boundary");
+	const phaseDeadline = { bootId: journal.state.budget.bootId, deadlineMs: phaseDeadlineMs };
 	const authority = policy.authority;
 	const generation = journal.state.generation;
 	const executionId = randomUUID();
 	const claims = workspaceClaim(request.workspace, request.role === "writer" ? "write" : "read", generation);
 	const timeoutMs = Math.floor(request.deadline - performance.now());
+	const intentDigest = digestObject({
+		argv: request.argv,
+		claims,
+		role: request.role,
+		...(request.detachable && request.role === "verifier"
+			? { timeoutMs, claimId: request.claimId, candidateDigest: journal.state.candidateDigest }
+			: {}),
+	});
 	const admission = authority.store.acquire({
 		sessionId: authority.sessionId,
 		incarnation: authority.incarnation,
 		commandId: executionId,
-		intentDigest: digestObject({ argv: request.argv, claims, role: request.role }),
+		intentDigest,
 		claims,
 		now: Date.now(),
 		ttl: timeoutMs + policy.cleanupMs + 30000,
@@ -101,6 +118,10 @@ export async function executeRunCommand(
 	const token: GrantToken = admission.token;
 	let supervisorInvoked = false;
 	let readyObserved = false;
+	let observedIdentity: NamespaceIdentity | undefined;
+	const stateRoot = dirname(authority.store.path);
+	const witnessDir = nativeWitnessDir(stateRoot);
+	const recordDir = nativeExecutionDir(stateRoot);
 	let result: SandboxOutcome;
 	try {
 		journal.append({
@@ -109,6 +130,7 @@ export async function executeRunCommand(
 			role: request.role,
 			claimId: request.claimId,
 			...(request.taskId === undefined ? {} : { taskId: request.taskId }),
+			...(request.detachable && request.role === "verifier" ? { timeoutMs } : {}),
 		});
 		if (timeoutMs <= 0 || policy.signal?.aborted) {
 			const failure = policy.signal?.aborted ? "cancelled" : "deadline";
@@ -131,9 +153,21 @@ export async function executeRunCommand(
 			timeoutMs: Math.floor(request.deadline - performance.now()),
 			cleanupMs: policy.cleanupMs,
 			maxOutputBytes: policy.maxOutputBytes,
+			phaseDeadline,
+			witnessDir,
+			recordDir,
+			requestId: nativeRequestId(executionId),
+			bindingDigest: digestObject({
+				token,
+				generation,
+				executionId,
+				intentDigest,
+			}),
+			...(request.detachable ? { detachable: true as const } : {}),
 			...(policy.signal ? { signal: policy.signal } : {}),
 			onReady: (identity: NamespaceIdentity) => {
 				readyObserved = true;
+				observedIdentity = identity;
 				if (journal.state.generation !== generation) throw new VerifiedRunError("stale_generation");
 				journal.append({ kind: "process_ready", executionId, identity });
 				if (!authority.store.effectStarted(token, claims, identity)) throw new VerifiedRunError("authority");
@@ -172,7 +206,24 @@ export async function executeRunCommand(
 	// recorded namespace drained empty. That is the termination-observed event
 	// — the grant releases its claims here and nowhere else.
 	if (!authority.store.confirmTerminated(token)) throw new VerifiedRunError("authority");
+	if (observedIdentity) discardNativeWitness(witnessDir, observedIdentity);
 	if (journal.state.generation !== generation) throw new VerifiedRunError("stale_generation");
 	journal.append({ kind: "exited", executionId, failure: request.role === "writer" ? result.failure : null });
+	// Stable native timestamps make receipt publication replayable across a parent crash.
+	if (request.detachable && request.role === "verifier")
+		result = await reattachRustExecution(stateRoot, executionId, {
+			...policy,
+			deadline: request.deadline,
+			assertBinding(record) {
+				if (
+					record.bindingDigest !== digestObject({ token, generation, executionId, intentDigest }) ||
+					digestObject(record.phaseDeadline) !== digestObject(phaseDeadline) ||
+					digestObject(record.identity) !== digestObject(observedIdentity)
+				)
+					throw new VerifiedRunError("native_binding");
+				return undefined;
+			},
+		});
+	if (!request.detachable) discardRustExecutionRecord(recordDir, nativeRequestId(executionId));
 	return { executionId, result, timeoutMs };
 }

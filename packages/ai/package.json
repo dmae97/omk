@@ -1,6 +1,6 @@
 {
 	"name": "omk-ai",
-	"version": "1.5.14",
+	"version": "2.0.0",
 	"description": "Unified LLM API with automatic model discovery and provider configuration",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -79,7 +79,7 @@
 		"prepublishOnly": "npm run clean && npm run build"
 	},
 	"dependencies": {
-		"@anthropic-ai/sdk": "0.91.1",
+		"@anthropic-ai/sdk": "0.92.0",
 		"@aws-sdk/client-bedrock-runtime": "3.1106.0",
 		"@google/genai": "1.52.0",
 		"@mistralai/mistralai": "2.2.1",

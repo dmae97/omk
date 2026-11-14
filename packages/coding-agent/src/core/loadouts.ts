@@ -489,12 +489,13 @@ export function deriveSchedulerFields(input: SchedulerDerivationInput): Schedule
 	const defaults = laneDefaultsForRole(input.role);
 	const readSet = toAccessSet(input.assignedReadPaths);
 	const writeSet = WRITING_ROLES.has(input.role) ? toAccessSet(input.assignedWritePaths) : [];
-	const parallelizable = deriveParallelizable(defaults.authority, writeSet);
+	// An undeclared writer has unknown effects; empty scope is not evidence of disjoint writes.
+	const parallelizable =
+		writeSet.length === 0 ? !WRITING_ROLES.has(input.role) : deriveParallelizable(defaults.authority, writeSet);
 	return { readSet, writeSet, parallelizable };
 }
 
 function deriveParallelizable(authority: LoadoutAuthority, writeSet: readonly LoadoutAccessEntry[]): boolean {
-	if (writeSet.length === 0) return true;
 	if (authority === "write-scoped") return false;
 	if (writeSet.some((entry) => isSerializeTriggerPath(entry.path))) return false;
 	return true;

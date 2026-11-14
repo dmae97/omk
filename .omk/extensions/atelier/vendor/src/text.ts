@@ -1,4 +1,4 @@
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import { truncateToWidth } from "omk-tui";
 
 // OSC (hyperlinks, titles), CSI (colors, cursor), C1 CSI, and two-byte ESC sequences.
 const TERMINAL_SEQUENCE =

@@ -32,6 +32,7 @@ import {
 import { fsyncDirectorySync, writeExclusiveFileDurablySync } from "../durable-file-io.ts";
 import { canonicalJson } from "../run-journal.ts";
 import { createAuthorityClock } from "./authority-clock.ts";
+import { compactedAuthority } from "./authority-compaction.ts";
 import { AuthorityLeaseHeldError, AuthorityStoreError } from "./authority-errors.ts";
 import {
 	type AuthorityEvent,
@@ -40,7 +41,6 @@ import {
 	applyAuthorityEvents,
 	authorityPendingReconcile,
 	parseAuthorityEvent,
-	snapshotFromProjection,
 } from "./authority-events.ts";
 import {
 	type AuthorityRecord,
@@ -203,6 +203,8 @@ export interface OpenAuthorityStoreOptions {
 	readonly clock?: () => number;
 	/** Disable only the parsing cache; disk integrity and durability checks always run. */
 	readonly incrementalReplay?: boolean;
+	/** Trusted runtime retention policy, evaluated inside the authority mutation lease. */
+	readonly retainGrant?: (grant: AuthorityGrantRecord) => boolean;
 }
 
 export interface AuthorityAcquireInput {
@@ -417,6 +419,7 @@ export class AuthorityStore {
 	private released = false;
 	private readonly now: () => number;
 	private readonly incrementalReplay: boolean;
+	private readonly retainGrant: OpenAuthorityStoreOptions["retainGrant"];
 
 	private constructor(
 		context: StoreContext,
@@ -431,6 +434,7 @@ export class AuthorityStore {
 		this.probe = options.probe ?? defaultProbe;
 		this.now = createAuthorityClock(options.clock);
 		this.incrementalReplay = options.incrementalReplay !== false;
+		this.retainGrant = options.retainGrant;
 	}
 
 	/**
@@ -524,6 +528,11 @@ export class AuthorityStore {
 		return this.context.path;
 	}
 
+	/** Lifecycle only: current durable bytes/head still require independent inspection. */
+	get isReleased(): boolean {
+		return this.released;
+	}
+
 	get head(): AuthorityHead {
 		return this.accepted.head;
 	}
@@ -604,6 +613,7 @@ export class AuthorityStore {
 				closeSync(fd);
 			}
 			this.context.hooks.afterLedgerFsync?.();
+			if (this.released) throw new AuthorityStoreError("stale_owner");
 			publishHead(this.context, head);
 			const verified = loadCommitted(this.context, false, this.incrementalReplay ? current : undefined);
 			if (verified.parsed.lastSeq !== head.lastSeq || verified.parsed.lastHash !== head.lastHash)
@@ -657,6 +667,8 @@ export class AuthorityStore {
 		const authorizationDeadline = input.now + input.ttl;
 		if (!Number.isSafeInteger(authorizationDeadline)) throw new RangeError("authorization deadline overflow");
 		const incarnation = sequence(input.incarnation);
+		// Cached dispositions need the same owner/head fence as a new reservation.
+		this.commit([]);
 		if (this.state.incarnations.get(input.sessionId) !== incarnation)
 			throw new AuthorityStoreError("stale_incarnation");
 		if (!/^[a-f0-9]{64}$/.test(input.intentDigest)) throw new TypeError("intentDigest must be a sha256 hex digest");
@@ -669,29 +681,23 @@ export class AuthorityStore {
 		// one reports expiry; an in-flight grant is a duplicate only when the
 		// full intent matches — otherwise it is an ID collision (I09/I20).
 		const tombstone = this.state.tombstones.get(input.commandId);
-		if (tombstone) {
-			const grant = this.state.grants.get(tombstone.grantSequence);
-			if (!grant) throw new AuthorityStoreError("corrupt");
-			assertSameCommandMeaning(grant, {
+		const prior = tombstone
+			? this.state.grants.get(tombstone.grantSequence)
+			: [...this.state.grants.values()].find((grant) => grant.commandId === input.commandId);
+		if (tombstone && !prior) throw new AuthorityStoreError("corrupt");
+		if (prior) {
+			assertSameCommandMeaning(prior, {
 				intentDigest: input.intentDigest,
 				sessionId: input.sessionId,
 				incarnation,
 				claims,
 				weight,
 			});
-			if (tombstone.expiresAtMs <= input.now) return { status: "result-expired" };
-			return { status: "result", resultDigest: tombstone.resultDigest, token: grant.token };
-		}
-		for (const grant of this.state.grants.values()) {
-			if (grant.commandId !== input.commandId) continue;
-			assertSameCommandMeaning(grant, {
-				intentDigest: input.intentDigest,
-				sessionId: input.sessionId,
-				incarnation,
-				claims,
-				weight,
-			});
-			return { status: "granted", token: grant.token, duplicate: true };
+			if (tombstone) {
+				if (tombstone.expiresAtMs <= input.now) return { status: "result-expired" };
+				return { status: "result", resultDigest: tombstone.resultDigest, token: prior.token };
+			}
+			return { status: "granted", token: prior.token, duplicate: true };
 		}
 
 		if (this.pendingReconcile) throw new AuthorityStoreError("reconcile_pending");
@@ -921,8 +927,9 @@ export class AuthorityStore {
 	 * GC (review §7): fold droppable state into an `authority-snapshot` and
 	 * atomically rewrite the log to that snapshot. Retained: the epoch pair,
 	 * incarnation counters, the grant counter (I31 — sequences never reissue),
-	 * every unsettled grant, every settled grant still referenced by an
-	 * unexpired tombstone, and the unexpired tombstones themselves. A crash
+	 * every unsettled or runtime-retained grant and every grant referenced by an
+	 * unexpired tombstone. Runtime-retained grants keep even expired tombstones
+	 * without extending their expiry, preserving duplicate-command dispositions. A crash
 	 * between the atomic rewrite and head publish self-heals on next open via
 	 * the snapshot continuation check.
 	 */
@@ -935,25 +942,8 @@ export class AuthorityStore {
 			if (!authorityHeadsEqual(current.head, this.accepted.head)) throw new AuthorityStoreError("stale_head");
 			const state = current.parsed.state;
 			if (state.epoch === null) return { dropped: 0 };
-			const keepGrant = new Set<Sequence>();
-			const keepTombstone = new Set<string>();
-			for (const tombstone of state.tombstones.values()) {
-				if (tombstone.expiresAtMs > now) {
-					keepTombstone.add(tombstone.commandId);
-					keepGrant.add(tombstone.grantSequence);
-				}
-			}
-			const grants = [...state.grants.values()].filter(
-				(grant) => !SETTLED_EFFECT_STATES.has(grant.state) || keepGrant.has(grant.token.grantSequence),
-			);
-			const tombstones = [...state.tombstones.values()].filter((stone) => keepTombstone.has(stone.commandId));
-			const dropped = state.grants.size - grants.length + (state.tombstones.size - tombstones.length);
+			const { dropped, snapshot } = compactedAuthority(state, now, this.retainGrant);
 			if (dropped === 0) return { dropped: 0 };
-			const snapshot = snapshotFromProjection({
-				...state,
-				grants: new Map(grants.map((grant) => [grant.token.grantSequence, grant])),
-				tombstones: new Map(tombstones.map((stone) => [stone.commandId, stone])),
-			});
 			const record = materializeRecord(current.parsed.lastSeq + 1, current.parsed.lastHash, {
 				kind: "authority-snapshot",
 				archivedThroughSequence: current.parsed.lastSeq,

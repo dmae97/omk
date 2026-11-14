@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,6 +49,40 @@ beforeEach(() => {
 
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
+describe("bare omk launch", () => {
+	it("installs global pstack agents before interactive startup", async () => {
+		const child = spawn(process.execPath, ["--import", sourceRunner, cliPath], {
+			cwd: workspace,
+			env: {
+				PATH: process.env.PATH,
+				HOME: root,
+				USERPROFILE: root,
+				OMK_CODING_AGENT_DIR: agentDir,
+				OMK_PACKAGE_DIR: packageDir,
+				OMK_OFFLINE: "1",
+				OMK_SKIP_VERSION_CHECK: "1",
+				TSX_TSCONFIG_PATH: sourceConfig,
+			},
+			stdio: "ignore",
+		});
+		const exited = new Promise<void>((resolve, reject) => {
+			child.once("error", reject);
+			child.once("exit", () => resolve());
+		});
+		const agent = join(agentDir, "agents", "pstack-poteto-agent.md");
+		try {
+			const deadline = Date.now() + 10000;
+			while (!existsSync(agent) && Date.now() < deadline && child.exitCode === null) {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			}
+			expect(readFileSync(agent, "utf8")).toContain("pstack-poteto-agent");
+		} finally {
+			child.kill();
+			await exited;
+		}
+	}, 15000);
+});
+
 describe("omk init --global", () => {
 	it("previews portable defaults without creating the config directory", () => {
 		// Given an empty user config, when previewing the global setup.
@@ -64,20 +98,31 @@ describe("omk init --global", () => {
 		expect(readdirSync(workspace)).toEqual([]);
 	});
 
-	it("creates only the three bundled documents when explicitly requested", () => {
+	it("creates bundled documents and agents while preserving user-owned agents", () => {
 		// Given an empty user config, when applying the setup.
 		const result = runInit(["--global"]);
 		// Then the installed bytes match the portable package templates.
 		expect(result.error).toBeUndefined();
 		expect(result.stderr).toBe("");
 		expect(result.status).toBe(0);
-		expect(readdirSync(agentDir).sort()).toEqual(["AGENTS.md", "CLAUDE.md", "INTERNET.md"]);
-		for (const name of readdirSync(agentDir)) {
+		expect(readdirSync(agentDir).sort()).toEqual(["AGENTS.md", "CLAUDE.md", "INTERNET.md", "agents"]);
+		const agents = ["pstack-comment-sicko.md", "pstack-poteto-agent.md"];
+		expect(readdirSync(join(agentDir, "agents")).sort()).toEqual(agents);
+		for (const name of agents) {
+			expect(readFileSync(join(agentDir, "agents", name), "utf8")).toBe(
+				readFileSync(join(packageDir, "resources", "pstack", "agents", name), "utf8"),
+			);
+		}
+		for (const name of ["AGENTS.md", "CLAUDE.md", "INTERNET.md"]) {
 			expect(readFileSync(join(agentDir, name), "utf8")).toBe(
 				readFileSync(join(packageDir, "examples", "context", name), "utf8"),
 			);
 		}
 		expect(readdirSync(workspace)).toEqual([]);
+		const customizedAgent = join(agentDir, "agents", "pstack-poteto-agent.md");
+		writeFileSync(customizedAgent, "# User-owned agent\n");
+		expect(runInit(["--global"]).status).toBe(0);
+		expect(readFileSync(customizedAgent, "utf8")).toBe("# User-owned agent\n");
 	});
 
 	it("preserves an existing Claude-only configuration instead of shadowing it", () => {

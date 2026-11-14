@@ -8,10 +8,11 @@ import {
 	mkdtempSync,
 	openSync,
 	readdirSync,
+	readFileSync,
 	rmSync,
 	unlinkSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { getAgentDir } from "../config.ts";
 import { loadSkills, loadSkillsFromDir } from "../core/skills.ts";
 
@@ -42,7 +43,23 @@ export function preflightProjectPstack(projectDir: string, bundleDir: string, ag
 		skillPaths: [],
 		catalogCache: false,
 	}).skills;
-	const existingNames = new Set(existing.map((skill) => skill.name));
+	const userBundle = join(agentDir, "skills", "pstack");
+	let sameBundle = false;
+	try {
+		const user = JSON.parse(readFileSync(join(userBundle, "UPSTREAM.json"), "utf8"));
+		const shipped = JSON.parse(readFileSync(join(bundleDir, "UPSTREAM.json"), "utf8"));
+		sameBundle = user.source === shipped.source && user.commit === shipped.commit;
+	} catch {
+		// Unidentified user skills remain protected from project-level shadowing.
+	}
+	const existingNames = new Set(
+		existing
+			.filter((skill) => {
+				const path = relative(userBundle, skill.filePath);
+				return !(sameBundle && path && !path.startsWith(`..${sep}`) && path !== "..");
+			})
+			.map((skill) => skill.name),
+	);
 	const conflicts = bundled
 		.map((skill) => skill.name)
 		.filter((name) => existingNames.has(name))
@@ -112,6 +129,27 @@ export function installProjectPstack(
 			if (staging) rmSync(staging, { recursive: true, force: true });
 		}
 	}
+	installPstackAgents(config, bundleDir, dryRun, writeLine);
+	writeLine(
+		"Project agents require explicit project scope. Interactive runs prompt for trust; headless runs cannot prompt.",
+	);
+}
+
+/** Install bundled agent definitions without replacing user-owned files. */
+export function installPstackAgents(
+	config: string,
+	bundleDir: string,
+	dryRun: boolean,
+	writeLine: (line: string) => void,
+): void {
+	const agentsDir = join(config, "agents");
+	ensureDirectory(agentsDir, dryRun);
+	const sourceAgents = join(bundleDir, "agents");
+	const agents = readdirSync(sourceAgents, { withFileTypes: true })
+		.filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+		.map((entry) => entry.name)
+		.sort();
+	if (agents.length === 0) throw new Error("pstack bundle is incomplete");
 	for (const agent of agents) {
 		const destination = join(agentsDir, agent);
 		if (lstatSync(destination, { throwIfNoEntry: false })) {
@@ -128,7 +166,4 @@ export function installProjectPstack(
 			}
 		}
 	}
-	writeLine(
-		"Project agents require explicit project scope. Interactive runs prompt for trust; headless runs cannot prompt.",
-	);
 }

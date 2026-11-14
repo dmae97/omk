@@ -57,10 +57,20 @@ OMK stores user configuration under `~/.omk/agent/` and project configuration un
 Install `omk-book-to-skill` to compile documents into reusable skills without adding Python extractors to OMK core:
 
 ```bash
-omk install npm:omk-book-to-skill@1.5.14
+omk install npm:omk-book-to-skill@2.0.0
 ```
 
 It provides compile, update, and verification commands plus a local SHA-256 provenance manifest. See [Book to Skill](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/book-to-skill.md).
+
+## Optional plain-language companions
+
+Install `omk-speak-like-you-eat` to add display-only ELI5 and Light rewrites without changing the original response or sending the companion back into LLM context:
+
+```bash
+omk install npm:omk-speak-like-you-eat@2.0.0
+```
+
+Use `/slye` for a manual rewrite, `/slye on` for automatic rewrites, and `ctrl+\` to switch versions. See [Speak Like You Eat](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/speak-like-you-eat.md).
 
 ## Providers & Models
 
@@ -171,8 +181,7 @@ See [Compaction](https://github.com/dmae97/omk/blob/main/packages/coding-agent/d
 ### Context Files
 
 Run `omk init --global --dry-run` to preview portable user instructions, then
-`omk init --global` to create missing files without overwriting existing context or
-settings. Use `omk init --project` for the repository document set and bundled pstack skills and agents. Existing files are preserved. Project agents require explicit scope; interactive runs prompt for trust. See [User context setup](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/context-files.md) and [Pstack setup](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/pstack.md).
+`omk init --global` to create missing context files and bundled pstack agents without overwriting existing files or settings. Use `omk init --project` for the repository document set and bundled pstack skills and agents. Existing files are preserved. Project agents require explicit scope; interactive runs prompt for trust. See [User context setup](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/context-files.md) and [Pstack setup](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/pstack.md).
 
 OMK discovers project instructions such as `AGENTS.md` from the current directory and parent directories. It also loads `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `RULES.md`, `TASKS.md`, and `PROGRESS.md`. Use `--no-context-files` when a clean session must not load project context.
 
@@ -272,7 +281,7 @@ npm test
 
 See [Development](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/development.md) and [CONTRIBUTING.md](https://github.com/dmae97/omk/blob/main/CONTRIBUTING.md).
 
-Release notes: [v1.5.14](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v1.5.14.md). Public releases: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). Source-version notes can describe a candidate until its tag workflow completes.
+Release notes: [v2.0.0](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v2.0.0.md). Public releases: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). Source-version notes can describe a candidate until its tag workflow completes.
 
 ## License
 

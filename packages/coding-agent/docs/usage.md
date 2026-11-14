@@ -125,6 +125,9 @@ as unavailable rather than inferred from checkout `HEAD`.
 `/reload` refreshes resources, not core JavaScript modules. Its last completion time
 is shown separately. Core changes need an authorized build where applicable and a
 restarted process. Source-mode QA does not update an installed launcher.
+The reload completion notice repeats this boundary: core code stays unchanged in the
+running process. After an update, quit and relaunch OMK, then use `/resume` if needed.
+Reload does not restart the process or approve any previously blocked action.
 
 **Failure cards:** Cause, impact and next action appear before technical fields.
 Ctrl+O (or the configured `app.tools.expand` binding) expands kind/phase/cause code,
@@ -407,6 +410,7 @@ review and never promotes `adaptive`.
 | `--mode rpc` | RPC mode over stdin/stdout; see [RPC mode](rpc.md) |
 | `--export <in> [out]` | Export a session to HTML |
 
+If the final assistant response reaches the model's output-token limit (`stopReason: "length"`), print mode preserves the partial response, warns on stderr, and exits with status `1` rather than claiming success. JSON mode also returns status `1` for this incomplete result.
 In print mode, omk also reads piped stdin and merges it into the initial prompt:
 
 ```bash
@@ -451,6 +455,11 @@ omk -p -- "--retries=3 is wrong, fix it"
 | `--exclude-tools <list>`, `-xt <list>` | Disable specific built-in, extension, and custom tools |
 | `--no-builtin-tools`, `-nbt` | Disable built-in tools but keep extension/custom tools enabled |
 | `--no-tools`, `-nt` | Disable all tools |
+| `--read-scope <paths>` | Restrict routed read access to comma-separated roots |
+| `--write-scope <paths>` | Restrict routed write access to comma-separated roots |
+| `--exec-scope <patterns>` | Restrict routed shell commands to comma-separated allow patterns |
+
+Scope options apply to the domain loadout selected from the CLI prompt. They require `OMK_DOMAIN_ROUTING` and an initial prompt; startup fails rather than ignoring an explicit scope. Write access outside a write root and commands outside an exec pattern are denied.
 
 Built-in tools: `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`.
 

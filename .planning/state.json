@@ -1,0 +1,12 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v2.0.0 — Pi-independent OMK",
+  "phases": [],
+  "next": {
+    "command": "/gsd-progress --next",
+    "label": "Continue Rust ownership after retained-grant compaction provenance",
+    "reason": "H2g preserves start/revocation provenance across authority snapshots for retained grants and removes archived-event scans and duplicate projection boilerplate. Actual native/source-CLI authority/reconnect/GC matrix: 102 passed with no skips; final cleanup recheck: 42 passed. Root check: 588 passed / 30 skipped / 0 failed. Legacy snapshots without provenance and completely dropped grants remain unavailable. Grant retirement tied to recoverability, native witness retention, DAG/scripted-agent/session reconnect, Rust ledger/scheduler ownership and desktop/platform acceptance remain open. Existing unrelated edits remain unchanged. No dependency/version change, commit, push, activation or release; changed package inputs require fresh installed-artifact receipts."
+  },
+  "updated_at": "2026-11-10T00:19:00Z"
+}

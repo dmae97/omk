@@ -348,6 +348,19 @@ const workerSkillAdmission = new WeakMap<WorkerExtensionArgsFn, WorkerSkillAdmit
 const workerSpawningSession = new WeakMap<WorkerExtensionArgsFn, string | undefined>();
 const workerParentRemainingMs = new WeakMap<WorkerExtensionArgsFn, () => number | undefined>();
 
+/** Applies one lane's declared write scope to the actual worker process, preserving per-call ownership maps. */
+function scopedWorkerArgs(
+	base: WorkerExtensionArgsFn,
+	writeScope: readonly string[] | undefined,
+): WorkerExtensionArgsFn {
+	if (!writeScope || writeScope.length === 0) return base;
+	const scoped: WorkerExtensionArgsFn = (model) => [...base(model), "--write-scope", writeScope.join(",")];
+	const admission = workerSkillAdmission.get(base);
+	if (admission) workerSkillAdmission.set(scoped, admission);
+	if (workerSpawningSession.has(base)) workerSpawningSession.set(scoped, workerSpawningSession.get(base));
+	return scoped;
+}
+
 async function runSingleAgentAttempt(
 	defaultCwd: string,
 	agents: AgentConfig[],
@@ -963,7 +976,10 @@ export default function (omk: ExtensionAPI) {
 								executionBudget,
 								profileStore,
 								0,
-								workerExtensionArgs,
+								scopedWorkerArgs(
+									workerExtensionArgs,
+									params.graph?.find((node) => node.id === laneId)?.writeScope,
+								),
 							);
 							result.nodeId = laneId;
 							result.dependencyDigests = dependencyDigests(task, outputs);
@@ -1159,7 +1175,7 @@ export default function (omk: ExtensionAPI) {
 								executionBudget,
 								profileStore,
 								1,
-								workerExtensionArgs,
+								scopedWorkerArgs(workerExtensionArgs, t.writeScope),
 							);
 							allResults[index] = result;
 							emitParallelUpdate();

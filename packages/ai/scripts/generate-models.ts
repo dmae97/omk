@@ -20,6 +20,7 @@ import type {
 } from "../src/types.ts";
 import { DEEPSEEK_COMPLETIONS_COMPAT, deepSeekNativeModels } from "./catalog-deepseek.ts";
 import { fetchExperientialModels } from "./catalog-experiential.ts";
+import { fetchGroqModels } from "./catalog-groq.ts";
 import { cursorModels } from "./catalog-cursor.ts";
 import { devinModels } from "./catalog-devin.ts";
 import { workbuddyModels } from "./catalog-workbuddy.ts";
@@ -112,7 +113,7 @@ const COPILOT_STATIC_HEADERS = {
 } as const;
 
 const KIMI_STATIC_HEADERS = {
-	"User-Agent": "KimiCLI/1.5",
+	"User-Agent": "omk",
 } as const;
 
 /** models.dev keys that carry the Kimi For Coding plan catalog, newest naming first. */
@@ -1851,6 +1852,7 @@ async function generateModels() {
 	// OpenRouter: xAI and other providers (excluding Anthropic, Google, OpenAI)
 	// AI Gateway: OpenAI-compatible catalog with tool-capable models
 	const modelsDevModels = await loadModelsDevData();
+	const groqModels = await fetchGroqModels(modelsDevModels.filter((model) => model.provider === "groq"));
 	const openRouterModels = await fetchOpenRouterModels();
 	const aiGatewayModels = await fetchAiGatewayModels();
 	const zylooModels = await fetchZylooModels();
@@ -1858,7 +1860,13 @@ async function generateModels() {
 	const experientialModels = await experientialModelsOrCommitted(fetchExperientialModels, MODELS);
 
 	// Combine models (models.dev has priority)
-	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels, ...zylooModels].filter(
+	const allModels = [
+		...modelsDevModels.filter((model) => model.provider !== "groq"),
+		...groqModels,
+		...openRouterModels,
+		...aiGatewayModels,
+		...zylooModels,
+	].filter(
 		(model) =>
 			!((model.provider === "opencode" || model.provider === "opencode-go") && model.id === "gpt-5.3-codex-spark") &&
 			// Native 5.5 needs new adaptive/off/replay handling; normalized OpenRouter routes keep their own contract.
@@ -2298,12 +2306,13 @@ async function generateModels() {
 	// OMK exposes one family-wide context contract for every GPT-5.6 route.
 	const CODEX_GPT_56_CONTEXT = 1_000_000;
 	const CODEX_MAX_TOKENS = 128000;
-	// GPT-6 family per the Codex bundled catalog (openai/codex b1e72963c3,
-	// codex-rs/models-manager/models.json, 2026-09-29). The client clamps a configured window to
-	// max_context_window (872,000); its default window is 272,000. Efforts run low..max, no none or
-	// minimal. Codex never sends `ultra`: it substitutes multi_agent_reasoning_effort (xhigh on
-	// 6.1 Sol and Astra) or, when unset, the highest listed non-ultra effort (max on gpt-6-sol).
-	// OMK does not start Codex's automatic subagent delegation, so `ultra` only selects that effort.
+	// GPT-6 family per the Codex bundled catalog (openai/codex c587d6e54cb1,
+	// codex-rs/models-manager/models.json, checked 2026-10-27). The client clamps a configured
+	// window to max_context_window (872,000); its default window is 272,000, or 500,000 on 6.1
+	// Terra. Efforts run low..max, no none or minimal. Codex never sends `ultra`: it substitutes
+	// multi_agent_reasoning_effort (xhigh on 6.1 Sol, 6.1 Terra and Astra) or, when unset, the
+	// highest listed non-ultra effort (max on gpt-6-sol). OMK does not start Codex's automatic
+	// subagent delegation, so `ultra` only selects that effort.
 	const CODEX_GPT_6_CONTEXT = 872_000;
 	const CODEX_GPT_6_LADDER = {
 		off: null,
@@ -2423,6 +2432,19 @@ async function generateModels() {
 			thinkingLevelMap: { ...CODEX_GPT_6_LADDER, ultra: "xhigh" },
 			input: ["text", "image"],
 			cost: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 },
+			contextWindow: CODEX_GPT_6_CONTEXT,
+			maxTokens: CODEX_MAX_TOKENS,
+		},
+		{
+			id: "gpt-6.1-terra",
+			name: "GPT-6.1 Terra",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: CODEX_BASE_URL,
+			reasoning: true,
+			thinkingLevelMap: { ...CODEX_GPT_6_LADDER, ultra: "xhigh" },
+			input: ["text", "image"],
+			cost: { input: 1, output: 5, cacheRead: 0.05, cacheWrite: 1.25 },
 			contextWindow: CODEX_GPT_6_CONTEXT,
 			maxTokens: CODEX_MAX_TOKENS,
 		},

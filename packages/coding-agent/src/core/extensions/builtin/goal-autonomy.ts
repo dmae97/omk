@@ -10,7 +10,13 @@ import type { DurableGoalStore } from "../../durable-goal-store.ts";
 import type { GoalAcceptance } from "../../goal-acceptance.ts";
 import type { GoalAutonomyBudget, GoalAutonomyInput, GoalAutonomyStopReason } from "../../goal-continuation.ts";
 import type { ExtensionAPI, ExtensionContext } from "../types.ts";
+import { parseGoalBudget } from "./goal-budget-command.ts";
+import { GoalBudgetState } from "./goal-budget-state.ts";
 import { renderGoal } from "./goal-controller-text.ts";
+import { settledRunCostUsd } from "./goal-cost-accounting.ts";
+
+export { parseGoalBudget } from "./goal-budget-command.ts";
+export { settledRunCostUsd } from "./goal-cost-accounting.ts";
 
 export const GOAL_AUTONOMY_ENTRY = {
 	budget: "goal_autonomy_budget",
@@ -34,34 +40,6 @@ export function goalAutonomyKey(goal: DurableGoalSnapshot): string {
 	return `${goal.ref.id}@${goal.createdAt}`;
 }
 
-function finiteCost(value: unknown): number | undefined {
-	return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
-}
-
-/** Cost of one settled run incl. subagent lanes; `undefined` when any call's cost is unknown (never 0). */
-export function settledRunCostUsd(messages: readonly unknown[]): number | undefined {
-	let total = 0;
-	for (const raw of messages) {
-		if (typeof raw !== "object" || raw === null) continue;
-		const message = raw as Message;
-		if (message.role === "assistant") {
-			const usage = message.usage as { cost?: { total?: unknown } } | undefined;
-			const cost = finiteCost(usage?.cost?.total);
-			if (cost === undefined) return undefined;
-			total += cost;
-		} else if (message.role === "toolResult" && message.toolName === "subagent") {
-			const results = (message.details as { results?: unknown } | undefined)?.results;
-			if (!Array.isArray(results)) return undefined;
-			for (const result of results) {
-				const cost = finiteCost((result as { usage?: { cost?: unknown } } | null)?.usage?.cost);
-				if (cost === undefined) return undefined;
-				total += cost;
-			}
-		}
-	}
-	return total;
-}
-
 /** AU4: reads the in-memory terminal cause the tool boundary attached; no output text is inspected. */
 export function settledRunSideEffect(messages: readonly unknown[]): "ok" | "unknown" {
 	let unknown = false;
@@ -77,45 +55,18 @@ export function settledRunSideEffect(messages: readonly unknown[]): "ok" | "unkn
 	return unknown ? "unknown" : "ok";
 }
 
-/** `/goal budget <usd|-> [<deadline ISO>|-]`; `/goal budget clear`. */
-export function parseGoalBudget(args: string): GoalAutonomyBudget | null {
-	const parts = args
-		.trim()
-		.split(/\s+/)
-		.filter((part) => part.length > 0);
-	if (parts.length === 1 && parts[0] === "clear") return null;
-	if (parts.length < 1 || parts.length > 2) throw usage();
-	const [cost, deadline] = parts;
-	const budget: { maxCostUsd?: number; deadlineIso?: string } = {};
-	if (cost !== "-") {
-		const value = Number(cost.replace(/^\$/, ""));
-		if (!Number.isFinite(value) || value <= 0) throw usage();
-		budget.maxCostUsd = value;
-	}
-	if (deadline !== undefined && deadline !== "-") {
-		const at = Date.parse(deadline);
-		if (!Number.isFinite(at)) throw usage();
-		budget.deadlineIso = new Date(at).toISOString();
-	}
-	if (budget.maxCostUsd === undefined && budget.deadlineIso === undefined) throw usage();
-	return budget;
-}
-
-function usage(): DurableGoalError {
-	return new DurableGoalError("invalid-input", "usage: /goal budget <usd|-> [<deadline ISO>|-] | /goal budget clear");
-}
-
-interface Spend {
-	readonly budget: GoalAutonomyBudget;
-	spentUsd: number | undefined;
-}
-
 export class GoalAutonomy {
 	private readonly omk: Pick<ExtensionAPI, "appendEntry">;
 	private readonly acceptance: GoalAcceptance;
-	private readonly spend = new Map<string, Spend>();
+	private readonly budgets = new GoalBudgetState();
+
+	restore(entries: readonly unknown[]): void {
+		this.budgets.restore(entries);
+	}
 	private readonly pins = new Map<string, string>();
 	private readonly revoked = new Set<string>();
+	/** Unknown side effects survive queued turns until the user explicitly resumes this goal instance. */
+	private readonly unknownOutcomes = new Set<string>();
 
 	constructor(omk: Pick<ExtensionAPI, "appendEntry">, acceptance: GoalAcceptance) {
 		this.omk = omk;
@@ -124,14 +75,19 @@ export class GoalAutonomy {
 
 	setBudget(goal: DurableGoalSnapshot, budget: GoalAutonomyBudget | null): string {
 		const key = goalAutonomyKey(goal);
-		if (budget === null) this.spend.delete(key);
-		else this.spend.set(key, { budget, spentUsd: 0 });
+		const spentUsd = this.budgets.spend.get(key)?.spentUsd;
+		const knownSpend = this.budgets.spend.has(key) ? spentUsd : 0;
 		this.omk.appendEntry(GOAL_AUTONOMY_ENTRY.budget, {
+			accountingVersion: 1,
+			spentUsd: knownSpend ?? null,
+			cleared: budget === null,
 			goalId: goal.ref.id,
 			createdAt: goal.createdAt,
 			...(budget?.maxCostUsd !== undefined ? { maxCostUsd: budget.maxCostUsd } : {}),
 			...(budget?.deadlineIso !== undefined ? { deadlineIso: budget.deadlineIso } : {}),
 		});
+		if (budget === null) this.budgets.spend.delete(key);
+		else this.budgets.spend.set(key, { budget, spentUsd: knownSpend });
 		return this.describe(goal);
 	}
 
@@ -148,7 +104,7 @@ export class GoalAutonomy {
 	}
 
 	describe(goal: DurableGoalSnapshot): string {
-		const spend = this.spend.get(goalAutonomyKey(goal));
+		const spend = this.budgets.spend.get(goalAutonomyKey(goal));
 		if (spend === undefined) return "budget: none (set with /goal budget <usd|-> [<deadline ISO>])";
 		const cost =
 			spend.budget.maxCostUsd === undefined
@@ -158,14 +114,21 @@ export class GoalAutonomy {
 	}
 
 	/** One settled run: account cost (incl. lanes) and read the side-effect outcome. */
-	observe(goal: DurableGoalSnapshot, messages: readonly unknown[], nowMs: number): GoalAutonomyInput {
-		const lastSideEffect = settledRunSideEffect(messages);
+	observe(
+		goal: DurableGoalSnapshot,
+		messages: readonly unknown[],
+		nowMs: number,
+		settlementId?: string,
+	): GoalAutonomyInput {
 		const key = goalAutonomyKey(goal);
-		const spend = this.spend.get(key);
-		if (spend !== undefined && spend.spentUsd !== undefined) {
-			const cost = settledRunCostUsd(messages);
-			spend.spentUsd = cost === undefined ? undefined : spend.spentUsd + cost;
-		}
+		if (settledRunSideEffect(messages) === "unknown") this.unknownOutcomes.add(key);
+		const lastSideEffect = this.unknownOutcomes.has(key) ? "unknown" : "ok";
+		const spend = this.accountCost(
+			goal,
+			() => settledRunCostUsd(messages),
+			settlementId ?? messages,
+			settlementId ?? `legacy-${nowMs}-${goal.ref.revision}`,
+		);
 		const pin = this.scopePin(goal);
 		if (!this.pins.has(key)) this.pins.set(key, pin);
 		return {
@@ -175,6 +138,35 @@ export class GoalAutonomy {
 			scopeChanged: this.pins.get(key) !== pin,
 			nowMs,
 		};
+	}
+
+	/** Cost-only delivery: no side-effect reduction, scope pin, acceptance or round advancement. */
+	observeCost(goal: DurableGoalSnapshot, cost: number | undefined, settlementId: string) {
+		const previous = this.budgets.spend.get(goalAutonomyKey(goal))?.spentUsd;
+		if (previous !== undefined && cost !== undefined && !Number.isFinite(previous + cost)) cost = undefined;
+		const spend = this.accountCost(goal, () => cost, settlementId, settlementId);
+		return { budget: spend?.budget, spentUsd: spend?.spentUsd };
+	}
+
+	private accountCost(
+		goal: DurableGoalSnapshot,
+		readCost: () => number | undefined,
+		identity: string | object,
+		settlementId: string,
+	) {
+		const key = goalAutonomyKey(goal);
+		const spend = this.budgets.spend.get(key);
+		if (this.budgets.admit(key, identity) && spend !== undefined) {
+			const cost = readCost();
+			this.omk.appendEntry("goal_autonomy_spend", {
+				goalId: goal.ref.id,
+				createdAt: goal.createdAt,
+				settlementId,
+				costUsd: cost ?? null,
+			});
+			spend.spentUsd = cost === undefined || spend.spentUsd === undefined ? undefined : spend.spentUsd + cost;
+		}
+		return spend;
 	}
 
 	/** AU3: objective, approved command (sha256) and contract revision. */
@@ -217,7 +209,7 @@ export class GoalAutonomy {
 			revision: goal.ref.revision,
 		});
 		const latest = await store.current();
-		if (latest?.status === "active") {
+		if (latest?.status === "active" && goalAutonomyKey(latest) === goalAutonomyKey(goal)) {
 			await store.transition(
 				{ kind: "block", ref: latest.ref, reason: `goal autonomy stop: ${reason}` },
 				nextDurableGoalTimestamp(latest),
@@ -263,6 +255,7 @@ export class GoalAutonomy {
 	resumed(goal: DurableGoalSnapshot): void {
 		const key = goalAutonomyKey(goal);
 		this.revoked.delete(key);
+		this.unknownOutcomes.delete(key);
 		this.pins.set(key, this.scopePin(goal));
 		this.omk.appendEntry(GOAL_AUTONOMY_ENTRY.resume, {
 			goalId: goal.ref.id,
@@ -275,8 +268,9 @@ export class GoalAutonomy {
 
 	forget(goal: DurableGoalSnapshot): void {
 		const key = goalAutonomyKey(goal);
-		this.spend.delete(key);
+		this.budgets.spend.delete(key);
 		this.pins.delete(key);
 		this.revoked.delete(key);
+		this.unknownOutcomes.delete(key);
 	}
 }

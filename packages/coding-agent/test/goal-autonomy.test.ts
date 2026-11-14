@@ -385,8 +385,10 @@ describe("G6: entries carry no prompt or command text", () => {
 		const autonomy = h.entries.filter((e) => e.customType.startsWith("goal_autonomy_"));
 		expect(autonomy.map((e) => e.customType)).toEqual([
 			"goal_autonomy_budget",
+			"goal_autonomy_spend",
 			"goal_autonomy_revoke",
 			"goal_autonomy_resume",
+			"goal_autonomy_spend",
 			"goal_autonomy_stop",
 		]);
 		expect(JSON.stringify(autonomy)).not.toMatch(/SECRET|grep/);

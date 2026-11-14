@@ -22,9 +22,9 @@
  * Erasable TypeScript only (no enum/namespace/parameter properties).
  */
 
-import { DEVIN_HARNESS_PROFILE, GROK_HARNESS_PROFILE } from "./domain-loadouts-provider-harness.ts";
+import { commands, DEVIN_HARNESS_PROFILE, GROK_HARNESS_PROFILE, gate } from "./domain-loadouts-provider-harness.ts";
 import type { DomainProfile } from "./domain-profile.ts";
-import type { CapabilityGate, LoadoutCommands, LoadoutProfile, ToolGate } from "./loadouts.ts";
+import type { LoadoutProfile, ToolGate } from "./loadouts.ts";
 
 export type { DomainProfile, TriggerKind, TriggerSpec } from "./domain-profile.ts";
 
@@ -32,14 +32,6 @@ const READ_TOOLS: ToolGate = { allow: ["read", "grep", "find", "ls"] };
 const WRITE_TOOLS: ToolGate = { allow: ["read", "grep", "find", "ls", "edit", "write", "bash"] };
 const TEST_TOOLS: ToolGate = { allow: ["read", "grep", "find", "ls", "bash"] };
 const SECURITY_TOOLS: ToolGate = { allow: ["read", "grep", "find", "ls", "bash"] };
-
-function gate(kind: "skill" | "mcp" | "hook", names: readonly string[]): CapabilityGate {
-	return { allow: [{ kind, names }] };
-}
-
-function commands(mode: LoadoutCommands["mode"], extras?: Partial<LoadoutCommands>): LoadoutCommands {
-	return { mode, ...extras };
-}
 
 /**
  * All domain profiles, keyed by id. Order is intentional only for human reading;
@@ -60,6 +52,8 @@ export const DOMAIN_PROFILES: Readonly<Record<string, DomainProfile>> = {
 		tools: WRITE_TOOLS,
 		skills: gate("skill", [
 			"frontend-design",
+			"ux-design",
+			"design-compare",
 			"frontend-ui-engineering",
 			"frontend-patterns",
 			"baseline-ui",

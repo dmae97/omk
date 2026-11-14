@@ -1,0 +1,57 @@
+{
+  "schema": "omk.contract.fixtures.v2",
+  "generatedBy": "scripts/record-contract-fixtures.mjs",
+  "origin": {
+    "head": "3632e73ffa33b3c3373835c26d03f950d8593fad",
+    "selectedSourceSha256": "27fc98d3a1e19e212f5d102432997b0069aa1d937a84a07771308f86538977cd"
+  },
+  "normalization": {
+    "paths": "synthetic placeholders",
+    "uuids": "first occurrence",
+    "fauxApi": "faux:<api>",
+    "promptSettledDurationMs": 0
+  },
+  "copiedGoldenEvidence": "archived synthetic records only; not fresh parity evidence",
+  "files": [
+    {
+      "path": "g0/provider-requests.jsonl",
+      "sha256": "7316e43485a9804dbdd949e1691a9365bda2ecc6f3204921be922b1cd871319a"
+    },
+    {
+      "path": "g0/session.jsonl",
+      "sha256": "c1dc0e813cc4583ecee8ca8d58332f478e6064f2e266b8a96083578995d56a30"
+    },
+    {
+      "path": "rpc-transcript.jsonl",
+      "sha256": "c32ad2cd1db9c97ccfdacbc6761fe5cf68d657719a7bb5edc309fad6e38cdc36"
+    },
+    {
+      "path": "session-equivalence/admission-pressure.json",
+      "sha256": "93e5301250a4844009e84da2d9c2b28437b7e84c3da65e1eae7d758ba2b386c2"
+    },
+    {
+      "path": "session-equivalence/forced-compaction.json",
+      "sha256": "57216fb8368db3b5f7605ecadf5cfee039436797767fc39056d262d7d1811357"
+    },
+    {
+      "path": "session-equivalence/mcp-over-budget.json",
+      "sha256": "f976421255f15c7ac82171718cbdf511b738fad63f5c5b4df03a34835e049439"
+    },
+    {
+      "path": "session-equivalence/plain-prompt.json",
+      "sha256": "1537fc79c0b152e9db3e53f924153647d45b12e39c8f0a99239bbe5dbc45c303"
+    },
+    {
+      "path": "session-equivalence/retry-transient.json",
+      "sha256": "b4a3202b1d474f6cb256cb32c87c30e790678a04aacbbeca11c1059d9ebdf3d6"
+    },
+    {
+      "path": "session-equivalence/spec103b-trace.json",
+      "sha256": "82053e8f223568e12bddeb03c29cef79e8d56664cce42fdd62ba3fd90cd2de67"
+    },
+    {
+      "path": "session-equivalence/tool-round-trip.json",
+      "sha256": "b34c9492bc730242aa5108c8fe0f0dab122a53888ba74adc9c4a3f19ba02df17"
+    }
+  ]
+}

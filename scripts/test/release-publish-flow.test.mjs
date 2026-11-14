@@ -28,6 +28,29 @@ describe("publish.mjs provenance resolution", () => {
 	});
 });
 
+describe("publish.mjs registry identity gates", () => {
+	it("reuses only an identical existing artifact", async () => {
+		const { decideExistingPublication } = await import(join(root, "scripts", "publish.mjs"));
+		const local = { integrity: "sha512-a", gitHead: "abc" };
+		assert.equal(decideExistingPublication(local, local), "reuse");
+		assert.equal(decideExistingPublication(local, { ...local, integrity: "sha512-b" }), "conflict");
+		assert.equal(decideExistingPublication(local, { ...local, gitHead: "def" }), "conflict");
+		assert.equal(decideExistingPublication(local, {}), "unverifiable");
+	});
+
+	it("rejects incomplete latest promotion", async () => {
+		const { latestMismatches } = await import(join(root, "scripts", "publish.mjs"));
+		assert.deepEqual(latestMismatches("1.0.1", { a: "1.0.1", b: "1.0.0" }), ["b"]);
+	});
+
+	it("packed smoke installs every tarball and runs the installed bin", () => {
+		const source = readFileSync(join(root, "scripts", "packed-npm-smoke.mjs"), "utf8");
+		assert.match(source, /npm", \["pack"/);
+		assert.match(source, /--ignore-scripts/);
+		assert.match(source, /--version/);
+	});
+});
+
 describe("release.mjs preflight and README sync", () => {
 	it("computes target versions for bump types and explicit versions", async () => {
 		const { computeTargetVersion } = await import(join(root, "scripts", "release.mjs"));
@@ -50,6 +73,7 @@ describe("release.mjs preflight and README sync", () => {
 			fixture,
 			[
 				"omk install npm:omk-book-to-skill@0.97.0",
+				"omk install npm:omk-speak-like-you-eat@0.97.0",
 				"Release notes: [v0.97.0](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v0.97.0.md).",
 			].join("\n"),
 		);
@@ -57,6 +81,7 @@ describe("release.mjs preflight and README sync", () => {
 			updateCodingAgentReadme("0.98.0", fixture);
 			const text = readFileSync(fixture, "utf8");
 			assert.match(text, /npm:omk-book-to-skill@0\.98\.0/);
+			assert.match(text, /npm:omk-speak-like-you-eat@0\.98\.0/);
 			assert.match(text, /RELEASE_NOTES_v0\.98\.0\.md/);
 			assert.doesNotMatch(text, /0\.97\.0/);
 		} finally {

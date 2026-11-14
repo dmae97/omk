@@ -58,7 +58,8 @@ describe("gemini-4-argon catalog", () => {
 		const live = requireModel("openrouter", "google/gemini-4-argon");
 		expect(live).toMatchObject({
 			contextWindow: 1_048_576,
-			maxTokens: 65_536,
+			// OpenRouter /models route limit, checked 2026-10-29; native limits stay separate.
+			maxTokens: 943_718,
 			cost: { input: 2, output: 10, cacheWrite: 0.1875 },
 			thinkingLevelMap: { off: null, minimal: null, low: "low", medium: "medium", high: "high" },
 		});

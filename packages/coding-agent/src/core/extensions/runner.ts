@@ -2,10 +2,9 @@
  * Extension runner - executes extensions and manages their lifecycle.
  */
 
-import type { AgentMessage } from "omk-agent-core";
+import type { AgentMessage, ThinkingLevel } from "omk-agent-core";
 import type { ImageContent, Model } from "omk-ai";
 import type { KeyId } from "omk-tui";
-import { type Theme, theme } from "../../modes/interactive/theme/theme.ts";
 import type { ResourceDiagnostic } from "../diagnostics.ts";
 import type { KeybindingsConfig } from "../keybindings.ts";
 import type { ModelRegistry } from "../model-registry.ts";
@@ -13,14 +12,18 @@ import type { SessionManager } from "../session-manager.ts";
 import type { SubagentLaneAuthority } from "../subagent-lane-authority.ts";
 import type { BuildSystemPromptOptions } from "../system-prompt.ts";
 import { contextHandlerMutatesMessages } from "./context-handler-options.ts";
+import { findRenderer } from "./entry-renderer.ts";
+import { noOpUIContext } from "./no-op-ui-context.ts";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
+	BeforeAgentStartTrigger,
 	BeforeProviderRequestEvent,
 	CompactOptions,
 	ContextEvent,
 	ContextEventResult,
 	ContextUsage,
+	EntryRenderer,
 	Extension,
 	ExtensionActions,
 	ExtensionCommandContext,
@@ -191,39 +194,6 @@ export async function emitSessionShutdownEvent(
 	return false;
 }
 
-const noOpUIContext: ExtensionUIContext = {
-	select: async () => undefined,
-	confirm: async () => false,
-	input: async () => undefined,
-	notify: () => {},
-	onTerminalInput: () => () => {},
-	setStatus: () => {},
-	setWorkingMessage: () => {},
-	setWorkingVisible: () => {},
-	setWorkingIndicator: () => {},
-	setHiddenThinkingLabel: () => {},
-	setWidget: () => {},
-	setFooter: () => {},
-	setHeader: () => {},
-	setTitle: () => {},
-	custom: async () => undefined as never,
-	pasteToEditor: () => {},
-	setEditorText: () => {},
-	getEditorText: () => "",
-	editor: async () => undefined,
-	addAutocompleteProvider: () => {},
-	setEditorComponent: () => {},
-	getEditorComponent: () => undefined,
-	get theme() {
-		return theme;
-	},
-	getAllThemes: () => [],
-	getTheme: () => undefined,
-	setTheme: (_theme: string | Theme) => ({ success: false, error: "UI not available" }),
-	getToolsExpanded: () => false,
-	setToolsExpanded: () => {},
-};
-
 export class ExtensionRunner {
 	private extensions: Extension[];
 	private runtime: ExtensionRuntime;
@@ -234,6 +204,7 @@ export class ExtensionRunner {
 	private modelRegistry: ModelRegistry;
 	private errorListeners: Set<ExtensionErrorListener> = new Set();
 	private getModel: () => Model<any> | undefined = () => undefined;
+	private getScopedModelsFn: () => ReadonlyArray<{ model: Model<any>; thinkingLevel?: ThinkingLevel }> = () => [];
 	private isIdleFn: () => boolean = () => true;
 	private getSignalFn: () => AbortSignal | undefined = () => undefined;
 	private waitForIdleFn: () => Promise<void> = async () => {};
@@ -242,6 +213,7 @@ export class ExtensionRunner {
 	private getContextUsageFn: () => ContextUsage | undefined = () => undefined;
 	private compactFn: (options?: CompactOptions) => void = () => {};
 	private getSystemPromptFn: () => string = () => "";
+	private isProjectTrustedFn: () => boolean = () => false;
 	private getSubagentLaneAuthorityFn?: () => SubagentLaneAuthority | null = undefined;
 	private getSystemPromptOptionsFn: () => BuildSystemPromptOptions = () => ({ cwd: this.cwd });
 	private newSessionHandler: NewSessionHandler = async () => ({ cancelled: false });
@@ -298,6 +270,7 @@ export class ExtensionRunner {
 
 		// Context actions (required)
 		this.getModel = contextActions.getModel;
+		this.getScopedModelsFn = contextActions.getScopedModels ?? (() => []);
 		this.isIdleFn = contextActions.isIdle;
 		this.getSignalFn = contextActions.getSignal;
 		this.abortFn = contextActions.abort;
@@ -306,6 +279,7 @@ export class ExtensionRunner {
 		this.getContextUsageFn = contextActions.getContextUsage;
 		this.compactFn = contextActions.compact;
 		this.getSystemPromptFn = contextActions.getSystemPrompt;
+		this.isProjectTrustedFn = contextActions.isProjectTrusted ?? (() => false);
 		this.getSubagentLaneAuthorityFn = contextActions.getSubagentLaneAuthority;
 		this.getSystemPromptOptionsFn = contextActions.getSystemPromptOptions ?? (() => ({ cwd: this.cwd }));
 
@@ -406,6 +380,16 @@ export class ExtensionRunner {
 		return undefined;
 	}
 
+	/** Active tool names; pi-fabric calls this on the runner itself (upstream pi API). */
+	getActiveTools(): string[] {
+		return this.runtime.getActiveTools();
+	}
+
+	/** OMK has no markdown transformer registry; pi-fabric calls this upstream runner method. */
+	getMarkdownTransformers(): unknown[] {
+		return [];
+	}
+
 	getFlags(): Map<string, ExtensionFlag> {
 		const allFlags = new Map<string, ExtensionFlag>();
 		for (const ext of this.extensions) {
@@ -477,10 +461,12 @@ export class ExtensionRunner {
 
 	invalidate(
 		message = "This extension ctx is stale after session replacement or reload. Do not use a captured extension API or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().",
+		replacementRuntime?: ExtensionRuntime,
 	): void {
 		if (!this.staleMessage) {
 			this.staleMessage = message;
-			this.runtime.invalidate(message);
+			// A custom loader may retain its factory APIs while the runner's contexts retire.
+			if (this.runtime !== replacementRuntime) this.runtime.invalidate(message);
 		}
 	}
 
@@ -512,13 +498,11 @@ export class ExtensionRunner {
 	}
 
 	getMessageRenderer(customType: string): MessageRenderer | undefined {
-		for (const ext of this.extensions) {
-			const renderer = ext.messageRenderers.get(customType);
-			if (renderer) {
-				return renderer;
-			}
-		}
-		return undefined;
+		return findRenderer(this.extensions, (extension) => extension.messageRenderers.get(customType));
+	}
+
+	getEntryRenderer(customType: string): EntryRenderer | undefined {
+		return findRenderer(this.extensions, (extension) => extension.entryRenderers?.get(customType));
 	}
 
 	private resolveRegisteredCommands(): ResolvedCommand[] {
@@ -610,6 +594,10 @@ export class ExtensionRunner {
 				runner.assertActive();
 				return runner.modelRegistry;
 			},
+			get scopedModels() {
+				runner.assertActive();
+				return runner.getScopedModelsFn();
+			},
 			get model() {
 				runner.assertActive();
 				return getModel();
@@ -649,6 +637,10 @@ export class ExtensionRunner {
 			getSystemPrompt: () => {
 				runner.assertActive();
 				return runner.getSystemPromptFn();
+			},
+			isProjectTrusted: () => {
+				runner.assertActive();
+				return runner.isProjectTrustedFn();
 			},
 			getSubagentLaneAuthority: () => {
 				runner.assertActive();
@@ -708,6 +700,7 @@ export class ExtensionRunner {
 	async emit<TEvent extends RunnerEmitEvent>(event: TEvent): Promise<RunnerEmitResult<TEvent>> {
 		const ctx = this.createContext();
 		let result: SessionBeforeEventResult | undefined;
+		const settledErrors: ExtensionError[] = [];
 
 		for (const ext of this.extensions) {
 			const handlers = ext.handlers.get(event.type);
@@ -726,16 +719,27 @@ export class ExtensionRunner {
 				} catch (err) {
 					const message = err instanceof Error ? err.message : String(err);
 					const stack = err instanceof Error ? err.stack : undefined;
-					this.emitError({
+					const error = {
 						extensionPath: ext.path,
 						event: event.type,
 						error: message,
 						stack,
-					});
+					};
+					if (event.type === "agent_settled") settledErrors.push(error);
+					else this.emitError(error);
 				}
 			}
 		}
 
+		for (const error of settledErrors) {
+			for (const listener of this.errorListeners) {
+				try {
+					listener(error);
+				} catch {
+					/* Observer reports cannot invalidate an already delivered settlement. */
+				}
+			}
+		}
 		return result as RunnerEmitResult<TEvent>;
 	}
 
@@ -949,6 +953,7 @@ export class ExtensionRunner {
 		images: ImageContent[] | undefined,
 		systemPrompt: string,
 		systemPromptOptions: BuildSystemPromptOptions,
+		trigger: BeforeAgentStartTrigger = { messageType: "user", prompt, images },
 	): Promise<BeforeAgentStartCombinedResult | undefined> {
 		let currentSystemPrompt = systemPrompt;
 		const ctx = Object.defineProperties(
@@ -970,8 +975,7 @@ export class ExtensionRunner {
 				try {
 					const event: BeforeAgentStartEvent = {
 						type: "before_agent_start",
-						prompt,
-						images,
+						...trigger,
 						systemPrompt: currentSystemPrompt,
 						systemPromptOptions,
 					};

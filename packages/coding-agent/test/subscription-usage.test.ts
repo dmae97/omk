@@ -1013,7 +1013,9 @@ describe("usage polling and a login that can no longer refresh", () => {
 				await loadSubscriptionUsage(testSession as never, usageFetch, "kimi-coding");
 			}
 
-			expect(tokenRequests.filter((url) => url.endsWith("/oauth2/token"))).toHaveLength(1);
+			// 2.0.0 refreshes at Kimi's `/api/oauth/token`; the old `/oauth2/token` answers 404.
+			expect(tokenRequests.filter((url) => url.endsWith("/api/oauth/token"))).toHaveLength(1);
+			expect(tokenRequests).toHaveLength(1);
 		} finally {
 			vi.unstubAllGlobals();
 			rmSync(dir, { recursive: true, force: true });

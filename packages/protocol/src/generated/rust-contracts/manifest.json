@@ -1,0 +1,80 @@
+{
+	"schema": "omk.contract.declarations.v1",
+	"scope": "wire declarations; the pi-compat.ts runtime table is checked by compat-table.mjs",
+	"sourcesSha256": "b66c4e84cfbc52afe77e801c2537c3198af1de95ca76b8cff6a2bbc2ef75bd4e",
+	"generatorSha256": "94fad8644651c937fb2e94ff4ca1c01ee39f2ec42fd3d476abaf4ba319dd6d7f",
+	"files": [
+		{
+			"path": "compat.ts",
+			"sha256": "74a2b1c4d37e462c8cd2ad11852a75a757ef12df70cbc1fef56490710f398b76"
+		},
+		{
+			"path": "host-wire.ts",
+			"sha256": "f310e3f87b118aa5fe1845520c20375f48d4bf162485572cd509839bd3422e55"
+		},
+		{
+			"path": "index.ts",
+			"sha256": "583702be04d3609645de2f0fc6b264017a812be40ee9a69169f77befbe0c13f5"
+		},
+		{
+			"path": "json.ts",
+			"sha256": "cfaf65de5eaed2de8c1828f2bfa32199aff1761cedbc2ddb2259f0f3de22875b"
+		},
+		{
+			"path": "jsonl.ts",
+			"sha256": "0d38c440524ae375d826e21ecd92f9fae7ae8b603f1d545cfa9a18a953dab160"
+		},
+		{
+			"path": "lib.ts",
+			"sha256": "e42e8e884af154f10d6410bc32bbfab3cb7171984f31be2e41df61278f373a3c"
+		},
+		{
+			"path": "rpc-command.ts",
+			"sha256": "964a6a60bd57876017ef746050b194b38180c07bc2e091382aaeb2fc1391ebff"
+		},
+		{
+			"path": "rpc-data.ts",
+			"sha256": "9b5a058f688e77148abd808a29e8cd9287064db6f2551d14fa30db7e11162fca"
+		},
+		{
+			"path": "rpc-events.ts",
+			"sha256": "b21f5a4f762f0e603ccee5ac213326ca8fa997dd0dcf3078361d026ac1274ff5"
+		},
+		{
+			"path": "rpc-response.ts",
+			"sha256": "24ca9fda7a63ce648d2cc79f6ef7648d04cafbf699241e6882b49c7cd151caef"
+		},
+		{
+			"path": "rpc-status.ts",
+			"sha256": "41111f4b40146831bbe78ed7a24dfb7fbd833f8cf3c418958009f645dbc5ffd4"
+		},
+		{
+			"path": "rpc-stream.ts",
+			"sha256": "1da8724f9221bce7e3cece07c4e86ede53caa73d47e585629f130dfc7e136b6c"
+		},
+		{
+			"path": "rpc-ui.ts",
+			"sha256": "232c05fc1a14f474ceec3ae46f78b75a49f9313245c3268307436b104ea64f36"
+		},
+		{
+			"path": "rpc.ts",
+			"sha256": "ffc3f9235ecbe7f538ebddd68148bb9679dd6ab9a3c88de260bb6cd9484d4dab"
+		},
+		{
+			"path": "session-jsonl.ts",
+			"sha256": "aa4f82d8619e9970d67f332a705ababa24f092325bb6171c1c896ca9b0b5d800"
+		},
+		{
+			"path": "session-message.ts",
+			"sha256": "410634192e3828aedf10ae23662551ec8eca37e4957a4c1bef9fe6df1a3d0909"
+		},
+		{
+			"path": "session.ts",
+			"sha256": "57cd1c2289f730ec908190eca6059dd85cf76d04d80ee00232f933ba82440cd4"
+		},
+		{
+			"path": "wire.generated.ts",
+			"sha256": "b81b5646cd59d7f060dbf3ff1e5c83b60cdb682ac321da164fbf81aa3881b6c2"
+		}
+	]
+}

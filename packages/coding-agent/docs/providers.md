@@ -37,6 +37,20 @@ With a stored native `xai` OAuth credential, OMK reads `GET https://cli-chat-pro
 
 With a configured `commandcode` API key (`models.json` or auth storage), OMK reads `GET https://api.commandcode.ai/alpha/whoami`, then `/alpha/billing/credits`, `/alpha/billing/subscriptions`, and `/alpha/usage/summary` on that same origin. The rail shows the 5-hour and weekly credit windows plus the monthly pool (`spent / remaining+spent`) and the plan name. OMK never sends the key anywhere except `api.commandcode.ai`, never reads browser cookies, and does not scrape Studio.
 
+### Google browser callback login
+
+Gemini CLI and Antigravity show the authorization URL only after their loopback
+callback listener is ready. The browser callback must be a GET to the exact
+callback path with the login's matching `state`; an unrelated or mismatched
+callback does not consume the pending login. If the preferred port is occupied,
+OMK uses an ephemeral loopback port and includes that port in the authorization
+and token-exchange redirect URI.
+
+The browser wait ends after five minutes, cancellation, approval, or denial.
+OMK closes the callback listener on every exit, including a failed browser hook.
+Token exchange and refresh are restricted to `https://oauth2.googleapis.com/token`.
+These bounds cover the callback wait, not subsequent Google project provisioning.
+
 ### Model Studio DeepSeek V4
 
 Model Studio uses `enable_thinking`, including for DeepSeek. OMK's Chat Completions
@@ -207,7 +221,7 @@ adapter is covered by loopback HTTP/2 protocol tests.
 - Officially endorsed by OpenAI: [Codex for OSS](https://developers.openai.com/community/codex-for-oss)
 - `gpt-5.6-moa` runs bounded, tool-free GPT-5.6 Sol and Terra advisers concurrently, then streams a Sol synthesis with the active tools and tool history. Synthesis tool calls enter the normal agent loop; each follow-up model turn repeats the three-call workflow. Adviser and synthesis output remain independently capped.
 - On GPT-5.6 models OMK sends `xhigh` for its `max` and `ultra` tiers; `ultra` on the MoA model additionally represents the Sol/Terra delegation workflow.
-- GPT-6.1 Sol (`gpt-6.1-sol`, the Codex default since 2026-09-29), GPT-6 Astra, GPT-6 Sol and GPT-6 Luna follow the Codex client's bundled catalog: efforts `low` through `max` with no `off` or `minimal` (thinking stays on), an 872,000-token window and 128,000 output tokens. `ultra` appears on 6.1 Sol, Astra and 6 Sol and sends the effort the Codex client sends for it: `xhigh` on 6.1 Sol and Astra, `max` on 6 Sol. In the Codex app `ultra` also delegates to subagents automatically; in OMK it only selects that effort.
+- GPT-6.1 Sol (`gpt-6.1-sol`, the Codex default since 2026-09-29), GPT-6.1 Terra, GPT-6 Astra, GPT-6 Sol and GPT-6 Luna follow the Codex client's bundled catalog: efforts `low` through `max` with no `off` or `minimal` (thinking stays on), an 872,000-token window and 128,000 output tokens. On Sol/Terra 6.1 and Astra, `/think max` sends `reasoning.effort: "max"`, but `/think ultra` sends `"xhigh"`, not `"ultra"`. GPT-6 Sol maps `ultra` to `"max"`; Luna does not offer `ultra`. In the Codex app `ultra` also delegates to subagents automatically; in OMK it only selects that effort. Custom `models.json` entries replace built-in thinking metadata, so the effective selector and wire mapping can differ.
 - When using stored Codex OAuth, OMK uses its selected account for its own requests; a runtime `--api-key` can override it. Selecting `ultra` does not pin that account for the optional subagent extension's worker processes: they reload the stored selection, which can change while a run is active, and do not inherit a parent's in-memory API-key override.
 
 ```bash
