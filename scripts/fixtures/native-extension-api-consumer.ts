@@ -3,6 +3,7 @@ import { systemHash } from "omk-ai/prompt-hash";
 import * as oauth from "omk-ai/oauth";
 import * as agentNode from "omk-agent-core/node";
 import { createAgentSession, DefaultResourceLoader, defineTool, type ExtensionAPI, type ExtensionFactory, getAgentDir, type ProviderConfig, type ToolDefinition } from "open-multi-agent-kit";
+import { parseConfig } from "omk-speak-like-you-eat";
 
 type LoaderOptions = ConstructorParameters<typeof DefaultResourceLoader>[0];
 const options: LoaderOptions = { cwd: process.cwd(), agentDir: getAgentDir(), packageManifestDialect: "omk", noSkills: true, noThemes: true, noContextFiles: true };
@@ -13,4 +14,5 @@ const tool: ToolDefinition<typeof parameters> = defineTool({ name: "typed_artifa
   execute: async (_id, args) => ({ content: [{ type: "text", text: String(args.value + 1) }], details: { value: args.value + 1 } }) });
 const provider: ProviderConfig = { api: "typed-artifact", baseUrl: "https://example.invalid", apiKey: "offline-fixture", models: [] };
 const extension: ExtensionFactory = (api: ExtensionAPI) => { api.registerTool(tool); api.registerProvider("typed-artifact", provider); };
-void [result, extension, systemHash({ systemPrompt: "" }), oauth, agentNode];
+const slyeConfig = parseConfig({ enabled: false });
+void [result, extension, systemHash({ systemPrompt: "" }), oauth, agentNode, slyeConfig];
