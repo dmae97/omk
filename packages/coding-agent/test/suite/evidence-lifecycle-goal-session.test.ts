@@ -182,7 +182,27 @@ describe("spec 106 D1 evidence attribution through a live session", () => {
 		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe");
 		const probe = await createHarness();
 		harnesses.push(probe);
-		const harness = await createHarness({ tools: [createReadTool(probe.tempDir)] });
+		let holdSettlement = false;
+		let releaseSettlement = () => {};
+		let enterSettlement = () => {};
+		const settlementGate = new Promise<void>((resolve) => {
+			releaseSettlement = resolve;
+		});
+		const settlementEntered = new Promise<void>((resolve) => {
+			enterSettlement = resolve;
+		});
+		const harness = await createHarness({
+			tools: [createReadTool(probe.tempDir)],
+			extensionFactories: [
+				(omk) => {
+					omk.on("agent_settled", async () => {
+						if (!holdSettlement) return;
+						enterSettlement();
+						await settlementGate;
+					});
+				},
+			],
+		});
 		harnesses.push(harness);
 		const file = join(probe.tempDir, "big.txt");
 		writeFileSync(file, Array.from({ length: 5000 }, (_, i) => `line ${i}`).join("\n"));
@@ -191,6 +211,8 @@ describe("spec 106 D1 evidence attribution through a live session", () => {
 		await idle(harness);
 		const id = harness.sessionManager.getSessionId();
 		expect(evidenceRegistryStats(id).registered).toBe(0);
+		const settledBefore = harness.eventsOfType("prompt_settled").length;
+		holdSettlement = true;
 		harness.setResponses([
 			fauxAssistantMessage("summary of the session"),
 			fauxAssistantMessage([fauxToolCall("read", { path: file })], { stopReason: "toolUse" }),
@@ -204,8 +226,19 @@ describe("spec 106 D1 evidence attribution through a live session", () => {
 			{ customType: "test-deferred", content: "after compaction", display: false },
 			{ triggerTurn: true },
 		);
-		await compaction;
-		await idle(harness);
+		try {
+			await compaction;
+			await settlementEntered;
+			await idle(harness);
+			// Model-idle does not mean the async settlement has recorded its evidence report.
+			expect(evidenceEntries(harness).at(-1)?.report.byProducer["read-spill"]).toBeUndefined();
+		} finally {
+			releaseSettlement();
+		}
+		await vi.waitFor(() => expect(harness.eventsOfType("prompt_settled")).toHaveLength(settledBefore + 1), {
+			timeout: 20_000,
+			interval: 50,
+		});
 		const last = evidenceEntries(harness).at(-1)?.report as Report;
 		expect(last.byProducer["read-spill"]).toBe(1);
 		expect(last.registered).toBe(1);
