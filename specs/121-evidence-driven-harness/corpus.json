@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "baseline": "3045c4ca2f548865b4638759a4e253cd23333688",
+  "recovery": [
+    {"id":"H3-01","file":"test/verified-run-authority-restart.test.ts","name":"authority restart quarantine keeps unresolved effects owned across restart and settles only on a termination witness"},
+    {"id":"H3-02","file":"test/verified-run-authority-restart.test.ts","name":"authority restart quarantine quarantines a committed dispatch intent that was never witnessed as spawned (I01/I02)"},
+    {"id":"H3-03","file":"test/verified-run-authority-restart.test.ts","name":"authority restart quarantine resumes an unfinished reconcile without bumping the epoch again"},
+    {"id":"H3-04","file":"test/verified-run-authority-restart.test.ts","name":"authority restart quarantine keeps a cancelled live effect quarantined until witnessed — cancel is not termination"},
+    {"id":"H3-05","file":"test/verified-run-authority-restart.test.ts","name":"authority restart quarantine does not treat a git-ref grant without a process witness as terminated (F07)"},
+    {"id":"H3-06","file":"test/verified-run-authority-restart.test.ts","name":"authority restart quarantine survives a full epoch cycle on durable state — incarnation counters never regress (S2)"},
+    {"id":"H3-07","file":"test/verified-run-resume.test.ts","name":"frozen candidate recovery acquires a new generation, preserves the original budget and rechecks only the candidate"},
+    {"id":"H3-08","file":"test/verified-run-resume.test.ts","name":"frozen candidate recovery does not execute a duplicate resume command twice"},
+    {"id":"H3-09","file":"test/verified-run-resume.test.ts","name":"frozen candidate recovery rejects stale revision, generation, candidate or conflicting command identity"},
+    {"id":"H3-10","file":"test/verified-run-resume.test.ts","name":"frozen candidate recovery does not compete with an existing live owner"},
+    {"id":"H3-11","file":"test/verified-run-resume.test.ts","name":"frozen candidate recovery does not reset uncertainty when a dispatch has no observed namespace identity"},
+    {"id":"H3-12","file":"test/verified-run-resume.test.ts","name":"frozen candidate recovery reports a reboot as a changed clock basis even when uptime reset"},
+    {"id":"H3-13","file":"test/verified-run-resume.test.ts","name":"frozen candidate recovery does not dispatch when resume persistence fails (visible bytes: false)"},
+    {"id":"H3-14","file":"test/verified-run-resume.test.ts","name":"frozen candidate recovery does not dispatch when resume persistence fails (visible bytes: true)"},
+    {"id":"H3-15","file":"test/verified-run-resume.test.ts","name":"frozen candidate recovery bounds generation acquisition without resetting the deadline"},
+    {"id":"H3-16","file":"test/verified-run-resume.test.ts","name":"frozen candidate recovery requires the original approval and cannot recreate a missing issuer"},
+    {"id":"H3-17","file":"test/goal-budget-recovery.test.ts","name":"durable goal budget recovery restores cap, original deadline, spend and processed settlement IDs"},
+    {"id":"H3-18","file":"test/goal-budget-recovery.test.ts","name":"durable goal budget recovery preserves unknown spend and does not apply it to a replacement goal"},
+    {"id":"H3-19","file":"test/goal-budget-recovery.test.ts","name":"durable goal budget recovery replays an explicit clear and fails closed on legacy budgets without accounting"},
+    {"id":"H3-20","file":"test/durable-goal-checkpoint.test.ts","name":"durable goal seam checkpoints keeps the prior seam across a round boundary and clears it when the goal definition changes"}
+  ],
+  "security": [
+    {
+      "id":"H7-01",
+      "attack":{"id":"tool-output-attack","file":"test/goal-controller-acceptance.test.ts","name":"spec 094 acceptance diagnostics in the repair follow-up AC7: injected instructions in the output do not change the goal or the approval"},
+      "control":{"id":"tool-output-control","file":"test/goal-controller-acceptance.test.ts","name":"spec 094 acceptance diagnostics in the repair follow-up AC1: flag on carries check, attempt and workspace identity plus the output"}
+    },
+    {
+      "id":"H7-02",
+      "attack":{"id":"checkpoint-attack","file":"test/goal-controller-checkpoint.test.ts","name":"goal controller seam checkpoints does not promote a checkpoint loaded from mutable workspace state to user authority"},
+      "control":{"id":"checkpoint-control","file":"test/goal-controller-checkpoint.test.ts","name":"goal controller seam checkpoints records checkpoint JSON in the existing goal journal and carries it into the next round"}
+    },
+    {
+      "id":"H7-03",
+      "attack":{"id":"receipt-attack","file":"test/goal-controller-acceptance.test.ts","name":"/goal acceptance contract revision (spec 099) refuses completion on a passing receipt once its approval is withdrawn"},
+      "control":{"id":"receipt-control","file":"test/goal-controller-acceptance.test.ts","name":"/goal acceptance contract revision (spec 099) allows completion when the same check passes after it failed"}
+    },
+    {
+      "id":"H7-04",
+      "attack":{"id":"success-attack","file":"test/verified-run.test.ts","name":"verified-run command profile does not accept model-like verified text instead of a passing protected check"},
+      "control":{"id":"success-control","file":"test/verified-run.test.ts","name":"verified-run command profile executes, fixes the exact candidate, verifies externally and leaves the base untouched"}
+    },
+    {
+      "id":"H7-05",
+      "attack":{"id":"source-attack","file":"test/verified-run.test.ts","name":"verified-run command profile fails closed if an accepted candidate blob is modified after verification"},
+      "control":{"id":"source-control","file":"test/verified-run-v3.test.ts","name":"verified candidate native receipt bridge returns native v3 receipts bound to observed execution and the exact candidate"}
+    },
+    {
+      "id":"H7-06",
+      "attack":{"id":"scope-attack","file":"test/verified-run.test.ts","name":"verified-run command profile refuses a writer that changes a path outside its accepted scope"},
+      "control":{"id":"scope-control","file":"test/verified-run.test.ts","name":"verified-run command profile returns the same durable result for a duplicate command without running twice"}
+    },
+    {
+      "id":"H7-07",
+      "attack":{"id":"network-attack","file":"test/harness-network-corpus.test.ts","name":"harness network corpus rejects access to a live host loopback service without delivering bytes"},
+      "control":{"id":"network-control","file":"test/harness-network-corpus.test.ts","name":"harness network corpus permits an approved local read in the same network-isolated boundary"}
+    }
+  ]
+}
