@@ -1,0 +1,1245 @@
+{
+  "schema": "omk-g1-license-supplement/v1",
+  "status": "primary-source-review-complete-legal-notice-gates-remain-open",
+  "reviewDate": "2026-11-13",
+  "scope": "G1 exact frozen graph only; no K1 changes, builds, dependency resolution, adoption, publication, account changes or terms acceptance",
+  "authorization": {
+    "ownerRequest": "K1은 건드리지 말고 빌드나 채택 없이 G1의 ObjC 고지문, Apple SDK 배포 권리와 추가 라이선스 의무를 원문 근거로 확인해 B1 번들을 보완해.",
+    "bundleApproved": false,
+    "productionAdopted": false,
+    "buildPerformed": false,
+    "sdkLicenseAcceptedOnOwnersBehalf": false
+  },
+  "frozenBundle": {
+    "priorReviewJsonSha256": "04fcbe2d7806a865a9bfa09226e76a48c5f88cbd95fa8dc0ab424c42c3cba22e",
+    "manifestSha256": "79e5072e447530ac30d9acf3009002ee3e38e5e9c1fb6ba21ce988cca1383932",
+    "lockSha256": "297fb6d82458e35456f0baff9c69298d70b56cc58c48b897ad6cfdc9d68e847a",
+    "registryPackageCount": 84,
+    "selectedUnionPackageCount": 78,
+    "graphChanged": false
+  },
+  "sourceUse": "Original-source passages with immutable revision/archive hashes and whitespace-normalized character offsets; raw sources and PDF remain temporary, no source or license corpus incorporated into production",
+  "sources": [
+    {
+      "id": "apple-xcode.pdf",
+      "url": "https://www.apple.com/legal/sla/docs/xcode.pdf",
+      "finalUrl": "https://www.apple.com/legal/sla/docs/xcode.pdf",
+      "fetchedAt": "2026-11-13T01:24:22.702320+00:00",
+      "sha256": "5e6bd16bcba3dd591bde1c57f7c6f19f08a194c84cdc54485c4660f90e2a26ec",
+      "bytes": 201889,
+      "headers": {
+        "Content-Type": "application/pdf",
+        "Last-Modified": "Wed, 05 Aug 2026 15:47:35 GMT"
+      }
+    },
+    {
+      "id": "apple-license-index.html",
+      "url": "https://www.apple.com/legal/sla/",
+      "finalUrl": "https://www.apple.com/legal/sla/",
+      "fetchedAt": "2026-11-13T01:24:22.817381+00:00",
+      "sha256": "843bc487738dab4939d86edb791a097aa6d86a350166926086ad15d661015f0e",
+      "bytes": 107417,
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    {
+      "id": "objc2-issue-23.json",
+      "url": "https://api.github.com/repos/madsmtm/objc2/issues/23",
+      "finalUrl": "https://api.github.com/repos/madsmtm/objc2/issues/23",
+      "fetchedAt": "2026-11-13T01:24:23.139978+00:00",
+      "sha256": "717fbd99616534f05f1541e7b99318224c14549d0cdc685cc60b92276f7073ac",
+      "bytes": 5415,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "ETag": "W/\"d0fc68e87fb6ac9bcee4880e3c755ed36d0219330400bab6b37ff3125edf6c47\"",
+        "Last-Modified": "Tue, 27 Oct 2026 08:02:39 GMT"
+      }
+    },
+    {
+      "id": "objc2-issue-23-comments.json",
+      "url": "https://api.github.com/repos/madsmtm/objc2/issues/23/comments?per_page=100",
+      "finalUrl": "https://api.github.com/repos/madsmtm/objc2/issues/23/comments?per_page=100",
+      "fetchedAt": "2026-11-13T01:24:29.111601+00:00",
+      "sha256": "693793ca78da74e95349b6ec21e0678c4de42e2ca0a8405cf244e27869cd06e4",
+      "bytes": 9613,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "ETag": "W/\"14f4313713cf81859e70934c3bcb6c69b5447e5e9f92bd8635cc1ba33d76431d\""
+      }
+    },
+    {
+      "id": "objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b-LICENSE.md",
+      "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "finalUrl": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "fetchedAt": "2026-11-13T01:24:23.234208+00:00",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "bytes": 1339,
+      "headers": {
+        "Content-Type": "text/plain; charset=utf-8",
+        "ETag": "\"3eacb329430512a21db9514d4cfed32c7bf32220d79b3daec1ad5e779e403cab\""
+      }
+    },
+    {
+      "id": "objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b-tree.json",
+      "url": "https://api.github.com/repos/madsmtm/objc2/git/trees/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b?recursive=1",
+      "finalUrl": "https://api.github.com/repos/madsmtm/objc2/git/trees/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b?recursive=1",
+      "fetchedAt": "2026-11-13T01:24:23.632467+00:00",
+      "sha256": "29d093c7bbe1adb45b0207742cb8244ef35115228ff19bf3680c4ae63e55f065",
+      "bytes": 569765,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "ETag": "W/\"727c6e9022549c6a28e9afa0eaa588d06333c26a2acd56eb456307f939ca83b6\"",
+        "Last-Modified": "Tue, 10 Nov 2026 12:14:59 GMT"
+      }
+    },
+    {
+      "id": "objc2-d7d2fa23ceaa5e6096c923b081040e5d81b3b9df-LICENSE.md",
+      "url": "https://raw.githubusercontent.com/madsmtm/objc2/d7d2fa23ceaa5e6096c923b081040e5d81b3b9df/LICENSE.md",
+      "finalUrl": "https://raw.githubusercontent.com/madsmtm/objc2/d7d2fa23ceaa5e6096c923b081040e5d81b3b9df/LICENSE.md",
+      "fetchedAt": "2026-11-13T01:24:23.896429+00:00",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "bytes": 1339,
+      "headers": {
+        "Content-Type": "text/plain; charset=utf-8",
+        "ETag": "\"3eacb329430512a21db9514d4cfed32c7bf32220d79b3daec1ad5e779e403cab\""
+      }
+    },
+    {
+      "id": "objc2-d7d2fa23ceaa5e6096c923b081040e5d81b3b9df-tree.json",
+      "url": "https://api.github.com/repos/madsmtm/objc2/git/trees/d7d2fa23ceaa5e6096c923b081040e5d81b3b9df?recursive=1",
+      "finalUrl": "https://api.github.com/repos/madsmtm/objc2/git/trees/d7d2fa23ceaa5e6096c923b081040e5d81b3b9df?recursive=1",
+      "fetchedAt": "2026-11-13T01:24:24.294892+00:00",
+      "sha256": "8b8e66525b9a25eebfcca3c8aa1679636b2548c7c1cc6a88304862c87df67d3f",
+      "bytes": 539363,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "ETag": "W/\"4858648e3863e0ff6c090b15e3d347d1732f946f56c587fc936fde700a760551\"",
+        "Last-Modified": "Tue, 10 Nov 2026 12:14:59 GMT"
+      }
+    },
+    {
+      "id": "objc2-8d214f5477365ffcbcbb7de058c86ed9a518efb7-LICENSE.md",
+      "url": "https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md",
+      "finalUrl": "https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md",
+      "fetchedAt": "2026-11-13T01:24:24.553256+00:00",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "bytes": 1339,
+      "headers": {
+        "Content-Type": "text/plain; charset=utf-8",
+        "ETag": "\"3eacb329430512a21db9514d4cfed32c7bf32220d79b3daec1ad5e779e403cab\""
+      }
+    },
+    {
+      "id": "objc2-8d214f5477365ffcbcbb7de058c86ed9a518efb7-tree.json",
+      "url": "https://api.github.com/repos/madsmtm/objc2/git/trees/8d214f5477365ffcbcbb7de058c86ed9a518efb7?recursive=1",
+      "finalUrl": "https://api.github.com/repos/madsmtm/objc2/git/trees/8d214f5477365ffcbcbb7de058c86ed9a518efb7?recursive=1",
+      "fetchedAt": "2026-11-13T01:24:24.981200+00:00",
+      "sha256": "1b466589fca908ca290c6dd80eb04bae26b8ecc5a0bf291c15c7c2105553eaa2",
+      "bytes": 396210,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "ETag": "W/\"4f1eba3ed265711ea91b7f978ac937760cde8336446cc90e9f3b77337fc33a3d\"",
+        "Last-Modified": "Tue, 10 Nov 2026 12:14:59 GMT"
+      }
+    },
+    {
+      "id": "objc2-issue-826.json",
+      "url": "https://api.github.com/repos/madsmtm/objc2/issues/826",
+      "finalUrl": "https://api.github.com/repos/madsmtm/objc2/issues/826",
+      "fetchedAt": "2026-11-13T01:24:53.730605+00:00",
+      "sha256": "99f28fc8a355ddc5c1631ef6579e17b20ccb894a7bdd07a041333b1dcfabb82a",
+      "bytes": 3887
+    },
+    {
+      "id": "objc2-issue-826-comments.json",
+      "url": "https://api.github.com/repos/madsmtm/objc2/issues/826/comments?per_page=100",
+      "finalUrl": "https://api.github.com/repos/madsmtm/objc2/issues/826/comments?per_page=100",
+      "fetchedAt": "2026-11-13T01:24:54.102886+00:00",
+      "sha256": "865bd014d764fc13510058a8fe1583c189301499955ec2d448aa7a030f349e9c",
+      "bytes": 21050
+    },
+    {
+      "id": "objc2-ee9a7ada2131f5944b8750428e265c15632f2a19-LICENSE-MIT.txt",
+      "url": "https://raw.githubusercontent.com/madsmtm/objc2/ee9a7ada2131f5944b8750428e265c15632f2a19/LICENSE-MIT.txt",
+      "finalUrl": "https://raw.githubusercontent.com/madsmtm/objc2/ee9a7ada2131f5944b8750428e265c15632f2a19/LICENSE-MIT.txt",
+      "fetchedAt": "2026-11-13T01:25:29.390196+00:00",
+      "sha256": "f6a2e783669a0dd7a2c3b8a4f76db40ae49033e66e1bdc30f3aa25fe5577b070",
+      "bytes": 1053
+    },
+    {
+      "id": "objc2-ee9a7ada2131f5944b8750428e265c15632f2a19-LICENSE-APACHE.txt",
+      "url": "https://raw.githubusercontent.com/madsmtm/objc2/ee9a7ada2131f5944b8750428e265c15632f2a19/LICENSE-APACHE.txt",
+      "finalUrl": "https://raw.githubusercontent.com/madsmtm/objc2/ee9a7ada2131f5944b8750428e265c15632f2a19/LICENSE-APACHE.txt",
+      "fetchedAt": "2026-11-13T01:25:29.718053+00:00",
+      "sha256": "0c9a5f6fe28e27015e12506ffe58c9e007cead169af9670ec15c1df0d14e4f2a",
+      "bytes": 10204
+    },
+    {
+      "id": "objc2-ee9a7ada2131f5944b8750428e265c15632f2a19-LICENSE-ZLIB.txt",
+      "url": "https://raw.githubusercontent.com/madsmtm/objc2/ee9a7ada2131f5944b8750428e265c15632f2a19/LICENSE-ZLIB.txt",
+      "finalUrl": "https://raw.githubusercontent.com/madsmtm/objc2/ee9a7ada2131f5944b8750428e265c15632f2a19/LICENSE-ZLIB.txt",
+      "fetchedAt": "2026-11-13T01:25:30.017805+00:00",
+      "sha256": "fced3e7fedc235fa83ed0108b0df74d86b435d06436356f46917a903cbadd80a",
+      "bytes": 838
+    },
+    {
+      "id": "objc2-license-history.json",
+      "url": "https://api.github.com/repos/madsmtm/objc2/commits?sha=d7d2fa23ceaa5e6096c923b081040e5d81b3b9df&path=LICENSE.txt&per_page=5",
+      "fetchedAt": "2026-11-13T01:26:14.126109+00:00",
+      "sha256": "d80087dd4d6b90d0ce7a5b424ac4558e4fe5f16601ab90f4205055b8afde7def",
+      "bytes": 6425
+    },
+    {
+      "id": "objc2-historical-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/madsmtm/objc2/757cd841d0293341dbefd9b99d7548dec244ffde/LICENSE.txt",
+      "fetchedAt": "2026-11-13T01:26:31.454962+00:00",
+      "sha256": "e353f37b12aefbb9f9b29490e837cfee05d9bda70804b3562839a3285c1df1e5",
+      "bytes": 1066
+    },
+    {
+      "id": "objc2-license-clarify-commit.json",
+      "url": "https://api.github.com/repos/madsmtm/objc2/commits/cfb199226661ec6e4939fcd7cd7531b3c5453076",
+      "fetchedAt": "2026-11-13T01:26:31.856598+00:00",
+      "sha256": "fb5b813147bd6d892003346df590c17f04b54315ff50cbacdd09d9ce2dc86a96",
+      "bytes": 20314
+    },
+    {
+      "id": "objc2-license-texts-commit.json",
+      "url": "https://api.github.com/repos/madsmtm/objc2/commits/ee9a7ada2131f5944b8750428e265c15632f2a19",
+      "fetchedAt": "2026-11-13T01:26:32.252756+00:00",
+      "sha256": "07351d5acd5ecad319b1ea8055de2d8f3de8bbe61387735748f6c14caa8572f4",
+      "bytes": 19169
+    },
+    {
+      "id": "crate-objc2-0.6.5--Cargo.toml",
+      "url": "https://static.crates.io/crates/objc2/objc2-0.6.5.crate",
+      "archiveSha256": "08849bbd4767dfae9457696856ae1c84fe4e0281bbe4a7abff2d0e06fb7981f8",
+      "archiveMember": "objc2-0.6.5/Cargo.toml",
+      "sha256": "5556dba493fc18e98ebf82f587011f76df6c8c26532613e4c8f904ee586d7cf0",
+      "bytes": 5073,
+      "verifiedAt": "2026-11-13T01:31:43.331992+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-0.6.5--.cargo_vcs_info.json",
+      "url": "https://static.crates.io/crates/objc2/objc2-0.6.5.crate",
+      "archiveSha256": "08849bbd4767dfae9457696856ae1c84fe4e0281bbe4a7abff2d0e06fb7981f8",
+      "archiveMember": "objc2-0.6.5/.cargo_vcs_info.json",
+      "sha256": "5f7c8e095d3933c477ff1f71021b551cbfe497a62346a1dc8615debd9846e257",
+      "bytes": 106,
+      "verifiedAt": "2026-11-13T01:31:43.339169+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-0.6.5--README.md",
+      "url": "https://static.crates.io/crates/objc2/objc2-0.6.5.crate",
+      "archiveSha256": "08849bbd4767dfae9457696856ae1c84fe4e0281bbe4a7abff2d0e06fb7981f8",
+      "archiveMember": "objc2-0.6.5/README.md",
+      "sha256": "5da56f1508a87b982a23e6bad2ff09b329f7fcf9181ea15eac17788f8d1c6824",
+      "bytes": 847,
+      "verifiedAt": "2026-11-13T01:31:43.346061+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-encode-4.1.0--Cargo.toml",
+      "url": "https://static.crates.io/crates/objc2-encode/objc2-encode-4.1.0.crate",
+      "archiveSha256": "ef25abbcd74fb2609453eb695bd2f860d389e457f67dc17cafc8b8cbc89d0c33",
+      "archiveMember": "objc2-encode-4.1.0/Cargo.toml",
+      "sha256": "cf9a8cc812710344d7fe618a5e615530baeeceae5c2826b9d5bb557dc419f159",
+      "bytes": 1850,
+      "verifiedAt": "2026-11-13T01:31:43.374654+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-encode-4.1.0--.cargo_vcs_info.json",
+      "url": "https://static.crates.io/crates/objc2-encode/objc2-encode-4.1.0.crate",
+      "archiveSha256": "ef25abbcd74fb2609453eb695bd2f860d389e457f67dc17cafc8b8cbc89d0c33",
+      "archiveMember": "objc2-encode-4.1.0/.cargo_vcs_info.json",
+      "sha256": "b23c761215887d90ac44e18b18c8b386f93139c65a4a14f110e22405830cb3f1",
+      "bytes": 113,
+      "verifiedAt": "2026-11-13T01:31:43.376239+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-encode-4.1.0--README.md",
+      "url": "https://static.crates.io/crates/objc2-encode/objc2-encode-4.1.0.crate",
+      "archiveSha256": "ef25abbcd74fb2609453eb695bd2f860d389e457f67dc17cafc8b8cbc89d0c33",
+      "archiveMember": "objc2-encode-4.1.0/README.md",
+      "sha256": "e980a74b88a62193f7908df3c27e7915f38559870f5e033ddb77fbed65e024a5",
+      "bytes": 795,
+      "verifiedAt": "2026-11-13T01:31:43.377793+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-foundation-0.3.2--Cargo.toml",
+      "url": "https://static.crates.io/crates/objc2-foundation/objc2-foundation-0.3.2.crate",
+      "archiveSha256": "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272",
+      "archiveMember": "objc2-foundation-0.3.2/Cargo.toml",
+      "sha256": "eabbe24e325c7b474c6f5de2e955f4f942ecd385608e4b6609b89a1f68ef39cc",
+      "bytes": 11621,
+      "verifiedAt": "2026-11-13T01:31:43.420322+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-foundation-0.3.2--.cargo_vcs_info.json",
+      "url": "https://static.crates.io/crates/objc2-foundation/objc2-foundation-0.3.2.crate",
+      "archiveSha256": "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272",
+      "archiveMember": "objc2-foundation-0.3.2/.cargo_vcs_info.json",
+      "sha256": "de34f3c84d7cb1cafcedb4e83b7efdd64047872566827477b954f8a853536bb1",
+      "bytes": 127,
+      "verifiedAt": "2026-11-13T01:31:43.431819+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-foundation-0.3.2--README.md",
+      "url": "https://static.crates.io/crates/objc2-foundation/objc2-foundation-0.3.2.crate",
+      "archiveSha256": "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272",
+      "archiveMember": "objc2-foundation-0.3.2/README.md",
+      "sha256": "50be6f8e1214bd644cdc32c9610278c004205cdddbe2aaed7887d8bad48dd6c5",
+      "bytes": 758,
+      "verifiedAt": "2026-11-13T01:31:43.441920+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-app-kit-0.3.2--Cargo.toml",
+      "url": "https://static.crates.io/crates/objc2-app-kit/objc2-app-kit-0.3.2.crate",
+      "archiveSha256": "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c",
+      "archiveMember": "objc2-app-kit-0.3.2/Cargo.toml",
+      "sha256": "11a761a52774ed9738fb854ba3eecb48fa360b6ce43dddc00c338346853717b5",
+      "bytes": 69072,
+      "verifiedAt": "2026-11-13T01:31:43.504085+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-app-kit-0.3.2--.cargo_vcs_info.json",
+      "url": "https://static.crates.io/crates/objc2-app-kit/objc2-app-kit-0.3.2.crate",
+      "archiveSha256": "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c",
+      "archiveMember": "objc2-app-kit-0.3.2/.cargo_vcs_info.json",
+      "sha256": "07762c2a438c287ac124300928c9da0f96cefc1932ff8cadac13716fd1e195eb",
+      "bytes": 124,
+      "verifiedAt": "2026-11-13T01:31:43.519897+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-app-kit-0.3.2--README.md",
+      "url": "https://static.crates.io/crates/objc2-app-kit/objc2-app-kit-0.3.2.crate",
+      "archiveSha256": "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c",
+      "archiveMember": "objc2-app-kit-0.3.2/README.md",
+      "sha256": "da145d375986071fdf836604db8c6e99438bb484ad51b8775455635e36fc2ce3",
+      "bytes": 766,
+      "verifiedAt": "2026-11-13T01:31:43.535886+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-core-foundation-0.3.2--Cargo.toml",
+      "url": "https://static.crates.io/crates/objc2-core-foundation/objc2-core-foundation-0.3.2.crate",
+      "archiveSha256": "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536",
+      "archiveMember": "objc2-core-foundation-0.3.2/Cargo.toml",
+      "sha256": "c0f54260fa1396923f2db4edf1e2d54e8ab09dea214af4b8ce37aaefa7185e60",
+      "bytes": 4472,
+      "verifiedAt": "2026-11-13T01:31:43.564549+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-core-foundation-0.3.2--.cargo_vcs_info.json",
+      "url": "https://static.crates.io/crates/objc2-core-foundation/objc2-core-foundation-0.3.2.crate",
+      "archiveSha256": "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536",
+      "archiveMember": "objc2-core-foundation-0.3.2/.cargo_vcs_info.json",
+      "sha256": "1c1a87985a2bd25015f5e2413f4041379bea0172b2fce88dae3e6482b50aab26",
+      "bytes": 132,
+      "verifiedAt": "2026-11-13T01:31:43.572685+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-core-foundation-0.3.2--README.md",
+      "url": "https://static.crates.io/crates/objc2-core-foundation/objc2-core-foundation-0.3.2.crate",
+      "archiveSha256": "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536",
+      "archiveMember": "objc2-core-foundation-0.3.2/README.md",
+      "sha256": "c02a9b113d8855df956d9d854321c5bfef3c2921131070dc0c64870053b42459",
+      "bytes": 822,
+      "verifiedAt": "2026-11-13T01:31:43.578554+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-core-graphics-0.3.2--Cargo.toml",
+      "url": "https://static.crates.io/crates/objc2-core-graphics/objc2-core-graphics-0.3.2.crate",
+      "archiveSha256": "e022c9d066895efa1345f8e33e584b9f958da2fd4cd116792e15e07e4720a807",
+      "archiveMember": "objc2-core-graphics-0.3.2/Cargo.toml",
+      "sha256": "9756d343dc626faf07cdef1cdef29a2b3efed0f6a2fc44ae35fd828e2f482dc1",
+      "bytes": 7943,
+      "verifiedAt": "2026-11-13T01:31:43.590358+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-core-graphics-0.3.2--.cargo_vcs_info.json",
+      "url": "https://static.crates.io/crates/objc2-core-graphics/objc2-core-graphics-0.3.2.crate",
+      "archiveSha256": "e022c9d066895efa1345f8e33e584b9f958da2fd4cd116792e15e07e4720a807",
+      "archiveMember": "objc2-core-graphics-0.3.2/.cargo_vcs_info.json",
+      "sha256": "264ea4e6453d508410c33c7e5c05ef71f067cac56efc06603862b36d1fe5dfc3",
+      "bytes": 130,
+      "verifiedAt": "2026-11-13T01:31:43.596296+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-core-graphics-0.3.2--README.md",
+      "url": "https://static.crates.io/crates/objc2-core-graphics/objc2-core-graphics-0.3.2.crate",
+      "archiveSha256": "e022c9d066895efa1345f8e33e584b9f958da2fd4cd116792e15e07e4720a807",
+      "archiveMember": "objc2-core-graphics-0.3.2/README.md",
+      "sha256": "6361def881598a3b6d19e7e0d45d77aa5f8c87980db0c36d895cc33bb83f10bf",
+      "bytes": 808,
+      "verifiedAt": "2026-11-13T01:31:43.599956+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-error-code-3.4.0--LICENSE",
+      "url": "https://static.crates.io/crates/error-code/error-code-3.4.0.crate",
+      "archiveSha256": "0b5343afd4a8365a643ac588dab4cf234a190c7f6c88c9f6dd6ffe00837661b7",
+      "archiveMember": "error-code-3.4.0/LICENSE",
+      "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566",
+      "bytes": 1338,
+      "verifiedAt": "2026-11-13T01:31:43.610906+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-libloading-0.9.0--LICENSE",
+      "url": "https://static.crates.io/crates/libloading/libloading-0.9.0.crate",
+      "archiveSha256": "754ca22de805bb5744484a5b151a9e1a8e837d5dc232c2d7d8c2e3492edc8b60",
+      "archiveMember": "libloading-0.9.0/LICENSE",
+      "sha256": "b29f8b01452350c20dd1af16ef83b598fea3053578ccc1c7a0ef40e57be2620f",
+      "bytes": 736,
+      "verifiedAt": "2026-11-13T01:31:43.614966+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-unicode-ident-1.0.27--LICENSE-UNICODE",
+      "url": "https://static.crates.io/crates/unicode-ident/unicode-ident-1.0.27.crate",
+      "archiveSha256": "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563",
+      "archiveMember": "unicode-ident-1.0.27/LICENSE-UNICODE",
+      "sha256": "f7db81051789b729fea528a63ec4c938fdcb93d9d61d97dc8cc2e9df6d47f2a1",
+      "bytes": 1995,
+      "verifiedAt": "2026-11-13T01:31:43.618960+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-unicode-ident-1.0.27--LICENSE-MIT",
+      "url": "https://static.crates.io/crates/unicode-ident/unicode-ident-1.0.27.crate",
+      "archiveSha256": "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563",
+      "archiveMember": "unicode-ident-1.0.27/LICENSE-MIT",
+      "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "bytes": 1023,
+      "verifiedAt": "2026-11-13T01:31:43.621411+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-unicode-ident-1.0.27--Cargo.toml",
+      "url": "https://static.crates.io/crates/unicode-ident/unicode-ident-1.0.27.crate",
+      "archiveSha256": "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563",
+      "archiveMember": "unicode-ident-1.0.27/Cargo.toml",
+      "sha256": "c0e96a9c7ee62f5f9ab12de69e0ad44826ad753911d47638f605c936f7ea2c1c",
+      "bytes": 2072,
+      "verifiedAt": "2026-11-13T01:31:43.623585+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-quick-error-2.0.1--README.rst",
+      "url": "https://static.crates.io/crates/quick-error/quick-error-2.0.1.crate",
+      "archiveSha256": "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3",
+      "archiveMember": "quick-error-2.0.1/README.rst",
+      "sha256": "97f715a3a68ede33bca81c98ad791375b2bb7ad0d814377b0651f5c4de8f7d4a",
+      "bytes": 1732,
+      "verifiedAt": "2026-11-13T01:31:43.626339+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-quick-error-2.0.1--LICENSE-MIT",
+      "url": "https://static.crates.io/crates/quick-error/quick-error-2.0.1.crate",
+      "archiveSha256": "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3",
+      "archiveMember": "quick-error-2.0.1/LICENSE-MIT",
+      "sha256": "058f01fe181608d027fcde7e528fc03ea3cf90f30903c407644b0a9bbc54f500",
+      "bytes": 1070,
+      "verifiedAt": "2026-11-13T01:31:43.627858+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-quick-error-2.0.1--LICENSE-APACHE",
+      "url": "https://static.crates.io/crates/quick-error/quick-error-2.0.1.crate",
+      "archiveSha256": "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3",
+      "archiveMember": "quick-error-2.0.1/LICENSE-APACHE",
+      "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+      "bytes": 11358,
+      "verifiedAt": "2026-11-13T01:31:43.629461+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-gethostname-1.1.0--LICENSE",
+      "url": "https://static.crates.io/crates/gethostname/gethostname-1.1.0.crate",
+      "archiveSha256": "1bd49230192a3797a9a4d6abe9b3eed6f7fa4c8a8a4947977c6f80025f92cbd8",
+      "archiveMember": "gethostname-1.1.0/LICENSE",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+      "bytes": 10847,
+      "verifiedAt": "2026-11-13T01:31:43.632149+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-foundation-0.3.2--src__copying.rs",
+      "url": "https://static.crates.io/crates/objc2-foundation/objc2-foundation-0.3.2.crate",
+      "archiveSha256": "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272",
+      "archiveMember": "objc2-foundation-0.3.2/src/copying.rs",
+      "sha256": "259b22f571b54fed25f68ec5abd8eda223e7b0547a806f13ba797a0eabecd64f",
+      "bytes": 8610,
+      "verifiedAt": "2026-11-13T01:31:43.642016+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-foundation-0.3.2--src__tests__copying.rs",
+      "url": "https://static.crates.io/crates/objc2-foundation/objc2-foundation-0.3.2.crate",
+      "archiveSha256": "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272",
+      "archiveMember": "objc2-foundation-0.3.2/src/tests/copying.rs",
+      "sha256": "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423",
+      "bytes": 618,
+      "verifiedAt": "2026-11-13T01:31:43.656668+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "crate-objc2-foundation-0.3.2--Cargo.modified.toml",
+      "url": "https://static.crates.io/crates/objc2-foundation/objc2-foundation-0.3.2.crate",
+      "archiveSha256": "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272",
+      "archiveMember": "objc2-foundation-0.3.2/Cargo.modified.toml",
+      "sha256": "a5d9adc1a4e53b2e41d077b9c77d6fdee47273e7978f5a459cc35c84308b32da",
+      "bytes": 1034,
+      "verifiedAt": "2026-11-13T01:31:43.667235+00:00",
+      "provenance": "Exact member of the unchanged B1 checksum-verified published crate archive"
+    },
+    {
+      "id": "upstream-clipboard-win-5.4.3--LICENSE",
+      "url": "https://raw.githubusercontent.com/DoumanAsh/clipboard-win/ed27008ae5d1f10cfbb266de039f0fb35fd05a56/LICENSE",
+      "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566",
+      "bytes": 1338,
+      "revision": "ed27008ae5d1f10cfbb266de039f0fb35fd05a56",
+      "provenance": "Previously retrieved exact VCS commit linked from checksum-verified crate; hash reverified, no fresh branch lookup"
+    },
+    {
+      "id": "upstream-napi-3.16.2--LICENSE",
+      "url": "https://raw.githubusercontent.com/napi-rs/napi-rs/cda88ea649a2e182e0b6f7ec9cb8a6db7758b47d/LICENSE",
+      "sha256": "3f1ce66533302df3a32edbfdfc0b78f0dd34659e4c1f5817162e5ea3c2297215",
+      "bytes": 2138,
+      "revision": "cda88ea649a2e182e0b6f7ec9cb8a6db7758b47d",
+      "provenance": "Previously retrieved exact VCS commit linked from checksum-verified crate; hash reverified, no fresh branch lookup"
+    },
+    {
+      "id": "upstream-napi-sys-3.4.1--LICENSE",
+      "url": "https://raw.githubusercontent.com/napi-rs/napi-rs/d9cb526c15e63ba30e06b4d169068c9854180595/LICENSE",
+      "sha256": "3f1ce66533302df3a32edbfdfc0b78f0dd34659e4c1f5817162e5ea3c2297215",
+      "bytes": 2138,
+      "revision": "d9cb526c15e63ba30e06b4d169068c9854180595",
+      "provenance": "Previously retrieved exact VCS commit linked from checksum-verified crate; hash reverified, no fresh branch lookup"
+    },
+    {
+      "id": "upstream-napi-build-2.6.0--LICENSE",
+      "url": "https://raw.githubusercontent.com/napi-rs/napi-rs/a94cef33f62e74682963dd085e283f52dcec2600/LICENSE",
+      "sha256": "3f1ce66533302df3a32edbfdfc0b78f0dd34659e4c1f5817162e5ea3c2297215",
+      "bytes": 2138,
+      "revision": "a94cef33f62e74682963dd085e283f52dcec2600",
+      "provenance": "Previously retrieved exact VCS commit linked from checksum-verified crate; hash reverified, no fresh branch lookup"
+    },
+    {
+      "id": "upstream-napi-derive-3.7.1--LICENSE",
+      "url": "https://raw.githubusercontent.com/napi-rs/napi-rs/cda88ea649a2e182e0b6f7ec9cb8a6db7758b47d/LICENSE",
+      "sha256": "3f1ce66533302df3a32edbfdfc0b78f0dd34659e4c1f5817162e5ea3c2297215",
+      "bytes": 2138,
+      "revision": "cda88ea649a2e182e0b6f7ec9cb8a6db7758b47d",
+      "provenance": "Previously retrieved exact VCS commit linked from checksum-verified crate; hash reverified, no fresh branch lookup"
+    },
+    {
+      "id": "upstream-napi-derive-backend-7.0.1--LICENSE",
+      "url": "https://raw.githubusercontent.com/napi-rs/napi-rs/cda88ea649a2e182e0b6f7ec9cb8a6db7758b47d/LICENSE",
+      "sha256": "3f1ce66533302df3a32edbfdfc0b78f0dd34659e4c1f5817162e5ea3c2297215",
+      "bytes": 2138,
+      "revision": "cda88ea649a2e182e0b6f7ec9cb8a6db7758b47d",
+      "provenance": "Previously retrieved exact VCS commit linked from checksum-verified crate; hash reverified, no fresh branch lookup"
+    },
+    {
+      "id": "apple-xcode.txt",
+      "derivedFrom": "apple-xcode.pdf",
+      "extraction": "pdftotext -layout; UTF-8 text layer; form-feed page boundaries; 16 non-empty pages, no OCR required",
+      "sha256": "0ab35ecb70098112a140f9917871d2d2b4f81f0e94df1f4f06ed52eadd50952d",
+      "bytes": 64351
+    }
+  ],
+  "excerpts": [
+    {
+      "id": "O-MIT-ONLY",
+      "sourceId": "objc2-d7d2fa23ceaa5e6096c923b081040e5d81b3b9df-LICENSE.md",
+      "locator": "License paragraph",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "3befdaf3c34c6b6d5522fc3a340526ce3db86e4a15648fca0f1f30acf550fbb7",
+      "startCodepoint": 64,
+      "endCodepoint": 191,
+      "text": "The crates `objc2`, `block2`, `objc2-foundation` and `objc2-encode` are [currently][#23] licensed under [the MIT license][MIT]."
+    },
+    {
+      "id": "O-SDK-CAVEAT",
+      "sourceId": "objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b-LICENSE.md",
+      "locator": "Apple SDKs paragraph",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "3befdaf3c34c6b6d5522fc3a340526ce3db86e4a15648fca0f1f30acf550fbb7",
+      "startCodepoint": 855,
+      "endCodepoint": 963,
+      "text": "From reading the license, it is unclear whether distributing derived works such as these crates are allowed?"
+    },
+    {
+      "id": "O-OLD-DECLARATIONS",
+      "sourceId": "objc2-issue-826-comments.json",
+      "locator": "https://github.com/madsmtm/objc2/issues/826#issuecomment-6103078978",
+      "page": null,
+      "jsonPointer": [
+        7,
+        "body"
+      ],
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "c283580e9839a23d8608b3a6fb5bb0f3398fdd55eb4fb132e9f286087b5b2753",
+      "startCodepoint": 0,
+      "endCodepoint": 75,
+      "text": "The license of the old crate versions are as stated in the `license` field."
+    },
+    {
+      "id": "O-NOT-SUFFICIENT",
+      "sourceId": "objc2-issue-826-comments.json",
+      "locator": "https://github.com/madsmtm/objc2/issues/826#issuecomment-6107377999",
+      "page": null,
+      "jsonPointer": [
+        9,
+        "body"
+      ],
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "dfe1aa183b6ebab92bc1091d0e31b88bcbf76df9bf6c1a4e037191b7ad0509d1",
+      "startCodepoint": 54,
+      "endCodepoint": 170,
+      "text": "Dunno how copyright law works, so can't really answer that. Probably not though, there's other contributors than me."
+    },
+    {
+      "id": "O-MADS-NOTICE",
+      "sourceId": "objc2-ee9a7ada2131f5944b8750428e265c15632f2a19-LICENSE-MIT.txt",
+      "locator": "License header",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "fe66251ad38a94ed58068538d80ce032a03d046a7f271121aeda5e2222b7dbb7",
+      "startCodepoint": 0,
+      "endCodepoint": 28,
+      "text": "Copyright 2026 Mads Marquart"
+    },
+    {
+      "id": "O-STEVEN-NOTICE",
+      "sourceId": "objc2-historical-LICENSE.txt",
+      "locator": "Historical license header at parent of removal commit",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "96a1230fa6082c0dbfa227b67021cbfae2a2199b9d93c5876dd0bd22aa0c3972",
+      "startCodepoint": 12,
+      "endCodepoint": 40,
+      "text": "Copyright (c) Steven Sheldon"
+    },
+    {
+      "id": "A-MACOS-DISTRIBUTION",
+      "sourceId": "apple-xcode.txt",
+      "locator": "Section 2.4, final sentence",
+      "page": 4,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "0ff15f00d485b70187e2540687bf2e58b19cdb0ba00ebec18eae50849f1d2246",
+      "startCodepoint": 3604,
+      "endCodepoint": 3814,
+      "text": "For clarity, macOS applications and libraries may be distributed without entering into a separate written agreement with Apple so long as such applications and libraries comply with the terms of this Agreement."
+    },
+    {
+      "id": "A-SDK-DEFINITION",
+      "sourceId": "apple-xcode.txt",
+      "locator": "Section 1, macOS SDK definition",
+      "page": 2,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "68c26b244f91321cc5e1a0383544042a8fb3616396c7e085f804f019dcd0790d",
+      "startCodepoint": 2412,
+      "endCodepoint": 2496,
+      "text": "including but not limited to header files, APIs, libraries, simulators, and software"
+    },
+    {
+      "id": "A-NO-SDK-REDISTRIBUTION",
+      "sourceId": "apple-xcode.txt",
+      "locator": "Section 2.7, restrictions subject to written permission and stated exceptions",
+      "page": 5,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "9d6458b5c734942c600bdf26a8b7c52ba6e4e3645483bbbe00f6edb79d93f37e",
+      "startCodepoint": 855,
+      "endCodepoint": 941,
+      "text": "redistribute, or sublicense the Apple Software and Apple Services, in whole or in part"
+    },
+    {
+      "id": "A-OPEN-SOURCE-EXCEPTION",
+      "sourceId": "apple-xcode.txt",
+      "locator": "Section 2.7, exception to copy/modify/derivative-work restrictions",
+      "page": 5,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "9d6458b5c734942c600bdf26a8b7c52ba6e4e3645483bbbe00f6edb79d93f37e",
+      "startCodepoint": 1478,
+      "endCodepoint": 1619,
+      "text": "to the extent as may be permitted by licensing terms governing use of open-sourced components or sample code included with the Apple Software"
+    },
+    {
+      "id": "A-NOTICES",
+      "sourceId": "apple-xcode.txt",
+      "locator": "Section 2.5, permitted copies only",
+      "page": 4,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "0ff15f00d485b70187e2540687bf2e58b19cdb0ba00ebec18eae50849f1d2246",
+      "startCodepoint": 3826,
+      "endCodepoint": 3930,
+      "text": "You agree to retain and reproduce in full the Apple copyright, disclaimers and other proprietary notices"
+    },
+    {
+      "id": "A-HARDWARE",
+      "sourceId": "apple-xcode.txt",
+      "locator": "Important Note",
+      "page": 1,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "2a998088d352c860b80b7216946339a90cf4a2374585165311a1f8b36a18be68",
+      "startCodepoint": 737,
+      "endCodepoint": 809,
+      "text": "AUTHORIZED ONLY FOR EXECUTION ON AN APPLE-BRANDED PRODUCT RUNNING MACOS."
+    },
+    {
+      "id": "A-INDEX-VERSION",
+      "sourceId": "apple-license-index.html",
+      "locator": "Software license index warning",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "1c379120fdf3df7621bb71af2568b85f8e32aab1e1361682dde268ba058d3211",
+      "startCodepoint": 85637,
+      "endCodepoint": 85700,
+      "text": "may differ from the version of the license you can review here."
+    },
+    {
+      "id": "L-BSL-EXCEPTION",
+      "sourceId": "crate-error-code-3.4.0--LICENSE",
+      "locator": "Notice retention paragraph, binary-only exception",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "a796d5730b60337084397744dbaaad751d2995d421f96e8842e4a22007ee284f",
+      "startCodepoint": 723,
+      "endCodepoint": 860,
+      "text": "unless such copies or derivative works are solely in the form of machine-executable object code generated by a source language processor."
+    },
+    {
+      "id": "L-ISC",
+      "sourceId": "crate-libloading-0.9.0--LICENSE",
+      "locator": "Permission paragraph",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "121aea2578cd98e64faa0ca32acfd4f83551b1ecd293730a9541a4f5a37bf85c",
+      "startCodepoint": 157,
+      "endCodepoint": 246,
+      "text": "provided that the above copyright notice and this permission notice appear in all copies."
+    },
+    {
+      "id": "L-UNICODE",
+      "sourceId": "crate-unicode-ident-1.0.27--LICENSE-UNICODE",
+      "locator": "Unicode License V3 permission paragraph",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "21b7ffe46249356209d64748a5179bf37a704880d8af02c77bd65d20800503f0",
+      "startCodepoint": 920,
+      "endCodepoint": 1115,
+      "text": "provided that either (a) this copyright and permission notice appear with all copies of the Data Files or Software, or (b) this copyright and permission notice appear in associated Documentation."
+    },
+    {
+      "id": "L-UNICODE-ADVERTISING",
+      "sourceId": "crate-unicode-ident-1.0.27--LICENSE-UNICODE",
+      "locator": "Final paragraph, except as contained in notice",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "21b7ffe46249356209d64748a5179bf37a704880d8af02c77bd65d20800503f0",
+      "startCodepoint": 1774,
+      "endCodepoint": 1837,
+      "text": "the name of a copyright holder shall not be used in advertising"
+    },
+    {
+      "id": "L-QUICK-EITHER",
+      "sourceId": "crate-quick-error-2.0.1--README.rst",
+      "locator": "License section; two named licenses and at your option follow",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "1a7b3589cd72c190a4fb4949bb826111572b3ed8e1098e34ef76d5bc12afc025",
+      "startCodepoint": 931,
+      "endCodepoint": 955,
+      "text": "Licensed under either of"
+    },
+    {
+      "id": "L-QUICK-OPTION",
+      "sourceId": "crate-quick-error-2.0.1--README.rst",
+      "locator": "License section, final sentence",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "1a7b3589cd72c190a4fb4949bb826111572b3ed8e1098e34ef76d5bc12afc025",
+      "startCodepoint": 1120,
+      "endCodepoint": 1135,
+      "text": "at your option."
+    },
+    {
+      "id": "L-MIT-RETENTION",
+      "sourceId": "crate-quick-error-2.0.1--LICENSE-MIT",
+      "locator": "MIT notice condition",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "f8045e4596656573bf8dcf8761e4a055096b8d704e8c47ddf4e57d8121a48a51",
+      "startCodepoint": 479,
+      "endCodepoint": 605,
+      "text": "The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software."
+    },
+    {
+      "id": "L-APACHE-COPY",
+      "sourceId": "crate-gethostname-1.1.0--LICENSE",
+      "locator": "Apache 2.0 section 4(a)",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "0ffddef9e48f8a09aed5caf2d44f7ba1c1be2d9b8e0a6f693b1635b2d5566645",
+      "startCodepoint": 4675,
+      "endCodepoint": 4765,
+      "text": "You must give any other recipients of the Work or Derivative Works a copy of this License;"
+    },
+    {
+      "id": "L-APACHE-NOTICE",
+      "sourceId": "crate-gethostname-1.1.0--LICENSE",
+      "locator": "Apache 2.0 section 4(d), conditional notice duty",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "0ffddef9e48f8a09aed5caf2d44f7ba1c1be2d9b8e0a6f693b1635b2d5566645",
+      "startCodepoint": 5141,
+      "endCodepoint": 5210,
+      "text": "If the Work includes a \"NOTICE\" text file as part of its distribution"
+    },
+    {
+      "id": "L-NAPI-MIT-RETENTION",
+      "sourceId": "upstream-napi-3.16.2--LICENSE",
+      "locator": "MIT condition repeated for LongYinan and GitHub notices",
+      "page": null,
+      "jsonPointer": null,
+      "normalization": "Unicode whitespace collapsed to one ASCII space; no wording/case/punctuation changes",
+      "normalizedTextSha256": "08e68757cccc78158a89af9c0f5b9ec7a0d2717db58b94c98ace50b55baf5c0b",
+      "startCodepoint": 482,
+      "endCodepoint": 608,
+      "text": "The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software."
+    }
+  ],
+  "objcPackages": [
+    {
+      "package": "objc2@0.6.5",
+      "declaredLicense": "MIT",
+      "archiveSha256": "08849bbd4767dfae9457696856ae1c84fe4e0281bbe4a7abff2d0e06fb7981f8",
+      "revision": "d7d2fa23ceaa5e6096c923b081040e5d81b3b9df",
+      "upstreamPath": "crates/objc2",
+      "manifestSource": "crate-objc2-0.6.5--Cargo.toml",
+      "vcsSource": "crate-objc2-0.6.5--.cargo_vcs_info.json",
+      "readmeSource": "crate-objc2-0.6.5--README.md",
+      "pinnedLicenseStatementSource": "objc2-d7d2fa23ceaa5e6096c923b081040e5d81b3b9df-LICENSE.md",
+      "pinnedTreeSource": "objc2-d7d2fa23ceaa5e6096c923b081040e5d81b3b9df-tree.json",
+      "pinnedTreeTruncated": false,
+      "licenseDocumentPathsInPinnedTree": [
+        "LICENSE.md"
+      ],
+      "noticeDisposition": "Later full license texts and historical notice recovered, but exact-release contributor notice completeness remains unresolved; no relicensing/adoption approval"
+    },
+    {
+      "package": "objc2-encode@4.1.0",
+      "declaredLicense": "MIT",
+      "archiveSha256": "ef25abbcd74fb2609453eb695bd2f860d389e457f67dc17cafc8b8cbc89d0c33",
+      "revision": "8d214f5477365ffcbcbb7de058c86ed9a518efb7",
+      "upstreamPath": "crates/objc2-encode",
+      "manifestSource": "crate-objc2-encode-4.1.0--Cargo.toml",
+      "vcsSource": "crate-objc2-encode-4.1.0--.cargo_vcs_info.json",
+      "readmeSource": "crate-objc2-encode-4.1.0--README.md",
+      "pinnedLicenseStatementSource": "objc2-8d214f5477365ffcbcbb7de058c86ed9a518efb7-LICENSE.md",
+      "pinnedTreeSource": "objc2-8d214f5477365ffcbcbb7de058c86ed9a518efb7-tree.json",
+      "pinnedTreeTruncated": false,
+      "licenseDocumentPathsInPinnedTree": [
+        "LICENSE.md"
+      ],
+      "noticeDisposition": "Later full license texts and historical notice recovered, but exact-release contributor notice completeness remains unresolved; no relicensing/adoption approval"
+    },
+    {
+      "package": "objc2-foundation@0.3.2",
+      "declaredLicense": "MIT",
+      "archiveSha256": "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272",
+      "revision": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "upstreamPath": "framework-crates/objc2-foundation",
+      "manifestSource": "crate-objc2-foundation-0.3.2--Cargo.toml",
+      "vcsSource": "crate-objc2-foundation-0.3.2--.cargo_vcs_info.json",
+      "readmeSource": "crate-objc2-foundation-0.3.2--README.md",
+      "pinnedLicenseStatementSource": "objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b-LICENSE.md",
+      "pinnedTreeSource": "objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b-tree.json",
+      "pinnedTreeTruncated": false,
+      "licenseDocumentPathsInPinnedTree": [
+        "LICENSE.md"
+      ],
+      "noticeDisposition": "Later full license texts and historical notice recovered, but exact-release contributor notice completeness remains unresolved; no relicensing/adoption approval"
+    },
+    {
+      "package": "objc2-app-kit@0.3.2",
+      "declaredLicense": "Zlib OR Apache-2.0 OR MIT",
+      "archiveSha256": "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c",
+      "revision": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "upstreamPath": "framework-crates/objc2-app-kit",
+      "manifestSource": "crate-objc2-app-kit-0.3.2--Cargo.toml",
+      "vcsSource": "crate-objc2-app-kit-0.3.2--.cargo_vcs_info.json",
+      "readmeSource": "crate-objc2-app-kit-0.3.2--README.md",
+      "pinnedLicenseStatementSource": "objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b-LICENSE.md",
+      "pinnedTreeSource": "objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b-tree.json",
+      "pinnedTreeTruncated": false,
+      "licenseDocumentPathsInPinnedTree": [
+        "LICENSE.md"
+      ],
+      "noticeDisposition": "Later full license texts and historical notice recovered, but exact-release contributor notice completeness remains unresolved; no relicensing/adoption approval"
+    },
+    {
+      "package": "objc2-core-foundation@0.3.2",
+      "declaredLicense": "Zlib OR Apache-2.0 OR MIT",
+      "archiveSha256": "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536",
+      "revision": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "upstreamPath": "framework-crates/objc2-core-foundation",
+      "manifestSource": "crate-objc2-core-foundation-0.3.2--Cargo.toml",
+      "vcsSource": "crate-objc2-core-foundation-0.3.2--.cargo_vcs_info.json",
+      "readmeSource": "crate-objc2-core-foundation-0.3.2--README.md",
+      "pinnedLicenseStatementSource": "objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b-LICENSE.md",
+      "pinnedTreeSource": "objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b-tree.json",
+      "pinnedTreeTruncated": false,
+      "licenseDocumentPathsInPinnedTree": [
+        "LICENSE.md"
+      ],
+      "noticeDisposition": "Later full license texts and historical notice recovered, but exact-release contributor notice completeness remains unresolved; no relicensing/adoption approval"
+    },
+    {
+      "package": "objc2-core-graphics@0.3.2",
+      "declaredLicense": "Zlib OR Apache-2.0 OR MIT",
+      "archiveSha256": "e022c9d066895efa1345f8e33e584b9f958da2fd4cd116792e15e07e4720a807",
+      "revision": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "upstreamPath": "framework-crates/objc2-core-graphics",
+      "manifestSource": "crate-objc2-core-graphics-0.3.2--Cargo.toml",
+      "vcsSource": "crate-objc2-core-graphics-0.3.2--.cargo_vcs_info.json",
+      "readmeSource": "crate-objc2-core-graphics-0.3.2--README.md",
+      "pinnedLicenseStatementSource": "objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b-LICENSE.md",
+      "pinnedTreeSource": "objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b-tree.json",
+      "pinnedTreeTruncated": false,
+      "licenseDocumentPathsInPinnedTree": [
+        "LICENSE.md"
+      ],
+      "noticeDisposition": "Later full license texts and historical notice recovered, but exact-release contributor notice completeness remains unresolved; no relicensing/adoption approval"
+    }
+  ],
+  "inventoryCorrection": {
+    "package": "objc2-foundation@0.3.2",
+    "beforeStandaloneMissingSelectedCount": 11,
+    "afterStandaloneMissingSelectedCount": 12,
+    "beforeUnresolvedObjcCount": 5,
+    "afterUnresolvedObjcCount": 6,
+    "reason": "The original filename heuristic matched COPYING followed by a period, misclassifying src/copying.rs and src/tests/copying.rs. Both are Rust protocol implementation/test code, not license documents.",
+    "excludedMatches": [
+      {
+        "file": "src/copying.rs",
+        "sha256": "259b22f571b54fed25f68ec5abd8eda223e7b0547a806f13ba797a0eabecd64f",
+        "sourceId": "crate-objc2-foundation-0.3.2--src__copying.rs"
+      },
+      {
+        "file": "src/tests/copying.rs",
+        "sha256": "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423",
+        "sourceId": "crate-objc2-foundation-0.3.2--src__tests__copying.rs"
+      }
+    ]
+  },
+  "appleAgreement": {
+    "id": "EA2002",
+    "printedDate": "06/08/2026",
+    "pdfSourceId": "apple-xcode.pdf",
+    "pdfSha256": "5e6bd16bcba3dd591bde1c57f7c6f19f08a194c84cdc54485c4660f90e2a26ec",
+    "pages": 16,
+    "textSourceId": "apple-xcode.txt",
+    "observedContractTermsNotGoverningLawOpinion": true,
+    "actuallyAcceptedSdkAgreementVerified": false,
+    "generationSdkVersionVerified": false,
+    "distributionRightForSdkDerivedBindingsCleared": false,
+    "termsAcceptancePerformed": false,
+    "findings": [
+      {
+        "id": "A1",
+        "status": "conditional-permission-in-primary-text",
+        "evidence": [
+          "A-MACOS-DISTRIBUTION"
+        ],
+        "conclusion": "Section 2.4 expressly allows macOS applications and libraries to be distributed without a separate written agreement, subject to compliance. Section 2.2A distinguishes macOS from other Apple SDKs. This does not approve this addon, imply App Store distribution rights or authorize redistribution of SDK components."
+      },
+      {
+        "id": "A2",
+        "status": "sdk-redistribution-restrictions-confirmed",
+        "evidence": [
+          "A-SDK-DEFINITION",
+          "A-NO-SDK-REDISTRIBUTION",
+          "A-OPEN-SOURCE-EXCEPTION",
+          "A-NOTICES"
+        ],
+        "conclusion": "SDK definitions cover headers/APIs/libraries; section 2.7 reserves redistribution and derivative-work rights subject to stated permission/OSS/sample-code exceptions. Section 2.5 retains notices for permitted copies, not a standalone copying grant. Do not bundle SDK headers, .tbd, frameworks, SDK tools or SDK source on this review alone."
+      },
+      {
+        "id": "A3",
+        "status": "exact-accepted-terms-and-binding-classification-unresolved",
+        "evidence": [
+          "A-HARDWARE",
+          "A-INDEX-VERSION",
+          "O-SDK-CAVEAT"
+        ],
+        "conclusion": "The public PDF is a dated snapshot, not proof of which terms a future builder accepted or which SDK generated the bindings. Distinguish redistributable macOS application/library object code from SDK-derived declarations/source. Upstream MIT/Apache/Zlib terms cannot by themselves establish Apple rights. No applicable-law enforceability or copyrightability opinion is made."
+      }
+    ]
+  },
+  "additionalLicenseObligations": [
+    {
+      "id": "BSL",
+      "packages": [
+        "clipboard-win@5.4.3",
+        "error-code@3.4.0"
+      ],
+      "license": "BSL-1.0",
+      "status": "primary-text-obligations-confirmed-not-adopted",
+      "evidence": [
+        "L-BSL-EXCEPTION"
+      ],
+      "obligations": [
+        "Include existing copyright notices and entire Boost statement when redistributing source/covered material.",
+        "The exception applies only when such copies/derivative works are solely machine-executable object code generated by a source language processor; do not presume every mixed npm/Bun archive qualifies.",
+        "Conservative future packaging plan: retain full exact license/notices even with object code, without relying on the exception. No duty to publish proprietary source is imposed by the inspected BSL text."
+      ]
+    },
+    {
+      "id": "ISC",
+      "packages": [
+        "libloading@0.9.0"
+      ],
+      "license": "ISC",
+      "status": "primary-text-obligations-confirmed-not-adopted",
+      "evidence": [
+        "L-ISC"
+      ],
+      "obligations": [
+        "Preserve Copyright © 2015, Simonas Kazlauskas and the ISC permission notice in all copies; preserve full license/disclaimer in future license assets.",
+        "No binary-only notice exception appears in the inspected text. No source-disclosure condition is stated."
+      ]
+    },
+    {
+      "id": "Unicode",
+      "packages": [
+        "unicode-ident@1.0.27"
+      ],
+      "license": "(MIT OR Apache-2.0) AND Unicode-3.0",
+      "status": "primary-text-obligations-confirmed-not-adopted",
+      "evidence": [
+        "L-UNICODE",
+        "L-UNICODE-ADVERTISING"
+      ],
+      "obligations": [
+        "A MIT/Apache choice does not remove the conjunctive Unicode obligation.",
+        "Retain Copyright © 1991-2023 Unicode, Inc. and permission notice with all copies OR associated documentation; ship full LICENSE-UNICODE in future distribution materials rather than relying on an external link alone.",
+        "Do not use the copyright-holder name to advertise/promote without prior written authorization, except as contained in the notice."
+      ]
+    },
+    {
+      "id": "quick-error",
+      "packages": [
+        "quick-error@2.0.1"
+      ],
+      "license": "raw manifest MIT/Apache-2.0; README explicitly offers Apache-2.0 OR MIT",
+      "status": "legacy-expression-ambiguity-resolved-by-published-source-not-adopted",
+      "evidence": [
+        "L-QUICK-EITHER",
+        "L-QUICK-OPTION",
+        "L-MIT-RETENTION"
+      ],
+      "obligations": [
+        "Keep the original manifest expression unchanged; README License section explicitly says either and at your option.",
+        "If MIT is later selected, retain Copyright (c) 2015 The quick-error Developers and the complete MIT notice. Apache selection would instead require its license conditions. No selection/adoption made here."
+      ]
+    },
+    {
+      "id": "Apache",
+      "packages": [
+        "gethostname@1.1.0"
+      ],
+      "license": "Apache-2.0 (mandatory for this package); also relevant when an OR alternative is selected later",
+      "status": "primary-text-obligations-confirmed-not-adopted",
+      "evidence": [
+        "L-APACHE-COPY",
+        "L-APACHE-NOTICE"
+      ],
+      "obligations": [
+        "Section 4(a): give recipients the license, including object distributions. Section 4(b): prominently identify modified files if modifications are made.",
+        "Section 4(c): retain relevant copyright/patent/trademark/attribution notices in distributed Source form. Section 4(d): reproduce applicable NOTICE attributions if the Work includes NOTICE.",
+        "Observe section 3 patent-claim/license scope and termination and section 6 trademark restrictions; no source-publication condition or copyleft inferred."
+      ]
+    },
+    {
+      "id": "NAPI-MIT",
+      "packages": [
+        "napi@3.16.2",
+        "napi-sys@3.4.1",
+        "napi-build@2.6.0",
+        "napi-derive@3.7.1",
+        "napi-derive-backend@7.0.1"
+      ],
+      "license": "MIT",
+      "status": "pinned-upstream-texts-recovered-not-adopted",
+      "evidence": [
+        "L-NAPI-MIT-RETENTION"
+      ],
+      "obligations": [
+        "The pinned repository license contains LongYinan and GitHub MIT notices. Preserve both complete copyright/permission/disclaimer blocks with future copies/substantial portions; a package.json license field or hyperlink alone is not the proposed notice deliverable."
+      ]
+    },
+    {
+      "id": "ObjC-choices",
+      "packages": [
+        "objc2@0.6.5",
+        "objc2-encode@4.1.0",
+        "objc2-foundation@0.3.2",
+        "objc2-app-kit@0.3.2",
+        "objc2-core-foundation@0.3.2",
+        "objc2-core-graphics@0.3.2"
+      ],
+      "license": "Per-package declared choices unchanged",
+      "status": "release-notice-completeness-and-sdk-rights-unresolved",
+      "evidence": [
+        "O-MIT-ONLY",
+        "O-OLD-DECLARATIONS",
+        "O-NOT-SUFFICIENT",
+        "O-MADS-NOTICE",
+        "O-STEVEN-NOTICE"
+      ],
+      "obligations": [
+        "objc2, objc2-encode and objc2-foundation remain MIT-only in this frozen bundle; do not apply the open relicensing proposal as a completed grant.",
+        "AppKit/CoreFoundation/CoreGraphics declare Zlib OR Apache-2.0 OR MIT; only an actually declared option may be chosen later, with its conditions.",
+        "Later full repository license texts and historical Steven Sheldon notice are actual recovered sources, not proof of a complete per-release/per-file contributor notice mapping. Preserve provenance; do not synthesize copyright holders/years or declare this gate closed.",
+        "Zlib avoids mandatory product acknowledgment but prohibits source-notice removal/misrepresentation and requires marking altered source; choosing it cannot resolve independent Apple SDK rights."
+      ]
+    }
+  ],
+  "remainingGates": [
+    "Map complete applicable copyright/permission notices for all six selected ObjC versions, including earlier contributions; maintainer comment does not affirm completeness.",
+    "Determine actual SDK/Xcode versions and accepted agreements for a future authorized native build, plus evidence/legal assessment of SDK-derived binding redistribution.",
+    "Owner B1 approval tied to exact supplemented bundle and its license obligations, followed by separate incorporation/build authorization.",
+    "After future authorization only: verify notices are actually inside Node/Bun distribution artifacts and no prohibited SDK material is bundled; no packaging/build acceptance is claimed now."
+  ],
+  "verification": {
+    "status": "source-evidence-passed-protected-record-drift",
+    "sourceEvidenceExitCode": 0,
+    "protectionCheckExitCode": 1,
+    "sourceHashesChecked": 56,
+    "groundedExcerptsChecked": 23,
+    "negativeMutationControls": [
+      "quote wording",
+      "source hash",
+      "graph scope",
+      "Apple blanket clearance",
+      "notice false-positive count",
+      "adoption authority",
+      "ungranted ObjC relicensing"
+    ],
+    "nativeCargoInputCount": 12,
+    "nativeCargoInputsUnchanged": true,
+    "k1ReviewRecordCount": 6,
+    "k1ReviewRecordsUnchanged": false,
+    "k1ReviewRecordDrift": [
+      {
+        "path": "specs/120-rust-core/k1-json-parity.md",
+        "beforeSha256": "8796efb80e4985cc9bc5b9db279cd96725496fb64820947aa1bee4f4f3d0fa94",
+        "afterSha256": "2defad3aa41b20a27858f18e621e0874550e59fae8f9e1e1b11cb77cc52d9841"
+      }
+    ],
+    "repositoryWritesScopedTo": [
+      "specs/120-rust-core/g1-b1-review.json",
+      "specs/120-rust-core/g1-b1-review.md",
+      "specs/120-rust-core/g1-license-review.json",
+      "specs/120-rust-core/g1-license-review.md"
+    ],
+    "concurrentChangesOutsideOwnedScope": [
+      {
+        "path": "specs/120-rust-core/k1-json-parity.md",
+        "beforeSha256": "8796efb80e4985cc9bc5b9db279cd96725496fb64820947aa1bee4f4f3d0fa94",
+        "afterSha256": "2defad3aa41b20a27858f18e621e0874550e59fae8f9e1e1b11cb77cc52d9841"
+      },
+      {
+        "path": "packages/coding-agent/src/core/agent-session.ts",
+        "beforeSha256": "61e11cfb5d94e9b6b99345f1dc54233a7f7b527b5975429bcb00cf186cc1a5a0",
+        "afterSha256": "ccc31dc39af201df051d32fb774e9474e899b927e2fbb9973a19026b3dd9cd08"
+      },
+      {
+        "path": "packages/coding-agent/src/core/evidence-lifecycle-session.ts",
+        "beforeSha256": "ce4b768aac5ac5eebc765a6b310a1f5162392bfd95aad5ccc5e48ba9ec8b95d3",
+        "afterSha256": "0ee5d8d456e1dcb499abec6c53fd2b3ccfbb3b29b63710e7e08977a046a9cb02"
+      },
+      {
+        "path": "packages/coding-agent/src/core/extensions/runner.ts",
+        "beforeSha256": "c24d07da48acf3e997dff6ddf3451895b780b5d7fda72a385a96c70f1f9a8046",
+        "afterSha256": "8ba3c0bd3db7722055b429aa99c369265cbbd84a8951ca8599d8d35bb4d567c6"
+      },
+      {
+        "path": "packages/coding-agent/src/core/extensions/types.ts",
+        "beforeSha256": "75948eca99c747ad1b3ed20f89cdb3be7281a5c8ea70f31810178546c45f53e1",
+        "afterSha256": "3c4248fbcfceaf7a3123b10d2f8888326287029f949a2dc2ada1ca90a272a9d3"
+      }
+    ],
+    "newPathsOutsideOwnedScope": [
+      "packages/coding-agent/src/core/extensions/entry-renderer.ts"
+    ],
+    "buildAndAdoptionPerformed": false,
+    "newResolutionPerformed": false,
+    "newTemporaryLockfileCreated": false,
+    "originalTemporaryLockfileUnchanged": true,
+    "aggregateVerifierExitCode": 1,
+    "repositoryDocLinks": {
+      "command": "node scripts/check-doc-links.mjs",
+      "exitCode": 1,
+      "output": "Documentation link check failed:\n  packages/coding-agent/docs/packages.md: link speak-like-you-eat.md resolves locally but is not committed; a fresh checkout will 404\n"
+    },
+    "scripts": [
+      {
+        "file": "acquire.py",
+        "sha256": "5fd067222ce14e13652e774d784bcd3957b46aa24cccd6b4167a97e2bac75a71"
+      },
+      {
+        "file": "collect.py",
+        "sha256": "22344093ab2fcc61def88e26c07bf91bb51dd2d2a02992c297aeaab421969164"
+      },
+      {
+        "file": "verify.py",
+        "sha256": "00eefa812977651fde05ecda4385f9c670bbf97c032907b726bb04ded4f45df4"
+      }
+    ],
+    "selfReview": "Source passages, exact version declarations, uncompleted relicensing, COPYING.rs false positives, conditional macOS permission versus SDK redistribution, actual accepted terms unknown, and no-build/adoption boundaries checked directly."
+  }
+}

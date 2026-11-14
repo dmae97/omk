@@ -1,0 +1,616 @@
+{
+  "schema": "omk.g1-rust-copy-notices.v1",
+  "reviewDate": "2026-11-13",
+  "status": "historical-source-and-notices-mapped; exact-copy-event-revision-unattested; human-decision-pending",
+  "scope": "G1 N4 only; no K1 writes, dependency resolution, build, adoption, license selection or approval",
+  "baseB1JsonSha256": "8cbc59748c4abefafb365d2fee95da351ad00ad6fd11597f9f1d075abc2617cd",
+  "baseLicenseSupplementSha256": "9cc2665d3219856b69938e735a70a29f81f7944e0c59d5043a75d090207f0388",
+  "priorSourceHistorySha256": "9a4e04c4a76265aba250a66f74000bd60330578510c4fbf4c78e1c50f061ccd6",
+  "frozenManifestSha256": "79e5072e447530ac30d9acf3009002ee3e38e5e9c1fb6ba21ce988cca1383932",
+  "frozenLockSha256": "297fb6d82458e35456f0baff9c69298d70b56cc58c48b897ad6cfdc9d68e847a",
+  "downstream": {
+    "package": "objc2@0.6.5",
+    "declaredLicense": "MIT",
+    "archiveSha256": "08849bbd4767dfae9457696856ae1c84fe4e0281bbe4a7abff2d0e06fb7981f8",
+    "archiveMember": "objc2-0.6.5/src/__macro_helpers/os_version/apple.rs",
+    "published": {
+      "sourceId": "objc-published.rs",
+      "revision": "d7d2fa23ceaa5e6096c923b081040e5d81b3b9df",
+      "path": "crates/objc2/src/__macro_helpers/os_version/apple.rs",
+      "sha256": "e08dcc685ff32f8219e5823b0d7e2a70c5534ec13c39d26bf08c9fea703dcb1c",
+      "gitBlob": "37259e72947efff040a9f969cc33844a54919281",
+      "byteCount": 21284
+    },
+    "initialHelper": {
+      "sourceId": "objc-intro.rs",
+      "revision": "69bd06107b2141789ae63edc81f776f2ae4955a0",
+      "path": "crates/objc2/src/__macro_helpers/os_version/apple.rs",
+      "sha256": "a588c1efe6e1d3e496f20472c6ed007bac689061b53ca9363e9b5bee00ff1cd9",
+      "gitBlob": "f57ef07ed5607c8a4f0da48d7feba8da29fa75a1",
+      "byteCount": 10766
+    },
+    "copyReferenceIntroduction": {
+      "sourceId": "objc-pr-copy.rs",
+      "revision": "e1c7b209eafe24e78dcbaef87143ccfc9ee8a8e8",
+      "path": "crates/objc2/src/__macro_helpers/os_version/apple.rs",
+      "sha256": "df3c6cbcefa7e52193309018f095c7a4a0ae265bf977a5fdb79d96f1c0a9e1b2",
+      "gitBlob": "8897d76643ff0ce0b30ccb2a2f11936bc42684b6",
+      "byteCount": 21335
+    },
+    "copyCommitDate": "2025-04-04T12:11:59Z",
+    "distinction": "The 2024-10-27 helper introduction predates the Rust PR. The rewrite and explicit PR copy reference first appear at e1c7b209, not 69bd0610."
+  },
+  "upstream": {
+    "repository": "https://github.com/rust-lang/rust",
+    "pullRequest": 138944,
+    "historicalComparisonSource": {
+      "sourceId": "rust-copytime-library__std__src__sys__platform_version__darwin__mod.rs",
+      "revision": "a0061acd9d97cb70a67d0b080a04ebcd734b15b7",
+      "path": "library/std/src/sys/platform_version/darwin/mod.rs",
+      "sha256": "31ac90a787ea88e1261d1161247e4028c74a6e2eb543307f6faa6076ae95ff17",
+      "gitBlob": "627e716193bfba28fa81b47adc93b47611b2db2e",
+      "byteCount": 17857
+    },
+    "commitDate": "2025-04-04T11:51:28Z",
+    "headForcePushEventAt": "2025-04-04T11:52:31Z",
+    "exactCopiedRevision": null,
+    "revisionConclusion": "a0061acd is the time-bounded historical source match, not an attested copy-event SHA. The downstream comment names a PR only; timestamps and text identity do not prove which local working state was copied.",
+    "contrasts": [
+      {
+        "revision": "721f8eb0ebd8305a26c484abe19f50c89b629ee2",
+        "reason": "Earlier PR snapshot lacks later documentation/FFI availability comments present in the downstream rewrite."
+      },
+      {
+        "revision": "19cccaf8765763af17a3cd5dbe005e9602d8eca4",
+        "commitDate": "2025-04-04T12:13:07Z",
+        "headForcePushEventAt": "2025-04-04T12:13:31Z",
+        "reason": "Darwin mod.rs differs from a006 only by publically -> publicly; the downstream introduction retains publically. Commit metadata is later than the downstream copy commit."
+      },
+      {
+        "revision": "846d6a4466813f3ad12e2bf15db4071f22b8ae0b",
+        "reason": "Current merged-PR head has September committer date and reorganized CoreFoundation implementation; it is not established as the April copy source."
+      }
+    ],
+    "mergeRevision": "349fbba24f0158c1ed293658c31de5c8a0954e5a",
+    "headAndMergeModBytesEqual": true
+  },
+  "comparison": {
+    "method": "Python difflib.SequenceMatcher, autojunk=False, strip each line, retain blocks with >=8 nonempty upstream lines; inclusive 1-based ranges; SHA-256 of normalized lines joined with LF plus final LF. This is text evidence, not a legal substantiality metric.",
+    "upstreamSourceId": "rust-copytime-library__std__src__sys__platform_version__darwin__mod.rs",
+    "copyIntroductionSourceId": "objc-pr-copy.rs",
+    "publishedSourceId": "objc-published.rs",
+    "copyIntroductionMatches": [
+      {
+        "upstreamLines": [
+          26,
+          46
+        ],
+        "downstreamLines": [
+          94,
+          114
+        ],
+        "normalizedSha256": "34196c1a984692569634f0014e7699e5dfb78275523d8bfba5a4227b35813130"
+      },
+      {
+        "upstreamLines": [
+          48,
+          60
+        ],
+        "downstreamLines": [
+          116,
+          128
+        ],
+        "normalizedSha256": "b1a8a5a520bb01ec5bfec6ca17fb2fd819613518ffa4c7f2cb957a0ec204a56d"
+      },
+      {
+        "upstreamLines": [
+          66,
+          79
+        ],
+        "downstreamLines": [
+          134,
+          147
+        ],
+        "normalizedSha256": "f096ea25baf279cb05949b961fe54f52a31e8879124b94ee734146d70d77d277"
+      },
+      {
+        "upstreamLines": [
+          88,
+          101
+        ],
+        "downstreamLines": [
+          157,
+          170
+        ],
+        "normalizedSha256": "4f0a892e11eaad1329fee1affdf542a5a22b2ca23e5c4b7bbc9f86cb5ef82db4"
+      },
+      {
+        "upstreamLines": [
+          107,
+          120
+        ],
+        "downstreamLines": [
+          190,
+          203
+        ],
+        "normalizedSha256": "afec65f78b1cfd19af367e0ed7438196d7be76b5d5c8e1d12f93897bd4670525"
+      },
+      {
+        "upstreamLines": [
+          122,
+          196
+        ],
+        "downstreamLines": [
+          205,
+          279
+        ],
+        "normalizedSha256": "92ac288bf8b58466378b8d0df4fdd167fe761e83799b5c6b824b84ca3acd925d"
+      },
+      {
+        "upstreamLines": [
+          233,
+          249
+        ],
+        "downstreamLines": [
+          325,
+          341
+        ],
+        "normalizedSha256": "429dcaf4c7f6c39ba2013606f27549de287bddd8359e2a46e5519bd144378c08"
+      },
+      {
+        "upstreamLines": [
+          253,
+          352
+        ],
+        "downstreamLines": [
+          345,
+          444
+        ],
+        "normalizedSha256": "939b190f9a7253d8dc03dadce514d42a8eac91b26a825baea24aaf54a92396ce"
+      },
+      {
+        "upstreamLines": [
+          354,
+          401
+        ],
+        "downstreamLines": [
+          449,
+          496
+        ],
+        "normalizedSha256": "72a65d40fabf6a21854c97b5822d89fe212b27672ada74a4cc034973476a363f"
+      },
+      {
+        "upstreamLines": [
+          403,
+          421
+        ],
+        "downstreamLines": [
+          498,
+          516
+        ],
+        "normalizedSha256": "bdd2b77338eb75d9cdae906530e4449d99f1f330af958e5334bab21f0aab6765"
+      }
+    ],
+    "publishedMatches": [
+      {
+        "upstreamLines": [
+          28,
+          46
+        ],
+        "downstreamLines": [
+          96,
+          114
+        ],
+        "normalizedSha256": "12413fcfcf7458d33bafcb5f8dfa874560dfaf42641b0ea014d2ada7315b4224"
+      },
+      {
+        "upstreamLines": [
+          48,
+          59
+        ],
+        "downstreamLines": [
+          116,
+          127
+        ],
+        "normalizedSha256": "402064381e95c4546aa3ddf4ae9fc015da24dccc3f1d34d6c06366a77cbef4d0"
+      },
+      {
+        "upstreamLines": [
+          67,
+          79
+        ],
+        "downstreamLines": [
+          135,
+          147
+        ],
+        "normalizedSha256": "73feacb326e774528e7be78032d0814e0a61838e2cf10e36e7dce3d4ba907d5c"
+      },
+      {
+        "upstreamLines": [
+          88,
+          96
+        ],
+        "downstreamLines": [
+          157,
+          165
+        ],
+        "normalizedSha256": "a538accbc3c4f964fe9ddb265b9ed91147c7a2194a1ddac4c8cf7e7f726d7740"
+      },
+      {
+        "upstreamLines": [
+          107,
+          120
+        ],
+        "downstreamLines": [
+          190,
+          203
+        ],
+        "normalizedSha256": "afec65f78b1cfd19af367e0ed7438196d7be76b5d5c8e1d12f93897bd4670525"
+      },
+      {
+        "upstreamLines": [
+          122,
+          138
+        ],
+        "downstreamLines": [
+          205,
+          221
+        ],
+        "normalizedSha256": "2dc076b7c984241959b7a921f846edf6751af319a837c5d40dd334ace640ced8"
+      },
+      {
+        "upstreamLines": [
+          160,
+          179
+        ],
+        "downstreamLines": [
+          243,
+          262
+        ],
+        "normalizedSha256": "7b2053022d37a942fd17c0d87f421fe70032cd3eaf57907ff57dafe2c8b78f3b"
+      },
+      {
+        "upstreamLines": [
+          181,
+          196
+        ],
+        "downstreamLines": [
+          264,
+          279
+        ],
+        "normalizedSha256": "ea1c40c564c47bf1875ff1d0843d76a8054ab29950366702445377f4ec82542c"
+      },
+      {
+        "upstreamLines": [
+          233,
+          249
+        ],
+        "downstreamLines": [
+          325,
+          341
+        ],
+        "normalizedSha256": "429dcaf4c7f6c39ba2013606f27549de287bddd8359e2a46e5519bd144378c08"
+      },
+      {
+        "upstreamLines": [
+          253,
+          352
+        ],
+        "downstreamLines": [
+          345,
+          444
+        ],
+        "normalizedSha256": "939b190f9a7253d8dc03dadce514d42a8eac91b26a825baea24aaf54a92396ce"
+      },
+      {
+        "upstreamLines": [
+          368,
+          401
+        ],
+        "downstreamLines": [
+          463,
+          496
+        ],
+        "normalizedSha256": "4678254d15c6f588c6043746ab4e1b6c03b26352ba6aded96510903673f7359b"
+      }
+    ],
+    "changes": [
+      "OSVersion is a downstream struct instead of Rust u32/NonZero; parser helpers are not identical.",
+      "libc calls become local extern declarations, crate::mem becomes core::mem, and path conversion uses CString/OsStringExt.",
+      "Later downstream changes replace c-string literals with nul-terminated byte slices and target_abi checks with compatibility cfgs; assertion formatting also differs.",
+      "The declaration/comments and CoreFoundation plist extraction, Deferred, cache and sysctl logic retain long matching blocks. The files as a whole are not byte-identical."
+    ]
+  },
+  "noticeMapping": [
+    {
+      "id": "N4-RUST-DARWIN",
+      "package": "objc2@0.6.5",
+      "downstreamFile": "src/__macro_helpers/os_version/apple.rs",
+      "downstreamPublishedLines": [
+        94,
+        526
+      ],
+      "upstreamRevision": "a0061acd9d97cb70a67d0b080a04ebcd734b15b7",
+      "upstreamPath": "library/std/src/sys/platform_version/darwin/mod.rs",
+      "scope": "current_version, lookup_version, version_from_sysctl, version_from_plist, parse_version_from_plist, Deferred; line interval includes modified code, not a claim that every line is copied.",
+      "upstreamDeclaredLicense": "MIT OR Apache-2.0",
+      "downstreamDeclaredLicense": "MIT",
+      "noticeSourceIds": [
+        "rust-copytime-LICENSE-MIT",
+        "rust-copytime-LICENSE-APACHE",
+        "rust-copytime-COPYRIGHT",
+        "rust-copytime-REUSE.toml",
+        "rust-copytime-license-metadata.json"
+      ],
+      "literalMitCopyright": "Copyright (c) The Rust Project Contributors",
+      "literalReuseCopyright": "The Rust Project Developers (see https://thanks.rust-lang.org)",
+      "reuseLicenseLiteral": "MIT or Apache-2.0",
+      "exceptionCheck": "Only blanket library/** annotation matches. license-metadata root grants Apache-2.0 OR MIT with the same REUSE attribution and no Darwin-specific node. Non-truncated root/library trees show no NOTICE in root or notice/license files along this source path. No file-header override observed. This is not an audit of references or all third-party code.",
+      "preserveProposal": "For a proposed MIT route consistent with objc2 MIT metadata, preserve the complete pinned Rust MIT copyright, permission and disclaimer plus REUSE attribution and source/change mapping. A PR URL alone is not the notice. Selection, applicability, packaging and completeness require human review.",
+      "apacheAlternativeBoundary": "The Rust origin offers Apache-2.0 as an alternative, not a relicensing of the whole MIT-only objc2 crate. If relied on for that portion, review section 4(a)-(c), conditional 4(d), patents and trademarks. Do not apply the LLVM exception to this Darwin source.",
+      "status": "mapped-not-approved",
+      "reviewer": null,
+      "decisionDate": null
+    },
+    {
+      "id": "N4-RUST-TARGET-REFERENCE",
+      "package": "objc2@0.6.5",
+      "downstreamFile": "src/__macro_helpers/os_version/apple.rs",
+      "downstreamPublishedLines": [
+        17,
+        93
+      ],
+      "upstreamRevision": "1e5719bdc40bb553089ce83525f07dfe0b2e71e9",
+      "upstreamPath": "compiler/rustc_target/src/spec/base/apple/mod.rs",
+      "upstreamReferencedLines": [
+        207,
+        231
+      ],
+      "source": {
+        "sourceId": "rust-target-compiler__rustc_target__src__spec__base__apple__mod.rs",
+        "revision": "1e5719bdc40bb553089ce83525f07dfe0b2e71e9",
+        "path": "compiler/rustc_target/src/spec/base/apple/mod.rs",
+        "sha256": "7ee773c2304a592884c220f2b6d2312d99043c1dd5e97777811e42ef8b8a247a",
+        "gitBlob": "73763cf034ca0f1c62b00fc2b599fd5e3d7a3558",
+        "byteCount": 13368
+      },
+      "scope": "Separate explicit source reference for deployment-target tables; adapted match arms/arch handling. Not the PR copy revision.",
+      "upstreamDeclaredLicense": "MIT OR Apache-2.0",
+      "noticeSourceIds": [
+        "rust-target-LICENSE-MIT",
+        "rust-target-LICENSE-APACHE",
+        "rust-target-COPYRIGHT",
+        "rust-target-REUSE.toml"
+      ],
+      "literalMitCopyright": null,
+      "literalReuseCopyright": "The Rust Project Developers (see https://thanks.rust-lang.org)",
+      "preserveProposal": "This older LICENSE-MIT has no copyright line; do not insert the a006 later copyright into it as if original. Preserve its exact permission/disclaimer and applicable REUSE attribution with this separate revision/path. COPYRIGHT contains scoped third-party sections; do not transfer unrelated LLVM/Clay/Unicode clauses wholesale to these tables.",
+      "status": "reference-and-notices-mapped-not-approved",
+      "reviewer": null,
+      "decisionDate": null
+    }
+  ],
+  "excerpts": [
+    {
+      "sourceId": "rust-copytime-LICENSE-MIT",
+      "text": "Copyright (c) The Rust Project Contributors",
+      "startChar": 0,
+      "endChar": 43,
+      "sourceSha256": "b71bd43a069ca0641a9ecfe585ca7b3c53b5cc1608f8b68321168698e28b5ea1"
+    },
+    {
+      "sourceId": "rust-copytime-LICENSE-MIT",
+      "text": "The above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.",
+      "startChar": 479,
+      "endChar": 605,
+      "sourceSha256": "b71bd43a069ca0641a9ecfe585ca7b3c53b5cc1608f8b68321168698e28b5ea1"
+    },
+    {
+      "sourceId": "rust-copytime-REUSE.toml",
+      "text": "SPDX-FileCopyrightText = \"The Rust Project Developers (see https://thanks.rust-lang.org)\"\nSPDX-License-Identifier = \"MIT or Apache-2.0\"",
+      "startChar": 1261,
+      "endChar": 1396,
+      "sourceSha256": "6f5693d31a9c6f004b6defac2a8482c46ae3abe16fcce230bd8071e3327c1b45"
+    }
+  ],
+  "unresolved": [
+    "A single exact copy-event SHA is not attested; a006 is a comparison revision supported by timeline and discriminating text, not a provenance guarantee.",
+    "No whole-crate complete contributor/notice conclusion, Apple SDK redistribution right or legal substantiality finding follows from this mapping.",
+    "XNU, Zig, compiler-rt, libloading links are references not proven additional copied source/license conclusions in this review.",
+    "N4 reviewer decision, N5 license choice, P1 proposed asset manifest, B1 owner approval, B2 execution permission and V1 real artifact verification remain pending."
+  ],
+  "sourceRecords": [
+    {
+      "id": "objc-intro.rs",
+      "sha256": "a588c1efe6e1d3e496f20472c6ed007bac689061b53ca9363e9b5bee00ff1cd9",
+      "bytes": 10766,
+      "url": "https://github.com/madsmtm/objc2/blob/69bd06107b2141789ae63edc81f776f2ae4955a0/crates/objc2/src/__macro_helpers/os_version/apple.rs"
+    },
+    {
+      "id": "objc-pr-copy.rs",
+      "url": "https://github.com/madsmtm/objc2/blob/e1c7b209eafe24e78dcbaef87143ccfc9ee8a8e8/crates/objc2/src/__macro_helpers/os_version/apple.rs",
+      "sha256": "df3c6cbcefa7e52193309018f095c7a4a0ae265bf977a5fdb79d96f1c0a9e1b2",
+      "bytes": 21335
+    },
+    {
+      "id": "objc-published.rs",
+      "sha256": "e08dcc685ff32f8219e5823b0d7e2a70c5534ec13c39d26bf08c9fea703dcb1c",
+      "bytes": 21284,
+      "url": "https://github.com/madsmtm/objc2/blob/d7d2fa23ceaa5e6096c923b081040e5d81b3b9df/crates/objc2/src/__macro_helpers/os_version/apple.rs"
+    },
+    {
+      "id": "rust-pr.json",
+      "url": "https://api.github.com/repos/rust-lang/rust/pulls/138944",
+      "sha256": "8539b4e6be80475378d2ea1535c6d008d534499ee24887a6ef61e192712c680f",
+      "bytes": 26811,
+      "fetchedAt": "2026-11-13T02:24:47.691078+00:00"
+    },
+    {
+      "id": "rust-pr-timeline.json",
+      "url": "https://api.github.com/repos/rust-lang/rust/issues/138944/timeline?per_page=100",
+      "sha256": "174d28b19b5d1c2259df2177c50a58fe75f03e967e5c5f92df5355f82f3a88f9",
+      "bytes": 257025,
+      "fetchedAt": "2026-11-13T02:30:50.609059+00:00"
+    },
+    {
+      "id": "rust-pr-timeline-page2.json",
+      "url": "https://api.github.com/repos/rust-lang/rust/issues/138944/timeline?per_page=100&page=2",
+      "sha256": "617efb78631804e82de07dbf1d5c2d3b2e3d23c3943c596fa01fe7b9817711d4",
+      "bytes": 296799,
+      "fetchedAt": "2026-11-13T02:34:54.473845+00:00"
+    },
+    {
+      "id": "rust-historical-721f8eb0ebd8305a26c484abe19f50c89b629ee2-commit.json",
+      "url": "https://api.github.com/repos/rust-lang/rust/commits/721f8eb0ebd8305a26c484abe19f50c89b629ee2",
+      "sha256": "16df22e262d139cdc6d659b10e70a5782844d221993f8947ed45fb71ffc6dd53",
+      "bytes": 51740,
+      "fetchedAt": "2026-11-13T02:34:54.949673+00:00"
+    },
+    {
+      "id": "rust-historical-721f8eb0ebd8305a26c484abe19f50c89b629ee2-mod.rs",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/721f8eb0ebd8305a26c484abe19f50c89b629ee2/library/std/src/sys/platform_version/darwin/mod.rs",
+      "sha256": "fb390a75694c56270c9e8c8f6d2d1ecaa74112269b9e5453779f23304def10d9",
+      "bytes": 16827,
+      "fetchedAt": "2026-11-13T02:34:55.335108+00:00"
+    },
+    {
+      "id": "rust-historical-a0061acd9d97cb70a67d0b080a04ebcd734b15b7-commit.json",
+      "url": "https://api.github.com/repos/rust-lang/rust/commits/a0061acd9d97cb70a67d0b080a04ebcd734b15b7",
+      "sha256": "a0b65eef09de9820be12440f9a5d8cd69630f26229be9719336000d1b6f6e39f",
+      "bytes": 53440,
+      "fetchedAt": "2026-11-13T02:34:55.827538+00:00"
+    },
+    {
+      "id": "rust-historical-19cccaf8765763af17a3cd5dbe005e9602d8eca4-commit.json",
+      "url": "https://api.github.com/repos/rust-lang/rust/commits/19cccaf8765763af17a3cd5dbe005e9602d8eca4",
+      "sha256": "6a7122aaa0170bfdc4719d9b40b83f4fbc12990fd02bcebf07d409b985d4b659",
+      "bytes": 53428,
+      "fetchedAt": "2026-11-13T02:34:56.373319+00:00"
+    },
+    {
+      "id": "rust-historical-19cccaf8765763af17a3cd5dbe005e9602d8eca4-mod.rs",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/19cccaf8765763af17a3cd5dbe005e9602d8eca4/library/std/src/sys/platform_version/darwin/mod.rs",
+      "sha256": "3ad75646f0eb03a8022f2b9a00c7b592073733f79d1b6591448fbe4c67bb37ea",
+      "bytes": 17855,
+      "fetchedAt": "2026-11-13T02:34:56.731403+00:00"
+    },
+    {
+      "id": "rust-copytime-library__std__src__sys__platform_version__darwin__mod.rs",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/a0061acd9d97cb70a67d0b080a04ebcd734b15b7/library/std/src/sys/platform_version/darwin/mod.rs",
+      "sha256": "31ac90a787ea88e1261d1161247e4028c74a6e2eb543307f6faa6076ae95ff17",
+      "bytes": 17857,
+      "fetchedAt": "2026-11-13T02:31:11.424299+00:00"
+    },
+    {
+      "id": "rust-head-commit.json",
+      "url": "https://api.github.com/repos/rust-lang/rust/commits/846d6a4466813f3ad12e2bf15db4071f22b8ae0b",
+      "sha256": "cc700ce808a0fcc7ce8028416c247befdf77d76dc27327af9a40badba626eefb",
+      "bytes": 58401,
+      "fetchedAt": "2026-11-13T02:26:23.148357+00:00"
+    },
+    {
+      "id": "rust-head-mod.rs",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/846d6a4466813f3ad12e2bf15db4071f22b8ae0b/library/std/src/sys/platform_version/darwin/mod.rs",
+      "sha256": "4d678b105d7922f52027d51807b47c51fdbe7a7dbc467d6d1b438f33c7de7298",
+      "bytes": 14424,
+      "fetchedAt": "2026-11-13T02:26:25.021292+00:00"
+    },
+    {
+      "id": "rust-merge-mod.rs",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/349fbba24f0158c1ed293658c31de5c8a0954e5a/library/std/src/sys/platform_version/darwin/mod.rs",
+      "sha256": "4d678b105d7922f52027d51807b47c51fdbe7a7dbc467d6d1b438f33c7de7298",
+      "bytes": 14424,
+      "fetchedAt": "2026-11-13T02:26:19.751426+00:00"
+    },
+    {
+      "id": "rust-copytime-LICENSE-MIT",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/a0061acd9d97cb70a67d0b080a04ebcd734b15b7/LICENSE-MIT",
+      "sha256": "b71bd43a069ca0641a9ecfe585ca7b3c53b5cc1608f8b68321168698e28b5ea1",
+      "bytes": 1068,
+      "fetchedAt": "2026-11-13T02:31:12.245011+00:00"
+    },
+    {
+      "id": "rust-copytime-LICENSE-APACHE",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/a0061acd9d97cb70a67d0b080a04ebcd734b15b7/LICENSE-APACHE",
+      "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+      "bytes": 9723,
+      "fetchedAt": "2026-11-13T02:31:12.571220+00:00"
+    },
+    {
+      "id": "rust-copytime-COPYRIGHT",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/a0061acd9d97cb70a67d0b080a04ebcd734b15b7/COPYRIGHT",
+      "sha256": "172020dbfd5b53a226dfde77616190a48dcff519b0bc0e6deb91a8450782c4af",
+      "bytes": 1571,
+      "fetchedAt": "2026-11-13T02:31:12.923174+00:00"
+    },
+    {
+      "id": "rust-copytime-REUSE.toml",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/a0061acd9d97cb70a67d0b080a04ebcd734b15b7/REUSE.toml",
+      "sha256": "6f5693d31a9c6f004b6defac2a8482c46ae3abe16fcce230bd8071e3327c1b45",
+      "bytes": 6164,
+      "fetchedAt": "2026-11-13T02:31:13.363555+00:00"
+    },
+    {
+      "id": "rust-copytime-license-metadata.json",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/a0061acd9d97cb70a67d0b080a04ebcd734b15b7/license-metadata.json",
+      "sha256": "7c693ea746d879a27c3db8ae26131090d0cd89c36f79550ea6674b97e2da9a03",
+      "bytes": 8842,
+      "fetchedAt": "2026-11-13T02:31:13.765400+00:00"
+    },
+    {
+      "id": "rust-copytime-root-tree.json",
+      "url": "https://api.github.com/repos/rust-lang/rust/git/trees/a0061acd9d97cb70a67d0b080a04ebcd734b15b7",
+      "sha256": "6adfe0c1540cf24a312f0d34c3fcb690b53294cc506b44b7ac4b75601d1a85fe",
+      "bytes": 7476,
+      "fetchedAt": "2026-11-13T02:35:56.664272+00:00"
+    },
+    {
+      "id": "rust-copytime-library-tree.json",
+      "url": "https://api.github.com/repos/rust-lang/rust/git/trees/599b7cf1de852a0a2303efd393b3198d9d3f9aa4?recursive=1",
+      "sha256": "ad9daa41bcf350d0fae53bca2e67454392b607c7e5dc94e16de6000477108bf3",
+      "bytes": 398980,
+      "fetchedAt": "2026-11-13T02:36:55.043783+00:00"
+    },
+    {
+      "id": "rust-target-compiler__rustc_target__src__spec__base__apple__mod.rs",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/1e5719bdc40bb553089ce83525f07dfe0b2e71e9/compiler/rustc_target/src/spec/base/apple/mod.rs",
+      "sha256": "7ee773c2304a592884c220f2b6d2312d99043c1dd5e97777811e42ef8b8a247a",
+      "bytes": 13368,
+      "fetchedAt": "2026-11-13T02:35:54.990183+00:00"
+    },
+    {
+      "id": "rust-target-LICENSE-MIT",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/1e5719bdc40bb553089ce83525f07dfe0b2e71e9/LICENSE-MIT",
+      "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "bytes": 1023,
+      "fetchedAt": "2026-11-13T02:35:55.342403+00:00"
+    },
+    {
+      "id": "rust-target-LICENSE-APACHE",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/1e5719bdc40bb553089ce83525f07dfe0b2e71e9/LICENSE-APACHE",
+      "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+      "bytes": 9723,
+      "fetchedAt": "2026-11-13T02:35:55.667195+00:00"
+    },
+    {
+      "id": "rust-target-COPYRIGHT",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/1e5719bdc40bb553089ce83525f07dfe0b2e71e9/COPYRIGHT",
+      "sha256": "bd0581fef622b3d8b25836cf70feb7e1a7a6171ea9e440b46dfda74c46a0ed0d",
+      "bytes": 21109,
+      "fetchedAt": "2026-11-13T02:35:55.997572+00:00"
+    },
+    {
+      "id": "rust-target-REUSE.toml",
+      "url": "https://raw.githubusercontent.com/rust-lang/rust/1e5719bdc40bb553089ce83525f07dfe0b2e71e9/REUSE.toml",
+      "sha256": "c1df1643ec5efa9161be96379853f3c4b94f3a0b5052303c3fb22e7fabb24f58",
+      "bytes": 6162,
+      "fetchedAt": "2026-11-13T02:35:56.319306+00:00"
+    }
+  ],
+  "approvalGranted": false,
+  "buildPerformed": false,
+  "adopted": false,
+  "selectedLicense": null,
+  "approvedBy": null,
+  "approvedAt": null
+}

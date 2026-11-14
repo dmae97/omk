@@ -5,8 +5,8 @@
   "phases": [],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Continue Rust ownership after retained-grant compaction provenance",
-    "reason": "H2g preserves start/revocation provenance across authority snapshots for retained grants and removes archived-event scans and duplicate projection boilerplate. Actual native/source-CLI authority/reconnect/GC matrix: 102 passed with no skips; final cleanup recheck: 42 passed. Root check: 588 passed / 30 skipped / 0 failed. Legacy snapshots without provenance and completely dropped grants remain unavailable. Grant retirement tied to recoverability, native witness retention, DAG/scripted-agent/session reconnect, Rust ledger/scheduler ownership and desktop/platform acceptance remain open. Existing unrelated edits remain unchanged. No dependency/version change, commit, push, activation or release; changed package inputs require fresh installed-artifact receipts."
+    "label": "Continue native authorization handoff after recovery-aware grant retention and Rust phase caps",
+    "reason": "H2h retains original settled grants across recoverable crash windows using the shared GC recovery policy, without extending token or tombstone expiry. H2i gives Rust the original boot-bound phase cap and binds reconnect to that persisted cap. Combined native/authority/recovery/GC matrix: 161 passed in 25 files; final native post-review recheck: 26 passed in five files. Rust: 16 tests plus check, Clippy, fmt and isolated release build passed. Base-R phase-clock oracle: 14 cases passed with a rejected negative control. Root check: 588 passed / 30 skipped / 0 failed. Native authorization revocation, Rust ledger/scheduler ownership, witness retention, broader reconnect and desktop/platform acceptance remain open. Existing unrelated edits and index are preserved. No dependency/version change, commit, push or activation; changed package inputs require fresh installed-artifact receipts."
   },
-  "updated_at": "2026-11-10T00:19:00Z"
+  "updated_at": "2026-11-10T01:45:00Z"
 }

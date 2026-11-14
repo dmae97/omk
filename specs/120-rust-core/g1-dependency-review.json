@@ -1,0 +1,610 @@
+{
+  "schema": "omk-g1-dependency-preflight/v1",
+  "status": "preliminary-not-approved",
+  "reviewDate": "2026-11-13",
+  "baseHead": "3045c4ca2f548865b4638759a4e253cd23333688",
+  "stage": "G1",
+  "implementationImpact": "preserve",
+  "resolutionPerformed": false,
+  "temporaryLockfileCreated": false,
+  "productionAdopted": false,
+  "ownerApproval": null,
+  "resolvedGraph": null,
+  "transitivePackageCount": null,
+  "transitiveLicenseReview": null,
+  "transitiveBuildScripts": null,
+  "transitiveProcMacros": null,
+  "vulnerabilityAudit": null,
+  "candidates": [
+    {
+      "name": "arboard",
+      "pin": "=3.7.0",
+      "role": "clipboard backend",
+      "defaultFeatures": false,
+      "features": [
+        "image-data"
+      ],
+      "license": "MIT OR Apache-2.0",
+      "rustVersion": "1.71.0",
+      "yanked": false,
+      "archiveSha256": "aeb9553e62312c8756a5979254fc6d7da8bbeb5986a1e17037fab932f7037917",
+      "metadataUrl": "https://crates.io/api/v1/crates/arboard/3.7.0",
+      "archiveUrl": "https://static.crates.io/crates/arboard/arboard-3.7.0.crate",
+      "manifestSha256": "b582ac4fbd0fa318993a683ba0f95e684fa4a2d613cace1bb22445caf5258a91",
+      "licenseFiles": [
+        {
+          "file": "LICENSE-APACHE.txt",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        },
+        {
+          "file": "LICENSE-MIT.txt",
+          "sha256": "f35468024534e0f4f16bb94cd0e88c87fbd1314f919c2645a07d350fb77b40c0"
+        }
+      ],
+      "licenseTextStatus": "present-in-archive",
+      "buildScript": false,
+      "procMacro": false,
+      "declaredDependencies": [
+        {
+          "name": "clipboard-win",
+          "requirement": "^5.3.1",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [
+            "std"
+          ],
+          "target": "cfg(windows)"
+        },
+        {
+          "name": "log",
+          "requirement": "^0.4",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": "cfg(windows)"
+        },
+        {
+          "name": "log",
+          "requirement": "^0.4",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": "cfg(all(unix, not(any(target_os=\"macos\", target_os=\"android\", target_os=\"emscripten\"))))"
+        },
+        {
+          "name": "objc2",
+          "requirement": "^0.6.0",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": "cfg(target_os = \"macos\")"
+        },
+        {
+          "name": "objc2-app-kit",
+          "requirement": "^0.3.0",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": false,
+          "features": [
+            "std",
+            "objc2-core-graphics",
+            "NSPasteboard",
+            "NSPasteboardItem",
+            "NSImage"
+          ],
+          "target": "cfg(target_os = \"macos\")"
+        },
+        {
+          "name": "objc2-foundation",
+          "requirement": "^0.3.0",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": false,
+          "features": [
+            "std",
+            "NSArray",
+            "NSString",
+            "NSEnumerator",
+            "NSGeometry",
+            "NSValue"
+          ],
+          "target": "cfg(target_os = \"macos\")"
+        },
+        {
+          "name": "parking_lot",
+          "requirement": "^0.12",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": "cfg(all(unix, not(any(target_os=\"macos\", target_os=\"android\", target_os=\"emscripten\"))))"
+        },
+        {
+          "name": "percent-encoding",
+          "requirement": "^2.3.1",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": "cfg(all(unix, not(any(target_os=\"macos\", target_os=\"android\", target_os=\"emscripten\"))))"
+        },
+        {
+          "name": "windows-sys",
+          "requirement": ">=0.52.0, <0.62.0",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [
+            "Win32_Foundation",
+            "Win32_Storage_FileSystem",
+            "Win32_System_DataExchange",
+            "Win32_System_Memory",
+            "Win32_System_Ole",
+            "Win32_UI_Shell"
+          ],
+          "target": "cfg(windows)"
+        },
+        {
+          "name": "x11rb",
+          "requirement": "^0.13",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": "cfg(all(unix, not(any(target_os=\"macos\", target_os=\"android\", target_os=\"emscripten\"))))"
+        },
+        {
+          "name": "image",
+          "requirement": "^0.25",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": false,
+          "features": [
+            "png"
+          ],
+          "target": "cfg(all(unix, not(any(target_os=\"macos\", target_os=\"android\", target_os=\"emscripten\"))))"
+        },
+        {
+          "name": "image",
+          "requirement": "^0.25",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": false,
+          "features": [
+            "tiff"
+          ],
+          "target": "cfg(target_os = \"macos\")"
+        },
+        {
+          "name": "image",
+          "requirement": "^0.25",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": false,
+          "features": [
+            "png",
+            "bmp"
+          ],
+          "target": "cfg(windows)"
+        },
+        {
+          "name": "objc2-core-foundation",
+          "requirement": "^0.3.0",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": false,
+          "features": [
+            "std",
+            "CFCGTypes"
+          ],
+          "target": "cfg(target_os = \"macos\")"
+        },
+        {
+          "name": "objc2-core-graphics",
+          "requirement": "^0.3.0",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": false,
+          "features": [
+            "std",
+            "CGImage",
+            "CGColorSpace",
+            "CGDataProvider"
+          ],
+          "target": "cfg(target_os = \"macos\")"
+        },
+        {
+          "name": "wl-clipboard-rs",
+          "requirement": "^0.9.3",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": true,
+          "features": [],
+          "target": "cfg(all(unix, not(any(target_os=\"macos\", target_os=\"android\", target_os=\"emscripten\"))))"
+        }
+      ]
+    },
+    {
+      "name": "napi",
+      "pin": "=3.16.2",
+      "role": "Node-API ABI and worker tasks",
+      "defaultFeatures": false,
+      "features": [
+        "napi4",
+        "dyn-symbols"
+      ],
+      "license": "MIT",
+      "rustVersion": "1.88",
+      "yanked": false,
+      "archiveSha256": "567c62b9c2d0fae123713f766686ad66a2c75b45ba3ee01ed8b06a7e99bc435b",
+      "metadataUrl": "https://crates.io/api/v1/crates/napi/3.16.2",
+      "archiveUrl": "https://static.crates.io/crates/napi/napi-3.16.2.crate",
+      "manifestSha256": "9d2172fe8feecb9c887d2152ad154d5612f38a7ba6792bf74107789bcb970cb5",
+      "licenseFiles": [],
+      "licenseTextStatus": "missing-in-archive-requires-pinned-upstream-notice",
+      "buildScript": "build.rs",
+      "procMacro": false,
+      "declaredDependencies": [
+        {
+          "name": "bitflags",
+          "requirement": "^2",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "ctor",
+          "requirement": "^1.0.0",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": false,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "futures",
+          "requirement": "^0.3",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "libc",
+          "requirement": "^0.2",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": "cfg(unix)"
+        },
+        {
+          "name": "napi-build",
+          "requirement": "^2.6.0",
+          "kind": "build",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [
+            "wasi-heap-sync"
+          ],
+          "target": null
+        },
+        {
+          "name": "napi-sys",
+          "requirement": "^3.4.1",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": false,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "nohash-hasher",
+          "requirement": "^0.2.0",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "rustc-hash",
+          "requirement": "^2.1.1",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "anyhow",
+          "requirement": "^1",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "chrono",
+          "requirement": "^0.4",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "encoding_rs",
+          "requirement": "^0.8",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "futures-core",
+          "requirement": "^0.3",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "indexmap",
+          "requirement": "^2",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "serde",
+          "requirement": "^1",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "serde_json",
+          "requirement": "^1",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "tokio",
+          "requirement": "^1",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": true,
+          "features": [
+            "rt",
+            "sync"
+          ],
+          "target": "cfg(all(target_family = \"wasm\", not(tokio_unstable)))"
+        },
+        {
+          "name": "tokio",
+          "requirement": "^1",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": true,
+          "features": [
+            "rt",
+            "rt-multi-thread",
+            "sync"
+          ],
+          "target": "cfg(any(all(target_family = \"wasm\", tokio_unstable), not(target_family = \"wasm\")))"
+        },
+        {
+          "name": "tokio-stream",
+          "requirement": "^0.1",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "tracing",
+          "requirement": "^0.1",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "napi-derive",
+      "pin": "=3.7.1",
+      "role": "procedural bindings",
+      "defaultFeatures": false,
+      "features": [
+        "strict"
+      ],
+      "license": "MIT",
+      "rustVersion": "1.88",
+      "yanked": false,
+      "archiveSha256": "94c8098ed9d61a1bbd019519c637817531b0e24023ef4b5678f2f0cbe24bed9c",
+      "metadataUrl": "https://crates.io/api/v1/crates/napi-derive/3.7.1",
+      "archiveUrl": "https://static.crates.io/crates/napi-derive/napi-derive-3.7.1.crate",
+      "manifestSha256": "7a0695d425fd843ce749cb30cbfd9545df743942ad9021077855864b090b922d",
+      "licenseFiles": [],
+      "licenseTextStatus": "missing-in-archive-requires-pinned-upstream-notice",
+      "buildScript": false,
+      "procMacro": true,
+      "declaredDependencies": [
+        {
+          "name": "convert_case",
+          "requirement": "^0.12",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "napi-derive-backend",
+          "requirement": "^7.0.1",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "proc-macro2",
+          "requirement": "^1",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "quote",
+          "requirement": "^1",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "syn",
+          "requirement": "^3",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [
+            "fold",
+            "full",
+            "extra-traits"
+          ],
+          "target": null
+        },
+        {
+          "name": "ctor",
+          "requirement": "^1.0.0",
+          "kind": "normal",
+          "optional": true,
+          "defaultFeatures": false,
+          "features": [],
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "napi-build",
+      "pin": "=2.6.0",
+      "role": "addon build helper",
+      "defaultFeatures": false,
+      "features": [],
+      "license": "MIT",
+      "rustVersion": "1.88",
+      "yanked": false,
+      "archiveSha256": "b899b545d3aa6dca985939059f258c5488d34e4ecf39c274e20009748f4b846d",
+      "metadataUrl": "https://crates.io/api/v1/crates/napi-build/2.6.0",
+      "archiveUrl": "https://static.crates.io/crates/napi-build/napi-build-2.6.0.crate",
+      "manifestSha256": "a98789d7687d7c9a48c8636f9c3e4b93572d1c7a46c964b3dcb52060015faf3f",
+      "licenseFiles": [],
+      "licenseTextStatus": "missing-in-archive-requires-pinned-upstream-notice",
+      "buildScript": false,
+      "procMacro": false,
+      "declaredDependencies": []
+    },
+    {
+      "name": "png",
+      "pin": "=0.18.1",
+      "role": "RGBA-to-PNG encoding",
+      "defaultFeatures": false,
+      "features": [],
+      "license": "MIT OR Apache-2.0",
+      "rustVersion": "1.73",
+      "yanked": false,
+      "archiveSha256": "60769b8b31b2a9f263dae2776c37b1b28ae246943cf719eb6946a1db05128a61",
+      "metadataUrl": "https://crates.io/api/v1/crates/png/0.18.1",
+      "archiveUrl": "https://static.crates.io/crates/png/png-0.18.1.crate",
+      "manifestSha256": "642c5d3c2bf538404cf1d5c4aac254d033e0854af844610435fd13e910bf93aa",
+      "licenseFiles": [
+        {
+          "file": "LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "file": "LICENSE-MIT",
+          "sha256": "eaf40297c75da471f7cda1f3458e8d91b4b2ec866e609527a13acfa93b638652"
+        }
+      ],
+      "licenseTextStatus": "present-in-archive",
+      "buildScript": false,
+      "procMacro": false,
+      "declaredDependencies": [
+        {
+          "name": "bitflags",
+          "requirement": "^2.0",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "crc32fast",
+          "requirement": "^1.2.0",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "fdeflate",
+          "requirement": "^0.3.3",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "flate2",
+          "requirement": "^1.0.35",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [],
+          "target": null
+        },
+        {
+          "name": "miniz_oxide",
+          "requirement": "^0.8",
+          "kind": "normal",
+          "optional": false,
+          "defaultFeatures": true,
+          "features": [
+            "simd"
+          ],
+          "target": null
+        }
+      ]
+    }
+  ]
+}
