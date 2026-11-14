@@ -23,7 +23,7 @@
 
 ## tmux 사이드바
 
-tmux 안에서 시작하면 같은 사이드바 내용을 별도의 오른쪽 pane에 표시합니다. OMK 입력창에서 `Ctrl+Q`를 누르면 그 pane만 닫거나 다시 엽니다. OMK나 tmux 세션 전체를 종료하지 않고 전역 tmux 키 설정도 바꾸지 않습니다. 기본 폭은 44열이며 처음 열 때 OMK pane에 최소 93열이 필요합니다. tmux의 `resize-pane`으로 폭을 바꾸면 다시 그립니다.
+tmux 안에서 시작하면 같은 사이드바 내용을 별도의 오른쪽 pane에 표시합니다. OMK 입력창에서 `Ctrl+Shift+Q`를 누르면 그 pane만 닫거나 다시 엽니다. OMK나 tmux 세션 전체를 종료하지 않고 전역 tmux 키 설정도 바꾸지 않습니다. 기본 폭은 44열이며 처음 열 때 OMK pane에 최소 93열이 필요합니다. tmux의 `resize-pane`으로 폭을 바꾸면 다시 그립니다.
 
 저장소 루트에서 새 세션이나 기존 대화를 시작합니다.
 
@@ -32,7 +32,7 @@ bash scripts/omk-tmux.sh
 bash scripts/omk-tmux.sh --resume <session-id>
 ```
 
-이미 tmux 안이면 중첩하지 않고 `omk`를 실행합니다. 실행 중인 OMK를 tmux 안으로 옮기지는 않으므로 현재 대화는 `/quit` 후 `--resume`으로 이어갑니다. tmux 밖에서는 기존 native 사이드바를 유지하며 `Ctrl+Q`도 같은 Atelier 사이드바를 제어합니다. `/reload`는 현재 확장만 갱신합니다.
+이미 tmux 안이면 중첩하지 않고 `omk`를 실행합니다. 실행 중인 OMK를 tmux 안으로 옮기지는 않으므로 현재 대화는 `/quit` 후 `--resume`으로 이어갑니다. tmux 밖에서는 기존 native 사이드바를 유지하며 `Ctrl+Shift+Q`도 같은 Atelier 사이드바를 제어합니다. `/reload`는 현재 확장만 갱신합니다.
 
 기존 상태, TODO, 사용량 렌더러를 재사용하고 소유자 표시가 일치하는 pane만 정리합니다. `/reload`, `/atelier disable`, 정상 종료 때 출력 연결을 닫습니다. tmux 모드의 자동 접기와 `Ctrl+Shift+R` 대신 tmux의 크기 조절을 사용하세요.
 
@@ -57,7 +57,7 @@ bash scripts/omk-tmux.sh --resume <session-id>
 ## 제한
 
 호스트에는 사용자 정의 푸터와 편집기가 각각 하나뿐이므로 다른 확장과 충돌하면 로드 순서가 적용됩니다. 기본 프레임으로 돌아가려면 `/atelier disable`을 사용합니다. 터미널 배경색 자체는 호스트/터미널 설정이며 테마가 전역 터미널 배경을 강제로 바꾸지 않습니다.
-Atelier가 활성화되면 `Ctrl+Q`는 내장 레일 대신 Atelier 사이드바를 제어합니다. 별도의 내장 레일이 고정된 호스트에서는 `settings.json`의 `pinStatusSidebar`를 `false`로 설정해 중복을 피하세요. 내장 고정 설정 자체는 변경하지 않습니다. native 모드는 사이드바 해제/종료 때 기존 gutter 콜백을 복원하며 나중에 등록된 다른 소유자의 gutter는 지우지 않습니다. 프로젝트 신뢰 확인 API가 없는 호스트는 프로젝트 설정과 작업공간 검사를 비활성화한 채 사용자 설정으로 표시합니다.
+Atelier 사이드바는 `Ctrl+Shift+Q`, OMK 내장 상태 사이드바는 기존 `Ctrl+Q`를 사용합니다. 별도의 내장 레일이 고정된 호스트에서는 `settings.json`의 `pinStatusSidebar`를 `false`로 설정해 중복을 피하세요. 내장 고정 설정 자체는 변경하지 않습니다. native 모드는 사이드바 해제/종료 때 기존 gutter 콜백을 복원하며 나중에 등록된 다른 소유자의 gutter는 지우지 않습니다. 프로젝트 신뢰 확인 API가 없는 호스트는 프로젝트 설정과 작업공간 검사를 비활성화한 채 사용자 설정으로 표시합니다.
 
 자식 비용 그래프는 소유자가 확인된 pi-subagents 기록과 현재 세션의 성공한 `bg_delegate`/`bg_result`에 묶인 검증된 final receipt 사용량을 읽습니다. Native delegate는 마지막 응답의 관측값만 표시하며 전체 실행 비용으로 추정하지 않습니다. OMK의 모든 `bg_run`/AdaptOrch 작업 비용을 지원한다고 가정하지 않습니다. Kitty/iTerm2 그래픽은 호스트가 지원할 때만 사용하고 나머지는 텍스트 그래프로 표시합니다. OS 알림은 upstream의 macOS/Windows 지원을 유지하며 Linux 알림은 추가하지 않습니다.
 

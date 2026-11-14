@@ -194,7 +194,7 @@ async function start(mode: "tui" | "rpc" | "print" | "json" = "tui") {
 
 describe("Atelier real OMK loader and event consumer", () => {
 	it.skipIf(spawnSync("tmux", ["-V"]).status !== 0)(
-		"renders the live sidebar in an owned tmux pane and toggles it with Ctrl+Q",
+		"renders the live sidebar in an owned tmux pane and toggles it with Ctrl+Shift+Q",
 		async () => {
 			const directory = mkdtempSync(join(tmpdir(), "omk-atelier-tmux-"));
 			const socket = join(directory, "socket");
@@ -228,7 +228,10 @@ describe("Atelier real OMK loader and event consumer", () => {
 			const capture = () => tmux("capture-pane", "-p", "-t", panes().find((pane) => pane !== main) ?? main);
 			await expect.poll(capture).toContain("AGENT");
 			expect(tmux("display-message", "-p", "-t", main, "#{pane_active}").trim()).toBe("1");
-			const shortcut = h.runner.getShortcuts(new KeybindingsManager().getEffectiveConfig()).get("ctrl+q");
+			const shortcuts = h.runner.getShortcuts(new KeybindingsManager().getEffectiveConfig());
+			expect(shortcuts.has("ctrl+q")).toBe(false);
+			expect(h.runner.getShortcutDiagnostics()).toEqual([]);
+			const shortcut = shortcuts.get("ctrl+shift+q");
 			expect(shortcut).toBeDefined();
 			await shortcut?.handler(h.runner.createCommandContext());
 			expect(panes()).toEqual([main]);
@@ -280,7 +283,7 @@ describe("Atelier real OMK loader and event consumer", () => {
 		expect(h.render()).toContain("CODEX 5H");
 		expect(h.render()).toContain("35%");
 		expect(h.render()).toContain("OMK transcript");
-		const toggle = h.runner.getShortcuts(new KeybindingsManager().getEffectiveConfig()).get("ctrl+q");
+		const toggle = h.runner.getShortcuts(new KeybindingsManager().getEffectiveConfig()).get("ctrl+shift+q");
 		expect(toggle).toBeDefined();
 		await toggle?.handler(h.runner.createCommandContext());
 		expect(h.tui.contentWidth).toBe(140);

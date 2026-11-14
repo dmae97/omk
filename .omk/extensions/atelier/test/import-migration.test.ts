@@ -200,7 +200,7 @@ it("native package retains the exact registrations and both themes through Defau
 		const entry = packageExtensions[0];
 		if (!entry) throw new Error("Atelier package extension was not loaded");
 		expect([...entry.commands.keys()].sort()).toEqual(["atelier", "atelier-theme"]);
-		expect([...entry.shortcuts.keys()].sort()).toEqual(["ctrl+q", "ctrl+shift+r", "f6"]);
+		expect([...entry.shortcuts.keys()].sort()).toEqual(["ctrl+shift+q", "ctrl+shift+r", "f6"]);
 		expect([...entry.tools.keys()]).toEqual([]);
 		expect([...entry.flags.keys()]).toEqual([]);
 		expect([...entry.messageRenderers.keys()]).toEqual([]);

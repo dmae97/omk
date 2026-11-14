@@ -2,7 +2,7 @@ import { stripVTControlCharacters } from "node:util";
 import { sliceByColumn, truncateToWidth } from "omk-tui";
 import type { ExtensionContext } from "open-multi-agent-kit";
 
-export const DEFAULT_ATELIER_KEYBINDINGS = { sidebarToggle: "ctrl+q" } as const;
+export const DEFAULT_ATELIER_KEYBINDINGS = { sidebarToggle: "ctrl+shift+q" } as const;
 
 // Older installed OMK hosts lack this named export. APC includes the editor cursor marker.
 export const stripTerminalSequences = (text: string): string =>
