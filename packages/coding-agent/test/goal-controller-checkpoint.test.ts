@@ -150,6 +150,10 @@ describe("goal controller seam checkpoints", () => {
 		await agentSettled.handler({} as never, context as never);
 		expect(captured.messages[0]).toContain("Seam checkpoint");
 		expect(captured.messages[0]).toContain("Next: Run focused tests");
+		expect(captured.messages[0]).toContain("Historical evidence (reverify): (none)");
+		expect(captured.messages[0]).not.toContain("Verified:");
+		await command.handler("", context);
+		expect(notifications.at(-1)).toContain("Historical evidence (reverify): (none)");
 		expect((await store.current())?.completedRounds).toBe(1);
 	});
 
