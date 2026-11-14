@@ -722,6 +722,9 @@ export default function (omk: ExtensionAPI) {
 			'Default agent scope is "user" (from ~/.omk/agent/agents).',
 			'To enable project-local agents in .omk/agents, set agentScope: "both" (or "project").',
 		].join(" "),
+		promptGuidelines: [
+			"When using AdaptOrch, first call the actually exposed route_topology MCP tool, then dispatch the same graph IDs, task descriptions and dependencies (per-node depends_on or top-level from/to pairs, not both). Use only the observed routing result; never invent one.",
+		],
 		parameters: SubagentParams,
 		resolveTimeoutMs: () => MAX_EXECUTION_BUDGET_MS + EXECUTION_CLEANUP_RESERVE_MS,
 

@@ -71,6 +71,7 @@ export interface SubagentOrchestrationPlan {
 	readonly spawnGate: SpawnGateDecision;
 	readonly blockers: readonly string[];
 	readonly warnings: readonly string[];
+	readonly preferredLaneOrder?: readonly string[];
 }
 
 const DEFAULT_SPAWN_THRESHOLD = 4;
@@ -456,7 +457,7 @@ function schedulePreparedLanes(
 		const selected: PreparedLane[] = [];
 		for (const lane of ready) {
 			if (maxParallelLanes !== undefined && selected.length >= maxParallelLanes) break;
-			if (!selected.some((selectedLane) => lanesConflict(selectedLane, lane))) {
+			if (!selected.some((selectedLane) => laneGrantsConflict(selectedLane.grant, lane.grant))) {
 				selected.push(lane);
 			}
 		}
@@ -471,10 +472,6 @@ function schedulePreparedLanes(
 	}
 
 	return batches;
-}
-
-function lanesConflict(left: PreparedLane, right: PreparedLane): boolean {
-	return laneGrantsConflict(left.grant, right.grant);
 }
 
 /** Read/write path conflict between two lane grants (writer vs. reader or writer). */
