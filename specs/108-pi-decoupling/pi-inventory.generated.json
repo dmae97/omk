@@ -108,16 +108,6 @@
 			"scope": "test"
 		},
 		{
-			"file": "packages/agent/src/types.ts:382",
-			"module": "packages/agent",
-			"kind": "mention",
-			"specifier": "@mariozechner/agent",
-			"symbols": [
-				"*"
-			],
-			"scope": "src"
-		},
-		{
 			"file": "packages/coding-agent/src/utils/clipboard-native.ts:22",
 			"module": "packages/coding-agent",
 			"kind": "require",
@@ -776,7 +766,7 @@
 			"symbols": [
 				"*"
 			],
-			"scope": "src"
+			"scope": "scripts"
 		},
 		{
 			"file": "scripts/native-extension-artifact-gate.mjs:66",
@@ -786,7 +776,7 @@
 			"symbols": [
 				"*"
 			],
-			"scope": "src"
+			"scope": "scripts"
 		},
 		{
 			"file": "scripts/native-extension-artifact-gate.mjs:78",
@@ -796,7 +786,7 @@
 			"symbols": [
 				"*"
 			],
-			"scope": "src"
+			"scope": "scripts"
 		}
 	],
 	"runtimeAliases": [
