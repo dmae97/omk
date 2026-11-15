@@ -54,6 +54,8 @@ omk update --allow-scripts
 
 `--allow-scripts` applies to that one command only. Installs that happen on their own (startup, `-e`) never run scripts.
 
+A missing JavaScript or TypeScript file under `build/`, `dist/`, or `lib/` is not evidence of a skipped native build. OMK preserves that resolution error without suggesting `--allow-scripts`. If an extension wrapper references an old temporary installation or a restored `node_modules` tree, review its imports and the owning package's runtime dependencies. Use `omk list` to identify the configured source and `omk package doctor ./path/to/package --package-manifest-dialect omk` for static migration checks. Update the reviewed package or fix the wrapper to use supported public imports and portable package-relative paths; `omk init --global` does not repair extension imports or install their dependencies. A missing legacy Pi export requires package migration, not automatic compatibility activation.
+
 ### Project trust
 
 A cloned repository's `.omk/` can load code: `packages` and `extensions` in `.omk/settings.json`, files in `.omk/extensions/`, and the `npmCommand`, `shellPath` and `shellCommandPrefix` settings. omk loads none of these until you trust the project:

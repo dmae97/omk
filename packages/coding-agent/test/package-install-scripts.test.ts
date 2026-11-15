@@ -123,6 +123,18 @@ describe("package install scripts (spec 053)", () => {
 		expect(hinted).toContain(ALLOW_SCRIPTS_FLAG);
 		expect(withAllowScriptsHint('Failed to load extension "x": SyntaxError')).not.toContain(ALLOW_SCRIPTS_FLAG);
 	});
+
+	it.each([
+		"/tmp/old-install/node_modules/legacy-host/dist/core/extensions/builtin/diff.js",
+		"../../npm/node_modules/shell-package/dist/index.ts",
+		"./dist/index.js",
+		"./lib/client.js",
+		"./build/main.js",
+	])("does not suggest running install scripts for a missing JS/TS module: %s", (path) => {
+		const message = `Failed to load extension: Cannot find module '${path}'`;
+		expect(looksLikeSkippedInstallScript(message)).toBe(false);
+		expect(withAllowScriptsHint(message)).toBe(message);
+	});
 });
 
 describe("omk install --allow-scripts (CLI)", () => {
