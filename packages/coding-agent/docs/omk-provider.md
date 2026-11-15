@@ -25,7 +25,7 @@ Select a model by its qualified id (`OMK/coder` or `OMK/reasoner`). In the CLI t
 
 The table lists the context window and max output the client declares. The gateway enforces its own per-request output cap. `OMK/reasoner` has a cap of 32,768 tokens; a request with a larger `max_tokens` gets HTTP 429 `request_limit_exceeded` and `x-omk-retryable: false`, and is not retried. `OMK/coder` has no cap and its default is 8,192. These values come from the gateway config and may change.
 
-`OMK/coder` does not send a reasoning level. `OMK/reasoner` always reasons: `low` and `high` are sent as-is, `medium` is sent as `low`, and unsupported levels (`off`, `minimal`, `xhigh`, `max`) are clamped to a supported level. Internal calls that carry no reasoning level are sent as `coder`.
+`OMK/coder` does not send a reasoning level. `OMK/reasoner` always reasons: `low` and `high` are sent as-is, `medium` is sent as `low`, and unsupported levels (`off`, `minimal`, `xhigh`, `max`) are clamped to a supported level. Internal calls that carry no reasoning level are sent as `coder`. A branch summary requested from `/tree`, or over RPC with `summarize: true`, is sent with the coder model even in an `OMK/reasoner` session, so usage for that call is recorded under `OMK/coder`.
 
 ## Credentials
 
