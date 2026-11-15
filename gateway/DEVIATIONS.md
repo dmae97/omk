@@ -16,7 +16,7 @@
 | `model_not_allowed` message names the model | generic message | echoing client input would reproduce any brand string the client typed |
 | `/v1/models` unauthenticated? (unspecified) | requires a token | consistent with all other `/v1` routes |
 | Postgres server | PGlite default; optional real Postgres via `OMK_GATEWAY_DATABASE_URL` | no paid/hosted DB; local Postgres is required only for the cap-race test and before hosting |
-| T-13 (real omk client against the gateway) | mock now serves stream SSE and tool-call (JSON and SSE) plus a tool-result follow-up; client e2e not yet run | needs the Provider Engineer's #387 head against `npm run dev:mock` |
+| T-13 (real omk client against the gateway) | passed 9/9 client cases plus the usage_events check against the mock upstream, client `13753b84ac` (#392 merge), results in `gateway/e2e/t13-392/` | mock only; repeat against the real upstream before hosting (11/18 final QA) |
 
 - 2026-11-11: reasoner effort is low/high only for every user (PM decision). `max` always returns 429 `request_limit_exceeded`. The `users.allow_max_effort` column and `issueKey({allowMaxEffort})` option remain but are ignored by validation; remove them in a later cleanup.
 
