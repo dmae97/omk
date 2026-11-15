@@ -1,5 +1,5 @@
 /**
- * Structured next-task suggestions: the host renders input → verification → evidence → result,
+ * Structured next-task suggestions (v3): the host renders a title plus context, scope and done-when lines,
  * a local suggestion exists whether or not a model answers, stale state never reaches the editor,
  * and Tab hands the displayed prompt to the editor input path without sending anything.
  */
@@ -31,8 +31,8 @@ import { getEditorTheme, initTheme } from "../src/modes/interactive/theme/theme.
 
 const ON = { OMK_NEXT_SUGGESTIONS: "1", LANG: "en_US.UTF-8" };
 const anthropic = getModel("anthropic", "claude-sonnet-4-5")! as Model<"anthropic-messages">;
-const EN_HEADINGS = ["## Input", "## Verification", "## Evidence", "## Result"];
-const KO_HEADINGS = ["## 입력", "## 검증", "## 증거", "## 결과"];
+const EN_LABELS = ["Context: ", "Scope: ", "Done when: "];
+const KO_LABELS = ["맥락: ", "범위: ", "완료 기준: "];
 
 function assistant(text: string, stopReason: AssistantMessage["stopReason"] = "stop"): AssistantMessage {
 	return {
@@ -69,9 +69,9 @@ const toolResult = (toolCallId: string, toolName: string, isError: boolean, text
 	timestamp: 2,
 });
 
-function headingOrder(prompt: string, headings: readonly string[]): number[] {
+function labelOrder(prompt: string, labels: readonly string[]): number[] {
 	const lines = prompt.split("\n");
-	return headings.map((heading) => lines.indexOf(heading));
+	return labels.map((label) => lines.findIndex((line) => line.startsWith(label)));
 }
 
 const controllers: NextSuggestionController[] = [];
@@ -139,21 +139,47 @@ function port(suggestionReply: SuggestionReply, options: Partial<NextSuggestionO
 }
 
 describe("structured suggestion prompt: host contract", () => {
-	it("renders the four sections in order with non-empty items, in both locales", () => {
-		for (const [text, headings] of [
-			["add a retry to the uploader", EN_HEADINGS],
-			["업로더에 재시도를 추가해줘", KO_HEADINGS],
+	it("quotes only the user's words when the last request was an accepted suggestion", () => {
+		const accepted = [
+			"새 OMK 창에서 doctor 확인해줘.",
+			"## 입력",
+			"- 해결할 문제: 새 OMK 창에서 doctor 확인해줘.",
+			"- 대상 범위: 미확인. 대상 파일이나 모듈을 먼저 특정",
+			"## 결과",
+			"- 최종 보고: 변경 경로, 실행한 명령과 종료 상태, 미검증 항목 그리고 2.0.1로 업데이트",
+		].join("\n");
+		const facts = collectSuggestionFacts({ messages: [user(accepted), assistant("ok")], outcome: "completed" });
+		expect(facts.userRequest).toBe("새 OMK 창에서 doctor 확인해줘. 그리고 2.0.1로 업데이트");
+		const v3 = renderSuggestionPrompt(buildSuggestion(facts, "다음 단계를 진행해줘."));
+		const again = collectSuggestionFacts({
+			messages: [user(`${v3} 추가 요청`), assistant("ok")],
+			outcome: "completed",
+		});
+		expect(again.userRequest).toBe("다음 단계를 진행해줘. 추가 요청");
+		// Plain text that merely starts like a label is left alone.
+		const plain = collectSuggestionFacts({
+			messages: [user("Scope: just the parser"), assistant("ok")],
+			outcome: "completed",
+		});
+		expect(plain.userRequest).toBe("Scope: just the parser");
+	});
+
+	it("renders a title and three labelled lines, four sentences in all, in both locales", () => {
+		for (const [text, labels] of [
+			["add a retry to the uploader", EN_LABELS],
+			["업로더에 재시도를 추가해줘", KO_LABELS],
 		] as const) {
 			const facts = collectSuggestionFacts({ messages: [user(text), assistant("Done.")], outcome: "completed" });
 			const suggestion = buildSuggestion(facts, sanitizeModelTask("Run the uploader tests next.", facts));
 			const prompt = renderSuggestionPrompt(suggestion);
 			expect(suggestionViolation(suggestion)).toBeUndefined();
 			expect(isWellFormedSuggestionPrompt(prompt)).toBe(true);
-			const order = headingOrder(prompt, headings);
-			expect(order.every((index) => index > 0)).toBe(true);
-			expect([...order].sort((a, b) => a - b)).toEqual(order);
+			expect(labelOrder(prompt, labels)).toEqual([1, 2, 3]);
+			expect(prompt.split("\n")).toHaveLength(4);
 			expect(prompt.split("\n")[0]).toBe("Run the uploader tests next.");
-			for (const key of SUGGESTION_SECTION_ORDER) expect(suggestion.sections[key].length).toBeGreaterThanOrEqual(3);
+			expect(prompt).not.toMatch(/^## /m);
+			for (const key of SUGGESTION_SECTION_ORDER) expect(suggestion.sections[key].trim()).not.toBe("");
+			expect(prompt).toContain(text);
 		}
 	});
 
@@ -161,12 +187,15 @@ describe("structured suggestion prompt: host contract", () => {
 		const facts = collectSuggestionFacts({ messages: [], outcome: "idle", env: ON });
 		const good = buildSuggestion(facts);
 		expect(suggestionViolation({ ...good, title: "  " })).toBe("title");
-		expect(suggestionViolation({ ...good, sections: { ...good.sections, evidence: [] } })).toBe("evidence");
-		expect(suggestionViolation({ ...good, sections: { ...good.sections, result: [" "] } })).toBe("result");
+		expect(suggestionViolation({ ...good, sections: { ...good.sections, context: "" } })).toBe("context");
+		expect(suggestionViolation({ ...good, sections: { ...good.sections, check: " " } })).toBe("check");
+		expect(suggestionViolation({ ...good, sections: { ...good.sections, scope: "a\nb" } })).toBe("scope");
 		const prompt = renderSuggestionPrompt(good);
+		const [title, context, scope, check] = prompt.split("\n");
+		expect(isWellFormedSuggestionPrompt(prompt)).toBe(true);
 		expect(isWellFormedSuggestionPrompt(good.title)).toBe(false);
-		expect(isWellFormedSuggestionPrompt(prompt.replace("## Evidence", "## Result"))).toBe(false);
-		expect(isWellFormedSuggestionPrompt(prompt.replace(/## Verification[\s\S]*?(?=## Evidence)/, ""))).toBe(false);
+		expect(isWellFormedSuggestionPrompt([title, scope, context, check].join("\n"))).toBe(false);
+		expect(isWellFormedSuggestionPrompt([title, context, check].join("\n"))).toBe(false);
 		expect(isWellFormedSuggestionPrompt(`${prompt}\ntrailing garbage`)).toBe(false);
 	});
 
@@ -213,13 +242,10 @@ describe("structured suggestion prompt: host contract", () => {
 		expect(classifySituation(changed)).toBe("verify");
 		const verify = renderSuggestionPrompt(buildSuggestion(changed));
 		expect(verify.split("\n")[0]).toBe("Verify the change: src/a.ts and 1 more");
-		expect(verify).toContain("no check had run when this suggestion was built");
-		// The result section states what is expected, never that it happened.
-		expect(buildSuggestion(changed).sections.result.map((item) => item.split(":")[0])).toEqual([
-			"Expected deliverable",
-			"Completion condition",
-			"Final report",
-		]);
+		expect(verify).toContain("Scope: src/a.ts, src/b.ts");
+		expect(verify).toContain(
+			'Context: last request "rename the helper" (completed); changed files src/a.ts, src/b.ts',
+		);
 		expect(verify).not.toMatch(/\b(was|were|has been|have been) (verified|fixed|completed|tested)\b/i);
 
 		const failing = collectSuggestionFacts({
@@ -255,7 +281,7 @@ describe("structured suggestions in the controller", () => {
 		expect(controller.title).toBe("Confirm the task goal and target scope");
 		expect(p.editorState.placeholder).toBe(controller.suggestion);
 		expect(isWellFormedSuggestionPrompt(p.editorState.placeholder)).toBe(true);
-		expect(p.editorState.placeholder).toContain("Unconfirmed: goal, target paths, completion criteria");
+		expect(p.editorState.placeholder).toContain("Context: no turn has run yet");
 		expect(p.calls).toEqual({ main: 0, suggestion: 0 });
 	});
 
@@ -268,9 +294,9 @@ describe("structured suggestions in the controller", () => {
 		]);
 		expect(controller.title).toBe("Run the uploader tests next.");
 		const prompt = controller.suggestion ?? "";
-		expect(headingOrder(prompt, EN_HEADINGS).every((index) => index > 0)).toBe(true);
-		expect(prompt).toContain("- Scope: src/upload.ts");
-		expect(prompt).toContain("- Inferred: the problem is the model's proposed next request");
+		expect(labelOrder(prompt, EN_LABELS)).toEqual([1, 2, 3]);
+		expect(prompt).toContain("Scope: src/upload.ts");
+		expect(prompt).not.toContain("Inferred:");
 		expect(p.calls.suggestion).toBe(1);
 	});
 
@@ -298,7 +324,9 @@ describe("structured suggestions in the controller", () => {
 			expect(controller.title).toBe("Verify the change: src/upload.ts");
 			expect(isWellFormedSuggestionPrompt(controller.suggestion ?? "")).toBe(true);
 			expect(p.editorState.placeholder).toBe(controller.suggestion);
-			expect(controller.suggestion).toContain(`(no model input: ${reason})`);
+			// The skip reason stays out of the prompt: it is host diagnostics, not task context.
+			expect(reason).not.toBe("");
+			expect(controller.suggestion).not.toContain("no model input");
 			expect(p.calls.suggestion).toBe(1);
 		},
 	);
@@ -327,10 +355,10 @@ describe("structured suggestions in the controller", () => {
 		const fresh = p.install();
 		await p.turn(fresh, "add a retry to the uploader");
 		expect(fresh.title).toBe("Review what the last answer left unconfirmed");
-		expect(fresh.suggestion).toContain("(no model input: timeout)");
+		expect(isWellFormedSuggestionPrompt(fresh.suggestion ?? "")).toBe(true);
 	});
 
-	it("offline or quota-unknown: no request is sent and the local suggestion says why", async () => {
+	it("offline or quota-unknown: no request is sent and the local suggestion is shown", async () => {
 		const p = port(() => assistant("unused"), {
 			quotaUsage: async () => {
 				throw new Error("offline");
@@ -339,7 +367,7 @@ describe("structured suggestions in the controller", () => {
 		const controller = p.install();
 		await p.turn(controller, "add a retry to the uploader");
 		expect(p.calls.suggestion).toBe(0);
-		expect(controller.suggestion).toContain("(no model input: usage_unavailable)");
+		expect(controller.title).toBe("Review what the last answer left unconfirmed");
 		expect(isWellFormedSuggestionPrompt(controller.suggestion ?? "")).toBe(true);
 	});
 
@@ -439,9 +467,7 @@ describe("structured suggestions in the controller", () => {
 			.join("\n")
 			.replace(/\u001b\[[0-9;]*m|\u001b_[^\u0007]*\u0007/g, "");
 		const renderedLines = rendered.split("\n").map((line) => line.trim());
-		for (const heading of EN_HEADINGS) expect(renderedLines).toContain(heading);
-		expect(renderedLines.indexOf("## Input")).toBeLessThan(renderedLines.indexOf("## Verification"));
-		expect(renderedLines.indexOf("## Evidence")).toBeLessThan(renderedLines.indexOf("## Result"));
+		expect(renderedLines.some((line) => line.startsWith("Context: "))).toBe(true);
 		// Every prompt line is on screen (wrapped rows joined back), so display and delivery match.
 		const flat = renderedLines.join(" ").replace(/\s+/g, " ");
 		for (const line of prompt.split("\n")) expect(flat).toContain(line.replace(/\s+/g, " "));

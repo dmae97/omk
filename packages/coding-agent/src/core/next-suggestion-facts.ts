@@ -6,8 +6,9 @@
  * infers a defect that the transcript does not show.
  */
 import { userMessageText } from "./next-suggestion-accept-trace.ts";
+import { allSituationChecks, type SuggestionLocale } from "./next-suggestion-copy.ts";
 
-export type SuggestionLocale = "ko" | "en";
+export type { SuggestionLocale };
 /** `idle`: no turn has settled yet in this session view. */
 export type SuggestionTurnOutcome = "completed" | "failed" | "aborted" | "idle";
 
@@ -51,6 +52,38 @@ export function boundFact(value: string, max: number = MAX_FACT_CHARS): string {
 	return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
+// Labels of host-rendered suggestions (v2 sectioned and v3 short form), both locales.
+const HOST_LABEL =
+	/^(?:- )?(?:해결할 문제|대상 범위|현재 상태|제약과 사용 가능한 입력|미확인|확인과 통과 조건|사용자 경로|실패와 회귀|실행 불가|관측\(세션 기록\)|수집할 증거|추정|기대 산출물|완료 조건|최종 보고|맥락|범위|완료 기준|Problem|Scope|Current state|Constraints and available input|Unconfirmed|Checks and pass condition|User path|Failure and regression|Cannot run|Observed \(session transcript\)|Evidence to collect|Inferred|Expected deliverable|Completion condition|Final report|Context|Done when): /;
+const HOST_MARKER = /^(?:## (?:입력|Input)|맥락: |Context: )/m;
+const HOST_TAILS = [
+	"변경 경로, 실행한 명령과 종료 상태, 미검증 항목",
+	"changed paths, commands run with exit status, unverified items",
+	...allSituationChecks(),
+];
+
+/**
+ * The user's own words in a request that may be an accepted host suggestion: the host
+ * checklist is dropped, text typed after its canned last value is kept. A prompt without a
+ * host marker is returned unchanged.
+ */
+export function requestText(raw: string): string {
+	if (!HOST_MARKER.test(raw)) return raw;
+	const kept: string[] = [];
+	for (const line of raw.split("\n")) {
+		const trimmed = line.trim();
+		if (trimmed.startsWith("## ")) continue;
+		if (!HOST_LABEL.test(trimmed)) {
+			kept.push(line);
+			continue;
+		}
+		const tail = HOST_TAILS.find((value) => trimmed.includes(value));
+		const extra = tail ? trimmed.slice(trimmed.lastIndexOf(tail) + tail.length).trim() : "";
+		if (extra) kept.push(extra);
+	}
+	return kept.join("\n");
+}
+
 function firstText(content: unknown): string {
 	if (typeof content === "string") return content;
 	if (!Array.isArray(content)) return "";
@@ -84,7 +117,7 @@ export function collectSuggestionFacts(input: CollectFactsInput): SuggestionFact
 		}
 	}
 	const rawRequest = start >= 0 ? userMessageText(messages[start]) : undefined;
-	const userRequest = rawRequest ? boundFact(rawRequest) : undefined;
+	const userRequest = rawRequest ? boundFact(requestText(rawRequest)) || undefined : undefined;
 	const pathByCall = new Map<string, string>();
 	const lastResult = new Map<string, { readonly error: boolean; readonly text: string }>();
 	const changed = new Set<string>();
