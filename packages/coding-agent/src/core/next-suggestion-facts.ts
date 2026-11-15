@@ -6,9 +6,9 @@
  * infers a defect that the transcript does not show.
  */
 import { userMessageText } from "./next-suggestion-accept-trace.ts";
-import { allSituationChecks } from "./next-suggestion-copy.ts";
+import { allSituationChecks, type SuggestionLocale } from "./next-suggestion-copy.ts";
 
-export type SuggestionLocale = "ko" | "en";
+export type { SuggestionLocale };
 /** `idle`: no turn has settled yet in this session view. */
 export type SuggestionTurnOutcome = "completed" | "failed" | "aborted" | "idle";
 

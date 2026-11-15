@@ -4,7 +4,7 @@
  * Every string describes a check to run or a thing to confirm; none claims a result.
  * `{0}` is the situation subject (failed tools or the first changed path).
  */
-import type { SuggestionLocale } from "./next-suggestion-facts.ts";
+export type SuggestionLocale = "ko" | "en";
 
 export type SuggestionSituation = "blocked" | "reconnect" | "diagnose" | "verify" | "clarify" | "continue";
 
