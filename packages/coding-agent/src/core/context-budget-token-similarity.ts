@@ -48,7 +48,7 @@ export function fuzzyTokenWeight(
 /**
  * Similarity in [0, 1] between two distinct tokens: 1 on containment either
  * way, else the character-bigram Dice coefficient when it reaches
- * {@link BIGRAM_DICE_THRESHOLD}. The length-ratio guard rejects pairs whose
+ * {@link BIGRAM_DICE_THRESHOLD} and both tokens start with the same character. The length-ratio guard rejects pairs whose
  * bigram overlap can mathematically never reach the threshold.
  */
 export function tokenSimilarity(queryToken: string, itemToken: string): number {
@@ -57,6 +57,11 @@ export function tokenSimilarity(queryToken: string, itemToken: string): number {
 	}
 	if (itemToken.includes(queryToken) || queryToken.includes(itemToken)) {
 		return 1;
+	}
+	// Stem drift and Korean 조사 endings keep the word's start; tokens that share only an
+	// inflection suffix ("rendering"/"covering") are unrelated words, not one lexical hit.
+	if (queryToken[0] !== itemToken[0]) {
+		return 0;
 	}
 	// Max possible shared bigrams is the shorter side's count; Dice =
 	// 2·shared/(bigrams_a + bigrams_b) ≥ threshold requires
