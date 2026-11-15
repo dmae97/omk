@@ -53,6 +53,8 @@ describe("user context initialization", () => {
 		expect(outcome).toEqual({ handled: false, exitCode: 0 });
 		expect(readFileSync(join(agentDir, "agents"), "utf8")).toBe("keep");
 		expect(lines.join("\n")).toContain("pstack");
+		expect(lines.join("\n")).toContain(`pstack destination is not a real directory: ${join(agentDir, "agents")}`);
+		expect(lines.join("\n")).not.toContain("(unknown)");
 	});
 
 	it("leaves unrelated CLI arguments unhandled", () => {

@@ -52,7 +52,8 @@ const SKIPPED_SCRIPT_SYMPTOMS: readonly RegExp[] = [
 	/Could not locate the bindings file/u,
 	/No native build was found/u,
 	/Cannot find module '[^']*\.node'/u,
-	/Cannot find module '[^']*[\\/](?:build|dist|lib|prebuilds)[\\/][^']*'/u,
+	// A node_modules path targets another install tree (often a stale wrapper), not this package's build.
+	/Cannot find module '(?![^']*node_modules)[^']*[\\/](?:build|dist|lib|prebuilds)[\\/][^']*'/u,
 	/node-pre-gyp/u,
 	/was compiled against a different Node\.js version/u,
 	/Failed to load native binding/u,

@@ -98,6 +98,26 @@ describe("omk init --global", () => {
 		expect(readdirSync(workspace)).toEqual([]);
 	});
 
+	it.each([false, true])("reports the unsafe agents destination without overwriting it (dryRun=%s)", (dryRun) => {
+		mkdirSync(agentDir, { recursive: true });
+		for (const name of ["AGENTS.md", "INTERNET.md", "CLAUDE.md"]) {
+			writeFileSync(join(agentDir, name), "# Existing context\n");
+		}
+		const agents = join(agentDir, "agents");
+		writeFileSync(agents, "keep");
+
+		const result = runInit(["--global", ...(dryRun ? ["--dry-run"] : [])]);
+
+		expect(result.error).toBeUndefined();
+		expect(result.status).toBe(1);
+		expect(result.stdout).toContain(`pstack destination is not a real directory: ${agents}`);
+		expect(result.stdout).not.toContain("(unknown)");
+		expect(readFileSync(agents, "utf8")).toBe("keep");
+		for (const name of ["AGENTS.md", "INTERNET.md", "CLAUDE.md"]) {
+			expect(readFileSync(join(agentDir, name), "utf8")).toBe("# Existing context\n");
+		}
+	});
+
 	it("creates bundled documents and agents while preserving user-owned agents", () => {
 		// Given an empty user config, when applying the setup.
 		const result = runInit(["--global"]);
