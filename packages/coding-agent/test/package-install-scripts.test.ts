@@ -127,14 +127,19 @@ describe("package install scripts (spec 053)", () => {
 	it.each([
 		"/tmp/old-install/node_modules/legacy-host/dist/core/extensions/builtin/diff.js",
 		"../../npm/node_modules/shell-package/dist/index.ts",
-		"./dist/index.js",
-		"./lib/client.js",
-		"./build/main.js",
-	])("does not suggest running install scripts for a missing JS/TS module: %s", (path) => {
+		"C:\\old-install\\node_modules\\legacy-host\\lib\\index.js",
+	])("does not suggest install scripts for a module in another install tree: %s", (path) => {
 		const message = `Failed to load extension: Cannot find module '${path}'`;
 		expect(looksLikeSkippedInstallScript(message)).toBe(false);
 		expect(withAllowScriptsHint(message)).toBe(message);
 	});
+
+	it.each(["./dist/index.js", "./lib/client.js", "./build/main.js"])(
+		"still suggests install scripts for the package's own missing build output: %s",
+		(path) => {
+			expect(looksLikeSkippedInstallScript(`Cannot find module '${path}'`)).toBe(true);
+		},
+	);
 });
 
 describe("omk install --allow-scripts (CLI)", () => {

@@ -47,11 +47,13 @@ export function buildGitDependencyInstallArgs(hasConfiguredNpmCommand: boolean, 
 }
 
 // Messages a package produces when the build step its install script would have run never ran:
-// Require native-build evidence; a missing JavaScript/TypeScript path alone can be a stale import.
+// node-gyp / prebuild bindings, node-pre-gyp, napi-rs/prebuildify loaders, and missing build output.
 const SKIPPED_SCRIPT_SYMPTOMS: readonly RegExp[] = [
 	/Could not locate the bindings file/u,
 	/No native build was found/u,
 	/Cannot find module '[^']*\.node'/u,
+	// A node_modules path targets another install tree (often a stale wrapper), not this package's build.
+	/Cannot find module '(?![^']*node_modules)[^']*[\\/](?:build|dist|lib|prebuilds)[\\/][^']*'/u,
 	/node-pre-gyp/u,
 	/was compiled against a different Node\.js version/u,
 	/Failed to load native binding/u,
