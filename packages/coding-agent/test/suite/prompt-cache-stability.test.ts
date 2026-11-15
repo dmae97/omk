@@ -319,6 +319,10 @@ describe("prompt cache prefix stability (spec 051)", () => {
 		const calls = await runSession(FLAGS_ON, harnesses, {
 			skills: bundledSkills(),
 			settings: { contextBudget: { enabled: true } } as HarnessOptions["settings"],
+			// TASK_B shares no word with any bundled skill; it used to rank only through suffix-only fuzzy
+			// matches (write~site). One real name-token hit (0.60) ranks a skill without crossing the 0.7
+			// auto-load band, so the contextBudget message stays the only `<prompt_skills>` message.
+			secondPrompt: "Now write the review summary to b.txt.",
 		});
 		expect(prefixBreaks(calls)).toEqual([]);
 		const second = secondPromptCall(calls);
