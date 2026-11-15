@@ -35,6 +35,20 @@ describe("capability clauses", () => {
 		for (const clause of clauses) expect(clause.tokens.length).toBeGreaterThanOrEqual(MIN_CLAUSE_TOKENS);
 	});
 
+	it("does not treat a bare file-path fragment as a capability clause", () => {
+		// Regression: a suggestion scope line "/tmp/gke-fp-probe.mts" scored gke-* skills 1.00 as its
+		// own clause ("gke" name token + "probe" in "probes") on a commit-and-PR request.
+		const clauses = splitTaskClauses("커밋하고 draft PR 올려줘\n/tmp/gke-fp-probe.mts, packages/a/b-c.ts");
+		expect(clauses.map((clause) => clause.text)).toEqual(["커밋하고 draft PR 올려줘"]);
+		const gke = {
+			name: "gke-reliability",
+			description: "Improves GKE workload reliability, using PDBs, health probes, and topology spread constraints.",
+		};
+		const task = "/home/dmae97/omk 변경 파일 3개만 stage해서 커밋하고 draft PR 올려줘\n/tmp/gke-fp-probe.mts";
+		const result = selectSkills({ task, skills: [gke] });
+		expect(result.selected).toEqual([]);
+	});
+
 	it("whole score equals scoreSkillRelevance, and a counted clause equals it on the clause text", () => {
 		const token = fc.stringMatching(/^[a-z][a-z0-9]{2,9}$/);
 		fc.assert(
