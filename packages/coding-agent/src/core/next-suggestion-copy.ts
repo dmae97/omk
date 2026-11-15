@@ -180,3 +180,8 @@ export function situationCopy(
 		done,
 	};
 }
+
+/** Every `check` string in both locales: the canned tail of a rendered suggestion's last line. */
+export function allSituationChecks(): readonly string[] {
+	return [KO, EN].flatMap((table) => Object.values(table).map((row) => row[3]));
+}
