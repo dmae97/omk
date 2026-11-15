@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-11-15
+
+### Fixed
+
+- `omk init --global` and a bare `omk` launch now report why bundled pstack agent installation failed, including the affected path, instead of `(unknown)`. Existing files are still never replaced (#451).
+- An extension load failure for a module under another installation's `node_modules` tree no longer suggests `omk install --allow-scripts`, because install scripts cannot fix a stale path. A missing file in a package's own `build/`, `dist/` or `lib/` output and missing `.node` bindings still get the hint (#451).
+
 ## [2.0.0] - 2026-11-14
 
 ### Added
