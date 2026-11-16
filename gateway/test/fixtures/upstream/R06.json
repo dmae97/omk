@@ -1,0 +1,27 @@
+{
+  "id": "chatcmpl-deepseek-R06",
+  "object": "chat.completion",
+  "created": 1790000000,
+  "model": "deepseek-flash",
+  "system_fingerprint": "fp_deepseek_x",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Edge."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 100,
+    "completion_tokens": 15,
+    "total_tokens": 115,
+    "prompt_tokens_details": {
+      "cached_tokens": 10
+    },
+    "prompt_cache_hit_tokens": 10,
+    "prompt_cache_miss_tokens": 90
+  }
+}

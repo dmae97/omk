@@ -1,0 +1,6 @@
+{
+	"upstream_base_url": "https://api.deepseek.com",
+	"upstream_timeout_ms": 120000,
+	"estimate_chars_per_token": 4,
+	"features": { "fim": false }
+}
