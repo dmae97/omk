@@ -207,6 +207,17 @@ describe("scoreSkillRelevance", () => {
 		const exact = scoreSkillRelevance({ name: "scorecard", description: "scorecard metrics" }, "scorecard pipeline");
 		expect(exact).toBeGreaterThanOrEqual(score);
 	});
+
+	it("keeps a suffix-only near-miss below the strong auto-load band", () => {
+		// Regression: "rendering" fuzzily matched "covering", lifting gke-app-onboarding from 0.60 to 0.71
+		// on an A2UI/Angular prompt that only shares the generic name token "app".
+		const gke = {
+			name: "gke-app-onboarding",
+			description:
+				"Manages GKE application onboarding, covering containerization, deployment manifests, and migration.",
+		};
+		expect(scoreSkillRelevance(gke, "add A2UI rendering to our Angular app")).toBeLessThan(0.7);
+	});
 });
 
 // ---------------------------------------------------------------------------

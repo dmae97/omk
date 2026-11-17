@@ -59,6 +59,12 @@ describe("context-budget-token-similarity", () => {
 			expect(tokenSimilarity("abcdef", "abghij")).toBe(0);
 		});
 
+		it("returns 0 when tokens share only an inflection suffix, not a stem", () => {
+			// rendering/covering share "ering" (Dice 8/15 ≈ 0.53) but no stem.
+			expect(tokenSimilarity("rendering", "covering")).toBe(0);
+			expect(tokenSimilarity("ordering", "rendering")).toBe(0);
+		});
+
 		it("returns 0 when either token has length < 2 during bigram evaluation", () => {
 			// Query shorter than 2 but item length >= 4 without containment
 			expect(tokenSimilarity("a", "wxyz")).toBe(0);

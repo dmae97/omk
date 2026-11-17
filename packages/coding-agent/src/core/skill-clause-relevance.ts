@@ -33,6 +33,10 @@ const CLAUSE_BOUNDARY = /[\r\n]+|[.!?;:]+(?=\s|$)|,\s+|\s+(?:and|then|also|plus)
 // short lines would match every `skill-*` name. It still counts toward `whole`, as before clauses.
 const SKILL_BLOCK = /<skill name="[^"]*" location="[^"]*">\n[\s\S]*?\n<\/skill>/gu;
 
+// A fragment of only file paths ("/tmp/gke-fp-probe.mts") names files, not a capability; its
+// filename tokens still count toward `whole`, but it must not saturate a clause on its own.
+const PATH_ONLY = /^(?:\S*[/\\]\S*\s*)+$/u;
+
 export interface TaskClause {
 	readonly text: string;
 	readonly tokens: readonly string[];
@@ -49,7 +53,7 @@ export function splitTaskClauses(task: string): TaskClause[] {
 			.trim();
 		const tokens = tokenizeForRelevance(text);
 		const key = tokens.join(" ");
-		if (tokens.length < MIN_CLAUSE_TOKENS || seen.has(key)) continue;
+		if (tokens.length < MIN_CLAUSE_TOKENS || seen.has(key) || PATH_ONLY.test(text)) continue;
 		seen.add(key);
 		clauses.push({ text, tokens });
 		if (clauses.length === MAX_TASK_CLAUSES) break;
