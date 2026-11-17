@@ -161,3 +161,36 @@ describe("advertised reasoning_effort matches what the gateway allows", () => {
 		}
 	});
 });
+
+describe("built-in upstream tools are blocked (PM 2026-11-17)", () => {
+	const rows = async () => (await h.db.query("SELECT count(*)::int n FROM usage_events")).rows[0].n as number;
+	const fnTool = (name: string) => ({ type: "function", function: { name, description: "d", parameters: { type: "object", properties: {} } } });
+	it.each([
+		["deepseek_web_search tool", { tools: [{ type: "deepseek_web_search" }] }],
+		["deepseek_read_url tool", { tools: [{ type: "deepseek_read_url" }] }],
+		["built-in tool next to a function tool", { tools: [fnTool("read"), { type: "deepseek_web_search" }] }],
+		["tool_choice naming a built-in", { tools: [fnTool("read")], tool_choice: { type: "deepseek_web_search" } }],
+		["tools that is not an array", { tools: { type: "function" } }],
+	])("%s -> 400 on both models, 0 upstream calls, 0 usage rows", async (_name, extra) => {
+		for (const model of ["OMK/coder", "OMK/reasoner"]) {
+			const n = h.mock.requests.length;
+			const r0 = await rows();
+			const r = await h.chat(plain(), { model, messages: msg(), ...extra });
+			expect(r.status).toBe(400);
+			const code = (await r.json()).error.code;
+			expect(["unsupported_tool", "invalid_request"]).toContain(code);
+			expect(h.mock.requests).toHaveLength(n);
+			expect(await rows()).toBe(r0);
+		}
+	});
+	it("function tools pass through unchanged, including one named web_search", async () => {
+		const tools = [fnTool("web_search"), fnTool("read")];
+		const r = await h.chat(plain(), { model: "OMK/coder", messages: msg(), tools, tool_choice: "auto" });
+		expect(r.status).toBe(200);
+		expect(last().tools).toEqual(tools);
+		expect(last().tool_choice).toBe("auto");
+		const r2 = await h.chat(plain(), { model: "OMK/coder", messages: msg(), tools, tool_choice: { type: "function", function: { name: "read" } } });
+		expect(r2.status).toBe(200);
+		expect(last().tool_choice).toEqual({ type: "function", function: { name: "read" } });
+	});
+});

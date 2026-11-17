@@ -59,6 +59,21 @@ export function validateRequest(body: any, model: string, cfg: ModelCfg, config:
 		if (typeof m.reasoning_content === "string") promptChars += m.reasoning_content.length;
 	}
 
+	// PM 2026-11-17: upstream built-in tools (web search, URL reading, ...) are billed per call outside token
+	// metering, so v1 forwards only plain function tools. Match on the tool type, never on the function name:
+	// a function tool named "web_search" runs on the client and stays allowed.
+	if (body.tools !== undefined) {
+		if (!Array.isArray(body.tools)) throw E.invalid("'tools' must be an array.", "tools");
+		for (const t of body.tools) {
+			if (!isObj(t) || t.type !== "function" || !isObj(t.function) || typeof t.function.name !== "string") {
+				throw E.invalid("Only function tools are supported. Built-in tools are not available.", "tools", "unsupported_tool");
+			}
+		}
+	}
+	if (isObj(body.tool_choice) && body.tool_choice.type !== "function") {
+		throw E.invalid("'tool_choice' can only name a function tool.", "tool_choice", "unsupported_tool");
+	}
+
 	if (body.stream !== undefined && typeof body.stream !== "boolean") throw E.invalid("'stream' must be a boolean.", "stream");
 
 	// thinking
