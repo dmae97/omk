@@ -8,6 +8,11 @@
 
 - `omk init --global` and a bare `omk` launch now report why bundled pstack agent installation failed, including the affected path, instead of `(unknown)`. Existing files are still never replaced (#451).
 - An extension load failure for a module under another installation's `node_modules` tree no longer suggests `omk install --allow-scripts`, because install scripts cannot fix a stale path. A missing file in a package's own `build/`, `dist/` or `lib/` output and missing `.node` bindings still get the hint (#451).
+- Skill selection rejects fuzzy matches between words with different initial characters unless one contains the other, and no longer treats path-only fragments as independent capability clauses. Filename tokens still count toward whole-request relevance (#453).
+
+### Changed
+
+- Next-task suggestions (`OMK_NEXT_SUGGESTIONS`, flag, default off) use the v3 format: a title and three labelled lines for context, scope and completion criteria. Skill selection for an accepted suggestion uses its title and scope rather than the host's context and check wording (#454).
 
 ## [2.0.0] - 2026-11-14
 

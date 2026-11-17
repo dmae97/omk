@@ -1,17 +1,19 @@
 # OMK v2.0.1
 
-OMK 2.0.1 is a patch release from `main`. It makes two setup failures
-diagnosable on a new machine, makes the release workflow's npm check wait for
-registry propagation, and carries the test coverage our community contributed
-in this cycle.
+OMK 2.0.1 is a patch release from `main`. It makes setup failures diagnosable,
+reduces false-positive skill matches, shortens opt-in next-task suggestions,
+and waits for npm registry propagation before completing a release.
 
 ## Contributors
 
-Thank you to everyone whose pull requests were merged in this cycle:
+Thank you to the community contributors whose pull requests were merged in this cycle:
 
 - [@anhnt256](https://github.com/anhnt256) added unit tests for the code-point
   predicates (#437), `tryAcquireLaneDispatch` (#438), the legacy resource
-  helpers (#439) and the HTTP idle timeout helpers (#441).
+  helpers (#439), HTTP idle timeouts (#441), context-budget tier allocation
+  (#459) and the Grok playbook loader (#460).
+- [@joshuaallgaier2-cmd](https://github.com/joshuaallgaier2-cmd) added unit tests
+  for context-budget ordering (#450) and coverage gaps (#455).
 
 ## Fixed
 
@@ -26,9 +28,20 @@ Thank you to everyone whose pull requests were merged in this cycle:
   scripts cannot fix a stale path. A missing file in a package's own `build/`,
   `dist/` or `lib/` output and missing `.node` bindings still get the hint
   (#451).
+- Skill selection rejects fuzzy matches between words with different initial
+  characters unless one contains the other, and no longer treats path-only
+  fragments as independent capability clauses. Filename tokens still count
+  toward whole-request relevance (#453).
 - The release workflow waits for each package's npm `latest` dist-tag before it
   verifies the publish, so registry propagation delay no longer skips the
   GitHub Release (#442).
+
+## Changed
+
+- Next-task suggestions (`OMK_NEXT_SUGGESTIONS`, flag, default off) use the v3
+  format: a title and three labelled lines for context, scope and completion
+  criteria. Skill selection for an accepted suggestion uses its title and
+  scope rather than the host's context and check wording (#454).
 
 ## Verification scope
 
