@@ -52,7 +52,7 @@ expected=${OMK_TEST_PREVIOUS_RELEASE:-2.0.1}
 }
 before=$(hash "$root/bin/omk")
 pack 2.0.2-test
-if FAIL_SWITCH=1 install_fixture; then exit 1; fi
+if (FAIL_SWITCH=1 install_fixture); then exit 1; fi
 # A failed download would preserve the old version too: require evidence we reached the switch.
 [ -L "$root/bin/.omk.next" ]
 [ "$("$root/bin/.omk.next" --version)" = 2.0.2-test ]
