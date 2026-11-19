@@ -3,8 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getModel } from "omk-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parseArgs } from "../src/cli/args.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
-import { createLoadoutAccessPolicy } from "../src/core/loadout-access-policy.ts";
+import {
+	createLoadoutAccessPolicy,
+	decideLoadoutAccess,
+	type LoadoutAccessPolicy,
+} from "../src/core/loadout-access-policy.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
 import { createAgentSession } from "../src/core/sdk.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
@@ -134,6 +139,49 @@ describe("createAgentSession domain dispatch wiring", () => {
 		} finally {
 			session.dispose();
 		}
+	});
+
+	it("enforces CLI read/write/execute scope through the routed SDK session", async () => {
+		const parsed = parseArgs([
+			"--read-scope",
+			"README.md",
+			"--write-scope",
+			"src",
+			"--exec-scope",
+			"npm test",
+			"Implement a responsive frontend UI component",
+		]);
+		const { session } = await createTestSdkSession({
+			domainRoutingPrompt: parsed.messages.join("\n"),
+			domainScopeHints: parsed.scopeHints,
+		});
+		try {
+			const policy = (session as unknown as { _loadoutAccessPolicy: LoadoutAccessPolicy })._loadoutAccessPolicy;
+			expect(decideLoadoutAccess(policy, { operation: "read", toolName: "read", path: "README.md" }).allowed).toBe(
+				true,
+			);
+			expect(
+				decideLoadoutAccess(policy, { operation: "write", toolName: "write", path: "src/Button.tsx" }).allowed,
+			).toBe(true);
+			expect(
+				decideLoadoutAccess(policy, { operation: "execute", toolName: "bash", command: "npm test" }).allowed,
+			).toBe(true);
+			expect(
+				decideLoadoutAccess(policy, { operation: "write", toolName: "write", path: "outside.txt" }).allowed,
+			).toBe(false);
+			expect(
+				decideLoadoutAccess(policy, { operation: "execute", toolName: "bash", command: "rm -rf src" }).allowed,
+			).toBe(false);
+		} finally {
+			session.dispose();
+		}
+	});
+
+	it("fails closed when explicit scope cannot be routed", async () => {
+		process.env.OMK_DOMAIN_ROUTING = "0";
+		await expect(
+			createTestSdkSession({ domainRoutingPrompt: "edit", domainScopeHints: { writeScope: ["src"] } }),
+		).rejects.toThrow(/requires OMK_DOMAIN_ROUTING/);
 	});
 
 	it("does nothing when opt-in is enabled without a routing prompt hint", async () => {

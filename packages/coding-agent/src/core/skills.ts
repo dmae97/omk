@@ -106,8 +106,10 @@ function validateName(name: string): string[] {
 		errors.push(`name exceeds ${MAX_NAME_LENGTH} characters (${name.length})`);
 	}
 
-	if (!/^[a-z0-9-]+$/.test(name)) {
-		errors.push(`name contains invalid characters (must be lowercase a-z, 0-9, hyphens only)`);
+	// OMK divergence from the Agent Skills spec: dots may separate non-empty segments, because
+	// Spec Kitty generates Pi command skills as `spec-kitty.<command>` (invoked as /skill:spec-kitty.plan).
+	if (!/^[a-z0-9-]+(\.[a-z0-9-]+)*$/.test(name)) {
+		errors.push(`name contains invalid characters (must be lowercase a-z, 0-9, hyphens; dots only between segments)`);
 	}
 
 	if (name.startsWith("-") || name.endsWith("-")) {

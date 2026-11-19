@@ -40,6 +40,13 @@ describe("Experiential Labs catalog", () => {
 		expect(getSupportedThinkingLevels(model!)).toEqual(["low", "medium", "high", "xhigh", "max"]);
 	});
 
+	it("does not invent max for the GLM-5.3 uncensored gateway route", () => {
+		const model = find("glm-5.3-uncensored");
+		expect(model).toBeDefined();
+		expect(getSupportedThinkingLevels(model!)).toEqual(["low", "high"]);
+		expect(model?.thinkingLevelMap?.max).toBeNull();
+	});
+
 	it("exposes the gateway's reasoning ladder for GPT-6 Sol", () => {
 		const model = find("gpt-6-sol");
 

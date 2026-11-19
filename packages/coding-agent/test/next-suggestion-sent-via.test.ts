@@ -114,7 +114,10 @@ describe("accept trace sentVia: real AgentSession dispatch path", () => {
 			resourceLoader: createTestResourceLoader({ extensionsResult: await createTestExtensionsResult(extensions) }),
 		});
 		const records: Array<Omit<SuggestionOutcomeRecord, "schemaVersion" | "sessionHash">> = [];
-		const trace = new SuggestionAcceptTracker((r) => records.push(r));
+		// The startup suggestion is host-built (`local`) and ends as `new_turn`; these cases follow the generated one.
+		const trace = new SuggestionAcceptTracker((r) => {
+			if (r.candidateSource !== "local") records.push(r);
+		});
 		let text = "";
 		const editor: SuggestionEditorPort = {
 			getText: () => text,
@@ -264,7 +267,10 @@ describe("accept trace sentVia: input deferred while another prompt is in prefli
 		harness = await createHarness({ settings: { retry: { enabled: false } } });
 		harness.setResponses(Array.from({ length: 4 }, () => () => createAssistantMessage("ok")));
 		const records: Array<Omit<SuggestionOutcomeRecord, "schemaVersion" | "sessionHash">> = [];
-		const trace = new SuggestionAcceptTracker((r) => records.push(r));
+		// The startup suggestion is host-built (`local`) and ends as `new_turn`; these cases follow the generated one.
+		const trace = new SuggestionAcceptTracker((r) => {
+			if (r.candidateSource !== "local") records.push(r);
+		});
 		const editor: SuggestionEditorPort = {
 			getText: () => "",
 			setText: () => {},

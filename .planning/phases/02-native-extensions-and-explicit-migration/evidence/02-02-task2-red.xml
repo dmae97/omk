@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="25" failures="15" errors="0" time="2.538494142">
+    <testsuite name="test/package-doctor-native-cli.test.ts" timestamp="2026-11-05T12:50:00.512Z" hostname="NucBoxEVO-X2" tests="13" failures="6" errors="0" skipped="0" time="2.480037675">
+        <testcase classname="test/package-doctor-native-cli.test.ts" name="package doctor target selection &gt; selects native independently of main argument parsing &quot;--package-manifest-dialect&quot;" time="0.014881393">
+            <failure message="expected { handled: true, exitCode: 2 } to deeply equal { handled: true, exitCode: 1 }" type="AssertionError">
+AssertionError: expected { handled: true, exitCode: 2 } to deeply equal { handled: true, exitCode: 1 }
+
+- Expected
++ Received
+
+  {
+-   &quot;exitCode&quot;: 1,
++   &quot;exitCode&quot;: 2,
+    &quot;handled&quot;: true,
+  }
+
+ ❯ test/package-doctor-native-cli.test.ts:47:19
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-cli.test.ts" name="package doctor target selection &gt; selects native independently of main argument parsing &quot;./fixture&quot;" time="0.004518319">
+            <failure message="expected { handled: true, exitCode: 2 } to deeply equal { handled: true, exitCode: 1 }" type="AssertionError">
+AssertionError: expected { handled: true, exitCode: 2 } to deeply equal { handled: true, exitCode: 1 }
+
+- Expected
++ Received
+
+  {
+-   &quot;exitCode&quot;: 1,
++   &quot;exitCode&quot;: 2,
+    &quot;handled&quot;: true,
+  }
+
+ ❯ test/package-doctor-native-cli.test.ts:47:19
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-cli.test.ts" name="package doctor target selection &gt; rejects invalid selection before preparation &quot;./fixture&quot;" time="0.002314288">
+        </testcase>
+        <testcase classname="test/package-doctor-native-cli.test.ts" name="package doctor target selection &gt; rejects invalid selection before preparation &quot;--package-manifest-dialect=&quot;" time="0.003236749">
+        </testcase>
+        <testcase classname="test/package-doctor-native-cli.test.ts" name="package doctor target selection &gt; rejects invalid selection before preparation &quot;./fixture&quot;" time="0.001499493">
+        </testcase>
+        <testcase classname="test/package-doctor-native-cli.test.ts" name="package doctor target selection &gt; rejects invalid selection before preparation &quot;./fixture&quot;" time="0.007438021">
+        </testcase>
+        <testcase classname="test/package-doctor-native-cli.test.ts" name="package doctor target selection &gt; rejects invalid selection before preparation &quot;--package-manifest-dialect=bad&quot;" time="0.001190841">
+        </testcase>
+        <testcase classname="test/package-doctor-native-cli.test.ts" name="package doctor target selection &gt; rejects invalid selection before preparation &quot;--package-manifest-dialect=omk&quot;" time="0.000954821">
+        </testcase>
+        <testcase classname="test/package-doctor-native-cli.test.ts" name="package doctor target selection &gt; rejects invalid selection before preparation &quot;./fixture&quot;" time="0.003954391">
+        </testcase>
+        <testcase classname="test/package-doctor-native-cli.test.ts" name="package doctor target selection &gt; preserves omission JSON and cleanup with explicit compatibility" time="0.007854644">
+            <failure message="expected 2 to be +0 // Object.is equality" type="AssertionError">
+AssertionError: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ test/package-doctor-native-cli.test.ts:73:178
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-cli.test.ts" name="package doctor target selection &gt; cleans prepared sources when scanning fails" time="0.00532608">
+            <failure message="expected 2 to be 1 // Object.is equality" type="AssertionError">
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ test/package-doctor-native-cli.test.ts:83:28
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-cli.test.ts" name="package doctor target selection &gt; runs the actual local static CLI for &quot;--package-manifest-dialect&quot; without executing or rewriting originals" time="1.202395644">
+            <failure message="expected 2 to be 1 // Object.is equality" type="AssertionError">
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ test/package-doctor-native-cli.test.ts:91:25
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-cli.test.ts" name="package doctor target selection &gt; runs the actual local static CLI for &quot;--package-manifest-dialect=omk&quot; without executing or rewriting originals" time="1.221296547">
+            <failure message="expected 2 to be 1 // Object.is equality" type="AssertionError">
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ test/package-doctor-native-cli.test.ts:91:25
+            </failure>
+        </testcase>
+    </testsuite>
+    <testsuite name="test/package-doctor-native-profile.test.ts" timestamp="2026-11-05T12:50:00.530Z" hostname="NucBoxEVO-X2" tests="12" failures="9" errors="0" skipped="0" time="0.058456467">
+        <testcase classname="test/package-doctor-native-profile.test.ts" name="static native package diagnosis &gt; reports Pi-only policy as a diagnostic without convention fallback or execution" time="0.011697237">
+            <failure message="expected true to be false // Object.is equality" type="AssertionError">
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ test/package-doctor-native-profile.test.ts:24:29
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-profile.test.ts" name="static native package diagnosis &gt; warns about declared but absent subpath imports in dependencies" time="0.004399054">
+            <failure message="expected &apos;Legacy Pi runtime imports will use OM…&apos; to match /no implicit.*alias/i" type="AssertionError">
+AssertionError: expected &apos;Legacy Pi runtime imports will use OM…&apos; to match /no implicit.*alias/i
+
+- Expected:
+/no implicit.*alias/i
+
++ Received:
+&quot;Legacy Pi runtime imports will use OMK compatibility aliases&quot;
+
+ ❯ test/package-doctor-native-profile.test.ts:38:26
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-profile.test.ts" name="static native package diagnosis &gt; warns about declared but absent subpath imports in peerDependencies" time="0.003017262">
+            <failure message="expected &apos;Legacy Pi runtime imports will use OM…&apos; to match /no implicit.*alias/i" type="AssertionError">
+AssertionError: expected &apos;Legacy Pi runtime imports will use OM…&apos; to match /no implicit.*alias/i
+
+- Expected:
+/no implicit.*alias/i
+
++ Received:
+&quot;Legacy Pi runtime imports will use OMK compatibility aliases&quot;
+
+ ❯ test/package-doctor-native-profile.test.ts:38:26
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-profile.test.ts" name="static native package diagnosis &gt; warns about declared but absent subpath imports in optionalDependencies" time="0.005106903">
+            <failure message="expected &apos;Legacy Pi runtime imports will use OM…&apos; to match /no implicit.*alias/i" type="AssertionError">
+AssertionError: expected &apos;Legacy Pi runtime imports will use OM…&apos; to match /no implicit.*alias/i
+
+- Expected:
+/no implicit.*alias/i
+
++ Received:
+&quot;Legacy Pi runtime imports will use OMK compatibility aliases&quot;
+
+ ❯ test/package-doctor-native-profile.test.ts:38:26
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-profile.test.ts" name="static native package diagnosis &gt; errors on an undeclared exact legacy package root with declarations {}" time="0.006376938">
+            <failure message="expected { id: &apos;runtime-imports&apos;, …(3) } to match object { status: &apos;error&apos;, …(1) }
+(2 matching properties omitted from actual)" type="AssertionError">
+AssertionError: expected { id: &apos;runtime-imports&apos;, …(3) } to match object { status: &apos;error&apos;, …(1) }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    &quot;files&quot;: [
+      &quot;entry.ts&quot;,
+    ],
+-   &quot;status&quot;: &quot;error&quot;,
++   &quot;status&quot;: &quot;warning&quot;,
+  }
+
+ ❯ test/package-doctor-native-profile.test.ts:53:68
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-profile.test.ts" name="static native package diagnosis &gt; errors on an undeclared exact legacy package root with declarations {&quot;dependencies&quot;:{&quot;@earendil-works/pi-ai-extra&quot;:&quot;*&quot;}}" time="0.001757762">
+            <failure message="expected { id: &apos;runtime-imports&apos;, …(3) } to match object { status: &apos;error&apos;, …(1) }
+(2 matching properties omitted from actual)" type="AssertionError">
+AssertionError: expected { id: &apos;runtime-imports&apos;, …(3) } to match object { status: &apos;error&apos;, …(1) }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    &quot;files&quot;: [
+      &quot;entry.ts&quot;,
+    ],
+-   &quot;status&quot;: &quot;error&quot;,
++   &quot;status&quot;: &quot;warning&quot;,
+  }
+
+ ❯ test/package-doctor-native-profile.test.ts:53:68
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-profile.test.ts" name="static native package diagnosis &gt; errors on an undeclared exact legacy package root with declarations {&quot;devDependencies&quot;:{&quot;@earendil-works/pi-ai&quot;:&quot;*&quot;}}" time="0.002681122">
+            <failure message="expected { id: &apos;runtime-imports&apos;, …(3) } to match object { status: &apos;error&apos;, …(1) }
+(2 matching properties omitted from actual)" type="AssertionError">
+AssertionError: expected { id: &apos;runtime-imports&apos;, …(3) } to match object { status: &apos;error&apos;, …(1) }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    &quot;files&quot;: [
+      &quot;entry.ts&quot;,
+    ],
+-   &quot;status&quot;: &quot;error&quot;,
++   &quot;status&quot;: &quot;warning&quot;,
+  }
+
+ ❯ test/package-doctor-native-profile.test.ts:53:68
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-profile.test.ts" name="static native package diagnosis &gt; errors on an undeclared exact legacy package root with declarations {&quot;dependencies&quot;:{&quot;@earendil-works/pi-ai&quot;:null}}" time="0.001127431">
+            <failure message="expected { id: &apos;runtime-imports&apos;, …(3) } to match object { status: &apos;error&apos;, …(1) }
+(2 matching properties omitted from actual)" type="AssertionError">
+AssertionError: expected { id: &apos;runtime-imports&apos;, …(3) } to match object { status: &apos;error&apos;, …(1) }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    &quot;files&quot;: [
+      &quot;entry.ts&quot;,
+    ],
+-   &quot;status&quot;: &quot;error&quot;,
++   &quot;status&quot;: &quot;warning&quot;,
+  }
+
+ ❯ test/package-doctor-native-profile.test.ts:53:68
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-profile.test.ts" name="static native package diagnosis &gt; does not blacklist an unrelated package from the same publisher" time="0.00127553">
+        </testcase>
+        <testcase classname="test/package-doctor-native-profile.test.ts" name="static native package diagnosis &gt; preserves byte-equivalent compatibility JSON on omission and undefined" time="0.003478586">
+        </testcase>
+        <testcase classname="test/package-doctor-native-profile.test.ts" name="static native package diagnosis &gt; validates untyped construction before filesystem access" time="0.005527212">
+            <failure message="expected [Function] to throw error including &apos;packageManifestDialect must be &quot;omk&quot; …&apos; but got &apos;ENOENT: no such file or directory, ls…&apos;" type="AssertionError">
+AssertionError: expected [Function] to throw error including &apos;packageManifestDialect must be &quot;omk&quot; …&apos; but got &apos;ENOENT: no such file or directory, ls…&apos;
+
+Expected: &quot;packageManifestDialect must be &quot;omk&quot; or &quot;omk+pi&quot;&quot;
+Received: &quot;ENOENT: no such file or directory, lstat &apos;/mnt/omkdata/tmp/omk-doctor-native-9xxCBE/missing&apos;&quot;
+
+ ❯ test/package-doctor-native-profile.test.ts:74:151
+            </failure>
+        </testcase>
+        <testcase classname="test/package-doctor-native-profile.test.ts" name="static native package diagnosis &gt; keeps bounded relative scanning, no node_modules reads, symlink containment and source redaction" time="0.01051938">
+        </testcase>
+    </testsuite>
+</testsuites>

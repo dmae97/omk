@@ -22,7 +22,7 @@ const strippedCopies = new WeakMap<object, { readonly snapshot: readonly unknown
 
 function shallowSnapshot(message: AssistantMessage): unknown[] {
 	const snapshot: unknown[] = [];
-	for (const key of Object.keys(message)) snapshot.push(key, (message as unknown as Record<string, unknown>)[key]);
+	for (const [key, value] of Object.entries(message)) snapshot.push(key, value);
 	snapshot.push(message.content.length, ...message.content);
 	return snapshot;
 }

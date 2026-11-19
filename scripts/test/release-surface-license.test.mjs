@@ -7,7 +7,7 @@ import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const packages = ["ai", "tui", "agent", "protocol", "adaptorch-wpl", "coding-agent", "book-to-skill"];
+const packages = ["ai", "tui", "agent", "protocol", "adaptorch-wpl", "coding-agent", "book-to-skill", "speak-like-you-eat"];
 
 describe("release surface license checks", () => {
 	let fixture;
@@ -27,7 +27,7 @@ describe("release surface license checks", () => {
 				JSON.stringify({
 					name: `fixture-${name}`,
 					version: "1.0.0",
-					files: ["LICENSE", "DEVIN-NOTICE", "resources", "vendor"],
+					files: ["LICENSE", "DEVIN-NOTICE", "UPSTREAM-LICENSE", "resources", "vendor"],
 				}),
 			);
 			writeFileSync(join(dir, "LICENSE"), name === "book-to-skill" ? "Book license\n" : rootLicense);
@@ -37,6 +37,7 @@ describe("release surface license checks", () => {
 		writeFileSync(join(fixture, "packages/coding-agent/resources/pstack/LICENSE"), "pstack license\n");
 		mkdirSync(join(fixture, "packages/book-to-skill/vendor/book-to-skill"), { recursive: true });
 		writeFileSync(join(fixture, "packages/book-to-skill/vendor/book-to-skill/LICENSE.md"), "upstream license\n");
+		writeFileSync(join(fixture, "packages/speak-like-you-eat/UPSTREAM-LICENSE"), "SLYE license\n");
 	});
 
 	after(() => rmSync(fixture, { recursive: true, force: true }));

@@ -1,6 +1,6 @@
 import { basename } from "node:path";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type Component, type OverlayHandle, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import type { ExtensionContext } from "open-multi-agent-kit";
+import { type Component, type OverlayHandle, truncateToWidth, visibleWidth } from "omk-tui";
 import { liveTheme } from "../../src/theme.ts";
 import { DEFAULT_CONFIG } from "./config.ts";
 import { displayHomePath } from "./display-path.ts";

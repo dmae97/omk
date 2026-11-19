@@ -48,6 +48,10 @@ const ITEM_FIELDS = {
 	detail: Type.Optional(Type.String({ description: "Optional extra context for the task." })),
 };
 
+/** Older embedded callers can lack a session manager; they keep the compatibility owner. */
+const todoOwner = (ctx: { sessionManager?: { getSessionId?: () => string } }) =>
+	ctx.sessionManager?.getSessionId?.() ?? "default";
+
 function registerTodoChecklist(omk: ExtensionAPI, verify: TodoVerify | undefined, env: NodeJS.ProcessEnv): void {
 	let state: TodoState = EMPTY_TODO_STATE;
 	// Typed as main's fields: with the flag on the extra fields reach `normalizeTodoFields` untyped, and only there.
@@ -55,9 +59,12 @@ function registerTodoChecklist(omk: ExtensionAPI, verify: TodoVerify | undefined
 		verify ? { ...ITEM_FIELDS, ...verify.TODO_VERIFY_ITEM_FIELDS } : ITEM_FIELDS
 	) as typeof ITEM_FIELDS;
 
-	omk.on("session_start", () => {
+	omk.on("session_start", (_event, ctx) => {
 		state = EMPTY_TODO_STATE;
-		resetCurrentTodoState();
+		resetCurrentTodoState(todoOwner(ctx));
+	});
+	omk.on("session_shutdown", (_event, ctx) => {
+		resetCurrentTodoState(todoOwner(ctx));
 	});
 
 	omk.registerTool({
@@ -91,7 +98,7 @@ function registerTodoChecklist(omk: ExtensionAPI, verify: TodoVerify | undefined
 							: { ...item, status: item.status as TodoStatus },
 				),
 			);
-			setCurrentTodoState(state);
+			setCurrentTodoState(state, todoOwner(ctx));
 			if (verify) verify.logTodoSnapshot(state.items, env);
 			const snapshot = state;
 			// Only a UI session mounts the widget. With a UI present, a failed import

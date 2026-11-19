@@ -266,6 +266,11 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 				}
 			}
 		}
+		const finalMessage = session.state.messages.at(-1);
+		if (finalMessage?.role === "assistant" && finalMessage.stopReason === "length") {
+			console.error("Warning: response was truncated at the model's output token limit.");
+			exitCode = 1;
+		}
 
 		return exitCode;
 	} catch (error: unknown) {

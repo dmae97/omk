@@ -5,7 +5,10 @@ import type { SuggestionBudget } from "../../core/next-suggestion-budget.ts";
 import type * as settlement from "../../core/next-suggestion-settlement.ts";
 
 export interface SuggestionSessionPort {
-	readonly agent: { streamFn: StreamFn; readonly state: { readonly messages: readonly unknown[] } };
+	readonly agent: {
+		streamFn: StreamFn;
+		readonly state: { readonly messages: readonly unknown[]; readonly isStreaming?: boolean };
+	};
 	readonly model: { readonly provider: string; readonly id: string } | undefined;
 	subscribe(
 		listener: (event: { readonly type: string; readonly outcome?: string; readonly message?: unknown }) => unknown,
@@ -28,4 +31,9 @@ export interface NextSuggestionOptions {
 	/** Spec 103 caps budget (caps flag only); defaults to the env budget. */
 	readonly budget?: SuggestionBudget;
 	readonly timeoutSignal?: (ms: number) => AbortSignal;
+	/**
+	 * Whether the selected model can send a request (credentials configured). A session can hold a
+	 * default model object without any login; absent ⇒ a selected model counts as usable.
+	 */
+	readonly modelUsable?: () => boolean;
 }

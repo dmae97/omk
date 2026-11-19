@@ -902,6 +902,270 @@ describe("AuthStorage", () => {
 		});
 	});
 
+	describe("token refresh does not hold the credential store", () => {
+		// Sessions share one auth.json. The refresh request used to run inside the store lock, so one
+		// provider answering slowly (or a dead login retried every minute by every session) kept all
+		// the others from reading their own, still valid, credentials.
+		function uniqueId(label: string): string {
+			return `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+		}
+
+		function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+			let resolve!: (value: T) => void;
+			const promise = new Promise<T>((settle) => {
+				resolve = settle;
+			});
+			return { promise, resolve };
+		}
+
+		/** An OAuth provider whose refresh stays in flight until the test releases it. */
+		function registerGatedProvider(id: string) {
+			const started = deferred<void>();
+			const gate = deferred<void>();
+			const state = { refreshCalls: 0, started: started.promise, release: () => gate.resolve() };
+			registerOAuthProvider({
+				id,
+				name: id,
+				async login() {
+					throw new Error("Not used in this test");
+				},
+				async refreshToken(credentials) {
+					state.refreshCalls++;
+					started.resolve();
+					await gate.promise;
+					return {
+						...credentials,
+						access: `${id}-refreshed`,
+						refresh: `${id}-rotated`,
+						expires: Date.now() + 3_600_000,
+					};
+				},
+				getApiKey(credentials) {
+					return credentials.access;
+				},
+			});
+			return state;
+		}
+
+		function expired(id: string) {
+			return { type: "oauth", refresh: `${id}-refresh`, access: `${id}-expired`, expires: Date.now() - 10_000 };
+		}
+
+		function readAuthJson(): Record<string, { access?: string; refresh?: string; key?: string }> {
+			return JSON.parse(readFileSync(authJsonPath, "utf-8"));
+		}
+
+		test("a refresh in flight for one provider does not delay another provider's token", async () => {
+			const slowId = uniqueId("slow-provider");
+			const slow = registerGatedProvider(slowId);
+			writeAuthJson({
+				[slowId]: expired(slowId),
+				anthropic: {
+					type: "oauth",
+					refresh: "r",
+					access: "valid-anthropic-token",
+					expires: Date.now() + 3_600_000,
+				},
+			});
+			const sessionA = AuthStorage.create(authJsonPath);
+			const sessionB = AuthStorage.create(authJsonPath);
+
+			const slowKey = sessionA.getApiKey(slowId);
+			await slow.started;
+
+			const blocked = new Promise<string>((resolve) =>
+				setTimeout(() => resolve("blocked behind the refresh"), 1_000),
+			);
+			expect(await Promise.race([sessionB.getApiKey("anthropic"), blocked])).toBe("valid-anthropic-token");
+
+			slow.release();
+			expect(await slowKey).toBe(`${slowId}-refreshed`);
+			expect(readAuthJson()[slowId]).toMatchObject({ access: `${slowId}-refreshed`, refresh: `${slowId}-rotated` });
+		});
+
+		test("a token that needs no refresh never holds the store lock across an await", async () => {
+			// A session resolves its key at request start, right before it assembles the prompt. A lock
+			// taken with the async API spans event-loop turns, so it stayed held for as long as that
+			// synchronous work ran: a 2 s stall in one session was a 2 s hold for all of them.
+			writeAuthJson({
+				anthropic: {
+					type: "oauth",
+					refresh: "r",
+					access: "valid-anthropic-token",
+					expires: Date.now() + 3_600_000,
+				},
+			});
+			authStorage = AuthStorage.create(authJsonPath);
+			const asyncLock = vi.spyOn(lockfile, "lock");
+
+			expect(await authStorage.getApiKey("anthropic")).toBe("valid-anthropic-token");
+			expect(asyncLock).not.toHaveBeenCalled();
+		});
+
+		test("waits for the store lock when another process holds it at that instant", async () => {
+			writeAuthJson({
+				anthropic: {
+					type: "oauth",
+					refresh: "r",
+					access: "valid-anthropic-token",
+					expires: Date.now() + 3_600_000,
+				},
+			});
+			authStorage = AuthStorage.create(authJsonPath);
+			const busy = Object.assign(new Error("Lock file is already being held"), { code: "ELOCKED" });
+			vi.spyOn(lockfile, "lockSync").mockImplementation(() => {
+				throw busy;
+			});
+			const asyncLock = vi.spyOn(lockfile, "lock");
+
+			expect(await authStorage.getApiKey("anthropic")).toBe("valid-anthropic-token");
+			expect(asyncLock).toHaveBeenCalledTimes(1);
+		});
+
+		test("two sessions that find the same expired token refresh it once", async () => {
+			const id = uniqueId("shared-provider");
+			const provider = registerGatedProvider(id);
+			writeAuthJson({ [id]: expired(id) });
+			const sessionA = AuthStorage.create(authJsonPath);
+			const sessionB = AuthStorage.create(authJsonPath);
+
+			const first = sessionA.getApiKey(id);
+			await provider.started;
+			const second = sessionB.getApiKey(id);
+			provider.release();
+
+			expect(await first).toBe(`${id}-refreshed`);
+			expect(await second).toBe(`${id}-refreshed`);
+			expect(provider.refreshCalls).toBe(1);
+		});
+
+		test("a store change made during the refresh survives the write-back", async () => {
+			const id = uniqueId("writeback-provider");
+			const provider = registerGatedProvider(id);
+			writeAuthJson({ [id]: expired(id) });
+			const sessionA = AuthStorage.create(authJsonPath);
+			const sessionB = AuthStorage.create(authJsonPath);
+
+			const refreshing = sessionA.getApiKey(id);
+			await provider.started;
+			sessionB.set("other-provider", { type: "api_key", key: "added-during-refresh" });
+			provider.release();
+
+			expect(await refreshing).toBe(`${id}-refreshed`);
+			expect(sessionB.drainErrors()).toEqual([]);
+			const stored = readAuthJson();
+			expect(stored["other-provider"]).toMatchObject({ key: "added-during-refresh" });
+			expect(stored[id]).toMatchObject({ access: `${id}-refreshed` });
+		});
+
+		test("a login that replaced the account during the refresh is not overwritten", async () => {
+			const id = uniqueId("relogin-provider");
+			const provider = registerGatedProvider(id);
+			writeAuthJson({ [id]: expired(id) });
+			const sessionA = AuthStorage.create(authJsonPath);
+			const sessionB = AuthStorage.create(authJsonPath);
+
+			const refreshing = sessionA.getApiKey(id);
+			await provider.started;
+			sessionB.set(id, {
+				type: "oauth",
+				refresh: "new-login-refresh",
+				access: "new-login-access",
+				expires: Date.now() + 3_600_000,
+			});
+			provider.release();
+			await refreshing;
+
+			expect(readAuthJson()[id]).toMatchObject({ access: "new-login-access", refresh: "new-login-refresh" });
+			expect(await sessionA.getApiKey(id)).toBe("new-login-access");
+		});
+	});
+
+	describe("background callers do not repeat a refresh that keeps failing", () => {
+		// The usage rail asks for every configured provider's key about once a minute in every session.
+		// A login that could no longer refresh sent a token request each time, for as long as it stayed
+		// in the store.
+		function registerDeadProvider() {
+			const id = `dead-login-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+			const state = { id, refreshCalls: 0 };
+			registerOAuthProvider({
+				id,
+				name: id,
+				async login() {
+					throw new Error("Not used in this test");
+				},
+				async refreshToken() {
+					state.refreshCalls++;
+					throw new Error("invalid_grant");
+				},
+				getApiKey(credentials) {
+					return credentials.access;
+				},
+			});
+			return state;
+		}
+
+		function expiredLogin(refresh: string) {
+			return { type: "oauth" as const, refresh, access: "expired-access", expires: Date.now() - 10_000 };
+		}
+
+		const background = { includeFallback: false, background: true };
+
+		test("asks the token endpoint once across repeated background calls", async () => {
+			const dead = registerDeadProvider();
+			writeAuthJson({ [dead.id]: expiredLogin("dead-refresh") });
+			authStorage = AuthStorage.create(authJsonPath);
+
+			for (let poll = 0; poll < 3; poll++) {
+				expect(await authStorage.getApiKey(dead.id, background)).toBeUndefined();
+			}
+
+			expect(dead.refreshCalls).toBe(1);
+			expect(authStorage.drainErrors()).toHaveLength(1);
+		});
+
+		test("a request the user is waiting on still tries", async () => {
+			const dead = registerDeadProvider();
+			writeAuthJson({ [dead.id]: expiredLogin("dead-refresh") });
+			authStorage = AuthStorage.create(authJsonPath);
+
+			await authStorage.getApiKey(dead.id, background);
+			expect(await authStorage.getApiKey(dead.id)).toBeUndefined();
+
+			expect(dead.refreshCalls).toBe(2);
+		});
+
+		test("tries again once the wait has passed", async () => {
+			const dead = registerDeadProvider();
+			writeAuthJson({ [dead.id]: expiredLogin("dead-refresh") });
+			authStorage = AuthStorage.create(authJsonPath);
+			const startedAt = performance.now();
+			const clock = vi.spyOn(performance, "now").mockReturnValue(startedAt);
+
+			await authStorage.getApiKey(dead.id, background);
+			clock.mockReturnValue(startedAt + 59_000);
+			await authStorage.getApiKey(dead.id, background);
+			expect(dead.refreshCalls).toBe(1);
+
+			clock.mockReturnValue(startedAt + 61_000);
+			await authStorage.getApiKey(dead.id, background);
+			expect(dead.refreshCalls).toBe(2);
+		});
+
+		test("a new login for the provider is tried at once", async () => {
+			const dead = registerDeadProvider();
+			writeAuthJson({ [dead.id]: expiredLogin("dead-refresh") });
+			authStorage = AuthStorage.create(authJsonPath);
+			await authStorage.getApiKey(dead.id, background);
+
+			// Another session logged in again; this one only sees the store change.
+			AuthStorage.create(authJsonPath).set(dead.id, expiredLogin("refresh-from-new-login"));
+			await authStorage.getApiKey(dead.id, background);
+
+			expect(dead.refreshCalls).toBe(2);
+		});
+	});
+
 	describe("persistence semantics", () => {
 		test("set preserves unrelated external edits", () => {
 			writeAuthJson({

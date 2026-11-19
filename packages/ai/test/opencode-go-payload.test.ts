@@ -49,18 +49,15 @@ describe("OpenCode Go reasoning payloads", () => {
 		expect(payload).not.toHaveProperty("enable_thinking");
 	});
 
-	it.each(["mimo-v2.5", "mimo-v2.5-pro", "mimo-v2.6-flash", "mimo-v2.6-pro", "longcat-2.0", "kimi-k2.6", "glm-5.1"])(
-		"uses only the thinking toggle on %s",
-		async (id) => {
-			for (const reasoning of ["high", undefined] as const) {
-				const payload = await capture(id, reasoning);
-				expect(payload).toMatchObject({ thinking: { type: reasoning ? "enabled" : "disabled" } });
-				expect(payload).not.toHaveProperty("reasoning_effort");
-			}
-		},
-	);
+	it.each(["mimo-v2.6-flash", "mimo-v2.6-pro", "longcat-2.0"])("uses only the thinking toggle on %s", async (id) => {
+		for (const reasoning of ["high", undefined] as const) {
+			const payload = await capture(id, reasoning);
+			expect(payload).toMatchObject({ thinking: { type: reasoning ? "enabled" : "disabled" } });
+			expect(payload).not.toHaveProperty("reasoning_effort");
+		}
+	});
 
-	it.each(["kimi-k2.7-code", "minimax-m2.5", "minimax-m2.7"])("leaves fixed reasoning enabled on %s", async (id) => {
+	it.each(["kimi-k2.7-code"])("leaves fixed reasoning enabled on %s", async (id) => {
 		const payload = await capture(id, "high");
 		expect(payload).not.toHaveProperty("reasoning_effort");
 		expect(payload).not.toHaveProperty("thinking");

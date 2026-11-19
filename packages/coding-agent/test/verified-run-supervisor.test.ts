@@ -194,7 +194,11 @@ describe("owned process supervisor cancellation proof", () => {
 		const controller = new AbortController();
 		const execution = executeSandbox({
 			...request(),
-			argv: ["/bin/sh", "-c", 'trap "" TERM; setsid sleep 60 & sleep 60'],
+			argv: [
+				"/bin/sh",
+				"-c",
+				"trap \"\" TERM; setsid /bin/sh -c 'echo ready > kill-descendant-ready; exec sleep 60' & sleep 60",
+			],
 			signal: controller.signal,
 			onReady: (identity) => ready.resolve(identity),
 		});
@@ -204,15 +208,22 @@ describe("owned process supervisor cancellation proof", () => {
 				throw new Error("process exited before ready");
 			}),
 		]);
-		expect((await waitForMembers(identity, 2)).length).toBeGreaterThanOrEqual(2);
-		controller.abort();
-		const outcome = await execution;
-		expect(outcome.failure).toBe("cancelled");
-		expect(outcome.exitCode).toBeNull();
-		// Init death terminates every remaining task in the namespace: the
-		// member set is empty, and init teardown completes on the kernel side.
-		expect(await supervisor.awaitBoundaryDrained(identity, 5000)).toBe("drained");
-		expect(await waitForNamespaceGone(identity)).toBe("gone");
+		try {
+			// Readiness is committed before argv runs; a /proc scan alone may count unrelated unreadable tasks.
+			const deadline = performance.now() + 5000;
+			while (!existsSync(join(root, "kill-descendant-ready")) && performance.now() < deadline)
+				await new Promise((resolve) => setTimeout(resolve, 10));
+			expect(existsSync(join(root, "kill-descendant-ready"))).toBe(true);
+			expect((await waitForMembers(identity, 2)).length).toBeGreaterThanOrEqual(2);
+		} finally {
+			controller.abort();
+			const outcome = await execution;
+			expect(outcome.failure).toBe("cancelled");
+			expect(outcome.exitCode).toBeNull();
+			// Keep the real namespace termination witness after observing the actual detached descendant.
+			expect(await supervisor.awaitBoundaryDrained(identity, 5000)).toBe("drained");
+			expect(await waitForNamespaceGone(identity)).toBe("gone");
+		}
 	});
 
 	it("detects a live descendant independently of the recorded direct child", async () => {

@@ -918,6 +918,43 @@ describe("provider doctor", () => {
 			expect(requests.map((request) => request.method)).toEqual(["GET", "GET"]);
 		});
 
+		test("issue #9: diagnosing custom provider by name from config.toml directly", async () => {
+			vi.stubEnv("KIMI_BASE_URL", "");
+			vi.stubEnv("KIMI_API_KEY", "");
+			writeFileSync(
+				kimiConfigPath,
+				[
+					"[providers.ollama]",
+					'type = "openai_legacy"',
+					'base_url = "https://ollama.example.test/v1"',
+					'model_name = "ollama-model"',
+				].join("\n"),
+			);
+
+			const requests: ProviderDoctorTransportRequest[] = [];
+			const result = await diagnoseProvider("ollama", {
+				agentDir,
+				kimiConfigPath,
+				level: 1,
+				transport: sequenceTransport([404, 200], requests),
+			});
+
+			expect(result).toMatchObject({
+				status: "ok",
+				origin: "custom-openai-compatible",
+				source: "kimi-config-toml:providers.ollama",
+				targetUrl: "https://ollama.example.test/v1",
+				api: "openai-completions",
+				modelId: "ollama-model",
+				authPresent: false,
+			});
+			expect(result.checks.find((check) => check.name === "native-provider-checks")?.status).toBe("skipped");
+			expect(result.checks.find((check) => check.name === "auth-present")?.status).toBe("skipped");
+			expect(result.checks.find((check) => check.name === "root-endpoint")?.status).toBe("unsupported");
+			expect(result.checks.find((check) => check.name === "models-endpoint")?.status).toBe("ok");
+			expect(requests.map((request) => request.method)).toEqual(["GET", "GET"]);
+		});
+
 		test("root Kimi config keys keep native classification and beat provider tables", async () => {
 			writeFileSync(
 				kimiConfigPath,

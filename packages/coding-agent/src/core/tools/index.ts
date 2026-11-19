@@ -1,3 +1,5 @@
+import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
+
 export {
 	type BashOperations,
 	type BashSpawnContext,
@@ -25,6 +27,7 @@ export {
 	type EditToolInput,
 	type EditToolOptions,
 } from "./edit.ts";
+export { createExploreToolDefinition, type ExploreToolInput } from "./explore.ts";
 export { withFileMutationQueue } from "./file-mutation-queue.ts";
 export {
 	createFindTool,
@@ -81,6 +84,7 @@ import type { ToolDefinition } from "../extensions/types.ts";
 import { type BashToolOptions, createBashTool, createBashToolDefinition } from "./bash.ts";
 import { createDiagnosticsTool, createDiagnosticsToolDefinition } from "./diagnostics.ts";
 import { createEditTool, createEditToolDefinition, type EditToolOptions } from "./edit.ts";
+import { createExploreToolDefinition } from "./explore.ts";
 import { createFindTool, createFindToolDefinition, type FindToolOptions } from "./find.ts";
 import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "./grep.ts";
 import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.ts";
@@ -89,7 +93,7 @@ import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } fro
 
 export type Tool = AgentTool<any>;
 export type ToolDef = ToolDefinition<any, any>;
-export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls" | "diagnostics";
+export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls" | "diagnostics" | "explore";
 export const allToolNames: Set<ToolName> = new Set([
 	"read",
 	"bash",
@@ -129,6 +133,8 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createLsToolDefinition(cwd, options?.ls);
 		case "diagnostics":
 			return createDiagnosticsToolDefinition(cwd);
+		case "explore":
+			return createExploreToolDefinition(cwd);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -152,6 +158,8 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createLsTool(cwd, options?.ls);
 		case "diagnostics":
 			return createDiagnosticsTool(cwd);
+		case "explore":
+			return wrapToolDefinition(createExploreToolDefinition(cwd));
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -169,6 +177,7 @@ export function createCodingToolDefinitions(cwd: string, options?: ToolsOptions)
 export function createReadOnlyToolDefinitions(cwd: string, options?: ToolsOptions): ToolDef[] {
 	return [
 		createReadToolDefinition(cwd, options?.read),
+		createExploreToolDefinition(cwd),
 		createGrepToolDefinition(cwd, options?.grep),
 		createFindToolDefinition(cwd, options?.find),
 		createLsToolDefinition(cwd, options?.ls),
@@ -184,6 +193,7 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 		grep: createGrepToolDefinition(cwd, options?.grep),
 		find: createFindToolDefinition(cwd, options?.find),
 		ls: createLsToolDefinition(cwd, options?.ls),
+		explore: createExploreToolDefinition(cwd),
 		diagnostics: createDiagnosticsToolDefinition(cwd),
 	};
 }
@@ -214,6 +224,7 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		write: createWriteTool(cwd, options?.write),
 		grep: createGrepTool(cwd, options?.grep),
 		find: createFindTool(cwd, options?.find),
+		explore: wrapToolDefinition(createExploreToolDefinition(cwd)),
 		ls: createLsTool(cwd, options?.ls),
 		diagnostics: createDiagnosticsTool(cwd),
 	};

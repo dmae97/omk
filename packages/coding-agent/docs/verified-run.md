@@ -14,6 +14,11 @@ M3의 정적 DAG·부분 재시도와 최대 2개 작업의 eager frontier를 �
 
 ## 실행 경로
 
+Workbench의 읽기 전용 그래프 입력은 `omk run graph ID --state-dir DIR --json`으로
+얻습니다. 기존 원장·증거를 읽으며 실행·복구·게시를 요청하지 않습니다. 성공한 읽기의
+exit `0`은 run의 검증 통과를 뜻하지 않습니다. 출력 버전은 `omk.run-graph.v1`이며
+현재 runtime은 Node입니다. Rust 실행 호스트나 데스크톱 UI의 완료를 뜻하지 않습니다.
+
 ```text
 계약 parser → 명시적 host 승인 → 단일 owner + v2 원장
   → 격리 writer → 실제 process close → candidate manifest + blobs

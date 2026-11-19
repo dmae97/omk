@@ -29,9 +29,9 @@ describe("DeepSeek V4.1 Flash thinking", () => {
 		const base = getModels("openrouter").find((entry) => entry.id === "deepseek/deepseek-v4.1-flash");
 		const snapshot = getModels("openrouter").find((entry) => entry.id === "deepseek/deepseek-v4.1-flash-1017");
 		expect(base).toMatchObject({
-			// OpenRouter /api/v1/models lists 393,216 for both routes (checked 2026-10-27).
-			maxTokens: 393216,
-			cost: { input: 0.0648, output: 0.144, cacheRead: 0.0016 },
+			// OpenRouter's own /models declaration, checked 2026-10-29 (not the native model cap).
+			maxTokens: 943718,
+			cost: { input: 0.045, output: 0.5, cacheRead: 0.006 },
 		});
 		expect(snapshot).toMatchObject({
 			maxTokens: 393216,
@@ -44,11 +44,12 @@ describe("DeepSeek V4.1 Flash thinking", () => {
 		const snapshot = getModels("vercel-ai-gateway").find((entry) => entry.id === "deepseek/deepseek-v4.1-flash-1017");
 		expect(base).toMatchObject({
 			maxTokens: 32768,
-			cost: { input: 0.3, output: 1.2, cacheRead: 0.007 },
+			cost: { input: 0.075, output: 0.3, cacheRead: 0.0015 },
 		});
 		expect(snapshot).toMatchObject({
-			maxTokens: 384000,
-			cost: { input: 0.15, output: 0.6, cacheRead: 0.003 },
+			// Vercel /v1/models route declaration, checked 2026-10-29.
+			maxTokens: 1048576,
+			cost: { input: 0.075, output: 0.3, cacheRead: 0.0015 },
 		});
 	});
 

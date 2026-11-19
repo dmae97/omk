@@ -5,8 +5,8 @@ import {
 	estimateTokens,
 	getAgentDir,
 	SettingsManager,
-} from "@earendil-works/pi-coding-agent";
-import type { KeyId } from "@earendil-works/pi-tui";
+} from "open-multi-agent-kit";
+import type { KeyId } from "omk-tui";
 import { DEFAULT_ATELIER_KEYBINDINGS, isAtelierProjectTrusted } from "../../src/compat.ts";
 import { createSubscriptionUsagePanel, SUBSCRIPTION_PANEL_ID } from "../../src/subscription-usage.ts";
 import { liveTheme } from "../../src/theme.ts";

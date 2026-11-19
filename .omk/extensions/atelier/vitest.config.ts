@@ -6,8 +6,6 @@ export default defineConfig({
 	test: { include: ["test/**/*.test.ts"], testTimeout: 30000, maxWorkers: 1 },
 	resolve: {
 		alias: {
-			"@earendil-works/pi-coding-agent": fileURLToPath(new URL("packages/coding-agent/src/index.ts", root)),
-			"@earendil-works/pi-tui": fileURLToPath(new URL("packages/tui/src/index.ts", root)),
 			"open-multi-agent-kit": fileURLToPath(new URL("packages/coding-agent/src/index.ts", root)),
 			"omk-tui": fileURLToPath(new URL("packages/tui/src/index.ts", root)),
 			"omk-ai/oauth": fileURLToPath(new URL("packages/ai/src/oauth.ts", root)),

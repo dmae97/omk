@@ -1,6 +1,7 @@
 import { reduceDagEvent } from "./dag-projection.ts";
 import type { RunTaskProjection } from "./dag-types.ts";
 import { reduceInterruptedEvent } from "./interruption.ts";
+import { reduceReconnectEvent } from "./native-reconnect-event.ts";
 import { type ProcessReduction, reduceProcessEvent } from "./process-projection.ts";
 import { reduceRecoveryEvent } from "./recovery-projection.ts";
 import type { RunEvent, RunProjection, WriterReduction } from "./run-types.ts";
@@ -159,6 +160,9 @@ export function projectRun(events: readonly RunEvent[]): RunProjection {
 					checked: progress.checked,
 					activeRole: progress.activeRole,
 				});
+				break;
+			case "reconnected":
+				reduceReconnectEvent(context, event, commands, progress.lastDispatch);
 				break;
 			case "evaluated":
 				if (

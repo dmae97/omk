@@ -1,0 +1,11 @@
+{
+	"schemaVersion": 1,
+	"source": {
+		"repository": "https://github.com/wtfzambo/speak-like-you-eat",
+		"commit": "162d756406a02dc84873b46d04ff3907e3f5262d",
+		"declaredVersion": "1.6.1"
+	},
+	"license": "MIT",
+	"adaptedAt": "2026-11-13",
+	"scope": "OMK-native runtime behavior and offline tests; Pi/OMP compatibility layers, historical backlog, release automation, and paid benchmark runner are not vendored."
+}

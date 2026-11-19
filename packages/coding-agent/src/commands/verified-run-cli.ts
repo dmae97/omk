@@ -91,6 +91,28 @@ export async function runVerifiedRunCli(
 				exitCode = state.application === "candidate_ready" ? 0 : 1;
 				break;
 			}
+			case "reconnect": {
+				required(parsed, "--execute");
+				const approvedContractDigest = required(parsed, "--approve");
+				const state = await withRunSignal(stateRunPath(stateRoot, parsed.id ?? ""), (signal) =>
+					coordinator.reconnect(
+						{
+							schemaVersion: VERIFIED_COMMAND_VERSION,
+							kind: "reconnect",
+							runId: parsed.id ?? "",
+							commandId: required(parsed, "--command-id"),
+							executionId: required(parsed, "--execution"),
+							expectedRevision: Number(required(parsed, "--revision")),
+							expectedGeneration: Number(required(parsed, "--generation")),
+							contractDigest: approvedContractDigest,
+						},
+						{ approvedContractDigest, signal },
+					),
+				);
+				result = state;
+				exitCode = state.application === "candidate_ready" ? 0 : 1;
+				break;
+			}
 			case "publish": {
 				required(parsed, "--execute");
 				const approvedContractDigest = required(parsed, "--approve");
@@ -129,9 +151,12 @@ export async function runVerifiedRunCli(
 				const report = collectVerifiedRuns(stateRoot, {
 					olderThanMs: retention(parsed),
 					execute: parsed.flags.has("--execute"),
+					obsolete: parsed.flags.has("--prune-obsolete"),
 				});
 				result = report;
-				exitCode = report.runs.some((entry) => entry.reason === "remove_failed") ? 1 : 0;
+				exitCode = [...report.runs, ...report.nativeRecords].some((entry) => entry.reason === "remove_failed")
+					? 1
+					: 0;
 				break;
 			}
 			case "inspect":

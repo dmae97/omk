@@ -28,6 +28,17 @@ afterEach(() => {
 });
 
 describe("runPrintMode", () => {
+	it.each(["text", "json"] as const)("returns failure for truncated output in %s mode", async (mode) => {
+		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "partial response", stopReason: "length" }));
+		const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode,
+			initialMessage: "fixture",
+		});
+		expect(exitCode).toBe(1);
+		expect(errors).toHaveBeenCalledWith(expect.stringContaining("output token limit"));
+		if (mode === "text") expect(printIo.output.join("")).toContain("partial response");
+	});
 	it.each(["text", "json"] as const)(
 		"waits for final settlement after a recovered attempt in %s mode",
 		async (mode) => {

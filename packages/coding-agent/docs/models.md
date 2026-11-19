@@ -5,6 +5,7 @@ Add custom providers and models (Ollama, vLLM, LM Studio, proxies) via `~/.omk/a
 ## Table of Contents
 
 - [Catalog availability](#catalog-availability)
+- [List visibility](#list-visibility)
 - [Minimal Example](#minimal-example)
 - [Full Example](#full-example)
 - [Supported APIs](#supported-apis)
@@ -28,6 +29,36 @@ not prove that an account can invoke that model.
 
 The [OpenCode Go catalog refresh](model-catalog-refresh.md) records the 2026-10-17 live-ID refresh,
 API-family endpoints, exact thinking controls, and models.json override caveats.
+
+## List visibility
+
+Use an optional top-level `visibility` object to hide unavailable or unverified entries
+without deleting provider definitions or credentials:
+
+```json
+{
+  "visibility": {
+    "providers": ["google", "ollama"],
+    "models": { "ollama": ["my-installed-model"] }
+  },
+  "providers": {}
+}
+```
+
+`providers` is an exact provider allowlist. An empty array shows none; omitting it
+preserves the normal provider set. Each `models` entry is an exact ID allowlist for
+that provider; omitting a provider's entry leaves its IDs unrestricted. Authentication
+is still required. `/model`, `--list-models`, cycling and availability-based resolution
+share this filter. Model definitions remain in `getAll()` and `find()` for diagnostics
+and explicit use: visibility is not an authorization or network-security boundary.
+
+This is a recorded selection policy, not a background health monitor. Recheck providers
+and update the allowlist when credentials or endpoints change. A public model list is
+not proof that a key works, and authenticated metadata does not prove inference access
+for every model or available quota. No network request or OAuth refresh is performed
+by this filter. `/model` reloads changed configuration; removing `visibility` restores
+legacy availability. Malformed explicit visibility objects hide all available entries
+and report a configuration error.
 
 ## Minimal Example
 
@@ -244,7 +275,7 @@ Current behavior:
 
 ### Thinking Level Map
 
-Use `thinkingLevelMap` on a model to describe model-specific thinking controls. `models.json` accepts `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`. Built-in metadata can also expose the `ultra` CLI tier (GPT-6 Astra maps it to documented `max`; GPT-5.6 Sol/Terra/MoA on Codex map it to backend `xhigh`; on Codex, GPT-6.1 Sol and GPT-6 Astra send `xhigh` and GPT-6 Sol sends `max`, the efforts the Codex client sends for `ultra`), but the current `models.json` schema has no `ultra` key.
+Use `thinkingLevelMap` on a model to describe model-specific thinking controls. `models.json` accepts `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`. Built-in metadata can also expose the `ultra` CLI tier (GPT-6 Astra maps it to documented `max`; GPT-5.6 Sol/Terra/MoA on Codex map it to backend `xhigh`; on Codex, GPT-6.1 Sol/Terra and GPT-6 Astra send `xhigh` and GPT-6 Sol sends `max`, the efforts the Codex client sends for `ultra`), but the current `models.json` schema has no `ultra` key.
 
 | Value | Meaning |
 | --- | --- |

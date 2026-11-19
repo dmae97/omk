@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseRunContract, parseRunStartCommand } from "omk-protocol";
@@ -227,11 +227,17 @@ describe("live journal readers under a concurrent writer (spec 056)", () => {
 		return { reads, failures };
 	}
 
+	it("cancel's reader accepts a torn append only while its writer owns the lease", async () => {
+		appendFileSync(journalPath(runPath), '{"version":2,"seq":3');
+		await expect(cancelVerifiedRun(runPath, { waitMs: 0 })).resolves.toMatchObject({ outcome: "pending" });
+		expect(() => readRunJournal(runPath)).toThrow(/journal_truncated/);
+		owner.release();
+		await expect(cancelVerifiedRun(runPath, { waitMs: 0 })).rejects.toThrow(/journal_truncated/);
+	});
+
 	it("cancel's journal read survives a writer appending mid-read", async () => {
 		await startMutator();
-		// Without a live owner, cancel reads the journal and returns not_running: only the read is timed,
-		// not the durable (fsync) cancel request a live owner would get.
-		owner.release();
+		// The mutator is still writing: keep its owner live so reader mode can accept a torn append.
 		const { reads, failures } = await hammerAsync(() => cancelVerifiedRun(runPath, { waitMs: 0 }));
 		expect(failures).toEqual([]);
 		// Only proves the loop ran; a cancel costs about 25 ms here and more under load.
@@ -241,7 +247,6 @@ describe("live journal readers under a concurrent writer (spec 056)", () => {
 	it("cancel's journal read outlasts a burst of appends longer than the strict retry window", async () => {
 		// A strict read fails for about a third of the start times here; a 250 ms reader never does.
 		await startMutator({ burstMs: 50, holdMs: 50 });
-		owner.release();
 		const { reads, failures } = await hammerAsync(() => cancelVerifiedRun(runPath, { waitMs: 0 }), 3000);
 		expect(failures).toEqual([]);
 		expect(reads).toBeGreaterThan(5);

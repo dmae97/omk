@@ -1,3 +1,5 @@
+// Generated from native/omk-contract/src/compat.rs. Do not edit.
+// Run: node scripts/generate-contracts.mjs --write
 export type PiCompatibilityTarget = "coding-agent" | "agent-core" | "agent-core-node" | "ai" | "ai-oauth" | "tui";
 
 const PI_NAMESPACES = ["@earendil-works", "@mariozechner"] as const;
@@ -25,4 +27,16 @@ export function isLegacyPiRuntimeImport(specifier: string): boolean {
 
 export function isSupportedLegacyPiRuntimeImport(specifier: string): boolean {
 	return Object.getOwnPropertyDescriptor(LEGACY_PI_RUNTIME_ALIASES, specifier) !== undefined;
+}
+
+const LEGACY_PI_IMPORT_MENTION =
+	/@(?:mariozechner|earendil-works|oh-my-pi)\/pi-(?:agent-core|ai|coding-agent|natives|tui|utils)\b/u;
+
+/**
+ * Migration hint appended to a native-mode extension load failure that names a legacy Pi package.
+ * Since OMK 2.0 an omitted dialect is "omk", so Pi compatibility needs the explicit opt-in.
+ */
+export function legacyPiImportHint(message: string, dialect: "omk" | "omk+pi"): string {
+	if (dialect !== "omk" || !LEGACY_PI_IMPORT_MENTION.test(message)) return "";
+	return " (legacy Pi import: OMK 2.0 loads extensions with the native omk dialect by default. Migrate the import to an omk package, or opt into compatibility with --package-manifest-dialect omk+pi. Diagnose with: omk package doctor <source> --package-manifest-dialect omk)";
 }

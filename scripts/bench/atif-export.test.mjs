@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { exportTrajectory, main, parseJsonl, readRunLog } from "./atif-export.mjs";
+import { costAccounting } from "./atif/map.mjs";
 import { reverseTrajectory } from "./atif/reverse.mjs";
 import { collectSecrets, maskString, rescan } from "./atif/mask.mjs";
 
@@ -93,6 +94,24 @@ describe("spec 110 ATIF export", () => {
 		const { t } = load("worker");
 		assert.equal(t.extra.omk.workerLlmCalls.length, 1);
 		assert.equal(t.extra.omk.workerLlmCalls[0].record.role, "worker");
+		assert.equal(t.extra.omk.costAccounting.cost_coverage, "complete");
+		assert.ok(Math.abs(t.extra.omk.costAccounting.task_total_cost_usd - 0.008) < 1e-12);
+		assert.ok(Math.abs(t.extra.omk.costAccounting.worker_cost_usd - 0.003) < 1e-12);
+	});
+
+	it("keeps unknown cost unknown, bills duplicate response IDs once and records the executing identity", () => {
+		const cost = costAccounting([
+			{ responseId: "a", costTotal: 0.01 },
+			{ responseId: "a", costTotal: 0.01 },
+			{ role: "worker", responseId: "b" },
+		]);
+		assert.equal(cost.task_total_cost_usd, null);
+		assert.equal(cost.known_cost_usd, 0.01);
+		assert.equal(cost.duplicate_calls, 1);
+		const eventsText = readFileSync(join(fx("plain"), "events.jsonl"), "utf8");
+		const t = JSON.parse(exportTrajectory({ eventsText, runLogDir: join(fx("plain"), "run-log"), env: {}, sourceSha: "abc", artifactDigest: "sha256:def" }).json);
+		assert.equal(t.agent.version, "unknown");
+		assert.deepEqual(t.extra.omk.runtimeIdentity, { version: "unknown", sourceSha: "abc", artifactDigest: "sha256:def" });
 	});
 
 	it("matches the checked-in validated sample (criterion 2)", () => {
@@ -101,6 +120,8 @@ describe("spec 110 ATIF export", () => {
 		const norm = (x) => {
 			const c = structuredClone(x);
 			c.agent.version = "X";
+			delete c.extra.omk.costAccounting;
+			delete c.extra.omk.runtimeIdentity;
 			for (const s of c.steps) delete s.timestamp;
 			return c;
 		};

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="3" failures="1" errors="0" time="1.561197559">
+    <testsuite name="test/native-extension-lifecycle.test.ts" timestamp="2026-11-05T13:00:47.329Z" hostname="NucBoxEVO-X2" tests="3" failures="1" errors="0" skipped="0" time="1.561197559">
+        <testcase classname="test/native-extension-lifecycle.test.ts" name="native extension lifecycle continuity &gt; retains native selection, metadata, trust and subscription cleanup through reload, with stale guards across new and cwd-changing resume" time="1.511741349">
+        </testcase>
+        <testcase classname="test/native-extension-lifecycle.test.ts" name="native extension lifecycle continuity &gt; rejects captured APIs and contexts after native session reload" time="0.04372598">
+            <failure message="expected [Function] to throw an error" type="AssertionError">
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ test/native-extension-lifecycle.test.ts:128:48
+            </failure>
+        </testcase>
+        <testcase classname="test/native-extension-lifecycle.test.ts" name="native extension lifecycle continuity &gt; does not let native selection grant trust to an unapproved project" time="0.0043478">
+        </testcase>
+    </testsuite>
+</testsuites>

@@ -1,0 +1,17 @@
+[package]
+name = "omk-providers"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+
+[workspace]
+resolver = "3"
+
+[dependencies]
+tokio = { version = "=1.54.1", default-features = false, features = ["rt", "net", "time", "sync", "io-util"] }
+reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "=0.23.46", default-features = false, features = ["std", "tls12", "ring"] }
+serde = { version = "=1.0.229", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "=1.0.154", default-features = false, features = ["std", "raw_value"] }

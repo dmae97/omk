@@ -1,5 +1,5 @@
-import { CustomEditor } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { CustomEditor } from "open-multi-agent-kit";
+import { truncateToWidth, visibleWidth } from "omk-tui";
 import { stripTerminalSequences } from "../../src/compat.ts";
 import { fitToWidth } from "./text.ts";
 

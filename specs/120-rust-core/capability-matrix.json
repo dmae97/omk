@@ -1,0 +1,650 @@
+{
+	"schema": "omk.capability-matrix.v1",
+	"spec": "specs/120-rust-core/spec.md §6",
+	"scope": "Dispositions for the Rust core in 2.0.0 (K0 to K5). The Node core is unchanged. Stage is the delivering stage for ported and hosted, and the stage that could lift a refusal",
+	"features": [
+		{
+			"id": "mode.interactive",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Interactive terminal UI (`omk` without -p)",
+			"note": "Spec 120 §8: interactive mode on the Rust core is refused until K6"
+		},
+		{
+			"id": "mode.print",
+			"disposition": "ported",
+			"stage": "K5",
+			"description": "Print mode (`omk -p`)"
+		},
+		{
+			"id": "mode.json",
+			"disposition": "ported",
+			"stage": "K5",
+			"description": "JSON event stream (`--mode json`)"
+		},
+		{
+			"id": "mode.rpc",
+			"disposition": "ported",
+			"stage": "K5",
+			"description": "Public RPC (`--mode rpc`)"
+		},
+		{
+			"id": "mode.acp",
+			"disposition": "ported",
+			"stage": "K5",
+			"description": "Agent Client Protocol (`--mode acp`)"
+		},
+		{
+			"id": "tool.read",
+			"disposition": "ported",
+			"stage": "K3",
+			"description": "Built-in `read` tool"
+		},
+		{
+			"id": "tool.write",
+			"disposition": "ported",
+			"stage": "K3",
+			"description": "Built-in `write` tool"
+		},
+		{
+			"id": "tool.edit",
+			"disposition": "ported",
+			"stage": "K3",
+			"description": "Built-in `edit` tool"
+		},
+		{
+			"id": "tool.bash",
+			"disposition": "ported",
+			"stage": "K3",
+			"description": "Built-in `bash` tool",
+			"note": "Sandbox decision equals the Node core's per platform (PL2); native Windows refuses under enforce"
+		},
+		{
+			"id": "tool.grep",
+			"disposition": "ported",
+			"stage": "K3",
+			"description": "Built-in `grep` tool"
+		},
+		{
+			"id": "tool.find",
+			"disposition": "ported",
+			"stage": "K3",
+			"description": "Built-in `find` tool"
+		},
+		{
+			"id": "tool.ls",
+			"disposition": "ported",
+			"stage": "K3",
+			"description": "Built-in `ls` tool"
+		},
+		{
+			"id": "tool.diagnostics",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Built-in `diagnostics` tool",
+			"note": "Not in the K3 tool set of spec 120 §4"
+		},
+		{
+			"id": "tool.explore",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Built-in `explore` tool",
+			"note": "Not in the K3 tool set of spec 120 §4"
+		},
+		{
+			"id": "slash.settings",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/settings` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.skills",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/skills` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.attach",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/attach` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.think",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/think` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.model",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/model` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.scoped-models",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/scoped-models` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.export",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/export` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.import",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/import` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.share",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/share` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.copy",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/copy` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.name",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/name` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.session",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/session` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.resource",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/resource` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.debug",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/debug` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.changelog",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/changelog` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.star",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/star` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.hotkeys",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/hotkeys` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.fork",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/fork` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.clone",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/clone` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.tree",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/tree` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.login",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/login` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.logout",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/logout` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.jev",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/jev` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.rnode",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/rnode` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.new",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/new` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.compact",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/compact` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.resume",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/resume` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.reload",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/reload` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.quit",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/quit` command",
+			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "providers.builtin",
+			"disposition": "ported",
+			"stage": "K1",
+			"description": "Built-in provider clients and streaming parsers",
+			"note": "RC2 compares request bodies and headers with recorded fixtures"
+		},
+		{
+			"id": "providers.credentials",
+			"disposition": "ported",
+			"stage": "K1",
+			"description": "Credential storage in `auth.json`"
+		},
+		{
+			"id": "providers.catalog",
+			"disposition": "ported",
+			"stage": "K1",
+			"description": "Model catalog and the `models.json` overlay"
+		},
+		{
+			"id": "session.store",
+			"disposition": "ported",
+			"stage": "K2",
+			"description": "Session JSONL store, branching, queues, compaction and retry"
+		},
+		{
+			"id": "session.prompt-resources",
+			"disposition": "ported",
+			"stage": "K2",
+			"description": "Resources the system prompt needs: context files, skill and prompt listings"
+		},
+		{
+			"id": "settings.files",
+			"disposition": "ported",
+			"stage": "K2",
+			"description": "Reading `settings.json` with the same format"
+		},
+		{
+			"id": "extensions.loading",
+			"disposition": "hosted",
+			"stage": "K4",
+			"description": "Loading user and project extensions on Node",
+			"note": "Discovery and manifest resolution run in Rust; module loading runs in the host"
+		},
+		{
+			"id": "extensions.events",
+			"disposition": "hosted",
+			"stage": "K4",
+			"description": "The 28 `omk.on` events and the 24 `ExtensionAPI` methods"
+		},
+		{
+			"id": "extensions.tools",
+			"disposition": "hosted",
+			"stage": "K4",
+			"description": "Extension-registered tools",
+			"note": "Execute in the host, outside the core's sandbox supervision. Not presented as sandboxed"
+		},
+		{
+			"id": "extensions.providers",
+			"disposition": "hosted",
+			"stage": "K4",
+			"description": "Extension-registered providers (F3)",
+			"note": "The core calls the host and applies its budgets and cancellation"
+		},
+		{
+			"id": "extensions.commands",
+			"disposition": "hosted",
+			"stage": "K4",
+			"description": "Extension-registered commands invoked through prompts and RPC"
+		},
+		{
+			"id": "extensions.ui-dialogs",
+			"disposition": "hosted",
+			"stage": "K4",
+			"description": "Extension UI requests over the RPC UI methods"
+		},
+		{
+			"id": "extensions.custom-components",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Custom TUI components, widgets, editors and message renderers"
+		},
+		{
+			"id": "packages.manifest-dialect",
+			"disposition": "ported",
+			"stage": "K4",
+			"description": "Package manifest dialects `omk` and `omk+pi` (spec 120 §5a)",
+			"note": "Rust applies the dialect; the host receives a generic specifier map"
+		},
+		{
+			"id": "packages.doctor",
+			"disposition": "ported",
+			"stage": "K4",
+			"description": "`omk package doctor` static diagnosis (spec 120 §5a)"
+		},
+		{
+			"id": "packages.installer",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "`omk install`, `update`, `remove`, `list` and `config`"
+		},
+		{
+			"id": "goals",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Durable `/goal`, acceptance checks and goal autonomy"
+		},
+		{
+			"id": "verified-run",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Verified-run ledger and scheduler"
+		},
+		{
+			"id": "mcp",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "MCP client and server attachment"
+		},
+		{
+			"id": "skills.admission",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Skill admission and automatic skill loading"
+		},
+		{
+			"id": "subagents",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Subagent lanes"
+		},
+		{
+			"id": "builtin.command-safety-gate",
+			"disposition": "ported",
+			"stage": "K3",
+			"description": "Command safety gate for bash tool calls and user bash (F4)"
+		},
+		{
+			"id": "builtin.finish-check",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Finish check and its verifier turn"
+		},
+		{
+			"id": "builtin.goal-controller",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "The `/goal` controller, acceptance, budget and autonomy"
+		},
+		{
+			"id": "builtin.deliverable-guard",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Deliverable guard"
+		},
+		{
+			"id": "builtin.deepseek-harness",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "DeepSeek system-prompt harness"
+		},
+		{
+			"id": "builtin.prompt-preset",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Per-model prompt presets"
+		},
+		{
+			"id": "builtin.identical-loop",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Identical tool-call loop guard"
+		},
+		{
+			"id": "builtin.tool-pair-repair",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Tool call and result pair repair"
+		},
+		{
+			"id": "builtin.todo-checklist",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "`update_todo` checklist tool"
+		},
+		{
+			"id": "builtin.tencent-memory",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Tencent memory tool"
+		},
+		{
+			"id": "builtin.registry",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "The Node core's list of built-in extension factories",
+			"note": "The Rust core keeps its own list of ported gates"
+		}
+	],
+	"builtinExtensions": [
+		{
+			"file": "command-safety-gate.ts",
+			"feature": "builtin.command-safety-gate",
+			"disposition": "ported",
+			"safety": true
+		},
+		{
+			"file": "deepseek-harness.ts",
+			"feature": "builtin.deepseek-harness",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "deliverable-guard.ts",
+			"feature": "builtin.deliverable-guard",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "finish-check-reply.ts",
+			"feature": "builtin.finish-check",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "finish-check-reverify-stage.ts",
+			"feature": "builtin.finish-check",
+			"disposition": "refused",
+			"safety": false,
+			"reviewNote": "Blocks write and edit during the verifier turn. Classified as harness discipline, not a safety gate; owner review"
+		},
+		{
+			"file": "finish-check-run-log.ts",
+			"feature": "builtin.finish-check",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "finish-check-todo.ts",
+			"feature": "builtin.finish-check",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "finish-check.ts",
+			"feature": "builtin.finish-check",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "goal-acceptance-repair.ts",
+			"feature": "builtin.goal-controller",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "goal-acceptance-task-facts.ts",
+			"feature": "builtin.goal-controller",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "goal-autonomy.ts",
+			"feature": "builtin.goal-controller",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "goal-budget-command.ts",
+			"feature": "builtin.goal-controller",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "goal-budget-state.ts",
+			"feature": "builtin.goal-controller",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "goal-controller-acceptance.ts",
+			"feature": "builtin.goal-controller",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "goal-controller-required-tools.ts",
+			"feature": "builtin.goal-controller",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "goal-controller-text.ts",
+			"feature": "builtin.goal-controller",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "goal-controller-verify-args.ts",
+			"feature": "builtin.goal-controller",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "goal-controller.ts",
+			"feature": "builtin.goal-controller",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "goal-cost-accounting.ts",
+			"feature": "builtin.goal-controller",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "harness-factories.ts",
+			"feature": "builtin.registry",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "identical-loop.ts",
+			"feature": "builtin.identical-loop",
+			"disposition": "refused",
+			"safety": false,
+			"reviewNote": "Blocks repeated tool calls. Classified as a loop guard, not a safety gate; owner review"
+		},
+		{
+			"file": "prompt-preset.ts",
+			"feature": "builtin.prompt-preset",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "tencent-memory.ts",
+			"feature": "builtin.tencent-memory",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "todo-checklist.ts",
+			"feature": "builtin.todo-checklist",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "tool-pair-repair.ts",
+			"feature": "builtin.tool-pair-repair",
+			"disposition": "refused",
+			"safety": false
+		}
+	]
+}

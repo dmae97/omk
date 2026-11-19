@@ -5,7 +5,75 @@ Status: Draft (step 1 inventory delivered) · Owner: Harness Engineer · Reviewe
 ## Goal
 
 Make omk independent of the pi ecosystem (`@mariozechner/*`, `@earendil-works/pi-*`, `@oh-my-pi/*`)
-without changing behavior, so the binary work in spec 109 can start from an omk-only module graph.
+through staged boundaries, so the binary work in spec 109 can start from an omk-only module graph.
+The 1.x default preserves compatibility. The owner-approved 2.0 milestone may
+deliberately remove implicit compatibility after its migration and acceptance gates.
+
+## 2.0 staging contract
+
+The first native slice was managed-package manifest selection, not a replacement
+runtime. `DefaultPackageManager` added an immutable construction option,
+`packageManifestDialect: "omk" | "omk+pi"`; omission retains the current `omk+pi`
+behavior. That slice introduced no environment flag, persisted setting, CLI switch or
+automatic default change based on the package version.
+
+Explicit `omk` mode accepts authoritative `omk` manifests and convention-only
+packages. A Pi-only manifest is a terminal policy rejection: it must not become
+ordinary manifest absence, malformed JSON, or permission to load conventional
+files. Apply the selected dialect to filtered/unfiltered resources and nested or
+automatic extension discovery. Keep existing path validation and `omk` precedence.
+
+**Harness impact: preserve for existing defaults.** Preserve default resource
+selection, path validation, tool/permission boundaries and absence of new runtime
+requests. The explicit native mode must load a real native extension and admit
+zero resources from the rejected Pi-only fixture, including conventional fallback
+files. The source baseline is `0d6e74b0d21cdb810c88c42381457eff944b935f` plus the
+pre-existing local overlay; a SHA alone does not identify that overlay or an
+installed executable. Retain pre-edit source digests and observed RED/GREEN output.
+
+Run the bounded acceptance from `packages/coding-agent`:
+
+```sh
+node ../../node_modules/vitest/dist/cli.js --run test/package-manifest-boundary.test.ts test/package-manifest.test.ts test/package-manager.test.ts test/extensions-discovery.test.ts test/extensions-pi-provider-compat.test.ts test/extension-loader-lazy-imports.test.ts test/package-doctor.test.ts test/package-doctor-cli.test.ts test/package-manifest-auto-boundary.test.ts test/package-manifest-branch-boundary.test.ts
+```
+
+Then run `npm run check` from the root and record results in the GSD phase evidence.
+These checks do not satisfy the broader benchmark/equivalence gates below and
+make no solve-rate, cost or latency improvement claim. This slice adds no R oracle
+coverage and does not satisfy the milestone's required R acceptance gates.
+
+Runtime aliases remain unchanged in this first slice. The final 2.0 default must
+separately remove implicit Pi runtime compatibility, with tests for locally
+installed Pi packages, transitive imports and subpaths. Merely deleting a Jiti
+alias does not prevent ordinary module resolution. Direct extension loading,
+compiled binaries, clipboard replacement and desktop/platform acceptance are
+separate gates. Preserve original licenses, notices and user data throughout.
+
+### Explicit consumer staging, 2026-11-05
+
+The additive source consumer path now accepts `--package-manifest-dialect omk|omk+pi`
+(space or equals syntax) for the CLI and independently for `omk package doctor
+<source>`. The selected primitive reaches each recreated CLI resource loader.
+Programmatic consumers use `DefaultResourceLoader` construction and the existing
+public `createAgentSession({ resourceLoader })` injection, without a second SDK flag.
+Invalid/repeated CLI selections fail before evaluation; project trust and explicit
+extension-load failures retain their existing authority.
+
+Explicit native loading supplies no implicit Pi aliases in Node/Jiti or Bun
+virtual tables. Boundary A permits ordinary installed user dependencies, including
+Pi packages, subpaths and transitive imports, with their own identity. It does not
+enforce dependency declarations at runtime or blacklist a publisher namespace.
+Static native doctor errors distinguish undeclared literal legacy imports from
+exact runtime dependency declarations. A declared-dependency warning is not proof
+of installation or compatibility. Doctor preparation remains compatibility-based
+and static, preserving originals and scan limits.
+
+Omission/undefined remain `omk+pi`; versions remain 1.5.10. Source tests are not
+packaged Node, compiled Bun, complete extension-feature or lifecycle acceptance.
+The six authorized source-work steps are not ROADMAP Phase 6 or desktop/R/Rust
+completion. No activation or publication is authorized by this staging note.
+The equivalence/benchmark and one-module-per-PR criteria below remain unchanged;
+they have not been satisfied or waived and need disposition before a default flip.
 
 ## Key finding from step 1
 

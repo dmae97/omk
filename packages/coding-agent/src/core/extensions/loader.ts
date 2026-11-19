@@ -13,13 +13,25 @@ import { resolvePath } from "../../utils/paths.ts";
 import { createEventBus, type EventBus } from "../event-bus.ts";
 import type { ExecOptions } from "../exec.ts";
 import { execCommand } from "../exec.ts";
-import { readPackageManifest } from "../package-manifest.ts";
-import { LEGACY_PI_RUNTIME_ALIASES, type PiCompatibilityTarget } from "../pi-compat.ts";
+import {
+	DEFAULT_PACKAGE_MANIFEST_DIALECT,
+	type PackageManifestDialect,
+	resolvePackageManifestDialect,
+} from "../package-manifest.ts";
+import { LEGACY_PI_RUNTIME_ALIASES, legacyPiImportHint, type PiCompatibilityTarget } from "../pi-compat.ts";
 import { createSyntheticSourceInfo } from "../source-info.ts";
+import { transferGoalCostSink } from "./builtin/goal-cost-accounting.ts";
 import { markContextHandlerNonMutating } from "./context-handler-options.ts";
+import { discoverDirectExtensionsInDir, resolveDirectExtensionEntries } from "./direct-discovery-entries.ts";
+import { initializeExtension } from "./initialize-extension.ts";
 import { attachLoadedExtensionsAccessor, trackLoadedExtensions } from "./internal-loaded-extensions.ts";
 import { buildVirtualModulesLazily, createJitiLazily } from "./lazy-imports.ts";
+import { createExtensionRuntime } from "./runtime.ts";
+
+export { createExtensionRuntime } from "./runtime.ts";
+
 import type {
+	EntryRenderer,
 	Extension,
 	ExtensionAPI,
 	ExtensionFactory,
@@ -33,7 +45,11 @@ import type {
 
 const require = createRequire(import.meta.url);
 
-let _aliases: Record<string, string> | null = null;
+const aliasesByDialect: Partial<Record<PackageManifestDialect, Record<string, string>>> = {};
+
+export interface ExtensionLoadOptions {
+	packageManifestDialect?: PackageManifestDialect;
+}
 
 type PackageJsonResolver = (id: string) => string;
 type ExistsSync = (path: string) => boolean;
@@ -103,8 +119,9 @@ export function resolveOmkAgentCoreNodeEntryForTests(options: {
  * Get aliases for jiti (used in Node.js/development mode).
  * In Bun binary mode, virtualModules is used instead.
  */
-function getAliases(): Record<string, string> {
-	if (_aliases) return _aliases;
+function getAliases(dialect: PackageManifestDialect): Record<string, string> {
+	const cached = aliasesByDialect[dialect];
+	if (cached) return cached;
 
 	const __dirname = path.dirname(fileURLToPath(import.meta.url));
 	const packageIndex = path.resolve(__dirname, "../..", "index.js");
@@ -169,13 +186,15 @@ function getAliases(): Record<string, string> {
 		"ai-oauth": omkAiOauthEntry,
 		tui: omkTuiEntry,
 	};
-	_aliases = {
-		...Object.fromEntries(
-			Object.entries(LEGACY_PI_RUNTIME_ALIASES).map(([specifier, target]) => [
-				specifier,
-				legacyPiAliasTargets[target],
-			]),
-		),
+	const aliases = {
+		...(dialect === "omk+pi"
+			? Object.fromEntries(
+					Object.entries(LEGACY_PI_RUNTIME_ALIASES).map(([specifier, target]) => [
+						specifier,
+						legacyPiAliasTargets[target],
+					]),
+				)
+			: {}),
 		"open-multi-agent-kit": omkCodingAgentEntry,
 		"omk-agent-core": omkAgentCoreEntry,
 		"omk-agent-core/node": omkAgentCoreNodeEntry,
@@ -191,66 +210,11 @@ function getAliases(): Record<string, string> {
 		"@sinclair/typebox/value": typeboxValueEntry,
 	};
 
-	return _aliases;
+	aliasesByDialect[dialect] = aliases;
+	return aliases;
 }
 
 type HandlerFn = (...args: unknown[]) => Promise<unknown>;
-
-/**
- * Create a runtime with throwing stubs for action methods.
- * Runner.bindCore() replaces these with real implementations.
- */
-export function createExtensionRuntime(): ExtensionRuntime {
-	const notInitialized = () => {
-		throw new Error("Extension runtime not initialized. Action methods cannot be called during extension loading.");
-	};
-	const state: { staleMessage?: string } = {};
-	const assertActive = () => {
-		if (state.staleMessage) {
-			throw new Error(state.staleMessage);
-		}
-	};
-
-	const runtime: ExtensionRuntime = {
-		sendMessage: notInitialized,
-		sendUserMessage: notInitialized,
-		appendEntry: notInitialized,
-		setSessionName: notInitialized,
-		getSessionName: notInitialized,
-		setLabel: notInitialized,
-		getActiveTools: notInitialized,
-		getAllTools: notInitialized,
-		setActiveTools: notInitialized,
-		// registerTool() is valid during extension load; refresh is only needed post-bind.
-		refreshTools: () => {},
-		getCommands: notInitialized,
-		setModel: () => Promise.reject(new Error("Extension runtime not initialized")),
-		getThinkingLevel: notInitialized,
-		setThinkingLevel: notInitialized,
-		// Optional; replaced by bindCore when the session provides a handler.
-		callMcpTool: undefined,
-		flagValues: new Map(),
-		pendingProviderRegistrations: [],
-		// Provider name → owning extension resolvedPath (spec 057 R9); read by the subagent via the internal list.
-		providerOwners: new Map(),
-		assertActive,
-		invalidate: (message) => {
-			state.staleMessage ??=
-				message ??
-				"This extension ctx is stale after session replacement or reload. Do not use a captured extension API or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().";
-		},
-		// Pre-bind: queue registrations so bindCore() can flush them once the
-		// model registry is available. bindCore() replaces both with direct calls.
-		registerProvider: (name, config, extensionPath = "<unknown>") => {
-			runtime.pendingProviderRegistrations.push({ name, config, extensionPath });
-		},
-		unregisterProvider: (name) => {
-			runtime.pendingProviderRegistrations = runtime.pendingProviderRegistrations.filter((r) => r.name !== name);
-		},
-	};
-
-	return runtime;
-}
 
 /**
  * Create the ExtensionAPI for an extension.
@@ -314,6 +278,11 @@ function createExtensionAPI(
 		registerMessageRenderer<T>(customType: string, renderer: MessageRenderer<T>): void {
 			runtime.assertActive();
 			extension.messageRenderers.set(customType, renderer as MessageRenderer);
+		},
+		registerEntryRenderer<T>(customType: string, renderer: EntryRenderer<T>): void {
+			runtime.assertActive();
+			if (extension.entryRenderers === undefined) extension.entryRenderers = new Map();
+			extension.entryRenderers.set(customType, renderer as EntryRenderer);
 		},
 
 		// Flag access - checks extension registered it, reads from runtime
@@ -444,12 +413,17 @@ function createExtensionAPI(
 	return attachLoadedExtensionsAccessor(api, runtime);
 }
 
-async function loadExtensionModule(extensionPath: string, binaryMode = isBunBinary) {
+async function loadExtensionModule(
+	extensionPath: string,
+	binaryMode = isBunBinary,
+	dialect: PackageManifestDialect = DEFAULT_PACKAGE_MANIFEST_DIALECT,
+) {
 	const jiti = await createJitiLazily(import.meta.url, {
 		moduleCache: false,
-		// Bun binary: virtualModules; Node/dev: aliases. tryNative off so jiti owns all imports.
-		// biome-ignore format: keep ternary one line so loader.ts stays within module-size baseline
-		...(binaryMode ? { virtualModules: await buildVirtualModulesLazily(), tryNative: false } : { alias: getAliases() }),
+		// Native mode removes implicit aliases, not ordinary user-installed dependency resolution.
+		...(binaryMode
+			? { virtualModules: await buildVirtualModulesLazily(dialect), tryNative: false }
+			: { alias: getAliases(dialect) }),
 	});
 
 	const module = await jiti.import(extensionPath, { default: true });
@@ -457,8 +431,11 @@ async function loadExtensionModule(extensionPath: string, binaryMode = isBunBina
 	return typeof factory !== "function" ? undefined : factory;
 }
 /** Internal test seam for loading extensions through Bun binary virtual modules. */
-export async function loadExtensionModuleWithVirtualModulesForTests(extensionPath: string) {
-	return loadExtensionModule(extensionPath, true);
+export async function loadExtensionModuleWithVirtualModulesForTests(
+	extensionPath: string,
+	options: ExtensionLoadOptions = {},
+) {
+	return loadExtensionModule(extensionPath, true, resolvePackageManifestDialect(options.packageManifestDialect));
 }
 
 /**
@@ -478,6 +455,7 @@ function createExtension(extensionPath: string, resolvedPath: string): Extension
 		handlers: new Map(),
 		tools: new Map(),
 		messageRenderers: new Map(),
+		entryRenderers: new Map(),
 		commands: new Map(),
 		flags: new Map(),
 		shortcuts: new Map(),
@@ -490,23 +468,24 @@ async function loadExtension(
 	cwd: string,
 	eventBus: EventBus,
 	runtime: ExtensionRuntime,
+	dialect: PackageManifestDialect,
 ): Promise<{ extension: Extension | null; error: string | null }> {
 	const resolvedPath = resolvePath(extensionPath, cwd, { normalizeUnicodeSpaces: true });
 
 	try {
-		const factory = await loadExtensionModule(resolvedPath);
+		const factory = await loadExtensionModule(resolvedPath, isBunBinary, dialect);
 		if (!factory) {
 			return { extension: null, error: `Extension does not export a valid factory function: ${extensionPath}` };
 		}
 
 		const extension = createExtension(extensionPath, resolvedPath);
 		const api = createExtensionAPI(extension, runtime, cwd, eventBus);
-		await factory(api);
+		await initializeExtension(factory, api, extension);
 
-		return { extension, error: null };
+		return { extension: transferGoalCostSink(api, extension), error: null };
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		return { extension: null, error: `Failed to load extension: ${message}` };
+		return { extension: null, error: `Failed to load extension: ${message}${legacyPiImportHint(message, dialect)}` };
 	}
 }
 
@@ -523,14 +502,20 @@ export async function loadExtensionFromFactory(
 	const extension = createExtension(extensionPath, extensionPath);
 	const resolvedCwd = resolvePath(cwd);
 	const api = createExtensionAPI(extension, runtime, resolvedCwd, eventBus);
-	await factory(api);
-	return extension;
+	await initializeExtension(factory, api, extension);
+	return transferGoalCostSink(api, extension);
 }
 
 /**
  * Load extensions from paths.
  */
-export async function loadExtensions(paths: string[], cwd: string, eventBus?: EventBus): Promise<LoadExtensionsResult> {
+export async function loadExtensions(
+	paths: string[],
+	cwd: string,
+	eventBus?: EventBus,
+	options: ExtensionLoadOptions = {},
+): Promise<LoadExtensionsResult> {
+	const dialect = resolvePackageManifestDialect(options.packageManifestDialect);
 	const runtime = createExtensionRuntime();
 	const extensions = trackLoadedExtensions(runtime, []);
 	const errors: Array<{ path: string; error: string }> = [];
@@ -538,7 +523,7 @@ export async function loadExtensions(paths: string[], cwd: string, eventBus?: Ev
 	const resolvedEventBus = eventBus ?? createEventBus();
 
 	for (const extPath of paths) {
-		const { extension, error } = await loadExtension(extPath, resolvedCwd, resolvedEventBus, runtime);
+		const { extension, error } = await loadExtension(extPath, resolvedCwd, resolvedEventBus, runtime, dialect);
 
 		if (error) {
 			errors.push({ path: extPath, error });
@@ -551,101 +536,6 @@ export async function loadExtensions(paths: string[], cwd: string, eventBus?: Ev
 	return { extensions, errors, runtime };
 }
 
-function isExtensionFile(name: string): boolean {
-	return name.endsWith(".ts") || name.endsWith(".js");
-}
-
-/**
- * Resolve extension entry points from a directory.
- *
- * Checks for:
- * 1. package.json with "omk.extensions" or "pi.extensions" (omk wins)
- * 2. index.ts or index.js -> returns the index file
- *
- * Returns resolved paths or null if no entry points found.
- */
-function resolveExtensionEntries(dir: string): string[] | null {
-	const packageJsonPath = path.join(dir, "package.json");
-	if (fs.existsSync(packageJsonPath)) {
-		const resolvedManifest = readPackageManifest(packageJsonPath);
-		if (resolvedManifest && (resolvedManifest.key !== null || resolvedManifest.diagnostics.length > 0)) {
-			const entries: string[] = [];
-			for (const extPath of resolvedManifest.manifest?.extensions ?? []) {
-				const candidate = path.resolve(dir, extPath);
-				if (!fs.existsSync(candidate)) continue;
-				if (fs.statSync(candidate).isDirectory()) {
-					for (const indexName of ["index.ts", "index.js", "index.mjs", "index.cjs"]) {
-						const indexPath = path.join(candidate, indexName);
-						if (fs.existsSync(indexPath)) {
-							entries.push(indexPath);
-							break;
-						}
-					}
-				} else {
-					entries.push(candidate);
-				}
-			}
-			return entries;
-		}
-	}
-
-	// Check for index.ts or index.js
-	const indexTs = path.join(dir, "index.ts");
-	const indexJs = path.join(dir, "index.js");
-	if (fs.existsSync(indexTs)) {
-		return [indexTs];
-	}
-	if (fs.existsSync(indexJs)) {
-		return [indexJs];
-	}
-
-	return null;
-}
-
-/**
- * Discover extensions in a directory.
- *
- * Discovery rules:
- * 1. Direct files: `extensions/*.ts` or `*.js` → load
- * 2. Subdirectory with index: `extensions/* /index.ts` or `index.js` → load
- * 3. Subdirectory with package.json: `extensions/* /package.json` with OMK manifest → load what it declares
- *
- * No recursion beyond one level. Complex packages must use package.json manifest.
- */
-function discoverExtensionsInDir(dir: string): string[] {
-	if (!fs.existsSync(dir)) {
-		return [];
-	}
-
-	const discovered: string[] = [];
-
-	try {
-		const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-		for (const entry of entries) {
-			const entryPath = path.join(dir, entry.name);
-
-			// 1. Direct files: *.ts or *.js
-			if ((entry.isFile() || entry.isSymbolicLink()) && isExtensionFile(entry.name)) {
-				discovered.push(entryPath);
-				continue;
-			}
-
-			// 2 & 3. Subdirectories
-			if (entry.isDirectory() || entry.isSymbolicLink()) {
-				const entries = resolveExtensionEntries(entryPath);
-				if (entries) {
-					discovered.push(...entries);
-				}
-			}
-		}
-	} catch {
-		return [];
-	}
-
-	return discovered;
-}
-
 /**
  * Discover and load extensions from standard locations.
  */
@@ -654,7 +544,9 @@ export async function discoverAndLoadExtensions(
 	cwd: string,
 	agentDir: string = getAgentDir(),
 	eventBus?: EventBus,
+	options: ExtensionLoadOptions = {},
 ): Promise<LoadExtensionsResult> {
+	const dialect = resolvePackageManifestDialect(options.packageManifestDialect);
 	const resolvedCwd = resolvePath(cwd);
 	const resolvedAgentDir = resolvePath(agentDir);
 	const allPaths: string[] = [];
@@ -672,29 +564,29 @@ export async function discoverAndLoadExtensions(
 
 	// 1. Project-local extensions: cwd/${CONFIG_DIR_NAME}/extensions/
 	const localExtDir = path.join(resolvedCwd, CONFIG_DIR_NAME, "extensions");
-	addPaths(discoverExtensionsInDir(localExtDir));
+	addPaths(discoverDirectExtensionsInDir(localExtDir, dialect));
 
 	// 2. Global extensions: agentDir/extensions/
 	const globalExtDir = path.join(resolvedAgentDir, "extensions");
-	addPaths(discoverExtensionsInDir(globalExtDir));
+	addPaths(discoverDirectExtensionsInDir(globalExtDir, dialect));
 
 	// 3. Explicitly configured paths
 	for (const p of configuredPaths) {
 		const resolved = resolvePath(p, resolvedCwd, { normalizeUnicodeSpaces: true });
 		if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
 			// Check for package.json with omk manifest or index.ts
-			const entries = resolveExtensionEntries(resolved);
+			const entries = resolveDirectExtensionEntries(resolved, dialect);
 			if (entries) {
 				addPaths(entries);
 				continue;
 			}
 			// No explicit entries - discover individual files in directory
-			addPaths(discoverExtensionsInDir(resolved));
+			addPaths(discoverDirectExtensionsInDir(resolved, dialect));
 			continue;
 		}
 
 		addPaths([resolved]);
 	}
 
-	return loadExtensions(allPaths, resolvedCwd, eventBus);
+	return loadExtensions(allPaths, resolvedCwd, eventBus, { packageManifestDialect: dialect });
 }

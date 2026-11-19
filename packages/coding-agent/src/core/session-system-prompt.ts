@@ -87,3 +87,8 @@ export function assembleSessionSystemPrompt(input: SessionSystemPromptInput): Se
 	const built: BuiltSystemPrompt = buildSystemPromptPlan(options);
 	return { options, prompt: built.prompt, cacheBoundary: built.cacheBoundary };
 }
+
+export function defaultActiveSkillNames(skills: readonly Skill[], names: readonly string[]): string[] {
+	const userSkills = new Set(skills.filter((skill) => skill.sourceInfo.scope === "user").map((skill) => skill.name));
+	return names.filter((name) => userSkills.has(name));
+}

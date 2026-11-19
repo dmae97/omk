@@ -56,8 +56,8 @@ describe("getSupportedThinkingLevels", () => {
 		expect(getSupportedThinkingLevels(model!)).toEqual(["off", "high", "max"]);
 	});
 
-	it("restores still-served Go Kimi K2.6 with only its thinking toggle", () => {
-		const model = getModel("opencode-go", "kimi-k2.6");
+	it("keeps the live Go MiMo V2.6 route on its declared thinking toggle", () => {
+		const model = getModel("opencode-go", "mimo-v2.6-pro");
 		expect(getSupportedThinkingLevels(model)).toEqual(["off", "high"]);
 	});
 

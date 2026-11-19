@@ -20,6 +20,7 @@ import { GoalAutonomy } from "./goal-autonomy.ts";
 import { GoalAcceptanceFlow, type GoalAcceptanceTestHooks } from "./goal-controller-acceptance.ts";
 import { GoalRequiredTools } from "./goal-controller-required-tools.ts";
 import { checkpointPayload, continuationSeam, renderGoal, unavailableWorkspaceCode } from "./goal-controller-text.ts";
+import { registerGoalCostAccounting } from "./goal-cost-accounting.ts";
 
 export interface GoalControllerOptions {
 	/** Test seam for the acceptance-check runner. */
@@ -42,6 +43,7 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 	const autonomy = goalAutonomyEnabled() ? new GoalAutonomy(omk, acceptance) : undefined;
 
 	if (autonomy !== undefined) {
+		registerGoalCostAccounting(omk, autonomy);
 		// AU2: an explicit user steer (not an extension message, not a command) revokes the loop.
 		omk.on("input", async (event, ctx) => {
 			if (event.streamingBehavior !== "steer" || event.source === "extension") return { action: "continue" };
@@ -119,6 +121,7 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 					ctx.ui.notify(renderGoal(current, ...lines), "info");
 					return;
 				}
+				autonomy?.restore(ctx.sessionManager.getBranch?.() ?? ctx.sessionManager.getEntries());
 				const existing = await store.current();
 				// Spec 119 (flag on only): `/goal budget`, user-set only.
 				if (autonomy?.budgetCommand(text, existing, ctx)) return;
@@ -215,9 +218,10 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 		}
 		if (requiredTools.enabled) requiredTools.sync(current);
 		if (!current) return;
+		autonomy?.restore(ctx.sessionManager.getBranch?.() ?? ctx.sessionManager.getEntries());
 		const observed =
 			autonomy !== undefined && current.status === "active"
-				? autonomy.observe(current, event.messages, Date.now())
+				? autonomy.observe(current, event.messages, Date.now(), event.settlementId)
 				: undefined;
 		const decision = decideGoalContinuation({
 			status: current.status,

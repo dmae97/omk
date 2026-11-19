@@ -83,10 +83,12 @@ describe("regression #3592: no-builtin-tools keeps extension tools enabled", () 
 			"diagnostics",
 			"dynamic_tool",
 			"edit",
+			"explore",
 			"find",
 			"grep",
 			"ls",
 			"read",
+			"tencent_memory",
 			// Built-in update_todo is still *listed*: noTools governs what is active,
 			// not what the registry knows about.
 			"update_todo",

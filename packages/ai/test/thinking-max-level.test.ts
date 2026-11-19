@@ -75,8 +75,8 @@ describe("max thinking level", () => {
 			// OpenRouter route declaration is; OMK's `max` label resolves onto that
 			// declared ceiling, but it serializes to `xhigh`, not to a `max` literal
 			// the lane never declared.
-			if (provider === "openrouter" || provider === "cursor" || provider === "devin" || provider === "workbuddy")
-				continue;
+			// Experiential's callable surface also declares per-route effort ceilings.
+			if (["openrouter", "cursor", "devin", "workbuddy", "experientiallabs"].includes(provider)) continue;
 			for (const model of Object.values(models)) {
 				// A non-reasoning route has no effort levels to map. Experiential Labs'
 				// GLM-5.2 is one: its gateway surface rejects reasoning_effort even

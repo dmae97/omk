@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "open-multi-agent-kit";
 import { isAtelierProjectTrusted } from "../../src/compat.ts";
 import { readDelegateUsage } from "../../src/delegate-usage.ts";
 import { selectWorkingPhrase } from "./activity.ts";

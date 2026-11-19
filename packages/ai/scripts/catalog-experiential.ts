@@ -65,6 +65,7 @@ interface ExperientialCatalog {
  */
 interface ExperientialSurfaceModel {
 	id: string;
+	supports_tools?: boolean;
 	supports_reasoning?: boolean;
 	supported_reasoning_efforts?: string[];
 	chat_max_tokens_field?: string | null;
@@ -106,7 +107,7 @@ function buildModel(
 	const model = row.model;
 	if (!surface) return undefined;
 	if (!(model.output_modalities ?? []).includes("text")) return undefined;
-	if (model.supported_params?.tools !== true) return undefined;
+	if (!(surface.supports_tools ?? model.supported_params?.tools)) return undefined;
 
 	const route = pickRoute(row);
 	if (!route) return undefined;
@@ -118,11 +119,11 @@ function buildModel(
 			(provider) => provider.input_nano_usd_per_million != null,
 		) ?? route;
 	const maxTokens =
-		model.max_output_tokens ??
 		surface.maximum_output_tokens ??
+		model.max_output_tokens ??
 		route.capabilities?.maximum_output_tokens ??
 		4096;
-	const contextWindow = model.context_window ?? model.max_input_tokens ?? surface.context_window_tokens ?? 4096;
+	const contextWindow = surface.context_window_tokens ?? model.context_window ?? model.max_input_tokens ?? 4096;
 	const maxTokensField = surface.chat_max_tokens_field ?? route.capabilities?.chat_max_tokens_field;
 	const compat: OpenAICompletionsCompat = {
 		maxTokensField: maxTokensField === "max_completion_tokens" ? "max_completion_tokens" : "max_tokens",
@@ -175,8 +176,13 @@ export async function fetchExperientialModels(): Promise<Model<"openai-completio
 		});
 		if (!response.ok) throw new Error(`Experiential Labs catalog HTTP ${response.status}`);
 		const catalog = (await response.json()) as ExperientialCatalog;
+		if (!Array.isArray(catalog.models) || !Number.isSafeInteger(catalog.total) || catalog.total <= 0) {
+			throw new Error("Invalid Experiential Labs catalog page");
+		}
+		if (catalog.models.length === 0) throw new Error("Incomplete Experiential Labs catalog pagination");
 		rows.push(...catalog.models);
-		if (rows.length >= catalog.total || catalog.models.length === 0) break;
+		if (rows.length > catalog.total) throw new Error("Inconsistent Experiential Labs catalog total");
+		if (rows.length === catalog.total) break;
 	}
 
 	const surfaceResponse = await fetch(`${BASE_URL}/models`, {
@@ -185,7 +191,10 @@ export async function fetchExperientialModels(): Promise<Model<"openai-completio
 	});
 	if (!surfaceResponse.ok) throw new Error(`Experiential Labs /v1/models HTTP ${surfaceResponse.status}`);
 	const surfaceBody = (await surfaceResponse.json()) as { data?: ExperientialSurfaceModel[] };
-	const surface = new Map((surfaceBody.data ?? []).map((model) => [model.id, model]));
+	if (!Array.isArray(surfaceBody.data) || surfaceBody.data.length === 0) {
+		throw new Error("Invalid or empty Experiential Labs callable model list");
+	}
+	const surface = new Map(surfaceBody.data.map((model) => [model.id, model]));
 
 	const models = rows
 		.map((row) => buildModel(row, surface.get(row.model.slug)))

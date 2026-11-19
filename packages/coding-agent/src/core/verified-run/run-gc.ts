@@ -6,45 +6,24 @@ import {
 	type SessionOwnerLease,
 	SessionOwnerLeaseHeldError,
 } from "../session-owner-lease.ts";
-import { journalPath, readRunJournal } from "./journal.ts";
-import { readRunClock, remainingRunTime } from "./recovery-clock.ts";
+import { type JournalSnapshot, journalPath, readRunJournal } from "./journal.ts";
+import { type NativeRecordGc, withNativeRecordGc } from "./native-record-gc.ts";
+import type { NativeRecordGcEntry, RunGcEntry, RunGcOptions, RunGcReport } from "./run-gc-types.ts";
+
+export type { NativeRecordGcEntry, RunGcEntry, RunGcOptions, RunGcReport } from "./run-gc-types.ts";
+
+import { runRecoveryHold } from "./run-retention.ts";
 import type { RunProjection } from "./run-types.ts";
 import { VerifiedRunError } from "./storage.ts";
 
 /**
- * Verified-run artifact GC. It removes only derived workspaces — materialized copies that can be
- * rebuilt from content-addressed blobs — and never the journal, issuer key, candidate manifests,
- * blobs, receipts or attestations, so `evidence`, `artifact`, `status` and `publish` keep working.
+ * Verified-run GC removes derived workspaces and independently proven, retired native records.
+ * Journals, authority, issuer keys, manifests, blobs, receipts and attestations remain intact,
+ * so evidence, artifacts, publication and completed command replay keep working.
  */
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const DERIVED = /^(?:(?:writer|candidate)(?:-[1-9][0-9]*)?|tasks)$/;
 const UNITS: Readonly<Record<string, number>> = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
-
-export interface RunGcOptions {
-	/** Minimum age of the run's last journal write, in milliseconds. */
-	readonly olderThanMs: number;
-	/** False reports what would be removed without touching the file system. */
-	readonly execute: boolean;
-}
-
-export interface RunGcEntry {
-	readonly runId: string;
-	readonly action: "pruned" | "prunable" | "kept";
-	/** Why a run was kept; null when it was (or would be) pruned. */
-	readonly reason: string | null;
-	/** Derived workspace names (relative to the run) that were or would be removed. */
-	readonly paths: readonly string[];
-	readonly bytes: number;
-}
-
-export interface RunGcReport {
-	readonly stateRoot: string;
-	readonly execute: boolean;
-	readonly olderThanMs: number;
-	readonly runs: readonly RunGcEntry[];
-	readonly prunedBytes: number;
-	readonly prunableBytes: number;
-}
 
 /** `<integer><unit>` with unit ms, s, m, h or d. */
 export function parseRetention(text: string): number {
@@ -66,32 +45,15 @@ function treeBytes(path: string): number {
 	return total;
 }
 
-/**
- * No recovery command can ever succeed: no anchored budget, a past budget cap, or another boot.
- * Null when the run clock cannot decide (rollback, unavailable, damaged budget): keep the run.
- */
-function unrecoverable(state: RunProjection): boolean | null {
-	if (state.execution === "succeeded" || state.execution === "failed" || !state.budget) return true;
-	try {
-		return remainingRunTime(state.budget, state.budget.verifyCapMs, readRunClock()) === 0;
-	} catch (error) {
-		if (!(error instanceof VerifiedRunError)) throw error;
-		return error.code === "clock_changed" ? true : null;
-	}
-}
-
 function keepReason(runPath: string, state: RunProjection, olderThanMs: number): string | null {
-	if (state.activeExecutionIds.length || state.writerOpen || state.settlement !== "settled") return "unsettled";
-	if (state.publication === "intent" || state.publication === "reconciliation_required") return "publication_open";
-	const done = unrecoverable(state);
-	if (done === null) return "clock_unknown";
-	if (!done) return "recoverable";
+	const hold = runRecoveryHold(state);
+	if (hold) return hold;
 	// wall-clock: compared with the journal's file mtime, which the kernel stamps from the wall clock
 	if (Date.now() - lstatSync(journalPath(runPath)).mtimeMs < olderThanMs) return "recent";
 	return null;
 }
 
-function collectRun(runPath: string, runId: string, options: RunGcOptions): RunGcEntry {
+function collectRun(runPath: string, runId: string, options: RunGcOptions, native: NativeRecordGc): RunGcEntry {
 	const kept = (reason: string): RunGcEntry => Object.freeze({ runId, action: "kept", reason, paths: [], bytes: 0 });
 	if (!existsSync(journalPath(runPath))) return kept("missing_journal");
 	let owner: SessionOwnerLease;
@@ -102,16 +64,17 @@ function collectRun(runPath: string, runId: string, options: RunGcOptions): RunG
 		return kept("owner_unknown");
 	}
 	try {
-		let state: RunProjection | undefined;
+		let snapshot: JournalSnapshot | null;
 		try {
-			state = readRunJournal(runPath)?.state;
+			snapshot = readRunJournal(runPath);
 		} catch (error) {
 			if (error instanceof VerifiedRunError) return kept("integrity");
 			throw error;
 		}
-		if (!state || state.runId !== runId) return kept("integrity");
-		const reason = keepReason(runPath, state, options.olderThanMs);
-		if (reason) return kept(reason);
+		if (!snapshot || snapshot.state.runId !== runId) return kept("integrity");
+		const reason = keepReason(runPath, snapshot.state, options.olderThanMs);
+		const nativeReason = native.visit(runPath, snapshot, reason);
+		if (reason || nativeReason) return kept(reason ?? nativeReason ?? "native_unknown");
 		const paths = readdirSync(runPath)
 			.filter((name) => DERIVED.test(name) && lstatSync(join(runPath, name)).isDirectory())
 			.sort();
@@ -134,21 +97,38 @@ function collectRun(runPath: string, runId: string, options: RunGcOptions): RunG
 
 /** Inspect every run directory directly under the state root, holding each run's owner lease. */
 export function collectVerifiedRuns(stateRoot: string, options: RunGcOptions): RunGcReport {
+	if (
+		!Number.isSafeInteger(options.olderThanMs) ||
+		options.olderThanMs < 0 ||
+		typeof options.execute !== "boolean" ||
+		(options.obsolete !== undefined && typeof options.obsolete !== "boolean")
+	)
+		throw new VerifiedRunError("usage");
 	const root = resolve(stateRoot);
-	const runs: RunGcEntry[] = [];
-	const names = existsSync(root) ? readdirSync(root).sort() : [];
-	for (const name of names) {
-		if (!RUN_ID.test(name) || !lstatSync(join(root, name)).isDirectory()) continue;
-		runs.push(collectRun(join(root, name), name, options));
-	}
-	const sum = (action: RunGcEntry["action"]) =>
-		runs.filter((entry) => entry.action === action).reduce((total, entry) => total + entry.bytes, 0);
-	return Object.freeze({
-		stateRoot: root,
-		execute: options.execute,
-		olderThanMs: options.olderThanMs,
-		runs: Object.freeze(runs),
-		prunedBytes: sum("pruned"),
-		prunableBytes: sum("prunable"),
+	return withNativeRecordGc(root, options, (native) => {
+		const runs: RunGcEntry[] = [];
+		const names = existsSync(root) ? readdirSync(root).sort() : [];
+		for (const name of names) {
+			if (!RUN_ID.test(name) || !lstatSync(join(root, name)).isDirectory()) continue;
+			if ((name === "native-exec" || name === "native-witness") && !existsSync(journalPath(join(root, name))))
+				continue;
+			runs.push(collectRun(join(root, name), name, options, native));
+		}
+		const sum = (action: RunGcEntry["action"]) =>
+			runs.filter((entry) => entry.action === action).reduce((total, entry) => total + entry.bytes, 0);
+		native.finish();
+		const nativeSum = (action: NativeRecordGcEntry["action"]) =>
+			native.entries.filter((entry) => entry.action === action).reduce((total, entry) => total + entry.bytes, 0);
+		return Object.freeze({
+			stateRoot: root,
+			execute: options.execute,
+			olderThanMs: options.olderThanMs,
+			runs: Object.freeze(runs),
+			prunedBytes: sum("pruned"),
+			prunableBytes: sum("prunable"),
+			nativeRecords: Object.freeze(native.entries),
+			prunedNativeBytes: nativeSum("pruned"),
+			prunableNativeBytes: nativeSum("prunable"),
+		});
 	});
 }

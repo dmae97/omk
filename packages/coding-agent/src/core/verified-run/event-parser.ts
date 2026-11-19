@@ -7,6 +7,7 @@ import {
 } from "omk-protocol";
 import type { RunTaskCheckpoint } from "./dag-types.ts";
 import { parseNamespaceIdentity } from "./namespace-identity.ts";
+import { parseReconnectEvent } from "./native-reconnect-event.ts";
 import { parseRecoveryBudget } from "./recovery-clock.ts";
 import type { RunEvent } from "./run-types.ts";
 import { VerifiedRunError } from "./storage.ts";
@@ -72,6 +73,7 @@ export function parseRunEvent(raw: unknown): RunEvent {
 				role: value.role,
 				claimId: value.claimId === null ? null : text(value.claimId),
 				...(value.taskId === undefined ? {} : { taskId: text(value.taskId) }),
+				...(value.timeoutMs === undefined ? {} : { timeoutMs: integer(value.timeoutMs) }),
 			};
 		}
 		case "input_checkpoint":
@@ -148,6 +150,8 @@ export function parseRunEvent(raw: unknown): RunEvent {
 					throw new VerifiedRunError("integrity");
 			}
 		}
+		case "reconnected":
+			return parseReconnectEvent(value);
 		case "evaluated":
 			if (typeof value.verified !== "boolean") throw new VerifiedRunError("integrity");
 			return { kind: value.kind, receiptDigest: digest(value.receiptDigest), verified: value.verified };

@@ -354,7 +354,7 @@ describe("turn-starting input while the session is busy without an agent loop", 
 			extensionFactories: [
 				(omk) => {
 					omk.on("before_agent_start", (event) => {
-						seenByPreflight.push(event.prompt);
+						if (event.messageType === "user") seenByPreflight.push(event.prompt);
 					});
 				},
 			],
@@ -391,7 +391,8 @@ describe("turn-starting input while the session is busy without an agent loop", 
 			extensionFactories: [
 				(omk) => {
 					omk.registerCommand("ping", {
-						handler: async () => {
+						handler: async (_args, ctx) => {
+							expect(ctx.isIdle()).toBe(false);
 							ran.push("ping");
 						},
 					});

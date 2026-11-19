@@ -60,6 +60,8 @@ export interface CreateAgentSessionFromServicesOptions {
 	excludeTools?: CreateAgentSessionOptions["excludeTools"];
 	noTools?: CreateAgentSessionOptions["noTools"];
 	customTools?: ToolDefinition[];
+	domainRoutingPrompt?: CreateAgentSessionOptions["domainRoutingPrompt"];
+	domainScopeHints?: CreateAgentSessionOptions["domainScopeHints"];
 	replayLedger?: CreateAgentSessionOptions["replayLedger"];
 	replayGoalId?: CreateAgentSessionOptions["replayGoalId"];
 	replayLaneId?: CreateAgentSessionOptions["replayLaneId"];
@@ -204,6 +206,8 @@ export async function createAgentSessionFromServices(
 		excludeTools: options.excludeTools,
 		noTools: options.noTools,
 		customTools: options.customTools,
+		domainRoutingPrompt: options.domainRoutingPrompt,
+		domainScopeHints: options.domainScopeHints,
 		sessionStartEvent: options.sessionStartEvent,
 		modelPinned: options.modelPinned,
 		replayLedger: options.replayLedger,

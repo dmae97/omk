@@ -214,6 +214,41 @@ describe("#6647 compaction retries transient summarization failures", () => {
 		expect(getCallCount()).toBe(1);
 	});
 
+	// Observed 2026-11-11: an account rate limit outlasted the 2 s, 4 s and 8 s backoff. The agent
+	// turn waits longer for it, and the summary call shares the same account.
+	it("waits out a rate limit as the agent turn does", async () => {
+		const harness = await createHarness({ withConfiguredAuth: false });
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		harness.settingsManager.applyOverrides({ retry: { enabled: true, maxRetries: 3, baseDelayMs: 2000 } });
+
+		const error: AssistantMessage = {
+			...fauxAssistantMessage("", {
+				stopReason: "error",
+				errorMessage:
+					'429 {"type":"error","error":{"type":"rate_limit_error","message":"Please try again later."}}',
+			}),
+			usage: createUsage(10),
+		};
+		useScriptedStreamFn(harness, [error]);
+		const scheduled = new Promise<number>((resolve) => {
+			const unsubscribe = harness.session.subscribe((event) => {
+				if (event.type === "summarization_retry_scheduled") {
+					unsubscribe();
+					resolve(event.delayMs);
+				}
+			});
+		});
+
+		const compactPromise = harness.session.compact();
+		const delayMs = await scheduled;
+		harness.session.abortCompaction();
+		await expect(compactPromise).rejects.toThrow();
+
+		expect(delayMs).toBeGreaterThan(12_000);
+		expect(delayMs).toBeLessThanOrEqual(16_000);
+	});
+
 	it("aborts an in-flight retry backoff via abortCompaction", async () => {
 		const harness = await createHarness({ withConfiguredAuth: false });
 		harnesses.push(harness);

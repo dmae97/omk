@@ -55,7 +55,7 @@ W3 and W4 share `editor.ts` and land as one reviewed editor patch with separate 
 
 ## Current implementation checkpoint
 
-The local change implements W1-W7, C1, and C2: generation/contract-pinned evidence, pre-cap host-state exclusion, complete-scope completion, stale acceptance blocking, rejection recovery, effective-ceiling admission, stream identity, auxiliary request scopes, TUI disposal, shared quota reads, and one-candidate/in-flight reuse. These are correctness and ownership changes, not measured performance claims. Prefix suffix UX and file-search caching remain separate follow-up experiments.
+The local change implements W1-W7, C1, C2, and the first prefix-suffix UX experiment: generation/contract-pinned evidence, pre-cap host-state exclusion, complete-scope completion, stale acceptance blocking, rejection recovery, effective-ceiling admission, stream identity, auxiliary request scopes, TUI disposal, shared quota reads, one-candidate/in-flight reuse, and exact-prefix inline suffixes behind `OMK_NEXT_SUGGESTIONS_PREFIX` (default off). Prefix input keeps the current candidate, performs no provider call, and requires a cursor-at-end freshness check immediately before Tab insertion. Accept traces distinguish generated/cache-served candidates and empty-editor/inline-prefix surfaces; their timestamps support an exposure threshold such as 750 ms without storing text. These are correctness and ownership changes, not measured performance claims. File-search caching and learned display policies remain separate follow-up experiments.
 
 ## Measurement contract
 

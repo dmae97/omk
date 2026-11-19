@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { resolve, sep } from "node:path";
 import { appendRunLog, RUN_LOG_DIR_ENV, type RunLogRecord } from "./run-log.ts";
-import type { SessionEntry } from "./session-manager.ts";
+import type { SessionContext, SessionEntry } from "./session-manager.ts";
 import type { Skill } from "./skills.ts";
 import { resolveReadPath } from "./tools/path-utils.ts";
 
@@ -17,6 +17,8 @@ export interface AutoLoadStore {
 	getEntries(): readonly SessionEntry[];
 	appendCustomEntry(customType: string, data?: unknown): unknown;
 	getSessionId?(): string | undefined;
+	/** Native stores expose the active branch after compaction; legacy adapters keep lifetime deduplication. */
+	buildSessionContext?(): Pick<SessionContext, "messages">;
 }
 
 const seqBySession = new Map<string | null, number>();

@@ -78,6 +78,8 @@ export default function extension(_pi: ExtensionAPI) {
 			source: root,
 			packageRoot: root,
 			resources: { extensions: [entry], skills: [], prompts: [], themes: [] },
+			// Alias warnings describe the explicit compatibility profile; the OMK 2.0 default is native.
+			packageManifestDialect: "omk+pi",
 		});
 		const runtimeCheck = result.checks.find((check) => check.id === "runtime-imports");
 

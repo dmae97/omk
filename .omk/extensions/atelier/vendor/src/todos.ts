@@ -1,4 +1,4 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "open-multi-agent-kit";
 import { isRecord } from "./text.ts";
 import type { NormalizedTodo } from "./types.ts";
 

@@ -1,8 +1,15 @@
 import type { Message } from "omk-ai";
+import { fauxAssistantMessage, fauxThinking } from "omk-ai";
 import { describe, expect, it } from "vitest";
 import { serializeConversation } from "../src/core/compaction/utils.ts";
 
 describe("serializeConversation", () => {
+	it("omits reasoning from summarization input without changing the retained message", () => {
+		const message = fauxAssistantMessage([fauxThinking("private reasoning"), { type: "text", text: "final answer" }]);
+		const before = structuredClone(message);
+		expect(serializeConversation([message])).toBe("[Assistant]: final answer");
+		expect(message).toEqual(before);
+	});
 	it("should truncate long tool results", () => {
 		const longContent = "x".repeat(5000);
 		const messages: Message[] = [

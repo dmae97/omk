@@ -39,7 +39,16 @@ describe("regression #8724: in-memory fork during an active tool turn", () => {
 					);
 				}),
 		};
-		const harness = await createHarness({ tools: [blockingTool] });
+		let settled = 0;
+		const harness = await createHarness({
+			tools: [blockingTool],
+			extensionFactories: [
+				(omk) =>
+					omk.on("agent_settled", () => {
+						settled++;
+					}),
+			],
+		});
 		const services: AgentSessionServices = {
 			cwd: harness.tempDir,
 			agentDir: harness.tempDir,
@@ -83,6 +92,7 @@ describe("regression #8724: in-memory fork during an active tool turn", () => {
 		const forkResult = await runtime.fork(firstUserEntryId!);
 		await closedPrompt;
 		await runtime.session.bindExtensions({});
+		expect(settled).toBe(1); // Closing the old session must not start new extension producers.
 
 		expect(forkResult).toEqual({ cancelled: false, selectedText: "first prompt" });
 		expect(runtime.session.messages).toEqual([]);

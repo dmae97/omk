@@ -185,6 +185,16 @@ describe("PromptSkillFreeze (spec 050 R6)", () => {
 		expect((await other.turn(input(noRead))).messages).toEqual([]);
 	});
 
+	it("reuses the current selection for automatic follow-ups without adding skill messages", async () => {
+		const freeze = new PromptSkillFreeze();
+		await freeze.turn(input({ provider: "xai" }));
+		const second = await freeze.turn(input({ provider: "xai", query: "Write the summary file in python code" }));
+		expect(second.messages).toHaveLength(1);
+		const automatic = await freeze.turn(input({ provider: "xai", query: "Finish check" }), true);
+		expect(automatic.options).toBe(second.options);
+		expect(automatic.messages).toEqual([]);
+	});
+
 	it("logs harness-move records with hashes and counts only", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "omk-prompt-skills-"));
 		dirs.push(dir);

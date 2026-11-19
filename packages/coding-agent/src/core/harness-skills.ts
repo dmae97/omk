@@ -4,6 +4,7 @@
  * exclusions and the `headroom` pressure rule on top of `selectSkills()`.
  */
 
+import { suggestionSkillQuery } from "./next-suggestion-prompt.ts";
 import { MAX_SELECTED_SKILLS, type SkillCandidate, selectSkills } from "./skill-selector.ts";
 
 export interface HarnessSkillCandidate extends SkillCandidate {
@@ -37,7 +38,8 @@ export function selectHarnessSkills(
 		return true;
 	});
 	const selected = selectSkills({
-		task,
+		// An accepted suggestion prompt is matched by its task, not by the host's checklist wording.
+		task: suggestionSkillQuery(task) ?? task,
 		skills,
 		paths: options.paths,
 		max: MAX_SELECTED_SKILLS,

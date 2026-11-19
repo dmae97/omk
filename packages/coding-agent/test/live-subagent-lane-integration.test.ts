@@ -31,7 +31,8 @@ const EMPTY_INVENTORY: CapabilityInventory = {
 function laneSpec(id: string, writeScope?: string[]) {
 	return {
 		id,
-		role: "executor" as const,
+		// A writer without declared scope is serialized; read-only lanes exercise width.
+		role: writeScope ? ("executor" as const) : ("critic" as const),
 		task: `task for ${id}`,
 		agentName: "test-agent",
 		...(writeScope ? { writeScope } : {}),

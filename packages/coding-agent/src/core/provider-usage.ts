@@ -652,7 +652,8 @@ async function resolveCredential(
 ): Promise<{ readonly provider: string; readonly apiKey: string } | undefined> {
 	for (const candidate of usageSource.credentials) {
 		if (!credentialConfigured(session, candidate)) continue;
-		const apiKey = await session.modelRegistry.getApiKeyForProvider(candidate.provider);
+		// Polling: a login whose refresh keeps failing must not be retried on every tick.
+		const apiKey = await session.modelRegistry.getApiKeyForProvider(candidate.provider, { background: true });
 		if (apiKey) return { provider: candidate.provider, apiKey };
 	}
 	return undefined;

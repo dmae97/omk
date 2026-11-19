@@ -9,32 +9,42 @@ import {
 	type TodoState,
 } from "./todo-state.ts";
 
-let currentTodoState: TodoState = EMPTY_TODO_STATE;
+const DEFAULT_OWNER = "default";
+const states = new Map<string, TodoState>();
+let currentOwner = DEFAULT_OWNER;
 
-export function getCurrentTodoState(): TodoState {
-	return currentTodoState;
+/** Without an owner this is the compatibility view of the most recently updated session. */
+export function getCurrentTodoState(owner = currentOwner): TodoState {
+	return states.get(owner) ?? EMPTY_TODO_STATE;
 }
 
-export function setCurrentTodoState(state: TodoState): void {
-	currentTodoState = state;
+export function setCurrentTodoState(state: TodoState, owner = DEFAULT_OWNER): void {
+	currentOwner = owner;
+	states.set(owner, state);
 }
 
-export function resetCurrentTodoState(): void {
-	currentTodoState = EMPTY_TODO_STATE;
+export function resetCurrentTodoState(owner?: string): void {
+	if (owner === undefined) {
+		states.clear();
+		currentOwner = DEFAULT_OWNER;
+		return;
+	}
+	states.delete(owner);
+	if (currentOwner === owner) currentOwner = DEFAULT_OWNER;
 }
 
 /**
  * Kind of the todo the run is on now (spec 049 R3): `nextActiveTodo`'s item, `undefined` when there is
  * none or its kind is unknown. Read-only; this and `activeTodoDifficulty` are spec 037's only inputs from todos.
  */
-export function activeTodoKind(): TodoKind | undefined {
-	const kind = nextActiveTodo(currentTodoState)?.kind;
+export function activeTodoKind(owner?: string): TodoKind | undefined {
+	const kind = nextActiveTodo(getCurrentTodoState(owner))?.kind;
 	return kind !== undefined && TODO_KINDS.includes(kind) ? kind : undefined;
 }
 
 /** The model's difficulty estimate for the same item as `activeTodoKind`; `undefined` when not given. */
-export function activeTodoDifficulty(): TodoDifficulty | undefined {
-	const difficulty = nextActiveTodo(currentTodoState)?.difficulty;
+export function activeTodoDifficulty(owner?: string): TodoDifficulty | undefined {
+	const difficulty = nextActiveTodo(getCurrentTodoState(owner))?.difficulty;
 	return difficulty !== undefined && TODO_DIFFICULTIES.includes(difficulty) ? difficulty : undefined;
 }
 
@@ -45,13 +55,12 @@ export function activeTodoDifficulty(): TodoDifficulty | undefined {
  * their blocker reason. The snapshot is deterministic for unchanged state —
  * it deliberately excludes `updatedAt` — because the commit boundary digests
  * it and discards a summary captured under different control state. `branch`
- * stays null until a VCS-branch authority is attached; no production producer
- * exists today and an empty string would be worse than an explicit null.
+ * stays null until a VCS-branch authority is attached.
  */
-export function todoControlState(): CompactionControlState {
+export function todoControlState(owner?: string): CompactionControlState {
 	const openTasks: string[] = [];
 	const blockerReasons: string[] = [];
-	for (const item of currentTodoState.items) {
+	for (const item of getCurrentTodoState(owner).items) {
 		if (item.status === "done") continue;
 		openTasks.push(`${item.id} ${item.label}`);
 		if (item.status === "blocked") {

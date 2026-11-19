@@ -98,7 +98,7 @@ describe("constitution: releases run on the release branch", () => {
 });
 
 describe("constitution: public lockstep packages", () => {
-	it("lists all seven public packages including omk-adaptorch-wpl", () => {
+	it("lists all eight public packages including omk-adaptorch-wpl", () => {
 		for (const name of [
 			"open-multi-agent-kit",
 			"omk-ai",
@@ -107,12 +107,13 @@ describe("constitution: public lockstep packages", () => {
 			"omk-protocol",
 			"omk-adaptorch-wpl",
 			"omk-book-to-skill",
+			"omk-speak-like-you-eat",
 		]) {
 			assert.match(constitution, new RegExp(`\\\`${name}\\\``), `missing ${name}`);
 		}
 	});
 
-	it("publish helper covers exactly those seven packages", async () => {
+	it("publish helper covers exactly those eight packages", async () => {
 		const publishSource = readFileSync(join(root, "scripts", "publish.mjs"), "utf8");
 		for (const name of [
 			"open-multi-agent-kit",
@@ -122,6 +123,7 @@ describe("constitution: public lockstep packages", () => {
 			"omk-protocol",
 			"omk-adaptorch-wpl",
 			"omk-book-to-skill",
+			"omk-speak-like-you-eat",
 		]) {
 			assert.match(publishSource, new RegExp(`"${name}"`), `publish.mjs missing ${name}`);
 		}

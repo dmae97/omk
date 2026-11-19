@@ -46,7 +46,8 @@ export function agentVersion() {
 }
 
 /** Build, mask and serialize. Returns { json, hits }. */
-export function exportTrajectory({ eventsText, runLogDir, env = process.env, version = agentVersion(), maskNames = [], afterMask }) {
+/** The executing run's identity. The exporter checkout is not evidence for an older run. */
+export function exportTrajectory({ eventsText, runLogDir, env = process.env, version = "unknown", sourceSha, artifactDigest, maskNames = [], afterMask }) {
 	const events = parseJsonl(eventsText);
 	const { runLog, hashes } = readRunLog(runLogDir);
 	const trajectory = buildTrajectory({
@@ -54,6 +55,7 @@ export function exportTrajectory({ eventsText, runLogDir, env = process.env, ver
 		runLog,
 		agentVersion: version,
 		inputHashes: { events: sha256(eventsText), ...hashes },
+		runtimeIdentity: { sourceSha, artifactDigest },
 	});
 	const secrets = collectSecrets(env, maskNames);
 	let masked = maskDeep(trajectory, secrets); // whole object, extra.omk.eventLog included
@@ -66,7 +68,7 @@ function parseArgs(argv) {
 	const args = {};
 	for (let i = 0; i < argv.length; i++) {
 		const key = argv[i];
-		if (key === "--events" || key === "--run-log" || key === "--out" || key === "--mask-env-names") args[key.slice(2)] = argv[++i];
+		if (["--events", "--run-log", "--out", "--mask-env-names", "--agent-version", "--source-sha", "--artifact-digest"].includes(key)) args[key.slice(2)] = argv[++i];
 		else throw new Error(`unknown argument: ${key}`);
 	}
 	if (!args.events || !args.out) throw new Error("usage: atif-export.mjs --events <events.jsonl> [--run-log <dir>] [--mask-env-names A,B] --out <trajectory.json>");
@@ -88,6 +90,9 @@ export function main(argv = process.argv.slice(2), env = process.env, options = 
 		runLogDir: args["run-log"],
 		env,
 		maskNames,
+		version: args["agent-version"],
+		sourceSha: args["source-sha"],
+		artifactDigest: args["artifact-digest"],
 		afterMask: options.afterMask,
 	});
 	writeFileSync(args.out, json);

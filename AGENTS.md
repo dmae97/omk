@@ -30,6 +30,7 @@ fork only one of the two hosts ever reads.
 | `packages/protocol` | `omk-protocol` — wire types |
 | `packages/adaptorch-wpl` | `omk-adaptorch-wpl` — Work Packet Loop primitives; the CLI's advisory adaptorch bridge is opt-in and default-off |
 | `packages/book-to-skill` | `omk-book-to-skill` |
+| `packages/speak-like-you-eat` | `omk-speak-like-you-eat` — optional plain-language companion rewrites |
 | `packages/initcheck`, `packages/promptguard` | Go modules, outside the npm workspaces and the lockstep version |
 | `.omk/skills`, `.omk/extensions`, `.omk/prompts` | project-local skills, extensions, and prompt templates discovered from a checkout — see [`SKILLS.md`](SKILLS.md) |
 | `specs/` | constitution and spec-kit artifacts |
@@ -186,7 +187,7 @@ G0 (`test/suite/g0-session-hash.ts`) must match main with all of them set to `0`
 
 All workspace packages share one lockstep version; there are no major releases. A release
 is complete only when the tag on `main`, the GitHub Release, and npm `latest` for all
-seven public packages agree. Publishing runs in CI. Released changelog sections are
+eight public packages agree. Publishing runs in CI. Released changelog sections are
 immutable — new work goes under `[Unreleased]`. Details and the full rule set are in
 [`specs/constitution.md`](specs/constitution.md).
 

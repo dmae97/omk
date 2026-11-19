@@ -12,6 +12,7 @@ import { SessionManager } from "../../src/core/session-manager.ts";
 import { SettingsManager } from "../../src/core/settings-manager.ts";
 
 const FAKE_SERVER = join(dirname(fileURLToPath(import.meta.url)), "fake-server.mjs");
+const RECOVERY_SERVER = join(dirname(fileURLToPath(import.meta.url)), "recovery-server.mjs");
 
 let tempDir: string;
 let agentDir: string;
@@ -116,6 +117,40 @@ describe("AgentSession MCP integration", () => {
 		expect(tool).toBeDefined();
 		const result = await tool?.execute("call-1", { message: "wired" }, undefined, undefined, {} as never);
 		expect(result?.content).toEqual([{ type: "text", text: "echo: wired" }]);
+	});
+
+	it("publishes the recovered native catalog and replaces dead tool handles", async () => {
+		const s = await newSession();
+		await s.attachMcpServers({
+			servers: [
+				{
+					name: "demo",
+					command: process.execPath,
+					args: [RECOVERY_SERVER, join(tempDir, "generation")],
+					inheritEnv: false,
+				},
+			],
+		});
+		const oldTool = s.getToolDefinition("demo__echo");
+		expect(oldTool).toBeDefined();
+		expect(s.getToolDefinition("demo__before")).toBeDefined();
+		s.setActiveToolsByName(s.getActiveToolNames().filter((name) => name !== "demo__echo"));
+		expect((await s.mcpCheckHealth())[0].state).toBe("failed");
+		expect(s.getToolDefinition("demo__echo")).toBe(oldTool);
+		expect((await s.mcpCheckHealth({ reconnectFailed: true }))[0].state).toBe("ready");
+		const recovered = s.getToolDefinition("demo__echo");
+		expect(recovered).toBeDefined();
+		expect(recovered).not.toBe(oldTool);
+		expect(s.getActiveToolNames()).not.toContain("demo__echo");
+		expect(s.getToolDefinition("demo__before")).toBeUndefined();
+		expect(s.getToolDefinition("demo__after")).toBeDefined();
+		const result = await recovered?.execute("recovered", { message: "wired" }, undefined, undefined, {} as never);
+		expect(result?.content).toEqual([{ type: "text", text: "2: wired" }]);
+		expect(
+			(await oldTool?.execute("stale", { message: "no retry" }, undefined, undefined, {} as never))?.details,
+		).toMatchObject({ isError: true });
+		await s.mcpCheckHealth();
+		expect(s.getToolDefinition("demo__echo")).toBe(recovered);
 	});
 
 	it("keeps the session usable when a server fails to start", async () => {

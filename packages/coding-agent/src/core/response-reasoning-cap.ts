@@ -206,6 +206,7 @@ export function createResponseReasoningCapStreamFn(
 			({ type, timestamp: Date.now(), details: { ...details, ...extra } }) satisfies AssistantMessageDiagnostic;
 
 		void (async () => {
+			let confirmedUsage: Usage | undefined;
 			try {
 				const firstCapMs = capMs();
 				const firstOutcome = await runAttempt(first, retryEffort !== undefined, true, () => controller.abort());
@@ -213,6 +214,7 @@ export function createResponseReasoningCapStreamFn(
 					finish(firstOutcome.message);
 					return;
 				}
+				confirmedUsage = firstOutcome.message.usage;
 				const retryDetails = capDetails(firstOutcome, firstOutcome.capped, firstCapMs);
 				// spec 042 run log: one `retry` line now, exactly one terminal line below (or in the catch).
 				const retryLog = logReasoningCapRetry(retryDetails, firstOutcome.message.usage);
@@ -259,7 +261,8 @@ export function createResponseReasoningCapStreamFn(
 					api: model.api,
 					provider: model.provider,
 					model: model.id,
-					usage: {
+					diagnostics: [{ type: "usage_incomplete", timestamp: Date.now() }],
+					usage: confirmedUsage ?? {
 						input: 0,
 						output: 0,
 						cacheRead: 0,

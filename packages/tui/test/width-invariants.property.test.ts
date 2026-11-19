@@ -218,18 +218,14 @@ describe("width invariants (property-based)", () => {
 		);
 	});
 
-	it(
-		"W4b: a leading zero-width joiner adds no width",
-		{ todo: 'known defect: ["\\u0e33"] -> visibleWidth("\\u200d\\u0e33") is 2, visibleWidth("\\u0e33") is 1' },
-		() => {
-			fc.assert(
-				fc.property(freeText, (text) => {
-					assert.strictEqual(visibleWidth(`\u200d${text}`), visibleWidth(text));
-				}),
-				{ numRuns: NUM_RUNS, examples: [["\u0e33"], ["\uff9e"]] },
-			);
-		},
-	);
+	it("W4b: a leading zero-width joiner adds no width", () => {
+		fc.assert(
+			fc.property(freeText, (text) => {
+				assert.strictEqual(visibleWidth(`\u200d${text}`), visibleWidth(text));
+			}),
+			{ numRuns: NUM_RUNS, examples: [["\u0e33"], ["\uff9e"]] },
+		);
+	});
 
 	it("W5: truncateToWidth stays within maxWidth and leaves fitting text unchanged", () => {
 		fc.assert(fc.property(styledText, narrowBiasedWidth(1), ellipses, checkTruncation), {
@@ -244,19 +240,15 @@ describe("width invariants (property-based)", () => {
 		});
 	});
 
-	it(
-		"W5b: truncateToWidth invariants hold when SGR splits a grapheme cluster",
-		{ todo: 'known defect: ["\\u2764\\x1b[0m\\ufe0f", 1, ""] -> truncateToWidth returns its input, width 2 > 1' },
-		() => {
-			fc.assert(fc.property(clusterSplittingText, narrowBiasedWidth(1), ellipses, checkTruncation), {
-				numRuns: NUM_RUNS,
-				examples: [
-					["\u2764\x1b[0m\ufe0f", 1, ""],
-					["\u{1f1fa}\x1b[31m\u{1f1f8}", 3, "…"],
-				],
-			});
-		},
-	);
+	it("W5b: truncateToWidth invariants hold when SGR splits a grapheme cluster", () => {
+		fc.assert(fc.property(clusterSplittingText, narrowBiasedWidth(1), ellipses, checkTruncation), {
+			numRuns: NUM_RUNS,
+			examples: [
+				["\u2764\x1b[0m\ufe0f", 1, ""],
+				["\u{1f1fa}\x1b[31m\u{1f1f8}", 3, "…"],
+			],
+		});
+	});
 
 	it("W6: wrapTextWithAnsi lines fit the width and keep every non-space character", () => {
 		const nonSpace = (text: string) => stripSgr(text).replaceAll(" ", "");

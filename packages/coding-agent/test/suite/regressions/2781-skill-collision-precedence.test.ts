@@ -30,7 +30,7 @@ describe("issue #2781 skill collision precedence: user skills should override pa
 		mkdirSync(skillDir, { recursive: true });
 		writeFileSync(
 			join(pkgDir, "package.json"),
-			JSON.stringify({ name: `fake-pkg-${name}`, version: "1.0.0", pi: { skills: [`skills/${name}`] } }, null, 2),
+			JSON.stringify({ name: `fake-pkg-${name}`, version: "1.0.0", omk: { skills: [`skills/${name}`] } }, null, 2),
 		);
 		writeFileSync(
 			join(skillDir, "SKILL.md"),
@@ -45,7 +45,7 @@ describe("issue #2781 skill collision precedence: user skills should override pa
 		mkdirSync(skillDir, { recursive: true });
 		writeFileSync(
 			join(pkgDir, "package.json"),
-			JSON.stringify({ name: dirName, version: "1.0.0", pi: { skills: [`skills/${name}`] } }, null, 2),
+			JSON.stringify({ name: dirName, version: "1.0.0", omk: { skills: [`skills/${name}`] } }, null, 2),
 		);
 		const skillPath = join(skillDir, "SKILL.md");
 		writeFileSync(skillPath, `---\nname: ${name}\ndescription: ${description}\n---\n${content}`);

@@ -47,6 +47,27 @@ function require<TApi extends Api>(model: Model<TApi> | undefined, label: string
 }
 
 describe("Kimi K3.1 Pro on Kimi For Coding", () => {
+	it("identifies OMK even when an overlay supplies a Kimi CLI user agent", async () => {
+		const model = getModel("kimi-coding", "k3.1-pro" as never);
+		if (!model) throw new Error("Missing kimi-coding/k3.1-pro");
+		let headers: Headers | undefined;
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+				headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+				return new Response(JSON.stringify({ error: { type: "invalid_request_error", message: "fixture" } }), {
+					status: 400,
+					headers: { "content-type": "application/json" },
+				});
+			}),
+		);
+		await streamSimple(
+			{ ...model, headers: { "User-Agent": "KimiCLI/1.5" } },
+			{ messages: [{ role: "user", content: "fixture", timestamp: 0 }] },
+			{ apiKey: "fixture-key", maxTokens: 128 },
+		).result();
+		expect(headers?.get("user-agent")).toBe("omk");
+	});
 	it.each(CODING_IDS)("registers %s with the pinned id, 1M context and always-on reasoning", (id) => {
 		const model = require(getModels("kimi-coding").find((entry) => entry.id === id), `kimi-coding/${id}`);
 		expect(model).toMatchObject({

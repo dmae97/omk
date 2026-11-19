@@ -511,8 +511,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 	resetTimings();
 	if (process.env.OMK_TIMING === "1") (await import("./core/debug-timing-hooks.ts")).installDebugTimingHooks();
-	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env.OMK_OFFLINE);
-	if (offlineMode) {
+	if (args.includes("--offline") || isTruthyEnvFlag(process.env.OMK_OFFLINE)) {
 		process.env.OMK_OFFLINE = "1";
 		process.env.OMK_SKIP_VERSION_CHECK = "1";
 	}
@@ -557,7 +556,7 @@ export async function main(args: string[], options?: MainOptions) {
 		}
 	}
 
-	const parsed = parseArgs(args);
+	const { packageManifestDialect, ...parsed } = parseArgs(args);
 	if (parsed.diagnostics.length > 0) {
 		for (const d of parsed.diagnostics) {
 			const color = d.type === "error" ? chalk.red : chalk.yellow;
@@ -693,6 +692,7 @@ export async function main(args: string[], options?: MainOptions) {
 			settingsManager,
 			extensionFlagValues: parsed.unknownFlags,
 			resourceLoaderOptions: {
+				packageManifestDialect,
 				additionalExtensionPaths: resolvedExtensionPaths,
 				additionalSkillPaths: resolvedSkillPaths,
 				additionalPromptTemplatePaths: resolvedPromptTemplatePaths,
@@ -765,6 +765,9 @@ export async function main(args: string[], options?: MainOptions) {
 			excludeTools: sessionOptions.excludeTools,
 			noTools: sessionOptions.noTools,
 			customTools: sessionOptions.customTools,
+			// Without explicit scope, CLI routing would apply empty read/write roots to every prompt.
+			domainRoutingPrompt: parsed.scopeHints ? parsed.messages.join("\n") : undefined,
+			domainScopeHints: parsed.scopeHints,
 		});
 		const cliThinkingOverride = parsed.thinking !== undefined || cliThinkingFromModel;
 		if (created.session.model && cliThinkingOverride) {

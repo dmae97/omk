@@ -1,0 +1,9 @@
+[package]
+name = "omk-policy-probe"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[workspace]
+resolver = "3"

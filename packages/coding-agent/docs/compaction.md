@@ -87,6 +87,13 @@ If a provider rejects a request for context overflow despite OMK's projection, O
 2. If that retry also overflows, OMK recompacts from the previous kept boundary with `reserveTokens`, `reservedOutputTokens`, and `keepRecentTokens` capped at 4096, then retries once more.
 3. A third overflow stops recovery and reports an actionable error instead of looping.
 
+The compaction boundary is entry-based. Usage reported before a committed compaction is excluded
+from the next prompt's estimate rather than being added again to the summary and retained tail.
+For example, a pre-compaction assistant usage of 264,849 tokens must not force the next SWE-2
+request back over its 219,416-token input ceiling. If this stale-usage behavior appears in an
+existing process, verify the running engine and restart it on a current build instead of raising
+the model's declared window.
+
 Compaction cannot shrink a latest user message that alone exceeds the provider's effective context window; split that input or select a model with a larger effective window.
 
 ### Model Selection
@@ -97,7 +104,7 @@ By default, compaction uses the active session model. Set `compaction.model` to 
 
 Every compaction and branch-summary LLM call flows through one choke point (`completeSummarization`):
 
-- **Retries**: transient stream drops (`terminated`, socket close, 5xx, DNS/transport errors) follow the configured `retry` settings (`enabled`, `maxRetries`, `baseDelayMs`) with exponential backoff. Aborts are never retried. Retry progress is emitted as `summarization_retry_scheduled` / `summarization_retry_attempt_start` / `summarization_retry_finished` session events (surfaced in the TUI and RPC stream).
+- **Retries**: transient stream drops (`terminated`, socket close, 5xx, DNS/transport errors) follow the configured `retry` settings (`enabled`, `maxRetries`, `baseDelayMs`) with exponential backoff. A rate limit waits longer, as it does for an agent turn; see [rate limits and credential retries](provider-resilience.md#rate-limits-and-credential-retries). Aborts are never retried. Retry progress is emitted as `summarization_retry_scheduled` / `summarization_retry_attempt_start` / `summarization_retry_finished` session events (surfaced in the TUI and RPC stream).
 - **Isolation**: each summarization request runs with prompt caching disabled (`cacheRetention: "none"`) and a fresh routing `sessionId`, so summaries never write unusable provider cache entries or inherit interactive session affinity.
 - **Completion validation**: an aborted completion stays an `AbortError`, even if it contains partial text. Empty/whitespace-only summaries and unexpected stop reasons cannot be published as compaction entries. The existing nonempty `length`-stop behavior remains unchanged; it is not a claim that the summary preserved all information.
 

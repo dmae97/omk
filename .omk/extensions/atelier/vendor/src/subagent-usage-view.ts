@@ -1,5 +1,5 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import type { ExtensionContext } from "open-multi-agent-kit";
+import { matchesKey, truncateToWidth, visibleWidth } from "omk-tui";
 import { openLifecycleOverlay, type OverlayLifetime } from "./overlay-lifecycle.ts";
 import { createPalette } from "./palette.ts";
 import { costLegendColumns, subagentCostChart } from "./subagent-cost-chart.ts";

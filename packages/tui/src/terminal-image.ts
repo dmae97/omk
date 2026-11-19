@@ -1,5 +1,5 @@
-import { execSync } from "node:child_process";
 import { formatImageFallback } from "./image-fallback.ts";
+import { probeTmuxHyperlinks } from "./tmux-hyperlinks.ts";
 
 export type ImageProtocol = "kitty" | "iterm2" | null;
 
@@ -45,27 +45,6 @@ export function setCellDimensions(dims: CellDimensions): void {
 	cellDimensions = dims;
 }
 
-/**
- * Checks whether the attached tmux client forwards OSC 8 hyperlinks to the
- * outer terminal. tmux only re-emits them when its `client_termfeatures` lists
- * `hyperlinks`, and strips them otherwise. On any error fallbacks `false`.
- */
-function probeTmuxHyperlinks(): boolean {
-	try {
-		const termfeatures = execSync("tmux display-message -p '#{client_termfeatures}'", {
-			encoding: "utf8",
-			timeout: 250,
-			stdio: ["ignore", "pipe", "ignore"],
-		});
-		return termfeatures
-			.split(",")
-			.map((feature) => feature.trim())
-			.includes("hyperlinks");
-	} catch {
-		return false;
-	}
-}
-
 export function detectCapabilities(tmuxForwardsHyperlink: () => boolean = probeTmuxHyperlinks): TerminalCapabilities {
 	const termProgram = process.env.TERM_PROGRAM?.toLowerCase() || "";
 	const terminalEmulator = process.env.TERMINAL_EMULATOR?.toLowerCase() || "";
@@ -84,6 +63,9 @@ export function detectCapabilities(tmuxForwardsHyperlink: () => boolean = probeT
 		return { images: null, trueColor: hasTrueColorHint, hyperlinks: false };
 	}
 
+	if (termProgram === "herdr") {
+		return { images: "kitty", trueColor: hasTrueColorHint, hyperlinks: true };
+	}
 	if (process.env.KITTY_WINDOW_ID || termProgram === "kitty") {
 		return { images: "kitty", trueColor: true, hyperlinks: true };
 	}

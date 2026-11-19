@@ -1,9 +1,9 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { MAX_VERIFIED_RUN_GENERATIONS, type RunContract } from "omk-protocol";
 import { commandEnvironmentDigest } from "./broker.ts";
 import { loadCandidate } from "./candidate.ts";
 import type { JournalSnapshot } from "./journal.ts";
-import { probeNamespace } from "./namespace-identity.ts";
+import { nativeWitnessDir, probeWithNativeWitness } from "./native-witness.ts";
 import { readRunClock, remainingRunTime } from "./recovery-clock.ts";
 import { readRegularFile, VerifiedRunError } from "./storage.ts";
 
@@ -35,7 +35,7 @@ export function assertWorkRecoverable(
 			dispatch?.kind !== "dispatch" ||
 			dispatch.role !== "writer" ||
 			!identity ||
-			probeNamespace(identity) !== "gone"
+			probeWithNativeWitness(identity, nativeWitnessDir(dirname(runPath))) !== "gone"
 		)
 			throw new VerifiedRunError("unsettled");
 	}

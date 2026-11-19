@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { describe, expect, it } from "vitest";
 import { MeasurementInputError } from "../src/core/performance-upgrade/measurement-trace.ts";
 import {
@@ -149,6 +150,21 @@ describe("attributePhases", () => {
 		});
 		expect(nonZero(result.phaseTicks)).toEqual({ tool: 10, render: 20 });
 		expect([...reads.values()].every((count) => count === 1)).toBe(true);
+	});
+
+	it("attributes 10,000 deeply nested spans without quadratic scanning", () => {
+		const depth = 10_000;
+		const spans = Array.from({ length: depth }, (_, index) =>
+			span(`s${index}`, "tool", index, 2 * depth - index, index === 0 ? undefined : `s${index - 1}`),
+		);
+		const startedAt = performance.now();
+		const result = attributePhases({ submittedAt: 0, settledAt: 2 * depth, spans });
+		const elapsedMs = performance.now() - startedAt;
+
+		expect(result.phaseTicks.tool).toBe(2 * depth);
+		expect(result.exclusiveTicks.get("s0")).toBe(2);
+		expect(result.exclusiveTicks.get(`s${depth - 1}`)).toBe(2);
+		expect(elapsedMs).toBeLessThan(2_000);
 	});
 });
 

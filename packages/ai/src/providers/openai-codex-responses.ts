@@ -42,6 +42,7 @@ import {
 } from "../utils/diagnostics.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord } from "../utils/headers.ts";
+import { isRetryableCodexHttpError, parseCodexHttpError } from "./openai-codex-http-errors.ts";
 import { GPT_56_MOA_MODEL_ID, streamOpenAICodexMoa } from "./openai-codex-moa.ts";
 import { CodexProtocolError, parseSSE } from "./openai-codex-protocol.ts";
 import { resolveOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
@@ -115,22 +116,6 @@ interface RequestBody {
 // ============================================================================
 // Retry Helpers
 // ============================================================================
-
-function isTerminalRateLimitError(errorText: string): boolean {
-	return /GoUsageLimitError|FreeUsageLimitError|Monthly usage limit reached|available balance|insufficient_quota|out of budget|quota exceeded|quota\s+(?:has been\s+|was\s+|is\s+)?exhaust|billing/i.test(
-		errorText,
-	);
-}
-
-function isRetryableError(status: number, errorText: string): boolean {
-	if (status === 429 && isTerminalRateLimitError(errorText)) {
-		return false;
-	}
-	if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) {
-		return true;
-	}
-	return /rate.?limit|overloaded|service.?unavailable|upstream.?connect|connection.?refused/i.test(errorText);
-}
 
 function getRetryAfterDelayMs(headers: Headers): number | undefined {
 	const retryAfterMs = headers.get("retry-after-ms");
@@ -377,7 +362,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 						}
 
 						const errorText = await response.text();
-						if (attempt < maxRetries && isRetryableError(response.status, errorText)) {
+						if (attempt < maxRetries && isRetryableCodexHttpError(response.status, errorText)) {
 							const retryAfterDelayMs = getRetryAfterDelayMs(response.headers);
 							const delayMs =
 								retryAfterDelayMs === undefined
@@ -388,11 +373,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 							continue;
 						}
 
-						const fakeResponse = new Response(errorText, {
-							status: response.status,
-							statusText: response.statusText,
-						});
-						const info = await parseErrorResponse(fakeResponse);
+						const info = parseCodexHttpError(errorText, response);
 						throw new CodexApiError(info.friendlyMessage || info.message);
 					} finally {
 						headerTimeout.clear();
@@ -1496,40 +1477,6 @@ async function processWebSocketStream(
 	} finally {
 		release({ keep: keepConnection });
 	}
-}
-
-// ============================================================================
-// Error Handling
-// ============================================================================
-
-async function parseErrorResponse(response: Response): Promise<{ message: string; friendlyMessage?: string }> {
-	const raw = await response.text();
-	let message = raw || response.statusText || "Request failed";
-	let friendlyMessage: string | undefined;
-
-	try {
-		const parsed = JSON.parse(raw) as {
-			error?: { code?: string; type?: string; message?: string; plan_type?: string; resets_at?: number };
-		};
-		const err = parsed?.error;
-		if (err) {
-			const code = err.code || err.type || "";
-			if (/usage_limit_reached|usage_not_included|rate_limit_exceeded/i.test(code) || response.status === 429) {
-				const plan = err.plan_type ? ` (${err.plan_type.toLowerCase()} plan)` : "";
-				// wall-clock: resets_at is a Unix timestamp set by the server
-				const mins = err.resets_at
-					? Math.max(0, Math.round((err.resets_at * 1000 - Date.now()) / 60000))
-					: undefined;
-				const when = mins !== undefined ? ` Try again in ~${mins} min.` : "";
-				friendlyMessage = `You have hit your ChatGPT usage limit${plan}.${when}`.trim();
-			}
-			message = err.message || friendlyMessage || message;
-		}
-	} catch {
-		// Preserve the raw provider error when the body is not JSON.
-	}
-
-	return { message, friendlyMessage };
 }
 
 // ============================================================================

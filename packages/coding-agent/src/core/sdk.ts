@@ -19,10 +19,11 @@ import { formatNoModelsAvailableMessage } from "./auth-guidance.ts";
 import { AuthStorage } from "./auth-storage.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { tryDevinHarnessDispatch } from "./devin-harness-dispatch.ts";
-import { createDomainDispatchRuntimeSession, isDomainRoutingEnabled, tryDomainDispatch } from "./domain-dispatch.ts";
+import { createDomainDispatchRuntimeSession, scopedDomainPolicy } from "./domain-dispatch.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { tryGrokHarnessDispatch } from "./grok-harness-dispatch.ts";
 import type { LoadoutAccessPolicy } from "./loadout-access-policy.ts";
+import type { ScopeHints } from "./loadout-compose.ts";
 import { convertToLlm } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import { findInitialModel } from "./model-resolver.ts";
@@ -110,6 +111,8 @@ export interface CreateAgentSessionOptions {
 	 * This text only selects a loadout policy and is never sent to the model.
 	 */
 	domainRoutingPrompt?: string;
+	/** Explicit user authority narrowed into the routed loadout; scoped requests fail closed if routing is unavailable. */
+	domainScopeHints?: ScopeHints;
 	/** Optional loadout enforcement policy for SDK-created sessions. */
 	loadoutAccessPolicy?: LoadoutAccessPolicy;
 	/** Trusted sandbox preflight used for built-in local bash execution. */
@@ -291,25 +294,16 @@ function createEffectiveLoadoutAccessPolicy(
 		}
 	}
 
-	const domainRoutingPrompt = options.domainRoutingPrompt?.trim();
-	if (!domainRoutingPrompt || !isDomainRoutingEnabled(process.env)) {
-		return undefined;
-	}
-
-	try {
-		const dispatch = tryDomainDispatch({
-			role: "coder",
-			initialPrompt: domainRoutingPrompt,
-			session,
-			resourceLoader,
-			cwd,
-			agentDir,
-			env: process.env,
-		});
-		return dispatch.loadoutAccessPolicy;
-	} catch {
-		return undefined;
-	}
+	return scopedDomainPolicy({
+		role: "coder",
+		initialPrompt: options.domainRoutingPrompt ?? "",
+		scopeHints: options.domainScopeHints,
+		session,
+		resourceLoader,
+		cwd,
+		agentDir,
+		env: process.env,
+	});
 }
 
 /**

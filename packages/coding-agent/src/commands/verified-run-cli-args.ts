@@ -7,16 +7,17 @@ export const USAGE = `Usage: omk run plan --contract FILE [--json]
        omk run authority [--state-dir DIR] [--json]
        omk run inspect ID --recovery|--writer-recovery|--task-recovery [--state-dir DIR]
        omk run retry-tasks ID --execute --tasks ID[,ID...]|- --approve DIGEST --base DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
+       omk run reconnect ID --execute --approve DIGEST --execution ID --revision N --generation N --command-id ID [--state-dir DIR]
        omk run restart-writer ID --execute --approve DIGEST --base DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
        omk run resume ID --execute --approve DIGEST --candidate DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
        omk run publish ID --execute --contract FILE --approve DIGEST --candidate DIGEST --parent OID --receipt DIGEST --revision N --generation N --command-id ID [--state-dir DIR]
        omk run artifact ID --candidate DIGEST --path PATH [--state-dir DIR]
        omk run cancel ID [--wait-ms N] [--state-dir DIR] [--json]
-       omk run gc [--older-than DURATION] [--execute] [--state-dir DIR] [--json]
+       omk run gc [--older-than DURATION] [--execute] [--prune-obsolete] [--state-dir DIR] [--json]
 The opt-in command, scripted-agent and bounded command-DAG profiles never apply changes to the original workspace.
 Resume rechecks a fixed candidate. Writer/task recovery preserves input checkpoints and budgets. Command-DAG concurrency defaults to 1 and supports an explicit cap of 2.
 Cancel (SIGINT, SIGTERM or omk run cancel from another shell) pauses the run: restart-writer, resume or retry-tasks continue it inside the original budget.
-GC removes only derived workspaces of runs that can no longer recover (default --older-than 7d); without --execute it reports what it would remove.
+GC removes derived workspaces and proven-terminated native records only after recovery is closed (default --older-than 7d); without --execute it reports what it would remove. --prune-obsolete additionally deletes orphan/legacy 1.5 records only when terminal, aged and unbound. Unknown or recoverable records are kept.
 Graph emits a versioned read-only verified-run snapshot for workbench clients; exit 0 means the read succeeded, not that the run passed.
 Plan amendment, managed apply and TUI/RPC control are not implemented.`;
 
@@ -25,6 +26,7 @@ const ACTIONS = [
 	"start",
 	"resume",
 	"restart-writer",
+	"reconnect",
 	"retry-tasks",
 	"publish",
 	"cancel",
@@ -38,7 +40,7 @@ const ACTIONS = [
 	"evidence",
 	"artifact",
 ] as const;
-const SWITCHES = ["--json", "--execute", "--recovery", "--writer-recovery", "--task-recovery"];
+const SWITCHES = ["--json", "--execute", "--recovery", "--writer-recovery", "--task-recovery", "--prune-obsolete"];
 const RECOVERY = ["--execute", "--approve", "--revision", "--generation", "--command-id", "--state-dir", "--json"];
 const PUBLISH = ["--contract", "--candidate", "--parent", "--receipt", ...RECOVERY];
 
@@ -56,6 +58,8 @@ function allowedFlags(action: Parsed["action"]): readonly string[] {
 			return ["--contract", "--approve", "--command-id", "--state-dir", "--json"];
 		case "resume":
 			return ["--candidate", ...RECOVERY];
+		case "reconnect":
+			return ["--execution", ...RECOVERY];
 		case "restart-writer":
 			return ["--base", ...RECOVERY];
 		case "retry-tasks":
@@ -69,7 +73,7 @@ function allowedFlags(action: Parsed["action"]): readonly string[] {
 		case "cancel":
 			return ["--wait-ms", "--state-dir", "--json"];
 		case "gc":
-			return ["--older-than", "--execute", "--state-dir", "--json"];
+			return ["--older-than", "--execute", "--prune-obsolete", "--state-dir", "--json"];
 		default:
 			return ["--state-dir", "--json"];
 	}

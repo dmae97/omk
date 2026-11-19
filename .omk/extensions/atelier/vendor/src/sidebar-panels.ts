@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "open-multi-agent-kit";
 import { isRecord, sanitizeInline } from "./text.ts";
 import type {
 	BuiltinSidebarPanelId,

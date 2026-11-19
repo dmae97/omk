@@ -55,7 +55,7 @@ A failover or route-rotation switch applies to the current session only. It is r
 
 If the candidate OMK switched to rejects the request outright (for example `403 Access to model denied`, an authentication error, or an unsupported model), that candidate is marked failed for the turn and the chain advances to the next authenticated candidate. When no candidate remains, the turn ends with that error instead of retrying the denied model. The same error from the model you selected yourself is still not retried, and with a `--model`/`--provider` pin a denied candidate ends the turn instead of moving to another model.
 
-A content/safety stop gets at most one automatic retry, including a retry that switches model, regardless of the larger transport retry budget. Other transient failures keep the configured retry policy and backoff. Plain authentication errors remain non-retryable and do not trigger failover.
+A content/safety stop gets at most one automatic retry, including a retry that switches model, regardless of the larger transport retry budget. Other transient failures keep the configured retry policy and backoff. Plain authentication errors remain non-retryable and do not trigger failover; the two exceptions are described under [rate limits and credential retries](#rate-limits-and-credential-retries).
 
 Recognized quota shapes include billing-cycle usage limits (`429 Go usage limit exceeded`), `insufficient_quota`, `free_limit_reached`, exhausted balances/credits, `GoUsageLimitError`, `FreeUsageLimitError`, and out-of-budget responses. These are classified as `provider.rate_limit`, even when a provider wraps them in HTTP 403. Provider-capacity bodies that omit a status or limit token are classified the same way: xAI `currently at capacity` / `high demand` (HTTP 429) and Anthropic `overloaded_error` / `Overloaded` (HTTP 529). Left unmatched they fall through to `provider.protocol` and advertise orphan-`tool_call_id` sanitize.
 
@@ -72,6 +72,18 @@ The default candidate order is:
 5. `deepseek/deepseek-v4-flash`
 6. `modelstudio-maas/deepseek-v4-pro`
 7. `kimi-coding/kimi-for-coding`
+
+## Rate limits and credential retries
+
+Two failures used to end a turn in the middle of work when several sessions shared one account. Both are retried within the normal `retry.maxRetries` budget, and neither switches model.
+
+**Rate limit without a hint.** A 429, `rate_limit_error` or "too many requests" answer that is not quota exhaustion waits 8 times the configured backoff for that attempt, capped at 60 seconds, minus up to 25% jitter. With `retry.baseDelayMs: 2000` and `retry.maxRetries: 3` the retries span 81 to 108 seconds instead of 14. The jitter keeps sessions that were throttled at the same moment from retrying at the same moment. A `Retry-After` hint in the error text replaces this wait (still capped at 60 seconds), a retry on a route OMK just switched to keeps its short delay, and Esc cancels the wait.
+
+**Stored login not resolved at request time.** Sessions share `auth.json`. When a request finds its stored OAuth login expired and cannot refresh it, or cannot read the credential store, no request is sent and no other key is used in its place. That attempt is now retried with the plain backoff, because another session finishing its refresh clears it. If the login still cannot be resolved when the budget is spent, the turn ends with the message that names `/login <provider>`. A credential the provider itself rejected (`401`, `403`, `authentication_error`) is not retried.
+
+One refresh failure is not retried: the token endpoint answering 400 or 401, or naming `invalid_grant` or `invalid_client`. The refresh token is dead and only `/login <provider>` replaces it, so the turn ends at once with that message. OMK reads this from the refresh error of the OAuth provider; a failure it does not recognize, a 403 or an unreachable endpoint included, is retried as above.
+
+The summary calls made by compaction and branch summaries use their own retry loop. They get the same rate-limit wait and honor a `Retry-After` hint, but never switch model or route.
 
 ## Same-model route rotation
 

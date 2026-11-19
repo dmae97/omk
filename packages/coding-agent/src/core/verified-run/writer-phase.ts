@@ -3,6 +3,7 @@ import { performance } from "node:perf_hooks";
 import { executeDag } from "./dag-phase.ts";
 import { executeRunCommand, type OwnedRunCommand } from "./owned-execution.ts";
 import type { RunPhaseContext } from "./phase-context.ts";
+import { rustHostReconnectEnabled } from "./rust-host-binding.ts";
 import { executeScriptedWriter } from "./scripted-writer.ts";
 import type { VerifiedRunRuntime } from "./session-port.ts";
 import { VerifiedRunError } from "./storage.ts";
@@ -34,6 +35,7 @@ export async function executeWriter(
 				workspace: options.workspace,
 				deadline: options.deadline,
 				claimId: null,
+				...(rustHostReconnectEnabled() ? { detachable: true as const } : {}),
 			});
 			if (writer.result.failure) throw new VerifiedRunError(writer.result.failure);
 			return;

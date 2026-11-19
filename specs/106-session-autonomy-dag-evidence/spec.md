@@ -4,6 +4,23 @@ Status: draft (spec; C1 implemented on `feat/lane-failure-isolation`)
 Base: `origin/main` @ `f1920f4dad` (after #205/#206, merged in). Verified: `git diff 741ac1c473 f1920f4dad` touches none of the files cited below (only `.omk/extensions/atelier/test/cost-history.test.ts` (#206) and LICENSE/README/TRADEMARKS/`readmeasset/adaptorch/*` (#205)), so every `file:line` ref is re-anchored to `f1920f4dad` unchanged. Launcher refs are main, not the C1 branch. Refs under `packages/coding-agent/src/core/` unless noted.
 Source: 인호's v1.5.5 improvement doc (A–D). Freeze 10/23 12:00 KST ⇒ every behavior change default-off.
 
+## 2026-10-30 amendment — unlimited session skill admission
+
+The operator explicitly removed the numeric session cap. This amendment supersedes the
+cap-specific A1 requirements, refusal messages, SK1/SK2/SK7 expectations, and promotion
+metrics below. Other parts of this spec remain historical design records.
+
+- `SkillAdmissionLedger.reserve()` accepts every new `(skillId, digest)` identity. Reusing
+  an admitted identity still creates no new record, and a released reservation can be replaced.
+- Resume, compaction, model switch, legacy sessions, direct `read`, explicit/steer/follow-up,
+  and worker hand-off have no 10-body limit. Existing `skill_admission` records and
+  `policyRevision` remain compatible.
+- Unknown schema versions and policy revisions still fail closed. The flag-off path still
+  writes no admission records and preserves legacy requests.
+- Regression evidence: the unlimited suite initially produced 6 RED failures, then passed
+  18/18 across the pure ledger and real session/read/worker paths. The randomized guard now
+  checks identity dedupe and reservation ownership instead of enforcing a numeric cap.
+
 ## 0. Doc claims re-checked against current main
 
 All six SHA-256 values in doc §A.4 match main (files unchanged since 741ac1c4).

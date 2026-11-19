@@ -327,13 +327,28 @@ describe("verified-run command profile", () => {
 			if (event.kind === "process_ready") throw new VerifiedRunError("cancelled");
 			return append.call(this, event);
 		});
+		// Isolate ready-error classification; real namespace cancellation is covered by verified-run-supervisor.
+		const sandbox = vi.spyOn(broker, "executeSandbox").mockImplementation(async (request) => {
+			if (!request.onReady) throw new Error("missing readiness callback");
+			await request.onReady({
+				pid: 4242,
+				startTicks: "1",
+				namespace: "pid:[1]",
+				bootId: "00000000-0000-0000-0000-000000000000",
+			});
+			throw new Error("readiness cancellation was not propagated");
+		});
 		try {
-			await coordinator.start(contract, command, { approvedContractDigest: plan.contractDigest });
+			const state = await coordinator.start(contract, command, { approvedContractDigest: plan.contractDigest });
+			expect(state.failure).toBe("cancelled");
+			expect(sandbox).toHaveBeenCalledOnce();
+			expect(fault.mock.calls.some(([event]) => event.kind === "process_ready")).toBe(true);
 			expect(coordinator.inspectAuthority().status.blockingGrants).toEqual([
 				expect.objectContaining({ state: "quarantined", effectLive: true }),
 			]);
 		} finally {
 			fault.mockRestore();
+			sandbox.mockRestore();
 		}
 	});
 
@@ -364,7 +379,9 @@ describe("verified-run command profile", () => {
 			const { contract, plan, command } = prepared();
 			const coordinator = new RunCoordinator(stateRoot);
 			const state = await coordinator.start(contract, command, { approvedContractDigest: plan.contractDigest });
-			expect(state.verification).toBe("verified");
+			expect(state.verification, JSON.stringify({ execution: state.execution, failure: state.failure })).toBe(
+				"verified",
+			);
 			switch (fault) {
 				case "missing_issuer":
 					rmSync(join(stateRoot, contract.runId, "issuer.key"));
@@ -398,7 +415,10 @@ describe("verified-run command profile", () => {
 	it("fails closed if an accepted candidate blob is modified after verification", async () => {
 		const { contract, plan, command } = prepared();
 		const coordinator = new RunCoordinator(stateRoot);
-		await coordinator.start(contract, command, { approvedContractDigest: plan.contractDigest });
+		const state = await coordinator.start(contract, command, { approvedContractDigest: plan.contractDigest });
+		expect(state.verification, JSON.stringify({ execution: state.execution, failure: state.failure })).toBe(
+			"verified",
+		);
 		const bundle = coordinator.evidence(contract.runId);
 		const file = bundle.manifest.files.find((entry) => entry.path === "result.txt");
 		if (!file) throw new Error("fixture candidate missing");

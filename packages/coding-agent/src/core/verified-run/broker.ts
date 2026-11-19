@@ -6,7 +6,10 @@ import type { RunContract } from "omk-protocol";
 import { ownedGitMounts } from "./git-sandbox-layout.ts";
 import type { NamespaceIdentity } from "./namespace-identity.ts";
 import { identityFromSandboxInfo, PROCESS_GATE_ARGV } from "./process-gate.ts";
+import { rustHostBinding, rustHostReconnectEnabled } from "./rust-host-binding.ts";
+import { executeRustSandbox } from "./rust-host-execution.ts";
 import { releaseExitedSandboxGroup, trackSandboxGroup, untrackSandboxGroup } from "./sandbox-groups.ts";
+import type { SandboxExecution, SandboxOutcome } from "./sandbox-types.ts";
 import { digestBytes, digestObject, VerifiedRunError } from "./storage.ts";
 import {
 	awaitBoundaryDrained,
@@ -16,30 +19,11 @@ import {
 	SUPERVISOR_SYSTEM_ARGS,
 } from "./supervisor-adapter.ts";
 
-export interface SandboxExecution {
-	readonly workspace: string;
-	readonly argv: readonly string[];
-	readonly writable: boolean;
-	readonly timeoutMs: number;
-	readonly cleanupMs: number;
-	readonly maxOutputBytes: number;
-	readonly signal?: AbortSignal;
-	readonly onReady?: (identity: NamespaceIdentity) => void | Promise<void>;
-	/** Trusted built-in publisher only: readonly worktree, writable .git, readonly current Node executable. */
-	readonly gitPublication?: true;
-}
-export interface SandboxOutcome {
-	readonly stdout: Buffer;
-	readonly stderr: Buffer;
-	readonly exitCode: number | null;
-	readonly failure: string | null;
-	readonly startedAt: string;
-	readonly finishedAt: string;
-	readonly durationMs: number;
-}
+export type { SandboxExecution, SandboxOutcome } from "./sandbox-types.ts";
 
 export function commandEnvironmentDigest(contract: RunContract, driver: "legacy" | "gated-v1" = "legacy"): string {
 	if (process.platform !== "linux" || !existsSync(SUPERVISOR_BINARY)) throw new VerifiedRunError("unsupported");
+	const nativeHost = driver === "gated-v1" ? rustHostBinding() : undefined;
 	let writers: readonly (readonly string[])[];
 	switch (contract.profile) {
 		case "linux-command-v1":
@@ -59,6 +43,7 @@ export function commandEnvironmentDigest(contract: RunContract, driver: "legacy"
 	const binaries = [
 		...new Set([
 			SUPERVISOR_BINARY,
+			...(nativeHost ? ["/usr/bin/kill"] : []),
 			...writers.map((argv) => argv[0]),
 			...contract.checks.map((check) => check.argv[0]),
 			...(driver === "gated-v1" ? [PROCESS_GATE_ARGV[0]] : []),
@@ -78,6 +63,8 @@ export function commandEnvironmentDigest(contract: RunContract, driver: "legacy"
 		kernel: release(),
 		sandbox: SUPERVISOR_SYSTEM_ARGS,
 		...(driver === "gated-v1" ? { gate: PROCESS_GATE_ARGV, infoFd: 3 } : {}),
+		...(nativeHost ? { nativeHost } : {}),
+		...(driver === "gated-v1" && rustHostReconnectEnabled() ? { nativeReconnect: "writer-verifier-v2" } : {}),
 		binaries: materials,
 	});
 }
@@ -107,6 +94,8 @@ export async function executeSandbox(request: SandboxExecution): Promise<Sandbox
 	if (!request.onReady) throw new VerifiedRunError("unsupported_boundary");
 	const backend = loadSupervisorBackend();
 	if (request.gitPublication && request.writable) throw new VerifiedRunError("unsupported_boundary");
+	const nativeHost = request.gitPublication ? undefined : rustHostBinding();
+	if (nativeHost) return executeRustSandbox(request, nativeHost);
 	const started = performance.now();
 	const startedAt = new Date().toISOString();
 	const argv = [

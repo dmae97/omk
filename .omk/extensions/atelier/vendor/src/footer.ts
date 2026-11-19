@@ -1,4 +1,4 @@
-import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { type Component, truncateToWidth, visibleWidth } from "omk-tui";
 import { DEFAULT_CONFIG } from "./config.ts";
 import { formatTokens } from "./metrics.ts";
 import { type AtelierPalette, createPalette, type PaletteRole, type ThemeLike } from "./palette.ts";

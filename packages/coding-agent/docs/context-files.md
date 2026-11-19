@@ -1,7 +1,7 @@
 # User context setup
 
 OMK's shared defaults are provider-neutral, editable markdown. They do not ship
-an operator's personal configuration, install skills, or enable external services.
+an operator's personal configuration, install global skills, or enable external services.
 
 ## Initialize an installed OMK
 
@@ -13,10 +13,10 @@ omk init --global
 ```
 
 The first command previews the operation without creating even the target directory.
-The second creates missing documents in `~/.omk/agent/`. Both are offline and return
+The second creates missing documents and bundled pstack agent definitions in `~/.omk/agent/`. Existing agents are preserved. Pstack skills remain project-scoped and are installed by `omk init --project`; see [Pstack setup](pstack.md). Both commands are offline and return
 before migrations, settings, credentials, sessions, extensions, and model startup.
 There is no install hook: installing or updating the npm package does not alter
-user instructions, including when installed with `--ignore-scripts`.
+user instructions, including when installed with `--ignore-scripts`. A bare `omk` launch also installs missing bundled pstack agents in the user agent directory without changing existing files or creating context documents. Installation failures are reported as warnings and do not stop startup; explicit `omk init --global` can be used to retry.
 
 ### Project context
 
@@ -94,7 +94,7 @@ and [Environment variables](environment-variables.md).
   and avoids a new compatibility import pointing to the wrong filename.
 - A missing `INTERNET.md` can still be created. Any existing case variant is preserved.
 - `settings.json`, authentication, models, MCP configuration, installed packages,
-  skills, shell profiles, other hosts' directories, and project files are untouched.
+  global skills, shell profiles, other hosts' directories, and project files are untouched.
 - Required templates are read before writing. An I/O failure while writing can leave
   earlier files created; setup is not a multi-file transaction. Review the output
   before retrying. Exclusive file creation prevents overwriting a concurrent file.

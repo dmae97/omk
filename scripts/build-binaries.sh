@@ -131,10 +131,13 @@ for platform in "${PLATFORMS[@]}"; do
 	# Bun compiled executables only embed worker scripts when they are passed as
 	# explicit build entrypoints. The runtime can still use new URL(...), but the
 	# worker must be present in the compiled executable.
+	# --compile-autoload-package-json: standalone executables otherwise ignore
+	# on-disk package.json at runtime, so installed extension dependencies lose
+	# main/exports resolution (e.g. require("pkg/cjs")).
 	if [[ "$platform" == windows-* ]]; then
-		bun build --compile --target=bun-$platform ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile "$OUTPUT_DIR/$platform/omk.exe"
+		bun build --compile --compile-autoload-package-json --target=bun-$platform ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile "$OUTPUT_DIR/$platform/omk.exe"
 	else
-		bun build --compile --target=bun-$platform ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile "$OUTPUT_DIR/$platform/omk"
+		bun build --compile --compile-autoload-package-json --target=bun-$platform ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile "$OUTPUT_DIR/$platform/omk"
 	fi
 done
 

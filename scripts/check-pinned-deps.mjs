@@ -22,6 +22,7 @@ const internalWorkspaceDependencies = new Set([
 	"omk-agent-core",
 	"omk-ai",
 	"omk-book-to-skill",
+	"omk-speak-like-you-eat",
 	"omk-protocol",
 	"omk-tui",
 	"open-multi-agent-kit",

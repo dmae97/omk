@@ -9,11 +9,7 @@ import { transformMessages } from "./transform-messages.ts";
 
 type GoogleApiType = "google-generative-ai" | "google-vertex";
 
-/**
- * Thinking level for Gemini 3 models.
- * Mirrors Google's ThinkingLevel enum values.
- */
-export type GoogleThinkingLevel = "THINKING_LEVEL_UNSPECIFIED" | "MINIMAL" | "LOW" | "MEDIUM" | "HIGH";
+export type { GoogleThinkingLevel } from "./google-thinking-level.ts";
 
 /**
  * Determines whether a streamed Gemini `Part` should be treated as "thinking".

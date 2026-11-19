@@ -48,14 +48,10 @@ const EXCLUDE_UNVERIFIED_NEW_IDS: { provider: string; id: string; reason: string
 	{ provider: "opencode-go", id: "minimax-m3.1-flash-free", reason: "opencode-go-catalog.test.ts pins the live id set; add with that test update" },
 	{ provider: "huggingface", id: "deepseek-ai/DeepSeek-V4.1-Flash-1017", reason: "not confirmed in official model docs (checked 2026-10-20 KST)" },
 	{ provider: "nvidia", id: "stepfun-ai/step-5-preview", reason: "not confirmed in official model docs (checked 2026-10-20 KST)" },
-	{ provider: "openrouter", id: "inception/mercury-3", reason: "not confirmed in official model docs (checked 2026-10-20 KST)" },
-	{ provider: "openrouter", id: "unbiased/pareto-26.10", reason: "not confirmed in official model docs (checked 2026-10-20 KST)" },
 	{ provider: "together", id: "meta-models/Muse-Spark-Open-816B-A42B", reason: "not confirmed in official model docs (checked 2026-10-20 KST)" },
 	{ provider: "together", id: "nvidia/NVIDIA-Nemotron-3.5-Super-VL", reason: "not confirmed in official model docs (checked 2026-10-20 KST)" },
 	{ provider: "together", id: "reflection/Beam-1.0-501B-A23B", reason: "not confirmed in official model docs (checked 2026-10-20 KST)" },
-	{ provider: "vercel-ai-gateway", id: "deepseek/deepseek-v4.1-flash-1017-fast", reason: "not confirmed in official model docs (checked 2026-10-20 KST)" },
-	{ provider: "vercel-ai-gateway", id: "inception/mercury-3", reason: "not confirmed in official model docs (checked 2026-10-20 KST)" },
-	{ provider: "vercel-ai-gateway", id: "minimax/minimax-m3.1-flash", reason: "not confirmed in official model docs (checked 2026-10-20 KST)" },
+	// OpenRouter and Vercel route IDs/limits are confirmed by their own /models APIs (2026-10-29).
 ];
 
 /** Fields kept at their committed values because the upstream change is unverified. */
@@ -70,40 +66,9 @@ const PINNED_FIELDS: { provider: string; id: string; fields: ("cost" | "contextW
 	{ provider: "vercel-ai-gateway", id: "spacexai/grok-4.5", fields: ["thinkingLevelMap"] },
 	{ provider: "xai", id: "grok-4.3", fields: ["thinkingLevelMap"] },
 	{ provider: "xai", id: "grok-4.5", fields: ["thinkingLevelMap"] },
-	// OpenRouter/Together/Vercel price and cap moves seen on 2026-10-20 that no official doc confirms.
-	{ provider: "openrouter", id: "deepseek/deepseek-chat", fields: ["cost", "maxTokens"] },
-	{ provider: "openrouter", id: "deepseek/deepseek-v4-flash-0731", fields: ["cost", "maxTokens"] },
-	{ provider: "openrouter", id: "deepseek/deepseek-v4-pro", fields: ["cost"] },
-	{ provider: "openrouter", id: "deepseek/deepseek-v4-pro-0813", fields: ["maxTokens"] },
-	{ provider: "openrouter", id: "deepseek/deepseek-v4.1-flash", fields: ["cost"] },
-	{ provider: "openrouter", id: "google/gemini-4-argon", fields: ["maxTokens"] },
-	{ provider: "openrouter", id: "google/gemma-3-27b-it", fields: ["cost"] },
-	{ provider: "openrouter", id: "google/gemma-4-26b-a4b-it", fields: ["cost"] },
-	{ provider: "openrouter", id: "meta-llama/llama-4-maverick", fields: ["contextWindow"] },
-	{ provider: "openrouter", id: "moonshotai/kimi-k3", fields: ["cost"] },
-	{ provider: "openrouter", id: "nvidia/nemotron-3.5-super-vl", fields: ["cost"] },
-	{ provider: "openrouter", id: "qwen/qwen3-30b-a3b-instruct-2507", fields: ["cost"] },
-	{ provider: "openrouter", id: "qwen/qwen3.5-27b", fields: ["cost", "maxTokens"] },
-	{ provider: "openrouter", id: "qwen/qwen3.5-35b-a3b", fields: ["maxTokens"] },
-	{ provider: "openrouter", id: "qwen/qwen3.5-397b-a17b", fields: ["cost", "maxTokens"] },
-	{ provider: "openrouter", id: "reflection/beam-1.0-501b-a23b", fields: ["cost"] },
-	{ provider: "openrouter", id: "upstage/solar-pro4", fields: ["cost"] },
-	{ provider: "openrouter", id: "z-ai/glm-4.6", fields: ["cost"] },
-	{ provider: "openrouter", id: "z-ai/glm-5", fields: ["maxTokens"] },
-	{ provider: "openrouter", id: "z-ai/glm-5.3", fields: ["cost"] },
-	{ provider: "openrouter", id: "z-ai/glm-5.3-flash", fields: ["cost", "maxTokens"] },
-	{ provider: "openrouter", id: "~deepseek/deepseek-flash-latest", fields: ["cost", "maxTokens"] },
-	{ provider: "openrouter", id: "~deepseek/deepseek-pro-latest", fields: ["cost"] },
-	{ provider: "openrouter", id: "~deepseek/deepseek-v4-flash-latest", fields: ["cost"] },
-	{ provider: "openrouter", id: "~google/gemini-pro-latest", fields: ["maxTokens"] },
-	{ provider: "openrouter", id: "~moonshotai/kimi-latest", fields: ["cost"] },
-	{ provider: "openrouter", id: "~unbiased/pareto-latest", fields: ["cost", "contextWindow"] },
-	{ provider: "openrouter", id: "~z-ai/glm-flash-latest", fields: ["cost"] },
-	{ provider: "openrouter", id: "~z-ai/glm-latest", fields: ["cost", "maxTokens"] },
+	// Gateway pricing and limits come from each gateway's own live /models API, not older snapshots.
 	{ provider: "together", id: "Qwen/Qwen3.6-Plus", fields: ["maxTokens"] },
 	{ provider: "together", id: "Qwen/Qwen3.7-Max", fields: ["maxTokens"] },
-	{ provider: "vercel-ai-gateway", id: "deepseek/deepseek-v4.1-flash", fields: ["cost", "maxTokens"] },
-	{ provider: "vercel-ai-gateway", id: "deepseek/deepseek-v4.1-flash-1017", fields: ["cost", "contextWindow", "maxTokens"] },
 ];
 
 /** Values set from official provider docs. Each entry cites its source. */

@@ -613,7 +613,14 @@ Content`,
 				JSON.stringify({ pi: { extensions: ["./"], skills: ["./skills"] } }),
 			);
 
-			const result = await packageManager.resolveExtensionSources([pkgDir]);
+			// Pi manifests are a compatibility feature since OMK 2.0; the omitted default is native.
+			const compatible = new DefaultPackageManager({
+				cwd: tempDir,
+				agentDir,
+				settingsManager,
+				packageManifestDialect: "omk+pi",
+			});
+			const result = await compatible.resolveExtensionSources([pkgDir]);
 
 			expect(result.extensions.some((resource) => resource.path === extensionPath && resource.enabled)).toBe(true);
 			expect(result.extensions.some((resource) => resource.path === helperPath)).toBe(false);
@@ -790,7 +797,14 @@ Content`,
 		});
 
 		it("should inspect git packages without installing dependencies", async () => {
-			const managerWithInternals = packageManager as unknown as PackageManagerInternals;
+			// Package doctor prepares inspections with the compatibility dialect so legacy resources stay visible.
+			const inspector = new DefaultPackageManager({
+				cwd: tempDir,
+				agentDir,
+				settingsManager,
+				packageManifestDialect: "omk+pi",
+			});
+			const managerWithInternals = inspector as unknown as PackageManagerInternals;
 			const runNpmCommandSpy = vi.spyOn(managerWithInternals, "runNpmCommand");
 			vi.spyOn(managerWithInternals, "runCommand").mockImplementation(async (command, args) => {
 				expect(command).toBe("git");
@@ -803,7 +817,7 @@ Content`,
 				writeFileSync(join(target, "index.ts"), "export default function () {};");
 			});
 
-			const result = await packageManager.preparePackageInspection("git:github.com/example/doctor-fixture");
+			const result = await inspector.preparePackageInspection("git:github.com/example/doctor-fixture");
 
 			expect(result.resources.extensions).toHaveLength(1);
 			expect(runNpmCommandSpy).not.toHaveBeenCalled();

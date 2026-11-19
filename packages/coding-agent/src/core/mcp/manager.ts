@@ -12,12 +12,19 @@ import { mcpPublicDiagnostic, publicMcpServerVersion } from "./public-diagnostic
 import type { McpToolDetails } from "./tools.ts";
 import { retireMcpClient } from "./transport-retirement.ts";
 
-export type { McpManagerOptions, McpServerConfig, McpServerState, McpServerStatus } from "./manager-runtime.ts";
+export type {
+	McpAttachOptions,
+	McpManagerOptions,
+	McpServerConfig,
+	McpServerState,
+	McpServerStatus,
+} from "./manager-runtime.ts";
 
 export class McpManager {
 	private readonly runtimes = new Map<string, ServerRuntime>();
 	private readonly options: McpManagerOptions;
 	private readonly connections: McpConnectionQueue;
+	private publishedTools: readonly ToolDefinition<TSchema, McpToolDetails>[] | undefined;
 
 	constructor(options: McpManagerOptions) {
 		this.options = options;
@@ -49,16 +56,30 @@ export class McpManager {
 	/** Wait for every enabled attempt, then return the full admitted catalog in configuration order. */
 	async listToolDefinitions(): Promise<ToolDefinition<TSchema, McpToolDetails>[]> {
 		await Promise.all([...this.runtimes.values()].map((runtime) => this.ensureConnected(runtime)));
-		const tools: ToolDefinition<TSchema, McpToolDetails>[] = [];
-		const seen = new Set<string>();
+		return this.publishToolDefinitions();
+	}
+
+	private publishToolDefinitions(): ToolDefinition<TSchema, McpToolDetails>[] {
+		const tools = new Map<string, ToolDefinition<TSchema, McpToolDetails>>();
+		const catalog = new Map<string, ToolDefinition<TSchema, McpToolDetails>>();
 		for (const runtime of this.runtimes.values()) {
+			if (this.options.onToolsChanged && runtime.state === "ready") runtime.lastReadyTools = runtime.tools;
 			for (const tool of runtime.tools) {
-				if (seen.has(tool.name)) continue;
-				seen.add(tool.name);
-				tools.push(tool);
+				if (!tools.has(tool.name)) tools.set(tool.name, tool);
+			}
+			for (const tool of runtime.lastReadyTools ?? []) {
+				if (!catalog.has(tool.name)) catalog.set(tool.name, tool);
 			}
 		}
-		return tools;
+		const published = [...catalog.values()];
+		if (
+			published.length !== this.publishedTools?.length ||
+			published.some((tool, index) => tool !== this.publishedTools?.[index])
+		) {
+			this.options.onToolsChanged?.(published);
+			this.publishedTools = published;
+		}
+		return [...tools.values()];
 	}
 
 	/** Connect a single server by name using the same capacity and single-flight as listing. */
@@ -66,6 +87,7 @@ export class McpManager {
 		const runtime = this.runtimes.get(name);
 		if (!runtime) return { name, state: "failed", toolCount: 0, error: `Unknown MCP server "${name}"` };
 		await this.ensureConnected(runtime);
+		this.publishToolDefinitions();
 		return {
 			name,
 			state: runtime.state,
@@ -90,11 +112,13 @@ export class McpManager {
 			if (runtime.pendingClient) void retireMcpClient(runtime, runtime.pendingClient);
 			runtime.pendingClient = undefined;
 			runtime.tools = [];
+			runtime.lastReadyTools = undefined;
 			runtime.quarantinedTools = [];
 			if (runtime.state === "ready" || runtime.state === "connecting" || runtime.state === "queued")
 				runtime.state = "idle";
 		}
 		this.connections.cancelQueued();
+		this.publishedTools = undefined;
 	}
 
 	/** Explicitly join native process/stdio closure; remote effects are outside this proof. */
@@ -123,6 +147,7 @@ export class McpManager {
 			}
 		}
 		await Promise.all(work);
+		this.publishToolDefinitions();
 		return this.status();
 	}
 

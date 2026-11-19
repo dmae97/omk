@@ -1,4 +1,4 @@
-import { type OverlayOptions, type TUI, visibleWidth } from "@earendil-works/pi-tui";
+import { type OverlayOptions, type TUI, visibleWidth } from "omk-tui";
 import { compositeTuiLine } from "../../src/compat.ts";
 
 const RESET = "\u001b[0m\u001b]8;;\u0007";

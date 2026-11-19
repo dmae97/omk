@@ -37,7 +37,7 @@ type RenderSessionContextThis = {
 		getShowImages(): boolean;
 		getImageWidthCells(): number;
 	};
-	sessionManager: { getCwd(): string };
+	sessionManager: { getCwd(): string; getBranch(): readonly unknown[] };
 	session: { retryAttempt: number; isStreaming: boolean };
 	toolOutputExpanded: boolean;
 	isInitialized: boolean;
@@ -66,7 +66,8 @@ function createFakeInteractiveModeThis(isStreaming = true): RenderSessionContext
 			getShowImages: () => false,
 			getImageWidthCells: () => 60,
 		},
-		sessionManager: { getCwd: () => process.cwd() },
+		// renderSessionContext replays custom entries from the branch; these regressions have none.
+		sessionManager: { getCwd: () => process.cwd(), getBranch: () => [] },
 		session: { retryAttempt: 0, isStreaming },
 		toolOutputExpanded: false,
 		isInitialized: true,

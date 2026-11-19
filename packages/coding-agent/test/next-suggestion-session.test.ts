@@ -11,6 +11,8 @@ import { AuthStorage } from "../src/core/auth-storage.ts";
 import { KeybindingsManager } from "../src/core/keybindings.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
 import { type QuotaUsage, SUGGESTION_INSTRUCTION } from "../src/core/next-suggestion.ts";
+import { SuggestionAcceptTracker, type SuggestionOutcomeRecord } from "../src/core/next-suggestion-accept-trace.ts";
+import { isWellFormedSuggestionPrompt } from "../src/core/next-suggestion-prompt.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
 import { CustomEditor } from "../src/modes/interactive/components/custom-editor.ts";
@@ -183,8 +185,11 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		const editor = fakeEditor();
 		const controller = install(on.session, editor);
 		await on.session.prompt("first");
-		await vi.waitFor(() => expect(controller.suggestion).toBe(SUGGESTION));
-		expect(editor.state.placeholder).toBe(SUGGESTION);
+		await vi.waitFor(() => expect(controller.title).toBe(SUGGESTION));
+		// The placeholder is the whole host-rendered prompt, titled with the model sentence.
+		expect(editor.state.placeholder).toBe(controller.suggestion);
+		expect(isWellFormedSuggestionPrompt(editor.state.placeholder)).toBe(true);
+		expect(editor.state.placeholder.split("\n")[0]).toBe(SUGGESTION);
 		await on.session.prompt("second");
 
 		// One suggestion per completed turn; none of them reaches a main request.
@@ -398,7 +403,7 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		const shownAt: number[] = [];
 		const setPlaceholder = editor.setPlaceholder;
 		editor.setPlaceholder = (text) => {
-			if (text === SUGGESTION) shownAt.push(h.suggestion.length);
+			if (text.startsWith(SUGGESTION)) shownAt.push(h.suggestion.length);
 			setPlaceholder(text);
 		};
 		install(h.session, editor);
@@ -428,9 +433,12 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		const editor = fakeEditor();
 		const controller = install(h.session, editor);
 		await h.session.prompt("first");
-		await vi.waitFor(() => expect(controller.suggestion).toBe(SUGGESTION));
+		await vi.waitFor(() => expect(controller.title).toBe(SUGGESTION));
+		const prompt = controller.suggestion;
+		expect(editor.state.placeholder).toBe(prompt);
 		expect(editor.onBeforeInput?.("\t")).toBe(true);
-		expect(editor.state.text).toBe(SUGGESTION);
+		// What was displayed is exactly what reaches the editor input path.
+		expect(editor.state.text).toBe(prompt);
 		expect(editor.state.placeholder).toBe("base");
 		expect(h.main).toHaveLength(1);
 
@@ -438,7 +446,7 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		// prompt() resolved raced the suggestion, which is discarded while the editor has text.
 		editor.state.text = "";
 		await h.session.prompt("second");
-		await vi.waitFor(() => expect(controller.suggestion).toBe(SUGGESTION));
+		await vi.waitFor(() => expect(controller.title).toBe(SUGGESTION));
 		expect(editor.onBeforeInput?.("x")).toBe(false);
 		expect(controller.suggestion).toBeUndefined();
 		expect(editor.state.placeholder).toBe("base");
@@ -450,7 +458,7 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		const editor = fakeEditor(true);
 		const controller = install(h.session, editor);
 		await h.session.prompt("first");
-		await vi.waitFor(() => expect(controller.suggestion).toBe(SUGGESTION));
+		await vi.waitFor(() => expect(controller.title).toBe(SUGGESTION));
 		expect(editor.onBeforeInput?.("\t")).toBe(false);
 		expect(editor.state.text).toBe("");
 	});
@@ -480,6 +488,54 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		replacement.dispose();
 	});
 
+	it("prefix experiment reuses the current candidate without provider calls and accepts one undo unit", async () => {
+		initTheme("dark");
+		const ui = new TUI(new VirtualTerminal(80, 30));
+		const editor = new CustomEditor(ui, getEditorTheme(), new KeybindingsManager());
+		editor.setPlaceholder("base");
+		const h = harness(tempCwd());
+		const records: Array<Omit<SuggestionOutcomeRecord, "schemaVersion" | "sessionHash">> = [];
+		const trace = new SuggestionAcceptTracker((record) => records.push(record));
+		const controller = installNextSuggestions(h.session as unknown as SuggestionSessionPort, editor, "base", {
+			env: { ...ON, OMK_NEXT_SUGGESTIONS_PREFIX: "1" },
+			isTab: (data) => data === "\t",
+			quotaUsage: async () => "no_quota" as const,
+			acceptTrace: trace,
+		});
+		controllers.push(controller!);
+		await h.session.prompt("first");
+		await vi.waitFor(() => expect(controller!.title).toBe(SUGGESTION));
+		const calls = h.calls();
+
+		editor.handleInput("R");
+		expect(h.calls()).toBe(calls);
+		expect(controller!.title).toBe(SUGGESTION);
+		expect(editor.render(80).join("\n")).toContain("un the parser tests next.");
+		// The startup suggestion is local and ends when the first turn starts; the settled turn's local
+		// suggestion is refined in place by the model sentence, so it leaves no `abandoned` record.
+		expect(records).toHaveLength(2);
+		expect(records[0]).toMatchObject({ candidateSource: "local", outcome: "dismissed", dismissReason: "new_turn" });
+		expect(records[1]).toMatchObject({
+			candidateSource: "generated",
+			displaySurface: "empty-editor",
+			outcome: "dismissed",
+			dismissReason: "typed_over",
+		});
+		const prompt = controller!.suggestion!;
+		editor.handleInput("\t");
+		expect(editor.getText()).toBe(prompt);
+		expect(h.calls()).toBe(calls);
+		trace.sent(prompt, Date.now(), "prompt");
+		expect(records.at(-1)).toMatchObject({
+			candidateSource: "generated",
+			displaySurface: "inline-prefix",
+			outcome: "accepted",
+			sentAs: "exact",
+		});
+		editor.handleInput("\x1b[45;5u");
+		expect(editor.getText()).toBe("R");
+	});
+
 	it("real CustomEditor: gray suggestion renders, Tab inserts, typing dismisses, Tab without suggestion is untouched", async () => {
 		initTheme("dark");
 		const ui = new TUI(new VirtualTerminal(80, 30));
@@ -488,15 +544,16 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		const h = harness(tempCwd());
 		const controller = install(h.session, editor);
 		await h.session.prompt("first");
-		await vi.waitFor(() => expect(controller.suggestion).toBe(SUGGESTION));
+		await vi.waitFor(() => expect(controller.title).toBe(SUGGESTION));
 		expect(editor.render(80).join("\n")).toContain(SUGGESTION);
+		const prompt = controller.suggestion;
 		editor.handleInput("\t");
-		expect(editor.getText()).toBe(SUGGESTION);
+		expect(editor.getText()).toBe(prompt);
 		expect(h.main).toHaveLength(1);
 
 		editor.setText("");
 		await h.session.prompt("second");
-		await vi.waitFor(() => expect(controller.suggestion).toBe(SUGGESTION));
+		await vi.waitFor(() => expect(controller.title).toBe(SUGGESTION));
 		editor.handleInput("h");
 		expect(editor.getText()).toBe("h");
 		expect(controller.suggestion).toBeUndefined();
@@ -525,18 +582,19 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		const custom = new CustomEditor(ui, getEditorTheme(), keybindings);
 		active = custom;
 		await h.session.prompt("first");
-		await vi.waitFor(() => expect(controller.suggestion).toBe(SUGGESTION));
+		await vi.waitFor(() => expect(controller.title).toBe(SUGGESTION));
 		expect(custom.render(80).join("\n")).toContain(SUGGESTION);
 		expect(defaultEditor.render(80).join("\n")).not.toContain(SUGGESTION);
+		const prompt = controller.suggestion;
 		custom.handleInput("\t");
-		expect(custom.getText()).toBe(SUGGESTION);
+		expect(custom.getText()).toBe(prompt);
 		expect(defaultEditor.getText()).toBe("");
 		expect(h.main).toHaveLength(1);
 
 		// The extension removes its editor while a suggestion is visible: the shown one is cleared too.
 		custom.setText("");
 		await h.session.prompt("second");
-		await vi.waitFor(() => expect(controller.suggestion).toBe(SUGGESTION));
+		await vi.waitFor(() => expect(controller.title).toBe(SUGGESTION));
 		active = defaultEditor;
 		controller.cancel();
 		expect(custom.render(80).join("\n")).not.toContain(SUGGESTION);

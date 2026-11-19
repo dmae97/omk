@@ -12,12 +12,12 @@ import type { CapabilityGate, LoadoutCommands, ToolGate } from "./loadouts.ts";
 
 const WRITE_TOOLS: ToolGate = { allow: ["read", "grep", "find", "ls", "edit", "write", "bash"] };
 
-function gate(kind: "skill" | "mcp" | "hook", names: readonly string[]): CapabilityGate {
+export function gate(kind: "skill" | "mcp" | "hook", names: readonly string[]): CapabilityGate {
 	return { allow: [{ kind, names }] };
 }
 
-function commands(mode: LoadoutCommands["mode"]): LoadoutCommands {
-	return { mode };
+export function commands(mode: LoadoutCommands["mode"], extras?: Partial<LoadoutCommands>): LoadoutCommands {
+	return { mode, ...extras };
 }
 
 export const GROK_HARNESS_PROFILE: DomainProfile = {

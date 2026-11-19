@@ -105,4 +105,55 @@ describe("omk doctor", () => {
 		});
 		expect(outcome.output).not.toContain("sk-ant");
 	});
+
+	it("issue #9: passes credentials and default-model when custom provider configured in models.json", async () => {
+		mkdirSync(agentDir, { recursive: true });
+		writeFileSync(
+			join(agentDir, "models.json"),
+			JSON.stringify({
+				providers: {
+					ollama: {
+						baseUrl: "http://localhost:11434/v1",
+						apiKey: "ollama",
+						api: "openai-completions",
+						models: [{ id: "llama3" }],
+					},
+				},
+			}),
+		);
+		const outcome = await run(["doctor", "--json"]);
+		const report = JSON.parse(outcome.output) as {
+			checks: Array<{ id: string; status: string; summary: string }>;
+		};
+		const creds = report.checks.find((check) => check.id === "credentials");
+		expect(creds?.status).toBe("pass");
+		expect(creds?.summary).toContain("custom: ollama (models.json)");
+		const model = report.checks.find((check) => check.id === "default-model");
+		expect(model?.status).toBe("pass");
+		expect(model?.summary).toContain("ollama/llama3");
+	});
+
+	it("issue #9: passes credentials and default-model when custom provider configured via ~/.kimi/config.toml", async () => {
+		const kimiDir = join(root, ".kimi");
+		mkdirSync(kimiDir, { recursive: true });
+		writeFileSync(
+			join(kimiDir, "config.toml"),
+			[
+				"[providers.ollama]",
+				'type = "openai_legacy"',
+				'base_url = "http://localhost:11434/v1"',
+				'model_name = "llama3"',
+			].join("\n"),
+		);
+		const outcome = await run(["doctor", "--json"], { HOME: root, KIMI_CONFIG_PATH: join(kimiDir, "config.toml") });
+		const report = JSON.parse(outcome.output) as {
+			checks: Array<{ id: string; status: string; summary: string }>;
+		};
+		const creds = report.checks.find((check) => check.id === "credentials");
+		expect(creds?.status).toBe("pass");
+		expect(creds?.summary).toContain("custom: kimi:ollama (~/.kimi/config.toml)");
+		const model = report.checks.find((check) => check.id === "default-model");
+		expect(model?.status).toBe("pass");
+		expect(model?.summary).toContain("kimi-coding (custom:ollama)/llama3");
+	});
 });

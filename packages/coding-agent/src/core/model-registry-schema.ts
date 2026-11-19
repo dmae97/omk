@@ -1,5 +1,6 @@
 import { type Static, Type } from "typebox";
 import { Compile } from "typebox/compile";
+import type { TLocalizedValidationError } from "typebox/error";
 
 // Schema for OpenRouter routing preferences
 const PercentileCutoffsSchema = Type.Object({
@@ -167,8 +168,36 @@ const ProviderConfigSchema = Type.Object({
 
 const ModelsConfigSchema = Type.Object({
 	providers: Type.Record(Type.String(), ProviderConfigSchema),
+	visibility: Type.Optional(
+		Type.Object({
+			providers: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+			models: Type.Optional(Type.Record(Type.String(), Type.Array(Type.String({ minLength: 1 })))),
+		}),
+	),
 });
 
 export const validateModelsConfig = Compile(ModelsConfigSchema);
 
 export type ModelsConfig = Static<typeof ModelsConfigSchema>;
+
+export function isModelVisible(
+	model: { provider: string; id: string },
+	visibility: ModelsConfig["visibility"],
+): boolean {
+	if (visibility?.providers && !visibility.providers.includes(model.provider)) return false;
+	const models = visibility?.models;
+	return !models || !Object.hasOwn(models, model.provider) || models[model.provider].includes(model.id);
+}
+
+export function formatValidationPath(error: TLocalizedValidationError): string {
+	if (error.keyword === "required") {
+		const requiredProperties = (error.params as { requiredProperties?: string[] }).requiredProperties;
+		const requiredProperty = requiredProperties?.[0];
+		if (requiredProperty) {
+			const basePath = error.instancePath.replace(/^\//, "").replace(/\//g, ".");
+			return basePath ? `${basePath}.${requiredProperty}` : requiredProperty;
+		}
+	}
+	const path = error.instancePath.replace(/^\//, "").replace(/\//g, ".");
+	return path || "root";
+}

@@ -24,6 +24,7 @@ export class SessionShutdown {
 	private readonly producers = new Set<Promise<void>>();
 	private closing = false;
 	private completion: Promise<void> | undefined;
+	private closeOperation: (() => Promise<void>) | undefined;
 
 	get isClosing(): boolean {
 		return this.closing;
@@ -67,6 +68,10 @@ export class SessionShutdown {
 			owner.finish();
 		}
 	}
+	/** Retained delivery is joined by close, not admitted as a fresh producer. */
+	runSettlement(operation: () => Promise<void>): Promise<void> {
+		return this.closing ? operation() : this.run(operation);
+	}
 
 	get closedByCommand(): boolean {
 		return this.context.getStore()?.closedByCommand ?? false;
@@ -84,7 +89,12 @@ export class SessionShutdown {
 		}
 	}
 
-	close(stop: () => void, drain: () => Promise<void>, finalize: () => void): Promise<void> {
+	close(
+		stop: () => void,
+		drain: () => Promise<void>,
+		finalize: () => void,
+		recover?: () => Promise<void>,
+	): Promise<void> {
 		const commands: ShutdownProducer[] = [];
 		for (let owner = this.context.getStore(); owner; owner = owner.parent) {
 			if (!owner.active) continue;
@@ -98,23 +108,37 @@ export class SessionShutdown {
 		}
 		if (this.completion) return this.completion;
 		this.closing = true;
-		this.completion = Promise.resolve().then(async () => {
+		if (!this.closeOperation) {
 			const errors: unknown[] = [];
-			try {
-				stop();
-			} catch (error) {
-				errors.push(error);
-			}
-			await Promise.all([...this.producers]);
-			try {
-				await drain();
-				// Only successful joins authorize final resource/lease release.
-				finalize();
-			} catch (error) {
-				errors.push(error);
-			}
-			throwShutdownErrors(errors);
-		});
+			let stopped = false;
+			// Accounting retries keep the original stop results and independent join promises.
+			this.closeOperation = async () => {
+				if (!stopped) {
+					stopped = true;
+					try {
+						stop();
+					} catch (error) {
+						errors.push(error);
+					}
+				}
+				try {
+					await recover?.();
+				} catch (error) {
+					this.completion = undefined;
+					throwShutdownErrors([...errors, error]);
+				}
+				await Promise.all([...this.producers]);
+				try {
+					await drain();
+					// Only successful joins authorize final resource/lease release.
+					finalize();
+				} catch (error) {
+					errors.push(error);
+				}
+				throwShutdownErrors(errors);
+			};
+		}
+		this.completion = Promise.resolve().then(this.closeOperation);
 		return this.completion;
 	}
 
@@ -134,6 +158,7 @@ export class SessionShutdown {
 			control?: Promise<SessionControlServer>;
 		},
 		finalize: () => void,
+		recover?: () => Promise<void>,
 	): Promise<void> {
 		let controlClose: Promise<void> | undefined;
 		return this.close(
@@ -176,6 +201,7 @@ export class SessionShutdown {
 				throwShutdownErrors(joins.flatMap((join) => (join.status === "rejected" ? [join.reason] : [])));
 			},
 			finalize,
+			recover,
 		);
 	}
 

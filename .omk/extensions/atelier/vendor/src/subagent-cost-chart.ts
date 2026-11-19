@@ -1,4 +1,4 @@
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth } from "omk-tui";
 import { type AtelierPalette, PALETTE_RGB, type PaletteRole, paintRgb, type Rgb } from "./palette.ts";
 import { interpolateCostCurve, renderCostImage } from "./subagent-cost-image.ts";
 import type { SubagentUsageSnapshot } from "./subagent-usage.ts";

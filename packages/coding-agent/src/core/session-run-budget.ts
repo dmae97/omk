@@ -89,6 +89,9 @@ export class SessionRunBudget {
 	waitForIdle(): Promise<void> {
 		return (this.current ?? this.previous)?.waitForIdle() ?? Promise.resolve();
 	}
+	waitForExecution(): Promise<void> {
+		return this.executionCompletion ?? Promise.resolve();
+	}
 	/** True once the owning session closed this budget (session dispose). */
 	get closed(): boolean {
 		return this.disposed;

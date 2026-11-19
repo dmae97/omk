@@ -44,6 +44,13 @@ export interface McpManagerOptions {
 	readonly connectionConcurrency?: number;
 	/** Injected for tests so the manager can be exercised without spawning processes. */
 	readonly createClient?: (options: McpClientOptions) => McpClient;
+	/** Publish ready catalog replacements; retain failed handles until recovery so host tool selections survive. */
+	readonly onToolsChanged?: (tools: readonly ToolDefinition<TSchema, McpToolDetails>[]) => void;
+}
+
+export interface McpAttachOptions {
+	readonly servers?: readonly McpServerConfig[];
+	readonly callTimeoutMs?: number;
 }
 
 export interface ServerRuntime {
@@ -51,6 +58,8 @@ export interface ServerRuntime {
 	state: McpServerState;
 	client?: McpClient;
 	tools: ToolDefinition<TSchema, McpToolDetails>[];
+	/** Last admitted catalog, retained through a transient outage and cleared on close. */
+	lastReadyTools?: readonly ToolDefinition<TSchema, McpToolDetails>[];
 	quarantinedTools: string[];
 	error?: string;
 	connecting?: Promise<void>;

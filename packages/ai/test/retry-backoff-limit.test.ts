@@ -124,3 +124,41 @@ describe("retryBackoffDelayMs", () => {
 		expect(backoff("abc" as unknown as number, 1)).toBe(2000);
 	});
 });
+
+describe("retryAssistantCall policy.delayMs", () => {
+	const scheduledDelays = async (delayMs: (backoffMs: number, errorMessage: string) => number) => {
+		const scheduled: number[] = [];
+		let calls = 0;
+		const controller = new AbortController();
+		const pending = retryAssistantCall(
+			async () => (++calls === 1 ? transient() : done()),
+			{ enabled: true, maxRetries: 1, baseDelayMs: 1, delayMs },
+			controller.signal,
+			{
+				onRetryScheduled: (_attempt, _max, delay) => {
+					scheduled.push(delay);
+					// The delay is only observed; no test waits it out.
+					queueMicrotask(() => controller.abort());
+				},
+			},
+		);
+		await pending;
+		return scheduled;
+	};
+
+	it("replaces the backoff and receives it with the error text", async () => {
+		const seen: [number, string][] = [];
+		const scheduled = await scheduledDelays((backoffMs, errorMessage) => {
+			seen.push([backoffMs, errorMessage]);
+			return 5000;
+		});
+		expect(seen).toEqual([[1, "overloaded_error"]]);
+		expect(scheduled).toEqual([5000]);
+	});
+
+	it("keeps the backoff for a value no timer can hold and caps a longer one", async () => {
+		expect(await scheduledDelays(() => Number.NaN)).toEqual([1]);
+		expect(await scheduledDelays(() => -1)).toEqual([1]);
+		expect(await scheduledDelays(() => Number.POSITIVE_INFINITY)).toEqual([TIMER_LIMIT_MS]);
+	});
+});

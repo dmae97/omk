@@ -21,7 +21,6 @@ import type {
 } from "../types.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
-import type { GoogleThinkingLevel } from "./google-shared.ts";
 import {
 	convertMessages,
 	convertTools,
@@ -31,6 +30,7 @@ import {
 	retainThoughtSignature,
 } from "./google-shared.ts";
 import { getDisabledThinkingConfig } from "./google-thinking-disable.ts";
+import type { GoogleThinkingLevel } from "./google-thinking-level.ts";
 import { buildBaseOptions } from "./simple-options.ts";
 
 export interface GoogleOptions extends StreamOptions {

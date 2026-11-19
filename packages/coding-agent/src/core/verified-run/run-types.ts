@@ -1,5 +1,6 @@
 import type {
 	RunContract,
+	RunReconnectCommand,
 	RunResumeCommand,
 	RunStartCommand,
 	RunTaskRetryCommand,
@@ -24,6 +25,8 @@ export type RunEvent =
 			readonly role: "writer" | "verifier";
 			readonly claimId: string | null;
 			readonly taskId?: string;
+			/** Original receipt timeout for reconnectable native verifiers. */
+			readonly timeoutMs?: number;
 	  }
 	| { readonly kind: "input_checkpoint"; readonly digest: string }
 	| { readonly kind: "process_ready"; readonly executionId: string; readonly identity: NamespaceIdentity }
@@ -55,6 +58,13 @@ export type RunEvent =
 			readonly observedMs: number;
 			readonly reconciledExecutionIds: readonly string[];
 			readonly adopted: readonly RunTaskCheckpoint[];
+	  }
+	| {
+			readonly kind: "reconnected";
+			readonly command: RunReconnectCommand;
+			readonly observedMs: number;
+			readonly grantSequence: string;
+			readonly authorityEpoch: string;
 	  }
 	| { readonly kind: "evaluated"; readonly receiptDigest: string; readonly verified: boolean }
 	| { readonly kind: "failed"; readonly code: string }
