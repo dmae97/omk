@@ -185,7 +185,7 @@ mkdir -p "${root}/versions" "${root}/bin"
 stage="${root}/versions/.incoming.$$"
 rm -rf "$stage"
 mv "${work}/unpacked/omk" "$stage"
-installed_version="$("${stage}/omk" --version 2>/dev/null)" || die "the downloaded binary does not run on this machine"
+installed_version="$(unset OMK_PACKAGE_DIR; "${stage}/omk" --version 2>/dev/null)" || die "the downloaded binary does not run on this machine"
 case "$installed_version" in
 [0-9]*.[0-9]*.[0-9]*) ;;
 *) die "unexpected version string from the binary: '${installed_version}'" ;;
