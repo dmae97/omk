@@ -142,7 +142,9 @@ import { type McpAttachOptions, McpManager, type McpServerStatus } from "./mcp/m
 import { type McpProjectTrustSummary, projectTrustSummary } from "./mcp/trust-summary.ts";
 import { type OntologyShadowObservation, withOntologyShadowObservation } from "./ontology-shadow.ts";
 import { buildRuntimeProvenance } from "./runtime-provenance.ts";
+import { normalizeToolNames, toolNameSetsEqual } from "./session-tool-selection.ts";
 import { createSubagentLaneAuthority, type SubagentLaneAuthority } from "./subagent-lane-authority.ts";
+import { SubagentRoutingReceipt } from "./subagent-routing-receipt.ts";
 import { resolveWorkspaceWriteRoots } from "./tools/workspace-write-guard.ts";
 import { type ToolCallMetric, TurnMetricsSink, turnUsageMetricFromUsage } from "./turn-metrics.ts";
 
@@ -564,23 +566,6 @@ function pendingToolResultClass(name: string, args: unknown): ToolResultClass {
 /** Standard thinking levels */
 const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high"];
 
-function normalizeToolNames(toolNames: readonly string[]): string[] {
-	return [...new Set(toolNames.map((name) => name.trim()).filter((name) => name !== ""))].sort((left, right) => {
-		if (left < right) return -1;
-		if (left > right) return 1;
-		return 0;
-	});
-}
-
-function toolNameSetsEqual(left: readonly string[], right: readonly string[]): boolean {
-	const normalizedLeft = normalizeToolNames(left);
-	const normalizedRight = normalizeToolNames(right);
-	return (
-		normalizedLeft.length === normalizedRight.length &&
-		normalizedLeft.every((toolName, index) => toolName === normalizedRight[index])
-	);
-}
-
 // ============================================================================
 // AgentSession Class
 // ============================================================================
@@ -626,6 +611,7 @@ export class AgentSession {
 	 */
 	private _adaptorchBridge: AdaptorchBridge | null = null;
 	private _adaptorchBridgeInitAttempted = false;
+	private readonly _subagentRoutingReceipt = new SubagentRoutingReceipt();
 
 	// Event subscription state
 	private _unsubscribeAgent?: () => void;
@@ -1322,6 +1308,12 @@ export class AgentSession {
 	private _handleAgentEvent = async (event: AgentEvent): Promise<void> => {
 		// Required run lifecycle persistence executes before extension/user listeners.
 		this._handleRunLifecycleEvent(event);
+		this._subagentRoutingReceipt.observe(
+			event,
+			this._promptLifecycle.activePromptRunId,
+			this._workspaceMutationCount,
+			"toolName" in event && this._mcpToolNames.has(event.toolName),
+		);
 
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
 		// This ensures the UI sees the updated queue state
@@ -2317,6 +2309,13 @@ export class AgentSession {
 			signal: this.agent?.signal,
 			noteDetachedChild: () => this._promptLifecycle.noteDetachedChild(),
 			getRemainingExecutionMs: () => this._runBudget.remainingMs,
+			applyRoutingReceipt: (plan, lanes) =>
+				this._subagentRoutingReceipt.apply(
+					plan,
+					lanes,
+					this._promptLifecycle.activePromptRunId,
+					this._workspaceMutationCount,
+				),
 		});
 	}
 

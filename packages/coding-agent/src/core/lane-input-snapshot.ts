@@ -40,6 +40,16 @@ export function snapshotLaneLaunchInput(input: LaunchSubagentLanesInput): Launch
 		return Object.freeze({ ...batch, laneIds: Object.freeze(laneIds) });
 	});
 	const heavyLaneIds = input.heavyLaneIds === undefined ? undefined : new Set(input.heavyLaneIds);
+	const preferredLaneOrder =
+		input.plan.preferredLaneOrder === undefined ? undefined : [...input.plan.preferredLaneOrder];
+	if (
+		preferredLaneOrder &&
+		(preferredLaneOrder.length !== ids.size ||
+			new Set(preferredLaneOrder).size !== ids.size ||
+			preferredLaneOrder.some((id) => !ids.has(id)))
+	) {
+		throw new RangeError("lane.invalid_preferred_order");
+	}
 	for (const id of heavyLaneIds ?? []) {
 		if (!ids.has(id)) throw new RangeError("lane.unknown_heavy_id");
 	}
@@ -50,6 +60,7 @@ export function snapshotLaneLaunchInput(input: LaunchSubagentLanesInput): Launch
 			...input.plan,
 			route: Object.freeze({ ...input.plan.route }),
 			batches: Object.freeze(batches),
+			...(preferredLaneOrder ? { preferredLaneOrder: Object.freeze(preferredLaneOrder) } : {}),
 		}),
 		heavyLaneIds,
 		// Preserve method receiver compatibility while pinning callback identity.
