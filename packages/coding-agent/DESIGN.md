@@ -70,8 +70,8 @@ Colour comes only from theme tokens. The default themes are the paper pair; othe
 
 ## QA Gates
 
-- Component render regression must prove expanded mode preserves the fixed control pane.
-- tmux capture must show no overflow at the target reference width; visual QA renders the capture (paper dark and light) and checks it against the README hero before completion.
+- Open the real TUI and exercise `Ctrl+O`, `Ctrl+Q` and resize. Check focus and overflow in wide and narrow layouts. Compare the paper dark and light tmux captures against the README hero.
+- Keep the render regression for the expanded control pane. A component test is not terminal evidence.
 - Status rows derive from `ControlPlaneViewModel`; no hardcoded state strings or decorative telemetry in the rail.
 - Startup header surfaces render only turn-stable values; live values stay in viewport-anchored surfaces. `test/control-plane-header-surface.test.ts` requires identical header output across queue, failure card, CPU and RSS changes.
 - `test/rnode-overlay.test.ts` requires R·NODE to stay out of every header render and keep the overlay frame closed at any terminal height. `test/status-sidebar-rnode.test.ts` requires it never to push the pinned rail past the terminal.
