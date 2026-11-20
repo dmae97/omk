@@ -1,10 +1,10 @@
 # OMK Brand Design System
 
-This document governs the repository README, landing surfaces, and public brand assets. `packages/coding-agent/DESIGN.md` remains the source of truth for the terminal UI.
+Use this guide for README, landing and public brand changes. Use `packages/coding-agent/DESIGN.md` for the terminal UI.
 
-## 1. Atmosphere & Identity
+## 1. Identity
 
-OMK feels like a calm, auditable command center: technical enough to trust, restrained enough to read, and never chaotic. The signature is **OMK Girl at the control plane**—an adult fictional operator who makes scope, routing, evidence, and recovery visible. Cyberpunk cues come from precise instrumentation, matte materials, scanlines, and controlled light rather than neon clutter.
+Show scope, routing, evidence and recovery through OMK Girl, an adult fictional operator. Use legible instrumentation, matte materials, scanlines and controlled light.
 
 ## 2. Color
 

@@ -1,219 +1,33 @@
-# AGENTS.md — OMK monorepo project rules
+# OMK project rules
 
-Rules for any coding agent working in this repository. Scope is this repo only: layout,
-commands, code style, git discipline, release, and what may never be published here.
+## Start
 
-## Precedence
+1. **Pstack first.** Read `pstack-poteto-mode` before exploring, planning or editing, after any required host gates. Use `.omk/skills/pstack/poteto-mode/SKILL.md` if installed; otherwise use a configured user copy or the [bundled OMK copy](packages/coding-agent/resources/pstack/skills/poteto-mode/SKILL.md). Read the matching playbook. If the skill cannot load, report why and work directly. This does not grant delegation or install anything.
+2. **AdaptOrch for a real DAG.** When dependencies change the work order or verification, call the available AdaptOrch MCP `adaptorch_route_topology` with `from`/`to` edges and `prefer_ensemble_singleton=false`. Use `adaptorch_navigate_evidence` for a fixed evidence pack and run reads for an existing run. Follow stricter host gates. Advice does not authorize a run, delegation, data transfer or spend. If unavailable, report it and follow the permitted local path.
+3. **Name the proof.** Resume from the prior checkpoint or identify the behavior and a check that would fail if it broke. Preserve other sessions' work.
 
-1. The operator's global agent manual, if the machine has one. It is machine-local and
-   deliberately not versioned here — see [Publication boundary](#publication-boundary).
-2. This file — project rules for this checkout.
-3. [`CLAUDE.md`](CLAUDE.md) — a Claude Code entry point that imports this file, not a
-   second source of behavioral truth.
+## Code and verification
 
-[`specs/constitution.md`](specs/constitution.md) outranks all three on release,
-versioning, and governance questions.
+- Put recurring corrections in the API, type or boundary. Use lint or a regression test to catch mistakes still expressible. Fix misleading examples in scope. Keep comments for reasons the code cannot show. Drive UI changes through the real user path. [Source: Lauren Tan, All Code Is Slop (Except Mine)](https://ai.engineer/talks/O_zcc6Xl12g-all-code-is-slop-except-mine).
+- The npm manifest owns toolchain versions and scripts. After non-doc changes run the focused tests, then `npm run check`. The check is not the full test suite. Run one test from its workspace with `node ../../node_modules/vitest/dist/cli.js --run test/x.test.ts`. Use `./test.sh` for the approved full non-e2e suite; never run full Vitest directly with live credentials. Build or run the full suite only when requested. Use `./omk-test.sh` for the source CLI.
+- Coding-agent behavior lives in `packages/coding-agent/src/`; tests in its `test/`; user-facing changes in its `docs/`. For TUI changes verify the actual entry point. A source test does not prove an installed build or an already-running session picked up the change.
+- TypeScript is strict and erasable in `packages/*/src`, `packages/*/test` and coding-agent examples. Keep imports at top level. Avoid `any`; inline trivial single-use helpers. Keybindings belong in `DEFAULT_*_KEYBINDINGS`. `scripts/check-module-size.mjs` owns the 250 pure-LOC ratchet. Read the relevant file before broad edits and preserve intentional behavior.
+- Model catalog: edit generators in `packages/ai/scripts/`, never generated catalogs. Run `npm run models:refresh` as a separate reviewed operation; endpoint failures can remove models. Running model metadata may be overridden by the user `models.json`. Releases use the committed catalogs.
+- Provider work: follow [the provider checklist](.omk/skills/add-llm-provider.md). Add a representative `stream.test.ts` model and applicable matrix cases. Gate live tests on the provider's own credential variable.
+- Harness flags and opt-outs live in [environment variables](packages/coding-agent/docs/environment-variables.md). Keep the G0 flag-off session hash unchanged. Check spec 119 and `/goal` budget, stop and resume behavior when changing goal autonomy.
 
-OMK loads the first of `AGENTS.md`/`CLAUDE.md` it finds in a directory, so an OMK session
-here reads this file and never sees `CLAUDE.md`; Claude Code reads `CLAUDE.md`, which
-imports this file. Behavioral rules belong here: a rule copied into `CLAUDE.md` becomes a
-fork only one of the two hosts ever reads.
+## Git, release and publication boundary
 
-## Repository map
-
-| Path | Contents |
-| --- | --- |
-| `packages/coding-agent` | `open-multi-agent-kit` — the `omk` CLI, its docs and examples |
-| `packages/ai` | `omk-ai` — multi-provider LLM API |
-| `packages/agent` | `omk-agent-core` — agent runtime |
-| `packages/tui` | `omk-tui` — terminal UI |
-| `packages/protocol` | `omk-protocol` — wire types |
-| `packages/adaptorch-wpl` | `omk-adaptorch-wpl` — Work Packet Loop primitives; the CLI's advisory adaptorch bridge is opt-in and default-off |
-| `packages/book-to-skill` | `omk-book-to-skill` |
-| `packages/speak-like-you-eat` | `omk-speak-like-you-eat` — optional plain-language companion rewrites |
-| `packages/initcheck`, `packages/promptguard` | Go modules, outside the npm workspaces and the lockstep version |
-| `.omk/skills`, `.omk/extensions`, `.omk/prompts` | project-local skills, extensions, and prompt templates discovered from a checkout — see [`SKILLS.md`](SKILLS.md) |
-| `specs/` | constitution and spec-kit artifacts |
-| `scripts/` | release, publish, and repository guards |
-| `.github/` | CI workflows and per-release notes |
-
-User-facing documentation lives in `packages/coding-agent/docs/`. The root `docs/` tree is
-git-ignored working material: never link to it from a tracked file, because such a link
-resolves on this disk and breaks in a fresh clone.
-
-## Commands
-
-Node `>=22.19.0`, npm `11.14.1`.
-
-| Task | Command |
-| --- | --- |
-| Install | `npm install --ignore-scripts` |
-| Lint, format, typecheck, guards | `npm run check` |
-| Tests (non-e2e) | `./test.sh` |
-| One test file | `node ../../node_modules/vitest/dist/cli.js --run test/x.test.ts` |
-| Go modules | `go test ./...` inside `packages/initcheck` or `packages/promptguard` |
-| Run the CLI from source | `./omk-test.sh` |
-| Build | `npm run build` |
-
-Run `npm run check` after any non-doc change and fix everything it reports; it does not
-run tests. Never run the full vitest suite directly — it activates e2e tests when
-endpoint or auth environment variables are present. Do not run `npm run build` or the
-full suite unless asked.
-
-## Runtime change rule
-
-For coding-agent behavior changes: update `packages/coding-agent/src/**`, update
-`packages/coding-agent/docs/**` when commands or workflows change, add or update targeted
-tests under `packages/coding-agent/test/**`, run the targeted test, then `npm run check`.
-Rebuild only if the change must reach the running TUI, and restart it before checking
-interactive slash commands.
-
-## Code style
-
-- TypeScript strict. Erasable syntax only in `packages/*/src`, `packages/*/test`, and
-  `packages/coding-agent/examples`: no parameter properties, `enum`, `namespace`/`module`,
-  or `import =`/`export =`.
-- No `any` unless unavoidable. Top-level imports only — no inline or dynamic imports.
-- Inline a single-call-site, single-line helper instead of naming it.
-- Never hardcode a key check; add to `DEFAULT_*_KEYBINDINGS`.
-- Modules are held to a 250-line pure-LOC ratchet (`scripts/check-module-size.mjs`).
-- Read a file in full before a wide-ranging change, and ask before removing code that
-  looks intentional.
-
-## Generated model catalogs
-
-`packages/ai/src/models.generated.ts` and `image-models.generated.ts` are committed
-artifacts. Never hand-edit them: change the generators under `packages/ai/scripts/`, then
-run `npm run models:refresh` as its own reviewed change. The generators read live provider
-APIs, so a model can disappear from the diff because an endpoint was unreachable rather
-than retired — read the diff before committing it. Releases never regenerate them.
-
-A user overlay at `~/.omk/agent/models.json` overrides the built catalog per provider at
-runtime. When a model's metadata looks wrong in a running session, check that overlay
-first, and restart the process after changing either layer.
-
-## Adding a provider
-
-Follow [`.omk/skills/add-llm-provider.md`](.omk/skills/add-llm-provider.md) in order: core
-types, provider module, lazy registration in `register-builtins.ts`, credential detection,
-model generation, tests, coding-agent wiring, docs. A new provider must appear in
-`packages/ai/test/stream.test.ts` with at least one representative model even when it
-reuses an existing API implementation, plus the wider matrix (`tokens`, `abort`, `empty`,
-`context-overflow`, `cross-provider-handoff`, and the rest) wherever it applies. Gate
-live-credential cases behind `describe.skipIf` on that provider's own environment
-variable so a keyless run still passes.
-
-## Autonomous development mode (24/7)
-
-The repository owner runs agent teams on this repo in continuous autonomous mode. Agents
-keep working without asking for a per-step OK: open branches and PRs, push work branches,
-review, and merge.
-
-Still required in this mode:
-
-- Merge only after the reviewer approved the current head SHA and CI is green. Use a merge
-  commit pinned to that SHA (`gh pr merge N --merge --match-head-commit <sha>`). Any head
-  change needs a new review.
-- After a PR is open, never rebase, amend, force-push, or use `--no-verify`; update it by
-  merging `main` in. Commits are authored as `dmae97`.
-- One concern per PR. No new dependency without review. Pin the measurement baseline SHA
-  before an A/B. Never skip or bypass CI, and do not edit workflow files without the
-  owner's OK.
-- Releases: patch releases (bump the last number by 1, e.g. 1.5.6 to 1.5.7) are always
-  allowed, including the tag and npm publish; minor and major releases need the owner's OK.
-  Cut a patch only when at least one user-facing PR has merged since the last tag, `main`
-  CI is green, and `npm ci`, build, test, and `npm pack --dry-run` pass in a clean clone.
-  Use a release PR that changes only CHANGELOG and versions. In the CHANGELOG, mark
-  default-off features as "flag, default off" and make no performance claims without an
-  A/B result. After the release PR merges, push only the tag: the release workflow
-  publishes to npm and creates the GitHub Release with binaries. Never publish or create
-  the Release by hand.
-- Paid benchmark runs wait for a dollar cap the owner sets.
-- Never print, log, or commit secrets.
-- Code copied from other projects must be MIT or Apache-2.0: name the source at the top of
-  the file, and update `NOTICE` for Apache-2.0 code. GPL, unlicensed, or source-available
-  code (for example Claude Code) is a reference for ideas only.
-- Public text makes no ranking claims. Benchmark numbers are described only as
-  "self-measured under TB 4.0 rules".
-
-## Goal autonomy
-
-`OMK_GOAL_AUTONOMY` (flag, default on since this change; `0`/`false`/`off` opts out, spec 119) lets an active `/goal` stop itself with
-`budget-limit`, `deadline`, `outcome-unknown`, or `scope-changed`. The budget is set only by
-the user via `/goal budget <usd|-> [<deadline ISO>|-]` (or `/goal budget clear`) and counts
-subagent lane cost; an unknown remaining budget stops with `budget-limit`. User steering
-pauses the goal and only `/goal resume` restarts it. Stop reasons are custom entries; the
-`omk.goal.v1` schema is unchanged. With the flag explicitly off (`OMK_GOAL_AUTONOMY=0`), session output is
-byte-identical to the pre-default-on baseline (G0). No A/B result exists yet, so make no performance claims.
-
-## Default-on harness flags
-
-These `OMK_*` feature flags are on by default (unset, or any value other than the opt-outs). Set one to `0`,
-`false` or `off` (trimmed, case-insensitive) to restore the earlier behavior. This mirrors
-`packages/coding-agent/README.md`; details are in `packages/coding-agent/docs/environment-variables.md`.
-
-| Flag | Default | Disable |
-|---|---|---|
-| `OMK_EDIT_DIAGNOSTICS` | on | `OMK_EDIT_DIAGNOSTICS=0` |
-| `OMK_EXEC_TRUNCATE_MIDDLE` | on | `OMK_EXEC_TRUNCATE_MIDDLE=0` |
-| `OMK_JSON_SESSION_INFO` | on (adds `omk_session_info` lines to `--mode json`) | `OMK_JSON_SESSION_INFO=0` |
-| `OMK_GOAL_AUTONOMY` | on | `OMK_GOAL_AUTONOMY=0` |
-| `OMK_SKILL_ADMISSION` | on | `OMK_SKILL_ADMISSION=0` |
-| `OMK_SKILL_AUTO_LOAD` | on (subagent workers set `0`) | `OMK_SKILL_AUTO_LOAD=0` |
-| `OMK_EVIDENCE_LIFECYCLE` | conditional delete of verified goal-recall files only; `observe` deletes nothing | `OMK_EVIDENCE_LIFECYCLE=0` |
-| `OMK_ADAPTIVE_EFFORT` | on (cost; subagent workers set `0`) | `OMK_ADAPTIVE_EFFORT=0` |
-| `OMK_DOMAIN_ROUTING` | on (cost/routing) | `OMK_DOMAIN_ROUTING=0` |
-| `OMK_GOAL_OUTPUT_RECALL` | on | `OMK_GOAL_OUTPUT_RECALL=0` |
-| `OMK_LANE_READY_QUEUE` | on | `OMK_LANE_READY_QUEUE=0` |
-| `OMK_LANE_FAILURE_SCOPE` | on | `OMK_LANE_FAILURE_SCOPE=0` |
-| `OMK_RTK_OUTPUT` | on (raw output when `rtk` is missing) | `OMK_RTK_OUTPUT=0` |
-| `OMK_SESSION_CONTROL` | on; unset never fails startup, an explicit `1` is required | `OMK_SESSION_CONTROL=0` |
-| `OMK_VERIFIED_MEMORY` | on (needs Context Budget V2) | `OMK_VERIFIED_MEMORY=0` |
-| `OMK_RESPONSE_REASONING_CAP` | on (cost) | `OMK_RESPONSE_REASONING_CAP=0` |
-| `OMK_PREFIX_BOUNDARY` | on (prompt cache) | `OMK_PREFIX_BOUNDARY=0` |
-
-G0 (`test/suite/g0-session-hash.ts`) must match main with all of them set to `0`.
-
-## Git and safety
-
-- Multiple sessions may share this working tree. Stage only files you changed, by explicit
-  path. Never `git add -A`/`.`, `git reset --hard`, `git checkout .`, `git clean -fd`,
-  `git stash`, `--no-verify`, or force-push.
-- Never commit unless asked. Treat lockfile and dependency changes as reviewed code.
-- Never guess where to inject API keys or `.env` values. Write only to the target the user
-  named, keep it git-ignored, never echo it back, never commit it.
-
-## Release
-
-All workspace packages share one lockstep version; there are no major releases. A release
-is complete only when the tag on `main`, the GitHub Release, and npm `latest` for all
-eight public packages agree. Publishing runs in CI. Released changelog sections are
-immutable — new work goes under `[Unreleased]`. Details and the full rule set are in
-[`specs/constitution.md`](specs/constitution.md).
-
-## Publication boundary
-
-The operator's private agent home (`~/.omk/agent`) holds personal skills, agents, prompts,
-patches, session data, and research corpora. None of it belongs in this repository, its
-releases, or any npm tarball — not as a copy, a vendored tree, a drifted duplicate, or a
-quoted excerpt. A fresh clone must be complete without it.
-
-`scripts/check-private-agent-home.mjs` enforces this on every `npm run check`. If it
-fails, remove the material rather than widening the guard.
+- Stage only authorized paths or hunks. No blanket stage, hard reset, worktree-wide checkout or clean, stash, hook bypass, or force-push. Commit, push, PR, merge and release stay within current approval. After a PR opens, merge `main` instead of rebasing or amending. One concern per PR. Use repo author `dmae97` on authorized commits.
+- Merge only with green CI and approval of the current head; pin `gh pr merge N --merge --match-head-commit <sha>`. A head change needs new review. Workflow changes and new dependencies require owner review. Paid benchmarks need an owner-set dollar cap; pin the A/B baseline SHA. Public benchmark figures are "self-measured under TB 4.0 rules"; omit ranking claims.
+- [The constitution](specs/constitution.md) owns releases and governance. Keep lockstep versions, leave released changelog entries unchanged, and document default-off behavior and measured claims accurately. CI publishes; do not publish or create a GitHub release by hand.
+- Keep secrets out of source, logs and reports. Copy only MIT- or Apache-2.0-licensed code; name the source and update `NOTICE` for Apache-2.0. Public files must not copy or quote the private agent home. `scripts/check-private-agent-home.mjs` enforces this. Links in tracked files must resolve in a fresh clone; root `docs/` is ignored working material.
+- Claude Code imports this file from `CLAUDE.md`. OMK chooses this file first and does not expand `@` imports. Keep shared behavior here and user preferences outside the repository.
 
 <!-- OPENWIKI:START -->
 
 ## OpenWiki
 
-This repository can carry a generated `openwiki/` evidence index. It is optional just-in-time context, not required startup reading, and it may be absent — a scheduled workflow regenerates it.
-
-With `contextBudget.enabled` and `contextBudget.openwiki` both set, a session offers the corpus to the prompt budget as low-priority `evidence` candidates ranked against each turn's query; the default is off, and admission mirrors `scripts/check-openwiki.mjs` (a stale corpus contributes titles only, an unreviewed interrupted one contributes nothing). This does not change the rule below: a page is a lead to verify against source, never a claim to repeat.
-
-- Treat source code and tests as authoritative. A brief's unknowns and review items are verification gaps, not automatic requirements.
-- Prefer the narrowest quiet validation that proves the changed behavior. Preserve complete failure output.
-- Do not treat an `interrupted` corpus as context unless `openwiki/.manual-review.json` binds a review to the current corpus digest; `scripts/check-openwiki.mjs` enforces this.
-- Judge wiki freshness by `openwiki/.last-update.json` `gitHead` against current `HEAD`; claims from an older head need re-verification against source before use.
-
-The scheduled OpenWiki GitHub Actions workflow refreshes the repository wiki. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
+Use `openwiki/` as leads, not startup reading or authority. Verify claims against source and tests. Check `.last-update.json` for the revision and `.manual-review.json` for a reviewed interrupted corpus. `scripts/check-openwiki.mjs` owns admission. The scheduled workflow owns generated pages.
 
 <!-- OPENWIKI:END -->
