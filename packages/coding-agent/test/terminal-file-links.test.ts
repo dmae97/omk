@@ -12,6 +12,7 @@ describe("Windows-openable tool paths in WSL", () => {
 		// Given a Windows Terminal session and a project outside the harness checkout.
 		vi.stubEnv("WSL_DISTRO_NAME", "Ubuntu-24.04");
 		vi.stubEnv("SSH_CONNECTION", "");
+		vi.stubEnv("SSH_TTY", "");
 		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
 		// When rendering a report artifact link.
 		const result = linkPath(
@@ -29,6 +30,7 @@ describe("Windows-openable tool paths in WSL", () => {
 		// Given a WSL user working on a Windows drive.
 		vi.stubEnv("WSL_DISTRO_NAME", "Ubuntu-24.04");
 		vi.stubEnv("SSH_CONNECTION", "");
+		vi.stubEnv("SSH_TTY", "");
 		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
 		// When the file contains spaces and a literal hash character.
 		const result = linkPath("report", "보고서 #1.html", "/mnt/c/Users/example/Desktop");
