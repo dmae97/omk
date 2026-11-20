@@ -30,6 +30,12 @@ export function railFits(columns: number, rows?: number): boolean {
 }
 
 /** Status line for pinning the sidebar on a terminal too small to show it; undefined when the rail fits. */
+export function railVisibility(pinned: boolean, customFooter: boolean, tmux: boolean, width: number, height: number) {
+	if (tmux) return "tmux-owner";
+	if (customFooter) return "custom-footer";
+	if (!pinned) return "unpinned";
+	return railFits(width, height) ? "visible" : "terminal-too-small";
+}
 export function pinnedRailNotice(columns: number, rows: number): string | undefined {
 	if (railFits(columns, rows)) return undefined;
 	return `Status sidebar pinned; it shows at ${LAYOUT_BREAKPOINTS.md}+ columns and ${RAIL_MIN_ROWS}+ rows.`;

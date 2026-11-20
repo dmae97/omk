@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { type Component, truncateToWidth } from "omk-tui";
 import type { StatusPanelModel } from "./status-panel-model.ts";
 
+type Failure = "unsupported-runtime" | "dependency-error" | "render-error" | "worker-error" | "worker-timeout";
 export class HybridStatusPanel implements Component {
 	private child: ChildProcess | undefined;
 	private closed: Promise<void> = Promise.resolve();
@@ -11,7 +12,11 @@ export class HybridStatusPanel implements Component {
 	private pendingFrame: { width: number; height: number } | undefined;
 	private revision = 0;
 	private inFlight = false;
-	private failed = false;
+	private failed?: Failure;
+	private rendered: "not-rendered" | "native-fallback" | "opentui-frame" = "not-rendered";
+	get renderState() {
+		return this.failed ?? this.rendered;
+	}
 	private disposed = false;
 	private timer: ReturnType<typeof setTimeout> | undefined;
 	private expanded = false;
@@ -54,24 +59,27 @@ export class HybridStatusPanel implements Component {
 					this.inFlight = true;
 					this.pendingFrame = { width, height };
 					this.child.send({ id: ++this.revision, ...request }, (error) => {
-						if (error) this.fail();
+						if (error) this.fail("worker-error");
 					});
-					this.timer ??= setTimeout(() => this.fail(), 5000).unref();
+					this.timer ??= setTimeout(() => this.fail("worker-timeout"), 5000).unref();
 				}
 			}
 		} catch {
-			this.fail();
+			this.fail("render-error");
 		}
-		return this.frame?.width === width && this.frame.height === height
-			? this.frame.lines
-			: this.fallback.render(width);
+		if (this.frame?.width === width && this.frame.height === height) {
+			this.rendered = "opentui-frame";
+			return this.frame.lines;
+		}
+		this.rendered = "native-fallback";
+		return this.fallback.render(width);
 	}
 
 	private start(): void {
 		if (this.child || this.failed) return;
 		const [major, minor] = process.versions.node.split(".").map(Number);
 		if (major < 26 || (major === 26 && minor < 4)) {
-			this.failed = true;
+			this.failed = "unsupported-runtime";
 			return;
 		}
 		const suffix = import.meta.url.endsWith(".ts") ? ".ts" : ".js";
@@ -95,13 +103,17 @@ export class HybridStatusPanel implements Component {
 				resolve();
 			}),
 		);
-		child.on("error", () => this.fail());
+		child.on("error", () => this.fail("worker-error"));
 		child.on("exit", () => {
-			if (!this.disposed) this.fail();
+			if (!this.disposed) this.fail("worker-error");
 		});
 		child.on("message", (message: unknown) => {
 			if (this.disposed || this.failed || !message || typeof message !== "object") return;
 			const reply = message as Record<string, unknown>;
+			if (reply.id === this.revision && reply.error === "dependency-error") {
+				this.fail("dependency-error");
+				return;
+			}
 			if (
 				reply.id !== this.revision ||
 				!Array.isArray(reply.lines) ||
@@ -122,9 +134,9 @@ export class HybridStatusPanel implements Component {
 		});
 	}
 
-	private fail(): void {
+	private fail(reason: Failure): void {
 		if (this.failed || this.disposed) return;
-		this.failed = true;
+		this.failed = reason;
 		this.frame = undefined;
 		this.stopChild();
 		this.requestRender();

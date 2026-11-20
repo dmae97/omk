@@ -176,7 +176,7 @@ import { UserMessageSelectorComponent } from "./components/user-message-selector
 import type { HybridStatusPanel } from "./hybrid-status-panel.ts";
 import { waitForInteractiveInput } from "./interactive-input.ts";
 import { runJevCommand } from "./jev-command.ts";
-import { pinnedRailNotice, railFits } from "./layout-class.ts";
+import { pinnedRailNotice, railFits, railVisibility } from "./layout-class.ts";
 import { formatResourceDescription } from "./resource-description.ts";
 import { handleRNodeInput } from "./rnode/rnode-command.ts";
 import { RNodeController } from "./rnode/rnode-controller.ts";
@@ -200,7 +200,7 @@ import {
 } from "./theme/theme.ts";
 import { checkTmuxKeyboardSetup } from "./tmux-keyboard.ts";
 import type { TmuxStatusRail } from "./tmux-status-rail.ts";
-import { createTuiDiagnostics, createTuiDiagnosticsView, saveTuiDiagnostics } from "./tui-diagnostics.ts";
+import { createTuiDiagnostics, createTuiDiagnosticsView, notifyDiagnosticSave } from "./tui-diagnostics.ts";
 import { captureTuiRuntime, inspectTuiRuntime } from "./tui-runtime-info.ts";
 
 const TUI_RUNTIME = captureTuiRuntime(import.meta.url);
@@ -2177,12 +2177,16 @@ export class InteractiveMode {
 
 	/** The pinned rail is only shown (and its gutter reserved) when the terminal is large enough. */
 	private isStatusSidebarVisible(termWidth: number, termHeight: number): boolean {
-		// An extension footer owns the status slot, so the pinned rail steps aside while it is set.
-		return (
-			!this.tmuxStatusRail?.active &&
-			this.customFooter === undefined &&
-			this.statusSidebarPinned &&
-			railFits(termWidth, termHeight)
+		return this.statusRailVisibility(termWidth, termHeight) === "visible";
+	}
+
+	private statusRailVisibility(width: number, height: number) {
+		return railVisibility(
+			this.statusSidebarPinned,
+			this.customFooter !== undefined,
+			this.tmuxStatusRail?.active === true,
+			width,
+			height,
 		);
 	}
 
@@ -2191,6 +2195,7 @@ export class InteractiveMode {
 	 */
 	private toggleStatusSidebar(): void {
 		this.statusSidebarPinned = !this.statusSidebarPinned;
+		this.settingsManager.setPinStatusSidebar(this.statusSidebarPinned);
 		if (this.statusSidebarPinned && this.customFooter === undefined) this.tmuxStatusRail?.start();
 		else this.tmuxStatusRail?.stop();
 		// The footer slot and the right gutter both key off isStatusSidebarVisible,
@@ -6348,6 +6353,11 @@ export class InteractiveMode {
 		const report = createTuiDiagnostics({
 			runtime: inspectTuiRuntime(TUI_RUNTIME),
 			terminal: this.ui.terminal,
+			rail: {
+				layout: this.statusRailVisibility(this.ui.terminal.columns, this.ui.terminal.rows),
+				requested: this.hybridStatusPanel ? "opentui" : "native",
+				lastRender: this.hybridStatusPanel?.renderState ?? "native-selected",
+			},
 			isStreaming: this.session.isStreaming,
 			isCompacting: this.session.isCompacting,
 			messageCount: this.session.messages.length,
@@ -6356,15 +6366,7 @@ export class InteractiveMode {
 		});
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(createTuiDiagnosticsView(report, TUI_RUNTIME));
-		if (args === "save") {
-			try {
-				this.showStatus(`Metadata-only diagnostics saved locally: ${saveTuiDiagnostics(report)}`);
-			} catch {
-				this.showError(
-					"Could not save diagnostics. Check temporary-directory permissions; no transcript was exported.",
-				);
-			}
-		}
+		if (args === "save") notifyDiagnosticSave(report, this.showStatus.bind(this), this.showError.bind(this));
 		this.ui.requestRender();
 	}
 
