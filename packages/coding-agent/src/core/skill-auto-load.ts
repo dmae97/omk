@@ -21,6 +21,7 @@ import {
 	sha256,
 	skillAutoloadSessionId,
 } from "./skill-autoload-observe.ts";
+import { type SkillSectionLoadStatus, type SkillSectionReport, skillSectionReports } from "./skill-section-report.ts";
 import { MAX_SELECTED_SKILLS, SKILL_STRONG_THRESHOLD, SKILL_WEAK_THRESHOLD, selectSkills } from "./skill-selector.ts";
 import type { Skill } from "./skills.ts";
 import { editParentSessionId } from "./tools/edit-match-observe.ts";
@@ -75,6 +76,8 @@ export interface AutoLoadInput {
 	readonly env?: NodeJS.ProcessEnv;
 	readonly budgetTokens?: number;
 	readonly warn?: (line: string) => void;
+	/** Active-mode diagnostics only; never called by the observe-only path. */
+	readonly onSections?: (sections: readonly SkillSectionReport[]) => void;
 }
 
 interface Pick {
@@ -113,9 +116,11 @@ function runAutoLoad(
 	const task = suggestionSkillQuery(input.query) ?? input.query;
 	const selection = selectSkills({ task, skills: invocable });
 	const granted = new Set(selection.selected.map((skill) => skill.name));
+	// Explicit sections must not be refilled with strong but ungranted duplicates.
+	const sectioned = selection.sections !== undefined;
 	const ordered = [
 		...selection.scores.filter((score) => granted.has(score.name)),
-		...selection.scores.filter((score) => !granted.has(score.name)),
+		...selection.scores.filter((score) => !sectioned && !granted.has(score.name)),
 	];
 	for (const score of ordered) {
 		const skill = byName.get(score.name);
@@ -124,7 +129,7 @@ function runAutoLoad(
 	}
 	const strongPicks = picks.filter((pick) => pick.band === "strong").slice(0, MAX_SELECTED_SKILLS);
 	const ambiguousPicks = picks.filter((pick) => pick.band === "ambiguous").slice(0, MAX_SELECTED_SKILLS);
-	if (strongPicks.length === 0 && ambiguousPicks.length === 0 && !observe) return undefined;
+	if (strongPicks.length === 0 && ambiguousPicks.length === 0 && !observe && !selection.sections) return undefined;
 	const already = admittedKeys(input.store);
 	const context = already.size > 0 ? input.store.buildSessionContext?.().messages : undefined;
 	const budget = input.budgetTokens ?? SKILL_AUTO_LOAD_BUDGET_TOKENS;
@@ -134,6 +139,7 @@ function runAutoLoad(
 	const blocks: string[] = [];
 	const refused: Skill[] = [];
 	const candidates: RunLogRecord[] = [];
+	const outcomes = new Map<string, SkillSectionLoadStatus>();
 	for (const pick of [...strongPicks, ...ambiguousPicks]) {
 		let body: string | undefined;
 		try {
@@ -167,6 +173,20 @@ function runAutoLoad(
 				refused.push(pick.skill);
 			}
 		}
+		outcomes.set(
+			pick.skill.name,
+			loaded
+				? "loaded"
+				: inContext
+					? "in_context"
+					: pick.band === "ambiguous"
+						? "below_strong_threshold"
+						: body === undefined
+							? "unreadable"
+							: overBudget
+								? "body_budget"
+								: "admission_limit",
+		);
 		candidates.push({
 			nameSha256: sha256(pick.skill.name),
 			digest,
@@ -200,6 +220,7 @@ function runAutoLoad(
 			env,
 		);
 	}
+	if (active && selection.sections) input.onSections?.(skillSectionReports(selection.sections, invocable, outcomes));
 	if (blocks.length === 0 && refused.length === 0) return undefined;
 	return renderAutoLoadMessage(blocks, refused);
 }

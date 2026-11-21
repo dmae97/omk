@@ -18,6 +18,7 @@ import { appendRunLog } from "./run-log.ts";
 import { type AutoLoadStore, autoLoadSkills } from "./skill-auto-load.ts";
 import { type HistoryMessage, rankRelevantSkills, recentUserPrompts } from "./skill-context-relevance.ts";
 import { SkillSearchGate } from "./skill-search-gate.ts";
+import { renderSkillSectionReports, type SkillSectionReport } from "./skill-section-report.ts";
 import type { Skill } from "./skills.ts";
 import { compactSkillDescription } from "./skills-prompt.ts";
 import type { BuildSystemPromptOptions } from "./system-prompt.ts";
@@ -98,19 +99,35 @@ export class PromptSkillFreeze {
 		const candidates = await this.skillSearch.candidates(input.budgetQuery, input.env, explicitSkillNames(input));
 		const withCandidates = candidates ? { ...plan, messages: [...plan.messages, candidates] } : plan;
 		const store = this.admission?.();
+		let sections: readonly SkillSectionReport[] = [];
 		const content = store
-			? autoLoadSkills({ store, skills: input.skills, query: input.budgetQuery, env: input.env })
+			? autoLoadSkills({
+					store,
+					skills: input.skills,
+					query: input.budgetQuery,
+					env: input.env,
+					onSections: (reports) => {
+						sections = reports;
+					},
+				})
 			: undefined;
-		if (content === undefined) return withCandidates;
+		if (content === undefined && sections.length === 0) return withCandidates;
 		const timestamp = (input.now ?? Date.now)();
-		const message: CustomMessage = {
-			role: "custom",
-			customType: PROMPT_SKILLS_CUSTOM_TYPE,
-			content,
-			display: false,
-			timestamp,
-		};
-		return { ...withCandidates, messages: [...withCandidates.messages, message] };
+		const messages = [...withCandidates.messages];
+		if (sections.length > 0) {
+			messages.push({
+				role: "custom",
+				customType: "skill-sections",
+				content: renderSkillSectionReports(sections, this.skillSearch.active),
+				display: true,
+				details: { sections },
+				timestamp,
+			});
+		}
+		if (content !== undefined) {
+			messages.push({ role: "custom", customType: PROMPT_SKILLS_CUSTOM_TYPE, content, display: false, timestamp });
+		}
+		return { ...withCandidates, messages };
 	}
 
 	private planTurn(input: PromptSkillTurnInput): PromptSkillTurn {

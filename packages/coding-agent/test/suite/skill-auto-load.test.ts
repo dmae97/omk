@@ -255,6 +255,107 @@ describe("spec 117 delivery and workers", () => {
 		expect(String(on.messages[0]?.content)).not.toContain("K8S-BODY");
 	});
 
+	it("shows section diagnostics even when no body can load, with a metadata-only hub handoff", async () => {
+		const hub = skill(tmp(), "omk-security", "entrypoint workflow catalog", "HUB-BODY-MUST-NOT-LOAD");
+		const store = new Store();
+		const freeze = new PromptSkillFreeze(() => store);
+		const turn = await freeze.turn({
+			...input([hub], ON),
+			budgetQuery: "## Security\nFind threats malware vulnerabilities",
+		});
+		const report = turn.messages.find((message) => message.customType === "skill-sections");
+		expect(report?.display).toBe(true);
+		expect(report?.details).toMatchObject({
+			sections: [
+				{
+					section: "Security",
+					missingReason: "no_match",
+					discovery: { hub: { name: hub.name, location: hub.filePath } },
+				},
+			],
+		});
+		expect(String(report?.content)).toContain(hub.filePath);
+		expect(String(report?.content)).not.toContain("skill_search");
+		expect(JSON.stringify(turn)).not.toContain("HUB-BODY-MUST-NOT-LOAD");
+		expect(store.records()).toHaveLength(0);
+		expect(
+			(
+				await freeze.turn(
+					{ ...input([hub], ON), budgetQuery: "## Security\nFind threats malware vulnerabilities" },
+					true,
+				)
+			).messages,
+		).toEqual([]);
+	});
+
+	it("keeps diagnostics absent when automatic loading is disabled, including observe-only mode", async () => {
+		const hub = skill(tmp(), "omk-security", "entrypoint workflow catalog");
+		const onSections = () => {
+			throw new Error("observe-only must not publish diagnostics");
+		};
+		const env = { OMK_SKILL_AUTO_LOAD: "0", OMK_RUN_LOG_DIR: tmp() };
+		expect(
+			autoLoadSkills({
+				store: new Store(),
+				skills: [hub],
+				query: "## Security\nFind threats malware vulnerabilities",
+				env,
+				onSections,
+			}),
+		).toBeUndefined();
+		const off = await new PromptSkillFreeze(() => new Store()).turn({
+			...input([hub], env),
+			budgetQuery: "## Security\nFind threats malware vulnerabilities",
+		});
+		expect(off.messages).toEqual([]);
+	});
+
+	it("reports actual load failures and retained instructions instead of calling every grant loaded", () => {
+		const { pdf } = fixture();
+		const query = `## PDF\n${QUERY}`;
+		const reports: unknown[] = [];
+		const store = new Store();
+		const collect = (sections: readonly unknown[]) => {
+			reports.push(sections);
+		};
+		autoLoadSkills({ store, skills: [pdf], query, env: ON, budgetTokens: 0, onSections: collect });
+		autoLoadSkills({ store, skills: [pdf], query, env: ON, onSections: collect });
+		autoLoadSkills({ store, skills: [pdf], query, env: ON, onSections: collect });
+		rmSync(pdf.filePath);
+		autoLoadSkills({ store, skills: [pdf], query, env: ON, onSections: collect });
+		expect(reports).toMatchObject([
+			[{ selected: [{ name: pdf.name, status: "body_budget" }], loadFailure: "body_budget" }],
+			[{ selected: [{ name: pdf.name, status: "loaded" }] }],
+			[{ selected: [{ name: pdf.name, status: "in_context" }] }],
+			[{ selected: [{ name: pdf.name, status: "unreadable" }], loadFailure: "unreadable" }],
+		]);
+	});
+
+	it("reports admission refusal without leaking section text or hub metadata into the run log", () => {
+		const root = tmp();
+		const store = new Store();
+		const env = { ...ON, OMK_RUN_LOG_DIR: tmp() };
+		for (let i = 0; i < 10; i++) {
+			const warm = skill(root, `warm-${i}`, `warm helper ${i}`);
+			autoLoadSkills({ store, skills: [warm], query: `warm helper ${i}`, env });
+		}
+		const pdf = skill(root, "pdf-extract", "extract text from pdf invoice files");
+		const reports: unknown[] = [];
+		autoLoadSkills({
+			store,
+			skills: [pdf],
+			query: `## PRIVATE-SECTION\n${QUERY}`,
+			env,
+			onSections: (sections) => {
+				reports.push(sections);
+			},
+		});
+		expect(reports).toMatchObject([[{ selected: [{ status: "admission_limit" }], loadFailure: "admission_limit" }]]);
+		expect(store.records()).toHaveLength(10);
+		const log = JSON.stringify(readLog(env.OMK_RUN_LOG_DIR));
+		for (const value of ["PRIVATE-SECTION", pdf.name, pdf.filePath, QUERY]) expect(log).not.toContain(value);
+	});
+
 	it("AL7: worker env forces auto-load off and suggest off", () => {
 		const env = subagentWorkerEnv({ ...ON, OMK_SKILL_SEARCH_SUGGEST: "1" });
 		expect(env.OMK_SKILL_AUTO_LOAD).toBe("0");

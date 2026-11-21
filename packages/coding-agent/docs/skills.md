@@ -104,9 +104,41 @@ reach a frontend, a testing and a Docker skill instead of three near-duplicate r
 A clause needs three or more content words and two matched words to count. The grant still
 holds at most three skills and takes one per clause before a second skill for a clause that is
 already covered; the wider explored set is kept as `candidates` with the clause each matched and,
-when not granted, the skill that already covers it. A single-clause request ranks exactly as
+when not granted, the skill that already covers it. An unsectioned single-clause request ranks exactly as
 before. An accepted next-task suggestion prompt is matched by its title and scope line, not by
 the host's checklist wording.
+
+Markdown ATX headings (`#` through `######`) define explicit request sections. The heading
+path is retained with each body clause, so `## React frontend` followed by `Fix spacing`
+can match a frontend skill even when either line alone is too short. Nested headings
+retain their parent context; sibling headings replace it. Headings inside expanded skill
+instructions or fenced code blocks are not request sections, and bare file paths do not
+become capability clauses.
+
+For clause matches in sectioned requests, selection takes at most one skill per explicit section. Both
+`selected` and `candidates` include its `section` heading path, while `covers` still names
+the matching clause. Automatic loading respects that grant instead of filling unused
+slots with another skill from an already covered section. The three-skill cap, strong
+match threshold, body budget and admission rules remain unchanged, so a section without
+a strong match is not automatically loaded. This adds no model or network call.
+
+With automatic loading enabled, sectioned prompts also produce a visible `skill-sections`
+message and structured `details.sections`. Each section lists its selector grants separately
+from their actual `loaded` or `in_context` status. Uncovered sections distinguish missing
+matches, matches below the strong threshold, the selection cap, a skill assigned elsewhere,
+insufficient body context and clauses outside the existing twelve-clause scoring bound.
+Body-budget exhaustion, unreadable files and admission refusal are reported from the actual
+loading attempt; a selector grant alone is not evidence that instructions were delivered.
+
+For an uncovered section, the message reuses the `!omk` hub resolver against the current
+invocable inventory and supplies the installed hub's location plus a section-specific search
+query. Read that hub to follow its specialist discovery instructions. When native skill search
+is active, the handoff points to `skill_search`; otherwise it points to the available inventory.
+Missing or explicit-only hubs are not advertised. This is a metadata handoff: it does not read
+or admit additional hub/specialist bodies, execute searches, or increase the grant cap. Skill
+admission and body budgets still apply to subsequent reads. Ordinary unsectioned requests,
+automatic continuations and flag-off/observe-only prompts emit no section diagnostic message;
+the system prompt stays unchanged and run logs still contain hashes and counts only.
 
 ### Automatic loading checks the current context
 
@@ -204,6 +236,7 @@ Skills register as `/skill:name` commands and interactive `!` launcher entries:
 ```
 
 Arguments after the command are appended after the skill content for the current turn.
+
 
 `!omk <role-or-request>` is a deterministic OMK hub router. Exact role aliases such as `frontend`, `backend`, `loop`, and `plan` select `omk-frontend`, `omk-backend-data`, `omk-loop`, and `omk-plan`; free-form prompts are scored against the same hub vocabulary and fall back to `omk-skills` when no role is clear.
 
