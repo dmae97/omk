@@ -118,3 +118,4 @@ aefb3b8802808e5cc39d3be8bdb204c4f864a6a5:packages/coding-agent/test/freedom-safe
 d533b089fddc0b1abc6e77debe7a38653714cc06:test/secret-scanner.test.mjs:github-pat:34
 d533b089fddc0b1abc6e77debe7a38653714cc06:test/secret-scanner.test.mjs:github-pat:102
 d533b089fddc0b1abc6e77debe7a38653714cc06:test/secret-scanner.test.mjs:github-pat:405
+43915f9683ba03ea61abfac8f4afcbff8b4f0410:scripts/test/release-publish-flow.test.mjs:generic-api-key:192
