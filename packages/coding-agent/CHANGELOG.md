@@ -6,6 +6,7 @@
 
 - The startup warning about a global `tools/` directory now fires only for legacy custom-tool entries (a top-level `.ts`, `.js`, `.mjs` or `.cjs` file, or a directory with an `index.*` file), not for unrelated checkouts or binaries stored there.
 - A main-turn request whose OAuth token the provider rejects (`401 token_expired`, `token_revoked`) now forces one token refresh and retries once, as compaction already did. A failed refresh reports the original error with a `/login <provider>` hint. API keys, non-auth errors, and rejections that arrive after output started are not retried.
+- Verified runs accept a workspace created under umask 002: group write on files (`0664`, `0775`) and directories (`0775`) is dropped before the mode check, so these candidates no longer fail with `mode_unrepresentable` or `file_type`. Modes that Git would widen, such as `0600`, `0640` and `0660`, are still refused.
 
 ## [2.0.2] - 2026-11-21
 

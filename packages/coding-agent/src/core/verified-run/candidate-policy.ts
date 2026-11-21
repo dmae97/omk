@@ -20,6 +20,11 @@ export const CANDIDATE_POLICY = Object.freeze({
 });
 const denied = new Set(CANDIDATE_POLICY.deniedNames);
 
+/** A umask 002 checkout adds group write. Git stores no group bits, so dropping it narrows a mode, never widens it. */
+export function withoutGroupWrite(mode: number): number {
+	return mode & ~0o020;
+}
+
 export function safeCandidatePath(path: string): void {
 	if (
 		!path ||

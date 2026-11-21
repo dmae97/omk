@@ -1,5 +1,6 @@
 import { realpathSync } from "node:fs";
 import type { CandidateManifest } from "./candidate.ts";
+import { withoutGroupWrite } from "./candidate-policy.ts";
 import { preflightGitCandidate } from "./git-candidate-preflight.ts";
 import { GitOperationBudget, runGit } from "./git-execution.ts";
 import { digestObject, VerifiedRunError } from "./storage.ts";
@@ -61,7 +62,8 @@ function treeSortKey(name: string, directory: boolean): Buffer {
 /** Git trees only distinguish non-executable `100644` from executable `100755`. */
 function gitFileMode(mode: number): "100644" | "100755" {
 	const executable = (mode & 0o111) !== 0;
-	if (executable ? mode !== 0o755 : mode !== 0o644) throw new VerifiedRunError("mode_unrepresentable");
+	const normalized = withoutGroupWrite(mode);
+	if (executable ? normalized !== 0o755 : normalized !== 0o644) throw new VerifiedRunError("mode_unrepresentable");
 	return executable ? "100755" : "100644";
 }
 
