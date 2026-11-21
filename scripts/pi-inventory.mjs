@@ -12,7 +12,8 @@ const PI_PKG = /^@(mariozechner|earendil-works|oh-my-pi)\/|^pi-[a-z0-9-]+$/;
 const DEP_KEYS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 
 function git(...a) { return execFileSync("git", a, { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 }); }
-const files = git("ls-files", "-z").split("\0").filter(Boolean);
+const deleted = new Set(git("ls-files", "-z", "--deleted").split("\0"));
+const files = git("ls-files", "-z").split("\0").filter((f) => !deleted.has(f));
 
 // 1. manifests
 const manifests = [];

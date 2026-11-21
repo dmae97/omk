@@ -117,6 +117,8 @@ describe("findDistOrphans", () => {
 		const root = fixture({
 			"dist/docs/guide.js": "",
 			"dist/examples/demo.js": "",
+			"dist/export-html/vendor/marked.min.js": "",
+			"dist/node_modules/@opentui/core/testing.bun.js": "",
 			"src/core/a.ts": "",
 		});
 		assert.deepEqual(findDistOrphans(root), []);

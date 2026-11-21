@@ -125,3 +125,18 @@ test("pi-inventory discovers .mts/.cts/.tsx/.mjs via git ls-files and skips non-
 		rmSync(root, { recursive: true, force: true });
 	}
 });
+
+test("pi-inventory checks tracked code after an unstaged deletion", () => {
+	const { root, run } = setup();
+	try {
+		const legacy = join(root, "src", "legacy.ts");
+		writeFileSync(legacy, "export const legacy = true;\n");
+		execFileSync("git", ["-C", root, "add", "src/legacy.ts"], { env: cleanEnv });
+		assert.equal(run().status, 0);
+		rmSync(legacy);
+		const result = run("--check");
+		assert.equal(result.status, 0, result.stderr);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});

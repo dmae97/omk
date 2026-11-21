@@ -13,7 +13,7 @@ const selfSrcHooks = fileURLToPath(new URL("./src/core/hooks/index.ts", import.m
 export default defineConfig({
 	test: {
 		// Bundled pstack keeps upstream Bun/Node test suites for opt-in upstream use.
-		exclude: [...configDefaults.exclude, "resources/pstack/**"],
+		exclude: [...configDefaults.exclude, "dist/**", "resources/pstack/**"],
 		globals: true,
 		environment: "node",
 		testTimeout: 30000,
@@ -34,6 +34,9 @@ export default defineConfig({
 			{ find: /^omk-tui$/, replacement: tuiSrcIndex },
 			{ find: /^omk-protocol$/, replacement: protocolSrcIndex },
 			{ find: /^omk-adaptorch-wpl$/, replacement: adaptorchWplSrcIndex },
+			{ find: /^omk-ai$/, replacement: aiSrcIndex },
+			{ find: /^omk-ai\/oauth$/, replacement: aiSrcOAuth },
+			{ find: /^omk-ai\/prompt-hash$/, replacement: fileURLToPath(new URL("../ai/src/prompt-hash.ts", import.meta.url)) },
 			{ find: /^@earendil-works\/omk-ai$/, replacement: aiSrcIndex },
 			{ find: /^@earendil-works\/omk-ai\/oauth$/, replacement: aiSrcOAuth },
 			// Legacy compatibility bridges for pre-OMK pi-agent-core imports.
@@ -41,6 +44,7 @@ export default defineConfig({
 			{ find: /^@mariozechner\/omk-ai$/, replacement: aiSrcIndex },
 			{ find: /^@mariozechner\/omk-ai\/oauth$/, replacement: aiSrcOAuth },
 			{ find: /^omk-agent-core$/, replacement: agentSrcIndex },
+			{ find: /^omk-agent-core\/node$/, replacement: fileURLToPath(new URL("../agent/src/node.ts", import.meta.url)) },
 			{ find: /^@mariozechner\/pi-agent-core$/, replacement: agentSrcIndex },
 		],
 	},
