@@ -292,7 +292,7 @@ describe("legacy config compatibility migrations", () => {
 		const toolsDir = path.join(agentDir, "tools");
 		fs.mkdirSync(toolsDir, { recursive: true });
 		fs.writeFileSync(path.join(toolsDir, "rg"), "managed rg", "utf-8");
-		fs.writeFileSync(path.join(toolsDir, "custom-tool"), "custom", "utf-8");
+		fs.writeFileSync(path.join(toolsDir, "custom-tool.ts"), "custom", "utf-8");
 		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
 		let deprecationWarnings: string[] = [];
@@ -302,11 +302,46 @@ describe("legacy config compatibility migrations", () => {
 
 		expect(fs.existsSync(path.join(agentDir, "tools", "rg"))).toBe(false);
 		expect(fs.readFileSync(path.join(agentDir, "bin", "rg"), "utf-8")).toBe("managed rg");
-		expect(fs.readFileSync(path.join(agentDir, "tools", "custom-tool"), "utf-8")).toBe("custom");
+		expect(fs.readFileSync(path.join(agentDir, "tools", "custom-tool.ts"), "utf-8")).toBe("custom");
 		expect(deprecationWarnings).toEqual([
 			"Global tools/ directory contains custom tools. Custom tools have been merged into extensions.",
 		]);
 		const logOutput = logSpy.mock.calls.map((call) => String(call[0])).join("\n");
 		expect(logOutput).toContain("Migrated managed binaries tools/");
+	});
+
+	it("does not warn about vendored checkouts or release binaries stored in tools/", () => {
+		const agentDir = createTempDir("omk-tools-vendored-test-");
+		const toolsDir = path.join(agentDir, "tools");
+		// Vendored git checkout with a package.json but no index module.
+		fs.mkdirSync(path.join(toolsDir, "vendored-src"), { recursive: true });
+		fs.writeFileSync(path.join(toolsDir, "vendored-src", "package.json"), "{}", "utf-8");
+		fs.writeFileSync(path.join(toolsDir, "vendored-src", "README.md"), "docs", "utf-8");
+		// Release tree holding only a versioned binary.
+		fs.mkdirSync(path.join(toolsDir, "release", "v1.0.0"), { recursive: true });
+		fs.writeFileSync(path.join(toolsDir, "release", "v1.0.0", "tool-linux-amd64"), "", "utf-8");
+
+		let deprecationWarnings: string[] = [];
+		withAgentDir(agentDir, () => {
+			deprecationWarnings = runMigrations(agentDir).deprecationWarnings;
+		});
+
+		expect(deprecationWarnings).toEqual([]);
+	});
+
+	it("warns when a tools/ subdirectory has a loadable index module", () => {
+		const agentDir = createTempDir("omk-tools-index-entry-test-");
+		const toolsDir = path.join(agentDir, "tools");
+		fs.mkdirSync(path.join(toolsDir, "legacy-tool"), { recursive: true });
+		fs.writeFileSync(path.join(toolsDir, "legacy-tool", "index.ts"), "", "utf-8");
+
+		let deprecationWarnings: string[] = [];
+		withAgentDir(agentDir, () => {
+			deprecationWarnings = runMigrations(agentDir).deprecationWarnings;
+		});
+
+		expect(deprecationWarnings).toEqual([
+			"Global tools/ directory contains custom tools. Custom tools have been merged into extensions.",
+		]);
 	});
 });
