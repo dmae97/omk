@@ -104,10 +104,10 @@ mark a goal done only when your own check passes. It is a standalone CLI, so it
 can serve as an open-source alternative to a single-provider agent such as
 Claude Code.
 
-> **OMK 2.0 migration status: prerelease.** The `2.0.0` milestone is published,
-> but the independent Rust core is not ready to select. The default agent still
-> runs on Node. Native `omk` package loading is the shipped breaking change;
-> complete Pi removal and Rust/platform acceptance remain open.
+> **OMK 2.0 is released; the Rust core is still in progress.** `2.0.0` and
+> `2.0.1` are regular releases on GitHub and npm. The shipped breaking change is
+> native `omk` package loading. The default agent still runs on Node, and complete
+> Pi removal and Rust/platform acceptance remain open.
 > See [why 2.0.0](#why-200-and-what-changed).
 
 ## 60-second start
@@ -171,9 +171,9 @@ required for your first task.
 2.0.0 marks the move to OMK-native packages by default, rather than silently
 loading legacy Pi manifests and substituting Pi SDK imports. That breaks some
 existing extension installations, so the owner declared a milestone version.
-It does not mean the Rust rewrite is complete. The migration remains prerelease;
-GitHub currently lists the published `v2.0.0` milestone as a non-prerelease, and
-npm has `2.0.0`. Those publication labels are not Rust-core acceptance evidence.
+It does not mean the Rust rewrite is complete. `v2.0.0` and `v2.0.1` are regular
+releases on GitHub and npm, but that release status is not Rust-core acceptance
+evidence. The Rust core work below is still open.
 
 | Area | What shipped in the 2.0.0 milestone | What remains |
 | --- | --- | --- |
@@ -198,7 +198,7 @@ license notices remain required throughout the port.
 See the [migration guide](packages/coding-agent/docs/omk-2-migration.md),
 [Rust core plan](packages/coding-agent/docs/omk-2-rust-core.md) and
 [published milestone notes](https://github.com/dmae97/omk/releases/tag/v2.0.0) for the scope and gates.
-This status note was checked on 2026-11-14; it does not retag or republish 2.0.0.
+This status note was checked on 2026-11-21; it does not retag or republish 2.0.0.
 
 ### At a glance
 
