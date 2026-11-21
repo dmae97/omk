@@ -56,6 +56,16 @@ function admissionEntries(sm: SessionManager) {
 }
 
 describe("spec 106 A1 session skill admission", () => {
+	it.each(["0", "1"])("preserves slash skill request text with admission=%s", async (enabled) => {
+		vi.stubEnv("OMK_SKILL_ADMISSION", enabled);
+		const { harness } = await harnessWithSkills(1);
+		const request = "Keep this request intact.\n두 번째 줄과 경로 src/example.ts도 유지하세요.";
+		harness.setResponses([fauxAssistantMessage("ok")]);
+		await harness.session.prompt(`/skill:skill-0 ${request}`);
+		const delivered = getUserTexts(harness).at(-1);
+		expect(delivered).toContain('<skill name="skill-0"');
+		expect(delivered?.endsWith(request)).toBe(true);
+	});
 	it("flag off: explicit skills expand as before and no admission entries are written", async () => {
 		vi.stubEnv("OMK_SKILL_ADMISSION", "0");
 		const { harness } = await harnessWithSkills(12);
