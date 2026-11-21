@@ -140,6 +140,15 @@ describe("constitution: CI-only npm publishing", () => {
 		assert.match(publishJob, /NODE_AUTH_TOKEN: \$\{\{ secrets\.NPM_TOKEN \}\}/);
 		assert.doesNotMatch(publishJob, /^\s+id-token: write\s*$/m);
 	});
+
+	it("checks the publish token before the first npm publish and requires release notes on main", () => {
+		assert.match(constitution, /Before its first `npm publish`, the publish helper reads the registry's token list/);
+		assert.match(constitution, /requires `\.github\/RELEASE_NOTES_vX\.Y\.Z\.md` to be on `main`/);
+		const publishSource = readFileOrThrow(join(root, "scripts", "publish.mjs"));
+		const check = publishSource.indexOf("await assertPublishToken(");
+		assert.ok(check > 0 && check < publishSource.indexOf('const publishArgs = ["publish"'));
+		assert.match(readFileOrThrow(join(root, "scripts", "release.mjs")), /releaseNotesExist\(expectedVersion\)/);
+	});
 });
 
 describe("repo hygiene: no backup files in source trees", () => {

@@ -43,6 +43,51 @@ export async function waitForLatest(version, names, readLatest, { attempts = 30,
 	}
 }
 
+const REGISTRY = "https://registry.npmjs.org";
+const TOKEN_HELP =
+	'Create a granular access token with "Bypass two-factor authentication (2FA)" checked and read-write access to all eight packages, then set it as the npm-publish environment secret NPM_TOKEN.';
+
+/**
+ * Why the registry would refuse `npm publish` with this token, or null. The token listing masks each
+ * token as its first 8 and last 4 characters; publishing without an OTP needs bypass_2fa (granular)
+ * or an automation token (classic). Messages name the token, never its value.
+ */
+export function tokenPublishBlocker(token, listing) {
+	const matches = (listing?.objects ?? []).filter(
+		(entry) => entry.token === `${token.slice(0, 8)}...${token.slice(-4)}`,
+	);
+	if (matches.length === 0) return `NODE_AUTH_TOKEN is not in the account's npm token list. ${TOKEN_HELP}`;
+	if (matches.length > 1) return `${matches.length} tokens share NODE_AUTH_TOKEN's masked form; cannot tell which one is in use.`;
+	const [entry] = matches;
+	if (entry.bypass_2fa === true || entry.automation === true) return null;
+	return `npm token "${entry.name ?? "unnamed"}" cannot publish without a one-time password (bypass_2fa is false). ${TOKEN_HELP}`;
+}
+
+/** Fail before the first publish instead of on it (E404 for a dead token, E403/EOTP without 2FA bypass). */
+export async function assertPublishToken(env = process.env, fetchJson = fetchRegistryJson) {
+	const token = env.NODE_AUTH_TOKEN;
+	if (!token) return "skipped";
+	const headers = { authorization: `Bearer ${token}` };
+	const objects = [];
+	let next = "/-/npm/v1/tokens?perPage=100";
+	for (let page = 0; next && page < 20; page++) {
+		const { status, body } = await fetchJson(`${REGISTRY}${next}`, headers);
+		if (status !== 200) throw new Error(`npm registry rejected NODE_AUTH_TOKEN (HTTP ${status}). ${TOKEN_HELP}`);
+		objects.push(...(body?.objects ?? []));
+		const listing = { objects };
+		if (tokenPublishBlocker(token, listing) === null) return "ok";
+		next = body?.urls?.next;
+	}
+	const blocker = tokenPublishBlocker(token, { objects });
+	if (blocker) throw new Error(blocker);
+	return "ok";
+}
+
+async function fetchRegistryJson(url, headers) {
+	const response = await fetch(url, { headers: { ...headers, accept: "application/json" } });
+	return { status: response.status, body: response.ok ? await response.json() : null };
+}
+
 const isMain = Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 const packages = [
@@ -199,6 +244,7 @@ if (isMain) {
 	);
 	console.log();
 
+	let tokenChecked = false;
 	for (const pkg of packages) {
 		const version = packageVersions.get(pkg.name);
 		assertBuildOutputExists(pkg.directory);
@@ -224,6 +270,11 @@ if (isMain) {
 			continue;
 		}
 
+		// Only before a real publish: a rerun that reuses every package needs no publish rights.
+		if (!tokenChecked) {
+			await assertPublishToken();
+			tokenChecked = true;
+		}
 		const publishArgs = ["publish", "--access", "public"];
 		if (provenance) {
 			publishArgs.push("--provenance");
