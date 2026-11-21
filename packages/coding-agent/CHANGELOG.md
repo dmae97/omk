@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- `OMK_SUBAGENT_ADAPTORCH` (experimental, default off) lets subagent lane dispatch use the result of an actually executed, authorized `adaptorch_route_topology` MCP call. `shadow` (or `1`) only records proposals; `enforce` can prioritize ready lanes and narrow sequential execution to one lane. A receipt must match the same prompt's task IDs, descriptions and dependencies and still be fresh; missing or incompatible results fall back to the local plan. The consumer adds no service or model calls. See [AdaptOrch subagent routing](docs/adaptorch-subagent-routing.md).
+
+### Fixed
+
+- The standalone installer reads the downloaded binary's version with `OMK_PACKAGE_DIR` unset, so an `OMK_PACKAGE_DIR` in the environment that points at another installation no longer makes the check read that installation's version.
+
 ## [2.0.1] - 2026-11-15
 
 ### Fixed
