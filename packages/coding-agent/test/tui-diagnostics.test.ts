@@ -87,6 +87,25 @@ describe("runtime identity observations", () => {
 });
 
 describe("metadata-only diagnostics", () => {
+	it("reports a hidden rail separately from its requested renderer, in the view and saved JSON", () => {
+		const { runtime, root } = fixture();
+		const rail = { requested: "opentui" as const, lastRender: "not-rendered", layout: "terminal-too-small" };
+		const data = createTuiDiagnostics({
+			runtime: inspectTuiRuntime(runtime),
+			rail,
+			columns: 80,
+			rows: 24,
+			messageCount: 0,
+			isStreaming: false,
+			isCompacting: false,
+			termination: undefined,
+			lastResourceReloadAt: undefined,
+		});
+		expect(createTuiDiagnosticsView(data, runtime).render(160).join("\n")).toContain(
+			"Right rail: terminal-too-small",
+		);
+		expect(JSON.parse(readFileSync(saveTuiDiagnostics(data, root), "utf8")).rail).toEqual(rail);
+	});
 	it("projects numeric terminal output observations without payloads or extra fields", () => {
 		const { runtime } = fixture();
 		const stats = {

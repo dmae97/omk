@@ -56,6 +56,7 @@ process.on("message", (message: unknown) => {
 	if (!active)
 		active = renderPending()
 			.catch(() => {
+				if (!openTui && process.connected) process.send?.({ id: request.id, error: "dependency-error" });
 				void close();
 			})
 			.finally(() => {
