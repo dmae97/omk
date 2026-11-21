@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { constants, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, openSync, closeSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-export const PACKAGES = ["ai", "tui", "agent", "protocol", "adaptorch-wpl", "coding-agent", "book-to-skill"];
+export const PACKAGES = ["ai", "tui", "agent", "protocol", "adaptorch-wpl", "coding-agent", "book-to-skill", "speak-like-you-eat"];
 export const DEFAULT_APPROVED_ROOT = "/mnt/omkdata/tmp/opencode";
 // OMK_ARTIFACT_WORK_ROOT relocates the owned work root (CI and tests); it must be an absolute, normalized, non-root path.
 export function approvedRoot() {
@@ -130,6 +130,12 @@ export function checkCandidate(work) {
 	assertNoLinksOutside(receipt.snapshot);
 	return receipt;
 }
+function assertCandidateManifest(pkg, dir, version, reviewedLock) {
+	const name = dir === "coding-agent" ? "open-multi-agent-kit" : dir === "agent" ? "omk-agent-core" : `omk-${dir}`;
+	const locked = reviewedLock.packages?.[`packages/${dir}`];
+	assert(pkg.name === name && pkg.version === version && pkg.license === "MIT" && locked?.name === name && locked.version === version, `unreviewed local candidate manifest: ${dir}`);
+	assert(!["preinstall", "install", "postinstall", "prepare"].some((name) => pkg.scripts?.[name]), "unexpected lifecycle requires review before build or pack");
+}
 export function prepare(source, work, frozen) {
 	assertWork(work, source, true);
 	const files = inputs(source);
@@ -149,6 +155,8 @@ export function prepare(source, work, frozen) {
 	assertFiles(snapshot, files);
 	assert.equal(digest(inputs(source)), frozen, "source changed during snapshot");
 	const reviewedLock = readJson(join(snapshot, "package-lock.json"));
+	const version = readJson(join(snapshot, "package.json")).version;
+	assert(typeof version === "string" && version.length > 0 && reviewedLock.version === version && reviewedLock.packages?.[""]?.version === version, "unreviewed candidate root/lock version");
 	const dependencies = [];
 	walk(snapshot, (path, stat) => {
 		if (!stat.isFile() || !/(?:^|\/)node_modules\/(?:@[^/]+\/)?[^/]+\/package.json$/.test(path)) return;
@@ -158,8 +166,7 @@ export function prepare(source, work, frozen) {
 	});
 	for (const dir of PACKAGES) {
 		const pkg = readJson(join(snapshot, "packages", dir, "package.json"));
-		assert(pkg.name === (dir === "coding-agent" ? "open-multi-agent-kit" : dir === "agent" ? "omk-agent-core" : `omk-${dir}`) && pkg.version === "1.5.10" && pkg.license === "MIT", "unreviewed local candidate manifest");
-		assert(!["preinstall", "install", "postinstall", "prepare"].some((name) => pkg.scripts?.[name]), "unexpected lifecycle requires review before build");
+		assertCandidateManifest(pkg, dir, version, reviewedLock);
 	}
 	for (const dir of ["home", "agent", "tarballs", "unpacked"]) mkdirSync(join(work, dir));
 	const tools = { node: { version: process.version, path: realpathSync(process.execPath), sha256: fileDigest(process.execPath) }, npm: run("npm", ["--version"], snapshot, work, "npm-version").stdout.trim() };
@@ -170,8 +177,7 @@ export function prepare(source, work, frozen) {
 	const tarballs = PACKAGES.map((dir) => {
 		const packageDir = join(snapshot, "packages", dir);
 		const manifest = readJson(join(packageDir, "package.json"));
-		assert(manifest.version === "1.5.10" && manifest.license === "MIT", `unreviewed candidate package: ${manifest.name}`);
-		assert(!["preinstall", "install", "postinstall", "prepare"].some((name) => manifest.scripts?.[name]), "unexpected package lifecycle requires review");
+		assertCandidateManifest(manifest, dir, version, reviewedLock);
 		const pack = run("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", join(work, "tarballs")], packageDir, work, `pack-${dir}`);
 		const packed = JSON.parse(pack.stdout)[0];
 		const path = contained(join(work, "tarballs"), resolve(work, "tarballs", packed.filename));
@@ -235,7 +241,7 @@ export function installConsumer(work) {
 		const expected = candidate.tarballs.find((row) => row.name === manifest.name);
 		if (expected) resolved.push(assertPackage(dirname(path), expected, prefix));
 	});
-	assert.equal(new Set(resolved.map((row) => row.name)).size, 7, "seven exact installed packages required");
+	assert.equal(new Set(resolved.map((row) => row.name)).size, 8, "eight exact installed packages required");
 	writeJson(join(work, "installed.json"), { candidate: candidate.candidate, prefix, lock, resolved });
 	return { candidate, prefix, resolved };
 }

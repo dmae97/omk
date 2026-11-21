@@ -135,7 +135,7 @@ function nodeStage(work) {
 	const observed = readJson(fixture.env.NATIVE_ARTIFACT_GUARD);
 	assert.equal(observed.attempts, 0);
 	assert(events.some((event) => event.event === "network") && events.filter((event) => event.event === "network").every((event) => event.attempts === 0), "SDK fixture network evidence missing or nonzero");
-	assert.equal(new Set(observed.observed.map((row) => row.name)).size, 7, "all seven public roots must resolve from installed bytes");
+	assert.equal(new Set(observed.observed.map((row) => row.name)).size, 8, "all eight public roots must resolve from installed bytes");
 	const receipt = { status: "pass", candidate: candidate.candidate, outputs: candidate.outputsDigest, cases, resolved, sdk: { result, events, observed }, environment: observed.environment };
 	checkCandidate(work); writeJson(join(work, "node.json"), receipt); return receipt;
 }
@@ -149,7 +149,7 @@ function typesStage(work) {
 	writeJson(join(prefix, "tsconfig.json"), config);
 	const result = run(process.execPath, [join(candidate.snapshot, "node_modules/typescript/lib/tsc.js"), "-p", join(prefix, "tsconfig.json")], prefix, work, "installed-types");
 	assert(!/"(?:paths|baseUrl)"/.test(JSON.stringify(config)), "source type aliases forbidden");
-	const internalResolutions = [...result.stdout.matchAll(/Module name '(open-multi-agent-kit|omk-(?:ai|agent-core|tui|protocol|adaptorch-wpl|book-to-skill))[^']*' was successfully resolved to '([^']+)'/g)];
+	const internalResolutions = [...result.stdout.matchAll(/Module name '(open-multi-agent-kit|omk-(?:ai|agent-core|tui|protocol|adaptorch-wpl|book-to-skill|speak-like-you-eat))[^']*' was successfully resolved to '([^']+)'/g)];
 	assert(internalResolutions.length > 0, "installed declaration resolution evidence missing");
 	for (const match of internalResolutions) contained(realpathSync(prefix), realpathSync(match[2]));
 	const compiler = join(candidate.snapshot, "node_modules/typescript/lib/tsc.js");

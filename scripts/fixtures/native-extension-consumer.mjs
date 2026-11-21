@@ -10,11 +10,12 @@ import * as protocol from "omk-protocol";
 import * as tui from "omk-tui";
 import * as wpl from "omk-adaptorch-wpl";
 import * as book from "omk-book-to-skill";
+import * as slye from "omk-speak-like-you-eat";
 import { AuthStorage, createAgentSession, DefaultResourceLoader, ModelRegistry, SessionManager, SettingsManager } from "open-multi-agent-kit";
 
 const agentDir = process.env.OMK_CODING_AGENT_DIR;
 const record = (event) => appendFileSync(process.env.NATIVE_ARTIFACT_RECEIPT, `${JSON.stringify(event)}\n`);
-for (const namespace of [agent, agentNode, ai, oauth, protocol, tui, wpl, book]) assert(Object.keys(namespace).length > 0);
+for (const namespace of [agent, agentNode, ai, oauth, protocol, tui, wpl, book, slye]) assert(Object.keys(namespace).length > 0);
 assert.equal(systemHash({ systemPrompt: "" }), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
 assert.equal(process.env.NODE_PATH, undefined);
 assert.equal(process.env.NODE_OPTIONS, undefined);
@@ -45,6 +46,6 @@ for (const cwd of [process.cwd(), join(process.cwd(), "replacement")]) {
 		await session.reload();
 		assert.equal(loader.getExtensions().runtime.providerOwners.get("native-artifact-fixture"), join(cwd, "extension.ts"));
 		await session.prompt("run the offline artifact fixture after reload");
-		record({ event: "sdk", injectedLoader: true, reload: true, replacement: cwd !== process.cwd(), owner: join(cwd, "extension.ts"), roots: ["open-multi-agent-kit", "omk-ai", "omk-agent-core", "omk-tui", "omk-protocol", "omk-adaptorch-wpl", "omk-book-to-skill"] });
+		record({ event: "sdk", injectedLoader: true, reload: true, replacement: cwd !== process.cwd(), owner: join(cwd, "extension.ts"), roots: ["open-multi-agent-kit", "omk-ai", "omk-agent-core", "omk-tui", "omk-protocol", "omk-adaptorch-wpl", "omk-book-to-skill", "omk-speak-like-you-eat"] });
 	} finally { await session.close(); session.dispose(); }
 }

@@ -187,3 +187,61 @@ describe("release artifacts do not depend on live provider APIs", () => {
 		}
 	});
 });
+
+describe("publish.mjs npm token preflight", () => {
+	// Synthetic token assembled at runtime so secret scanners do not see a credential literal.
+	const token = ["npm", "_ABCDEFGH", "x".repeat(30), "WXYZ"].join("");
+	const masked = `${token.slice(0, 8)}...${token.slice(-4)}`;
+	const listing = (...objects) => ({ objects, urls: {} });
+
+	it("accepts the matching granular token only when it bypasses 2FA", async () => {
+		const { tokenPublishBlocker } = await import(join(root, "scripts", "publish.mjs"));
+		assert.equal(tokenPublishBlocker(token, listing({ name: "ci", token: masked, bypass_2fa: true })), null);
+		assert.match(
+			tokenPublishBlocker(token, listing({ name: "ci", token: masked, bypass_2fa: false })),
+			/"ci".*Bypass two-factor authentication/,
+		);
+	});
+
+	it("accepts a classic automation token and refuses an unlisted or ambiguous token", async () => {
+		const { tokenPublishBlocker } = await import(join(root, "scripts", "publish.mjs"));
+		assert.equal(tokenPublishBlocker(token, listing({ name: "auto", token: masked, automation: true })), null);
+		assert.match(tokenPublishBlocker(token, listing({ name: "other", token: "npm_ZZZZ...0000", bypass_2fa: true })), /not in/);
+		assert.match(
+			tokenPublishBlocker(token, listing({ token: masked, bypass_2fa: true }, { token: masked, bypass_2fa: false })),
+			/2 tokens/,
+		);
+	});
+
+	it("checks the registry before publishing and never prints the token", async () => {
+		const { assertPublishToken } = await import(join(root, "scripts", "publish.mjs"));
+		const seen = [];
+		const fetchJson = async (url, headers) => {
+			seen.push({ url, auth: headers.authorization });
+			return { status: 200, body: listing({ name: "ci", token: masked, bypass_2fa: false }) };
+		};
+		const error = await assertPublishToken({ NODE_AUTH_TOKEN: token }, fetchJson).catch((e) => e);
+		assert.ok(error instanceof Error);
+		assert.doesNotMatch(error.message, new RegExp(token));
+		assert.deepEqual(seen, [{ url: "https://registry.npmjs.org/-/npm/v1/tokens?perPage=100", auth: `Bearer ${token}` }]);
+	});
+
+	it("reports a token the registry rejects and skips the check without NODE_AUTH_TOKEN", async () => {
+		const { assertPublishToken } = await import(join(root, "scripts", "publish.mjs"));
+		const rejected = await assertPublishToken({ NODE_AUTH_TOKEN: token }, async () => ({ status: 401, body: {} })).catch((e) => e);
+		assert.match(rejected.message, /rejected NODE_AUTH_TOKEN \(HTTP 401\)/);
+		let called = false;
+		assert.equal(await assertPublishToken({}, async () => { called = true; }), "skipped");
+		assert.equal(called, false);
+	});
+
+	it("follows listing pages until the token is found", async () => {
+		const { assertPublishToken } = await import(join(root, "scripts", "publish.mjs"));
+		const pages = {
+			"https://registry.npmjs.org/-/npm/v1/tokens?perPage=100": { objects: [], urls: { next: "/-/npm/v1/tokens?page=1&perPage=100" } },
+			"https://registry.npmjs.org/-/npm/v1/tokens?page=1&perPage=100": listing({ name: "ci", token: masked, bypass_2fa: true }),
+		};
+		assert.equal(await assertPublishToken({ NODE_AUTH_TOKEN: token }, async (url) => ({ status: 200, body: pages[url] })), "ok");
+	});
+
+});
