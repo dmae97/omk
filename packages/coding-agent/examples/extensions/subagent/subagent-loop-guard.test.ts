@@ -193,11 +193,16 @@ describe("spec 071 loop guard is always on (no flag)", () => {
 	}, 60_000);
 });
 
-/** Values that differ per run: the test cwd, mkdtemp suffixes and the attempt's remaining milliseconds. */
+/**
+ * Values that differ per run: the test cwd, the TMPDIR root (the golden was recorded with TMPDIR=/tmp),
+ * mkdtemp suffixes and the attempt's remaining milliseconds.
+ */
 function normalizeRequest(line: string): string {
 	return line
 		.split(cwd)
 		.join("<CWD>")
+		.split(path.join(os.tmpdir(), "omk-subagent-"))
+		.join("/tmp/omk-subagent-")
 		.replace(/omk-subagent-checkpoint-[A-Za-z0-9]{6}/g, "omk-subagent-checkpoint-<RND>")
 		.replace(/omk-subagent-[A-Za-z0-9]{6}\//g, "omk-subagent-<RND>/")
 		.replace(/about \d+ms/g, "about <MS>ms");

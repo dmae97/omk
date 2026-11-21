@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 
 const SCRIPT = new URL("../pi-inventory.mjs", import.meta.url).pathname;
@@ -48,6 +48,61 @@ test("pi-inventory catches static, type-only, dynamic, require and re-export", (
 	}
 });
 
+test("pi-inventory uses one scope precedence for parsed imports and catch-all mentions", () => {
+	const { root, out, run } = setup();
+	try {
+		const specifier = ["@mariozechner", "pi-scope-fixture"].join("/");
+		const kinds = ["static", "type-only", "side-effect", "re-export", "dynamic", "require", "mention"];
+		const code = [
+			`import { x } from "${specifier}";`,
+			`import type { T } from "${specifier}";`,
+			`import "${specifier}";`,
+			`export { x } from "${specifier}";`,
+			`const lazy = import("${specifier}");`,
+			`const loaded = require("${specifier}");`,
+			`const literal = "${specifier}";`,
+		].join("\n") + "\n";
+		const cases = [
+			["src/consumer.ts", "src"],
+			["scripts/consumer.mjs", "scripts"],
+			["scripts/test/consumer.mjs", "test"],
+			["packages/fixture/vendor/src/consumer.ts", "vendored"],
+			["packages/fixture/vendor/scripts/consumer.mjs", "scripts"],
+		];
+		for (const [path] of cases) {
+			mkdirSync(dirname(join(root, path)), { recursive: true });
+			writeFileSync(join(root, path), code);
+		}
+		execFileSync("git", ["-C", root, "add", "--", ...cases.map(([path]) => path)], { env: cleanEnv });
+		assert.equal(run().status, 0);
+		const bytes = readFileSync(out, "utf8");
+		const inv = JSON.parse(bytes);
+		for (const [path, scope] of cases) {
+			const rows = inv.imports.filter((row) => row.file.startsWith(`${path}:`));
+			assert.equal(rows.length, kinds.length, path);
+			assert.deepEqual(rows.map((row) => row.kind).sort(), [...kinds].sort(), path);
+			for (const row of rows) {
+				assert.equal(row.scope, scope, `${row.file} (${row.kind})`);
+				assert.equal(row.specifier, specifier);
+			}
+		}
+		assert.equal(run().status, 0);
+		assert.equal(readFileSync(out, "utf8"), bytes, "regeneration must be byte-identical");
+		assert.equal(run("--check").status, 0);
+		const mention = inv.imports.find((row) => row.file === "scripts/consumer.mjs:7");
+		assert.ok(mention);
+		mention.scope = "src";
+		const tampered = JSON.stringify(inv, null, "\t") + "\n";
+		writeFileSync(out, tampered);
+		const checked = run("--check");
+		assert.equal(checked.status, 1);
+		assert.match(checked.stderr, /differs/);
+		assert.equal(readFileSync(out, "utf8"), tampered, "--check must not repair a wrong scope");
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
 test("pi-inventory discovers .mts/.cts/.tsx/.mjs via git ls-files and skips non-code files", () => {
 	const { root, out, run } = setup();
 	try {
@@ -66,6 +121,21 @@ test("pi-inventory discovers .mts/.cts/.tsx/.mjs via git ls-files and skips non-
 		for (const s of [S("mts"), S("cts"), S("tsx"), S("mjs")]) assert.ok(specs.includes(s), s);
 		assert.ok(!specs.includes(S("md")));
 		assert.ok(!specs.includes(S("untracked")));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("pi-inventory checks tracked code after an unstaged deletion", () => {
+	const { root, run } = setup();
+	try {
+		const legacy = join(root, "src", "legacy.ts");
+		writeFileSync(legacy, "export const legacy = true;\n");
+		execFileSync("git", ["-C", root, "add", "src/legacy.ts"], { env: cleanEnv });
+		assert.equal(run().status, 0);
+		rmSync(legacy);
+		const result = run("--check");
+		assert.equal(result.status, 0, result.stderr);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

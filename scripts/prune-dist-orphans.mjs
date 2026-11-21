@@ -21,7 +21,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** Directories copied wholesale into dist; their contents have no 1:1 source mapping. */
-const COPIED_TREES = new Set(["docs", "examples"]);
+const COPIED_TREES = new Set(["docs", "examples", "export-html", "node_modules"]);
 
 /** Extensions tsgo emits. Anything else in dist is a copied asset. */
 const COMPILED_SUFFIXES = [".d.ts.map", ".d.ts", ".js.map", ".js"];

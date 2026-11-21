@@ -12,7 +12,8 @@ const PI_PKG = /^@(mariozechner|earendil-works|oh-my-pi)\/|^pi-[a-z0-9-]+$/;
 const DEP_KEYS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 
 function git(...a) { return execFileSync("git", a, { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 }); }
-const files = git("ls-files", "-z").split("\0").filter(Boolean);
+const deleted = new Set(git("ls-files", "-z", "--deleted").split("\0"));
+const files = git("ls-files", "-z").split("\0").filter((f) => !deleted.has(f));
 
 // 1. manifests
 const manifests = [];
@@ -37,18 +38,19 @@ const PATTERNS = [
 const imports = [];
 for (const f of files.filter((f) => CODE.test(f) && SCOPE.test(f) && !f.includes("node_modules/")).sort()) {
 	const text = readFileSync(join(ROOT, f), "utf8");
+	const scope = /(^|\/)test\//.test(f) ? "test" : /(^|\/)scripts\//.test(f) ? "scripts" : f.includes("/vendor/") ? "vendored" : "src";
 	for (const [kind, re] of PATTERNS) for (const m of text.matchAll(re)) {
 		const line = text.slice(0, m.index).split("\n").length;
 		const clause = m.length > 2 ? m[1] : "";
 		const symbols = (clause.match(/\{([\s\S]*)\}/)?.[1] ?? clause).split(",").map((s) => s.trim().replace(/^type\s+/, "")).filter(Boolean);
 		const mod = f.split("/").slice(0, 2).join("/");
-		imports.push({ file: `${f}:${line}`, module: mod, kind, specifier: m[m.length - 1], symbols: symbols.length ? symbols : ["*"], scope: /(^|\/)test\//.test(f) ? "test" : /(^|\/)scripts\//.test(f) ? "scripts" : f.includes("/vendor/") ? "vendored" : "src" });
+		imports.push({ file: `${f}:${line}`, module: mod, kind, specifier: m[m.length - 1], symbols: symbols.length ? symbols : ["*"], scope });
 	}
 	// catch-all: any remaining pi specifier mention (string-literal fixtures, comments) so nothing is missed
 	const seen = new Set(imports.filter((i) => i.file.startsWith(f + ":")).map((i) => i.file));
 	text.split("\n").forEach((l, i) => {
 		const m = l.match(/['"\x60](@(?:mariozechner|earendil-works|oh-my-pi)\/[^'"\x60]+)['"\x60]/);
-		if (m && !seen.has(`${f}:${i + 1}`)) imports.push({ file: `${f}:${i + 1}`, module: f.split("/").slice(0, 2).join("/"), kind: "mention", specifier: m[1], symbols: ["*"], scope: /(^|\/)test\//.test(f) ? "test" : f.includes("/vendor/") ? "vendored" : "src" });
+		if (m && !seen.has(`${f}:${i + 1}`)) imports.push({ file: `${f}:${i + 1}`, module: f.split("/").slice(0, 2).join("/"), kind: "mention", specifier: m[1], symbols: ["*"], scope });
 	});
 }
 // 3. runtime alias surface (pi specifiers OMK resolves for third-party extensions)

@@ -1,5 +1,5 @@
 import type { CandidateManifest } from "./candidate.ts";
-import { assertPublishablePath, safeCandidatePath } from "./candidate-policy.ts";
+import { assertPublishablePath, safeCandidatePath, withoutGroupWrite } from "./candidate-policy.ts";
 import { digestBytes, VerifiedRunError } from "./storage.ts";
 
 /** Validate every entry before the first Git object write, including legacy candidates. */
@@ -19,7 +19,8 @@ export function preflightGitCandidate(manifest: CandidateManifest, contents: Rea
 	for (const directory of manifest.directories) checkPath(directory);
 	for (const file of manifest.files) {
 		checkPath(file.path);
-		if (file.mode !== 0o644 && file.mode !== 0o755) throw new VerifiedRunError("mode_unrepresentable");
+		const mode = withoutGroupWrite(file.mode);
+		if (mode !== 0o644 && mode !== 0o755) throw new VerifiedRunError("mode_unrepresentable");
 		const bytes = contents.get(file.digest);
 		if (
 			!bytes ||

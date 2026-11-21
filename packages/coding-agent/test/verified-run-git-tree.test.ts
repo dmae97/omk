@@ -81,6 +81,28 @@ describe("verified-run git tree identity", () => {
 		expect(line.endsWith("\trun")).toBe(true);
 	});
 
+	it("seals a umask 002 checkout: group write is dropped, never widened into Git", () => {
+		const root = repo();
+		mkdirSync(join(root, "shared"));
+		chmodSync(join(root, "shared"), 0o775);
+		writeFileSync(join(root, "shared", "note"), "group");
+		chmodSync(join(root, "shared", "note"), 0o664);
+		writeFileSync(join(root, "run"), "#!/bin/sh\n");
+		chmodSync(join(root, "run"), 0o775);
+		const commit = seal(root);
+		const entries = git(root, ["ls-tree", "-r", commit])
+			.split("\n")
+			.map((line) => `${line.split(" ")[0]} ${line.split("\t")[1]}`);
+		expect(entries.sort()).toEqual(["100644 shared/note", "100755 run"]);
+	});
+
+	it("still refuses a group-writable mode that hides a read bit Git would publish (F08)", () => {
+		const root = repo();
+		writeFileSync(join(root, "secret"), "hidden");
+		chmodSync(join(root, "secret"), 0o660);
+		expect(() => seal(root)).toThrow(/mode_unrepresentable/);
+	});
+
 	it("does not run an inherited reference-transaction hook (F06)", () => {
 		const root = repo();
 		const outside = mkdtempSync(join(tmpdir(), "omk-git-hooks-"));

@@ -44,7 +44,9 @@ Coordinator는 기존 durable file I/O·mutation lock·session owner lease를 �
   받아 실행합니다. 승인된 각 검사의 exit code가 0이고 stdout 바이트가 계약과 같아야 합니다.
   비교 코드·기대값·원장·issuer key는 supervisor에만 있습니다.
 - regular file의 바이트·경로·mode, 빈 디렉터리·삭제를 binding합니다. 디렉터리는 mode
-  `0755`만 지원합니다. root 디렉터리 mode는 실행 기반 시설로 취급합니다.
+  `0755`만, Git에 쓰는 file은 `0644`와 `0755`만 지원합니다. umask 002가 더한 group write
+  (`0775`, `0664`)는 떼어 낸 뒤 판정합니다. Git mode가 원래 mode보다 넓어지는 `0600`·`0640`·`0660`
+  같은 mode는 거부합니다. root 디렉터리 mode는 실행 기반 시설로 취급합니다.
   symlink, hardlink, 특수 파일, set-ID mode, 잘못된 UTF-8 이름은 거부합니다.
 - root `.git`과 `.omk`는 이 profile의 입력에서 명시적으로 제외합니다. 그 밖의
   dotfile·untracked file은 포함합니다. Git submodule과 mutable dependency cache는

@@ -1,7 +1,7 @@
 import { chmodSync, lstatSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { RunPhaseBudget } from "omk-protocol";
-import { assertPublishablePath, safeCandidatePath } from "./candidate-policy.ts";
+import { assertPublishablePath, safeCandidatePath, withoutGroupWrite } from "./candidate-policy.ts";
 import {
 	assertDirectory,
 	digestBytes,
@@ -50,7 +50,7 @@ export function captureCandidate(root: string, limits: RunPhaseBudget): Candidat
 			const absolute = join(root, path);
 			const stat = lstatSync(absolute);
 			if (stat.isDirectory()) {
-				if ((stat.mode & 0o7777) !== 0o755) throw new VerifiedRunError("file_type");
+				if (withoutGroupWrite(stat.mode & 0o7777) !== 0o755) throw new VerifiedRunError("file_type");
 				directories.push(path);
 				visit(path);
 				continue;

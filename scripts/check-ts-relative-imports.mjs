@@ -1,5 +1,6 @@
+import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import ts from "typescript";
 
 const ignoredDirectories = new Set([".git", "coverage", "dist", "node_modules"]);
@@ -18,6 +19,22 @@ const ignoredDirectoryPaths = new Set([
 const rootScratchDirectory = "~";
 const files = [];
 const scanRoot = process.argv[2] ?? ".";
+// A linked checkout owns its own checks, regardless of its directory name.
+const worktreeListing = spawnSync("git", ["worktree", "list", "--porcelain", "-z"], {
+	cwd: scanRoot,
+	encoding: "utf8",
+	stdio: ["ignore", "pipe", "pipe"],
+	timeout: 10000,
+});
+const linkedWorktrees = new Set(
+	worktreeListing.status === 0
+		? worktreeListing.stdout
+				.split("\0")
+				.filter((field) => field.startsWith("worktree "))
+				.map((field) => resolve(field.slice("worktree ".length)))
+				.filter((path) => path !== resolve(scanRoot))
+		: [],
+);
 
 function collectTypescriptFiles(directory) {
 	for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -38,7 +55,8 @@ function isIgnoredDirectory(directory, name, childDirectory) {
 	return (
 		ignoredDirectories.has(name) ||
 		ignoredDirectoryPaths.has(relative(scanRoot, childDirectory)) ||
-		(directory === scanRoot && name === rootScratchDirectory)
+		(directory === scanRoot && name === rootScratchDirectory) ||
+		linkedWorktrees.has(resolve(childDirectory))
 	);
 }
 
