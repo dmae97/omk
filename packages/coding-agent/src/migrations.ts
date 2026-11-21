@@ -370,10 +370,24 @@ export function archiveLegacyHooksDir(baseDir: string): string | null {
 }
 
 /**
+ * True only for entries the legacy tools/ loader would have auto-loaded: a top-level module file, or a
+ * directory holding an index module. Vendored checkouts and release binaries sit in tools/ too and are
+ * not custom tools, so they must not trigger the migration warning.
+ */
+function isLegacyToolEntry(toolsDir: string, entry: string): boolean {
+	const lower = entry.toLowerCase();
+	if (entry.startsWith(".") || ["fd", "rg", "fd.exe", "rg.exe"].includes(lower)) return false;
+	if (/\.(?:ts|js|mjs|cjs)$/.test(lower)) return true;
+	return ["index.ts", "index.js", "index.mjs", "index.cjs"].some((name) => existsSync(join(toolsDir, entry, name)));
+}
+
+/**
  * Check for deprecated hooks/ and tools/ directories.
  * Project-level hooks/ (`autoArchiveHooks`) are archived automatically because project shell hooks
  * are never executed; global hooks/ may still be live via the hook inventory, so it stays a warning.
- * Note: tools/ may contain legacy auto-extracted fd/rg binaries, so only warn if it has other files.
+ * Note: tools/ is also used as a scratch directory for vendored sources and release binaries, so only
+ * warn about entries the legacy loader would have auto-loaded: a top-level module or a directory with
+ * an index module. fd/rg binaries and hidden files are ignored.
  */
 export function checkDeprecatedExtensionDirs(
 	baseDir: string,
@@ -398,15 +412,8 @@ export function checkDeprecatedExtensionDirs(
 	}
 
 	if (existsSync(toolsDir)) {
-		// Check if tools/ contains anything other than fd/rg (which are auto-extracted binaries)
 		try {
-			const entries = readdirSync(toolsDir);
-			const customTools = entries.filter((e) => {
-				const lower = e.toLowerCase();
-				return (
-					lower !== "fd" && lower !== "rg" && lower !== "fd.exe" && lower !== "rg.exe" && !e.startsWith(".") // Ignore .DS_Store and other hidden files
-				);
-			});
+			const customTools = readdirSync(toolsDir).filter((e) => isLegacyToolEntry(toolsDir, e));
 			if (customTools.length > 0) {
 				warnings.push(
 					`${label} tools/ directory contains custom tools. Custom tools have been merged into extensions.`,
