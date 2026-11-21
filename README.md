@@ -608,7 +608,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v2.0.1](.github/RELEASE_NOTES_v2.0.1.md)
+- [Release notes for v2.0.2](.github/RELEASE_NOTES_v2.0.2.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -681,6 +681,18 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v2.0.2
+
+### Added
+
+- `OMK_SUBAGENT_ADAPTORCH` (experimental, default off) lets subagent lane dispatch use the result of an actually executed, authorized `adaptorch_route_topology` MCP call. `shadow` (or `1`) only records proposals; `enforce` can prioritize ready lanes and narrow sequential execution to one lane. A receipt must match the same prompt's task IDs, descriptions and dependencies and still be fresh; missing or incompatible results fall back to the local plan. The consumer adds no service or model calls. See [AdaptOrch subagent routing](packages/coding-agent/docs/adaptorch-subagent-routing.md).
+
+### Fixed
+
+- The standalone installer reads the downloaded binary's version with `OMK_PACKAGE_DIR` unset, so an `OMK_PACKAGE_DIR` in the environment that points at another installation no longer makes the check read that installation's version.
+
+Release notes live in [RELEASE_NOTES_v2.0.2.md](.github/RELEASE_NOTES_v2.0.2.md).
+
 ## Release v2.0.1
 
 ### Fixed
@@ -715,14 +727,6 @@ Release notes live in [RELEASE_NOTES_v2.0.1.md](.github/RELEASE_NOTES_v2.0.1.md)
 - A receipt-reading critic, visual-QA or document lane now depends only on the producers whose receipt its read scope covers; a lane reading the whole run directory still waits for every producer. Writer serialization and the failure scope are unchanged.
 
 Release notes live in [RELEASE_NOTES_v2.0.0.md](.github/RELEASE_NOTES_v2.0.0.md).
-
-## Release v1.5.14
-
-### Fixed
-
-- Turns on Anthropic models gated to Claude Code 2.1.290 or newer no longer fail with HTTP 400 `claude_code_version_too_old` when you are logged in with an Anthropic OAuth subscription. The `custom-provider-anthropic` example extension sends the same version in its user agent (#393).
-
-Release notes live in [RELEASE_NOTES_v1.5.14.md](.github/RELEASE_NOTES_v1.5.14.md).
 
 <!-- releases:end -->
 
