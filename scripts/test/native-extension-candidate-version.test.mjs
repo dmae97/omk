@@ -6,6 +6,10 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { digest, inputs, PACKAGES, prepare } from "../native-extension-artifact-candidate.mjs";
 
+// A pre-commit hook in a linked worktree exports that worktree's GIT_DIR. `git init` with it inherited
+// writes core.bare=true into the shared repository config, so this file and its children run without it.
+for (const key of Object.keys(process.env)) if (key.startsWith("GIT_")) delete process.env[key];
+
 test("artifact candidates cover all eight public lockstep packages", () => {
 	assert.deepEqual([...PACKAGES].sort(), [
 		"adaptorch-wpl", "agent", "ai", "book-to-skill", "coding-agent", "protocol", "speak-like-you-eat", "tui",
