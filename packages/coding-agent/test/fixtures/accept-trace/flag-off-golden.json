@@ -4,15 +4,15 @@
 		"turns.jsonl"
 	],
 	"editor": [
-		"true|251|base",
-		"false|252|base",
-		"false|253|base",
-		"false|254|base",
-		"false|255|base",
+		"true|39|base",
+		"false|40|base",
+		"false|41|base",
+		"false|42|base",
+		"false|43|base",
 		"false|1|base"
 	],
 	"mainRequests": [
 		"{\"systemPrompt\":\"s\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"first\"}],\"timestamp\":1}],\"tools\":[]}",
-		"{\"systemPrompt\":\"s\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Run the SECRET-SUGGESTION parser tests.\\nContext: last request \\\"first\\\" (completed)\\nScope: unconfirmed, identify the target files or module first\\nDone when: compare each requirement of the last request with the answer. Passes when every item has support now\"}],\"timestamp\":1}],\"tools\":[]}"
+		"{\"systemPrompt\":\"s\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Run the SECRET-SUGGESTION parser tests now.\"}],\"timestamp\":1}],\"tools\":[]}"
 	]
 }

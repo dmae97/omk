@@ -1,5 +1,5 @@
 /**
- * Spec 091 stage 1: one next-task sentence after a completed turn.
+ * Spec 091 stage 1: a short next-task request after a completed turn.
  *
  * Default off (`OMK_NEXT_SUGGESTIONS`). When off, nothing here is installed:
  * no stream wrapper, no extra provider call, request bytes unchanged.
@@ -21,6 +21,7 @@ import {
 	cappedSuggestionOptions,
 	checkSuggestionCache,
 	estimateSuggestionCostUsd,
+	hasObservedCodexHit,
 	type SuggestionBudget,
 } from "./next-suggestion-budget.ts";
 import { suggestionEffectiveMaxTokens, suggestionMaxTokens } from "./next-suggestion-options.ts";
@@ -47,9 +48,10 @@ export const USAGE_CHECK_TIMEOUT_MS = 2_000;
 export type QuotaUsage = number | "no_quota" | "unavailable";
 
 export const SUGGESTION_INSTRUCTION =
-	"[next-task suggestion] Based on the conversation so far, write the single next request the user is most " +
-	"likely to send. Reply with that one sentence only, in the user's language, with no quotes, no preamble, " +
-	"and no tool calls.";
+	"[next-task suggestion] Write one request the user could send next, in their language. " +
+	"Use the latest request and the work actually completed. For a staged workflow such as pstack, " +
+	"pick the first unfinished step whose prerequisites are met. If blocked, ask for the missing decision or check. " +
+	"Do not repeat completed work or assume permission to deploy. Reply with one sentence only, no quotes, no preamble, and no tool calls.";
 
 export function isNextSuggestionsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 	return /^(?:1|on|true|yes)$/i.test(env[NEXT_SUGGESTIONS_ENV]?.trim() ?? "");
@@ -152,20 +154,21 @@ export function planSuggestion(input: SuggestionPlanInput): SuggestionPlan {
 	const skip = (reason: SuggestionSkipReason): SuggestionPlan => ({ kind: "skip", reason });
 	if (input.outcome === "aborted") return skip("aborted");
 	if (input.outcome !== "completed") return skip("not_completed");
-	const final = input.finalAssistant;
+	const { finalAssistant: final, currentModel: model, record } = input;
 	if (final?.stopReason === "aborted") return skip("aborted");
 	if (!final || final.stopReason === "error") return skip("error");
-	const record = input.record;
 	if (!record || record.atMs > final.timestamp + 1) return skip("no_record");
-	const model = input.currentModel;
 	if (!model || model.provider !== record.model.provider || model.id !== record.model.id) {
 		return skip("model_changed");
 	}
+	const observedCodexHit = hasObservedCodexHit(record.model, final, record.options);
 	if (input.caps) {
 		const cache = checkSuggestionCache(record.model, record.options, input.nowMs - record.atMs);
-		if (cache !== "ok") return skip(cache);
+		if (cache === "cache_capability_unknown" && observedCodexHit) {
+			if (input.nowMs - record.atMs >= SHORT_CACHE_TTL_MS) return skip("cache_cold");
+		} else if (cache !== "ok") return skip(cache);
 	} else {
-		if (!supportsPromptCache(record.model, record.options)) return skip("no_cache_support");
+		if (!supportsPromptCache(record.model, record.options) && !observedCodexHit) return skip("no_cache_support");
 		if (input.nowMs - record.atMs >= cacheTtlMs(record.options)) return skip("cache_cold");
 	}
 	if (input.usage === "unavailable") return skip("usage_unavailable");
@@ -209,7 +212,7 @@ export function buildSuggestionContext(record: RecordedMainRequest, finalAssista
 }
 
 export function extractSuggestion(message: AssistantMessage): string | undefined {
-	if (message.stopReason === "error" || message.stopReason === "aborted") return undefined;
+	if (message.stopReason !== "stop" || message.content.some((block) => block.type === "toolCall")) return undefined;
 	const text = message.content
 		.filter((block): block is { type: "text"; text: string } => block.type === "text")
 		.map((block) => block.text)

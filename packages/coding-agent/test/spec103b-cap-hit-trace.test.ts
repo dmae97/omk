@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { StreamFn } from "omk-agent-core";
 import { type AssistantMessage, type Context, getModel, type Model, type SimpleStreamOptions } from "omk-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { QuotaUsage } from "../src/core/next-suggestion.ts";
 import type { SuggestionBudget } from "../src/core/next-suggestion-budget.ts";
 import { type AnySuggestionSettlement, anySuggestionMetricInput } from "../src/core/next-suggestion-settlement.ts";
 import { summarizeTurnMetrics } from "../src/core/turn-metrics.ts";
@@ -55,6 +56,8 @@ interface Run {
 	readonly onSuggestionRequest?: (options: Record<string, unknown>) => void;
 	readonly abortDuringRequest?: boolean;
 	readonly outcome?: string;
+	readonly quotaUsage?: () => Promise<QuotaUsage>;
+	readonly usageTimeoutMs?: number;
 }
 
 async function run(opts: Run): Promise<{ settled: AnySuggestionSettlement[]; providerCalls: number }> {
@@ -92,7 +95,8 @@ async function run(opts: Run): Promise<{ settled: AnySuggestionSettlement[]; pro
 	};
 	const controller = installNextSuggestions(session as unknown as SuggestionSessionPort, editor, "base", {
 		env: opts.env,
-		quotaUsage: async () => "no_quota",
+		quotaUsage: opts.quotaUsage ?? (async () => "no_quota"),
+		...(opts.usageTimeoutMs === undefined ? {} : { usageTimeoutMs: opts.usageTimeoutMs }),
 		...(opts.budget ? { budget: opts.budget } : {}),
 		...(opts.timeoutSignal ? { timeoutSignal: opts.timeoutSignal } : {}),
 		settle: (s) => settled.push(s),
@@ -146,6 +150,27 @@ describe("spec 103b §2: flag scope", () => {
 		expect(off.settled).toHaveLength(0);
 		const shown = await run({ env: { OMK_NEXT_SUGGESTIONS: "1" } });
 		expect(lines(shown.settled)[0]).not.toMatch(/capsApplied|reasoningCapped/);
+	});
+});
+
+describe("next-suggestion diagnostics (caps off)", () => {
+	const env = { OMK_NEXT_SUGGESTIONS: "1", OMK_NEXT_SUGGESTIONS_DIAGNOSTICS: "1" };
+	it("records skip reasons and quota lookup time without caps fields", async () => {
+		const early = JSON.parse(lines((await run({ env, outcome: "failed" })).settled)[0]!);
+		expect(early).toMatchObject({ purpose: "suggestion", suggestionSkip: "not_completed" });
+		expect(early.capsApplied).toBeUndefined();
+		expect(early.quotaReadMs).toBeUndefined();
+
+		const slow = await run({ env, quotaUsage: () => new Promise<QuotaUsage>(() => {}), usageTimeoutMs: 20 });
+		expect(slow.providerCalls).toBe(0);
+		const timeout = JSON.parse(lines(slow.settled)[0]!);
+		expect(timeout).toMatchObject({ suggestionSkip: "usage_unavailable" });
+		expect(timeout.quotaReadMs).toBeGreaterThanOrEqual(15);
+		expect(timeout.capsApplied).toBeUndefined();
+
+		const shown = JSON.parse(lines((await run({ env })).settled)[0]!);
+		expect(shown).toMatchObject({ suggestionOutcome: "shown", quotaReadMs: expect.any(Number) });
+		expect(shown.capsApplied).toBeUndefined();
 	});
 });
 

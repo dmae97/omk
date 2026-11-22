@@ -3,6 +3,8 @@ import type {
 	SuggestionCandidateSource,
 	SuggestionDisplaySurface,
 } from "../../core/next-suggestion-accept-trace.ts";
+import type { DisplayReporter } from "../../core/next-suggestion-display-log.ts";
+import type { SuggestionSessionPort } from "./next-suggestion-types.ts";
 import type { SuggestionEditorPort } from "./suggestion-active-editor.ts";
 
 export const NEXT_SUGGESTIONS_PREFIX_ENV = "OMK_NEXT_SUGGESTIONS_PREFIX";
@@ -42,27 +44,36 @@ export interface ShownCandidate {
 	readonly settledAtEpochMs: number;
 	readonly quotaCheckedAtEpochMs: number;
 	readonly source: SuggestionCandidateSource;
+	readonly report?: DisplayReporter;
 }
 
 /** Session state a shown suggestion was built from; accept re-checks it before inserting. */
 export interface SuggestionRevision {
+	readonly sessionId?: string;
+	readonly leaf?: string | null;
 	readonly messageCount: number;
 	readonly lastMessage: unknown;
 	readonly modelKey: string;
 }
 
-export function suggestionRevision(
-	messages: readonly unknown[],
-	model: { readonly provider: string; readonly id: string } | undefined,
-	canSend = model !== undefined,
-): SuggestionRevision {
+export function suggestionRevision(session: SuggestionSessionPort, canSend: boolean): SuggestionRevision {
 	// A login that makes the same model usable is a state change: a "blocked" suggestion goes stale.
+	const { model } = session;
+	const { messages } = session.agent.state;
 	const key = model ? `${model.provider}/${model.id}` : "";
-	return { messageCount: messages.length, lastMessage: messages.at(-1), modelKey: canSend ? key : `${key}!` };
+	return {
+		sessionId: session.sessionId,
+		leaf: session.sessionManager?.getLeafId(),
+		messageCount: messages.length,
+		lastMessage: messages.at(-1),
+		modelKey: canSend ? key : `${key}!`,
+	};
 }
 
 export function sameRevision(left: SuggestionRevision, right: SuggestionRevision): boolean {
 	return (
+		left.sessionId === right.sessionId &&
+		left.leaf === right.leaf &&
 		left.messageCount === right.messageCount &&
 		left.lastMessage === right.lastMessage &&
 		left.modelKey === right.modelKey
@@ -77,6 +88,7 @@ export type ShownState = {
 	readonly task?: string;
 	readonly candidate: ShownCandidate;
 	readonly revision: SuggestionRevision;
+	inlinePainted?: boolean;
 	surface: SuggestionDisplaySurface;
 };
 
@@ -99,7 +111,11 @@ export interface InlineSuggestionDisplayInput extends SuggestionDisplayInput {
 export function showEmptySuggestion(input: SuggestionDisplayInput): void {
 	const { candidate, editor, suggestion } = input;
 	editor.setInlineSuggestion?.("");
-	editor.setPlaceholder(suggestion);
+	candidate.report?.("offered", undefined, "empty-editor");
+	editor.setPlaceholder(
+		suggestion,
+		candidate.report && (() => candidate.report?.("rendered", undefined, "empty-editor")),
+	);
 	const meta = {
 		parentTurnIndex: candidate.parentTurnIndex,
 		provider: candidate.provider,
@@ -115,11 +131,53 @@ export function showEmptySuggestion(input: SuggestionDisplayInput): void {
 	input.requestRender?.();
 }
 
+export function extendInlineSuggestion(
+	state: ShownState,
+	text: string,
+	key: string,
+	editor: SuggestionEditorPort,
+	basePlaceholder: string,
+	acceptTrace?: SuggestionAcceptTracker,
+	requestRender?: () => void,
+): boolean {
+	const cursor = editor.getCursor?.();
+	if (!cursor) return false;
+	const projection = projectSuggestion(state.text, {
+		text: text + key,
+		cursor: { line: cursor.line, col: cursor.col + key.length },
+	});
+	if (projection.kind !== "inline-suffix") return false;
+	if (state.surface === "empty-editor") {
+		acceptTrace?.dismissed("typed_over", Date.now());
+		state.candidate.report?.("cleared", "typed_over", state.surface);
+	}
+	showInlineSuggestion({
+		suffix: projection.text,
+		suggestion: state.text,
+		candidate: state.candidate,
+		state,
+		editor,
+		basePlaceholder,
+		acceptTrace,
+		requestRender,
+	});
+	return true;
+}
+
 export function showInlineSuggestion(input: InlineSuggestionDisplayInput): void {
 	const { candidate, editor, suggestion } = input;
 	const firstInline = input.state.surface !== "inline-prefix";
 	editor.setPlaceholder(input.basePlaceholder);
-	editor.setInlineSuggestion?.(input.suffix);
+	if (firstInline) candidate.report?.("offered", undefined, "inline-prefix");
+	editor.setInlineSuggestion?.(
+		input.suffix,
+		candidate.report &&
+			(() => {
+				if (input.state.inlinePainted) return;
+				input.state.inlinePainted = true;
+				candidate.report?.("rendered", undefined, "inline-prefix");
+			}),
+	);
 	if (firstInline) {
 		input.acceptTrace?.shown(
 			{

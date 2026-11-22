@@ -17,6 +17,8 @@ export interface SuggestionSettlement {
 	readonly startedAtEpochMs: number;
 	/** Spec 103b: present only with `OMK_NEXT_SUGGESTIONS_CAPS` on. */
 	readonly caps?: { readonly reasoningCapped: boolean };
+	/** `OMK_NEXT_SUGGESTIONS_DIAGNOSTICS`: time spent reading quota before this request. */
+	readonly quotaReadMs?: number;
 }
 
 /** Spec 103b: a caps-on plan skip (no provider call). Only ever produced with the caps flag on. */
@@ -27,6 +29,14 @@ export interface SuggestionSkipSettlement {
 	readonly model?: string;
 	readonly parentTurnIndex: number;
 	readonly atEpochMs: number;
+	/** False only for a caps-off diagnostics skip. */
+	readonly capsApplied?: false;
+	/** Present only when the skip followed a quota read. */
+	readonly quotaReadMs?: number;
+}
+
+export function isSuggestionDiagnosticsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+	return /^(?:1|on|true|yes)$/i.test(env.OMK_NEXT_SUGGESTIONS_DIAGNOSTICS?.trim() ?? "");
 }
 
 /** Build a caps-on skip settlement from a skip plan; the caller checks the caps flag. */
@@ -65,6 +75,7 @@ export function suggestionMetricInput(sessionId: string, settlement: SuggestionS
 		endedAtEpochMs: settlement.startedAtEpochMs + result.latencyMs,
 		...(result.usage ? { usage: turnUsageMetricFromUsage(result.usage), stopReason: stopReasonOf(result) } : {}),
 		...(settlement.caps ? { capsApplied: true, reasoningCapped: settlement.caps.reasoningCapped } : {}),
+		...(settlement.quotaReadMs === undefined ? {} : { quotaReadMs: settlement.quotaReadMs }),
 	};
 }
 
@@ -80,7 +91,8 @@ export function suggestionSkipMetricInput(sessionId: string, settlement: Suggest
 		...(settlement.model === undefined ? {} : { model: settlement.model }),
 		startedAtEpochMs: settlement.atEpochMs,
 		endedAtEpochMs: settlement.atEpochMs,
-		capsApplied: true,
+		...(settlement.capsApplied === false ? {} : { capsApplied: true }),
+		...(settlement.quotaReadMs === undefined ? {} : { quotaReadMs: settlement.quotaReadMs }),
 		suggestionSkip: settlement.skip,
 		...(costCap ? { estimatedCostUsd: costCap.estimatedCostUsd, maxCostUsd: costCap.maxCostUsd } : {}),
 	};

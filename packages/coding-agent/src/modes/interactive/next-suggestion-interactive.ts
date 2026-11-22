@@ -1,5 +1,6 @@
 import type { AgentSession } from "../../core/agent-session.ts";
 import { suggestionAcceptTracker } from "../../core/next-suggestion-accept-trace.ts";
+import { suggestionDisplayLogger } from "../../core/next-suggestion-display-log.ts";
 import * as settlement from "../../core/next-suggestion-settlement.ts";
 import type { SubscriptionUsageReader } from "../../core/subscription-usage-reader.ts";
 import {
@@ -32,6 +33,7 @@ export function installInteractiveNextSuggestions(
 		modelUsable: () => session.model !== undefined && session.modelRegistry.hasConfiguredAuth(session.model),
 		quotaUsage: () => activeQuotaUsage(session, reader),
 		settle: settlement.suggestionMetricsSettler(() => session.sessionId, session.sessionManager.getCwd()),
+		displayLog: suggestionDisplayLogger(() => session.sessionId, session.sessionManager.getCwd()),
 		acceptTrace: suggestionAcceptTracker(() => session.sessionId, session.sessionManager.getCwd()),
 	});
 }

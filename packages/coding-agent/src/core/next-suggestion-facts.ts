@@ -19,6 +19,9 @@ export interface SuggestionFacts {
 	readonly userRequest?: string;
 	/** Paths of `edit`/`write` tool calls in the last run whose result was not an error. */
 	readonly changedPaths: readonly string[];
+	readonly freshCheck?: boolean;
+	/** null: a task snapshot exists but has no actionable entry. */
+	readonly nextTask?: string | null;
 	/** Tools whose last result in the run is still an error. */
 	readonly failedTools: readonly string[];
 	/** First line of the unresolved failure, bounded. */
@@ -36,6 +39,7 @@ const WRITE_TOOLS: ReadonlySet<string> = new Set(["edit", "write"]);
 interface LooseMessage {
 	readonly role?: unknown;
 	readonly content?: unknown;
+	readonly details?: { readonly tasks?: unknown; readonly error?: unknown };
 	readonly stopReason?: unknown;
 	readonly errorMessage?: unknown;
 	readonly toolCallId?: unknown;
@@ -119,12 +123,25 @@ export function collectSuggestionFacts(input: CollectFactsInput): SuggestionFact
 	const rawRequest = start >= 0 ? userMessageText(messages[start]) : undefined;
 	const userRequest = rawRequest ? boundFact(requestText(rawRequest)) || undefined : undefined;
 	const pathByCall = new Map<string, string>();
+	const checks = new Map<string, number>();
+	let revision = 0;
+	let freshCheck = false;
+	let nextTask: string | null | undefined;
 	const lastResult = new Map<string, { readonly error: boolean; readonly text: string }>();
 	const changed = new Set<string>();
 	let failure: string | undefined;
 	for (const message of start >= 0 ? messages.slice(start + 1) : []) {
 		if (message?.role === "assistant" && Array.isArray(message.content)) {
 			for (const block of message.content) {
+				if (
+					block?.type === "toolCall" &&
+					block.name === "bash" &&
+					typeof block.id === "string" &&
+					/^(?:npm (?:run check|test)|pnpm (?:check|test)|cargo test|go test \.\/\.\.\.)$/.test(
+						block.arguments?.command ?? "",
+					)
+				)
+					checks.set(block.id, revision);
 				const path = block?.arguments?.path;
 				if (block?.type === "toolCall" && WRITE_TOOLS.has(block.name) && typeof path === "string") {
 					pathByCall.set(String(block.id), path);
@@ -137,7 +154,34 @@ export function collectSuggestionFacts(input: CollectFactsInput): SuggestionFact
 			const error = message.isError === true;
 			lastResult.set(message.toolName, { error, text: firstText(message.content) });
 			const path = pathByCall.get(String(message.toolCallId));
-			if (path !== undefined && !error) changed.add(path);
+			if (error || (path !== undefined && WRITE_TOOLS.has(message.toolName))) {
+				revision++;
+				freshCheck = false;
+				if (!error && path !== undefined) changed.add(path);
+			} else if (
+				message.toolName === "bash" &&
+				message.isError === false &&
+				checks.get(String(message.toolCallId)) === revision
+			) {
+				freshCheck = true;
+			}
+			if (
+				message.toolName === "todo" &&
+				!error &&
+				!message.details?.error &&
+				Array.isArray(message.details?.tasks)
+			) {
+				const tasks = message.details.tasks;
+				const done = new Set(tasks.filter((t) => t?.status === "completed").map((t) => t.id));
+				const ready = tasks.filter(
+					(t) =>
+						typeof t?.subject === "string" &&
+						Array.isArray(t.blockedBy) &&
+						t.blockedBy.every((id: unknown) => done.has(id)),
+				);
+				const task = ready.find((t) => t.status === "in_progress") ?? ready.find((t) => t.status === "pending");
+				nextTask = task ? boundFact(task.subject) : null;
+			}
 		}
 	}
 	const failedTools = [...lastResult].filter(([, result]) => result.error).map(([name]) => name);
@@ -150,6 +194,8 @@ export function collectSuggestionFacts(input: CollectFactsInput): SuggestionFact
 		outcome: input.outcome,
 		...(userRequest ? { userRequest } : {}),
 		changedPaths: [...changed].slice(0, MAX_FACT_PATHS).map((path) => boundFact(path, 120)),
+		...(freshCheck ? { freshCheck } : {}),
+		...(nextTask !== undefined ? { nextTask } : {}),
 		failedTools,
 		...(failure ? { failure } : {}),
 		modelMissing: input.modelMissing === true,

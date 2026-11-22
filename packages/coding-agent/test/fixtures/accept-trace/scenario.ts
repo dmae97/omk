@@ -2,8 +2,7 @@
  * Accept-trace golden scenario: suggestions on, one turn, the suggestion is
  * shown, accepted with Tab, lightly edited (" now" appended) and sent as the next
  * prompt, then a second suggestion is shown and dismissed by typing. Extra controller
- * options are passed through untyped. The accepted text is the whole host-rendered
- * prompt, so the committed flag-off golden holds that prompt in the second main request.
+ * options are passed through untyped. The accepted v1 sentence is pinned by the golden.
  */
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,8 +18,7 @@ import {
 } from "../../../src/modes/interactive/next-suggestion-controller.ts";
 
 export const SUGGESTION = "Run the SECRET-SUGGESTION parser tests.";
-/** Fragment of the edited prompt that was sent; it must never reach the outcome log. */
-export const SENT = " now";
+export const SENT = "Run the SECRET-SUGGESTION parser tests now.";
 const anthropic = getModel("anthropic", "claude-sonnet-4-5")! as Model<"anthropic-messages">;
 
 function assistant(text: string): AssistantMessage {
@@ -130,6 +128,7 @@ export async function runAcceptScenario(
 		await turn("first", 0);
 		key("\t"); // accept
 		for (const c of " now") key(c);
+		text = text.replace("tests. now", "tests now.");
 		const sent = text;
 		text = "";
 		await turn(sent, 1);

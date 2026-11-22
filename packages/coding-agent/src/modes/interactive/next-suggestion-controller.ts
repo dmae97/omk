@@ -14,13 +14,14 @@ import type { AssistantMessage } from "omk-ai";
 import { getKeybindings } from "omk-tui";
 import { isNextSuggestionsEnabled, MainRequestRecorder, type RecordedMainRequest } from "../../core/next-suggestion.ts";
 import { dismissReasonForKey, traceQueuedDispatch, userMessageText } from "../../core/next-suggestion-accept-trace.ts";
+import type { ClearReason } from "../../core/next-suggestion-display-log.ts";
 import { NextSuggestionCandidate } from "./next-suggestion-candidate.ts";
 import {
+	extendInlineSuggestion,
 	isPrefixSuggestionsEnabled,
 	projectSuggestion,
 	type ShownState,
 	sameRevision,
-	showInlineSuggestion,
 	suggestionRevision,
 } from "./next-suggestion-prefix.ts";
 import { initialSuggestion, presentSuggestion } from "./next-suggestion-present.ts";
@@ -47,8 +48,7 @@ export class NextSuggestionController {
 	private readonly keyHandler = (data: string): boolean => this.handleKey(data);
 	pending: AbortController | undefined;
 	private pendingTask: Promise<void> | undefined;
-	private pendingRecord: RecordedMainRequest | undefined;
-	private pendingFinal: AssistantMessage | undefined;
+	private noteCancellation?: (reason: ClearReason) => void;
 	private readonly candidates: NextSuggestionCandidate;
 	private shown: ShownState | undefined;
 	private readonly wrapped: StreamFn;
@@ -76,9 +76,11 @@ export class NextSuggestionController {
 			if (event.type === "agent_start") {
 				this.options.acceptTrace?.dismissed("new_turn", Date.now());
 				this.candidates.clear();
-				this.cancel();
+				this.cancel("new_turn");
 				this.turnsInRun = 0;
+				this.pendingTask = undefined;
 			} else if (event.type === "turn_end") this.turnsInRun++;
+			else if (event.type === "compaction_start") this.cancel();
 			else if (event.type === "prompt_settled") void this.onSettled(event.outcome);
 			else if (event.type === "message_start" && this.options.acceptTrace && !this.restorePrompt) {
 				// Only for ports without prompt(); a real session reports its dispatch branch instead.
@@ -101,7 +103,7 @@ export class NextSuggestionController {
 		this.options.acceptTrace?.flush(Date.now());
 		this.restorePrompt?.();
 		this.candidates.clear();
-		this.cancel();
+		this.cancel("disposed");
 		this.unsubscribe();
 		if (this.session.agent.streamFn === this.wrapped) this.session.agent.streamFn = this.inner;
 		if (this.editor.onBeforeInput === this.keyHandler) this.editor.onBeforeInput = undefined;
@@ -126,14 +128,14 @@ export class NextSuggestionController {
 	}
 
 	/** Dismiss the visible suggestion and cancel any pending generation. */
-	cancel(): void {
+	cancel(reason: ClearReason = "other"): void {
+		this.noteCancellation?.(reason);
+		this.noteCancellation = undefined;
 		this.generation++;
 		this.pending?.abort();
 		this.pending = undefined;
-		this.pendingTask = undefined;
-		this.pendingRecord = undefined;
-		this.pendingFinal = undefined;
 		if (this.shown !== undefined) {
+			this.shown.candidate.report?.("cleared", reason, this.shown.surface);
 			this.shown = undefined;
 			this.editor.setPlaceholder(this.basePlaceholder);
 			this.editor.setInlineSuggestion?.("");
@@ -150,23 +152,20 @@ export class NextSuggestionController {
 		const trace = this.options.acceptTrace;
 		trace?.observeEditor(text, Date.now());
 
+		if (shown && !sameRevision(shown.revision, this.revision())) {
+			trace?.dismissed("other", Date.now());
+			this.cancel("stale_revision");
+			return false;
+		}
 		if (shown && suggestion !== undefined && isTab(data) && !this.editor.isShowingAutocomplete()) {
 			const projection = projectSuggestion(suggestion, { text, cursor: this.editor.getCursor?.() });
-			const { messages } = this.session.agent.state;
-			const live = suggestionRevision(messages, this.session.model, sessionCanSend(this.session, this.options));
-			if (projection.kind !== "none" && !sameRevision(shown.revision, live)) {
-				// The session moved on (compaction, tree navigation, model change): never insert a stale prompt.
-				trace?.dismissed("other", Date.now());
-				this.cancel();
-				return false;
-			}
 			if (
 				projection.kind === "empty-editor" ||
 				(isPrefixSuggestionsEnabled(this.options.env) && projection.kind === "inline-suffix")
 			) {
 				if (shown.task) this.candidates.dismiss(shown.task);
 				trace?.accepted(Date.now());
-				this.cancel();
+				this.cancel("accepted");
 				if (projection.kind === "empty-editor") this.editor.setText(projection.text);
 				else if (this.editor.insertTextAtCursor) this.editor.insertTextAtCursor(projection.text);
 				else this.editor.setText(text + projection.text);
@@ -180,34 +179,26 @@ export class NextSuggestionController {
 			dismissReasonForKey(data) === "typed_over" &&
 			!this.editor.isShowingAutocomplete()
 		) {
-			const cursor = this.editor.getCursor?.();
-			const projection = cursor
-				? projectSuggestion(suggestion, {
-						text: text + data,
-						cursor: { line: cursor.line, col: cursor.col + data.length },
-					})
-				: { kind: "none" as const };
-			if (projection.kind === "inline-suffix" && shown) {
-				if (shown.surface === "empty-editor") trace?.dismissed("typed_over", Date.now());
-				showInlineSuggestion({
-					suffix: projection.text,
-					suggestion: shown.text,
-					candidate: shown.candidate,
-					state: shown,
-					editor: this.editor,
-					basePlaceholder: this.basePlaceholder,
-					acceptTrace: trace,
-					requestRender: this.options.requestRender,
-				});
+			if (
+				shown &&
+				extendInlineSuggestion(
+					shown,
+					text,
+					data,
+					this.editor,
+					this.basePlaceholder,
+					trace,
+					this.options.requestRender,
+				)
+			)
 				return false;
-			}
 		}
 
 		if (suggestion !== undefined) {
 			trace?.dismissed(dismissReasonForKey(data), Date.now());
 			if (shown?.task) this.candidates.dismiss(shown.task);
 		}
-		this.cancel();
+		this.cancel(this.editor.isShowingAutocomplete() ? "autocomplete" : dismissReasonForKey(data));
 		return false;
 	}
 
@@ -215,31 +206,28 @@ export class NextSuggestionController {
 		if (this.disposed) return Promise.resolve();
 		const record = this.recorder.lastRequest;
 		const finalAssistant = lastAssistant(this.session.agent.state.messages);
-		if (this.pendingTask && this.pendingRecord === record && this.pendingFinal === finalAssistant) {
-			return this.pendingTask;
-		}
-		this.cancel();
+		if (this.pendingTask) return this.pendingTask;
+		this.cancel("replaced");
 		const generation = this.generation;
 		const task = this.runSettled(outcome, generation, record, finalAssistant);
-		this.pendingRecord = record;
-		this.pendingFinal = finalAssistant;
 		this.pendingTask = task;
-		const clear = () => {
-			if (this.pendingTask !== task) return;
-			this.pendingTask = undefined;
-			this.pendingRecord = undefined;
-			this.pendingFinal = undefined;
-		};
-		void task.then(clear, clear);
 		return task;
 	}
 
+	private revision() {
+		return suggestionRevision(this.session, sessionCanSend(this.session, this.options));
+	}
 	private runSettled(
 		outcome: string | undefined,
 		generation: number,
 		record: RecordedMainRequest | undefined,
 		finalAssistant: AssistantMessage | undefined,
 	): Promise<void> {
+		const revision = this.revision();
+		let reason: ClearReason | undefined;
+		this.noteCancellation = (value) => {
+			reason = value;
+		};
 		return runSettledSuggestion({
 			session: this.session,
 			options: this.options,
@@ -250,7 +238,13 @@ export class NextSuggestionController {
 			record,
 			finalAssistant,
 			parentTurnIndex: Math.max(0, this.turnsInRun - 1),
-			isCurrent: () => generation === this.generation,
+			isCurrent: () => {
+				if (generation !== this.generation) return false;
+				if (sameRevision(revision, this.revision())) return true;
+				this.cancel("stale_revision");
+				return false;
+			},
+			cancelReason: () => reason,
 			editorEmpty: () => this.editor.getText().length === 0,
 			pendingOwner: this,
 			show: (composed, timing) => this.present(composed, timing),

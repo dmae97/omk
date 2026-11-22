@@ -1,7 +1,6 @@
 /**
- * Structured next-task suggestions (v3): the host renders a title plus context, scope and done-when lines,
- * a local suggestion exists whether or not a model answers, stale state never reaches the editor,
- * and Tab hands the displayed prompt to the editor input path without sending anything.
+ * Legacy structured prompt compatibility and the v1 single-line controller.
+ * Stale state never reaches the editor, and Tab inserts without sending anything.
  */
 import type { StreamFn } from "omk-agent-core";
 import { type AssistantMessage, type Context, getModel, type Model } from "omk-ai";
@@ -274,18 +273,17 @@ describe("structured suggestion prompt: host contract", () => {
 	});
 });
 
-describe("structured suggestions in the controller", () => {
-	it("shows an honest local suggestion before any turn, with zero provider calls", () => {
+describe("v1 suggestions in the controller", () => {
+	it("leaves the initial editor unchanged with zero provider calls", () => {
 		const p = port(() => assistant("unused"));
 		const controller = p.install();
-		expect(controller.title).toBe("Confirm the task goal and target scope");
-		expect(p.editorState.placeholder).toBe(controller.suggestion);
-		expect(isWellFormedSuggestionPrompt(p.editorState.placeholder)).toBe(true);
-		expect(p.editorState.placeholder).toContain("Context: no turn has run yet");
+		expect(controller.title).toBeUndefined();
+		expect(controller.suggestion).toBeUndefined();
+		expect(p.editorState.placeholder).toBe("base");
 		expect(p.calls).toEqual({ main: 0, suggestion: 0 });
 	});
 
-	it("replaces the local suggestion with a validated model sentence, keeping the host layout", async () => {
+	it("shows only the validated model sentence", async () => {
 		const p = port(() => assistant("Run the uploader tests next."));
 		const controller = p.install();
 		await p.turn(controller, "add a retry to the uploader", [
@@ -294,9 +292,7 @@ describe("structured suggestions in the controller", () => {
 		]);
 		expect(controller.title).toBe("Run the uploader tests next.");
 		const prompt = controller.suggestion ?? "";
-		expect(labelOrder(prompt, EN_LABELS)).toEqual([1, 2, 3]);
-		expect(prompt).toContain("Scope: src/upload.ts");
-		expect(prompt).not.toContain("Inferred:");
+		expect(prompt).toBe("Run the uploader tests next.");
 		expect(p.calls.suggestion).toBe(1);
 	});
 
@@ -312,26 +308,21 @@ describe("structured suggestions in the controller", () => {
 			},
 			"error",
 		],
-	] as const)(
-		"keeps a complete local suggestion on %s, with one request and no retry",
-		async (_name, reply, reason) => {
-			const p = port(reply);
-			const controller = p.install();
-			await p.turn(controller, "add a retry to the uploader", [
-				toolCall("c1", "edit", "src/upload.ts"),
-				toolResult("c1", "edit", false),
-			]);
-			expect(controller.title).toBe("Verify the change: src/upload.ts");
-			expect(isWellFormedSuggestionPrompt(controller.suggestion ?? "")).toBe(true);
-			expect(p.editorState.placeholder).toBe(controller.suggestion);
-			// The skip reason stays out of the prompt: it is host diagnostics, not task context.
-			expect(reason).not.toBe("");
-			expect(controller.suggestion).not.toContain("no model input");
-			expect(p.calls.suggestion).toBe(1);
-		},
-	);
+	] as const)("keeps the editor empty on %s, with one request and no retry", async (_name, reply, reason) => {
+		const p = port(reply);
+		const controller = p.install();
+		await p.turn(controller, "add a retry to the uploader", [
+			toolCall("c1", "edit", "src/upload.ts"),
+			toolResult("c1", "edit", false),
+		]);
+		expect(controller.title).toBeUndefined();
+		expect(controller.suggestion).toBeUndefined();
+		expect(p.editorState.placeholder).toBe("base");
+		expect(reason).not.toBe("");
+		expect(p.calls.suggestion).toBe(1);
+	});
 
-	it("falls back at the existing deadline instead of waiting on a hung provider", async () => {
+	it("keeps the editor empty at the existing provider deadline", async () => {
 		const p = port(() => new Promise<AssistantMessage>(() => {}), {
 			env: { ...ON, OMK_NEXT_SUGGESTIONS_CAPS: "1" },
 			budget: { maxReasoning: "inherit", deadlineMs: 5, maxCostUsd: 1 },
@@ -354,11 +345,11 @@ describe("structured suggestions in the controller", () => {
 		controller.dispose();
 		const fresh = p.install();
 		await p.turn(fresh, "add a retry to the uploader");
-		expect(fresh.title).toBe("Review what the last answer left unconfirmed");
-		expect(isWellFormedSuggestionPrompt(fresh.suggestion ?? "")).toBe(true);
+		expect(fresh.title).toBeUndefined();
+		expect(fresh.suggestion).toBeUndefined();
 	});
 
-	it("offline or quota-unknown: no request is sent and the local suggestion is shown", async () => {
+	it("offline or quota-unknown: no request or fallback is shown", async () => {
 		const p = port(() => assistant("unused"), {
 			quotaUsage: async () => {
 				throw new Error("offline");
@@ -367,18 +358,18 @@ describe("structured suggestions in the controller", () => {
 		const controller = p.install();
 		await p.turn(controller, "add a retry to the uploader");
 		expect(p.calls.suggestion).toBe(0);
-		expect(controller.title).toBe("Review what the last answer left unconfirmed");
-		expect(isWellFormedSuggestionPrompt(controller.suggestion ?? "")).toBe(true);
+		expect(controller.title).toBeUndefined();
+		expect(controller.suggestion).toBeUndefined();
 	});
 
-	it("a failed turn proposes the provider check; an aborted turn stays empty", async () => {
+	it("failed and aborted turns leave the editor empty", async () => {
 		const p = port(() => assistant("unused"));
 		const controller = p.install();
 		p.emit({ type: "agent_start" });
 		p.state.messages = [user("add a retry"), assistant("", "error")];
 		await controller.onSettled("failed");
-		expect(controller.title).toBe("Check the provider failure and run local checks");
-		expect(controller.suggestion).toContain('error "503 upstream unavailable"');
+		expect(controller.title).toBeUndefined();
+		expect(controller.suggestion).toBeUndefined();
 		expect(p.calls.suggestion).toBe(0);
 
 		p.emit({ type: "agent_start" });
@@ -399,7 +390,7 @@ describe("structured suggestions in the controller", () => {
 		const controller = p.install();
 		const settled = p.turn(controller, "add a retry to the uploader");
 		await new Promise((resolve) => setTimeout(resolve, 10));
-		expect(controller.title).toBe("Review what the last answer left unconfirmed");
+		expect(controller.title).toBeUndefined();
 		expect(p.editor.onBeforeInput?.("\x1b")).toBe(false);
 		expect(controller.suggestion).toBeUndefined();
 		release(assistant("Run the uploader tests next."));
@@ -425,27 +416,38 @@ describe("structured suggestions in the controller", () => {
 		expect(p.editorState.text).toBe("");
 	});
 
-	it("no model: the suggestion names the block and accepting it sends nothing", async () => {
+	it("no model: no suggestion is offered or accepted", async () => {
 		const p = port(() => assistant("unused"));
 		p.session.model = undefined;
 		const controller = p.install();
-		expect(controller.title).toBe("Blocked: no usable model");
-		expect(controller.suggestion).toContain("select a model with /model or authenticate with /login");
-		const prompt = controller.suggestion;
-		expect(p.editor.onBeforeInput?.("\t")).toBe(true);
-		expect(p.editorState.text).toBe(prompt);
+		expect(controller.title).toBeUndefined();
+		expect(controller.suggestion).toBeUndefined();
+		expect(p.editor.onBeforeInput?.("\t")).toBe(false);
+		expect(p.editorState.text).toBe("");
 		expect(p.calls).toEqual({ main: 0, suggestion: 0 });
 	});
 
-	it("a default model without credentials is blocked, and logging in makes that suggestion stale", () => {
+	it("a default model without credentials offers no suggestion", () => {
 		let authenticated = false;
 		const p = port(() => assistant("unused"), { modelUsable: () => authenticated });
 		const controller = p.install();
-		expect(controller.title).toBe("Blocked: no usable model");
+		expect(controller.title).toBeUndefined();
 		authenticated = true;
 		expect(p.editor.onBeforeInput?.("\t")).toBe(false);
 		expect(p.editorState.text).toBe("");
 		expect(controller.suggestion).toBeUndefined();
+	});
+
+	it("displays and accepts only the first model line", async () => {
+		const text = "Make the uploader retry delay configurable.\nReuse the existing retry handler.";
+		const p = port(() => assistant(text));
+		const controller = p.install();
+		await p.turn(controller, "add a retry to the uploader");
+		expect(controller.title).toBe("Make the uploader retry delay configurable.");
+		expect(controller.suggestion).toBe("Make the uploader retry delay configurable.");
+		expect(p.editor.onBeforeInput?.("\t")).toBe(true);
+		expect(p.editorState.text).toBe("Make the uploader retry delay configurable.");
+		expect(p.calls).toEqual({ main: 1, suggestion: 1 });
 	});
 
 	it("real editor: the rendered prompt is what Tab inserts and what submit delivers; nothing is sent by Tab", async () => {
@@ -467,7 +469,8 @@ describe("structured suggestions in the controller", () => {
 			.join("\n")
 			.replace(/\u001b\[[0-9;]*m|\u001b_[^\u0007]*\u0007/g, "");
 		const renderedLines = rendered.split("\n").map((line) => line.trim());
-		expect(renderedLines.some((line) => line.startsWith("Context: "))).toBe(true);
+		expect(prompt).toBe("Run the uploader tests next.");
+		expect(prompt).not.toContain("Context:");
 		// Every prompt line is on screen (wrapped rows joined back), so display and delivery match.
 		const flat = renderedLines.join(" ").replace(/\s+/g, " ");
 		for (const line of prompt.split("\n")) expect(flat).toContain(line.replace(/\s+/g, " "));

@@ -23,6 +23,26 @@ function documentEmpty(state: EditorSuffixView["state"]): boolean {
 }
 
 /** Style a placeholder or inline suffix without changing document state. */
+export class EditorHints {
+	readonly text = { placeholder: "", inlineSuggestion: "" };
+	private readonly painted: Partial<Record<keyof EditorHints["text"], () => void>> = {};
+
+	set(kind: keyof EditorHints["text"], text: string, painted?: () => void): void {
+		this.text[kind] = text;
+		this.painted[kind] = painted;
+	}
+
+	suffix(input: EditorSuffixFormatInput): { text: string; width: number } {
+		const suffix = formatEditorSuffix(input);
+		if (suffix.width > 0) {
+			const kind = documentEmpty(input.state) ? "placeholder" : "inlineSuggestion";
+			const notify = this.painted[kind];
+			delete this.painted[kind];
+			notify?.();
+		}
+		return suffix;
+	}
+}
 export function formatEditorSuffix(input: EditorSuffixFormatInput): { text: string; width: number } {
 	const cursorAtDocumentEnd =
 		input.state.cursorLine === input.state.lines.length - 1 &&
