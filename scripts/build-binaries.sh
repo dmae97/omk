@@ -8,7 +8,7 @@
 #
 # Options:
 #   --skip-install      Skip npm ci
-#   --skip-deps         Skip installing cross-platform dependencies
+#   --skip-deps         Skip cross-platform clipboard install; stage OpenTUI offline
 #   --skip-build        Skip npm run build
 #   --platform <name>   Build only for specified platform (darwin-arm64, darwin-x64, linux-x64, linux-arm64, windows-x64, windows-arm64)
 #   --out <dir>         Output directory (default: packages/coding-agent/binaries)
@@ -181,6 +181,7 @@ for platform in "${PLATFORMS[@]}"; do
 	mkdir -p "$OUTPUT_DIR/$platform/node_modules/@mariozechner"
 	cp -r ../../node_modules/@mariozechner/clipboard "$OUTPUT_DIR/$platform/node_modules/@mariozechner/"
 	cp -r ../../node_modules/@mariozechner/$clipboard_native_package "$OUTPUT_DIR/$platform/node_modules/@mariozechner/"
+	node ../../scripts/stage-opentui-runtime.mjs "$platform" "$OUTPUT_DIR/$platform" "$SKIP_DEPS"
 
 	# Copy terminal input native helpers next to compiled binaries.
 	if [[ "$platform" == darwin-* ]]; then
