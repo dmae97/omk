@@ -177,7 +177,7 @@ import type { HybridStatusPanel } from "./hybrid-status-panel.ts";
 import { waitForInteractiveInput } from "./interactive-input.ts";
 import { runJevCommand } from "./jev-command.ts";
 import { pinnedRailNotice, railFits } from "./layout-class.ts";
-import { formatResourceDescription } from "./resource-description.ts";
+import { formatResourceDescription, getAutocompleteSourceTag } from "./resource-description.ts";
 import { handleRNodeInput } from "./rnode/rnode-command.ts";
 import { RNodeController } from "./rnode/rnode-controller.ts";
 import { createSkillPickerForDraft } from "./skill-picker-draft.ts";
@@ -491,28 +491,7 @@ export class InteractiveMode {
 	}
 
 	private getAutocompleteSourceTag(sourceInfo?: SourceInfo): string | undefined {
-		if (!sourceInfo) {
-			return undefined;
-		}
-
-		const scopePrefix = sourceInfo.scope === "user" ? "u" : sourceInfo.scope === "project" ? "p" : "t";
-		const source = sourceInfo.source.trim();
-
-		if (source === "auto" || source === "local" || source === "cli") {
-			return scopePrefix;
-		}
-
-		if (source.startsWith("npm:")) {
-			return `${scopePrefix}:${source}`;
-		}
-
-		const gitSource = parseGitUrl(source);
-		if (gitSource) {
-			const ref = gitSource.ref ? `@${gitSource.ref}` : "";
-			return `${scopePrefix}:git:${gitSource.host}/${gitSource.path}${ref}`;
-		}
-
-		return scopePrefix;
+		return getAutocompleteSourceTag(sourceInfo);
 	}
 
 	private prefixAutocompleteDescription(description: string | undefined, sourceInfo?: SourceInfo): string | undefined {

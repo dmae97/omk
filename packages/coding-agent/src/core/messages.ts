@@ -43,6 +43,11 @@ export interface BashExecutionMessage {
 	excludeFromContext?: boolean;
 }
 
+export const SKILL_SECTIONS_CUSTOM_TYPE = "skill-sections";
+
+/** Operator-only diagnostics: shown in the session, never sent to the model or a summary (keyed by type so restored sessions match). */
+const DISPLAY_ONLY_CUSTOM_TYPES: ReadonlySet<string> = new Set([SKILL_SECTIONS_CUSTOM_TYPE]);
+
 /**
  * Message type for extension-injected messages via sendMessage().
  * These are custom messages that extensions can inject into the conversation.
@@ -164,6 +169,7 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
 						timestamp: m.timestamp,
 					};
 				case "custom": {
+					if (DISPLAY_ONLY_CUSTOM_TYPES.has(m.customType)) return undefined;
 					const content = typeof m.content === "string" ? [{ type: "text" as const, text: m.content }] : m.content;
 					return {
 						role: "user",

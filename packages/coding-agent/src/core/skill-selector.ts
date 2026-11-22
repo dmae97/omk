@@ -16,6 +16,7 @@
  */
 import { scoreSkillRelevance } from "./context-budget-relevance.ts";
 import { scoreSkillByClauses, splitTaskClauses } from "./skill-clause-relevance.ts";
+import { type SkillSectionSelection, summarizeSkillSections } from "./skill-section-selection.ts";
 
 /** Documented lane grant cap: load at most 2–3 skills. */
 export const MAX_SELECTED_SKILLS = 3;
@@ -45,11 +46,14 @@ interface SelectedSkill extends SkillScore {
 	readonly description: string;
 	/** The request clause this skill was granted for; absent when the whole request or a path matched. */
 	readonly covers?: string;
+	/** Explicit request section this skill covers, when present. */
+	readonly section?: string;
 }
 
 /** One explored skill above the weak floor, granted or not. */
 export interface SkillCandidateMatch extends SkillScore {
 	readonly covers?: string;
+	readonly section?: string;
 	readonly selected: boolean;
 	/** Granted skill that already covers the same clause; such a candidate is not granted. */
 	readonly redundantWith?: string;
@@ -66,6 +70,8 @@ export interface SelectSkillsInput {
 export interface SkillSelectionResult {
 	readonly selected: readonly SelectedSkill[];
 	readonly scores: readonly SkillScore[];
+	/** Section diagnostics are metadata only and absent for ordinary prose. */
+	readonly sections?: readonly SkillSectionSelection[];
 	/** Every skill above the weak floor in rank order: the explored set, wider than `selected`. */
 	readonly candidates: readonly SkillCandidateMatch[];
 	readonly confidence: SkillConfidence;
@@ -78,13 +84,23 @@ export function selectSkills(input: SelectSkillsInput): SkillSelectionResult {
 	const pathTokens = pathHintTokens(input.paths);
 	const max = resolveMax(input.max);
 	const skills = uniqueSkills(input.skills);
-	if ((task === "" && pathTokens.length === 0) || skills.length === 0) {
-		return fallback([], "no skill signals detected");
-	}
-
-	// A single clause is the whole request: clause scoring would add nothing to it.
+	// A single unsectioned clause is already the whole request.
 	const found = task === "" ? [] : splitTaskClauses(task);
-	const clauses = found.length >= 2 ? found : [];
+	const clauses = found.length >= 2 || found.some((clause) => clause.section !== undefined) ? found : [];
+	const finish = (
+		result: SkillSelectionResult,
+		ranked: readonly { skill: { name: string }; clauseScores: readonly number[] }[] = [],
+	): SkillSelectionResult => {
+		const sections = summarizeSkillSections(task, clauses, ranked, result.selected, {
+			weak: SKILL_WEAK_THRESHOLD,
+			strong: SKILL_STRONG_THRESHOLD,
+			max: MAX_SELECTED_SKILLS,
+		});
+		return sections.length > 0 ? { ...result, sections } : result;
+	};
+	if ((task === "" && pathTokens.length === 0) || skills.length === 0) {
+		return finish(fallback([], "no skill signals detected"));
+	}
 	const ranked = skills
 		.map((skill, index) => {
 			const byClause = task === "" ? undefined : scoreSkillByClauses(skill, task, clauses);
@@ -93,7 +109,13 @@ export function selectSkills(input: SelectSkillsInput): SkillSelectionResult {
 			let matches = 0;
 			for (const [clauseIndex, clauseScore] of (byClause?.clauses ?? []).entries()) {
 				const clauseMatches = byClause?.clauseMatches[clauseIndex] ?? 0;
-				if (clauseScore > score || (clause >= 0 && clauseScore === score && clauseMatches > matches)) {
+				if (
+					clauseScore > score ||
+					(clauseScore === score &&
+						clauseScore > 0 &&
+						((clause < 0 && clauses[clauseIndex]?.section !== undefined) ||
+							(clause >= 0 && clauseMatches > matches)))
+				) {
 					score = clauseScore;
 					clause = clauseIndex;
 					matches = clauseMatches;
@@ -108,7 +130,7 @@ export function selectSkills(input: SelectSkillsInput): SkillSelectionResult {
 					matches = 0;
 				}
 			}
-			return { skill, index, score, clause, matches };
+			return { skill, index, score, clause, matches, clauseScores: byClause?.clauses ?? [] };
 		})
 		.sort((left, right) => {
 			if (right.score !== left.score) return right.score - left.score;
@@ -120,25 +142,32 @@ export function selectSkills(input: SelectSkillsInput): SkillSelectionResult {
 	const scores: SkillScore[] = ranked.map((entry) => ({ name: entry.skill.name, score: entry.score }));
 	const aboveWeak = ranked.filter((entry) => entry.score >= SKILL_WEAK_THRESHOLD);
 	if (aboveWeak.length === 0) {
-		return fallback(scores, "no skill signals detected");
+		return finish(fallback(scores, "no skill signals detected"), ranked);
 	}
 
 	const leader = aboveWeak[0];
 	if (!leader) {
-		return fallback(scores, "no skill signals detected");
+		return finish(fallback(scores, "no skill signals detected"), ranked);
 	}
-	// One skill per clause first; whole-request and path matches keep their rank-order slots.
-	const coveredBy = new Map<number, string>();
+	// One skill per explicit section (otherwise per clause) first; whole-request and path matches keep their rank-order slots.
+	const coveredBy = new Map<number | string, string>();
 	const selected: SelectedSkill[] = [];
 	const candidates: SkillCandidateMatch[] = [];
 	for (const entry of aboveWeak) {
 		const covers = entry.clause >= 0 ? clauses[entry.clause]?.text : undefined;
-		const redundantWith = entry.clause >= 0 ? coveredBy.get(entry.clause) : undefined;
+		const section = entry.clause >= 0 ? clauses[entry.clause]?.section : undefined;
+		const coverage = section ?? (entry.clause >= 0 ? entry.clause : undefined);
+		const redundantWith = coverage === undefined ? undefined : coveredBy.get(coverage);
 		const take = redundantWith === undefined && selected.length < max;
-		const match = { name: entry.skill.name, score: entry.score, ...(covers ? { covers } : {}) };
+		const match = {
+			name: entry.skill.name,
+			score: entry.score,
+			...(covers ? { covers } : {}),
+			...(section ? { section } : {}),
+		};
 		if (take) {
 			selected.push({ ...match, description: entry.skill.description });
-			if (entry.clause >= 0) coveredBy.set(entry.clause, entry.skill.name);
+			if (coverage !== undefined) coveredBy.set(coverage, entry.skill.name);
 		}
 		candidates.push({ ...match, selected: take, ...(redundantWith ? { redundantWith } : {}) });
 	}
@@ -151,7 +180,7 @@ export function selectSkills(input: SelectSkillsInput): SkillSelectionResult {
 			? `ambiguous: ${leader.skill.name}(${formatScore(leader.score)}) vs ${runner.skill.name}(${formatScore(runner.score)})`
 			: `${leader.skill.name} selected (${formatScore(leader.score)})`;
 
-	return { selected, scores, candidates, confidence, ambiguous, reason };
+	return finish({ selected, scores, candidates, confidence, ambiguous, reason }, ranked);
 }
 
 function fallback(scores: readonly SkillScore[], reason: string): SkillSelectionResult {
