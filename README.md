@@ -640,7 +640,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v2.0.2](.github/RELEASE_NOTES_v2.0.2.md)
+- [Release notes for v2.0.3](.github/RELEASE_NOTES_v2.0.3.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -713,6 +713,33 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v2.0.3
+
+### Changed
+
+- With `OMK_OPENTUI_STATUS_RAIL` on (the default), the `Ctrl+O` control pane overlay and the built-in footer also render with OpenTUI, each in its own offscreen worker with its own native fallback. `FooterComponent` still decides every footer segment, drop and truncation; extension footers (`setFooter`) stay native. A standalone Bun binary (Bun 1.3.14+) starts the worker from its own executable. See [TUI](packages/coding-agent/docs/tui.md#hybrid-opentui-status-panel).
+- The pinned status rail now shows from 108 columns (previously 120) and 16 rows. The control pane overlay keeps the MD/LG breakpoints.
+- Fresh settings pin the status rail, and `Ctrl+Q` saves the choice, including a hidden rail. `/debug` and `/debug save` report the rail layout, the requested renderer and the last render; an earlier OpenTUI frame does not count as the rail being visible now.
+- Next-task suggestions (`OMK_NEXT_SUGGESTIONS`, flag, default off) return to the v1 form: the model's next request on one line, at most 200 characters, with a 128-token output budget. The host no longer adds context, scope or checklist lines or a local startup/error suggestion; an empty, malformed, timed-out or failed reply shows nothing and is not retried. The next open task of the latest todo snapshot takes precedence over model text, and after a successful workspace check (`npm run check`, `npm test`, ...) the editor stays empty until another edit or failure. Late replies after a turn, session, branch, model or compaction change are discarded. See [environment variables](packages/coding-agent/docs/environment-variables.md).
+- Skill selection treats Markdown headings in a request as explicit sections: a body clause keeps its heading path, so `## React frontend` above `Fix spacing` can match a frontend skill, and at most one skill is granted per section. Automatic loading no longer fills unused slots from an already covered section. With automatic loading on, a sectioned prompt adds a visible `skill-sections` message that lists each section's grants, their actual load status, and why a section stayed uncovered, with a pointer to the matching `!omk` hub. The message is for the operator only and is never sent to the model or into summaries; it lists at most 16 sections with headings cut to 120 characters. The three-skill cap, thresholds, body budget and admission rules are unchanged, and unsectioned prompts behave as before. See [Skills](packages/coding-agent/docs/skills.md).
+
+### Added
+
+- The package manager reapplies the bundled, version-pinned repairs after installing or updating a managed native package: `pi-subagents` 0.78.0 (subagent admission, disposal and checkpoint handling) and `@aeondave/pi-skill-optimizer` 3.1.2 (persistence). Repairs apply only to an explicit native `omk` manifest at that exact version, and unknown versions, changed hunk contexts or unsafe paths fail before any file is written. See [Packages](packages/coding-agent/docs/packages.md#native-package-repairs).
+- `OMK_NEXT_SUGGESTIONS_DIAGNOSTICS` (default off, requires `OMK_NEXT_SUGGESTIONS`) writes a turn-metrics record for every skipped suggestion and adds `quotaReadMs` (quota lookup time). Records hold enums and numbers only and change no request or display behavior.
+
+### Fixed
+
+- Standalone release binaries now ship the locked `@opentui/core` runtime and its native library for their platform, so the status rail renders an OpenTUI frame instead of falling back with `dependency-error`. `scripts/build-binaries.sh` stages it from `package-lock.json` (archives with integrity only; `--skip-deps` stages offline).
+- Selecting a `/name` or `/skill:name` skill in autocomplete with Enter or Tab no longer submits the prompt; the draft stays editable. Ordinary slash commands such as `/help` still run on Enter.
+- An accepted legacy (v2/v3) suggestion prompt that the user extended is matched for skills by the user's words, including text typed after the last line, instead of the host's context and completion wording.
+- The startup warning about a global `tools/` directory now fires only for legacy custom-tool entries (a top-level `.ts`, `.js`, `.mjs` or `.cjs` file, or a directory with an `index.*` file), not for unrelated checkouts or binaries stored there.
+- A main-turn request whose OAuth token the provider rejects (`401 token_expired`, `token_revoked`) now forces one token refresh and retries once, as compaction already did. A failed refresh reports the original error with a `/login <provider>` hint. API keys, non-auth errors, and rejections that arrive after output started are not retried.
+- Verified runs accept a workspace created under umask 002: group write on files (`0664`, `0775`) and directories (`0775`) is dropped before the mode check, so these candidates no longer fail with `mode_unrepresentable` or `file_type`. Modes that Git would widen, such as `0600`, `0640` and `0660`, are still refused.
+- With context budgeting on, a short follow-up with no skill signal of its own ("fix it", "이어서 해줘") now ranks `<relevant_skills>` against the session's last two user prompts as well (weights 0.8 and 0.64), so the list no longer drops the skills the conversation is about. Prompts with their own skill signal rank as before.
+
+Release notes live in [RELEASE_NOTES_v2.0.3.md](.github/RELEASE_NOTES_v2.0.3.md).
+
 ## Release v2.0.2
 
 ### Added
@@ -738,27 +765,6 @@ Release notes live in [RELEASE_NOTES_v2.0.2.md](.github/RELEASE_NOTES_v2.0.2.md)
 - Next-task suggestions (`OMK_NEXT_SUGGESTIONS`, flag, default off) use the v3 format: a title and three labelled lines for context, scope and completion criteria. Skill selection for an accepted suggestion uses its title and scope rather than the host's context and check wording (#454).
 
 Release notes live in [RELEASE_NOTES_v2.0.1.md](.github/RELEASE_NOTES_v2.0.1.md).
-
-## Release v2.0.0
-
-### Added
-
-- `omk-speak-like-you-eat` adapts SLYE 1.6.1 as an optional OMK package with manual and automatic plain-language companions, ELI5 and Light tabs, scoped model selection, trusted project settings, custom prompts, cancellation, and retry behavior. Extension contexts now expose session-scoped models, and `registerEntryRenderer()` renders persisted custom entries without adding them to LLM context. See [Speak Like You Eat](packages/coding-agent/docs/speak-like-you-eat.md) and [Extensions](packages/coding-agent/docs/extensions.md#display-only-entry-rendering).
-- Next-task suggestions (`OMK_NEXT_SUGGESTIONS`, flag, default off) now show a complete prompt in the empty editor: a title, then input, verification, evidence and result sections rendered by the host from the session transcript. A local suggestion appears before any provider call and stays when the model reply is empty, malformed, timed out or failed; Tab inserts exactly the displayed text and refuses a suggestion whose session state changed. Multi-line editor placeholders render below the cursor row. See [environment variables](packages/coding-agent/docs/environment-variables.md).
-
-### Changed
-
-- Skill selection for automatic loads and provider-harness grants scores each clause of a multi-capability request and grants one skill per clause before a second for the same clause, still at most three. Single-clause requests rank as before. See [skills](packages/coding-agent/docs/skills.md#requests-with-several-capabilities).
-
-### Breaking Changes
-
-- The default package manifest dialect is now native `omk`. Extensions that import legacy Pi packages without installing them, and packages with only a `pi` manifest, no longer load by default. Opt into compatibility with `--package-manifest-dialect omk+pi`, or `packageManifestDialect: "omk+pi"` in SDK constructors. The load error now names this option. `omk package doctor` also defaults to the native target. See [the OMK 2 migration notes](packages/coding-agent/docs/omk-2-migration.md#native-default-2026-11-08).
-
-### Fixed
-
-- A receipt-reading critic, visual-QA or document lane now depends only on the producers whose receipt its read scope covers; a lane reading the whole run directory still waits for every producer. Writer serialization and the failure scope are unchanged.
-
-Release notes live in [RELEASE_NOTES_v2.0.0.md](.github/RELEASE_NOTES_v2.0.0.md).
 
 <!-- releases:end -->
 
