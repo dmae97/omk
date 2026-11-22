@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Skill selection treats Markdown headings in a request as explicit sections: a body clause keeps its heading path, so `## React frontend` above `Fix spacing` can match a frontend skill, and at most one skill is granted per section. Automatic loading no longer fills unused slots from an already covered section. With automatic loading on, a sectioned prompt adds a visible `skill-sections` message that lists each section's grants, their actual load status, and why a section stayed uncovered, with a pointer to the matching `!omk` hub. The three-skill cap, thresholds, body budget and admission rules are unchanged, and unsectioned prompts behave as before. See [Skills](docs/skills.md).
+- Skill selection treats Markdown headings in a request as explicit sections: a body clause keeps its heading path, so `## React frontend` above `Fix spacing` can match a frontend skill, and at most one skill is granted per section. Automatic loading no longer fills unused slots from an already covered section. With automatic loading on, a sectioned prompt adds a visible `skill-sections` message that lists each section's grants, their actual load status, and why a section stayed uncovered, with a pointer to the matching `!omk` hub. The message is for the operator only and is never sent to the model or into summaries; it lists at most 16 sections with headings cut to 120 characters. The three-skill cap, thresholds, body budget and admission rules are unchanged, and unsectioned prompts behave as before. See [Skills](docs/skills.md).
 
 ### Fixed
 

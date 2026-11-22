@@ -1,6 +1,10 @@
 import { splitTaskSections, type TaskClause } from "./skill-clause-relevance.ts";
 import { SKILL_SEARCH_MAX_QUERY } from "./skill-search-mode.ts";
 
+/** Report bounds; scoring keeps its own `MAX_TASK_CLAUSES` bound. */
+export const MAX_REPORTED_SECTIONS = 16;
+export const MAX_SECTION_HEADING_CHARS = 120;
+
 export type SkillSectionMissingReason =
 	| "insufficient_context"
 	| "not_scored"
@@ -32,7 +36,8 @@ export function summarizeSkillSections(
 	thresholds: { weak: number; strong: number; max: number },
 ): SkillSectionSelection[] {
 	const grantedNames = new Set(selected.map((skill) => skill.name));
-	return splitTaskSections(task).map(({ section, query, hasCapability }) => {
+	const sections = splitTaskSections(task).slice(0, MAX_REPORTED_SECTIONS);
+	return sections.map(({ section, query, hasCapability }) => {
 		const indices = clauses.flatMap((clause, index) => (clause.section === section ? [index] : []));
 		const matches = (indices.length > 0 ? ranked : [])
 			.map((entry) => ({
@@ -52,7 +57,7 @@ export function summarizeSkillSections(
 			missingReason = "covered_elsewhere";
 		else missingReason = "selection_limit";
 		return {
-			section,
+			section: section.slice(0, MAX_SECTION_HEADING_CHARS),
 			query: query.slice(0, SKILL_SEARCH_MAX_QUERY),
 			selected: grants,
 			candidates: matches.slice(0, thresholds.max),

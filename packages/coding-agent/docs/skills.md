@@ -123,7 +123,9 @@ match threshold, body budget and admission rules remain unchanged, so a section 
 a strong match is not automatically loaded. This adds no model or network call.
 
 With automatic loading enabled, sectioned prompts also produce a visible `skill-sections`
-message and structured `details.sections`. Each section lists its selector grants separately
+message and structured `details.sections`. The message is shown to the operator only: it is
+never sent to the model (also after resume) or into compaction and branch summaries.
+It covers at most the first 16 sections, with headings cut to 120 characters. Each section lists its selector grants separately
 from their actual `loaded` or `in_context` status. Uncovered sections distinguish missing
 matches, matches below the strong threshold, the selection cap, a skill assigned elsewhere,
 insufficient body context and clauses outside the existing twelve-clause scoring bound.
@@ -132,7 +134,7 @@ loading attempt; a selector grant alone is not evidence that instructions were d
 
 For an uncovered section, the message reuses the `!omk` hub resolver against the current
 invocable inventory and supplies the installed hub's location plus a section-specific search
-query. Read that hub to follow its specialist discovery instructions. When native skill search
+query. The operator can read that hub to follow its specialist discovery instructions. When native skill search
 is active, the handoff points to `skill_search`; otherwise it points to the available inventory.
 Missing or explicit-only hubs are not advertised. This is a metadata handoff: it does not read
 or admit additional hub/specialist bodies, execute searches, or increase the grant cap. Skill

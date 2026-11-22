@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { splitTaskClauses } from "../src/core/skill-clause-relevance.ts";
 import { renderSkillSectionReports, skillSectionReports } from "../src/core/skill-section-report.ts";
+import { MAX_REPORTED_SECTIONS, MAX_SECTION_HEADING_CHARS } from "../src/core/skill-section-selection.ts";
 import { MAX_SELECTED_SKILLS, selectSkills } from "../src/core/skill-selector.ts";
 import type { Skill } from "../src/core/skills.ts";
 
@@ -194,5 +195,16 @@ describe("request-section skill selection", () => {
 		expect(result.sections?.find((section) => section.section === "Paths")).toMatchObject({
 			missingReason: "insufficient_context",
 		});
+	});
+
+	it("bounds the section report count and heading length independently of scoring", () => {
+		const heading = "Frontend layout ".repeat(30);
+		const task = Array.from({ length: 30 }, (_, i) => `## ${i} ${heading}\nFix React frontend layout spacing`).join(
+			"\n",
+		);
+		const sections = selectSkills({ task, skills }).sections ?? [];
+		expect(sections).toHaveLength(MAX_REPORTED_SECTIONS);
+		for (const section of sections) expect(section.section.length).toBeLessThanOrEqual(MAX_SECTION_HEADING_CHARS);
+		expect(sections[0]?.selected.map((skill) => skill.name)).toEqual(["frontend-layout"]);
 	});
 });

@@ -13,6 +13,7 @@ import {
 	compactionHysteresisConfigFor,
 	getCompactionHeadroomThreshold,
 } from "../../src/core/compaction/compaction-headroom.ts";
+import { convertToLlm } from "../../src/core/messages.ts";
 import { PromptSkillFreeze } from "../../src/core/prompt-skill-message.ts";
 import { autoLoadSkills } from "../../src/core/skill-auto-load.ts";
 import { sha256 } from "../../src/core/skill-autoload-observe.ts";
@@ -158,7 +159,7 @@ describe("spec 117 e2e", () => {
 		expect(captured).not.toContain("MOTION-SECTION-BODY");
 	}, 60_000);
 
-	it("delivers visible section results and a hub discovery handoff on the real session path", async () => {
+	it("shows section results to the operator without sending the diagnostic to the model", async () => {
 		const root = tmp();
 		const skills = [
 			writeSkill(root, "frontend-layout", "React frontend layout spacing responsive CSS", "FRONTEND-BODY"),
@@ -187,7 +188,11 @@ describe("spec 117 e2e", () => {
 				],
 			},
 		});
-		expect(captured).toContain("Skill selection by request section");
+		expect(captured).not.toContain("Skill selection by request section");
+		expect(captured).not.toContain("Hub discovery");
+		expect(captured).not.toContain("Specialist discovery");
+		// Summaries and restored sessions go through the same conversion.
+		expect(convertToLlm(report ? [report] : [])).toEqual([]);
 		expect(captured).toContain("FRONTEND-BODY");
 		expect(captured).not.toContain("HUB-BODY-NOT-GRANTED");
 	}, 60_000);

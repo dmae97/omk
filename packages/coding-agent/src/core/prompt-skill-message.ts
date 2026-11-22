@@ -13,7 +13,7 @@ import { type ActiveSkillState, addActiveSkills } from "./active-skill-state.ts"
 import { escapeXml } from "./context-budget-system-prompt-items.ts";
 import { devinHarnessAutoApplyEnabled, isDevinProvider, selectDevinHarnessSkills } from "./devin-harness.ts";
 import { grokHarnessAutoApplyEnabled, isGrokOAuthProvider, selectGrokHarnessSkills } from "./grok-harness.ts";
-import type { CustomMessage } from "./messages.ts";
+import { type CustomMessage, SKILL_SECTIONS_CUSTOM_TYPE } from "./messages.ts";
 import { appendRunLog } from "./run-log.ts";
 import { type AutoLoadStore, autoLoadSkills } from "./skill-auto-load.ts";
 import { type HistoryMessage, rankRelevantSkills, recentUserPrompts } from "./skill-context-relevance.ts";
@@ -117,7 +117,7 @@ export class PromptSkillFreeze {
 		if (sections.length > 0) {
 			messages.push({
 				role: "custom",
-				customType: "skill-sections",
+				customType: SKILL_SECTIONS_CUSTOM_TYPE,
 				content: renderSkillSectionReports(sections, this.skillSearch.active),
 				display: true,
 				details: { sections },
