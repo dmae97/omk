@@ -1,3 +1,6 @@
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { isBunBinary } from "../../config.ts";
 /**
  * The parts of `@opentui/core` the status panel uses. The package is an optional dependency that needs Node 26.4+,
  * so it is loaded at runtime in the render worker and is never required to type-check or build OMK.
@@ -44,9 +47,11 @@ export interface OpenTui {
 }
 
 export async function loadOpenTui(): Promise<OpenTui> {
-	// Non-literal specifiers keep the optional package out of compile-time module resolution.
-	const coreName: string = "@opentui/core";
-	const testingName: string = "@opentui/core/testing";
+	// The standalone worker must load the native library from disk beside the executable.
+	const packaged = (entry: string) =>
+		pathToFileURL(join(dirname(process.execPath), "node_modules", "@opentui", "core", entry)).href;
+	const coreName = isBunBinary ? packaged("index.bun.js") : "@opentui/core";
+	const testingName = isBunBinary ? packaged("testing.bun.js") : "@opentui/core/testing";
 	const [core, testing] = await Promise.all([import(coreName), import(testingName)]);
 	return {
 		BoxRenderable: core.BoxRenderable,

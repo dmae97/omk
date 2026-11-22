@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- With `OMK_OPENTUI_STATUS_RAIL` on (the default), the `Ctrl+O` control pane overlay and the built-in footer also render with OpenTUI, each in its own offscreen worker with its own native fallback. `FooterComponent` still decides every footer segment, drop and truncation; extension footers (`setFooter`) stay native. A standalone Bun binary (Bun 1.3.14+) starts the worker from its own executable; packaging the OpenTUI runtime into release artifacts is a separate change. See [TUI](docs/tui.md#hybrid-opentui-status-panel).
+- The pinned status rail now shows from 108 columns (previously 120) and 16 rows. The control pane overlay keeps the MD/LG breakpoints.
+- Fresh settings pin the status rail, and `Ctrl+Q` saves the choice, including a hidden rail. `/debug` and `/debug save` report the rail layout, the requested renderer and the last render; an earlier OpenTUI frame does not count as the rail being visible now.
+
 ### Fixed
 
 - The startup warning about a global `tools/` directory now fires only for legacy custom-tool entries (a top-level `.ts`, `.js`, `.mjs` or `.cjs` file, or a directory with an `index.*` file), not for unrelated checkouts or binaries stored there.

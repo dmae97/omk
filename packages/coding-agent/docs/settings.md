@@ -78,7 +78,7 @@ Global-only, default-off lifecycle for a future v4 advisory source. The timeout,
 | `editorPaddingX` | number | `0` | Horizontal padding for input editor (0-3) |
 | `autocompleteMaxVisible` | number | `5` | Max visible items in autocomplete dropdown (3-20) |
 | `showHardwareCursor` | boolean | `false` | Show the terminal cursor while TUI positions it for IME support |
-| `pinStatusSidebar` | boolean | `true` | Show the right status rail when the terminal is at least 120 columns by 16 rows and no custom footer or tmux pane owns the slot. `Ctrl+Q` saves the new pin preference. A saved choice takes precedence over `OMK_PIN_STATUS_SIDEBAR`; set the latter to `0` to start unpinned with fresh settings. `/debug` reports the in-process rail's layout and renderer state. |
+| `pinStatusSidebar` | boolean | `true` | Show the right status rail when the terminal is at least 108 columns by 16 rows and no custom footer or tmux pane owns the slot. `Ctrl+Q` saves the new pin preference. A saved choice takes precedence over `OMK_PIN_STATUS_SIDEBAR`; set the latter to `0` to start unpinned with fresh settings. `/debug` reports the in-process rail's layout and renderer state. |
 | `subscriptionUsageProviders` | string[] | omitted | Global settings only. Allowlist of usage groups (for example `["openai-codex", "anthropic"]`) shown in the pinned rail's USAGE section and requested from providers. Omitted shows every configured group; `[]` hides them all and sends no usage requests. A project `.omk/settings.json` cannot change it. An invalid value (not an array of non-empty provider IDs) also hides them all |
 
 ### Telemetry and update checks

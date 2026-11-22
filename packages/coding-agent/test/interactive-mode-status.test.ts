@@ -328,6 +328,7 @@ describe("InteractiveMode status sidebar toggle", () => {
 	function toggleOn(columns: number, rows: number, pinned: boolean) {
 		const fakeThis = {
 			statusSidebarPinned: pinned,
+			settingsManager: { setPinStatusSidebar: vi.fn() },
 			ui: { terminal: { columns, rows }, requestRender: vi.fn() },
 			showStatus: vi.fn(),
 		};
@@ -337,9 +338,10 @@ describe("InteractiveMode status sidebar toggle", () => {
 	}
 
 	test("pinning on a terminal too small for the rail explains why nothing appears", () => {
-		const narrow = toggleOn(110, 40, false);
+		const narrow = toggleOn(107, 40, false);
 		expect(narrow.statusSidebarPinned).toBe(true);
-		expect(narrow.showStatus).toHaveBeenCalledWith("Status sidebar pinned; it shows at 120+ columns and 16+ rows.");
+		expect(narrow.settingsManager.setPinStatusSidebar).toHaveBeenCalledExactlyOnceWith(true);
+		expect(narrow.showStatus).toHaveBeenCalledWith("Status sidebar pinned; it shows at 108+ columns and 16+ rows.");
 		expect(narrow.ui.requestRender).toHaveBeenCalled();
 		expect(toggleOn(160, 12, false).showStatus).toHaveBeenCalledTimes(1);
 	});
@@ -348,19 +350,25 @@ describe("InteractiveMode status sidebar toggle", () => {
 		expect(toggleOn(160, 40, false).showStatus).not.toHaveBeenCalled();
 		const unpinned = toggleOn(110, 40, true);
 		expect(unpinned.statusSidebarPinned).toBe(false);
+		expect(unpinned.settingsManager.setPinStatusSidebar).toHaveBeenCalledExactlyOnceWith(false);
 		expect(unpinned.showStatus).not.toHaveBeenCalled();
 	});
 });
 
 describe("InteractiveMode status sidebar visibility", () => {
 	function visible(customFooter: object | undefined, tmuxActive = false) {
-		const fakeThis = { statusSidebarPinned: true, customFooter, tmuxStatusRail: { active: tmuxActive } };
+		const fakeThis = {
+			statusSidebarPinned: true,
+			customFooter,
+			tmuxStatusRail: { active: tmuxActive },
+			statusRailVisibility: Reflect.get(InteractiveMode.prototype, "statusRailVisibility"),
+		};
 		const isVisible = Reflect.get(InteractiveMode.prototype, "isStatusSidebarVisible") as (
 			this: typeof fakeThis,
 			columns: number,
 			rows: number,
 		) => boolean;
-		return isVisible.call(fakeThis, 160, 40);
+		return isVisible.call(fakeThis, 108, 28);
 	}
 
 	test("an extension footer takes the status slot from the pinned rail", () => {

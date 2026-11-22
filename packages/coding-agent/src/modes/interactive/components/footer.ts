@@ -185,6 +185,11 @@ export class FooterComponent implements Component {
 	}
 
 	render(width: number): string[] {
+		return this.renderParts(width).lines;
+	}
+
+	/** The rendered rows plus the stats row split at its padding, for the OpenTUI footer. */
+	renderParts(width: number): { lines: string[]; statsLeft: string; statsRight: string } {
 		const state = this.session.state;
 
 		// Calculate cumulative usage from ALL session entries (not just post-compaction messages)
@@ -359,6 +364,7 @@ export class FooterComponent implements Component {
 			lines.push(truncateToWidth(statusLine, width, theme.fg("dim", "...")));
 		}
 
-		return lines;
+		// The padding is spaces only, so the trimmed remainder is exactly the right-aligned text.
+		return { lines, statsLeft: dimStatsLeft, statsRight: theme.fg("dim", remainder.trimStart()) };
 	}
 }

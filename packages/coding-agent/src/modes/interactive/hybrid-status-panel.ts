@@ -1,10 +1,20 @@
-import { type ChildProcess, fork } from "node:child_process";
+import { type ChildProcess, fork, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { type Component, truncateToWidth } from "omk-tui";
+import { isBunBinary } from "../../config.ts";
+import { OPENTUI_STATUS_WORKER_ARG } from "./opentui-status-worker-protocol.ts";
 import type { StatusPanelModel } from "./status-panel-model.ts";
 
 type Failure = "unsupported-runtime" | "dependency-error" | "render-error" | "worker-error" | "worker-timeout";
-export class HybridStatusPanel implements Component {
+/** Which offscreen scene the worker builds, and how many rows it gets for a model. */
+export type HybridSurface<M> = { kind: "status" | "footer"; height: (model: M, rows: number) => number };
+
+const STATUS_SURFACE: HybridSurface<unknown> = {
+	kind: "status",
+	height: (_model, rows) => Math.max(8, Math.min(200, rows)),
+};
+
+export class HybridStatusPanel<M = StatusPanelModel> implements Component {
 	private child: ChildProcess | undefined;
 	private closed: Promise<void> = Promise.resolve();
 	private frame: { width: number; height: number; lines: string[] } | undefined;
@@ -20,21 +30,24 @@ export class HybridStatusPanel implements Component {
 	private disposed = false;
 	private timer: ReturnType<typeof setTimeout> | undefined;
 	private expanded = false;
-	private readonly readModel: (expanded: boolean) => StatusPanelModel;
+	private readonly readModel: (expanded: boolean, width: number) => M;
 	private readonly fallback: Component;
 	private readonly getRows: () => number;
 	private readonly requestRender: () => void;
+	private readonly surface: HybridSurface<M>;
 
 	constructor(
-		readModel: (expanded: boolean) => StatusPanelModel,
+		readModel: (expanded: boolean, width: number) => M,
 		fallback: Component,
 		getRows: () => number,
 		requestRender: () => void,
+		surface: HybridSurface<M> = STATUS_SURFACE,
 	) {
 		this.readModel = readModel;
 		this.fallback = fallback;
 		this.getRows = getRows;
 		this.requestRender = requestRender;
+		this.surface = surface;
 	}
 
 	setExpanded(expanded: boolean): void {
@@ -48,9 +61,11 @@ export class HybridStatusPanel implements Component {
 
 	render(width: number): string[] {
 		if (this.disposed || this.failed) return this.fallback.render(width);
-		const height = Math.max(8, Math.min(200, this.getRows()));
+		let height = 0;
 		try {
-			const request = { width, height, model: this.readModel(this.expanded) };
+			const model = this.readModel(this.expanded, width);
+			height = this.surface.height(model, this.getRows());
+			const request = { kind: this.surface.kind, width, height, model };
 			const signature = JSON.stringify(request);
 			if (signature !== this.previous && !this.inFlight) {
 				this.start();
@@ -77,23 +92,29 @@ export class HybridStatusPanel implements Component {
 
 	private start(): void {
 		if (this.child || this.failed) return;
-		const [major, minor] = process.versions.node.split(".").map(Number);
-		if (major < 26 || (major === 26 && minor < 4)) {
+		const runtime = isBunBinary ? process.versions.bun : process.versions.node;
+		const [major, minor, patch] = (runtime ?? "").split(".").map(Number);
+		const supported = isBunBinary
+			? major > 1 || (major === 1 && (minor > 3 || (minor === 3 && patch >= 14)))
+			: major > 26 || (major === 26 && minor >= 4);
+		if (!supported) {
 			this.failed = "unsupported-runtime";
 			return;
 		}
-		const suffix = import.meta.url.endsWith(".ts") ? ".ts" : ".js";
-		const entry = fileURLToPath(new URL(`./opentui-status-worker${suffix}`, import.meta.url));
 		const env = Object.fromEntries(
 			["PATH", "HOME", "TMPDIR", "TERM", "COLORTERM"].flatMap((key) =>
 				process.env[key] === undefined ? [] : [[key, process.env[key]]],
 			),
 		);
-		const child = fork(entry, [], {
-			execArgv: ["--experimental-ffi"],
-			stdio: ["ignore", "ignore", "ignore", "ipc"],
-			env,
-		});
+		const stdio: ["ignore", "ignore", "ignore", "ipc"] = ["ignore", "ignore", "ignore", "ipc"];
+		const suffix = import.meta.url.endsWith(".ts") ? ".ts" : ".js";
+		const child = isBunBinary
+			? spawn(process.execPath, [OPENTUI_STATUS_WORKER_ARG], { stdio, env, serialization: "json" })
+			: fork(fileURLToPath(new URL(`./opentui-status-worker${suffix}`, import.meta.url)), [], {
+					execArgv: ["--experimental-ffi"],
+					stdio,
+					env,
+				});
 		this.child = child;
 		this.closed = new Promise((resolve) =>
 			child.once("close", () => {

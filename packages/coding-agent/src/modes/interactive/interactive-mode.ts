@@ -173,11 +173,11 @@ import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
-import type { HybridStatusPanel } from "./hybrid-status-panel.ts";
 import { waitForInteractiveInput } from "./interactive-input.ts";
 import { runJevCommand } from "./jev-command.ts";
 import { pinnedRailNotice, railFits, railVisibility } from "./layout-class.ts";
-import { formatResourceDescription } from "./resource-description.ts";
+import { type FooterPanelModel, type HybridStatusPanel, hybridControlPane, hybridFooter } from "./opentui-surfaces.ts";
+import { formatResourceDescription, getAutocompleteSourceTag } from "./resource-description.ts";
 import { handleRNodeInput } from "./rnode/rnode-command.ts";
 import { RNodeController } from "./rnode/rnode-controller.ts";
 import { createSkillPickerForDraft } from "./skill-picker-draft.ts";
@@ -397,6 +397,9 @@ export class InteractiveMode {
 	private statusSidebar: StatusSidebarComponent | undefined;
 	/** OpenTUI rendering of the pinned rail; undefined when `OMK_OPENTUI_STATUS_RAIL=0`. */
 	private hybridStatusPanel: HybridStatusPanel | undefined;
+	/** OpenTUI renderings of the Ctrl+O control pane and the built-in footer, under the same switch. */
+	private hybridControlPane: HybridStatusPanel | undefined;
+	private hybridFooter: HybridStatusPanel<FooterPanelModel> | undefined;
 	/** Optional tmux pane that takes over the pinned rail (`OMK_TMUX_STATUS_RAIL=1`). */
 	private tmuxStatusRail: TmuxStatusRail | undefined;
 	private readonly statusPanelActivity = new StatusPanelActivity(() => this.ui.requestRender());
@@ -410,10 +413,10 @@ export class InteractiveMode {
 				this.isStatusSidebarVisible(this.ui.terminal.columns, this.ui.terminal.rows)
 			)
 				return [];
-			return (this.customFooter ?? this.footer).render(width);
+			return (this.customFooter ?? this.hybridFooter ?? this.footer).render(width);
 		},
 		invalidate: (): void => {
-			(this.customFooter ?? this.footer).invalidate?.();
+			(this.customFooter ?? this.hybridFooter ?? this.footer).invalidate?.();
 		},
 	};
 
@@ -478,6 +481,7 @@ export class InteractiveMode {
 		this.editorContainer.addChild(this.editor as Component);
 		this.footerDataProvider = new FooterDataProvider(this.sessionManager.getCwd());
 		this.footer = new FooterComponent(this.session, this.footerDataProvider);
+		this.hybridFooter = hybridFooter(this.footer, this.ui);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
 		this.footer.setShowSystemMetrics(this.settingsManager.getFooterSystemMetrics());
 		this.noticeContainer = new Container();
@@ -491,28 +495,7 @@ export class InteractiveMode {
 	}
 
 	private getAutocompleteSourceTag(sourceInfo?: SourceInfo): string | undefined {
-		if (!sourceInfo) {
-			return undefined;
-		}
-
-		const scopePrefix = sourceInfo.scope === "user" ? "u" : sourceInfo.scope === "project" ? "p" : "t";
-		const source = sourceInfo.source.trim();
-
-		if (source === "auto" || source === "local" || source === "cli") {
-			return scopePrefix;
-		}
-
-		if (source.startsWith("npm:")) {
-			return `${scopePrefix}:${source}`;
-		}
-
-		const gitSource = parseGitUrl(source);
-		if (gitSource) {
-			const ref = gitSource.ref ? `@${gitSource.ref}` : "";
-			return `${scopePrefix}:git:${gitSource.host}/${gitSource.path}${ref}`;
-		}
-
-		return scopePrefix;
+		return getAutocompleteSourceTag(sourceInfo);
 	}
 
 	private prefixAutocompleteDescription(description: string | undefined, sourceInfo?: SourceInfo): string | undefined {
@@ -855,7 +838,14 @@ export class InteractiveMode {
 			this.builtInHeader = controlPanel;
 			// The headroom label is probed off the render path; repaint once if a version turns up.
 			void repaintWhenHeadroomVersionResolves(() => this.ui.requestRender());
-			this.ui.showOverlay(new ControlPanelRightPaneComponent(controlPanelContent, () => this.ui.terminal.rows), {
+			const nativePane = new ControlPanelRightPaneComponent(controlPanelContent, () => this.ui.terminal.rows);
+			this.hybridControlPane = hybridControlPane(nativePane, this.ui, {
+				getSession: () => this.session,
+				footerData: this.footerDataProvider,
+				readActivity: () => this.statusPanelActivity.read(this.session),
+				rnode: () => this.rnode.panelInput(),
+			});
+			this.ui.showOverlay(this.hybridControlPane ?? nativePane, {
 				anchor: "top-right",
 				width: CONTROL_PANEL_SIDEBAR_WIDTH,
 				maxHeight: "100%",
@@ -883,7 +873,9 @@ export class InteractiveMode {
 		this.renderWidgets(); // Initialize with default spacer
 		this.ui.addChild(this.widgetContainerAbove);
 		this.ui.addChild(this.attachmentStripContainer);
-		this.ui.addChild(new InputReadinessComponent(() => this.onInputCallback !== undefined));
+		const pinned = this.settingsManager.getPinStatusSidebar();
+		const pinSaved = this.settingsManager.getGlobalSettings().pinStatusSidebar !== undefined;
+		if (!pinSaved && !pinned) this.ui.addChild(new InputReadinessComponent(() => this.onInputCallback !== undefined));
 		this.ui.addChild(this.editorContainer);
 		this.ui.addChild(this.widgetContainerBelow);
 		this.ui.addChild(this.noticeContainer);
@@ -3135,7 +3127,7 @@ export class InteractiveMode {
 		}
 
 		this.footer.invalidate();
-		if (this.hybridStatusPanel) this.statusPanelActivity.observe(this.session, event);
+		if (this.hybridStatusPanel || this.hybridControlPane) this.statusPanelActivity.observe(this.session, event);
 
 		switch (event.type) {
 			case "prompt_settled":
@@ -6506,6 +6498,7 @@ export class InteractiveMode {
 	stop(options: { finalSessionLog?: boolean } = {}): void {
 		this.tmuxStatusRail?.dispose();
 		this.hybridStatusPanel?.dispose();
+		this.hybridControlPane?.dispose();
 		this.statusPanelActivity?.dispose();
 		this.rnode?.dispose();
 		disposeInteractiveNextSuggestions();
@@ -6533,6 +6526,7 @@ export class InteractiveMode {
 		}
 
 		for (const component of [this.chatContainer, this.builtInHeader, this.customHeader]) disposeComponent(component);
+		this.hybridFooter?.dispose();
 		this.footer.dispose();
 		this.footerDataProvider.dispose();
 		this.unsubscribeThemedOutputStale?.();

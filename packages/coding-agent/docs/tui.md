@@ -280,7 +280,18 @@ the native sidebar (`OMK_OPENTUI_STATUS_RAIL=0` or the OpenTUI fallback).
 
 ## Hybrid OpenTUI status panel
 
-The pinned status panel renders with OpenTUI by default since 2.0.
+The pinned status panel renders with OpenTUI by default since 2.0. The same
+offscreen renderer also draws two more surfaces, each in its own child process
+with its own native fallback:
+
+- The `Ctrl+O` control pane overlay (shown while the rail is not pinned) renders
+  the detailed status panel view instead of the native boxed pane.
+- The built-in footer: `FooterComponent` still decides every segment, priority
+  drop and truncation; OpenTUI lays out the rows and pins the model/provider to
+  the right edge. Extension statuses keep their foreground colors and bold;
+  other SGR attributes and hyperlinks are dropped. Extension-provided footers
+  (`setFooter`) stay native.
+
 The conversation, editor, keyboard focus and terminal output stay owned by `omk-tui`.
 OpenTUI runs in a separate offscreen rendering process and returns ANSI rows, not
 terminal-control commands. No additional agent or model runs.
@@ -312,7 +323,7 @@ terminal-control commands. No additional agent or model runs.
   prioritize essential status, skill and check observations over connection lists
   and runtime details. Custom keybindings are reflected in the panel hint.
 - Fresh settings pin the panel. `Ctrl+Q` saves the choice, including a hidden
-  panel. Below 120 columns or 16 rows the footer layout leaves the editor visible.
+  panel. Below 108 columns or 16 rows the footer layout leaves the editor visible.
 - `/debug` and `/debug save` report layout, requested renderer and last render.
   A last OpenTUI frame is historical when the layout is hidden. `native-selected`
   is an explicit opt-out; fallback and worker failure are not OpenTUI success.
