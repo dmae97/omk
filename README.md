@@ -104,8 +104,8 @@ mark a goal done only when your own check passes. It is a standalone CLI, so it
 can serve as an open-source alternative to a single-provider agent such as
 Claude Code.
 
-> **OMK 2.0 is released; the Rust core is still in progress.** `2.0.0` and
-> `2.0.1` are regular releases on GitHub and npm. The shipped breaking change is
+> **OMK 2.0 is released; the Rust core is still in progress.** The 2.0.x
+> versions are regular releases on GitHub and npm. The shipped breaking change is
 > native `omk` package loading. The default agent still runs on Node, and complete
 > Pi removal and Rust/platform acceptance remain open.
 > See [why 2.0.0](#why-200-and-what-changed).
@@ -171,7 +171,7 @@ required for your first task.
 2.0.0 marks the move to OMK-native packages by default, rather than silently
 loading legacy Pi manifests and substituting Pi SDK imports. That breaks some
 existing extension installations, so the owner declared a milestone version.
-It does not mean the Rust rewrite is complete. `v2.0.0` and `v2.0.1` are regular
+It does not mean the Rust rewrite is complete. The 2.0.x versions are regular
 releases on GitHub and npm, but that release status is not Rust-core acceptance
 evidence. The Rust core work below is still open.
 

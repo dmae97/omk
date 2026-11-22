@@ -13,6 +13,7 @@ import {
 	compactionHysteresisConfigFor,
 	getCompactionHeadroomThreshold,
 } from "../../src/core/compaction/compaction-headroom.ts";
+import { convertToLlm } from "../../src/core/messages.ts";
 import { PromptSkillFreeze } from "../../src/core/prompt-skill-message.ts";
 import { autoLoadSkills } from "../../src/core/skill-auto-load.ts";
 import { sha256 } from "../../src/core/skill-autoload-observe.ts";
@@ -125,6 +126,75 @@ describe("spec 117 e2e", () => {
 		const on = await firstRequest(await harnessWith(skills, root), false);
 		expect(on.bytes).toContain("PDF-BODY");
 		expect(on.input).toBeGreaterThan(absent.input);
+	}, 60_000);
+
+	it("section grants reach the provider without refilling duplicate section skills", async () => {
+		const root = tmp();
+		const skills = [
+			writeSkill(root, "frontend-layout", "React frontend layout spacing responsive CSS", "LAYOUT-SECTION-BODY"),
+			writeSkill(root, "frontend-motion", "React frontend motion animation transitions", "MOTION-SECTION-BODY"),
+			writeSkill(root, "python-testing", "Python pytest regression fixtures coverage", "PYTEST-SECTION-BODY"),
+		];
+		vi.stubEnv("OMK_SKILL_AUTO_LOAD", "1");
+		vi.stubEnv("OMK_SKILL_ADMISSION", "1");
+		const harness = await harnessWith(skills, root);
+		let captured = "";
+		harness.setResponses([
+			(context) => {
+				captured = JSON.stringify(context);
+				return fauxAssistantMessage("done");
+			},
+		]);
+		await harness.session.prompt(
+			[
+				"## Frontend",
+				"Fix React frontend layout spacing.",
+				"Add React frontend motion animation.",
+				"## Tests",
+				"Add Python pytest regression fixtures coverage.",
+			].join("\n"),
+		);
+		expect(captured).toContain("LAYOUT-SECTION-BODY");
+		expect(captured).toContain("PYTEST-SECTION-BODY");
+		expect(captured).not.toContain("MOTION-SECTION-BODY");
+	}, 60_000);
+
+	it("shows section results to the operator without sending the diagnostic to the model", async () => {
+		const root = tmp();
+		const skills = [
+			writeSkill(root, "frontend-layout", "React frontend layout spacing responsive CSS", "FRONTEND-BODY"),
+			writeSkill(root, "omk-security", "entrypoint workflow catalog", "HUB-BODY-NOT-GRANTED"),
+		];
+		vi.stubEnv("OMK_SKILL_AUTO_LOAD", "1");
+		vi.stubEnv("OMK_SKILL_ADMISSION", "1");
+		const harness = await harnessWith(skills, root);
+		let captured = "";
+		harness.setResponses([
+			(context) => {
+				captured = JSON.stringify(context);
+				return fauxAssistantMessage("done");
+			},
+		]);
+		await harness.session.prompt("## React frontend\nFix spacing\n## Security\nFind threats malware vulnerabilities");
+		const report = harness.session.messages.find(
+			(message) => message.role === "custom" && message.customType === "skill-sections",
+		);
+		expect(report).toMatchObject({
+			display: true,
+			details: {
+				sections: [
+					{ section: "React frontend", selected: [{ name: "frontend-layout", status: "loaded" }] },
+					{ section: "Security", missingReason: "no_match", discovery: { hub: { name: "omk-security" } } },
+				],
+			},
+		});
+		expect(captured).not.toContain("Skill selection by request section");
+		expect(captured).not.toContain("Hub discovery");
+		expect(captured).not.toContain("Specialist discovery");
+		// Summaries and restored sessions go through the same conversion.
+		expect(convertToLlm(report ? [report] : [])).toEqual([]);
+		expect(captured).toContain("FRONTEND-BODY");
+		expect(captured).not.toContain("HUB-BODY-NOT-GRANTED");
 	}, 60_000);
 
 	it("default on (env unset): the same request delivers the body", async () => {

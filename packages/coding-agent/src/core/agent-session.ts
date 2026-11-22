@@ -2672,6 +2672,7 @@ export class AgentSession {
 					skills: this._resourceLoader.getSkills().skills,
 					harnessQuery: isBangSkillInvocation ? currentText : expandedText,
 					budgetQuery: expandedText,
+					history: this.agent.state.messages,
 					contextPressure: () => this._computePressureBucket(messages) > 0,
 					contextBudget: (query) => this._getContextBudgetOptions(query),
 				},

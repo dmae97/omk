@@ -5,6 +5,7 @@
 ### Changed
 
 - Next-task suggestions (`OMK_NEXT_SUGGESTIONS`, flag, default off) return to the v1 form: the model's next request on one line, at most 200 characters, with a 128-token output budget. The host no longer adds context, scope or checklist lines or a local startup/error suggestion; an empty, malformed, timed-out or failed reply shows nothing and is not retried. The next open task of the latest todo snapshot takes precedence over model text, and after a successful workspace check (`npm run check`, `npm test`, ...) the editor stays empty until another edit or failure. Late replies after a turn, session, branch, model or compaction change are discarded. See [environment variables](docs/environment-variables.md).
+- Skill selection treats Markdown headings in a request as explicit sections: a body clause keeps its heading path, so `## React frontend` above `Fix spacing` can match a frontend skill, and at most one skill is granted per section. Automatic loading no longer fills unused slots from an already covered section. With automatic loading on, a sectioned prompt adds a visible `skill-sections` message that lists each section's grants, their actual load status, and why a section stayed uncovered, with a pointer to the matching `!omk` hub. The message is for the operator only and is never sent to the model or into summaries; it lists at most 16 sections with headings cut to 120 characters. The three-skill cap, thresholds, body budget and admission rules are unchanged, and unsectioned prompts behave as before. See [Skills](docs/skills.md).
 
 ### Added
 
@@ -14,10 +15,10 @@
 
 - Selecting a `/name` or `/skill:name` skill in autocomplete with Enter or Tab no longer submits the prompt; the draft stays editable. Ordinary slash commands such as `/help` still run on Enter.
 - An accepted legacy (v2/v3) suggestion prompt that the user extended is matched for skills by the user's words, including text typed after the last line, instead of the host's context and completion wording.
-
 - The startup warning about a global `tools/` directory now fires only for legacy custom-tool entries (a top-level `.ts`, `.js`, `.mjs` or `.cjs` file, or a directory with an `index.*` file), not for unrelated checkouts or binaries stored there.
 - A main-turn request whose OAuth token the provider rejects (`401 token_expired`, `token_revoked`) now forces one token refresh and retries once, as compaction already did. A failed refresh reports the original error with a `/login <provider>` hint. API keys, non-auth errors, and rejections that arrive after output started are not retried.
 - Verified runs accept a workspace created under umask 002: group write on files (`0664`, `0775`) and directories (`0775`) is dropped before the mode check, so these candidates no longer fail with `mode_unrepresentable` or `file_type`. Modes that Git would widen, such as `0600`, `0640` and `0660`, are still refused.
+- With context budgeting on, a short follow-up with no skill signal of its own ("fix it", "이어서 해줘") now ranks `<relevant_skills>` against the session's last two user prompts as well (weights 0.8 and 0.64), so the list no longer drops the skills the conversation is about. Prompts with their own skill signal rank as before.
 
 ## [2.0.2] - 2026-11-21
 

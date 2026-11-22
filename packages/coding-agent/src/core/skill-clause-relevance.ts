@@ -37,28 +37,89 @@ const SKILL_BLOCK = /<skill name="[^"]*" location="[^"]*">\n[\s\S]*?\n<\/skill>/
 // filename tokens still count toward `whole`, but it must not saturate a clause on its own.
 const PATH_ONLY = /^(?:\S*[/\\]\S*\s*)+$/u;
 
+function capabilityBody(fragment: string): string {
+	return fragment
+		.replace(/^[\s#>*-]+/u, "")
+		.replace(/^(?:and|then|also|plus|그리고|및|또한)\s+/iu, "")
+		.trim();
+}
+
 export interface TaskClause {
 	readonly text: string;
 	readonly tokens: readonly string[];
+	/** Explicit Markdown heading path; absent for unsectioned requests. */
+	readonly section?: string;
+}
+
+function* taskFragments(task: string): Generator<{ fragment: string; section?: string }> {
+	const headings: string[] = [];
+	let fence: string | undefined;
+	for (const line of task.replace(SKILL_BLOCK, "\n").split(/\r?\n/u)) {
+		const marker = line.match(/^\s{0,3}(`{3,}|~{3,})/u)?.[1];
+		if (marker) {
+			if (fence === undefined) fence = marker;
+			else if (marker[0] === fence[0] && marker.length >= fence.length && /^\s{0,3}(?:`{3,}|~{3,})\s*$/u.test(line))
+				fence = undefined;
+			continue;
+		}
+		if (fence !== undefined) continue;
+		const heading = line.match(/^\s{0,3}(#{1,6})[ \t]+(.+?)[ \t]*$/u);
+		if (heading) {
+			const level = heading[1]!.length;
+			headings.length = level - 1;
+			headings[level - 1] = heading[2]!.replace(/[ \t]+#+[ \t]*$/u, "").trim();
+			yield { fragment: "", section: headings.filter(Boolean).join(" / ") };
+			continue;
+		}
+		const section = headings.filter(Boolean).join(" / ");
+		for (const fragment of line.split(CLAUSE_BOUNDARY)) yield { fragment, ...(section ? { section } : {}) };
+	}
 }
 
 /** Distinct clauses of a request in source order; fragments under {@link MIN_CLAUSE_TOKENS} are dropped. */
 export function splitTaskClauses(task: string): TaskClause[] {
 	const clauses: TaskClause[] = [];
 	const seen = new Set<string>();
-	for (const fragment of task.replace(SKILL_BLOCK, "\n").split(CLAUSE_BOUNDARY)) {
-		const text = fragment
-			.replace(/^[\s#>*-]+/u, "")
-			.replace(/^(?:and|then|also|plus|그리고|및|또한)\s+/iu, "")
-			.trim();
+	for (const { fragment, section } of taskFragments(task)) {
+		const body = capabilityBody(fragment);
+		if (PATH_ONLY.test(body) || (section && tokenizeForRelevance(body).length === 0)) continue;
+		const text = section ? `${section}: ${body}` : body;
 		const tokens = tokenizeForRelevance(text);
 		const key = tokens.join(" ");
 		if (tokens.length < MIN_CLAUSE_TOKENS || seen.has(key) || PATH_ONLY.test(text)) continue;
 		seen.add(key);
-		clauses.push({ text, tokens });
+		clauses.push({ text, tokens, ...(section ? { section } : {}) });
 		if (clauses.length === MAX_TASK_CLAUSES) break;
 	}
 	return clauses;
+}
+
+export interface TaskSection {
+	readonly section: string;
+	readonly query: string;
+	readonly hasCapability: boolean;
+}
+
+/** The same heading/fence parser as clauses, retaining even sections without usable instructions. */
+export function splitTaskSections(task: string): TaskSection[] {
+	const sections = new Map<string, { fragments: string[]; hasCapability: boolean }>();
+	for (const { fragment, section } of taskFragments(task)) {
+		if (!section) continue;
+		let entry = sections.get(section);
+		if (!entry) {
+			entry = { fragments: [], hasCapability: false };
+			sections.set(section, entry);
+		}
+		const body = capabilityBody(fragment);
+		if (!body || PATH_ONLY.test(body) || tokenizeForRelevance(body).length === 0) continue;
+		entry.fragments.push(body);
+		entry.hasCapability ||= tokenizeForRelevance(`${section}: ${body}`).length >= MIN_CLAUSE_TOKENS;
+	}
+	return [...sections].map(([section, entry]) => ({
+		section,
+		query: `${section}: ${entry.fragments.join(" ")}`.trim(),
+		hasCapability: entry.hasCapability,
+	}));
 }
 
 interface SkillTokens {
