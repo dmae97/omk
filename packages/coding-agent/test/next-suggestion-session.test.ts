@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "omk-agent-core";
@@ -12,7 +12,7 @@ import { KeybindingsManager } from "../src/core/keybindings.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
 import { type QuotaUsage, SUGGESTION_INSTRUCTION } from "../src/core/next-suggestion.ts";
 import { SuggestionAcceptTracker, type SuggestionOutcomeRecord } from "../src/core/next-suggestion-accept-trace.ts";
-import { isWellFormedSuggestionPrompt } from "../src/core/next-suggestion-prompt.ts";
+import { suggestionDisplayLogger } from "../src/core/next-suggestion-display-log.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
 import { CustomEditor } from "../src/modes/interactive/components/custom-editor.ts";
@@ -140,9 +140,14 @@ function fakeEditor(autocomplete = false) {
 	return editor;
 }
 
-function install(session: AgentSession, editor: SuggestionEditorPort) {
+function install(
+	session: AgentSession,
+	editor: SuggestionEditorPort,
+	displayLog?: ReturnType<typeof suggestionDisplayLogger>,
+) {
 	const controller = installNextSuggestions(session as unknown as SuggestionSessionPort, editor, "base", {
 		env: ON,
+		displayLog,
 		isTab: (data) => data === "\t",
 		quotaUsage: async () => "no_quota" as const,
 	});
@@ -186,10 +191,8 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		const controller = install(on.session, editor);
 		await on.session.prompt("first");
 		await vi.waitFor(() => expect(controller.title).toBe(SUGGESTION));
-		// The placeholder is the whole host-rendered prompt, titled with the model sentence.
-		expect(editor.state.placeholder).toBe(controller.suggestion);
-		expect(isWellFormedSuggestionPrompt(editor.state.placeholder)).toBe(true);
-		expect(editor.state.placeholder.split("\n")[0]).toBe(SUGGESTION);
+		// V1 displays only the model sentence and never sends an unaccepted candidate.
+		expect(editor.state.placeholder).toBe(SUGGESTION);
 		await on.session.prompt("second");
 
 		// One suggestion per completed turn; none of them reaches a main request.
@@ -375,6 +378,23 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		expect(h.suggestion).toHaveLength(0);
 	});
 
+	it("discards a late reply after tree navigation with identical messages, without a retry", async () => {
+		let release = () => {};
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const h = harness(tempCwd(), { suggestionGate: gate });
+		const editor = fakeEditor();
+		const controller = install(h.session, editor);
+		await h.session.prompt("first");
+		await vi.waitFor(() => expect(h.suggestion).toHaveLength(1));
+		h.session.sessionManager.resetLeaf();
+		release();
+		await controller.onSettled("completed");
+		expect(controller.suggestion).toBeUndefined();
+		expect(editor.onBeforeInput?.("\t")).toBe(false);
+		expect(h.suggestion).toHaveLength(1);
+	});
 	it("discards a late suggestion when the user started typing", async () => {
 		let release = () => {};
 		const gate = new Promise<void>((resolve) => {
@@ -511,11 +531,8 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		expect(h.calls()).toBe(calls);
 		expect(controller!.title).toBe(SUGGESTION);
 		expect(editor.render(80).join("\n")).toContain("un the parser tests next.");
-		// The startup suggestion is local and ends when the first turn starts; the settled turn's local
-		// suggestion is refined in place by the model sentence, so it leaves no `abandoned` record.
-		expect(records).toHaveLength(2);
-		expect(records[0]).toMatchObject({ candidateSource: "local", outcome: "dismissed", dismissReason: "new_turn" });
-		expect(records[1]).toMatchObject({
+		expect(records).toHaveLength(1);
+		expect(records[0]).toMatchObject({
 			candidateSource: "generated",
 			displaySurface: "empty-editor",
 			outcome: "dismissed",
@@ -542,13 +559,28 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		const editor = new CustomEditor(ui, getEditorTheme(), new KeybindingsManager());
 		editor.setPlaceholder("base");
 		const h = harness(tempCwd());
-		const controller = install(h.session, editor);
+		const dir = tempCwd();
+		const log = suggestionDisplayLogger(() => h.session.sessionId, dir, { OMK_TURN_METRICS_DIR: dir });
+		const controller = install(h.session, editor, log);
+		const events = () =>
+			readFileSync(join(dir, "suggestion-display.jsonl"), "utf8")
+				.trim()
+				.split("\n")
+				.map((line) => JSON.parse(line))
+				.filter((row) => row.source === "generated");
 		await h.session.prompt("first");
 		await vi.waitFor(() => expect(controller.title).toBe(SUGGESTION));
+		expect(events().map((row) => row.event)).toEqual(["offered"]);
 		expect(editor.render(80).join("\n")).toContain(SUGGESTION);
 		const prompt = controller.suggestion;
 		editor.handleInput("\t");
 		expect(editor.getText()).toBe(prompt);
+		expect(events().map((row) => [row.event, row.reason])).toEqual([
+			["offered", undefined],
+			["rendered", undefined],
+			["cleared", "accepted"],
+		]);
+		expect(JSON.stringify(events())).not.toContain(SUGGESTION);
 		expect(h.main).toHaveLength(1);
 
 		editor.setText("");
@@ -557,6 +589,7 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		editor.handleInput("h");
 		expect(editor.getText()).toBe("h");
 		expect(controller.suggestion).toBeUndefined();
+		expect(events().at(-1)).toMatchObject({ sessionId: h.session.sessionId, event: "cleared", reason: "typed_over" });
 		expect(editor.render(80).join("\n")).not.toContain(SUGGESTION);
 
 		controller.dispose();

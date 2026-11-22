@@ -277,8 +277,7 @@ describe("accept trace: tracker state machine", () => {
 });
 
 describe("accept trace: controller wiring", () => {
-	// The golden's `turns`, `files` and first main request are the bytes main `7cd26ee5fa` produced; its
-	// editor log and second main request hold the host-rendered four-section prompt that Tab now inserts.
+	// Restore the exact v1 golden from before 340d445c5f; trace-off bytes stay pinned.
 	it("golden (required): trace flag off ⇒ turns, files, editor and main requests byte-identical to the golden", async () => {
 		const golden = JSON.parse(
 			readFileSync(join(import.meta.dirname, "fixtures", "accept-trace", "flag-off-golden.json"), "utf8"),
@@ -309,16 +308,13 @@ describe("accept trace: controller wiring", () => {
 		expect(on.editor).toEqual(golden.editor);
 		expect(on.mainRequests).toEqual(golden.mainRequests);
 		const records = parse(on.outcomes);
-		// Three shown suggestions ⇒ three records: the startup one (host-built, ended by the first turn),
-		// the Tab accept (edited) and the typed-over dismissal. A local suggestion refined in place by the
-		// model sentence is one shown event, so it adds no `abandoned` record.
+		// V1 has only the accepted model candidate and the later typed-over candidate.
 		expect(records.map((r) => [r.candidateSource, r.outcome, r.sentAs ?? r.dismissReason])).toEqual([
-			["local", "dismissed", "new_turn"],
 			["generated", "accepted", "edited"],
 			["generated", "dismissed", "typed_over"],
 		]);
 		expect(records.filter((r) => r.outcome === "accepted")).toHaveLength(1);
-		expect(records[1]).toMatchObject({ msToAccept: 0, editRatioBucket: "le_0.1", shownAtEpochMs: T0 });
+		expect(records[0]).toMatchObject({ msToAccept: 0, editRatioBucket: "le_0.1", shownAtEpochMs: T0 });
 		for (const r of records) {
 			for (const k of Object.keys(r)) expect(ALLOWED_KEYS.has(k), k).toBe(true);
 			expect(r.settledAtEpochMs <= r.quotaCheckedAtEpochMs && r.quotaCheckedAtEpochMs <= r.shownAtEpochMs).toBe(

@@ -2,9 +2,12 @@ import type { StreamFn } from "omk-agent-core";
 import type { QuotaUsage, SuggestionPlan } from "../../core/next-suggestion.ts";
 import type { SuggestionAcceptTracker } from "../../core/next-suggestion-accept-trace.ts";
 import type { SuggestionBudget } from "../../core/next-suggestion-budget.ts";
+import type { DisplayReporter, DisplayTurn } from "../../core/next-suggestion-display-log.ts";
 import type * as settlement from "../../core/next-suggestion-settlement.ts";
 
 export interface SuggestionSessionPort {
+	readonly sessionId?: string;
+	readonly sessionManager?: { getLeafId(): string | null };
 	readonly agent: {
 		streamFn: StreamFn;
 		readonly state: { readonly messages: readonly unknown[]; readonly isStreaming?: boolean };
@@ -23,6 +26,7 @@ export interface NextSuggestionOptions {
 	readonly quotaUsage?: () => Promise<QuotaUsage>;
 	readonly usageTimeoutMs?: number;
 	readonly requestRender?: () => void;
+	readonly displayLog?: (turn: DisplayTurn) => DisplayReporter;
 	readonly onPlan?: (plan: SuggestionPlan) => void;
 	/** Spec 103: settle every suggestion request's usage, including discarded and cancelled ones. */
 	readonly settle?: (s: settlement.AnySuggestionSettlement) => void;

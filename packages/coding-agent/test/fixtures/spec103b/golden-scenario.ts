@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { StreamFn } from "omk-agent-core";
 import { type AssistantMessage, type Context, getModel, type Model } from "omk-ai";
+import { SUGGESTION_INSTRUCTION } from "../../../src/core/next-suggestion.ts";
 import { suggestionMetricsSettler } from "../../../src/core/next-suggestion-settlement.ts";
 import { summarizeTurnMetrics, TurnMetricsSink } from "../../../src/core/turn-metrics.ts";
 import {
@@ -43,8 +44,9 @@ export async function runGoldenScenario(env: NodeJS.ProcessEnv): Promise<{ turns
 	const dir = mkdtempSync(join(tmpdir(), "omk-103b-golden-"));
 	try {
 		const metricsEnv = { ...env, OMK_TURN_METRICS_DIR: dir };
-		// Large context: with caps on this would exceed the $0.02 cost cap (over_cost_cap).
-		const big = "x".repeat(200_000);
+		// Keep the legacy fixture's serialized input size fixed across suggestion copy edits.
+		const instructionChars = JSON.stringify(SUGGESTION_INSTRUCTION).length - 2;
+		const big = "x".repeat(200_226 - instructionChars);
 		const contexts: Context[] = [
 			{
 				systemPrompt: "s",
@@ -109,6 +111,7 @@ export async function runGoldenScenario(env: NodeJS.ProcessEnv): Promise<{ turns
 			await controller.onSettled("completed");
 		}
 		// A plan skip: failed outcome (no request).
+		emit({ type: "agent_start" });
 		await controller.onSettled("failed");
 		controller.dispose();
 		const turns = readFileSync(sink.path, "utf8");
