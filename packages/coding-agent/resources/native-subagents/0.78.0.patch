@@ -1,0 +1,299 @@
+--- src/runs/shared/child-session.js
++++ src/runs/shared/child-session.js
+@@ -22,6 +22,7 @@
+ import { supervisorChannelDir } from "./child-tool-plan.js";
+ import { pinChildCacheRetention } from "../../shared/child-cache-retention.js";
+ import { getAgentDir, PI_CODING_AGENT_PACKAGE_ROOT_ENV } from "../../shared/utils.js";
++import { splitKnownThinkingSuffix } from "../../shared/model-info.js";
+ import { resolvePackageSubpath } from "../background/runner-aliases.js";
+ import { PI_CODING_AGENT_PACKAGE, resolveInstalledPiPackageRoot, resolvePiPackageRoot } from "./pi-spawn.js";
+ /** Mirror pi's JSON event projection: `message_update` drops the partial message. */
+@@ -307,8 +308,12 @@
+     /** Launches still waiting for their MCP tools; `dispose()` ends the wait and waits for their shutdown. */
+     const mcpWaits = new Set();
+     let disposals = 0;
++    const createRuntime = async (pi) => {
++        const authStorage = pi.AuthStorage.create();
++        return { authStorage, modelRegistry: pi.ModelRegistry.create(authStorage) };
++    };
+     const sharedRuntime = async (pi) => {
+-        runtime ??= pi.ModelRuntime.create().catch((error) => {
++        runtime ??= createRuntime(pi).catch((error) => {
+             runtime = undefined;
+             throw error;
+         });
+@@ -320,8 +325,8 @@
+             const pi = await loadPiCodingAgent();
+             const builtinMcpTools = launch.builtinMcpTools ?? [];
+             const builtinMcp = builtinMcpTools.length ? selectedBuiltinMcpExtension(pi, builtinMcpTools) : undefined;
+-            const modelRuntime = launch.parentProviderRegistry
+-                ? await pi.ModelRuntime.create()
++            const { authStorage, modelRegistry: modelRuntime } = launch.parentProviderRegistry
++                ? await createRuntime(pi)
+                 : await sharedRuntime(pi);
+             const agentDir = getAgentDir();
+             const commands = launch.runtime.runId && launch.runtime.agent && launch.runtime.childIndex !== undefined
+@@ -382,7 +387,8 @@
+                     launch.onExtensionError?.({ extensionPath: "<session>", event: "session_shutdown", error });
+                 }
+                 finally {
+-                    session.dispose();
++                    if (typeof session.close === "function") await session.close();
++                    else session.dispose();
+                 }
+             };
+             let inheritedProviders = new Set();
+@@ -422,15 +428,23 @@
+                 const header = newSessionFile && launch.parentSessionFile ? sessionManager.getHeader() : null;
+                 if (header)
+                     header.parentSession = launch.parentSessionFile;
+-                const resolvedModel = launch.model
+-                    ? pi.resolveCliModel({ cliModel: launch.model, modelRuntime })
+-                    : undefined;
+-                if (resolvedModel?.error)
+-                    throw new Error(resolvedModel.error);
++                let resolvedModel;
++                if (launch.model) {
++                    const models = modelRuntime.getAll();
++                    let model = models.find((entry) => `${entry.provider}/${entry.id}` === launch.model);
++                    if (model) resolvedModel = { model };
++                    else {
++                        const { baseModel, thinkingSuffix } = splitKnownThinkingSuffix(launch.model);
++                        model = models.find((entry) => `${entry.provider}/${entry.id}` === baseModel);
++                        if (!model) throw new Error(`Child model '${launch.model}' is unavailable in the host registry.`);
++                        resolvedModel = { model, ...(thinkingSuffix ? { thinkingLevel: thinkingSuffix.slice(1) } : {}) };
++                    }
++                }
+                 const { session } = await pi.createAgentSession({
+                     cwd: launch.cwd,
+                     agentDir,
+-                    modelRuntime,
++                    authStorage,
++                    modelRegistry: modelRuntime,
+                     ...(resolvedModel?.model ? { model: resolvedModel.model } : {}),
+                     ...(resolvedModel?.thinkingLevel ? { thinkingLevel: resolvedModel.thinkingLevel } : {}),
+                     ...(launch.tools ? { tools: launch.tools } : {}),
+@@ -453,9 +467,14 @@
+                             launch.onExtensionError?.({ extensionPath: error.extensionPath, event: error.event, error: error.error });
+                         },
+                     });
++                    // Native OMK attaches MCP transports separately from extension binding.
++                    if (typeof session.attachMcpServers === "function" &&
++                        !launch.runtime.capabilityCeiling?.denyExtensions &&
++                        launch.tools?.some((name) => name.includes("__") && !launch.excludeTools?.includes(name)))
++                        await session.attachMcpServers();
+                 }
+                 catch (error) {
+-                    session.dispose();
++                    await shutdownSession(session);
+                     throw error;
+                 }
+                 finally {
+--- src/runs/foreground/execution.js
++++ src/runs/foreground/execution.js
+@@ -438,6 +438,7 @@
+     let toolAvailabilityError;
+     let abortedBySignal = options.signal?.aborted === true;
+     let afterCompactionSettlement = false;
++    let sessionDisposalFailed = false;
+     if (options.workflowChildPermitLaunch) {
+         const permitError = consumeWorkflowChildPermit(options.workflowChildPermitLaunch.permit, {
+             workflowRunId: options.workflowChildPermitLaunch.workflowRunId,
+@@ -695,7 +696,11 @@
+                     }
+                 }
+                 await session?.dispose();
+-            }).catch(() => undefined).then(() => {
++            }).catch((error) => {
++                sessionDisposalFailed = true;
++                result.error ??= `Subagent session disposal failed: ${error instanceof Error ? error.message : String(error)}`;
++                code = 1;
++            }).then(() => {
+                 resolve(code);
+             });
+         };
+@@ -1124,27 +1129,28 @@
+             }, 1000);
+             activityTimer.unref?.();
+         }
+-        if (attemptTimeout) {
+-            timeoutTimer = setTimeout(() => {
+-                if (sessionSettled || lifecycleFinished || interruptedByControl || result.timedOut)
++        const timeoutAttempt = () => {
++            if (!attemptTimeout || sessionSettled || lifecycleFinished || interruptedByControl || result.timedOut)
++                return;
++            result.timedOut = true;
++            timeoutCause = attemptTimeout.message;
++            clearAllToolTimeouts();
++            result.error = attemptTimeout.message;
++            result.finalOutput = attemptTimeout.message;
++            progress.status = "failed";
++            progress.error = attemptTimeout.message;
++            progress.durationMs = Date.now() - startTime;
++            fireUpdate();
++            abortChild();
++            timeoutHardFinishTimer = setTimeout(() => {
++                if (sessionSettled || lifecycleFinished)
+                     return;
+-                result.timedOut = true;
+-                timeoutCause = attemptTimeout.message;
+-                clearAllToolTimeouts();
+-                result.error = attemptTimeout.message;
+-                result.finalOutput = attemptTimeout.message;
+-                progress.status = "failed";
+-                progress.error = attemptTimeout.message;
+-                progress.durationMs = Date.now() - startTime;
+-                fireUpdate();
+-                abortChild();
+-                timeoutHardFinishTimer = setTimeout(() => {
+-                    if (sessionSettled || lifecycleFinished)
+-                        return;
+-                    settle(undefined, true);
+-                }, 4000);
+-                timeoutHardFinishTimer.unref?.();
+-            }, attemptTimeout.remainingMs);
++                settle(undefined, true);
++            }, 4000);
++            timeoutHardFinishTimer.unref?.();
++        };
++        if (attemptTimeout) {
++            timeoutTimer = setTimeout(timeoutAttempt, attemptTimeout.remainingMs);
+             timeoutTimer.unref?.();
+         }
+         let toolTimeoutSequence = 0;
+@@ -1382,8 +1388,10 @@
+                     },
+                 });
+                 messageBaseline = created.messages.length;
+-                // A runtime replacement can stop a child that detached while it was still being created.
+-                if (!hostStopReason)
++                // Creation and host callbacks may consume the deadline before its timer runs.
++                if (attemptTimeout && resolveAttemptTimeout(options)?.remainingMs === 0)
++                    timeoutAttempt();
++                if (!hostStopReason && !abortedBySignal && !interruptedByControl && !result.timedOut)
+                     await created.prompt(`Task: ${task}`);
+                 settle(undefined);
+             }
+@@ -1393,10 +1401,10 @@
+         })();
+     });
+     result.exitCode = exitCode;
+-    if (afterCompactionSettlement) {
++    if (afterCompactionSettlement && !sessionDisposalFailed) {
+         result[AFTER_COMPACTION_SETTLEMENT] = true;
+     }
+-    if (interruptedByControl) {
++    if (interruptedByControl && !sessionDisposalFailed) {
+         result.exitCode = 0;
+         result.interrupted = true;
+         result.error = undefined;
+--- src/runs/background/subagent-runner.js
++++ src/runs/background/subagent-runner.js
+@@ -1520,6 +1520,7 @@
+     const activeChildTimeouts = new Map();
+     const activeChildStops = new Map();
+     const activeChildSteers = new Map();
++    const pendingDeadlineCheckpoints = new Set();
+     /** Steers routed to a running step before its session was created. */
+     const queuedStepSteers = new Map();
+     const childStopRequests = new Map();
+@@ -2669,6 +2670,22 @@
+         }
+         void steer(request).then((delivery) => applySteerDelivery(request.id, index, delivery), (error) => applySteerDelivery(request.id, index, { state: "failed", message: error instanceof Error ? error.message : String(error) }));
+     };
++    const deliverDeadlineCheckpoint = (flatIndex) => {
++        if (timedOut || stopped || interrupted || statusPayload.state !== "running"
++            || statusPayload.steps[flatIndex]?.status !== "running" || Date.now() >= config.deadlineAt)
++            return;
++        const now = Date.now();
++        const seconds = Math.round(Math.max(0, config.deadlineAt - now) / 1000);
++        deliverSteerRequest({
++            type: "steer",
++            id: `deadline-checkpoint-${now}-${flatIndex}`,
++            ts: now,
++            mode: "steer",
++            source: "deadline-checkpoint",
++            targetIndex: flatIndex,
++            message: `Deadline checkpoint from the runner: this run is killed in about ${seconds} seconds. Finish the current tool call only, then stop and reply with a handoff: changed files, build/test state, remaining work, and commit/PR state. Do not start new work.`,
++        });
++    };
+     const flushPendingStepSteers = (flatIndex) => {
+         const remaining = [];
+         for (const request of pendingStepSteers.splice(0)) {
+@@ -2938,6 +2955,16 @@
+             }
+             statusPayload.turnCount = Math.max(statusPayload.turnCount ?? 0, step.turnCount);
+         }
++        if (event.type === "turn_end" && pendingDeadlineCheckpoints.delete(flatIndex)) {
++            const message = event.message;
++            const content = Array.isArray(message?.content) ? message.content : [];
++            const finalReply = message?.role === "assistant" && message.stopReason === "stop"
++                && !message.errorMessage && !content.some((part) => part.type === "toolCall")
++                && content.some((part) => part.type === "text" && part.text?.trim());
++            // A timer steer queued during the final answer would force an unnecessary extra model turn.
++            if (!finalReply)
++                deliverDeadlineCheckpoint(flatIndex);
++        }
+         syncTopLevelCurrentTool();
+         step.lastActivityAt = now;
+         statusPayload.lastActivityAt = now;
+@@ -3227,32 +3254,27 @@
+     if (config.deadlineAt !== undefined) {
+         const remainingMs = Math.max(0, config.deadlineAt - Date.now());
+         timeoutTimer = setTimeout(timeoutRunner, remainingMs);
+         timeoutTimer.unref?.();
+-        // Route the pre-deadline checkpoint like any external steer so its lifecycle records the receipt.
++        // Native checkpoints wait for a turn boundary; external CLI runners have no such event.
+         const checkpointBeforeDeadlineMs = config.checkpointBeforeDeadlineMs;
+         const checkpointDelayMs = checkpointBeforeDeadlineMs === undefined || !Number.isInteger(checkpointBeforeDeadlineMs) || checkpointBeforeDeadlineMs <= 0
+             ? undefined
+             : remainingMs - checkpointBeforeDeadlineMs;
+         if (checkpointDelayMs !== undefined && checkpointDelayMs >= 1_000) {
+-            const deadlineAt = config.deadlineAt;
+             checkpointTimer = setTimeout(() => {
+                 checkpointTimer = undefined;
+                 if (timedOut || stopped || interrupted)
+                     return;
+-                if (!statusPayload.steps.some((step) => step.status === "running"))
+-                    return;
+-                const now = Date.now();
+-                const seconds = Math.round(Math.max(0, deadlineAt - now) / 1000);
+-                deliverSteerRequest({
+-                    type: "steer",
+-                    id: `deadline-checkpoint-${now}`,
+-                    ts: now,
+-                    mode: "steer",
+-                    source: "deadline-checkpoint",
+-                    message: `Deadline checkpoint from the runner: this run is killed in about ${seconds} seconds. Finish the current tool call only, then stop and reply with a handoff: changed files, build/test state, remaining work, and commit/PR state. Do not start new work.`,
++                statusPayload.steps.forEach((step, index) => {
++                    if (step.status !== "running")
++                        return;
++                    if (flatSteps[index]?.runner?.type === "external-cli")
++                        deliverDeadlineCheckpoint(index);
++                    else
++                        pendingDeadlineCheckpoints.add(index);
+                 });
+             }, checkpointDelayMs);
+             checkpointTimer.unref?.();
+         }
+     }
+     appendJsonl(eventsPath, JSON.stringify({
+--- src/runs/background/runner-aliases.js
++++ src/runs/background/runner-aliases.js
+@@ -14,15 +14,13 @@
+ export const JITI_ALIAS_ENV = "JITI_ALIAS";
+ /** Specifiers the runner's import graph may use, with the package and export subpath each resolves to. */
+ export const HOST_PEER_ALIASES = [
+     { specifier: "open-multi-agent-kit", pkg: "open-multi-agent-kit", subpath: "." },
+     { specifier: "omk-agent-core", pkg: "omk-agent-core", subpath: "." },
+     // Optional: hosts whose pi-agent-core declares no "./node" export cannot import it, so no alias is needed.
+     { specifier: "omk-agent-core/node", pkg: "omk-agent-core", subpath: "./node", optional: true },
+     { specifier: "omk-tui", pkg: "omk-tui", subpath: "." },
+-    { specifier: "omk-ai", pkg: "omk-ai", subpath: "./compat" },
+-    { specifier: "omk-ai/compat", pkg: "omk-ai", subpath: "./compat" },
++    { specifier: "omk-ai", pkg: "omk-ai", subpath: "." },
+     { specifier: "omk-ai/oauth", pkg: "omk-ai", subpath: "./oauth" },
+-    { specifier: "omk-ai/providers/all", pkg: "omk-ai", subpath: "./providers/all" },
+     { specifier: "typebox", pkg: "typebox", subpath: "." },
+     { specifier: "typebox/compile", pkg: "typebox", subpath: "./compile" },
+     { specifier: "typebox/value", pkg: "typebox", subpath: "./value" },

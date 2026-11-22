@@ -1,0 +1,40 @@
+--- src/persistence.ts
++++ src/persistence.ts
+@@ -502,34 +502,37 @@
+ export function cleanupTemporaryOutputs(options: TemporaryOutputArchiveOptions = {}): number {
+ 	const directory = archiveDirectory(options);
+ 	const now = archiveNow(options);
+ 	let removed = 0;
+ 	let entries;
+ 	try {
+ 		entries = readdirSync(directory, { withFileTypes: true, encoding: "utf8" });
+ 	} catch {
+ 		return 0;
+ 	}
+ 	for (const entry of entries) {
+ 		if (typeof entry === "string" || !entry.isFile()) continue;
+ 		const match = OUTPUT_ARCHIVE_FILE_RE.exec(entry.name);
+ 		if (!match) continue;
+ 		const digest = match[1];
+ 		const path = join(directory, entry.name);
+ 		const metadataPath = outputArchiveMetadataPath(directory, digest);
+ 		try {
++			// Skip live archives without a durable write lock; recheck expiry under lock before deleting.
++			const expiry = readArchiveExpiry(metadataPath, lstatSync(path).mtimeMs);
++			if (!expiry.valid || now <= expiry.expiresAt) continue;
+ 			const deleted = withFileLocks([metadataPath], () => {
+ 				const info = lstatSync(path);
+ 				if (!info.isFile() || info.isSymbolicLink()) return false;
+ 				const expiry = readArchiveExpiry(metadataPath, info.mtimeMs);
+ 				if (!expiry.valid || now <= expiry.expiresAt) return false;
+ 				unlinkSync(path);
+ 				try { unlinkSync(metadataPath); } catch { /* best effort */ }
+ 				return true;
+ 			});
+ 			if (deleted) removed += 1;
+ 		} catch {
+ 			// Concurrent resolution or cleanup is harmless.
+ 		}
+ 	}
+ 	return removed;
+ }

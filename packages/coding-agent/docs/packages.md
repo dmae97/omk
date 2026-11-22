@@ -94,6 +94,18 @@ The command emits a versioned JSON report and returns `0` when no compatibility 
 
 The doctor never imports extension modules. For npm sources it downloads the registry tarball with `npm pack --ignore-scripts` and extracts bounded regular files without installing dependencies. Git inspection clones without running `npm install`. These static checks are advisory and do not make third-party code trusted.
 
+### Native package repairs
+
+After an install or update, the package manager reapplies the bundled, version-pinned repairs to
+managed native packages: `pi-subagents` 0.78.0 and `@aeondave/pi-skill-optimizer` 3.1.2, both with
+an explicit native `omk` manifest. The patches and their upstream licenses are in
+[`resources/native-subagents/`](../resources/native-subagents/README.md) and
+[`resources/native-skill-optimizer/`](../resources/native-skill-optimizer/README.md).
+Only those exact versions are repaired, hunk contexts and paths are checked before any file is
+written, and an unknown version fails instead of guessing. Replacing the package with plain npm
+does not run this hook; run the OMK installer again before loading it. These repairs change no
+admission rule.
+
 ### Explicit native manifest dialect
 
 Since OMK 2.0 the default is native `omk`: omission and `undefined` select `omk`,

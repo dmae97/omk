@@ -12,6 +12,7 @@
 
 ### Added
 
+- The package manager reapplies the bundled, version-pinned repairs after installing or updating a managed native package: `pi-subagents` 0.78.0 (subagent admission, disposal and checkpoint handling) and `@aeondave/pi-skill-optimizer` 3.1.2 (persistence). Repairs apply only to an explicit native `omk` manifest at that exact version, and unknown versions, changed hunk contexts or unsafe paths fail before any file is written. See [Packages](docs/packages.md#native-package-repairs).
 - `OMK_NEXT_SUGGESTIONS_DIAGNOSTICS` (default off, requires `OMK_NEXT_SUGGESTIONS`) writes a turn-metrics record for every skipped suggestion and adds `quotaReadMs` (quota lookup time). Records hold enums and numbers only and change no request or display behavior.
 
 ### Fixed
