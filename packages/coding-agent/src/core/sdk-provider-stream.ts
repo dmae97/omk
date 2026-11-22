@@ -92,8 +92,23 @@ function createProviderStream(runtime: SdkProviderRuntime): StreamFn {
 		const timeoutMs = requestOptions?.timeoutMs ?? providerRetrySettings.timeoutMs ?? effectiveTimeoutMs;
 		const websocketConnectTimeoutMs =
 			requestOptions?.websocketConnectTimeoutMs ?? settingsManager.getWebSocketConnectTimeoutMs();
-		// One dispatch with an explicit key; used for the first attempt and the
-		// single forced-refresh retry (the second key wins over the rejected one).
+		const headers = mergeProviderAttributionHeaders(
+			requestModel,
+			settingsManager,
+			requestOptions?.sessionId,
+			auth.headers,
+			requestOptions?.headers,
+		);
+		const hasExplicitAuthHeader = Object.keys(headers ?? {}).some((name) => {
+			const lower = name.toLowerCase();
+			if (lower === "x-api-key") return true;
+			return (
+				lower === "authorization" &&
+				(name !== "Authorization" ||
+					!auth.authorizationFromApiKey ||
+					Object.hasOwn(requestOptions?.headers ?? {}, name))
+			);
+		});
 		const issue = (apiKey: string | undefined): AssistantMessageEventStream =>
 			streamSimple(requestModel, requestContext, {
 				...requestOptions,
@@ -106,14 +121,12 @@ function createProviderStream(runtime: SdkProviderRuntime): StreamFn {
 					runtime.onRateLimit?.(apiKey, snapshot, responseModel);
 					await requestOptions?.onRateLimit?.(snapshot, responseModel);
 				},
-				headers: mergeProviderAttributionHeaders(
-					requestModel,
-					settingsManager,
-					requestOptions?.sessionId,
-					auth.headers,
-					requestOptions?.headers,
-				),
+				headers:
+					auth.authorizationFromApiKey && apiKey !== auth.apiKey
+						? { ...headers, Authorization: `Bearer ${apiKey}` }
+						: headers,
 			});
+		if (!auth.oauth || auth.apiKey === undefined || hasExplicitAuthHeader) return issue(auth.apiKey);
 		return dispatchWithRejectedOAuthRecovery(issue, auth.apiKey, requestModel, modelRegistry);
 	};
 }
@@ -142,9 +155,6 @@ function dispatchWithRejectedOAuthRecovery(
 	modelRegistry: ModelRegistry,
 ): AssistantMessageEventStream {
 	const outer = createAssistantMessageEventStream();
-	// Refreshing is only worth attempting for a stored OAuth credential; an API
-	// key the provider rejected cannot be renewed by /login-refresh machinery.
-	const canRefresh = apiKey !== undefined && modelRegistry.isUsingOAuthProvider(model.provider);
 	let recovered = false;
 	// A retry after any forwarded event would emit a second "start" and duplicate the assistant message.
 	let forwarded = false;
@@ -159,13 +169,7 @@ function dispatchWithRejectedOAuthRecovery(
 			// Terminal event. A rejected-token error on an OAuth provider we have not
 			// yet retried forces one refresh; anything else is forwarded as-is.
 			const rejected = event.error;
-			if (
-				canRefresh &&
-				!recovered &&
-				!forwarded &&
-				sentKey !== undefined &&
-				isRejectedOAuthTokenMessage(rejected.errorMessage)
-			) {
+			if (!recovered && !forwarded && sentKey !== undefined && isRejectedOAuthTokenMessage(rejected.errorMessage)) {
 				recovered = true;
 				let refreshed: string | undefined;
 				try {

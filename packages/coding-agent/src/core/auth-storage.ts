@@ -630,6 +630,7 @@ export class AuthStorage {
 	 * credential is left in place for that login to replace.
 	 */
 	async refreshRejectedOAuthToken(providerId: OAuthProviderId, rejectedApiKey: string): Promise<string | undefined> {
+		if (this.runtimeOverrides.get(providerId)) return undefined;
 		return (await this.resolveOAuthTokenWithLock(providerId, 0, rejectedApiKey))?.apiKey;
 	}
 
@@ -685,10 +686,17 @@ export class AuthStorage {
 		providerId: string,
 		options?: { includeFallback?: boolean; minRemainingMs?: number; background?: boolean },
 	): Promise<string | undefined> {
+		return (await this.resolveApiKey(providerId, options))?.apiKey;
+	}
+
+	async resolveApiKey(
+		providerId: string,
+		options?: { includeFallback?: boolean; minRemainingMs?: number; background?: boolean },
+	): Promise<{ apiKey: string; oauth?: true } | undefined> {
 		// Runtime override takes highest priority
 		const runtimeKey = this.runtimeOverrides.get(providerId);
 		if (runtimeKey) {
-			return runtimeKey;
+			return { apiKey: runtimeKey };
 		}
 
 		// Lock contention with another session leaves the credential map unread (reload() records the
@@ -701,7 +709,8 @@ export class AuthStorage {
 		const cred = this.data[providerId];
 
 		if (cred?.type === "api_key") {
-			return resolveConfigValue(cred.key);
+			const apiKey = resolveConfigValue(cred.key);
+			return apiKey === undefined ? undefined : { apiKey };
 		}
 
 		if (cred?.type === "oauth") {
@@ -714,7 +723,7 @@ export class AuthStorage {
 					options?.background,
 				);
 				if (result) {
-					return result.apiKey;
+					return { apiKey: result.apiKey, oauth: true };
 				}
 			} catch (error) {
 				// The failure this stands for was recorded when it happened.
@@ -738,11 +747,12 @@ export class AuthStorage {
 
 		// Fall back to environment variable
 		const envKey = getEnvApiKey(providerId);
-		if (envKey) return envKey;
+		if (envKey) return { apiKey: envKey };
 
 		// Fall back to custom resolver (e.g., models.json custom providers)
 		if (options?.includeFallback !== false) {
-			return this.fallbackResolver?.(providerId) ?? undefined;
+			const apiKey = this.fallbackResolver?.(providerId);
+			return apiKey == null ? undefined : { apiKey };
 		}
 
 		return undefined;

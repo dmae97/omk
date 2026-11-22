@@ -135,6 +135,8 @@ export type ResolvedRequestAuth =
 			ok: true;
 			apiKey?: string;
 			headers?: Record<string, string>;
+			oauth?: true;
+			authorizationFromApiKey?: true;
 	  }
 	| {
 			ok: false;
@@ -746,6 +748,8 @@ export class ModelRegistry {
 				ok: true,
 				apiKey,
 				headers: headers && Object.keys(headers).length > 0 ? headers : undefined,
+				...(key.oauth && { oauth: true as const }),
+				...(key.oauth && providerConfig?.authHeader && { authorizationFromApiKey: true as const }),
 			};
 		} catch (error) {
 			return {
